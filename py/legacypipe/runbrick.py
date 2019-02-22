@@ -103,13 +103,18 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         get_git_version, get_version_header, get_dependency_versions,
         wcs_for_brick, read_one_tim)
     from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
+    import logging
 
     t0 = tlast = Time()
     record_event and record_event('stage_tims: starting')
 
     assert(survey is not None)
 
-
+    logger = logging.getLogger('runbrick.tims')
+    def info(*args):
+        logger.info(*args)
+    def debug(*args):
+        logger.debug(*args)
 
     # Get brick object
     custom_brick = (ra is not None)
@@ -189,43 +194,39 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
     if ccds is None:
         raise NothingToDoError('No CCDs touching brick')
-    print(len(ccds), 'CCDs touching target WCS')
+    info(len(ccds), 'CCDs touching target WCS')
 
-    print('Got CCDs:', Time()-t0)
-
-    if "ccd_cuts" in ccds.get_columns():
-        print('Applying CCD cuts...')
-        cutvals = ccds.ccd_cuts
-        print('CCD cut bitmask values:', cutvals)
-        ccds.cut(cutvals == 0)
-        print(len(ccds), 'CCDs survive cuts')
+    if 'ccd_cuts' in ccds.get_columns():
+        ccds.cut(ccds.ccd_cuts == 0)
+        debug(len(ccds), 'CCDs survive cuts')
     else:
         print('WARNING: not applying CCD cuts')
 
     # Cut on bands to be used
     ccds.cut(np.array([b in bands for b in ccds.filter]))
-    print('Cut to', len(ccds), 'CCDs in bands', ','.join(bands))
+    debug('Cut to', len(ccds), 'CCDs in bands', ','.join(bands))
 
-    print('Cutting on CCDs to be used for fitting...')
+    debug('Cutting on CCDs to be used for fitting...')
     I = survey.ccds_for_fitting(brick, ccds)
     if I is not None:
-        print('Cutting to', len(I), 'of', len(ccds), 'CCDs for fitting.')
+        debug('Cutting to', len(I), 'of', len(ccds), 'CCDs for fitting.')
         ccds.cut(I)
 
+    # DR8 -- drop early data from before additional baffling was added to the camera.
     ccds.cut(ccds.mjd_obs >= 56730)
-    print('Dropping CCDs before MJD 56730 (DATE >= 2014-03-14): now', len(ccds))
+    debug('Dropping CCDs before MJD 56730 (DATE >= 2014-03-14): now', len(ccds))
 
     if min_mjd is not None:
         ccds.cut(ccds.mjd_obs >= min_mjd)
-        print('Cut to', len(ccds), 'after MJD', min_mjd)
+        debug('Cut to', len(ccds), 'after MJD', min_mjd)
     if max_mjd is not None:
         ccds.cut(ccds.mjd_obs <= max_mjd)
-        print('Cut to', len(ccds), 'before MJD', max_mjd)
+        debug('Cut to', len(ccds), 'before MJD', max_mjd)
 
     if depth_cut:
         # If we have many images, greedily select images until we have
         # reached our target depth
-        print('Cutting to CCDs required to hit our depth targets')
+        debug('Cutting to CCDs required to hit our depth targets')
         # Previously, depth_cut was a boolean; I turned it into a float margin;
         # be a little backwards-compatible.
         margin = float(depth_cut)
@@ -236,23 +237,22 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                                    plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf,
                                    do_calibs, gitver, targetwcs, **kwa)
         ccds.cut(np.array(keep_ccds))
-        print('Cut to', len(ccds), 'CCDs required to reach depth targets')
+        debug('Cut to', len(ccds), 'CCDs required to reach depth targets')
 
     # Create Image objects for each CCD
     ims = []
+    info('Keeping', len(ccds), 'CCDs:')
     for ccd in ccds:
         im = survey.get_image_object(ccd)
         if survey.cache_dir is not None:
             im.check_for_cached_files(survey)
         ims.append(im)
-        print(im, im.band, 'exptime', im.exptime, 'propid', ccd.propid,
+        info('  ', im, im.band, 'exptime', im.exptime, 'propid', ccd.propid,
               'seeing %.2f' % (ccd.fwhm*im.pixscale),
-              'object', getattr(ccd, 'object', None), 'MJD', ccd.mjd_obs)
-
-    print('Cut CCDs:', Time()-t0)
+              'object', getattr(ccd, 'object', '').strip(), 'MJD %.3f' % ccd.mjd_obs)
 
     tnow = Time()
-    print('[serial tims] Finding images touching brick:', tnow-tlast)
+    debug('[serial tims] Finding images touching brick:', tnow-tlast)
     tlast = tnow
 
     if do_calibs:
@@ -269,14 +269,10 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         args = [(im, kwa) for im in ims]
         mp.map(run_calibs, args)
         tnow = Time()
-        print('[parallel tims] Calibrations:', tnow-tlast)
+        debug('[parallel tims] Calibrations:', tnow-tlast)
         tlast = tnow
-        #record_event and record_event('stage_tims: done calibs')
-
-    print('Calibs:', Time()-t0)
 
     # Read Tractor images
-
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
                                 hybridPsf=hybridPsf, normalizePsf=normalizePsf,
                                 splinesky=splinesky,
@@ -289,35 +285,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     tims = list(mp.map(read_one_tim, args))
     record_event and record_event('stage_tims: done read_tims')
 
-    # print('FIXME -- hacking sky')
-    # args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
-    #                             hybridPsf=hybridPsf, normalizePsf=normalizePsf,
-    #                             splinesky=True,
-    #                             subsky=False,
-    #                             apodize=apodize,
-    #                             constant_invvar=constant_invvar,
-    #                             pixels=read_image_pixels))
-    #                             for im in ims]
-    # record_event and record_event('stage_tims: starting read_tims')
-    # tims = list(mp.map(read_one_tim, args))
-    # record_event and record_event('stage_tims: done read_tims')
-    # from tractor import ConstantSky
-    # for tim in tims:
-    #     spl = tim.getSky()
-    #     med = np.median(spl.vals)
-    #     print('Splinesky: min', spl.vals.min(), 'max', spl.vals.max(), 'med', med)
-    #     img = tim.getImage()
-    #     print('Before subtracting: pix median', np.median(tim.getImage()), 'vs sig1', tim.sig1)
-    #     #print('zpscale:', tim.zpscale, '1/zpscale', 1/tim.zpscale)
-    #     # scale sky to nanomaggies to match the image pixels
-    #     # (nope, that was already done)
-    #     #img -= (med / tim.zpscale)
-    #     img -= med
-    #     tim.sky = ConstantSky(0.)
-    #     print('After subtracting: pix median', np.median(tim.getImage()), 'vs sig1', tim.sig1)
-
     tnow = Time()
-    print('[parallel tims] Read', len(ccds), 'images:', tnow-tlast)
+    debug('[parallel tims] Read', len(ccds), 'images:', tnow-tlast)
     tlast = tnow
 
     # Cut the table of CCDs to match the 'tims' list
@@ -327,13 +296,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     assert(len(ccds) == len(tims))
     if len(tims) == 0:
         raise NothingToDoError('No photometric CCDs touching brick.')
-
-    # Count pixels
-    npix = 0
-    for tim in tims:
-        h,w = tim.shape
-        npix += h*w
-    print('Total of', npix, 'pixels read')
 
     # Check calibration product versions
     for tim in tims:
@@ -377,84 +339,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     # Cut "bands" down to just the bands for which we have images.
     timbands = [tim.band for tim in tims]
     bands = [b for b in bands if b in timbands]
-    print('Cut bands to', bands)
+    debug('Cut bands to', bands)
 
     if plots:
-        # Pixel histograms of subimages.
-        for b in bands:
-            sig1 = np.median([tim.sig1 for tim in tims if tim.band == b])
-            plt.clf()
-            for tim in tims:
-                if tim.band != b:
-                    continue
-                # broaden range to encompass most pixels... only req'd
-                # when sky is bad
-                lo,hi = -5.*sig1, 5.*sig1
-                pix = tim.getImage()[tim.getInvError() > 0]
-                lo = min(lo, np.percentile(pix, 5))
-                hi = max(hi, np.percentile(pix, 95))
-                plt.hist(pix, range=(lo, hi), bins=50, histtype='step',
-                         alpha=0.5, label=tim.name)
-            plt.legend()
-            plt.xlabel('Pixel values')
-            plt.title('Pixel distributions: %s band' % b)
-            ps.savefig()
-
-            plt.clf()
-            lo,hi = -5., 5.
-            for tim in tims:
-                if tim.band != b:
-                    continue
-                ie = tim.getInvError()
-                pix = (tim.getImage() * ie)[ie > 0]
-                plt.hist(pix, range=(lo, hi), bins=50, histtype='step',
-                         alpha=0.5, label=tim.name)
-            plt.legend()
-            plt.xlabel('Pixel values (sigma)')
-            plt.xlim(lo,hi)
-            plt.title('Pixel distributions: %s band' % b)
-            ps.savefig()
-
-    if plots:# and False:
-        # Plot image pixels, invvars, masks
-        for tim in tims:
-            plt.clf()
-            plt.subplot(2,2,1)
-            dimshow(tim.getImage(), vmin=-3.*tim.sig1, vmax=10.*tim.sig1)
-            plt.title('image')
-            plt.subplot(2,2,2)
-            dimshow(tim.getInvError(), vmin=0, vmax=1.1/tim.sig1)
-            plt.title('inverr')
-            if tim.dq is not None:
-                plt.subplot(2,2,3)
-                dimshow(tim.dq, vmin=0, vmax=tim.dq.max())
-                plt.title('DQ')
-                plt.subplot(2,2,3)
-                dimshow(((tim.dq & tim.dq_saturation_bits) > 0),
-                        vmin=0, vmax=1.5, cmap='hot')
-                plt.title('SATUR')
-            plt.subplot(2,2,4)
-            dimshow(tim.getImage() * (tim.getInvError() > 0),
-                    vmin=-3.*tim.sig1, vmax=10.*tim.sig1)
-            plt.title('image (masked)')
-            plt.suptitle(tim.name)
-            ps.savefig()
-
-            if False and tim.dq is not None:
-                plt.clf()
-                bitmap = dict([(v,k) for k,v in CP_DQ_BITS.items()])
-                k = 1
-                for i in range(12):
-                    bitval = 1 << i
-                    if not bitval in bitmap:
-                        continue
-                    plt.subplot(3,3,k)
-                    k+=1
-                    plt.imshow((tim.dq & bitval) > 0,
-                               vmin=0, vmax=1.5, cmap='hot')
-                    plt.title(bitmap[bitval])
-                plt.suptitle('Mask planes: %s' % tim.name)
-                ps.savefig()
+        from runbrick_plots import tim_plots
+        tim_plots(tims, bands, ps)
 
     # Add header cards about which bands and cameras are involved.
     for band in 'grz':

@@ -4,6 +4,82 @@ from astrometry.util.plotutils import dimshow
 from legacypipe.survey import *
 
 
+def tim_plots(tims, bands, ps):
+    # Pixel histograms of subimages.
+    for b in bands:
+        sig1 = np.median([tim.sig1 for tim in tims if tim.band == b])
+        plt.clf()
+        for tim in tims:
+            if tim.band != b:
+                continue
+            # broaden range to encompass most pixels... only req'd
+            # when sky is bad
+            lo,hi = -5.*sig1, 5.*sig1
+            pix = tim.getImage()[tim.getInvError() > 0]
+            lo = min(lo, np.percentile(pix, 5))
+            hi = max(hi, np.percentile(pix, 95))
+            plt.hist(pix, range=(lo, hi), bins=50, histtype='step',
+                     alpha=0.5, label=tim.name)
+        plt.legend()
+        plt.xlabel('Pixel values')
+        plt.title('Pixel distributions: %s band' % b)
+        ps.savefig()
+
+        plt.clf()
+        lo,hi = -5., 5.
+        for tim in tims:
+            if tim.band != b:
+                continue
+            ie = tim.getInvError()
+            pix = (tim.getImage() * ie)[ie > 0]
+            plt.hist(pix, range=(lo, hi), bins=50, histtype='step',
+                     alpha=0.5, label=tim.name)
+        plt.legend()
+        plt.xlabel('Pixel values (sigma)')
+        plt.xlim(lo,hi)
+        plt.title('Pixel distributions: %s band' % b)
+        ps.savefig()
+
+    # Plot image pixels, invvars, masks
+    for tim in tims:
+        plt.clf()
+        plt.subplot(2,2,1)
+        dimshow(tim.getImage(), vmin=-3.*tim.sig1, vmax=10.*tim.sig1)
+        plt.title('image')
+        plt.subplot(2,2,2)
+        dimshow(tim.getInvError(), vmin=0, vmax=1.1/tim.sig1)
+        plt.title('inverr')
+        if tim.dq is not None:
+            plt.subplot(2,2,3)
+            dimshow(tim.dq, vmin=0, vmax=tim.dq.max())
+            plt.title('DQ')
+            plt.subplot(2,2,3)
+            dimshow(((tim.dq & tim.dq_saturation_bits) > 0),
+                    vmin=0, vmax=1.5, cmap='hot')
+            plt.title('SATUR')
+        plt.subplot(2,2,4)
+        dimshow(tim.getImage() * (tim.getInvError() > 0),
+                vmin=-3.*tim.sig1, vmax=10.*tim.sig1)
+        plt.title('image (masked)')
+        plt.suptitle(tim.name)
+        ps.savefig()
+
+        if False and tim.dq is not None:
+            plt.clf()
+            bitmap = dict([(v,k) for k,v in CP_DQ_BITS.items()])
+            k = 1
+            for i in range(12):
+                bitval = 1 << i
+                if not bitval in bitmap:
+                    continue
+                plt.subplot(3,3,k)
+                k+=1
+                plt.imshow((tim.dq & bitval) > 0,
+                           vmin=0, vmax=1.5, cmap='hot')
+                plt.title(bitmap[bitval])
+            plt.suptitle('Mask planes: %s' % tim.name)
+            ps.savefig()
+
 def _psf_check_plots(tims):
     # HACK -- check PSF models
     plt.figure(num=2, figsize=(7,4.08))
