@@ -931,19 +931,22 @@ def create_temp(**kwargs):
 
 def imsave_jpeg(jpegfn, img, **kwargs):
     '''Saves a image in JPEG format.  Some matplotlib installations
-    (notably at NERSC) don't support jpeg, so we write to PNG and then
-    convert to JPEG using the venerable netpbm tools.
+    don't support jpeg, so we optionally write to PNG and then convert
+    to JPEG using the venerable netpbm tools.
 
     *jpegfn*: JPEG filename
     *img*: image, in the typical matplotlib formats (see plt.imsave)
     '''
     import pylab as plt
-    tmpfn = create_temp(suffix='.png')
-    plt.imsave(tmpfn, img, **kwargs)
-    cmd = ('pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn))
-    rtn = os.system(cmd)
-    print(cmd, '->', rtn)
-    os.unlink(tmpfn)
+    if True:
+        plt.imsave(jpegfn, img, **kwargs)
+    else:
+        tmpfn = create_temp(suffix='.png')
+        plt.imsave(tmpfn, img, **kwargs)
+        cmd = ('pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn))
+        rtn = os.system(cmd)
+        print(cmd, '->', rtn)
+        os.unlink(tmpfn)
 
 class LegacySurveyData(object):
     '''

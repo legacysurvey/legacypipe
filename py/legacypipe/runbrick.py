@@ -27,7 +27,6 @@ if __name__ == '__main__':
     matplotlib.use('Agg')
 import sys
 import os
-from functools import reduce
 
 import pylab as plt
 import numpy as np
@@ -41,34 +40,13 @@ from astrometry.util.ttime import Time
 from legacypipe.survey import get_rgb, imsave_jpeg, LegacySurveyData, MASKBITS
 from legacypipe.image import CP_DQ_BITS
 from legacypipe.utils import (
-    RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels)
+    RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels,
+    get_ulimit)
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 
 # RGB image args used in the tile viewer:
-#rgbkwargs = dict(mnmx=(-1,100.), arcsinh=1.)
-#rgbkwargs_resid = dict(mnmx=(-5,5))
-
 rgbkwargs = dict(mnmx=(-3,300.), arcsinh=1.)
 rgbkwargs_resid = dict(mnmx=(-5,5))
-
-# Memory Limits
-def get_ulimit():
-    import resource
-    for name, desc in [
-        ('RLIMIT_AS', 'VMEM'),
-        ('RLIMIT_CORE', 'core file size'),
-        ('RLIMIT_CPU',  'CPU time'),
-        ('RLIMIT_FSIZE', 'file size'),
-        ('RLIMIT_DATA', 'heap size'),
-        ('RLIMIT_STACK', 'stack size'),
-        ('RLIMIT_RSS', 'resident set size'),
-        ('RLIMIT_NPROC', 'number of processes'),
-        ('RLIMIT_NOFILE', 'number of open files'),
-        ('RLIMIT_MEMLOCK', 'lockable memory address'),
-        ]:
-        limit_num = getattr(resource, name)
-        soft, hard = resource.getrlimit(limit_num)
-        print('Maximum %-25s (%-15s) : %20s %20s' % (desc, name, soft, hard))
 
 def runbrick_global_init():
     from tractor.galaxy import disable_galaxy_cache
@@ -127,9 +105,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
 
     t0 = tlast = Time()
+    record_event and record_event('stage_tims: starting')
+
     assert(survey is not None)
 
-    record_event and record_event('stage_tims: starting')
+
 
     # Get brick object
     custom_brick = (ra is not None)
@@ -143,7 +123,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             raise RunbrickError('No such brick: "%s"' % brickname)
     brickid = brick.brickid
     brickname = brick.brickname
-    print('Got brick:', Time()-t0)
 
     # Get WCS object describing brick
     targetwcs = wcs_for_brick(brick, W=W, H=H, pixscale=pixscale)
@@ -161,11 +140,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         brick.ra2,nil  = targetwcs.pixelxy2radec(1, H/2)
         nil, brick.dec1 = targetwcs.pixelxy2radec(W/2, 1)
         nil, brick.dec2 = targetwcs.pixelxy2radec(W/2, H)
-    print('Got brick wcs:', Time()-t0)
 
     # Create FITS header with version strings
     gitver = get_git_version()
-    print('Got git version:', Time()-t0)
 
     version_header = get_version_header(program_name, survey.survey_dir, release,
                                         git_version=gitver)
@@ -207,8 +184,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             name='CORN%iRA' %(i+1), value=r, comment='[deg] Brick corner RA'))
         version_header.add_record(dict(
             name='CORN%iDEC'%(i+1), value=d, comment='[deg] Brick corner Dec'))
-
-    print('Got FITS header:', Time()-t0)
 
     # Find CCDs
     ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
@@ -1090,6 +1065,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     sources are also split into "blobs" of overlapping pixels.  Each
     of these blobs will be processed independently.
     '''
+    from functools import reduce
     from tractor import PointSource, NanoMaggies, RaDecPos, Catalog
     from legacypipe.detection import (detection_maps, sed_matched_filters,
                         run_sed_matched_filters, segment_and_group_sources)
@@ -2153,11 +2129,10 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     model fits, and we can create coadds of the images, model, and
     residuals.  We also perform aperture photometry in this stage.
     '''
-    from legacypipe.survey import apertures_arcsec, IN_BLOB
     from functools import reduce
+    from legacypipe.survey import apertures_arcsec, IN_BLOB
 
     tlast = Time()
-
     record_event and record_event('stage_coadds: starting')
 
     # Write per-brick CCDs table

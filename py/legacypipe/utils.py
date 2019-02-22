@@ -391,3 +391,22 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
         T = merge_tables(TT, columns='fillzero')
         write_results(fn, T, events, fitshdr)
 
+# Memory Limits
+def get_ulimit():
+    import resource
+    for name, desc in [
+        ('RLIMIT_AS', 'VMEM'),
+        ('RLIMIT_CORE', 'core file size'),
+        ('RLIMIT_CPU',  'CPU time'),
+        ('RLIMIT_FSIZE', 'file size'),
+        ('RLIMIT_DATA', 'heap size'),
+        ('RLIMIT_STACK', 'stack size'),
+        ('RLIMIT_RSS', 'resident set size'),
+        ('RLIMIT_NPROC', 'number of processes'),
+        ('RLIMIT_NOFILE', 'number of open files'),
+        ('RLIMIT_MEMLOCK', 'lockable memory address'),
+        ]:
+        limit_num = getattr(resource, name)
+        soft, hard = resource.getrlimit(limit_num)
+        print('Maximum %-25s (%-15s) : %20s %20s' % (desc, name, soft, hard))
+
