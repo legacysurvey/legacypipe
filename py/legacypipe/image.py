@@ -997,7 +997,7 @@ class LegacySurveyImage(object):
             return psf
 
         # spatially varying pixelized PsfEx
-        from tractor import PixelizedPsfEx, PsfExModel
+        from tractor import PixelizedPsfEx
         psf = None
         if self.merged_psffn is not None:
             if os.path.exists(self.merged_psffn):
@@ -1031,6 +1031,7 @@ class LegacySurveyImage(object):
         return psf
 
     def read_merged_psfex_model(self, normalizePsf=False):
+        from tractor import PsfExModel
         debug('Reading merged PsfEx models from', self.merged_psffn)
         T = fits_table(self.merged_psffn)
         I, = np.nonzero((T.expnum == self.expnum) *
