@@ -121,7 +121,7 @@ if __name__ == '__main__':
                '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
                '--blob-image', '--no-hybrid-psf',
                '--survey-dir', surveydir,
-               '--outdir', outdir] + extra_args)
+               '--outdir', outdir] + extra_args + ['-v'])
     print('Checking for calib file', fn)
     assert(os.path.exists(fn))
 

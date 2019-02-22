@@ -911,7 +911,7 @@ class LegacySurveyImage(object):
 
             if not os.path.exists(self.splineskyfn):
                 if self.merged_splineskyfn is not None:
-                    print('ERROR: Splinesky: neither', self.merged_splineskyfn, 'nor', self.splineskyfn, 'found')
+                    raise RuntimeError('Read Splinesky: neither', self.merged_splineskyfn, 'nor', self.splineskyfn, 'found')
                 return None
 
         fn = self.skyfn
@@ -1004,9 +1004,8 @@ class LegacySurveyImage(object):
                 psf = self.read_merged_psfex_model(normalizePsf=normalizePsf)
             else:
                 if not os.path.exists(self.psffn):
-                    print('ERROR: PsfEx: neither', self.merged_psffn,
+                    raise RuntimeError('Read PsfEx: neither', self.merged_psffn,
                           'nor', self.psffn, 'exist')
-                    return None
 
         if psf is None:
             debug('Reading PsfEx model from', self.psffn)
@@ -1485,6 +1484,7 @@ class LegacySurveyImage(object):
         if psfex:
             self.run_psfex(git_version=git_version, ps=ps)
         if sky:
+            print('Run_sky')
             self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia)
 
 

@@ -1882,7 +1882,7 @@ def run_calibs(X):
     im = X[0]
     kwargs = X[1]
     noraise = kwargs.pop('noraise', False)
-    #print('run_calibs for image', im)
+    debug('run_calibs for image', im, ':', kwargs)
     try:
         return im.run_calibs(**kwargs)
     except:

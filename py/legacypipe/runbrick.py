@@ -48,6 +48,15 @@ from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 rgbkwargs = dict(mnmx=(-3,300.), arcsinh=1.)
 rgbkwargs_resid = dict(mnmx=(-5,5))
 
+import logging
+logger = logging.getLogger('legacypipe.runbrick')
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
+
 def runbrick_global_init():
     from tractor.galaxy import disable_galaxy_cache
     print('Starting process', os.getpid(), Time()-Time())
@@ -3643,6 +3652,8 @@ def main(args=None):
         print('Starting thread to run "ps"')
         ps_thread.start()
 
+    debug('kwargs:', kwargs)
+        
     rtn = -1
     try:
         run_brick(opt.brick, survey, **kwargs)
