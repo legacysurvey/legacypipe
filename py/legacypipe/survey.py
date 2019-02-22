@@ -1043,13 +1043,21 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if self.version in ['dr1','dr2']:
             self.file_prefix = 'decals'
 
+        import logging
+        self.log = logging.getLogger('legacypipe.survey')
+        #if self.verbose:
+
+    def info(self, *args):
+        from legacypipe.utils import log_info
+        log_info(self.log, args)
+
+    def debug(self, *args):
+        from legacypipe.utils import log_debug
+        log_debug(self.log, args)
+        
     def __str__(self):
         return ('%s: dir %s, out %s' %
                 (type(self).__name__, self.survey_dir, self.output_dir))
-
-    def debug(self, *args):
-        if self.verbose:
-            print(*args)
 
     def ccds_for_fitting(self, brick, ccds):
         # By default, use all.
@@ -1243,9 +1251,9 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         cfn = fn.replace(self.survey_dir, self.cache_dir)
         #print('cache fn', cfn)
         if os.path.exists(cfn):
-            print('Cached file hit:', fn, '->', cfn)
+            self.debug('Cached file hit:', fn, '->', cfn)
             return cfn
-        print('Cached file miss:', fn, '-/->', cfn)
+        self.debug('Cached file miss:', fn, '-/->', cfn)
 
         ### HACK for post-DR5 NonDECaLS reorg / DMD
         if 'CPHETDEX' in fn:
@@ -1258,7 +1266,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             pat = fn.replace('CPHETDEX', '*')
             fns = glob(pat)
             if len(fns) == 1:
-                print('Globbed', pat, '->', fns[0])
+                self.debug('Globbed', pat, '->', fns[0])
                 return fns[0]
 
         return fn
@@ -1396,7 +1404,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                     f = open(self.tmpfn, 'wb')
                     f.write(rawdata)
                     f.close()
-                    print('Wrote', self.tmpfn)
+                    self.survey.debug('Wrote', self.tmpfn)
                     del rawdata
                 else:
                     f = open(self.tmpfn, 'rb')
@@ -1408,7 +1416,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                     del sha
 
                 os.rename(self.tmpfn, self.real_fn)
-                print('Renamed to', self.real_fn)
+                self.survey.debug('Renamed to', self.real_fn)
+                self.survey.info('Wrote', self.real_fn)
 
                 if self.hashsum:
                     # List the relative filename (from output dir) in
@@ -1578,16 +1587,16 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         if rahi < ralo:
             # Wrap-around
-            print('In Dec slice:', len(np.flatnonzero((bricks.dec1 <= dechi) *
+            self.debug('In Dec slice:', len(np.flatnonzero((bricks.dec1 <= dechi) *
                                                       (bricks.dec2 >= declo))))
-            print('Above RAlo=', ralo, ':', len(np.flatnonzero(bricks.ra2 >= ralo)))
-            print('Below RAhi=', rahi, ':', len(np.flatnonzero(bricks.ra1 <= rahi)))
-            print('In RA slice:', len(np.nonzero(np.logical_or(bricks.ra2 >= ralo,
+            self.debug('Above RAlo=', ralo, ':', len(np.flatnonzero(bricks.ra2 >= ralo)))
+            self.debug('Below RAhi=', rahi, ':', len(np.flatnonzero(bricks.ra1 <= rahi)))
+            self.debug('In RA slice:', len(np.nonzero(np.logical_or(bricks.ra2 >= ralo,
                                                                bricks.ra1 <= rahi))))
 
             I, = np.nonzero(np.logical_or(bricks.ra2 >= ralo, bricks.ra1 <= rahi) *
                             (bricks.dec1 <= dechi) * (bricks.dec2 >= declo))
-            print('In RA&Dec slice', len(I))
+            self.debug('In RA&Dec slice', len(I))
         else:
             I, = np.nonzero((bricks.ra1  <= rahi ) * (bricks.ra2  >= ralo) *
                             (bricks.dec1 <= dechi) * (bricks.dec2 >= declo))
@@ -1626,7 +1635,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         TT = []
         for fn in fns:
-            print('Reading CCDs from', fn)
+            self.debug('Reading CCDs from', fn)
             # cols = (
             #     'exptime filter propid crpix1 crpix2 crval1 crval2 ' +
             #     'cd1_1 cd1_2 cd2_1 cd2_2 ccdname ccdzpt ccdraoff ccddecoff ' +
@@ -1634,13 +1643,13 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             #     'ra dec zpt expnum fwhm mjd_obs').split()
             #T = fits_table(fn, columns=cols)
             T = fits_table(fn, **kwargs)
-            print('Got', len(T), 'CCDs')
+            self.debug('Got', len(T), 'CCDs')
             TT.append(T)
         if len(TT) > 1:
             T = merge_tables(TT, columns='fillzero')
         else:
             T = TT[0]
-        print('Total of', len(T), 'CCDs')
+        self.debug('Total of', len(T), 'CCDs')
         del TT
 
         cols = T.columns()
@@ -1664,12 +1673,12 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         fns = self.find_file('annotated-ccds')
         TT = []
         for fn in fns:
-            print('Reading annotated CCDs from', fn)
+            self.debug('Reading annotated CCDs from', fn)
             T = fits_table(fn)
-            print('Got', len(T), 'CCDs')
+            self.debug('Got', len(T), 'CCDs')
             TT.append(T)
         T = merge_tables(TT, columns='fillzero')
-        print('Total of', len(T), 'CCDs')
+        self.debug('Total of', len(T), 'CCDs')
         del TT
         T = self.cleanup_ccds_table(T)
         return T
@@ -1848,18 +1857,18 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         from astrometry.libkd.spherematch import tree_open
         TT = []
         for fn in fns:
-            print('Searching', fn)
+            self.debug('Searching', fn)
             try:
                 kd = tree_open(fn, 'expnum')
             except:
-                print('Failed to open', fn, ':')
+                self.debug('Failed to open', fn, ':')
                 import traceback
                 traceback.print_exc()
                 continue
             if kd is None:
                 return None
             I = kd.search(np.array([expnum]), 0.5, 0, 0)
-            print(len(I), 'CCDs with expnum', expnum, 'in', fn)
+            self.debug(len(I), 'CCDs with expnum', expnum, 'in', fn)
             if len(I) == 0:
                 continue
             # Read only the CCD-table rows within range.
@@ -1876,7 +1885,7 @@ def run_calibs(X):
     im = X[0]
     kwargs = X[1]
     noraise = kwargs.pop('noraise', False)
-    print('run_calibs for image', im)
+    #print('run_calibs for image', im)
     try:
         return im.run_calibs(**kwargs)
     except:
@@ -1888,7 +1897,7 @@ def run_calibs(X):
 
 def read_one_tim(X):
     (im, targetrd, kwargs) = X
-    print('Reading', im)
+    #print('Reading', im)
     tim = im.get_tractor_image(radecpoly=targetrd, **kwargs)
     return tim
 

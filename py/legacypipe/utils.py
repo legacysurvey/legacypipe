@@ -8,6 +8,14 @@ from tractor.utils import _GaussianPriors
 from astrometry.util.multiproc import multiproc
 from astrometry.util.ttime import Time
 
+def log_info(logger, args):
+    msg = ' '.join(map(str, args))
+    logger.info(msg)
+
+def log_debug(logger, args):
+    msg = ' '.join(map(str, args))
+    logger.debug(msg)
+    
 class EllipseWithPriors(EllipseESoft):
     '''An ellipse (used to represent galaxy shapes) with Gaussian priors
     over softened ellipticity parameters.  This class is used during

@@ -112,11 +112,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     logger = logging.getLogger('runbrick.tims')
     def info(*args):
-        msg = ' '.join(map(str, args))
-        logger.info(msg)
+        from legacypipe.utils import log_info
+        log_info(logger, args)
     def debug(*args):
-        msg = ' '.join(map(str, args))
-        logger.debug(msg)
+        from legacypipe.utils import log_debug
+        log_debug(logger, args)
 
     # Get brick object
     custom_brick = (ra is not None)
@@ -196,7 +196,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
     if ccds is None:
         raise NothingToDoError('No CCDs touching brick')
-    info(len(ccds), 'CCDs touching target WCS')
+    debug(len(ccds), 'CCDs touching target WCS')
 
     if 'ccd_cuts' in ccds.get_columns():
         ccds.cut(ccds.ccd_cuts == 0)
@@ -250,8 +250,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             im.check_for_cached_files(survey)
         ims.append(im)
         info('  ', im, im.band, 'exptime', im.exptime, 'propid', ccd.propid,
-              'seeing %.2f' % (ccd.fwhm*im.pixscale),
-              'object', getattr(ccd, 'object', '').strip(), 'MJD %.3f' % ccd.mjd_obs)
+              'seeing %.2f' % (ccd.fwhm*im.pixscale), 'MJD %.3f' % ccd.mjd_obs,
+              'object', getattr(ccd, 'object', '').strip())
 
     tnow = Time()
     debug('[serial tims] Finding images touching brick:', tnow-tlast)
@@ -3067,8 +3067,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     from astrometry.util.multiproc import multiproc
     from astrometry.util.plotutils import PlotSequence
 
-    print('Total Memory Available to Job:')
-    get_ulimit()
+    # print('Total Memory Available to Job:')
+    # get_ulimit()
 
     # *initargs* are passed to the first stage (stage_tims)
     # so should be quantities that shouldn't get updated from their pickled
@@ -3506,7 +3506,7 @@ def get_runbrick_kwargs(survey=None,
                             survey_dir=survey_dir,
                             output_dir=output_dir,
                             cache_dir=cache_dir)
-        print('Got survey:', survey)
+        print(survey)
     
     if check_done or skip or skip_coadd:
         if skip_coadd:
@@ -3583,10 +3583,10 @@ def main(args=None):
         print('Command-line args:', sys.argv)
     else:
         print('Args:', args)
-    print()
-    print('Slurm cluster:', os.environ.get('SLURM_CLUSTER_NAME', 'none'))
-    print('Job id:', os.environ.get('SLURM_JOB_ID', 'none'))
-    print('Array task id:', os.environ.get('ARRAY_TASK_ID', 'none'))
+    cid = os.environ.get('SLURM_CLUSTER_NAME', 'none')
+    jid = os.environ.get('SLURM_JOB_ID', 'none')
+    aid = os.environ.get('ARRAY_TASK_ID', 'none')
+    print('Slurm cluster/job/array:', cid, '/', jid, '/', aid)
     print()
 
     parser = get_parser()
@@ -3642,8 +3642,6 @@ def main(args=None):
         ps_thread.daemon = True
         print('Starting thread to run "ps"')
         ps_thread.start()
-
-    print('kwargs:', kwargs)
 
     rtn = -1
     try:

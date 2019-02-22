@@ -4,6 +4,16 @@ import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
 
+import logging
+logger = logging.getLogger('legacypipe.image')
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
+
+
 '''
 Base class for handling the images we process.  These are all
 processed by variants of the NOAO Community Pipeline (CP), so this
@@ -168,8 +178,8 @@ class LegacySurveyImage(object):
             if fn.endswith('.fz'):
                 fun = fn[:-3]
                 if os.path.exists(fun):
-                    print('Using      ', fun)
-                    print('rather than', fn)
+                    debug('Using      ', fun)
+                    debug('rather than', fn)
                     setattr(self, attr, fun)
                     fn = fun
 
@@ -185,7 +195,7 @@ class LegacySurveyImage(object):
             if fn is None:
                 continue
             cfn = survey.check_cache(fn)
-            #print('Checking for cached', key, ':', fn, '->', cfn)
+            #debug('Checking for cached', key, ':', fn, '->', cfn)
             if cfn != fn:
                 setattr(self, key, cfn)
 
@@ -285,12 +295,12 @@ class LegacySurveyImage(object):
 
         x0,x1,y0,y1,slc = self.get_image_extent(wcs=wcs, slc=slc, radecpoly=radecpoly)
         if y1 - y0 < tiny or x1 - x0 < tiny:
-            print('Skipping tiny subimage')
+            debug('Skipping tiny subimage')
             return None
 
         # Read image pixels
         if pixels:
-            print('Reading image slice:', slc)
+            debug('Reading image slice:', slc)
             img,imghdr = self.read_image(header=True, slice=slc)
             self.check_image_header(imghdr)
         else:
@@ -305,7 +315,7 @@ class LegacySurveyImage(object):
             invvar = np.ones_like(img)
         assert(np.all(np.isfinite(invvar)))
         if np.all(invvar == 0.):
-            print('Skipping zero-invvar image')
+            debug('Skipping zero-invvar image')
             return None
         # Negative invvars (from, eg, fpack decompression noise) cause havoc
         if not np.all(invvar >= 0.):
@@ -318,7 +328,7 @@ class LegacySurveyImage(object):
                 dq = self.remap_dq(dq, dqhdr)
                 invvar[dq != 0] = 0.
             if np.all(invvar == 0.):
-                print('Skipping zero-invvar image (after DQ masking)')
+                debug('Skipping zero-invvar image (after DQ masking)')
                 return None
 
         # header 'FWHM' is in pixels
@@ -350,10 +360,10 @@ class LegacySurveyImage(object):
                 blobmap,nblobs = label(dq & bits)
                 badblobs = np.unique(np.append(blobmap[:,0], blobmap[:,-1]))
                 badblobs = badblobs[badblobs != 0]
-                #print('Bad blobs:', badblobs)
+                #debug('Bad blobs:', badblobs)
                 for bad in badblobs:
                     n = np.sum(blobmap == bad)
-                    print('Setting', n, 'edge SATUR|BLEED pixels to EDGE')
+                    debug('Setting', n, 'edge SATUR|BLEED pixels to EDGE')
                     dq[blobmap == bad] = CP_DQ_BITS['edge']
 
         # Drop rows and columns at the image edges that are all masked.
@@ -372,11 +382,11 @@ class LegacySurveyImage(object):
         y1_new += 1
         x1_new += 1
         if x0_new != x0 or x1_new != x1 or y0_new != y0 or y1_new != y1:
-            #print('Old x0,x1', x0,x1, 'y0,y1', y0,y1)
-            #print('New x0,x1', x0_new,x1_new, 'y0,y1', y0_new,y1_new)
+            #debug('Old x0,x1', x0,x1, 'y0,y1', y0,y1)
+            #debug('New x0,x1', x0_new,x1_new, 'y0,y1', y0_new,y1_new)
 
             if y1_new - y0_new < tiny or x1_new - x0_new < tiny:
-                print('Skipping tiny subimage (after clipping masked edges)')
+                debug('Skipping tiny subimage (after clipping masked edges)')
                 return None
 
             img    = img   [y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
@@ -395,7 +405,7 @@ class LegacySurveyImage(object):
         midsky = np.median(skymod)
         if subsky:
             from tractor.sky import ConstantSky
-            print('Instantiating and subtracting sky model')
+            debug('Instantiating and subtracting sky model')
             img -= skymod
             zsky = ConstantSky(0.)
             zsky.version = getattr(sky, 'version', '')
@@ -431,7 +441,7 @@ class LegacySurveyImage(object):
         assert(np.isfinite(sig1))
 
         if constant_invvar:
-            print('Setting constant invvar', 1./sig1**2)
+            debug('Setting constant invvar', 1./sig1**2)
             invvar[invvar > 0] = 1./sig1**2
 
         if apodize and slc is not None:
@@ -451,22 +461,22 @@ class LegacySurveyImage(object):
             apo = False
             #if y0 == 0:
             if True:
-                #print('Apodize bottom')
+                #debug('Apodize bottom')
                 invvar[:len(rampy),:] *= rampy[:,np.newaxis]
                 apo = True
             #if x0 == 0:
             if True:
-                #print('Apodize left')
+                #debug('Apodize left')
                 invvar[:,:len(rampx)] *= rampx[np.newaxis,:]
                 apo = True
             #if y1 >= H:
             if True:
-                #print('Apodize top')
+                #debug('Apodize top')
                 invvar[-len(rampy):,:] *= rampy[::-1][:,np.newaxis]
                 apo = True
             #if x1 >= W:
             if True:
-                #print('Apodize right')
+                #debug('Apodize right')
                 invvar[:,-len(rampx):] *= rampx[::-1][np.newaxis,:]
                 apo = True
 
@@ -579,7 +589,7 @@ class LegacySurveyImage(object):
         new_extent = self.get_good_image_slice((x0,x1,y0,y1), get_extent=True)
         if new_extent != old_extent:
             x0,x1,y0,y1 = new_extent
-            print('Applying good subregion of CCD: slice is', x0,x1,y0,y1)
+            debug('Applying good subregion of CCD: slice is', x0,x1,y0,y1)
             if x0 >= x1 or y0 >= y1:
                 return 0,0,0,0,None
             slc = slice(y0,y1), slice(x0,x1)
@@ -591,7 +601,7 @@ class LegacySurveyImage(object):
     # A function that can be called by a subclasser's remap_invvar() method,
     # if desired, to include the contribution from the source Poisson fluctuations
     def remap_invvar_shotnoise(self, invvar, primhdr, img, dq):
-        print('Remapping weight map for', self.name)
+        debug('Remapping weight map for', self.name)
         const_sky = primhdr['SKYADU'] # e/s, Recommended sky level keyword from Frank 
         expt = primhdr['EXPTIME'] # s
         with np.errstate(divide='ignore'):
@@ -680,7 +690,7 @@ class LegacySurveyImage(object):
         (image, header) : (numpy array, fitsio header)
             If `header = True`.
         '''
-        print('Reading image from', self.imgfn, 'hdu', self.hdu)
+        debug('Reading image from', self.imgfn, 'hdu', self.hdu)
         return self._read_fits(self.imgfn, self.hdu, **kwargs)
 
     def get_image_shape(self):
@@ -766,7 +776,7 @@ class LegacySurveyImage(object):
         '''
         Reads the Data Quality (DQ) mask image.
         '''
-        print('Reading data quality image', self.dqfn, 'ext', self.hdu)
+        debug('Reading data quality image', self.dqfn, 'ext', self.hdu)
         dq = self._read_fits(self.dqfn, self.hdu, **kwargs)
 
         # FIXME - Turn SATUR on edges to EDGE
@@ -786,7 +796,7 @@ class LegacySurveyImage(object):
         '''
         Reads the inverse-variance (weight) map image.
         '''
-        print('Reading weight map image', self.wtfn, 'ext', self.hdu)
+        debug('Reading weight map image', self.wtfn, 'ext', self.hdu)
         invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
         return invvar
 
@@ -827,7 +837,7 @@ class LegacySurveyImage(object):
         wcs = wcs_pv2sip_hdr(hdr, stepsize=stepsize)
         # Correction: ccd ra,dec offsets from zeropoints/CCDs file
         dra,ddec = self.dradec
-        # print('Applying astrometric zeropoint:', (dra,ddec))
+        # debug('Applying astrometric zeropoint:', (dra,ddec))
         r,d = wcs.get_crval()
         wcs.set_crval((r + dra / np.cos(np.deg2rad(d)), d + ddec))
         wcs.version = ''
@@ -862,17 +872,17 @@ class LegacySurveyImage(object):
         '''
         if splinesky and getattr(self, 'merged_splineskyfn', None) is not None:
             if not os.path.exists(self.merged_splineskyfn):
-                print('Merged spline sky model does not exist:', self.merged_splineskyfn)
+                debug('Merged spline sky model does not exist:', self.merged_splineskyfn)
         if (splinesky and getattr(self, 'merged_splineskyfn', None) is not None
             and os.path.exists(self.merged_splineskyfn)):
             try:
-                print('Reading merged spline sky models from', self.merged_splineskyfn)
+                debug('Reading merged spline sky models from', self.merged_splineskyfn)
                 T = fits_table(self.merged_splineskyfn)
                 if 'sig1' in T.get_columns():
                     I, = np.nonzero((T.expnum == self.expnum) *
                                     np.array([c.strip() == self.ccdname
                                               for c in T.ccdname]))
-                    print('Found', len(I), 'matching CCD')
+                    debug('Found', len(I), 'matching CCD')
                     if len(I) >= 1:
                         return T.sig1[I[0]]
             except:
@@ -881,7 +891,7 @@ class LegacySurveyImage(object):
             fn = self.splineskyfn
         else:
             fn = self.skyfn
-        print('Reading sky model from', fn)
+        debug('Reading sky model from', fn)
         hdr = fitsio.read_header(fn)
         sig1 = hdr.get('SIG1', None)
         return sig1
@@ -893,51 +903,22 @@ class LegacySurveyImage(object):
         from tractor.utils import get_class_from_name
 
         sky = None
-        if splinesky and getattr(self, 'merged_splineskyfn', None) is not None:
-            if not os.path.exists(self.merged_splineskyfn):
-                print('Merged spline sky model does not exist:', self.merged_splineskyfn)
-
-        if (splinesky and getattr(self, 'merged_splineskyfn', None) is not None
-            and os.path.exists(self.merged_splineskyfn)):
-            try:
-                print('Reading merged spline sky models from', self.merged_splineskyfn)
-                T = fits_table(self.merged_splineskyfn)
-                I, = np.nonzero((T.expnum == self.expnum) *
-                                np.array([c.strip() == self.ccdname
-                                          for c in T.ccdname]))
-                print('Found', len(I), 'matching CCDs')
-                if len(I) == 1:
-                    Ti = T[I[0]]
-                    # Remove any padding
-                    h,w = Ti.gridh, Ti.gridw
-                    Ti.gridvals = Ti.gridvals[:h, :w]
-                    Ti.xgrid = Ti.xgrid[:w]
-                    Ti.ygrid = Ti.ygrid[:h]
-
-                    skyclass = Ti.skyclass.strip()
-                    clazz = get_class_from_name(skyclass)
-                    fromfits = getattr(clazz, 'from_fits_row')
-                    sky = fromfits(Ti)
-                    
-                    if slc is not None:
-                        sy,sx = slc
-                        x0,y0 = sx.start,sy.start
-                        sky.shift(x0, y0)
-                    sky.version = Ti.legpipev
-                    sky.plver = Ti.plver
-                    if 'sig1' in Ti.get_columns():
-                        sky.sig1 = Ti.sig1
-                    if 'imgdsum' in Ti.get_columns():
-                        sky.datasum = Ti.imgdsum
+        if splinesky:
+            mergedfn = getattr(self, 'merged_splineskyfn', None)
+            if mergedfn is not None and os.path.exists(mergedfn):
+                sky = self.read_merged_splinesky_model(slc=slc)
+                if sky is not None:
                     return sky
-            except:
-                import traceback
-                traceback.print_exc()
+
+            if not os.path.exists(self.splineskyfn):
+                if mergedfn is not None:
+                    print('ERROR: Splinesky: neither', mergedfn, 'nor', self.splineskyfn, 'found')
+                return None
 
         fn = self.skyfn
         if splinesky:
             fn = self.splineskyfn
-        print('Reading sky model from', fn)
+        debug('Reading sky model from', fn)
         hdr = fitsio.read_header(fn)
         try:
             skyclass = hdr['SKY']
@@ -969,6 +950,37 @@ class LegacySurveyImage(object):
         sky.datasum = hdr.get('IMGDSUM')
         return sky
 
+    def read_merged_splinesky_model(self, slc=None):
+        debug('Reading merged spline sky models from', self.merged_splineskyfn)
+        T = fits_table(self.merged_splineskyfn)
+        I, = np.nonzero((T.expnum == self.expnum) *
+                        np.array([c.strip() == self.ccdname
+                                  for c in T.ccdname]))
+        debug('Found', len(I), 'matching CCDs in merged splinesky file')
+        if len(I) != 1:
+            return None
+        Ti = T[I[0]]
+        # Remove any padding
+        h,w = Ti.gridh, Ti.gridw
+        Ti.gridvals = Ti.gridvals[:h, :w]
+        Ti.xgrid = Ti.xgrid[:w]
+        Ti.ygrid = Ti.ygrid[:h]
+        skyclass = Ti.skyclass.strip()
+        clazz = get_class_from_name(skyclass)
+        fromfits = getattr(clazz, 'from_fits_row')
+        sky = fromfits(Ti)
+        if slc is not None:
+            sy,sx = slc
+            x0,y0 = sx.start,sy.start
+            sky.shift(x0, y0)
+        sky.version = Ti.legpipev
+        sky.plver = Ti.plver
+        if 'sig1' in Ti.get_columns():
+            sky.sig1 = Ti.sig1
+        if 'imgdsum' in Ti.get_columns():
+            sky.datasum = Ti.imgdsum
+        return sky
+    
     def read_psf_model(self, x0, y0,
                        gaussPsf=False, pixPsf=False, hybridPsf=False,
                        normalizePsf=False,
