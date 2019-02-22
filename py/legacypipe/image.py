@@ -950,6 +950,7 @@ class LegacySurveyImage(object):
         return sky
 
     def read_merged_splinesky_model(self, slc=None):
+        from tractor.utils import get_class_from_name
         debug('Reading merged spline sky models from', self.merged_splineskyfn)
         T = fits_table(self.merged_splineskyfn)
         I, = np.nonzero((T.expnum == self.expnum) *
