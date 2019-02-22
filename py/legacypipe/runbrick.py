@@ -3454,11 +3454,16 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('-b', '--brick',
         help='Brick name to run; required unless --radec is given')
 
-    parser.add_argument(
-        '--radec', nargs=2,
+    parser.add_argument('--radec', nargs=2,
         help='RA,Dec center for a custom location (not a brick)')
     parser.add_argument('--pixscale', type=float, default=0.262,
                         help='Pixel scale of the output coadds (arcsec/pixel)')
+    parser.add_argument('-W', '--width', type=int, default=3600,
+                        help='Target image width, default %(default)i')
+    parser.add_argument('-H', '--height', type=int, default=3600,
+                        help='Target image height, default %(default)i')
+    parser.add_argument('--zoom', type=int, nargs=4,
+                        help='Set target image extent (default "0 3600 0 3600")')
 
     parser.add_argument('-d', '--outdir', dest='output_dir',
                         help='Set output base directory, default "."')
@@ -3466,9 +3471,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--release', default=7999, type=int,
                         help='Release code for output catalogs')
 
-    parser.add_argument(
-        '--survey-dir', type=str, default=None,
-        help='Override the $LEGACY_SURVEY_DIR environment variable')
+    parser.add_argument('--survey-dir', type=str, default=None,
+                        help='Override the $LEGACY_SURVEY_DIR environment variable')
 
     parser.add_argument('--cache-dir', type=str, default=None,
                         help='Directory to search for cached files')
@@ -3489,15 +3493,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--plot-number', type=int, default=0,
                         help='Set PlotSequence starting number')
 
-    parser.add_argument('-W', '--width', type=int, default=3600,
-                        help='Target image width, default %(default)i')
-    parser.add_argument('-H', '--height', type=int, default=3600,
-                        help='Target image height, default %(default)i')
-
-    parser.add_argument(
-        '--zoom', type=int, nargs=4,
-        help='Set target image extent (default "0 3600 0 3600")')
-
     parser.add_argument('--ceres', default=False, action='store_true',
                         help='Use Ceres Solver for all optimization?')
 
@@ -3517,7 +3512,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         help=('Debugging: run the single blob containing RA,Dec <ra> <dec>; '+
               'this option can be repeated to run multiple blobs.'))
 
-    parser.add_argument('--max-blobsize', type=int, help='Skip blobs containing more than the given number of pixels.')
+    parser.add_argument('--max-blobsize', type=int,
+                        help='Skip blobs containing more than the given number of pixels.')
 
     parser.add_argument(
         '--check-done', default=False, action='store_true',
