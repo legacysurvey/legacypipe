@@ -55,6 +55,7 @@ RUN for x in \
     matplotlib \
     astropy \
     photutils \
+    zmq \
     ; do pip3 install $x; done \
     && rm -Rf /root/.cache/pip
 
@@ -88,8 +89,6 @@ RUN cd /src/ \
     && cd qdo \
     && python3 setup.py install
 
-# Technically we could delete everything in /src at this point...
-
 # python = python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
@@ -104,6 +103,5 @@ RUN cd /src \
     && cd /src/legacypipe/py \
     && ln -s /src/legacyzpts/py/legacyzpts .
 
-RUN pip3 install zmq
-
-#RUN cd /src/legacypipe && git pull && echo 1
+# up!
+RUN cd /src/legacypipe && git pull && echo 1
