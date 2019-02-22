@@ -112,9 +112,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     logger = logging.getLogger('runbrick.tims')
     def info(*args):
-        logger.info(*args)
+        msg = ' '.join(map(str, args))
+        logger.info(msg)
     def debug(*args):
-        logger.debug(*args)
+        msg = ' '.join(map(str, args))
+        logger.debug(msg)
 
     # Get brick object
     custom_brick = (ra is not None)
