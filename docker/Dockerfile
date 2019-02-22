@@ -104,4 +104,4 @@ RUN cd /src \
     && ln -s /src/legacyzpts/py/legacyzpts .
 
 # up!
-RUN cd /src/legacypipe && git pull && echo 5
+RUN cd /src/legacypipe && git pull && echo 6

@@ -7,8 +7,9 @@
 # Burst-buffer!
 BB=$DW_PERSISTENT_STRIPED_dr8
 
-#export LEGACY_SURVEY_DIR=/global/cscratch1/sd/dstn/dr8-depthcut
-export LEGACY_SURVEY_DIR=$BB/dr8-depthcut
+export LEGACY_SURVEY_DIR=/global/cscratch1/sd/dstn/dr8-depthcut
+#export LEGACY_SURVEY_DIR=$BB/dr8-depthcut
+cachedir=${BB}dr8-depthcut
 
 export DUST_DIR=/global/project/projectdirs/cosmo/data/dust/v0_1
 export UNWISE_COADDS_DIR=/global/projecta/projectdirs/cosmo/work/wise/outputs/merge/neo4/fulldepth:/global/project/projectdirs/cosmo/data/unwise/allwise/unwise-coadds/fulldepth
@@ -46,7 +47,7 @@ cd /src/legacypipe/py
 
 #outdir=$LEGACY_SURVEY_DIR
 #outdir=/global/cscratch1/sd/dstn/dr8test010
-outdir=$BB/dr8test11
+outdir=${BB}dr8test11
 
 brick="$1"
 
@@ -80,6 +81,7 @@ python -u legacypipe/runbrick.py \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
      --unwise-coadds \
      --survey-dir $LEGACY_SURVEY_DIR \
+     --cache-dir $cachedir \
      --outdir $outdir \
      --brick $brick \
      >> $log 2>&1

@@ -911,7 +911,7 @@ class LegacySurveyImage(object):
 
             if not os.path.exists(self.splineskyfn):
                 if self.merged_splineskyfn is not None:
-                    print('ERROR: Splinesky: neither', mergedfn, 'nor', self.splineskyfn, 'found')
+                    print('ERROR: Splinesky: neither', self.merged_splineskyfn, 'nor', self.splineskyfn, 'found')
                 return None
 
         fn = self.skyfn
