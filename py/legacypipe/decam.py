@@ -5,6 +5,15 @@ import astropy.time
 
 from legacypipe.image import LegacySurveyImage, CP_DQ_BITS
 
+import logging
+logger = logging.getLogger('legacypipe.decam')
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
+
 '''
 Code specific to images from the Dark Energy Camera (DECam).
 '''
@@ -34,17 +43,17 @@ class DecamImage(LegacySurveyImage):
                 (self.mjdobs < DecamImage.glowmjd)):
             # Northern chips: drop 100 pix off the bottom
             if 'N' in self.ccdname:
-                print('Clipping bottom part of northern DES r-band chip')
+                debug('Clipping bottom part of northern DES r-band chip')
                 y0 = 100
             else:
                 # Southern chips: drop 100 pix off the top
-                print('Clipping top part of southern DES r-band chip')
+                debug('Clipping top part of southern DES r-band chip')
                 y1 = self.height - 100
 
         # Clip the bad half of chip S7.
         # The left half is OK.
         if self.ccdname == 'S7':
-            print('Clipping the right half of chip S7')
+            debug('Clipping the right half of chip S7')
             x1 = 1023
 
         return x0,x1,y0,y1
@@ -58,8 +67,8 @@ class DecamImage(LegacySurveyImage):
         plver = primhdr['PLVER']
         if decam_has_dq_codes(plver):
             # IGNORE SATELLITE MASKER
-            print('Remapping DQ bits for', str(self))
-            print('', np.sum(dq == 8), 'pixels have code 8 set')
+            debug('Remapping DQ bits for', str(self))
+            debug('', np.sum(dq == 8), 'pixels have code 8 set')
             dq[dq == 8] = 0
             dq = self.remap_dq_cp_codes(dq, hdr)
         else:
@@ -69,7 +78,7 @@ class DecamImage(LegacySurveyImage):
             bothbits = CP_DQ_BITS['badpix'] | CP_DQ_BITS['satur']
             I = np.flatnonzero((dq & bothbits) == bothbits)
             if len(I):
-                print('Warning: un-setting SATUR for', len(I),
+                debug('Warning: un-setting SATUR for', len(I),
                       'pixels with SATUR and BADPIX set.')
                 dq.flat[I] &= ~CP_DQ_BITS['satur']
                 assert(np.all((dq & bothbits) != bothbits))
