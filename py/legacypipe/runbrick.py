@@ -344,7 +344,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     debug('Cut bands to', bands)
 
     if plots:
-        from runbrick_plots import tim_plots
+        from legacypipe.runbrick_plots import tim_plots
         tim_plots(tims, bands, ps)
 
     # Add header cards about which bands and cameras are involved.
