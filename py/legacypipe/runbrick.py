@@ -3459,7 +3459,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         action='store_false',
                         help="Don't use Gaia sources as fixed stars")
 
-    parser.add_argument('--no-large-galaxies', dest='large_galaxies', default=False,
+    parser.add_argument('--no-large-galaxies', dest='large_galaxies', default=True,
                         action='store_false', help="Don't do the default large-galaxy magic.")
 
     parser.add_argument('--min-mjd', type=float,
