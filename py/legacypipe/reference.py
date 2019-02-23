@@ -58,8 +58,11 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                 tycho.cut(keep)
                 #print('Cut to', len(tycho), 'Tycho-2 stars that do not match Gaia')
                 gaia.isbright[J] = True
-        if len(gaia):
-            refs.append(gaia)
+        if gaia is not None and len(gaia) > 0:
+            if refs is None:
+                refs = [gaia]
+            else:
+                refs.append(gaia)
 
     # Read the catalog of star (open and globular) clusters and add them to the
     # set of reference stars (with the isbright bit set).
@@ -68,13 +71,19 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         if clusters is not None:
             print('Found', len(clusters), 'star clusters nearby')
             clusters.iscluster = np.ones(len(clusters), bool)
-            refs.append(clusters)
+            if refs is None:
+                refs = [clusters]
+            else:
+                refs.append(clusters)
 
     # Read large galaxies nearby.
     if large_galaxies:
         galaxies = read_large_galaxies(survey, targetwcs)
         if galaxies is not None:
-            refs.append(galaxies)
+            if refs is None:
+                refs = [galaxies]
+            else:
+                refs.append(galaxies)
 
     refcat = None
     if refs:
