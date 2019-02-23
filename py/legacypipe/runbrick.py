@@ -215,10 +215,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         debug('Cutting to', len(I), 'of', len(ccds), 'CCDs for fitting.')
         ccds.cut(I)
 
-    # DR8 -- drop early data from before additional baffling was added to the camera.
-    ccds.cut(ccds.mjd_obs >= 56730)
-    debug('Dropping CCDs before MJD 56730 (DATE >= 2014-03-14): now', len(ccds))
-
     if min_mjd is not None:
         ccds.cut(ccds.mjd_obs >= min_mjd)
         debug('Cut to', len(ccds), 'after MJD', min_mjd)
@@ -3446,8 +3442,10 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--no-large-galaxies', dest='large_galaxies', default=True,
                         action='store_false', help="Don't do the default large-galaxy magic.")
-
-    parser.add_argument('--min-mjd', type=float,
+    # HACK -- Default value for DR8 MJD cut
+    # DR8 -- drop early data from before additional baffling was added to the camera.
+    # 56730 = 2014-03-14
+    parser.add_argument('--min-mjd', type=float, default=56730.,
                         help='Only keep images taken after the given MJD')
     parser.add_argument('--max-mjd', type=float,
                         help='Only keep images taken before the given MJD')
