@@ -47,10 +47,7 @@ jobs:
                make extra
                make install INSTALL_DIR=/usr/local
                make clean
-               cd /tmp && python3 -c "import sys; print('Sys.path is', sys.path)"
-               cd /tmp && python3 -c "from astrometry.util.fits import *" || echo "fail"
-               export PYTHONPATH=${PYTHONPATH}:/usr/local/lib/python
-               cd /tmp && python3 -c "from astrometry.util.fits import *"
+               cd /tmp && python3 -c "from astrometry.util import fits; print(fits.__file__)"
       - run:
           name: The Tractor
           command: |
@@ -62,7 +59,7 @@ jobs:
                make ceres
                make install INSTALL_DIR=/usr/local
                rm -R $(find . -name "*.o" -o -name "*.so")
-               cd /tmp && python3 -c "from tractor.galaxy import *"
+               cd /tmp && python3 -c "from tractor import galaxy; print(galaxy.__file__)"
       - run:
           name: Unwise PSF
           command: |
@@ -91,6 +88,9 @@ jobs:
           name: Coveralls
           command: |
               cd py
-              coveralls debug
+              # set in the circleci build config,
+              # https://circleci.com/gh/legacysurvey/legacypipe/edit#env-vars
+              echo "COVERALLS_REPO_TOKEN=${COVERALLS_REPO_TOKEN} bundle exec rspec spec" > .coveralls.yml
+              #coveralls debug
               coveralls
-      
+
