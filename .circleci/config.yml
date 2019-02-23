@@ -80,6 +80,8 @@ jobs:
               cd py
               echo $PYTHONPATH
               pwd
+              python3 -c "import sys; print(sys.path)"
+              python3 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
               coverage run test/runbrick_test.py travis
       - run:
           name: Coveralls
