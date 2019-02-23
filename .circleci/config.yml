@@ -49,6 +49,8 @@ jobs:
           command: |
                git clone http://github.com/dstndstn/tractor.git tractor
                cd tractor
+               export PYTHON=python3
+               export PYTHON_CONFIG=python3-config
                make
                make ceres
                make install INSTALL_DIR=/usr/local
