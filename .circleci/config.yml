@@ -21,6 +21,7 @@ jobs:
           name: Python paths
           command: |
              echo "../site-packages" > /usr/local/lib/python3.6/dist-packages/site-packages.pth
+             echo "/usr/local/lib/python" > /usr/local/lib/python3.6/dist-packages/usrlocal.pth
              ln -s /usr/bin/python3 /usr/bin/python
       - run:
          name: Pip packages
@@ -46,6 +47,9 @@ jobs:
                make extra
                make install INSTALL_DIR=/usr/local
                make clean
+               cd /tmp && python3 -c "import sys; print('Sys.path is', sys.path)"
+               cd /tmp && python3 -c "from astrometry.util.fits import *" || echo "fail"
+               export PYTHONPATH=${PYTHONPATH}:/usr/local/lib/python
                cd /tmp && python3 -c "from astrometry.util.fits import *"
       - run:
           name: The Tractor
