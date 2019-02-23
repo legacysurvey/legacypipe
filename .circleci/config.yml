@@ -68,8 +68,14 @@ jobs:
       - run:
           name: Unit & Coverage tests
           command: |
+              pwd
+              ls
+              export PYTHONPATH=${PYTHONPATH}:$(pwd)/unwise_psf/py:.
+              export WISE_PSF_DIR=$(pwd)/unwise_psf/etc
+              export DUST_DIR=$(pwd)/dust
               cd py
               echo $PYTHONPATH
+              pwd
               coverage run test/runbrick_test.py travis
       - run:
           name: Coveralls
