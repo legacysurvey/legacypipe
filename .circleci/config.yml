@@ -39,11 +39,14 @@ jobs:
           command: |
                git clone http://github.com/dstndstn/astrometry.net.git astrometry
                cd astrometry
+               export PYTHON=python3
+               export PYTHON_SCRIPT="/usr/bin/env python3"
                make
                make py
                make extra
                make install INSTALL_DIR=/usr/local
                make clean
+               python3 -c "from astrometry.util.fits import *"
       - run:
           name: The Tractor
           command: |
@@ -55,6 +58,7 @@ jobs:
                make ceres
                make install INSTALL_DIR=/usr/local
                rm -R $(find . -name "*.o" -o -name "*.so")
+               python3 -c "from tractor.galaxy import *"
       - run:
           name: Unwise PSF
           command: |
