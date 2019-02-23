@@ -1,0 +1,150 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: ubuntu:18.04
+    steps:
+      - checkout
+      - run:
+          name: Tell me about your CPUs
+          command: cat /proc/cpuinfo
+      - run:
+          name: Ubuntu packages
+          command: |
+            apt update && apt install -y apt-utils
+            DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends make gcc g++ git file pkg-config wget swig netpbm wcslib-dev wcslib-tools zlib1g-dev libbz2-dev libcairo2-dev libcfitsio-dev libcfitsio-bin libgsl-dev libjpeg-dev libnetpbm10-dev libpng-dev libeigen3-dev libgoogle-glog-dev libceres-dev python3 python3-dev python3-pip python3-pil python3-tk
+            apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+       - run:
+           name: Fix multiprocessing bug
+           command: cp docker/pool.py /usr/lib/python3.6/multiprocessing/pool.py
+       - run:
+           name: Python paths
+           command: |
+              echo "../site-packages" > /usr/local/lib/python3.6/dist-packages/site-packages.pth
+              ln -s /usr/bin/python3 /usr/bin/python
+       - run:
+          name: Pip packages
+          command: |
+            for x in setuptools wheel intel-numpy intel-scipy psycopg2 fitsio matplotlib astropy photutils zmq; do pip3 install $x; done
+            rm -Rf /root/.cache/pip
+       - run:
+           name: Astrometry.net
+           command: |
+               git clone http://github.com/dstndstn/astrometry.net.git astrometry
+               cd astrometry
+               make
+               make py
+               make extra
+               make install INSTALL_DIR=/usr/local
+               make clean
+#       - run:
+#           name: Setup Environment Variables
+#           command: |
+#             #### CIRCLE_WORKING_DIRECTORY is ~/project, which isn't always expanded into /root/project...
+#             echo "export BASE=${CIRCLE_WORKING_DIRECTORY}" >> $BASH_ENV
+#             echo "export LIBDIR=~/chime/lib" >> $BASH_ENV
+#             echo "export INCDIR=~/chime/include" >> $BASH_ENV
+#             echo "export BINDIR=~/chime/bin" >> $BASH_ENV
+#             echo 'export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${LIBDIR}' >> $BASH_ENV
+#             echo "export NUMPY_INCDIR=$(python -c 'import numpy; print(numpy.get_include())')" >> $BASH_ENV
+#             echo "export PYTHONPATH=${PYTHONPATH}:/usr/lib/python2.7/dist-packages" >> $BASH_ENV
+#             echo 'export MSGPACK_CFLAGS=-I${BASE}/msgpack-2.1.0/include' >> $BASH_ENV
+#             echo "export MSGPACK_LFLAGS=" >> $BASH_ENV
+#             echo "export HAVE_PSRFITS=n" >> $BASH_ENV
+#             echo "export HAVE_HDF5=y" >> $BASH_ENV
+#             echo "export HAVE_CH_FRB_IO=y" >> $BASH_ENV
+#             echo "export HAVE_BONSAI=y" >> $BASH_ENV
+#             echo "export HAVE_SIMPULSE=y" >> $BASH_ENV
+#             echo "export HAVE_PNG=y" >> $BASH_ENV
+#             echo "export HAVE_JSONCPP=y" >> $BASH_ENV
+#             echo "export PYDIR=~/chime/lib/python2.7/site-packages" >> $BASH_ENV
+#             echo "export PYTHON_INCDIR=/usr/include/python2.7" >> $BASH_ENV
+#             echo "BASH ENV:"
+#             cat $BASH_ENV
+#       - run:
+#           name: msgpack
+#           command: |
+#             pwd
+#             wget https://github.com/msgpack/msgpack-c/releases/download/cpp-2.1.0/msgpack-2.1.0.tar.gz
+#             tar xzf msgpack-2.1.0.tar.gz
+#             ls msgpack-2.1.0/include || true
+#             ls /root/project/msgpack-2.1.0/include || true
+#             ls ${CIRCLE_WORKING_DIRECTORY}/msgpack-2.1.0/include || true
+#             ls ~/project/msgpack-2.1.0/include || true
+# 
+#       - run:
+#           name: simd_helpers, simpulse, sp_hdf5, pyclops
+#           command: |
+#             set
+#             env
+#             cd $BASE
+#             git clone https://github.com/kmsmith137/simd_helpers.git
+#             cd simd_helpers
+#             ln -s site/Makefile.local.norootprivs Makefile.local
+#             #make -j4
+#             make install
+#             cd $BASE
+#             git clone https://github.com/kmsmith137/simpulse.git
+#             cd simpulse
+#             ln -s site/Makefile.local.frb-compute-0 Makefile.local
+#             #make -j4
+#             make install
+#             cd $BASE
+#             git clone https://github.com/kmsmith137/sp_hdf5.git
+#             cd sp_hdf5
+#             ln -s site/Makefile.local.linux Makefile.local
+#             #make -j4
+#             make install
+#             cd $BASE
+#             git clone https://github.com/kmsmith137/pyclops.git
+#             cd pyclops
+#             ## FIXME
+#             ln -s ../simpulse/site/Makefile.local.frb-compute-0 Makefile.local
+#             #make -j4
+#             make install
+#       - run:
+#           name: ch_frb_io
+#           command: |
+#             pwd
+#             ls ${BASE}/msgpack-2.1.0/include || true
+#             git clone https://github.com/CHIMEFRB/ch_frb_io.git
+#             cd ch_frb_io
+#             git checkout circleci
+#             ln -s site/Makefile.local.frb-compute-0 Makefile.local
+#             make -j4 || make
+#             make install
+#       - run:
+#           name: rf_kernels
+#           command: |
+#             cd
+#             git clone https://github.com/kmsmith137/rf_kernels.git
+#             cd rf_kernels
+#             ln -s site/Makefile.local.travis Makefile.local
+#             make -j4 || make
+#             make install
+#       - run:
+#           name: bonsai
+#           command: |
+#             pwd
+#             git clone git@github.com:CHIMEFRB/bonsai.git
+#             cd bonsai
+#             git checkout circleci
+#             ln -s site/Makefile.local.frb-compute-0 Makefile.local
+#             make -j4 || make
+#             make install
+#       - run:
+#           name: rf_pipelines
+#           command: |
+#             pwd
+#             git clone https://github.com/kmsmith137/rf_pipelines.git
+#             cd rf_pipelines
+#             git checkout circleci
+#             ln -s site/Makefile.local.frb-compute-0 Makefile.local
+#             make -j4 || make
+#             make install
+#       - run:
+#           name: ch_frb_l1
+#           command: |
+#             ln -s site/Makefile.local.frb-compute-0 Makefile.local
+#             make -j4 || make
+#             make install
