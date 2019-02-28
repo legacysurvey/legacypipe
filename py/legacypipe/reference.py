@@ -383,7 +383,7 @@ def read_star_clusters(targetwcs):
     #     clusters.delete_column(c)
 
     # Set isbright=True
-    clusters.isbright = np.ones(len(clusters), bool)
+    clusters.isbright = np.zeros(len(clusters), bool)
     clusters.iscluster = np.ones(len(clusters), bool)
         
     return clusters

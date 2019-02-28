@@ -682,7 +682,8 @@ class OneBlob(object):
         # geometric
         x0,y0 = srcwcs_x0y0
         force_pointsource = (self.refmap[y0+iy,x0+ix] &
-                             (IN_BLOB['BRIGHT'] | IN_BLOB['GALAXY'])) > 0
+                             (IN_BLOB['BRIGHT'] | IN_BLOB['GALAXY'] |
+                              IN_BLOB['CLUSTER'])) > 0
         fit_background = (self.refmap[y0+iy,x0+ix] &
                           (IN_BLOB['MEDIUM'] | IN_BLOB['GALAXY'])) > 0
 

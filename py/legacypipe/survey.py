@@ -45,6 +45,7 @@ MASKBITS = dict(
     BAILOUT    = 0x400, # bailed out of processing
     MEDIUM     = 0x800, # medium-bright star
     GALAXY     = 0x1000, # LSLGA large galaxy
+    CLUSTER    = 0x2000, # Cluster catalog source
 )
 
 # Bits in the "brightblob" bitmask
