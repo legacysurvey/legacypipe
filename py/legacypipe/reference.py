@@ -350,8 +350,11 @@ def read_star_clusters(targetwcs):
 
     clusterfile = resource_filename('legacypipe', 'data/NGC-star-clusters.fits')
     print('Reading {}'.format(clusterfile))
-    clusters = fits_table(clusterfile, columns=['ra', 'dec', 'majax'])
+    clusters = fits_table(clusterfile, columns=['ra', 'dec', 'majax', 'type'])
     clusters.ref_id = np.arange(len(clusters))
+
+    print('HACK -- cutting to only GCl!')
+    clusters.cut(np.array([t.strip() == 'GCl' for t in clusters.type]))
 
     radius = 1.
     rc,dc = targetwcs.radec_center()
