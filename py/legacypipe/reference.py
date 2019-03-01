@@ -109,7 +109,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         ## Create Tractor sources from reference stars
         refcat = []
         for g in refs:
-            if g.isbright or g.ismedium:
+            if g.isbright or g.ismedium or g.iscluster:
                 refcat.append(GaiaSource.from_catalog(g, bands))
             elif g.islargegalaxy:
                 fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])

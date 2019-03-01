@@ -155,5 +155,5 @@ ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacyzpts/py:/src/
 ENV WISE_PSF_DIR /src/unwise_psf/etc
 
 # up!
-RUN cd /src/legacypipe && git pull && echo 1
+RUN cd /src/legacypipe && git pull && echo 3
 
