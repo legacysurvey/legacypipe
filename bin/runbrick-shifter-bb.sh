@@ -1,24 +1,31 @@
 #! /bin/bash
 
-# Script for running the legacypipe code within a Shifter container at NERSC.
+# Script for running the legacypipe code within a Shifter container at NERSC
+# with burst buffer!
 
 # This merges some contents from legacypipe-env and runbrick.sh
 
 # Burst-buffer!
-BB=$DW_PERSISTENT_STRIPED_dr8
+if [ x$DW_PERSISTENT_STRIPED_DR8 == x ]; then
+  # premium job finally running
+  BB=$CSCRATCH/
+else
+  BB=$DW_PERSISTENT_STRIPED_DR8
+fi
 
 export LEGACY_SURVEY_DIR=/global/cscratch1/sd/dstn/dr8-depthcut
 #export LEGACY_SURVEY_DIR=$BB/dr8-depthcut
-cachedir=${BB}dr8-depthcut
+#cachedir=${BB}dr8-depthcut
 
 export DUST_DIR=/global/project/projectdirs/cosmo/data/dust/v0_1
-export UNWISE_COADDS_DIR=/global/projecta/projectdirs/cosmo/work/wise/outputs/merge/neo4/fulldepth:/global/project/projectdirs/cosmo/data/unwise/allwise/unwise-coadds/fulldepth
+export UNWISE_COADDS_DIR=/global/project/projectdirs/cosmo/work/wise/outputs/merge/neo4/fulldepth:/global/project/projectdirs/cosmo/data/unwise/allwise/unwise-coadds/fulldepth
 export UNWISE_COADDS_TIMERESOLVED_DIR=/global/projecta/projectdirs/cosmo/work/wise/outputs/merge/neo4
 export GAIA_CAT_DIR=/global/project/projectdirs/cosmo/work/gaia/chunks-gaia-dr2-astrom/
 export GAIA_CAT_VER=2
 export TYCHO2_KD_DIR=/global/project/projectdirs/cosmo/staging/tycho2
 export LARGEGALAXIES_DIR=/global/project/projectdirs/cosmo/staging/largegalaxies/v2.0
-UNWISE_PSF_DIR=/global/project/projectdirs/cosmo/staging/unwise_psf/2018-11-25
+#UNWISE_PSF_DIR=/global/project/projectdirs/cosmo/staging/unwise_psf/2018-11-25
+UNWISE_PSF_DIR=/src/unwise_psf
 export WISE_PSF_DIR=${UNWISE_PSF_DIR}/etc
 export PS1CAT_DIR=/global/project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v3/
 
@@ -47,13 +54,15 @@ cd /src/legacypipe/py
 
 #outdir=$LEGACY_SURVEY_DIR
 #outdir=/global/cscratch1/sd/dstn/dr8test010
-outdir=${BB}dr8test11
+outdir=${BB}dr8test14
 
 brick="$1"
 
 bri=$(echo $brick | head -c 3)
 mkdir -p $outdir/logs/$bri
 log="$outdir/logs/$bri/$brick.log"
+
+mkdir -p $outdir/metrics/$bri
 
 echo Logging to: $log
 echo Running on $(hostname)
@@ -72,19 +81,25 @@ echo -e "\nStarting on $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
 python -u legacypipe/runbrick.py \
-     --release 7911 \
+     --release 7914 \
      --skip \
      --skip-calibs \
      --threads ${ncores} \
-     --write-stage srcs \
      --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
      --unwise-coadds \
      --survey-dir $LEGACY_SURVEY_DIR \
-     --cache-dir $cachedir \
      --outdir $outdir \
      --brick $brick \
+     --ps "${outdir}/metrics/${bri}/ps-${brick}.fits" \
+     --ps-t0 $(date "+%s") \
+     --depth-cut 1 \
      >> $log 2>&1
+
+#     --cache-dir $cachedir \
+
+
+#     --write-stage srcs \
 
 #     --zoom 100 300 100 300 \
 #--pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
