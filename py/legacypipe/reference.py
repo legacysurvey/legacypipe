@@ -109,7 +109,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         ## Create Tractor sources from reference stars
         refcat = []
         for g in refs:
-            if g.isbright or g.ismedium:
+            if g.isbright or g.ismedium or g.iscluster:
                 refcat.append(GaiaSource.from_catalog(g, bands))
             elif g.islargegalaxy:
                 fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
@@ -296,6 +296,8 @@ def read_large_galaxies(survey, targetwcs):
     # if len(gals) == 0:
     #     return None,None
     galaxies.radius = galaxies.d25 / 2. / 60.
+    # John told me to do this
+    galaxies.radius *= 1.2
     galaxies.delete_column('d25')
     galaxies.rename('lslga_id', 'ref_id')
     galaxies.ref_cat = np.array(['L2'] * len(galaxies))
@@ -350,8 +352,11 @@ def read_star_clusters(targetwcs):
 
     clusterfile = resource_filename('legacypipe', 'data/NGC-star-clusters.fits')
     print('Reading {}'.format(clusterfile))
-    clusters = fits_table(clusterfile, columns=['ra', 'dec', 'majax'])
+    clusters = fits_table(clusterfile, columns=['ra', 'dec', 'majax', 'type'])
     clusters.ref_id = np.arange(len(clusters))
+
+    print('HACK -- cutting to only GCl!')
+    clusters.cut(np.array([t.strip() == 'GCl' for t in clusters.type]))
 
     radius = 1.
     rc,dc = targetwcs.radec_center()
@@ -380,7 +385,7 @@ def read_star_clusters(targetwcs):
     #     clusters.delete_column(c)
 
     # Set isbright=True
-    clusters.isbright = np.ones(len(clusters), bool)
+    clusters.isbright = np.zeros(len(clusters), bool)
     clusters.iscluster = np.ones(len(clusters), bool)
         
     return clusters
