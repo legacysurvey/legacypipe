@@ -38,15 +38,25 @@ Can add kd-tree data structure to this resulting annotated-ccds file like this:
 
 def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False):
     # File from the "observing" svn repo:
+    from pkg_resources import resource_filename
+    
     if mzls:
-        # https://desi.lbl.gov/svn/decam/code/mosaic3/trunk
-        tiles = fits_table('mosaic-tiles_obstatus.fits')
+        tilefile = resource_filename('legacyzpts', 'data/mosaic-tiles_obstatus.fits')
     elif bass:
-        tiles = None
+        tilefile = None
     else:
-        # https://desi.lbl.gov/svn/decam/code/observing/trunk
-        tiles = fits_table('decam-tiles_obstatus.fits')
-
+        tilefile = resource_filename('legacyzpts', 'data/decam-tiles_obstatus.fits')
+        
+    if tilefile is not None:
+        if os.path.isfile(tilefile):
+            print('Reading {}'.format(tilefile))
+            tiles = fits_table(tilefile)
+        else:
+            print('Required tile file {} not found!'.format(tilefile))
+            raise IOError
+    else:
+        tiles = None
+        
     if tiles is not None:
         # Map tile IDs back to index in the obstatus file.
         tileid_to_index = np.empty(max(tiles.tileid)+1, int)
