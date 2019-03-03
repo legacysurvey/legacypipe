@@ -1205,6 +1205,8 @@ class LegacySurveyImage(object):
                             comment='DATASUM of image file'))
         hdr.add_record(dict(name='PROCDATE', value=procdate,
                             comment='DATE of image file'))
+        hdr.add_record(dict(name='EXPNUM', value=self.expnum,
+                            comment='exposure number'))
 
         wt[dq != 0] = 0.
         good = (wt > 0)
