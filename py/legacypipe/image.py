@@ -1182,6 +1182,7 @@ class LegacySurveyImage(object):
         slc = self.get_good_image_slice(None)
         img = self.read_image(slice=slc)
         wt = self.read_invvar(slice=slc)
+        dq = self.read_dq(slice=slc)
         hdr = get_version_header(None, self.survey.get_survey_dir(), release,
                                  git_version=git_version)
         primhdr = self.read_image_primary_header()
@@ -1202,6 +1203,7 @@ class LegacySurveyImage(object):
         hdr.add_record(dict(name='PROCDATE', value=procdate,
                             comment='DATE of image file'))
 
+        wt[dq != 0] = 0.
         good = (wt > 0)
         if np.sum(good) == 0:
             raise RuntimeError('No pixels with weight > 0 in: ' + str(self))
