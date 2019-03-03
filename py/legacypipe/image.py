@@ -1145,6 +1145,7 @@ class LegacySurveyImage(object):
         imghdr = self.read_image_header()
         datasum = imghdr.get('DATASUM', '0')
         procdate = primhdr['DATE']
+        import pdb ; pdb.set_trace()
         if git_version is None:
             git_version = get_git_version()
         # We write the PSF model to a .fits.tmp file, then rename to .fits
@@ -1162,6 +1163,8 @@ class LegacySurveyImage(object):
                 (psftmpfn, datasum),
                 'modhead %s PROCDATE "%s" "DATE of image file"' %
                 (psftmpfn, procdate),
+                'modhead %s EXPNUM "%s" "exposure number"' %
+                (psftmpfn, self.expnum),
                 'mv %s %s' % (psftmpfn, psfoutfn),
                 ]
         for cmd in cmds:
