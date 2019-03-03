@@ -1145,7 +1145,6 @@ class LegacySurveyImage(object):
         imghdr = self.read_image_header()
         datasum = imghdr.get('DATASUM', '0')
         procdate = primhdr['DATE']
-        import pdb ; pdb.set_trace()
         if git_version is None:
             git_version = get_git_version()
         # We write the PSF model to a .fits.tmp file, then rename to .fits
