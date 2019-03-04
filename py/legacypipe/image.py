@@ -853,6 +853,11 @@ class LegacySurveyImage(object):
         fn = self.skyfn
         if splinesky:
             fn = self.splineskyfn
+
+        if not validate_procdate_plver(fn, 'primaryheader',
+                                       self.expnum, self.plver, self.procdate):
+            raise RuntimeError('Splinesky file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' % fn)
+
         debug('Reading sky model from', fn)
         hdr = fitsio.read_header(fn)
         try:
@@ -889,6 +894,10 @@ class LegacySurveyImage(object):
         from tractor.utils import get_class_from_name
         debug('Reading merged spline sky models from', self.merged_splineskyfn)
         T = fits_table(self.merged_splineskyfn)
+        if not validate_procdate_plver(self.merged_splineskyfn, 'table',
+                                       self.expnum, self.plver, self.procdate, data=T)
+            raise RuntimeError('Merged splinesky file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
+                               self.merged_splineskyfn)
         I, = np.nonzero((T.expnum == self.expnum) *
                         np.array([c.strip() == self.ccdname
                                   for c in T.ccdname]))
@@ -951,6 +960,11 @@ class LegacySurveyImage(object):
             else:
                 psf = PixelizedPsfEx(self.psffn)
             hdr = fitsio.read_header(self.psffn)
+
+            if not validate_procdate_plver(self.psffn, 'primaryheader',
+                                           self.expnum, self.plver, self.procdate, data=hdr):
+                raise RuntimeError('PsfEx file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' % self.psffn)
+
             psf.version = hdr.get('LEGSURV', None)
             if psf.version is None:
                 psf.version = str(os.stat(self.psffn).st_mtime)
@@ -970,6 +984,12 @@ class LegacySurveyImage(object):
         from tractor import PsfExModel
         debug('Reading merged PsfEx models from', self.merged_psffn)
         T = fits_table(self.merged_psffn)
+
+        if not validate_procdate_plver(self.merged_psffn, 'table',
+                                       self.expnum, self.plver, self.procdate, data=T)
+            raise RuntimeError('Merged PsfEx file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
+                               self.merged_psffn)
+
         I, = np.nonzero((T.expnum == self.expnum) *
                         np.array([c.strip() == self.ccdname
                                   for c in T.ccdname]))
