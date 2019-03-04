@@ -296,7 +296,7 @@ class LegacySurveyImage(object):
         #
         assert(validate_procdate_plver(self.imgfn, 'primaryheader',
                                        self.expnum, self.plver, self.procdate,
-                                       data=primhdr)
+                                       data=primhdr))
         band = self.band
         wcs = self.get_wcs()
 
