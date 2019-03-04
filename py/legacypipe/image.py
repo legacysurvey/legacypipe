@@ -134,11 +134,12 @@ class LegacySurveyImage(object):
         self.camera  = ccd.camera.strip()
         self.fwhm    = ccd.fwhm
         self.propid  = ccd.propid
-        self.mjdobs = ccd.mjd_obs
-        self.width  = ccd.width
-        self.height = ccd.height
-
-        self.sig1 = getattr(ccd, 'sig1', None)
+        self.mjdobs  = ccd.mjd_obs
+        self.width   = ccd.width
+        self.height  = ccd.height
+        self.sig1    = ccd.sig1
+        self.plver   = ccd.plver.strip()
+        self.procdate = ccd.procdate.strip()
 
         # Which Data Quality bits mark saturation?
         self.dq_saturation_bits = CP_DQ_BITS['satur'] # | CP_DQ_BITS['bleed']
@@ -291,6 +292,11 @@ class LegacySurveyImage(object):
         get_dq = dq
         get_invvar = invvar
 
+        primhdr = self.read_image_primary_header()
+        #
+        assert(validate_procdate_plver(self.imgfn, 'primaryheader',
+                                       self.expnum, self.plver, self.procdate,
+                                       data=primhdr)
         band = self.band
         wcs = self.get_wcs()
 
@@ -324,7 +330,7 @@ class LegacySurveyImage(object):
         if np.all(invvar == 0.):
             debug('Skipping zero-invvar image')
             return None
-        primhdr = self.read_image_primary_header()
+
         # for create_testcase: omit remappings.
         if not no_remap_invvar:
             invvar = self.remap_invvar(invvar, primhdr, img, dq)
