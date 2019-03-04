@@ -829,53 +829,7 @@ class LegacySurveyImage(object):
     def get_sig1(self, **kwargs):
         from tractor.brightness import NanoMaggies
         zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
-
-        if self.sig1 is not None:
-            # CCDs table sig1 is in nanomaggies
-            #return self.sig1
-            # Oops, nope, the legacyzpts sig1 values (DR7) are *not*!
-            return self.sig1 / zpscale
-
-        # these sig1 values are in image counts; scale to nanomaggies
-        skysig1 = self.get_sky_sig1(**kwargs)
-        if skysig1 is None:
-            dq = im.read_dq(**kwargs)
-            iv = im.read_invvar(dq=dq, **kwargs)
-            skysig1 = 1./np.sqrt(np.median(iv[dq == 0]))
-        return skysig1 / zpscale
-
-    ### Yuck, this is not much better than just doing read_sky_model().sig1 ...
-    def get_sky_sig1(self, splinesky=False):
-        '''
-        Returns the per-pixel noise estimate, which (for historical
-        reasons) is stored in the sky model.  NOTE that this is in
-        image pixel counts, NOT calibrated nanomaggies.
-        '''
-        if splinesky and getattr(self, 'merged_splineskyfn', None) is not None:
-            if not os.path.exists(self.merged_splineskyfn):
-                debug('Merged spline sky model does not exist:', self.merged_splineskyfn)
-        if (splinesky and getattr(self, 'merged_splineskyfn', None) is not None
-            and os.path.exists(self.merged_splineskyfn)):
-            try:
-                debug('Reading merged spline sky models from', self.merged_splineskyfn)
-                T = fits_table(self.merged_splineskyfn)
-                if 'sig1' in T.get_columns():
-                    I, = np.nonzero((T.expnum == self.expnum) *
-                                    np.array([c.strip() == self.ccdname
-                                              for c in T.ccdname]))
-                    debug('Found', len(I), 'matching CCD')
-                    if len(I) >= 1:
-                        return T.sig1[I[0]]
-            except:
-                pass
-        if splinesky:
-            fn = self.splineskyfn
-        else:
-            fn = self.skyfn
-        debug('Reading sky model from', fn)
-        hdr = fitsio.read_header(fn)
-        sig1 = hdr.get('SIG1', None)
-        return sig1
+        return self.sig1 / zpscale
 
     def read_sky_model(self, splinesky=False, slc=None, **kwargs):
         '''
