@@ -296,7 +296,13 @@ class LegacySurveyImage(object):
         #
         assert(validate_procdate_plver(self.imgfn, 'primaryheader',
                                        self.expnum, self.plver, self.procdate,
-                                       data=primhdr))
+                                       data=primhdr, cpheader=True))
+        assert(validate_procdate_plver(self.wtfn, 'primaryheader',
+                                       self.expnum, self.plver, self.procdate,
+                                       cpheader=True))
+        assert(validate_procdate_plver(self.dqfn, 'primaryheader',
+                                       self.expnum, self.plver, self.procdate,
+                                       cpheader=True))
         band = self.band
         wcs = self.get_wcs()
 
@@ -1439,7 +1445,7 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
         return PixelizedPSF(pix)
 
 def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
-                            data=None, ext=1):
+                            data=None, ext=1, cpheader=False):
     if not os.path.exists(fn):
         return False
     # Check the data model
@@ -1471,7 +1477,10 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                 hdr = fitsio.FITS(fn)[ext].read_header()
         else:
             hdr = data
-        for key,targetval,strip in (('PROCDATE', procdate, True),
+        procdatekey = 'PROCDATE'
+        if cpheader:
+            procdatekey = 'DATE'
+        for key,targetval,strip in ((procdatekey, procdate, True),
                                     ('PLVER', plver, True),
                                     ('EXPNUM', expnum, False)):
             if key not in hdr:
