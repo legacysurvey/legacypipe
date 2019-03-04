@@ -1455,3 +1455,50 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
         pix /= pix.sum()
         return PixelizedPSF(pix)
 
+def validate_procdate_plver(fn, filetype, expnum, plver, procdate, data=None):
+    if not os.path.exists(fn):
+        return False
+    # Check the data model
+    if filetype == 'table':
+        if data is None:
+            T = fits_table(fn)
+        else:
+            T = data
+        cols = T.get_columns()
+        for key,targetval,strip in (('procdate', procdate, True),
+                                    ('plver', plver, True),
+                                    ('expnum', expnum, False)):
+            if key not in cols:
+                print('Warning: outdated data model: {} (missing {})'.format(
+                    fn, key.upper()))
+                return False
+            val = T.get(key)
+            if strip:
+                val = np.array([v.strip() for v in val])
+            if not np.all(val == targetval):
+                print('Warning: table value', val, 'not equal to', targetval)
+                return False
+        return True
+    elif filetype == 'primaryheader':
+        if data is None:
+            hdr = read_primary_header(fn)
+        else:
+            hdr = data
+        for key,targetval,strip in (('PROCDATE', procdate, True),
+                                    ('PLVER', plver, True),
+                                    ('EXPNUM', expnum, False)):
+            if key not in hdr:
+                print('Warning: outdated data model: {} (missing {})'.format(
+                    fn, key))
+                return False
+            val = hdr[key]
+            if strip:
+                val = val.strip()
+            if val != targetval:
+                print('Warning: header value', val, 'not equal to', targetval)
+                return False
+        return True
+
+    else:
+        raise ValueError('incorrect filetype')
+
