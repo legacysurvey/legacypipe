@@ -123,6 +123,7 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False):
 
         ccds.sig1[iccd] = tim.sig1
         ccds.plver[iccd] = tim.plver
+        ccds.procdate[iccd] = tim.procdate
 
         # parse 'DECaLS_15150_r' to get tile number
         obj = ccd.object.strip()
@@ -387,7 +388,7 @@ def init_annotations(ccds):
     ccds.tileebv  = np.zeros(len(ccds), np.float32)
 
     ccds.plver = np.array([' '*6] * len(ccds))
-
+    ccds.procdate = np.array([' '*19] * len(ccds))
 
 def main(outfn='ccds-annotated.fits', ccds=None, **kwargs):
     survey = LegacySurveyData(ccds=ccds)
