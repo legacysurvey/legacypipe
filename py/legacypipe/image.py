@@ -852,7 +852,7 @@ class LegacySurveyImage(object):
         debug('Reading merged spline sky models from', self.merged_splineskyfn)
         T = fits_table(self.merged_splineskyfn)
         if not validate_procdate_plver(self.merged_splineskyfn, 'table',
-                                       self.expnum, self.plver, self.procdate, data=T)
+                                       self.expnum, self.plver, self.procdate, data=T):
             raise RuntimeError('Merged splinesky file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
                                self.merged_splineskyfn)
         I, = np.nonzero((T.expnum == self.expnum) *
@@ -943,7 +943,7 @@ class LegacySurveyImage(object):
         T = fits_table(self.merged_psffn)
 
         if not validate_procdate_plver(self.merged_psffn, 'table',
-                                       self.expnum, self.plver, self.procdate, data=T)
+                                       self.expnum, self.plver, self.procdate, data=T):
             raise RuntimeError('Merged PsfEx file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
                                self.merged_psffn)
 
