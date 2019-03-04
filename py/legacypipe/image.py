@@ -1432,7 +1432,8 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
         pix /= pix.sum()
         return PixelizedPSF(pix)
 
-def validate_procdate_plver(fn, filetype, expnum, plver, procdate, data=None):
+def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
+                            data=None, ext=1):
     if not os.path.exists(fn):
         return False
     # Check the data model
@@ -1456,9 +1457,12 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate, data=None):
                 print('Warning: table value', val, 'not equal to', targetval)
                 return False
         return True
-    elif filetype == 'primaryheader':
+    elif filetype in ['primaryheader', 'header']:
         if data is None:
-            hdr = read_primary_header(fn)
+            if filetype == 'primaryheader':
+                hdr = read_primary_header(fn)
+            else:
+                hdr = fitsio.FITS(fn)[ext].read_header()
         else:
             hdr = data
         for key,targetval,strip in (('PROCDATE', procdate, True),
