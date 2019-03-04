@@ -154,6 +154,7 @@ def read_primary_header(fn):
     Reads the FITS primary header (HDU 0) from the given filename.
     This is just a faster version of fitsio.read_header(fn).
     '''
+    import fitsio
     if fn.endswith('.gz'):
         return fitsio.read_header(fn)
 
