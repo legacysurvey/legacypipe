@@ -829,6 +829,7 @@ class LegacySurveyImage(object):
     def get_sig1(self, **kwargs):
         from tractor.brightness import NanoMaggies
         zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
+        # CCDs table sig1 is in ADU.
         return self.sig1 / zpscale
 
     def read_sky_model(self, splinesky=False, slc=None, **kwargs):
