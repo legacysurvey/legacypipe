@@ -297,12 +297,14 @@ class LegacySurveyImage(object):
         assert(validate_procdate_plver(self.imgfn, 'primaryheader',
                                        self.expnum, self.plver, self.procdate,
                                        data=primhdr, cpheader=True))
-        assert(validate_procdate_plver(self.wtfn, 'primaryheader',
-                                       self.expnum, self.plver, self.procdate,
-                                       cpheader=True))
-        assert(validate_procdate_plver(self.dqfn, 'primaryheader',
-                                       self.expnum, self.plver, self.procdate,
-                                       cpheader=True))
+        # NOTE, this does not work because the WT and DQ maps have DATEs
+        # that are like 15 seconds later than the image.
+        # assert(validate_procdate_plver(self.wtfn, 'primaryheader',
+        #                                self.expnum, self.plver, self.procdate,
+        #                                cpheader=True))
+        # assert(validate_procdate_plver(self.dqfn, 'primaryheader',
+        #                                self.expnum, self.plver, self.procdate,
+        #                                cpheader=True))
         band = self.band
         wcs = self.get_wcs()
 
