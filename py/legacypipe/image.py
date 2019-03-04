@@ -1461,14 +1461,13 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                                     ('plver', plver, True),
                                     ('expnum', expnum, False)):
             if key not in cols:
-                print('Warning: outdated data model: {} (missing {})'.format(
-                    fn, key.upper()))
+                print('Warning: outdated data model:', fn, 'table missing', key)
                 return False
             val = T.get(key)
             if strip:
                 val = np.array([v.strip() for v in val])
             if not np.all(val == targetval):
-                print('Warning: table value', val, 'not equal to', targetval)
+                print('Warning: table value', val, 'not equal to', targetval, 'in file', fn)
                 return False
         return True
     elif filetype in ['primaryheader', 'header']:
@@ -1486,14 +1485,13 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                                     ('PLVER', plver, True),
                                     ('EXPNUM', expnum, False)):
             if key not in hdr:
-                print('Warning: outdated data model: {} (missing {})'.format(
-                    fn, key))
+                print('Warning: outdated data model:', fn, 'header missing', key)
                 return False
             val = hdr[key]
             if strip:
                 val = val.strip()
             if val != targetval:
-                print('Warning: header value', val, 'not equal to', targetval)
+                print('Warning: header value', val, 'not equal to', targetval, 'in file', fn)
                 return False
         return True
 
