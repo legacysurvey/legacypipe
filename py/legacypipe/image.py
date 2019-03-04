@@ -307,39 +307,31 @@ class LegacySurveyImage(object):
             img = np.zeros((y1-y0, x1-x0), np.float32)
             imghdr = self.read_image_header()
         assert(np.all(np.isfinite(img)))
-            
-        # Read inverse-variance (weight) map
-        if get_invvar:
-            invvar = self.read_invvar(slice=slc)
-        else:
-            invvar = np.ones_like(img)
-        assert(np.all(np.isfinite(invvar)))
-        if np.all(invvar == 0.):
-            debug('Skipping zero-invvar image')
-            return None
-        # Negative invvars (from, eg, fpack decompression noise) cause havoc
-        if not np.all(invvar >= 0.):
-            raise ValueError('not np.all(invvar >= 0.), hdu=%d fn=%s' % (self.hdu,self.wtfn))
 
         # Read data-quality (flags) map and zero out the invvars of masked pixels
+        if get_invvar:
+            get_dq = True
         if get_dq:
             dq,dqhdr = self.read_dq(slice=slc, header=True)
             if dq is not None:
                 dq = self.remap_dq(dq, dqhdr)
-                invvar[dq != 0] = 0.
-            if np.all(invvar == 0.):
-                debug('Skipping zero-invvar image (after DQ masking)')
-                return None
+        # Read inverse-variance (weight) map
+        if get_invvar:
+            invvar = self.read_invvar(slice=slc, dq=dq)
+        else:
+            invvar = np.ones_like(img)
+        if np.all(invvar == 0.):
+            debug('Skipping zero-invvar image')
+            return None
+        primhdr = self.read_image_primary_header()
+        # for create_testcase: omit remappings.
+        if not no_remap_invvar:
+            invvar = self.remap_invvar(invvar, primhdr, img, dq)
 
         # header 'FWHM' is in pixels
         assert(self.fwhm > 0)
         psf_fwhm = self.fwhm 
         psf_sigma = psf_fwhm / 2.35
-        primhdr = self.read_image_primary_header()
-
-        # for create_testcase: omit remappings.
-        if not no_remap_invvar:
-            invvar = self.remap_invvar(invvar, primhdr, img, dq)
 
         # Ugly: occasionally the CP marks edge pixels with SATUR (and
         # nearby pixels with BLEED).  Convert connected blobs of
@@ -792,27 +784,16 @@ class LegacySurveyImage(object):
     def remap_dq_cp_codes(self, dq, header):
         return remap_dq_cp_codes(dq)
     
-    def read_invvar(self, **kwargs):
+    def read_invvar(self, dq=None, **kwargs):
         '''
         Reads the inverse-variance (weight) map image.
         '''
         debug('Reading weight map image', self.wtfn, 'ext', self.hdu)
         invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
-        return invvar
-
-    def read_invvar_clipped(self, clip=True, clipThresh=0.01, **kwargs):
-        '''A function that can optionally be called by subclassers for read_invvar,
-        clipping fpack artifacts to zero.'''
-        invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
-        if clip:
-            # Clamp near-zero (incl negative!) invvars to zero.
-            # These arise due to fpack.
-            if clipThresh > 0.:
-                med = np.median(invvar[invvar > 0])
-                thresh = clipThresh * med
-            else:
-                thresh = 0.
-            invvar[invvar < thresh] = 0
+        if dq is not None:
+            invvar[dq != 0] = 0.
+        assert(np.all(invvar >= 0.))
+        assert(np.all(np.isfinite(invvar)))
         return invvar
 
     def get_tractor_wcs(self, wcs, x0, y0, tai=None,
@@ -858,8 +839,8 @@ class LegacySurveyImage(object):
         # these sig1 values are in image counts; scale to nanomaggies
         skysig1 = self.get_sky_sig1(**kwargs)
         if skysig1 is None:
-            iv = im.read_invvar(**kwargs)
             dq = im.read_dq(**kwargs)
+            iv = im.read_invvar(dq=dq, **kwargs)
             skysig1 = 1./np.sqrt(np.median(iv[dq == 0]))
         return skysig1 / zpscale
 
@@ -1183,8 +1164,8 @@ class LegacySurveyImage(object):
 
         slc = self.get_good_image_slice(None)
         img = self.read_image(slice=slc)
-        wt = self.read_invvar(slice=slc)
         dq = self.read_dq(slice=slc)
+        wt = self.read_invvar(slice=slc, dq=dq)
         hdr = get_version_header(None, self.survey.get_survey_dir(), release,
                                  git_version=git_version)
         primhdr = self.read_image_primary_header()
@@ -1206,8 +1187,6 @@ class LegacySurveyImage(object):
                             comment='DATE of image file'))
         hdr.add_record(dict(name='EXPNUM', value=self.expnum,
                             comment='exposure number'))
-
-        wt[dq != 0] = 0.
         good = (wt > 0)
         if np.sum(good) == 0:
             raise RuntimeError('No pixels with weight > 0 in: ' + str(self))

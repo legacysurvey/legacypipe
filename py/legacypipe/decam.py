@@ -28,9 +28,6 @@ class DecamImage(LegacySurveyImage):
         # Adjust zeropoint for exposure time
         self.ccdzpt += 2.5 * np.log10(self.exptime)
 
-    def read_invvar(self, **kwargs):
-        return self.read_invvar_clipped(**kwargs)
-
     glowmjd = astropy.time.Time('2014-08-01').utc.mjd
 
     def get_good_image_subregion(self):
