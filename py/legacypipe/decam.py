@@ -4,6 +4,7 @@ import numpy as np
 import astropy.time
 
 from legacypipe.image import LegacySurveyImage, CP_DQ_BITS
+from legacypipe.utils import read_primary_header
 
 import logging
 logger = logging.getLogger('legacypipe.decam')
@@ -60,7 +61,7 @@ class DecamImage(LegacySurveyImage):
         Called by get_tractor_image() to map the results from read_dq
         into a bitmask.
         '''
-        primhdr = self.read_primary_header(self.dqfn)
+        primhdr = read_primary_header(self.dqfn)
         plver = primhdr['PLVER']
         if decam_has_dq_codes(plver):
             # IGNORE SATELLITE MASKER
