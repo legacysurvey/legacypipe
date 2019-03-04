@@ -223,10 +223,14 @@ def read_tycho2(survey, targetwcs):
     tycho.ref_id = (tycho.tyc1.astype(np.int64)*1000000 +
                     tycho.tyc2.astype(np.int64)*10 +
                     tycho.tyc3.astype(np.int64))
-    tycho.pmra_ivar = 1./tycho.sigma_pm_ra**2
-    tycho.pmdec_ivar = 1./tycho.sigma_pm_dec**2
-    tycho.ra_ivar  = 1./tycho.sigma_ra **2
-    tycho.dec_ivar = 1./tycho.sigma_dec**2
+    with np.errstate(divide='ignore'):
+        tycho.pmra_ivar = 1./tycho.sigma_pm_ra**2
+        tycho.pmdec_ivar = 1./tycho.sigma_pm_dec**2
+        tycho.ra_ivar  = 1./tycho.sigma_ra **2
+        tycho.dec_ivar = 1./tycho.sigma_dec**2
+    for c in ['pmra', 'pmdec', 'pmra_ivar', 'pmdec_ivar']:
+        X = tycho.get(c)
+        X[np.logical_not(np.isfinite(X))] = 0.
 
     tycho.rename('pm_ra', 'pmra')
     tycho.rename('pm_dec', 'pmdec')
@@ -241,9 +245,6 @@ def read_tycho2(survey, targetwcs):
               'mean_ra', 'mean_dec', #'epoch_ra', 'epoch_dec',
               'sigma_pm_ra', 'sigma_pm_dec', 'sigma_ra', 'sigma_dec']:
         tycho.delete_column(c)
-    for c in ['pmra', 'pmdec', 'pmra_ivar', 'pmdec_ivar']:
-        X = tycho.get(c)
-        X[np.logical_not(np.isfinite(X))] = 0.
 
     # add Gaia-style columns
     # No parallaxes in Tycho-2
