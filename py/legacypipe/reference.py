@@ -324,28 +324,42 @@ def read_star_clusters(targetwcs):
              'cstarnames', 'identifiers', 'commonnames', 'nednotes', 'ongcnotes')
     NGC = ascii.read('NGC.csv', delimiter=';', names=names)
   
+    ra, dec = [], []
+    for _ra, _dec in zip(ma.getdata(NGC['ra_hms']), ma.getdata(NGC['dec_dms'])):
+        ra.append(hmsstring2ra(_ra.replace('h', ':').replace('m', ':').replace('s','')))
+        dec.append(dmsstring2dec(_dec.replace('d', ':').replace('m', ':').replace('s','')))
+    NGC['ra'] = ra
+    NGC['dec'] = dec
+        
     objtype = np.char.strip(ma.getdata(NGC['type']))
-    keeptype = ('PN', 'OCl', 'GCl', 'Cl+N')
+
+    # Keep all globular clusters and planetary nebulae
+    keeptype = ('PN', 'GCl')
     keep = np.zeros(len(NGC), dtype=bool)
     for otype in keeptype:
         ww = [otype == tt for tt in objtype]
         keep = np.logical_or(keep, ww)
+    print(np.sum(keep))
 
     clusters = NGC[keep]
+    clusters.write('NGC-star-clusters.fits', overwrite=True)
 
-    ra, dec = [], []
-    for _ra, _dec in zip(ma.getdata(clusters['ra_hms']), ma.getdata(clusters['dec_dms'])):
-        ra.append(hmsstring2ra(_ra.replace('h', ':').replace('m', ':').replace('s','')))
-        dec.append(dmsstring2dec(_dec.replace('d', ':').replace('m', ':').replace('s','')))
-    clusters['ra'] = ra
-    clusters['dec'] = dec
-        
+    # Code to help visually check all open clusters that are in the DESI footprint.
+    checktype = ('OCl', 'Cl+N')
+    check = np.zeros(len(NGC), dtype=bool)
+    for otype in checktype:
+        ww = [otype == tt for tt in objtype]
+        check = np.logical_or(check, ww)
+    check_clusters = NGC[check] # 845 of them
+    
     tiles = desimodel.io.load_tiles(onlydesi=True)
     indesi = desimodel.footprint.is_point_in_desi(tiles, ma.getdata(clusters['ra']),
                                                   ma.getdata(clusters['dec']))
     print(np.sum(indesi))
-    clusters.write('NGC-star-clusters.fits', overwrite=True)
 
+    # Write out a catalog, load it into the viewer and look at each of them.
+    check_clusters[['ra', 'dec', 'name']][indesi].write('check.fits', overwrite=True) # 25 of them
+    
     """
     from pkg_resources import resource_filename
     from astrometry.util.starutil_numpy import degrees_between
