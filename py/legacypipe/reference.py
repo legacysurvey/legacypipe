@@ -369,9 +369,6 @@ def read_star_clusters(targetwcs):
     clusters = fits_table(clusterfile, columns=['ra', 'dec', 'majax', 'type'])
     clusters.ref_id = np.arange(len(clusters))
 
-    print('HACK -- cutting to only GCl!')
-    clusters.cut(np.array([t.strip() == 'GCl' for t in clusters.type]))
-
     radius = 1.
     rc,dc = targetwcs.radec_center()
     d = degrees_between(rc, dc, clusters.ra, clusters.dec)
