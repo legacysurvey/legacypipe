@@ -101,7 +101,7 @@ def main():
                       help='Quick cut to only CCDs near selected bricks')
 
     parser.add_argument('--check-coadd', action='store_true',
-                      help='Check which caoadds actually need to run.')
+                      help='Check which coadds actually need to run.')
     parser.add_argument('--out', help='Output filename for calibs, default %(default)s',
                       default='jobs')
     parser.add_argument('--command', action='store_true',
@@ -132,7 +132,6 @@ def main():
 
 
     opt = parser.parse_args()
-
 
     want_ccds = (opt.calibs or opt.forced or opt.lsb)
     want_bricks = not want_ccds
@@ -407,6 +406,27 @@ def main():
     elif opt.region == 'dr8sky':
         rlo,rhi = 35.0, 37.0
         dlo,dhi = -3.0, -1.0
+
+    # ADM DR8 test regions, see, e.g.:
+    # https://desi.lbl.gov/trac/wiki/DecamLegacy/DR8#Testregions
+    elif opt.region == 'dr8-test-s82':
+        rlo, rhi = 0, 45
+        dlo, dhi = -1.25, 1.25
+    elif opt.region == 'dr8-test-hsc-sgc':
+        rlo, rhi = 30, 40
+        dlo, dhi = -6.5, -1.25
+    elif opt.region == 'dr8-test-hsc-ngc':
+        rlo, rhi = 177.5, 182.5
+        dlo, dhi = -1, 1
+    elif opt.region == 'dr8-test-edr':
+        rlo, rhi = 240, 245
+        dlo, dhi = 5, 12
+    elif opt.region == 'dr8-test-hsc-north':
+        rlo, rhi = 240, 250
+        dlo, dhi = 42, 45
+    elif opt.region == 'dr8-test-deep2-egs':
+        rlo, rhi = 213, 216.5
+        dlo, dhi = 52, 54
         
     if opt.mindec is not None:
         dlo = opt.mindec
