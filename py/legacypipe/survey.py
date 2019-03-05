@@ -1159,11 +1159,11 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 return swaplist([os.path.join(basedir, 'decals-ccds.fits.gz')])
             else:
                 return swaplist(
-                    glob(os.path.join(basedir, 'survey-ccds-*.fits.gz')))
+                    glob(os.path.join(basedir, 'survey-ccds*.fits.gz')))
 
         elif filetype == 'ccd-kds':
             return swaplist(
-                glob(os.path.join(basedir, 'survey-ccds-*.kd.fits')))
+                glob(os.path.join(basedir, 'survey-ccds*.kd.fits')))
 
         elif filetype == 'tycho2':
             dirnm = os.environ.get('TYCHO2_KD_DIR')

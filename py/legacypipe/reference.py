@@ -319,34 +319,59 @@ def read_star_clusters(targetwcs):
     import desimodel.io
     import desimodel.footprint
         
+    tiles = desimodel.io.load_tiles(onlydesi=True)
+    
     names = ('name', 'type', 'ra_hms', 'dec_dms', 'const', 'majax', 'minax',
              'pa', 'bmag', 'vmag', 'jmag', 'hmag', 'kmag', 'sbrightn', 'hubble',
              'cstarumag', 'cstarbmag', 'cstarvmag', 'messier', 'ngc', 'ic',
              'cstarnames', 'identifiers', 'commonnames', 'nednotes', 'ongcnotes')
     NGC = ascii.read('NGC.csv', delimiter=';', names=names)
+    NGC = NGC[(NGC['ra_hms'] != 'N/A')]
   
+    ra, dec = [], []
+    for _ra, _dec in zip(ma.getdata(NGC['ra_hms']), ma.getdata(NGC['dec_dms'])):
+        ra.append(hmsstring2ra(_ra.replace('h', ':').replace('m', ':').replace('s','')))
+        dec.append(dmsstring2dec(_dec.replace('d', ':').replace('m', ':').replace('s','')))
+    NGC['ra'] = ra
+    NGC['dec'] = dec
+        
     objtype = np.char.strip(ma.getdata(NGC['type']))
-    keeptype = ('PN', 'OCl', 'GCl', 'Cl+N')
+
+    # Keep all globular clusters and planetary nebulae
+    keeptype = ('PN', 'GCl')
     keep = np.zeros(len(NGC), dtype=bool)
     for otype in keeptype:
         ww = [otype == tt for tt in objtype]
         keep = np.logical_or(keep, ww)
+    print(np.sum(keep))
 
     clusters = NGC[keep]
 
-    ra, dec = [], []
-    for _ra, _dec in zip(ma.getdata(clusters['ra_hms']), ma.getdata(clusters['dec_dms'])):
-        ra.append(hmsstring2ra(_ra.replace('h', ':').replace('m', ':').replace('s','')))
-        dec.append(dmsstring2dec(_dec.replace('d', ':').replace('m', ':').replace('s','')))
-    clusters['ra'] = ra
-    clusters['dec'] = dec
-        
-    tiles = desimodel.io.load_tiles(onlydesi=True)
+    # Fill missing major axes with a nominal 0.4 arcmin (roughly works
+    # for NGC7009, which is the only missing PN in the footprint).
+    ma.set_fill_value(clusters['majax'], 0.4)
+    clusters['majax'] = ma.filled(clusters['majax'].data)
+    
     indesi = desimodel.footprint.is_point_in_desi(tiles, ma.getdata(clusters['ra']),
                                                   ma.getdata(clusters['dec']))
     print(np.sum(indesi))
+    bb = clusters[indesi]
+    bb[np.argsort(bb['majax'])[::-1]]['name', 'ra', 'dec', 'majax', 'type']
+    
     clusters.write('NGC-star-clusters.fits', overwrite=True)
 
+
+    # Code to help visually check all open clusters that are in the DESI footprint.
+    checktype = ('OCl', 'Cl+N')
+    check = np.zeros(len(NGC), dtype=bool)
+    for otype in checktype:
+        ww = [otype == tt for tt in objtype]
+        check = np.logical_or(check, ww)
+    check_clusters = NGC[check] # 845 of them
+    
+    # Write out a catalog, load it into the viewer and look at each of them.
+    check_clusters[['ra', 'dec', 'name']][indesi].write('check.fits', overwrite=True) # 25 of them
+    
     """
     from pkg_resources import resource_filename
     from astrometry.util.starutil_numpy import degrees_between
@@ -355,9 +380,6 @@ def read_star_clusters(targetwcs):
     print('Reading {}'.format(clusterfile))
     clusters = fits_table(clusterfile, columns=['ra', 'dec', 'majax', 'type'])
     clusters.ref_id = np.arange(len(clusters))
-
-    print('HACK -- cutting to only GCl!')
-    clusters.cut(np.array([t.strip() == 'GCl' for t in clusters.type]))
 
     radius = 1.
     rc,dc = targetwcs.radec_center()
