@@ -228,12 +228,12 @@ def read_tycho2(survey, targetwcs):
         tycho.pmdec_ivar = 1./tycho.sigma_pm_dec**2
         tycho.ra_ivar  = 1./tycho.sigma_ra **2
         tycho.dec_ivar = 1./tycho.sigma_dec**2
+    tycho.rename('pm_ra', 'pmra')
+    tycho.rename('pm_dec', 'pmdec')
     for c in ['pmra', 'pmdec', 'pmra_ivar', 'pmdec_ivar']:
         X = tycho.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
 
-    tycho.rename('pm_ra', 'pmra')
-    tycho.rename('pm_dec', 'pmdec')
     tycho.mag = tycho.mag_vt
     tycho.mag[tycho.mag == 0] = tycho.mag_hp[tycho.mag == 0]
 
