@@ -1481,13 +1481,48 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
         procdatekey = 'PROCDATE'
         if cpheader:
             procdatekey = 'DATE'
-        for key,targetval,strip in ((procdatekey, procdate, True),
-                                    ('PLVER', plver, True),
-                                    ('EXPNUM', expnum, False)):
-            if key not in hdr:
-                print('Warning: outdated data model:', fn, 'header missing', key)
-                return False
-            val = hdr[key]
+
+        cpexpnum = None
+        if cpheader:
+            # Special handling for EXPNUM in some cases
+            if 'EXPNUM' in hdr:
+                cpexpnum = hdr['EXPNUM']
+            else:
+                # At the beginning of the MzLS survey, eg 2016-01-24, the EXPNUM
+                # cards are blank.  Fake up an expnum like 160125082555
+                # (yymmddhhmmss), same as the CP filename.
+                # OBSID   = 'kp4m.20160125T082555' / Observation ID
+                # MzLS:
+                obsid = hdr['OBSID']
+                if obsid.startswith('kp4m.'):
+                    obsid = obsid.strip().split('.')[1]
+                    obsid = obsid.replace('T', '')
+                    obsid = int(obsid[2:], 10)
+                    cpexpnum = obsid
+                    print('Faked up EXPNUM', cpexpnum)
+                elif obsid.startswith('ksb'):
+                    import re
+                    # obsid = obsid[3:]
+                    # obsid = int(obsid[2:], 10)
+                    # cpexpnum = obsid
+                    # DTACQNAM= '/descache/bass/20160504/d7513.0033.fits'
+                    base= (os.path.basename(hdr['DTACQNAM'])
+                           .replace('.fits','')
+                           .replace('.fz',''))
+                    cpexpnum = int(re.sub(r'([a-z]+|\.+)','',base), 10)
+                    print('Faked up EXPNUM', cpexpnum)
+
+        for key,spval,targetval,strip in ((procdatekey, None, procdate, True),
+                                          ('PLVER', None, plver, True),
+                                          ('EXPNUM', cpexpnum, expnum, False)):
+            if spval is not None:
+                val = spval
+            else:
+                if key not in hdr:
+                    print('Warning: outdated data model:', fn, 'header missing', key)
+                    return False
+                val = hdr[key]
+
             if strip:
                 val = val.strip()
             if val != targetval:
