@@ -318,11 +318,14 @@ def read_star_clusters(targetwcs):
     import desimodel.io
     import desimodel.footprint
         
+    tiles = desimodel.io.load_tiles(onlydesi=True)
+    
     names = ('name', 'type', 'ra_hms', 'dec_dms', 'const', 'majax', 'minax',
              'pa', 'bmag', 'vmag', 'jmag', 'hmag', 'kmag', 'sbrightn', 'hubble',
              'cstarumag', 'cstarbmag', 'cstarvmag', 'messier', 'ngc', 'ic',
              'cstarnames', 'identifiers', 'commonnames', 'nednotes', 'ongcnotes')
     NGC = ascii.read('NGC.csv', delimiter=';', names=names)
+    NGC = NGC[(NGC['ra_hms'] != 'N/A')]
   
     ra, dec = [], []
     for _ra, _dec in zip(ma.getdata(NGC['ra_hms']), ma.getdata(NGC['dec_dms'])):
@@ -342,7 +345,20 @@ def read_star_clusters(targetwcs):
     print(np.sum(keep))
 
     clusters = NGC[keep]
+
+    # Fill missing major axes with a nominal 0.4 arcmin (roughly works
+    # for NGC7009, which is the only missing PN in the footprint).
+    ma.set_fill_value(clusters['majax'], 0.4)
+    clusters['majax'] = ma.filled(clusters['majax'].data)
+    
+    indesi = desimodel.footprint.is_point_in_desi(tiles, ma.getdata(clusters['ra']),
+                                                  ma.getdata(clusters['dec']))
+    print(np.sum(indesi))
+    bb = clusters[indesi]
+    bb[np.argsort(bb['majax'])[::-1]]['name', 'ra', 'dec', 'majax', 'type']
+    
     clusters.write('NGC-star-clusters.fits', overwrite=True)
+
 
     # Code to help visually check all open clusters that are in the DESI footprint.
     checktype = ('OCl', 'Cl+N')
@@ -352,11 +368,6 @@ def read_star_clusters(targetwcs):
         check = np.logical_or(check, ww)
     check_clusters = NGC[check] # 845 of them
     
-    tiles = desimodel.io.load_tiles(onlydesi=True)
-    indesi = desimodel.footprint.is_point_in_desi(tiles, ma.getdata(clusters['ra']),
-                                                  ma.getdata(clusters['dec']))
-    print(np.sum(indesi))
-
     # Write out a catalog, load it into the viewer and look at each of them.
     check_clusters[['ra', 'dec', 'name']][indesi].write('check.fits', overwrite=True) # 25 of them
     
