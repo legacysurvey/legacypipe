@@ -36,7 +36,8 @@ Can add kd-tree data structure to this resulting annotated-ccds file like this:
 
 '''
 
-def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False):
+def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False,
+             carryOn=True):
     # File from the "observing" svn repo:
     from pkg_resources import resource_filename
     
@@ -75,7 +76,10 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False):
             print('Failed to get_image_object()')
             import traceback
             traceback.print_exc()
-            continue
+            if carryOn:
+                continue
+            else:
+                raise
         print('Reading CCD %i of %i:' % (iccd+1, len(ccds)), im, 'file', ccd.image_filename, 'CCD', ccd.ccdname)
 
         X = im.get_good_image_subregion()
@@ -99,7 +103,10 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False):
             print('Failed to get_tractor_image')
             import traceback
             traceback.print_exc()
-            continue
+            if carryOn:
+                continue
+            else:
+                raise
 
         if tim is None:
             continue
