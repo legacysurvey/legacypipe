@@ -394,8 +394,8 @@ def init_annotations(ccds):
     ccds.tilepass = np.zeros(len(ccds), np.uint8)
     ccds.tileebv  = np.zeros(len(ccds), np.float32)
 
-    ccds.plver = np.array([' '*8] * len(ccds))
-    ccds.procdate = np.array([' '*19] * len(ccds))
+    #ccds.plver = np.array([' '*8] * len(ccds))
+    #ccds.procdate = np.array([' '*19] * len(ccds))
 
 def main(outfn='ccds-annotated.fits', ccds=None, **kwargs):
     survey = LegacySurveyData(ccds=ccds)
