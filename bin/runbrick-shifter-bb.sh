@@ -81,6 +81,7 @@ echo -e "\nStarting on $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
 python -u legacypipe/runbrick.py \
+     --brick $brick \
      --release 7914 \
      --skip \
      --skip-calibs \
@@ -90,10 +91,10 @@ python -u legacypipe/runbrick.py \
      --unwise-coadds \
      --survey-dir $LEGACY_SURVEY_DIR \
      --outdir $outdir \
-     --brick $brick \
-     --ps "${outdir}/metrics/${bri}/ps-${brick}.fits" \
+     --ps "${outdir}/metrics/${bri}/ps-${brick}-${SLURM_JOB_ID}.fits" \
      --ps-t0 $(date "+%s") \
      --depth-cut 1 \
+    --bail-out \
      >> $log 2>&1
 
 #     --cache-dir $cachedir \
