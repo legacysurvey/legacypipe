@@ -755,7 +755,7 @@ class LegacySurveyImage(object):
     def remap_dq_cp_codes(self, dq, header):
         return remap_dq_cp_codes(dq)
     
-    def read_invvar(self, dq=None, **kwargs):
+    def read_invvar(self, clip=True, clipThresh=0.1, dq=None, **kwargs):
         '''
         Reads the inverse-variance (weight) map image.
         '''
@@ -763,6 +763,17 @@ class LegacySurveyImage(object):
         invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
         if dq is not None:
             invvar[dq != 0] = 0.
+
+        if clip:
+            # Additionally clamp near-zero (incl negative!) weight to zero,
+            # which arise due to fpack.
+            if clipThresh > 0.:
+                thresh = clipThresh * np.median(invvar[invvar > 0])
+            else:
+                thresh = 0.
+            print(thresh)
+            invvar[invvar < thresh] = 0
+            
         assert(np.all(invvar >= 0.))
         assert(np.all(np.isfinite(invvar)))
         return invvar
@@ -1416,7 +1427,6 @@ class LegacySurveyImage(object):
         if psfex:
             self.run_psfex(git_version=git_version, ps=ps)
         if sky:
-            print('Run_sky')
             self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia)
 
 
