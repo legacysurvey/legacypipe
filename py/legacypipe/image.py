@@ -1472,6 +1472,7 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
 def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                             data=None, ext=1, cpheader=False):
     if not os.path.exists(fn):
+        print('File not found {}'.format(fn))
         return False
     # Check the data model
     if filetype == 'table':
