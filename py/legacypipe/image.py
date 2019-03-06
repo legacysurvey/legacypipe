@@ -514,7 +514,7 @@ class LegacySurveyImage(object):
                                   hybridPsf=hybridPsf, normalizePsf=normalizePsf,
                                   psf_sigma=psf_sigma,
                                   w=x1 - x0, h=y1 - y0)
-
+        
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
                     photocal=LinearPhotoCal(zpscale, band=band),
                     sky=sky, name=self.name + ' ' + band)
@@ -771,7 +771,6 @@ class LegacySurveyImage(object):
                 thresh = clipThresh * np.median(invvar[invvar > 0])
             else:
                 thresh = 0.
-            print(thresh)
             invvar[invvar < thresh] = 0
             
         assert(np.all(invvar >= 0.))
@@ -969,8 +968,10 @@ class LegacySurveyImage(object):
 
         if not validate_procdate_plver(self.merged_psffn, 'table',
                                        self.expnum, self.plver, self.procdate, data=T):
-            raise RuntimeError('Merged PsfEx file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
-                               self.merged_psffn)
+            print('WARNING! Merged PsfEx file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
+                  self.merged_psffn)
+            #raise RuntimeError('Merged PsfEx file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
+            #                   self.merged_psffn)
 
         I, = np.nonzero((T.expnum == self.expnum) *
                         np.array([c.strip() == self.ccdname
@@ -1178,7 +1179,10 @@ class LegacySurveyImage(object):
             masked = binary_dilation(masked, iterations=3)
 
             cimage, _, _ = sigmaclip(img[good * (masked==False)], low=2.0, high=2.0)
-            sky_john = np.median(cimage)
+            if len(cimage) > 0:
+                sky_john = np.median(cimage)
+            else:
+                sky_john = 0.0
             del cimage
 
             boxsize = self.splinesky_boxsize
@@ -1204,7 +1208,10 @@ class LegacySurveyImage(object):
                             > (3.*bsig1))
             masked = binary_dilation(masked, iterations=3)
             good[masked] = False
-            sig1b = 1./np.sqrt(np.median(wt[good]))
+            if np.sum(good) > 0:
+                sig1b = 1./np.sqrt(np.median(wt[good]))
+            else:
+                sig1b = sig1
 
             # Also mask based on reference stars and galaxies.
             from legacypipe.reference import get_reference_sources
@@ -1328,7 +1335,7 @@ class LegacySurveyImage(object):
 
             hdr.add_record(dict(name='SIG1', value=sig1,
                                 comment='Median stdev of unmasked pixels'))
-            hdr.add_record(dict(name='SIG1B', value=sig1,
+            hdr.add_record(dict(name='SIG1B', value=sig1b,
                                 comment='Median stdev of unmasked pixels+'))
 
             hdr.add_record(dict(name='S_MODE', value=sky_mode,
