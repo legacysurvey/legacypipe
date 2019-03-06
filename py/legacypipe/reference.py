@@ -162,7 +162,7 @@ def read_gaia(targetwcs):
 
     # Gaia version?
     gaiaver = int(os.getenv('GAIA_CAT_VER', '1'))
-    print('Assuming Gaia catalog Data Release', gaiaver)
+    #print('Assuming Gaia catalog Data Release', gaiaver)
     gaia_release = 'G%i' % gaiaver
     gaia.ref_cat = np.array([gaia_release] * len(gaia))
     gaia.ref_id  = gaia.source_id
