@@ -229,16 +229,31 @@ to compute them in advance. Furthermore, if we want to use PSF
 zeropoints, then we must compute the calibrations in advance because
 they are needed to compute the PSF zeropoints. The easiest way is to run
 them at the same time as the zeropoints as outlined in the previous
-section.
+section. In order to run only the calibrations, there are two options:
+run the zeropoints code but with the flag
 
-The procedure is to run the two following scripts:
+    --run-calibs-only
 
-    legacypipe/run-calib.py
-    legacypipe/merge-calibs.py
+The other is to call directly the code `legacypipe/run-calib.py`.
 
-The first is called by `legacyzpts/legacy_zeropoints.py`, but the second
-needs to be called afterwards to merge the calibration file that are
-computed per CCD into files per exposure.
+The calibration files are output by CCD. To merge them and create files
+per exposure, we need to run
+
+    legacypipe/merge-calibs.py --outdir calib --continue
+
+with `LEGACY_SURVEY_DIR` set. The continue flag will make the code
+continue to go over every exposure even if some of them fail. If a
+survey-ccds files containing the zeropoints already exists, we can limit
+the process to the exposure in that CCDs file bu using the flag
+
+     --ccds <survey-ccds-file>.
+
+kd-tree survey-ccds file
+------------------------
+
+Legacypipe will look for a unified kd-tree file and will only look for
+others if it can't find this one. It must the include the info from all
+`survey-ccds-{camera}-{band}.fits.gz`.
 
 To create the kd-tree version of the zeropoint files,
 
@@ -252,6 +267,56 @@ To create the kd-tree version of the zeropoint files,
 Obviously, if there is only one `survey-ccds` file, the tabmerge
 commands are not necessary.
 
+For DR8, a new script runs the last two commands:
+
+    legacypipe/create_kdtrees.py --infn /tmp/survey-ccds-dr8.fits --outfn survey-ccds-dr8.kd.fits
+
+Generating the brick list
+-------------------------
+
+We need to create a database with a list of tasks. For our purpose, a
+task is simply the brick name. The code that generates the brick list
+from the CCDs files outputs some diagnostic information which must be
+edited out before being fed to qdo:
+
+    python legacypipe/queue-calibs.py --touching --region mzls >
+    bricks.txt >> log
+    vi bricks.txt
+
+and edit out everything that is not a brick name, *e.g.* 1234p567.
+
+Depth cut
+---------
+
+To perform the depth cut, the kd-tree version of the merged survey-ccds
+file must reside in the (temporary) `LEGACY_SURVEY_DIR` directory.
+
+The first step is to create a task list. For our purpose, a task is
+simply the brick name. This list can serve for both for the next stage
+of the depth cut process and the later tractor processing. After
+generating the brick list as above, feed it to qdo:
+
+    qdo load dr8 bricks.txt
+
+The first step is to take the bricks and compute a corresponding
+ccds-BRICK.fits files. Using the QDO queue just created:
+
+    qdo launch dr8 100 --cores_per_worker 1 --walltime=01:00:00 --script legacyanalysis/depthcut.sh --batchqueue regular --keep_env
+
+The command should be run in a temprary directory without any other FITS
+files. The above command also assumes that legacypipe/py is in the
+PYTHONPATH; the hard coded paths in the script should be adjusted. Once
+the queue has been processed, we run in the same directory
+
+    legacyanalysis/depth-cut-dr8.py
+
+in order to take all the ccds-BRICK.fits files to a
+survey-ccds-depthcut.fits file.
+
+Afterwards, generate the final kd-tree survey-ccds file using the
+`create_kdtrees.py` as described above which must be copied to the final
+`LEGACY_SURVEY_DIR` directory.
+
 Running tractor
 ===============
 
@@ -260,18 +325,6 @@ Staging of input data
 
 For DR1-4, input images were copied from project to Cori or Edison
 scratch; for DR5 onwards, this was not done and things worked just fine.
-
-Setting up the task list
-------------------------
-
-We need to create a database with a list of tasks. For our purpose, a
-task is simply the brick name. The code that generates the brick list
-from the CCDs files outputs some diagnostic information which must be
-edited out before being fed to qdo:
-
-    python legacypipe/queue-calibs.py --touching --region mzls > bricks.txt >> log
-    vi bricks.txt # Edit out everything that isn't a brick name, e.g. 1234p567
-    qdo load dr6 bricks.txt
 
 Launching tractor
 -----------------
