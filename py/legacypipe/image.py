@@ -3,6 +3,7 @@ import os
 import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
+from legacypipe.utils import read_primary_header
 
 import logging
 logger = logging.getLogger('legacypipe.image')
@@ -133,11 +134,12 @@ class LegacySurveyImage(object):
         self.camera  = ccd.camera.strip()
         self.fwhm    = ccd.fwhm
         self.propid  = ccd.propid
-        self.mjdobs = ccd.mjd_obs
-        self.width  = ccd.width
-        self.height = ccd.height
-
-        self.sig1 = getattr(ccd, 'sig1', None)
+        self.mjdobs  = ccd.mjd_obs
+        self.width   = ccd.width
+        self.height  = ccd.height
+        self.sig1    = ccd.sig1
+        self.plver   = ccd.plver.strip()
+        self.procdate = ccd.procdate.strip()
 
         # Which Data Quality bits mark saturation?
         self.dq_saturation_bits = CP_DQ_BITS['satur'] # | CP_DQ_BITS['bleed']
@@ -290,6 +292,19 @@ class LegacySurveyImage(object):
         get_dq = dq
         get_invvar = invvar
 
+        primhdr = self.read_image_primary_header()
+        #
+        assert(validate_procdate_plver(self.imgfn, 'primaryheader',
+                                       self.expnum, self.plver, self.procdate,
+                                       data=primhdr, cpheader=True))
+        # NOTE, this does not work because the WT and DQ maps have DATEs
+        # that are like 15 seconds later than the image.
+        # assert(validate_procdate_plver(self.wtfn, 'primaryheader',
+        #                                self.expnum, self.plver, self.procdate,
+        #                                cpheader=True))
+        # assert(validate_procdate_plver(self.dqfn, 'primaryheader',
+        #                                self.expnum, self.plver, self.procdate,
+        #                                cpheader=True))
         band = self.band
         wcs = self.get_wcs()
 
@@ -307,39 +322,31 @@ class LegacySurveyImage(object):
             img = np.zeros((y1-y0, x1-x0), np.float32)
             imghdr = self.read_image_header()
         assert(np.all(np.isfinite(img)))
-            
-        # Read inverse-variance (weight) map
-        if get_invvar:
-            invvar = self.read_invvar(slice=slc)
-        else:
-            invvar = np.ones_like(img)
-        assert(np.all(np.isfinite(invvar)))
-        if np.all(invvar == 0.):
-            debug('Skipping zero-invvar image')
-            return None
-        # Negative invvars (from, eg, fpack decompression noise) cause havoc
-        if not np.all(invvar >= 0.):
-            raise ValueError('not np.all(invvar >= 0.), hdu=%d fn=%s' % (self.hdu,self.wtfn))
 
         # Read data-quality (flags) map and zero out the invvars of masked pixels
+        if get_invvar:
+            get_dq = True
         if get_dq:
             dq,dqhdr = self.read_dq(slice=slc, header=True)
             if dq is not None:
                 dq = self.remap_dq(dq, dqhdr)
-                invvar[dq != 0] = 0.
-            if np.all(invvar == 0.):
-                debug('Skipping zero-invvar image (after DQ masking)')
-                return None
+        # Read inverse-variance (weight) map
+        if get_invvar:
+            invvar = self.read_invvar(slice=slc, dq=dq)
+        else:
+            invvar = np.ones_like(img)
+        if np.all(invvar == 0.):
+            debug('Skipping zero-invvar image')
+            return None
+
+        # for create_testcase: omit remappings.
+        if not no_remap_invvar:
+            invvar = self.remap_invvar(invvar, primhdr, img, dq)
 
         # header 'FWHM' is in pixels
         assert(self.fwhm > 0)
         psf_fwhm = self.fwhm 
         psf_sigma = psf_fwhm / 2.35
-        primhdr = self.read_image_primary_header()
-
-        # for create_testcase: omit remappings.
-        if not no_remap_invvar:
-            invvar = self.remap_invvar(invvar, primhdr, img, dq)
 
         # Ugly: occasionally the CP marks edge pixels with SATUR (and
         # nearby pixels with BLEED).  Convert connected blobs of
@@ -507,7 +514,7 @@ class LegacySurveyImage(object):
                                   hybridPsf=hybridPsf, normalizePsf=normalizePsf,
                                   psf_sigma=psf_sigma,
                                   w=x1 - x0, h=y1 - y0)
-
+        
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
                     photocal=LinearPhotoCal(zpscale, band=band),
                     sky=sky, name=self.name + ' ' + band)
@@ -715,51 +722,7 @@ class LegacySurveyImage(object):
         primary_header : fitsio header
             The FITS header
         '''
-        return self.read_primary_header(self.imgfn)
-
-    def read_primary_header(self, fn):
-        '''
-        Reads the FITS primary header (HDU 0) from the given filename.
-        This is just a faster version of fitsio.read_header(fn).
-        '''
-        if fn.endswith('.gz'):
-            return fitsio.read_header(fn)
-
-        # Weirdly, this can be MUCH faster than letting fitsio do it...
-        hdr = fitsio.FITSHDR()
-        foundEnd = False
-        ff = open(fn, 'rb')
-        h = b''
-        while True:
-            hnew = ff.read(32768)
-            if len(hnew) == 0:
-                # EOF
-                ff.close()
-                raise RuntimeError('Reached end-of-file in "%s" before finding end of FITS header.' % fn)
-            h = h + hnew
-            while True:
-                line = h[:80]
-                h = h[80:]
-                #print('Header line "%s"' % line)
-                # HACK -- fitsio apparently can't handle CONTINUE.
-                # It also has issues with slightly malformed cards, like
-                # KEYWORD  =      / no value
-                if line[:8] != b'CONTINUE':
-                    try:
-                        hdr.add_record(line.decode())
-                    except OSError as err:
-                        print('Warning: failed to parse FITS header line: ' +
-                              ('"%s"; error "%s"; skipped' % (line.strip(), str(err))))
-                              
-                if line == (b'END' + b' '*77):
-                    foundEnd = True
-                    break
-                if len(h) < 80:
-                    break
-            if foundEnd:
-                break
-        ff.close()
-        return hdr
+        return read_primary_header(self.imgfn)
 
     def read_image_header(self, **kwargs):
         '''
@@ -792,27 +755,26 @@ class LegacySurveyImage(object):
     def remap_dq_cp_codes(self, dq, header):
         return remap_dq_cp_codes(dq)
     
-    def read_invvar(self, **kwargs):
+    def read_invvar(self, clip=True, clipThresh=0.1, dq=None, **kwargs):
         '''
         Reads the inverse-variance (weight) map image.
         '''
         debug('Reading weight map image', self.wtfn, 'ext', self.hdu)
         invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
-        return invvar
+        if dq is not None:
+            invvar[dq != 0] = 0.
 
-    def read_invvar_clipped(self, clip=True, clipThresh=0.01, **kwargs):
-        '''A function that can optionally be called by subclassers for read_invvar,
-        clipping fpack artifacts to zero.'''
-        invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
         if clip:
-            # Clamp near-zero (incl negative!) invvars to zero.
-            # These arise due to fpack.
+            # Additionally clamp near-zero (incl negative!) weight to zero,
+            # which arise due to fpack.
             if clipThresh > 0.:
-                med = np.median(invvar[invvar > 0])
-                thresh = clipThresh * med
+                thresh = clipThresh * np.median(invvar[invvar > 0])
             else:
                 thresh = 0.
             invvar[invvar < thresh] = 0
+            
+        assert(np.all(invvar >= 0.))
+        assert(np.all(np.isfinite(invvar)))
         return invvar
 
     def get_tractor_wcs(self, wcs, x0, y0, tai=None,
@@ -848,53 +810,8 @@ class LegacySurveyImage(object):
     def get_sig1(self, **kwargs):
         from tractor.brightness import NanoMaggies
         zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
-
-        if self.sig1 is not None:
-            # CCDs table sig1 is in nanomaggies
-            #return self.sig1
-            # Oops, nope, the legacyzpts sig1 values (DR7) are *not*!
-            return self.sig1 / zpscale
-
-        # these sig1 values are in image counts; scale to nanomaggies
-        skysig1 = self.get_sky_sig1(**kwargs)
-        if skysig1 is None:
-            iv = im.read_invvar(**kwargs)
-            dq = im.read_dq(**kwargs)
-            skysig1 = 1./np.sqrt(np.median(iv[dq == 0]))
-        return skysig1 / zpscale
-
-    ### Yuck, this is not much better than just doing read_sky_model().sig1 ...
-    def get_sky_sig1(self, splinesky=False):
-        '''
-        Returns the per-pixel noise estimate, which (for historical
-        reasons) is stored in the sky model.  NOTE that this is in
-        image pixel counts, NOT calibrated nanomaggies.
-        '''
-        if splinesky and getattr(self, 'merged_splineskyfn', None) is not None:
-            if not os.path.exists(self.merged_splineskyfn):
-                debug('Merged spline sky model does not exist:', self.merged_splineskyfn)
-        if (splinesky and getattr(self, 'merged_splineskyfn', None) is not None
-            and os.path.exists(self.merged_splineskyfn)):
-            try:
-                debug('Reading merged spline sky models from', self.merged_splineskyfn)
-                T = fits_table(self.merged_splineskyfn)
-                if 'sig1' in T.get_columns():
-                    I, = np.nonzero((T.expnum == self.expnum) *
-                                    np.array([c.strip() == self.ccdname
-                                              for c in T.ccdname]))
-                    debug('Found', len(I), 'matching CCD')
-                    if len(I) >= 1:
-                        return T.sig1[I[0]]
-            except:
-                pass
-        if splinesky:
-            fn = self.splineskyfn
-        else:
-            fn = self.skyfn
-        debug('Reading sky model from', fn)
-        hdr = fitsio.read_header(fn)
-        sig1 = hdr.get('SIG1', None)
-        return sig1
+        # CCDs table sig1 is in ADU.
+        return self.sig1 / zpscale
 
     def read_sky_model(self, splinesky=False, slc=None, **kwargs):
         '''
@@ -917,6 +834,11 @@ class LegacySurveyImage(object):
         fn = self.skyfn
         if splinesky:
             fn = self.splineskyfn
+
+        if not validate_procdate_plver(fn, 'primaryheader',
+                                       self.expnum, self.plver, self.procdate):
+            raise RuntimeError('Splinesky file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' % fn)
+
         debug('Reading sky model from', fn)
         hdr = fitsio.read_header(fn)
         try:
@@ -953,6 +875,10 @@ class LegacySurveyImage(object):
         from tractor.utils import get_class_from_name
         debug('Reading merged spline sky models from', self.merged_splineskyfn)
         T = fits_table(self.merged_splineskyfn)
+        if not validate_procdate_plver(self.merged_splineskyfn, 'table',
+                                       self.expnum, self.plver, self.procdate, data=T):
+            raise RuntimeError('Merged splinesky file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
+                               self.merged_splineskyfn)
         I, = np.nonzero((T.expnum == self.expnum) *
                         np.array([c.strip() == self.ccdname
                                   for c in T.ccdname]))
@@ -1015,6 +941,11 @@ class LegacySurveyImage(object):
             else:
                 psf = PixelizedPsfEx(self.psffn)
             hdr = fitsio.read_header(self.psffn)
+
+            if not validate_procdate_plver(self.psffn, 'primaryheader',
+                                           self.expnum, self.plver, self.procdate, data=hdr):
+                raise RuntimeError('PsfEx file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' % self.psffn)
+
             psf.version = hdr.get('LEGSURV', None)
             if psf.version is None:
                 psf.version = str(os.stat(self.psffn).st_mtime)
@@ -1034,6 +965,14 @@ class LegacySurveyImage(object):
         from tractor import PsfExModel
         debug('Reading merged PsfEx models from', self.merged_psffn)
         T = fits_table(self.merged_psffn)
+
+        if not validate_procdate_plver(self.merged_psffn, 'table',
+                                       self.expnum, self.plver, self.procdate, data=T):
+            print('WARNING! Merged PsfEx file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
+                  self.merged_psffn)
+            #raise RuntimeError('Merged PsfEx file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
+            #                   self.merged_psffn)
+
         I, = np.nonzero((T.expnum == self.expnum) *
                         np.array([c.strip() == self.ccdname
                                   for c in T.ccdname]))
@@ -1162,6 +1101,8 @@ class LegacySurveyImage(object):
                 (psftmpfn, datasum),
                 'modhead %s PROCDATE "%s" "DATE of image file"' %
                 (psftmpfn, procdate),
+                'modhead %s EXPNUM "%s" "exposure number"' %
+                (psftmpfn, self.expnum),
                 'mv %s %s' % (psftmpfn, psfoutfn),
                 ]
         for cmd in cmds:
@@ -1176,13 +1117,14 @@ class LegacySurveyImage(object):
         from legacypipe.survey import get_version_header
         from scipy.ndimage.morphology import binary_dilation
         from astrometry.util.file import trymakedirs
+        from astrometry.util.miscutils import estimate_mode
 
         plots = (ps is not None)
 
         slc = self.get_good_image_slice(None)
         img = self.read_image(slice=slc)
-        wt = self.read_invvar(slice=slc)
         dq = self.read_dq(slice=slc)
+        wt = self.read_invvar(slice=slc, dq=dq)
         hdr = get_version_header(None, self.survey.get_survey_dir(), release,
                                  git_version=git_version)
         primhdr = self.read_image_primary_header()
@@ -1202,18 +1144,22 @@ class LegacySurveyImage(object):
                             comment='DATASUM of image file'))
         hdr.add_record(dict(name='PROCDATE', value=procdate,
                             comment='DATE of image file'))
-
-        wt[dq != 0] = 0.
+        hdr.add_record(dict(name='EXPNUM', value=self.expnum,
+                            comment='exposure number'))
         good = (wt > 0)
         if np.sum(good) == 0:
             raise RuntimeError('No pixels with weight > 0 in: ' + str(self))
 
         # Do a few different scalar sky estimates
-        try:
-            from astrometry.util.miscutils import estimate_mode
-            sky_mode = estimate_mode(img[good], raiseOnWarn=True)
-        except:
-            sky_mode = 0.
+        if np.sum(good) > 100:
+            try:
+                sky_mode = estimate_mode(img[good], raiseOnWarn=False)
+            except:
+                sky_mode = 0.
+        else:
+            sky_mode = 0.0
+        if np.isnan(sky_mode) or np.isinf(sky_mode):
+            sky_mode = 0.0
 
         sky_median = np.median(img[good])
 
@@ -1233,13 +1179,17 @@ class LegacySurveyImage(object):
             # Sigma of boxcar-smoothed image
             bsig1 = sig1 / boxcar
             masked = np.abs(uniform_filter(img - sky_clipped_median, size=boxcar,
-                                           mode='constant')
-                            > (3.*bsig1))
+                                           mode='constant') > (3.*bsig1))
             masked = binary_dilation(masked, iterations=3)
-
-            cimage, _, _ = sigmaclip(img[good * (masked==False)], low=2.0, high=2.0)
-            sky_john = np.median(cimage)
-            del cimage
+            if np.sum(good * (masked==False)) > 100:
+                cimage, _, _ = sigmaclip(img[good * (masked==False)], low=2.0, high=2.0)
+                if len(cimage) > 0:
+                    sky_john = np.median(cimage)
+                else:
+                    sky_john = 0.0
+                del cimage
+            else:
+                sky_john = 0.0
 
             boxsize = self.splinesky_boxsize
 
@@ -1264,7 +1214,10 @@ class LegacySurveyImage(object):
                             > (3.*bsig1))
             masked = binary_dilation(masked, iterations=3)
             good[masked] = False
-            sig1b = 1./np.sqrt(np.median(wt[good]))
+            if np.sum(good) > 0:
+                sig1b = 1./np.sqrt(np.median(wt[good]))
+            else:
+                sig1b = sig1
 
             # Also mask based on reference stars and galaxies.
             from legacypipe.reference import get_reference_sources
@@ -1388,7 +1341,7 @@ class LegacySurveyImage(object):
 
             hdr.add_record(dict(name='SIG1', value=sig1,
                                 comment='Median stdev of unmasked pixels'))
-            hdr.add_record(dict(name='SIG1B', value=sig1,
+            hdr.add_record(dict(name='SIG1B', value=sig1b,
                                 comment='Median stdev of unmasked pixels+'))
 
             hdr.add_record(dict(name='S_MODE', value=sky_mode,
@@ -1487,7 +1440,6 @@ class LegacySurveyImage(object):
         if psfex:
             self.run_psfex(git_version=git_version, ps=ps)
         if sky:
-            print('Run_sky')
             self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia)
 
 
@@ -1516,4 +1468,92 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
         pix = self.psfex.at(x, y)
         pix /= pix.sum()
         return PixelizedPSF(pix)
+
+def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
+                            data=None, ext=1, cpheader=False):
+    if not os.path.exists(fn):
+        print('File not found {}'.format(fn))
+        return False
+    # Check the data model
+    if filetype == 'table':
+        if data is None:
+            T = fits_table(fn)
+        else:
+            T = data
+        cols = T.get_columns()
+        for key,targetval,strip in (('procdate', procdate, True),
+                                    ('plver', plver, True),
+                                    ('expnum', expnum, False)):
+            if key not in cols:
+                print('Warning: outdated data model:', fn, 'table missing', key)
+                return False
+            val = T.get(key)
+            if strip:
+                val = np.array([v.strip() for v in val])
+            if not np.all(val == targetval):
+                print('Warning: table value', val, 'not equal to', targetval, 'in file', fn)
+                return False
+        return True
+    elif filetype in ['primaryheader', 'header']:
+        if data is None:
+            if filetype == 'primaryheader':
+                hdr = read_primary_header(fn)
+            else:
+                hdr = fitsio.FITS(fn)[ext].read_header()
+        else:
+            hdr = data
+        procdatekey = 'PROCDATE'
+        if cpheader:
+            procdatekey = 'DATE'
+
+        cpexpnum = None
+        if cpheader:
+            # Special handling for EXPNUM in some cases
+            if 'EXPNUM' in hdr:
+                cpexpnum = hdr['EXPNUM']
+            else:
+                # At the beginning of the MzLS survey, eg 2016-01-24, the EXPNUM
+                # cards are blank.  Fake up an expnum like 160125082555
+                # (yymmddhhmmss), same as the CP filename.
+                # OBSID   = 'kp4m.20160125T082555' / Observation ID
+                # MzLS:
+                obsid = hdr['OBSID']
+                if obsid.startswith('kp4m.'):
+                    obsid = obsid.strip().split('.')[1]
+                    obsid = obsid.replace('T', '')
+                    obsid = int(obsid[2:], 10)
+                    cpexpnum = obsid
+                    print('Faked up EXPNUM', cpexpnum)
+                elif obsid.startswith('ksb'):
+                    import re
+                    # obsid = obsid[3:]
+                    # obsid = int(obsid[2:], 10)
+                    # cpexpnum = obsid
+                    # DTACQNAM= '/descache/bass/20160504/d7513.0033.fits'
+                    base= (os.path.basename(hdr['DTACQNAM'])
+                           .replace('.fits','')
+                           .replace('.fz',''))
+                    cpexpnum = int(re.sub(r'([a-z]+|\.+)','',base), 10)
+                    print('Faked up EXPNUM', cpexpnum)
+
+        for key,spval,targetval,strip in ((procdatekey, None, procdate, True),
+                                          ('PLVER', None, plver, True),
+                                          ('EXPNUM', cpexpnum, expnum, False)):
+            if spval is not None:
+                val = spval
+            else:
+                if key not in hdr:
+                    print('Warning: outdated data model:', fn, 'header missing', key)
+                    return False
+                val = hdr[key]
+
+            if strip:
+                val = val.strip()
+            if val != targetval:
+                print('Warning: header value', val, 'not equal to', targetval, 'in file', fn)
+                return False
+        return True
+
+    else:
+        raise ValueError('incorrect filetype')
 
