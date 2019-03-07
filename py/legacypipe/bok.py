@@ -14,9 +14,6 @@ class BokImage(LegacySurveyImage):
     def __init__(self, survey, t):
         super(BokImage, self).__init__(survey, t)
 
-    def read_invvar(self, **kwargs):
-        return self.read_invvar_clipped(**kwargs)
-
     def read_dq(self, slice=None, header=False, **kwargs):
         # Add supplemental static mask.
         import os
