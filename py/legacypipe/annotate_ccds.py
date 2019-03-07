@@ -164,10 +164,13 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False,
             # HACK -- DR4 PSF sampling issue
             tim.psf = psf.constantPsfAt(x, y)
 
-            p = im.psf_norm(tim, x=x, y=y)
-            g = im.galaxy_norm(tim, x=x, y=y)
-            psfnorms.append(p)
-            galnorms.append(g)
+            try:
+                p = im.psf_norm(tim, x=x, y=y)
+                g = im.galaxy_norm(tim, x=x, y=y)
+                psfnorms.append(p)
+                galnorms.append(g)
+            except:
+                pass
 
         tim.psf = psf
 
