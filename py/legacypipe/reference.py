@@ -38,7 +38,8 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         gaia = read_gaia(marginwcs)
     if gaia is not None:
         gaia.isbright = np.zeros(len(gaia), bool)
-        gaia.ismedium = gaia.pointsource
+        gaia.ismedium = np.ones(len(gaia), bool)
+        #gaia.ismedium = gaia.pointsource
         # Handle sources that appear in both Gaia and Tycho-2 by dropping the entry from Tycho-2.
         if len(gaia) and len(tycho):
             # Before matching, apply proper motions to bring them to
