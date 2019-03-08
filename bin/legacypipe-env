@@ -4,9 +4,6 @@ unset PYTHONPATH
 
 export NERSC_HOST=`/usr/common/usg/bin/nersc_host`
 
-# Where are inputs and outputs going?
-export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/desiproc/dr8
-
 export DUST_DIR=/global/project/projectdirs/cosmo/data/dust/v0_1
 
 export UNWISE_COADDS_DIR=/global/projecta/projectdirs/cosmo/work/wise/outputs/merge/neo4/fulldepth:/global/project/projectdirs/cosmo/data/unwise/allwise/unwise-coadds/fulldepth
@@ -24,16 +21,12 @@ export WISE_PSF_DIR=${UNWISE_PSF_DIR}/etc
 
 export PS1CAT_DIR=/global/project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v3/
 
+export PYTHONPATH=${PYTHONPATH}:${UNWISE_PSF_DIR}/py
+
 # desiconda
 desiconda_version=20180512-1.2.5-img
 module use /global/common/software/desi/$NERSC_HOST/desiconda/$desiconda_version/modulefiles
 module load desiconda
-
-export PYTHONPATH=${PYTHONPATH}:${UNWISE_PSF_DIR}/py
-
-
-
-
 
 
 # Add legacypipe directory to python path
