@@ -72,8 +72,9 @@ RUN mkdir -p /src \
 # /opt/intel/bin
 ENV CC icc
 ENV CXX icpc
+ENV LDSHARED icc -shared
 ENV CFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=gnu99 -pthread
-ENV CXXFLAGS = -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=c++11 -pthread
+ENV CXXFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=c++11 -pthread
 ENV PYTHON python3
 ENV PYTHON_CONFIG python3-config
 ENV PYTHON_SCRIPT "/usr/bin/env python3"
@@ -110,8 +111,10 @@ RUN cd /src/sourceextractor \
 RUN cd /src \
     && git clone https://github.com/astromatic/psfex.git psfex \
     && cd psfex \
-    && sh autogen.sh \
-    && ./configure \
+    && sh autogen.sh
+
+RUN cd /src/psfex \
+    && ./configure --enable-icc --enable-mkl \
     && make \
     && make install
 
@@ -187,7 +190,7 @@ RUN cd /src \
 ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacyzpts/py:/src/legacypipe/py
 ENV WISE_PSF_DIR /src/unwise_psf/etc
 
-RUN apt update && apt install -y procps && apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+#RUN apt update && apt install -y procps && apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # up!
 RUN cd /src/legacypipe && git pull && echo 3
