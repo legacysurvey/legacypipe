@@ -94,7 +94,7 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Legacypipe
 RUN cd /src \
-    && git clone -b dr8a http://github.com/legacysurvey/legacypipe.git legacypipe \
+    && git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
     && echo 1
 
 # Legacyzpts
