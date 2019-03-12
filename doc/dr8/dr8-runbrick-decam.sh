@@ -18,7 +18,8 @@ echo 'Working on brick '$brick
 
 source dr8-env-decam.sh
 
-drdir=${DW_PERSISTENT_STRIPED_DR8}dr8b
+#drdir=${DW_PERSISTENT_STRIPED_DR8}dr8b
+drdir=/global/project/projectdirs/cosmo/work/legacysurvey/dr8b
 outdir=$drdir/runbrick-decam
 
 bri=$(echo $brick | head -c 3)
