@@ -185,6 +185,19 @@ def make_sweep(sweep, bricks, ns):
                     return None, None
                 else:
                     raise
+            # ADM check all the column dtypes match.
+            if not ns.ignore_errors:
+                sflds = SWEEP_DTYPE.fields
+                tflds = objects.dtype.fields
+                for fld in sflds:
+                    try:
+                        sdt, tdt = sflds[fld][0], tflds[fld][0]
+                        assert sdt == tdt
+                    except:
+                        msg = 'sweeps/Tractor dtypes differ for field '
+                        msg += '{}. Sweeps: {}, Tractor: {}'.format(fld, sdt, tdt)
+                        raise ValueError(msg)
+
             mask = objects['BRICK_PRIMARY'] != 0
             objects = objects[mask]
             mask = objects['RA'] >= ra1
@@ -264,7 +277,7 @@ def read_region(brickname, filename, bricksdesc):
 
 SWEEP_DTYPE = np.dtype([
 #   ('BRICK_PRIMARY', '?'),
-    ('RELEASE', '>i4'), 
+    ('RELEASE', '>i2'), 
     ('BRICKID', '>i4'), 
     ('BRICKNAME', 'S8'), 
     ('OBJID', '>i4'), 
@@ -297,10 +310,10 @@ SWEEP_DTYPE = np.dtype([
     ('FLUX_IVAR_I', '>f4'), 
     ('FLUX_IVAR_Z', '>f4'), 
     ('FLUX_IVAR_Y', '>f4'), 
-    ('FLUX_IVAR_W1', '>f4'), 
-    ('FLUX_IVAR_W2', '>f4'), 
-    ('FLUX_IVAR_W3', '>f4'), 
-    ('FLUX_IVAR_W4', '>f4'), 
+    ('FLUX_IVAR_W1', '>f8'), 
+    ('FLUX_IVAR_W2', '>f8'), 
+    ('FLUX_IVAR_W3', '>f8'), 
+    ('FLUX_IVAR_W4', '>f8'), 
 #   ('DECAM_MW_TRANSMISSION', '>f4', (6,)), 
 #   ('WISE_MW_TRANSMISSION', '>f4', (4,)), 
     ('MW_TRANSMISSION_U', '>f4'), 
@@ -315,16 +328,16 @@ SWEEP_DTYPE = np.dtype([
     ('MW_TRANSMISSION_W4', '>f4'), 
 #   ('DECAM_NOBS', 'u1', (6,)),
 #   ('WISE_NOBS', '>i2', (4,)), 
-    ('NOBS_U', 'i2'), 
-    ('NOBS_G', 'i2'), 
-    ('NOBS_R', 'i2'), 
-    ('NOBS_I', 'i2'), 
-    ('NOBS_Z', 'i2'), 
-    ('NOBS_Y', 'i2'), 
-    ('NOBS_W1', 'i2'), 
-    ('NOBS_W2', 'i2'), 
-    ('NOBS_W3', 'i2'), 
-    ('NOBS_W4', 'i2'), 
+    ('NOBS_U', '>i2'), 
+    ('NOBS_G', '>i2'), 
+    ('NOBS_R', '>i2'), 
+    ('NOBS_I', '>i2'), 
+    ('NOBS_Z', '>i2'), 
+    ('NOBS_Y', '>i2'), 
+    ('NOBS_W1', '>i2'), 
+    ('NOBS_W2', '>i2'), 
+    ('NOBS_W3', '>i2'), 
+    ('NOBS_W4', '>i2'), 
 #   ('DECAM_RCHI2', '>f4', (6,)), 
 #   ('WISE_RCHI2', '>f4', (4,)), 
     ('RCHISQ_U', '>f4'), 
