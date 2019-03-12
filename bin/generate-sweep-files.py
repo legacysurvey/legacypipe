@@ -190,10 +190,8 @@ def make_sweep(sweep, bricks, ns):
                 sflds = SWEEP_DTYPE.fields
                 tflds = objects.dtype.fields
                 for fld in sflds:
-                    try:
-                        sdt, tdt = sflds[fld][0], tflds[fld][0]
-                        assert sdt == tdt
-                    except:
+                    sdt, tdt = sflds[fld][0], tflds[fld][0]
+                    if sdt != tdt:
                         msg = 'sweeps/Tractor dtypes differ for field '
                         msg += '{}. Sweeps: {}, Tractor: {}'.format(fld, sdt, tdt)
                         raise ValueError(msg)
@@ -327,7 +325,7 @@ SWEEP_DTYPE = np.dtype([
     ('MW_TRANSMISSION_W3', '>f4'),
     ('MW_TRANSMISSION_W4', '>f4'),
 #   ('DECAM_NOBS', 'u1', (6,)),
-#   ('WISE_NOBS', '>i2', (4,)), 
+#   ('WISE_NOBS', '>i2', (4,)),
     ('NOBS_U', '>i2'),
     ('NOBS_G', '>i2'),
     ('NOBS_R', '>i2'),
@@ -460,7 +458,7 @@ SWEEP_DTYPE = np.dtype([
 
 def parse_args():
     ap = argparse.ArgumentParser(
-    description="""Create Sweep files for DECALS. 
+    description="""Create Sweep files for DECALS.
         This tool ensures each sweep file contains roughly '-n' objects. HDF5 and FITS formats are supported.
         Columns contained in a sweep file are: 
 
@@ -479,23 +477,23 @@ def parse_args():
     ap.add_argument('-F', "--filelist", default=None,
         help="list of tractor brickfiles to use; this will avoid expensive walking of the path.")
 
-    ap.add_argument('-d', "--bricksdesc", default=None, 
+    ap.add_argument('-d', "--bricksdesc", default=None,
         help="location of decals-bricks.fits, speeds up the scanning")
 
     ap.add_argument('-v', "--verbose", action='store_true')
     ap.add_argument('-I', "--ignore-errors", action='store_true')
 
-    ap.add_argument('-S', "--schema", choices=['blocks', 'dec', 'ra'], 
-            default='blocks', 
+    ap.add_argument('-S', "--schema", choices=['blocks', 'dec', 'ra'],
+            default='blocks',
             help="""Decomposition schema. Still being tuned. """)
 
-    ap.add_argument('-b', "--bricklist", 
-        help="""Filename with list of bricknames to include. 
+    ap.add_argument('-b', "--bricklist",
+        help="""Filename with list of bricknames to include.
                 If not set, all bricks in src are included, sorted by brickname.
             """)
 
     ap.add_argument("--numproc", type=int, default=None,
-        help="""Number of concurrent processes to use. 0 for sequential execution. 
+        help="""Number of concurrent processes to use. 0 for sequential execution.
             Default is to use OMP_NUM_THREADS, or the number of cores on the node.""")
 
     return ap.parse_args()
