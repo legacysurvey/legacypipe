@@ -125,7 +125,7 @@ def merge_psfex(survey, expnum, C, psfoutfn, opt):
         if not os.path.exists(fn):
             print('File not found:', fn)
             if opt.all_found:
-                return
+                return 0
             continue
         imobjs.append(im)
         Cgood.append(ccd)
@@ -191,6 +191,7 @@ def merge_psfex(survey, expnum, C, psfoutfn, opt):
     T.writeto(tmpfn)
     os.rename(tmpfn, fn)
     print('Wrote', fn)
+    return 1
 
 def merge_splinesky(survey, expnum, C, skyoutfn, opt):
     splinesky = []
@@ -203,7 +204,7 @@ def merge_splinesky(survey, expnum, C, skyoutfn, opt):
         if not os.path.exists(fn):
             print('File not found:', fn)
             if opt.all_found:
-                return
+                return 0
             continue
         imobjs.append(im)
         Cgood.append(ccd)
@@ -276,8 +277,7 @@ def merge_splinesky(survey, expnum, C, skyoutfn, opt):
     T.writeto(tmpfn)
     os.rename(tmpfn, fn)
     print('Wrote', fn)
-
-
+    return 1
         
 if __name__ == '__main__':
     main()
