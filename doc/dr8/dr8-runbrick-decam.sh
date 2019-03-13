@@ -30,9 +30,16 @@ mkdir -p $logdir
 echo Logging to: $log
 
 # Limit memory usage.
-ncores=8 # 128 GB / Cori Haswell node = 134217728 kbytes
-maxmem=134217728
-let usemem=${maxmem}*${ncores}/32
+ncores=8
+if [ "$NERSC_HOST" = "edison" ]; then
+    # 64 GB / Edison node = 67108864 kbytes
+    maxmem=67108864
+    let usemem=${maxmem}*${ncores}/24
+else
+    # 128 GB / Cori Haswell node = 134217728 kbytes
+    maxmem=134217728
+    let usemem=${maxmem}*${ncores}/32
+fi
 ulimit -Sv $usemem
 
 echo -e "\n\n\n" >> $log
@@ -51,6 +58,7 @@ echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 time python $LEGACYPIPE_DIR/py/legacypipe/runbrick.py \
      --brick $brick --outdir $outdir \
      --skip --skip-calibs --threads ${ncores} \
+     --release 8000 \
      --depth-cut 1.0 \
      --checkpoint $outdir/checkpoints/${bri}/checkpoint-${brick}.pickle \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
