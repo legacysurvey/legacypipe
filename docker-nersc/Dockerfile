@@ -36,98 +36,84 @@ RUN DEBIAN_FRONTEND=noninteractive \
 
 RUN echo "../site-packages" > /usr/local/lib/python3.5/dist-packages/site-packages.pth
 
+# ugly: Tractor's mp_fourier module detects the $CC='icc' exactly
+# These are in /opt/intel/bin, which is on the PATH.
+ENV CC icc
+ENV CXX icpc
+ENV LDSHARED icc -shared
+ENV CFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=gnu99 -pthread
+ENV CXXFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=c++11 -pthread
+
 # Pip installs
 RUN for x in \
     setuptools \
     wheel \
     intel-numpy \
     intel-scipy \
-    psycopg2 \
+    psycopg2-binary \
     matplotlib \
     astropy \
     photutils \
     fitsio \
     zmq \
     ; do pip3 install $x; done \
+    #&& rm -Rf /root/.cache/pip \
     && echo 1
 
 ## NOTE -- intel compilers only set *after* pip installs --
 # photutils didn't work with these cflags, and we don't care
 # that much that python codes are compiled with icc.
 
-# psycopg2-binary
-
-# Astrometry.net
-RUN mkdir -p /src \
-    && export PYTHON=python3 \
-    && export PYTHON_SCRIPT="/usr/bin/env python3" \
-    && cd /src \
-    && git clone http://github.com/dstndstn/astrometry.net.git astrometry \
-    && cd astrometry \
-    && make \
-    && make py \
-    && make extra \
-    && make install INSTALL_DIR=/usr/local \
-    && make clean && echo up
-
-# The Tractor's mp_fourier module detects the $CC='icc' exactly (which is ugly!)
-# /opt/intel/bin
-ENV CC icc
-ENV CXX icpc
-ENV LDSHARED icc -shared
-ENV CFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=gnu99 -pthread
-ENV CXXFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=c++11 -pthread
 ENV PYTHON python3
 ENV PYTHON_CONFIG python3-config
 ENV PYTHON_SCRIPT "/usr/bin/env python3"
+
+# Astrometry.net
+RUN mkdir -p /src \
+    && cd /src \
+    && git clone http://github.com/dstndstn/astrometry.net.git astrometry \
+    && cd astrometry \
+    && make -j4 && make \
+    && make py \
+    && make extra \
+    && make install INSTALL_DIR=/usr/local \
+    && make clean
 
 # The Tractor
 RUN cd /src \
     && git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    #&& export PYTHON=python3 \
-    #&& export PYTHON_CONFIG=python3-config \
     && make \
     && make ceres \
     && make install INSTALL_DIR=/usr/local \
     && rm -R $(find . -name "*.o" -o -name "*.so")
 
-#patch -p1 < ../rules/patch_sextractor
-# CC="@CC@" CFLAGS="@CFLAGS@" CPPFLAGS="-I@BLAS_INCLUDE@" ./configure @CROSS@ \
-# --with-lapacke="@LAPACK@ @BLAS@" --prefix="@AUX_PREFIX@" \
-
-ENV BLAS = -L${MKLROOT}/lib/intel64 -lmkl_rt -fopenmp -lpthread -limf -lsvml -ldl
+ENV BLAS -L${MKLROOT}/lib/intel64 -lmkl_rt -fopenmp -lpthread -limf -lsvml -ldl
 ENV CPPFLAGS -I${MKLROOT}/include
 
 RUN mkdir -p /src \
     && cd /src \
     && git clone https://github.com/astromatic/sextractor.git sourceextractor \
     && cd sourceextractor \
-    && sh autogen.sh
-
-RUN cd /src/sourceextractor \
+    && sh autogen.sh \
     && ./configure --enable-icc --enable-mkl \
     && make \
-    && make install
+    && make install \
+    && make clean
 
 RUN cd /src \
     && git clone https://github.com/astromatic/psfex.git psfex \
     && cd psfex \
-    && sh autogen.sh
-
-RUN cd /src/psfex \
+    && sh autogen.sh \
     && ./configure --enable-icc --enable-mkl \
     && make \
-    && make install
-
-
-
+    && make install \
+    && make clean
 
 ######## Stage 2 ########
 # ... don't have to clean above, just copy over installation
 #FROM registry.services.nersc.gov/nersc/intel_cxx_runtime
 FROM registry.services.nersc.gov/nersc/intel_cxx_fort_mpi_mkl_runtime
-#COPY --from=builder /opt/intel/ /opt/intel/
 COPY --from=builder /usr/local /usr/local
 #RUN echo '/opt/local/lib' > /etc/ld.so.conf.d/package-libs.conf && \
 #    ldconfig
@@ -176,14 +162,11 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Legacypipe
 RUN cd /src \
-    && git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
-    && echo 1
+    && git clone http://github.com/legacysurvey/legacypipe.git legacypipe
 
 # Legacyzpts
 RUN cd /src \
     && git clone https://github.com/legacysurvey/legacyzpts.git
-    #&& cd /src/legacypipe/py \
-    #&& ln -s /src/legacyzpts/py/legacyzpts .
 
 # unwise_psf
 RUN cd /src \
