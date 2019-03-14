@@ -427,7 +427,7 @@ def main():
     elif opt.region == 'dr8-test-deep2-egs':
         rlo, rhi = 213, 216.5
         dlo, dhi = 52, 54
-    elif opt.region == 'dr8-overlap':
+    elif opt.region == 'dr8-test-overlap':
         rlo, rhi = 132, 140.5,
         dlo, dhi = 31.5, 35
         
