@@ -428,7 +428,7 @@ def main():
         rlo, rhi = 213, 216.5
         dlo, dhi = 52, 54
     elif opt.region == 'dr8-test-overlap':
-        rlo, rhi = 132, 140.5,
+        rlo, rhi = 132, 140.5
         dlo, dhi = 31.5, 35
         
     if opt.mindec is not None:
