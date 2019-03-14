@@ -4,8 +4,11 @@ unset PYTHONPATH
 
 export NERSC_HOST=`/usr/common/usg/bin/nersc_host`
 
-# Where are inputs and outputs going?
-export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/desiproc/dr8
+# desiconda
+#export desiconda_version=20180512-1.2.5-img
+desiconda_version=20190311-1.2.7-img
+module use /global/common/software/desi/cori/desiconda/$desiconda_version/modulefiles
+module load desiconda
 
 export DUST_DIR=/global/project/projectdirs/cosmo/data/dust/v0_1
 
@@ -19,31 +22,8 @@ export GAIA_CAT_VER=2
 export TYCHO2_KD_DIR=/global/project/projectdirs/cosmo/staging/tycho2
 export LARGEGALAXIES_DIR=/global/project/projectdirs/cosmo/staging/largegalaxies/v2.0
 
-UNWISE_PSF_DIR=/global/project/projectdirs/cosmo/staging/unwise_psf/2018-11-25
-export WISE_PSF_DIR=${UNWISE_PSF_DIR}/etc
-
 export PS1CAT_DIR=/global/project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v3/
 
-# desiconda
-desiconda_version=20180512-1.2.5-img
-module use /global/common/software/desi/$NERSC_HOST/desiconda/$desiconda_version/modulefiles
-module load desiconda
-
-export PYTHONPATH=${PYTHONPATH}:${UNWISE_PSF_DIR}/py
-
-
-
-
-
-
-# Add legacypipe directory to python path
-# (not required if you're running the code from the legacypipe/py directory)
-# Where's the code?
-# export LEGACYPIPE_DIR=/global/cscratch1/sd/desiproc/${NERSC_HOST}-code/legacypipe/
-# PYTHONPATH=${LEGACYPIPE_DIR}/py:${PYTHONPATH}
-
-# local Tractor install?
-# PYTHONPATH=${CODE_DIR}/tractor:${PYTHONPATH}
-
-# local astrometry.net install?
-# PYTHONPATH=${CODE_DIR}/astrometry/lib/python:${PYTHONPATH}
+export UNWISE_PSF_DIR=/global/project/projectdirs/cosmo/staging/unwise_psf/2018-11-25
+export WISE_PSF_DIR=${UNWISE_PSF_DIR}/etc
+export PYTHONPATH=$UNWISE_PSF_DIR/py:$PYTHONPATH

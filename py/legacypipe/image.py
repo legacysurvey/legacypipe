@@ -514,7 +514,7 @@ class LegacySurveyImage(object):
                                   hybridPsf=hybridPsf, normalizePsf=normalizePsf,
                                   psf_sigma=psf_sigma,
                                   w=x1 - x0, h=y1 - y0)
-
+        
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
                     photocal=LinearPhotoCal(zpscale, band=band),
                     sky=sky, name=self.name + ' ' + band)
@@ -755,7 +755,7 @@ class LegacySurveyImage(object):
     def remap_dq_cp_codes(self, dq, header):
         return remap_dq_cp_codes(dq)
     
-    def read_invvar(self, dq=None, **kwargs):
+    def read_invvar(self, clip=True, clipThresh=0.1, dq=None, **kwargs):
         '''
         Reads the inverse-variance (weight) map image.
         '''
@@ -763,6 +763,16 @@ class LegacySurveyImage(object):
         invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
         if dq is not None:
             invvar[dq != 0] = 0.
+
+        if clip:
+            # Additionally clamp near-zero (incl negative!) weight to zero,
+            # which arise due to fpack.
+            if clipThresh > 0.:
+                thresh = clipThresh * np.median(invvar[invvar > 0])
+            else:
+                thresh = 0.
+            invvar[invvar < thresh] = 0
+            
         assert(np.all(invvar >= 0.))
         assert(np.all(np.isfinite(invvar)))
         return invvar
@@ -958,8 +968,10 @@ class LegacySurveyImage(object):
 
         if not validate_procdate_plver(self.merged_psffn, 'table',
                                        self.expnum, self.plver, self.procdate, data=T):
-            raise RuntimeError('Merged PsfEx file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
-                               self.merged_psffn)
+            print('WARNING! Merged PsfEx file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
+                  self.merged_psffn)
+            #raise RuntimeError('Merged PsfEx file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
+            #                   self.merged_psffn)
 
         I, = np.nonzero((T.expnum == self.expnum) *
                         np.array([c.strip() == self.ccdname
@@ -1105,6 +1117,7 @@ class LegacySurveyImage(object):
         from legacypipe.survey import get_version_header
         from scipy.ndimage.morphology import binary_dilation
         from astrometry.util.file import trymakedirs
+        from astrometry.util.miscutils import estimate_mode
 
         plots = (ps is not None)
 
@@ -1138,11 +1151,15 @@ class LegacySurveyImage(object):
             raise RuntimeError('No pixels with weight > 0 in: ' + str(self))
 
         # Do a few different scalar sky estimates
-        try:
-            from astrometry.util.miscutils import estimate_mode
-            sky_mode = estimate_mode(img[good], raiseOnWarn=True)
-        except:
-            sky_mode = 0.
+        if np.sum(good) > 100:
+            try:
+                sky_mode = estimate_mode(img[good], raiseOnWarn=False)
+            except:
+                sky_mode = 0.
+        else:
+            sky_mode = 0.0
+        if np.isnan(sky_mode) or np.isinf(sky_mode):
+            sky_mode = 0.0
 
         sky_median = np.median(img[good])
 
@@ -1162,13 +1179,17 @@ class LegacySurveyImage(object):
             # Sigma of boxcar-smoothed image
             bsig1 = sig1 / boxcar
             masked = np.abs(uniform_filter(img - sky_clipped_median, size=boxcar,
-                                           mode='constant')
-                            > (3.*bsig1))
+                                           mode='constant') > (3.*bsig1))
             masked = binary_dilation(masked, iterations=3)
-
-            cimage, _, _ = sigmaclip(img[good * (masked==False)], low=2.0, high=2.0)
-            sky_john = np.median(cimage)
-            del cimage
+            if np.sum(good * (masked==False)) > 100:
+                cimage, _, _ = sigmaclip(img[good * (masked==False)], low=2.0, high=2.0)
+                if len(cimage) > 0:
+                    sky_john = np.median(cimage)
+                else:
+                    sky_john = 0.0
+                del cimage
+            else:
+                sky_john = 0.0
 
             boxsize = self.splinesky_boxsize
 
@@ -1193,7 +1214,10 @@ class LegacySurveyImage(object):
                             > (3.*bsig1))
             masked = binary_dilation(masked, iterations=3)
             good[masked] = False
-            sig1b = 1./np.sqrt(np.median(wt[good]))
+            if np.sum(good) > 0:
+                sig1b = 1./np.sqrt(np.median(wt[good]))
+            else:
+                sig1b = sig1
 
             # Also mask based on reference stars and galaxies.
             from legacypipe.reference import get_reference_sources
@@ -1317,7 +1341,7 @@ class LegacySurveyImage(object):
 
             hdr.add_record(dict(name='SIG1', value=sig1,
                                 comment='Median stdev of unmasked pixels'))
-            hdr.add_record(dict(name='SIG1B', value=sig1,
+            hdr.add_record(dict(name='SIG1B', value=sig1b,
                                 comment='Median stdev of unmasked pixels+'))
 
             hdr.add_record(dict(name='S_MODE', value=sky_mode,
@@ -1416,7 +1440,6 @@ class LegacySurveyImage(object):
         if psfex:
             self.run_psfex(git_version=git_version, ps=ps)
         if sky:
-            print('Run_sky')
             self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia)
 
 
@@ -1449,6 +1472,7 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
 def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                             data=None, ext=1, cpheader=False):
     if not os.path.exists(fn):
+        print('File not found {}'.format(fn))
         return False
     # Check the data model
     if filetype == 'table':

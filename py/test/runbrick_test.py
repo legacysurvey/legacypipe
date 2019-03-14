@@ -146,7 +146,7 @@ if __name__ == '__main__':
     fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
     assert(os.path.exists(fn))
     T = fits_table(fn)
-    assert(len(T) == 4)
+    assert(len(T) == 3)
 
     # Check skipping blobs outside the brick's unique area.
     # (this now doesn't detect any sources at all, reasonably)

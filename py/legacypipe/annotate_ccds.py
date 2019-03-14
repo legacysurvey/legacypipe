@@ -80,7 +80,7 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False,
                 continue
             else:
                 raise
-        print('Reading CCD %i of %i:' % (iccd+1, len(ccds)), im, 'file', ccd.image_filename, 'CCD', ccd.ccdname)
+        #print('Reading CCD %i of %i:' % (iccd+1, len(ccds)), im, 'file', ccd.image_filename, 'CCD', ccd.ccdname)
 
         X = im.get_good_image_subregion()
         for i,x in enumerate(X):
@@ -98,7 +98,6 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False,
         sky = None
         try:
             tim = im.get_tractor_image(**kwargs)
-
         except:
             print('Failed to get_tractor_image')
             import traceback
@@ -165,10 +164,13 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False,
             # HACK -- DR4 PSF sampling issue
             tim.psf = psf.constantPsfAt(x, y)
 
-            p = im.psf_norm(tim, x=x, y=y)
-            g = im.galaxy_norm(tim, x=x, y=y)
-            psfnorms.append(p)
-            galnorms.append(g)
+            try:
+                p = im.psf_norm(tim, x=x, y=y)
+                g = im.galaxy_norm(tim, x=x, y=y)
+                psfnorms.append(p)
+                galnorms.append(g)
+            except:
+                pass
 
         tim.psf = psf
 
@@ -311,29 +313,30 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False,
     ccds.wise_extinction = ext[:,len(allbands):]
 
     # Depth
-    detsig1 = ccds.sig1 / ccds.psfnorm_mean
-    depth = 5. * detsig1
-    # that's flux in nanomaggies -- convert to mag
-    ccds.psfdepth = -2.5 * (np.log10(depth) - 9)
+    with np.errstate(invalid='ignore', divide='ignore'):
+        detsig1 = ccds.sig1 / ccds.psfnorm_mean
+        depth = 5. * detsig1
+        # that's flux in nanomaggies -- convert to mag
+        ccds.psfdepth = -2.5 * (np.log10(depth) - 9)
 
-    detsig1 = ccds.sig1 / ccds.galnorm_mean
-    depth = 5. * detsig1
-    # that's flux in nanomaggies -- convert to mag
-    ccds.galdepth = -2.5 * (np.log10(depth) - 9)
+        detsig1 = ccds.sig1 / ccds.galnorm_mean
+        depth = 5. * detsig1
+        # that's flux in nanomaggies -- convert to mag
+        ccds.galdepth = -2.5 * (np.log10(depth) - 9)
     
-    # Depth using Gaussian FWHM.
-    psf_sigma = ccds.fwhm / 2.35
-    gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
-    detsig1 = ccds.sig1 / gnorm
-    depth = 5. * detsig1
-    # that's flux in nanomaggies -- convert to mag
-    ccds.gausspsfdepth = -2.5 * (np.log10(depth) - 9)
+        # Depth using Gaussian FWHM.
+        psf_sigma = ccds.fwhm / 2.35
+        gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
+        detsig1 = ccds.sig1 / gnorm
+        depth = 5. * detsig1
+        # that's flux in nanomaggies -- convert to mag
+        ccds.gausspsfdepth = -2.5 * (np.log10(depth) - 9)
 
-    # Gaussian galaxy depth
-    detsig1 = ccds.sig1 / gaussgalnorm
-    depth = 5. * detsig1
-    # that's flux in nanomaggies -- convert to mag
-    ccds.gaussgaldepth = -2.5 * (np.log10(depth) - 9)
+        # Gaussian galaxy depth
+        detsig1 = ccds.sig1 / gaussgalnorm
+        depth = 5. * detsig1
+        # that's flux in nanomaggies -- convert to mag
+        ccds.gaussgaldepth = -2.5 * (np.log10(depth) - 9)
 
     # NaN depths -> 0
     for X in [ccds.psfdepth, ccds.galdepth, ccds.gausspsfdepth, ccds.gaussgaldepth]:

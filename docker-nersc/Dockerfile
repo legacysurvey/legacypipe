@@ -55,6 +55,8 @@ RUN for x in \
 # photutils didn't work with these cflags, and we don't care
 # that much that python codes are compiled with icc.
 
+# psycopg2-binary
+
 # Astrometry.net
 RUN mkdir -p /src \
     && export PYTHON=python3 \
@@ -190,7 +192,7 @@ RUN cd /src \
 ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacyzpts/py:/src/legacypipe/py
 ENV WISE_PSF_DIR /src/unwise_psf/etc
 
-#RUN apt update && apt install -y procps && apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+# cgroup-tools -- doesn't work inside containers.
 
 # up!
 RUN cd /src/legacypipe && git pull && echo 3
