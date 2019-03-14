@@ -1,7 +1,5 @@
-FROM registry.services.nersc.gov/nersc/intel_cxx_devel as builder
-
-ENV CC /opt/intel/bin/icc
-ENV CXX /opt/intel/bin/icpc
+#FROM registry.services.nersc.gov/nersc/intel_cxx_devel as builder
+FROM registry.services.nersc.gov/nersc/intel_cxx_fort_mpi_mkl_devel as builder
 
 RUN apt -y update && apt install -y apt-utils && echo yes
 
@@ -53,6 +51,10 @@ RUN for x in \
     ; do pip3 install $x; done \
     && echo 1
 
+## NOTE -- intel compilers only set *after* pip installs --
+# photutils didn't work with these cflags, and we don't care
+# that much that python codes are compiled with icc.
+
 # psycopg2-binary
 
 # Astrometry.net
@@ -69,8 +71,12 @@ RUN mkdir -p /src \
     && make clean && echo up
 
 # The Tractor's mp_fourier module detects the $CC='icc' exactly (which is ugly!)
+# /opt/intel/bin
 ENV CC icc
 ENV CXX icpc
+ENV LDSHARED icc -shared
+ENV CFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=gnu99 -pthread
+ENV CXXFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=c++11 -pthread
 ENV PYTHON python3
 ENV PYTHON_CONFIG python3-config
 ENV PYTHON_SCRIPT "/usr/bin/env python3"
@@ -86,12 +92,41 @@ RUN cd /src \
     && make install INSTALL_DIR=/usr/local \
     && rm -R $(find . -name "*.o" -o -name "*.so")
 
+#patch -p1 < ../rules/patch_sextractor
+# CC="@CC@" CFLAGS="@CFLAGS@" CPPFLAGS="-I@BLAS_INCLUDE@" ./configure @CROSS@ \
+# --with-lapacke="@LAPACK@ @BLAS@" --prefix="@AUX_PREFIX@" \
+
+ENV BLAS = -L${MKLROOT}/lib/intel64 -lmkl_rt -fopenmp -lpthread -limf -lsvml -ldl
+ENV CPPFLAGS -I${MKLROOT}/include
+
+RUN mkdir -p /src \
+    && cd /src \
+    && git clone https://github.com/astromatic/sextractor.git sourceextractor \
+    && cd sourceextractor \
+    && sh autogen.sh
+
+RUN cd /src/sourceextractor \
+    && ./configure --enable-icc --enable-mkl \
+    && make \
+    && make install
+
+RUN cd /src \
+    && git clone https://github.com/astromatic/psfex.git psfex \
+    && cd psfex \
+    && sh autogen.sh
+
+RUN cd /src/psfex \
+    && ./configure --enable-icc --enable-mkl \
+    && make \
+    && make install
+
 
 
 
 ######## Stage 2 ########
 # ... don't have to clean above, just copy over installation
-FROM registry.services.nersc.gov/nersc/intel_cxx_runtime
+#FROM registry.services.nersc.gov/nersc/intel_cxx_runtime
+FROM registry.services.nersc.gov/nersc/intel_cxx_fort_mpi_mkl_runtime
 #COPY --from=builder /opt/intel/ /opt/intel/
 COPY --from=builder /usr/local /usr/local
 #RUN echo '/opt/local/lib' > /etc/ld.so.conf.d/package-libs.conf && \
@@ -107,6 +142,7 @@ RUN apt -y update && apt install -y apt-utils && echo yes
 
 RUN DEBIAN_FRONTEND=noninteractive \
     apt install -y --no-install-recommends \
+    procps \
     make \
     git \
     file \
@@ -158,10 +194,6 @@ ENV WISE_PSF_DIR /src/unwise_psf/etc
 
 # cgroup-tools -- doesn't work inside containers.
 
-RUN apt update && apt install -y procps strace && apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
 # up!
 RUN cd /src/legacypipe && git pull && echo 3
-
-
 

@@ -234,7 +234,6 @@ def read_tycho2(survey, targetwcs):
     for c in ['pmra', 'pmdec', 'pmra_ivar', 'pmdec_ivar']:
         X = tycho.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
-
     tycho.mag = tycho.mag_vt
     tycho.mag[tycho.mag == 0] = tycho.mag_hp[tycho.mag == 0]
 
