@@ -1470,6 +1470,7 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
         return PixelizedPSF(pix)
 
 def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
+                            plprocid,
                             data=None, ext=1, cpheader=False):
     if not os.path.exists(fn):
         print('File not found {}'.format(fn))
@@ -1481,8 +1482,10 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
         else:
             T = data
         cols = T.get_columns()
-        for key,targetval,strip in (('procdate', procdate, True),
+        ### FIXME -- once we don't need procdate, clean up special-casing below!!
+        for key,targetval,strip in (#('procdate', procdate, True),
                                     ('plver', plver, True),
+                                    ('plprocid', plprocid, True),
                                     ('expnum', expnum, False)):
             if key not in cols:
                 print('Warning: outdated data model:', fn, 'table missing', key)
@@ -1536,8 +1539,9 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                     cpexpnum = int(re.sub(r'([a-z]+|\.+)','',base), 10)
                     print('Faked up EXPNUM', cpexpnum)
 
-        for key,spval,targetval,strip in ((procdatekey, None, procdate, True),
+        for key,spval,targetval,strip in (#(procdatekey, None, procdate, True),
                                           ('PLVER', None, plver, True),
+                                          ('PLPROCID', None, plprocid, True),
                                           ('EXPNUM', cpexpnum, expnum, False)):
             if spval is not None:
                 val = spval
