@@ -36,17 +36,28 @@ Can add kd-tree data structure to this resulting annotated-ccds file like this:
 
 '''
 
-def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False):
+def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False,
+             carryOn=True):
     # File from the "observing" svn repo:
+    from pkg_resources import resource_filename
+    
     if mzls:
-        # https://desi.lbl.gov/svn/decam/code/mosaic3/trunk
-        tiles = fits_table('mosaic-tiles_obstatus.fits')
+        tilefile = resource_filename('legacyzpts', 'data/mosaic-tiles_obstatus.fits')
     elif bass:
-        tiles = None
+        tilefile = None
     else:
-        # https://desi.lbl.gov/svn/decam/code/observing/trunk
-        tiles = fits_table('decam-tiles_obstatus.fits')
-
+        tilefile = resource_filename('legacyzpts', 'data/decam-tiles_obstatus.fits')
+        
+    if tilefile is not None:
+        if os.path.isfile(tilefile):
+            print('Reading {}'.format(tilefile))
+            tiles = fits_table(tilefile)
+        else:
+            print('Required tile file {} not found!'.format(tilefile))
+            raise IOError
+    else:
+        tiles = None
+        
     if tiles is not None:
         # Map tile IDs back to index in the obstatus file.
         tileid_to_index = np.empty(max(tiles.tileid)+1, int)
@@ -65,8 +76,11 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False):
             print('Failed to get_image_object()')
             import traceback
             traceback.print_exc()
-            continue
-        print('Reading CCD %i of %i:' % (iccd+1, len(ccds)), im, 'file', ccd.image_filename, 'CCD', ccd.ccdname)
+            if carryOn:
+                continue
+            else:
+                raise
+        #print('Reading CCD %i of %i:' % (iccd+1, len(ccds)), im, 'file', ccd.image_filename, 'CCD', ccd.ccdname)
 
         X = im.get_good_image_subregion()
         for i,x in enumerate(X):
@@ -84,12 +98,14 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False):
         sky = None
         try:
             tim = im.get_tractor_image(**kwargs)
-
         except:
             print('Failed to get_tractor_image')
             import traceback
             traceback.print_exc()
-            continue
+            if carryOn:
+                continue
+            else:
+                raise
 
         if tim is None:
             continue
@@ -113,6 +129,7 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False):
 
         ccds.sig1[iccd] = tim.sig1
         ccds.plver[iccd] = tim.plver
+        ccds.procdate[iccd] = tim.procdate
 
         # parse 'DECaLS_15150_r' to get tile number
         obj = ccd.object.strip()
@@ -147,10 +164,13 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False):
             # HACK -- DR4 PSF sampling issue
             tim.psf = psf.constantPsfAt(x, y)
 
-            p = im.psf_norm(tim, x=x, y=y)
-            g = im.galaxy_norm(tim, x=x, y=y)
-            psfnorms.append(p)
-            galnorms.append(g)
+            try:
+                p = im.psf_norm(tim, x=x, y=y)
+                g = im.galaxy_norm(tim, x=x, y=y)
+                psfnorms.append(p)
+                galnorms.append(g)
+            except:
+                pass
 
         tim.psf = psf
 
@@ -293,29 +313,30 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False):
     ccds.wise_extinction = ext[:,len(allbands):]
 
     # Depth
-    detsig1 = ccds.sig1 / ccds.psfnorm_mean
-    depth = 5. * detsig1
-    # that's flux in nanomaggies -- convert to mag
-    ccds.psfdepth = -2.5 * (np.log10(depth) - 9)
+    with np.errstate(invalid='ignore', divide='ignore'):
+        detsig1 = ccds.sig1 / ccds.psfnorm_mean
+        depth = 5. * detsig1
+        # that's flux in nanomaggies -- convert to mag
+        ccds.psfdepth = -2.5 * (np.log10(depth) - 9)
 
-    detsig1 = ccds.sig1 / ccds.galnorm_mean
-    depth = 5. * detsig1
-    # that's flux in nanomaggies -- convert to mag
-    ccds.galdepth = -2.5 * (np.log10(depth) - 9)
+        detsig1 = ccds.sig1 / ccds.galnorm_mean
+        depth = 5. * detsig1
+        # that's flux in nanomaggies -- convert to mag
+        ccds.galdepth = -2.5 * (np.log10(depth) - 9)
     
-    # Depth using Gaussian FWHM.
-    psf_sigma = ccds.fwhm / 2.35
-    gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
-    detsig1 = ccds.sig1 / gnorm
-    depth = 5. * detsig1
-    # that's flux in nanomaggies -- convert to mag
-    ccds.gausspsfdepth = -2.5 * (np.log10(depth) - 9)
+        # Depth using Gaussian FWHM.
+        psf_sigma = ccds.fwhm / 2.35
+        gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
+        detsig1 = ccds.sig1 / gnorm
+        depth = 5. * detsig1
+        # that's flux in nanomaggies -- convert to mag
+        ccds.gausspsfdepth = -2.5 * (np.log10(depth) - 9)
 
-    # Gaussian galaxy depth
-    detsig1 = ccds.sig1 / gaussgalnorm
-    depth = 5. * detsig1
-    # that's flux in nanomaggies -- convert to mag
-    ccds.gaussgaldepth = -2.5 * (np.log10(depth) - 9)
+        # Gaussian galaxy depth
+        detsig1 = ccds.sig1 / gaussgalnorm
+        depth = 5. * detsig1
+        # that's flux in nanomaggies -- convert to mag
+        ccds.gaussgaldepth = -2.5 * (np.log10(depth) - 9)
 
     # NaN depths -> 0
     for X in [ccds.psfdepth, ccds.galdepth, ccds.gausspsfdepth, ccds.gaussgaldepth]:
@@ -376,8 +397,8 @@ def init_annotations(ccds):
     ccds.tilepass = np.zeros(len(ccds), np.uint8)
     ccds.tileebv  = np.zeros(len(ccds), np.float32)
 
-    ccds.plver = np.array([' '*6] * len(ccds))
-
+    #ccds.plver = np.array([' '*8] * len(ccds))
+    #ccds.procdate = np.array([' '*19] * len(ccds))
 
 def main(outfn='ccds-annotated.fits', ccds=None, **kwargs):
     survey = LegacySurveyData(ccds=ccds)
