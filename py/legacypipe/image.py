@@ -1423,6 +1423,8 @@ class LegacySurveyImage(object):
                 psfex = False
             except Exception as e:
                 print('Did not find existing PsfEx model for', self, ':', e)
+                #import traceback
+                #traceback.print_exc()
         if psfex:
             se = True
 
@@ -1563,6 +1565,8 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                 val = hdr[key]
 
             if strip:
+                # PLPROCID can get parsed as an int by fitsio, ugh
+                val = str(val)
                 val = val.strip()
             if val != targetval:
                 print('Warning: header value', val, 'not equal to', targetval, 'in file', fn)
