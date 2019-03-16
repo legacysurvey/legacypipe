@@ -140,6 +140,7 @@ class LegacySurveyImage(object):
         self.sig1    = ccd.sig1
         self.plver   = ccd.plver.strip()
         self.procdate = ccd.procdate.strip()
+        self.plprocid = ccd.plprocid.strip()
 
         # Which Data Quality bits mark saturation?
         self.dq_saturation_bits = CP_DQ_BITS['satur'] # | CP_DQ_BITS['bleed']
@@ -296,15 +297,16 @@ class LegacySurveyImage(object):
         #
         assert(validate_procdate_plver(self.imgfn, 'primaryheader',
                                        self.expnum, self.plver, self.procdate,
+                                       self.plprocid,
                                        data=primhdr, cpheader=True))
-        # NOTE, this does not work because the WT and DQ maps have DATEs
-        # that are like 15 seconds later than the image.
-        # assert(validate_procdate_plver(self.wtfn, 'primaryheader',
-        #                                self.expnum, self.plver, self.procdate,
-        #                                cpheader=True))
-        # assert(validate_procdate_plver(self.dqfn, 'primaryheader',
-        #                                self.expnum, self.plver, self.procdate,
-        #                                cpheader=True))
+        assert(validate_procdate_plver(self.wtfn, 'primaryheader',
+                                       self.expnum, self.plver, self.procdate,
+                                       self.plprocid,
+                                       cpheader=True))
+        assert(validate_procdate_plver(self.dqfn, 'primaryheader',
+                                       self.expnum, self.plver, self.procdate,
+                                       self.plprocid,
+                                       cpheader=True))
         band = self.band
         wcs = self.get_wcs()
 
@@ -545,6 +547,7 @@ class LegacySurveyImage(object):
         tim.primhdr = primhdr
         tim.hdr = imghdr
         tim.plver = primhdr.get('PLVER','').strip()
+        tim.plprocid = primhdr.get('PLPROCID','').strip()
         tim.skyver = (getattr(sky, 'version', ''), getattr(sky, 'plver', ''))
         tim.wcsver = (getattr(wcs, 'version', ''), getattr(wcs, 'plver', ''))
         tim.psfver = (getattr(psf, 'version', ''), getattr(psf, 'plver', ''))
@@ -836,8 +839,9 @@ class LegacySurveyImage(object):
             fn = self.splineskyfn
 
         if not validate_procdate_plver(fn, 'primaryheader',
-                                       self.expnum, self.plver, self.procdate):
-            raise RuntimeError('Splinesky file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' % fn)
+                                       self.expnum, self.plver, self.procdate,
+                                       self.plprocid):
+            raise RuntimeError('Splinesky file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' % fn)
 
         debug('Reading sky model from', fn)
         hdr = fitsio.read_header(fn)
@@ -876,8 +880,9 @@ class LegacySurveyImage(object):
         debug('Reading merged spline sky models from', self.merged_splineskyfn)
         T = fits_table(self.merged_splineskyfn)
         if not validate_procdate_plver(self.merged_splineskyfn, 'table',
-                                       self.expnum, self.plver, self.procdate, data=T):
-            raise RuntimeError('Merged splinesky file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
+                                       self.expnum, self.plver, self.procdate,
+                                       self.plprocid, data=T):
+            raise RuntimeError('Merged splinesky file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' %
                                self.merged_splineskyfn)
         I, = np.nonzero((T.expnum == self.expnum) *
                         np.array([c.strip() == self.ccdname
@@ -943,8 +948,8 @@ class LegacySurveyImage(object):
             hdr = fitsio.read_header(self.psffn)
 
             if not validate_procdate_plver(self.psffn, 'primaryheader',
-                                           self.expnum, self.plver, self.procdate, data=hdr):
-                raise RuntimeError('PsfEx file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' % self.psffn)
+                                           self.expnum, self.plver, self.procdate, self.plprocid, data=hdr):
+                raise RuntimeError('PsfEx file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' % self.psffn)
 
             psf.version = hdr.get('LEGSURV', None)
             if psf.version is None:
@@ -967,8 +972,8 @@ class LegacySurveyImage(object):
         T = fits_table(self.merged_psffn)
 
         if not validate_procdate_plver(self.merged_psffn, 'table',
-                                       self.expnum, self.plver, self.procdate, data=T):
-            print('WARNING! Merged PsfEx file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
+                                       self.expnum, self.plver, self.procdate, self.plprocid, data=T):
+            print('WARNING! Merged PsfEx file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' %
                   self.merged_psffn)
             #raise RuntimeError('Merged PsfEx file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
             #                   self.merged_psffn)
@@ -1073,7 +1078,7 @@ class LegacySurveyImage(object):
         if rtn:
             raise RuntimeError('Command failed: ' + cmd)
         os.rename(tmpfn, self.sefn)
-
+        
     def run_psfex(self, git_version=None, ps=None):
         from astrometry.util.file import trymakedirs
         from legacypipe.survey import get_git_version
@@ -1081,6 +1086,7 @@ class LegacySurveyImage(object):
         trymakedirs(self.psffn, dir=True)
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', 'V0.0')
+        plprocid = primhdr['PLPROCID']
         imghdr = self.read_image_header()
         datasum = imghdr.get('DATASUM', '0')
         procdate = primhdr['DATE']
@@ -1097,6 +1103,8 @@ class LegacySurveyImage(object):
                 (psftmpfn, git_version),
                 'modhead %s PLVER "%s" "CP ver of image file"' %
                 (psftmpfn, plver),
+                'modhead %s PLPROCID "%s" "CP ver of image file"' %
+                (psftmpfn, plprocid),
                 'modhead %s IMGDSUM "%s" "DATASUM of image file"' %
                 (psftmpfn, datasum),
                 'modhead %s PROCDATE "%s" "DATE of image file"' %
@@ -1129,6 +1137,7 @@ class LegacySurveyImage(object):
                                  git_version=git_version)
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', 'V0.0')
+        plprocid = primhdr['PLPROCID']
         imghdr = self.read_image_header()
         datasum = imghdr.get('DATASUM', '0')
         procdate = primhdr['DATE']
@@ -1140,6 +1149,8 @@ class LegacySurveyImage(object):
                             comment='NOAO product type'))
         hdr.add_record(dict(name='PLVER', value=plver,
                             comment='CP ver of image file'))
+        hdr.add_record(dict(name='PLPROCID', value=plprocid,
+                            comment='CP proc tag of image file'))
         hdr.add_record(dict(name='IMGDSUM', value=datasum,
                             comment='DATASUM of image file'))
         hdr.add_record(dict(name='PROCDATE', value=procdate,

@@ -130,6 +130,7 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False,
         ccds.sig1[iccd] = tim.sig1
         ccds.plver[iccd] = tim.plver
         ccds.procdate[iccd] = tim.procdate
+        ccds.plprocid[iccd] = tim.plprocid
 
         # parse 'DECaLS_15150_r' to get tile number
         obj = ccd.object.strip()
