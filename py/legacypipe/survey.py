@@ -949,6 +949,7 @@ def imsave_jpeg(jpegfn, img, **kwargs):
     '''
     import pylab as plt
     if True:
+        kwargs.update(format='jpg')
         plt.imsave(jpegfn, img, **kwargs)
     else:
         tmpfn = create_temp(suffix='.png')
