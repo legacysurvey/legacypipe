@@ -383,6 +383,8 @@ def main(survey=None, opt=None):
     version_hdr.add_record(dict(name='EXPOSURE',
                                 value='%s-%s-%s' % (ccd.camera, im.expnum, im.ccdname),
                                 comment='Name of this image'))
+    version_hdr.add_record(dict(name='PLVER', value=ccd.plver, comment='CP pipeline version'))
+    version_hdr.add_record(dict(name='PROCDATE', value=ccd.procdate, comment='CP image DATE'))
 
     keys = ['TELESCOP','OBSERVAT','OBS-LAT','OBS-LONG','OBS-ELEV',
             'INSTRUME']
@@ -391,9 +393,11 @@ def main(survey=None, opt=None):
             version_hdr.add_record(dict(name=key, value=tim.primhdr[key]))
 
     hdr = fitsio.FITSHDR()
-    units = {'exptime':'sec', 'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2',
+    units = {'exptime':'sec',
+             'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2',
+             'apflux':'nanomaggy', 'apflux_ivar':'1/nanomaggy^2',
              'psfdepth':'1/nanomaggy^2', 'galdepth':'1/nanomaggy^2',
-             'psfsize':'arcsec' }
+             'sky':'nanomaggy/arcsec^2', 'psfsize':'arcsec' }
     if opt.derivs:
         units.update({'dra':'arcsec', 'ddec':'arcsec',
                       'dra_ivar':'1/arcsec^2', 'ddec_ivar':'1/arcsec^2'})
