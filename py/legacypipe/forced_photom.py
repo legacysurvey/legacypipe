@@ -235,9 +235,7 @@ def main(survey=None, opt=None):
         # Fix up various failure modes:
         # FixedCompositeGalaxy(pos=RaDecPos[240.51147402832561, 10.385488075518923], brightness=NanoMaggies: g=(flux -2.87), r=(flux -5.26), z=(flux -7.65), fracDev=FracDev(0.60177207), shapeExp=re=3.78351e-44, e1=9.30367e-13, e2=1.24392e-16, shapeDev=re=inf, e1=-0, e2=-0)
         # -> convert to EXP
-        I = np.flatnonzero(np.array([((t.type == 'COMP') and
-                                      (not np.isfinite(t.shapedev_r)))
-                                     for t in T]))
+        I, = np.nonzero([t == 'COMP' and not np.isfinite(r) for t,r in zip(T.type, T.shapedev_r)])
         if len(I):
             print('Converting', len(I), 'bogus COMP galaxies to EXP')
             for i in I:
@@ -245,9 +243,7 @@ def main(survey=None, opt=None):
 
         # Same thing with the exp component.
         # -> convert to DEV
-        I = np.flatnonzero(np.array([((t.type == 'COMP') and
-                                      (not np.isfinite(t.shapeexp_r)))
-                                     for t in T]))
+        I, = np.nonzero([t == 'COMP' and not np.isfinite(r) for t,r in zip(T.type, T.shapeexp_r)])
         if len(I):
             print('Converting', len(I), 'bogus COMP galaxies to DEV')
             for i in I:
