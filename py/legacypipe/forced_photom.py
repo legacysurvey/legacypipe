@@ -450,16 +450,17 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
     nsize = 0
     for src in cat:
+
         # Limit sizes of huge models
-        from tractor.galaxy import ProfileGalaxy
-        if isinstance(src, ProfileGalaxy):
-            px,py = tim.wcs.positionToPixel(src.getPosition())
-            h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
-            MAXHALF = 128
-            if h > MAXHALF:
-                #print('halfsize', h,'for',src,'-> setting to',MAXHALF)
-                nsize += 1
-                src.halfsize = MAXHALF
+        # from tractor.galaxy import ProfileGalaxy
+        # if isinstance(src, ProfileGalaxy):
+        #     px,py = tim.wcs.positionToPixel(src.getPosition())
+        #     h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
+        #     MAXHALF = 128
+        #     if h > MAXHALF:
+        #         #print('halfsize', h,'for',src,'-> setting to',MAXHALF)
+        #         nsize += 1
+        #         src.halfsize = MAXHALF
 
         src.freezeAllBut('brightness')
         src.getBrightness().freezeAllBut(tim.band)
