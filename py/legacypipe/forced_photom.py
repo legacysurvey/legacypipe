@@ -37,8 +37,8 @@ def get_parser():
     parser.add_argument('--skip', dest='skip', default=False, action='store_true',
                         help='Exit if the output file already exists')
 
-    parser.add_argument('--zoom', type=int, nargs=4, help='Set target image extent (default "0 2046 0 4094")')
-    parser.add_argument('--no-ceres', action='store_false', dest='ceres', help='Do not use Ceres optimiziation engine (use scipy)')
+    parser.add_argument('--zoom', type=int, nargs=4, help='Set target image extent (eg "0 100 0 200")')
+    parser.add_argument('--no-ceres', action='store_false', dest='ceres', help='Do not use Ceres optimization engine (use scipy)')
     parser.add_argument('--plots', default=None, help='Create plots; specify a base filename for the plots')
     parser.add_argument('--write-cat', help='Write out the catalog subset on which forced phot was done')
     parser.add_argument('--apphot', action='store_true',
@@ -79,6 +79,10 @@ def get_parser():
     return parser
 
 def main(survey=None, opt=None):
+
+    import sys
+    print(' '.join(sys.argv))
+
     '''Driver function for forced photometry of individual Legacy
     Survey images.
     '''
@@ -87,7 +91,7 @@ def main(survey=None, opt=None):
         opt = parser.parse_args()
 
     Time.add_measurement(MemMeas)
-    t0 = Time()
+    t0 = tlast = Time()
 
     if opt.skip and os.path.exists(opt.outfn):
         print('Ouput file exists:', opt.outfn)
@@ -181,7 +185,9 @@ def main(survey=None, opt=None):
                                normalizePsf=opt.normalize_psf)
     print('Got tim:', tim)
 
-    print('Read image:', Time()-t0)
+    tnow = Time()
+    print('Read image:', tnow-tlast)
+    tlast = tnow
 
     if opt.catalog:
         T = fits_table(opt.catalog)
@@ -267,13 +273,20 @@ def main(survey=None, opt=None):
     cols = T.get_columns()
     if 'flux_r' in cols and not 'decam_flux_r' in cols:
         kwargs.update(fluxPrefix='')
-    cat = read_fits_catalog(T, **kwargs)
+
+    tnow = Time()
+    print('Read catalog:', tnow-tlast)
+    tlast = tnow
+
+    cat = read_fits_catalog(T, bands='r', **kwargs)
     # Replace the brightness (which will be a NanoMaggies with g,r,z)
     # with a NanoMaggies with this image's band only.
     for src in cat:
         src.brightness = NanoMaggies(**{tim.band: 1.})
 
-    print('Read catalog:', Time()-t0)
+    tnow = Time()
+    print('Parse catalog:', tnow-tlast)
+    tlast = tnow
 
     print('Forced photom...')
     F = run_forced_phot(cat, tim,
@@ -285,7 +298,6 @@ def main(survey=None, opt=None):
                         do_apphot=opt.apphot,
                         get_model=opt.save_model,
                         ps=ps)
-    t0 = Time()
 
     if opt.save_model:
         # unpack results
@@ -339,6 +351,8 @@ def main(survey=None, opt=None):
     ok,x,y = tim.sip_wcs.radec2pixelxy(T.ra, T.dec)
     F.x = (x-1).astype(np.float32)
     F.y = (y-1).astype(np.float32)
+
+    ## FIXME -- read outlier_masks?
 
     h,w = tim.shape
     F.mask = tim.dq[np.clip(np.round(F.y).astype(int), 0, h-1),
@@ -403,7 +417,9 @@ def main(survey=None, opt=None):
         fitsio.write(opt.save_data, tim.getImage(), header=hdr, clobber=True)
         print('Wrote', opt.save_data)
 
-    print('Finished forced phot:', Time()-t0)
+    tnow = Time()
+    print('Forced phot:', tnow-tlast)
+    print('Total:', tnow-t0)
     return 0
 
 def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
@@ -610,7 +626,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         apxy = xxyy - 1.
 
         apertures = apertures_arcsec / tim.wcs.pixel_scale()
-        print('Apertures:', apertures, 'pixels')
+        #print('Apertures:', apertures, 'pixels')
 
         #print('apxy shape', apxy.shape)  # --> (2,N)
 
@@ -618,7 +634,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         H,W = img.shape
         Iap = np.flatnonzero((apxy[0,:] >= 0)   * (apxy[1,:] >= 0) *
                              (apxy[0,:] <= W-1) * (apxy[1,:] <= H-1))
-        print('Aperture photometry for', len(Iap), 'of', len(apxy), 'sources within image bounds')
+        print('Aperture photometry for', len(Iap), 'of', len(apxy[0,:]), 'sources within image bounds')
 
         for rad in apertures:
             aper = photutils.CircularAperture(apxy[:,Iap], rad)
