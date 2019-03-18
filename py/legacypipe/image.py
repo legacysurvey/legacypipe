@@ -624,7 +624,7 @@ class LegacySurveyImage(object):
 
     def check_image_header(self, imghdr):
         # check consistency between the CCDs table and the image header
-        e = imghdr['EXTNAME']
+        e = imghdr['EXTNAME'].upper()
         if e.strip() != self.ccdname.strip():
             print('WARNING: Expected header EXTNAME="%s" to match self.ccdname="%s", self.imgfn=%s' % (e.strip(), self.ccdname,self.imgfn))
 
