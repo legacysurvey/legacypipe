@@ -653,10 +653,12 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         F.apflux = np.zeros((len(F), len(apertures)), np.float32)
         F.apflux[Iap,:] = ap.astype(np.float32)
 
-        ap = 1./(np.vstack(apimgerr).T)**2
-        ap[np.logical_not(np.isfinite(ap))] = 0.
+        apimgerr = np.vstack(apimgerr).T
+        apiv = np.zeros(apimgerr.shape, np.float32)
+        apiv[apimgerr != 0] = 1./apimgerr[apimgerr != 0]**2
+
         F.apflux_ivar = np.zeros((len(F), len(apertures)), np.float32)
-        F.apflux_ivar[Iap,:] = ap.astype(np.float32)
+        F.apflux_ivar[Iap,:] = apiv
         if timing:
             print('Aperture photom:', Time()-t0)
 
