@@ -203,7 +203,13 @@ def main(survey=None, opt=None):
                 print('WARNING: catalog', fn, 'does not exist.  Skipping!')
                 continue
             print('Reading', fn)
-            T = fits_table(fn)
+            T = fits_table(fn, columns=[
+                'ra', 'dec', 'brick_primary', 'type', 'release', 'brickid', 'brickname', 'objid',
+                'fracdev', 'flux_r',
+                'shapedev_r', 'shapedev_e1', 'shapedev_e2',
+                'shapeexp_r', 'shapeexp_e1', 'shapeexp_e2',
+                'ref_epoch', 'pmra', 'pmdec', 'parallax'
+            ])
             ok,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
             W,H = chipwcs.get_width(), chipwcs.get_height()
             I = np.flatnonzero((xx >= -margin) * (xx <= (W+margin)) *
