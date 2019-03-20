@@ -28,6 +28,8 @@ def get_parser():
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
 
+    parser.add_argument('--threads', type=int, help='Run multi-threaded', default=None)
+
     parser.add_argument('--catalog-dir', help='Set LEGACY_SURVEY_DIR to use to read catalogs')
 
     parser.add_argument('--catalog', help='Use the given FITS catalog file, rather than reading from a data release directory')
@@ -73,7 +75,7 @@ def get_parser():
     parser.add_argument('--camera', help='Cut to only CCD with given camera name?')
 
     parser.add_argument('expnum', help='Exposure number')
-    parser.add_argument('ccdname', help='Image HDU OR CCD name.')
+    parser.add_argument('ccdname', help='Image HDU OR CCD name OR "all".')
     parser.add_argument('outfn', help='Output catalog filename.')
 
     return parser
@@ -115,7 +117,7 @@ def main(survey=None, opt=None):
         from astrometry.util.plotutils import PlotSequence
         ps = PlotSequence(opt.plots)
 
-    # Try parsing filename as exposure number.
+    # Try parsing first arg as exposure number (otherwise, it's a filename)
     try:
         expnum = int(opt.expnum)
         filename = None
@@ -124,13 +126,15 @@ def main(survey=None, opt=None):
         expnum = None
         filename = opt.expnum
 
-    # Try parsing HDU number
-    try:
-        hdu = int(opt.ccdname)
-        ccdname = None
-    except:
-        hdu = -1
-        ccdname = opt.ccdname
+    # Try parsing HDU: "all" or HDU name or HDU number.
+    all_hdus = (opt.ccdname == 'all')
+    hdu = -1
+    ccdname = None
+    if not all_hdus:
+        try:
+            hdu = int(opt.ccdname)
+        except:
+            ccdname = opt.ccdname
 
     if survey is None:
         survey = LegacySurveyData()
@@ -158,7 +162,7 @@ def main(survey=None, opt=None):
     else:
         # Read metadata from survey-ccds.fits table
         T = survey.find_ccds(expnum=expnum, ccdname=ccdname)
-        print(len(T), 'with expnum', expnum, 'and CCDname', ccdname)
+        print(len(T), 'with expnum', expnum, 'and ccdname', ccdname)
         if hdu >= 0:
             T.cut(T.image_hdu == hdu)
             print(len(T), 'with HDU', hdu)
@@ -168,9 +172,55 @@ def main(survey=None, opt=None):
         if opt.camera is not None:
             T.cut(T.camera == opt.camera)
             print(len(T), 'with camera', opt.camera)
-        assert(len(T) == 1)
+        if not all_hdus:
+            assert(len(T) == 1)
 
-    ccd = T[0]
+    if opt.threads:
+        from astrometry.util.multiproc import multiproc
+        from astrometry.util.timingpool import TimingPool, TimingPoolMeas
+        pool = TimingPool(opt.threads)
+        poolmeas = TimingPoolMeas(pool, pickleTraffic=False)
+        Time.add_measurement(poolmeas)
+        mp = multiproc(None, pool=pool)
+        args = []
+        for ccd in T:
+            args.append((survey, catsurvey, ccd, opt, zoomslice, ps))
+
+        tm = Time()
+        FF = mp.map(bounce_one_ccd, args)
+        print('Multi-processing forced-phot:', Time()-tm)
+        FF = [F for F in FF if F is not None]
+        if len(FF) == 0:
+            print('No photometry results to write.')
+            return 0
+        # Keep only the first header
+        # FIXME remove ccd-specific entries?
+        _,version_hdr = FF[0]
+        FF = [F for F,hdr in FF]
+        F = merge_tables(FF)
+    else:
+        ccd = T[0]
+        F = run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps)
+
+    tmpfn = os.path.join(outdir, 'tmp-' + os.path.basename(opt.outfn))
+    fitsio.write(tmpfn, None, header=version_hdr, clobber=True)
+    F.writeto(tmpfn, header=hdr, append=True)
+    os.rename(tmpfn, opt.outfn)
+    print('Wrote', opt.outfn)
+
+    tnow = Time()
+    print('Total:', tnow-t0)
+    return 0
+
+def bounce_one_ccd(X):
+    # for multiprocessing
+    #survey,catsurvey,ccd,opt,zoomslice,ps = X
+    #return run_one_ccd(survey, ccd, opt)
+    return run_one_ccd(*X)
+
+def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
+    t0 = tlast = Time()
+
     im = survey.get_image_object(ccd)
 
     if opt.do_calib:
@@ -204,7 +254,8 @@ def main(survey=None, opt=None):
                 continue
             print('Reading', fn)
             T = fits_table(fn, columns=[
-                'ra', 'dec', 'brick_primary', 'type', 'release', 'brickid', 'brickname', 'objid',
+                'ra', 'dec', 'brick_primary', 'type', 'release',
+                'brickid', 'brickname', 'objid',
                 'fracdev', 'flux_r',
                 'shapedev_r', 'shapedev_e1', 'shapedev_e2',
                 'shapeexp_r', 'shapeexp_e1', 'shapeexp_e2',
@@ -226,7 +277,7 @@ def main(survey=None, opt=None):
                 TT.append(T)
         if len(TT) == 0:
             print('No sources to photometer.')
-            return 0
+            return None
         T = merge_tables(TT, columns='fillzero')
         T._header = TT[0]._header
         del TT
@@ -367,7 +418,7 @@ def main(survey=None, opt=None):
     filename = getattr(ccd, 'image_filename')
     if filename is None:
         # HACK -- print only two directory names + filename of CPFILE.
-        fname = os.path.basename(im.imgfn)
+        fname = os.path.basename(im.imgfn.strip())
         d = os.path.dirname(im.imgfn)
         d1 = os.path.basename(d)
         d = os.path.dirname(d)
@@ -420,16 +471,9 @@ def main(survey=None, opt=None):
         fitsio.write(opt.save_data, tim.getImage(), header=hdr, clobber=True)
         print('Wrote', opt.save_data)
 
-    tmpfn = os.path.join(outdir, 'tmp-' + os.path.basename(opt.outfn))
-    fitsio.write(tmpfn, None, header=version_hdr, clobber=True)
-    F.writeto(tmpfn, header=hdr, append=True)
-    os.rename(tmpfn, opt.outfn)
-    print('Wrote', opt.outfn)
-
     tnow = Time()
     print('Forced phot:', tnow-tlast)
-    print('Total:', tnow-t0)
-    return 0
+    return F,version_hdr
 
 def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                     do_forced=True, do_apphot=True, get_model=False, ps=None,
