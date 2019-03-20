@@ -409,9 +409,6 @@ def main(survey=None, opt=None):
     outdir = os.path.dirname(opt.outfn)
     if len(outdir):
         trymakedirs(outdir)
-    fitsio.write(opt.outfn, None, header=version_hdr, clobber=True)
-    F.writeto(opt.outfn, header=hdr, append=True)
-    print('Wrote', opt.outfn)
 
     if opt.save_model or opt.save_data:
         hdr = fitsio.FITSHDR()
@@ -422,6 +419,12 @@ def main(survey=None, opt=None):
     if opt.save_data:
         fitsio.write(opt.save_data, tim.getImage(), header=hdr, clobber=True)
         print('Wrote', opt.save_data)
+
+    tmpfn = os.path.join(outdir, 'tmp-' + os.path.basename(opt.outfn))
+    fitsio.write(tmpfn, None, header=version_hdr, clobber=True)
+    F.writeto(tmpfn, header=hdr, append=True)
+    os.rename(tmpfn, opt.outfn)
+    print('Wrote', opt.outfn)
 
     tnow = Time()
     print('Forced phot:', tnow-tlast)
