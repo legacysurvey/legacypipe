@@ -1,7 +1,7 @@
 #! /bin/bash
 # Set up the software for running DR8.
 
-export LEGACY_SURVEY_DIR=/global/project/projectdirs/cosmo/work/legacysurvey/dr8b/runbrick-decam
+export LEGACY_SURVEY_DIR=/global/project/projectdirs/cosmo/work/legacysurvey/dr8b/runbrick-90prime-mosaic
 
 # Use local check-outs of legacypipe and legacyzpts.
 export LEGACYPIPE_DIR=$LEGACY_SURVEY_DIR/code/legacypipe

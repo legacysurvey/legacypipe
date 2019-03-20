@@ -13,50 +13,24 @@
 #   qdo recover dr8a --dead
 #   qdo tasks dr8a --state=Failed
 
-dr=dr8b
-camera=decam
-export LEGACY_SURVEY_DIR=/global/project/projectdirs/cosmo/work/legacysurvey/${dr}/runbrick-${camera}
-source $LEGACY_SURVEY_DIR/dr8-env.sh
-CODE_DIR=$LEGACY_SURVEY_DIR/code
-
-# Use local check-outs of legacypipe and legacyzpts.
-export LEGACYPIPE_DIR=$CODE_DIR/legacypipe
-export LEGACYZPTS_DIR=$CODE_DIR/legacyzpts
-export PYTHONPATH=$PYTHONPATH:$LEGACYPIPE_DIR/py
-export PYTHONPATH=$PYTHONPATH:$LEGACYZPTS_DIR/py
-
-if [ $camera == "decam" ]; then
-  release=8000
-else
-  release=8001
-fi    
-
 brick="$1"
 echo 'Working on brick '$brick
 
-if [ x$DW_PERSISTENT_STRIPED_DR8 == x ]; then
-  if [ "$NERSC_HOST" = "edison" ]; then
-    drdir=$SCRATCH/$dr
-  else
-    drdir=$CSCRATCH/$dr
-  fi  
-  # For writing to project, if necessary.
-  drdir=/global/project/projectdirs/cosmo/work/legacysurvey/${dr}
-else
-  drdir=${DW_PERSISTENT_STRIPED_DR8}${dr}
-fi
-outdir=${drdir}/runbrick-${camera}
-echo 'Writing output to '$outdir
+source dr8-env-90prime-mosaic.sh
+
+#drdir=${DW_PERSISTENT_STRIPED_DR8}dr8b
+drdir=/global/project/projectdirs/cosmo/work/legacysurvey/dr8b
+outdir=$drdir/runbrick-90prime-mosaic
 
 bri=$(echo $brick | head -c 3)
-logdir=${drdir}/logs-runbrick-${camera}/${bri}
-log=${logdir}/${brick}.log
+logdir=$drdir/logs-runbrick-90prime-mosaic/$bri
+log=$logdir/$brick.log
 mkdir -p $logdir
 
 echo Logging to: $log
 
 # Limit memory usage.
-ncores=8
+ncores=1
 if [ "$NERSC_HOST" = "edison" ]; then
     # 64 GB / Edison node = 67108864 kbytes
     maxmem=67108864
@@ -71,7 +45,6 @@ ulimit -Sv $usemem
 echo -e "\n\n\n" >> $log
 echo "PWD: $(pwd)" >> $log
 echo "Modules:" >> $log
-module list >> $log 2>&1
 echo >> $log
 echo "Environment:" >> $log
 set | grep -v PASS >> $log
@@ -84,8 +57,10 @@ echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 time python $LEGACYPIPE_DIR/py/legacypipe/runbrick.py \
      --brick $brick --outdir $outdir \
      --skip --skip-calibs --threads ${ncores} \
+     --stage srcs \
      --release 8000 \
      --depth-cut 1.0 \
      --checkpoint $outdir/checkpoints/${bri}/checkpoint-${brick}.pickle \
-     --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
-      >> $log 2>&1
+     --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle"
+
+#\ >> $log 2>&1

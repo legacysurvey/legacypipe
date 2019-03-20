@@ -1,21 +1,21 @@
 #! /bin/bash
+# Run legacy_zeropoints on a single image with (optionally) the burst buffer
+# within a Shifter container at NERSC.
 
-# Run legacy_zeropoints on a single image with the burst buffer.  Assumes the
-# file dr8-env.sh exists in the same path as this script is launched.
-
-# To load and launch:
-#   qdo load calibs ./image-list.txt
-#   qdo launch calibs 256 --cores_per_worker 8 --walltime=00:30:00 --script ./dr8-zpts.sh --batchqueue debug --keep_env --batchopts "--bbf=bb.conf"
-
-# Useful commands:
-#   qdo status calibs
-#   qdo retry calibs
-#   qdo recover calibs --dead
-#   qdo tasks calibs --state=Failed
-
-# Variables to be sure are correct: dr and the name of the the env script.
+# Variables to be sure are correct: dr, LEGACY_SURVEY_DIR, and CODE_DIR.  Also
+# note that LEGACY_SURVEY_DIR has to be defined here, *before* the env script is
+# sourced.
 dr=dr8b
-source ./dr8-env.sh
+
+export LEGACY_SURVEY_DIR=/global/project/projectdirs/cosmo/work/legacysurvey/$dr
+source $LEGACY_SURVEY_DIR/dr8-env-shifter.sh
+CODE_DIR=$LEGACY_SURVEY_DIR/code
+
+# Use local check-outs of legacypipe and legacyzpts.
+export LEGACYPIPE_DIR=$CODE_DIR/legacypipe
+export LEGACYZPTS_DIR=$CODE_DIR/legacyzpts
+export PYTHONPATH=$PYTHONPATH:$LEGACYPIPE_DIR/py
+export PYTHONPATH=$PYTHONPATH:$LEGACYZPTS_DIR/py
 
 # Get the camera from the filename
 image_fn="$1"
@@ -37,14 +37,14 @@ echo 'Working on camera '$camera
 
 if [ x$DW_PERSISTENT_STRIPED_DR8 == x ]; then
   if [ "$NERSC_HOST" = "edison" ]; then
-    outdir=$SCRATCH/${dr}
+    outdir=$SCRATCH/$dr
   else
-    outdir=$CSCRATCH/${dr}
+    outdir=$CSCRATCH/$dr
   fi  
   # For writing to project, if necessary.
-  outdir=/global/project/projectdirs/cosmo/work/legacysurvey/${dr}
+  outdir=/global/project/projectdirs/cosmo/work/legacysurvey/$dr    
 else
-  outdir=${DW_PERSISTENT_STRIPED_DR8}${dr}
+  outdir=${DW_PERSISTENT_STRIPED_DR8}$dr
 fi
 echo 'Writing output to '$outdir
 zptsdir=$outdir/zpts
@@ -72,6 +72,7 @@ else
 fi
 ulimit -Sv $usemem
 
+# do it!
 time python $LEGACYZPTS_DIR/py/legacyzpts/legacy_zeropoints.py --camera ${camera} \
     --image ${image_fn} --outdir ${zptsdir} --calibdir ${calibdir} --threads ${ncores} \
     >> $log 2>&1

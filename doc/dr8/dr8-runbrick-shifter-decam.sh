@@ -1,22 +1,15 @@
 #! /bin/bash
+# Run legacypipe/runbrick.py on a single brick with (optionally) the burst
+# buffer within a Shifter container at NERSC.
 
-# Run legacypipe/runbrick.py on a single brick with the burst buffer.  Assumes
-# the file dr8-env.sh exists in the same path as this script is launched.
-
-# To load and launch:
-#   qdo load dr8a ./brick-lists/test-HSC-NGC
-#   qdo launch dr8a 256 --cores_per_worker 8 --walltime=00:30:00 --script ./dr8-runbrick.sh --batchqueue debug --keep_env --batchopts "--bbf=bb.conf"
-
-# Useful commands:
-#   qdo status dr8a
-#   qdo retry dr8a
-#   qdo recover dr8a --dead
-#   qdo tasks dr8a --state=Failed
+# Variables to be sure are correct: dr, camera, release, LEGACY_SURVEY_DIR, and
+# CODE_DIR.  Also note that LEGACY_SURVEY_DIR has to be defined here, *before*
+# the env script is sourced.
 
 dr=dr8b
 camera=decam
 export LEGACY_SURVEY_DIR=/global/project/projectdirs/cosmo/work/legacysurvey/${dr}/runbrick-${camera}
-source $LEGACY_SURVEY_DIR/dr8-env.sh
+source $LEGACY_SURVEY_DIR/dr8-env-shifter.sh
 CODE_DIR=$LEGACY_SURVEY_DIR/code
 
 # Use local check-outs of legacypipe and legacyzpts.
@@ -70,8 +63,6 @@ ulimit -Sv $usemem
 
 echo -e "\n\n\n" >> $log
 echo "PWD: $(pwd)" >> $log
-echo "Modules:" >> $log
-module list >> $log 2>&1
 echo >> $log
 echo "Environment:" >> $log
 set | grep -v PASS >> $log
@@ -81,11 +72,11 @@ echo >> $log
 
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 
-time python $LEGACYPIPE_DIR/py/legacypipe/runbrick.py \
-     --brick $brick --outdir $outdir \
+time python ${LEGACYPIPE_DIR}/py/legacypipe/runbrick.py \
+     --brick ${brick} --outdir $outdir \
      --skip --skip-calibs --threads ${ncores} \
-     --release 8000 \
+     --release ${release} \
      --depth-cut 1.0 \
-     --checkpoint $outdir/checkpoints/${bri}/checkpoint-${brick}.pickle \
+     --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
       >> $log 2>&1

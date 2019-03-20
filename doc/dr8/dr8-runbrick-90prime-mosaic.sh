@@ -14,9 +14,9 @@
 #   qdo tasks dr8a --state=Failed
 
 dr=dr8b
-camera=decam
+camera=90prime-mosaic
 export LEGACY_SURVEY_DIR=/global/project/projectdirs/cosmo/work/legacysurvey/${dr}/runbrick-${camera}
-source $LEGACY_SURVEY_DIR/dr8-env.sh
+source $LEGACY_SURVEY_DIR/dr8-env-${camera}.sh
 CODE_DIR=$LEGACY_SURVEY_DIR/code
 
 # Use local check-outs of legacypipe and legacyzpts.
@@ -56,7 +56,7 @@ mkdir -p $logdir
 echo Logging to: $log
 
 # Limit memory usage.
-ncores=8
+ncores=4
 if [ "$NERSC_HOST" = "edison" ]; then
     # 64 GB / Edison node = 67108864 kbytes
     maxmem=67108864
@@ -70,8 +70,6 @@ ulimit -Sv $usemem
 
 echo -e "\n\n\n" >> $log
 echo "PWD: $(pwd)" >> $log
-echo "Modules:" >> $log
-module list >> $log 2>&1
 echo >> $log
 echo "Environment:" >> $log
 set | grep -v PASS >> $log
@@ -82,10 +80,10 @@ echo >> $log
 echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 
 time python $LEGACYPIPE_DIR/py/legacypipe/runbrick.py \
-     --brick $brick --outdir $outdir \
+     --brick ${brick} --outdir ${outdir} \
      --skip --skip-calibs --threads ${ncores} \
-     --release 8000 \
+     --release ${release} \
      --depth-cut 1.0 \
-     --checkpoint $outdir/checkpoints/${bri}/checkpoint-${brick}.pickle \
+     --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
       >> $log 2>&1
