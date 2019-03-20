@@ -175,6 +175,10 @@ def main(survey=None, opt=None):
         if not all_hdus:
             assert(len(T) == 1)
 
+    args = []
+    for ccd in T:
+        args.append((survey, catsurvey, ccd, opt, zoomslice, ps))
+
     if opt.threads:
         from astrometry.util.multiproc import multiproc
         from astrometry.util.timingpool import TimingPool, TimingPoolMeas
@@ -182,26 +186,43 @@ def main(survey=None, opt=None):
         poolmeas = TimingPoolMeas(pool, pickleTraffic=False)
         Time.add_measurement(poolmeas)
         mp = multiproc(None, pool=pool)
-        args = []
-        for ccd in T:
-            args.append((survey, catsurvey, ccd, opt, zoomslice, ps))
-
         tm = Time()
         FF = mp.map(bounce_one_ccd, args)
         print('Multi-processing forced-phot:', Time()-tm)
-        FF = [F for F in FF if F is not None]
-        if len(FF) == 0:
-            print('No photometry results to write.')
-            return 0
-        # Keep only the first header
-        # FIXME remove ccd-specific entries?
-        _,version_hdr = FF[0]
-        FF = [F for F,hdr in FF]
-        F = merge_tables(FF)
     else:
-        ccd = T[0]
-        F = run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps)
+        FF = map(bounce_one_ccd, args)
 
+    FF = [F for F in FF if F is not None]
+    if len(FF) == 0:
+        print('No photometry results to write.')
+        return 0
+    # Keep only the first header
+    _,version_hdr = FF[0]
+    FF = [F for F,hdr in FF]
+    F = merge_tables(FF)
+
+    if all_hdus:
+        version_hdr.delete('CPHDU')
+        version_hdr.delete('CCDNAME')
+        version_hdr.delete('EXPOSURE')
+
+    hdr = fitsio.FITSHDR()
+    units = {'exptime':'sec',
+             'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2',
+             'apflux':'nanomaggy', 'apflux_ivar':'1/nanomaggy^2',
+             'psfdepth':'1/nanomaggy^2', 'galdepth':'1/nanomaggy^2',
+             'sky':'nanomaggy/arcsec^2', 'psfsize':'arcsec' }
+    if opt.derivs:
+        units.update({'dra':'arcsec', 'ddec':'arcsec',
+                      'dra_ivar':'1/arcsec^2', 'ddec_ivar':'1/arcsec^2'})
+    columns = F.get_columns()
+    for i,col in enumerate(columns):
+        if col in units:
+            hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
+
+    outdir = os.path.dirname(opt.outfn)
+    if len(outdir):
+        trymakedirs(outdir)
     tmpfn = os.path.join(outdir, 'tmp-' + os.path.basename(opt.outfn))
     fitsio.write(tmpfn, None, header=version_hdr, clobber=True)
     F.writeto(tmpfn, header=hdr, append=True)
@@ -442,24 +463,6 @@ def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
     for key in keys:
         if key in tim.primhdr:
             version_hdr.add_record(dict(name=key, value=tim.primhdr[key]))
-
-    hdr = fitsio.FITSHDR()
-    units = {'exptime':'sec',
-             'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2',
-             'apflux':'nanomaggy', 'apflux_ivar':'1/nanomaggy^2',
-             'psfdepth':'1/nanomaggy^2', 'galdepth':'1/nanomaggy^2',
-             'sky':'nanomaggy/arcsec^2', 'psfsize':'arcsec' }
-    if opt.derivs:
-        units.update({'dra':'arcsec', 'ddec':'arcsec',
-                      'dra_ivar':'1/arcsec^2', 'ddec_ivar':'1/arcsec^2'})
-    columns = F.get_columns()
-    for i,col in enumerate(columns):
-        if col in units:
-            hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
-
-    outdir = os.path.dirname(opt.outfn)
-    if len(outdir):
-        trymakedirs(outdir)
 
     if opt.save_model or opt.save_data:
         hdr = fitsio.FITSHDR()

@@ -429,11 +429,11 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
 
     import socket
     hdr.add_record(dict(name='HOSTNAME', value=socket.gethostname(),
-                        comment='Machine where runbrick.py was run'))
+                        comment='Machine where script was run'))
     hdr.add_record(dict(name='HOSTFQDN', value=socket.getfqdn(),
-                        comment='Machine where runbrick.py was run'))
+                        comment='Machine where script was run'))
     hdr.add_record(dict(name='NERSC', value=os.environ.get('NERSC_HOST', 'none'),
-                        comment='NERSC machine where runbrick.py was run'))
+                        comment='NERSC machine where script was run'))
     hdr.add_record(dict(name='JOB_ID', value=os.environ.get('SLURM_JOB_ID', 'none'),
                         comment='SLURM job id'))
     hdr.add_record(dict(name='ARRAY_ID', value=os.environ.get('ARRAY_TASK_ID', 'none'),
