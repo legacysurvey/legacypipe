@@ -13,6 +13,10 @@
 #   qdo recover calibs --dead
 #   qdo tasks calibs --state=Failed
 
+# Variables to be sure are correct: dr and the name of the the env script.
+dr=dr8b
+source ./dr8-env.sh
+
 # Get the camera from the filename
 image_fn="$1"
 echo $image_fn
@@ -29,19 +33,22 @@ else
   echo 'Unable to get camera from file name!'
   exit 1
 fi
-
 echo 'Working on camera '$camera
 
-source dr8-env.sh
-
-outdir=${DW_PERSISTENT_STRIPED_DR8}dr8b
+if [ x$DW_PERSISTENT_STRIPED_DR8 == x ]; then
+  if [ "$NERSC_HOST" = "edison" ]; then
+    outdir=$SCRATCH/${dr}
+  else
+    outdir=$CSCRATCH/${dr}
+  fi  
+  # For writing to project, if necessary.
+  outdir=/global/project/projectdirs/cosmo/work/legacysurvey/${dr}
+else
+  outdir=${DW_PERSISTENT_STRIPED_DR8}${dr}
+fi
+echo 'Writing output to '$outdir
 zptsdir=$outdir/zpts
 calibdir=$outdir/calib
-
-# Limit memory usage.
-maxmem=134217728 # 128 GB / Cori Haswell node = 134217728 kbytes
-let usemem=${maxmem}*${ncores}/32
-ulimit -Sv $usemem
 
 # Redirect logs to a nested directory.
 cpdir=`echo $(basename $(dirname ${image_fn}))`
@@ -51,6 +58,19 @@ mkdir -p $logdir
 log=`echo $(basename ${image_fn} | sed s#.fits.fz#.log#g)`
 log=$logdir/$log
 echo Logging to: $log
+
+# Limit memory usage.
+ncores=8
+if [ "$NERSC_HOST" = "edison" ]; then
+    # 64 GB / Edison node = 67108864 kbytes
+    maxmem=67108864
+    let usemem=${maxmem}*${ncores}/24
+else
+    # 128 GB / Cori Haswell node = 134217728 kbytes
+    maxmem=134217728
+    let usemem=${maxmem}*${ncores}/32
+fi
+ulimit -Sv $usemem
 
 time python $LEGACYZPTS_DIR/py/legacyzpts/legacy_zeropoints.py --camera ${camera} \
     --image ${image_fn} --outdir ${zptsdir} --calibdir ${calibdir} --threads ${ncores} \

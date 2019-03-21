@@ -30,7 +30,7 @@ mkdir -p $logdir
 echo Logging to: $log
 
 # Limit memory usage.
-ncores=8
+ncores=1
 if [ "$NERSC_HOST" = "edison" ]; then
     # 64 GB / Edison node = 67108864 kbytes
     maxmem=67108864
@@ -61,5 +61,6 @@ time python $LEGACYPIPE_DIR/py/legacypipe/runbrick.py \
      --release 8000 \
      --depth-cut 1.0 \
      --checkpoint $outdir/checkpoints/${bri}/checkpoint-${brick}.pickle \
-     --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
-      >> $log 2>&1
+     --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle"
+
+#\ >> $log 2>&1

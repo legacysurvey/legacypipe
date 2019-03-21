@@ -1,11 +1,13 @@
 #! /bin/bash
-# Set up the software for running DR8.
+# Set up the software for running DR8.  Note the assumption that locally
+# checked-out code is in the "code" subdirectory relative to where this script
+# is sourced!
 
-export LEGACY_SURVEY_DIR=/global/project/projectdirs/cosmo/work/legacysurvey/dr8b
+CODE_DIR=$PWD/code
 
 # Use local check-outs of legacypipe and legacyzpts.
-export LEGACYPIPE_DIR=$LEGACY_SURVEY_DIR/code/legacypipe
-export LEGACYZPTS_DIR=$LEGACY_SURVEY_DIR/code/legacyzpts
+export LEGACYPIPE_DIR=$CODE_DIR/legacypipe
+export LEGACYZPTS_DIR=$CODE_DIR/legacyzpts
 
 # This file has most of the needed environment variables.
 source $LEGACYPIPE_DIR/bin/legacypipe-env
@@ -15,12 +17,14 @@ export PATH=$LEGACYZPTS_DIR/bin:$PATH
 export PYTHONPATH=$LEGACYPIPE_DIR/py:$PYTHONPATH
 export PYTHONPATH=$LEGACYZPTS_DIR/py:$PYTHONPATH
 
-# Temporary, until we get the new conda stack working
-export QDO_DIR=/global/project/projectdirs/cosmo/work/legacysurvey/dr8b/code/qdo
+# Temporary, until we get the new conda stack working on edison.
+export QDO_DIR=$CODE_DIR/qdo
 export PATH=$QDO_DIR/bin:$PATH
 export PYTHONPATH=$QDO_DIR:$PYTHONPATH
-#export PATH=/global/project/projectdirs/cosmo/work/legacysurvey/dr8b/code/build/bin:$PATH
-#export PYTHONPATH=/global/project/projectdirs/cosmo/work/legacysurvey/dr8b/code/build/lib/python3.6/site-packages:$PYTHONPATH
+if [ "$NERSC_HOST" = "edison" ]; then
+  export PATH=$CODE_DIR/build/bin:$PATH
+  export PYTHONPATH=$CODE_DIR/build/lib/python3.6/site-packages:$PYTHONPATH
+fi
 
 # Some NERSC-specific options to get MPI working properly.
 export OMP_NUM_THREADS=1

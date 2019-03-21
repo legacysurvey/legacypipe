@@ -19,8 +19,10 @@ export PYTHONPATH=$LEGACYZPTS_DIR/py:$PYTHONPATH
 export QDO_DIR=/global/project/projectdirs/cosmo/work/legacysurvey/dr8b/code/qdo
 export PATH=$QDO_DIR/bin:$PATH
 export PYTHONPATH=$QDO_DIR:$PYTHONPATH
-#export PATH=/global/project/projectdirs/cosmo/work/legacysurvey/dr8b/code/build/bin:$PATH
-#export PYTHONPATH=/global/project/projectdirs/cosmo/work/legacysurvey/dr8b/code/build/lib/python3.6/site-packages:$PYTHONPATH
+if [ "$NERSC_HOST" = "edison" ]; then
+    export PATH=/global/project/projectdirs/cosmo/work/legacysurvey/dr8b/code/build/$NERSC_HOST/bin:$PATH
+    export PYTHONPATH=/global/project/projectdirs/cosmo/work/legacysurvey/dr8b/code/build/$NERSC_HOST/lib/python3.6/site-packages:$PYTHONPATH
+fi    
 
 # Some NERSC-specific options to get MPI working properly.
 export OMP_NUM_THREADS=1
