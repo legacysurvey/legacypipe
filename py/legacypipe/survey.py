@@ -1239,7 +1239,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                                      'brick-%s.sha256sum' % brick))
         elif filetype == 'outliers_mask':
             return swap(os.path.join(basedir, 'metrics', brickpre, 
-                                     'outlier-mask-%s.fits.fz' % (brick))
+                                     'outlier-mask-%s.fits.fz' % (brick)))
 
         print('Unknown filetype "%s"' % filetype)
         assert(False)
@@ -1284,8 +1284,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             galdepth = '[compress G %i,%i; qz 0]',
             psfsize = '[compress G %i,%i; qz 0]',
             outliers_mask = '[compress G]',
-        #outliers_mask = '[compress H %i,%i]',
         ).get(filetype)
+        #outliers_mask = '[compress H %i,%i]',
         if pat is None:
             return pat
         # Tile compression size

@@ -1,5 +1,6 @@
 import numpy as np
 import fitsio
+import os
 
 import logging
 logger = logging.getLogger('legacypipe.outliers')
@@ -14,7 +15,8 @@ def debug(*args):
 OUTLIER_POS = 1
 OUTLIER_NEG = 2
 
-def read_outlier_mask_file(tims, brickname):
+def read_outlier_mask_file(survey, tims, brickname):
+    from legacypipe.image import CP_DQ_BITS
     fn = survey.find_file('outliers_mask', brick=brickname, output=True)
     if not os.path.exists(fn):
         return False
@@ -41,10 +43,7 @@ def read_outlier_mask_file(tims, brickname):
 
 def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
                         mp=None, plots=False, ps=None, make_badcoadds=True):
-    from scipy.ndimage.morphology import binary_dilation
-    from scipy.ndimage.filters import gaussian_filter
     from legacypipe.image import CP_DQ_BITS
-    from astrometry.util.resample import resample_with_wcs,OverlapError
     if plots:
         import pylab as plt
 
@@ -61,7 +60,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
         if len(btims) == 0:
             continue
         debug(len(btims), 'images for band', band)
-        args.append((band, btims))
+        args.append((band, btims, targetwcs, make_badcoadds, plots, ps))
 
     band_masks = mp.map(bounce_outliers_one_band, args)
 
@@ -98,6 +97,10 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
 
 def outliers_one_band(band, btims, targetwcs, make_badcoadds, plots, ps):
     import time
+    from scipy.ndimage.filters import gaussian_filter
+    from scipy.ndimage.morphology import binary_dilation
+    from astrometry.util.resample import resample_with_wcs,OverlapError
+    from legacypipe.image import CP_DQ_BITS
     
     H,W = targetwcs.shape
     # Build blurred reference image
@@ -132,7 +135,7 @@ def outliers_one_band(band, btims, targetwcs, make_badcoadds, plots, ps):
         coimg[Yo,Xo] += rimg * wt
         cow  [Yo,Xo] += wt
         masks[Yo,Xo] |= (tim.dq[Yi,Xi])
-        resams.append([tim] + [x.astype(np.int16) for x in [Yo,Xo,Yi,Xi]] + [rimg,wt])
+        resams.append([x.astype(np.int16) for x in [Yo,Xo,Yi,Xi]] + [rimg,wt])
 
     print('Total resampling time:', resam_time)
         
@@ -313,7 +316,11 @@ def outliers_one_band(band, btims, targetwcs, make_badcoadds, plots, ps):
 
 def bounce_outliers_one_band(X):
     (band, btims, targetwcs, make_badcoadds, plots, ps) = X
-    return outliers_one_band(band, btims, targetwcs, make_badcoadds, plots, ps)
+    try:
+        return outliers_one_band(band, btims, targetwcs, make_badcoadds, plots, ps)
+    except:
+        import traceback
+        traceback.print_exc()
 
 def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
     from astrometry.util.resample import resample_with_wcs, OverlapError

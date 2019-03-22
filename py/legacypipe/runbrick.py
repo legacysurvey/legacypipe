@@ -727,7 +727,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
     record_event and record_event('stage_mask_junk: starting')
 
     # Check for existing MEF containing masks for all the chips we need.
-    if not read_outlier_mask_file(tims, brickname):
+    if not read_outlier_mask_file(survey, tims, brickname):
         from astrometry.util.file import trymakedirs
 
         # Make before-n-after plots (before)
@@ -741,6 +741,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         patch_from_coadd(C.coimgs, targetwcs, bands, tims, mp=mp)
         del C
         
+        make_badcoadds = True
         badcoadds = mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
                                         mp=mp, plots=plots, ps=ps, make_badcoadds=make_badcoadds)
 
