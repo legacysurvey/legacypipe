@@ -762,10 +762,10 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
             tims_todo.append(tim)
             continue
 
-        debug('Reading from', maskfn)
+        info('Reading mask from', maskfn)
         # Apply this mask!
         tim.dq |= mask * CP_DQ_BITS['outlier']
-        tim.getInvError()[mask] = 0.
+        tim.getInvError()[mask > 0] = 0.
 
     if len(tims_todo):
         # Patch individual-CCD masked pixels from a coadd
