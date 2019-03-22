@@ -226,6 +226,13 @@ class mysample(object):
             self.zp0 = 24.92
             self.recm = 22.5
             self.phreq = 0.02
+        
+        if(self.survey =='DECaLS' or self.survey =='DEShyb' or self.survey !='NGCproxy'):
+            self.pixsize = 0.2637 #arcsec
+        if(self.survey =='BASS'):
+            self.pixsize = 0.454 
+        if(self.survey =='MZLS'): 
+            self.pixsize = 0.26
 
 # ------------------------------------------------------------------
 # --- Footprints ----
@@ -244,6 +251,30 @@ def InNGCproxyFootprint(RA):
     if(RA < -180 ) : RA = RA + 360
     if( 100 <= RA <= 300 ) : return True 
     return False 
+
+def plot_fwhm2D(sample,ral,decl,fwhm,mapfile,mytitle):
+    # Plot depth 
+    from matplotlib import pyplot as plt
+    import matplotlib.cm as cm
+    ralB = [ ra-360 if ra > 300 else ra for ra in ral ]
+    #vmax = sample.recm + 2.0 
+    #vmin = sample.recm - 2.0
+    ##mapa = plt.scatter(ralB,decl,c=depth, cmap=cm.gnuplot,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
+    #mapa = plt.scatter(ralB,decl,c=depth, cmap=cm.RdYlBu_r,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
+    #mapa = plt.scatter(ralB,decl,c=fwhm, cmap=cm.RdYlBu_r,s=2., lw=0,edgecolors='none')
+    mapa = plt.scatter(ralB,decl,c=fwhm, cmap=cm.bwr_r,s=2.,vmin=0.5, vmax=1.8, lw=0,edgecolors='none')
+    mapa.cmap.set_over('lawngreen')
+    cbar = plt.colorbar(mapa,extend='both')
+    plt.xlabel('r.a. (degrees)')
+    plt.ylabel('declination (degrees)')
+    plt.title(mytitle)
+    plt.xlim(-60,300)
+    plt.ylim(-30,90)
+    print('saving plot image to %s', mapfile)
+    plt.savefig(mapfile)
+    plt.close()
+    return
+
 
 
 def plot_magdepth2D(sample,ral,decl,depth,mapfile,mytitle):
@@ -496,7 +527,174 @@ def val3p4c_depthfromIvarOLD(sample):
     return mapfile 
 
 
-def val3p4c_depthfromIvar(sample,Nexpmin=1):    
+def val4p1_bandquality(sample,minfwhm=1.3,Nexpmin=1,Nexpmax=500,depthmin=21.0):    
+    """
+       Requirement v4.1
+       z-band image quality will be smaller than 1.3 arcsec FWHM in at least one pass.
+       allow to be tested in all bands
+    """
+    nside = 1024       # Resolution of output maps
+    nsideSTR='1024'    # same as nside but in string format
+    nsidesout = None   # if you want full sky degraded maps to be written
+    ratiores = 1       # Superresolution/oversampling ratio, simp mode doesn't allow anything other than 1
+    mode = 1           # 1: fully sequential, 2: parallel then sequential, 3: fully parallel
+    pixoffset = 0      # How many pixels are being removed on the edge of each CCD? 15 for DES.
+    oversamp='1'       # ratiores in string format
+    
+    band = sample.band
+    catalogue_name = sample.catalog
+    fname = sample.ccds    
+    localdir = sample.localdir
+    extc = sample.extc
+
+    #Read ccd file 
+    tbdata = pyfits.open(fname)[1].data
+    
+    # ------------------------------------------------------
+    # Obtain indices
+    auxstr='band_'+band
+    sample_names = [auxstr]
+    if(sample.DR == 'DR3'):
+        inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True)) 
+    elif(sample.DR == 'DR4'):
+        inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['bitmask'] == 0)) 
+    elif(sample.DR == 'DR5'):
+        if(sample.survey == 'DECaLS'):
+            inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True)) 
+        elif(sample.survey == 'DEShyb'):
+            inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True) & (list(map(InDEShybFootprint,tbdata['ra'],tbdata['dec']))))
+        elif(sample.survey == 'NGCproxy'):
+            inds = np.where((tbdata['filter'] == band) & (tbdata['photometric'] == True) & (tbdata['blacklist_ok'] == True) & (list(map(InNGCproxyFootprint,tbdata['ra'])))) 
+    elif(sample.DR == 'DR6'):
+        inds = np.where((tbdata['filter'] == band)) 
+    elif(sample.DR == 'DR7'):
+        if(sample.survey == 'DECaLS'):
+            inds = np.where((tbdata['filter'] == band)) 
+        elif(sample.survey == 'DEShyb'):
+            inds = np.where((tbdata['filter'] == band) & (list(map(InDEShybFootprint,tbdata['ra'],tbdata['dec']))))
+        elif(sample.survey == 'NGCproxy'):
+            inds = np.where((tbdata['filter'] == band) & (list(map(InNGCproxyFootprint,tbdata['ra'])))) 
+
+
+    #Read data 
+    #obtain fwhm
+    myfwhm = tbdata['fwhm']*sample.pixsize
+    hits=np.ones(np.shape(myfwhm)) 
+    print(myfwhm[0:25])
+    
+    nmag = Magtonanomaggies(tbdata['galdepth']-extc*tbdata['EBV'])/5.
+    ivar= 1./nmag**2.
+
+    # What properties do you want mapped?
+    # Each each tuple has [(quantity to be projected, weighting scheme, operation),(etc..)] 
+    propertiesandoperations = [ ('myfwhm', '', 'min'), ('hits','','total'),('ivar', '','total') ]
+
+
+
+
+ 
+ 
+    # What properties to keep when reading the images? 
+    # Should at least contain propertiesandoperations and the image corners.
+    # MARCM - actually no need for ra dec image corners.   
+    # Only needs ra0 ra1 ra2 ra3 dec0 dec1 dec2 dec3 only if fast track appropriate quicksip subroutines were implemented 
+    #propertiesToKeep = [ 'filter', 'FWHM','mjd_obs'] \
+    # 	+ ['RA', 'DEC', 'crval1', 'crval2', 'crpix1', 'crpix2', 'cd1_1', 'cd1_2', 'cd2_1', 'cd2_2','width','height']
+    propertiesToKeep = [ 'filter', 'FWHM','mjd_obs'] \
+    	+ ['RA', 'DEC', 'ra0','ra1','ra2','ra3','dec0','dec1','dec2','dec3']
+    
+    # Create big table with all relevant properties. 
+
+    tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [myfwhm] + [hits] + [ivar], names = propertiesToKeep + [ 'myfwhm', 'hits', 'ivar'])
+    
+    # Read the table, create Healtree, project it into healpix maps, and write these maps.
+    # Done with Quicksip library, note it has quite a few hardcoded values (use new version by MARCM for BASS and MzLS) 
+    # project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside)
+    #project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, localdir, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
+    project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, localdir, sample_names, inds, nside)
+ 
+    # HEALPIX DEPTH MAPS 
+    # convert ivar to depth 
+    import healpy as hp
+    from healpix3 import pix2ang_ring,thphi2radec
+
+    # Read Haelpix maps from quicksip  
+    prop='myfwhm'
+    op='min'
+
+    fname2=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+\
+    catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
+    f = fitsio.read(fname2)
+
+    ral = []
+    decl = []
+    val = f['SIGNAL']
+    pix = f['PIXEL']
+
+    #get hits
+    prop = 'hits'
+    op = 'total'
+    fname2=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+\
+    catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
+    f = fitsio.read(fname2)
+    hitsb=f['SIGNAL']
+    
+    # get depth  
+    prop='ivar'
+    op='total'
+
+    fname2=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+\
+    catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
+    f = fitsio.read(fname2)
+    ivarxx = f['SIGNAL']
+ 
+    # Obtain values to plot 
+    #if (prop == 'ivar'):
+    myval = []
+    mylabel='minfwhm' 
+            
+    above=0 
+    for i in range(0,len(val)):
+       seeing= val[i] 
+       npases=hitsb[i]
+       mydepth = nanomaggiesToMag(np.sqrt(1./ivarxx[i] * 5.))
+       if(npases >= Nexpmin and npases <= Nexpmax and mydepth >= depthmin ): 
+           myval.append(seeing)
+           th,phi = hp.pix2ang(int(nside),pix[i])
+           ra,dec = thphi2radec(th,phi)
+           ral.append(ra)
+           decl.append(dec)
+           if(seeing > minfwhm):
+              above=above+1
+
+    npix=len(myval)
+
+    # plot histogram
+    from matplotlib import pyplot as plt
+    import matplotlib.cm as cm
+    plt.hist(myval,bins=20,range=(0.5,1.5))
+    histfile = localdir+mylabel+'_'+band+'_hist_'+catalogue_name+str(nside)+'.png'
+    plt.savefig(histfile)
+    plt.close()
+# 
+
+    # write some numbers
+    print('Area is ', npix/(float(nside)**2.*12)*360*360./pi, ' sq. deg.')
+    print('Area with fwhm above ', minfwhm, 'is', above/(float(nside)**2.*12)*360*360./pi, ' sq. deg.')
+    print('Corresponding to ', above, 'of ', npix, ' pixels')
+    print('Within the plot, min ', mylabel, '= ', min(myval), ' and max ', mylabel, ' = ', max(myval))
+
+
+    # plot map
+    mapfile=localdir+mylabel+'_'+band+'_'+catalogue_name+str(nside)+'.png'
+    mytitle='Map of '+ mylabel +' for '+catalogue_name+' '+band+'-band \n with '+str(Nexpmin)+\
+           ' or more exposures'
+    plot_fwhm2D(sample,ral,decl,myval,mapfile,mytitle)
+
+    return mapfile, histfile 
+
+
+def val3p4c_depthfromIvar(sample,Nexpmin=1,Nexpmax=500):    
     """
        Requirement V3.4
        90% filled to g=24, r=23.4 and z=22.5 and 95% and 98% at 0.3/0.6 mag shallower.
@@ -619,7 +817,7 @@ def val3p4c_depthfromIvar(sample,Nexpmin=1):
     for i in range(0,len(val)):
        depth=nanomaggiesToMag(sqrt(1./val[i]) * 5.)
        npases=hitsb[i]
-       if(npases >= Nexpmin  ):
+       if(npases >= Nexpmin and npases <= Nexpmax ):
            myval.append(depth)
            th,phi = hp.pix2ang(int(nside),pix[i])
            ra,dec = thphi2radec(th,phi)
@@ -690,7 +888,7 @@ def val3p4c_depthfromIvar(sample,Nexpmin=1):
     #f = fitsio.read(fname2)
     
     #hitsb=f['SIGNAL']
-    hist, bin_edges =np.histogram(hitsb,bins=[-0.5,0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5,8.5,100],density=True)
+    hist, bin_edges =np.histogram(hitsb,bins=[-0.5,0.5,1.5,2.5,3.5,4.5,5.5,6.5,7.5,8.5,9.5,10.5, 11.5,12.5, 13.5, 14.5, 15.5, 16.15,17.5,18.5,19.5,20.5,21.5,22.5,23.5,24.5,25.5,100],density=True)
     #print hitsb[1000:10015]
     #hist, bin_edges =np.histogram(hitsb,density=True)
     print("Percentage of hits for 0,1,2., to >7 pases\n", end=' ') 
@@ -724,7 +922,7 @@ def val3p4c_depthfromIvar(sample,Nexpmin=1):
 #    plt.close()
 #    return mapfile
 
-def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0, Nexpmin=1):    
+def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0, Nexpmin=1,enterFrac=False,fraclist=[0,0]):    
     """
        Requirement V3.4
        90% filled to g=24, r=23.4 and z=22.5 and 95% and 98% at 0.3/0.6 mag shallower.
@@ -735,9 +933,12 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0, Nexpm
        This produces the histogram for Dustin's processed galaxy depth
     """
 
+    myfrac = sample.FracExp 
+    if( enterFrac == True ) : myfrac = fraclist
 
     # Check fraction of number of exposures adds to 1. 
-    if( abs(sum(sample.FracExp) - 1.0) > 1e-5 ):
+    #if( abs(sum(sample.FracExp) - 1.0) > 1e-5 ):
+    if( abs(sum(myfrac) - 1.0) > 1e-5 ):
        raise ValueError("Fration of number of exposures don't add to one")
 
     # Survey inputs
@@ -832,7 +1033,8 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0, Nexpm
     nbr = 0	
     NTl = []
     n = 0
-    for indx, f in enumerate(sample.FracExp,1) : 
+    #for indx, f in enumerate(sample.FracExp,1) : 
+    for indx, f in enumerate(myfrac,1) : 
         Nexp = indx # indx starts at 1 bc argument on enumearate :-), thus is the number of exposures
         nd = int(round(ndraw * f))
         if(Nexp < Nexpmin): nd=0 
