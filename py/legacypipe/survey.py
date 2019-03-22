@@ -1238,8 +1238,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             return swap(os.path.join(basedir, 'tractor', brickpre,
                                      'brick-%s.sha256sum' % brick))
         elif filetype == 'outliers_mask':
-            return swap(os.path.join(basedir, 'metrics', brickpre, brick,
-                                     'outlier-mask-%s-%s-%s.fits.fz' % (camera, expnum, ccdname)))
+            return swap(os.path.join(basedir, 'metrics', brickpre, 
+                                     'outlier-mask-%s.fits.fz' % (brick))
 
         print('Unknown filetype "%s"' % filetype)
         assert(False)
@@ -1283,7 +1283,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             depth  = '[compress G %i,%i; qz 0]',
             galdepth = '[compress G %i,%i; qz 0]',
             psfsize = '[compress G %i,%i; qz 0]',
-            outliers_mask = '[compress H %i,%i]',
+            outliers_mask = '[compress G]',
+        #outliers_mask = '[compress H %i,%i]',
         ).get(filetype)
         if pat is None:
             return pat
