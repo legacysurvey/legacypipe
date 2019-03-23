@@ -22,7 +22,7 @@ def read_outlier_mask_file(survey, tims, brickname):
         return False
     F = fitsio.FITS(fn)
     for tim in tims:
-        extname = '%s-%s-%s' % (tim.camera, tim.expnum, tim.ccdname)
+        extname = '%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
         if not extname in F:
             print('WARNING: Did not find extension', extname, 'in outlier-mask file', fn)
             return False
@@ -68,11 +68,11 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
         # empty Primary HDU
         out.fits.write(None, header=version_header)
 
-        for (band,btims),masks in zip(args, band_masks):
-            for tim, (mask,badcoadd) in zip(btims, masks):
-                if make_badcoadds:
-                    badcoadds.append(badcoadd)
-                
+        for arglist,(masks,badcoadd) in zip(args, band_masks):
+            band,btims = arglist[:2]
+            if make_badcoadds:
+                badcoadds.append(badcoadd)
+            for tim, mask in zip(btims, masks):
                 # Apply the mask!
                 tim.inverr[mask > 0] = 0.
                 tim.dq[mask > 0] |= CP_DQ_BITS['outlier']
@@ -85,13 +85,18 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 hdr.delete('IMAGEH')
                 hdr.add_record(dict(name='IMTYPE', value='outlier_mask',
                                     comment='LegacySurvey image type'))
-                hdr.add_record(dict(name='CAMERA',  value=tim.camera))
-                hdr.add_record(dict(name='EXPNUM',  value=tim.expnum))
-                hdr.add_record(dict(name='CCDNAME', value=tim.ccdname))
+                hdr.add_record(dict(name='CAMERA',  value=tim.imobj.camera))
+                hdr.add_record(dict(name='EXPNUM',  value=tim.imobj.expnum))
+                hdr.add_record(dict(name='CCDNAME', value=tim.imobj.ccdname))
                 hdr.add_record(dict(name='X0', value=tim.x0))
                 hdr.add_record(dict(name='Y0', value=tim.y0))
 
-                out.fits.write(mask, header=hdr, compress='HCOMPRESS')
+                # HCOMPRESS;: 943k
+                # GZIP_1: 4.4M
+                # GZIP: 4.4M
+                # RICE: 2.8M
+                extname = '%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
+                out.fits.write(mask, header=hdr, extname=extname, compress='HCOMPRESS')
 
     return badcoadds
 
@@ -243,8 +248,6 @@ def outliers_one_band(band, btims, targetwcs, make_badcoadds, plots, ps):
         del reldiff, otherwt
 
         if (not np.any(hotpix)) and (not np.any(coldpix)):
-            ## FIXME
-            #return hotpix
             continue
 
         hot = np.zeros((H,W), bool)
@@ -305,7 +308,6 @@ def outliers_one_band(band, btims, targetwcs, make_badcoadds, plots, ps):
         Ibad, = np.nonzero(hot[mYi,mXi])
         Ibad2, = np.nonzero(cold[mYi,mXi])
         info(tim, ': masking', len(Ibad), 'positive outlier pixels and', len(Ibad2), 'negative outlier pixels')
-        #nz = np.sum(tim.getInvError() == 0)
         maskedpix[mYo[Ibad],  mXo[Ibad]]  = OUTLIER_POS
         maskedpix[mYo[Ibad2], mXo[Ibad2]] = OUTLIER_NEG
 
