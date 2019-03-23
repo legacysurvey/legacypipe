@@ -731,7 +731,6 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         from astrometry.util.file import trymakedirs
 
         # Make before-n-after plots (before)
-        t0 = Time()
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
         outdir = os.path.join(survey.output_dir, 'metrics', brickname[:3])
         trymakedirs(outdir)
@@ -741,15 +740,10 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         # Patch individual-CCD masked pixels from a coadd
         patch_from_coadd(C.coimgs, targetwcs, bands, tims, mp=mp)
         del C
-        t1 = Time()
-        print('Coadd + patching:', t1-t0)
 
         make_badcoadds = True
         badcoadds = mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
                                         mp=mp, plots=plots, ps=ps, make_badcoadds=make_badcoadds)
-
-        t2 = Time()
-        print('Masking outliers:', t2-t1)
 
         # Make before-n-after plots (after)
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
@@ -757,9 +751,6 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
         imsave_jpeg(outfn, get_rgb(C.coimgs, bands))
         outfn = os.path.join(outdir, 'outliers-masked-%s.jpg' % brickname)
         imsave_jpeg(outfn, get_rgb(badcoadds, bands))
-
-        t3 = Time()
-        print('Post coadds:', t3-t2)
 
     return dict(tims=tims)
 
