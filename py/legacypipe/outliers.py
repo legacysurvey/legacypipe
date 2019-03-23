@@ -58,102 +58,80 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
     else:
         badcoadds = None
 
-    band_masks = []
-    args = []
-    for iband,band in enumerate(bands):
-        btims = [tim for tim in tims if tim.band == band]
-        if len(btims) == 0:
-            continue
-        debug(len(btims), 'images for band', band)
-        args.append((band, btims, targetwcs, make_badcoadds, plots, ps))
-        
-        H,W = targetwcs.shape
-        # Build blurred reference image
-        sigs = np.array([tim.psf_sigma for tim in btims])
-        debug('PSF sigmas:', sigs)
-        targetsig = max(sigs) + 0.5
-        addsigs = np.sqrt(targetsig**2 - sigs**2)
-        debug('Target sigma:', targetsig)
-        debug('Blur sigmas:', addsigs)
-        coimg = np.zeros((H,W), np.float32)
-        cow   = np.zeros((H,W), np.float32)
-        masks = np.zeros((H,W), np.int16)
-
-        t0 = Time()
-        R = mp.map(blur_resample_one, [(tim,sig,targetwcs) for tim,sig in zip(btims,addsigs)])
-        t1 = Time()
-        for tim,r in zip(btims, R):
-            if r is None:
-                continue
-            Yo,Xo,iacc,wacc,macc = r
-            coimg[Yo,Xo] += iacc
-            cow  [Yo,Xo] += wacc
-            masks[Yo,Xo] |= macc
-            del Yo,Xo,iacc,wacc,macc
-        del r,R
-        t2 = Time()
-        print('Resample:', t1-t0)
-        print('Accumulate:', t2-t1)
-            
-        #
-        veto = np.logical_or(
-            binary_dilation(masks & CP_DQ_BITS['bleed'], iterations=3),
-            binary_dilation(masks & CP_DQ_BITS['satur'], iterations=10))
-        del masks
-    
-        if plots:
-            plt.clf()
-            plt.imshow(veto, interpolation='nearest', origin='lower', cmap='gray')
-            plt.title('SATUR, BLEED veto (%s band)' % band)
-            ps.savefig()
-    
-        t0 = Time()
-        R = mp.map(compare_one, [(tim, sig, targetwcs, coimg,cow, veto, make_badcoadds, plots,ps)
-                                 for tim,sig in zip(btims,addsigs)])
-        print('Finding outliers:', Time()-t0)
-        del coimg, cow, veto
-
-        masks = []
-        badcoadd = None
-        if make_badcoadds:
-            badcoadd = np.zeros((H,W), np.float32)
-            badcon   = np.zeros((H,W), np.int16)
-
-        for r,tim in zip(R, btims):
-            if r is None:
-                # none masked
-                masked = np.zeros(tim.shape, np.uint8)
-                masks.append(masked)
-                continue
-            masked,badco = r
-            masks.append(masked)
-            if make_badcoadds:
-                yo,xo,bimg = badco
-                badcoadd[yo, xo] += bimg
-                badcon  [yo, xo] += 1
-                del yo,xo,bimg
-            del badco
-        del r,R
-    
-        if make_badcoadds:
-            badcoadd /= np.maximum(badcon, 1)
-        band_masks.append((masks, badcoadd))
-
-    #band_masks = mp.map(bounce_outliers_one_band, args)
-
     with survey.write_output('outliers_mask', brick=brickname) as out:
         # empty Primary HDU
         out.fits.write(None, header=version_header)
 
-        for arglist,(masks,badcoadd) in zip(args, band_masks):
-            band,btims = arglist[:2]
+        for iband,band in enumerate(bands):
+            btims = [tim for tim in tims if tim.band == band]
+            if len(btims) == 0:
+                continue
+            debug(len(btims), 'images for band', band)
+            
+            H,W = targetwcs.shape
+            # Build blurred reference image
+            sigs = np.array([tim.psf_sigma for tim in btims])
+            debug('PSF sigmas:', sigs)
+            targetsig = max(sigs) + 0.5
+            addsigs = np.sqrt(targetsig**2 - sigs**2)
+            debug('Target sigma:', targetsig)
+            debug('Blur sigmas:', addsigs)
+            coimg = np.zeros((H,W), np.float32)
+            cow   = np.zeros((H,W), np.float32)
+            masks = np.zeros((H,W), np.int16)
+    
+            R = mp.map(blur_resample_one, [(tim,sig,targetwcs) for tim,sig in zip(btims,addsigs)])
+            for tim,r in zip(btims, R):
+                if r is None:
+                    continue
+                Yo,Xo,iacc,wacc,macc = r
+                coimg[Yo,Xo] += iacc
+                cow  [Yo,Xo] += wacc
+                masks[Yo,Xo] |= macc
+                del Yo,Xo,iacc,wacc,macc
+            del r,R
+    
+            #
+            veto = np.logical_or(
+                binary_dilation(masks & CP_DQ_BITS['bleed'], iterations=3),
+                binary_dilation(masks & CP_DQ_BITS['satur'], iterations=10))
+            del masks
+        
+            if plots:
+                plt.clf()
+                plt.imshow(veto, interpolation='nearest', origin='lower', cmap='gray')
+                plt.title('SATUR, BLEED veto (%s band)' % band)
+                ps.savefig()
+        
+            R = mp.map(compare_one, [(tim, sig, targetwcs, coimg,cow, veto, make_badcoadds, plots,ps)
+                                     for tim,sig in zip(btims,addsigs)])
+            del coimg, cow, veto
+    
+            masks = []
+            badcoadd = None
             if make_badcoadds:
-                badcoadds.append(badcoadd)
-            for tim, mask in zip(btims, masks):
+                badcoadd = np.zeros((H,W), np.float32)
+                badcon   = np.zeros((H,W), np.int16)
+    
+            for r,tim in zip(R, btims):
+                if r is None:
+                    # none masked
+                    mask = np.zeros(tim.shape, np.uint8)
+                else:
+                    mask,badco = r
+                    if make_badcoadds:
+                        yo,xo,bimg = badco
+                        badcoadd[yo, xo] += bimg
+                        badcon  [yo, xo] += 1
+                        del yo,xo,bimg
+                    del badco
+
+
                 # Apply the mask!
                 tim.inverr[mask > 0] = 0.
                 tim.dq[mask > 0] |= CP_DQ_BITS['outlier']
 
+                # Write output!
                 # copy version_header before modifying it.
                 hdr = fitsio.FITSHDR()
                 # Plug in the tim WCS header
@@ -174,6 +152,12 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 # RICE: 2.8M
                 extname = '%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
                 out.fits.write(mask, header=hdr, extname=extname, compress='HCOMPRESS')
+
+            del r,R
+        
+            if make_badcoadds:
+                badcoadd /= np.maximum(badcon, 1)
+                badcoadds.append(badcoadd)
 
     return badcoadds
 
