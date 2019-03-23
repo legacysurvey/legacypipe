@@ -1,7 +1,6 @@
 import numpy as np
 import fitsio
 import os
-from astrometry.util.ttime import Time
 
 import logging
 logger = logging.getLogger('legacypipe.outliers')
