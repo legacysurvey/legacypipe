@@ -410,6 +410,6 @@ def read_star_clusters(targetwcs):
     # Set isbright=True
     clusters.isbright = np.zeros(len(clusters), bool)
     clusters.iscluster = np.ones(len(clusters), bool)
-        
+
     return clusters
 

@@ -29,8 +29,7 @@ if __name__ == '__main__':
     # demo RexGalaxy, with plots
     if False:
         from legacypipe.survey import RexGalaxy
-        from tractor import RaDecPos, NanoMaggies, PixPos
-        from tractor import ScalarParam
+        from tractor import NanoMaggies, PixPos
         from tractor import Image, GaussianMixturePSF, LinearPhotoCal
         from legacypipe.survey import LogRadius
         rex = RexGalaxy(
@@ -166,7 +165,7 @@ if __name__ == '__main__':
     # assert(os.path.exists(fn))
     # T = fits_table(fn)
     # assert(len(T) == 1)
-    
+
     # Custom RA,Dec; blob ra,dec.
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
     outdir = 'out-testcase4b'
@@ -202,10 +201,9 @@ if __name__ == '__main__':
     # Read catalog into Tractor sources to test read_fits_catalog
     from legacypipe.catalog import read_fits_catalog
     from legacypipe.survey import LegacySurveyData, GaiaSource
-    from astrometry.util.fits import fits_table
     from tractor.galaxy import DevGalaxy
     from tractor import PointSource
-    
+
     survey = LegacySurveyData(survey_dir=outdir)
     fn = survey.find_file('tractor', brick='2447p120')
     print('Checking', fn)
@@ -278,13 +276,10 @@ if __name__ == '__main__':
     #    assert( os.path.exists(os.path.join(rt_dir,fn)) )
     #for fn in ['image','model','resid','simscoadd']: 
     #    assert( os.path.exists(os.path.join(rt_dir,'qa-'+brick+'-star-'+fn+'-01.jpg')) )
-     
+
     if not travis:
         # With ceres
         main(args=['--brick', '2447p120', '--zoom', '1020', '1070', '2775', '2815',
                    '--no-wise', '--force-all', '--no-write', '--ceres',
                    '--survey-dir', surveydir,
                    '--outdir', 'out-testcase3-ceres'] + extra_args)
-    
-
-    

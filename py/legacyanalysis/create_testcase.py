@@ -76,7 +76,7 @@ def main():
     del kd
     print('Read', len(tycho), 'Tycho-2 stars')
     ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
-    margin = 100
+    #margin = 100
     #tycho.cut(ok * (tx > -margin) * (tx < W+margin) *
     #          (ty > -margin) * (ty < H+margin))
     print('Cut to', len(tycho), 'Tycho-2 stars within brick')

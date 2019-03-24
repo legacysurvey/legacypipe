@@ -4,12 +4,12 @@ import numpy as np
 import pylab as plt
 import time
 
-from astrometry.util.ttime import Time, CpuMeas
+from astrometry.util.ttime import Time
 from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.util.fits import fits_table
 from astrometry.util.plotutils import dimshow
 
-from tractor import Tractor, PointSource, Image, NanoMaggies, Catalog, Patch
+from tractor import Tractor, PointSource, Image, Catalog, Patch
 from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev, FracDev, disable_galaxy_cache, enable_galaxy_cache
 from tractor.patch import ModelMask
 
@@ -95,7 +95,7 @@ def one_blob(X):
     ob.run(B)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
-    
+
     ok,x1,y1 = blobwcs.radec2pixelxy(
         np.array([src.getPosition().ra  for src in B.sources]),
         np.array([src.getPosition().dec for src in B.sources]))
@@ -217,12 +217,12 @@ class OneBlob(object):
             if self.plots_single:
                 plt.figure(2)
                 mods = list(tr.getModelImages())
-                coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs, images=mods,
+                coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=mods,
                                            fill_holes=False)
                 dimshow(get_rgb(coimgs,self.bands), ticks=False)
                 plt.savefig('blob-%s-initmodel.png' % (self.name))
                 res = [(tim.getImage() - mod) for tim,mod in zip(self.tims, mods)]
-                coresids,nil = quick_coadds(self.tims, self.bands, self.blobwcs, images=res)
+                coresids,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=res)
                 dimshow(get_rgb(coresids, self.bands, **rgbkwargs_resid), ticks=False)
                 plt.savefig('blob-%s-initresid.png' % (self.name))
                 dimshow(get_rgb(coresids, self.bands), ticks=False)
@@ -329,7 +329,7 @@ class OneBlob(object):
         for k,v in M.items():
             B.set(k, v)
         info('Blob', self.name, 'finished:', Time()-tlast)
-        
+
     def run_model_selection(self, cat, Ibright, B):
         # We compute & subtract initial models for the other sources while
         # fitting each source:
@@ -341,7 +341,7 @@ class OneBlob(object):
         #   -fit, with Catalog([src])
         #   -subtract final model (from each tim)
         # -Replace original images
-    
+
         models = SourceModels()
         # Remember original tim images
         models.save_images(self.tims)
@@ -362,13 +362,12 @@ class OneBlob(object):
             debug('Model selection for source %i of %i in blob %s; sourcei %i' %
                   (numi+1, len(Ibright), self.name, srci))
             cpu0 = time.clock()
-    
+
             # Add this source's initial model back in.
             models.add(srci, self.tims)
 
             if self.plots_single:
                 plt.figure(2)
-                tr = self.tractor(self.tims, cat)
                 coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
                                            fill_holes=False)
                 rgb = get_rgb(coimgs,self.bands)
@@ -466,11 +465,12 @@ class OneBlob(object):
             from legacypipe.detection import detection_maps
             from astrometry.util.multiproc import multiproc
             from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
-            from scipy.ndimage.measurements import label, find_objects
+            from scipy.ndimage.measurements import label
             # Compute per-band detection maps
             mp = multiproc()
             detmaps,detivs,satmaps = detection_maps(
                 srctims, srcwcs, self.bands, mp)
+            del satmaps
             # Compute the symmetric area that fits in this 'tim'
             pos = src.getPosition()
             ok,xx,yy = srcwcs.radec2pixelxy(pos.ra, pos.dec)
@@ -492,7 +492,7 @@ class OneBlob(object):
                 # just OR the detection maps per-band...
                 flipblobs |= (flipsn > 5.)
 
-            blobs,nb = label(flipblobs)
+            blobs,_ = label(flipblobs)
             goodblob = blobs[iy,ix]
 
             if self.plots_per_source:
@@ -568,7 +568,7 @@ class OneBlob(object):
                 try:
                     Yo,Xo,Yi,Xi,nil = resample_with_wcs(
                         tim.subwcs, srcwcs, [], 2)
-                except:
+                except OverlapError:
                     continue
                 ie = tim.getInvError()
                 newie = np.zeros_like(ie)
@@ -583,14 +583,14 @@ class OneBlob(object):
                 xl,xh = xx.min(), xx.max()
                 yl,yh = yy.min(), yy.max()
                 totalpix += len(xx)
-                
+
                 d = { src: ModelMask(xl, yl, 1+xh-xl, 1+yh-yl) }
                 mm.append(d)
-                
+
                 saved_srctim_ies.append(ie)
                 tim.inverr = newie
                 keep_srctims.append(tim)
-            
+
             srctims = keep_srctims
             modelMasks = mm
 
@@ -599,7 +599,7 @@ class OneBlob(object):
             sh,sw = srcwcs.shape
             B.blob_symm_width [srci] = sw
             B.blob_symm_height[srci] = sh
-            
+
             # if self.plots_per_source:
             #     from legacypipe.detection import plot_boundary_map
             #     plt.clf()
@@ -613,7 +613,7 @@ class OneBlob(object):
             #     plot_boundary_map(flipblobs, rgb=(255,255,255), extent=ext)
             #     plot_boundary_map(dilated, rgb=(0,255,0), extent=ext)
             #     plt.title('symmetrized blobs')
-            #     self.ps.savefig()                
+            #     self.ps.savefig()
             # 
             #     nil,nil,coimgs,nil = quick_coadds(
             #         srctims, self.bands, self.blobwcs,
@@ -635,7 +635,7 @@ class OneBlob(object):
                 # plt.xlabel('Image pixels (sigma)')
                 # plt.title('Symmetrized pixel values')
                 # self.ps.savefig()
-                
+
             # # plot the modelmasks for each tim.
             # plt.clf()
             # R = int(np.floor(np.sqrt(len(srctims))))
@@ -650,7 +650,7 @@ class OneBlob(object):
             #     plt.title(tim.name)
             # plt.suptitle('Model Masks')
             # self.ps.savefig()
-            
+
         if self.bigblob and self.plots_per_source:
             # This is a local source-WCS plot of the data going into the
             # fit.
@@ -693,7 +693,7 @@ class OneBlob(object):
             fit_background = False
 
         debug('Source at blob coordinates', x0+ix, y0+iy, '- forcing pointsource?', force_pointsource, ', is large galaxy?', is_galaxy, ', fitting sky background:', fit_background)
-        
+
         if fit_background:
             for tim in srctims:
                 tim.freezeAllBut('sky')
@@ -701,7 +701,7 @@ class OneBlob(object):
             skyparams = srctractor.images.getParams()
 
         enable_galaxy_cache()
-            
+
         # Compute the log-likehood without a source here.
         srccat[0] = None
 
@@ -720,7 +720,7 @@ class OneBlob(object):
             co,nil = quick_coadds(srctims, self.bands, srcwcs, images=res)
             rgb = get_rgb(co, self.bands, **rgbkwargs)
             model_resid_rgb['none'] = rgb
-            
+
         chisqs_none = _per_band_chisqs(srctractor, self.bands)
 
         nparams = dict(ptsrc=2, simple=2, rex=3, exp=5, dev=5, comp=9)
@@ -740,7 +740,7 @@ class OneBlob(object):
             rex = simple
         else:
             simname = 'simple'
-            
+
         trymodels = [('ptsrc', ptsrc)]
 
         if oldmodel == 'ptsrc':
@@ -766,7 +766,7 @@ class OneBlob(object):
         cputimes = {}
         for name,newsrc in trymodels:
             cpum0 = time.clock()
-            
+
             if name == 'gals':
                 # If 'simple' was better than 'ptsrc', or the source is
                 # bright, try the galaxy models.
@@ -875,7 +875,7 @@ class OneBlob(object):
                 co,nil = quick_coadds(srctims, self.bands, srcwcs, images=res)
                 rgb = get_rgb(co, self.bands, **rgbkwargs)
                 model_resid_rgb[name] = rgb
-            
+
             # Compute inverse-variances for each source.
             # Convert to "vanilla" ellipse parameterization
             # (but save old shapes first)
@@ -890,7 +890,7 @@ class OneBlob(object):
                 # We have to freeze the sky here before computing
                 # uncertainties
                 srctractor.freezeParam('images')
-                
+
             nsrcparams = newsrc.numberOfParams()
             _convert_ellipses(newsrc)
             assert(newsrc.numberOfParams() == nsrcparams)
@@ -915,7 +915,7 @@ class OneBlob(object):
             #
             srctractor.setModelMasks(newsrc_mm)
             ch = _per_band_chisqs(srctractor, self.bands)
-                
+
             chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
             cpum1 = time.clock()
             B.all_model_cpu[srci][name] = cpum1 - cpum0
@@ -1094,12 +1094,8 @@ class OneBlob(object):
                           keepmod, str(keepsrc), str(src)), fontsize=10)
             self.ps.savefig()
 
-
-
-            
-
         return keepsrc
-        
+
     def _optimize_individual_sources(self, tr, cat, Ibright, cputime):
         # Single source (though this is coded to handle multiple sources)
         # Fit sources one at a time, but don't subtract other models
@@ -1121,10 +1117,10 @@ class OneBlob(object):
             # print(cat[i])
             cpu1 = time.clock()
             cputime[i] += (cpu1 - cpu0)
-            
+
         tr.setModelMasks(None)
         disable_galaxy_cache()
-        
+
     def tractor(self, tims, cat):
         tr = Tractor(tims, cat, **self.trargs)
         tr.freezeParams('images')
@@ -1140,7 +1136,7 @@ class OneBlob(object):
         #   -fit, with Catalog([src])
         #   -subtract final model (from each tim)
         # -Replace original images
-    
+
         models = SourceModels()
         # Remember original tim images
         models.save_images(self.tims)
@@ -1155,16 +1151,16 @@ class OneBlob(object):
             src = cat[srci]
             # Add this source's initial model back in.
             models.add(srci, self.tims)
-    
+
             if self.bigblob:
                 # Create super-local sub-sub-tims around this source
-    
+
                 # Make the subimages the same size as the modelMasks.
                 #tbb0 = Time()
                 mods = [mod[srci] for mod in models.models]
                 srctims,modelMasks = _get_subimages(self.tims, mods, src)
                 #print('Creating srctims:', Time()-tbb0)
-    
+
                 # We plots only the first & last three sources
                 if self.plots_per_source and (numi < 3 or numi >= len(Ibright)-3):
                     plt.clf()
@@ -1190,7 +1186,7 @@ class OneBlob(object):
                     plt.title('source %i of %i' % (numi, len(Ibright)))
                     plt.axis(ax)
                     self.ps.savefig()
-    
+
             else:
                 srctims = self.tims
                 modelMasks = models.model_masks(srci, src)
@@ -1199,7 +1195,7 @@ class OneBlob(object):
             srctractor = self.tractor(srctims, [src])
             #print('Setting modelMasks:', modelMasks)
             srctractor.setModelMasks(modelMasks)
-            
+
             # if plots and False:
             #     spmods,spnames = [],[]
             #     spallmods,spallnames = [],[]
@@ -1208,12 +1204,12 @@ class OneBlob(object):
             #         spallnames.append('Initial (all)')
             #     spmods.append(list(srctractor.getModelImages()))
             #     spnames.append('Initial')
-    
+
             # First-round optimization
             #print('First-round initial log-prob:', srctractor.getLogProb())
             srctractor.optimize_loop(**self.optargs)
             #print('First-round final log-prob:', srctractor.getLogProb())
-    
+
             # if plots and False:
             #     spmods.append(list(srctractor.getModelImages()))
             #     spnames.append('Fit')
@@ -1253,21 +1249,21 @@ class OneBlob(object):
             #                rgb_format='Blob %i, src %i: %%s' % (iblob, i))
             #     for tim,im in zip(tims, tempims):
             #         tim.data = im
-    
+
             # Re-remove the final fit model for this source
             models.update_and_subtract(srci, src, self.tims)
-    
+
             srctractor.setModelMasks(None)
             disable_galaxy_cache()
-    
+
             #print('Fitting source took', Time()-tsrc)
             #print(src)
             cpu1 = time.clock()
             cputime[srci] += (cpu1 - cpu0)
-            
+
         models.restore_images(self.tims)
         del models
-    
+
     def _fit_fluxes(self, cat, tims, bands):
         cat.thawAllRecursive()
         for src in cat:
@@ -1277,7 +1273,6 @@ class OneBlob(object):
                 src.getBrightness().freezeAllBut(b)
             # Images for this band
             btims = [tim for tim in tims if tim.band == b]
-    
             btr = self.tractor(btims, cat)
             btr.optimize_forced_photometry(shared_params=False, wantims=False)
         cat.thawAllRecursive()
@@ -1304,14 +1299,14 @@ class OneBlob(object):
                                        fill_holes=False)
             dimshow(get_rgb(coimgs,self.bands, **rgbkwargs_resid))
             return
-            
+
         mods = None
         if model is not None:
             mods = list(model.getModelImages())
         coimgs,cons = quick_coadds(tims, self.bands, wcs, images=mods,
                                    fill_holes=False)
         dimshow(get_rgb(coimgs,self.bands))
-        
+
     def _initial_plots(self):
         debug('Plotting blob image for blob', self.name)
         coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
@@ -1346,7 +1341,7 @@ class OneBlob(object):
         #              color=ccmap[tim.band])
         # plt.xlabel('signal/noise per pixel')
         # self.ps.savefig()
-        
+
     def create_tims(self, timargs):
         # In order to make multiprocessing easier, the one_blob method
         # is passed all the ingredients to make local tractor Images
@@ -1512,11 +1507,10 @@ def _compute_source_metrics(srcs, tims, bands, tr):
                     np.sum((mod[slc] - patch) * np.abs(patch)) /
                     np.sum(patch**2))
                 fracflux_den[isrc,iband] += fin
-                
+
                 fracmasked_num[isrc,iband] += (
                     np.sum((tim.getInvError()[slc] == 0) * np.abs(patch)) /
                     np.abs(counts[isrc]))
-                    
                 fracmasked_den[isrc,iband] += fin
 
                 fracin_num[isrc,iband] += np.abs(np.sum(patch))
@@ -1544,7 +1538,7 @@ def _compute_source_metrics(srcs, tims, bands, tr):
 
     #print('Fracflux_num:', fracflux_num)
     #print('Fracflux_den:', fracflux_den)
-                
+
     fracflux   = fracflux_num   / fracflux_den
     rchi2      = rchi2_num      / rchi2_den
     fracmasked = fracmasked_num / fracmasked_den
@@ -1693,7 +1687,7 @@ class SourceModels(object):
     '''
     def __init__(self):
         self.filledModelMasks = True
-    
+
     def save_images(self, tims):
         self.orig_images = [tim.getImage() for tim in tims]
         for tim,img in zip(tims, self.orig_images):
@@ -1975,4 +1969,3 @@ def get_inblob_map(blobwcs, refs):
 
             blobmap[ylo:yhi, xlo:xhi] |= (bitval * masked)
     return blobmap
-

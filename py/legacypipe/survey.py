@@ -8,6 +8,7 @@ import numpy as np
 import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
+from astrometry.util.file import trymakedirs
 
 from tractor.ellipses import EllipseESoft, EllipseE
 from tractor.galaxy import ExpGalaxy
@@ -1356,11 +1357,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
             def __enter__(self):
                 dirnm = os.path.dirname(self.tmpfn)
-                if not os.path.exists(dirnm):
-                    try:
-                        os.makedirs(dirnm)
-                    except:
-                        pass
+                trymakedirs(dirnm)
                 return self
 
             def __exit__(self, exc_type, exc_value, traceback):

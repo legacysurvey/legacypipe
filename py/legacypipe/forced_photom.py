@@ -82,7 +82,6 @@ def get_parser():
 
 def main(survey=None, opt=None):
 
-    import sys
     print(' '.join(sys.argv))
 
     '''Driver function for forced photometry of individual Legacy

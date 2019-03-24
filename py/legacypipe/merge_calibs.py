@@ -278,6 +278,6 @@ def merge_splinesky(survey, expnum, C, skyoutfn, opt):
     os.rename(tmpfn, fn)
     print('Wrote', fn)
     return 1
-        
+
 if __name__ == '__main__':
     main()

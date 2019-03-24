@@ -29,9 +29,11 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     '''
     from tractor import NanoMaggies, PointSource, Tractor, ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
 
-    # PSF broadening in post-reactivation data, by band.
-    # Newer version from Aaron's email to decam-chatter, 2018-06-14.
-    broadening = { 1: 1.0405, 2: 1.0346, 3: None, 4: None }
+    if not pixelized_psf and psf_broadening is None:
+        # PSF broadening in post-reactivation data, by band.
+        # Newer version from Aaron's email to decam-chatter, 2018-06-14.
+        broadening = { 1: 1.0405, 2: 1.0346, 3: None, 4: None }
+        psf_broadening = broadening[band]
 
     if False:
         from astrometry.util.plotutils import PlotSequence
@@ -338,7 +340,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             src.halfsize = int(np.hypot(R, galrad * 5 / pixscale))
 
     print('Set source sizes:', nbig, 'big', nmedium, 'medium', nsmall, 'small')
-            
+
     minsb = 0.
     fitsky = False
 
