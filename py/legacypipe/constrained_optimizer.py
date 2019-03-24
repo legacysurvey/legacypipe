@@ -1,5 +1,4 @@
 from __future__ import print_function
-from tractor.optimize import Optimizer
 from tractor.lsqr_optimizer import LsqrOptimizer
 import numpy as np
 
@@ -12,13 +11,13 @@ class ConstrainedOptimizer(LsqrOptimizer):
         R = {}
         self.hitLimit = False
         for step in range(steps):
-            dlnp, X, alpha = self.optimize(tractor, **kwargs)
+            dlnp,X,_ = self.optimize(tractor, **kwargs)
             if dlnp <= dchisq:
                 break
         R.update(steps=step)
         R.update(hit_limit=self.hitLimit)
         return R
-    
+
     def tryUpdates(self, tractor, X, alphas=None):
         if alphas is None:
             # 1/1024 to 1 in factors of 2, + sqrt(2.) + 2.
@@ -35,7 +34,7 @@ class ConstrainedOptimizer(LsqrOptimizer):
         # print('Parameters:', tractor.getParamNames())
         # print('  lower bounds:', lowers)
         # print('  upper bounds:', uppers)
-        
+
         for alpha in alphas:
             #logverb('  Stepping with alpha =', alpha)
             pa = [p + alpha * d for p, d in zip(p0, X)]
@@ -65,7 +64,7 @@ class ConstrainedOptimizer(LsqrOptimizer):
                 print('Tiny maxalpha; bailing out without parameter update')
                 self.hitLimit = True
                 break
-                    
+
             if maxalpha < alpha:
                 alpha = maxalpha
                 bailout = True
@@ -94,7 +93,7 @@ class ConstrainedOptimizer(LsqrOptimizer):
             #logverb('  delta log-prob:', pAfter - pBefore)
 
             #print('Step', alpha, 'p', pAfter, 'dlnp', pAfter-pBefore)
-            
+
             if not np.isfinite(pAfter):
                 logmsg('  Got bad log-prob', pAfter)
                 break
@@ -124,6 +123,3 @@ class ConstrainedOptimizer(LsqrOptimizer):
         pa = [p + alphaBest * d for p, d in zip(p0, X)]
         tractor.setParams(pa)
         return pBest - pBefore, alphaBest
-
-
-

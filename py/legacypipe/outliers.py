@@ -11,8 +11,6 @@ def debug(*args):
     log_debug(logger, args)
 
 def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
-    from astrometry.util.resample import resample_with_wcs, OverlapError
-
     H,W = targetwcs.shape
     ibands = dict([(b,i) for i,b in enumerate(bands)])
     for tim in tims:
@@ -53,7 +51,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
         badcoadds = []
 
     # Build blurred reference image
-    for iband,band in enumerate(bands):
+    for band in bands:
         btims = [tim for tim in tims if tim.band == band]
         if len(btims) == 0:
             continue
@@ -234,7 +232,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             # Actually do the masking!
             # Resample "hot" (in brick coords) back to tim coords.
             try:
-                mYo,mXo,mYi,mXi,nil = resample_with_wcs(
+                mYo,mXo,mYi,mXi,_ = resample_with_wcs(
                     tim.subwcs, targetwcs, [], 3)
             except OverlapError:
                 continue

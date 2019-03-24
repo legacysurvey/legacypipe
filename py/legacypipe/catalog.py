@@ -29,7 +29,7 @@ fits_short_typemap = { PointSource: 'P',
 
 def _typestring(t):
     return '%s.%s' % (t.__module__, t.__name__)
-    
+
 ellipse_types = dict([(_typestring(t), t) for t in
                       [ EllipseESoft, EllipseE, ]])
 
@@ -43,7 +43,6 @@ def _source_param_types(src):
     #print('Source param types:', tree)
     types = flatten_node(tree)
     return types
-    
 
 def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
                          prefix='', save_invvars=True, unpackShape=True):
@@ -139,7 +138,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
     flux = T.get('%s%s' % (prefix, 'flux'))
     iv = T.get('%s%s' % (prefix, 'flux_ivar'))
     flux[iv == 0] = 0.
-    
+
     return T, hdr
 
 # We'll want to compute errors in our native representation, so have a
@@ -218,7 +217,7 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
     if hdr is None:
         hdr = T._header
     if allbands is None:
-        allbands = bands    
+        allbands = bands
     rev_typemap = dict([(v,k) for k,v in fits_typemap.items()])
 
     if unpackShape and ellipseClass != EllipseE:
@@ -228,13 +227,11 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
         T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
         T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
 
-    ivbandcols = []
-
     ibands = np.array([allbands.index(b) for b in bands])
 
     ivs = []
     cat = []
-    for i,t in enumerate(T):
+    for t in T:
         clazz = rev_typemap[t.type.strip()]
         pos = RaDecPos(t.ra, t.dec)
         assert(np.isfinite(t.ra))
@@ -253,7 +250,7 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                 fluxes[b] = t.get(fluxPrefix + 'flux_' + b)
                 assert(np.all(np.isfinite(fluxes[b])))
             br = NanoMaggies(order=bands, **fluxes)
-            
+
         params = [pos, br]
         if invvars:
             # ASSUME & hard-code that the position and brightness are
@@ -291,7 +288,7 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                     ivs.extend(t.shapedev_ivar)
                 else:
                     ivs.extend(t.shapeexp_ivar)
-            
+
         elif issubclass(clazz, FixedCompositeGalaxy):
             # hard-code knowledge that params are fracDev, shapeE, shapeD
             assert(np.isfinite(t.fracdev))
@@ -330,4 +327,3 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
         ivs[np.logical_not(np.isfinite(ivs))] = 0
         return cat, ivs
     return cat
-
