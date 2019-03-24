@@ -136,7 +136,7 @@ def merge_psfex(survey, expnum, C, psfoutfn, opt):
         T = fits_table(fn)
         hdr = fitsio.read_header(fn, ext=1)
 
-        keys = ['LOADED', 'ACCEPTED', 'CHI2', 'POLNAXIS', 
+        keys = ['LOADED', 'ACCEPTED', 'CHI2', 'POLNAXIS',
                 'POLNGRP', 'PSF_FWHM', 'PSF_SAMP', 'PSFNAXIS',
                 'PSFAXIS1', 'PSFAXIS2', 'PSFAXIS3',]
 
