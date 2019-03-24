@@ -11,7 +11,7 @@ class ConstrainedOptimizer(LsqrOptimizer):
         R = {}
         self.hitLimit = False
         for step in range(steps):
-            dlnp,X,_ = self.optimize(tractor, **kwargs)
+            dlnp,_,_ = self.optimize(tractor, **kwargs)
             if dlnp <= dchisq:
                 break
         R.update(steps=step)

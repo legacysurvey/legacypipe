@@ -857,7 +857,7 @@ def bricks_touching_wcs(targetwcs, survey=None, B=None, margin=20):
 
     # MAGIC 0.4 degree search radius =
     # DECam hypot(1024,2048)*0.27/3600 + Brick hypot(0.25, 0.25) ~= 0.35 + margin
-    I,J,_ = match_radec(B.ra, B.dec, ra, dec,
+    I,_,_ = match_radec(B.ra, B.dec, ra, dec,
                         radius + np.hypot(0.25,0.25)/2. + 0.05)
     print(len(I), 'bricks nearby')
     keep = []
