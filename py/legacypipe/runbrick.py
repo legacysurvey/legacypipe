@@ -589,7 +589,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             # Add this image the the depth map...
             from astrometry.util.resample import resample_with_wcs, OverlapError
             try:
-                Yo,Xo,Yi,Xi,_ = resample_with_wcs(coarsewcs, wcs)
+                Yo,Xo,_,_,_ = resample_with_wcs(coarsewcs, wcs)
                 debug(len(Yo), 'of', (cW*cH), 'pixels covered by this image')
             except OverlapError:
                 debug('No overlap')
@@ -1242,7 +1242,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         ps.savefig()
 
     # Segment, and record which sources fall into each blob
-    blobs,blobsrcs,_ = segment_and_group_sources(
+    blobs,blobsrcs,blobslices = segment_and_group_sources(
         np.logical_or(hot, reduce(np.logical_or, saturated_pix)),
         T, name=brickname, ps=ps, plots=plots)
     del hot
