@@ -737,7 +737,6 @@ class OneBlob(object):
 
         if self.rex:
             simname = 'rex'
-            rex = simple
         else:
             simname = 'simple'
 
@@ -835,10 +834,7 @@ class OneBlob(object):
             # First-round optimization (during model selection)
             #print('Optimizing: first round for', name, ':', len(srctims))
             #print(newsrc)
-            cpustep0 = time.clock()
             R = srctractor.optimize_loop(**self.optargs)
-            #print('Optimizing first round', name, 'took',
-            #      time.clock()-cpustep0)
             debug('Fit result:', newsrc)
             hit_limit = R.get('hit_limit', False)
             if hit_limit:
@@ -1038,7 +1034,6 @@ class OneBlob(object):
 
         # This is V2 of the model-selection plot
         if self.plots_per_source:
-            from collections import OrderedDict
             plt.clf()
             rows,cols = 3, 6
             modnames = ['none', 'ptsrc', simname, 'dev', 'exp', 'comp']
@@ -1105,16 +1100,12 @@ class OneBlob(object):
         models.create(self.tims, cat)
         enable_galaxy_cache()
 
-        for numi,i in enumerate(Ibright):
+        for i in Ibright:
             cpu0 = time.clock()
-            #print('Fitting source', i, '(%i of %i in blob)' %
-            #  (numi, len(Ibright)))
             cat.freezeAllBut(i)
             modelMasks = models.model_masks(0, cat[i])
             tr.setModelMasks(modelMasks)
             tr.optimize_loop(**self.optargs)
-            #print('Fitting source took', Time()-tsrc)
-            # print(cat[i])
             cpu1 = time.clock()
             cputime[i] += (cpu1 - cpu0)
 
@@ -1165,7 +1156,7 @@ class OneBlob(object):
                 if self.plots_per_source and (numi < 3 or numi >= len(Ibright)-3):
                     plt.clf()
                     # Recompute coadds because of the subtract-all-and-readd shuffle
-                    coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
+                    coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
                                                  fill_holes=False)
                     rgb = get_rgb(coimgs, self.bands)
                     dimshow(rgb)
@@ -1295,22 +1286,22 @@ class OneBlob(object):
     def _plot_coadd(self, tims, wcs, model=None, resid=None):
         if resid is not None:
             mods = list(resid.getChiImages())
-            coimgs,cons = quick_coadds(tims, self.bands, wcs, images=mods,
-                                       fill_holes=False)
+            coimgs,_ = quick_coadds(tims, self.bands, wcs, images=mods,
+                                    fill_holes=False)
             dimshow(get_rgb(coimgs,self.bands, **rgbkwargs_resid))
             return
 
         mods = None
         if model is not None:
             mods = list(model.getModelImages())
-        coimgs,cons = quick_coadds(tims, self.bands, wcs, images=mods,
-                                   fill_holes=False)
+        coimgs,_ = quick_coadds(tims, self.bands, wcs, images=mods,
+                                fill_holes=False)
         dimshow(get_rgb(coimgs,self.bands))
 
     def _initial_plots(self):
         debug('Plotting blob image for blob', self.name)
-        coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
-                                     fill_holes=False)
+        coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
+                                fill_holes=False)
         self.rgb = get_rgb(coimgs, self.bands)
         plt.clf()
         dimshow(self.rgb)
@@ -1354,8 +1345,8 @@ class OneBlob(object):
             subwcs = wcs.get_subimage(int(sx0), int(sy0),
                                       int(sx1-sx0), int(sy1-sy0))
             try:
-                Yo,Xo,Yi,Xi,rims = resample_with_wcs(subwcs, self.blobwcs,
-                                                     [], 2)
+                Yo,Xo,Yi,Xi,_ = resample_with_wcs(subwcs, self.blobwcs,
+                                                  [], 2)
             except OverlapError:
                 continue
             if len(Yo) == 0:
@@ -1400,7 +1391,7 @@ def _convert_ellipses(src):
 
 def _compute_invvars(allderivs):
     ivs = []
-    for iparam,derivs in enumerate(allderivs):
+    for derivs in allderivs:
         chisq = 0
         for deriv,tim in derivs:
             h,w = tim.shape
@@ -1899,7 +1890,7 @@ def _chisq_improvement(src, chisqs, chisqs_none):
 
 def _per_band_chisqs(tractor, bands):
     chisqs = dict([(b,0) for b in bands])
-    for i,img in enumerate(tractor.images):
+    for img in tractor.images:
         chi = tractor.getChiImage(img=img)
         chisqs[img.band] = chisqs[img.band] + (chi ** 2).sum()
     return chisqs
