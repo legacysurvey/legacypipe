@@ -8,7 +8,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     
     from legacypipe.survey import GaiaSource
     from legacypipe.survey import LegacyEllipseWithPriors
-    from tractor import PointSource, NanoMaggies, RaDecPos
+    from tractor import NanoMaggies, RaDecPos
     from tractor.galaxy import ExpGalaxy
     from tractor.ellipses import EllipseESoft
 
@@ -50,7 +50,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
             cosdec = np.cos(np.deg2rad(gaia.dec))
             gra  = gaia.ra +  (1991.5 - gaia.ref_epoch) * gaia.pmra  / (3600.*1000.) / cosdec
             gdec = gaia.dec + (1991.5 - gaia.ref_epoch) * gaia.pmdec / (3600.*1000.)
-            I,J,d = match_radec(tycho.ra, tycho.dec, gra, gdec, 1./3600.,
+            I,J,_ = match_radec(tycho.ra, tycho.dec, gra, gdec, 1./3600.,
                                 nearest=True)
             #print('Matched', len(I), 'Tycho-2 stars to Gaia stars.')
             if len(I):
@@ -285,11 +285,11 @@ def read_large_galaxies(survey, targetwcs):
     # Read only the rows within range.
     galaxies = fits_table(galfn, rows=I, columns=['ra', 'dec', 'd25', 'mag', 'lslga_id', 'ba', 'pa'])
     del kd
-    ok,xx,yy = targetwcs.radec2pixelxy(galaxies.ra, galaxies.dec)
-    H,W = targetwcs.shape
 
     # # D25 is diameter in arcmin
     # pixsizes = gals.d25 * (60./2.) / targetwcs.pixel_scale()
+    # ok,xx,yy = targetwcs.radec2pixelxy(galaxies.ra, galaxies.dec)
+    # H,W = targetwcs.shape
     # gals.cut(ok * (xx > -pixsizes) * (xx < W+pixsizes) *
     #          (yy > -pixsizes) * (yy < H+pixsizes))
     # print('Cut to', len(gals), 'large galaxies touching brick')
