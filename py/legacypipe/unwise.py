@@ -189,7 +189,6 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 except OverlapError:
                     # Shouldn't happen by this point
                     print('No overlap between WISE tile', tile.coadd_id, 'and brick')
-                    pass
 
         # The tiles have some overlap, so zero out pixels outside the
         # tile's unique area.
@@ -210,7 +209,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             tag = '%s W%i' % (tile.coadd_id, band)
             plt.title('%s: tim data (unique)' % tag)
             ps.savefig()
-        
+
         del xx,yy,rr,dd,unique
 
         wcs = tim.wcs.wcs
@@ -228,7 +227,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         phot.wise_coadd_id[I] = tile.coadd_id
         central_flux[I] = tim.getImage()[y[I], x[I]]
         del x,y,good,usrc
-        
+
         if pixelized_psf:
             import unwise_psf
             psfimg = unwise_psf.get_unwise_psf(band, tile.coadd_id)
@@ -271,7 +270,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             tim.psf = PixelizedPSF(psfimg)
             #print('### HACK ### normalized PSF to 1.0')
             print('Set PSF to', tim.psf)
-        
+
         if psf_broadening is not None and not pixelized_psf:
             # psf_broadening is a factor by which the PSF FWHMs
             # should be scaled; the PSF is a little wider
@@ -314,7 +313,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     #- central pixel <= 1000: 19x19 pix box size
     #- central pixel in 1000 - 20000: 59x59 box size
     #- central pixel > 20000 or saturated: 149x149 box size
-    #- object near "bright star": 299x299 box size 
+    #- object near "bright star": 299x299 box size
     nbig = nmedium = nsmall = 0
     for src,cflux in zip(cat, central_flux):
         if cflux > 20000:
@@ -371,7 +370,6 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 'Ceres terminated with status %i' % term)
 
     if wantims:
-        ims0 = R.ims0
         ims1 = R.ims1
     flux_invvars = R.IV
     if R.fitstats is not None:
@@ -584,7 +582,6 @@ def unwise_tiles_touching_wcs(wcs, polygons=True):
     Returns a FITS table (with RA,Dec,coadd_id) of unWISE tiles
     '''
     from astrometry.util.miscutils import polygons_intersect
-    from astrometry.util.fits import fits_table
     from astrometry.util.starutil_numpy import degrees_between
 
     from pkg_resources import resource_filename
