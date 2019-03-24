@@ -1,5 +1,4 @@
 from __future__ import print_function
-import sys
 
 import numpy as np
 
@@ -24,6 +23,7 @@ def main(args=None):
                         help='Prefix on FLUX etc columns (eg, "decam_" to match DR3) for output file')
     parser.add_argument('--in-flux-prefix', default='',
                         help='Prefix on FLUX etc columns (eg, "decam_" to match DR3) for input file')
+    parser.add_argument('--release', type=int, default=8000)
 
     opt = parser.parse_args(args=args)
 
@@ -35,7 +35,7 @@ def main(args=None):
     primhdr = fitsio.read_header(opt.infn)
     allbands = opt.allbands
 
-    format_catalog(T, hdr, primhdr, allbands, opt.out,
+    format_catalog(T, hdr, primhdr, allbands, opt.out, opt.release,
                    in_flux_prefix=opt.in_flux_prefix,
                    flux_prefix=opt.flux_prefix)
     T.writeto(opt.out)
@@ -64,7 +64,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
     # Nans,Infs
     # Ivar -> 0
     ivar_nans= ['ra_ivar','dec_ivar',
-                'shapeexp_r_ivar','shapeexp_e1_ivar','shapeexp_e2_ivar'] 
+                'shapeexp_r_ivar','shapeexp_e1_ivar','shapeexp_e2_ivar']
     for key in ivar_nans:
         ind= np.isfinite(T.get(key)) == False
         if np.any(ind):
@@ -185,7 +185,9 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
     def add_fluxlike(c):
         for b in allbands:
             cols.append('%s%s_%s' % (flux_prefix, c, b))
-    def add_wiselike(c, bands=wbands):
+    def add_wiselike(c, bands=None):
+        if bands is None:
+            bands = wbands
         for b in bands:
             cols.append('%s_%s' % (c, b))
 
@@ -295,4 +297,3 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
 
 if __name__ == '__main__':
     main()
-    
