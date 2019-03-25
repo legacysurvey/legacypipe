@@ -1238,8 +1238,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             return swap(os.path.join(basedir, 'tractor', brickpre,
                                      'brick-%s.sha256sum' % brick))
         elif filetype == 'outliers_mask':
-            return swap(os.path.join(basedir, 'metrics', brickpre, brick,
-                                     'outlier-mask-%s-%s-%s.fits.fz' % (camera, expnum, ccdname)))
+            return swap(os.path.join(basedir, 'metrics', brickpre, 
+                                     'outlier-mask-%s.fits.fz' % (brick)))
 
         print('Unknown filetype "%s"' % filetype)
         assert(False)
@@ -1272,19 +1272,20 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
     def get_compression_string(self, filetype, shape=None, **kwargs):
         pat = dict(# g: sigma ~ 0.002.  qz -1e-3: 6 MB, -1e-4: 10 MB
-            image = '[compress R %i,%i; qz -1e-4]',
+            image = '[compress R %(tilew)i,%(tileh)i; qz -1e-4]',
             # g: qz -1e-3: 2 MB, -1e-4: 2.75 MB
-            model = '[compress R %i,%i; qz -1e-4]',
-            chi2  = '[compress R %i,%i; qz -0.1]',
+            model = '[compress R %(tilew)i,%(tileh)i; qz -1e-4]',
+            chi2  = '[compress R %(tilew)i,%(tileh)i; qz -0.1]',
             # qz +8: 9 MB, qz +16: 10.5 MB
-            invvar = '[compress R %i,%i; qz 16]',
-            nexp   = '[compress H %i,%i]',
-            maskbits = '[compress H %i,%i]',
-            depth  = '[compress G %i,%i; qz 0]',
-            galdepth = '[compress G %i,%i; qz 0]',
-            psfsize = '[compress G %i,%i; qz 0]',
-            outliers_mask = '[compress H %i,%i]',
+            invvar = '[compress R %(tilew)i,%(tileh)i; qz 16]',
+            nexp   = '[compress H %(tilew)i,%(tileh)i]',
+            maskbits = '[compress H %(tilew)i,%(tileh)i]',
+            depth  = '[compress G %(tilew)i,%(tileh)i; qz 0]',
+            galdepth = '[compress G %(tilew)i,%(tileh)i; qz 0]',
+            psfsize = '[compress G %(tilew)i,%(tileh)i; qz 0]',
+            outliers_mask = '[compress G]',
         ).get(filetype)
+        #outliers_mask = '[compress H %i,%i]',
         if pat is None:
             return pat
         # Tile compression size
@@ -1306,7 +1307,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 if remain == 0 or remain >= 4:
                     break
                 tileh += 1
-        return pat % (tilew,tileh)
+        return pat % dict(tilew=tilew,tileh=tileh)
 
     def write_output(self, filetype, hashsum=True, **kwargs):
         '''
