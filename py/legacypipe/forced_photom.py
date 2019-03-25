@@ -16,7 +16,6 @@ from astrometry.util.ttime import Time, MemMeas
 
 from tractor import Tractor, Catalog, NanoMaggies
 from tractor.galaxy import disable_galaxy_cache
-from tractor.ellipses import EllipseE
 
 from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version_header, apertures_arcsec
 from catalog import read_fits_catalog
@@ -82,7 +81,6 @@ def get_parser():
 
 def main(survey=None, opt=None):
 
-    import sys
     print(' '.join(sys.argv))
 
     '''Driver function for forced photometry of individual Legacy
@@ -113,7 +111,6 @@ def main(survey=None, opt=None):
 
     ps = None
     if opt.plots is not None:
-        import pylab as plt
         from astrometry.util.plotutils import PlotSequence
         ps = PlotSequence(opt.plots)
 
@@ -240,7 +237,7 @@ def bounce_one_ccd(X):
     return run_one_ccd(*X)
 
 def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
-    t0 = tlast = Time()
+    tlast = Time()
 
     im = survey.get_image_object(ccd)
 
@@ -333,9 +330,6 @@ def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
         I = np.flatnonzero(T.ref_epoch > 0)
         if len(I):
             from legacypipe.survey import radec_at_mjd
-            orig_ra = T.ra.copy()
-            orig_dec = T.dec.copy()
-
             print('Moving', len(I), 'Gaia stars to MJD', tim.time.toMjd())
             ra,dec = radec_at_mjd(T.ra[I], T.dec[I], T.ref_epoch[I].astype(float),
                                   T.pmra[I], T.pmdec[I], T.parallax[I],
@@ -498,9 +492,8 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         opti = CeresOptimizer(BW=B, BH=B)
         #forced_kwargs.update(verbose=True)
 
-    nsize = 0
+    # nsize = 0
     for src in cat:
-
         # Limit sizes of huge models
         # from tractor.galaxy import ProfileGalaxy
         # if isinstance(src, ProfileGalaxy):

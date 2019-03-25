@@ -12,7 +12,7 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
 
     haloimgs = [np.zeros((H,W),np.float32) for b in bands]
     fitvalues = []
-    
+
     for istar,g in enumerate(gaia):
         print('Star w/ G=', g.G)
         ok,x,y = targetwcs.radec2pixelxy(g.ra, g.dec)
@@ -28,13 +28,12 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
         radii = np.arange(15, pixrad, 5)
         minr = int(radii[0])
         maxr = int(radii[-1])
-        fitr = maxr
         # Apodization fraction
         apr = maxr*0.8
 
         # segment percentile to fit
         segpct = 10
-        
+
         ylo,yhi = max(0,iy-maxr), min(H,iy+maxr+1)
         xlo,xhi = max(0,ix-maxr), min(W,ix+maxr+1)
         if yhi-ylo <= 1 or xhi-xlo <= 1:
@@ -45,7 +44,7 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
         r2 = ((np.arange(ylo, yhi)[:,np.newaxis] - y)**2 +
               (np.arange(xlo, xhi)[np.newaxis,:] - x)**2)
         rads = np.sqrt(r2)
-        # 
+        #
         apodize = np.clip((rads - maxr) / (apr - maxr), 0., 1.)
 
         # Pre-compute power-law profile shape
@@ -58,7 +57,7 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
             rimgs = []
 
         fit_fluxes = []
-        
+
         for iband,band in enumerate(bands):
             rimg = (coimgs[iband][ylo:yhi, xlo:xhi] -
                     haloimgs[iband][ylo:yhi, xlo:xhi])
@@ -99,7 +98,7 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
                 rseg = np.array(rseg)
                 rseg = rseg[np.isfinite(rseg)]
                 if len(rseg):
-                    mn,lo,quart,med = np.percentile(rseg, [0, segpct, 25, 50])
+                    lo,quart,med = np.percentile(rseg, [segpct, 25, 50])
                     rr.append((rlo+rhi)/2.)
                     mm.append(lo)
                     dm.append(((med-quart)/2.))
@@ -135,7 +134,7 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
             haloimgs[iband][ylo:yhi, xlo:xhi] += K * mod * apodize
             fit_fluxes.append(F)
         fitvalues.append((fit_fluxes, fixed_alpha, minr, maxr, apr))
-            
+
         if False and plots:
             # plt.clf()
             # for band,fit in zip(bands,fits):
@@ -150,25 +149,25 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
             dimshow(get_rgb(rimgs, bands, **rgbkwargs))
             plt.title('rimg')
             ps.savefig()
-            
+
             plt.clf()
             dimshow(get_rgb(segpros, bands, **rgbkwargs))
             plt.title('rseg')
             ps.savefig()
-            
+
             plt.clf()
             dimshow(get_rgb(profiles, bands, **rgbkwargs))
             plt.title('rpro')
             ps.savefig()
-            
+
             plt.clf()
             dimshow(get_rgb(fitpros, bands, **rgbkwargs))
             plt.title('r fit')
             ps.savefig()
-            
+
             plt.clf()
             dimshow(get_rgb([co[ylo:yhi,xlo:xhi] - halo[ylo:yhi,xlo:xhi] for co,halo in zip(coimgs,haloimgs)], bands, **rgbkwargs))
             plt.title('data - r fit (fixed)')
             ps.savefig()
-            
+
     return fitvalues,haloimgs

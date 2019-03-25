@@ -55,15 +55,8 @@ from __future__ import print_function
 import sys
 import os
 import numpy as np
-from collections import OrderedDict
-from glob import glob
-
-import matplotlib
-matplotlib.use('Agg')
-import pylab as plt
 
 from astrometry.util.fits import fits_table
-from astrometry.util.file import trymakedirs
 
 from legacypipe.survey import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
@@ -107,7 +100,7 @@ def main():
     parser.add_argument('--command', action='store_true',
                       help='Write out full command-line to run calib')
     parser.add_argument('--opt', help='With --command, extra options to add')
-    
+
     parser.add_argument('--maxra', type=float, help='Maximum RA to run')
     parser.add_argument('--minra', type=float, help='Minimum RA to run')
     parser.add_argument('--maxdec', type=float, help='Maximum Dec to run')
@@ -386,7 +379,7 @@ def main():
         dlo,dhi = -10., 90. # -10: pull in Stripe 82 data too
 
     elif opt.region == 'dr4-bootes':
-        # https://desi.lbl.gov/trac/wiki/DecamLegacy/DR4sched 
+        # https://desi.lbl.gov/trac/wiki/DecamLegacy/DR4sched
         #dlo,dhi = 34., 35.
         #rlo,rhi = 209.5, 210.5
         dlo,dhi = 33., 36.
@@ -430,7 +423,7 @@ def main():
     elif opt.region == 'dr8-test-overlap':
         rlo, rhi = 132, 140.5
         dlo, dhi = 31.5, 35
-        
+
     if opt.mindec is not None:
         dlo = opt.mindec
     if opt.maxdec is not None:
@@ -514,7 +507,7 @@ def main():
         # f1.close()
         # f2.close()
         # log('Wrote *-names.txt')
-        
+
     if opt.touching:
 
         if want_bricks:
@@ -575,7 +568,6 @@ def main():
     if opt.nccds:
         from queue import Queue
         from threading import Thread
-        from time import sleep
 
         log('Checking number of CCDs per brick')
 
@@ -712,7 +704,7 @@ def main():
         cmd = 'python legacypipe/run-calib.py '
         if opt.opt is not None:
             cmd += opt.opt + ' '
-        
+
     for j,i in enumerate(allI):
 
         if opt.delete_sky:
@@ -735,7 +727,7 @@ def main():
         else:
             s = '%i' % T.index[i]
             prefix = ''
-            
+
         if j < 10:
             print('Index', T.index[i], 'expnum', T.expnum[i], 'ccdname', T.ccdname[i],
                   'filename', T.image_filename[i])

@@ -543,10 +543,6 @@ def main():
 
     nnhist = 6
 
-    gdepth = []
-    rdepth = []
-    zdepth = []
-
     ibricks = []
     nsrcs = []
     npsf  = []

@@ -3,7 +3,7 @@ import numpy as np
 
 import astropy.time
 
-from legacypipe.image import LegacySurveyImage, CP_DQ_BITS
+from legacypipe.image import LegacySurveyImage
 from legacypipe.utils import read_primary_header
 
 import logging

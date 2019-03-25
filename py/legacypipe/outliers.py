@@ -11,7 +11,6 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
-
 OUTLIER_POS = 1
 OUTLIER_NEG = 2
 
@@ -341,9 +340,6 @@ def blur_resample_one(X):
     blurnorm = 1./(2. * np.sqrt(np.pi) * sig)
     wt = tim.getInvvar()[Yi,Xi] / (blurnorm**2)
     return (Yo.astype(np.int16), Xo.astype(np.int16), rimg*wt, wt, tim.dq[Yi,Xi])
-
-
-
 
 def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
     from astrometry.util.resample import resample_with_wcs, OverlapError

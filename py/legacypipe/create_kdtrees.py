@@ -50,7 +50,7 @@ def pre_depthcut():
         infn = indir + 'survey-ccds-decam-%s.fits.gz' % band
         print('Input:', infn)
         outfn = outdir + '/survey-ccds-decam-%s.kd.fits' % band
-        create_kdtree(infn, outfn)
+        create_kdtree(infn, outfn, True)
 
 if __name__ == '__main__':
     import argparse
@@ -58,6 +58,6 @@ if __name__ == '__main__':
     parser.add_argument('infn', help='Input filename (CCDs file)')
     parser.add_argument('outfn', help='Output filename (survey-ccds-X.kd.fits file')
     parser.add_argument('--no-cut', dest='ccd_cuts', default=True, action='store_false')
-    
+
     opt = parser.parse_args()
     create_kdtree(opt.infn, opt.outfn, opt.ccd_cuts)
