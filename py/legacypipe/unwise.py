@@ -450,7 +450,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     nm[nm_ivar == 0] = 0.
 
     phot.set(wband + '_nanomaggies', nm.astype(np.float32))
-    phot.set(wband + '_nanomaggies_ivar', nm_ivar)
+    phot.set(wband + '_nanomaggies_ivar', nm_ivar.astype(np.float32))
     dnm = np.zeros(len(nm_ivar), np.float32)
     okiv = (nm_ivar > 0)
     dnm[okiv] = (1. / np.sqrt(nm_ivar[okiv])).astype(np.float32)
