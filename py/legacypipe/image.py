@@ -1096,30 +1096,29 @@ class LegacySurveyImage(object):
         psfdir = os.path.dirname(self.psffn)
         psfoutfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.fits')
         psftmpfn = psfoutfn + '.tmp'
-        cmds = ['psfex -c %s -PSF_DIR %s -PSF_SUFFIX .fits.tmp %s' %
-                (os.path.join(sedir, self.camera + '.psfex'),
-                 psfdir, self.sefn),
-                'modhead %s LEGPIPEV "%s" "legacypipe git version"' %
-                (psftmpfn, git_version),
-                'modhead %s PLVER "%s" "CP ver of image file"' %
-                (psftmpfn, plver),
-                'modhead %s PLPROCID "%s" "CP ver of image file"' %
-                (psftmpfn, plprocid),
-                'modhead %s IMGDSUM "%s" "DATASUM of image file"' %
-                (psftmpfn, datasum),
-                'modhead %s PROCDATE "%s" "DATE of image file"' %
-                (psftmpfn, procdate),
-                'modhead %s EXPNUM "%s" "exposure number"' %
-                (psftmpfn, self.expnum),
-                'mv %s %s' % (psftmpfn, psfoutfn),
-                ]
-        for cmd in cmds:
-            print(cmd)
-            rtn = os.system(cmd)
-            if rtn:
-                raise RuntimeError('Command failed: %s: return value: %i' %
-                                   (cmd,rtn))
+        cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .fits.tmp %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, self.sefn)
+        
+        rtn = os.system(cmd)
+        if rtn:
+            raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
+        
+        # Update the header
+        hlist = [
+            {'name': 'LEGPIPEV', 'value': git_version, 'comment': "legacypipe git version"},
+            {'name': 'EXPNUM',   'value': self.expnum, 'comment': "exponsure number"},
+            {'name': 'PLVER',    'value': plver,       'comment': "CP version"},
+            {'name': 'PLPROCID', 'value': plprocid,    'comment': "CP processing date hash"},
+            {'name': 'PROCDATE', 'value': procdate,    'comment': "DATE of image file"},
+            {'name': 'IMGDSUM',  'value': datasum,     'comment': "DATASUM of image file"}
+            ]
+        F = fitsio.FITS(psftmpfn)
+        F[1].write_keys(hlist)
 
+        cmd = 'mv %s %s' % (psftmpfn, psfoutfn)
+        rtn = os.system(cmd)
+        if rtn:
+            raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
+        
     def run_sky(self, splinesky=False, git_version=None, ps=None, survey=None,
                 gaia=True, release=0):
         from legacypipe.survey import get_version_header
@@ -1150,7 +1149,7 @@ class LegacySurveyImage(object):
         hdr.add_record(dict(name='PLVER', value=plver,
                             comment='CP ver of image file'))
         hdr.add_record(dict(name='PLPROCID', value=plprocid,
-                            comment='CP proc tag of image file'))
+                            comment='CP processing date hash'))
         hdr.add_record(dict(name='IMGDSUM', value=datasum,
                             comment='DATASUM of image file'))
         hdr.add_record(dict(name='PROCDATE', value=procdate,
