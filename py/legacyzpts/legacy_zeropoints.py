@@ -2840,7 +2840,7 @@ def main(image_list=None,args=None):
 
     '''
     from pkg_resources import resource_filename
-        
+
     assert(not args is None)
     assert(not image_list is None)
     t0 = Time()
