@@ -63,7 +63,7 @@ def main():
                 mask = d < matched_distance[i]
                 mask &= objects['BRICK_PRIMARY'] 
                 i = i[mask]
-                matched_catalog[i] = objects[mask]
+                matched_catalog[i] = objects[mask][list(matched_catalog.dtype.names)]
                 matched_distance[i] = d[mask]
             matched = mask.sum()
 

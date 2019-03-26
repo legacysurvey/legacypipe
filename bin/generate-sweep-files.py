@@ -438,6 +438,7 @@ SWEEP_DTYPE = np.dtype([
     ('FIBERTOTFLUX_I', '>f4'),
     ('FIBERTOTFLUX_Z', '>f4'),
     ('FIBERTOTFLUX_Y', '>f4'),
+    ('REF_CAT', '|S2'),
     ('REF_ID', '>i8'),
     ('GAIA_PHOT_G_MEAN_MAG', '>f4'),
     ('GAIA_PHOT_G_MEAN_FLUX_OVER_ERROR', '>f4'),
