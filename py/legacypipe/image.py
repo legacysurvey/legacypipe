@@ -1083,8 +1083,8 @@ class LegacySurveyImage(object):
         sedir = self.survey.get_se_dir()
         trymakedirs(self.psffn, dir=True)
         primhdr = self.read_image_primary_header()
-        plver = primhdr.get('PLVER', 'V0.0')
-        plprocid = primhdr['PLPROCID']
+        plver = primhdr.get('PLVER', 'V0.0').strip()
+        plprocid = primhdr['PLPROCID'].strip()
         imghdr = self.read_image_header()
         datasum = imghdr.get('DATASUM', '0')
         procdate = primhdr['DATE']
@@ -1109,8 +1109,9 @@ class LegacySurveyImage(object):
             {'name': 'PROCDATE', 'value': procdate,    'comment': "DATE of image file"},
             {'name': 'IMGDSUM',  'value': datasum,     'comment': "DATASUM of image file"}
             ]
-        F = fitsio.FITS(psftmpfn)
-        F[1].write_keys(hlist)
+        F = fitsio.FITS(psftmpfn, 'rw')
+        F[0].write_keys(hlist)
+        F.close()
 
         cmd = 'mv %s %s' % (psftmpfn, psfoutfn)
         rtn = os.system(cmd)
