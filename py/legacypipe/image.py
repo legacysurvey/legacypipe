@@ -141,7 +141,11 @@ class LegacySurveyImage(object):
         self.sig1    = ccd.sig1
         self.plver   = ccd.plver.strip()
         self.procdate = ccd.procdate.strip()
-        self.plprocid = ccd.plprocid.strip()
+        # Use a dummy value to accommodate old calibs (which will fail later unless old-calibs-ok=True)
+        if 'plprocid' in ccd.columns():
+            self.plprocid = ccd.plprocid.strip()
+        else:
+            self.plprocid = 'xxxxxxx'
 
         # Which Data Quality bits mark saturation?
         self.dq_saturation_bits = CP_DQ_BITS['satur'] # | CP_DQ_BITS['bleed']
@@ -295,7 +299,9 @@ class LegacySurveyImage(object):
         get_invvar = invvar
 
         primhdr = self.read_image_primary_header()
-        #
+
+        import pdb ; pdb.set_trace()
+        
         assert(validate_procdate_plver(self.imgfn, 'primaryheader',
                                        self.expnum, self.plver, self.procdate,
                                        self.plprocid,
@@ -838,14 +844,10 @@ class LegacySurveyImage(object):
         if splinesky:
             fn = self.splineskyfn
 
-        val = validate_procdate_plver(fn, 'primaryheader',
-                                      self.expnum, self.plver, self.procdate,
-                                      self.plprocid)
-        if not val:
-            if old_calibs_ok:
-                print('Warning: allowing sky model that does not validate because old_calibs_ok=True;', fn)
-            else:
-                raise RuntimeError('Splinesky file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' % fn)
+        if not validate_procdate_plver(fn, 'primaryheader',
+                                       self.expnum, self.plver, self.procdate,
+                                       self.plprocid, old_calibs_ok=old_calibs_ok):
+            raise RuntimeError('Splinesky file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' % fn)
 
         debug('Reading sky model from', fn)
         hdr = fitsio.read_header(fn)
@@ -883,15 +885,10 @@ class LegacySurveyImage(object):
         from tractor.utils import get_class_from_name
         debug('Reading merged spline sky models from', self.merged_splineskyfn)
         T = fits_table(self.merged_splineskyfn)
-        val = validate_procdate_plver(self.merged_splineskyfn, 'table',
-                                      self.expnum, self.plver, self.procdate,
-                                      self.plprocid, data=T)
-        if not val:
-            if old_calibs_ok:
-                print('Warning: allowing merged splinesky file %s that does not validate because old_calibs_ok=True;',
-                      self.merged_splineskyfn)
-            else:
-                raise RuntimeError('Merged splinesky file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' %
+        if not validate_procdate_plver(self.merged_splineskyfn, 'table',
+                                       self.expnum, self.plver, self.procdate,
+                                       self.plprocid, data=T, old_calibs_ok=old_calibs_ok):
+            raise RuntimeError('Merged splinesky file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' %
                                self.merged_splineskyfn)
         I, = np.nonzero((T.expnum == self.expnum) *
                         np.array([c.strip() == self.ccdname
@@ -954,14 +951,11 @@ class LegacySurveyImage(object):
                 psf = PixelizedPsfEx(self.psffn)
             hdr = fitsio.read_header(self.psffn)
 
-            val = validate_procdate_plver(self.psffn, 'primaryheader',
-                                          self.expnum, self.plver, self.procdate,
-                                          self.plprocid, data=hdr)
-            if not val:
-                if old_calibs_ok:
-                    print('Warning: allowing PSFEx model that does not validate because old_calibs_ok=True;', self.psffn)
-                else:
-                    raise RuntimeError('PsfEx file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' % self.psffn)
+            if not validate_procdate_plver(self.psffn, 'primaryheader',
+                                           self.expnum, self.plver, self.procdate,
+                                           self.plprocid, data=hdr, old_calibs_ok=old_calibs_ok):
+                raise RuntimeError('PsfEx file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' %
+                                   self.psffn)
 
             psf.version = hdr.get('LEGSURV', None)
             if psf.version is None:
@@ -983,16 +977,11 @@ class LegacySurveyImage(object):
         debug('Reading merged PsfEx models from', self.merged_psffn)
         T = fits_table(self.merged_psffn)
 
-        val = validate_procdate_plver(self.merged_psffn, 'table',
-                                      self.expnum, self.plver, self.procdate,
-                                      self.plprocid, data=T)
-        if not val:
-            if old_calibs_ok:
-                print('Warning: allowing merged PSFEx file %s that does not validate because old_calibs_ok=True;',
-                      self.merged_psffn)
-            else:
-                print('WARNING! Merged PSFEx file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' %
-                      self.merged_psffn)
+        if not validate_procdate_plver(self.merged_psffn, 'table',
+                                       self.expnum, self.plver, self.procdate,
+                                       self.plprocid, data=T, old_calibs_ok=old_calibs_ok):
+            raise RuntimeError('Merged PSFEx file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' %
+                  self.merged_psffn)
 
         I, = np.nonzero((T.expnum == self.expnum) *
                         np.array([c.strip() == self.ccdname
@@ -1498,7 +1487,9 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
 
 def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                             plprocid,
-                            data=None, ext=1, cpheader=False):
+                            data=None, ext=1, cpheader=False,
+                            old_calibs_ok=False):
+    
     if not os.path.exists(fn):
         print('File not found {}'.format(fn))
         return False
@@ -1515,13 +1506,17 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                                     ('plprocid', plprocid, True),
                                     ('expnum', expnum, False)):
             if key not in cols:
-                print('Warning: outdated data model:', fn, 'table missing', key)
-                return False
+                if old_calibs_ok:
+                    print('WARNING: {} table missing {} but old_calibs_ok=True'.format(fn, key))
+                    continue
+                else:
+                    #print('WARNING: {} missing {}'.format(fn, key))
+                    return False
             val = T.get(key)
             if strip:
                 val = np.array([v.strip() for v in val])
             if not np.all(val == targetval):
-                print('Warning: table value', val, 'not equal to', targetval, 'in file', fn)
+                print('WARNING: table value', val, 'not equal to', targetval, 'in file', fn)
                 return False
         return True
     elif filetype in ['primaryheader', 'header']:
@@ -1574,8 +1569,12 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                 val = spval
             else:
                 if key not in hdr:
-                    print('Warning: outdated data model:', fn, 'header missing', key)
-                    return False
+                    if old_calibs_ok:
+                        print('WARNING: {} header missing {} but old_calibs_ok=True'.format(fn, key))
+                        continue
+                    else:
+                        #print('WARNING: {} header missing {}'.format(fn, key))
+                        return False
                 val = hdr[key]
 
             if strip:
@@ -1583,7 +1582,7 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                 val = str(val)
                 val = val.strip()
             if val != targetval:
-                print('Warning: header value', val, 'not equal to', targetval, 'in file', fn)
+                print('WARNING: header value', val, 'not equal to', targetval, 'in file', fn)
                 return False
         return True
 
