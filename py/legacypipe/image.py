@@ -816,7 +816,7 @@ class LegacySurveyImage(object):
         # CCDs table sig1 is in ADU.
         return self.sig1 / zpscale
 
-    def read_sky_model(self, splinesky=False, slc=None, **kwargs):
+    def read_sky_model(self, splinesky=False, slc=None, old_calibs_ok=False, **kwargs):
         '''
         Reads the sky model, returning a Tractor Sky object.
         '''
@@ -825,7 +825,7 @@ class LegacySurveyImage(object):
         sky = None
         if splinesky:
             if self.merged_splineskyfn and os.path.exists(self.merged_splineskyfn):
-                sky = self.read_merged_splinesky_model(slc=slc)
+                sky = self.read_merged_splinesky_model(slc=slc, old_calibs_ok=old_calibs_ok)
                 if sky is not None:
                     return sky
 
@@ -838,10 +838,14 @@ class LegacySurveyImage(object):
         if splinesky:
             fn = self.splineskyfn
 
-        if not validate_procdate_plver(fn, 'primaryheader',
-                                       self.expnum, self.plver, self.procdate,
-                                       self.plprocid):
-            raise RuntimeError('Splinesky file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' % fn)
+        val = validate_procdate_plver(fn, 'primaryheader',
+                                      self.expnum, self.plver, self.procdate,
+                                      self.plprocid)
+        if not val:
+            if old_calibs_ok:
+                print('Warning: allowing sky model that does not validate because old_calibs_ok=True;', fn)
+            else:
+                raise RuntimeError('Splinesky file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' % fn)
 
         debug('Reading sky model from', fn)
         hdr = fitsio.read_header(fn)
@@ -875,14 +879,19 @@ class LegacySurveyImage(object):
         sky.datasum = hdr.get('IMGDSUM')
         return sky
 
-    def read_merged_splinesky_model(self, slc=None):
+    def read_merged_splinesky_model(self, slc=None, old_calibs_ok=False):
         from tractor.utils import get_class_from_name
         debug('Reading merged spline sky models from', self.merged_splineskyfn)
         T = fits_table(self.merged_splineskyfn)
-        if not validate_procdate_plver(self.merged_splineskyfn, 'table',
-                                       self.expnum, self.plver, self.procdate,
-                                       self.plprocid, data=T):
-            raise RuntimeError('Merged splinesky file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' %
+        val = validate_procdate_plver(self.merged_splineskyfn, 'table',
+                                      self.expnum, self.plver, self.procdate,
+                                      self.plprocid, data=T)
+        if not val:
+            if old_calibs_ok:
+                print('Warning: allowing merged splinesky file %s that does not validate because old_calibs_ok=True;',
+                      self.merged_splineskyfn)
+            else:
+                raise RuntimeError('Merged splinesky file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' %
                                self.merged_splineskyfn)
         I, = np.nonzero((T.expnum == self.expnum) *
                         np.array([c.strip() == self.ccdname
@@ -914,7 +923,7 @@ class LegacySurveyImage(object):
 
     def read_psf_model(self, x0, y0,
                        gaussPsf=False, pixPsf=False, hybridPsf=False,
-                       normalizePsf=False,
+                       normalizePsf=False, old_calibs_ok=False,
                        psf_sigma=1., w=0, h=0):
         assert(gaussPsf or pixPsf or hybridPsf)
         if gaussPsf:
@@ -930,7 +939,7 @@ class LegacySurveyImage(object):
         psf = None
         if self.merged_psffn is not None:
             if os.path.exists(self.merged_psffn):
-                psf = self.read_merged_psfex_model(normalizePsf=normalizePsf)
+                psf = self.read_merged_psfex_model(normalizePsf=normalizePsf, old_calibs_ok=old_calibs_ok)
             else:
                 if not os.path.exists(self.psffn):
                     raise RuntimeError('Read PsfEx: neither', self.merged_psffn,
@@ -945,9 +954,14 @@ class LegacySurveyImage(object):
                 psf = PixelizedPsfEx(self.psffn)
             hdr = fitsio.read_header(self.psffn)
 
-            if not validate_procdate_plver(self.psffn, 'primaryheader',
-                                           self.expnum, self.plver, self.procdate, self.plprocid, data=hdr):
-                raise RuntimeError('PsfEx file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' % self.psffn)
+            val = validate_procdate_plver(self.psffn, 'primaryheader',
+                                          self.expnum, self.plver, self.procdate,
+                                          self.plprocid, data=hdr)
+            if not val:
+                if old_calibs_ok:
+                    print('Warning: allowing PSFEx model that does not validate because old_calibs_ok=True;', self.psffn)
+                else:
+                    raise RuntimeError('PsfEx file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' % self.psffn)
 
             psf.version = hdr.get('LEGSURV', None)
             if psf.version is None:
@@ -964,17 +978,21 @@ class LegacySurveyImage(object):
         debug('Using PSF model', psf)
         return psf
 
-    def read_merged_psfex_model(self, normalizePsf=False):
+    def read_merged_psfex_model(self, normalizePsf=False, old_calibs_ok=False):
         from tractor import PsfExModel
         debug('Reading merged PsfEx models from', self.merged_psffn)
         T = fits_table(self.merged_psffn)
 
-        if not validate_procdate_plver(self.merged_psffn, 'table',
-                                       self.expnum, self.plver, self.procdate, self.plprocid, data=T):
-            print('WARNING! Merged PsfEx file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' %
-                  self.merged_psffn)
-            #raise RuntimeError('Merged PsfEx file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
-            #                   self.merged_psffn)
+        val = validate_procdate_plver(self.merged_psffn, 'table',
+                                      self.expnum, self.plver, self.procdate,
+                                      self.plprocid, data=T)
+        if not val:
+            if old_calibs_ok:
+                print('Warning: allowing merged PSFEx file %s that does not validate because old_calibs_ok=True;',
+                      self.merged_psffn)
+            else:
+                print('WARNING! Merged PSFEx file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' %
+                      self.merged_psffn)
 
         I, = np.nonzero((T.expnum == self.expnum) *
                         np.array([c.strip() == self.ccdname
@@ -1408,14 +1426,15 @@ class LegacySurveyImage(object):
                    fcopy=False, use_mask=True,
                    force=False, git_version=None,
                    splinesky=False, ps=None, survey=None,
-                   gaia=True):
+                   gaia=True, old_calibs_ok=False):
         '''
         Run calibration pre-processing steps.
         '''
         if psfex and not force:
             # Check whether PSF model already exists
             try:
-                self.read_psf_model(0, 0, pixPsf=True, hybridPsf=True)
+                self.read_psf_model(0, 0, pixPsf=True, hybridPsf=True,
+                                    old_calibs_ok=old_calibs_ok)
                 psfex = False
             except Exception as e:
                 print('Did not find existing PsfEx model for', self, ':', e)
@@ -1431,7 +1450,8 @@ class LegacySurveyImage(object):
         if sky and not force:
             # Check whether sky model already exists
             try:
-                self.read_sky_model(splinesky=splinesky)
+                self.read_sky_model(splinesky=splinesky,
+                                    old_calibs_ok=old_calibs_ok)
                 sky = False
             except Exception as e:
                 print('Did not find existing sky model for', self, ':', e)
