@@ -142,10 +142,7 @@ class LegacySurveyImage(object):
         self.plver   = ccd.plver.strip()
         self.procdate = ccd.procdate.strip()
         # Use a dummy value to accommodate old calibs (which will fail later unless old-calibs-ok=True)
-        if 'plprocid' in ccd.columns():
-            self.plprocid = ccd.plprocid.strip()
-        else:
-            self.plprocid = 'xxxxxxx'
+        self.plprocid = getattr(ccd, 'plprocid', 'xxxxxxx').strip()
 
         # Which Data Quality bits mark saturation?
         self.dq_saturation_bits = CP_DQ_BITS['satur'] # | CP_DQ_BITS['bleed']
