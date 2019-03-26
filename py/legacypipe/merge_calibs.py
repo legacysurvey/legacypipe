@@ -170,7 +170,7 @@ def merge_psfex(survey, expnum, C, psfoutfn, opt):
 
         hdr = fitsio.read_header(fn)
         psfhdrvals.append([hdr.get(k,'') for k in [
-            'LEGPIPEV', 'PLVER', 'IMGDSUM', 'PROCDATE']] + [expnum, ccd.ccdname])
+            'LEGPIPEV', 'PLVER', 'PLPROCID', 'IMGDSUM', 'PROCDATE']] + [expnum, ccd.ccdname])
 
     if len(psfex) == 0:
         return
@@ -181,10 +181,11 @@ def merge_psfex(survey, expnum, C, psfoutfn, opt):
     T.psf_mask = np.concatenate([[p] for p in padded])
     T.legpipev = np.array([h[0] for h in psfhdrvals])
     T.plver    = np.array([h[1] for h in psfhdrvals])
-    T.imgdsum  = np.array([h[2] for h in psfhdrvals])
-    T.procdate = np.array([h[3] for h in psfhdrvals])
-    T.expnum   = np.array([h[4] for h in psfhdrvals])
-    T.ccdname  = np.array([h[5] for h in psfhdrvals])
+    T.plprocid = np.array([h[2] for h in psfhdrvals])
+    T.imgdsum  = np.array([h[3] for h in psfhdrvals])
+    T.procdate = np.array([h[4] for h in psfhdrvals])
+    T.expnum   = np.array([h[5] for h in psfhdrvals])
+    T.ccdname  = np.array([h[6] for h in psfhdrvals])
     fn = psfoutfn
     trymakedirs(fn, dir=True)
     tmpfn = os.path.join(os.path.dirname(fn), 'tmp-' + os.path.basename(fn))
@@ -228,7 +229,7 @@ def merge_splinesky(survey, expnum, C, skyoutfn, opt):
             s_pcts = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
             skyhdrvals.append([hdr.get(k, '') for k in [
-                'SKY', 'LEGPIPEV', 'PLVER', 'IMGDSUM', 'PROCDATE', 'SIG1',
+                'SKY', 'LEGPIPEV', 'PLVER', 'PLPROCID', 'IMGDSUM', 'PROCDATE', 'SIG1',
                 'S_MODE', 'S_MED', 'S_CMED', 'S_JOHN', 'S_FMASKD', 'S_FINE'] +
                                ['S_P%i' % p for p in s_pcts]] +
                               [expnum, ccd.ccdname])
@@ -255,20 +256,21 @@ def merge_splinesky(survey, expnum, C, skyoutfn, opt):
     T.skyclass = np.array([h[0] for h in skyhdrvals])
     T.legpipev = np.array([h[1] for h in skyhdrvals])
     T.plver    = np.array([h[2] for h in skyhdrvals])
-    T.imgdsum  = np.array([h[3] for h in skyhdrvals])
-    T.procdate = np.array([h[4] for h in skyhdrvals])
-    T.sig1     = np.array([h[5] for h in skyhdrvals]).astype(np.float32)
-    T.sky_mode = np.array([h[6] for h in skyhdrvals]).astype(np.float32)
-    T.sky_med  = np.array([h[7] for h in skyhdrvals]).astype(np.float32)
-    T.sky_cmed = np.array([h[8] for h in skyhdrvals]).astype(np.float32)
-    T.sky_john = np.array([h[9] for h in skyhdrvals]).astype(np.float32)
-    T.sky_fmasked = np.array([h[10] for h in skyhdrvals]).astype(np.float32)
-    T.sky_fine = np.array([h[11] for h in skyhdrvals]).astype(np.float32)
+    T.plprocid = np.array([h[3] for h in skyhdrvals])
+    T.imgdsum  = np.array([h[4] for h in skyhdrvals])
+    T.procdate = np.array([h[5] for h in skyhdrvals])
+    T.sig1     = np.array([h[6] for h in skyhdrvals]).astype(np.float32)
+    T.sky_mode = np.array([h[7] for h in skyhdrvals]).astype(np.float32)
+    T.sky_med  = np.array([h[8] for h in skyhdrvals]).astype(np.float32)
+    T.sky_cmed = np.array([h[9] for h in skyhdrvals]).astype(np.float32)
+    T.sky_john = np.array([h[10] for h in skyhdrvals]).astype(np.float32)
+    T.sky_fmasked = np.array([h[11] for h in skyhdrvals]).astype(np.float32)
+    T.sky_fine    = np.array([h[12] for h in skyhdrvals]).astype(np.float32)
 
     for i,p in enumerate(s_pcts):
-        T.set('sky_p%i' % p, np.array([h[11 + i] for h in skyhdrvals]).astype(np.float32))
+        T.set('sky_p%i' % p, np.array([h[12 + i] for h in skyhdrvals]).astype(np.float32))
 
-    i0 = 12 + len(s_pcts)
+    i0 = 13 + len(s_pcts)
     T.expnum   = np.array([h[i0+0] for h in skyhdrvals])
     T.ccdname  = np.array([h[i0+1] for h in skyhdrvals])
     fn = skyoutfn

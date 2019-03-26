@@ -68,6 +68,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                target_extent=None, program_name='runbrick.py',
                bands=None,
                do_calibs=True,
+               old_calibs_ok=True,
                splinesky=True,
                subsky=True,
                gaussPsf=False, pixPsf=False, hybridPsf=False,
@@ -234,7 +235,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             kwa.update(margin=depth_cut)
         keep_ccds,_ = make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                                      plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf,
-                                     do_calibs, gitver, targetwcs, **kwa)
+                                     do_calibs, gitver, targetwcs, old_calibs_ok, **kwa)
         ccds.cut(np.array(keep_ccds))
         debug('Cut to', len(ccds), 'CCDs required to reach depth targets')
 
@@ -257,7 +258,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     if do_calibs:
         from legacypipe.survey import run_calibs
         record_event and record_event('stage_tims: starting calibs')
-        kwa = dict(git_version=gitver, survey=survey)
+        kwa = dict(git_version=gitver, survey=survey, old_calibs_ok=old_calibs_ok)
         if gaussPsf:
             kwa.update(psfex=False)
         if splinesky:
@@ -278,7 +279,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                                 subsky=subsky,
                                 apodize=apodize,
                                 constant_invvar=constant_invvar,
-                                pixels=read_image_pixels))
+                                pixels=read_image_pixels,
+                                old_calibs_ok=old_calibs_ok))
                                 for im in ims]
     record_event and record_event('stage_tims: starting read_tims')
     tims = list(mp.map(read_one_tim, args))
@@ -373,7 +375,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
 def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                    plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf, do_calibs,
-                   gitver, targetwcs, get_depth_maps=False, margin=0.5,
+                   gitver, targetwcs, old_calibs_ok, get_depth_maps=False, margin=0.5,
                    use_approx_wcs=False):
     # Add some margin to our DESI depth requirements
     target_depth_map = dict(g=24.0 + margin, r=23.4 + margin, z=22.5 + margin)
@@ -539,7 +541,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             debug(im)
 
             if do_calibs:
-                kwa = dict(git_version=gitver)
+                kwa = dict(git_version=gitver, old_calibs_ok=old_calibs_ok)
                 if gaussPsf:
                     kwa.update(psfex=False)
                 if splinesky:
@@ -2831,6 +2833,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               early_coadds=False,
               blob_image=False,
               do_calibs=True,
+              old_calibs_ok=False,
               write_metrics=True,
               gaussPsf=False,
               pixPsf=False,
@@ -2940,6 +2943,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     - *early_coadds*: boolean; generate the early coadds?
 
     - *do_calibs*: boolean; run the calibration preprocessing steps?
+
+    - *old_calibs_ok*: boolean; allow/use old calibration frames?
 
     - *write_metrics*: boolean; write out a variety of useful metrics
 
@@ -3070,6 +3075,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   unwise_coadds=unwise_coadds,
                   bailout=bail_out,
                   do_calibs=do_calibs,
+                  old_calibs_ok=old_calibs_ok,
                   write_metrics=write_metrics,
                   lanczos=lanczos,
                   unwise_dir=unwise_dir,
@@ -3322,6 +3328,10 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument(
         '--skip-calibs', dest='do_calibs', default=True, action='store_false',
         help='Do not run the calibration steps')
+
+    parser.add_argument(
+        '--old-calibs-ok', dest='old_calibs_ok', default=False, action='store_true',
+        help='Allow old calibration files (where the data validation does not necessarily pass).')
 
     parser.add_argument('--skip-metrics', dest='write_metrics', default=True,
                         action='store_false',
