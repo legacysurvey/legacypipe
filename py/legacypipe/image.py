@@ -261,7 +261,8 @@ class LegacySurveyImage(object):
                           nanomaggies=True, subsky=True, tiny=10,
                           dq=True, invvar=True, pixels=True,
                           no_remap_invvar=False,
-                          constant_invvar=False):
+                          constant_invvar=False,
+                          old_calibs_ok=False):
         '''
         Returns a tractor.Image ("tim") object for this image.
 
@@ -300,20 +301,21 @@ class LegacySurveyImage(object):
 
         primhdr = self.read_image_primary_header()
 
-        import pdb ; pdb.set_trace()
-        
         assert(validate_procdate_plver(self.imgfn, 'primaryheader',
                                        self.expnum, self.plver, self.procdate,
                                        self.plprocid,
-                                       data=primhdr, cpheader=True))
+                                       data=primhdr, cpheader=True,
+                                       old_calibs_ok=old_calibs_ok))
         assert(validate_procdate_plver(self.wtfn, 'primaryheader',
                                        self.expnum, self.plver, self.procdate,
                                        self.plprocid,
-                                       cpheader=True))
+                                       cpheader=True,
+                                       old_calibs_ok=old_calibs_ok))
         assert(validate_procdate_plver(self.dqfn, 'primaryheader',
                                        self.expnum, self.plver, self.procdate,
                                        self.plprocid,
-                                       cpheader=True))
+                                       cpheader=True,
+                                       old_calibs_ok=old_calibs_ok))
         band = self.band
         wcs = self.get_wcs()
 
@@ -413,7 +415,8 @@ class LegacySurveyImage(object):
             slc = slice(y0,y1), slice(x0,x1)
 
         sky = self.read_sky_model(splinesky=splinesky, slc=slc,
-                                  primhdr=primhdr, imghdr=imghdr)
+                                  primhdr=primhdr, imghdr=imghdr,
+                                  old_calibs_ok=old_calibs_ok)
         skysig1 = getattr(sky, 'sig1', None)
 
         skymod = np.zeros_like(img)
@@ -522,7 +525,8 @@ class LegacySurveyImage(object):
         psf = self.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
                                   hybridPsf=hybridPsf, normalizePsf=normalizePsf,
                                   psf_sigma=psf_sigma,
-                                  w=x1 - x0, h=y1 - y0)
+                                  w=x1 - x0, h=y1 - y0,
+                                  old_calibs_ok=old_calibs_ok)
 
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
                     photocal=LinearPhotoCal(zpscale, band=band),
@@ -1582,8 +1586,12 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                 val = str(val)
                 val = val.strip()
             if val != targetval:
-                print('WARNING: header value', val, 'not equal to', targetval, 'in file', fn)
-                return False
+                if old_calibs_ok:
+                    print('WARNING: {}!={} in {} header but old_calibs_ok=True'.format(val, targetval, fn))
+                    continue
+                else:
+                    print('WARNING: {}!={} in {} header'.format(val, targetval, fn))
+                    return False
         return True
 
     else:
