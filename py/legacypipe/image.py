@@ -1493,7 +1493,6 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                             plprocid,
                             data=None, ext=1, cpheader=False,
                             old_calibs_ok=False):
-    
     if not os.path.exists(fn):
         print('File not found {}'.format(fn))
         return False

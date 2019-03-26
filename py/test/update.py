@@ -35,4 +35,3 @@ for dirnm in ['test/testcase6',
         
     T.plprocid = np.array(plprocid)
     T.writeto(ccdfn)
-        
