@@ -2125,7 +2125,8 @@
 111755 out of focus
 111756 out of focus
 111757 mirror covers were closed
-anything before-111792 Due to a cloudy weather, the dome is closed (no useful data tonight)
+# anything before-111792 Due to a cloudy weather, the dome is closed (no useful data tonight)
+
 113282 counts > 50k
 113283 counts > 50k
 113284 counts > 50k
@@ -3733,8 +3734,8 @@ anything before-111792 Due to a cloudy weather, the dome is closed (no useful da
 145023 too much clouds with moon, >30kadu in background
 
 #2017-11-05
-Clouds and moon gives a high background.
-From copilot : Possible bad_expid.txt entries:
+# Clouds and moon gives a high background.
+# From copilot : Possible bad_expid.txt entries:
 145206 expfactor=0.19 MzLS_727206_
 145193 expfactor=0.12 MzLS_682351_
 145194 expfactor=0.24 MzLS_682352_
@@ -5633,17 +5634,17 @@ From copilot : Possible bad_expid.txt entries:
 160803 is similar to 160791. ; out of focus?
 
 # 2018-02-06
-160942. pass=1 and seeing= 1.609  58156.100  0.565  0.871     1.771 MzLS_366284_
+160942 pass=1 and seeing= 1.609  58156.100  0.565  0.871     1.771 MzLS_366284_
 160945 expfactor=0.153  0.879     6.547 MzLS_607742_
-160946. pass=1 and seeing= 1.738  58156.108  0.354  0.855     2.828 MzLS_607743_
-160947. pass=1 and seeing= 1.851  58156.109  0.967  0.912     2.586 MzLS_607744_
-160948. pass=1 and seeing= 1.843  58156.113  0.970  0.914     2.577 MzLS_610583_
-160949. pass=1 and seeing= 1.936  58156.116  0.587  0.901     4.258 MzLS_610584_
+160946 pass=1 and seeing= 1.738  58156.108  0.354  0.855     2.828 MzLS_607743_
+160947 pass=1 and seeing= 1.851  58156.109  0.967  0.912     2.586 MzLS_607744_
+160948 pass=1 and seeing= 1.843  58156.113  0.970  0.914     2.577 MzLS_610583_
+160949 pass=1 and seeing= 1.936  58156.116  0.587  0.901     4.258 MzLS_610584_
 160950 expfactor=0.25,seeing=2.15 MzLS_610585_
-161051. pass=1 and seeing= 1.951  58156.535  0.311  0.968     7.916 MzLS_708602_
-160952. pass=1 and seeing= 2.178  58156.126  0.707  0.906     3.540 MzLS_613399_
-160953. pass=1 and seeing= 2.368  58156.129  0.573  0.901     4.364 MzLS_613400_
-160954. pass=1 and seeing= 2.100  58156.133  0.332  0.933     7.538 MzLS_613401_
+161051 pass=1 and seeing= 1.951  58156.535  0.311  0.968     7.916 MzLS_708602_
+160952 pass=1 and seeing= 2.178  58156.126  0.707  0.906     3.540 MzLS_613399_
+160953 pass=1 and seeing= 2.368  58156.129  0.573  0.901     4.364 MzLS_613400_
+160954 pass=1 and seeing= 2.100  58156.133  0.332  0.933     7.538 MzLS_613401_
 161006 seeing=2.11 MzLS_732751_
 
 # 2018-02-09

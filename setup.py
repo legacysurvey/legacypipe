@@ -62,7 +62,8 @@ print('Finding packages...')
 setup_keywords['packages'] = find_packages('py')
 print('Done finding packages.')
 setup_keywords['package_dir'] = {'':'py'}
-setup_keywords['package_data'] = {'legacypipe': ['config/*']}
+setup_keywords['package_data'] = {'legacypipe': ['config/*', 'data/*'],
+                                  'legacyzpts': ['data/*']}
 #
 # Run setup command.
 #

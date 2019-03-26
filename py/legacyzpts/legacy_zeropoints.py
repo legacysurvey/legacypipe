@@ -244,7 +244,7 @@ def create_survey_table(T, surveyfn, camera=None, psf=False, bad_expid=None):
     print('Wrote %s' % surveyfn)
 
 def create_annotated_table(leg_fn, ann_fn, camera, survey, psf=False):
-    from legacypipe.annotate_ccds import annotate, init_annotations
+    from legacyzpts.annotate_ccds import annotate, init_annotations
     T = fits_table(leg_fn)
     T = survey.cleanup_ccds_table(T)
     init_annotations(T)
@@ -2840,7 +2840,7 @@ def main(image_list=None,args=None):
 
     '''
     from pkg_resources import resource_filename
-        
+
     assert(not args is None)
     assert(not image_list is None)
     t0 = Time()
