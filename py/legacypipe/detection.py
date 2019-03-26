@@ -42,9 +42,7 @@ def _detmap(X):
     return Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
 
 def detection_maps(tims, targetwcs, bands, mp, apodize=None):
-    from legacypipe.coadds import make_coadds
     # Render the detection maps
-
     H,W = targetwcs.shape
     H,W = np.int(H), np.int(W)
     ibands = dict([(b,i) for i,b in enumerate(bands)])
@@ -61,7 +59,7 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None):
         detivs [ib][Yo,Xo] += inciv
         if sat is not None:
             satmaps[ib][Yo,Xo] |= sat
-    for i,(detmap,detiv) in enumerate(zip(detmaps, detivs)):
+    for detmap,detiv in zip(detmaps, detivs):
         detmap /= np.maximum(1e-16, detiv)
     return detmaps, detivs, satmaps
 
@@ -202,7 +200,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     Tnew.peaksn = np.array(peaksn)
     Tnew.apsn = np.array(apsn)
     newcat = []
-    for i,(r,d,x,y) in enumerate(zip(pr,pd,peakx,peaky)):
+    for r,d,x,y in zip(pr,pd,peakx,peaky):
         fluxes = dict([(band, detmap[y, x])
                        for band,detmap in zip(bands,detmaps)])
         newcat.append(PointSource(RaDecPos(r,d),
@@ -300,7 +298,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     H,W = detmaps[0].shape
 
     allzero = True
-    for iband,band in enumerate(bands):
+    for iband in range(len(bands)):
         if sed[iband] == 0:
             continue
         if np.all(detivs[iband] == 0):
@@ -376,9 +374,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 
     if ps is not None:
         from astrometry.util.plotutils import dimshow
-        crossa = dict(ms=10, mew=1.5)
-        green = (0,1,0)
-
         plt.clf()
         plt.subplot(1,2,2)
         dimshow(sedsn, vmin=-2, vmax=100, cmap='hot', ticks=False)
@@ -416,7 +411,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     saddlemap = binary_dilation(saddlemap, iterations=dilate)
     if saturated_pix is not None:
         saddlemap |= satur
-    allblobs,nblobs = label(saddlemap)
+    allblobs,_ = label(saddlemap)
     allslices = find_objects(allblobs)
     ally0 = [sy.start for sy,sx in allslices]
     allx0 = [sx.start for sy,sx in allslices]
@@ -492,7 +487,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         thisblob = blobs[y-y0, x-x0]
 
         saddlemap *= (blobs == thisblob)
-        
+
         # previously found sources:
         ox = np.append(xomit, px[:i][keep[:i]]) - x0
         oy = np.append(yomit, py[:i][keep[:i]]) - y0
@@ -510,7 +505,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                          x, y, level, ps)
         if False and (not cut) and ps is not None:
             _peak_plot_3(sedsn, nsigma, x, y, x0, y0, slc, saddlemap,
-                         xomit, yomit, px, py, keep, i, ps)
+                         xomit, yomit, px, py, keep, i, cut, ps)
 
         if cut:
             # in same blob as previously found source.
@@ -528,7 +523,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                       max(0, x-apout):min(W,x+apout+1)] > 0)
         aph,apw = ap.shape
         apx0, apy0 = max(0, x - apout), max(0, y - apout)
-        R2 = ((np.arange(aph)+apy0 - y)[:,np.newaxis]**2 + 
+        R2 = ((np.arange(aph)+apy0 - y)[:,np.newaxis]**2 +
               (np.arange(apw)+apx0 - x)[np.newaxis,:]**2)
         ap = ap[apiv * (R2 >= apin**2) * (R2 <= apout**2)]
         if len(ap):
@@ -607,7 +602,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 def _peak_plot_1(vetomap, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
                  level, dilate, saturated_pix, satur, ps):
     from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
-    from scipy.ndimage.measurements import label, find_objects
+    from scipy.ndimage.measurements import label
     plt.clf()
     plt.suptitle('Peak at %i,%i' % (x,y))
     plt.subplot(2,2,1)
@@ -637,7 +632,7 @@ def _peak_plot_1(vetomap, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
     # plt.plot(xomit, yomit, 'm.')
     # plt.axis(ax)
     # plt.title('saddle map (1)')
-    
+
     plt.subplot(2,2,2)
     saddlemap = binary_fill_holes(saddlemap)
     plt.imshow(saddlemap, interpolation='nearest', origin='lower',
@@ -649,7 +644,7 @@ def _peak_plot_1(vetomap, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
     plt.axis(ax)
     plt.title('saddle map (fill holes)')
 
-    blobs,nblobs = label(saddlemap)
+    blobs,_ = label(saddlemap)
     thisblob = blobs[y, x]
     saddlemap *= (blobs == thisblob)
 
@@ -679,7 +674,7 @@ def _peak_plot_1(vetomap, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
 def _peak_plot_2(ox, oy, w, h, blobs, thisblob, sedsn, x0, y0,
                  x, y, level, ps):
     I = np.flatnonzero((ox >= 0) * (ox < w) * (oy >= 0) * (oy < h) *
-                       (blobs[np.clip(oy,0,h-1), np.clip(ox,0,w-1)] == 
+                       (blobs[np.clip(oy,0,h-1), np.clip(ox,0,w-1)] ==
                         thisblob))
     j = I[0]
     plt.clf()
@@ -736,7 +731,7 @@ def _peak_plot_3(sedsn, nsigma, x, y, x0, y0, slc, saddlemap,
     else:
         plt.suptitle('Keep')
     ps.savefig()
-    
+
 def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     '''
     *image*: binary image that defines "blobs"
@@ -752,8 +747,6 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     '''
     from scipy.ndimage.morphology import binary_fill_holes
     from scipy.ndimage.measurements import label, find_objects
-
-    emptyblob = 0
 
     image = binary_fill_holes(image)
 
@@ -832,7 +825,6 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     blobs = bm[blobs]
 
     if plots:
-        import pylab as plt
         from astrometry.util.plotutils import dimshow
         plt.clf()
         dimshow(blobs > -1, vmin=0, vmax=1)

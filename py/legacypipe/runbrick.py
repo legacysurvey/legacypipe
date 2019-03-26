@@ -37,11 +37,9 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import dimshow
 from astrometry.util.ttime import Time
 
-from legacypipe.survey import get_rgb, imsave_jpeg, LegacySurveyData, MASKBITS
+from legacypipe.survey import get_rgb, imsave_jpeg, MASKBITS
 from legacypipe.image import CP_DQ_BITS
-from legacypipe.utils import (
-    RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels,
-    get_ulimit)
+from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 
 # RGB image args used in the tile viewer:
@@ -68,7 +66,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                release=None,
                plots=False, ps=None,
                target_extent=None, program_name='runbrick.py',
-               bands=['g','r','z'],
+               bands=None,
                do_calibs=True,
                splinesky=True,
                subsky=True,
@@ -112,13 +110,15 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         get_git_version, get_version_header, get_dependency_versions,
         wcs_for_brick, read_one_tim)
     from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
-    import logging
 
-    t0 = tlast = Time()
+    tlast = Time()
     record_event and record_event('stage_tims: starting')
 
     assert(survey is not None)
 
+    if bands is None:
+        bands = ['g','r','z']
+    
     # Get brick object
     custom_brick = (ra is not None)
     if custom_brick:
@@ -232,9 +232,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         kwa = {}
         if margin >= 0:
             kwa.update(margin=depth_cut)
-        keep_ccds,overlapping = make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
-                                   plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf,
-                                   do_calibs, gitver, targetwcs, **kwa)
+        keep_ccds,_ = make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
+                                     plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf,
+                                     do_calibs, gitver, targetwcs, **kwa)
         ccds.cut(np.array(keep_ccds))
         debug('Cut to', len(ccds), 'CCDs required to reach depth targets')
 
@@ -246,7 +246,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         if survey.cache_dir is not None:
             im.check_for_cached_files(survey)
         ims.append(im)
-        info('  ', im, im.band, 'exptime', im.exptime, 'propid', ccd.propid,
+        info('  ', os.path.basename(im.imgfn), im, im.band, 'exptime', im.exptime, 'propid', ccd.propid,
               'seeing %.2f' % (ccd.fwhm*im.pixscale), 'MJD %.3f' % ccd.mjd_obs,
               'object', getattr(ccd, 'object', '').strip())
 
@@ -375,9 +375,6 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                    plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf, do_calibs,
                    gitver, targetwcs, get_depth_maps=False, margin=0.5,
                    use_approx_wcs=False):
-    from legacypipe.survey import wcs_for_brick
-    from collections import Counter
-
     # Add some margin to our DESI depth requirements
     target_depth_map = dict(g=24.0 + margin, r=23.4 + margin, z=22.5 + margin)
 
@@ -511,8 +508,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 # (for pixels unique to this brick)
                 depthvalue[:,:] = 0.
                 active = (last_pcts < target_depths)
-                for d,pct in zip(target_depths[active], last_pcts[active]):
-                    #debug('target percentile depth', d, 'has depth', pct)
+                for d in target_depths[active]:
                     depthvalue += U * np.maximum(0, d - depthmap)
                 ccdvalue = np.zeros(len(b_inds), np.float32)
                 for j,i in enumerate(b_inds):
@@ -573,8 +569,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                                         normalizePsf=normalizePsf)
                 psf = psf.constantPsfAt((x1-x0)//2, (y1-y0)//2)
                 # create a fake tim to compute galnorm
-                from tractor import (PixPos, Flux, ModelMask, LinearPhotoCal, Image,
-                                     NullWCS)
+                from tractor import PixPos, Flux, ModelMask, Image, NullWCS
                 from legacypipe.survey import SimpleGalaxy
     
                 h,w = 50,50
@@ -594,7 +589,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             # Add this image the the depth map...
             from astrometry.util.resample import resample_with_wcs, OverlapError
             try:
-                Yo,Xo,Yi,Xi,nil = resample_with_wcs(coarsewcs, wcs)
+                Yo,Xo,_,_,_ = resample_with_wcs(coarsewcs, wcs)
                 debug(len(Yo), 'of', (cW*cH), 'pixels covered by this image')
             except OverlapError:
                 debug('No overlap')
@@ -705,7 +700,6 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             plt.xlabel('Seeing (arcsec)')
             plt.ylabel('Exptime (sec)')
             plt.title('CCDs kept for band %s' % band)
-            yl,yh = plt.ylim()
             plt.ylim(0, np.max(ccds.exptime[I]) * 1.1)
             ps.savefig()
 
@@ -722,74 +716,35 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
     exposures, by blurring all images in the same band to the same PSF size,
     then searching for outliers.
     '''
-    from legacypipe.outliers import patch_from_coadd, mask_outlier_pixels
+    from legacypipe.outliers import patch_from_coadd, mask_outlier_pixels, read_outlier_mask_file
 
     record_event and record_event('stage_mask_junk: starting')
 
-    # Make before-n-after plots (before)
-    C = make_coadds(tims, bands, targetwcs, mp=mp, max=True, sbscale=False)
-    if True:
-        outdir = os.path.join(survey.output_dir, 'metrics', brickname[:3])
+    # Check for existing MEF containing masks for all the chips we need.
+    if not read_outlier_mask_file(survey, tims, brickname):
         from astrometry.util.file import trymakedirs
+
+        # Make before-n-after plots (before)
+        C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
+        outdir = os.path.join(survey.output_dir, 'metrics', brickname[:3])
         trymakedirs(outdir)
         outfn = os.path.join(outdir, 'outliers-pre-%s.jpg' % brickname)
         imsave_jpeg(outfn, get_rgb(C.coimgs, bands))
-        outfn = os.path.join(outdir, 'outliers-maxpre-%s.jpg' % brickname)
-        imsave_jpeg(outfn, get_rgb(C.maximgs, bands))
 
-    make_badcoadds = False
-    # Do we have all the required outlier mask files on disk already??  If so, skip all this jazz!
-    tims_todo = []
-    for tim in tims:
-        ### FIXME -- output directory vs $LEGACY_SURVEY_DIR...!
-        maskfn = survey.find_file('outliers_mask', brick=brickname,
-                                  camera=tim.imobj.camera.strip(), expnum=tim.imobj.expnum,
-                                  ccdname=tim.imobj.ccdname.strip(), output=True)
-        if not os.path.exists(maskfn):
-            tims_todo.append(tim)
-            continue
-
-        # Read it!
-        mask,hdr = fitsio.read(maskfn, header=True)
-        if mask.shape != tim.shape:
-            print('Warning: Outlier mask', maskfn, 'does not match shape of tim', tim)
-            tims_todo.append(tim)
-            continue
-        x0 = hdr['X0']
-        y0 = hdr['Y0']
-        if x0 != tim.x0 or y0 != tim.y0:
-            print('Warning: Outlier mask', maskfn, 'x0,y0 does not match that of tim', tim)
-            tims_todo.append(tim)
-            continue
-
-        debug('Reading from', maskfn)
-        # Apply this mask!
-        tim.dq |= mask * CP_DQ_BITS['outlier']
-        tim.getInvError()[mask] = 0.
-
-    if len(tims_todo):
         # Patch individual-CCD masked pixels from a coadd
-        patch_from_coadd(C.coimgs, targetwcs, bands, tims_todo, mp=mp)
+        patch_from_coadd(C.coimgs, targetwcs, bands, tims, mp=mp)
         del C
 
-        todo_bands = [b for b in bands if b in [tim.band for tim in tims_todo]]
-
         make_badcoadds = True
-        badcoadds = mask_outlier_pixels(survey, tims, todo_bands, targetwcs, brickname, version_header,
-                                        mp=mp, plots=plots, ps=ps, make_badcoadds=make_badcoadds,
-                                        tims_todo=tims_todo)
+        badcoadds = mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
+                                        mp=mp, plots=plots, ps=ps, make_badcoadds=make_badcoadds)
 
-    # Make before-n-after plots (after)
-    if True:
-        C = make_coadds(tims, bands, targetwcs, mp=mp, max=True, sbscale=False)
+        # Make before-n-after plots (after)
+        C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
         outfn = os.path.join(outdir, 'outliers-post-%s.jpg' % brickname)
         imsave_jpeg(outfn, get_rgb(C.coimgs, bands))
-        outfn = os.path.join(outdir, 'outliers-maxpost-%s.jpg' % brickname)
-        imsave_jpeg(outfn, get_rgb(C.maximgs, bands))
-        
-        if make_badcoadds:
-            outfn = os.path.join(outdir, 'outliers-masked-%s.jpg' % brickname)
-            imsave_jpeg(outfn, get_rgb(badcoadds, bands))
+        outfn = os.path.join(outdir, 'outliers-masked-%s.jpg' % brickname)
+        imsave_jpeg(outfn, get_rgb(badcoadds, bands))
 
     return dict(tims=tims)
 
@@ -820,11 +775,8 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
 
     # Sims: coadds of galaxy sims only, image only
     if hasattr(tims[0], 'sims_image'):
-        sims_coadd, nil = quick_coadds(
+        sims_coadd,_ = quick_coadds(
             tims, bands, targetwcs, images=[tim.sims_image for tim in tims])
-        image_coadd,nil = quick_coadds(
-            tims, bands, targetwcs, images=[tim.data - tim.sims_image
-                                            for tim in tims])
 
     D = _depth_histogram(brick, targetwcs, bands, C.psfdetivs, C.galdetivs)
     with survey.write_output('depth-table', brick=brickname) as out:
@@ -901,13 +853,10 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     return None
 
 def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20):
-    import numpy as np
-
     rgbscales=dict(g=(2, 6.0),
                    r=(1, 3.4),
                    i=(0, 3.0),
                    z=(0, 2.2))
-
     # rgbscales = {'u': 1.5, #1.0,
     #              'g': 2.5,
     #              'r': 1.5,
@@ -955,12 +904,10 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     '''
     from functools import reduce
     from tractor import PointSource, NanoMaggies, RaDecPos, Catalog
-    from legacypipe.detection import (detection_maps, sed_matched_filters,
+    from legacypipe.detection import (detection_maps,
                         run_sed_matched_filters, segment_and_group_sources)
-    from legacypipe.survey import GaiaSource
     from scipy.ndimage.morphology import binary_dilation
-    from scipy.ndimage.measurements import label, find_objects, center_of_mass
-
+    from scipy.ndimage.measurements import label, center_of_mass
     from legacypipe.reference import get_reference_sources
 
     record_event and record_event('stage_srcs: starting')
@@ -1303,7 +1250,6 @@ def stage_fitblobs(T=None,
     the sources contained within that blob.
     '''
     from tractor import Catalog
-    from legacypipe.survey import IN_BLOB
 
     tlast = Time()
     for tim in tims:
@@ -1317,7 +1263,7 @@ def stage_fitblobs(T=None,
         tim.modelMinval = minsigma * tim.sig1
 
     if plots:
-        coimgs,cons = quick_coadds(tims, bands, targetwcs)
+        coimgs,_ = quick_coadds(tims, bands, targetwcs)
         plt.clf()
         dimshow(get_rgb(coimgs, bands))
         ax = plt.axis()
@@ -1612,8 +1558,6 @@ def stage_fitblobs(T=None,
     del ublob
     assert(len(iblob) == len(T))
     T.blob = iblob.astype(np.int32)
-    # What blob number is not-a-blob?
-    noblob = 0
 
     # write out blob map
     if write_metrics:
@@ -1625,7 +1569,6 @@ def stage_fitblobs(T=None,
         blobmap[0] = -1
         blobmap[oldblob + 1] = iblob
         blobs = blobmap[blobs+1]
-        noblob = -1
         del blobmap
 
         # copy version_header before modifying it.
@@ -1775,7 +1718,6 @@ def _check_checkpoints(R, blobslices, brickname):
 
 def _format_all_models(T, newcat, BB, bands, rex):
     from legacypipe.catalog import prepare_fits_catalog, fits_typemap
-    from astrometry.util.file import pickle_to_file
     from tractor import Catalog
 
     TT = fits_table()
@@ -1810,11 +1752,11 @@ def _format_all_models(T, newcat, BB, bands, rex):
 
         allivs = np.hstack([m.get(srctype,[]) for m in BB.all_model_ivs])
         assert(len(allivs) == xcat.numberOfParams())
-        
+
         TT,hdr = prepare_fits_catalog(xcat, allivs, TT, hdr, bands, None,
                                       prefix=prefix+'_')
         TT.set('%s_cpu' % prefix,
-               np.array([m.get(srctype,0) 
+               np.array([m.get(srctype,0)
                          for m in BB.all_model_cpu]).astype(np.float32))
         TT.set('%s_hit_limit' % prefix,
                np.array([m.get(srctype,0)
@@ -1849,11 +1791,15 @@ def _format_all_models(T, newcat, BB, bands, rex):
 def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                plots, ps, simul_opt, use_ceres, refmap,
                brick, rex,
-               skipblobs=[], max_blobsize=None, custom_brick=False):
+               skipblobs=None, max_blobsize=None, custom_brick=False):
     '''
     *blobs*: map, with -1 indicating no-blob, other values indexing *blobslices*,*blobsrcs*.
     '''
     from collections import Counter
+
+    if skipblobs is None:
+        skipblobs = []
+
     H,W = targetwcs.shape
 
     # sort blobs by size so that larger ones start running first
@@ -1876,7 +1822,6 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
         Isrcs = blobsrcs  [iblob]
         assert(len(Isrcs) > 0)
 
-        tblob = Time()
         # blob bbox in target coords
         sy,sx = bslc
         by0,by1 = sy.start, sy.stop
@@ -1920,7 +1865,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
         # Here we cut out subimages for the blob...
         rr,dd = targetwcs.pixelxy2radec([bx0,bx0,bx1,bx1],[by0,by1,by1,by0])
         subtimargs = []
-        for itim,tim in enumerate(tims):
+        for tim in tims:
             h,w = tim.shape
             ok,x,y = tim.subwcs.radec2pixelxy(rr,dd)
             sx0,sx1 = x.min(), x.max()
@@ -1980,7 +1925,6 @@ def _get_mod(X):
 
     if hasattr(tim, 'modelMinval'):
         debug('tim modelMinval', tim.modelMinval)
-        minval = tim.modelMinval
     else:
         # this doesn't really help when using pixelized PSFs / FFTs
         tim.modelMinval = minval = tim.sig * 0.1
@@ -3559,7 +3503,6 @@ def get_runbrick_kwargs(survey=None,
     return survey, opt
 
 def main(args=None):
-    import logging
     import datetime
     from astrometry.util.ttime import MemMeas
     from legacypipe.survey import get_git_version

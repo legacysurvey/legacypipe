@@ -40,14 +40,14 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False,
              carryOn=True):
     # File from the "observing" svn repo:
     from pkg_resources import resource_filename
-    
+
     if mzls:
         tilefile = resource_filename('legacyzpts', 'data/mosaic-tiles_obstatus.fits')
     elif bass:
         tilefile = None
     else:
         tilefile = resource_filename('legacyzpts', 'data/decam-tiles_obstatus.fits')
-        
+
     if tilefile is not None:
         if os.path.isfile(tilefile):
             print('Reading {}'.format(tilefile))
@@ -57,7 +57,7 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False,
             raise IOError
     else:
         tiles = None
-        
+
     if tiles is not None:
         # Map tile IDs back to index in the obstatus file.
         tileid_to_index = np.empty(max(tiles.tileid)+1, int)
@@ -146,7 +146,6 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False,
             except:
                 import traceback
                 traceback.print_exc()
-                pass
 
         if tile is not None:
             ccds.tileid  [iccd] = tile.tileid
@@ -231,14 +230,8 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False,
         tim.psf = im.read_psf_model(0, 0, gaussPsf=True,
                                     psf_sigma=tim.psf_sigma)
         gaussgalnorm[iccd] = im.galaxy_norm(tim, x=cx, y=cy)
-
-        psfnorm = im.psf_norm(tim)
-        pnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
-        #print('Gaussian PSF norm:', psfnorm, 'vs analytic', pnorm)
-        #print('Gaussian gal norm:', gaussgalnorm[iccd])
-
         tim.psf = realpsf
-        
+
         has_skygrid = hasattr(sky, 'evaluateGrid')
 
         # Sky -- evaluate on a grid (every ~10th pixel)
@@ -324,7 +317,7 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False,
         depth = 5. * detsig1
         # that's flux in nanomaggies -- convert to mag
         ccds.galdepth = -2.5 * (np.log10(depth) - 9)
-    
+
         # Depth using Gaussian FWHM.
         psf_sigma = ccds.fwhm / 2.35
         gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
@@ -460,7 +453,7 @@ if __name__ == '__main__':
         print(len(I), 'CCDs have annotated==False')
 
         upccds = ccds[I]
-        annotate(upccds, mzls=opt.mzls, bass=opt.bass,
+        annotate(upccds, survey, mzls=opt.mzls, bass=opt.bass,
                  normalizePsf=opt.normalizePsf)
         ccds[I] = upccds
 
@@ -473,7 +466,7 @@ if __name__ == '__main__':
     from astrometry.util.multiproc import *
     mp = multiproc(opt.threads)
     N = 100
-    
+
     if len(opt.part) == 0 and len(opt.ccds) == 0:
         opt.part.append('decals')
         opt.part.append('nondecals')
@@ -531,4 +524,3 @@ if __name__ == '__main__':
         T.object = T.object.astype('S37')
 
         T.writeto('survey-ccds-annotated-%s.fits' % name)
-

@@ -8,6 +8,7 @@ import numpy as np
 import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
+from astrometry.util.file import trymakedirs
 
 from tractor.ellipses import EllipseESoft, EllipseE
 from tractor.galaxy import ExpGalaxy
@@ -201,7 +202,6 @@ class GaiaSource(PointSource):
     
     @classmethod
     def from_catalog(cls, g, bands):
-        from tractor.tractortime import TAITime
         from tractor import NanoMaggies
 
         # When creating 'tim.time' entries, we do:
@@ -354,14 +354,14 @@ class BrickDuck(object):
         self.brickid = -1
 
 
-def get_git_version(dir=None):
+def get_git_version(dirnm=None):
     '''
     Runs 'git describe' in the current directory (or given dir) and
     returns the result as a string.
 
     Parameters
     ----------
-    dir : string
+    dirnm : string
         If non-None, "cd" to the given directory before running 'git describe'
 
     Returns
@@ -370,12 +370,12 @@ def get_git_version(dir=None):
     '''
     from astrometry.util.run_command import run_command
     cmd = ''
-    if dir is None:
+    if dirnm is None:
         # Get the git version of the legacypipe product
         import legacypipe
-        dir = os.path.dirname(legacypipe.__file__)
+        dirnm = os.path.dirname(legacypipe.__file__)
 
-    cmd = "cd '%s' && git describe" % dir
+    cmd = "cd '%s' && git describe" % dirnm
     rtn,version,err = run_command(cmd)
     if rtn:
         raise RuntimeError('Failed to get version string (%s): ' % cmd +
@@ -396,7 +396,6 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
 
     if git_version is None:
         git_version = get_git_version()
-        #print('Version:', git_version)
 
     hdr = fitsio.FITSHDR()
 
@@ -429,11 +428,11 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
 
     import socket
     hdr.add_record(dict(name='HOSTNAME', value=socket.gethostname(),
-                        comment='Machine where runbrick.py was run'))
+                        comment='Machine where script was run'))
     hdr.add_record(dict(name='HOSTFQDN', value=socket.getfqdn(),
-                        comment='Machine where runbrick.py was run'))
+                        comment='Machine where script was run'))
     hdr.add_record(dict(name='NERSC', value=os.environ.get('NERSC_HOST', 'none'),
-                        comment='NERSC machine where runbrick.py was run'))
+                        comment='NERSC machine where script was run'))
     hdr.add_record(dict(name='JOB_ID', value=os.environ.get('SLURM_JOB_ID', 'none'),
                         comment='SLURM job id'))
     hdr.add_record(dict(name='ARRAY_ID', value=os.environ.get('ARRAY_TASK_ID', 'none'),
@@ -447,7 +446,6 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir):
     # Get DESICONDA version, and read file $DESICONDA/pkg_list.txt for
     # other package versions.
     default_ver = 'UNAVAILABLE'
-    depnum = 0
     desiconda = os.environ.get('DESICONDA', default_ver)
     # DESICONDA like .../edison/desiconda/20180512-1.2.5-img/conda
     verstr = os.path.basename(os.path.dirname(desiconda))
@@ -477,7 +475,6 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir):
     depvers.append(('astrometry', os.path.dirname(astrometry.__file__)))
     import tractor
     depvers.append(('tractor', os.path.dirname(tractor.__file__)))
-    import fitsio
     depvers.append(('fitsio', os.path.dirname(fitsio.__file__)))
 
     # Get additional paths from environment variables
@@ -608,7 +605,7 @@ def tim_get_resamp(tim, targetwcs):
     if hasattr(tim, 'resamp'):
         return tim.resamp
     try:
-        Yo,Xo,Yi,Xi,nil = resample_with_wcs(targetwcs, tim.subwcs, [], 2)
+        Yo,Xo,Yi,Xi,_ = resample_with_wcs(targetwcs, tim.subwcs, [], 2)
     except OverlapError:
         print('No overlap')
         return None
@@ -703,8 +700,7 @@ def switch_to_soft_ellipses(cat):
      in-place.
 
     '''
-    from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy
-    from tractor.ellipses import EllipseESoft
+    from tractor.galaxy import DevGalaxy, FixedCompositeGalaxy
     for src in cat:
         if isinstance(src, (DevGalaxy, ExpGalaxy)):
             src.shape = EllipseESoft.fromEllipseE(src.shape)
@@ -735,7 +731,6 @@ def brick_catalog_for_radec_box(ralo, rahi, declo, dechi,
     I = survey.bricks_touching_radec_box(bricks, ralo, rahi, declo, dechi)
     print(len(I), 'bricks touch RA,Dec box')
     TT = []
-    hdr = None
     for i in I:
         brick = bricks[i]
         fn = catpattern % brick.brickid
@@ -862,7 +857,7 @@ def bricks_touching_wcs(targetwcs, survey=None, B=None, margin=20):
 
     # MAGIC 0.4 degree search radius =
     # DECam hypot(1024,2048)*0.27/3600 + Brick hypot(0.25, 0.25) ~= 0.35 + margin
-    I,J,d = match_radec(B.ra, B.dec, ra, dec,
+    I,_,_ = match_radec(B.ra, B.dec, ra, dec,
                         radius + np.hypot(0.25,0.25)/2. + 0.05)
     print(len(I), 'bricks nearby')
     keep = []
@@ -949,6 +944,7 @@ def imsave_jpeg(jpegfn, img, **kwargs):
     '''
     import pylab as plt
     if True:
+        kwargs.update(format='jpg')
         plt.imsave(jpegfn, img, **kwargs)
     else:
         tmpfn = create_temp(suffix='.png')
@@ -1237,8 +1233,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             return swap(os.path.join(basedir, 'tractor', brickpre,
                                      'brick-%s.sha256sum' % brick))
         elif filetype == 'outliers_mask':
-            return swap(os.path.join(basedir, 'metrics', brickpre, brick,
-                                     'outlier-mask-%s-%s-%s.fits.fz' % (camera, expnum, ccdname)))
+            return swap(os.path.join(basedir, 'metrics', brickpre, 
+                                     'outlier-mask-%s.fits.fz' % (brick)))
 
         print('Unknown filetype "%s"' % filetype)
         assert(False)
@@ -1257,7 +1253,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if 'CPHETDEX' in fn:
             '''
             Cached file miss:
-            /global/cscratch1/sd/dstn/dr5-new-sky/images/decam/NonDECaLS/CPHETDEX/c4d_130902_082433_oow_g_v1.fits.fz -/-> 
+            /global/cscratch1/sd/dstn/dr5-new-sky/images/decam/NonDECaLS/CPHETDEX/c4d_130902_082433_oow_g_v1.fits.fz -/->
             /global/cscratch1/sd/dstn/dr5-new-sky/cache/images/decam/NonDECaLS/CPHETDEX/c4d_130902_082433_oow_g_v1.fits.fz
             '''
             from glob import glob
@@ -1271,19 +1267,20 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
     def get_compression_string(self, filetype, shape=None, **kwargs):
         pat = dict(# g: sigma ~ 0.002.  qz -1e-3: 6 MB, -1e-4: 10 MB
-            image = '[compress R %i,%i; qz -1e-4]',
+            image = '[compress R %(tilew)i,%(tileh)i; qz -1e-4]',
             # g: qz -1e-3: 2 MB, -1e-4: 2.75 MB
-            model = '[compress R %i,%i; qz -1e-4]',
-            chi2  = '[compress R %i,%i; qz -0.1]',
+            model = '[compress R %(tilew)i,%(tileh)i; qz -1e-4]',
+            chi2  = '[compress R %(tilew)i,%(tileh)i; qz -0.1]',
             # qz +8: 9 MB, qz +16: 10.5 MB
-            invvar = '[compress R %i,%i; qz 16]',
-            nexp   = '[compress H %i,%i]',
-            maskbits = '[compress H %i,%i]',
-            depth  = '[compress G %i,%i; qz 0]',
-            galdepth = '[compress G %i,%i; qz 0]',
-            psfsize = '[compress G %i,%i; qz 0]',
-            outliers_mask = '[compress H %i,%i]',
+            invvar = '[compress R %(tilew)i,%(tileh)i; qz 16]',
+            nexp   = '[compress H %(tilew)i,%(tileh)i]',
+            maskbits = '[compress H %(tilew)i,%(tileh)i]',
+            depth  = '[compress G %(tilew)i,%(tileh)i; qz 0]',
+            galdepth = '[compress G %(tilew)i,%(tileh)i; qz 0]',
+            psfsize = '[compress G %(tilew)i,%(tileh)i; qz 0]',
+            outliers_mask = '[compress G]',
         ).get(filetype)
+        #outliers_mask = '[compress H %i,%i]',
         if pat is None:
             return pat
         # Tile compression size
@@ -1305,7 +1302,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 if remain == 0 or remain >= 4:
                     break
                 tileh += 1
-        return pat % (tilew,tileh)
+        return pat % dict(tilew=tilew,tileh=tileh)
 
     def write_output(self, filetype, hashsum=True, **kwargs):
         '''
@@ -1355,11 +1352,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
             def __enter__(self):
                 dirnm = os.path.dirname(self.tmpfn)
-                if not os.path.exists(dirnm):
-                    try:
-                        os.makedirs(dirnm)
-                    except:
-                        pass
+                trymakedirs(dirnm)
                 return self
 
             def __exit__(self, exc_type, exc_value, traceback):
@@ -1731,7 +1724,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         # check cache...
         if self.ccd_kdtrees is not None:
             return self.ccd_kdtrees
-        
+
         fns = self.find_file('ccd-kds')
         fns = self.filter_ccd_kd_files(fns)
 
@@ -1781,7 +1774,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         ims = []
         for t in C:
             debug('Image file', t.image_filename, 'hdu', t.image_hdu)
-            im = self.get_image_object(self, t)
+            im = self.get_image_object(t)
             ims.append(im)
         # Read images, clip to ROI
         W,H = targetwcs.get_width(), targetwcs.get_height()
@@ -1843,7 +1836,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                          nleaf=60, bbox=False, split=True)
         ekd.set_name('expnum')
         ekd.write('ekd.fits')
-        
+
         > fitsgetext -i $CSCRATCH/dr7-depthcut/survey-ccds-dr7.kd.fits -o dr7-%02i -a -M
         > fitsgetext -i ekd.fits -o ekd-%02i -a -M
         > cat dr7-0* ekd-0[123456] > $CSCRATCH/dr7-depthcut+/survey-ccds-dr7.kd.fits
@@ -1907,7 +1900,6 @@ class SchlegelPsfModel(PsfExModel):
         `ext` is ignored.
         '''
         if fn is not None:
-            from astrometry.util.fits import fits_table
             T = fits_table(fn)
             T.about()
 

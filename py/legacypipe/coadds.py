@@ -1,5 +1,4 @@
 from __future__ import print_function
-import os
 import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
@@ -40,11 +39,6 @@ class UnwiseCoadd(object):
                              for band in [1,2,3,4]]
 
     def add(self, tile, wise_models):
-        gotbands = []
-        imgs = []
-        mods = []
-        ierrs = []
-        tilewcs = None
         for band in [1,2,3,4]:
             if not (tile, band) in wise_models:
                 debug('Tile', tile, 'band', band, '-- model not found')
@@ -67,7 +61,6 @@ class UnwiseCoadd(object):
                 debug('Band', band, ': now', np.sum(self.unwise_con[band-1]>0), 'pixels are set in image coadd')
             except OverlapError:
                 debug('No overlap between WISE model tile', tile, 'and brick')
-                pass
 
     def finish(self, survey, brickname, version_header):
         from legacypipe.survey import imsave_jpeg
@@ -109,7 +102,6 @@ class UnwiseCoadd(object):
             info('Wrote', out.fn)
 
 def _unwise_to_rgb(imgs):
-    import numpy as np
     img = imgs[0]
     H,W = img.shape
     ## FIXME
@@ -141,12 +133,15 @@ def make_coadds(tims, bands, targetwcs,
                 mods=None, xy=None, apertures=None, apxy=None,
                 ngood=False, detmaps=False, psfsize=False, allmasks=True,
                 max=False, sbscale=True,
-                callback=None, callback_args=[],
+                callback=None, callback_args=None,
                 plots=False, ps=None,
                 lanczos=True, mp=None,
                 satur_val=10.):
     from astrometry.util.ttime import Time
     t0 = Time()
+
+    if callback_args is None:
+        callback_args = []
 
     class Duck(object):
         pass
@@ -677,7 +672,6 @@ def make_coadds(tims, bands, targetwcs,
 
 def _resample_one(args):
     (itim,tim,mod,lanczos,targetwcs,sbscale) = args
-    from astrometry.util.resample import resample_with_wcs, OverlapError
     if lanczos:
         from astrometry.util.miscutils import patch_image
         patched = tim.getImage().copy()
@@ -849,7 +843,7 @@ def quick_coadds(tims, bands, targetwcs, images=None,
     if get_max:
         maximgs = []
 
-    for ib,band in enumerate(bands):
+    for band in bands:
         coimg  = np.zeros((H,W), np.float32)
         coimg2 = np.zeros((H,W), np.float32)
         con    = np.zeros((H,W), np.int16)

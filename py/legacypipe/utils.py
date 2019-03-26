@@ -5,9 +5,6 @@ import numpy as np
 from tractor.ellipses import EllipseESoft
 from tractor.utils import _GaussianPriors
 
-from astrometry.util.multiproc import multiproc
-from astrometry.util.ttime import Time
-
 def log_info(logger, args):
     msg = ' '.join(map(str, args))
     logger.info(msg)
@@ -15,12 +12,12 @@ def log_info(logger, args):
 def log_debug(logger, args):
     msg = ' '.join(map(str, args))
     logger.debug(msg)
-    
+
 class EllipseWithPriors(EllipseESoft):
     '''An ellipse (used to represent galaxy shapes) with Gaussian priors
     over softened ellipticity parameters.  This class is used during
     fitting.
-    
+
     We ALSO place a prior on log-radius, forcing it to be < +5 (in
     log-arcsec); though this gets dynamically adjusted in the oneblob.py code.
 
@@ -201,7 +198,7 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
     import re
     import fitsio
     from functools import reduce
-    
+
     # my pid = parent pid -- this is a thread.
     print('run_ps_thread starting: parent PID', parent_pid, ', my PID', os.getpid(), fn)
     TT = []
@@ -257,7 +254,7 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
     if clock_ticks == -1:
         #print('Failed to get clock times per second; assuming 100')
         clock_ticks = 100
-    
+
     while True:
         shutdown.wait(5.0)
         if shutdown.is_set():
@@ -394,7 +391,7 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
         timenow = time.time()
         T.unixtime = np.zeros(len(T), np.float64) + timenow
         T.step = np.zeros(len(T), np.int16) + step
-        
+
         if os.path.exists('/proc'):
             # Try to grab higher-precision CPU timing info from /proc/PID/stat
             T.proc_utime = np.zeros(len(T), np.float32)
@@ -428,7 +425,7 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
                     T.processor [i] = proc
                 except:
                     pass
-        
+
         TT.append(T)
 
         #print('ps -- step', step)
@@ -462,4 +459,3 @@ def get_ulimit():
         limit_num = getattr(resource, name)
         soft, hard = resource.getrlimit(limit_num)
         print('Maximum %-25s (%-15s) : %20s %20s' % (desc, name, soft, hard))
-

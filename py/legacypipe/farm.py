@@ -4,7 +4,6 @@ from collections import Counter
 
 import zmq
 
-from legacypipe.runbrick import *
 from legacypipe.runbrick import _blob_iter, _write_checkpoint
 
 def main():
@@ -32,7 +31,6 @@ def main():
     # queue directly from the input thread to the output thread, when checkpointed
     # results are read from disk.
     checkpointqueue = queue.Queue()
-    
     blobsizes = ThreadSafeDict()
 
     outstanding_work = ThreadSafeDict()
@@ -126,7 +124,6 @@ def main():
         except:
             import traceback
             traceback.print_exc()
-            pass
 
         if result == nowork:
             print('Empty result')
@@ -245,8 +242,7 @@ def output_thread(queuename, outqueue, checkpointqueue, blobsizes, outstanding_w
         print('Output thread: got result', len(allresults[brick]), 'of', (nblobs or '(unknown)'), 'for brick', brick, 'iblob', iblob, 'from', worker, 'took', twork, 'seconds')
         check_brick_done(brick)
 
-
-def get_blob_iter(skipblobs=[],
+def get_blob_iter(skipblobs=None,
                   brickname=None,
                   brick=None,
                   blobsrcs=None, blobslices=None, blobs=None,
@@ -262,6 +258,9 @@ def get_blob_iter(skipblobs=[],
                   rex=False,
                   custom_brick=False,
                   **kwargs):
+    if skipblobs is None:
+        skipblobs = []
+    
     # drop any cached data before we start pickling/multiprocessing
     survey.drop_cache()
 
@@ -281,14 +280,12 @@ def get_blob_iter(skipblobs=[],
                           skipblobs=skipblobs)
     return blobiter
 
-
 class PrioritizedItem(object):
     def __init__(self, priority=0, item=None):
         self.priority = priority
         self.item = item
     def __lt__(self, other):
         return self.priority < other.priority
-
 
 class ThreadSafeDict(object):
     def __init__(self):
@@ -312,7 +309,6 @@ class ThreadSafeDict(object):
     def copy(self):
         with self.lock:
             return self.d.copy()
-
 
 def queue_work(brickname, inqueue, checkpointqueue, opt):
     '''
@@ -378,7 +374,6 @@ def queue_work(brickname, inqueue, checkpointqueue, opt):
     # Finished queuing all blobs for this brick -- record how many blobs we sent out.
     return nchk + nq
 
-
 def input_thread(queuename, inqueue, checkpointqueue, blobsizes, opt):
 
     import qdo
@@ -404,8 +399,7 @@ def input_thread(queuename, inqueue, checkpointqueue, blobsizes, opt):
                 task.set_state(qdo.Task.FAILED, err=1)
         else:
             #- no more tasks in queue so break
-            break        
-
+            break
 
 if __name__ == '__main__':
     main()

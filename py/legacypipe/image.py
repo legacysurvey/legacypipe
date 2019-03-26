@@ -3,6 +3,7 @@ import os
 import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
+from tractor import PixelizedPsfEx, PixelizedPSF
 from legacypipe.utils import read_primary_header
 
 import logging
@@ -29,7 +30,7 @@ base class is pretty specific.
 # 4   -- interpolated                 InstCal/Resampled
 # 16  -- single exposure cosmic ray   InstCal/Resampled
 # 64  -- bleed trail                  InstCal/Resampled
-# 128 -- multi-exposure transient     InstCal/Resampled 
+# 128 -- multi-exposure transient     InstCal/Resampled
 CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
                   trans=128,
                   edge = 256,
@@ -148,14 +149,14 @@ class LegacySurveyImage(object):
         # Photometric and astrometric zeropoints
         self.ccdzpt = ccd.ccdzpt
         self.dradec = (ccd.ccdraoff / 3600., ccd.ccddecoff / 3600.)
-        
+
         # in arcsec/pixel
         self.pixscale = 3600. * np.sqrt(np.abs(ccd.cd1_1 * ccd.cd2_2 -
                                                ccd.cd1_2 * ccd.cd2_1))
 
         expstr = '%08i' % self.expnum
         self.name = '%s-%s-%s' % (self.camera, expstr, self.ccdname)
-        calname = '%s/%s/%s-%s-%s' % (expstr[:5], expstr, self.camera, 
+        calname = '%s/%s/%s-%s-%s' % (expstr[:5], expstr, self.camera,
                                       expstr, self.ccdname)
         calibdir = os.path.join(self.survey.get_calib_dir(), self.camera)
         self.sefn  = os.path.join(calibdir, 'se',    calname + '.fits')
@@ -259,7 +260,7 @@ class LegacySurveyImage(object):
                           constant_invvar=False):
         '''
         Returns a tractor.Image ("tim") object for this image.
-        
+
         Options describing a subimage to return:
 
         - *slc*: y,x slice objects
@@ -273,7 +274,7 @@ class LegacySurveyImage(object):
         - *hybridPsf*: combo pixelized PsfEx + Gaussian approx.
 
         Options determining the sky model to use:
-        
+
         - *splinesky*: median filter chunks of the image, then spline those.
 
         Options determining the units of the image:
@@ -347,7 +348,7 @@ class LegacySurveyImage(object):
 
         # header 'FWHM' is in pixels
         assert(self.fwhm > 0)
-        psf_fwhm = self.fwhm 
+        psf_fwhm = self.fwhm
         psf_sigma = psf_fwhm / 2.35
 
         # Ugly: occasionally the CP marks edge pixels with SATUR (and
@@ -366,7 +367,7 @@ class LegacySurveyImage(object):
             from scipy.ndimage.measurements import label
             bits = CP_DQ_BITS['satur'] | CP_DQ_BITS['bleed']
             if np.any(dq[:,0] & bits) or np.any(dq[:,-1] & bits):
-                blobmap,nblobs = label(dq & bits)
+                blobmap,_ = label(dq & bits)
                 badblobs = np.unique(np.append(blobmap[:,0], blobmap[:,-1]))
                 badblobs = badblobs[badblobs != 0]
                 #debug('Bad blobs:', badblobs)
@@ -408,7 +409,7 @@ class LegacySurveyImage(object):
         sky = self.read_sky_model(splinesky=splinesky, slc=slc,
                                   primhdr=primhdr, imghdr=imghdr)
         skysig1 = getattr(sky, 'sig1', None)
-        
+
         skymod = np.zeros_like(img)
         sky.addTo(skymod)
         midsky = np.median(skymod)
@@ -511,12 +512,12 @@ class LegacySurveyImage(object):
         # tractor WCS object
         twcs = self.get_tractor_wcs(wcs, x0, y0, primhdr=primhdr, imghdr=imghdr,
                                     tai=tai)
-                                    
+
         psf = self.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
                                   hybridPsf=hybridPsf, normalizePsf=normalizePsf,
                                   psf_sigma=psf_sigma,
                                   w=x1 - x0, h=y1 - y0)
-        
+
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
                     photocal=LinearPhotoCal(zpscale, band=band),
                     sky=sky, name=self.name + ' ' + band)
@@ -615,11 +616,11 @@ class LegacySurveyImage(object):
         const_sky = primhdr['SKYADU'] # e/s, Recommended sky level keyword from Frank 
         expt = primhdr['EXPTIME'] # s
         with np.errstate(divide='ignore'):
-            var_SR = 1./invvar # e/s 
-        var_Astro = np.abs(img - const_sky) / expt # e/s 
+            var_SR = 1./invvar # e/s
+        var_Astro = np.abs(img - const_sky) / expt # e/s
         wt = 1./(var_SR + var_Astro) # s/e
 
-        # Zero out NaNs and masked pixels 
+        # Zero out NaNs and masked pixels
         wt[np.isfinite(wt) == False] = 0.
         wt[dq != 0] = 0.
 
@@ -627,7 +628,7 @@ class LegacySurveyImage(object):
 
     def check_image_header(self, imghdr):
         # check consistency between the CCDs table and the image header
-        e = imghdr['EXTNAME']
+        e = imghdr['EXTNAME'].upper()
         if e.strip() != self.ccdname.strip():
             print('WARNING: Expected header EXTNAME="%s" to match self.ccdname="%s", self.imgfn=%s' % (e.strip(), self.ccdname,self.imgfn))
 
@@ -668,12 +669,11 @@ class LegacySurveyImage(object):
         #galmod /= galmod.sum()
         galnorm = np.sqrt(np.sum(galmod**2))
         return galnorm
-    
+
     def _read_fits(self, fn, hdu, slice=None, header=None, **kwargs):
         if slice is not None:
             f = fitsio.FITS(fn)[hdu]
             img = f[slice]
-            rtn = img
             if header:
                 hdr = f.read_header()
                 return (img,hdr)
@@ -757,7 +757,7 @@ class LegacySurveyImage(object):
 
     def remap_dq_cp_codes(self, dq, header):
         return remap_dq_cp_codes(dq)
-    
+
     def read_invvar(self, clip=True, clipThresh=0.1, dq=None, **kwargs):
         '''
         Reads the inverse-variance (weight) map image.
@@ -775,7 +775,7 @@ class LegacySurveyImage(object):
             else:
                 thresh = 0.
             invvar[invvar < thresh] = 0
-            
+
         assert(np.all(invvar >= 0.))
         assert(np.all(np.isfinite(invvar)))
         return invvar
@@ -911,13 +911,12 @@ class LegacySurveyImage(object):
         if 'imgdsum' in Ti.get_columns():
             sky.datasum = Ti.imgdsum
         return sky
-    
+
     def read_psf_model(self, x0, y0,
                        gaussPsf=False, pixPsf=False, hybridPsf=False,
                        normalizePsf=False,
                        psf_sigma=1., w=0, h=0):
         assert(gaussPsf or pixPsf or hybridPsf)
-        psffn = None
         if gaussPsf:
             from tractor import GaussianMixturePSF
             v = psf_sigma**2
@@ -928,7 +927,6 @@ class LegacySurveyImage(object):
             return psf
 
         # spatially varying pixelized PsfEx
-        from tractor import PixelizedPsfEx
         psf = None
         if self.merged_psffn is not None:
             if os.path.exists(self.merged_psffn):
@@ -1012,7 +1010,7 @@ class LegacySurveyImage(object):
         psf.fwhm = Ti.psf_fwhm
         return psf
 
-    
+
     ######## Calibration tasks ###########
 
 
@@ -1034,7 +1032,7 @@ class LegacySurveyImage(object):
         tmpmaskfn = create_temp(suffix='.fits')
         todelete.append(tmpimgfn)
         todelete.append(tmpmaskfn)
-        
+
         if fcopy:
             cmd = 'imcopy %s"+%i" %s' % (imgfn, hdu, tmpimgfn)
         else:
@@ -1042,7 +1040,7 @@ class LegacySurveyImage(object):
         print(cmd)
         if os.system(cmd):
             raise RuntimeError('Command failed: ' + cmd)
-        
+
         if fcopy:
             cmd = 'imcopy %s"+%i" %s' % (maskfn, hdu, tmpmaskfn)
         else:
@@ -1277,9 +1275,7 @@ class LegacySurveyImage(object):
             fine_rms = np.sqrt(np.mean(skypix**2))
 
             if plots:
-                from legacypipe.detection import plot_boundary_map
                 import pylab as plt
-
                 ima = dict(interpolation='nearest', origin='lower', vmin=med-2.*sig1,
                            vmax=med+5.*sig1, cmap='gray')
                 ima2 = dict(interpolation='nearest', origin='lower', vmin=med-0.5*sig1,
@@ -1370,7 +1366,7 @@ class LegacySurveyImage(object):
                                 comment='Sky: fraction masked'))
             hdr.add_record(dict(name='S_FINE', value=fine_rms,
                                 comment='Sky: RMS resid fine - splinesky'))
-                
+
             trymakedirs(self.splineskyfn, dir=True)
             tmpfn = os.path.join(os.path.dirname(self.splineskyfn),
                              'tmp-' + os.path.basename(self.splineskyfn))
@@ -1456,7 +1452,6 @@ class LegacySurveyImage(object):
 
 
 
-from tractor import PixelizedPsfEx, PixelizedPSF
 class NormalizedPixelizedPsfEx(PixelizedPsfEx):
     def __str__(self):
         return 'NormalizedPixelizedPsfEx'
@@ -1464,8 +1459,7 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
     def getFourierTransform(self, px, py, radius):
         fft, (cx,cy), shape, (v,w) = super(NormalizedPixelizedPsfEx, self).getFourierTransform(px, py, radius)
         #print('NormalizedPSF: getFourierTransform at', (px,py), ': sum', fft.sum(), 'zeroth element:', fft[0][0], 'max', np.max(np.abs(fft)))
-        sum = np.abs(fft[0][0])
-        fft /= sum
+        fft /= np.abs(fft[0][0])
         #print('NormalizedPixelizedPsfEx: getFourierTransform at', (px,py), ': sum', sum)
         return fft, (cx,cy), shape, (v,w)
 
@@ -1574,4 +1568,3 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
 
     else:
         raise ValueError('incorrect filetype')
-

@@ -178,5 +178,5 @@ ENV WISE_PSF_DIR /src/unwise_psf/etc
 # cgroup-tools -- doesn't work inside containers.
 
 # up!
-RUN cd /src/legacypipe && git pull && echo 3
+RUN cd /src/legacypipe && git pull && echo 5
 
