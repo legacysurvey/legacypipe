@@ -115,8 +115,8 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
             elif g.islargegalaxy:
                 fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
                 assert(np.all(np.isfinite(list(fluxes.values()))))
-                rr = g.radius * 3600.
-                pa = g.pa
+                rr = g.radius * 3600. / 0.5 # factor of two accounts for R(25)-->reff
+                pa = 180 - g.pa
                 if not np.isfinite(pa):
                     pa = 0.
                 logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, g.ba, pa)
