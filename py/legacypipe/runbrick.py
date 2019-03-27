@@ -1577,7 +1577,7 @@ def stage_fitblobs(T=None,
         hdr.delete('IMAGEH')
         hdr.add_record(dict(name='IMTYPE', value='blobmap',
                             comment='LegacySurveys image type'))
-        hdr.add_record(dict(name='EQUINOX', value=2000.))
+        hdr.add_record(dict(name='EQUINOX', value=2000.,comment='Observation Epoch'))
 
         with survey.write_output('blobmap', brick=brickname, shape=blobs.shape) as out:
             out.fits.write(blobs, header=hdr)
@@ -2086,7 +2086,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         hdr.add_record(r)
     # Plug the WCS header cards into these images
     targetwcs.add_to_header(hdr)
-    hdr.add_record(dict(name='EQUINOX', value=2000.))
+    hdr.add_record(dict(name='EQUINOX', value=2000., comment='Observation Epoch'))
     hdr.delete('IMAGEW')
     hdr.delete('IMAGEH')
     hdr.add_record(dict(name='IMTYPE', value='maskbits',
