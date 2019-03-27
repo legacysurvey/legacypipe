@@ -227,6 +227,7 @@ def make_sweep(sweep, bricks, ns):
 
     data = np.concatenate(data, axis=0)
     header = [dict(name=key, value=header[key],comment=header.get_comment(key)) for key in header if value is not NA]
+    print(header)
     return data, header, neff
 
 
