@@ -159,12 +159,12 @@ class NA: pass
 
 def make_sweep(sweep, bricks, ns):
     data = [np.empty(0, dtype=SWEEP_DTYPE)]
-    header = {}
+    header = fitsio.FITSHDR()
     ra1, dec1, ra2, dec2 = sweep
     def merge_header(header, header2):
-        for key, value in header2.items():
+        for key in header2.keys():
             if key not in header:
-                header[key] = value
+                header.add_record(dict(name=key,value=header2[key],comment=header2.get_comment(key)))
             else:
                 if header[key] is NA:
                     pass
@@ -215,11 +215,6 @@ def make_sweep(sweep, bricks, ns):
                 except ValueError:
                     print('failed on column `%s`' % colname)
                     raise
-            #chunkheader = dict([(key, chunkheader[key]) for key in chunkheader.keys()])
-            chunkheader = fitsio.FITSHDR()
-            rmhdr = vars(chunkheader)
-            for record in rmhdr['_record_map']:
-                chunkheader[record] = rmhdr['_record_map'][record]
             return chunk, chunkheader
 
         def reduce(chunk, chunkheader):
@@ -231,13 +226,13 @@ def make_sweep(sweep, bricks, ns):
     neff = len(data) - 1
 
     data = np.concatenate(data, axis=0)
-    header = dict([(key, value) for key, value in header.items() if value is not NA])
+    header = [dict(name=key, value=header[key],comment=header.get_comment(key)) for key in header if value is not NA]
     return data, header, neff
 
 
 def save_sweep_file(filename, data, header, format):
     if format == 'fits':
-        header = [dict(name=key, value=header[key]) for key in sorted(header.keys())]
+        header = [dict(name=key, value=header[key],comment=header.get_comment(key)) for key in sorted(header.keys())]
         with fitsio.FITS(filename, mode='rw', clobber=True) as ff:
             ff.create_image_hdu()
             ff[0].write_keys(header)
