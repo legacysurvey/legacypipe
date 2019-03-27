@@ -230,8 +230,12 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
         if pixelized_psf:
             import unwise_psf
-            psfimg = unwise_psf.get_unwise_psf(band, tile.coadd_id, 
-                                               modelname='unwisecat')
+            if (band == 1) or (band == 2):
+                # we only have updated PSFs for W1 and W2
+                psfimg = unwise_psf.get_unwise_psf(band, tile.coadd_id, 
+                                                   modelname='neo4_unwisecat')
+            else:
+                psfimg = unwise_psf.get_unwise_psf(band, tile.coadd_id)
             #print('PSF postage stamp', psfimg.shape, 'sum', psfimg.sum())
 
             if band == 4:
@@ -268,7 +272,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
             from tractor.psf import PixelizedPSF
             psfimg /= psfimg.sum()
-            fluxrescales = {1: 1.050, 2: 0.997, 3: 1.0, 4: 1.0}
+            fluxrescales = {1: 1.04, 2: 1.005, 3: 1.0, 4: 1.0}
             psfimg *= fluxrescales[band]
             tim.psf = PixelizedPSF(psfimg)
             #print('### HACK ### normalized PSF to 1.0')
