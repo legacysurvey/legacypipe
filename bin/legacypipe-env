@@ -24,6 +24,6 @@ export LARGEGALAXIES_DIR=/global/project/projectdirs/cosmo/staging/largegalaxies
 
 export PS1CAT_DIR=/global/project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v3/
 
-export UNWISE_PSF_DIR=/global/project/projectdirs/cosmo/staging/unwise_psf/2018-11-25
+export UNWISE_PSF_DIR=/global/project/projectdirs/cosmo/staging/unwise_psf/2019-03-27
 export WISE_PSF_DIR=${UNWISE_PSF_DIR}/etc
 export PYTHONPATH=$UNWISE_PSF_DIR/py:$PYTHONPATH
