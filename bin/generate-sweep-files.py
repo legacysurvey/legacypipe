@@ -159,12 +159,12 @@ class NA: pass
 
 def make_sweep(sweep, bricks, ns):
     data = [np.empty(0, dtype=SWEEP_DTYPE)]
-    header = fitsio.FITSHDR()
+    header = {}
     ra1, dec1, ra2, dec2 = sweep
     def merge_header(header, header2):
-        for key in header2.keys():
+        for key, value in header2.items():
             if key not in header:
-                header.add_record(dict(name=key,value=header2[key],comment=header2.get_comment(key)))
+                header[key] = value
             else:
                 if header[key] is NA:
                     pass
@@ -215,6 +215,7 @@ def make_sweep(sweep, bricks, ns):
                 except ValueError:
                     print('failed on column `%s`' % colname)
                     raise
+            chunkheader = dict([(key, chunkheader[key]) for key in chunkheader.keys()])
             return chunk, chunkheader
 
         def reduce(chunk, chunkheader):
@@ -226,14 +227,13 @@ def make_sweep(sweep, bricks, ns):
     neff = len(data) - 1
 
     data = np.concatenate(data, axis=0)
-    header = [dict(name=key, value=header[key],comment=header.get_comment(key)) for key in header if value is not NA]
-    print(header)
+    header = dict([(key, value) for key, value in header.items() if value is not NA])
     return data, header, neff
 
 
 def save_sweep_file(filename, data, header, format):
     if format == 'fits':
-        header = [dict(name=key, value=header[key],comment=header.get_comment(key)) for key in sorted(header.keys())]
+        header = [dict(name=key, value=header[key]) for key in sorted(header.keys())]
         with fitsio.FITS(filename, mode='rw', clobber=True) as ff:
             ff.create_image_hdu()
             ff[0].write_keys(header)
@@ -462,7 +462,6 @@ def parse_args():
     description="""Create Sweep files for DECALS.
         This tool ensures each sweep file contains roughly '-n' objects. HDF5 and FITS formats are supported.
         Columns contained in a sweep file are:
-
         [%(columns)s].
     """ % dict(columns=str(SWEEP_DTYPE.names)),
         )
