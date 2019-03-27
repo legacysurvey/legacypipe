@@ -205,7 +205,7 @@ def cols_for_survey_table(which='all'):
         dustins_keys= ['skyrms']
     return need_arjuns_keys + dustins_keys + martins_keys + gods_keys
  
-def create_survey_table(T, surveyfn, camera=None, psf=False, bad_expid=None):
+def create_survey_table(T, surveyfn, camera=None, bad_expid=None):
     """input _ccds_table fn
     output a table formatted for legacypipe/runbrick
     """
@@ -236,20 +236,19 @@ def create_survey_table(T, surveyfn, camera=None, psf=False, bad_expid=None):
     T.cd2_1 = T.cd2_1.astype(np.float32)
     T.cd2_2 = T.cd2_2.astype(np.float32)
 
-    if psf:
-        from legacyzpts.psfzpt_cuts import add_psfzpt_cuts
-        add_psfzpt_cuts(T, camera, bad_expid)
+    from legacyzpts.psfzpt_cuts import add_psfzpt_cuts
+    add_psfzpt_cuts(T, camera, bad_expid)
 
     writeto_via_temp(surveyfn, T)
     print('Wrote %s' % surveyfn)
 
-def create_annotated_table(leg_fn, ann_fn, camera, survey, psf=False):
+def create_annotated_table(leg_fn, ann_fn, camera, survey):
     from legacyzpts.annotate_ccds import annotate, init_annotations
     T = fits_table(leg_fn)
     T = survey.cleanup_ccds_table(T)
     init_annotations(T)
     annotate(T, survey, mzls=(camera == 'mosaic'), bass=(camera == '90prime'),
-             normalizePsf=psf, carryOn=True)
+             normalizePsf=True, carryOn=True)
     writeto_via_temp(ann_fn, T)
     print('Wrote %s' % ann_fn)
 
@@ -741,7 +740,7 @@ class Measurer(object):
         ccds['zpt']= np.nan
         return ccds, stars_photom, stars_astrom
 
-    def run(self, ext=None, save_xy=False, psfex=False, splinesky=False, survey=None):
+    def run(self, ext=None, save_xy=False, splinesky=False, survey=None):
 
         """Computes statistics for 1 CCD
         
@@ -835,14 +834,13 @@ class Measurer(object):
             return self.return_on_error(txt,ccds=ccds)
         weight = self.scale_weight(weight)
 
-        if psfex:
-            # Quick check for PsfEx file
-            psf = self.get_psfex_model()
-            if psf.psfex.sampling == 0.:
-                print('PsfEx model has SAMPLING=0')
-                nacc = psf.header.get('ACCEPTED')
-                print('PsfEx model number of stars accepted:', nacc)
-                return self.return_on_error(err_message='Bad PSF model', ccds=ccds)
+        # Quick check for PsfEx file
+        psf = self.get_psfex_model()
+        if psf.psfex.sampling == 0.:
+            print('PsfEx model has SAMPLING=0')
+            nacc = psf.header.get('ACCEPTED')
+            print('PsfEx model number of stars accepted:', nacc)
+            return self.return_on_error(err_message='Bad PSF model', ccds=ccds)
 
         self.img,hdr = self.read_image()
 
@@ -2424,6 +2422,10 @@ def measure_image(img_fn, image_dir='images', run_calibs_only=False, just_measur
         if not validate_procdate_plver(measure.get_splinesky_merged_filename(),
                                        'table', measure.expnum, measure.plver, measure.procdate, measure.plprocid):
             raise RuntimeError('Merged splinesky file did not validate!')
+        # At this point the merged file exists and has been validated, so remove
+        # the individual splinesky files.
+        pdb.set_trace()
+        
     if psfex:
         fn = measure.get_psfex_merged_filename()
         if not os.path.exists(fn):
@@ -2432,8 +2434,8 @@ def measure_image(img_fn, image_dir='images', run_calibs_only=False, just_measur
         if not validate_procdate_plver(measure.get_psfex_merged_filename(),
                                    'table', measure.expnum, measure.plver, measure.procdate, measure.plprocid):
             raise RuntimeError('Merged psfex file did not validate!')
-
-    ## at this point, merged calib files exist & pass validation
+        # At this point the merged file exists and has been validated, so remove
+        # the individual PSFEx and SE files.
 
     if run_calibs_only:
         return
@@ -2482,7 +2484,7 @@ def run_one_calib(X):
 
 def run_one_ext(X):
     measure, ext, survey, psfex, splinesky, debug = X
-    rtns = measure.run(ext, psfex=psfex, splinesky=splinesky, survey=survey, save_xy=debug)
+    rtns = measure.run(ext, splinesky=splinesky, survey=survey, save_xy=debug)
     return rtns
 
 class outputFns(object):
@@ -2533,14 +2535,14 @@ def writeto_via_temp(outfn, obj, func_write=False, **kwargs):
         obj.writeto(tempfn, **kwargs)
     os.rename(tempfn, outfn)
 
-def runit(imgfn, starfn_photom, surveyfn, annfn, psf=False, bad_expid=None,
+def runit(imgfn, starfn_photom, surveyfn, annfn, bad_expid=None,
           survey=None, run_calibs_only=False, **measureargs):
     '''Generate a legacypipe-compatible (survey) CCDs file for a given image.
     '''
 
     t0 = Time()
 
-    results = measure_image(imgfn, psf=psf, survey=survey, run_calibs_only=run_calibs_only, **measureargs)
+    results = measure_image(imgfn, survey=survey, run_calibs_only=run_calibs_only, **measureargs)
     if run_calibs_only:
         return
 
@@ -2696,7 +2698,6 @@ def main(image_list=None,args=None):
         if cal is not None:
             measureargs['calibdir'] = os.path.join(cal, 'calib')
 
-    psf = measureargs['psf']
     camera = measureargs['camera']
     image_dir = measureargs['image_dir']
 
@@ -2749,7 +2750,7 @@ def main(image_list=None,args=None):
 
         if legok and photok:
             # survey --> annotated
-            create_annotated_table(F.surveyfn, F.annfn, camera, survey, psf=psf)
+            create_annotated_table(F.surveyfn, F.annfn, camera, survey)
             continue
 
         # Create the file

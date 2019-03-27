@@ -36,7 +36,7 @@ Can add kd-tree data structure to this resulting annotated-ccds file like this:
 
 '''
 
-def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=False,
+def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=True,
              carryOn=True):
     # File from the "observing" svn repo:
     from pkg_resources import resource_filename
