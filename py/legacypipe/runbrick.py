@@ -104,7 +104,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     - *splinesky*: boolean.  Use SplineSky model, rather than ConstantSky?
     - *subsky*: boolean.  Subtract sky model from tims?
-    
+
     '''
     from legacypipe.survey import (
         get_git_version, get_version_header, get_dependency_versions,
@@ -118,7 +118,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     if bands is None:
         bands = ['g','r','z']
-    
+
     # Get brick object
     custom_brick = (ra is not None)
     if custom_brick:
@@ -159,30 +159,26 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     for name,value,comment in deps:
         version_header.add_record(dict(name=name, value=value, comment=comment))
 
-    version_header.add_record(dict(name='BRICKNAM', value=brickname,
-                                comment='LegacySurvey brick RRRr[pm]DDd'))
+    version_header.add_record(dict(name='BRICK', value=brickname,
+                                comment='LegacySurveys brick RRRr[pm]DDd'))
     version_header.add_record(dict(name='BRICKID' , value=brickid,
-                                comment='LegacySurvey brick id'))
+                                comment='LegacySurveys brick id'))
     version_header.add_record(dict(name='RAMIN'   , value=brick.ra1,
-                                comment='Brick RA min'))
+                                comment='[deg] Brick RA min'))
     version_header.add_record(dict(name='RAMAX'   , value=brick.ra2,
-                                comment='Brick RA max'))
+                                comment='[deg] Brick RA max'))
     version_header.add_record(dict(name='DECMIN'  , value=brick.dec1,
-                                comment='Brick Dec min'))
+                                comment='[deg] Brick Dec min'))
     version_header.add_record(dict(name='DECMAX'  , value=brick.dec2,
-                                comment='Brick Dec max'))
-    version_header.add_record(dict(name='BRICKRA' , value=brick.ra,
-                                comment='Brick center'))
-    version_header.add_record(dict(name='BRICKDEC', value=brick.dec,
-                                comment='Brick center'))
+                                comment='[deg] Brick Dec max'))
+    #version_header.add_record(dict(name='BRICKRA' , value=brick.ra,comment='[deg] Brick center'))
+    #version_header.add_record(dict(name='BRICKDEC', value=brick.dec,comment='[deg] Brick center'))
 
     # Add NOAO-requested headers
     version_header.add_record(dict(
-        name='RA', value=ra2hmsstring(brick.ra, separator=':'),
-        comment='[h] RA Brick center'))
+        name='RA', value=ra2hmsstring(brick.ra, separator=':'), comment='[hms] Brick center RA'))
     version_header.add_record(dict(
-        name='DEC', value=dec2dmsstring(brick.dec, separator=':'),
-        comment='[deg] Dec Brick center'))
+        name='DEC', value=dec2dmsstring(brick.dec, separator=':'), comment='[dms] Brick center DEC'))
     version_header.add_record(dict(
         name='CENTRA', value=brick.ra, comment='[deg] Brick center RA'))
     version_header.add_record(dict(
@@ -356,7 +352,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         version_header.add_record(dict(
             name='CAMS_%s' % band.upper(), value=' '.join(cams),
             comment='Cameras contributing band %s' % band))
-    version_header.add_record(dict(name='BRICKBND', value=''.join(bands),
+    version_header.add_record(dict(name='BANDS', value=''.join(bands),
                                    comment='Bands touching this brick'))
     version_header.add_record(dict(name='NBANDS', value=len(bands),
                                    comment='Number of bands in this catalog'))
@@ -476,14 +472,14 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             plt.colorbar()
             plt.title('CCDs overlapping brick: %i in %s band (%i / %i / %i)' %
                       (len(b_inds), band, nccds.min(), np.median(nccds), nccds.max()))
-                
+
             ps.savefig()
             #continue
 
         while len(b_inds):
             if len(try_ccds) == 0:
                 # Choose the next CCD to look at in this band.
-    
+
                 # A rough point-source depth proxy would be:
                 # metric = np.sqrt(ccds.extime[b_inds]) / seeing[b_inds]
                 # If we want to put more weight on choosing good-seeing images, we could do:
@@ -571,7 +567,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 # create a fake tim to compute galnorm
                 from tractor import PixPos, Flux, ModelMask, Image, NullWCS
                 from legacypipe.survey import SimpleGalaxy
-    
+
                 h,w = 50,50
                 gal = SimpleGalaxy(PixPos(w//2,h//2), Flux(1.))
                 tim = Image(data=np.zeros((h,w), np.float32),
@@ -845,7 +841,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                 hdr.delete('IMAGEW')
                 hdr.delete('IMAGEH')
                 hdr.add_record(dict(name='IMTYPE', value='blobmap',
-                                    comment='LegacySurvey image type'))
+                                    comment='LegacySurveys image type'))
                 with survey.write_output('blobmap', brick=brickname,
                                          shape=blobs.shape) as out:
                     out.fits.write(blobs, header=hdr)
@@ -968,12 +964,12 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             dimshow(get_rgb(coimgs, bands, **rgbkwargs))
             plt.title('data')
             ps.savefig()
-    
+
             plt.clf()
             dimshow(get_rgb(haloimgs, bands, **rgbkwargs))
             plt.title('fit profiles')
             ps.savefig()
-    
+
             plt.clf()
             dimshow(get_rgb([c-h for c,h in zip(coimgs,haloimgs)], bands, **rgbkwargs))
             plt.title('data - fit profiles')
@@ -1040,7 +1036,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         sat.mag = np.zeros(len(sat), np.float32) + 15.
         sat.ref_cat = np.array(['  '] * len(sat))
         del satyx
-        
+
         avoid_x = np.append(avoid_x, sat.ibx).astype(int)
         avoid_y = np.append(avoid_y, sat.iby).astype(int)
         # Create catalog entries for saturated blobs
@@ -1154,7 +1150,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     assert(len(T) > 0)
     assert(len(cat) == len(T))
-    
+
     tnow = Time()
     debug('[serial srcs] Peaks:', tnow-tlast)
     tlast = tnow
@@ -1493,7 +1489,7 @@ def stage_fitblobs(T=None,
         _write_checkpoint(R, checkpoint_filename)
 
         debug('Got', n_finished_total, 'results; wrote', len(R), 'to checkpoint')
-            
+
     debug('[parallel fitblobs] Fitting sources took:', Time()-tlast)
 
     # Repackage the results from one_blob...
@@ -1580,7 +1576,7 @@ def stage_fitblobs(T=None,
         hdr.delete('IMAGEW')
         hdr.delete('IMAGEH')
         hdr.add_record(dict(name='IMTYPE', value='blobmap',
-                            comment='LegacySurvey image type'))
+                            comment='LegacySurveys image type'))
         hdr.add_record(dict(name='EQUINOX', value=2000.))
 
         with survey.write_output('blobmap', brick=brickname, shape=blobs.shape) as out:
@@ -1806,7 +1802,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
     blobvals = Counter(blobs[blobs>=0])
     blob_order = np.array([i for i,npix in blobvals.most_common()])
     del blobvals
-    
+
     if custom_brick:
         U = None
     else:
@@ -1979,7 +1975,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     ra  = np.array([src.getPosition().ra  for src in cat])
     dec = np.array([src.getPosition().dec for src in cat])
     ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
-    
+
     # Get integer brick pixel coords for each source, for referencing maps
     T.out_of_bounds = reduce(np.logical_or, [xx < 0.5, yy < 0.5,
                                              xx > W+0.5, yy > H+0.5])
@@ -2001,7 +1997,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                                    targetwcs),
                     plots=plots, ps=ps, mp=mp)
     record_event and record_event('stage_coadds: extras')
-    
+
     # Coadds of galaxy sims only, image only
     if hasattr(tims[0], 'sims_image'):
         sims_mods = [tim.sims_image for tim in tims]
@@ -2094,7 +2090,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     hdr.delete('IMAGEW')
     hdr.delete('IMAGEH')
     hdr.add_record(dict(name='IMTYPE', value='maskbits',
-                        comment='LegacySurvey image type'))
+                        comment='LegacySurveys image type'))
     # NOTE that we pass the "maskbits" and "maskbits_header" variables
     # on to later stages, because we will add in the WISE mask planes
     # later (and write the result in the writecat stage. THEREFORE, if
@@ -2394,7 +2390,7 @@ def stage_wise_forced(
     if not os.path.exists(background_dir):
         print('WARNING: no WISE backgrounds in', background_dir)
         background_dir = None
-    
+
     # Create list of groups-of-tiles to photometer
     args = []
     # Skip if $UNWISE_COADDS_DIR or --unwise-dir not set.
@@ -2617,7 +2613,7 @@ def stage_writecat(
                             comment='maskbits bit 12: LSLGA large galaxy'))
         hdr.add_record(dict(name='BITNM13', value='CLUSTER',
                             comment='maskbits bit 13: Cluster'))
-        
+
         if wise_mask_maps is not None:
             wisehdr = fitsio.FITSHDR()
             wisehdr.add_record(dict(name='WBITNM0', value='BRIGHT',
@@ -2673,7 +2669,7 @@ def stage_writecat(
     #  values smaller by multiplying by cos(Dec); so invvars are /=
     #  cosdec^2
     T2.ra_ivar /= np.cos(np.deg2rad(T2.dec))**2
-    
+
     # Compute fiber fluxes
     T2.fiberflux, T2.fibertotflux = get_fiber_fluxes(
         cat, T2, targetwcs, H, W, pixscale, bands, plots=plots, ps=ps)
@@ -2719,7 +2715,7 @@ def stage_writecat(
 
     T2.delete_column('orig_ra')
     T2.delete_column('orig_dec')
-    
+
     T2.brick_primary = ((T2.ra  >= brick.ra1 ) * (T2.ra  < brick.ra2) *
                         (T2.dec >= brick.dec1) * (T2.dec < brick.dec2))
 
@@ -2752,7 +2748,7 @@ def stage_writecat(
                 WISE_T.set(c, flux)
                 t = 'lc_flux_w%i' % band
                 T2.set(t, flux)
-                
+
             c = 'w%i_nanomaggies_ivar' % band
             flux = WISE.get(c) / fluxfactor**2
             WISE.set(c, flux)
@@ -2797,7 +2793,7 @@ def stage_writecat(
                        N_wise_epochs=11, motions=gaia_stars, gaia_tagalong=True)
 
     # write fits file with galaxy-sim stuff (xy bounds of each sim)
-    if 'sims_xy' in T.get_columns(): 
+    if 'sims_xy' in T.get_columns():
         sims_data = fits_table()
         sims_data.sims_xy = T.sims_xy
         with survey.write_output('galaxy-sims', brick=brickname) as out:
@@ -2950,11 +2946,11 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     - *hybridPsf*: boolean; use combo pixelized PsfEx + Gaussian approx model
 
     - *normalizePsf*: boolean; make PsfEx model have unit flux
-    
+
     - *splinesky*: boolean; use the splined sky model (default is constant)?
 
     - *subsky*: boolean; subtract the sky model when reading in tims (tractor images)?
-    
+
     - *ceres*: boolean; use Ceres Solver when possible?
 
     - *wise_ceres*: boolean; use Ceres Solver for unWISE forced photometry?
@@ -3295,7 +3291,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--no-wise-ceres', dest='wise_ceres', default=True,
                         action='store_false',
                         help='Do not use Ceres Solver for unWISE forced phot')
-    
+
     parser.add_argument('--nblobs', type=int,help='Debugging: only fit N blobs')
     parser.add_argument('--blob', type=int, help='Debugging: start with blob #')
     parser.add_argument('--blobid', help='Debugging: process this list of (comma-separated) blob ids.')
@@ -3353,14 +3349,14 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument(
         '--no-lanczos', dest='lanczos', action='store_false', default=True,
         help='Do nearest-neighbour rather than Lanczos-3 coadds')
-    
+
     parser.add_argument('--gpsf', action='store_true', default=False,
                         help='Use a fixed single-Gaussian PSF')
 
     parser.add_argument('--no-hybrid-psf', dest='hybridPsf', default=True,
                         action='store_false',
                         help="Don't use a hybrid pixelized/Gaussian PSF model")
-    
+
     parser.add_argument('--no-normalize-psf', dest='normalizePsf', default=True,
                         action='store_false',
                         help='Do not normalize the PSF model to unix flux')
@@ -3439,7 +3435,7 @@ def get_runbrick_kwargs(survey=None,
                             output_dir=output_dir,
                             cache_dir=cache_dir)
         info(survey)
-    
+
     if check_done or skip or skip_coadd:
         if skip_coadd:
             fn = survey.find_file('image-jpeg', output=True, brick=brick)
@@ -3575,7 +3571,7 @@ def main(args=None):
         ps_thread.start()
 
     debug('kwargs:', kwargs)
-        
+
     rtn = -1
     try:
         run_brick(opt.brick, survey, **kwargs)
