@@ -300,8 +300,8 @@ def read_large_galaxies(survey, targetwcs):
     # if len(gals) == 0:
     #     return None,None
     galaxies.radius = galaxies.d25 / 2. / 60.
-    # John told me to do this
-    galaxies.radius *= 1.2
+    # John told me to do this...
+    #galaxies.radius *= 1.2 ...and then John taketh away.
     galaxies.delete_column('d25')
     galaxies.rename('lslga_id', 'ref_id')
     galaxies.ref_cat = np.array(['L2'] * len(galaxies))
