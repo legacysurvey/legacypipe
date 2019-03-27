@@ -879,6 +879,7 @@ class LegacySurveyImage(object):
             if len(sky.version) == 0:
                 sky.version = str(os.stat(fn).st_mtime)
         sky.plver = hdr.get('PLVER', '').strip()
+        sky.procdate = hdr.get('PROCDATE', '').strip()
         sig1 = hdr.get('SIG1', None)
         if sig1 is not None:
             sky.sig1 = sig1
@@ -916,6 +917,7 @@ class LegacySurveyImage(object):
             sky.shift(x0, y0)
         sky.version = Ti.legpipev
         sky.plver = Ti.plver
+        sky.procdate = Ti.procdate
         if 'sig1' in Ti.get_columns():
             sky.sig1 = Ti.sig1
         if 'imgdsum' in Ti.get_columns():
@@ -965,6 +967,7 @@ class LegacySurveyImage(object):
             if psf.version is None:
                 psf.version = str(os.stat(self.psffn).st_mtime)
             psf.plver = hdr.get('PLVER', '').strip()
+            psf.procdate = hdr.get('PROCDATE', '').strip()
             psf.datasum = hdr.get('IMGDSUM', 0)
             hdr = fitsio.read_header(self.psffn, ext=1)
             psf.fwhm = hdr['PSF_FWHM']
@@ -1016,6 +1019,7 @@ class LegacySurveyImage(object):
 
         psf.version = Ti.legpipev.strip()
         psf.plver = Ti.plver.strip()
+        psf.procdate = Ti.procdate.strip()
         if 'imgdsum' in Ti.get_columns():
             psf.datasum = Ti.imgdsum
         psf.fwhm = Ti.psf_fwhm
