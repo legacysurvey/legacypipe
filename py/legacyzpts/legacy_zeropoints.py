@@ -2636,7 +2636,7 @@ def runit(imgfn, starfn_photom, surveyfn, annfn, bad_expid=None,
     create_survey_table(accds, surveyfn, camera=measureargs['camera'],
                         bad_expid=bad_expid)
     # survey --> annotated
-    create_annotated_table(surveyfn, annfn, measureargs['camera'], survey, psf=psf)
+    create_annotated_table(surveyfn, annfn, measureargs['camera'], survey)
 
     t0 = ptime('write-results-to-fits',t0)
     
