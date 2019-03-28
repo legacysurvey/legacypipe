@@ -2394,7 +2394,7 @@ def measure_image(img_fn, image_dir='images', run_calibs_only=False, just_measur
         ccds = mp.map(run_one_calib, [(measure, survey, ext, do_psfex, do_splinesky)
                                       for ext in extlist])
         
-        from legacypipe.merge_calibs import merge_splinesky, merge_psfex
+        from legacyzpts.merge_calibs import merge_splinesky, merge_psfex
         class FakeOpts(object):
             pass
         opts = FakeOpts()
