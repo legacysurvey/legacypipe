@@ -1204,6 +1204,56 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         plt.title('saturated_pix')
         ps.savefig()
 
+        from scipy.ndimage.measurements import find_objects
+
+        any_saturated = reduce(np.logical_or, saturated_pix)
+
+        merging = np.zeros_like(any_saturated)
+
+        h,w = any_saturated.shape
+        for i in range(w):
+            col = hot[:,i]
+            cblobs,nc = label(col)
+            col = np.logical_or(col, any_saturated[:,i])
+            cblobs2,nc2 = label(col)
+            if nc2 < nc:
+                # at least one pair of blobs merged together
+                # Find merged blobs:
+                # "cblobs2" is a map from pixels to merged blob number.
+                # look up which merged blob each un-merged blob belongs to.
+                slcs = find_objects(cblobs)
+                from collections import Counter
+                counts = Counter()
+                for slc in slcs:
+                    (slc,) = slc
+                    #print('slice', slc, 'cblobs2 shape', cblobs2.shape,
+                    #      'blob index', cblobs2[slc.start])
+                    mergedblob = cblobs2[slc.start]
+                    counts[mergedblob] += 1
+                #print('Counts for unmerged blobs in merged blobs:', counts)
+                slcs2 = find_objects(cblobs2)
+                for blob,n in counts.most_common():
+                    if n == 1:
+                        break
+                    #print('Index', index)
+                    (slc,) = slcs2[blob-1]
+                    merging[slc, i] = True
+
+        plt.clf()
+        plt.subplot(1,2,1)
+        dimshow((hot*1) + (any_saturated*1), vmin=0, vmax=2, cmap='hot')
+        plt.title('hot + saturated')
+        ps.savefig()
+
+        plt.clf()
+        plt.subplot(1,2,1)
+        dimshow(merging, vmin=0, vmax=1, cmap='hot')
+        plt.title('merging')
+        plt.subplot(1,2,2)
+        dimshow(np.logical_or(hot, merging), vmin=0, vmax=1, cmap='hot')
+        plt.title('merged')
+        ps.savefig()
+
     # Segment, and record which sources fall into each blob
     blobs,blobsrcs,blobslices = segment_and_group_sources(
         np.logical_or(hot, reduce(np.logical_or, saturated_pix)),
