@@ -208,7 +208,10 @@ def cols_for_survey_table(which='all'):
 def create_survey_table(T, surveyfn, camera=None, bad_expid=None):
     """input _ccds_table fn
     output a table formatted for legacypipe/runbrick
+
     """
+    from legacyzpts.psfzpt_cuts import add_psfzpt_cuts
+
     assert(camera in CAMERAS)
     need_keys = cols_for_survey_table(which='all')
     # Rename
@@ -236,7 +239,6 @@ def create_survey_table(T, surveyfn, camera=None, bad_expid=None):
     T.cd2_1 = T.cd2_1.astype(np.float32)
     T.cd2_2 = T.cd2_2.astype(np.float32)
 
-    from legacyzpts.psfzpt_cuts import add_psfzpt_cuts
     add_psfzpt_cuts(T, camera, bad_expid)
 
     writeto_via_temp(surveyfn, T)
@@ -2632,7 +2634,7 @@ def runit(imgfn, starfn_photom, surveyfn, annfn, bad_expid=None,
 
     # survey table
     create_survey_table(accds, surveyfn, camera=measureargs['camera'],
-                        psf=psf, bad_expid=bad_expid)
+                        bad_expid=bad_expid)
     # survey --> annotated
     create_annotated_table(surveyfn, annfn, measureargs['camera'], survey, psf=psf)
 
