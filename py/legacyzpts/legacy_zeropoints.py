@@ -1256,7 +1256,7 @@ class Measurer(object):
         fn = self.get_splinesky_merged_filename()
         #print('Looking for file', fn)
         if os.path.exists(fn):
-            print('Reading splinesky-merged {}'.format(fn))
+            #print('Reading splinesky-merged {}'.format(fn))
             T = fits_table(fn)
             if validate_procdate_plver(fn, 'table', self.expnum, self.plver,
                                    self.procdate, self.plprocid, data=T):
@@ -1282,7 +1282,7 @@ class Measurer(object):
         if not os.path.exists(fn):
             return None
 
-        print('Reading splinesky {}'.format(fn))
+        #print('Reading splinesky {}'.format(fn))
         hdr = read_primary_header(fn)
 
         if not validate_procdate_plver(fn, 'primaryheader', self.expnum, self.plver,
@@ -1459,6 +1459,11 @@ class Measurer(object):
                           '%s-%s.fits' % (self.camera, expstr))
         return fn
 
+    def get_psfex_unmerged_filename(self):
+        expstr = '%08i' % self.expnum
+        return os.path.join(self.calibdir, self.camera, 'psfex', expstr[:5], expstr,
+                          '%s-%s-%s.fits' % (self.camera, expstr, self.ext))
+
     def get_psfex_model(self):
         import tractor
 
@@ -1467,7 +1472,7 @@ class Measurer(object):
         expstr = '%08i' % self.expnum
         #print('Looking for PsfEx file', fn)
         if os.path.exists(fn):
-            print('Reading psfex-merged {}'.format(fn))
+            #print('Reading psfex-merged {}'.format(fn))
             T = fits_table(fn)
             if validate_procdate_plver(fn, 'table', self.expnum, self.plver,
                                    self.procdate, self.plprocid, data=T):
@@ -1487,13 +1492,12 @@ class Measurer(object):
                     return psf
 
         # Look for single-CCD PsfEx file
-        fn = os.path.join(self.calibdir, self.camera, 'psfex', expstr[:5], expstr,
-                          '%s-%s-%s.fits' % (self.camera, expstr, self.ext))
-        #print('Reading PsfEx file', fn)
+        fn = self.get_psfex_unmerged_filename()
+
         if not os.path.exists(fn):
             return None
 
-        print('Reading psfex {}'.format(fn))
+        #print('Reading psfex {}'.format(fn))
         hdr = read_primary_header(fn)
         if not validate_procdate_plver(fn, 'primaryheader', self.expnum, self.plver,
                                        self.procdate, self.plprocid, data=hdr):
@@ -2317,7 +2321,7 @@ def _measure_image(args):
     return measure_image(*args)
 
 def measure_image(img_fn, image_dir='images', run_calibs_only=False, just_measure=False,
-                  survey=None, threads=None, **measureargs):
+                  survey=None, threads=None, psfex=True, **measureargs):
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
     the FITS extensions for a given set of images.
     '''
@@ -2369,7 +2373,6 @@ def measure_image(img_fn, image_dir='images', run_calibs_only=False, just_measur
     all_ccds = []
     all_stars_photom = []
     all_stars_astrom = []
-    psfex = measureargs['psf']
     splinesky = measureargs['splinesky']
 
     do_splinesky = splinesky
@@ -2424,7 +2427,11 @@ def measure_image(img_fn, image_dir='images', run_calibs_only=False, just_measur
             raise RuntimeError('Merged splinesky file did not validate!')
         # At this point the merged file exists and has been validated, so remove
         # the individual splinesky files.
-        pdb.set_trace()
+        for ext in extlist:
+            measure.ext = ext
+            fn = measure.get_splinesky_unmerged_filename()
+            if os.path.isfile(fn):
+                os.remove(fn)
         
     if psfex:
         fn = measure.get_psfex_merged_filename()
@@ -2436,6 +2443,14 @@ def measure_image(img_fn, image_dir='images', run_calibs_only=False, just_measur
             raise RuntimeError('Merged psfex file did not validate!')
         # At this point the merged file exists and has been validated, so remove
         # the individual PSFEx and SE files.
+        for ext in extlist:
+            measure.ext = ext
+            psffn = measure.get_psfex_unmerged_filename()
+            if os.path.isfile(psffn):
+                os.remove(psffn)
+            sefn = psffn.replace('psfex', 'se')
+            if os.path.isfile(sefn):
+                os.remove(sefn)
 
     if run_calibs_only:
         return
@@ -2738,13 +2753,23 @@ def main(image_list=None,args=None):
         F = outputFns(imgfn, outdir, camera, image_dir=image_dir, debug=measureargs['debug'])
 
         measure = measure_image(F.imgfn, just_measure=True, **measureargs)
+        psffn = measure.get_psfex_merged_filename()
+        skyfn = measure.get_splinesky_merged_filename()
 
-        legok,annok = [validate_procdate_plver(fn, 'table', measure.expnum,
-                                               measure.plver, measure.procdate, measure.plprocid)
-                       for fn in [F.surveyfn, F.annfn]]
+        legok, annok, psfok, skyok = [validate_procdate_plver(
+            fn, 'table', measure.expnum, measure.plver, measure.procdate, measure.plprocid)
+            for fn in [F.surveyfn, F.annfn, psffn, skyfn]]
+
+        if measureargs['run_calibs_only'] and psfok and skyok:
+            print('Already finished {}'.format(psffn))
+            print('Already finished {}'.format(skyfn))
+            continue
+            
         photok = validate_procdate_plver(F.starfn_photom, 'header', measure.expnum,
-                                         measure.plver, measure.procdate, measure.plprocid, ext=1)
-        if legok and annok and photok:
+                                         measure.plver, measure.procdate, measure.plprocid,
+                                         ext=1)
+
+        if legok and annok and photok and psfok and skyok:
             print('Already finished: {}'.format(F.annfn))
             continue
 
