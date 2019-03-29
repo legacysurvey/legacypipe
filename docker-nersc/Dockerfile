@@ -164,10 +164,6 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 RUN cd /src \
     && git clone http://github.com/legacysurvey/legacypipe.git legacypipe
 
-# Legacyzpts
-RUN cd /src \
-    && git clone https://github.com/legacysurvey/legacyzpts.git
-
 # unwise_psf
 RUN cd /src \
     && git clone https://github.com/legacysurvey/unwise_psf.git
@@ -178,5 +174,4 @@ ENV WISE_PSF_DIR /src/unwise_psf/etc
 # cgroup-tools -- doesn't work inside containers.
 
 # up!
-RUN cd /src/legacypipe && git pull && echo 5
-
+RUN cd /src/legacypipe && git pull && echo 1
