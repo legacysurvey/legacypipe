@@ -63,7 +63,7 @@ def main():
                 mask = d < matched_distance[i]
                 mask &= objects['BRICK_PRIMARY'] 
                 i = i[mask]
-                matched_catalog[i] = objects[mask]
+                matched_catalog[i] = objects[mask][list(matched_catalog.dtype.names)]
                 matched_distance[i] = d[mask]
             matched = mask.sum()
 
@@ -227,7 +227,7 @@ def parse_args():
     ap.add_argument('-f', "--format", choices=['fits', 'hdf5'], nargs='+', default=["fits"],
         help="Format of the output file")
 
-    ap.add_argument('-t', "--tolerance", default=1, type=float,
+    ap.add_argument('-t', "--tolerance", default=1.5, type=float,
         help="Tolerance of the angular distance for a match, in arcseconds")
 
     ap.add_argument('-F', "--filelist", default=None,

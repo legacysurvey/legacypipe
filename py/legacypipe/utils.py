@@ -5,17 +5,21 @@ import numpy as np
 from tractor.ellipses import EllipseESoft
 from tractor.utils import _GaussianPriors
 
-from astrometry.util.multiproc import multiproc
-from astrometry.util.ttime import Time
+def log_info(logger, args):
+    msg = ' '.join(map(str, args))
+    logger.info(msg)
+
+def log_debug(logger, args):
+    msg = ' '.join(map(str, args))
+    logger.debug(msg)
 
 class EllipseWithPriors(EllipseESoft):
-    '''
-    An ellipse (used to represent galaxy shapes) with Gaussian priors
+    '''An ellipse (used to represent galaxy shapes) with Gaussian priors
     over softened ellipticity parameters.  This class is used during
     fitting.
-    
-    We ALSO place a prior on log-radius, forcing it to be < +5 (r_e =
-    148").
+
+    We ALSO place a prior on log-radius, forcing it to be < +5 (in
+    log-arcsec); though this gets dynamically adjusted in the oneblob.py code.
 
     To use this class, subclass it and set the 'ellipticityStd' class
     member.
@@ -142,6 +146,51 @@ def find_unique_pixels(wcs, W, H, unique, ra1,ra2,dec1,dec2):
             break
     return unique
 
+def read_primary_header(fn):
+    '''
+    Reads the FITS primary header (HDU 0) from the given filename.
+    This is just a faster version of fitsio.read_header(fn).
+    '''
+    import fitsio
+    if fn.endswith('.gz'):
+        return fitsio.read_header(fn)
+
+    # Weirdly, this can be MUCH faster than letting fitsio do it...
+    hdr = fitsio.FITSHDR()
+    foundEnd = False
+    ff = open(fn, 'rb')
+    h = b''
+    while True:
+        hnew = ff.read(32768)
+        if len(hnew) == 0:
+            # EOF
+            ff.close()
+            raise RuntimeError('Reached end-of-file in "%s" before finding end of FITS header.' % fn)
+        h = h + hnew
+        while True:
+            line = h[:80]
+            h = h[80:]
+            #print('Header line "%s"' % line)
+            # HACK -- fitsio apparently can't handle CONTINUE.
+            # It also has issues with slightly malformed cards, like
+            # KEYWORD  =      / no value
+            if line[:8] != b'CONTINUE':
+                try:
+                    hdr.add_record(line.decode())
+                except OSError as err:
+                    print('Warning: failed to parse FITS header line: ' +
+                          ('"%s"; error "%s"; skipped' % (line.strip(), str(err))))
+
+            if line == (b'END' + b' '*77):
+                foundEnd = True
+                break
+            if len(h) < 80:
+                break
+        if foundEnd:
+            break
+    ff.close()
+    return hdr
+
 def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
     from astrometry.util.run_command import run_command
     from astrometry.util.fits import fits_table, merge_tables
@@ -149,7 +198,7 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
     import re
     import fitsio
     from functools import reduce
-    
+
     # my pid = parent pid -- this is a thread.
     print('run_ps_thread starting: parent PID', parent_pid, ', my PID', os.getpid(), fn)
     TT = []
@@ -205,7 +254,7 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
     if clock_ticks == -1:
         #print('Failed to get clock times per second; assuming 100')
         clock_ticks = 100
-    
+
     while True:
         shutdown.wait(5.0)
         if shutdown.is_set():
@@ -342,7 +391,7 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
         timenow = time.time()
         T.unixtime = np.zeros(len(T), np.float64) + timenow
         T.step = np.zeros(len(T), np.int16) + step
-        
+
         if os.path.exists('/proc'):
             # Try to grab higher-precision CPU timing info from /proc/PID/stat
             T.proc_utime = np.zeros(len(T), np.float32)
@@ -376,7 +425,7 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
                     T.processor [i] = proc
                 except:
                     pass
-        
+
         TT.append(T)
 
         #print('ps -- step', step)
@@ -392,3 +441,21 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
         T = merge_tables(TT, columns='fillzero')
         write_results(fn, T, events, fitshdr)
 
+# Memory Limits
+def get_ulimit():
+    import resource
+    for name, desc in [
+        ('RLIMIT_AS', 'VMEM'),
+        ('RLIMIT_CORE', 'core file size'),
+        ('RLIMIT_CPU',  'CPU time'),
+        ('RLIMIT_FSIZE', 'file size'),
+        ('RLIMIT_DATA', 'heap size'),
+        ('RLIMIT_STACK', 'stack size'),
+        ('RLIMIT_RSS', 'resident set size'),
+        ('RLIMIT_NPROC', 'number of processes'),
+        ('RLIMIT_NOFILE', 'number of open files'),
+        ('RLIMIT_MEMLOCK', 'lockable memory address'),
+        ]:
+        limit_num = getattr(resource, name)
+        soft, hard = resource.getrlimit(limit_num)
+        print('Maximum %-25s (%-15s) : %20s %20s' % (desc, name, soft, hard))

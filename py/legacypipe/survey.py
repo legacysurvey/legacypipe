@@ -8,6 +8,7 @@ import numpy as np
 import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
+from astrometry.util.file import trymakedirs
 
 from tractor.ellipses import EllipseESoft, EllipseE
 from tractor.galaxy import ExpGalaxy
@@ -15,7 +16,14 @@ from tractor import PointSource, ParamList, ConstantFitsWcs
 
 from legacypipe.utils import EllipseWithPriors
 
-release_number = 7000
+import logging
+logger = logging.getLogger('legacypipe.survey')
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
 
 # search order: $TMPDIR, $TEMP, $TMP, then /tmp, /var/tmp, /usr/tmp
 tempdir = tempfile.gettempdir()
@@ -37,6 +45,8 @@ MASKBITS = dict(
     WISEM2     = 0x200,
     BAILOUT    = 0x400, # bailed out of processing
     MEDIUM     = 0x800, # medium-bright star
+    GALAXY     = 0x1000, # LSLGA large galaxy
+    CLUSTER    = 0x2000, # Cluster catalog source
 )
 
 # Bits in the "brightblob" bitmask
@@ -44,6 +54,7 @@ IN_BLOB = dict(
     BRIGHT = 0x1,
     MEDIUM = 0x2,
     CLUSTER = 0x4,
+    GALAXY = 0x8,
 )
 
 # Ugly hack: for sphinx documentation, the astrometry and tractor (and
@@ -191,7 +202,6 @@ class GaiaSource(PointSource):
     
     @classmethod
     def from_catalog(cls, g, bands):
-        from tractor.tractortime import TAITime
         from tractor import NanoMaggies
 
         # When creating 'tim.time' entries, we do:
@@ -344,14 +354,14 @@ class BrickDuck(object):
         self.brickid = -1
 
 
-def get_git_version(dir=None):
+def get_git_version(dirnm=None):
     '''
     Runs 'git describe' in the current directory (or given dir) and
     returns the result as a string.
 
     Parameters
     ----------
-    dir : string
+    dirnm : string
         If non-None, "cd" to the given directory before running 'git describe'
 
     Returns
@@ -360,12 +370,12 @@ def get_git_version(dir=None):
     '''
     from astrometry.util.run_command import run_command
     cmd = ''
-    if dir is None:
+    if dirnm is None:
         # Get the git version of the legacypipe product
         import legacypipe
-        dir = os.path.dirname(legacypipe.__file__)
+        dirnm = os.path.dirname(legacypipe.__file__)
 
-    cmd = "cd '%s' && git describe" % dir
+    cmd = "cd '%s' && git describe" % dirnm
     rtn,version,err = run_command(cmd)
     if rtn:
         raise RuntimeError('Failed to get version string (%s): ' % cmd +
@@ -373,7 +383,8 @@ def get_git_version(dir=None):
     version = version.strip()
     return version
 
-def get_version_header(program_name, survey_dir, git_version=None):
+def get_version_header(program_name, survey_dir, release, git_version=None):
+
     '''
     Creates a fitsio header describing a DECaLS data product.
     '''
@@ -385,7 +396,6 @@ def get_version_header(program_name, survey_dir, git_version=None):
 
     if git_version is None:
         git_version = get_git_version()
-        #print('Version:', git_version)
 
     hdr = fitsio.FITSHDR()
 
@@ -398,18 +408,18 @@ def get_version_header(program_name, survey_dir, git_version=None):
                         comment='legacypipe git version'))
     hdr.add_record(dict(name='SURVEYV', value=survey_dir,
                         comment='Legacy Survey directory'))
-    hdr.add_record(dict(name='DECALSDR', value='DR7',
+    hdr.add_record(dict(name='DECALSDR', value='DR8',
                         comment='DECaLS release name'))
     hdr.add_record(dict(name='DECALSDT', value=datetime.datetime.now().isoformat(),
                         comment='%s run time' % program_name))
-    hdr.add_record(dict(name='SURVEY', value='DECaLS',
-                        comment='DECam Legacy Survey'))
+    hdr.add_record(dict(name='SURVEY', value='DECaLS+MzLS+BASS',
+                        comment='Legacy Surveys'))
     # Requested by NOAO
-    hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
+    hdr.add_record(dict(name='SURVEYID', value='DECaLS BASS MzLS',
                         comment='Survey name'))
+    #hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
     #hdr.add_record(dict(name='SURVEYID', value='BASS MzLS',
-    #                    comment='Survey name'))
-    hdr.add_record(dict(name='DRVERSIO', value=release_number,
+    hdr.add_record(dict(name='DRVERSIO', value=release,
                         comment='Survey data release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
                         comment='Observation type'))
@@ -418,17 +428,95 @@ def get_version_header(program_name, survey_dir, git_version=None):
 
     import socket
     hdr.add_record(dict(name='HOSTNAME', value=socket.gethostname(),
-                        comment='Machine where runbrick.py was run'))
+                        comment='Machine where script was run'))
     hdr.add_record(dict(name='HOSTFQDN', value=socket.getfqdn(),
-                        comment='Machine where runbrick.py was run'))
+                        comment='Machine where script was run'))
     hdr.add_record(dict(name='NERSC', value=os.environ.get('NERSC_HOST', 'none'),
-                        comment='NERSC machine where runbrick.py was run'))
+                        comment='NERSC machine where script was run'))
     hdr.add_record(dict(name='JOB_ID', value=os.environ.get('SLURM_JOB_ID', 'none'),
                         comment='SLURM job id'))
     hdr.add_record(dict(name='ARRAY_ID', value=os.environ.get('ARRAY_TASK_ID', 'none'),
                         comment='SLURM job array id'))
 
     return hdr
+
+def get_dependency_versions(unwise_dir, unwise_tr_dir):
+    depvers = []
+    headers = []
+    # Get DESICONDA version, and read file $DESICONDA/pkg_list.txt for
+    # other package versions.
+    default_ver = 'UNAVAILABLE'
+    desiconda = os.environ.get('DESICONDA', default_ver)
+    # DESICONDA like .../edison/desiconda/20180512-1.2.5-img/conda
+    verstr = os.path.basename(os.path.dirname(desiconda))
+    depvers.append(('desiconda', verstr))
+
+    if desiconda != default_ver:
+        fn = os.path.join(desiconda, 'pkg_list.txt')
+        vers = {}
+        if not os.path.exists(fn):
+            print('Warning: expected file $DESICONDA/pkg_list.txt to exist but it does not!')
+        else:
+            # Read version numbers
+            for line in open(fn):
+                words = line.strip().split('=')
+                if len(words) >= 2:
+                    vers[words[0]] = words[1]
+
+        for pkg in ['astropy', 'matplotlib', 'mkl', 'numpy', 'python', 'scipy']:
+            verstr = vers.get(pkg, default_ver)
+            if verstr == default_ver:
+                print('Warning: failed to get version string for "%s"' % pkg)
+            else:
+                depvers.append((pkg, verstr))
+
+    # Store paths to astrometry and tractor packages.
+    import astrometry
+    depvers.append(('astrometry', os.path.dirname(astrometry.__file__)))
+    import tractor
+    depvers.append(('tractor', os.path.dirname(tractor.__file__)))
+    depvers.append(('fitsio', os.path.dirname(fitsio.__file__)))
+
+    # Get additional paths from environment variables
+    for dep in ['TYCHO2_KD', 'GAIA_CAT', 'LARGEGALAXIES', 'WISE_PSF']:
+        value = os.environ.get('%s_DIR' % dep, default_ver)
+        if value == default_ver:
+            print('Warning: failed to get version string for "%s"' % dep)
+        else:
+            depvers.append((dep, value))
+
+    if unwise_dir is not None:
+        dirs = unwise_dir.split(':')
+        depvers.append(('unwise', unwise_dir))
+        for i,d in enumerate(dirs):
+            headers.append(('UNWISD%i' % (i+1), d, 'unWISE dir(s)'))
+
+    if unwise_tr_dir is not None:
+        depvers.append(('unwise_tr', unwise_tr_dir))
+        # this is assumed to be only a single directory
+        headers.append(('UNWISTD', unwise_tr_dir, 'unWISE time-resolved dir'))
+
+    added_long = False
+    for i,(name,value) in enumerate(depvers):
+        headers.append(('DEPNAM%02i' % i, name, 'Dependency name'))
+        if len(value) > 68:
+            headers.append(('DEPVER%02i' % i, value[:67] + '&',
+                            'Dependency version'))
+            while len(value):
+                value = value[67:]
+                if len(value) == 0:
+                    break
+                headers.append(('CONTINUE',
+                                "  '%s%s'" % (value[:67], '&' if len(value) > 67 else ''),
+                                None))
+        else:
+            headers.append(('DEPVER%02i' % i, value, 'Dependency version'))
+            added_long = True
+
+    if added_long:
+        headers = [('LONGSTRN', 'OGIP 1.0','CONTINUE cards are used')] + headers
+
+    return headers
 
 class MyFITSHDR(fitsio.FITSHDR):
     '''
@@ -517,7 +605,7 @@ def tim_get_resamp(tim, targetwcs):
     if hasattr(tim, 'resamp'):
         return tim.resamp
     try:
-        Yo,Xo,Yi,Xi,nil = resample_with_wcs(targetwcs, tim.subwcs, [], 2)
+        Yo,Xo,Yi,Xi,_ = resample_with_wcs(targetwcs, tim.subwcs, [], 2)
     except OverlapError:
         print('No overlap')
         return None
@@ -612,8 +700,7 @@ def switch_to_soft_ellipses(cat):
      in-place.
 
     '''
-    from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy
-    from tractor.ellipses import EllipseESoft
+    from tractor.galaxy import DevGalaxy, FixedCompositeGalaxy
     for src in cat:
         if isinstance(src, (DevGalaxy, ExpGalaxy)):
             src.shape = EllipseESoft.fromEllipseE(src.shape)
@@ -644,7 +731,6 @@ def brick_catalog_for_radec_box(ralo, rahi, declo, dechi,
     I = survey.bricks_touching_radec_box(bricks, ralo, rahi, declo, dechi)
     print(len(I), 'bricks touch RA,Dec box')
     TT = []
-    hdr = None
     for i in I:
         brick = bricks[i]
         fn = catpattern % brick.brickid
@@ -771,7 +857,7 @@ def bricks_touching_wcs(targetwcs, survey=None, B=None, margin=20):
 
     # MAGIC 0.4 degree search radius =
     # DECam hypot(1024,2048)*0.27/3600 + Brick hypot(0.25, 0.25) ~= 0.35 + margin
-    I,J,d = match_radec(B.ra, B.dec, ra, dec,
+    I,_,_ = match_radec(B.ra, B.dec, ra, dec,
                         radius + np.hypot(0.25,0.25)/2. + 0.05)
     print(len(I), 'bricks nearby')
     keep = []
@@ -850,19 +936,23 @@ def create_temp(**kwargs):
 
 def imsave_jpeg(jpegfn, img, **kwargs):
     '''Saves a image in JPEG format.  Some matplotlib installations
-    (notably at NERSC) don't support jpeg, so we write to PNG and then
-    convert to JPEG using the venerable netpbm tools.
+    don't support jpeg, so we optionally write to PNG and then convert
+    to JPEG using the venerable netpbm tools.
 
     *jpegfn*: JPEG filename
     *img*: image, in the typical matplotlib formats (see plt.imsave)
     '''
     import pylab as plt
-    tmpfn = create_temp(suffix='.png')
-    plt.imsave(tmpfn, img, **kwargs)
-    cmd = ('pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn))
-    rtn = os.system(cmd)
-    print(cmd, '->', rtn)
-    os.unlink(tmpfn)
+    if True:
+        kwargs.update(format='jpg')
+        plt.imsave(jpegfn, img, **kwargs)
+    else:
+        tmpfn = create_temp(suffix='.png')
+        plt.imsave(tmpfn, img, **kwargs)
+        cmd = ('pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn))
+        rtn = os.system(cmd)
+        print(cmd, '->', rtn)
+        os.unlink(tmpfn)
 
 class LegacySurveyData(object):
     '''
@@ -963,10 +1053,6 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         return ('%s: dir %s, out %s' %
                 (type(self).__name__, self.survey_dir, self.output_dir))
 
-    def debug(self, *args):
-        if self.verbose:
-            print(*args)
-
     def ccds_for_fitting(self, brick, ccds):
         # By default, use all.
         return None
@@ -1012,6 +1098,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         return T, hdr, primhdr
 
     def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s',
+                  camera=None, expnum=None, ccdname=None,
                   output=False, **kwargs):
         '''
         Returns the filename of a Legacy Survey file.
@@ -1068,11 +1155,11 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 return swaplist([os.path.join(basedir, 'decals-ccds.fits.gz')])
             else:
                 return swaplist(
-                    glob(os.path.join(basedir, 'survey-ccds-*.fits.gz')))
+                    glob(os.path.join(basedir, 'survey-ccds*.fits.gz')))
 
         elif filetype == 'ccd-kds':
             return swaplist(
-                glob(os.path.join(basedir, 'survey-ccds-*.kd.fits')))
+                glob(os.path.join(basedir, 'survey-ccds*.kd.fits')))
 
         elif filetype == 'tycho2':
             dirnm = os.environ.get('TYCHO2_KD_DIR')
@@ -1081,6 +1168,15 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                 if os.path.exists(fn):
                     return fn
             return swap(os.path.join(basedir, 'tycho2.kd.fits'))
+
+        elif filetype == 'large-galaxies':
+            dirnm = os.environ.get('LARGEGALAXIES_DIR')
+            fn = 'LSLGA-v2.0.kd.fits'
+            if dirnm is not None:
+                fn = os.path.join(dirnm, fn)
+                if os.path.exists(fn):
+                    return fn
+            return swap(os.path.join(basedir, fn))
 
         elif filetype == 'annotated-ccds':
             if self.version == 'dr2':
@@ -1123,15 +1219,22 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         elif filetype in ['maskbits']:
             return swap(os.path.join(codir,
-                                     '%s-%s-%s.fits.gz' % (sname, brick, filetype)))
+                                     '%s-%s-%s.fits.fz' % (sname, brick, filetype)))
 
         elif filetype in ['all-models']:
             return swap(os.path.join(basedir, 'metrics', brickpre,
                                      'all-models-%s.fits' % (brick)))
 
+        elif filetype == 'ref-sources':
+            return swap(os.path.join(basedir, 'metrics', brickpre,
+                                     'reference-%s.fits' % (brick)))
+
         elif filetype == 'checksums':
             return swap(os.path.join(basedir, 'tractor', brickpre,
                                      'brick-%s.sha256sum' % brick))
+        elif filetype == 'outliers_mask':
+            return swap(os.path.join(basedir, 'metrics', brickpre, 
+                                     'outlier-mask-%s.fits.fz' % (brick)))
 
         print('Unknown filetype "%s"' % filetype)
         assert(False)
@@ -1142,42 +1245,44 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         cfn = fn.replace(self.survey_dir, self.cache_dir)
         #print('cache fn', cfn)
         if os.path.exists(cfn):
-            print('Cached file hit:', fn, '->', cfn)
+            debug('Cached file hit:', fn, '->', cfn)
             return cfn
-        print('Cached file miss:', fn, '-/->', cfn)
+        debug('Cached file miss:', fn, '-/->', cfn)
 
         ### HACK for post-DR5 NonDECaLS reorg / DMD
         if 'CPHETDEX' in fn:
             '''
             Cached file miss:
-            /global/cscratch1/sd/dstn/dr5-new-sky/images/decam/NonDECaLS/CPHETDEX/c4d_130902_082433_oow_g_v1.fits.fz -/-> 
+            /global/cscratch1/sd/dstn/dr5-new-sky/images/decam/NonDECaLS/CPHETDEX/c4d_130902_082433_oow_g_v1.fits.fz -/->
             /global/cscratch1/sd/dstn/dr5-new-sky/cache/images/decam/NonDECaLS/CPHETDEX/c4d_130902_082433_oow_g_v1.fits.fz
             '''
             from glob import glob
             pat = fn.replace('CPHETDEX', '*')
             fns = glob(pat)
             if len(fns) == 1:
-                print('Globbed', pat, '->', fns[0])
+                debug('Globbed', pat, '->', fns[0])
                 return fns[0]
 
         return fn
 
     def get_compression_string(self, filetype, shape=None, **kwargs):
         pat = dict(# g: sigma ~ 0.002.  qz -1e-3: 6 MB, -1e-4: 10 MB
-            image = '[compress R %i,%i; qz -1e-4]',
+            image = '[compress R %(tilew)i,%(tileh)i; qz -1e-4]',
             # g: qz -1e-3: 2 MB, -1e-4: 2.75 MB
-            model = '[compress R %i,%i; qz -1e-4]',
-            chi2  = '[compress R %i,%i; qz -0.1]',
+            model = '[compress R %(tilew)i,%(tileh)i; qz -1e-4]',
+            chi2  = '[compress R %(tilew)i,%(tileh)i; qz -0.1]',
             # qz +8: 9 MB, qz +16: 10.5 MB
-            invvar = '[compress R %i,%i; qz 16]',
-            nexp   = '[compress H %i,%i]',
-            depth  = '[compress G %i,%i; qz 0]',
-            galdepth = '[compress G %i,%i; qz 0]',
-            psfsize = '[compress G %i,%i; qz 0]',
+            invvar = '[compress R %(tilew)i,%(tileh)i; qz 16]',
+            nexp   = '[compress H %(tilew)i,%(tileh)i]',
+            maskbits = '[compress H %(tilew)i,%(tileh)i]',
+            depth  = '[compress G %(tilew)i,%(tileh)i; qz 0]',
+            galdepth = '[compress G %(tilew)i,%(tileh)i; qz 0]',
+            psfsize = '[compress G %(tilew)i,%(tileh)i; qz 0]',
+            outliers_mask = '[compress G]',
         ).get(filetype)
+        #outliers_mask = '[compress H %i,%i]',
         if pat is None:
             return pat
-
         # Tile compression size
         tilew,tileh = 100,100
         if shape is not None:
@@ -1187,17 +1292,17 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             # compress if we can't find one.
             if W < 4 or H < 4:
                 return None
-            while tilew < W:
+            while tilew <= W:
                 remain = W % tilew
-                if remain >= 4:
+                if remain == 0 or remain >= 4:
                     break
                 tilew += 1
-            while tileh < H:
+            while tileh <= H:
                 remain = H % tileh
-                if remain >= 4:
+                if remain == 0 or remain >= 4:
                     break
                 tileh += 1
-        return pat % (tilew,tileh)
+        return pat % dict(tilew=tilew,tileh=tileh)
 
     def write_output(self, filetype, hashsum=True, **kwargs):
         '''
@@ -1247,11 +1352,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
             def __enter__(self):
                 dirnm = os.path.dirname(self.tmpfn)
-                if not os.path.exists(dirnm):
-                    try:
-                        os.makedirs(dirnm)
-                    except:
-                        pass
+                trymakedirs(dirnm)
                 return self
 
             def __exit__(self, exc_type, exc_value, traceback):
@@ -1294,7 +1395,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                     f = open(self.tmpfn, 'wb')
                     f.write(rawdata)
                     f.close()
-                    print('Wrote', self.tmpfn)
+                    debug('Wrote', self.tmpfn)
                     del rawdata
                 else:
                     f = open(self.tmpfn, 'rb')
@@ -1306,7 +1407,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                     del sha
 
                 os.rename(self.tmpfn, self.real_fn)
-                print('Renamed to', self.real_fn)
+                debug('Renamed to', self.real_fn)
+                info('Wrote', self.real_fn)
 
                 if self.hashsum:
                     # List the relative filename (from output dir) in
@@ -1476,16 +1578,16 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         if rahi < ralo:
             # Wrap-around
-            print('In Dec slice:', len(np.flatnonzero((bricks.dec1 <= dechi) *
+            debug('In Dec slice:', len(np.flatnonzero((bricks.dec1 <= dechi) *
                                                       (bricks.dec2 >= declo))))
-            print('Above RAlo=', ralo, ':', len(np.flatnonzero(bricks.ra2 >= ralo)))
-            print('Below RAhi=', rahi, ':', len(np.flatnonzero(bricks.ra1 <= rahi)))
-            print('In RA slice:', len(np.nonzero(np.logical_or(bricks.ra2 >= ralo,
+            debug('Above RAlo=', ralo, ':', len(np.flatnonzero(bricks.ra2 >= ralo)))
+            debug('Below RAhi=', rahi, ':', len(np.flatnonzero(bricks.ra1 <= rahi)))
+            debug('In RA slice:', len(np.nonzero(np.logical_or(bricks.ra2 >= ralo,
                                                                bricks.ra1 <= rahi))))
 
             I, = np.nonzero(np.logical_or(bricks.ra2 >= ralo, bricks.ra1 <= rahi) *
                             (bricks.dec1 <= dechi) * (bricks.dec2 >= declo))
-            print('In RA&Dec slice', len(I))
+            debug('In RA&Dec slice', len(I))
         else:
             I, = np.nonzero((bricks.ra1  <= rahi ) * (bricks.ra2  >= ralo) *
                             (bricks.dec1 <= dechi) * (bricks.dec2 >= declo))
@@ -1524,7 +1626,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         TT = []
         for fn in fns:
-            print('Reading CCDs from', fn)
+            debug('Reading CCDs from', fn)
             # cols = (
             #     'exptime filter propid crpix1 crpix2 crval1 crval2 ' +
             #     'cd1_1 cd1_2 cd2_1 cd2_2 ccdname ccdzpt ccdraoff ccddecoff ' +
@@ -1532,13 +1634,13 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             #     'ra dec zpt expnum fwhm mjd_obs').split()
             #T = fits_table(fn, columns=cols)
             T = fits_table(fn, **kwargs)
-            print('Got', len(T), 'CCDs')
+            debug('Got', len(T), 'CCDs')
             TT.append(T)
         if len(TT) > 1:
             T = merge_tables(TT, columns='fillzero')
         else:
             T = TT[0]
-        print('Total of', len(T), 'CCDs')
+        debug('Total of', len(T), 'CCDs')
         del TT
 
         cols = T.columns()
@@ -1562,12 +1664,12 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         fns = self.find_file('annotated-ccds')
         TT = []
         for fn in fns:
-            print('Reading annotated CCDs from', fn)
+            debug('Reading annotated CCDs from', fn)
             T = fits_table(fn)
-            print('Got', len(T), 'CCDs')
+            debug('Got', len(T), 'CCDs')
             TT.append(T)
         T = merge_tables(TT, columns='fillzero')
-        print('Total of', len(T), 'CCDs')
+        debug('Total of', len(T), 'CCDs')
         del TT
         T = self.cleanup_ccds_table(T)
         return T
@@ -1601,7 +1703,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             TT = []
             for fn,kd in kdfns:
                 I = tree_search_radec(kd, ra, dec, radius)
-                self.debug(len(I), 'CCDs within', radius, 'deg of RA,Dec',
+                debug(len(I), 'CCDs within', radius, 'deg of RA,Dec',
                            '(%.3f, %.3f)' % (ra,dec))
                 if len(I) == 0:
                     continue
@@ -1622,14 +1724,14 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         # check cache...
         if self.ccd_kdtrees is not None:
             return self.ccd_kdtrees
-        
+
         fns = self.find_file('ccd-kds')
         fns = self.filter_ccd_kd_files(fns)
 
         from astrometry.libkd.spherematch import tree_open
         self.ccd_kdtrees = []
         for fn in fns:
-            self.debug('Opening kd-tree', fn)
+            debug('Opening kd-tree', fn)
             kd = tree_open(fn, 'ccds')
             self.ccd_kdtrees.append((fn, kd))
         return self.ccd_kdtrees
@@ -1671,8 +1773,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             C.cut(np.array([b in bands for b in C.filter]))
         ims = []
         for t in C:
-            self.debug('Image file', t.image_filename, 'hdu', t.image_hdu)
-            im = self.get_image_object(self, t)
+            debug('Image file', t.image_filename, 'hdu', t.image_hdu)
+            im = self.get_image_object(t)
             ims.append(im)
         # Read images, clip to ROI
         W,H = targetwcs.get_width(), targetwcs.get_height()
@@ -1734,7 +1836,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                          nleaf=60, bbox=False, split=True)
         ekd.set_name('expnum')
         ekd.write('ekd.fits')
-        
+
         > fitsgetext -i $CSCRATCH/dr7-depthcut/survey-ccds-dr7.kd.fits -o dr7-%02i -a -M
         > fitsgetext -i ekd.fits -o ekd-%02i -a -M
         > cat dr7-0* ekd-0[123456] > $CSCRATCH/dr7-depthcut+/survey-ccds-dr7.kd.fits
@@ -1746,18 +1848,18 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         from astrometry.libkd.spherematch import tree_open
         TT = []
         for fn in fns:
-            print('Searching', fn)
+            debug('Searching', fn)
             try:
                 kd = tree_open(fn, 'expnum')
             except:
-                print('Failed to open', fn, ':')
+                debug('Failed to open', fn, ':')
                 import traceback
                 traceback.print_exc()
                 continue
             if kd is None:
                 return None
             I = kd.search(np.array([expnum]), 0.5, 0, 0)
-            print(len(I), 'CCDs with expnum', expnum, 'in', fn)
+            debug(len(I), 'CCDs with expnum', expnum, 'in', fn)
             if len(I) == 0:
                 continue
             # Read only the CCD-table rows within range.
@@ -1774,7 +1876,7 @@ def run_calibs(X):
     im = X[0]
     kwargs = X[1]
     noraise = kwargs.pop('noraise', False)
-    print('run_calibs for image', im)
+    debug('run_calibs for image', im, ':', kwargs)
     try:
         return im.run_calibs(**kwargs)
     except:
@@ -1786,7 +1888,7 @@ def run_calibs(X):
 
 def read_one_tim(X):
     (im, targetrd, kwargs) = X
-    print('Reading', im)
+    #print('Reading', im)
     tim = im.get_tractor_image(radecpoly=targetrd, **kwargs)
     return tim
 
@@ -1798,7 +1900,6 @@ class SchlegelPsfModel(PsfExModel):
         `ext` is ignored.
         '''
         if fn is not None:
-            from astrometry.util.fits import fits_table
             T = fits_table(fn)
             T.about()
 

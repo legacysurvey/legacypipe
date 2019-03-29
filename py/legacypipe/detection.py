@@ -6,24 +6,34 @@ from astrometry.util.ttime import Time
 def _detmap(X):
     from scipy.ndimage.filters import gaussian_filter
     from legacypipe.survey import tim_get_resamp
-
-    (tim, targetwcs, H, W) = X
+    from astrometry.util.resample import resample_with_wcs, OverlapError
+    (tim, targetwcs, H, W, apodize) = X
     R = tim_get_resamp(tim, targetwcs)
     if R is None:
         return None,None,None,None,None
-    ie = tim.getInvvar()
     assert(tim.psf_sigma > 0)
     psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
+    ie = tim.getInvvar()
     detim = tim.getImage().copy()
     tim.getSky().addTo(detim, scale=-1.)
-    detim[ie == 0] = 0.
-    # Patch SATURATED pixels with the value saturated pixels would have??
-    #detim[(tim.dq & tim.dq_bits['satur']) > 0] = tim.satval
     detim = gaussian_filter(detim, tim.psf_sigma) / psfnorm**2
     detsig1 = tim.sig1 / psfnorm
     subh,subw = tim.shape
     detiv = np.zeros((subh,subw), np.float32) + (1. / detsig1**2)
     detiv[ie == 0] = 0.
+    detiv = gaussian_filter(detiv, tim.psf_sigma)
+
+    if apodize:
+        apodize = int(apodize)
+        ramp = np.arctan(np.linspace(-np.pi, np.pi, apodize+2))
+        ramp = (ramp - ramp.min()) / (ramp.max()-ramp.min())
+        # drop first and last (= 0 and 1)
+        ramp = ramp[1:-1]
+        detiv[:len(ramp),:] *= ramp[:,np.newaxis]
+        detiv[:,:len(ramp)] *= ramp[np.newaxis,:]
+        detiv[-len(ramp):,:] *= ramp[::-1][:,np.newaxis]
+        detiv[:,-len(ramp):] *= ramp[::-1][np.newaxis,:]
+
     (Yo,Xo,Yi,Xi) = R
     if tim.dq is None:
         sat = None
@@ -31,9 +41,8 @@ def _detmap(X):
         sat = ((tim.dq[Yi,Xi] & tim.dq_saturation_bits) > 0)
     return Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
 
-def detection_maps(tims, targetwcs, bands, mp):
+def detection_maps(tims, targetwcs, bands, mp, apodize=None):
     # Render the detection maps
-
     H,W = targetwcs.shape
     H,W = np.int(H), np.int(W)
     ibands = dict([(b,i) for i,b in enumerate(bands)])
@@ -42,7 +51,7 @@ def detection_maps(tims, targetwcs, bands, mp):
     detivs  = [np.zeros((H,W), np.float32) for b in bands]
     satmaps = [np.zeros((H,W), bool)       for b in bands]
     for tim, (Yo,Xo,incmap,inciv,sat) in zip(
-        tims, mp.map(_detmap, [(tim, targetwcs, H, W) for tim in tims])):
+        tims, mp.map(_detmap, [(tim, targetwcs, H, W, apodize) for tim in tims])):
         if Yo is None:
             continue
         ib = ibands[tim.band]
@@ -50,7 +59,6 @@ def detection_maps(tims, targetwcs, bands, mp):
         detivs [ib][Yo,Xo] += inciv
         if sat is not None:
             satmaps[ib][Yo,Xo] |= sat
-
     for detmap,detiv in zip(detmaps, detivs):
         detmap /= np.maximum(1e-16, detiv)
     return detmaps, detivs, satmaps
@@ -192,33 +200,34 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     Tnew.peaksn = np.array(peaksn)
     Tnew.apsn = np.array(apsn)
     newcat = []
-    for i,(r,d,x,y) in enumerate(zip(pr,pd,peakx,peaky)):
+    for r,d,x,y in zip(pr,pd,peakx,peaky):
         fluxes = dict([(band, detmap[y, x])
                        for band,detmap in zip(bands,detmaps)])
         newcat.append(PointSource(RaDecPos(r,d),
                                   NanoMaggies(order=bands, **fluxes)))
     return Tnew, newcat, hot
 
-def plot_boundary_map(X, rgb=(0,255,0), extent=None):
+def plot_boundary_map(X, rgb=(0,255,0), extent=None, iterations=1):
     from scipy.ndimage.morphology import binary_dilation
 
     H,W = X.shape
 
+    it = iterations
     #bounds = np.logical_xor(binary_dilation(X), X)
-    padded = np.zeros((H+2, W+2), bool)
-    padded[1:-1, 1:-1] = X.astype(bool)
+    padded = np.zeros((H+2*it, W+2*it), bool)
+    padded[it:-it, it:-it] = X.astype(bool)
     bounds = np.logical_xor(binary_dilation(padded), padded)
     #rgba = np.zeros((H,W,4), np.uint8)
-    rgba = np.zeros((H+2,W+2,4), np.uint8)
+    rgba = np.zeros((H+2*it,W+2*it,4), np.uint8)
     rgba[:,:,0] = bounds*rgb[0]
     rgba[:,:,1] = bounds*rgb[1]
     rgba[:,:,2] = bounds*rgb[2]
     rgba[:,:,3] = bounds*255
     if extent is None:
-        extent = [-1, W+1, -1, H+1]
+        extent = [-it, W+it, -it, H+it]
     else:
         x0,x1,y0,y1 = extent
-        extent = [x0-1, x1+1, y0-1, y1+1]
+        extent = [x0-it, x1+it, y0-it, y1+it]
 
     plt.imshow(rgba, interpolation='nearest', origin='lower', extent=extent)
 
@@ -289,7 +298,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     H,W = detmaps[0].shape
 
     allzero = True
-    for iband,band in enumerate(bands):
+    for iband in range(len(bands)):
         if sed[iband] == 0:
             continue
         if np.all(detivs[iband] == 0):
@@ -365,9 +374,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 
     if ps is not None:
         from astrometry.util.plotutils import dimshow
-        crossa = dict(ms=10, mew=1.5)
-        green = (0,1,0)
-
         plt.clf()
         plt.subplot(1,2,2)
         dimshow(sedsn, vmin=-2, vmax=100, cmap='hot', ticks=False)
@@ -405,7 +411,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     saddlemap = binary_dilation(saddlemap, iterations=dilate)
     if saturated_pix is not None:
         saddlemap |= satur
-    allblobs,nblobs = label(saddlemap)
+    allblobs,_ = label(saddlemap)
     allslices = find_objects(allblobs)
     ally0 = [sy.start for sy,sx in allslices]
     allx0 = [sx.start for sy,sx in allslices]
@@ -447,6 +453,9 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # search within its "allblob", which is defined by the lowest
     # saddle.
     print('Found', len(px), 'potential peaks')
+    nveto = 0
+    nsaddle = 0
+    naper = 0
     for i,(x,y) in enumerate(zip(px, py)):
         # one plot per peak is a little excessive!
         if False and ps is not None:
@@ -456,6 +465,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 
         if vetomap[y,x]:
             #print('  in veto map!')
+            nveto += 1
             continue
 
         level = saddle_level(sedsn[y,x])
@@ -477,7 +487,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         thisblob = blobs[y-y0, x-x0]
 
         saddlemap *= (blobs == thisblob)
-        
+
         # previously found sources:
         ox = np.append(xomit, px[:i][keep[:i]]) - x0
         oy = np.append(yomit, py[:i][keep[:i]]) - y0
@@ -495,13 +505,14 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                          x, y, level, ps)
         if False and (not cut) and ps is not None:
             _peak_plot_3(sedsn, nsigma, x, y, x0, y0, slc, saddlemap,
-                         xomit, yomit, px, py, keep, i, ps)
+                         xomit, yomit, px, py, keep, i, cut, ps)
 
         if cut:
             # in same blob as previously found source.
             #print('  cut')
             # update vetomap
             vetomap[slc] |= saddlemap
+            nsaddle += 1
             #print('Added to vetomap:', np.sum(saddlemap), 'pixels set; now total of', np.sum(vetomap), 'pixels set')
             continue
 
@@ -512,7 +523,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                       max(0, x-apout):min(W,x+apout+1)] > 0)
         aph,apw = ap.shape
         apx0, apy0 = max(0, x - apout), max(0, y - apout)
-        R2 = ((np.arange(aph)+apy0 - y)[:,np.newaxis]**2 + 
+        R2 = ((np.arange(aph)+apy0 - y)[:,np.newaxis]**2 +
               (np.arange(apw)+apx0 - x)[np.newaxis,:]**2)
         ap = ap[apiv * (R2 >= apin**2) * (R2 <= apout**2)]
         if len(ap):
@@ -523,6 +534,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             m = -1.
         if cutonaper:
             if sedsn[y,x] - m < nsigma:
+                naper += 1
                 continue
 
         aper.append(m)
@@ -543,6 +555,9 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                     extent=[apx0,apx0+apw,apy0,apy0+aph])
             plt.suptitle('peak %.1f vs ap %.1f' % (sedsn[y,x], m))
             ps.savefig()
+
+    print('Of', len(px), 'potential peaks:', nveto, 'in veto map,', nsaddle, 'cut by saddle test,',
+          naper, 'cut by aper test,', np.sum(keep), 'kept')
 
     print('New sources:', Time()-t0)
     t0 = Time()
@@ -587,7 +602,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 def _peak_plot_1(vetomap, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
                  level, dilate, saturated_pix, satur, ps):
     from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
-    from scipy.ndimage.measurements import label, find_objects
+    from scipy.ndimage.measurements import label
     plt.clf()
     plt.suptitle('Peak at %i,%i' % (x,y))
     plt.subplot(2,2,1)
@@ -617,7 +632,7 @@ def _peak_plot_1(vetomap, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
     # plt.plot(xomit, yomit, 'm.')
     # plt.axis(ax)
     # plt.title('saddle map (1)')
-    
+
     plt.subplot(2,2,2)
     saddlemap = binary_fill_holes(saddlemap)
     plt.imshow(saddlemap, interpolation='nearest', origin='lower',
@@ -629,7 +644,7 @@ def _peak_plot_1(vetomap, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
     plt.axis(ax)
     plt.title('saddle map (fill holes)')
 
-    blobs,nblobs = label(saddlemap)
+    blobs,_ = label(saddlemap)
     thisblob = blobs[y, x]
     saddlemap *= (blobs == thisblob)
 
@@ -659,7 +674,7 @@ def _peak_plot_1(vetomap, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
 def _peak_plot_2(ox, oy, w, h, blobs, thisblob, sedsn, x0, y0,
                  x, y, level, ps):
     I = np.flatnonzero((ox >= 0) * (ox < w) * (oy >= 0) * (oy < h) *
-                       (blobs[np.clip(oy,0,h-1), np.clip(ox,0,w-1)] == 
+                       (blobs[np.clip(oy,0,h-1), np.clip(ox,0,w-1)] ==
                         thisblob))
     j = I[0]
     plt.clf()
@@ -716,7 +731,7 @@ def _peak_plot_3(sedsn, nsigma, x, y, x0, y0, slc, saddlemap,
     else:
         plt.suptitle('Keep')
     ps.savefig()
-    
+
 def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     '''
     *image*: binary image that defines "blobs"
@@ -733,8 +748,6 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     from scipy.ndimage.morphology import binary_fill_holes
     from scipy.ndimage.measurements import label, find_objects
 
-    emptyblob = 0
-
     image = binary_fill_holes(image)
 
     blobs,nblobs = label(image)
@@ -743,7 +756,9 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     del image
 
     blobslices = find_objects(blobs)
-    T.blob = blobs[T.iby, T.ibx]
+    clipx = np.clip(T.ibx, 0, W-1)
+    clipy = np.clip(T.iby, 0, H-1)
+    T.blob = blobs[clipy, clipx]
 
     if plots:
         import pylab as plt
@@ -793,52 +808,7 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
         inblobs[Isrcs] = True
     noblobs = np.flatnonzero(np.logical_not(inblobs))
     del inblobs
-    # Add new fake blobs!
-    for ib,i in enumerate(noblobs):
-        #S = 3
-        S = 5
-        bslc = (slice(np.clip(T.iby[i] - S, 0, H-1),
-                      np.clip(T.iby[i] + S+1, 0, H)),
-                slice(np.clip(T.ibx[i] - S, 0, W-1),
-                      np.clip(T.ibx[i] + S+1, 0, W)))
-
-        # Does this new blob overlap existing blob(s)?
-        oblobs = np.unique(blobs[bslc])
-        oblobs = oblobs[oblobs != emptyblob]
-
-        #print('This blob overlaps existing blobs:', oblobs)
-        if len(oblobs) > 1:
-            print('WARNING: not merging overlapping blobs like maybe we should')
-        if len(oblobs):
-            blob = oblobs[0]
-            #print('Adding source to existing blob', blob)
-            blobs[bslc][blobs[bslc] == emptyblob] = blob
-            blobindex = blobmap[blob]
-            if blobindex == -1:
-                # the overlapping blob was going to be dropped -- restore it.
-                blobindex = len(blobsrcs)
-                blobmap[blob] = blobindex
-                blobslices.append(dropslices[blob])
-                blobsrcs.append(np.array([], np.int64))
-            # Expand the existing blob slice to encompass this new source
-            oldslc = blobslices[blobindex]
-            sy,sx = oldslc
-            oy0,oy1, ox0,ox1 = sy.start,sy.stop, sx.start,sx.stop
-            sy,sx = bslc
-            ny0,ny1, nx0,nx1 = sy.start,sy.stop, sx.start,sx.stop
-            newslc = slice(min(oy0,ny0), max(oy1,ny1)), slice(min(ox0,nx0), max(ox1,nx1))
-            blobslices[blobindex] = newslc
-            # Add this source to the list of source indices for the existing blob.
-            blobsrcs[blobindex] = np.append(blobsrcs[blobindex], np.array([i]))
-
-        else:
-            # Set synthetic blob number
-            blob = nblobs+1 + ib
-            blobs[bslc][blobs[bslc] == emptyblob] = blob
-            blobmap[blob] = len(blobsrcs)
-            blobslices.append(bslc)
-            blobsrcs.append(np.array([i]))
-    #print('Added', len(noblobs), 'new fake singleton blobs')
+    print(len(noblobs), 'sources are not in blobs')
 
     # Remap the "blobs" image so that empty regions are = -1 and the blob values
     # correspond to their indices in the "blobsrcs" list.
@@ -851,21 +821,10 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     for k,v in blobmap.items():
         bm[k] = v
     bm[0] = -1
-
-    # DEBUG
-    if plots:
-        import fitsio
-        fitsio.write('blobs-before-%s.fits' % name, blobs, clobber=True)
-
     # Remap blob numbers
     blobs = bm[blobs]
 
     if plots:
-        import fitsio
-        fitsio.write('blobs-after-%s.fits' % name, blobs, clobber=True)
-
-    if plots:
-        import pylab as plt
         from astrometry.util.plotutils import dimshow
         plt.clf()
         dimshow(blobs > -1, vmin=0, vmax=1)
@@ -887,13 +846,13 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
 
     for j,Isrcs in enumerate(blobsrcs):
         for i in Isrcs:
-            if (blobs[T.iby[i], T.ibx[i]] != j):
+            if (blobs[clipy[i], clipx[i]] != j):
                 print('---------------------------!!!-------------------------')
                 print('Blob', j, 'sources', Isrcs)
                 print('Source', i, 'coords x,y', T.ibx[i], T.iby[i])
                 print('Expected blob value', j, 'but got',
-                      blobs[T.iby[i], T.ibx[i]])
+                      blobs[clipy[i], clipx[i]])
 
-    T.blob = blobs[T.iby, T.ibx]
+    T.blob = blobs[clipy, clipx]
     assert(len(blobsrcs) == len(blobslices))
     return blobs, blobsrcs, blobslices

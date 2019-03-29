@@ -1,8 +1,15 @@
 from __future__ import print_function
-import sys
-import os
 
 import numpy as np
+
+import logging
+logger = logging.getLogger('legacypipe.format_catalog')
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
 
 def main(args=None):
     import argparse
@@ -16,7 +23,8 @@ def main(args=None):
                         help='Prefix on FLUX etc columns (eg, "decam_" to match DR3) for output file')
     parser.add_argument('--in-flux-prefix', default='',
                         help='Prefix on FLUX etc columns (eg, "decam_" to match DR3) for input file')
-    
+    parser.add_argument('--release', type=int, default=8000)
+
     opt = parser.parse_args(args=args)
 
     import fitsio
@@ -27,16 +35,18 @@ def main(args=None):
     primhdr = fitsio.read_header(opt.infn)
     allbands = opt.allbands
 
-    format_catalog(T, hdr, primhdr, allbands, opt.out,
+    format_catalog(T, hdr, primhdr, allbands, opt.out, opt.release,
                    in_flux_prefix=opt.in_flux_prefix,
                    flux_prefix=opt.flux_prefix)
     T.writeto(opt.out)
     print('Wrote', opt.out)
 
-def format_catalog(T, hdr, primhdr, allbands, outfn,
+def format_catalog(T, hdr, primhdr, allbands, outfn, release,
                    in_flux_prefix='', flux_prefix='',
-                   write_kwargs={}, N_wise_epochs=None,
+                   write_kwargs=None, N_wise_epochs=None,
                    motions=True, gaia_tagalong=False):
+    if write_kwargs is None:
+        write_kwargs = {}
     # Retrieve the bands in this catalog.
     bands = []
     for i in range(10):
@@ -45,7 +55,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
             break
         b = b.strip()
         bands.append(b)
-    print('Bands in this catalog:', bands)
+    debug('Bands in this catalog:', bands)
 
     has_wise =    'flux_w1'    in T.columns()
     has_wise_lc = 'lc_flux_w1' in T.columns()
@@ -54,7 +64,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     # Nans,Infs
     # Ivar -> 0
     ivar_nans= ['ra_ivar','dec_ivar',
-                'shapeexp_r_ivar','shapeexp_e1_ivar','shapeexp_e2_ivar'] 
+                'shapeexp_r_ivar','shapeexp_e1_ivar','shapeexp_e2_ivar']
     for key in ivar_nans:
         ind= np.isfinite(T.get(key)) == False
         if np.any(ind):
@@ -98,7 +108,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
             T.set('%s%s_%s' % (flux_prefix, k, b), A[:,i])
 
     from tractor.sfd import SFDMap
-    print('Reading SFD maps...')
+    info('Reading SFD maps...')
     sfd = SFDMap()
     filts = ['%s %s' % ('DES', f) for f in allbands]
     wisebands = ['WISE W1', 'WISE W2', 'WISE W3', 'WISE W4']
@@ -125,11 +135,10 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
             T.set(col, 10.**(-wise_ext[:,i] / 2.5))
             trans_cols_wise.append(col)
 
-    from legacypipe.survey import release_number
-    T.release = np.zeros(len(T), np.int16) + release_number
-        
+    T.release = np.zeros(len(T), np.int16) + release
+
     # Column ordering...
-    cols = ['release', 'brickid', 'brickname', 'objid', 'brick_primary', 
+    cols = ['release', 'brickid', 'brickname', 'objid', 'brick_primary',
             'brightblob',
             'type', 'ra', 'dec', 'ra_ivar', 'dec_ivar',
             'bx', 'by', 'dchisq', 'ebv', 'mjd_min', 'mjd_max',
@@ -163,6 +172,11 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
             ('astrometric_n_good_obs_al', np.int16),
             ('astrometric_weight_al', np.float32),
             ('duplicated_source', bool),
+            ('a_g_val', np.float32),
+            ('e_bp_min_rp_val', np.float32),
+            ('phot_bp_rp_excess_factor', np.float32),
+            ('astrometric_sigma5d_max', np.float32),
+            ('astrometric_params_solved', np.uint8),
         ]
         tcols = T.get_columns()
         for c,t in gaia_cols:
@@ -176,10 +190,12 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     def add_fluxlike(c):
         for b in allbands:
             cols.append('%s%s_%s' % (flux_prefix, c, b))
-    def add_wiselike(c, bands=wbands):
+    def add_wiselike(c, bands=None):
+        if bands is None:
+            bands = wbands
         for b in bands:
             cols.append('%s_%s' % (c, b))
-            
+
     add_fluxlike('flux')
     if has_wise:
         add_wiselike('flux')
@@ -237,9 +253,9 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
         'shapedev_e1', 'shapedev_e1_ivar',
         'shapedev_e2', 'shapedev_e2_ivar',])
 
-    print('Columns:', cols)
-    print('T columns:', T.columns())
-    
+    debug('Columns:', cols)
+    debug('T columns:', T.columns())
+
     # match case to T.
     cc = T.get_columns()
     cclower = [c.lower() for c in cc]
@@ -247,7 +263,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
         if (not c in cc) and c in cclower:
             j = cclower.index(c)
             cols[i] = cc[j]
-    
+
     # Units
     deg = 'deg'
     degiv = '1/deg^2'
@@ -277,13 +293,12 @@ def format_catalog(T, hdr, primhdr, allbands, outfn,
     for b in wbands:
         units.update([('%s_%s' % (k, b), v)
                       for k,v in wunits.items()])
-    
+
     # Create a list of units aligned with 'cols'
     units = [units.get(c, '') for c in cols]
 
     T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units,
               **write_kwargs)
-        
+
 if __name__ == '__main__':
     main()
-    

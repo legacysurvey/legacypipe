@@ -16,7 +16,6 @@ from astrometry.util.ttime import Time, MemMeas
 
 from tractor import Tractor, Catalog, NanoMaggies
 from tractor.galaxy import disable_galaxy_cache
-from tractor.ellipses import EllipseE
 
 from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version_header, apertures_arcsec
 from catalog import read_fits_catalog
@@ -28,6 +27,8 @@ def get_parser():
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
 
+    parser.add_argument('--threads', type=int, help='Run multi-threaded', default=None)
+
     parser.add_argument('--catalog-dir', help='Set LEGACY_SURVEY_DIR to use to read catalogs')
 
     parser.add_argument('--catalog', help='Use the given FITS catalog file, rather than reading from a data release directory')
@@ -37,8 +38,8 @@ def get_parser():
     parser.add_argument('--skip', dest='skip', default=False, action='store_true',
                         help='Exit if the output file already exists')
 
-    parser.add_argument('--zoom', type=int, nargs=4, help='Set target image extent (default "0 2046 0 4094")')
-    parser.add_argument('--no-ceres', action='store_false', dest='ceres', help='Do not use Ceres optimiziation engine (use scipy)')
+    parser.add_argument('--zoom', type=int, nargs=4, help='Set target image extent (eg "0 100 0 200")')
+    parser.add_argument('--no-ceres', action='store_false', dest='ceres', help='Do not use Ceres optimization engine (use scipy)')
     parser.add_argument('--plots', default=None, help='Create plots; specify a base filename for the plots')
     parser.add_argument('--write-cat', help='Write out the catalog subset on which forced phot was done')
     parser.add_argument('--apphot', action='store_true',
@@ -73,12 +74,15 @@ def get_parser():
     parser.add_argument('--camera', help='Cut to only CCD with given camera name?')
 
     parser.add_argument('expnum', help='Exposure number')
-    parser.add_argument('ccdname', help='Image HDU OR CCD name.')
+    parser.add_argument('ccdname', help='Image HDU OR CCD name OR "all".')
     parser.add_argument('outfn', help='Output catalog filename.')
 
     return parser
 
 def main(survey=None, opt=None):
+
+    print(' '.join(sys.argv))
+
     '''Driver function for forced photometry of individual Legacy
     Survey images.
     '''
@@ -87,7 +91,7 @@ def main(survey=None, opt=None):
         opt = parser.parse_args()
 
     Time.add_measurement(MemMeas)
-    t0 = Time()
+    t0 = tlast = Time()
 
     if opt.skip and os.path.exists(opt.outfn):
         print('Ouput file exists:', opt.outfn)
@@ -107,11 +111,10 @@ def main(survey=None, opt=None):
 
     ps = None
     if opt.plots is not None:
-        import pylab as plt
         from astrometry.util.plotutils import PlotSequence
         ps = PlotSequence(opt.plots)
 
-    # Try parsing filename as exposure number.
+    # Try parsing first arg as exposure number (otherwise, it's a filename)
     try:
         expnum = int(opt.expnum)
         filename = None
@@ -120,13 +123,15 @@ def main(survey=None, opt=None):
         expnum = None
         filename = opt.expnum
 
-    # Try parsing HDU number
-    try:
-        hdu = int(opt.ccdname)
-        ccdname = None
-    except:
-        hdu = -1
-        ccdname = opt.ccdname
+    # Try parsing HDU: "all" or HDU name or HDU number.
+    all_hdus = (opt.ccdname == 'all')
+    hdu = -1
+    ccdname = None
+    if not all_hdus:
+        try:
+            hdu = int(opt.ccdname)
+        except:
+            ccdname = opt.ccdname
 
     if survey is None:
         survey = LegacySurveyData()
@@ -154,7 +159,7 @@ def main(survey=None, opt=None):
     else:
         # Read metadata from survey-ccds.fits table
         T = survey.find_ccds(expnum=expnum, ccdname=ccdname)
-        print(len(T), 'with expnum', expnum, 'and CCDname', ccdname)
+        print(len(T), 'with expnum', expnum, 'and ccdname', ccdname)
         if hdu >= 0:
             T.cut(T.image_hdu == hdu)
             print(len(T), 'with HDU', hdu)
@@ -164,9 +169,76 @@ def main(survey=None, opt=None):
         if opt.camera is not None:
             T.cut(T.camera == opt.camera)
             print(len(T), 'with camera', opt.camera)
-        assert(len(T) == 1)
+        if not all_hdus:
+            assert(len(T) == 1)
 
-    ccd = T[0]
+    args = []
+    for ccd in T:
+        args.append((survey, catsurvey, ccd, opt, zoomslice, ps))
+
+    if opt.threads:
+        from astrometry.util.multiproc import multiproc
+        from astrometry.util.timingpool import TimingPool, TimingPoolMeas
+        pool = TimingPool(opt.threads)
+        poolmeas = TimingPoolMeas(pool, pickleTraffic=False)
+        Time.add_measurement(poolmeas)
+        mp = multiproc(None, pool=pool)
+        tm = Time()
+        FF = mp.map(bounce_one_ccd, args)
+        print('Multi-processing forced-phot:', Time()-tm)
+    else:
+        FF = map(bounce_one_ccd, args)
+
+    FF = [F for F in FF if F is not None]
+    if len(FF) == 0:
+        print('No photometry results to write.')
+        return 0
+    # Keep only the first header
+    _,version_hdr = FF[0]
+    FF = [F for F,hdr in FF]
+    F = merge_tables(FF)
+
+    if all_hdus:
+        version_hdr.delete('CPHDU')
+        version_hdr.delete('CCDNAME')
+        version_hdr.delete('EXPOSURE')
+
+    hdr = fitsio.FITSHDR()
+    units = {'exptime':'sec',
+             'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2',
+             'apflux':'nanomaggy', 'apflux_ivar':'1/nanomaggy^2',
+             'psfdepth':'1/nanomaggy^2', 'galdepth':'1/nanomaggy^2',
+             'sky':'nanomaggy/arcsec^2', 'psfsize':'arcsec' }
+    if opt.derivs:
+        units.update({'dra':'arcsec', 'ddec':'arcsec',
+                      'dra_ivar':'1/arcsec^2', 'ddec_ivar':'1/arcsec^2'})
+    columns = F.get_columns()
+    for i,col in enumerate(columns):
+        if col in units:
+            hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
+
+    outdir = os.path.dirname(opt.outfn)
+    if len(outdir):
+        trymakedirs(outdir)
+    tmpfn = os.path.join(outdir, 'tmp-' + os.path.basename(opt.outfn))
+    fitsio.write(tmpfn, None, header=version_hdr, clobber=True)
+    F.writeto(tmpfn, header=hdr, append=True)
+    os.rename(tmpfn, opt.outfn)
+    print('Wrote', opt.outfn)
+
+    tnow = Time()
+    print('Total:', tnow-t0)
+    return 0
+
+def bounce_one_ccd(X):
+    # for multiprocessing
+    #survey,catsurvey,ccd,opt,zoomslice,ps = X
+    #return run_one_ccd(survey, ccd, opt)
+    return run_one_ccd(*X)
+
+def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
+    tlast = Time()
+
     im = survey.get_image_object(ccd)
 
     if opt.do_calib:
@@ -178,10 +250,13 @@ def main(survey=None, opt=None):
     tim = im.get_tractor_image(slc=zoomslice, pixPsf=True, splinesky=True,
                                constant_invvar=opt.constant_invvar,
                                hybridPsf=opt.hybrid_psf,
-                               normalizePsf=opt.normalize_psf)
+                               normalizePsf=opt.normalize_psf,
+                               old_calibs_ok=True)
     print('Got tim:', tim)
 
-    print('Read image:', Time()-t0)
+    tnow = Time()
+    print('Read image:', tnow-tlast)
+    tlast = tnow
 
     if opt.catalog:
         T = fits_table(opt.catalog)
@@ -197,7 +272,14 @@ def main(survey=None, opt=None):
                 print('WARNING: catalog', fn, 'does not exist.  Skipping!')
                 continue
             print('Reading', fn)
-            T = fits_table(fn)
+            T = fits_table(fn, columns=[
+                'ra', 'dec', 'brick_primary', 'type', 'release',
+                'brickid', 'brickname', 'objid',
+                'fracdev', 'flux_r',
+                'shapedev_r', 'shapedev_e1', 'shapedev_e2',
+                'shapeexp_r', 'shapeexp_e1', 'shapeexp_e2',
+                'ref_epoch', 'pmra', 'pmdec', 'parallax'
+            ])
             ok,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
             W,H = chipwcs.get_width(), chipwcs.get_height()
             I = np.flatnonzero((xx >= -margin) * (xx <= (W+margin)) *
@@ -214,7 +296,7 @@ def main(survey=None, opt=None):
                 TT.append(T)
         if len(TT) == 0:
             print('No sources to photometer.')
-            return 0
+            return None
         T = merge_tables(TT, columns='fillzero')
         T._header = TT[0]._header
         del TT
@@ -223,9 +305,7 @@ def main(survey=None, opt=None):
         # Fix up various failure modes:
         # FixedCompositeGalaxy(pos=RaDecPos[240.51147402832561, 10.385488075518923], brightness=NanoMaggies: g=(flux -2.87), r=(flux -5.26), z=(flux -7.65), fracDev=FracDev(0.60177207), shapeExp=re=3.78351e-44, e1=9.30367e-13, e2=1.24392e-16, shapeDev=re=inf, e1=-0, e2=-0)
         # -> convert to EXP
-        I = np.flatnonzero(np.array([((t.type == 'COMP') and
-                                      (not np.isfinite(t.shapedev_r)))
-                                     for t in T]))
+        I, = np.nonzero([t == 'COMP' and not np.isfinite(r) for t,r in zip(T.type, T.shapedev_r)])
         if len(I):
             print('Converting', len(I), 'bogus COMP galaxies to EXP')
             for i in I:
@@ -233,9 +313,7 @@ def main(survey=None, opt=None):
 
         # Same thing with the exp component.
         # -> convert to DEV
-        I = np.flatnonzero(np.array([((t.type == 'COMP') and
-                                      (not np.isfinite(t.shapeexp_r)))
-                                     for t in T]))
+        I, = np.nonzero([t == 'COMP' and not np.isfinite(r) for t,r in zip(T.type, T.shapeexp_r)])
         if len(I):
             print('Converting', len(I), 'bogus COMP galaxies to DEV')
             for i in I:
@@ -253,9 +331,6 @@ def main(survey=None, opt=None):
         I = np.flatnonzero(T.ref_epoch > 0)
         if len(I):
             from legacypipe.survey import radec_at_mjd
-            orig_ra = T.ra.copy()
-            orig_dec = T.dec.copy()
-
             print('Moving', len(I), 'Gaia stars to MJD', tim.time.toMjd())
             ra,dec = radec_at_mjd(T.ra[I], T.dec[I], T.ref_epoch[I].astype(float),
                                   T.pmra[I], T.pmdec[I], T.parallax[I],
@@ -267,13 +342,20 @@ def main(survey=None, opt=None):
     cols = T.get_columns()
     if 'flux_r' in cols and not 'decam_flux_r' in cols:
         kwargs.update(fluxPrefix='')
-    cat = read_fits_catalog(T, **kwargs)
+
+    tnow = Time()
+    print('Read catalog:', tnow-tlast)
+    tlast = tnow
+
+    cat = read_fits_catalog(T, bands='r', **kwargs)
     # Replace the brightness (which will be a NanoMaggies with g,r,z)
     # with a NanoMaggies with this image's band only.
     for src in cat:
         src.brightness = NanoMaggies(**{tim.band: 1.})
 
-    print('Read catalog:', Time()-t0)
+    tnow = Time()
+    print('Parse catalog:', tnow-tlast)
+    tlast = tnow
 
     print('Forced photom...')
     F = run_forced_phot(cat, tim,
@@ -285,7 +367,6 @@ def main(survey=None, opt=None):
                         do_apphot=opt.apphot,
                         get_model=opt.save_model,
                         ps=ps)
-    t0 = Time()
 
     if opt.save_model:
         # unpack results
@@ -340,16 +421,20 @@ def main(survey=None, opt=None):
     F.x = (x-1).astype(np.float32)
     F.y = (y-1).astype(np.float32)
 
+    ## FIXME -- read outlier_masks?
+
     h,w = tim.shape
     F.mask = tim.dq[np.clip(np.round(F.y).astype(int), 0, h-1),
                     np.clip(np.round(F.x).astype(int), 0, w-1)]
 
     program_name = sys.argv[0]
-    version_hdr = get_version_header(program_name, surveydir)
+    ## FIXME -- from catalog?
+    release = 0
+    version_hdr = get_version_header(program_name, surveydir, release)
     filename = getattr(ccd, 'image_filename')
     if filename is None:
         # HACK -- print only two directory names + filename of CPFILE.
-        fname = os.path.basename(im.imgfn)
+        fname = os.path.basename(im.imgfn.strip())
         d = os.path.dirname(im.imgfn)
         d1 = os.path.basename(d)
         d = os.path.dirname(d)
@@ -365,31 +450,14 @@ def main(survey=None, opt=None):
     version_hdr.add_record(dict(name='EXPOSURE',
                                 value='%s-%s-%s' % (ccd.camera, im.expnum, im.ccdname),
                                 comment='Name of this image'))
+    version_hdr.add_record(dict(name='PLVER', value=ccd.plver, comment='CP pipeline version'))
+    version_hdr.add_record(dict(name='PROCDATE', value=ccd.procdate, comment='CP image DATE'))
 
     keys = ['TELESCOP','OBSERVAT','OBS-LAT','OBS-LONG','OBS-ELEV',
             'INSTRUME']
     for key in keys:
         if key in tim.primhdr:
             version_hdr.add_record(dict(name=key, value=tim.primhdr[key]))
-
-    hdr = fitsio.FITSHDR()
-    units = {'exptime':'sec', 'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2',
-             'psfdepth':'1/nanomaggy^2', 'galdepth':'1/nanomaggy^2',
-             'psfsize':'arcsec' }
-    if opt.derivs:
-        units.update({'dra':'arcsec', 'ddec':'arcsec',
-                      'dra_ivar':'1/arcsec^2', 'ddec_ivar':'1/arcsec^2'})
-    columns = F.get_columns()
-    for i,col in enumerate(columns):
-        if col in units:
-            hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
-
-    outdir = os.path.dirname(opt.outfn)
-    if len(outdir):
-        trymakedirs(outdir)
-    fitsio.write(opt.outfn, None, header=version_hdr, clobber=True)
-    F.writeto(opt.outfn, header=hdr, append=True)
-    print('Wrote', opt.outfn)
 
     if opt.save_model or opt.save_data:
         hdr = fitsio.FITSHDR()
@@ -401,8 +469,9 @@ def main(survey=None, opt=None):
         fitsio.write(opt.save_data, tim.getImage(), header=hdr, clobber=True)
         print('Wrote', opt.save_data)
 
-    print('Finished forced phot:', Time()-t0)
-    return 0
+    tnow = Time()
+    print('Forced phot:', tnow-tlast)
+    return F,version_hdr
 
 def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                     do_forced=True, do_apphot=True, get_model=False, ps=None,
@@ -424,18 +493,18 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         opti = CeresOptimizer(BW=B, BH=B)
         #forced_kwargs.update(verbose=True)
 
-    nsize = 0
+    # nsize = 0
     for src in cat:
         # Limit sizes of huge models
-        from tractor.galaxy import ProfileGalaxy
-        if isinstance(src, ProfileGalaxy):
-            px,py = tim.wcs.positionToPixel(src.getPosition())
-            h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
-            MAXHALF = 128
-            if h > MAXHALF:
-                #print('halfsize', h,'for',src,'-> setting to',MAXHALF)
-                nsize += 1
-                src.halfsize = MAXHALF
+        # from tractor.galaxy import ProfileGalaxy
+        # if isinstance(src, ProfileGalaxy):
+        #     px,py = tim.wcs.positionToPixel(src.getPosition())
+        #     h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
+        #     MAXHALF = 128
+        #     if h > MAXHALF:
+        #         #print('halfsize', h,'for',src,'-> setting to',MAXHALF)
+        #         nsize += 1
+        #         src.halfsize = MAXHALF
 
         src.freezeAllBut('brightness')
         src.getBrightness().freezeAllBut(tim.band)
@@ -608,7 +677,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         apxy = xxyy - 1.
 
         apertures = apertures_arcsec / tim.wcs.pixel_scale()
-        print('Apertures:', apertures, 'pixels')
+        #print('Apertures:', apertures, 'pixels')
 
         #print('apxy shape', apxy.shape)  # --> (2,N)
 
@@ -616,7 +685,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         H,W = img.shape
         Iap = np.flatnonzero((apxy[0,:] >= 0)   * (apxy[1,:] >= 0) *
                              (apxy[0,:] <= W-1) * (apxy[1,:] <= H-1))
-        print('Aperture photometry for', len(Iap), 'of', len(apxy), 'sources within image bounds')
+        print('Aperture photometry for', len(Iap), 'of', len(apxy[0,:]), 'sources within image bounds')
 
         for rad in apertures:
             aper = photutils.CircularAperture(apxy[:,Iap], rad)
@@ -628,10 +697,12 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         F.apflux = np.zeros((len(F), len(apertures)), np.float32)
         F.apflux[Iap,:] = ap.astype(np.float32)
 
-        ap = 1./(np.vstack(apimgerr).T)**2
-        ap[np.logical_not(np.isfinite(ap))] = 0.
+        apimgerr = np.vstack(apimgerr).T
+        apiv = np.zeros(apimgerr.shape, np.float32)
+        apiv[apimgerr != 0] = 1./apimgerr[apimgerr != 0]**2
+
         F.apflux_ivar = np.zeros((len(F), len(apertures)), np.float32)
-        F.apflux_ivar[Iap,:] = ap.astype(np.float32)
+        F.apflux_ivar[Iap,:] = apiv
         if timing:
             print('Aperture photom:', Time()-t0)
 
