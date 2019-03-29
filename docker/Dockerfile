@@ -97,11 +97,5 @@ RUN cd /src \
     && git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
     && echo 1
 
-# Legacyzpts
-RUN cd /src \
-    && git clone https://github.com/legacysurvey/legacyzpts.git \
-    && cd /src/legacypipe/py \
-    && ln -s /src/legacyzpts/py/legacyzpts .
-
 # up!
 RUN cd /src/legacypipe && git pull && echo 9
