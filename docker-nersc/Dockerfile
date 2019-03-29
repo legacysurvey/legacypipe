@@ -173,5 +173,13 @@ ENV WISE_PSF_DIR /src/unwise_psf/etc
 
 # cgroup-tools -- doesn't work inside containers.
 
+ENV PS1='[container] \u@\h:\w\$ '
+SHELL ["/bin/bash", "-c"]
+
 # up!
 RUN cd /src/legacypipe && git pull && echo 1
+
+### HACK -- testing
+RUN cd /src/legacypipe && git checkout import-legacyzpts && git pull && echo 1
+
+
