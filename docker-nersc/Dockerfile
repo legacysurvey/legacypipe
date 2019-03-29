@@ -173,14 +173,24 @@ ENV WISE_PSF_DIR /src/unwise_psf/etc
 
 # cgroup-tools -- doesn't work inside containers.
 
+# set prompt and default shell
 SHELL ["/bin/bash", "-c"]
 RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> /root/.bashrc
 
-# up!
-RUN cd /src/legacypipe && git pull && echo 1
+# Create config files in /root
+RUN mkdir /root/.qdo && echo "[qdo]" > /root/.qdo/qdorc
+RUN python -c "import astropy"
 
 ### HACK -- testing
-RUN cd /src/legacypipe && git checkout import-legacyzpts && git pull && echo 1
 
+RUN apt update && apt install htop
 
+RUN mkdir -p /src \
+    && cd /src/ \
+    && git clone https://bitbucket.org/dstn/qdo.git qdoX \
+    && cd qdoX \
+    && git checkout print-db-overhead \
+    && python3 setup.py install
 
+# up!
+RUN cd /src/legacypipe && git pull && echo 1
