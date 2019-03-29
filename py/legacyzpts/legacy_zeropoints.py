@@ -79,66 +79,66 @@ def _ccds_table(camera='decam'):
     max_camera_length = max([len(c) for c in CAMERAS])
 
     cols = [
-        ('err_message', 'S30'), 
-        ('image_filename', 'S120'), 
-        ('image_hdu', '>i2'),      
-        ('camera', 'S%i' % max_camera_length),          
-        ('expnum', '>i8'),         
-        ('plver', 'S8'),         
+        ('err_message', 'S30'),
+        ('image_filename', 'S120'),
+        ('image_hdu', 'i2'),
+        ('camera', 'S%i' % max_camera_length),
+        ('expnum', 'i8'),
+        ('plver', 'S8'),
         ('procdate', 'S19'),
         ('plprocid', 'S7'),
-        ('ccdname', 'S5'),         
-        ('ccdnum', '>i2'),        
-        ('expid', 'S17'),        
-        ('object', 'S35'),      
-        ('propid', 'S10'),     
-        ('filter', 'S1'),     
-        ('exptime', '>f4'),  
+        ('ccdname', 'S5'),
+        ('ccdnum', 'i2'),
+        ('expid', 'S17'),
+        ('object', 'S35'),
+        ('propid', 'S10'
+        ('filter', 'S1'
+        ('exptime', 'f4'),
         ('date_obs', 'S26'),
-        ('mjd_obs', '>f8'),  
-        ('ut', 'S15'),       
-        ('ha', 'S13'),       
-        ('airmass', '>f4'), 
-        ('fwhm', '>f4'),       
-        ('fwhm_cp', '>f4'),   
-        ('gain', '>f4'),     
-        ('width', '>i2'),   
-        ('height', '>i2'), 
-        ('ra_bore', '>f8'),     
-        ('dec_bore', '>f8'),   
-        ('crpix1', '>f4'),     
-        ('crpix2', '>f4'),
-        ('crval1', '>f8'),
-        ('crval2', '>f8'),
-        ('cd1_1', '>f4'),
-        ('cd1_2', '>f4'),
-        ('cd2_1', '>f4'),
-        ('cd2_2', '>f4'),
-        ('pixscale', 'f4'),   
-        ('zptavg', '>f4'),   
+        ('mjd_obs', 'f8'),
+        ('ut', 'S15'),
+        ('ha', 'S13'),
+        ('airmass', 'f4'),
+        ('fwhm', 'f4'),
+        ('fwhm_cp', 'f4'),
+        ('gain', 'f4'),
+        ('width', 'i2'),
+        ('height', 'i2'),
+        ('ra_bore', 'f8'),
+        ('dec_bore', 'f8'),
+        ('crpix1', 'f4'),
+        ('crpix2', 'f4'),
+        ('crval1', 'f8'),
+        ('crval2', 'f8'),
+        ('cd1_1', 'f4'),
+        ('cd1_2', 'f4'),
+        ('cd2_1', 'f4'),
+        ('cd2_2', 'f4'),
+        ('pixscale', 'f4'),
+        ('zptavg', 'f4'),
         ('yshift', 'bool'),
         # -- CCD-level quantities --
-        ('ra', '>f8'),        
-        ('dec', '>f8'),      
-        ('skymag', '>f4'),  
-        ('skycounts', '>f4'),
-        ('skyrms', '>f4'),
-        ('sig1', '>f4'),
-        ('nmatch_photom', '>i2'),   
-        ('nmatch_astrom', '>i2'),  
-        ('goodps1', '>i2'),   
-        ('goodps1_wbadpix5', '>i2'),
-        ('phoff', '>f4'),   
-        ('phrms', '>f4'),  
-        ('zpt', '>f4'),   
-        ('zpt_wbadpix5', '>f4'), 
-        ('transp', '>f4'),    
-        ('raoff', '>f4'),    
-        ('decoff', '>f4'),  
-        ('rarms', '>f4'),  
-        ('decrms', '>f4'),  
-        ('rastddev', '>f4'),  
-        ('decstddev', '>f4')  
+        ('ra', 'f8'),
+        ('dec', 'f8'),
+        ('skymag', 'f4'),
+        ('skycounts', 'f4'),
+        ('skyrms', 'f4'),
+        ('sig1', 'f4'),
+        ('nstars_photom', 'i2'),
+        ('nstars_astrom', 'i2'),
+        ('goodps1', 'i2'),
+        ('goodps1_wbadpix5', 'i2'),
+        ('phoff', 'f4'),
+        ('phrms', 'f4'),
+        ('zpt', 'f4'),
+        ('zpt_wbadpix5', 'f4'),
+        ('transp', 'f4'),
+        ('raoff',  'f4'),
+        ('decoff', 'f4'),
+        ('rarms',  'f4'),
+        ('decrms', 'f4'),
+        ('rastddev',  'f4'),
+        ('decstddev', 'f4'),
         ]
     ccds = Table(np.zeros(1, dtype=cols))
     return ccds
@@ -149,16 +149,16 @@ def _stars_table(nstars=1):
     Description and Units at:
     https://github.com/legacysurvey/legacyzpts/blob/master/DESCRIPTION_OF_OUTPUTS.md
     '''
-    cols = [('image_filename', 'S100'),('image_hdu', '>i2'),
-            ('expid', 'S16'), ('filter', 'S1'),('nmatch', '>i2'), 
-            ('x', 'f4'), ('y', 'f4'), ('expnum', '>i8'),
+    cols = [('image_filename', 'S100'),('image_hdu', 'i2'),
+            ('expid', 'S16'), ('filter', 'S1'),('nstars', 'i2'), 
+            ('x', 'f4'), ('y', 'f4'), ('expnum', 'i8'),
             ('plver', 'S8'), ('procdate', 'S19'), ('plprocid', 'S7'),
             ('gain', 'f4'),
             ('ra', 'f8'), ('dec', 'f8'), ('apmag', 'f4'),('apflux', 'f4'),('apskyflux', 'f4'),('apskyflux_perpix', 'f4'),
             ('radiff', 'f8'), ('decdiff', 'f8'),
             ('ps1_mag', 'f4'),
             ('gaia_g','f8'),('ps1_g','f8'),('ps1_r','f8'),('ps1_i','f8'),('ps1_z','f8'),
-            ('exptime', '>f4')]
+            ('exptime', 'f4')]
     stars = Table(np.zeros(nstars, dtype=cols))
     return stars
 
@@ -178,12 +178,12 @@ def cols_for_survey_table(which='all'):
     """
     assert(which in ['all','numeric','nonzero_diff'])
     martins_keys = ['airmass', 'ccdskymag']
-    gods_keys = ['plver', 'procdate', 'plprocid']
+    gods_keys = ['plver', 'procdate', 'plprocid', 'ccdnastrom', 'ccdnphotom']
     if which == 'all':
         need_arjuns_keys= ['ra','dec','ra_bore','dec_bore',
                            'image_filename','image_hdu','expnum','ccdname','object',
                            'filter','exptime','camera','width','height','propid',
-                           'mjd_obs','ccdnmatch',
+                           'mjd_obs',
                            'fwhm','zpt','ccdzpt','ccdraoff','ccddecoff',
                            'ccdrarms', 'ccddecrms', 'ccdskycounts',
                            'ccdphrms',
@@ -194,13 +194,13 @@ def cols_for_survey_table(which='all'):
         need_arjuns_keys= ['ra','dec','ra_bore','dec_bore',
                            'expnum',
                            'exptime','width','height',
-                           'mjd_obs','ccdnmatch',
+                           'mjd_obs',
                            'fwhm','zpt','ccdzpt','ccdraoff','ccddecoff',
                            'cd1_1','cd2_2','cd1_2','cd2_1',
                            'crval1','crval2','crpix1','crpix2']
         dustins_keys= ['skyrms']
     elif which == 'nonzero_diff':
-        need_arjuns_keys= ['ra','dec','ccdnmatch',
+        need_arjuns_keys= ['ra','dec',
                            'fwhm','zpt','ccdzpt','ccdraoff','ccddecoff']
         dustins_keys= ['skyrms']
     return need_arjuns_keys + dustins_keys + martins_keys + gods_keys
@@ -224,7 +224,8 @@ def create_survey_table(T, surveyfn, camera=None, bad_expid=None):
                   ('rarms',  'ccdrarms'),
                   ('decrms', 'ccddecrms'),
                   ('phrms', 'ccdphrms'),
-                  ('nmatch_photom','ccdnmatch')]
+                  ('nstars_astrom','ccdnastrom'),
+                  ('nstars_photom','ccdnphotom')]
     for old,new in rename_keys:
         T.rename(old,new)
     # Delete 
@@ -1087,12 +1088,16 @@ class Measurer(object):
         phot.delete_column('iref')
         refs.delete_column('flux0')
 
+        with np.errstate(divide='ignore'):
+            phot.flux_sn = (phot.flux / phot.dflux)
+        phot.flux_sn[phot.dflux == 0] = 0.
+
         phot.raoff  = (refs.ra_now  - phot.ra_fit ) * 3600. * np.cos(np.deg2rad(refs.dec_now))
         phot.decoff = (refs.dec_now - phot.dec_fit) * 3600.
 
         dra  = phot.raoff [refs.astrom]
         ddec = phot.decoff[refs.astrom]
-        nastrom = len(dra)
+
         raoff  = np.median(dra)
         decoff = np.median(ddec)
         rastd  = np.std(dra)
@@ -1101,6 +1106,11 @@ class Measurer(object):
         rarms = getrms(ra_clip)
         dec_clip, _, _ = sigmaclip(ddec, low=3., high=3.)
         decrms = getrms(dec_clip)
+
+        # For astrom, since we have Gaia everywhere, count the number that pass the sigma-clip,
+        # ie, the number of stars that corresponds to the reported offset and scatter (in RA).
+        nastrom = len(ra_clip)
+
         print('RA, Dec offsets (arcsec): %.4f, %.4f' % (raoff, decoff))
         print('RA, Dec stddev  (arcsec): %.4f, %.4f' % (rastd, decstd))
         print('RA, Dec RMS     (arcsec): %.4f, %.4f' % (rarms, decrms))
@@ -1118,19 +1128,18 @@ class Measurer(object):
 
         phot.psfmag = np.zeros(len(phot), np.float32)
 
+        print('Flux S/N min/median/max: %.1f / %.1f / %.1f' %
+              (phot.flux_sn.min(), np.median(phot.flux_sn), phot.flux_sn.max()))
+        # Note that this is independent of whether we have reference stars
+        # (eg, will work where we don't have PS1)
+        nphotom = np.sum(phot.flux_sn > 5.)
+
         dmag = (refs.legacy_survey_mag - phot.instpsfmag)[refs.photom]
         if len(dmag):
             dmag = dmag[np.isfinite(dmag)]
             print('Zeropoint: using', len(dmag), 'good stars')
             dmag, _, _ = sigmaclip(dmag, low=2.5, high=2.5)
-            nphotom = len(dmag)
-            print('Zeropoint: using', nphotom, 'stars after sigma-clipping')
-
-            with np.errstate(divide='ignore'):
-                flux_sn = (phot.flux / phot.dflux)[refs.photom]
-            flux_sn[phot.dflux[refs.photom] == 0] = 0.
-            print('Flux S/N values:', ', '.join(['%.1f' % sn for sn in flux_sn]))
-            nphotom_detected = np.sum(flux_sn > 5.)
+            print('Zeropoint: using', len(dmag), 'stars after sigma-clipping')
 
             zptstd = np.std(dmag)
             zptmed = np.median(dmag)
@@ -1148,7 +1157,6 @@ class Measurer(object):
             phot.psfmag[ok] = phot.instpsfmag[ok] + zptmed
 
         else:
-            nphotom = 0
             dzpt = 0.
             zptmed = 0.
             zptstd = 0.
@@ -1202,8 +1210,8 @@ class Measurer(object):
         ccds['phrms'] = zptstd
         ccds['zpt'] = zptmed
         ccds['transp'] = transp
-        ccds['nmatch_photom'] = nphotom
-        ccds['nmatch_astrom'] = nastrom
+        ccds['nstars_photom'] = nphotom
+        ccds['nstars_astrom'] = nastrom
 
         # .ra,.dec = Gaia else PS1
         phot.ra  = phot.ra_gaia

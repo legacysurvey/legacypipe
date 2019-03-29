@@ -201,7 +201,7 @@ def psf_zeropoint_cuts(P, pixscale,
 
     cuts = [
         ('not_grz',   np.array([f.strip() not in keys for f in P.filter])),
-        ('ccdnmatch', P.ccdnmatch < 20),
+        ('ccdnmatch', P.ccdnphotom < 20),
         ('zpt_small', np.array([ccdzpt < zpt_cut_lo.get(f,0) for f,ccdzpt in zip(P.filter, ccdzpt)])),
         ('zpt_large', np.array([ccdzpt > zpt_cut_hi.get(f,0) for f,ccdzpt in zip(P.filter, ccdzpt)])),
         ('phrms',     P.ccdphrms > 0.1),
