@@ -10,7 +10,7 @@ This uses the Intel compilers, which introduces two complications:
 
 Preliminaries:
 
-- create an account at `http://hub.docker.com`
+- create an account at <https://hub.docker.com>
 - ask someone to add you to the `legacysurvey` organization on Docker Hub.
 
 
@@ -35,7 +35,7 @@ Third, run the `build.sh` script:
 
 Note that the `build.sh` script tags the build as
 `legacysurvey/legacypipe:nersc`.  This is a Docker Hub name;
-see `https://hub.docker.com/r/legacysurvey/legacypipe/tags` for
+see <https://hub.docker.com/r/legacysurvey/legacypipe/tags> for
 tagged builds there.
 
 Fourth, push the built container to Docker Hub:
