@@ -243,7 +243,7 @@ def add_psfzpt_cuts(T, camera, bad_expid):
         dg = (-0.5, 0.18)
         dr = (-0.5, 0.18)
         radec_rms = 0.2
-        skybright = {})
+        skybright = {}
         zpt_diff_avg = 0.1
         zpt_lo = dict(g=g0+dg[0], r=r0+dr[0])
         zpt_hi = dict(g=g0+dg[1], r=r0+dr[1])
