@@ -176,7 +176,8 @@ def detrend_mzlsbass_zeropoints(P):
     return detrend_zeropoints(P, airmass_terms, mjd_terms)
 
 def psf_zeropoint_cuts(P, pixscale,
-                       zpt_cut_lo, zpt_cut_hi, bad_expid, camera):
+                       zpt_cut_lo, zpt_cut_hi, bad_expid, camera,
+                       radec_rms, skybright, zpt_diff_avg):
     '''
     zpt_cut_lo, zpt_cut_hi: dict from band to zeropoint.
     '''
@@ -201,30 +202,23 @@ def psf_zeropoint_cuts(P, pixscale,
 
     cuts = [
         ('not_grz',   np.array([f.strip() not in keys for f in P.filter])),
-        ('ccdnmatch', P.ccdnmatch < 20),
-        ('zpt_small', np.array([ccdzpt < zpt_cut_lo.get(f,0) for f,ccdzpt in zip(P.filter, ccdzpt)])),
-        ('zpt_large', np.array([ccdzpt > zpt_cut_hi.get(f,0) for f,ccdzpt in zip(P.filter, ccdzpt)])),
-        ('phrms',     P.ccdphrms > 0.1),
+        ('ccdnmatch', P.ccdnphotom < 20),
+        ('zpt_small', np.array([ccdzpt < zpt_cut_lo.get(f.strip(),0) for f,ccdzpt in zip(P.filter, ccdzpt)])),
+        ('zpt_large', np.array([ccdzpt > zpt_cut_hi.get(f.strip(),0) for f,ccdzpt in zip(P.filter, ccdzpt)])),
+        ('phrms',     P.ccdphrms > 0.2),
         ('exptime', P.exptime < 30),
-        ('zpt_diff_avg', (np.abs(P.ccdzpt - P.zpt) > 0.1)),
         ('seeing_bad', np.logical_or(seeing < 0, seeing > 3.0)),
         ('badexp_file', np.array([expnum in bad_expid for expnum in P.expnum])),
+        ('radecrms',  np.hypot(P.ccdrarms, P.ccddecrms) > radec_rms),
+        ('sky_is_bright', np.array([sky > skybright.get(f.strip(), 1e6) for f,sky in zip(P.filter, P.ccdskycounts)])),
+        ('zpt_diff_avg', np.abs(P.ccdzpt - P.zpt) > zpt_diff_avg),
     ]
-
-    if camera == '90prime':
-        cuts.append(('radecrms',  np.hypot(P.ccdrarms, P.ccddecrms) > 0.2))
-        cuts.append(('sky_is_bright', P.ccdskycounts > 150))
 
     if camera == 'mosaic':
         cuts.append(('not_third_pix', (np.logical_not(P.yshift) * (P.mjd_obs < 57674.))))
-        cuts.append(('radecrms',  np.hypot(P.ccdrarms, P.ccddecrms) > 0.1))
-        cuts.append(('sky_is_bright', P.ccdskycounts > 250))
 
     if camera == 'decam':
         cuts.append(('early_decam', P.mjd_obs < MJD_EARLY_DECAM))
-        cuts.append(('radecrms',  np.hypot(P.ccdrarms, P.ccddecrms) > 0.1))
-        # No DECam sky cut (and we would want it band-specific anyway...)
-        # cuts.append(('sky_is_bright', P.ccdskycounts > 250))
 
     for name,cut in cuts:
         P.ccd_cuts += CCD_CUT_BITS[name] * cut
@@ -234,19 +228,27 @@ def add_psfzpt_cuts(T, camera, bad_expid):
     if camera == 'mosaic':
         # Arjun: 2019-03-15
         z0 = 26.20
-        dz = (-1.0, 0.18)
+        dz = (-1.0, 0.8)
+        radec_rms = 0.1
+        skybright = dict(z=200.)
+        zpt_diff_avg = 0.1
         zpt_lo = dict(z=z0+dz[0])
         zpt_hi = dict(z=z0+dz[1])
-        psf_zeropoint_cuts(T, 0.262, zpt_lo, zpt_hi, bad_expid, camera)
+        psf_zeropoint_cuts(T, 0.262, zpt_lo, zpt_hi, bad_expid, camera, radec_rms, skybright,
+                           zpt_diff_avg)
 
     elif camera == '90prime':
         g0 = 25.74
         r0 = 25.52
         dg = (-0.5, 0.18)
         dr = (-0.5, 0.18)
+        radec_rms = 0.2
+        skybright = {})
+        zpt_diff_avg = 0.1
         zpt_lo = dict(g=g0+dg[0], r=r0+dr[0])
         zpt_hi = dict(g=g0+dg[1], r=r0+dr[1])
-        psf_zeropoint_cuts(T, 0.45, zpt_lo, zpt_hi, bad_expid, camera)
+        psf_zeropoint_cuts(T, 0.45, zpt_lo, zpt_hi, bad_expid, camera, radec_rms, skybright,
+                           zpt_diff_avg)
 
     elif camera == 'decam':
         # These are from DR5; eg
@@ -259,9 +261,13 @@ def add_psfzpt_cuts(T, camera, bad_expid):
         di = (-0.5, 0.25)
         dr = (-0.5, 0.25)
         dz = (-0.5, 0.25)
+        radec_rms = 0.4
+        skybright = dict(g=90., r=150., z=180.)
+        zpt_diff_avg = 0.25
         zpt_lo = dict(g=g0+dg[0], r=r0+dr[0], i=i0+dr[0], z=z0+dz[0])
         zpt_hi = dict(g=g0+dg[1], r=r0+dr[1], i=i0+dr[1], z=z0+dz[1])
-        psf_zeropoint_cuts(T, 0.262, zpt_lo, zpt_hi, bad_expid, camera)
+        psf_zeropoint_cuts(T, 0.262, zpt_lo, zpt_hi, bad_expid, camera, radec_rms, skybright,
+                           zpt_diff_avg)
     else:
         assert(False)
         
