@@ -2688,6 +2688,7 @@ def get_parser():
     parser.add_argument('--threads', default=None, type=int,
                         help='Multiprocessing threads (parallel by HDU)')
     parser.add_argument('--quiet', default=False, action='store_true', help='quiet down')
+    parser.add_argument('--overhead', type=str, default=None, help='Print python startup time since the given date.')
     return parser
 
 
@@ -2844,6 +2845,15 @@ def read_primary_header(fn):
 if __name__ == "__main__":
     parser= get_parser()  
     args = parser.parse_args()
+
+    if args.overhead is not None:
+        t0 = args.overhead
+        if t0.endswith('.N'):
+            t0 = t0[:-2]
+        t0 = float(t0)
+        import time
+        print('Startup time:', time.time()-t0, 'seconds')
+
     if args.image_list:
         images= read_lines(args.image_list) 
     elif args.image:

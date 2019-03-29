@@ -2,6 +2,8 @@
 
 echo "runcalibs.sh: script is: $0"
 
+starttime=$(date +%s.%N)
+
 source $(dirname $0)/legacypipe-env
 #export LEGACY_SURVEY_DIR=/global/project/projectdirs/cosmo/work/legacysurvey/dr8b
 
@@ -41,5 +43,6 @@ log=${outdir}/$(basename -s .fits.fz $image_fn).log
 python legacyzpts/legacy_zeropoints.py \
 	   --camera ${camera} --image ${image_fn} --outdir ${outdir} \
        --image-dir $LEGCAY_SURVEY_DIR/images \
+       --overhead ${starttime} \
        >> $log 2>&1
 
