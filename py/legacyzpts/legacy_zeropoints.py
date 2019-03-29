@@ -1125,6 +1125,13 @@ class Measurer(object):
             dmag, _, _ = sigmaclip(dmag, low=2.5, high=2.5)
             nphotom = len(dmag)
             print('Zeropoint: using', nphotom, 'stars after sigma-clipping')
+
+            with np.errstate(divide='ignore'):
+                flux_sn = (phot.flux / phot.dflux)[refs.photom]
+            flux_sn[phot.dflux[refs.photom] == 0] = 0.
+            print('Flux S/N values:', ', '.join(['%.1f' % sn for sn in flux_sn]))
+            nphotom_detected = np.sum(flux_sn > 5.)
+
             zptstd = np.std(dmag)
             zptmed = np.median(dmag)
             dzpt = zptmed - zp0
