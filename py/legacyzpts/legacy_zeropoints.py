@@ -1180,9 +1180,9 @@ class Measurer(object):
         phot.expnum  = np.zeros(len(phot), np.int64) + self.expnum
         phot.ccdname = np.array([self.ccdname] * len(phot))
         phot.filter  = np.array([self.band] * len(phot))
-        # ugh, pad ccdname to 3 characters for DECam
-        if self.camera == 'decam' and len(self.ccdname) < 3:
-            phot.ccdname = phot.ccdname.astype('S3')
+        # pad ccdname to 4 characters (Bok: "CCD1")
+        if len(self.ccdname) < 4:
+            phot.ccdname = phot.ccdname.astype('S4')
 
         phot.exptime = np.zeros(len(phot), np.float32) + self.exptime
         phot.gain = np.zeros(len(phot), np.float32) + self.gain
