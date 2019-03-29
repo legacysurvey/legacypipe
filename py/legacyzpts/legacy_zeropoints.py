@@ -120,7 +120,7 @@ def _ccds_table(camera='decam'):
         # -- CCD-level quantities --
         ('ra', 'f8'),
         ('dec', 'f8'),
-        ('skymag', 'f4'),
+        ('skysb', 'f4'),
         ('skycounts', 'f4'),
         ('skyrms', 'f4'),
         ('sig1', 'f4'),
@@ -177,7 +177,7 @@ def cols_for_survey_table(which='all'):
         when compute it)
     """
     assert(which in ['all','numeric','nonzero_diff'])
-    martins_keys = ['airmass', 'ccdskymag']
+    martins_keys = ['airmass', 'ccdskysb']
     gods_keys = ['plver', 'procdate', 'plprocid', 'ccdnastrom', 'ccdnphotom']
     if which == 'all':
         need_arjuns_keys= ['ra','dec','ra_bore','dec_bore',
@@ -220,7 +220,7 @@ def create_survey_table(T, surveyfn, camera=None, bad_expid=None):
                   ('raoff','ccdraoff'),
                   ('decoff','ccddecoff'),
                   ('skycounts', 'ccdskycounts'),
-                  ('skymag', 'ccdskymag'),
+                  ('skysb', 'ccdskysb'),
                   ('rarms',  'ccdrarms'),
                   ('decrms', 'ccddecrms'),
                   ('phrms', 'ccdphrms'),
@@ -718,7 +718,7 @@ class Measurer(object):
 
         ccds['skyrms'] = skyrms / exptime # e/sec
         ccds['skycounts'] = skymed / exptime # [electron/pix]
-        ccds['skymag'] = skybr   # [mag/arcsec^2]
+        ccds['skysb'] = skybr   # [mag/arcsec^2]
         t0= ptime('measure-sky',t0)
 
         # Load PS1 & Gaia catalogues
