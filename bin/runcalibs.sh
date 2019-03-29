@@ -5,7 +5,7 @@ echo "runcalibs.sh: script is: $0"
 starttime=$(date +%s.%N)
 
 source $(dirname $0)/legacypipe-env
-#export LEGACY_SURVEY_DIR=/global/project/projectdirs/cosmo/work/legacysurvey/dr8b
+export LEGACY_SURVEY_DIR=/global/project/projectdirs/cosmo/work/legacysurvey/dr8b
 
 # Don't add ~/.local/ to Python's sys.path
 export PYTHONNOUSERSITE=1
@@ -18,7 +18,7 @@ export MPICH_GNI_FORK_MODE=FULLCOPY
 export KMP_AFFINITY=disabled
 
 # Try limiting memory to avoid killing the whole MPI job...
-ncores=32
+ncores=8
 if [ "$NERSC_HOST" = "edison" ]; then
     # 64 GB / Edison node = 67108864 kbytes
     maxmem=67108864
@@ -31,18 +31,27 @@ fi
 ulimit -Sv $usemem
 
 #outdir=/global/project/projectdirs/cosmo/work/legacysurvey/dr8
-outdir=$CSCRATCH/cal
+outdir=cal
 
 export camera=decam
 
-image_fn = $1
+image_fn=$1
 
 log=${outdir}/$(basename -s .fits.fz $image_fn).log
 
+export PYTHONPATH=${PYTHONPATH}:.
+
+echo "python legacyzpts/legacy_zeropoints.py \
+	   --camera ${camera} --image ${image_fn} --outdir ${outdir} \
+       --image_dir $LEGACY_SURVEY_DIR/images \
+       --overhead ${starttime} --threads ${ncores} >> $log"
+       >> $log
+
 #cd $zpts_code/legacyzpts/py
 python legacyzpts/legacy_zeropoints.py \
-	   --camera ${camera} --image ${image_fn} --outdir ${outdir} \
-       --image-dir $LEGCAY_SURVEY_DIR/images \
-       --overhead ${starttime} \
-       >> $log 2>&1
+	--camera ${camera} --image ${image_fn} --outdir ${outdir} \
+    --image_dir $LEGACY_SURVEY_DIR/images \
+    --threads ${ncores} \
+    --overhead ${starttime} \
+    >> $log 2>&1
 
