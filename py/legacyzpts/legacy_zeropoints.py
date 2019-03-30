@@ -46,6 +46,8 @@ except ImportError:
     #pass
     raise
 
+record_event = None
+
 CAMERAS=['decam','mosaic','90prime','megaprime']
 
 def ptime(text,t0):
@@ -1954,6 +1956,8 @@ def measure_image(img_fn, image_dir='images', run_calibs_only=False, just_measur
                                'table', measure.expnum, measure.plver, measure.procdate, measure.plprocid):
             do_psfex = False
 
+    record_event and record_event('start calibs')
+            
     if do_splinesky or do_psfex:
         # for DR8, allow grabbing old PsfEx individual-CCD PsfEx files
         ccds = mp.map(run_one_calib, [(measure, survey, ext, do_psfex, do_splinesky)
@@ -1979,6 +1983,8 @@ def measure_image(img_fn, image_dir='images', run_calibs_only=False, just_measur
                 print('Wrote {}'.format(psfoutfn))
             else:
                 print('Problem writing {}'.format(psfoutfn))
+
+    record_event and record_event('finish calibs')
 
     # Now, if they're still missing it's because the entire exposure is borked
     # (WCS failed, weight maps are all zero, etc.), so exit gracefully.
@@ -2020,9 +2026,13 @@ def measure_image(img_fn, image_dir='images', run_calibs_only=False, just_measur
     if run_calibs_only:
         return
 
+    record_event and record_event('finish merge calibs, start photom')
+
     rtns = mp.map(run_one_ext, [(measure, ext, survey, psfex, splinesky, measureargs['debug'])
                                 for ext in extlist])
 
+    record_event and record_event('finish photom')
+    
     for ext,rtn in zip(extlist,rtns):
         ccds, stars_photom, stars_astrom = rtn
         if ccds is not None:
@@ -2243,6 +2253,7 @@ def get_parser():
                         help='Multiprocessing threads (parallel by HDU)')
     parser.add_argument('--quiet', default=False, action='store_true', help='quiet down')
     parser.add_argument('--overhead', type=str, default=None, help='Print python startup time since the given date.')
+    parser.add_argument('--ps', help='Run "ps" and write results to given filename?')
     return parser
 
 
@@ -2400,6 +2411,7 @@ if __name__ == "__main__":
     parser= get_parser()  
     args = parser.parse_args()
 
+    t0 = 0.
     if args.overhead is not None:
         t0 = args.overhead
         if t0.endswith('.N'):
@@ -2408,9 +2420,35 @@ if __name__ == "__main__":
         import time
         print('Startup time:', time.time()-t0, 'seconds')
 
+    ps = args.pop('ps', None)
+    if ps is not None:
+        import threading
+        from collections import deque
+        from legacypipe.utils import run_ps_thread
+        ps_shutdown = threading.Event()
+        ps_queue = deque()
+        def record_event_real(msg):
+            from time import time
+            ps_queue.append((time(), msg))
+
+        global record_event
+        record_event = record_event_real
+
+        if t0 > 0:
+            record_event('start')
+
+        ps_thread = threading.Thread(
+            target=run_ps_thread,
+            args=(os.getpid(), os.getppid(), ps_file, ps_shutdown, ps_queue),
+            name='run_ps')
+        ps_thread.daemon = True
+        print('Starting thread to run "ps"')
+        ps_thread.start()
+        
     if args.image_list:
         images= read_lines(args.image_list) 
     elif args.image:
         images= [args.image]
 
     main(image_list=images,args=args)
+    record_event and record_event('finished')
