@@ -2420,11 +2420,11 @@ if __name__ == "__main__":
         import time
         print('Startup time:', time.time()-t0, 'seconds')
 
-    ps = args.pop('ps', None)
-    if ps is not None:
+    if args.ps is not None:
         import threading
         from collections import deque
         from legacypipe.utils import run_ps_thread
+        ps_file = args.ps
         ps_shutdown = threading.Event()
         ps_queue = deque()
         def record_event_real(msg):
@@ -2435,7 +2435,9 @@ if __name__ == "__main__":
         record_event = record_event_real
 
         if t0 > 0:
-            record_event('start')
+            record_event('script start')
+
+        record_event('python start')
 
         ps_thread = threading.Thread(
             target=run_ps_thread,
