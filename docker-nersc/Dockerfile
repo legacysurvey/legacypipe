@@ -196,4 +196,4 @@ RUN mkdir -p /src \
 RUN cd /src/legacypipe && git pull && echo 1
 
 ## TEST
-RUN cd /src/legacypipe && git pull && git checkout calib-ps && git pull && echo 2
+RUN cd /src/legacypipe && git pull && git checkout calib-ps && git pull && echo 4

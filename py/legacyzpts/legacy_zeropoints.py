@@ -1494,8 +1494,10 @@ class Measurer(object):
         #print('Created legacypipe image object', im)
         git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
 
+        t0 = Time()
         im.run_calibs(psfex=do_psf, sky=do_sky, splinesky=True,
                       git_version=git_version, survey=survey)#, force=True)
+        print('run_calibs', im, ':', Time()-t0)
 
         return ccd
 
