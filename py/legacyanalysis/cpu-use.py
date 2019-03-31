@@ -3,7 +3,7 @@ from astrometry.util.fits import *
 import numpy as np
 import pylab as plt
 
-def plot_cpu_usage(fn, title, cpufn, memfn):
+def plot_cpu_usage(fn, title, cpufn, memfn, total=False):
     T = fits_table(fn)
     #T.about()
     events = fits_table(fn, ext=2)
@@ -16,7 +16,34 @@ def plot_cpu_usage(fn, title, cpufn, memfn):
     xaxis = unixtimes - t0
 
     parent_pid = T._header['PPID']
-    T.mine = np.logical_or(T.pid == parent_pid, T.ppid == parent_pid)
+
+    #children_pids = set(T.pid[T.ppid == parent_pid])
+    #todo = list(children_pids)
+    #family_pids = children_pids.union(set([parent_pid]))
+
+    mypgid = set(T.pgid[T.pid == parent_pid])
+    print('My PGID:', mypgid)
+    assert(len(mypgid) == 1)
+    mypgid = mypgid.pop()
+
+    # todo = [parent_pid]
+    # family_pids = set()
+    # while len(todo):
+    #     pid = todo.pop()
+    #     print('Checking PID', pid)
+    #     kids = set(T.pid[T.ppid == pid])
+    #     print('Found', len(kids), 'child PIDs')
+    #     for k in kids:
+    #         if (not k in family_pids) and (not k in todo):
+    #             todo.append(k)
+    #     family_pids.add(pid)
+    #     family_pids.update(kids)
+    
+    #T.mine = np.logical_or(T.pid == parent_pid, T.ppid == parent_pid)
+    #T.mine = np.array([p in family_pids for p in T.pid])
+
+    T.mine = (T.pgid == mypgid)
+
     T.main = (T.pid == parent_pid)
 
     I = np.flatnonzero(T.mine)
@@ -25,7 +52,8 @@ def plot_cpu_usage(fn, title, cpufn, memfn):
     print(len(mypids), 'PIDs')
     
     plt.clf()
-    
+
+    total_cpu = np.zeros(len(steps), np.float32)
     ps_icpu = np.zeros(len(steps), np.float32)
     plotted_worker = False
     for pid in mypids:
@@ -41,12 +69,14 @@ def plot_cpu_usage(fn, title, cpufn, memfn):
             icpu = np.zeros(len(steps), np.float32)
             icpu[J] = T.proc_icpu[II]
     
-            print('PID', pid, ', parent?', (pid==parent_pid))
-            procs = np.zeros(1+max(T.processor[II]), np.float32)
-            np.add.at(procs, T.processor[II], T.proc_stime[II]+T.proc_utime[II])
-            J = np.flatnonzero(procs)
-            print('Used CPU #,time:', zip(J, procs[J]))
-    
+            # print('PID', pid, ', parent?', (pid==parent_pid))
+            # procs = np.zeros(1+max(T.processor[II]), np.float32)
+            # np.add.at(procs, T.processor[II], T.proc_stime[II]+T.proc_utime[II])
+            # J = np.flatnonzero(procs)
+            # print('Used CPU #,time:', list(zip(J, procs[J])))
+
+            total_cpu += icpu
+
             if pid == parent_pid:
                 plt.plot(xaxis, icpu, 'k-', alpha=0.5, label='My main')
             else:
@@ -61,6 +91,9 @@ def plot_cpu_usage(fn, title, cpufn, memfn):
     if np.any(ps_icpu > 0):
         plt.plot(xaxis, ps_icpu, 'g-', alpha=0.5, label='ps')
 
+    if total:
+        plt.plot(xaxis, total_cpu, 'g-', label='My Total')
+        
     # Add up all other PIDs
     I = np.flatnonzero(np.logical_not(T.mine))
     pids = np.unique(T.pid[I])
@@ -128,7 +161,6 @@ def plot_cpu_usage(fn, title, cpufn, memfn):
     plt.legend()
     plt.title(title)
     plt.savefig(memfn)
-    
 
 def oldtimey():
     for title,tag in [
@@ -175,4 +207,24 @@ def oldtimey():
         print()
     
         plot_cpu_usage(fn, title, 'ps-%s.png' % tag, 'ps-mem-%s.png' % tag)
+    
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--title', default='', help='Plot title')
+    parser.add_argument('--total', default=False, action='store_true',
+                        help='Plot total?')
+    parser.add_argument('ps-file')
+    parser.add_argument('cpu-plot')
+    parser.add_argument('mem-plot')
+
+    args = parser.parse_args()
+
+    plot_cpu_usage(getattr(args, 'ps-file'), args.title, getattr(args, 'cpu-plot'),
+                   getattr(args, 'mem-plot'), total=args.total)
+
+if __name__ == '__main__':
+    main()
     

@@ -2032,7 +2032,7 @@ def measure_image(img_fn, image_dir='images', run_calibs_only=False, just_measur
                                 for ext in extlist])
 
     record_event and record_event('finish photom')
-    
+
     for ext,rtn in zip(extlist,rtns):
         ccds, stars_photom, stars_astrom = rtn
         if ccds is not None:
@@ -2208,6 +2208,9 @@ def runit(imgfn, starfn_photom, surveyfn, annfn, bad_expid=None,
     # survey table
     create_survey_table(accds, surveyfn, camera=measureargs['camera'],
                         bad_expid=bad_expid)
+
+    record_event and record_event('annotate')
+
     # survey --> annotated
     create_annotated_table(surveyfn, annfn, measureargs['camera'], survey)
 
@@ -2427,15 +2430,17 @@ if __name__ == "__main__":
         ps_file = args.ps
         ps_shutdown = threading.Event()
         ps_queue = deque()
-        def record_event_real(msg):
-            from time import time
-            ps_queue.append((time(), msg))
+        def record_event_real(msg, t=None):
+            if t is None:
+                from time import time
+                t = time()
+            ps_queue.append((t, msg))
 
-        global record_event
+        #global record_event
         record_event = record_event_real
 
         if t0 > 0:
-            record_event('script start')
+            record_event('script start', t=t0)
 
         record_event('python start')
 
