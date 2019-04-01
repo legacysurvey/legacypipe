@@ -1517,7 +1517,7 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                     return False
             val = T.get(key)
             if strip:
-                val = np.array([v.strip() for v in val])
+                val = np.array([str(v).strip() for v in val])
             if not np.all(val == targetval):
                 print('WARNING: table value', val, 'not equal to', targetval, 'in file', fn)
                 return False
