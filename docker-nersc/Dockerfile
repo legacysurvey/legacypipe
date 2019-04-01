@@ -160,7 +160,7 @@ RUN cd /src \
 RUN cd /src \
     && git clone https://github.com/legacysurvey/unwise_psf.git
 
-ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacyzpts/py:/src/legacypipe/py
+ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 ENV WISE_PSF_DIR /src/unwise_psf/etc
 
 # set prompt and default shell
