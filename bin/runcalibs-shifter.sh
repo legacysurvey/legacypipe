@@ -2,10 +2,9 @@
 
 # Run legacy_zeropoints on a single image within a Shifter container at NERSC.
 
-## How many processes to run in parallel -- this is for Cori KNL.
-ncores=17
-
 export LEGACY_SURVEY_DIR=/global/project/projectdirs/cosmo/work/legacysurvey/dr8
+
+ncores=4
 
 # Record the time this script started, for reporting python startup time.
 starttime=$(date +%s.%N)
