@@ -250,7 +250,8 @@ def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
     tim = im.get_tractor_image(slc=zoomslice, pixPsf=True, splinesky=True,
                                constant_invvar=opt.constant_invvar,
                                hybridPsf=opt.hybrid_psf,
-                               normalizePsf=opt.normalize_psf)
+                               normalizePsf=opt.normalize_psf,
+                               old_calibs_ok=True)
     print('Got tim:', tim)
 
     tnow = Time()

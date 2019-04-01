@@ -96,7 +96,7 @@ def main():
     cols = outccds.get_columns()
     for c in ['ccd_x0', 'ccd_x1', 'ccd_y0', 'ccd_y1',
               'brick_x0', 'brick_x1', 'brick_y0', 'brick_y1',
-              'plver', 'skyver', 'wcsver', 'psfver', 'skyplver', 'wcsplver',
+              'skyver', 'wcsver', 'psfver', 'skyplver', 'wcsplver',
               'psfplver' ]:
         if c in cols:
             outccds.delete_column(c)
@@ -121,7 +121,7 @@ def main():
 
         tim = im.get_tractor_image(slc, pixPsf=True, splinesky=True,
                                    subsky=False, nanomaggies=False,
-                                   no_remap_invvar=True)
+                                   no_remap_invvar=True, old_calibs_ok=True)
         print('Tim:', tim.shape)
 
         if args.pad:
@@ -297,10 +297,20 @@ def main():
         trymakedirs(outim.psffn, dir=True)
         print('Writing PsfEx:', outim.psffn)
         psfex.writeto(outim.psffn)
+        # update header
+        F = fitsio.FITS(outim.psffn, 'rw')
+        F[0].write_keys([dict(name='EXPNUM', value=ccd.expnum),
+                         dict(name='PLVER',  value=psf.plver),
+                         dict(name='PROCDATE', value=psf.procdate)])
+        F.close()
 
         print('Sky filename:', outim.splineskyfn)
         trymakedirs(outim.splineskyfn, dir=True)
-        sky.write_fits(outim.splineskyfn)
+        primhdr = fitsio.FITSHDR()
+        primhdr['PLVER'] = sky.plver
+        primhdr['PROCDATE'] = sky.procdate
+        primhdr['EXPNUM'] = ccd.expnum
+        sky.write_fits(outim.splineskyfn, primhdr=primhdr)
 
         # HACK -- check result immediately.
         outccds.writeto(os.path.join(args.outdir, 'survey-ccds-1.fits.gz'))
@@ -310,7 +320,7 @@ def main():
         outim = outsurvey.get_image_object(occd)
         print('Got output image:', outim)
         otim = outim.get_tractor_image(pixPsf=True, splinesky=True,
-                                       hybridPsf=True)
+                                       hybridPsf=True, old_calibs_ok=True)
         print('Got output tim:', otim)
 
     outccds.writeto(os.path.join(args.outdir, 'survey-ccds-1.fits.gz'))
@@ -444,7 +454,7 @@ def main():
         outim = outsurvey.get_image_object(ccd)
         print('Got output image:', outim)
         otim = outim.get_tractor_image(pixPsf=True, splinesky=True,
-                                       hybridPsf=True)
+                                       hybridPsf=True, old_calibs_ok=True)
         print('Got output tim:', otim)
     
 if __name__ == '__main__':

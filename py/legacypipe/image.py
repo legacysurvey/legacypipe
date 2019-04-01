@@ -141,6 +141,8 @@ class LegacySurveyImage(object):
         self.sig1    = ccd.sig1
         self.plver   = ccd.plver.strip()
         self.procdate = ccd.procdate.strip()
+        # Use a dummy value to accommodate old calibs (which will fail later unless old-calibs-ok=True)
+        self.plprocid = getattr(ccd, 'plprocid', 'xxxxxxx').strip()
 
         # Which Data Quality bits mark saturation?
         self.dq_saturation_bits = CP_DQ_BITS['satur'] # | CP_DQ_BITS['bleed']
@@ -256,7 +258,8 @@ class LegacySurveyImage(object):
                           nanomaggies=True, subsky=True, tiny=10,
                           dq=True, invvar=True, pixels=True,
                           no_remap_invvar=False,
-                          constant_invvar=False):
+                          constant_invvar=False,
+                          old_calibs_ok=False):
         '''
         Returns a tractor.Image ("tim") object for this image.
 
@@ -294,18 +297,22 @@ class LegacySurveyImage(object):
         get_invvar = invvar
 
         primhdr = self.read_image_primary_header()
-        #
+
         assert(validate_procdate_plver(self.imgfn, 'primaryheader',
                                        self.expnum, self.plver, self.procdate,
-                                       data=primhdr, cpheader=True))
-        # NOTE, this does not work because the WT and DQ maps have DATEs
-        # that are like 15 seconds later than the image.
-        # assert(validate_procdate_plver(self.wtfn, 'primaryheader',
-        #                                self.expnum, self.plver, self.procdate,
-        #                                cpheader=True))
-        # assert(validate_procdate_plver(self.dqfn, 'primaryheader',
-        #                                self.expnum, self.plver, self.procdate,
-        #                                cpheader=True))
+                                       self.plprocid,
+                                       data=primhdr, cpheader=True,
+                                       old_calibs_ok=old_calibs_ok))
+        assert(validate_procdate_plver(self.wtfn, 'primaryheader',
+                                       self.expnum, self.plver, self.procdate,
+                                       self.plprocid,
+                                       cpheader=True,
+                                       old_calibs_ok=old_calibs_ok))
+        assert(validate_procdate_plver(self.dqfn, 'primaryheader',
+                                       self.expnum, self.plver, self.procdate,
+                                       self.plprocid,
+                                       cpheader=True,
+                                       old_calibs_ok=old_calibs_ok))
         band = self.band
         wcs = self.get_wcs()
 
@@ -405,7 +412,8 @@ class LegacySurveyImage(object):
             slc = slice(y0,y1), slice(x0,x1)
 
         sky = self.read_sky_model(splinesky=splinesky, slc=slc,
-                                  primhdr=primhdr, imghdr=imghdr)
+                                  primhdr=primhdr, imghdr=imghdr,
+                                  old_calibs_ok=old_calibs_ok)
         skysig1 = getattr(sky, 'sig1', None)
 
         skymod = np.zeros_like(img)
@@ -514,7 +522,8 @@ class LegacySurveyImage(object):
         psf = self.read_psf_model(x0, y0, gaussPsf=gaussPsf, pixPsf=pixPsf,
                                   hybridPsf=hybridPsf, normalizePsf=normalizePsf,
                                   psf_sigma=psf_sigma,
-                                  w=x1 - x0, h=y1 - y0)
+                                  w=x1 - x0, h=y1 - y0,
+                                  old_calibs_ok=old_calibs_ok)
 
         tim = Image(img, invvar=invvar, wcs=twcs, psf=psf,
                     photocal=LinearPhotoCal(zpscale, band=band),
@@ -546,6 +555,7 @@ class LegacySurveyImage(object):
         tim.primhdr = primhdr
         tim.hdr = imghdr
         tim.plver = primhdr.get('PLVER','').strip()
+        tim.plprocid = primhdr.get('PLPROCID','').strip()
         tim.skyver = (getattr(sky, 'version', ''), getattr(sky, 'plver', ''))
         tim.wcsver = (getattr(wcs, 'version', ''), getattr(wcs, 'plver', ''))
         tim.psfver = (getattr(psf, 'version', ''), getattr(psf, 'plver', ''))
@@ -813,7 +823,7 @@ class LegacySurveyImage(object):
         # CCDs table sig1 is in ADU.
         return self.sig1 / zpscale
 
-    def read_sky_model(self, splinesky=False, slc=None, **kwargs):
+    def read_sky_model(self, splinesky=False, slc=None, old_calibs_ok=False, **kwargs):
         '''
         Reads the sky model, returning a Tractor Sky object.
         '''
@@ -822,13 +832,13 @@ class LegacySurveyImage(object):
         sky = None
         if splinesky:
             if self.merged_splineskyfn and os.path.exists(self.merged_splineskyfn):
-                sky = self.read_merged_splinesky_model(slc=slc)
+                sky = self.read_merged_splinesky_model(slc=slc, old_calibs_ok=old_calibs_ok)
                 if sky is not None:
                     return sky
 
             if not os.path.exists(self.splineskyfn):
                 if self.merged_splineskyfn is not None:
-                    raise RuntimeError('Read Splinesky: neither', self.merged_splineskyfn, 'nor', self.splineskyfn, 'found')
+                    raise RuntimeError('Read Splinesky: neither {} nor {} found'.format(self.merged_splineskyfn, self.splineskyfn))
                 return None
 
         fn = self.skyfn
@@ -836,8 +846,9 @@ class LegacySurveyImage(object):
             fn = self.splineskyfn
 
         if not validate_procdate_plver(fn, 'primaryheader',
-                                       self.expnum, self.plver, self.procdate):
-            raise RuntimeError('Splinesky file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' % fn)
+                                       self.expnum, self.plver, self.procdate,
+                                       self.plprocid, old_calibs_ok=old_calibs_ok):
+            raise RuntimeError('Splinesky file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' % fn)
 
         debug('Reading sky model from', fn)
         hdr = fitsio.read_header(fn)
@@ -865,19 +876,21 @@ class LegacySurveyImage(object):
             if len(sky.version) == 0:
                 sky.version = str(os.stat(fn).st_mtime)
         sky.plver = hdr.get('PLVER', '').strip()
+        sky.procdate = hdr.get('PROCDATE', '').strip()
         sig1 = hdr.get('SIG1', None)
         if sig1 is not None:
             sky.sig1 = sig1
         sky.datasum = hdr.get('IMGDSUM')
         return sky
 
-    def read_merged_splinesky_model(self, slc=None):
+    def read_merged_splinesky_model(self, slc=None, old_calibs_ok=False):
         from tractor.utils import get_class_from_name
         debug('Reading merged spline sky models from', self.merged_splineskyfn)
         T = fits_table(self.merged_splineskyfn)
         if not validate_procdate_plver(self.merged_splineskyfn, 'table',
-                                       self.expnum, self.plver, self.procdate, data=T):
-            raise RuntimeError('Merged splinesky file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
+                                       self.expnum, self.plver, self.procdate,
+                                       self.plprocid, data=T, old_calibs_ok=old_calibs_ok):
+            raise RuntimeError('Merged splinesky file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' %
                                self.merged_splineskyfn)
         I, = np.nonzero((T.expnum == self.expnum) *
                         np.array([c.strip() == self.ccdname
@@ -901,6 +914,7 @@ class LegacySurveyImage(object):
             sky.shift(x0, y0)
         sky.version = Ti.legpipev
         sky.plver = Ti.plver
+        sky.procdate = Ti.procdate
         if 'sig1' in Ti.get_columns():
             sky.sig1 = Ti.sig1
         if 'imgdsum' in Ti.get_columns():
@@ -909,7 +923,7 @@ class LegacySurveyImage(object):
 
     def read_psf_model(self, x0, y0,
                        gaussPsf=False, pixPsf=False, hybridPsf=False,
-                       normalizePsf=False,
+                       normalizePsf=False, old_calibs_ok=False,
                        psf_sigma=1., w=0, h=0):
         assert(gaussPsf or pixPsf or hybridPsf)
         if gaussPsf:
@@ -925,11 +939,10 @@ class LegacySurveyImage(object):
         psf = None
         if self.merged_psffn is not None:
             if os.path.exists(self.merged_psffn):
-                psf = self.read_merged_psfex_model(normalizePsf=normalizePsf)
+                psf = self.read_merged_psfex_model(normalizePsf=normalizePsf, old_calibs_ok=old_calibs_ok)
             else:
                 if not os.path.exists(self.psffn):
-                    raise RuntimeError('Read PsfEx: neither', self.merged_psffn,
-                          'nor', self.psffn, 'exist')
+                    raise RuntimeError('Read Splinesky: neither {} nor {} found'.format(self.merged_psffn, self.psffn))
 
         if psf is None:
             debug('Reading PsfEx model from', self.psffn)
@@ -941,13 +954,16 @@ class LegacySurveyImage(object):
             hdr = fitsio.read_header(self.psffn)
 
             if not validate_procdate_plver(self.psffn, 'primaryheader',
-                                           self.expnum, self.plver, self.procdate, data=hdr):
-                raise RuntimeError('PsfEx file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' % self.psffn)
+                                           self.expnum, self.plver, self.procdate,
+                                           self.plprocid, data=hdr, old_calibs_ok=old_calibs_ok):
+                raise RuntimeError('PsfEx file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' %
+                                   self.psffn)
 
             psf.version = hdr.get('LEGSURV', None)
             if psf.version is None:
                 psf.version = str(os.stat(self.psffn).st_mtime)
             psf.plver = hdr.get('PLVER', '').strip()
+            psf.procdate = hdr.get('PROCDATE', '').strip()
             psf.datasum = hdr.get('IMGDSUM', 0)
             hdr = fitsio.read_header(self.psffn, ext=1)
             psf.fwhm = hdr['PSF_FWHM']
@@ -959,17 +975,16 @@ class LegacySurveyImage(object):
         debug('Using PSF model', psf)
         return psf
 
-    def read_merged_psfex_model(self, normalizePsf=False):
+    def read_merged_psfex_model(self, normalizePsf=False, old_calibs_ok=False):
         from tractor import PsfExModel
         debug('Reading merged PsfEx models from', self.merged_psffn)
         T = fits_table(self.merged_psffn)
 
         if not validate_procdate_plver(self.merged_psffn, 'table',
-                                       self.expnum, self.plver, self.procdate, data=T):
-            print('WARNING! Merged PsfEx file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
+                                       self.expnum, self.plver, self.procdate,
+                                       self.plprocid, data=T, old_calibs_ok=old_calibs_ok):
+            raise RuntimeError('Merged PSFEx file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' %
                   self.merged_psffn)
-            #raise RuntimeError('Merged PsfEx file %s did not pass consistency validation (PLVER, PROCDATE, EXPNUM)' %
-            #                   self.merged_psffn)
 
         I, = np.nonzero((T.expnum == self.expnum) *
                         np.array([c.strip() == self.ccdname
@@ -1000,6 +1015,7 @@ class LegacySurveyImage(object):
 
         psf.version = Ti.legpipev.strip()
         psf.plver = Ti.plver.strip()
+        psf.procdate = Ti.procdate.strip()
         if 'imgdsum' in Ti.get_columns():
             psf.datasum = Ti.imgdsum
         psf.fwhm = Ti.psf_fwhm
@@ -1071,14 +1087,15 @@ class LegacySurveyImage(object):
         if rtn:
             raise RuntimeError('Command failed: ' + cmd)
         os.rename(tmpfn, self.sefn)
-
+        
     def run_psfex(self, git_version=None, ps=None):
         from astrometry.util.file import trymakedirs
         from legacypipe.survey import get_git_version
         sedir = self.survey.get_se_dir()
         trymakedirs(self.psffn, dir=True)
         primhdr = self.read_image_primary_header()
-        plver = primhdr.get('PLVER', 'V0.0')
+        plver = primhdr.get('PLVER', 'V0.0').strip()
+        plprocid = primhdr['PLPROCID'].strip()
         imghdr = self.read_image_header()
         datasum = imghdr.get('DATASUM', '0')
         procdate = primhdr['DATE']
@@ -1088,28 +1105,30 @@ class LegacySurveyImage(object):
         psfdir = os.path.dirname(self.psffn)
         psfoutfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.fits')
         psftmpfn = psfoutfn + '.tmp'
-        cmds = ['psfex -c %s -PSF_DIR %s -PSF_SUFFIX .fits.tmp %s' %
-                (os.path.join(sedir, self.camera + '.psfex'),
-                 psfdir, self.sefn),
-                'modhead %s LEGPIPEV "%s" "legacypipe git version"' %
-                (psftmpfn, git_version),
-                'modhead %s PLVER "%s" "CP ver of image file"' %
-                (psftmpfn, plver),
-                'modhead %s IMGDSUM "%s" "DATASUM of image file"' %
-                (psftmpfn, datasum),
-                'modhead %s PROCDATE "%s" "DATE of image file"' %
-                (psftmpfn, procdate),
-                'modhead %s EXPNUM "%s" "exposure number"' %
-                (psftmpfn, self.expnum),
-                'mv %s %s' % (psftmpfn, psfoutfn),
-                ]
-        for cmd in cmds:
-            print(cmd)
-            rtn = os.system(cmd)
-            if rtn:
-                raise RuntimeError('Command failed: %s: return value: %i' %
-                                   (cmd,rtn))
+        cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .fits.tmp %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, self.sefn)
+        
+        rtn = os.system(cmd)
+        if rtn:
+            raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
+        
+        # Update the header
+        hlist = [
+            {'name': 'LEGPIPEV', 'value': git_version, 'comment': "legacypipe git version"},
+            {'name': 'EXPNUM',   'value': self.expnum, 'comment': "exponsure number"},
+            {'name': 'PLVER',    'value': plver,       'comment': "CP version"},
+            {'name': 'PLPROCID', 'value': plprocid,    'comment': "CP processing date hash"},
+            {'name': 'PROCDATE', 'value': procdate,    'comment': "DATE of image file"},
+            {'name': 'IMGDSUM',  'value': datasum,     'comment': "DATASUM of image file"}
+            ]
+        F = fitsio.FITS(psftmpfn, 'rw')
+        F[0].write_keys(hlist)
+        F.close()
 
+        cmd = 'mv %s %s' % (psftmpfn, psfoutfn)
+        rtn = os.system(cmd)
+        if rtn:
+            raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
+        
     def run_sky(self, splinesky=False, git_version=None, ps=None, survey=None,
                 gaia=True, release=0):
         from legacypipe.survey import get_version_header
@@ -1127,6 +1146,7 @@ class LegacySurveyImage(object):
                                  git_version=git_version)
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', 'V0.0')
+        plprocid = primhdr['PLPROCID']
         imghdr = self.read_image_header()
         datasum = imghdr.get('DATASUM', '0')
         procdate = primhdr['DATE']
@@ -1138,6 +1158,8 @@ class LegacySurveyImage(object):
                             comment='NOAO product type'))
         hdr.add_record(dict(name='PLVER', value=plver,
                             comment='CP ver of image file'))
+        hdr.add_record(dict(name='PLPROCID', value=plprocid,
+                            comment='CP processing date hash'))
         hdr.add_record(dict(name='IMGDSUM', value=datasum,
                             comment='DATASUM of image file'))
         hdr.add_record(dict(name='PROCDATE', value=procdate,
@@ -1397,17 +1419,20 @@ class LegacySurveyImage(object):
                    fcopy=False, use_mask=True,
                    force=False, git_version=None,
                    splinesky=False, ps=None, survey=None,
-                   gaia=True):
+                   gaia=True, old_calibs_ok=False):
         '''
         Run calibration pre-processing steps.
         '''
         if psfex and not force:
             # Check whether PSF model already exists
             try:
-                self.read_psf_model(0, 0, pixPsf=True, hybridPsf=True)
+                self.read_psf_model(0, 0, pixPsf=True, hybridPsf=True,
+                                    old_calibs_ok=old_calibs_ok)
                 psfex = False
             except Exception as e:
                 print('Did not find existing PsfEx model for', self, ':', e)
+                #import traceback
+                #traceback.print_exc()
         if psfex:
             se = True
 
@@ -1418,7 +1443,8 @@ class LegacySurveyImage(object):
         if sky and not force:
             # Check whether sky model already exists
             try:
-                self.read_sky_model(splinesky=splinesky)
+                self.read_sky_model(splinesky=splinesky,
+                                    old_calibs_ok=old_calibs_ok)
                 sky = False
             except Exception as e:
                 print('Did not find existing sky model for', self, ':', e)
@@ -1464,7 +1490,9 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
         return PixelizedPSF(pix)
 
 def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
-                            data=None, ext=1, cpheader=False):
+                            plprocid,
+                            data=None, ext=1, cpheader=False,
+                            old_calibs_ok=False):
     if not os.path.exists(fn):
         print('File not found {}'.format(fn))
         return False
@@ -1475,17 +1503,23 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
         else:
             T = data
         cols = T.get_columns()
-        for key,targetval,strip in (('procdate', procdate, True),
+        ### FIXME -- once we don't need procdate, clean up special-casing below!!
+        for key,targetval,strip in (#('procdate', procdate, True),
                                     ('plver', plver, True),
+                                    ('plprocid', plprocid, True),
                                     ('expnum', expnum, False)):
             if key not in cols:
-                print('Warning: outdated data model:', fn, 'table missing', key)
-                return False
+                if old_calibs_ok:
+                    print('WARNING: {} table missing {} but old_calibs_ok=True'.format(fn, key))
+                    continue
+                else:
+                    #print('WARNING: {} missing {}'.format(fn, key))
+                    return False
             val = T.get(key)
             if strip:
                 val = np.array([v.strip() for v in val])
             if not np.all(val == targetval):
-                print('Warning: table value', val, 'not equal to', targetval, 'in file', fn)
+                print('WARNING: table value', val, 'not equal to', targetval, 'in file', fn)
                 return False
         return True
     elif filetype in ['primaryheader', 'header']:
@@ -1530,22 +1564,33 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                     cpexpnum = int(re.sub(r'([a-z]+|\.+)','',base), 10)
                     print('Faked up EXPNUM', cpexpnum)
 
-        for key,spval,targetval,strip in ((procdatekey, None, procdate, True),
+        for key,spval,targetval,strip in (#(procdatekey, None, procdate, True),
                                           ('PLVER', None, plver, True),
+                                          ('PLPROCID', None, plprocid, True),
                                           ('EXPNUM', cpexpnum, expnum, False)):
             if spval is not None:
                 val = spval
             else:
                 if key not in hdr:
-                    print('Warning: outdated data model:', fn, 'header missing', key)
-                    return False
+                    if old_calibs_ok:
+                        print('WARNING: {} header missing {} but old_calibs_ok=True'.format(fn, key))
+                        continue
+                    else:
+                        #print('WARNING: {} header missing {}'.format(fn, key))
+                        return False
                 val = hdr[key]
 
             if strip:
+                # PLPROCID can get parsed as an int by fitsio, ugh
+                val = str(val)
                 val = val.strip()
             if val != targetval:
-                print('Warning: header value', val, 'not equal to', targetval, 'in file', fn)
-                return False
+                if old_calibs_ok:
+                    print('WARNING: {}!={} in {} header but old_calibs_ok=True'.format(val, targetval, fn))
+                    continue
+                else:
+                    print('WARNING: {}!={} in {} header'.format(val, targetval, fn))
+                    return False
         return True
 
     else:
