@@ -170,3 +170,4 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> /root/.bashrc
 RUN mkdir /root/.qdo && echo "[qdo]" > /root/.qdo/qdorc
 RUN python -c "import astropy"
 
+RUN cd /src/legacypipe/py && git pull && echo 1

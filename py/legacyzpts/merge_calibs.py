@@ -38,7 +38,7 @@ def pad_arrays(A):
             padded.append(a)
             continue
         p = np.zeros(maxshape, a.dtype)
-        s = list((slice(s) for s in ashape))
+        s = tuple((slice(s) for s in ashape))
         p[s] = a
         padded.append(p)
     return padded
