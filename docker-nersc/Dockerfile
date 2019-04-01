@@ -1,4 +1,3 @@
-#FROM registry.services.nersc.gov/nersc/intel_cxx_devel as builder
 FROM registry.services.nersc.gov/nersc/intel_cxx_fort_mpi_mkl_devel as builder
 
 RUN apt -y update && apt install -y apt-utils && echo yes
@@ -60,10 +59,6 @@ RUN for x in \
     #&& rm -Rf /root/.cache/pip \
     && echo 1
 
-## NOTE -- intel compilers only set *after* pip installs --
-# photutils didn't work with these cflags, and we don't care
-# that much that python codes are compiled with icc.
-
 ENV PYTHON python3
 ENV PYTHON_CONFIG python3-config
 ENV PYTHON_SCRIPT "/usr/bin/env python3"
@@ -111,12 +106,8 @@ RUN cd /src \
     && make clean
 
 ######## Stage 2 ########
-# ... don't have to clean above, just copy over installation
-#FROM registry.services.nersc.gov/nersc/intel_cxx_runtime
 FROM registry.services.nersc.gov/nersc/intel_cxx_fort_mpi_mkl_runtime
 COPY --from=builder /usr/local /usr/local
-#RUN echo '/opt/local/lib' > /etc/ld.so.conf.d/package-libs.conf && \
-#    ldconfig
 
 ENV PYTHON python3
 ENV PYTHON_CONFIG python3-config
@@ -129,6 +120,7 @@ RUN apt -y update && apt install -y apt-utils && echo yes
 RUN DEBIAN_FRONTEND=noninteractive \
     apt install -y --no-install-recommends \
     procps \
+    htop \
     make \
     git \
     file \
@@ -168,29 +160,13 @@ RUN cd /src \
 RUN cd /src \
     && git clone https://github.com/legacysurvey/unwise_psf.git
 
-ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacyzpts/py:/src/legacypipe/py
+ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 ENV WISE_PSF_DIR /src/unwise_psf/etc
-
-# cgroup-tools -- doesn't work inside containers.
 
 # set prompt and default shell
 SHELL ["/bin/bash", "-c"]
 RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> /root/.bashrc
-
 # Create config files in /root
 RUN mkdir /root/.qdo && echo "[qdo]" > /root/.qdo/qdorc
 RUN python -c "import astropy"
 
-### HACK -- testing
-
-RUN apt update && apt install htop
-
-RUN mkdir -p /src \
-    && cd /src/ \
-    && git clone https://bitbucket.org/dstn/qdo.git qdoX \
-    && cd qdoX \
-    && git checkout print-db-overhead \
-    && python3 setup.py install
-
-# up!
-RUN cd /src/legacypipe && git pull && echo 1
