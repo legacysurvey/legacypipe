@@ -152,13 +152,14 @@ RUN mkdir -p /src \
 # python = python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
+# unwise_psf
+RUN cd /src \
+    && git clone https://github.com/legacysurvey/unwise_psf.git \
+    && git checkout dr8
+
 # Legacypipe
 RUN cd /src \
     && git clone http://github.com/legacysurvey/legacypipe.git legacypipe
-
-# unwise_psf
-RUN cd /src \
-    && git clone https://github.com/legacysurvey/unwise_psf.git
 
 ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 ENV WISE_PSF_DIR /src/unwise_psf/etc
@@ -170,4 +171,4 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> /root/.bashrc
 RUN mkdir /root/.qdo && echo "[qdo]" > /root/.qdo/qdorc
 RUN python -c "import astropy"
 
-RUN cd /src/legacypipe/py && git pull && echo 1
+#RUN cd /src/legacypipe/py && git pull && echo 1

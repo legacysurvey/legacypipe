@@ -4,7 +4,7 @@
 
 export LEGACY_SURVEY_DIR=/global/project/projectdirs/cosmo/work/legacysurvey/dr8
 
-ncores=4
+ncores=8
 
 # Record the time this script started, for reporting python startup time.
 starttime=$(date +%s.%N)
