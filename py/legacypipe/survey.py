@@ -411,8 +411,8 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
     #                    comment='LegacySurveys Directory Prefix'))
     hdr.add_record(dict(name='LSDIR', value=survey_dir,
                         comment='$LEGACY_SURVEY_DIR directory'))
-    #hdr.add_record(dict(name='LSDR', value='DR8',
-    #                    comment='DECaLS release name'))
+    hdr.add_record(dict(name='LSDR', value='DR8',
+                        comment='Data release number'))
     hdr.add_record(dict(name='RUNDATE', value=datetime.datetime.now().isoformat(),
                         comment='%s run time' % program_name))
     hdr.add_record(dict(name='SURVEY', value='DECaLS+BASS+MzLS',
