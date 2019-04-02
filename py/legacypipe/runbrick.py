@@ -3518,6 +3518,10 @@ def main(args=None):
     print('legacypipe git version:', get_git_version())
     if args is None:
         print('Command-line args:', sys.argv)
+        cmd = 'python'
+        for vv in sys.argv:
+            cmd += ' {}'.format(vv) 
+        print(cmd)
     else:
         print('Args:', args)
     cid = os.environ.get('SLURM_CLUSTER_NAME', 'none')
