@@ -37,7 +37,7 @@ before_script:
     - (cd $HOME/astrometry.net && git pull) || (rm -Rf $HOME/astrometry.net && cd $HOME && git clone https://github.com/dstndstn/astrometry.net.git);
     - (cd $HOME/astrometry.net && make && make py)
 
-    - (cd $HOME && git clone https://github.com/legacysurvey/unwise_psf.git)
+    - (cd $HOME && git clone https://github.com/legacysurvey/unwise_psf.git && cd unwise_psf && git checkout dr8)
 
     # - if [ ! -d "$HOME/tractor-git" ]; then (cd $HOME; git clone https://github.com/dstndstn/tractor.git tractor-git); fi
     # - (cd $HOME/tractor-git && git pull) || (rm -Rf $HOME/tractor-git && cd $HOME && git clone https://github.com/dstndstn/tractor.git tractor-git);
