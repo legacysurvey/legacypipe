@@ -398,8 +398,8 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
         git_version = get_git_version()
 
     hdr = fitsio.FITSHDR()
-    lsdir_prefix1 = '/global/project/projectdirs'
-    lsdir_prefix2 = '/global/projecta/projectdirs'
+    #lsdir_prefix1 = '/global/project/projectdirs'
+    #lsdir_prefix2 = '/global/projecta/projectdirs'
     for s in [
         'Data product of the DECam Legacy Survey (DECaLS)',
         'Full documentation at http://legacysurvey.org',
@@ -407,26 +407,26 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
         hdr.add_record(dict(name='COMMENT', value=s, comment=s))
     hdr.add_record(dict(name='LEGPIPEV', value=git_version,
                         comment='legacypipe git version'))
-    hdr.add_record(dict(name='LSDIRPFX', value=lsdir_prefix1,
-                        comment='LegacySurveys Directory Prefix'))
-    hdr.add_record(dict(name='LSDIR', value=survey_dir.lstrip(lsdir_prefix1),
-                        comment='LegacySurveys directory'))
-    hdr.add_record(dict(name='LSDR', value='DR8',
-                        comment='DECaLS release name'))
+    #hdr.add_record(dict(name='LSDIRPFX', value=lsdir_prefix1,
+    #                    comment='LegacySurveys Directory Prefix'))
+    hdr.add_record(dict(name='LSDIR', value=survey_dir,
+                        comment='$LEGACY_SURVEY_DIR directory'))
+    #hdr.add_record(dict(name='LSDR', value='DR8',
+    #                    comment='DECaLS release name'))
     hdr.add_record(dict(name='RUNDATE', value=datetime.datetime.now().isoformat(),
                         comment='%s run time' % program_name))
-    hdr.add_record(dict(name='SURVEY', value='DECaLS+MzLS+BASS',
-                        comment='LegacySurveys'))
+    hdr.add_record(dict(name='SURVEY', value='DECaLS+BASS+MzLS',
+                        comment='The LegacySurveys'))
     # Requested by NOAO
-    hdr.add_record(dict(name='SURVEYID', value='DECaLS MzLS BASS',
-                        comment='Survey name'))
+    hdr.add_record(dict(name='SURVEYID', value='DECaLS BASS MzLS',
+                        comment='Survey names'))
     #hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
     #hdr.add_record(dict(name='SURVEYID', value='BASS MzLS',
-    hdr.add_record(dict(name='RELEASE', value=release,
-                        comment='Survey data release number'))
+    hdr.add_record(dict(name='DRVERSIO', value=release,
+                        comment='LegacySurveys Data Release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
                         comment='Observation type'))
-    hdr.add_record(dict(name='PROCTYPE', value='brick',
+    hdr.add_record(dict(name='PROCTYPE', value='tile',
                         comment='Processing type'))
 
     import socket

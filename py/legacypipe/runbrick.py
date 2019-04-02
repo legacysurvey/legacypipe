@@ -165,30 +165,30 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     version_header.add_record(dict(name='BRICKID' , value=brickid,
                                 comment='LegacySurveys brick id'))
     version_header.add_record(dict(name='RAMIN'   , value=brick.ra1,
-                                comment='[deg] Brick RA min'))
+                                comment='Brick RA min (deg)'))
     version_header.add_record(dict(name='RAMAX'   , value=brick.ra2,
-                                comment='[deg] Brick RA max'))
+                                comment='Brick RA max (deg)'))
     version_header.add_record(dict(name='DECMIN'  , value=brick.dec1,
-                                comment='[deg] Brick Dec min'))
+                                comment='Brick Dec min (deg)'))
     version_header.add_record(dict(name='DECMAX'  , value=brick.dec2,
-                                comment='[deg] Brick Dec max'))
+                                comment='Brick Dec max (deg)'))
     #version_header.add_record(dict(name='BRICKRA' , value=brick.ra,comment='[deg] Brick center'))
     #version_header.add_record(dict(name='BRICKDEC', value=brick.dec,comment='[deg] Brick center'))
 
     # Add NOAO-requested headers
     version_header.add_record(dict(
-        name='RA', value=ra2hmsstring(brick.ra, separator=':'), comment='[hms] Brick center RA'))
+        name='RA', value=ra2hmsstring(brick.ra, separator=':'), comment='Brick center RA (hms)'))
     version_header.add_record(dict(
-        name='DEC', value=dec2dmsstring(brick.dec, separator=':'), comment='[dms] Brick center DEC'))
+        name='DEC', value=dec2dmsstring(brick.dec, separator=':'), comment='Brick center DEC (dms)'))
     version_header.add_record(dict(
-        name='CENTRA', value=brick.ra, comment='[deg] Brick center RA'))
+        name='CENTRA', value=brick.ra, comment='Brick center RA (deg)'))
     version_header.add_record(dict(
-        name='CENTDEC', value=brick.dec, comment='[deg] Brick center Dec'))
+        name='CENTDEC', value=brick.dec, comment='Brick center Dec (deg)'))
     for i,(r,d) in enumerate(targetrd[:4]):
         version_header.add_record(dict(
-            name='CORN%iRA' %(i+1), value=r, comment='[deg] Brick corner RA'))
+            name='CORN%iRA' %(i+1), value=r, comment='Brick corner RA (deg)'))
         version_header.add_record(dict(
-            name='CORN%iDEC'%(i+1), value=d, comment='[deg] Brick corner Dec'))
+            name='CORN%iDEC'%(i+1), value=d, comment='Brick corner Dec (deg)'))
 
     # Find CCDs
     ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
@@ -1579,7 +1579,7 @@ def stage_fitblobs(T=None,
         hdr.delete('IMAGEH')
         hdr.add_record(dict(name='IMTYPE', value='blobmap',
                             comment='LegacySurveys image type'))
-        hdr.add_record(dict(name='EQUINOX', value=2000.,comment='Observation Epoch'))
+        hdr.add_record(dict(name='EQUINOX', value=2000.,comment='Observation epoch'))
 
         with survey.write_output('blobmap', brick=brickname, shape=blobs.shape) as out:
             out.fits.write(blobs, header=hdr)
@@ -2088,7 +2088,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         hdr.add_record(r)
     # Plug the WCS header cards into these images
     targetwcs.add_to_header(hdr)
-    hdr.add_record(dict(name='EQUINOX', value=2000., comment='Observation Epoch'))
+    hdr.add_record(dict(name='EQUINOX', value=2000., comment='Observation epoch'))
     hdr.delete('IMAGEW')
     hdr.delete('IMAGEH')
     hdr.add_record(dict(name='IMTYPE', value='maskbits',
