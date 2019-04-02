@@ -739,11 +739,10 @@ def write_coadd_images(band,
     for r in version_header.records():
         hdr.add_record(r)
     # Grab these keywords from all input files for this band...
-    keys = ['TELESCOP','OBSERVAT','OBS-LAT','OBS-LONG','OBS-ELEV',
+    keys = ['OBSERVAT', 'TELESCOP','OBS-LAT','OBS-LONG','OBS-ELEV',
             'INSTRUME','FILTER']
-    comms = ['Observation Telescope', 'Observatory','Observatory Latitude',
-            'Observatory Longitude','Observatory Elevation',
-            'Instrument used for observation','Filter used for observation']
+    comms = ['Observatory name', 'Telescope  name', 'Latitude (deg)', 'Longitude (deg)',
+             'Elevation (m)', 'Instrument name', 'Filter name']
     vals = set()
     for tim in tims:
         if tim.band != band:
