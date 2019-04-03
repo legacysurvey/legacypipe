@@ -199,7 +199,7 @@ class GaiaSource(PointSource):
 
     def isForcedPointSource(self):
         return self.forced_point_source
-    
+
     @classmethod
     def from_catalog(cls, g, bands):
         from tractor import NanoMaggies
@@ -398,7 +398,8 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
         git_version = get_git_version()
 
     hdr = fitsio.FITSHDR()
-
+    #lsdir_prefix1 = '/global/project/projectdirs'
+    #lsdir_prefix2 = '/global/projecta/projectdirs'
     for s in [
         'Data product of the DECam Legacy Survey (DECaLS)',
         'Full documentation at http://legacysurvey.org',
@@ -406,32 +407,33 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
         hdr.add_record(dict(name='COMMENT', value=s, comment=s))
     hdr.add_record(dict(name='LEGPIPEV', value=git_version,
                         comment='legacypipe git version'))
-    hdr.add_record(dict(name='SURVEYV', value=survey_dir,
-                        comment='Legacy Survey directory'))
-    hdr.add_record(dict(name='DECALSDR', value='DR8',
-                        comment='DECaLS release name'))
-    hdr.add_record(dict(name='DECALSDT', value=datetime.datetime.now().isoformat(),
+    #hdr.add_record(dict(name='LSDIRPFX', value=lsdir_prefix1,
+    #                    comment='LegacySurveys Directory Prefix'))
+    hdr.add_record(dict(name='LSDIR', value=survey_dir,
+                        comment='$LEGACY_SURVEY_DIR directory'))
+    hdr.add_record(dict(name='LSDR', value='DR8',
+                        comment='Data release number'))
+    hdr.add_record(dict(name='RUNDATE', value=datetime.datetime.now().isoformat(),
                         comment='%s run time' % program_name))
-    hdr.add_record(dict(name='SURVEY', value='DECaLS+MzLS+BASS',
-                        comment='Legacy Surveys'))
+    hdr.add_record(dict(name='SURVEY', value='DECaLS+BASS+MzLS',
+                        comment='The LegacySurveys'))
     # Requested by NOAO
     hdr.add_record(dict(name='SURVEYID', value='DECaLS BASS MzLS',
-                        comment='Survey name'))
+                        comment='Survey names'))
     #hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
     #hdr.add_record(dict(name='SURVEYID', value='BASS MzLS',
     hdr.add_record(dict(name='DRVERSIO', value=release,
-                        comment='Survey data release number'))
+                        comment='LegacySurveys Data Release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
                         comment='Observation type'))
     hdr.add_record(dict(name='PROCTYPE', value='tile',
                         comment='Processing type'))
 
     import socket
-    hdr.add_record(dict(name='HOSTNAME', value=socket.gethostname(),
+    hdr.add_record(dict(name='NODENAME', value=socket.gethostname(),
                         comment='Machine where script was run'))
-    hdr.add_record(dict(name='HOSTFQDN', value=socket.getfqdn(),
-                        comment='Machine where script was run'))
-    hdr.add_record(dict(name='NERSC', value=os.environ.get('NERSC_HOST', 'none'),
+    #hdr.add_record(dict(name='HOSTFQDN', value=socket.getfqdn(),comment='Machine where script was run'))
+    hdr.add_record(dict(name='HOSTNAME', value=os.environ.get('NERSC_HOST', 'none'),
                         comment='NERSC machine where script was run'))
     hdr.add_record(dict(name='JOB_ID', value=os.environ.get('SLURM_JOB_ID', 'none'),
                         comment='SLURM job id'))
@@ -489,19 +491,20 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir):
         dirs = unwise_dir.split(':')
         depvers.append(('unwise', unwise_dir))
         for i,d in enumerate(dirs):
-            headers.append(('UNWISD%i' % (i+1), d, 'unWISE dir(s)'))
+            headers.append(('UNWISD%i' % (i+1), d, ''))
+            #headers.append(('UNWISD%i' % (i+1), d, 'unWISE dir(s)'))
 
     if unwise_tr_dir is not None:
         depvers.append(('unwise_tr', unwise_tr_dir))
         # this is assumed to be only a single directory
-        headers.append(('UNWISTD', unwise_tr_dir, 'unWISE time-resolved dir'))
+        headers.append(('UNWISTD', unwise_tr_dir, ''))
+        #headers.append(('UNWISTD', unwise_tr_dir, 'unWISE time-resolved dir'))
 
     added_long = False
     for i,(name,value) in enumerate(depvers):
-        headers.append(('DEPNAM%02i' % i, name, 'Dependency name'))
+        headers.append(('DEPNAM%02i' % i, name, ''))
         if len(value) > 68:
-            headers.append(('DEPVER%02i' % i, value[:67] + '&',
-                            'Dependency version'))
+            headers.append(('DEPVER%02i' % i, value[:67] + '&', ''))
             while len(value):
                 value = value[67:]
                 if len(value) == 0:
@@ -510,7 +513,7 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir):
                                 "  '%s%s'" % (value[:67], '&' if len(value) > 67 else ''),
                                 None))
         else:
-            headers.append(('DEPVER%02i' % i, value, 'Dependency version'))
+            headers.append(('DEPVER%02i' % i, value, ''))
             added_long = True
 
     if added_long:
@@ -981,7 +984,7 @@ class LegacySurveyData(object):
         cache_dir : string
             Directory to search for input files before looking in survey_dir.  Useful
             for, eg, Burst Buffer.
-            
+
         output_dir : string
             Base directory for output files; default ".".
         '''
@@ -1233,7 +1236,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             return swap(os.path.join(basedir, 'tractor', brickpre,
                                      'brick-%s.sha256sum' % brick))
         elif filetype == 'outliers_mask':
-            return swap(os.path.join(basedir, 'metrics', brickpre, 
+            return swap(os.path.join(basedir, 'metrics', brickpre,
                                      'outlier-mask-%s.fits.fz' % (brick)))
 
         print('Unknown filetype "%s"' % filetype)
@@ -1944,4 +1947,3 @@ class SchlegelPsfModel(PsfExModel):
             print('SchlegelPsfEx degree:', self.degree)
             bh,bw = self.psfbases[0].shape
             self.radius = (bh+1)/2.
-
