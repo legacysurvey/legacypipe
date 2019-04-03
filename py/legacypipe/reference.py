@@ -397,7 +397,7 @@ def read_star_clusters(targetwcs):
     # set the isbright bit so we get all the brightstarinblob logic.
     #clusters.ref_cat = clusters.name
     clusters.ref_cat = np.array(['CL'] * len(clusters))
-    clusters.mag = np.array([35])
+    clusters.mag = np.array([35] * len(clusters))
 
     # Radius in degrees (from "majax" in arcmin)
     clusters.radius = clusters.majax / 60.
