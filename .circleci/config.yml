@@ -64,6 +64,8 @@ jobs:
           name: Unwise PSF
           command: |
                git clone https://github.com/legacysurvey/unwise_psf.git
+               cd unwise_psf
+               git checkout dr8
                export WISE_PSF_DIR=$(pwd)/unwise_psf/etc
                export PYTHONPATH=${PYTHONPATH}:$(pwd)/unwise_psf/py
       - run:
