@@ -3496,6 +3496,8 @@ def get_runbrick_kwargs(survey=None,
         if not os.path.exists(unwise_modelsky_dir):
             print('WARNING: no WISE sky background maps in {}'.format(unwise_modelsky_dir))
             unwise_modelsky_dir = None
+        else:
+            unwise_modelsky_dir = os.path.realpath(unwise_modelsky_dir) # follow the soft link
     opt.update(unwise_dir=unwise_dir, unwise_tr_dir=unwise_tr_dir, unwise_modelsky_dir=unwise_modelsky_dir)
 
     # list of strings if -w / --write-stage is given; False if
