@@ -1428,7 +1428,7 @@ def stage_fitblobs(T=None,
     if refstars:
         from legacypipe.oneblob import get_inblob_map
         refstars.radius_pix = np.ceil(refstars.radius * 3600. / targetwcs.pixel_scale()).astype(int)
-        refmap = get_inblob_map(targetwcs, refstars)
+        refmap = get_inblob_map(targetwcs, refstars[refstars.donotfit == False])
     else:
         HH, WW = targetwcs.shape
         refmap = np.zeros((int(HH), int(WW)), np.uint8)

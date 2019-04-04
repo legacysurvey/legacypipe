@@ -112,15 +112,19 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         refs.in_bounds = ((refs.ibx >= 0) * (refs.ibx < W) *
                           (refs.iby >= 0) * (refs.iby < H))
 
-        for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster']:
+        for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster', 'donotfit']:
             if not col in refs.get_columns():
                 refs.set(col, np.zeros(len(refs), bool))
 
         ## Create Tractor sources from reference stars
         refcat = []
         for g in refs:
+            if g.donotfit:
+                continue
+                
             if g.isbright or g.ismedium or g.iscluster:
                 refcat.append(GaiaSource.from_catalog(g, bands))
+                
             elif g.islargegalaxy:
                 fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
                 assert(np.all(np.isfinite(list(fluxes.values()))))
