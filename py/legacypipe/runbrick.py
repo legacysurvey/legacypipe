@@ -1515,6 +1515,7 @@ def stage_fitblobs(T=None,
     II = BB.Isrcs
     newcat = BB.sources
     # ... and make the table T parallel with BB.
+    # FIXME -- Dustin
     T.cut(II)
     assert(len(T) == len(BB))
 
