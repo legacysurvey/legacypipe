@@ -83,6 +83,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                record_event=None,
                unwise_dir=None,
                unwise_tr_dir=None,
+               unwise_modelsky_dir=None,
                **kwargs):
     '''
     This is the first stage in the pipeline.  It
@@ -156,7 +157,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     version_header = get_version_header(program_name, survey.survey_dir, release,
                                         git_version=gitver)
 
-    deps = get_dependency_versions(unwise_dir, unwise_tr_dir)
+    deps = get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir)
     for name,value,comment in deps:
         version_header.add_record(dict(name=name, value=value, comment=comment))
 
@@ -2351,6 +2352,7 @@ def stage_wise_forced(
     brickname=None,
     unwise_dir=None,
     unwise_tr_dir=None,
+    unwise_modelsky_dir=None,
     brick=None,
     wise_ceres=True,
     unwise_coadds=False,
@@ -2387,12 +2389,6 @@ def stage_wise_forced(
     # use Aaron's WISE pixelized PSF model (unwise_psf repository)?
     wpixpsf = True
 
-    # use Eddie's WISE Catalog background maps?
-    background_dir = os.path.join(survey.get_calib_dir(), 'wise', 'modelsky')
-    if not os.path.exists(background_dir):
-        print('WARNING: no WISE backgrounds in', background_dir)
-        background_dir = None
-
     # Create list of groups-of-tiles to photometer
     args = []
     # Skip if $UNWISE_COADDS_DIR or --unwise-dir not set.
@@ -2402,7 +2398,7 @@ def stage_wise_forced(
         for band in [1,2,3,4]:
             get_masks = targetwcs if (band == 1) else None
             args.append((wcat, wtiles, band, roiradec,
-                         wise_ceres, wpixpsf, unwise_coadds, get_masks, ps, True, background_dir))
+                         wise_ceres, wpixpsf, unwise_coadds, get_masks, ps, True, unwise_modelsky_dir))
 
     # Add time-resolved WISE coadds
     # Skip if $UNWISE_COADDS_TIMERESOLVED_DIR or --unwise-tr-dir not set.
@@ -2456,7 +2452,7 @@ def stage_wise_forced(
                 eptiles.unwise_dir = np.array([os.path.join(tdir, 'e%03i'%ep)
                                               for ep in epochs[I,ie]])
                 eargs.append((ie,(wcat, eptiles, band, roiradec,
-                                  wise_ceres, wpixpsf, False, None, ps, False, background_dir)))
+                                  wise_ceres, wpixpsf, False, None, ps, False, unwise_modelsky_dir)))
 
     # Run the forced photometry!
     record_event and record_event('stage_wise_forced: photometry')
@@ -2851,6 +2847,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               wise_ceres=True,
               unwise_dir=None,
               unwise_tr_dir=None,
+              unwise_modelsky_dir=None,
               threads=None,
               plots=False, plots2=False, coadd_bw=False,
               plot_base=None, plot_number=0,
@@ -2864,8 +2861,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               prereqs_update=None,
               stagefunc = None,
               ):
-    '''
-    Run the full Legacy Survey data reduction pipeline.
+    '''Run the full Legacy Survey data reduction pipeline.
 
     The pipeline is built out of "stages" that run in sequence.  By
     default, this function will cache the result of each stage in a
@@ -2967,6 +2963,10 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     - *unwise_tr_dir*: string; where to look for time-resolved
       unWISE coadd files.  This may be a colon-separated list of
       directories to search in order.
+
+    - *unwise_modelsky_dir*: string; where to look for the unWISE sky background
+      maps.  The default is to look in the "wise/modelsky" subdirectory of the
+      calibration directory.
 
     - *threads*: integer; how many CPU cores to use
 
@@ -3076,6 +3076,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   lanczos=lanczos,
                   unwise_dir=unwise_dir,
                   unwise_tr_dir=unwise_tr_dir,
+                  unwise_modelsky_dir=unwise_modelsky_dir,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
                   force=forceStages, write=write_pickles,
                   record_event=record_event)
@@ -3428,6 +3429,7 @@ def get_runbrick_kwargs(survey=None,
                         stage=[],
                         unwise_dir=None,
                         unwise_tr_dir=None,
+                        unwise_modelsky_dir=None,
                         write_stage=None,
                         write=True,
                         gpsf=False,
@@ -3489,7 +3491,14 @@ def get_runbrick_kwargs(survey=None,
         unwise_dir = os.environ.get('UNWISE_COADDS_DIR', None)
     if unwise_tr_dir is None:
         unwise_tr_dir = os.environ.get('UNWISE_COADDS_TIMERESOLVED_DIR', None)
-    opt.update(unwise_dir=unwise_dir, unwise_tr_dir=unwise_tr_dir)
+    if unwise_modelsky_dir is None:
+        unwise_modelsky_dir = os.path.join(survey.get_calib_dir(), 'wise', 'modelsky')
+        if not os.path.exists(unwise_modelsky_dir):
+            print('WARNING: no WISE sky background maps in {}'.format(unwise_modelsky_dir))
+            unwise_modelsky_dir = None
+        else:
+            unwise_modelsky_dir = os.path.realpath(unwise_modelsky_dir) # follow the soft link
+    opt.update(unwise_dir=unwise_dir, unwise_tr_dir=unwise_tr_dir, unwise_modelsky_dir=unwise_modelsky_dir)
 
     # list of strings if -w / --write-stage is given; False if
     # --no-write given; True by default.

@@ -19,7 +19,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                       pixelized_psf=False,
                       get_masks=None,
                       move_crpix=False,
-                      background_dir=None):
+                      modelsky_dir=None):
     '''
     Given a list of tractor sources *cat*
     and a list of unWISE tiles *tiles* (a fits_table with RA,Dec,coadd_id)
@@ -106,8 +106,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             realwcs.set_crpix(x+dx, y+dy)
             print('CRPIX', x,y, 'shift by', dx,dy, 'to', realwcs.crpix)
 
-        if background_dir and band in [1, 2]:
-            fn = os.path.join(background_dir, '%s.%i.mod.fits' % (tile.coadd_id, band))
+        if modelsky_dir and band in [1, 2]:
+            fn = os.path.join(modelsky_dir, '%s.%i.mod.fits' % (tile.coadd_id, band))
             if not os.path.exists(fn):
                 raise RuntimeError('WARNING: does not exist:', fn)
             x0,x1,y0,y1 = tim.roi
@@ -511,10 +511,10 @@ def unwise_phot(X):
     This is the entry-point from runbrick.py, called via mp.map()
     '''
     (wcat, tiles, band, roiradec, wise_ceres, pixelized_psf, get_mods, get_masks, ps,
-     move_crpix, background_dir) = X
+     move_crpix, modelsky_dir) = X
     kwargs = dict(roiradecbox=roiradec, band=band, pixelized_psf=pixelized_psf,
                   get_masks=get_masks, ps=ps, move_crpix=move_crpix,
-                  background_dir=background_dir)
+                  modelsky_dir=modelsky_dir)
     if get_mods:
         kwargs.update(get_models=get_mods)
 
