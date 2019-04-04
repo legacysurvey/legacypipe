@@ -838,7 +838,7 @@ class LegacySurveyImage(object):
 
             if not os.path.exists(self.splineskyfn):
                 if self.merged_splineskyfn is not None:
-                    raise RuntimeError('Read Splinesky: neither {} nor {} found'.format(self.merged_splineskyfn, self.splineskyfn))
+                    raise RuntimeError('Merged splinesky model {} not found'.format(self.merged_splineskyfn))
                 return None
 
         fn = self.skyfn
@@ -942,7 +942,7 @@ class LegacySurveyImage(object):
                 psf = self.read_merged_psfex_model(normalizePsf=normalizePsf, old_calibs_ok=old_calibs_ok)
             else:
                 if not os.path.exists(self.psffn):
-                    raise RuntimeError('Read Splinesky: neither {} nor {} found'.format(self.merged_psffn, self.psffn))
+                    raise RuntimeError('Merged PsfEx model {} not found'.format(self.merged_psffn))
 
         if psf is None:
             debug('Reading PsfEx model from', self.psffn)
@@ -1586,10 +1586,10 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                 val = val.strip()
             if val != targetval:
                 if old_calibs_ok:
-                    print('WARNING: {}!={} in {} header but old_calibs_ok=True'.format(val, targetval, fn))
+                    print('WARNING: {} {}!={} in {} header but old_calibs_ok=True'.format(key, val, targetval, fn))
                     continue
                 else:
-                    print('WARNING: {}!={} in {} header'.format(val, targetval, fn))
+                    print('WARNING: {} {}!={} in {} header'.format(key val, targetval, fn))
                     return False
         return True
 
