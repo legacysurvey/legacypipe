@@ -1589,7 +1589,7 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                     print('WARNING: {} {}!={} in {} header but old_calibs_ok=True'.format(key, val, targetval, fn))
                     continue
                 else:
-                    print('WARNING: {} {}!={} in {} header'.format(key val, targetval, fn))
+                    print('WARNING: {} {}!={} in {} header'.format(key, val, targetval, fn))
                     return False
         return True
 
