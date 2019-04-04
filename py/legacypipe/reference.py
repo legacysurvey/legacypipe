@@ -39,6 +39,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     if gaia is not None:
         gaia.isbright = np.zeros(len(gaia), bool)
         gaia.ismedium = np.ones(len(gaia), bool)
+        gaia.donotfit = np.zeros(len(gaia), bool)
         #gaia.ismedium = gaia.pointsource
         # Handle sources that appear in both Gaia and Tycho-2 by dropping the entry from Tycho-2.
         if len(gaia) and len(tycho):
@@ -81,6 +82,14 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     if large_galaxies:
         galaxies = read_large_galaxies(survey, targetwcs)
         if galaxies is not None:
+            # Resolve possible Gaia-large-galaxy duplicates
+            if gaia and len(gaia):
+                I,J,_ = match_radec(galaxies.ra, galaxies.dec, gaia.ra, gaia.dec,
+                                    2./3600., nearest=True)
+                #print('Matched', len(I), 'large galaxies to Gaia stars.')
+                if len(I):
+                    gaia.donotfit[J] = True
+            
             if refs is None:
                 refs = [galaxies]
             else:
