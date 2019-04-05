@@ -2,6 +2,15 @@ import os
 import numpy as np
 from astrometry.util.fits import fits_table, merge_tables
 
+import logging
+logger = logging.getLogger('legacypipe.reference')
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
+
 def get_reference_sources(survey, targetwcs, pixscale, bands,
                           tycho_stars=True, gaia_stars=True, large_galaxies=True,
                           star_clusters=True):
@@ -52,12 +61,11 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
             gdec = gaia.dec + (1991.5 - gaia.ref_epoch) * gaia.pmdec / (3600.*1000.)
             I,J,_ = match_radec(tycho.ra, tycho.dec, gra, gdec, 1./3600.,
                                 nearest=True)
-            #print('Matched', len(I), 'Tycho-2 stars to Gaia stars.')
+            debug('Matched', len(I), 'Tycho-2 stars to Gaia stars.')
             if len(I):
                 keep = np.ones(len(tycho), bool)
                 keep[I] = False
                 tycho.cut(keep)
-                #print('Cut to', len(tycho), 'Tycho-2 stars that do not match Gaia')
                 gaia.isbright[J] = True
         if gaia is not None and len(gaia) > 0:
             if refs is None:
@@ -70,7 +78,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     if star_clusters:
         clusters = read_star_clusters(marginwcs)
         if clusters is not None:
-            print('Found', len(clusters), 'star clusters nearby')
+            debug('Found', len(clusters), 'star clusters nearby')
             clusters.iscluster = np.ones(len(clusters), bool)
             if refs is None:
                 refs = [clusters]
@@ -141,7 +149,7 @@ def read_gaia(targetwcs):
     from legacypipe.gaiacat import GaiaCatalog
 
     gaia = GaiaCatalog().get_catalog_in_wcs(targetwcs)
-    print('Got Gaia stars:', gaia)
+    debug('Got', len(gaia), 'Gaia stars nearby')
 
     # DJS, [decam-chatter 5486] Solved! GAIA separation of point sources
     #   from extended sources
@@ -155,14 +163,6 @@ def read_gaia(targetwcs):
     # in our catalog files, this is in float32; in the Gaia data model it's
     # a byte, with only values 3 and 31 in DR2.
     gaia.astrometric_params_solved = gaia.astrometric_params_solved.astype(np.uint8)
-
-    # ok,xx,yy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
-    # margin = 10
-    # H,W = targetwcs.shape
-    # gaia.cut(ok * (xx > -margin) * (xx < W+margin) *
-    #           (yy > -margin) * (yy < H+margin))
-    # print('Cut to', len(gaia), 'Gaia stars within brick')
-    # del ok,xx,yy
 
     # Gaia version?
     gaiaver = int(os.getenv('GAIA_CAT_VER', '1'))
@@ -203,7 +203,7 @@ def read_tycho2(survey, targetwcs):
     # John added the "isgalaxy" flag 2018-05-10, from the Metz & Geffert (04) catalog.
     kd = tree_open(tycho2fn, 'stars')
     I = tree_search_radec(kd, ra, dec, radius)
-    print(len(I), 'Tycho-2 stars within', radius, 'deg of RA,Dec (%.3f, %.3f)' % (ra,dec))
+    debug(len(I), 'Tycho-2 stars within', radius, 'deg of RA,Dec (%.3f, %.3f)' % (ra,dec))
     if len(I) == 0:
         return None
     # Read only the rows within range.
@@ -211,16 +211,9 @@ def read_tycho2(survey, targetwcs):
     del kd
     if 'isgalaxy' in tycho.get_columns():
         tycho.cut(tycho.isgalaxy == 0)
-        print('Cut to', len(tycho), 'Tycho-2 stars on isgalaxy==0')
+        debug('Cut to', len(tycho), 'Tycho-2 stars on isgalaxy==0')
     else:
         print('Warning: no "isgalaxy" column in Tycho-2 catalog')
-    # ok,xx,yy = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
-    # margin = 10
-    # H,W = targetwcs.shape
-    # tycho.cut(ok * (xx > -margin) * (xx < W+margin) *
-    #           (yy > -margin) * (yy < H+margin))
-    # print('Cut to', len(tycho), 'Tycho-2 stars within brick')
-    # del ok,xx,yy
 
     tycho.ref_cat = np.array(['T2'] * len(tycho))
     # tyc1: [1,9537], tyc2: [1,12121], tyc3: [1,3]
@@ -282,7 +275,7 @@ def read_large_galaxies(survey, targetwcs):
 
     kd = tree_open(galfn, 'largegals')
     I = tree_search_radec(kd, rc, dc, radius)
-    print(len(I), 'large galaxies within', radius, 'deg of RA,Dec (%.3f, %.3f)' % (rc,dc))
+    debug(len(I), 'large galaxies within', radius, 'deg of RA,Dec (%.3f, %.3f)' % (rc,dc))
     if len(I) == 0:
         return None
     # Read only the rows within range.
@@ -290,15 +283,6 @@ def read_large_galaxies(survey, targetwcs):
     del kd
 
     # # D25 is diameter in arcmin
-    # pixsizes = gals.d25 * (60./2.) / targetwcs.pixel_scale()
-    # ok,xx,yy = targetwcs.radec2pixelxy(galaxies.ra, galaxies.dec)
-    # H,W = targetwcs.shape
-    # gals.cut(ok * (xx > -pixsizes) * (xx < W+pixsizes) *
-    #          (yy > -pixsizes) * (yy < H+pixsizes))
-    # print('Cut to', len(gals), 'large galaxies touching brick')
-    # del ok,xx,yy,pixsizes
-    # if len(gals) == 0:
-    #     return None,None
     galaxies.radius = galaxies.d25 / 2. / 60.
     # John told me to do this...
     #galaxies.radius *= 1.2 ...and then John taketh away.
@@ -380,7 +364,7 @@ def read_star_clusters(targetwcs):
     from astrometry.util.starutil_numpy import degrees_between
 
     clusterfile = resource_filename('legacypipe', 'data/NGC-star-clusters.fits')
-    print('Reading {}'.format(clusterfile))
+    debug('Reading {}'.format(clusterfile))
     clusters = fits_table(clusterfile, columns=['ra', 'dec', 'majax', 'type'])
     clusters.ref_id = np.arange(len(clusters))
 
@@ -391,7 +375,7 @@ def read_star_clusters(targetwcs):
     if len(clusters) == 0:
         return None
     
-    print('Cut to {} star cluster(s) within the brick'.format(len(clusters)))
+    debug('Cut to {} star cluster(s) within the brick'.format(len(clusters)))
 
     # For each cluster, add a single faint star at the same coordinates, but
     # set the isbright bit so we get all the brightstarinblob logic.
@@ -402,13 +386,6 @@ def read_star_clusters(targetwcs):
     # Radius in degrees (from "majax" in arcmin)
     clusters.radius = clusters.majax / 60.
     clusters.radius[np.logical_not(np.isfinite(clusters.radius))] = 1./60.
-
-    # Remove unnecessary columns but then add all the Gaia-style columns we need.
-    # for c in ['name', 'type', 'ra_hms', 'dec_dms', 'const', 'majax', 'minax', 'pa',
-    #           'bmag', 'vmag', 'jmag', 'hmag', 'kmag', 'sbrightn', 'hubble', 'cstarumag',
-    #           'cstarbmag', 'cstarvmag', 'messier', 'ngc', 'ic', 'cstarnames', 'identifiers',
-    #           'commonnames', 'nednotes', 'ongcnotes']:
-    #     clusters.delete_column(c)
 
     # Set isbright=True
     clusters.isbright = np.zeros(len(clusters), bool)
