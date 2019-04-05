@@ -7,6 +7,7 @@ import fitsio
 import matplotlib
 matplotlib.use('Agg')
 
+import astropy.io.fits
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
 from legacypipe.survey import LegacySurveyData
@@ -134,7 +135,8 @@ def merge_psfex(survey, expnum, C, psfoutfn, opt):
         fn = im.psffn
         print('Reading', fn)
         T = fits_table(fn)
-        hdr = fitsio.read_header(fn, ext=1)
+        #hdr = fitsio.read_header(fn, ext=1)
+        hdr = astropy.io.fits.getheader(fn, ext=1)
 
         keys = ['LOADED', 'ACCEPTED', 'CHI2', 'POLNAXIS',
                 'POLNGRP', 'PSF_FWHM', 'PSF_SAMP', 'PSFNAXIS',
@@ -168,7 +170,8 @@ def merge_psfex(survey, expnum, C, psfoutfn, opt):
         #print(fn)
         #T.about()
 
-        hdr = fitsio.read_header(fn)
+        #hdr = fitsio.read_header(fn)
+        hdr = astropy.io.fits.getheader(fn)
         psfhdrvals.append([hdr.get(k,'') for k in [
             'LEGPIPEV', 'PLVER', 'PLPROCID', 'IMGDSUM', 'PROCDATE']] + [expnum, ccd.ccdname])
 
@@ -224,7 +227,8 @@ def merge_splinesky(survey, expnum, C, skyoutfn, opt):
             splinesky.append(T)
             # print(fn)
             # T.about()
-            hdr = fitsio.read_header(fn)
+            #hdr = fitsio.read_header(fn)
+            hdr = astropy.io.fits.getheader(fn)
 
             s_pcts = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 
@@ -233,6 +237,7 @@ def merge_splinesky(survey, expnum, C, skyoutfn, opt):
                 'S_MODE', 'S_MED', 'S_CMED', 'S_JOHN', 'S_FMASKD', 'S_FINE'] +
                                ['S_P%i' % p for p in s_pcts]] +
                               [expnum, ccd.ccdname])
+            print(hdr['PLPROCID'])
 
     if len(splinesky) == 0:
         return
