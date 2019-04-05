@@ -237,7 +237,6 @@ def merge_splinesky(survey, expnum, C, skyoutfn, opt):
                 'S_MODE', 'S_MED', 'S_CMED', 'S_JOHN', 'S_FMASKD', 'S_FINE'] +
                                ['S_P%i' % p for p in s_pcts]] +
                               [expnum, ccd.ccdname])
-            print(hdr['PLPROCID'])
 
     if len(splinesky) == 0:
         return
@@ -254,7 +253,7 @@ def merge_splinesky(survey, expnum, C, skyoutfn, opt):
 
     cols = splinesky[0].columns()
     #print('Columns:', cols)
-    for c in ['gridvals', 'xgrid', 'ygrid']:
+    for c in ['gridvals', 'xgrid', 'ygrid', 'gridw', 'gridh']:
         cols.remove(c)
 
     T.add_columns_from(merge_tables(splinesky, columns=cols))
