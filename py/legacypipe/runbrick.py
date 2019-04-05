@@ -2754,20 +2754,6 @@ def stage_writecat(
                                     comment='Mask bit 2**%i=%i meaning' %
                                     (i, bit)))
 
-    # Brick pixel positions
-    ok,bx,by = targetwcs.radec2pixelxy(T2.orig_ra, T2.orig_dec)
-    T2.bx0 = (bx - 1.).astype(np.float32)
-    T2.by0 = (by - 1.).astype(np.float32)
-    ok,bx,by = targetwcs.radec2pixelxy(T2.ra, T2.dec)
-    T2.bx = (bx - 1.).astype(np.float32)
-    T2.by = (by - 1.).astype(np.float32)
-
-    T2.delete_column('orig_ra')
-    T2.delete_column('orig_dec')
-
-    T2.brick_primary = ((T2.ra  >= brick.ra1 ) * (T2.ra  < brick.ra2) *
-                        (T2.dec >= brick.dec1) * (T2.dec < brick.dec2))
-
     if WISE is not None:
         # Convert WISE fluxes from Vega to AB.
         # http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec4_4h.html#conv2ab
@@ -2824,6 +2810,23 @@ def stage_writecat(
                 for band in [1,2]:
                     T2.set(cout % band, WISE_T.get(cin % band))
             # print('WISE light-curve shapes:', WISE_T.w1_nanomaggies.shape)
+
+    if T_donotfit:
+        T2 = merge_tables([T2, T_donotfit], columns='fillzero')
+
+    # Brick pixel positions
+    ok,bx,by = targetwcs.radec2pixelxy(T2.orig_ra, T2.orig_dec)
+    T2.bx0 = (bx - 1.).astype(np.float32)
+    T2.by0 = (by - 1.).astype(np.float32)
+    ok,bx,by = targetwcs.radec2pixelxy(T2.ra, T2.dec)
+    T2.bx = (bx - 1.).astype(np.float32)
+    T2.by = (by - 1.).astype(np.float32)
+
+    T2.delete_column('orig_ra')
+    T2.delete_column('orig_dec')
+
+    T2.brick_primary = ((T2.ra  >= brick.ra1 ) * (T2.ra  < brick.ra2) *
+                        (T2.dec >= brick.dec1) * (T2.dec < brick.dec2))
 
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
         T2.writeto(None, fits_object=out.fits, primheader=primhdr, header=hdr)
