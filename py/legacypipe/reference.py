@@ -22,14 +22,14 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     mpix = int(np.ceil(ref_margin * 3600. / pixscale))
     marginwcs = targetwcs.get_subimage(-mpix, -mpix, W+2*mpix, H+2*mpix)
     
-    refs = None
+    refs = []
 
     if tycho_stars:
         #print('Enlarged target WCS from', targetwcs, 'to', marginwcs, 'for ref stars')
         # Read Tycho-2 stars and use as saturated sources.
         tycho = read_tycho2(survey, marginwcs)
-        if len(tycho) > 0:
-            refs = [tycho]
+        if len(tycho):
+            refs.append(tycho)
             
     # Add Gaia stars
     gaia = None
@@ -61,22 +61,16 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                 #print('Cut to', len(tycho), 'Tycho-2 stars that do not match Gaia')
                 gaia.isbright[J] = True
         if gaia is not None and len(gaia) > 0:
-            if refs is None:
-                refs = [gaia]
-            else:
-                refs.append(gaia)
+            refs.append(gaia)
 
     # Read the catalog of star (open and globular) clusters and add them to the
     # set of reference stars (with the isbright bit set).
     if star_clusters:
         clusters = read_star_clusters(marginwcs)
-        if clusters is not None:
+        if clusters and len(clusters):
             print('Found', len(clusters), 'star clusters nearby')
             clusters.iscluster = np.ones(len(clusters), bool)
-            if refs is None:
-                refs = [clusters]
-            else:
-                refs.append(clusters)
+            refs.append(clusters)
 
     # Read large galaxies nearby.
     if large_galaxies:
@@ -86,62 +80,63 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
             if gaia and len(gaia):
                 I,J,_ = match_radec(galaxies.ra, galaxies.dec, gaia.ra, gaia.dec,
                                     2./3600., nearest=True)
-                #print('Matched', len(I), 'large galaxies to Gaia stars.')
+                print('Matched', len(I), 'large galaxies to Gaia stars.')
                 if len(I):
                     gaia.donotfit[J] = True
-            
-            if refs is None:
-                refs = [galaxies]
-            else:
-                refs.append(galaxies)
+
+            refs.append(galaxies)
 
     refcat = None
-    if refs:
+    if len(refs):
         refs = merge_tables([r for r in refs if r is not None], columns='fillzero')
 
-        refs.radius_pix = np.ceil(refs.radius * 3600. / pixscale).astype(int)
+    if len(refs) == 0:
+        return None,None
 
-        ok,xx,yy = targetwcs.radec2pixelxy(refs.ra, refs.dec)
-        # ibx = integer brick coords
-        refs.ibx = np.round(xx-1.).astype(int)
-        refs.iby = np.round(yy-1.).astype(int)
+    refs.radius_pix = np.ceil(refs.radius * 3600. / pixscale).astype(int)
 
-        refs.cut((xx > -refs.radius_pix) * (xx < W+refs.radius_pix) *
-                 (yy > -refs.radius_pix) * (yy < H+refs.radius_pix))
+    ok,xx,yy = targetwcs.radec2pixelxy(refs.ra, refs.dec)
+    # ibx = integer brick coords
+    refs.ibx = np.round(xx-1.).astype(int)
+    refs.iby = np.round(yy-1.).astype(int)
 
-        refs.in_bounds = ((refs.ibx >= 0) * (refs.ibx < W) *
-                          (refs.iby >= 0) * (refs.iby < H))
+    refs.cut((xx > -refs.radius_pix) * (xx < W+refs.radius_pix) *
+             (yy > -refs.radius_pix) * (yy < H+refs.radius_pix))
 
-        for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster', 'donotfit']:
-            if not col in refs.get_columns():
-                refs.set(col, np.zeros(len(refs), bool))
+    refs.in_bounds = ((refs.ibx >= 0) * (refs.ibx < W) *
+                      (refs.iby >= 0) * (refs.iby < H))
 
-        ## Create Tractor sources from reference stars
-        refcat = []
-        for g in refs:
-            if g.donotfit:
-                continue
-                
-            if g.isbright or g.ismedium or g.iscluster:
-                refcat.append(GaiaSource.from_catalog(g, bands))
-                
-            elif g.islargegalaxy:
-                fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
-                assert(np.all(np.isfinite(list(fluxes.values()))))
-                rr = g.radius * 3600. / 0.5 # factor of two accounts for R(25)-->reff
-                pa = 180 - g.pa
-                if not np.isfinite(pa):
-                    pa = 0.
-                logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, g.ba, pa)
-                gal = ExpGalaxy(RaDecPos(g.ra, g.dec),
-                                NanoMaggies(order=bands, **fluxes),
-                                LegacyEllipseWithPriors(logr, ee1, ee2))
-                gal.isForcedLargeGalaxy = True
-                refcat.append(gal)
-            else:
-                assert(False)
+    for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster', 'donotfit']:
+        if not col in refs.get_columns():
+            refs.set(col, np.zeros(len(refs), bool))
 
-        for src in refcat:
+    ## Create Tractor sources from reference stars
+    refcat = []
+    for g in refs:
+        if g.donotfit:
+            refcat.append(None)
+
+        elif g.isbright or g.ismedium or g.iscluster:
+            refcat.append(GaiaSource.from_catalog(g, bands))
+            
+        elif g.islargegalaxy:
+            fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
+            assert(np.all(np.isfinite(list(fluxes.values()))))
+            rr = g.radius * 3600. / 0.5 # factor of two accounts for R(25)-->reff
+            pa = 180 - g.pa
+            if not np.isfinite(pa):
+                pa = 0.
+            logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, g.ba, pa)
+            gal = ExpGalaxy(RaDecPos(g.ra, g.dec),
+                            NanoMaggies(order=bands, **fluxes),
+                            LegacyEllipseWithPriors(logr, ee1, ee2))
+            gal.isForcedLargeGalaxy = True
+            refcat.append(gal)
+        else:
+            assert(False)
+
+    for src in refcat:
+        if src:
             src.is_reference_source = True
 
     return refs, refcat

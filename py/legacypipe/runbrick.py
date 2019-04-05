@@ -1048,6 +1048,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             assert(np.all(np.isfinite(list(fluxes.values()))))
             satcat.append(PointSource(RaDecPos(r, d),
                                       NanoMaggies(order=bands, **fluxes)))
+    assert(len(satcat) == len(sat))
 
     if plots:
         plt.clf()
@@ -1115,7 +1116,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     del satmap
 
-
     # SED-matched detections
     record_event and record_event('stage_srcs: SED-matched')
     info('Running source detection at', nsigma, 'sigma')
@@ -1129,6 +1129,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         nsigma=nsigma, saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
     if Tnew is None:
         raise NothingToDoError('No sources detected.')
+    assert(len(Tnew) == len(newcat))
     Tnew.delete_column('peaksn')
     Tnew.delete_column('apsn')
     del detmaps
@@ -1143,7 +1144,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     if len(sat):
         tables.append(sat)
         cats += satcat
-    if refstars is not None and len(refstars):
+    if refstars and len(refstars):
         tables.append(refstars)
         cats += refcat
     T = merge_tables(tables, columns='fillzero')
