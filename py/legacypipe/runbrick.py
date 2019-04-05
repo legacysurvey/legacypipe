@@ -916,6 +916,23 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                                              tycho_stars=tycho_stars, gaia_stars=gaia_stars,
                                              large_galaxies=large_galaxies,
                                              star_clusters=star_clusters)
+    # "refstars" is a table
+    # "refcat" is a list of tractor Sources
+    # They are aligned
+    T_donotfit = None
+    if refstars:
+        assert(len(refstars) == len(refcat))
+
+        # Pull out reference sources flagged do-not-fit; we add them back in (much) later
+        I, = np.nonzero(refstars.donotfit)
+        if len(I):
+            T_donotfit = refstars[I]
+            I, = np.nonzero(np.logical_not(refstars.donotfit))
+            refstars.cut(I)
+            refcat = [refcat[i] for i in I]
+            assert(len(refstars) == len(refcat))
+        del I
+
     if refstars:
         # Don't detect new sources where we already have reference stars
         avoid_x = refstars.ibx[refstars.in_bounds]
@@ -987,9 +1004,11 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             plt.title('second-round data - fit profiles')
             ps.savefig()
 
-    if refstars:
+    if refstars or T_donotfit:
+        allrefs = merge_tables([t for t in [refstars, T_donotfit] if t])
         with survey.write_output('ref-sources', brick=brickname) as out:
-            refstars.writeto(None, fits_object=out.fits, primheader=version_header)
+            allrefs.writeto(None, fits_object=out.fits, primheader=version_header)
+        del allrefs
 
     record_event and record_event('stage_srcs: detection maps')
 
@@ -1212,7 +1231,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tlast = tnow
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
-            'ps', 'refstars', 'gaia_stars', 'saturated_pix']
+            'ps', 'refstars', 'gaia_stars', 'saturated_pix',
+            'T_donotfit']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
@@ -1935,7 +1955,8 @@ def _get_mod(X):
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  custom_brick=False,
-                 T=None, cat=None, pixscale=None, plots=False,
+                 T=None, T_donotfit=None,
+                 cat=None, pixscale=None, plots=False,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
                  saturated_pix=None,
                  brightblobmask=None,
@@ -1978,11 +1999,14 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     assert(len(T) == len(cat))
     ra  = np.array([src.getPosition().ra  for src in cat])
     dec = np.array([src.getPosition().dec for src in cat])
+    if T_donotfit:
+        ra  = np.append(ra,  T_donotfit.ra)
+        dec = np.append(dec, T_donotfit.dec)
     ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
 
     # Get integer brick pixel coords for each source, for referencing maps
     T.out_of_bounds = reduce(np.logical_or, [xx < 0.5, yy < 0.5,
-                                             xx > W+0.5, yy > H+0.5])
+                                             xx > W+0.5, yy > H+0.5])[:len(T)]
     ixy = (np.clip(np.round(xx - 1), 0, W-1).astype(int),
            np.clip(np.round(yy - 1), 0, H-1).astype(int))
     # convert apertures to pixels
