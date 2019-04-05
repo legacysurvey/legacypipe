@@ -2041,12 +2041,45 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         del T_image_coadds
     ###
 
-    for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth',
-              'mjd_min', 'mjd_max']:
-        T.set(c, C.T.get(c))
+    # Save per-source measurements of the maps produced during coadding
+    cols = ['nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth',
+            'mjd_min', 'mjd_max']
     # store galaxy sim bounding box in Tractor cat
     if 'sims_xy' in C.T.get_columns():
-        T.set('sims_xy', C.T.get('sims_xy'))
+        cols.append('sims_xy')
+
+    Nno = T_donotfit and len(T_donotfit) or 0
+    Nyes = len(T)
+    for c in cols:
+        val = C.T.get(c)
+        T.set(c, val[:Nyes])
+        if Nno:
+            T_donotfit.set(c, val[Nyes:])
+    assert(C.AP is not None)
+
+    # How many apertures?
+    ap = C.AP.get('apflux_img_%s' % bands[0])
+    n,A = ap.shape
+    assert(A == len(apertures_arcsec))
+
+    T.apflux       = np.zeros((len(T), len(bands), A), np.float32)
+    T.apflux_ivar  = np.zeros((len(T), len(bands), A), np.float32)
+    T.apflux_resid = np.zeros((len(T), len(bands), A), np.float32)
+    if Nno:
+        T_donotfit.apflux       = np.zeros((Nno, len(bands), A), np.float32)
+        T_donotfit.apflux_ivar  = np.zeros((Nno, len(bands), A), np.float32)
+        T_donotfit.apflux_resid = np.zeros((Nno, len(bands), A), np.float32)
+
+    AP = C.AP
+    for iband,band in enumerate(bands):
+        T.apflux      [:,iband,:] = AP.get('apflux_img_%s'      % band)[:Nyes,:]
+        T.apflux_ivar [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)[:Nyes,:]
+        T.apflux_resid[:,iband,:] = AP.get('apflux_resid_%s'    % band)[:Nyes,:]
+        if Nno:
+            T_donotfit.apflux      [:,iband,:] = AP.get('apflux_img_%s'      % band)[Nyes:,:]
+            T_donotfit.apflux_ivar [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)[Nyes:,:]
+            T_donotfit.apflux_resid[:,iband,:] = AP.get('apflux_resid_%s'    % band)[Nyes:,:]
+    del AP
 
     # Compute depth histogram
     D = _depth_histogram(brick, targetwcs, bands, C.psfdetivs, C.galdetivs)
@@ -2216,7 +2249,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
     tnow = Time()
     debug('[serial coadds] Aperture photometry, wrap-up', tnow-tlast)
-    return dict(T=T, AP=C.AP, apertures_pix=apertures,
+    return dict(T=T, apertures_pix=apertures,
                 apertures_arcsec=apertures_arcsec,
                 maskbits=maskbits,
                 maskbits_header=maskbits_header)
@@ -2570,12 +2603,12 @@ def stage_writecat(
     version_header=None,
     release=None,
     T=None,
+    T_donotfit=None,
     WISE=None,
     WISE_T=None,
     maskbits=None,
     maskbits_header=None,
     wise_mask_maps=None,
-    AP=None,
     apertures_arcsec=None,
     cat=None, pixscale=None, targetwcs=None,
     W=None,H=None,
@@ -2675,18 +2708,6 @@ def stage_writecat(
 
     #print('Catalog table contents:')
     #TT.about()
-
-    assert(AP is not None)
-    # How many apertures?
-    ap = AP.get('apflux_img_%s' % bands[0])
-    n,A = ap.shape
-    TT.apflux       = np.zeros((len(TT), len(bands), A), np.float32)
-    TT.apflux_ivar  = np.zeros((len(TT), len(bands), A), np.float32)
-    TT.apflux_resid = np.zeros((len(TT), len(bands), A), np.float32)
-    for iband,band in enumerate(bands):
-        TT.apflux      [:,iband,:] = AP.get('apflux_img_%s'      % band)
-        TT.apflux_ivar [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)
-        TT.apflux_resid[:,iband,:] = AP.get('apflux_resid_%s'    % band)
 
     hdr = fs = None
     T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs)
