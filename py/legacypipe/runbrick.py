@@ -2056,12 +2056,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         if Nno:
             T_donotfit.set(c, val[Nyes:])
     assert(C.AP is not None)
-
     # How many apertures?
-    ap = C.AP.get('apflux_img_%s' % bands[0])
-    n,A = ap.shape
-    assert(A == len(apertures_arcsec))
-
+    A == len(apertures_arcsec)
     T.apflux       = np.zeros((len(T), len(bands), A), np.float32)
     T.apflux_ivar  = np.zeros((len(T), len(bands), A), np.float32)
     T.apflux_resid = np.zeros((len(T), len(bands), A), np.float32)
@@ -2069,7 +2065,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         T_donotfit.apflux       = np.zeros((Nno, len(bands), A), np.float32)
         T_donotfit.apflux_ivar  = np.zeros((Nno, len(bands), A), np.float32)
         T_donotfit.apflux_resid = np.zeros((Nno, len(bands), A), np.float32)
-
     AP = C.AP
     for iband,band in enumerate(bands):
         T.apflux      [:,iband,:] = AP.get('apflux_img_%s'      % band)[:Nyes,:]
