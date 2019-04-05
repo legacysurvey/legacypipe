@@ -1081,6 +1081,7 @@ class LegacySurveyImage(object):
             '-FILTER_NAME %s' % os.path.join(sedir, self.camera + '.conv'),
             '-FLAG_IMAGE %s' % maskfn,
             '-CATALOG_NAME %s' % tmpfn,
+            '-VERBOSE_TYPE QUIET',
             imgfn])
         print(cmd)
         rtn = os.system(cmd)
@@ -1105,7 +1106,7 @@ class LegacySurveyImage(object):
         psfdir = os.path.dirname(self.psffn)
         psfoutfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.fits')
         psftmpfn = psfoutfn + '.tmp'
-        cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .fits.tmp %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, self.sefn)
+        cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .fits.tmp -VERBOSE_TYPE QUIET %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, self.sefn)
         
         rtn = os.system(cmd)
         if rtn:
