@@ -46,6 +46,9 @@ class EllipseWithPriors(EllipseESoft):
     def setMaxLogRadius(self, rmax):
         self.uppers[0] = rmax
 
+    def getMaxLogRadius(self, rmax):
+        return self.uppers[0]
+
     @classmethod
     def fromRAbPhi(cls, r, ba, phi):
         logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(r, ba, phi)
