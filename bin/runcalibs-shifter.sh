@@ -67,5 +67,6 @@ python /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
     --threads ${ncores} \
     --overhead ${starttime} \
     --run-calibs-only \
+    --quiet \
     >> $log 2>&1
 
