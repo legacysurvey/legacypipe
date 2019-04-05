@@ -2268,10 +2268,10 @@ def main(image_list=None,args=None):
     quiet = measureargs.get('quiet', False)
 
     import logging
-    if quiet:
-        lvl = logging.INFO
-    else:
-        lvl = logging.DEBUG
+    #if quiet:
+    lvl = logging.INFO
+    #else:
+    #    lvl = logging.DEBUG
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
 
     if measureargs['calibdir'] is None:
