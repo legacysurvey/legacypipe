@@ -2057,7 +2057,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
             T_donotfit.set(c, val[Nyes:])
     assert(C.AP is not None)
     # How many apertures?
-    A == len(apertures_arcsec)
+    A = len(apertures_arcsec)
     T.apflux       = np.zeros((len(T), len(bands), A), np.float32)
     T.apflux_ivar  = np.zeros((len(T), len(bands), A), np.float32)
     T.apflux_resid = np.zeros((len(T), len(bands), A), np.float32)
