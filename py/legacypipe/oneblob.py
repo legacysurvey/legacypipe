@@ -691,13 +691,14 @@ class OneBlob(object):
         if is_galaxy:
             fit_background = False
 
-            known_galaxy_rmax = 0.
+            known_galaxy_logrmax = 0.
             if isinstance(src, (DevGalaxy,ExpGalaxy)):
                 print('Known galaxy.  Initial shape:', src.shape)
-                known_galaxy_rmax = src.shape.re * 5.
+                # MAGIC 2. = factor by which r_e is allowed to grow for an LSLGA galaxy.
+                known_galaxy_logrmax = np.log(src.shape.re * 2.)
             elif isinstance(src, FixedCompositeGalaxy):
                 print('Known galaxy.  Initial shapes:', src.shapeExp, src.shapeDev)
-                known_galaxy_rmax = max(src.shapeExp.re, src.shapeDev.re) * 5.
+                known_galaxy_logrmax = np.log(max(src.shapeExp.re, src.shapeDev.re) * 2.)
             else:
                 print('WARNING: unknown galaxy type:', src)
 
@@ -801,21 +802,25 @@ class OneBlob(object):
             # Set maximum galaxy model sizes
             if is_galaxy:
                 # This is a known large galaxy -- set max size based on initial size.
-                rmax = known_galaxy_rmax
+                logrmax = known_galaxy_logrmax
+                if name in ('exp', 'rex', 'dev'):
+                    newsrc.shape.setMaxLogRadius(logrmax)
+                elif name == 'comp':
+                    newsrc.shapeExp.setMaxLogRadius(logrmax)
+                    newsrc.shapeDev.setMaxLogRadius(logrmax)
             else:
                 # FIXME -- could use different fractions for deV vs exp (or comp)
                 fblob = 0.8
                 sh,sw = srcwcs.shape
-                # MAGIC 5 her
-                rmax = min(np.log(fblob * max(sh, sw) * self.pixscale))
+                logrmax = np.log(fblob * max(sh, sw) * self.pixscale)
                 if name in ['exp', 'rex', 'dev']:
-                    if rmax < newsrc.shape.getMaxLogRadius():
-                        newsrc.shape.setMaxLogRadius(rmax)
+                    if logrmax < newsrc.shape.getMaxLogRadius():
+                        newsrc.shape.setMaxLogRadius(logrmax)
                 elif name in ['comp']:
-                    if rmax < newsrc.shapeExp.getMaxLogRadius():
-                        newsrc.shapeExp.setMaxLogRadius(rmax)
-                    if rmax < newsrc.shapeDev.getMaxLogRadius():
-                        newsrc.shapeDev.setMaxLogRadius(rmax)
+                    if logrmax < newsrc.shapeExp.getMaxLogRadius():
+                        newsrc.shapeExp.setMaxLogRadius(logrmax)
+                    if logrmax < newsrc.shapeDev.getMaxLogRadius():
+                        newsrc.shapeDev.setMaxLogRadius(logrmax)
 
             ### FIXME -- also set model rendering limits here??
 
@@ -857,11 +862,11 @@ class OneBlob(object):
             if hit_limit:
                 if name in ['exp', 'rex', 'dev']:
                     debug('Hit limit: r %.2f vs %.2f' %
-                          (newsrc.shape.re, np.exp(rmax)))
+                          (newsrc.shape.re, np.exp(logrmax)))
                 elif name in ['comp']:
                     debug('Hit limit: r %.2f, %.2f vs %.2f' %
                           (newsrc.shapeExp.re, newsrc.shapeDev.re,
-                           np.exp(rmax)))
+                           np.exp(logrmax)))
             #srctractor.printThawedParams()
 
             ok,ix,iy = srcwcs.radec2pixelxy(newsrc.getPosition().ra,
