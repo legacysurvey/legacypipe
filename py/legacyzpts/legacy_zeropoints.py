@@ -1,8 +1,11 @@
 from __future__ import division, print_function
-if __name__ == '__main__':
-    import matplotlib
-    matplotlib.use('Agg')
-import matplotlib.pyplot as plt
+
+# Turn off plotting imports for production
+if False:
+    if __name__ == '__main__':
+        import matplotlib
+        matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
 
 import os
 import argparse
