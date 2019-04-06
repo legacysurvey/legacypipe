@@ -28,11 +28,17 @@ export KMP_AFFINITY=disabled
 
 # NOTE, we do NOT set PYTHONPATH -- it is set in the Docker container.
 # Specifically, DO NOT override it with a local checkout of legacypipe or any other package!
-echo "PYTHONPATH is $PYTHONPATH"
+#echo "PYTHONPATH is $PYTHONPATH"
 
-outdir=${LEGACY_SURVEY_DIR}
+# Burst-buffer!
+if [ x$DW_PERSISTENT_STRIPED_DR8 == x ]; then
+    # No burst buffer available -- write outputs to LSD
+    outdir=${LEGACY_SURVEY_DIR}
+else
+    outdir=$DW_PERSISTENT_STRIPED_DR8
+fi
 zptsdir=${outdir}/zpts
-calibdir=$outdir/calib
+calibdir=${outdir}/calib
 imagedir=${LEGACY_SURVEY_DIR}/images
 
 image_fn="$1"
@@ -55,8 +61,8 @@ cpdir=`echo $(basename $(dirname ${image_fn}))`
 logdir=$outdir/logs-calibs/$camera/$cpdir
 mkdir -p $logdir
 log=`echo $(basename ${image_fn} | sed s#.fits.fz#.log#g)`
+tmplog=/tmp/$log
 log=$logdir/$log
-echo Logging to: $log
 
 python /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
 	--camera ${camera} \
@@ -67,5 +73,10 @@ python /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
     --threads ${ncores} \
     --overhead ${starttime} \
     --run-calibs-only \
-    >> $log 2>&1
-
+    --quiet \
+    >> $tmplog 2>&1
+# Save the return value from the python command -- otherwise we exit 0 because the
+# mv succeeds!
+status=$?
+mv $tmplog $log
+exit $status

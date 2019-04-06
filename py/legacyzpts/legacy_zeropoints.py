@@ -1,50 +1,38 @@
 from __future__ import division, print_function
-if __name__ == '__main__':
-    import matplotlib
-    matplotlib.use('Agg')
-import matplotlib.pyplot as plt
+
+# Turn off plotting imports for production
+if False:
+    if __name__ == '__main__':
+        import matplotlib
+        matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
 
 import os
-import pdb
 import argparse
-import re
-import datetime
 import sys
 
 import numpy as np
 from scipy.stats import sigmaclip
-from scipy.ndimage.filters import median_filter
 
 import fitsio
 from astropy.io import fits as fits_astropy
 from astropy.table import Table, vstack
-from astropy import units
-from astropy.coordinates import SkyCoord
+from photutils import CircularAperture, aperture_photometry
 
-from photutils import (CircularAperture, CircularAnnulus,
-                       aperture_photometry, DAOStarFinder)
+from astrometry.util.file import trymakedirs
+from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
+from astrometry.util.util import wcs_pv2sip_hdr
+from astrometry.util.ttime import Time
+from astrometry.util.fits import fits_table, merge_tables
+from astrometry.libkd.spherematch import match_radec
 
-# Sphinx build would crash
-try:
-    from astrometry.util.file import trymakedirs
-    from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
-    from astrometry.util.util import wcs_pv2sip_hdr
-    from astrometry.util.ttime import Time
-    from astrometry.util.fits import fits_table, merge_tables
-    from astrometry.libkd.spherematch import match_radec
-    from astrometry.libkd.spherematch import match_xy
+from tractor.splinesky import SplineSky
 
-    from tractor.splinesky import SplineSky
-
-    import legacypipe
-    from legacypipe.ps1cat import ps1cat
-    from legacypipe.gaiacat import GaiaCatalog
-    from legacypipe.survey import radec_at_mjd, get_git_version
-    from legacypipe.image import validate_procdate_plver
-
-except ImportError:
-    #pass
-    raise
+import legacypipe
+from legacypipe.ps1cat import ps1cat
+from legacypipe.gaiacat import GaiaCatalog
+from legacypipe.survey import radec_at_mjd, get_git_version
+from legacypipe.image import validate_procdate_plver
 
 CAMERAS=['decam','mosaic','90prime','megaprime']
 
@@ -59,10 +47,6 @@ def read_lines(fn):
     fin.close()
     if len(lines) < 1: raise ValueError('lines not read properly from %s' % fn)
     return np.array( list(np.char.strip(lines)) )
-
-def dobash(cmd):
-    print('UNIX cmd: %s' % cmd)
-    if os.system(cmd): raise ValueError
 
 def astropy_to_astrometry_table(t):
     T = fits_table()
@@ -288,6 +272,7 @@ class Measurer(object):
     def __init__(self, fn, image_dir='images',
                  calibrate=False, quiet=False,
                  **kwargs):
+        self.quiet = quiet
         # Set extra kwargs
         self.ps1_pattern= kwargs['ps1_pattern']
         
@@ -1123,7 +1108,7 @@ class Measurer(object):
             #print('Reading splinesky-merged {}'.format(fn))
             T = fits_table(fn)
             if validate_procdate_plver(fn, 'table', self.expnum, self.plver,
-                                   self.procdate, self.plprocid, data=T):
+                                       self.procdate, self.plprocid, data=T, quiet=self.quiet):
                 I, = np.nonzero((T.expnum == self.expnum) *
                                 np.array([c.strip() == self.ext for c in T.ccdname]))
                 if len(I) == 1:
@@ -1148,9 +1133,8 @@ class Measurer(object):
 
         #print('Reading splinesky {}'.format(fn))
         hdr = read_primary_header(fn)
-
         if not validate_procdate_plver(fn, 'primaryheader', self.expnum, self.plver,
-                                   self.procdate, self.plprocid, data=hdr):
+                                       self.procdate, self.plprocid, data=hdr, quiet=self.quiet):
             return None
 
         try:
@@ -1339,7 +1323,7 @@ class Measurer(object):
             #print('Reading psfex-merged {}'.format(fn))
             T = fits_table(fn)
             if validate_procdate_plver(fn, 'table', self.expnum, self.plver,
-                                   self.procdate, self.plprocid, data=T):
+                                       self.procdate, self.plprocid, data=T, quiet=self.quiet):
                 I, = np.nonzero((T.expnum == self.expnum) *
                                 np.array([c.strip() == self.ext for c in T.ccdname]))
                 if len(I) == 1:
@@ -1364,7 +1348,7 @@ class Measurer(object):
         #print('Reading psfex {}'.format(fn))
         hdr = read_primary_header(fn)
         if not validate_procdate_plver(fn, 'primaryheader', self.expnum, self.plver,
-                                       self.procdate, self.plprocid, data=hdr):
+                                       self.procdate, self.plprocid, data=hdr, quiet=self.quiet):
             return None
 
         hdr = fitsio.read_header(fn, ext=1)
@@ -1809,6 +1793,7 @@ class NinetyPrimeMeasurer(Measurer):
     def get_expnum(self, primhdr):
         """converts 90prime header key DTACQNAM into the unique exposure number"""
         # /descache/bass/20160710/d7580.0144.fits --> 75800144
+        import re
         base= (os.path.basename(primhdr['DTACQNAM'])
                .replace('.fits','')
                .replace('.fz',''))
@@ -1893,6 +1878,8 @@ def measure_image(img_fn, image_dir='images', run_calibs_only=False, just_measur
     from astrometry.util.multiproc import multiproc
     t0 = Time()
 
+    quiet = measureargs.get('quiet', False)
+
     img_fn_full = os.path.join(image_dir, img_fn)
 
     # Fitsio can throw error: ValueError: CONTINUE not supported
@@ -1947,11 +1934,11 @@ def measure_image(img_fn, image_dir='images', run_calibs_only=False, just_measur
     # they're missing.
     if splinesky:
         if validate_procdate_plver(measure.get_splinesky_merged_filename(),
-                               'table', measure.expnum, measure.plver, measure.procdate, measure.plprocid):
+                                   'table', measure.expnum, measure.plver, measure.procdate, measure.plprocid, quiet=quiet):
             do_splinesky = False
     if psfex:
         if validate_procdate_plver(measure.get_psfex_merged_filename(),
-                               'table', measure.expnum, measure.plver, measure.procdate, measure.plprocid):
+                                   'table', measure.expnum, measure.plver, measure.procdate, measure.plprocid, quiet=quiet):
             do_psfex = False
 
     if do_splinesky or do_psfex:
@@ -1969,14 +1956,16 @@ def measure_image(img_fn, image_dir='images', run_calibs_only=False, just_measur
             skyoutfn = measure.get_splinesky_merged_filename()
             err_splinesky = merge_splinesky(survey, measure.expnum, ccds, skyoutfn, opts)
             if err_splinesky == 1:
-                print('Wrote {}'.format(skyoutfn))
+                if not quiet:
+                    print('Wrote {}'.format(skyoutfn))
             else:
                 print('Problem writing {}'.format(skyoutfn))
         if do_psfex:
             psfoutfn = measure.get_psfex_merged_filename()
             err_psfex = merge_psfex(survey, measure.expnum, ccds, psfoutfn, opts)
             if err_psfex == 1:
-                print('Wrote {}'.format(psfoutfn))
+                if not quiet:
+                    print('Wrote {}'.format(psfoutfn))
             else:
                 print('Problem writing {}'.format(psfoutfn))
 
@@ -2265,6 +2254,15 @@ def main(image_list=None,args=None):
     measureargs.pop('image')
     nimage = len(image_list)
 
+    quiet = measureargs.get('quiet', False)
+
+    import logging
+    #if quiet:
+    lvl = logging.INFO
+    #else:
+    #    lvl = logging.DEBUG
+    logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+
     if measureargs['calibdir'] is None:
         cal = os.getenv('LEGACY_SURVEY_DIR',None)
         if cal is not None:
@@ -2301,8 +2299,6 @@ def main(image_list=None,args=None):
             raise IOError
 
     outdir = measureargs.pop('outdir')
-    #trymakedirs(outdir)
-    t0 = ptime('parse-args', t0)
     for ii, imgfn in enumerate(image_list):
         print('Working on image {}/{}: {}'.format(ii+1, nimage, imgfn))
 
@@ -2314,7 +2310,7 @@ def main(image_list=None,args=None):
         skyfn = measure.get_splinesky_merged_filename()
 
         legok, annok, psfok, skyok = [validate_procdate_plver(
-            fn, 'table', measure.expnum, measure.plver, measure.procdate, measure.plprocid)
+            fn, 'table', measure.expnum, measure.plver, measure.procdate, measure.plprocid, quiet=quiet)
             for fn in [F.surveyfn, F.annfn, psffn, skyfn]]
 
         if measureargs['run_calibs_only'] and psfok and skyok:
@@ -2324,7 +2320,7 @@ def main(image_list=None,args=None):
             
         photok = validate_procdate_plver(F.starfn_photom, 'header', measure.expnum,
                                          measure.plver, measure.procdate, measure.plprocid,
-                                         ext=1)
+                                         ext=1, quiet=quiet)
 
         if legok and annok and photok and psfok and skyok:
             print('Already finished: {}'.format(F.annfn))
@@ -2336,12 +2332,11 @@ def main(image_list=None,args=None):
             continue
 
         # Create the file
-        t0 = ptime('b4-run',t0)
+        t0 = ptime('before-run',t0)
         runit(F.imgfn, F.starfn_photom, F.surveyfn, F.annfn, **measureargs)
         t0 = ptime('after-run',t0)
     tnow = Time()
     print("TIMING:total %s" % (tnow-tbegin,))
-    print("Done")
 
 from legacypipe.survey import LegacySurveyData
 class FakeLegacySurveyData(LegacySurveyData):

@@ -838,7 +838,7 @@ class LegacySurveyImage(object):
 
             if not os.path.exists(self.splineskyfn):
                 if self.merged_splineskyfn is not None:
-                    raise RuntimeError('Read Splinesky: neither {} nor {} found'.format(self.merged_splineskyfn, self.splineskyfn))
+                    raise RuntimeError('Merged splinesky model {} not found'.format(self.merged_splineskyfn))
                 return None
 
         fn = self.skyfn
@@ -942,7 +942,7 @@ class LegacySurveyImage(object):
                 psf = self.read_merged_psfex_model(normalizePsf=normalizePsf, old_calibs_ok=old_calibs_ok)
             else:
                 if not os.path.exists(self.psffn):
-                    raise RuntimeError('Read Splinesky: neither {} nor {} found'.format(self.merged_psffn, self.psffn))
+                    raise RuntimeError('Merged PsfEx model {} not found'.format(self.merged_psffn))
 
         if psf is None:
             debug('Reading PsfEx model from', self.psffn)
@@ -1035,7 +1035,7 @@ class LegacySurveyImage(object):
         fcopy = False
         hdr = fitsio.read_header(imgfn, ext=hdu)
         if not ((hdr['XTENSION'] == 'BINTABLE') and hdr.get('ZIMAGE', False)):
-            print('Image %s, HDU %i is not fpacked; just imcopying.' %
+            debug('Image %s, HDU %i is not fpacked; just imcopying.' %
                   (imgfn,  hdu))
             fcopy = True
 
@@ -1048,7 +1048,7 @@ class LegacySurveyImage(object):
             cmd = 'imcopy %s"+%i" %s' % (imgfn, hdu, tmpimgfn)
         else:
             cmd = 'funpack -E %i -O %s %s' % (hdu, tmpimgfn, imgfn)
-        print(cmd)
+        debug(cmd)
         if os.system(cmd):
             raise RuntimeError('Command failed: ' + cmd)
 
@@ -1056,7 +1056,7 @@ class LegacySurveyImage(object):
             cmd = 'imcopy %s"+%i" %s' % (maskfn, hdu, tmpmaskfn)
         else:
             cmd = 'funpack -E %i -O %s %s' % (hdu, tmpmaskfn, maskfn)
-        print(cmd)
+        debug(cmd)
         if os.system(cmd):
             print('Command failed: ' + cmd)
             M,hdr = self._read_fits(maskfn, hdu, header=True)
@@ -1081,8 +1081,9 @@ class LegacySurveyImage(object):
             '-FILTER_NAME %s' % os.path.join(sedir, self.camera + '.conv'),
             '-FLAG_IMAGE %s' % maskfn,
             '-CATALOG_NAME %s' % tmpfn,
+            '-VERBOSE_TYPE QUIET',
             imgfn])
-        print(cmd)
+        debug(cmd)
         rtn = os.system(cmd)
         if rtn:
             raise RuntimeError('Command failed: ' + cmd)
@@ -1105,8 +1106,8 @@ class LegacySurveyImage(object):
         psfdir = os.path.dirname(self.psffn)
         psfoutfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.fits')
         psftmpfn = psfoutfn + '.tmp'
-        cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .fits.tmp %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, self.sefn)
-        
+        cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .fits.tmp -VERBOSE_TYPE QUIET %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, self.sefn)
+        debug(cmd)
         rtn = os.system(cmd)
         if rtn:
             raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
@@ -1245,7 +1246,7 @@ class LegacySurveyImage(object):
 
             wcs = self.get_wcs(hdr=imghdr)
 
-            print('Good image slice:', slc)
+            debug('Good image slice:', slc)
             if slc is not None:
                 sy,sx = slc
                 y0,y1 = sy.start, sy.stop
@@ -1384,7 +1385,7 @@ class LegacySurveyImage(object):
                              'tmp-' + os.path.basename(self.splineskyfn))
             skyobj.write_fits(tmpfn, primhdr=hdr)
             os.rename(tmpfn, self.splineskyfn)
-            print('Wrote sky model', self.splineskyfn)
+            debug('Wrote sky model', self.splineskyfn)
 
         else:
             from tractor.sky import ConstantSky
@@ -1413,7 +1414,7 @@ class LegacySurveyImage(object):
                              'tmp-' + os.path.basename(self.skyfn))
             tsky.write_fits(tmpfn, hdr=hdr)
             os.rename(tmpfn, self.skyfn)
-            print('Wrote sky model', self.skyfn)
+            debug('Wrote sky model', self.skyfn)
 
     def run_calibs(self, psfex=True, sky=True, se=False,
                    fcopy=False, use_mask=True,
@@ -1430,9 +1431,8 @@ class LegacySurveyImage(object):
                                     old_calibs_ok=old_calibs_ok)
                 psfex = False
             except Exception as e:
-                print('Did not find existing PsfEx model for', self, ':', e)
-                #import traceback
-                #traceback.print_exc()
+                debug('Did not find existing PsfEx model for', self, ':', e)
+
         if psfex:
             se = True
 
@@ -1447,9 +1447,7 @@ class LegacySurveyImage(object):
                                     old_calibs_ok=old_calibs_ok)
                 sky = False
             except Exception as e:
-                print('Did not find existing sky model for', self, ':', e)
-                #import traceback
-                #traceback.print_exc()
+                debug('Did not find existing sky model for', self, ':', e)
 
         if se:
             # The image & mask files to process (funpacked if necessary)
@@ -1492,9 +1490,10 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
 def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                             plprocid,
                             data=None, ext=1, cpheader=False,
-                            old_calibs_ok=False):
+                            old_calibs_ok=False, quiet=False):
     if not os.path.exists(fn):
-        print('File not found {}'.format(fn))
+        if not quiet:
+            print('File not found {}'.format(fn))
         return False
     # Check the data model
     if filetype == 'table':
@@ -1551,7 +1550,8 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                     obsid = obsid.replace('T', '')
                     obsid = int(obsid[2:], 10)
                     cpexpnum = obsid
-                    print('Faked up EXPNUM', cpexpnum)
+                    if not quiet:
+                        print('Faked up EXPNUM', cpexpnum)
                 elif obsid.startswith('ksb'):
                     import re
                     # obsid = obsid[3:]
@@ -1562,7 +1562,8 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                            .replace('.fits','')
                            .replace('.fz',''))
                     cpexpnum = int(re.sub(r'([a-z]+|\.+)','',base), 10)
-                    print('Faked up EXPNUM', cpexpnum)
+                    if not quiet:
+                        print('Faked up EXPNUM', cpexpnum)
 
         for key,spval,targetval,strip in (#(procdatekey, None, procdate, True),
                                           ('PLVER', None, plver, True),
@@ -1586,10 +1587,10 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                 val = val.strip()
             if val != targetval:
                 if old_calibs_ok:
-                    print('WARNING: {}!={} in {} header but old_calibs_ok=True'.format(val, targetval, fn))
+                    print('WARNING: {} {}!={} in {} header but old_calibs_ok=True'.format(key, val, targetval, fn))
                     continue
                 else:
-                    print('WARNING: {}!={} in {} header'.format(val, targetval, fn))
+                    print('WARNING: {} {}!={} in {} header'.format(key, val, targetval, fn))
                     return False
         return True
 

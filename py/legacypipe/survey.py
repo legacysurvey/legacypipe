@@ -447,7 +447,7 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
 
     return hdr
 
-def get_dependency_versions(unwise_dir, unwise_tr_dir):
+def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
     depvers = []
     headers = []
     # Get DESICONDA version, and read file $DESICONDA/pkg_list.txt for
@@ -504,6 +504,11 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir):
         # this is assumed to be only a single directory
         headers.append(('UNWISTD', unwise_tr_dir, ''))
         #headers.append(('UNWISTD', unwise_tr_dir, 'unWISE time-resolved dir'))
+
+    if unwise_modelsky_dir is not None:
+        depvers.append(('unwise_modelsky', unwise_modelsky_dir))
+        # this is assumed to be only a single directory
+        headers.append(('UNWISSKY', unwise_modelsky_dir, ''))
 
     added_long = False
     for i,(name,value) in enumerate(depvers):

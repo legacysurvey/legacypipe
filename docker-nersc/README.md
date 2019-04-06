@@ -62,3 +62,22 @@ Run it via:
 ```
 shifter --image docker:legacysurvey/legacypipe:nersc bash
 ```
+
+
+
+Notes about DR8
+===============
+
+For DR8, we have a series of tags of the `legacypipe` repo and the Docker containers.
+
+These were done by, eg:
+
+```
+cd legacypipe/docker-nersc
+git tag -a DR8.0.2
+git push --tags
+./build.sh
+# Copy the tag
+docker tag legacysurvey/legacypipe:nersc legacysurvey/legacypipe:nersc-dr8.0.2
+docker push legacysurvey/legacypipe:nersc-dr8.0.2
+```
