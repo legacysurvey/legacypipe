@@ -75,5 +75,8 @@ python /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
     --run-calibs-only \
     --quiet \
     >> $tmplog 2>&1
+# Save the return value from the python command -- otherwise we exit 0 because the
+# mv succeeds!
+status=$?
 mv $tmplog $log
-
+exit $status
