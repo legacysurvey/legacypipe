@@ -61,9 +61,8 @@ cpdir=`echo $(basename $(dirname ${image_fn}))`
 logdir=$outdir/logs-calibs/$camera/$cpdir
 mkdir -p $logdir
 log=`echo $(basename ${image_fn} | sed s#.fits.fz#.log#g)`
-log=$logdir/$log
-#echo Logging to: $log
 tmplog=/tmp/$log
+log=$logdir/$log
 
 python /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
 	--camera ${camera} \
