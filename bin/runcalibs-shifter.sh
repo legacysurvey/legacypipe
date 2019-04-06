@@ -30,9 +30,15 @@ export KMP_AFFINITY=disabled
 # Specifically, DO NOT override it with a local checkout of legacypipe or any other package!
 #echo "PYTHONPATH is $PYTHONPATH"
 
-outdir=${LEGACY_SURVEY_DIR}
+# Burst-buffer!
+if [ x$DW_PERSISTENT_STRIPED_DR8 == x ]; then
+    # No burst buffer available -- write outputs to LSD
+    outdir=${LEGACY_SURVEY_DIR}
+else
+    outdir=$DW_PERSISTENT_STRIPED_DR8
+fi
 zptsdir=${outdir}/zpts
-calibdir=$outdir/calib
+calibdir=${outdir}/calib
 imagedir=${LEGACY_SURVEY_DIR}/images
 
 image_fn="$1"
