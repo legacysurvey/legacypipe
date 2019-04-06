@@ -5,46 +5,31 @@ if __name__ == '__main__':
 import matplotlib.pyplot as plt
 
 import os
-import pdb
 import argparse
-import re
-import datetime
 import sys
 
 import numpy as np
 from scipy.stats import sigmaclip
-from scipy.ndimage.filters import median_filter
 
 import fitsio
 from astropy.io import fits as fits_astropy
 from astropy.table import Table, vstack
-from astropy import units
-from astropy.coordinates import SkyCoord
+from photutils import CircularAperture, aperture_photometry
 
-from photutils import (CircularAperture, CircularAnnulus,
-                       aperture_photometry, DAOStarFinder)
+from astrometry.util.file import trymakedirs
+from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
+from astrometry.util.util import wcs_pv2sip_hdr
+from astrometry.util.ttime import Time
+from astrometry.util.fits import fits_table, merge_tables
+from astrometry.libkd.spherematch import match_radec
 
-# Sphinx build would crash
-try:
-    from astrometry.util.file import trymakedirs
-    from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
-    from astrometry.util.util import wcs_pv2sip_hdr
-    from astrometry.util.ttime import Time
-    from astrometry.util.fits import fits_table, merge_tables
-    from astrometry.libkd.spherematch import match_radec
-    from astrometry.libkd.spherematch import match_xy
+from tractor.splinesky import SplineSky
 
-    from tractor.splinesky import SplineSky
-
-    import legacypipe
-    from legacypipe.ps1cat import ps1cat
-    from legacypipe.gaiacat import GaiaCatalog
-    from legacypipe.survey import radec_at_mjd, get_git_version
-    from legacypipe.image import validate_procdate_plver
-
-except ImportError:
-    #pass
-    raise
+import legacypipe
+from legacypipe.ps1cat import ps1cat
+from legacypipe.gaiacat import GaiaCatalog
+from legacypipe.survey import radec_at_mjd, get_git_version
+from legacypipe.image import validate_procdate_plver
 
 CAMERAS=['decam','mosaic','90prime','megaprime']
 
@@ -1805,6 +1790,7 @@ class NinetyPrimeMeasurer(Measurer):
     def get_expnum(self, primhdr):
         """converts 90prime header key DTACQNAM into the unique exposure number"""
         # /descache/bass/20160710/d7580.0144.fits --> 75800144
+        import re
         base= (os.path.basename(primhdr['DTACQNAM'])
                .replace('.fits','')
                .replace('.fz',''))
