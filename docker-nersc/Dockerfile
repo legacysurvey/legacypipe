@@ -63,10 +63,11 @@ ENV PYTHON python3
 ENV PYTHON_CONFIG python3-config
 ENV PYTHON_SCRIPT "/usr/bin/env python3"
 
+RUN mkdir -p /src
+WORKDIR /src
+
 # Astrometry.net
-RUN mkdir -p /src \
-    && cd /src \
-    && git clone http://github.com/dstndstn/astrometry.net.git astrometry \
+RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
     && make -j4 && make \
     && make py \
@@ -75,8 +76,7 @@ RUN mkdir -p /src \
     && make clean
 
 # The Tractor
-RUN cd /src \
-    && git clone http://github.com/dstndstn/tractor.git tractor \
+RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
     && make \
     && make ceres \
@@ -86,9 +86,7 @@ RUN cd /src \
 ENV BLAS -L${MKLROOT}/lib/intel64 -lmkl_rt -fopenmp -lpthread -limf -lsvml -ldl
 ENV CPPFLAGS -I${MKLROOT}/include
 
-RUN mkdir -p /src \
-    && cd /src \
-    && git clone https://github.com/astromatic/sextractor.git sourceextractor \
+RUN git clone https://github.com/astromatic/sextractor.git sourceextractor \
     && cd sourceextractor \
     && sh autogen.sh \
     && ./configure --enable-icc --enable-mkl \
@@ -96,8 +94,7 @@ RUN mkdir -p /src \
     && make install \
     && make clean
 
-RUN cd /src \
-    && git clone https://github.com/astromatic/psfex.git psfex \
+RUN git clone https://github.com/astromatic/psfex.git psfex \
     && cd psfex \
     && sh autogen.sh \
     && ./configure --enable-icc --enable-mkl \
@@ -107,7 +104,6 @@ RUN cd /src \
 
 ######## Stage 2 ########
 FROM registry.services.nersc.gov/nersc/intel_cxx_fort_mpi_mkl_runtime
-COPY --from=builder /usr/local /usr/local
 
 ENV PYTHON python3
 ENV PYTHON_CONFIG python3-config
@@ -142,10 +138,14 @@ RUN DEBIAN_FRONTEND=noninteractive \
     # # Remove APT files
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+RUN pip3 install cython
+
+COPY --from=builder /usr/local /usr/local
+
+WORKDIR /src
+
 # QDO
-RUN mkdir -p /src \
-    && cd /src/ \
-    && git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
+RUN git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
     && cd qdo \
     && python3 setup.py install
 
@@ -153,13 +153,11 @@ RUN mkdir -p /src \
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # unwise_psf
-RUN cd /src \
-    && git clone https://github.com/legacysurvey/unwise_psf.git \
+RUN git clone https://github.com/legacysurvey/unwise_psf.git \
     && cd unwise_psf && git checkout dr8
 
 # Legacypipe
-RUN cd /src \
-    && git clone http://github.com/legacysurvey/legacypipe.git legacypipe
+RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe
 
 ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 ENV WISE_PSF_DIR /src/unwise_psf/etc
@@ -171,4 +169,6 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> /root/.bashrc
 RUN mkdir /root/.qdo && echo "[qdo]" > /root/.qdo/qdorc
 RUN python -c "import astropy"
 
-RUN cd /src/legacypipe/py && git pull && git describe && echo 1
+RUN cd /src/legacypipe/py && git pull && git describe && echo 4
+
+#RUN pip3 install cython
