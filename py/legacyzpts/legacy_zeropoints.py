@@ -1076,7 +1076,7 @@ class Measurer(object):
         t0= ptime('all-computations-for-this-ccd',t0)
         # Plots for comparing to Arjuns zeropoints*.ps
         if self.verboseplots:
-            self.make_plots(stars,dmag,ccds['zpt'],ccds['transp'])
+            self.make_plots(stars_photom,dmag,ccds['zpt'],ccds['transp'])
             t0= ptime('made-plots',t0)
         return ccds, stars_photom, stars_astrom
 
@@ -1247,6 +1247,7 @@ class Measurer(object):
             #print('Optimizing position of Gaia star', istar)
 
             if plots and plot_this:
+                import pylab as plt
                 plt.clf()
                 plt.subplot(2,2,1)
                 plt.imshow(subimg, interpolation='nearest', origin='lower')
@@ -1376,6 +1377,7 @@ class Measurer(object):
     
     def make_plots(self,stars,dmag,zpt,transp):
         '''stars -- stars table'''
+        import pylab as plt
         suffix='_qa_%s.png' % stars['expid'][0][-4:]
         fig,ax=plt.subplots(1,2,figsize=(10,4))
         plt.subplots_adjust(wspace=0.2,bottom=0.2,right=0.8)

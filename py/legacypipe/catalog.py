@@ -109,7 +109,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
         for k in fskeys:
             x = getattr(fs, k)
             x = np.array(x).astype(np.float32)
-            T.set('%s%s_%s' % (prefix, tim.filter, k), x.astype(np.float32))
+            T.set('%s_%s' % (prefix, k), x.astype(np.float32))
 
     _get_tractor_fits_values(T, cat, '%s%%s' % prefix, unpackShape=unpackShape)
 
