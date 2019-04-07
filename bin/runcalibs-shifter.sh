@@ -78,5 +78,5 @@ python /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
 # Save the return value from the python command -- otherwise we exit 0 because the
 # mv succeeds!
 status=$?
-mv $tmplog $log
+cat $tmplog >> $log
 exit $status
