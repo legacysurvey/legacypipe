@@ -40,8 +40,10 @@ RUN echo "../site-packages" > /usr/local/lib/python3.5/dist-packages/site-packag
 ENV CC icc
 ENV CXX icpc
 ENV LDSHARED icc -shared
-ENV CFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=gnu99 -pthread
-ENV CXXFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=c++11 -pthread
+ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -march=ivybridge -ax=haswell,knl
+ENV ARCH_FLAGS ""
+#ENV CFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=gnu99 -pthread
+#ENV CXXFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=c++11 -pthread
 
 # Pip installs
 RUN for x in \
@@ -56,7 +58,7 @@ RUN for x in \
     fitsio \
     zmq \
     ; do pip3 install $x; done \
-    #&& rm -Rf /root/.cache/pip \
+    && rm -Rf /root/.cache/pip \
     && echo 1
 
 ENV PYTHON python3
@@ -121,6 +123,8 @@ RUN DEBIAN_FRONTEND=noninteractive \
     git \
     file \
     pkg-config \
+    gdb \
+    less \
     wget \
     netpbm \
     wcslib-dev \
@@ -171,4 +175,3 @@ RUN python -c "import astropy"
 
 RUN cd /src/legacypipe/py && git pull && git describe && echo 4
 
-#RUN pip3 install cython
