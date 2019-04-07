@@ -40,7 +40,7 @@ RUN echo "../site-packages" > /usr/local/lib/python3.5/dist-packages/site-packag
 ENV CC icc
 ENV CXX icpc
 ENV LDSHARED icc -shared
-ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -march=ivybridge -ax=haswell,knl
+ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=ivybridge -ax=haswell,knl
 ENV ARCH_FLAGS ""
 #ENV CFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=gnu99 -pthread
 #ENV CXXFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=c++11 -pthread
