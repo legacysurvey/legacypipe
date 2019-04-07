@@ -1156,6 +1156,8 @@ class Measurer(object):
     def tractor_fit_sources(self, ref_ra, ref_dec, ref_flux, img, ierr,
                             psf, normalize_psf=True):
         import tractor
+        #from tractor.patch import ModelMask
+        from tractor import PixelizedPSF
 
         plots = False
         #plot_this = np.hypot(x - 118, y - 1276) < 5
@@ -1199,11 +1201,22 @@ class Measurer(object):
             subimg = img[ylo:yhi+1, xlo:xhi+1]
             # FIXME -- check that ierr is correct
             subie = ierr[ylo:yhi+1, xlo:xhi+1]
-            subpsf = psf.constantPsfAt(x, y)
-            psfsum = np.sum(subpsf.img)
+
+            if False:
+                subpsf = psf.constantPsfAt(x, y)
+                psfsum = np.sum(subpsf.img)
+                if normalize_psf:
+                    # print('Normalizing PsfEx model with sum:', s)
+                    subpsf.img /= psfsum
+
+            psfimg = psf.getImage(x, y)
+            ph,pw = psf.img.shape
+            psfsum = np.sum(psfimg)
             if normalize_psf:
-                # print('Normalizing PsfEx model with sum:', s)
-                subpsf.img /= psfsum
+                psfimg /= psfsum
+            sz = R + 5
+            psfimg = psfimg[ph//2-sz:ph//2+sz+1, pw//2-sz:pw//2+sz+1]
+            subpsf = PixelizedPSF(psfimg)
 
             if np.all(subie == 0):
                 #print('Inverse-variance map is all zero')
@@ -1220,6 +1233,10 @@ class Measurer(object):
             src = tractor.PointSource(tractor.PixPos(x0, y0),
                                       tractor.Flux(flux0))
             tr = tractor.Tractor([tim], [src])
+
+            #sh,sw = tim.shape
+            #mm = [dict(src=ModelMask(0, 0, sw, sh))]
+            
             tr.freezeParam('images')
             optargs = dict(priors=False, shared_params=False)
             # The initial flux estimate doesn't seem to work too well,
