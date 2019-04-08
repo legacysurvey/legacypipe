@@ -2,9 +2,6 @@ from __future__ import print_function
 import numpy as np
 import os
 
-import matplotlib
-matplotlib.use('Agg')
-
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.starutil_numpy import degrees_between
 from astrometry.util.util import Tan
