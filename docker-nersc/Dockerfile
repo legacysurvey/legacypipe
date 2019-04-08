@@ -179,3 +179,4 @@ RUN python -c "import astropy"
 
 RUN cd /src/legacypipe/py && git pull && git describe && echo 5
 
+RUN apt update && apt install --no-install-recommends -y vim && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
