@@ -1,5 +1,8 @@
 from distutils.core import setup
 from Cython.Build import cythonize
+import os
+
+os.environ['CFLAGS'] = '-march=native'
 
 setup(
     ext_modules = cythonize([
@@ -12,7 +15,7 @@ setup(
         'legacypipe/format_catalog.py',
         'legacypipe/gaiacat.py',
         'legacypipe/halos.py',
-        'legacypipe/image.py',
+        # 'legacypipe/image.py',
         'legacypipe/mosaic.py',
         'legacypipe/oneblob.py',
         'legacypipe/outliers.py',
@@ -27,8 +30,10 @@ setup(
         'legacyzpts/legacy_zeropoints.py',
         'legacyzpts/merge_calibs.py',
         'legacyzpts/psfzpt_cuts.py',
-    ], annotate=True, compiler_directives=dict(language_level=3,
-                                                   infer_types=True,
+    ], annotate=True,
+       nthreads=4,
+       compiler_directives=dict(language_level=3,
+                                infer_types=True,
 #profile=True
 ))
 )
