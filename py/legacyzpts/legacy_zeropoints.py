@@ -1239,7 +1239,9 @@ class Measurer(object):
             #mm = [dict(src=ModelMask(0, 0, sw, sh))]
             
             tr.freezeParam('images')
-            optargs = dict(priors=False, shared_params=False)
+            optargs = dict(priors=False, shared_params=False,
+                           alphas=[0.1, 0.3, 1.0])
+
             # The initial flux estimate doesn't seem to work too well,
             # so quickly fit flux first
             src.freezeParam('pos')
@@ -1248,7 +1250,6 @@ class Measurer(object):
             tr.optimize_forced_photometry()
             tim.photocal = pc
             src.thawParam('pos')
-            #print('Optimizing position of Gaia star', istar)
 
             if plots and plot_this:
                 import pylab as plt
