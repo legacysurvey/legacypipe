@@ -73,7 +73,8 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && make py \
     && make extra \
     && make install INSTALL_DIR=/usr/local \
-    && make clean
+    && make clean \
+    && echo 1
 
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
@@ -169,6 +170,16 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> /root/.bashrc
 RUN mkdir /root/.qdo && echo "[qdo]" > /root/.qdo/qdorc
 RUN python -c "import astropy"
 
+RUN    python    -m compileall /usr/local/lib/python/astrometry \
+    && python -O -m compileall /usr/local/lib/python/astrometry \
+    && python    -m compileall /usr/local/lib/python/tractor \
+    && python -O -m compileall /usr/local/lib/python/tractor
+
 RUN cd /src/legacypipe/py && git pull && git describe && echo 4
+
+RUN    python    -m compileall /src/legacypipe/py \
+    && python -O -m compileall /src/legacypipe/py \
+    && python    -m compileall /src/unwise_psf/py/unwise_psf.py \
+    && python -O -m compileall /src/unwise_psf/py/unwise_psf.py
 
 #RUN pip3 install cython
