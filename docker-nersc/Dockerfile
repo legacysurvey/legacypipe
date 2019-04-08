@@ -35,15 +35,7 @@ RUN DEBIAN_FRONTEND=noninteractive \
 
 RUN echo "../site-packages" > /usr/local/lib/python3.5/dist-packages/site-packages.pth
 
-# ugly: Tractor's mp_fourier module detects the $CC='icc' exactly
-# These are in /opt/intel/bin, which is on the PATH.
-ENV CC icc
-ENV CXX icpc
-ENV LDSHARED icc -shared
-ENV CFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=gnu99 -pthread
-ENV CXXFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=c++11 -pthread
-
-# Pip installs
+# Pip installs -- binary
 RUN for x in \
     setuptools \
     wheel \
@@ -52,12 +44,26 @@ RUN for x in \
     psycopg2-binary \
     matplotlib \
     astropy \
-    photutils \
-    fitsio \
     zmq \
     ; do pip3 install $x; done \
-    #&& rm -Rf /root/.cache/pip \
-    && echo 1
+    && rm -Rf /root/.cache/pip
+
+# ugly: Tractor's mp_fourier module detects the $CC='icc' exactly
+# These are in /opt/intel/bin, which is on the PATH.
+ENV CC icc
+ENV CXX icpc
+ENV LDSHARED icc -shared
+ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=ivybridge -ax=haswell,knl
+ENV ARCH_FLAGS ""
+#ENV CFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=gnu99 -pthread
+#ENV CXXFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=c++11 -pthread
+
+# Pip installs -- built from source
+RUN for x in \
+    photutils \
+    fitsio \
+    ; do pip3 install $x; done \
+    && rm -Rf /root/.cache/pip
 
 ENV PYTHON python3
 ENV PYTHON_CONFIG python3-config
@@ -74,7 +80,7 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && make extra \
     && make install INSTALL_DIR=/usr/local \
     && make clean \
-    && echo 1
+    && echo 2
 
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
@@ -122,6 +128,8 @@ RUN DEBIAN_FRONTEND=noninteractive \
     git \
     file \
     pkg-config \
+    gdb \
+    less \
     wget \
     netpbm \
     wcslib-dev \
@@ -182,4 +190,6 @@ RUN    python    -m compileall /src/legacypipe/py \
     && python    -m compileall /src/unwise_psf/py/unwise_psf.py \
     && python -O -m compileall /src/unwise_psf/py/unwise_psf.py
 
-#RUN pip3 install cython
+RUN cd /src/legacypipe/py && git pull && git describe && echo 5
+
+RUN apt update && apt install --no-install-recommends -y vim && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
