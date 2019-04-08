@@ -1158,6 +1158,7 @@ class Measurer(object):
         import tractor
         #from tractor.patch import ModelMask
         from tractor import PixelizedPSF
+        from tractor.brightness import LinearPhotoCal
 
         plots = False
         #plot_this = np.hypot(x - 118, y - 1276) < 5
@@ -1240,9 +1241,12 @@ class Measurer(object):
             tr.freezeParam('images')
             optargs = dict(priors=False, shared_params=False)
             # The initial flux estimate doesn't seem to work too well,
-            # so just for plotting's sake, fit flux first
+            # so quickly fit flux first
             src.freezeParam('pos')
-            tr.optimize(**optargs)
+            pc = tim.photocal
+            tim.photocal = LinearPhotoCal(1.)
+            tr.optimize_forced_photometry()
+            tim.photocal = pc
             src.thawParam('pos')
             #print('Optimizing position of Gaia star', istar)
 
