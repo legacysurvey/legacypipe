@@ -801,19 +801,23 @@ class LegacySurveyImage(object):
         # Use astropy.io.fits to open it, because it provides access to the compressed data
         # -- the underlying BINTABLE with the ZSCALE and ZZERO keywords we need.
         from astropy.io import fits as fits_astropy
-        #hdu = fits_astropy.open(weightfn, disable_image_compression=True)[ext]
-        #hdr = hdu.header
-        hdu = fits_astropy.open(weightfn)[ext]
-        hdu = hdu.compressed_data
-        hdr = hdu._header
-        print('Header:', hdr)
+        hdu = fits_astropy.open(weightfn, disable_image_compression=True)[ext]
+        hdr = hdu.header
+        table = hdu.data
+        #hdu = fits_astropy.open(weightfn)[ext]
+        #table = hdu.compressed_data
+        #hdr = hdu._header
+        #print('Header:', hdr)
+        zquant = hdr['ZQUANTIZ']
+        print('Fpack quantization method:', zquant)
+        # FIXME -- SUBTRACTIVE_DITHER_1 causes trouble
+        # but SUBTRACTIVE_DITHER_2, which treats zeros specially, should be okay...
         tilew = hdr['ZTILE1']
         tileh = hdr['ZTILE2']
         imagew = hdr['ZNAXIS1']
         # This function can only handle non-tiled (row-by-row compressed) files.
         if tilew != imagew or tileh != 1:
             raise ValueError('fix_weight_quantization: file is not row-by-row compressed: tile size %i x %i.' % (tilew, tileh))
-        table = hdu.data
         zscale = table.field('ZSCALE')
         zzero  = table.field('ZZERO' )
         if not np.all(zzero == 0.0):
@@ -824,9 +828,9 @@ class LegacySurveyImage(object):
         H,W = wt.shape
         if len(zscale) != H:
             raise ValueError('fix_weight_quantization: sliced zscale size does not match weight array: %i vs %i' % (len(zscale), H))
-        print('Zeroing out', np.sum(wt <= zscale[:,np.newaxis]*0.5), 'weight-map pixels below quantization error')
+        print('Zeroing out', np.sum(wt <= zscale[:,np.newaxis]*0.5), 'weight-map pixels below quantization error (= median %.3g)' % (np.median(zscale)*0.5))
         wt[wt <= zscale[:,np.newaxis]*0.5] = 0.
-        return False
+        return True
 
     def get_tractor_wcs(self, wcs, x0, y0, tai=None,
                         primhdr=None, imghdr=None):
