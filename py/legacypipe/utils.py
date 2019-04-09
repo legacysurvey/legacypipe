@@ -10,6 +10,7 @@ def log_info(logger, args):
     logger.info(msg)
 
 def log_debug(logger, args):
+    import logging
     if logger.isEnabledFor(logging.DEBUG):
         msg = ' '.join(map(str, args))
         logger.debug(msg)
