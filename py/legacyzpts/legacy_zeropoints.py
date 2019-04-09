@@ -1728,7 +1728,7 @@ class Mosaic3Measurer(Measurer):
                               'fwhm_cp':['SEEINGP1','SEEINGP']}
 
     def get_expnum(self, primhdr):
-        if 'EXPNUM' in primhdr:
+        if 'EXPNUM' in primhdr and primhdr['EXPNUM'] is not None:
             return primhdr['EXPNUM']
         # At the beginning of the survey, eg 2016-01-24, the EXPNUM
         # cards are blank.  Fake up an expnum like 160125082555
