@@ -700,7 +700,7 @@ def _resample_one(args):
     else:
         im = tim.getImage ()[Yi,Xi]
         if mod is not None:
-            mo = mods[itim][Yi,Xi]
+            mo = mod[Yi,Xi]
     iv = tim.getInvvar()[Yi,Xi]
     if sbscale:
         fscale = tim.sbscale

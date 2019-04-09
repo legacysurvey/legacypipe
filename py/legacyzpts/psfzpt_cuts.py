@@ -1,9 +1,7 @@
 from __future__ import print_function
 import numpy as np
-import pylab as plt
 import fitsio
 from astrometry.util.fits import fits_table, merge_tables
-from astrometry.util.plotutils import PlotSequence
 from collections import Counter
 
 def psf_cuts_to_string(ccd_cuts, join=', '):
@@ -203,8 +201,8 @@ def psf_zeropoint_cuts(P, pixscale,
     cuts = [
         ('not_grz',   np.array([f.strip() not in keys for f in P.filter])),
         ('ccdnmatch', P.ccdnphotom < 20),
-        ('zpt_small', np.array([ccdzpt < zpt_cut_lo.get(f.strip(),0) for f,ccdzpt in zip(P.filter, ccdzpt)])),
-        ('zpt_large', np.array([ccdzpt > zpt_cut_hi.get(f.strip(),0) for f,ccdzpt in zip(P.filter, ccdzpt)])),
+        ('zpt_small', np.array([zpt < zpt_cut_lo.get(f.strip(),0) for f,zpt in zip(P.filter, ccdzpt)])),
+        ('zpt_large', np.array([zpt > zpt_cut_hi.get(f.strip(),0) for f,zpt in zip(P.filter, ccdzpt)])),
         ('phrms',     P.ccdphrms > 0.2),
         ('exptime', P.exptime < 30),
         ('seeing_bad', np.logical_or(seeing < 0, seeing > 3.0)),
@@ -295,6 +293,7 @@ def read_bad_expid(fn='bad_expid.txt'):
 if __name__ == '__main__':
     import sys
     from pkg_resources import resource_filename
+    import pylab as plt
 
     # MzLS, BASS DR8b updates
     T = fits_table('/global/project/projectdirs/cosmo/work/legacysurvey/dr8b/runbrick-90prime-mosaic/survey-ccds-dr8b-90prime-mosaic-nocuts.kd.fits')
