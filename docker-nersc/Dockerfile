@@ -104,7 +104,6 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && git checkout speedup \
     && make \
     && make ceres \
     && make install INSTALL_DIR=/usr/local \
@@ -180,26 +179,14 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> /root/.bashrc
 RUN mkdir /root/.qdo && echo "[qdo]" > /root/.qdo/qdorc
 RUN python -c "import astropy"
 
-# yuck
-#RUN wget https://raw.githubusercontent.com/dstndstn/astrometry.net/master/util/EXIF.py \
-#    && mv EXIF.py /usr/local/lib/python/astrometry/util/
-
 RUN    python    -m compileall /src/unwise_psf/py/unwise_psf.py \
     && python -O -m compileall /src/unwise_psf/py/unwise_psf.py
-
-RUN wget https://raw.githubusercontent.com/dstndstn/tractor/speedup/tractor/engine.py \
-    && mv engine.py /usr/local/lib/python/tractor/
-
-RUN cd /src/legacypipe/py && git pull && git checkout speedup
-
-RUN    python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
-    && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
 RUN python -O -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages /usr/local/lib/python /usr/local/lib/python3.5/site-packages /usr/local/lib/python3.5/dist-packages && \
     python    -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages /usr/local/lib/python /usr/local/lib/python3.5/site-packages /usr/local/lib/python3.5/dist-packages
     
-RUN wget https://raw.githubusercontent.com/dstndstn/tractor/speedup/tractor/engine.py \
-    && mv engine.py /usr/local/lib/python/tractor/ \
-    && python    -m compileall /usr/local/lib/python/tractor/engine.py \
-    && python -O -m compileall /usr/local/lib/python/tractor/engine.py
-    
+RUN cd /src/legacypipe/py && git pull && git describe
+
+RUN    python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
+    && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
+
