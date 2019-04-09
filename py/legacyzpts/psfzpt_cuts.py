@@ -2,7 +2,6 @@ from __future__ import print_function
 import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table, merge_tables
-from astrometry.util.plotutils import PlotSequence
 from collections import Counter
 
 def psf_cuts_to_string(ccd_cuts, join=', '):
