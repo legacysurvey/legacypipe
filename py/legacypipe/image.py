@@ -765,27 +765,68 @@ class LegacySurveyImage(object):
     def remap_dq_cp_codes(self, dq, header):
         return remap_dq_cp_codes(dq)
 
-    def read_invvar(self, clip=True, clipThresh=0.1, dq=None, **kwargs):
+    def read_invvar(self, clip=True, clipThresh=0.1, dq=None, slice=None,
+                    **kwargs):
         '''
         Reads the inverse-variance (weight) map image.
         '''
         debug('Reading weight map image', self.wtfn, 'ext', self.hdu)
-        invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
+        invvar = self._read_fits(self.wtfn, self.hdu, slice=slice, **kwargs)
         if dq is not None:
             invvar[dq != 0] = 0.
 
         if clip:
-            # Additionally clamp near-zero (incl negative!) weight to zero,
-            # which arise due to fpack.
-            if clipThresh > 0.:
-                thresh = clipThresh * np.median(invvar[invvar > 0])
-            else:
-                thresh = 0.
-            invvar[invvar < thresh] = 0
+
+            fixed = False
+            try:
+                fixed = self.fix_weight_quantization(invvar, self.wtfn, self.hdu, slice)
+            except:
+                import traceback
+                traceback.print_exc()
+
+            if not fixed:
+                # Clamp near-zero (incl negative!) weight to zero,
+                # which arise due to fpack.
+                if clipThresh > 0.:
+                    thresh = clipThresh * np.median(invvar[invvar > 0])
+                else:
+                    thresh = 0.
+                invvar[invvar < thresh] = 0
 
         assert(np.all(invvar >= 0.))
         assert(np.all(np.isfinite(invvar)))
         return invvar
+
+    def fix_weight_quantization(self, wt, weightfn, ext, slc):
+        # Use astropy.io.fits to open it, because it provides access to the compressed data
+        # -- the underlying BINTABLE with the ZSCALE and ZZERO keywords we need.
+        from astropy.io import fits as fits_astropy
+        #hdu = fits_astropy.open(weightfn, disable_image_compression=True)[ext]
+        #hdr = hdu.header
+        hdu = fits_astropy.open(weightfn)[ext]
+        hdu = hdu.compressed_data
+        hdr = hdu._header
+        print('Header:', hdr)
+        tilew = hdr['ZTILE1']
+        tileh = hdr['ZTILE2']
+        imagew = hdr['ZNAXIS1']
+        # This function can only handle non-tiled (row-by-row compressed) files.
+        if tilew != imagew or tileh != 1:
+            raise ValueError('fix_weight_quantization: file is not row-by-row compressed: tile size %i x %i.' % (tilew, tileh))
+        table = hdu.data
+        zscale = table.field('ZSCALE')
+        zzero  = table.field('ZZERO' )
+        if not np.all(zzero == 0.0):
+            raise ValueError('fix_weight_quantization: ZZERO is not all zero: [%.g, %.g]!' % (np.min(zzero), np.max(zzero)))
+        if slc is not None:
+            yslice,xscale = slc
+            zscale = zscale[yslice]
+        H,W = wt.shape
+        if len(zscale) != H:
+            raise ValueError('fix_weight_quantization: sliced zscale size does not match weight array: %i vs %i' % (len(zscale), H))
+        print('Zeroing out', np.sum(wt <= zscale[:,np.newaxis]*0.5), 'weight-map pixels below quantization error')
+        wt[wt <= zscale[:,np.newaxis]*0.5] = 0.
+        return False
 
     def get_tractor_wcs(self, wcs, x0, y0, tai=None,
                         primhdr=None, imghdr=None):
