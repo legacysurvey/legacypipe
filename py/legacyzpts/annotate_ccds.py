@@ -71,7 +71,7 @@ def annotate(ccds, survey, mp=None, mzls=False, bass=False, normalizePsf=True,
 
     anns = mp.map(annotate_one_ccd, [
         (ccd, survey, normalizePsf, carryOn) for ccd in ccds])
-    for iccd,(ccd,ann) in enumerate(zip(ccds, anns)):
+    for iccd,ann in enumerate(anns):
         tileid = ann.pop('tileid', -1)
         if tileid > -1:
             tile = tiles[tileid_to_index[tileid]]
@@ -83,7 +83,7 @@ def annotate(ccds, survey, mp=None, mzls=False, bass=False, normalizePsf=True,
 
         for k,v in ann.items():
             ccds.get(k)[iccd] = v
-    
+
     sfd = tractor.sfd.SFDMap()
     allbands = 'ugrizY'
     filts = ['%s %s' % ('DES', f) for f in allbands]
@@ -187,7 +187,6 @@ def annotate_one_ccd(X):
     # parse 'DECaLS_15150_r' to get tile number
     obj = ccd.object.strip()
     words = obj.split('_')
-    tile = None
     if len(words) == 3 and words[0] in ('DECaLS', 'MzLS', 'MOSAIC'):
         try:
             tileid = int(words[1])
