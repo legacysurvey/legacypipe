@@ -31,12 +31,15 @@ base class is pretty specific.
 # 16  -- single exposure cosmic ray   InstCal/Resampled
 # 64  -- bleed trail                  InstCal/Resampled
 # 128 -- multi-exposure transient     InstCal/Resampled
-CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
+CP_DQ_BITS = dict(badpix=1,
+                  satur=2,
+                  interp=4,
+                  cr=16,
+                  bleed=64,
                   trans=128,
                   edge = 256,
                   edge2 = 512,
-                  ## masked by stage_mask_junk
-                  longthin = 1024,
+                  # Added by our stage_mask_junk outlier rejection
                   outlier = 2048,
                   )
 
@@ -129,6 +132,7 @@ class LegacySurveyImage(object):
 
         self.hdu     = ccd.image_hdu
         self.expnum  = ccd.expnum
+        self.image_filename = ccd.image_filename.strip()
         self.ccdname = ccd.ccdname.strip()
         self.band    = ccd.filter.strip()
         self.exptime = ccd.exptime

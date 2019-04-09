@@ -64,7 +64,8 @@ def tim_plots(tims, bands, ps):
         plt.suptitle(tim.name)
         ps.savefig()
 
-        if False and tim.dq is not None:
+        if True and tim.dq is not None:
+            from legacypipe.image import CP_DQ_BITS
             plt.clf()
             bitmap = dict([(v,k) for k,v in CP_DQ_BITS.items()])
             k = 1
@@ -72,16 +73,16 @@ def tim_plots(tims, bands, ps):
                 bitval = 1 << i
                 if not bitval in bitmap:
                     continue
+                # only 9 bits are actually used
                 plt.subplot(3,3,k)
                 k+=1
                 plt.imshow((tim.dq & bitval) > 0,
                            vmin=0, vmax=1.5, cmap='hot')
                 plt.title(bitmap[bitval])
-            plt.suptitle('Mask planes: %s' % tim.name)
+            plt.suptitle('Mask planes: %s (%s %s)' % (tim.name, tim.imobj.image_filename, tim.imobj.ccdname))
             ps.savefig()
 
 def _psf_check_plots(tims):
-    # HACK -- check PSF models
     plt.figure(num=2, figsize=(7,4.08))
     for im,tim in zip(ims,tims):
         print()
