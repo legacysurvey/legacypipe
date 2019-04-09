@@ -229,12 +229,12 @@ def create_survey_table(T, surveyfn, camera=None, bad_expid=None):
     writeto_via_temp(surveyfn, T)
     print('Wrote %s' % surveyfn)
 
-def create_annotated_table(leg_fn, ann_fn, camera, survey):
+def create_annotated_table(leg_fn, ann_fn, camera, survey, mp):
     from legacyzpts.annotate_ccds import annotate, init_annotations
     T = fits_table(leg_fn)
     T = survey.cleanup_ccds_table(T)
     init_annotations(T)
-    annotate(T, survey, mzls=(camera == 'mosaic'), bass=(camera == '90prime'),
+    annotate(T, survey, mp, mzls=(camera == 'mosaic'), bass=(camera == '90prime'),
              normalizePsf=True, carryOn=True)
     writeto_via_temp(ann_fn, T)
     print('Wrote %s' % ann_fn)
@@ -1156,6 +1156,9 @@ class Measurer(object):
     def tractor_fit_sources(self, ref_ra, ref_dec, ref_flux, img, ierr,
                             psf, normalize_psf=True):
         import tractor
+        #from tractor.patch import ModelMask
+        from tractor import PixelizedPSF
+        from tractor.brightness import LinearPhotoCal
 
         plots = False
         #plot_this = np.hypot(x - 118, y - 1276) < 5
@@ -1199,11 +1202,22 @@ class Measurer(object):
             subimg = img[ylo:yhi+1, xlo:xhi+1]
             # FIXME -- check that ierr is correct
             subie = ierr[ylo:yhi+1, xlo:xhi+1]
-            subpsf = psf.constantPsfAt(x, y)
-            psfsum = np.sum(subpsf.img)
+
+            if False:
+                subpsf = psf.constantPsfAt(x, y)
+                psfsum = np.sum(subpsf.img)
+                if normalize_psf:
+                    # print('Normalizing PsfEx model with sum:', s)
+                    subpsf.img /= psfsum
+
+            psfimg = psf.getImage(x, y)
+            ph,pw = psf.img.shape
+            psfsum = np.sum(psfimg)
             if normalize_psf:
-                # print('Normalizing PsfEx model with sum:', s)
-                subpsf.img /= psfsum
+                psfimg /= psfsum
+            sz = R + 5
+            psfimg = psfimg[ph//2-sz:ph//2+sz+1, pw//2-sz:pw//2+sz+1]
+            subpsf = PixelizedPSF(psfimg)
 
             if np.all(subie == 0):
                 #print('Inverse-variance map is all zero')
@@ -1220,14 +1234,22 @@ class Measurer(object):
             src = tractor.PointSource(tractor.PixPos(x0, y0),
                                       tractor.Flux(flux0))
             tr = tractor.Tractor([tim], [src])
+
+            #sh,sw = tim.shape
+            #mm = [dict(src=ModelMask(0, 0, sw, sh))]
+            
             tr.freezeParam('images')
-            optargs = dict(priors=False, shared_params=False)
+            optargs = dict(priors=False, shared_params=False,
+                           alphas=[0.1, 0.3, 1.0])
+
             # The initial flux estimate doesn't seem to work too well,
-            # so just for plotting's sake, fit flux first
+            # so quickly fit flux first
             src.freezeParam('pos')
-            tr.optimize(**optargs)
+            pc = tim.photocal
+            tim.photocal = LinearPhotoCal(1.)
+            tr.optimize_forced_photometry()
+            tim.photocal = pc
             src.thawParam('pos')
-            #print('Optimizing position of Gaia star', istar)
 
             if plots and plot_this:
                 import pylab as plt
@@ -1868,16 +1890,11 @@ def get_extlist(camera,fn,debug=False,choose_ccd=None):
     return extlist
    
  
-def _measure_image(args):
-    '''Utility function to wrap measure_image function for multiprocessing map.''' 
-    return measure_image(*args)
-
-def measure_image(img_fn, image_dir='images', run_calibs_only=False, just_measure=False,
-                  survey=None, threads=None, psfex=True, **measureargs):
+def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False, just_measure=False,
+                  survey=None, psfex=True, **measureargs):
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
     the FITS extensions for a given set of images.
     '''
-    from astrometry.util.multiproc import multiproc
     t0 = Time()
 
     quiet = measureargs.get('quiet', False)
@@ -1922,8 +1939,6 @@ def measure_image(img_fn, image_dir='images', run_calibs_only=False, just_measur
                      pixscale = measure.pixscale,
                      primhdr = measure.primhdr)
 
-    mp = multiproc(nthreads=(threads or 1))
-    
     all_ccds = []
     all_stars_photom = []
     all_stars_astrom = []
@@ -2106,14 +2121,13 @@ def writeto_via_temp(outfn, obj, func_write=False, **kwargs):
         obj.writeto(tempfn, **kwargs)
     os.rename(tempfn, outfn)
 
-def runit(imgfn, starfn_photom, surveyfn, annfn, bad_expid=None,
+def runit(imgfn, starfn_photom, surveyfn, annfn, mp, bad_expid=None,
           survey=None, run_calibs_only=False, **measureargs):
     '''Generate a legacypipe-compatible (survey) CCDs file for a given image.
     '''
-
     t0 = Time()
 
-    results = measure_image(imgfn, survey=survey, run_calibs_only=run_calibs_only, **measureargs)
+    results = measure_image(imgfn, mp, survey=survey, run_calibs_only=run_calibs_only, **measureargs)
     if run_calibs_only:
         return
 
@@ -2190,7 +2204,7 @@ def runit(imgfn, starfn_photom, surveyfn, annfn, bad_expid=None,
     create_survey_table(accds, surveyfn, camera=measureargs['camera'],
                         bad_expid=bad_expid)
     # survey --> annotated
-    create_annotated_table(surveyfn, annfn, measureargs['camera'], survey)
+    create_annotated_table(surveyfn, annfn, measureargs['camera'], survey, mp)
 
     t0 = ptime('write-results-to-fits',t0)
     
@@ -2258,6 +2272,10 @@ def main(image_list=None,args=None):
 
     quiet = measureargs.get('quiet', False)
 
+    from astrometry.util.multiproc import multiproc
+    threads = measureargs.pop('threads')
+    mp = multiproc(nthreads=(threads or 1))
+    
     import logging
     #if quiet:
     lvl = logging.INFO
@@ -2307,7 +2325,7 @@ def main(image_list=None,args=None):
         # Check if the outputs are done and have the correct data model.
         F = outputFns(imgfn, outdir, camera, image_dir=image_dir, debug=measureargs['debug'])
 
-        measure = measure_image(F.imgfn, just_measure=True, **measureargs)
+        measure = measure_image(F.imgfn, None, just_measure=True, **measureargs)
         psffn = measure.get_psfex_merged_filename()
         skyfn = measure.get_splinesky_merged_filename()
 
@@ -2330,12 +2348,12 @@ def main(image_list=None,args=None):
 
         if legok and photok:
             # survey --> annotated
-            create_annotated_table(F.surveyfn, F.annfn, camera, survey)
+            create_annotated_table(F.surveyfn, F.annfn, camera, survey, mp)
             continue
 
         # Create the file
         t0 = ptime('before-run',t0)
-        runit(F.imgfn, F.starfn_photom, F.surveyfn, F.annfn, **measureargs)
+        runit(F.imgfn, F.starfn_photom, F.surveyfn, F.annfn, mp, **measureargs)
         t0 = ptime('after-run',t0)
     tnow = Time()
     print("TIMING:total %s" % (tnow-tbegin,))

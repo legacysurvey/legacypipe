@@ -1,9 +1,7 @@
 from __future__ import print_function
 import numpy as np
-import pylab as plt
 import fitsio
 from astrometry.util.fits import fits_table, merge_tables
-from astrometry.util.plotutils import PlotSequence
 from collections import Counter
 
 def psf_cuts_to_string(ccd_cuts, join=', '):
@@ -295,6 +293,7 @@ def read_bad_expid(fn='bad_expid.txt'):
 if __name__ == '__main__':
     import sys
     from pkg_resources import resource_filename
+    import pylab as plt
 
     # MzLS, BASS DR8b updates
     T = fits_table('/global/project/projectdirs/cosmo/work/legacysurvey/dr8b/runbrick-90prime-mosaic/survey-ccds-dr8b-90prime-mosaic-nocuts.kd.fits')
