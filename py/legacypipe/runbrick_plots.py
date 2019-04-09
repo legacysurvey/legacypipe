@@ -82,6 +82,17 @@ def tim_plots(tims, bands, ps):
             plt.suptitle('Mask planes: %s (%s %s)' % (tim.name, tim.imobj.image_filename, tim.imobj.ccdname))
             ps.savefig()
 
+            im = tim.imobj
+            if decam_has_dq_codes(im.plver):
+                # Integer codes, not bitmask.  Re-read and plot.
+                dq = im.read_dq(slice=tim.slice)
+                plt.clf()
+                plt.imshow(dq, interpolation='nearest', origin='lower',
+                           cmap='tab10')
+                plt.colorbar()
+                plt.title('CP DQ codes: %s (%s %s)' % (tim.name, tim.imobj.image_filename, tim.imobj.ccdname))
+                ps.savefig()
+
 def _psf_check_plots(tims):
     plt.figure(num=2, figsize=(7,4.08))
     for im,tim in zip(ims,tims):
