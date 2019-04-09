@@ -924,7 +924,9 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     if refstars:
         assert(len(refstars) == len(refcat))
 
-        # Pull out reference sources flagged do-not-fit; we add them back in (much) later
+        # Pull out reference sources flagged do-not-fit; we add them back in (much) later.
+        # These are Gaia sources near the centers of LSLGA large galaxies, so we want to
+        # propagate the Gaia catalog information, but don't want to fit them.
         I, = np.nonzero(refstars.donotfit)
         if len(I):
             T_donotfit = refstars[I]
@@ -2000,6 +2002,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     assert(len(T) == len(cat))
     ra  = np.array([src.getPosition().ra  for src in cat])
     dec = np.array([src.getPosition().dec for src in cat])
+    # We tag the "T_donotfit" sources on the end to get aperture phot
+    # and other metrics.
     if T_donotfit:
         ra  = np.append(ra,  T_donotfit.ra)
         dec = np.append(dec, T_donotfit.dec)
@@ -2054,6 +2058,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     for c in cols:
         val = C.T.get(c)
         T.set(c, val[:Nyes])
+        # We appended T_donotfit; peel off those results
         if Nno:
             T_donotfit.set(c, val[Nyes:])
     assert(C.AP is not None)
@@ -2201,7 +2206,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         for i,(src,x,y,rr,dd) in enumerate(zip(cat, x1, y1, ra, dec)):
             from tractor import PointSource
             from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy
-
             ee = []
             ec = []
             cc = None
@@ -2803,6 +2807,7 @@ def stage_writecat(
             # print('WISE light-curve shapes:', WISE_T.w1_nanomaggies.shape)
 
     if T_donotfit:
+        T_donotfit.type = np.array(['DUP']*len(T_donotfit))
         T2 = merge_tables([T2, T_donotfit], columns='fillzero')
 
     # Brick pixel positions
