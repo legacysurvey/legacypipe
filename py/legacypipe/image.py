@@ -802,8 +802,9 @@ class LegacySurveyImage(object):
         return invvar
 
     def fix_weight_quantization(self, wt, weightfn, ext, slc):
-        # Use astropy.io.fits to open it, because it provides access to the compressed data
-        # -- the underlying BINTABLE with the ZSCALE and ZZERO keywords we need.
+        # Use astropy.io.fits to open it, because it provides access
+        # to the compressed data -- the underlying BINTABLE with the
+        # ZSCALE and ZZERO keywords we need.
         from astropy.io import fits as fits_astropy
         hdu = fits_astropy.open(weightfn, disable_image_compression=True)[ext]
         hdr = hdu.header
@@ -811,11 +812,11 @@ class LegacySurveyImage(object):
         #hdu = fits_astropy.open(weightfn)[ext]
         #table = hdu.compressed_data
         #hdr = hdu._header
-        #print('Header:', hdr)
         zquant = hdr['ZQUANTIZ']
         print('Fpack quantization method:', zquant)
-        # FIXME -- SUBTRACTIVE_DITHER_1 causes trouble
-        # but SUBTRACTIVE_DITHER_2, which treats zeros specially, should be okay...
+        # FIXME -- SUBTRACTIVE_DITHER_1 causes trouble but
+        # SUBTRACTIVE_DITHER_2, which treats zeros specially, should
+        # be okay...
         tilew = hdr['ZTILE1']
         tileh = hdr['ZTILE2']
         imagew = hdr['ZNAXIS1']
@@ -838,8 +839,6 @@ class LegacySurveyImage(object):
 
     def get_tractor_wcs(self, wcs, x0, y0, tai=None,
                         primhdr=None, imghdr=None):
-        #from tractor.basics import ConstantFitsWcs
-        #twcs = ConstantFitsWcs(wcs)
         from legacypipe.survey import LegacySurveyWcs
         twcs = LegacySurveyWcs(wcs, tai)
         if x0 or y0:
