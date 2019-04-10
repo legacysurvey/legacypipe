@@ -442,7 +442,7 @@ class OneBlob(object):
             srcwcs_x0y0 = (0, 0)
             srcblobmask = self.blobmask
 
-        if self.plots_per_source:
+        if False and self.plots_per_source:
             # This is a handy blob-coordinates plot of the data
             # going into the fit.
             plt.clf()
@@ -495,7 +495,8 @@ class OneBlob(object):
             blobs,_ = label(flipblobs)
             goodblob = blobs[iy,ix]
 
-            if self.plots_per_source:
+            if False and self.plots_per_source:
+                # This plot is about the symmetric-blob definitions when fitting sources.
                 from legacypipe.detection import plot_boundary_map
                 plt.clf()
                 for i,(band,detmap,detiv) in enumerate(zip(self.bands, detmaps, detivs)):
@@ -512,13 +513,11 @@ class OneBlob(object):
                 dimshow(flipblobs, vmin=0, vmax=1, cmap='gray')
                 ax = plt.axis()
                 plot_boundary_map(blobs == goodblob)
-
                 if binary_fill_holes(flipblobs)[iy,ix]:
                     fb = (blobs == goodblob)
                     di = binary_dilation(fb, iterations=4)
                     if np.any(di):
                         plot_boundary_map(di, rgb=(255,0,0))
-
                 plt.axis(ax)
                 plt.title('good blob')
                 self.ps.savefig()
@@ -692,6 +691,17 @@ class OneBlob(object):
         if is_galaxy:
             fit_background = False
 
+            known_galaxy_logrmax = 0.
+            if isinstance(src, (DevGalaxy,ExpGalaxy)):
+                print('Known galaxy.  Initial shape:', src.shape)
+                # MAGIC 2. = factor by which r_e is allowed to grow for an LSLGA galaxy.
+                known_galaxy_logrmax = np.log(src.shape.re * 2.)
+            elif isinstance(src, FixedCompositeGalaxy):
+                print('Known galaxy.  Initial shapes:', src.shapeExp, src.shapeDev)
+                known_galaxy_logrmax = np.log(max(src.shapeExp.re, src.shapeDev.re) * 2.)
+            else:
+                print('WARNING: unknown galaxy type:', src)
+
         debug('Source at blob coordinates', x0+ix, y0+iy, '- forcing pointsource?', force_pointsource, ', is large galaxy?', is_galaxy, ', fitting sky background:', fit_background)
 
         if fit_background:
@@ -790,15 +800,27 @@ class OneBlob(object):
             #print('Starting optimization for', name)
 
             # Set maximum galaxy model sizes
-            # FIXME -- could use different fractions for deV vs exp (or comp)
-            fblob = 0.8
-            sh,sw = srcwcs.shape
-            rmax = np.log(fblob * max(sh, sw) * self.pixscale)
-            if name in ['exp', 'rex', 'dev']:
-                newsrc.shape.setMaxLogRadius(rmax)
-            elif name in ['comp']:
-                newsrc.shapeExp.setMaxLogRadius(rmax)
-                newsrc.shapeDev.setMaxLogRadius(rmax)
+            if is_galaxy:
+                # This is a known large galaxy -- set max size based on initial size.
+                logrmax = known_galaxy_logrmax
+                if name in ('exp', 'rex', 'dev'):
+                    newsrc.shape.setMaxLogRadius(logrmax)
+                elif name == 'comp':
+                    newsrc.shapeExp.setMaxLogRadius(logrmax)
+                    newsrc.shapeDev.setMaxLogRadius(logrmax)
+            else:
+                # FIXME -- could use different fractions for deV vs exp (or comp)
+                fblob = 0.8
+                sh,sw = srcwcs.shape
+                logrmax = np.log(fblob * max(sh, sw) * self.pixscale)
+                if name in ['exp', 'rex', 'dev']:
+                    if logrmax < newsrc.shape.getMaxLogRadius():
+                        newsrc.shape.setMaxLogRadius(logrmax)
+                elif name in ['comp']:
+                    if logrmax < newsrc.shapeExp.getMaxLogRadius():
+                        newsrc.shapeExp.setMaxLogRadius(logrmax)
+                    if logrmax < newsrc.shapeDev.getMaxLogRadius():
+                        newsrc.shapeDev.setMaxLogRadius(logrmax)
 
             ### FIXME -- also set model rendering limits here??
 
@@ -840,11 +862,11 @@ class OneBlob(object):
             if hit_limit:
                 if name in ['exp', 'rex', 'dev']:
                     debug('Hit limit: r %.2f vs %.2f' %
-                          (newsrc.shape.re, np.exp(rmax)))
+                          (newsrc.shape.re, np.exp(logrmax)))
                 elif name in ['comp']:
                     debug('Hit limit: r %.2f, %.2f vs %.2f' %
                           (newsrc.shapeExp.re, newsrc.shapeDev.re,
-                           np.exp(rmax)))
+                           np.exp(logrmax)))
             #srctractor.printThawedParams()
 
             ok,ix,iy = srcwcs.radec2pixelxy(newsrc.getPosition().ra,

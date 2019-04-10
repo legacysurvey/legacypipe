@@ -31,12 +31,15 @@ base class is pretty specific.
 # 16  -- single exposure cosmic ray   InstCal/Resampled
 # 64  -- bleed trail                  InstCal/Resampled
 # 128 -- multi-exposure transient     InstCal/Resampled
-CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
+CP_DQ_BITS = dict(badpix=1,
+                  satur=2,
+                  interp=4,
+                  cr=16,
+                  bleed=64,
                   trans=128,
                   edge = 256,
                   edge2 = 512,
-                  ## masked by stage_mask_junk
-                  longthin = 1024,
+                  # Added by our stage_mask_junk outlier rejection
                   outlier = 2048,
                   )
 
@@ -129,6 +132,7 @@ class LegacySurveyImage(object):
 
         self.hdu     = ccd.image_hdu
         self.expnum  = ccd.expnum
+        self.image_filename = ccd.image_filename.strip()
         self.ccdname = ccd.ccdname.strip()
         self.band    = ccd.filter.strip()
         self.exptime = ccd.exptime
@@ -765,23 +769,33 @@ class LegacySurveyImage(object):
     def remap_dq_cp_codes(self, dq, header):
         return remap_dq_cp_codes(dq)
 
-    def read_invvar(self, clip=True, clipThresh=0.1, dq=None, **kwargs):
+    def read_invvar(self, clip=True, clipThresh=0.1, dq=None, slice=None,
+                    **kwargs):
         '''
         Reads the inverse-variance (weight) map image.
         '''
         debug('Reading weight map image', self.wtfn, 'ext', self.hdu)
-        invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
+        invvar = self._read_fits(self.wtfn, self.hdu, slice=slice, **kwargs)
         if dq is not None:
             invvar[dq != 0] = 0.
 
         if clip:
-            # Additionally clamp near-zero (incl negative!) weight to zero,
-            # which arise due to fpack.
-            if clipThresh > 0.:
-                thresh = clipThresh * np.median(invvar[invvar > 0])
-            else:
-                thresh = 0.
-            invvar[invvar < thresh] = 0
+
+            fixed = False
+            try:
+                fixed = fix_weight_quantization(invvar, self.wtfn, self.hdu, slice)
+            except:
+                import traceback
+                traceback.print_exc()
+
+            if not fixed:
+                # Clamp near-zero (incl negative!) weight to zero,
+                # which arise due to fpack.
+                if clipThresh > 0.:
+                    thresh = clipThresh * np.median(invvar[invvar > 0])
+                else:
+                    thresh = 0.
+                invvar[invvar < thresh] = 0
 
         assert(np.all(invvar >= 0.))
         assert(np.all(np.isfinite(invvar)))
@@ -789,8 +803,6 @@ class LegacySurveyImage(object):
 
     def get_tractor_wcs(self, wcs, x0, y0, tai=None,
                         primhdr=None, imghdr=None):
-        #from tractor.basics import ConstantFitsWcs
-        #twcs = ConstantFitsWcs(wcs)
         from legacypipe.survey import LegacySurveyWcs
         twcs = LegacySurveyWcs(wcs, tai)
         if x0 or y0:
@@ -1486,6 +1498,48 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
         pix = self.psfex.at(x, y)
         pix /= pix.sum()
         return PixelizedPSF(pix)
+
+def fix_weight_quantization(wt, weightfn, ext, slc):
+    '''
+    wt: weight-map array
+    weightfn: filename
+    ext: extension
+    slc: slice
+    '''
+    # Use astropy.io.fits to open it, because it provides access
+    # to the compressed data -- the underlying BINTABLE with the
+    # ZSCALE and ZZERO keywords we need.
+    from astropy.io import fits as fits_astropy
+    hdu = fits_astropy.open(weightfn, disable_image_compression=True)[ext]
+    hdr = hdu.header
+    table = hdu.data
+    #hdu = fits_astropy.open(weightfn)[ext]
+    #table = hdu.compressed_data
+    #hdr = hdu._header
+    zquant = hdr['ZQUANTIZ']
+    print('Fpack quantization method:', zquant)
+    # FIXME -- SUBTRACTIVE_DITHER_1 causes trouble but
+    # SUBTRACTIVE_DITHER_2, which treats zeros specially, should
+    # be okay...
+    tilew = hdr['ZTILE1']
+    tileh = hdr['ZTILE2']
+    imagew = hdr['ZNAXIS1']
+    # This function can only handle non-tiled (row-by-row compressed) files.
+    if tilew != imagew or tileh != 1:
+        raise ValueError('fix_weight_quantization: file is not row-by-row compressed: tile size %i x %i.' % (tilew, tileh))
+    zscale = table.field('ZSCALE')
+    zzero  = table.field('ZZERO' )
+    if not np.all(zzero == 0.0):
+        raise ValueError('fix_weight_quantization: ZZERO is not all zero: [%.g, %.g]!' % (np.min(zzero), np.max(zzero)))
+    if slc is not None:
+        yslice,_ = slc
+        zscale = zscale[yslice]
+    H,_ = wt.shape
+    if len(zscale) != H:
+        raise ValueError('fix_weight_quantization: sliced zscale size does not match weight array: %i vs %i' % (len(zscale), H))
+    print('Zeroing out', np.sum(wt <= zscale[:,np.newaxis]*0.5), 'weight-map pixels below quantization error (= median %.3g)' % (np.median(zscale)*0.5))
+    wt[wt <= zscale[:,np.newaxis]*0.5] = 0.
+    return True
 
 def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                             plprocid,
