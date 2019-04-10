@@ -783,7 +783,7 @@ class LegacySurveyImage(object):
 
             fixed = False
             try:
-                fixed = self.fix_weight_quantization(invvar, self.wtfn, self.hdu, slice)
+                fixed = fix_weight_quantization(invvar, self.wtfn, self.hdu, slice)
             except:
                 import traceback
                 traceback.print_exc()
@@ -800,42 +800,6 @@ class LegacySurveyImage(object):
         assert(np.all(invvar >= 0.))
         assert(np.all(np.isfinite(invvar)))
         return invvar
-
-    def fix_weight_quantization(self, wt, weightfn, ext, slc):
-        # Use astropy.io.fits to open it, because it provides access
-        # to the compressed data -- the underlying BINTABLE with the
-        # ZSCALE and ZZERO keywords we need.
-        from astropy.io import fits as fits_astropy
-        hdu = fits_astropy.open(weightfn, disable_image_compression=True)[ext]
-        hdr = hdu.header
-        table = hdu.data
-        #hdu = fits_astropy.open(weightfn)[ext]
-        #table = hdu.compressed_data
-        #hdr = hdu._header
-        zquant = hdr['ZQUANTIZ']
-        print('Fpack quantization method:', zquant)
-        # FIXME -- SUBTRACTIVE_DITHER_1 causes trouble but
-        # SUBTRACTIVE_DITHER_2, which treats zeros specially, should
-        # be okay...
-        tilew = hdr['ZTILE1']
-        tileh = hdr['ZTILE2']
-        imagew = hdr['ZNAXIS1']
-        # This function can only handle non-tiled (row-by-row compressed) files.
-        if tilew != imagew or tileh != 1:
-            raise ValueError('fix_weight_quantization: file is not row-by-row compressed: tile size %i x %i.' % (tilew, tileh))
-        zscale = table.field('ZSCALE')
-        zzero  = table.field('ZZERO' )
-        if not np.all(zzero == 0.0):
-            raise ValueError('fix_weight_quantization: ZZERO is not all zero: [%.g, %.g]!' % (np.min(zzero), np.max(zzero)))
-        if slc is not None:
-            yslice,xscale = slc
-            zscale = zscale[yslice]
-        H,W = wt.shape
-        if len(zscale) != H:
-            raise ValueError('fix_weight_quantization: sliced zscale size does not match weight array: %i vs %i' % (len(zscale), H))
-        print('Zeroing out', np.sum(wt <= zscale[:,np.newaxis]*0.5), 'weight-map pixels below quantization error (= median %.3g)' % (np.median(zscale)*0.5))
-        wt[wt <= zscale[:,np.newaxis]*0.5] = 0.
-        return True
 
     def get_tractor_wcs(self, wcs, x0, y0, tai=None,
                         primhdr=None, imghdr=None):
@@ -1534,6 +1498,48 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
         pix = self.psfex.at(x, y)
         pix /= pix.sum()
         return PixelizedPSF(pix)
+
+def fix_weight_quantization(wt, weightfn, ext, slc):
+    '''
+    wt: weight-map array
+    weightfn: filename
+    ext: extension
+    slc: slice
+    '''
+    # Use astropy.io.fits to open it, because it provides access
+    # to the compressed data -- the underlying BINTABLE with the
+    # ZSCALE and ZZERO keywords we need.
+    from astropy.io import fits as fits_astropy
+    hdu = fits_astropy.open(weightfn, disable_image_compression=True)[ext]
+    hdr = hdu.header
+    table = hdu.data
+    #hdu = fits_astropy.open(weightfn)[ext]
+    #table = hdu.compressed_data
+    #hdr = hdu._header
+    zquant = hdr['ZQUANTIZ']
+    print('Fpack quantization method:', zquant)
+    # FIXME -- SUBTRACTIVE_DITHER_1 causes trouble but
+    # SUBTRACTIVE_DITHER_2, which treats zeros specially, should
+    # be okay...
+    tilew = hdr['ZTILE1']
+    tileh = hdr['ZTILE2']
+    imagew = hdr['ZNAXIS1']
+    # This function can only handle non-tiled (row-by-row compressed) files.
+    if tilew != imagew or tileh != 1:
+        raise ValueError('fix_weight_quantization: file is not row-by-row compressed: tile size %i x %i.' % (tilew, tileh))
+    zscale = table.field('ZSCALE')
+    zzero  = table.field('ZZERO' )
+    if not np.all(zzero == 0.0):
+        raise ValueError('fix_weight_quantization: ZZERO is not all zero: [%.g, %.g]!' % (np.min(zzero), np.max(zzero)))
+    if slc is not None:
+        yslice,_ = slc
+        zscale = zscale[yslice]
+    H,_ = wt.shape
+    if len(zscale) != H:
+        raise ValueError('fix_weight_quantization: sliced zscale size does not match weight array: %i vs %i' % (len(zscale), H))
+    print('Zeroing out', np.sum(wt <= zscale[:,np.newaxis]*0.5), 'weight-map pixels below quantization error (= median %.3g)' % (np.median(zscale)*0.5))
+    wt[wt <= zscale[:,np.newaxis]*0.5] = 0.
+    return True
 
 def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                             plprocid,

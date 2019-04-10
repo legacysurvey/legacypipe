@@ -426,7 +426,8 @@ class Measurer(object):
 
             fixed = False
             try:
-                fixed = self.fix_weight_quantization(wt, fn, self.ext, self.slc)
+                from legacypipe.image import fix_weight_quantization
+                fixed = fix_weight_quantization(wt, fn, self.ext, self.slc)
             except:
                 import traceback
                 traceback.print_exc()
@@ -447,38 +448,6 @@ class Measurer(object):
         assert(np.all(np.isfinite(wt)))
 
         return wt
-
-    def fix_weight_quantization(self, wt, weightfn, ext, slc):
-        # Use astropy.io.fits to open it, because it provides access
-        # to the compressed data -- the underlying BINTABLE with the
-        # ZSCALE and ZZERO keywords we need.
-        hdu = fits_astropy.open(weightfn, disable_image_compression=True)[ext]
-        hdr = hdu.header
-        table = hdu.data
-        zquant = hdr['ZQUANTIZ']
-        print('Fpack quantization method:', zquant)
-        # FIXME -- SUBTRACTIVE_DITHER_1 causes trouble, but
-        # SUBTRACTIVE_DITHER_2, which treats zeros specially, should
-        # be okay...
-        tilew = hdr['ZTILE1']
-        tileh = hdr['ZTILE2']
-        imagew = hdr['ZNAXIS1']
-        # This function can only handle non-tiled (row-by-row compressed) files.
-        if tilew != imagew or tileh != 1:
-            raise ValueError('fix_weight_quantization: file is not row-by-row compressed: tile size %i x %i.' % (tilew, tileh))
-        zscale = table.field('ZSCALE')
-        zzero  = table.field('ZZERO' )
-        if not np.all(zzero == 0.0):
-            raise ValueError('fix_weight_quantization: ZZERO is not all zero: [%.g, %.g]!' % (np.min(zzero), np.max(zzero)))
-        if slc is not None:
-            yslice,xscale = slc
-            zscale = zscale[yslice]
-        H,W = wt.shape
-        if len(zscale) != H:
-            raise ValueError('fix_weight_quantization: sliced zscale size does not match weight array: %i vs %i' % (len(zscale), H))
-        print('Zeroing out', np.sum(wt <= zscale[:,np.newaxis]*0.5), 'weight-map pixels below quantization error (= median %.3g)' % (np.median(zscale)*0.5))
-        wt[wt <= zscale[:,np.newaxis]*0.5] = 0.
-        return True
 
     def read_image(self):
         '''Read the image and header; scale the image.'''
