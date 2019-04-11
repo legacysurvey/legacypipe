@@ -121,9 +121,6 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         if g.donotfit or g.iscluster:
             refcat.append(None)
 
-        elif g.isbright or g.ismedium:
-            refcat.append(GaiaSource.from_catalog(g, bands))
-            
         elif g.islargegalaxy:
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
             assert(np.all(np.isfinite(list(fluxes.values()))))
@@ -136,8 +133,11 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                             NanoMaggies(order=bands, **fluxes),
                             LegacyEllipseWithPriors(logr, ee1, ee2))
             refcat.append(gal)
+
         else:
-            assert(False)
+            # Gaia star -- which we want to create a source for, regardless of
+            # whether it is marked medium | bright (or neither).
+            refcat.append(GaiaSource.from_catalog(g, bands))
 
     for src in refcat:
         if src:
