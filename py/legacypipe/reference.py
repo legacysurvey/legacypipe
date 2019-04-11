@@ -14,7 +14,7 @@ def debug(*args):
 def get_reference_sources(survey, targetwcs, pixscale, bands,
                           tycho_stars=True, gaia_stars=True, large_galaxies=True,
                           star_clusters=True):
-    
+
     from legacypipe.survey import GaiaSource
     from legacypipe.survey import LegacyEllipseWithPriors
     from tractor import NanoMaggies, RaDecPos
@@ -33,9 +33,8 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     
     refs = []
 
+    # Tycho-2 stars
     if tycho_stars:
-        #print('Enlarged target WCS from', targetwcs, 'to', marginwcs, 'for ref stars')
-        # Read Tycho-2 stars and use as saturated sources.
         tycho = read_tycho2(survey, marginwcs)
         if len(tycho):
             refs.append(tycho)
@@ -206,9 +205,21 @@ def read_tycho2(survey, targetwcs):
     tycho2fn = survey.find_file('tycho2')
     radius = 1.
     ra,dec = targetwcs.radec_center()
-    # fitscopy /data2/catalogs-fits/TYCHO2/tycho2.fits"[col tyc1;tyc2;tyc3;ra;dec;sigma_ra;sigma_dec;mean_ra;mean_dec;pm_ra;pm_dec;sigma_pm_ra;sigma_pm_dec;epoch_ra;epoch_dec;mag_bt;mag_vt;mag_hp]" /tmp/tycho2-astrom.fits
-    # startree -i /tmp/tycho2-astrom.fits -o ~/cosmo/work/legacysurvey/dr7/tycho2.kd.fits -P -k -n stars -T
-    # John added the "isgalaxy" flag 2018-05-10, from the Metz & Geffert (04) catalog.
+    # John added the "isgalaxy" flag 2018-05-10, from the Metz &
+    # Geffert (04) catalog.
+
+    # Eddie added the "zguess" column 2019-03-06, by matching with
+    # 2MASS and estimating z based on APASS.
+
+    # The "tycho2.kd.fits" file read here was produced by:
+    #
+    # fitscopy ~schlafly/legacysurvey/tycho-isgalaxyflag-2mass.fits"[col \
+    #   tyc1;tyc2;tyc3;ra;dec;sigma_ra;sigma_dec;mean_ra;mean_dec;pm_ra;pm_dec; \
+    #   sigma_pm_ra;sigma_pm_dec;epoch_ra;epoch_dec;mag_bt;mag_vt;mag_hp; \
+    #   isgalaxy;Jmag;Hmag;Kmag,zguess]" /tmp/tycho2-astrom.fits
+    # startree -P -k -n stars -T -i /tmp/tycho2-astrom.fits \
+    #  -o /global/project/projectdirs/cosmo/staging/tycho2/tycho2.kd.fits
+
     kd = tree_open(tycho2fn, 'stars')
     I = tree_search_radec(kd, ra, dec, radius)
     debug(len(I), 'Tycho-2 stars within', radius, 'deg of RA,Dec (%.3f, %.3f)' % (ra,dec))
@@ -239,23 +250,25 @@ def read_tycho2(survey, targetwcs):
         X = tycho.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
     tycho.mag = tycho.mag_vt
+    # Patch missing mag values...
     tycho.mag[tycho.mag == 0] = tycho.mag_hp[tycho.mag == 0]
+    tycho.mag[tycho.mag == 0] = tycho.mag_bt[tycho.mag == 0]
+    # Per discussion in issue #306 -- cut on mag < 13.  This drops only 13k/2.5M stars
+    tycho.cut(tycho.mag < 13.)
 
     # See note on gaia.radius above -- don't change the 0.262 to
     # targetwcs.pixel_scale()!
     tycho.radius = np.minimum(1800., 150. * 2.5**((11. - tycho.mag)/3.)) * 0.262/3600.
     
     for c in ['tyc1', 'tyc2', 'tyc3', 'mag_bt', 'mag_vt', 'mag_hp',
-              'mean_ra', 'mean_dec', #'epoch_ra', 'epoch_dec',
+              'mean_ra', 'mean_dec',
               'sigma_pm_ra', 'sigma_pm_dec', 'sigma_ra', 'sigma_dec']:
         tycho.delete_column(c)
-
     # add Gaia-style columns
     # No parallaxes in Tycho-2
     tycho.parallax = np.zeros(len(tycho), np.float32)
-    # Arrgh, Tycho-2 has separate epoch_ra and epoch_dec.
+    # Tycho-2 has separate epoch_ra and epoch_dec.
     # Move source to the mean epoch.
-    # FIXME -- check this!!
     tycho.ref_epoch = (tycho.epoch_ra + tycho.epoch_dec) / 2.
     cosdec = np.cos(np.deg2rad(tycho.dec))
     tycho.ra  += (tycho.ref_epoch - tycho.epoch_ra ) * tycho.pmra  / 3600. / cosdec
@@ -271,7 +284,6 @@ def read_tycho2(survey, targetwcs):
     tycho.delete_column('epoch_dec')
     tycho.isbright = np.ones(len(tycho), bool)
     tycho.ismedium = np.ones(len(tycho), bool)
-
     return tycho
 
 def read_large_galaxies(survey, targetwcs):
