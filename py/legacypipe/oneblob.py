@@ -716,14 +716,12 @@ class OneBlob(object):
         trymodels = [('ptsrc', ptsrc)]
 
         if oldmodel == 'ptsrc':
-            forced = False
-            if isinstance(src, GaiaSource):
-                debug('Gaia source', src)
-                if src.isForcedPointSource():
-                    forced = True
-            if forced:
+            if getattr(src, 'forced_point_source', False):
+                # This is set in the GaiaSource contructor from
+                # gaia.pointsource
                 debug('Gaia source is forced to be a point source -- not trying other models')
             elif force_pointsource:
+                # Geometric mask
                 debug('Not computing galaxy models due to objects in blob')
             else:
                 trymodels.append((simname, simple))
@@ -731,6 +729,7 @@ class OneBlob(object):
                 # The 'gals' model is just a marker
                 trymodels.append(('gals', None))
         else:
+            # If the source was initialized as a galaxy, try all models
             trymodels.extend([(simname, simple),
                               ('dev', dev), ('exp', exp), ('comp', comp)])
 
