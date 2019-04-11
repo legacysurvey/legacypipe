@@ -43,11 +43,6 @@ def one_blob(X):
     if len(timargs) == 0:
         return None
 
-    for src in srcs:
-        from tractor import Galaxy
-        if isinstance(src, Galaxy):
-            debug('Source:', src)
-
     if plots:
         plt.figure(2, figsize=(3,3))
         plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
@@ -72,13 +67,10 @@ def one_blob(X):
     safe_x0 = np.clip(np.round(x0-1).astype(int), 0,blobw-1)
     safe_y0 = np.clip(np.round(y0-1).astype(int), 0,blobh-1)
     B.started_in_blob = blobmask[safe_y0, safe_x0]
-
     # This uses 'initial' pixel positions, because that's what determines
     # the fitting behaviors.
     B.brightblob = refmap[safe_y0, safe_x0].astype(np.int16)
-
     B.cpu_source = np.zeros(len(B), np.float32)
-
     B.blob_width  = np.zeros(len(B), np.int16) + blobw
     B.blob_height = np.zeros(len(B), np.int16) + blobh
     B.blob_npix   = np.zeros(len(B), np.int32) + np.sum(blobmask)
@@ -87,7 +79,6 @@ def one_blob(X):
     B.blob_symm_height  = np.zeros(len(B), np.int16)
     B.blob_symm_npix    = np.zeros(len(B), np.int32)
     B.blob_symm_nimages = np.zeros(len(B), np.int16)
-
     B.hit_limit = np.zeros(len(B), bool)
 
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
@@ -105,10 +96,9 @@ def one_blob(X):
     assert(len(B.finished_in_blob) == len(B))
     assert(len(B.finished_in_blob) == len(B.started_in_blob))
 
-    B.cpu_blob = np.zeros(len(B), np.float32)
+    B.cpu_blob = np.empty(len(B), np.float32)
     t1 = time.clock()
     B.cpu_blob[:] = t1 - t0
-
     return B
 
 class OneBlob(object):
@@ -122,14 +112,11 @@ class OneBlob(object):
         self.srcs = srcs
         self.bands = bands
         self.plots = plots
-
         self.refmap = refmap
-
         self.plots_per_source = plots
         self.plots_per_model = False
         # blob-1-data.png, etc
         self.plots_single = False
-
         self.ps = ps
         self.simul_opt = simul_opt
         self.use_ceres = use_ceres
@@ -202,18 +189,15 @@ class OneBlob(object):
 
         # Optimize all at once?
         if len(cat) > 1 and len(cat) <= 10:
-            #tfit = Time()
             cat.thawAllParams()
             tr.optimize_loop(**self.optargs)
 
         if self.plots:
             self._plots(tr, 'After source fitting')
-
             plt.clf()
             self._plot_coadd(self.tims, self.blobwcs, model=tr)
             plt.title('After source fitting')
             self.ps.savefig()
-
             if self.plots_single:
                 plt.figure(2)
                 mods = list(tr.getModelImages())
@@ -228,7 +212,6 @@ class OneBlob(object):
                 dimshow(get_rgb(coresids, self.bands), ticks=False)
                 plt.savefig('blob-%s-initsub.png' % (self.name))
                 plt.figure(1)
-
 
         debug('Blob', self.name, 'finished initial fitting:', Time()-tlast)
         tlast = Time()
@@ -298,18 +281,10 @@ class OneBlob(object):
             nsrcparams = src.numberOfParams()
             _convert_ellipses(src)
             assert(src.numberOfParams() == nsrcparams)
-            # print('Computing variances for source', src, ': N params:', nsrcparams)
-            # print('Source params:')
-            # src.printThawedParams()
-            # For Gaia sources, temporarily convert the GaiaPosition to a
-            # RaDecPos in order to compute the invvar it would have in our
-            # imaging?  Or just plug in the Gaia-measured uncertainties??
-            # (going to implement the latter)
             # Compute inverse-variances
             allderivs = tr.getDerivs()
             ivars = _compute_invvars(allderivs)
             assert(len(ivars) == nsrcparams)
-            #print('Inverse-variances:', ivars)
             B.srcinvvars[isub] = ivars
             assert(len(B.srcinvvars[isub]) == cat[isub].numberOfParams())
             cat.freezeParam(isub)
@@ -317,7 +292,6 @@ class OneBlob(object):
         # Check for sources with zero inverse-variance -- I think these
         # can be generated during the "Simultaneous re-opt" stage above --
         # sources can get scattered outside the blob.
-
         I, = np.nonzero([np.sum(iv) > 0 for iv in B.srcinvvars])
         if len(I) < len(B):
             debug('Keeping', len(I), 'of', len(B),'sources with non-zero ivar')
@@ -1939,7 +1913,7 @@ def get_inblob_map(blobwcs, refs):
         if not np.any(isit):
             debug('None marked', col)
             continue
-        I = np.flatnonzero(isit)
+        I, = np.nonzero(isit)
         debug(len(I), 'with', col, 'set')
         if len(I) == 0:
             continue

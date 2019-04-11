@@ -963,48 +963,42 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         debug(len(Igaia), 'stars for halo fitting')
     if len(Igaia):
         from legacypipe.halos import fit_halos
-        debug('Subtracting stellar halos...')
         # FIXME -- again...?
         coimgs,cons = quick_coadds(tims, bands, targetwcs)
-
-        fluxes,haloimgs = fit_halos(coimgs, cons, H, W, targetwcs,
-                                    pixscale, bands, gaia[Igaia],
-                                    plots, ps)
+        fluxes,haloimgs = fit_halos(coimgs, cons, H, W, targetwcs, pixscale, bands,
+                                    gaia[Igaia], plots, ps)
         init_fluxes = [(f and f[0] or None) for f in fluxes]
 
         fluxes2,haloimgs2 = fit_halos([co-halo for co,halo in zip(coimgs,haloimgs)],
-                                       cons, H, W, targetwcs,
-                                       pixscale, bands, gaia[Igaia],
-                                       plots, ps, init_fluxes=init_fluxes)
+                                       cons, H, W, targetwcs, pixscale, bands,
+                                       gaia[Igaia], plots, ps,
+                                       init_fluxes=init_fluxes)
 
         for iband,b in enumerate(bands):
             haloflux = np.zeros(len(refstars))
             haloflux[Igaia] = np.array([f and f[0][iband] or 0. for f in fluxes2])
             refstars.set('star_halo_flux_%s' % b, haloflux)
 
-        ## FIXME -- write a map of where we have subtracted the halo?  (splice with PSF model??)
+        ## FIXME -- write a map of where we have subtracted the halo?
+        ## (splice with PSF model??)
 
         if plots:
             plt.clf()
             dimshow(get_rgb(coimgs, bands, **rgbkwargs))
             plt.title('data')
             ps.savefig()
-
             plt.clf()
             dimshow(get_rgb(haloimgs, bands, **rgbkwargs))
             plt.title('fit profiles')
             ps.savefig()
-
             plt.clf()
             dimshow(get_rgb([c-h for c,h in zip(coimgs,haloimgs)], bands, **rgbkwargs))
             plt.title('data - fit profiles')
             ps.savefig()
-
             plt.clf()
             dimshow(get_rgb(haloimgs2, bands, **rgbkwargs))
             plt.title('second-round fit profiles')
             ps.savefig()
-
             plt.clf()
             dimshow(get_rgb([c-h2 for c,h2 in zip(coimgs,haloimgs2)], bands, **rgbkwargs))
             plt.title('second-round data - fit profiles')
@@ -1029,8 +1023,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     # Expand the mask around saturated pixels to avoid generating
     # peaks at the edge of the mask.
-    saturated_pix = [binary_dilation(satmap > 0, iterations=4)
-                     for satmap in satmaps]
+    saturated_pix = [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps]
 
     # Saturated blobs -- create a source for each, except for those
     # that already have a Tycho-2 or Gaia star
@@ -1040,7 +1033,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         # Build a map from old "satblobs" to new; identity to start
         remap = np.arange(nsat+1)
         # Drop blobs that contain a reference star
-        zeroout = satblobs[refstars.iby[refstars.in_bounds], refstars.ibx[refstars.in_bounds]]
+        zeroout = satblobs[refstars.iby[refstars.in_bounds],
+                           refstars.ibx[refstars.in_bounds]]
         remap[zeroout] = 0
         # Renumber them to be contiguous
         I = np.flatnonzero(remap)
@@ -1133,12 +1127,11 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
         if gaia_stars and len(gaia):
             ok,ix,iy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
-            for x,y,g in zip(ix,iy,gaia.G):
+            for x,y,g in zip(ix,iy,gaia.phot_g_mean_mag):
                 plt.text(x, y, '%.1f' % g, color='k',
                          bbox=dict(facecolor='w', alpha=0.5))
             plt.axis(ax)
             ps.savefig()
-
     del satmap
 
     # SED-matched detections
@@ -1277,11 +1270,8 @@ def stage_fitblobs(T=None,
     '''
     from tractor import Catalog
 
-    tlast = Time()
-    for tim in tims:
-        assert(np.all(np.isfinite(tim.getInvError())))
-
     record_event and record_event('stage_fitblobs: starting')
+    tlast = Time()
 
     # How far down to render model profiles
     minsigma = 0.1
@@ -1343,7 +1333,6 @@ def stage_fitblobs(T=None,
         plt.title('Blobs')
         ps.savefig()
 
-
     T.orig_ra  = T.ra.copy()
     T.orig_dec = T.dec.copy()
 
@@ -1400,12 +1389,10 @@ def stage_fitblobs(T=None,
         blobmap[keepblobs + 1] = np.arange(len(keepblobs))
         # apply the map!
         blobs = blobmap[blobs + 1]
-
         # 'blobslices' and 'blobsrcs' are lists where the index corresponds to the
         # value in the 'blobs' map.
         blobslices = [blobslices[i] for i in keepblobs]
         blobsrcs   = [blobsrcs  [i] for i in keepblobs]
-
         # one more place where blob numbers are recorded...
         T.blob = blobs[T.iby, T.ibx]
 
