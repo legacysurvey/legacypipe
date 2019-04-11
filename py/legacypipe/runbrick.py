@@ -1006,7 +1006,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             ps.savefig()
 
     if refstars or T_donotfit or T_clusters:
-        allrefs = merge_tables([t for t in [refstars, T_donotfit, T_clusters] if t])
+        allrefs = merge_tables([t for t in [refstars, T_donotfit, T_clusters] if t],
+                               columns='fillzero')
         with survey.write_output('ref-sources', brick=brickname) as out:
             allrefs.writeto(None, fits_object=out.fits, primheader=version_header)
         del allrefs
@@ -1445,7 +1446,7 @@ def stage_fitblobs(T=None,
         from legacypipe.oneblob import get_inblob_map
         refs = refstars[refstars.donotfit == False]
         if T_clusters is not None:
-            refs = merge_tables([refs, T_clusters])
+            refs = merge_tables([refs, T_clusters], columns='fillzero')
         refmap = get_inblob_map(targetwcs, refs)
         del refs
     else:

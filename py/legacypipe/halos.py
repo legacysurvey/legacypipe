@@ -14,7 +14,7 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
     fitvalues = []
 
     for istar,g in enumerate(gaia):
-        print('Star w/ G=', g.G)
+        print('Star w/ G=', g.phot_g_mean_mag)
         ok,x,y = targetwcs.radec2pixelxy(g.ra, g.dec)
         x -= 1.
         y -= 1.
