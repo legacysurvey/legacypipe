@@ -914,23 +914,33 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tlast = Time()
 
     refstars, refcat = get_reference_sources(survey, targetwcs, pixscale, bands,
-                                             tycho_stars=tycho_stars, gaia_stars=gaia_stars,
+                                             tycho_stars=tycho_stars,
+                                             gaia_stars=gaia_stars,
                                              large_galaxies=large_galaxies,
                                              star_clusters=star_clusters)
     # "refstars" is a table
     # "refcat" is a list of tractor Sources
     # They are aligned
     T_donotfit = None
+    T_clusters = None
     if refstars:
         assert(len(refstars) == len(refcat))
-
-        # Pull out reference sources flagged do-not-fit; we add them back in (much) later.
-        # These are Gaia sources near the centers of LSLGA large galaxies, so we want to
-        # propagate the Gaia catalog information, but don't want to fit them.
+        # Pull out reference sources flagged do-not-fit; we add them
+        # back in (much) later.  These are Gaia sources near the
+        # centers of LSLGA large galaxies, so we want to propagate the
+        # Gaia catalog information, but don't want to fit them.
         I, = np.nonzero(refstars.donotfit)
         if len(I):
             T_donotfit = refstars[I]
             I, = np.nonzero(np.logical_not(refstars.donotfit))
+            refstars.cut(I)
+            refcat = [refcat[i] for i in I]
+            assert(len(refstars) == len(refcat))
+        # Pull out star clusters too.
+        I, = np.nonzero(refstars.iscluster)
+        if len(I):
+            T_clusters = refstars[I]
+            I, = np.nonzero(np.logical_not(refstars.iscluster))
             refstars.cut(I)
             refcat = [refcat[i] for i in I]
             assert(len(refstars) == len(refcat))
@@ -947,17 +957,10 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     Igaia = []
     if gaia_stars:
         gaia = refstars
-        Igaia = np.flatnonzero(np.logical_or(refstars.isbright, refstars.ismedium) *
-                               np.logical_not(refstars.iscluster) *
-                               (gaia.G < 15.))
-        Igaia = Igaia[np.argsort(gaia.G[Igaia])]
-        debug(len(Igaia), 'stars with G<15')
-
-        # gaia = refstars[np.logical_or(refstars.isbright, refstars.ismedium) *
-        #                 np.logical_not(refstars.iscluster)]
-        # if len(gaia):
-        #     Igaia = np.argsort(gaia.G)
-        #     Igaia = Igaia[gaia.G[Igaia] < 15.]
+        Igaia, = np.nonzero(np.logical_or(refstars.isbright, refstars.ismedium) *
+                            np.logical_not(refstars.iscluster))
+        Igaia = Igaia[np.argsort(gaia.phot_g_mean_mag[Igaia])]
+        debug(len(Igaia), 'stars for halo fitting')
     if len(Igaia):
         from legacypipe.halos import fit_halos
         debug('Subtracting stellar halos...')
@@ -1007,8 +1010,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             plt.title('second-round data - fit profiles')
             ps.savefig()
 
-    if refstars or T_donotfit:
-        allrefs = merge_tables([t for t in [refstars, T_donotfit] if t])
+    if refstars or T_donotfit or T_clusters:
+        allrefs = merge_tables([t for t in [refstars, T_donotfit, T_clusters] if t])
         with survey.write_output('ref-sources', brick=brickname) as out:
             allrefs.writeto(None, fits_object=out.fits, primheader=version_header)
         del allrefs
@@ -1235,12 +1238,13 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
             'ps', 'refstars', 'gaia_stars', 'saturated_pix',
-            'T_donotfit']
+            'T_donotfit', 'T_clusters']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
 
 def stage_fitblobs(T=None,
+                   T_clusters=None,
                    brickname=None,
                    brickid=None,
                    brick=None,
@@ -1451,8 +1455,11 @@ def stage_fitblobs(T=None,
 
     if refstars:
         from legacypipe.oneblob import get_inblob_map
-        refstars.radius_pix = np.ceil(refstars.radius * 3600. / targetwcs.pixel_scale()).astype(int)
-        refmap = get_inblob_map(targetwcs, refstars[refstars.donotfit == False])
+        refs = refstars[refstars.donotfit == False]
+        if T_clusters is not None:
+            refs = merge_tables([refs, T_clusters])
+        refmap = get_inblob_map(targetwcs, refs)
+        del refs
     else:
         HH, WW = targetwcs.shape
         refmap = np.zeros((int(HH), int(WW)), np.uint8)
