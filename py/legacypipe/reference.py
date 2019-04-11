@@ -45,17 +45,16 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         from astrometry.libkd.spherematch import match_radec
         gaia = read_gaia(marginwcs)
     if gaia is not None:
-        gaia.isbright = np.zeros(len(gaia), bool)
-        gaia.ismedium = np.ones(len(gaia), bool)
+        gaia.isbright = (gaia.phot_g_mean_mag < 13.)
+        gaia.ismedium = (gaia.phot_g_mean_mag < 16.)
         gaia.donotfit = np.zeros(len(gaia), bool)
-        #gaia.ismedium = gaia.pointsource
-        # Handle sources that appear in both Gaia and Tycho-2 by dropping the entry from Tycho-2.
+        # Handle sources that appear in both Gaia and Tycho-2 by
+        # dropping the entry from Tycho-2.
         if len(gaia) and len(tycho):
             # Before matching, apply proper motions to bring them to
-            # the same epoch.
-            # We want to use the more-accurate Gaia proper motions, so
-            # rewind Gaia positions to the approximate epoch of
-            # Tycho-2: 1991.5.
+            # the same epoch.  We want to use the more-accurate Gaia
+            # proper motions, so rewind Gaia positions to the
+            # approximate epoch of Tycho-2: 1991.5.
             cosdec = np.cos(np.deg2rad(gaia.dec))
             gra  = gaia.ra +  (1991.5 - gaia.ref_epoch) * gaia.pmra  / (3600.*1000.) / cosdec
             gdec = gaia.dec + (1991.5 - gaia.ref_epoch) * gaia.pmdec / (3600.*1000.)
@@ -90,13 +89,11 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                 print('Matched', len(I), 'large galaxies to Gaia stars.')
                 if len(I):
                     gaia.donotfit[J] = True
-
             refs.append(galaxies)
 
     refcat = None
     if len(refs):
         refs = merge_tables([r for r in refs if r is not None], columns='fillzero')
-
     if len(refs) == 0:
         return None,None
 
@@ -107,9 +104,10 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     refs.ibx = np.round(xx-1.).astype(int)
     refs.iby = np.round(yy-1.).astype(int)
 
+    # cut ones whose position + radius are outside the brick bounds.
     refs.cut((xx > -refs.radius_pix) * (xx < W+refs.radius_pix) *
              (yy > -refs.radius_pix) * (yy < H+refs.radius_pix))
-
+    # mark ones that are actually inside the brick area.
     refs.in_bounds = ((refs.ibx >= 0) * (refs.ibx < W) *
                       (refs.iby >= 0) * (refs.iby < H))
 
@@ -197,7 +195,7 @@ def read_gaia(targetwcs):
     # relation) is from eyeballing a radius-vs-mag plot that was in
     # pixels; that is unrelated to the present targetwcs pixel scale.
     gaia.radius = np.minimum(1800., 150. * 2.5**((11. - gaia.G)/3.)) * 0.262/3600.
-
+    gaia.delete_column('G')
     return gaia
 
 def read_tycho2(survey, targetwcs):
