@@ -1009,8 +1009,9 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             plt.title('second-round data - fit profiles')
             ps.savefig()
 
-    if refstars or T_donotfit:
-        allrefs = merge_tables([t for t in [refstars, T_donotfit] if t])
+    if refstars or T_donotfit or T_clusters:
+        allrefs = merge_tables([t for t in [refstars, T_donotfit, T_clusters] if t],
+                               columns='fillzero')
         with survey.write_output('ref-sources', brick=brickname) as out:
             allrefs.writeto(None, fits_object=out.fits, primheader=version_header)
         del allrefs
@@ -1453,8 +1454,11 @@ def stage_fitblobs(T=None,
 
     if refstars:
         from legacypipe.oneblob import get_inblob_map
-        refstars.radius_pix = np.ceil(refstars.radius * 3600. / targetwcs.pixel_scale()).astype(int)
-        refmap = get_inblob_map(targetwcs, refstars[refstars.donotfit == False])
+        refs = refstars[refstars.donotfit == False]
+        if T_clusters is not None:
+            refs = merge_tables([refs, T_clusters], columns='fillzero')
+        refmap = get_inblob_map(targetwcs, refs)
+        del refs
     else:
         HH, WW = targetwcs.shape
         refmap = np.zeros((int(HH), int(WW)), np.uint8)
