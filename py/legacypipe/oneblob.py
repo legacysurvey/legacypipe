@@ -768,7 +768,6 @@ class OneBlob(object):
                 # The 'gals' model is just a marker
                 trymodels.append(('gals', None))
         else:
-            #if hasattr(src, 'isForcedLargeGalaxy') and src.isForcedLargeGalaxy:
             trymodels.extend([(simname, simple),
                               ('dev', dev), ('exp', exp), ('comp', comp)])
 

@@ -135,7 +135,6 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
             gal = ExpGalaxy(RaDecPos(g.ra, g.dec),
                             NanoMaggies(order=bands, **fluxes),
                             LegacyEllipseWithPriors(logr, ee1, ee2))
-            gal.isForcedLargeGalaxy = True
             refcat.append(gal)
         else:
             assert(False)
