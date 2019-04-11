@@ -958,7 +958,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     if gaia_stars:
         gaia = refstars
         Igaia, = np.nonzero(np.logical_or(refstars.isbright, refstars.ismedium) *
-                            np.logical_not(refstars.iscluster))
+                            np.logical_not(refstars.iscluster) *
+                            refstars.pointsource)
         Igaia = Igaia[np.argsort(gaia.phot_g_mean_mag[Igaia])]
         debug(len(Igaia), 'stars for halo fitting')
     if len(Igaia):
