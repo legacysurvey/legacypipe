@@ -350,11 +350,7 @@ class OneBlob(object):
                 plt.figure(1)
 
             # only plot models for one source
-            #savedplots = self.plots_per_source
-            #self.plots_per_source = savedplots and (srci == 31)
             keepsrc = self.model_selection_one_source(src, srci, models, B)
-            #self.plots_per_source = savedplots
-
             B.sources[srci] = keepsrc
             cat[srci] = keepsrc
 
@@ -465,12 +461,12 @@ class OneBlob(object):
                                          np.flipud(np.fliplr(sn[slc])))
                 # just OR the detection maps per-band...
                 flipblobs |= (flipsn > 5.)
-
             blobs,_ = label(flipblobs)
             goodblob = blobs[iy,ix]
 
             if False and self.plots_per_source:
-                # This plot is about the symmetric-blob definitions when fitting sources.
+                # This plot is about the symmetric-blob definitions
+                # when fitting sources.
                 from legacypipe.detection import plot_boundary_map
                 plt.clf()
                 for i,(band,detmap,detiv) in enumerate(zip(self.bands, detmaps, detivs)):
@@ -587,28 +583,25 @@ class OneBlob(object):
             #     plot_boundary_map(dilated, rgb=(0,255,0), extent=ext)
             #     plt.title('symmetrized blobs')
             #     self.ps.savefig()
-            # 
             #     nil,nil,coimgs,nil = quick_coadds(
             #         srctims, self.bands, self.blobwcs,
             #         fill_holes=False, get_cow=True)
-                # dimshow(get_rgb(coimgs, self.bands))
-                # ax = plt.axis()
-                # plt.plot(x-1, y-1, 'r+')
-                # plt.axis(ax)
-                # plt.title('Symmetric-blob masked')
-                # self.ps.savefig()
-
-                # plt.clf()
-                # for tim in srctims:
-                #     ie = tim.getInvError()
-                #     sigmas = (tim.getImage() * ie)[ie > 0]
-                #     plt.hist(sigmas, range=(-5,5), bins=21, histtype='step')
-                #     plt.axvline(np.mean(sigmas), alpha=0.5)
-                # plt.axvline(0., color='k', lw=3, alpha=0.5)
-                # plt.xlabel('Image pixels (sigma)')
-                # plt.title('Symmetrized pixel values')
-                # self.ps.savefig()
-
+            #     dimshow(get_rgb(coimgs, self.bands))
+            #     ax = plt.axis()
+            #     plt.plot(x-1, y-1, 'r+')
+            #     plt.axis(ax)
+            #     plt.title('Symmetric-blob masked')
+            #     self.ps.savefig()
+            #     plt.clf()
+            #     for tim in srctims:
+            #         ie = tim.getInvError()
+            #         sigmas = (tim.getImage() * ie)[ie > 0]
+            #         plt.hist(sigmas, range=(-5,5), bins=21, histtype='step')
+            #         plt.axvline(np.mean(sigmas), alpha=0.5)
+            #     plt.axvline(0., color='k', lw=3, alpha=0.5)
+            #     plt.xlabel('Image pixels (sigma)')
+            #     plt.title('Symmetrized pixel values')
+            #     self.ps.savefig()
             # # plot the modelmasks for each tim.
             # plt.clf()
             # R = int(np.floor(np.sqrt(len(srctims))))
@@ -628,12 +621,10 @@ class OneBlob(object):
             # This is a local source-WCS plot of the data going into the
             # fit.
             plt.clf()
-            coimgs,cons = quick_coadds(srctims, self.bands, srcwcs,
-                                       fill_holes=False)
+            coimgs,cons = quick_coadds(srctims, self.bands, srcwcs, fill_holes=False)
             dimshow(get_rgb(coimgs, self.bands))
             plt.title('Model selection: stage1 data (srcwcs)')
             self.ps.savefig()
-            #self._plots(srctractor, 'Model selection init')
 
         srctractor = self.tractor(srctims, [src])
         srctractor.setModelMasks(modelMasks)
@@ -649,22 +640,20 @@ class OneBlob(object):
             debug('Source is starting outside blob -- skipping.')
             return None
 
-        # blob-wide
-        #force_pointsource = self.force_pointsource
-        #fit_background = self.fit_background
-        # geometric
+        from tractor import Galaxy
+        is_galaxy = isinstance(src, Galaxy)
+
+        # Fitting behaviors based on geometric masks.
         x0,y0 = srcwcs_x0y0
         force_pointsource = (self.refmap[y0+iy,x0+ix] &
                              (IN_BLOB['BRIGHT'] | IN_BLOB['GALAXY'] |
                               IN_BLOB['CLUSTER'])) > 0
         fit_background = (self.refmap[y0+iy,x0+ix] &
                           (IN_BLOB['MEDIUM'] | IN_BLOB['GALAXY'])) > 0
-
-        from tractor import Galaxy
-        is_galaxy = isinstance(src, Galaxy)
         if is_galaxy:
             fit_background = False
 
+            # LSLGA galaxy: set the maximum allowed r_e.
             known_galaxy_logrmax = 0.
             if isinstance(src, (DevGalaxy,ExpGalaxy)):
                 print('Known galaxy.  Initial shape:', src.shape)
@@ -770,8 +759,6 @@ class OneBlob(object):
                     dev.getShape()).copy()
             srccat[0] = newsrc
 
-            #print('Starting optimization for', name)
-
             # Set maximum galaxy model sizes
             if is_galaxy:
                 # This is a known large galaxy -- set max size based on initial size.
@@ -795,8 +782,6 @@ class OneBlob(object):
                     if logrmax < newsrc.shapeDev.getMaxLogRadius():
                         newsrc.shapeDev.setMaxLogRadius(logrmax)
 
-            ### FIXME -- also set model rendering limits here??
-
             # Use the same modelMask shapes as the original source ('src').
             # Need to create newsrc->mask mappings though:
             mm = remap_modelmask(modelMasks, src, newsrc)
@@ -806,29 +791,12 @@ class OneBlob(object):
             # Save these modelMasks for later...
             newsrc_mm = mm
 
-            #lnp = srctractor.getLogProb()
-            #print('Initial log-prob:', lnp)
-            #print('vs original src: ', lnp - lnp0)
-            # if self.plots and False:
-            #     # Grid of derivatives.
-            #     _plot_derivs(tims, newsrc, srctractor, ps)
-            # if self.plots:
-            #     mods = list(srctractor.getModelImages())
-            #     plt.clf()
-            #     coimgs,cons = quick_coadds(srctims, bands, srcwcs,
-            #                               images=mods, fill_holes=False)
-            #     dimshow(get_rgb(coimgs, bands))
-            #     plt.title('Initial: ' + name)
-            #     self.ps.savefig()
-
             if fit_background:
-                #print('Resetting sky params.')
+                # Reset sky params
                 srctractor.images.setParams(skyparams)
                 srctractor.thawParam('images')
 
             # First-round optimization (during model selection)
-            #print('Optimizing: first round for', name, ':', len(srctims))
-            #print(newsrc)
             R = srctractor.optimize_loop(**self.optargs)
             debug('Fit result:', newsrc)
             hit_limit = R.get('hit_limit', False)
@@ -840,7 +808,6 @@ class OneBlob(object):
                     debug('Hit limit: r %.2f, %.2f vs %.2f' %
                           (newsrc.shapeExp.re, newsrc.shapeDev.re,
                            np.exp(logrmax)))
-            #srctractor.printThawedParams()
 
             ok,ix,iy = srcwcs.radec2pixelxy(newsrc.getPosition().ra,
                                             newsrc.getPosition().dec)
@@ -850,8 +817,6 @@ class OneBlob(object):
             if ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
                 # Exited blob!
                 debug('Source exited sub-blob!')
-                # FIXME -- do we want to save any of the fitting results?
-                # Or flag this??
                 continue
 
             disable_galaxy_cache()
@@ -903,7 +868,6 @@ class OneBlob(object):
             # Use the original 'srctractor' here so that the different
             # models are evaluated on the same pixels.
             # ---> AND with the same modelMasks as the original source...
-            #
             srctractor.setModelMasks(newsrc_mm)
             ch = _per_band_chisqs(srctractor, self.bands)
 
@@ -1038,7 +1002,6 @@ class OneBlob(object):
             coimgs, cons = quick_coadds(srctims, self.bands, srcwcs)
             rgb = get_rgb(coimgs, self.bands)
             dimshow(rgb, ticks=False)
-
             for imod,modname in enumerate(modnames):
                 if modname != 'none' and not modname in chisqs:
                     continue
@@ -1058,21 +1021,18 @@ class OneBlob(object):
                 #    plt.axis(ax)
                 #    tt = 'Image'
                 #else:
-
                 # Second row: models
                 plt.subplot(rows, cols, 1+imod+1*cols)
                 rgb = model_mod_rgb[modname]
                 dimshow(rgb, ticks=False)
                 axes.append(plt.gca())
                 plt.title(modname)
-
                 # Third row: residuals (not chis)
                 plt.subplot(rows, cols, 1+imod+2*cols)
                 rgb = model_resid_rgb[modname]
                 dimshow(rgb, ticks=False)
                 axes.append(plt.gca())
                 plt.title('chisq %.0f' % chisqs[modname], fontsize=8)
-
                 # Highlight the model to be kept
                 if modname == keepmod:
                     for ax in axes:

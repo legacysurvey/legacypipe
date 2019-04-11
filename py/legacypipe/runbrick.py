@@ -964,7 +964,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         debug(len(Igaia), 'stars for halo fitting')
     if len(Igaia):
         from legacypipe.halos import fit_halos
-        # FIXME -- again...?
+        # FIXME -- another coadd...
         coimgs,cons = quick_coadds(tims, bands, targetwcs)
         fluxes,haloimgs = fit_halos(coimgs, cons, H, W, targetwcs, pixscale, bands,
                                     gaia[Igaia], plots, ps)
