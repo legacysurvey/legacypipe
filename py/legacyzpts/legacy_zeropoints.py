@@ -668,8 +668,10 @@ class Measurer(object):
 
         self.img,hdr = self.read_image()
 
-        # Per-pixel error -- weight is 1/sig*2, scaled by scale_weight()
+        # Per-pixel error
         medweight = np.median(weight[(weight > 0) * (self.bitmask == 0)])
+        # We scale the image & weight into ADU, but we want to report
+        # sig1 in nanomaggie-ish units, ie, in per-second units.
         ccds['sig1'] = (1. / np.sqrt(medweight)) / self.exptime
 
         self.invvar = self.remap_invvar(weight, self.primhdr, self.img, self.bitmask)
