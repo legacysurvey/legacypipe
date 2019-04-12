@@ -131,7 +131,7 @@ def annotate(ccds, survey, mp=None, mzls=False, bass=False, normalizePsf=True,
 
 def annotate_one_ccd(X):
     ccd, survey, normalizePsf, carryOn = X
-    print('Annotating CCD', ccd.image_filename, 'expnum', ccd.expnum,
+    print('Annotating CCD', ccd.image_filename.strip(), 'expnum', ccd.expnum,
           'CCD', ccd.ccdname)
     result = {}
     try:
