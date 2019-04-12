@@ -730,15 +730,6 @@ class Measurer(object):
         gaia = GaiaCatalog.catalog_nantozero(gaia)
         assert(gaia is not None)
         print(len(gaia), 'Gaia stars')
-
-        # Move Gaia stars to the epoch of this image.
-        gaia.ra_orig = gaia.ra.copy()
-        gaia.dec_orig = gaia.dec.copy()
-        ra,dec = radec_at_mjd(gaia.ra, gaia.dec, gaia.ref_epoch.astype(float),
-                              gaia.pmra, gaia.pmdec, gaia.parallax, self.mjd_obs)
-        gaia.ra  = ra
-        gaia.dec = dec
-
         return self.run_psfphot(ccds, ps1, gaia, zp0, self.exptime, self.airmass,
                                 sky_img, splinesky, survey)
 
@@ -771,7 +762,7 @@ class Measurer(object):
             #   https://github.com/numpy/numpy/issues/11448
             ierr = np.sqrt(self.invvar)
 
-        # Gaia
+        # Move Gaia stars to the epoch of this image.
         gaia.rename('ra',  'ra_gaia')
         gaia.rename('dec', 'dec_gaia')
         gaia.rename('source_id', 'gaia_sourceid')
