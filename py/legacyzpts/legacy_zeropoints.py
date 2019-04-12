@@ -417,23 +417,33 @@ class Measurer(object):
         else:
             wt = fitsio.read(fn, ext=self.ext)
 
-        if scale:
-            wt = self.scale_weight(wt)
-
         if bitmask is not None:
             # Set all masked pixels to have weight zero.
             # bitmask value 1 = bad
             wt[bitmask > 0] = 0.
             
-        if clip and np.sum(wt > 0) > 0:
-            # Additionally clamp near-zero (incl negative!) weight to zero,
-            # which arise due to fpack.
-            if clipThresh > 0.:
-                thresh = clipThresh * np.median(wt[wt > 0])
-            else:
-                thresh = 0.
-            wt[wt < thresh] = 0
-            
+        if clip and np.any(wt > 0):
+
+            fixed = False
+            try:
+                from legacypipe.image import fix_weight_quantization
+                fixed = fix_weight_quantization(wt, fn, self.ext, self.slc)
+            except:
+                import traceback
+                traceback.print_exc()
+
+            if not fixed:
+                # Clamp near-zero (incl negative!) weight to zero,
+                # which arise due to fpack.
+                if clipThresh > 0.:
+                    thresh = clipThresh * np.median(wt[wt > 0])
+                else:
+                    thresh = 0.
+                wt[wt < thresh] = 0
+
+        if scale:
+            wt = self.scale_weight(wt)
+
         assert(np.all(wt >= 0.))
         assert(np.all(np.isfinite(wt)))
 

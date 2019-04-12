@@ -917,6 +917,25 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                                              tycho_stars=tycho_stars, gaia_stars=gaia_stars,
                                              large_galaxies=large_galaxies,
                                              star_clusters=star_clusters)
+    # "refstars" is a table
+    # "refcat" is a list of tractor Sources
+    # They are aligned
+    T_donotfit = None
+    if refstars:
+        assert(len(refstars) == len(refcat))
+
+        # Pull out reference sources flagged do-not-fit; we add them back in (much) later.
+        # These are Gaia sources near the centers of LSLGA large galaxies, so we want to
+        # propagate the Gaia catalog information, but don't want to fit them.
+        I, = np.nonzero(refstars.donotfit)
+        if len(I):
+            T_donotfit = refstars[I]
+            I, = np.nonzero(np.logical_not(refstars.donotfit))
+            refstars.cut(I)
+            refcat = [refcat[i] for i in I]
+            assert(len(refstars) == len(refcat))
+        del I
+
     if refstars:
         # Don't detect new sources where we already have reference stars
         avoid_x = refstars.ibx[refstars.in_bounds]
@@ -988,9 +1007,11 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             plt.title('second-round data - fit profiles')
             ps.savefig()
 
-    if refstars:
+    if refstars or T_donotfit:
+        allrefs = merge_tables([t for t in [refstars, T_donotfit] if t])
         with survey.write_output('ref-sources', brick=brickname) as out:
-            refstars.writeto(None, fits_object=out.fits, primheader=version_header)
+            allrefs.writeto(None, fits_object=out.fits, primheader=version_header)
+        del allrefs
 
     record_event and record_event('stage_srcs: detection maps')
 
@@ -1049,6 +1070,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             assert(np.all(np.isfinite(list(fluxes.values()))))
             satcat.append(PointSource(RaDecPos(r, d),
                                       NanoMaggies(order=bands, **fluxes)))
+    assert(len(satcat) == len(sat))
 
     if plots:
         plt.clf()
@@ -1116,7 +1138,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     del satmap
 
-
     # SED-matched detections
     record_event and record_event('stage_srcs: SED-matched')
     info('Running source detection at', nsigma, 'sigma')
@@ -1130,6 +1151,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         nsigma=nsigma, saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
     if Tnew is None:
         raise NothingToDoError('No sources detected.')
+    assert(len(Tnew) == len(newcat))
     Tnew.delete_column('peaksn')
     Tnew.delete_column('apsn')
     del detmaps
@@ -1144,7 +1166,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     if len(sat):
         tables.append(sat)
         cats += satcat
-    if refstars is not None and len(refstars):
+    if refstars and len(refstars):
         tables.append(refstars)
         cats += refcat
     T = merge_tables(tables, columns='fillzero')
@@ -1212,7 +1234,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tlast = tnow
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
-            'ps', 'refstars', 'gaia_stars', 'saturated_pix']
+            'ps', 'refstars', 'gaia_stars', 'saturated_pix',
+            'T_donotfit']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
@@ -1429,7 +1452,7 @@ def stage_fitblobs(T=None,
     if refstars:
         from legacypipe.oneblob import get_inblob_map
         refstars.radius_pix = np.ceil(refstars.radius * 3600. / targetwcs.pixel_scale()).astype(int)
-        refmap = get_inblob_map(targetwcs, refstars)
+        refmap = get_inblob_map(targetwcs, refstars[refstars.donotfit == False])
     else:
         HH, WW = targetwcs.shape
         refmap = np.zeros((int(HH), int(WW)), np.uint8)
@@ -1516,6 +1539,7 @@ def stage_fitblobs(T=None,
     II = BB.Isrcs
     newcat = BB.sources
     # ... and make the table T parallel with BB.
+    # FIXME -- Dustin
     T.cut(II)
     assert(len(T) == len(BB))
 
@@ -1934,7 +1958,8 @@ def _get_mod(X):
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  custom_brick=False,
-                 T=None, cat=None, pixscale=None, plots=False,
+                 T=None, T_donotfit=None,
+                 cat=None, pixscale=None, plots=False,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
                  saturated_pix=None,
                  brightblobmask=None,
@@ -1977,11 +2002,16 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     assert(len(T) == len(cat))
     ra  = np.array([src.getPosition().ra  for src in cat])
     dec = np.array([src.getPosition().dec for src in cat])
+    # We tag the "T_donotfit" sources on the end to get aperture phot
+    # and other metrics.
+    if T_donotfit:
+        ra  = np.append(ra,  T_donotfit.ra)
+        dec = np.append(dec, T_donotfit.dec)
     ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
 
     # Get integer brick pixel coords for each source, for referencing maps
     T.out_of_bounds = reduce(np.logical_or, [xx < 0.5, yy < 0.5,
-                                             xx > W+0.5, yy > H+0.5])
+                                             xx > W+0.5, yy > H+0.5])[:len(T)]
     ixy = (np.clip(np.round(xx - 1), 0, W-1).astype(int),
            np.clip(np.round(yy - 1), 0, H-1).astype(int))
     # convert apertures to pixels
@@ -2016,12 +2046,41 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         del T_image_coadds
     ###
 
-    for c in ['nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth',
-              'mjd_min', 'mjd_max']:
-        T.set(c, C.T.get(c))
+    # Save per-source measurements of the maps produced during coadding
+    cols = ['nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth',
+            'mjd_min', 'mjd_max']
     # store galaxy sim bounding box in Tractor cat
     if 'sims_xy' in C.T.get_columns():
-        T.set('sims_xy', C.T.get('sims_xy'))
+        cols.append('sims_xy')
+
+    Nno = T_donotfit and len(T_donotfit) or 0
+    Nyes = len(T)
+    for c in cols:
+        val = C.T.get(c)
+        T.set(c, val[:Nyes])
+        # We appended T_donotfit; peel off those results
+        if Nno:
+            T_donotfit.set(c, val[Nyes:])
+    assert(C.AP is not None)
+    # How many apertures?
+    A = len(apertures_arcsec)
+    T.apflux       = np.zeros((len(T), len(bands), A), np.float32)
+    T.apflux_ivar  = np.zeros((len(T), len(bands), A), np.float32)
+    T.apflux_resid = np.zeros((len(T), len(bands), A), np.float32)
+    if Nno:
+        T_donotfit.apflux       = np.zeros((Nno, len(bands), A), np.float32)
+        T_donotfit.apflux_ivar  = np.zeros((Nno, len(bands), A), np.float32)
+        T_donotfit.apflux_resid = np.zeros((Nno, len(bands), A), np.float32)
+    AP = C.AP
+    for iband,band in enumerate(bands):
+        T.apflux      [:,iband,:] = AP.get('apflux_img_%s'      % band)[:Nyes,:]
+        T.apflux_ivar [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)[:Nyes,:]
+        T.apflux_resid[:,iband,:] = AP.get('apflux_resid_%s'    % band)[:Nyes,:]
+        if Nno:
+            T_donotfit.apflux      [:,iband,:] = AP.get('apflux_img_%s'      % band)[Nyes:,:]
+            T_donotfit.apflux_ivar [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)[Nyes:,:]
+            T_donotfit.apflux_resid[:,iband,:] = AP.get('apflux_resid_%s'    % band)[Nyes:,:]
+    del AP
 
     # Compute depth histogram
     D = _depth_histogram(brick, targetwcs, bands, C.psfdetivs, C.galdetivs)
@@ -2147,7 +2206,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         for i,(src,x,y,rr,dd) in enumerate(zip(cat, x1, y1, ra, dec)):
             from tractor import PointSource
             from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy
-
             ee = []
             ec = []
             cc = None
@@ -2191,7 +2249,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
     tnow = Time()
     debug('[serial coadds] Aperture photometry, wrap-up', tnow-tlast)
-    return dict(T=T, AP=C.AP, apertures_pix=apertures,
+    return dict(T=T, apertures_pix=apertures,
                 apertures_arcsec=apertures_arcsec,
                 maskbits=maskbits,
                 maskbits_header=maskbits_header)
@@ -2540,12 +2598,12 @@ def stage_writecat(
     version_header=None,
     release=None,
     T=None,
+    T_donotfit=None,
     WISE=None,
     WISE_T=None,
     maskbits=None,
     maskbits_header=None,
     wise_mask_maps=None,
-    AP=None,
     apertures_arcsec=None,
     cat=None, pixscale=None, targetwcs=None,
     W=None,H=None,
@@ -2646,18 +2704,6 @@ def stage_writecat(
     #print('Catalog table contents:')
     #TT.about()
 
-    assert(AP is not None)
-    # How many apertures?
-    ap = AP.get('apflux_img_%s' % bands[0])
-    n,A = ap.shape
-    TT.apflux       = np.zeros((len(TT), len(bands), A), np.float32)
-    TT.apflux_ivar  = np.zeros((len(TT), len(bands), A), np.float32)
-    TT.apflux_resid = np.zeros((len(TT), len(bands), A), np.float32)
-    for iband,band in enumerate(bands):
-        TT.apflux      [:,iband,:] = AP.get('apflux_img_%s'      % band)
-        TT.apflux_ivar [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)
-        TT.apflux_resid[:,iband,:] = AP.get('apflux_resid_%s'    % band)
-
     hdr = fs = None
     T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs)
 
@@ -2702,20 +2748,6 @@ def stage_writecat(
             primhdr.add_record(dict(name='MASKB%i' % i, value=bitmap[bit],
                                     comment='Mask bit 2**%i=%i meaning' %
                                     (i, bit)))
-
-    # Brick pixel positions
-    ok,bx,by = targetwcs.radec2pixelxy(T2.orig_ra, T2.orig_dec)
-    T2.bx0 = (bx - 1.).astype(np.float32)
-    T2.by0 = (by - 1.).astype(np.float32)
-    ok,bx,by = targetwcs.radec2pixelxy(T2.ra, T2.dec)
-    T2.bx = (bx - 1.).astype(np.float32)
-    T2.by = (by - 1.).astype(np.float32)
-
-    T2.delete_column('orig_ra')
-    T2.delete_column('orig_dec')
-
-    T2.brick_primary = ((T2.ra  >= brick.ra1 ) * (T2.ra  < brick.ra2) *
-                        (T2.dec >= brick.dec1) * (T2.dec < brick.dec2))
 
     if WISE is not None:
         # Convert WISE fluxes from Vega to AB.
@@ -2773,6 +2805,24 @@ def stage_writecat(
                 for band in [1,2]:
                     T2.set(cout % band, WISE_T.get(cin % band))
             # print('WISE light-curve shapes:', WISE_T.w1_nanomaggies.shape)
+
+    if T_donotfit:
+        T_donotfit.type = np.array(['DUP']*len(T_donotfit))
+        T2 = merge_tables([T2, T_donotfit], columns='fillzero')
+
+    # Brick pixel positions
+    ok,bx,by = targetwcs.radec2pixelxy(T2.orig_ra, T2.orig_dec)
+    T2.bx0 = (bx - 1.).astype(np.float32)
+    T2.by0 = (by - 1.).astype(np.float32)
+    ok,bx,by = targetwcs.radec2pixelxy(T2.ra, T2.dec)
+    T2.bx = (bx - 1.).astype(np.float32)
+    T2.by = (by - 1.).astype(np.float32)
+
+    T2.delete_column('orig_ra')
+    T2.delete_column('orig_dec')
+
+    T2.brick_primary = ((T2.ra  >= brick.ra1 ) * (T2.ra  < brick.ra2) *
+                        (T2.dec >= brick.dec1) * (T2.dec < brick.dec2))
 
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
         T2.writeto(None, fits_object=out.fits, primheader=primhdr, header=hdr)
