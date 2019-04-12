@@ -68,19 +68,8 @@ class ps1cat(HealpixedCatalog):
         Args:
             expnum, ccdname: select catalogue with these
             ccdwcs: or select catalogue with this
-        """
-        #assert('ps1' in pattern or 'gaia' in pattern)
-        #assert(ps1_or_gaia in ['ps1','ps1_gaia'])
-        #if ps1_or_gaia == 'ps1':
-        #  # PS1 "qz" directory  
-        #  # e.g. /project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v2
-        #  self.catdir= os.getenv('PS1CAT_DIR')
-        #elif ps1_or_gaia == 'ps1_gaia':
-        #  # PS1-Gaia "qz" matches-only directory
-        #  # e.g. /project/projectdirs/cosmo/work/gaia/chunks-ps1-gaia
-        #  self.catdir= os.getenv('PS1_GAIA_MATCHES')
-        #fnpattern = os.path.join(self.catdir, prefix + '-%(hp)05d.fits')
 
+        """
         self.ps1catdir = os.getenv('PS1CAT_DIR')
         if self.ps1catdir is None:
             raise ValueError('You must have the PS1CAT_DIR environment variable set to point to healpixed PS1 catalogs')
