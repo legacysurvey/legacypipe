@@ -566,7 +566,7 @@ class Measurer(object):
                 (gicolor < 2.7))
    
     def return_on_error(self,err_message='',
-                        ccds=None, stars_photom=None, stars_astrom=None):
+                        ccds=None, stars_photom=None):
         """Sets ccds table err message, zpt to nan, and returns appropriately for self.run() 
         
         Args: 
@@ -579,7 +579,7 @@ class Measurer(object):
             ccds['image_filename'] = self.fn_base
         ccds['err_message']= err_message
         ccds['zpt']= np.nan
-        return ccds, stars_photom, stars_astrom
+        return ccds, stars_photom
 
     def run(self, ext=None, save_xy=False, splinesky=False, survey=None):
 
@@ -898,13 +898,6 @@ class Measurer(object):
             if not c in wantcols:
                 refs.delete_column(c)
                 continue
-            # dt = wantcols[c]
-            # rdt = refs.get(c).dtype
-            # if rdt != dt:
-            #     print('Warning: column', c, 'has type', rdt, 'not', dt)
-
-        # print('(Cleaned) reference stars:')
-        # refs.about()
 
         if False:
             from astrometry.util.plotutils import PlotSequence
@@ -945,8 +938,9 @@ class Measurer(object):
         dec_clip, _, _ = sigmaclip(ddec, low=3., high=3.)
         decrms = getrms(dec_clip)
 
-        # For astrom, since we have Gaia everywhere, count the number that pass the sigma-clip,
-        # ie, the number of stars that corresponds to the reported offset and scatter (in RA).
+        # For astrom, since we have Gaia everywhere, count the number
+        # that pass the sigma-clip, ie, the number of stars that
+        # corresponds to the reported offset and scatter (in RA).
         nastrom = len(ra_clip)
 
         print('RA, Dec offsets (arcsec): %.4f, %.4f' % (raoff, decoff))
@@ -1058,10 +1052,7 @@ class Measurer(object):
         phot.ra [I] = phot.ra_ps1 [I]
         phot.dec[I] = phot.dec_ps1[I]
 
-        stars_astrom = phot
-
         # Create subset table for Eddie's ubercal
-        stars_photom = phot.copy()
         cols = ['ra', 'dec', 'flux', 'dflux', 'chi2', 'fracmasked', 'instpsfmag',
                 'dpsfmag',
                 'bitmask', 'x_fit', 'y_fit', 'gaia_sourceid', 'ra_gaia', 'dec_gaia',
@@ -1075,16 +1066,16 @@ class Measurer(object):
                 'apflux_6_err', 'apflux_7_err', 'apflux_8_err',
                 'ra_now', 'dec_now', 'ra_fit', 'dec_fit', 'x_ref', 'y_ref'
             ]
-        for c in stars_photom.get_columns():
+        for c in phot.get_columns():
             if not c in cols:
-                stars_photom.delete_column(c)
+                phot.delete_column(c)
 
         t0= ptime('all-computations-for-this-ccd',t0)
         # Plots for comparing to Arjuns zeropoints*.ps
         if self.verboseplots:
-            self.make_plots(stars_photom,dmag,ccds['zpt'],ccds['transp'])
+            self.make_plots(phot,dmag,ccds['zpt'],ccds['transp'])
             t0= ptime('made-plots',t0)
-        return ccds, stars_photom, stars_astrom
+        return ccds, phot
 
     def ps1_to_observed(self, ps1):
         colorterm = self.colorterm_ps1_to_observed(ps1.median, self.band)
@@ -1946,8 +1937,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False, just_me
                      primhdr = measure.primhdr)
 
     all_ccds = []
-    all_stars_photom = []
-    all_stars_astrom = []
+    all_photom = []
     splinesky = measureargs['splinesky']
 
     do_splinesky = splinesky
@@ -2035,40 +2025,25 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False, just_me
     rtns = mp.map(run_one_ext, [(measure, ext, survey, psfex, splinesky, measureargs['debug'])
                                 for ext in extlist])
 
-    for ext,rtn in zip(extlist,rtns):
-        ccds, stars_photom, stars_astrom = rtn
+    for ext,(ccds,photom) in zip(extlist,rtns):
         if ccds is not None:
             all_ccds.append(ccds)
-        if stars_photom is not None:
-            all_stars_photom.append(stars_photom)
-        if stars_astrom is not None:
-            all_stars_astrom.append(stars_astrom)
+        if photom is not None:
+            all_photom.append(photom)
 
     # Compute the median zeropoint across all the CCDs.
     all_ccds = vstack(all_ccds)
 
-    #print('all_ccds:', type(all_ccds))
-    #print(all_ccds)
-    # print('all_stars_photom:', all_stars_photom)
-    # for p in all_stars_photom:
-    #     print('  ', type(p), p)
-    # print('all_stars_astrom:', all_stars_astrom)
-    # for p in all_stars_astrom:
-    #     print('  ', type(p), p)
+    if len(all_photom):
+        all_photom = merge_tables(all_photom)
+    else:
+        all_photom = None
 
-    if len(all_stars_photom):
-        all_stars_photom = merge_tables(all_stars_photom)
-    else:
-        all_stars_photom = None
-    if len(all_stars_astrom):
-        all_stars_astrom = merge_tables(all_stars_astrom)
-    else:
-        all_stars_astrom = None
     zpts = all_ccds['zpt']
     all_ccds['zptavg'] = np.median(zpts[np.isfinite(zpts)])
 
     t0 = ptime('measure-image-%s' % img_fn,t0)
-    return all_ccds, all_stars_photom, all_stars_astrom, extra_info, measure
+    return all_ccds, all_photom, extra_info, measure
 
 def run_one_calib(X):
     measure, survey, ext, psfex, splinesky = X
@@ -2141,7 +2116,7 @@ def runit(imgfn, photomfn, surveyfn, annfn, mp, bad_expid=None,
         print('All CCDs bad, quitting.')
         return
 
-    ccds, stars_photom, stars_astrom, extra_info, measure = results
+    ccds, photom, extra_info, measure = results
     t0 = ptime('measure_image',t0)
 
     img_primhdr = extra_info.pop('primhdr')
@@ -2199,10 +2174,8 @@ def runit(imgfn, photomfn, surveyfn, annfn, mp, bad_expid=None,
     firstdir = os.path.basename(dirnm)
     hdr.add_record(dict(name='FILENAME', value=os.path.join(firstdir, base)))
 
-    if stars_photom is not None:
-        writeto_via_temp(photomfn, stars_photom, overwrite=True, header=hdr)
-    # if stars_astrom is not None:
-    #     writeto_via_temp(starfn_astrom, stars_astrom, overwrite=True, header=hdr)
+    if photom is not None:
+        writeto_via_temp(photomfn, photom, overwrite=True, header=hdr)
 
     accds = astropy_to_astrometry_table(ccds)
 
