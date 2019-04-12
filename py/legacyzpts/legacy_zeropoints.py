@@ -2257,10 +2257,6 @@ def main(image_list=None,args=None):
             print('Already finished: {}'.format(F.annfn))
             continue
 
-        if phot_ok and not leg_ok:
-            create_survey_table(F.photomfn, F.surveyfn, camera, survey, mp,
-                                **measureargs)
-
         if leg_ok and phot_ok and not ann_ok:
             # survey --> annotated
             create_annotated_table(F.surveyfn, F.annfn, camera, survey, mp)
