@@ -621,7 +621,7 @@ class OneBlob(object):
             # This is a local source-WCS plot of the data going into the
             # fit.
             plt.clf()
-            coimgs,cons = quick_coadds(srctims, self.bands, srcwcs, fill_holes=False)
+            coimgs,_ = quick_coadds(srctims, self.bands, srcwcs, fill_holes=False)
             dimshow(get_rgb(coimgs, self.bands))
             plt.title('Model selection: stage1 data (srcwcs)')
             self.ps.savefig()
