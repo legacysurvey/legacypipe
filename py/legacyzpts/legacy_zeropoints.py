@@ -2119,29 +2119,12 @@ def runit(imgfn, photomfn, surveyfn, annfn, mp, bad_expid=None,
     ccds, photom, extra_info, measure = results
     t0 = ptime('measure_image',t0)
 
-    img_primhdr = extra_info.pop('primhdr')
+    primhdr = extra_info.pop('primhdr')
 
-    ## Write out.
-    #if False:
-    #    writeto_via_temp(zptfn, ccds, func_write=True, overwrite=True)
-    #    # Header <-- fiducial zp,ext, also exptime, pixscale
-    #    hdulist = fits_astropy.open(zptfn, mode='update')
-    #    prihdr = hdulist[0].header
-    #    for key,val in extra_info.items():
-    #        prihdr[key] = val
-    #    hdulist.close() # Save changes
-    #    print('Wrote {}'.format(zptfn))
-
-    # Two stars tables
-    primhdr = img_primhdr
-    #print('Primary header:')
-    #print(primhdr)
     hdr = fitsio.FITSHDR()
-    for key in ['AIRMASS', 'OBJECT', 'TELESCOP', 'INSTRUME', 'EXPTIME',
-                'DATE-OBS', 'MJD-OBS', 'PROGRAM', 'OBSERVER',
-                'PROPID', 'FILTER', 'HA', 'ZD', 'AZ', 'DOMEAZ', 'HUMIDITY',
-                'PLVER',
-                ]:
+    for key in ['AIRMASS', 'OBJECT', 'TELESCOP', 'INSTRUME', 'EXPTIME', 'DATE-OBS',
+                'MJD-OBS', 'PROGRAM', 'OBSERVER', 'PROPID', 'FILTER', 'HA', 'ZD',
+                'AZ', 'DOMEAZ', 'HUMIDITY', 'PLVER', ]:
         if not key in primhdr:
             continue
         v = primhdr[key]
@@ -2149,16 +2132,22 @@ def runit(imgfn, photomfn, surveyfn, annfn, mp, bad_expid=None,
             v = v.strip()
         hdr.add_record(dict(name=key, value=v,
                             comment=primhdr.get_comment(key)))
-    hdr.add_record(dict(name='EXPNUM', value=measure.expnum, comment='Exposure number'))
-    hdr.add_record(dict(name='PROCDATE', value=measure.procdate, comment='CP processing date'))
-    hdr.add_record(dict(name='PLPROCID', value=measure.plprocid, comment='CP processing batch'))
-    hdr.add_record(dict(name='RA_BORE', value=hmsstring2ra(primhdr['RA']), comment='Boresight RA'))
-    hdr.add_record(dict(name='DEC_BORE', value=dmsstring2dec(primhdr['DEC']), comment='Boresight Dec'))
+    hdr.add_record(dict(name='EXPNUM', value=measure.expnum,
+                        comment='Exposure number'))
+    hdr.add_record(dict(name='PROCDATE', value=measure.procdate,
+                        comment='CP processing date'))
+    hdr.add_record(dict(name='PLPROCID', value=measure.plprocid,
+                        comment='CP processing batch'))
+    hdr.add_record(dict(name='RA_BORE', value=hmsstring2ra(primhdr['RA']),
+                        comment='Boresight RA'))
+    hdr.add_record(dict(name='DEC_BORE', value=dmsstring2dec(primhdr['DEC']),
+                        comment='Boresight Dec'))
 
     medzpt = np.nanmedian(ccds['zpt'])
     if not np.isfinite(medzpt):
         medzpt = 0.0
-    hdr.add_record(dict(name='CCD_ZPT', value=medzpt, comment='Exposure median zeropoint'))
+    hdr.add_record(dict(name='CCD_ZPT', value=medzpt,
+                        comment='Exposure median zeropoint'))
 
     goodfwhm = (ccds['fwhm'] > 0)
     if np.sum(goodfwhm) > 0:
@@ -2167,7 +2156,8 @@ def runit(imgfn, photomfn, surveyfn, annfn, mp, bad_expid=None,
         fwhm = 0.0
     pixscale = extra_info['pixscale']
     hdr.add_record(dict(name='FWHM', value=fwhm, comment='Exposure median FWHM (CP)'))
-    hdr.add_record(dict(name='SEEING', value=fwhm * pixscale, comment='Exposure median seeing (FWHM*pixscale)'))
+    hdr.add_record(dict(name='SEEING', value=fwhm * pixscale,
+                        comment='Exposure median seeing (FWHM*pixscale)'))
 
     base = os.path.basename(imgfn)
     dirnm = os.path.dirname(imgfn)
