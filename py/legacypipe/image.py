@@ -143,9 +143,12 @@ class LegacySurveyImage(object):
         self.width   = ccd.width
         self.height  = ccd.height
         self.sig1    = ccd.sig1
-        self.plver   = ccd.plver.strip()
-        self.procdate = ccd.procdate.strip()
-        # Use a dummy value to accommodate old calibs (which will fail later unless old-calibs-ok=True)
+        #self.plver   = ccd.plver.strip()
+        #self.procdate = ccd.procdate.strip()
+        # Use dummy values to accommodate old calibs (which will fail later
+        # unless old-calibs-ok=True)
+        self.plver = getattr(ccd, 'plver', 'xxx').strip()
+        self.procdate = getattr(ccd, 'procdate', 'xxxxxxx').strip()
         self.plprocid = getattr(ccd, 'plprocid', 'xxxxxxx').strip()
 
         # Which Data Quality bits mark saturation?
@@ -1582,8 +1585,12 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
             if strip:
                 val = np.array([str(v).strip() for v in val])
             if not np.all(val == targetval):
-                print('WARNING: table value', val, 'not equal to', targetval, 'in file', fn)
-                return False
+                if old_calibs_ok:
+                    print('WARNING: {} {}!={} in {} table but old_calibs_ok=True'.format(key, val, targetval, fn))
+                    continue
+                else:
+                    print('WARNING: {} {}!={} in {} table'.format(key, val, targetval, fn))
+                    return False
         return True
     elif filetype in ['primaryheader', 'header']:
         if data is None:
