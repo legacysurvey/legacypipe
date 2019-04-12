@@ -747,6 +747,8 @@ class Measurer(object):
         gaia.ra  = ra
         gaia.dec = dec
 
+        import pdb ; pdb.set_trace()
+
         return self.run_psfphot(ccds, ps1, gaia, zp0, exptime, airmass, sky_img,
                                 splinesky, survey)
 
@@ -2060,8 +2062,6 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False, just_me
     zpts = all_ccds['zpt']
     all_ccds['zptavg'] = np.median(zpts[np.isfinite(zpts)])
 
-    import pdb ; pdb.set_trace()
-
     t0 = ptime('measure-image-%s' % img_fn,t0)
     return all_ccds, all_stars_photom, all_stars_astrom, extra_info, measure
 
@@ -2231,7 +2231,7 @@ def get_parser():
     parser.add_argument('--outdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
     parser.add_argument('--debug', action='store_true', default=False, help='Write additional files and plots for debugging')
     parser.add_argument('--choose_ccd', action='store', default=None, help='forced to use only the specified ccd')
-    parser.add_argument('--ps1_pattern', action='store', default='/project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v3/ps1-%(hp)05d.fits', help='pattern for PS1 catalogues')
+    parser.add_argument('--ps1_pattern', action='store', default='/global/project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v3/ps1-%(hp)05d.fits', help='pattern for PS1 catalogues')
     parser.add_argument('--logdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
     parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
     parser.add_argument('--verboseplots', action='store_true', default=False, help='use to plot FWHM Moffat PSF fits to the 20 brightest stars')

@@ -62,19 +62,14 @@ class HealpixedCatalog(object):
     
 class ps1cat(HealpixedCatalog):
     ps1band = dict(g=0,r=1,i=2,z=3,Y=4)
-    def __init__(self,expnum=None,ccdname=None,ccdwcs=None,
-                 pattern='/project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v3/ps1-%(hp)05d.fits'):
+    def __init__(self,expnum=None,ccdname=None,ccdwcs=None):
         """Read PS1 or gaia sources for an exposure number + CCD name or CCD WCS
 
         Args:
             expnum, ccdname: select catalogue with these
             ccdwcs: or select catalogue with this
-            pattern: absolute path and wildcard for PS1 or Gaia catalogues
-                dr: /project/projectdirs/cosmo/work/
-                PS1: ${dr}/ps1/cats/chunks-qz-star-v3/ps1-%(hp)05d.fits
-                PS1-Gaia: ${dr}/gaia/chunks-ps1-gaia/chunk-%(hp)05d.fits
         """
-        assert('ps1' in pattern or 'gaia' in pattern)
+        #assert('ps1' in pattern or 'gaia' in pattern)
         #assert(ps1_or_gaia in ['ps1','ps1_gaia'])
         #if ps1_or_gaia == 'ps1':
         #  # PS1 "qz" directory  
@@ -85,7 +80,12 @@ class ps1cat(HealpixedCatalog):
         #  # e.g. /project/projectdirs/cosmo/work/gaia/chunks-ps1-gaia
         #  self.catdir= os.getenv('PS1_GAIA_MATCHES')
         #fnpattern = os.path.join(self.catdir, prefix + '-%(hp)05d.fits')
-        super(ps1cat, self).__init__(pattern)
+
+        self.ps1catdir = os.getenv('PS1CAT_DIR')
+        if self.ps1catdir is None:
+            raise ValueError('You must have the PS1CAT_DIR environment variable set to point to healpixed PS1 catalogs')
+        fnpattern = os.path.join(self.ps1catdir, 'ps1-%(hp)05d.fits')
+        super(ps1cat, self).__init__(fnpattern)
         
         if ccdwcs is None:
             from legacypipe.survey import LegacySurveyData
