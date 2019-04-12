@@ -1513,18 +1513,28 @@ def fix_weight_quantization(wt, weightfn, ext, slc):
     hdu = fits_astropy.open(weightfn, disable_image_compression=True)[ext]
     hdr = hdu.header
     table = hdu.data
+    # This was an older way of accessing the compressed data table:
     #hdu = fits_astropy.open(weightfn)[ext]
     #table = hdu.compressed_data
     #hdr = hdu._header
-    zquant = hdr['ZQUANTIZ']
+    zquant = hdr['ZQUANTIZ'].strip()
     print('Fpack quantization method:', zquant)
-    # FIXME -- SUBTRACTIVE_DITHER_1 causes trouble but
-    # SUBTRACTIVE_DITHER_2, which treats zeros specially, should
-    # be okay...
+    if zquant == 'SUBTRACTIVE_DITHER_2':
+        # This method treats zeros specially so that they remain zero
+        # after decompression, so return True to say that we have
+        # fixed the weights.
+        return True
+    if zquant != 'SUBTRACTIVE_DITHER_1':
+        # .... who knows what's going on?!
+        raise ValueError('fix_weight_quantization: unknown ZQUANTIZ method "%s"' % zquant)
     tilew = hdr['ZTILE1']
     tileh = hdr['ZTILE2']
     imagew = hdr['ZNAXIS1']
-    # This function can only handle non-tiled (row-by-row compressed) files.
+    # This function can only handle non-tiled (row-by-row compressed)
+    # files.  (This was just a choice for simplicity of
+    # implementation; the ZSCALE and ZZERO arrays are stored one per
+    # block, and handling general rectangular blocks (that get sliced
+    # by "slc") would be significantly more complicated.)
     if tilew != imagew or tileh != 1:
         raise ValueError('fix_weight_quantization: file is not row-by-row compressed: tile size %i x %i.' % (tilew, tileh))
     zscale = table.field('ZSCALE')
