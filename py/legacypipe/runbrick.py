@@ -322,7 +322,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     ccds.brick_x1 = np.ceil (np.max(x, axis=1)).astype(np.int16)
     ccds.brick_y0 = np.floor(np.min(y, axis=1)).astype(np.int16)
     ccds.brick_y1 = np.ceil (np.max(y, axis=1)).astype(np.int16)
-    ccds.sig1 = np.array([tim.sig1 for tim in tims])
     ccds.psfnorm = np.array([tim.psfnorm for tim in tims])
     ccds.galnorm = np.array([tim.galnorm for tim in tims])
     ccds.propid = np.array([tim.propid for tim in tims])
@@ -488,9 +487,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 # If we want to put more weight on choosing good-seeing images, we could do:
                 #metric = np.sqrt(ccds.exptime[b_inds]) / seeing[b_inds]**2
 
-                # DR7: CCDs sig1 values need to get calibrated to nanomaggies
-                zpscale = 10.**((ccds.ccdzpt[b_inds] - 22.5) / 2.5) * ccds.exptime[b_inds]
-                sig1 = ccds.sig1[b_inds] / zpscale
+                sig1 = ccds.sig1[b_inds]
                 # depth would be ~ 1 / (sig1 * seeing); we privilege good seeing here.
                 metric = 1. / (sig1 * seeing[b_inds]**2)
 
@@ -558,8 +555,6 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 continue
             wcs = wcs.get_subimage(int(x0), int(y0), int(x1-x0), int(y1-y0))
 
-            skysig1 = im.get_sig1(splinesky=splinesky, slc=slc)
-
             if 'galnorm_mean' in ccds.get_columns():
                 galnorm = ccd.galnorm_mean
                 debug('Using galnorm_mean from CCDs table:', galnorm)
@@ -580,10 +575,9 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 galmod = np.maximum(0, galmod)
                 galmod /= galmod.sum()
                 galnorm = np.sqrt(np.sum(galmod**2))
-            detiv = 1. / (skysig1 / galnorm)**2
-            debug('Galnorm:', galnorm, 'skysig1:', skysig1)
-            galdepth = -2.5 * (np.log10(5. * skysig1 / galnorm) - 9.)
-            debug('Galdepth for this CCD:', galdepth)
+            detiv = 1. / (sig1 / galnorm)**2
+            galdepth = -2.5 * (np.log10(5. * sig1 / galnorm) - 9.)
+            debug('Galnorm:', galnorm, 'sig1:', sig1, 'galdepth', galdepth)
 
             # Add this image the the depth map...
             from astrometry.util.resample import resample_with_wcs, OverlapError

@@ -670,7 +670,7 @@ class Measurer(object):
 
         # Per-pixel error -- weight is 1/sig*2, scaled by scale_weight()
         medweight = np.median(weight[(weight > 0) * (self.bitmask == 0)])
-        ccds['sig1'] = 1. / np.sqrt(medweight)
+        ccds['sig1'] = (1. / np.sqrt(medweight)) / self.exptime
 
         self.invvar = self.remap_invvar(weight, self.primhdr, self.img, self.bitmask)
 
