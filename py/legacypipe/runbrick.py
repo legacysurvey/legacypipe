@@ -979,8 +979,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             haloflux = np.zeros(len(refstars))
             haloflux[Igaia] = np.array([f and f[0][iband] or 0. for f in fluxes2])
             refstars.set('star_halo_flux_%s' % b, haloflux)
-            if T_donotfit:
-                T_donotfit.set('star_halo_flux_%s' % b, np.zeros(len(T_donotfit)))
 
         ## FIXME -- write a map of where we have subtracted the halo?
         ## (splice with PSF model??)
