@@ -673,9 +673,7 @@ class Measurer(object):
 
         # Per-pixel error -- weight is 1/sig*2, scaled by scale_weight()
         medweight = np.median(weight[(weight > 0) * (self.bitmask == 0)])
-        # Undo the weight scaling to get sig1 back into native image units
-        wscale = self.scale_weight(1.)
-        ccds['sig1'] = 1. / np.sqrt(medweight / wscale)
+        ccds['sig1'] = 1. / np.sqrt(medweight)
 
         self.invvar = self.remap_invvar(weight, self.primhdr, self.img, self.bitmask)
 
@@ -948,6 +946,10 @@ class Measurer(object):
 
             ok = (phot.instpsfmag != 0)
             phot.psfmag[ok] = phot.instpsfmag[ok] + zptmed
+
+            from tractor.brightness import NanoMaggies
+            zpscale = NanoMaggies.zeropointToScale(zptmed)
+            ccds['sig1'] /= zpscale
 
         else:
             dzpt = 0.
