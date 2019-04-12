@@ -727,11 +727,9 @@ class Measurer(object):
         gaia = GaiaCatalog.catalog_nantozero(gaia)
         assert(gaia is not None)
         print(len(gaia), 'Gaia stars')
-        return self.run_psfphot(ccds, ps1, gaia, zp0, self.exptime, self.airmass,
-                                sky_img, splinesky, survey)
+        return self.run_psfphot(ccds, ps1, gaia, zp0, sky_img, splinesky, survey)
 
-    def run_psfphot(self, ccds, ps1, gaia, zp0, exptime, airmass, sky_img,
-                    splinesky, survey):
+    def run_psfphot(self, ccds, ps1, gaia, zp0, sky_img, splinesky, survey):
         t0= Time()
 
         # Now put Gaia stars into the image and re-fit their centroids
@@ -782,7 +780,7 @@ class Measurer(object):
         if ps1 is not None:
             # PS1 for photometry
             # Initial flux estimate, from nominal zeropoint
-            ps1.flux0 = (10.**((zp0 - ps1.legacy_survey_mag) / 2.5) * exptime
+            ps1.flux0 = (10.**((zp0 - ps1.legacy_survey_mag) / 2.5) * self.exptime
                          ).astype(np.float32)
             # we don't have/use proper motions for PS1 stars
             ps1.rename('ra_ok',  'ra_now')
@@ -912,7 +910,7 @@ class Measurer(object):
 
         ok, = np.nonzero(phot.flux > 0)
         phot.instpsfmag = np.zeros(len(phot), np.float32)
-        phot.instpsfmag[ok] = -2.5*np.log10(phot.flux[ok] / exptime)
+        phot.instpsfmag[ok] = -2.5*np.log10(phot.flux[ok] / self.exptime)
         # Uncertainty on psfmag
         phot.dpsfmag = np.zeros(len(phot), np.float32)
         phot.dpsfmag[ok] = np.abs((-2.5 / np.log(10.)) * phot.dflux[ok] / phot.flux[ok])
@@ -940,7 +938,7 @@ class Measurer(object):
             zptmed = np.median(dmag)
             dzpt = zptmed - zp0
             kext = self.extinction(self.band)
-            transp = 10.**(-0.4 * (-dzpt - kext * (airmass - 1.0)))
+            transp = 10.**(-0.4 * (-dzpt - kext * (self.airmass - 1.0)))
 
             print('Number of stars used for zeropoint median %d' % nphotom)
             print('Zeropoint %.4f' % zptmed)
@@ -980,8 +978,8 @@ class Measurer(object):
             phot.ccdname = phot.ccdname.astype('S4')
 
         phot.exptime = np.zeros(len(phot), np.float32) + self.exptime
-        phot.gain = np.zeros(len(phot), np.float32) + self.gain
-        phot.airmass = np.zeros(len(phot), np.float32) + airmass
+        phot.gain    = np.zeros(len(phot), np.float32) + self.gain
+        phot.airmass = np.zeros(len(phot), np.float32) + self.airmass
 
         import photutils
         apertures_arcsec_diam = [6, 7, 8]
