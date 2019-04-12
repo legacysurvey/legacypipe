@@ -274,8 +274,6 @@ class Measurer(object):
                  **kwargs):
         self.quiet = quiet
         # Set extra kwargs
-        self.ps1_pattern= kwargs['ps1_pattern']
-        
         self.zptsfile= kwargs.get('zptsfile')
         self.prefix= kwargs.get('prefix')
         self.verboseplots= kwargs.get('verboseplots')
@@ -722,8 +720,7 @@ class Measurer(object):
         
         ps1 = None
         try:
-            ps1 = ps1cat(ccdwcs=self.wcs, 
-                         pattern= self.ps1_pattern).get_stars(magrange=None)
+            ps1 = ps1cat(ccdwcs=self.wcs).get_stars(magrange=None)
         except OSError:
             print('No PS1 stars found for this image -- outside the PS1 footprint, or in the Galactic plane?')
 
@@ -2241,7 +2238,6 @@ def get_parser():
     parser.add_argument('--outdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
     parser.add_argument('--debug', action='store_true', default=False, help='Write additional files and plots for debugging')
     parser.add_argument('--choose_ccd', action='store', default=None, help='forced to use only the specified ccd')
-    parser.add_argument('--ps1_pattern', action='store', default='/global/project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v3/ps1-%(hp)05d.fits', help='pattern for PS1 catalogues')
     parser.add_argument('--logdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
     parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
     parser.add_argument('--verboseplots', action='store_true', default=False, help='use to plot FWHM Moffat PSF fits to the 20 brightest stars')
