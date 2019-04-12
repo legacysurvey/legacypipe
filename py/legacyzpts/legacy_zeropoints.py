@@ -630,6 +630,7 @@ class Measurer(object):
         ccds['width'] = self.width
         ccds['height'] = self.height
         ccds['fwhm_cp'] = self.fwhm_cp
+        ccds['fwhm'] = self.fwhm_cp # initialize with the CP value
 
         hdr_fwhm = self.fwhm_cp
         notneeded_cols= ['avsky']
@@ -1965,7 +1966,6 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False, just_me
             do_psfex = False
 
     if do_splinesky or do_psfex:
-        # for DR8, allow grabbing old PsfEx individual-CCD PsfEx files
         ccds = mp.map(run_one_calib, [(measure, survey, ext, do_psfex, do_splinesky)
                                       for ext in extlist])
         
@@ -1979,16 +1979,18 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False, just_me
             skyoutfn = measure.get_splinesky_merged_filename()
             err_splinesky = merge_splinesky(survey, measure.expnum, ccds, skyoutfn, opts)
             if err_splinesky == 1:
-                if not quiet:
-                    print('Wrote {}'.format(skyoutfn))
+                pass
+                #if not quiet:
+                #    print('Wrote {}'.format(skyoutfn))
             else:
                 print('Problem writing {}'.format(skyoutfn))
         if do_psfex:
             psfoutfn = measure.get_psfex_merged_filename()
             err_psfex = merge_psfex(survey, measure.expnum, ccds, psfoutfn, opts)
             if err_psfex == 1:
-                if not quiet:
-                    print('Wrote {}'.format(psfoutfn))
+                pass
+                #if not quiet:
+                #    print('Wrote {}'.format(psfoutfn))
             else:
                 print('Problem writing {}'.format(psfoutfn))
 
@@ -2201,8 +2203,6 @@ def runit(imgfn, starfn_photom, surveyfn, annfn, mp, bad_expid=None,
 
     if stars_photom is not None:
         writeto_via_temp(starfn_photom, stars_photom, overwrite=True, header=hdr)
-    # if stars_astrom is not None:
-    #     writeto_via_temp(starfn_astrom, stars_astrom, overwrite=True, header=hdr)
 
     accds = astropy_to_astrometry_table(ccds)
 
