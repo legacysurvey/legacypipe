@@ -292,6 +292,8 @@ class Measurer(object):
             self.primhdr= tmp[0].header
             tmp.close()
             del tmp
+
+        self.band = self.get_band()
         # CP WCS succeed?
         self.goodWcs=True  
         if not ('WCSCAL' in self.primhdr.keys() and
@@ -581,6 +583,24 @@ class Measurer(object):
         ccds['zpt']= np.nan
         return ccds, stars_photom
 
+    def init_ccd(self, ccds):
+        '''
+        ccds: 1-row astropy table object from _ccds_table.
+        '''
+        ccds['image_filename'] = self.fn_base
+        ccds['object'] = self.obj
+        ccds['filter'] = self.band
+        ccds['yshift'] = 'YSHIFT' in self.primhdr
+
+        for key in ['image_hdu', 'ccdnum', 'camera', 'expnum', 'plver', 'procdate',
+                    'plprocid', 'ccdname', 'expid', 'propid', 'exptime', 'date_obs',
+                    'mjd_obs', 'ut', 'ra_bore', 'dec_bore', 'ha', 'airmass', 'gain',
+                    'pixscale', 'width', 'height', 'fwhm_cp']:
+            ccds[key] = getattr(self, key)
+
+        # Formerly we grabbed the PsfEx FWHM; instead just use the CP value!
+        ccds['fwhm'] = ccds['fwhm_cp']
+    
     def run(self, ext=None, save_xy=False, splinesky=False, survey=None):
 
         """Computes statistics for 1 CCD
@@ -600,34 +620,8 @@ class Measurer(object):
 
         # Initialize 
         ccds = _ccds_table(self.camera)
-        # FIXME -- could clean up paths here??
-        ccds['image_filename'] = self.fn_base
-        ccds['image_hdu'] = self.image_hdu 
-        ccds['ccdnum'] = self.ccdnum 
-        ccds['camera'] = self.camera
-        ccds['expnum'] = self.expnum
-        ccds['plver'] = self.plver
-        ccds['procdate'] = self.procdate
-        ccds['plprocid'] = self.plprocid
-        ccds['ccdname'] = self.ccdname
-        ccds['expid'] = self.expid
-        ccds['object'] = self.obj
-        ccds['propid'] = self.propid
-        ccds['filter'] = self.band
-        ccds['exptime'] = self.exptime
-        ccds['date_obs'] = self.date_obs
-        ccds['mjd_obs'] = self.mjd_obs
-        ccds['ut'] = self.ut
-        ccds['ra_bore'] = self.ra_bore
-        ccds['dec_bore'] = self.dec_bore
-        ccds['ha'] = self.ha
-        ccds['airmass'] = self.airmass
-        ccds['gain'] = self.gain
-        ccds['pixscale'] = self.pixscale
-        ccds['yshift'] = 'YSHIFT' in self.primhdr
-        ccds['width'] = self.width
-        ccds['height'] = self.height
-        ccds['fwhm_cp'] = self.fwhm_cp
+
+        self.init_ccd(ccds)
 
         hdr_fwhm = self.fwhm_cp
         notneeded_cols= ['avsky']
@@ -635,23 +629,17 @@ class Measurer(object):
                         'cd1_1','cd1_2', 'cd2_1', 'cd2_2']:
             if ccd_col.upper() in self.hdr.keys():
                 #print('CP Header: %s = ' % ccd_col,self.hdr[ccd_col])
-                ccds[ccd_col]= self.hdr[ccd_col]
+                ccds[ccd_col] = self.hdr[ccd_col]
+            elif ccd_col in notneeded_cols:
+                ccds[ccd_col] = np.nan
             else:
-                if ccd_col in notneeded_cols:
-                    ccds[ccd_col]= np.nan
-                else:
-                    raise KeyError('Could not find %s, keys not in cp header:' \
-                               % ccd_col,ccd_col)
-        exptime = ccds['exptime'].data[0]
-        airmass = ccds['airmass'].data[0]
-        print('Band {}, Exptime {}, Airmass {}'.format(self.band, exptime, airmass))
+                raise KeyError('Could not find %s key in header:' % ccd_col)
 
         # WCS: 1-indexed so pixel pixelxy2radec(1,1) corresponds to img[0,0]
-        H = ccds['height'].data[0]
-        W = ccds['width'].data[0]
-        print('Image size:', W,H)
+        H = self.height
+        W = self.width
         ccdra, ccddec = self.wcs.pixelxy2radec((W+1) / 2.0, (H+1) / 2.0)
-        ccds['ra'] = ccdra   # [degree]
+        ccds['ra']  = ccdra  # [degree]
         ccds['dec'] = ccddec # [degree]
         t0= ptime('header-info',t0)
 
@@ -704,11 +692,11 @@ class Measurer(object):
         # Bunch of sky estimates
         # Median of absolute deviation (MAD), std dev = 1.4826 * MAD
         print('sky from median of image= %.2f' % skymed)
-        skybr = zp0 - 2.5*np.log10(skymed / self.pixscale / self.pixscale / exptime)
+        skybr = zp0 - 2.5*np.log10(skymed / self.pixscale / self.pixscale / self.exptime)
         print('Sky brightness: {:.3f} mag/arcsec^2 (assuming nominal zeropoint)'.format(skybr))
 
-        ccds['skyrms'] = skyrms / exptime # e/sec
-        ccds['skycounts'] = skymed / exptime # [electron/pix]
+        ccds['skyrms'] = skyrms / self.exptime # e/sec
+        ccds['skycounts'] = skymed / self.exptime # [electron/pix]
         ccds['skysb'] = skybr   # [mag/arcsec^2]
         t0= ptime('measure-sky',t0)
 
@@ -744,17 +732,15 @@ class Measurer(object):
         print(len(gaia), 'Gaia stars')
 
         # Move Gaia stars to the epoch of this image.
-
         gaia.ra_orig = gaia.ra.copy()
         gaia.dec_orig = gaia.dec.copy()
-
         ra,dec = radec_at_mjd(gaia.ra, gaia.dec, gaia.ref_epoch.astype(float),
                               gaia.pmra, gaia.pmdec, gaia.parallax, self.mjd_obs)
         gaia.ra  = ra
         gaia.dec = dec
 
-        return self.run_psfphot(ccds, ps1, gaia, zp0, exptime, airmass, sky_img,
-                                splinesky, survey)
+        return self.run_psfphot(ccds, ps1, gaia, zp0, self.exptime, self.airmass,
+                                sky_img, splinesky, survey)
 
     def run_psfphot(self, ccds, ps1, gaia, zp0, exptime, airmass, sky_img,
                     splinesky, survey):
@@ -768,9 +754,6 @@ class Measurer(object):
         # sources there, optimize them and see how much they want to
         # move.
         psf = self.get_psfex_model()
-        # Just keep the CP FWHM measurement!!
-        ccds['fwhm'] = ccds['fwhm_cp']
-        #ccds['fwhm'] = psf.fwhm
 
         if splinesky:
             sky = self.get_splinesky()
@@ -779,14 +762,13 @@ class Measurer(object):
             sky.addTo(skymod)
             # Apply the same transformation that was applied to the image...
             skymod = self.scale_image(skymod)
-            #print('Old sky_img: avg', np.mean(sky_img), 'min/max', np.min(sky_img), np.max(sky_img))
-            #print('Skymod: avg', np.mean(skymod), 'min/max', skymod.min(), skymod.max())
             fit_img = self.img - skymod
         else:
             fit_img = self.img - sky_img
 
         with np.errstate(invalid='ignore'):
-            # sqrt(0.) can trigger complaints; https://github.com/numpy/numpy/issues/11448
+            # sqrt(0.) can trigger complaints;
+            #   https://github.com/numpy/numpy/issues/11448
             ierr = np.sqrt(self.invvar)
 
         # Gaia
@@ -898,14 +880,6 @@ class Measurer(object):
             if not c in wantcols:
                 refs.delete_column(c)
                 continue
-
-        if False:
-            from astrometry.util.plotutils import PlotSequence
-            ps = PlotSequence('astromfit')
-            plt.clf()
-            plt.hist((fit_img * ierr).ravel(), range=(-5,5), bins=100)
-            plt.xlabel('Image pixel S/N')
-            ps.savefig()
 
         # Run tractor fitting on the ref stars, using the PsfEx model.
         phot = self.tractor_fit_sources(refs.ra_now, refs.dec_now, refs.flux0,
@@ -1153,12 +1127,10 @@ class Measurer(object):
     def tractor_fit_sources(self, ref_ra, ref_dec, ref_flux, img, ierr,
                             psf, normalize_psf=True):
         import tractor
-        #from tractor.patch import ModelMask
         from tractor import PixelizedPSF
         from tractor.brightness import LinearPhotoCal
 
         plots = False
-        #plot_this = np.hypot(x - 118, y - 1276) < 5
         plot_this = False
         if plots:
             from astrometry.util.plotutils import PlotSequence
@@ -1220,27 +1192,18 @@ class Measurer(object):
                 #print('Inverse-variance map is all zero')
                 continue
 
-            #print('PSF model:', subpsf)
-            #print('PSF image sum:', subpsf.img.sum())
-
             tim = tractor.Image(data=subimg, inverr=subie, psf=subpsf)
             flux0 = ref_flux[istar]
-            #print('Zp0', zp0, 'mag', ref.mag[istar], 'flux', flux0)
             x0 = x - xlo
             y0 = y - ylo
-            src = tractor.PointSource(tractor.PixPos(x0, y0),
-                                      tractor.Flux(flux0))
+            src = tractor.PointSource(tractor.PixPos(x0, y0), tractor.Flux(flux0))
             tr = tractor.Tractor([tim], [src])
 
-            #sh,sw = tim.shape
-            #mm = [dict(src=ModelMask(0, 0, sw, sh))]
-            
             tr.freezeParam('images')
             optargs = dict(priors=False, shared_params=False,
                            alphas=[0.1, 0.3, 1.0])
 
-            # The initial flux estimate doesn't seem to work too well,
-            # so quickly fit flux first
+            # Do a quick flux fit first
             src.freezeParam('pos')
             pc = tim.photocal
             tim.photocal = LinearPhotoCal(1.)
@@ -1264,16 +1227,11 @@ class Measurer(object):
                 plt.suptitle('Before')
                 ps.savefig()
 
-            #print('Initial flux', flux0)
+            # Now the position and flux fit
             for step in range(50):
                 dlnp, x, alpha = tr.optimize(**optargs)
-                #print('delta position', src.pos.x - x0, src.pos.y - y0,
-                #      'flux', src.brightness, 'dlnp', dlnp)
                 if dlnp == 0:
                     break
-
-            #print('Getting variance estimate: thawed params:')
-            #tr.printThawedParams()
             variance = tr.optimize(variance=True, just_variance=True, **optargs)
             # Yuck -- if inverse-variance is all zero, weird-shaped result...
             if len(variance) == 4 and variance[3] is None:
@@ -1286,7 +1244,6 @@ class Measurer(object):
             # profile-weighted chi-squared
             cal.chi2.append(np.sum(chi**2 * psfimg))
             # profile-weighted fraction of masked pixels
-            #cal.fracmasked.append(np.sum(psfimg * (ierr == 0)))
             cal.fracmasked.append(np.sum(psfimg * (subie == 0)))
 
             cal.psfsum.append(psfsum)
@@ -1343,7 +1300,8 @@ class Measurer(object):
             #print('Reading psfex-merged {}'.format(fn))
             T = fits_table(fn)
             if validate_procdate_plver(fn, 'table', self.expnum, self.plver,
-                                       self.procdate, self.plprocid, data=T, quiet=self.quiet):
+                                       self.procdate, self.plprocid, data=T,
+                                       quiet=self.quiet):
                 I, = np.nonzero((T.expnum == self.expnum) *
                                 np.array([c.strip() == self.ext for c in T.ccdname]))
                 if len(I) == 1:
@@ -1361,14 +1319,12 @@ class Measurer(object):
 
         # Look for single-CCD PsfEx file
         fn = self.get_psfex_unmerged_filename()
-
         if not os.path.exists(fn):
             return None
-
-        #print('Reading psfex {}'.format(fn))
         hdr = read_primary_header(fn)
         if not validate_procdate_plver(fn, 'primaryheader', self.expnum, self.plver,
-                                       self.procdate, self.plprocid, data=hdr, quiet=self.quiet):
+                                       self.procdate, self.plprocid, data=hdr,
+                                       quiet=self.quiet):
             return None
 
         hdr = fitsio.read_header(fn, ext=1)
@@ -1431,7 +1387,6 @@ class Measurer(object):
         print('Wrote %s' % fn)
 
     def run_calibs(self, survey, ext, psfex=True, splinesky=True, read_hdu=True):
-
         # Initialize with some basic data
         self.set_hdu(ext)
 
@@ -1453,16 +1408,9 @@ class Measurer(object):
         ccd.cd1_2 = ccd.cd2_1 = 0.
         ccd.pixscale = self.pixscale ## units??
         ccd.mjd_obs = self.mjd_obs
-        # Read image metadata to get size.
-        #info = fitsio.FITS(self.fn)[self.image_hdu].get_info()
-        #print('Image metadata:', info)
-        #H,W = info['dims']
-        #ccd.width = W
-        #ccd.height = H
         ccd.width = self.width
         ccd.height = self.height
         ccd.arawgain = self.gain
-
         ccd.sig1 = None
         ccd.plver = self.plver
         ccd.procdate = self.procdate
@@ -1483,7 +1431,6 @@ class Measurer(object):
 
         if (not do_psf) and (not do_sky):
             # Nothing to do!
-            #print('No need to run calibs')
             return ccd
 
         # Check for all-zero weight maps
@@ -1494,12 +1441,9 @@ class Measurer(object):
             return ccd
 
         im = survey.get_image_object(ccd)
-        #print('Created legacypipe image object', im)
         git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
-
         im.run_calibs(psfex=do_psf, sky=do_sky, splinesky=True,
-                      git_version=git_version, survey=survey)#, force=True)
-
+                      git_version=git_version, survey=survey)
         return ccd
 
 class FakeCCD(object):
@@ -1516,11 +1460,9 @@ class DecamMeasurer(Measurer):
     '''
     def __init__(self, *args, **kwargs):
         super(DecamMeasurer, self).__init__(*args, **kwargs)
-        self.minstar = 5 # decstat.pro
         self.pixscale =0.262 
         self.camera = 'decam'
         self.ut = self.primhdr['TIME-OBS']
-        self.band = self.get_band()
         # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
         # Use center of exposure if possible
         if 'RA' in self.primhdr.keys():
@@ -1604,11 +1546,9 @@ class DecamMeasurer(Measurer):
 class MegaPrimeMeasurer(Measurer):
     def __init__(self, *args, **kwargs):
         super(MegaPrimeMeasurer, self).__init__(*args, **kwargs)
-        self.minstar = 5 # decstat.pro
         self.camera = 'megaprime'
         self.pixscale = get_pixscale(self.camera)
         self.ut = self.primhdr['UTC-OBS']
-        self.band = self.get_band()
         # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
         # Use center of exposure if possible
         self.ra_bore = self.primhdr['RA_DEG']
@@ -1646,7 +1586,6 @@ class MegaPrimeMeasurer(Measurer):
 
     def get_band(self):
         band = self.primhdr['FILTER'][0]
-        #band = band.split()[0]
         return band
 
     def get_gain(self,hdr):
@@ -1702,11 +1641,8 @@ class Mosaic3Measurer(Measurer):
     UNITS: e-/s'''
     def __init__(self, *args, **kwargs):
         super(Mosaic3Measurer, self).__init__(*args, **kwargs)
-
-        self.minstar=20 # mosstat.pro
         self.pixscale=0.262 # 0.260 is right, but mosstat.pro has 0.262
         self.camera = 'mosaic'
-        self.band= self.get_band()
         self.ut = self.primhdr['TIME-OBS']
         # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
         self.ra_bore = hmsstring2ra(self.primhdr['RA'])
@@ -1774,11 +1710,8 @@ class NinetyPrimeMeasurer(Measurer):
     UNITS -- CP e-/s'''
     def __init__(self, *args, **kwargs):
         super(NinetyPrimeMeasurer, self).__init__(*args, **kwargs)
-        
-        self.minstar=20 # bokstat.pro
         self.pixscale= 0.470 # 0.455 is correct, but mosstat.pro has 0.470
         self.camera = '90prime'
-        self.band= self.get_band()
         # {RA,DEC}: center of exposure, doesn't have TEL{RA,DEC}
         self.ra_bore = hmsstring2ra(self.primhdr['RA'])
         self.dec_bore = dmsstring2dec(self.primhdr['DEC'])
@@ -1887,7 +1820,8 @@ def get_extlist(camera,fn,debug=False,choose_ccd=None):
     return extlist
    
  
-def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False, just_measure=False,
+def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
+                  just_measure=False,
                   survey=None, psfex=True, **measureargs):
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
     the FITS extensions for a given set of images.
@@ -1947,11 +1881,13 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False, just_me
     # they're missing.
     if splinesky:
         if validate_procdate_plver(measure.get_splinesky_merged_filename(),
-                                   'table', measure.expnum, measure.plver, measure.procdate, measure.plprocid, quiet=quiet):
+                                   'table', measure.expnum, measure.plver,
+                                   measure.procdate, measure.plprocid, quiet=quiet):
             do_splinesky = False
     if psfex:
         if validate_procdate_plver(measure.get_psfex_merged_filename(),
-                                   'table', measure.expnum, measure.plver, measure.procdate, measure.plprocid, quiet=quiet):
+                                   'table', measure.expnum, measure.plver,
+                                   measure.procdate, measure.plprocid, quiet=quiet):
             do_psfex = False
 
     if do_splinesky or do_psfex:
@@ -1990,7 +1926,8 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False, just_me
             print('Merged splinesky file not found {}'.format(fn))
             return []
         if not validate_procdate_plver(measure.get_splinesky_merged_filename(),
-                                       'table', measure.expnum, measure.plver, measure.procdate, measure.plprocid):
+                                       'table', measure.expnum, measure.plver,
+                                       measure.procdate, measure.plprocid):
             raise RuntimeError('Merged splinesky file did not validate!')
         # At this point the merged file exists and has been validated, so remove
         # the individual splinesky files.
@@ -2006,7 +1943,8 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False, just_me
             print('Merged psfex file not found {}'.format(fn))
             return []
         if not validate_procdate_plver(measure.get_psfex_merged_filename(),
-                                   'table', measure.expnum, measure.plver, measure.procdate, measure.plprocid):
+                                   'table', measure.expnum, measure.plver,
+                                   measure.procdate, measure.plprocid):
             raise RuntimeError('Merged psfex file did not validate!')
         # At this point the merged file exists and has been validated, so remove
         # the individual PSFEx and SE files.
@@ -2022,7 +1960,8 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False, just_me
     if run_calibs_only:
         return
 
-    rtns = mp.map(run_one_ext, [(measure, ext, survey, psfex, splinesky, measureargs['debug'])
+    rtns = mp.map(run_one_ext, [(measure, ext, survey, psfex, splinesky,
+                                 measureargs['debug'])
                                 for ext in extlist])
 
     for ext,(ccds,photom) in zip(extlist,rtns):
@@ -2108,7 +2047,8 @@ def runit(imgfn, photomfn, surveyfn, annfn, mp, bad_expid=None,
     '''
     t0 = Time()
 
-    results = measure_image(imgfn, mp, survey=survey, run_calibs_only=run_calibs_only, **measureargs)
+    results = measure_image(imgfn, mp, survey=survey, run_calibs_only=run_calibs_only,
+                            **measureargs)
     if run_calibs_only:
         return
 
@@ -2292,14 +2232,16 @@ def main(image_list=None,args=None):
         print('Working on image {}/{}: {}'.format(ii+1, nimage, imgfn))
 
         # Check if the outputs are done and have the correct data model.
-        F = outputFns(imgfn, outdir, camera, image_dir=image_dir, debug=measureargs['debug'])
+        F = outputFns(imgfn, outdir, camera, image_dir=image_dir,
+                      debug=measureargs['debug'])
 
         measure = measure_image(F.imgfn, None, just_measure=True, **measureargs)
         psffn = measure.get_psfex_merged_filename()
         skyfn = measure.get_splinesky_merged_filename()
 
         leg_ok, ann_ok, psf_ok, sky_ok = [validate_procdate_plver(
-            fn, 'table', measure.expnum, measure.plver, measure.procdate, measure.plprocid, quiet=quiet)
+            fn, 'table', measure.expnum, measure.plver, measure.procdate,
+            measure.plprocid, quiet=quiet)
             for fn in [F.surveyfn, F.annfn, psffn, skyfn]]
 
         if measureargs['run_calibs_only'] and psf_ok and sky_ok:
@@ -2308,8 +2250,8 @@ def main(image_list=None,args=None):
             continue
             
         phot_ok = validate_procdate_plver(F.photomfn, 'header', measure.expnum,
-                                         measure.plver, measure.procdate, measure.plprocid,
-                                         ext=1, quiet=quiet)
+                                         measure.plver, measure.procdate,
+                                         measure.plprocid, ext=1, quiet=quiet)
 
         if leg_ok and ann_ok and phot_ok and psf_ok and sky_ok:
             print('Already finished: {}'.format(F.annfn))
