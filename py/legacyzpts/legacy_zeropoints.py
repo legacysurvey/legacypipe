@@ -772,13 +772,14 @@ class Measurer(object):
             ierr = np.sqrt(self.invvar)
 
         # Gaia
-        ra,dec = radec_at_mjd(gaia.ra, gaia.dec, gaia.ref_epoch.astype(float),
-                              gaia.pmra, gaia.pmdec, gaia.parallax, self.mjd_obs)
+        gaia.rename('ra',  'ra_gaia')
+        gaia.rename('dec', 'dec_gaia')
         gaia.rename('source_id', 'gaia_sourceid')
+        ra,dec = radec_at_mjd(gaia.ra_gaia, gaia.dec_gaia,
+                              gaia.ref_epoch.astype(float),
+                              gaia.pmra, gaia.pmdec, gaia.parallax, self.mjd_obs)
         gaia.ra_now = ra
         gaia.dec_now = dec
-        gaia.rename('ra', 'ra_gaia')
-        gaia.rename('dec', 'dec_gaia')
         for b in ['g', 'bp', 'rp']:
             mag = gaia.get('phot_%s_mean_mag' % b)
             sn = gaia.get('phot_%s_mean_flux_over_error' % b)
@@ -794,7 +795,8 @@ class Measurer(object):
         if ps1 is not None:
             # PS1 for photometry
             # Initial flux estimate, from nominal zeropoint
-            ps1.flux0 = (10.**((zp0 - ps1.legacy_survey_mag) / 2.5) * exptime).astype(np.float32)
+            ps1.flux0 = (10.**((zp0 - ps1.legacy_survey_mag) / 2.5) * exptime
+                         ).astype(np.float32)
             # we don't have/use proper motions for PS1 stars
             ps1.rename('ra_ok',  'ra_now')
             ps1.rename('dec_ok', 'dec_now')
@@ -1001,9 +1003,12 @@ class Measurer(object):
                                             arcsec_diam / 2. / self.pixscale)
             with np.errstate(divide='ignore'):
                 err = 1./ierr
-            apphot = photutils.aperture_photometry(fit_img, ap, error=err, mask=(ierr==0))
-            phot.set('apflux_%i'     % arcsec_diam, apphot.field('aperture_sum').data.astype(np.float32))
-            phot.set('apflux_%i_err' % arcsec_diam, apphot.field('aperture_sum_err').data.astype(np.float32))
+            apphot = photutils.aperture_photometry(fit_img, ap,
+                                                   error=err, mask=(ierr==0))
+            phot.set('apflux_%i' % arcsec_diam,
+                     apphot.field('aperture_sum').data.astype(np.float32))
+            phot.set('apflux_%i_err' % arcsec_diam,
+                     apphot.field('aperture_sum_err').data.astype(np.float32))
 
         # Add to the zeropoints table
         ccds['raoff']  = raoff
@@ -1074,12 +1079,11 @@ class Measurer(object):
 
         # Look for merged file
         fn = self.get_splinesky_merged_filename()
-        #print('Looking for file', fn)
         if os.path.exists(fn):
-            #print('Reading splinesky-merged {}'.format(fn))
             T = fits_table(fn)
             if validate_procdate_plver(fn, 'table', self.expnum, self.plver,
-                                       self.procdate, self.plprocid, data=T, quiet=self.quiet):
+                                       self.procdate, self.plprocid, data=T,
+                                       quiet=self.quiet):
                 I, = np.nonzero((T.expnum == self.expnum) *
                                 np.array([c.strip() == self.ext for c in T.ccdname]))
                 if len(I) == 1:
@@ -1089,7 +1093,6 @@ class Measurer(object):
                     Ti.gridvals = Ti.gridvals[:h, :w]
                     Ti.xgrid = Ti.xgrid[:w]
                     Ti.ygrid = Ti.ygrid[:h]
-
                     skyclass = Ti.skyclass.strip()
                     clazz = get_class_from_name(skyclass)
                     fromfits = getattr(clazz, 'from_fits_row')
@@ -1098,30 +1101,24 @@ class Measurer(object):
 
         # Look for single-CCD file
         fn = self.get_splinesky_unmerged_filename()
-        #print('Reading file', fn)
         if not os.path.exists(fn):
             return None
-
-        #print('Reading splinesky {}'.format(fn))
         hdr = read_primary_header(fn)
         if not validate_procdate_plver(fn, 'primaryheader', self.expnum, self.plver,
-                                       self.procdate, self.plprocid, data=hdr, quiet=self.quiet):
+                                       self.procdate, self.plprocid, data=hdr,
+                                       quiet=self.quiet):
             return None
-
         try:
             skyclass = hdr['SKY']
         except NameError:
             raise NameError('SKY not in header: skyfn={}'.format(fn))
-
         clazz = get_class_from_name(skyclass)
-
         if getattr(clazz, 'from_fits', None) is not None:
             fromfits = getattr(clazz, 'from_fits')
             sky = fromfits(fn, hdr)
         else:
             fromfits = getattr(clazz, 'fromFitsHeader')
             sky = fromfits(hdr, prefix='SKY_')
-
         return sky
 
     def tractor_fit_sources(self, ref_ra, ref_dec, ref_flux, img, ierr,
@@ -1340,7 +1337,6 @@ class Measurer(object):
         fig,ax=plt.subplots(1,2,figsize=(10,4))
         plt.subplots_adjust(wspace=0.2,bottom=0.2,right=0.8)
         for key in ['astrom_gaia','photom']:
-        #for key in ['astrom_gaia','astrom_ps1','photom']:
             if key == 'astrom_gaia':    
                 ax[0].scatter(stars['radiff'],stars['decdiff'])
                 xlab=ax[0].set_xlabel(r'$\Delta Ra$ (Gaia - CCD)')
