@@ -2067,7 +2067,9 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False, just_me
     else:
         all_stars_astrom = None
     zpts = all_ccds['zpt']
-    all_ccds['zptavg'] = np.median(zpts[np.isfinite(zpts)])
+    zptgood = np.isfinite(zpts)
+    if np.sum(zptgood) > 0:
+        all_ccds['zptavg'] = np.median(zpts[zptgood])
 
     t0 = ptime('measure-image-%s' % img_fn,t0)
     return all_ccds, all_stars_photom, all_stars_astrom, extra_info, measure
@@ -2181,9 +2183,11 @@ def runit(imgfn, starfn_photom, surveyfn, annfn, mp, bad_expid=None,
     hdr.add_record(dict(name='PLPROCID', value=measure.plprocid, comment='CP processing batch'))
     hdr.add_record(dict(name='RA_BORE', value=hmsstring2ra(primhdr['RA']), comment='Boresight RA'))
     hdr.add_record(dict(name='DEC_BORE', value=dmsstring2dec(primhdr['DEC']), comment='Boresight Dec'))
-
-    medzpt = np.nanmedian(ccds['zpt'])
-    if not np.isfinite(medzpt):
+    
+    zptgood = np.isfinite(ccds['zpt'])
+    if np.sum(zptgood) > 0:
+        medzpt = np.median(ccds['zpt'][zptgood])
+    else:
         medzpt = 0.0
     hdr.add_record(dict(name='CCD_ZPT', value=medzpt, comment='Exposure median zeropoint'))
 
