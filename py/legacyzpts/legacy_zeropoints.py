@@ -754,8 +754,6 @@ class Measurer(object):
         gaia.ra  = ra
         gaia.dec = dec
 
-        import pdb ; pdb.set_trace()
-
         return self.run_psfphot(ccds, ps1, gaia, zp0, exptime, airmass, sky_img,
                                 splinesky, survey)
 
