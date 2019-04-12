@@ -143,8 +143,6 @@ class LegacySurveyImage(object):
         self.width   = ccd.width
         self.height  = ccd.height
         self.sig1    = ccd.sig1
-        #self.plver   = ccd.plver.strip()
-        #self.procdate = ccd.procdate.strip()
         # Use dummy values to accommodate old calibs (which will fail later
         # unless old-calibs-ok=True)
         self.plver = getattr(ccd, 'plver', 'xxx').strip()
@@ -928,8 +926,8 @@ class LegacySurveyImage(object):
             x0,y0 = sx.start,sy.start
             sky.shift(x0, y0)
         sky.version = Ti.legpipev
-        sky.plver = Ti.plver
-        sky.procdate = Ti.procdate
+        sky.plver = getattr(Ti, 'plver', '')
+        sky.procdate = getattr(Ti, 'procdate', '')
         if 'sig1' in Ti.get_columns():
             sky.sig1 = Ti.sig1
         if 'imgdsum' in Ti.get_columns():
@@ -1029,8 +1027,8 @@ class LegacySurveyImage(object):
             psf = PixelizedPsfEx(None, psfex=psfex)
 
         psf.version = Ti.legpipev.strip()
-        psf.plver = Ti.plver.strip()
-        psf.procdate = Ti.procdate.strip()
+        psf.plver = getattr(Ti, 'plver', '')
+        psf.procdate = getattr(Ti, 'procdate', '')
         if 'imgdsum' in Ti.get_columns():
             psf.datasum = Ti.imgdsum
         psf.fwhm = Ti.psf_fwhm
