@@ -274,8 +274,6 @@ class Measurer(object):
                  **kwargs):
         self.quiet = quiet
         # Set extra kwargs
-        self.ps1_pattern= kwargs['ps1_pattern']
-        
         self.zptsfile= kwargs.get('zptsfile')
         self.prefix= kwargs.get('prefix')
         self.verboseplots= kwargs.get('verboseplots')
@@ -632,6 +630,7 @@ class Measurer(object):
         ccds['width'] = self.width
         ccds['height'] = self.height
         ccds['fwhm_cp'] = self.fwhm_cp
+        ccds['fwhm'] = self.fwhm_cp # initialize with the CP value
 
         hdr_fwhm = self.fwhm_cp
         notneeded_cols= ['avsky']
@@ -722,8 +721,7 @@ class Measurer(object):
         
         ps1 = None
         try:
-            ps1 = ps1cat(ccdwcs=self.wcs, 
-                         pattern= self.ps1_pattern).get_stars(magrange=None)
+            ps1 = ps1cat(ccdwcs=self.wcs).get_stars(magrange=None)
         except OSError:
             print('No PS1 stars found for this image -- outside the PS1 footprint, or in the Galactic plane?')
 
@@ -804,9 +802,8 @@ class Measurer(object):
         for b in ['g', 'bp', 'rp']:
             mag = gaia.get('phot_%s_mean_mag' % b)
             sn = gaia.get('phot_%s_mean_flux_over_error' % b)
-            magerr = np.abs(2.5/np.log(10.) * 1./np.maximum(1., sn))
+            magerr = np.abs(2.5/np.log(10.) * 1./np.fmax(1., sn))
             gaia.set('phot_%s_mean_mag_error' % b, magerr)
-            # FIXME -- NaNs?
         gaia.flux0 = np.ones(len(gaia), np.float32)
         # we set 'astrom' and omit 'photom'; it will get filled in with zeros.
         gaia.astrom = np.ones(len(gaia), bool)
@@ -1969,7 +1966,6 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False, just_me
             do_psfex = False
 
     if do_splinesky or do_psfex:
-        # for DR8, allow grabbing old PsfEx individual-CCD PsfEx files
         ccds = mp.map(run_one_calib, [(measure, survey, ext, do_psfex, do_splinesky)
                                       for ext in extlist])
         
@@ -1983,16 +1979,18 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False, just_me
             skyoutfn = measure.get_splinesky_merged_filename()
             err_splinesky = merge_splinesky(survey, measure.expnum, ccds, skyoutfn, opts)
             if err_splinesky == 1:
-                if not quiet:
-                    print('Wrote {}'.format(skyoutfn))
+                pass
+                #if not quiet:
+                #    print('Wrote {}'.format(skyoutfn))
             else:
                 print('Problem writing {}'.format(skyoutfn))
         if do_psfex:
             psfoutfn = measure.get_psfex_merged_filename()
             err_psfex = merge_psfex(survey, measure.expnum, ccds, psfoutfn, opts)
             if err_psfex == 1:
-                if not quiet:
-                    print('Wrote {}'.format(psfoutfn))
+                pass
+                #if not quiet:
+                #    print('Wrote {}'.format(psfoutfn))
             else:
                 print('Problem writing {}'.format(psfoutfn))
 
@@ -2069,7 +2067,9 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False, just_me
     else:
         all_stars_astrom = None
     zpts = all_ccds['zpt']
-    all_ccds['zptavg'] = np.median(zpts[np.isfinite(zpts)])
+    zptgood = np.isfinite(zpts)
+    if np.sum(zptgood) > 0:
+        all_ccds['zptavg'] = np.median(zpts[zptgood])
 
     t0 = ptime('measure-image-%s' % img_fn,t0)
     return all_ccds, all_stars_photom, all_stars_astrom, extra_info, measure
@@ -2183,9 +2183,11 @@ def runit(imgfn, starfn_photom, surveyfn, annfn, mp, bad_expid=None,
     hdr.add_record(dict(name='PLPROCID', value=measure.plprocid, comment='CP processing batch'))
     hdr.add_record(dict(name='RA_BORE', value=hmsstring2ra(primhdr['RA']), comment='Boresight RA'))
     hdr.add_record(dict(name='DEC_BORE', value=dmsstring2dec(primhdr['DEC']), comment='Boresight Dec'))
-
-    medzpt = np.nanmedian(ccds['zpt'])
-    if not np.isfinite(medzpt):
+    
+    zptgood = np.isfinite(ccds['zpt'])
+    if np.sum(zptgood) > 0:
+        medzpt = np.median(ccds['zpt'][zptgood])
+    else:
         medzpt = 0.0
     hdr.add_record(dict(name='CCD_ZPT', value=medzpt, comment='Exposure median zeropoint'))
 
@@ -2205,8 +2207,6 @@ def runit(imgfn, starfn_photom, surveyfn, annfn, mp, bad_expid=None,
 
     if stars_photom is not None:
         writeto_via_temp(starfn_photom, stars_photom, overwrite=True, header=hdr)
-    # if stars_astrom is not None:
-    #     writeto_via_temp(starfn_astrom, stars_astrom, overwrite=True, header=hdr)
 
     accds = astropy_to_astrometry_table(ccds)
 
@@ -2240,7 +2240,6 @@ def get_parser():
     parser.add_argument('--outdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
     parser.add_argument('--debug', action='store_true', default=False, help='Write additional files and plots for debugging')
     parser.add_argument('--choose_ccd', action='store', default=None, help='forced to use only the specified ccd')
-    parser.add_argument('--ps1_pattern', action='store', default='/project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v3/ps1-%(hp)05d.fits', help='pattern for PS1 catalogues')
     parser.add_argument('--logdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
     parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
     parser.add_argument('--verboseplots', action='store_true', default=False, help='use to plot FWHM Moffat PSF fits to the 20 brightest stars')
