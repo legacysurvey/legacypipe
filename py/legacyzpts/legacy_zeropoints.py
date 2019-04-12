@@ -539,7 +539,6 @@ class Measurer(object):
             mnsky, skystd = self.sensible_sigmaclip(img - skyimg,nsigma=nsigma)
             skymed= np.median(skyimg)
         else:
-            #sky, sig1 = self.sensible_sigmaclip(img[1500:2500, 500:1000])
             if self.camera in ['decam', 'megaprime']:
                 slc=[slice(1500,2500),slice(500,1500)]
             elif self.camera in ['mosaic','90prime']:
@@ -550,8 +549,6 @@ class Measurer(object):
             skymed= np.median(clip_vals) 
             skystd= np.std(clip_vals) 
             skyimg= np.zeros(img.shape) + skymed
-            # MAD gives 10% larger value
-            # sig1= 1.4826 * np.median(np.abs(clip_vals))
         return skyimg, skymed, skystd
 
     def get_ps1_cuts(self,ps1):
@@ -687,7 +684,7 @@ class Measurer(object):
 
         # Bunch of sky estimates
         # Median of absolute deviation (MAD), std dev = 1.4826 * MAD
-        print('sky from median of image= %.2f' % skymed)
+        print('sky from median of image = %.2f' % skymed)
         skybr = zp0 - 2.5*np.log10(skymed / self.pixscale / self.pixscale / self.exptime)
         print('Sky brightness: {:.3f} mag/arcsec^2 (assuming nominal zeropoint)'.format(skybr))
 
@@ -703,8 +700,8 @@ class Measurer(object):
         ps1 = None
         try:
             ps1 = ps1cat(ccdwcs=self.wcs).get_stars(magrange=None)
-        except OSError:
-            print('No PS1 stars found for this image -- outside the PS1 footprint, or in the Galactic plane?')
+        except OSError as e:
+            print('No PS1 stars found for this image -- outside the PS1 footprint, or in the Galactic plane?', e)
 
         if ps1 is not None and len(ps1) == 0:
             ps1 = None
