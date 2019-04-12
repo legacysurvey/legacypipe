@@ -794,9 +794,8 @@ class Measurer(object):
         for b in ['g', 'bp', 'rp']:
             mag = gaia.get('phot_%s_mean_mag' % b)
             sn = gaia.get('phot_%s_mean_flux_over_error' % b)
-            magerr = np.abs(2.5/np.log(10.) * 1./np.maximum(1., sn))
+            magerr = np.abs(2.5/np.log(10.) * 1./np.fmax(1., sn))
             gaia.set('phot_%s_mean_mag_error' % b, magerr)
-            # FIXME -- NaNs?
         gaia.flux0 = np.ones(len(gaia), np.float32)
         # we set 'astrom' and omit 'photom'; it will get filled in with zeros.
         gaia.astrom = np.ones(len(gaia), bool)
@@ -2060,6 +2059,8 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False, just_me
         all_stars_astrom = None
     zpts = all_ccds['zpt']
     all_ccds['zptavg'] = np.median(zpts[np.isfinite(zpts)])
+
+    import pdb ; pdb.set_trace()
 
     t0 = ptime('measure-image-%s' % img_fn,t0)
     return all_ccds, all_stars_photom, all_stars_astrom, extra_info, measure
