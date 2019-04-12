@@ -1,5 +1,5 @@
 from __future__ import print_function
-import os
+import os, warnings
 import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
@@ -143,9 +143,10 @@ class LegacySurveyImage(object):
         self.width   = ccd.width
         self.height  = ccd.height
         self.sig1    = ccd.sig1
-        self.plver   = ccd.plver.strip()
-        self.procdate = ccd.procdate.strip()
-        # Use a dummy value to accommodate old calibs (which will fail later unless old-calibs-ok=True)
+        # Use dummy values to accommodate old calibs (which will fail later
+        # unless old-calibs-ok=True)
+        self.plver = getattr(ccd, 'plver', 'xxx').strip()
+        self.procdate = getattr(ccd, 'procdate', 'xxxxxxx').strip()
         self.plprocid = getattr(ccd, 'plprocid', 'xxxxxxx').strip()
 
         # Which Data Quality bits mark saturation?
@@ -925,8 +926,8 @@ class LegacySurveyImage(object):
             x0,y0 = sx.start,sy.start
             sky.shift(x0, y0)
         sky.version = Ti.legpipev
-        sky.plver = Ti.plver
-        sky.procdate = Ti.procdate
+        sky.plver = getattr(Ti, 'plver', '')
+        sky.procdate = getattr(Ti, 'procdate', '')
         if 'sig1' in Ti.get_columns():
             sky.sig1 = Ti.sig1
         if 'imgdsum' in Ti.get_columns():
@@ -1026,8 +1027,8 @@ class LegacySurveyImage(object):
             psf = PixelizedPsfEx(None, psfex=psfex)
 
         psf.version = Ti.legpipev.strip()
-        psf.plver = Ti.plver.strip()
-        psf.procdate = Ti.procdate.strip()
+        psf.plver = getattr(Ti, 'plver', '')
+        psf.procdate = getattr(Ti, 'procdate', '')
         if 'imgdsum' in Ti.get_columns():
             psf.datasum = Ti.imgdsum
         psf.fwhm = Ti.psf_fwhm
@@ -1510,7 +1511,10 @@ def fix_weight_quantization(wt, weightfn, ext, slc):
     # to the compressed data -- the underlying BINTABLE with the
     # ZSCALE and ZZERO keywords we need.
     from astropy.io import fits as fits_astropy
-    hdu = fits_astropy.open(weightfn, disable_image_compression=True)[ext]
+    from astropy.utils.exceptions import AstropyUserWarning
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category=AstropyUserWarning)
+        hdu = fits_astropy.open(weightfn, disable_image_compression=True)[ext]
     hdr = hdu.header
     table = hdu.data
     # This was an older way of accessing the compressed data table:
@@ -1582,8 +1586,12 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
             if strip:
                 val = np.array([str(v).strip() for v in val])
             if not np.all(val == targetval):
-                print('WARNING: table value', val, 'not equal to', targetval, 'in file', fn)
-                return False
+                if old_calibs_ok:
+                    print('WARNING: {} {}!={} in {} table but old_calibs_ok=True'.format(key, val, targetval, fn))
+                    continue
+                else:
+                    print('WARNING: {} {}!={} in {} table'.format(key, val, targetval, fn))
+                    return False
         return True
     elif filetype in ['primaryheader', 'header']:
         if data is None:
