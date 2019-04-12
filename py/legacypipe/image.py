@@ -1,5 +1,5 @@
 from __future__ import print_function
-import os
+import os, warnings
 import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
@@ -1513,7 +1513,10 @@ def fix_weight_quantization(wt, weightfn, ext, slc):
     # to the compressed data -- the underlying BINTABLE with the
     # ZSCALE and ZZERO keywords we need.
     from astropy.io import fits as fits_astropy
-    hdu = fits_astropy.open(weightfn, disable_image_compression=True)[ext]
+    from astropy.utils.exceptions import AstropyUserWarning
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category=AstropyUserWarning)
+        hdu = fits_astropy.open(weightfn, disable_image_compression=True)[ext]
     hdr = hdu.header
     table = hdu.data
     # This was an older way of accessing the compressed data table:
