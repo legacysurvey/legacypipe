@@ -158,6 +158,10 @@ def annotate_one_ccd(X):
     psf = None
     wcs = None
     sky = None
+
+    if ccd.ccdnastrom == 0: # something went terribly wrong
+        return result
+
     try:
         tim = im.get_tractor_image(**kwargs)
     except:
