@@ -189,11 +189,7 @@ def cols_for_survey_table(which='all'):
         dustins_keys= ['skyrms']
     return need_arjuns_keys + dustins_keys + martins_keys + gods_keys
  
-def create_survey_table(T, surveyfn, camera=None, bad_expid=None):
-    """input _ccds_table fn
-    output a table formatted for legacypipe/runbrick
-
-    """
+def write_survey_table(T, surveyfn, camera=None, bad_expid=None):
     from legacyzpts.psfzpt_cuts import add_psfzpt_cuts
 
     assert(camera in CAMERAS)
@@ -2211,8 +2207,8 @@ def runit(imgfn, starfn_photom, surveyfn, annfn, mp, bad_expid=None,
     accds = astropy_to_astrometry_table(ccds)
 
     # survey table
-    create_survey_table(accds, surveyfn, camera=measureargs['camera'],
-                        bad_expid=bad_expid)
+    write_survey_table(accds, surveyfn, camera=measureargs['camera'],
+                       bad_expid=bad_expid)
     # survey --> annotated
     create_annotated_table(surveyfn, annfn, measureargs['camera'], survey, mp)
 
@@ -2339,24 +2335,28 @@ def main(image_list=None,args=None):
         psffn = measure.get_psfex_merged_filename()
         skyfn = measure.get_splinesky_merged_filename()
 
-        legok, annok, psfok, skyok = [validate_procdate_plver(
+        leg_ok, ann_ok, psf_ok, sky_ok = [validate_procdate_plver(
             fn, 'table', measure.expnum, measure.plver, measure.procdate, measure.plprocid, quiet=quiet)
             for fn in [F.surveyfn, F.annfn, psffn, skyfn]]
 
-        if measureargs['run_calibs_only'] and psfok and skyok:
+        if measureargs['run_calibs_only'] and psf_ok and sky_ok:
             print('Already finished {}'.format(psffn))
             print('Already finished {}'.format(skyfn))
             continue
             
-        photok = validate_procdate_plver(F.starfn_photom, 'header', measure.expnum,
+        phot_ok = validate_procdate_plver(F.starfn_photom, 'header', measure.expnum,
                                          measure.plver, measure.procdate, measure.plprocid,
                                          ext=1, quiet=quiet)
 
-        if legok and annok and photok and psfok and skyok:
+        if leg_ok and ann_ok and phot_ok and psf_ok and sky_ok:
             print('Already finished: {}'.format(F.annfn))
             continue
 
-        if legok and photok:
+        if phot_ok and not leg_ok:
+            create_survey_table(F.starfn_photom, F.surveyfn, camera, survey, mp,
+                                **measureargs)
+
+        if leg_ok and phot_ok and not ann_ok:
             # survey --> annotated
             create_annotated_table(F.surveyfn, F.annfn, camera, survey, mp)
             continue
