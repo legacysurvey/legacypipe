@@ -187,9 +187,6 @@ class GaiaPosition(ParamList):
 
 
 class GaiaSource(PointSource):
-    def __init__(self, pos, bright):
-        super(GaiaSource, self).__init__(pos, bright)
-
     @staticmethod
     def getName():
         return 'GaiaSource'
@@ -197,43 +194,25 @@ class GaiaSource(PointSource):
     def getSourceType(self):
         return 'GaiaSource'
 
-    def isForcedPointSource(self):
-        return self.forced_point_source
-
     @classmethod
     def from_catalog(cls, g, bands):
         from tractor import NanoMaggies
-
-        # When creating 'tim.time' entries, we do:
-        #import astropy.time
-        # Convert MJD-OBS, in UTC, into TAI
-        #mjd_tai = astropy.time.Time(self.mjdobs,
-        #                            format='mjd', scale='utc').tai.mjd
-
         # Gaia has NaN entries when no proper motion or parallax is measured.
         # Convert to zeros.
         def nantozero(x):
             if not np.isfinite(x):
                 return 0.
             return x
-
         pos = GaiaPosition(g.ra, g.dec, g.ref_epoch,
                            nantozero(g.pmra),
                            nantozero(g.pmdec),
                            nantozero(g.parallax))
-        #print('Gaia G mags:', g.phot_g_mean_mag)
         # Assume color 0 from Gaia G mag as initial flux
         m = g.phot_g_mean_mag
         fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
                        for band in bands])
         bright = NanoMaggies(order=bands, **fluxes)
         src = cls(pos, bright)
-        #print('Created:', src)
-        # print('Params:', src.getParams())
-        # src.printThawedParams()
-        # print('N params:', src.numberOfParams())
-        # print('named params:', src.namedparams)
-        # print('param names:', src.paramnames)
         src.forced_point_source = g.pointsource
         return src
 

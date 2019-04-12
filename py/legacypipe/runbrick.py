@@ -914,23 +914,33 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tlast = Time()
 
     refstars, refcat = get_reference_sources(survey, targetwcs, pixscale, bands,
-                                             tycho_stars=tycho_stars, gaia_stars=gaia_stars,
+                                             tycho_stars=tycho_stars,
+                                             gaia_stars=gaia_stars,
                                              large_galaxies=large_galaxies,
                                              star_clusters=star_clusters)
     # "refstars" is a table
     # "refcat" is a list of tractor Sources
     # They are aligned
     T_donotfit = None
+    T_clusters = None
     if refstars:
         assert(len(refstars) == len(refcat))
-
-        # Pull out reference sources flagged do-not-fit; we add them back in (much) later.
-        # These are Gaia sources near the centers of LSLGA large galaxies, so we want to
-        # propagate the Gaia catalog information, but don't want to fit them.
+        # Pull out reference sources flagged do-not-fit; we add them
+        # back in (much) later.  These are Gaia sources near the
+        # centers of LSLGA large galaxies, so we want to propagate the
+        # Gaia catalog information, but don't want to fit them.
         I, = np.nonzero(refstars.donotfit)
         if len(I):
             T_donotfit = refstars[I]
             I, = np.nonzero(np.logical_not(refstars.donotfit))
+            refstars.cut(I)
+            refcat = [refcat[i] for i in I]
+            assert(len(refstars) == len(refcat))
+        # Pull out star clusters too.
+        I, = np.nonzero(refstars.iscluster)
+        if len(I):
+            T_clusters = refstars[I]
+            I, = np.nonzero(np.logical_not(refstars.iscluster))
             refstars.cut(I)
             refcat = [refcat[i] for i in I]
             assert(len(refstars) == len(refcat))
@@ -947,68 +957,57 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     Igaia = []
     if gaia_stars:
         gaia = refstars
-        Igaia = np.flatnonzero(np.logical_or(refstars.isbright, refstars.ismedium) *
-                               np.logical_not(refstars.iscluster) *
-                               (gaia.G < 15.))
-        Igaia = Igaia[np.argsort(gaia.G[Igaia])]
-        debug(len(Igaia), 'stars with G<15')
-
-        # gaia = refstars[np.logical_or(refstars.isbright, refstars.ismedium) *
-        #                 np.logical_not(refstars.iscluster)]
-        # if len(gaia):
-        #     Igaia = np.argsort(gaia.G)
-        #     Igaia = Igaia[gaia.G[Igaia] < 15.]
+        Igaia, = np.nonzero(np.logical_or(refstars.isbright, refstars.ismedium) *
+                            np.logical_not(refstars.iscluster) *
+                            refstars.pointsource)
+        Igaia = Igaia[np.argsort(gaia.phot_g_mean_mag[Igaia])]
+        debug(len(Igaia), 'stars for halo fitting')
     if len(Igaia):
         from legacypipe.halos import fit_halos
-        debug('Subtracting stellar halos...')
-        # FIXME -- again...?
+        # FIXME -- another coadd...
         coimgs,cons = quick_coadds(tims, bands, targetwcs)
-
-        fluxes,haloimgs = fit_halos(coimgs, cons, H, W, targetwcs,
-                                    pixscale, bands, gaia[Igaia],
-                                    plots, ps)
+        fluxes,haloimgs = fit_halos(coimgs, cons, H, W, targetwcs, pixscale, bands,
+                                    gaia[Igaia], plots, ps)
         init_fluxes = [(f and f[0] or None) for f in fluxes]
 
         fluxes2,haloimgs2 = fit_halos([co-halo for co,halo in zip(coimgs,haloimgs)],
-                                       cons, H, W, targetwcs,
-                                       pixscale, bands, gaia[Igaia],
-                                       plots, ps, init_fluxes=init_fluxes)
+                                       cons, H, W, targetwcs, pixscale, bands,
+                                       gaia[Igaia], plots, ps,
+                                       init_fluxes=init_fluxes)
 
         for iband,b in enumerate(bands):
             haloflux = np.zeros(len(refstars))
             haloflux[Igaia] = np.array([f and f[0][iband] or 0. for f in fluxes2])
             refstars.set('star_halo_flux_%s' % b, haloflux)
 
-        ## FIXME -- write a map of where we have subtracted the halo?  (splice with PSF model??)
+        ## FIXME -- write a map of where we have subtracted the halo?
+        ## (splice with PSF model??)
 
         if plots:
             plt.clf()
             dimshow(get_rgb(coimgs, bands, **rgbkwargs))
             plt.title('data')
             ps.savefig()
-
             plt.clf()
             dimshow(get_rgb(haloimgs, bands, **rgbkwargs))
             plt.title('fit profiles')
             ps.savefig()
-
             plt.clf()
             dimshow(get_rgb([c-h for c,h in zip(coimgs,haloimgs)], bands, **rgbkwargs))
             plt.title('data - fit profiles')
             ps.savefig()
-
             plt.clf()
             dimshow(get_rgb(haloimgs2, bands, **rgbkwargs))
             plt.title('second-round fit profiles')
             ps.savefig()
-
             plt.clf()
             dimshow(get_rgb([c-h2 for c,h2 in zip(coimgs,haloimgs2)], bands, **rgbkwargs))
             plt.title('second-round data - fit profiles')
             ps.savefig()
 
-    if refstars or T_donotfit:
-        allrefs = merge_tables([t for t in [refstars, T_donotfit] if t])
+    if refstars or T_donotfit or T_clusters:
+        allrefs = merge_tables([t for t in [refstars, T_donotfit, T_clusters] if t],
+                               columns='fillzero')
         with survey.write_output('ref-sources', brick=brickname) as out:
             allrefs.writeto(None, fits_object=out.fits, primheader=version_header)
         del allrefs
@@ -1026,8 +1025,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     # Expand the mask around saturated pixels to avoid generating
     # peaks at the edge of the mask.
-    saturated_pix = [binary_dilation(satmap > 0, iterations=4)
-                     for satmap in satmaps]
+    saturated_pix = [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps]
 
     # Saturated blobs -- create a source for each, except for those
     # that already have a Tycho-2 or Gaia star
@@ -1037,7 +1035,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         # Build a map from old "satblobs" to new; identity to start
         remap = np.arange(nsat+1)
         # Drop blobs that contain a reference star
-        zeroout = satblobs[refstars.iby[refstars.in_bounds], refstars.ibx[refstars.in_bounds]]
+        zeroout = satblobs[refstars.iby[refstars.in_bounds],
+                           refstars.ibx[refstars.in_bounds]]
         remap[zeroout] = 0
         # Renumber them to be contiguous
         I = np.flatnonzero(remap)
@@ -1130,12 +1129,11 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
         if gaia_stars and len(gaia):
             ok,ix,iy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
-            for x,y,g in zip(ix,iy,gaia.G):
+            for x,y,g in zip(ix,iy,gaia.phot_g_mean_mag):
                 plt.text(x, y, '%.1f' % g, color='k',
                          bbox=dict(facecolor='w', alpha=0.5))
             plt.axis(ax)
             ps.savefig()
-
     del satmap
 
     # SED-matched detections
@@ -1235,12 +1233,13 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
             'ps', 'refstars', 'gaia_stars', 'saturated_pix',
-            'T_donotfit']
+            'T_donotfit', 'T_clusters']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
 
 def stage_fitblobs(T=None,
+                   T_clusters=None,
                    brickname=None,
                    brickid=None,
                    brick=None,
@@ -1273,11 +1272,8 @@ def stage_fitblobs(T=None,
     '''
     from tractor import Catalog
 
-    tlast = Time()
-    for tim in tims:
-        assert(np.all(np.isfinite(tim.getInvError())))
-
     record_event and record_event('stage_fitblobs: starting')
+    tlast = Time()
 
     # How far down to render model profiles
     minsigma = 0.1
@@ -1339,7 +1335,6 @@ def stage_fitblobs(T=None,
         plt.title('Blobs')
         ps.savefig()
 
-
     T.orig_ra  = T.ra.copy()
     T.orig_dec = T.dec.copy()
 
@@ -1396,12 +1391,10 @@ def stage_fitblobs(T=None,
         blobmap[keepblobs + 1] = np.arange(len(keepblobs))
         # apply the map!
         blobs = blobmap[blobs + 1]
-
         # 'blobslices' and 'blobsrcs' are lists where the index corresponds to the
         # value in the 'blobs' map.
         blobslices = [blobslices[i] for i in keepblobs]
         blobsrcs   = [blobsrcs  [i] for i in keepblobs]
-
         # one more place where blob numbers are recorded...
         T.blob = blobs[T.iby, T.ibx]
 
@@ -1451,8 +1444,11 @@ def stage_fitblobs(T=None,
 
     if refstars:
         from legacypipe.oneblob import get_inblob_map
-        refstars.radius_pix = np.ceil(refstars.radius * 3600. / targetwcs.pixel_scale()).astype(int)
-        refmap = get_inblob_map(targetwcs, refstars[refstars.donotfit == False])
+        refs = refstars[refstars.donotfit == False]
+        if T_clusters is not None:
+            refs = merge_tables([refs, T_clusters], columns='fillzero')
+        refmap = get_inblob_map(targetwcs, refs)
+        del refs
     else:
         HH, WW = targetwcs.shape
         refmap = np.zeros((int(HH), int(WW)), np.uint8)

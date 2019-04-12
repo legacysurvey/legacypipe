@@ -752,9 +752,8 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     from scipy.ndimage.measurements import label, find_objects
 
     image = binary_fill_holes(image)
-
     blobs,nblobs = label(image)
-    print('N detected blobs:', nblobs)
+    print('Detected blobs:', nblobs)
     H,W = image.shape
     del image
 
@@ -788,13 +787,10 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     blobsrcs = []
     keepslices = []
     blobmap = {}
-    dropslices = {}
     for blob in range(1, nblobs+1):
-        Isrcs = np.flatnonzero(T.blob == blob)
+        Isrcs, = np.nonzero(T.blob == blob)
         if len(Isrcs) == 0:
-            #print('Blob', blob, 'has no sources')
             blobmap[blob] = -1
-            dropslices[blob] = blobslices[blob-1]
             continue
         blobmap[blob] = len(blobsrcs)
         blobsrcs.append(Isrcs)
