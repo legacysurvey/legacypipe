@@ -2115,7 +2115,7 @@ class outputFns(object):
             base = base[:-len('.fits')]
         if debug:
             base += '-debug'
-        self.starfn_photom = os.path.join(basedir, base + '-photom.fits')
+        self.photomfn = os.path.join(basedir, base + '-photom.fits')
         self.surveyfn = os.path.join(basedir, base + '-survey.fits')
         self.annfn = os.path.join(basedir, base + '-annotated.fits')
             
@@ -2127,7 +2127,7 @@ def writeto_via_temp(outfn, obj, func_write=False, **kwargs):
         obj.writeto(tempfn, **kwargs)
     os.rename(tempfn, outfn)
 
-def runit(imgfn, starfn_photom, surveyfn, annfn, mp, bad_expid=None,
+def runit(imgfn, photomfn, surveyfn, annfn, mp, bad_expid=None,
           survey=None, run_calibs_only=False, **measureargs):
     '''Generate a legacypipe-compatible (survey) CCDs file for a given image.
     '''
@@ -2200,7 +2200,7 @@ def runit(imgfn, starfn_photom, surveyfn, annfn, mp, bad_expid=None,
     hdr.add_record(dict(name='FILENAME', value=os.path.join(firstdir, base)))
 
     if stars_photom is not None:
-        writeto_via_temp(starfn_photom, stars_photom, overwrite=True, header=hdr)
+        writeto_via_temp(photomfn, stars_photom, overwrite=True, header=hdr)
     # if stars_astrom is not None:
     #     writeto_via_temp(starfn_astrom, stars_astrom, overwrite=True, header=hdr)
 
@@ -2344,7 +2344,7 @@ def main(image_list=None,args=None):
             print('Already finished {}'.format(skyfn))
             continue
             
-        phot_ok = validate_procdate_plver(F.starfn_photom, 'header', measure.expnum,
+        phot_ok = validate_procdate_plver(F.photomfn, 'header', measure.expnum,
                                          measure.plver, measure.procdate, measure.plprocid,
                                          ext=1, quiet=quiet)
 
@@ -2353,7 +2353,7 @@ def main(image_list=None,args=None):
             continue
 
         if phot_ok and not leg_ok:
-            create_survey_table(F.starfn_photom, F.surveyfn, camera, survey, mp,
+            create_survey_table(F.photomfn, F.surveyfn, camera, survey, mp,
                                 **measureargs)
 
         if leg_ok and phot_ok and not ann_ok:
@@ -2363,7 +2363,7 @@ def main(image_list=None,args=None):
 
         # Create the file
         t0 = ptime('before-run',t0)
-        runit(F.imgfn, F.starfn_photom, F.surveyfn, F.annfn, mp, **measureargs)
+        runit(F.imgfn, F.photomfn, F.surveyfn, F.annfn, mp, **measureargs)
         t0 = ptime('after-run',t0)
     tnow = Time()
     print("TIMING:total %s" % (tnow-tbegin,))
