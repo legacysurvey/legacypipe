@@ -2762,9 +2762,11 @@ def stage_writecat(
         T2.wise_mask = WISE.wise_mask
 
         for band in [1,2,3,4]:
+            # Apply the Vega-to-AB shift *while* copying columns from
+            # WISE to T2.
             dm = vega_to_ab['w%i' % band]
             c = 'w%i_psfdepth' % band
-            WISE.set(c, WISE.get(c) + dm)
+            T2.set(c, WISE.get(c) + dm)
             fluxfactor = 10.** (dm / -2.5)
             c = 'w%i_nanomaggies' % band
             flux = WISE.get(c) * fluxfactor
@@ -2791,7 +2793,8 @@ def stage_writecat(
         # Rename some WISE columns
         for cin,cout in [('w%i_nexp',        'nobs_w%i'),
                          ('w%i_profracflux', 'fracflux_w%i'),
-                         ('w%i_prochi2',     'rchisq_w%i'),]:
+                         ('w%i_prochi2',     'rchisq_w%i'),
+                         ('w%i_psfdepth',    'psfdepth_w%i'),]:
             for band in [1,2,3,4]:
                 T2.set(cout % band, WISE.get(cin % band))
 
