@@ -957,7 +957,8 @@ class LegacySurveyData(object):
     from disk.
     '''
 
-    def __init__(self, survey_dir=None, cache_dir=None, output_dir=None):
+    def __init__(self, survey_dir=None, cache_dir=None, output_dir=None,
+                 allbands='grz'):
         '''Create a LegacySurveyData object using data from the given
         *survey_dir* directory, or from the $LEGACY_SURVEY_DIR environment
         variable.
@@ -1023,7 +1024,7 @@ class LegacySurveyData(object):
             'megaprime': MegaPrimeImage,
             }
 
-        self.allbands = 'ugrizY'
+        self.allbands = allbands
 
         # Filename prefix for coadd files
         self.file_prefix = 'legacysurvey'
@@ -1127,17 +1128,11 @@ class LegacySurveyData(object):
         sname = self.file_prefix
 
         if filetype == 'bricks':
-            fn = 'survey-bricks.fits.gz'
-            if self.version in ['dr1','dr2']:
-                fn = 'decals-bricks.fits'
-            return swap(os.path.join(basedir, fn))
+            return swap(os.path.join(basedir, 'survey-bricks.fits.gz'))
 
         elif filetype == 'ccds':
-            if self.version in ['dr1','dr2']:
-                return swaplist([os.path.join(basedir, 'decals-ccds.fits.gz')])
-            else:
-                return swaplist(
-                    glob(os.path.join(basedir, 'survey-ccds*.fits.gz')))
+            return swaplist(
+                glob(os.path.join(basedir, 'survey-ccds*.fits.gz')))
 
         elif filetype == 'ccd-kds':
             return swaplist(
@@ -1161,9 +1156,6 @@ class LegacySurveyData(object):
             return swap(os.path.join(basedir, fn))
 
         elif filetype == 'annotated-ccds':
-            if self.version == 'dr2':
-                return swaplist(
-                    glob(os.path.join(basedir, 'decals-ccds-annotated.fits')))
             return swaplist(
                 glob(os.path.join(basedir, 'ccds-annotated-*.fits.gz')))
 

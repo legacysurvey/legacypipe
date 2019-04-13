@@ -223,6 +223,10 @@ def psf_zeropoint_cuts(P, pixscale,
         print(np.count_nonzero(cut), 'CCDs cut by', name)
 
 def add_psfzpt_cuts(T, camera, bad_expid):
+
+    from legacyzpts.legacy_zeropoints import get_pixscale
+    pixscale = get_pixscale(camera)
+
     if camera == 'mosaic':
         # Arjun: 2019-03-15
         z0 = 26.20
@@ -232,8 +236,8 @@ def add_psfzpt_cuts(T, camera, bad_expid):
         zpt_diff_avg = 0.1
         zpt_lo = dict(z=z0+dz[0])
         zpt_hi = dict(z=z0+dz[1])
-        psf_zeropoint_cuts(T, 0.262, zpt_lo, zpt_hi, bad_expid, camera, radec_rms, skybright,
-                           zpt_diff_avg)
+        psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
+                           skybright, zpt_diff_avg)
 
     elif camera == '90prime':
         g0 = 25.74
@@ -245,8 +249,8 @@ def add_psfzpt_cuts(T, camera, bad_expid):
         zpt_diff_avg = 0.1
         zpt_lo = dict(g=g0+dg[0], r=r0+dr[0])
         zpt_hi = dict(g=g0+dg[1], r=r0+dr[1])
-        psf_zeropoint_cuts(T, 0.45, zpt_lo, zpt_hi, bad_expid, camera, radec_rms, skybright,
-                           zpt_diff_avg)
+        psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
+                           skybright, zpt_diff_avg)
 
     elif camera == 'decam':
         # These are from DR5; eg
@@ -264,8 +268,8 @@ def add_psfzpt_cuts(T, camera, bad_expid):
         zpt_diff_avg = 0.25
         zpt_lo = dict(g=g0+dg[0], r=r0+dr[0], z=z0+dz[0])#, i=i0+dr[0])
         zpt_hi = dict(g=g0+dg[1], r=r0+dr[1], z=z0+dz[1])#, i=i0+dr[1])
-        psf_zeropoint_cuts(T, 0.262, zpt_lo, zpt_hi, bad_expid, camera, radec_rms, skybright,
-                           zpt_diff_avg)
+        psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
+                           skybright, zpt_diff_avg)
     else:
         assert(False)
         

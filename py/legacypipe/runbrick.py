@@ -322,7 +322,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     ccds.brick_x1 = np.ceil (np.max(x, axis=1)).astype(np.int16)
     ccds.brick_y0 = np.floor(np.min(y, axis=1)).astype(np.int16)
     ccds.brick_y1 = np.ceil (np.max(y, axis=1)).astype(np.int16)
-    ccds.sig1 = np.array([tim.sig1 for tim in tims])
     ccds.psfnorm = np.array([tim.psfnorm for tim in tims])
     ccds.galnorm = np.array([tim.galnorm for tim in tims])
     ccds.propid = np.array([tim.propid for tim in tims])
@@ -488,9 +487,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 # If we want to put more weight on choosing good-seeing images, we could do:
                 #metric = np.sqrt(ccds.exptime[b_inds]) / seeing[b_inds]**2
 
-                # DR7: CCDs sig1 values need to get calibrated to nanomaggies
-                zpscale = 10.**((ccds.ccdzpt[b_inds] - 22.5) / 2.5) * ccds.exptime[b_inds]
-                sig1 = ccds.sig1[b_inds] / zpscale
+                sig1 = ccds.sig1[b_inds]
                 # depth would be ~ 1 / (sig1 * seeing); we privilege good seeing here.
                 metric = 1. / (sig1 * seeing[b_inds]**2)
 
@@ -558,8 +555,6 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 continue
             wcs = wcs.get_subimage(int(x0), int(y0), int(x1-x0), int(y1-y0))
 
-            skysig1 = im.get_sig1(splinesky=splinesky, slc=slc)
-
             if 'galnorm_mean' in ccds.get_columns():
                 galnorm = ccd.galnorm_mean
                 debug('Using galnorm_mean from CCDs table:', galnorm)
@@ -580,10 +575,9 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 galmod = np.maximum(0, galmod)
                 galmod /= galmod.sum()
                 galnorm = np.sqrt(np.sum(galmod**2))
-            detiv = 1. / (skysig1 / galnorm)**2
-            debug('Galnorm:', galnorm, 'skysig1:', skysig1)
-            galdepth = -2.5 * (np.log10(5. * skysig1 / galnorm) - 9.)
-            debug('Galdepth for this CCD:', galdepth)
+            detiv = 1. / (sig1 / galnorm)**2
+            galdepth = -2.5 * (np.log10(5. * sig1 / galnorm) - 9.)
+            debug('Galnorm:', galnorm, 'sig1:', sig1, 'galdepth', galdepth)
 
             # Add this image the the depth map...
             from astrometry.util.resample import resample_with_wcs, OverlapError
@@ -2532,6 +2526,7 @@ def stage_wise_forced(
             if WISE is None:
                 WISE = p.phot
             else:
+                p.phot.delete_column('wise_coadd_id') # duplicate
                 WISE.add_columns_from(p.phot)
 
         if wise_mask_maps is not None:
@@ -2610,7 +2605,6 @@ def stage_writecat(
     brick=None,
     invvars=None,
     gaia_stars=False,
-    allbands='ugrizY',
     record_event=None,
     **kwargs):
     '''
@@ -2690,7 +2684,6 @@ def stage_writecat(
             if wise_mask_maps is not None:
                 out.fits.write(wise_mask_maps[0], header=wisehdr)
                 out.fits.write(wise_mask_maps[1], header=wisehdr)
-        del maskbits
         del wise_mask_maps
 
     TT = T.copy()
@@ -2762,34 +2755,33 @@ def stage_writecat(
         T2.wise_mask = WISE.wise_mask
 
         for band in [1,2,3,4]:
+            # Apply the Vega-to-AB shift *while* copying columns from
+            # WISE to T2.
             dm = vega_to_ab['w%i' % band]
             fluxfactor = 10.** (dm / -2.5)
+            # fluxes
             c = 'w%i_nanomaggies' % band
-            flux = WISE.get(c) * fluxfactor
-            WISE.set(c, flux)
             t = 'flux_w%i' % band
-            T2.set(t, flux)
+            T2.set(t, WISE.get(c) * fluxfactor)
             if WISE_T is not None and band <= 2:
-                flux = WISE_T.get(c) * fluxfactor
-                WISE_T.set(c, flux)
                 t = 'lc_flux_w%i' % band
-                T2.set(t, flux)
-
+                T2.set(t, WISE_T.get(c) * fluxfactor)
+            # ivars
             c = 'w%i_nanomaggies_ivar' % band
-            flux = WISE.get(c) / fluxfactor**2
-            WISE.set(c, flux)
             t = 'flux_ivar_w%i' % band
-            T2.set(t, flux)
+            T2.set(t, WISE.get(c) / fluxfactor**2)
             if WISE_T is not None and band <= 2:
-                flux = WISE_T.get(c) / fluxfactor**2
-                WISE_T.set(c, flux)
                 t = 'lc_flux_ivar_w%i' % band
-                T2.set(t, flux)
+                T2.set(t, WISE_T.get(c) / fluxfactor**2)
+            # This is in 1/nanomaggies**2 units also
+            c = 'w%i_psfdepth' % band
+            t = 'psfdepth_w%i' % band
+            T2.set(t, WISE.get(c) / fluxfactor**2)
 
         # Rename some WISE columns
         for cin,cout in [('w%i_nexp',        'nobs_w%i'),
                          ('w%i_profracflux', 'fracflux_w%i'),
-                         ('w%i_prochi2',     'rchisq_w%i'),]:
+                         ('w%i_prochi2',     'rchisq_w%i')]:
             for band in [1,2,3,4]:
                 T2.set(cout % band, WISE.get(cin % band))
 
@@ -2800,7 +2792,9 @@ def stage_writecat(
                              ('w%i_mjd',         'lc_mjd_w%i'),]:
                 for band in [1,2]:
                     T2.set(cout % band, WISE_T.get(cin % band))
-            # print('WISE light-curve shapes:', WISE_T.w1_nanomaggies.shape)
+        # Done with these now!
+        WISE_T = None
+        WISE = None
 
     if T_donotfit:
         T_donotfit.type = np.array(['DUP']*len(T_donotfit))
@@ -2819,12 +2813,13 @@ def stage_writecat(
 
     T2.brick_primary = ((T2.ra  >= brick.ra1 ) * (T2.ra  < brick.ra2) *
                         (T2.dec >= brick.dec1) * (T2.dec < brick.dec2))
+    H,W = maskbits.shape
+    T2.maskbits = maskbits[np.clip(T2.by, 0, H-1).astype(int),
+                           np.clip(T2.bx, 0, W-1).astype(int)]
+    del maskbits
 
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
         T2.writeto(None, fits_object=out.fits, primheader=primhdr, header=hdr)
-
-    ### FIXME -- convert intermediate tractor catalog to final, for now...
-    ### FIXME -- note that this is now the only place where 'allbands' is used.
 
     # The "format_catalog" code expects all lower-case column names...
     for c in T2.columns():
@@ -2832,7 +2827,7 @@ def stage_writecat(
             T2.rename(c, c.lower())
     from legacypipe.format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
-        format_catalog(T2, hdr, primhdr, allbands, None, release,
+        format_catalog(T2, hdr, primhdr, survey.allbands, None, release,
                        write_kwargs=dict(fits_object=out.fits),
                        N_wise_epochs=11, motions=gaia_stars, gaia_tagalong=True)
 
@@ -2860,7 +2855,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               release=None,
               zoom=None,
               bands=None,
-              allbands=None,
+              allbands='grz',
               depth_cut=None,
               nblobs=None, blob=None, blobxy=None, blobradec=None, blobid=None,
               max_blobsize=None,
@@ -3062,7 +3057,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         kwargs.update(forceall=True)
 
     if allbands is not None:
-        kwargs.update(allbands=allbands)
+        survey.allbands = allbands
 
     if radec is not None:
         assert(len(radec) == 2)

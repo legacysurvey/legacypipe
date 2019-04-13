@@ -183,7 +183,6 @@ def annotate_one_ccd(X):
 
     result.update(humidity = hdr.get('HUMIDITY'),
                   outtemp = hdr.get('OUTTEMP'),
-                  sig1 = tim.sig1,
                   plver = tim.plver,
                   procdate = tim.procdate,
                   plprocid = tim.plprocid)
@@ -337,8 +336,6 @@ def init_annotations(ccds):
     ccds.ra_center  = np.zeros(len(ccds), np.float64)
     ccds.dec_center = np.zeros(len(ccds), np.float64)
 
-    ccds.sig1 = np.zeros(len(ccds), np.float32)
-
     ccds.meansky = np.zeros(len(ccds), np.float32)
     ccds.stdsky  = np.zeros(len(ccds), np.float32)
     ccds.maxsky  = np.zeros(len(ccds), np.float32)
@@ -370,9 +367,6 @@ def init_annotations(ccds):
     ccds.tileid   = np.zeros(len(ccds), np.int32)
     ccds.tilepass = np.zeros(len(ccds), np.uint8)
     ccds.tileebv  = np.zeros(len(ccds), np.float32)
-
-    #ccds.plver = np.array([' '*8] * len(ccds))
-    #ccds.procdate = np.array([' '*19] * len(ccds))
 
 def main(outfn='ccds-annotated.fits', ccds=None, **kwargs):
     survey = LegacySurveyData(ccds=ccds)
