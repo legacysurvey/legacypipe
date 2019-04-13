@@ -142,6 +142,8 @@ class LegacySurveyImage(object):
         self.mjdobs  = ccd.mjd_obs
         self.width   = ccd.width
         self.height  = ccd.height
+        # In nanomaggies.
+        # (in DR7, CCDs-table sig1 values were in ADU-ish units)
         self.sig1    = ccd.sig1
         # Use dummy values to accommodate old calibs (which will fail later
         # unless old-calibs-ok=True)
@@ -419,8 +421,6 @@ class LegacySurveyImage(object):
         sky = self.read_sky_model(splinesky=splinesky, slc=slc,
                                   primhdr=primhdr, imghdr=imghdr,
                                   old_calibs_ok=old_calibs_ok)
-        skysig1 = getattr(sky, 'sig1', None)
-
         skymod = np.zeros_like(img)
         sky.addTo(skymod)
         midsky = np.median(skymod)
@@ -444,26 +444,9 @@ class LegacySurveyImage(object):
                 sky.scale(1./zpscale)
             zpscale = 1.
 
-        # Compute 'sig1', scalar typical per-pixel noise
-        if get_invvar:
-            sig1 = 1./np.sqrt(np.median(invvar[invvar > 0]))
-        elif skysig1 is not None:
-            sig1 = skysig1
-            if nanomaggies:
-                # skysig1 is in the native units
-                sig1 /= orig_zpscale
-        else:
-            # Estimate per-pixel noise via Blanton's 5-pixel MAD
-            slice1 = (slice(0,-5,10),slice(0,-5,10))
-            slice2 = (slice(5,None,10),slice(5,None,10))
-            mad = np.median(np.abs(img[slice1] - img[slice2]).ravel())
-            sig1 = 1.4826 * mad / np.sqrt(2.)
-            invvar *= (1. / sig1**2)
-        assert(np.isfinite(sig1))
-
         if constant_invvar:
-            debug('Setting constant invvar', 1./sig1**2)
-            invvar[invvar > 0] = 1./sig1**2
+            assert(nanomaggies)
+            invvar[invvar > 0] = 1./self.sig1**2
 
         if apodize and slc is not None:
             sy,sx = slc
@@ -512,7 +495,7 @@ class LegacySurveyImage(object):
             # (can happen, eg, if sky calibration product is inconsistent with
             #  the data)
             imgmed = np.median(img[invvar>0])
-            if np.abs(imgmed) > sig1:
+            if np.abs(imgmed) > self.sig1:
                 print('WARNING: image median', imgmed, 'is more than 1 sigma',
                       'away from zero!')
 
@@ -550,7 +533,7 @@ class LegacySurveyImage(object):
         tim.slice = slc
         tim.zpscale = orig_zpscale
         tim.midsky = midsky
-        tim.sig1 = sig1
+        tim.sig1 = self.sig1
         tim.psf_fwhm = psf_fwhm
         tim.psf_sigma = psf_sigma
         tim.propid = self.propid
@@ -829,12 +812,6 @@ class LegacySurveyImage(object):
         phdr = self.read_image_primary_header()
         wcs.plver = phdr.get('PLVER', '').strip()
         return wcs
-
-    def get_sig1(self, **kwargs):
-        from tractor.brightness import NanoMaggies
-        zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
-        # CCDs table sig1 is in ADU.
-        return self.sig1 / zpscale
 
     def read_sky_model(self, splinesky=False, slc=None, old_calibs_ok=False, **kwargs):
         '''

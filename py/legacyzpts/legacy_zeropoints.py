@@ -539,7 +539,6 @@ class Measurer(object):
             mnsky, skystd = self.sensible_sigmaclip(img - skyimg,nsigma=nsigma)
             skymed= np.median(skyimg)
         else:
-            #sky, sig1 = self.sensible_sigmaclip(img[1500:2500, 500:1000])
             if self.camera in ['decam', 'megaprime']:
                 slc=[slice(1500,2500),slice(500,1500)]
             elif self.camera in ['mosaic','90prime']:
@@ -550,8 +549,6 @@ class Measurer(object):
             skymed= np.median(clip_vals) 
             skystd= np.std(clip_vals) 
             skyimg= np.zeros(img.shape) + skymed
-            # MAD gives 10% larger value
-            # sig1= 1.4826 * np.median(np.abs(clip_vals))
         return skyimg, skymed, skystd
 
     def get_ps1_cuts(self,ps1):
@@ -671,11 +668,11 @@ class Measurer(object):
 
         self.img,hdr = self.read_image()
 
-        # Per-pixel error -- weight is 1/sig*2, scaled by scale_weight()
+        # Per-pixel error
         medweight = np.median(weight[(weight > 0) * (self.bitmask == 0)])
-        # Undo the weight scaling to get sig1 back into native image units
-        wscale = self.scale_weight(1.)
-        ccds['sig1'] = 1. / np.sqrt(medweight / wscale)
+        # We scale the image & weight into ADU, but we want to report
+        # sig1 in nanomaggie-ish units, ie, in per-second units.
+        ccds['sig1'] = (1. / np.sqrt(medweight)) / self.exptime
 
         self.invvar = self.remap_invvar(weight, self.primhdr, self.img, self.bitmask)
 
@@ -689,7 +686,7 @@ class Measurer(object):
 
         # Bunch of sky estimates
         # Median of absolute deviation (MAD), std dev = 1.4826 * MAD
-        print('sky from median of image= %.2f' % skymed)
+        print('sky from median of image = %.2f' % skymed)
         skybr = zp0 - 2.5*np.log10(skymed / self.pixscale / self.pixscale / self.exptime)
         print('Sky brightness: {:.3f} mag/arcsec^2 (assuming nominal zeropoint)'.format(skybr))
 
@@ -705,8 +702,8 @@ class Measurer(object):
         ps1 = None
         try:
             ps1 = ps1cat(ccdwcs=self.wcs).get_stars(magrange=None)
-        except OSError:
-            print('No PS1 stars found for this image -- outside the PS1 footprint, or in the Galactic plane?')
+        except OSError as e:
+            print('No PS1 stars found for this image -- outside the PS1 footprint, or in the Galactic plane?', e)
 
         if ps1 is not None and len(ps1) == 0:
             ps1 = None
@@ -727,11 +724,9 @@ class Measurer(object):
         gaia = GaiaCatalog.catalog_nantozero(gaia)
         assert(gaia is not None)
         print(len(gaia), 'Gaia stars')
-        return self.run_psfphot(ccds, ps1, gaia, zp0, self.exptime, self.airmass,
-                                sky_img, splinesky, survey)
+        return self.run_psfphot(ccds, ps1, gaia, zp0, sky_img, splinesky, survey)
 
-    def run_psfphot(self, ccds, ps1, gaia, zp0, exptime, airmass, sky_img,
-                    splinesky, survey):
+    def run_psfphot(self, ccds, ps1, gaia, zp0, sky_img, splinesky, survey):
         t0= Time()
 
         # Now put Gaia stars into the image and re-fit their centroids
@@ -782,7 +777,7 @@ class Measurer(object):
         if ps1 is not None:
             # PS1 for photometry
             # Initial flux estimate, from nominal zeropoint
-            ps1.flux0 = (10.**((zp0 - ps1.legacy_survey_mag) / 2.5) * exptime
+            ps1.flux0 = (10.**((zp0 - ps1.legacy_survey_mag) / 2.5) * self.exptime
                          ).astype(np.float32)
             # we don't have/use proper motions for PS1 stars
             ps1.rename('ra_ok',  'ra_now')
@@ -912,7 +907,7 @@ class Measurer(object):
 
         ok, = np.nonzero(phot.flux > 0)
         phot.instpsfmag = np.zeros(len(phot), np.float32)
-        phot.instpsfmag[ok] = -2.5*np.log10(phot.flux[ok] / exptime)
+        phot.instpsfmag[ok] = -2.5*np.log10(phot.flux[ok] / self.exptime)
         # Uncertainty on psfmag
         phot.dpsfmag = np.zeros(len(phot), np.float32)
         phot.dpsfmag[ok] = np.abs((-2.5 / np.log(10.)) * phot.dflux[ok] / phot.flux[ok])
@@ -940,7 +935,7 @@ class Measurer(object):
             zptmed = np.median(dmag)
             dzpt = zptmed - zp0
             kext = self.extinction(self.band)
-            transp = 10.**(-0.4 * (-dzpt - kext * (airmass - 1.0)))
+            transp = 10.**(-0.4 * (-dzpt - kext * (self.airmass - 1.0)))
 
             print('Number of stars used for zeropoint median %d' % nphotom)
             print('Zeropoint %.4f' % zptmed)
@@ -950,6 +945,10 @@ class Measurer(object):
 
             ok = (phot.instpsfmag != 0)
             phot.psfmag[ok] = phot.instpsfmag[ok] + zptmed
+
+            from tractor.brightness import NanoMaggies
+            zpscale = NanoMaggies.zeropointToScale(zptmed)
+            ccds['sig1'] /= zpscale
 
         else:
             dzpt = 0.
@@ -980,8 +979,8 @@ class Measurer(object):
             phot.ccdname = phot.ccdname.astype('S4')
 
         phot.exptime = np.zeros(len(phot), np.float32) + self.exptime
-        phot.gain = np.zeros(len(phot), np.float32) + self.gain
-        phot.airmass = np.zeros(len(phot), np.float32) + airmass
+        phot.gain    = np.zeros(len(phot), np.float32) + self.gain
+        phot.airmass = np.zeros(len(phot), np.float32) + self.airmass
 
         import photutils
         apertures_arcsec_diam = [6, 7, 8]
