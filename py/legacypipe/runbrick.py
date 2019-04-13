@@ -706,7 +706,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
         return (keep_ccds, overlapping_ccds, depthmaps)
     return keep_ccds, overlapping_ccds
 
-def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
+def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     mp=None, nsigma=None, plots=None, ps=None, record_event=None,
                     survey=None, brickname=None, version_header=None,
                     **kwargs):
@@ -717,7 +717,7 @@ def stage_mask_junk(tims=None, targetwcs=None, W=None, H=None, bands=None,
     '''
     from legacypipe.outliers import patch_from_coadd, mask_outlier_pixels, read_outlier_mask_file
 
-    record_event and record_event('stage_mask_junk: starting')
+    record_event and record_event('stage_outliers: starting')
 
     # Check for existing MEF containing masks for all the chips we need.
     if not read_outlier_mask_file(survey, tims, brickname):
@@ -3163,8 +3163,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     prereqs = {
         'tims':None,
-        'mask_junk': 'tims',
-        'srcs': 'mask_junk',
+        'outliers': 'tims',
+        'srcs': 'outliers',
 
         # fitblobs: see below
 
@@ -3189,7 +3189,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                 })
         else:
             prereqs.update({
-                'image_coadds':'mask_junk',
+                'image_coadds':'outliers',
                 'srcs':'image_coadds',
                 'fitblobs':'srcs',
                 })
