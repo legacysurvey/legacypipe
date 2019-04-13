@@ -146,10 +146,10 @@ def _stars_table(nstars=1):
     stars = Table(np.zeros(nstars, dtype=cols))
     return stars
 
-def get_pixscale(camera='decam'):
+def get_pixscale(camera):
   return {'decam':0.262,
           'mosaic':0.262,
-          '90prime':0.470,
+          '90prime':0.455,
           'megaprime':0.185}[camera]
 
 def cols_for_survey_table(which='all'):
@@ -1442,8 +1442,8 @@ class DecamMeasurer(Measurer):
     '''
     def __init__(self, *args, **kwargs):
         super(DecamMeasurer, self).__init__(*args, **kwargs)
-        self.pixscale =0.262 
         self.camera = 'decam'
+        self.pixscale = get_pixscale(self.camera)
         self.ut = self.primhdr['TIME-OBS']
         # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
         # Use center of exposure if possible
@@ -1623,8 +1623,8 @@ class Mosaic3Measurer(Measurer):
     UNITS: e-/s'''
     def __init__(self, *args, **kwargs):
         super(Mosaic3Measurer, self).__init__(*args, **kwargs)
-        self.pixscale=0.262 # 0.260 is right, but mosstat.pro has 0.262
         self.camera = 'mosaic'
+        self.pixscale = get_pixscale(self.camera)
         self.ut = self.primhdr['TIME-OBS']
         # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
         self.ra_bore = hmsstring2ra(self.primhdr['RA'])
@@ -1692,8 +1692,8 @@ class NinetyPrimeMeasurer(Measurer):
     UNITS -- CP e-/s'''
     def __init__(self, *args, **kwargs):
         super(NinetyPrimeMeasurer, self).__init__(*args, **kwargs)
-        self.pixscale= 0.470 # 0.455 is correct, but mosstat.pro has 0.470
         self.camera = '90prime'
+        self.pixscale = get_pixscale(self.camera)
         # {RA,DEC}: center of exposure, doesn't have TEL{RA,DEC}
         self.ra_bore = hmsstring2ra(self.primhdr['RA'])
         self.dec_bore = dmsstring2dec(self.primhdr['DEC'])
