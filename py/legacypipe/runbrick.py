@@ -3096,6 +3096,11 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     if plot_number:
         ps.skipto(plot_number)
 
+    if release is None:
+        release = survey.get_default_release()
+        if release is None:
+            release = 8888
+
     kwargs.update(ps=ps, nsigma=nsigma,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
                   release=release,
@@ -3313,8 +3318,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('-d', '--outdir', dest='output_dir',
                         help='Set output base directory, default "."')
 
-    parser.add_argument('--release', default=7999, type=int,
-                        help='Release code for output catalogs')
+    parser.add_argument('--release', default=0, type=int,
+                        help='Release code for output catalogs (default determined by --run)')
 
     parser.add_argument('--survey-dir', type=str, default=None,
                         help='Override the $LEGACY_SURVEY_DIR environment variable')

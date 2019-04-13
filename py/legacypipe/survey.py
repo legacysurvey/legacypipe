@@ -1032,6 +1032,9 @@ class LegacySurveyData(object):
         return ('%s: dir %s, out %s' %
                 (type(self).__name__, self.survey_dir, self.output_dir))
 
+    def get_default_release(self):
+        return None
+
     def ccds_for_fitting(self, brick, ccds):
         # By default, use all.
         return None
