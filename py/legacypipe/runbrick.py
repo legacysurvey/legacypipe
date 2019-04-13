@@ -710,6 +710,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
 def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     mp=None, nsigma=None, plots=None, ps=None, record_event=None,
                     survey=None, brickname=None, version_header=None,
+                    gaia_stars=False,
                     **kwargs):
     '''
     This pipeline stage tries to detect artifacts in the individual
@@ -737,7 +738,8 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
 
         make_badcoadds = True
         badcoadds = mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
-                                        mp=mp, plots=plots, ps=ps, make_badcoadds=make_badcoadds)
+                                        mp=mp, plots=plots, ps=ps, make_badcoadds=make_badcoadds,
+            gaia_stars=gaia_stars)
 
         # Make before-n-after plots (after)
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)

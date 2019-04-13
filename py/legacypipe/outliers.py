@@ -41,7 +41,8 @@ def read_outlier_mask_file(survey, tims, brickname):
     return True
 
 def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
-                        mp=None, plots=False, ps=None, make_badcoadds=True):
+                        mp=None, plots=False, ps=None, make_badcoadds=True,
+                        gaia_stars=False):
     from legacypipe.image import CP_DQ_BITS
     from legacypipe.reference import read_gaia
     from scipy.ndimage.filters import gaussian_filter
@@ -57,26 +58,27 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
     else:
         badcoadds = None
 
-    gaia = read_gaia(targetwcs)
-    #print(len(gaia), 'Gaia stars for outlier veto')
-    # Not moving Gaia stars to epoch of individual images...
-    ok,bx,by = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
-    bx -= 1.
-    by -= 1.
     star_veto = np.zeros(targetwcs.shape, np.bool)
-    # Radius to mask around Gaia stars, in arcsec
-    radius = 1.0
-    pixrad = radius / targetwcs.pixel_scale()
-    for x,y in zip(bx,by):
-        xlo = int(np.clip(np.floor(x - pixrad), 0, W-1))
-        xhi = int(np.clip(np.ceil (x + pixrad), 0, W-1))
-        ylo = int(np.clip(np.floor(y - pixrad), 0, H-1))
-        yhi = int(np.clip(np.ceil (y + pixrad), 0, H-1))
-        if xlo == xhi or ylo == yhi:
-            continue
-        r2 = (((np.arange(ylo,yhi+1) - y)**2)[:,np.newaxis] +
-              ((np.arange(xlo,xhi+1) - x)**2)[np.newaxis,:])
-        star_veto[ylo:yhi+1, xlo:xhi+1] |= (r2 < pixrad)
+    if gaia_stars:
+        gaia = read_gaia(targetwcs)
+        #print(len(gaia), 'Gaia stars for outlier veto')
+        # Not moving Gaia stars to epoch of individual images...
+        ok,bx,by = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
+        bx -= 1.
+        by -= 1.
+        # Radius to mask around Gaia stars, in arcsec
+        radius = 1.0
+        pixrad = radius / targetwcs.pixel_scale()
+        for x,y in zip(bx,by):
+            xlo = int(np.clip(np.floor(x - pixrad), 0, W-1))
+            xhi = int(np.clip(np.ceil (x + pixrad), 0, W-1))
+            ylo = int(np.clip(np.floor(y - pixrad), 0, H-1))
+            yhi = int(np.clip(np.ceil (y + pixrad), 0, H-1))
+            if xlo == xhi or ylo == yhi:
+                continue
+            r2 = (((np.arange(ylo,yhi+1) - y)**2)[:,np.newaxis] +
+                  ((np.arange(xlo,xhi+1) - x)**2)[np.newaxis,:])
+            star_veto[ylo:yhi+1, xlo:xhi+1] |= (r2 < pixrad)
 
     if plots:
         plt.clf()

@@ -39,7 +39,7 @@ CP_DQ_BITS = dict(badpix=1,
                   trans=128,
                   edge = 256,
                   edge2 = 512,
-                  # Added by our stage_mask_junk outlier rejection
+                  # Added by our stage_outliers rejection
                   outlier = 2048,
                   )
 
