@@ -957,8 +957,7 @@ class LegacySurveyData(object):
     from disk.
     '''
 
-    def __init__(self, survey_dir=None, cache_dir=None, output_dir=None,
-                 version=None, ccds=None, verbose=False):
+    def __init__(self, survey_dir=None, cache_dir=None, output_dir=None):
         '''Create a LegacySurveyData object using data from the given
         *survey_dir* directory, or from the $LEGACY_SURVEY_DIR environment
         variable.
@@ -987,13 +986,8 @@ class LegacySurveyData(object):
         if survey_dir is None:
             survey_dir = os.environ.get('LEGACY_SURVEY_DIR')
             if survey_dir is None:
-                print('''Warning: you should set the $LEGACY_SURVEY_DIR environment variable.
-On NERSC, you can do:
-  module use /project/projectdirs/cosmo/work/decam/versions/modules
-  module load legacysurvey
-
-Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail.
-''')
+                print('Warning: you should set the $LEGACY_SURVEY_DIR environment variable.')
+                print('Using the current directory as LEGACY_SURVEY_DIR.')
                 survey_dir = os.getcwd()
 
         self.survey_dir = survey_dir
@@ -1005,7 +999,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             self.output_dir = output_dir
 
         self.output_file_hashes = OrderedDict()
-        self.ccds = ccds
+        self.ccds = None
         self.bricks = None
         self.ccds_index = None
 
@@ -1031,15 +1025,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         self.allbands = 'ugrizY'
 
-        assert(version in [None, 'dr2', 'dr1'])
-        self.version = version
-
-        self.verbose = verbose
-
         # Filename prefix for coadd files
         self.file_prefix = 'legacysurvey'
-        if self.version in ['dr1','dr2']:
-            self.file_prefix = 'decals'
 
     def __str__(self):
         return ('%s: dir %s, out %s' %
