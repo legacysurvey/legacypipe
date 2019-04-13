@@ -2532,6 +2532,7 @@ def stage_wise_forced(
             if WISE is None:
                 WISE = p.phot
             else:
+                p.phot.delete_column('wise_coadd_id') # duplicate
                 WISE.add_columns_from(p.phot)
 
         if wise_mask_maps is not None:
@@ -2766,36 +2767,29 @@ def stage_writecat(
             # WISE to T2.
             dm = vega_to_ab['w%i' % band]
             fluxfactor = 10.** (dm / -2.5)
+            # fluxes
             c = 'w%i_nanomaggies' % band
-            flux = WISE.get(c) * fluxfactor
-            WISE.set(c, flux)
             t = 'flux_w%i' % band
-            T2.set(t, flux)
+            T2.set(t, WISE.get(c) * fluxfactor)
             if WISE_T is not None and band <= 2:
-                flux = WISE_T.get(c) * fluxfactor
-                WISE_T.set(c, flux)
                 t = 'lc_flux_w%i' % band
-                T2.set(t, flux)
-
+                T2.set(t, WISE_T.get(c) * fluxfactor)
+            # ivars
             c = 'w%i_nanomaggies_ivar' % band
-            flux = WISE.get(c) / fluxfactor**2
-            WISE.set(c, flux)
             t = 'flux_ivar_w%i' % band
-            T2.set(t, flux)
-            # This is in 1/nanomaggies**2 units
-            c = 'w%i_psfdepth' % band
-            T2.set(c, WISE.get(c) / fluxfactor**2)
+            T2.set(t, WISE.get(c) / fluxfactor**2)
             if WISE_T is not None and band <= 2:
-                flux = WISE_T.get(c) / fluxfactor**2
-                WISE_T.set(c, flux)
                 t = 'lc_flux_ivar_w%i' % band
-                T2.set(t, flux)
+                T2.set(t, WISE_T.get(c) / fluxfactor**2)
+            # This is in 1/nanomaggies**2 units also
+            c = 'w%i_psfdepth' % band
+            t = 'psfdepth_w%i' % band
+            T2.set(t, WISE.get(c) / fluxfactor**2)
 
         # Rename some WISE columns
         for cin,cout in [('w%i_nexp',        'nobs_w%i'),
                          ('w%i_profracflux', 'fracflux_w%i'),
-                         ('w%i_prochi2',     'rchisq_w%i'),
-                         ('w%i_psfdepth',    'psfdepth_w%i'),]:
+                         ('w%i_prochi2',     'rchisq_w%i')]:
             for band in [1,2,3,4]:
                 T2.set(cout % band, WISE.get(cin % band))
 
@@ -2806,7 +2800,9 @@ def stage_writecat(
                              ('w%i_mjd',         'lc_mjd_w%i'),]:
                 for band in [1,2]:
                     T2.set(cout % band, WISE_T.get(cin % band))
-            # print('WISE light-curve shapes:', WISE_T.w1_nanomaggies.shape)
+        # Done with these now!
+        WISE_T = None
+        WISE = None
 
     if T_donotfit:
         T_donotfit.type = np.array(['DUP']*len(T_donotfit))

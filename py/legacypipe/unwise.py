@@ -341,7 +341,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             pixscale = 2.75
             src.halfsize = int(np.hypot(R, galrad * 5 / pixscale))
 
-    print('Set WISE source sizes:', nbig, 'big', nmedium, 'medium', nsmall, 'small')
+    #print('Set WISE source sizes:', nbig, 'big', nmedium, 'medium', nsmall, 'small')
 
     minsb = 0.
     fitsky = False
@@ -364,11 +364,11 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
     if use_ceres:
         term = R.ceres_status['termination']
-        print('Ceres termination status:', term)
         # Running out of memory can cause failure to converge
         # and term status = 2.
         # Fail completely in this case.
         if term != 0:
+            print('Ceres termination status:', term)
             raise RuntimeError(
                 'Ceres terminated with status %i' % term)
 
