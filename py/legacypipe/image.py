@@ -636,10 +636,6 @@ class LegacySurveyImage(object):
         if y is None:
             y = h//2
         patch = psf.getPointSourcePatch(x, y).patch
-        # Clamp up to zero and normalize before taking the norm
-        # (decided that this is a poor idea - eg PSF normalization vs zeropoint)
-        #patch = np.maximum(0, patch)
-        #patch /= patch.sum()
         psfnorm = np.sqrt(np.sum(patch**2))
         return psfnorm
 
