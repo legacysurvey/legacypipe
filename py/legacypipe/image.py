@@ -764,9 +764,9 @@ class LegacySurveyImage(object):
             fixed = False
             try:
                 fixed = fix_weight_quantization(invvar, self.wtfn, self.hdu, slice)
-            except:
-                import traceback
-                traceback.print_exc()
+            except Exception as e:
+                print('Fix_weight_quantization bailed out on', self.wtfn,
+                      'hdu', self.hdu, ':', e)
 
             if not fixed:
                 # Clamp near-zero (incl negative!) weight to zero,

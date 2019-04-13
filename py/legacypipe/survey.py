@@ -957,8 +957,8 @@ class LegacySurveyData(object):
     from disk.
     '''
 
-    def __init__(self, allbands='grz', survey_dir=None, cache_dir=None,
-                 output_dir=None, version=None, ccds=None, verbose=False):
+    def __init__(self, survey_dir=None, cache_dir=None, output_dir=None,
+                 allbands='grz'):
         '''Create a LegacySurveyData object using data from the given
         *survey_dir* directory, or from the $LEGACY_SURVEY_DIR environment
         variable.
@@ -987,13 +987,8 @@ class LegacySurveyData(object):
         if survey_dir is None:
             survey_dir = os.environ.get('LEGACY_SURVEY_DIR')
             if survey_dir is None:
-                print('''Warning: you should set the $LEGACY_SURVEY_DIR environment variable.
-On NERSC, you can do:
-  module use /project/projectdirs/cosmo/work/decam/versions/modules
-  module load legacysurvey
-
-Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail.
-''')
+                print('Warning: you should set the $LEGACY_SURVEY_DIR environment variable.')
+                print('Using the current directory as LEGACY_SURVEY_DIR.')
                 survey_dir = os.getcwd()
 
         self.survey_dir = survey_dir
@@ -1005,7 +1000,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             self.output_dir = output_dir
 
         self.output_file_hashes = OrderedDict()
-        self.ccds = ccds
+        self.ccds = None
         self.bricks = None
         self.ccds_index = None
 
@@ -1031,19 +1026,15 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         self.allbands = allbands
 
-        assert(version in [None, 'dr2', 'dr1'])
-        self.version = version
-
-        self.verbose = verbose
-
         # Filename prefix for coadd files
         self.file_prefix = 'legacysurvey'
-        if self.version in ['dr1','dr2']:
-            self.file_prefix = 'decals'
 
     def __str__(self):
         return ('%s: dir %s, out %s' %
                 (type(self).__name__, self.survey_dir, self.output_dir))
+
+    def get_default_release(self):
+        return None
 
     def ccds_for_fitting(self, brick, ccds):
         # By default, use all.
@@ -1137,17 +1128,11 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         sname = self.file_prefix
 
         if filetype == 'bricks':
-            fn = 'survey-bricks.fits.gz'
-            if self.version in ['dr1','dr2']:
-                fn = 'decals-bricks.fits'
-            return swap(os.path.join(basedir, fn))
+            return swap(os.path.join(basedir, 'survey-bricks.fits.gz'))
 
         elif filetype == 'ccds':
-            if self.version in ['dr1','dr2']:
-                return swaplist([os.path.join(basedir, 'decals-ccds.fits.gz')])
-            else:
-                return swaplist(
-                    glob(os.path.join(basedir, 'survey-ccds*.fits.gz')))
+            return swaplist(
+                glob(os.path.join(basedir, 'survey-ccds*.fits.gz')))
 
         elif filetype == 'ccd-kds':
             return swaplist(
@@ -1171,9 +1156,6 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             return swap(os.path.join(basedir, fn))
 
         elif filetype == 'annotated-ccds':
-            if self.version == 'dr2':
-                return swaplist(
-                    glob(os.path.join(basedir, 'decals-ccds-annotated.fits')))
             return swaplist(
                 glob(os.path.join(basedir, 'ccds-annotated-*.fits.gz')))
 
