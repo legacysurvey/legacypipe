@@ -236,7 +236,6 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                                                    modelname='neo4_unwisecat')
             else:
                 psfimg = unwise_psf.get_unwise_psf(band, tile.coadd_id)
-            #print('PSF postage stamp', psfimg.shape, 'sum', psfimg.sum())
 
             if band == 4:
                 # oversample (the unwise_psf models are at native W4 5.5"/pix,
@@ -261,7 +260,6 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                     plt.imshow(psfimg, interpolation='nearest', origin='lower')
                     plt.title('Original PSF model')
                     ps.savefig()
-
                     plt.clf()
                     plt.imshow(subpsf, interpolation='nearest', origin='lower')
                     plt.title('Subsampled PSF model')
@@ -275,8 +273,6 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             fluxrescales = {1: 1.04, 2: 1.005, 3: 1.0, 4: 1.0}
             psfimg *= fluxrescales[band]
             tim.psf = PixelizedPSF(psfimg)
-            #print('### HACK ### normalized PSF to 1.0')
-            print('Set PSF to', tim.psf)
 
         if psf_broadening is not None and not pixelized_psf:
             # psf_broadening is a factor by which the PSF FWHMs
@@ -288,12 +284,9 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 #
                 print('Broadening PSF: from', psf)
                 p0 = psf.getParams()
-                #print('Params:', p0)
                 pnames = psf.getParamNames()
-                #print('Param names:', pnames)
                 p1 = [p * psf_broadening**2 if 'var' in name else p
                       for (p, name) in zip(p0, pnames)]
-                #print('Broadened:', p1)
                 psf.setParams(p1)
                 print('Broadened PSF:', psf)
             else:
@@ -309,12 +302,11 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         tim.tile = tile
         tims.append(tim)
 
-    #print('Central flux: max', central_flux.max(), 'median', np.median(central_flux))
-
     if plots:
         plt.clf()
         mn,mx = 0.1, 20000
-        plt.hist(np.log10(np.clip(central_flux, mn, mx)), bins=100, range=(np.log10(mn), np.log10(mx)))
+        plt.hist(np.log10(np.clip(central_flux, mn, mx)), bins=100,
+                 range=(np.log10(mn), np.log10(mx)))
         logt = np.arange(0, 5)
         plt.xticks(logt, ['%i' % i for i in 10.**logt])
         plt.title('Central fluxes (W%i)' % band)
@@ -342,8 +334,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             src.fixedRadius = R
         else:
             ### FIXME -- sizes for galaxies..... can we set PSF size separately?
-            # RexGalaxy is a subclass of ExpGalaxy
             galrad = 0
+            # RexGalaxy is a subclass of ExpGalaxy
             if isinstance(src, (ExpGalaxy, DevGalaxy)):
                 galrad = src.shape.re
             elif isinstance(src, FixedCompositeGalaxy):
