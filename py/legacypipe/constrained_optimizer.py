@@ -47,21 +47,21 @@ class ConstrainedOptimizer(LsqrOptimizer):
                     # This parameter hits the limit; compute the step size
                     # to just hit the limit.
                     a = (l - p0[i]) / X[i]
-                    print('Parameter', i, 'with initial value', p0[i],
-                          'and update', X[i], 'would hit lower limit', l,
-                          'with alpha', alpha, '; max alpha', a)
+                    # print('Parameter', i, 'with initial value', p0[i],
+                    #       'and update', X[i], 'would hit lower limit', l,
+                    #       'with alpha', alpha, '; max alpha', a)
                     maxalpha = min(maxalpha, a)
                 if u is not None and px > u:
                     # This parameter hits the limit; compute the step size
                     # to just hit the limit.
                     a = (u - p0[i]) / X[i]
-                    print('Parameter', i, 'with initial value', p0[i],
-                          'and update', X[i], 'would hit upper limit', u,
-                          'with alpha', alpha, '; max alpha', a)
+                    # print('Parameter', i, 'with initial value', p0[i],
+                    #       'and update', X[i], 'would hit upper limit', u,
+                    #       'with alpha', alpha, '; max alpha', a)
                     maxalpha = min(maxalpha, a)
 
             if maxalpha < 1e-8:
-                print('Tiny maxalpha; bailing out without parameter update')
+                # print('Tiny maxalpha; bailing out without parameter update')
                 self.hitLimit = True
                 break
 
