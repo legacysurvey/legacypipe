@@ -473,7 +473,10 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     phot.set(wband + '_mag', mag)
     phot.set(wband + '_mag_err', dmag)
     psfdepth = np.empty(len(phot), np.float32)
-    psfdepth[:] = -2.5 * (np.log10(5. * tim.sig1 / psfnorm) - 9.)
+    # This would be in mags
+    #psfdepth[:] = -2.5 * (np.log10(5. * tim.sig1 / psfnorm) - 9.)
+    # To handle zero-depth, we instead return 1/nanomaggies^2 units!
+    psfdepth[:] = 1. / (tim.sig1 / psfnorm)**2
     phot.set(wband + '_psfdepth', psfdepth)
 
     for k in fskeys:

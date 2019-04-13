@@ -2765,8 +2765,6 @@ def stage_writecat(
             # Apply the Vega-to-AB shift *while* copying columns from
             # WISE to T2.
             dm = vega_to_ab['w%i' % band]
-            c = 'w%i_psfdepth' % band
-            T2.set(c, WISE.get(c) + dm)
             fluxfactor = 10.** (dm / -2.5)
             c = 'w%i_nanomaggies' % band
             flux = WISE.get(c) * fluxfactor
@@ -2784,6 +2782,9 @@ def stage_writecat(
             WISE.set(c, flux)
             t = 'flux_ivar_w%i' % band
             T2.set(t, flux)
+            # This is in 1/nanomaggies**2 units
+            c = 'w%i_psfdepth' % band
+            T2.set(c, WISE.get(c) / fluxfactor**2)
             if WISE_T is not None and band <= 2:
                 flux = WISE_T.get(c) / fluxfactor**2
                 WISE_T.set(c, flux)
