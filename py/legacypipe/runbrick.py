@@ -2690,7 +2690,6 @@ def stage_writecat(
             if wise_mask_maps is not None:
                 out.fits.write(wise_mask_maps[0], header=wisehdr)
                 out.fits.write(wise_mask_maps[1], header=wisehdr)
-        del maskbits
         del wise_mask_maps
 
     TT = T.copy()
@@ -2819,6 +2818,10 @@ def stage_writecat(
 
     T2.brick_primary = ((T2.ra  >= brick.ra1 ) * (T2.ra  < brick.ra2) *
                         (T2.dec >= brick.dec1) * (T2.dec < brick.dec2))
+    H,W = maskbits.shape
+    T2.maskbits = maskbits[np.clip(T2.by, 0, H-1).astype(int),
+                           np.clip(T2.bx, 0, W-1).astype(int)]
+    del maskbits
 
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
         T2.writeto(None, fits_object=out.fits, primheader=primhdr, header=hdr)

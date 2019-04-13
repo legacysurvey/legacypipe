@@ -139,7 +139,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
 
     # Column ordering...
     cols = ['release', 'brickid', 'brickname', 'objid', 'brick_primary',
-            'brightblob',
+            'brightblob', 'maskbits',
             'type', 'ra', 'dec', 'ra_ivar', 'dec_ivar',
             'bx', 'by', 'dchisq', 'ebv', 'mjd_min', 'mjd_max',
             'ref_cat', 'ref_id']
