@@ -43,6 +43,7 @@ def read_outlier_mask_file(survey, tims, brickname):
 def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
                         mp=None, plots=False, ps=None, make_badcoadds=True):
     from legacypipe.image import CP_DQ_BITS
+    from legacypipe.reference import read_gaia
     from scipy.ndimage.filters import gaussian_filter
     from scipy.ndimage.morphology import binary_dilation
     from astrometry.util.resample import resample_with_wcs,OverlapError
@@ -55,6 +56,36 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
         badcoadds = []
     else:
         badcoadds = None
+
+    gaia = read_gaia(targetwcs)
+    #print(len(gaia), 'Gaia stars for outlier veto')
+    # Not moving Gaia stars to epoch of individual images...
+    ok,bx,by = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
+    bx -= 1.
+    by -= 1.
+    star_veto = np.zeros(targetwcs.shape, np.bool)
+    # Radius to mask around Gaia stars, in arcsec
+    radius = 1.0
+    pixrad = radius / targetwcs.pixel_scale()
+    for x,y in zip(bx,by):
+        xlo = int(np.clip(np.floor(x - pixrad), 0, W-1))
+        xhi = int(np.clip(np.ceil (x + pixrad), 0, W-1))
+        ylo = int(np.clip(np.floor(y - pixrad), 0, H-1))
+        yhi = int(np.clip(np.ceil (y + pixrad), 0, H-1))
+        if xlo == xhi or ylo == yhi:
+            continue
+        r2 = (((np.arange(ylo,yhi+1) - y)**2)[:,np.newaxis] +
+              ((np.arange(xlo,xhi+1) - x)**2)[np.newaxis,:])
+        star_veto[ylo:yhi+1, xlo:xhi+1] |= (r2 < pixrad)
+
+    if plots:
+        plt.clf()
+        plt.imshow(star_veto, interpolation='nearest', origin='lower',
+                   vmin=0, vmax=1, cmap='hot')
+        ax = plt.axis()
+        plt.plot(bx, by, 'r.')
+        plt.axis(ax)
+        ps.savefig()
 
     with survey.write_output('outliers_mask', brick=brickname) as out:
         # empty Primary HDU
@@ -90,9 +121,10 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             del r,R
     
             #
-            veto = np.logical_or(
+            veto = np.logical_or(star_veto,
+                                 np.logical_or(
                 binary_dilation(masks & CP_DQ_BITS['bleed'], iterations=3),
-                binary_dilation(masks & CP_DQ_BITS['satur'], iterations=10))
+                binary_dilation(masks & CP_DQ_BITS['satur'], iterations=10)))
             del masks
         
             if plots:
