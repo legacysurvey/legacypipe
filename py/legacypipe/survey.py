@@ -957,8 +957,8 @@ class LegacySurveyData(object):
     from disk.
     '''
 
-    def __init__(self, survey_dir=None, cache_dir=None, output_dir=None,
-                 version=None, ccds=None, verbose=False):
+    def __init__(self, allbands='grz', survey_dir=None, cache_dir=None,
+                 output_dir=None, version=None, ccds=None, verbose=False):
         '''Create a LegacySurveyData object using data from the given
         *survey_dir* directory, or from the $LEGACY_SURVEY_DIR environment
         variable.
@@ -1029,7 +1029,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             'megaprime': MegaPrimeImage,
             }
 
-        self.allbands = 'ugrizY'
+        self.allbands = allbands
 
         assert(version in [None, 'dr2', 'dr1'])
         self.version = version

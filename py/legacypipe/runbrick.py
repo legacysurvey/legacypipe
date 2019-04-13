@@ -2604,7 +2604,6 @@ def stage_writecat(
     brick=None,
     invvars=None,
     gaia_stars=False,
-    allbands='ugrizY',
     record_event=None,
     **kwargs):
     '''
@@ -2820,16 +2819,13 @@ def stage_writecat(
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
         T2.writeto(None, fits_object=out.fits, primheader=primhdr, header=hdr)
 
-    ### FIXME -- convert intermediate tractor catalog to final, for now...
-    ### FIXME -- note that this is now the only place where 'allbands' is used.
-
     # The "format_catalog" code expects all lower-case column names...
     for c in T2.columns():
         if c != c.lower():
             T2.rename(c, c.lower())
     from legacypipe.format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
-        format_catalog(T2, hdr, primhdr, allbands, None, release,
+        format_catalog(T2, hdr, primhdr, survey.allbands, None, release,
                        write_kwargs=dict(fits_object=out.fits),
                        N_wise_epochs=11, motions=gaia_stars, gaia_tagalong=True)
 
@@ -2857,7 +2853,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               release=None,
               zoom=None,
               bands=None,
-              allbands=None,
+              allbands='grz',
               depth_cut=None,
               nblobs=None, blob=None, blobxy=None, blobradec=None, blobid=None,
               max_blobsize=None,
@@ -3059,7 +3055,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         kwargs.update(forceall=True)
 
     if allbands is not None:
-        kwargs.update(allbands=allbands)
+        survey.allbands = allbands
 
     if radec is not None:
         assert(len(radec) == 2)
