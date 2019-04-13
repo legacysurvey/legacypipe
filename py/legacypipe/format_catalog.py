@@ -224,6 +224,8 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
             cols.append(col)
     for c in ['psfsize', 'psfdepth', 'galdepth']:
         add_fluxlike(c)
+    if has_wise:
+        add_wiselike('psfdepth')
 
     if has_wise:
         cols.append('wise_coadd_id')

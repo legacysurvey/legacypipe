@@ -299,6 +299,12 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             else:
                 print('WARNING: cannot apply psf_broadening to WISE PSF of type', type(psf))
 
+        # PSF norm for depth
+        psf = tim.getPsf()
+        h,w = tim.shape
+        patch = psf.getPointSourcePatch(h//2, y//2).patch
+        psfnorm = np.sqrt(np.sum(patch**2))
+
         print('unWISE tile', tile.coadd_id, ': read image with shape', tim.shape)
         tim.tile = tile
         tims.append(tim)
@@ -474,6 +480,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
     phot.set(wband + '_mag', mag)
     phot.set(wband + '_mag_err', dmag)
+    phot.set(wband + '_psfdepth', -2.5 * (np.log10(5. * tim.sig1 / psfnorm) - 9.
+                                          ).astype(np.float32))
 
     for k in fskeys:
         phot.set(wband + '_' + k, fitstats[k])

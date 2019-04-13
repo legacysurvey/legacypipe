@@ -2763,6 +2763,8 @@ def stage_writecat(
 
         for band in [1,2,3,4]:
             dm = vega_to_ab['w%i' % band]
+            c = 'w%i_psfdepth' % band
+            WISE.set(c, WISE.get(c) + dm)
             fluxfactor = 10.** (dm / -2.5)
             c = 'w%i_nanomaggies' % band
             flux = WISE.get(c) * fluxfactor
