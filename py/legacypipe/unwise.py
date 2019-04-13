@@ -295,7 +295,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         # PSF norm for depth
         psf = tim.getPsf()
         h,w = tim.shape
-        patch = psf.getPointSourcePatch(h//2, y//2).patch
+        patch = psf.getPointSourcePatch(h//2, w//2).patch
         psfnorm = np.sqrt(np.sum(patch**2))
 
         print('unWISE tile', tile.coadd_id, ': read image with shape', tim.shape)
@@ -472,8 +472,9 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
     phot.set(wband + '_mag', mag)
     phot.set(wband + '_mag_err', dmag)
-    phot.set(wband + '_psfdepth', -2.5 * (np.log10(5. * tim.sig1 / psfnorm) - 9.
-                                          ).astype(np.float32))
+    psfdepth = np.empty(len(phot), np.float32)
+    psfdepth[:] = -2.5 * (np.log10(5. * tim.sig1 / psfnorm) - 9.)
+    phot.set(wband + '_psfdepth', psfdepth)
 
     for k in fskeys:
         phot.set(wband + '_' + k, fitstats[k])
