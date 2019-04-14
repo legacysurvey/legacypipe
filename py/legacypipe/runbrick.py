@@ -1014,6 +1014,13 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         # Actually subtract the halos from the tims!
         subtract_halos(tims, gaia[Igaia], fluxarray, pixscale, bands, plots, ps, mp)
 
+        if plots:
+            coimgs,_ = quick_coadds(tims, bands, targetwcs)
+            plt.clf()
+            dimshow(get_rgb(coimgs, bands, **rgbkwargs))
+            plt.title('halos subtracted')
+            ps.savefig()
+
 
     if refstars or T_donotfit or T_clusters:
         allrefs = merge_tables([t for t in [refstars, T_donotfit, T_clusters] if t],

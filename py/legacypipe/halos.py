@@ -58,12 +58,15 @@ def subtract_halos(tims, refs, fluxes2, pixscale, bands, plots, ps, mp):
             plt.subplot(1,3,1)
             plt.imshow(tim.data, origin='lower', interpolation='nearest',
                        vmin=-2*tim.sig1, vmax=5.*tim.sig1)
+            plt.colorbar(orientation='horizontal')
             plt.subplot(1,3,2)
             plt.imshow(h, origin='lower', interpolation='nearest',
                        vmin=-2*tim.sig1, vmax=5.*tim.sig1)
+            plt.colorbar(orientation='horizontal')
             plt.subplot(1,3,3)
             plt.imshow(tim.data-h, origin='lower', interpolation='nearest',
                        vmin=-2*tim.sig1, vmax=5.*tim.sig1)
+            plt.colorbar(orientation='horizontal')
             plt.suptitle(tim.name)
             ps.savefig()
 
@@ -118,6 +121,7 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
             profiles = []
             fitpros = []
             rimgs = []
+            fitdata = []
 
         fit_fluxes = []
 
@@ -194,20 +198,22 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
             K = (r2 >= minr**2) * (r2 <= maxr**2)
             if plots:
                 fitpro[K] += mod[K]
+                fitdata.append((band, rr, mm, dm, F))
             haloimgs[iband][ylo:yhi, xlo:xhi] += K * mod * apodize
             fit_fluxes.append(F)
         fitvalues.append((fit_fluxes, fixed_alpha, minr, maxr, apr))
 
-        if False and plots:
-            # plt.clf()
-            # for band,fit in zip(bands,fits):
-            #     (F2,), rr, mm, dm, I,(F1,alpha1) = fit
-            #     cc = dict(z='m').get(band,band)
-            #     plt.loglog(rr, mm, '-', color=cc)
-            #     plt.errorbar(rr, mm, yerr=dm, color=cc, fmt='.')
-            #     plt.plot(rr, powerlaw_model(0., F1, alpha1, rr), '-', color=cc, lw=3, alpha=0.3)
-            # ps.savefig()
+        if plots:
+            import pylab as plt
+            plt.clf()
+            for (band, rr, mm, dm, F) in fitdata:
+                cc = dict(z='m').get(band,band)
+                plt.loglog(rr, mm, '-', color=cc)
+                plt.errorbar(rr, mm, yerr=dm, color=cc, fmt='.')
+                plt.plot(rr, powerlaw_model(rr, F), '-', color=cc, lw=3, alpha=0.3)
+            ps.savefig()
 
+        if False and plots:
             plt.clf()
             dimshow(get_rgb(rimgs, bands, **rgbkwargs))
             plt.title('rimg')
