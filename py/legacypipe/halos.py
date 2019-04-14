@@ -41,6 +41,20 @@ def subtract_halos(tims, refs, fluxes2, pixscale, bands, plots, ps, mp):
     args = [(tim, refs, fluxes2[:,iband[tim.band]], pixscale) for tim in tims]
     haloimgs = mp.map(subtract_one, args)
     for tim,h in zip(tims, haloimgs):
+
+        if plots:
+            plt.clf()
+            plt.subplot(1,3,1)
+            plt.imshow(tim.data, origin='lower', interpolation='nearest',
+                       vmin=-2*tim.sig1, vmax=5.*tim.sig1)
+            plt.subplot(1,3,2)
+            plt.imshow(h, origin='lower', interpolation='nearest',
+                       vmin=-2*tim.sig1, vmax=5.*tim.sig1)
+            plt.subplot(1,3,3)
+            plt.imshow(tim.data-h, origin='lower', interpolation='nearest',
+                       vmin=-2*tim.sig1, vmax=5.*tim.sig1)
+            plt.suptitle(tim.name)
+            ps.savefig()
         tim.data -= h
 
 def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
