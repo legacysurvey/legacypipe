@@ -3316,7 +3316,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('-d', '--outdir', dest='output_dir',
                         help='Set output base directory, default "."')
 
-    parser.add_argument('--release', default=0, type=int,
+    parser.add_argument('--release', default=None, type=int,
                         help='Release code for output catalogs (default determined by --run)')
 
     parser.add_argument('--survey-dir', type=str, default=None,
