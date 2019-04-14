@@ -6,6 +6,43 @@ fixed_alpha = -3.0
 def powerlaw_model(r, F, alpha=fixed_alpha):
     return F * r**alpha
 
+def subtract_one(X):
+    tim, refs, fluxes, gpixscale = X
+
+    halo = np.zeros(tim.shape, np.float32)
+    for ref,flux in zip(refs,fluxes):
+        H,W = tim.shape
+        ok,x,y = tim.subwcs.radec2pixelxy2(ref.ra, ref.dec)
+        x -= 1.
+        y -= 1.
+        pixscale = tim.imobj.pixscale
+        pixrad = int(np.ceil(ref.radius * 3600. / pixscale))
+        xlo = int(np.clip(np.floor(x - pixrad), 0, W-1))
+        xhi = int(np.clip(np.ceil (x + pixrad), 0, W-1))
+        ylo = int(np.clip(np.floor(y - pixrad), 0, H-1))
+        yhi = int(np.clip(np.ceil (y + pixrad), 0, H-1))
+        if xlo == xhi or ylo == yhi:
+            continue
+
+        r2 = ((np.arange(ylo, yhi+1)[:,np.newaxis] - y)**2 +
+              (np.arange(xlo, xhi+1)[np.newaxis,:] - x)**2)
+        rads = np.sqrt(r2)
+        maxr = pixrad
+        apodize = np.clip((rads - maxr) / (apr - maxr), 0., 1.)
+        # The power-law scale was computed at the coadd pixscale, which might
+        # differ from this tim's pixscale; scale it.
+        h = powerlaw_model(rads * pixscale / gpixscale, flux)
+        # ASSUME tim is in nanomaggies units
+        halo[ylo:yhi+1, xlo:xlo+1] = h
+    return halo
+
+def subtract_halos(tims, refs, fluxes2, pixscale, bands, plots, ps, mp):
+    iband = dict([(b,i) for i,b in enumerate(bands)])
+    args = [(tim, refs, fluxes2[:,iband[tim.band]], pixscale) for tim in tims]
+    haloimgs = mp.map(subtract_one, args)
+    for tim,h in zip(tims, haloimgs):
+        tim.data -= h
+
 def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
               bands, gaia, plots, ps, init_fluxes=None):
     from scipy.optimize import minimize
