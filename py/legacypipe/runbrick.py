@@ -889,6 +889,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                gaia_stars=False,
                large_galaxies=False,
                star_clusters=True,
+               star_halos=False,
                record_event=None,
                **kwargs):
     '''
@@ -951,76 +952,74 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         avoid_x, avoid_y = np.array([]), np.array([])
 
     # Subtract star halos?
-    Igaia = []
-    if gaia_stars:
+    if star_halos and gaia_stars:
+        Igaia = []
         gaia = refstars
         Igaia, = np.nonzero(np.logical_or(refstars.isbright, refstars.ismedium) *
-                            np.logical_not(refstars.iscluster) *
-                            refstars.pointsource)
+                            np.logical_not(refstars.iscluster) * refstars.pointsource)
         Igaia = Igaia[np.argsort(gaia.phot_g_mean_mag[Igaia])]
         debug(len(Igaia), 'stars for halo fitting')
-    if len(Igaia):
-        from legacypipe.halos import fit_halos, subtract_halos
-        # FIXME -- another coadd...
-        coimgs,cons = quick_coadds(tims, bands, targetwcs)
-        fluxes,haloimgs = fit_halos(coimgs, cons, H, W, targetwcs, pixscale, bands,
-                                    gaia[Igaia], plots, ps)
-        init_fluxes = [(f and f[0] or None) for f in fluxes]
+        if len(Igaia):
+            from legacypipe.halos import fit_halos, subtract_halos
+            # FIXME -- another coadd...
+            coimgs,cons = quick_coadds(tims, bands, targetwcs)
+            fluxes,haloimgs = fit_halos(coimgs, cons, H, W, targetwcs, pixscale, bands,
+                                        gaia[Igaia], plots, ps)
+            init_fluxes = [(f and f[0] or None) for f in fluxes]
 
-        if plots:
-            plt.clf()
-            dimshow(get_rgb(coimgs, bands, **rgbkwargs))
-            plt.title('data')
-            ps.savefig()
-            plt.clf()
-            dimshow(get_rgb(haloimgs, bands, **rgbkwargs))
-            plt.title('fit profiles')
-            ps.savefig()
-            plt.clf()
-            dimshow(get_rgb([c-h for c,h in zip(coimgs,haloimgs)], bands,**rgbkwargs))
-            plt.title('data - fit profiles')
-            ps.savefig()
+            if plots:
+                plt.clf()
+                dimshow(get_rgb(coimgs, bands, **rgbkwargs))
+                plt.title('data')
+                ps.savefig()
+                plt.clf()
+                dimshow(get_rgb(haloimgs, bands, **rgbkwargs))
+                plt.title('fit profiles')
+                ps.savefig()
+                plt.clf()
+                dimshow(get_rgb([c-h for c,h in zip(coimgs,haloimgs)], bands,
+                                **rgbkwargs))
+                plt.title('data - fit profiles')
+                ps.savefig()
 
-        # Subtract first-round halos from coadd
-        co2 = [c - h for c,h in zip(coimgs,haloimgs)]
-        del haloimgs
+            # Subtract first-round halos from coadd
+            co2 = [c - h for c,h in zip(coimgs,haloimgs)]
+            del haloimgs
 
-        fluxes2,haloimgs2 = fit_halos(co2, cons, H, W, targetwcs, pixscale, bands,
-                                       gaia[Igaia], plots, ps,
-                                       init_fluxes=init_fluxes)
-        del co2, cons
+            fluxes2,haloimgs2 = fit_halos(co2, cons, H, W, targetwcs, pixscale, bands,
+                                          gaia[Igaia], plots, ps,
+                                          init_fluxes=init_fluxes)
+            del co2, cons
+            fluxarray = np.array([f[0] for f in fluxes2])
 
-        fluxarray = np.array([f[0] for f in fluxes2])
+            for iband,b in enumerate(bands):
+                haloflux = np.zeros(len(refstars))
+                haloflux[Igaia] = fluxarray[:,iband]
+                refstars.set('star_halo_flux_%s' % b, haloflux)
 
-        for iband,b in enumerate(bands):
-            haloflux = np.zeros(len(refstars))
-            haloflux[Igaia] = fluxarray[:,iband]
-            refstars.set('star_halo_flux_%s' % b, haloflux)
+            if plots:
+                plt.clf()
+                dimshow(get_rgb(haloimgs2, bands, **rgbkwargs))
+                plt.title('second-round fit profiles')
+                ps.savefig()
+                plt.clf()
+                dimshow(get_rgb([c-h2 for c,h2 in zip(coimgs,haloimgs2)], bands,
+                                **rgbkwargs))
+                plt.title('second-round data - fit profiles')
+                ps.savefig()
 
-        if plots:
-            plt.clf()
-            dimshow(get_rgb(haloimgs2, bands, **rgbkwargs))
-            plt.title('second-round fit profiles')
-            ps.savefig()
-            plt.clf()
-            dimshow(get_rgb([c-h2 for c,h2 in zip(coimgs,haloimgs2)], bands,
-                            **rgbkwargs))
-            plt.title('second-round data - fit profiles')
-            ps.savefig()
+            del haloimgs2
+            del coimgs
 
-        del haloimgs2
-        del coimgs
+            # Actually subtract the halos from the tims!
+            subtract_halos(tims, gaia[Igaia], fluxarray, pixscale, bands, plots, ps,mp)
 
-        # Actually subtract the halos from the tims!
-        subtract_halos(tims, gaia[Igaia], fluxarray, pixscale, bands, plots, ps, mp)
-
-        if plots:
-            coimgs,_ = quick_coadds(tims, bands, targetwcs)
-            plt.clf()
-            dimshow(get_rgb(coimgs, bands, **rgbkwargs))
-            plt.title('halos subtracted')
-            ps.savefig()
-
+            if plots:
+                coimgs,_ = quick_coadds(tims, bands, targetwcs)
+                plt.clf()
+                dimshow(get_rgb(coimgs, bands, **rgbkwargs))
+                plt.title('halos subtracted')
+                ps.savefig()
 
     if refstars or T_donotfit or T_clusters:
         allrefs = merge_tables([t for t in [refstars, T_donotfit, T_clusters] if t],
