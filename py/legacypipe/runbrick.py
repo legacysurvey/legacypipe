@@ -9,7 +9,7 @@ For calling from other scripts, see:
 Or for much more fine-grained control, see the individual stages:
 
 - :py:func:`stage_tims`
-- :py:func:`stage_outliers`
+- :py:func:`stage_xoutliers`
 - :py:func:`stage_image_coadds`
 - :py:func:`stage_srcs`
 - :py:func:`stage_fitblobs`
@@ -960,7 +960,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         Igaia = Igaia[np.argsort(gaia.phot_g_mean_mag[Igaia])]
         debug(len(Igaia), 'stars for halo fitting')
     if len(Igaia):
-        from legacypipe.halos import fit_halos
+        from legacypipe.halos import fit_halos, subtract_halos
         # FIXME -- another coadd...
         coimgs,cons = quick_coadds(tims, bands, targetwcs)
         fluxes,haloimgs = fit_halos(coimgs, cons, H, W, targetwcs, pixscale, bands,
@@ -983,16 +983,18 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
         # Subtract first-round halos from coadd
         co2 = [c - h for c,h in zip(coimgs,haloimgs)]
-        del c,h,haloimgs
-            
+        del haloimgs
+
         fluxes2,haloimgs2 = fit_halos(co2, cons, H, W, targetwcs, pixscale, bands,
                                        gaia[Igaia], plots, ps,
                                        init_fluxes=init_fluxes)
         del co2, cons
 
+        fluxarray = np.array([f[0] for f in fluxes2])
+
         for iband,b in enumerate(bands):
             haloflux = np.zeros(len(refstars))
-            haloflux[Igaia] = np.array([f and f[0][iband] or 0. for f in fluxes2])
+            haloflux[Igaia] = fluxarray[:,iband]
             refstars.set('star_halo_flux_%s' % b, haloflux)
 
         if plots:
@@ -1010,7 +1012,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         del coimgs
 
         # Actually subtract the halos from the tims!
-        subtract_halos(tims, gaia[Igaia], fluxes2, pixscale, bands, plots, ps, mp)
+        subtract_halos(tims, gaia[Igaia], fluxarray, pixscale, bands, plots, ps, mp)
 
 
     if refstars or T_donotfit or T_clusters:
