@@ -456,12 +456,21 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
             else:
                 depvers.append((pkg, verstr))
 
-    # Store paths to astrometry and tractor packages.
     import astrometry
-    depvers.append(('astrometry', os.path.dirname(astrometry.__file__)))
     import tractor
-    depvers.append(('tractor', os.path.dirname(tractor.__file__)))
-    depvers.append(('fitsio', os.path.dirname(fitsio.__file__)))
+
+    for name,pkg in [('astrometry', astrometry),
+                     ('tractor', tractor),
+                     ('fitsio', fitsio),]:
+        depvers.append((name + '-path', os.path.dirname(pkg.__file__)))
+        try:
+            depvers.append((name, pkg.__version__))
+        except:
+            try:
+                depvers.append((name,
+                                get_git_version(os.path.dirname(pkg.__file__))))
+            except:
+                pass
 
     # Get additional paths from environment variables
     for dep in ['TYCHO2_KD', 'GAIA_CAT', 'LARGEGALAXIES', 'WISE_PSF']:
