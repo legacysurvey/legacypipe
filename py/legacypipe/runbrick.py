@@ -1412,7 +1412,7 @@ def stage_fitblobs(T=None,
         blobslices = [blobslices[i] for i in keepblobs]
         blobsrcs   = [blobsrcs  [i] for i in keepblobs]
         # one more place where blob numbers are recorded...
-        T.blob = blobs[T.iby, T.ibx]
+        T.blob = blobs[np.clip(T.iby, 0, H-1), np.clip(T.ibx, 0, W-1)]
 
     # drop any cached data before we start pickling/multiprocessing
     survey.drop_cache()
