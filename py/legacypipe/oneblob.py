@@ -37,7 +37,7 @@ def one_blob(X):
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
      srcs, bands, plots, ps, simul_opt, use_ceres, rex, refmap) = X
 
-    info('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images' %
+    debug('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images' %
           (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs)))
 
     if len(timargs) == 0:
@@ -148,11 +148,11 @@ class OneBlob(object):
         self.optargs.update(dchisq = 0.1)
 
     def run(self, B):
+        trun = tlast = Time()
         # Not quite so many plots...
         self.plots1 = self.plots
         cat = Catalog(*self.srcs)
 
-        tlast = Time()
         if self.plots:
             self._initial_plots()
             from legacypipe.detection import plot_boundary_map
@@ -302,7 +302,7 @@ class OneBlob(object):
         M = _compute_source_metrics(B.sources, self.tims, self.bands, tr)
         for k,v in M.items():
             B.set(k, v)
-        info('Blob', self.name, 'finished:', Time()-tlast)
+        info('Blob', self.name, 'finished, total:', Time()-trun)
 
     def run_model_selection(self, cat, Ibright, B):
         # We compute & subtract initial models for the other sources while
