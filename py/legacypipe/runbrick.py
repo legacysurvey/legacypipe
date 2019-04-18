@@ -488,9 +488,8 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 # If we want to put more weight on choosing good-seeing images, we could do:
                 #metric = np.sqrt(ccds.exptime[b_inds]) / seeing[b_inds]**2
 
-                sig1 = ccds.sig1[b_inds]
                 # depth would be ~ 1 / (sig1 * seeing); we privilege good seeing here.
-                metric = 1. / (sig1 * seeing[b_inds]**2)
+                metric = 1. / (ccds.sig1[b_inds] * seeing[b_inds]**2)
 
                 # This metric is *BIG* for *GOOD* ccds!
 
@@ -576,9 +575,9 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 galmod = np.maximum(0, galmod)
                 galmod /= galmod.sum()
                 galnorm = np.sqrt(np.sum(galmod**2))
-            detiv = 1. / (sig1 / galnorm)**2
-            galdepth = -2.5 * (np.log10(5. * sig1 / galnorm) - 9.)
-            debug('Galnorm:', galnorm, 'sig1:', sig1, 'galdepth', galdepth)
+            detiv = 1. / (im.sig1 / galnorm)**2
+            galdepth = -2.5 * (np.log10(5. * im.sig1 / galnorm) - 9.)
+            debug('Galnorm:', galnorm, 'sig1:', im.sig1, 'galdepth', galdepth)
 
             # Add this image the the depth map...
             from astrometry.util.resample import resample_with_wcs, OverlapError
