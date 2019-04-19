@@ -28,6 +28,7 @@ CCD_CUT_BITS= dict(
     seeing_bad = 0x1000,
     early_decam = 0x2000,
     depth_cut = 0x4000,
+    too_many_bad_ccds = 0x8000,
 )
 
 MJD_EARLY_DECAM = 56730.

@@ -187,7 +187,6 @@ def check_ooidw(flist, fields=['plprocid', 'plver', 'expnum']):
             temp = [fname.replace(repstr, imstr) in fnames
                     for imstr in imstrs]
             idw[s[i]] = numpy.all(temp)
-        # pdb.set_trace()
     return idw
 
 
@@ -261,7 +260,8 @@ def qkeep_decam(flist, problem=False):
     ]
     for f in filters:
         m = m | (flist['filter'] == f)
-    m = m & (flist['mjd_obs'] > 56730)
+    # m = m & (flist['mjd_obs'] > 56730)
+    # MJD cut can occur post-calibrations.
     # bad_expid?
     if problem:
         m = (m, ~m)
@@ -338,8 +338,8 @@ def filelist(flist, survey, stripndir=10, report=True):
         for i, f in zip(ind, flist['filename'][ind]):
             newpath = f.replace('BOK_CP', 'BOK_Raw')
             newpath = newpath.replace('CP', '')
-            newpath = newpath[:17]+'_ori.fits.fz'
-            flist['object'][i] = newpath
+            newpath = newpath[:-17]+'_ori.fits.fz'
+            flist['object'][i] = fits.getheader(newpath)['OBJECT']
             
     flist['filename'] = ['/'.join(f.split('/')[stripndir:])
                          for f in flist['filename']]
@@ -350,7 +350,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(
         description='Make file list.',
-        epilog='EXAMPLE: %(prog)s flist outflist.fits')
+        epilog='EXAMPLE: %(prog)s survey flist outflist.fits')
     parser.add_argument('survey', type=str, help='decam, 90prime, or mosaic')
     parser.add_argument('filelist', type=str, 
                         help='output of `find` listing files to consider')
