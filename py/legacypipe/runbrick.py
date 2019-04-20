@@ -1625,7 +1625,7 @@ def stage_fitblobs(T=None,
     T.brickname = np.array([brickname] * len(T))
     if len(T.brickname) == 0:
         T.brickname = T.brickname.astype('S8')
-    T.objid = np.arange(len(T)).astype(np.int32)
+    T.objid = np.arange(len(T), dtype=np.int32)
 
     # How many sources in each blob?
     from collections import Counter
