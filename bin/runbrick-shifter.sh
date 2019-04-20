@@ -15,6 +15,7 @@ else
   # Use "DR8" burst buffer.
   BB=$DW_PERSISTENT_STRIPED_DR8
 fi
+outdir=${BB}dr8
 
 if [ "$NERSC_HOST" = "edison" ]; then
     export LEGACY_SURVEY_DIR=/scratch1/scratchdirs/desiproc/dr8
@@ -68,8 +69,6 @@ ulimit -Sv $usemem
 
 cd /src/legacypipe/py
 
-outdir=${BB}dr8
-
 brick="$1"
 
 bri=$(echo $brick | head -c 3)
@@ -109,6 +108,9 @@ python -u legacypipe/runbrick.py \
      --ps-t0 $(date "+%s") \
      --depth-cut 1 \
      >> $log 2>&1
+
+# --run 90prime-mosaic
+# --run decam
 
 #     --write-stage srcs \
 
