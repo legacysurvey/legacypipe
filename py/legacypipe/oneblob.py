@@ -384,7 +384,7 @@ class OneBlob(object):
             for tim in srctims:
                 try:
                     Yo,Xo,Yi,Xi,nil = resample_with_wcs(
-                        self.blobwcs, tim.subwcs, [],2)
+                        self.blobwcs, tim.subwcs, intType=np.int16)
                 except:
                     continue
                 insrc[Yo,Xo] |= (tim.inverr[Yi,Xi] > 0)
@@ -536,7 +536,7 @@ class OneBlob(object):
                 # 'dilated'.
                 try:
                     Yo,Xo,Yi,Xi,nil = resample_with_wcs(
-                        tim.subwcs, srcwcs, [], 2)
+                        tim.subwcs, srcwcs, intType=np.int16)
                 except OverlapError:
                     continue
                 ie = tim.getInvError()
@@ -1300,7 +1300,7 @@ class OneBlob(object):
                                       int(sx1-sx0), int(sy1-sy0))
             try:
                 Yo,Xo,Yi,Xi,_ = resample_with_wcs(subwcs, self.blobwcs,
-                                                  [], 2)
+                                                  intType=np.int16)
             except OverlapError:
                 continue
             if len(Yo) == 0:

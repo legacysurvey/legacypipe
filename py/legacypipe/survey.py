@@ -606,14 +606,13 @@ def tim_get_resamp(tim, targetwcs):
     if hasattr(tim, 'resamp'):
         return tim.resamp
     try:
-        Yo,Xo,Yi,Xi,_ = resample_with_wcs(targetwcs, tim.subwcs, [], 2)
+        Yo,Xo,Yi,Xi,_ = resample_with_wcs(targetwcs, tim.subwcs, intType=np.int16)
     except OverlapError:
         print('No overlap')
         return None
     if len(Yo) == 0:
         return None
-    resamp = [x.astype(np.int16) for x in (Yo,Xo,Yi,Xi)]
-    return resamp
+    return Yo,Xo,Yi,Xi
 
 def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None,
             clip=True):
