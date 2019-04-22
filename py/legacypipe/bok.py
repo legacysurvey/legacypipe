@@ -20,6 +20,7 @@ class BokImage(LegacySurveyImage):
         from pkg_resources import resource_filename
         dq = super(BokImage, self).read_dq(slice=slice, header=header, **kwargs)
         if header:
+            # unpack tuple
             dq,hdr = dq
         dirname = resource_filename('legacypipe', 'config')
         fn = os.path.join(dirname, 'ksb_staticmask_ood_v1.fits.fz')

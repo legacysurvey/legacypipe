@@ -208,16 +208,15 @@ def compare_one(X):
     img = gaussian_filter(tim.getImage(), sig)
     try:
         Yo,Xo,Yi,Xi,[rimg] = resample_with_wcs(
-            targetwcs, tim.subwcs, [img], 3)
+            targetwcs, tim.subwcs, [img], intType=np.int16)
     except OverlapError:
         return None
     del img
     blurnorm = 1./(2. * np.sqrt(np.pi) * sig)
     wt = tim.getInvvar()[Yi,Xi] / np.float32(blurnorm**2)
-    Yo = Yo.astype(np.int16)
-    Xo = Xo.astype(np.int16)
-    Yi = Yi.astype(np.int16)
-    Xi = Xi.astype(np.int16)
+    if Xi.dtype != np.int16:
+        Yi = Yi.astype(np.int16)
+        Xi = Xi.astype(np.int16)
 
     # Compare against reference image...
     maskedpix = np.zeros(tim.shape, np.uint8)
@@ -346,7 +345,7 @@ def compare_one(X):
     # Resample "hot" (in brick coords) back to tim coords.
     try:
         mYo,mXo,mYi,mXi,nil = resample_with_wcs(
-            tim.subwcs, targetwcs, [], 3)
+            tim.subwcs, targetwcs, intType=np.int16)
     except OverlapError:
         return None
     Ibad, = np.nonzero(hot[mYi,mXi])
@@ -367,17 +366,15 @@ def blur_resample_one(X):
     img = gaussian_filter(tim.getImage(), sig)
     try:
         Yo,Xo,Yi,Xi,[rimg] = resample_with_wcs(
-            targetwcs, tim.subwcs, [img], 3)
+            targetwcs, tim.subwcs, [img], intType=np.int16)
     except OverlapError:
         return None
     del img
     blurnorm = 1./(2. * np.sqrt(np.pi) * sig)
     wt = tim.getInvvar()[Yi,Xi] / (blurnorm**2)
-    return (Yo.astype(np.int16), Xo.astype(np.int16), rimg*wt, wt, tim.dq[Yi,Xi])
+    return (Yo, Xo, rimg*wt, wt, tim.dq[Yi,Xi])
 
 def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
-    from astrometry.util.resample import resample_with_wcs, OverlapError
-
     H,W = targetwcs.shape
     ibands = dict([(b,i) for i,b in enumerate(bands)])
     for tim in tims:
@@ -392,8 +389,8 @@ def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
                 continue
             ra,dec = tim.subwcs.pixelxy2radec(ix+1, iy+1)[-2:]
             ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
-            xx = np.round(xx-1).astype(np.int16)
-            yy = np.round(yy-1).astype(np.int16)
+            xx = (xx - 1. + 0.5).astype(np.int16)
+            yy = (yy - 1. + 0.5).astype(np.int16)
             keep = (xx >= 0) * (xx < W) * (yy >= 0) * (yy < H)
             if not np.any(keep):
                 continue

@@ -24,9 +24,8 @@ def subtract_one_real(X):
         if xlo == xhi or ylo == yhi:
             continue
 
-        r2 = ((np.arange(ylo, yhi+1)[:,np.newaxis] - y)**2 +
-              (np.arange(xlo, xhi+1)[np.newaxis,:] - x)**2)
-        rads = np.sqrt(r2)
+        rads = np.hypot(np.arange(ylo, yhi+1)[:,np.newaxis] - y,
+                        np.arange(xlo, xhi+1)[np.newaxis,:] - x)
         maxr = pixrad
         # Apodization fraction
         apr = maxr*0.8
