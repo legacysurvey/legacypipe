@@ -93,7 +93,7 @@ echo >> $log
 echo -e "\nStarting on $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
-python -u legacypipe/runbrick.py \
+python -O legacypipe/runbrick.py \
      --brick $brick \
      --release 8080 \
      --skip \
