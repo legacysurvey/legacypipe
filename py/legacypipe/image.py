@@ -956,8 +956,9 @@ class LegacySurveyImage(object):
 
         psf.shift(x0, y0)
         if hybridPsf:
-            from tractor.psf import HybridPixelizedPSF
-            psf = HybridPixelizedPSF(psf, cx=w/2., cy=h/2.)
+            from tractor.psf import HybridPixelizedPSF, NCircularGaussianPSF
+            psf = HybridPixelizedPSF(psf, cx=w/2., cy=h/2.,
+                                     gauss=NCircularGaussianPSF([psf.fwhm / 2.35], [1.]))
         debug('Using PSF model', psf)
         return psf
 
