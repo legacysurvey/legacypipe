@@ -177,7 +177,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 try:
                     tanwcs = tim.wcs.wcs
                     assert(tanwcs.shape == tilemask.shape)
-                    Yo,Xo,Yi,Xi,_ = resample_with_wcs(get_masks, tanwcs)
+                    Yo,Xo,Yi,Xi,_ = resample_with_wcs(get_masks, tanwcs, intType=np.int16)
                     # Only deal with mask pixels that are set.
                     I, = np.nonzero(tilemask[Yi,Xi] > 0)
                     # Trim to unique area for this tile

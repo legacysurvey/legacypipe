@@ -51,7 +51,8 @@ class UnwiseCoadd(object):
 
             debug('WISE: resampling', wcs, 'to', self.unwise_wcs)
             try:
-                Yo,Xo,Yi,Xi,resam = resample_with_wcs(self.unwise_wcs, wcs, [img, mod])
+                Yo,Xo,Yi,Xi,resam = resample_with_wcs(self.unwise_wcs, wcs,
+                                                      [img, mod], intType=np.int16)
                 rimg,rmod = resam
                 debug('Adding', len(Yo), 'pixels from tile', tile, 'to coadd')
                 self.unwise_co [band-1][Yo,Xo] += rimg
@@ -686,7 +687,7 @@ def _resample_one(args):
 
     try:
         Yo,Xo,Yi,Xi,rimgs = resample_with_wcs(
-            targetwcs, tim.subwcs, imgs, 3)
+            targetwcs, tim.subwcs, imgs, 3, intType=np.int16)
     except OverlapError:
         return None
     if len(Yo) == 0:

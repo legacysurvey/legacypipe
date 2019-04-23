@@ -250,7 +250,7 @@ def get_bitmask_fn(imgfn):
 def get_weight_fn(imgfn):
     if 'ooi' in imgfn: 
         fn= imgfn.replace('ooi','oow')
-    elif 'oki' in imgfn: 
+    elif 'oki' in imgfn:
         fn= imgfn.replace('oki','oow')
     else:
         raise ValueError('bad imgfn? no ooi or oki: %s' % imgfn)
@@ -2064,10 +2064,18 @@ def runit(imgfn, photomfn, surveyfn, annfn, mp, bad_expid=None,
                         comment='CP processing date'))
     hdr.add_record(dict(name='PLPROCID', value=measure.plprocid,
                         comment='CP processing batch'))
-    hdr.add_record(dict(name='RA_BORE', value=hmsstring2ra(primhdr['RA']),
-                        comment='Boresight RA'))
-    hdr.add_record(dict(name='DEC_BORE', value=dmsstring2dec(primhdr['DEC']),
-                        comment='Boresight Dec'))
+    # Some early DECam files (eg, decam/NonDECaLS/CP20140527/c4d_140528_012504_ooi_r_v1.fits.fz)
+    # have RA,DEC floating-point.  Later, they're HH:MM:SS.
+    ra = primhdr['RA']
+    dec = primhdr['DEC']
+    try:
+        ra = float(ra)
+        dec = float(dec)
+    except:
+        ra = hmsstring2ra(ra)
+        dec = dmsstring2dec(dec)
+    hdr.add_record(dict(name='RA_BORE',  value=ra,  comment='Boresight RA'))
+    hdr.add_record(dict(name='DEC_BORE', value=dec, comment='Boresight Dec'))
 
     zptgood = np.isfinite(ccds['zpt'])
     if np.sum(zptgood) > 0:

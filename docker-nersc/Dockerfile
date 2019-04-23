@@ -99,7 +99,7 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && make extra \
     && make install INSTALL_DIR=/usr/local \
     && make clean \
-    && echo 2
+    && echo 3
 
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
@@ -182,10 +182,14 @@ RUN python -c "import astropy"
 RUN    python    -m compileall /src/unwise_psf/py/unwise_psf.py \
     && python -O -m compileall /src/unwise_psf/py/unwise_psf.py
 
-RUN python -O -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages /usr/local/lib/python /usr/local/lib/python3.5/site-packages /usr/local/lib/python3.5/dist-packages && \
-    python    -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages /usr/local/lib/python /usr/local/lib/python3.5/site-packages /usr/local/lib/python3.5/dist-packages
-    
-RUN cd /src/legacypipe/py && git pull && git describe && echo 5
+RUN python -O -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
+           /usr/local/lib/python /usr/local/lib/python3.5/site-packages \
+           /usr/local/lib/python3.5/dist-packages && \
+    python    -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
+           /usr/local/lib/python /usr/local/lib/python3.5/site-packages \
+           /usr/local/lib/python3.5/dist-packages
+
+RUN cd /src/legacypipe/py && git pull && git describe && echo 8
 
 RUN    python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
     && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}

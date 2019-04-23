@@ -803,7 +803,7 @@ def sdss_coadd(targetwcs, bands):
             simg = frame.getImage()
             wcs = AsTransWrapper(frame.astrans, w, h, 0.5, 0.5)
             try:
-                Yo,Xo,Yi,Xi,nil = resample_with_wcs(targetwcs, wcs, [], 3)
+                Yo,Xo,Yi,Xi,nil = resample_with_wcs(targetwcs, wcs)
             except OverlapError:
                 continue
             sdsscoimgs[iband][Yo,Xo] += simg[Yi,Xi]
