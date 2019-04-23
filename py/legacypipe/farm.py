@@ -1,3 +1,4 @@
+import os
 import pickle
 import time
 from collections import Counter
@@ -8,48 +9,92 @@ from legacypipe.runbrick import _blob_iter, _write_checkpoint
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('queue', help='QDO queue name to get brick names from')
     parser.add_argument('--pickle', default='pickles/runbrick-%(brick)s-srcs.pickle',
-                        help='Pickle pattern for "srcs" (source detection) stage pickles')
+                        help='Pickle pattern for "srcs" (source detection) stage pickles, default %(default)s')
     parser.add_argument('--checkpoint', default='checkpoints/checkpoint-%(brick)s.pickle',
                         help='Checkpoint filename pattern')
     parser.add_argument('--checkpoint-period', type=int, default=300,
                         help='Time between writing checkpoints')
+    parser.add_argument('--port', default=5555, type=int,
+                        help='Network port (TCP)')
+    parser.add_argument('--big', type=str, default='keep', choices=['keep', 'drop', 'queue'],
+                        help='What to do with big blobs: "keep", "drop", "queue"')
+    parser.add_argument('--big-pix', type=int, default=250000,
+                        help='Define how many pixels are in a "big" blob')
+    parser.add_argument('--big-port', default=5556, type=int,
+                        help='Network port (TCP) for big blobs, if --big=queue')
     opt = parser.parse_args()
 
     queuename = opt.queue
 
-
     import threading
     import queue
 
+    # inqueue: for holding blob-work-packets
     #inqueue = queue.PriorityQueue(maxsize=10000)
     # Effectively, run a brick at a time, prioritizing as usual...
-    inqueue = queue.Queue(maxsize=1000)
+    inqueue = queue.Queue(maxsize=10000)
+
+    # bigqueue: like inqueue, but for big blobs.
+    if opt.big == 'queue':
+        bigqueue = queue.Queue(maxsize=1000)
+    else:
+        bigqueue = None
+
+    # outqueue: for holding blob results
     outqueue = queue.Queue()
+
     # queue directly from the input thread to the output thread, when checkpointed
     # results are read from disk.
     checkpointqueue = queue.Queue()
-    blobsizes = ThreadSafeDict()
 
+    blobsizes = ThreadSafeDict()
     outstanding_work = ThreadSafeDict()
 
-    inthread = threading.Thread(target=input_thread, args=(queuename, inqueue, checkpointqueue, blobsizes, opt),
+    inthread = threading.Thread(target=input_thread,
+                                args=(queuename, inqueue, bigqueue, checkpointqueue,
+                                      blobsizes, opt),
                                 daemon=True)
     inthread.start()
 
-    outthread = threading.Thread(target=output_thread, args=(queuename, outqueue, checkpointqueue, blobsizes, outstanding_work, opt),
+    outthread = threading.Thread(target=output_thread,
+                                 args=(queuename, outqueue, checkpointqueue, blobsizes,
+                                       outstanding_work, opt),
                                  daemon=True)
     outthread.start()
 
+    ctx = zmq.Context()
+    networkthread = threading.Thread(target=network_thread,
+                                     args=(ctx, opt.port, inqueue, outqueue, outstanding_work, 'main'))
+    networkthread.start()
+
+    if opt.big == 'queue':
+        bignetworkthread = threading.Thread(target=network_thread,
+                                            args=(ctx, opt.big_port, bigqueue, outqueue,
+                                                  outstanding_work, 'big'))
+        bignetworkthread.start()
+    else:
+        bignetworkthread = None
+
+    inthread.join()
+    outthread.join()
+    networkthread.join()
+    if bignetworkthread is not None:
+        bignetworkthread.join()
+
+
+def network_thread(ctx, port, inqueue, outqueue, outstanding_work, qname):
     # Network thread:
     import socket
     me = socket.gethostname()
-    ctx = zmq.Context()
+
     sock = ctx.socket(zmq.REP)
-    sock.bind('tcp://*:5555')
-    print('Listening on tcp://%s:5555' % me)
+    addr = 'tcp://*:' + str(port)
+    sock.bind(addr)
+    print('Listening on tcp://%s:%i' % (me, port))
 
     nowork = pickle.dumps(None, -1)
     iswork = False
@@ -91,10 +136,11 @@ def main():
             ct = Counter()
             oldest = {}
             for i,(k,v) in enumerate(out.items()):
-                (worker,tstart) = v
+                (nm,worker,tstart) = v
                 (br,ib) = k
                 if i < 20:
-                    print('Brick,blob', k, 'worker', worker, 'started', tnow-tstart, 's ago')
+                    print('Brick,blob', k, 'queue', nm, 'worker', worker,
+                          'started', tnow-tstart, 's ago')
                 c[br] += 1
                 ct[br] += (tnow-tstart)
                 if not br in oldest:
@@ -112,15 +158,15 @@ def main():
                 continue
         parts = sock.recv_multipart()
         assert(len(parts) == 2)
-        sender = parts[0]
+        worker = parts[0]
         result = parts[1]
-        print('Request: from', sender, ':', len(result), 'bytes')
+        print('Request: from', worker, ':', len(result), 'bytes')
         try:
             sock.send(work, flags=zmq.NOBLOCK)
             if iswork:
                 worksent += 1
                 tnow = time.time()
-                outstanding_work.set((br,iblob), (sender,tnow))
+                outstanding_work.set((br,iblob), (qname,worker,tnow))
         except:
             import traceback
             traceback.print_exc()
@@ -232,14 +278,15 @@ def output_thread(queuename, outqueue, checkpointqueue, blobsizes, outstanding_w
 
         try:
             tnow = time.time()
-            worker,tstart = outstanding_work.get_and_del((brick,iblob))
+            qname,worker,tstart = outstanding_work.get_and_del((brick,iblob))
             twork = tnow - tstart
         except:
+            qname = None
             worker = None
             twork = None
 
         nblobs,_ = get_brick_nblobs(brick, '(unknown)')
-        print('Output thread: got result', len(allresults[brick]), 'of', (nblobs or '(unknown)'), 'for brick', brick, 'iblob', iblob, 'from', worker, 'took', twork, 'seconds')
+        print('Output thread: got result', len(allresults[brick]), 'of', (nblobs or '(unknown)'), 'for brick', brick, 'iblob', iblob, 'from', worker, 'on queue', qname, 'took', twork, 'seconds')
         check_brick_done(brick)
 
 def get_blob_iter(skipblobs=None,
@@ -256,8 +303,10 @@ def get_blob_iter(skipblobs=None,
                   simul_opt=False, use_ceres=True, mp=None,
                   refstars=None,
                   rex=False,
+                  T_clusters=None,
                   custom_brick=False,
                   **kwargs):
+    import numpy as np
     if skipblobs is None:
         skipblobs = []
     
@@ -266,8 +315,11 @@ def get_blob_iter(skipblobs=None,
 
     if refstars:
         from legacypipe.oneblob import get_inblob_map
-        refstars.radius_pix = np.ceil(refstars.radius * 3600. / targetwcs.pixel_scale()).astype(int)
-        refmap = get_inblob_map(targetwcs, refstars)
+        refs = refstars[refstars.donotfit == False]
+        if T_clusters is not None:
+            refs = merge_tables([refs, T_clusters], columns='fillzero')
+        refmap = get_inblob_map(targetwcs, refs)
+        del refs
     else:
         HH, WW = targetwcs.shape
         refmap = np.zeros((int(HH), int(WW)), np.uint8)
@@ -310,13 +362,13 @@ class ThreadSafeDict(object):
         with self.lock:
             return self.d.copy()
 
-def queue_work(brickname, inqueue, checkpointqueue, opt):
+def queue_work(brickname, inqueue, bigqueue, checkpointqueue, opt):
     '''
     Called from the input thread to generate work packets for the given *brickname*.
     '''
     from astrometry.util.file import unpickle_from_file
 
-    pickle_fn = opt.pickle % dict(brick=brickname)
+    pickle_fn = opt.pickle % dict(brick=brickname, brickpre=brickname[:3])
     print('Looking for', pickle_fn)
     if not os.path.exists(pickle_fn):
         raise RuntimeError('Input pickle does not exist: ' + pickle_fn)
@@ -327,7 +379,7 @@ def queue_work(brickname, inqueue, checkpointqueue, opt):
     nchk = 0
 
     # Check for and read existing checkpoint file.
-    checkpoint_fn = opt.checkpoint % dict(brick=brickname)
+    checkpoint_fn = opt.checkpoint % dict(brick=brickname, brickpre=brickname[:3])
     if os.path.exists(checkpoint_fn):
         print('Reading checkpoint file', checkpoint_fn)
         R = unpickle_from_file(checkpoint_fn)
@@ -348,6 +400,10 @@ def queue_work(brickname, inqueue, checkpointqueue, opt):
     assert(kwargs['brickname'] == brickname)
     blobiter = get_blob_iter(**kwargs)
 
+    big_npix = opt.big_pix
+    if opt.big == 'keep':
+        big_npix = 10000 * 10000
+
     nq = 0
     for arg in blobiter:
         if arg is None:
@@ -364,17 +420,27 @@ def queue_work(brickname, inqueue, checkpointqueue, opt):
             blobh = args[7]
             priority = -(blobw*blobh)
 
+        if opt.big == 'drop' and blobw*blobh > big_npix:
+            print('Dropping a blob of size', blobw, 'x', blobh)
+            continue
+
+        dest_queue = inqueue
+
+        if opt.big == 'queue' and blobw*blobh > big_npix:
+            print('Blob of size', blobw, 'x', blobh, 'goes on big queue')
+            dest_queue = bigqueue
+
         picl = pickle.dumps(arg, -1)
 
         qitem = PrioritizedItem(priority=priority, item=(br, iblob, (args is None), picl))
         print('Queuing blob', (nq+1), 'for brick', brickname, '- queue size ~', inqueue.qsize())
         nq += 1
-        inqueue.put(qitem)
+        dest_queue.put(qitem)
 
     # Finished queuing all blobs for this brick -- record how many blobs we sent out.
     return nchk + nq
 
-def input_thread(queuename, inqueue, checkpointqueue, blobsizes, opt):
+def input_thread(queuename, inqueue, bigqueue, checkpointqueue, blobsizes, opt):
 
     import qdo
     q = qdo.connect(queuename)
@@ -387,7 +453,7 @@ def input_thread(queuename, inqueue, checkpointqueue, blobsizes, opt):
                 brickname = task.task
                 print('Brick', brickname)
                 # WORK
-                nblobs = queue_work(brickname, inqueue, checkpointqueue, opt)
+                nblobs = queue_work(brickname, inqueue, bigqueue, checkpointqueue, opt)
                 blobsizes.set(brickname, (nblobs, task.id))
                 #
                 print('Finished', brickname, 'with', nblobs, 'blobs')
