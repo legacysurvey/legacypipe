@@ -55,9 +55,13 @@ def run(server):
         (brickname, iblob, args) = rep
 
         print('Calling one_blob...')
+        t0_wall = time.time()
+        t0_cpu  = time.clock()
         result = one_blob(args)
+        t1_cpu  = time.clock()
+        t1_wall = time.time()
         # send our answer along with our next request for work!
-        req = (brickname, iblob, result)
+        req = (brickname, iblob, result, t1_cpu-t0_cpu, t1_wall-t0_wall)
 
 def main():
     parser = argparse.ArgumentParser()
