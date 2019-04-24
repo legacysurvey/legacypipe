@@ -62,7 +62,7 @@ def main():
     # inqueue: for holding blob-work-packets
     #inqueue = queue.PriorityQueue(maxsize=10000)
     # Effectively, run a brick at a time, prioritizing as usual...
-    inqueue = queue.Queue(maxsize=5000)
+    inqueue = mp.Queue(maxsize=5000)
 
     # bigqueue: like inqueue, but for big blobs.
     if opt.big == 'queue':
@@ -75,7 +75,7 @@ def main():
 
     # queue directly from the input thread to the output thread, when checkpointed
     # results are read from disk.
-    checkpointqueue = queue.Queue()
+    checkpointqueue = mp.Queue()
 
     blobsizes = mp.Queue()
     outstanding_work = ThreadSafeDict()
