@@ -37,10 +37,13 @@ def run(server):
     sock.connect(server)
 
     req = None
+    meta = None
+    tprev_wall = time.time()
     while True:
         msg = pickle.dumps(req, -1)
+        meta_msg = pickle.dumps(meta, -1)
         print('Sending', len(msg))
-        sock.send_multipart([jobid, msg])
+        sock.send_multipart([jobid, meta_msg, msg])
         rep = sock.recv()
         print('Received reply:', len(rep), 'bytes')
         rep = pickle.loads(rep)
@@ -57,11 +60,16 @@ def run(server):
         print('Calling one_blob...')
         t0_wall = time.time()
         t0_cpu  = time.clock()
+
         result = one_blob(args)
+
         t1_cpu  = time.clock()
         t1_wall = time.time()
+        overhead = t0_wall - tprev_wall
+        tprev_wall = t1_wall
         # send our answer along with our next request for work!
-        req = (brickname, iblob, result, t1_cpu-t0_cpu, t1_wall-t0_wall)
+        req = result
+        meta = (brickname, iblob, t1_cpu-t0_cpu, t1_wall-t0_wall, overhead)
 
 def main():
     parser = argparse.ArgumentParser()
