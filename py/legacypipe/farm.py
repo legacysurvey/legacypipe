@@ -4,6 +4,10 @@ import pickle
 import time
 from collections import Counter
 
+import multiprocessing as mp
+import threading
+import queue
+
 import zmq
 
 from legacypipe.runbrick import _blob_iter, _write_checkpoint
@@ -55,13 +59,10 @@ def main():
 
     queuename = opt.queue
 
-    import threading
-    import queue
-
     # inqueue: for holding blob-work-packets
     #inqueue = queue.PriorityQueue(maxsize=10000)
     # Effectively, run a brick at a time, prioritizing as usual...
-    inqueue = queue.Queue(maxsize=1000)
+    inqueue = queue.Queue(maxsize=5000)
 
     # bigqueue: like inqueue, but for big blobs.
     if opt.big == 'queue':
@@ -76,7 +77,7 @@ def main():
     # results are read from disk.
     checkpointqueue = queue.Queue()
 
-    blobsizes = ThreadSafeDict()
+    blobsizes = mp.Queue()
     outstanding_work = ThreadSafeDict()
     finished_work = ThreadSafeDict()
     reported_cputime = ThreadSafeDict()
@@ -317,26 +318,22 @@ def output_thread(queuename, outqueue, checkpointqueue, blobsizes, outstanding_w
 
     allresults = {}
 
-    # thread-Local cache of 'blobsizes'
-    brick_nblobs = {}
-    brick_taskids = {}
+    # Stored values from the 'blobsizes' queue.
+    # brick -> (nblobs, qdo_taskid)
+    brick_info = {}
 
     # Local mapping of brickname -> [set of cancelled blob ids]
     brick_cancelled = {}
 
     def get_brick_nblobs(brick, defnblobs=None):
-        nblobs = defnblobs
-        taskid = None
-        if brick in brick_nblobs:
-            nblobs = brick_nblobs[brick]
-            taskid = brick_taskids[brick]
-        else:
-            bs = blobsizes.get(brick)
-            if bs is not None:
-                (nblobs, taskid) = bs
-                brick_nblobs[brick] = nblobs
-                brick_taskids[brick] = taskid
-        return nblobs,taskid
+        if not brick in brick_info:
+            try:
+                while True:
+                    br, nb, tid = blobsizes.get(False)
+                    brick_info[br] = (nb,tid)
+            except queue.Empty:
+                pass
+        return brick_info.get(brick, (defnblobs,None))
 
     def check_brick_done(brick):
         nblobs,taskid = get_brick_nblobs(brick)
@@ -602,7 +599,7 @@ def input_thread(queuename, inqueue, bigqueue, checkpointqueue, blobsizes, opt):
             debug('Brick', brickname)
             # WORK
             nblobs = queue_work(brickname, inqueue, bigqueue, checkpointqueue, opt)
-            blobsizes.set(brickname, (nblobs, task.id))
+            blobsizes.put((brickname, nblobs, task.id))
             #
             debug('Finished', brickname, 'with', nblobs, 'blobs')
         except:
