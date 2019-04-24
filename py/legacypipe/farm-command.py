@@ -20,8 +20,12 @@ def main():
 
     req = ['reset']
     msg = pickle.dumps(req, -1)
+    print('Sending...')
     sock.send(msg)
+    print('Waiting for reply')
     reply = sock.recv()
     msg = pickle.loads(reply)
     print('Reply:', msg)
 
+if __name__ == '__main__':
+    main()

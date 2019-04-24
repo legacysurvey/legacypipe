@@ -1,3 +1,4 @@
+import sys
 import os
 import pickle
 import time
@@ -43,7 +44,7 @@ def main():
                         default=0, help='Make more verbose')
     opt = parser.parse_args()
 
-    if verbose == 0:
+    if opt.verbose == 0:
         lvl = logging.INFO
     else:
         lvl = logging.DEBUG
@@ -57,7 +58,7 @@ def main():
     # inqueue: for holding blob-work-packets
     #inqueue = queue.PriorityQueue(maxsize=10000)
     # Effectively, run a brick at a time, prioritizing as usual...
-    inqueue = queue.Queue(maxsize=10000)
+    inqueue = queue.Queue(maxsize=1000)
 
     # bigqueue: like inqueue, but for big blobs.
     if opt.big == 'queue':
@@ -127,7 +128,7 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, outstanding_work,
         print('Listening on tcp://%s:%i for commands (queue: %s)' % (me, command_port, qname))
 
     nowork = pickle.dumps(None, -1)
-    iswork = False
+    havework = False
     worksent = 0
     resultsreceived = 0
     #  FIXME -- track brick,iblob of outstanding work, for timeout?
@@ -171,26 +172,27 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, outstanding_work,
                     break
 
         print('Network thread: approx size of input queue:', inqueue.qsize(), 'output queue:', outqueue.qsize())
-        try:
-            arg = inqueue.get(block=False)
-            work = arg.item
-            iswork = True
-        except:
-            work = nowork
-            iswork = False
-            print('Work queue is empty.')
-
-        # Peek into work packet, checking for empty (None) work and short-cutting, putting a None
-        # result directly on the output queue.
-        if iswork:
-            (br,iblob,isempty,picl) = work
-            if isempty:
-                debug('Short-cutting empty work packet for brick', br, 'iblob', iblob)
-                result = pickle.dumps((br, iblob, None), -1)
-                outqueue.put(result)
-                continue
-            work = picl
-            debug('Next work packet:', len(work), 'bytes')
+        if not havework:
+            try:
+                arg = inqueue.get(block=False)
+                work = arg.item
+                havework = True
+            except:
+                work = nowork
+                havework = False
+                print('Work queue is empty.')
+            # Peek into work packet, checking for empty (None) work
+            # and short-cutting, putting a None result directly on the
+            # output queue.
+            if havework:
+                (br,iblob,isempty,picl) = work
+                if isempty:
+                    debug('Short-cutting empty work packet for brick', br, 'iblob', iblob)
+                    result = pickle.dumps((br, iblob, None), -1)
+                    outqueue.put(result)
+                    continue
+                work = picl
+                debug('Next work packet:', len(work), 'bytes')
 
         tnow = time.time()
         if tnow - last_printout > 60:
@@ -215,7 +217,7 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, outstanding_work,
             last_printout = tnow
 
         debug('Waiting for request')
-        if not iswork:
+        if not havework or command_sock is not None:
             events = sock.poll(5000)
             if events == 0:
                 # recv timed out; check work queue again
@@ -227,9 +229,10 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, outstanding_work,
         debug('Request: from', worker, ':', len(result), 'bytes')
         try:
             sock.send(work, flags=zmq.NOBLOCK)
-            if iswork:
+            if havework:
                 worksent += 1
                 tnow = time.time()
+                havework = False
                 outstanding_work.set((br,iblob), (qname,worker,tnow))
         except:
             import traceback
@@ -344,7 +347,7 @@ def output_thread(queuename, outqueue, checkpointqueue, blobsizes, outstanding_w
         (brick, iblob, res) = result
         if res == 'cancel':
             if not brick in brick_cancelled:
-                brick_cancelled = set()
+                brick_cancelled[brick] = set()
             brick_cancelled[brick].add(iblob)
 
             debug('Output thread: got cancel for brick', brick, 'blob', iblob, 'on', qname)
