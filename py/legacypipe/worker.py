@@ -20,14 +20,17 @@ def run(server):
     print('SLURM_ARRAY_TASK_ID', aid)
     print('SLURM_ARRAY_JOB_ID', ajid)
     print('SLURM_NODEID', nid)
+    import socket
+    me = socket.gethostname()
+    print('Hostname', me)
 
     if len(cluster + jid + aid) == 0:
-        jobid = ''
+        jobid = me + '_' + 'pid' + str(os.getpid())
     else:
         if len(aid):
-            jobid = '%s_%s_%s_%s' % (cluster, ajid, aid, nid)
+            jobid = '%s_%s_%s_%s_%s' % (cluster, ajid, aid, nid, me)
         else:
-            jobid = '%s_%s_%s' % (cluster, jid, nid)
+            jobid = '%s_%s_%s_%s' % (cluster, jid, nid, me)
     jobid = jobid.encode()
     print('Setting jobid', jobid)
 
