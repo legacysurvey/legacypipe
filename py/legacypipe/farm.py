@@ -62,16 +62,16 @@ def main():
     # inqueue: for holding blob-work-packets
     #inqueue = queue.PriorityQueue(maxsize=10000)
     # Effectively, run a brick at a time, prioritizing as usual...
-    inqueue = mp.Queue(maxsize=5000)
+    inqueue = mp.Queue(maxsize=1000)
 
     # bigqueue: like inqueue, but for big blobs.
     if opt.big == 'queue':
-        bigqueue = queue.Queue(maxsize=1000)
+        bigqueue = mp.Queue(maxsize=1000)
     else:
         bigqueue = None
 
     # outqueue: for holding blob results
-    outqueue = queue.Queue()
+    outqueue = mp.Queue()
 
     # queue directly from the input thread to the output thread, when checkpointed
     # results are read from disk.
@@ -79,30 +79,45 @@ def main():
 
     blobsizes = mp.Queue()
 
-    finished_bricks = queue.Queue()
+    finished_bricks = mp.Queue()
 
-    inthread = threading.Thread(target=input_thread,
-                                args=(queuename, inqueue, bigqueue, checkpointqueue,
-                                      blobsizes, opt),
-                                daemon=True)
-    inthread.start()
+    # inthread = threading.Thread(target=input_thread,
+    #                             args=(queuename, inqueue, bigqueue, checkpointqueue,
+    #                                   blobsizes, opt),
+    #                             daemon=True)
+    # inthread.start()
 
-    outthread = threading.Thread(target=output_thread,
+    inthreads = []
+    for i in range(4):
+        inthread = mp.Process(target=input_thread,
+                              args=(queuename, inqueue, bigqueue, checkpointqueue,
+                                    blobsizes, opt),
+                              daemon=True)
+        inthreads.append(inthread)
+        inthread.start()
+
+    #outthread = threading.Thread(target=output_thread,
+    outthread = mp.Process(target=output_thread,
                                  args=(queuename, outqueue, checkpointqueue, blobsizes,
                                        finished_bricks, opt),
                                  daemon=True)
     outthread.start()
 
-    ctx = zmq.Context()
-    networkthread = threading.Thread(target=network_thread,
-                                     args=(ctx, opt.port, opt.command_port, inqueue, outqueue,
-                                           finished_bricks, 'main'))
+    #ctx = zmq.Context()
+    ctx = None
+    #networkthread = threading.Thread(target=network_thread,
+    networkthread = mp.Process(target=network_thread,
+                               args=(ctx, opt.port, opt.command_port, inqueue, outqueue,
+                                     finished_bricks, 'main'),
+                               daemon=True)
     networkthread.start()
 
     if opt.big == 'queue':
-        bignetworkthread = threading.Thread(target=network_thread,
+        #bignetworkthread = threading.Thread(target=network_thread,
+        bignetworkthread = mp.Process(target=network_thread,
                                             args=(ctx, opt.big_port, opt.big_command_port,
-                                                  bigqueue, outqueue, None, 'big'))
+                                                  bigqueue, outqueue, None, 'big'),
+                                      daemon=True)
         bignetworkthread.start()
     else:
         bignetworkthread = None
@@ -119,6 +134,8 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
     import socket
     me = socket.gethostname()
 
+    if ctx is None:
+        ctx = zmq.Context()
     sock = ctx.socket(zmq.REP)
     addr = 'tcp://*:' + str(port)
     sock.bind(addr)
@@ -178,7 +195,8 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
         # Retrieve the next work assignment
         if not havework:
             try:
-                arg = inqueue.get(block=False)
+                #arg = inqueue.get(block=False)
+                arg = inqueue.get(block=True, timeout=0.1)
                 work = arg.item
                 havework = True
             except:
@@ -540,6 +558,8 @@ def queue_work(brickname, inqueue, bigqueue, checkpointqueue, opt):
     if opt.big == 'keep':
         big_npix = 10000 * 10000
 
+    mypid = os.getpid()
+
     nq = 0
     for arg in blobiter:
         if arg is None:
@@ -568,7 +588,9 @@ def queue_work(brickname, inqueue, bigqueue, checkpointqueue, opt):
         picl = pickle.dumps(arg, -1)
 
         qitem = PrioritizedItem(priority=priority, item=(br, iblob, picl))
-        debug('Queuing blob', (nq+1), 'for brick', brickname, '- queue size ~', inqueue.qsize())
+
+        #debug('Queuing blob', (nq+1), 'for brick', brickname, '- queue size ~', inqueue.qsize())
+        print('Input proc', mypid, 'queuing blob', (nq+1), 'for brick', brickname, 'qsize ~', inqueue.qsize())
         nq += 1
         dest_queue.put(qitem)
 
@@ -576,6 +598,7 @@ def queue_work(brickname, inqueue, bigqueue, checkpointqueue, opt):
     return nchk + nq
 
 def input_thread(queuename, inqueue, bigqueue, checkpointqueue, blobsizes, opt):
+    print('Input process', os.getpid(), 'starting')
     import qdo
     q = qdo.connect(queuename)
 
@@ -599,4 +622,5 @@ def input_thread(queuename, inqueue, bigqueue, checkpointqueue, blobsizes, opt):
             task.set_state(qdo.Task.FAILED, err=1)
 
 if __name__ == '__main__':
+    #mp.set_start_method('spawn')
     main()
