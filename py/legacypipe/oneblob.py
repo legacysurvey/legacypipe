@@ -14,7 +14,8 @@ from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedF
 from tractor.patch import ModelMask
 
 from legacypipe.survey import (SimpleGalaxy, RexGalaxy, GaiaSource,
-                               LegacyEllipseWithPriors, get_rgb, IN_BLOB)
+                               LegacyEllipseWithPriors, get_rgb)
+from legacypipe.bits import IN_BLOB
 from legacypipe.runbrick import rgbkwargs, rgbkwargs_resid
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods

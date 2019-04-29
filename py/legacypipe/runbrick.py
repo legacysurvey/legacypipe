@@ -38,8 +38,8 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import dimshow
 from astrometry.util.ttime import Time
 
-from legacypipe.survey import get_rgb, imsave_jpeg, MASKBITS
-from legacypipe.bits import DQ_BITS
+from legacypipe.survey import get_rgb, imsave_jpeg
+from legacypipe.bits import DQ_BITS, MASKBITS
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 
@@ -1984,8 +1984,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     residuals.  We also perform aperture photometry in this stage.
     '''
     from functools import reduce
-    from legacypipe.survey import apertures_arcsec, IN_BLOB
-
+    from legacypipe.survey import apertures_arcsec
+    from legacypipe.bits import IN_BLOB
     tlast = Time()
     record_event and record_event('stage_coadds: starting')
 
