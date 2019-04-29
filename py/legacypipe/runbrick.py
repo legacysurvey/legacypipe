@@ -1177,13 +1177,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         plt.title('saturated_pix')
         ps.savefig()
 
-        plt.clf()
-        plt.subplot(1,2,1)
-        dimshow((hot*1) + (any_saturated*1), vmin=0, vmax=2, cmap='hot')
-        plt.title('hot + saturated')
-        ps.savefig()
-
-
     # Find "hot" pixels that are separated by masked pixels?
     if False:
         from scipy.ndimage.measurements import find_objects
@@ -1224,6 +1217,12 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         if plots:
             plt.clf()
             plt.subplot(1,2,1)
+            dimshow((hot*1) + (any_saturated*1), vmin=0, vmax=2, cmap='hot')
+            plt.title('hot + saturated')
+            ps.savefig()
+
+            plt.clf()
+            plt.subplot(1,2,1)
             dimshow(merging, vmin=0, vmax=1, cmap='hot')
             plt.title('merging')
             plt.subplot(1,2,2)
@@ -1231,6 +1230,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             plt.title('merged')
             ps.savefig()
 
+        del merging, any_saturated
 
     # Segment, and record which sources fall into each blob
     blobs,blobsrcs,blobslices = segment_and_group_sources(hot, T, name=brickname,
