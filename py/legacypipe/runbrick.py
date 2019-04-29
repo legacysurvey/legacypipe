@@ -1233,9 +1233,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
 
     # Segment, and record which sources fall into each blob
-    blobs,blobsrcs,blobslices = segment_and_group_sources(
-        np.logical_or(hot, reduce(np.logical_or, saturated_pix)),
-        T, name=brickname, ps=ps, plots=plots)
+    blobs,blobsrcs,blobslices = segment_and_group_sources(hot, T, name=brickname,
+                                                          ps=ps, plots=plots)
     del hot
 
     tnow = Time()
