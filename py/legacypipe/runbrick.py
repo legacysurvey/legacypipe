@@ -1177,13 +1177,22 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         plt.title('saturated_pix')
         ps.savefig()
 
+        plt.clf()
+        plt.subplot(1,2,1)
+        dimshow((hot*1) + (any_saturated*1), vmin=0, vmax=2, cmap='hot')
+        plt.title('hot + saturated')
+        ps.savefig()
+
+
+    # Find "hot" pixels that are separated by masked pixels?
+    if False:
         from scipy.ndimage.measurements import find_objects
-
         any_saturated = reduce(np.logical_or, saturated_pix)
-
         merging = np.zeros_like(any_saturated)
-
         h,w = any_saturated.shape
+        # All our cameras have bleed trails that go along image rows.
+        # We go column by column, checking whether blobs of "hot" pixels
+        # get joined up when merged with SATUR pixels.
         for i in range(w):
             col = hot[:,i]
             cblobs,nc = label(col)
@@ -1203,7 +1212,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                     #      'blob index', cblobs2[slc.start])
                     mergedblob = cblobs2[slc.start]
                     counts[mergedblob] += 1
-                #print('Counts for unmerged blobs in merged blobs:', counts)
                 slcs2 = find_objects(cblobs2)
                 for blob,n in counts.most_common():
                     if n == 1:
@@ -1211,21 +1219,18 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                     #print('Index', index)
                     (slc,) = slcs2[blob-1]
                     merging[slc, i] = True
+        hot |= merging
 
-        plt.clf()
-        plt.subplot(1,2,1)
-        dimshow((hot*1) + (any_saturated*1), vmin=0, vmax=2, cmap='hot')
-        plt.title('hot + saturated')
-        ps.savefig()
+        if plots:
+            plt.clf()
+            plt.subplot(1,2,1)
+            dimshow(merging, vmin=0, vmax=1, cmap='hot')
+            plt.title('merging')
+            plt.subplot(1,2,2)
+            dimshow(np.logical_or(hot, merging), vmin=0, vmax=1, cmap='hot')
+            plt.title('merged')
+            ps.savefig()
 
-        plt.clf()
-        plt.subplot(1,2,1)
-        dimshow(merging, vmin=0, vmax=1, cmap='hot')
-        plt.title('merging')
-        plt.subplot(1,2,2)
-        dimshow(np.logical_or(hot, merging), vmin=0, vmax=1, cmap='hot')
-        plt.title('merged')
-        ps.savefig()
 
     # Segment, and record which sources fall into each blob
     blobs,blobsrcs,blobslices = segment_and_group_sources(
