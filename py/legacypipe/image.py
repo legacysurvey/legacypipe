@@ -1,5 +1,5 @@
 from __future__ import print_function
-import os
+import os, warnings
 import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
@@ -31,12 +31,15 @@ base class is pretty specific.
 # 16  -- single exposure cosmic ray   InstCal/Resampled
 # 64  -- bleed trail                  InstCal/Resampled
 # 128 -- multi-exposure transient     InstCal/Resampled
-CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
+CP_DQ_BITS = dict(badpix=1,
+                  satur=2,
+                  interp=4,
+                  cr=16,
+                  bleed=64,
                   trans=128,
                   edge = 256,
                   edge2 = 512,
-                  ## masked by stage_mask_junk
-                  longthin = 1024,
+                  # Added by our stage_outliers rejection
                   outlier = 2048,
                   )
 
@@ -129,6 +132,7 @@ class LegacySurveyImage(object):
 
         self.hdu     = ccd.image_hdu
         self.expnum  = ccd.expnum
+        self.image_filename = ccd.image_filename.strip()
         self.ccdname = ccd.ccdname.strip()
         self.band    = ccd.filter.strip()
         self.exptime = ccd.exptime
@@ -138,14 +142,14 @@ class LegacySurveyImage(object):
         self.mjdobs  = ccd.mjd_obs
         self.width   = ccd.width
         self.height  = ccd.height
+        # In nanomaggies.
+        # (in DR7, CCDs-table sig1 values were in ADU-ish units)
         self.sig1    = ccd.sig1
-        self.plver   = ccd.plver.strip()
-        self.procdate = ccd.procdate.strip()
-        # Use a dummy value to accommodate old calibs (which will fail later unless old-calibs-ok=True)
-        if 'plprocid' in ccd.columns():
-            self.plprocid = ccd.plprocid.strip()
-        else:
-            self.plprocid = 'xxxxxxx'
+        # Use dummy values to accommodate old calibs (which will fail later
+        # unless old-calibs-ok=True)
+        self.plver = getattr(ccd, 'plver', 'xxx').strip()
+        self.procdate = getattr(ccd, 'procdate', 'xxxxxxx').strip()
+        self.plprocid = getattr(ccd, 'plprocid', 'xxxxxxx').strip()
 
         # Which Data Quality bits mark saturation?
         self.dq_saturation_bits = CP_DQ_BITS['satur'] # | CP_DQ_BITS['bleed']
@@ -417,8 +421,6 @@ class LegacySurveyImage(object):
         sky = self.read_sky_model(splinesky=splinesky, slc=slc,
                                   primhdr=primhdr, imghdr=imghdr,
                                   old_calibs_ok=old_calibs_ok)
-        skysig1 = getattr(sky, 'sig1', None)
-
         skymod = np.zeros_like(img)
         sky.addTo(skymod)
         midsky = np.median(skymod)
@@ -442,26 +444,9 @@ class LegacySurveyImage(object):
                 sky.scale(1./zpscale)
             zpscale = 1.
 
-        # Compute 'sig1', scalar typical per-pixel noise
-        if get_invvar:
-            sig1 = 1./np.sqrt(np.median(invvar[invvar > 0]))
-        elif skysig1 is not None:
-            sig1 = skysig1
-            if nanomaggies:
-                # skysig1 is in the native units
-                sig1 /= orig_zpscale
-        else:
-            # Estimate per-pixel noise via Blanton's 5-pixel MAD
-            slice1 = (slice(0,-5,10),slice(0,-5,10))
-            slice2 = (slice(5,None,10),slice(5,None,10))
-            mad = np.median(np.abs(img[slice1] - img[slice2]).ravel())
-            sig1 = 1.4826 * mad / np.sqrt(2.)
-            invvar *= (1. / sig1**2)
-        assert(np.isfinite(sig1))
-
         if constant_invvar:
-            debug('Setting constant invvar', 1./sig1**2)
-            invvar[invvar > 0] = 1./sig1**2
+            assert(nanomaggies)
+            invvar[invvar > 0] = 1./self.sig1**2
 
         if apodize and slc is not None:
             sy,sx = slc
@@ -510,7 +495,7 @@ class LegacySurveyImage(object):
             # (can happen, eg, if sky calibration product is inconsistent with
             #  the data)
             imgmed = np.median(img[invvar>0])
-            if np.abs(imgmed) > sig1:
+            if np.abs(imgmed) > self.sig1:
                 print('WARNING: image median', imgmed, 'is more than 1 sigma',
                       'away from zero!')
 
@@ -548,7 +533,7 @@ class LegacySurveyImage(object):
         tim.slice = slc
         tim.zpscale = orig_zpscale
         tim.midsky = midsky
-        tim.sig1 = sig1
+        tim.sig1 = self.sig1
         tim.psf_fwhm = psf_fwhm
         tim.psf_sigma = psf_sigma
         tim.propid = self.propid
@@ -651,10 +636,6 @@ class LegacySurveyImage(object):
         if y is None:
             y = h//2
         patch = psf.getPointSourcePatch(x, y).patch
-        # Clamp up to zero and normalize before taking the norm
-        # (decided that this is a poor idea - eg PSF normalization vs zeropoint)
-        #patch = np.maximum(0, patch)
-        #patch /= patch.sum()
         psfnorm = np.sqrt(np.sum(patch**2))
         return psfnorm
 
@@ -768,23 +749,33 @@ class LegacySurveyImage(object):
     def remap_dq_cp_codes(self, dq, header):
         return remap_dq_cp_codes(dq)
 
-    def read_invvar(self, clip=True, clipThresh=0.1, dq=None, **kwargs):
+    def read_invvar(self, clip=True, clipThresh=0.1, dq=None, slice=None,
+                    **kwargs):
         '''
         Reads the inverse-variance (weight) map image.
         '''
         debug('Reading weight map image', self.wtfn, 'ext', self.hdu)
-        invvar = self._read_fits(self.wtfn, self.hdu, **kwargs)
+        invvar = self._read_fits(self.wtfn, self.hdu, slice=slice, **kwargs)
         if dq is not None:
             invvar[dq != 0] = 0.
 
         if clip:
-            # Additionally clamp near-zero (incl negative!) weight to zero,
-            # which arise due to fpack.
-            if clipThresh > 0.:
-                thresh = clipThresh * np.median(invvar[invvar > 0])
-            else:
-                thresh = 0.
-            invvar[invvar < thresh] = 0
+
+            fixed = False
+            try:
+                fixed = fix_weight_quantization(invvar, self.wtfn, self.hdu, slice)
+            except Exception as e:
+                print('Fix_weight_quantization bailed out on', self.wtfn,
+                      'hdu', self.hdu, ':', e)
+
+            if not fixed:
+                # Clamp near-zero (incl negative!) weight to zero,
+                # which arise due to fpack.
+                if clipThresh > 0.:
+                    thresh = clipThresh * np.median(invvar[invvar > 0])
+                else:
+                    thresh = 0.
+                invvar[invvar < thresh] = 0
 
         assert(np.all(invvar >= 0.))
         assert(np.all(np.isfinite(invvar)))
@@ -792,8 +783,6 @@ class LegacySurveyImage(object):
 
     def get_tractor_wcs(self, wcs, x0, y0, tai=None,
                         primhdr=None, imghdr=None):
-        #from tractor.basics import ConstantFitsWcs
-        #twcs = ConstantFitsWcs(wcs)
         from legacypipe.survey import LegacySurveyWcs
         twcs = LegacySurveyWcs(wcs, tai)
         if x0 or y0:
@@ -820,12 +809,6 @@ class LegacySurveyImage(object):
         wcs.plver = phdr.get('PLVER', '').strip()
         return wcs
 
-    def get_sig1(self, **kwargs):
-        from tractor.brightness import NanoMaggies
-        zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
-        # CCDs table sig1 is in ADU.
-        return self.sig1 / zpscale
-
     def read_sky_model(self, splinesky=False, slc=None, old_calibs_ok=False, **kwargs):
         '''
         Reads the sky model, returning a Tractor Sky object.
@@ -841,7 +824,7 @@ class LegacySurveyImage(object):
 
             if not os.path.exists(self.splineskyfn):
                 if self.merged_splineskyfn is not None:
-                    raise RuntimeError('Read Splinesky: neither', self.merged_splineskyfn, 'nor', self.splineskyfn, 'found')
+                    raise RuntimeError('Merged splinesky model {} not found'.format(self.merged_splineskyfn))
                 return None
 
         fn = self.skyfn
@@ -916,8 +899,8 @@ class LegacySurveyImage(object):
             x0,y0 = sx.start,sy.start
             sky.shift(x0, y0)
         sky.version = Ti.legpipev
-        sky.plver = Ti.plver
-        sky.procdate = Ti.procdate
+        sky.plver = getattr(Ti, 'plver', '')
+        sky.procdate = getattr(Ti, 'procdate', '')
         if 'sig1' in Ti.get_columns():
             sky.sig1 = Ti.sig1
         if 'imgdsum' in Ti.get_columns():
@@ -945,8 +928,7 @@ class LegacySurveyImage(object):
                 psf = self.read_merged_psfex_model(normalizePsf=normalizePsf, old_calibs_ok=old_calibs_ok)
             else:
                 if not os.path.exists(self.psffn):
-                    raise RuntimeError('Read PsfEx: neither', self.merged_psffn,
-                          'nor', self.psffn, 'exist')
+                    raise RuntimeError('Merged PsfEx model {} not found'.format(self.merged_psffn))
 
         if psf is None:
             debug('Reading PsfEx model from', self.psffn)
@@ -974,8 +956,9 @@ class LegacySurveyImage(object):
 
         psf.shift(x0, y0)
         if hybridPsf:
-            from tractor.psf import HybridPixelizedPSF
-            psf = HybridPixelizedPSF(psf, cx=w/2., cy=h/2.)
+            from tractor.psf import HybridPixelizedPSF, NCircularGaussianPSF
+            psf = HybridPixelizedPSF(psf, cx=w/2., cy=h/2.,
+                                     gauss=NCircularGaussianPSF([psf.fwhm / 2.35], [1.]))
         debug('Using PSF model', psf)
         return psf
 
@@ -1018,8 +1001,8 @@ class LegacySurveyImage(object):
             psf = PixelizedPsfEx(None, psfex=psfex)
 
         psf.version = Ti.legpipev.strip()
-        psf.plver = Ti.plver.strip()
-        psf.procdate = Ti.procdate.strip()
+        psf.plver = getattr(Ti, 'plver', '')
+        psf.procdate = getattr(Ti, 'procdate', '')
         if 'imgdsum' in Ti.get_columns():
             psf.datasum = Ti.imgdsum
         psf.fwhm = Ti.psf_fwhm
@@ -1039,7 +1022,7 @@ class LegacySurveyImage(object):
         fcopy = False
         hdr = fitsio.read_header(imgfn, ext=hdu)
         if not ((hdr['XTENSION'] == 'BINTABLE') and hdr.get('ZIMAGE', False)):
-            print('Image %s, HDU %i is not fpacked; just imcopying.' %
+            debug('Image %s, HDU %i is not fpacked; just imcopying.' %
                   (imgfn,  hdu))
             fcopy = True
 
@@ -1052,7 +1035,7 @@ class LegacySurveyImage(object):
             cmd = 'imcopy %s"+%i" %s' % (imgfn, hdu, tmpimgfn)
         else:
             cmd = 'funpack -E %i -O %s %s' % (hdu, tmpimgfn, imgfn)
-        print(cmd)
+        debug(cmd)
         if os.system(cmd):
             raise RuntimeError('Command failed: ' + cmd)
 
@@ -1060,7 +1043,7 @@ class LegacySurveyImage(object):
             cmd = 'imcopy %s"+%i" %s' % (maskfn, hdu, tmpmaskfn)
         else:
             cmd = 'funpack -E %i -O %s %s' % (hdu, tmpmaskfn, maskfn)
-        print(cmd)
+        debug(cmd)
         if os.system(cmd):
             print('Command failed: ' + cmd)
             M,hdr = self._read_fits(maskfn, hdu, header=True)
@@ -1085,8 +1068,9 @@ class LegacySurveyImage(object):
             '-FILTER_NAME %s' % os.path.join(sedir, self.camera + '.conv'),
             '-FLAG_IMAGE %s' % maskfn,
             '-CATALOG_NAME %s' % tmpfn,
+            '-VERBOSE_TYPE QUIET',
             imgfn])
-        print(cmd)
+        debug(cmd)
         rtn = os.system(cmd)
         if rtn:
             raise RuntimeError('Command failed: ' + cmd)
@@ -1109,8 +1093,8 @@ class LegacySurveyImage(object):
         psfdir = os.path.dirname(self.psffn)
         psfoutfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.fits')
         psftmpfn = psfoutfn + '.tmp'
-        cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .fits.tmp %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, self.sefn)
-        
+        cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .fits.tmp -VERBOSE_TYPE QUIET %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, self.sefn)
+        debug(cmd)
         rtn = os.system(cmd)
         if rtn:
             raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
@@ -1249,7 +1233,7 @@ class LegacySurveyImage(object):
 
             wcs = self.get_wcs(hdr=imghdr)
 
-            print('Good image slice:', slc)
+            debug('Good image slice:', slc)
             if slc is not None:
                 sy,sx = slc
                 y0,y1 = sy.start, sy.stop
@@ -1388,7 +1372,7 @@ class LegacySurveyImage(object):
                              'tmp-' + os.path.basename(self.splineskyfn))
             skyobj.write_fits(tmpfn, primhdr=hdr)
             os.rename(tmpfn, self.splineskyfn)
-            print('Wrote sky model', self.splineskyfn)
+            debug('Wrote sky model', self.splineskyfn)
 
         else:
             from tractor.sky import ConstantSky
@@ -1417,7 +1401,7 @@ class LegacySurveyImage(object):
                              'tmp-' + os.path.basename(self.skyfn))
             tsky.write_fits(tmpfn, hdr=hdr)
             os.rename(tmpfn, self.skyfn)
-            print('Wrote sky model', self.skyfn)
+            debug('Wrote sky model', self.skyfn)
 
     def run_calibs(self, psfex=True, sky=True, se=False,
                    fcopy=False, use_mask=True,
@@ -1434,9 +1418,8 @@ class LegacySurveyImage(object):
                                     old_calibs_ok=old_calibs_ok)
                 psfex = False
             except Exception as e:
-                print('Did not find existing PsfEx model for', self, ':', e)
-                #import traceback
-                #traceback.print_exc()
+                debug('Did not find existing PsfEx model for', self, ':', e)
+
         if psfex:
             se = True
 
@@ -1451,9 +1434,7 @@ class LegacySurveyImage(object):
                                     old_calibs_ok=old_calibs_ok)
                 sky = False
             except Exception as e:
-                print('Did not find existing sky model for', self, ':', e)
-                #import traceback
-                #traceback.print_exc()
+                debug('Did not find existing sky model for', self, ':', e)
 
         if se:
             # The image & mask files to process (funpacked if necessary)
@@ -1493,12 +1474,68 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
         pix /= pix.sum()
         return PixelizedPSF(pix)
 
+def fix_weight_quantization(wt, weightfn, ext, slc):
+    '''
+    wt: weight-map array
+    weightfn: filename
+    ext: extension
+    slc: slice
+    '''
+    # Use astropy.io.fits to open it, because it provides access
+    # to the compressed data -- the underlying BINTABLE with the
+    # ZSCALE and ZZERO keywords we need.
+    from astropy.io import fits as fits_astropy
+    from astropy.utils.exceptions import AstropyUserWarning
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category=AstropyUserWarning)
+        hdu = fits_astropy.open(weightfn, disable_image_compression=True)[ext]
+    hdr = hdu.header
+    table = hdu.data
+    # This was an older way of accessing the compressed data table:
+    #hdu = fits_astropy.open(weightfn)[ext]
+    #table = hdu.compressed_data
+    #hdr = hdu._header
+    zquant = hdr['ZQUANTIZ'].strip()
+    print('Fpack quantization method:', zquant)
+    if zquant == 'SUBTRACTIVE_DITHER_2':
+        # This method treats zeros specially so that they remain zero
+        # after decompression, so return True to say that we have
+        # fixed the weights.
+        return True
+    if zquant != 'SUBTRACTIVE_DITHER_1':
+        # .... who knows what's going on?!
+        raise ValueError('fix_weight_quantization: unknown ZQUANTIZ method "%s"' % zquant)
+    tilew = hdr['ZTILE1']
+    tileh = hdr['ZTILE2']
+    imagew = hdr['ZNAXIS1']
+    # This function can only handle non-tiled (row-by-row compressed)
+    # files.  (This was just a choice for simplicity of
+    # implementation; the ZSCALE and ZZERO arrays are stored one per
+    # block, and handling general rectangular blocks (that get sliced
+    # by "slc") would be significantly more complicated.)
+    if tilew != imagew or tileh != 1:
+        raise ValueError('fix_weight_quantization: file is not row-by-row compressed: tile size %i x %i.' % (tilew, tileh))
+    zscale = table.field('ZSCALE')
+    zzero  = table.field('ZZERO' )
+    if not np.all(zzero == 0.0):
+        raise ValueError('fix_weight_quantization: ZZERO is not all zero: [%.g, %.g]!' % (np.min(zzero), np.max(zzero)))
+    if slc is not None:
+        yslice,_ = slc
+        zscale = zscale[yslice]
+    H,_ = wt.shape
+    if len(zscale) != H:
+        raise ValueError('fix_weight_quantization: sliced zscale size does not match weight array: %i vs %i' % (len(zscale), H))
+    print('Zeroing out', np.sum(wt <= zscale[:,np.newaxis]*0.5), 'weight-map pixels below quantization error (= median %.3g)' % (np.median(zscale)*0.5))
+    wt[wt <= zscale[:,np.newaxis]*0.5] = 0.
+    return True
+
 def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                             plprocid,
                             data=None, ext=1, cpheader=False,
-                            old_calibs_ok=False):
+                            old_calibs_ok=False, quiet=False):
     if not os.path.exists(fn):
-        print('File not found {}'.format(fn))
+        if not quiet:
+            print('File not found {}'.format(fn))
         return False
     # Check the data model
     if filetype == 'table':
@@ -1521,10 +1558,14 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                     return False
             val = T.get(key)
             if strip:
-                val = np.array([v.strip() for v in val])
+                val = np.array([str(v).strip() for v in val])
             if not np.all(val == targetval):
-                print('WARNING: table value', val, 'not equal to', targetval, 'in file', fn)
-                return False
+                if old_calibs_ok:
+                    print('WARNING: {} {}!={} in {} table but old_calibs_ok=True'.format(key, val, targetval, fn))
+                    continue
+                else:
+                    print('WARNING: {} {}!={} in {} table'.format(key, val, targetval, fn))
+                    return False
         return True
     elif filetype in ['primaryheader', 'header']:
         if data is None:
@@ -1555,7 +1596,8 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                     obsid = obsid.replace('T', '')
                     obsid = int(obsid[2:], 10)
                     cpexpnum = obsid
-                    print('Faked up EXPNUM', cpexpnum)
+                    if not quiet:
+                        print('Faked up EXPNUM', cpexpnum)
                 elif obsid.startswith('ksb'):
                     import re
                     # obsid = obsid[3:]
@@ -1566,7 +1608,8 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                            .replace('.fits','')
                            .replace('.fz',''))
                     cpexpnum = int(re.sub(r'([a-z]+|\.+)','',base), 10)
-                    print('Faked up EXPNUM', cpexpnum)
+                    if not quiet:
+                        print('Faked up EXPNUM', cpexpnum)
 
         for key,spval,targetval,strip in (#(procdatekey, None, procdate, True),
                                           ('PLVER', None, plver, True),
@@ -1590,10 +1633,10 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                 val = val.strip()
             if val != targetval:
                 if old_calibs_ok:
-                    print('WARNING: {}!={} in {} header but old_calibs_ok=True'.format(val, targetval, fn))
+                    print('WARNING: {} {}!={} in {} header but old_calibs_ok=True'.format(key, val, targetval, fn))
                     continue
                 else:
-                    print('WARNING: {}!={} in {} header'.format(val, targetval, fn))
+                    print('WARNING: {} {}!={} in {} header'.format(key, val, targetval, fn))
                     return False
         return True
 

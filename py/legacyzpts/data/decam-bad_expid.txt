@@ -1,0 +1,3176 @@
+#EXPID	Flag	comments
+#Flags: 1=possibly saturated; 2=clouds; 3=other source
+346343 expfactor=0.208  seeing=1.400
+346344 expfactor=0.246  seeing=1.235
+346345 expfactor=0.188  seeing=1.449
+346346 expfactor=0.217  seeing=1.230
+346347 expfactor=0.226  seeing=1.269
+346348 expfactor=0.237  seeing=1.288
+346349 expfactor=0.247  seeing=1.150
+346350 expfactor=0.260  seeing=1.202
+346351 expfactor=0.199  seeing=1.471
+346352 expfactor=0.179  seeing=1.446
+346353 expfactor=0.246  seeing=1.235
+346354 expfactor=0.261  seeing=1.225
+346355 expfactor=0.255  seeing=1.188
+346356 expfactor=0.261  seeing=1.225
+346650 expfactor=0.158  seeing=1.986
+346651 expfactor=0.191  seeing=1.827
+346652 expfactor=0.195  seeing=1.788
+346653 expfactor=0.229  seeing=1.590
+346654 expfactor=0.223  seeing=1.633
+346655 expfactor=0.211  seeing=1.592
+346656 expfactor=0.225  seeing=1.645
+346657 expfactor=0.180  seeing=1.605
+346658 expfactor=0.176  seeing=1.793
+346659 expfactor=0.165  seeing=1.931
+346660 expfactor=0.183  seeing=1.721
+346661 expfactor=0.178  seeing=1.701
+346662	1
+346663	1
+346664	1
+346665	1
+346666 expfactor=0.233  seeing=1.403
+346667 expfactor=0.227  seeing=1.438
+346669 expfactor=0.211  seeing=1.540
+346670 expfactor=0.209  seeing=1.553
+346671 expfactor=0.213  seeing=1.513
+346672 expfactor=0.240  seeing=1.406
+346673 expfactor=0.243  seeing=1.438
+346674 expfactor=0.204  seeing=1.619
+346675 expfactor=0.282  seeing=1.451
+346676 expfactor=0.205  seeing=1.578
+346677 expfactor=0.168  seeing=1.774
+346678 expfactor=0.140  seeing=2.016
+346679 expfactor=0.153  seeing=1.925
+346680 expfactor=0.190  seeing=1.722
+346681 expfactor=0.198  seeing=1.578
+346682 expfactor=0.215  seeing=1.581
+346683 expfactor=0.185  seeing=1.720
+346684 expfactor=0.189  seeing=1.665
+346685 expfactor=0.187  seeing=1.615
+346686 expfactor=0.237  seeing=1.472
+346687 expfactor=0.200  seeing=1.605
+346688 expfactor=0.210  seeing=1.602
+346689 expfactor=0.189  seeing=1.769
+346690 expfactor=0.246  seeing=1.535
+346691 expfactor=0.210  seeing=1.575
+346692 expfactor=0.243  seeing=1.416
+346693 expfactor=0.239  seeing=1.491
+346694 expfactor=0.229  seeing=1.505
+346695 expfactor=0.241  seeing=1.535
+346696 expfactor=0.223  seeing=1.539
+346697 expfactor=0.292  seeing=1.375
+346698 expfactor=0.272  seeing=1.500
+346699 expfactor=0.255  seeing=1.545
+346700 expfactor=0.250  seeing=1.588
+346701 expfactor=0.268  seeing=1.536
+346702 expfactor=0.277  seeing=1.552
+346706 expfactor=0.282  seeing=1.409
+346748 expfactor=0.273  seeing=1.470
+346750 expfactor=0.293  seeing=1.496
+346752 expfactor=0.300  seeing=1.548
+346754 expfactor=0.154  seeing=1.436
+346755 expfactor=0.158  seeing=1.592
+346765 expfactor=0.207  seeing=1.475
+
+347009 expfactor=0.299  seeing=1.877
+347014 expfactor=0.290  seeing=1.745
+347028 expfactor=0.202  seeing=1.955
+347029 expfactor=0.271  seeing=1.570
+347031 expfactor=0.266  seeing=1.556
+347032 expfactor=0.292  seeing=1.533
+347416 expfactor=0.272  seeing=1.247
+347636 expfactor=0.217  seeing=1.337
+347645 expfactor=0.140  seeing=1.228
+347646 expfactor=0.262  seeing=1.316
+347648 expfactor=0.199  seeing=1.288
+347649 expfactor=0.131  seeing=1.310
+347650 expfactor=0.271  seeing=1.343
+347657 expfactor=0.279  seeing=1.588
+347658 expfactor=0.148  seeing=1.722
+347659 expfactor=0.140  seeing=1.821
+347661 expfactor=0.247  seeing=2.368
+347663 expfactor=0.290  seeing=1.903
+347676 expfactor=0.270  seeing=1.143
+347677 expfactor=0.289  seeing=1.085
+347678 expfactor=0.148  seeing=1.043
+347679 expfactor=0.269  seeing=0.985
+347680 expfactor=0.261  seeing=1.025
+347697 expfactor=0.132  seeing=1.085
+347733 expfactor=0.253  seeing=1.130
+347734 expfactor=0.210  seeing=1.151
+347736	1
+347737	1
+347738	1
+347739	1
+347740	1
+347741	1
+347744	1
+347745 expfactor=0.297  seeing=0.993
+347746 expfactor=0.260  seeing=1.046
+347747	1
+347748	1
+347749 expfactor=0.164  seeing=1.095
+347750	1
+347751	1
+347752	1
+347753	1
+347754	1
+347755	1
+347756	1
+347757	1
+347758	1
+347759	1
+347760	1
+347761	1
+347762	1
+347763	1
+347764	1
+347765	1
+347766	1
+347767	1
+347768	1
+347769	1
+347770	1
+347771	1
+347772	1
+347773	1
+347774	1
+347775	1
+347776	1
+347777	1
+347778	1
+347779	1
+347780	1
+347781	1
+347782	1
+347783	1
+347784	1
+347785	1
+347786	1
+347787	1
+347788	1
+347789	1
+347790	1
+347919 expfactor=0.269  seeing=1.478
+348295	3	DECAL lights on top ring turned on
+
+392368 expfactor=0.251  seeing=2.006
+392369 expfactor=0.252  seeing=2.064
+392401 expfactor=0.293  seeing=2.004
+392405 expfactor=0.261  seeing=2.025
+393655 expfactor=0.158  seeing=1.393
+393656 expfactor=0.291  seeing=1.421
+393657 expfactor=0.001  seeing=1.444
+393658 expfactor=0.080  seeing=1.361
+393666 expfactor=0.014  seeing=1.424
+393667 expfactor=0.002  seeing=1.654
+393668 expfactor=0.071  seeing=1.505
+393672 expfactor=0.297  seeing=1.471
+393673 expfactor=0.207  seeing=1.511
+393674 expfactor=0.261  seeing=1.277
+393676 expfactor=0.001  seeing=1.211
+393677 expfactor=0.000  seeing=1.443
+393678 expfactor=0.000  seeing=1.240
+393679	2
+393680	2
+393681	2
+393682	2
+393683	2
+393684	2
+393685	2
+393686  2
+393687  2
+393688 expfactor=0.000  seeing=1.298
+393689 expfactor=0.058  seeing=0.646
+396101	3
+396131	3	active optics failure
+396477 expfactor=0.295  seeing=1.228
+396478 expfactor=0.290  seeing=1.194
+
+425094 expfactor=0.175  seeing=2.500
+425095 expfactor=0.242  seeing=2.176
+425096 expfactor=0.215  seeing=2.765
+425098 expfactor=0.123  seeing=2.900
+425099 expfactor=0.204  seeing=2.368
+425102 expfactor=0.236  seeing=2.203
+425103 expfactor=0.277  seeing=2.026
+425106 expfactor=0.197  seeing=2.427
+425112 expfactor=0.257  seeing=2.765
+425328 expfactor=0.621  seeing=2.823
+425342 expfactor=0.271  seeing=1.872
+425347 expfactor=0.231  seeing=2.060
+425616	3	guiding failed
+425617 expfactor=0.007  seeing=1.510
+425618 expfactor=0.186  seeing=1.370
+425619	3	telescope moved, double stars
+425651 expfactor=0.001  seeing=1.163
+426072 expfactor=0.015  seeing=3.112
+
+431170 expfactor=0.039  seeing=1.391
+431171 expfactor=0.024  seeing=1.140
+431515 expfactor=0.286  seeing=2.195
+431516 expfactor=0.216  seeing=2.552
+432201 expfactor=0.175  seeing=0.830
+432202 expfactor=0.218  seeing=0.868
+432203 expfactor=0.105  seeing=0.838
+432204 expfactor=0.015  seeing=1.084
+432205 expfactor=0.276  seeing=0.799
+432212 expfactor=0.132  seeing=0.924
+432213 expfactor=0.048  seeing=0.949
+432214 expfactor=0.027  seeing=0.920
+432215 expfactor=0.275  seeing=0.958
+432216 expfactor=0.048  seeing=0.972
+432752 expfactor=0.270  seeing=1.097
+432753 expfactor=0.028  seeing=1.379
+432754 expfactor=0.133  seeing=1.106
+432755 expfactor=0.111  seeing=1.063
+432756 expfactor=0.014  seeing=1.167
+432757 expfactor=0.026  seeing=1.145
+432758 expfactor=0.046  seeing=1.198
+432759 expfactor=0.019  seeing=0.986
+432760 expfactor=0.047  seeing=1.086
+432761 expfactor=0.022  seeing=1.102
+432762 expfactor=0.007  seeing=1.331
+432763 expfactor=0.000  seeing=1.472
+432764 expfactor=0.006  seeing=1.124
+432765 expfactor=0.000  seeing=1.383
+432766 expfactor=0.001  seeing=1.254
+432767 expfactor=0.001  seeing=1.176
+432768 expfactor=0.000  seeing=1.283
+432771 expfactor=0.000  seeing=1.475
+432772 expfactor=0.000  seeing=1.434
+432773 expfactor=0.000  seeing=1.405
+432774 expfactor=0.000  seeing=1.301
+432775 expfactor=0.000  seeing=1.146
+432776 expfactor=0.000  seeing=1.211
+432777 expfactor=0.001  seeing=1.288
+432778 expfactor=0.064  seeing=1.102
+432779 expfactor=0.008  seeing=1.271
+432780 expfactor=0.039  seeing=1.118
+432781 expfactor=0.003  seeing=1.126
+432782 expfactor=0.001  seeing=1.104
+432783 expfactor=0.001  seeing=1.227
+432784 expfactor=0.174  seeing=0.981
+432786 expfactor=0.211  seeing=0.880
+432843 expfactor=0.207  seeing=0.888
+432844 expfactor=0.068  seeing=1.221
+432845 expfactor=0.000  seeing=1.313
+432847 expfactor=0.083  seeing=0.942
+432849 expfactor=0.072  seeing=1.296
+432850 expfactor=0.019  seeing=1.112
+432851 expfactor=0.002  seeing=1.340
+432852 expfactor=0.062  seeing=1.286
+432853 expfactor=0.003  seeing=1.448
+432854 expfactor=0.144  seeing=1.049
+432855 expfactor=0.270  seeing=1.177
+432856 expfactor=0.268  seeing=0.462
+432857 expfactor=0.046  seeing=1.351
+432858 expfactor=0.008  seeing=1.284
+432859 expfactor=0.012  seeing=0.986
+433305 expfactor=0.282  seeing=1.210
+
+# Non-DECaLS exposures
+454540 HMAP, not a science exposure but a T&E calibration
+458441 Isolated controller glitch, visible in the raw, effects one backplane
+
+
+483634 expfactor=0.168  seeing=1.339
+483636 expfactor=0.250  seeing=1.484
+483692 expfactor=0.203  seeing=1.531
+483719 expfactor=0.298  seeing=2.026
+483789 expfactor=0.235  seeing=1.624
+483790 expfactor=0.178  seeing=1.810
+483793 expfactor=0.213  seeing=1.820
+483795 expfactor=0.249  seeing=1.903
+483797 expfactor=0.259  seeing=1.955
+483798 expfactor=0.227  seeing=1.950
+483802 expfactor=0.284  seeing=1.869
+483803 expfactor=0.227  seeing=1.968
+483806 expfactor=0.191  seeing=2.168
+483808 expfactor=0.193  seeing=2.100
+483810 expfactor=0.185  seeing=2.140
+483813 expfactor=0.225  seeing=1.768
+488218 expfactor=0.054  seeing=1.811
+488219 expfactor=0.195  seeing=1.303
+488220 expfactor=0.150  seeing=1.272
+488221 expfactor=0.110  seeing=1.331
+488222 expfactor=0.127  seeing=1.331
+488223 expfactor=0.232  seeing=1.298
+488224 expfactor=0.249  seeing=1.198
+488227 expfactor=0.197  seeing=1.341
+488228 expfactor=0.179  seeing=1.345
+488229 expfactor=0.202  seeing=1.346
+488230 expfactor=0.171  seeing=1.643
+488231 expfactor=0.219  seeing=1.543
+488234 expfactor=0.229  seeing=1.512
+488241 expfactor=0.292  seeing=1.906
+488243 expfactor=0.254  seeing=1.855
+488244 expfactor=0.103  seeing=1.856
+488245 expfactor=0.150  seeing=2.038
+488247 expfactor=0.190  seeing=2.144
+488248 expfactor=0.243  seeing=1.935
+488250 expfactor=0.223  seeing=2.023
+488251 expfactor=0.151  seeing=2.089
+488252 expfactor=0.171  seeing=2.158
+488253 expfactor=0.186  seeing=2.037
+488254 expfactor=0.151  seeing=2.115
+488255 expfactor=0.218  seeing=1.849
+488256 expfactor=0.102  seeing=1.927
+488257 expfactor=0.030  seeing=2.123
+488258 expfactor=0.098  seeing=1.738
+488259 expfactor=0.037  seeing=1.717
+488260 expfactor=0.089  seeing=1.550
+488261 expfactor=0.179  seeing=1.524
+488262 expfactor=0.044  seeing=1.525
+488263 expfactor=0.204  seeing=1.503
+488264 expfactor=0.047  seeing=1.378
+488265 expfactor=0.025  seeing=1.636
+488266 expfactor=0.043  seeing=1.929
+488267 expfactor=0.059  seeing=1.725
+488268 expfactor=0.070  seeing=1.914
+488269 expfactor=0.010  seeing=2.054
+488270 expfactor=0.099  seeing=1.939
+488271 expfactor=0.027  seeing=1.864
+488272 expfactor=0.019  seeing=1.844
+488273 expfactor=0.004  seeing=2.010
+488274 expfactor=0.008  seeing=1.697
+496913 expfactor=0.183  seeing=2.855
+496914 expfactor=0.231  seeing=2.686
+496915 expfactor=0.222  seeing=2.795
+496916 expfactor=0.223  seeing=2.813
+496917 expfactor=0.324  seeing=3.115
+496918 expfactor=0.334  seeing=3.077
+496919 expfactor=0.367  seeing=2.956
+496920 expfactor=0.304  seeing=3.129
+496921 expfactor=0.428  seeing=2.881
+496922 expfactor=0.388  seeing=2.860
+496923 expfactor=0.334  seeing=2.929
+496924 expfactor=0.334  seeing=2.988
+496925 expfactor=0.344  seeing=3.044
+496926 expfactor=0.412  seeing=2.923
+496927 expfactor=0.385  seeing=3.054
+496928 expfactor=0.396  seeing=2.975
+496929 expfactor=0.368  seeing=3.196
+496930 expfactor=0.390  seeing=3.066
+497082 expfactor=0.269  seeing=1.229
+509116 expfactor=0.181  seeing=2.251
+509117 expfactor=0.148  seeing=2.610
+509120 expfactor=0.224  seeing=2.070
+509121 expfactor=0.093  seeing=3.042
+509122 expfactor=0.232  seeing=2.594
+509124 expfactor=0.264  seeing=1.920
+509127 expfactor=0.228  seeing=2.002
+509129 expfactor=0.185  seeing=2.816
+509130 expfactor=0.377  seeing=2.684
+509132 expfactor=0.102  seeing=3.314
+509133 expfactor=0.255  seeing=3.056
+509134 expfactor=0.085  seeing=3.628
+509135 expfactor=0.262  seeing=3.114
+509136 expfactor=0.086  seeing=3.607
+509137 expfactor=0.222  seeing=3.056
+509138 expfactor=0.124  seeing=2.986
+509139 expfactor=0.200  seeing=2.507
+509146 expfactor=0.285  seeing=2.159
+509153 expfactor=0.389  seeing=2.664
+509154 expfactor=0.163  seeing=2.807
+509155 expfactor=0.181  seeing=2.763
+509156 expfactor=0.316  seeing=3.028
+509157 expfactor=0.198  seeing=3.590
+509158 expfactor=0.094  seeing=3.607
+509159 expfactor=0.082  seeing=3.743
+509160 expfactor=0.247  seeing=3.336
+509161 expfactor=0.157  seeing=3.824
+509162 expfactor=0.124  seeing=3.256
+509163 expfactor=0.105  seeing=3.508
+509164 expfactor=0.224  seeing=3.464
+509165 expfactor=0.328  seeing=3.095
+509166 expfactor=0.166  seeing=3.017
+509167 expfactor=0.090  seeing=3.654
+509168 expfactor=0.250  seeing=3.288
+509169 expfactor=0.159  seeing=3.874
+509170 expfactor=0.074  seeing=3.896
+509171 expfactor=0.236  seeing=3.470
+509172 expfactor=0.060  seeing=4.212
+509173 expfactor=0.144  seeing=3.159
+509174 expfactor=0.199  seeing=3.611
+509175 expfactor=0.242  seeing=3.488
+509176 expfactor=0.067  seeing=4.148
+509177 expfactor=0.093  seeing=3.659
+509178 expfactor=0.240  seeing=3.464
+509179 expfactor=0.446  seeing=2.783
+509180 expfactor=0.114  seeing=3.418
+509181 expfactor=0.511  seeing=2.682
+509182 expfactor=0.062  seeing=4.262
+509183 expfactor=0.166  seeing=2.988
+509185 expfactor=0.519  seeing=2.551
+509186 expfactor=0.215  seeing=2.672
+509187 expfactor=0.231  seeing=2.670
+509193 expfactor=0.214  seeing=2.771
+509200 expfactor=0.175  seeing=2.009
+509202 expfactor=0.101  seeing=1.960
+509203 expfactor=0.076  seeing=1.882
+509478 expfactor=0.246  seeing=2.344
+509480 expfactor=0.201  seeing=2.888
+509481 expfactor=0.251  seeing=2.388
+509482 expfactor=0.277  seeing=2.593
+509484 expfactor=0.209  seeing=2.568
+509485 expfactor=0.238  seeing=2.684
+510555 expfactor=0.262  seeing=2.323
+510601 expfactor=0.293  seeing=1.931
+510882 expfactor=0.297  seeing=1.334
+510885 expfactor=0.204  seeing=1.454
+510886 expfactor=0.217  seeing=1.658
+510889 expfactor=0.147  seeing=1.658
+510890 expfactor=0.118  seeing=1.609
+510891 expfactor=0.175  seeing=1.154
+510905 expfactor=0.105  seeing=1.180
+510906 expfactor=0.266  seeing=1.113
+510910 expfactor=0.149  seeing=1.223
+510922 expfactor=0.299  seeing=1.003
+510926 expfactor=0.182  seeing=1.109
+510928 expfactor=0.265  seeing=0.970
+510945 expfactor=0.255  seeing=1.457
+
+520012  3       Vsub not working 
+520189 expfactor=0.268  seeing=1.924
+522012 expfactor=0.278  seeing=1.443
+522055  3       pointing moved 
+522060 expfactor=0.279  seeing=1.497
+522078 expfactor=0.049  seeing=2.104
+522084 expfactor=0.039  seeing=1.669
+522085 expfactor=0.042  seeing=1.916
+522106 expfactor=0.023  seeing=1.696
+522107 expfactor=0.254  seeing=1.500
+522111 expfactor=0.050  seeing=1.172
+522112 expfactor=0.094  seeing=1.348
+522113 expfactor=0.238  seeing=1.414
+535091 expfactor=0.175  seeing=1.572
+535092 expfactor=0.220  seeing=1.478
+535093 expfactor=0.285  seeing=1.390
+535094 expfactor=0.290  seeing=1.640
+535142 expfactor=0.122  seeing=2.221
+535143 expfactor=0.147  seeing=1.994
+535144 expfactor=0.252  seeing=1.774
+535145 expfactor=0.248  seeing=1.803
+535197  3       pointing moved
+535355  3       shutter control failed. Image not taken
+535471 expfactor=0.067  seeing=4.031
+535472 expfactor=0.077  seeing=3.840
+535473 expfactor=0.132  seeing=3.153
+535474 expfactor=0.173  seeing=2.909
+535475 expfactor=0.318  seeing=2.615
+535478 expfactor=0.638  seeing=2.533
+535479 expfactor=0.532  seeing=2.681
+535494 expfactor=0.524  seeing=2.524
+535497 expfactor=0.479  seeing=2.679
+535498 expfactor=0.347  seeing=3.070
+535501 expfactor=0.514  seeing=2.559
+535577 expfactor=0.297  seeing=2.293
+535578  3       depth factor < 0.4 because seeing blew up
+535579  3       depth factor < 0.4 because seeing blew up
+535872  3       depth factor < 0.2 because 23sec exposure
+535873  3       depth factor < 0.2 because 23sec exposure
+535874  3       depth factor < 0.2 because 23sec exposure
+536280  3       depth factor < 0.3 because of clouds
+536281 expfactor=0.043  seeing=1.249
+536282 expfactor=0.063  seeing=1.245
+536283 expfactor=0.123  seeing=1.211
+536284 expfactor=0.217  seeing=1.306
+536314  3       transparency < 0.3 and depth factor < 0.3
+536315  3       transparency < 0.3 and depth factor < 0.3
+536316  3       transparency < 0.3 and depth factor < 0.3
+536317  3       transparency < 0.3 and depth factor < 0.3
+536318  3       transparency < 0.3 and depth factor < 0.3
+536319  3       transparency < 0.3 and depth factor < 0.3
+536320  3       transparency < 0.3 and depth factor < 0.3
+536321  3       transparency < 0.3 and depth factor < 0.3
+536322  3       transparency < 0.3 and depth factor < 0.3
+536323  3       transparency < 0.3 and depth factor < 0.3
+536324  3       transparency < 0.3 and depth factor < 0.3
+536325  3       transparency < 0.3 and depth factor < 0.3
+536326  3       transparency < 0.3 and depth factor < 0.3
+536327  3       transparency < 0.3 and depth factor < 0.3
+536328  3       transparency < 0.3 and depth factor < 0.3
+536329  3       transparency < 0.3 and depth factor < 0.3
+536330  3       transparency < 0.3 and depth factor < 0.3
+536331  3       transparency < 0.3 and depth factor < 0.3
+536332  3       transparency < 0.3 and depth factor < 0.3
+536333  3       transparency < 0.3 and depth factor < 0.3
+536334  3       transparency < 0.3 and depth factor < 0.3
+536335  3       transparency < 0.3 and depth factor < 0.3
+536336  3       transparency < 0.3 and depth factor < 0.3
+536337  3       transparency < 0.3 and depth factor < 0.3
+536338  3       transparency < 0.3 and depth factor < 0.3
+536346 expfactor=0.254  seeing=1.131
+536347  3       transparency < 0.3 and depth factor < 0.3
+536348  3       transparency < 0.3 and depth factor < 0.3
+536349  3       transparency < 0.3 and depth factor < 0.3
+536350  3       transparency < 0.3 and depth factor < 0.3
+536351  3       transparency < 0.3 and depth factor < 0.3
+536354  3       transparency < 0.3 and depth factor < 0.3
+536355  3       transparency < 0.3 and depth factor < 0.3
+536356  3      clouds; depth factor = 0.00 
+536357  3      clouds; depth factor = 0.00 
+536358  3      clouds; depth factor = 0.00 
+536359 expfactor=0.000  seeing=1.350
+536360 expfactor=0.002  seeing=1.146
+536361 expfactor=0.017  seeing=1.208
+536362 expfactor=0.021  seeing=1.383
+536377 expfactor=0.290  seeing=1.179
+536379 expfactor=0.258  seeing=1.304
+536380 expfactor=0.180  seeing=1.354
+536381 expfactor=0.180  seeing=1.401
+536391 expfactor=0.274  seeing=1.158
+536393 expfactor=0.224  seeing=1.344
+536398 expfactor=0.090  seeing=1.221
+536409  3      depth factor < 0.1.
+536410  3      depth factor < 0.1.
+536411  3      depth factor < 0.1.
+536412  3      depth factor < 0.1.
+536415  3      depth factor < 0.3
+547748 expfactor=0.269  seeing=1.735
+547749 expfactor=0.269  seeing=1.708
+547761 expfactor=0.287  seeing=2.467
+548172  3	no guide stars. Maybe ok anyway.
+548188  3	no guide stars. Double images. Bad.
+548218  3	no guide stars. Double images. Bad.
+548256 expfactor=0.283  seeing=1.532
+548300 expfactor=0.244  seeing=1.493
+548362  3	no guide stars. Double images. Bad.
+548364 expfactor=0.292  seeing=1.626
+548400  3	lost guide stars 2/3 in. Double images. Bad.
+548414  2	lost guide
+548415  2	lost guide
+548416  2	lost guide
+548417  2	lost guide
+552525  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552526  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552527  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552528  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552529  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552530  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552531  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552532  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552533  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552534  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552535  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552536  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552537  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552538  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552539  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552540  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552541  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552542  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552543  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552544  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552545  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552546  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552547  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552548  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552549  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552550  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552551  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552552  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552553  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552554  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552555  2  transparency < 0.3 thick clouds, and seeing > 2.5
+552556  2  transparency < 0.3 thick clouds, and seeing > 2.5
+
+553390 expfactor=0.267  seeing=1.182
+553464 expfactor=0.298  seeing=1.717
+553466 expfactor=0.296  seeing=1.836
+553480 expfactor=0.196  seeing=1.381
+553481 expfactor=0.013  seeing=1.355
+553482 expfactor=0.110  seeing=1.385
+553483 expfactor=0.101  seeing=1.455
+553484 expfactor=0.080  seeing=1.465
+553486 expfactor=0.019  seeing=1.678
+553487 expfactor=0.084  seeing=1.414
+553488 expfactor=0.049  seeing=1.559
+553489 expfactor=0.024  seeing=1.459
+553490 expfactor=0.004  seeing=1.287
+553491 expfactor=0.012  seeing=1.307
+553492 expfactor=0.006  seeing=1.318
+553496 expfactor=0.180  seeing=1.647
+553497 expfactor=0.076  seeing=1.831
+553498 expfactor=0.054  seeing=1.644
+553499 expfactor=0.108  seeing=1.557
+553500 expfactor=0.229  seeing=1.455
+553757 expfactor=0.256  seeing=1.564
+553758 expfactor=0.033  seeing=1.616
+553759 expfactor=0.060  seeing=1.404
+553760 expfactor=0.068  seeing=1.548
+553761 expfactor=0.039  seeing=1.432
+553762 expfactor=0.050  seeing=1.444
+553763 expfactor=0.096  seeing=1.421
+553765 expfactor=0.283  seeing=1.443
+553766 expfactor=0.201  seeing=1.519
+553767 expfactor=0.300  seeing=1.345
+553777 expfactor=0.249  seeing=1.339
+553778 expfactor=0.158  seeing=1.235
+553779 expfactor=0.203  seeing=1.470
+553780 expfactor=0.137  seeing=1.367
+553781 expfactor=0.201  seeing=1.617
+553782 expfactor=0.118  seeing=1.634
+553783 expfactor=0.059  seeing=1.367
+553784 expfactor=0.074  seeing=1.340
+553785 expfactor=0.101  seeing=1.309
+553786 expfactor=0.091  seeing=1.559
+553787 expfactor=0.054  seeing=1.592
+553788 expfactor=0.001  seeing=1.664
+553789 expfactor=0.004  seeing=1.978
+553790 expfactor=0.010  seeing=1.422
+553791 expfactor=0.009  seeing=1.547
+553792 expfactor=0.003  seeing=1.272
+553793 expfactor=0.006  seeing=1.527
+553794 expfactor=0.044  seeing=1.577
+553795 expfactor=0.034  seeing=1.553
+553796 expfactor=0.069  seeing=1.421
+553797 expfactor=0.058  seeing=1.689
+553798 expfactor=0.080  seeing=1.665
+553799 expfactor=0.060  seeing=1.604
+553800 expfactor=0.081  seeing=1.534
+553801 expfactor=0.078  seeing=1.402
+553802 expfactor=0.061  seeing=1.287
+553803 expfactor=0.059  seeing=1.305
+553804 expfactor=0.087  seeing=1.491
+553805 expfactor=0.056  seeing=1.612
+553806 expfactor=0.157  seeing=1.456
+553807 expfactor=0.256  seeing=1.438
+553808 expfactor=0.201  seeing=1.440
+553809 expfactor=0.105  seeing=1.592
+553810 expfactor=0.093  seeing=1.744
+553811 expfactor=0.046  seeing=1.787
+553812 expfactor=0.090  seeing=1.514
+553813 expfactor=0.048  seeing=1.510
+553814 expfactor=0.043  seeing=1.353
+553815 expfactor=0.049  seeing=1.287
+553816 expfactor=0.138  seeing=1.059
+553817 expfactor=0.079  seeing=1.175
+553818 expfactor=0.095  seeing=1.036
+553819 expfactor=0.197  seeing=1.110
+553820 expfactor=0.139  seeing=1.279
+553821 expfactor=0.129  seeing=1.460
+553822 expfactor=0.130  seeing=1.207
+553823 expfactor=0.158  seeing=1.206
+553824 expfactor=0.156  seeing=1.207
+553825 expfactor=0.136  seeing=1.565
+553826 expfactor=0.096  seeing=1.557
+553827 expfactor=0.161  seeing=1.504
+554079 expfactor=0.125  seeing=1.614
+554080 expfactor=0.258  seeing=1.506
+554106 expfactor=0.685  seeing=2.704
+554121 expfactor=0.168  seeing=1.984
+554126 expfactor=0.169  seeing=1.480
+554147 expfactor=0.086  seeing=1.882
+554148 expfactor=0.085  seeing=2.035
+554149 expfactor=0.158  seeing=1.731
+554284 expfactor=0.287  seeing=1.183
+554298 expfactor=0.253  seeing=1.018
+
+557831 expfactor=0.268  seeing=3.100
+557832 expfactor=0.168  seeing=3.631
+
+559016  3  depth factor < 0.3, bright sky during twilight
+559017  3  depth factor < 0.3, bright sky during twilight
+
+562836 expfactor=0.296  seeing=1.372
+562837 expfactor=0.238  seeing=1.567
+562852	3	depth factor < 0.2
+562855	3	depth factor < 0.2
+562856	3	depth factor < 0.2
+562857	3	transparency < 0.3, depth factor < 0.2
+562872	3	depth factor < 0.2
+562873	3	depth factor < 0.2
+562874	3	depth factor < 0.2
+562875	3	transparency < 0.3, depth factor < 0.2
+562876	3	transparency < 0.3, depth factor < 0.2
+562877 expfactor=0.260  seeing=1.308
+562878	3	depth factor < 0.2
+562881 expfactor=0.289  seeing=1.416
+562882	3	depth factor < 0.2
+562883	3	transparency < 0.3, depth factor < 0.2
+562884	3	transparency < 0.3, depth factor < 0.2
+562885	3	depth factor < 0.2
+562886 expfactor=0.230  seeing=1.519
+562887	3	depth factor < 0.2
+562888	3	transparency < 0.3, depth factor < 0.2
+562889	3	transparency < 0.3, depth factor < 0.2
+562890	3	transparency < 0.3, depth factor < 0.2
+562891	3	transparency < 0.3, depth factor < 0.2
+562892	3	transparency < 0.3, depth factor < 0.2
+562893	3	transparency < 0.3, depth factor < 0.2
+562894	3	transparency < 0.3, depth factor < 0.2
+562895	3	transparency < 0.3, depth factor < 0.2
+562896	3	transparency < 0.3, depth factor < 0.2
+562897	3	transparency < 0.3, depth factor < 0.2
+
+563016 expfactor=0.029  seeing=1.883
+563017 expfactor=0.070  seeing=1.355
+563018 expfactor=0.180  seeing=1.432
+563019 expfactor=0.122  seeing=1.515
+563020 expfactor=0.158  seeing=1.459
+563021 expfactor=0.254  seeing=1.570
+563028 expfactor=0.239  seeing=1.575
+563029 expfactor=0.119  seeing=1.689
+563424 expfactor=0.013  seeing=1.829
+563425 expfactor=0.046  seeing=0.947
+563426 expfactor=0.068  seeing=0.936
+563427 expfactor=0.063  seeing=1.101
+563428 expfactor=0.084  seeing=1.060
+563429 expfactor=0.083  seeing=1.176
+563430 expfactor=0.111  seeing=1.128
+563431 expfactor=0.092  seeing=1.346
+563460	3	telescope moved during image
+563628 expfactor=0.288  seeing=0.903
+563658	3	transparency < 0.3, depth factor < 0.2
+563665	3	depth factor < 0.2
+563666	3	transparency < 0.3, depth factor < 0.2
+563667	3	transparency < 0.3, depth factor < 0.2
+563787 expfactor=0.024  seeing=1.494
+563788 expfactor=0.043  seeing=1.343
+563789 expfactor=0.080  seeing=1.218
+563790 expfactor=0.099  seeing=1.216
+563792 expfactor=0.239  seeing=1.414
+563812	3	depth factor < 0.2
+563813 expfactor=0.295  seeing=1.055
+563825 expfactor=0.249  seeing=1.265
+563830	3	depth factor < 0.2
+563831	3	depth factor < 0.2
+563832	3	depth factor < 0.2
+563833	3	depth factor < 0.2
+563834	3	depth factor < 0.2
+563835	3	depth factor < 0.2
+563836	3	depth factor < 0.2
+563837	3	depth factor < 0.2
+563838 expfactor=0.254  seeing=1.525
+563842 expfactor=0.215  seeing=1.652
+563852 expfactor=0.272  seeing=1.419
+
+582822 expfactor=0.143  seeing=1.587
+582823 expfactor=0.245  seeing=1.331
+582824 expfactor=0.192  seeing=1.368
+582827 expfactor=0.204  seeing=1.288
+582828 expfactor=0.142  seeing=1.354
+582829 expfactor=0.141  seeing=1.310
+582830 expfactor=0.288  seeing=1.221
+582832	2	depth factor < 0.2
+582833	2	depth factor < 0.2
+582834	2	depth factor < 0.2
+582835 expfactor=0.251  seeing=1.042
+582836 expfactor=0.142  seeing=0.952
+582837 expfactor=0.138  seeing=0.956
+582838 expfactor=0.143  seeing=0.933
+582839 expfactor=0.168  seeing=0.883
+582840  2	depth factor < 0.2
+582841  2	depth factor < 0.2
+582842  2	depth factor < 0.2
+582843  2	depth factor < 0.2
+582844  2	depth factor < 0.2
+582845  2	depth factor < 0.2
+582846  2	depth factor < 0.2
+582847  2	depth factor < 0.2
+582848  2	depth factor < 0.2
+582849  2	depth factor < 0.2
+582850  2	depth factor < 0.2
+582851  2	depth factor < 0.2
+582852  2	depth factor < 0.2
+582853  2	depth factor < 0.2
+582854  2	depth factor < 0.2
+582855  2	depth factor < 0.2
+582856  2	depth factor < 0.2
+582857  2	depth factor < 0.2
+582858  2	depth factor < 0.2
+582860 expfactor=0.247  seeing=1.316
+582863  3	Earthquake
+582864  3	Earthquake
+582865 expfactor=0.213  seeing=0.908
+582867 expfactor=0.254  seeing=1.003
+582868 expfactor=0.170  seeing=0.975
+582869 expfactor=0.162  seeing=0.976
+582870 expfactor=0.166  seeing=1.158
+582871  2 	depth factor < 0.2	
+582872  2 	depth factor < 0.2	
+582873  2 	depth factor < 0.2	
+582874  2 	depth factor < 0.2	
+582875  2 	depth factor < 0.2	
+582876  2 	depth factor < 0.2	
+582877  2 	depth factor < 0.2	
+583110  2 	depth factor < 0.2	
+583111  2 	depth factor < 0.2	
+583112 expfactor=0.100  seeing=1.318
+583113 expfactor=0.045  seeing=1.346
+583114  2 	depth factor < 0.2	
+583115  2 	depth factor < 0.2	
+583118 expfactor=0.152  seeing=1.278
+583119 expfactor=0.213  seeing=1.212
+583120  2  expfactor < 0.3
+583125 expfactor=0.226  seeing=1.090
+583194  1 	between 10.7 and 12 twilight end of night	
+583195  1 	between 10.7 and 12 twilight end of night	
+583196  1 	between 10.7 and 12 twilight end of night	
+592619  2       lots of clouds, depth factor <<0.3
+592620  2	lots of clouds, depth factor <<0.3
+592621  2	lots of clouds, depth factor <<0.3
+592622  2	lots of clouds, depth factor <<0.3
+592623  2	lots of clouds, depth factor <<0.3
+592624  2	lots of clouds, depth factor <<0.3
+592625  2	lots of clouds, depth factor <<0.3
+592626  2	lots of clouds, depth factor <<0.3
+592627  2	lots of clouds, depth factor <0.3
+592791  3	insufficient exposure time, depth factor <0.3
+592792  3	insufficient exposure time, depth factor <0.3
+592793  3	insufficient exposure time, depth factor <0.3
+592874  3       insufficient exposure time
+592875  3       insufficient exposure time
+592876  3       insufficient exposure time
+592877  3       insufficient exposure time
+592882  3  expfactor < 0.3
+592883  3	telescope brakes activated, dome got in front of camera
+592884  3	telescope brakes activated, dome got in front of camera
+604729  3       taken as pass2 but should have been pass3, bad seeing       
+604730  3       taken as pass2 but should have been pass3, bad seeing
+604734  3       taken as pass2 but should have been pass3, bad seeing
+604735  3       taken as pass2 but should have been pass3, bad seeing
+604736  3       taken as pass2 but should have been pass3, bad seeing
+604737  3       taken as pass2 but should have been pass3, bad seeing
+604738  3       taken as pass2 but should have been pass3, bad seeing
+604739  3       taken as pass2 but should have been pass3, bad seeing
+604740  3       taken as pass2 but should have been pass3, bad seeing
+604741  3       taken as pass2 but should have been pass3, bad seeing
+604742  3       taken as pass2 but should have been pass3, bad seeing
+604743  3       taken as pass2 but should have been pass3, bad seeing
+604744  3       taken as pass2 but should have been pass3, bad seeing
+604749 expfactor=0.543  seeing=2.588
+604750 expfactor=0.360  seeing=2.891
+604751 expfactor=0.361  seeing=2.840
+604753 expfactor=0.594  seeing=2.586
+604754 expfactor=0.426  seeing=3.045
+604755 expfactor=0.527  seeing=2.699
+604756  3 expfactor < 0.3
+604757  3 expfactor < 0.3
+604758 expfactor=0.542  seeing=2.713
+604759  3 expfactor < 0.3
+604760  3 expfactor < 0.3
+604761  3 expfactor < 0.3
+604762 expfactor=0.387  seeing=3.015
+604763 expfactor=0.305  seeing=2.724
+604764 expfactor=0.341  seeing=2.572
+604767 expfactor=0.569  seeing=2.527
+604768 expfactor=0.332  seeing=2.524
+604771 expfactor=0.404  seeing=2.536
+604772 expfactor=0.388  seeing=2.724
+604774 expfactor=0.492  seeing=2.536
+604788  3       short exposure time and wrongly pass2 after decbot crash
+604789  3       short exposure time and wrongly pass2 after decbot crash
+604790  3       short exposure time and wrongly pass2 after decbot crash
+605009  3 expfactor < 0.3
+605011  3 expfactor < 0.3
+605012 expfactor=0.321  seeing=2.734
+607932	3	telescope moving for pointing correction ~4s early
+624436  3  expfactor < 0.3
+624437  3  expfactor < 0.3
+624438  3  expfactor < 0.3
+624439  3  expfactor < 0.3
+624445  3  expfactor < 0.3
+624446  3  expfactor < 0.3
+624466 expfactor=0.323  seeing=2.566
+624468 expfactor=0.545  seeing=2.595
+625105  3  expfactor < 0.3
+625225  3  expfactor < 0.3
+625226  3  expfactor < 0.3
+625626  3  expfactor < 0.3
+625955  3  expfactor < 0.3
+625956  3  expfactor < 0.3
+630649  3 expfactor < 0.3
+630869  3       4MAPS down; telescope slewing - junk
+631097  3 expfactor < 0.3
+634312  3       pointing is -91, -20 off
+634313  3       trailed. 
+634314  3       pointing off -104, -13.
+634315  3       pointing off 50, -99. 
+634783 expfactor=0.362  seeing=2.584
+635114 expfactor=0.231  seeing=1.613
+635115 expfactor=0.246  seeing=1.669
+635116  3 expfactor < 0.3
+635117  3 expfactor < 0.3
+635503  3 expfactor < 0.3
+635504  3 expfactor < 0.3
+635505  3 expfactor < 0.3
+635506  3 expfactor < 0.3
+635910 expfactor=0.303  seeing=2.562
+635939 expfactor=0.435  seeing=2.563
+635942  3 expfactor < 0.3
+635943 expfactor=0.380  seeing=2.896
+635944 expfactor=0.516  seeing=2.622
+635945  3 expfactor < 0.3
+635946  3 expfactor < 0.3
+635947 expfactor=0.365  seeing=2.910
+635948  3 expfactor < 0.3
+635949  3 expfactor < 0.3
+635950 expfactor=0.476  seeing=2.819
+635951 expfactor=0.385  seeing=3.119
+635952 expfactor=0.579  seeing=2.843
+635953 expfactor=0.526  seeing=2.571
+635959 expfactor=0.688  seeing=2.731
+635960 expfactor=0.705  seeing=2.591
+635962 expfactor=0.473  seeing=2.888
+635963 expfactor=0.691  seeing=2.623
+635964 expfactor=0.487  seeing=2.609
+635965 expfactor=0.570  seeing=2.868
+635968 expfactor=0.587  seeing=2.732
+635969 expfactor=0.659  seeing=2.599
+635970 expfactor=0.506  seeing=2.565
+635976 expfactor=0.555  seeing=2.508
+636018 expfactor=0.334  seeing=2.682
+636022 expfactor=0.386  seeing=2.672
+637652  3 expfactor < 0.3
+637653  3 expfactor < 0.3
+637654  3 expfactor < 0.3
+637658  3 expfactor < 0.3
+640617 expfactor=0.301  seeing=2.688
+640618  3 expfactor < 0.3
+640619  3 expfactor < 0.3
+640686  3 expfactor < 0.3
+640687  3 expfactor < 0.3
+640689  3 expfactor < 0.3
+640690  3 expfactor < 0.3
+640692  3 expfactor < 0.3
+640693  3 expfactor < 0.3
+640694  3 expfactor < 0.3
+640695  3 expfactor < 0.3
+640696  3 expfactor < 0.3
+640697  3 expfactor < 0.3
+640698  3 expfactor < 0.3
+640700  3 expfactor < 0.3
+640706  3 expfactor < 0.3
+640707  3 expfactor < 0.3
+640710  3 expfactor < 0.3
+640711  3 expfactor < 0.3
+641983  3 expfactor < 0.3
+641984  3 expfactor < 0.3
+641985  3 expfactor < 0.3
+641986  3 expfactor < 0.3
+646227  2       transparency < 0.3, depth factor < 0.2
+646228  2       transparency < 0.3, depth factor < 0.2
+646229  2       transparency < 0.3, depth factor < 0.2
+646230  2       transparency < 0.3, depth factor < 0.2
+646231  2       transparency < 0.3, depth factor < 0.2
+646232  2       transparency < 0.3, depth factor < 0.2
+646233  2       transparency < 0.3, depth factor < 0.2
+646235  2       depth factor < 0.2
+646236  2       transparency < 0.3, depth factor < 0.2
+646237  2       transparency < 0.3, depth factor < 0.2
+646238  2       transparency < 0.3, depth factor < 0.2
+646239  2       transparency < 0.3, depth factor < 0.2
+646240  2       transparency < 0.3, depth factor < 0.2
+646241  2       transparency < 0.3, depth factor < 0.2
+646242 expfactor=0.001  seeing=1.507
+646243  2       transparency < 0.3, depth factor < 0.2
+646244  2       transparency < 0.3, depth factor < 0.2
+646245  2       transparency < 0.3, depth factor < 0.2
+646246  2       transparency < 0.3, depth factor < 0.2
+646247  2       transparency < 0.3, depth factor < 0.2
+646248  2       transparency < 0.3, depth factor < 0.2
+646249  2       transparency < 0.3, depth factor < 0.2
+646250  2       transparency < 0.3, depth factor < 0.2
+646251  2       transparency < 0.3, depth factor < 0.2
+646252  2       transparency < 0.3, depth factor < 0.2
+646253  2       transparency < 0.3, depth factor < 0.2
+646254  2       transparency < 0.3, depth factor < 0.2
+646255  2       transparency < 0.3, depth factor < 0.2
+646256  2       transparency < 0.3, depth factor < 0.2
+646257  2       transparency < 0.3, depth factor < 0.2
+646258  2       transparency < 0.3, depth factor < 0.2
+646259  2       transparency < 0.3, depth factor < 0.2
+646260  2       transparency < 0.3, depth factor < 0.2
+646261  2       transparency < 0.3, depth factor < 0.2
+646262  2       transparency < 0.3, depth factor < 0.2
+646263  2       transparency < 0.3, depth factor < 0.2
+646264  2       transparency < 0.3, depth factor < 0.2
+646265  2       transparency < 0.3, depth factor < 0.2
+646266  2       transparency < 0.3, depth factor < 0.2
+646267  2       transparency < 0.3, depth factor < 0.2
+646675  3     expfactor < 0.3
+646809  3       depth factor < 0.2
+646810  3       depth factor < 0.2
+646811  3       depth factor < 0.2
+646812  3       depth factor < 0.2
+646821 expfactor=0.294  seeing=1.621
+647320	1	bright sky
+647321	1	bright sky
+647322	1	bright sky
+647323	1	bright sky
+647324	1	bright sky
+647325	1	bright sky
+647326	1	bright sky
+647327	1	bright sky
+647328	1	bright sky
+647329	1	bright sky
+647330	1	bright sky
+647331	1	bright sky
+647332	1	bright sky
+647333	1	bright sky
+647334	1	bright sky
+647335	1	bright sky
+647988  3  expfactor < 0.3
+647989  3  expfactor < 0.3
+647990  3  expfactor < 0.3
+647991  3  expfactor < 0.3
+648000 expfactor=0.317  seeing=3.013
+648001  3  expfactor < 0.3
+648002  3  expfactor < 0.3
+648003  3  expfactor < 0.3
+648004  3  expfactor < 0.3
+648005 expfactor=0.405  seeing=2.612
+648007  3  expfactor < 0.3
+648008 expfactor=0.416  seeing=2.532
+648009  3  expfactor < 0.3
+648025 expfactor=0.429  seeing=2.862
+648037  3  expfactor < 0.3
+648051  3  expfactor < 0.3
+648057  3  expfactor < 0.3
+648057  3  expfactor < 0.3
+648058  3  expfactor < 0.3
+648059  3  expfactor < 0.3
+648061  3  expfactor < 0.3
+648062  3  expfactor < 0.3
+648063  3  expfactor < 0.3
+648064  3  expfactor < 0.3
+648067  3  expfactor < 0.3
+648068  3  expfactor < 0.3
+648070  3  expfactor < 0.3
+648072  3  expfactor < 0.3
+648073  3  expfactor < 0.3
+648074  3  expfactor < 0.3
+648075  3  expfactor < 0.3
+648076  3 expfactor < 0.3
+648079  3 expfactor < 0.3
+648081  3 expfactor < 0.3
+648082  3 expfactor < 0.3
+648083  3 expfactor < 0.3
+648091  3 expfactor < 0.3
+648092  3 expfactor < 0.3
+648093  3 expfactor < 0.3
+648094  3 expfactor < 0.3
+648095  3 expfactor < 0.3
+648099  3 expfactor < 0.3
+648100  3 expfactor < 0.3
+648101  3 expfactor < 0.3
+648102  3 expfactor < 0.3
+648103  3 expfactor < 0.3
+648104  3 expfactor < 0.3
+648105  3 expfactor < 0.3
+649384  3 expfactor < 0.3
+649385  3 expfactor < 0.3
+649388 expfactor=0.579  seeing=2.744
+649392 expfactor=0.626  seeing=2.550
+649393 expfactor=0.323  seeing=2.847
+649420 expfactor=0.407  seeing=2.630
+649441 expfactor=0.490  seeing=2.683
+649477 expfactor=0.473  seeing=2.555
+649516 expfactor=0.549  seeing=2.502
+649566  3 expfactor < 0.3
+
+650054 expfactor=0.268  seeing=1.528
+650180 expfactor=0.194  seeing=1.448
+650187 expfactor=0.185  seeing=1.316
+650188 expfactor=0.159  seeing=1.333
+650189 expfactor=0.007  seeing=1.468
+650190 expfactor=0.006  seeing=1.374
+650191 expfactor=0.025  seeing=1.496
+650195 expfactor=0.100  seeing=1.135
+650202 expfactor=0.246  seeing=1.442
+650203 expfactor=0.009  seeing=1.519
+650204 expfactor=0.006  seeing=1.295
+650205 expfactor=0.019  seeing=1.201
+650206 expfactor=0.024  seeing=1.241
+650207 expfactor=0.071  seeing=1.345
+650208 expfactor=0.175  seeing=1.355
+650209 expfactor=0.151  seeing=1.231
+650210 expfactor=0.155  seeing=1.203
+650211 expfactor=0.223  seeing=1.338
+650212 expfactor=0.220  seeing=1.304
+650213 expfactor=0.192  seeing=1.330
+650217 expfactor=0.160  seeing=1.168
+650219 expfactor=0.163  seeing=1.111
+650220 expfactor=0.090  seeing=1.192
+650224 expfactor=0.205  seeing=1.332
+650225 expfactor=0.026  seeing=1.369
+650226 expfactor=0.002  seeing=1.315
+650227 expfactor=0.006  seeing=1.421
+650228 expfactor=0.018  seeing=1.350
+650229 expfactor=0.079  seeing=1.226
+650230 expfactor=0.221  seeing=1.279
+650232 expfactor=0.087  seeing=1.341
+650233 expfactor=0.001  seeing=1.445
+650234 expfactor=0.000  seeing=1.411
+650235 expfactor=0.000  seeing=1.194
+650236 expfactor=0.003  seeing=1.453
+650237 expfactor=0.003  seeing=1.469
+650238 expfactor=0.002  seeing=1.566
+650239    3   guiding failed
+650240 expfactor=0.000  seeing=1.400
+650241 expfactor=0.000  seeing=1.416
+650242 expfactor=0.000  seeing=1.352
+650243 expfactor=0.000  seeing=1.567
+650244 expfactor=0.000  seeing=1.565
+650245 expfactor=0.000  seeing=1.629
+650246 expfactor=0.009  seeing=1.294
+650247 expfactor=0.075  seeing=1.300
+650248 expfactor=0.032  seeing=1.241
+650249 expfactor=0.040  seeing=1.141
+650250 expfactor=0.122  seeing=1.088
+650251 expfactor=0.020  seeing=1.205
+650252 expfactor=0.022  seeing=1.160
+650253 expfactor=0.090  seeing=1.165
+650254 expfactor=0.087  seeing=1.066
+650255 expfactor=0.146  seeing=1.131
+650256 expfactor=0.184  seeing=1.098
+650257 expfactor=0.014  seeing=1.015
+650258 expfactor=0.013  seeing=1.000
+650259 expfactor=0.042  seeing=0.967
+650260 expfactor=0.016  seeing=1.012
+650261 expfactor=0.064  seeing=0.968
+650262 expfactor=0.016  seeing=1.052
+650263 expfactor=0.010  seeing=1.056
+650264 expfactor=0.002  seeing=1.116
+650265 expfactor=0.023  seeing=1.296
+650266 expfactor=0.027  seeing=1.139
+650267 expfactor=0.015  seeing=1.073
+650268 expfactor=0.013  seeing=1.143
+650269 expfactor=0.015  seeing=1.242
+650270 expfactor=0.015  seeing=1.134
+650271 expfactor=0.017  seeing=1.114
+650272 expfactor=0.009  seeing=1.100
+650273 expfactor=0.005  seeing=1.188
+650274    3   guiding failed
+650275    3   guiding failed
+650276    3   guiding failed
+650277    3   guiding failed
+650278    3   guiding failed
+
+650398 expfactor=0.229  seeing=2.248
+650401 expfactor=0.149  seeing=2.213
+650403 expfactor=0.229  seeing=1.761
+650409 expfactor=0.209  seeing=2.084
+650410 expfactor=0.046  seeing=2.264
+650411 expfactor=0.019  seeing=2.402
+650412 expfactor=0.226  seeing=2.113
+650413 expfactor=0.078  seeing=2.019
+650414 expfactor=0.001  seeing=2.939
+
+650428    3   guiding failure
+650429 expfactor=0.223  seeing=1.515
+
+659726 expfactor=0.517  seeing=2.545
+659727 expfactor=0.493  seeing=2.684
+659728 expfactor=0.345  seeing=3.256
+
+660172 expfactor=0.229  seeing=1.608
+660198 expfactor=0.278  seeing=1.404
+660206 expfactor=0.281  seeing=1.151
+660208 expfactor=0.219  seeing=1.088
+660209 expfactor=0.165  seeing=1.151
+660210 expfactor=0.235  seeing=1.111
+660211 expfactor=0.247  seeing=1.015
+660212 expfactor=0.157  seeing=1.168
+660213 expfactor=0.191  seeing=1.156
+660217 expfactor=0.210  seeing=1.076
+660218 expfactor=0.127  seeing=1.096
+660343 expfactor=0.005  seeing=1.395
+660344 expfactor=0.004  seeing=1.497
+660345 expfactor=0.014  seeing=1.249
+660346 expfactor=0.015  seeing=1.377
+660390 expfactor=0.109  seeing=1.152
+660395 expfactor=0.037  seeing=1.236
+660396 expfactor=0.002  seeing=1.244
+660397 expfactor=0.027  seeing=1.120
+660398 expfactor=0.022  seeing=1.257
+660399 expfactor=0.164  seeing=1.332
+660400 expfactor=0.194  seeing=1.337
+660401 expfactor=0.101  seeing=1.237
+660402 expfactor=0.158  seeing=1.270
+660406 expfactor=0.179  seeing=1.452
+660409 expfactor=0.284  seeing=1.432
+660411 expfactor=0.299  seeing=1.283
+660413 expfactor=0.260  seeing=1.108
+
+660434    3   transparency < 0.3
+660439    3   transparency < 0.3
+660453    3   transparency < 0.3
+660734    3   transparency < 0.3
+661180    3   windshake. DIQ>3" E-W elong
+661181    3   same
+661182    3   same
+661183    3   same
+661191    3   abort, TCS fail
+661195    3   exp factor < 0.3
+661196    3   exp factor = 0.33
+661197 expfactor=0.471  seeing=2.746
+661200 expfactor=0.591  seeing=2.553
+661201 expfactor=0.594  seeing=2.598
+661202 expfactor=0.519  seeing=2.728
+661203 expfactor=0.441  seeing=2.887
+661206 expfactor=0.488  seeing=2.524
+661207    3   exp factor = 0.33
+661208    3   exp factor < 0.3 
+661209    3   exp factor < 0.3 
+661210    3   exp factor < 0.3 
+661211    3   exp factor < 0.3 
+661212    3   exp factor < 0.3 
+661213    3   exp factor < 0.3 
+661214    3   exp factor < 0.3 
+661216 expfactor=0.439  seeing=2.836
+661217 expfactor=0.388  seeing=3.024
+661218 expfactor=0.485  seeing=2.581
+661219 expfactor=0.356  seeing=2.604
+661220 expfactor=0.463  seeing=2.841
+661221 expfactor=0.351  seeing=3.272
+661222    3   exp factor < 0.3 
+661226    3   exp factor < 0.3 
+661227    3   exp factor < 0.3 
+661228    3   exp factor < 0.3 
+661229 expfactor=0.337  seeing=2.589
+661230 expfactor=0.364  seeing=2.709
+661231 expfactor=0.376  seeing=2.674
+661232 expfactor=0.438  seeing=2.662
+661233 expfactor=0.314  seeing=2.941
+661234 expfactor=0.391  seeing=2.968
+661235 expfactor=0.426  seeing=2.539
+661245 expfactor=0.374  seeing=2.747
+661249    3   exp factor < 0.3 
+661251 expfactor=0.343  seeing=2.627
+661252    3   exp factor < 0.3 
+661253    3   exp factor < 0.3 
+661254 expfactor=0.524  seeing=2.528
+661256 expfactor=0.498  seeing=2.674
+661257 expfactor=0.421  seeing=2.845
+661258 expfactor=0.345  seeing=2.636
+661259 expfactor=0.448  seeing=2.782
+661268 expfactor=0.491  seeing=2.806
+661269    3   exp factor < 0.3 
+661270 expfactor=0.367  seeing=3.054
+661289 expfactor=0.392  seeing=3.105
+661290    3   abort
+661291    3   abort
+661292    3   abort
+661293 expfactor=0.362  seeing=2.542
+661298 expfactor=0.706  seeing=2.521
+661309    3   abort
+661327    3   exp factor < 0.3
+661329 expfactor=0.409  seeing=2.741
+661342 expfactor=0.406  seeing=2.618
+661359 expfactor=0.427  seeing=2.786
+661360    3   exp factor < 0.3
+661481    3   exp factor < 0.3
+661482    3   exp factor < 0.3
+661483    3   exp factor < 0.3
+661489    3   exp factor < 0.3
+661490    3   exp factor < 0.3
+661491    3   exp factor < 0.3
+661492    3   exp factor < 0.3
+661493 expfactor=0.132  seeing=3.981
+661505    3   exp factor < 0.3
+661506    3   exp factor < 0.3
+661507    3   exp factor < 0.3
+661508    3   exp factor < 0.3
+661509    3   exp factor < 0.3
+661511    3   exp factor < 0.3
+661512 expfactor=0.447  seeing=2.658
+661513 expfactor=0.368  seeing=2.747
+661514    3   exp factor < 0.3
+661516    3   exp factor < 0.3
+661518    3   exp factor < 0.3
+661519    3   exp factor < 0.3
+661520    3   exp factor < 0.3
+661521 expfactor=0.324  seeing=3.199
+661522    3   exp factor < 0.3
+661523 expfactor=0.576  seeing=2.583
+661524 expfactor=0.468  seeing=2.866
+661525 expfactor=0.463  seeing=2.507
+661527 expfactor=0.512  seeing=2.545
+661528    3   exp factor < 0.3
+661529    3   exp factor < 0.3
+661530    3   exp factor < 0.3
+661531 expfactor=0.478  seeing=2.616
+661532    3   exp factor < 0.3
+661533    3   exp factor < 0.3
+661534    3   exp factor < 0.3
+661539 expfactor=0.444  seeing=2.635
+661540 expfactor=0.535  seeing=2.531
+661547 expfactor=0.365  seeing=2.591
+661557 expfactor=0.441  seeing=2.913
+661629 expfactor=0.389  seeing=2.584
+661647    3   exp factor < 0.3
+661653 expfactor=0.452  seeing=2.544
+661656    3   exp factor < 0.3
+661686    3   exp factor < 0.3
+661811    3   dome partially in the way
+662164    3   exp factor < 0.3
+662166    3   exp factor < 0.3
+662167    3   exp factor < 0.3
+662175    3   exp factor < 0.3
+662177    3   exp factor < 0.3
+662178    3   exp factor < 0.3
+662179    3   exp factor < 0.3
+662180    3   exp factor < 0.3
+662182    3   exp factor < 0.3
+662184    3   exp factor < 0.3
+662185    3   exp factor < 0.3
+662187    3   exp factor < 0.3
+662190    3   exp factor < 0.3
+662193    3   exp factor < 0.3
+662194    3   exp factor < 0.3
+662197    3   exp factor < 0.3
+662421    3   exp factor < 0.3
+662425    3   exp factor < 0.3
+662557    3   exp factor < 0.3
+662558    3   exp factor < 0.3
+662565    3   exp factor < 0.3
+662567    3   exp factor < 0.3
+662570    3   exp factor < 0.3
+662571    3   exp factor < 0.3
+662572    3   exp factor < 0.3
+662573    3   exp factor < 0.3
+662574    3   exp factor < 0.3
+662575    3   exp factor < 0.3
+662576    3   exp factor < 0.3
+662577    3   exp factor < 0.3
+662578    3   exp factor < 0.3
+662579    3   exp factor < 0.3
+662580    3   exp factor < 0.3
+662582    3   exp factor < 0.3
+662590    3   exp factor < 0.3
+662591    3   exp factor < 0.3
+662592    3   exp factor < 0.3
+662596    3   exp factor < 0.3
+662597    3   exp factor < 0.3
+662598    3   exp factor < 0.3
+662599    3   exp factor < 0.3
+662600    3   exp factor < 0.3
+662601    3   exp factor < 0.3
+662602    3   exp factor < 0.3
+662603    3   exp factor < 0.3
+662604    3   exp factor < 0.3
+662605    3   exp factor < 0.3
+662606    3   exp factor < 0.3
+662607    3   exp factor < 0.3
+662608    3   exp factor < 0.3
+662609    3   exp factor < 0.3
+662610    3   exp factor < 0.3
+662611    3   exp factor < 0.3
+662612    3   exp factor < 0.3
+662613    3   exp factor < 0.3
+662614    3   exp factor < 0.3
+662615    3   exp factor < 0.3
+662616    3   exp factor < 0.3
+662617    3   exp factor < 0.3
+662618    3   exp factor < 0.3
+662621    3   exp factor < 0.3
+662622    3   exp factor < 0.3
+662623    3   exp factor < 0.3
+662624    3   exp factor < 0.3
+662625    3   exp factor < 0.3
+662626    3   exp factor < 0.3
+662627    3   exp factor < 0.3
+662628    3   exp factor < 0.3
+662629    3   exp factor < 0.3
+662630    3   exp factor < 0.3
+662631    3   exp factor < 0.3
+662646    3   exp factor < 0.3 and elliptical PSF
+662647    3   exp factor < 0.3
+662648    3   pass=2, but seeing > 1.3 and transparency poor
+662685    3   exp factor < 0.3
+662692    3   exp factor < 0.3
+662693    3   exp factor < 0.3
+662703    3   exp factor < 0.3
+662704    3   exp factor < 0.3
+662705    3   exp factor < 0.3
+662706    3   exp factor < 0.3
+662707    3   exp factor < 0.3
+662708    3   exp factor < 0.3
+662709    3   exp factor < 0.3
+662716    3   exp factor < 0.3
+662719    3   exp factor < 0.3
+662720    3   exp factor < 0.3
+662721    3   exp factor < 0.3
+662722    3   exp factor < 0.3
+662724    3   exp factor < 0.3
+662726    3   exp factor < 0.3
+662727    3   exp factor < 0.3
+662728    3   exp factor < 0.3
+662729    3   exp factor < 0.3
+662730    3   exp factor < 0.3
+662731    3   exp factor < 0.3
+662732    3   exp factor < 0.3
+662733    3   exp factor < 0.3
+662734    3   exp factor < 0.3
+662735    3   exp factor < 0.3
+662736    3   exp factor < 0.3
+662737    3   exp factor < 0.3
+662738    3   exp factor < 0.3
+662739    3   exp factor < 0.3
+662740    3   exp factor < 0.3
+662741    3   exp factor < 0.3
+662742    3   exp factor < 0.3
+662743    3   exp factor < 0.3
+662744    3   exp factor < 0.3
+662745    3   exp factor < 0.3
+662746    3   exp factor < 0.3
+662747    3   exp factor < 0.3
+662748    3   exp factor < 0.3
+662749    3   exp factor < 0.3
+662750    3   exp factor < 0.3
+662751    3   exp factor < 0.3
+662752    3   exp factor < 0.3
+662753    3   exp factor < 0.3
+662754    3   exp factor < 0.3
+662755    3   exp factor < 0.3
+662756    3   exp factor < 0.3
+662757    3   exp factor < 0.3
+662758    3   exp factor < 0.3
+662759    3   exp factor < 0.3
+662760    3   exp factor < 0.3
+662771    3   exp factor < 0.3
+662773    3   exp factor < 0.3
+662774    3   exp factor < 0.3
+662775    3   exp factor < 0.3
+662783    3   exp factor < 0.3
+662784    3   exp factor < 0.3
+662785    3   exp factor < 0.3
+662786    3   exp factor < 0.3
+662787    3   exp factor < 0.3
+662796    3   exp factor < 0.3
+662797    3   exp factor < 0.3
+662798    3   exp factor < 0.3
+662799    3   exp factor < 0.3
+662800    3   exp factor < 0.3
+662801    3   exp factor < 0.3
+662802    3   exp factor < 0.3
+662811    3   exp factor < 0.3
+662812    3   exp factor < 0.3
+662813    3   exp factor < 0.3
+662814    3   exp factor < 0.3
+662815    3   exp factor < 0.3
+662816    3   exp factor < 0.3
+662817    3   exp factor < 0.3
+662818    3   exp factor < 0.3
+662819    3   exp factor < 0.3
+662820    3   exp factor < 0.3
+662821    3   exp factor < 0.3
+662822    3   exp factor < 0.3
+662823    3   exp factor < 0.3
+662824    3   exp factor < 0.3
+662825    3   exp factor < 0.3
+662826    3   exp factor < 0.3
+662827    3   exp factor < 0.3
+662828    3   exp factor < 0.3
+662829    3   exp factor < 0.3
+662830    3   exp factor < 0.3
+662831    3   exp factor < 0.3
+662832    3   exp factor < 0.3
+662833    3   exp factor < 0.3
+662834    3   exp factor < 0.3
+662835    3   exp factor < 0.3
+662836    3   exp factor < 0.3
+662837    3   exp factor < 0.3
+662838    3   exp factor < 0.3
+662839    3   exp factor < 0.3
+662841    3   exp factor < 0.3
+662843    3   exp factor < 0.3
+662848    3   exp factor < 0.3
+662849    3   exp factor < 0.3
+662850    3   exp factor < 0.3
+662858    3   exp factor < 0.3
+662877    3   exp factor < 0.3
+662878    3   exp factor < 0.3
+662883    3   exp factor < 0.3
+662884    3   exp factor < 0.3
+662885    3   exp factor < 0.3
+662886    3   exp factor < 0.3
+662887    3   exp factor < 0.3
+662888    3   exp factor < 0.3
+662894    3   exp factor < 0.3
+662895    3   exp factor < 0.3
+662896    3   exp factor < 0.3
+662905    3   exp factor < 0.3
+662906    3   exp factor < 0.3
+662907    3   exp factor < 0.3
+662908    3   exp factor < 0.3
+662909    3   exp factor < 0.3
+662910    3   exp factor < 0.3
+662911    3   exp factor < 0.3
+662912    3   exp factor < 0.3
+662913    3   exp factor < 0.3
+662914    3   exp factor < 0.3
+662915    3   exp factor < 0.3
+662916    3   exp factor < 0.3
+662917    3   exp factor < 0.3
+662918    3   exp factor < 0.3
+662919    3   exp factor < 0.3
+662920    3   exp factor < 0.3
+662921    3   exp factor < 0.3
+662922    3   exp factor < 0.3
+662923    3   exp factor < 0.3
+662924    3   exp factor < 0.3
+662925    3   exp factor < 0.3
+662927    3   exp factor < 0.3
+662928    3   exp factor < 0.3
+662930    3   exp factor < 0.3
+662931    3   exp factor < 0.3
+662932    3   exp factor < 0.3
+662933    3   exp factor < 0.3
+662934    3   exp factor < 0.3
+662935    3   exp factor < 0.3
+662936    3   exp factor < 0.3
+662937    3   exp factor < 0.3
+662938    3   exp factor < 0.3
+662939    3   exp factor < 0.3
+662940    3   exp factor < 0.3
+662941    3   exp factor < 0.3
+662942    3   exp factor < 0.3
+662943    3   exp factor < 0.3
+662944    3   exp factor < 0.3
+663067   2  expfactor<0.3  DECaLS_18046
+663068   2  expfactor<0.3  DECaLS_18046
+663069   2  expfactor<0.3  DECaLS_18056
+663070   2  expfactor<0.3  DECaLS_18083
+663072   2  expfactor<0.3  DECaLS_18039
+663073   2  expfactor<0.3  DECaLS_18039
+663074   2  expfactor<0.3  DECaLS_18049
+663075   2  expfactor<0.3  DECaLS_18022
+663078   2  expfactor<0.3  DECaLS_34017
+663081   2  expfactor<0.3  DECaLS_34111
+663082   2  expfactor<0.3  DECaLS_34121
+663083   2  expfactor<0.3  DECaLS_34109
+663084   2  expfactor<0.3  DECaLS_34092
+663085   2  expfactor<0.3  DECaLS_34047
+663088   2  expfactor<0.3  DECaLS_34133
+663089   2  expfactor<0.3  DECaLS_34118
+663090   2  expfactor<0.3  DECaLS_34080
+663091   2  expfactor<0.3  DECaLS_34038
+663092   2  expfactor<0.3  DECaLS_34036
+663093   2  expfactor<0.3  DECaLS_44344
+663095   2  expfactor<0.3  DECaLS_44362
+663097   2  expfactor<0.3  DECaLS_44402
+663098   2  expfactor<0.3  DECaLS_34089
+663099   2  expfactor<0.3  DECaLS_34027
+663100   2  expfactor<0.3  DECaLS_36586
+663102   2  expfactor<0.3  DECaLS_34091
+663212   2  expfactor<0.3  DECaLS_46918
+663213   2  expfactor<0.3  DECaLS_46918
+663214   2  expfactor<0.3  DECaLS_46953
+663215   2  expfactor<0.3  DECaLS_46974
+663216   2  expfactor<0.3  DECaLS_46997
+663217   2  expfactor<0.3  DECaLS_47040
+663218   2  expfactor<0.3  DECaLS_47044
+663219   2  expfactor<0.3  DECaLS_46985
+663220   2  expfactor<0.3  DECaLS_47008
+663221   2  expfactor<0.3  DECaLS_47071
+663222   2  expfactor<0.3  DECaLS_47068
+663223   2  expfactor<0.3  DECaLS_47073
+663224   2  expfactor<0.3  DECaLS_31831
+663225   2  expfactor<0.3  DECaLS_35350
+663226   2  expfactor<0.3  DECaLS_35328
+663227   2  expfactor<0.3  DECaLS_46946
+663228   2  expfactor<0.3  DECaLS_34561
+663229   2  expfactor<0.3  DECaLS_34656
+663230   2  expfactor<0.3  DECaLS_47082
+663231   2  expfactor<0.3  DECaLS_34658
+663232   2  expfactor<0.3  DECaLS_34542
+663233   2  expfactor<0.3  DECaLS_34628
+663234   2  expfactor<0.3  DECaLS_34670
+663235   2  expfactor<0.3  DECaLS_34610
+663236   2  expfactor<0.3  DECaLS_32337
+663237   2  expfactor<0.3  DECaLS_43406
+663238   2  expfactor<0.3  DECaLS_43420
+663239   2  expfactor<0.3  DECaLS_43422
+663240   2  expfactor<0.3  DECaLS_43436
+663241   2  expfactor<0.3  DECaLS_43444
+663242   2  expfactor<0.3  DECaLS_43457
+663243   2  expfactor<0.3  DECaLS_43462
+663244   2  expfactor<0.3  DECaLS_43453
+663245   2  expfactor<0.3  DECaLS_43484
+663246   2  expfactor<0.3  DECaLS_36818
+663247   2  expfactor<0.3  DECaLS_43502
+663248   2  expfactor<0.3  DECaLS_43521
+663249   2  expfactor<0.3  DECaLS_43560
+663250   2  expfactor<0.3  DECaLS_43528
+663251   2  expfactor<0.3  DECaLS_36826
+663252   2  expfactor<0.3  DECaLS_43583
+663253   2  expfactor<0.3  DECaLS_43602
+663254   2  expfactor<0.3  DECaLS_43619
+663255   2  expfactor<0.3  DECaLS_43625
+663256   2  expfactor<0.3  DECaLS_36837
+663257   2  expfactor<0.3  DECaLS_36850
+663258   2  expfactor<0.3  DECaLS_43553
+663259   2  expfactor<0.3  DECaLS_45762
+663260   2  expfactor<0.3  DECaLS_43641
+663261   2  expfactor<0.3  DECaLS_43650
+663262   2  expfactor<0.3  DECaLS_45656
+663263   2  expfactor<0.3  DECaLS_39672
+663264   2  expfactor<0.3  DECaLS_39684
+663339   3  pass1 taken with transparency<1 DECaLS_13908_g  
+663340   3  pass1 taken with transparency<1 DECaLS_13888_g  
+663341   3  pass1 taken with transparency<1 DECaLS_13838_g  
+663362   2  expfactor<0.3  DECaLS_39592
+663366   2  expfactor<0.3  DECaLS_45578
+663367   2  expfactor<0.3  DECaLS_45562
+663368   2  expfactor<0.3  DECaLS_44361
+663369   2  expfactor<0.3  DECaLS_44383
+663370   2  expfactor<0.3  DECaLS_44404
+663371   2  expfactor<0.3  DECaLS_44403
+663372   2  expfactor<0.3  DECaLS_45549
+663373   2  expfactor<0.3  DECaLS_33945
+663373   2  expfactor<0.3  DECaLS_33945
+663374   2  expfactor<0.3  DECaLS_33963
+663376   2  expfactor<0.3  DECaLS_33907
+663381   2  expfactor<0.3  DECaLS_34014
+663382   2  expfactor<0.3  DECaLS_34016
+663383   2  expfactor<0.3  DECaLS_34037
+663497   2  expfactor<0.3  
+663498   2  expfactor<0.3  
+663499   2  expfactor<0.3  
+663500   2  expfactor<0.3  
+663501   2  expfactor<0.3  
+663612   2  expfactor<0.3
+663613   2  expfactor<0.3
+663762 expfactor=0.551  seeing=2.679
+663763 expfactor=0.373  seeing=2.942
+663770   2  expfactor < 0.3 DECaLS_33963
+663771 expfactor=0.537  seeing=2.582
+663784   3  shows features like clouds but OA says totally clear
+663798 expfactor=0.349  seeing=2.546
+663799   2  expfactor < 0.3 DECaLS_36589
+669395 expfactor=0.224  seeing=2.990
+669396 expfactor=0.274  seeing=3.009
+669397 expfactor=0.315  seeing=2.951
+669398 expfactor=0.256  seeing=3.069
+669399 expfactor=0.428  seeing=2.553
+669406 expfactor=0.502  seeing=2.544
+669408 expfactor=0.344  seeing=2.627
+669424   3  no guiding star found. seeing 2"; ellipiticity looks ok.
+669870 expfactor=0.368  seeing=2.591
+
+# 2017-08-22 thick clouds all night
+670763 expfactor=0.012  seeing=1.302
+670764 expfactor=0.016  seeing=1.476
+670765 expfactor=0.007  seeing=1.290
+670766 expfactor=0.006  seeing=1.203
+670767 expfactor=0.008  seeing=1.329
+670768 expfactor=0.004  seeing=1.275
+670769 expfactor=0.000  seeing=1.477
+670770 expfactor=0.004  seeing=1.384
+670771 expfactor=0.002  seeing=1.372
+670772 expfactor=0.000  seeing=1.558
+670773 expfactor=0.000  seeing=1.535
+670774 expfactor=0.000  seeing=1.558
+670775 expfactor=0.000  seeing=1.732
+670776 expfactor=0.001  seeing=1.765
+670777 expfactor=0.002  seeing=1.529
+670778 expfactor=0.022  seeing=1.467
+670779 expfactor=0.009  seeing=1.454
+670780 expfactor=0.016  seeing=1.426
+670781 expfactor=0.012  seeing=1.458
+670782 expfactor=0.039  seeing=1.183
+670783 expfactor=0.010  seeing=1.292
+670784 expfactor=0.003  seeing=1.453
+670784 expfactor=0.003  seeing=1.453
+670785 expfactor=0.010  seeing=1.144
+670786 expfactor=0.007  seeing=1.202
+670787 expfactor=0.001  seeing=1.289
+670788 expfactor=0.000  seeing=1.284
+670789 expfactor=0.000  seeing=1.203
+670790 expfactor=0.001  seeing=1.131
+670791 expfactor=0.002  seeing=1.293
+670792 expfactor=0.002  seeing=1.294
+670793 expfactor=0.001  seeing=1.374
+670797 expfactor=0.295  seeing=1.693
+670800 expfactor=0.159  seeing=1.422
+670801 expfactor=0.096  seeing=1.340
+670802 expfactor=0.048  seeing=1.521
+670803 expfactor=0.052  seeing=1.337
+670804 expfactor=0.035  seeing=1.421
+670805 expfactor=0.031  seeing=1.393
+670806 expfactor=0.014  seeing=1.423
+670807 expfactor=0.005  seeing=1.380
+670808 expfactor=0.008  seeing=1.533
+670809 expfactor=0.058  seeing=1.434
+670810 expfactor=0.069  seeing=1.440
+670814 expfactor=0.030  seeing=1.771
+670815 expfactor=0.006  seeing=1.601
+670816 expfactor=0.003  seeing=1.580
+670817 expfactor=0.001  seeing=1.418
+670818 expfactor=0.010  seeing=1.256
+670819 expfactor=0.005  seeing=1.272
+670820 expfactor=0.041  seeing=1.331
+670821 expfactor=0.017  seeing=1.286
+670822 expfactor=0.012  seeing=1.249
+670823 expfactor=0.002  seeing=1.476
+670824 expfactor=0.001  seeing=1.505
+670825 expfactor=0.006  seeing=1.550
+670826 expfactor=0.108  seeing=1.314
+670827 expfactor=0.149  seeing=1.262
+670828 expfactor=0.087  seeing=1.295
+670829 expfactor=0.165  seeing=1.253
+670830 expfactor=0.030  seeing=1.411
+670831 expfactor=0.026  seeing=1.343
+670832 expfactor=0.003  seeing=1.560
+670833 expfactor=0.002  seeing=1.522
+670834 expfactor=0.001  seeing=1.882
+670835 expfactor=0.031  seeing=1.515
+670836 expfactor=0.034  seeing=1.571
+670837 expfactor=0.030  seeing=1.470
+670838 expfactor=0.111  seeing=1.467
+670839 expfactor=0.099  seeing=1.353
+670840 expfactor=0.037  seeing=1.426
+670841 expfactor=0.051  seeing=1.390
+670842 expfactor=0.024  seeing=1.291
+
+670843   3  SISPI broken; image did not read out properly
+670844 expfactor=0.087  seeing=1.300
+670845 expfactor=0.141  seeing=1.433
+
+# 2017-09-14
+677658   3  expfactor < 0.3 too shallow ; seeing > 3"
+677659 expfactor=0.027  seeing=3.836
+677660 expfactor=0.035  seeing=3.802
+677661 expfactor=0.059  seeing=4.115
+677662 expfactor=0.160  seeing=3.302
+677663 expfactor=0.177  seeing=3.094
+677664 expfactor=0.131  seeing=3.728
+677665 expfactor=0.094  seeing=3.705
+677666 expfactor=0.123  seeing=3.376
+677667 expfactor=0.489  seeing=2.721
+677668 expfactor=0.360  seeing=3.051
+677669 expfactor=0.358  seeing=2.902
+677670 expfactor=0.330  seeing=2.746
+677671 expfactor=0.259  seeing=2.730
+677672 expfactor=0.552  seeing=2.614
+677673 expfactor=0.280  seeing=2.922
+677674 expfactor=0.198  seeing=2.944
+677675 expfactor=0.401  seeing=2.564
+677676 expfactor=0.460  seeing=2.709
+677677 expfactor=0.370  seeing=2.740
+677678 expfactor=0.656  seeing=2.640
+677679 expfactor=0.316  seeing=3.026
+677680 expfactor=0.305  seeing=3.211
+
+677684 expfactor=0.302  seeing=3.105
+677685 expfactor=0.690  seeing=2.542
+677687 expfactor=0.450  seeing=2.500
+677688 expfactor=0.570  seeing=2.607
+677689 expfactor=0.475  seeing=2.568
+677690 expfactor=0.334  seeing=2.967
+677692   3  dome occulted telescope field during part of this exposure
+677693 expfactor=0.512  seeing=2.541
+
+677705 expfactor=0.375  seeing=2.992
+677706 expfactor=0.535  seeing=2.708
+677707 expfactor=0.447  seeing=2.614
+677709 expfactor=0.785  seeing=2.600
+677714 expfactor=0.628  seeing=2.774
+677715 expfactor=0.540  seeing=2.742
+677717 expfactor=0.554  seeing=2.577
+677718 expfactor=0.779  seeing=2.523
+677719 expfactor=0.654  seeing=2.604
+677722 expfactor=0.594  seeing=2.619
+677723 expfactor=0.566  seeing=2.666
+677724 expfactor=0.274  seeing=3.080
+
+677751 expfactor=0.166  seeing=1.631
+677771 expfactor=0.520  seeing=2.582
+677803 expfactor=0.632  seeing=2.256
+677804 expfactor=0.506  seeing=2.628
+677805 expfactor=0.479  seeing=2.726
+677806 expfactor=0.419  seeing=2.882
+677807 expfactor=0.536  seeing=2.775
+677808 expfactor=0.665  seeing=2.575
+677809 expfactor=0.762  seeing=2.548
+677815 expfactor=0.755  seeing=2.597
+677816 expfactor=0.474  seeing=3.099
+677819 expfactor=0.404  seeing=2.932
+677820 expfactor=0.312  seeing=2.696
+
+#297-09-15
+677930   3 expfactor=0.01,seeing=4.10 MzLS_43648_
+677931   3 expfactor=0.03,seeing=3.48 MzLS_43648_
+677932   3 expfactor=0.05,seeing=3.07 MzLS_43649_
+677934   3 expfactor=0.13,seeing=3.15 MzLS_43616_
+677935   3 expfactor=0.18,seeing=2.69 MzLS_36879_
+677936   3 expfactor=0.21,seeing=2.55 MzLS_43642_
+677938   3 expfactor=0.18,seeing=3.03 MzLS_45634_
+677941 expfactor=0.335  seeing=2.724
+677942 expfactor=0.302  seeing=2.620
+
+677947 expfactor=0.347  seeing=2.615
+677948 expfactor=0.320  seeing=2.752
+677955 expfactor=0.504  seeing=2.558
+677956 expfactor=0.543  seeing=2.585
+677957 expfactor=0.459  seeing=2.580
+677961 expfactor=0.446  seeing=2.518
+
+678007   3  dome occulted telescope field during part of this exposure
+678115   3  dome occulted telescope field during part of this exposure
+
+679527 expfactor=0.273  seeing=1.826
+679528 expfactor=0.223  seeing=2.109
+
+679594 expfactor=0.446  seeing=2.912
+679595 expfactor=0.265  seeing=3.356
+679600 expfactor=0.395  seeing=2.728
+679601 expfactor=0.298  seeing=2.238
+679602 expfactor=0.462  seeing=2.015
+679603 expfactor=0.079  seeing=2.178
+679604 expfactor=0.017  seeing=2.281
+679605 expfactor=0.066  seeing=2.512
+679606 expfactor=0.014  seeing=2.507
+
+679626 expfactor=0.236  seeing=2.661
+
+679677 expfactor=0.228  seeing=2.292
+679786 expfactor=0.200  seeing=2.033
+679787 expfactor=0.278  seeing=1.695
+
+679821 expfactor=0.135  seeing=3.076
+679822 expfactor=0.079  seeing=3.066
+679823 expfactor=0.131  seeing=3.381
+679824 expfactor=0.143  seeing=3.090
+679825 expfactor=0.264  seeing=3.166
+679826 expfactor=0.204  seeing=3.403
+679827 expfactor=0.160  seeing=3.387
+679828 expfactor=0.096  seeing=3.468
+679829 expfactor=0.136  seeing=3.886
+679830 expfactor=0.228  seeing=3.627
+679831 expfactor=0.142  seeing=3.561
+679832 expfactor=0.153  seeing=3.768
+679833 expfactor=0.109  seeing=3.784
+679834 expfactor=0.294  seeing=3.312
+679835 expfactor=0.490  seeing=2.729
+679836 expfactor=0.292  seeing=2.891
+679837 expfactor=0.379  seeing=2.625
+679838 expfactor=0.279  seeing=2.387
+679839 expfactor=0.612  seeing=2.526
+679840 expfactor=0.429  seeing=3.069
+679841 expfactor=0.269  seeing=2.930
+679842 expfactor=0.318  seeing=3.324
+679843 expfactor=0.317  seeing=2.802
+679844 expfactor=0.949  seeing=2.320
+679845 expfactor=0.590  seeing=2.673
+679846 expfactor=0.448  seeing=2.812
+679847 expfactor=0.812  seeing=2.668
+679856 expfactor=0.285  seeing=2.392
+679895 expfactor=0.345  seeing=2.630
+679937 expfactor=0.271  seeing=2.193
+
+680050 expfactor=0.210  seeing=1.250
+680051 expfactor=0.270  seeing=1.190
+680052 expfactor=0.166  seeing=1.314
+680053 expfactor=0.146  seeing=1.528
+680225 expfactor=0.457  seeing=2.063
+680229 expfactor=0.469  seeing=2.001
+680250 expfactor=0.278  seeing=1.541
+
+689982   2 underexposed, clouds. 
+689983   2 underexposed, clouds. 
+689984   2 underexposed, clouds. 
+689985   2 underexposed, clouds. 
+689989   2 underexposed, clouds. 
+689990   2 underexposed, clouds. 
+689991   2 underexposed, clouds. 
+689992   2 underexposed, clouds. 
+689993   2 underexposed, clouds. 
+689994   2 underexposed, clouds. 
+689995   2 underexposed, clouds. 
+
+690022 expfactor=0.207  seeing=0.997
+690034 expfactor=0.261  seeing=0.955
+690039 expfactor=0.203  seeing=0.881
+690040 expfactor=0.204  seeing=0.827
+
+690215   2 underexposed, clouds. 
+690216   2 underexposed, clouds. 
+690219   3 made offest while exposing
+690220   2 underexposed, clouds. 
+690226 expfactor=0.299  seeing=1.229
+690227   2 underexposed, clouds. 
+690228   2 underexposed, clouds. 
+690229   2 underexposed, clouds. 
+690236   2 underexposed, clouds. 
+690237   2 underexposed, clouds. 
+690239   2 underexposed, clouds. 
+690254   2 underexposed, clouds. 
+690255   2 underexposed, clouds. 
+690256   2 underexposed, clouds. 
+690259 expfactor=0.212  seeing=1.178
+690260 expfactor=0.139  seeing=1.181
+690265   2 underexposed, clouds. 
+690266 expfactor=0.047  seeing=1.104
+690276   2 underexposed, clouds. 
+690277   2 underexposed, clouds. 
+690278   2 underexposed, clouds. 
+690282   2 underexposed, clouds. 
+695042 expfactor=0.219  seeing=1.026
+695155 expfactor=0.299  seeing=0.949
+695694 expfactor=0.293  seeing=1.148
+695701   3 occulted by dome momentarily.
+719040   3 seeing>1.5 in pass1 + large offset
+719041   3 seeing>1.5 in pass1 + large offset
+719042 expfactor=0.299  seeing=2.650
+719043   3 not guiding, high airmass, seeing>2
+719044   3 not guiding, high airmass, seeing>2
+719045   3 not guiding, high airmass, seeing>2
+719066   3 occulted by dome momentarily
+720478   3 made offset during exposure
+720876   3 made offset during exposure
+721463   3 made offset during exposure
+723438   2 clouds, exp factor < 0.3
+723439   2 clouds, exp factor < 0.3
+723440   2 clouds, exp factor < 0.3
+723441   2 clouds, exp factor < 0.3
+724721	 3 expfactor < 0.3
+724722 	 3 expfactor < 0.3
+724723   3 expfactor < 0.3
+724779   3 triangles in the image, primary mirror lost shape during alert
+725200   3 expfactor < 0.3
+
+# 2018-03-13
+730063 expfactor=0.07 MzLS_39213_
+730064 expfactor=0.09 MzLS_39213_
+730065 expfactor=0.18 MzLS_39240_
+730066 expfactor=0.19 MzLS_42521_
+
+#2018-03-14
+730594 expfactor=0.27 MzLS_47874_
+
+#2018-03-17
+731411 expfactor=0.26,seeing=2.26 MzLS_26544_
+731414 seeing=2.13 MzLS_8888_
+731415 expfactor=0.27,seeing=2.30 MzLS_8867_
+731416 seeing=2.20 MzLS_26628_
+731419 seeing=2.36 MzLS_42567_
+
+#2018-05-12
+745658 expfactor=0.296  seeing=2.556
+745659 expfactor=0.348  seeing=2.306
+745762 expfactor=0.268  seeing=2.124
+745768 expfactor=0.268  seeing=1.540
+745769 expfactor=0.154  seeing=1.639
+745770 expfactor=0.072  seeing=1.649
+745771 expfactor=0.012  seeing=1.576
+745772 expfactor=0.010  seeing=2.141
+745776 expfactor=0.185  seeing=1.730
+745779 expfactor=0.271  seeing=1.661
+745780 expfactor=0.198  seeing=1.638
+745781 expfactor=0.286  seeing=2.067
+745782 expfactor=0.285  seeing=2.146
+745788 expfactor=0.207  seeing=1.743
+745794 expfactor=0.311  seeing=2.431
+745795 expfactor=0.245  seeing=1.588
+745796 expfactor=0.015  seeing=1.566
+745797 expfactor=0.014  seeing=1.516
+745798 expfactor=0.041  seeing=2.144
+745799 expfactor=0.169  seeing=1.977
+745800 expfactor=0.040  seeing=1.903
+745801 expfactor=0.027  seeing=1.771
+745802 expfactor=0.009  seeing=2.117
+745803 expfactor=0.006  seeing=2.414
+745804 expfactor=0.014  seeing=1.586
+745805 expfactor=0.182  seeing=1.706
+745806 expfactor=0.110  seeing=1.931
+745808 expfactor=0.118  seeing=2.278
+745809 expfactor=0.014  seeing=1.858
+745810 expfactor=0.017  seeing=1.514
+745811 expfactor=0.078  seeing=1.668
+745812 expfactor=0.169  seeing=1.636
+745813 expfactor=0.113  seeing=1.527
+745814 expfactor=0.126  seeing=1.757
+745815 expfactor=0.115  seeing=1.528
+745816 expfactor=0.005  seeing=1.920
+745817 expfactor=0.031  seeing=1.778
+745818 expfactor=0.059  seeing=1.671
+745819 expfactor=0.015  seeing=1.475
+745820 expfactor=0.118  seeing=1.504
+745821 expfactor=0.137  seeing=1.449
+745822 expfactor=0.008  seeing=1.819
+745823 expfactor=0.153  seeing=1.633
+745824 expfactor=0.071  seeing=1.780
+745825 expfactor=0.010  seeing=1.702
+745826 expfactor=0.034  seeing=1.739
+745827 expfactor=0.033  seeing=1.361
+745828 expfactor=0.087  seeing=1.280
+745829 expfactor=0.004  seeing=1.239
+745830 expfactor=0.042  seeing=1.238
+745831 expfactor=0.065  seeing=1.232
+745832 expfactor=0.019  seeing=1.672
+745833 expfactor=0.006  seeing=1.428
+745834 expfactor=0.013  seeing=1.251
+745835 expfactor=0.012  seeing=1.534
+745836 expfactor=0.000  seeing=1.551
+745837 expfactor=0.001  seeing=1.498
+745838 expfactor=0.078  seeing=1.300
+745839 expfactor=0.041  seeing=1.226
+745840 expfactor=0.135  seeing=1.280
+745841 expfactor=0.054  seeing=1.176
+
+#2018-05-14
+746298 expfactor=0.040  seeing=1.278
+746299 expfactor=0.050  seeing=1.171
+746300 expfactor=0.070  seeing=1.133
+746301 expfactor=0.037  seeing=1.335
+746302 expfactor=0.013  seeing=1.938
+746303 expfactor=0.051  seeing=1.983
+746304 expfactor=0.180  seeing=1.333
+746357 expfactor=0.281  seeing=1.560
+746358 expfactor=0.264  seeing=1.605
+746359 expfactor=0.255  seeing=1.595
+746364 expfactor=0.263  seeing=1.539
+746366 expfactor=0.177  seeing=1.520
+746368 expfactor=0.165  seeing=1.607
+746369 expfactor=0.202  seeing=1.745
+746370 expfactor=0.177  seeing=1.650
+746378 expfactor=0.067  seeing=1.324
+746379 expfactor=0.201  seeing=1.538
+746384 expfactor=0.126  seeing=1.570
+746385 expfactor=0.096  seeing=1.625
+746415 expfactor=0.170  seeing=1.748
+746433 expfactor=0.217  seeing=1.224
+746434 expfactor=0.045  seeing=1.268
+746435 expfactor=0.267  seeing=1.124
+746437 expfactor=0.061  seeing=1.204
+746438 expfactor=0.214  seeing=1.159
+746439 expfactor=0.101  seeing=1.422
+746440 expfactor=0.076  seeing=1.383
+746441 expfactor=0.126  seeing=1.363
+746442 expfactor=0.017  seeing=1.706
+746443 expfactor=0.015  seeing=1.705
+746444 expfactor=0.039  seeing=1.407
+746445 expfactor=0.227  seeing=1.760
+746446 expfactor=0.038  seeing=1.650
+746447 expfactor=0.098  seeing=1.633
+746448 expfactor=0.076  seeing=2.031
+746449 expfactor=0.227  seeing=2.001
+746450 expfactor=0.202  seeing=2.019
+746451 expfactor=0.054  seeing=1.559
+746452 expfactor=0.001  seeing=1.842
+746454 expfactor=0.180  seeing=1.817
+746456 expfactor=0.002  seeing=1.776
+746457 expfactor=0.000  seeing=1.679
+746458 expfactor=0.001  seeing=1.709
+
+#2018-05-16
+747146 expfactor=0.184  seeing=0.951
+747147 expfactor=0.061  seeing=1.116
+747148 expfactor=0.001  seeing=1.325
+747149 expfactor=0.002  seeing=1.493
+747160 expfactor=0.034  seeing=1.225
+747161 expfactor=0.049  seeing=1.318
+747162 expfactor=0.003  seeing=1.358
+747163 expfactor=0.000  seeing=1.436
+
+#2018-05-17
+747273 expfactor=0.004  seeing=1.243
+747274 expfactor=0.005  seeing=1.075
+747275 expfactor=0.013  seeing=0.849
+747276 expfactor=0.038  seeing=0.880
+747278 expfactor=0.023  seeing=0.910
+747279 expfactor=0.042  seeing=1.000
+747280 expfactor=0.008  seeing=1.085
+747281 expfactor=0.011  seeing=1.126
+747282 expfactor=0.144  seeing=1.110
+747286 expfactor=0.121  seeing=1.292
+747287 expfactor=0.209  seeing=1.030
+747290 expfactor=0.020  seeing=0.970
+747291 expfactor=0.057  seeing=0.936
+747292 expfactor=0.180  seeing=1.070
+747293 expfactor=0.214  seeing=1.205
+747469 expfactor=0.380  seeing=2.309
+747488 expfactor=0.282  seeing=1.667
+
+#2018-06-18
+754037 expfactor=0.309  seeing=2.219
+754039 expfactor=0.445  seeing=2.269
+754136 expfactor=0.129  seeing=1.397
+
+#2018-07-24
+758933 expfactor=0.798  seeing=2.267
+758934 expfactor=0.605  seeing=2.311
+758943 expfactor=0.283  seeing=1.791
+
+#2018-07-25
+759135 expfactor=0.062  seeing=1.848
+759136 expfactor=0.017  seeing=1.789
+759137 expfactor=0.009  seeing=1.919
+759138 expfactor=0.070  seeing=1.899
+759139 expfactor=0.084  seeing=1.839
+759140 expfactor=0.172  seeing=1.760
+759141 expfactor=0.233  seeing=1.802
+759142 expfactor=0.297  seeing=1.878
+759144 expfactor=0.164  seeing=1.801
+759145 expfactor=0.213  seeing=1.792
+759146 expfactor=0.141  seeing=1.749
+759147 expfactor=0.226  seeing=1.450
+759148 expfactor=0.096  seeing=1.881
+759149 expfactor=0.186  seeing=1.552
+759150 expfactor=0.148  seeing=1.728
+759151 expfactor=0.266  seeing=1.599
+759152 expfactor=0.116  seeing=1.540
+759153 expfactor=0.073  seeing=1.463
+759154 expfactor=0.091  seeing=1.534
+759155 expfactor=0.101  seeing=1.364
+759156 expfactor=0.254  seeing=1.282
+759157 expfactor=0.097  seeing=1.260
+759158 expfactor=0.161  seeing=1.361
+759159 expfactor=0.079  seeing=1.277
+759160 expfactor=0.047  seeing=1.496
+759161 expfactor=0.124  seeing=1.354
+759163 expfactor=0.204  seeing=1.631
+759164 expfactor=0.058  seeing=1.848
+759166 expfactor=0.173  seeing=1.763
+759176 expfactor=0.150  seeing=1.466
+
+#2018-08-07
+759208 expfactor=0.763  seeing=1.798
+759209 expfactor=0.649  seeing=1.756
+762785 expfactor=0.053  seeing=3.367
+762786 expfactor=0.055  seeing=3.539
+762787 expfactor=0.120  seeing=3.458
+762788 expfactor=0.292  seeing=2.888
+762789 expfactor=0.302  seeing=3.210
+762790 expfactor=0.247  seeing=3.368
+762791 expfactor=0.104  seeing=4.160
+762792 expfactor=0.036  seeing=5.572
+762793 expfactor=0.174  seeing=3.947
+762794 expfactor=0.508  seeing=2.739
+762795 expfactor=0.318  seeing=3.420
+762796 expfactor=0.508  seeing=3.208
+762797 expfactor=0.293  seeing=3.692
+762798 expfactor=0.148  seeing=4.327
+762799 expfactor=0.259  seeing=3.868
+762800 expfactor=0.155  seeing=4.309
+762801 expfactor=0.272  seeing=3.776
+762802 expfactor=0.564  seeing=3.078
+762803 expfactor=0.310  seeing=3.610
+762804 expfactor=0.619  seeing=3.023
+762805 expfactor=0.689  seeing=2.894
+762806 expfactor=0.344  seeing=3.479
+762807 expfactor=0.332  seeing=3.411
+762808 expfactor=0.200  seeing=3.965
+762809 expfactor=0.368  seeing=3.466
+762810 expfactor=0.318  seeing=3.650
+762811 expfactor=0.391  seeing=3.147
+762812 expfactor=0.531  seeing=2.800
+762813 expfactor=0.265  seeing=3.122
+762814 expfactor=0.622  seeing=2.680
+762815 expfactor=1.264  seeing=2.304
+762817 expfactor=1.349  seeing=2.279
+762818 expfactor=0.313  seeing=3.193
+762819 expfactor=0.849  seeing=2.701
+762820 expfactor=0.672  seeing=3.088
+762821 expfactor=0.590  seeing=2.920
+762822 expfactor=0.248  seeing=3.567
+762823 expfactor=0.703  seeing=3.067
+762824 expfactor=0.531  seeing=2.893
+762825 expfactor=1.176  seeing=2.257
+762826 expfactor=0.567  seeing=2.611
+762829 expfactor=0.685  seeing=2.418
+762830 expfactor=0.724  seeing=2.596
+762831 expfactor=0.903  seeing=2.606
+762834 expfactor=0.527  seeing=2.555
+762844 expfactor=0.470  seeing=2.526
+762845 expfactor=0.544  seeing=2.419
+762854 expfactor=0.579  seeing=2.674
+762855 expfactor=0.726  seeing=2.577
+762857 expfactor=0.622  seeing=2.565
+762858 expfactor=0.594  seeing=2.630
+762859 expfactor=0.643  seeing=2.600
+762860 expfactor=0.707  seeing=2.526
+762862 expfactor=1.259  seeing=2.217
+762864 expfactor=1.177  seeing=2.209
+762865 expfactor=0.418  seeing=2.571
+762866 expfactor=1.053  seeing=2.245
+762867 expfactor=0.850  seeing=2.589
+762868 expfactor=0.468  seeing=2.803
+762869 expfactor=0.579  seeing=2.889
+762870 expfactor=0.982  seeing=2.420
+762872 expfactor=1.106  seeing=2.213
+762885 expfactor=0.956  seeing=2.411
+762886 expfactor=0.688  seeing=2.666
+762888 expfactor=0.820  seeing=2.466
+762889 expfactor=0.698  seeing=2.277
+762890 expfactor=0.558  seeing=2.765
+762891 expfactor=0.848  seeing=2.481
+762896 expfactor=1.266  seeing=2.216
+762897 expfactor=0.512  seeing=2.547
+
+#2018-08-08
+763406 expfactor=0.273  seeing=1.416
+763407 expfactor=0.181  seeing=1.409
+
+#2018-08-09
+763665 expfactor=0.561  seeing=2.060
+763703 expfactor=0.062  seeing=1.411
+763705 expfactor=0.082  seeing=1.367
+763706 expfactor=0.015  seeing=1.367
+763709 expfactor=0.073  seeing=1.324
+763744 expfactor=0.183  seeing=1.501
+763745 expfactor=0.251  seeing=1.414
+763839 expfactor=0.066  seeing=1.173
+763840 expfactor=0.070  seeing=1.134
+
+#2018-08-10
+764252 expfactor=0.406  seeing=2.045
+764253 expfactor=0.692  seeing=1.705
+
+#2018-08-11
+764572 expfactor=0.543  seeing=1.838
+
+#2018-08-28
+766497 seeing>2"
+766506 expfactor=0.33 g-band seeing=1.7"
+766567 blank image because of sispi issue
+
+#2018-08-29
+766984 expfactor=0.201  seeing=1.718
+767020 expfactor=0.214  seeing=1.138
+767021 expfactor=0.135  seeing=1.038
+767022 expfactor=0.053  seeing=1.124
+
+#2018-08-30
+767318 expfactor=0.002  seeing=2.516
+767319 expfactor=0.042  seeing=2.281
+767320 expfactor=0.363  seeing=2.822
+767321 expfactor=0.285  seeing=2.851
+767322 expfactor=0.308  seeing=3.068
+767323 expfactor=0.298  seeing=2.846
+767324 expfactor=0.317  seeing=2.856
+767325 expfactor=0.486  seeing=2.732
+767326 expfactor=0.745  seeing=2.704
+767327 expfactor=0.591  seeing=2.563
+767328 expfactor=1.094  seeing=2.315
+767329 expfactor=0.929  seeing=2.417
+767332 expfactor=1.552  seeing=2.276
+767333 expfactor=0.803  seeing=2.483
+767333 expfactor=0.803  seeing=2.483
+767335 expfactor=0.477  seeing=2.524
+767340 expfactor=0.376  seeing=2.468
+767341 expfactor=0.162  seeing=2.706
+767342 expfactor=0.363  seeing=2.926
+767343 expfactor=0.265  seeing=3.115
+767344 expfactor=1.018  seeing=2.783
+767345 expfactor=1.081  seeing=2.689
+767346 expfactor=0.542  seeing=2.305
+767347 expfactor=1.312  seeing=2.245
+767348 expfactor=0.837  seeing=2.605
+767372 expfactor=0.274  seeing=1.977
+767374 expfactor=0.016  seeing=2.295
+767374 expfactor=0.016  seeing=2.295
+767375 expfactor=0.047  seeing=2.231
+767375 expfactor=0.047  seeing=2.231
+767376 expfactor=0.004  seeing=1.874
+767377 expfactor=0.002  seeing=1.730
+767378 expfactor=0.012  seeing=1.764
+767379 expfactor=0.001  seeing=2.023
+
+#2018-08-31
+767527 expfactor=0.00,seeing=3.92 DECaLS_39579_
+767528 expfactor=0.17,seeing=2.63 DECaLS_39579_
+767529 expfactor=0.25,seeing=2.44 DECaLS_40101_
+767530 expfactor=0.00,seeing=3.29 DECaLS_45700_
+767531 expfactor=0.00,seeing=3.50 DECaLS_45677_
+767532 expfactor=0.01,seeing=2.80 DECaLS_45595_
+767533 expfactor=0.14,seeing=2.60 DECaLS_44364_
+767534 seeing=2.62 DECaLS_45577_
+767535 seeing=2.38 DECaLS_39665_
+767536 seeing=2.55 DECaLS_40166_
+767537 seeing=2.13 DECaLS_40180_
+767538 seeing=2.58 DECaLS_39478_
+767539 seeing=2.35 DECaLS_39494_
+767540 seeing=2.10 DECaLS_39588_
+767541 seeing=2.09 DECaLS_39615_
+767542 seeing=2.35 DECaLS_44383_
+767543 seeing=2.30 DECaLS_39590_
+767544 seeing=2.25 DECaLS_39513_
+767545 expfactor=0.04,seeing=2.66 DECaLS_40179_
+767546 expfactor=0.25,seeing=2.75 DECaLS_40098_
+767547 expfactor=0.12,seeing=2.76 DECaLS_39469_
+767548 expfactor=0.002  seeing=0.726
+767550 seeing=2.07 DECaLS_39581_
+767554 seeing=2.08 DECaLS_39668_
+767555 seeing=2.44 DECaLS_39637_
+767556 seeing=2.90 DECaLS_39476_
+767557 seeing=2.51 DECaLS_39498_
+767558 seeing=2.38 DECaLS_39460_
+767559 seeing=2.36 DECaLS_39466_
+767560 seeing=2.32 DECaLS_40142_
+767596 seeing=2.02 DECaLS_39449_
+767597 seeing=2.03 DECaLS_39444_
+767598 seeing=2.21 DECaLS_39450_
+767599 seeing=2.13 DECaLS_39452_
+767682 expfactor=0.300  seeing=1.906
+
+#2018-09-01
+767834 dome occlusion warning
+767835 dome occlusion warning
+767901 dome occlusion warning
+767824 expfactor=0.730  seeing=1.883
+767825 expfactor=0.692  seeing=2.000
+767826 expfactor=0.756  seeing=2.269
+767830 expfactor=0.424  seeing=2.775
+767884 expfactor=0.582  seeing=2.244
+767913 expfactor=0.476  seeing=1.941
+767926 expfactor=0.957  seeing=1.747
+
+#2018-09-02
+768262 expfactor=0.758  seeing=1.859
+768289 expfactor=0.560  seeing=1.851
+768291 expfactor=0.679  seeing=1.836
+768292 expfactor=0.641  seeing=1.788
+768500 expfactor=0.206  seeing=2.242
+768501 expfactor=0.188  seeing=1.525
+
+#2018-09-03
+
+#2018-09-04
+768964 expfactor=0.228  seeing=1.580
+769282 morning twi
+769283 morning twi
+769284 expfactor=0.201  seeing=0.970
+
+#2018-09-05
+769759 expfactor=0.436  seeing=1.292  morning twi
+769760 expfactor=0.274  seeing=1.532  morning twi
+
+#2018-09-06
+769893 evening twi
+768964 expfactor=0.228  seeing=1.580
+769284 expfactor=0.201  seeing=0.970
+769981 image shake due to earthquake
+770222 expfactor=0.421  seeing=0.834  morning twi
+
+#2018-09-09
+771377  expfactor=0.35 
+
+# 2018-09-10
+771779   twilight low expfactor observation
+771780   twilight low expfactor observation
+
+# 2018-09-11
+772201 expfactor=0.156  seeing=1.959
+772205 expfactor=0.700  seeing=2.078
+772206 expfactor=0.597  seeing=2.402
+772207 expfactor=0.588  seeing=2.546
+772209 expfactor=0.883  seeing=2.232
+772244 expfactor=0.362  seeing=2.410
+772246 expfactor=0.325  seeing=2.219
+772248 expfactor=0.298  seeing=2.880
+772249 expfactor=0.260  seeing=3.322
+772250 expfactor=0.239  seeing=3.051
+772251 expfactor=0.541  seeing=2.902
+772252 expfactor=0.216  seeing=3.646
+772253 expfactor=0.594  seeing=2.686
+772331 expfactor=0.037  seeing=1.175
+
+# 2018-09-12
+772860 expfactor=0.032  seeing=1.318
+772861 expfactor=0.076  seeing=1.150
+772862 expfactor=0.115  seeing=1.212
+772863 expfactor=0.041  seeing=1.291
+772865 expfactor=0.271  seeing=1.067
+772866 expfactor=0.004  seeing=1.174
+772867 expfactor=0.000  seeing=1.251
+772868 expfactor=0.006  seeing=1.223
+772869 expfactor=0.001  seeing=1.431
+
+# 2018-09-14
+773602 expfactor=0.225  seeing=1.959
+773603 expfactor=0.234  seeing=2.095
+773604 expfactor=0.238  seeing=2.160
+773608 expfactor=0.990  seeing=2.219
+773609 expfactor=0.795  seeing=2.183
+773647 expfactor=0.590  seeing=2.117
+
+# 2018-09-15
+774186 expfactor=0.811  seeing=1.716
+774194 expfactor=0.850  seeing=1.705
+774238 expfactor=0.931  seeing=1.804
+
+# 2018-09-16
+774556 junk with controller restart
+
+# 2018-09-17
+774982 expfactor=0.014  seeing=1.055
+774983 expfactor=0.002  seeing=1.100
+774984 expfactor=0.003  seeing=1.149
+774985 expfactor=0.252  seeing=3.375
+774986 expfactor=0.001  seeing=1.313
+774987 expfactor=0.091  seeing=0.997
+774988 expfactor=0.061  seeing=1.042
+774989 bright sky
+775033 expfactor=0.237  seeing=1.738
+775034 expfactor=0.263  seeing=1.471
+775078 expfactor=0.824  seeing=2.269
+775079 expfactor=0.693  seeing=2.292
+
+# 2018-09-18
+775369 expfactor=0.001  seeing=1.844
+775370 expfactor=0.003  seeing=1.727
+775371 expfactor=0.000  seeing=1.737
+775372 expfactor=0.000  seeing=1.549
+775373 expfactor=0.000  seeing=1.803
+775374 expfactor=0.001  seeing=1.777
+775375 expfactor=0.001  seeing=1.546
+775376 expfactor=0.001  seeing=1.510
+775377 expfactor=0.000  seeing=2.187
+#775378 zero
+#775379 zero
+775380 expfactor=0.000  seeing=1.939
+775381 expfactor=0.004  seeing=1.662
+775382 expfactor=0.006  seeing=1.557
+775383 expfactor=0.007  seeing=1.595
+#775384 zero
+#775385 pointing
+#775386 post-vsub-on-flush
+#775387 post-vsub-on-flush
+#775388 pointing
+#775389 post-vsub-on-flush
+#775390 post-vsub-on-flush
+#775391 pointing
+#775392 post-vsub-on-flush
+#775393 post-vsub-on-flush
+#775394 pointing
+775395 expfactor=0.002  seeing=1.565
+775396 expfactor=0.014  seeing=1.448
+775397 expfactor=0.001  seeing=1.492
+775398 expfactor=0.001  seeing=1.382
+775399 expfactor=0.010  seeing=1.458
+775400 expfactor=0.011  seeing=1.674
+775401 expfactor=0.020  seeing=1.932
+775402 expfactor=0.027  seeing=1.831
+775403 expfactor=0.315  seeing=2.350
+775404 expfactor=0.205  seeing=2.630
+775405 expfactor=0.624  seeing=2.078
+775407 expfactor=0.574  seeing=2.253
+775423 expfactor=0.197  seeing=1.484
+775429 expfactor=0.084  seeing=1.762
+775430 expfactor=0.052  seeing=1.660
+775431 expfactor=0.236  seeing=1.464
+775433 expfactor=0.167  seeing=1.758
+775434 expfactor=0.019  seeing=1.783
+775435 expfactor=0.073  seeing=1.682
+775436 expfactor=0.298  seeing=1.562
+775437 expfactor=0.097  seeing=1.392
+
+# 2018-09-19
+775739 expfactor=0.012  seeing=1.187
+775740 expfactor=0.006  seeing=1.200
+775741 expfactor=0.005  seeing=1.255
+775742 expfactor=0.006  seeing=1.206
+775743 expfactor=0.030  seeing=1.449
+775744 expfactor=0.058  seeing=1.208
+775745 expfactor=0.042  seeing=1.232
+775746 expfactor=0.035  seeing=1.246
+775747 expfactor=0.002  seeing=1.430
+775748 expfactor=0.003  seeing=1.348
+775749 expfactor=0.008  seeing=1.396
+775750 expfactor=0.000  seeing=2.655
+
+# 2018-09-20
+775943 expfactor=0.238  seeing=1.199
+
+# 2018-09-21
+776269 expfactor=0.099  seeing=1.130
+776270 expfactor=0.137  seeing=1.068
+776271 expfactor=0.165  seeing=1.316
+776272 expfactor=0.150  seeing=1.404
+776325 expfactor=0.535  seeing=2.322
+776326 expfactor=0.483  seeing=2.338
+776328 expfactor=0.492  seeing=2.425
+
+# 2018-10-03
+780382 expfactor=0.125  seeing=1.002
+780393 expfactor=0.245  seeing=1.035
+780394 expfactor=0.169  seeing=1.161
+780395 expfactor=0.073  seeing=1.220
+780396 expfactor=0.029  seeing=1.237
+780397 expfactor=0.017  seeing=1.118
+780398 expfactor=0.011  seeing=1.180
+780399 expfactor=0.013  seeing=1.355
+780400 expfactor=0.014  seeing=1.358
+780401 expfactor=0.281  seeing=1.099
+780402 expfactor=0.207  seeing=1.217
+780403 expfactor=0.176  seeing=1.303
+780404 expfactor=0.079  seeing=1.449
+780405 expfactor=0.156  seeing=1.297
+780406 expfactor=0.111  seeing=1.175
+780407 expfactor=0.065  seeing=1.415
+780408 expfactor=0.037  seeing=1.460
+780409 expfactor=0.033  seeing=1.399
+780410 expfactor=0.026  seeing=1.365
+780411 expfactor=0.012  seeing=1.478
+780412 expfactor=0.008  seeing=1.339
+780413 expfactor=0.007  seeing=1.489
+780414 expfactor=0.004  seeing=1.683
+780415 expfactor=0.002  seeing=1.361
+780416 expfactor=0.003  seeing=1.513
+780417 expfactor=0.002  seeing=1.275
+780418 expfactor=0.002  seeing=1.296
+780419 expfactor=0.002  seeing=1.536
+780420 expfactor=0.000  seeing=1.501
+780421 expfactor=0.001  seeing=1.468
+780422 expfactor=0.001  seeing=1.396
+780423 expfactor=0.000  seeing=1.326
+780424 expfactor=0.000  seeing=1.323
+780425 expfactor=0.000  seeing=1.360
+780426 expfactor=0.000  seeing=1.203
+780427 expfactor=0.000  seeing=1.332
+780428 expfactor=0.001  seeing=1.495
+780429 expfactor=0.004  seeing=1.341
+780430 expfactor=0.029  seeing=1.070
+780431 expfactor=0.028  seeing=1.131
+780432 expfactor=0.034  seeing=1.288
+780433 expfactor=0.046  seeing=1.138
+780434 expfactor=0.080  seeing=1.128
+780435 expfactor=0.070  seeing=1.370
+780436 expfactor=0.082  seeing=1.317
+780437 expfactor=0.193  seeing=1.225
+780438 expfactor=0.171  seeing=1.283
+780439 expfactor=0.178  seeing=1.215
+780440 expfactor=0.255  seeing=1.135
+780441 expfactor=0.199  seeing=1.157
+780442 expfactor=0.287  seeing=1.241
+780445 expfactor=0.268  seeing=1.102
+780446 expfactor=0.096  seeing=1.264
+780447 expfactor=0.030  seeing=1.073
+780448 expfactor=0.069  seeing=0.915
+780449 expfactor=0.099  seeing=0.918
+780450 expfactor=0.249  seeing=0.925
+780451 expfactor=0.277  seeing=1.013
+780452 expfactor=0.061  seeing=1.182
+780453 expfactor=0.095  seeing=1.149
+780454 expfactor=0.189  seeing=1.124
+780455 expfactor=0.042  seeing=1.317
+780456 expfactor=0.086  seeing=1.224
+780457 expfactor=0.161  seeing=1.117
+780458 expfactor=0.189  seeing=1.152
+780459 expfactor=0.039  seeing=1.211
+780460 expfactor=0.039  seeing=1.065
+780461 expfactor=0.074  seeing=1.241
+780462 expfactor=0.106  seeing=1.163
+780463 expfactor=0.055  seeing=1.371
+780464 expfactor=0.027  seeing=1.347
+780465 expfactor=0.011  seeing=1.236
+780466 expfactor=0.006  seeing=1.082
+780467 expfactor=0.006  seeing=0.980
+780468 expfactor=0.004  seeing=1.078
+780469 expfactor=0.002  seeing=1.051
+780470 expfactor=0.001  seeing=0.913
+780471 expfactor=0.002  seeing=0.998
+780472 expfactor=0.012  seeing=1.002
+780473 expfactor=0.007  seeing=1.080
+780474 expfactor=0.011  seeing=0.971
+780475 expfactor=0.009  seeing=1.116
+780476 expfactor=0.020  seeing=0.965
+780477 expfactor=0.037  seeing=0.959
+780478 expfactor=0.053  seeing=1.066
+780479 expfactor=0.083  seeing=0.986
+780480 expfactor=0.042  seeing=1.050
+780481 expfactor=0.072  seeing=0.967
+780482 expfactor=0.107  seeing=0.931
+780483 expfactor=0.135  seeing=0.935
+780484 expfactor=0.047  seeing=1.099
+780485 expfactor=0.064  seeing=1.059
+780486 expfactor=0.041  seeing=1.027
+780487 expfactor=0.025  seeing=1.171
+780488 expfactor=0.025  seeing=0.980
+780489 expfactor=0.011  seeing=1.094
+780490 expfactor=0.011  seeing=1.135
+780491 expfactor=0.008  seeing=0.999
+780492 expfactor=0.006  seeing=1.124
+780493 expfactor=0.006  seeing=1.037
+780494 expfactor=0.003  seeing=1.066
+780495 expfactor=0.001  seeing=1.027
+780496 expfactor=0.000  seeing=1.125
+780497 expfactor=0.000  seeing=1.119
+780498 expfactor=0.001  seeing=1.236
+780499 expfactor=0.001  seeing=1.201
+780500 expfactor=0.001  seeing=1.174
+780501 expfactor=0.002  seeing=1.223
+780502 expfactor=0.002  seeing=1.024
+780503 expfactor=0.002  seeing=1.049
+780504 expfactor=0.006  seeing=1.201
+780505 expfactor=0.008  seeing=1.046
+780506 expfactor=0.005  seeing=0.975
+780507 expfactor=0.005  seeing=0.998
+780508 expfactor=0.003  seeing=0.937
+780509 expfactor=0.001  seeing=0.885
+780510 expfactor=0.006  seeing=0.871
+780511 expfactor=0.013  seeing=0.868
+780512 expfactor=0.006  seeing=0.977
+780513 expfactor=0.013  seeing=1.007
+780514 expfactor=0.067  seeing=0.931
+780515 expfactor=0.037  seeing=0.998
+780516 expfactor=0.012  seeing=1.015
+780517 expfactor=0.012  seeing=0.928
+780518 expfactor=0.045  seeing=0.877
+780519 expfactor=0.051  seeing=0.901
+780520 expfactor=0.005  seeing=0.928
+780521 expfactor=0.007  seeing=0.858
+780522 expfactor=0.015  seeing=0.871
+
+# 2018-10-04
+780600 expfactor=0.001  seeing=1.442
+780601 expfactor=0.002  seeing=1.257
+780602 expfactor=0.002  seeing=1.514
+780603 expfactor=0.003  seeing=1.667
+780604 expfactor=0.058  seeing=1.450
+780605 expfactor=0.212  seeing=1.486
+780609 expfactor=0.122  seeing=1.185
+780610 expfactor=0.268  seeing=1.096
+780613 expfactor=0.203  seeing=1.258
+780617 expfactor=0.202  seeing=1.354
+780618 expfactor=0.254  seeing=1.516
+780619 expfactor=0.106  seeing=1.497
+780620 expfactor=0.086  seeing=1.591
+780626 expfactor=0.152  seeing=1.652
+780627 expfactor=0.041  seeing=2.006
+780628 expfactor=0.157  seeing=2.752
+
+# 2018-10-05
+781040 expfactor=0.401  seeing=2.348
+781041 expfactor=0.470  seeing=2.396
+781042 expfactor=0.278  seeing=2.835
+781043 expfactor=0.607  seeing=2.556
+781044 expfactor=0.255  seeing=3.269
+781045 expfactor=0.264  seeing=2.972
+781062 expfactor=0.397  seeing=2.502
+
+# 2018-10-07
+781671 expfactor=0.000  seeing=2.027
+781672 expfactor=0.002  seeing=1.726
+781673 expfactor=0.002  seeing=1.682
+781674 expfactor=0.000  seeing=1.538
+781675 expfactor=0.001  seeing=1.531
+781676 expfactor=0.001  seeing=1.703
+781677 expfactor=0.003  seeing=1.499
+781678 expfactor=0.242  seeing=1.168
+781679 expfactor=0.117  seeing=1.579
+781680 expfactor=0.042  seeing=1.840
+781681 expfactor=0.180  seeing=2.072
+781682 expfactor=0.372  seeing=2.029  nominally at depth
+781683 expfactor=0.289  seeing=1.870
+781684 expfactor=0.318  seeing=1.841  nominally at depth
+781685 expfactor=0.043  seeing=1.670
+781686 expfactor=0.004  seeing=1.710
+781687 expfactor=0.002  seeing=1.995
+781688 expfactor=0.002  seeing=2.279
+781689 expfactor=0.007  seeing=1.978
+781690 expfactor=0.000  seeing=1.737
+781691 expfactor=0.000  seeing=1.967
+781692 expfactor=0.001  seeing=2.076
+781693 expfactor=0.001  seeing=2.058
+781694 expfactor=0.000  seeing=2.001
+781695 expfactor=0.000  seeing=1.878
+781696 expfactor=0.118  seeing=0.744
+
+# 2018-10-11
+782774 expfactor=0.281  seeing=1.942
+782775 expfactor=0.259  seeing=1.995
+782776 expfactor=0.261  seeing=2.174
+782784 expfactor=0.292  seeing=1.999
+782793 expfactor=0.314  seeing=2.842
+782848 expfactor=0.702  seeing=2.241
+782849 expfactor=0.699  seeing=2.215
+782850 expfactor=0.457  seeing=2.421
+782853 expfactor=0.363  seeing=2.706
+782854 expfactor=0.373  seeing=2.618
+782855 expfactor=0.442  seeing=2.427
+782857 expfactor=0.301  seeing=2.513
+782858 expfactor=0.431  seeing=2.400
+782859 expfactor=0.727  seeing=2.417
+782860 expfactor=0.722  seeing=2.268
+782861 expfactor=0.373  seeing=2.440
+
+# 2018-10-12
+782997 expfactor=0.147  seeing=2.026
+782998 expfactor=0.016  seeing=4.574
+782999 expfactor=0.162  seeing=2.476
+783000 expfactor=0.274  seeing=1.958
+783001 expfactor=0.420  seeing=2.493
+783002 expfactor=0.329  seeing=2.748
+783003 expfactor=0.442  seeing=2.447
+783017 expfactor=0.646  seeing=2.014
+783018 expfactor=0.277  seeing=2.712
+783019 expfactor=0.555  seeing=2.501
+783167 expfactor=0.382  seeing=2.679
+
+# 2018-10-13
+783309 expfactor=0.577  seeing=3.052
+783310 expfactor=0.440  seeing=3.414
+783311 expfactor=0.385  seeing=3.507
+783312 expfactor=0.197  seeing=4.027
+783313 expfactor=0.231  seeing=3.677
+783314 expfactor=0.363  seeing=3.276
+783315 expfactor=0.277  seeing=3.572
+783316 expfactor=0.238  seeing=3.872
+783317 expfactor=0.259  seeing=3.313
+783318 expfactor=0.122  seeing=3.321
+783319 expfactor=0.235  seeing=2.663
+783320 expfactor=0.031  seeing=3.294
+783321 expfactor=0.157  seeing=3.221
+783322 expfactor=0.042  seeing=2.763
+783323 expfactor=0.082  seeing=3.018
+783324 expfactor=0.423  seeing=2.970
+783325 expfactor=0.166  seeing=3.193
+783326 expfactor=0.239  seeing=3.098
+783327 expfactor=0.041  seeing=3.200
+783331 expfactor=0.064  seeing=3.683
+783332 expfactor=0.228  seeing=3.340
+783333 expfactor=0.130  seeing=2.865
+783334 expfactor=0.134  seeing=2.921
+783335 expfactor=0.111  seeing=2.858
+783336 expfactor=0.050  seeing=3.026
+783337 expfactor=0.225  seeing=2.725
+783338 expfactor=0.292  seeing=2.803
+783339 expfactor=0.806  seeing=2.469
+783340 expfactor=0.247  seeing=3.288
+783341 expfactor=0.187  seeing=3.227
+783342 expfactor=0.181  seeing=3.222
+783343 expfactor=0.452  seeing=3.042
+783344 expfactor=0.189  seeing=3.196
+783345 expfactor=0.485  seeing=2.877
+783346 expfactor=0.881  seeing=2.505
+783347 expfactor=0.328  seeing=2.556
+783349 expfactor=0.816  seeing=2.425
+783350 expfactor=0.657  seeing=2.763
+783351 expfactor=1.241  seeing=2.686
+783352 expfactor=0.555  seeing=2.816
+783353 expfactor=0.650  seeing=2.777
+783354 expfactor=0.630  seeing=2.842
+783355 expfactor=0.974  seeing=2.750
+783356 expfactor=0.591  seeing=2.845
+783357 expfactor=0.793  seeing=2.776
+783358 expfactor=0.311  seeing=3.218
+783359 expfactor=0.333  seeing=3.530
+783360 expfactor=0.449  seeing=3.203
+783361 expfactor=0.259  seeing=3.525
+783362 expfactor=0.420  seeing=3.274
+783363 expfactor=0.365  seeing=3.242
+783364 expfactor=0.632  seeing=3.294
+783365 expfactor=0.614  seeing=3.054
+783366 expfactor=0.206  seeing=4.015
+783367 expfactor=0.433  seeing=3.498
+783368 expfactor=0.505  seeing=3.659
+783369 expfactor=0.147  seeing=4.275
+783370 expfactor=0.188  seeing=4.194
+783371 expfactor=0.452  seeing=3.772
+783372 expfactor=0.402  seeing=3.609
+783373 expfactor=0.672  seeing=3.462
+783374 expfactor=0.130  seeing=3.685
+783375 expfactor=0.033  seeing=5.148
+783376 expfactor=0.044  seeing=4.529
+783377 expfactor=0.010  seeing=5.050
+783378 expfactor=0.066  seeing=4.742
+783379 expfactor=0.045  seeing=5.151
+783380 expfactor=0.266  seeing=3.726
+783381 expfactor=0.081  seeing=4.581
+783382 expfactor=0.093  seeing=4.315
+783383 expfactor=0.050  seeing=4.902
+783384 expfactor=0.038  seeing=5.358
+783385 expfactor=0.078  seeing=4.796
+783386 expfactor=0.043  seeing=5.079
+783387 expfactor=0.004  seeing=7.628
+783388 expfactor=0.003  seeing=7.679
+783389 expfactor=0.074  seeing=5.062
+783390 expfactor=0.227  seeing=3.966
+
+# 2018-10-14
+783524 expfactor=0.410  seeing=2.223
+783545 expfactor=0.737  seeing=2.080
+783594 expfactor=0.193  seeing=1.520
+
+# 2018-10-15
+783674 expfactor=0.454  seeing=2.463
+783676 expfactor=0.422  seeing=2.479
+783889 expfactor=0.572  seeing=2.295
+783919 expfactor=0.242  seeing=1.702
+
+# 2018-10-16
+784239 expfactor=0.634  seeing=2.246
+
+# 2018-10-30
+789407 expfactor=0.225  seeing=2.210
+789423 expfactor=0.003  seeing=1.932
+789424 expfactor=0.005  seeing=1.832
+789425 expfactor=0.026  seeing=1.496
+789426 expfactor=0.077  seeing=1.561
+789427 expfactor=0.014  seeing=1.621
+
+# 2018-10-31
+789565 expfactor=0.233  seeing=1.785
+789566 expfactor=0.270  seeing=1.638
+789567 expfactor=0.174  seeing=2.355
+789568 expfactor=0.300  seeing=1.996
+789670 expfactor=0.167  seeing=1.333
+
+# 2018-11-01
+790050 expfactor=0.013  seeing=0.825
+790051 expfactor=0.003  seeing=0.904
+
+# 2018-11-02
+790213 expfactor=0.749  seeing=1.848
+790215 expfactor=0.757  seeing=1.849
+790217 expfactor=0.649  seeing=1.953
+790218 expfactor=0.837  seeing=1.886
+790219 expfactor=0.751  seeing=2.051
+790286 expfactor=0.215  seeing=1.385
+790289 expfactor=0.251  seeing=1.549
+
+# 2018-11-03
+790513 expfactor=0.596  seeing=1.872
+790518 expfactor=0.635  seeing=2.055
+790519 expfactor=0.793  seeing=1.912
+790520 expfactor=0.790  seeing=1.792
+790560 expfactor=0.940  seeing=1.709
+
+# 2018-11-04
+790913 expfactor=0.270  seeing=1.182
+790928 expfactor=0.242  seeing=1.106
+790944 expfactor=0.290  seeing=1.260
+
+# 2018-11-09
+792755 expfactor=0.505  seeing=1.984
+792760 expfactor=0.356  seeing=2.290
+792762 expfactor=0.556  seeing=2.094
+#792768 expfactor=0.813  seeing=1.813
+#792795 expfactor=0.636  seeing=1.797
+792799 expfactor=0.174  seeing=1.598
+792803 expfactor=0.434  seeing=1.917
+#792819 expfactor=1.132  seeing=1.852
+792821 expfactor=0.541  seeing=2.656
+792825 expfactor=0.759  seeing=2.422
+792831 expfactor=0.290  seeing=2.795
+792833 expfactor=0.222  seeing=2.334
+792836 expfactor=0.294  seeing=2.355
+792843 expfactor=0.504  seeing=2.468
+792844 expfactor=0.258  seeing=2.268
+792862 expfactor=0.335  seeing=2.594
+792874 expfactor=0.943  seeing=2.218
+
+# 2018-11-10
+#793050 expfactor=0.485  seeing=2.124  Last chance g pass1
+#793051 expfactor=0.424  seeing=2.037  Last chance g pass1
+793052 expfactor=0.192  seeing=2.117
+793053 expfactor=0.221  seeing=1.810
+#793057 expfactor=0.497  seeing=1.864  Last chance g pass1
+#793061 expfactor=0.754  seeing=2.005  Last chance g pass1
+#793062 expfactor=1.472  seeing=1.793  Last chance r pass1
+#793063 expfactor=1.271  seeing=1.924  Last chance r pass1
+#793064 expfactor=0.621  seeing=2.175  Last chance g pass1
+#793089 expfactor=0.468  seeing=1.824  Last chance g pass1
+793091 expfactor=0.093  seeing=1.659 clouds
+793092 expfactor=0.170  seeing=1.332 clouds
+793093 expfactor=0.077  seeing=1.383 clouds
+793095 expfactor=0.183  seeing=1.430 clouds
+793096 expfactor=0.241  seeing=1.580 clouds
+793109 expfactor=0.127  seeing=1.428 clouds
+793111 expfactor=0.266  seeing=1.402 clouds
+793116 expfactor=0.216  seeing=1.431 clouds
+793117 expfactor=0.297  seeing=1.685 clouds
+793118 expfactor=0.288  seeing=1.490 clouds
+793123 expfactor=0.027  seeing=3.644 clouds mirror temperature rising sharply
+793124 expfactor=0.107  seeing=2.480 clouds
+793125 expfactor=0.072  seeing=2.521 clouds
+793126 expfactor=0.111  seeing=2.224 clouds
+793127 expfactor=0.162  seeing=2.143 clouds
+793128 expfactor=0.091  seeing=1.896 clouds
+793129 expfactor=0.067  seeing=1.856 clouds
+793130 expfactor=0.154  seeing=1.577 clouds
+793148 expfactor=0.273  seeing=1.621 clouds
+793149 expfactor=0.132  seeing=1.751 clouds
+793150 expfactor=0.295  seeing=1.856 clouds
+793156 expfactor=0.296  seeing=2.174 clouds
+793157 expfactor=0.159  seeing=2.240 clouds
+793159 expfactor=0.165  seeing=2.157 clouds
+793160 expfactor=0.144  seeing=2.044 clouds
+
+# 2018-11-11
+793295 expfactor=0.216  seeing=1.561  filter=z  pass=1
+#793298 expfactor=0.393  seeing=1.745  filter=z  pass=1
+#793299 expfactor=0.363  seeing=1.777  filter=z  pass=1
+#793305 expfactor=0.668  seeing=1.852  filter=z  pass=1
+793306 expfactor=0.458  seeing=2.213  filter=z  pass=1
+793307 expfactor=0.469  seeing=2.176  filter=z  pass=1
+793308 expfactor=0.566  seeing=2.432  filter=z  pass=1
+793309 expfactor=1.078  seeing=2.041  filter=z  pass=2
+#793310 expfactor=1.700  seeing=1.804  filter=z  pass=1
+#793319 expfactor=0.629  seeing=1.849  filter=z  pass=1
+#793329 expfactor=0.630  seeing=1.726  filter=z  pass=1
+793332 expfactor=0.456  seeing=2.057  filter=z  pass=1
+#793334 expfactor=1.046  seeing=1.757  filter=z  pass=1
+#793336 expfactor=1.057  seeing=1.957  filter=z  pass=1
+793337 expfactor=0.799  seeing=2.142  filter=z  pass=1
+793338 expfactor=0.557  seeing=2.344  filter=z  pass=2
+793339 expfactor=0.457  seeing=2.491  filter=z  pass=2
+793340 expfactor=0.506  seeing=2.534  filter=z  pass=1
+793341 expfactor=0.331  seeing=2.959  filter=z  pass=1
+793342 expfactor=0.457  seeing=2.585  filter=z  pass=3
+793343 expfactor=0.560  seeing=2.425  filter=z  pass=1
+#793344 expfactor=0.910  seeing=1.856  filter=z  pass=1
+793345 expfactor=0.742  seeing=2.077  filter=z  pass=2
+793351 expfactor=0.182  seeing=2.026  filter=g  pass=2
+793355 expfactor=0.244  seeing=1.948  filter=g  pass=1
+793356 expfactor=0.137  seeing=1.850  filter=g  pass=3
+793357 expfactor=0.220  seeing=1.771  filter=g  pass=2
+793362 expfactor=0.356  seeing=2.118  filter=g  pass=1
+793363 expfactor=0.240  seeing=1.982  filter=g  pass=2
+793364 expfactor=0.635  seeing=2.305  filter=r  pass=3
+793366 expfactor=0.313  seeing=2.750  filter=g  pass=3
+793367 expfactor=0.143  seeing=2.648  filter=g  pass=1
+793368 expfactor=0.136  seeing=2.938  filter=g  pass=3
+793369 expfactor=0.703  seeing=2.101  filter=z  pass=2
+793371 expfactor=0.103  seeing=1.981  filter=g  pass=2
+#793372 expfactor=0.716  seeing=1.866  filter=z  pass=1
+793373 expfactor=0.026  seeing=2.151  filter=r  pass=1
+793374 expfactor=0.037  seeing=2.443  filter=g  pass=3
+793375 expfactor=0.034  seeing=2.390  filter=g  pass=3
+793376 expfactor=0.001  seeing=2.209  filter=g  pass=3
+793379 expfactor=0.131  seeing=2.162  filter=g  pass=3
+793383 expfactor=0.071  seeing=2.563  filter=g  pass=3
+793386 expfactor=0.797  seeing=2.530  filter=r  pass=3
+793387 expfactor=0.392  seeing=2.752  filter=g  pass=3
+793389 expfactor=0.661  seeing=2.706  filter=r  pass=3
+793390 expfactor=0.321  seeing=2.987  filter=g  pass=3
+793391 expfactor=0.242  seeing=3.209  filter=g  pass=3
+
+# 2018-11-12
+793525 expfactor=0.241  seeing=3.174  filter=r  pass=3
+793526 expfactor=0.443  seeing=2.499  filter=r  pass=3
+793527 expfactor=0.314  seeing=2.565  filter=g  pass=3
+793528 expfactor=0.197  seeing=2.103  filter=g  pass=3
+793529 expfactor=0.277  seeing=2.024  filter=g  pass=3
+793577 expfactor=0.678  seeing=2.237  filter=r  pass=3
+793579 expfactor=0.761  seeing=2.410  filter=g  pass=3
+793585 expfactor=0.598  seeing=2.458  filter=g  pass=3
+793586 expfactor=0.602  seeing=2.434  filter=g  pass=3
+793587 expfactor=0.904  seeing=2.360  filter=r  pass=3
+793588 expfactor=0.807  seeing=2.391  filter=r  pass=3
+793591 expfactor=1.054  seeing=2.276  filter=r  pass=3
+793592 expfactor=0.759  seeing=2.659  filter=r  pass=3
+793593 expfactor=0.559  seeing=2.889  filter=r  pass=3
+793598 expfactor=0.338  seeing=2.579  filter=g  pass=3
+793601 expfactor=0.990  seeing=2.242  filter=z  pass=3
+
+# 2018-11-13
+793734 expfactor=0.011  seeing=5.198  filter=z  pass=2
+793735 expfactor=0.132  seeing=2.948  filter=z  pass=2
+793736 expfactor=0.044  seeing=3.729  filter=z  pass=2
+793737 expfactor=0.336  seeing=2.778  filter=z  pass=1
+793738 expfactor=0.981  seeing=2.040  filter=z  pass=2
+793739 expfactor=0.250  seeing=3.250  filter=z  pass=3
+793740 expfactor=0.481  seeing=2.408  filter=z  pass=3
+793741 expfactor=0.374  seeing=2.579  filter=z  pass=3
+793742 expfactor=0.345  seeing=2.615  filter=z  pass=3
+793743 expfactor=0.732  seeing=2.471  filter=z  pass=3
+793744 expfactor=0.761  seeing=2.489  filter=z  pass=3
+793745 expfactor=0.899  seeing=2.367  filter=z  pass=3
+793746 expfactor=1.173  seeing=2.468  filter=z  pass=3
+793747 expfactor=1.021  seeing=2.555  filter=z  pass=3
+793748 expfactor=1.457  seeing=2.343  filter=z  pass=3
+793749 expfactor=0.929  seeing=2.427  filter=z  pass=3
+793750 expfactor=1.048  seeing=2.448  filter=z  pass=3
+793751 expfactor=0.373  seeing=3.233  filter=z  pass=3
+793752 expfactor=0.771  seeing=2.556  filter=z  pass=3
+793753 expfactor=0.581  seeing=2.961  filter=z  pass=3
+793754 expfactor=0.187  seeing=3.896  filter=z  pass=3
+793755 expfactor=0.394  seeing=3.262  filter=z  pass=3
+793756 expfactor=0.866  seeing=2.754  filter=z  pass=3
+793757 expfactor=0.578  seeing=2.977  filter=z  pass=3
+793758 expfactor=0.644  seeing=2.824  filter=z  pass=3
+793759 expfactor=0.865  seeing=2.585  filter=z  pass=3
+793760 expfactor=1.124  seeing=2.419  filter=z  pass=3
+793761 expfactor=0.633  seeing=2.777  filter=z  pass=3
+793762 expfactor=0.307  seeing=3.683  filter=z  pass=3
+793763 expfactor=0.130  seeing=4.647  filter=z  pass=3
+793764 expfactor=0.435  seeing=3.551  filter=z  pass=3
+793765 expfactor=0.803  seeing=2.845  filter=z  pass=3
+793766 expfactor=0.589  seeing=3.151  filter=z  pass=3
+793767 expfactor=0.599  seeing=2.831  filter=z  pass=3
+793768 expfactor=0.768  seeing=2.377  filter=z  pass=3
+793769 expfactor=0.840  seeing=2.619  filter=z  pass=3
+793770 expfactor=0.632  seeing=2.598  filter=z  pass=3
+793771 expfactor=0.570  seeing=2.533  filter=z  pass=3
+793772 expfactor=0.627  seeing=2.676  filter=z  pass=3
+793775 expfactor=0.742  seeing=2.476  filter=z  pass=3
+793776 expfactor=0.624  seeing=2.654  filter=z  pass=3
+793777 expfactor=0.581  seeing=2.311  filter=z  pass=3
+793789 expfactor=0.200  seeing=2.277  filter=g  pass=3
+793790 expfactor=0.275  seeing=2.350  filter=g  pass=3
+793791 expfactor=0.208  seeing=2.416  filter=g  pass=3
+793792 expfactor=0.074  seeing=2.436  filter=g  pass=3
+793793 expfactor=0.273  seeing=2.332  filter=r  pass=3
+793797 expfactor=0.241  seeing=2.278  filter=g  pass=3
+793804 expfactor=0.578  seeing=2.209  filter=r  pass=3
+793805 expfactor=0.594  seeing=2.254  filter=r  pass=3
+793814 expfactor=0.577  seeing=2.551  filter=g  pass=3
+793815 expfactor=0.804  seeing=2.388  filter=r  pass=3
+793826 expfactor=0.692  seeing=2.540  filter=g  pass=3
+
+# 2018-12-08
+#801242 expfactor=0.955  seeing=1.803  filter=g  pass=1
+#801245 expfactor=0.685  seeing=1.788  filter=r  pass=1
+#801250 expfactor=0.842  seeing=1.827  filter=g  pass=1
+#801275 expfactor=0.827  seeing=1.820  filter=g  pass=1
+801280 expfactor=0.586  seeing=1.866  filter=z  pass=1
+
+# 2018-12-09
+801577 expfactor=0.687  seeing=1.962  filter=g  pass=1
+801579 expfactor=0.600  seeing=2.082  filter=g  pass=1
+801580 expfactor=0.698  seeing=1.810  filter=g  pass=1
+801581 expfactor=0.749  seeing=1.802  filter=g  pass=1
+
+# 2018-12-13
+802679 expfactor=0.328  seeing=2.410  filter=r  pass=1
+802696 expfactor=1.267  seeing=1.807  filter=g  pass=1
+802702 expfactor=0.855  seeing=2.308  filter=z  pass=3
+
+# 2018-12-15
+#803714 expfactor=0.945  seeing=1.872  filter=g  pass=1
+803722 Garbage exposure
+
+# 2018-12-28
+807053 expfactor=0.106  seeing=1.594  filter=g  pass=3
+
+# 2019-01-01
+808250 expfactor=0.220  seeing=1.279  filter=g  pass=2
+808251 expfactor=0.169  seeing=1.305  filter=g  pass=2
+808255 expfactor=0.284  seeing=1.371  filter=g  pass=3
+808256 expfactor=0.106  seeing=1.298  filter=g  pass=3
+808322 expfactor=0.118  seeing=1.392  filter=g  pass=2
+808323 expfactor=0.161  seeing=1.469  filter=g  pass=2
+808324 expfactor=0.141  seeing=1.593  filter=r  pass=3
+808331 expfactor=0.079  seeing=1.122  filter=g  pass=1
+808348 copilot failure and data looks very strange
+808353 expfactor=0.187  seeing=1.034  filter=g  pass=1
+808358 expfactor=0.087  seeing=0.946  filter=g  pass=1
+808359 expfactor=0.153  seeing=0.874  filter=r  pass=2
+808360 expfactor=0.142  seeing=1.002  filter=g  pass=1
+
+# 2019-01-02
+808542 expfactor=0.215  seeing=1.385  filter=z  pass=2
+808545 expfactor=0.115  seeing=1.671  filter=g  pass=1
+808549 expfactor=0.271  seeing=1.394  filter=g  pass=2
+808551 expfactor=0.188  seeing=1.433  filter=g  pass=1
+808552 expfactor=0.106  seeing=1.366  filter=g  pass=2
+808553 expfactor=0.097  seeing=1.461  filter=g  pass=3
+808554 expfactor=0.097  seeing=1.579  filter=g  pass=2
+808555 expfactor=0.075  seeing=1.497  filter=g  pass=3
+808581 expfactor=0.251  seeing=1.576  filter=g  pass=1
+808582 expfactor=0.161  seeing=1.520  filter=g  pass=2
+808583 expfactor=0.248  seeing=1.487  filter=g  pass=3
+808584 expfactor=0.209  seeing=1.298  filter=z  pass=3
+808589 expfactor=0.295  seeing=1.982  filter=g  pass=2
+808591 expfactor=0.604  seeing=1.855  filter=g  pass=1
+808593 expfactor=0.763  seeing=1.880  filter=g  pass=1
+808594 expfactor=0.811  seeing=1.994  filter=g  pass=1
+808595 expfactor=0.550  seeing=2.288  filter=g  pass=2
+808596 expfactor=0.493  seeing=2.315  filter=g  pass=1
+808597 expfactor=0.577  seeing=2.124  filter=g  pass=1
+808601 expfactor=0.279  seeing=1.638  filter=g  pass=2
+808613 expfactor=0.868  seeing=1.931  filter=g  pass=1
+808646 expfactor=0.805  seeing=2.079  filter=g  pass=1
+808647 expfactor=0.796  seeing=2.070  filter=r  pass=1
+
+# 2019-02-03
+#819522 expfactor=0.833  seeing=1.808  filter=g  pass=1
+819537 expfactor=0.490  seeing=2.583  filter=g  pass=2
+819538 expfactor=0.359  seeing=2.543  filter=g  pass=3
+819539 expfactor=0.675  seeing=2.233  filter=g  pass=1
+819540 expfactor=0.395  seeing=2.716  filter=g  pass=2
+819542 expfactor=0.631  seeing=2.610  filter=r  pass=3
+819543 expfactor=0.376  seeing=3.095  filter=g  pass=1
+819544 expfactor=0.537  seeing=2.681  filter=g  pass=2
+819545 expfactor=0.619  seeing=2.924  filter=r  pass=1
+819546 expfactor=1.246  seeing=2.392  filter=r  pass=1
+#819547 expfactor=2.072  seeing=1.988  filter=z  pass=1
+819548 expfactor=0.806  seeing=2.044  filter=g  pass=1
+#819549 expfactor=1.098  seeing=1.882  filter=g  pass=1
+819604 expfactor=0.261  seeing=2.255  filter=g  pass=2
+
+# 2019-02-04
+#819862 expfactor=0.818  seeing=1.831  filter=g  pass=1
+819865 expfactor=0.866  seeing=1.965  filter=g  pass=1
+#819866 expfactor=0.911  seeing=1.873  filter=g  pass=1
+#819910 expfactor=0.796  seeing=1.812  filter=g  pass=1
+819920 expfactor=0.471  seeing=2.286  filter=z  pass=2
+
+# 2019-02-05
+820179 expfactor=0.561  seeing=2.061  filter=g  pass=1
+#820180 expfactor=0.402  seeing=1.841  filter=g  pass=1
+820182 expfactor=0.322  seeing=2.065  filter=g  pass=1
+
+# 2019-02-06
+820527 expfactor=0.000  seeing=1.482  filter=r  pass=2
+820528 expfactor=0.010  seeing=1.293  filter=g  pass=1
+820529 expfactor=0.001  seeing=1.687  filter=g  pass=1
+820530 expfactor=0.007  seeing=1.738  filter=g  pass=1
+820531 expfactor=0.010  seeing=1.826  filter=g  pass=1
+820532 expfactor=0.008  seeing=2.204  filter=g  pass=2
+820533 expfactor=0.003  seeing=2.428  filter=g  pass=1
+820534 expfactor=0.012  seeing=2.290  filter=g  pass=2
+820535 expfactor=0.027  seeing=1.950  filter=g  pass=1
+820536 expfactor=0.013  seeing=2.208  filter=g  pass=3
+820537 expfactor=0.006  seeing=2.240  filter=g  pass=2
+820538 expfactor=0.005  seeing=1.697  filter=g  pass=1
+820539 expfactor=0.029  seeing=1.317  filter=r  pass=2
+820540 expfactor=0.011  seeing=2.179  filter=g  pass=1
+820541 expfactor=0.124  seeing=1.776  filter=z  pass=2
+820566 expfactor=0.090  seeing=1.201  filter=g  pass=1
+820569 expfactor=0.149  seeing=1.348  filter=g  pass=1
+820584 expfactor=0.252  seeing=1.031  filter=g  pass=2
+
+# 2019-03-02
+829486 expfactor=0.211  seeing=1.222  filter=g  pass=2
+829487 expfactor=0.257  seeing=1.306  filter=g  pass=1
+829488 expfactor=0.041  seeing=1.350  filter=g  pass=2
+829489 expfactor=0.074  seeing=1.306  filter=g  pass=2
+829490 expfactor=0.173  seeing=1.243  filter=g  pass=1
+829493 expfactor=0.108  seeing=1.507  filter=g  pass=3
+829494 expfactor=0.064  seeing=1.545  filter=g  pass=2
+829495 expfactor=0.019  seeing=1.632  filter=g  pass=2
+829497 expfactor=0.197  seeing=1.159  filter=z  pass=1
+829501 expfactor=0.256  seeing=1.406  filter=z  pass=3
+829502 expfactor=0.010  seeing=1.651  filter=g  pass=2
+829503 expfactor=0.018  seeing=1.296  filter=z  pass=3
+829504 expfactor=0.013  seeing=1.379  filter=z  pass=2
+829524 expfactor=0.012  seeing=1.232  filter=g  pass=2
+829525 expfactor=0.012  seeing=0.998  filter=z  pass=3
+829526 expfactor=0.022  seeing=1.201  filter=z  pass=3
+829527 expfactor=0.099  seeing=1.438  filter=z  pass=2
+
+# 2019-03-03
+#829697 expfactor=0.723  seeing=1.704  filter=r  pass=1
+829699 expfactor=0.625  seeing=2.140  filter=g  pass=1
+829700 expfactor=0.507  seeing=2.440  filter=g  pass=2
+#829701 expfactor=0.899  seeing=1.999  filter=z  pass=1
+829720 expfactor=0.551  seeing=2.120  filter=g  pass=1
+#829721 expfactor=1.342  seeing=1.882  filter=r  pass=1
+#829724 expfactor=0.861  seeing=2.019  filter=g  pass=1
+#829751 expfactor=0.989  seeing=1.916  filter=g  pass=1
+829755 expfactor=0.751  seeing=2.024  filter=r  pass=1
+#829756 expfactor=1.209  seeing=1.800  filter=g  pass=1
+#829758 expfactor=0.924  seeing=1.706  filter=r  pass=1
+829763 expfactor=0.717  seeing=2.010  filter=r  pass=1
+829764 expfactor=0.723  seeing=2.188  filter=g  pass=1
+#829767 expfactor=1.171  seeing=1.703  filter=r  pass=1
+#829768 expfactor=0.979  seeing=1.979  filter=g  pass=1
+
+# 2019-03-04
+
+# 2019-03-05
+830281 expfactor=0.0000 seeing=1.588  filter=r  pass=2
+
+347634 3 hexapod update exposure with weird saturated features.

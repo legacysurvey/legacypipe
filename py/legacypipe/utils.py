@@ -10,8 +10,10 @@ def log_info(logger, args):
     logger.info(msg)
 
 def log_debug(logger, args):
-    msg = ' '.join(map(str, args))
-    logger.debug(msg)
+    import logging
+    if logger.isEnabledFor(logging.DEBUG):
+        msg = ' '.join(map(str, args))
+        logger.debug(msg)
 
 class EllipseWithPriors(EllipseESoft):
     '''An ellipse (used to represent galaxy shapes) with Gaussian priors
@@ -41,10 +43,15 @@ class EllipseWithPriors(EllipseESoft):
                               param=EllipseESoft(1.,0.,0.))
             self.__class__.ellipsePriors = ellipsePriors
         self.gpriors = self.ellipsePriors
-        self.uppers[0] = 5.
+        # MAGIC -- 30" default max r_e!
+        # SEE ALSO survey.py : class(LogRadius)!
+        self.uppers[0] = np.log(30.)
 
     def setMaxLogRadius(self, rmax):
         self.uppers[0] = rmax
+
+    def getMaxLogRadius(self):
+        return self.uppers[0]
 
     @classmethod
     def fromRAbPhi(cls, r, ba, phi):

@@ -187,9 +187,6 @@ class GaiaPosition(ParamList):
 
 
 class GaiaSource(PointSource):
-    def __init__(self, pos, bright):
-        super(GaiaSource, self).__init__(pos, bright)
-
     @staticmethod
     def getName():
         return 'GaiaSource'
@@ -197,43 +194,25 @@ class GaiaSource(PointSource):
     def getSourceType(self):
         return 'GaiaSource'
 
-    def isForcedPointSource(self):
-        return self.forced_point_source
-    
     @classmethod
     def from_catalog(cls, g, bands):
         from tractor import NanoMaggies
-
-        # When creating 'tim.time' entries, we do:
-        #import astropy.time
-        # Convert MJD-OBS, in UTC, into TAI
-        #mjd_tai = astropy.time.Time(self.mjdobs,
-        #                            format='mjd', scale='utc').tai.mjd
-
         # Gaia has NaN entries when no proper motion or parallax is measured.
         # Convert to zeros.
         def nantozero(x):
             if not np.isfinite(x):
                 return 0.
             return x
-
         pos = GaiaPosition(g.ra, g.dec, g.ref_epoch,
                            nantozero(g.pmra),
                            nantozero(g.pmdec),
                            nantozero(g.parallax))
-        #print('Gaia G mags:', g.phot_g_mean_mag)
         # Assume color 0 from Gaia G mag as initial flux
         m = g.phot_g_mean_mag
         fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
                        for band in bands])
         bright = NanoMaggies(order=bands, **fluxes)
         src = cls(pos, bright)
-        #print('Created:', src)
-        # print('Params:', src.getParams())
-        # src.printThawedParams()
-        # print('N params:', src.numberOfParams())
-        # print('named params:', src.namedparams)
-        # print('param names:', src.paramnames)
         src.forced_point_source = g.pointsource
         return src
 
@@ -266,13 +245,18 @@ class LogRadius(EllipseESoft):
     def __init__(self, *args, **kwargs):
         super(LogRadius, self).__init__(*args, **kwargs)
         self.lowers = [None]
-        self.uppers = [5.]
+        # MAGIC -- 10" default max r_e!
+        # SEE ALSO utils.py : class(EllipseWithPriors)!
+        self.uppers = [np.log(10.)]
 
     def isLegal(self):
         return self.logre <= self.uppers[0]
 
     def setMaxLogRadius(self, rmax):
         self.uppers[0] = rmax
+
+    def getMaxLogRadius(self):
+        return self.uppers[0]
 
     @staticmethod
     def getName():
@@ -398,7 +382,8 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
         git_version = get_git_version()
 
     hdr = fitsio.FITSHDR()
-
+    #lsdir_prefix1 = '/global/project/projectdirs'
+    #lsdir_prefix2 = '/global/projecta/projectdirs'
     for s in [
         'Data product of the DECam Legacy Survey (DECaLS)',
         'Full documentation at http://legacysurvey.org',
@@ -406,32 +391,33 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
         hdr.add_record(dict(name='COMMENT', value=s, comment=s))
     hdr.add_record(dict(name='LEGPIPEV', value=git_version,
                         comment='legacypipe git version'))
-    hdr.add_record(dict(name='SURVEYV', value=survey_dir,
-                        comment='Legacy Survey directory'))
-    hdr.add_record(dict(name='DECALSDR', value='DR8',
-                        comment='DECaLS release name'))
-    hdr.add_record(dict(name='DECALSDT', value=datetime.datetime.now().isoformat(),
+    #hdr.add_record(dict(name='LSDIRPFX', value=lsdir_prefix1,
+    #                    comment='LegacySurveys Directory Prefix'))
+    hdr.add_record(dict(name='LSDIR', value=survey_dir,
+                        comment='$LEGACY_SURVEY_DIR directory'))
+    hdr.add_record(dict(name='LSDR', value='DR8',
+                        comment='Data release number'))
+    hdr.add_record(dict(name='RUNDATE', value=datetime.datetime.now().isoformat(),
                         comment='%s run time' % program_name))
-    hdr.add_record(dict(name='SURVEY', value='DECaLS+MzLS+BASS',
-                        comment='Legacy Surveys'))
+    hdr.add_record(dict(name='SURVEY', value='DECaLS+BASS+MzLS',
+                        comment='The LegacySurveys'))
     # Requested by NOAO
     hdr.add_record(dict(name='SURVEYID', value='DECaLS BASS MzLS',
-                        comment='Survey name'))
+                        comment='Survey names'))
     #hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
     #hdr.add_record(dict(name='SURVEYID', value='BASS MzLS',
     hdr.add_record(dict(name='DRVERSIO', value=release,
-                        comment='Survey data release number'))
+                        comment='LegacySurveys Data Release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
                         comment='Observation type'))
     hdr.add_record(dict(name='PROCTYPE', value='tile',
                         comment='Processing type'))
 
     import socket
-    hdr.add_record(dict(name='HOSTNAME', value=socket.gethostname(),
+    hdr.add_record(dict(name='NODENAME', value=socket.gethostname(),
                         comment='Machine where script was run'))
-    hdr.add_record(dict(name='HOSTFQDN', value=socket.getfqdn(),
-                        comment='Machine where script was run'))
-    hdr.add_record(dict(name='NERSC', value=os.environ.get('NERSC_HOST', 'none'),
+    #hdr.add_record(dict(name='HOSTFQDN', value=socket.getfqdn(),comment='Machine where script was run'))
+    hdr.add_record(dict(name='HOSTNAME', value=os.environ.get('NERSC_HOST', 'none'),
                         comment='NERSC machine where script was run'))
     hdr.add_record(dict(name='JOB_ID', value=os.environ.get('SLURM_JOB_ID', 'none'),
                         comment='SLURM job id'))
@@ -440,7 +426,7 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
 
     return hdr
 
-def get_dependency_versions(unwise_dir, unwise_tr_dir):
+def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
     depvers = []
     headers = []
     # Get DESICONDA version, and read file $DESICONDA/pkg_list.txt for
@@ -470,12 +456,21 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir):
             else:
                 depvers.append((pkg, verstr))
 
-    # Store paths to astrometry and tractor packages.
     import astrometry
-    depvers.append(('astrometry', os.path.dirname(astrometry.__file__)))
     import tractor
-    depvers.append(('tractor', os.path.dirname(tractor.__file__)))
-    depvers.append(('fitsio', os.path.dirname(fitsio.__file__)))
+
+    for name,pkg in [('astrometry', astrometry),
+                     ('tractor', tractor),
+                     ('fitsio', fitsio),]:
+        depvers.append((name + '-path', os.path.dirname(pkg.__file__)))
+        try:
+            depvers.append((name, pkg.__version__))
+        except:
+            try:
+                depvers.append((name,
+                                get_git_version(os.path.dirname(pkg.__file__))))
+            except:
+                pass
 
     # Get additional paths from environment variables
     for dep in ['TYCHO2_KD', 'GAIA_CAT', 'LARGEGALAXIES', 'WISE_PSF']:
@@ -489,19 +484,25 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir):
         dirs = unwise_dir.split(':')
         depvers.append(('unwise', unwise_dir))
         for i,d in enumerate(dirs):
-            headers.append(('UNWISD%i' % (i+1), d, 'unWISE dir(s)'))
+            headers.append(('UNWISD%i' % (i+1), d, ''))
+            #headers.append(('UNWISD%i' % (i+1), d, 'unWISE dir(s)'))
 
     if unwise_tr_dir is not None:
         depvers.append(('unwise_tr', unwise_tr_dir))
         # this is assumed to be only a single directory
-        headers.append(('UNWISTD', unwise_tr_dir, 'unWISE time-resolved dir'))
+        headers.append(('UNWISTD', unwise_tr_dir, ''))
+        #headers.append(('UNWISTD', unwise_tr_dir, 'unWISE time-resolved dir'))
+
+    if unwise_modelsky_dir is not None:
+        depvers.append(('unwise_modelsky', unwise_modelsky_dir))
+        # this is assumed to be only a single directory
+        headers.append(('UNWISSKY', unwise_modelsky_dir, ''))
 
     added_long = False
     for i,(name,value) in enumerate(depvers):
-        headers.append(('DEPNAM%02i' % i, name, 'Dependency name'))
+        headers.append(('DEPNAM%02i' % i, name, ''))
         if len(value) > 68:
-            headers.append(('DEPVER%02i' % i, value[:67] + '&',
-                            'Dependency version'))
+            headers.append(('DEPVER%02i' % i, value[:67] + '&', ''))
             while len(value):
                 value = value[67:]
                 if len(value) == 0:
@@ -510,7 +511,7 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir):
                                 "  '%s%s'" % (value[:67], '&' if len(value) > 67 else ''),
                                 None))
         else:
-            headers.append(('DEPVER%02i' % i, value, 'Dependency version'))
+            headers.append(('DEPVER%02i' % i, value, ''))
             added_long = True
 
     if added_long:
@@ -605,14 +606,13 @@ def tim_get_resamp(tim, targetwcs):
     if hasattr(tim, 'resamp'):
         return tim.resamp
     try:
-        Yo,Xo,Yi,Xi,_ = resample_with_wcs(targetwcs, tim.subwcs, [], 2)
+        Yo,Xo,Yi,Xi,_ = resample_with_wcs(targetwcs, tim.subwcs, intType=np.int16)
     except OverlapError:
         print('No overlap')
         return None
     if len(Yo) == 0:
         return None
-    resamp = [x.astype(np.int16) for x in (Yo,Xo,Yi,Xi)]
-    return resamp
+    return Yo,Xo,Yi,Xi
 
 def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None,
             clip=True):
@@ -966,7 +966,7 @@ class LegacySurveyData(object):
     '''
 
     def __init__(self, survey_dir=None, cache_dir=None, output_dir=None,
-                 version=None, ccds=None, verbose=False):
+                 allbands='grz'):
         '''Create a LegacySurveyData object using data from the given
         *survey_dir* directory, or from the $LEGACY_SURVEY_DIR environment
         variable.
@@ -981,7 +981,7 @@ class LegacySurveyData(object):
         cache_dir : string
             Directory to search for input files before looking in survey_dir.  Useful
             for, eg, Burst Buffer.
-            
+
         output_dir : string
             Base directory for output files; default ".".
         '''
@@ -995,13 +995,8 @@ class LegacySurveyData(object):
         if survey_dir is None:
             survey_dir = os.environ.get('LEGACY_SURVEY_DIR')
             if survey_dir is None:
-                print('''Warning: you should set the $LEGACY_SURVEY_DIR environment variable.
-On NERSC, you can do:
-  module use /project/projectdirs/cosmo/work/decam/versions/modules
-  module load legacysurvey
-
-Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail.
-''')
+                print('Warning: you should set the $LEGACY_SURVEY_DIR environment variable.')
+                print('Using the current directory as LEGACY_SURVEY_DIR.')
                 survey_dir = os.getcwd()
 
         self.survey_dir = survey_dir
@@ -1013,7 +1008,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             self.output_dir = output_dir
 
         self.output_file_hashes = OrderedDict()
-        self.ccds = ccds
+        self.ccds = None
         self.bricks = None
         self.ccds_index = None
 
@@ -1037,21 +1032,17 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             'megaprime': MegaPrimeImage,
             }
 
-        self.allbands = 'ugrizY'
-
-        assert(version in [None, 'dr2', 'dr1'])
-        self.version = version
-
-        self.verbose = verbose
+        self.allbands = allbands
 
         # Filename prefix for coadd files
         self.file_prefix = 'legacysurvey'
-        if self.version in ['dr1','dr2']:
-            self.file_prefix = 'decals'
 
     def __str__(self):
         return ('%s: dir %s, out %s' %
                 (type(self).__name__, self.survey_dir, self.output_dir))
+
+    def get_default_release(self):
+        return None
 
     def ccds_for_fitting(self, brick, ccds):
         # By default, use all.
@@ -1145,17 +1136,11 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         sname = self.file_prefix
 
         if filetype == 'bricks':
-            fn = 'survey-bricks.fits.gz'
-            if self.version in ['dr1','dr2']:
-                fn = 'decals-bricks.fits'
-            return swap(os.path.join(basedir, fn))
+            return swap(os.path.join(basedir, 'survey-bricks.fits.gz'))
 
         elif filetype == 'ccds':
-            if self.version in ['dr1','dr2']:
-                return swaplist([os.path.join(basedir, 'decals-ccds.fits.gz')])
-            else:
-                return swaplist(
-                    glob(os.path.join(basedir, 'survey-ccds*.fits.gz')))
+            return swaplist(
+                glob(os.path.join(basedir, 'survey-ccds*.fits.gz')))
 
         elif filetype == 'ccd-kds':
             return swaplist(
@@ -1179,9 +1164,6 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             return swap(os.path.join(basedir, fn))
 
         elif filetype == 'annotated-ccds':
-            if self.version == 'dr2':
-                return swaplist(
-                    glob(os.path.join(basedir, 'decals-ccds-annotated.fits')))
             return swaplist(
                 glob(os.path.join(basedir, 'ccds-annotated-*.fits.gz')))
 
@@ -1233,7 +1215,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             return swap(os.path.join(basedir, 'tractor', brickpre,
                                      'brick-%s.sha256sum' % brick))
         elif filetype == 'outliers_mask':
-            return swap(os.path.join(basedir, 'metrics', brickpre, 
+            return swap(os.path.join(basedir, 'metrics', brickpre,
                                      'outlier-mask-%s.fits.fz' % (brick)))
 
         print('Unknown filetype "%s"' % filetype)
@@ -1944,4 +1926,3 @@ class SchlegelPsfModel(PsfExModel):
             print('SchlegelPsfEx degree:', self.degree)
             bh,bw = self.psfbases[0].shape
             self.radius = (bh+1)/2.
-

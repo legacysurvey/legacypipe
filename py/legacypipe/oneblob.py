@@ -37,16 +37,11 @@ def one_blob(X):
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
      srcs, bands, plots, ps, simul_opt, use_ceres, rex, refmap) = X
 
-    info('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images' %
+    debug('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images' %
           (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs)))
 
     if len(timargs) == 0:
         return None
-
-    for src in srcs:
-        from tractor import Galaxy
-        if isinstance(src, Galaxy):
-            debug('Source:', src)
 
     if plots:
         plt.figure(2, figsize=(3,3))
@@ -72,13 +67,10 @@ def one_blob(X):
     safe_x0 = np.clip(np.round(x0-1).astype(int), 0,blobw-1)
     safe_y0 = np.clip(np.round(y0-1).astype(int), 0,blobh-1)
     B.started_in_blob = blobmask[safe_y0, safe_x0]
-
     # This uses 'initial' pixel positions, because that's what determines
     # the fitting behaviors.
     B.brightblob = refmap[safe_y0, safe_x0].astype(np.int16)
-
     B.cpu_source = np.zeros(len(B), np.float32)
-
     B.blob_width  = np.zeros(len(B), np.int16) + blobw
     B.blob_height = np.zeros(len(B), np.int16) + blobh
     B.blob_npix   = np.zeros(len(B), np.int32) + np.sum(blobmask)
@@ -87,7 +79,6 @@ def one_blob(X):
     B.blob_symm_height  = np.zeros(len(B), np.int16)
     B.blob_symm_npix    = np.zeros(len(B), np.int32)
     B.blob_symm_nimages = np.zeros(len(B), np.int16)
-
     B.hit_limit = np.zeros(len(B), bool)
 
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
@@ -105,10 +96,9 @@ def one_blob(X):
     assert(len(B.finished_in_blob) == len(B))
     assert(len(B.finished_in_blob) == len(B.started_in_blob))
 
-    B.cpu_blob = np.zeros(len(B), np.float32)
+    B.cpu_blob = np.empty(len(B), np.float32)
     t1 = time.clock()
     B.cpu_blob[:] = t1 - t0
-
     return B
 
 class OneBlob(object):
@@ -122,14 +112,11 @@ class OneBlob(object):
         self.srcs = srcs
         self.bands = bands
         self.plots = plots
-
         self.refmap = refmap
-
         self.plots_per_source = plots
         self.plots_per_model = False
         # blob-1-data.png, etc
         self.plots_single = False
-
         self.ps = ps
         self.simul_opt = simul_opt
         self.use_ceres = use_ceres
@@ -161,11 +148,11 @@ class OneBlob(object):
         self.optargs.update(dchisq = 0.1)
 
     def run(self, B):
+        trun = tlast = Time()
         # Not quite so many plots...
         self.plots1 = self.plots
         cat = Catalog(*self.srcs)
 
-        tlast = Time()
         if self.plots:
             self._initial_plots()
             from legacypipe.detection import plot_boundary_map
@@ -202,18 +189,15 @@ class OneBlob(object):
 
         # Optimize all at once?
         if len(cat) > 1 and len(cat) <= 10:
-            #tfit = Time()
             cat.thawAllParams()
             tr.optimize_loop(**self.optargs)
 
         if self.plots:
             self._plots(tr, 'After source fitting')
-
             plt.clf()
             self._plot_coadd(self.tims, self.blobwcs, model=tr)
             plt.title('After source fitting')
             self.ps.savefig()
-
             if self.plots_single:
                 plt.figure(2)
                 mods = list(tr.getModelImages())
@@ -228,7 +212,6 @@ class OneBlob(object):
                 dimshow(get_rgb(coresids, self.bands), ticks=False)
                 plt.savefig('blob-%s-initsub.png' % (self.name))
                 plt.figure(1)
-
 
         debug('Blob', self.name, 'finished initial fitting:', Time()-tlast)
         tlast = Time()
@@ -298,18 +281,10 @@ class OneBlob(object):
             nsrcparams = src.numberOfParams()
             _convert_ellipses(src)
             assert(src.numberOfParams() == nsrcparams)
-            # print('Computing variances for source', src, ': N params:', nsrcparams)
-            # print('Source params:')
-            # src.printThawedParams()
-            # For Gaia sources, temporarily convert the GaiaPosition to a
-            # RaDecPos in order to compute the invvar it would have in our
-            # imaging?  Or just plug in the Gaia-measured uncertainties??
-            # (going to implement the latter)
             # Compute inverse-variances
             allderivs = tr.getDerivs()
             ivars = _compute_invvars(allderivs)
             assert(len(ivars) == nsrcparams)
-            #print('Inverse-variances:', ivars)
             B.srcinvvars[isub] = ivars
             assert(len(B.srcinvvars[isub]) == cat[isub].numberOfParams())
             cat.freezeParam(isub)
@@ -317,7 +292,6 @@ class OneBlob(object):
         # Check for sources with zero inverse-variance -- I think these
         # can be generated during the "Simultaneous re-opt" stage above --
         # sources can get scattered outside the blob.
-
         I, = np.nonzero([np.sum(iv) > 0 for iv in B.srcinvvars])
         if len(I) < len(B):
             debug('Keeping', len(I), 'of', len(B),'sources with non-zero ivar')
@@ -328,7 +302,7 @@ class OneBlob(object):
         M = _compute_source_metrics(B.sources, self.tims, self.bands, tr)
         for k,v in M.items():
             B.set(k, v)
-        info('Blob', self.name, 'finished:', Time()-tlast)
+        info('Blob', self.name, 'finished, total:', Time()-trun)
 
     def run_model_selection(self, cat, Ibright, B):
         # We compute & subtract initial models for the other sources while
@@ -376,11 +350,7 @@ class OneBlob(object):
                 plt.figure(1)
 
             # only plot models for one source
-            #savedplots = self.plots_per_source
-            #self.plots_per_source = savedplots and (srci == 31)
             keepsrc = self.model_selection_one_source(src, srci, models, B)
-            #self.plots_per_source = savedplots
-
             B.sources[srci] = keepsrc
             cat[srci] = keepsrc
 
@@ -414,7 +384,7 @@ class OneBlob(object):
             for tim in srctims:
                 try:
                     Yo,Xo,Yi,Xi,nil = resample_with_wcs(
-                        self.blobwcs, tim.subwcs, [],2)
+                        self.blobwcs, tim.subwcs, intType=np.int16)
                 except:
                     continue
                 insrc[Yo,Xo] |= (tim.inverr[Yi,Xi] > 0)
@@ -442,7 +412,7 @@ class OneBlob(object):
             srcwcs_x0y0 = (0, 0)
             srcblobmask = self.blobmask
 
-        if self.plots_per_source:
+        if False and self.plots_per_source:
             # This is a handy blob-coordinates plot of the data
             # going into the fit.
             plt.clf()
@@ -491,11 +461,12 @@ class OneBlob(object):
                                          np.flipud(np.fliplr(sn[slc])))
                 # just OR the detection maps per-band...
                 flipblobs |= (flipsn > 5.)
-
             blobs,_ = label(flipblobs)
             goodblob = blobs[iy,ix]
 
-            if self.plots_per_source:
+            if False and self.plots_per_source:
+                # This plot is about the symmetric-blob definitions
+                # when fitting sources.
                 from legacypipe.detection import plot_boundary_map
                 plt.clf()
                 for i,(band,detmap,detiv) in enumerate(zip(self.bands, detmaps, detivs)):
@@ -512,13 +483,11 @@ class OneBlob(object):
                 dimshow(flipblobs, vmin=0, vmax=1, cmap='gray')
                 ax = plt.axis()
                 plot_boundary_map(blobs == goodblob)
-
                 if binary_fill_holes(flipblobs)[iy,ix]:
                     fb = (blobs == goodblob)
                     di = binary_dilation(fb, iterations=4)
                     if np.any(di):
                         plot_boundary_map(di, rgb=(255,0,0))
-
                 plt.axis(ax)
                 plt.title('good blob')
                 self.ps.savefig()
@@ -567,7 +536,7 @@ class OneBlob(object):
                 # 'dilated'.
                 try:
                     Yo,Xo,Yi,Xi,nil = resample_with_wcs(
-                        tim.subwcs, srcwcs, [], 2)
+                        tim.subwcs, srcwcs, intType=np.int16)
                 except OverlapError:
                     continue
                 ie = tim.getInvError()
@@ -614,28 +583,25 @@ class OneBlob(object):
             #     plot_boundary_map(dilated, rgb=(0,255,0), extent=ext)
             #     plt.title('symmetrized blobs')
             #     self.ps.savefig()
-            # 
             #     nil,nil,coimgs,nil = quick_coadds(
             #         srctims, self.bands, self.blobwcs,
             #         fill_holes=False, get_cow=True)
-                # dimshow(get_rgb(coimgs, self.bands))
-                # ax = plt.axis()
-                # plt.plot(x-1, y-1, 'r+')
-                # plt.axis(ax)
-                # plt.title('Symmetric-blob masked')
-                # self.ps.savefig()
-
-                # plt.clf()
-                # for tim in srctims:
-                #     ie = tim.getInvError()
-                #     sigmas = (tim.getImage() * ie)[ie > 0]
-                #     plt.hist(sigmas, range=(-5,5), bins=21, histtype='step')
-                #     plt.axvline(np.mean(sigmas), alpha=0.5)
-                # plt.axvline(0., color='k', lw=3, alpha=0.5)
-                # plt.xlabel('Image pixels (sigma)')
-                # plt.title('Symmetrized pixel values')
-                # self.ps.savefig()
-
+            #     dimshow(get_rgb(coimgs, self.bands))
+            #     ax = plt.axis()
+            #     plt.plot(x-1, y-1, 'r+')
+            #     plt.axis(ax)
+            #     plt.title('Symmetric-blob masked')
+            #     self.ps.savefig()
+            #     plt.clf()
+            #     for tim in srctims:
+            #         ie = tim.getInvError()
+            #         sigmas = (tim.getImage() * ie)[ie > 0]
+            #         plt.hist(sigmas, range=(-5,5), bins=21, histtype='step')
+            #         plt.axvline(np.mean(sigmas), alpha=0.5)
+            #     plt.axvline(0., color='k', lw=3, alpha=0.5)
+            #     plt.xlabel('Image pixels (sigma)')
+            #     plt.title('Symmetrized pixel values')
+            #     self.ps.savefig()
             # # plot the modelmasks for each tim.
             # plt.clf()
             # R = int(np.floor(np.sqrt(len(srctims))))
@@ -655,12 +621,10 @@ class OneBlob(object):
             # This is a local source-WCS plot of the data going into the
             # fit.
             plt.clf()
-            coimgs,cons = quick_coadds(srctims, self.bands, srcwcs,
-                                       fill_holes=False)
+            coimgs,_ = quick_coadds(srctims, self.bands, srcwcs, fill_holes=False)
             dimshow(get_rgb(coimgs, self.bands))
             plt.title('Model selection: stage1 data (srcwcs)')
             self.ps.savefig()
-            #self._plots(srctractor, 'Model selection init')
 
         srctractor = self.tractor(srctims, [src])
         srctractor.setModelMasks(modelMasks)
@@ -676,21 +640,30 @@ class OneBlob(object):
             debug('Source is starting outside blob -- skipping.')
             return None
 
-        # blob-wide
-        #force_pointsource = self.force_pointsource
-        #fit_background = self.fit_background
-        # geometric
+        from tractor import Galaxy
+        is_galaxy = isinstance(src, Galaxy)
+
+        # Fitting behaviors based on geometric masks.
         x0,y0 = srcwcs_x0y0
         force_pointsource = (self.refmap[y0+iy,x0+ix] &
                              (IN_BLOB['BRIGHT'] | IN_BLOB['GALAXY'] |
                               IN_BLOB['CLUSTER'])) > 0
         fit_background = (self.refmap[y0+iy,x0+ix] &
                           (IN_BLOB['MEDIUM'] | IN_BLOB['GALAXY'])) > 0
-
-        from tractor import Galaxy
-        is_galaxy = isinstance(src, Galaxy)
         if is_galaxy:
             fit_background = False
+
+            # LSLGA galaxy: set the maximum allowed r_e.
+            known_galaxy_logrmax = 0.
+            if isinstance(src, (DevGalaxy,ExpGalaxy)):
+                print('Known galaxy.  Initial shape:', src.shape)
+                # MAGIC 2. = factor by which r_e is allowed to grow for an LSLGA galaxy.
+                known_galaxy_logrmax = np.log(src.shape.re * 2.)
+            elif isinstance(src, FixedCompositeGalaxy):
+                print('Known galaxy.  Initial shapes:', src.shapeExp, src.shapeDev)
+                known_galaxy_logrmax = np.log(max(src.shapeExp.re, src.shapeDev.re) * 2.)
+            else:
+                print('WARNING: unknown galaxy type:', src)
 
         debug('Source at blob coordinates', x0+ix, y0+iy, '- forcing pointsource?', force_pointsource, ', is large galaxy?', is_galaxy, ', fitting sky background:', fit_background)
 
@@ -743,14 +716,12 @@ class OneBlob(object):
         trymodels = [('ptsrc', ptsrc)]
 
         if oldmodel == 'ptsrc':
-            forced = False
-            if isinstance(src, GaiaSource):
-                debug('Gaia source', src)
-                if src.isForcedPointSource():
-                    forced = True
-            if forced:
+            if getattr(src, 'forced_point_source', False):
+                # This is set in the GaiaSource contructor from
+                # gaia.pointsource
                 debug('Gaia source is forced to be a point source -- not trying other models')
             elif force_pointsource:
+                # Geometric mask
                 debug('Not computing galaxy models due to objects in blob')
             else:
                 trymodels.append((simname, simple))
@@ -758,7 +729,7 @@ class OneBlob(object):
                 # The 'gals' model is just a marker
                 trymodels.append(('gals', None))
         else:
-            #if hasattr(src, 'isForcedLargeGalaxy') and src.isForcedLargeGalaxy:
+            # If the source was initialized as a galaxy, try all models
             trymodels.extend([(simname, simple),
                               ('dev', dev), ('exp', exp), ('comp', comp)])
 
@@ -787,20 +758,28 @@ class OneBlob(object):
                     dev.getShape()).copy()
             srccat[0] = newsrc
 
-            #print('Starting optimization for', name)
-
             # Set maximum galaxy model sizes
-            # FIXME -- could use different fractions for deV vs exp (or comp)
-            fblob = 0.8
-            sh,sw = srcwcs.shape
-            rmax = np.log(fblob * max(sh, sw) * self.pixscale)
-            if name in ['exp', 'rex', 'dev']:
-                newsrc.shape.setMaxLogRadius(rmax)
-            elif name in ['comp']:
-                newsrc.shapeExp.setMaxLogRadius(rmax)
-                newsrc.shapeDev.setMaxLogRadius(rmax)
-
-            ### FIXME -- also set model rendering limits here??
+            if is_galaxy:
+                # This is a known large galaxy -- set max size based on initial size.
+                logrmax = known_galaxy_logrmax
+                if name in ('exp', 'rex', 'dev'):
+                    newsrc.shape.setMaxLogRadius(logrmax)
+                elif name == 'comp':
+                    newsrc.shapeExp.setMaxLogRadius(logrmax)
+                    newsrc.shapeDev.setMaxLogRadius(logrmax)
+            else:
+                # FIXME -- could use different fractions for deV vs exp (or comp)
+                fblob = 0.8
+                sh,sw = srcwcs.shape
+                logrmax = np.log(fblob * max(sh, sw) * self.pixscale)
+                if name in ['exp', 'rex', 'dev']:
+                    if logrmax < newsrc.shape.getMaxLogRadius():
+                        newsrc.shape.setMaxLogRadius(logrmax)
+                elif name in ['comp']:
+                    if logrmax < newsrc.shapeExp.getMaxLogRadius():
+                        newsrc.shapeExp.setMaxLogRadius(logrmax)
+                    if logrmax < newsrc.shapeDev.getMaxLogRadius():
+                        newsrc.shapeDev.setMaxLogRadius(logrmax)
 
             # Use the same modelMask shapes as the original source ('src').
             # Need to create newsrc->mask mappings though:
@@ -811,41 +790,23 @@ class OneBlob(object):
             # Save these modelMasks for later...
             newsrc_mm = mm
 
-            #lnp = srctractor.getLogProb()
-            #print('Initial log-prob:', lnp)
-            #print('vs original src: ', lnp - lnp0)
-            # if self.plots and False:
-            #     # Grid of derivatives.
-            #     _plot_derivs(tims, newsrc, srctractor, ps)
-            # if self.plots:
-            #     mods = list(srctractor.getModelImages())
-            #     plt.clf()
-            #     coimgs,cons = quick_coadds(srctims, bands, srcwcs,
-            #                               images=mods, fill_holes=False)
-            #     dimshow(get_rgb(coimgs, bands))
-            #     plt.title('Initial: ' + name)
-            #     self.ps.savefig()
-
             if fit_background:
-                #print('Resetting sky params.')
+                # Reset sky params
                 srctractor.images.setParams(skyparams)
                 srctractor.thawParam('images')
 
             # First-round optimization (during model selection)
-            #print('Optimizing: first round for', name, ':', len(srctims))
-            #print(newsrc)
             R = srctractor.optimize_loop(**self.optargs)
             debug('Fit result:', newsrc)
             hit_limit = R.get('hit_limit', False)
             if hit_limit:
                 if name in ['exp', 'rex', 'dev']:
                     debug('Hit limit: r %.2f vs %.2f' %
-                          (newsrc.shape.re, np.exp(rmax)))
+                          (newsrc.shape.re, np.exp(logrmax)))
                 elif name in ['comp']:
                     debug('Hit limit: r %.2f, %.2f vs %.2f' %
                           (newsrc.shapeExp.re, newsrc.shapeDev.re,
-                           np.exp(rmax)))
-            #srctractor.printThawedParams()
+                           np.exp(logrmax)))
 
             ok,ix,iy = srcwcs.radec2pixelxy(newsrc.getPosition().ra,
                                             newsrc.getPosition().dec)
@@ -855,8 +816,6 @@ class OneBlob(object):
             if ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
                 # Exited blob!
                 debug('Source exited sub-blob!')
-                # FIXME -- do we want to save any of the fitting results?
-                # Or flag this??
                 continue
 
             disable_galaxy_cache()
@@ -908,7 +867,6 @@ class OneBlob(object):
             # Use the original 'srctractor' here so that the different
             # models are evaluated on the same pixels.
             # ---> AND with the same modelMasks as the original source...
-            #
             srctractor.setModelMasks(newsrc_mm)
             ch = _per_band_chisqs(srctractor, self.bands)
 
@@ -1043,7 +1001,6 @@ class OneBlob(object):
             coimgs, cons = quick_coadds(srctims, self.bands, srcwcs)
             rgb = get_rgb(coimgs, self.bands)
             dimshow(rgb, ticks=False)
-
             for imod,modname in enumerate(modnames):
                 if modname != 'none' and not modname in chisqs:
                     continue
@@ -1063,21 +1020,18 @@ class OneBlob(object):
                 #    plt.axis(ax)
                 #    tt = 'Image'
                 #else:
-
                 # Second row: models
                 plt.subplot(rows, cols, 1+imod+1*cols)
                 rgb = model_mod_rgb[modname]
                 dimshow(rgb, ticks=False)
                 axes.append(plt.gca())
                 plt.title(modname)
-
                 # Third row: residuals (not chis)
                 plt.subplot(rows, cols, 1+imod+2*cols)
                 rgb = model_resid_rgb[modname]
                 dimshow(rgb, ticks=False)
                 axes.append(plt.gca())
                 plt.title('chisq %.0f' % chisqs[modname], fontsize=8)
-
                 # Highlight the model to be kept
                 if modname == keepmod:
                     for ax in axes:
@@ -1346,7 +1300,7 @@ class OneBlob(object):
                                       int(sx1-sx0), int(sy1-sy0))
             try:
                 Yo,Xo,Yi,Xi,_ = resample_with_wcs(subwcs, self.blobwcs,
-                                                  [], 2)
+                                                  intType=np.int16)
             except OverlapError:
                 continue
             if len(Yo) == 0:
@@ -1918,7 +1872,7 @@ def get_inblob_map(blobwcs, refs):
         if not np.any(isit):
             debug('None marked', col)
             continue
-        I = np.flatnonzero(isit)
+        I, = np.nonzero(isit)
         debug(len(I), 'with', col, 'set')
         if len(I) == 0:
             continue

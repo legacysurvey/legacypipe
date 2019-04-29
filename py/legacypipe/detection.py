@@ -6,7 +6,6 @@ from astrometry.util.ttime import Time
 def _detmap(X):
     from scipy.ndimage.filters import gaussian_filter
     from legacypipe.survey import tim_get_resamp
-    from astrometry.util.resample import resample_with_wcs, OverlapError
     (tim, targetwcs, H, W, apodize) = X
     R = tim_get_resamp(tim, targetwcs)
     if R is None:
@@ -159,24 +158,23 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     apsn = []
 
     for sedname,sed in SEDs:
-        print('SED', sedname)
+        #print('SED', sedname)
         if plots:
             pps = ps
         else:
             pps = None
-        t0 = Time()
+        #t0 = Time()
         sedhot,px,py,peakval,apval = sed_matched_detection(
             sedname, sed, detmaps, detivs, bands, xx, yy, rr,
             nsigma=nsigma, saturated_pix=saturated_pix, ps=pps)
-        print('SED took', Time()-t0)
+        #print('SED took', Time()-t0)
         if sedhot is None:
             continue
-        print(len(px), 'new peaks')
+        print('SED', sedname, ':', len(px), 'new peaks')
         hot |= sedhot
         # With an empty xx, np.append turns it into a double!
         xx = np.append(xx, px).astype(int)
         yy = np.append(yy, py).astype(int)
-
         peaksn.extend(peakval)
         apsn.extend(apval)
 
@@ -294,7 +292,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     from scipy.ndimage.measurements import label, find_objects
     from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
 
-    t0 = Time()
+    #t0 = Time()
     H,W = detmaps[0].shape
 
     allzero = True
@@ -333,8 +331,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     del sedmap
 
     peaks = (sedsn > nsigma)
-    print('SED sn:', Time()-t0)
-    t0 = Time()
+    #print('SED sn:', Time()-t0)
+    #t0 = Time()
 
     def saddle_level(Y):
         # Require a saddle that drops by (the larger of) "saddle"
@@ -369,8 +367,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[0:-2,2:  ])
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[2:  ,0:-2])
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[2:  ,2:  ])
-    print('Peaks:', Time()-t0)
-    t0 = Time()
+    #print('Peaks:', Time()-t0)
+    #t0 = Time()
 
     if ps is not None:
         from astrometry.util.plotutils import dimshow
@@ -388,6 +386,9 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         plt.axis(ax)
         plt.title('SED %s: S/N & peaks' % sedname)
         ps.savefig()
+
+        import fitsio
+        fitsio.write('sed-sn-%s.fits' % sedname, sedsn)
 
         # plt.clf()
         # plt.imshow(sedsn, vmin=-2, vmax=10, interpolation='nearest',
@@ -559,8 +560,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     print('Of', len(px), 'potential peaks:', nveto, 'in veto map,', nsaddle, 'cut by saddle test,',
           naper, 'cut by aper test,', np.sum(keep), 'kept')
 
-    print('New sources:', Time()-t0)
-    t0 = Time()
+    #print('New sources:', Time()-t0)
 
     if ps is not None:
         pxdrop = px[np.logical_not(keep)]
@@ -749,9 +749,8 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     from scipy.ndimage.measurements import label, find_objects
 
     image = binary_fill_holes(image)
-
     blobs,nblobs = label(image)
-    print('N detected blobs:', nblobs)
+    #print('Detected blobs:', nblobs)
     H,W = image.shape
     del image
 
@@ -785,13 +784,10 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     blobsrcs = []
     keepslices = []
     blobmap = {}
-    dropslices = {}
     for blob in range(1, nblobs+1):
-        Isrcs = np.flatnonzero(T.blob == blob)
+        Isrcs, = np.nonzero(T.blob == blob)
         if len(Isrcs) == 0:
-            #print('Blob', blob, 'has no sources')
             blobmap[blob] = -1
-            dropslices[blob] = blobslices[blob-1]
             continue
         blobmap[blob] = len(blobsrcs)
         blobsrcs.append(Isrcs)
@@ -808,7 +804,7 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
         inblobs[Isrcs] = True
     noblobs = np.flatnonzero(np.logical_not(inblobs))
     del inblobs
-    print(len(noblobs), 'sources are not in blobs')
+    #print(len(noblobs), 'sources are not in blobs')
 
     # Remap the "blobs" image so that empty regions are = -1 and the blob values
     # correspond to their indices in the "blobsrcs" list.

@@ -15,21 +15,21 @@ import fitsio
 
 def main():
     ns = parse_args()
-            
+
     if ns.ignore_errors:
         print("Warning: *** Will ignore broken tractor catalogue files ***")
         print("         *** Disable -I for final data product.         ***")
     # avoid each subprocess importing h5py again and again.
-    if 'hdf5' in ns.format: 
+    if 'hdf5' in ns.format:
         import h5py
 
-    # this may take a while on a file system with slow meta-data 
+    # this may take a while on a file system with slow meta-data
     # access
     # bricks = [(name, filepath, region), ...]
     bricks = list_bricks(ns)
 
     t0 = time()
-            
+
     try:
         os.makedirs(ns.dest)
     except OSError:
@@ -68,28 +68,28 @@ def main():
 
         for format in ns.format:
             filename = template %  \
-                dict(ramin=formatra(sweep[0]), 
+                dict(ramin=formatra(sweep[0]),
                      decmin=formatdec(sweep[1]),
-                     ramax=formatra(sweep[2]), 
+                     ramax=formatra(sweep[2]),
                      decmax=formatdec(sweep[3]),
                      format=format)
 
             if len(data) > 0:
-                save_sweep_file(os.path.join(ns.dest, filename), 
+                save_sweep_file(os.path.join(ns.dest, filename),
                     data, header, format)
 
         return filename, nbricks, len(data)
 
-    def reduce(filename, nbricks, nobj): 
+    def reduce(filename, nbricks, nobj):
         nbricks_tot[...] += nbricks
         nobj_tot[...] += nobj
 
         if ns.verbose and nobj > 0:
             print (
-            '%s : %d bricks %d primary objects, %g bricks / sec %g objs / sec' % 
-            ( filename, nbricks, nobj, 
-              nbricks_tot / (time() - t0), 
-              nobj_tot / (time() - t0), 
+            '%s : %d bricks %d primary objects, %g bricks / sec %g objs / sec' %
+            ( filename, nbricks, nobj,
+              nbricks_tot / (time() - t0),
+              nobj_tot / (time() - t0),
             )
             )
 
@@ -101,7 +101,7 @@ def list_bricks(ns):
     t0 = time()
 
     if ns.filelist is not None:
-        d = dict([(parse_filename(fn.strip()), fn.strip()) 
+        d = dict([(parse_filename(fn.strip()), fn.strip())
             for fn in open(ns.filelist, 'r').readlines()])
     else:
         d = dict(iter_tractor(ns.src))
@@ -115,12 +115,12 @@ def list_bricks(ns):
         bricksdesc = dict([(item['BRICKNAME'].decode(), item) for item in bricksdesc])
     else:
         bricksdesc = None
-             
+
     #- Load list of bricknames to use
     if ns.bricklist is not None:
         bricklist = np.loadtxt(ns.bricklist, dtype='S8')
         # TODO: skip unknown bricks?
-        d = dict([(brickname.decode(), d[brickname]) 
+        d = dict([(brickname.decode(), d[brickname])
                              for brickname in bricklist])
 
     t0 = time()
@@ -138,7 +138,7 @@ def list_bricks(ns):
     if ns.verbose:
         print('read regions of %d bricks in %g seconds' % (
             len(bricks), time() - t0))
- 
+
     return bricks
 
 def sweep_schema_ra(nstripes):
@@ -152,10 +152,10 @@ def sweep_schema_dec(nstripes):
 def sweep_schema_blocks(nra, ndec):
     ra = np.linspace(0, 360, nra + 1, endpoint=True)
     dec = np.linspace(-90, 90, ndec + 1, endpoint=True)
-    
+
     return [(ra[i], dec[j], ra[i+1], dec[j+1]) for i in range(len(ra) - 1) for j in range(len(dec) - 1)]
 
-class NA: pass 
+class NA: pass
 
 def make_sweep(sweep, bricks, ns):
     data = [np.empty(0, dtype=SWEEP_DTYPE)]
@@ -171,10 +171,10 @@ def make_sweep(sweep, bricks, ns):
                 else:
                     if header[key] != value:
                         header[key] = NA
-        
+
     with sharedmem.MapReduce(np=0) as pool:
         def filter(brickname, filename, region):
-            if not intersect(sweep, region): 
+            if not intersect(sweep, region):
                 return None, None
             try:
                 objects = fitsio.read(filename, 1, upper=True)
@@ -208,14 +208,14 @@ def make_sweep(sweep, bricks, ns):
 
             for colname in chunk.dtype.names:
                 if colname not in objects.dtype.names:
-                    # skip missing columns 
+                    # skip missing columns
                     continue
                 try:
                     chunk[colname][...] = objects[colname][...]
                 except ValueError:
                     print('failed on column `%s`' % colname)
                     raise
-            chunkheader = dict([(key, chunkheader[key]) for key in chunkheader.keys()])    
+            chunkheader = dict([(key, chunkheader[key]) for key in chunkheader.keys()])
             return chunk, chunkheader
 
         def reduce(chunk, chunkheader):
@@ -247,7 +247,7 @@ def save_sweep_file(filename, data, header, format):
                 dset.attrs[key] = header[key]
     else:
         raise ValueError("Unknown format")
-    
+
 def intersect(region1, region2, tol=0.1):
     #  ra1, dec1, ra2, dec2 = region1
     # left top right bottom
@@ -255,11 +255,11 @@ def intersect(region1, region2, tol=0.1):
         # this do not use periodic boundary yet
         return (r[0] - tol, r[1] - tol, r[2] + tol, r[3] + tol)
 
-    region1 = pad(region1) 
-    region2 = pad(region2) 
+    region1 = pad(region1)
+    region2 = pad(region2)
 
     dx = min(region1[2], region2[2]) - max(region1[0], region2[0])
-    dy = min(region1[3], region2[3]) - max(region1[1], region2[1]) 
+    dy = min(region1[3], region2[3]) - max(region1[1], region2[1])
     return (dx > 0) & (dy > 0)
 
 def read_region(brickname, filename, bricksdesc):
@@ -461,8 +461,7 @@ def parse_args():
     ap = argparse.ArgumentParser(
     description="""Create Sweep files for DECALS.
         This tool ensures each sweep file contains roughly '-n' objects. HDF5 and FITS formats are supported.
-        Columns contained in a sweep file are: 
-
+        Columns contained in a sweep file are:
         [%(columns)s].
     """ % dict(columns=str(SWEEP_DTYPE.names)),
         )

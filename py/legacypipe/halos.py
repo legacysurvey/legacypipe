@@ -6,6 +6,71 @@ fixed_alpha = -3.0
 def powerlaw_model(r, F, alpha=fixed_alpha):
     return F * r**alpha
 
+def subtract_one_real(X):
+    tim, refs, fluxes, gpixscale = X
+
+    halo = np.zeros(tim.shape, np.float32)
+    for ref,flux in zip(refs,fluxes):
+        H,W = tim.shape
+        ok,x,y = tim.subwcs.radec2pixelxy(ref.ra, ref.dec)
+        x -= 1.
+        y -= 1.
+        pixscale = tim.imobj.pixscale
+        pixrad = int(np.ceil(ref.radius * 3600. / pixscale))
+        xlo = int(np.clip(np.floor(x - pixrad), 0, W-1))
+        xhi = int(np.clip(np.ceil (x + pixrad), 0, W-1))
+        ylo = int(np.clip(np.floor(y - pixrad), 0, H-1))
+        yhi = int(np.clip(np.ceil (y + pixrad), 0, H-1))
+        if xlo == xhi or ylo == yhi:
+            continue
+
+        rads = np.hypot(np.arange(ylo, yhi+1)[:,np.newaxis] - y,
+                        np.arange(xlo, xhi+1)[np.newaxis,:] - x)
+        maxr = pixrad
+        # Apodization fraction
+        apr = maxr*0.8
+        apodize = np.clip((rads - maxr) / (apr - maxr), 0., 1.)
+        # The power-law scale was computed at the coadd pixscale, which might
+        # differ from this tim's pixscale; scale it.
+        h = powerlaw_model(rads * pixscale / gpixscale, flux)
+        # ASSUME tim is in nanomaggies units
+        halo[ylo:yhi+1, xlo:xhi+1] += h
+    return halo
+
+def subtract_one(X):
+    try:
+        return subtract_one_real(X)
+    except:
+        import traceback
+        traceback.print_exc()
+        raise
+
+def subtract_halos(tims, refs, fluxes2, pixscale, bands, plots, ps, mp):
+    iband = dict([(b,i) for i,b in enumerate(bands)])
+    args = [(tim, refs, fluxes2[:,iband[tim.band]], pixscale) for tim in tims]
+    haloimgs = mp.map(subtract_one, args)
+    for tim,h in zip(tims, haloimgs):
+
+        if plots:
+            import pylab as plt
+            plt.clf()
+            plt.subplot(1,3,1)
+            plt.imshow(tim.data, origin='lower', interpolation='nearest',
+                       vmin=-2*tim.sig1, vmax=5.*tim.sig1)
+            plt.colorbar(orientation='horizontal')
+            plt.subplot(1,3,2)
+            plt.imshow(h, origin='lower', interpolation='nearest',
+                       vmin=-2*tim.sig1, vmax=5.*tim.sig1)
+            plt.colorbar(orientation='horizontal')
+            plt.subplot(1,3,3)
+            plt.imshow(tim.data-h, origin='lower', interpolation='nearest',
+                       vmin=-2*tim.sig1, vmax=5.*tim.sig1)
+            plt.colorbar(orientation='horizontal')
+            plt.suptitle(tim.name)
+            ps.savefig()
+
+        tim.data -= h
+
 def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
               bands, gaia, plots, ps, init_fluxes=None):
     from scipy.optimize import minimize
@@ -14,7 +79,7 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
     fitvalues = []
 
     for istar,g in enumerate(gaia):
-        print('Star w/ G=', g.G)
+        print('Star w/ G=', g.phot_g_mean_mag)
         ok,x,y = targetwcs.radec2pixelxy(g.ra, g.dec)
         x -= 1.
         y -= 1.
@@ -55,6 +120,7 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
             profiles = []
             fitpros = []
             rimgs = []
+            fitdata = []
 
         fit_fluxes = []
 
@@ -131,20 +197,22 @@ def fit_halos(coimgs, cons, H, W, targetwcs, pixscale,
             K = (r2 >= minr**2) * (r2 <= maxr**2)
             if plots:
                 fitpro[K] += mod[K]
+                fitdata.append((band, rr, mm, dm, F))
             haloimgs[iband][ylo:yhi, xlo:xhi] += K * mod * apodize
             fit_fluxes.append(F)
         fitvalues.append((fit_fluxes, fixed_alpha, minr, maxr, apr))
 
-        if False and plots:
-            # plt.clf()
-            # for band,fit in zip(bands,fits):
-            #     (F2,), rr, mm, dm, I,(F1,alpha1) = fit
-            #     cc = dict(z='m').get(band,band)
-            #     plt.loglog(rr, mm, '-', color=cc)
-            #     plt.errorbar(rr, mm, yerr=dm, color=cc, fmt='.')
-            #     plt.plot(rr, powerlaw_model(0., F1, alpha1, rr), '-', color=cc, lw=3, alpha=0.3)
-            # ps.savefig()
+        if plots:
+            import pylab as plt
+            plt.clf()
+            for (band, rr, mm, dm, F) in fitdata:
+                cc = dict(z='m').get(band,band)
+                plt.loglog(rr, mm, '-', color=cc)
+                plt.errorbar(rr, mm, yerr=dm, color=cc, fmt='.')
+                plt.plot(rr, powerlaw_model(rr, F), '-', color=cc, lw=3, alpha=0.3)
+            ps.savefig()
 
+        if False and plots:
             plt.clf()
             dimshow(get_rgb(rimgs, bands, **rgbkwargs))
             plt.title('rimg')

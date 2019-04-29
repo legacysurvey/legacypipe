@@ -51,7 +51,8 @@ class UnwiseCoadd(object):
 
             debug('WISE: resampling', wcs, 'to', self.unwise_wcs)
             try:
-                Yo,Xo,Yi,Xi,resam = resample_with_wcs(self.unwise_wcs, wcs, [img, mod])
+                Yo,Xo,Yi,Xi,resam = resample_with_wcs(self.unwise_wcs, wcs,
+                                                      [img, mod], intType=np.int16)
                 rimg,rmod = resam
                 debug('Adding', len(Yo), 'pixels from tile', tile, 'to coadd')
                 self.unwise_co [band-1][Yo,Xo] += rimg
@@ -686,7 +687,7 @@ def _resample_one(args):
 
     try:
         Yo,Xo,Yi,Xi,rimgs = resample_with_wcs(
-            targetwcs, tim.subwcs, imgs, 3)
+            targetwcs, tim.subwcs, imgs, 3, intType=np.int16)
     except OverlapError:
         return None
     if len(Yo) == 0:
@@ -700,7 +701,7 @@ def _resample_one(args):
     else:
         im = tim.getImage ()[Yi,Xi]
         if mod is not None:
-            mo = mods[itim][Yi,Xi]
+            mo = mod[Yi,Xi]
     iv = tim.getInvvar()[Yi,Xi]
     if sbscale:
         fscale = tim.sbscale
@@ -739,8 +740,10 @@ def write_coadd_images(band,
     for r in version_header.records():
         hdr.add_record(r)
     # Grab these keywords from all input files for this band...
-    keys = ['TELESCOP','OBSERVAT','OBS-LAT','OBS-LONG','OBS-ELEV',
+    keys = ['OBSERVAT', 'TELESCOP','OBS-LAT','OBS-LONG','OBS-ELEV',
             'INSTRUME','FILTER']
+    comms = ['Observatory name', 'Telescope  name', 'Latitude (deg)', 'Longitude (deg)',
+             'Elevation (m)', 'Instrument name', 'Filter name']
     vals = set()
     for tim in tims:
         if tim.band != band:
@@ -755,8 +758,8 @@ def write_coadd_images(band,
                 kk = key
             else:
                 kk = key[:7] + '%i'%i
-            hdr.add_record(dict(name=kk, value=v[ik]))
-    hdr.add_record(dict(name='FILTERX', value=band))
+            hdr.add_record(dict(name=kk, value=v[ik],comment=comms[ik]))
+    hdr.add_record(dict(name='FILTERX', value=band, comment='Filter short name'))
 
     # DATE-OBS converted to TAI.
     mjds = [tim.time.toMjd() for tim in tims if tim.band == band]
@@ -777,7 +780,7 @@ def write_coadd_images(band,
     targetwcs.add_to_header(hdr)
     hdr.delete('IMAGEW')
     hdr.delete('IMAGEH')
-    hdr.add_record(dict(name='EQUINOX', value=2000.))
+    hdr.add_record(dict(name='EQUINOX', value=2000., comment='Observation Epoch'))
 
     imgs = [
         ('image',  'image', cowimg),
@@ -807,7 +810,7 @@ def write_coadd_images(band,
         for r in hdr.records():
             hdr2.add_record(r)
         hdr2.add_record(dict(name='IMTYPE', value=name,
-                             comment='LegacySurvey image type'))
+                             comment='LegacySurveys image type'))
         hdr2.add_record(dict(name='PRODTYPE', value=prodtype,
                              comment='NOAO image type'))
         if name in ['image', 'model']:
@@ -900,4 +903,3 @@ def quick_coadds(tims, bands, targetwcs, images=None,
     if get_max:
         rtn.append(maximgs)
     return rtn
-

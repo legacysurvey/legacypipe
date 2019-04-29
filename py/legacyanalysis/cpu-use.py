@@ -99,13 +99,13 @@ def plot_cpu_usage(fn, title, cpufn, memfn):
         #pmem[J] = T.pmem[II]
 
         if pid == parent_pid:
-            plt.plot(xaxis, pmem, 'k-', alpha=0.5, label='My main')
+            plt.plot(xaxis, pmem / 1e6, 'k-', alpha=0.5, label='My main')
         else:
             kwa = {}
             if not plotted_worker:
                 kwa.update(label='My workers')
                 plotted_worker = True
-            plt.plot(xaxis, pmem, 'b-', alpha=0.25, **kwa)
+            plt.plot(xaxis, pmem / 1e6, 'b-', alpha=0.25, **kwa)
 
     I = np.flatnonzero(np.logical_not(T.mine))
     pids = np.unique(T.pid[I])
@@ -116,7 +116,7 @@ def plot_cpu_usage(fn, title, cpufn, memfn):
         J = np.array([stepmap[s] for s in T.step[II]])
         #pmem[J] += T.pmem[II]
         pmem[J] += T.vsz[II]
-    plt.plot(xaxis, pmem, 'r-', label='Other PIDs')
+    plt.plot(xaxis, pmem / 1e6, 'r-', label='Other PIDs')
 
     for e,t in zip(events.event, events.unixtime - t0):
         plt.axvline(t, color='k', alpha=0.1)
@@ -124,7 +124,7 @@ def plot_cpu_usage(fn, title, cpufn, memfn):
 
     plt.xlabel('Wall time (s)')
     #plt.ylabel('Memory %')
-    plt.ylabel('VSS')
+    plt.ylabel('VSS (GB)')
     plt.legend()
     plt.title(title)
     plt.savefig(memfn)
@@ -176,3 +176,26 @@ def oldtimey():
     
         plot_cpu_usage(fn, title, 'ps-%s.png' % tag, 'ps-mem-%s.png' % tag)
     
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', '--cpufn', dest='cpufn',
+                        help='CPU plot filename')
+    parser.add_argument('-m', '--memfn', dest='memfn',
+                        help='Memory plot filename')
+    parser.add_argument('-t', '--title', dest='title', help='Plot title')
+    parser.add_argument('filename')
+    opt = parser.parse_args()
+
+    import os
+    base = os.path.basename(opt.filename)
+    if '.' in base:
+        base = base.split('.')[0]
+
+    if opt.cpufn is None:
+        opt.cpufn = base + '-cpu.png'
+    if opt.memfn is None:
+        opt.memfn = base + '-mem.png'
+    if opt.title is None:
+        opt.title = base
+    plot_cpu_usage(opt.filename, opt.title, opt.cpufn, opt.memfn)

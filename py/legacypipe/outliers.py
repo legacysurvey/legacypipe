@@ -41,8 +41,10 @@ def read_outlier_mask_file(survey, tims, brickname):
     return True
 
 def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
-                        mp=None, plots=False, ps=None, make_badcoadds=True):
+                        mp=None, plots=False, ps=None, make_badcoadds=True,
+                        gaia_stars=False):
     from legacypipe.image import CP_DQ_BITS
+    from legacypipe.reference import read_gaia
     from scipy.ndimage.filters import gaussian_filter
     from scipy.ndimage.morphology import binary_dilation
     from astrometry.util.resample import resample_with_wcs,OverlapError
@@ -55,6 +57,37 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
         badcoadds = []
     else:
         badcoadds = None
+
+    star_veto = np.zeros(targetwcs.shape, np.bool)
+    if gaia_stars:
+        gaia = read_gaia(targetwcs)
+        #print(len(gaia), 'Gaia stars for outlier veto')
+        # Not moving Gaia stars to epoch of individual images...
+        ok,bx,by = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
+        bx -= 1.
+        by -= 1.
+        # Radius to mask around Gaia stars, in arcsec
+        radius = 1.0
+        pixrad = radius / targetwcs.pixel_scale()
+        for x,y in zip(bx,by):
+            xlo = int(np.clip(np.floor(x - pixrad), 0, W-1))
+            xhi = int(np.clip(np.ceil (x + pixrad), 0, W-1))
+            ylo = int(np.clip(np.floor(y - pixrad), 0, H-1))
+            yhi = int(np.clip(np.ceil (y + pixrad), 0, H-1))
+            if xlo == xhi or ylo == yhi:
+                continue
+            r2 = (((np.arange(ylo,yhi+1) - y)**2)[:,np.newaxis] +
+                  ((np.arange(xlo,xhi+1) - x)**2)[np.newaxis,:])
+            star_veto[ylo:yhi+1, xlo:xhi+1] |= (r2 < pixrad)
+
+    if plots:
+        plt.clf()
+        plt.imshow(star_veto, interpolation='nearest', origin='lower',
+                   vmin=0, vmax=1, cmap='hot')
+        ax = plt.axis()
+        plt.plot(bx, by, 'r.')
+        plt.axis(ax)
+        ps.savefig()
 
     with survey.write_output('outliers_mask', brick=brickname) as out:
         # empty Primary HDU
@@ -90,9 +123,10 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             del r,R
     
             #
-            veto = np.logical_or(
+            veto = np.logical_or(star_veto,
+                                 np.logical_or(
                 binary_dilation(masks & CP_DQ_BITS['bleed'], iterations=3),
-                binary_dilation(masks & CP_DQ_BITS['satur'], iterations=10))
+                binary_dilation(masks & CP_DQ_BITS['satur'], iterations=10)))
             del masks
         
             if plots:
@@ -174,16 +208,15 @@ def compare_one(X):
     img = gaussian_filter(tim.getImage(), sig)
     try:
         Yo,Xo,Yi,Xi,[rimg] = resample_with_wcs(
-            targetwcs, tim.subwcs, [img], 3)
+            targetwcs, tim.subwcs, [img], intType=np.int16)
     except OverlapError:
         return None
     del img
     blurnorm = 1./(2. * np.sqrt(np.pi) * sig)
     wt = tim.getInvvar()[Yi,Xi] / np.float32(blurnorm**2)
-    Yo = Yo.astype(np.int16)
-    Xo = Xo.astype(np.int16)
-    Yi = Yi.astype(np.int16)
-    Xi = Xi.astype(np.int16)
+    if Xi.dtype != np.int16:
+        Yi = Yi.astype(np.int16)
+        Xi = Xi.astype(np.int16)
 
     # Compare against reference image...
     maskedpix = np.zeros(tim.shape, np.uint8)
@@ -312,7 +345,7 @@ def compare_one(X):
     # Resample "hot" (in brick coords) back to tim coords.
     try:
         mYo,mXo,mYi,mXi,nil = resample_with_wcs(
-            tim.subwcs, targetwcs, [], 3)
+            tim.subwcs, targetwcs, intType=np.int16)
     except OverlapError:
         return None
     Ibad, = np.nonzero(hot[mYi,mXi])
@@ -333,17 +366,15 @@ def blur_resample_one(X):
     img = gaussian_filter(tim.getImage(), sig)
     try:
         Yo,Xo,Yi,Xi,[rimg] = resample_with_wcs(
-            targetwcs, tim.subwcs, [img], 3)
+            targetwcs, tim.subwcs, [img], intType=np.int16)
     except OverlapError:
         return None
     del img
     blurnorm = 1./(2. * np.sqrt(np.pi) * sig)
     wt = tim.getInvvar()[Yi,Xi] / (blurnorm**2)
-    return (Yo.astype(np.int16), Xo.astype(np.int16), rimg*wt, wt, tim.dq[Yi,Xi])
+    return (Yo, Xo, rimg*wt, wt, tim.dq[Yi,Xi])
 
 def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
-    from astrometry.util.resample import resample_with_wcs, OverlapError
-
     H,W = targetwcs.shape
     ibands = dict([(b,i) for i,b in enumerate(bands)])
     for tim in tims:
@@ -358,8 +389,8 @@ def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
                 continue
             ra,dec = tim.subwcs.pixelxy2radec(ix+1, iy+1)[-2:]
             ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
-            xx = np.round(xx-1).astype(np.int16)
-            yy = np.round(yy-1).astype(np.int16)
+            xx = (xx - 1. + 0.5).astype(np.int16)
+            yy = (yy - 1. + 0.5).astype(np.int16)
             keep = (xx >= 0) * (xx < W) * (yy >= 0) * (yy < H)
             if not np.any(keep):
                 continue
