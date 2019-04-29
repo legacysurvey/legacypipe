@@ -1,7 +1,8 @@
 from __future__ import print_function
 import numpy as np
 import os
-from legacypipe.image import LegacySurveyImage, CP_DQ_BITS
+from legacypipe.image import LegacySurveyImage
+from legacypipe.bits import DQ_BITS
 
 '''
 This is for the "pitcairn" reductions for CFIS-r data.
@@ -62,7 +63,7 @@ class MegaPrimeImage(LegacySurveyImage):
         into a bitmask.  We only have a 0/1 bad pixel mask.
         '''
         dqbits = np.zeros(dq.shape, np.int16)
-        dqbits[dq == 0] = CP_DQ_BITS['badpix']
+        dqbits[dq == 0] = DQ_BITS['badpix']
         return dqbits
 
     def read_image(self, header=False, **kwargs):

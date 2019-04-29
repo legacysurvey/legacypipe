@@ -5,6 +5,7 @@ import fitsio
 from astrometry.util.fits import fits_table
 from tractor import PixelizedPsfEx, PixelizedPSF
 from legacypipe.utils import read_primary_header
+from legacypipe.bits import DQ_BITS
 
 import logging
 logger = logging.getLogger('legacypipe.image')
@@ -22,33 +23,11 @@ processed by variants of the NOAO Community Pipeline (CP), so this
 base class is pretty specific.
 '''
 
-# From: http://www.noao.edu/noao/staff/fvaldes/CPDocPrelim/PL201_3.html
-# 1   -- detector bad pixel           InstCal
-# 1   -- detector bad pixel/no data   Resampled
-# 1   -- No data                      Stacked
-# 2   -- saturated                    InstCal/Resampled
-# 4   -- interpolated                 InstCal/Resampled
-# 16  -- single exposure cosmic ray   InstCal/Resampled
-# 64  -- bleed trail                  InstCal/Resampled
-# 128 -- multi-exposure transient     InstCal/Resampled
-CP_DQ_BITS = dict(badpix=1,
-                  satur=2,
-                  interp=4,
-                  cr=16,
-                  bleed=64,
-                  trans=128,
-                  edge = 256,
-                  edge2 = 512,
-                  # Added by our stage_outliers rejection
-                  outlier = 2048,
-                  )
-
 def remap_dq_cp_codes(dq):
     '''
     Some versions of the CP use integer codes, not bit masks.
     This converts them.
     '''
-    from legacypipe.image import CP_DQ_BITS
     dqbits = np.zeros(dq.shape, np.int16)
     '''
     1 = bad
@@ -68,14 +47,14 @@ def remap_dq_cp_codes(dq):
     from scipy.ndimage.morphology import binary_dilation
     dq[np.logical_and(dq == 1, binary_dilation(dq == 3))] = 3
 
-    dqbits[dq == 1] |= CP_DQ_BITS['badpix']
-    dqbits[dq == 2] |= CP_DQ_BITS['badpix']
-    dqbits[dq == 3] |= CP_DQ_BITS['satur']
-    dqbits[dq == 4] |= CP_DQ_BITS['bleed']
-    dqbits[dq == 5] |= CP_DQ_BITS['cr']
-    dqbits[dq == 6] |= CP_DQ_BITS['badpix']
-    dqbits[dq == 7] |= CP_DQ_BITS['trans']
-    dqbits[dq == 8] |= CP_DQ_BITS['trans']
+    dqbits[dq == 1] |= DQ_BITS['badpix']
+    dqbits[dq == 2] |= DQ_BITS['badpix']
+    dqbits[dq == 3] |= DQ_BITS['satur']
+    dqbits[dq == 4] |= DQ_BITS['bleed']
+    dqbits[dq == 5] |= DQ_BITS['cr']
+    dqbits[dq == 6] |= DQ_BITS['badpix']
+    dqbits[dq == 7] |= DQ_BITS['trans']
+    dqbits[dq == 8] |= DQ_BITS['trans']
     return dqbits
 
 class LegacySurveyImage(object):
@@ -152,7 +131,7 @@ class LegacySurveyImage(object):
         self.plprocid = getattr(ccd, 'plprocid', 'xxxxxxx').strip()
 
         # Which Data Quality bits mark saturation?
-        self.dq_saturation_bits = CP_DQ_BITS['satur'] # | CP_DQ_BITS['bleed']
+        self.dq_saturation_bits = DQ_BITS['satur'] # | DQ_BITS['bleed']
 
         # Photometric and astrometric zeropoints
         self.ccdzpt = ccd.ccdzpt
@@ -377,7 +356,7 @@ class LegacySurveyImage(object):
         # with source detection.
         if get_dq:
             from scipy.ndimage.measurements import label
-            bits = CP_DQ_BITS['satur'] | CP_DQ_BITS['bleed']
+            bits = DQ_BITS['satur'] | DQ_BITS['bleed']
             if np.any(dq[:,0] & bits) or np.any(dq[:,-1] & bits):
                 blobmap,_ = label(dq & bits)
                 badblobs = np.unique(np.append(blobmap[:,0], blobmap[:,-1]))
@@ -386,7 +365,7 @@ class LegacySurveyImage(object):
                 for bad in badblobs:
                     n = np.sum(blobmap == bad)
                     debug('Setting', n, 'edge SATUR|BLEED pixels to EDGE')
-                    dq[blobmap == bad] = CP_DQ_BITS['edge']
+                    dq[blobmap == bad] = DQ_BITS['edge']
 
         # Drop rows and columns at the image edges that are all masked.
         for y0_new in range(y0, y1):

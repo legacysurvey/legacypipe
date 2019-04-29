@@ -11,11 +11,10 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
-OUTLIER_POS = 1
-OUTLIER_NEG = 2
+from legacypipe.bits import OUTLIER_POS, OUTLIER_NEG
 
 def read_outlier_mask_file(survey, tims, brickname):
-    from legacypipe.image import CP_DQ_BITS
+    from legacypipe.bits import DQ_BITS
     fn = survey.find_file('outliers_mask', brick=brickname, output=True)
     if not os.path.exists(fn):
         return False
@@ -36,14 +35,14 @@ def read_outlier_mask_file(survey, tims, brickname):
             print('Warning: Outlier mask', fn, 'x0,y0 does not match that of tim', tim)
             return False
         # Apply this mask!
-        tim.dq |= (mask > 0) * CP_DQ_BITS['outlier']
+        tim.dq |= (mask > 0) * DQ_BITS['outlier']
         tim.inverr[mask > 0] = 0.
     return True
 
 def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
                         mp=None, plots=False, ps=None, make_badcoadds=True,
                         gaia_stars=False):
-    from legacypipe.image import CP_DQ_BITS
+    from legacypipe.bits import DQ_BITS
     from legacypipe.reference import read_gaia
     from scipy.ndimage.filters import gaussian_filter
     from scipy.ndimage.morphology import binary_dilation
@@ -125,8 +124,8 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             #
             veto = np.logical_or(star_veto,
                                  np.logical_or(
-                binary_dilation(masks & CP_DQ_BITS['bleed'], iterations=3),
-                binary_dilation(masks & CP_DQ_BITS['satur'], iterations=10)))
+                binary_dilation(masks & DQ_BITS['bleed'], iterations=3),
+                binary_dilation(masks & DQ_BITS['satur'], iterations=10)))
             del masks
         
             if plots:
@@ -161,7 +160,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
 
                 # Apply the mask!
                 tim.inverr[mask > 0] = 0.
-                tim.dq[mask > 0] |= CP_DQ_BITS['outlier']
+                tim.dq[mask > 0] |= DQ_BITS['outlier']
 
                 # Write output!
                 # copy version_header before modifying it.
