@@ -1042,56 +1042,10 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # peaks at the edge of the mask.
     saturated_pix = [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps]
 
-    # Saturated blobs -- create a source for each, except for those
-    # that already have a Tycho-2 or Gaia star
-    satmap = reduce(np.logical_or, satmaps)
-    satblobs,nsat = label(satmap > 0)
-    if refstars:
-        # Build a map from old "satblobs" to new; identity to start
-        remap = np.arange(nsat+1)
-        # Drop blobs that contain a reference star
-        zeroout = satblobs[refstars.iby[refstars.in_bounds],
-                           refstars.ibx[refstars.in_bounds]]
-        remap[zeroout] = 0
-        # Renumber them to be contiguous
-        I = np.flatnonzero(remap)
-        nsat = len(I)
-        remap[I] = 1 + np.arange(nsat)
-        satblobs = remap[satblobs]
-        del remap, zeroout, I
-
-    # Add sources for any remaining saturated blobs
-    satcat = []
-    sat = fits_table()
-    if nsat:
-        satyx = center_of_mass(satmap, labels=satblobs, index=np.arange(nsat)+1)
-        # NOTE, satyx is in y,x order (center_of_mass)
-        sat.ibx = np.array([x for y,x in satyx]).astype(int)
-        sat.iby = np.array([y for y,x in satyx]).astype(int)
-        sat.ra,sat.dec = targetwcs.pixelxy2radec(sat.ibx+1, sat.iby+1)
-        debug('Adding', len(sat), 'additional saturated stars')
-        # MAGIC mag for a saturated star
-        sat.mag = np.zeros(len(sat), np.float32) + 15.
-        sat.ref_cat = np.array(['  '] * len(sat))
-        del satyx
-
-        avoid_x = np.append(avoid_x, sat.ibx).astype(int)
-        avoid_y = np.append(avoid_y, sat.iby).astype(int)
-        # Create catalog entries for saturated blobs
-        for r,d,m in zip(sat.ra, sat.dec, sat.mag):
-            fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
-                           for band in bands])
-            assert(np.all(np.isfinite(list(fluxes.values()))))
-            satcat.append(PointSource(RaDecPos(r, d),
-                                      NanoMaggies(order=bands, **fluxes)))
-    assert(len(satcat) == len(sat))
+    # Formerly, we generated sources for each saturated blob, but since we now initialize
+    # with Tycho-2 and Gaia stars and large galaxies, not needed.
 
     if plots:
-        plt.clf()
-        dimshow(satmap)
-        plt.title('satmap')
-        ps.savefig()
-
         rgb = get_rgb(detmaps, bands, **rgbkwargs)
         plt.clf()
         dimshow(rgb)
@@ -1102,10 +1056,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             rgb[:,:,2-i][satpix] = 1
         plt.clf()
         dimshow(rgb)
-        ax = plt.axis()
-        if len(sat):
-            plt.plot(sat.ibx, sat.iby, 'ro')
-        plt.axis(ax)
         plt.title('detmaps & saturated')
         ps.savefig()
 
@@ -1119,11 +1069,11 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             tycho = refstars[refstars.isbright]
             if len(tycho):
                 ok,ix,iy = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
-                p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='r', mfc='none')
+                p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=14, mec='r', mfc='none')
                 lp.append(p)
                 lt.append('Tycho-2 only')
             if gaia_stars:
-                gaia = refstars[refstars.ismedium]
+                gaia = refstars[refstars.ref_cat == 'G2']
             if gaia_stars and len(gaia):
                 ok,ix,iy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
                 p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='c', mfc='none')
@@ -1134,7 +1084,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 galaxies = refstars[refstars.islargegalaxy]
             if large_galaxies and len(galaxies):
                 ok,ix,iy = targetwcs.radec2pixelxy(galaxies.ra, galaxies.dec)
-                p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='g', mfc='none')
+                p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=14, mec=(0,1,0), mfc='none')
                 lp.append(p)
                 lt.append('Galaxies')
             plt.axis(ax)
@@ -1149,15 +1099,13 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                          bbox=dict(facecolor='w', alpha=0.5))
             plt.axis(ax)
             ps.savefig()
-    del satmap
 
     # SED-matched detections
     record_event and record_event('stage_srcs: SED-matched')
     info('Running source detection at', nsigma, 'sigma')
     SEDs = survey.sed_matched_filters(bands)
 
-    # Add a ~1" exclusion zone around reference, saturated stars, and large
-    # galaxies.
+    # Add a ~1" exclusion zone around reference stars and large galaxies
     avoid_r = np.zeros_like(avoid_x) + 4
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
@@ -1172,20 +1120,16 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     Tnew.ref_cat = np.array(['  '] * len(Tnew))
     Tnew.ref_id  = np.zeros(len(Tnew), np.int64)
 
-    # Merge newly detected sources with existing (Tycho2 + Gaia) source lists,
-    # saturated sources, and large galaxies.
+    # Merge newly detected sources with reference sources (Tycho2, Gaia, large galaxies)
     cats = newcat
     tables = [Tnew]
-    if len(sat):
-        tables.append(sat)
-        cats += satcat
     if refstars and len(refstars):
         tables.append(refstars)
         cats += refcat
     T = merge_tables(tables, columns='fillzero')
     cat = Catalog(*cats)
     cat.freezeAllParams()
-
+    # The tractor Source object list "cat" and the table "T" are row-aligned.
     assert(len(T) > 0)
     assert(len(cat) == len(T))
 
@@ -1201,9 +1145,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         plt.title('Detections')
         ps.savefig()
         ax = plt.axis()
-        if len(sat):
-            plt.plot(sat.ibx, sat.iby, '+', color='r',
-                     label='Saturated', **crossa)
         if len(refstars):
             I, = np.nonzero([r[0] == 'T' for r in refstars.ref_cat])
             if len(I):
