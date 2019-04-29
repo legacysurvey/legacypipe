@@ -39,7 +39,7 @@ from astrometry.util.plotutils import dimshow
 from astrometry.util.ttime import Time
 
 from legacypipe.survey import get_rgb, imsave_jpeg, MASKBITS
-from legacypipe.image import CP_DQ_BITS
+from legacypipe.bits import DQ_BITS
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 
@@ -2749,14 +2749,14 @@ def stage_writecat(
                                 comment='Aperture radius, in arcsec'))
 
     # Record the meaning of mask bits
-    bits = list(CP_DQ_BITS.values())
+    bits = list(DQ_BITS.values())
     bits.sort()
-    bitmap = dict((v,k) for k,v in CP_DQ_BITS.items())
+    bitmap = dict((v,k) for k,v in DQ_BITS.items())
     for i in range(16):
         bit = 1<<i
         if bit in bitmap:
             primhdr.add_record(dict(name='MASKB%i' % i, value=bitmap[bit],
-                                    comment='Mask bit 2**%i=%i meaning' %
+                                    comment='ALLMASK/ANYMASK bit 2**%i=%i meaning' %
                                     (i, bit)))
 
     if WISE is not None:

@@ -72,15 +72,15 @@ class DecamImage(LegacySurveyImage):
             dq[dq == 5] = 0
             dq = self.remap_dq_cp_codes(dq, hdr)
         else:
-            from legacypipe.image import CP_DQ_BITS
+            from legacypipe.bits import DQ_BITS
             dq = dq.astype(np.int16)
             # Un-set the SATUR flag for pixels that also have BADPIX set.
-            bothbits = CP_DQ_BITS['badpix'] | CP_DQ_BITS['satur']
+            bothbits = DQ_BITS['badpix'] | DQ_BITS['satur']
             I = np.flatnonzero((dq & bothbits) == bothbits)
             if len(I):
                 debug('Warning: un-setting SATUR for', len(I),
                       'pixels with SATUR and BADPIX set.')
-                dq.flat[I] &= ~CP_DQ_BITS['satur']
+                dq.flat[I] &= ~DQ_BITS['satur']
                 assert(np.all((dq & bothbits) != bothbits))
         return dq
 
