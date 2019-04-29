@@ -265,9 +265,7 @@ def add_psfzpt_cuts(T, camera, bad_expid):
         dr = (-0.5, 0.25)
         dz = (-0.5, 0.25)
         radec_rms = 0.4
-        # These sky brightness cuts (g=90, r=150, z=180) were developed on DR7,
-        # which differs from DR8 by a factor of the gain, which is ~0.25 for DECam.
-        skybright = dict(g=90./4., r=150./4., z=180./4.)
+        skybright = dict(g=90., r=150., z=180.)
         zpt_diff_avg = 0.25
         zpt_lo = dict(g=g0+dg[0], r=r0+dr[0], z=z0+dz[0])#, i=i0+dr[0])
         zpt_hi = dict(g=g0+dg[1], r=r0+dr[1], z=z0+dz[1])#, i=i0+dr[1])
