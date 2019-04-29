@@ -5,6 +5,7 @@ import fitsio
 from astrometry.util.fits import fits_table
 from tractor import PixelizedPsfEx, PixelizedPSF
 from legacypipe.utils import read_primary_header
+from legacypipe.bits import DQ_BITS
 
 import logging
 logger = logging.getLogger('legacypipe.image')
