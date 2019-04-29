@@ -3174,3 +3174,5 @@
 830281 expfactor=0.0000 seeing=1.588  filter=r  pass=2
 
 347634 3 hexapod update exposure with weird saturated features.
+
+660432 Trailed exposure found by DJS, 2019-04-29
