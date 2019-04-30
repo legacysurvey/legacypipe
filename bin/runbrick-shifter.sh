@@ -95,23 +95,21 @@ echo "--------------------------------------------------------------------------
 
 python -O legacypipe/runbrick.py \
      --brick $brick \
-     --release 8080 \
      --skip \
      --skip-calibs \
      --threads ${ncores} \
      --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
      --unwise-coadds \
-     --survey-dir $LEGACY_SURVEY_DIR \
      --outdir $outdir \
      --ps "${outdir}/metrics/${bri}/ps-${brick}-${SLURM_JOB_ID}.fits" \
      --ps-t0 $(date "+%s") \
-     --depth-cut 1 \
+     --write-stage srcs \
      >> $log 2>&1
 
+# Need to add either:
 # --run 90prime-mosaic
 # --run decam
 
-#     --write-stage srcs \
 
 # QDO_BATCH_PROFILE=cori-shifter qdo launch -v tst 1 --cores_per_worker 8 --walltime=30:00 --batchqueue=debug --keep_env --batchopts "--image=docker:dstndstn/legacypipe:intel" --script "/src/legacypipe/bin/runbrick-shifter.sh"
