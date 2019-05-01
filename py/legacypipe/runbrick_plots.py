@@ -65,9 +65,9 @@ def tim_plots(tims, bands, ps):
         ps.savefig()
 
         if True and tim.dq is not None:
-            from legacypipe.image import CP_DQ_BITS
+            from legacypipe.bits import DQ_BITS
             plt.clf()
-            bitmap = dict([(v,k) for k,v in CP_DQ_BITS.items()])
+            bitmap = dict([(v,k) for k,v in DQ_BITS.items()])
             k = 1
             for i in range(12):
                 bitval = 1 << i

@@ -26,7 +26,7 @@ jobs:
       - run:
          name: Pip packages
          command: |
-            for x in setuptools wheel intel-numpy intel-scipy psycopg2-binary fitsio==0.9.2 matplotlib astropy photutils zmq; do pip3 install $x; done
+            for x in setuptools wheel intel-numpy intel-scipy psycopg2-binary fitsio==0.9.12 matplotlib astropy photutils zmq; do pip3 install $x; done
             rm -Rf /root/.cache/pip
       - run:
           name: Dust maps
