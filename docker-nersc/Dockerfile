@@ -155,9 +155,6 @@ COPY --from=builder /usr/local /usr/local
 
 WORKDIR /src
 
-RUN pip3 install pyephem \
- && rm -Rf /root/.cache/pip
-
 # QDO
 RUN git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
     && cd qdo \
@@ -182,6 +179,9 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> /root/.bashrc
 # Create config files in /root
 RUN mkdir /root/.qdo && echo "[qdo]" > /root/.qdo/qdorc
 RUN python -c "import astropy"
+
+# Download astropy site locations and USNO sky model
+RUN python -c "from astropy.coordinates import EarthLocation, SkyCoord, AltAz; from astropy.time import Time; print(EarthLocation.of_site('ctio')); print(SkyCoord(180.,-45.,unit='deg').transform_to(AltAz(obstime=Time(56806.0, format='mjd'), location=EarthLocation.of_site('ctio'))))"
 
 RUN    python    -m compileall /src/unwise_psf/py/unwise_psf.py \
     && python -O -m compileall /src/unwise_psf/py/unwise_psf.py
