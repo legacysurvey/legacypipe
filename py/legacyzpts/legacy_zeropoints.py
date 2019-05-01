@@ -318,6 +318,21 @@ class Measurer(object):
             attrkey = namechange.get(key.lower(), key.lower())
             setattr(self, attrkey, val)
 
+        self.ra_bore,self.dec_bore = self.get_radec_bore(primhdr)
+
+        if self.airmass is None:
+            # Recompute it
+            site = self.get_site()
+            if site is None:
+                print('AIRMASS missing and site not defined.')
+            else:
+                from astropy.time import Time
+                from astropy.coordinates import SkyCoord, AltAz
+                time = Time(self.mjd_obs, format='mjd')
+                coords = SkyCoord(self.ra_bore, self.dec_bore, unit='deg')
+                altaz = coords.transform_to(AltAz(obstime=time, location=site))
+                self.airmass = altaz.secz
+
         self.expnum = self.get_expnum(self.primhdr)
         if not quiet:
             print('CP Header: EXPNUM = ',self.expnum)
@@ -325,6 +340,25 @@ class Measurer(object):
             print('CP Header: PLVER = ',self.plver)
             print('CP Header: PLPROCID = ',self.plprocid)
         self.obj = self.primhdr['OBJECT']
+
+    def get_site(self):
+        return None
+
+    def get_radec_bore(self, primhdr):
+        # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
+        # In some DECam exposures, RA,DEC are floating-point, but RA is in *decimal hours*.
+        # Fall back to TELRA in that case.
+        if 'RA' in primhdr.keys():
+            try:
+                ra_bore = hmsstring2ra(primhdr['RA'])
+                dec_bore = dmsstring2dec(primhdr['DEC'])
+            except:
+                if 'TELRA' in primhdr.keys():
+                    ra_bore = hmsstring2ra(primhdr['TELRA'])
+                    dec_bore = dmsstring2dec(primhdr['TELDEC'])
+                else:
+                    raise ValueError('Neither RA or TELRA in primary header')
+        return ra_bore, dec_bore
 
     def get_good_image_subregion(self):
         '''
@@ -338,7 +372,7 @@ class Measurer(object):
         return None,None,None,None
 
     def get_expnum(self, primhdr):
-        return self.primhdr['EXPNUM']
+        return primhdr['EXPNUM']
 
     def get_ut(self, primhdr):
         return primhdr['TIME-OBS']
@@ -1449,19 +1483,6 @@ class DecamMeasurer(Measurer):
         super(DecamMeasurer, self).__init__(*args, **kwargs)
         self.camera = 'decam'
         self.pixscale = get_pixscale(self.camera)
-        # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
-        # Use center of exposure if possible
-        if 'RA' in self.primhdr.keys():
-            self.ra_bore = self.primhdr['RA']
-            self.dec_bore = self.primhdr['DEC']
-        elif 'TELRA' in self.primhdr.keys():
-            self.ra_bore = self.primhdr['TELRA']
-            self.dec_bore = self.primhdr['TELDEC']
-        else:
-            raise ValueError('Neither RA or TELRA in primhdr, crash')
-        if type(self.ra_bore) == str:
-            self.ra_bore = hmsstring2ra(self.ra_bore) 
-            self.dec_bore = dmsstring2dec(self.dec_bore)
 
         # /global/homes/a/arjundey/idl/pro/observing/decstat.pro
         self.zp0 =  dict(g = 26.610,r = 26.818,z = 26.484,
@@ -1474,6 +1495,10 @@ class DecamMeasurer(Measurer):
         self.cp_header_keys= {'width':['ZNAXIS1','NAXIS1'],
                               'height':['ZNAXIS2','NAXIS2'],
                               'fwhm_cp':['FWHM']}
+
+    def get_site(self):
+        from astropy.coordinates import EarthLocation
+        return EarthLocation.of_site('ctio')
 
     def get_good_image_subregion(self):
         x0,x1,y0,y1 = None,None,None,None
@@ -1534,10 +1559,6 @@ class MegaPrimeMeasurer(Measurer):
         super(MegaPrimeMeasurer, self).__init__(*args, **kwargs)
         self.camera = 'megaprime'
         self.pixscale = get_pixscale(self.camera)
-        # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
-        # Use center of exposure if possible
-        self.ra_bore = self.primhdr['RA_DEG']
-        self.dec_bore = self.primhdr['DEC_DEG']
 
         # # /global/homes/a/arjundey/idl/pro/observing/decstat.pro
         ### HACK!!!
@@ -1634,17 +1655,9 @@ class Mosaic3Measurer(Measurer):
         super(Mosaic3Measurer, self).__init__(*args, **kwargs)
         self.camera = 'mosaic'
         self.pixscale = get_pixscale(self.camera)
-        # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
-        self.ra_bore = hmsstring2ra(self.primhdr['RA'])
-        self.dec_bore = dmsstring2dec(self.primhdr['DEC'])
-        # ARAWGAIN does not exist, 1.8 or 1.94 close
-        #self.gain = self.hdr['GAIN']
 
         self.zp0 = dict(z = 26.552)
         self.k_ext = dict(z = 0.06)
-        # --> e/sec
-        #for b in self.zp0.keys(): 
-        #    self.zp0[b] += -2.5*np.log10(self.gain)  
         # Dict: {"ccd col":[possible CP Header keys for that]}
         self.cp_header_keys= {'width':['ZNAXIS1','NAXIS1'],
                               'height':['ZNAXIS2','NAXIS2'],
@@ -2054,18 +2067,8 @@ def runit(imgfn, photomfn, surveyfn, annfn, mp, bad_expid=None,
                         comment='CP processing date'))
     hdr.add_record(dict(name='PLPROCID', value=measure.plprocid,
                         comment='CP processing batch'))
-    # Some early DECam files (eg, decam/NonDECaLS/CP20140527/c4d_140528_012504_ooi_r_v1.fits.fz)
-    # have RA,DEC floating-point.  Later, they're HH:MM:SS.
-    ra = primhdr['RA']
-    dec = primhdr['DEC']
-    try:
-        ra = float(ra)
-        dec = float(dec)
-    except:
-        ra = hmsstring2ra(ra)
-        dec = dmsstring2dec(dec)
-    hdr.add_record(dict(name='RA_BORE',  value=ra,  comment='Boresight RA'))
-    hdr.add_record(dict(name='DEC_BORE', value=dec, comment='Boresight Dec'))
+    hdr.add_record(dict(name='RA_BORE',  value=measure.ra_bore,  comment='Boresight RA (deg)'))
+    hdr.add_record(dict(name='DEC_BORE', value=measure.dec_bore, comment='Boresight Dec (deg)'))
 
     zptgood = np.isfinite(ccds['zpt'])
     if np.sum(zptgood) > 0:
