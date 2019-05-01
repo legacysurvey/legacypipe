@@ -230,7 +230,7 @@ def create_annotated_table(leg_fn, ann_fn, camera, survey, mp):
     T = fits_table(leg_fn)
     T = survey.cleanup_ccds_table(T)
     init_annotations(T)
-    annotate(T, survey, mp, mzls=(camera == 'mosaic'), bass=(camera == '90prime'),
+    annotate(T, survey, mp=mp, mzls=(camera == 'mosaic'), bass=(camera == '90prime'),
              normalizePsf=True, carryOn=True)
     writeto_via_temp(ann_fn, T)
     print('Wrote %s' % ann_fn)
@@ -307,14 +307,15 @@ class Measurer(object):
         self.date_obs = self.primhdr['DATE-OBS']
         self.mjd_obs = self.primhdr['MJD-OBS']
         # Add more attributes.
-        for key, attrkey in zip(['AIRMASS','HA', 'DATE', 'PLVER', 'PLPROCID'],
-                                ['AIRMASS','HA', 'PROCDATE', 'PLVER', 'PLPROCID']):
-            val = self.primhdr[key]
+        namechange = dict(date='procdate')
+        for key in ['AIRMASS','HA', 'DATE', 'PLVER', 'PLPROCID']:
+            val = self.primhdr.get(key)
             if type(val) == str:
                 val = val.strip()
                 if len(val) == 0:
                     raise ValueError('Empty header card: %s' % key)
-            setattr(self, attrkey.lower(), val)
+            attrkey = namechange.get(key.lower(), key.lower())
+            setattr(self, attrkey, val)
 
         self.expnum = self.get_expnum(self.primhdr)
         if not quiet:
