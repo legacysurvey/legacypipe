@@ -306,6 +306,7 @@ class Measurer(object):
         self.exptime = self.primhdr['EXPTIME']
         self.date_obs = self.primhdr['DATE-OBS']
         self.mjd_obs = self.primhdr['MJD-OBS']
+        self.ut = self.get_ut(primhdr)
         # Add more attributes.
         namechange = dict(date='procdate')
         for key in ['AIRMASS','HA', 'DATE', 'PLVER', 'PLPROCID']:
@@ -338,6 +339,9 @@ class Measurer(object):
 
     def get_expnum(self, primhdr):
         return self.primhdr['EXPNUM']
+
+    def get_ut(self, primhdr):
+        return primhdr['TIME-OBS']
 
     def zeropoint(self, band):
         return self.zp0[band]
@@ -1445,7 +1449,6 @@ class DecamMeasurer(Measurer):
         super(DecamMeasurer, self).__init__(*args, **kwargs)
         self.camera = 'decam'
         self.pixscale = get_pixscale(self.camera)
-        self.ut = self.primhdr['TIME-OBS']
         # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
         # Use center of exposure if possible
         if 'RA' in self.primhdr.keys():
@@ -1531,7 +1534,6 @@ class MegaPrimeMeasurer(Measurer):
         super(MegaPrimeMeasurer, self).__init__(*args, **kwargs)
         self.camera = 'megaprime'
         self.pixscale = get_pixscale(self.camera)
-        self.ut = self.primhdr['UTC-OBS']
         # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
         # Use center of exposure if possible
         self.ra_bore = self.primhdr['RA_DEG']
@@ -1559,6 +1561,12 @@ class MegaPrimeMeasurer(Measurer):
 
         self.primhdr['WCSCAL'] = 'success'
         self.goodWcs = True
+
+    def get_ut(self, primhdr):
+        return primhdr['UTC-OBS']
+
+    def get_radec_bore(self, primhdr):
+        return primhdr['RA_DEG'], primhdr['DEC_DEG']
 
     def ps1_to_observed(self, ps1):
         # u->g
@@ -1626,7 +1634,6 @@ class Mosaic3Measurer(Measurer):
         super(Mosaic3Measurer, self).__init__(*args, **kwargs)
         self.camera = 'mosaic'
         self.pixscale = get_pixscale(self.camera)
-        self.ut = self.primhdr['TIME-OBS']
         # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
         self.ra_bore = hmsstring2ra(self.primhdr['RA'])
         self.dec_bore = dmsstring2dec(self.primhdr['DEC'])
@@ -1695,33 +1702,12 @@ class NinetyPrimeMeasurer(Measurer):
         super(NinetyPrimeMeasurer, self).__init__(*args, **kwargs)
         self.camera = '90prime'
         self.pixscale = get_pixscale(self.camera)
-        # {RA,DEC}: center of exposure, doesn't have TEL{RA,DEC}
-        self.ra_bore = hmsstring2ra(self.primhdr['RA'])
-        self.dec_bore = dmsstring2dec(self.primhdr['DEC'])
-        self.ut = self.primhdr['UT']
-
-        # Can't find what people are using for this!
-        # 1.4 is close to average of hdr['GAIN[1-16]']
-        #self.gain= 1.4 
-        
-        #self.gain = np.average((self.hdr['GAINA'],self.hdr['GAINB'])) 
-        # Average (nominal) gain values.  The gain is sort of a hack since this
-        # information should be scraped from the headers, plus we're ignoring
-        # the gain variations across amplifiers (on a given CCD).
-        #gaindict = dict(ccd1 = 1.47, ccd2 = 1.48, ccd3 = 1.42, ccd4 = 1.4275)
-        #self.gain = gaindict[self.ccdname.lower()]
 
         # Nominal zeropoints, sky brightness, and extinction values (taken from
-        # rapala.ninetyprime.boketc.py).  The sky and zeropoints are both in
-        # ADU, so account for the gain here.
-        #corr = 2.5 * np.log10(self.gain)
-
+        # rapala.ninetyprime.boketc.py)
         # /global/homes/a/arjundey/idl/pro/observing/bokstat.pro
         self.zp0 =  dict(g = 26.93,r = 27.01,z = 26.552) # ADU/sec
         self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06)
-        # --> e/sec
-        #for b in self.zp0.keys(): 
-        #    self.zp0[b] += -2.5*np.log10(self.gain)  
         # Dict: {"ccd col":[possible CP Header keys for that]}
         self.cp_header_keys= {'width':['ZNAXIS1','NAXIS1'],
                               'height':['ZNAXIS2','NAXIS2'],
@@ -1737,7 +1723,10 @@ class NinetyPrimeMeasurer(Measurer):
         return int( re.sub(r'([a-z]+|\.+)','',base) )
     
     def get_gain(self,hdr):
-        return 1.4 # no GAINA,B
+        return 1.4
+
+    def get_ut(self, primhdr):
+        return primhdr['UT']
 
     def get_band(self):
         band = self.primhdr['FILTER']
