@@ -99,7 +99,7 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && make extra \
     && make install INSTALL_DIR=/usr/local \
     && make clean \
-    && echo 3
+    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import astrometry; print(astrometry.__version__)")
 
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
@@ -107,7 +107,8 @@ RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && make \
     && make ceres \
     && make install INSTALL_DIR=/usr/local \
-    && rm -R $(find . -name "*.o" -o -name "*.so")
+    && rm -R $(find . -name "*.o" -o -name "*.so") \
+    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
 
 ######## Stage 2 ########
 FROM registry.services.nersc.gov/nersc/intel_cxx_fort_mpi_mkl_runtime
@@ -167,7 +168,7 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
     && cd unwise_psf && git checkout dr8
 
 # Legacypipe
-RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe
+RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe && echo 1
 
 ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 ENV WISE_PSF_DIR /src/unwise_psf/etc
@@ -179,6 +180,9 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> /root/.bashrc
 RUN mkdir /root/.qdo && echo "[qdo]" > /root/.qdo/qdorc
 RUN python -c "import astropy"
 
+# Download astropy site locations and USNO sky model
+RUN python -c "from astropy.coordinates import EarthLocation, SkyCoord, AltAz; from astropy.time import Time; print(EarthLocation.of_site('ctio')); print(SkyCoord(180.,-45.,unit='deg').transform_to(AltAz(obstime=Time(56806.0, format='mjd'), location=EarthLocation.of_site('ctio'))))"
+
 RUN    python    -m compileall /src/unwise_psf/py/unwise_psf.py \
     && python -O -m compileall /src/unwise_psf/py/unwise_psf.py
 
@@ -189,7 +193,7 @@ RUN python -O -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
            /usr/local/lib/python /usr/local/lib/python3.5/site-packages \
            /usr/local/lib/python3.5/dist-packages
 
-RUN cd /src/legacypipe/py && git pull && git describe && echo 8
+#RUN cd /src/legacypipe/py && git pull && git describe && echo 12
 
 RUN    python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
     && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
