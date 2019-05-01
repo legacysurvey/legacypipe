@@ -155,6 +155,9 @@ COPY --from=builder /usr/local /usr/local
 
 WORKDIR /src
 
+RUN pip3 install pyephem \
+ && rm -Rf /root/.cache/pip
+
 # QDO
 RUN git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
     && cd qdo \
