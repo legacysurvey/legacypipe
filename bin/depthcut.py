@@ -299,9 +299,9 @@ if __name__ == "__main__":
     if not numpy.all((ccds['ccd_cuts'] & depthbit) == 0):
         print('Warning: some depth_cut bits already set; zeroing...')
     ccds['ccd_cuts'] = ccds['ccd_cuts'] & ~depthbit
-    dcut = depthcut(args.survey, ccds, annotated, tilefile=args.tilefile,
-                    imlist=args.imlist)
     mbad = good_ccd_fraction(args.survey, ccds) < 0.7
     ccds['ccd_cuts'] = ccds['ccd_cuts'] | (manybadbit * mbad)
+    dcut = depthcut(args.survey, ccds, annotated, tilefile=args.tilefile,
+                    imlist=args.imlist)
     ccds['ccd_cuts'] = ccds['ccd_cuts'] | (depthbit * ~dcut)
     fits.writeto(getattr(args, 'survey-ccds-out'), ccds)

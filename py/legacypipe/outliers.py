@@ -79,14 +79,15 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                   ((np.arange(xlo,xhi+1) - x)**2)[np.newaxis,:])
             star_veto[ylo:yhi+1, xlo:xhi+1] |= (r2 < pixrad)
 
-    if plots:
-        plt.clf()
-        plt.imshow(star_veto, interpolation='nearest', origin='lower',
-                   vmin=0, vmax=1, cmap='hot')
-        ax = plt.axis()
-        plt.plot(bx, by, 'r.')
-        plt.axis(ax)
-        ps.savefig()
+    # if plots:
+    #     plt.clf()
+    #     plt.imshow(star_veto, interpolation='nearest', origin='lower',
+    #                vmin=0, vmax=1, cmap='hot')
+    #     ax = plt.axis()
+    #     plt.plot(bx, by, 'r.')
+    #     plt.axis(ax)
+    #     plt.title('Star vetos')
+    #     ps.savefig()
 
     with survey.write_output('outliers_mask', brick=brickname) as out:
         # empty Primary HDU
@@ -128,11 +129,11 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 binary_dilation(masks & DQ_BITS['satur'], iterations=10)))
             del masks
         
-            if plots:
-                plt.clf()
-                plt.imshow(veto, interpolation='nearest', origin='lower', cmap='gray')
-                plt.title('SATUR, BLEED veto (%s band)' % band)
-                ps.savefig()
+            # if plots:
+            #     plt.clf()
+            #     plt.imshow(veto, interpolation='nearest', origin='lower', cmap='gray')
+            #     plt.title('SATUR, BLEED veto (%s band)' % band)
+            #     ps.savefig()
         
             R = mp.map(compare_one, [(tim, sig, targetwcs, coimg,cow, veto, make_badcoadds, plots,ps)
                                      for tim,sig in zip(btims,addsigs)])
@@ -250,7 +251,7 @@ def compare_one(X):
         plt.title('other wt')
         showimg[Yo,Xo] = sndiff
         plt.subplot(2,3,3)
-        plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=0, vmax=10)
+        plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=-10, vmax=10,cmap='RdBu_r')
         plt.title('S/N diff')
         showimg[Yo,Xo] = rimg
         plt.subplot(2,3,4)
@@ -264,18 +265,18 @@ def compare_one(X):
         plt.suptitle(tim.name)
         showimg[Yo,Xo] = reldiff
         plt.subplot(2,3,6)
-        plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=0, vmax=4)
+        plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=-4, vmax=4, cmap='RdBu_r')
         plt.title('rel diff')
         ps.savefig()
 
-        from astrometry.util.plotutils import loghist
-        plt.clf()
-        loghist(sndiff.ravel(), reldiff.ravel(),
-                bins=100)
-        plt.xlabel('S/N difference')
-        plt.ylabel('Relative difference')
-        plt.title('Outliers: ' + tim.name)
-        ps.savefig()
+        # from astrometry.util.plotutils import loghist
+        # plt.clf()
+        # loghist(sndiff.ravel(), reldiff.ravel(),
+        #         bins=100)
+        # plt.xlabel('S/N difference')
+        # plt.ylabel('Relative difference')
+        # plt.title('Outliers: ' + tim.name)
+        # ps.savefig()
     
     del otherimg
     
@@ -305,7 +306,9 @@ def compare_one(X):
     hot = binary_dilation(hot, iterations=1)
     cold = binary_dilation(cold, iterations=1)
     if plots:
-        heat = hot.astype(np.uint8)
+        heat = np.zeros(hot.shape, np.int8)
+        heat += hot
+        heat += -1 * cold
     # "warm"
     hot = np.logical_or(hot,
                         binary_dilation(hot, iterations=5) * (snmap > 3.))
@@ -316,6 +319,7 @@ def compare_one(X):
     
     if plots:
         heat += hot
+        heat +- -1*cold
     # "lukewarm"
     hot = np.logical_or(hot,
                         binary_dilation(hot, iterations=5) * (snmap > 2.))
@@ -326,8 +330,9 @@ def compare_one(X):
     
     if plots:
         heat += hot
+        heat +- -1*cold
         plt.clf()
-        plt.imshow(heat, interpolation='nearest', origin='lower', cmap='hot')
+        plt.imshow(heat, interpolation='nearest', origin='lower', cmap='RdBu_r', vmin=-3, vmax=+3)
         plt.title(tim.name + ': outliers')
         ps.savefig()
         del heat
