@@ -169,8 +169,8 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
 
 
                 # Apply the mask!
-                tim.inverr[mask > 0] = 0.
-                tim.dq[mask > 0] |= DQ_BITS['outlier']
+                tim.inverr[(mask & OUTLIER_POS) > 0] = 0.
+                tim.dq[(mask & OUTLIER_POS) > 0] |= DQ_BITS['outlier']
 
                 # Write output!
                 # copy version_header before modifying it.
