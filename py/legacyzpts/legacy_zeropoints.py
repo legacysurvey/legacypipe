@@ -306,7 +306,7 @@ class Measurer(object):
         self.exptime = self.primhdr['EXPTIME']
         self.date_obs = self.primhdr['DATE-OBS']
         self.mjd_obs = self.primhdr['MJD-OBS']
-        self.ut = self.get_ut(primhdr)
+        self.ut = self.get_ut(self.primhdr)
         # Add more attributes.
         namechange = dict(date='procdate')
         for key in ['AIRMASS','HA', 'DATE', 'PLVER', 'PLPROCID']:
@@ -318,7 +318,7 @@ class Measurer(object):
             attrkey = namechange.get(key.lower(), key.lower())
             setattr(self, attrkey, val)
 
-        self.ra_bore,self.dec_bore = self.get_radec_bore(primhdr)
+        self.ra_bore,self.dec_bore = self.get_radec_bore(self.primhdr)
 
         if self.airmass is None:
             # Recompute it
