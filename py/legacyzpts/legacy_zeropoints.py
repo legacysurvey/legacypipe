@@ -1407,7 +1407,8 @@ class Measurer(object):
         plt.close()
         print('Wrote %s' % fn)
 
-    def run_calibs(self, survey, ext, psfex=True, splinesky=True, read_hdu=True):
+    def run_calibs(self, survey, ext, psfex=True, splinesky=True, read_hdu=True,
+                   plots=False):
         # Initialize with some basic data
         self.set_hdu(ext)
 
@@ -1461,10 +1462,15 @@ class Measurer(object):
             print('Weight map is all zero on CCD {} -- skipping'.format(self.ccdname))
             return ccd
 
+        ps = None
+        if plots:
+            from astrometry.util.plotutils import PlotSequence
+            ps = PlotSequence('%s-%i-%s' % (self.camera, self.expnum, self.ccdname))
+
         im = survey.get_image_object(ccd)
         git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
         im.run_calibs(psfex=do_psf, sky=do_sky, splinesky=True,
-                      git_version=git_version, survey=survey)
+                      git_version=git_version, survey=survey, ps=ps)
         return ccd
 
 class FakeCCD(object):
@@ -1855,6 +1861,8 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
                      pixscale = measure.pixscale,
                      primhdr = measure.primhdr)
 
+    plots = measureargs.get('plots', False)
+
     all_ccds = []
     all_photom = []
     splinesky = measureargs['splinesky']
@@ -1876,7 +1884,8 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
             do_psfex = False
 
     if do_splinesky or do_psfex:
-        ccds = mp.map(run_one_calib, [(measure, survey, ext, do_psfex, do_splinesky)
+        ccds = mp.map(run_one_calib, [(measure, survey, ext, do_psfex, do_splinesky,
+                                       plots)
                                       for ext in extlist])
         
         from legacyzpts.merge_calibs import merge_splinesky, merge_psfex
@@ -1973,12 +1982,13 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     return all_ccds, all_photom, extra_info, measure
 
 def run_one_calib(X):
-    measure, survey, ext, psfex, splinesky = X
+    measure, survey, ext, psfex, splinesky, plots = X
     return measure.run_calibs(survey, ext, psfex=psfex, splinesky=splinesky)
 
 def run_one_ext(X):
     measure, ext, survey, psfex, splinesky, debug = X
-    rtns = measure.run(ext, splinesky=splinesky, survey=survey, save_xy=debug)
+    rtns = measure.run(ext, splinesky=splinesky, survey=survey, save_xy=debug,
+                       plots=plots)
     return rtns
 
 class outputFns(object):
@@ -2133,6 +2143,7 @@ def get_parser():
     parser.add_argument('--verboseplots', action='store_true', default=False, help='use to plot FWHM Moffat PSF fits to the 20 brightest stars')
     parser.add_argument('--calibrate', action='store_true',
                         help='Use this option when deriving the photometric transformation equations.')
+    parser.add_argument('--plots', action='store_true', help='Calib plots?')
     parser.add_argument('--nproc', type=int,action='store',default=1,
                         help='set to > 1 if using legacy-zeropoints-mpiwrapper.py')
     parser.add_argument('--run-calibs-only', default=False, action='store_true',
