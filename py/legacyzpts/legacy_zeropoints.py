@@ -1464,6 +1464,8 @@ class Measurer(object):
 
         ps = None
         if plots:
+            import matplotlib
+            matplotlib.use('Agg')
             from astrometry.util.plotutils import PlotSequence
             ps = PlotSequence('%s-%i-%s' % (self.camera, self.expnum, self.ccdname))
 
@@ -1983,7 +1985,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
 
 def run_one_calib(X):
     measure, survey, ext, psfex, splinesky, plots = X
-    return measure.run_calibs(survey, ext, psfex=psfex, splinesky=splinesky)
+    return measure.run_calibs(survey, ext, psfex=psfex, splinesky=splinesky, plots=plots)
 
 def run_one_ext(X):
     measure, ext, survey, psfex, splinesky, debug = X

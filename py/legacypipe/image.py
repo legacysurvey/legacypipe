@@ -1180,15 +1180,19 @@ class LegacySurveyImage(object):
 
             boxsize = self.splinesky_boxsize
 
-            # Start by subtracting the overall median
-            med = sky_median
+            # Initial scalar sky estimate; also the fallback value if everything is masked
+            # in one of the splinesky grid cells.
+            #initsky = sky_median
+            initsky = sky_john
+            if initsky == 0.0:
+                initsky = sky_clipped_median
 
             # For DECam chips where we drop half the chip, spline becomes underconstrained
             if min(img.shape) / boxsize < 4:
                 boxsize /= 2
 
             # Compute initial model...
-            skyobj = SplineSky.BlantonMethod(img - med, good, boxsize)
+            skyobj = SplineSky.BlantonMethod(img - initsky, good, boxsize)
             skymod = np.zeros_like(img)
             skyobj.addTo(skymod)
 
@@ -1197,7 +1201,7 @@ class LegacySurveyImage(object):
             boxcar = 5
             # Sigma of boxcar-smoothed image
             bsig1 = sig1 / boxcar
-            masked = np.abs(uniform_filter(img-med-skymod, size=boxcar, mode='constant')
+            masked = np.abs(uniform_filter(img-initsky-skymod, size=boxcar, mode='constant')
                             > (3.*bsig1))
             masked = binary_dilation(masked, iterations=3)
             good[masked] = False
@@ -1229,9 +1233,9 @@ class LegacySurveyImage(object):
             stargood = (get_inblob_map(wcs, refs) == 0)
 
             # Now find the final sky model using that more extensive mask
-            skyobj = SplineSky.BlantonMethod(img - med, good * stargood, boxsize)
-            # add the overall median back in
-            skyobj.offset(med)
+            skyobj = SplineSky.BlantonMethod(img - initsky, good * stargood, boxsize)
+            # add the initial sky estimate back in
+            skyobj.offset(initsky)
 
             # Compute stats on sky
             skypix = np.zeros_like(img)
@@ -1247,18 +1251,17 @@ class LegacySurveyImage(object):
             fmasked = float(np.sum((good * stargood) == 0)) / (H*W)
 
             # DEBUG -- compute a splinesky on a finer grid and compare it.
-            fineskyobj = SplineSky.BlantonMethod(img - med, good * stargood, boxsize//2)
-            # add the overall median back in
-            fineskyobj.offset(med)
+            fineskyobj = SplineSky.BlantonMethod(img - initsky, good * stargood, boxsize//2)
+            fineskyobj.offset(initsky)
             fineskyobj.addTo(skypix, -1.)
             fine_rms = np.sqrt(np.mean(skypix**2))
 
             if plots:
                 import pylab as plt
-                ima = dict(interpolation='nearest', origin='lower', vmin=med-2.*sig1,
-                           vmax=med+5.*sig1, cmap='gray')
-                ima2 = dict(interpolation='nearest', origin='lower', vmin=med-0.5*sig1,
-                           vmax=med+0.5*sig1, cmap='gray')
+                ima = dict(interpolation='nearest', origin='lower', vmin=initsky-2.*sig1,
+                           vmax=initsky+5.*sig1, cmap='gray')
+                ima2 = dict(interpolation='nearest', origin='lower', vmin=initsky-0.5*sig1,
+                           vmax=initsky+0.5*sig1, cmap='gray')
 
                 plt.clf()
                 plt.imshow(img.T, **ima)
@@ -1288,17 +1291,17 @@ class LegacySurveyImage(object):
 
 
                 plt.clf()
-                plt.imshow((img.T - med)*good.T + med, **ima)
+                plt.imshow((img.T - initsky)*good.T + initsky, **ima)
                 plt.title('Image (boxcar masked)')
                 ps.savefig()
 
                 plt.clf()
-                plt.imshow((img.T - med)*stargood.T + med, **ima)
+                plt.imshow((img.T - initsky)*stargood.T + initsky, **ima)
                 plt.title('Image (star masked)')
                 ps.savefig()
 
                 plt.clf()
-                plt.imshow((img.T - med)*(stargood * good).T + med, **ima)
+                plt.imshow((img.T - initsky)*(stargood * good).T + initsky, **ima)
                 plt.title('Image (boxcar & star masked)')
                 ps.savefig()
 

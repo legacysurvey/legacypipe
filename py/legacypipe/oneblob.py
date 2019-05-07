@@ -1,7 +1,6 @@
 from __future__ import print_function
 
 import numpy as np
-import pylab as plt
 import time
 
 from astrometry.util.ttime import Time
@@ -45,6 +44,7 @@ def one_blob(X):
         return None
 
     if plots:
+        import pylab as plt
         plt.figure(2, figsize=(3,3))
         plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
         plt.figure(1)
@@ -155,6 +155,7 @@ class OneBlob(object):
         cat = Catalog(*self.srcs)
 
         if self.plots:
+            import pylab as plt
             self._initial_plots()
             from legacypipe.detection import plot_boundary_map
             plt.clf()
@@ -342,6 +343,7 @@ class OneBlob(object):
             models.add(srci, self.tims)
 
             if self.plots_single:
+                import pylab as plt
                 plt.figure(2)
                 coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
                                            fill_holes=False)
@@ -993,6 +995,7 @@ class OneBlob(object):
 
         # This is V2 of the model-selection plot
         if self.plots_per_source:
+            import pylab as plt
             plt.clf()
             rows,cols = 3, 6
             modnames = ['none', 'ptsrc', simname, 'dev', 'exp', 'comp']
@@ -1109,6 +1112,7 @@ class OneBlob(object):
 
                 # We plots only the first & last three sources
                 if self.plots_per_source and (numi < 3 or numi >= len(Ibright)-3):
+                    import pylab as plt
                     plt.clf()
                     # Recompute coadds because of the subtract-all-and-readd shuffle
                     coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
@@ -1254,6 +1258,7 @@ class OneBlob(object):
         dimshow(get_rgb(coimgs,self.bands))
 
     def _initial_plots(self):
+        import pylab as plt
         debug('Plotting blob image for blob', self.name)
         coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
                                 fill_holes=False)

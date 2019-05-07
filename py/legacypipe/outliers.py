@@ -13,6 +13,9 @@ def debug(*args):
 
 from legacypipe.bits import OUTLIER_POS, OUTLIER_NEG
 
+def get_bits_to_mask():
+    return OUTLIER_POS | OUTLIER_NEG
+
 def read_outlier_mask_file(survey, tims, brickname):
     from legacypipe.bits import DQ_BITS
     fn = survey.find_file('outliers_mask', brick=brickname, output=True)
@@ -35,8 +38,9 @@ def read_outlier_mask_file(survey, tims, brickname):
             print('Warning: Outlier mask', fn, 'x0,y0 does not match that of tim', tim)
             return False
         # Apply this mask!
-        tim.dq |= (mask > 0) * DQ_BITS['outlier']
-        tim.inverr[mask > 0] = 0.
+        maskbits = get_bits_to_mask()
+        tim.dq |= ((mask & maskbits) > 0) * DQ_BITS['outlier']
+        tim.inverr[(mask & maskbits) > 0] = 0.
     return True
 
 def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
@@ -169,8 +173,9 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
 
 
                 # Apply the mask!
-                tim.inverr[(mask & OUTLIER_POS) > 0] = 0.
-                tim.dq[(mask & OUTLIER_POS) > 0] |= DQ_BITS['outlier']
+                maskbits = get_bits_to_mask()
+                tim.inverr[(mask & maskbits) > 0] = 0.
+                tim.dq[(mask & maskbits) > 0] |= DQ_BITS['outlier']
 
                 # Write output!
                 # copy version_header before modifying it.
