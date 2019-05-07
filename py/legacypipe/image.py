@@ -1180,9 +1180,10 @@ class LegacySurveyImage(object):
 
             boxsize = self.splinesky_boxsize
 
-            # Start by subtracting the overall median
-            initsky = sky_median
-
+            # Initial scalar sky estimate; also the fallback value if everything is masked
+            # in one of the splinesky grid cells.
+            #initsky = sky_median
+            initsky = sky_john
 
             # For DECam chips where we drop half the chip, spline becomes underconstrained
             if min(img.shape) / boxsize < 4:
