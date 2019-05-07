@@ -1184,6 +1184,8 @@ class LegacySurveyImage(object):
             # in one of the splinesky grid cells.
             #initsky = sky_median
             initsky = sky_john
+            if initsky == 0.0:
+                initsky = sky_clipped_median
 
             # For DECam chips where we drop half the chip, spline becomes underconstrained
             if min(img.shape) / boxsize < 4:
