@@ -2,6 +2,7 @@ import os
 import numpy
 from astropy.io import fits
 import pdb
+from astrometry.util.fits import fits_table, merge_tables
 
 
 class subslices:
@@ -41,7 +42,7 @@ def depthcut(survey, ccds, annotated, tilefile=None, imlist=None):
     if survey == 'decam':
         return depthcut_decam(ccds, annotated, tilefile)
     elif survey == '90prime':
-        imlist = fits.getdata(imlist)
+        imlist = fits_table(imlist)
         ccds = repair_object_names(ccds, imlist)
         return depthcut_90prime_alternative(ccds, annotated)
     elif survey == 'mosaic':
@@ -50,17 +51,17 @@ def depthcut(survey, ccds, annotated, tilefile=None, imlist=None):
 
 
 def keep_deepest_des(ccds, annotated):
-    tileid = ccds['object']
-    return keep_deepest_ccds(ccds['image_filename'], tileid, ccds['filter'],
-                             annotated['psfdepth'], n=1)
+    tileid = ccds.object
+    return keep_deepest_ccds(ccds.image_filename, tileid, ccds.filter,
+                             annotated.psfdepth, n=1)
 
 def depthcut_90prime_alternative(ccds, annotated, n=6):
-    s = numpy.lexsort([ccds['image_hdu'], ccds['image_filename']])
+    s = numpy.lexsort([ccds.image_hdu, ccds.image_filename])
     ccds = ccds[s]
-    sa = numpy.lexsort([annotated['image_hdu'], annotated['image_filename']])
+    sa = numpy.lexsort([annotated.image_hdu, annotated.image_filename])
     annotated = annotated[sa]
-    if not numpy.all((ccds['image_hdu'] == annotated['image_hdu']) &
-                     (ccds['image_filename'] == annotated['image_filename'])):
+    if not numpy.all((ccds.image_hdu == annotated.image_hdu) &
+                     (ccds.image_filename == annotated.image_filename)):
         raise ValueError('Inconsistent ccds & annotated ccds file?')
     keep = numpy.zeros(len(ccds), dtype='bool')
 
@@ -71,31 +72,31 @@ def depthcut_90prime_alternative(ccds, annotated, n=6):
             return sentinel
         return y
 
-    tileid = numpy.array([int_noexception(o, -1) for o in ccds['object']], 
+    tileid = numpy.array([int_noexception(o, -1) for o in ccds.object], 
                          dtype='i4')
 
-    m = (ccds['ccd_cuts'] == 0) & (tileid >= 0)
+    m = (ccds.ccd_cuts == 0) & (tileid >= 0)
     keep[s[m]] = keep_deepest_ccds(
-        ccds['image_filename'][m], tileid[m], ccds['filter'][m], 
-        annotated['psfdepth'][m], n=n)
+        ccds.image_filename[m], tileid[m], ccds.filter[m], 
+        annotated.psfdepth[m], n=n)
     return keep
 
 
 def repair_object_names(ccds, imlist, prefix='90prime/'):
     ccds = ccds.copy()
-    imfilename = numpy.array([prefix+f for f in imlist['filename']])
+    imfilename = numpy.array([prefix+f for f in imlist.filename])
     s = numpy.argsort(imfilename)
     imlist = imlist[s]
     imfilename = imfilename[s]
-    cobjectname = numpy.array([o.strip() for o in ccds['object']])
+    cobjectname = numpy.array([o.strip() for o in ccds.object])
     iobjectname = numpy.array([o.replace("'",'').strip() 
-                               for o in imlist['object']])
+                               for o in imlist.object])
     m = (cobjectname == '')
-    cfilename = numpy.array([f.strip() for f in ccds['image_filename']])
+    cfilename = numpy.array([f.strip() for f in ccds.image_filename])
     ind = numpy.searchsorted(imfilename, cfilename)
     if not numpy.all(imfilename[ind] == cfilename):
         raise AssertionError('some image file names not found in image list?')
-    ccds['object'][m] = iobjectname[ind[m]]
+    ccds.object[m] = iobjectname[ind[m]]
     return ccds
 
 
@@ -110,15 +111,15 @@ def depthcut_mosaic(ccds, annotated, tilefile, n=2):
     # 2677 OBJECT Observation(s) in tile file.
     # 361 MOSAIC_XYZ_z observations in file list.  None in tile file.  
     # 2015B-2001
-    s = numpy.lexsort([ccds['image_hdu'], ccds['image_filename']])
+    s = numpy.lexsort([ccds.image_hdu, ccds.image_filename])
     ccds = ccds[s]
-    sa = numpy.lexsort([annotated['image_hdu'], annotated['image_filename']])
+    sa = numpy.lexsort([annotated.image_hdu, annotated.image_filename])
     annotated = annotated[sa]
-    if not numpy.all((ccds['image_hdu'] == annotated['image_hdu']) &
-                     (ccds['image_filename'] == annotated['image_filename'])):
+    if not numpy.all((ccds.image_hdu == annotated.image_hdu) &
+                     (ccds.image_filename == annotated.image_filename)):
         raise ValueError('Inconsistent ccds & annotated ccds file?')
     keep = numpy.zeros(len(ccds), dtype='bool')
-    m = ccds['ccd_cuts'] == 0
+    m = ccds.ccd_cuts == 0
     keep[s[m]] = keep_deepest_tiles(ccds[m], annotated[m], tilefile, n=n)
     return keep
 
@@ -150,20 +151,20 @@ def keep_deepest_ccds(filename, tileid, filt, depth, n=2):
 
 
 def keep_deepest_tiles(ccds, annotated, tilefile, n=2):
-    tiles = fits.getdata(tilefile)
+    tiles = fits_table(tilefile)
     from astropy.coordinates import SkyCoord
     from astropy import units as u
     res = numpy.zeros(len(ccds), dtype='bool')
-    m = numpy.flatnonzero(ccds['ccd_cuts'] == 0)
-    ct = SkyCoord(ra=tiles['ra']*u.degree, dec=tiles['dec']*u.degree)
-    cc = SkyCoord(ra=ccds['ra_bore'][m]*u.degree, 
-                  dec=ccds['dec_bore'][m]*u.degree)
+    m = numpy.flatnonzero(ccds.ccd_cuts == 0)
+    ct = SkyCoord(ra=tiles.ra*u.degree, dec=tiles.dec*u.degree)
+    cc = SkyCoord(ra=ccds.ra_bore[m]*u.degree, 
+                  dec=ccds.dec_bore[m]*u.degree)
     mt, dct, _ = cc.match_to_catalog_sky(ct)
-    tileid = tiles['tileid'][mt]
+    tileid = tiles.tileid[mt]
     mmatch = (dct < 0.05*u.degree)
     m = m[mmatch]
-    keep = keep_deepest_ccds(ccds['image_filename'][m], tileid[mmatch], 
-                             ccds['filter'][m], annotated['psfdepth'][m], n=n)
+    keep = keep_deepest_ccds(ccds.image_filename[m], tileid[mmatch], 
+                             ccds.filter[m], annotated.psfdepth[m], n=n)
     m = m[keep]
     res = numpy.zeros(len(ccds), dtype='bool')
     res[m] = 1
@@ -171,9 +172,9 @@ def keep_deepest_tiles(ccds, annotated, tilefile, n=2):
 
 
 def keep_deepest_des(ccds, annotated):
-    tileid = ccds['object']
-    return keep_deepest_ccds(ccds['image_filename'], tileid, ccds['filter'],
-                             annotated['psfdepth'], n=1)
+    tileid = ccds.object
+    return keep_deepest_ccds(ccds.image_filename, tileid, ccds.filter,
+                             annotated.psfdepth, n=1)
 
 
 def depthcut_decam(ccds, annotated, tilefile):
@@ -181,12 +182,12 @@ def depthcut_decam(ccds, annotated, tilefile):
         raise ValueError('DECam depth cut requires a tile file.')
     # need ccds & annotated ccds: former has ccd_cuts, latter has psfdepth
     # these are not row matched!
-    s = numpy.lexsort([ccds['image_hdu'], ccds['image_filename']])
+    s = numpy.lexsort([ccds.image_hdu, ccds.image_filename])
     ccds = ccds[s]
-    sa = numpy.lexsort([annotated['image_hdu'], annotated['image_filename']])
+    sa = numpy.lexsort([annotated.image_hdu, annotated.image_filename])
     annotated = annotated[sa]
-    if not numpy.all((ccds['image_hdu'] == annotated['image_hdu']) &
-                     (ccds['image_filename'] == annotated['image_filename'])):
+    if not numpy.all((ccds.image_hdu == annotated.image_hdu) &
+                     (ccds.image_filename == annotated.image_filename)):
         raise ValueError('Inconsistent ccds & annotated ccds file?')
     # we will only keep exposures that:
     # - have no ccd_cuts
@@ -194,8 +195,8 @@ def depthcut_decam(ccds, annotated, tilefile):
     # propids
     # - match a tile
     # - are among the top two deepest exposures satisfying the above.
-    keep = depthcut_propid_decam(ccds) & (ccds['ccd_cuts'] == 0)
-    m = ccds['propid'] != '2012B-0001'
+    keep = depthcut_propid_decam(ccds) & (ccds.ccd_cuts == 0)
+    m = ccds.propid != '2012B-0001'
     keep[m & keep] = keep_deepest_tiles(
         ccds[m & keep], annotated[m & keep], tilefile)
     keep[~m & keep] = keep_deepest_des(ccds[~m & keep], annotated[~m & keep])
@@ -214,20 +215,20 @@ def depthcut_propid_decam(ccds):
     # DECaLS, DECaLS+, DES, Bonaca, BLISS, DeROSITA
     for pid in ['2014B-0404', '2016A-0190', '2012B-0001', '2015A-0620', 
                 '2017A-0260', '2017A-0388']: 
-        mpropid = mpropid | (ccds['propid']  == pid)
+        mpropid = mpropid | (ccds.propid  == pid)
     # within these surveys, limit to 'normal' program, as identified
     # by object name.  This excludes, e.g., special DECaLS observations on the 
     # COSMOS field, DES SN fields, ...
     mobject = numpy.array([('DECaLS_' in o) or ('DES survey' in o) or 
-                           ('BLISS field' in o) or ('DeCaLS' == o) or 
-                           ('Tile ' in o) for o in ccds['object']])
+                           ('BLISS field' in o) or ('DeCaLS' == o.strip()) or 
+                           ('Tile ' in o) for o in ccds.object])
     def isint(x):
         try:
             _ = int(x)
         except:
             return False
         return True
-    misint = numpy.array([isint(x) for x in ccds['object']])
+    misint = numpy.array([isint(x) for x in ccds.object])
     m = mpropid & (mobject | misint)
     return m
 
@@ -237,17 +238,17 @@ def make_plots(ccds, depthcut, rad=1., nside=512,
                filename=None):
     import util_efs
     from matplotlib import pyplot as p
-    ccdcut = ccds['ccd_cuts']
-    filts = numpy.unique(ccds['filter'][ccdcut])
-    _, u = numpy.unique(ccds['expnum'], return_index=True)
+    ccdcut = ccds.ccd_cuts
+    filts = numpy.unique(ccds.filter[ccdcut])
+    _, u = numpy.unique(ccds.expnum, return_index=True)
     for f in filts:
-        mf = (ccds['filter'][u] == f)
+        mf = (ccds.filter[u] == f)
         maps = {'original': (mf & (ccdcut[u] == 0)),
                 'depthcut': (mf & (ccdcut[u] == 0) & depthcut[u]),
                 'excluded': (mf & (ccdcut[u] == 0) & ~depthcut[u])}
         for (label, m) in maps.items():
             _, ncov = util_efs.paint_map(
-                ccds['ra_bore'][u[m]], ccds['dec_bore'][u[m]], 
+                ccds.ra_bore[u[m]], ccds.dec_bore[u[m]], 
                 numpy.ones(numpy.sum(m)), rad, nside=nside)
             p.figure(label)
             p.clf()
@@ -264,10 +265,10 @@ def good_ccd_fraction(survey, ccds):
         raise ValueError('survey not recognized!')
     nccds = 62 if survey == 'decam' else 4
     ngooddict = {}
-    for expnum, cut in zip(ccds['expnum'], ccds['ccd_cuts']):
+    for expnum, cut in zip(ccds.expnum, ccds.ccd_cuts):
         if cut == 0:
             ngooddict[expnum] = ngooddict.get(expnum, 0) + 1
-    ngoodccds = numpy.array([ngooddict.get(e, 0) for e in ccds['expnum']])
+    ngoodccds = numpy.array([ngooddict.get(e, 0) for e in ccds.expnum])
     if numpy.any(ngoodccds > nccds):
         raise ValueError('Some exposures have more good CCDs than should be possible!')
     return ngoodccds/float(nccds)
@@ -276,9 +277,9 @@ def good_ccd_fraction(survey, ccds):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(
-        description='Perform depth & CCD-fraction cuts.',
+        description='Update ccd_cuts, add depth & CCD-fraction cuts.',
         epilog='EXAMPLE: %(prog)s survey survey-ccds ccds-annotated survey-ccds-out')
-    parser.add_argument('survey', type=str, help='decam, 90prime, or mosaic')
+    parser.add_argument('camera', type=str, help='decam, 90prime, or mosaic')
     parser.add_argument('survey-ccds', type=str, 
                         help='survey-ccds file name')
     parser.add_argument('ccds-annotated', type=str,
@@ -290,18 +291,26 @@ if __name__ == "__main__":
     parser.add_argument('--imlist', type=str, default='',
                         help='image list for survey, needed for 90prime')
     args = parser.parse_args()
-    from astropy.io import fits
-    ccds = fits.getdata(getattr(args, 'survey-ccds'))
-    annotated = fits.getdata(getattr(args, 'ccds-annotated'))
+    ccds = fits_table(getattr(args, 'survey-ccds'))
+    if not numpy.all(ccds.ccd_cuts == 0):
+        print('Warning: zeroing existing ccd_cuts')
+        ccds.ccd_cuts = 0.
     from legacyzpts import psfzpt_cuts
+    from pkg_resources import resource_filename
+    fn = resource_filename('legacyzpts', 
+                           'data/{}-bad_expid.txt'.format(args.camera))
+    bad_expid = psfzpt_cuts.read_bad_expid(fn)
+    psfzpt_cuts.add_psfzpt_cuts(ccds, args.camera, bad_expid)
+
+    annotated = fits_table(getattr(args, 'ccds-annotated'))
     depthbit = psfzpt_cuts.CCD_CUT_BITS['depth_cut']
     manybadbit = psfzpt_cuts.CCD_CUT_BITS['too_many_bad_ccds']
-    if not numpy.all((ccds['ccd_cuts'] & depthbit) == 0):
+    if not numpy.all((ccds.ccd_cuts & depthbit) == 0):
         print('Warning: some depth_cut bits already set; zeroing...')
-    ccds['ccd_cuts'] = ccds['ccd_cuts'] & ~depthbit
-    mbad = good_ccd_fraction(args.survey, ccds) < 0.7
-    ccds['ccd_cuts'] = ccds['ccd_cuts'] | (manybadbit * mbad)
-    dcut = depthcut(args.survey, ccds, annotated, tilefile=args.tilefile,
+    ccds.ccd_cuts = ccds.ccd_cuts & ~depthbit
+    mbad = good_ccd_fraction(args.camera, ccds) < 0.7
+    ccds.ccd_cuts = ccds.ccd_cuts | (manybadbit * mbad)
+    dcut = depthcut(args.camera, ccds, annotated, tilefile=args.tilefile,
                     imlist=args.imlist)
-    ccds['ccd_cuts'] = ccds['ccd_cuts'] | (depthbit * ~dcut)
-    fits.writeto(getattr(args, 'survey-ccds-out'), ccds)
+    ccds.ccd_cuts = ccds.ccd_cuts | (depthbit * ~dcut)
+    ccds.write_to(getattr(args, 'survey-ccds-out'))
