@@ -3186,3 +3186,6 @@
 430486 3 pupil ghost subtraction problem?
 553845 3 pupil ghost subtraction problem?
 721209 3 pupil ghost subtraction problem?
+
+488239 3 bright clouds
+488242 3 bright clouds
