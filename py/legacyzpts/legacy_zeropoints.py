@@ -68,7 +68,7 @@ def _ccds_table(camera='decam'):
         ('err_message', 'S30'),
         ('image_filename', 'S120'),
         ('image_hdu', 'i2'),
-        ('camera', 'S9',
+        ('camera', 'S9'),
         ('expnum', 'i8'),
         ('plver', 'S8'),
         ('procdate', 'S19'),
