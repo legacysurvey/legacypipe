@@ -3176,3 +3176,13 @@
 347634 3 hexapod update exposure with weird saturated features.
 
 660432 Trailed exposure found by DJS, 2019-04-29
+
+430480 3 pupil ghost subtraction problem?
+430481 3 pupil ghost subtraction problem?
+430482 3 pupil ghost subtraction problem?
+430483 3 pupil ghost subtraction problem?
+430484 3 pupil ghost subtraction problem?
+430485 3 pupil ghost subtraction problem?
+430486 3 pupil ghost subtraction problem?
+553845 3 pupil ghost subtraction problem?
+721209 3 pupil ghost subtraction problem?
