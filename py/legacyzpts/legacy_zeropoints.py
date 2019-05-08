@@ -1500,7 +1500,10 @@ class DecamMeasurer(Measurer):
 
     def get_site(self):
         from astropy.coordinates import EarthLocation
-        return EarthLocation.of_site('ctio')
+        # zomg astropy's caching mechanism is horrific
+        # return EarthLocation.of_site('ctio')
+        from astropy.units import m
+        return EarthLocation(1814304. * m, -5214366. * m, -3187341. * m)
 
     def get_good_image_subregion(self):
         x0,x1,y0,y1 = None,None,None,None

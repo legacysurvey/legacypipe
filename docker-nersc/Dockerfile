@@ -173,15 +173,33 @@ RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe && echo 1
 ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 ENV WISE_PSF_DIR /src/unwise_psf/etc
 
+RUN pip3 install --no-cache-dir ipython
+
+ENV HOME /root
+
 # set prompt and default shell
 SHELL ["/bin/bash", "-c"]
 RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> /root/.bashrc
 # Create config files in /root
 RUN mkdir /root/.qdo && echo "[qdo]" > /root/.qdo/qdorc
 RUN python -c "import astropy"
-
 # Download astropy site locations and USNO sky model
+RUN python -c "from astropy.coordinates import EarthLocation; EarthLocation._get_site_registry(force_download=True)"
 RUN python -c "from astropy.coordinates import EarthLocation, SkyCoord, AltAz; from astropy.time import Time; print(EarthLocation.of_site('ctio')); print(SkyCoord(180.,-45.,unit='deg').transform_to(AltAz(obstime=Time(56806.0, format='mjd'), location=EarthLocation.of_site('ctio'))))"
+
+# Patch astropy:
+ADD urlmap-readonly.patch /tmp/
+RUN cd /usr/local/lib/python3.5/dist-packages && \
+    patch -p1 < /tmp/urlmap-readonly.patch
+
+# Alternatively, could retrieve
+#   http://data.astropy.org/coordinates/sites.json
+# to
+#   /usr/local/lib/python3.5/dist-packages/astropy/coordinates/data/sites.json
+
+
+ENTRYPOINT ["/bin/bash", "-c"]
+CMD ["/bin/bash"]
 
 RUN    python    -m compileall /src/unwise_psf/py/unwise_psf.py \
     && python -O -m compileall /src/unwise_psf/py/unwise_psf.py
