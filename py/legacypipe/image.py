@@ -4,6 +4,7 @@ import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
 from tractor import PixelizedPsfEx, PixelizedPSF
+from tractor.splinesky import SplineSky
 from legacypipe.utils import read_primary_header
 from legacypipe.bits import DQ_BITS
 
@@ -821,7 +822,14 @@ class LegacySurveyImage(object):
             skyclass = hdr['SKY']
         except NameError:
             raise NameError('SKY not in header: skyfn=%s, imgfn=%s' % (fn,self.imgfn))
-        clazz = get_class_from_name(skyclass)
+
+        # Replace splinesky cells that equal the "fallback" value of sky_med with sky_john instead.
+        # Note that this is for single-CCD splinesky files; see read_merged_splinesky_model for
+        # the merged version.
+        if splinesky and skyclass == 'tractor.splinesky.SplineSky':
+            clazz = LegacySplineSky
+        else:
+            clazz = get_class_from_name(skyclass)
 
         if getattr(clazz, 'from_fits', None) is not None:
             fromfits = getattr(clazz, 'from_fits')
@@ -870,7 +878,11 @@ class LegacySurveyImage(object):
         Ti.xgrid = Ti.xgrid[:w]
         Ti.ygrid = Ti.ygrid[:h]
         skyclass = Ti.skyclass.strip()
-        clazz = get_class_from_name(skyclass)
+
+        if skyclass == 'tractor.splinesky.SplineSky':
+            clazz = LegacySplineSky
+        else:
+            clazz = get_class_from_name(skyclass)
         fromfits = getattr(clazz, 'from_fits_row')
         sky = fromfits(Ti)
         if slc is not None:
@@ -1431,6 +1443,27 @@ class LegacySurveyImage(object):
         if sky:
             self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia)
 
+
+class LegacySplineSky(SplineSky):
+    @classmethod
+    def from_fits(cls, filename, header, row=0):
+        from astrometry.util.fits import fits_table
+        T = fits_table(filename)
+        T = T[row]
+        T.sky_med  = header['S_MED']
+        T.sky_john = header['S_JOHN']
+        return cls.from_fits_row(T)
+
+    @classmethod
+    def from_fits_row(cls, Ti):
+        gridvals = Ti.gridvals.copy()
+        nswap = np.sum(gridvals == Ti.sky_med)
+        print('Swapping in SKY_JOHN values for', nswap, 'splinesky cells;', Ti.sky_med, '->', Ti.sky_john)
+        gridvals[gridvals == Ti.sky_med] = Ti.sky_john
+        sky = cls(Ti.xgrid, Ti.ygrid, gridvals, order=Ti.order)
+        sky.shift(Ti.x0, Ti.y0)
+        return sky
+        #return SplineSky.from_fits_row(cls, Ti)
 
 
 class NormalizedPixelizedPsfEx(PixelizedPsfEx):
