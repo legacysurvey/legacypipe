@@ -108,7 +108,8 @@ def flistsummary(flist):
         out['filename'][i] = flist[i]
         try:
             hdr = fits.getheader(f)
-        except OSError:
+            expnum = get_expnum(hdr)
+        except (OSError, fits.VerifyError):
             out['expnum'][i] = -1
             out['object'][i] = 'could not read in, corrupt?'
             print('corrupt?  %s' % f)
@@ -358,9 +359,12 @@ if __name__ == "__main__":
                         help='output file name (.fits)')
     parser.add_argument('--allsummaryfn', type=str, default='',
                         help='allsumary file name (.fits)')
+    parser.add_argument('--skip', type=int, default=0,
+                        help='number of exposures to skip (testing only)')
     args = parser.parse_args()
     flist = open(args.filelist, 'r').readlines()
     flist = [f.strip() for f in flist if '.fits' in f]
+    flist = flist[args.skip:]
     summary = flistsummary(flist)
     if len(args.allsummaryfn) > 0:
         fits.writeto(args.allsummaryfn, summary)
