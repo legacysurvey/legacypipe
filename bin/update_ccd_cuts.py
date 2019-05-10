@@ -10,12 +10,14 @@ class subslices:
     def __init__(self, data, uind=None, **kw):
         if uind is None:
             _, self.uind = numpy.unique(data, return_index=True, **kw)
+        else:
+            self.uind = uind
+        self.uind = numpy.sort(self.uind)
+        # 1st elements.  Must convert to last elements.
+        if len(self.uind) > 0:
             self.uind = numpy.sort(self.uind)
-            # 1st elements.  Must convert to last elements.
-            if len(self.uind) > 0:
-                self.uind = numpy.sort(self.uind)
-                self.uind = numpy.concatenate(
-                    [self.uind[1:]-1, [len(data)-1]])
+            self.uind = numpy.concatenate(
+                [self.uind[1:]-1, [len(data)-1]])
         else:
             self.uind = uind.copy()
         self.ind = 0
@@ -134,6 +136,9 @@ def keep_deepest_images(tileid, filt, depth, n=2):
         if len(ind) <= n:
             continue
         res[ind[:-n]] = 0  # don't keep shallow tiles
+        if ((not numpy.all(tileid[ind] == tileid[ind[0]])) or
+            (numpy.max(depth[ind[:-n]]) > numpy.min(depth[ind[-n:]]))):
+            pdb.set_trace()
     return res
 
 
@@ -290,6 +295,8 @@ if __name__ == "__main__":
                         help='appropriate tile file for survey')
     parser.add_argument('--imlist', type=str, default='',
                         help='image list for survey, needed for 90prime')
+    parser.add_argument('--image2coadd', type=str, default='',
+                        help='list of DES good exposures')
     args = parser.parse_args()
     ccds = fits_table(getattr(args, 'survey-ccds'))
     if not numpy.all(ccds.ccd_cuts == 0):
@@ -300,7 +307,8 @@ if __name__ == "__main__":
     fn = resource_filename('legacyzpts', 
                            'data/{}-bad_expid.txt'.format(args.camera))
     bad_expid = psfzpt_cuts.read_bad_expid(fn)
-    psfzpt_cuts.add_psfzpt_cuts(ccds, args.camera, bad_expid)
+    psfzpt_cuts.add_psfzpt_cuts(ccds, args.camera, bad_expid, 
+                                image2coadd=args.image2coadd)
 
     annotated = fits_table(getattr(args, 'ccds-annotated'))
     depthbit = psfzpt_cuts.CCD_CUT_BITS['depth_cut']
