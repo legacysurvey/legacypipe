@@ -3134,7 +3134,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     # HACK -- Default value for DR8 MJD cut
     # DR8 -- drop early data from before additional baffling was added to the camera.
     # 56730 = 2014-03-14
-    parser.add_argument('--min-mjd', type=float, default=56730.,
+    parser.add_argument('--min-mjd', type=float, 
                         help='Only keep images taken after the given MJD')
     parser.add_argument('--max-mjd', type=float,
                         help='Only keep images taken before the given MJD')
