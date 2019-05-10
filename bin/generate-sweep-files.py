@@ -411,6 +411,8 @@ SWEEP_DTYPE = np.dtype([
 #    ('GALDEPTH_I', '>f4'),
     ('GALDEPTH_Z', '>f4'),
 #    ('GALDEPTH_Y', '>f4'),
+    ('PSFDEPTH_W1', '>f4'),
+    ('PSFDEPTH_W2', '>f4'),
     ('WISE_COADD_ID', 'S8'),
     ('FRACDEV', '>f4'),
     ('FRACDEV_IVAR', '>f4'),
