@@ -102,10 +102,11 @@ python -O legacypipe/runbrick.py \
 #     --write-stage srcs \
 #     --zoom 100 300 100 300 \
 
-python legacypipe/rmckpt.py --brick $brick --outdir $outdir
-
 status=$?
 cat $tmplog >> $log
+
+python legacypipe/rmckpt.py --brick $brick --outdir $outdir
+
 exit $status
 
 
