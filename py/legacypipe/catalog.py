@@ -15,9 +15,11 @@ fits_typemap = { PointSource: 'PSF',
                  FixedCompositeGalaxy: 'COMP',
                  SimpleGalaxy: 'SIMP',
                  RexGalaxy: 'REX',
-                 #GaiaSource: 'GAIA',
                  GaiaSource: 'PSF',
                  type(None): 'NONE' }
+
+fits_reverse_typemap = dict([(v,k) for k,v in fits_typemap.items()])
+fits_reverse_typemap.update({ 'DUP': GaiaSource })
 
 fits_short_typemap = { PointSource: 'P',
                        ExpGalaxy: 'E',
@@ -218,7 +220,7 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
         hdr = T._header
     if allbands is None:
         allbands = bands
-    rev_typemap = dict([(v,k) for k,v in fits_typemap.items()])
+    rev_typemap = fits_reverse_typemap
 
     if unpackShape and ellipseClass != EllipseE:
         print('Not doing unpackShape because ellipseClass != EllipseE.')
