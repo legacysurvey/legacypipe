@@ -3193,9 +3193,17 @@
 420479 3 pupil ghost subtraction problem?
 574304 3 pupil ghost subtraction problem?
 
-
+301061 3 bright clouds
+321551 3 bright clouds
+454583 3 bright clouds
+454584 3 bright clouds
+468078 3 bright clouds
 488239 3 bright clouds
 488242 3 bright clouds
+552888 3 bright clouds
+552890 3 bright clouds
+552903 3 bright clouds
+552904 3 bright clouds
 
 262572 3 bad dark sky flat, could be reprocessed?
 262573 3 bad dark sky flat, could be reprocessed?
