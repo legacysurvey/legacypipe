@@ -3227,4 +3227,5 @@
 262591 3 bad dark sky flat, could be reprocessed?
 262593 3 bad dark sky flat, could be reprocessed?
 
+626512 3 weird sky structures
 664419 3 weird sky structures
