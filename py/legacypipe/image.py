@@ -1447,7 +1447,6 @@ class LegacySurveyImage(object):
 class LegacySplineSky(SplineSky):
     @classmethod
     def from_fits(cls, filename, header, row=0):
-        from astrometry.util.fits import fits_table
         T = fits_table(filename)
         T = T[row]
         T.sky_med  = header['S_MED']

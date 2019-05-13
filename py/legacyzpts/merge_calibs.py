@@ -272,7 +272,7 @@ def merge_splinesky(survey, expnum, C, skyoutfn, opt):
     T.sky_fine    = np.array([h[12] for h in skyhdrvals]).astype(np.float32)
 
     i0 = 13
-    
+
     for i,p in enumerate(s_pcts):
         T.set('sky_p%i' % p, np.array([h[i0 + i] for h in skyhdrvals]).astype(np.float32))
 
