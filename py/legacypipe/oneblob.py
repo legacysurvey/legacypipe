@@ -1763,19 +1763,22 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
         # bright stars / reference stars: we don't test the simple model.
         return 'ptsrc'
     # Now choose between point source and simple model (SIMP/REX)
-    if chisqs.get('ptsrc',0)-nparams['ptsrc'] > chisqs.get(simname,0)-nparams[simname]:
+    if 'ptsrc' in chisqs and (
+            chisqs['ptsrc']-nparams['ptsrc'] > chisqs.get(simname,0)-nparams[simname]):
         #print('Keeping source; PTSRC is better than SIMPLE')
         keepmod = 'ptsrc'
-    else:
+    elif simname in chisqs and (
+            chisqs[simname]-nparams[simname] > chisqs.get('ptsrc',0)-nparams['ptsrc']):
         #print('Keeping source; SIMPLE is better than PTSRC')
         #print('REX is better fit.  Radius', simplemod.shape.re)
+        oldkeepmod = keepmod
         keepmod = simname
         # For REX, we also demand a fractionally better fit
         if simname == 'rex':
             dchisq_psf = chisqs.get('ptsrc',0)
             dchisq_rex = chisqs.get('rex',0)
             if dchisq_psf > 0 and (dchisq_rex - dchisq_psf) < (0.01 * dchisq_psf):
-                keepmod = 'ptsrc'
+                keepmod = oldkeepmod
 
     if not ('exp' in chisqs or 'dev' in chisqs):
         return keepmod
