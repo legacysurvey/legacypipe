@@ -667,6 +667,9 @@ class OneBlob(object):
         sh,sw = srcwcs.shape
         if ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
             debug('Source is starting outside blob -- skipping.')
+            if mask_others:
+                for ie,tim in zip(saved_srctim_ies, srctims):
+                    tim.inverr = ie
             return None
 
         from tractor import Galaxy
@@ -845,6 +848,9 @@ class OneBlob(object):
             if ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
                 # Exited blob!
                 debug('Source exited sub-blob!')
+                if mask_others:
+                    for ie,tim in zip(saved_srctim_ies, srctims):
+                        tim.inverr = ie
                 continue
 
             disable_galaxy_cache()
