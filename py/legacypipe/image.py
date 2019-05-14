@@ -1447,7 +1447,6 @@ class LegacySurveyImage(object):
 class LegacySplineSky(SplineSky):
     @classmethod
     def from_fits(cls, filename, header, row=0):
-        from astrometry.util.fits import fits_table
         T = fits_table(filename)
         T = T[row]
         T.sky_med  = header['S_MED']
@@ -1509,8 +1508,11 @@ def fix_weight_quantization(wt, weightfn, ext, slc):
     #hdu = fits_astropy.open(weightfn)[ext]
     #table = hdu.compressed_data
     #hdr = hdu._header
-    zquant = hdr['ZQUANTIZ'].strip()
+    zquant = hdr.get('ZQUANTIZ','').strip()
     print('Fpack quantization method:', zquant)
+    if len(zquant) == 0:
+        # Not fpacked?
+        return True
     if zquant == 'SUBTRACTIVE_DITHER_2':
         # This method treats zeros specially so that they remain zero
         # after decompression, so return True to say that we have
