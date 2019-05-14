@@ -13,6 +13,9 @@ def debug(*args):
 
 from legacypipe.bits import OUTLIER_POS, OUTLIER_NEG
 
+def get_bits_to_mask():
+    return OUTLIER_POS | OUTLIER_NEG
+
 def read_outlier_mask_file(survey, tims, brickname):
     from legacypipe.bits import DQ_BITS
     fn = survey.find_file('outliers_mask', brick=brickname, output=True)
@@ -35,8 +38,9 @@ def read_outlier_mask_file(survey, tims, brickname):
             print('Warning: Outlier mask', fn, 'x0,y0 does not match that of tim', tim)
             return False
         # Apply this mask!
-        tim.dq |= (mask > 0) * DQ_BITS['outlier']
-        tim.inverr[mask > 0] = 0.
+        maskbits = get_bits_to_mask()
+        tim.dq |= ((mask & maskbits) > 0) * DQ_BITS['outlier']
+        tim.inverr[(mask & maskbits) > 0] = 0.
     return True
 
 def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
@@ -53,9 +57,11 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
     H,W = targetwcs.shape
 
     if make_badcoadds:
-        badcoadds = []
+        badcoadds_pos = []
+        badcoadds_neg = []
     else:
-        badcoadds = None
+        badcoadds_pos = None
+        badcoadds_neg = None
 
     star_veto = np.zeros(targetwcs.shape, np.bool)
     if gaia_stars:
@@ -140,11 +146,14 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             del coimg, cow, veto
     
             masks = []
-            badcoadd = None
+            badcoadd_pos = None
+            badcoadd_neg = None
             if make_badcoadds:
-                badcoadd = np.zeros((H,W), np.float32)
-                badcon   = np.zeros((H,W), np.int16)
-    
+                badcoadd_pos = np.zeros((H,W), np.float32)
+                badcon_pos   = np.zeros((H,W), np.int16)
+                badcoadd_neg = np.zeros((H,W), np.float32)
+                badcon_neg   = np.zeros((H,W), np.int16)
+
             for r,tim in zip(R, btims):
                 if r is None:
                     # none masked
@@ -152,16 +161,21 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 else:
                     mask,badco = r
                     if make_badcoadds:
-                        yo,xo,bimg = badco
-                        badcoadd[yo, xo] += bimg
-                        badcon  [yo, xo] += 1
-                        del yo,xo,bimg
+                        badhot, badcold = badco
+                        yo,xo,bimg = badhot
+                        badcoadd_pos[yo, xo] += bimg
+                        badcon_pos  [yo, xo] += 1
+                        yo,xo,bimg = badcold
+                        badcoadd_neg[yo, xo] += bimg
+                        badcon_neg  [yo, xo] += 1
+                        del yo,xo,bimg, badhot,badcold
                     del badco
 
 
                 # Apply the mask!
-                tim.inverr[mask > 0] = 0.
-                tim.dq[mask > 0] |= DQ_BITS['outlier']
+                maskbits = get_bits_to_mask()
+                tim.inverr[(mask & maskbits) > 0] = 0.
+                tim.dq[(mask & maskbits) > 0] |= DQ_BITS['outlier']
 
                 # Write output!
                 # copy version_header before modifying it.
@@ -188,10 +202,12 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             del r,R
         
             if make_badcoadds:
-                badcoadd /= np.maximum(badcon, 1)
-                badcoadds.append(badcoadd)
+                badcoadd_pos /= np.maximum(badcon_pos, 1)
+                badcoadd_neg /= np.maximum(badcon_neg, 1)
+                badcoadds_pos.append(badcoadd_pos)
+                badcoadds_neg.append(badcoadd_neg)
 
-    return badcoadds
+    return badcoadds_pos,badcoadds_neg
 
 def compare_one(X):
     from scipy.ndimage.filters import gaussian_filter
@@ -339,12 +355,14 @@ def compare_one(X):
 
     del snmap
 
-    bad, = np.nonzero(hot[Yo,Xo])
-
     badco = None
     if make_badcoadds:
-        badco = (Yo[bad], Xo[bad], tim.getImage()[Yi[bad],Xi[bad]])
-    
+        bad, = np.nonzero(hot[Yo,Xo])
+        badhot = (Yo[bad], Xo[bad], tim.getImage()[Yi[bad],Xi[bad]])
+        bad, = np.nonzero(cold[Yo,Xo])
+        badcold = (Yo[bad], Xo[bad], tim.getImage()[Yi[bad],Xi[bad]])
+        badco = badhot,badcold
+
     # Actually do the masking!
     # Resample "hot" (in brick coords) back to tim coords.
     try:

@@ -1,7 +1,6 @@
 from __future__ import print_function
 
 import numpy as np
-import pylab as plt
 import time
 
 from astrometry.util.ttime import Time
@@ -45,6 +44,7 @@ def one_blob(X):
         return None
 
     if plots:
+        import pylab as plt
         plt.figure(2, figsize=(3,3))
         plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
         plt.figure(1)
@@ -155,6 +155,7 @@ class OneBlob(object):
         cat = Catalog(*self.srcs)
 
         if self.plots:
+            import pylab as plt
             self._initial_plots()
             from legacypipe.detection import plot_boundary_map
             plt.clf()
@@ -342,6 +343,7 @@ class OneBlob(object):
             models.add(srci, self.tims)
 
             if self.plots_single:
+                import pylab as plt
                 plt.figure(2)
                 coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
                                            fill_holes=False)
@@ -413,9 +415,10 @@ class OneBlob(object):
             srcwcs_x0y0 = (0, 0)
             srcblobmask = self.blobmask
 
-        if False and self.plots_per_source:
+        if self.plots_per_source:
             # This is a handy blob-coordinates plot of the data
             # going into the fit.
+            import pylab as plt
             plt.clf()
             nil,nil,coimgs,nil = quick_coadds(srctims, self.bands,self.blobwcs,
                                               fill_holes=False, get_cow=True)
@@ -465,23 +468,29 @@ class OneBlob(object):
             blobs,_ = label(flipblobs)
             goodblob = blobs[iy,ix]
 
-            if False and self.plots_per_source:
+            if self.plots_per_source:
                 # This plot is about the symmetric-blob definitions
                 # when fitting sources.
+                import pylab as plt
                 from legacypipe.detection import plot_boundary_map
+
                 plt.clf()
                 for i,(band,detmap,detiv) in enumerate(zip(self.bands, detmaps, detivs)):
                     if i >= 4:
                         break
                     detsn = detmap * np.sqrt(detiv)
                     plt.subplot(2,2, i+1)
-                    dimshow(detsn, vmin=-2, vmax=8, cmap='gray')
+                    dimshow(detsn, vmin=-2, vmax=8)
                     ax = plt.axis()
                     plot_boundary_map(detsn >= 5.)
+                    plt.plot(ix, iy, 'rx')
+                    plt.plot([ix-flipw, ix-flipw, ix+flipw, ix+flipw, ix-flipw],
+                             [iy-fliph, iy+fliph, iy+fliph, iy-fliph, iy-fliph], 'r-')
                     plt.axis(ax)
                     plt.title('det S/N: ' + band)
                 plt.subplot(2,2,4)
-                dimshow(flipblobs, vmin=0, vmax=1, cmap='gray')
+                dimshow(flipblobs, vmin=0, vmax=1)
+                plt.colorbar()
                 ax = plt.axis()
                 plot_boundary_map(blobs == goodblob)
                 if binary_fill_holes(flipblobs)[iy,ix]:
@@ -489,8 +498,27 @@ class OneBlob(object):
                     di = binary_dilation(fb, iterations=4)
                     if np.any(di):
                         plot_boundary_map(di, rgb=(255,0,0))
+                plt.plot(ix, iy, 'rx')
+                plt.plot([ix-flipw, ix-flipw, ix+flipw, ix+flipw, ix-flipw],
+                         [iy-fliph, iy+fliph, iy+fliph, iy-fliph, iy-fliph], 'r-')
                 plt.axis(ax)
                 plt.title('good blob')
+                self.ps.savefig()
+
+                plt.clf()
+                plt.subplot(1,2,1)
+                dimshow(blobs)
+                plt.colorbar()
+                plt.title('blob map; goodblob=%i' % goodblob)
+                plt.subplot(1,2,2)
+                dimshow(binary_fill_holes(flipblobs), vmin=0, vmax=1)
+                plt.colorbar()
+                plt.title('symmetric blob mask: 1 = good')
+                ax = plt.axis()
+                plt.plot(ix, iy, 'rx')
+                plt.plot([ix-flipw, ix-flipw, ix+flipw, ix+flipw, ix-flipw],
+                         [iy-fliph, iy+fliph, iy+fliph, iy-fliph, iy-fliph], 'r-')
+                plt.axis(ax)
                 self.ps.savefig()
 
             # If there is no longer a source detected at the original source
@@ -639,6 +667,9 @@ class OneBlob(object):
         sh,sw = srcwcs.shape
         if ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
             debug('Source is starting outside blob -- skipping.')
+            if mask_others:
+                for ie,tim in zip(saved_srctim_ies, srctims):
+                    tim.inverr = ie
             return None
 
         from tractor import Galaxy
@@ -817,6 +848,9 @@ class OneBlob(object):
             if ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
                 # Exited blob!
                 debug('Source exited sub-blob!')
+                if mask_others:
+                    for ie,tim in zip(saved_srctim_ies, srctims):
+                        tim.inverr = ie
                 continue
 
             disable_galaxy_cache()
@@ -993,6 +1027,7 @@ class OneBlob(object):
 
         # This is V2 of the model-selection plot
         if self.plots_per_source:
+            import pylab as plt
             plt.clf()
             rows,cols = 3, 6
             modnames = ['none', 'ptsrc', simname, 'dev', 'exp', 'comp']
@@ -1109,6 +1144,7 @@ class OneBlob(object):
 
                 # We plots only the first & last three sources
                 if self.plots_per_source and (numi < 3 or numi >= len(Ibright)-3):
+                    import pylab as plt
                     plt.clf()
                     # Recompute coadds because of the subtract-all-and-readd shuffle
                     coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
@@ -1254,6 +1290,7 @@ class OneBlob(object):
         dimshow(get_rgb(coimgs,self.bands))
 
     def _initial_plots(self):
+        import pylab as plt
         debug('Plotting blob image for blob', self.name)
         coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
                                 fill_holes=False)

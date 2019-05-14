@@ -401,16 +401,19 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
         del C
 
         make_badcoadds = True
-        badcoadds = mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
-                                        mp=mp, plots=plots, ps=ps, make_badcoadds=make_badcoadds,
-            gaia_stars=gaia_stars)
+        badcoaddspos, badcoaddsneg = mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
+                                                         mp=mp, plots=plots, ps=ps, make_badcoadds=make_badcoadds,
+                                                         gaia_stars=gaia_stars)
 
         # Make before-n-after plots (after)
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
         outfn = os.path.join(outdir, 'outliers-post-%s.jpg' % brickname)
         imsave_jpeg(outfn, get_rgb(C.coimgs, bands), origin='lower')
-        outfn = os.path.join(outdir, 'outliers-masked-%s.jpg' % brickname)
-        imsave_jpeg(outfn, get_rgb(badcoadds, bands), origin='lower')
+
+        outfn = os.path.join(outdir, 'outliers-masked-pos-%s.jpg' % brickname)
+        imsave_jpeg(outfn, get_rgb(badcoaddspos, bands), origin='lower')
+        outfn = os.path.join(outdir, 'outliers-masked-neg-%s.jpg' % brickname)
+        imsave_jpeg(outfn, get_rgb(badcoaddsneg, bands), origin='lower')
 
     return dict(tims=tims)
 
@@ -3298,6 +3301,8 @@ def main(args=None):
     else:
         lvl = logging.DEBUG
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+    # tractor logging is *soooo* chatty
+    logging.getLogger('tractor.engine').setLevel(lvl + 10)
 
     Time.add_measurement(MemMeas)
     if opt.plots:

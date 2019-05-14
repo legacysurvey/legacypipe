@@ -4,6 +4,7 @@ import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
 from tractor import PixelizedPsfEx, PixelizedPSF
+from tractor.splinesky import SplineSky
 from legacypipe.utils import read_primary_header
 from legacypipe.bits import DQ_BITS
 
@@ -821,7 +822,14 @@ class LegacySurveyImage(object):
             skyclass = hdr['SKY']
         except NameError:
             raise NameError('SKY not in header: skyfn=%s, imgfn=%s' % (fn,self.imgfn))
-        clazz = get_class_from_name(skyclass)
+
+        # Replace splinesky cells that equal the "fallback" value of sky_med with sky_john instead.
+        # Note that this is for single-CCD splinesky files; see read_merged_splinesky_model for
+        # the merged version.
+        if splinesky and skyclass == 'tractor.splinesky.SplineSky':
+            clazz = LegacySplineSky
+        else:
+            clazz = get_class_from_name(skyclass)
 
         if getattr(clazz, 'from_fits', None) is not None:
             fromfits = getattr(clazz, 'from_fits')
@@ -870,7 +878,11 @@ class LegacySurveyImage(object):
         Ti.xgrid = Ti.xgrid[:w]
         Ti.ygrid = Ti.ygrid[:h]
         skyclass = Ti.skyclass.strip()
-        clazz = get_class_from_name(skyclass)
+
+        if skyclass == 'tractor.splinesky.SplineSky':
+            clazz = LegacySplineSky
+        else:
+            clazz = get_class_from_name(skyclass)
         fromfits = getattr(clazz, 'from_fits_row')
         sky = fromfits(Ti)
         if slc is not None:
@@ -1180,15 +1192,19 @@ class LegacySurveyImage(object):
 
             boxsize = self.splinesky_boxsize
 
-            # Start by subtracting the overall median
-            med = sky_median
+            # Initial scalar sky estimate; also the fallback value if everything is masked
+            # in one of the splinesky grid cells.
+            #initsky = sky_median
+            initsky = sky_john
+            if initsky == 0.0:
+                initsky = sky_clipped_median
 
             # For DECam chips where we drop half the chip, spline becomes underconstrained
             if min(img.shape) / boxsize < 4:
                 boxsize /= 2
 
             # Compute initial model...
-            skyobj = SplineSky.BlantonMethod(img - med, good, boxsize)
+            skyobj = SplineSky.BlantonMethod(img - initsky, good, boxsize)
             skymod = np.zeros_like(img)
             skyobj.addTo(skymod)
 
@@ -1197,7 +1213,7 @@ class LegacySurveyImage(object):
             boxcar = 5
             # Sigma of boxcar-smoothed image
             bsig1 = sig1 / boxcar
-            masked = np.abs(uniform_filter(img-med-skymod, size=boxcar, mode='constant')
+            masked = np.abs(uniform_filter(img-initsky-skymod, size=boxcar, mode='constant')
                             > (3.*bsig1))
             masked = binary_dilation(masked, iterations=3)
             good[masked] = False
@@ -1229,9 +1245,9 @@ class LegacySurveyImage(object):
             stargood = (get_inblob_map(wcs, refs) == 0)
 
             # Now find the final sky model using that more extensive mask
-            skyobj = SplineSky.BlantonMethod(img - med, good * stargood, boxsize)
-            # add the overall median back in
-            skyobj.offset(med)
+            skyobj = SplineSky.BlantonMethod(img - initsky, good * stargood, boxsize)
+            # add the initial sky estimate back in
+            skyobj.offset(initsky)
 
             # Compute stats on sky
             skypix = np.zeros_like(img)
@@ -1247,18 +1263,17 @@ class LegacySurveyImage(object):
             fmasked = float(np.sum((good * stargood) == 0)) / (H*W)
 
             # DEBUG -- compute a splinesky on a finer grid and compare it.
-            fineskyobj = SplineSky.BlantonMethod(img - med, good * stargood, boxsize//2)
-            # add the overall median back in
-            fineskyobj.offset(med)
+            fineskyobj = SplineSky.BlantonMethod(img - initsky, good * stargood, boxsize//2)
+            fineskyobj.offset(initsky)
             fineskyobj.addTo(skypix, -1.)
             fine_rms = np.sqrt(np.mean(skypix**2))
 
             if plots:
                 import pylab as plt
-                ima = dict(interpolation='nearest', origin='lower', vmin=med-2.*sig1,
-                           vmax=med+5.*sig1, cmap='gray')
-                ima2 = dict(interpolation='nearest', origin='lower', vmin=med-0.5*sig1,
-                           vmax=med+0.5*sig1, cmap='gray')
+                ima = dict(interpolation='nearest', origin='lower', vmin=initsky-2.*sig1,
+                           vmax=initsky+5.*sig1, cmap='gray')
+                ima2 = dict(interpolation='nearest', origin='lower', vmin=initsky-0.5*sig1,
+                           vmax=initsky+0.5*sig1, cmap='gray')
 
                 plt.clf()
                 plt.imshow(img.T, **ima)
@@ -1288,17 +1303,17 @@ class LegacySurveyImage(object):
 
 
                 plt.clf()
-                plt.imshow((img.T - med)*good.T + med, **ima)
+                plt.imshow((img.T - initsky)*good.T + initsky, **ima)
                 plt.title('Image (boxcar masked)')
                 ps.savefig()
 
                 plt.clf()
-                plt.imshow((img.T - med)*stargood.T + med, **ima)
+                plt.imshow((img.T - initsky)*stargood.T + initsky, **ima)
                 plt.title('Image (star masked)')
                 ps.savefig()
 
                 plt.clf()
-                plt.imshow((img.T - med)*(stargood * good).T + med, **ima)
+                plt.imshow((img.T - initsky)*(stargood * good).T + initsky, **ima)
                 plt.title('Image (boxcar & star masked)')
                 ps.savefig()
 
@@ -1429,6 +1444,25 @@ class LegacySurveyImage(object):
             self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia)
 
 
+class LegacySplineSky(SplineSky):
+    @classmethod
+    def from_fits(cls, filename, header, row=0):
+        T = fits_table(filename)
+        T = T[row]
+        T.sky_med  = header['S_MED']
+        T.sky_john = header['S_JOHN']
+        return cls.from_fits_row(T)
+
+    @classmethod
+    def from_fits_row(cls, Ti):
+        gridvals = Ti.gridvals.copy()
+        nswap = np.sum(gridvals == Ti.sky_med)
+        if nswap:
+            print('Swapping in SKY_JOHN values for', nswap, 'splinesky cells;', Ti.sky_med, '->', Ti.sky_john)
+        gridvals[gridvals == Ti.sky_med] = Ti.sky_john
+        sky = cls(Ti.xgrid, Ti.ygrid, gridvals, order=Ti.order)
+        sky.shift(Ti.x0, Ti.y0)
+        return sky
 
 class NormalizedPixelizedPsfEx(PixelizedPsfEx):
     def __str__(self):
@@ -1474,8 +1508,11 @@ def fix_weight_quantization(wt, weightfn, ext, slc):
     #hdu = fits_astropy.open(weightfn)[ext]
     #table = hdu.compressed_data
     #hdr = hdu._header
-    zquant = hdr['ZQUANTIZ'].strip()
+    zquant = hdr.get('ZQUANTIZ','').strip()
     print('Fpack quantization method:', zquant)
+    if len(zquant) == 0:
+        # Not fpacked?
+        return True
     if zquant == 'SUBTRACTIVE_DITHER_2':
         # This method treats zeros specially so that they remain zero
         # after decompression, so return True to say that we have
