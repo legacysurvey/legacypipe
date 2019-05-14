@@ -3301,6 +3301,8 @@ def main(args=None):
     else:
         lvl = logging.DEBUG
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+    # tractor logging is *soooo* chatty
+    logging.getLogger('tractor.engine').setLevel(lvl + 10)
 
     Time.add_measurement(MemMeas)
     if opt.plots:

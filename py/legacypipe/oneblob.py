@@ -415,9 +415,10 @@ class OneBlob(object):
             srcwcs_x0y0 = (0, 0)
             srcblobmask = self.blobmask
 
-        if False and self.plots_per_source:
+        if self.plots_per_source:
             # This is a handy blob-coordinates plot of the data
             # going into the fit.
+            import pylab as plt
             plt.clf()
             nil,nil,coimgs,nil = quick_coadds(srctims, self.bands,self.blobwcs,
                                               fill_holes=False, get_cow=True)
@@ -467,23 +468,29 @@ class OneBlob(object):
             blobs,_ = label(flipblobs)
             goodblob = blobs[iy,ix]
 
-            if False and self.plots_per_source:
+            if self.plots_per_source:
                 # This plot is about the symmetric-blob definitions
                 # when fitting sources.
+                import pylab as plt
                 from legacypipe.detection import plot_boundary_map
+
                 plt.clf()
                 for i,(band,detmap,detiv) in enumerate(zip(self.bands, detmaps, detivs)):
                     if i >= 4:
                         break
                     detsn = detmap * np.sqrt(detiv)
                     plt.subplot(2,2, i+1)
-                    dimshow(detsn, vmin=-2, vmax=8, cmap='gray')
+                    dimshow(detsn, vmin=-2, vmax=8)
                     ax = plt.axis()
                     plot_boundary_map(detsn >= 5.)
+                    plt.plot(ix, iy, 'rx')
+                    plt.plot([ix-flipw, ix-flipw, ix+flipw, ix+flipw, ix-flipw],
+                             [iy-fliph, iy+fliph, iy+fliph, iy-fliph, iy-fliph], 'r-')
                     plt.axis(ax)
                     plt.title('det S/N: ' + band)
                 plt.subplot(2,2,4)
-                dimshow(flipblobs, vmin=0, vmax=1, cmap='gray')
+                dimshow(flipblobs, vmin=0, vmax=1)
+                plt.colorbar()
                 ax = plt.axis()
                 plot_boundary_map(blobs == goodblob)
                 if binary_fill_holes(flipblobs)[iy,ix]:
@@ -491,8 +498,27 @@ class OneBlob(object):
                     di = binary_dilation(fb, iterations=4)
                     if np.any(di):
                         plot_boundary_map(di, rgb=(255,0,0))
+                plt.plot(ix, iy, 'rx')
+                plt.plot([ix-flipw, ix-flipw, ix+flipw, ix+flipw, ix-flipw],
+                         [iy-fliph, iy+fliph, iy+fliph, iy-fliph, iy-fliph], 'r-')
                 plt.axis(ax)
                 plt.title('good blob')
+                self.ps.savefig()
+
+                plt.clf()
+                plt.subplot(1,2,1)
+                dimshow(blobs)
+                plt.colorbar()
+                plt.title('blob map; goodblob=%i' % goodblob)
+                plt.subplot(1,2,2)
+                dimshow(binary_fill_holes(flipblobs), vmin=0, vmax=1)
+                plt.colorbar()
+                plt.title('symmetric blob mask: 1 = good')
+                ax = plt.axis()
+                plt.plot(ix, iy, 'rx')
+                plt.plot([ix-flipw, ix-flipw, ix+flipw, ix+flipw, ix-flipw],
+                         [iy-fliph, iy+fliph, iy+fliph, iy-fliph, iy-fliph], 'r-')
+                plt.axis(ax)
                 self.ps.savefig()
 
             # If there is no longer a source detected at the original source

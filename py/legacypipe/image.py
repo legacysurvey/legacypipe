@@ -1458,13 +1458,12 @@ class LegacySplineSky(SplineSky):
     def from_fits_row(cls, Ti):
         gridvals = Ti.gridvals.copy()
         nswap = np.sum(gridvals == Ti.sky_med)
-        print('Swapping in SKY_JOHN values for', nswap, 'splinesky cells;', Ti.sky_med, '->', Ti.sky_john)
+        if nswap:
+            print('Swapping in SKY_JOHN values for', nswap, 'splinesky cells;', Ti.sky_med, '->', Ti.sky_john)
         gridvals[gridvals == Ti.sky_med] = Ti.sky_john
         sky = cls(Ti.xgrid, Ti.ygrid, gridvals, order=Ti.order)
         sky.shift(Ti.x0, Ti.y0)
         return sky
-        #return SplineSky.from_fits_row(cls, Ti)
-
 
 class NormalizedPixelizedPsfEx(PixelizedPsfEx):
     def __str__(self):
