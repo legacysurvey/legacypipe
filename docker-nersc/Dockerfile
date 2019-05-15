@@ -45,25 +45,24 @@ RUN for x in \
     matplotlib \
     astropy \
     zmq \
-    ; do pip3 install $x; done \
-    && rm -Rf /root/.cache/pip
+    ; do pip3 --no-cache-dir install $x; done
 
 # ugly: Tractor's mp_fourier module detects the $CC='icc' exactly
 # These are in /opt/intel/bin, which is on the PATH.
 ENV CC icc
 ENV CXX icpc
 ENV LDSHARED icc -shared
-ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=ivybridge -ax=haswell,knl
+# Edison & Cori
+#ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=ivybridge -ax=haswell,knl
+# Just Cori
+ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell -ax=knl
 ENV ARCH_FLAGS ""
-#ENV CFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=gnu99 -pthread
-#ENV CXXFLAGS -O3 -g -fPIC -xAVX -axMIC-AVX512 -std=c++11 -pthread
 
 # Pip installs -- built from source
 RUN for x in \
     photutils \
     fitsio \
-    ; do pip3 install $x; done \
-    && rm -Rf /root/.cache/pip
+    ; do pip3 --no-cache-dir install $x; done
 
 ENV PYTHON python3
 ENV PYTHON_CONFIG python3-config
@@ -119,9 +118,8 @@ ENV PYTHON_SCRIPT "/usr/bin/env python3"
 
 RUN rm /root/.profile
 
-RUN apt -y update && apt install -y apt-utils && echo yes
-
-RUN DEBIAN_FRONTEND=noninteractive \
+RUN apt -y update && apt install -y apt-utils \
+ && DEBIAN_FRONTEND=noninteractive \
     apt install -y --no-install-recommends \
     procps \
     htop \
@@ -130,6 +128,7 @@ RUN DEBIAN_FRONTEND=noninteractive \
     file \
     pkg-config \
     gdb \
+    strace \
     vim \
     less \
     wget \
@@ -149,9 +148,9 @@ RUN DEBIAN_FRONTEND=noninteractive \
     # # Remove APT files
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-RUN pip3 install cython
-
 COPY --from=builder /usr/local /usr/local
+
+RUN pip3 --no-cache-dir install cython ipython
 
 WORKDIR /src
 
@@ -172,8 +171,6 @@ RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe && echo 1
 
 ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 ENV WISE_PSF_DIR /src/unwise_psf/etc
-
-RUN pip3 install --no-cache-dir ipython
 
 ENV HOME /root
 
@@ -211,7 +208,9 @@ RUN python -O -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
            /usr/local/lib/python /usr/local/lib/python3.5/site-packages \
            /usr/local/lib/python3.5/dist-packages
 
-RUN cd /src/legacypipe/py && git pull && git describe && echo 15
+RUN pip3 uninstall -y fitsio; pip3 install --no-cache-dir fitsio==0.9.12
+
+RUN cd /src/legacypipe/py && git pull && git describe
 
 RUN    python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
     && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
