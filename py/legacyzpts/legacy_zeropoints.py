@@ -1994,8 +1994,7 @@ def run_one_calib(X):
 
 def run_one_ext(X):
     measure, ext, survey, psfex, splinesky, debug = X
-    rtns = measure.run(ext, splinesky=splinesky, survey=survey, save_xy=debug,
-                       plots=plots)
+    rtns = measure.run(ext, splinesky=splinesky, survey=survey, save_xy=debug)
     return rtns
 
 class outputFns(object):
