@@ -61,7 +61,7 @@ ENV ARCH_FLAGS ""
 # Pip installs -- built from source
 RUN for x in \
     photutils \
-    fitsio \
+    fitsio==0.9.12 \
     ; do pip3 --no-cache-dir install $x; done
 
 ENV PYTHON python3
@@ -207,8 +207,6 @@ RUN python -O -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
     python    -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
            /usr/local/lib/python /usr/local/lib/python3.5/site-packages \
            /usr/local/lib/python3.5/dist-packages
-
-RUN pip3 uninstall -y fitsio; pip3 install --no-cache-dir fitsio==0.9.12
 
 RUN cd /src/legacypipe/py && git pull && git describe
 
