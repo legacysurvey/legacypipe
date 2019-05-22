@@ -1480,6 +1480,92 @@ class Measurer(object):
 class FakeCCD(object):
     pass
 
+class SDSSMeasurer(Measurer):
+    def __init__(self, *args, **kwargs):
+        super(SDSSMeasurer, self).__init__(*args, **kwargs)
+        self.camera = 'sdss'
+        self.pixscale = get_pixscale(self.camera)
+
+        print('Totally made up zeropoints and extinction coefficients!')
+        self.zp0 =  dict(u=25.0,
+                         g=25.0,
+                         r=25.0,
+                         i=25.0,
+                         z=25.0)
+
+        self.k_ext = dict(u=0.24,
+                          g=0.17,
+                          r=0.10,
+                          i=0.08,
+                          z=0.06)
+        
+        self.cp_header_keys= {'width':   ['ZNAXIS1','NAXIS1'],
+                              'height':  ['ZNAXIS2','NAXIS2'],
+                              'fwhm_cp': ['FWHM']}
+        self.primhdr['WCSCAL'] = 'success'
+        self.goodWcs = True
+
+    def get_ut(self, primhdr):
+        return primhdr['UTC-OBS']
+
+    def get_radec_bore(self, primhdr):
+        return primhdr['RA_DEG'], primhdr['DEC_DEG']
+
+    def ps1_to_observed(self, ps1):
+        # u->g
+        ps1band = dict(u='g').get(self.band, self.band)
+        ps1band_index = ps1cat.ps1band[ps1band]
+        colorterm = self.colorterm_ps1_to_observed(ps1.median, self.band)
+        return ps1.median[:, ps1band_index] + np.clip(colorterm, -1., +1.)
+
+    def get_band(self):
+        band = self.primhdr['FILTER'][0]
+        return band
+
+    def get_gain(self,hdr):
+        return hdr['GAIN']
+
+    def colorterm_ps1_to_observed(self, ps1stars, band):
+        from legacypipe.ps1cat import ps1_to_decam
+        print('HACK -- using DECam color term for SDSS!!')
+        if band == 'u':
+            print('HACK -- using g-band color term for u band!')
+            band = 'g'
+        return ps1_to_decam(ps1stars, band)
+
+    def scale_image(self, img):
+        return img.astype(np.float32)
+
+    def scale_weight(self, img):
+        return img
+
+    def get_wcs(self):
+        import pdb ; pdb.set_trace()
+        return wcs_pv2sip_hdr(self.hdr)
+
+    def read_weight(self, clip=True, clipThresh=0.01, **kwargs):
+        # Just estimate from image...
+        img,hdr = self.read_image()
+        print('Image:', img.shape, img.dtype)
+
+        # Estimate per-pixel noise via Blanton's 5-pixel MAD
+        slice1 = (slice(0,-5,10),slice(0,-5,10))
+        slice2 = (slice(5,None,10),slice(5,None,10))
+        mad = np.median(np.abs(img[slice1] - img[slice2]).ravel())
+        sig1 = 1.4826 * mad / np.sqrt(2.)
+        invvar = (1. / sig1**2)
+        return np.zeros_like(img) + invvar
+
+    def read_bitmask(self):
+        # from legacypipe/cfht.py
+        dqfn = 'cfis/test.mask.0.40.01.fits'
+        if self.slc is not None:
+            mask = fitsio.FITS(dqfn)[self.ext][self.slc]
+        else:
+            mask = fitsio.read(dqfn, ext=self.ext)
+        # This mask is a 16-bit image but has values 0=bad, 1=good.  Flip.
+        return (1 - mask).astype(np.int16)
+
 class DecamMeasurer(Measurer):
     '''DECam CP units: ADU
 
@@ -2137,7 +2223,7 @@ def get_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,\
                                      description='Generate a legacypipe-compatible (survey) CCDs file \
                                                   from a set of reduced imaging.')
-    parser.add_argument('--camera',choices=['decam','mosaic','90prime','megaprime'],action='store',required=True)
+    parser.add_argument('--camera',choices=['decam','mosaic','90prime','megaprime', 'sdss'],action='store',required=True)
     parser.add_argument('--image',action='store',default=None,help='relative path to image starting from decam,bok,mosaicz dir',required=False)
     parser.add_argument('--image_list',action='store',default=None,help='text file listing multiples images in same was as --image',required=False)
     parser.add_argument('--image_dir', type=str, default='images', help='Directory containing the imaging data (analogous to legacypipe.LegacySurveyData.image_dir).')
@@ -2210,7 +2296,7 @@ def main(image_list=None,args=None):
     survey.calibdir = measureargs.get('calibdir')
     measureargs.update(survey=survey)
 
-    if camera in ['mosaic', 'decam', 'megaprime', '90prime']:
+    if camera in ['mosaic', 'decam', 'megaprime', '90prime', 'sdss']:
         if camera in ['mosaic', 'decam', '90prime']:
             from legacyzpts.psfzpt_cuts import read_bad_expid
 
