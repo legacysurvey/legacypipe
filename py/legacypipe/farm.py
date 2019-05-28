@@ -87,6 +87,45 @@ The overall data flow is:
   in QDO.
 
 
+
+At present, we run this by starting the farm.py script on an
+interactive-queue node (preferably Haswell), copying the node's socket
+address into a script that we will use to launch worker.py processes
+via Slurm (on KNL nodes).  This gives the input_thread processes some
+time to prepare some work packets before the worker.py processes show
+up asking to be fed, and also allows us to monitor the overall state
+of the run.
+
+Going forward, it would probably be good to automatically start one
+farm.py process per Slurm job, and then start a bunch of worker.py
+processes to talk to it.
+
+The worker.py processes should not have to touch the filesystem to
+read any data.  If we run them within Shifter containers, then they
+should have little I/O overhead and should scale quite well.
+
+Bottlenecks in the current setup (as I understand them) are:
+- eventually the network link (which uses the infiniband fabric) will
+  saturate
+- the input_threads have to do a fair bit of work, so each one can
+  feed only a handful of worker.py nodes; eventually we'll fill a
+  Haswell node with input_threads.
+- last I profiled, it seemed like the network_thread was spending a
+  significant fraction of its time popping items from the input_queue
+  -- perhaps due to contention for the lock.  It could be that we want
+  to use one input_queue per input_thread, rather than having all of
+  them share a single queue.  There is no particular reason they need
+  to share a queue; we would then have to implement a simple
+  round-robin scheme to pull work from the different input_queues.
+- currently, the worker.py processes are synchronous: they ask for
+  work, wait for the reply, do the work, and send in the result.  We
+  could keep a short queue (per worker or even for the set of workers
+  sharing a node) to reduce this latency.
+
+Last I checked, I could keep up with about 64 KNL nodes x 68 worker.py
+processes with 8 input_thread processes, but efficiency was starting
+to drop.
+
 '''
 import sys
 import os
@@ -170,6 +209,8 @@ def main():
     # received all results for a brick.
     blobsizes = mp.Queue()
 
+    # queue from the output thread to the network thread, only for reporting
+    # that a brick has been finished.
     finished_bricks = mp.Queue()
 
     inthreads = []
