@@ -159,6 +159,8 @@ def main():
                         help='Checkpoint filename pattern')
     parser.add_argument('--checkpoint-period', type=int, default=300,
                         help='Time between writing checkpoints')
+    parser.add_argument('--inthreads', type=int, default=1,
+                        help='Number of brick-processing processes to start')
     parser.add_argument('--port', default=5555, type=int,
                         help='Network port (TCP)')
     parser.add_argument('--command-port', default=5565, type=int,
@@ -214,7 +216,7 @@ def main():
     finished_bricks = mp.Queue()
 
     inthreads = []
-    for i in range(8):
+    for i in range(opt.inthreads):
         inthread = mp.Process(target=input_thread,
                               args=(queuename, inqueue, bigqueue, checkpointqueue,
                                     blobsizes, opt, i),
