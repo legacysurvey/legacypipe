@@ -2487,7 +2487,11 @@ def stage_writecat(
         WISE = None
 
     if T_donotfit:
-        T_donotfit.type = np.array(['DUP']*len(T_donotfit))
+        T_donotfit.type = np.array(['DUP ']*len(T_donotfit))
+        T_donotfit.brickid = np.zeros(len(T_donotfit), np.int32) + brickid
+        T_donotfit.brickname = np.array([brickname] * len(T_donotfit))
+        T_donotfit.objid = np.arange(len(T_donotfit), dtype=np.int32) + len(T2)
+
         T2 = merge_tables([T2, T_donotfit], columns='fillzero')
 
     # Brick pixel positions
