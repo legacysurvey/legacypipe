@@ -160,6 +160,7 @@ def annotate_one_ccd(X):
     sky = None
 
     if ccd.ccdnastrom == 0: # something went terribly wrong
+        print('ccdnastrom == 0; bailing on annotation')
         return result
 
     try:
@@ -174,6 +175,7 @@ def annotate_one_ccd(X):
             raise
 
     if tim is None:
+        print('Failed to get_tractor_image; bailing on annotation')
         return result
 
     psf = tim.psf
@@ -314,6 +316,7 @@ def annotate_one_ccd(X):
                   pixscale_min  = min(pixscale),
                   pixscale_max  = max(pixscale))
     result.update(annotated=True)
+    print('Finished annotation')
     return result
 
 def init_annotations(ccds):

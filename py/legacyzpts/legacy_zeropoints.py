@@ -765,6 +765,13 @@ class Measurer(object):
         gaia = GaiaCatalog.catalog_nantozero(gaia)
         assert(gaia is not None)
         print(len(gaia), 'Gaia stars')
+
+        if len(gaia) > 10000:
+            I = np.argsort(gaia.phot_g_mean_mag)
+            print('Min mag:', gaia.phot_g_mean_mag[I[0]])
+            gaia.cut(I[:10000])
+            print('Cut to', len(gaia), 'Gaia stars')
+
         return self.run_psfphot(ccds, ps1, gaia, zp0, sky_img, splinesky, survey)
 
     def run_psfphot(self, ccds, ps1, gaia, zp0, sky_img, splinesky, survey):
