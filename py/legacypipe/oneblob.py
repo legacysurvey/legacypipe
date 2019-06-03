@@ -1779,8 +1779,7 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
     '''
     keepmod = 'none'
 
-    print()
-    print('_select_model: chisqs', chisqs)
+    #print('_select_model: chisqs', chisqs)
 
     # This is our "detection threshold": 5-sigma in
     # *parameter-penalized* units; ie, ~5.2-sigma for point sources
@@ -1803,7 +1802,7 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
         # bright stars / reference stars: we don't test the simple model.
         return 'ptsrc'
 
-    print('PSF', chisqs.get('ptsrc',0)-nparams['ptsrc'], 'vs REX', chisqs.get(simname,0)-nparams[simname])
+    #print('PSF', chisqs.get('ptsrc',0)-nparams['ptsrc'], 'vs REX', chisqs.get(simname,0)-nparams[simname])
 
     # Is PSF good enough to keep?
     if 'ptsrc' in chisqs and (
@@ -1813,12 +1812,11 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
     # Now choose between point source and simple model (SIMP/REX)
     if 'ptsrc' in chisqs and (
             chisqs['ptsrc']-nparams['ptsrc'] >= chisqs.get(simname,0)-nparams[simname]):
-        print('Keeping PSF')
+        #print('Keeping PSF')
         keepmod = 'ptsrc'
     elif simname in chisqs and (
             chisqs[simname]-nparams[simname] > chisqs.get('ptsrc',0)-nparams['ptsrc']):
-        #print('Keeping source; SIMPLE is better than PTSRC')
-        print('REX is better fit than PSF.')
+        #print('REX is better fit than PSF.')
         oldkeepmod = keepmod
         keepmod = simname
         # For REX, we also demand a fractionally better fit
@@ -1826,11 +1824,11 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
             dchisq_psf = chisqs.get('ptsrc',0)
             dchisq_rex = chisqs.get('rex',0)
             if dchisq_psf > 0 and (dchisq_rex - dchisq_psf) < (0.01 * dchisq_psf):
-                print('REX is not a fractionally better fit, keeping', oldkeepmod)
+                #print('REX is not a fractionally better fit, keeping', oldkeepmod)
                 keepmod = oldkeepmod
 
     if not ('exp' in chisqs or 'dev' in chisqs):
-        print('No EXP or DEV; keeping', keepmod)
+        #print('No EXP or DEV; keeping', keepmod)
         return keepmod
 
     # This is our "upgrade" threshold: how much better a galaxy
@@ -1840,24 +1838,24 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
     # This is the "fractional" upgrade threshold for ptsrc/simple->dev/exp:
     # 1% of ptsrc vs nothing
     fcut = 0.01 * chisqs.get('ptsrc', 0.)
-    print('Cut: absolute', galaxy_margin, 'fractional', fcut)
+    #print('Cut: absolute', galaxy_margin, 'fractional', fcut)
     cut = max(cut, fcut)
 
     expdiff = chisqs.get('exp', 0) - chisqs[keepmod]
     devdiff = chisqs.get('dev', 0) - chisqs[keepmod]
 
-    print('EXP vs', keepmod, ':', expdiff)
-    print('DEV vs', keepmod, ':', devdiff)
+    #print('EXP vs', keepmod, ':', expdiff)
+    #print('DEV vs', keepmod, ':', devdiff)
 
     if not (expdiff > cut or devdiff > cut):
-        print('Keeping', keepmod)
+        #print('Keeping', keepmod)
         return keepmod
 
     if expdiff > devdiff:
-        print('Upgrading to EXP: diff', expdiff)
+        #print('Upgrading to EXP: diff', expdiff)
         keepmod = 'exp'
     else:
-        print('Upgrading to DEV: diff', expdiff)
+        #print('Upgrading to DEV: diff', expdiff)
         keepmod = 'dev'
 
     if not 'comp' in chisqs:
