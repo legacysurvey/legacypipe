@@ -12,7 +12,8 @@ from legacypipe.survey import wcs_for_brick
 def main():
     #fns = glob('/global/project/projectdirs/cosmo/work/legacysurvey/dr8/decam/tractor/000/tractor-000??00?.fits')
     fns = glob('/global/project/projectdirs/cosmo/work/legacysurvey/dr8/decam/tractor/*/tractor-*.fits')
-    
+    fns.sort()
+
     # vers = Counter()
     # for fn in fns:
     #     hdr = fitsio.read_header(fn)
@@ -23,7 +24,9 @@ def main():
     
     for ifn,fn in enumerate(fns):
         T8 = fits_table(fn)
-    
+        phdr = fitsio.read_header(fn)
+        hdr = T8.get_header()
+
         amfn = fn.replace('/tractor-', '/all-models-').replace('/tractor/', '/metrics/')
         A = fits_table(amfn)
 
@@ -159,7 +162,7 @@ def main():
             os.makedirs(outdir)
         except:
             pass
-        Tnew.writeto(outfn)
+        Tnew.writeto(outfn, header=hdr, primheader=phdr)
         #print('Wrote', outfn)
 
 
