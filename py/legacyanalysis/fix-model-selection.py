@@ -51,6 +51,7 @@ def patch_one(X):
             continue
     
         # Copy fit values from the "newtype" entries in all-models
+        Tnew.type[i] = '%-4s' % newtype
         cols = ['ra', 'dec', 'ra_ivar', 'dec_ivar']
         nt = newtype.lower()
         for c in cols:
