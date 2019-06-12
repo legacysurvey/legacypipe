@@ -1117,11 +1117,36 @@ def stage_fitblobs(T=None,
         skipblobs = [r['iblob'] for r in R]
 
     bailout_mask = None
+    T_refbail = None
     if bailout:
         bailout_mask = _get_bailout_mask(blobs, skipblobs, targetwcs, W, H, brick,
                                          blobslices)
         # skip all blobs!
-        skipblobs = np.unique(blobs[blobs>=0])
+        new_skipblobs = np.unique(blobs[blobs>=0])
+        # Which blobs are we bailing out on?
+        bailing = set(new_skipblobs) - set(skipblobs)
+        print('Bailing out on blobs:', bailing)
+        if len(bailing):
+            Ibail = np.hstack([blobsrcs[b] for b in bailing])
+            # Find reference sources in bailout blobs
+            Irefbail = []
+            for i in Ibail:
+                if getattr(cat[i], 'is_reference_source', False):
+                    Irefbail.append(i)
+            if len(Irefbail):
+                from legacypipe.catalog import _get_tractor_fits_values
+                from legacypipe.oneblob import _convert_ellipses
+                T_refbail = T[np.array(Irefbail)]
+                cat_refbail = [cat[i] for i in Irefbail]
+                # For LSLGA sources
+                for src in cat_refbail:
+                    _convert_ellipses(src)
+                # Sets TYPE, etc for T_refbail table.
+                _get_tractor_fits_values(T_refbail, cat_refbail, '%s')
+
+            print('Found', len(T_refbail), 'reference sources in bail-out blobs')
+
+        skipblobs = new_skipblobs
         # append empty results so that a later assert on the lengths will pass
         while len(R) < len(blobsrcs):
             R.append(dict(brickname=brickname, iblob=-1, result=None))
@@ -1339,7 +1364,7 @@ def stage_fitblobs(T=None,
     if get_all_models:
         keys.append('all_models')
     if bailout:
-        keys.append('bailout_mask')
+        keys.extend(['bailout_mask', 'T_refbail'])
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
@@ -1638,7 +1663,7 @@ def _get_mod(X):
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  custom_brick=False,
-                 T=None, T_donotfit=None,
+                 T=None, T_donotfit=None, T_refbail=None,
                  cat=None, pixscale=None, plots=False,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
                  saturated_pix=None,
@@ -1682,6 +1707,14 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     assert(len(T) == len(cat))
     ra  = np.array([src.getPosition().ra  for src in cat])
     dec = np.array([src.getPosition().dec for src in cat])
+
+    # T_refbail and T_donotfit sources get the same treatment...
+    if T_refbail is not None:
+        if T_donotfit is not None:
+            T_donotfit = merge_tables([T_donotfit, T_refbail], columns='fillzero')
+        else:
+            T_donotfit = T_refbail
+
     # We tag the "T_donotfit" sources on the end to get aperture phot
     # and other metrics.
     if T_donotfit:
@@ -1929,7 +1962,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
     tnow = Time()
     debug('[serial coadds] Aperture photometry, wrap-up', tnow-tlast)
-    return dict(T=T, apertures_pix=apertures,
+    return dict(T=T, T_donotfit=T_donotfit, apertures_pix=apertures,
                 apertures_arcsec=apertures_arcsec,
                 maskbits=maskbits,
                 maskbits_header=maskbits_header)
@@ -2487,7 +2520,12 @@ def stage_writecat(
         WISE = None
 
     if T_donotfit:
-        T_donotfit.type = np.array(['DUP ']*len(T_donotfit))
+        if not 'type' in T_donotfit.get_columns():
+            T_donotfit.type = np.array(['DUP ']*len(T_donotfit))
+        else:
+            for i in range(len(T_donotfit)):
+                if len(T_donotfit.type[i].strip()) == 0:
+                    T_donotfit.type[i] = 'DUP '
         T_donotfit.brickid = np.zeros(len(T_donotfit), np.int32) + brickid
         T_donotfit.brickname = np.array([brickname] * len(T_donotfit))
         T_donotfit.objid = np.arange(len(T_donotfit), dtype=np.int32) + len(T2)
