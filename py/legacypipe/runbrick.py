@@ -1962,6 +1962,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
     tnow = Time()
     debug('[serial coadds] Aperture photometry, wrap-up', tnow-tlast)
+
     return dict(T=T, T_donotfit=T_donotfit, apertures_pix=apertures,
                 apertures_arcsec=apertures_arcsec,
                 maskbits=maskbits,
@@ -2128,6 +2129,7 @@ def stage_wise_forced(
     wise_ceres=True,
     unwise_coadds=False,
     version_header=None,
+    maskbits=None,
     mp=None,
     record_event=None,
     ps=None,
@@ -2151,8 +2153,30 @@ def stage_wise_forced(
     # the way the roiradec box is used, the min/max order doesn't matter
     roiradec = [targetrd[0,0], targetrd[2,0], targetrd[0,1], targetrd[2,1]]
 
+    # Sources to photometer
+    do_phot = np.ones(len(cat), bool)
+
+    # Drop sources within the CLUSTER mask from forced photometry.
+    Icluster = None
+    if maskbits is not None:
+        incluster = (maskbits & MASKBITS['CLUSTER'] > 0)
+        if np.any(incluster):
+            print('Checking for sources inside CLUSTER mask')
+            ra  = np.array([src.getPosition().ra  for src in cat])
+            dec = np.array([src.getPosition().dec for src in cat])
+            ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
+            xx = np.round(xx - 1).astype(int)
+            yy = np.round(yy - 1).astype(int)
+            I = np.flatnonzero(ok * (xx >= 0)*(xx < W) * (yy >= 0)*(yy < H))
+            if len(I):
+                Icluster = I[incluster[yy[I], xx[I]]]
+                print('Found', len(Icluster), 'of', len(cat), 'sources inside CLUSTER mask')
+                do_phot[Icluster] = False
+    Nskipped = len(do_phot) - np.sum(do_phot)
+
     wcat = []
-    for src in cat:
+    for i in np.flatnonzero(do_phot):
+        src = cat[i]
         src = src.copy()
         src.setBrightness(NanoMaggies(w=1.))
         wcat.append(src)
@@ -2267,6 +2291,12 @@ def stage_wise_forced(
                 wcoadds.add(tile, wise_models)
             wcoadds.finish(survey, brickname, version_header)
 
+        if Nskipped > 0:
+            assert(len(WISE) == len(wcat))
+            WISE = _fill_skipped_values(WISE, Nskipped, do_phot)
+            assert(len(WISE) == len(cat))
+            assert(len(WISE) == len(T))
+
         # Look up mask values for sources
         WISE.wise_mask = np.zeros((len(cat), 2), np.uint8)
         ra  = np.array([src.getPosition().ra  for src in cat])
@@ -2293,7 +2323,6 @@ def stage_wise_forced(
                 continue
             assert(ie < Nepochs)
             phot = r.phot
-            #phot.about()
             phot.delete_column('wise_coadd_id')
             for c in phot.columns():
                 if not c in WISE_T.columns():
@@ -2301,11 +2330,34 @@ def stage_wise_forced(
                     WISE_T.set(c, np.zeros((len(x), Nepochs), x.dtype))
                 X = WISE_T.get(c)
                 X[:,ie] = phot.get(c)
+        if Nskipped > 0:
+            assert(len(wcat) == len(WISE_T))
+            WISE_T = _fill_skipped_values(WISE_T, Nskipped, do_phot)
+            assert(len(WISE_T) == len(cat))
+            assert(len(WISE_T) == len(T))
 
     debug('Returning: WISE', WISE)
     debug('Returning: WISE_T', WISE_T)
 
     return dict(WISE=WISE, WISE_T=WISE_T, wise_mask_maps=wise_mask_maps)
+
+def _fill_skipped_values(WISE, Nskipped, do_phot):
+    # Fill in blank values for skipped (Icluster) sources
+    # Append empty rows to the WISE results for !do_phot sources.
+    Wempty = fits_table()
+    Wempty.nil = np.zeros(Nskipped, bool)
+    WISE = merge_tables([WISE, Wempty], columns='fillzero')
+    WISE.delete_column('nil')
+    # Reorder to match "cat" order.
+    I = np.empty(len(WISE), int)
+    I[:] = -1
+    Ido, = np.nonzero(do_phot)
+    I[Ido] = np.arange(len(Ido))
+    Idont, = np.nonzero(np.logical_not(do_phot))
+    I[Idont] = np.arange(len(Idont)) + len(Ido)
+    assert(np.all(I > -1))
+    WISE.cut(I)
+    return WISE
 
 def stage_writecat(
     survey=None,
