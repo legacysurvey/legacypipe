@@ -1658,6 +1658,10 @@ def _get_mod(X):
         tim.modelMinval = minval = tim.sig * 0.1
     mod = tractor.getModelImage(0)
     debug('Getting model for', tim, ':', Time()-t0)
+
+    if hasattr(tim.psf, 'clear_cache'):
+        tim.psf.clear_cache()
+
     return mod
 
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
