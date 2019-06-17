@@ -2172,6 +2172,7 @@ def stage_wise_forced(
                 Icluster = I[incluster[yy[I], xx[I]]]
                 print('Found', len(Icluster), 'of', len(cat), 'sources inside CLUSTER mask')
                 do_phot[Icluster] = False
+    Nskipped = len(do_phot) - np.sum(do_phot)
 
     wcat = []
     for i in np.flatnonzero(do_phot):
@@ -2290,44 +2291,11 @@ def stage_wise_forced(
                 wcoadds.add(tile, wise_models)
             wcoadds.finish(survey, brickname, version_header)
 
-        # Fill in blank values for skipped (Icluster) sources
-        Nskipped = len(do_phot) - np.sum(do_phot)
         if Nskipped > 0:
-            Wempty = fits_table()
-            Wempty.nil = np.zeros(Nskipped, bool)
-            print('Filling in blank values for skipped WISE phot.')
-            WISE.about()
-            ###
-            WISE.wra  = np.array([src.getPosition().ra  for src in wcat])
-            WISE.wdec = np.array([src.getPosition().dec for src in wcat])
-            assert(len(wcat) == len(WISE))
-            Wreal = WISE.copy()
-
-            WISE = merge_tables([WISE, Wempty], columns='fillzero')
-
-            # Reorder to match "cat" order.
-            I = np.empty(len(WISE), int)
-            I[:] = -1
-            Ido, = np.nonzero(do_phot)
-            I[Ido] = np.arange(len(Ido))
-            Idont, = np.nonzero(np.logical_not(do_phot))
-            I[Idont] = np.arange(len(Idont)) + len(Ido)
-            assert(len(Ido) + len(Idont) == len(I))
-            ##
-            assert(len(Ido) == len(Wreal))
-            #W2 = WISE[I]
-            WISE.cut(I)
-            #WISE = WISE[I]
-            ###
-            #WISE.do_phot = do_phot
-            WISE.delete_column('nil')
-            # ASSERT some stuff about the ordering?
+            assert(len(WISE) == len(wcat))
+            WISE = _fill_skipped_values(WISE, Nskipped, do_phot)
+            assert(len(WISE) == len(cat))
             assert(len(WISE) == len(T))
-            print('WISE ra,dec vs cat')
-            for i in range(len(WISE)):
-                print('  i %i, do_phot %s (%.4f, %.4f)  vs (%.4f, %.4f)  (diff %.4f %.4f)' %
-                      (i, do_phot[i], WISE.wra[i], WISE.wdec[i], T.ra[i], T.dec[i],
-                       WISE.wra[i]-T.ra[i], WISE.wdec[i]-T.dec[i]))
 
         # Look up mask values for sources
         WISE.wise_mask = np.zeros((len(cat), 2), np.uint8)
@@ -2355,7 +2323,6 @@ def stage_wise_forced(
                 continue
             assert(ie < Nepochs)
             phot = r.phot
-            #phot.about()
             phot.delete_column('wise_coadd_id')
             for c in phot.columns():
                 if not c in WISE_T.columns():
@@ -2363,11 +2330,34 @@ def stage_wise_forced(
                     WISE_T.set(c, np.zeros((len(x), Nepochs), x.dtype))
                 X = WISE_T.get(c)
                 X[:,ie] = phot.get(c)
+        if Nskipped > 0:
+            assert(len(wcat) == len(WISE_T))
+            WISE_T = _fill_skipped_values(WISE_T, Nskipped, do_phot)
+            assert(len(WISE_T) == len(cat))
+            assert(len(WISE_T) == len(T))
 
     debug('Returning: WISE', WISE)
     debug('Returning: WISE_T', WISE_T)
 
     return dict(WISE=WISE, WISE_T=WISE_T, wise_mask_maps=wise_mask_maps)
+
+def _fill_skipped_values(WISE, Nskipped, do_phot):
+    # Fill in blank values for skipped (Icluster) sources
+    # Append empty rows to the WISE results for !do_phot sources.
+    Wempty = fits_table()
+    Wempty.nil = np.zeros(Nskipped, bool)
+    WISE = merge_tables([WISE, Wempty], columns='fillzero')
+    WISE.delete_column('nil')
+    # Reorder to match "cat" order.
+    I = np.empty(len(WISE), int)
+    I[:] = -1
+    Ido, = np.nonzero(do_phot)
+    I[Ido] = np.arange(len(Ido))
+    Idont, = np.nonzero(np.logical_not(do_phot))
+    I[Idont] = np.arange(len(Idont)) + len(Ido)
+    assert(np.all(I > -1))
+    WISE.cut(I)
+    return WISE
 
 def stage_writecat(
     survey=None,
