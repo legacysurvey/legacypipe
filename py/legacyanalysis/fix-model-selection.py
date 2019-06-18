@@ -100,6 +100,9 @@ def patch_one(X):
 
     print('%i of %i: %s patching %i of %i sources' % (ifn+1, Nfns, os.path.basename(fn), npatched, len(Tnew)))
 
+    if npatched == 0:
+        return
+
     phdr.add_record(dict(name='PATCHED', value=npatched,
                          comment='Patched DR8.2.1 model-sel bug'))
 
@@ -120,7 +123,6 @@ def main():
     print(len(fns), 'Tractor catalogs')
 
     vers = Counter()
-    #versionmap = {}
     keepfns = []
 
     for fn in fns:
@@ -128,7 +130,6 @@ def main():
         ver = hdr['LEGPIPEV']
         ver = ver.strip()
         vers[ver] += 1
-        #versionmap[fn] = ver
         if ver == 'DR8.2.1':
             keepfns.append(fn)
 
@@ -142,8 +143,6 @@ def main():
     mp = multiproc(8)
     mp.map(patch_one, args)
     
-    #for ifn,fn in enumerate(fns):
-
 
 if __name__ == '__main__':
     main()
