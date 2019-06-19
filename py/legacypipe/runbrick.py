@@ -150,6 +150,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     pixscale = targetwcs.pixel_scale()
     targetrd = np.array([targetwcs.pixelxy2radec(x,y) for x,y in
                          [(1,1),(W,1),(W,H),(1,H),(1,1)]])
+    print('targetrd',W,H,pixscale,targetrd)
     # custom brick -- set RA,Dec bounds
     if custom_brick:
         brick.ra1,nil  = targetwcs.pixelxy2radec(W, H/2)
@@ -284,7 +285,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         print('WARNING: not applying CCD cuts')
 
     # Cut on bands to be used
-    ccds.cut(np.array([b in bands for b in ccds.filter]))
+    print(ccds.filter)
+    #ccds.cut(np.array([b in bands for b in ccds.filter]))
     print('Cut to', len(ccds), 'CCDs in bands', ','.join(bands))
 
     print('Cutting on CCDs to be used for fitting...')
@@ -418,10 +420,12 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     ccds.psfplver = np.array([tim.psfver[1] for tim in tims])
 
     # Cut "bands" down to just the bands for which we have images.
+    
     timbands = [tim.band for tim in tims]
     bands = [b for b in bands if b in timbands]
+    print('tims',tims,timbands,bands)
     print('Cut bands to', bands)
-
+    
     if plots:
         # Pixel histograms of subimages.
         for b in bands:
@@ -479,6 +483,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                 plt.title('SATUR')
             
             plt.subplot(2,2,4)
+            #print('sky median',np.median(tim.sky))
             dimshow(tim.sky)
             plt.suptitle(tim.name)
             ps.savefig()
@@ -695,7 +700,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             print('Band', im.band, 'expnum', im.expnum, 'exptime', im.exptime, 'seeing', im.fwhm*im.pixscale, 'arcsec, propid', im.propid)
 
             im.check_for_cached_files(survey)
-            print(im)
+            #print(im)
 
             if do_calibs:
                 kwa = dict(git_version=gitver)
@@ -1625,7 +1630,8 @@ def stage_fitblobs(T=None,
     keepblobs = None
     if blobradec is not None:
         # blobradec is a list like [(ra0,dec0), ...]
-        rd = np.array(blobradec)
+        print('blobradec', blobradec)
+        rd = np.array([(blobradec[0],blobradec[1])])
         ok,x,y = targetwcs.radec2pixelxy(rd[:,0], rd[:,1])
         x = (x - 1).astype(int)
         y = (y - 1).astype(int)
@@ -1832,7 +1838,7 @@ def stage_fitblobs(T=None,
     assert(nb == len(bands))
     ns,nb = BB.dchisq.shape
     assert(ns == len(cat))
-    assert(nb == 6) # ptsrc, rex, dev, exp, psfexp, comp
+    assert(nb == 8) # ptsrc, rex, dev, exp, psfexp, psfdev, psfcomp, comp
 
     # Renumber blobs to make them contiguous.
     oldblob = T.blob
@@ -1950,7 +1956,7 @@ def _format_all_models(T, newcat, BB, bands, rex):
         simpname = 'rex'
     else:
         simpname = 'simple'
-    srctypes = ['ptsrc', simpname, 'dev','exp', 'psfexp', 'comp']
+    srctypes = ['ptsrc', simpname, 'dev','exp', 'comp', 'psfexp', 'psfdev', 'psfcomp']
 
     for srctype in srctypes:
         # Create catalog with the fit results for each source type
@@ -2459,7 +2465,7 @@ def stage_wise_forced(
     '''
     from wise.forcedphot import unwise_tiles_touching_wcs
     from tractor import NanoMaggies
-
+    import sys
     record_event and record_event('stage_wise_forced: starting')
 
     # Here we assume the targetwcs is axis-aligned and that the
@@ -2470,6 +2476,8 @@ def stage_wise_forced(
     roiradec = [r[0], r[1], d[2], d[3]]
 
     tiles = unwise_tiles_touching_wcs(targetwcs)
+    
+   
     print('Cut to', len(tiles), 'unWISE tiles')
 
     wcat = []
@@ -3414,7 +3422,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         help=('Debugging: run the single blob containing pixel <bx> <by>; '+
               'this option can be repeated to run multiple blobs.'))
     parser.add_argument(
-        '--blobradec', type=float, nargs=2, default=None, action='append',
+        '--blobradec', type=float, nargs=2,default=None,
         help=('Debugging: run the single blob containing RA,Dec <ra> <dec>; '+
               'this option can be repeated to run multiple blobs.'))
 

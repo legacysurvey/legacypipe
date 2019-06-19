@@ -3,7 +3,7 @@
 """
 Build CCD table for ZTF Coadd
 """
-
+from astropy import wcs
 import sys
 import numpy as np
 import os
@@ -50,20 +50,10 @@ def CreateCCDTable(folder,outfolder):
 
 		with fits.open(image) as f:
 			header = f[0].header
-		try:
-			table['fwhm'].append(header['C3SEE'])
-		except KeyError:
-			try:
-				table['fwhm'].append(header['MEDFWHM'])
-			except KeyError:
-			#	try:
-				table['fwhm'].append(header['SEEING'])
-				#except KeyError:
-			#		print('missing C3SEE')
-			#		continue
-		print(table['fwhm'])
+		print(header)
 		table['image_filename'].append(image_fname)
-		#table['image_key'].append(image_key)
+		table['fwhm'].append(header['HIERARCH CHIP.SEEING'])
+		print(table['fwhm'])
 		table['image_hdu'].append(0)
 		table['camera'].append('ztf')
 		try:
@@ -88,7 +78,7 @@ def CreateCCDTable(folder,outfolder):
 		except KeyError:
 			table['exptime'].append(header['TOTEXPT'])
 		try:
-			table['mjd_obs'].append(header['OBSMJD'])
+			table['mjd_obs'].append(header['MJD-OBS'])
 		except KeyError:
 			table['mjd_obs'].append(header['JDEND'])
 		table['width'].append(header['NAXIS1'])
@@ -99,14 +89,20 @@ def CreateCCDTable(folder,outfolder):
 		table['crpix2'].append(header['CRPIX2'])
 		table['crval1'].append(header['CRVAL1'])
 		table['crval2'].append(header['CRVAL2'])
-		table['cd1_1'].append(header['CD1_1'])
-		table['cd1_2'].append(header['CD1_2'])
-		table['cd2_1'].append(header['CD2_1'])
-		table['cd2_2'].append(header['CD2_2'])
+		table['cd1_1'].append(header['PC001001']*header['CDELT1'])
+		table['cd1_2'].append(header['PC001002']*header['CDELT1'])
+		table['cd2_1'].append(header['PC002001']*header['CDELT2'])
+		table['cd2_2'].append(header['PC002002']*header['CDELT2'])
 		table['yshift'].append(0)
-		table['ra'].append(float(header['CRVAL1']))
-		table['dec'].append(float(header['CRVAL2']))
-		table['skyrms'].append(0)
+		wcs_image = wcs.WCS(header)
+		coords = wcs.utils.pixel_to_skycoord(header['NAXIS1'],header['NAXIS2'],wcs_image,mode='wcs')
+		
+	
+		table['ra'].append(coords.ra.degree)
+		table['dec'].append(coords.dec.degree)
+
+		'''
+		#table['skyrms'].append(0)
 		try:
 			table['sig1'].append(header['C3SKYSIG'])
 		except KeyError:
@@ -114,11 +110,12 @@ def CreateCCDTable(folder,outfolder):
 				table['sig1'].append(header['GSTDDEV'])
 			except KeyError:
 				table['sig1'].append(header['ASTCHI2'])
+		'''
 		try:
 			table['ccdzpt'].append(header['C3ZP'])
 		except KeyError:
-			table['ccdzpt'].append(header['MAGZP'])
-
+			table['ccdzpt'].append(header['HIERARCH FPA.ZP'])
+		
 		#table['zpt'].append(0)		
 		table['ccdraoff'].append(0)
 		table['ccddecoff'].append(0)

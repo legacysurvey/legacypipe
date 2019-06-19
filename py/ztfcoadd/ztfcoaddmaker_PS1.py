@@ -55,7 +55,7 @@ def main():
 	#initialize.create_lists(args.folder, args.debug)
 	scie_list = np.genfromtxt(args.folder+"/scie.list",dtype=str)
 	#print(len([scie_list]))
-	
+
 	#if len([scie_list])==1:
 #		scie_list=list([str([scie_list][0])])
 #	print(scie_list)

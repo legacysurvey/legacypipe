@@ -29,9 +29,10 @@ def select_best_images(image_list, N_images_in_coadd, debug, output=True):
 
 	for image in image_list:
 		with fits.open(image) as f:
-			lmt_mag = f[0].header['C3lmtmag']
-			if lmt_mag > 20:
-				lmt_mag_images.append(image)
+			#lmt_mag = f[0].header['C3lmtmag']
+			#if lmt_mag > 20:
+			#Quick fix because my images have -999 for maglim and no C3lmtmag in header
+			lmt_mag_images.append(image)
 
 	if len(lmt_mag_images) < N_images_in_coadd:
 		utils.print_d('%i Images in Coadd : lmt_mag Selection'%len(lmt_mag_images), debug)
@@ -44,7 +45,15 @@ def select_best_images(image_list, N_images_in_coadd, debug, output=True):
 	seeing_images_tuples = []
 	for image in lmt_mag_images:
 		with fits.open(image) as f:
-			seeing = f[0].header['C3SEE']
+			try:
+				seeing = f[0].header['C3SEE']
+			except KeyError:
+				try:
+					seeing=f[0].header['MEDFWHM']
+				except KeyError:
+				#	try:
+					seeing=f[0].header['SEEING']
+				
 			seeing_images_tuples.append((image,seeing))
 	seeing_images_tuples = sorted(seeing_images_tuples, key=lambda x: x[1])[:N_images_in_coadd]
 
@@ -76,8 +85,10 @@ def edit_coadd_header(scie_list, coadd_fname):
 	obsmjd_arr = []
 	for scie in scie_list:
 		with fits.open(scie) as f:
-			obsmjd_arr.append(f[0].header['OBSMJD'])
-
+			try:
+				obsmjd_arr.append(f[0].header['OBSMJD'])
+			except KeyError:
+				obsmjd_arr.append(f[0].header['MJD-OBS'])	
 	with fits.open(coadd_fname, mode='update') as f:
 		f[0].header['OBSMJD'] = np.median(obsmjd_arr)
 		f[0].header['EXPID'] = 0
@@ -85,7 +96,7 @@ def edit_coadd_header(scie_list, coadd_fname):
 def make_coadd(scie_list, folder, debug):
 
 	os.chdir(folder)
-	
+	print(scie_list)	
 	# MAKE THAT COADD!
 	coadd = "%s/coadd_sciimg.fits"%folder
 	for scie in scie_list:
@@ -120,10 +131,14 @@ def make_coadd(scie_list, folder, debug):
 	shutil.copy(im_real_stars_fname,coadd_real_stars_fname)
 
 	zp, see, lmt_mag, skys, skysigs = zpsee.zpsee_info([coadd], [coaddcat], debug, coaddFlag=True)
+	
+	print('zp is',zp)
 	zpsee.update_image_headers(zp, see, lmt_mag, skys, skysigs, [coadd], debug)
 	
 	# CREATE FINAL CATALOG WITH CORRECT MAGNITUDES
+	print(coadd)
 	with fits.open(coadd) as f:
+		#print()
 		zp = f[0].header['C3ZP']
 	coaddcat_final="%s/coadd_sciimg.cat"%folder
 	cmd="sex -c %s/legacypipe/py/ztfcoadd/coadd/coadd.sex -WEIGHT_IMAGE %s -MAG_ZEROPOINT %s -VERBOSE_TYPE QUIET -CATALOG_NAME %s %s"%(utils.PROJECTPATH,coaddweight,zp,coaddcat_final,coadd)

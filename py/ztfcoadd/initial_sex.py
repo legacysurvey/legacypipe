@@ -8,7 +8,7 @@ from ztfcoadd import utils
 def create_sex_cats(my_scie_list, debug):
     
     for i,scie in enumerate(my_scie_list):
-
+       
         cat = scie.replace('ztf','prelim.ztf').replace('.fits','.cat')
         var = scie.replace('.fits','.var.fits')
         utils.print_d('%i/%i) Creating initial_sex for %s'%(i+1,len(my_scie_list),utils.trim(cat)),debug)

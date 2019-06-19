@@ -253,6 +253,7 @@ def main(survey=None, opt=None):
     cols = T.get_columns()
     if 'flux_r' in cols and not 'decam_flux_r' in cols:
         kwargs.update(fluxPrefix='')
+    kwargs.update(bands='g')
     cat = read_fits_catalog(T, **kwargs)
     # Replace the brightness (which will be a NanoMaggies with g,r,z)
     # with a NanoMaggies with this image's band only.
@@ -379,6 +380,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
     for src in cat:
         # Limit sizes of huge models
         from tractor.galaxy import ProfileGalaxy
+        '''
         if isinstance(src, ProfileGalaxy):
             px,py = tim.wcs.positionToPixel(src.getPosition())
             h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
@@ -387,9 +389,9 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 #print('halfsize', h,'for',src,'-> setting to',MAXHALF)
                 nsize += 1
                 src.halfsize = MAXHALF
-
-        src.freezeAllBut('brightness')
-        src.getBrightness().freezeAllBut(tim.band)
+        '''
+        src.freezeAllBut('brightnessPoint')
+        #src.getBrightness().freezeAllBut(tim.band)
     #print('Limited the size of', nsize, 'large galaxy models')
     
     if derivs:
@@ -412,9 +414,9 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         # For convenience, put all the real sources at the front of
         # the list, so we can pull the IVs off the front of the list.
         cat = realsrcs + derivsrcs
-
+    print('CAT IS HERE',cat)
     if agn:
-        from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
+        from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy, PSFandDevGalaxy_diffcentres, PSFandExpGalaxy_diffcentres, PSFandCompGalaxy_diffcentres
         from tractor import PointSource
         from legacypipe.survey import SimpleGalaxy, RexGalaxy
 
@@ -427,7 +429,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             if isinstance(src, (SimpleGalaxy, RexGalaxy)):
                 #print('Skipping SIMP or REX:', src)
                 continue
-            if isinstance(src, (ExpGalaxy, DevGalaxy, FixedCompositeGalaxy)):
+            if isinstance(src, (ExpGalaxy, DevGalaxy, FixedCompositeGalaxy,PSFandDevGalaxy_diffcentres, PSFandExpGalaxy_diffcentres, PSFandCompGalaxy_diffcentres)):
                 iagn.append(i)
                 bright = src.getBrightness().copy()
                 bright.setParams(np.zeros(bright.numberOfParams()))
@@ -440,7 +442,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         iagn = np.array(iagn)
         cat = realsrcs + agnsrcs
         print('Added AGN to', len(iagn), 'galaxies')
-
+    print([tim],cat)
     tr = Tractor([tim], cat, optimizer=opti)
     tr.freezeParam('images')
     disable_galaxy_cache()

@@ -2,7 +2,7 @@ from __future__ import print_function
 
 import os
 import tempfile
-
+import sys
 import numpy as np
 
 import fitsio
@@ -742,14 +742,19 @@ def ccds_touching_wcs(targetwcs, ccds, ccdrad=None, polygons=True):
 
     trad = targetwcs.radius()
     if ccdrad is None:
+        
         ccdrad = max(np.sqrt(np.abs(ccds.cd1_1 * ccds.cd2_2 -
                                     ccds.cd1_2 * ccds.cd2_1)) *
                      np.hypot(ccds.width, ccds.height) / 2.)
-
+    #print(ccds.cd1_1,ccds.cd2_2,np.sqrt(np.abs(ccds.cd1_1 * ccds.cd2_2 -ccds.cd1_2 * ccds.cd2_1)),np.hypot(ccds.width, ccds.height))
     rad = trad + ccdrad
     r,d = targetwcs.radec_center()
+    #print(ccds.dec,d)
     I, = np.where(np.abs(ccds.dec - d) < rad)
-    I = I[np.where(degrees_between(r, d, ccds.ra[I], ccds.dec[I]) < rad)[0]]
+    #print(degrees_between(r, d, ccds.ra[I], ccds.dec[I]))
+    #I = I[np.where(degrees_between(r, d, ccds.ra[I], ccds.dec[I]) < rad)[0]]
+    #print(ccds.dec,d,rad) 
+    #print('target ra and dec',I,r,d,ccds.ra, ccds.dec, degrees_between(r, d, ccds.ra[I], ccds.dec[I]),rad,I)
     if not polygons:
         return I
     # now check actual polygon intersection
@@ -764,6 +769,8 @@ def ccds_touching_wcs(targetwcs, ccds, ccdrad=None, polygons=True):
     keep = []
     for i in I:
         W,H = ccds.width[i],ccds.height[i]
+        #print(ccds.crval1[i], ccds.crval2[i], ccds.crpix1[i], ccds.crpix2[i])
+        
         wcs = Tan(*[float(x) for x in
                     [ccds.crval1[i], ccds.crval2[i], ccds.crpix1[i], ccds.crpix2[i],
                      ccds.cd1_1[i], ccds.cd1_2[i], ccds.cd2_1[i], ccds.cd2_2[i], W, H]])
@@ -773,6 +780,7 @@ def ccds_touching_wcs(targetwcs, ccds, ccdrad=None, polygons=True):
         for x,y in [(0.5,0.5),(W+0.5,0.5),(W+0.5,H+0.5),(0.5,H+0.5)]:
             rr,dd = wcs.pixelxy2radec(x,y)
             ok,xx,yy = targetwcs.radec2pixelxy(rr,dd)
+            #print(xx,yy)
             poly.append((xx,yy))
         if wdet > 0:
             poly = list(reversed(poly))
@@ -780,6 +788,7 @@ def ccds_touching_wcs(targetwcs, ccds, ccdrad=None, polygons=True):
         if polygons_intersect(targetpoly, poly):
             keep.append(i)
     I = np.array(keep)
+    #print('I',I)
     return I
 
 def create_temp(**kwargs):
@@ -976,7 +985,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
 
         if brick is not None:
             codir = os.path.join(basedir, 'coadd', brickpre, brick)
-        print(brick,codir)
+        #print(brick,codir)
         # Swap in files in the self.cache_dir, if they exist.
         def swap(fn):
             if output:
@@ -999,10 +1008,12 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             if self.version in ['dr1','dr2']:
                 return swaplist([os.path.join(basedir, 'decals-ccds.fits.gz')])
             else:
+                print('INHERE') 
                 return swaplist(
                     glob(os.path.join(basedir, 'survey-ccds-*.fits.gz')))
 
         elif filetype == 'ccd-kds':
+            print('ccd-kds',glob(os.path.join(basedir, 'survey-ccds-*.kd.fits')))
             return swaplist(
                 glob(os.path.join(basedir, 'survey-ccds-*.kd.fits')))
 
@@ -1406,10 +1417,11 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         # Otherwise, fall back to survey-ccds-*.fits.gz files.
         if len(fns) == 0:
             fns = self.find_file('ccds')
+            print('fns',fns)
             fns.sort()
             fns = self.filter_ccds_files(fns)
 	
-        print(fns)
+       
         TT = []
         for fn in fns:
             print('Reading CCDs from', fn)
@@ -1478,7 +1490,10 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         Returns a table of the CCDs touching the given *wcs* region.
         '''
         fns = self.find_file('ccd-kds')
+        print(fns)
         fns = self.filter_ccd_kd_files(fns)
+        
+        
         if len(fns):
             # Assume that if >= 1 survey-ccds-*.kd.fits files exist,
             # then we should read all CCDs from there rather than
@@ -1499,6 +1514,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             radius = 1.
 
             ra,dec = wcs.radec_center()
+            #print(fns,ra,deci,'HERE')
+            
             TT = []
             for fn in fns:
                 print('Searching', fn)
@@ -1516,6 +1533,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         else:
             ccds = self.get_ccds_readonly()
         I = ccds_touching_wcs(wcs, ccds, **kwargs)
+        print(I,'ccds touching wcs')
         if len(I) == 0:
             return None
         return ccds[I]
@@ -1559,7 +1577,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
                              for band in bands]))
         ims = []
         for t in C:
-            print()
+            #print()
             print('Image file', t.image_filename, 'hdu', t.image_hdu)
             im = DecamImage(self, t)
             ims.append(im)
@@ -1617,8 +1635,9 @@ def run_calibs(X):
 
 def read_one_tim(X):
     (im, targetrd, kwargs) = X
-    print('Reading', im)
-    tim = im.get_tractor_image(radecpoly=targetrd, **kwargs)
+    print('Reading', im, targetrd)
+    
+    tim = im.get_tractor_image(radecpoly=targetrd, tiny=1, **kwargs)
     return tim
 
 from tractor.psfex import PsfExModel

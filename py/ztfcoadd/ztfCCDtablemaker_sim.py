@@ -19,7 +19,6 @@ def CreateCCDTable(folder,outfolder):
 
 	#image_list = glob.glob(folder+'/images/*sciimg.fits')
 	image_list = np.loadtxt(folder+'/scie.list',dtype=str)
-
 	filter_tbl = {1: 'g',
 	              2: 'r',
 	              3: 'i'}
@@ -28,18 +27,8 @@ def CreateCCDTable(folder,outfolder):
 
 	slashsplit = lambda x : x.split('/')[-1]
 	slashdir = lambda x : '/'.join(x.split('/')[:-1])
-	
-	print(len([image_list]))
-	
-	#if len([image_list])==1:
-#		image_list=list([str([image_list][0])])
-	print(image_list)
 
-
-	
 	for image in image_list:
-		
-	
 		print(image)
 		if '/' in image:
 			image_key = '_'.join(slashsplit(image).split('_')[:7])
@@ -61,7 +50,6 @@ def CreateCCDTable(folder,outfolder):
 				#except KeyError:
 			#		print('missing C3SEE')
 			#		continue
-		print(table['fwhm'])
 		table['image_filename'].append(image_fname)
 		#table['image_key'].append(image_key)
 		table['image_hdu'].append(0)

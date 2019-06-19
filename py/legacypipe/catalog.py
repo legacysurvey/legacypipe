@@ -3,7 +3,7 @@ from __future__ import print_function
 import numpy as np
 
 from tractor import PointSource, getParamTypeTree, RaDecPos
-from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy, PSFandExpGalaxy_diffcentres
+from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy, PSFandExpGalaxy_diffcentres, PSFandDevGalaxy_diffcentres, PSFandCompGalaxy_diffcentres
 from tractor.ellipses import EllipseESoft, EllipseE
 
 from legacypipe.survey import SimpleGalaxy, RexGalaxy, GaiaSource
@@ -15,8 +15,10 @@ fits_typemap = { PointSource: 'PSF',
                  FixedCompositeGalaxy: 'COMP',
                  SimpleGalaxy: 'SIMP',
                  RexGalaxy: 'REX',
-                 PSFandExpGalaxy_diffcentres: 'PSFEXP', 
+                 PSFandExpGalaxy_diffcentres: 'PSE', 
                 #GaiaSource: 'GAIA',
+                 PSFandDevGalaxy_diffcentres: 'PSD',
+                 PSFandCompGalaxy_diffcentres: 'PSC',
                  GaiaSource: 'PSF',
                  type(None): 'NONE' }
 
@@ -27,6 +29,8 @@ fits_short_typemap = { PointSource: 'P',
                        SimpleGalaxy: 'S',
                        RexGalaxy: 'R',
                        PSFandExpGalaxy_diffcentres: 'A',
+                       PSFandDevGalaxy_diffcentres: 'B',
+                       PSFandCompGalaxy_diffcentres: 'X',
                        GaiaSource: 'G' }
 
 def _typestring(t):
@@ -168,8 +172,8 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
     shapeExp = np.zeros((len(T), 3), np.float32)
     shapeDev = np.zeros((len(T), 3), np.float32)
     fracDev  = np.zeros(len(T), np.float32)
-    posPoint = np.zeros((len(T),2), np.float32)
-   
+    posPoint = np.zeros((len(T),2), np.float64)
+    brightnessPoint = np.zeros((len(T),1), np.float32) 
     
     for i,src in enumerate(cat):
         #print('_get_tractor_fits_values for pattern', pat, 'src', src)
@@ -187,11 +191,40 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
             fracDev[i] = src.fracDev.getValue()
         elif isinstance(src, PSFandExpGalaxy_diffcentres):
             shapeExp[i,:] = src.shapeExp.getAllParams()
-            print('LOOK HERE',src.posPoint.getAllParams())
-            posPoint[i,:] = src.posPoint.getAllParams()
+           
+            brightnessPoint[i,:] = src.brightnessPoint.getAllParams() 
             
+            try:
+                posPoint[i,:] = src.posPoint.getAllParams()
+               
+            except ValueError:
+                posPoint[i,:] = [0, 0]
+                print('posPoint parameters not present, subbing 0s')
+        elif isinstance(src, PSFandDevGalaxy_diffcentres):
+            shapeDev[i,:] = src.shapeDev.getAllParams()
+            brightnessPoint[i,:] = src.brightnessPoint.getAllParams()     
+            try:
+                posPoint[i,:] = src.posPoint.getAllParams()
+            except ValueError:
+                posPoint[i,:] = [0, 0]
+                print('posPoint parameters not present, subbing 0s')
+            
+        elif isinstance(src, PSFandCompGalaxy_diffcentres):
+            shapeDev[i,:] = src.shapeDev.getAllParams()
+            shapeExp[i,:] = src.shapeExp.getAllParams()
+            brightnessPoint[i,:] = src.brightnessPoint.getAllParams() 
+            
+            try:
+                posPoint[i,:] = src.posPoint.getAllParams()
+                
+            except ValueError:
+                posPoint[i,:] = [0, 0]
+                print('posPoint parameters not present, subbing 0s')
+            
+    T.set(pat % 'brightnessPoint', brightnessPoint[:])
     T.set(pat % 'raPoint', posPoint[:,0]) 
     T.set(pat % 'decPoint', posPoint[:,1])
+    
     T.set(pat % 'fracDev',   fracDev)
     #T.set(pat % 'posPoint', posPoint)
     if unpackShape:
@@ -239,17 +272,19 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
         T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
 
     ivbandcols = []
-
+    #print(bands)
     ibands = np.array([allbands.index(b) for b in bands])
-
+    #print(ibands)
     ivs = []
     cat = []
     for i,t in enumerate(T):
+        #print(t.type)
         clazz = rev_typemap[t.type.strip()]
+        #print(t.get_columns())
         pos = RaDecPos(t.ra, t.dec)
         assert(np.isfinite(t.ra))
         assert(np.isfinite(t.dec))
-
+        
         shorttype = fits_short_typemap[clazz]
 
         if fluxPrefix + 'flux' in t.get_columns():
@@ -302,7 +337,7 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                 else:
                     ivs.extend(t.shapeexp_ivar)
             
-        elif issubclass(clazz, PSFandExpGalaxy_diffcentres):
+        elif issubclass(clazz, PSFandExpGalaxy_diffcentres) or issubclass(clazz, PSFandDevGalaxy_diffcentres) or issubclass(clazz, PSFandCompGalaxy_diffcentres):
             # hard-code knowledge that params are fracDev, shapeE, shapeD
             assert(np.isfinite(t.fracdev))
             params.append(t.fracdev)
@@ -313,8 +348,24 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                 expeclazz = expeclazz.replace('"','')
                 expeclazz = ellipse_types[expeclazz]
             assert(np.all([np.isfinite(x) for x in t.shapeexp]))
-            ee = expeclazz(*t.shapeexp)
-            params.append(ee)
+            if issubclass(clazz, PSFandExpGalaxy_diffcentres):
+                ee = expeclazz(*t.shapeexp) 
+                params.append(ee)
+            elif issubclass(clazz, PSFandDevGalaxy_diffcentres):
+                ee = expeclazz(*t.shapedev)
+                params.append(ee)
+            elif issubclass(clazz, PSFandCompGalaxy_diffcentres):
+                ee = expeclazz(*t.shapeexp)
+                de = expeclazz(*t.shapedev)
+                params.append(ee)
+                params.append(de)
+            #ef = expeclazz(t.brightnesspoint)
+            params.append(t.brightnesspoint)
+            #ef = expeclazz(*t.rapoint)
+            #params.append(ef)
+            #eg = expeclazz(*t.decpoint)
+            #params.append(eg)
+
             if invvars:
                 ivs.extend(t.shapeexp_ivar)
         
@@ -348,7 +399,7 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
             pass
         else:
             raise RuntimeError('Unknown class %s' % str(clazz))
-
+        #print(clazz,*params)
         src = clazz(*params)
         cat.append(src)
 

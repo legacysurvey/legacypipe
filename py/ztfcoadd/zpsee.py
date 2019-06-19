@@ -148,20 +148,21 @@ def zpsee_info(scie_list, pre_cat_list, debug, coaddFlag=False):
 
         these_fluxes, these_seeings, these_zps = return_star_info(cat, desi_stars)
         result = copy.deepcopy(desi_stars)
-
+        print('thesezps',these_zps)
         if len(these_zps) == 0:
             these_fluxes, these_seeings, these_zps = return_star_info(cat, iptf_stars)
             result = copy.deepcopy(iptf_stars)
 
+        print('thesezps',these_zps)
         np.savez(real_stars_fname,desi_stars=desi_stars,iptf_stars=iptf_stars,real_stars=result)
 
         seeing = np.median(these_seeings)
         zp = np.median(these_zps)
-
+        print('zp is',zp)
         if not coaddFlag:
             cond0 = mask_data & 6141 == 0
             cond1 = mask_data & 2050 == 0
-            image_data_flat = image_data[cond0 & cond1]
+            image_data_flat = image_data#[cond0 & cond1]
         else:
             image_data_flat = image_data[image_data != 0]
 
@@ -188,17 +189,17 @@ def zpsee_info(scie_list, pre_cat_list, debug, coaddFlag=False):
     return np.array(zps), np.array(seeings), np.array(lmt_mags), np.array(skys), np.array(skysigs)
 
 def update_image_headers(zp, see, lmt_mag, skys, skysigs, scie_list, debug):
-
+    print(scie_list)
     for zeropoint, seeing, mag, sky, skysig, image in zip(zp, see, lmt_mag, skys, skysigs, scie_list):
 
         with fits.open(image, mode='update') as f:
             data = f[0].data
             header = f[0].header
-
-            header["C3ZP"] = zeropoint
+           
+            header["C3ZP"] = zeropoint 
             header["C3SEE"] = seeing
             header["C3LMTMAG"] = mag
             header["C3SKY"] = sky
             header["C3SKYSIG"] = skysig
 
-#        fits.writeto(image,data,header,overwrite=True)
+        fits.writeto(image,data,header,overwrite=True)

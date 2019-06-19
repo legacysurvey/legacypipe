@@ -44,18 +44,27 @@ def download_real_stars(folder, debug):
                   3: 'i'}
 
 	im = scie_list[0]
+	print(im)
 	with fits.open(im) as f:
-		imfilter = filter_tbl[f[0].header['FILTERID']]
+		try:
+			imfilter = filter_tbl[f[0].header['FILTERID']]
+		except KeyError:
+			imfilter = 'g'
+		print(f[0].header)
 		imfilter += '_median'
-		nax1 = f[0].header['NAXIS1']
-		nax2 = f[0].header['NAXIS2']
-	
+		try:
+			nax1 = f[0].header['NAXIS1']
+			nax2 = f[0].header['NAXIS2']
+		except KeyError:
+			nax1 = f[1].header['NAXIS1']
+			nax2 = f[1].header['NAXIS2']
+
 	ra_ul, dec_ul = utils.xy2sky(im, 1, 1)
 	ra_ur, dec_ur = utils.xy2sky(im, nax1, 1)
 	ra_ll, dec_ll = utils.xy2sky(im, 1, nax2)
 	ra_lr, dec_lr = utils.xy2sky(im, nax1, nax2)
 	ra_c, dec_c = utils.xy2sky(im, nax1/2, nax2/2)
-	
+		
 	query_dict = {'flt':imfilter.lower(), 'ra_ll':ra_ll, 'dec_ll':dec_ll,
 	              'ra_lr':ra_lr, 'dec_lr':dec_lr, 'ra_ul':ra_ul,
 	              'dec_ul':dec_ul, 'ra_ur':ra_ur, 'dec_ur':dec_ur,
@@ -82,17 +91,19 @@ def download_real_stars(folder, debug):
 		shutil.copy(real_stars_fname_master,real_stars_fname)
 
 def edit_fits_headers(scie_list):
-
 	for scie in scie_list:
-	    with fits.open(scie, mode='update') as f:
-	        data = f[0].data
-	        header = f[0].header
-	        header['EXTNAME'] = 'CCD0'
-	        header['XTENSION'] = 'C3'
-	        if 'FIXAPERS' in header:
-	            try:
-	                a = int(header['FIXAPERS'].split(',')[0])
-	                header['FIXAPERS'] = ','.join(['a%s'%f for f in header['FIXAPERS'].split(',')])
-	            except ValueError:
-	                pass
-	                
+		
+		print(scie)
+		with fits.open(scie, mode='update') as f:
+			#print(f[0].data)
+			#data = f[0].data
+			header = f[0].header
+			header['EXTNAME'] = 'CCD0'
+			header['XTENSION'] = 'C3'
+			if 'FIXAPERS' in header:
+				try:
+					a = int(header['FIXAPERS'].split(',')[0])
+					header['FIXAPERS'] = ','.join(['a%s'%f for f in header['FIXAPERS'].split(',')])
+				except ValueError:
+					pass
+					

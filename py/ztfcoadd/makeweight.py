@@ -14,9 +14,10 @@ def make_weights(my_scie_list, debug):
         maskname = scie.replace('sciimg', 'mskimg')
         varname = scie.replace('.fits', '.var.fits')
         weightname = scie.replace('sciimg', 'weight')
-	#If a hot pixel or a dead pixel, give it a huge number
+	    #If a hot pixel or a dead pixel, give it a huge number
         with fits.open(varname) as img:
             with fits.open(maskname) as mask:
+                print(mask[0].data)
                 img[0].data = 1 / img[0].data
                 img[0].data[mask[0].data & 6141 != 0] = 0 
                 img.writeto(weightname, overwrite=True)

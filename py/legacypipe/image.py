@@ -249,10 +249,11 @@ class LegacySurveyImage(object):
         wcs = self.get_wcs()
 
         x0,x1,y0,y1,slc = self.get_image_extent(wcs=wcs, slc=slc, radecpoly=radecpoly)
+        
         if y1 - y0 < tiny or x1 - x0 < tiny:
             print('Skipping tiny subimage')
             return None
-
+        
         # Read image pixels
         if pixels:
             print('Reading image slice:', slc)
@@ -261,6 +262,10 @@ class LegacySurveyImage(object):
         else:
             img = np.zeros((y1-y0, x1-x0), np.float32)
             imghdr = self.read_image_header()
+        
+        img=np.nan_to_num(img)
+        #print(np.median(img),np.std(img))   
+        #print(np.sum(np.isnan(img))/(img.shape[0]*img.shape[1]))
         assert(np.all(np.isfinite(img)))
             
         # Read inverse-variance (weight) map
@@ -359,24 +364,10 @@ class LegacySurveyImage(object):
             print('Instantiating and subtracting sky model')
             skymod = np.zeros_like(img)
             sky.addTo(skymod)
-            
+            print('MEDIANS',np.median(skymod),np.median(img),img.shape) 
             lo,hi = np.percentile(img, [20,80])
             ima = dict(vmin=lo, vmax=hi, interpolation='nearest', origin='lower', cmap='gray')
-            import matplotlib.pyplot as plt
-            plt.clf()
-            plt.imshow(img, **ima)
-            plt.savefig('before_subtraction_1024'+self.name+'.png')
-
-
-            img -= skymod
             
-            lo,hi = np.percentile(img, [20,80])
-            ima = dict(vmin=lo, vmax=hi, interpolation='nearest', origin='lower', cmap='gray')
-            plt.clf()
-            plt.imshow(img, **ima)
-            plt.savefig('after_subtraction_1024'+self.name+'.png')
-
-
             
             midsky = np.median(skymod)
             zsky = ConstantSky(0.)
@@ -387,6 +378,7 @@ class LegacySurveyImage(object):
             del zsky
 
         orig_zpscale = zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
+        print('zpscale = ',zpscale,np.median(img))
         if nanomaggies:
             # Scale images to Nanomaggies
             img /= zpscale
@@ -411,7 +403,7 @@ class LegacySurveyImage(object):
             sig1 = 1.4826 * mad / np.sqrt(2.)
             invvar *= (1. / sig1**2)
         assert(np.isfinite(sig1))
-
+        print('sig1 = ',sig1,np.median(img))
         if constant_invvar:
             print('Setting constant invvar', 1./sig1**2)
             invvar[invvar > 0] = 1./sig1**2
@@ -528,8 +520,9 @@ class LegacySurveyImage(object):
         x0,y0 = 0,0
         x1 = x0 + imw
         y1 = y0 + imh
-
+        #print(imw,imh,'width and height')
         # Clip to RA,Dec polygon?
+        '''
         if slc is None and radecpoly is not None:
             from astrometry.util.miscutils import clip_polygon
             imgpoly = [(1,1),(1,imh),(imw,imh),(imw,1)]
@@ -553,10 +546,11 @@ class LegacySurveyImage(object):
             sy,sx = slc
             y0,y1 = sy.start, sy.stop
             x0,x1 = sx.start, sx.stop
-
+        '''
         # Is part of this image bad?
         old_extent = (x0,x1,y0,y1)
         new_extent = self.get_good_image_slice((x0,x1,y0,y1), get_extent=True)
+        #print(old_extent,new_extent,'HERE')
         if new_extent != old_extent:
             x0,x1,y0,y1 = new_extent
             print('Applying good subregion of CCD: slice is', x0,x1,y0,y1)
@@ -1056,11 +1050,12 @@ class LegacySurveyImage(object):
             psf.fwhm = hdr['PSF_FWHM']
 
         psf.shift(x0, y0)
+
         if hybridPsf:
             from tractor.psf import HybridPixelizedPSF
             psf = HybridPixelizedPSF(psf, cx=w/2., cy=h/2.)
 
-        print('Using PSF model', psf)
+
         return psf
 
     ######## Calibration tasks ###########
@@ -1075,10 +1070,10 @@ class LegacySurveyImage(object):
         # fails.  Check whether actually fpacked.
         fcopy = False
         hdr = fitsio.read_header(imgfn, ext=hdu)
-        if not ((hdr['XTENSION'] == 'BINTABLE') and hdr.get('ZIMAGE', False)):
-            print('Image %s, HDU %i is not fpacked; just imcopying.' %
-                  (imgfn,  hdu))
-            fcopy = True
+        #if not ((hdr['XTENSION'] == 'BINTABLE') and hdr.get('ZIMAGE', False)):
+        #    print('Image %s, HDU %i is not fpacked; just imcopying.' %
+        #          (imgfn,  hdu))
+        #    fcopy = True
 
         tmpimgfn  = create_temp(suffix='.fits')
         tmpmaskfn = create_temp(suffix='.fits')
@@ -1186,7 +1181,7 @@ class LegacySurveyImage(object):
             if np.sum(good) == 0:
                 raise RuntimeError('No pixels with weight > 0 in: ' + str(self))
             med = np.median(img[good])
-            print('median is',med)
+            print('median is',med,good)
             # For DECam chips where we drop half the chip, spline becomes underconstrained
             if min(img.shape) / boxsize < 4:
                 boxsize /= 2
@@ -1194,8 +1189,12 @@ class LegacySurveyImage(object):
             boxsize = int(boxsize)
 
             # Compute initial model...
+            #print(img-med, good, boxsize)
             skyobj = SplineSky.BlantonMethod(img - med, good, boxsize)
             skymod = np.zeros_like(img)
+            print('skymod median is', np.median(skymod))
+
+
             skyobj.addTo(skymod)
 
             # Now mask bright objects in a boxcar-smoothed (image - initial sky model)
@@ -1204,6 +1203,7 @@ class LegacySurveyImage(object):
             boxcar = 5
             # Sigma of boxcar-smoothed image
             bsig1 = sig1 / boxcar
+            print('skymod median is', np.median(skymod))
             masked = np.abs(uniform_filter(img-med-skymod, size=boxcar, mode='constant')
                             > (3.*bsig1))
             masked = binary_dilation(masked, iterations=3)
@@ -1214,6 +1214,7 @@ class LegacySurveyImage(object):
             skyobj = SplineSky.BlantonMethod(img - med, good, boxsize)
             # add the overall median back in
             skyobj.offset(med)
+            print('masked', np.sum(good)/(good.shape[0]*good.shape[1]))
 
             if slc is not None:
                 sy,sx = slc
@@ -1289,6 +1290,7 @@ class LegacySurveyImage(object):
             todelete = []
             imgfn,maskfn = self.funpack_files(self.imgfn, self.dqfn,
                                               self.hdu, todelete)
+            print('LOOK HERE',imgfn, maskfn)
             self.run_se(imgfn, maskfn)
             for fn in todelete:
                 os.unlink(fn)
@@ -1316,6 +1318,7 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
         #print('NormalizedPixelizedPsfEx: getImage at', px,py)
         img = super(NormalizedPixelizedPsfEx, self).getImage(px, py)
         img /= np.sum(img)
+        print(np.sum(img))
         return img
 
     def constantPsfAt(self, x, y):

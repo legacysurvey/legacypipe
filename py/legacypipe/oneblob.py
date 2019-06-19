@@ -12,7 +12,7 @@ from astrometry.util.plotutils import dimshow
 from tractor import Tractor, PointSource, Image, NanoMaggies, Catalog, Patch
 import tractor
 print(tractor.__file__)
-from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, PSFandExpGalaxy_diffcentres, SoftenedFracDev, FracDev, disable_galaxy_cache, enable_galaxy_cache
+from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, PSFandExpGalaxy_diffcentres, PSFandDevGalaxy_diffcentres, PSFandCompGalaxy_diffcentres, SoftenedFracDev, FracDev, disable_galaxy_cache, enable_galaxy_cache
 from tractor.patch import ModelMask
 
 from legacypipe.survey import (SimpleGalaxy, RexGalaxy, GaiaSource,
@@ -197,6 +197,7 @@ class OneBlob(object):
         tlast = Time()
 
         # Next, model selections: point source vs dev/exp vs composite.
+        
         self.run_model_selection(cat, Ibright, B)
 
         print('Blob', self.name, 'finished model selection:', Time()-tlast)
@@ -305,7 +306,7 @@ class OneBlob(object):
         #   -subtract final model (from each tim)
         # -Replace original images
     
-        print('gets here')
+        
         models = SourceModels()
         # Remember original tim images
         models.save_images(self.tims)
@@ -315,14 +316,14 @@ class OneBlob(object):
         # print('Subtracting initial models:', Time()-tt)
 
         N = len(cat)
-        B.dchisq = np.zeros((N, 6), np.float32)
+        B.dchisq = np.zeros((N, 8), np.float32)
         B.all_models    = np.array([{} for i in range(N)])
         B.all_model_ivs = np.array([{} for i in range(N)])
         B.all_model_cpu = np.array([{} for i in range(N)])
          
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
-    
+            
             src = cat[srci]
             print('Model selection for source %i of %i in blob %s' %
                   (numi+1, len(Ibright), self.name))
@@ -486,16 +487,19 @@ class OneBlob(object):
             srccat[0] = None
             chisqs_none = _per_band_chisqs(srctractor, self.bands)
     
-            nparams = dict(ptsrc=2, simple=2, rex=3, exp=5, dev=5, comp=9,psfexp=9)
+            nparams = dict(ptsrc=2, simple=2, rex=3, exp=5, dev=5, comp=9,psfexp=9, psfdev=9, psfcomp=11)
             # This is our "upgrade" threshold: how much better a galaxy
             # fit has to be versus ptsrc, and comp versus galaxy.
             galaxy_margin = 3.**2 + (nparams['exp'] - nparams['ptsrc'])
-    
+            galaxypsf_margin =  3.**2 + (nparams['psfexp'] - nparams['exp'])
+            comppsf_margin =  3.**2 + (nparams['psfcomp'] - nparams['exp'])
+ 
+
             # *chisqs* is actually chi-squared improvement vs no source;
             # larger is a better fit.
             chisqs = dict(none=0)
     
-            oldmodel, ptsrc, simple, dev, exp, comp, psfexp = _initialize_models(
+            oldmodel, ptsrc, simple, dev, exp, comp, psfexp, psfdev, psfcomp = _initialize_models(
                 src, self.rex)
     
             if self.rex:
@@ -522,9 +526,10 @@ class OneBlob(object):
                     # The 'gals' model is just a marker
                     trymodels.append(('gals', None))
             else:
-                trymodels.extend([('dev', dev), ('exp', exp), ('psfexp',psfexp), ('comp',comp)])
+                trymodels.extend([('dev', dev), ('exp', exp), ('comp',comp),('psfexp',psfexp),('psfdev',psfdev),('psfcomp',psfcomp)])
 
             cputimes = {}
+
             for name,newsrc in trymodels:
                 cpum0 = time.clock()
                 
@@ -534,12 +539,41 @@ class OneBlob(object):
                     if ((chisqs[simname] > chisqs['ptsrc']) or
                         (chisqs['ptsrc'] > 400)):
                         trymodels.extend([
-                            ('dev', dev), ('exp', exp), ('psfexp',psfexp), ('comp',comp)])
+                            ('dev', dev), ('exp', exp), ('comp',comp),('psfexp',psfexp),('psfdev',psfdev),('psfcomp',psfcomp)])
                     continue
-                print(chisqs.keys(),chisqs)
+                #print(chisqs.keys(),chisqs)
+                
+                if name == 'comp' and newsrc is None:
+                    smod = _select_model(chisqs, nparams, galaxy_margin, galaxypsf_margin, comppsf_margin, self.rex)
+                    if smod not in ['dev', 'exp']:
+                        continue
+                    newsrc = comp = FixedCompositeGalaxy(
+                        src.getPosition(), src.getBrightness(),
+                        SoftenedFracDev(0.5), exp.getShape(),
+                        dev.getShape()).copy()
+                    srccat[0] = newsrc
+
+
+
+                if name == 'psfdev' and newsrc is None:
+                    if (max(chisqs['dev'], chisqs['exp']) <
+                        (chisqs['ptsrc'] + galaxypsf_margin)):
+                        print('dev/exp not much better than ptsrc not computing psfexp model.')
+                        continue
+
+                    
+                    
+                    #print(src)
+                    newsrc = psfdev = PSFandDevGalaxy_diffcentres(
+                        src.getPosition(), src.getBrightness(), dev.getShape(),
+                        src.getPosition(),src.getBrightness()).copy()
+
+                
+
+                
                 if name == 'psfexp' and newsrc is None:
                     if (max(chisqs['dev'], chisqs['exp']) <
-                        (chisqs['ptsrc'] + galaxy_margin)):
+                        (chisqs['ptsrc'] + galaxypsf_margin)):
                         print('dev/exp not much better than ptsrc not computing psfexp model.')
                         continue
 
@@ -550,24 +584,23 @@ class OneBlob(object):
                     #    (chisqs['ptsrc'] + galaxy_margin)):
                     #    print('comp not much better than ptsrc, not computing psfexp model.')
                     #    continue
-                    print(src)
+                    #print(src)
                     newsrc = psfexp = PSFandExpGalaxy_diffcentres(
                         src.getPosition(), src.getBrightness(), exp.getShape(),
                         src.getPosition(),src.getBrightness()).copy()
 
                 
 
-                if name == 'comp' and newsrc is None:
+                if name == 'psfcomp' and newsrc is None:
                     # Compute the comp model if exp or dev would be accepted
                     if (max(chisqs['dev'], chisqs['exp']) <
-                        (chisqs['ptsrc'] + galaxy_margin)):
-                        #print('dev/exp not much better than ptsrc;
-                        #not computing comp model.')
+                        (chisqs['ptsrc'] + galaxypsf_margin)):
+                        print('dev/exp not much better than ptsrc;not computing comp model.')
                         continue
-                    newsrc = comp = FixedCompositeGalaxy(
-                        src.getPosition(), src.getBrightness(),
-                        SoftenedFracDev(0.5), exp.getShape(),
-                        dev.getShape()).copy()
+                    newsrc = psfcomp = PSFandCompGalaxy_diffcentres(
+                        src.getPosition(), src.getBrightness(), exp.getShape(),
+                        src.getBrightness(), dev.getShape(),
+                        src.getPosition(),src.getBrightness()).copy()
                 
                 srccat[0] = newsrc
                 
@@ -762,10 +795,10 @@ class OneBlob(object):
             # Actually select which model to keep.  This "modnames"
             # array determines the order of the elements in the DCHISQ
             # column of the catalog.
-            modnames = ['ptsrc', simname, 'dev', 'exp', 'comp', 'psfexp']
-            keepmod = _select_model(chisqs, nparams, galaxy_margin, self.rex)
+            modnames = ['ptsrc', simname, 'dev', 'exp', 'comp', 'psfexp','psfdev','psfcomp']
+            keepmod = _select_model(chisqs, nparams, galaxy_margin, galaxypsf_margin, comppsf_margin, self.rex)
             keepsrc = {'none':None, 'ptsrc':ptsrc, simname:simple,
-                       'dev':dev, 'exp':exp, 'comp':comp, 'psfexp':psfexp}[keepmod]
+                       'dev':dev, 'exp':exp, 'comp':comp, 'psfexp':psfexp, 'psfdev':psfdev, 'psfcomp':psfcomp}[keepmod]
             bestchi = chisqs.get(keepmod, 0.)
 
             if keepsrc is not None and bestchi == 0.:
@@ -836,10 +869,10 @@ class OneBlob(object):
                 from collections import OrderedDict
                 subplots = []
                 plt.clf()
-                rows,cols = 3, 6
+                rows,cols = 3, 8
                 mods = OrderedDict([
                     ('none',None), ('ptsrc',ptsrc), (simname,simple),
-                    ('dev',dev), ('exp',exp), ('comp',comp),('psfexp',psfexp)])
+                    ('dev',dev), ('exp',exp), ('comp',comp),('psfexp',psfexp),('psfdev',psfdev),('psfcomp',psfcomp)])
                 for imod,modname in enumerate(mods.keys()):
                     if modname != 'none' and not modname in chisqs:
                         continue
@@ -1557,7 +1590,9 @@ def _initialize_models(src, rex):
         shape = LegacyEllipseWithPriors(-1., 0., 0.)
         dev = DevGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
         exp = ExpGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
-        psfexp= None  
+        psfexp= None 
+        psfdev = None
+        psfcomp = None
         comp = None
         oldmodel = 'ptsrc'
 
@@ -1569,6 +1604,8 @@ def _initialize_models(src, rex):
                         src.getShape()).copy()
         comp = None
         psfexp = None
+        psfdev = None
+        psfcomp = None
         oldmodel = 'dev'
 
     elif isinstance(src, ExpGalaxy):
@@ -1579,6 +1616,8 @@ def _initialize_models(src, rex):
         exp = src.copy()
         comp = None
         psfexp = None
+        psfdev = None
+        psfcomp = None
         oldmodel = 'exp'
 
     elif isinstance(src, FixedCompositeGalaxy):
@@ -1597,6 +1636,9 @@ def _initialize_models(src, rex):
         exp = ExpGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
         comp = src.copy()
         psfexp = PSFandExpGalaxy_diffcentres(src.getPosition(),src.getBrightnesses()[0],src.shapeExp,src.getPosition(),src.getBrightnesses()[1])
+        psfdev = PSFandDevGalaxy_diffcentres(src.getPosition(),src.getBrightnesses()[0],src.shapeDev,src.getPosition(),src.getBrightnesses()[1])
+        psfcomp = PSFandCompGalaxy_diffcentres(src.getPosition(),src.getBrightnesses()[0],src.shapeExp,src.getBrightnesses()[1],src.shapeDev,src.getPosition(),src.getBrightnesses()[2])
+        
         oldmodel = 'comp'
     elif isinstance(src, PSFandExpGalaxy):
         ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
@@ -1608,11 +1650,50 @@ def _initialize_models(src, rex):
         dev = DevGalaxy(src.getPosition(), src.getBrightness(),
                         src.getShape()).copy()
         psfexp = src.copy()
+        psfdev = PSFandDevGalaxy_diffcentres(src.getPosition(),src.getBrightnesses()[0],src.shapeDev,src.getPosition(),src.getBrightnesses()[1])
+        psfcomp = PSFandCompGalaxy_diffcentres(src.getPosition(),src.getBrightnesses()[0],src.shapeExp,src.getBrightnesses()[1],src.shapeDev,src.getPosition(),src.getBrightnesses()[2])
+        comp = FixedCompositeGalaxy(src.getPosition(), src.BrightnessExp,src.shapeExp,src.BrightnessDev,src.shapeDev) 
+        oldmodel = 'psfexp'
+    elif isinstance(src, PSFandDevGalaxy):
+        ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
+        simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
+        
+        shape = src.shapeDev
+        exp = ExpGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
+
+        dev = DevGalaxy(src.getPosition(), src.getBrightness(),
+                        src.getShape()).copy()
+        psfexp = PSFandExpGalaxy_diffcentres(src.getPosition(),src.getBrightnesses()[0],src.shapeExp,src.getPosition(),src.getBrightnesses()[1])
+        psfdev = src.copy() 
+        psfcomp = PSFandCompGalaxy_diffcentres(src.getPosition(),src.getBrightnesses()[0],src.shapeExp,src.getBrightnesses()[1],src.shapeDev,src.getPosition(),src.getBrightnesses()[2])
+        
         comp = FixedCompositeGalaxy(src.getPosition(), src.BrightnessExp,src.shapeExp,src.BrightnessDev,src.shapeDev) 
         oldmodel = 'psfexp'
 
+    elif isinstance(src, PSFandCompGalaxy):
+        ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
+        simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
+        frac = src.fracDev.clipped()
+        if frac > 0:
+            shape = src.shapeDev
+        else:
+            shape = src.shapeExp
+        dev = DevGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
+        if frac < 1:
+            shape = src.shapeExp
+        else:
+            shape = src.shapeDev
+        exp = ExpGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
+        comp = FixedCompositeGalaxy(src.getPosition(), src.BrightnessExp,src.shapeExp,src.BrightnessDev,src.shapeDev) 
+      
+        psfcomp = src.copy()
+        psfexp = PSFandExpGalaxy_diffcentres(src.getPosition(),src.getBrightnesses()[0],src.shapeExp,src.getPosition(),src.getBrightnesses()[1])
+        psfdev = PSFandDevGalaxy_diffcentres(src.getPosition(),src.getBrightnesses()[0],src.shapeDev,src.getPosition(),src.getBrightnesses()[1])
 
-    return oldmodel, ptsrc, simple, dev, exp, comp, psfexp
+        oldmodel = 'psfcomp'
+
+
+    return oldmodel, ptsrc, simple, exp, dev, comp, psfexp, psfdev, psfcomp
 
 def _get_subimages(tims, mods, src):
     subtims = []
@@ -1622,7 +1703,7 @@ def _get_subimages(tims, mods, src):
         if mod is None:
             continue
         mh,mw = mod.shape
-        print('MOD SHAPE',mh,mw)
+        #print('MOD SHAPE',mh,mw)
         if mh == 0 or mw == 0:
             continue
         # for modelMasks
@@ -1769,7 +1850,7 @@ def _clip_model_to_blob(mod, sh, ie):
 
     return mod
 
-def _select_model(chisqs, nparams, galaxy_margin, rex):
+def _select_model(chisqs, nparams, galaxy_margin, galaxypsf_margin, comppsf_margin, rex):
     '''
     Returns keepmod
     '''
@@ -1779,9 +1860,12 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
     # *parameter-penalized* units; ie, ~5.2-sigma for point sources
     cut = 5.**2
     # Take the best of all models computed
+    #print(chisqs.keys(),'LOOK HERE')
     diff = max([chisqs[name] - nparams[name] for name in chisqs.keys()
                 if name != 'none'])
-
+    #if 'psfdev' in chisqs: 
+    #    keepmod = 'psfdev'
+    #    return keepmod
     if diff < cut:
         return keepmod
     # We're going to keep this source!
@@ -1818,51 +1902,100 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
 
     # This is the "fractional" upgrade threshold for ptsrc/simple->dev/exp:
     # 1% of ptsrc vs nothing
-    cut = 0.01 * chisqs['ptsrc']
+    fcut = 0.01 * chisqs.get('ptsrc', 0)#chisqs['ptsrc']
     
     #print('Cut: max of', cut, 'and', fcut, ' (fraction of chisq_psf=%.1f)'
     # % chisqs['ptsrc'])
-    #cut = max(cut, fcut)
+    cut = max(cut, fcut)
 
     expdiff = chisqs['exp'] - chisqs[keepmod]
     devdiff = chisqs['dev'] - chisqs[keepmod]
     
+   
     #print('EXP vs', keepmod, ':', expdiff)
     #print('DEV vs', keepmod, ':', devdiff)
 
-    if not (expdiff > cut or devdiff > cut):
+    if (expdiff > cut or devdiff > cut):
         #print('Keeping', keepmod)
-        return keepmod
+        #return keepmod
 
-    if expdiff > devdiff:
+        if expdiff > devdiff:
+            #print('Upgrading from PTSRC to EXP: diff', expdiff)
+            keepmod = 'exp'
+        else:
+            #print('Upgrading from PTSRC to DEV: diff', expdiff)
+            keepmod = 'dev'
+        
+    fcut = 0.01 * chisqs.get(keepmod, 0)
+    
+    #print('Cut: max of', cut, 'and', fcut, ' (fraction of chisq_psf=%.1f)'
+    # % chisqs['ptsrc'])
+    cut = max(cut, fcut)
+
+
+    #if not 'comp' in chisqs:
+    #    return keepmod
+    if 'comp' in chisqs:
+        diff = chisqs['comp'] - chisqs[keepmod]
+        if diff > cut:
+            keepmod = 'comp'
+   
+    #if diff < cut:
+    #    return keepmod
+
+    print('Comparing', keepmod, 'to comp.  cut:', cut, 'comp:', diff)
+       #return keepmod
+    
+    fcut = 0.01 * chisqs.get(keepmod, 0)
+    cut = galaxypsf_margin 
+    #print('Cut: max of', cut, 'and', fcut, ' (fraction of chisq_psf=%.1f)'
+    # % chisqs['ptsrc'])
+    cut = max(cut, fcut)
+
+    if not 'psfexp' in chisqs:
+        return keepmod
+    if not 'psfdev' in chisqs:
+        return keepmod
+    
+    exppsfdiff = chisqs['psfexp'] - chisqs[keepmod]
+    devpsfdiff = chisqs['psfdev'] - chisqs[keepmod]
+    comppsfdiff = chisqs['psfcomp'] - chisqs[keepmod]  
+    #Add this back after experimenting
+    #if not (exppsfdiff > cut or devpsfdiff > cut or comppsfdiff > cut):
+        #print('Keeping', keepmod)
+    #    return keepmod
+  
+    if exppsfdiff > devpsfdiff:
         #print('Upgrading from PTSRC to EXP: diff', expdiff)
-        keepmod = 'exp'
+        keepmod = 'psfexp'
     else:
         #print('Upgrading from PTSRC to DEV: diff', expdiff)
-        keepmod = 'dev'
-
-    if not 'comp' in chisqs:
-        return keepmod
-
-    diff = chisqs['comp'] - chisqs[keepmod]
+        keepmod = 'psfdev' 
     
-    print('Got to exppsfdiff calculation') 
-    exppsfdiff = chisqs['psfexp'] - chisqs[keepmod]
-    if exppsfdiff > cut:
+    if not 'psfcomp' in chisqs:
+        return keepmod
+  
+    fcut = 0.01 * chisqs.get(keepmod, 0)
+    cut = comppsf_margin  
+    #print('Cut: max of', cut, 'and', fcut, ' (fraction of chisq_psf=%.1f)'
+    # % chisqs['ptsrc'])
+    cut = max(cut, fcut)
+    
+    if comppsfdiff > cut:
+        keepmod = 'psfcomp'
+
+    
+    '''
+    if exppsfdiff > 3*cut:
         keepmod = 'psfexp'
         print('Upgrading from composite to exppsfdiff')
         return keepmod
 
 
-    print('Comparing', keepmod, 'to comp.  cut:', cut, 'comp:', diff)
-    if diff > cut:
-        keepmod = 'comp'
-        return keepmod
-
     if not 'psfexp' in chisqs:
         return keepmod
         #print('Upgrading from dev/exp to composite.')
-  
+    '''
     return keepmod
 
 
