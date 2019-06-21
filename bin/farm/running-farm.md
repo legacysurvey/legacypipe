@@ -1,13 +1,13 @@
 #### Preparation
 
-1. Create a directory named farm, or any other name you want
+1.  Create a directory named farm, or any other name you want
 
 ```bash
 mkdir farm
 cd farm
 ```
 
-2. Clone the legacypipe repo and checkout the correct version
+2.  Clone the legacypipe repo and checkout the correct version
 
 ```bash
 git clone https://github.com/legacysurvey/legacypipe
@@ -16,7 +16,7 @@ git fetch && git fetch --tags
 git checkout <tag>
 ```
 
-3. Copy the relevant scripts from the legacypipe repo
+3.  Copy the relevant scripts from the legacypipe repo
 
 ```bash
 # Copy all sh files from <legacypipe directory> to <the farm directory you created at step 1>
@@ -24,15 +24,15 @@ cd ..
 cp bin/farm/*.sh .
 ```
 
-4. Create qdo_login.sh containing qdo database credential environmental variables.
-5. Run generate-launcher.py
+4.  Create qdo_login.sh containing qdo database credential environmental variables.
+5.  Run generate-launcher.py
 
 ```bash
 module load python3
 python generate-launcher.py
 ```
 
-6. Modify the options within launch-farm.sh
+6.  Modify the options within launch-farm.sh
 
 ```bash
 ###Dependencies
@@ -49,7 +49,7 @@ QNAME				# qdo queue containing the bricks you want to process
 ###
 ```
 
-7. Modify the options within launch-worker.sh
+7.  Modify the options within launch-worker.sh
 
 ```bash
 ###Dependencies
