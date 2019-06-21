@@ -21,7 +21,7 @@ git checkout <tag>
 ```bash
 # Copy all sh files from <legacypipe directory> to <the farm directory you created at step 1>
 cd ..
-cp bin/farm/*.sh .
+cp bin/farm/<data release>/*.sh .
 ```
 
 4.  Create qdo_login.sh containing qdo database credential environmental variables.
