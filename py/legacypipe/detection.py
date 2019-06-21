@@ -387,8 +387,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         plt.title('SED %s: S/N & peaks' % sedname)
         ps.savefig()
 
-        import fitsio
-        fitsio.write('sed-sn-%s.fits' % sedname, sedsn)
+        #import fitsio
+        #fitsio.write('sed-sn-%s.fits' % sedname, sedsn)
 
         # plt.clf()
         # plt.imshow(sedsn, vmin=-2, vmax=10, interpolation='nearest',
