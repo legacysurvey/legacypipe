@@ -222,7 +222,12 @@ def write_survey_table(T, surveyfn, camera=None, bad_expid=None):
     T.cd2_1 = T.cd2_1.astype(np.float32)
     T.cd2_2 = T.cd2_2.astype(np.float32)
 
-    add_psfzpt_cuts(T, camera, bad_expid)
+    # add_psfzpt_cuts(T, camera, bad_expid)
+    # We now run this as a separate step at the end via
+    # update_ccd_cuts.
+    # replace with placeholder that masks everything until this is run.
+    from legacyzpts import psfzpt_cuts
+    T.ccd_cuts = psfzpt_cuts.CCD_CUT_BITS['err_legacyzpts']
 
     writeto_via_temp(surveyfn, T)
     print('Wrote %s' % surveyfn)
