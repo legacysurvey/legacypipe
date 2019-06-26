@@ -187,28 +187,28 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     # New peaks:
     peakx = xx[n0:]
     peaky = yy[n0:]
-    if len(peakx) == 0:
-        return None,None,None
 
-    # Add sources for the new peaks we found
-    pr,pd = targetwcs.pixelxy2radec(peakx+1, peaky+1)
-    print('Adding', len(pr), 'new sources')
-    # Also create FITS table for new sources
-    Tnew = fits_table()
-    Tnew.ra  = pr
-    Tnew.dec = pd
-    Tnew.ibx = peakx
-    Tnew.iby = peaky
-    assert(len(peaksn) == len(Tnew))
-    assert(len(apsn) == len(Tnew))
-    Tnew.peaksn = np.array(peaksn)
-    Tnew.apsn = np.array(apsn)
+    Tnew = None
     newcat = []
-    for r,d,x,y in zip(pr,pd,peakx,peaky):
-        fluxes = dict([(band, detmap[y, x])
-                       for band,detmap in zip(bands,detmaps)])
-        newcat.append(PointSource(RaDecPos(r,d),
-                                  NanoMaggies(order=bands, **fluxes)))
+    if len(peakx):
+        # Add sources for the new peaks we found
+        pr,pd = targetwcs.pixelxy2radec(peakx+1, peaky+1)
+        print('Adding', len(pr), 'new sources')
+        # Also create FITS table for new sources
+        Tnew = fits_table()
+        Tnew.ra  = pr
+        Tnew.dec = pd
+        Tnew.ibx = peakx
+        Tnew.iby = peaky
+        assert(len(peaksn) == len(Tnew))
+        assert(len(apsn) == len(Tnew))
+        Tnew.peaksn = np.array(peaksn)
+        Tnew.apsn = np.array(apsn)
+        for r,d,x,y in zip(pr,pd,peakx,peaky):
+            fluxes = dict([(band, detmap[y, x])
+                           for band,detmap in zip(bands,detmaps)])
+            newcat.append(PointSource(RaDecPos(r,d),
+                                      NanoMaggies(order=bands, **fluxes)))
     return Tnew, newcat, hot
 
 def plot_boundary_map(X, rgb=(0,255,0), extent=None, iterations=1):
