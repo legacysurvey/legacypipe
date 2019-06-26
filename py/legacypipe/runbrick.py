@@ -810,19 +810,23 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     if Tnew is None and not bailout_sources:
         raise NothingToDoError('No sources detected.')
     assert(len(Tnew) == len(newcat))
-    Tnew.delete_column('peaksn')
-    Tnew.delete_column('apsn')
+    if Tnew is not None:
+        Tnew.delete_column('peaksn')
+        Tnew.delete_column('apsn')
+        Tnew.ref_cat = np.array(['  '] * len(Tnew))
+        Tnew.ref_id  = np.zeros(len(Tnew), np.int64)
     del detmaps
     del detivs
-    Tnew.ref_cat = np.array(['  '] * len(Tnew))
-    Tnew.ref_id  = np.zeros(len(Tnew), np.int64)
 
     # Merge newly detected sources with reference sources (Tycho2, Gaia, large galaxies)
-    cats = newcat
-    tables = [Tnew]
+    cats = []
+    tables = []
+    if Tnew is not None:
+        cats.extend(newcat)
+        tables.append(Tnew)
     if refstars and len(refstars):
+        cats.extend(refcat)
         tables.append(refstars)
-        cats += refcat
     T = merge_tables(tables, columns='fillzero')
     cat = Catalog(*cats)
     cat.freezeAllParams()
