@@ -807,7 +807,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
         nsigma=nsigma, saturated_pix=saturated_pix, veto_map=veto_map,
         plots=plots, ps=ps, mp=mp)
-    if Tnew is None:
+    if Tnew is None and not bailout_sources:
         raise NothingToDoError('No sources detected.')
     assert(len(Tnew) == len(newcat))
     Tnew.delete_column('peaksn')
