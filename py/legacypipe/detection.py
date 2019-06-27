@@ -609,7 +609,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 
     if ps is not None:
         plt.clf()
-        dimshow(vetomap, vmin=0, vmax=1, cmap='hot')
+        dimshow(this_veto_map, vmin=0, vmax=1, cmap='hot')
         plt.title('SED %s: veto map' % sedname)
         ps.savefig()
 
