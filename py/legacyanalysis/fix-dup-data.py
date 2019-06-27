@@ -18,7 +18,7 @@ def patch_one(X):
     hdr = T8.get_header()
 
     I = np.flatnonzero(T8.type == 'DUP ')
-    print(ifn, 'of', Nfns, ':', fn, ':', len(I), 'DUP', 'ver:', phdr['LEGPIPEV'], 'Patched:', phdr.get('PATCHED', None))
+    print(ifn, 'of', Nfns, ':', fn, ':', len(I), 'DUP', 'ver:', phdr['LEGPIPEV'])
 
     if len(I):
         T8.objid[I] = I
@@ -38,12 +38,12 @@ def patch_one(X):
         (6, 'SATUR'  , 'Bright star saturation'),
         (7, 'SPIKE2' , 'Geometric diffraction spike'),
     ]
-    name_map = {'LATENT2': 'LATEN2'}
+    #name_map = {'LATENT2': 'LATEN2'}
 
     for bit,name,comm in wisebits:
-        phdr.add_record(dict(name='WBITN%i' % bit, value=name, comment=comm))
-    for bit,name,comm in wisebits:
-        phdr.add_record(dict(name='W%s' % name_map.get(name, name), value=1<<bit, comment=comm))
+        phdr.add_record(dict(name='WBITN%i' % bit, value=name, comment=comm + ' (0x%x)' % (1<<bit)))
+    #for bit,name,comm in wisebits:
+    #    phdr.add_record(dict(name='W%s' % name_map.get(name, name), value=1<<bit, comment=comm))
 
     phdr.add_record(dict(name='COMMENT', value='MASKBITS bit values:'))
     maskbits = [
@@ -62,17 +62,17 @@ def patch_one(X):
         (12, 'GALAXY',   'LSLGA large galaxy'),
         (13, 'CLUSTER',  'Cluster'),
     ]
-    name_map = {
-        'NPRIMARY':  'NPRIMRY',
-        'ALLMASK_G': 'ALLM_G',
-        'ALLMASK_R': 'ALLM_R',
-        'ALLMASK_Z': 'ALLM_Z',
-        }
+    # name_map = {
+    #     'NPRIMARY':  'NPRIMRY',
+    #     'ALLMASK_G': 'ALLM_G',
+    #     'ALLMASK_R': 'ALLM_R',
+    #     'ALLMASK_Z': 'ALLM_Z',
+    #     }
 
     for bit,name,comm in maskbits:
-        phdr.add_record(dict(name='MBITN%i' % bit, value=name, comment=comm))
-    for bit,name,comm in maskbits:
-        phdr.add_record(dict(name='M%s' % name_map.get(name, name), value=1<<bit, comment=comm))
+        phdr.add_record(dict(name='MBITN%i' % bit, value=name, comment=comm + ' (0x%x)' % (1<<bit)))
+    #for bit,name,comm in maskbits:
+    #    phdr.add_record(dict(name='M%s' % name_map.get(name, name), value=1<<bit, comment=comm))
 
     phdr.add_record(dict(name='COMMENT', value='ANYMASK/ALLMASK bit values:'))
     anybits = [
@@ -87,12 +87,12 @@ def patch_one(X):
         (11,'OUTLIER', 'Outlier from stack'),
     ]
 
-    name_map = {}
+    #name_map = {}
 
     for bit,name,comm in anybits:
-        phdr.add_record(dict(name='ABITN%i' % bit, value=name, comment=comm))
-    for bit,name,comm in anybits:
-        phdr.add_record(dict(name='A%s' % name_map.get(name, name), value=1<<bit, comment=comm))
+        phdr.add_record(dict(name='ABITN%i' % bit, value=name, comment=comm + ' (0x%x)' % (1<<bit)))
+    #for bit,name,comm in anybits:
+    #    phdr.add_record(dict(name='A%s' % name_map.get(name, name), value=1<<bit, comment=comm))
 
     phdr.add_record(dict(name='COMMENT', value='BRIGHTBLOB bit values:'))
     brightbits = [
@@ -101,12 +101,12 @@ def patch_one(X):
         (2, 'CLUSTER', 'Globular cluster'),
         (3, 'GALAXY',  'Large LSLGA galaxy'),
     ]
-    name_map = {}
+    #name_map = {}
 
     for bit,name,comm in brightbits:
-        phdr.add_record(dict(name='BBITN%i' % bit, value=name, comment=comm))
-    for bit,name,comm in brightbits:
-        phdr.add_record(dict(name='B%s' % name_map.get(name, name), value=1<<bit, comment=comm))
+        phdr.add_record(dict(name='BBITN%i' % bit, value=name, comment=comm + ' (0x%x)' % (1<<bit)))
+    #for bit,name,comm in brightbits:
+    #    phdr.add_record(dict(name='B%s' % name_map.get(name, name), value=1<<bit, comment=comm))
 
     # Ugh, need to copy units
     columns = T8.get_columns()
@@ -146,7 +146,7 @@ def patch_one(X):
 
 
 def main():
-    fns = glob('/global/project/projectdirs/cosmo/work/legacysurvey/dr8/90prime-mosaic/tractor/000/tractor-*.fits')
+    fns = glob('/global/project/projectdirs/cosmo/work/legacysurvey/dr8/90prime-mosaic/tractor/*/tractor-*.fits')
     fns.sort()
     print(len(fns), 'Tractor catalogs')
 
@@ -167,8 +167,7 @@ def main():
 
     N = len(fns)
     args = [(i,N,fn) for i,fn in enumerate(fns)]
-    #mp = multiproc(8)
-    mp = multiproc()
+    mp = multiproc(8)
     mp.map(patch_one, args)
 
 if __name__ == '__main__':

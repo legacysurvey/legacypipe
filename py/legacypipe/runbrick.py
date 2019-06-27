@@ -793,9 +793,9 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         from legacypipe.bits import IN_BLOB
         refs = refstars[refstars.donotfit == False]
         # CUT to real large galaxies and bright stars
-        refs.cut(np.logical_or(refs.islargegalaxy * (refs.radius > 10./60.),
+        refs.cut(np.logical_or(refs.islargegalaxy * (refs.radius > 5./60.),
                                refs.isbright))
-        print('Cut to', np.sum(refs.islargegalaxy), 'large galaxies (> 10 arcmin radius)',
+        print('Cut to', np.sum(refs.islargegalaxy), 'large galaxies (> 5 arcmin radius)',
               'and', np.sum(refs.isbright), 'bright stars')
         if T_clusters is not None:
             refs = merge_tables([refs, T_clusters], columns='fillzero')
