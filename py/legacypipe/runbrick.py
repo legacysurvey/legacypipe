@@ -792,15 +792,17 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         from legacypipe.oneblob import get_inblob_map
         from legacypipe.bits import IN_BLOB
         refs = refstars[refstars.donotfit == False]
-        # CUT to real large galaxies
-        refs.cut(refs.islargegalaxy)
-        refs.cut(refs.radius > 10./60.)
-        print('Cut to', len(refs), 'large galaxies (> 10 arcmin radius)')
+        # CUT to real large galaxies and bright stars
+        refs.cut(np.logical_or(refs.islargegalaxy * (refs.radius > 10./60.),
+                               refs.isbright))
+        print('Cut to', np.sum(refs.islargegalaxy), 'large galaxies (> 10 arcmin radius)',
+              'and', np.sum(refs.isbright), 'bright stars')
         if T_clusters is not None:
             refs = merge_tables([refs, T_clusters], columns='fillzero')
         refmap = get_inblob_map(targetwcs, refs)
         del refs
-        veto_map = (refmap & (IN_BLOB['CLUSTER'] | IN_BLOB['GALAXY']) > 0)
+        veto_map = (refmap > 0)
+        #veto_map = (refmap & (IN_BLOB['CLUSTER'] | IN_BLOB['GALAXY'] | IN_BLOB['BRIGHT']) > 0)
         del refmap
 
     Tnew,newcat,hot = run_sed_matched_filters(
