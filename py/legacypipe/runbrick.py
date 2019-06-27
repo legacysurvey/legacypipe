@@ -561,6 +561,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                version_header=None,
                mp=None, nsigma=None,
                survey=None, brick=None,
+               bailout_sources=False,
                tycho_stars=False,
                gaia_stars=False,
                large_galaxies=False,
@@ -784,25 +785,48 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     # Add a ~1" exclusion zone around reference stars and large galaxies
     avoid_r = np.zeros_like(avoid_x) + 4
+
+    veto_map = None
+
+    if bailout_sources:
+        from legacypipe.oneblob import get_inblob_map
+        from legacypipe.bits import IN_BLOB
+        refs = refstars[refstars.donotfit == False]
+        # CUT to real large galaxies
+        refs.cut(refs.islargegalaxy)
+        refs.cut(refs.radius > 10./60.)
+        print('Cut to', len(refs), 'large galaxies (> 10 arcmin radius)')
+        if T_clusters is not None:
+            refs = merge_tables([refs, T_clusters], columns='fillzero')
+        refmap = get_inblob_map(targetwcs, refs)
+        del refs
+        veto_map = (refmap & (IN_BLOB['CLUSTER'] | IN_BLOB['GALAXY']) > 0)
+        del refmap
+
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
-        nsigma=nsigma, saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
-    if Tnew is None:
+        nsigma=nsigma, saturated_pix=saturated_pix, veto_map=veto_map,
+        plots=plots, ps=ps, mp=mp)
+    if Tnew is None and not bailout_sources:
         raise NothingToDoError('No sources detected.')
     assert(len(Tnew) == len(newcat))
-    Tnew.delete_column('peaksn')
-    Tnew.delete_column('apsn')
+    if Tnew is not None:
+        Tnew.delete_column('peaksn')
+        Tnew.delete_column('apsn')
+        Tnew.ref_cat = np.array(['  '] * len(Tnew))
+        Tnew.ref_id  = np.zeros(len(Tnew), np.int64)
     del detmaps
     del detivs
-    Tnew.ref_cat = np.array(['  '] * len(Tnew))
-    Tnew.ref_id  = np.zeros(len(Tnew), np.int64)
 
     # Merge newly detected sources with reference sources (Tycho2, Gaia, large galaxies)
-    cats = newcat
-    tables = [Tnew]
+    cats = []
+    tables = []
+    if Tnew is not None:
+        cats.extend(newcat)
+        tables.append(Tnew)
     if refstars and len(refstars):
+        cats.extend(refcat)
         tables.append(refstars)
-        cats += refcat
     T = merge_tables(tables, columns='fillzero')
     cat = Catalog(*cats)
     cat.freezeAllParams()
@@ -2675,6 +2699,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               min_mjd=None, max_mjd=None,
               unwise_coadds=False,
               bail_out=False,
+              bail_out_sources=False,
               ceres=True,
               wise_ceres=True,
               unwise_dir=None,
@@ -2907,6 +2932,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   wise_ceres=wise_ceres,
                   unwise_coadds=unwise_coadds,
                   bailout=bail_out,
+                  bailout_sources=bail_out_sources,
                   do_calibs=do_calibs,
                   old_calibs_ok=old_calibs_ok,
                   write_metrics=write_metrics,
@@ -3250,6 +3276,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--bail-out', default=False, action='store_true',
                         help='Bail out of "fitblobs" processing, writing all blobs from the checkpoint and skipping any remaining ones.')
+
+    parser.add_argument('--bail-out-sources', default=False, action='store_true',
+                        help='Avoid detecting new sources in large GALAXY and CLUSTER masked areas')
 
     return parser
 
