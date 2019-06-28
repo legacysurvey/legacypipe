@@ -31,8 +31,8 @@ def CreateCCDTable(folder,outfolder):
 	
 	print(len([image_list]))
 	
-	#if len([image_list])==1:
-#		image_list=list([str([image_list][0])])
+	if len([image_list])==1:
+		image_list=list([str([image_list][0])])
 	print(image_list)
 
 
@@ -50,12 +50,12 @@ def CreateCCDTable(folder,outfolder):
 
 		with fits.open(image) as f:
 			header = f[0].header
-		print(header)
+
 		table['image_filename'].append(image_fname)
-		table['fwhm'].append(header['HIERARCH CHIP.SEEING'])
-		print(table['fwhm'])
+		table['fwhm'].append(1.0)#max(float(header['HIERARCH CHIP.SEEING']),1.0))
+
 		table['image_hdu'].append(0)
-		table['camera'].append('ztf')
+		table['camera'].append('ps1')
 		try:
 			table['expnum'].append(header['EXPID'])
 		except KeyError:
@@ -78,9 +78,9 @@ def CreateCCDTable(folder,outfolder):
 		except KeyError:
 			table['exptime'].append(header['TOTEXPT'])
 		try:
-			table['mjd_obs'].append(header['MJD-OBS'])
+			table['mjd_obs'].append(float(header['MJD-OBS']))
 		except KeyError:
-			table['mjd_obs'].append(header['JDEND'])
+			table['mjd_obs'].append(float(header['JDEND']))
 		table['width'].append(header['NAXIS1'])
 		table['height'].append(header['NAXIS2'])
 		table['ra_bore'].append(0)
@@ -88,7 +88,7 @@ def CreateCCDTable(folder,outfolder):
 		table['crpix1'].append(header['CRPIX1'])
 		table['crpix2'].append(header['CRPIX2'])
 		table['crval1'].append(header['CRVAL1'])
-		table['crval2'].append(header['CRVAL2'])
+		table['crval2'].append(header['CRVAL2'])	
 		table['cd1_1'].append(header['PC001001']*header['CDELT1'])
 		table['cd1_2'].append(header['PC001002']*header['CDELT1'])
 		table['cd2_1'].append(header['PC002001']*header['CDELT2'])
@@ -100,7 +100,7 @@ def CreateCCDTable(folder,outfolder):
 	
 		table['ra'].append(coords.ra.degree)
 		table['dec'].append(coords.dec.degree)
-
+		table['sig1'].append(1.0)
 		'''
 		#table['skyrms'].append(0)
 		try:

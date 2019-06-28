@@ -1,8 +1,10 @@
 ## bash snippet for setting up environment for runbrick.sh / runbrick.py
+export CODEPATH=/project/projectdirs/uLens/code/bin
 
 unset PYTHONPATH
 
 export NERSC_HOST=`/usr/common/usg/bin/nersc_host`
+
 
 # Assume we're running from the legacypipe/py directory:
 export PYTHONPATH=${PYTHONPATH}:.
@@ -12,31 +14,28 @@ export PYTHONPATH=${PYTHONPATH}:.
 
 export DUST_DIR=/global/homes/c/cwar4677/dust/sfddata 
 #/global/project/projectdirs/desi/software/attic/${NERSC_HOST}/dust/v0_0
+=======
+# desiconda
+#export desiconda_version=20180512-1.2.5-img
+desiconda_version=20190311-1.2.7-img
+module use /global/common/software/desi/cori/desiconda/$desiconda_version/modulefiles
+module load desiconda
+
+export DUST_DIR=/global/project/projectdirs/cosmo/data/dust/v0_1
+#>>>>>>> 457b44ac8814215e607b45f106870ecc6666d55d
 
 export UNWISE_COADDS_DIR=/global/projecta/projectdirs/cosmo/work/wise/outputs/merge/neo4/fulldepth:/global/project/projectdirs/cosmo/data/unwise/allwise/unwise-coadds/fulldepth
 
 export UNWISE_COADDS_TIMERESOLVED_DIR=/global/projecta/projectdirs/cosmo/work/wise/outputs/merge/neo4
 
-export GAIA_CAT_DIR=/global/project/projectdirs/cosmo/work/gaia/chunks-gaia-dr2-astrom/
+export GAIA_CAT_DIR=/global/project/projectdirs/cosmo/work/gaia/chunks-gaia-dr2-astrom-2/
 export GAIA_CAT_VER=2
 
 export TYCHO2_KD_DIR=/global/project/projectdirs/cosmo/staging/tycho2
+export LARGEGALAXIES_DIR=/global/project/projectdirs/cosmo/staging/largegalaxies/v2.0
 
 export PS1CAT_DIR=/global/project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v3/
 
-# desiconda
-desiconda_version=20180512-1.2.5-img
-module use /global/common/software/desi/$NERSC_HOST/desiconda/$desiconda_version/modulefiles
-module load desiconda
-
-# Add legacypipe directory to python path
-# (not required if you're running the code from the legacypipe/py directory)
-# Where's the code?
-# export LEGACYPIPE_DIR=/global/cscratch1/sd/desiproc/${NERSC_HOST}-code/legacypipe/
-# PYTHONPATH=${LEGACYPIPE_DIR}/py:${PYTHONPATH}
-
-# local Tractor install?
-# PYTHONPATH=${CODE_DIR}/tractor:${PYTHONPATH}
-
-# local astrometry.net install?
-# PYTHONPATH=${CODE_DIR}/astrometry/lib/python:${PYTHONPATH}
+export UNWISE_PSF_DIR=/global/project/projectdirs/cosmo/staging/unwise_psf/dr8
+export WISE_PSF_DIR=${UNWISE_PSF_DIR}/etc
+export PYTHONPATH=$UNWISE_PSF_DIR/py:$PYTHONPATH

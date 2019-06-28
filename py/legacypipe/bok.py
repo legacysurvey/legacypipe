@@ -1,5 +1,4 @@
 from __future__ import print_function
-import numpy as np
 
 from legacypipe.image import LegacySurveyImage
 
@@ -14,9 +13,6 @@ class BokImage(LegacySurveyImage):
     def __init__(self, survey, t):
         super(BokImage, self).__init__(survey, t)
 
-    def read_invvar(self, **kwargs):
-        return self.read_invvar_clipped(**kwargs)
-
     def read_dq(self, slice=None, header=False, **kwargs):
         # Add supplemental static mask.
         import os
@@ -24,6 +20,7 @@ class BokImage(LegacySurveyImage):
         from pkg_resources import resource_filename
         dq = super(BokImage, self).read_dq(slice=slice, header=header, **kwargs)
         if header:
+            # unpack tuple
             dq,hdr = dq
         dirname = resource_filename('legacypipe', 'config')
         fn = os.path.join(dirname, 'ksb_staticmask_ood_v1.fits.fz')

@@ -1,0 +1,67 @@
+#-------------------------------- PSF model ----------------------------------
+ 
+BASIS_TYPE      PIXEL_AUTO      # NONE, PIXEL, GAUSS-LAGUERRE or FILE
+BASIS_NUMBER    20              # Basis number or parameter
+PSF_SAMPLING    1.0             # Sampling step in pixel units (0.0 = auto)
+PSF_PIXELSIZE   1.0             # Effective pixel size in pixel step units
+PSF_ACCURACY    0.01            # Accuracy to expect from PSF "pixel" values
+PSF_SIZE        25,25           # Image size of the PSF model
+PSF_RECENTER    N               # Allow recentering of PSF-candidates Y/N ?
+ 
+#------------------------- Point source measurements -------------------------
+ 
+CENTER_KEYS     X_IMAGE,Y_IMAGE # Catalogue parameters for source pre-centering
+PHOTFLUX_KEY    FLUX_APER(4)    # Catalogue parameter for photometric norm.
+PHOTFLUXERR_KEY FLUXERR_APER(4) # Catalogue parameter for photometric error
+ 
+#----------------------------- PSF variability -------------------------------
+ 
+PSFVAR_KEYS     X_IMAGE,Y_IMAGE # Catalogue or FITS (preceded by :) params
+PSFVAR_GROUPS   1,1             # Group tag for each context key
+PSFVAR_DEGREES  2               # Polynom degree for each group
+ 
+#----------------------------- Sample selection ------------------------------
+ 
+SAMPLE_AUTOSELECT  Y            # Automatically select the FWHM (Y/N) ?
+SAMPLEVAR_TYPE     SEEING       # File-to-file PSF variability: NONE or SEEING
+SAMPLE_FWHMRANGE   2.0,30.0     # Allowed FWHM range
+SAMPLE_VARIABILITY 0.2          # Allowed FWHM variability (1.0 = 100%)
+SAMPLE_MINSN       20           # Minimum S/N for a source to be used
+SAMPLE_MAXELLIP    0.3          # Maximum (A-B)/(A+B) for a source to be used
+
+SAMPLE_FLAGMASK    0x00fe       # Rejection mask on SExtractor FLAGS
+SAMPLE_WFLAGMASK   0x0000       # Rejection mask on SExtractor FLAGS_WEIGHT
+SAMPLE_IMAFLAGMASK 0x0          # Rejection mask on SExtractor IMAFLAGS_ISO
+BADPIXEL_FILTER    N            # Filter bad-pixels in samples (Y/N) ?
+BADPIXEL_NMAX      0            # Maximum number of bad pixels allowed
+ 
+#------------------------------- Check-plots ----------------------------------
+ 
+CHECKPLOT_DEV       NULL         # NULL, XWIN, TK, PS, PSC, XFIG, PNG,
+                                # JPEG, AQT, PDF or SVG
+CHECKPLOT_RES       0           # Check-plot resolution (0 = default)
+CHECKPLOT_ANTIALIAS Y           # Anti-aliasing using convert (Y/N) ?
+
+#CHECKPLOT_TYPE      FWHM,ELLIPTICITY,COUNTS, COUNT_FRACTION, CHI2, RESIDUALS
+#CHECKPLOT_NAME      fwhm, ellipticity, counts, countfrac, chi2, resi
+ 
+CHECKPLOT_TYPE NONE
+CHECKIMAGE_TYPE NONE
+
+#------------------------------ Check-Images ---------------------------------
+# 
+#CHECKIMAGE_TYPE SAMPLES,SNAPSHOTS_IMRES         # CHI,PROTOTYPES,SAMPLES,RESIDUALS,SNAPSHOTS
+#                                # or MOFFAT,-MOFFAT,-SYMMETRICAL
+#CHECKIMAGE_NAME samp.fits,snap_imres.fits       #chi.fits,proto.fits,samp.fits,resi.fits,snap.fits
+#                                # Check-image filenames
+#CHECKIMAGE_CUBE Y               # Save check-images as datacubes (Y/N) ?
+# 
+#----------------------------- Miscellaneous ---------------------------------
+ 
+PSF_DIR                         # Where to write PSFs (empty=same as input)
+PSF_SUFFIX      .fits            # Filename extension for output PSF filename
+VERBOSE_TYPE    FULL            # can be QUIET,NORMAL,LOG or FULL
+WRITE_XML       N               # Write XML file (Y/N)?
+NTHREADS        1               # Number of simultaneous threads for
+                                # the SMP version of PSFEx
+                                # 0 = automatic

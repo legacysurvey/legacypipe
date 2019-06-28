@@ -1,0 +1,99 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: ubuntu:18.04
+    steps:
+      - run:
+          name: Tell me about your CPUs
+          command: cat /proc/cpuinfo
+      - run:
+          name: Ubuntu packages
+          command: |
+            apt update && apt install -y apt-utils
+            DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends make gcc g++ git file pkg-config wget swig netpbm wcslib-dev wcslib-tools zlib1g-dev libbz2-dev libcairo2-dev libcfitsio-dev libcfitsio-bin libgsl-dev libjpeg-dev libnetpbm10-dev libpng-dev libeigen3-dev libgoogle-glog-dev libceres-dev python3 python3-dev python3-pip python3-pil python3-tk
+            apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+      - checkout
+      - run:
+          name: Fix multiprocessing bug
+          command: cp docker/pool.py /usr/lib/python3.6/multiprocessing/pool.py
+      - run:
+          name: Python paths
+          command: |
+             echo "../site-packages" > /usr/local/lib/python3.6/dist-packages/site-packages.pth
+             echo "/usr/local/lib/python" > /usr/local/lib/python3.6/dist-packages/usrlocal.pth
+             ln -s /usr/bin/python3 /usr/bin/python
+      - run:
+         name: Pip packages
+         command: |
+            for x in setuptools wheel intel-numpy intel-scipy psycopg2-binary fitsio==0.9.12 matplotlib astropy photutils zmq; do pip3 install $x; done
+            rm -Rf /root/.cache/pip
+      - run:
+          name: Dust maps
+          command: |
+               mkdir -p dust/maps
+               (cd dust/maps && wget -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_ngp.fits)
+               (cd dust/maps && wget -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_sgp.fits)
+               export DUST_DIR=$(pwd)/dust
+      - run:
+          name: Astrometry.net
+          command: |
+               git clone http://github.com/dstndstn/astrometry.net.git astrometry
+               cd astrometry
+               export PYTHON=python3
+               export PYTHON_SCRIPT="/usr/bin/env python3"
+               make
+               make py
+               make extra
+               make install INSTALL_DIR=/usr/local
+               make clean
+               cd /tmp && python3 -c "from astrometry.util import fits; print(fits.__file__)"
+      - run:
+          name: The Tractor
+          command: |
+               git clone http://github.com/dstndstn/tractor.git tractor
+               cd tractor
+               export PYTHON=python3
+               export PYTHON_CONFIG=python3-config
+               make
+               make ceres
+               make install INSTALL_DIR=/usr/local
+               rm -R $(find . -name "*.o" -o -name "*.so")
+               cd /tmp && python3 -c "from tractor import galaxy; print(galaxy.__file__)"
+      - run:
+          name: Unwise PSF
+          command: |
+               git clone https://github.com/legacysurvey/unwise_psf.git
+               cd unwise_psf
+               git checkout dr8
+               export WISE_PSF_DIR=$(pwd)/unwise_psf/etc
+               export PYTHONPATH=${PYTHONPATH}:$(pwd)/unwise_psf/py
+      - run:
+          name: Test deps
+          command: |
+              pip3 install Sphinx coveralls
+      - run:
+          name: Unit & Coverage tests
+          command: |
+              pwd
+              ls
+              export PYTHONPATH=${PYTHONPATH}:$(pwd)/unwise_psf/py:.
+              export WISE_PSF_DIR=$(pwd)/unwise_psf/etc
+              export DUST_DIR=$(pwd)/dust
+              cd py
+              echo $PYTHONPATH
+              pwd
+              python3 -c "import sys; print(sys.path)"
+              python3 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
+              coverage run test/unit_tests.py
+              coverage run -a test/runbrick_test.py travis
+      - run:
+          name: Coveralls
+          command: |
+              cd py
+              # set in the circleci build config,
+              # https://circleci.com/gh/legacysurvey/legacypipe/edit#env-vars
+              echo "COVERALLS_REPO_TOKEN=${COVERALLS_REPO_TOKEN} bundle exec rspec spec" > .coveralls.yml
+              #coveralls debug
+              coveralls
+

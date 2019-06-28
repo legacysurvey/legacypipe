@@ -4,8 +4,106 @@ from astrometry.util.plotutils import dimshow
 from legacypipe.survey import *
 
 
+def tim_plots(tims, bands, ps):
+    # Pixel histograms of subimages.
+    for b in bands:
+        sig1 = np.median([tim.sig1 for tim in tims if tim.band == b])
+        plt.clf()
+        for tim in tims:
+            if tim.band != b:
+                continue
+            # broaden range to encompass most pixels... only req'd
+            # when sky is bad
+            lo,hi = -5.*sig1, 5.*sig1
+            pix = tim.getImage()[tim.getInvError() > 0]
+            lo = min(lo, np.percentile(pix, 5))
+            hi = max(hi, np.percentile(pix, 95))
+            plt.hist(pix, range=(lo, hi), bins=50, histtype='step',
+                     alpha=0.5, label=tim.name)
+        plt.legend()
+        plt.xlabel('Pixel values')
+        plt.title('Pixel distributions: %s band' % b)
+        ps.savefig()
+
+        plt.clf()
+        lo,hi = -5., 5.
+        for tim in tims:
+            if tim.band != b:
+                continue
+            ie = tim.getInvError()
+            pix = (tim.getImage() * ie)[ie > 0]
+            plt.hist(pix, range=(lo, hi), bins=50, histtype='step',
+                     alpha=0.5, label=tim.name)
+        plt.legend()
+        plt.xlabel('Pixel values (sigma)')
+        plt.xlim(lo,hi)
+        plt.title('Pixel distributions: %s band' % b)
+        ps.savefig()
+
+    # Plot image pixels, invvars, masks
+    for tim in tims:
+        plt.clf()
+        plt.subplot(2,2,1)
+        dimshow(tim.getImage(), vmin=-3.*tim.sig1, vmax=10.*tim.sig1)
+        plt.title('image')
+        plt.subplot(2,2,2)
+        dimshow(tim.getInvError(), vmin=0, vmax=1.1/tim.sig1)
+        plt.title('inverr')
+        if tim.dq is not None:
+            plt.subplot(2,2,3)
+            dimshow(tim.dq, vmin=0, vmax=tim.dq.max())
+            plt.title('DQ')
+            plt.subplot(2,2,3)
+            dimshow(((tim.dq & tim.dq_saturation_bits) > 0),
+                    vmin=0, vmax=1.5, cmap='hot')
+            plt.title('SATUR')
+        plt.subplot(2,2,4)
+        dimshow(tim.getImage() * (tim.getInvError() > 0),
+                vmin=-3.*tim.sig1, vmax=10.*tim.sig1)
+        plt.title('image (masked)')
+        plt.suptitle(tim.name)
+        ps.savefig()
+
+        if True and tim.dq is not None:
+            from legacypipe.bits import DQ_BITS
+            plt.clf()
+            bitmap = dict([(v,k) for k,v in DQ_BITS.items()])
+            k = 1
+            for i in range(12):
+                bitval = 1 << i
+                if not bitval in bitmap:
+                    continue
+                # only 9 bits are actually used
+                plt.subplot(3,3,k)
+                k+=1
+                plt.imshow((tim.dq & bitval) > 0,
+                           vmin=0, vmax=1.5, cmap='hot')
+                plt.title(bitmap[bitval])
+            plt.suptitle('Mask planes: %s (%s %s)' % (tim.name, tim.imobj.image_filename, tim.imobj.ccdname))
+            ps.savefig()
+
+            im = tim.imobj
+            from legacypipe.decam import decam_has_dq_codes
+            #print(tim.name, ': plver "%s"' % im.plver, 'has DQ codes:', decam_has_dq_codes(im.plver))
+            if im.camera == 'decam' and decam_has_dq_codes(im.plver):
+                # Integer codes, not bitmask.  Re-read and plot.
+                dq = im.read_dq(slice=tim.slice)
+                plt.clf()
+                plt.subplot(1,3,1)
+                dimshow(tim.getImage(), vmin=-3.*tim.sig1, vmax=30.*tim.sig1)
+                plt.title('image')
+                plt.subplot(1,3,2)
+                dimshow(tim.getInvError(), vmin=0, vmax=1.1/tim.sig1)
+                plt.title('inverr')
+                plt.subplot(1,3,3)
+                plt.imshow(dq, interpolation='nearest', origin='lower',
+                           cmap='tab10', vmin=-0.5, vmax=9.5)
+                plt.colorbar()
+                plt.title('DQ codes')
+                plt.suptitle('%s (%s %s) PLVER %s' % (tim.name, im.image_filename, im.ccdname, im.plver))
+                ps.savefig()
+
 def _psf_check_plots(tims):
-    # HACK -- check PSF models
     plt.figure(num=2, figsize=(7,4.08))
     for im,tim in zip(ims,tims):
         print()
@@ -705,7 +803,7 @@ def sdss_coadd(targetwcs, bands):
             simg = frame.getImage()
             wcs = AsTransWrapper(frame.astrans, w, h, 0.5, 0.5)
             try:
-                Yo,Xo,Yi,Xi,nil = resample_with_wcs(targetwcs, wcs, [], 3)
+                Yo,Xo,Yi,Xi,nil = resample_with_wcs(targetwcs, wcs)
             except OverlapError:
                 continue
             sdsscoimgs[iband][Yo,Xo] += simg[Yi,Xi]

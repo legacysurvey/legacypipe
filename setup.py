@@ -47,11 +47,12 @@ except ImportError:
 # Set other keywords for the setup function.  These are automated, & should
 # be left alone unless you are an expert.
 #
-# Treat everything in bin/ except *.rst as a script to be installed.
+# Treat everything in bin/*.{py,sh,slurm} as a script to be installed.
 #
 if os.path.isdir('bin'):
     setup_keywords['scripts'] = [fname for fname in glob.glob(os.path.join('bin', '*'))
-        if not os.path.basename(fname).endswith('.rst')]
+        if os.path.basename(fname).split('.')[-1] in ['sh', 'py', 'slurm']]
+
 setup_keywords['provides'] = [setup_keywords['name']]
 setup_keywords['requires'] = ['Python (>2.7.0)']
 #setup_keywords['install_requires'] = ['Python (>2.6.0)']
@@ -61,7 +62,8 @@ print('Finding packages...')
 setup_keywords['packages'] = find_packages('py')
 print('Done finding packages.')
 setup_keywords['package_dir'] = {'':'py'}
-setup_keywords['package_data'] = {'legacypipe': ['config/*']}
+setup_keywords['package_data'] = {'legacypipe': ['config/*', 'data/*'],
+                                  'legacyzpts': ['data/*']}
 #
 # Run setup command.
 #

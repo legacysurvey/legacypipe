@@ -55,15 +55,8 @@ from __future__ import print_function
 import sys
 import os
 import numpy as np
-from collections import OrderedDict
-from glob import glob
-
-import matplotlib
-matplotlib.use('Agg')
-import pylab as plt
 
 from astrometry.util.fits import fits_table
-from astrometry.util.file import trymakedirs
 
 from legacypipe.survey import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
@@ -84,6 +77,8 @@ def main():
 
     parser.add_argument('--nper', type=int, default=None,
                       help='Batch N calibs per line')
+    parser.add_argument('--byexp', action='store_true', default=False,
+                        help='Run one whole exposure per job (not one CCD per job)')
 
     parser.add_argument('--forced', action='store_true',
                       help='Output forced-photometry commands')
@@ -99,13 +94,13 @@ def main():
                       help='Quick cut to only CCDs near selected bricks')
 
     parser.add_argument('--check-coadd', action='store_true',
-                      help='Check which caoadds actually need to run.')
+                      help='Check which coadds actually need to run.')
     parser.add_argument('--out', help='Output filename for calibs, default %(default)s',
                       default='jobs')
     parser.add_argument('--command', action='store_true',
                       help='Write out full command-line to run calib')
     parser.add_argument('--opt', help='With --command, extra options to add')
-    
+
     parser.add_argument('--maxra', type=float, help='Maximum RA to run')
     parser.add_argument('--minra', type=float, help='Minimum RA to run')
     parser.add_argument('--maxdec', type=float, help='Maximum Dec to run')
@@ -126,11 +121,10 @@ def main():
 
     parser.add_argument('--nccds', action='store_true', default=False, help='Prints number of CCDs per brick')
 
-    parser.add_argument('--bands', default='g,r,z', help='Set bands to keep')
+    parser.add_argument('--bands', default='g,r,z', help='Set bands to keep: comma-separated list.')
 
 
     opt = parser.parse_args()
-
 
     want_ccds = (opt.calibs or opt.forced or opt.lsb)
     want_bricks = not want_ccds
@@ -144,6 +138,8 @@ def main():
     else:
         B = survey.get_bricks()
 
+    log('Bricks Dec range:', B.dec.min(), B.dec.max())
+
     if opt.ccds is not None:
         T = fits_table(opt.ccds)
         log('Read', len(T), 'from', opt.ccds)
@@ -153,15 +149,17 @@ def main():
     T.index = np.arange(len(T))
 
     if opt.ignore_cuts == False:
-        print('Applying CCD cuts...')
+        log('Applying CCD cuts...')
         if 'ccd_cuts' in T.columns():
             T.cut(T.ccd_cuts == 0)
-            print(len(T), 'CCDs survive cuts')
+            log(len(T), 'CCDs survive cuts')
 
     bands = opt.bands.split(',')
     log('Filters:', np.unique(T.filter))
     T.cut(np.flatnonzero(np.array([f in bands for f in T.filter])))
     log('Cut to', len(T), 'CCDs in filters', bands)
+
+    log('CCDs Dec range:', T.dec.min(), T.dec.max())
 
     # I,J,d,counts = match_radec(B.ra, B.dec, T.ra, T.dec, 0.2, nearest=True, count=True)
     # plt.clf()
@@ -244,6 +242,11 @@ def main():
         # 535 bricks, ~7000 CCDs
         rlo,rhi = 240,245
         dlo,dhi =   5, 12
+
+    elif opt.region == 'dr8-decam':
+        rlo,rhi =   0, 360
+        dlo,dhi = -70,  40
+        log('DR8-DECam region')
 
     elif opt.region == 'edrplus':
         rlo,rhi = 235,248
@@ -376,7 +379,7 @@ def main():
         dlo,dhi = -10., 90. # -10: pull in Stripe 82 data too
 
     elif opt.region == 'dr4-bootes':
-        # https://desi.lbl.gov/trac/wiki/DecamLegacy/DR4sched 
+        # https://desi.lbl.gov/trac/wiki/DecamLegacy/DR4sched
         #dlo,dhi = 34., 35.
         #rlo,rhi = 209.5, 210.5
         dlo,dhi = 33., 36.
@@ -388,7 +391,39 @@ def main():
         rlo,rhi = 36., 36.5
         dlo,dhi = -4.5, -4.
 
-        
+    elif opt.region == 'ngc2632':
+        # open cluster
+        rlo,rhi = 129.0, 131.0
+        dlo,dhi = 19.0, 20.5
+
+    elif opt.region == 'dr8sky':
+        rlo,rhi = 35.0, 37.0
+        dlo,dhi = -3.0, -1.0
+
+    # ADM DR8 test regions, see, e.g.:
+    # https://desi.lbl.gov/trac/wiki/DecamLegacy/DR8#Testregions
+    elif opt.region == 'dr8-test-s82':
+        rlo, rhi = 0, 45
+        dlo, dhi = -1.25, 1.25
+    elif opt.region == 'dr8-test-hsc-sgc':
+        rlo, rhi = 30, 40
+        dlo, dhi = -6.5, -1.25
+    elif opt.region == 'dr8-test-hsc-ngc':
+        rlo, rhi = 177.5, 182.5
+        dlo, dhi = -1, 1
+    elif opt.region == 'dr8-test-edr':
+        rlo, rhi = 240, 245
+        dlo, dhi = 5, 12
+    elif opt.region == 'dr8-test-hsc-north':
+        rlo, rhi = 240, 250
+        dlo, dhi = 42, 45
+    elif opt.region == 'dr8-test-deep2-egs':
+        rlo, rhi = 213, 216.5
+        dlo, dhi = 52, 54
+    elif opt.region == 'dr8-test-overlap':
+        rlo, rhi = 132, 140.5
+        dlo, dhi = 31.5, 35
+
     if opt.mindec is not None:
         dlo = opt.mindec
     if opt.maxdec is not None:
@@ -404,7 +439,7 @@ def main():
     else: # RA wrap
         B.cut(np.logical_or(B.ra >= rlo, B.ra <= rhi) *
               (B.dec >= dlo) * (B.dec <= dhi))
-    log(len(B), 'bricks in range')
+    log(len(B), 'bricks in range; cut Dec range', B.dec.min(), B.dec.max())
     #for name in B.get('brickname'):
     #    print(name)
     #B.writeto('bricks-cut.fits')
@@ -420,6 +455,8 @@ def main():
                         nearest=True)
     B.cut(I)
     log('Cut to', len(B), 'bricks near CCDs')
+    log('Bricks Dec range:', B.dec.min(), B.dec.max())
+
 
     # plt.clf()
     # plt.plot(B.ra, B.dec, 'b.')
@@ -470,7 +507,7 @@ def main():
         # f1.close()
         # f2.close()
         # log('Wrote *-names.txt')
-        
+
     if opt.touching:
 
         if want_bricks:
@@ -523,10 +560,14 @@ def main():
     else:
         allI = np.arange(len(T))
 
+    if opt.byexp:
+        nil,eI = np.unique(T.expnum[allI], return_index=True)
+        allI = allI[eI]
+        print('Cut to', len(allI), 'expnums')
+
     if opt.nccds:
         from queue import Queue
         from threading import Thread
-        from time import sleep
 
         log('Checking number of CCDs per brick')
 
@@ -618,26 +659,20 @@ def main():
                 os.path.exists(imgfn[:-3])):
                 imgfn = imgfn[:-3]
 
-            #f.write('python legacypipe/forced_photom_decam.py %s %i DR3 %s\n' %
-            #        (imgfn, T.image_hdu[i], outfn))
-
-            #outfn = os.path.join('forced', expstr[:5], expstr,
             outfn = os.path.join(expstr[:5], expstr,
                                  'forced-%s-%s-%s.fits' %
                                  (T.camera[i].strip(), expstr, T.ccdname[i]))
 
-            # f.write('python legacypipe/forced_photom_decam.py --hybrid-psf --apphot --constant-invvar %i %s DR3 forced/vanilla/%s\n' %
-            #         (T.expnum[i], T.ccdname[i], outfn))
-            # f.write('python legacypipe/forced_photom_decam.py --hybrid-psf --derivs --constant-invvar %i %s DR3 forced/derivs/%s\n' %
-            #         (T.expnum[i], T.ccdname[i], outfn))
-            # f.write('python legacypipe/forced_photom_decam.py --hybrid-psf --agn --constant-invvar %i %s DR3 forced/agn/%s\n' %
-            #         (T.expnum[i], T.ccdname[i], outfn))
-
-            f.write('python legacypipe/forced_photom.py --apphot --catalog-dir /project/projectdirs/cosmo/data/legacysurvey/dr6/ %i %s DR forced/%s\n' %
+            f.write('python legacypipe/forced_photom.py --apphot --derivs --catalog-dir /project/projectdirs/cosmo/data/legacysurvey/dr7/ %i %s forced/%s\n' %
                     (T.expnum[i], T.ccdname[i], outfn))
-            
+
         f.close()
         log('Wrote', opt.out)
+
+        fn = 'forced-ccds.fits'
+        T[allI].writeto(fn)
+        print('Wrote', fn)
+
         sys.exit(0)
 
     if opt.lsb:
@@ -669,7 +704,7 @@ def main():
         cmd = 'python legacypipe/run-calib.py '
         if opt.opt is not None:
             cmd += opt.opt + ' '
-        
+
     for j,i in enumerate(allI):
 
         if opt.delete_sky:
@@ -680,7 +715,10 @@ def main():
                 os.unlink(im.skyfn)
 
         if opt.command:
-            s = '%i-%s' % (T.expnum[i], T.ccdname[i])
+            if opt.byexp:
+                s = '--expnum %i' % (T.expnum[i])
+            else:
+                s = '%i-%s' % (T.expnum[i], T.ccdname[i])
             prefix = 'python legacypipe/run-calib.py '
             if opt.opt is not None:
                 prefix = prefix + opt.opt
@@ -689,11 +727,11 @@ def main():
         else:
             s = '%i' % T.index[i]
             prefix = ''
-            
+
         if j < 10:
             print('Index', T.index[i], 'expnum', T.expnum[i], 'ccdname', T.ccdname[i],
                   'filename', T.image_filename[i])
-            
+
         if not opt.nper:
             f.write(prefix + s + '\n')
         else:

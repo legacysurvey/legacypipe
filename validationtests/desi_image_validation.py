@@ -149,6 +149,18 @@ class mysample(object):
                 if(self.survey != 'MZLS'): raise RuntimeError("Survey name seems inconsistent")
             else: raise RuntimeError("Input sample band seems inconsisent")
 
+        elif(self.DR == 'DR7'):
+            inputdir = '/global/project/projectdirs/cosmo/data/legacysurvey/dr7/'
+            self.ccds =inputdir+'ccds-annotated-dr7.fits.gz'
+            if(self.survey == 'DECaLS') : 
+                   self.catalog = 'DECaLS_DR7'
+            elif(self.survey == 'DEShyb') :
+                   self.catalog = 'DEShyb_DR7'
+            elif(self.survey == 'NGCproxy' ) :
+                   self.catalog = 'NGCproxy_DR7'
+            else: raise RuntimeError("Survey name seems inconsistent")
+
+
         else: raise RuntimeError("Data Realease seems wrong") 
 
         # Make directory for outputs if it doesn't exist
@@ -215,12 +227,33 @@ def InNGCproxyFootprint(RA):
     if( 100 <= RA <= 300 ) : return True 
     return False 
 
+def plot_magdepth2D(sample,ral,decl,depth,mapfile,mytitle):
+    # Plot depth 
+    from matplotlib import pyplot as plt
+    import matplotlib.cm as cm
+    ralB = [ ra-360 if ra > 300 else ra for ra in ral ]
+    vmax = sample.recm
+    vmin = vmax - 2.0
+    mapa = plt.scatter(ralB,decl,c=depth, cmap=cm.gnuplot,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
+    mapa.cmap.set_over('lawngreen')
+    cbar = plt.colorbar(mapa,extend='both')
+    plt.xlabel('r.a. (degrees)')
+    plt.ylabel('declination (degrees)')
+    plt.title(mytitle)
+    plt.xlim(-60,300)
+    plt.ylim(-30,90)
+    print 'saving plot to ', mapfile
+    plt.savefig(mapfile)
+    plt.close()
+    return 
+
+
 # ------------------------------------------------------------------
 # ------------ VALIDATION TESTS ------------------------------------
 # ------------------------------------------------------------------
 # Note: part of the name of the function should startw with number valXpX 
 
-def val3p4c_depthfromIvar(sample):    
+def val3p4c_depthfromIvarOLD(sample):    
     """
        Requirement V3.4
        90% filled to g=24, r=23.4 and z=22.5 and 95% and 98% at 0.3/0.6 mag shallower.
@@ -399,13 +432,13 @@ def val3p4c_depthfromIvar(sample):
     return mapfile 
 
 
-def val3p4c_depthfromIvar3plus(sample):    
+def val3p4c_depthfromIvar(sample,Nexpmin=1):    
     """
        Requirement V3.4
        90% filled to g=24, r=23.4 and z=22.5 and 95% and 98% at 0.3/0.6 mag shallower.
 
        Produces extinction correction magnitude maps for visual inspection
-
+       MARCM includes min number of exposures
        MARCM stable version, improved from AJR quick hack 
        This now included extinction from the exposures
        Uses quicksip subroutines from Boris, corrected 
@@ -515,7 +548,7 @@ def val3p4c_depthfromIvar3plus(sample):
     for i in range(0,len(val)):
        depth=nanomaggiesToMag(sqrt(1./val[i]) * 5.)
        npases=hitsb[i]
-       if(npases > 2 ):
+       if(npases >= Nexpmin  ):
            myval.append(depth)
            th,phi = hp.pix2ang(int(nside),pix[i])
            ra,dec = thphi2radec(th,phi)
@@ -532,23 +565,33 @@ def val3p4c_depthfromIvar3plus(sample):
 
 
     # Plot depth 
-    from matplotlib import pyplot as plt
-    import matplotlib.cm as cm
+    #from matplotlib import pyplot as plt
+    #import matplotlib.cm as cm
 
-    mapa = plt.scatter(ral,decl,c=myval, cmap=cm.rainbow,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
-    cbar = plt.colorbar(mapa)
-    plt.xlabel('r.a. (degrees)')
-    plt.ylabel('declination (degrees)')
-    plt.title('Map of '+ mylabel +' for '+catalogue_name+' '+band+'-band \n with 3 or more exposures')
-    plt.xlim(0,360)
-    plt.ylim(-30,90)
-    mapfile=localdir+mylabel+'_'+band+'_'+catalogue_name+str(nside)+'.png'
-    print 'saving plot to ', mapfile
-    plt.savefig(mapfile)
-    plt.close()
+    #ralB = [ ra-360 if ra > 300 else ra for ra in ral ]
+    #vmax = sample.recm
+    #vmin = vmax - 2.0
+      
+    #mapa = plt.scatter(ralB,decl,c=myval, cmap=cm.rainbow,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
+    #mapa = plt.scatter(ralB,decl,c=myval, cmap=cm.gnuplot,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
+    #mapa.cmap.set_over('yellowgreen')
+    #cbar = plt.colorbar(mapa,extend='both')
+    #plt.xlabel('r.a. (degrees)')
+    #plt.ylabel('declination (degrees)')
+    #plt.title('Map of '+ mylabel +' for '+catalogue_name+' '+band+'-band \n with 3 or more exposures')
+    #plt.xlim(-60,300)
+    #plt.ylim(-30,90)
+    #mapfile=localdir+mylabel+'_'+band+'_'+catalogue_name+str(nside)+'.png'
+    #print 'saving plot to ', mapfile
+    #plt.savefig(mapfile)
+    #plt.close()
     #plt.show()
     #cbar.set_label(r'5$\sigma$ galaxy depth', rotation=270,labelpad=1)
     #plt.xscale('log')
+    mapfile=localdir+mylabel+'_'+band+'_'+catalogue_name+str(nside)+'.png'
+    mytitle='Map of '+ mylabel +' for '+catalogue_name+' '+band+'-band \n with '+str(Nexpmin)+\
+           ' or more exposures'
+    plot_magdepth2D(sample,ral,decl,myval,mapfile,mytitle)
 
 
     # Statistics depths
@@ -586,7 +629,28 @@ def val3p4c_depthfromIvar3plus(sample):
 
     return mapfile 
 
-def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):    
+
+def plot_magdepth2D(sample,ral,decl,depth,mapfile,mytitle):
+    # Plot depth 
+    from matplotlib import pyplot as plt
+    import matplotlib.cm as cm
+    ralB = [ ra-360 if ra > 300 else ra for ra in ral ]
+    vmax = sample.recm
+    vmin = vmax - 2.0
+    mapa = plt.scatter(ralB,decl,c=depth, cmap=cm.gnuplot,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
+    mapa.cmap.set_over('yellowgreen')
+    cbar = plt.colorbar(mapa,extend='both')
+    plt.xlabel('r.a. (degrees)')
+    plt.ylabel('declination (degrees)')
+    plt.title(mytitle)
+    plt.xlim(-60,300)
+    plt.ylim(-30,90)
+    print 'saving plot to ', mapfile
+    plt.savefig(mapfile)
+    plt.close()
+    return mapfile
+
+def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0, Nexpmin=1):    
     """
        Requirement V3.4
        90% filled to g=24, r=23.4 and z=22.5 and 95% and 98% at 0.3/0.6 mag shallower.
@@ -677,6 +741,7 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
     for indx, f in enumerate(sample.FracExp,1) : 
         Nexp = indx # indx starts at 1 bc argument on enumearate :-), thus is the number of exposures
         nd = int(round(ndraw * f))
+        if(Nexp < Nexpmin): nd=0 
         ndrawn=ndrawn+nd
 
         for i in range(0,nd):
@@ -708,7 +773,8 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0):
     else:
         med = (NTl[len(NTl)/2+1]+NTl[len(NTl)/2])/2.
 
-    print "Total images drawn with either 1,2,3,4,5 exposures", ndrawn
+    print "Total images drawn with either ", Nexpmin, " to 5 exposures", ndrawn
+    print "We are in fact runing with a minimum of", Nexpmin, "exposures"
     print "Mean = ", mean, "; Median = ", med ,"; Std = ", std
     print 'percentage better than requirements = '+str(nbr/float(ndrawn))
     if(sample.band =='g'): print "Requirements are > 90%, 95% and 98% at 24, 23.7, 23.4"

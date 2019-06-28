@@ -27,7 +27,9 @@ def main():
     parser.add_argument('--cache-dir', type=str, default=None,
                         help='Directory to search for cached files')
     parser.add_argument('--wise', help='For WISE outputs, give the path to a WCS file describing the sub-brick region of interest, eg, a coadd image')
+    parser.add_argument('--wise-wcs-hdu', help='For WISE outputs, the HDU to read the WCS from in the file given by --wise.', type=int, default=0)
     parser.add_argument('--fpack', action='store_true', default=False)
+    parser.add_argument('--gzip', action='store_true', default=False)
     parser.add_argument('--pad', action='store_true', default=False,
                         help='Keep original image size, but zero out pixels outside ROI')
     
@@ -43,9 +45,6 @@ def main():
         ra,dec = args.brick.split(',')
         ra = float(ra)
         dec = float(dec)
-        #class duck(object):
-        #    pass
-        #fakebrick = duck()
         fakebricks = fits_table()
         fakebricks.brickname = np.array([('custom-%06i%s%05i' %
                                           (int(1000*ra), 'm' if dec < 0 else 'p',
@@ -54,10 +53,6 @@ def main():
         fakebricks.dec = np.array([dec])
         bricks = fakebricks
         outbricks = bricks
-        #outbricks = bricks(np.array([0]))
-        #outbricks = bricks[0]
-        #print('Outbricks:', outbricks)
-        #outbricks.about()
     else:
         bricks = survey.get_bricks_readonly()
         outbricks = bricks[np.array([n == args.brick for n in bricks.brickname])]
@@ -81,7 +76,7 @@ def main():
     del kd
     print('Read', len(tycho), 'Tycho-2 stars')
     ok,tx,ty = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
-    margin = 100
+    #margin = 100
     #tycho.cut(ok * (tx > -margin) * (tx < W+margin) *
     #          (ty > -margin) * (ty < H+margin))
     print('Cut to', len(tycho), 'Tycho-2 stars within brick')
@@ -101,7 +96,7 @@ def main():
     cols = outccds.get_columns()
     for c in ['ccd_x0', 'ccd_x1', 'ccd_y0', 'ccd_y1',
               'brick_x0', 'brick_x1', 'brick_y0', 'brick_y1',
-              'plver', 'skyver', 'wcsver', 'psfver', 'skyplver', 'wcsplver',
+              'skyver', 'wcsver', 'psfver', 'skyplver', 'wcsplver',
               'psfplver' ]:
         if c in cols:
             outccds.delete_column(c)
@@ -120,14 +115,69 @@ def main():
         if survey.cache_dir is not None:
             im.check_for_cached_files(survey)
         slc = (slice(ccd.ccd_y0, ccd.ccd_y1), slice(ccd.ccd_x0, ccd.ccd_x1))
+
+        psfkwargs = dict(pixPsf=True, gaussPsf=False, hybridPsf=False,
+                         normalizePsf=False)
+
         tim = im.get_tractor_image(slc, pixPsf=True, splinesky=True,
-                                   subsky=False, nanomaggies=False)
+                                   subsky=False, nanomaggies=False,
+                                   no_remap_invvar=True, old_calibs_ok=True)
         print('Tim:', tim.shape)
 
-        psf = tim.getPsf()
-        print('PSF:', psf)
-        psfex = psf.psfex
-        print('PsfEx:', psfex)
+        psfrow = psfhdr = None
+
+        if args.pad:
+            psf = im.read_psf_model(0, 0, w=im.width, h=im.height, **psfkwargs)
+            psfex = psf.psfex
+        else:
+            psf = tim.getPsf()
+            psfex = psf.psfex
+
+            # Did the PSF model come from a merged file?
+            mpsf = im.read_merged_psfex_model(old_calibs_ok=True)
+            if mpsf is not None:
+                T = fits_table(im.merged_psffn)
+                I, = np.nonzero((T.expnum == im.expnum) *
+                                np.array([c.strip() == im.ccdname for c in T.ccdname]))
+                psfrow = T[I]
+                x0 = ccd.ccd_x0
+                y0 = ccd.ccd_y0
+                psfrow.polzero1[0] += x0
+                psfrow.polzero2[0] += y0
+                psfhdr = fitsio.read_header(im.merged_psffn)
+
+        psfex.fwhm = tim.psf_fwhm
+
+        if psfrow is not None:
+            print('PSF row:', psfrow)
+        else:
+            print('PSF:', psf)
+            print('PsfEx:', psfex)
+
+        skyrow = skyhdr = None
+
+        if args.pad:
+            primhdr = fitsio.read_header(im.imgfn)
+            imghdr = fitsio.read_header(im.imgfn, hdu=im.hdu)
+            sky = im.read_sky_model(splinesky=True, primhdr=primhdr, imghdr=imghdr)
+        else:
+            sky = tim.getSky()
+
+            # Did the sky model come from a merged file?
+            msky = im.read_merged_splinesky_model(slc=slc, old_calibs_ok=True)
+            if msky is not None:
+                T = fits_table(im.merged_splineskyfn)
+                I, = np.nonzero((T.expnum == im.expnum) *
+                                np.array([c.strip() == im.ccdname for c in T.ccdname]))
+                skyrow = T[I]
+                skyrow.x0[0] = ccd.ccd_x0
+                skyrow.y0[0] = ccd.ccd_y0
+                skyhdr = fitsio.read_header(im.merged_splineskyfn)
+
+        if skyrow is not None:
+            print('Sky row:', skyrow)
+        else:
+            print('Sky:', sky)
 
         outim = outsurvey.get_image_object(ccd)
         print('Output image:', outim)
@@ -143,6 +193,14 @@ def main():
         print('Reading data quality from', im.dqfn, 'hdu', im.hdu)
         dqdata = im._read_fits(im.dqfn, im.hdu, slice=tim.slice)
 
+        print('Tim shape:', tim.shape, 'Slice', tim.slice)
+        print('image shape:', imgdata.shape, 'iv', ivdata.shape, 'DQ', dqdata.shape)
+
+        from collections import Counter
+        dqvals = Counter(dqdata.ravel())
+        print('DQ pixel counts:')
+        for k,n in dqvals.most_common():
+            print('  0x%x' % k, ':', n)
 
         if args.pad:
             # Create zero image of full size, copy in data.
@@ -171,21 +229,27 @@ def main():
         outim.imgfn = outim.imgfn.replace('.fits', '-%s.fits' % im.ccdname)
         if not args.fpack:
             outim.imgfn = outim.imgfn.replace('.fits.fz', '.fits')
+        if args.gzip:
+            outim.imgfn = outim.imgfn.replace('.fits', '.fits.gz')
 
-        outim.wtfn  = outim.wtfn .replace('.fits', '-%s.fits' % im.ccdname)
+        outim.wtfn  = outim.wtfn.replace('.fits', '-%s.fits' % im.ccdname)
         if not args.fpack:
-            outim.wtfn  = outim.wtfn .replace('.fits.fz', '.fits')
+            outim.wtfn  = outim.wtfn.replace('.fits.fz', '.fits')
+        if args.gzip:
+            outim.wtfn = outim.wtfn.replace('.fits', '.fits.gz')
 
         if outim.dqfn is not None:
-            outim.dqfn  = outim.dqfn .replace('.fits', '-%s.fits' % im.ccdname)
+            outim.dqfn  = outim.dqfn.replace('.fits', '-%s.fits' % im.ccdname)
             if not args.fpack:
-                outim.dqfn  = outim.dqfn .replace('.fits.fz', '.fits')
+                outim.dqfn  = outim.dqfn.replace('.fits.fz', '.fits')
+            if args.gzip:
+                outim.dqfn = outim.dqfn.replace('.fits', '.fits.gz')
 
         if bok:
             outim.psffn = outim.psffn.replace('.psf', '-%s.psf' % im.ccdname)
 
         ccdfn = outim.imgfn
-        ccdfn = ccdfn.replace(outsurvey.get_image_dir(),'')
+        ccdfn = ccdfn.replace(outsurvey.get_image_dir(), '')
         if ccdfn.startswith('/'):
             ccdfn = ccdfn[1:]
         outccds.image_filename[iccd] = ccdfn
@@ -198,8 +262,10 @@ def main():
         if args.fpack:
             f,ofn = tempfile.mkstemp(suffix='.fits')
             os.close(f)
-        fitsio.write(ofn, None, header=tim.primhdr, clobber=True)
-        fitsio.write(ofn, imgdata, header=tim.hdr, extname=ccd.ccdname)
+        fits = fitsio.FITS(ofn, 'rw', clobber=True)
+        fits.write(None, header=tim.primhdr)
+        fits.write(imgdata, header=tim.hdr, extname=ccd.ccdname)
+        fits.close()
 
         if args.fpack:
             cmd = 'fpack -qz 8 -S %s > %s && rm %s' % (ofn, outim.imgfn, ofn)
@@ -233,8 +299,10 @@ def main():
             f,ofn = tempfile.mkstemp(suffix='.fits')
             os.close(f)
 
-        fitsio.write(ofn, None, header=tim.primhdr, clobber=True)
-        fitsio.write(ofn, ivdata, header=tim.hdr, extname=ccd.ccdname)
+        fits = fitsio.FITS(ofn, 'rw', clobber=True)
+        fits.write(None, header=tim.primhdr)
+        fits.write(ivdata, header=tim.hdr, extname=ccd.ccdname)
+        fits.close()
 
         if args.fpack:
             cmd = 'fpack -qz 8 -S %s > %s && rm %s' % (ofn, wfn, ofn)
@@ -251,8 +319,10 @@ def main():
                 f,ofn = tempfile.mkstemp(suffix='.fits')
                 os.close(f)
 
-            fitsio.write(ofn, None, header=tim.primhdr, clobber=True)
-            fitsio.write(ofn, dqdata, header=tim.hdr, extname=ccd.ccdname)
+            fits = fitsio.FITS(ofn, 'rw', clobber=True)
+            fits.write(None, header=tim.primhdr)
+            fits.write(dqdata, header=tim.hdr, extname=ccd.ccdname)
+            fits.close()
 
             if args.fpack:
                 cmd = 'fpack -g -q 0 -S %s > %s && rm %s' % (ofn, outim.dqfn, ofn)
@@ -260,17 +330,38 @@ def main():
                 rtn = os.system(cmd)
                 assert(rtn == 0)
 
-        print('PSF filename:', outim.psffn)
-        trymakedirs(outim.psffn, dir=True)
-        print('Writing PsfEx:', outim.psffn, 'with FWHM', tim.psf_fwhm)
-        psfex.fwhm = tim.psf_fwhm
-        psfex.writeto(outim.psffn) #, fwhm=tim.psf_fwhm)
+        psfout = outim.psffn
+        if psfrow:
+            psfout = outim.merged_psffn
+        print('PSF output filename:', psfout)
+        trymakedirs(psfout, dir=True)
+        if psfrow:
+            psfrow.writeto(psfout, primhdr=psfhdr)
+        else:
+            print('Writing PsfEx:', psfout)
+            psfex.writeto(psfout)
+            # update header
+            F = fitsio.FITS(psfout, 'rw')
+            F[0].write_keys([dict(name='EXPNUM', value=ccd.expnum),
+                             dict(name='PLVER',  value=psf.plver),
+                             dict(name='PROCDATE', value=psf.procdate),])
+            F.close()
 
-        print('Sky filename:', outim.splineskyfn)
-        sky = tim.getSky()
-        print('Sky:', sky)
-        trymakedirs(outim.splineskyfn, dir=True)
-        sky.write_fits(outim.splineskyfn)
+        skyout = outim.splineskyfn
+        if skyrow:
+            skyout = outim.merged_splineskyfn
+
+        print('Sky output filename:', skyout)
+        trymakedirs(skyout, dir=True)
+        if skyrow is not None:
+            skyrow.writeto(skyout, primhdr=skyhdr)
+        else:
+            primhdr = fitsio.FITSHDR()
+            primhdr['PLVER'] = sky.plver
+            primhdr['PROCDATE'] = sky.procdate
+            primhdr['EXPNUM'] = ccd.expnum
+            primhdr['IMGDSUM'] = sky.datasum
+            sky.write_fits(skyout, primhdr=primhdr)
 
         # HACK -- check result immediately.
         outccds.writeto(os.path.join(args.outdir, 'survey-ccds-1.fits.gz'))
@@ -280,10 +371,8 @@ def main():
         outim = outsurvey.get_image_object(occd)
         print('Got output image:', outim)
         otim = outim.get_tractor_image(pixPsf=True, splinesky=True,
-                                       hybridPsf=True)
+                                       hybridPsf=True, old_calibs_ok=True)
         print('Got output tim:', otim)
-
-
 
     outccds.writeto(os.path.join(args.outdir, 'survey-ccds-1.fits.gz'))
 
@@ -293,8 +382,8 @@ def main():
         from wise.unwise import (unwise_tile_wcs, unwise_tiles_touching_wcs,
                                  get_unwise_tractor_image, get_unwise_tile_dir)
         # Read WCS...
-        print('Reading TAN wcs header from', args.wise)
-        targetwcs = Tan(args.wise)
+        print('Reading TAN wcs header from', args.wise, 'HDU', args.wise_wcs_hdu)
+        targetwcs = Tan(args.wise, args.wise_wcs_hdu)
         tiles = unwise_tiles_touching_wcs(targetwcs)
         print('Cut to', len(tiles), 'unWISE tiles')
         H,W = targetwcs.shape
@@ -309,17 +398,19 @@ def main():
         unwise_tr_dir = os.environ['UNWISE_COADDS_TIMERESOLVED_DIR']
         wise_tr_out = os.path.join(args.outdir, 'images', 'unwise-tr')
         print('Will write WISE time-resolved outputs to', wise_tr_out)
+        trymakedirs(wise_tr_out)
 
-        W = fits_table(os.path.join(unwise_tr_dir, 'time_resolved_neo1-atlas.fits'))
+        W = fits_table(os.path.join(unwise_tr_dir, 'time_resolved_atlas.fits'))
         print('Read', len(W), 'time-resolved WISE coadd tiles')
         W.cut(np.array([t in tiles.coadd_id for t in W.coadd_id]))
         print('Cut to', len(W), 'time-resolved vs', len(tiles), 'full-depth')
 
         # Write the time-resolved index subset.
-        W.writeto(os.path.join(wise_tr_out, 'time_resolved_neo1-atlas.fits'))
+        W.writeto(os.path.join(wise_tr_out, 'time_resolved_atlas.fits'))
 
         # this ought to be enough for anyone =)
-        Nepochs = 5
+        _,Nepochs = W.epoch_bitmask.shape
+        print('N epochs in time-resolved atlas:', Nepochs)
 
         wisedata = []
 
@@ -414,7 +505,7 @@ def main():
         outim = outsurvey.get_image_object(ccd)
         print('Got output image:', outim)
         otim = outim.get_tractor_image(pixPsf=True, splinesky=True,
-                                       hybridPsf=True)
+                                       hybridPsf=True, old_calibs_ok=True)
         print('Got output tim:', otim)
     
 if __name__ == '__main__':

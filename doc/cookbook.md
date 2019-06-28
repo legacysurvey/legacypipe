@@ -4,7 +4,7 @@ How to run a Legacy Survey data release
 
 Martin Landriau
 
-July 2017 - January 2018
+July 2017 -- July 2018
 
 ------------------------------------------------------------------------
 
@@ -18,29 +18,24 @@ NERSC. Instructions assume code is being run as desiproc.
 Environment
 ===========
 
-The environment is set in the desiproc .bashrc.ext file.
-
-Dust maps, WISE coadds, etc
----------------------------
-
-    module use /global/cscratch1/sd/desiproc/modulefiles
-    module load legacypipe/legacysurvey
-    module load legacypipe/unwise_coadds
-    module load legacypipe/unwise_coadds_timeresolved
-    module load legacypipe/dust
-
-The above module files need to be modified to contain the correct
-information for the current DR. Unless the location of relevant
-quantities has changed, the only thing to update in these module files
-between DRs is `legacysurvey` to indicate the location of the DR
-directory.
+Un to and including DR6, the environment variables were set by loading
+modules in the in the `~/.bashrc.ext` file. From DR7 onwards, the
+environment, except for QDO variables, can be set by sourcing\
+`legacypipe/bin/legacypipe-env` or a local copy. Note that some relevant
+commands may be commented out in this template, which assumes that the
+code is being run from within its base directory. These variables
+provide the location of the codes, dust maps, WISE coadds, Tycho and
+Gaia catalogues, and the data release working directory where the
+calibration files, zero-points and links to the images directories can
+be found.
 
 desiconda
 ---------
 
-Desiconda provides a consistent build for all the dependencies required
-for the Legacy Survey processing. To ensure we use the most up-to-date
-version, we use explicitely the version number instead of the default.
+The above shell script also loads the desiconda module. Desiconda
+provides a consistent build for all the dependencies required for the
+Legacy Survey processing. To ensure we use the most up-to-date version,
+we use explicitely the version number instead of the default.
 
     module use /global/common/${NERSC_HOST}/contrib/desi/desiconda/20170818-1.1.12-img/modulefiles
     module load desiconda
@@ -73,8 +68,9 @@ and Cori, because of compiled components.
     python setup.py install --prefix=/scratch1/scratchdirs/desiproc/DRcode/build/
     cd ..
 
-In the above, the export commands need to be included in any script
-passed to qdo, described in the next section.
+Some of the above export commands (or a template for them) are normally
+commented out from the `legacypipe-env` script and this needs to be
+modified appropriately.
 
 qdo
 ---
@@ -88,6 +84,10 @@ In order to facilitate the launching of jobs, we use qdo.
     export QDO_DB_HOST=nerscdb03.nersc.gov
     export QDO_DB_USER=desirun_admin
     export QDO_DB_PASS= password redacted
+
+These commands are set in the `~/.bashrc.ext` file; however, if the
+`legacypipe-env` script is sourced, we need to rerun the export amending
+the `PYTHONPATH`.
 
 The easiest way to set up a queue is to pass to qdo a list of task as an
 ASCII file:
@@ -229,16 +229,31 @@ to compute them in advance. Furthermore, if we want to use PSF
 zeropoints, then we must compute the calibrations in advance because
 they are needed to compute the PSF zeropoints. The easiest way is to run
 them at the same time as the zeropoints as outlined in the previous
-section.
+section. In order to run only the calibrations, there are two options:
+run the zeropoints code but with the flag
 
-The procedure is to run the two following scripts:
+    --run-calibs-only
 
-    legacypipe/run-calib.py
-    legacypipe/merge-calibs.py
+The other is to call directly the code `legacypipe/run-calib.py`.
 
-The first is called by `legacyzpts/legacy_zeropoints.py`, but the second
-needs to be called afterwards to merge the calibration file that are
-computed per CCD into files per exposure.
+The calibration files are output by CCD. To merge them and create files
+per exposure, we need to run
+
+    legacypipe/merge-calibs.py --outdir calib --continue
+
+with `LEGACY_SURVEY_DIR` set. The continue flag will make the code
+continue to go over every exposure even if some of them fail. If a
+survey-ccds files containing the zeropoints already exists, we can limit
+the process to the exposure in that CCDs file bu using the flag
+
+     --ccds <survey-ccds-file>.
+
+kd-tree survey-ccds file
+------------------------
+
+Legacypipe will look for a unified kd-tree file and will only look for
+others if it can't find this one. It must the include the info from all
+`survey-ccds-{camera}-{band}.fits.gz`.
 
 To create the kd-tree version of the zeropoint files,
 
@@ -252,6 +267,56 @@ To create the kd-tree version of the zeropoint files,
 Obviously, if there is only one `survey-ccds` file, the tabmerge
 commands are not necessary.
 
+For DR8, a new script runs the last two commands:
+
+    legacypipe/create_kdtrees.py --infn /tmp/survey-ccds-dr8.fits --outfn survey-ccds-dr8.kd.fits
+
+Generating the brick list
+-------------------------
+
+We need to create a database with a list of tasks. For our purpose, a
+task is simply the brick name. The code that generates the brick list
+from the CCDs files outputs some diagnostic information which must be
+edited out before being fed to qdo:
+
+    python legacypipe/queue-calibs.py --touching --region mzls >
+    bricks.txt >> log
+    vi bricks.txt
+
+and edit out everything that is not a brick name, *e.g.* 1234p567.
+
+Depth cut
+---------
+
+To perform the depth cut, the kd-tree version of the merged survey-ccds
+file must reside in the (temporary) `LEGACY_SURVEY_DIR` directory.
+
+The first step is to create a task list. For our purpose, a task is
+simply the brick name. This list can serve for both for the next stage
+of the depth cut process and the later tractor processing. After
+generating the brick list as above, feed it to qdo:
+
+    qdo load dr8 bricks.txt
+
+The first step is to take the bricks and compute a corresponding
+ccds-BRICK.fits files. Using the QDO queue just created:
+
+    qdo launch dr8 100 --cores_per_worker 1 --walltime=01:00:00 --script legacyanalysis/depthcut.sh --batchqueue regular --keep_env
+
+The command should be run in a temprary directory without any other FITS
+files. The above command also assumes that legacypipe/py is in the
+PYTHONPATH; the hard coded paths in the script should be adjusted. Once
+the queue has been processed, we run in the same directory
+
+    legacyanalysis/depth-cut-dr8.py
+
+in order to take all the ccds-BRICK.fits files to a
+survey-ccds-depthcut.fits file.
+
+Afterwards, generate the final kd-tree survey-ccds file using the
+`create_kdtrees.py` as described above which must be copied to the final
+`LEGACY_SURVEY_DIR` directory.
+
 Running tractor
 ===============
 
@@ -259,19 +324,7 @@ Staging of input data
 ---------------------
 
 For DR1-4, input images were copied from project to Cori or Edison
-scratch; for DR5, this was not done and things worked just fine.
-
-Setting up the task list
-------------------------
-
-We need to create a database with a list of tasks. For our purpose, a
-task is simply the brick name. The code that generates the brick list
-from the CCDs files outputs some diagnostic information which must be
-edited out before being fed to qdo:
-
-    python legacypipe/queue-calibs.py --touching --region mzls > bricks.txt >> log
-    vi bricks.txt # Edit out everything that isn't a brick name, e.g. 1234p567
-    qdo load dr6 bricks.txt
+scratch; for DR5 onwards, this was not done and things worked just fine.
 
 Launching tractor
 -----------------
@@ -285,30 +338,29 @@ The script in the example is a local copy of
 to be modified for everything to run:
 
     export PYTHONPATH=$CSCRATCH/DRcode/legacypipe/py:$PYTHONPATH
-    outdir=$CSCRATCH/dr6-out
+    outdir=$CSCRATCH/dr7out
     rundir=$CSCRATCH/DRcode
 
 The arguments to runbrick can be modified in this script. Here is a
 generic call:
 
     python ${rundir}/legacypipe/py/legacypipe/runbrick.py \ 
-          --psf-normalize \
           --skip \ 
           --threads 16 \ 
           --skip-calibs \ 
           --checkpoint ${rundir}/checkpoints/${bri}/checkpoint-${brick}.pickle \ 
           --pickle "${rundir}/pickles/${bri}/runbrick-\%(brick)s-\%\%(stage)s.pickle" \ 
-          --brick $brick --outdir $outdir --nsigma 6 \  
+          --write-stage srcs \
+          --brick $brick --outdir $outdir \  
           >> $log 2>&1 
 
-The flag `psf-normalize` is necessary to use PSF zeropoints, otherwise
-aperture zeropoints are used. The number of threads has to be smaller or
-equal to twice the number of cores per task; skip-calibs assumes all the
-calibration files for this brick have already been generated; skip will
-stop if there is already a tractor catalogue for this brick. The
-checkpoint and pickle flags are optional and the files generated don't
-get erased once the brick has completed and the pickle files can be
-quite large. An easy way to clean up is via the following script:
+The number of threads has to be smaller or equal to twice the number of
+cores per task; skip-calibs assumes all the calibration files for this
+brick have already been generated; skip will stop if there is already a
+tractor catalogue for this brick. The checkpoint and pickle flags are
+optional and the files generated don't get erased once the brick has
+completed and the pickle files can be quite large. An easy way to clean
+up is via the following script:
 
     import qdo
     from utils import removeckpt
@@ -343,16 +395,41 @@ Transfering output
 ------------------
 
 The `coadd`, `tractor` and `metrics` directories are rsynced to
-`/projecta`. The log files, will be tarred by directory and gzipped
-before being transferred (also, log files for bricks that were processed
-partly on both machines need to be concatenated).
+`/projecta` or `/project`. The log files, will be tarred by directory
+and gzipped before being transferred (also, log files for bricks that
+were processed partly on both machines need to be concatenated).
 
 In the same directory, the contents of the `$LEGACY_SURVEY_DIR` (except
 the images directory which contains only symbolic links) are also
 copied.
 
+End game
+--------
+
+There will inevitably come a point where bricks take a long time to
+complete or fail to complete at all due to large blobs. These can be due
+to very bright stars, large galaxies or large artefacts. For DR7, a new
+option to `runbrick.py` was introduced: `–bail-out`. Re-starting the
+remaining bricks from the checkpoints (making a backup might be prudent)
+to finish the bricks can be done mostly on the debug queue.
+
 Post-tractor processing
 =======================
+
+Bright neighbours
+-----------------
+
+For DR7, an extra step in the processing was introduced to go over the
+tractor catalogues and check whether the neighbouring bricks have large
+blobs near their border. This process modifies the\
+`coadd/legacysurvey-<brickname>-maskbits.fits.gz` and tractor
+catalogues. The script\
+`legacypipe/bin/copymaskbits.py` makes a backup of these files. Since we
+archive the tractor-i files, backing up the tractor catalogues is not
+necessary. This step is most efficiently carried out using qdo using the
+script\
+`legacypipe/bin/qdo-post-process.sh`, where the tasks are, like for the
+main processing, the brickname.
 
 Top-level depth files
 ---------------------
@@ -407,6 +484,15 @@ Note that for the plotting to work, the files
 `decam-tiles_obstatus.fits` have to be in the directory. They can be
 obtained from the DESI SVN repository.
 
+For DR7, the number of bricks per 10 degree of RA exceeded the Python
+limit on the number of arguments, so that the procedure outlined above
+doesn't work for DECaLS. Splitting the brick list in bins of 1 degree in
+RA is easy to implement and can be done via qdo on the debug queue in a
+relatively short amount of time with the script
+`legacypipe/bin/qdo-brick-summary.sh` for which the tasks are the
+subdirectory names `000` - `359`. Note that the code will crash if there
+are no bricks in the directory, but this failure is inconsequential.
+
 Sweeps and external matching
 ----------------------------
 
@@ -437,15 +523,16 @@ e.g.:
     export PYTHONPATH=$LEGACYPIPE_DIR/py:${PYTHONPATH}
 
 Then, we build the list of tractor files for this data release and
-submit the job. This can be done on an interactive queue. For DR6, the
-process took about 30 minutes on one Cori Haswell node:
+submit the job. This can be done on an interactive queue. For DR7, the
+process took about 90 minutes on one Cori Haswell node:
 
     find $TRACTOR_INDIR -name 'tractor-*.fits' > $TRACTOR_FILELIST
     time srun -u --cpu_bind=no -n 1 python $LEGACYPIPE_DIR/bin/generate-sweep-files.py \
-              -v --numproc 32 -I -f fits -F $TRACTOR_FILELIST --schema blocks \
+              -v --numproc 16 -I -f fits -F $TRACTOR_FILELIST --schema blocks \
               -d $BRICKSFILE $TRACTOR_INDIR $SWEEP_OUTDIR
 
-The files will be written to `$SWEEP_OUTDIR`.
+The files will be written to `$SWEEP_OUTDIR`. The number of CPUs used
+was reduced by half to 16 for DR7 because of memory failure.
 
 To generate the \"external files\" matched to other surveys (e.g. see
 ​http://legacysurvey.org/dr4/files/), we proceed in a similar fashion.
@@ -488,13 +575,16 @@ five external catalogues:
          $TRACTOR_INDIR \
          $EXTERNAL_OUTDIR/survey-$dr-dr14Q_v4_4.fits --copycols MJD PLATE FIBERID
 
+Note that the script `legacypipe/bin/sweep-external-env.sh` provides a
+template to set all the relevant variables described above.
+
 Release directory structure and checksum files
 ----------------------------------------------
 
 Most of the tractor input and output is already in release form, but
 there are two exceptions:
 
--   The sweep output is in `sweep/6.0/`, where the number indicates the
+-   The sweep output is in `sweep/7.0/`, where the number indicates the
     release, instead of simply `sweep`.
 
 -   The tractor log files are tarred by output subdirectory and gzipped.
@@ -508,6 +598,7 @@ is to generate the checksums for the rest of the output. This can be
 handled by the following scripts (with directory location appropriately
 amended):
 
+    legacypipe/bin/tar-logfiles.py
     legacypipe/bin/post-process-qa.py
     legacypipe/bin/repackchecksum.py
     legacypipe/bin/checksumming-non-tractor.sh

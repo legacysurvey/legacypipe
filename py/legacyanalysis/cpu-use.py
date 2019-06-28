@@ -3,49 +3,7 @@ from astrometry.util.fits import *
 import numpy as np
 import pylab as plt
 
-for title,tag in [
-        #('Cori Haswell, 64', 'has-64-0001p000'),
-        #('Cori Haswell, shared(16)', 'has-16-0001p000'),
-        # ('Cori Haswell, 8, BB', 'bb-has-8-2420p070'),
-        # ('Cori Haswell, 8 threads', 'has-8-0001p000'),
-        # ('Cori KNL, 1 thread', 'knl-1'),
-        # ('Cori KNL, 2 threads', 'knl-2'),
-        # ('Cori KNL, 4 threads', 'knl-4'),
-        # ('Cori KNL, 8 threads', 'knl-8'),
-        # ('Cori KNL, 16 threads', 'knl-16'),
-        # ('Cori KNL, 32 threads', 'knl-32'),
-        # ('Cori KNL, 68 threads', 'knl-68'),
-        # ('Cori KNL, 136 threads', 'knl-136'),
-        # ('Cori KNL, 272 threads', 'knl-272'),
-        # ('Cori Haswell, 1 thread', 'has-1'),
-        # ('Cori Haswell, 2 threads', 'has-2'),
-        # ('Cori Haswell, 4 threads', 'has-4'),
-        # ('Cori Haswell, 8 threads', 'has-8'),
-        # ('Cori Haswell, 16 threads', 'has-16'), # ('Cori Haswell, 32 threads', 'has-32'),
-        # ('Cori Haswell, 64 threads', 'has-64'),
-        # ('KNL vanilla 16', '7a'),
-        # ('KNL vanilla 68', '7b'),
-        # ('KNL fast 16', '7c'),
-        # ('KNL fast 68', '7d'),
-        # ('KNL fast2 16', '7e'),
-        # ('KNL fast2 68', '7f'),
-        # ('KNL fast2 128', '7g'),
-        # ('KNL fast2 256', '7h'),
-        ('KNL vanilla 16', '7m'),
-        ('KNL vanilla 68', '7n'),
-        ('KNL fast 16', '7o'),
-        ('KNL fast 68', '7p'),
-        ('KNL fast 128', '7q'),
-        ('KNL fast 256', '7r'),
-        ]:
-    #fn = 'timing/ps-knl-1.fits'
-    #fn = 'timing/ps-%s.fits' % tag
-    #fn = 'ps-%s.fits' % tag
-    fn = '/global/cscratch1/sd/dstn/out-%s/ps.fits' % tag
-    print()
-    print('Reading', fn)
-    print()
-    
+def plot_cpu_usage(fn, title, cpufn, memfn):
     T = fits_table(fn)
     #T.about()
     events = fits_table(fn, ext=2)
@@ -122,10 +80,9 @@ for title,tag in [
     plt.ylabel('CPU %')
     plt.legend()
     plt.title(title)
-    plt.savefig('ps-%s.png' % tag)
+    plt.savefig(cpufn)
     
     plt.clf()
-
     plotted_worker = False
     I = np.flatnonzero(T.mine)
     for pid in mypids:
@@ -142,13 +99,13 @@ for title,tag in [
         #pmem[J] = T.pmem[II]
 
         if pid == parent_pid:
-            plt.plot(xaxis, pmem, 'k-', alpha=0.5, label='My main')
+            plt.plot(xaxis, pmem / 1e6, 'k-', alpha=0.5, label='My main')
         else:
             kwa = {}
             if not plotted_worker:
                 kwa.update(label='My workers')
                 plotted_worker = True
-            plt.plot(xaxis, pmem, 'b-', alpha=0.25, **kwa)
+            plt.plot(xaxis, pmem / 1e6, 'b-', alpha=0.25, **kwa)
 
     I = np.flatnonzero(np.logical_not(T.mine))
     pids = np.unique(T.pid[I])
@@ -159,7 +116,7 @@ for title,tag in [
         J = np.array([stepmap[s] for s in T.step[II]])
         #pmem[J] += T.pmem[II]
         pmem[J] += T.vsz[II]
-    plt.plot(xaxis, pmem, 'r-', label='Other PIDs')
+    plt.plot(xaxis, pmem / 1e6, 'r-', label='Other PIDs')
 
     for e,t in zip(events.event, events.unixtime - t0):
         plt.axvline(t, color='k', alpha=0.1)
@@ -167,8 +124,78 @@ for title,tag in [
 
     plt.xlabel('Wall time (s)')
     #plt.ylabel('Memory %')
-    plt.ylabel('VSS')
+    plt.ylabel('VSS (GB)')
     plt.legend()
     plt.title(title)
-    plt.savefig('ps-mem-%s.png' % tag)
+    plt.savefig(memfn)
     
+
+def oldtimey():
+    for title,tag in [
+            #('Cori Haswell, 64', 'has-64-0001p000'),
+            #('Cori Haswell, shared(16)', 'has-16-0001p000'),
+            # ('Cori Haswell, 8, BB', 'bb-has-8-2420p070'),
+            # ('Cori Haswell, 8 threads', 'has-8-0001p000'),
+            # ('Cori KNL, 1 thread', 'knl-1'),
+            # ('Cori KNL, 2 threads', 'knl-2'),
+            # ('Cori KNL, 4 threads', 'knl-4'),
+            # ('Cori KNL, 8 threads', 'knl-8'),
+            # ('Cori KNL, 16 threads', 'knl-16'),
+            # ('Cori KNL, 32 threads', 'knl-32'),
+            # ('Cori KNL, 68 threads', 'knl-68'),
+            # ('Cori KNL, 136 threads', 'knl-136'),
+            # ('Cori KNL, 272 threads', 'knl-272'),
+            # ('Cori Haswell, 1 thread', 'has-1'),
+            # ('Cori Haswell, 2 threads', 'has-2'),
+            # ('Cori Haswell, 4 threads', 'has-4'),
+            # ('Cori Haswell, 8 threads', 'has-8'),
+            # ('Cori Haswell, 16 threads', 'has-16'), # ('Cori Haswell, 32 threads', 'has-32'),
+            # ('Cori Haswell, 64 threads', 'has-64'),
+            # ('KNL vanilla 16', '7a'),
+            # ('KNL vanilla 68', '7b'),
+            # ('KNL fast 16', '7c'),
+            # ('KNL fast 68', '7d'),
+            # ('KNL fast2 16', '7e'),
+            # ('KNL fast2 68', '7f'),
+            # ('KNL fast2 128', '7g'),
+            # ('KNL fast2 256', '7h'),
+            ('KNL vanilla 16', '7m'),
+            ('KNL vanilla 68', '7n'),
+            ('KNL fast 16', '7o'),
+            ('KNL fast 68', '7p'),
+            ('KNL fast 128', '7q'),
+            ('KNL fast 256', '7r'),
+            ]:
+        #fn = 'timing/ps-knl-1.fits'
+        #fn = 'timing/ps-%s.fits' % tag
+        #fn = 'ps-%s.fits' % tag
+        fn = '/global/cscratch1/sd/dstn/out-%s/ps.fits' % tag
+        print()
+        print('Reading', fn)
+        print()
+    
+        plot_cpu_usage(fn, title, 'ps-%s.png' % tag, 'ps-mem-%s.png' % tag)
+    
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', '--cpufn', dest='cpufn',
+                        help='CPU plot filename')
+    parser.add_argument('-m', '--memfn', dest='memfn',
+                        help='Memory plot filename')
+    parser.add_argument('-t', '--title', dest='title', help='Plot title')
+    parser.add_argument('filename')
+    opt = parser.parse_args()
+
+    import os
+    base = os.path.basename(opt.filename)
+    if '.' in base:
+        base = base.split('.')[0]
+
+    if opt.cpufn is None:
+        opt.cpufn = base + '-cpu.png'
+    if opt.memfn is None:
+        opt.memfn = base + '-mem.png'
+    if opt.title is None:
+        opt.title = base
+    plot_cpu_usage(opt.filename, opt.title, opt.cpufn, opt.memfn)

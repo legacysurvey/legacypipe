@@ -15,12 +15,18 @@ fits_typemap = { PointSource: 'PSF',
                  FixedCompositeGalaxy: 'COMP',
                  SimpleGalaxy: 'SIMP',
                  RexGalaxy: 'REX',
+
                  PSFandExpGalaxy_diffcentres: 'PSE', 
                 #GaiaSource: 'GAIA',
                  PSFandDevGalaxy_diffcentres: 'PSD',
                  PSFandCompGalaxy_diffcentres: 'PSC',
+
+
                  GaiaSource: 'PSF',
                  type(None): 'NONE' }
+
+fits_reverse_typemap = dict([(v,k) for k,v in fits_typemap.items()])
+fits_reverse_typemap.update({ 'DUP': GaiaSource })
 
 fits_short_typemap = { PointSource: 'P',
                        ExpGalaxy: 'E',
@@ -35,7 +41,7 @@ fits_short_typemap = { PointSource: 'P',
 
 def _typestring(t):
     return '%s.%s' % (t.__module__, t.__name__)
-    
+
 ellipse_types = dict([(_typestring(t), t) for t in
                       [ EllipseESoft, EllipseE, ]])
 
@@ -49,7 +55,6 @@ def _source_param_types(src):
     #print('Source param types:', tree)
     types = flatten_node(tree)
     return types
-    
 
 def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
                          prefix='', save_invvars=True, unpackShape=True):
@@ -86,12 +91,24 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
     params0 = cat.getParams()
 
     flux = np.zeros((len(cat), len(allbands)), np.float32)
-    flux_ivar = np.zeros((len(cat), len(allbands)), np.float32)
+    fluxPoint = np.zeros((len(cat), len(allbands)), np.float32)
+    fluxGal = np.zeros((len(cat), len(allbands)), np.float32)
 
+    flux_ivar = np.zeros((len(cat), len(allbands)), np.float32)
+    rev_typemap = fits_reverse_typemap
     for filt in filts:
         i = allbands.index(filt)
         for j,src in enumerate(cat):
             if src is not None:
+                #clazz = rev_typemap[src.type.strip()]
+                #print(clazz)                
+                if isinstance(src, (PSFandExpGalaxy_diffcentres,PSFandDevGalaxy_diffcentres)):
+                    #print(src.getBrightnesses()[1],'BRIGHTNESSES')
+                    b=src.getBrightnesses()[1]
+                    fluxPoint[j,i]=b.getFlux(filt)
+                    b=src.getBrightnesses()[0]
+                    fluxGal[j,i]=b.getFlux(filt)
+   
                 flux[j,i] = sum(b.getFlux(filt) for b in src.getBrightnesses())
 
         if invvars is None:
@@ -108,6 +125,9 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
         cat.setParams(params0)
 
     T.set('%sflux' % prefix, flux)
+    T.set('%sfluxPoint' % prefix, fluxPoint)
+    T.set('%sfluxGal' % prefix, fluxGal)
+
     if save_invvars:
         T.set('%sflux_ivar' % prefix, flux_ivar)
 
@@ -116,7 +136,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
         for k in fskeys:
             x = getattr(fs, k)
             x = np.array(x).astype(np.float32)
-            T.set('%s%s_%s' % (prefix, tim.filter, k), x.astype(np.float32))
+            T.set('%s_%s' % (prefix, k), x.astype(np.float32))
 
     _get_tractor_fits_values(T, cat, '%s%%s' % prefix, unpackShape=unpackShape)
 
@@ -145,7 +165,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
     flux = T.get('%s%s' % (prefix, 'flux'))
     iv = T.get('%s%s' % (prefix, 'flux_ivar'))
     flux[iv == 0] = 0.
-    
+
     return T, hdr
 
 # We'll want to compute errors in our native representation, so have a
@@ -261,24 +281,32 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
     if hdr is None:
         hdr = T._header
     if allbands is None:
-        allbands = bands    
-    rev_typemap = dict([(v,k) for k,v in fits_typemap.items()])
+        allbands = bands
+    rev_typemap = fits_reverse_typemap
 
     if unpackShape and ellipseClass != EllipseE:
         print('Not doing unpackShape because ellipseClass != EllipseE.')
         unpackShape = False
     if unpackShape:
+        print([t.get_columns() for t in T])
         T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
         T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
 
+    '''
     ivbandcols = []
-    #print(bands)
+    '''
+
+
     ibands = np.array([allbands.index(b) for b in bands])
     #print(ibands)
     ivs = []
     cat = []
-    for i,t in enumerate(T):
+
+    #for i,t in enumerate(T):
         #print(t.type)
+
+    for t in T:
+
         clazz = rev_typemap[t.type.strip()]
         #print(t.get_columns())
         pos = RaDecPos(t.ra, t.dec)
@@ -288,6 +316,7 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
         shorttype = fits_short_typemap[clazz]
 
         if fluxPrefix + 'flux' in t.get_columns():
+            #print('LOOK HERE',t.get(fluxPrefix + 'flux'),np.atleast_1d(t.get(fluxPrefix + 'flux')),clazz)
             flux = np.atleast_1d(t.get(fluxPrefix + 'flux'))
             assert(np.all(np.isfinite(flux[ibands])))
             br = NanoMaggies(order=bands,
@@ -298,22 +327,24 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                 fluxes[b] = t.get(fluxPrefix + 'flux_' + b)
                 assert(np.all(np.isfinite(fluxes[b])))
             br = NanoMaggies(order=bands, **fluxes)
-            
-        params = [pos, br]
-        if invvars:
-            # ASSUME & hard-code that the position and brightness are
-            # the first params
-
-            if fluxPrefix + 'flux_ivar' in t.get_columns():
-                fluxiv = np.atleast_1d(t.get(fluxPrefix + 'flux_ivar'))
-                fluxivs = list(fluxiv[ibands])
-            else:
-                fluxivs = []
-                for b in bands:
-                    fluxivs.append(t.get(fluxPrefix + 'flux_ivar_' + b))
-            ivs.extend([t.ra_ivar, t.dec_ivar] + fluxivs)
 
         if issubclass(clazz, (DevGalaxy, ExpGalaxy)):
+            params = [pos, br]
+            if invvars:
+                # ASSUME & hard-code that the position and brightness are
+                # the first params
+
+                if fluxPrefix + 'flux_ivar' in t.get_columns():
+                    fluxiv = np.atleast_1d(t.get(fluxPrefix + 'flux_ivar'))
+                    fluxivs = list(fluxiv[ibands])
+                else:
+                    fluxivs = []
+                    for b in bands:
+                        fluxivs.append(t.get(fluxPrefix + 'flux_ivar_' + b))
+                ivs.extend([t.ra_ivar, t.dec_ivar] + fluxivs)
+
+
+
             if ellipseClass is not None:
                 eclazz = ellipseClass
             else:
@@ -336,11 +367,46 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                     ivs.extend(t.shapedev_ivar)
                 else:
                     ivs.extend(t.shapeexp_ivar)
+
             
         elif issubclass(clazz, PSFandExpGalaxy_diffcentres) or issubclass(clazz, PSFandDevGalaxy_diffcentres) or issubclass(clazz, PSFandCompGalaxy_diffcentres):
+
+
+        #elif issubclass(clazz, FixedCompositeGalaxy):
+            params = [pos]
+            if invvars:
+                # ASSUME & hard-code that the position and brightness are
+                # the first params
+
+                if fluxPrefix + 'flux_ivar' in t.get_columns():
+                    fluxiv = np.atleast_1d(t.get(fluxPrefix + 'flux_ivar'))
+                    fluxivs = list(fluxiv[ibands])
+                else:
+                    fluxivs = []
+                    for b in bands:
+                        fluxivs.append(t.get(fluxPrefix + 'flux_ivar_' + b))
+                ivs.extend([t.ra_ivar, t.dec_ivar] + fluxivs)
+
+            
+            if fluxPrefix + 'fluxgal' in t.get_columns():
+                fluxGal = np.atleast_1d(t.get(fluxPrefix + 'fluxgal'))
+                assert(np.all(np.isfinite(fluxGal[ibands])))
+                brGal = NanoMaggies(order=bands,
+                                 **dict(zip(bands, fluxGal[ibands])))
+            else:
+                fluxesGal = {}
+                for b in bands:
+                    #print(bands,t.get(fluxPrefix + 'fluxgal_' + b))
+                    fluxesGal[b] = t.get(fluxPrefix + 'fluxgal_' + b)
+                    assert(np.all(np.isfinite(fluxesGal[b])))
+                brGal = NanoMaggies(order=bands, **fluxesGal)
+
+            params.append(brGal)
+
+
             # hard-code knowledge that params are fracDev, shapeE, shapeD
-            assert(np.isfinite(t.fracdev))
-            params.append(t.fracdev)
+            #assert(np.isfinite(t.fracdev))
+            #params.append(t.fracdev)
             if ellipseClass is not None:
                 expeclazz = ellipseClass
             else:
@@ -360,15 +426,50 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                 params.append(ee)
                 params.append(de)
             #ef = expeclazz(t.brightnesspoint)
-            params.append(t.brightnesspoint)
+            #params.append(t.brightnesspoint)
             #ef = expeclazz(*t.rapoint)
             #params.append(ef)
             #eg = expeclazz(*t.decpoint)
             #params.append(eg)
+            posPoint = RaDecPos(t.rapoint, t.decpoint)
+            #assert(np.isfinite(t.ra))
+            #assert(np.isfinite(t.dec))
+            params.append(posPoint)
+            shorttype = fits_short_typemap[clazz]
+            #print(t.get_columns())
+           
+            if fluxPrefix + 'fluxpoint' in t.get_columns():
+                fluxPoint = np.atleast_1d(t.get(fluxPrefix + 'fluxpoint'))
+                assert(np.all(np.isfinite(fluxPoint[ibands])))
+                brPoint = NanoMaggies(order=bands,
+                                 **dict(zip(bands, fluxPoint[ibands])))
+            else:
+                fluxesPoint = {}
+                for b in bands:
+                    print(bands,t.get(fluxPrefix + 'fluxpoint_' + b))
+                    fluxesPoint[b] = t.get(fluxPrefix + 'fluxpoint_' + b)
+                    assert(np.all(np.isfinite(fluxesPoint[b])))
+                brPoint = NanoMaggies(order=bands, **fluxesPoint)
 
+            params.append(brPoint)
+            '''
             if invvars:
-                ivs.extend(t.shapeexp_ivar)
-        
+                # ASSUME & hard-code that the position and brightness are
+                # the first params
+
+                if fluxPrefix + 'flux_ivar' in t.get_columns():
+                    fluxiv = np.atleast_1d(t.get(fluxPrefix + 'flux_ivar'))
+                    fluxivs = list(fluxiv[ibands])
+                else:
+                    fluxivs = []
+                    for b in bands:
+                        fluxivs.append(t.get(fluxPrefix + 'flux_ivar_' + b))
+                ivs.extend([t.ra_ivar, t.dec_ivar] + fluxivs)
+
+
+                if invvars:
+                    ivs.extend(t.shapeexp_ivar)
+            '''
         elif issubclass(clazz, FixedCompositeGalaxy):
             # hard-code knowledge that params are fracDev, shapeE, shapeD
         
@@ -393,13 +494,12 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                 ivs.append(t.fracdev_ivar)
                 ivs.extend(t.shapeexp_ivar)
                 ivs.extend(t.shapedev_ivar)
-
-
         elif issubclass(clazz, PointSource):
             pass
         else:
             raise RuntimeError('Unknown class %s' % str(clazz))
-        #print(clazz,*params)
+        #print(clazz,params)
+        
         src = clazz(*params)
         cat.append(src)
 
@@ -408,4 +508,3 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
         ivs[np.logical_not(np.isfinite(ivs))] = 0
         return cat, ivs
     return cat
-

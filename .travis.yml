@@ -11,8 +11,8 @@ sudo: false
 # python versions to test against...
 language: python
 python:
-  - "2.7"
   - "3.6"
+#  - "3.7"
 
 install:
     - export WCSLIB_INC="-I/usr/include/wcslib-4.20"
@@ -21,19 +21,23 @@ install:
     - pip install Sphinx==1.5.4   # 1.5.6?
     - pip install numpy
     - pip install scipy
+    - pip install Pillow
     - pip install matplotlib
     - pip install numpydoc
     - pip install astropy #==2.0rc1
     - pip install photutils
     - pip install coveralls
     # fitsio master version
-    - pip install --no-deps --upgrade git+https://github.com/esheldon/fitsio.git#egg=fitsio
+    #- pip install --no-deps --upgrade git+https://github.com/esheldon/fitsio.git#egg=fitsio
+    - pip install --no-deps --upgrade git+https://github.com/esheldon/fitsio.git@v0.9.12#egg=fitsio
     - pip install -v --no-deps --upgrade git+https://github.com/dstndstn/tractor.git
 
 before_script:
     - if [ ! -d "$HOME/astrometry.net" ]; then (cd $HOME; git clone https://github.com/dstndstn/astrometry.net.git); fi
     - (cd $HOME/astrometry.net && git pull) || (rm -Rf $HOME/astrometry.net && cd $HOME && git clone https://github.com/dstndstn/astrometry.net.git);
     - (cd $HOME/astrometry.net && make && make py)
+
+    - (cd $HOME && git clone https://github.com/legacysurvey/unwise_psf.git && cd unwise_psf && git checkout dr8)
 
     # - if [ ! -d "$HOME/tractor-git" ]; then (cd $HOME; git clone https://github.com/dstndstn/tractor.git tractor-git); fi
     # - (cd $HOME/tractor-git && git pull) || (rm -Rf $HOME/tractor-git && cd $HOME && git clone https://github.com/dstndstn/tractor.git tractor-git);
@@ -54,7 +58,8 @@ before_script:
     - export DUST_DIR=$HOME/dust
 
 script:
-    - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$HOME/astrometry.net
+    - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$HOME/astrometry.net:$HOME/unwise_psf/py
+    - export WISE_PSF_DIR=$HOME/unwise_psf/etc
     - ls $HOME
     - ls $HOME/astrometry.net
     - (cd doc && make)
@@ -63,7 +68,7 @@ script:
     # - python -c "import matplotlib; print(matplotlib.__file__)"
     # - python -c "import fitsio; print(fitsio.__file__)"
     # - python -c "import tractor.emfit"
-    - (cd py && coverage run test/runbrick_test.py travis)
+    - (cd py && coverage run test/runbrick_test.py travis && coverage run -a test/unit_tests.py)
 
 after_success:
     - (cd py && coveralls debug)

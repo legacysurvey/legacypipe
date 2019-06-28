@@ -56,8 +56,8 @@ def main():
 	scie_list = np.genfromtxt(args.folder+"/scie.list",dtype=str)
 	#print(len([scie_list]))
 
-	#if len([scie_list])==1:
-#		scie_list=list([str([scie_list][0])])
+	if len([scie_list])==1:
+		scie_list=list([str([scie_list][0])])
 #	print(scie_list)
 	initialize.download_real_stars(args.folder, args.debug)
 
@@ -68,7 +68,7 @@ def main():
 	initial_sex.create_sex_cats(scie_list, args.debug)
 	
 	# MAKE WEIGHT FILES
-	makeweight.make_weights(scie_list, args.debug)
+	makeweight.make_weights_PS1(scie_list, args.debug)
 	
 	# CALCULATE IMAGE PROPERTIES AND UPDATE HEADERS	
 	pre_cat_list = [scie.replace('ztf','prelim.ztf').replace('.fits','.cat') for scie in scie_list]

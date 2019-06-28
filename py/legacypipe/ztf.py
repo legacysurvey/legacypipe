@@ -60,7 +60,14 @@ class ZtfImage(LegacySurveyImage):
         Some versions of the CP use integer codes, not bit masks.
         This converts them.
         '''
-        from legacypipe.image import CP_DQ_BITS
+        #from legacypipe.image import CP_DQ_BITS
+        CP_DQ_BITS = dict(badpix=1, satur=2, interp=4, cr=16, bleed=64,
+                  trans=128,
+                  edge = 256,
+                  edge2 = 512,
+                  ## masked by stage_mask_junk
+                  longthin = 1024,
+                  ) 
         dqbits = np.zeros(dq.shape, np.int16)
 
         dqbits[dq & 2**0 != 0] |= CP_DQ_BITS['trans']

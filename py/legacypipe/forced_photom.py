@@ -9,20 +9,17 @@ import sys
 
 import numpy as np
 import fitsio
-
+import logging
+logger = logging.getLogger('legacypipe.forcedphotom')
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
 from astrometry.util.ttime import Time, MemMeas
 
 from tractor import Tractor, Catalog, NanoMaggies
 from tractor.galaxy import disable_galaxy_cache
-from tractor.ellipses import EllipseE
 
 from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version_header, apertures_arcsec
-#from legacypipe.survey import exposure_metadata
 from catalog import read_fits_catalog
-
-import photutils
 
 def get_parser():
     '''
@@ -31,13 +28,19 @@ def get_parser():
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
 
+    parser.add_argument('--threads', type=int, help='Run multi-threaded', default=None)
+
     parser.add_argument('--catalog-dir', help='Set LEGACY_SURVEY_DIR to use to read catalogs')
+
+    parser.add_argument('--catalog', help='Use the given FITS catalog file, rather than reading from a data release directory')
 
     parser.add_argument('--skip-calibs', dest='do_calib', default=True, action='store_false',
                         help='Do not try to run calibrations')
+    parser.add_argument('--skip', dest='skip', default=False, action='store_true',
+                        help='Exit if the output file already exists')
 
-    parser.add_argument('--zoom', type=int, nargs=4, help='Set target image extent (default "0 2046 0 4094")')
-    parser.add_argument('--no-ceres', action='store_false', dest='ceres', help='Do not use Ceres optimiziation engine (use scipy)')
+    parser.add_argument('--zoom', type=int, nargs=4, help='Set target image extent (eg "0 100 0 200")')
+    parser.add_argument('--no-ceres', action='store_false', dest='ceres', help='Do not use Ceres optimization engine (use scipy)')
     parser.add_argument('--plots', default=None, help='Create plots; specify a base filename for the plots')
     parser.add_argument('--write-cat', help='Write out the catalog subset on which forced phot was done')
     parser.add_argument('--apphot', action='store_true',
@@ -50,7 +53,7 @@ def get_parser():
 
     parser.add_argument('--agn', action='store_true',
                         help='Add a point source to the center of each DEV/EXP/COMP galaxy?')
-    
+
     parser.add_argument('--constant-invvar', action='store_true',
                         help='Set inverse-variance to a constant across the image?')
 
@@ -60,22 +63,27 @@ def get_parser():
     parser.add_argument('--no-normalize-psf', dest='normalize_psf', action='store_false',
                         default=True,
                         help='Do not normalize PSF?')
-    
+
+    parser.add_argument('--no-move-gaia', dest='move_gaia', action='store_false',
+                        default=True, help='Do not move Gaia stars to image epoch?')
+
     parser.add_argument('--save-model',
                         help='Compute and save model image?')
     parser.add_argument('--save-data',
                         help='Compute and save model image?')
 
     parser.add_argument('--camera', help='Cut to only CCD with given camera name?')
-    
-    parser.add_argument('expnum', help='Filename OR exposure number.')
-    parser.add_argument('ccdname', help='Image HDU OR CCD name.')
-    parser.add_argument('catfn', help='Catalog filename OR "DR".')
+
+    parser.add_argument('expnum', help='Exposure number')
+    parser.add_argument('ccdname', help='Image HDU OR CCD name OR "all".')
     parser.add_argument('outfn', help='Output catalog filename.')
 
     return parser
-    
+
 def main(survey=None, opt=None):
+    print('survey is',survey)
+    print(' '.join(sys.argv))
+
     '''Driver function for forced photometry of individual Legacy
     Survey images.
     '''
@@ -84,16 +92,16 @@ def main(survey=None, opt=None):
         opt = parser.parse_args()
 
     Time.add_measurement(MemMeas)
-    t0 = Time()
+    t0 = tlast = Time()
 
-    if os.path.exists(opt.outfn):
+    if opt.skip and os.path.exists(opt.outfn):
         print('Ouput file exists:', opt.outfn)
         sys.exit(0)
 
     if opt.derivs and opt.agn:
         print('Sorry, can\'t do --derivs AND --agn')
         sys.exit(0)
-        
+
     if not opt.forced:
         opt.apphot = True
 
@@ -104,11 +112,10 @@ def main(survey=None, opt=None):
 
     ps = None
     if opt.plots is not None:
-        import pylab as plt
         from astrometry.util.plotutils import PlotSequence
         ps = PlotSequence(opt.plots)
 
-    # Try parsing filename as exposure number.
+    # Try parsing first arg as exposure number (otherwise, it's a filename)
     try:
         expnum = int(opt.expnum)
         filename = None
@@ -117,17 +124,35 @@ def main(survey=None, opt=None):
         expnum = None
         filename = opt.expnum
 
-    # Try parsing HDU number
-    try:
-        hdu = int(opt.ccdname)
-        ccdname = None
-    except:
-        hdu = -1
-        ccdname = opt.ccdname
+    # Try parsing HDU: "all" or HDU name or HDU number.
+    all_hdus = (opt.ccdname == 'all')
+    hdu = -1
+    ccdname = None
+    if not all_hdus:
+        try:
+            hdu = int(opt.ccdname)
+        except:
+            ccdname = opt.ccdname
+    if opt.catalog_dir is not None:
+        survey_dir=opt.catalog_dir
+    output_dir=survey_dir
+    cache_dir=None 
+    run=None
+    
+    def info(*args):
+        from legacypipe.utils import log_info
+        log_info(logger, args)
 
     if survey is None:
-        survey = LegacySurveyData()
-
+        from legacypipe.runs import get_survey
+        survey = get_survey(run,
+                            survey_dir=survey_dir,
+                            output_dir=output_dir,
+                            cache_dir=cache_dir)
+        info(survey)
+    #if survey is None:
+    #    survey = LegacySurveyData()
+    
     catsurvey = survey
     if opt.catalog_dir is not None:
         catsurvey = LegacySurveyData(survey_dir = opt.catalog_dir)
@@ -151,7 +176,7 @@ def main(survey=None, opt=None):
     else:
         # Read metadata from survey-ccds.fits table
         T = survey.find_ccds(expnum=expnum, ccdname=ccdname)
-        print(len(T), 'with expnum', expnum, 'and CCDname', ccdname)
+        print(len(T), 'with expnum', expnum, 'and ccdname', ccdname)
         if hdu >= 0:
             T.cut(T.image_hdu == hdu)
             print(len(T), 'with HDU', hdu)
@@ -161,27 +186,98 @@ def main(survey=None, opt=None):
         if opt.camera is not None:
             T.cut(T.camera == opt.camera)
             print(len(T), 'with camera', opt.camera)
-        assert(len(T) == 1)
+        if not all_hdus:
+            assert(len(T) == 1)
 
-    ccd = T[0]
+    args = []
+    for ccd in T:
+        args.append((survey, catsurvey, ccd, opt, zoomslice, ps))
+    print('ARGS HERE',args)
+    if opt.threads:
+        from astrometry.util.multiproc import multiproc
+        from astrometry.util.timingpool import TimingPool, TimingPoolMeas
+        pool = TimingPool(opt.threads)
+        poolmeas = TimingPoolMeas(pool, pickleTraffic=False)
+        Time.add_measurement(poolmeas)
+        mp = multiproc(None, pool=pool)
+        tm = Time()
+        FF = mp.map(bounce_one_ccd, args)
+        print('Multi-processing forced-phot:', Time()-tm)
+    else:
+        FF = map(bounce_one_ccd, args)
+
+    FF = [F for F in FF if F is not None]
+    if len(FF) == 0:
+        print('No photometry results to write.')
+        return 0
+    # Keep only the first header
+    _,version_hdr = FF[0]
+    FF = [F for F,hdr in FF]
+    F = merge_tables(FF)
+
+    if all_hdus:
+        version_hdr.delete('CPHDU')
+        version_hdr.delete('CCDNAME')
+        version_hdr.delete('EXPOSURE')
+
+    hdr = fitsio.FITSHDR()
+    units = {'exptime':'sec',
+             'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2',
+             'apflux':'nanomaggy', 'apflux_ivar':'1/nanomaggy^2',
+             'psfdepth':'1/nanomaggy^2', 'galdepth':'1/nanomaggy^2',
+             'sky':'nanomaggy/arcsec^2', 'psfsize':'arcsec' }
+    if opt.derivs:
+        units.update({'dra':'arcsec', 'ddec':'arcsec',
+                      'dra_ivar':'1/arcsec^2', 'ddec_ivar':'1/arcsec^2'})
+    columns = F.get_columns()
+    for i,col in enumerate(columns):
+        if col in units:
+            hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
+
+    outdir = os.path.dirname(opt.outfn)
+    if len(outdir):
+        trymakedirs(outdir)
+    tmpfn = os.path.join(outdir, 'tmp-' + os.path.basename(opt.outfn))
+    fitsio.write(tmpfn, None, header=version_hdr, clobber=True)
+    F.writeto(tmpfn, header=hdr, append=True)
+    os.rename(tmpfn, opt.outfn)
+    print('Wrote', opt.outfn)
+
+    tnow = Time()
+    print('Total:', tnow-t0)
+    return 0
+
+def bounce_one_ccd(X):
+    # for multiprocessing
+    #survey,catsurvey,ccd,opt,zoomslice,ps = X
+    #return run_one_ccd(survey, ccd, opt)
+    return run_one_ccd(*X)
+
+def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
+    tlast = Time()
+
     im = survey.get_image_object(ccd)
-
+    
     if opt.do_calib:
         #from legacypipe.survey import run_calibs
         #kwa = dict(splinesky=True)
         #run_calibs((im, kwa))
-        im.run_calibs(splinesky=True)
+        im.run_calibs(splinesky=True,survey=survey)
 
     tim = im.get_tractor_image(slc=zoomslice, pixPsf=True, splinesky=True,
                                constant_invvar=opt.constant_invvar,
                                hybridPsf=opt.hybrid_psf,
-                               normalizePsf=opt.normalize_psf)
+                               normalizePsf=opt.normalize_psf,
+                               old_calibs_ok=True)
     print('Got tim:', tim)
 
-    print('Read image:', Time()-t0)
+    tnow = Time()
+    print('Read image:', tnow-tlast)
+    tlast = tnow
 
-    if opt.catfn in ['DR1', 'DR2', 'DR3', 'DR5', 'DR']:
-
+    if opt.catalog:
+        T = fits_table(opt.catalog)
+    else:
         margin = 20
         TT = []
         chipwcs = tim.subwcs
@@ -193,14 +289,20 @@ def main(survey=None, opt=None):
                 print('WARNING: catalog', fn, 'does not exist.  Skipping!')
                 continue
             print('Reading', fn)
-            T = fits_table(fn)
+            T = fits_table(fn, columns=[
+                'ra', 'dec', 'brick_primary', 'type', 'release',
+                'brickid', 'brickname', 'objid',
+                'fracdev', 'flux_r',
+                'shapedev_r', 'shapedev_e1', 'shapedev_e2',
+                'shapeexp_r', 'shapeexp_e1', 'shapeexp_e2',
+                'ref_epoch', 'pmra', 'pmdec', 'parallax'
+            ])
             ok,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
             W,H = chipwcs.get_width(), chipwcs.get_height()
             I = np.flatnonzero((xx >= -margin) * (xx <= (W+margin)) *
                                (yy >= -margin) * (yy <= (H+margin)))
             T.cut(I)
             print('Cut to', len(T), 'sources within image + margin')
-            # print('Brick_primary:', np.unique(T.brick_primary))
             T.cut(T.brick_primary)
             print('Cut to', len(T), 'on brick_primary')
             for col in ['out_of_bounds', 'left_blob']:
@@ -211,7 +313,7 @@ def main(survey=None, opt=None):
                 TT.append(T)
         if len(TT) == 0:
             print('No sources to photometer.')
-            return 0
+            return None
         T = merge_tables(TT, columns='fillzero')
         T._header = TT[0]._header
         del TT
@@ -220,20 +322,15 @@ def main(survey=None, opt=None):
         # Fix up various failure modes:
         # FixedCompositeGalaxy(pos=RaDecPos[240.51147402832561, 10.385488075518923], brightness=NanoMaggies: g=(flux -2.87), r=(flux -5.26), z=(flux -7.65), fracDev=FracDev(0.60177207), shapeExp=re=3.78351e-44, e1=9.30367e-13, e2=1.24392e-16, shapeDev=re=inf, e1=-0, e2=-0)
         # -> convert to EXP
-        I = np.flatnonzero(np.array([((t.type == 'COMP') and
-                                      (not np.isfinite(t.shapedev_r)))
-                                     for t in T]))
+        I, = np.nonzero([t == 'COMP' and not np.isfinite(r) for t,r in zip(T.type, T.shapedev_r)])
         if len(I):
             print('Converting', len(I), 'bogus COMP galaxies to EXP')
             for i in I:
                 T.type[i] = 'EXP'
 
-
         # Same thing with the exp component.
         # -> convert to DEV
-        I = np.flatnonzero(np.array([((t.type == 'COMP') and
-                                      (not np.isfinite(t.shapeexp_r)))
-                                     for t in T]))
+        I, = np.nonzero([t == 'COMP' and not np.isfinite(r) for t,r in zip(T.type, T.shapeexp_r)])
         if len(I):
             print('Converting', len(I), 'bogus COMP galaxies to DEV')
             for i in I:
@@ -243,26 +340,50 @@ def main(survey=None, opt=None):
             T.writeto(opt.write_cat)
             print('Wrote catalog to', opt.write_cat)
 
-    else:
-        T = fits_table(opt.catfn)
-
     surveydir = survey.get_survey_dir()
     del survey
+    
+    if opt.move_gaia:
+        # Gaia stars: move RA,Dec to the epoch of this image.
+        I = np.flatnonzero(T.ref_epoch > 0)
+        if len(I):
+            from legacypipe.survey import radec_at_mjd
+            print('Moving', len(I), 'Gaia stars to MJD', tim.time.toMjd())
+            ra,dec = radec_at_mjd(T.ra[I], T.dec[I], T.ref_epoch[I].astype(float),
+                                  T.pmra[I], T.pmdec[I], T.parallax[I],
+                                  tim.time.toMjd())
+            T.ra [I] = ra
+            T.dec[I] = dec
 
     kwargs = {}
     cols = T.get_columns()
     if 'flux_r' in cols and not 'decam_flux_r' in cols:
         kwargs.update(fluxPrefix='')
-    kwargs.update(bands='g')
-    cat = read_fits_catalog(T, **kwargs)
+#<<<<<<< HEAD
+    #kwargs.update(bands='g')
+    #cat = read_fits_catalog(T, **kwargs)
+#=======
+
+    tnow = Time()
+    print('Read catalog:', tnow-tlast)
+    tlast = tnow
+
+    cat = read_fits_catalog(T, bands='g', **kwargs)
+#>>>>>>> 457b44ac8814215e607b45f106870ecc6666d55d
     # Replace the brightness (which will be a NanoMaggies with g,r,z)
     # with a NanoMaggies with this image's band only.
     for src in cat:
-        src.brightness = NanoMaggies(**{tim.band: 1.})
+        src.brightness = NanoMaggies(**{tim.band: 1.}) 
+        if src.brightnessPoint:
+            src.brightnessPoint = NanoMaggies(**{tim.band: 1.})
 
-    print('Read catalog:', Time()-t0)
+
+    tnow = Time()
+    print('Parse catalog:', tnow-tlast)
+    tlast = tnow
 
     print('Forced photom...')
+
     F = run_forced_phot(cat, tim,
                         ceres=opt.ceres,
                         derivs=opt.derivs,
@@ -270,39 +391,79 @@ def main(survey=None, opt=None):
                         agn=opt.agn,
                         do_forced=opt.forced,
                         do_apphot=opt.apphot,
+                        get_model=opt.save_model,
                         ps=ps)
-    t0 = Time()
-    
-    F.release   = T.release
+
+    if opt.save_model:
+        # unpack results
+        F,model_img = F
+
+    #F.release   = T.release
     F.brickid   = T.brickid
     F.brickname = T.brickname
     F.objid     = T.objid
 
-    F.camera = np.array([ccd.camera] * len(F))
-    F.expnum = np.array([im.expnum] * len(F)).astype(np.int32)
+    F.camera  = np.array([ccd.camera] * len(F))
+    F.expnum  = np.array([im.expnum]  * len(F)).astype(np.int32)
     F.ccdname = np.array([im.ccdname] * len(F))
 
     # "Denormalizing"
-    F.filter  = np.array([tim.band]               * len(T))
-    F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(T))
-    F.exptime = np.array([tim.primhdr['EXPTIME']] * len(T)).astype(np.float32)
+    F.filter  = np.array([tim.band]               * len(F))
+    try:
+        F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(F))
+    except KeyError:
+        F.mjd     = np.array([tim.primhdr['OBSMJD']] * len(F))
+    F.exptime = np.array([tim.primhdr['EXPTIME']] * len(F)).astype(np.float32)
+    F.psfsize = np.array([tim.psf_fwhm * tim.imobj.pixscale] * len(F)).astype(np.float32)
+    #### FIXME -- units?
+    ### --> also add units to the dict below so the FITS headers have units
+    F.sky     = np.array([tim.midsky / tim.zpscale / tim.imobj.pixscale**2] * len(F)).astype(np.float32)
+    # in the same units as the depth maps -- flux inverse-variance.
+    F.psfdepth = np.array([(1. / (tim.sig1 / tim.psfnorm)**2)] * len(F)).astype(np.float32)
+    F.galdepth = np.array([(1. / (tim.sig1 / tim.galnorm)**2)] * len(F)).astype(np.float32)
+    # F.psfdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.psfnorm) - 9)] * len(F)).astype(np.float32)
+    # F.galdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.galnorm) - 9)] * len(F)).astype(np.float32)
+
+    # super units questions here
+    if opt.derivs:
+        cosdec = np.cos(np.deg2rad(T.dec))
+        F.dra  = (F.flux_dra  / F.flux) * 3600. / cosdec
+        F.ddec = (F.flux_ddec / F.flux) * 3600.
+        F.dra_ivar  = F.flux_dra_ivar  * (F.flux / 3600. * cosdec)**2
+        F.ddec_ivar = F.flux_ddec_ivar * (F.flux / 3600.)**2
+        F.delete_column('flux_dra')
+        F.delete_column('flux_ddec')
+        F.delete_column('flux_dra_ivar')
+        F.delete_column('flux_ddec_ivar')
+        F.flux = F.flux_fixed
+        F.flux_ivar = F.flux_fixed_ivar
+        F.delete_column('flux_fixed')
+        F.delete_column('flux_fixed_ivar')
+
+        for c in ['dra', 'ddec', 'dra_ivar', 'ddec_ivar', 'flux', 'flux_ivar']:
+            F.set(c, F.get(c).astype(np.float32))
+
     F.ra  = T.ra
     F.dec = T.dec
-    
+
     ok,x,y = tim.sip_wcs.radec2pixelxy(T.ra, T.dec)
     F.x = (x-1).astype(np.float32)
     F.y = (y-1).astype(np.float32)
+
+    ## FIXME -- read outlier_masks?
 
     h,w = tim.shape
     F.mask = tim.dq[np.clip(np.round(F.y).astype(int), 0, h-1),
                     np.clip(np.round(F.x).astype(int), 0, w-1)]
 
     program_name = sys.argv[0]
-    version_hdr = get_version_header(program_name, surveydir)
+    ## FIXME -- from catalog?
+    release = 0
+    version_hdr = get_version_header(program_name, surveydir, release)
     filename = getattr(ccd, 'image_filename')
     if filename is None:
         # HACK -- print only two directory names + filename of CPFILE.
-        fname = os.path.basename(im.imgfn)
+        fname = os.path.basename(im.imgfn.strip())
         d = os.path.dirname(im.imgfn)
         d1 = os.path.basename(d)
         d = os.path.dirname(d)
@@ -318,6 +479,8 @@ def main(survey=None, opt=None):
     version_hdr.add_record(dict(name='EXPOSURE',
                                 value='%s-%s-%s' % (ccd.camera, im.expnum, im.ccdname),
                                 comment='Name of this image'))
+    #version_hdr.add_record(dict(name='PLVER', value=ccd.plver, comment='CP pipeline version'))
+    #version_hdr.add_record(dict(name='PROCDATE', value=ccd.procdate, comment='CP image DATE'))
 
     keys = ['TELESCOP','OBSERVAT','OBS-LAT','OBS-LONG','OBS-ELEV',
             'INSTRUME']
@@ -325,39 +488,22 @@ def main(survey=None, opt=None):
         if key in tim.primhdr:
             version_hdr.add_record(dict(name=key, value=tim.primhdr[key]))
 
-    hdr = fitsio.FITSHDR()
-    units = {'exptime':'sec', 'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2'}
-    columns = F.get_columns()
-    for i,col in enumerate(columns):
-        if col in units:
-            hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
-
-    outdir = os.path.dirname(opt.outfn)
-    if len(outdir):
-        trymakedirs(outdir)
-    fitsio.write(opt.outfn, None, header=version_hdr, clobber=True)
-    F.writeto(opt.outfn, header=hdr, append=True)
-    print('Wrote', opt.outfn)
-    
     if opt.save_model or opt.save_data:
         hdr = fitsio.FITSHDR()
         tim.getWcs().wcs.add_to_header(hdr)
     if opt.save_model:
-        print('Getting model image...')
-        tr = Tractor([tim], cat)
-        mod = tr.getModelImage(tim)
-        fitsio.write(opt.save_model, mod, header=hdr, clobber=True)
+        fitsio.write(opt.save_model, model_img, header=hdr, clobber=True)
         print('Wrote', opt.save_model)
     if opt.save_data:
         fitsio.write(opt.save_data, tim.getImage(), header=hdr, clobber=True)
         print('Wrote', opt.save_data)
-    
-    print('Finished forced phot:', Time()-t0)
-    return 0
 
-    
+    tnow = Time()
+    print('Forced phot:', tnow-tlast)
+    return F,version_hdr
+
 def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
-                    do_forced=True, do_apphot=True, ps=None,
+                    do_forced=True, do_apphot=True, get_model=False, ps=None,
                     timing=False,
                     fixed_also=False):
     '''
@@ -376,10 +522,11 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         opti = CeresOptimizer(BW=B, BH=B)
         #forced_kwargs.update(verbose=True)
 
-    nsize = 0
+    # nsize = 0
     for src in cat:
         # Limit sizes of huge models
-        from tractor.galaxy import ProfileGalaxy
+#<<<<<<< HEAD
+#        from tractor.galaxy import ProfileGalaxy
         '''
         if isinstance(src, ProfileGalaxy):
             px,py = tim.wcs.positionToPixel(src.getPosition())
@@ -390,25 +537,42 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 nsize += 1
                 src.halfsize = MAXHALF
         '''
-        src.freezeAllBut('brightnessPoint')
+        src.freezeAllBut('brightnessPoint','brightnessDev')
+        #print(src.getBrightnessPoint())
+        src.getBrightnessPoint().freezeAllBut(tim.band)
+        src.getBrightnessDev().freezeAllBut(tim.band)
+
+        #=======
+        # from tractor.galaxy import ProfileGalaxy
+        # if isinstance(src, ProfileGalaxy):
+        #     px,py = tim.wcs.positionToPixel(src.getPosition())
+        #     h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
+        #     MAXHALF = 128
+        #     if h > MAXHALF:
+        #         #print('halfsize', h,'for',src,'-> setting to',MAXHALF)
+        #         nsize += 1
+        #         src.halfsize = MAXHALF
+
+        #src.freezeAllBut('brightness')
         #src.getBrightness().freezeAllBut(tim.band)
+#>>>>>>> 457b44ac8814215e607b45f106870ecc6666d55d
     #print('Limited the size of', nsize, 'large galaxy models')
-    
+
     if derivs:
         realsrcs = []
         derivsrcs = []
         for src in cat:
             realsrcs.append(src)
 
-            brightness_dra  = src.getBrightness().copy()
-            brightness_ddec = src.getBrightness().copy()
+            brightness_dra  = src.getBrightnessPoint().copy()
+            brightness_ddec = src.getBrightnessPoint().copy()
             brightness_dra .setParams(np.zeros(brightness_dra .numberOfParams()))
             brightness_ddec.setParams(np.zeros(brightness_ddec.numberOfParams()))
             brightness_dra .freezeAllBut(tim.band)
             brightness_ddec.freezeAllBut(tim.band)
 
-            dsrc = SourceDerivatives(src, [tim.band], ['pos'],
-                                     [brightness_dra, brightness_ddec])
+            dsrc = SourceDerivatives(src, [brightness_dra, brightness_ddec],
+                                     tim, ps)
             derivsrcs.append(dsrc)
 
         # For convenience, put all the real sources at the front of
@@ -442,8 +606,9 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         iagn = np.array(iagn)
         cat = realsrcs + agnsrcs
         print('Added AGN to', len(iagn), 'galaxies')
-    print([tim],cat)
-    tr = Tractor([tim], cat, optimizer=opti)
+    #print([tim],cat, 'time and cat are here')
+    tr = Tractor(images=[tim], catalog=cat, optimizer=opti)
+    #print('tr.catalog',tr.catalog)
     tr.freezeParam('images')
     disable_galaxy_cache()
 
@@ -451,18 +616,17 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
     if do_forced:
 
-        if ps is None:
+        if ps is None and not get_model:
             forced_kwargs.update(wantims=False)
 
-        # print('Params:')
-        # tr.printThawedParams()
-
         R = tr.optimize_forced_photometry(variance=True, fitstats=True,
-                                          shared_params=False, priors=False, **forced_kwargs)
+                                          shared_params=False, priors=False,
+                                          **forced_kwargs)
 
-        if ps is not None:
+        if ps is not None or get_model:
             (data,mod,ie,chi,roi) = R.ims1[0]
 
+        if ps is not None:
             ima = dict(vmin=-2.*tim.sig1, vmax=5.*tim.sig1,
                        interpolation='nearest', origin='lower',
                        cmap='gray')
@@ -512,6 +676,17 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
         F.fracflux = R.fitstats.profracflux[:N].astype(np.float32)
         F.rchi2    = R.fitstats.prochi2    [:N].astype(np.float32)
+        # 1 - 
+        #F.fracmasked = R.fitstats.pronpix  [:N].astype(np.float32)
+        try:
+            F.fracmasked = R.fitstats.promasked[:N].astype(np.float32)
+        except:
+            print('No "fracmasked" available (only in recent Tractor versions)')
+        F.fluxPoint = np.array([src.getBrightnessPoint().getFlux(tim.band)
+                           for src in cat]).astype(np.float32)
+        
+        F.fluxGal = np.array([src.getBrightnessDev().getFlux(tim.band)
+                           for src in cat]).astype(np.float32)
 
         if derivs:
             F.flux_dra  = np.array([src.getParams()[0] for src in derivsrcs]).astype(np.float32)
@@ -524,7 +699,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             F.flux_agn_ivar = np.zeros(len(F), np.float32)
             F.flux_agn[iagn] = np.array([src.getParams()[0] for src in agnsrcs])
             F.flux_agn_ivar[iagn] = R.IV[N:].astype(np.float32)
-            
+
         if timing:
             print('Forced photom:', Time()-t0)
 
@@ -556,7 +731,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         apxy = xxyy - 1.
 
         apertures = apertures_arcsec / tim.wcs.pixel_scale()
-        print('Apertures:', apertures, 'pixels')
+        #print('Apertures:', apertures, 'pixels')
 
         #print('apxy shape', apxy.shape)  # --> (2,N)
 
@@ -564,7 +739,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         H,W = img.shape
         Iap = np.flatnonzero((apxy[0,:] >= 0)   * (apxy[1,:] >= 0) *
                              (apxy[0,:] <= W-1) * (apxy[1,:] <= H-1))
-        print('Aperture photometry for', len(Iap), 'of', len(apxy), 'sources within image bounds')
+        print('Aperture photometry for', len(Iap), 'of', len(apxy[0,:]), 'sources within image bounds')
 
         for rad in apertures:
             aper = photutils.CircularAperture(apxy[:,Iap], rad)
@@ -576,96 +751,93 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         F.apflux = np.zeros((len(F), len(apertures)), np.float32)
         F.apflux[Iap,:] = ap.astype(np.float32)
 
-        ap = 1./(np.vstack(apimgerr).T)**2
-        ap[np.logical_not(np.isfinite(ap))] = 0.
+        apimgerr = np.vstack(apimgerr).T
+        apiv = np.zeros(apimgerr.shape, np.float32)
+        apiv[apimgerr != 0] = 1./apimgerr[apimgerr != 0]**2
+
         F.apflux_ivar = np.zeros((len(F), len(apertures)), np.float32)
-        F.apflux_ivar[Iap,:] = ap.astype(np.float32)
+        F.apflux_ivar[Iap,:] = apiv
         if timing:
             print('Aperture photom:', Time()-t0)
 
+    if get_model:
+        return F,mod
     return F
 
-### This class was copied from sim-forced-phot.py
 from tractor import MultiParams, BasicSource
 class SourceDerivatives(MultiParams, BasicSource):
-    def __init__(self, real, freeze, thaw, brights):
+    def __init__(self, real, brights, tim, ps):
+        from tractor.patch import Patch
         '''
         *real*: The real source whose derivatives are my profiles.
-        *freeze*: List of parameter names to freeze before taking derivs
-        *thaw*: List of parameter names to thaw before taking derivs
         '''
         # This a subclass of MultiParams and we pass the brightnesses
         # as our params.
         super(SourceDerivatives,self).__init__(*brights)
         self.real = real
-        self.freeze = freeze
-        self.thaw = thaw
         self.brights = brights
         self.umods = None
 
-        # # Test...
-        # self.real.freezeParamsRecursive(*self.freeze)
-        # self.real.thawParamsRecursive(*self.thaw)
-        # # #
-        # print('Source derivs: params are:')
-        # self.real.printThawedParams()
-        # # # and revert...
-        # self.real.freezeParamsRecursive(*self.thaw)
-        # self.real.thawParamsRecursive(*self.freeze)
+        # Get the current source profile and take pixel-space
+        # derivatives by hand, for speed and to get symmetric
+        # derivatives.
+        realmod = real.getUnitFluxModelPatch(tim)
+        p = realmod.patch
+        dx = np.zeros_like(p)
+        dy = np.zeros_like(p)
+        # Omit a boundary of 1 pixel on all sides in both derivatives
+        dx[1:-1, 1:-1] = (p[1:-1, :-2] - p[1:-1, 2:]) / 2.
+        dy[1:-1, 1:-1] = (p[:-2, 1:-1] - p[2:, 1:-1]) / 2.
+        # Convert from pixel-space to RA,Dec derivatives via CD matrix
+        px, py = tim.getWcs().positionToPixel(real.pos, real)
+        cdi = tim.getWcs().cdInverseAtPixel(px, py)
+        dra  = dx * cdi[0, 0] + dy * cdi[1, 0]
+        ddec = dx * cdi[0, 1] + dy * cdi[1, 1]
+
+        if ps is not None:
+            import pylab as plt
+            mx = p.max()
+            plt.clf()
+            plt.subplot(2,3,1)
+            plt.imshow(p, interpolation='nearest', origin='lower',
+                       vmin=0, vmax=mx)
+            mx *= 0.25
+            plt.subplot(2,3,2)
+            plt.imshow(dx, interpolation='nearest', origin='lower',
+                       vmin=-mx, vmax=mx)
+            plt.title('dx')
+            plt.subplot(2,3,3)
+            plt.imshow(dy, interpolation='nearest', origin='lower',
+                       vmin=-mx, vmax=mx)
+            plt.title('dy')
+            plt.subplot(2,3,5)
+            sc = 3600/0.262
+            plt.imshow(dra/sc, interpolation='nearest', origin='lower',
+                       vmin=-mx, vmax=mx)
+            plt.title('dra')
+            plt.subplot(2,3,6)
+            plt.imshow(ddec/sc, interpolation='nearest', origin='lower',
+                       vmin=-mx, vmax=mx)
+            plt.title('ddec')
+            ps.savefig()
+        # These are our "unit-flux" models
+        self.umods = [Patch(realmod.x0, realmod.y0, dra),
+                      Patch(realmod.x0, realmod.y0, ddec)]
 
     @staticmethod
     def getNamedParams():
-        return dict(dpos0=0, dpos1=1)
-        
+        return dict(dra=0, ddec=1)
+
     # forced photom calls getUnitFluxModelPatches
     def getUnitFluxModelPatches(self, img, minval=0., modelMask=None):
-        self.real.freezeParamsRecursive(*self.freeze)
-        self.real.thawParamsRecursive(*self.thaw)
-
-        # The derivatives will be scaled by the source brightness;
-        # undo that scaling. (We want derivatives of unit-flux models)
-        counts = img.getPhotoCal().brightnessToCounts(self.real.brightness)
-
-        #print('SourceDerivatives.getUnitFluxModelPatches: counts=', counts)
-
-        derivs = self.real.getParamDerivatives(img, modelMask=modelMask)
-
-        #print('Derivs:', derivs)
-
-        ## FIXME -- what about using getUnitFluxModelPatch(derivs=True) ?
-        
-        #print('SourceDerivs: derivs', derivs)
-        for d in derivs:
-            if d is not None:
-                d /= counts
-                # print('Deriv: abs max', np.abs(d.patch).max(), 'range', d.patch.min(), d.patch.max(), 'sum', d.patch.sum())
-
-        # RA,Dec
-        assert(len(derivs) == 2)
-
-        # and revert...
-        self.real.freezeParamsRecursive(*self.thaw)
-        self.real.thawParamsRecursive(*self.freeze)
-        # Save these derivatives as our unit-flux models.
-        self.umods = derivs
-        return derivs
+        return self.umods
 
     def getModelPatch(self, img, minsb=0., modelMask=None):
-        if self.umods is None:
-            return None
-        if self.umods[0] is None and self.umods[1] is None:
-            return None
+        from tractor.patch import add_patches
         pc = img.getPhotoCal()
-        total = None
-        if self.umods[0] is not None:
-            total = self.umods[0] * pc.brightnessToCounts(self.brights[0])
-        if self.umods[1] is not None:
-            um = self.umods[1] * pc.brightnessToCounts(self.brights[1])
-            if total is None:
-                total = um
-            else:
-                total += um
-        return total
+        p1 = self.umods[0] * pc.brightnessToCounts(self.brights[0])
+        p2 = self.umods[1] * pc.brightnessToCounts(self.brights[1])
+        return add_patches(p1, p2)
 
 if __name__ == '__main__':
     sys.exit(main())

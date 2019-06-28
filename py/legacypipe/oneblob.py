@@ -1,25 +1,39 @@
 from __future__ import print_function
 
 import numpy as np
-import pylab as plt
 import time
 
-from astrometry.util.ttime import Time, CpuMeas
+from astrometry.util.ttime import Time
 from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.util.fits import fits_table
 from astrometry.util.plotutils import dimshow
 
-from tractor import Tractor, PointSource, Image, NanoMaggies, Catalog, Patch
+
+
 import tractor
 print(tractor.__file__)
 from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, PSFandExpGalaxy_diffcentres, PSFandDevGalaxy_diffcentres, PSFandCompGalaxy_diffcentres, SoftenedFracDev, FracDev, disable_galaxy_cache, enable_galaxy_cache
+
+from tractor import Tractor, PointSource, Image, Catalog, Patch
+
+
 from tractor.patch import ModelMask
 
 from legacypipe.survey import (SimpleGalaxy, RexGalaxy, GaiaSource,
                                LegacyEllipseWithPriors, get_rgb)
+from legacypipe.bits import IN_BLOB
 from legacypipe.runbrick import rgbkwargs, rgbkwargs_resid
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
+
+import logging
+logger = logging.getLogger('legacypipe.oneblob')
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
 
 def one_blob(X):
     '''
@@ -28,15 +42,16 @@ def one_blob(X):
     if X is None:
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
-     srcs, bands, plots, ps, simul_opt, use_ceres, hasbright, rex) = X
+     srcs, bands, plots, ps, simul_opt, use_ceres, rex, refmap) = X
 
-    print('Fitting blob number', nblob, 'val', iblob, ':', len(Isrcs),
-          'sources, size', blobw, 'x', blobh, len(timargs), 'images')
+    debug('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images' %
+          (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs)))
 
     if len(timargs) == 0:
         return None
 
     if plots:
+        import pylab as plt
         plt.figure(2, figsize=(3,3))
         plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
         plt.figure(1)
@@ -49,29 +64,37 @@ def one_blob(X):
     B = fits_table()
     B.sources = srcs
     B.Isrcs = Isrcs
+    B.iblob = iblob
+    B.blob_x0 = np.zeros(len(B), np.int16) + bx0
+    B.blob_y0 = np.zeros(len(B), np.int16) + by0
 
     # Did sources start within the blob?
     ok,x0,y0 = blobwcs.radec2pixelxy(
         np.array([src.getPosition().ra  for src in srcs]),
         np.array([src.getPosition().dec for src in srcs]))
-
-    B.started_in_blob = blobmask[
-        np.clip(np.round(y0-1).astype(int), 0,blobh-1),
-        np.clip(np.round(x0-1).astype(int), 0,blobw-1)]
-
+    safe_x0 = np.clip(np.round(x0-1).astype(int), 0,blobw-1)
+    safe_y0 = np.clip(np.round(y0-1).astype(int), 0,blobh-1)
+    B.started_in_blob = blobmask[safe_y0, safe_x0]
+    # This uses 'initial' pixel positions, because that's what determines
+    # the fitting behaviors.
+    B.brightblob = refmap[safe_y0, safe_x0].astype(np.int16)
     B.cpu_source = np.zeros(len(B), np.float32)
-
     B.blob_width  = np.zeros(len(B), np.int16) + blobw
     B.blob_height = np.zeros(len(B), np.int16) + blobh
     B.blob_npix   = np.zeros(len(B), np.int32) + np.sum(blobmask)
     B.blob_nimages= np.zeros(len(B), np.int16) + len(timargs)
-    
+    B.blob_symm_width   = np.zeros(len(B), np.int16)
+    B.blob_symm_height  = np.zeros(len(B), np.int16)
+    B.blob_symm_npix    = np.zeros(len(B), np.int32)
+    B.blob_symm_nimages = np.zeros(len(B), np.int16)
+    B.hit_limit = np.zeros(len(B), bool)
+
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, hasbright, rex)
+                 plots, ps, simul_opt, use_ceres, rex, refmap)
     ob.run(B)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
-    
+
     ok,x1,y1 = blobwcs.radec2pixelxy(
         np.array([src.getPosition().ra  for src in B.sources]),
         np.array([src.getPosition().dec for src in B.sources]))
@@ -81,36 +104,30 @@ def one_blob(X):
     assert(len(B.finished_in_blob) == len(B))
     assert(len(B.finished_in_blob) == len(B.started_in_blob))
 
-    B.brightstarinblob = np.zeros(len(B), bool)
-    if hasbright:
-        B.brightstarinblob[:] = True
-
-    B.cpu_blob = np.zeros(len(B), np.float32)
+    B.cpu_blob = np.empty(len(B), np.float32)
     t1 = time.clock()
     B.cpu_blob[:] = t1 - t0
-        
-    B.iblob = iblob
     return B
 
 class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, hasbright, rex):
+                 plots, ps, simul_opt, use_ceres, rex, refmap):
         self.name = name
         self.rex = rex
         self.blobwcs = blobwcs
+        self.pixscale = self.blobwcs.pixel_scale()
         self.blobmask = blobmask
         self.srcs = srcs
         self.bands = bands
         self.plots = plots
-
-        self.plots_per_source = False
+        self.refmap = refmap
+        self.plots_per_source = plots
+        self.plots_per_model = False
         # blob-1-data.png, etc
         self.plots_single = False
-
         self.ps = ps
         self.simul_opt = simul_opt
         self.use_ceres = use_ceres
-        self.hasbright = hasbright
         self.deblend = False
         self.tims = self.create_tims(timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
@@ -121,33 +138,49 @@ class OneBlob(object):
         self.blobh,self.blobw = blobmask.shape
         self.bigblob = (self.blobw * self.blobh) > 100*100
         if self.bigblob:
-            print('Big blob:', name)
+            debug('Big blob:', name)
         self.trargs = dict()
-    
-        if use_ceres:
-            from tractor.ceres_optimizer import CeresOptimizer
-            ceres_optimizer = CeresOptimizer()
-            self.optargs.update(scale_columns=False,
-                                scaled=False,
-                                dynamic_scale=False)
-            self.trargs.update(optimizer=ceres_optimizer)
-        else:
-            self.optargs.update(dchisq = 0.1)
+
+        # if use_ceres:
+        #     from tractor.ceres_optimizer import CeresOptimizer
+        #     ceres_optimizer = CeresOptimizer()
+        #     self.optargs.update(scale_columns=False,
+        #                         scaled=False,
+        #                         dynamic_scale=False)
+        #     self.trargs.update(optimizer=ceres_optimizer)
+        # else:
+        #     self.optargs.update(dchisq = 0.1)
+
+        from legacypipe.constrained_optimizer import ConstrainedOptimizer
+        self.trargs.update(optimizer=ConstrainedOptimizer())
+        self.optargs.update(dchisq = 0.1)
 
     def run(self, B):
+        trun = tlast = Time()
         # Not quite so many plots...
         self.plots1 = self.plots
         cat = Catalog(*self.srcs)
 
-        tlast = Time()
         if self.plots:
+            import pylab as plt
             self._initial_plots()
+            from legacypipe.detection import plot_boundary_map
+            plt.clf()
+            dimshow(self.rgb)
+            ax = plt.axis()
+            bitset = ((self.refmap & IN_BLOB['MEDIUM']) != 0)
+            plot_boundary_map(bitset, rgb=(255,0,0), iterations=2)
+            bitset = ((self.refmap & IN_BLOB['BRIGHT']) != 0)
+            plot_boundary_map(bitset, rgb=(200,200,0), iterations=2)
+            bitset = ((self.refmap & IN_BLOB['GALAXY']) != 0)
+            plot_boundary_map(bitset, rgb=(0,255,0), iterations=2)
+            plt.axis(ax)
+            plt.title('Reference-source Masks')
+            self.ps.savefig()
 
-        if self.deblend:
-            ### Test bogus deblending
-            self.run_deblend(cat)
-
-        self._fit_fluxes(cat, self.tims, self.bands)
+        if not self.bigblob:
+            debug('Fitting just fluxes using initial models...')
+            self._fit_fluxes(cat, self.tims, self.bands)
         tr = self.tractor(self.tims, cat)
 
         if self.plots:
@@ -165,42 +198,38 @@ class OneBlob(object):
 
         # Optimize all at once?
         if len(cat) > 1 and len(cat) <= 10:
-            #tfit = Time()
             cat.thawAllParams()
             tr.optimize_loop(**self.optargs)
 
         if self.plots:
             self._plots(tr, 'After source fitting')
-
             plt.clf()
             self._plot_coadd(self.tims, self.blobwcs, model=tr)
             plt.title('After source fitting')
             self.ps.savefig()
-
             if self.plots_single:
                 plt.figure(2)
                 mods = list(tr.getModelImages())
-                coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs, images=mods,
+                coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=mods,
                                            fill_holes=False)
                 dimshow(get_rgb(coimgs,self.bands), ticks=False)
                 plt.savefig('blob-%s-initmodel.png' % (self.name))
                 res = [(tim.getImage() - mod) for tim,mod in zip(self.tims, mods)]
-                coresids,nil = quick_coadds(self.tims, self.bands, self.blobwcs, images=res)
+                coresids,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=res)
                 dimshow(get_rgb(coresids, self.bands, **rgbkwargs_resid), ticks=False)
                 plt.savefig('blob-%s-initresid.png' % (self.name))
                 dimshow(get_rgb(coresids, self.bands), ticks=False)
                 plt.savefig('blob-%s-initsub.png' % (self.name))
                 plt.figure(1)
 
-
-        print('Blob', self.name, 'finished initial fitting:', Time()-tlast)
+        debug('Blob', self.name, 'finished initial fitting:', Time()-tlast)
         tlast = Time()
 
         # Next, model selections: point source vs dev/exp vs composite.
         
         self.run_model_selection(cat, Ibright, B)
 
-        print('Blob', self.name, 'finished model selection:', Time()-tlast)
+        debug('Blob', self.name, 'finished model selection:', Time()-tlast)
         tlast = Time()
 
         if self.plots:
@@ -262,18 +291,10 @@ class OneBlob(object):
             nsrcparams = src.numberOfParams()
             _convert_ellipses(src)
             assert(src.numberOfParams() == nsrcparams)
-            # print('Computing variances for source', src, ': N params:', nsrcparams)
-            # print('Source params:')
-            # src.printThawedParams()
-            # For Gaia sources, temporarily convert the GaiaPosition to a
-            # RaDecPos in order to compute the invvar it would have in our
-            # imaging?  Or just plug in the Gaia-measured uncertainties??
-            # (going to implement the latter)
             # Compute inverse-variances
             allderivs = tr.getDerivs()
             ivars = _compute_invvars(allderivs)
             assert(len(ivars) == nsrcparams)
-            #print('Inverse-variances:', ivars)
             B.srcinvvars[isub] = ivars
             assert(len(B.srcinvvars[isub]) == cat[isub].numberOfParams())
             cat.freezeParam(isub)
@@ -281,10 +302,9 @@ class OneBlob(object):
         # Check for sources with zero inverse-variance -- I think these
         # can be generated during the "Simultaneous re-opt" stage above --
         # sources can get scattered outside the blob.
-
         I, = np.nonzero([np.sum(iv) > 0 for iv in B.srcinvvars])
         if len(I) < len(B):
-            print('Keeping', len(I), 'of', len(B),'sources with non-zero ivar')
+            debug('Keeping', len(I), 'of', len(B),'sources with non-zero ivar')
             B.cut(I)
             cat = Catalog(*B.sources)
             tr.catalog = cat
@@ -292,8 +312,8 @@ class OneBlob(object):
         M = _compute_source_metrics(B.sources, self.tims, self.bands, tr)
         for k,v in M.items():
             B.set(k, v)
-        print('Blob', self.name, 'finished:', Time()-tlast)
-        
+        info('Blob', self.name, 'finished, total:', Time()-trun)
+
     def run_model_selection(self, cat, Ibright, B):
         # We compute & subtract initial models for the other sources while
         # fitting each source:
@@ -305,181 +325,210 @@ class OneBlob(object):
         #   -fit, with Catalog([src])
         #   -subtract final model (from each tim)
         # -Replace original images
-    
-        
         models = SourceModels()
         # Remember original tim images
         models.save_images(self.tims)
         # Create initial models for each tim x each source
-        # tt = Time()
         models.create(self.tims, cat, subtract=True)
-        # print('Subtracting initial models:', Time()-tt)
 
         N = len(cat)
         B.dchisq = np.zeros((N, 8), np.float32)
         B.all_models    = np.array([{} for i in range(N)])
         B.all_model_ivs = np.array([{} for i in range(N)])
         B.all_model_cpu = np.array([{} for i in range(N)])
-         
+        B.all_model_hit_limit = np.array([{} for i in range(N)])
+
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
-            
+
+
             src = cat[srci]
-            print('Model selection for source %i of %i in blob %s' %
-                  (numi+1, len(Ibright), self.name))
-            # if isinstance(src, GaiaSource):
-            #     print('Gaia source', src)
-            #     if src.isForcedPointSource():
-            #         print('Gaia source is forced to be a point source -- not doing model selection.')
-            #         continue
+            debug('Model selection for source %i of %i in blob %s; sourcei %i' %
+                  (numi+1, len(Ibright), self.name, srci))
             cpu0 = time.clock()
-    
+
             # Add this source's initial model back in.
             models.add(srci, self.tims)
+
+            if self.plots_single:
+                import pylab as plt
+                plt.figure(2)
+                coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
+                                           fill_holes=False)
+                rgb = get_rgb(coimgs,self.bands)
+                plt.imsave('blob-%s-%s-bdata.png' % (self.name, srci), rgb,
+                           origin='lower')
+                plt.figure(1)
+
+            # only plot models for one source
+            keepsrc = self.model_selection_one_source(src, srci, models, B)
+            B.sources[srci] = keepsrc
+            cat[srci] = keepsrc
+
+            # Re-remove the final fit model for this source.
+            models.update_and_subtract(srci, keepsrc, self.tims)
 
             if self.plots_single:
                 plt.figure(2)
                 tr = self.tractor(self.tims, cat)
                 coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
                                            fill_holes=False)
-                # not using rgbkwargs_resid
-                #dimshow(get_rgb(coimgs,self.bands), ticks=False)
-                #plt.savefig('blob-%s-%i-bdata.png' % (self.name, srci))
-                rgb = get_rgb(coimgs,self.bands)
-                plt.imsave('blob-%s-%s-bdata.png' % (self.name, srci), rgb,
-                           origin='lower')
+                dimshow(get_rgb(coimgs,self.bands), ticks=False)
+                plt.savefig('blob-%s-%i-sub.png' % (self.name, srci))
                 plt.figure(1)
 
-    
-            if self.bigblob:
-                # if self.plots:
-                #     plt.clf()
-                #     for j,tim in enumerate(self.tims):
-                #         plt.subplot(len(self.tims), 2, j+1)
-                #         dimshow(tim.getImage(), vmin=-2*tim.sig1, vmax=5*tim.sig1)
-                #         ax = plt.axis()
-                #         x,y = tim.wcs.positionToPixel(src.getPosition())
-                #         plt.plot(x, y, 'r.')
-                #     self.ps.savefig()
-                mods = [mod[srci] for mod in models.models]
-                srctims,modelMasks = _get_subimages(self.tims, mods, src)
-                # if self.plots:
-                #     for j,tim in enumerate(srctims):
-                #         plt.subplot(len(srctims), 2, len(srctims)+j+1)
-                #         dimshow(tim.getImage(), vmin=-2*tim.sig1, vmax=5*tim.sig1)
-                #         ax = plt.axis()
-                #         x,y = tim.wcs.positionToPixel(src.getPosition())
-                #         plt.plot(x, y, 'r.')
-                #     self.ps.savefig()
+            cpu1 = time.clock()
+            B.cpu_source[srci] += (cpu1 - cpu0)
 
-                # Create a little local WCS subregion for this source, by
-                # resampling non-zero inverrs from the srctims into blobwcs
-                insrc = np.zeros((self.blobh,self.blobw), bool)
-                for tim in srctims:
-                    try:
-                        Yo,Xo,Yi,Xi,nil = resample_with_wcs(
-                            self.blobwcs, tim.subwcs, [],2)
-                    except:
-                        continue
-                    insrc[Yo,Xo] |= (tim.inverr[Yi,Xi] > 0)
-    
-                if np.sum(insrc) == 0:
-                    # No source pixels touching blob... this can
-                    # happen when a source scatters outside the blob
-                    # in the fitting stage.  Drop the source here.
-                    B.sources[srci] = cat[srci] = None
+        models.restore_images(self.tims)
+        del models
+
+    def model_selection_one_source(self, src, srci, models, B):
+
+        if self.bigblob:
+            mods = [mod[srci] for mod in models.models]
+            srctims,modelMasks = _get_subimages(self.tims, mods, src)
+
+            # Create a little local WCS subregion for this source, by
+            # resampling non-zero inverrs from the srctims into blobwcs
+            insrc = np.zeros((self.blobh,self.blobw), bool)
+            for tim in srctims:
+                try:
+                    Yo,Xo,Yi,Xi,nil = resample_with_wcs(
+                        self.blobwcs, tim.subwcs, intType=np.int16)
+                except:
                     continue
-                yin = np.max(insrc, axis=1)
-                xin = np.max(insrc, axis=0)
-                yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
-                xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
-                srcwcs = self.blobwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
-                srcbounds = [xl, xh, yl, yh]
-                # A mask for which pixels in the 'srcwcs' square are occupied.
-                srcpix = insrc[yl:yh+1, xl:xh+1]
-            else:
-                modelMasks = models.model_masks(srci, src)
-                srctims = self.tims
-                srcwcs = self.blobwcs
-                srcpix = None
+                insrc[Yo,Xo] |= (tim.inverr[Yi,Xi] > 0)
 
-            srctractor = self.tractor(srctims, [src])
-            srctractor.setModelMasks(modelMasks)
-            enable_galaxy_cache()
+            if np.sum(insrc) == 0:
+                # No source pixels touching blob... this can
+                # happen when a source scatters outside the blob
+                # in the fitting stage.  Drop the source here.
+                return None
+
+            yin = np.max(insrc, axis=1)
+            xin = np.max(insrc, axis=0)
+            yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
+            xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
+            del insrc
+
+            srcwcs = self.blobwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
+            srcwcs_x0y0 = (xl, yl)
+            # A mask for which pixels in the 'srcwcs' square are occupied.
+            srcblobmask = self.blobmask[yl:yh+1, xl:xh+1]
+        else:
+            modelMasks = models.model_masks(srci, src)
+            srctims = self.tims
+            srcwcs = self.blobwcs
+            srcwcs_x0y0 = (0, 0)
+            srcblobmask = self.blobmask
+
+        if self.plots_per_source:
+            # This is a handy blob-coordinates plot of the data
+            # going into the fit.
+            import pylab as plt
+            plt.clf()
+            nil,nil,coimgs,nil = quick_coadds(srctims, self.bands,self.blobwcs,
+                                              fill_holes=False, get_cow=True)
+            dimshow(get_rgb(coimgs, self.bands))
+            ax = plt.axis()
+            pos = src.getPosition()
+            ok,x,y = self.blobwcs.radec2pixelxy(pos.ra, pos.dec)
+            ix,iy = int(np.round(x-1)), int(np.round(y-1))
+            plt.plot(x-1, y-1, 'r+')
+            plt.axis(ax)
+            plt.title('Model selection: data')
+            self.ps.savefig()
+
+        # Mask out other sources while fitting this one, by
+        # finding symmetrized blobs of significant pixels
+        mask_others = True
+        if mask_others:
+            from legacypipe.detection import detection_maps
+            from astrometry.util.multiproc import multiproc
+            from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
+            from scipy.ndimage.measurements import label
+            # Compute per-band detection maps
+            mp = multiproc()
+            detmaps,detivs,satmaps = detection_maps(
+                srctims, srcwcs, self.bands, mp)
+            del satmaps
+            # Compute the symmetric area that fits in this 'tim'
+            pos = src.getPosition()
+            ok,xx,yy = srcwcs.radec2pixelxy(pos.ra, pos.dec)
+            bh,bw = srcblobmask.shape
+            ix = int(np.clip(np.round(xx-1), 0, bw-1))
+            iy = int(np.clip(np.round(yy-1), 0, bh-1))
+            flipw = min(ix, bw-1-ix)
+            fliph = min(iy, bh-1-iy)
+            flipblobs = np.zeros(srcblobmask.shape, bool)
+            # Go through the per-band detection maps, marking significant pixels
+            for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
+                sn = detmap * np.sqrt(detiv)
+                slc = (slice(iy-fliph, iy+fliph+1),
+                       slice(ix-flipw, ix+flipw+1))
+                flipsn = np.zeros_like(sn)
+                # Symmetrize
+                flipsn[slc] = np.minimum(sn[slc],
+                                         np.flipud(np.fliplr(sn[slc])))
+                # just OR the detection maps per-band...
+                flipblobs |= (flipsn > 5.)
+            blobs,_ = label(flipblobs)
+            goodblob = blobs[iy,ix]
 
             if self.plots_per_source:
-                # This is a handy blob-coordinates plot of the data
-                # going into the fit.
+                # This plot is about the symmetric-blob definitions
+                # when fitting sources.
+                import pylab as plt
+                from legacypipe.detection import plot_boundary_map
+
                 plt.clf()
-                coimgs,cons = quick_coadds(srctims, self.bands, self.blobwcs,
-                                             fill_holes=False)
-                dimshow(get_rgb(coimgs, self.bands))
-                plt.title('Model selection: stage1 data')
+                for i,(band,detmap,detiv) in enumerate(zip(self.bands, detmaps, detivs)):
+                    if i >= 4:
+                        break
+                    detsn = detmap * np.sqrt(detiv)
+                    plt.subplot(2,2, i+1)
+                    dimshow(detsn, vmin=-2, vmax=8)
+                    ax = plt.axis()
+                    plot_boundary_map(detsn >= 5.)
+                    plt.plot(ix, iy, 'rx')
+                    plt.plot([ix-flipw, ix-flipw, ix+flipw, ix+flipw, ix-flipw],
+                             [iy-fliph, iy+fliph, iy+fliph, iy-fliph, iy-fliph], 'r-')
+                    plt.axis(ax)
+                    plt.title('det S/N: ' + band)
+                plt.subplot(2,2,4)
+                dimshow(flipblobs, vmin=0, vmax=1)
+                plt.colorbar()
+                ax = plt.axis()
+                plot_boundary_map(blobs == goodblob)
+                if binary_fill_holes(flipblobs)[iy,ix]:
+                    fb = (blobs == goodblob)
+                    di = binary_dilation(fb, iterations=4)
+                    if np.any(di):
+                        plot_boundary_map(di, rgb=(255,0,0))
+                plt.plot(ix, iy, 'rx')
+                plt.plot([ix-flipw, ix-flipw, ix+flipw, ix+flipw, ix-flipw],
+                         [iy-fliph, iy+fliph, iy+fliph, iy-fliph, iy-fliph], 'r-')
+                plt.axis(ax)
+                plt.title('good blob')
                 self.ps.savefig()
 
-                # # plot the modelmasks for each tim.
-                # plt.clf()
-                # R = int(np.floor(np.sqrt(len(srctims))))
-                # C = int(np.ceil(len(srctims) / float(R)))
-                # for i,tim in enumerate(srctims):
-                #     plt.subplot(R, C, i+1)
-                #     msk = modelMasks[i][src].mask
-                #     print('Mask:', msk)
-                #     if msk is None:
-                #         continue
-                #     plt.imshow(msk, interpolation='nearest', origin='lower', vmin=0, vmax=1)
-                #     plt.title(tim.name)
-                # plt.suptitle('Model Masks')
-                # self.ps.savefig()
-                
-            if self.bigblob and self.plots_per_source:
-                # This is a local source-WCS plot of the data going into the
-                # fit.
                 plt.clf()
-                coimgs,cons = quick_coadds(srctims, self.bands, srcwcs,
-                                           fill_holes=False)
-                dimshow(get_rgb(coimgs, self.bands))
-                plt.title('Model selection: stage1 data (srcwcs)')
+                plt.subplot(1,2,1)
+                dimshow(blobs)
+                plt.colorbar()
+                plt.title('blob map; goodblob=%i' % goodblob)
+                plt.subplot(1,2,2)
+                dimshow(binary_fill_holes(flipblobs), vmin=0, vmax=1)
+                plt.colorbar()
+                plt.title('symmetric blob mask: 1 = good')
+                ax = plt.axis()
+                plt.plot(ix, iy, 'rx')
+                plt.plot([ix-flipw, ix-flipw, ix+flipw, ix+flipw, ix-flipw],
+                         [iy-fliph, iy+fliph, iy+fliph, iy-fliph, iy-fliph], 'r-')
+                plt.axis(ax)
                 self.ps.savefig()
-
-                self._plots(srctractor, 'Model selection init')
-                # srch,srcw = srcwcs.shape
-                # _plot_mods(srctims, [list(srctractor.getModelImages())], srcwcs,
-                #            ['Model selection init'], self.bands, None,None,
-                #            None, srcw,srch, self.ps, chi_plots=False)
-
-            if self.deblend:
-                # Create tims with the deblending-weighted pixels.
-                debtims = [Image(data=np.zeros_like(tim.data),
-                               inverr=tim.getInvError(),
-                               wcs=tim.wcs, psf=tim.psf, photocal=tim.photocal,
-                               sky=tim.sky, name=tim.name) for tim in srctims]
-                for dtim,tim in zip(debtims,srctims):
-                    dtim.band = tim.band
-                    dtim.subwcs = tim.subwcs
-                    # Resample the deb weights from blob space to tim space
-                    try:
-                        Yo,Xo,Yi,Xi,nil = resample_with_wcs(
-                            tim.subwcs, self.blobwcs, [], 2)
-                    except:
-                        continue
-                    dpatch = self.deb_profiles[srci]
-                    ph,pw = dpatch.shape
-                    K = np.flatnonzero((Yi >= dpatch.y0) * (Xi >= dpatch.x0) *
-                                       (Yi < (dpatch.y0+ph)) *
-                                       (Xi < (dpatch.x0+pw)))
-                    dtim.data[Yo[K],Xo[K]] = (tim.data[Yo[K], Xo[K]] *
-                        dpatch.patch[Yi[K]-dpatch.y0, Xi[K]-dpatch.x0] /
-                        np.maximum(self.deb_prosum[Yi[K], Xi[K]], 1e-16))
-                debtractor = self.tractor(debtims, srctractor.catalog)
-
-            if self.bigblob and self.plots and self.deblend:
-                plt.clf()
-                coimgs,cons = quick_coadds(debtims, self.bands, srcwcs,
-                                           fill_holes=False)
-                dimshow(get_rgb(coimgs, self.bands))
-                plt.title('Deblend-weighted data')
-                self.ps.savefig()
+            '''<<<<<<< HEAD
                     
             srccat = srctractor.getCatalog()
 
@@ -689,49 +738,186 @@ class OneBlob(object):
                                 mod = None
                         mods.append(mod)
                     modtims,mm = _get_subimages(self.tims, mods, newsrc)
+            '''
 
+            # If there is no longer a source detected at the original source
+            # position, we want to drop this source.  However, saturation can
+            # cause there to be no detection S/N because of masking, so do
+            # a hole-fill before checking.
+            # FIXME -- this could go before the label() call
+            if not binary_fill_holes(flipblobs)[iy,ix]:
+                # The hole-fill can still fail (eg, in small test images) if
+                # the bleed trail splits the blob into two pieces.
+                # Skip this test for reference sources.
+                if getattr(src, 'is_reference_source', False):
+                    debug('Reference source center is outside symmetric blob; keeping')
                 else:
-                    mm = []
-                    modtims = []
-                    for tim in self.tims:
-                        d = dict()
-                        mod = newsrc.getModelPatch(tim)
-                        if mod is None:
-                            continue
-                        #print('After first-round fit: model is', mod.shape)
-                        mod = _clip_model_to_blob(mod, tim.shape,
-                                                  tim.getInvError())
-                        if mod is None:
-                            continue
-                        #d[newsrc] = ModelMask(mod.x0, mod.y0, mod.patch != 0)
-                        mh,mw = mod.shape
-                        d[newsrc] = ModelMask(mod.x0, mod.y0, mw, mh)
-                        modtims.append(tim)
-                        mm.append(d)
+                    debug('Source center is not in the symmetric blob mask; skipping')
+                    return None
 
-                #print('Mod selection: after second-round opt:', newsrc)
+            if goodblob != 0:
+                flipblobs = (blobs == goodblob)
+            dilated = binary_dilation(flipblobs, iterations=4)
+            if not np.any(dilated):
+                debug('No pixels in dilated symmetric mask')
+                return None
+            yin = np.max(dilated, axis=1)
+            xin = np.max(dilated, axis=0)
+            yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
+            xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
+            #print('Dilated: good bounds x', xl,xh, 'y', yl,yh)
+            #oldshape = srcwcs.shape
+            (oldx0,oldy0) = srcwcs_x0y0
+            srcwcs = srcwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
+            srcwcs_x0y0 = (oldx0 + xl, oldy0 + yl)
+            srcblobmask = srcblobmask[yl:yh+1, xl:xh+1]
+            #print('Cut srcwcs from', oldshape, 'to', srcwcs.shape)
+            dilated = dilated[yl:yh+1, xl:xh+1]
+            flipblobs = flipblobs[yl:yh+1, xl:xh+1]
 
-                if modtims is not None:
-                    modtractor = self.tractor(modtims, [newsrc])
-                    modtractor.setModelMasks(mm)
-                    enable_galaxy_cache()
-    
-                    modtractor.optimize_loop(maxcpu=60., **self.optargs)
-                    #print('Mod selection: after second-round opt:', newsrc)
+            saved_srctim_ies = []
+            keep_srctims = []
+            mm = []
+            totalpix = 0
+            for tim in srctims:
+                # Zero out inverse-errors for all pixels outside
+                # 'dilated'.
+                try:
+                    Yo,Xo,Yi,Xi,nil = resample_with_wcs(
+                        tim.subwcs, srcwcs)#, intType=np.int16)
+                except OverlapError:
+                    continue
+                ie = tim.getInvError()
+                newie = np.zeros_like(ie)
 
-                    if self.plots_per_source:
-                        plt.clf()
-                        modimgs = list(modtractor.getModelImages())
-                        comods,nil = quick_coadds(modtims, self.bands, srcwcs,
-                                                    images=modimgs)
-                        dimshow(get_rgb(comods, self.bands))
-                        plt.title('After second-round opt: ' + name)
-                        self.ps.savefig()
+                good, = np.nonzero(dilated[Yi,Xi] * (ie[Yo,Xo] > 0))
+                if len(good) == 0:
+                    debug('Tim has inverr all == 0')
+                    continue
+                yy = Yo[good]
+                xx = Xo[good]
+                newie[yy,xx] = ie[yy,xx]
+                xl,xh = xx.min(), xx.max()
+                yl,yh = yy.min(), yy.max()
+                totalpix += len(xx)
 
-                        # self._plot_coadd(modtims, self.blobwcs,resid=modtractor)
-                        # plt.title('second round: resid %s' % name)
-                        # self.ps.savefig()
+                d = { src: ModelMask(xl, yl, 1+xh-xl, 1+yh-yl) }
+                mm.append(d)
 
+                saved_srctim_ies.append(ie)
+                tim.inverr = newie
+                keep_srctims.append(tim)
+
+            srctims = keep_srctims
+            modelMasks = mm
+
+            B.blob_symm_nimages[srci] = len(srctims)
+            B.blob_symm_npix[srci] = totalpix
+            sh,sw = srcwcs.shape
+            B.blob_symm_width [srci] = sw
+            B.blob_symm_height[srci] = sh
+
+            # if self.plots_per_source:
+            #     from legacypipe.detection import plot_boundary_map
+            #     plt.clf()
+            #     dimshow(get_rgb(coimgs, self.bands))
+            #     ax = plt.axis()
+            #     plt.plot(x-1, y-1, 'r+')
+            #     plt.axis(ax)
+            #     sx0,sy0 = srcwcs_x0y0
+            #     sh,sw = srcwcs.shape
+            #     ext = [sx0, sx0+sw, sy0, sy0+sh]
+            #     plot_boundary_map(flipblobs, rgb=(255,255,255), extent=ext)
+            #     plot_boundary_map(dilated, rgb=(0,255,0), extent=ext)
+            #     plt.title('symmetrized blobs')
+            #     self.ps.savefig()
+            #     nil,nil,coimgs,nil = quick_coadds(
+            #         srctims, self.bands, self.blobwcs,
+            #         fill_holes=False, get_cow=True)
+            #     dimshow(get_rgb(coimgs, self.bands))
+            #     ax = plt.axis()
+            #     plt.plot(x-1, y-1, 'r+')
+            #     plt.axis(ax)
+            #     plt.title('Symmetric-blob masked')
+            #     self.ps.savefig()
+            #     plt.clf()
+            #     for tim in srctims:
+            #         ie = tim.getInvError()
+            #         sigmas = (tim.getImage() * ie)[ie > 0]
+            #         plt.hist(sigmas, range=(-5,5), bins=21, histtype='step')
+            #         plt.axvline(np.mean(sigmas), alpha=0.5)
+            #     plt.axvline(0., color='k', lw=3, alpha=0.5)
+            #     plt.xlabel('Image pixels (sigma)')
+            #     plt.title('Symmetrized pixel values')
+            #     self.ps.savefig()
+            # # plot the modelmasks for each tim.
+            # plt.clf()
+            # R = int(np.floor(np.sqrt(len(srctims))))
+            # C = int(np.ceil(len(srctims) / float(R)))
+            # for i,tim in enumerate(srctims):
+            #     plt.subplot(R, C, i+1)
+            #     msk = modelMasks[i][src].mask
+            #     print('Mask:', msk)
+            #     if msk is None:
+            #         continue
+            #     plt.imshow(msk, interpolation='nearest', origin='lower', vmin=0, vmax=1)
+            #     plt.title(tim.name)
+            # plt.suptitle('Model Masks')
+            # self.ps.savefig()
+
+        if self.bigblob and self.plots_per_source:
+            # This is a local source-WCS plot of the data going into the
+            # fit.
+            plt.clf()
+            coimgs,_ = quick_coadds(srctims, self.bands, srcwcs, fill_holes=False)
+            dimshow(get_rgb(coimgs, self.bands))
+            plt.title('Model selection: stage1 data (srcwcs)')
+            self.ps.savefig()
+#>>>>>>> 457b44ac8814215e607b45f106870ecc6666d55d
+
+        srctractor = self.tractor(srctims, [src])
+        srctractor.setModelMasks(modelMasks)
+        srccat = srctractor.getCatalog()
+
+        ok,ix,iy = srcwcs.radec2pixelxy(src.getPosition().ra,
+                                        src.getPosition().dec)
+        ix = int(ix-1)
+        iy = int(iy-1)
+        # Start in blob
+        sh,sw = srcwcs.shape
+        if ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
+            debug('Source is starting outside blob -- skipping.')
+            if mask_others:
+                for ie,tim in zip(saved_srctim_ies, srctims):
+                    tim.inverr = ie
+            return None
+
+        from tractor import Galaxy
+        is_galaxy = isinstance(src, Galaxy)
+
+        # Fitting behaviors based on geometric masks.
+        x0,y0 = srcwcs_x0y0
+        force_pointsource = (self.refmap[y0+iy,x0+ix] &
+                             (IN_BLOB['BRIGHT'] | IN_BLOB['GALAXY'] |
+                              IN_BLOB['CLUSTER'])) > 0
+        fit_background = (self.refmap[y0+iy,x0+ix] &
+                          (IN_BLOB['MEDIUM'] | IN_BLOB['GALAXY'])) > 0
+        if is_galaxy:
+            fit_background = False
+
+            # LSLGA galaxy: set the maximum allowed r_e.
+            known_galaxy_logrmax = 0.
+            if isinstance(src, (DevGalaxy,ExpGalaxy)):
+                print('Known galaxy.  Initial shape:', src.shape)
+                # MAGIC 2. = factor by which r_e is allowed to grow for an LSLGA galaxy.
+                known_galaxy_logrmax = np.log(src.shape.re * 2.)
+            elif isinstance(src, FixedCompositeGalaxy):
+                print('Known galaxy.  Initial shapes:', src.shapeExp, src.shapeDev)
+                known_galaxy_logrmax = np.log(max(src.shapeExp.re, src.shapeDev.re) * 2.)
+            else:
+                print('WARNING: unknown galaxy type:', src)
+
+            '''<<<<<<< HEAD
                 else:
                     # Bright star; set modtractor = srctractor for the ivars
                     srctractor.setModelMasks(newsrc_mm)
@@ -925,45 +1111,469 @@ class OneBlob(object):
                 plt.suptitle('Blob %s, source %i: keeping %s\nwas: %s' %
                              (self.name, srci, keepmod, str(src)), fontsize=10)
                 self.ps.savefig()
+        '''
+        debug('Source at blob coordinates', x0+ix, y0+iy, '- forcing pointsource?', force_pointsource, ', is large galaxy?', is_galaxy, ', fitting sky background:', fit_background)
+        #>>>>>>> 457b44ac8814215e607b45f106870ecc6666d55d
 
-                # Save individual plots (for the paper)
-                if self.plots_single:
-                    for name,rgb in subplots:
-                        plt.figure(2)
-                        plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
-                        dimshow(rgb, ticks=False)
-                        fn = 'blob-%s-%i-%s.png' % (self.name, srci, name)
-                        plt.savefig(fn)
-                        print('Wrote', fn)
-                        plt.figure(1)
+        if fit_background:
+            for tim in srctims:
+                tim.freezeAllBut('sky')
+            srctractor.thawParam('images')
+            skyparams = srctractor.images.getParams()
 
-            B.dchisq[srci, :] = np.array([chisqs.get(k,0) for k in modnames])
-            B.sources[srci] = keepsrc
-            cat[srci] = keepsrc
-    
-            # Re-remove the final fit model for this source.
-            models.update_and_subtract(srci, keepsrc, self.tims)
+        enable_galaxy_cache()
 
+        # Compute the log-likehood without a source here.
+        srccat[0] = None
 
-            if self.plots_single:
-                plt.figure(2)
-                tr = self.tractor(self.tims, cat)
-                #mods = list(tr.getModelImages())
-                coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs, #images=mods,
-                                           fill_holes=False)
-                # not using rgbkwargs_resid
-                dimshow(get_rgb(coimgs,self.bands), ticks=False)
-                plt.savefig('blob-%s-%i-sub.png' % (self.name, srci))
-                plt.figure(1)
+        if fit_background:
+            srctractor.optimize_loop(**self.optargs)
 
-            #print('Keeping model:', keepmod)
-            #print('Keeping source:', keepsrc)
-            cpu1 = time.clock()
-            B.cpu_source[srci] += (cpu1 - cpu0)
+        if self.plots_per_source:
+            model_mod_rgb = {}
+            model_resid_rgb = {}
+            # the "none" model
+            modimgs = list(srctractor.getModelImages())
+            co,nil = quick_coadds(srctims, self.bands, srcwcs, images=modimgs)
+            rgb = get_rgb(co, self.bands, **rgbkwargs)
+            model_mod_rgb['none'] = rgb
+            res = [(tim.getImage() - mod) for tim,mod in zip(srctims, modimgs)]
+            co,nil = quick_coadds(srctims, self.bands, srcwcs, images=res)
+            rgb = get_rgb(co, self.bands, **rgbkwargs)
+            model_resid_rgb['none'] = rgb
 
-        models.restore_images(self.tims)
-        del models
+        chisqs_none = _per_band_chisqs(srctractor, self.bands)
+
+        #nparams = dict(ptsrc=2, simple=2, rex=3, exp=5, dev=5, comp=9)
+        nparams = dict(ptsrc=2, simple=2, rex=3, exp=5, dev=5, comp=9,psfexp=9, psfdev=9, psfcomp=11)
+
+        # This is our "upgrade" threshold: how much better a galaxy
+        # fit has to be versus ptsrc, and comp versus galaxy.
+        galaxy_margin = 3.**2 + (nparams['exp'] - nparams['ptsrc'])
+        galaxypsf_margin =  3.**2 + (nparams['psfexp'] - nparams['exp'])
+        comppsf_margin =  3.**2 + (nparams['psfcomp'] - nparams['exp'])
+ 
+
+        # *chisqs* is actually chi-squared improvement vs no source;
+        # larger is a better fit.
+        chisqs = dict(none=0)
+
+        oldmodel, ptsrc, simple, dev, exp, comp, psfexp, psfdev, psfcomp = _initialize_models(
+            src, self.rex)
+
+        if self.rex:
+            simname = 'rex'
+        else:
+            simname = 'simple'
+
+        trymodels = [('ptsrc', ptsrc)]
+
+        if oldmodel == 'ptsrc':
+            if getattr(src, 'forced_point_source', False):
+                # This is set in the GaiaSource contructor from
+                # gaia.pointsource
+                debug('Gaia source is forced to be a point source -- not trying other models')
+            elif force_pointsource:
+                # Geometric mask
+                debug('Not computing galaxy models due to objects in blob')
+            else:
+                trymodels.append((simname, simple))
+                # Try galaxy models if simple > ptsrc, or if bright.
+                # The 'gals' model is just a marker
+                trymodels.append(('gals', None))
+        else:
+            # If the source was initialized as a galaxy, try all models
+            trymodels.extend([(simname, simple),
+                              ('dev', dev), ('exp', exp), ('comp', comp), ('psfexp',psfexp),('psfdev',psfdev),('psfcomp',psfcomp)])
+
+        cputimes = {}
+        for name,newsrc in trymodels:
+            cpum0 = time.clock()
+
+            if name == 'gals':
+                # If 'simple' was better than 'ptsrc', or the source is
+                # bright, try the galaxy models.
+                chi_sim = chisqs.get(simname, 0)
+                chi_psf = chisqs.get('ptsrc', 0)
+                if chi_sim > chi_psf or max(chi_psf, chi_sim) > 400:
+                    trymodels.extend([
+                        ('dev', dev), ('exp', exp), ('comp', comp),('psfexp',psfexp),('psfdev',psfdev),('psfcomp',psfcomp)])
+                continue
+
+            if name == 'comp' and newsrc is None:
+                # Compute the comp model if exp or dev would be accepted
+                smod = _select_model(chisqs, nparams, galaxy_margin,galaxypsf_margin, comppsf_margin, self.rex)
+                if smod not in ['dev', 'exp']:
+                    continue
+                newsrc = comp = FixedCompositeGalaxy(
+                    src.getPosition(), src.getBrightness(),
+                    SoftenedFracDev(0.5), exp.getShape(),
+                    dev.getShape()).copy()
+            if name == 'psfdev' and newsrc is None:
+                if (max(chisqs.get('dev',0), chisqs.get('exp',0)) <
+                    (chisqs.get('ptsrc',0) + galaxypsf_margin)):
+                    print('dev/exp not much better than ptsrc not computing psfexp model.')
+                    continue
+
+                
+                
+                #print(src)
+                newsrc = psfdev = PSFandDevGalaxy_diffcentres(
+                    src.getPosition(), src.getBrightness()*0.5, dev.getShape(),
+                    src.getPosition(),src.getBrightness()*0.5).copy()
+
             
+
+            
+            if name == 'psfexp' and newsrc is None:
+                if (max(chisqs.get('dev',0), chisqs.get('exp',0)) <
+                    (chisqs.get('ptsrc',0) + galaxypsf_margin)):
+                    print('dev/exp not much better than ptsrc not computing psfexp model.')
+                    continue
+
+                
+                
+                # Compute the comp model if exp or dev would be accepted
+                #if (chisqs['comp'] <
+                #    (chisqs['ptsrc'] + galaxy_margin)):
+                #    print('comp not much better than ptsrc, not computing psfexp model.')
+                #    continue
+                #print(src)
+                newsrc = psfexp = PSFandExpGalaxy_diffcentres(
+                    src.getPosition(), src.getBrightness()*0.5, exp.getShape(),
+                    src.getPosition(),src.getBrightness()*0.5).copy()
+                #print(src.getPosition())
+            
+
+            if name == 'psfcomp' and newsrc is None:
+                # Compute the comp model if exp or dev would be accepted
+                if (max(chisqs.get('dev',0), chisqs.get('exp',0)) <
+                    (chisqs.get('ptsrc',0) + galaxypsf_margin)):
+                    print('dev/exp not much better than ptsrc;not computing comp model.')
+                    continue
+                newsrc = psfcomp = PSFandCompGalaxy_diffcentres(
+                    src.getPosition(), src.getBrightness(), exp.getShape(),
+                    src.getBrightness(), dev.getShape(),
+                    src.getPosition(),src.getBrightness()).copy()
+            
+
+
+
+
+            srccat[0] = newsrc
+
+            # Set maximum galaxy model sizes
+            if is_galaxy:
+                # This is a known large galaxy -- set max size based on initial size.
+                logrmax = known_galaxy_logrmax
+                if name in ('exp', 'rex', 'dev'):
+                    newsrc.shape.setMaxLogRadius(logrmax)
+                elif name == 'comp':
+                    newsrc.shapeExp.setMaxLogRadius(logrmax)
+                    newsrc.shapeDev.setMaxLogRadius(logrmax)
+            else:
+                # FIXME -- could use different fractions for deV vs exp (or comp)
+                fblob = 0.8
+                sh,sw = srcwcs.shape
+                logrmax = np.log(fblob * max(sh, sw) * self.pixscale)
+                if name in ['exp', 'rex', 'dev']:
+                    if logrmax < newsrc.shape.getMaxLogRadius():
+                        newsrc.shape.setMaxLogRadius(logrmax)
+                elif name in ['comp']:
+                    if logrmax < newsrc.shapeExp.getMaxLogRadius():
+                        newsrc.shapeExp.setMaxLogRadius(logrmax)
+                    if logrmax < newsrc.shapeDev.getMaxLogRadius():
+                        newsrc.shapeDev.setMaxLogRadius(logrmax)
+                elif name in ['psfexp']:
+                    if logrmax < newsrc.shapeExp.getMaxLogRadius():
+                        newsrc.shapeExp.setMaxLogRadius(logrmax)
+                elif name in ['psfdev']:
+                    if logrmax < newsrc.shapeDev.getMaxLogRadius():
+                        newsrc.shapeDev.setMaxLogRadius(logrmax)
+                elif name in ['psfcomp']:
+                    if logrmax < newsrc.shapeExp.getMaxLogRadius():
+                        newsrc.shapeExp.setMaxLogRadius(logrmax)
+                    if logrmax < newsrc.shapeDev.getMaxLogRadius():
+                        newsrc.shapeDev.setMaxLogRadius(logrmax)
+
+
+
+            # Use the same modelMask shapes as the original source ('src').
+            # Need to create newsrc->mask mappings though:
+            mm = remap_modelmask(modelMasks, src, newsrc)
+            srctractor.setModelMasks(mm)
+            enable_galaxy_cache()
+
+            # Save these modelMasks for later...
+            newsrc_mm = mm
+
+            if fit_background:
+                # Reset sky params
+                srctractor.images.setParams(skyparams)
+                srctractor.thawParam('images')
+
+            # First-round optimization (during model selection)
+            R = srctractor.optimize_loop(**self.optargs)
+            debug('Fit result:', newsrc)
+            hit_limit = R.get('hit_limit', False)
+            if hit_limit:
+                if name in ['exp', 'rex', 'dev']:
+                    debug('Hit limit: r %.2f vs %.2f' %
+                          (newsrc.shape.re, np.exp(logrmax)))
+                elif name in ['comp']:
+                    debug('Hit limit: r %.2f, %.2f vs %.2f' %
+                          (newsrc.shapeExp.re, newsrc.shapeDev.re,
+                           np.exp(logrmax)))
+
+            ok,ix,iy = srcwcs.radec2pixelxy(newsrc.getPosition().ra,
+                                            newsrc.getPosition().dec)
+            ix = int(ix-1)
+            iy = int(iy-1)
+            sh,sw = srcblobmask.shape
+            if ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
+                # Exited blob!
+                debug('Source exited sub-blob!')
+                if mask_others:
+                    for ie,tim in zip(saved_srctim_ies, srctims):
+                        tim.inverr = ie
+                continue
+
+            disable_galaxy_cache()
+
+            if self.plots_per_source:
+                # save RGB images for the model
+                modimgs = list(srctractor.getModelImages())
+                co,nil = quick_coadds(srctims, self.bands, srcwcs, images=modimgs)
+                rgb = get_rgb(co, self.bands, **rgbkwargs)
+                model_mod_rgb[name] = rgb
+                res = [(tim.getImage() - mod) for tim,mod in zip(srctims, modimgs)]
+                co,nil = quick_coadds(srctims, self.bands, srcwcs, images=res)
+                rgb = get_rgb(co, self.bands, **rgbkwargs)
+                model_resid_rgb[name] = rgb
+
+            # Compute inverse-variances for each source.
+            # Convert to "vanilla" ellipse parameterization
+            # (but save old shapes first)
+            # we do this (rather than making a copy) because we want to
+            # use the same modelMask maps.
+            if isinstance(newsrc, (DevGalaxy, ExpGalaxy)):
+                oldshape = newsrc.shape
+            elif isinstance(newsrc, FixedCompositeGalaxy):
+                oldshape = (newsrc.shapeExp, newsrc.shapeDev,newsrc.fracDev)
+            elif isinstance(newsrc, PSFandExpGalaxy_diffcentres):
+                oldshape = (newsrc.shapeExp)
+            elif isinstance(newsrc, PSFandDevGalaxy_diffcentres):
+                oldshape = (newsrc.shapeDev)
+            elif isinstance(newsrc, PSFandCompGalaxy_diffcentres):
+                oldshape = (newsrc.shapeExp, newsrc.shapeDev)
+
+
+
+            if fit_background:
+                # We have to freeze the sky here before computing
+                # uncertainties
+                srctractor.freezeParam('images')
+
+            nsrcparams = newsrc.numberOfParams()
+            _convert_ellipses(newsrc)
+            assert(newsrc.numberOfParams() == nsrcparams)
+            # Compute inverse-variances
+            # This uses the second-round modelMasks.
+            allderivs = srctractor.getDerivs()
+            ivars = _compute_invvars(allderivs)
+            assert(len(ivars) == nsrcparams)
+            B.all_model_ivs[srci][name] = np.array(ivars).astype(np.float32)
+            B.all_models[srci][name] = newsrc.copy()
+            assert(B.all_models[srci][name].numberOfParams() == nsrcparams)
+
+            # Now revert the ellipses!
+            if isinstance(newsrc, (DevGalaxy, ExpGalaxy)):
+                newsrc.shape = oldshape
+            elif isinstance(newsrc, FixedCompositeGalaxy):
+                (newsrc.shapeExp, newsrc.shapeDev,newsrc.fracDev) = oldshape
+
+            # Use the original 'srctractor' here so that the different
+            # models are evaluated on the same pixels.
+            # ---> AND with the same modelMasks as the original source...
+            srctractor.setModelMasks(newsrc_mm)
+            ch = _per_band_chisqs(srctractor, self.bands)
+
+            chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
+            cpum1 = time.clock()
+            B.all_model_cpu[srci][name] = cpum1 - cpum0
+            cputimes[name] = cpum1 - cpum0
+            B.all_model_hit_limit[srci][name] = hit_limit
+
+        if mask_others:
+            for ie,tim in zip(saved_srctim_ies, srctims):
+                tim.inverr = ie
+
+        # After model selection, revert the sky
+        # (srctims=tims when not bigblob)
+        if fit_background:
+            srctractor.images.setParams(skyparams)
+
+        # Actually select which model to keep.  This "modnames"
+        # array determines the order of the elements in the DCHISQ
+        # column of the catalog.
+        modnames = ['ptsrc', simname, 'dev', 'exp', 'comp', 'psfexp', 'psfdev', 'psfcomp']
+        keepmod = _select_model(chisqs, nparams, galaxy_margin,  galaxypsf_margin, comppsf_margin, self.rex)
+        keepsrc = {'none':None, 'ptsrc':ptsrc, simname:simple,
+                   'dev':dev, 'exp':exp, 'comp':comp, 'psfexp':psfexp, 'psfdev':psfdev, 'psfcomp':psfcomp}[keepmod]
+        bestchi = chisqs.get(keepmod, 0.)
+
+        B.dchisq[srci, :] = np.array([chisqs.get(k,0) for k in modnames])
+
+        if keepsrc is not None and bestchi == 0.:
+            # Weird edge case, or where some best-fit fluxes go
+            # negative. eg
+            # https://github.com/legacysurvey/legacypipe/issues/174
+            debug('Best dchisq is 0 -- dropping source')
+            keepsrc = None
+
+        B.hit_limit[srci] = B.all_model_hit_limit[srci].get(keepmod, False)
+
+        # This is the model-selection plot
+        # if self.plots_per_source:
+        #     from collections import OrderedDict
+        #     subplots = []
+        #     plt.clf()
+        #     rows,cols = 3, 6
+        #     mods = OrderedDict([
+        #         ('none',None), ('ptsrc',ptsrc), (simname,simple),
+        #         ('dev',dev), ('exp',exp), ('comp',comp)])
+        #     for imod,modname in enumerate(mods.keys()):
+        #         if modname != 'none' and not modname in chisqs:
+        #             continue
+        #         srccat[0] = mods[modname]
+        #         srctractor.setModelMasks(None)
+        #         axes = []
+        #         plt.subplot(rows, cols, imod+1)
+        #         if modname == 'none':
+        #             # In the first panel, we show a coadd of the data
+        #             coimgs, cons = quick_coadds(srctims, self.bands,srcwcs)
+        #             rgbims = coimgs
+        #             rgb = get_rgb(coimgs, self.bands)
+        #             dimshow(rgb, ticks=False)
+        #             subplots.append(('data', rgb))
+        #             axes.append(plt.gca())
+        #             ax = plt.axis()
+        #             ok,x,y = srcwcs.radec2pixelxy(
+        #                 src.getPosition().ra, src.getPosition().dec)
+        #             plt.plot(x-1, y-1, 'r+')
+        #             plt.axis(ax)
+        #             tt = 'Image'
+        #             chis = [((tim.getImage()) * tim.getInvError())**2
+        #                       for tim in srctims]
+        #             res = [tim.getImage() for tim in srctims]
+        #         else:
+        #             modimgs = list(srctractor.getModelImages())
+        #             comods,nil = quick_coadds(srctims, self.bands, srcwcs,
+        #                                         images=modimgs)
+        #             rgbims = comods
+        #             rgb = get_rgb(comods, self.bands)
+        #             dimshow(rgb, ticks=False)
+        #             axes.append(plt.gca())
+        #             subplots.append(('mod'+modname, rgb))
+        #             tt = modname #+ '\n(%.0f s)' % cputimes[modname]
+        #             chis = [((tim.getImage() - mod) * tim.getInvError())**2
+        #                     for tim,mod in zip(srctims, modimgs)]
+        #             res = [(tim.getImage() - mod) for tim,mod in
+        #                    zip(srctims, modimgs)]
+        # 
+        #         # Second row: same rgb image with arcsinh stretch
+        #         plt.subplot(rows, cols, imod+1+cols)
+        #         dimshow(get_rgb(rgbims, self.bands, **rgbkwargs), ticks=False)
+        #         axes.append(plt.gca())
+        #         plt.title(tt)
+        # 
+        #         # Third row: residuals (not chis)
+        #         coresids,nil = quick_coadds(srctims, self.bands, srcwcs,
+        #                                     images=res)
+        #         plt.subplot(rows, cols, imod+1+2*cols)
+        #         rgb = get_rgb(coresids, self.bands, **rgbkwargs_resid)
+        #         dimshow(rgb, ticks=False)
+        #         axes.append(plt.gca())
+        #         subplots.append(('res'+modname, rgb))
+        #         plt.title('chisq %.0f' % chisqs[modname], fontsize=8)
+        # 
+        #         # Highlight the model to be kept
+        #         if modname == keepmod:
+        #             for ax in axes:
+        #                 for spine in ax.spines.values():
+        #                     spine.set_edgecolor('red')
+        #                     spine.set_linewidth(2)
+        #     plt.suptitle('Blob %s, source %i (ptsrc: %s, fitbg: %s): keep %s\nwas: %s' %
+        #                  (self.name, srci, force_pointsource, fit_background,
+        #                  keepmod, str(src)), fontsize=10)
+        #     self.ps.savefig()
+        # 
+        #     if self.plots_single:
+        #         for name,rgb in subplots:
+        #             plt.figure(2)
+        #             plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
+        #             dimshow(rgb, ticks=False)
+        #             fn = 'blob-%s-%i-%s.png' % (self.name, srci, name)
+        #             plt.savefig(fn)
+        #             print('Wrote', fn)
+        #             plt.figure(1)
+
+        # This is V2 of the model-selection plot
+        if self.plots_per_source:
+            import pylab as plt
+            plt.clf()
+            rows,cols = 3, 6
+            modnames = ['none', 'ptsrc', simname, 'dev', 'exp', 'comp', 'psfexp', 'psfdev', 'psfcomp']
+
+            plt.subplot(rows, cols, 1)
+            # Top-left: image
+            coimgs, cons = quick_coadds(srctims, self.bands, srcwcs)
+            rgb = get_rgb(coimgs, self.bands)
+            dimshow(rgb, ticks=False)
+            for imod,modname in enumerate(modnames):
+                if modname != 'none' and not modname in chisqs:
+                    continue
+                axes = []
+                #plt.subplot(rows, cols, 1+imod)
+                #if modname == 'none':
+                #    # In the first panel, we show a coadd of the data
+                #    coimgs, cons = quick_coadds(srctims, self.bands,srcwcs)
+                #    rgb = get_rgb(coimgs, self.bands)
+                #    dimshow(rgb, ticks=False)
+                #    subplots.append(('data', rgb))
+                #    axes.append(plt.gca())
+                #    ax = plt.axis()
+                #    ok,x,y = srcwcs.radec2pixelxy(
+                #        src.getPosition().ra, src.getPosition().dec)
+                #    plt.plot(x-1, y-1, 'r+')
+                #    plt.axis(ax)
+                #    tt = 'Image'
+                #else:
+                # Second row: models
+                plt.subplot(rows, cols, 1+imod+1*cols)
+                rgb = model_mod_rgb[modname]
+                dimshow(rgb, ticks=False)
+                axes.append(plt.gca())
+                plt.title(modname)
+                # Third row: residuals (not chis)
+                plt.subplot(rows, cols, 1+imod+2*cols)
+                rgb = model_resid_rgb[modname]
+                dimshow(rgb, ticks=False)
+                axes.append(plt.gca())
+                plt.title('chisq %.0f' % chisqs[modname], fontsize=8)
+                # Highlight the model to be kept
+                if modname == keepmod:
+                    for ax in axes:
+                        for spine in ax.spines.values():
+                            spine.set_edgecolor('red')
+                            spine.set_linewidth(2)
+            plt.suptitle('Blob %s, src %i (ptsrc: %s, fitbg: %s): keep %s\n%s\nwas: %s' %
+                         (self.name, srci, force_pointsource, fit_background,
+                          keepmod, str(keepsrc), str(src)), fontsize=10)
+            self.ps.savefig()
+
+        return keepsrc
+
     def _optimize_individual_sources(self, tr, cat, Ibright, cputime):
         # Single source (though this is coded to handle multiple sources)
         # Fit sources one at a time, but don't subtract other models
@@ -973,22 +1583,18 @@ class OneBlob(object):
         models.create(self.tims, cat)
         enable_galaxy_cache()
 
-        for numi,i in enumerate(Ibright):
+        for i in Ibright:
             cpu0 = time.clock()
-            #print('Fitting source', i, '(%i of %i in blob)' %
-            #  (numi, len(Ibright)))
             cat.freezeAllBut(i)
             modelMasks = models.model_masks(0, cat[i])
             tr.setModelMasks(modelMasks)
             tr.optimize_loop(**self.optargs)
-            #print('Fitting source took', Time()-tsrc)
-            # print(cat[i])
             cpu1 = time.clock()
             cputime[i] += (cpu1 - cpu0)
-            
+
         tr.setModelMasks(None)
         disable_galaxy_cache()
-        
+
     def tractor(self, tims, cat):
         tr = Tractor(tims, cat, **self.trargs)
         tr.freezeParams('images')
@@ -1004,7 +1610,7 @@ class OneBlob(object):
         #   -fit, with Catalog([src])
         #   -subtract final model (from each tim)
         # -Replace original images
-    
+
         models = SourceModels()
         # Remember original tim images
         models.save_images(self.tims)
@@ -1014,26 +1620,27 @@ class OneBlob(object):
         # For sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
             cpu0 = time.clock()
-            print('Fitting source', srci, '(%i of %i in blob %s)' %
+            debug('Fitting source', srci, '(%i of %i in blob %s)' %
                   (numi+1, len(Ibright), self.name))
             src = cat[srci]
             # Add this source's initial model back in.
             models.add(srci, self.tims)
-    
+
             if self.bigblob:
                 # Create super-local sub-sub-tims around this source
-    
+
                 # Make the subimages the same size as the modelMasks.
                 #tbb0 = Time()
                 mods = [mod[srci] for mod in models.models]
                 srctims,modelMasks = _get_subimages(self.tims, mods, src)
                 #print('Creating srctims:', Time()-tbb0)
-    
+
                 # We plots only the first & last three sources
                 if self.plots_per_source and (numi < 3 or numi >= len(Ibright)-3):
+                    import pylab as plt
                     plt.clf()
                     # Recompute coadds because of the subtract-all-and-readd shuffle
-                    coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
+                    coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
                                                  fill_holes=False)
                     rgb = get_rgb(coimgs, self.bands)
                     dimshow(rgb)
@@ -1054,7 +1661,7 @@ class OneBlob(object):
                     plt.title('source %i of %i' % (numi, len(Ibright)))
                     plt.axis(ax)
                     self.ps.savefig()
-    
+
             else:
                 srctims = self.tims
                 modelMasks = models.model_masks(srci, src)
@@ -1063,7 +1670,7 @@ class OneBlob(object):
             srctractor = self.tractor(srctims, [src])
             #print('Setting modelMasks:', modelMasks)
             srctractor.setModelMasks(modelMasks)
-            
+
             # if plots and False:
             #     spmods,spnames = [],[]
             #     spallmods,spallnames = [],[]
@@ -1072,12 +1679,12 @@ class OneBlob(object):
             #         spallnames.append('Initial (all)')
             #     spmods.append(list(srctractor.getModelImages()))
             #     spnames.append('Initial')
-    
+
             # First-round optimization
             #print('First-round initial log-prob:', srctractor.getLogProb())
             srctractor.optimize_loop(**self.optargs)
             #print('First-round final log-prob:', srctractor.getLogProb())
-    
+
             # if plots and False:
             #     spmods.append(list(srctractor.getModelImages()))
             #     spnames.append('Fit')
@@ -1117,21 +1724,21 @@ class OneBlob(object):
             #                rgb_format='Blob %i, src %i: %%s' % (iblob, i))
             #     for tim,im in zip(tims, tempims):
             #         tim.data = im
-    
+
             # Re-remove the final fit model for this source
             models.update_and_subtract(srci, src, self.tims)
-    
+
             srctractor.setModelMasks(None)
             disable_galaxy_cache()
-    
+
             #print('Fitting source took', Time()-tsrc)
             #print(src)
             cpu1 = time.clock()
             cputime[srci] += (cpu1 - cpu0)
-            
+
         models.restore_images(self.tims)
         del models
-    
+
     def _fit_fluxes(self, cat, tims, bands):
         cat.thawAllRecursive()
         for src in cat:
@@ -1141,7 +1748,6 @@ class OneBlob(object):
                 src.getBrightness().freezeAllBut(b)
             # Images for this band
             btims = [tim for tim in tims if tim.band == b]
-    
             btr = self.tractor(btims, cat)
             btr.optimize_forced_photometry(shared_params=False, wantims=False)
         cat.thawAllRecursive()
@@ -1164,22 +1770,23 @@ class OneBlob(object):
     def _plot_coadd(self, tims, wcs, model=None, resid=None):
         if resid is not None:
             mods = list(resid.getChiImages())
-            coimgs,cons = quick_coadds(tims, self.bands, wcs, images=mods,
-                                       fill_holes=False)
+            coimgs,_ = quick_coadds(tims, self.bands, wcs, images=mods,
+                                    fill_holes=False)
             dimshow(get_rgb(coimgs,self.bands, **rgbkwargs_resid))
             return
-            
+
         mods = None
         if model is not None:
             mods = list(model.getModelImages())
-        coimgs,cons = quick_coadds(tims, self.bands, wcs, images=mods,
-                                   fill_holes=False)
+        coimgs,_ = quick_coadds(tims, self.bands, wcs, images=mods,
+                                fill_holes=False)
         dimshow(get_rgb(coimgs,self.bands))
-        
+
     def _initial_plots(self):
-        print('Plotting blob image for blob', self.name)
-        coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
-                                     fill_holes=False)
+        import pylab as plt
+        debug('Plotting blob image for blob', self.name)
+        coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
+                                fill_holes=False)
         self.rgb = get_rgb(coimgs, self.bands)
         plt.clf()
         dimshow(self.rgb)
@@ -1210,7 +1817,7 @@ class OneBlob(object):
         #              color=ccmap[tim.band])
         # plt.xlabel('signal/noise per pixel')
         # self.ps.savefig()
-        
+
     def create_tims(self, timargs):
         # In order to make multiprocessing easier, the one_blob method
         # is passed all the ingredients to make local tractor Images
@@ -1223,8 +1830,8 @@ class OneBlob(object):
             subwcs = wcs.get_subimage(int(sx0), int(sy0),
                                       int(sx1-sx0), int(sy1-sy0))
             try:
-                Yo,Xo,Yi,Xi,rims = resample_with_wcs(subwcs, self.blobwcs,
-                                                     [], 2)
+                Yo,Xo,Yi,Xi,_ = resample_with_wcs(subwcs, self.blobwcs)#,
+                                                  #intType=np.int16)
             except OverlapError:
                 continue
             if len(Yo) == 0:
@@ -1250,160 +1857,10 @@ class OneBlob(object):
             tim.modelMinval = modelMinval
             tim.subwcs = subwcs
             tim.meta = imobj
+            tim.psf_sigma = imobj.fwhm / 2.35
+            tim.dq = None
             tims.append(tim)
         return tims
-
-    def run_deblend(self, cat):
-        ras  = np.array([src.pos.ra  for src in cat])
-        decs = np.array([src.pos.dec for src in cat])
-        ok,x,y = self.blobwcs.radec2pixelxy(ras, decs)
-        x -= 1
-        y -= 1
-        Xi = np.round(x).astype(int)
-        Yi = np.round(y).astype(int)
-
-        # Combine the bands to make a single deblending profile...
-        # What weighting to use though?  Median S/N?
-        # Straight per-pixel weight?  (That's like flat-spectrum assumptn)
-        # (this is like [sed-matched] detection...)
-        coimgs,cons,cowimgs,wimgs = quick_coadds(
-            self.tims, self.bands, self.blobwcs, get_cow=True,
-            fill_holes=False)
-        #wts = [np.median(wt[wt > 0]) for wt in wimgs]
-        #print('Median weights:', wts)
-        bimg = np.zeros_like(cowimgs[0])
-        bwt  = np.zeros_like(cowimgs[0])
-        for im,wt in zip(cowimgs,wimgs):
-            bimg += wt * im
-            bwt  += wt
-        bimg /= np.maximum(1e-16, bwt)
-        sig1 = 1. / np.sqrt(np.median(wt[wt > 0]))
-
-        if self.plots:
-            plt.clf()
-            ima = dict(vmin=-2.*sig1, vmax=5.*sig1)
-            dimshow(bimg, **ima)
-            plt.title('Deblend -- merged bands')
-            self.ps.savefig()
-            ax = plt.axis()
-            plt.plot(Xi, Yi, 'r.')
-            plt.axis(ax)
-            self.ps.savefig()
-            self.deb_ima = ima
-
-        # size of region to use as postage stamp for deblending
-        sz = 32
-        h,w = bimg.shape
-
-        profiles = []
-        allprofiles = np.zeros_like(bimg)
-        for isrc,(xi,yi) in enumerate(zip(Xi,Yi)):
-            dx = min(sz, min(xi, w-1-xi))
-            dy = min(sz, min(yi, h-1-yi))
-            x0,y0 = xi - dx, yi - dy
-            slc = slice(y0, yi + dy+1), slice(x0, xi + dx+1)
-            subimg = bimg[slc]
-            subwt =   bwt[slc]
-            flipped = np.fliplr(np.flipud(subimg))
-            flipwt  = np.fliplr(np.flipud(subwt))
-            minimg = subimg.copy()
-            # Mirror the blob boundaries
-            submask = self.blobmask[slc]
-            flipmask = np.fliplr(np.flipud(submask))
-
-            I = np.flatnonzero((flipwt > 0) * (flipped < subimg))
-            minimg.flat[I] = flipped.flat[I]
-            minimg[flipmask == False] = 0
-
-            # Correct for min() bias for two Gaussians.  This isn't
-            # really the right way to do this
-            minimg[subwt > 0] += 0.545 * np.sqrt(1. / subwt[subwt > 0])
-            # And this is *really* a hack
-            minimg = np.maximum(0, minimg)
-
-            patch = Patch(x0, y0, minimg)
-            profiles.append(patch)
-            patch.addTo(allprofiles)
-
-            # if self.plots:
-            #     plt.clf()
-            #     plt.subplot(2,3,1)
-            #     dimshow(subimg, **ima)
-            #     plt.subplot(2,3,2)
-            #     dimshow(flipped, **ima)
-            #     #plt.subplot(2,3,3)
-            #     #dimshow(goodpix, vmin=0, vmax=1)
-            #     plt.subplot(2,3,4)
-            #     dimshow(minimg, **ima)
-            #     plt.subplot(2,3,5)
-            #     dimshow(allprofiles, **ima)
-            #     self.ps.savefig()
-
-        if self.plots:
-            plt.clf()
-            dimshow(allprofiles, **ima)
-            plt.title('Deblend -- sum of profiles')
-            self.ps.savefig()
-
-        self.deb_profiles = profiles
-        self.deb_prosum = allprofiles
-
-    # if plots:
-    #         try:
-    #             Yo,Xo,Yi,Xi,rims = resample_with_wcs(blobwcs, subwcs,[],2)
-    #         except OverlapError:
-    #             continue
-    #         tim.resamp = (Yo, Xo, Yi, Xi)
-    #         if False:
-    #             plt.clf()
-    #             plt.subplot(1,2,1)
-    #             dimshow(img, vmin=-2.*sig1, vmax=5.*sig1)
-    #             plt.subplot(1,2,2)
-    #             dimshow(inverr, vmin=0, vmax=1.1/sig1)
-    #             plt.suptitle('Subimage: ' + name)
-    #             self.ps.savefig()
-    # 
-    # if plots and False:
-    #     plotmods.append(list(tr.getModelImages()))
-    #     plotmodnames.append('Per Source')
-
-    # if plots and False:
-    #     plotmods.append(list(tr.getModelImages()))
-    #     plotmodnames.append('All Sources')
-    # if plots and False:
-    #     _plot_mods(tims, plotmods, plotmodnames, bands, None, None,
-    #            bslc, blobw, blobh, ps)
-
-    # if plots:
-    #     plt.clf()
-    #     dimshow(get_rgb(coimgs, bands))
-    #     ok,sx,sy = blobwcs.radec2pixelxy(
-    #         np.array([src.getPosition().ra  for src in srcs]),
-    #         np.array([src.getPosition().dec for src in srcs]))
-    #     plt.plot(sx, sy, 'r.')
-    #     plt.title('after source fitting')
-    #     self.ps.savefig()
-
-    # FIXME -- render initial models and find significant flux overlap
-    # (product)??  (Could use the same logic above!)  This would give
-    # families of sources to fit simultaneously.  (The
-    # not-friends-of-friends version of blobs!)
-
-
-    # if plots:
-    #     plotmods, plotmodnames = [],[]
-    #     plotmods.append(list(tr.getModelImages()))
-    #     plotmodnames.append('All model selection')
-    #     _plot_mods(tims, plotmods, plotmodnames, bands, None, None, bslc,
-    #                blobw, blobh, ps)
-
-
-    # print('After cutting sources:')
-    # for src,dchi in zip(B.sources, B.dchisqs):
-    #     print('  source', src, 'max dchisq', max(dchi), 'dchisqs', dchi)
-
-    #print('Blob variances:', Time()-tlast)
-    #tlast = Time()
 
 def _convert_ellipses(src):
     if isinstance(src, (DevGalaxy, ExpGalaxy)):
@@ -1419,7 +1876,7 @@ def _convert_ellipses(src):
 
 def _compute_invvars(allderivs):
     ivs = []
-    for iparam,derivs in enumerate(allderivs):
+    for derivs in allderivs:
         chisq = 0
         for deriv,tim in derivs:
             h,w = tim.shape
@@ -1526,11 +1983,10 @@ def _compute_source_metrics(srcs, tims, bands, tr):
                     np.sum((mod[slc] - patch) * np.abs(patch)) /
                     np.sum(patch**2))
                 fracflux_den[isrc,iband] += fin
-                
+
                 fracmasked_num[isrc,iband] += (
                     np.sum((tim.getInvError()[slc] == 0) * np.abs(patch)) /
                     np.abs(counts[isrc]))
-                    
                 fracmasked_den[isrc,iband] += fin
 
                 fracin_num[isrc,iband] += np.abs(np.sum(patch))
@@ -1558,7 +2014,7 @@ def _compute_source_metrics(srcs, tims, bands, tr):
 
     #print('Fracflux_num:', fracflux_num)
     #print('Fracflux_den:', fracflux_den)
-                
+
     fracflux   = fracflux_num   / fracflux_den
     rchi2      = rchi2_num      / rchi2_den
     fracmasked = fracmasked_num / fracmasked_den
@@ -1597,8 +2053,12 @@ def _initialize_models(src, rex):
         oldmodel = 'ptsrc'
 
     elif isinstance(src, DevGalaxy):
-        ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
-        simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
+        if rex:
+            from legacypipe.survey import LogRadius
+            simple = RexGalaxy(src.getPosition(), src.getBrightness(),
+                               LogRadius(np.log(src.getShape().re))).copy()
+        else:
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
         dev = src.copy()
         exp = ExpGalaxy(src.getPosition(), src.getBrightness(),
                         src.getShape()).copy()
@@ -1610,7 +2070,12 @@ def _initialize_models(src, rex):
 
     elif isinstance(src, ExpGalaxy):
         ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
-        simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
+        if rex:
+            from legacypipe.survey import LogRadius
+            simple = RexGalaxy(src.getPosition(), src.getBrightness(),
+                               LogRadius(np.log(src.getShape().re))).copy()
+        else:
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
         dev = DevGalaxy(src.getPosition(), src.getBrightness(),
                         src.getShape()).copy()
         exp = src.copy()
@@ -1622,12 +2087,19 @@ def _initialize_models(src, rex):
 
     elif isinstance(src, FixedCompositeGalaxy):
         ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
-        simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
         frac = src.fracDev.clipped()
-        if frac > 0:
+        if frac > 0.5:
             shape = src.shapeDev
         else:
             shape = src.shapeExp
+
+        if rex:
+            from legacypipe.survey import LogRadius
+            simple = RexGalaxy(src.getPosition(), src.getBrightness(),
+                               LogRadius(np.log(shape.re))).copy()
+        else:
+            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
+
         dev = DevGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
         if frac < 1:
             shape = src.shapeExp
@@ -1707,38 +2179,48 @@ def _get_subimages(tims, mods, src):
         if mh == 0 or mw == 0:
             continue
         # for modelMasks
-        d = { src: ModelMask(0, 0, mw, mh) } #mod.patch != 0) }
+        d = { src: ModelMask(0, 0, mw, mh) }
         modelMasks.append(d)
 
         x0,y0 = mod.x0 , mod.y0
         x1,y1 = x0 + mw, y0 + mh
-        slc = slice(y0,y1), slice(x0, x1)
 
-        subimg = tim.getImage()[slc]
-        if subimg.shape != (mh,mw):
-            print('Subimage shape:', subimg.shape, 'image shape',
-                  tim.getImage().shape, 'slice y', y0,y1, 'x', x0,x1,
-                  'mod shape', mh,mw)
-        # print('  subtim: x0,y0', x0,y0, 'shape', (y1-y0,x1-x0))
-        subpsf = tim.psf.constantPsfAt((x0+x1)/2., (y0+y1)/2.)
-        subtim = Image(data=subimg,
-                       inverr=tim.getInvError()[slc],
-                       wcs=tim.wcs.shifted(x0, y0),
-                       psf=subpsf,
-                       photocal=tim.getPhotoCal(),
-                       sky=tim.sky.shifted(x0, y0),
-                       name=tim.name)
-        sh,sw = subtim.shape
-        subtim.subwcs = tim.subwcs.get_subimage(x0, y0, sw, sh)
-        subtim.band = tim.band
-        subtim.sig1 = tim.sig1
-        subtim.modelMinval = tim.modelMinval
-        subtim.x0 = x0
-        subtim.y0 = y0
-        subtim.meta = tim.meta
+        subtim = _get_subtim(tim, x0, x1, y0, y1)
+
+        if subtim.shape != (mh,mw):
+            print('Subtim was not the shape expected:', subtim.shape,
+                  'image shape', tim.getImage().shape, 'slice y', y0,y1,
+                  'x', x0,x1, 'mod shape', mh,mw)
+
         subtims.append(subtim)
-        #print('  ', tim.shape, 'to', subtim.shape)
     return subtims, modelMasks
+
+def _get_subtim(tim, x0, x1, y0, y1):
+    slc = slice(y0,y1), slice(x0, x1)
+    subimg = tim.getImage()[slc]
+    subpsf = tim.psf.constantPsfAt((x0+x1)/2., (y0+y1)/2.)
+    subtim = Image(data=subimg,
+                   inverr=tim.getInvError()[slc],
+                   wcs=tim.wcs.shifted(x0, y0),
+                   psf=subpsf,
+                   photocal=tim.getPhotoCal(),
+                   sky=tim.sky.shifted(x0, y0),
+                   name=tim.name)
+    sh,sw = subtim.shape
+    subtim.subwcs = tim.subwcs.get_subimage(x0, y0, sw, sh)
+    subtim.band = tim.band
+    subtim.sig1 = tim.sig1
+    subtim.modelMinval = tim.modelMinval
+    subtim.x0 = x0
+    subtim.y0 = y0
+    subtim.meta = tim.meta
+    subtim.psf_sigma = tim.psf_sigma
+    if tim.dq is not None:
+        subtim.dq = tim.dq[slc]
+    else:
+        subtim.dq = None
+    return subtim
+
 
 class SourceModels(object):
     '''
@@ -1747,7 +2229,7 @@ class SourceModels(object):
     '''
     def __init__(self):
         self.filledModelMasks = True
-    
+
     def save_images(self, tims):
         self.orig_images = [tim.getImage() for tim in tims]
         for tim,img in zip(tims, self.orig_images):
@@ -1852,48 +2334,61 @@ def _clip_model_to_blob(mod, sh, ie):
 
 def _select_model(chisqs, nparams, galaxy_margin, galaxypsf_margin, comppsf_margin, rex):
     '''
-    Returns keepmod
+    Returns keepmod (string), the name of the preferred model.
     '''
     keepmod = 'none'
+
+    #print('_select_model: chisqs', chisqs)
 
     # This is our "detection threshold": 5-sigma in
     # *parameter-penalized* units; ie, ~5.2-sigma for point sources
     cut = 5.**2
     # Take the best of all models computed
     #print(chisqs.keys(),'LOOK HERE')
-    diff = max([chisqs[name] - nparams[name] for name in chisqs.keys()
-                if name != 'none'])
-    #if 'psfdev' in chisqs: 
-    #    keepmod = 'psfdev'
-    #    return keepmod
-    if diff < cut:
-        return keepmod
-    # We're going to keep this source!
+    diff = max([chisqs[name] - nparams[name] for name in chisqs.keys() if name != 'none'] + [-1])
 
+
+    if diff < cut:
+        # Drop this source
+        return keepmod
+
+    # Now choose between point source and simple model (SIMP/REX)
     if rex:
         simname = 'rex'
     else:
         simname = 'simple'
 
-    if not simname in chisqs:
+    if 'ptsrc' in chisqs and not simname in chisqs:
         # bright stars / reference stars: we don't test the simple model.
         return 'ptsrc'
-    # Now choose between point source and simple model (SIMP/REX)
-    if chisqs['ptsrc'] - nparams['ptsrc'] > chisqs[simname] - nparams[simname]:
-        #print('Keeping source; PTSRC is better than SIMPLE')
+
+    #print('PSF', chisqs.get('ptsrc',0)-nparams['ptsrc'], 'vs REX', chisqs.get(simname,0)-nparams[simname])
+
+    # Is PSF good enough to keep?
+    if 'ptsrc' in chisqs and (
+            chisqs['ptsrc']-nparams['ptsrc'] >= cut):
         keepmod = 'ptsrc'
-    else:
-        #print('Keeping source; SIMPLE is better than PTSRC')
-        #print('REX is better fit.  Radius', simplemod.shape.re)
+
+    # Now choose between point source and simple model (SIMP/REX)
+    if 'ptsrc' in chisqs and (
+            chisqs['ptsrc']-nparams['ptsrc'] >= chisqs.get(simname,0)-nparams[simname]):
+        #print('Keeping PSF')
+        keepmod = 'ptsrc'
+    elif simname in chisqs and (
+            chisqs[simname]-nparams[simname] > chisqs.get('ptsrc',0)-nparams['ptsrc']):
+        #print('REX is better fit than PSF.')
+        oldkeepmod = keepmod
         keepmod = simname
         # For REX, we also demand a fractionally better fit
         if simname == 'rex':
-            dchisq_psf = chisqs['ptsrc']
-            dchisq_rex = chisqs['rex']
-            if (dchisq_rex - dchisq_psf) < (0.01 * dchisq_psf):
-                keepmod = 'ptsrc'
+            dchisq_psf = chisqs.get('ptsrc',0)
+            dchisq_rex = chisqs.get('rex',0)
+            if dchisq_psf > 0 and (dchisq_rex - dchisq_psf) < (0.01 * dchisq_psf):
+                #print('REX is not a fractionally better fit, keeping', oldkeepmod)
+                keepmod = oldkeepmod
 
-    if not 'exp' in chisqs:
+    if not ('exp' in chisqs or 'dev' in chisqs):
+        #print('No EXP or DEV; keeping', keepmod)
         return keepmod
 
     # This is our "upgrade" threshold: how much better a galaxy
@@ -1902,22 +2397,21 @@ def _select_model(chisqs, nparams, galaxy_margin, galaxypsf_margin, comppsf_marg
 
     # This is the "fractional" upgrade threshold for ptsrc/simple->dev/exp:
     # 1% of ptsrc vs nothing
-    fcut = 0.01 * chisqs.get('ptsrc', 0)#chisqs['ptsrc']
-    
-    #print('Cut: max of', cut, 'and', fcut, ' (fraction of chisq_psf=%.1f)'
-    # % chisqs['ptsrc'])
+    fcut = 0.01 * chisqs.get('ptsrc', 0.)
+    #print('Cut: absolute', galaxy_margin, 'fractional', fcut)
     cut = max(cut, fcut)
 
-    expdiff = chisqs['exp'] - chisqs[keepmod]
-    devdiff = chisqs['dev'] - chisqs[keepmod]
-    
-   
+    expdiff = chisqs.get('exp', 0) - chisqs[keepmod]
+    devdiff = chisqs.get('dev', 0) - chisqs[keepmod]
+
+
     #print('EXP vs', keepmod, ':', expdiff)
     #print('DEV vs', keepmod, ':', devdiff)
 
     if (expdiff > cut or devdiff > cut):
         #print('Keeping', keepmod)
         #return keepmod
+
 
         if expdiff > devdiff:
             #print('Upgrading from PTSRC to EXP: diff', expdiff)
@@ -1936,7 +2430,7 @@ def _select_model(chisqs, nparams, galaxy_margin, galaxypsf_margin, comppsf_marg
     #if not 'comp' in chisqs:
     #    return keepmod
     if 'comp' in chisqs:
-        diff = chisqs['comp'] - chisqs[keepmod]
+        diff = chisqs.get('comp',0) - chisqs[keepmod]
         if diff > cut:
             keepmod = 'comp'
    
@@ -1957,9 +2451,9 @@ def _select_model(chisqs, nparams, galaxy_margin, galaxypsf_margin, comppsf_marg
     if not 'psfdev' in chisqs:
         return keepmod
     
-    exppsfdiff = chisqs['psfexp'] - chisqs[keepmod]
-    devpsfdiff = chisqs['psfdev'] - chisqs[keepmod]
-    comppsfdiff = chisqs['psfcomp'] - chisqs[keepmod]  
+    exppsfdiff = chisqs.get('psfexp',0) - chisqs[keepmod]
+    devpsfdiff = chisqs.get('psfdev',0) - chisqs[keepmod]
+    comppsfdiff = chisqs.get('psfcomp',0) - chisqs[keepmod]  
     #Add this back after experimenting
     #if not (exppsfdiff > cut or devpsfdiff > cut or comppsfdiff > cut):
         #print('Keeping', keepmod)
@@ -1984,11 +2478,20 @@ def _select_model(chisqs, nparams, galaxy_margin, galaxypsf_margin, comppsf_marg
     if comppsfdiff > cut:
         keepmod = 'psfcomp'
 
+
     
     '''
     if exppsfdiff > 3*cut:
         keepmod = 'psfexp'
         print('Upgrading from composite to exppsfdiff')
+    
+    =======
+    diff = chisqs['comp'] - chisqs[keepmod]
+    #print('Comparing', keepmod, 'to comp.  cut:', cut, 'comp:', diff)
+    fcut = 0.01 * chisqs[keepmod]
+    cut = max(cut, fcut)
+    if diff < cut:
+>>>>>>> 457b44ac8814215e607b45f106870ecc6666d55d
         return keepmod
 
 
@@ -2021,7 +2524,7 @@ def _chisq_improvement(src, chisqs, chisqs_none):
 
 def _per_band_chisqs(tractor, bands):
     chisqs = dict([(b,0) for b in bands])
-    for i,img in enumerate(tractor.images):
+    for img in tractor.images:
         chi = tractor.getChiImage(img=img)
         chisqs[img.band] = chisqs[img.band] + (chi ** 2).sum()
     return chisqs
@@ -2035,3 +2538,59 @@ def _limit_galaxy_stamp_size(src, tim, maxhalf=128):
             #print('halfsize', h, 'for', src, '-> setting to', maxhalf)
             src.halfsize = maxhalf
 
+def get_inblob_map(blobwcs, refs):
+    bh,bw = blobwcs.shape
+    bh = int(bh)
+    bw = int(bw)
+    blobmap = np.zeros((bh,bw), np.uint8)
+    # circular/elliptical regions:
+    for col,bit,ellipse in [('isbright', 'BRIGHT', False),
+                            ('ismedium', 'MEDIUM', False),
+                            ('iscluster', 'CLUSTER', False),
+                            ('islargegalaxy', 'GALAXY', True),]:
+        isit = refs.get(col)
+        if not np.any(isit):
+            debug('None marked', col)
+            continue
+        I, = np.nonzero(isit)
+        debug(len(I), 'with', col, 'set')
+        if len(I) == 0:
+            continue
+
+        thisrefs = refs[I]
+        ok,xx,yy = blobwcs.radec2pixelxy(thisrefs.ra, thisrefs.dec)
+        for x,y,ref in zip(xx,yy,thisrefs):
+            # Cut to L1 rectangle
+            xlo = int(np.clip(np.floor(x-1 - ref.radius_pix), 0, bw))
+            xhi = int(np.clip(np.ceil (x   + ref.radius_pix), 0, bw))
+            ylo = int(np.clip(np.floor(y-1 - ref.radius_pix), 0, bh))
+            yhi = int(np.clip(np.ceil (y   + ref.radius_pix), 0, bh))
+            #print('x range', xlo,xhi, 'y range', ylo,yhi)
+            if xlo == xhi or ylo == yhi:
+                continue
+
+            bitval = np.uint8(IN_BLOB[bit])
+            if not ellipse:
+                rr = ((np.arange(ylo,yhi)[:,np.newaxis] - (y-1))**2 +
+                      (np.arange(xlo,xhi)[np.newaxis,:] - (x-1))**2)
+                masked = (rr <= ref.radius_pix**2)
+            else:
+                # *should* have ba and pa if we got here...
+                xgrid,ygrid = np.meshgrid(np.arange(xlo,xhi), np.arange(ylo,yhi))
+                dx = xgrid - (x-1)
+                dy = ygrid - (y-1)
+                debug('Galaxy: PA', ref.pa, 'BA', ref.ba, 'Radius', ref.radius, 'pix', ref.radius_pix)
+                if not np.isfinite(ref.pa):
+                    ref.pa = 0.
+                v1x = -np.sin(np.deg2rad(ref.pa))
+                v1y =  np.cos(np.deg2rad(ref.pa))
+                v2x =  v1y
+                v2y = -v1x
+                dot1 = dx * v1x + dy * v1y
+                dot2 = dx * v2x + dy * v2y
+                r1 = ref.radius_pix
+                r2 = ref.radius_pix * ref.ba
+                masked = (dot1**2 / r1**2 + dot2**2 / r2**2 < 1.)
+
+            blobmap[ylo:yhi, xlo:xhi] |= (bitval * masked)
+    return blobmap

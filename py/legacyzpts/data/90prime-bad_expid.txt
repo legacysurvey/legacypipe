@@ -1,0 +1,88 @@
+#EXPID	Flag	comments
+
+# 2019-03-19
+
+74670155 donuts
+74670156 donuts
+74670157 donuts
+74670158 donuts
+74670159 donuts
+74670160 donuts
+74670161 donuts
+74670162 donuts
+74670163 donuts
+74670164 donuts
+74670165 donuts
+74670166 donuts
+74670167 donuts
+74670168 donuts
+74670169 donuts
+74670170 donuts
+74670171 donuts
+74670172 donuts
+74670173 donuts
+74670174 donuts
+74670175 donuts
+74670176 donuts
+74670177 donuts
+74670178 donuts
+74670179 donuts
+74670180 donuts
+74670181 donuts
+74670182 donuts
+74670183 donuts
+74670184 donuts
+74670185 donuts
+74670186 donuts
+74670187 donuts
+74670188 donuts
+74670189 donuts
+74670190 donuts
+74670191 donuts
+74670192 donuts
+74670193 donuts
+74670194 donuts
+74670195 donuts
+74670196 donuts
+74670197 donuts
+74670198 donuts
+74670199 donuts
+74670200 donuts
+74670201 donuts
+74670202 donuts
+74670203 donuts
+74670204 donuts
+74670205 donuts
+74670206 donuts
+74670207 donuts
+74670208 donuts
+74670209 donuts
+82280092 CP20180419/ksb_180420_110216_ooi_r_v1.fits.fz - seeing>>3 arsec
+82280076 CP20180419/ksb_180420_094712_ooi_r_v1.fits.fz - seeing>>3 arsec
+82280074 CP20180419/ksb_180420_093738_ooi_r_v1.fits.fz - seeing>>3 arsec
+82280093 CP20180419/ksb_180420_110703_ooi_r_v1.fits.fz - seeing>>3 arsec
+74240032 CP20160205/ksb_160206_022011_ooi_g_v1.fits.fz - seeing>>3 arsec
+74240031 CP20160205/ksb_160206_021614_ooi_g_v1.fits.fz - seeing>>3 arsec
+78330100 CP20170320/ksb_170321_054024_ooi_r_v1.fits.fz - seeing>>3 arsec
+78720083 CP20170428/ksb_170429_070946_ooi_r_v1.fits.fz - seeing>>3 arsec
+78720080 CP20170428/ksb_170429_065644_ooi_r_v1.fits.fz - seeing>>3 arsec
+78720088 CP20170428/ksb_170429_084036_ooi_r_v1.fits.fz - seeing>>3 arsec
+78720085 CP20170428/ksb_170429_071921_ooi_r_v1.fits.fz - seeing>>3 arsec
+78720027 CP20170428/ksb_170429_032009_ooi_g_v1.fits.fz - seeing>>3 arsec
+78720098 CP20170428/ksb_170429_104053_ooi_r_v1.fits.fz - seeing>>3 arsec
+78720071 CP20170428/ksb_170429_060558_ooi_r_v1.fits.fz - seeing>>3 arsec
+78720087 CP20170428/ksb_170429_083548_ooi_r_v1.fits.fz - seeing>>3 arsec
+78720064 CP20170428/ksb_170429_052346_ooi_r_v1.fits.fz - seeing>>3 arsec
+78720082 CP20170428/ksb_170429_070458_ooi_r_v1.fits.fz - seeing>>3 arsec
+78720089 CP20170428/ksb_170429_084632_ooi_r_v1.fits.fz - seeing>>3 arsec
+78720061 CP20170428/ksb_170429_050958_ooi_g_v1.fits.fz - seeing>>3 arsec
+75750051 CP20160705/ksb_160706_045718_ooi_g_v1.fits.fz - seeing>>3 arsec
+77810155 CP20170127/ksb_170128_124934_ooi_g_v1.fits.fz - seeing>>3 arsec
+77810158 CP20170127/ksb_170128_130450_ooi_g_v1.fits.fz - seeing>>3 arsec
+77810153 CP20170127/ksb_170128_123919_ooi_g_v1.fits.fz - seeing>>3 arsec
+77810152 CP20170127/ksb_170128_123404_ooi_g_v1.fits.fz - seeing>>3 arsec
+77810154 CP20170127/ksb_170128_124429_ooi_g_v1.fits.fz - seeing>>3 arsec
+77810151 CP20170127/ksb_170128_122901_ooi_g_v1.fits.fz - seeing>>3 arsec
+77810157 CP20170127/ksb_170128_125945_ooi_g_v1.fits.fz - seeing>>3 arsec
+75450118 CP20160605/ksb_160606_084503_ooi_r_v1.fits.fz - seeing>>3 arsec
+75450119 CP20160605/ksb_160606_085059_ooi_r_v1.fits.fz - seeing>>3 arsec
