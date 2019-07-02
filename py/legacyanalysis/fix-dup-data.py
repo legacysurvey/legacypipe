@@ -13,6 +13,10 @@ from astrometry.util.multiproc import multiproc
 def patch_one(X):
     (ifn, Nfns, fn, outfn, fix_dup) = X
 
+    if os.path.exists(outfn):
+        print(ifn, 'of', Nfns, ':', fn, ': output', outfn, 'exists')
+        return
+
     T8 = fits_table(fn)
     phdr = fitsio.read_header(fn)
     hdr = T8.get_header()
@@ -139,8 +143,13 @@ def patch_one(X):
         os.makedirs(outdir)
     except:
         pass
-    T8.writeto(outfn, header=hdr, primheader=phdr, units=units)
 
+    try:
+        T8.writeto(outfn, header=hdr, primheader=phdr, units=units)
+    except:
+        print('Failed to write', outfn)
+        if os.path.exists(outfn):
+            os.remove(outfn)
 
 def main():
     #fns = glob('/global/project/projectdirs/cosmo/work/legacysurvey/dr8/90prime-mosaic/tractor/*/tractor-*.fits')
@@ -149,7 +158,9 @@ def main():
     prefix = '/global/project/projectdirs/cosmo/work/legacysurvey/dr8/south/tractor/'
     out_prefix = 'patched-dr8-south/'
     pat = prefix + '*/tractor-*.fits'
-    fix_dup = False
+    # Actually, some *do* seem to need patching, eg 0001m012
+    fix_dup = True
+    #fix_dup = False
 
     fns = glob(pat)
     fns.sort()
@@ -176,6 +187,7 @@ def main():
     N = len(fns)
     args = [(i,N,fn,outfn,fix_dup) for i,(fn,outfn) in enumerate(zip(fns, outfns))]
     mp = multiproc(8)
+    #mp = multiproc()
     mp.map(patch_one, args)
 
 if __name__ == '__main__':
