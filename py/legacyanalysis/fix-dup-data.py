@@ -11,7 +11,7 @@ from legacypipe.survey import wcs_for_brick
 from astrometry.util.multiproc import multiproc
 
 def patch_one(X):
-    (ifn, Nfns, fn) = X
+    (ifn, Nfns, fn, outfn, fix_dup) = X
 
     T8 = fits_table(fn)
     phdr = fitsio.read_header(fn)
@@ -20,12 +20,12 @@ def patch_one(X):
     I = np.flatnonzero(T8.type == 'DUP ')
     print(ifn, 'of', Nfns, ':', fn, ':', len(I), 'DUP', 'ver:', phdr['LEGPIPEV'])
 
-    if len(I):
+    if fix_dup and len(I) > 0:
         T8.objid[I] = I
-        assert(len(np.unique(T8.objid)) == len(T8))
         T8.brickname[I] = T8.brickname[0]
         T8.brickid[I] = T8.brickid[0]
-    
+    assert(len(np.unique(T8.objid)) == len(T8))
+
     # Add mask bit definitions to headers
     phdr.add_record(dict(name='COMMENT', value='WISEMASK bit values:'))
     wisebits = [
@@ -86,7 +86,6 @@ def patch_one(X):
         (9, 'EDGE2',  'Edge pixel, jr'),
         (11,'OUTLIER', 'Outlier from stack'),
     ]
-
     #name_map = {}
 
     for bit,name,comm in anybits:
@@ -135,8 +134,6 @@ def patch_one(X):
             unit = extraunits.get(col, '')
         units.append(unit)
 
-    outfn = fn.replace('/global/project/projectdirs/cosmo/work/legacysurvey/dr8/90prime-mosaic/tractor/',
-                       'patched-dup/')
     outdir = os.path.dirname(outfn)
     try:
         os.makedirs(outdir)
@@ -146,9 +143,19 @@ def patch_one(X):
 
 
 def main():
-    fns = glob('/global/project/projectdirs/cosmo/work/legacysurvey/dr8/90prime-mosaic/tractor/*/tractor-*.fits')
+    #fns = glob('/global/project/projectdirs/cosmo/work/legacysurvey/dr8/90prime-mosaic/tractor/*/tractor-*.fits')
+
+    # DR8-south -- no need to fix DUP sources, just patch headers.
+    prefix = '/global/project/projectdirs/cosmo/work/legacysurvey/dr8/south/tractor/'
+    out_prefix = 'patched-dr8-south/'
+    pat = prefix + '*/tractor-*.fits'
+    fix_dup = False
+
+    fns = glob(pat)
     fns.sort()
     print(len(fns), 'Tractor catalogs')
+
+    outfns = [fn.replace(prefix, out_prefix) for fn in fns]
 
     # vers = Counter()
     # keepfns = []
@@ -165,8 +172,9 @@ def main():
     # fns = keepfns
     # print('Keeping', len(fns), 'with bad version')
 
+
     N = len(fns)
-    args = [(i,N,fn) for i,fn in enumerate(fns)]
+    args = [(i,N,fn,outfn,fix_dup) for i,(fn,outfn) in enumerate(zip(fns, outfns))]
     mp = multiproc(8)
     mp.map(patch_one, args)
 
