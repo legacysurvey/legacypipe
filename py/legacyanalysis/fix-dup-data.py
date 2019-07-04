@@ -159,9 +159,11 @@ def main():
     #fns = glob('/global/project/projectdirs/cosmo/work/legacysurvey/dr8/90prime-mosaic/tractor/*/tractor-*.fits')
 
     # DR8-south
-    prefix = '/global/project/projectdirs/cosmo/work/legacysurvey/dr8/south/tractor/'
+    #prefix = '/global/project/projectdirs/cosmo/work/legacysurvey/dr8/south/tractor/'
+    prefix = '/global/project/projectdirs/cosmo/work/legacysurvey/dr8-garage/south/original-tractor/'
     out_prefix = 'patched-dr8-south-2/'
     pat = prefix + '*/tractor-*.fits'
+    #pat = prefix + '013/tractor-0132m265.fits'
     fix_dup = True
 
     fns = glob(pat)
@@ -188,7 +190,7 @@ def main():
 
     N = len(fns)
     args = [(i,N,fn,outfn,fix_dup) for i,(fn,outfn) in enumerate(zip(fns, outfns))]
-    mp = multiproc(8)
+    mp = multiproc(32)
     #mp = multiproc()
     mp.map(patch_one, args)
 
