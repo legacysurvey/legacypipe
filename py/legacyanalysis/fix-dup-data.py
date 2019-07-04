@@ -24,7 +24,8 @@ def patch_one(X):
     utypes = np.unique(T8.type)
     T8.type = T8.type.astype('S4')
 
-    I = np.flatnonzero(T8.type == 'DUP ')
+    dupstring = np.array('DUP ').astype('S4')
+    I = np.flatnonzero(T8.type == dupstring)
     #print(ifn, 'of', Nfns, ':', fn, ':', len(I), 'DUP', 'ver:', phdr['LEGPIPEV'])
     print(ifn, 'of', Nfns, ':', fn, ':', 'ver:', phdr['LEGPIPEV'], 'types:', list(utypes))
 
