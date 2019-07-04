@@ -21,8 +21,12 @@ def patch_one(X):
     phdr = fitsio.read_header(fn)
     hdr = T8.get_header()
 
+    utypes = np.unique(T8.type)
+    T8.type = T8.type.astype('S4')
+
     I = np.flatnonzero(T8.type == 'DUP ')
-    print(ifn, 'of', Nfns, ':', fn, ':', len(I), 'DUP', 'ver:', phdr['LEGPIPEV'])
+    #print(ifn, 'of', Nfns, ':', fn, ':', len(I), 'DUP', 'ver:', phdr['LEGPIPEV'])
+    print(ifn, 'of', Nfns, ':', fn, ':', 'ver:', phdr['LEGPIPEV'], 'types:', list(utypes))
 
     if fix_dup and len(I) > 0:
         T8.objid[I] = I
@@ -154,13 +158,11 @@ def patch_one(X):
 def main():
     #fns = glob('/global/project/projectdirs/cosmo/work/legacysurvey/dr8/90prime-mosaic/tractor/*/tractor-*.fits')
 
-    # DR8-south -- no need to fix DUP sources, just patch headers.
+    # DR8-south
     prefix = '/global/project/projectdirs/cosmo/work/legacysurvey/dr8/south/tractor/'
-    out_prefix = 'patched-dr8-south/'
+    out_prefix = 'patched-dr8-south-2/'
     pat = prefix + '*/tractor-*.fits'
-    # Actually, some *do* seem to need patching, eg 0001m012
     fix_dup = True
-    #fix_dup = False
 
     fns = glob(pat)
     fns.sort()
