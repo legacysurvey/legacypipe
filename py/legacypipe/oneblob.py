@@ -929,6 +929,8 @@ class OneBlob(object):
                    'dev':dev, 'exp':exp, 'comp':comp}[keepmod]
         bestchi = chisqs.get(keepmod, 0.)
 
+        debug('Keeping model', keepmod, '(chisqs: ', chisqs, ')')
+
         B.dchisq[srci, :] = np.array([chisqs.get(k,0) for k in modnames])
 
         if keepsrc is not None and bestchi == 0.:
@@ -1127,9 +1129,9 @@ class OneBlob(object):
         # For sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
             cpu0 = time.clock()
-            debug('Fitting source', srci, '(%i of %i in blob %s)' %
-                  (numi+1, len(Ibright), self.name))
             src = cat[srci]
+            debug('Fitting source', srci, '(%i of %i in blob %s)' %
+                  (numi+1, len(Ibright), self.name), ':', src)
             # Add this source's initial model back in.
             models.add(srci, self.tims)
 

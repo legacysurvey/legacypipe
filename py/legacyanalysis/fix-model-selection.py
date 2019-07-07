@@ -98,7 +98,13 @@ def patch_one(X):
         npatched += 1
 
 
-    print('%i of %i: %s patching %i sources' % (ifn+1, Nfns, os.path.basename(fn), npatched))
+    print('%i of %i: %s patching %i of %i sources' % (ifn+1, Nfns, os.path.basename(fn), npatched, len(Tnew)))
+
+    if npatched == 0:
+        return
+
+    phdr.add_record(dict(name='PATCHED', value=npatched,
+                         comment='Patched DR8.2.1 model-sel bug'))
 
     outfn = fn.replace('/global/project/projectdirs/cosmo/work/legacysurvey/dr8/decam/tractor/',
                        'patched/')
@@ -114,20 +120,29 @@ def main():
     #fns = glob('/global/project/projectdirs/cosmo/work/legacysurvey/dr8/decam/tractor/000/tractor-000??00?.fits')
     fns = glob('/global/project/projectdirs/cosmo/work/legacysurvey/dr8/decam/tractor/*/tractor-*.fits')
     fns.sort()
+    print(len(fns), 'Tractor catalogs')
+
+    vers = Counter()
+    keepfns = []
+
+    for fn in fns:
+        hdr = fitsio.read_header(fn)
+        ver = hdr['LEGPIPEV']
+        ver = ver.strip()
+        vers[ver] += 1
+        if ver == 'DR8.2.1':
+            keepfns.append(fn)
+
+    print('Header versions:', vers.most_common())
+
+    fns = keepfns
+    print('Keeping', len(fns), 'with bad version')
 
     N = len(fns)
     args = [(i,N,fn) for i,fn in enumerate(fns)]
     mp = multiproc(8)
     mp.map(patch_one, args)
-
-    # vers = Counter()
-    # for fn in fns:
-    #     hdr = fitsio.read_header(fn)
-    #     vers[hdr['LEGPIPEV']] += 1
-    # print('Header versions:', vers.most_common())
     
-    #for ifn,fn in enumerate(fns):
-
 
 if __name__ == '__main__':
     main()
