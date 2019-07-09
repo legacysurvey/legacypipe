@@ -152,7 +152,8 @@ def get_pixscale(camera):
   return {'decam':0.262,
           'mosaic':0.262,
           '90prime':0.455,
-          'megaprime':0.185}[camera]
+          'megaprime':0.185,
+          'sdss': 0.396}[camera]
 
 def cols_for_survey_table(which='all'):
     """Return list of -survey.fits table colums
@@ -270,6 +271,7 @@ class Measurer(object):
     def __init__(self, fn, image_dir='images',
                  calibrate=False, quiet=False,
                  **kwargs):
+
         self.quiet = quiet
         # Set extra kwargs
         self.zptsfile= kwargs.get('zptsfile')
@@ -1487,11 +1489,16 @@ class Measurer(object):
 class FakeCCD(object):
     pass
 
-class SDSSMeasurer(Measurer):
+class SDSSMeasurer(object):
+#class SDSSMeasurer(Measurer):
     def __init__(self, *args, **kwargs):
-        super(SDSSMeasurer, self).__init__(*args, **kwargs)
+        #super(SDSSMeasurer, self).__init__(*args, **kwargs)
         self.camera = 'sdss'
         self.pixscale = get_pixscale(self.camera)
+
+        
+
+        import pdb ; pdb.set_trace()
 
         print('Totally made up zeropoints and extinction coefficients!')
         self.zp0 =  dict(u=25.0,
@@ -1920,6 +1927,13 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     t0 = Time()
 
     quiet = measureargs.get('quiet', False)
+    camera = measureargs['camera']
+
+    if camera == 'sdss':
+        measure = SDSSMeasurer(img_fn, **measureargs)
+        return measure
+
+    import pdb ; pdb.set_trace()
 
     img_fn_full = os.path.join(image_dir, img_fn)
 
@@ -1934,7 +1948,6 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
         tmp.close()
         del tmp
     
-    camera = measureargs['camera']
     camera_check = primhdr.get('INSTRUME','').strip().lower()
     # mosaic listed as mosaic3 in header, other combos maybe
     assert(camera in camera_check or camera_check in camera)
@@ -2113,22 +2126,32 @@ class outputFns(object):
         self.image_dir = image_dir
 
         # Keep the last directory component
-        dirname = os.path.basename(os.path.dirname(self.imgfn))
-        basedir = os.path.join(outdir, camera, dirname)
-        trymakedirs(basedir)
+        if camera == 'sdss':
+            basedir = os.path.join(outdir, camera, '{}'.format(imgfn['RUN']))
+            trymakedirs(basedir)
 
-        basename = os.path.basename(self.imgfn) 
-        # zpt,star fns
-        base = basename
-        if base.endswith('.fz'):
-            base = base[:-len('.fz')]
-        if base.endswith('.fits'):
-            base = base[:-len('.fits')]
-        if debug:
-            base += '-debug'
-        self.photomfn = os.path.join(basedir, base + '-photom.fits')
-        self.surveyfn = os.path.join(basedir, base + '-survey.fits')
-        self.annfn = os.path.join(basedir, base + '-annotated.fits')
+            base = '{}-{}-{}'.format(imgfn['RUN'], imgfn['CAMCOL'], imgfn['FIELD'])
+            self.photomfn = os.path.join(basedir, base + '-photom.fits')
+            self.surveyfn = os.path.join(basedir, base + '-survey.fits')
+            self.annfn = os.path.join(basedir, base + '-annotated.fits')
+        else:
+            dirname = os.path.basename(os.path.dirname(self.imgfn))
+            basedir = os.path.join(outdir, camera, dirname)
+            trymakedirs(basedir)
+
+            basename = os.path.basename(self.imgfn) 
+            # zpt,star fns
+            base = basename
+            if base.endswith('.fz'):
+                base = base[:-len('.fz')]
+            if base.endswith('.fits'):
+                base = base[:-len('.fits')]
+            if debug:
+                base += '-debug'
+                
+            self.photomfn = os.path.join(basedir, base + '-photom.fits')
+            self.surveyfn = os.path.join(basedir, base + '-survey.fits')
+            self.annfn = os.path.join(basedir, base + '-annotated.fits')
             
 def writeto_via_temp(outfn, obj, func_write=False, **kwargs):
     tempfn = os.path.join(os.path.dirname(outfn), 'tmp-' + os.path.basename(outfn))
@@ -2258,7 +2281,7 @@ def get_parser():
     return parser
 
 
-def main(image_list=None,args=None): 
+def main(image_list=None, args=None): 
     ''' Produce zeropoints for all CP images in image_list
     image_list -- iterable list of image filenames
     args -- parsed argparser objection from get_parser()
@@ -2334,6 +2357,7 @@ def main(image_list=None,args=None):
                       debug=measureargs['debug'])
 
         measure = measure_image(F.imgfn, None, just_measure=True, **measureargs)
+        
         psffn = measure.get_psfex_merged_filename()
         skyfn = measure.get_splinesky_merged_filename()
 
@@ -2432,9 +2456,19 @@ if __name__ == "__main__":
         import time
         print('Startup time:', time.time()-t0, 'seconds')
 
-    if args.image_list:
-        images= read_lines(args.image_list) 
-    elif args.image:
-        images= [args.image]
+    if args.camera == 'sdss':
+        # Get the image list from the window_flist file
+        window_flist_file = '/global/projecta/projectdirs/sdss/data/sdss/dr13/eboss/resolve/2013-07-29/window_flist.fits'
+        if not os.path.isfile(window_flist_file):
+            print('Window file {} not found!'.format(window_flist_file))
 
-    main(image_list=images,args=args)
+        print('Reading {}'.format(window_flist_file))
+        window_flist = fitsio.read(window_flist_file, rows=np.arange(3))
+        main(image_list=window_flist, args=args)
+    else:
+        if args.image_list:
+            images= read_lines(args.image_list) 
+        elif args.image:
+            images= [args.image]
+
+        main(image_list=images,args=args)
