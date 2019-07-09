@@ -68,7 +68,7 @@ script:
     # - python -c "import matplotlib; print(matplotlib.__file__)"
     # - python -c "import fitsio; print(fitsio.__file__)"
     # - python -c "import tractor.emfit"
-    - (cd py && coverage run test/runbrick_test.py travis)
+    - (cd py && coverage run test/runbrick_test.py travis && coverage run -a test/unit_tests.py)
 
 after_success:
     - (cd py && coveralls debug)

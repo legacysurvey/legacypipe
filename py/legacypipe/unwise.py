@@ -47,17 +47,19 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     if get_models:
         models = {}
 
+    wband = 'w%i' % band
+
     fskeys = ['prochi2', 'pronpix', 'profracflux', 'proflux', 'npix',
               'pronexp']
 
     Nsrcs = len(cat)
     phot = fits_table()
+    # Filled in based on unique tile overlap
     phot.wise_coadd_id = np.array(['        '] * Nsrcs)
+    phot.set(wband + '_psfdepth', np.zeros(len(phot), np.float32))
 
     ra  = np.array([src.getPosition().ra  for src in cat])
     dec = np.array([src.getPosition().dec for src in cat])
-
-    wband = 'w%i' % band
 
     nexp = np.zeros(Nsrcs, np.int16)
     mjd  = np.zeros(Nsrcs, np.float64)
@@ -197,6 +199,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         unique = radec_in_unique_area(rr, dd, tile.ra1, tile.ra2, tile.dec1, tile.dec2)
         #print(np.sum(unique), 'of', (th*tw), 'pixels in this tile are unique')
         tim.inverr[unique == False] = 0.
+        del xx,yy,rr,dd,unique
 
         if plots:
             sig1 = tim.sig1
@@ -208,24 +211,6 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             tag = '%s W%i' % (tile.coadd_id, band)
             plt.title('%s: tim data (unique)' % tag)
             ps.savefig()
-
-        del xx,yy,rr,dd,unique
-
-        wcs = tim.wcs.wcs
-        ok,x,y = wcs.radec2pixelxy(ra, dec)
-        x = np.round(x - 1.).astype(int)
-        y = np.round(y - 1.).astype(int)
-        good = (x >= 0) * (x < tw) * (y >= 0) * (y < th)
-        # Which sources are in this brick's unique area?
-        usrc = radec_in_unique_area(ra, dec, tile.ra1, tile.ra2, tile.dec1, tile.dec2)
-        I, = np.nonzero(good * usrc)
-
-        nexp[I] = tim.nuims[y[I], x[I]]
-        if hasattr(tim, 'mjdmin') and hasattr(tim, 'mjdmax'):
-            mjd[I] = (tim.mjdmin + tim.mjdmax) / 2.
-        phot.wise_coadd_id[I] = tile.coadd_id
-        central_flux[I] = tim.getImage()[y[I], x[I]]
-        del x,y,good,usrc
 
         if pixelized_psf:
             import unwise_psf
@@ -290,13 +275,32 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             else:
                 print('WARNING: cannot apply psf_broadening to WISE PSF of type', type(psf))
 
+        wcs = tim.wcs.wcs
+        ok,x,y = wcs.radec2pixelxy(ra, dec)
+        x = np.round(x - 1.).astype(int)
+        y = np.round(y - 1.).astype(int)
+        good = (x >= 0) * (x < tw) * (y >= 0) * (y < th)
+        # Which sources are in this brick's unique area?
+        usrc = radec_in_unique_area(ra, dec, tile.ra1, tile.ra2, tile.dec1, tile.dec2)
+        I, = np.nonzero(good * usrc)
+
+        nexp[I] = tim.nuims[y[I], x[I]]
+        if hasattr(tim, 'mjdmin') and hasattr(tim, 'mjdmax'):
+            mjd[I] = (tim.mjdmin + tim.mjdmax) / 2.
+        phot.wise_coadd_id[I] = tile.coadd_id
+
+        central_flux[I] = tim.getImage()[y[I], x[I]]
+        del x,y,good,usrc
+
         # PSF norm for depth
         psf = tim.getPsf()
         h,w = tim.shape
         patch = psf.getPointSourcePatch(h//2, w//2).patch
         psfnorm = np.sqrt(np.sum(patch**2))
+        # To handle zero-depth, we return 1/nanomaggies^2 units rather than mags.
+        psfdepth = 1. / (tim.sig1 / psfnorm)**2
+        phot.get(wband + '_psfdepth')[I] = psfdepth
 
-        #print('unWISE tile', tile.coadd_id, ': read image with shape', tim.shape)
         tim.tile = tile
         tims.append(tim)
 
@@ -469,12 +473,6 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
     phot.set(wband + '_mag', mag)
     phot.set(wband + '_mag_err', dmag)
-    psfdepth = np.empty(len(phot), np.float32)
-    # This would be in mags
-    #psfdepth[:] = -2.5 * (np.log10(5. * tim.sig1 / psfnorm) - 9.)
-    # To handle zero-depth, we instead return 1/nanomaggies^2 units!
-    psfdepth[:] = 1. / (tim.sig1 / psfnorm)**2
-    phot.set(wband + '_psfdepth', psfdepth)
 
     for k in fskeys:
         phot.set(wband + '_' + k, fitstats[k])

@@ -12,7 +12,9 @@ from astrometry.util.fits import fits_table
 def rbmain():
     travis = 'travis' in sys.argv
 
-    extra_args = []#'--verbose']
+    extra_args = ['--old-calibs-ok',
+    #'--verbose',
+        ]
     if travis:
         extra_args.extend(['--no-wise-ceres', '--no-gaia', '--no-large-galaxies'])
     

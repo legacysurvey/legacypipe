@@ -85,7 +85,8 @@ jobs:
               pwd
               python3 -c "import sys; print(sys.path)"
               python3 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
-              coverage run test/runbrick_test.py travis
+              coverage run test/unit_tests.py
+              coverage run -a test/runbrick_test.py travis
       - run:
           name: Coveralls
           command: |

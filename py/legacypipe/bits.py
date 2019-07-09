@@ -46,9 +46,9 @@ MASKBITS = dict(
 
 # Bits in the "brightblob" bitmask
 IN_BLOB = dict(
-    BRIGHT = 0x1,
-    MEDIUM = 0x2,
-    CLUSTER = 0x4,
-    GALAXY = 0x8,
+    BRIGHT  = 0x1,   # "bright" star
+    MEDIUM  = 0x2,   # "medium-bright" star
+    CLUSTER = 0x4,   # Globular cluster
+    GALAXY  = 0x8,   # large LSLGA galaxy
 )
 
