@@ -1491,11 +1491,15 @@ class FakeCCD(object):
 
 class SDSSMeasurer(object):
 #class SDSSMeasurer(Measurer):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, window_flist_one, *args, **kwargs):
         #super(SDSSMeasurer, self).__init__(*args, **kwargs)
         self.camera = 'sdss'
         self.pixscale = get_pixscale(self.camera)
 
+        self.photoObjs = 
+        self.redux =
+        self.frame = os.path.join(self.photoObjs, 'frame-{}-{:06i}-{}-{:04i}.fits.bz2'.format(band, run, camcol, field))
+        self.psField = os.path.join(self.redux, 'psField-{:06i}-{}-{:04i}.fit'.format(run, camcol, field))
         
 
         import pdb ; pdb.set_trace()
