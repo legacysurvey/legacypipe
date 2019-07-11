@@ -279,6 +279,50 @@ def good_ccd_fraction(survey, ccds):
     return ngoodccds/float(nccds)
 
 
+def match(a, b):
+    sa = numpy.argsort(a)
+    sb = numpy.argsort(b)
+    ua = numpy.unique(a[sa])
+    if len(ua) != len(a):# or len(ub) != len(b):
+        raise ValueError('All keys in a must be unique.')
+    ind = numpy.searchsorted(a[sa], b)
+    m = (ind >= 0) & (ind < len(a))
+    matches = a[sa[ind[m]]] == b[m]
+    m[m] &= matches
+    return sa[ind[m]], numpy.flatnonzero(m)
+
+
+def patch_zeropoints(zps, ccds, ccdsa):
+    if not numpy.all((ccds.image_hdu == ccdsa.image_hdu) &
+                     (ccdsa.image_filename == ccdsa.image_filename)):
+        raise ValueError('ccds and ccdsa must be row matched!')
+    mreplace = ccds.dec < -29.25
+    mok = ((zps.scatter > 0) & (zps.scatter < 0.05) & 
+           (numpy.abs(zps.resid) < 0.2))
+    mz, mc = match(zps.mjd_obs, ccds.mjd_obs)
+    m = mok[mz] & mreplace[mc]
+    mz = mz[m]
+    mc = mc[m]
+    oldccdzpt = ccds.ccdzpt.copy()
+    ccds.zpt[mc] = (zps.zp-zps.resid)[mz]
+    ccds.ccdzpt[mc] = (zps.zp-zps.resid)[mz]
+    ccds.ccdphrms[mc] = zps.scatter[mz]
+    ccdsa.zpt[mc] = (zps.zp-zps.resid)[mz]
+    ccdsa.ccdzpt[mc] = (zps.zp-zps.resid)[mz]
+    ccdsa.ccdphrms[mc] = zps.scatter[mz]
+    oldzp = numpy.where(oldccdzpt[mc] != 0, oldccdzpt[mc], 22.5)
+    newzp = numpy.where(ccds.ccdzpt[mc] != 0, ccds.ccdzpt[mc], 22.5)
+    oldzpscale = 10.**((oldzp-22.5)/2.5)
+    newzpscale = 10.**((newzp-22.5)/2.5)
+    ccds.sig1[mc] = ccds.sig1[mc]*oldzpscale/newzpscale
+    ccdsa.sig1[mc] = ccdsa.sig1[mc]*oldzpscale/newzpscale
+    dzp = newzp-oldzp
+    ccdsa.psfdepth[mc] += dzp
+    ccdsa.gausspsfdepth[mc] += dzp
+    ccdsa.galdepth[mc] += dzp
+    ccdsa.gaussgaldepth[mc] += dzp
+
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(
@@ -291,17 +335,29 @@ if __name__ == "__main__":
                         help='ccds-annotated file name')
     parser.add_argument('survey-ccds-out', type=str, default='',
                         help='output survey-ccds file')
+    parser.add_argument('ccds-annotated-out', type=str, default='',
+                        help='output annotated-ccds file')
     parser.add_argument('--tilefile', type=str, default='',
                         help='appropriate tile file for survey')
     parser.add_argument('--imlist', type=str, default='',
                         help='image list for survey, needed for 90prime')
     parser.add_argument('--image2coadd', type=str, default='',
                         help='list of DES good exposures')
+    parser.add_argument('--zeropoints', type=str, default='',
+                        help='ucal zero points for declination < -29.25')
     args = parser.parse_args()
     ccds = fits_table(getattr(args, 'survey-ccds'))
+    annotated = fits_table(getattr(args, 'ccds-annotated'))
+    if numpy.any((ccds.image_filename != annotated.image_filename) |
+                 (ccds.image_hdu != annotated.image_hdu)):
+        raise ValueError('survey and annotated CCDs files must be row-matched!')
     if not numpy.all(ccds.ccd_cuts == 0):
         print('Warning: zeroing existing ccd_cuts')
         ccds.ccd_cuts = 0.
+    if len(args.zeropoints) > 0:
+        zp = fits_table(args.zeropoints)
+        patch_zeropoints(zp, ccds, annotated)
+
     from legacyzpts import psfzpt_cuts
     from pkg_resources import resource_filename
     fn = resource_filename('legacyzpts', 
@@ -310,7 +366,6 @@ if __name__ == "__main__":
     psfzpt_cuts.add_psfzpt_cuts(ccds, args.camera, bad_expid, 
                                 image2coadd=args.image2coadd)
 
-    annotated = fits_table(getattr(args, 'ccds-annotated'))
     depthbit = psfzpt_cuts.CCD_CUT_BITS['depth_cut']
     manybadbit = psfzpt_cuts.CCD_CUT_BITS['too_many_bad_ccds']
     if not numpy.all((ccds.ccd_cuts & depthbit) == 0):
@@ -321,4 +376,6 @@ if __name__ == "__main__":
     dcut = depthcut(args.camera, ccds, annotated, tilefile=args.tilefile,
                     imlist=args.imlist)
     ccds.ccd_cuts = ccds.ccd_cuts | (depthbit * ~dcut)
+    annotated.ccd_cuts = ccds.ccd_cuts
     ccds.write_to(getattr(args, 'survey-ccds-out'))
+    annotated.writeto(getattr(args, 'ccds-annotated-out'))
