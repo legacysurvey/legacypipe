@@ -152,7 +152,8 @@ class mysample(object):
             else: raise RuntimeError("Survey name seems inconsistent")
 
         elif(self.DR == 'DR6'):
-            inputdir = '/global/cscratch1/sd/dstn/dr6plus/'
+            inputdir = '/global/projecta/projectdirs/cosmo/data/legacysurvey/dr6/' 
+            #inputdir = '/global/cscratch1/sd/dstn/dr6plus/'
             if (band == 'g'):
                 self.ccds = inputdir+'ccds-annotated-90prime-g.fits.gz'
                 self.catalog = 'BASS_DR6'
@@ -197,7 +198,59 @@ class mysample(object):
                    self.ccds =inputdir+'annotated-ccds-dr8b-90prime-mosaic-nocuts.fits'
                    self.catalog = 'MzLS_DR8'
             else: raise RuntimeError("Survey name seems inconsistent")
-
+ 
+        elif(self.DR == 'DR8'):
+            inputdir = '/global/project/projectdirs/cosmo/work/legacysurvey/dr8/'
+                     #'/global/projecta/projectdirs/cosmo/data/legacysurvey/dr8/'
+            if(self.survey == 'DECaLS') : 
+                  # self.ccds =inputdir+'DECaLS/ccds-annotated-decam-'+self.band+'.fits.gz'
+                   self.ccds =inputdir+'ccds-annotated-decam-dr8.fits.gz' 
+                   self.catalog = 'DECaLS_DR8'
+            elif(self.survey == 'BASS') : 
+                  #self.ccds =inputdir+'BASS+MzLS/ccds-annotated-90prime-'+self.band+'.fits.gz' 
+                   self.ccds =inputdir+'ccds-annotated-90prime-dr8.fits.gz' 
+                   self.catalog = 'BASS_DR8'
+            elif(self.survey == 'MZLS') :
+                   #self.ccds =inputdir+'BASS+MzLS/ccds-annotated-mosaic-'+self.band+'.fits.gz'
+                   self.ccds =inputdir+'ccds-annotated-mosaic-dr8.fits.gz'
+                   self.catalog = 'MzLS_DR8'
+            else: raise RuntimeError("Survey name seems inconsistent")
+                
+        elif(self.DR == 'DR8bands'):
+            inputdir = '/global/projecta/projectdirs/cosmo/data/legacysurvey/dr8/'
+            if(self.survey == 'DECaLS') : 
+                   self.ccds =inputdir+'DECaLS/ccds-annotated-decam-'+self.band+'.fits.gz'
+                   #self.ccds =inputdir+'ccds-annotated-decam-dr8.fits.gz' 
+                   self.catalog = 'DECaLS_DR8'
+            elif(self.survey == 'BASS') : 
+                   self.ccds =inputdir+'BASS+MzLS/ccds-annotated-90prime-'+self.band+'.fits.gz' 
+                   #self.ccds =inputdir+'ccds-annotated-90prime-dr8.fits.gz' 
+                   self.catalog = 'BASS_DR8'
+            elif(self.survey == 'MZLS') :
+                   self.ccds =inputdir+'BASS+MzLS/ccds-annotated-mosaic-'+self.band+'.fits.gz'
+                   #self.ccds =inputdir+'ccds-annotated-mosaic-dr8.fits.gz'
+                   self.catalog = 'MzLS_DR8'
+            else: raise RuntimeError("Survey name seems inconsistent")
+ 
+ #       elif(self.DR == 'DR8'):
+ #           inputdir = '/global/project/projectdirs/cosmo/work/legacysurvey/dr8/'
+ #                    #'/global/project/projectdirs/cosmo/data/legacysurvey/dr8/'
+ #           if(self.survey == 'DECaLS') : 
+ #                  self.ccds =inputdir+'ccds-annotated-decam-dr8.fits.gz'
+ #                  self.catalog = 'DECaLS_DR8'
+ #           elif(self.survey == 'DEShyb') :
+ #                  self.ccds =inputdir+'ccds-annotated-decam-dr8.fits.gz'
+ #                  self.catalog = 'DEShyb_DR8'
+ #           elif(self.survey == 'NGCproxy' ) :
+ #                  self.ccds =inputdir+'ccds-annotated-decam-dr8.fits.gz'
+ #                  self.catalog = 'NGCproxy_DR8'
+ #           elif(self.survey == 'BASS') : 
+ #                  self.ccds =inputdir+'ccds-annotated-90prime-dr8.fits.gz'
+ #                  self.catalog = 'BASS_DR8'
+ #           elif(self.survey == 'MZLS') :
+ #                  self.ccds =inputdir+'ccds-annotated-mosaic-dr8.fits.gz'
+ #                  self.catalog = 'MzLS_DR8'
+ #           else: raise RuntimeError("Survey name seems inconsistent")
 
 
 
@@ -305,8 +358,8 @@ def plot_magdepth2D(sample,ral,decl,depth,mapfile,mytitle):
     from matplotlib import pyplot as plt
     import matplotlib.cm as cm
     ralB = [ ra-360 if ra > 300 else ra for ra in ral ]
-    vmax = sample.recm + 2.0 
-    vmin = sample.recm - 2.0
+    vmax = sample.recm + 0.4 
+    vmin = sample.recm - 1.4
     ##mapa = plt.scatter(ralB,decl,c=depth, cmap=cm.gnuplot,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
     mapa = plt.scatter(ralB,decl,c=depth, cmap=cm.RdYlBu_r,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
     mapa.cmap.set_over('lawngreen')
@@ -322,6 +375,26 @@ def plot_magdepth2D(sample,ral,decl,depth,mapfile,mytitle):
     return
 
 
+def plot_zptreq2D(sample,ral,decl,depth,mapfile,mytitle):
+    # Plot depth 
+    from matplotlib import pyplot as plt
+    import matplotlib.cm as cm
+    ralB = [ ra-360 if ra > 300 else ra for ra in ral ]
+    vmax = sample.phreq + 0.01 
+    vmin = 0.0
+    ##mapa = plt.scatter(ralB,decl,c=depth, cmap=cm.gnuplot,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
+    mapa = plt.scatter(ralB,decl,c=depth, cmap=cm.RdYlBu_r,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
+    mapa.cmap.set_over('lawngreen')
+    cbar = plt.colorbar(mapa,extend='both')
+    plt.xlabel('r.a. (degrees)')
+    plt.ylabel('declination (degrees)')
+    plt.title(mytitle)
+    plt.xlim(-60,300)
+    plt.ylim(-30,90)
+    print('saving plot image to %s', mapfile)
+    plt.savefig(mapfile)
+    plt.close()
+    return
 
 def plot_magdepth2Db(sample,ral,decl,depth,mapfile,mytitle):
     # Plot depth 
@@ -770,15 +843,14 @@ def val4p1_bandquality(sample,minfwhm=1.3,Nexpmin=1,Nexpmax=500,depthmin=21.0):
     # Obtain indices
     auxstr='band_'+band
     sample_names = [auxstr]
-    if(sample.DR == 'DR8b'):
-        if(sample.survey == 'DECaLS'):
-            inds = np.where((tbdata['filter'] == band) & (tbdata['ccd_cuts'] == 0)) 
+    if(sample.DR == 'DR8'):
+        if(sample.survey == 'DECaLS' or sample.survey == 'MZLS' or sample.survey == 'BASS'):
+            inds = np.where((tbdata['filter'] == band)) # & (tbdata['ccd_cuts'] == 0)) 
         elif(sample.survey == 'DEShyb'):
             inds = np.where((tbdata['filter'] == band) & (tbdata['ccd_cuts'] == 0) &  (list(map(InDEShybFootprint,tbdata['ra'],tbdata['dec']))))
         elif(sample.survey == 'NGCproxy'):
             inds = np.where((tbdata['filter'] == band) & (tbdata['ccd_cuts'] == 0) &  (list(map(InNGCproxyFootprint,tbdata['ra'])))) 
-
-
+    
     #Read data 
     #obtain fwhm
     myfwhm = tbdata['fwhm']*sample.pixsize
@@ -950,8 +1022,8 @@ def val3p4c_depthfromIvar(sample,Nexpmin=1,Nexpmax=500):
             inds = np.where((tbdata['filter'] == band) & (list(map(InDEShybFootprint,tbdata['ra'],tbdata['dec']))))
         elif(sample.survey == 'NGCproxy'):
             inds = np.where((tbdata['filter'] == band) & (list(map(InNGCproxyFootprint,tbdata['ra'])))) 
-    elif(sample.DR == 'DR8b'):
-        if(sample.survey == 'DECaLS'):
+    elif(sample.DR == 'DR8'):
+        if(sample.survey == 'DECaLS' or sample.survey == 'BASS' or sample.survey == 'MZLS'):
             inds = np.where((tbdata['filter'] == band)) 
         elif(sample.survey == 'DEShyb'):
             inds = np.where((tbdata['filter'] == band) & (list(map(InDEShybFootprint,tbdata['ra'],tbdata['dec']))))
@@ -1233,6 +1305,27 @@ def val3p4b_maghist_pred(sample,ndraw=1e5, nbin=100, vmin=21.0, vmax=25.0, Nexpm
                  magext = f[i]['galdepth'] - f[i]['decam_extinction'][be]
                  nmag = Magtonanomaggies(magext)/5. #total noise
                  nl.append(nmag)
+
+        if(sample.DR == 'DR8'): 
+             #if f[i]['filter'] == sample.band:   
+             if(sample.band == 'r'): band_aux = b'r'
+             if(sample.band == 'g'): band_aux = b'g'
+             if(sample.band == 'z'): band_aux = b'z'
+             if f[i]['filter'] == band_aux:   
+
+                 if(sample.survey == 'DEShyb'):
+                    RA = f[i]['ra']
+                    DEC = f[i]['dec'] # more efficient to put this inside the function directly
+                    if(not InDEShybFootprint(RA,DEC) ): continue   # skip if not in DEShyb
+
+                 if(sample.survey == 'NGCproxy'):
+                    RA = f[i]['ra'] # more efficient to put this inside the function directly
+                    if(not InNGCproxyFootprint(RA) ): continue   # skip if not in NGC 
+
+                 magext = f[i]['galdepth'] - f[i]['decam_extinction'][be]
+                 nmag = Magtonanomaggies(magext)/5. #total noise
+                 nl.append(nmag)
+                
                 
     ng = len(nl)
     print("-----------")
@@ -1383,18 +1476,27 @@ def v5p1e_photometricReqPlot(sample):
             inds = np.where((tbdata['filter'] == band) & (list(map(InDEShybFootprint,tbdata['ra'],tbdata['dec']))))
         elif(sample.survey == 'NGCproxy'):
             inds = np.where((tbdata['filter'] == band) & (list(map(InNGCproxyFootprint,tbdata['ra'])))) 
+    elif(sample.DR == 'DR8'):
+        inds = np.where((tbdata['filter'] == band))             
 
 
     #Read data 
     #obtain invnoisesq here, including extinction 
-    zptvar = tbdata['CCDPHRMS']**2/tbdata['CCDNMATCH']
-    zptivar = 1./zptvar
+    ##zptvar = tbdata['CCDPHRMS']**2/tbdata['CCDNMATCH']  ## NAMES CHANGED FOR DR8
+    zptvar = tbdata['CCDPHRMS']**2/(tbdata['CCDNPHOTOM'])
+    #zptivar = 1./zptvar
     nccd = np.ones(len(tbdata))
-
+    
+    for i in range(len(tbdata)):
+        #if(tbdata['CCDPHRMS'][i] < 0) : print('uho')
+        if(tbdata['CCDNPHOTOM'][i] < 1): 
+            #print('EHE')
+            tbdata['CCDNPHOTOM'][i] = 0.0001 ### REMOVE - SORT OUT 
+    
     # What properties do you want mapped?
     # Each each tuple has [(quantity to be projected, weighting scheme, operation),(etc..)] 
     quicksipVerbose(sample.verbose)
-    propertiesandoperations = [('zptvar','','min')]
+    propertiesandoperations = [('zptvar','','min'),('nccd','','total')]
     #propertiesandoperations = [ ('zptvar', '', 'total') , ('zptvar','','min') , ('nccd','','total') , ('zptivar','','total')]
 
  
@@ -1402,16 +1504,20 @@ def v5p1e_photometricReqPlot(sample):
     #Should at least contain propertiesandoperations and the image corners.
     # MARCM - actually no need for ra dec image corners.   
     # Only needs ra0 ra1 ra2 ra3 dec0 dec1 dec2 dec3 only if fast track appropriate quicksip subroutines were implemented 
-    propertiesToKeep = [ 'filter', 'AIRMASS', 'FWHM','mjd_obs'] \
-    	+ ['RA', 'DEC', 'crval1', 'crval2', 'crpix1', 'crpix2', 'cd1_1', 'cd1_2', 'cd2_1', 'cd2_2','width','height']
+    #propertiesToKeep = [ 'filter', 'AIRMASS', 'FWHM','mjd_obs'] \
+    #	+ ['RA', 'DEC', 'crval1', 'crval2', 'crpix1', 'crpix2', 'cd1_1', 'cd1_2', 'cd2_1', 'cd2_2','width','height']
+    propertiesToKeep = [ 'filter', 'FWHM','mjd_obs'] \
+    	+ ['RA', 'DEC', 'ra0','ra1','ra2','ra3','dec0','dec1','dec2','dec3']
     
     # Create big table with all relevant properties. 
-    tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [zptvar,zptivar,nccd], names = propertiesToKeep + [ 'zptvar','zptivar','nccd'])
+    #tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [zptvar,zptivar,nccd], names = propertiesToKeep + [ 'zptvar','zptivar','nccd'])
+    tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [zptvar,nccd], names = propertiesToKeep + [ 'zptvar','nccd'])
     
     # Read the table, create Healtree, project it into healpix maps, and write these maps.
     # Done with Quicksip library, note it has quite a few hardcoded values (use new version by MARCM for BASS and MzLS) 
     # project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside)
-    project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, localdir, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
+    #project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, localdir, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
+    project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, localdir, sample_names, inds, nside)
  
     # ----- Read healpix maps for first case [zptvar min]-------------------------
     prop='zptvar'
@@ -1421,17 +1527,19 @@ def v5p1e_photometricReqPlot(sample):
     fname=localdir+catalogue_name+'/nside'+nsideSTR+'_oversamp'+oversamp+'/'+catalogue_name+'_band_'+band+'_nside'+nsideSTR+'_oversamp'+oversamp+'_'+prop+'__'+op+'.fits.gz'
     f = fitsio.read(fname)
 
-    ral = []
-    decl = []
+    
     val = f['SIGNAL']
     pix = f['PIXEL']
 
     # -------------- plot of values ------------------
     print('Plotting min zpt rms')
-    myval = []
+    ral = []
+    decl = []
+    myval = [] 
     for i in range(0,len(val)):
-             
-        myval.append(1.086 * np.sqrt(val[i])) #1.086 converts d(mag) into d(flux) 
+        
+        aux = 1.086 * np.sqrt(val[i])
+        myval.append(aux) #1.086 converts d(mag) into d(flux) 
         th,phi = hp.pix2ang(int(nside),pix[i])
         ra,dec = thphi2radec(th,phi)
         ral.append(ra)
@@ -1447,18 +1555,22 @@ def v5p1e_photometricReqPlot(sample):
     print('Area is ', npix/(float(nside)**2.*12)*360*360./pi, ' sq. deg.')
 
 
-    import matplotlib.cm as cm
-    mapa = plt.scatter(ral,decl,c=myval, cmap=cm.rainbow,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
+    #import matplotlib.cm as cm
+    #mapa = plt.scatter(ral,decl,c=myval, cmap=cm.rainbow,s=2., vmin=vmin, vmax=vmax, lw=0,edgecolors='none')
+    
     
     fname = localdir+mylabel+'_'+band+'_'+catalogue_name+str(nside)+'.png'
-    cbar = plt.colorbar(mapa)
-    plt.xlabel('r.a. (degrees)')
-    plt.ylabel('declination (degrees)')
-    plt.title('Map of '+ mylabel +' for '+catalogue_name+' '+band+'-band')
-    plt.xlim(0,360)
-    plt.ylim(-30,90)
-    plt.savefig(fname)
-    plt.close()
+    #cbar = plt.colorbar(mapa)
+    #plt.xlabel('r.a. (degrees)')
+    #plt.ylabel('declination (degrees)')
+    #plt.title('Map of '+ mylabel +' for '+catalogue_name+' '+band+'-band')
+    #plt.xlim(0,360)
+    #plt.ylim(-30,90)
+    #plt.savefig(fname)
+    #plt.close()
+    
+    mytitle='Photometric regions'
+    plot_zptreq2D(sample,ral,decl,myval,fname,mytitle)
 
 
     #-plot of status in udgrade maps:  nside64 = 1.406 deg pix size 
@@ -1478,12 +1590,15 @@ def v5p1e_photometricReqPlot(sample):
     for i in range(0,len(val)):
         th,phi = hp.pix2ang(int(nside),pix[i])
         ipix = hp.ang2pix(nside2,th,phi)
-        dF= 1.086 * (sqrt(val[i]))   # 1.086 converts d(magnitudes) into d(flux)
+        #if (val[i] < 0.0): print('problem')
+        dF= 1.086 * (np.sqrt(val[i]))   # 1.086 converts d(magnitudes) into d(flux)
 
         if(dF < phreq):
              myreq[ipix]=1
         else:
-             if(myreq[ipix] == 0): myreq[ipix]=-1
+             if(myreq[ipix] == 0): 
+                    myreq[ipix]=-1
+                    print('inside',th,phi)
 
     below=sum( x for x in myreq if x < 0) 
     below=-below
@@ -1520,23 +1635,35 @@ def v3p5_Areas(sample1,sample2):
         inds = np.where((tbdata['filter'] == sample1.band) & (tbdata['blacklist_ok'] == True)) 
     if(sample1.DR == 'DR4'):    
         inds = np.where((tbdata['filter'] == sample1.band) & (tbdata['bitmask'] == 0)) 
-    elif(sample.DR == 'DR5'):
-        if(sample.survey == 'DECaLS'):
-            inds = np.where((tbdata['filter'] == band) & (tbdata['blacklist_ok'] == True)) 
+    elif(sample1.DR == 'DR5'):
+        if(sample1.survey == 'DECaLS'):
+            inds = np.where((tbdata['filter'] == sample1.band) & (tbdata['blacklist_ok'] == True)) 
         elif(sample.survey == 'DEShyb'):
-            inds = np.where((tbdata['filter'] == band) & (tbdata['blacklist_ok'] == True) & (list(map(InDEShybFootprint,tbdata['ra'],tbdata['dec']))))
+            inds = np.where((tbdata['filter'] == sample1.band) & (tbdata['blacklist_ok'] == True) & (list(map(InDEShybFootprint,tbdata['ra'],tbdata['dec']))))
         elif(sample.survey == 'NGCproxy'):
-            inds = np.where((tbdata['filter'] == band) & (tbdata['blacklist_ok'] == True) & (list(map(InNGCproxyFootprint,tbdata['ra'])))) 
-    if(sample1.DR == 'DR6'):    
+            inds = np.where((tbdata['filter'] == sample1.band) & (tbdata['blacklist_ok'] == True) & (list(map(InNGCproxyFootprint,tbdata['ra'])))) 
+            
+    elif(sample1.DR == 'DR6'):    
         inds = np.where((tbdata['filter'] == sample1.band)) 
-    elif(sample.DR == 'DR5'):
-        if(sample.survey == 'DECaLS'):
-            inds = np.where((tbdata['filter'] == band)) 
+    elif(sample1.DR == 'DR7'):
+        if(sample1.survey == 'DECaLS'):
+            inds = np.where((tbdata['filter'] == sample1.band)) 
         elif(sample.survey == 'DEShyb'):
-            inds = np.where((tbdata['filter'] == band) & (list(map(InDEShybFootprint,tbdata['ra'],tbdata['dec']))))
+            inds = np.where((tbdata['filter'] == sample1.band) & (list(map(InDEShybFootprint,tbdata['ra'],tbdata['dec']))))
         elif(sample.survey == 'NGCproxy'):
-            inds = np.where((tbdata['filter'] == band) & (list(map(InNGCproxyFootprint,tbdata['ra'])))) 
-
+            inds = np.where((tbdata['filter'] == sample1.band) & (list(map(InNGCproxyFootprint,tbdata['ra'])))) 
+    elif(sample1.DR == 'DR8'):
+        if(sample1.survey == 'DECaLS' or sample1.survey=='BASS' or sample1.survey=='MZLS'):
+            inds = np.where((tbdata['filter'] == sample1.band)) 
+        elif(sample1.survey == 'DEShyb'):
+            inds = np.where((tbdata['filter'] == sample1.band) & (list(map(InDEShybFootprint,tbdata['ra'],tbdata['dec']))))
+        elif(sample1.survey == 'NGCproxy'):
+            inds = np.where((tbdata['filter'] == sample1.band) & (list(map(InNGCproxyFootprint,tbdata['ra'])))) 
+    
+        
+            
+            
+            
   
     #number of ccds at each point 
     nccd1=np.ones(len(tbdata))
@@ -1578,7 +1705,14 @@ def v3p5_Areas(sample1,sample2):
         inds = np.where((tbdata['filter'] == sample2.band)) 
     if(sample2.DR == 'DR7'):
         inds = np.where((tbdata['filter'] == sample2.band)) 
-
+    if(sample2.DR == 'DR8'):
+        if(sample2.survey == 'DECaLS' or sample2.survey=='BASS' or sample2.survey=='MzLS'):
+            inds = np.where((tbdata['filter'] == sample2.band)) 
+        elif(sample2.survey == 'DEShyb'):
+            inds = np.where((tbdata['filter'] == sample2.band) & (list(map(InDEShybFootprint,tbdata['ra'],tbdata['dec']))))
+        elif(sample2.survey == 'NGCproxy'):
+            inds = np.where((tbdata['filter'] == sample2.band) & (list(map(InNGCproxyFootprint,tbdata['ra'])))) 
+        
     #number of ccds at each point 
     nccd2=np.ones(len(tbdata))
     catalogue_name=sample2.catalog
@@ -1621,9 +1755,10 @@ def v3p5_Areas(sample1,sample2):
     pix2 = f['PIXEL']
     npix2 = np.size(pix2)
     
-    # ---- compute common healpix pixels               #this is python 2.7 use isin for 3.X
-    commonpix = np.in1d(pix1,pix2,assume_unique=True)  #unique: no pixel indicies are repeated
+    # ---- compute common healpix pixels               #this is python 2.7 use isin for 3.X instead of np.in1d
+    commonpix = np.isin(pix1,pix2,assume_unique=True)  #unique: no pixel indicies are repeated
     npix=np.sum(commonpix)                             #sum of bolean in array size pix1 
+                          
     
     area1 = npix1/(float(nside)**2.*12)*360*360./pi
     area2 = npix2/(float(nside)**2.*12)*360*360./pi
@@ -1635,22 +1770,40 @@ def v3p5_Areas(sample1,sample2):
    
 
 
-    # ----- plot join area using infomration from sample1 --- 
+
+
+    # ----- plot all areaas, with join area in different color ; using infomration from sample1 --- 
+    import matplotlib.cm as cm
+    
     ral = []
     decl = []
     myval = []
+    for i in range(0,len(pix1)):
+           th,phi = hp.pix2ang(int(nside),pix1[i])
+           ra,dec = thphi2radec(th,phi)
+           ral.append(ra)
+           decl.append(dec) 
+           myval.append(1) 
+
+    for i in range(0,len(pix2)):
+           th,phi = hp.pix2ang(int(nside),pix2[i])
+           ra,dec = thphi2radec(th,phi)
+           ral.append(ra)
+           decl.append(dec) 
+           myval.append(10)   
+    
     for i in range(0,len(pix1)):
         if(commonpix[i]): 
            th,phi = hp.pix2ang(int(nside),pix1[i])
            ra,dec = thphi2radec(th,phi)
            ral.append(ra)
            decl.append(dec) 
-           myval.append(1) 
-      
-    mylabel = 'join-area' 
-    import matplotlib.cm as cm
-    mapa = plt.scatter(ral,decl,c=myval, cmap=cm.rainbow,s=2.,lw=0,edgecolors='none')
+           myval.append(5) 
     
+    #actually overplotting the overlap region with colors on top 
+    mapa = plt.scatter(ral,decl,c=myval, cmap=cm.rainbow,s=2.,lw=0,edgecolors='none')
+
+    mylabel = 'Area'    
     fname = localdir+mylabel+'_'+band+'_'+catalogue_name1+'_'+catalogue_name2+str(nside)+'.png'
     cbar = plt.colorbar(mapa)
     plt.xlabel('r.a. (degrees)')
@@ -1707,6 +1860,9 @@ def val3p4c_seeing(sample,passmin=3,nbin=100,nside=1024):
         inds = np.where((tbdata['filter'] == band))
     elif(sample.DR == 'DR7'):
         inds = np.where((tbdata['filter'] == band))
+    elif(sample.DR == 'DR8'):
+        inds = np.where((tbdata['filter'] == band))
+
 
     #Read data 
     #obtain invnoisesq here, including extinction 
@@ -1723,9 +1879,13 @@ def val3p4c_seeing(sample,passmin=3,nbin=100,nside=1024):
     # Should at least contain propertiesandoperations and the image corners.
     # MARCM - actually no need for ra dec image corners.   
     # Only needs ra0 ra1 ra2 ra3 dec0 dec1 dec2 dec3 only if fast track appropriate quicksip subroutines were implemented 
-    propertiesToKeep = [ 'filter', 'AIRMASS', 'FWHM','mjd_obs'] \
-        + ['RA', 'DEC', 'crval1', 'crval2', 'crpix1', 'crpix2', 'cd1_1', 'cd1_2', 'cd2_1', 'cd2_2','width','height']
-
+    #propertiesToKeep = [ 'filter', 'AIRMASS', 'FWHM','mjd_obs'] \
+    #    + ['RA', 'DEC', 'crval1', 'crval2', 'crpix1', 'crpix2', 'cd1_1', 'cd1_2', 'cd2_1', 'cd2_2','width','height']
+    propertiesToKeep = [ 'filter', 'FWHM','mjd_obs'] \
+    	+ ['RA', 'DEC', 'ra0','ra1','ra2','ra3','dec0','dec1','dec2','dec3']
+    
+    
+    
     # Create big table with all relevant properties. 
 
     #tbdata = np.core.records.fromarrays([tbdata[prop] for prop in propertiesToKeep] + [ivar], names = propertiesToKeep + [ 'ivar'])
@@ -1734,7 +1894,8 @@ def val3p4c_seeing(sample,passmin=3,nbin=100,nside=1024):
     # Read the table, create Healtree, project it into healpix maps, and write these maps.
     # Done with Quicksip library, note it has quite a few hardcoded values (use new version by MARCM for BASS and MzLS) 
     # project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, outroot, sample_names, inds, nside)
-    project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, localdir, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
+    #project_and_write_maps(mode, propertiesandoperations, tbdata, catalogue_name, localdir, sample_names, inds, nside, ratiores, pixoffset, nsidesout)
+    project_and_write_maps_simp(mode, propertiesandoperations, tbdata, catalogue_name, localdir, sample_names, inds, nside)
 
       # Read Haelpix maps from quicksip  
     prop='FWHM'
