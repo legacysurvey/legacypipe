@@ -24,10 +24,10 @@ Using Shifter
 Starting from DR8, we shifted to using shifter images for the environment. Shifter images are basically docker images. To use it, you can either directly type
 
 ```bash
-shifter --image docker:legacysurvey/legacypipe:nersc-dr8.3.1 bash
+shifter --image docker:legacysurvey/legacypipe:nersc-dr8.3.2 bash
 ```
 
-Or you can add `shifter --image docker:legacysurvey/legacypipe:nersc-dr8.3.1 bash` to your srun command. Example:
+Or you can add `shifter --image docker:legacysurvey/legacypipe:nersc-dr8.3.2 bash` to your srun command. Example:
 
 ```bash
 srun -n 80 --ntasks-per-node=8 --cpus-per-task=8 --exclusive --cpu_bind=cores --threads-per-core=1 --image=docker:legacysurvey/legacypipe:nersc-dr8.3.0 shifter qdo_do.sh
@@ -364,10 +364,10 @@ Detailed instructions can be found at legacypipe/bin/farm directory
 
    ```bash
    # Haswell
-   QDO_BATCH_PROFILE=cori-shifter qdo launch -v $QDO_QUEUE_NAME 8 --cores_per_worker 4 --walltime=0:30:00 --batchqueue=debug --keep_env --batchopts "--image=docker:legacysurvey/legacypipe:nersc-dr8.3.1" --script "/global/cscratch1/sd/ziyaoz/farm-post/runbrick-shifter-dr8-postfarm.sh"
+   QDO_BATCH_PROFILE=cori-shifter qdo launch -v $QDO_QUEUE_NAME 8 --cores_per_worker 4 --walltime=0:30:00 --batchqueue=debug --keep_env --batchopts "--image=docker:legacysurvey/legacypipe:nersc-dr8.3.2" --script "/global/cscratch1/sd/ziyaoz/farm-post/runbrick-shifter-dr8-postfarm.sh"
    
    # KNL
-   QDO_BATCH_PROFILE=cori-knl-shifter qdo launch -v $QDO_QUEUE_NAME 80 --cores_per_worker 8 --walltime=4:00:00 --batchqueue=regular --keep_env --batchopts "--image=docker:legacysurvey/legacypipe:nersc-dr8.3.1" --script "/global/cscratch1/sd/ziyaoz/farm-post/runbrick-shifter-dr8-postfarm.sh"
+   QDO_BATCH_PROFILE=cori-knl-shifter qdo launch -v $QDO_QUEUE_NAME 80 --cores_per_worker 8 --walltime=4:00:00 --batchqueue=regular --keep_env --batchopts "--image=docker:legacysurvey/legacypipe:nersc-dr8.3.2" --script "/global/cscratch1/sd/ziyaoz/farm-post/runbrick-shifter-dr8-postfarm.sh"
    ```
 
 And that's it! If you are curious, feel free to read the detailed description below for not using farm.py, or you can skip to the Post-Tractor Processing section.
