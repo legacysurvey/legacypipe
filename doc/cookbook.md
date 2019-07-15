@@ -340,6 +340,44 @@ Afterwards, generate the final kd-tree survey-ccds file using the
 Running tractor
 ===============
 
+Using Farm.py
+--------
+
+In DR8, farm.py was introduced to maximize parallization at the fitblob stage. There are now three steps to tractor processing: 1. Pre-Farm 2. Farm.py 3. Post-Farm
+
+### Pre-Farm (Up to srcs stage)
+
+### Farm.py (Fitblobs stage)
+Detailed instructions can be found at legacypipe/bin/farm directory
+
+### Post-Farm (Rest of runbrick.py)
+
+1. Create a qdo queue containing the bricks to be processed
+
+2. Create a new directory and copy ` legacysurvey/doc/runbrick-shifter-dr8-postfarm.sh` into it
+
+3. Edit `runbrick-shifter-dr8-postfarm.sh` to fit your needs. Pay special attention to `outdir`, `ncores`, `--checkpoint` and `--pickle`
+
+4. Load qdo credentials into environment variables
+
+5. Launch jobs using commands similar to
+
+   ```bash
+   # Haswell
+   QDO_BATCH_PROFILE=cori-shifter qdo launch -v $QDO_QUEUE_NAME 8 --cores_per_worker 4 --walltime=0:30:00 --batchqueue=debug --keep_env --batchopts "--image=docker:legacysurvey/legacypipe:nersc-dr8.3.1" --script "/global/cscratch1/sd/ziyaoz/farm-post/runbrick-shifter-dr8-postfarm.sh"
+   
+   # KNL
+   QDO_BATCH_PROFILE=cori-knl-shifter qdo launch -v $QDO_QUEUE_NAME 80 --cores_per_worker 8 --walltime=4:00:00 --batchqueue=regular --keep_env --batchopts "--image=docker:legacysurvey/legacypipe:nersc-dr8.3.1" --script "/global/cscratch1/sd/ziyaoz/farm-post/runbrick-shifter-dr8-postfarm.sh"
+   ```
+
+And that's it! If you are curious, feel free to read the detailed description below for not using farm.py, or you can skip to the Post-Tractor Processing section.
+
+
+Not Using Farm.py
+---------
+The following details the steps used prior to DR8
+
+
 Staging of input data
 ---------------------
 
