@@ -422,9 +422,9 @@ up is via the following script:
 
     import qdo
     from utils import removeckpt
-    
+
     rundir = "/global/cscratch1/sd/desiproc/DR5_code/"
-    
+
     q = qdo.connect('dr5') 
     a = q.tasks(state=qdo.Task.SUCCEEDED) 
     n = len(a) 
@@ -517,7 +517,7 @@ queue on Cori.
     export PYTHONPATH=$builddir/lib/python3.5/site-packages:$PYTHONPATH
     export PYTHONPATH=$builddir/lib/python:$PYTHONPATH
     export PYTHONPATH=/global/cscratch1/sd/desiproc/DRcode/legacypipe/py:$PYTHONPATH
-    
+
     drdir=/global/projecta/projectdirs/cosmo/work/legacysurvey/dr6/
     for ((b=0; b<36; b++))
     do
@@ -569,11 +569,11 @@ e.g.:
 
     set -x
     export ATP_ENABLED=0
-    
+
     outdir=/global/cscratch1/sd/desiproc/dr6-out
     drdir=/global/projecta/projectdirs/cosmo/work/legacysurvey/dr6
     export LEGACYPIPE_DIR=/global/cscratch1/sd/desiproc/DRcode/legacypipe
-    
+
     export TRACTOR_INDIR=$drdir/tractor
     export BRICKSFILE=$drdir/survey-bricks.fits.gz
     export TRACTOR_FILELIST=$outdir/tractor_filelist
@@ -608,25 +608,25 @@ five external catalogues:
          $SDSSDIR/dr12/boss/qso/DR12Q/DR12Q.fits \
          $TRACTOR_INDIR \
          $EXTERNAL_OUTDIR/survey-$dr-dr12Q.fits --copycols MJD PLATE FIBERID RERUN_NUMBER
-    
+
     time srun -u --cpu_bind=no -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
          -v --numproc 32 -f fits -F $TRACTOR_FILELIST \
          $SDSSDIR/dr7/dr7qso.fit.gz \
          $TRACTOR_INDIR \
          $EXTERNAL_OUTDIR/survey-$dr-dr7Q.fits --copycols SMJD PLATE FIBER RERUN
-    
+
     time srun -u --cpu_bind=no -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
          -v --numproc 32 -f fits -F $TRACTOR_FILELIST \
          $SDSSDIR/dr12/boss/qso/DR12Q/Superset_DR12Q.fits \
          $TRACTOR_INDIR \
          $EXTERNAL_OUTDIR/survey-$dr-superset-dr12Q.fits --copycols MJD PLATE FIBERID
-    
+
     time srun -u --cpu_bind=no -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
          -v --numproc 32 -f fits -F $TRACTOR_FILELIST \
          $SDSSDIR/dr14/sdss/spectro/redux/specObj-dr14.fits \
          $TRACTOR_INDIR \
          $EXTERNAL_OUTDIR/survey-$dr-specObj-dr14.fits --copycols MJD PLATE FIBERID RUN2D
-    
+
     time srun -u --cpu_bind=no -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
          -v --numproc 32 -f fits -F $TRACTOR_FILELIST \
          $SDSSDIR/dr14/eboss/qso/DR14Q/DR14Q_v4_4.fits \
