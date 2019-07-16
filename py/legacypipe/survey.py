@@ -682,50 +682,6 @@ def switch_to_soft_ellipses(cat):
             src.shapeDev = EllipseESoft.fromEllipseE(src.shapeDev)
             src.shapeExp = EllipseESoft.fromEllipseE(src.shapeExp)
 
-def brick_catalog_for_radec_box(ralo, rahi, declo, dechi,
-                                survey, catpattern, bricks=None):
-    '''
-    Merges multiple Tractor brick catalogs to cover an RA,Dec
-    bounding-box.
-
-    No cleverness with RA wrap-around; assumes ralo < rahi.
-
-    survey: LegacySurveyData object
-
-    bricks: table of bricks, eg from LegacySurveyData.get_bricks()
-
-    catpattern: filename pattern of catalog files to read,
-        eg "pipebrick-cats/tractor-phot-%06i.its"
-    '''
-    assert(ralo < rahi)
-    assert(declo < dechi)
-
-    if bricks is None:
-        bricks = survey.get_bricks_readonly()
-    I = survey.bricks_touching_radec_box(bricks, ralo, rahi, declo, dechi)
-    print(len(I), 'bricks touch RA,Dec box')
-    TT = []
-    for i in I:
-        brick = bricks[i]
-        fn = catpattern % brick.brickid
-        print('Catalog', fn)
-        if not os.path.exists(fn):
-            print('Warning: catalog does not exist:', fn)
-            continue
-        T = fits_table(fn, header=True)
-        if T is None or len(T) == 0:
-            print('Warning: empty catalog', fn)
-            continue
-        T.cut((T.ra  >= ralo ) * (T.ra  <= rahi) *
-              (T.dec >= declo) * (T.dec <= dechi))
-        TT.append(T)
-    if len(TT) == 0:
-        return None
-    T = merge_tables(TT)
-    # arbitrarily keep the first header
-    T._header = TT[0]._header
-    return T
-
 def ccd_map_image(valmap, empty=0.):
     '''valmap: { 'N7' : 1., 'N8' : 17.8 }
 
@@ -985,16 +941,14 @@ class LegacySurveyData(object):
         self.ccds = None
         self.bricks = None
         self.ccds_index = None
-
-        # Create and cache a kd-tree for bricks_touching_radec_box ?
-        self.cache_tree = False
-        self.bricktree = None
-        ### HACK! Hard-coded brick edge size, in degrees!
-        self.bricksize = 0.25
-
         # Cached CCD kd-tree --
         # - initially None, then a list of (fn, kd)
         self.ccd_kdtrees = None
+        # Kd-tree over bricks
+        self.bricks_kd = None
+
+        ### HACK! Hard-coded brick edge size, in degrees!
+        self.bricksize = 0.25
 
         self.image_typemap = {
             'decam'  : DecamImage,
@@ -1111,6 +1065,10 @@ class LegacySurveyData(object):
 
         if filetype == 'bricks':
             return swap(os.path.join(basedir, 'survey-bricks.fits.gz'))
+
+        if filetype == 'bricks-kd':
+            # startree -i survey-bricks.fits -o survey-bricks.kd.fits -PTk -n bricks
+            return swap(os.path.join(basedir, 'survey-bricks.kd.fits'))
 
         elif filetype == 'ccds':
             return swaplist(
@@ -1404,8 +1362,9 @@ class LegacySurveyData(object):
         d = self.__dict__.copy()
         d['ccds'] = None
         d['bricks'] = None
-        d['bricktree'] = None
+        d['bricks_kd'] = None
         d['ccd_kdtrees'] = None
+        d['ccds_index'] = None
         return d
 
     def drop_cache(self):
@@ -1415,10 +1374,8 @@ class LegacySurveyData(object):
         '''
         self.ccds = None
         self.bricks = None
-        if self.bricktree is not None:
-            from astrometry.libkd.spherematch import tree_free
-            tree_free(self.bricktree)
-        self.bricktree = None
+        self.bricks_kd = None
+        self.ccds_index = None
 
     def get_calib_dir(self):
         '''
@@ -1446,6 +1403,19 @@ class LegacySurveyData(object):
         from pkg_resources import resource_filename
         return resource_filename('legacypipe', 'config')
 
+    def get_bricks_kd(self):
+        if self.bricks_kd is not None:
+            return self.bricks_kd
+        fn = self.find_file('bricks-kd')
+        if not os.path.exists(fn):
+            return None
+        from astrometry.libkd.spherematch import tree_open
+        debug('Opening bricks kd-tree', fn)
+        kd = tree_open(fn, 'bricks')
+        if kd is not None:
+            self.bricks_kd = kd
+        return kd
+
     def get_bricks(self):
         '''
         Returns a table of bricks.  The caller owns the table.
@@ -1453,6 +1423,11 @@ class LegacySurveyData(object):
         For read-only purposes, see *get_bricks_readonly()*, which
         uses a cached version.
         '''
+        if self.bricks is not None:
+            return self.bricks.copy()
+        fn = self.find_file('bricks-kd')
+        if os.path.exists(fn):
+            return fits_table(fn)
         return fits_table(self.find_file('bricks'))
 
     def get_bricks_readonly(self):
@@ -1461,10 +1436,6 @@ class LegacySurveyData(object):
         '''
         if self.bricks is None:
             self.bricks = self.get_bricks()
-            # Assert that bricks are the sizes we think they are.
-            # ... except for the two poles, which are half-sized
-            assert(np.all(np.abs((self.bricks.dec2 - self.bricks.dec1)[1:-1] -
-                                 self.bricksize) < 1e-3))
         return self.bricks
 
     def get_brick(self, brickid):
@@ -1490,64 +1461,61 @@ class LegacySurveyData(object):
     def get_bricks_near(self, ra, dec, radius):
         '''
         Returns a set of bricks near the given RA,Dec and radius (all in degrees).
+
+        Note that you have to include the radius of the brick yourself!
         '''
-        bricks = self.get_bricks_readonly()
-        if self.cache_tree:
-            from astrometry.libkd.spherematch import tree_build_radec, tree_search_radec
-            # Use kdtree
-            if self.bricktree is None:
-                self.bricktree = tree_build_radec(bricks.ra, bricks.dec)
-            I = tree_search_radec(self.bricktree, ra, dec, radius)
-        else:
+        kd = self.get_bricks_kd()
+        if kd is None:
             from astrometry.util.starutil_numpy import degrees_between
+            bricks = self.get_bricks_readonly()
             d = degrees_between(bricks.ra, bricks.dec, ra, dec)
             I, = np.nonzero(d < radius)
+            if len(I) == 0:
+                return None
+            return bricks[I]
+        from astrometry.libkd.spherematch import tree_search_radec
+        I = tree_search_radec(kd, ra, dec, radius)
+        fn = self.find_file('bricks-kd')
+        bricks = fits_table(fn, rows=I)
+        return bricks
+
+    def bricks_touching_radec_box(self, ralo, rahi, declo, dechi):
+        kd = self.get_bricks_kd()
+        if kd is None:
+            bricks = self.get_bricks_readonly()
+            I, = np.nonzero((bricks.dec2 >= declo) * (bricks.dec1 <= dechi))
+            from astrometry.util.starutil_numpy import ra_ranges_overlap
+            ov = ra_ranges_overlap(bricks.ra1[I], bricks.ra2[I], ralo, rahi)
+            I = I[ov]
+            if len(I) == 0:
+                return None
+            return bricks[I]
+
+        from astrometry.libkd.spherematch import tree_search_radec
+        # brick size
+        radius = np.sqrt(2.)/2. * self.bricksize
+        # RA,Dec box size
+        radius = radius + degrees_between(ralo, declo, rahi, dechi) / 2.
+        # RA,Dec midpoint:
+        dec = (dechi + declo) / 2.
+        c = (np.cos(np.deg2rad(rahi)) + np.cos(np.deg2rad(ralo))) / 2.
+        s = (np.sin(np.deg2rad(rahi)) + np.sin(np.deg2rad(ralo))) / 2.
+        ra  = np.rad2deg(np.arctan2(s, c))
+        I = tree_search_radec(kd, ra, dec, radius)
         if len(I) == 0:
             return None
-        return bricks[I]
-
-    def bricks_touching_radec_box(self, bricks,
-                                  ralo, rahi, declo, dechi):
-        '''
-        Returns an index vector of the bricks that touch the given RA,Dec box.
-        '''
-        if bricks is None:
-            bricks = self.get_bricks_readonly()
-        if self.cache_tree and bricks == self.bricks:
-            from astrometry.libkd.spherematch import tree_build_radec, tree_search_radec
-            from astrometry.util.starutil_numpy import degrees_between
-            # Use kdtree
-            if self.bricktree is None:
-                self.bricktree = tree_build_radec(bricks.ra, bricks.dec)
-            # brick size
-            radius = np.sqrt(2.)/2. * self.bricksize
-            # + RA,Dec box size
-            radius = radius + degrees_between(ralo, declo, rahi, dechi) / 2.
-            dec = (dechi + declo) / 2.
-            c = (np.cos(np.deg2rad(rahi)) + np.cos(np.deg2rad(ralo))) / 2.
-            s = (np.sin(np.deg2rad(rahi)) + np.sin(np.deg2rad(ralo))) / 2.
-            ra  = np.rad2deg(np.arctan2(s, c))
-            J = tree_search_radec(self.bricktree, ra, dec, radius)
-            I = J[np.nonzero((bricks.ra1[J]  <= rahi ) * (bricks.ra2[J]  >= ralo) *
-                             (bricks.dec1[J] <= dechi) * (bricks.dec2[J] >= declo))[0]]
-            return I
-
-        if rahi < ralo:
-            # Wrap-around
-            debug('In Dec slice:', len(np.flatnonzero((bricks.dec1 <= dechi) *
-                                                      (bricks.dec2 >= declo))))
-            debug('Above RAlo=', ralo, ':', len(np.flatnonzero(bricks.ra2 >= ralo)))
-            debug('Below RAhi=', rahi, ':', len(np.flatnonzero(bricks.ra1 <= rahi)))
-            debug('In RA slice:', len(np.nonzero(np.logical_or(bricks.ra2 >= ralo,
-                                                               bricks.ra1 <= rahi))))
-
-            I, = np.nonzero(np.logical_or(bricks.ra2 >= ralo, bricks.ra1 <= rahi) *
-                            (bricks.dec1 <= dechi) * (bricks.dec2 >= declo))
-            debug('In RA&Dec slice', len(I))
+        # Read bricks
+        if self.bricks is None:
+            fn = self.find_file('bricks-kd')
+            bricks = fits_table(fn, rows=I)
         else:
-            I, = np.nonzero((bricks.ra1  <= rahi ) * (bricks.ra2  >= ralo) *
-                            (bricks.dec1 <= dechi) * (bricks.dec2 >= declo))
-        return I
+            bricks = self.bricks[I]
+        # Cut to RA,Dec box
+        bricks.cut((bricks.dec2 >= declo) * (bricks.dec1 <= dechi))
+        bricks.cut(ra_ranges_overlap(bricks.ra1, bricks.ra2, ralo, rahi))
+        if len(bricks) == 0:
+            return None
+        return bricks
 
     def get_ccds_readonly(self):
         '''
