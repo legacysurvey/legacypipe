@@ -325,7 +325,8 @@ class OneBlob(object):
         models.create(self.tims, cat, subtract=True)
 
         N = len(cat)
-        B.dchisq = np.zeros((N, 5), np.float32)
+        ## FIXME Sersic
+        B.dchisq = np.zeros((N, 6), np.float32)
         B.all_models    = np.array([{} for i in range(N)])
         B.all_model_ivs = np.array([{} for i in range(N)])
         B.all_model_cpu = np.array([{} for i in range(N)])
@@ -728,7 +729,8 @@ class OneBlob(object):
 
         chisqs_none = _per_band_chisqs(srctractor, self.bands)
 
-        nparams = dict(ptsrc=2, simple=2, rex=3, exp=5, dev=5, comp=9)
+        nparams = dict(ptsrc=2, simple=2, rex=3, exp=5, dev=5,
+                       ser=6, comp=9)
         # This is our "upgrade" threshold: how much better a galaxy
         # fit has to be versus ptsrc, and comp versus galaxy.
         galaxy_margin = 3.**2 + (nparams['exp'] - nparams['ptsrc'])
@@ -739,6 +741,7 @@ class OneBlob(object):
 
         oldmodel, ptsrc, simple, dev, exp, comp = _initialize_models(
             src, self.rex)
+        ser = None
 
         if self.rex:
             simname = 'rex'
@@ -763,7 +766,8 @@ class OneBlob(object):
         else:
             # If the source was initialized as a galaxy, try all models
             trymodels.extend([(simname, simple),
-                              ('dev', dev), ('exp', exp), ('comp', comp)])
+                              ('dev', dev), ('exp', exp), ('ser', None),
+                              ('comp', comp)])
 
         cputimes = {}
         for name,newsrc in trymodels:
@@ -776,7 +780,7 @@ class OneBlob(object):
                 chi_psf = chisqs.get('ptsrc', 0)
                 if chi_sim > chi_psf or max(chi_psf, chi_sim) > 400:
                     trymodels.extend([
-                        ('dev', dev), ('exp', exp), ('comp', comp)])
+                        ('dev', dev), ('exp', exp), ('ser', None), ('comp', comp)])
                 continue
 
             if name == 'comp' and newsrc is None:
@@ -788,13 +792,30 @@ class OneBlob(object):
                     src.getPosition(), src.getBrightness(),
                     SoftenedFracDev(0.5), exp.getShape(),
                     dev.getShape()).copy()
+
+            if name == 'ser' and newsrc is None:
+                # Start at the better of exp or dev.
+                smod = _select_model(chisqs, nparams, galaxy_margin, self.rex)
+                print('Sersic: chisqs', chisqs, 'selecting model:', smod)
+                if smod not in ['dev', 'exp']:
+                    continue
+                if smod == 'dev':
+                    from tractor.sersic import SersicGalaxy, SersicIndex
+                    newsrc = ser = SersicGalaxy(src.getPosition(), src.getBrightness(),
+                                                dev.getShape(), SersicIndex(4.))
+                elif smod == 'exp':
+                    from tractor.sersic import SersicGalaxy, SersicIndex
+                    newsrc = ser = SersicGalaxy(src.getPosition(), src.getBrightness(),
+                                                exp.getShape(), SersicIndex(1.))
+                print('Initialized SER model:', newsrc)
+                    
             srccat[0] = newsrc
 
             # Set maximum galaxy model sizes
             if is_galaxy:
                 # This is a known large galaxy -- set max size based on initial size.
                 logrmax = known_galaxy_logrmax
-                if name in ('exp', 'rex', 'dev'):
+                if name in ('exp', 'rex', 'dev', 'ser'):
                     newsrc.shape.setMaxLogRadius(logrmax)
                 elif name == 'comp':
                     newsrc.shapeExp.setMaxLogRadius(logrmax)
@@ -829,7 +850,7 @@ class OneBlob(object):
 
             # First-round optimization (during model selection)
             R = srctractor.optimize_loop(**self.optargs)
-            debug('Fit result:', newsrc)
+            print('Fit result:', newsrc)
             hit_limit = R.get('hit_limit', False)
             if hit_limit:
                 if name in ['exp', 'rex', 'dev']:
@@ -871,6 +892,9 @@ class OneBlob(object):
             # (but save old shapes first)
             # we do this (rather than making a copy) because we want to
             # use the same modelMask maps.
+
+
+            ## FIXME Sersic
             if isinstance(newsrc, (DevGalaxy, ExpGalaxy)):
                 oldshape = newsrc.shape
             elif isinstance(newsrc, FixedCompositeGalaxy):
@@ -923,13 +947,13 @@ class OneBlob(object):
         # Actually select which model to keep.  This "modnames"
         # array determines the order of the elements in the DCHISQ
         # column of the catalog.
-        modnames = ['ptsrc', simname, 'dev', 'exp', 'comp']
+        modnames = ['ptsrc', simname, 'dev', 'exp', 'comp', 'ser']
         keepmod = _select_model(chisqs, nparams, galaxy_margin, self.rex)
         keepsrc = {'none':None, 'ptsrc':ptsrc, simname:simple,
-                   'dev':dev, 'exp':exp, 'comp':comp}[keepmod]
+                   'dev':dev, 'exp':exp, 'comp':comp, 'ser':ser}[keepmod]
         bestchi = chisqs.get(keepmod, 0.)
 
-        debug('Keeping model', keepmod, '(chisqs: ', chisqs, ')')
+        print('Keeping model', keepmod, '(chisqs: ', chisqs, ')')
 
         B.dchisq[srci, :] = np.array([chisqs.get(k,0) for k in modnames])
 
@@ -1031,8 +1055,8 @@ class OneBlob(object):
         if self.plots_per_source:
             import pylab as plt
             plt.clf()
-            rows,cols = 3, 6
-            modnames = ['none', 'ptsrc', simname, 'dev', 'exp', 'comp']
+            rows,cols = 3, 7
+            modnames = ['none', 'ptsrc', simname, 'dev', 'exp', 'comp', 'ser']
 
             plt.subplot(rows, cols, 1)
             # Top-left: image
@@ -1860,6 +1884,15 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
         #print('Upgrading to DEV: diff', expdiff)
         keepmod = 'dev'
 
+    # Consider Sersic models using same cut as Composite
+    if not 'ser' in chisqs:
+        return keepmod
+    diff = chisqs['ser'] - chisqs[keepmod]
+    fcut = 0.01 * chisqs[keepmod]
+    cut = max(cut, fcut)
+    if diff < cut:
+        return keepmod
+        
     if not 'comp' in chisqs:
         return keepmod
 
