@@ -29,9 +29,13 @@ def get_parser():
 
     parser.add_argument('--threads', type=int, help='Run multi-threaded', default=None)
 
+    parser.add_argument('--catalog', help='Use the given FITS catalog file, rather than reading from a data release directory')
+
     parser.add_argument('--catalog-dir', help='Set LEGACY_SURVEY_DIR to use to read catalogs')
 
-    parser.add_argument('--catalog', help='Use the given FITS catalog file, rather than reading from a data release directory')
+    parser.add_argument('--catalog-dir-north', help='Set LEGACY_SURVEY_DIR to use to read Northern catalogs')
+    parser.add_argument('--catalog-dir-south', help='Set LEGACY_SURVEY_DIR to use to read Southern catalogs')
+    parser.add_argument('--catalog-resolve-dec', help='Dec at which to switch from Northern to Southern catalogs')
 
     parser.add_argument('--skip-calibs', dest='do_calib', default=True, action='store_false',
                         help='Do not try to run calibrations')
@@ -136,9 +140,16 @@ def main(survey=None, opt=None):
     if survey is None:
         survey = LegacySurveyData()
 
-    catsurvey = survey
+    catsurvey_north = survey
+
+    if opt.catalog_dir_north is not None:
+        assert(opt.catalog_dir_south is not None)
+        assert(opt.catalog_resolve_dec is not None)
+        catsurvey = LegacySurveyData(survey_dir = opt.catalog_dir_north)
+        catsurvey_south = LegacySurveyData(survey_dir = opt.catalog_dir_south)
+
     if opt.catalog_dir is not None:
-        catsurvey = LegacySurveyData(survey_dir = opt.catalog_dir)
+        catsurvey_north = LegacySurveyData(survey_dir = opt.catalog_dir)
 
     if filename is not None and hdu >= 0:
         # FIXME -- try looking up in CCDs file?
@@ -174,7 +185,9 @@ def main(survey=None, opt=None):
 
     args = []
     for ccd in T:
-        args.append((survey, catsurvey, ccd, opt, zoomslice, ps))
+        args.append((survey,
+                     catsurvey_north, catsurvey_south, opt.catalog_resolve_dec,
+                     ccd, opt, zoomslice, ps))
 
     if opt.threads:
         from astrometry.util.multiproc import multiproc
@@ -236,7 +249,10 @@ def bounce_one_ccd(X):
     #return run_one_ccd(survey, ccd, opt)
     return run_one_ccd(*X)
 
-def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
+def cut_sources(T, chipwcs, margin):
+
+def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
+                ccd, opt, zoomslice, ps):
     tlast = Time()
 
     im = survey.get_image_object(ccd)
@@ -264,36 +280,53 @@ def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
         margin = 20
         TT = []
         chipwcs = tim.subwcs
-        bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
-        for b in bricks:
-            # there is some overlap with this brick... read the catalog.
-            fn = catsurvey.find_file('tractor', brick=b.brickname)
-            if not os.path.exists(fn):
-                print('WARNING: catalog', fn, 'does not exist.  Skipping!')
-                continue
-            print('Reading', fn)
-            T = fits_table(fn, columns=[
-                'ra', 'dec', 'brick_primary', 'type', 'release',
-                'brickid', 'brickname', 'objid',
-                'fracdev', 'flux_r',
-                'shapedev_r', 'shapedev_e1', 'shapedev_e2',
-                'shapeexp_r', 'shapeexp_e1', 'shapeexp_e2',
-                'ref_epoch', 'pmra', 'pmdec', 'parallax'
-            ])
-            ok,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
-            W,H = chipwcs.get_width(), chipwcs.get_height()
-            I = np.flatnonzero((xx >= -margin) * (xx <= (W+margin)) *
-                               (yy >= -margin) * (yy <= (H+margin)))
-            T.cut(I)
-            print('Cut to', len(T), 'sources within image + margin')
-            T.cut(T.brick_primary)
-            print('Cut to', len(T), 'on brick_primary')
-            for col in ['out_of_bounds', 'left_blob']:
-                if col in T.get_columns():
-                    T.cut(T.get(col) == False)
-                    print('Cut to', len(T), 'on', col)
-            if len(T):
-                TT.append(T)
+
+        surveys = [(catsurvey_north, True)]
+        if cutsurvey_south is not None:
+            surveys.append((cutsurvey_south, False))
+
+        for catsurvey,north in surveys:
+            bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
+            for b in bricks:
+                # there is some overlap with this brick... read the catalog.
+                fn = catsurvey.find_file('tractor', brick=b.brickname)
+                if not os.path.exists(fn):
+                    print('WARNING: catalog', fn, 'does not exist.  Skipping!')
+                    continue
+                print('Reading', fn)
+                T = fits_table(fn, columns=[
+                    'ra', 'dec', 'brick_primary', 'type', 'release',
+                    'brickid', 'brickname', 'objid',
+                    'fracdev', 'flux_r',
+                    'shapedev_r', 'shapedev_e1', 'shapedev_e2',
+                    'shapeexp_r', 'shapeexp_e1', 'shapeexp_e2',
+                    'ref_epoch', 'pmra', 'pmdec', 'parallax'
+                    ])
+                if resolve_dec is not None:
+                    if north:
+                        T.cut(T.dec >= resolve_dec)
+                        print('Cut to', len(T), 'north of the resolve line')
+                    else:
+                        T.cut(T.dec <  resolve_dec)
+                        print('Cut to', len(T), 'south of the resolve line')
+                ok,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
+                W,H = chipwcs.get_width(), chipwcs.get_height()
+                I, = np.nonzero((xx >= -margin) * (xx <= (W+margin)) *
+                                (yy >= -margin) * (yy <= (H+margin)))
+                T.cut(I)
+                print('Cut to', len(T), 'sources within image + margin')
+                T.cut(T.brick_primary)
+                print('Cut to', len(T), 'on brick_primary')
+                for col in ['out_of_bounds', 'left_blob']:
+                    if col in T.get_columns():
+                        T.cut(T.get(col) == False)
+                        print('Cut to', len(T), 'on', col)
+                # drop DUP sources
+                I, = np.nonzero([t.strip() != 'DUP' for t in T.type])
+                T.cut(I)
+                print('Cut to', len(T), 'after removing DUP')
+                if len(T):
+                    TT.append(T)
         if len(TT) == 0:
             print('No sources to photometer.')
             return None
@@ -386,6 +419,8 @@ def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
     F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(F))
     F.exptime = np.array([tim.primhdr['EXPTIME']] * len(F)).astype(np.float32)
     F.psfsize = np.array([tim.psf_fwhm * tim.imobj.pixscale] * len(F)).astype(np.float32)
+    F.ccd_cuts = np.array([ccd.ccd_cuts] * len(F))
+    F.airmass  = np.array([ccd.airmass ] * len(F))
     #### FIXME -- units?
     ### --> also add units to the dict below so the FITS headers have units
     F.sky     = np.array([tim.midsky / tim.zpscale / tim.imobj.pixscale**2] * len(F)).astype(np.float32)
@@ -429,7 +464,7 @@ def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
 
     program_name = sys.argv[0]
     ## FIXME -- from catalog?
-    release = 0
+    release = 8002
     version_hdr = get_version_header(program_name, surveydir, release)
     filename = getattr(ccd, 'image_filename')
     if filename is None:
