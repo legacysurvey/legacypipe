@@ -66,7 +66,7 @@ from astrometry.libkd.spherematch import match_radec
 def log(*s):
     print(' '.join([str(ss) for ss in s]), file=sys.stderr)
 
-def main():
+def main(args):
     """Main program.
     """
     import argparse
@@ -124,7 +124,7 @@ def main():
     parser.add_argument('--bands', default='g,r,z', help='Set bands to keep: comma-separated list.')
 
 
-    opt = parser.parse_args()
+    opt = parser.parse_args(args)
 
     want_ccds = (opt.calibs or opt.forced or opt.lsb)
     want_bricks = not want_ccds
@@ -493,7 +493,7 @@ def main():
             f.write('%s %s all %s\n' % (cam, exp, outfn))
         f.close()
         log('Wrote', opt.out)
-        sys.exit(0)
+        return 0
 
     # sort by RA increasing
     B.cut(np.argsort(B.ra))
@@ -626,7 +626,7 @@ def main():
         if opt.save_to_fits:
             B.writeto('bricks-%s-touching.fits' % opt.region)
         if not want_ccds:
-            sys.exit(0)
+            return 0
 
     ## Be careful here -- T has been cut; we want to write out T.index.
     ## 'allI' contains indices into T.
@@ -659,7 +659,7 @@ def main():
             print(cmd)
             rtn = os.system(cmd)
             assert(rtn == 0)
-        sys.exit(0)
+        return 0
 
     if opt.lsb:
         log('Writing LSB commands to', opt.out)
@@ -672,7 +672,7 @@ def main():
             f.write('python legacyanalysis/lsb.py --expnum %i --extname %s --out %s -F -n > lsb/lsb-%s-%s.log 2>&1\n' % (exp, ext, outfn, exp, ext))
         f.close()
         log('Wrote', opt.out)
-        sys.exit(0)
+        return 0
 
     log('Writing calibs to', opt.out)
     f = open(opt.out,'w')
@@ -736,4 +736,7 @@ def main():
 #
 #
 if __name__ == '__main__':
-    sys.exit(main())
+    import sys
+    main(sys.argv[1:])
+
+
