@@ -29,13 +29,15 @@ def get_parser():
 
     parser.add_argument('--threads', type=int, help='Run multi-threaded', default=None)
 
+    parser.add_argument('--survey-dir', help='Override LEGACY_SURVEY_DIR')
+
     parser.add_argument('--catalog', help='Use the given FITS catalog file, rather than reading from a data release directory')
 
     parser.add_argument('--catalog-dir', help='Set LEGACY_SURVEY_DIR to use to read catalogs')
 
     parser.add_argument('--catalog-dir-north', help='Set LEGACY_SURVEY_DIR to use to read Northern catalogs')
     parser.add_argument('--catalog-dir-south', help='Set LEGACY_SURVEY_DIR to use to read Southern catalogs')
-    parser.add_argument('--catalog-resolve-dec', help='Dec at which to switch from Northern to Southern catalogs')
+    parser.add_argument('--catalog-resolve-dec', type=float, help='Dec at which to switch from Northern to Southern catalogs')
 
     parser.add_argument('--skip-calibs', dest='do_calib', default=True, action='store_false',
                         help='Do not try to run calibrations')
@@ -138,14 +140,15 @@ def main(survey=None, opt=None):
             ccdname = opt.ccdname
 
     if survey is None:
-        survey = LegacySurveyData()
+        survey = LegacySurveyData(survey_dir=opt.survey_dir)
 
     catsurvey_north = survey
+    catsurvey_south = None
 
     if opt.catalog_dir_north is not None:
         assert(opt.catalog_dir_south is not None)
         assert(opt.catalog_resolve_dec is not None)
-        catsurvey = LegacySurveyData(survey_dir = opt.catalog_dir_north)
+        catsurvey_north = LegacySurveyData(survey_dir = opt.catalog_dir_north)
         catsurvey_south = LegacySurveyData(survey_dir = opt.catalog_dir_south)
 
     if opt.catalog_dir is not None:
@@ -249,8 +252,6 @@ def bounce_one_ccd(X):
     #return run_one_ccd(survey, ccd, opt)
     return run_one_ccd(*X)
 
-def cut_sources(T, chipwcs, margin):
-
 def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                 ccd, opt, zoomslice, ps):
     tlast = Time()
@@ -282,8 +283,8 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         chipwcs = tim.subwcs
 
         surveys = [(catsurvey_north, True)]
-        if cutsurvey_south is not None:
-            surveys.append((cutsurvey_south, False))
+        if catsurvey_south is not None:
+            surveys.append((catsurvey_south, False))
 
         for catsurvey,north in surveys:
             bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
