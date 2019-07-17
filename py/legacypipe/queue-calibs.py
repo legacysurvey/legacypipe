@@ -480,6 +480,21 @@ def main():
         T.cut(I)
         log('Cut to', len(T), 'CCDs near bricks')
 
+    if opt.forced:
+        log('Writing forced-photometry commands to', opt.out)
+        f = open(opt.out,'w')
+        log('Total of', len(T), 'CCDs')
+        #T.cut(allI)
+        camexp = set([(c,e) for c,e in zip(T.camera, T.expnum)])
+        print(len(camexp), 'unique camera/exposure pairs')
+        for cam,exp in camexp:
+            expstr = '%08i' % exp
+            outfn = os.path.join('forced', cam, expstr[:5], 'forced-%s-%s.fits' % (cam, exp))
+            f.write('%s %s all %s\n' % (cam, exp, outfn))
+        f.close()
+        log('Wrote', opt.out)
+        sys.exit(0)
+
     # sort by RA increasing
     B.cut(np.argsort(B.ra))
 
@@ -644,35 +659,6 @@ def main():
             print(cmd)
             rtn = os.system(cmd)
             assert(rtn == 0)
-        sys.exit(0)
-
-    if opt.forced:
-        log('Writing forced-photometry commands to', opt.out)
-        f = open(opt.out,'w')
-        log('Total of', len(allI), 'CCDs')
-        for j,i in enumerate(allI):
-            expstr = '%08i' % T.expnum[i]
-            imgfn = os.path.join(survey.survey_dir, 'images',
-                                 T.image_filename[i].strip())
-            if (not os.path.exists(imgfn) and
-                imgfn.endswith('.fz') and
-                os.path.exists(imgfn[:-3])):
-                imgfn = imgfn[:-3]
-
-            outfn = os.path.join(expstr[:5], expstr,
-                                 'forced-%s-%s-%s.fits' %
-                                 (T.camera[i].strip(), expstr, T.ccdname[i]))
-
-            f.write('python legacypipe/forced_photom.py --apphot --derivs --catalog-dir /project/projectdirs/cosmo/data/legacysurvey/dr7/ %i %s forced/%s\n' %
-                    (T.expnum[i], T.ccdname[i], outfn))
-
-        f.close()
-        log('Wrote', opt.out)
-
-        fn = 'forced-ccds.fits'
-        T[allI].writeto(fn)
-        print('Wrote', fn)
-
         sys.exit(0)
 
     if opt.lsb:
