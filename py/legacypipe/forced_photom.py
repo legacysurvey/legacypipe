@@ -259,9 +259,6 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     im = survey.get_image_object(ccd)
 
     if opt.do_calib:
-        #from legacypipe.survey import run_calibs
-        #kwa = dict(splinesky=True)
-        #run_calibs((im, kwa))
         im.run_calibs(splinesky=True)
 
     tim = im.get_tractor_image(slc=zoomslice, pixPsf=True, splinesky=True,
@@ -269,11 +266,32 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                                hybridPsf=opt.hybrid_psf,
                                normalizePsf=opt.normalize_psf,
                                old_calibs_ok=True)
-    print('Got tim:', tim)
+    print('Got tim:', tim, 'x0,y0', tim.x0, tim.y0)
 
     tnow = Time()
     print('Read image:', tnow-tlast)
     tlast = tnow
+
+    # Apply outlier masks
+    if True:
+        # Outliers masks are computed within a survey (north/south for dr8), and are stored
+        # in a brick-oriented way, in the results directories.
+        north_ccd = (ccd.camera.strip() != 'decam')
+        catsurvey = catsurvey_north
+        if not north_ccd and catsurvey_south is not None:
+            catsurvey = catsurvey_south
+        chipwcs = tim.subwcs
+        bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
+        for b in bricks:
+            from legacypipe.outliers import read_outlier_mask_file
+            print('Reading outlier mask for brick', b.brickname)
+            ok = read_outlier_mask_file(catsurvey, [tim], b.brickname, subimage=False, output=False)
+            if not ok:
+                print('WARNING: failed to read outliers mask file for brick', b.brickname)
+            #fn = catsurvey.find_file('outliers_mask', brick=b.brickname)
+            #if not os.path.exists(fn):
+            #    print('WARNING: outliers mask file', fn, 'does not exist.  Skipping!')
+            #    continue
 
     if opt.catalog:
         T = fits_table(opt.catalog)
@@ -603,6 +621,9 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
     if do_forced:
 
+        if derivs:
+            print('Forced photom with position derivatives:')
+
         if ps is None and not get_model:
             forced_kwargs.update(wantims=False)
 
@@ -686,6 +707,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             print('Forced photom:', Time()-t0)
 
         if derivs and fixed_also:
+            print('Forced photom with fixed positions:')
             cat = realsrcs
             tr.setCatalog(Catalog(*cat))
             R = tr.optimize_forced_photometry(variance=True, fitstats=False,
