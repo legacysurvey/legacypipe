@@ -238,7 +238,15 @@ def main(survey=None, opt=None):
         trymakedirs(outdir)
     tmpfn = os.path.join(outdir, 'tmp-' + os.path.basename(opt.outfn))
     fitsio.write(tmpfn, None, header=version_hdr, clobber=True)
-    F.writeto(tmpfn, header=hdr, append=True)
+
+    order = ['release', 'brickid', 'brickname', 'objid', 'camera', 'expnum', 'ccdname',
+             'filter', 'mjd', 'exptime', 'psfsize', 'ccd_cuts', 'airmass', 'sky',
+             'psfdepth', 'galdepth',
+             'ra', 'dec', 'flux', 'flux_ivar', 'fracflux', 'rchisq', 'fracmasked',
+             'apflux', 'apflux_ivar', 'x', 'y', 'mask', 'dra', 'ddec', 'dra_ivar', 'ddec_ivar']
+
+    F.writeto(tmpfn, header=hdr, append=True,
+              columns=[c for c in order if c in columns])
     os.rename(tmpfn, opt.outfn)
     print('Wrote', opt.outfn)
 
@@ -418,7 +426,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                         do_forced=opt.forced,
                         do_apphot=opt.apphot,
                         get_model=opt.save_model,
-                        ps=ps)
+                        ps=ps, timing=True)
 
     if opt.save_model:
         # unpack results
@@ -536,7 +544,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
     that flux too?
     '''
     if timing:
-        t0 = Time()
+        tlast = Time()
     if ps is not None:
         import pylab as plt
     opti = None
@@ -581,9 +589,12 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                                      tim, ps)
             derivsrcs.append(dsrc)
 
-        # For convenience, put all the real sources at the front of
-        # the list, so we can pull the IVs off the front of the list.
-        cat = realsrcs + derivsrcs
+        if fixed_also:
+            pass
+        else:
+            # For convenience, put all the real sources at the front of
+            # the list, so we can pull the IVs off the front of the list.
+            cat = realsrcs + derivsrcs
 
     if agn:
         from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
@@ -621,7 +632,32 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
     if do_forced:
 
+        if timing and (derivs or agn):
+            t = Time()
+            print('Setting up:', t-tlast)
+            tlast = t
         if derivs:
+
+            if fixed_also:
+                print('Forced photom with fixed positions:')
+                #cat = realsrcs
+                #tr.setCatalog(Catalog(*cat))
+                R = tr.optimize_forced_photometry(variance=True, fitstats=False,
+                                                  shared_params=False, priors=False,
+                                                  **forced_kwargs)
+                F.flux_fixed = np.array([src.getBrightness().getFlux(tim.band)
+                                         for src in cat]).astype(np.float32)
+                N = len(cat)
+                F.flux_fixed_ivar = R.IV[:N].astype(np.float32)
+
+                if timing:
+                    t = Time()
+                    print('Forced photom with fixed positions finished:', t-tlast)
+                    tlast = t
+
+                cat = realsrcs + derivsrcs
+                tr.setCatalog(Catalog(*cat))
+
             print('Forced photom with position derivatives:')
 
         if ps is None and not get_model:
@@ -683,7 +719,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         F.flux_ivar = R.IV[:N].astype(np.float32)
 
         F.fracflux = R.fitstats.profracflux[:N].astype(np.float32)
-        F.rchi2    = R.fitstats.prochi2    [:N].astype(np.float32)
+        F.rchisq   = R.fitstats.prochi2    [:N].astype(np.float32)
         # 1 - 
         #F.fracmasked = R.fitstats.pronpix  [:N].astype(np.float32)
         try:
@@ -704,19 +740,9 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             F.flux_agn_ivar[iagn] = R.IV[N:].astype(np.float32)
 
         if timing:
-            print('Forced photom:', Time()-t0)
-
-        if derivs and fixed_also:
-            print('Forced photom with fixed positions:')
-            cat = realsrcs
-            tr.setCatalog(Catalog(*cat))
-            R = tr.optimize_forced_photometry(variance=True, fitstats=False,
-                                              shared_params=False, priors=False,
-                                              **forced_kwargs)
-            F.flux_fixed = np.array([src.getBrightness().getFlux(tim.band)
-                                     for src in cat]).astype(np.float32)
-            N = len(cat)
-            F.flux_fixed_ivar = R.IV[:N].astype(np.float32)
+            t = Time()
+            print('Forced photom:', t-tlast)
+            tlast = t
 
     if do_apphot:
         import photutils
@@ -762,7 +788,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         F.apflux_ivar = np.zeros((len(F), len(apertures)), np.float32)
         F.apflux_ivar[Iap,:] = apiv
         if timing:
-            print('Aperture photom:', Time()-t0)
+            print('Aperture photom:', Time()-tlast)
 
     if get_model:
         return F,mod
