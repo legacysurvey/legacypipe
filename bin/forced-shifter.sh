@@ -26,7 +26,7 @@ logfile=$logdir/$camera-$expnum-$ccdname.log
 cd /src/legacypipe/py
 
 echo "Logging to $logfile"
-python -u legacypipe/forced_photom.py --survey-dir $DIR --catalog-dir-north $DIR/north --catalog-dir-south $DIR/south --catalog-resolve-dec 32.375 \
+python -u legacypipe/forced_photom.py --survey-dir $DIR --catalog-dir-north $DIR/north --catalog-dir-south $DIR/south --catalog-resolve-dec-ngc 32.375 \
     --skip-calibs --apphot --derivs --camera $camera \
     --threads 32 \
     $expnum $ccdname $outdir/$outfn > $logfile 2>&1

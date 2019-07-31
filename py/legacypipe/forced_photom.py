@@ -37,7 +37,7 @@ def get_parser():
 
     parser.add_argument('--catalog-dir-north', help='Set LEGACY_SURVEY_DIR to use to read Northern catalogs')
     parser.add_argument('--catalog-dir-south', help='Set LEGACY_SURVEY_DIR to use to read Southern catalogs')
-    parser.add_argument('--catalog-resolve-dec', type=float, help='Dec at which to switch from Northern to Southern catalogs')
+    parser.add_argument('--catalog-resolve-dec-ngc', type=float, help='Dec at which to switch from Northern to Southern catalogs (NGC only)')
 
     parser.add_argument('--skip-calibs', dest='do_calib', default=True, action='store_false',
                         help='Do not try to run calibrations')
@@ -147,7 +147,7 @@ def main(survey=None, opt=None):
 
     if opt.catalog_dir_north is not None:
         assert(opt.catalog_dir_south is not None)
-        assert(opt.catalog_resolve_dec is not None)
+        assert(opt.catalog_resolve_dec_ngc is not None)
         catsurvey_north = LegacySurveyData(survey_dir = opt.catalog_dir_north)
         catsurvey_south = LegacySurveyData(survey_dir = opt.catalog_dir_south)
 
@@ -189,7 +189,7 @@ def main(survey=None, opt=None):
     args = []
     for ccd in T:
         args.append((survey,
-                     catsurvey_north, catsurvey_south, opt.catalog_resolve_dec,
+                     catsurvey_north, catsurvey_south, opt.catalog_resolve_dec_ngc,
                      ccd, opt, zoomslice, ps))
 
     if opt.threads:
@@ -311,7 +311,18 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
 
         for catsurvey,north in surveys:
             bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
+
+            if resolve_dec is not None:
+                from astrometry.util.starutil_numpy import radectolb
+                bricks.gal_l, brick.gal_b = radectolb(bricks.ra, bricks.dec)
+
             for b in bricks:
+                # Skip bricks that are entirely on the wrong side of the resolve line (NGC only)
+                if b.gal_b > 0 and resolve_dec is not None:
+                    if north and b.dec2 <= resolve_dec:
+                        continue
+                    if not(north) and b.dec1 >= resolve_dec:
+                        continue
                 # there is some overlap with this brick... read the catalog.
                 fn = catsurvey.find_file('tractor', brick=b.brickname)
                 if not os.path.exists(fn):
