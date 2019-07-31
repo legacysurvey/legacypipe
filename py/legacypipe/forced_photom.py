@@ -219,7 +219,6 @@ def main(survey=None, opt=None):
         version_hdr.delete('CCDNAME')
         version_hdr.delete('EXPOSURE')
 
-    hdr = fitsio.FITSHDR()
     units = {'exptime':'sec',
              'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2',
              'apflux':'nanomaggy', 'apflux_ivar':'1/nanomaggy^2',
@@ -228,7 +227,17 @@ def main(survey=None, opt=None):
     if opt.derivs:
         units.update({'dra':'arcsec', 'ddec':'arcsec',
                       'dra_ivar':'1/arcsec^2', 'ddec_ivar':'1/arcsec^2'})
+
     columns = F.get_columns()
+    order = ['release', 'brickid', 'brickname', 'objid', 'camera', 'expnum', 'ccdname',
+             'filter', 'mjd', 'exptime', 'psfsize', 'ccd_cuts', 'airmass', 'sky',
+             'psfdepth', 'galdepth',
+             'ra', 'dec', 'flux', 'flux_ivar', 'fracflux', 'rchisq', 'fracmasked',
+             'apflux', 'apflux_ivar', 'x', 'y', 'mask', 'dra', 'ddec', 'dra_ivar', 'ddec_ivar']
+    columns = [c for c in order if c in columns]
+
+    # Set units headers (must happen after column ordering is set!)
+    hdr = fitsio.FITSHDR()
     for i,col in enumerate(columns):
         if col in units:
             hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
@@ -238,15 +247,7 @@ def main(survey=None, opt=None):
         trymakedirs(outdir)
     tmpfn = os.path.join(outdir, 'tmp-' + os.path.basename(opt.outfn))
     fitsio.write(tmpfn, None, header=version_hdr, clobber=True)
-
-    order = ['release', 'brickid', 'brickname', 'objid', 'camera', 'expnum', 'ccdname',
-             'filter', 'mjd', 'exptime', 'psfsize', 'ccd_cuts', 'airmass', 'sky',
-             'psfdepth', 'galdepth',
-             'ra', 'dec', 'flux', 'flux_ivar', 'fracflux', 'rchisq', 'fracmasked',
-             'apflux', 'apflux_ivar', 'x', 'y', 'mask', 'dra', 'ddec', 'dra_ivar', 'ddec_ivar']
-
-    F.writeto(tmpfn, header=hdr, append=True,
-              columns=[c for c in order if c in columns])
+    F.writeto(tmpfn, header=hdr, append=True, columns=columns)
     os.rename(tmpfn, opt.outfn)
     print('Wrote', opt.outfn)
 
