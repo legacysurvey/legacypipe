@@ -217,7 +217,6 @@ def main(survey=None, opt=None):
     if all_hdus:
         version_hdr.delete('CPHDU')
         version_hdr.delete('CCDNAME')
-        version_hdr.delete('EXPOSURE')
 
     units = {'exptime':'sec',
              'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2',
@@ -514,9 +513,6 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     version_hdr.add_record(dict(name='EXPNUM', value=im.expnum, comment='Exposure num'))
     version_hdr.add_record(dict(name='CCDNAME', value=im.ccdname, comment='CCD name'))
     version_hdr.add_record(dict(name='FILTER', value=tim.band, comment='Bandpass of this image'))
-    version_hdr.add_record(dict(name='EXPOSURE',
-                                value='%s-%s-%s' % (ccd.camera, im.expnum, im.ccdname),
-                                comment='Name of this image'))
     version_hdr.add_record(dict(name='PLVER', value=ccd.plver, comment='CP pipeline version'))
     version_hdr.add_record(dict(name='PROCDATE', value=ccd.procdate, comment='CP image DATE'))
 
