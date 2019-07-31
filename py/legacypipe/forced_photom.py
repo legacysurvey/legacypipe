@@ -233,7 +233,7 @@ def main(survey=None, opt=None):
              'filter', 'mjd', 'exptime', 'psfsize', 'ccd_cuts', 'airmass', 'sky',
              'psfdepth', 'galdepth',
              'ra', 'dec', 'flux', 'flux_ivar', 'fracflux', 'rchisq', 'fracmasked',
-             'apflux', 'apflux_ivar', 'x', 'y', 'mask', 'dra', 'ddec', 'dra_ivar', 'ddec_ivar']
+             'apflux', 'apflux_ivar', 'x', 'y', 'dqmask', 'dra', 'ddec', 'dra_ivar', 'ddec_ivar']
     columns = [c for c in order if c in columns]
 
     # Set units headers (must happen after column ordering is set!)
@@ -297,10 +297,6 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
             ok = read_outlier_mask_file(catsurvey, [tim], b.brickname, subimage=False, output=False)
             if not ok:
                 print('WARNING: failed to read outliers mask file for brick', b.brickname)
-            #fn = catsurvey.find_file('outliers_mask', brick=b.brickname)
-            #if not os.path.exists(fn):
-            #    print('WARNING: outliers mask file', fn, 'does not exist.  Skipping!')
-            #    continue
 
     if opt.catalog:
         T = fits_table(opt.catalog)
@@ -449,7 +445,6 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     F.psfsize = np.array([tim.psf_fwhm * tim.imobj.pixscale] * len(F)).astype(np.float32)
     F.ccd_cuts = np.array([ccd.ccd_cuts] * len(F))
     F.airmass  = np.array([ccd.airmass ] * len(F))
-    #### FIXME -- units?
     ### --> also add units to the dict below so the FITS headers have units
     F.sky     = np.array([tim.midsky / tim.zpscale / tim.imobj.pixscale**2] * len(F)).astype(np.float32)
     # in the same units as the depth maps -- flux inverse-variance.
@@ -484,11 +479,9 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     F.x = (x-1).astype(np.float32)
     F.y = (y-1).astype(np.float32)
 
-    ## FIXME -- read outlier_masks?
-
     h,w = tim.shape
-    F.mask = tim.dq[np.clip(np.round(F.y).astype(int), 0, h-1),
-                    np.clip(np.round(F.x).astype(int), 0, w-1)]
+    F.dqmask = tim.dq[np.clip(np.round(F.y).astype(int), 0, h-1),
+                      np.clip(np.round(F.x).astype(int), 0, w-1)]
 
     program_name = sys.argv[0]
     ## FIXME -- from catalog?
