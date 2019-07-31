@@ -446,7 +446,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     F.objid     = T.objid
 
     F.camera  = np.array([ccd.camera] * len(F))
-    F.expnum  = np.array([im.expnum]  * len(F)).astype(np.int32)
+    F.expnum  = np.array([im.expnum]  * len(F)).astype(np.int64)
     F.ccdname = np.array([im.ccdname] * len(F))
 
     # "Denormalizing"
