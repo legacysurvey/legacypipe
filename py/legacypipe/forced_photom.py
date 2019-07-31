@@ -580,8 +580,13 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
     if derivs:
         realsrcs = []
         derivsrcs = []
-        for src in cat:
+        Iderivs = []
+        for i,src in enumerate(cat):
             realsrcs.append(src)
+
+            if not isinstance(src, PointSource):
+                continue
+            Iderivs.append(i)
 
             brightness_dra  = src.getBrightness().copy()
             brightness_ddec = src.getBrightness().copy()
@@ -593,6 +598,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             dsrc = SourceDerivatives(src, [brightness_dra, brightness_ddec],
                                      tim, ps)
             derivsrcs.append(dsrc)
+        Iderivs = np.array(Iderivs)
 
         if fixed_also:
             pass
@@ -641,12 +647,10 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             t = Time()
             print('Setting up:', t-tlast)
             tlast = t
-        if derivs:
 
+        if derivs:
             if fixed_also:
                 print('Forced photom with fixed positions:')
-                #cat = realsrcs
-                #tr.setCatalog(Catalog(*cat))
                 R = tr.optimize_forced_photometry(variance=True, fitstats=False,
                                                   shared_params=False, priors=False,
                                                   **forced_kwargs)
@@ -662,7 +666,6 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
                 cat = realsrcs + derivsrcs
                 tr.setCatalog(Catalog(*cat))
-
             print('Forced photom with position derivatives:')
 
         if ps is None and not get_model:
@@ -713,30 +716,32 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 plt.title('Chi without derivatives: %s' % tim.name)
                 ps.savefig()
 
-        if derivs:
+        if derivs or agn:
             cat = realsrcs
-        if agn:
-            cat = realsrcs
+        N = len(cat)
 
         F.flux = np.array([src.getBrightness().getFlux(tim.band)
                            for src in cat]).astype(np.float32)
-        N = len(cat)
         F.flux_ivar = R.IV[:N].astype(np.float32)
 
         F.fracflux = R.fitstats.profracflux[:N].astype(np.float32)
         F.rchisq   = R.fitstats.prochi2    [:N].astype(np.float32)
-        # 1 - 
-        #F.fracmasked = R.fitstats.pronpix  [:N].astype(np.float32)
         try:
             F.fracmasked = R.fitstats.promasked[:N].astype(np.float32)
         except:
             print('No "fracmasked" available (only in recent Tractor versions)')
 
         if derivs:
-            F.flux_dra  = np.array([src.getParams()[0] for src in derivsrcs]).astype(np.float32)
-            F.flux_ddec = np.array([src.getParams()[1] for src in derivsrcs]).astype(np.float32)
-            F.flux_dra_ivar  = R.IV[N  ::2].astype(np.float32)
-            F.flux_ddec_ivar = R.IV[N+1::2].astype(np.float32)
+            F.flux_dra  = np.zeros(len(F), np.float32)
+            F.flux_dedc = np.zeros(len(F), np.float32)
+            F.flux_dra [Iderivs] = np.array([src.getParams()[0]
+                                             for src in derivsrcs]).astype(np.float32)
+            F.flux_ddec[Iderivs] = np.array([src.getParams()[1]
+                                             for src in derivsrcs]).astype(np.float32)
+            F.flux_dra_ivar  = np.zeros(len(F), np.float32)
+            F.flux_ddec_ivar = np.zeros(len(F), np.float32)
+            F.flux_dra_ivar [Iderivs] = R.IV[N  ::2].astype(np.float32)
+            F.flux_ddec_ivar[Iderivs] = R.IV[N+1::2].astype(np.float32)
 
         if agn:
             F.flux_agn = np.zeros(len(F), np.float32)
