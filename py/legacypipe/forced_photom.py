@@ -514,6 +514,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     version_hdr.add_record(dict(name='CCDNAME', value=im.ccdname, comment='CCD name'))
     version_hdr.add_record(dict(name='FILTER', value=tim.band, comment='Bandpass of this image'))
     version_hdr.add_record(dict(name='PLVER', value=ccd.plver, comment='CP pipeline version'))
+    version_hdr.add_record(dict(name='PLPROCID', value=ccd.plprocid, comment='CP pipeline id'))
     version_hdr.add_record(dict(name='PROCDATE', value=ccd.procdate, comment='CP image DATE'))
 
     keys = ['TELESCOP','OBSERVAT','OBS-LAT','OBS-LONG','OBS-ELEV',
