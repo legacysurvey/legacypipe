@@ -314,7 +314,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
 
             if resolve_dec is not None:
                 from astrometry.util.starutil_numpy import radectolb
-                bricks.gal_l, brick.gal_b = radectolb(bricks.ra, bricks.dec)
+                bricks.gal_l, bricks.gal_b = radectolb(bricks.ra, bricks.dec)
 
             for b in bricks:
                 # Skip bricks that are entirely on the wrong side of the resolve line (NGC only)
@@ -337,7 +337,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                     'shapeexp_r', 'shapeexp_e1', 'shapeexp_e2',
                     'ref_epoch', 'pmra', 'pmdec', 'parallax'
                     ])
-                if resolve_dec is not None:
+                if b.gal_b > 0 and resolve_dec is not None:
                     if north:
                         T.cut(T.dec >= resolve_dec)
                         print('Cut to', len(T), 'north of the resolve line')
@@ -582,6 +582,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         derivsrcs = []
         Iderivs = []
         for i,src in enumerate(cat):
+            from tractor import PointSource
             realsrcs.append(src)
 
             if not isinstance(src, PointSource):
@@ -733,7 +734,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
         if derivs:
             F.flux_dra  = np.zeros(len(F), np.float32)
-            F.flux_dedc = np.zeros(len(F), np.float32)
+            F.flux_ddec = np.zeros(len(F), np.float32)
             F.flux_dra [Iderivs] = np.array([src.getParams()[0]
                                              for src in derivsrcs]).astype(np.float32)
             F.flux_ddec[Iderivs] = np.array([src.getParams()[1]
