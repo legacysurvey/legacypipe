@@ -486,7 +486,8 @@ class Measurer(object):
         if scale:
             wt = self.scale_weight(wt)
 
-        assert(np.all(wt >= 0.))
+        #assert(np.all(wt >= 0.))
+        wt[np.where(wt<0.0)] = 0.0
         assert(np.all(np.isfinite(wt)))
 
         return wt
