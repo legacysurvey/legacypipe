@@ -84,7 +84,7 @@ def one_blob(X):
 
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, simul_opt, use_ceres, rex, refmap)
-    ob.run(B)
+    B = ob.run(B)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
 
@@ -148,7 +148,7 @@ class OneBlob(object):
         self.trargs.update(optimizer=ConstrainedOptimizer())
         self.optargs.update(dchisq = 0.1)
 
-    def run(self, B):
+    def run(self, B, iterative_detection=True):
         trun = tlast = Time()
         # Not quite so many plots...
         self.plots1 = self.plots
@@ -219,7 +219,8 @@ class OneBlob(object):
         tlast = Time()
 
         # Next, model selections: point source vs dev/exp vs composite.
-        self.run_model_selection(cat, Ibright, B)
+        B = self.run_model_selection(cat, Ibright, B,
+                                     iterative_detection=iterative_detection)
 
         debug('Blob', self.name, 'finished model selection:', Time()-tlast)
         tlast = Time()
@@ -241,6 +242,8 @@ class OneBlob(object):
             plt.figure(1)
 
         # Cut down to just the kept sources
+
+        cat = B.sources
         I = np.array([i for i,s in enumerate(cat) if s is not None])
         B.cut(I)
         cat = Catalog(*B.sources)
@@ -301,12 +304,17 @@ class OneBlob(object):
             cat = Catalog(*B.sources)
             tr.catalog = cat
 
+        #print('srcinvvars:', B.srcinvvars, 'type', type(B.srcinvvars))
+        #B.srcinvvars = np.array(B.srcinvvars)
+        #print('after: srcinvvars:', B.srcinvvars, 'type', type(B.srcinvvars))
+
         M = _compute_source_metrics(B.sources, self.tims, self.bands, tr)
         for k,v in M.items():
             B.set(k, v)
         info('Blob', self.name, 'finished, total:', Time()-trun)
+        return B
 
-    def run_model_selection(self, cat, Ibright, B):
+    def run_model_selection(self, cat, Ibright, B, iterative_detection=True):
         # We compute & subtract initial models for the other sources while
         # fitting each source:
         # -Remember the original images
@@ -372,8 +380,180 @@ class OneBlob(object):
             cpu1 = time.clock()
             B.cpu_source[srci] += (cpu1 - cpu0)
 
+        # At this point, we have subtracted our best model fits for each source
+        # to be kept; the tims contain residual images.
+
+        if iterative_detection:
+            Bnew = self.iterative_detection(B)
+            if Bnew is not None:
+                from astrometry.util.fits import merge_tables
+                print('Adding', len(Bnew), 'sources to catalog:', len(B))
+                print('Old sources:', B.sources)
+                print('New sources:', Bnew.sources)
+                print('Old Isrcs:', B.Isrcs)
+                print('New Isrcs:', Bnew.Isrcs)
+                # B.sources is a list of objects... merge() with
+                # fillzero doesn't handle them well.
+                srcs = B.sources
+                newsrcs = Bnew.sources
+                B.delete_column('sources')
+                Bnew.delete_column('sources')
+                iblob = B.iblob
+                B.delete_column('iblob')
+                #sivs = B.srcinvvars
+                #newsivs = Bnew.srcinvvars
+                #B.delete_column('srcinvvars')
+                Bnew.delete_column('srcinvvars')
+                
+                B = merge_tables([B, Bnew], columns='fillzero')
+                B.sources = srcs + newsrcs
+                B.iblob = iblob
+                #B.srcinvvars = sivs + newsivs
+
         models.restore_images(self.tims)
         del models
+        return B
+
+    def iterative_detection(self, Bold):
+        # Compute per-band detection maps
+        from legacypipe.detection import sed_matched_filters, detection_maps, run_sed_matched_filters
+        from astrometry.util.multiproc import multiproc
+
+        if self.plots:
+            coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
+                                       fill_holes=False)
+            import pylab as plt
+            plt.clf()
+            dimshow(get_rgb(coimgs,self.bands), ticks=False)
+            plt.title('Iterative detection: residuals')
+            self.ps.savefig()
+
+        mp = multiproc()
+        detmaps,detivs,satmaps = detection_maps(
+            self.tims, self.blobwcs, self.bands, mp)
+        # if self.plots:
+        #     import pylab as plt
+        #     plt.clf()
+        #     for det,div,b in zip(detmaps, detivs, self.bands):
+        #         plt.hist((det * np.sqrt(div)).ravel(), range=(-5,10),
+        #                  bins=50, histtype='step', color=dict(z='m').get(b, b))
+        #     plt.title('Detection pixel S/N')
+        #     self.ps.savefig()
+
+        #SEDs = survey.sed_matched_filters(self.bands)
+        SEDs = sed_matched_filters(self.bands)
+
+        avoid_x,avoid_y,avoid_r = [],[],[]
+        nsigma = 6.
+        Tnew,newcat,hot = run_sed_matched_filters(
+            SEDs, self.bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r),
+            self.blobwcs, nsigma=nsigma, saturated_pix=satmaps, veto_map=None,
+            plots=False, ps=None, mp=mp)
+            #plots=self.plots, ps=self.ps, mp=mp)
+        if Tnew is None:
+            print('No iterative sources detected!')
+            return None
+
+        print('Found', len(Tnew), 'new sources')
+
+        if self.plots:
+            coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
+                                       fill_holes=False)
+            import pylab as plt
+            plt.clf()
+            dimshow(get_rgb(coimgs,self.bands), ticks=False)
+            ax = plt.axis()
+            crossa = dict(ms=10, mew=1.5)
+            rr = np.array([s.getPosition().ra for s in Bold.sources
+                           if s is not None])
+            dd = np.array([s.getPosition().dec for s in Bold.sources
+                           if s is not None])
+            ok,xx,yy = self.blobwcs.radec2pixelxy(rr, dd)
+            plt.plot(xx-1, yy-1, 'r+', label='Old', **crossa)
+            plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0), label='New',
+                     **crossa)
+            plt.axis(ax)
+            plt.legend()
+            plt.title('Iterative detections')
+            self.ps.savefig()
+        #del satmaps
+
+        ### FIXME -- filter iterative detections to avoid large-residual messes
+
+        print('Tnew:')
+        Tnew.about()
+
+        from tractor import NanoMaggies, RaDecPos
+
+        newsrcs = [PointSource(RaDecPos(t.ra, t.dec),
+                               NanoMaggies(**dict([(b,1) for b in self.bands])))
+                               for t in Tnew]
+        print('New sources:', newsrcs)
+
+        oldsrcs = self.srcs
+        self.srcs = newsrcs
+        
+        Bnew = fits_table()
+        Bnew.sources = newsrcs
+        ## FIXME
+        Bnew.Isrcs = np.arange(len(Bnew))
+        Bnew.cpu_source = np.zeros(len(Bnew), np.float32)
+        Bnew.blob_symm_nimages = np.zeros(len(Bnew), np.int16)
+        Bnew.blob_symm_npix    = np.zeros(len(Bnew), np.int32)
+        Bnew.blob_symm_width   = np.zeros(len(Bnew), np.int16)
+        Bnew.blob_symm_height  = np.zeros(len(Bnew), np.int16)
+        Bnew.hit_limit = np.zeros(len(Bnew), bool)
+
+        Bnew = self.run(Bnew, iterative_detection=False)
+
+        print('Finished fitting iterative sources.  Bnew:')
+        Bnew.about()
+
+        newsrcs = Bnew.sources
+
+        # revert
+        self.srcs = oldsrcs
+
+        return Bnew
+        
+        # cat = Catalog(*newsrcs)
+        # if not self.bigblob:
+        #     debug('Fitting just fluxes using initial models...')
+        #     self._fit_fluxes(cat, self.tims, self.bands)
+        # tr = self.tractor(self.tims, cat)
+        # 
+        # Bnew = fits_table()
+        # Bnew.sources = newsrcs
+        # ## FIXME
+        # Bnew.Isrcs = np.arange(len(cat))
+        # Bnew.cpu_source = np.zeros(len(Bnew), np.float32)
+        # Bnew.blob_symm_nimages = np.zeros(len(Bnew), np.int16)
+        # Bnew.blob_symm_npix    = np.zeros(len(Bnew), np.int32)
+        # Bnew.blob_symm_width   = np.zeros(len(Bnew), np.int16)
+        # Bnew.blob_symm_height  = np.zeros(len(Bnew), np.int16)
+        # Bnew.hit_limit = np.zeros(len(Bnew), bool)
+        # 
+        # # Optimize individual sources, in order of flux.
+        # # First, choose the ordering...
+        # Ibright = _argsort_by_brightness(cat, self.bands)
+        # if len(cat) > 1:
+        #     self._optimize_individual_sources_subtract(
+        #         cat, Ibright, Bnew.cpu_source)
+        # else:
+        #     self._optimize_individual_sources(tr, cat, Ibright, Bnew.cpu_source)
+        # 
+        # # Next, model selections: point source vs dev/exp vs composite.
+        # self.run_model_selection(cat, Ibright, Bnew, iterative_detection=False)
+        # 
+        # if self.plots:
+        #     self._plots(tr, 'After iterative model selection')
+        # 
+        # # Cut down to just the kept sources
+        # I = np.array([i for i,s in enumerate(cat) if s is not None])
+        # Bnew.cut(I)
+        # cat = Catalog(*Bnew.sources)
+        # tr.catalog = cat
+
 
     def model_selection_one_source(self, src, srci, models, B):
 

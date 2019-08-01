@@ -746,7 +746,8 @@ def _peak_plot_3(sedsn, nsigma, x, y, x0, y0, slc, saddlemap,
     plt.subplot(1,2,2)
     y1,x1 = [s.stop for s in slc]
     ext = [x0,x1,y0,y1]
-    plt.imshow(saddlemap, extent=ext, interpolation='nearest', origin='lower')
+    plt.imshow(saddlemap, extent=ext, interpolation='nearest', origin='lower',
+               cmap='gray')
     #plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'c-')
     #ax = plt.axis()
     #plt.plot(ox+x0, oy+y0, 'rx')
