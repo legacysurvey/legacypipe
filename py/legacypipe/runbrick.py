@@ -1273,8 +1273,25 @@ def stage_fitblobs(T=None,
     II = BB.Isrcs
     newcat = BB.sources
     # ... and make the table T parallel with BB.
+    # For iterative sources:
+    n_iter = np.sum(II < 0)
+    if n_iter:
+        n_old = len(T)
+        # first have to pad T with some new entries...
+        Tnew = fits_table()
+        Tnew.iterative = np.array([True] * n_iter)
+        T = merge_tables([T, Tnew], columns='fillzero')
+        # ... and then point II at them.
+        II[II < 0] = n_old + np.arange(n_iter)
+    assert(np.all(II >= 0))
+    assert(np.all(II < len(T)))
+    assert(len(np.unique(II)) == len(II))
     T.cut(II)
     assert(len(T) == len(BB))
+    del BB.Isrcs
+
+    # so that iterative detections get a blob number.
+    T.blob = BB.blob
 
     # Drop sources that exited the blob as a result of fitting.
     left_blob = np.logical_and(BB.started_in_blob,
@@ -1282,10 +1299,10 @@ def stage_fitblobs(T=None,
     I, = np.nonzero(np.logical_not(left_blob))
     if len(I) < len(BB):
         debug('Dropping', len(BB)-len(I), 'sources that exited their blobs during fitting')
-    BB.cut(I)
-    T.cut(I)
-    newcat = [newcat[i] for i in I]
-    assert(len(T) == len(BB))
+        BB.cut(I)
+        T.cut(I)
+        newcat = [newcat[i] for i in I]
+        assert(len(T) == len(BB))
 
     assert(len(T) == len(newcat))
     info('Old catalog:', len(cat))
@@ -2618,6 +2635,9 @@ def stage_writecat(
 
     # Brick pixel positions
     ok,bx,by = targetwcs.radec2pixelxy(T2.orig_ra, T2.orig_dec)
+    # iterative sources
+    bx[ok==False] = 1.
+    by[ok==False] = 1.
     T2.bx0 = (bx - 1.).astype(np.float32)
     T2.by0 = (by - 1.).astype(np.float32)
     ok,bx,by = targetwcs.radec2pixelxy(T2.ra, T2.dec)

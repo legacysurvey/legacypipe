@@ -100,6 +100,8 @@ def one_blob(X):
     B.cpu_blob = np.empty(len(B), np.float32)
     t1 = time.clock()
     B.cpu_blob[:] = t1 - t0
+    B.blob = np.empty(len(B), np.int32)
+    B.blob[:] = nblob
     return B
 
 class OneBlob(object):
@@ -387,28 +389,23 @@ class OneBlob(object):
             Bnew = self.iterative_detection(B)
             if Bnew is not None:
                 from astrometry.util.fits import merge_tables
-                print('Adding', len(Bnew), 'sources to catalog:', len(B))
+                print('Adding', len(Bnew), 'sources to catalog with', len(B), 'sources')
                 print('Old sources:', B.sources)
                 print('New sources:', Bnew.sources)
-                print('Old Isrcs:', B.Isrcs)
-                print('New Isrcs:', Bnew.Isrcs)
                 # B.sources is a list of objects... merge() with
                 # fillzero doesn't handle them well.
                 srcs = B.sources
                 newsrcs = Bnew.sources
                 B.delete_column('sources')
                 Bnew.delete_column('sources')
+                # also scalars don't work well
                 iblob = B.iblob
                 B.delete_column('iblob')
-                #sivs = B.srcinvvars
-                #newsivs = Bnew.srcinvvars
-                #B.delete_column('srcinvvars')
+                # drop new srcinvvars, because they'll get recomputed in the main run() loop
                 Bnew.delete_column('srcinvvars')
-                
                 B = merge_tables([B, Bnew], columns='fillzero')
                 B.sources = srcs + newsrcs
                 B.iblob = iblob
-                #B.srcinvvars = sivs + newsivs
 
         models.restore_images(self.tims)
         del models
@@ -482,21 +479,21 @@ class OneBlob(object):
 
         print('Tnew:')
         Tnew.about()
-
+        print('ibx,iby', Tnew.ibx, Tnew.iby)
+        
         from tractor import NanoMaggies, RaDecPos
 
         newsrcs = [PointSource(RaDecPos(t.ra, t.dec),
                                NanoMaggies(**dict([(b,1) for b in self.bands])))
                                for t in Tnew]
-        print('New sources:', newsrcs)
+        #print('New sources:', newsrcs)
 
         oldsrcs = self.srcs
         self.srcs = newsrcs
         
         Bnew = fits_table()
         Bnew.sources = newsrcs
-        ## FIXME
-        Bnew.Isrcs = np.arange(len(Bnew))
+        Bnew.Isrcs = np.array([-1]*len(Bnew))
         Bnew.cpu_source = np.zeros(len(Bnew), np.float32)
         Bnew.blob_symm_nimages = np.zeros(len(Bnew), np.int16)
         Bnew.blob_symm_npix    = np.zeros(len(Bnew), np.int32)
