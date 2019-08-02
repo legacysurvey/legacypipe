@@ -1279,10 +1279,12 @@ def stage_fitblobs(T=None,
         n_old = len(T)
         # first have to pad T with some new entries...
         Tnew = fits_table()
-        Tnew.iterative = np.array([True] * n_iter)
+        Tnew.iterative = np.ones(n_iter, bool)
         T = merge_tables([T, Tnew], columns='fillzero')
         # ... and then point II at them.
         II[II < 0] = n_old + np.arange(n_iter)
+    else:
+        T.iterative = np.zeros(len(T), bool)
     assert(np.all(II >= 0))
     assert(np.all(II < len(T)))
     assert(len(np.unique(II)) == len(II))
@@ -1746,7 +1748,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
-    if 'iterative' in T.get_columns() and plots:
+    if plots:
         cat_init = [src for it,src in zip(T.iterative, cat) if it == False]
         cat_iter = [src for it,src in zip(T.iterative, cat) if it == True ]
         print(len(cat_init), 'initial sources and', len(cat_iter), 'iterative')
