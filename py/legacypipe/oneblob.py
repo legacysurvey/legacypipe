@@ -422,6 +422,9 @@ class OneBlob(object):
         mp = multiproc()
         detmaps,detivs,satmaps = detection_maps(
             self.tims, self.blobwcs, self.bands, mp)
+
+        # Also compute detection maps on the (first-round) model images!
+        
         # if self.plots:
         #     import pylab as plt
         #     plt.clf()
@@ -1471,13 +1474,12 @@ class OneBlob(object):
         # rather than the Images themselves.  Here we build the
         # 'tims'.
         tims = []
-        for (img, inverr, twcs, wcs, pcal, sky, psf, name, sx0, sx1, sy0, sy1,
+        for (img, inverr, twcs, wcsobj, pcal, sky, subpsf, name,
+             sx0, sx1, sy0, sy1,
              band, sig1, modelMinval, imobj) in timargs:
             # Mask out inverr for pixels that are not within the blob.
-            subwcs = wcs.get_subimage(int(sx0), int(sy0),
-                                      int(sx1-sx0), int(sy1-sy0))
             try:
-                Yo,Xo,Yi,Xi,_ = resample_with_wcs(subwcs, self.blobwcs,
+                Yo,Xo,Yi,Xi,_ = resample_with_wcs(wcsobj, self.blobwcs,
                                                   intType=np.int16)
             except OverlapError:
                 continue
@@ -1490,19 +1492,18 @@ class OneBlob(object):
 
             # If the subimage (blob) is small enough, instantiate a
             # constant PSF model in the center.
-            if sy1-sy0 < 400 and sx1-sx0 < 400:
-                subpsf = psf.constantPsfAt((sx0+sx1)/2., (sy0+sy1)/2.)
-            else:
-                # Otherwise, instantiate a (shifted) spatially-varying
-                # PsfEx model.
-                subpsf = psf.getShifted(sx0, sy0)
+            h,w = img.shape
+            if h < 400 and w < 400:
+                subpsf = subpsf.constantPsfAt(w/2., h/2.)
+
+            print('Subpsf:', subpsf)
 
             tim = Image(data=img, inverr=inverr, wcs=twcs,
                         psf=subpsf, photocal=pcal, sky=sky, name=name)
             tim.band = band
             tim.sig1 = sig1
             tim.modelMinval = modelMinval
-            tim.subwcs = subwcs
+            tim.subwcs = wcsobj
             tim.meta = imobj
             tim.psf_sigma = imobj.fwhm / 2.35
             tim.dq = None
