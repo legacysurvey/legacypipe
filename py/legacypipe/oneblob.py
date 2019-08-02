@@ -67,6 +67,8 @@ def one_blob(X):
         np.array([src.getPosition().dec for src in srcs]))
     safe_x0 = np.clip(np.round(x0-1).astype(int), 0,blobw-1)
     safe_y0 = np.clip(np.round(y0-1).astype(int), 0,blobh-1)
+    B.init_x = safe_x0
+    B.init_y = safe_y0
     B.started_in_blob = blobmask[safe_y0, safe_x0]
     # This uses 'initial' pixel positions, because that's what determines
     # the fitting behaviors.
@@ -385,7 +387,7 @@ class OneBlob(object):
         # to be kept; the tims contain residual images.
 
         if iterative_detection:
-            Bnew = self.iterative_detection(B)
+            Bnew = self.iterative_detection(B, models)
             if Bnew is not None:
                 from astrometry.util.fits import merge_tables
                 # B.sources is a list of objects... merge() with
@@ -405,7 +407,7 @@ class OneBlob(object):
         del models
         return B
 
-    def iterative_detection(self, Bold):
+    def iterative_detection(self, Bold, models):
         # Compute per-band detection maps
         from legacypipe.detection import sed_matched_filters, detection_maps, run_sed_matched_filters
         from astrometry.util.multiproc import multiproc
@@ -424,7 +426,41 @@ class OneBlob(object):
             self.tims, self.blobwcs, self.bands, mp)
 
         # Also compute detection maps on the (first-round) model images!
-        
+        # save tim.images (= residuals at this point)
+        realimages = [tim.getImage() for tim in self.tims]
+        for tim,mods in zip(self.tims, models.models):
+            modimg = np.zeros_like(tim.getImage())
+            for mod in mods:
+                if mod is None:
+                    continue
+                mod.addTo(modimg)
+            tim.data = modimg
+        if self.plots:
+            coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
+                                       fill_holes=False)
+            import pylab as plt
+            plt.clf()
+            dimshow(get_rgb(coimgs,self.bands), ticks=False)
+            plt.title('Iterative detection: first-round models')
+            self.ps.savefig()
+
+        mod_detmaps,mod_detivs,_ = detection_maps(
+            self.tims, self.blobwcs, self.bands, mp)
+        # revert
+        for tim,img in zip(self.tims, realimages):
+            tim.data = img
+
+        if self.plots:
+            import pylab as plt
+            plt.clf()
+            dimshow(get_rgb(detmaps,self.bands), ticks=False)
+            plt.title('Iterative detection: detection maps')
+            self.ps.savefig()
+            plt.clf()
+            dimshow(get_rgb(mod_detmaps,self.bands), ticks=False)
+            plt.title('Iterative detection: model detection maps')
+            self.ps.savefig()
+
         # if self.plots:
         #     import pylab as plt
         #     plt.clf()
@@ -434,14 +470,25 @@ class OneBlob(object):
         #     plt.title('Detection pixel S/N')
         #     self.ps.savefig()
 
-        SEDs = sed_matched_filters(self.bands)
-
         detlogger = logging.getLogger('legacypipe.detection')
         detloglvl = detlogger.getEffectiveLevel()
         detlogger.setLevel(detloglvl + 10)
-        
-        avoid_x,avoid_y,avoid_r = [],[],[]
+
+        SEDs = sed_matched_filters(self.bands)
+
+        # ok,old_x,old_y = self.blobwcs.radec2pixelxy(
+        #     np.array([src.getPosition().ra  for src in self.srcs if src is not None]),
+        #     np.array([src.getPosition().dec for src in self.srcs if src is not None]))
+        #avoid_x = (old_x - 1).astype(int)
+        #avoid_y = (old_y - 1).astype(int)
+
+        # Avoid re-detecting sources at positions close to initial
+        # source positions (including ones that will get cut!)
+        avoid_x = Bold.init_x
+        avoid_y = Bold.init_y
+        avoid_r = np.zeros(len(avoid_x), np.float32) + 2.
         nsigma = 6.
+
         Tnew,newcat,hot = run_sed_matched_filters(
             SEDs, self.bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r),
             self.blobwcs, nsigma=nsigma, saturated_pix=satmaps, veto_map=None,
@@ -455,6 +502,20 @@ class OneBlob(object):
             return None
 
         print('Found', len(Tnew), 'new sources')
+
+        Tnew.cut(self.refmap[Tnew.iby, Tnew.ibx] == 0)
+        print('Cut to', len(Tnew), 'on refmap')
+        if len(Tnew) == 0:
+            return None
+
+        detsns = np.dstack([m*np.sqrt(iv) for m,iv in zip(detmaps, detivs)])
+        modsns = np.dstack([m*np.sqrt(iv) for m,iv in zip(mod_detmaps, mod_detivs)])
+
+        det_max = np.max(detsns[Tnew.iby, Tnew.ibx, :], axis=1)
+        mod_max = np.max(modsns[Tnew.iby, Tnew.ibx, :], axis=1)
+        det_sum = np.sum(detsns[Tnew.iby, Tnew.ibx, :], axis=1)
+        mod_sum = np.sum(modsns[Tnew.iby, Tnew.ibx, :], axis=1)
+        del detsns, modsns
 
         if self.plots:
             coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
@@ -476,9 +537,48 @@ class OneBlob(object):
             plt.legend()
             plt.title('Iterative detections')
             self.ps.savefig()
-        #del satmaps
 
-        ### FIXME -- filter iterative detections to avoid large-residual messes?
+            plt.clf()
+            plt.loglog(mod_max, det_max, 'k.')
+            ax = plt.axis()
+            plt.plot([1e-3, 1e6], [1e-3, 1e6], 'b--', lw=3, alpha=0.3)
+            plt.axis(ax)
+            plt.xlabel('Model detection S/N: max')
+            plt.ylabel('Iterative detection S/N: max')
+            self.ps.savefig()
+
+            plt.clf()
+            plt.loglog(mod_sum, det_sum, 'k.')
+            ax = plt.axis()
+            plt.plot([1e-3, 1e6], [1e-3, 1e6], 'b--', lw=3, alpha=0.3)
+            plt.axis(ax)
+            plt.xlabel('Model detection S/N: sum')
+            plt.ylabel('Iterative detection S/N: sum')
+            self.ps.savefig()
+
+            plt.clf()
+            dimshow(get_rgb(coimgs,self.bands), ticks=False)
+            ax = plt.axis()
+            crossa = dict(ms=10, mew=1.5)
+            plt.plot(xx-1, yy-1, 'r+', label='Old', **crossa)
+            plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0), label='New',
+                     **crossa)
+            for x,y,r1,r2 in zip(Tnew.ibx, Tnew.iby, det_max/np.maximum(mod_max, 1.), det_sum/np.maximum(mod_sum, len(self.bands))):
+                plt.text(x, y, '%.1f, %.1f' % (r1,r2),
+                         color='k', fontsize=10,
+                         bbox=dict(facecolor='w', alpha=0.5))
+            plt.axis(ax)
+            plt.legend()
+            plt.title('Iterative detections')
+            self.ps.savefig()
+
+        B = 0.2
+        Tnew.cut(det_max > B * np.maximum(mod_max, 1.))
+        print('Cut to', len(Tnew), 'compared to model detection map')
+        if len(Tnew) == 0:
+            return None
+
+        #del satmaps
 
         from tractor import NanoMaggies, RaDecPos
 
@@ -1496,8 +1596,6 @@ class OneBlob(object):
             if h < 400 and w < 400:
                 subpsf = subpsf.constantPsfAt(w/2., h/2.)
 
-            print('Subpsf:', subpsf)
-
             tim = Image(data=img, inverr=inverr, wcs=twcs,
                         psf=subpsf, photocal=pcal, sky=sky, name=name)
             tim.band = band
@@ -1856,7 +1954,6 @@ class SourceModels(object):
 
     def update_and_subtract(self, i, src, tims):
         for tim,mods in zip(tims, self.models):
-            #mod = srctractor.getModelPatch(tim, src)
             if src is None:
                 mod = None
             else:

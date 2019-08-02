@@ -1658,13 +1658,9 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
             subie  = tim.getInvError()[subslc]
             subwcs = tim.getWcs().shifted(sx0, sy0)
             subsky = tim.getSky().shifted(sx0, sy0)
-
             subpsf = tim.getPsf().getShifted(sx0, sy0)
-            print('Shifted PSF:', subpsf)
-
             subwcsobj = tim.subwcs.get_subimage(int(sx0), int(sy0),
                                                 int(sx1-sx0), int(sy1-sy0))
-
             tim.imobj.psfnorm = tim.psfnorm
             tim.imobj.galnorm = tim.galnorm
             # FIXME -- maybe the cache is worth sending?
