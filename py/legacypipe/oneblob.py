@@ -431,9 +431,12 @@ class OneBlob(object):
         #     plt.title('Detection pixel S/N')
         #     self.ps.savefig()
 
-        #SEDs = survey.sed_matched_filters(self.bands)
         SEDs = sed_matched_filters(self.bands)
 
+        detlogger = logging.getLogger('legacypipe.detection')
+        detloglvl = detlogger.getEffectiveLevel()
+        detlogger.setLevel(detloglvl + 10)
+        
         avoid_x,avoid_y,avoid_r = [],[],[]
         nsigma = 6.
         Tnew,newcat,hot = run_sed_matched_filters(
@@ -441,6 +444,9 @@ class OneBlob(object):
             self.blobwcs, nsigma=nsigma, saturated_pix=satmaps, veto_map=None,
             plots=False, ps=None, mp=mp)
             #plots=self.plots, ps=self.ps, mp=mp)
+
+        detlogger.setLevel(detloglvl)
+
         if Tnew is None:
             print('No iterative sources detected!')
             return None
