@@ -1996,7 +1996,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         dimshow(get_rgb(C.coimgs, bands, **rgbkwargs))
         ax = plt.axis()
         #plt.plot(np.vstack((x0,x1))-1, np.vstack((y0,y1))-1, 'r-')
-        for xx0,yy0,xx1,yy1 in zip(x0,y0,x1,y1):
+        I = np.flatnonzero(T.orig_ra != 0.)
+        for xx0,yy0,xx1,yy1 in zip(x0[I],y0[I],x1[I],y1[I]):
             plt.plot([xx0-1,xx1-1], [yy0-1,yy1-1], 'r-')
         plt.plot(x1-1, y1-1, 'r.')
         plt.axis(ax)
@@ -2042,6 +2043,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                 r = rr + rd[:,0] * np.cos(np.deg2rad(dd))
                 d = dd + rd[:,1]
                 ok,xx,yy = targetwcs.radec2pixelxy(r, d)
+                xx -= 1.
+                yy -= 1.
                 x1,x2,x3 = xx[:3]
                 y1,y2,y3 = yy[:3]
                 plt.plot([x3, x1, x2], [y3, y1, y2], '-', color=c)
