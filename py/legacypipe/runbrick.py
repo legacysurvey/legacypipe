@@ -1741,6 +1741,46 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
+    if 'iterative' in T.get_columns() and plots:
+        cat_init = [src for it,src in zip(T.iterative, cat) if it == False]
+        cat_iter = [src for it,src in zip(T.iterative, cat) if it == True ]
+        print(len(cat_init), 'initial sources and', len(cat_iter), 'iterative')
+        mods_init = mp.map(_get_mod, [(tim, cat_init) for tim in tims])
+        mods_iter = mp.map(_get_mod, [(tim, cat_iter) for tim in tims])
+        coimgs_init,_ = quick_coadds(tims, bands, targetwcs, images=mods_init)
+        coimgs_iter,_ = quick_coadds(tims, bands, targetwcs, images=mods_iter)
+        coimgs,_ = quick_coadds(tims, bands, targetwcs)
+
+        plt.clf()
+        dimshow(get_rgb(coimgs, bands, **rgbkwargs))
+        plt.title('First-round data')
+        ps.savefig()
+
+        plt.clf()
+        dimshow(get_rgb(coimgs_init, bands, **rgbkwargs))
+        plt.title('First-round model fits')
+        ps.savefig()
+
+        plt.clf()
+        dimshow(get_rgb([img-mod for img,mod in zip(coimgs,coimgs_init)], bands, **rgbkwargs))
+        plt.title('First-round residuals')
+        ps.savefig()
+
+        plt.clf()
+        dimshow(get_rgb(coimgs_iter, bands, **rgbkwargs))
+        plt.title('Iterative model fits')
+        ps.savefig()
+
+        plt.clf()
+        dimshow(get_rgb([mod+mod2 for mod,mod2 in zip(coimgs_init, coimgs_iter)], bands, **rgbkwargs))
+        plt.title('Initial + Iterative model fits')
+        ps.savefig()
+
+        plt.clf()
+        dimshow(get_rgb([img-mod-mod2 for img,mod,mod2 in zip(coimgs,coimgs_init,coimgs_iter)], bands, **rgbkwargs))
+        plt.title('Iterative model residuals')
+        ps.savefig()
+
     tnow = Time()
     debug('[serial coadds]:', tnow-tlast)
     tlast = tnow

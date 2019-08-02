@@ -116,7 +116,8 @@ class OneBlob(object):
         self.bands = bands
         self.plots = plots
         self.refmap = refmap
-        self.plots_per_source = plots
+        self.plots_per_source = False
+        #self.plots_per_source = plots
         self.plots_per_model = False
         # blob-1-data.png, etc
         self.plots_single = False
@@ -150,7 +151,7 @@ class OneBlob(object):
         self.trargs.update(optimizer=ConstrainedOptimizer())
         self.optargs.update(dchisq = 0.1)
 
-    def run(self, B, iterative_detection=True):
+    def run(self, B, iterative_detection=True, compute_metrics=True):
         trun = tlast = Time()
         # Not quite so many plots...
         self.plots1 = self.plots
@@ -227,6 +228,13 @@ class OneBlob(object):
         debug('Blob', self.name, 'finished model selection:', Time()-tlast)
         tlast = Time()
 
+        # Cut down to just the kept sources
+        cat = B.sources
+        I = np.array([i for i,s in enumerate(cat) if s is not None])
+        B.cut(I)
+        cat = Catalog(*B.sources)
+        tr.catalog = cat
+
         if self.plots:
             self._plots(tr, 'After model selection')
 
@@ -243,13 +251,6 @@ class OneBlob(object):
             plt.savefig('blob-%s-resid.png' % (self.name))
             plt.figure(1)
 
-        # Cut down to just the kept sources
-
-        cat = B.sources
-        I = np.array([i for i,s in enumerate(cat) if s is not None])
-        B.cut(I)
-        cat = Catalog(*B.sources)
-        tr.catalog = cat
 
         # Do another quick round of flux-only fitting?
         # This does horribly -- fluffy galaxies go out of control because
@@ -274,45 +275,43 @@ class OneBlob(object):
         #             break
         #     #print('Simultaneous fit took:', Time()-tfit)
 
-        # Compute variances on all parameters for the kept model
-        B.srcinvvars = [None for i in range(len(B))]
-        cat.thawAllRecursive()
-        cat.freezeAllParams()
-        for isub in range(len(B.sources)):
-            cat.thawParam(isub)
-            src = cat[isub]
-            if src is None:
+        if compute_metrics:
+            # Compute variances on all parameters for the kept model
+            B.srcinvvars = [None for i in range(len(B))]
+            cat.thawAllRecursive()
+            cat.freezeAllParams()
+            for isub in range(len(B.sources)):
+                cat.thawParam(isub)
+                src = cat[isub]
+                if src is None:
+                    cat.freezeParam(isub)
+                    continue
+                # Convert to "vanilla" ellipse parameterization
+                nsrcparams = src.numberOfParams()
+                _convert_ellipses(src)
+                assert(src.numberOfParams() == nsrcparams)
+                # Compute inverse-variances
+                allderivs = tr.getDerivs()
+                ivars = _compute_invvars(allderivs)
+                assert(len(ivars) == nsrcparams)
+                B.srcinvvars[isub] = ivars
+                assert(len(B.srcinvvars[isub]) == cat[isub].numberOfParams())
                 cat.freezeParam(isub)
-                continue
-            # Convert to "vanilla" ellipse parameterization
-            nsrcparams = src.numberOfParams()
-            _convert_ellipses(src)
-            assert(src.numberOfParams() == nsrcparams)
-            # Compute inverse-variances
-            allderivs = tr.getDerivs()
-            ivars = _compute_invvars(allderivs)
-            assert(len(ivars) == nsrcparams)
-            B.srcinvvars[isub] = ivars
-            assert(len(B.srcinvvars[isub]) == cat[isub].numberOfParams())
-            cat.freezeParam(isub)
 
-        # Check for sources with zero inverse-variance -- I think these
-        # can be generated during the "Simultaneous re-opt" stage above --
-        # sources can get scattered outside the blob.
-        I, = np.nonzero([np.sum(iv) > 0 for iv in B.srcinvvars])
-        if len(I) < len(B):
-            debug('Keeping', len(I), 'of', len(B),'sources with non-zero ivar')
-            B.cut(I)
-            cat = Catalog(*B.sources)
-            tr.catalog = cat
+            # Check for sources with zero inverse-variance -- I think these
+            # can be generated during the "Simultaneous re-opt" stage above --
+            # sources can get scattered outside the blob.
+            I, = np.nonzero([np.sum(iv) > 0 for iv in B.srcinvvars])
+            if len(I) < len(B):
+                debug('Keeping', len(I), 'of', len(B),'sources with non-zero ivar')
+                B.cut(I)
+                cat = Catalog(*B.sources)
+                tr.catalog = cat
 
-        #print('srcinvvars:', B.srcinvvars, 'type', type(B.srcinvvars))
-        #B.srcinvvars = np.array(B.srcinvvars)
-        #print('after: srcinvvars:', B.srcinvvars, 'type', type(B.srcinvvars))
+            M = _compute_source_metrics(B.sources, self.tims, self.bands, tr)
+            for k,v in M.items():
+                B.set(k, v)
 
-        M = _compute_source_metrics(B.sources, self.tims, self.bands, tr)
-        for k,v in M.items():
-            B.set(k, v)
         info('Blob', self.name, 'finished, total:', Time()-trun)
         return B
 
@@ -389,9 +388,6 @@ class OneBlob(object):
             Bnew = self.iterative_detection(B)
             if Bnew is not None:
                 from astrometry.util.fits import merge_tables
-                print('Adding', len(Bnew), 'sources to catalog with', len(B), 'sources')
-                print('Old sources:', B.sources)
-                print('New sources:', Bnew.sources)
                 # B.sources is a list of objects... merge() with
                 # fillzero doesn't handle them well.
                 srcs = B.sources
@@ -401,8 +397,6 @@ class OneBlob(object):
                 # also scalars don't work well
                 iblob = B.iblob
                 B.delete_column('iblob')
-                # drop new srcinvvars, because they'll get recomputed in the main run() loop
-                Bnew.delete_column('srcinvvars')
                 B = merge_tables([B, Bnew], columns='fillzero')
                 B.sources = srcs + newsrcs
                 B.iblob = iblob
@@ -475,19 +469,14 @@ class OneBlob(object):
             self.ps.savefig()
         #del satmaps
 
-        ### FIXME -- filter iterative detections to avoid large-residual messes
+        ### FIXME -- filter iterative detections to avoid large-residual messes?
 
-        print('Tnew:')
-        Tnew.about()
-        print('ibx,iby', Tnew.ibx, Tnew.iby)
-        
         from tractor import NanoMaggies, RaDecPos
 
         newsrcs = [PointSource(RaDecPos(t.ra, t.dec),
                                NanoMaggies(**dict([(b,1) for b in self.bands])))
                                for t in Tnew]
-        #print('New sources:', newsrcs)
-
+        # Save
         oldsrcs = self.srcs
         self.srcs = newsrcs
         
@@ -501,56 +490,16 @@ class OneBlob(object):
         Bnew.blob_symm_height  = np.zeros(len(Bnew), np.int16)
         Bnew.hit_limit = np.zeros(len(Bnew), bool)
 
-        Bnew = self.run(Bnew, iterative_detection=False)
-
-        print('Finished fitting iterative sources.  Bnew:')
-        Bnew.about()
-
-        newsrcs = Bnew.sources
+        # Run the whole oneblob pipeline on the iterative sources!
+        Bnew = self.run(Bnew, iterative_detection=False, compute_metrics=False)
 
         # revert
         self.srcs = oldsrcs
 
-        return Bnew
-        
-        # cat = Catalog(*newsrcs)
-        # if not self.bigblob:
-        #     debug('Fitting just fluxes using initial models...')
-        #     self._fit_fluxes(cat, self.tims, self.bands)
-        # tr = self.tractor(self.tims, cat)
-        # 
-        # Bnew = fits_table()
-        # Bnew.sources = newsrcs
-        # ## FIXME
-        # Bnew.Isrcs = np.arange(len(cat))
-        # Bnew.cpu_source = np.zeros(len(Bnew), np.float32)
-        # Bnew.blob_symm_nimages = np.zeros(len(Bnew), np.int16)
-        # Bnew.blob_symm_npix    = np.zeros(len(Bnew), np.int32)
-        # Bnew.blob_symm_width   = np.zeros(len(Bnew), np.int16)
-        # Bnew.blob_symm_height  = np.zeros(len(Bnew), np.int16)
-        # Bnew.hit_limit = np.zeros(len(Bnew), bool)
-        # 
-        # # Optimize individual sources, in order of flux.
-        # # First, choose the ordering...
-        # Ibright = _argsort_by_brightness(cat, self.bands)
-        # if len(cat) > 1:
-        #     self._optimize_individual_sources_subtract(
-        #         cat, Ibright, Bnew.cpu_source)
-        # else:
-        #     self._optimize_individual_sources(tr, cat, Ibright, Bnew.cpu_source)
-        # 
-        # # Next, model selections: point source vs dev/exp vs composite.
-        # self.run_model_selection(cat, Ibright, Bnew, iterative_detection=False)
-        # 
-        # if self.plots:
-        #     self._plots(tr, 'After iterative model selection')
-        # 
-        # # Cut down to just the kept sources
-        # I = np.array([i for i,s in enumerate(cat) if s is not None])
-        # Bnew.cut(I)
-        # cat = Catalog(*Bnew.sources)
-        # tr.catalog = cat
+        if len(Bnew) == 0:
+            return None
 
+        return Bnew
 
     def model_selection_one_source(self, src, srci, models, B):
 
@@ -645,7 +594,7 @@ class OneBlob(object):
             blobs,_ = label(flipblobs)
             goodblob = blobs[iy,ix]
 
-            if self.plots_per_source:
+            if self.plots_per_source and False:
                 # This plot is about the symmetric-blob definitions
                 # when fitting sources.
                 import pylab as plt
@@ -1216,6 +1165,12 @@ class OneBlob(object):
             coimgs, cons = quick_coadds(srctims, self.bands, srcwcs)
             rgb = get_rgb(coimgs, self.bands)
             dimshow(rgb, ticks=False)
+
+            # next over: rgb with same stretch as models
+            plt.subplot(rows, cols, 2)
+            rgb = get_rgb(coimgs, self.bands, **rgbkwargs)
+            dimshow(rgb, ticks=False)
+
             for imod,modname in enumerate(modnames):
                 if modname != 'none' and not modname in chisqs:
                     continue
