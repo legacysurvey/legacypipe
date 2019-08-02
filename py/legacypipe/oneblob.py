@@ -277,6 +277,35 @@ class OneBlob(object):
         #             break
         #     #print('Simultaneous fit took:', Time()-tfit)
 
+        ### FIXME!
+        # A final optimization round This does seem to improve things,
+        ### but it makes some results weird -- eg, the dchisq values
+        ### don't really correspond to the final values.
+        if False and len(cat) > 1:
+            if self.plots:
+                import pylab as plt
+                modimgs = list(tr.getModelImages())
+                co,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
+                                    images=modimgs)
+                plt.clf()
+                dimshow(get_rgb(co, self.bands))
+                plt.title('Before final opt')
+                self.ps.savefig()
+
+            Ibright = _argsort_by_brightness(cat, self.bands)
+            self._optimize_individual_sources_subtract(
+                cat, Ibright, B.cpu_source)
+
+            if self.plots:
+                import pylab as plt
+                modimgs = list(tr.getModelImages())
+                co,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
+                                    images=modimgs)
+                plt.clf()
+                dimshow(get_rgb(co, self.bands))
+                plt.title('After final opt')
+                self.ps.savefig()
+
         if compute_metrics:
             # Compute variances on all parameters for the kept model
             B.srcinvvars = [None for i in range(len(B))]
