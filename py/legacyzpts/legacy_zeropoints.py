@@ -227,7 +227,7 @@ def write_survey_table(T, surveyfn, camera=None, bad_expid=None):
     # update_ccd_cuts.
     # replace with placeholder that masks everything until this is run.
     from legacyzpts import psfzpt_cuts
-    T.ccd_cuts = psfzpt_cuts.CCD_CUT_BITS['err_legacyzpts']
+    T.ccd_cuts = np.zeros(len(T), np.int16) + psfzpt_cuts.CCD_CUT_BITS['err_legacyzpts']
 
     writeto_via_temp(surveyfn, T)
     print('Wrote %s' % surveyfn)
@@ -244,24 +244,6 @@ def create_annotated_table(leg_fn, ann_fn, camera, survey, mp):
 
 def getrms(x):
     return np.sqrt( np.mean( np.power(x,2) ) )
-
-def get_bitmask_fn(imgfn):
-    if 'ooi' in imgfn: 
-        fn= imgfn.replace('ooi','ood')
-    elif 'oki' in imgfn: 
-        fn= imgfn.replace('oki','ood')
-    else:
-        raise ValueError('bad imgfn? no ooi or oki: %s' % imgfn)
-    return fn
-
-def get_weight_fn(imgfn):
-    if 'ooi' in imgfn: 
-        fn= imgfn.replace('ooi','oow')
-    elif 'oki' in imgfn:
-        fn= imgfn.replace('oki','oow')
-    else:
-        raise ValueError('bad imgfn? no ooi or oki: %s' % imgfn)
-    return fn
 
 class Measurer(object):
     """Main image processing functions for all cameras.
@@ -288,15 +270,8 @@ class Measurer(object):
         self.calibdir = kwargs.get('calibdir')
 
         self.calibrate = calibrate
-        
-        try:
-            self.primhdr = read_primary_header(self.fn)
-        except ValueError:
-            # astropy can handle it
-            tmp= fits_astropy.open(self.fn)
-            self.primhdr= tmp[0].header
-            tmp.close()
-            del tmp
+
+        self.primhdr = self.read_primary_header()
 
         self.band = self.get_band()
         # CP WCS succeed?
@@ -351,6 +326,18 @@ class Measurer(object):
     def get_site(self):
         return None
 
+    def read_primary_header(self):
+        try:
+            primhdr = read_primary_header(self.fn)
+        except ValueError:
+            # astropy can handle it
+            tmp= fits_astropy.open(self.fn)
+            primhdr= tmp[0].header
+            tmp.close()
+            del tmp
+        return primhdr
+
+
     def get_radec_bore(self, primhdr):
         # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
         # In some DECam exposures, RA,DEC are floating-point, but RA is in *decimal hours*.
@@ -390,6 +377,9 @@ class Measurer(object):
     def extinction(self, band):
         return self.k_ext[band]
 
+    def read_header(self, ext):
+        return fitsio.read_header(self.fn, ext=ext)
+
     def set_hdu(self,ext):
         self.ext = ext.strip()
         self.ccdname= ext.strip()
@@ -397,7 +387,7 @@ class Measurer(object):
         hdulist= fitsio.FITS(self.fn)
         self.image_hdu= hdulist[ext].get_extnum() #NOT ccdnum in header!
         # use header
-        self.hdr = fitsio.read_header(self.fn, ext=ext)
+        self.hdr = self.read_header(ext)
         # Sanity check
         assert(self.ccdname.upper() == self.hdr['EXTNAME'].strip().upper())
         self.ccdnum = np.int(self.hdr.get('CCDNUM', 0))
@@ -440,7 +430,7 @@ class Measurer(object):
         self.slc = slc
 
     def read_bitmask(self):
-        dqfn= get_bitmask_fn(self.fn)
+        dqfn = self.get_bitmask_fn(self.fn)
         if self.slc is not None:
             mask = fitsio.FITS(dqfn)[self.ext][self.slc]
         else:
@@ -448,11 +438,29 @@ class Measurer(object):
         mask = self.remap_bitmask(mask)
         return mask
 
+    def get_bitmask_fn(self, imgfn):
+        if 'ooi' in imgfn: 
+            fn= imgfn.replace('ooi','ood')
+        elif 'oki' in imgfn: 
+            fn= imgfn.replace('oki','ood')
+        else:
+            raise ValueError('bad imgfn? no ooi or oki: %s' % imgfn)
+        return fn
+
+    def get_weight_fn(self, imgfn):
+        if 'ooi' in imgfn: 
+            fn= imgfn.replace('ooi','oow')
+        elif 'oki' in imgfn:
+            fn= imgfn.replace('oki','oow')
+        else:
+            raise ValueError('bad imgfn? no ooi or oki: %s' % imgfn)
+        return fn
+    
     def remap_bitmask(self, mask):
         return mask
     
     def read_weight(self, clip=True, clipThresh=0.1, scale=True, bitmask=None):
-        fn = get_weight_fn(self.fn)
+        fn = self.get_weight_fn(self.fn)
 
         if self.slc is not None:
             wt = fitsio.FITS(fn)[self.ext][self.slc]
@@ -1858,16 +1866,15 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     camera_check = primhdr.get('INSTRUME','').strip().lower()
     # mosaic listed as mosaic3 in header, other combos maybe
     assert(camera in camera_check or camera_check in camera)
-    
-    if camera == 'decam':
-        measure = DecamMeasurer(img_fn, image_dir=image_dir, **measureargs)
-    elif camera == 'mosaic':
-        measure = Mosaic3Measurer(img_fn, image_dir=image_dir, **measureargs)
-    elif camera == '90prime':
-        measure = NinetyPrimeMeasurer(img_fn, image_dir=image_dir, **measureargs)
-    elif camera == 'megaprime':
-        measure = MegaPrimeMeasurer(img_fn, image_dir=image_dir, **measureargs)
-        
+
+    measureclass = measureargs.get('measureclass')
+    if measureclass is None:
+        measureclass = { 'decam': DecamMeasurer,
+                         'mosaic': Mosaic3Measurer,
+                         '90prime': NinetyPrimeMeasurer,
+                         'megaprime': MegaPrimeMeasurer }[camera]
+    measure = measureclass(img_fn, image_dir=image_dir, **measureargs)
+                            
     if just_measure:
         return measure
 
