@@ -966,7 +966,9 @@ def stage_fitblobs(T=None,
                    plots=False, plots2=False,
                    nblobs=None, blob0=None, blobxy=None, blobradec=None, blobid=None,
                    max_blobsize=None,
-                   simul_opt=False, use_ceres=True, mp=None,
+                   reoptimize=False,
+                   iterative=False,
+                   use_ceres=True, mp=None,
                    checkpoint_filename=None,
                    checkpoint_period=600,
                    write_pickle_filename=None,
@@ -1193,7 +1195,7 @@ def stage_fitblobs(T=None,
 
     # Create the iterator over blobs to process
     blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims,
-                          cat, bands, plots, ps, simul_opt, use_ceres,
+                          cat, bands, plots, ps, reoptimize, iterative, use_ceres,
                           refmap, brick, rex,
                           skipblobs=skipblobs,
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
@@ -1564,7 +1566,7 @@ def _format_all_models(T, newcat, BB, bands, rex):
     return TT,hdr
 
 def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
-               plots, ps, simul_opt, use_ceres, refmap,
+               plots, ps, reoptimize, iterative, use_ceres, refmap,
                brick, rex,
                skipblobs=None, max_blobsize=None, custom_brick=False):
     '''
@@ -1675,7 +1677,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
         yield (brickname, iblob,
                (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-               simul_opt, use_ceres, rex, refmap[bslc]))
+               reoptimize, iterative, use_ceres, rex, refmap[bslc]))
 
 def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &
@@ -2742,7 +2744,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               nblobs=None, blob=None, blobxy=None, blobradec=None, blobid=None,
               max_blobsize=None,
               nsigma=6,
-              simul_opt=False,
+              reoptimize=False,
+              iterative=False,
               wise=True,
               lanczos=True,
               early_coadds=False,
@@ -2850,9 +2853,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     - *max_blobsize*: int; ignore blobs with more than this many pixels
 
     - *nsigma*: float; detection threshold in sigmas.
-
-    - *simul_opt*: boolean; during fitting, if a blob contains multiple
-      sources, run a step of fitting the sources simultaneously?
 
     - *wise*: boolean; run WISE forced photometry?
 
@@ -2994,7 +2994,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   gaia_stars=gaia_stars,
                   large_galaxies=large_galaxies,
                   min_mjd=min_mjd, max_mjd=max_mjd,
-                  simul_opt=simul_opt,
+                  reoptimize=reoptimize,
+                  iterative=iterative,
                   use_ceres=ceres,
                   wise_ceres=wise_ceres,
                   unwise_coadds=unwise_coadds,
@@ -3268,8 +3269,12 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='Set N sigma source detection thresh')
 
     parser.add_argument(
-        '--simul-opt', action='store_true', default=False,
-        help='Do simultaneous optimization after model selection')
+        '--reoptimize', action='store_true', default=False,
+        help='Do a second round of model fitting after all model selections')
+
+    parser.add_argument(
+        '--iterative', action='store_true', default=False,
+        help='Turn on iterative source detection?')
 
     parser.add_argument('--no-wise', dest='wise', default=True,
                         action='store_false',

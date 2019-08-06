@@ -35,7 +35,7 @@ def one_blob(X):
     if X is None:
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
-     srcs, bands, plots, ps, simul_opt, use_ceres, rex, refmap) = X
+     srcs, bands, plots, ps, reoptimize, iterative, use_ceres, rex, refmap) = X
 
     debug('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images' %
           (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs)))
@@ -85,8 +85,8 @@ def one_blob(X):
     B.hit_limit = np.zeros(len(B), bool)
 
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, rex, refmap)
-    B = ob.run(B)
+                 plots, ps, use_ceres, rex, refmap)
+    B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
 
@@ -108,7 +108,7 @@ def one_blob(X):
 
 class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, simul_opt, use_ceres, rex, refmap):
+                 plots, ps, use_ceres, rex, refmap):
         self.name = name
         self.rex = rex
         self.blobwcs = blobwcs
@@ -124,7 +124,6 @@ class OneBlob(object):
         # blob-1-data.png, etc
         self.plots_single = False
         self.ps = ps
-        self.simul_opt = simul_opt
         self.use_ceres = use_ceres
         self.deblend = False
         self.tims = self.create_tims(timargs)
@@ -153,7 +152,8 @@ class OneBlob(object):
         self.trargs.update(optimizer=ConstrainedOptimizer())
         self.optargs.update(dchisq = 0.1)
 
-    def run(self, B, iterative_detection=True, compute_metrics=True):
+    def run(self, B, reoptimize=False, iterative_detection=True,
+            compute_metrics=True):
         trun = tlast = Time()
         # Not quite so many plots...
         self.plots1 = self.plots
@@ -253,35 +253,13 @@ class OneBlob(object):
             plt.savefig('blob-%s-resid.png' % (self.name))
             plt.figure(1)
 
-
         # Do another quick round of flux-only fitting?
         # This does horribly -- fluffy galaxies go out of control because
         # they're only constrained by pixels within this blob.
         #_fit_fluxes(cat, tims, bands, use_ceres, alphas)
 
-        # ### Simultaneous re-opt?
-        # if simul_opt and len(cat) > 1 and len(cat) <= 10:
-        #     #tfit = Time()
-        #     cat.thawAllParams()
-        #     #print('Optimizing:', tr)
-        #     #tr.printThawedParams()
-        #     max_cpu = 300.
-        #     cpu0 = time.clock()
-        #     for step in range(50):
-        #         dlnp,X,alpha = tr.optimize(**optargs)
-        #         cpu = time.clock()
-        #         if cpu-cpu0 > max_cpu:
-        #             print('Warning: Exceeded maximum CPU time for source')
-        #             break
-        #         if dlnp < 0.1:
-        #             break
-        #     #print('Simultaneous fit took:', Time()-tfit)
-
-        ### FIXME!
-        # A final optimization round This does seem to improve things,
-        ### but it makes some results weird -- eg, the dchisq values
-        ### don't really correspond to the final values.
-        if False and len(cat) > 1:
+        # A final optimization round?
+        if reoptimize:
             if self.plots:
                 import pylab as plt
                 modimgs = list(tr.getModelImages())
@@ -293,8 +271,11 @@ class OneBlob(object):
                 self.ps.savefig()
 
             Ibright = _argsort_by_brightness(cat, self.bands)
-            self._optimize_individual_sources_subtract(
-                cat, Ibright, B.cpu_source)
+            if len(cat) > 1:
+                self._optimize_individual_sources_subtract(
+                    cat, Ibright, B.cpu_source)
+            else:
+                self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source)
 
             if self.plots:
                 import pylab as plt

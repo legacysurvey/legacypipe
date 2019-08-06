@@ -210,7 +210,7 @@ RUN python -O -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
            /usr/local/lib/python /usr/local/lib/python3.5/site-packages \
            /usr/local/lib/python3.5/dist-packages
 
-RUN cd /src/legacypipe/py && git pull && git describe && echo 5
+RUN cd /src/legacypipe/py && git pull && git describe && echo 7
 
 RUN    python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
     && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
