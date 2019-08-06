@@ -22,6 +22,10 @@ from astrometry.util.multiproc import multiproc
 
 
 class GoldsteinDecamImage(DecamImage):
+    '''
+    A subclass of the legacypipe's DECam image-handling class to handle
+    different file structures / header cards.
+    '''
     def compute_filenames(self):
         self.dqfn = self.imgfn.replace('.fits', '.bpm.fits')
         self.wtfn = self.imgfn.replace('.fits', '.weight.fits')
@@ -41,6 +45,10 @@ class GoldsteinDecamImage(DecamImage):
         return dq
     
 class GoldsteinDecamMeasurer(DecamMeasurer):
+    '''
+    A subclass of the legacyzpt's DECam image-handling class to handle
+    different file structures / header cards.
+    '''
     def __init__(self, *args, **kwargs):
         super(GoldsteinDecamMeasurer, self).__init__(*args, **kwargs)
         self.plver = 'V0.0'
@@ -93,7 +101,8 @@ def main():
     
     basename = os.path.basename(fn)
     basename = basename.replace('.fits', '')
-    
+
+    # Output filenames for legacyzpts calibration/zeropoint files
     f,photfn = tempfile.mkstemp()
     os.close(f)
     surveyfn = os.path.join(survey_dir, 'survey-ccds-%s.fits.gz' % basename)
@@ -101,15 +110,13 @@ def main():
     mp = multiproc()
 
     survey = LegacySurveyData(survey_dir)
-    #survey.calibdir = calibdir
+    # Use the subclass above to handle DECam images!
     survey.image_typemap.update(decam=GoldsteinDecamImage)
-    
+
+    # Grab the exposure number and CCD name
     hdr = fitsio.read_header(fn)
-    
-    #ccdname = 'N21'
     expnum = hdr['EXPNUM']
     ccdname = hdr['EXTNAME'].strip()
-
     print('Exposure', expnum, 'CCD', ccdname)
     
     import logging
@@ -130,9 +137,11 @@ def main():
     ccd = ccds[0]
     print('Got CCD', ccd)
 
+    # Create Tractor image
     im = survey.get_image_object(ccd)
     print('Got image:', im)
 
+    # Look at this sub-image, or the whole chip?
     #zoomslice=None
     zoomslice = (slice(0, 1000), slice(0, 1000))
     
@@ -142,6 +151,7 @@ def main():
                                old_calibs_ok=True)
     print('Got tim:', tim)
 
+    # Read catalog files touching this CCD
     catsurvey = LegacySurveyData('/global/project/projectdirs/cosmo/work/legacysurvey/dr8/south')
     T = get_catalog_in_wcs(tim.subwcs, catsurvey)
     print('Got', len(T), 'DR8 catalog sources within CCD')
@@ -157,12 +167,15 @@ def main():
         T.ra [I] = ra
         T.dec[I] = dec
 
+    # Create Tractor Source objects from the catalog
     cat = read_fits_catalog(T, bands=tim.band)
     print('Created', len(cat), 'source objects')
 
+    # Render model image!
     tr = Tractor([tim], cat)
     mod = tr.getModelImage(0)
-    
+
+    # plots
     ima = dict(interpolation='nearest', origin='lower', vmin=-2*tim.sig1, vmax=10*tim.sig1,
                cmap='gray')
     plt.clf()
@@ -182,11 +195,4 @@ def main():
     
 if __name__ == '__main__':
     main()
-    
-
-
-
-
-
-
 
