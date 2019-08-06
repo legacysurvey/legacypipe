@@ -1602,7 +1602,7 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
             # Special handling for EXPNUM in some cases
             if 'EXPNUM' in hdr:
                 cpexpnum = hdr['EXPNUM']
-            else:
+            elif 'OBSID' in hdr:
                 # At the beginning of the MzLS survey, eg 2016-01-24, the EXPNUM
                 # cards are blank.  Fake up an expnum like 160125082555
                 # (yymmddhhmmss), same as the CP filename.
@@ -1628,6 +1628,9 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                     cpexpnum = int(re.sub(r'([a-z]+|\.+)','',base), 10)
                     if not quiet:
                         print('Faked up EXPNUM', cpexpnum)
+            else:
+                if not quiet:
+                    print('Missing EXPNUM and OBSID in header')
 
         for key,spval,targetval,strip in (#(procdatekey, None, procdate, True),
                                           ('PLVER', None, plver, True),
