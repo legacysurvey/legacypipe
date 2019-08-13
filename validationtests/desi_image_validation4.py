@@ -290,7 +290,7 @@ class mysample(object):
         '''
         if band == 'g':
             self.be = 1
-            self.extc = 3.3214  #/2.751
+            self.extc = 3.214  #/2.751
             self.zp0 = 25.08
             self.recm = 24.
             self.phreq = 0.01
