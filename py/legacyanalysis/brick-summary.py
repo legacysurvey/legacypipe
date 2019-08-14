@@ -558,10 +558,11 @@ def main():
     nsrcs = []
     npsf  = []
     nsimp = []
-    nrex = []
+    nrex  = []
     nexp  = []
     ndev  = []
     ncomp = []
+    ndup  = []
 
     gpsfsize = []
     rpsfsize = []
@@ -641,6 +642,7 @@ def main():
             nexp.append(types['EXP'])
             ndev.append(types['DEV'])
             ncomp.append(types['COMP'])
+            ndup.append(types['DUP'])
             print('N sources', nsrcs[-1])
 
             gpsfsize.append(np.median(T.psfsize_g))
@@ -726,13 +728,14 @@ def main():
     T.nexphist_g = np.array(gnhist).astype(np.int32)
     T.nexphist_r = np.array(rnhist).astype(np.int32)
     T.nexphist_z = np.array(znhist).astype(np.int32)
-    T.nobjs  = np.array(nsrcs).astype(np.int16)
-    T.npsf   = np.array(npsf ).astype(np.int16)
-    T.nsimp  = np.array(nsimp).astype(np.int16)
-    T.nrex   = np.array(nrex ).astype(np.int16)
-    T.nexp   = np.array(nexp ).astype(np.int16)
-    T.ndev   = np.array(ndev ).astype(np.int16)
-    T.ncomp  = np.array(ncomp).astype(np.int16)
+    T.nobjs  = np.array(nsrcs).astype(np.int32)
+    T.npsf   = np.array(npsf ).astype(np.int32)
+    T.nsimp  = np.array(nsimp).astype(np.int32)
+    T.nrex   = np.array(nrex ).astype(np.int32)
+    T.nexp   = np.array(nexp ).astype(np.int32)
+    T.ndev   = np.array(ndev ).astype(np.int32)
+    T.ncomp  = np.array(ncomp).astype(np.int32)
+    T.ndup   = np.array(ndup ).astype(np.int32)
     T.psfsize_g = np.array(gpsfsize).astype(np.float32)
     T.psfsize_r = np.array(rpsfsize).astype(np.float32)
     T.psfsize_z = np.array(zpsfsize).astype(np.float32)
