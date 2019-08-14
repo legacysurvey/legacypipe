@@ -387,7 +387,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     else:
         chipwcs = tim.subwcs
         T = get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=catsurvey_south,
-                               resolve_dec=resolve_dec, margin=margin)
+                               resolve_dec=resolve_dec)
         if T is None:
             print('No sources to photometer.')
         if opt.write_cat:

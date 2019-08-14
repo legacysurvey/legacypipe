@@ -23,12 +23,17 @@ logdir=$outdir/forced/logs/$camera-$exppre
 mkdir -p $logdir
 logfile=$logdir/$camera-$expnum-$ccdname.log
 
+# This fails if we're not running in the container, but then the rest of the script works fine.
 cd /src/legacypipe/py
 
 echo "Logging to $logfile"
-python -u legacypipe/forced_photom.py --survey-dir $DIR --catalog-dir-north $DIR/north --catalog-dir-south $DIR/south --catalog-resolve-dec-ngc 32.375 \
-    --skip-calibs --apphot --derivs --camera $camera \
-    --threads 32 \
-    $expnum $ccdname $outdir/$outfn > $logfile 2>&1
+python legacypipe/forced_photom.py \
+       --survey-dir $DIR \
+       --catalog-dir-north $DIR/north --catalog-dir-south $DIR/south \
+       --catalog-resolve-dec-ngc 32.375 \
+       --skip-calibs --apphot --derivs --camera $camera \
+       --threads 32 \
+       $expnum $ccdname $outdir/$outfn > $logfile 2>&1
 
-#    --threads 8 \
+# eg:
+# QDO_BATCH_PROFILE=cori-shifter qdo launch forced-south 1 --cores_per_worker 32 --walltime=30:00 --batchqueue=debug --batchopts "--image=docker:legacysurvey/legacypipe:nersc-dr9.0.1 --license=SCRATCH,project" --script "../bin/forced-south.sh" --keep_env
