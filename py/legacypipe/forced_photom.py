@@ -390,6 +390,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                                resolve_dec=resolve_dec)
         if T is None:
             print('No sources to photometer.')
+            return None
         if opt.write_cat:
             T.writeto(opt.write_cat)
             print('Wrote catalog to', opt.write_cat)
