@@ -1750,6 +1750,8 @@ class LegacySurveyData(object):
         if expnum is not None:
             C = self.try_expnum_kdtree(expnum)
             if C is not None:
+                if len(C) == 0:
+                    return None
                 if ccdname is not None:
                     C = C[C.ccdname == ccdname]
                 if camera is not None:
