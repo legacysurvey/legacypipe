@@ -57,6 +57,12 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True):
         else:
             dy = y0 - tim.y0
             dx = x0 - tim.x0
+            if dy < 0:
+                mask = mask[-dy:,:]
+                dy = 0
+            if dx < 0:
+                mask = mask[:,-dx:]
+                dx = 0
             assert(dy >= 0)
             assert(dx >= 0)
             mh,mw = mask.shape
