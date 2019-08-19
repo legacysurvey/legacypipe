@@ -323,6 +323,9 @@ class Measurer(object):
             print('CP Header: PLPROCID = ',self.plprocid)
         self.obj = self.primhdr['OBJECT']
 
+    def get_extension_list(self, fn, debug=False):
+        raise RuntimeError('get_extension_list not implemented in type ' + str(type(self)))
+
     def get_site(self):
         return None
 
@@ -1527,6 +1530,13 @@ class DecamMeasurer(Measurer):
                               'height':['ZNAXIS2','NAXIS2'],
                               'fwhm_cp':['FWHM']}
 
+    def get_extension_list(self, fn, debug=False):
+        if debug:
+            return ['N4']
+        hdu = fitsio.FITS(fn)
+        extlist = [hdu[i].get_extname() for i in range(1,len(hdu))]
+        return extlist
+
     def get_site(self):
         from astropy.coordinates import EarthLocation
         # zomg astropy's caching mechanism is horrific
@@ -1617,6 +1627,12 @@ class MegaPrimeMeasurer(Measurer):
         self.primhdr['WCSCAL'] = 'success'
         self.goodWcs = True
 
+    def get_extension_list(self, fn, debug=False):
+        if debug:
+            return ['ccd03']
+        hdu = fitsio.FITS(fn)
+        return [hdu[i].get_extname() for i in range(1,len(hdu))]
+
     def get_ut(self, primhdr):
         return primhdr['UTC-OBS']
 
@@ -1697,6 +1713,11 @@ class Mosaic3Measurer(Measurer):
                               'height':['ZNAXIS2','NAXIS2'],
                               'fwhm_cp':['SEEINGP1','SEEINGP']}
 
+    def get_extension_list(self, fn, debug=False):
+        if debug:
+            return ['CCD2']
+        return ['CCD1', 'CCD2', 'CCD3', 'CCD4']
+
     def get_expnum(self, primhdr):
         if 'EXPNUM' in primhdr and primhdr['EXPNUM'] is not None:
             return primhdr['EXPNUM']
@@ -1760,6 +1781,11 @@ class NinetyPrimeMeasurer(Measurer):
                               'height':['ZNAXIS2','NAXIS2'],
                               'fwhm_cp':['SEEINGP1','SEEINGP']}
 
+    def get_extension_list(self, fn, debug=False):
+        if debug:
+            return ['CCD1']
+        return ['CCD1', 'CCD2', 'CCD3', 'CCD4']
+
     def get_expnum(self, primhdr):
         """converts 90prime header key DTACQNAM into the unique exposure number"""
         # /descache/bass/20160710/d7580.0144.fits --> 75800144
@@ -1801,43 +1827,6 @@ class NinetyPrimeMeasurer(Measurer):
     def remap_bitmask(self, mask):
         from legacypipe.image import remap_dq_cp_codes
         return remap_dq_cp_codes(mask)
-
-def get_extlist(camera,fn,debug=False,choose_ccd=None):
-    '''
-    Args:
-        fn: image fn to read hdu from
-        debug: use subset of the ccds
-        choose_ccd: if not None, use only this ccd given
-
-    Returns: 
-        list of hdu names 
-    '''
-    if camera == '90prime':
-        extlist = ['CCD1', 'CCD2', 'CCD3', 'CCD4']
-        if debug:
-            extlist = ['CCD1']
-    elif camera == 'mosaic':
-        extlist = ['CCD1', 'CCD2', 'CCD3', 'CCD4']
-        if debug:
-            extlist = ['CCD2']
-    elif camera == 'decam':
-        hdu= fitsio.FITS(fn)
-        extlist= [hdu[i].get_extname() for i in range(1,len(hdu))]
-        if debug:
-            extlist = ['N4'] #,'S4', 'S22','N19']
-    elif camera == 'megaprime':
-        hdu= fitsio.FITS(fn)
-        extlist= [hdu[i].get_extname() for i in range(1,len(hdu))]
-        if debug:
-            extlist = ['ccd03']
-    else:
-        print('Camera {} not recognized!'.format(camera))
-        raise ValueError
-    if choose_ccd:
-        print('CHOOSING CCD %s' % choose_ccd)
-        extlist= [choose_ccd]
-    return extlist
-   
  
 def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
                   just_measure=False,
@@ -1878,9 +1867,10 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     if just_measure:
         return measure
 
-    extlist = get_extlist(camera, measure.fn, 
-                          debug=measureargs['debug'],
-                          choose_ccd=measureargs['choose_ccd'])
+    if measureargs['choose_ccd']:
+        extlist = [measureargs['choose_ccd']]
+    else:
+        extlist = measure.get_extension_list(measure.fn, debug=measureargs['debug'])
 
     extra_info = dict(zp_fid = measure.zeropoint( measure.band ),
                      ext_fid = measure.extinction( measure.band ),
