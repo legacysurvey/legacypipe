@@ -378,7 +378,8 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         for b in bricks:
             from legacypipe.outliers import read_outlier_mask_file
             print('Reading outlier mask for brick', b.brickname)
-            ok = read_outlier_mask_file(catsurvey, [tim], b.brickname, subimage=False, output=False)
+            ok = read_outlier_mask_file(catsurvey, [tim], b.brickname, subimage=False, output=False,
+                                        ps=ps)
             if not ok:
                 print('WARNING: failed to read outliers mask file for brick', b.brickname)
 
