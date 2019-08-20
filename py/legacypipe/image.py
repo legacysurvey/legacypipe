@@ -757,7 +757,7 @@ class LegacySurveyImage(object):
                     thresh = 0.
                 invvar[invvar < thresh] = 0
 
-        assert(np.all(invvar >= 0.))
+        invvar[invvar < 0.] = 0.
         assert(np.all(np.isfinite(invvar)))
         return invvar
 

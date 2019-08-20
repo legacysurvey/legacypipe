@@ -37,3 +37,6 @@ python legacypipe/forced_photom.py \
 
 # eg:
 # QDO_BATCH_PROFILE=cori-shifter qdo launch forced-south 1 --cores_per_worker 32 --walltime=30:00 --batchqueue=debug --batchopts "--image=docker:legacysurvey/legacypipe:nersc-dr9.0.1 --license=SCRATCH,project" --script "../bin/forced-south.sh" --keep_env
+
+# Shared queue (--threads 16)
+# qdo launch forced-south 1 --cores_per_worker 16 --walltime=1:00:00 --batchqueue=shared --batchopts "--license=SCRATCH,project -a 0-99 --cpus-per-task=32" --script "../bin/forced-south-16.sh" --keep_env -v

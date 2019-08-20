@@ -275,10 +275,7 @@ class Measurer(object):
 
         self.band = self.get_band()
         # CP WCS succeed?
-        self.goodWcs=True  
-        if not ('WCSCAL' in self.primhdr.keys() and
-                'success' in self.primhdr['WCSCAL'].strip().lower()):
-            self.goodWcs=False  
+        self.goodWcs = self.good_wcs(self.primhdr)
 
         # Camera-agnostic primary header cards
         try:
@@ -325,6 +322,9 @@ class Measurer(object):
 
     def get_extension_list(self, fn, debug=False):
         raise RuntimeError('get_extension_list not implemented in type ' + str(type(self)))
+
+    def good_wcs(self, primhdr):
+        return primhdr.get('WCSCAL', '').strip().lower() == 'success'
 
     def get_site(self):
         return None
@@ -1521,6 +1521,13 @@ class DecamMeasurer(Measurer):
         extlist = [hdu[i].get_extname() for i in range(1,len(hdu))]
         return extlist
 
+    def good_wcs(self, primhdr):
+        wcscal = primhdr.get('WCSCAL', '').strip().lower()
+        if wcscal == 'success':
+            return True
+        # Frank's work-around for some with incorrect WCSCAL=Failed (DR9 re-reductions)
+        return primhdr.get('SCAMPFLG') == 0
+        
     def get_site(self):
         from astropy.coordinates import EarthLocation
         # zomg astropy's caching mechanism is horrific
