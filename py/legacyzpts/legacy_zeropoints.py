@@ -659,6 +659,13 @@ class Measurer(object):
         t0= Time()
         t0= ptime('Measuring CCD=%s from image=%s' % (self.ccdname,self.fn),t0)
 
+        ps = None
+        plots = True
+        if plots:
+            from astrometry.util.plotutils import PlotSequence
+            ps = PlotSequence('zpt-%s' % self.expid)
+            import pylab as plt
+            
         # Initialize 
         ccds = _ccds_table(self.camera)
 
@@ -724,6 +731,20 @@ class Measurer(object):
 
         t0= ptime('read image',t0)
 
+        if ps is not None:
+            plt.clf()
+            mn,mx = np.percentile(self.img.ravel(), [25,98])
+            print('Percentiles:', mn,mx)
+            s1 = 1./np.sqrt(medweight)
+            print('sig1 from invvar:', s1)
+            med = np.percentile(self.img.ravel(), [50])
+            mn = med - 2.*s1
+            mx = med + 5.*s1
+            plt.imshow(self.img, interpolation='nearest', origin='lower', vmin=mn, vmax=mx)
+            plt.colorbar()
+            plt.title('Image')
+            ps.savefig()
+
         # Measure the sky brightness and (sky) noise level.
         zp0 = self.zeropoint(self.band)
         #print('Computing the sky background.')
@@ -777,9 +798,10 @@ class Measurer(object):
             gaia.cut(I[:10000])
             print('Cut to', len(gaia), 'Gaia stars')
 
-        return self.run_psfphot(ccds, ps1, gaia, zp0, sky_img, splinesky, survey)
+            
+        return self.run_psfphot(ccds, ps1, gaia, zp0, sky_img, splinesky, survey, ps=ps)
 
-    def run_psfphot(self, ccds, ps1, gaia, zp0, sky_img, splinesky, survey):
+    def run_psfphot(self, ccds, ps1, gaia, zp0, sky_img, splinesky, survey, ps=None):
         t0= Time()
 
         # Now put Gaia stars into the image and re-fit their centroids
@@ -880,6 +902,35 @@ class Measurer(object):
         else:
             refs = merge_tables(refs, columns='fillzero')
 
+        if ps is not None:
+            import pylab as plt
+            plt.clf()
+            mn,mx = np.percentile(self.img.ravel(), [25,95])
+            plt.imshow(self.img, interpolation='nearest', origin='lower', vmin=mn, vmax=mx)
+            plt.colorbar()
+            plt.title('self.img')
+            ps.savefig()
+
+            plt.clf()
+            plt.imshow(skymod, interpolation='nearest', origin='lower', vmin=mn, vmax=mx)
+            plt.colorbar()
+            plt.title('skymod')
+            ps.savefig()
+            
+            plt.clf()
+            plt.imshow(fit_img * ierr, interpolation='nearest', origin='lower', vmin=-2, vmax=5.,
+                       cmap='gray')
+            plt.colorbar()
+            ax = plt.axis()
+            if ps1 is not None:
+                ok,xx,yy = self.wcs.radec2pixelxy(ps1.ra_ps1, ps1.dec_ps1)
+                plt.plot(xx-1, yy-1, 'o', mec='g', mfc='none', ms=8, label='PS1')
+            ok,xx,yy = self.wcs.radec2pixelxy(gaia.ra_now, gaia.dec_now)
+            plt.plot(xx-1, yy-1, 'o', mec='r', mfc='none', ms=8, label='Gaia')
+            plt.legend()
+            plt.axis(ax)
+            ps.savefig()
+
         cols = [('ra_gaia', np.double),
                 ('dec_gaia', np.double),
                 ('gaia_sourceid', np.int64),
@@ -958,6 +1009,15 @@ class Measurer(object):
         print('RA, Dec stddev  (arcsec): %.4f, %.4f' % (rastd, decstd))
         print('RA, Dec RMS     (arcsec): %.4f, %.4f' % (rarms, decrms))
 
+        if ps is not None:
+            plt.clf()
+            plt.plot(dra, ddec, 'b.')
+            plt.axvline(raoff, color='k')
+            plt.axhline(decoff, color='k')
+            plt.xlabel('RA offsets (arcsec)')
+            plt.ylabel('Dec offsets (arcsec)')
+            ps.savefig()
+        
         ok, = np.nonzero(phot.flux > 0)
         phot.instpsfmag = np.zeros(len(phot), np.float32)
         phot.instpsfmag[ok] = -2.5*np.log10(phot.flux[ok] / self.exptime)
@@ -977,6 +1037,13 @@ class Measurer(object):
         # (eg, will work where we don't have PS1)
         nphotom = np.sum(phot.flux_sn > 5.)
 
+        if ps is not None:
+            plt.clf()
+            plt.plot(refs.legacy_survey_mag[refs.photom], phot.instpsfmag[refs.photom], 'b.')
+            plt.xlabel('PS1-predicted mag')
+            plt.ylabel('Instrumental mag')
+            ps.savefig()
+        
         dmag = (refs.legacy_survey_mag - phot.instpsfmag)[refs.photom]
         if len(dmag):
             dmag = dmag[np.isfinite(dmag)]
@@ -1190,6 +1257,9 @@ class Measurer(object):
         cal.fracmasked = []
 
         for istar in range(len(ref_ra)):
+
+            plot_this = istar < 20
+
             ok,x,y = self.wcs.radec2pixelxy(ref_ra[istar], ref_dec[istar])
             x -= 1
             y -= 1

@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use('Agg')
+
 from legacyzpts.legacy_zeropoints import *
 
 import logging
@@ -31,31 +34,26 @@ class MosaicRawMeasurer(Mosaic3Measurer):
     def set_hdu(self, ext):
         super(MosaicRawMeasurer, self).set_hdu(ext)
         img,hdr = super(MosaicRawMeasurer, self).read_image()
-        self.img_data,self.img_hdr = img,hdr
-        # Subtract median overscan and multiply by gains
-        dataA = parse_section(hdr['DATASEC'], slices=True)
-        biasA = parse_section(hdr['BIASSEC'], slices=True)
-        gainA = hdr['GAIN']
-        b = np.median(img[biasA])
-        img[dataA] = (img[dataA] - b) * gainA
-        # Trim the image
-        trimA = parse_section(hdr['TRIMSEC'], slices=True)
-        # zero out all but the trim section
-        trimg = img[trimA].copy().astype(np.float32)
-        img[:,:] = 0
-        img[trimA] = trimg
+        img,invvar = read_mosaic_raw_image(img, hdr)
+        self.img_data,self.img_hdr = img, hdr
+        self.invvar_data = invvar
 
-        # Estimate per-pixel noise via Blanton's 5-pixel MAD
-        slice1 = (slice(0,-5,10),slice(0,-5,10))
-        slice2 = (slice(5,None,10),slice(5,None,10))
-        pix1 = img[slice1].ravel()
-        pix2 = img[slice2].ravel()
-        I = np.flatnonzero((pix1 != 0) * (pix2 != 0))
-        mad = np.median(np.abs(pix1[I] - pix2[I]))
-        sig1 = 1.4826 * mad / np.sqrt(2.)
-        invvar = (1. / sig1**2)
-        self.invvar_data = np.zeros(img.shape, np.float32)
-        self.invvar_data[trimA] = invvar
+    def get_wcs(self):
+        wcs = wcs_pv2sip_hdr(self.hdr)
+
+        # Find astrometric offset!!
+        import sqlite3
+        conn = sqlite3.connect('obsdb/mosaic3.sqlite3')
+        c = conn.cursor()
+        print('Expnum is', self.expnum)
+        for dx,dy in c.execute('select dx,dy from obsdb_measuredccd where expnum=?',
+                             (self.expnum,)):
+            print('Found obsdb astrometric offset:', dx,dy)
+            px,py = wcs.get_crpix()
+            wcs.set_crpix((px-dx, py-dy))
+            break
+        return wcs
+        #return self.wcs_data
 
     def read_image(self):
         return self.img_data, self.img_hdr
@@ -73,8 +71,59 @@ class MosaicRawMeasurer(Mosaic3Measurer):
     def read_bitmask(self):
         return np.zeros((self.height, self.width), np.int16)
 
-    def read_weight(self, bitmask=None):
+    def read_weight(self, bitmask=None, scale=False):
         return self.invvar_data
+
+def read_mosaic_raw_image(img, hdr):
+    # Subtract median overscan and multiply by gains
+    dataA = parse_section(hdr['DATASEC'], slices=True)
+    biasA = parse_section(hdr['BIASSEC'], slices=True)
+    gainA = hdr['GAIN']
+    b = np.median(img[biasA])
+    img[dataA] = (img[dataA] - b) * gainA
+    # Trim the image
+    trimA = parse_section(hdr['TRIMSEC'], slices=True)
+    # zero out all but the trim section
+    trimg = img[trimA].copy()
+    img[:,:] = 0
+    img[trimA] = trimg
+
+    # Zero out some edge pixels too!
+    edge = 20
+    img[:edge,:] = 0.
+    img[-edge:,:] = 0.
+    img[:,:edge] = 0.
+    img[:,-edge:] = 0.
+
+    img = img.astype(np.float32)
+        
+    # Estimate per-pixel noise via Blanton's 5-pixel MAD
+    slice1 = (slice(0,-5,10),slice(0,-5,10))
+    slice2 = (slice(5,None,10),slice(5,None,10))
+    pix1 = img[slice1].ravel()
+    pix2 = img[slice2].ravel()
+    I = np.flatnonzero((pix1 != 0) * (pix2 != 0))
+    mad = np.median(np.abs(pix1[I] - pix2[I]))
+    sig1 = 1.4826 * mad / np.sqrt(2.)
+    iv = (1. / sig1**2)
+    invvar = np.zeros_like(img)
+    invvar[img != 0.0] = iv
+    return img,invvar
+
+# from obsbot.measure_raw
+def parse_section(s, slices=False):
+    '''
+    parse '[57:2104,51:4146]' into integers; also subtract 1.
+    '''
+    s = s.replace('[','').replace(']','').replace(',',' ').replace(':',' ')
+    #print('String', s)
+    i = [int(si)-1 for si in s.split()]
+    assert(len(i) == 4)
+    if not slices:
+        return i
+    slc = slice(i[2], i[3]+1), slice(i[0], i[1]+1)
+    #print('Slice', slc)
+    return slc
 
 from legacypipe.mosaic import MosaicImage
 class MosaicRawImage(MosaicImage):
@@ -89,8 +138,9 @@ class MosaicRawImage(MosaicImage):
         return hdr
 
     def read_image(self, **kwargs):
-        img = super(MosaicRawImage, self).read_image(**kwargs)
-        img = img.astype(np.float32)
+        img,hdr = super(MosaicRawImage, self).read_image(header=True)
+        img,invvar = read_mosaic_raw_image(img, hdr)
+        self.invvar_data = invvar
         return img
     
     def read_dq(self, **kwargs):
@@ -106,10 +156,11 @@ class MosaicRawImage(MosaicImage):
         '''
         Reads the inverse-variance (weight) map image.
         '''
-        debug('Reading weight map image', self.wtfn, 'ext', self.hdu)
-        iv = np.ones((self.height, self.width), np.float32)
-        return iv
-    
+        #debug('Reading weight map image', self.wtfn, 'ext', self.hdu)
+        #iv = np.ones((self.height, self.width), np.float32)
+        #return iv
+        return self.invvar_data
+        
 def main():
     from astrometry.util.multiproc import multiproc
     mp = multiproc()
@@ -127,14 +178,24 @@ def main():
     
     #measure = measure_image(imgfn, mp, image_dir='.',
     #                        camera='mosaic', **measureargs)
-    #just_measure=True, 
+
     photomfn = 'photom.fits'
     surveyfn = 'survey.fits'
     annfn = 'ann.fits'
-    # from astrometry.util.multiproc import multiproc
-    # mp = multiproc()
-    # 
     runit(imgfn, photomfn, surveyfn, annfn, mp, **measureargs)
 
+    from astrometry.util.fits import fits_table
+    P = fits_table(photomfn)
+    S = fits_table(surveyfn)
+    zpt = S.ccdzpt[0]
+    I = np.flatnonzero((P.legacy_survey_mag > 10.) * (P.legacy_survey_mag < 25.))
+    import pylab as plt
+    plt.clf()
+    plt.plot(P.legacy_survey_mag[I], P.instpsfmag[I] + zpt - P.legacy_survey_mag[I], 'b.')
+    plt.xlabel('PS1 predicted mag')
+    plt.ylabel('Calibrated mag - PS1 predicted mag')
+    plt.savefig('zpt.png')
+    
+    
 if __name__ == '__main__':
     main()
