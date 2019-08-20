@@ -28,13 +28,53 @@ class MosaicRawMeasurer(Mosaic3Measurer):
     def good_wcs(self, primhdr):
         return True
 
+    def set_hdu(self, ext):
+        super(MosaicRawMeasurer, self).set_hdu(ext)
+        img,hdr = super(MosaicRawMeasurer, self).read_image()
+        self.img_data,self.img_hdr = img,hdr
+        # Subtract median overscan and multiply by gains
+        dataA = parse_section(hdr['DATASEC'], slices=True)
+        biasA = parse_section(hdr['BIASSEC'], slices=True)
+        gainA = hdr['GAIN']
+        b = np.median(img[biasA])
+        img[dataA] = (img[dataA] - b) * gainA
+        # Trim the image
+        trimA = parse_section(hdr['TRIMSEC'], slices=True)
+        # zero out all but the trim section
+        trimg = img[trimA].copy().astype(np.float32)
+        img[:,:] = 0
+        img[trimA] = trimg
+
+        # Estimate per-pixel noise via Blanton's 5-pixel MAD
+        slice1 = (slice(0,-5,10),slice(0,-5,10))
+        slice2 = (slice(5,None,10),slice(5,None,10))
+        pix1 = img[slice1].ravel()
+        pix2 = img[slice2].ravel()
+        I = np.flatnonzero((pix1 != 0) * (pix2 != 0))
+        mad = np.median(np.abs(pix1[I] - pix2[I]))
+        sig1 = 1.4826 * mad / np.sqrt(2.)
+        invvar = (1. / sig1**2)
+        self.invvar_data = np.zeros(img.shape, np.float32)
+        self.invvar_data[trimA] = invvar
+
+    def read_image(self):
+        return self.img_data, self.img_hdr
+
+    def scale_image(self, img):
+        return img
+    def scale_weight(self, img):
+        return img
+
+    def remap_bitmask(self, mask):
+        return mask
+    def remap_invvar(self, invvar, primhdr, img, dq):
+        return invvar
+
     def read_bitmask(self):
         return np.zeros((self.height, self.width), np.int16)
 
     def read_weight(self, bitmask=None):
-        ### FIXME
-        return np.ones((self.height, self.width), np.float32)
-
+        return self.invvar_data
 
 from legacypipe.mosaic import MosaicImage
 class MosaicRawImage(MosaicImage):
