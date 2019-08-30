@@ -321,7 +321,7 @@ class Measurer(object):
         self.obj = self.primhdr['OBJECT']
 
     def good_wcs(self, primhdr):
-        return primhdr.get('WCSCAL', '').strip().lower() == 'success'
+        return primhdr.get('WCSCAL', '').strip().lower().startswith('success')
 
     def get_site(self):
         return None
@@ -1529,7 +1529,7 @@ class DecamMeasurer(Measurer):
 
     def good_wcs(self, primhdr):
         wcscal = primhdr.get('WCSCAL', '').strip().lower()
-        if wcscal == 'success':
+        if wcscal.startswith('success'):  # success / successful
             return True
         # Frank's work-around for some with incorrect WCSCAL=Failed (DR9 re-reductions)
         return primhdr.get('SCAMPFLG') == 0
@@ -1697,8 +1697,12 @@ class Mosaic3Measurer(Measurer):
         self.camera = 'mosaic'
         self.pixscale = get_pixscale(self.camera)
 
-        self.zp0 = dict(z = 26.552)
-        self.k_ext = dict(z = 0.06)
+        self.zp0 = dict(z = 26.552,
+                        D51 = 24.351, # from obsbot
+        )
+        self.k_ext = dict(z = 0.06,
+                          D51 = 0.211, # from obsbot
+        )
         # Dict: {"ccd col":[possible CP Header keys for that]}
         self.cp_header_keys= {'width':['ZNAXIS1','NAXIS1'],
                               'height':['ZNAXIS2','NAXIS2'],
@@ -1720,11 +1724,18 @@ class Mosaic3Measurer(Measurer):
 
     def get_band(self):
         band = self.primhdr['FILTER']
-        band = band.split()[0][0] # zd --> z
+        band = band.split()[0]
+        band = {'zd':'z'}.get(band, band) # zd --> z
         return band
 
     def get_gain(self,hdr):
         return hdr['GAIN']
+
+    def ps1_to_observed(self, ps1):
+        if self.band == 'D51':
+            ps1band = ps1cat.ps1band['g']
+            return ps1.median[:, ps1band]
+        return super(Mosaic3Measurer, self).ps1_to_observed(ps1)
 
     def colorterm_ps1_to_observed(self, ps1stars, band):
         """ps1stars: ps1.median 2D array of median mag for each band"""
