@@ -46,6 +46,10 @@ def get_parser():
 
     parser.add_argument('--zoom', type=int, nargs=4, help='Set target image extent (eg "0 100 0 200")')
     parser.add_argument('--no-ceres', action='store_false', dest='ceres', help='Do not use Ceres optimization engine (use scipy)')
+
+    parser.add_argument('--ceres-threads', type=int, default=1,
+                        help='Set number of threads used by Ceres')
+
     parser.add_argument('--plots', default=None, help='Create plots; specify a base filename for the plots')
     parser.add_argument('--write-cat', help='Write out the catalog subset on which forced phot was done')
     parser.add_argument('--apphot', action='store_true',
@@ -434,7 +438,8 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                         do_forced=opt.forced,
                         do_apphot=opt.apphot,
                         get_model=opt.save_model,
-                        ps=ps, timing=True)
+                        ps=ps, timing=True,
+                        ceres_threads=opt.ceres_threads)
 
     if opt.save_model:
         # unpack results
@@ -541,7 +546,8 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
 def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                     do_forced=True, do_apphot=True, get_model=False, ps=None,
                     timing=False,
-                    fixed_also=False):
+                    fixed_also=False,
+                    ceres_threads=1):
     '''
     fixed_also: if derivs=True, also run without derivatives and report
     that flux too?
@@ -555,7 +561,13 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
     if ceres:
         from tractor.ceres_optimizer import CeresOptimizer
         B = 8
-        opti = CeresOptimizer(BW=B, BH=B)
+
+        try:
+            opti = CeresOptimizer(BW=B, BH=B, threads=ceres_threads)
+        except:
+            if ceres_threads > 1:
+                raise RuntimeError('ceres_threads requested but not supported by tractor.ceres version')
+            opti = CeresOptimizer(BW=B, BH=B)
         #forced_kwargs.update(verbose=True)
 
     # nsize = 0
