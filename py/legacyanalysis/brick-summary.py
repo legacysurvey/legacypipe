@@ -91,14 +91,15 @@ def plots(opt):
     print('g,r,z coverage:', sum((T.nexp_g > 0) * (T.nexp_r > 0) * (T.nexp_z > 0)) / 16.)
 
     decam = True
-    # vs MzLS+BASS
-    #release = 'MzLS+BASS DR4'
-    release = 'DECaLS DR7'
+    if decam:
+        release = 'DECaLS DR8'
+    else: 
+        release = 'BASS+MzLS DR8'
 
     if decam:
         # DECam
         #ax = [360, 0, -21, 36]
-        ax = [300, -60, -21, 36]
+        ax = [300, -60, -75, 36]
 
         def map_ra(r):
                 return r + (-360 * (r > 300))
@@ -160,10 +161,20 @@ def plots(opt):
     plt.figure(1)
 
     # Map of the tile centers we want to observe...
+    """
     if decam:
         O = fits_table('obstatus/decam-tiles_obstatus.fits')
     else:
         O = fits_table('mosaic-tiles_obstatus.fits')
+    """
+    # File from the "observing" svn repo:
+    from pkg_resources import resource_filename
+
+    if decam:
+        tilefile = resource_filename('legacyzpts', 'data/decam-tiles_obstatus.fits')
+    else:
+        tilefile = resource_filename('legacyzpts', 'data/mosaic-tiles_obstatus.fits')
+    O = fits_table(tilefile)
     O.cut(O.in_desi == 1)
     rr,dd = np.meshgrid(np.linspace(ax[1],ax[0], 700),
                         np.linspace(ax[2],ax[3], 200))
@@ -547,10 +558,11 @@ def main():
     nsrcs = []
     npsf  = []
     nsimp = []
-    nrex = []
+    nrex  = []
     nexp  = []
     ndev  = []
     ncomp = []
+    ndup  = []
 
     gpsfsize = []
     rpsfsize = []
@@ -630,6 +642,7 @@ def main():
             nexp.append(types['EXP'])
             ndev.append(types['DEV'])
             ncomp.append(types['COMP'])
+            ndup.append(types['DUP'])
             print('N sources', nsrcs[-1])
 
             gpsfsize.append(np.median(T.psfsize_g))
@@ -715,13 +728,14 @@ def main():
     T.nexphist_g = np.array(gnhist).astype(np.int32)
     T.nexphist_r = np.array(rnhist).astype(np.int32)
     T.nexphist_z = np.array(znhist).astype(np.int32)
-    T.nobjs  = np.array(nsrcs).astype(np.int16)
-    T.npsf   = np.array(npsf ).astype(np.int16)
-    T.nsimp  = np.array(nsimp).astype(np.int16)
-    T.nrex   = np.array(nrex ).astype(np.int16)
-    T.nexp   = np.array(nexp ).astype(np.int16)
-    T.ndev   = np.array(ndev ).astype(np.int16)
-    T.ncomp  = np.array(ncomp).astype(np.int16)
+    T.nobjs  = np.array(nsrcs).astype(np.int32)
+    T.npsf   = np.array(npsf ).astype(np.int32)
+    T.nsimp  = np.array(nsimp).astype(np.int32)
+    T.nrex   = np.array(nrex ).astype(np.int32)
+    T.nexp   = np.array(nexp ).astype(np.int32)
+    T.ndev   = np.array(ndev ).astype(np.int32)
+    T.ncomp  = np.array(ncomp).astype(np.int32)
+    T.ndup   = np.array(ndup ).astype(np.int32)
     T.psfsize_g = np.array(gpsfsize).astype(np.float32)
     T.psfsize_r = np.array(rpsfsize).astype(np.float32)
     T.psfsize_z = np.array(zpsfsize).astype(np.float32)

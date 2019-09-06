@@ -72,7 +72,6 @@ python /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
     --calibdir ${calibdir} \
     --threads ${ncores} \
     --overhead ${starttime} \
-    --run-calibs-only \
     --quiet \
     >> $tmplog 2>&1
 # Save the return value from the python command -- otherwise we exit 0 because the

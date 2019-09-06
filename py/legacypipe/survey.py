@@ -31,32 +31,6 @@ tempdir = tempfile.gettempdir()
 # The apertures we use in aperture photometry, in ARCSEC radius
 apertures_arcsec = np.array([0.5, 0.75, 1., 1.5, 2., 3.5, 5., 7.])
 
-# Bits in the "maskbits" data product
-MASKBITS = dict(
-    NPRIMARY   = 0x1,   # not PRIMARY
-    BRIGHT     = 0x2,
-    SATUR_G    = 0x4,
-    SATUR_R    = 0x8,
-    SATUR_Z    = 0x10,
-    ALLMASK_G  = 0x20,
-    ALLMASK_R  = 0x40,
-    ALLMASK_Z  = 0x80,
-    WISEM1     = 0x100, # WISE masked
-    WISEM2     = 0x200,
-    BAILOUT    = 0x400, # bailed out of processing
-    MEDIUM     = 0x800, # medium-bright star
-    GALAXY     = 0x1000, # LSLGA large galaxy
-    CLUSTER    = 0x2000, # Cluster catalog source
-)
-
-# Bits in the "brightblob" bitmask
-IN_BLOB = dict(
-    BRIGHT = 0x1,
-    MEDIUM = 0x2,
-    CLUSTER = 0x4,
-    GALAXY = 0x8,
-)
-
 # Ugly hack: for sphinx documentation, the astrometry and tractor (and
 # other) packages are replaced by mock objects.  But you can't
 # subclass a mock object correctly, so we have to un-mock
@@ -187,9 +161,6 @@ class GaiaPosition(ParamList):
 
 
 class GaiaSource(PointSource):
-    def __init__(self, pos, bright):
-        super(GaiaSource, self).__init__(pos, bright)
-
     @staticmethod
     def getName():
         return 'GaiaSource'
@@ -197,43 +168,25 @@ class GaiaSource(PointSource):
     def getSourceType(self):
         return 'GaiaSource'
 
-    def isForcedPointSource(self):
-        return self.forced_point_source
-
     @classmethod
     def from_catalog(cls, g, bands):
         from tractor import NanoMaggies
-
-        # When creating 'tim.time' entries, we do:
-        #import astropy.time
-        # Convert MJD-OBS, in UTC, into TAI
-        #mjd_tai = astropy.time.Time(self.mjdobs,
-        #                            format='mjd', scale='utc').tai.mjd
-
         # Gaia has NaN entries when no proper motion or parallax is measured.
         # Convert to zeros.
         def nantozero(x):
             if not np.isfinite(x):
                 return 0.
             return x
-
         pos = GaiaPosition(g.ra, g.dec, g.ref_epoch,
                            nantozero(g.pmra),
                            nantozero(g.pmdec),
                            nantozero(g.parallax))
-        #print('Gaia G mags:', g.phot_g_mean_mag)
         # Assume color 0 from Gaia G mag as initial flux
         m = g.phot_g_mean_mag
         fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
                        for band in bands])
         bright = NanoMaggies(order=bands, **fluxes)
         src = cls(pos, bright)
-        #print('Created:', src)
-        # print('Params:', src.getParams())
-        # src.printThawedParams()
-        # print('N params:', src.numberOfParams())
-        # print('named params:', src.namedparams)
-        # print('param names:', src.paramnames)
         src.forced_point_source = g.pointsource
         return src
 
@@ -266,13 +219,18 @@ class LogRadius(EllipseESoft):
     def __init__(self, *args, **kwargs):
         super(LogRadius, self).__init__(*args, **kwargs)
         self.lowers = [None]
-        self.uppers = [5.]
+        # MAGIC -- 10" default max r_e!
+        # SEE ALSO utils.py : class(EllipseWithPriors)!
+        self.uppers = [np.log(10.)]
 
     def isLegal(self):
         return self.logre <= self.uppers[0]
 
     def setMaxLogRadius(self, rmax):
         self.uppers[0] = rmax
+
+    def getMaxLogRadius(self):
+        return self.uppers[0]
 
     @staticmethod
     def getName():
@@ -472,12 +430,21 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
             else:
                 depvers.append((pkg, verstr))
 
-    # Store paths to astrometry and tractor packages.
     import astrometry
-    depvers.append(('astrometry', os.path.dirname(astrometry.__file__)))
     import tractor
-    depvers.append(('tractor', os.path.dirname(tractor.__file__)))
-    depvers.append(('fitsio', os.path.dirname(fitsio.__file__)))
+
+    for name,pkg in [('astrometry', astrometry),
+                     ('tractor', tractor),
+                     ('fitsio', fitsio),]:
+        depvers.append((name + '-path', os.path.dirname(pkg.__file__)))
+        try:
+            depvers.append((name, pkg.__version__))
+        except:
+            try:
+                depvers.append((name,
+                                get_git_version(os.path.dirname(pkg.__file__))))
+            except:
+                pass
 
     # Get additional paths from environment variables
     for dep in ['TYCHO2_KD', 'GAIA_CAT', 'LARGEGALAXIES', 'WISE_PSF']:
@@ -613,14 +580,13 @@ def tim_get_resamp(tim, targetwcs):
     if hasattr(tim, 'resamp'):
         return tim.resamp
     try:
-        Yo,Xo,Yi,Xi,_ = resample_with_wcs(targetwcs, tim.subwcs, [], 2)
+        Yo,Xo,Yi,Xi,_ = resample_with_wcs(targetwcs, tim.subwcs, intType=np.int16)
     except OverlapError:
         print('No overlap')
         return None
     if len(Yo) == 0:
         return None
-    resamp = [x.astype(np.int16) for x in (Yo,Xo,Yi,Xi)]
-    return resamp
+    return Yo,Xo,Yi,Xi
 
 def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None,
             clip=True):
@@ -974,7 +940,7 @@ class LegacySurveyData(object):
     '''
 
     def __init__(self, survey_dir=None, cache_dir=None, output_dir=None,
-                 version=None, ccds=None, verbose=False):
+                 allbands='grz'):
         '''Create a LegacySurveyData object using data from the given
         *survey_dir* directory, or from the $LEGACY_SURVEY_DIR environment
         variable.
@@ -1003,13 +969,8 @@ class LegacySurveyData(object):
         if survey_dir is None:
             survey_dir = os.environ.get('LEGACY_SURVEY_DIR')
             if survey_dir is None:
-                print('''Warning: you should set the $LEGACY_SURVEY_DIR environment variable.
-On NERSC, you can do:
-  module use /project/projectdirs/cosmo/work/decam/versions/modules
-  module load legacysurvey
-
-Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail.
-''')
+                print('Warning: you should set the $LEGACY_SURVEY_DIR environment variable.')
+                print('Using the current directory as LEGACY_SURVEY_DIR.')
                 survey_dir = os.getcwd()
 
         self.survey_dir = survey_dir
@@ -1021,7 +982,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             self.output_dir = output_dir
 
         self.output_file_hashes = OrderedDict()
-        self.ccds = ccds
+        self.ccds = None
         self.bricks = None
         self.ccds_index = None
 
@@ -1045,21 +1006,17 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             'megaprime': MegaPrimeImage,
             }
 
-        self.allbands = 'ugrizY'
-
-        assert(version in [None, 'dr2', 'dr1'])
-        self.version = version
-
-        self.verbose = verbose
+        self.allbands = allbands
 
         # Filename prefix for coadd files
         self.file_prefix = 'legacysurvey'
-        if self.version in ['dr1','dr2']:
-            self.file_prefix = 'decals'
 
     def __str__(self):
         return ('%s: dir %s, out %s' %
                 (type(self).__name__, self.survey_dir, self.output_dir))
+
+    def get_default_release(self):
+        return None
 
     def ccds_for_fitting(self, brick, ccds):
         # By default, use all.
@@ -1153,17 +1110,11 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         sname = self.file_prefix
 
         if filetype == 'bricks':
-            fn = 'survey-bricks.fits.gz'
-            if self.version in ['dr1','dr2']:
-                fn = 'decals-bricks.fits'
-            return swap(os.path.join(basedir, fn))
+            return swap(os.path.join(basedir, 'survey-bricks.fits.gz'))
 
         elif filetype == 'ccds':
-            if self.version in ['dr1','dr2']:
-                return swaplist([os.path.join(basedir, 'decals-ccds.fits.gz')])
-            else:
-                return swaplist(
-                    glob(os.path.join(basedir, 'survey-ccds*.fits.gz')))
+            return swaplist(
+                glob(os.path.join(basedir, 'survey-ccds*.fits.gz')))
 
         elif filetype == 'ccd-kds':
             return swaplist(
@@ -1187,9 +1138,6 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
             return swap(os.path.join(basedir, fn))
 
         elif filetype == 'annotated-ccds':
-            if self.version == 'dr2':
-                return swaplist(
-                    glob(os.path.join(basedir, 'decals-ccds-annotated.fits')))
             return swaplist(
                 glob(os.path.join(basedir, 'ccds-annotated-*.fits.gz')))
 
@@ -1251,7 +1199,7 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if self.cache_dir is None:
             return fn
         cfn = fn.replace(self.survey_dir, self.cache_dir)
-        #print('cache fn', cfn)
+        print('checking for cache fn', cfn)
         if os.path.exists(cfn):
             debug('Cached file hit:', fn, '->', cfn)
             return cfn
@@ -1802,6 +1750,8 @@ Now using the current directory as LEGACY_SURVEY_DIR, but this is likely to fail
         if expnum is not None:
             C = self.try_expnum_kdtree(expnum)
             if C is not None:
+                if len(C) == 0:
+                    return None
                 if ccdname is not None:
                     C = C[C.ccdname == ccdname]
                 if camera is not None:

@@ -124,15 +124,37 @@ def main():
                                    no_remap_invvar=True, old_calibs_ok=True)
         print('Tim:', tim.shape)
 
+        psfrow = psfhdr = None
+
         if args.pad:
             psf = im.read_psf_model(0, 0, w=im.width, h=im.height, **psfkwargs)
             psfex = psf.psfex
         else:
             psf = tim.getPsf()
             psfex = psf.psfex
+
+            # Did the PSF model come from a merged file?
+            mpsf = im.read_merged_psfex_model(old_calibs_ok=True)
+            if mpsf is not None:
+                T = fits_table(im.merged_psffn)
+                I, = np.nonzero((T.expnum == im.expnum) *
+                                np.array([c.strip() == im.ccdname for c in T.ccdname]))
+                psfrow = T[I]
+                x0 = ccd.ccd_x0
+                y0 = ccd.ccd_y0
+                psfrow.polzero1[0] -= x0
+                psfrow.polzero2[0] -= y0
+                psfhdr = fitsio.read_header(im.merged_psffn)
+
         psfex.fwhm = tim.psf_fwhm
-        print('PSF:', psf)
-        print('PsfEx:', psfex)
+
+        if psfrow is not None:
+            print('PSF row:', psfrow)
+        else:
+            print('PSF:', psf)
+            print('PsfEx:', psfex)
+
+        skyrow = skyhdr = None
 
         if args.pad:
             primhdr = fitsio.read_header(im.imgfn)
@@ -140,7 +162,22 @@ def main():
             sky = im.read_sky_model(splinesky=True, primhdr=primhdr, imghdr=imghdr)
         else:
             sky = tim.getSky()
-        print('Sky:', sky)
+
+            # Did the sky model come from a merged file?
+            msky = im.read_merged_splinesky_model(slc=slc, old_calibs_ok=True)
+            if msky is not None:
+                T = fits_table(im.merged_splineskyfn)
+                I, = np.nonzero((T.expnum == im.expnum) *
+                                np.array([c.strip() == im.ccdname for c in T.ccdname]))
+                skyrow = T[I]
+                skyrow.x0[0] = ccd.ccd_x0
+                skyrow.y0[0] = ccd.ccd_y0
+                skyhdr = fitsio.read_header(im.merged_splineskyfn)
+
+        if skyrow is not None:
+            print('Sky row:', skyrow)
+        else:
+            print('Sky:', sky)
 
         outim = outsurvey.get_image_object(ccd)
         print('Output image:', outim)
@@ -293,24 +330,38 @@ def main():
                 rtn = os.system(cmd)
                 assert(rtn == 0)
 
-        print('PSF filename:', outim.psffn)
-        trymakedirs(outim.psffn, dir=True)
-        print('Writing PsfEx:', outim.psffn)
-        psfex.writeto(outim.psffn)
-        # update header
-        F = fitsio.FITS(outim.psffn, 'rw')
-        F[0].write_keys([dict(name='EXPNUM', value=ccd.expnum),
-                         dict(name='PLVER',  value=psf.plver),
-                         dict(name='PROCDATE', value=psf.procdate)])
-        F.close()
+        psfout = outim.psffn
+        if psfrow:
+            psfout = outim.merged_psffn
+        print('PSF output filename:', psfout)
+        trymakedirs(psfout, dir=True)
+        if psfrow:
+            psfrow.writeto(psfout, primhdr=psfhdr)
+        else:
+            print('Writing PsfEx:', psfout)
+            psfex.writeto(psfout)
+            # update header
+            F = fitsio.FITS(psfout, 'rw')
+            F[0].write_keys([dict(name='EXPNUM', value=ccd.expnum),
+                             dict(name='PLVER',  value=psf.plver),
+                             dict(name='PROCDATE', value=psf.procdate),])
+            F.close()
 
-        print('Sky filename:', outim.splineskyfn)
-        trymakedirs(outim.splineskyfn, dir=True)
-        primhdr = fitsio.FITSHDR()
-        primhdr['PLVER'] = sky.plver
-        primhdr['PROCDATE'] = sky.procdate
-        primhdr['EXPNUM'] = ccd.expnum
-        sky.write_fits(outim.splineskyfn, primhdr=primhdr)
+        skyout = outim.splineskyfn
+        if skyrow:
+            skyout = outim.merged_splineskyfn
+
+        print('Sky output filename:', skyout)
+        trymakedirs(skyout, dir=True)
+        if skyrow is not None:
+            skyrow.writeto(skyout, primhdr=skyhdr)
+        else:
+            primhdr = fitsio.FITSHDR()
+            primhdr['PLVER'] = sky.plver
+            primhdr['PROCDATE'] = sky.procdate
+            primhdr['EXPNUM'] = ccd.expnum
+            primhdr['IMGDSUM'] = sky.datasum
+            sky.write_fits(skyout, primhdr=primhdr)
 
         # HACK -- check result immediately.
         outccds.writeto(os.path.join(args.outdir, 'survey-ccds-1.fits.gz'))

@@ -3,7 +3,7 @@ import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
 from astrometry.util.resample import resample_with_wcs, OverlapError
-from legacypipe.image import CP_DQ_BITS
+from legacypipe.bits import DQ_BITS
 from legacypipe.survey import tim_get_resamp
 
 import logging
@@ -51,7 +51,8 @@ class UnwiseCoadd(object):
 
             debug('WISE: resampling', wcs, 'to', self.unwise_wcs)
             try:
-                Yo,Xo,Yi,Xi,resam = resample_with_wcs(self.unwise_wcs, wcs, [img, mod])
+                Yo,Xo,Yi,Xi,resam = resample_with_wcs(self.unwise_wcs, wcs,
+                                                      [img, mod], intType=np.int16)
                 rimg,rmod = resam
                 debug('Adding', len(Yo), 'pixels from tile', tile, 'to coadd')
                 self.unwise_co [band-1][Yo,Xo] += rimg
@@ -284,7 +285,7 @@ def make_coadds(tims, bands, targetwcs,
             # "all" mask
             andmask = np.empty((H,W), np.int16)
             from functools import reduce
-            allbits = reduce(np.bitwise_or, CP_DQ_BITS.values())
+            allbits = reduce(np.bitwise_or, DQ_BITS.values())
             andmask[:,:] = allbits
             kwargs.update(ormask=ormask, andmask=andmask)
         if xy:
@@ -355,7 +356,7 @@ def make_coadds(tims, bands, targetwcs,
                         okbits = 0
                         #for bitname in ['satur', 'bleed']:
                         for bitname in ['satur']:
-                            okbits |= CP_DQ_BITS[bitname]
+                            okbits |= DQ_BITS[bitname]
                         brightpix = ((dq & okbits) != 0)
                         myim = im.copy()
                         if satur_val is not None:
@@ -363,7 +364,7 @@ def make_coadds(tims, bands, targetwcs,
                             myim[brightpix] = satur_val
                         #for bitname in ['interp']:
                         for bitname in ['interp', 'bleed']:
-                            okbits |= CP_DQ_BITS[bitname]
+                            okbits |= DQ_BITS[bitname]
                         goodpix = ((dq & ~okbits) == 0)
                         thisgood = np.zeros((H,W), np.float32)
                         thisgood[Yo,Xo] = goodpix
@@ -408,14 +409,14 @@ def make_coadds(tims, bands, targetwcs,
                     # pixels exists
                     okbits = 0
                     for bitname in ['satur']:
-                        okbits |= CP_DQ_BITS[bitname]
+                        okbits |= DQ_BITS[bitname]
                     brightpix = ((dq & okbits) != 0)
                     if satur_val is not None:
                         # HACK -- force SATUR pix to be bright
                         im[brightpix] = satur_val
                     # Include these pixels if none other exist??
                     for bitname in ['interp']: #, 'bleed']:
-                        okbits |= CP_DQ_BITS[bitname]
+                        okbits |= DQ_BITS[bitname]
                     goodpix = ((dq & ~okbits) == 0)
 
                 coimg[Yo,Xo] += goodpix * im
@@ -686,7 +687,7 @@ def _resample_one(args):
 
     try:
         Yo,Xo,Yi,Xi,rimgs = resample_with_wcs(
-            targetwcs, tim.subwcs, imgs, 3)
+            targetwcs, tim.subwcs, imgs, 3, intType=np.int16)
     except OverlapError:
         return None
     if len(Yo) == 0:
@@ -700,7 +701,7 @@ def _resample_one(args):
     else:
         im = tim.getImage ()[Yi,Xi]
         if mod is not None:
-            mo = mods[itim][Yi,Xi]
+            mo = mod[Yi,Xi]
     iv = tim.getInvvar()[Yi,Xi]
     if sbscale:
         fscale = tim.sbscale

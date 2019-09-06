@@ -6,7 +6,6 @@ from astrometry.util.ttime import Time
 def _detmap(X):
     from scipy.ndimage.filters import gaussian_filter
     from legacypipe.survey import tim_get_resamp
-    from astrometry.util.resample import resample_with_wcs, OverlapError
     (tim, targetwcs, H, W, apodize) = X
     R = tim_get_resamp(tim, targetwcs)
     if R is None:
@@ -93,6 +92,8 @@ def sed_matched_filters(bands):
 
 def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
                             targetwcs, nsigma=5, saturated_pix=None,
+                            exclusion_radius=4.,
+                            veto_map=None,
                             plots=False, ps=None, mp=None):
     '''
     Runs a given set of SED-matched filters.
@@ -120,6 +121,8 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
         A map of pixels that are always considered "hot" when
         determining whether a new source touches hot pixels of an
         existing source.
+    exclusion_radius: int
+        How many pixels around an existing source to veto
     plots : boolean, optional
         Create plots?
     ps : PlotSequence object
@@ -159,52 +162,53 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     apsn = []
 
     for sedname,sed in SEDs:
-        print('SED', sedname)
+        #print('SED', sedname)
         if plots:
             pps = ps
         else:
             pps = None
-        t0 = Time()
+        #t0 = Time()
         sedhot,px,py,peakval,apval = sed_matched_detection(
             sedname, sed, detmaps, detivs, bands, xx, yy, rr,
-            nsigma=nsigma, saturated_pix=saturated_pix, ps=pps)
-        print('SED took', Time()-t0)
+            nsigma=nsigma, saturated_pix=saturated_pix, veto_map=veto_map,
+            ps=pps)
+        #print('SED took', Time()-t0)
         if sedhot is None:
             continue
-        print(len(px), 'new peaks')
+        print('SED', sedname, ':', len(px), 'new peaks')
         hot |= sedhot
         # With an empty xx, np.append turns it into a double!
         xx = np.append(xx, px).astype(int)
         yy = np.append(yy, py).astype(int)
-
+        rr = np.append(rr, np.zeros_like(px) + exclusion_radius).astype(int)
         peaksn.extend(peakval)
         apsn.extend(apval)
 
     # New peaks:
     peakx = xx[n0:]
     peaky = yy[n0:]
-    if len(peakx) == 0:
-        return None,None,None
 
-    # Add sources for the new peaks we found
-    pr,pd = targetwcs.pixelxy2radec(peakx+1, peaky+1)
-    print('Adding', len(pr), 'new sources')
-    # Also create FITS table for new sources
-    Tnew = fits_table()
-    Tnew.ra  = pr
-    Tnew.dec = pd
-    Tnew.ibx = peakx
-    Tnew.iby = peaky
-    assert(len(peaksn) == len(Tnew))
-    assert(len(apsn) == len(Tnew))
-    Tnew.peaksn = np.array(peaksn)
-    Tnew.apsn = np.array(apsn)
+    Tnew = None
     newcat = []
-    for r,d,x,y in zip(pr,pd,peakx,peaky):
-        fluxes = dict([(band, detmap[y, x])
-                       for band,detmap in zip(bands,detmaps)])
-        newcat.append(PointSource(RaDecPos(r,d),
-                                  NanoMaggies(order=bands, **fluxes)))
+    if len(peakx):
+        # Add sources for the new peaks we found
+        pr,pd = targetwcs.pixelxy2radec(peakx+1, peaky+1)
+        print('Adding', len(pr), 'new sources')
+        # Also create FITS table for new sources
+        Tnew = fits_table()
+        Tnew.ra  = pr
+        Tnew.dec = pd
+        Tnew.ibx = peakx
+        Tnew.iby = peaky
+        assert(len(peaksn) == len(Tnew))
+        assert(len(apsn) == len(Tnew))
+        Tnew.peaksn = np.array(peaksn)
+        Tnew.apsn = np.array(apsn)
+        for r,d,x,y in zip(pr,pd,peakx,peaky):
+            fluxes = dict([(band, detmap[y, x])
+                           for band,detmap in zip(bands,detmaps)])
+            newcat.append(PointSource(RaDecPos(r,d),
+                                      NanoMaggies(order=bands, **fluxes)))
     return Tnew, newcat, hot
 
 def plot_boundary_map(X, rgb=(0,255,0), extent=None, iterations=1):
@@ -235,6 +239,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                           xomit, yomit, romit,
                           nsigma=5.,
                           saturated_pix=None,
+                          veto_map=None,
                           saddle=2.,
                           cutonaper=True,
                           ps=None):
@@ -294,7 +299,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     from scipy.ndimage.measurements import label, find_objects
     from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
 
-    t0 = Time()
+    #t0 = Time()
     H,W = detmaps[0].shape
 
     allzero = True
@@ -333,8 +338,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     del sedmap
 
     peaks = (sedsn > nsigma)
-    print('SED sn:', Time()-t0)
-    t0 = Time()
+    #print('SED sn:', Time()-t0)
+    #t0 = Time()
 
     def saddle_level(Y):
         # Require a saddle that drops by (the larger of) "saddle"
@@ -369,8 +374,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[0:-2,2:  ])
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[2:  ,0:-2])
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[2:  ,2:  ])
-    print('Peaks:', Time()-t0)
-    t0 = Time()
+    #print('Peaks:', Time()-t0)
+    #t0 = Time()
 
     if ps is not None:
         from astrometry.util.plotutils import dimshow
@@ -388,6 +393,9 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         plt.axis(ax)
         plt.title('SED %s: S/N & peaks' % sedname)
         ps.savefig()
+
+        #import fitsio
+        #fitsio.write('sed-sn-%s.fits' % sedname, sedsn)
 
         # plt.clf()
         # plt.imshow(sedsn, vmin=-2, vmax=10, interpolation='nearest',
@@ -437,16 +445,37 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # the saddle heights of fainter sources.  Thus the vetomap isn't
     # the final word, it is just a quick veto of pixels we know for
     # sure will be vetoed.
-    vetomap = np.zeros(sedsn.shape, bool)
+    if veto_map is None:
+        this_veto_map = np.zeros(sedsn.shape, bool)
+    else:
+        this_veto_map = veto_map.copy()
 
     for x,y,r in zip(xomit, yomit, romit):
         xlo = int(np.clip(np.floor(x - r), 0, W-1))
         xhi = int(np.clip(np.ceil (x + r), 0, W-1))
         ylo = int(np.clip(np.floor(y - r), 0, H-1))
         yhi = int(np.clip(np.ceil (y + r), 0, H-1))
-        vetomap[ylo:yhi+1, xlo:xhi+1] |= (np.hypot(
+        this_veto_map[ylo:yhi+1, xlo:xhi+1] |= (np.hypot(
             (x - np.arange(xlo, xhi+1))[np.newaxis, :],
             (y - np.arange(ylo, yhi+1))[:, np.newaxis]) < r)
+
+    if ps is not None:
+        plt.clf()
+        plt.imshow(this_veto_map, interpolation='nearest', origin='lower', vmin=0, vmax=1, cmap='hot')
+        plt.title('Veto map')
+        ps.savefig()
+
+        print('Peaks in initial veto map:', np.sum(this_veto_map[py,px]), 'of', len(px))
+
+        plt.clf()
+        plt.imshow(saddlemap, interpolation='nearest', origin='lower', vmin=0, vmax=1, cmap='hot')
+        for slc in allslices:
+            sy,sx = slc
+            by0,by1 = sy.start, sy.stop
+            bx0,bx1 = sx.start, sx.stop
+            plt.plot([bx0, bx0, bx1, bx1, bx0], [by0, by1, by1, by0, by0], 'r-')
+        plt.title('Saddle map (lowest level): %i blobs' % len(allslices))
+        ps.savefig()
 
     # For each peak, determine whether it is isolated enough --
     # separated by a low enough saddle from other sources.  Need only
@@ -457,16 +486,16 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     nsaddle = 0
     naper = 0
     for i,(x,y) in enumerate(zip(px, py)):
-        # one plot per peak is a little excessive!
-        if False and ps is not None:
-            level = saddle_level(sedsn[y,x])
-            _peak_plot_1(vetomap, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
-                         level, dilate, saturated_pix, satur, ps)
-
-        if vetomap[y,x]:
+        if this_veto_map[y,x]:
             #print('  in veto map!')
             nveto += 1
             continue
+
+        # one plot per peak is a little excessive!
+        if True and ps is not None:
+            level = saddle_level(sedsn[y,x])
+            _peak_plot_1(this_veto_map, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
+                         level, dilate, saturated_pix, satur, ps)
 
         level = saddle_level(sedsn[y,x])
         ablob = allblobs[y,x]
@@ -500,10 +529,10 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                       (blobs[np.clip(oy,0,h-1), np.clip(ox,0,w-1)] == 
                        thisblob))
 
-        if False and cut and ps is not None:
+        if True and cut and ps is not None:
             _peak_plot_2(ox, oy, w, h, blobs, thisblob, sedsn, x0, y0,
                          x, y, level, ps)
-        if False and (not cut) and ps is not None:
+        if True and (not cut) and ps is not None:
             _peak_plot_3(sedsn, nsigma, x, y, x0, y0, slc, saddlemap,
                          xomit, yomit, px, py, keep, i, cut, ps)
 
@@ -511,9 +540,9 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             # in same blob as previously found source.
             #print('  cut')
             # update vetomap
-            vetomap[slc] |= saddlemap
+            this_veto_map[slc] |= saddlemap
             nsaddle += 1
-            #print('Added to vetomap:', np.sum(saddlemap), 'pixels set; now total of', np.sum(vetomap), 'pixels set')
+            #print('Added to vetomap:', np.sum(saddlemap), 'pixels set; now total of', np.sum(this_veto_map), 'pixels set')
             continue
 
         # Measure in aperture...
@@ -541,8 +570,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         peakval.append(sedsn[y,x])
         keep[i] = True
 
-        vetomap[slc] |= saddlemap
-        #print('Added to vetomap:', np.sum(saddlemap), 'pixels set; now total of', np.sum(vetomap), 'pixels set')
+        this_veto_map[slc] |= saddlemap
+        #print('Added to vetomap:', np.sum(saddlemap), 'pixels set; now total of', np.sum(this_veto_map), 'pixels set')
 
         if False and ps is not None:
             plt.clf()
@@ -559,8 +588,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     print('Of', len(px), 'potential peaks:', nveto, 'in veto map,', nsaddle, 'cut by saddle test,',
           naper, 'cut by aper test,', np.sum(keep), 'kept')
 
-    print('New sources:', Time()-t0)
-    t0 = Time()
+    #print('New sources:', Time()-t0)
 
     if ps is not None:
         pxdrop = px[np.logical_not(keep)]
@@ -581,7 +609,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 
     if ps is not None:
         plt.clf()
-        dimshow(vetomap, vmin=0, vmax=1, cmap='hot')
+        dimshow(this_veto_map, vmin=0, vmax=1, cmap='hot')
         plt.title('SED %s: veto map' % sedname)
         ps.savefig()
 
@@ -663,10 +691,11 @@ def _peak_plot_1(vetomap, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
     plt.subplot(2,2,4)
     plt.imshow(saddlemap, interpolation='nearest', origin='lower',
                vmin=0, vmax=1, cmap='gray')
-    plt.plot(x, y, '+', mec='r', mfc='r')
-    plt.plot(prevx, prevx, 'o', mec='r', mfc='none')
-    plt.plot(xomit, yomit, 'm.')
+    plt.plot(x, y, '+', mec='r', mfc='r', label='New source')
+    plt.plot(prevx, prevx, 'o', mec='r', mfc='none', label='Previous sources')
+    plt.plot(xomit, yomit, 'm.', label='Omit sources')
     plt.axis([min(nzx)-1, max(nzx)+1, min(nzy)-1, max(nzy)+1])
+    plt.legend()
     plt.title('saddle map (this blob)')
 
     ps.savefig()
@@ -749,9 +778,8 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     from scipy.ndimage.measurements import label, find_objects
 
     image = binary_fill_holes(image)
-
     blobs,nblobs = label(image)
-    print('N detected blobs:', nblobs)
+    #print('Detected blobs:', nblobs)
     H,W = image.shape
     del image
 
@@ -785,13 +813,10 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     blobsrcs = []
     keepslices = []
     blobmap = {}
-    dropslices = {}
     for blob in range(1, nblobs+1):
-        Isrcs = np.flatnonzero(T.blob == blob)
+        Isrcs, = np.nonzero(T.blob == blob)
         if len(Isrcs) == 0:
-            #print('Blob', blob, 'has no sources')
             blobmap[blob] = -1
-            dropslices[blob] = blobslices[blob-1]
             continue
         blobmap[blob] = len(blobsrcs)
         blobsrcs.append(Isrcs)
@@ -808,7 +833,7 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
         inblobs[Isrcs] = True
     noblobs = np.flatnonzero(np.logical_not(inblobs))
     del inblobs
-    print(len(noblobs), 'sources are not in blobs')
+    #print(len(noblobs), 'sources are not in blobs')
 
     # Remap the "blobs" image so that empty regions are = -1 and the blob values
     # correspond to their indices in the "blobsrcs" list.

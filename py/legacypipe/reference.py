@@ -14,7 +14,7 @@ def debug(*args):
 def get_reference_sources(survey, targetwcs, pixscale, bands,
                           tycho_stars=True, gaia_stars=True, large_galaxies=True,
                           star_clusters=True):
-    
+
     from legacypipe.survey import GaiaSource
     from legacypipe.survey import LegacyEllipseWithPriors
     from tractor import NanoMaggies, RaDecPos
@@ -31,14 +31,13 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     mpix = int(np.ceil(ref_margin * 3600. / pixscale))
     marginwcs = targetwcs.get_subimage(-mpix, -mpix, W+2*mpix, H+2*mpix)
     
-    refs = None
+    refs = []
 
+    # Tycho-2 stars
     if tycho_stars:
-        #print('Enlarged target WCS from', targetwcs, 'to', marginwcs, 'for ref stars')
-        # Read Tycho-2 stars and use as saturated sources.
         tycho = read_tycho2(survey, marginwcs)
-        if len(tycho) > 0:
-            refs = [tycho]
+        if len(tycho):
+            refs.append(tycho)
             
     # Add Gaia stars
     gaia = None
@@ -46,16 +45,16 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         from astrometry.libkd.spherematch import match_radec
         gaia = read_gaia(marginwcs)
     if gaia is not None:
-        gaia.isbright = np.zeros(len(gaia), bool)
-        gaia.ismedium = np.ones(len(gaia), bool)
-        #gaia.ismedium = gaia.pointsource
-        # Handle sources that appear in both Gaia and Tycho-2 by dropping the entry from Tycho-2.
+        gaia.isbright = (gaia.phot_g_mean_mag < 13.)
+        gaia.ismedium = (gaia.phot_g_mean_mag < 16.)
+        gaia.donotfit = np.zeros(len(gaia), bool)
+        # Handle sources that appear in both Gaia and Tycho-2 by
+        # dropping the entry from Tycho-2.
         if len(gaia) and len(tycho):
             # Before matching, apply proper motions to bring them to
-            # the same epoch.
-            # We want to use the more-accurate Gaia proper motions, so
-            # rewind Gaia positions to the approximate epoch of
-            # Tycho-2: 1991.5.
+            # the same epoch.  We want to use the more-accurate Gaia
+            # proper motions, so rewind Gaia positions to the
+            # approximate epoch of Tycho-2: 1991.5.
             cosdec = np.cos(np.deg2rad(gaia.dec))
             gra  = gaia.ra +  (1991.5 - gaia.ref_epoch) * gaia.pmra  / (3600.*1000.) / cosdec
             gdec = gaia.dec + (1991.5 - gaia.ref_epoch) * gaia.pmdec / (3600.*1000.)
@@ -68,10 +67,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                 tycho.cut(keep)
                 gaia.isbright[J] = True
         if gaia is not None and len(gaia) > 0:
-            if refs is None:
-                refs = [gaia]
-            else:
-                refs.append(gaia)
+            refs.append(gaia)
 
     # Read the catalog of star (open and globular) clusters and add them to the
     # set of reference stars (with the isbright bit set).
@@ -80,63 +76,71 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         if clusters is not None:
             debug('Found', len(clusters), 'star clusters nearby')
             clusters.iscluster = np.ones(len(clusters), bool)
-            if refs is None:
-                refs = [clusters]
-            else:
-                refs.append(clusters)
+            refs.append(clusters)
 
     # Read large galaxies nearby.
     if large_galaxies:
         galaxies = read_large_galaxies(survey, targetwcs)
         if galaxies is not None:
-            if refs is None:
-                refs = [galaxies]
-            else:
-                refs.append(galaxies)
+            # Resolve possible Gaia-large-galaxy duplicates
+            if gaia and len(gaia):
+                I,J,_ = match_radec(galaxies.ra, galaxies.dec, gaia.ra, gaia.dec,
+                                    2./3600., nearest=True)
+                print('Matched', len(I), 'large galaxies to Gaia stars.')
+                if len(I):
+                    gaia.donotfit[J] = True
+            refs.append(galaxies)
 
     refcat = None
-    if refs:
+    if len(refs):
         refs = merge_tables([r for r in refs if r is not None], columns='fillzero')
+    if len(refs) == 0:
+        return None,None
 
-        refs.radius_pix = np.ceil(refs.radius * 3600. / pixscale).astype(int)
+    refs.radius_pix = np.ceil(refs.radius * 3600. / pixscale).astype(int)
 
-        ok,xx,yy = targetwcs.radec2pixelxy(refs.ra, refs.dec)
-        # ibx = integer brick coords
-        refs.ibx = np.round(xx-1.).astype(int)
-        refs.iby = np.round(yy-1.).astype(int)
+    ok,xx,yy = targetwcs.radec2pixelxy(refs.ra, refs.dec)
+    # ibx = integer brick coords
+    refs.ibx = np.round(xx-1.).astype(int)
+    refs.iby = np.round(yy-1.).astype(int)
 
-        refs.cut((xx > -refs.radius_pix) * (xx < W+refs.radius_pix) *
-                 (yy > -refs.radius_pix) * (yy < H+refs.radius_pix))
+    # cut ones whose position + radius are outside the brick bounds.
+    refs.cut((xx > -refs.radius_pix) * (xx < W+refs.radius_pix) *
+             (yy > -refs.radius_pix) * (yy < H+refs.radius_pix))
+    # mark ones that are actually inside the brick area.
+    refs.in_bounds = ((refs.ibx >= 0) * (refs.ibx < W) *
+                      (refs.iby >= 0) * (refs.iby < H))
 
-        refs.in_bounds = ((refs.ibx >= 0) * (refs.ibx < W) *
-                          (refs.iby >= 0) * (refs.iby < H))
+    for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster', 'donotfit']:
+        if not col in refs.get_columns():
+            refs.set(col, np.zeros(len(refs), bool))
 
-        for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster']:
-            if not col in refs.get_columns():
-                refs.set(col, np.zeros(len(refs), bool))
+    ## Create Tractor sources from reference stars
+    refcat = []
+    for g in refs:
+        if g.donotfit or g.iscluster:
+            refcat.append(None)
 
-        ## Create Tractor sources from reference stars
-        refcat = []
-        for g in refs:
-            if g.isbright or g.ismedium or g.iscluster:
-                refcat.append(GaiaSource.from_catalog(g, bands))
-            elif g.islargegalaxy:
-                fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
-                assert(np.all(np.isfinite(list(fluxes.values()))))
-                rr = g.radius * 3600. / 0.5 # factor of two accounts for R(25)-->reff
-                pa = 180 - g.pa
-                if not np.isfinite(pa):
-                    pa = 0.
-                logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, g.ba, pa)
-                gal = ExpGalaxy(RaDecPos(g.ra, g.dec),
-                                NanoMaggies(order=bands, **fluxes),
-                                LegacyEllipseWithPriors(logr, ee1, ee2))
-                gal.isForcedLargeGalaxy = True
-                refcat.append(gal)
-            else:
-                assert(False)
+        elif g.islargegalaxy:
+            fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
+            assert(np.all(np.isfinite(list(fluxes.values()))))
+            rr = g.radius * 3600. / 0.5 # factor of two accounts for R(25)-->reff
+            pa = 180 - g.pa
+            if not np.isfinite(pa):
+                pa = 0.
+            logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, g.ba, pa)
+            gal = ExpGalaxy(RaDecPos(g.ra, g.dec),
+                            NanoMaggies(order=bands, **fluxes),
+                            LegacyEllipseWithPriors(logr, ee1, ee2))
+            refcat.append(gal)
 
-        for src in refcat:
+        else:
+            # Gaia star -- which we want to create a source for, regardless of
+            # whether it is marked medium | bright (or neither).
+            refcat.append(GaiaSource.from_catalog(g, bands))
+
+    for src in refcat:
+        if src:
             src.is_reference_source = True
 
     return refs, refcat
@@ -190,7 +194,7 @@ def read_gaia(targetwcs):
     # relation) is from eyeballing a radius-vs-mag plot that was in
     # pixels; that is unrelated to the present targetwcs pixel scale.
     gaia.radius = np.minimum(1800., 150. * 2.5**((11. - gaia.G)/3.)) * 0.262/3600.
-
+    gaia.delete_column('G')
     return gaia
 
 def read_tycho2(survey, targetwcs):
@@ -198,9 +202,21 @@ def read_tycho2(survey, targetwcs):
     tycho2fn = survey.find_file('tycho2')
     radius = 1.
     ra,dec = targetwcs.radec_center()
-    # fitscopy /data2/catalogs-fits/TYCHO2/tycho2.fits"[col tyc1;tyc2;tyc3;ra;dec;sigma_ra;sigma_dec;mean_ra;mean_dec;pm_ra;pm_dec;sigma_pm_ra;sigma_pm_dec;epoch_ra;epoch_dec;mag_bt;mag_vt;mag_hp]" /tmp/tycho2-astrom.fits
-    # startree -i /tmp/tycho2-astrom.fits -o ~/cosmo/work/legacysurvey/dr7/tycho2.kd.fits -P -k -n stars -T
-    # John added the "isgalaxy" flag 2018-05-10, from the Metz & Geffert (04) catalog.
+    # John added the "isgalaxy" flag 2018-05-10, from the Metz &
+    # Geffert (04) catalog.
+
+    # Eddie added the "zguess" column 2019-03-06, by matching with
+    # 2MASS and estimating z based on APASS.
+
+    # The "tycho2.kd.fits" file read here was produced by:
+    #
+    # fitscopy ~schlafly/legacysurvey/tycho-isgalaxyflag-2mass.fits"[col \
+    #   tyc1;tyc2;tyc3;ra;dec;sigma_ra;sigma_dec;mean_ra;mean_dec;pm_ra;pm_dec; \
+    #   sigma_pm_ra;sigma_pm_dec;epoch_ra;epoch_dec;mag_bt;mag_vt;mag_hp; \
+    #   isgalaxy;Jmag;Hmag;Kmag,zguess]" /tmp/tycho2-astrom.fits
+    # startree -P -k -n stars -T -i /tmp/tycho2-astrom.fits \
+    #  -o /global/project/projectdirs/cosmo/staging/tycho2/tycho2.kd.fits
+
     kd = tree_open(tycho2fn, 'stars')
     I = tree_search_radec(kd, ra, dec, radius)
     debug(len(I), 'Tycho-2 stars within', radius, 'deg of RA,Dec (%.3f, %.3f)' % (ra,dec))
@@ -231,23 +247,25 @@ def read_tycho2(survey, targetwcs):
         X = tycho.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
     tycho.mag = tycho.mag_vt
+    # Patch missing mag values...
     tycho.mag[tycho.mag == 0] = tycho.mag_hp[tycho.mag == 0]
+    tycho.mag[tycho.mag == 0] = tycho.mag_bt[tycho.mag == 0]
+    # Per discussion in issue #306 -- cut on mag < 13.  This drops only 13k/2.5M stars
+    tycho.cut(tycho.mag < 13.)
 
     # See note on gaia.radius above -- don't change the 0.262 to
     # targetwcs.pixel_scale()!
     tycho.radius = np.minimum(1800., 150. * 2.5**((11. - tycho.mag)/3.)) * 0.262/3600.
     
     for c in ['tyc1', 'tyc2', 'tyc3', 'mag_bt', 'mag_vt', 'mag_hp',
-              'mean_ra', 'mean_dec', #'epoch_ra', 'epoch_dec',
+              'mean_ra', 'mean_dec',
               'sigma_pm_ra', 'sigma_pm_dec', 'sigma_ra', 'sigma_dec']:
         tycho.delete_column(c)
-
     # add Gaia-style columns
     # No parallaxes in Tycho-2
     tycho.parallax = np.zeros(len(tycho), np.float32)
-    # Arrgh, Tycho-2 has separate epoch_ra and epoch_dec.
+    # Tycho-2 has separate epoch_ra and epoch_dec.
     # Move source to the mean epoch.
-    # FIXME -- check this!!
     tycho.ref_epoch = (tycho.epoch_ra + tycho.epoch_dec) / 2.
     cosdec = np.cos(np.deg2rad(tycho.dec))
     tycho.ra  += (tycho.ref_epoch - tycho.epoch_ra ) * tycho.pmra  / 3600. / cosdec
@@ -263,7 +281,6 @@ def read_tycho2(survey, targetwcs):
     tycho.delete_column('epoch_dec')
     tycho.isbright = np.ones(len(tycho), bool)
     tycho.ismedium = np.ones(len(tycho), bool)
-
     return tycho
 
 def read_large_galaxies(survey, targetwcs):

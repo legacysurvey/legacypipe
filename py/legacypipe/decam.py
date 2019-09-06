@@ -66,19 +66,21 @@ class DecamImage(LegacySurveyImage):
         if decam_has_dq_codes(plver):
             # IGNORE SATELLITE MASKER
             debug('Remapping DQ bits for', str(self))
-            debug('', np.sum(dq == 8), 'pixels have code 8 set')
+            info('', np.sum(dq == 8), 'pixels have code 8 set')
             dq[dq == 8] = 0
+            info('', np.sum(dq == 5), 'pixels have code 5 set')
+            dq[dq == 5] = 0
             dq = self.remap_dq_cp_codes(dq, hdr)
         else:
-            from legacypipe.image import CP_DQ_BITS
+            from legacypipe.bits import DQ_BITS
             dq = dq.astype(np.int16)
             # Un-set the SATUR flag for pixels that also have BADPIX set.
-            bothbits = CP_DQ_BITS['badpix'] | CP_DQ_BITS['satur']
+            bothbits = DQ_BITS['badpix'] | DQ_BITS['satur']
             I = np.flatnonzero((dq & bothbits) == bothbits)
             if len(I):
                 debug('Warning: un-setting SATUR for', len(I),
                       'pixels with SATUR and BADPIX set.')
-                dq.flat[I] &= ~CP_DQ_BITS['satur']
+                dq.flat[I] &= ~DQ_BITS['satur']
                 assert(np.all((dq & bothbits) != bothbits))
         return dq
 
@@ -90,5 +92,8 @@ def decam_has_dq_codes(plver):
     plver = plver.replace('V','')
     plver = plver.replace('DES ', '')
     plver = plver.replace('+1', 'a1')
+    #'4.8.2a'
+    if plver.endswith('2a'):
+        plver = plver.replace('.2a', '.2a1')
     return StrictVersion(plver) >= StrictVersion('3.5.0')
 

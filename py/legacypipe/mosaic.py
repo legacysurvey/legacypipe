@@ -30,6 +30,15 @@ class MosaicImage(LegacySurveyImage):
                     setattr(self, attr, fnother)
                     fn = fnother
 
+    def get_fwhm(self, primhdr, imghdr):
+        # exposure 88865 has SEEINGP1 in the primary header, nothing anywhere else,
+        # so FWHM in the CCDs file is NaN.
+        import numpy as np
+        print('mosaic get_fwhm: self.fwhm =', self.fwhm)
+        if not np.isfinite(self.fwhm):
+            self.fwhm = primhdr.get('SEEINGP1', 0.0)
+        return self.fwhm
+
     def remap_invvar(self, invvar, primhdr, img, dq):
         return self.remap_invvar_shotnoise(invvar, primhdr, img, dq)
 

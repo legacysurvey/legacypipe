@@ -1,9 +1,7 @@
 from __future__ import print_function
 import numpy as np
-import pylab as plt
 import fitsio
 from astrometry.util.fits import fits_table, merge_tables
-from astrometry.util.plotutils import PlotSequence
 from collections import Counter
 
 def psf_cuts_to_string(ccd_cuts, join=', '):
@@ -30,9 +28,32 @@ CCD_CUT_BITS= dict(
     seeing_bad = 0x1000,
     early_decam = 0x2000,
     depth_cut = 0x4000,
+    too_many_bad_ccds = 0x8000,
+    flagged_in_des = 0x10000,
 )
 
 MJD_EARLY_DECAM = 56730.
+
+# DECam CCD name to number mapping.
+ccdnamenumdict = {'S1': 25, 'S2': 26, 'S3': 27, 'S4':28, 
+                  'S5': 29, 'S6': 30, 'S7': 31,
+                  'S8': 19, 'S9': 20, 'S10': 21, 'S11': 22, 'S12': 23,
+                  'S13': 24,
+                  'S14': 13, 'S15': 14, 'S16': 15, 'S17': 16, 'S18': 17, 
+                  'S19': 18,
+                  'S20': 8, 'S21': 9, 'S22': 10, 'S23': 11, 'S24': 12,
+                  'S25': 4, 'S26': 5, 'S27': 6, 'S28': 7,
+                  'S29': 1, 'S30': 2, 'S31': 3,
+                  'N1': 32, 'N2': 33, 'N3': 34, 'N4': 35, 
+                  'N5': 36, 'N6': 37, 'N7': 38,
+                  'N8': 39, 'N9': 40, 'N10': 41, 'N11': 42, 'N12': 43,
+                  'N13': 44,
+                  'N14': 45, 'N15': 46, 'N16': 47, 'N17': 48, 'N18': 49, 
+                  'N19': 50,
+                  'N20': 51, 'N21': 52, 'N22': 53, 'N23': 54, 'N24': 55,
+                  'N25': 56, 'N26': 57, 'N27': 58, 'N28': 59,
+                  'N29': 60, 'N30': 61, 'N31': 62,
+                  }
 
 def detrend_zeropoints(P, airmass_terms, mjd_terms):
     '''
@@ -86,7 +107,9 @@ def detrend_decam_zeropoints(P):
     airmass_terms = [
         ('g', 0.173),
         ('r', 0.090),
-        ('z', 0.060),]
+        ('i', 0.054),
+        ('z', 0.060),
+        ('Y', 0.058)]
 
     mjd_terms = [
         ('g', 25.08, [
@@ -105,6 +128,7 @@ def detrend_decam_zeropoints(P):
             ( 950.0, 1250.0, 25.350, 25.260, 25.635,  -3.0000e-04),
             (1250.0, 1650.0, 25.320, 25.240, 25.570,  -2.0000e-04),
             (1650.0, 1900.0, 25.440, 25.380, 25.836,  -2.4001e-04),]),
+        ('i', 25.26, []),
         ('z', 24.92, [
             (   0.0,  160.0, 24.970, 24.970, 24.970,   0.0000e+00),
             ( 160.0,  480.0, 25.030, 24.950, 25.070,  -2.5000e-04),
@@ -113,7 +137,9 @@ def detrend_decam_zeropoints(P):
             ( 950.0, 1150.0, 25.030, 24.880, 25.743,  -7.5001e-04),
             (1150.0, 1270.0, 24.880, 25.030, 23.442,   1.2500e-03),
             (1270.0, 1650.0, 25.030, 24.890, 25.498,  -3.6842e-04),
-            (1650.0, 1900.0, 25.070, 24.940, 25.928,  -5.2000e-04),]),]
+            (1650.0, 1900.0, 25.070, 24.940, 25.928,  -5.2000e-04),]),
+        ('Y', 23.87, []),
+    ]
 
     return detrend_zeropoints(P, airmass_terms, mjd_terms)
 
@@ -177,7 +203,7 @@ def detrend_mzlsbass_zeropoints(P):
 
 def psf_zeropoint_cuts(P, pixscale,
                        zpt_cut_lo, zpt_cut_hi, bad_expid, camera,
-                       radec_rms, skybright, zpt_diff_avg):
+                       radec_rms, skybright, zpt_diff_avg, image2coadd=''):
     '''
     zpt_cut_lo, zpt_cut_hi: dict from band to zeropoint.
     '''
@@ -201,10 +227,10 @@ def psf_zeropoint_cuts(P, pixscale,
         ccdzpt = detrend_mzlsbass_zeropoints(P)
 
     cuts = [
-        ('not_grz',   np.array([f.strip() not in keys for f in P.filter])),
+        ('not_grz',   np.array([f.strip() not in 'grz' for f in P.filter])),
         ('ccdnmatch', P.ccdnphotom < 20),
-        ('zpt_small', np.array([ccdzpt < zpt_cut_lo.get(f.strip(),0) for f,ccdzpt in zip(P.filter, ccdzpt)])),
-        ('zpt_large', np.array([ccdzpt > zpt_cut_hi.get(f.strip(),0) for f,ccdzpt in zip(P.filter, ccdzpt)])),
+        ('zpt_small', np.array([zpt < zpt_cut_lo.get(f.strip(),0) for f,zpt in zip(P.filter, ccdzpt)])),
+        ('zpt_large', np.array([zpt > zpt_cut_hi.get(f.strip(),0) for f,zpt in zip(P.filter, ccdzpt)])),
         ('phrms',     P.ccdphrms > 0.2),
         ('exptime', P.exptime < 30),
         ('seeing_bad', np.logical_or(seeing < 0, seeing > 3.0)),
@@ -218,13 +244,38 @@ def psf_zeropoint_cuts(P, pixscale,
         cuts.append(('not_third_pix', (np.logical_not(P.yshift) * (P.mjd_obs < 57674.))))
 
     if camera == 'decam':
-        cuts.append(('early_decam', P.mjd_obs < MJD_EARLY_DECAM))
+        if image2coadd != '':
+            cuts.append(('flagged_in_des', not_in_image2coadd(P, image2coadd)))
+        else:
+            print('Removing all early DECam data')
+            cuts.append(('early_decam', P.mjd_obs < MJD_EARLY_DECAM))
 
     for name,cut in cuts:
         P.ccd_cuts += CCD_CUT_BITS[name] * cut
         print(np.count_nonzero(cut), 'CCDs cut by', name)
 
-def add_psfzpt_cuts(T, camera, bad_expid):
+
+def not_in_image2coadd(P, image2coadd):
+    image2coadd = fits_table(image2coadd)
+    ccdid = (P.expnum * 100 + 
+             np.array([ccdnamenumdict[c.strip()] for c in P.ccdname]))
+    ccdidi2c = image2coadd.expnum * 100 + image2coadd.ccdnum
+    s = np.argsort(ccdidi2c)
+    ind = np.searchsorted(ccdidi2c[s], ccdid)
+    match = (ind >= 0) & (ind < len(ccdidi2c))
+    match[match] = ccdidi2c[s[ind[match]]] == ccdid[match]
+    desy1mjd = 57432
+    # max MJD in image2coadd.fits is ~57431.3
+    print('Flagging images not in DES image2coadd.fits before MJD %d' 
+          % desy1mjd)
+    mindesy1 = (P.propid == '2012B-0001') & (P.mjd_obs < desy1mjd)
+    return mindesy1 & ~match
+
+
+def add_psfzpt_cuts(T, camera, bad_expid, image2coadd=''):
+    from legacyzpts.legacy_zeropoints import get_pixscale
+    pixscale = get_pixscale(camera)
+
     if camera == 'mosaic':
         # Arjun: 2019-03-15
         z0 = 26.20
@@ -234,8 +285,8 @@ def add_psfzpt_cuts(T, camera, bad_expid):
         zpt_diff_avg = 0.1
         zpt_lo = dict(z=z0+dz[0])
         zpt_hi = dict(z=z0+dz[1])
-        psf_zeropoint_cuts(T, 0.262, zpt_lo, zpt_hi, bad_expid, camera, radec_rms, skybright,
-                           zpt_diff_avg)
+        psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
+                           skybright, zpt_diff_avg)
 
     elif camera == '90prime':
         g0 = 25.74
@@ -247,8 +298,8 @@ def add_psfzpt_cuts(T, camera, bad_expid):
         zpt_diff_avg = 0.1
         zpt_lo = dict(g=g0+dg[0], r=r0+dr[0])
         zpt_hi = dict(g=g0+dg[1], r=r0+dr[1])
-        psf_zeropoint_cuts(T, 0.45, zpt_lo, zpt_hi, bad_expid, camera, radec_rms, skybright,
-                           zpt_diff_avg)
+        psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
+                           skybright, zpt_diff_avg)
 
     elif camera == 'decam':
         # These are from DR5; eg
@@ -257,17 +308,21 @@ def add_psfzpt_cuts(T, camera, bad_expid):
         r0 = 25.29
         i0 = 25.26
         z0 = 24.92
+        Y0 = 23.87
         dg = (-0.5, 0.25)
         di = (-0.5, 0.25)
         dr = (-0.5, 0.25)
         dz = (-0.5, 0.25)
+        dY = (-0.5, 0.25)
         radec_rms = 0.4
         skybright = dict(g=90., r=150., z=180.)
         zpt_diff_avg = 0.25
-        zpt_lo = dict(g=g0+dg[0], r=r0+dr[0], i=i0+dr[0], z=z0+dz[0])
-        zpt_hi = dict(g=g0+dg[1], r=r0+dr[1], i=i0+dr[1], z=z0+dz[1])
-        psf_zeropoint_cuts(T, 0.262, zpt_lo, zpt_hi, bad_expid, camera, radec_rms, skybright,
-                           zpt_diff_avg)
+        zpt_lo = dict(g=g0+dg[0], r=r0+dr[0], z=z0+dz[0], i=i0+di[0],
+                      Y=Y0+dY[0])
+        zpt_hi = dict(g=g0+dg[1], r=r0+dr[1], z=z0+dz[1], i=i0+di[1],
+                      Y=Y0+dY[1])
+        psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
+                           skybright, zpt_diff_avg, image2coadd=image2coadd)
     else:
         assert(False)
         
@@ -295,6 +350,7 @@ def read_bad_expid(fn='bad_expid.txt'):
 if __name__ == '__main__':
     import sys
     from pkg_resources import resource_filename
+    import pylab as plt
 
     # MzLS, BASS DR8b updates
     T = fits_table('/global/project/projectdirs/cosmo/work/legacysurvey/dr8b/runbrick-90prime-mosaic/survey-ccds-dr8b-90prime-mosaic-nocuts.kd.fits')

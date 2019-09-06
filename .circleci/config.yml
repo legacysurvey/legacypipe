@@ -26,7 +26,7 @@ jobs:
       - run:
          name: Pip packages
          command: |
-            for x in setuptools wheel intel-numpy intel-scipy psycopg2-binary fitsio matplotlib astropy photutils zmq; do pip3 install $x; done
+            for x in setuptools wheel intel-numpy intel-scipy psycopg2-binary fitsio==0.9.12 matplotlib astropy photutils zmq; do pip3 install $x; done
             rm -Rf /root/.cache/pip
       - run:
           name: Dust maps
@@ -85,7 +85,8 @@ jobs:
               pwd
               python3 -c "import sys; print(sys.path)"
               python3 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
-              coverage run test/runbrick_test.py travis
+              coverage run test/unit_tests.py
+              coverage run -a test/runbrick_test.py travis
       - run:
           name: Coveralls
           command: |

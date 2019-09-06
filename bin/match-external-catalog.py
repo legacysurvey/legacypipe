@@ -95,11 +95,32 @@ def main():
             os.makedirs(os.path.dirname(ns.dest))
         except OSError:
             pass
-        header = {}
+        
+        hdr = fitsio.FITSHDR()
+        hdr.add_record(dict(name='NMATCHED', value=nrealmatched,
+                            comment='Number of unique matches.'))
+        hdr.add_record(dict(name='NCOLL', value=nmatched - nrealmatched,
+                            comment='Total number of matches.'))
+        hdr.add_record(dict(name='NCOLL', value=nrealmatched,
+                            comment='Total number of matches.'))
+        hdr.add_record(dict(name='RADIUS', value=ns.tolerance,
+                            comment='Search radius (arcsec).'))
+        value = ns.external
+        if len(value) > 68:
+            hdr.add_record(dict(name='EXTERNAL', value=value[:67]+'&'))
+            while len(value):
+                value = value[67:]
+                if len(value) == 0:
+                    break
+                hdr.add_record(dict(name='CONTINUE', value="  '%s%s'" % (
+                    value[:67], '&' if len(value) > 67 else '')))
+            added_long = True
+        else:
+            added_long = False
 
-        header['NMATCHED'] = nrealmatched
-        header['NCOLLISION'] = nmatched - nrealmatched
-        header['TOL_ARCSEC'] = ns.tolerance
+        if added_long:
+            hdr.add_record(dict(name='LONGSTRN', value='OGIP 1.0',
+                                comment='CONTINUE cards are used'))
 
         # Optionally add the new columns
         if len(morecols) > 0:
@@ -119,7 +140,7 @@ def main():
             del _matched_catalog
 
         for format in ns.format:
-            save_file(ns.dest, matched_catalog, header, format)
+            save_file(ns.dest, matched_catalog, hdr, format)
 
 def save_file(filename, data, header, format):
     basename = os.path.splitext(filename)[0]

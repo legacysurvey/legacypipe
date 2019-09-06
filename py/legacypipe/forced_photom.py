@@ -18,7 +18,7 @@ from tractor import Tractor, Catalog, NanoMaggies
 from tractor.galaxy import disable_galaxy_cache
 
 from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version_header, apertures_arcsec
-from catalog import read_fits_catalog
+from legacypipe.catalog import read_fits_catalog
 
 def get_parser():
     '''
@@ -29,9 +29,15 @@ def get_parser():
 
     parser.add_argument('--threads', type=int, help='Run multi-threaded', default=None)
 
-    parser.add_argument('--catalog-dir', help='Set LEGACY_SURVEY_DIR to use to read catalogs')
+    parser.add_argument('--survey-dir', help='Override LEGACY_SURVEY_DIR')
 
     parser.add_argument('--catalog', help='Use the given FITS catalog file, rather than reading from a data release directory')
+
+    parser.add_argument('--catalog-dir', help='Set LEGACY_SURVEY_DIR to use to read catalogs')
+
+    parser.add_argument('--catalog-dir-north', help='Set LEGACY_SURVEY_DIR to use to read Northern catalogs')
+    parser.add_argument('--catalog-dir-south', help='Set LEGACY_SURVEY_DIR to use to read Southern catalogs')
+    parser.add_argument('--catalog-resolve-dec-ngc', type=float, help='Dec at which to switch from Northern to Southern catalogs (NGC only)')
 
     parser.add_argument('--skip-calibs', dest='do_calib', default=True, action='store_false',
                         help='Do not try to run calibrations')
@@ -40,6 +46,10 @@ def get_parser():
 
     parser.add_argument('--zoom', type=int, nargs=4, help='Set target image extent (eg "0 100 0 200")')
     parser.add_argument('--no-ceres', action='store_false', dest='ceres', help='Do not use Ceres optimization engine (use scipy)')
+
+    parser.add_argument('--ceres-threads', type=int, default=1,
+                        help='Set number of threads used by Ceres')
+
     parser.add_argument('--plots', default=None, help='Create plots; specify a base filename for the plots')
     parser.add_argument('--write-cat', help='Write out the catalog subset on which forced phot was done')
     parser.add_argument('--apphot', action='store_true',
@@ -134,11 +144,19 @@ def main(survey=None, opt=None):
             ccdname = opt.ccdname
 
     if survey is None:
-        survey = LegacySurveyData()
+        survey = LegacySurveyData(survey_dir=opt.survey_dir)
 
-    catsurvey = survey
+    catsurvey_north = survey
+    catsurvey_south = None
+
+    if opt.catalog_dir_north is not None:
+        assert(opt.catalog_dir_south is not None)
+        assert(opt.catalog_resolve_dec_ngc is not None)
+        catsurvey_north = LegacySurveyData(survey_dir = opt.catalog_dir_north)
+        catsurvey_south = LegacySurveyData(survey_dir = opt.catalog_dir_south)
+
     if opt.catalog_dir is not None:
-        catsurvey = LegacySurveyData(survey_dir = opt.catalog_dir)
+        catsurvey_north = LegacySurveyData(survey_dir = opt.catalog_dir)
 
     if filename is not None and hdu >= 0:
         # FIXME -- try looking up in CCDs file?
@@ -174,7 +192,9 @@ def main(survey=None, opt=None):
 
     args = []
     for ccd in T:
-        args.append((survey, catsurvey, ccd, opt, zoomslice, ps))
+        args.append((survey,
+                     catsurvey_north, catsurvey_south, opt.catalog_resolve_dec_ngc,
+                     ccd, opt, zoomslice, ps))
 
     if opt.threads:
         from astrometry.util.multiproc import multiproc
@@ -201,9 +221,7 @@ def main(survey=None, opt=None):
     if all_hdus:
         version_hdr.delete('CPHDU')
         version_hdr.delete('CCDNAME')
-        version_hdr.delete('EXPOSURE')
 
-    hdr = fitsio.FITSHDR()
     units = {'exptime':'sec',
              'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2',
              'apflux':'nanomaggy', 'apflux_ivar':'1/nanomaggy^2',
@@ -212,7 +230,17 @@ def main(survey=None, opt=None):
     if opt.derivs:
         units.update({'dra':'arcsec', 'ddec':'arcsec',
                       'dra_ivar':'1/arcsec^2', 'ddec_ivar':'1/arcsec^2'})
+
     columns = F.get_columns()
+    order = ['release', 'brickid', 'brickname', 'objid', 'camera', 'expnum', 'ccdname',
+             'filter', 'mjd', 'exptime', 'psfsize', 'ccd_cuts', 'airmass', 'sky',
+             'psfdepth', 'galdepth',
+             'ra', 'dec', 'flux', 'flux_ivar', 'fracflux', 'rchisq', 'fracmasked',
+             'apflux', 'apflux_ivar', 'x', 'y', 'dqmask', 'dra', 'ddec', 'dra_ivar', 'ddec_ivar']
+    columns = [c for c in order if c in columns]
+
+    # Set units headers (must happen after column ordering is set!)
+    hdr = fitsio.FITSHDR()
     for i,col in enumerate(columns):
         if col in units:
             hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
@@ -222,7 +250,7 @@ def main(survey=None, opt=None):
         trymakedirs(outdir)
     tmpfn = os.path.join(outdir, 'tmp-' + os.path.basename(opt.outfn))
     fitsio.write(tmpfn, None, header=version_hdr, clobber=True)
-    F.writeto(tmpfn, header=hdr, append=True)
+    F.writeto(tmpfn, header=hdr, append=True, columns=columns)
     os.rename(tmpfn, opt.outfn)
     print('Wrote', opt.outfn)
 
@@ -236,36 +264,27 @@ def bounce_one_ccd(X):
     #return run_one_ccd(survey, ccd, opt)
     return run_one_ccd(*X)
 
-def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
-    tlast = Time()
+def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_dec=None,
+                       margin=20):
+    TT = []
+    surveys = [(catsurvey_north, True)]
+    if catsurvey_south is not None:
+        surveys.append((catsurvey_south, False))
 
-    im = survey.get_image_object(ccd)
-
-    if opt.do_calib:
-        #from legacypipe.survey import run_calibs
-        #kwa = dict(splinesky=True)
-        #run_calibs((im, kwa))
-        im.run_calibs(splinesky=True)
-
-    tim = im.get_tractor_image(slc=zoomslice, pixPsf=True, splinesky=True,
-                               constant_invvar=opt.constant_invvar,
-                               hybridPsf=opt.hybrid_psf,
-                               normalizePsf=opt.normalize_psf,
-                               old_calibs_ok=True)
-    print('Got tim:', tim)
-
-    tnow = Time()
-    print('Read image:', tnow-tlast)
-    tlast = tnow
-
-    if opt.catalog:
-        T = fits_table(opt.catalog)
-    else:
-        margin = 20
-        TT = []
-        chipwcs = tim.subwcs
+    for catsurvey,north in surveys:
         bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
+
+        if resolve_dec is not None:
+            from astrometry.util.starutil_numpy import radectolb
+            bricks.gal_l, bricks.gal_b = radectolb(bricks.ra, bricks.dec)
+
         for b in bricks:
+            # Skip bricks that are entirely on the wrong side of the resolve line (NGC only)
+            if resolve_dec is not None and b.gal_b > 0:
+                if north and b.dec2 <= resolve_dec:
+                    continue
+                if not(north) and b.dec1 >= resolve_dec:
+                    continue
             # there is some overlap with this brick... read the catalog.
             fn = catsurvey.find_file('tractor', brick=b.brickname)
             if not os.path.exists(fn):
@@ -279,11 +298,18 @@ def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
                 'shapedev_r', 'shapedev_e1', 'shapedev_e2',
                 'shapeexp_r', 'shapeexp_e1', 'shapeexp_e2',
                 'ref_epoch', 'pmra', 'pmdec', 'parallax'
-            ])
+                ])
+            if resolve_dec is not None and b.gal_b > 0:
+                if north:
+                    T.cut(T.dec >= resolve_dec)
+                    print('Cut to', len(T), 'north of the resolve line')
+                else:
+                    T.cut(T.dec <  resolve_dec)
+                    print('Cut to', len(T), 'south of the resolve line')
             ok,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
             W,H = chipwcs.get_width(), chipwcs.get_height()
-            I = np.flatnonzero((xx >= -margin) * (xx <= (W+margin)) *
-                               (yy >= -margin) * (yy <= (H+margin)))
+            I, = np.nonzero((xx >= -margin) * (xx <= (W+margin)) *
+                            (yy >= -margin) * (yy <= (H+margin)))
             T.cut(I)
             print('Cut to', len(T), 'sources within image + margin')
             T.cut(T.brick_primary)
@@ -292,33 +318,84 @@ def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
                 if col in T.get_columns():
                     T.cut(T.get(col) == False)
                     print('Cut to', len(T), 'on', col)
+            # drop DUP sources
+            I, = np.nonzero([t.strip() != 'DUP' for t in T.type])
+            T.cut(I)
+            print('Cut to', len(T), 'after removing DUP')
             if len(T):
                 TT.append(T)
-        if len(TT) == 0:
+    if len(TT) == 0:
+        return None
+    T = merge_tables(TT, columns='fillzero')
+    T._header = TT[0]._header
+    del TT
+    print('Total of', len(T), 'catalog sources')
+
+    # Fix up various failure modes:
+    # FixedCompositeGalaxy(pos=RaDecPos[240.51147402832561, 10.385488075518923], brightness=NanoMaggies: g=(flux -2.87), r=(flux -5.26), z=(flux -7.65), fracDev=FracDev(0.60177207), shapeExp=re=3.78351e-44, e1=9.30367e-13, e2=1.24392e-16, shapeDev=re=inf, e1=-0, e2=-0)
+    # -> convert to EXP
+    I, = np.nonzero([t == 'COMP' and not np.isfinite(r) for t,r in zip(T.type, T.shapedev_r)])
+    if len(I):
+        print('Converting', len(I), 'bogus COMP galaxies to EXP')
+        for i in I:
+            T.type[i] = 'EXP'
+
+    # Same thing with the exp component.
+    # -> convert to DEV
+    I, = np.nonzero([t == 'COMP' and not np.isfinite(r) for t,r in zip(T.type, T.shapeexp_r)])
+    if len(I):
+        print('Converting', len(I), 'bogus COMP galaxies to DEV')
+        for i in I:
+            T.type[i] = 'DEV'
+    return T
+
+def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
+                ccd, opt, zoomslice, ps):
+    tlast = Time()
+
+    im = survey.get_image_object(ccd)
+
+    if opt.do_calib:
+        im.run_calibs(splinesky=True)
+
+    tim = im.get_tractor_image(slc=zoomslice, pixPsf=True, splinesky=True,
+                               constant_invvar=opt.constant_invvar,
+                               hybridPsf=opt.hybrid_psf,
+                               normalizePsf=opt.normalize_psf,
+                               old_calibs_ok=True)
+    print('Got tim:', tim, 'x0,y0', tim.x0, tim.y0)
+
+    tnow = Time()
+    print('Read image:', tnow-tlast)
+    tlast = tnow
+
+    # Apply outlier masks
+    if True:
+        # Outliers masks are computed within a survey (north/south for dr8), and are stored
+        # in a brick-oriented way, in the results directories.
+        north_ccd = (ccd.camera.strip() != 'decam')
+        catsurvey = catsurvey_north
+        if not north_ccd and catsurvey_south is not None:
+            catsurvey = catsurvey_south
+        chipwcs = tim.subwcs
+        bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
+        for b in bricks:
+            from legacypipe.outliers import read_outlier_mask_file
+            print('Reading outlier mask for brick', b.brickname)
+            ok = read_outlier_mask_file(catsurvey, [tim], b.brickname, subimage=False, output=False,
+                                        ps=ps)
+            if not ok:
+                print('WARNING: failed to read outliers mask file for brick', b.brickname)
+
+    if opt.catalog:
+        T = fits_table(opt.catalog)
+    else:
+        chipwcs = tim.subwcs
+        T = get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=catsurvey_south,
+                               resolve_dec=resolve_dec)
+        if T is None:
             print('No sources to photometer.')
             return None
-        T = merge_tables(TT, columns='fillzero')
-        T._header = TT[0]._header
-        del TT
-        print('Total of', len(T), 'catalog sources')
-
-        # Fix up various failure modes:
-        # FixedCompositeGalaxy(pos=RaDecPos[240.51147402832561, 10.385488075518923], brightness=NanoMaggies: g=(flux -2.87), r=(flux -5.26), z=(flux -7.65), fracDev=FracDev(0.60177207), shapeExp=re=3.78351e-44, e1=9.30367e-13, e2=1.24392e-16, shapeDev=re=inf, e1=-0, e2=-0)
-        # -> convert to EXP
-        I, = np.nonzero([t == 'COMP' and not np.isfinite(r) for t,r in zip(T.type, T.shapedev_r)])
-        if len(I):
-            print('Converting', len(I), 'bogus COMP galaxies to EXP')
-            for i in I:
-                T.type[i] = 'EXP'
-
-        # Same thing with the exp component.
-        # -> convert to DEV
-        I, = np.nonzero([t == 'COMP' and not np.isfinite(r) for t,r in zip(T.type, T.shapeexp_r)])
-        if len(I):
-            print('Converting', len(I), 'bogus COMP galaxies to DEV')
-            for i in I:
-                T.type[i] = 'DEV'
-
         if opt.write_cat:
             T.writeto(opt.write_cat)
             print('Wrote catalog to', opt.write_cat)
@@ -338,16 +415,11 @@ def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
             T.ra [I] = ra
             T.dec[I] = dec
 
-    kwargs = {}
-    cols = T.get_columns()
-    if 'flux_r' in cols and not 'decam_flux_r' in cols:
-        kwargs.update(fluxPrefix='')
-
     tnow = Time()
     print('Read catalog:', tnow-tlast)
     tlast = tnow
 
-    cat = read_fits_catalog(T, bands='r', **kwargs)
+    cat = read_fits_catalog(T, bands='r')
     # Replace the brightness (which will be a NanoMaggies with g,r,z)
     # with a NanoMaggies with this image's band only.
     for src in cat:
@@ -366,7 +438,8 @@ def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
                         do_forced=opt.forced,
                         do_apphot=opt.apphot,
                         get_model=opt.save_model,
-                        ps=ps)
+                        ps=ps, timing=True,
+                        ceres_threads=opt.ceres_threads)
 
     if opt.save_model:
         # unpack results
@@ -378,7 +451,7 @@ def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
     F.objid     = T.objid
 
     F.camera  = np.array([ccd.camera] * len(F))
-    F.expnum  = np.array([im.expnum]  * len(F)).astype(np.int32)
+    F.expnum  = np.array([im.expnum]  * len(F)).astype(np.int64)
     F.ccdname = np.array([im.ccdname] * len(F))
 
     # "Denormalizing"
@@ -386,7 +459,8 @@ def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
     F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(F))
     F.exptime = np.array([tim.primhdr['EXPTIME']] * len(F)).astype(np.float32)
     F.psfsize = np.array([tim.psf_fwhm * tim.imobj.pixscale] * len(F)).astype(np.float32)
-    #### FIXME -- units?
+    F.ccd_cuts = np.array([ccd.ccd_cuts] * len(F))
+    F.airmass  = np.array([ccd.airmass ] * len(F))
     ### --> also add units to the dict below so the FITS headers have units
     F.sky     = np.array([tim.midsky / tim.zpscale / tim.imobj.pixscale**2] * len(F)).astype(np.float32)
     # in the same units as the depth maps -- flux inverse-variance.
@@ -421,15 +495,13 @@ def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
     F.x = (x-1).astype(np.float32)
     F.y = (y-1).astype(np.float32)
 
-    ## FIXME -- read outlier_masks?
-
     h,w = tim.shape
-    F.mask = tim.dq[np.clip(np.round(F.y).astype(int), 0, h-1),
-                    np.clip(np.round(F.x).astype(int), 0, w-1)]
+    F.dqmask = tim.dq[np.clip(np.round(F.y).astype(int), 0, h-1),
+                      np.clip(np.round(F.x).astype(int), 0, w-1)]
 
     program_name = sys.argv[0]
     ## FIXME -- from catalog?
-    release = 0
+    release = 8002
     version_hdr = get_version_header(program_name, surveydir, release)
     filename = getattr(ccd, 'image_filename')
     if filename is None:
@@ -447,10 +519,8 @@ def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
     version_hdr.add_record(dict(name='EXPNUM', value=im.expnum, comment='Exposure num'))
     version_hdr.add_record(dict(name='CCDNAME', value=im.ccdname, comment='CCD name'))
     version_hdr.add_record(dict(name='FILTER', value=tim.band, comment='Bandpass of this image'))
-    version_hdr.add_record(dict(name='EXPOSURE',
-                                value='%s-%s-%s' % (ccd.camera, im.expnum, im.ccdname),
-                                comment='Name of this image'))
     version_hdr.add_record(dict(name='PLVER', value=ccd.plver, comment='CP pipeline version'))
+    version_hdr.add_record(dict(name='PLPROCID', value=ccd.plprocid, comment='CP pipeline id'))
     version_hdr.add_record(dict(name='PROCDATE', value=ccd.procdate, comment='CP image DATE'))
 
     keys = ['TELESCOP','OBSERVAT','OBS-LAT','OBS-LONG','OBS-ELEV',
@@ -476,13 +546,14 @@ def run_one_ccd(survey, catsurvey, ccd, opt, zoomslice, ps):
 def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                     do_forced=True, do_apphot=True, get_model=False, ps=None,
                     timing=False,
-                    fixed_also=False):
+                    fixed_also=False,
+                    ceres_threads=1):
     '''
     fixed_also: if derivs=True, also run without derivatives and report
     that flux too?
     '''
     if timing:
-        t0 = Time()
+        tlast = Time()
     if ps is not None:
         import pylab as plt
     opti = None
@@ -490,7 +561,13 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
     if ceres:
         from tractor.ceres_optimizer import CeresOptimizer
         B = 8
-        opti = CeresOptimizer(BW=B, BH=B)
+
+        try:
+            opti = CeresOptimizer(BW=B, BH=B, threads=ceres_threads)
+        except:
+            if ceres_threads > 1:
+                raise RuntimeError('ceres_threads requested but not supported by tractor.ceres version')
+            opti = CeresOptimizer(BW=B, BH=B)
         #forced_kwargs.update(verbose=True)
 
     # nsize = 0
@@ -513,8 +590,14 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
     if derivs:
         realsrcs = []
         derivsrcs = []
-        for src in cat:
+        Iderivs = []
+        for i,src in enumerate(cat):
+            from tractor import PointSource
             realsrcs.append(src)
+
+            if not isinstance(src, PointSource):
+                continue
+            Iderivs.append(i)
 
             brightness_dra  = src.getBrightness().copy()
             brightness_ddec = src.getBrightness().copy()
@@ -526,10 +609,14 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             dsrc = SourceDerivatives(src, [brightness_dra, brightness_ddec],
                                      tim, ps)
             derivsrcs.append(dsrc)
+        Iderivs = np.array(Iderivs)
 
-        # For convenience, put all the real sources at the front of
-        # the list, so we can pull the IVs off the front of the list.
-        cat = realsrcs + derivsrcs
+        if fixed_also:
+            pass
+        else:
+            # For convenience, put all the real sources at the front of
+            # the list, so we can pull the IVs off the front of the list.
+            cat = realsrcs + derivsrcs
 
     if agn:
         from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
@@ -566,6 +653,31 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
     F = fits_table()
 
     if do_forced:
+
+        if timing and (derivs or agn):
+            t = Time()
+            print('Setting up:', t-tlast)
+            tlast = t
+
+        if derivs:
+            if fixed_also:
+                print('Forced photom with fixed positions:')
+                R = tr.optimize_forced_photometry(variance=True, fitstats=False,
+                                                  shared_params=False, priors=False,
+                                                  **forced_kwargs)
+                F.flux_fixed = np.array([src.getBrightness().getFlux(tim.band)
+                                         for src in cat]).astype(np.float32)
+                N = len(cat)
+                F.flux_fixed_ivar = R.IV[:N].astype(np.float32)
+
+                if timing:
+                    t = Time()
+                    print('Forced photom with fixed positions finished:', t-tlast)
+                    tlast = t
+
+                cat = realsrcs + derivsrcs
+                tr.setCatalog(Catalog(*cat))
+            print('Forced photom with position derivatives:')
 
         if ps is None and not get_model:
             forced_kwargs.update(wantims=False)
@@ -615,30 +727,32 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 plt.title('Chi without derivatives: %s' % tim.name)
                 ps.savefig()
 
-        if derivs:
+        if derivs or agn:
             cat = realsrcs
-        if agn:
-            cat = realsrcs
+        N = len(cat)
 
         F.flux = np.array([src.getBrightness().getFlux(tim.band)
                            for src in cat]).astype(np.float32)
-        N = len(cat)
         F.flux_ivar = R.IV[:N].astype(np.float32)
 
         F.fracflux = R.fitstats.profracflux[:N].astype(np.float32)
-        F.rchi2    = R.fitstats.prochi2    [:N].astype(np.float32)
-        # 1 - 
-        #F.fracmasked = R.fitstats.pronpix  [:N].astype(np.float32)
+        F.rchisq   = R.fitstats.prochi2    [:N].astype(np.float32)
         try:
             F.fracmasked = R.fitstats.promasked[:N].astype(np.float32)
         except:
             print('No "fracmasked" available (only in recent Tractor versions)')
 
         if derivs:
-            F.flux_dra  = np.array([src.getParams()[0] for src in derivsrcs]).astype(np.float32)
-            F.flux_ddec = np.array([src.getParams()[1] for src in derivsrcs]).astype(np.float32)
-            F.flux_dra_ivar  = R.IV[N  ::2].astype(np.float32)
-            F.flux_ddec_ivar = R.IV[N+1::2].astype(np.float32)
+            F.flux_dra  = np.zeros(len(F), np.float32)
+            F.flux_ddec = np.zeros(len(F), np.float32)
+            F.flux_dra [Iderivs] = np.array([src.getParams()[0]
+                                             for src in derivsrcs]).astype(np.float32)
+            F.flux_ddec[Iderivs] = np.array([src.getParams()[1]
+                                             for src in derivsrcs]).astype(np.float32)
+            F.flux_dra_ivar  = np.zeros(len(F), np.float32)
+            F.flux_ddec_ivar = np.zeros(len(F), np.float32)
+            F.flux_dra_ivar [Iderivs] = R.IV[N  ::2].astype(np.float32)
+            F.flux_ddec_ivar[Iderivs] = R.IV[N+1::2].astype(np.float32)
 
         if agn:
             F.flux_agn = np.zeros(len(F), np.float32)
@@ -647,18 +761,9 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             F.flux_agn_ivar[iagn] = R.IV[N:].astype(np.float32)
 
         if timing:
-            print('Forced photom:', Time()-t0)
-
-        if derivs and fixed_also:
-            cat = realsrcs
-            tr.setCatalog(Catalog(*cat))
-            R = tr.optimize_forced_photometry(variance=True, fitstats=False,
-                                              shared_params=False, priors=False,
-                                              **forced_kwargs)
-            F.flux_fixed = np.array([src.getBrightness().getFlux(tim.band)
-                                     for src in cat]).astype(np.float32)
-            N = len(cat)
-            F.flux_fixed_ivar = R.IV[:N].astype(np.float32)
+            t = Time()
+            print('Forced photom:', t-tlast)
+            tlast = t
 
     if do_apphot:
         import photutils
@@ -704,7 +809,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         F.apflux_ivar = np.zeros((len(F), len(apertures)), np.float32)
         F.apflux_ivar[Iap,:] = apiv
         if timing:
-            print('Aperture photom:', Time()-t0)
+            print('Aperture photom:', Time()-tlast)
 
     if get_model:
         return F,mod

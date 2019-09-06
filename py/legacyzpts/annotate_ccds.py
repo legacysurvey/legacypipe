@@ -2,9 +2,6 @@ from __future__ import print_function
 import numpy as np
 import os
 
-import matplotlib
-matplotlib.use('Agg')
-
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.starutil_numpy import degrees_between
 from astrometry.util.util import Tan
@@ -36,8 +33,12 @@ Can add kd-tree data structure to this resulting annotated-ccds file like this:
 
 '''
 
-def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=True,
+def annotate(ccds, survey, mp=None, mzls=False, bass=False, normalizePsf=True,
              carryOn=True):
+    if mp is None:
+        from astrometry.util.multiproc import multiproc
+        mp = multiproc()
+
     # File from the "observing" svn repo:
     from pkg_resources import resource_filename
 
@@ -68,228 +69,24 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=True,
 
     gaussgalnorm = np.zeros(len(ccds), np.float32)
 
-    for iccd,ccd in enumerate(ccds):
-        print('Reading CCD %i of %i:' % (iccd+1, len(ccds)), 'file', ccd.image_filename, 'CCD', ccd.expnum, ccd.ccdname)
-        try:
-            im = survey.get_image_object(ccd)
-        except:
-            print('Failed to get_image_object()')
-            import traceback
-            traceback.print_exc()
-            if carryOn:
-                continue
+    anns = mp.map(annotate_one_ccd, [
+        (ccd, survey, normalizePsf, carryOn) for ccd in ccds])
+    for iccd,ann in enumerate(anns):
+        tileid = ann.pop('tileid', -1)
+        if tileid > -1:
+            index = tileid_to_index[tileid]
+            if index == -1:
+                print('Tile ID not found in obstatus file')
             else:
-                raise
-        #print('Reading CCD %i of %i:' % (iccd+1, len(ccds)), im, 'file', ccd.image_filename, 'CCD', ccd.ccdname)
-
-        X = im.get_good_image_subregion()
-        for i,x in enumerate(X):
-            if x is not None:
-                ccds.good_region[iccd,i] = x
-
-        W,H = ccd.width, ccd.height
-
-        kwargs = dict(pixPsf=True, splinesky=True, subsky=False,
-                      pixels=False, dq=False, invvar=False,
-                      normalizePsf=normalizePsf)
-
-        psf = None
-        wcs = None
-        sky = None
-        try:
-            tim = im.get_tractor_image(**kwargs)
-        except:
-            print('Failed to get_tractor_image')
-            import traceback
-            traceback.print_exc()
-            if carryOn:
-                continue
-            else:
-                raise
-
-        if tim is None:
-            continue
-
-        psf = tim.psf
-        wcs = tim.wcs.wcs
-        sky = tim.sky
-        hdr = tim.primhdr
-
-        # print('CCD fwhm:', ccd.fwhm)
-        # print('im fwhm:', im.fwhm)
-        # print('tim psf_fwhm', tim.psf_fwhm)
-        # print('tim psf_sigma:', tim.psf_sigma)
-        # print('Got PSF', psf)
-        # print('Got sky', type(sky))
-        # print('Got WCS', wcs)
-        # print('sig1', tim.sig1)
-
-        ccds.humidity[iccd] = hdr.get('HUMIDITY')
-        ccds.outtemp[iccd]  = hdr.get('OUTTEMP')
-
-        ccds.sig1[iccd] = tim.sig1
-        ccds.plver[iccd] = tim.plver
-        ccds.procdate[iccd] = tim.procdate
-        ccds.plprocid[iccd] = tim.plprocid
-
-        # parse 'DECaLS_15150_r' to get tile number
-        obj = ccd.object.strip()
-        words = obj.split('_')
-        tile = None
-        if len(words) == 3 and (
-            ((not mzls) and (words[0] == 'DECaLS')) or
-            (     mzls  and (words[0] in ['MzLS','MOSAIC']))):
-            try:
-                tileid = int(words[1])
-                tile = tiles[tileid_to_index[tileid]]
+                tile = tiles[index]
                 assert(tile.tileid == tileid)
-            except:
-                import traceback
-                traceback.print_exc()
+                ccds.tileid  [iccd] = tile.tileid
+                ccds.tilepass[iccd] = tile.get('pass')
+                ccds.tileebv [iccd] = tile.ebv_med
+        gaussgalnorm[iccd] = ann.pop('gaussgalnorm', 0)
 
-        if tile is not None:
-            ccds.tileid  [iccd] = tile.tileid
-            ccds.tilepass[iccd] = tile.get('pass')
-            ccds.tileebv [iccd] = tile.ebv_med
-
-        # Instantiate PSF on a grid
-        S = 32
-        xx = np.linspace(1+S, W-S, 5)
-        yy = np.linspace(1+S, H-S, 5)
-        xx,yy = np.meshgrid(xx, yy)
-        psfnorms = []
-        galnorms = []
-        for x,y in zip(xx.ravel(), yy.ravel()):
-
-            # HACK -- DR4 PSF sampling issue
-            tim.psf = psf.constantPsfAt(x, y)
-
-            try:
-                p = im.psf_norm(tim, x=x, y=y)
-                g = im.galaxy_norm(tim, x=x, y=y)
-                psfnorms.append(p)
-                galnorms.append(g)
-            except:
-                pass
-
-        tim.psf = psf
-
-        ccds.psfnorm_mean[iccd] = np.mean(psfnorms)
-        ccds.psfnorm_std [iccd] = np.std (psfnorms)
-        ccds.galnorm_mean[iccd] = np.mean(galnorms)
-        ccds.galnorm_std [iccd] = np.std (galnorms)
-
-        #print('psf norm', ccds.psfnorm_mean[iccd])
-        #print('gal norm', ccds.galnorm_mean[iccd])
-
-        # PSF in center of field
-        cx,cy = (W+1)/2., (H+1)/2.
-        p = psf.getPointSourcePatch(cx, cy).patch
-        ph,pw = p.shape
-        px,py = np.meshgrid(np.arange(pw), np.arange(ph))
-        psum = np.sum(p)
-        # print('psum', psum)
-        p /= psum
-        # centroids
-        cenx = np.sum(p * px)
-        ceny = np.sum(p * py)
-        # print('cenx,ceny', cenx,ceny)
-        # second moments
-        x2 = np.sum(p * (px - cenx)**2)
-        y2 = np.sum(p * (py - ceny)**2)
-        xy = np.sum(p * (px - cenx)*(py - ceny))
-        # semi-major/minor axes and position angle
-        theta = np.rad2deg(np.arctan2(2 * xy, x2 - y2) / 2.)
-        theta = np.abs(theta) * np.sign(xy)
-        s = np.sqrt(((x2 - y2)/2.)**2 + xy**2)
-        a = np.sqrt((x2 + y2) / 2. + s)
-        b = np.sqrt((x2 + y2) / 2. - s)
-        ell = 1. - b/a
-
-        # print('PSF second moments', x2, y2, xy)
-        # print('PSF position angle', theta)
-        # print('PSF semi-axes', a, b)
-        # print('PSF ellipticity', ell)
-
-        ccds.psf_mx2[iccd] = x2
-        ccds.psf_my2[iccd] = y2
-        ccds.psf_mxy[iccd] = xy
-        ccds.psf_a[iccd] = a
-        ccds.psf_b[iccd] = b
-        ccds.psf_theta[iccd] = theta
-        ccds.psf_ell  [iccd] = ell
-
-        #print('Computing Gaussian approximate PSF quantities...')
-        # Galaxy norm using Gaussian approximation of PSF.
-        realpsf = tim.psf
-
-        #print('FWHM', ccds.fwhm[i])
-        #print('-> sigma', ccds.fwhm[i] / 2.35)
-        #print('tim.PSF sigma', tim.psf_sigma)
-
-        tim.psf = im.read_psf_model(0, 0, gaussPsf=True,
-                                    psf_sigma=tim.psf_sigma)
-        gaussgalnorm[iccd] = im.galaxy_norm(tim, x=cx, y=cy)
-        tim.psf = realpsf
-
-        has_skygrid = hasattr(sky, 'evaluateGrid')
-
-        # Sky -- evaluate on a grid (every ~10th pixel)
-        if has_skygrid:
-            skygrid = sky.evaluateGrid(np.linspace(0, ccd.width-1,  int(1+ccd.width/10)),
-                                       np.linspace(0, ccd.height-1, int(1+ccd.height/10)))
-            ccds.meansky[iccd] = np.mean(skygrid)
-            ccds.stdsky[iccd]  = np.std(skygrid)
-            ccds.maxsky[iccd]  = skygrid.max()
-            ccds.minsky[iccd]  = skygrid.min()
-        else:
-            skyval = sky.getConstant()
-            ccds.meansky[iccd] = skyval
-            ccds.stdsky[iccd]  = 0.
-            ccds.maxsky[iccd]  = skyval
-            ccds.minsky[iccd]  = skyval
-
-        # WCS
-        ccds.ra0[iccd],ccds.dec0[iccd] = wcs.pixelxy2radec(1, 1)
-        ccds.ra1[iccd],ccds.dec1[iccd] = wcs.pixelxy2radec(1, H)
-        ccds.ra2[iccd],ccds.dec2[iccd] = wcs.pixelxy2radec(W, H)
-        ccds.ra3[iccd],ccds.dec3[iccd] = wcs.pixelxy2radec(W, 1)
-
-        midx, midy = (W+1)/2., (H+1)/2.
-        rc,dc  = wcs.pixelxy2radec(midx, midy)
-        ra,dec = wcs.pixelxy2radec([1,W,midx,midx], [midy,midy,1,H])
-        ccds.dra [iccd] = max(degrees_between(ra, dc+np.zeros_like(ra),
-                                              rc, dc))
-        ccds.ddec[iccd] = max(degrees_between(rc+np.zeros_like(dec), dec,
-                                              rc, dc))
-        ccds.ra_center [iccd] = rc
-        ccds.dec_center[iccd] = dc
-
-        # Compute scale change across the chip
-        # how many pixels to step
-        step = 10
-        xx = np.linspace(1+step, W-step, 5)
-        yy = np.linspace(1+step, H-step, 5)
-        xx,yy = np.meshgrid(xx, yy)
-        pixscale = []
-        for x,y in zip(xx.ravel(), yy.ravel()):
-            sx = [x-step, x-step, x+step, x+step, x-step]
-            sy = [y-step, y+step, y+step, y-step, y-step]
-            sr,sd = wcs.pixelxy2radec(sx, sy)
-            rc,dc = wcs.pixelxy2radec(x, y)
-            # project around a tiny little TAN WCS at (x,y), with 1" pixels
-            locwcs = Tan(rc, dc, 0., 0., 1./3600, 0., 0., 1./3600, 1., 1.)
-            ok,lx,ly = locwcs.radec2pixelxy(sr, sd)
-            #print('local x,y:', lx, ly)
-            A = polygon_area((lx, ly))
-            pixscale.append(np.sqrt(A / (2*step)**2))
-        # print('Pixel scales:', pixscale)
-        ccds.pixscale_mean[iccd] = np.mean(pixscale)
-        ccds.pixscale_min[iccd] = min(pixscale)
-        ccds.pixscale_max[iccd] = max(pixscale)
-        ccds.pixscale_std[iccd] = np.std(pixscale)
-
-        ccds.annotated[iccd] = True
+        for k,v in ann.items():
+            ccds.get(k)[iccd] = v
 
     sfd = tractor.sfd.SFDMap()
     allbands = 'ugrizY'
@@ -336,6 +133,195 @@ def annotate(ccds, survey, mzls=False, bass=False, normalizePsf=True,
     for X in [ccds.psfdepth, ccds.galdepth, ccds.gausspsfdepth, ccds.gaussgaldepth]:
         X[np.logical_not(np.isfinite(X))] = 0.
 
+def annotate_one_ccd(X):
+    ccd, survey, normalizePsf, carryOn = X
+    print('Annotating CCD', ccd.image_filename.strip(), 'expnum', ccd.expnum,
+          'CCD', ccd.ccdname)
+    result = {}
+    try:
+        im = survey.get_image_object(ccd)
+    except:
+        print('Failed to get_image_object()')
+        import traceback
+        traceback.print_exc()
+        if carryOn:
+            return result
+        else:
+            raise
+
+    X = im.get_good_image_subregion()
+    reg = [-1,-1,-1,-1]
+    for i,x in enumerate(X):
+        if x is not None:
+            reg[i] = x
+    result.update(good_region=reg)
+
+    kwargs = dict(pixPsf=True, splinesky=True, subsky=False,
+                  pixels=False, dq=False, invvar=False,
+                  normalizePsf=normalizePsf)
+    psf = None
+    wcs = None
+    sky = None
+
+    if ccd.ccdnastrom == 0: # something went terribly wrong
+        print('ccdnastrom == 0; bailing on annotation')
+        return result
+
+    try:
+        tim = im.get_tractor_image(**kwargs)
+    except:
+        print('Failed to get_tractor_image')
+        import traceback
+        traceback.print_exc()
+        if carryOn:
+            return result
+        else:
+            raise
+
+    if tim is None:
+        print('Failed to get_tractor_image; bailing on annotation')
+        return result
+
+    psf = tim.psf
+    wcs = tim.wcs.wcs
+    sky = tim.sky
+    hdr = tim.primhdr
+
+    result.update(humidity = hdr.get('HUMIDITY'),
+                  outtemp = hdr.get('OUTTEMP'),
+                  plver = tim.plver,
+                  procdate = tim.procdate,
+                  plprocid = tim.plprocid)
+
+    # parse 'DECaLS_15150_r' to get tile number
+    obj = ccd.object.strip()
+    words = obj.split('_')
+    if len(words) == 3 and words[0] in ('DECaLS', 'MzLS', 'MOSAIC'):
+        try:
+            tileid = int(words[1])
+            result.update(tileid=tileid)
+        except:
+            import traceback
+            traceback.print_exc()
+
+    # Instantiate PSF on a grid
+    S = 32
+    W,H = ccd.width, ccd.height
+    xx = np.linspace(1+S, W-S, 5)
+    yy = np.linspace(1+S, H-S, 5)
+    xx,yy = np.meshgrid(xx, yy)
+    psfnorms = []
+    galnorms = []
+    for x,y in zip(xx.ravel(), yy.ravel()):
+        tim.psf = psf.constantPsfAt(x, y)
+        try:
+            p = im.psf_norm(tim, x=x, y=y)
+            g = im.galaxy_norm(tim, x=x, y=y)
+            psfnorms.append(p)
+            galnorms.append(g)
+        except:
+            pass
+
+    tim.psf = psf
+    result.update(psfnorm_mean = np.mean(psfnorms),
+                  psfnorm_std  = np.std (psfnorms),
+                  galnorm_mean = np.mean(galnorms),
+                  galnorm_std  = np.std (galnorms))
+
+    # PSF in center of field
+    cx,cy = (W+1)/2., (H+1)/2.
+    p = psf.getPointSourcePatch(cx, cy).patch
+    ph,pw = p.shape
+    px,py = np.meshgrid(np.arange(pw), np.arange(ph))
+    psum = np.sum(p)
+    p /= psum
+    # centroids
+    cenx = np.sum(p * px)
+    ceny = np.sum(p * py)
+    # second moments
+    x2 = np.sum(p * (px - cenx)**2)
+    y2 = np.sum(p * (py - ceny)**2)
+    xy = np.sum(p * (px - cenx)*(py - ceny))
+    # semi-major/minor axes and position angle
+    theta = np.rad2deg(np.arctan2(2 * xy, x2 - y2) / 2.)
+    theta = np.abs(theta) * np.sign(xy)
+    s = np.sqrt(((x2 - y2)/2.)**2 + xy**2)
+    a = np.sqrt((x2 + y2) / 2. + s)
+    b = np.sqrt((x2 + y2) / 2. - s)
+    ell = 1. - b/a
+    result.update(psf_mx2 = x2,
+                  psf_my2 = y2,
+                  psf_mxy = xy,
+                  psf_a   = a,
+                  psf_b   = b,
+                  psf_theta = theta,
+                  psf_ell   = ell)
+    # Galaxy norm using Gaussian approximation of PSF.
+    realpsf = tim.psf
+
+    tim.psf = im.read_psf_model(0, 0, gaussPsf=True,
+                                psf_sigma=tim.psf_sigma)
+    result.update(gaussgalnorm = im.galaxy_norm(tim, x=cx, y=cy))
+    tim.psf = realpsf
+
+    has_skygrid = hasattr(sky, 'evaluateGrid')
+
+    # Sky -- evaluate on a grid (every ~10th pixel)
+    if has_skygrid:
+        skygrid = sky.evaluateGrid(np.linspace(0, ccd.width-1,  int(1+ccd.width/10)),
+                                   np.linspace(0, ccd.height-1, int(1+ccd.height/10)))
+        result.update(meansky = np.mean(skygrid),
+                      stdsky  = np.std(skygrid),
+                      maxsky  = skygrid.max(),
+                      minsky  = skygrid.min())
+    else:
+        skyval = sky.getConstant()
+        result.update(meansky = skyval,
+                      stdsky  = 0.,
+                      maxsky  = skyval,
+                      minsky  = skyval)
+
+    # WCS
+    r0,d0 = wcs.pixelxy2radec(1, 1)
+    r1,d1 = wcs.pixelxy2radec(1, H)
+    r2,d2 = wcs.pixelxy2radec(W, H)
+    r3,d3 = wcs.pixelxy2radec(W, 1)
+    result.update(ra0=r0, dec0=d0, ra1=r1, dec1=d1,
+                  ra2=r2, dec2=d2, ra3=r3, dec3=d3)
+
+    midx, midy = (W+1)/2., (H+1)/2.
+    rc,dc  = wcs.pixelxy2radec(midx, midy)
+    ra,dec = wcs.pixelxy2radec([1,W,midx,midx], [midy,midy,1,H])
+
+    result.update(dra  = max(degrees_between(ra, dc+np.zeros_like(ra) , rc, dc)),
+                  ddec = max(degrees_between(rc+np.zeros_like(dec),dec, rc, dc)),
+                  ra_center = rc,
+                  dec_center = dc)
+
+    # Compute scale change across the chip
+    # how many pixels to step
+    step = 10
+    xx = np.linspace(1+step, W-step, 5)
+    yy = np.linspace(1+step, H-step, 5)
+    xx,yy = np.meshgrid(xx, yy)
+    pixscale = []
+    for x,y in zip(xx.ravel(), yy.ravel()):
+        sx = [x-step, x-step, x+step, x+step, x-step]
+        sy = [y-step, y+step, y+step, y-step, y-step]
+        sr,sd = wcs.pixelxy2radec(sx, sy)
+        rc,dc = wcs.pixelxy2radec(x, y)
+        # project around a tiny little TAN WCS at (x,y), with 1" pixels
+        locwcs = Tan(rc, dc, 0., 0., 1./3600, 0., 0., 1./3600, 1., 1.)
+        ok,lx,ly = locwcs.radec2pixelxy(sr, sd)
+        A = polygon_area((lx, ly))
+        pixscale.append(np.sqrt(A / (2*step)**2))
+    result.update(pixscale_mean = np.mean(pixscale),
+                  pixscale_std  = np.std(pixscale),
+                  pixscale_min  = min(pixscale),
+                  pixscale_max  = max(pixscale))
+    result.update(annotated=True)
+    print('Finished annotation')
+    return result
 
 def init_annotations(ccds):
     ccds.annotated = np.zeros(len(ccds), bool)
@@ -356,8 +342,6 @@ def init_annotations(ccds):
     ccds.ddec = np.zeros(len(ccds), np.float32)
     ccds.ra_center  = np.zeros(len(ccds), np.float64)
     ccds.dec_center = np.zeros(len(ccds), np.float64)
-
-    ccds.sig1 = np.zeros(len(ccds), np.float32)
 
     ccds.meansky = np.zeros(len(ccds), np.float32)
     ccds.stdsky  = np.zeros(len(ccds), np.float32)
@@ -390,9 +374,6 @@ def init_annotations(ccds):
     ccds.tileid   = np.zeros(len(ccds), np.int32)
     ccds.tilepass = np.zeros(len(ccds), np.uint8)
     ccds.tileebv  = np.zeros(len(ccds), np.float32)
-
-    #ccds.plver = np.array([' '*8] * len(ccds))
-    #ccds.procdate = np.array([' '*19] * len(ccds))
 
 def main(outfn='ccds-annotated.fits', ccds=None, **kwargs):
     survey = LegacySurveyData(ccds=ccds)

@@ -13,6 +13,16 @@ class BokImage(LegacySurveyImage):
     def __init__(self, survey, t):
         super(BokImage, self).__init__(survey, t)
 
+    def get_fwhm(self, primhdr, imghdr):
+        # exposure BOK_CP/CP20160405/ksb_160406_104543_ooi_r_v1.fits.f
+        # has SEEINGP1 in the primary header, nothing anywhere else,
+        # so FWHM in the CCDs file is NaN.
+        import numpy as np
+        print('90prime get_fwhm: self.fwhm =', self.fwhm)
+        if not np.isfinite(self.fwhm):
+            self.fwhm = primhdr.get('SEEINGP1', 0.0)
+        return self.fwhm
+
     def read_dq(self, slice=None, header=False, **kwargs):
         # Add supplemental static mask.
         import os
@@ -20,6 +30,7 @@ class BokImage(LegacySurveyImage):
         from pkg_resources import resource_filename
         dq = super(BokImage, self).read_dq(slice=slice, header=header, **kwargs)
         if header:
+            # unpack tuple
             dq,hdr = dq
         dirname = resource_filename('legacypipe', 'config')
         fn = os.path.join(dirname, 'ksb_staticmask_ood_v1.fits.fz')

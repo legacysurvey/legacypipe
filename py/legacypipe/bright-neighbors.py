@@ -1,5 +1,6 @@
 import os
-from legacypipe.survey import LegacySurveyData, wcs_for_brick, MASKBITS
+from legacypipe.survey import LegacySurveyData, wcs_for_brick
+from legacypipe.bits import MASKBITS
 import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table

@@ -11,13 +11,26 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
-OUTLIER_POS = 1
-OUTLIER_NEG = 2
+from legacypipe.bits import OUTLIER_POS, OUTLIER_NEG
 
-def read_outlier_mask_file(survey, tims, brickname):
-    from legacypipe.image import CP_DQ_BITS
-    fn = survey.find_file('outliers_mask', brick=brickname, output=True)
+def get_bits_to_mask():
+    return OUTLIER_POS | OUTLIER_NEG
+
+def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, ps=None):
+    '''if subimage=True, assume that 'tims' are subimages, and demand that they have the same
+    x0,y0 pixel offsets and size as the outlier mask files.
+
+    if subimage=False, assume that 'tims' are full-CCD images, and
+    apply the mask to the relevant subimage.
+
+    *output* determines where we search for the file: treating it as output, or input?
+
+    '''
+
+    from legacypipe.bits import DQ_BITS
+    fn = survey.find_file('outliers_mask', brick=brickname, output=output)
     if not os.path.exists(fn):
+        print('Failed to apply outlier mask: No such file:', fn)
         return False
     F = fitsio.FITS(fn)
     for tim in tims:
@@ -27,22 +40,63 @@ def read_outlier_mask_file(survey, tims, brickname):
             return False
         mask = F[extname].read()
         hdr = F[extname].read_header()
-        if mask.shape != tim.shape:
-            print('Warning: Outlier mask', fn, 'does not match shape of tim', tim)
-            return False
+        if subimage:
+            if mask.shape != tim.shape:
+                print('Warning: Outlier mask', fn, 'does not match shape of tim', tim)
+                return False
         x0 = hdr['X0']
         y0 = hdr['Y0']
-        if x0 != tim.x0 or y0 != tim.y0:
-            print('Warning: Outlier mask', fn, 'x0,y0 does not match that of tim', tim)
-            return False
-        # Apply this mask!
-        tim.dq |= (mask > 0) * CP_DQ_BITS['outlier']
-        tim.inverr[mask > 0] = 0.
+        maskbits = get_bits_to_mask()
+        if subimage:
+            if x0 != tim.x0 or y0 != tim.y0:
+                print('Warning: Outlier mask', fn, 'x0,y0 does not match that of tim', tim)
+                return False
+            # Apply this mask!
+            tim.dq |= ((mask & maskbits) > 0) * DQ_BITS['outlier']
+            tim.inverr[(mask & maskbits) > 0] = 0.
+        else:
+
+            from astrometry.util.miscutils import get_overlapping_region
+            mh,mw = mask.shape
+            th,tw = tim.shape
+            my,ty = get_overlapping_region(tim.y0, tim.y0 + th - 1, y0, y0 + mh - 1)
+            mx,tx = get_overlapping_region(tim.x0, tim.x0 + tw - 1, x0, x0 + mw - 1)
+            # have to shift the "m" slices down by x0,y0
+            my = slice(my.start - y0, my.stop - y0)
+            mx = slice(mx.start - x0, mx.stop - x0)
+            tim.dq[ty, tx] |= ((mask[my, mx] & maskbits) > 0) * DQ_BITS['outlier']
+            tim.inverr[ty, tx][(mask[my, mx] & maskbits) > 0] = 0.
+
+            if ps is not None:
+                import pylab as plt
+                print('Mask extent: x [%i, %i], vs tim extent x [%i, %i]' % (x0, x0+mw, tim.x0, tim.x0+tw))
+                print('Mask extent: y [%i, %i], vs tim extent y [%i, %i]' % (y0, y0+mh, tim.y0, tim.y0+th))
+                print('x slice: mask', mx, 'tim', tx)
+                print('y slice: mask', my, 'tim', ty)
+                print('tim shape:', tim.shape)
+                print('mask shape:', mask.shape)
+                
+                newdq = np.zeros(tim.shape, bool)
+                newdq[ty, tx] = ((mask[my, mx] & maskbits) > 0)
+                print('Total of', np.sum(newdq), 'pixels masked')
+                plt.clf()
+                plt.imshow(tim.getImage(), interpolation='nearest', origin='lower', vmin=-2.*tim.sig1, vmax=5.*tim.sig1, cmap='gray')
+                ax = plt.axis()
+                from legacypipe.detection import plot_boundary_map
+                plot_boundary_map(newdq, iterations=3, rgb=(0,128,255))
+                plt.axis(ax)
+                ps.savefig()
+
+                plt.axis([tx.start, tx.stop, ty.start, ty.stop])
+                ps.savefig()
+            
     return True
 
 def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
-                        mp=None, plots=False, ps=None, make_badcoadds=True):
-    from legacypipe.image import CP_DQ_BITS
+                        mp=None, plots=False, ps=None, make_badcoadds=True,
+                        gaia_stars=False):
+    from legacypipe.bits import DQ_BITS
+    from legacypipe.reference import read_gaia
     from scipy.ndimage.filters import gaussian_filter
     from scipy.ndimage.morphology import binary_dilation
     from astrometry.util.resample import resample_with_wcs,OverlapError
@@ -52,9 +106,43 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
     H,W = targetwcs.shape
 
     if make_badcoadds:
-        badcoadds = []
+        badcoadds_pos = []
+        badcoadds_neg = []
     else:
-        badcoadds = None
+        badcoadds_pos = None
+        badcoadds_neg = None
+
+    star_veto = np.zeros(targetwcs.shape, np.bool)
+    if gaia_stars:
+        gaia = read_gaia(targetwcs)
+        #print(len(gaia), 'Gaia stars for outlier veto')
+        # Not moving Gaia stars to epoch of individual images...
+        ok,bx,by = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
+        bx -= 1.
+        by -= 1.
+        # Radius to mask around Gaia stars, in arcsec
+        radius = 1.0
+        pixrad = radius / targetwcs.pixel_scale()
+        for x,y in zip(bx,by):
+            xlo = int(np.clip(np.floor(x - pixrad), 0, W-1))
+            xhi = int(np.clip(np.ceil (x + pixrad), 0, W-1))
+            ylo = int(np.clip(np.floor(y - pixrad), 0, H-1))
+            yhi = int(np.clip(np.ceil (y + pixrad), 0, H-1))
+            if xlo == xhi or ylo == yhi:
+                continue
+            r2 = (((np.arange(ylo,yhi+1) - y)**2)[:,np.newaxis] +
+                  ((np.arange(xlo,xhi+1) - x)**2)[np.newaxis,:])
+            star_veto[ylo:yhi+1, xlo:xhi+1] |= (r2 < pixrad)
+
+    # if plots:
+    #     plt.clf()
+    #     plt.imshow(star_veto, interpolation='nearest', origin='lower',
+    #                vmin=0, vmax=1, cmap='hot')
+    #     ax = plt.axis()
+    #     plt.plot(bx, by, 'r.')
+    #     plt.axis(ax)
+    #     plt.title('Star vetos')
+    #     ps.savefig()
 
     with survey.write_output('outliers_mask', brick=brickname) as out:
         # empty Primary HDU
@@ -90,27 +178,31 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             del r,R
     
             #
-            veto = np.logical_or(
-                binary_dilation(masks & CP_DQ_BITS['bleed'], iterations=3),
-                binary_dilation(masks & CP_DQ_BITS['satur'], iterations=10))
+            veto = np.logical_or(star_veto,
+                                 np.logical_or(
+                binary_dilation(masks & DQ_BITS['bleed'], iterations=3),
+                binary_dilation(masks & DQ_BITS['satur'], iterations=10)))
             del masks
         
-            if plots:
-                plt.clf()
-                plt.imshow(veto, interpolation='nearest', origin='lower', cmap='gray')
-                plt.title('SATUR, BLEED veto (%s band)' % band)
-                ps.savefig()
+            # if plots:
+            #     plt.clf()
+            #     plt.imshow(veto, interpolation='nearest', origin='lower', cmap='gray')
+            #     plt.title('SATUR, BLEED veto (%s band)' % band)
+            #     ps.savefig()
         
             R = mp.map(compare_one, [(tim, sig, targetwcs, coimg,cow, veto, make_badcoadds, plots,ps)
                                      for tim,sig in zip(btims,addsigs)])
             del coimg, cow, veto
     
             masks = []
-            badcoadd = None
+            badcoadd_pos = None
+            badcoadd_neg = None
             if make_badcoadds:
-                badcoadd = np.zeros((H,W), np.float32)
-                badcon   = np.zeros((H,W), np.int16)
-    
+                badcoadd_pos = np.zeros((H,W), np.float32)
+                badcon_pos   = np.zeros((H,W), np.int16)
+                badcoadd_neg = np.zeros((H,W), np.float32)
+                badcon_neg   = np.zeros((H,W), np.int16)
+
             for r,tim in zip(R, btims):
                 if r is None:
                     # none masked
@@ -118,16 +210,21 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 else:
                     mask,badco = r
                     if make_badcoadds:
-                        yo,xo,bimg = badco
-                        badcoadd[yo, xo] += bimg
-                        badcon  [yo, xo] += 1
-                        del yo,xo,bimg
+                        badhot, badcold = badco
+                        yo,xo,bimg = badhot
+                        badcoadd_pos[yo, xo] += bimg
+                        badcon_pos  [yo, xo] += 1
+                        yo,xo,bimg = badcold
+                        badcoadd_neg[yo, xo] += bimg
+                        badcon_neg  [yo, xo] += 1
+                        del yo,xo,bimg, badhot,badcold
                     del badco
 
 
                 # Apply the mask!
-                tim.inverr[mask > 0] = 0.
-                tim.dq[mask > 0] |= CP_DQ_BITS['outlier']
+                maskbits = get_bits_to_mask()
+                tim.inverr[(mask & maskbits) > 0] = 0.
+                tim.dq[(mask & maskbits) > 0] |= DQ_BITS['outlier']
 
                 # Write output!
                 # copy version_header before modifying it.
@@ -154,10 +251,12 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             del r,R
         
             if make_badcoadds:
-                badcoadd /= np.maximum(badcon, 1)
-                badcoadds.append(badcoadd)
+                badcoadd_pos /= np.maximum(badcon_pos, 1)
+                badcoadd_neg /= np.maximum(badcon_neg, 1)
+                badcoadds_pos.append(badcoadd_pos)
+                badcoadds_neg.append(badcoadd_neg)
 
-    return badcoadds
+    return badcoadds_pos,badcoadds_neg
 
 def compare_one(X):
     from scipy.ndimage.filters import gaussian_filter
@@ -174,16 +273,15 @@ def compare_one(X):
     img = gaussian_filter(tim.getImage(), sig)
     try:
         Yo,Xo,Yi,Xi,[rimg] = resample_with_wcs(
-            targetwcs, tim.subwcs, [img], 3)
+            targetwcs, tim.subwcs, [img], intType=np.int16)
     except OverlapError:
         return None
     del img
     blurnorm = 1./(2. * np.sqrt(np.pi) * sig)
     wt = tim.getInvvar()[Yi,Xi] / np.float32(blurnorm**2)
-    Yo = Yo.astype(np.int16)
-    Xo = Xo.astype(np.int16)
-    Yi = Yi.astype(np.int16)
-    Xi = Xi.astype(np.int16)
+    if Xi.dtype != np.int16:
+        Yi = Yi.astype(np.int16)
+        Xi = Xi.astype(np.int16)
 
     # Compare against reference image...
     maskedpix = np.zeros(tim.shape, np.uint8)
@@ -218,7 +316,7 @@ def compare_one(X):
         plt.title('other wt')
         showimg[Yo,Xo] = sndiff
         plt.subplot(2,3,3)
-        plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=0, vmax=10)
+        plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=-10, vmax=10,cmap='RdBu_r')
         plt.title('S/N diff')
         showimg[Yo,Xo] = rimg
         plt.subplot(2,3,4)
@@ -232,18 +330,18 @@ def compare_one(X):
         plt.suptitle(tim.name)
         showimg[Yo,Xo] = reldiff
         plt.subplot(2,3,6)
-        plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=0, vmax=4)
+        plt.imshow(showimg, interpolation='nearest', origin='lower', vmin=-4, vmax=4, cmap='RdBu_r')
         plt.title('rel diff')
         ps.savefig()
 
-        from astrometry.util.plotutils import loghist
-        plt.clf()
-        loghist(sndiff.ravel(), reldiff.ravel(),
-                bins=100)
-        plt.xlabel('S/N difference')
-        plt.ylabel('Relative difference')
-        plt.title('Outliers: ' + tim.name)
-        ps.savefig()
+        # from astrometry.util.plotutils import loghist
+        # plt.clf()
+        # loghist(sndiff.ravel(), reldiff.ravel(),
+        #         bins=100)
+        # plt.xlabel('S/N difference')
+        # plt.ylabel('Relative difference')
+        # plt.title('Outliers: ' + tim.name)
+        # ps.savefig()
     
     del otherimg
     
@@ -273,7 +371,9 @@ def compare_one(X):
     hot = binary_dilation(hot, iterations=1)
     cold = binary_dilation(cold, iterations=1)
     if plots:
-        heat = hot.astype(np.uint8)
+        heat = np.zeros(hot.shape, np.int8)
+        heat += hot
+        heat += -1 * cold
     # "warm"
     hot = np.logical_or(hot,
                         binary_dilation(hot, iterations=5) * (snmap > 3.))
@@ -284,6 +384,7 @@ def compare_one(X):
     
     if plots:
         heat += hot
+        heat +- -1*cold
     # "lukewarm"
     hot = np.logical_or(hot,
                         binary_dilation(hot, iterations=5) * (snmap > 2.))
@@ -294,25 +395,28 @@ def compare_one(X):
     
     if plots:
         heat += hot
+        heat +- -1*cold
         plt.clf()
-        plt.imshow(heat, interpolation='nearest', origin='lower', cmap='hot')
+        plt.imshow(heat, interpolation='nearest', origin='lower', cmap='RdBu_r', vmin=-3, vmax=+3)
         plt.title(tim.name + ': outliers')
         ps.savefig()
         del heat
 
     del snmap
 
-    bad, = np.nonzero(hot[Yo,Xo])
-
     badco = None
     if make_badcoadds:
-        badco = (Yo[bad], Xo[bad], tim.getImage()[Yi[bad],Xi[bad]])
-    
+        bad, = np.nonzero(hot[Yo,Xo])
+        badhot = (Yo[bad], Xo[bad], tim.getImage()[Yi[bad],Xi[bad]])
+        bad, = np.nonzero(cold[Yo,Xo])
+        badcold = (Yo[bad], Xo[bad], tim.getImage()[Yi[bad],Xi[bad]])
+        badco = badhot,badcold
+
     # Actually do the masking!
     # Resample "hot" (in brick coords) back to tim coords.
     try:
         mYo,mXo,mYi,mXi,nil = resample_with_wcs(
-            tim.subwcs, targetwcs, [], 3)
+            tim.subwcs, targetwcs, intType=np.int16)
     except OverlapError:
         return None
     Ibad, = np.nonzero(hot[mYi,mXi])
@@ -333,17 +437,15 @@ def blur_resample_one(X):
     img = gaussian_filter(tim.getImage(), sig)
     try:
         Yo,Xo,Yi,Xi,[rimg] = resample_with_wcs(
-            targetwcs, tim.subwcs, [img], 3)
+            targetwcs, tim.subwcs, [img], intType=np.int16)
     except OverlapError:
         return None
     del img
     blurnorm = 1./(2. * np.sqrt(np.pi) * sig)
     wt = tim.getInvvar()[Yi,Xi] / (blurnorm**2)
-    return (Yo.astype(np.int16), Xo.astype(np.int16), rimg*wt, wt, tim.dq[Yi,Xi])
+    return (Yo, Xo, rimg*wt, wt, tim.dq[Yi,Xi])
 
 def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
-    from astrometry.util.resample import resample_with_wcs, OverlapError
-
     H,W = targetwcs.shape
     ibands = dict([(b,i) for i,b in enumerate(bands)])
     for tim in tims:
@@ -358,11 +460,10 @@ def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
                 continue
             ra,dec = tim.subwcs.pixelxy2radec(ix+1, iy+1)[-2:]
             ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
-            xx = np.round(xx-1).astype(np.int16)
-            yy = np.round(yy-1).astype(np.int16)
+            xx = (xx - 1. + 0.5).astype(np.int16)
+            yy = (yy - 1. + 0.5).astype(np.int16)
             keep = (xx >= 0) * (xx < W) * (yy >= 0) * (yy < H)
             if not np.any(keep):
                 continue
             img[iy[keep],ix[keep]] = coimgs[ibands[tim.band]][yy[keep],xx[keep]]
             del co
-

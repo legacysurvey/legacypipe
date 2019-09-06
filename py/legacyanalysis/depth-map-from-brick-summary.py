@@ -14,8 +14,11 @@ ra_center = 265.
 wcs = anwcs_create_hammer_aitoff(ra_center, 0., zoom, W, H, False)
 
 #Bs = fits_table('~/legacypipe/py/survey-bricks-dr5.fits.gz')
-Bs = fits_table('~/legacypipe/py/survey-bricks-dr7.fits.gz')
-Bn = fits_table('~/legacypipe/py/survey-bricks-dr6.fits.gz')
+#Bs = fits_table('~/legacypipe/py/survey-bricks-dr7.fits.gz')
+#Bn = fits_table('~/legacypipe/py/survey-bricks-dr6.fits.gz')
+Bs = fits_table('/global/project/projectdirs/cosmo/data/legacysurvey/dr8/south/survey-bricks-dr8-south.fits.gz')
+Bn = fits_table('/global/project/projectdirs/cosmo/data/legacysurvey/dr8/north/survey-bricks-dr8-north.fits.gz')
+
 
 Bs.l,Bs.b = radectolb(Bs.ra, Bs.dec)
 Bn.l,Bn.b = radectolb(Bn.ra, Bn.dec)
@@ -23,11 +26,15 @@ Bn.l,Bn.b = radectolb(Bn.ra, Bn.dec)
 ok,Bs.x,Bs.y = wcs.radec2pixelxy(Bs.ra, Bs.dec)
 ok,Bn.x,Bn.y = wcs.radec2pixelxy(Bn.ra, Bn.dec)
 
-decsplit = 32.125 # or 32.375
+decsplit = 32.375
 
 Bn.cut((Bn.b > 0) * (Bn.dec > decsplit))
 
 Bs.cut(np.logical_or(Bs.b <= 0, (Bs.b > 0) * (Bs.dec <= decsplit)))
+
+# Daniel
+Bn.cut(Bn.dec >= -10)
+Bs.cut(Bs.dec >= -20)
 
 ### subsample
 #Bs.cut(np.random.permutation(len(Bs))[:int(0.1*len(Bs))])
@@ -35,18 +42,19 @@ Bs.cut(np.logical_or(Bs.b <= 0, (Bs.b > 0) * (Bs.dec <= decsplit)))
 
 for band in 'grz':
     plt.clf()
+    plt.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95)
 
     lo,hi = { 'g':(23.0,25.0), 'r':(22.4,24.4), 'z':(21.5,23.5) }[band]
 
-    kw = dict(s=1, vmin=lo, vmax=hi, cmap='RdYlBu')
-    plt.scatter(Bn.x, Bn.y, c=Bn.get('galdepth_'+band) - Bn.get('ext_'+band),
-                **kw)
-    plt.scatter(Bs.x, Bs.y, c=Bs.get('galdepth_'+band) - Bs.get('ext_'+band),
-                **kw)
-    c = plt.colorbar(orientation='horizontal')
-    c.set_label('%s-band depth (mag)' % band)
-    #plt.plot(Bs.x, Bs.y, 'k.')
-    #plt.plot(Bn.x, Bn.y, 'k.')
+    if True:
+        plt.plot(Bn.x, Bn.y, 'o', ms=1, color='0.5')
+        plt.plot(Bs.x, Bs.y, 'o', ms=1, color='0.5')
+    else:
+        kw = dict(s=1, vmin=lo, vmax=hi, cmap='RdYlBu')
+        plt.scatter(Bn.x, Bn.y, c=Bn.get('galdepth_'+band) - Bn.get('ext_'+band), **kw)
+        plt.scatter(Bs.x, Bs.y, c=Bs.get('galdepth_'+band) - Bs.get('ext_'+band), **kw)
+        c = plt.colorbar(orientation='horizontal')
+        c.set_label('%s-band depth (mag)' % band)
 
     dec_gridlines = list(range(-30, 90, 10))
     dec_gridlines_ras = np.arange(ra_center-180, ra_center+180, 1)
