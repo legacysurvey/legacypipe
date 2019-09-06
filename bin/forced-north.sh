@@ -31,7 +31,7 @@ maxmem=134217728
 let usemem=${maxmem}*${ncores}/32
 # Can detect Cori KNL node (96 GB) via:
 # grep -q "Xeon Phi" /proc/cpuinfo && echo Yes
-ulimit -Sv $usemem
+#ulimit -Sv $usemem
 
 
 echo "Logging to $logfile"

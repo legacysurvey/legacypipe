@@ -339,8 +339,8 @@ class LegacySurveyImage(object):
             invvar = self.remap_invvar(invvar, primhdr, img, dq)
 
         # header 'FWHM' is in pixels
-        assert(self.fwhm > 0)
-        psf_fwhm = self.fwhm
+        psf_fwhm = self.get_fwhm(primhdr, imghdr)
+        assert(psf_fwhm > 0)
         psf_sigma = psf_fwhm / 2.35
 
         # Ugly: occasionally the CP marks edge pixels with SATUR (and
@@ -535,6 +535,9 @@ class LegacySurveyImage(object):
         subh,subw = tim.shape
         tim.subwcs = tim.sip_wcs.get_subimage(tim.x0, tim.y0, subw, subh)
         return tim
+
+    def get_fwhm(self, primhdr, imghdr):
+        return self.fwhm
 
     def get_image_extent(self, wcs=None, slc=None, radecpoly=None):
         '''
