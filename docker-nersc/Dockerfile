@@ -1,10 +1,11 @@
 FROM registry.services.nersc.gov/nersc/intel_cxx_fort_mpi_mkl_devel as builder
 
-RUN apt -y update && apt install -y apt-utils && echo yes
+RUN apt -y update && apt install -y apt-utils && echo 2
 
 RUN DEBIAN_FRONTEND=noninteractive \
     apt install -y --no-install-recommends \
     make \
+    cmake \
     git \
     file \
     pkg-config \
@@ -24,7 +25,7 @@ RUN DEBIAN_FRONTEND=noninteractive \
     libpng-dev \
     libeigen3-dev \
     libgoogle-glog-dev \
-    libsuitesparse-dev \
+    libgflags-dev \
     python3 \
     python3-dev \
     python3-pip \
@@ -33,6 +34,7 @@ RUN DEBIAN_FRONTEND=noninteractive \
     # # Remove APT files
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+#    libsuitesparse-dev \
 #    libceres-dev \
 
 RUN echo "../site-packages" > /usr/local/lib/python3.5/dist-packages/site-packages.pth
@@ -57,16 +59,22 @@ ENV LDSHARED icc -shared
 # Edison & Cori
 #ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=ivybridge -ax=haswell,knl
 # Just Cori
-ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell -ax=knl
+ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell -ax=knl -qopenmp
+# ONLY KNL
+#ENV CFLAGS -O3 -g -fPIC -std=c11 -pthread -x=knl -qopenmp
 ENV ARCH_FLAGS ""
-
-###---> std=c11 ?
 
 # Pip installs -- built from source
 RUN for x in \
     photutils \
     fitsio==0.9.12 \
     ; do pip3 --no-cache-dir install $x; done
+
+#  # # UGH fitsio doesn't cross-compile?
+#  ENV CFLAGS -O3 -g -fPIC -std=c11 -pthread -x=haswell -ax=knl -qopenmp
+#  RUN for x in \
+#    ; do pip3 --no-cache-dir install $x; done
+#  #ENV CFLAGS -O3 -g -fPIC -std=c11 -pthread -x=knl -qopenmp
 
 ENV PYTHON python3
 ENV PYTHON_CONFIG python3-config
@@ -104,35 +112,31 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && make clean \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import astrometry; print(astrometry.__version__)")
 
-# Ceres
-RUN wget -nv http://ceres-solver.org/ceres-solver-1.14.0.tar.gz \
-    && tar xzf ceres-solver-1.14.0.tar.gz \
-    && mkdir ceres-build
-RUN DEBIAN_FRONTEND=noninteractive \
-    apt -y update \
-    && apt install -y --no-install-recommends \
-        cmake \
-    && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-RUN apt remove -y libsuitesparse-dev && apt -y autoremove
-
+# METIS
 RUN wget -nv http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz \
     && tar xzf metis-5.1.0.tar.gz \
     && mkdir metis_build && cd metis_build \
     && cmake \
     -D CMAKE_VERBOSE_MAKEFILE=TRUE \
-    -D CMAKE_C_FLAGS="$CFLAGS -qopenmp" \
+    -D CMAKE_C_FLAGS="$CFLAGS" \
     -D GKLIB_PATH="../metis-5.1.0/GKlib" \
     ../metis-5.1.0 \
     && make \
     && make install
 
+# SuiteSparse
 RUN wget -nv http://faculty.cse.tamu.edu/davis/SuiteSparse/SuiteSparse-5.4.0.tar.gz \
-    && tar xzf SuiteSparse-5.4.0.tar.gz
+    && tar xzf SuiteSparse-5.4.0.tar.gz \
+    && cd SuiteSparse \
+    && make MY_METIS_LIB=/usr/local/lib/libmetis.a MY_METIS_INC=/usr/local/include config \
+    && make MY_METIS_LIB=/usr/local/lib/libmetis.a MY_METIS_INC=/usr/local/include JOBS=16
 
-RUN cd SuiteSparse \
-    && make MY_METIS_LIB=/usr/local/lib/libmetis.a MY_METIS_INC=/usr/local/include \
-    && make install
+RUN cd SuiteSparse && make install INSTALL=/usr/local
+
+# Ceres
+RUN wget -nv http://ceres-solver.org/ceres-solver-1.14.0.tar.gz \
+    && tar xzf ceres-solver-1.14.0.tar.gz \
+    && mkdir ceres-build
 
 RUN cd ceres-build \
     && cmake -D BUILD_SHARED_LIBS=ON -D CMAKE_VERBOSE_MAKEFILE=TRUE \
