@@ -24,7 +24,7 @@ RUN DEBIAN_FRONTEND=noninteractive \
     libpng-dev \
     libeigen3-dev \
     libgoogle-glog-dev \
-    libceres-dev \
+    libsuitesparse-dev \
     python3 \
     python3-dev \
     python3-pip \
@@ -32,6 +32,8 @@ RUN DEBIAN_FRONTEND=noninteractive \
     python3-tk \
     # # Remove APT files
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+#    libceres-dev \
 
 RUN echo "../site-packages" > /usr/local/lib/python3.5/dist-packages/site-packages.pth
 
@@ -57,6 +59,8 @@ ENV LDSHARED icc -shared
 # Just Cori
 ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell -ax=knl
 ENV ARCH_FLAGS ""
+
+###---> std=c11 ?
 
 # Pip installs -- built from source
 RUN for x in \
@@ -99,6 +103,45 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && make install INSTALL_DIR=/usr/local \
     && make clean \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import astrometry; print(astrometry.__version__)")
+
+# Ceres
+RUN wget -nv http://ceres-solver.org/ceres-solver-1.14.0.tar.gz \
+    && tar xzf ceres-solver-1.14.0.tar.gz \
+    && mkdir ceres-build
+RUN DEBIAN_FRONTEND=noninteractive \
+    apt -y update \
+    && apt install -y --no-install-recommends \
+        cmake \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+RUN apt remove -y libsuitesparse-dev && apt -y autoremove
+
+RUN wget -nv http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz \
+    && tar xzf metis-5.1.0.tar.gz \
+    && mkdir metis_build && cd metis_build \
+    && cmake \
+    -D CMAKE_VERBOSE_MAKEFILE=TRUE \
+    -D CMAKE_C_FLAGS="$CFLAGS -qopenmp" \
+    -D GKLIB_PATH="../metis-5.1.0/GKlib" \
+    ../metis-5.1.0 \
+    && make \
+    && make install
+
+RUN wget -nv http://faculty.cse.tamu.edu/davis/SuiteSparse/SuiteSparse-5.4.0.tar.gz \
+    && tar xzf SuiteSparse-5.4.0.tar.gz
+
+RUN cd SuiteSparse \
+    && make MY_METIS_LIB=/usr/local/lib/libmetis.a MY_METIS_INC=/usr/local/include \
+    && make install
+
+RUN cd ceres-build \
+    && cmake -D BUILD_SHARED_LIBS=ON -D CMAKE_VERBOSE_MAKEFILE=TRUE \
+       -D CMAKE_C_FLAGS="$CFLAGS" -D CMAKE_CXX_FLAGS="$CFLAGS" \
+       -D CMAKE_LIBRARY_PATH=/opt/intel/compilers_and_libraries/linux/mkl/lib/intel64 \
+       -D CMAKE_INCLUDE_PATH=/opt/intel/compilers_and_libraries/linux/mkl/include \
+       ../ceres-solver-1.14.0
+
+RUN cd ceres-build && make -j2
 
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
