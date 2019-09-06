@@ -52,6 +52,9 @@ RUN for x in \
     psycopg2-binary \
     matplotlib \
     astropy \
+    ; do pip3 install $x; done
+
+RUN for x in \
     photutils \
     fitsio \
     zmq \
