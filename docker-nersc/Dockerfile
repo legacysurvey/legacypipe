@@ -102,6 +102,9 @@ RUN git clone https://github.com/astromatic/psfex.git psfex \
     && make install \
     && make clean
 
+# For Astrometry.net (otherwise: missing kmpc_begin/end symbol)
+ENV LDFLAGS -liomp5
+
 # Astrometry.net
 RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
@@ -129,7 +132,7 @@ RUN wget -nv http://faculty.cse.tamu.edu/davis/SuiteSparse/SuiteSparse-5.4.0.tar
     && tar xzf SuiteSparse-5.4.0.tar.gz \
     && cd SuiteSparse \
     && make MY_METIS_LIB=/usr/local/lib/libmetis.a MY_METIS_INC=/usr/local/include config \
-    && make MY_METIS_LIB=/usr/local/lib/libmetis.a MY_METIS_INC=/usr/local/include JOBS=16
+    && make MY_METIS_LIB=/usr/local/lib/libmetis.a MY_METIS_INC=/usr/local/include JOBS=4
 
 RUN cd SuiteSparse && make install INSTALL=/usr/local
 
