@@ -320,6 +320,9 @@ class Measurer(object):
             print('CP Header: PLPROCID = ',self.plprocid)
         self.obj = self.primhdr['OBJECT']
 
+    def get_extension_list(self, fn, debug=False):
+        raise RuntimeError('get_extension_list not implemented in type ' + str(type(self)))
+
     def good_wcs(self, primhdr):
         return primhdr.get('WCSCAL', '').strip().lower().startswith('success')
 
@@ -396,27 +399,8 @@ class Measurer(object):
         self.wcs = self.get_wcs()
         # Pixscale is assumed CONSTANT! per camera
 
-        # From CP Header
-        hdrVal={}
-        # values we want
-        for ccd_col in ['width','height','fwhm_cp']:
-            # Possible keys in hdr for these values
-            for key in self.cp_header_keys[ccd_col]:
-                if key in self.hdr.keys():
-                    hdrVal[ccd_col]= self.hdr[key]
-                    break
-        for ccd_col in ['width','height','fwhm_cp']:
-            if ccd_col in hdrVal.keys():
-                #print('CP Header: %s = ' % ccd_col,hdrVal[ccd_col])
-                setattr(self, ccd_col, hdrVal[ccd_col])
-            else:
-                warning='Could not find %s, keys not in cp header: %s' % \
-                        (ccd_col,self.cp_header_keys[ccd_col])
-                if ccd_col == 'fwhm_cp':
-                    print('WARNING: %s' % warning)
-                    self.fwhm_cp = np.nan
-                else:
-                    raise KeyError(warning)
+        self.height, self.width = self.get_hdu_shape(self.hdr, hdulist[ext])
+        self.fwhm_cp = self.get_fwhm(self.hdr, hdulist[ext])
 
         x0,x1,y0,y1 = self.get_good_image_subregion()
         if x0 is None and x1 is None and y0 is None and y1 is None:
@@ -428,6 +412,13 @@ class Measurer(object):
             y1 = y1 or self.height
             slc = slice(y0,y1),slice(x0,x1)
         self.slc = slc
+
+    def get_hdu_shape(self, hdr, hdu):
+        h,w = hdu.get_info()['dims']
+        return int(h), int(w)
+
+    def get_fwhm(self, hdr, hdu):
+        return hdr['FWHM']
 
     def read_bitmask(self):
         dqfn = self.get_bitmask_fn(self.fn)
@@ -1522,10 +1513,13 @@ class DecamMeasurer(Measurer):
         self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06,
                           #i, Y totally made up
                           i=0.08, Y=0.06)
-        # Dict: {"ccd col":[possible CP Header keys for that]}
-        self.cp_header_keys= {'width':['ZNAXIS1','NAXIS1'],
-                              'height':['ZNAXIS2','NAXIS2'],
-                              'fwhm_cp':['FWHM']}
+
+    def get_extension_list(self, fn, debug=False):
+        if debug:
+            return ['N4']
+        hdu = fitsio.FITS(fn)
+        extlist = [hdu[i].get_extname() for i in range(1,len(hdu))]
+        return extlist
 
     def good_wcs(self, primhdr):
         wcscal = primhdr.get('WCSCAL', '').strip().lower()
@@ -1617,12 +1611,15 @@ class MegaPrimeMeasurer(Measurer):
         #                   #i, Y totally made up
         #                   i=0.08, Y=0.06)
         # --> e/sec
-        self.cp_header_keys= {'width':['ZNAXIS1','NAXIS1'],
-                              'height':['ZNAXIS2','NAXIS2'],
-                              'fwhm_cp':['FWHM']}
 
         self.primhdr['WCSCAL'] = 'success'
         self.goodWcs = True
+
+    def get_extension_list(self, fn, debug=False):
+        if debug:
+            return ['ccd03']
+        hdu = fitsio.FITS(fn)
+        return [hdu[i].get_extname() for i in range(1,len(hdu))]
 
     def get_ut(self, primhdr):
         return primhdr['UTC-OBS']
@@ -1703,10 +1700,17 @@ class Mosaic3Measurer(Measurer):
         self.k_ext = dict(z = 0.06,
                           D51 = 0.211, # from obsbot
         )
-        # Dict: {"ccd col":[possible CP Header keys for that]}
-        self.cp_header_keys= {'width':['ZNAXIS1','NAXIS1'],
-                              'height':['ZNAXIS2','NAXIS2'],
-                              'fwhm_cp':['SEEINGP1','SEEINGP']}
+
+    def get_fwhm(self, hdr, hdu):
+        for key in ['SEEINGP1', 'SEEINGP']:
+            if key in hdr:
+                return hdr[key]
+        raise RuntimeError('No FWHM key in header')
+
+    def get_extension_list(self, fn, debug=False):
+        if debug:
+            return ['CCD2']
+        return ['CCD1', 'CCD2', 'CCD3', 'CCD4']
 
     def get_expnum(self, primhdr):
         if 'EXPNUM' in primhdr and primhdr['EXPNUM'] is not None:
@@ -1773,10 +1777,17 @@ class NinetyPrimeMeasurer(Measurer):
         # /global/homes/a/arjundey/idl/pro/observing/bokstat.pro
         self.zp0 =  dict(g = 26.93,r = 27.01,z = 26.552) # ADU/sec
         self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06)
-        # Dict: {"ccd col":[possible CP Header keys for that]}
-        self.cp_header_keys= {'width':['ZNAXIS1','NAXIS1'],
-                              'height':['ZNAXIS2','NAXIS2'],
-                              'fwhm_cp':['SEEINGP1','SEEINGP']}
+
+    def get_fwhm(self, hdr, hdu):
+        for key in ['SEEINGP1', 'SEEINGP']:
+            if key in hdr:
+                return hdr[key]
+        raise RuntimeError('No FWHM key in header')
+
+    def get_extension_list(self, fn, debug=False):
+        if debug:
+            return ['CCD1']
+        return ['CCD1', 'CCD2', 'CCD3', 'CCD4']
 
     def get_expnum(self, primhdr):
         """converts 90prime header key DTACQNAM into the unique exposure number"""
@@ -1819,43 +1830,6 @@ class NinetyPrimeMeasurer(Measurer):
     def remap_bitmask(self, mask):
         from legacypipe.image import remap_dq_cp_codes
         return remap_dq_cp_codes(mask)
-
-def get_extlist(camera,fn,debug=False,choose_ccd=None):
-    '''
-    Args:
-        fn: image fn to read hdu from
-        debug: use subset of the ccds
-        choose_ccd: if not None, use only this ccd given
-
-    Returns: 
-        list of hdu names 
-    '''
-    if camera == '90prime':
-        extlist = ['CCD1', 'CCD2', 'CCD3', 'CCD4']
-        if debug:
-            extlist = ['CCD1']
-    elif camera == 'mosaic':
-        extlist = ['CCD1', 'CCD2', 'CCD3', 'CCD4']
-        if debug:
-            extlist = ['CCD2']
-    elif camera == 'decam':
-        hdu= fitsio.FITS(fn)
-        extlist= [hdu[i].get_extname() for i in range(1,len(hdu))]
-        if debug:
-            extlist = ['N4'] #,'S4', 'S22','N19']
-    elif camera == 'megaprime':
-        hdu= fitsio.FITS(fn)
-        extlist= [hdu[i].get_extname() for i in range(1,len(hdu))]
-        if debug:
-            extlist = ['ccd03']
-    else:
-        print('Camera {} not recognized!'.format(camera))
-        raise ValueError
-    if choose_ccd:
-        print('CHOOSING CCD %s' % choose_ccd)
-        extlist= [choose_ccd]
-    return extlist
-   
  
 def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
                   just_measure=False,
@@ -1896,9 +1870,10 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     if just_measure:
         return measure
 
-    extlist = get_extlist(camera, measure.fn, 
-                          debug=measureargs['debug'],
-                          choose_ccd=measureargs['choose_ccd'])
+    if measureargs['choose_ccd']:
+        extlist = [measureargs['choose_ccd']]
+    else:
+        extlist = measure.get_extension_list(measure.fn, debug=measureargs['debug'])
 
     extra_info = dict(zp_fid = measure.zeropoint( measure.band ),
                      ext_fid = measure.extinction( measure.band ),
