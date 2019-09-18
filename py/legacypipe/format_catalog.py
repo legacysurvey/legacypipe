@@ -248,6 +248,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
                     T.set(colname, newval)
     cols.extend([
         'fracdev', 'fracdev_ivar',
+        'sersic',  'sersic_ivar',
         'shapeexp_r', 'shapeexp_r_ivar',
         'shapeexp_e1', 'shapeexp_e1_ivar',
         'shapeexp_e2', 'shapeexp_e2_ivar',
