@@ -1517,7 +1517,7 @@ def _format_all_models(T, newcat, BB, bands, rex):
         simpname = 'rex'
     else:
         simpname = 'simple'
-    srctypes = ['ptsrc', simpname, 'dev','exp','comp']
+    srctypes = ['ptsrc', simpname, 'dev','exp','comp', 'ser']
 
     for srctype in srctypes:
         # Create catalog with the fit results for each source type
@@ -1552,7 +1552,9 @@ def _format_all_models(T, newcat, BB, bands, rex):
             TT.delete_column(col)
             continue
         # shapeDev for exp sources, vice versa
+        # (NOTE, this also removes "fracDev" from 'exp' and 'ser'.
         if (('exp_' in col and 'Dev' in col) or
+            ('ser_' in col and 'Dev' in col) or
             ('dev_' in col and 'Exp' in col) or
             ('rex_' in col and 'Dev' in col)):
             TT.delete_column(col)

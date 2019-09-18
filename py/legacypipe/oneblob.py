@@ -1070,7 +1070,7 @@ class OneBlob(object):
                 fblob = 0.8
                 sh,sw = srcwcs.shape
                 logrmax = np.log(fblob * max(sh, sw) * self.pixscale)
-                if name in ['exp', 'rex', 'dev']:
+                if name in ['exp', 'rex', 'dev', 'ser']:
                     if logrmax < newsrc.shape.getMaxLogRadius():
                         newsrc.shape.setMaxLogRadius(logrmax)
                 elif name in ['comp']:

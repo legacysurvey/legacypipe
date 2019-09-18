@@ -168,7 +168,11 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
     shapeDev = np.zeros((len(T), 3), np.float32)
     fracDev  = np.zeros(len(T), np.float32)
 
+    # sersic index
+    sersic = np.zeros(len(T), np.float32)
+
     for i,src in enumerate(cat):
+        from tractor.sersic import SersicGalaxy
         #print('_get_tractor_fits_values for pattern', pat, 'src', src)
         if isinstance(src, RexGalaxy):
             #print('Rex shape', src.shape, 'params', src.shape.getAllParams())
@@ -178,12 +182,17 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
         elif isinstance(src, DevGalaxy):
             shapeDev[i,:] = src.shape.getAllParams()
             fracDev[i] = 1.
+        elif isinstance(src, SersicGalaxy):
+            # Arbitrary choice here to stick Sersic params in shapeExp!
+            shapeExp[i,:] = src.shape.getAllParams()
+            sersic[i] = src.sersicindex.getValue()
         elif isinstance(src, FixedCompositeGalaxy):
             shapeExp[i,:] = src.shapeExp.getAllParams()
             shapeDev[i,:] = src.shapeDev.getAllParams()
             fracDev[i] = src.fracDev.getValue()
 
-    T.set(pat % 'fracDev',   fracDev)
+    T.set(pat % 'fracDev', fracDev)
+    T.set(pat % 'sersic',  sersic)
 
     if unpackShape:
         T.set(pat % 'shapeExp_r',  shapeExp[:,0])
@@ -195,7 +204,6 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
     else:
         T.set(pat % 'shapeExp', shapeExp)
         T.set(pat % 'shapeDev', shapeDev)
-
 
 def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                       allbands=None, ellipseClass=EllipseE,
