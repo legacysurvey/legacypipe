@@ -13,7 +13,7 @@ from legacypipe.survey import SimpleGalaxy, RexGalaxy, GaiaSource
 fits_typemap = { PointSource: 'PSF',
                  ExpGalaxy: 'EXP',
                  DevGalaxy: 'DEV',
-                 SersicGalax: 'SER',
+                 SersicGalaxy: 'SER',
                  FixedCompositeGalaxy: 'COMP',
                  SimpleGalaxy: 'SIMP',
                  RexGalaxy: 'REX',

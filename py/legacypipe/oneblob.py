@@ -148,8 +148,11 @@ class OneBlob(object):
         # else:
         #     self.optargs.update(dchisq = 0.1)
 
-        from legacypipe.constrained_optimizer import ConstrainedOptimizer
+
+        #from legacypipe.constrained_optimizer import ConstrainedOptimizer
+        from tractor.constrained_optimizer import ConstrainedOptimizer
         self.trargs.update(optimizer=ConstrainedOptimizer())
+
         self.optargs.update(dchisq = 0.1)
 
     def run(self, B, reoptimize=False, iterative_detection=True,
