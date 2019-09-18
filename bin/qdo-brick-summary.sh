@@ -6,7 +6,11 @@
 # but this failure is without consequence.
 
 # Make sure this has the appropriate paths
-source $CSCRATCH/DRcode/legacypipe/bin/legacypipe-env
+#source $CSCRATCH/DRcode/legacypipe/bin/legacypipe-env
+desiconda_version=20190311-1.2.7-img
+module use /global/common/software/desi/cori/desiconda/$desiconda_version/modulefiles
+module load desiconda
+export PYTHONPATH=/global/cscratch1/sd/landriau/dr8/code/legacypipe/py:$PYTHONPATH
 
 # Force MKL single-threaded
 # https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application
@@ -17,22 +21,18 @@ export OMP_NUM_THREADS=1
 export MPICH_GNI_FORK_MODE=FULLCOPY
 
 # Try limiting memory to avoid killing the whole MPI job...
-ncores=16
-if [ "$NERSC_HOST" = "edison" ]; then
-    # 64 GB / Edison node = 67108864 kbytes
-    maxmem=67108864
-    let usemem=${maxmem}*${ncores}/24
-else
-    # 128 GB / Cori Haswell node = 134217728 kbytes
-    maxmem=134217728
-    let usemem=${maxmem}*${ncores}/32
-fi
-ulimit -Sv $usemem
+#ncores=1
+# 128 GB / Cori Haswell node = 134217728 kbytes
+#maxmem=134217728
+#let usemem=${maxmem}*${ncores}/32
+#ulimit -Sv $usemem
 
 # Need to modify for future release and output directories
-drdir=/global/projecta/projectdirs/cosmo/work/legacysurvey/dr7
-outdir=$CSCRATCH/dr7bricks
-rundir=$CSCRATCH/DRcode
+release=dr8
+survey=south
+drdir=/global/project/projectdirs/cosmo/work/legacysurvey/${release}/${survey}
+outdir=/global/cscratch1/sd/landriau/${release}/${survey}/brick-summary
+rundir=/global/cscratch1/sd/landriau/${release}/code
 
 dirname="$1"
 
@@ -57,10 +57,10 @@ echo -e "\nStarting on ${NERSC_HOST} $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
 python -u $rundir/legacypipe/py/legacyanalysis/brick-summary.py \
-         --dr5 \
-         -o ${outdir}/dr7-bricks-summary-${dirname}.fits \
+         -o ${outdir}/${release}-${survey}-bricks-summary-${dirname}.fits \
          ${drdir}/coadd/${dirname}/*/*-nexp-*.fits.fz \
          > $log 2>&1
 
-# qdo launch dr7bsum 10 --cores_per_worker 16 --walltime=00:30:00 --script /global/cscratch1/sd/desiproc/DRcode/runmanaging/qdo-brick-summary.sh --batchqueue debug --keep_env --batchopts "-C haswell"
+# qdo launch bricksum 32 --cores_per_worker 1 --walltime=00:30:00 --script /global/cscratch1/sd/landriau/code/legacypipe/bin/qdo-brick-summary.sh --batchqueue debug --keep_env
+
 

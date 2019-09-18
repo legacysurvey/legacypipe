@@ -150,13 +150,24 @@ def summary_plots(summaryfn, ps, drname):
         ps.savefig()
 
 if __name__ == '__main__':
-    outfn = 'dr7-depth-concat.fits'
-    summaryfn = 'dr7-depth-summary.fits'
-    allfn = 'dr7-depth.fits'
-    basedir = '/global/projecta/projectdirs/cosmo/work/legacysurvey/dr7'
-    summarize_depths(basedir, outfn, summaryfn, allfn)
+    north = False
+    if north == True:
+        outfn = 'dr8-north-depth-concat.fits'
+        summaryfn = 'dr8-north-depth-summary.fits'
+        allfn = 'dr8-north-depth.fits'
+        basedir = '/global/project/projectdirs/cosmo/work/legacysurvey/dr8/north'
+        summarize_depths(basedir, outfn, summaryfn, allfn)
 
-    ps = PlotSequence('depth')
-    summary_plots(summaryfn, ps, 'DECaLS DR7')
+        ps = PlotSequence('depth')
+        summary_plots(summaryfn, ps, 'BASS+MzLS DR8')
+    else:
+        outfn = 'dr8-south-depth-concat.fits'
+        summaryfn = 'dr8-south-depth-summary.fits'
+        allfn = 'dr8-south-depth.fits'
+        basedir = '/global/project/projectdirs/cosmo/work/legacysurvey/dr8/south'
+        summarize_depths(basedir, outfn, summaryfn, allfn)
+
+        ps = PlotSequence('depth')
+        summary_plots(summaryfn, ps, 'DECaLS DR8')
     import sys
     sys.exit(0)

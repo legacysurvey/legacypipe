@@ -1199,7 +1199,7 @@ class LegacySurveyData(object):
         if self.cache_dir is None:
             return fn
         cfn = fn.replace(self.survey_dir, self.cache_dir)
-        #print('cache fn', cfn)
+        print('checking for cache fn', cfn)
         if os.path.exists(cfn):
             debug('Cached file hit:', fn, '->', cfn)
             return cfn

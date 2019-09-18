@@ -3,6 +3,15 @@ import pylab as plt
 import numpy as np
 from astrometry.util.ttime import Time
 
+import logging
+logger = logging.getLogger('legacypipe.detection')
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
+
 def _detmap(X):
     from scipy.ndimage.filters import gaussian_filter
     from legacypipe.survey import tim_get_resamp
@@ -86,7 +95,7 @@ def sed_matched_filters(bands):
         red = dict(g=2.5, r=1., i=0.4, z=0.4)
         SEDs.append(('Red', [red[b] for b in bands]))
 
-    print('SED-matched filters:', SEDs)
+    info('SED-matched filters:', SEDs)
 
     return SEDs
 
@@ -162,7 +171,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     apsn = []
 
     for sedname,sed in SEDs:
-        #print('SED', sedname)
+        #info('SED', sedname)
         if plots:
             pps = ps
         else:
@@ -172,10 +181,10 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
             sedname, sed, detmaps, detivs, bands, xx, yy, rr,
             nsigma=nsigma, saturated_pix=saturated_pix, veto_map=veto_map,
             ps=pps)
-        #print('SED took', Time()-t0)
+        #info('SED took', Time()-t0)
         if sedhot is None:
             continue
-        print('SED', sedname, ':', len(px), 'new peaks')
+        info('SED', sedname, ':', len(px), 'new peaks')
         hot |= sedhot
         # With an empty xx, np.append turns it into a double!
         xx = np.append(xx, px).astype(int)
@@ -193,7 +202,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     if len(peakx):
         # Add sources for the new peaks we found
         pr,pd = targetwcs.pixelxy2radec(peakx+1, peaky+1)
-        print('Adding', len(pr), 'new sources')
+        info('Adding', len(pr), 'new sources')
         # Also create FITS table for new sources
         Tnew = fits_table()
         Tnew.ra  = pr
@@ -311,7 +320,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         allzero = False
         break
     if allzero:
-        print('SED', sedname, 'has all zero weight')
+        info('SED', sedname, 'has all zero weight')
         return None,None,None,None,None
 
     sedmap = np.zeros((H,W), np.float32)
@@ -338,7 +347,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     del sedmap
 
     peaks = (sedsn > nsigma)
-    #print('SED sn:', Time()-t0)
+    #info('SED sn:', Time()-t0)
     #t0 = Time()
 
     def saddle_level(Y):
@@ -374,7 +383,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[0:-2,2:  ])
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[2:  ,0:-2])
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[2:  ,2:  ])
-    #print('Peaks:', Time()-t0)
+    #info('Peaks:', Time()-t0)
     #t0 = Time()
 
     if ps is not None:
@@ -465,7 +474,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         plt.title('Veto map')
         ps.savefig()
 
-        print('Peaks in initial veto map:', np.sum(this_veto_map[py,px]), 'of', len(px))
+        info('Peaks in initial veto map:', np.sum(this_veto_map[py,px]), 'of', len(px))
 
         plt.clf()
         plt.imshow(saddlemap, interpolation='nearest', origin='lower', vmin=0, vmax=1, cmap='hot')
@@ -481,13 +490,13 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # separated by a low enough saddle from other sources.  Need only
     # search within its "allblob", which is defined by the lowest
     # saddle.
-    print('Found', len(px), 'potential peaks')
+    info('Found', len(px), 'potential peaks')
     nveto = 0
     nsaddle = 0
     naper = 0
     for i,(x,y) in enumerate(zip(px, py)):
         if this_veto_map[y,x]:
-            #print('  in veto map!')
+            #info('  in veto map!')
             nveto += 1
             continue
 
@@ -502,8 +511,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         index = int(ablob - 1)
         slc = allslices[index]
 
-        #print('source', i, 'of', len(px), 'at', x,y, 'S/N', sedsn[y,x], 'saddle', level)
-        #print('  allblobs slice', slc)
+        #info('source', i, 'of', len(px), 'at', x,y, 'S/N', sedsn[y,x], 'saddle', level)
+        #info('  allblobs slice', slc)
 
         saddlemap = (sedsn[slc] > level)
         saddlemap = binary_dilation(saddlemap, iterations=dilate)
@@ -538,11 +547,11 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 
         if cut:
             # in same blob as previously found source.
-            #print('  cut')
+            #info('  cut')
             # update vetomap
             this_veto_map[slc] |= saddlemap
             nsaddle += 1
-            #print('Added to vetomap:', np.sum(saddlemap), 'pixels set; now total of', np.sum(this_veto_map), 'pixels set')
+            #info('Added to vetomap:', np.sum(saddlemap), 'pixels set; now total of', np.sum(this_veto_map), 'pixels set')
             continue
 
         # Measure in aperture...
@@ -571,7 +580,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         keep[i] = True
 
         this_veto_map[slc] |= saddlemap
-        #print('Added to vetomap:', np.sum(saddlemap), 'pixels set; now total of', np.sum(this_veto_map), 'pixels set')
+        #info('Added to vetomap:', np.sum(saddlemap), 'pixels set; now total of', np.sum(this_veto_map), 'pixels set')
 
         if False and ps is not None:
             plt.clf()
@@ -585,10 +594,10 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             plt.suptitle('peak %.1f vs ap %.1f' % (sedsn[y,x], m))
             ps.savefig()
 
-    print('Of', len(px), 'potential peaks:', nveto, 'in veto map,', nsaddle, 'cut by saddle test,',
+    info('Of', len(px), 'potential peaks:', nveto, 'in veto map,', nsaddle, 'cut by saddle test,',
           naper, 'cut by aper test,', np.sum(keep), 'kept')
 
-    #print('New sources:', Time()-t0)
+    #info('New sources:', Time()-t0)
 
     if ps is not None:
         pxdrop = px[np.logical_not(keep)]
@@ -746,7 +755,8 @@ def _peak_plot_3(sedsn, nsigma, x, y, x0, y0, slc, saddlemap,
     plt.subplot(1,2,2)
     y1,x1 = [s.stop for s in slc]
     ext = [x0,x1,y0,y1]
-    plt.imshow(saddlemap, extent=ext, interpolation='nearest', origin='lower')
+    plt.imshow(saddlemap, extent=ext, interpolation='nearest', origin='lower',
+               cmap='gray')
     #plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'c-')
     #ax = plt.axis()
     #plt.plot(ox+x0, oy+y0, 'rx')
@@ -779,7 +789,7 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
 
     image = binary_fill_holes(image)
     blobs,nblobs = label(image)
-    #print('Detected blobs:', nblobs)
+    #info('Detected blobs:', nblobs)
     H,W = image.shape
     del image
 
@@ -833,7 +843,7 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
         inblobs[Isrcs] = True
     noblobs = np.flatnonzero(np.logical_not(inblobs))
     del inblobs
-    #print(len(noblobs), 'sources are not in blobs')
+    #info(len(noblobs), 'sources are not in blobs')
 
     # Remap the "blobs" image so that empty regions are = -1 and the blob values
     # correspond to their indices in the "blobsrcs" list.
@@ -872,10 +882,10 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     for j,Isrcs in enumerate(blobsrcs):
         for i in Isrcs:
             if (blobs[clipy[i], clipx[i]] != j):
-                print('---------------------------!!!-------------------------')
-                print('Blob', j, 'sources', Isrcs)
-                print('Source', i, 'coords x,y', T.ibx[i], T.iby[i])
-                print('Expected blob value', j, 'but got',
+                info('---------------------------!!!-------------------------')
+                info('Blob', j, 'sources', Isrcs)
+                info('Source', i, 'coords x,y', T.ibx[i], T.iby[i])
+                info('Expected blob value', j, 'but got',
                       blobs[clipy[i], clipx[i]])
 
     T.blob = blobs[clipy, clipx]

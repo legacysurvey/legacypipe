@@ -966,7 +966,9 @@ def stage_fitblobs(T=None,
                    plots=False, plots2=False,
                    nblobs=None, blob0=None, blobxy=None, blobradec=None, blobid=None,
                    max_blobsize=None,
-                   simul_opt=False, use_ceres=True, mp=None,
+                   reoptimize=False,
+                   iterative=False,
+                   use_ceres=True, mp=None,
                    checkpoint_filename=None,
                    checkpoint_period=600,
                    write_pickle_filename=None,
@@ -1193,7 +1195,7 @@ def stage_fitblobs(T=None,
 
     # Create the iterator over blobs to process
     blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims,
-                          cat, bands, plots, ps, simul_opt, use_ceres,
+                          cat, bands, plots, ps, reoptimize, iterative, use_ceres,
                           refmap, brick, rex,
                           skipblobs=skipblobs,
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
@@ -1273,8 +1275,27 @@ def stage_fitblobs(T=None,
     II = BB.Isrcs
     newcat = BB.sources
     # ... and make the table T parallel with BB.
+    # For iterative sources:
+    n_iter = np.sum(II < 0)
+    if n_iter:
+        n_old = len(T)
+        # first have to pad T with some new entries...
+        Tnew = fits_table()
+        Tnew.iterative = np.ones(n_iter, bool)
+        T = merge_tables([T, Tnew], columns='fillzero')
+        # ... and then point II at them.
+        II[II < 0] = n_old + np.arange(n_iter)
+    else:
+        T.iterative = np.zeros(len(T), bool)
+    assert(np.all(II >= 0))
+    assert(np.all(II < len(T)))
+    assert(len(np.unique(II)) == len(II))
     T.cut(II)
     assert(len(T) == len(BB))
+    del BB.Isrcs
+
+    # so that iterative detections get a blob number.
+    T.blob = BB.blob
 
     # Drop sources that exited the blob as a result of fitting.
     left_blob = np.logical_and(BB.started_in_blob,
@@ -1282,10 +1303,10 @@ def stage_fitblobs(T=None,
     I, = np.nonzero(np.logical_not(left_blob))
     if len(I) < len(BB):
         debug('Dropping', len(BB)-len(I), 'sources that exited their blobs during fitting')
-    BB.cut(I)
-    T.cut(I)
-    newcat = [newcat[i] for i in I]
-    assert(len(T) == len(BB))
+        BB.cut(I)
+        T.cut(I)
+        newcat = [newcat[i] for i in I]
+        assert(len(T) == len(BB))
 
     assert(len(T) == len(newcat))
     info('Old catalog:', len(cat))
@@ -1546,7 +1567,7 @@ def _format_all_models(T, newcat, BB, bands, rex):
     return TT,hdr
 
 def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
-               plots, ps, simul_opt, use_ceres, refmap,
+               plots, ps, reoptimize, iterative, use_ceres, refmap,
                brick, rex,
                skipblobs=None, max_blobsize=None, custom_brick=False):
     '''
@@ -1639,24 +1660,25 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
             subimg = tim.getImage ()[subslc]
             subie  = tim.getInvError()[subslc]
             subwcs = tim.getWcs().shifted(sx0, sy0)
-            # Note that we *don't* shift the PSF here -- we do that
-            # in the one_blob code.
             subsky = tim.getSky().shifted(sx0, sy0)
+            subpsf = tim.getPsf().getShifted(sx0, sy0)
+            subwcsobj = tim.subwcs.get_subimage(int(sx0), int(sy0),
+                                                int(sx1-sx0), int(sy1-sy0))
             tim.imobj.psfnorm = tim.psfnorm
             tim.imobj.galnorm = tim.galnorm
             # FIXME -- maybe the cache is worth sending?
             if hasattr(tim.psf, 'clear_cache'):
                 tim.psf.clear_cache()
-            subtimargs.append((subimg, subie, subwcs, tim.subwcs,
+            subtimargs.append((subimg, subie, subwcs, subwcsobj,
                                tim.getPhotoCal(),
-                               subsky, tim.psf, tim.name, sx0, sx1, sy0, sy1,
+                               subsky, subpsf, tim.name, sx0, sx1, sy0, sy1,
                                tim.band, tim.sig1, tim.modelMinval,
                                tim.imobj))
 
         yield (brickname, iblob,
                (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-               simul_opt, use_ceres, rex, refmap[bslc]))
+               reoptimize, iterative, use_ceres, rex, refmap[bslc]))
 
 def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &
@@ -1724,6 +1746,46 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                             comment='NOAO data product type'))
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
+
+    if plots:
+        cat_init = [src for it,src in zip(T.iterative, cat) if it == False]
+        cat_iter = [src for it,src in zip(T.iterative, cat) if it == True ]
+        print(len(cat_init), 'initial sources and', len(cat_iter), 'iterative')
+        mods_init = mp.map(_get_mod, [(tim, cat_init) for tim in tims])
+        mods_iter = mp.map(_get_mod, [(tim, cat_iter) for tim in tims])
+        coimgs_init,_ = quick_coadds(tims, bands, targetwcs, images=mods_init)
+        coimgs_iter,_ = quick_coadds(tims, bands, targetwcs, images=mods_iter)
+        coimgs,_ = quick_coadds(tims, bands, targetwcs)
+
+        plt.clf()
+        dimshow(get_rgb(coimgs, bands, **rgbkwargs))
+        plt.title('First-round data')
+        ps.savefig()
+
+        plt.clf()
+        dimshow(get_rgb(coimgs_init, bands, **rgbkwargs))
+        plt.title('First-round model fits')
+        ps.savefig()
+
+        plt.clf()
+        dimshow(get_rgb([img-mod for img,mod in zip(coimgs,coimgs_init)], bands, **rgbkwargs))
+        plt.title('First-round residuals')
+        ps.savefig()
+
+        plt.clf()
+        dimshow(get_rgb(coimgs_iter, bands, **rgbkwargs))
+        plt.title('Iterative model fits')
+        ps.savefig()
+
+        plt.clf()
+        dimshow(get_rgb([mod+mod2 for mod,mod2 in zip(coimgs_init, coimgs_iter)], bands, **rgbkwargs))
+        plt.title('Initial + Iterative model fits')
+        ps.savefig()
+
+        plt.clf()
+        dimshow(get_rgb([img-mod-mod2 for img,mod,mod2 in zip(coimgs,coimgs_init,coimgs_iter)], bands, **rgbkwargs))
+        plt.title('Iterative model residuals')
+        ps.savefig()
 
     tnow = Time()
     debug('[serial coadds]:', tnow-tlast)
@@ -1937,7 +1999,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         dimshow(get_rgb(C.coimgs, bands, **rgbkwargs))
         ax = plt.axis()
         #plt.plot(np.vstack((x0,x1))-1, np.vstack((y0,y1))-1, 'r-')
-        for xx0,yy0,xx1,yy1 in zip(x0,y0,x1,y1):
+        I = np.flatnonzero(T.orig_ra != 0.)
+        for xx0,yy0,xx1,yy1 in zip(x0[I],y0[I],x1[I],y1[I]):
             plt.plot([xx0-1,xx1-1], [yy0-1,yy1-1], 'r-')
         plt.plot(x1-1, y1-1, 'r.')
         plt.axis(ax)
@@ -1983,6 +2046,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                 r = rr + rd[:,0] * np.cos(np.deg2rad(dd))
                 d = dd + rd[:,1]
                 ok,xx,yy = targetwcs.radec2pixelxy(r, d)
+                xx -= 1.
+                yy -= 1.
                 x1,x2,x3 = xx[:3]
                 y1,y2,y3 = yy[:3]
                 plt.plot([x3, x1, x2], [y3, y1, y2], '-', color=c)
@@ -2619,6 +2684,9 @@ def stage_writecat(
 
     # Brick pixel positions
     ok,bx,by = targetwcs.radec2pixelxy(T2.orig_ra, T2.orig_dec)
+    # iterative sources
+    bx[ok==False] = 1.
+    by[ok==False] = 1.
     T2.bx0 = (bx - 1.).astype(np.float32)
     T2.by0 = (by - 1.).astype(np.float32)
     ok,bx,by = targetwcs.radec2pixelxy(T2.ra, T2.dec)
@@ -2677,7 +2745,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               nblobs=None, blob=None, blobxy=None, blobradec=None, blobid=None,
               max_blobsize=None,
               nsigma=6,
-              simul_opt=False,
+              reoptimize=False,
+              iterative=False,
               wise=True,
               lanczos=True,
               early_coadds=False,
@@ -2785,9 +2854,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     - *max_blobsize*: int; ignore blobs with more than this many pixels
 
     - *nsigma*: float; detection threshold in sigmas.
-
-    - *simul_opt*: boolean; during fitting, if a blob contains multiple
-      sources, run a step of fitting the sources simultaneously?
 
     - *wise*: boolean; run WISE forced photometry?
 
@@ -2929,7 +2995,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   gaia_stars=gaia_stars,
                   large_galaxies=large_galaxies,
                   min_mjd=min_mjd, max_mjd=max_mjd,
-                  simul_opt=simul_opt,
+                  reoptimize=reoptimize,
+                  iterative=iterative,
                   use_ceres=ceres,
                   wise_ceres=wise_ceres,
                   unwise_coadds=unwise_coadds,
@@ -3203,8 +3270,12 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='Set N sigma source detection thresh')
 
     parser.add_argument(
-        '--simul-opt', action='store_true', default=False,
-        help='Do simultaneous optimization after model selection')
+        '--reoptimize', action='store_true', default=False,
+        help='Do a second round of model fitting after all model selections')
+
+    parser.add_argument(
+        '--iterative', action='store_true', default=False,
+        help='Turn on iterative source detection?')
 
     parser.add_argument('--no-wise', dest='wise', default=True,
                         action='store_false',
