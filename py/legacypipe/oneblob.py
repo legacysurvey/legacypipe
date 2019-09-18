@@ -2142,7 +2142,8 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
     cut = max(cut, fcut)
     if diff < cut:
         return keepmod
-        
+    keepmod = 'ser'
+    
     if not 'comp' in chisqs:
         return keepmod
 
