@@ -895,7 +895,8 @@ class OneBlob(object):
 
 
             ## FIXME Sersic
-            if isinstance(newsrc, (DevGalaxy, ExpGalaxy)):
+            from tractor.sersic import SersicGalaxy
+            if isinstance(newsrc, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
                 oldshape = newsrc.shape
             elif isinstance(newsrc, FixedCompositeGalaxy):
                 oldshape = (newsrc.shapeExp, newsrc.shapeDev,newsrc.fracDev)
@@ -918,7 +919,7 @@ class OneBlob(object):
             assert(B.all_models[srci][name].numberOfParams() == nsrcparams)
 
             # Now revert the ellipses!
-            if isinstance(newsrc, (DevGalaxy, ExpGalaxy)):
+            if isinstance(newsrc, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
                 newsrc.shape = oldshape
             elif isinstance(newsrc, FixedCompositeGalaxy):
                 (newsrc.shapeExp, newsrc.shapeDev,newsrc.fracDev) = oldshape
