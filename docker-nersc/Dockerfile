@@ -101,7 +101,7 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import astrometry; print(astrometry.__version__)")
 
 # The Tractor
-RUN git clone http://github.com/dstndstn/tractor.git tractor && echo 1 \
+RUN git clone http://github.com/dstndstn/tractor.git tractor && echo 2 \
     && cd tractor \
     && make \
     && make ceres \
@@ -203,16 +203,21 @@ CMD ["/bin/bash"]
 RUN    python    -m compileall /src/unwise_psf/py/unwise_psf.py \
     && python -O -m compileall /src/unwise_psf/py/unwise_psf.py
 
-RUN python -O -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
-           /usr/local/lib/python /usr/local/lib/python3.5/site-packages \
-           /usr/local/lib/python3.5/dist-packages && \
-    python    -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
-           /usr/local/lib/python /usr/local/lib/python3.5/site-packages \
-           /usr/local/lib/python3.5/dist-packages
+# Update just the tractor python files (not built files)
+RUN git clone http://github.com/dstndstn/tractor.git tractor \
+    && cd tractor \
+    && make install-py
 
 RUN cd /src/legacypipe/py && git pull \
     && git checkout sersic+iter \
     && git describe
 
-RUN    python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
-    && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
+RUN python -O -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
+           /usr/local/lib/python /usr/local/lib/python3.5/site-packages \
+           /usr/local/lib/python3.5/dist-packages \
+           /src/legacypipe/py/{legacypipe,legacyzpts} && \
+    python    -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
+           /usr/local/lib/python /usr/local/lib/python3.5/site-packages \
+           /usr/local/lib/python3.5/dist-packages \
+           /src/legacypipe/py/{legacypipe,legacyzpts}
+
