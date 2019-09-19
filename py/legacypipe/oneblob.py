@@ -43,6 +43,9 @@ def one_blob(X):
     if len(timargs) == 0:
         return None
 
+    from tractor.sersic import SersicIndex
+    SersicIndex.stepsize = 0.001
+    
     if plots:
         import pylab as plt
         plt.figure(2, figsize=(3,3))
@@ -1049,12 +1052,14 @@ class OneBlob(object):
                     continue
                 if smod == 'dev':
                     from tractor.sersic import SersicGalaxy, SersicIndex
-                    newsrc = ser = SersicGalaxy(src.getPosition(), src.getBrightness(),
-                                                dev.getShape(), SersicIndex(4.))
+                    newsrc = ser = SersicGalaxy(#src.getPosition(), src.getBrightness(),
+                        dev.getPosition().copy(), dev.getBrightness().copy(),
+                        dev.getShape().copy(), SersicIndex(4.))
                 elif smod == 'exp':
                     from tractor.sersic import SersicGalaxy, SersicIndex
-                    newsrc = ser = SersicGalaxy(src.getPosition(), src.getBrightness(),
-                                                exp.getShape(), SersicIndex(1.))
+                    newsrc = ser = SersicGalaxy(#src.getPosition(), src.getBrightness(),
+                        exp.getPosition().copy(), exp.getBrightness().copy(),
+                        exp.getShape().copy(), SersicIndex(1.))
                 print('Initialized SER model:', newsrc)
                     
             srccat[0] = newsrc
