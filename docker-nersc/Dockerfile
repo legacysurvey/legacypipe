@@ -200,9 +200,6 @@ RUN cd /usr/local/lib/python3.5/dist-packages && \
 ENTRYPOINT ["/bin/bash", "-c"]
 CMD ["/bin/bash"]
 
-RUN    python    -m compileall /src/unwise_psf/py/unwise_psf.py \
-    && python -O -m compileall /src/unwise_psf/py/unwise_psf.py
-
 # Update just the tractor python files (not built files)
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
@@ -215,9 +212,11 @@ RUN cd /src/legacypipe/py && git pull \
 RUN python -O -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
            /usr/local/lib/python /usr/local/lib/python3.5/site-packages \
            /usr/local/lib/python3.5/dist-packages \
+           /src/unwise_psf/py/unwise_psf.py \
            /src/legacypipe/py/{legacypipe,legacyzpts} && \
     python    -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
            /usr/local/lib/python /usr/local/lib/python3.5/site-packages \
            /usr/local/lib/python3.5/dist-packages \
+           /src/unwise_psf/py/unwise_psf.py \
            /src/legacypipe/py/{legacypipe,legacyzpts}
 
