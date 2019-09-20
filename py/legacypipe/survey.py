@@ -1199,7 +1199,7 @@ class LegacySurveyData(object):
         if self.cache_dir is None:
             return fn
         cfn = fn.replace(self.survey_dir, self.cache_dir)
-        #print('cache fn', cfn)
+        print('checking for cache fn', cfn)
         if os.path.exists(cfn):
             debug('Cached file hit:', fn, '->', cfn)
             return cfn
@@ -1750,6 +1750,8 @@ class LegacySurveyData(object):
         if expnum is not None:
             C = self.try_expnum_kdtree(expnum)
             if C is not None:
+                if len(C) == 0:
+                    return None
                 if ccdname is not None:
                     C = C[C.ccdname == ccdname]
                 if camera is not None:

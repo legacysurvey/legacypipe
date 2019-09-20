@@ -16,10 +16,21 @@ from legacypipe.bits import OUTLIER_POS, OUTLIER_NEG
 def get_bits_to_mask():
     return OUTLIER_POS | OUTLIER_NEG
 
-def read_outlier_mask_file(survey, tims, brickname):
+def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, ps=None):
+    '''if subimage=True, assume that 'tims' are subimages, and demand that they have the same
+    x0,y0 pixel offsets and size as the outlier mask files.
+
+    if subimage=False, assume that 'tims' are full-CCD images, and
+    apply the mask to the relevant subimage.
+
+    *output* determines where we search for the file: treating it as output, or input?
+
+    '''
+
     from legacypipe.bits import DQ_BITS
-    fn = survey.find_file('outliers_mask', brick=brickname, output=True)
+    fn = survey.find_file('outliers_mask', brick=brickname, output=output)
     if not os.path.exists(fn):
+        print('Failed to apply outlier mask: No such file:', fn)
         return False
     F = fitsio.FITS(fn)
     for tim in tims:
@@ -29,18 +40,56 @@ def read_outlier_mask_file(survey, tims, brickname):
             return False
         mask = F[extname].read()
         hdr = F[extname].read_header()
-        if mask.shape != tim.shape:
-            print('Warning: Outlier mask', fn, 'does not match shape of tim', tim)
-            return False
+        if subimage:
+            if mask.shape != tim.shape:
+                print('Warning: Outlier mask', fn, 'does not match shape of tim', tim)
+                return False
         x0 = hdr['X0']
         y0 = hdr['Y0']
-        if x0 != tim.x0 or y0 != tim.y0:
-            print('Warning: Outlier mask', fn, 'x0,y0 does not match that of tim', tim)
-            return False
-        # Apply this mask!
         maskbits = get_bits_to_mask()
-        tim.dq |= ((mask & maskbits) > 0) * DQ_BITS['outlier']
-        tim.inverr[(mask & maskbits) > 0] = 0.
+        if subimage:
+            if x0 != tim.x0 or y0 != tim.y0:
+                print('Warning: Outlier mask', fn, 'x0,y0 does not match that of tim', tim)
+                return False
+            # Apply this mask!
+            tim.dq |= ((mask & maskbits) > 0) * DQ_BITS['outlier']
+            tim.inverr[(mask & maskbits) > 0] = 0.
+        else:
+
+            from astrometry.util.miscutils import get_overlapping_region
+            mh,mw = mask.shape
+            th,tw = tim.shape
+            my,ty = get_overlapping_region(tim.y0, tim.y0 + th - 1, y0, y0 + mh - 1)
+            mx,tx = get_overlapping_region(tim.x0, tim.x0 + tw - 1, x0, x0 + mw - 1)
+            # have to shift the "m" slices down by x0,y0
+            my = slice(my.start - y0, my.stop - y0)
+            mx = slice(mx.start - x0, mx.stop - x0)
+            tim.dq[ty, tx] |= ((mask[my, mx] & maskbits) > 0) * DQ_BITS['outlier']
+            tim.inverr[ty, tx][(mask[my, mx] & maskbits) > 0] = 0.
+
+            if ps is not None:
+                import pylab as plt
+                print('Mask extent: x [%i, %i], vs tim extent x [%i, %i]' % (x0, x0+mw, tim.x0, tim.x0+tw))
+                print('Mask extent: y [%i, %i], vs tim extent y [%i, %i]' % (y0, y0+mh, tim.y0, tim.y0+th))
+                print('x slice: mask', mx, 'tim', tx)
+                print('y slice: mask', my, 'tim', ty)
+                print('tim shape:', tim.shape)
+                print('mask shape:', mask.shape)
+                
+                newdq = np.zeros(tim.shape, bool)
+                newdq[ty, tx] = ((mask[my, mx] & maskbits) > 0)
+                print('Total of', np.sum(newdq), 'pixels masked')
+                plt.clf()
+                plt.imshow(tim.getImage(), interpolation='nearest', origin='lower', vmin=-2.*tim.sig1, vmax=5.*tim.sig1, cmap='gray')
+                ax = plt.axis()
+                from legacypipe.detection import plot_boundary_map
+                plot_boundary_map(newdq, iterations=3, rgb=(0,128,255))
+                plt.axis(ax)
+                ps.savefig()
+
+                plt.axis([tx.start, tx.stop, ty.start, ty.stop])
+                ps.savefig()
+            
     return True
 
 def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
@@ -418,4 +467,3 @@ def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
                 continue
             img[iy[keep],ix[keep]] = coimgs[ibands[tim.band]][yy[keep],xx[keep]]
             del co
-

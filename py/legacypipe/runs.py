@@ -22,6 +22,8 @@ class NinetyPrimeMosaic(LegacySurveyData):
 runs = {
     'decam': DecamSurvey,
     '90prime-mosaic': NinetyPrimeMosaic,
+    'south': DecamSurvey,
+    'north': NinetyPrimeMosaic,
     None: LegacySurveyData,
 }
 

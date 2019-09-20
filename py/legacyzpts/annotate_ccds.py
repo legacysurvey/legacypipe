@@ -74,11 +74,15 @@ def annotate(ccds, survey, mp=None, mzls=False, bass=False, normalizePsf=True,
     for iccd,ann in enumerate(anns):
         tileid = ann.pop('tileid', -1)
         if tileid > -1:
-            tile = tiles[tileid_to_index[tileid]]
-            assert(tile.tileid == tileid)
-            ccds.tileid  [iccd] = tile.tileid
-            ccds.tilepass[iccd] = tile.get('pass')
-            ccds.tileebv [iccd] = tile.ebv_med
+            index = tileid_to_index[tileid]
+            if index == -1:
+                print('Tile ID not found in obstatus file')
+            else:
+                tile = tiles[index]
+                assert(tile.tileid == tileid)
+                ccds.tileid  [iccd] = tile.tileid
+                ccds.tilepass[iccd] = tile.get('pass')
+                ccds.tileebv [iccd] = tile.ebv_med
         gaussgalnorm[iccd] = ann.pop('gaussgalnorm', 0)
 
         for k,v in ann.items():
@@ -160,6 +164,7 @@ def annotate_one_ccd(X):
     sky = None
 
     if ccd.ccdnastrom == 0: # something went terribly wrong
+        print('ccdnastrom == 0; bailing on annotation')
         return result
 
     try:
@@ -174,6 +179,7 @@ def annotate_one_ccd(X):
             raise
 
     if tim is None:
+        print('Failed to get_tractor_image; bailing on annotation')
         return result
 
     psf = tim.psf
@@ -314,6 +320,7 @@ def annotate_one_ccd(X):
                   pixscale_min  = min(pixscale),
                   pixscale_max  = max(pixscale))
     result.update(annotated=True)
+    print('Finished annotation')
     return result
 
 def init_annotations(ccds):
