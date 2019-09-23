@@ -1038,7 +1038,7 @@ class OneBlob(object):
 
             if name == 'ser' and newsrc is None:
                 # Start at the better of exp or dev.
-                smod = _select_model(chisqs, nparams, galaxy_margin, self.rex)
+                smod = _select_model(chisqs, nparams, galaxy_margin)
                 print('Sersic: chisqs', chisqs, 'selecting model:', smod)
                 if smod not in ['dev', 'exp']:
                     continue
