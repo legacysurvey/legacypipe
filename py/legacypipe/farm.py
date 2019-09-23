@@ -675,7 +675,6 @@ def get_blob_iter(skipblobs=None,
                   reoptimize=False,
                   iterative=True,
                   refstars=None,
-                  rex=False,
                   T_clusters=None,
                   custom_brick=False,
                   **kwargs):
@@ -702,7 +701,7 @@ def get_blob_iter(skipblobs=None,
                           targetwcs, tims,
                           cat, bands, plots, ps,
                           reoptimize, iterative, use_ceres,
-                          refmap, brick, rex,
+                          refmap, brick,
                           max_blobsize=max_blobsize, custom_brick=custom_brick,
                           skipblobs=skipblobs)
     return blobiter

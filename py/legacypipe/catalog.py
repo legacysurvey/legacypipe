@@ -6,14 +6,13 @@ from tractor import PointSource, getParamTypeTree, RaDecPos
 from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
 from tractor.ellipses import EllipseESoft, EllipseE
 
-from legacypipe.survey import SimpleGalaxy, RexGalaxy, GaiaSource
+from legacypipe.survey import RexGalaxy, GaiaSource
 
 # FITS catalogs
 fits_typemap = { PointSource: 'PSF',
                  ExpGalaxy: 'EXP',
                  DevGalaxy: 'DEV',
                  FixedCompositeGalaxy: 'COMP',
-                 SimpleGalaxy: 'SIMP',
                  RexGalaxy: 'REX',
                  GaiaSource: 'PSF',
                  type(None): 'NONE' }
@@ -25,7 +24,6 @@ fits_short_typemap = { PointSource: 'P',
                        ExpGalaxy: 'E',
                        DevGalaxy: 'D',
                        FixedCompositeGalaxy: 'C',
-                       SimpleGalaxy: 'S',
                        RexGalaxy: 'R',
                        GaiaSource: 'G' }
 
