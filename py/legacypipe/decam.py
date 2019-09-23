@@ -92,6 +92,8 @@ def decam_has_dq_codes(plver):
     plver = plver.replace('V','')
     plver = plver.replace('DES ', '')
     plver = plver.replace('+1', 'a1')
-    plver = plver.replace('2a', '2')
+    #'4.8.2a'
+    if plver.endswith('2a'):
+        plver = plver.replace('.2a', '.2a1')
     return StrictVersion(plver) >= StrictVersion('3.5.0')
 

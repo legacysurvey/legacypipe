@@ -142,8 +142,8 @@ def main():
                 psfrow = T[I]
                 x0 = ccd.ccd_x0
                 y0 = ccd.ccd_y0
-                psfrow.polzero1[0] += x0
-                psfrow.polzero2[0] += y0
+                psfrow.polzero1[0] -= x0
+                psfrow.polzero2[0] -= y0
                 psfhdr = fitsio.read_header(im.merged_psffn)
 
         psfex.fwhm = tim.psf_fwhm

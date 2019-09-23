@@ -18,7 +18,7 @@ from tractor import Tractor, Catalog, NanoMaggies
 from tractor.galaxy import disable_galaxy_cache
 
 from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version_header, apertures_arcsec
-from catalog import read_fits_catalog
+from legacypipe.catalog import read_fits_catalog
 
 def get_parser():
     '''
@@ -46,6 +46,10 @@ def get_parser():
 
     parser.add_argument('--zoom', type=int, nargs=4, help='Set target image extent (eg "0 100 0 200")')
     parser.add_argument('--no-ceres', action='store_false', dest='ceres', help='Do not use Ceres optimization engine (use scipy)')
+
+    parser.add_argument('--ceres-threads', type=int, default=1,
+                        help='Set number of threads used by Ceres')
+
     parser.add_argument('--plots', default=None, help='Create plots; specify a base filename for the plots')
     parser.add_argument('--write-cat', help='Write out the catalog subset on which forced phot was done')
     parser.add_argument('--apphot', action='store_true',
@@ -260,6 +264,91 @@ def bounce_one_ccd(X):
     #return run_one_ccd(survey, ccd, opt)
     return run_one_ccd(*X)
 
+def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_dec=None,
+                       margin=20):
+    TT = []
+    surveys = [(catsurvey_north, True)]
+    if catsurvey_south is not None:
+        surveys.append((catsurvey_south, False))
+
+    for catsurvey,north in surveys:
+        bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
+
+        if resolve_dec is not None:
+            from astrometry.util.starutil_numpy import radectolb
+            bricks.gal_l, bricks.gal_b = radectolb(bricks.ra, bricks.dec)
+
+        for b in bricks:
+            # Skip bricks that are entirely on the wrong side of the resolve line (NGC only)
+            if resolve_dec is not None and b.gal_b > 0:
+                if north and b.dec2 <= resolve_dec:
+                    continue
+                if not(north) and b.dec1 >= resolve_dec:
+                    continue
+            # there is some overlap with this brick... read the catalog.
+            fn = catsurvey.find_file('tractor', brick=b.brickname)
+            if not os.path.exists(fn):
+                print('WARNING: catalog', fn, 'does not exist.  Skipping!')
+                continue
+            print('Reading', fn)
+            T = fits_table(fn, columns=[
+                'ra', 'dec', 'brick_primary', 'type', 'release',
+                'brickid', 'brickname', 'objid',
+                'fracdev', 'flux_r',
+                'shapedev_r', 'shapedev_e1', 'shapedev_e2',
+                'shapeexp_r', 'shapeexp_e1', 'shapeexp_e2',
+                'ref_epoch', 'pmra', 'pmdec', 'parallax'
+                ])
+            if resolve_dec is not None and b.gal_b > 0:
+                if north:
+                    T.cut(T.dec >= resolve_dec)
+                    print('Cut to', len(T), 'north of the resolve line')
+                else:
+                    T.cut(T.dec <  resolve_dec)
+                    print('Cut to', len(T), 'south of the resolve line')
+            ok,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
+            W,H = chipwcs.get_width(), chipwcs.get_height()
+            I, = np.nonzero((xx >= -margin) * (xx <= (W+margin)) *
+                            (yy >= -margin) * (yy <= (H+margin)))
+            T.cut(I)
+            print('Cut to', len(T), 'sources within image + margin')
+            T.cut(T.brick_primary)
+            print('Cut to', len(T), 'on brick_primary')
+            for col in ['out_of_bounds', 'left_blob']:
+                if col in T.get_columns():
+                    T.cut(T.get(col) == False)
+                    print('Cut to', len(T), 'on', col)
+            # drop DUP sources
+            I, = np.nonzero([t.strip() != 'DUP' for t in T.type])
+            T.cut(I)
+            print('Cut to', len(T), 'after removing DUP')
+            if len(T):
+                TT.append(T)
+    if len(TT) == 0:
+        return None
+    T = merge_tables(TT, columns='fillzero')
+    T._header = TT[0]._header
+    del TT
+    print('Total of', len(T), 'catalog sources')
+
+    # Fix up various failure modes:
+    # FixedCompositeGalaxy(pos=RaDecPos[240.51147402832561, 10.385488075518923], brightness=NanoMaggies: g=(flux -2.87), r=(flux -5.26), z=(flux -7.65), fracDev=FracDev(0.60177207), shapeExp=re=3.78351e-44, e1=9.30367e-13, e2=1.24392e-16, shapeDev=re=inf, e1=-0, e2=-0)
+    # -> convert to EXP
+    I, = np.nonzero([t == 'COMP' and not np.isfinite(r) for t,r in zip(T.type, T.shapedev_r)])
+    if len(I):
+        print('Converting', len(I), 'bogus COMP galaxies to EXP')
+        for i in I:
+            T.type[i] = 'EXP'
+
+    # Same thing with the exp component.
+    # -> convert to DEV
+    I, = np.nonzero([t == 'COMP' and not np.isfinite(r) for t,r in zip(T.type, T.shapeexp_r)])
+    if len(I):
+        print('Converting', len(I), 'bogus COMP galaxies to DEV')
+        for i in I:
+            T.type[i] = 'DEV'
+    return T
+
 def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                 ccd, opt, zoomslice, ps):
     tlast = Time()
@@ -293,99 +382,20 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         for b in bricks:
             from legacypipe.outliers import read_outlier_mask_file
             print('Reading outlier mask for brick', b.brickname)
-            ok = read_outlier_mask_file(catsurvey, [tim], b.brickname, subimage=False, output=False)
+            ok = read_outlier_mask_file(catsurvey, [tim], b.brickname, subimage=False, output=False,
+                                        ps=ps)
             if not ok:
                 print('WARNING: failed to read outliers mask file for brick', b.brickname)
 
     if opt.catalog:
         T = fits_table(opt.catalog)
     else:
-        margin = 20
-        TT = []
         chipwcs = tim.subwcs
-
-        surveys = [(catsurvey_north, True)]
-        if catsurvey_south is not None:
-            surveys.append((catsurvey_south, False))
-
-        for catsurvey,north in surveys:
-            bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
-
-            if resolve_dec is not None:
-                from astrometry.util.starutil_numpy import radectolb
-                bricks.gal_l, bricks.gal_b = radectolb(bricks.ra, bricks.dec)
-
-            for b in bricks:
-                # Skip bricks that are entirely on the wrong side of the resolve line (NGC only)
-                if b.gal_b > 0 and resolve_dec is not None:
-                    if north and b.dec2 <= resolve_dec:
-                        continue
-                    if not(north) and b.dec1 >= resolve_dec:
-                        continue
-                # there is some overlap with this brick... read the catalog.
-                fn = catsurvey.find_file('tractor', brick=b.brickname)
-                if not os.path.exists(fn):
-                    print('WARNING: catalog', fn, 'does not exist.  Skipping!')
-                    continue
-                print('Reading', fn)
-                T = fits_table(fn, columns=[
-                    'ra', 'dec', 'brick_primary', 'type', 'release',
-                    'brickid', 'brickname', 'objid',
-                    'fracdev', 'flux_r',
-                    'shapedev_r', 'shapedev_e1', 'shapedev_e2',
-                    'shapeexp_r', 'shapeexp_e1', 'shapeexp_e2',
-                    'ref_epoch', 'pmra', 'pmdec', 'parallax'
-                    ])
-                if b.gal_b > 0 and resolve_dec is not None:
-                    if north:
-                        T.cut(T.dec >= resolve_dec)
-                        print('Cut to', len(T), 'north of the resolve line')
-                    else:
-                        T.cut(T.dec <  resolve_dec)
-                        print('Cut to', len(T), 'south of the resolve line')
-                ok,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
-                W,H = chipwcs.get_width(), chipwcs.get_height()
-                I, = np.nonzero((xx >= -margin) * (xx <= (W+margin)) *
-                                (yy >= -margin) * (yy <= (H+margin)))
-                T.cut(I)
-                print('Cut to', len(T), 'sources within image + margin')
-                T.cut(T.brick_primary)
-                print('Cut to', len(T), 'on brick_primary')
-                for col in ['out_of_bounds', 'left_blob']:
-                    if col in T.get_columns():
-                        T.cut(T.get(col) == False)
-                        print('Cut to', len(T), 'on', col)
-                # drop DUP sources
-                I, = np.nonzero([t.strip() != 'DUP' for t in T.type])
-                T.cut(I)
-                print('Cut to', len(T), 'after removing DUP')
-                if len(T):
-                    TT.append(T)
-        if len(TT) == 0:
+        T = get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=catsurvey_south,
+                               resolve_dec=resolve_dec)
+        if T is None:
             print('No sources to photometer.')
             return None
-        T = merge_tables(TT, columns='fillzero')
-        T._header = TT[0]._header
-        del TT
-        print('Total of', len(T), 'catalog sources')
-
-        # Fix up various failure modes:
-        # FixedCompositeGalaxy(pos=RaDecPos[240.51147402832561, 10.385488075518923], brightness=NanoMaggies: g=(flux -2.87), r=(flux -5.26), z=(flux -7.65), fracDev=FracDev(0.60177207), shapeExp=re=3.78351e-44, e1=9.30367e-13, e2=1.24392e-16, shapeDev=re=inf, e1=-0, e2=-0)
-        # -> convert to EXP
-        I, = np.nonzero([t == 'COMP' and not np.isfinite(r) for t,r in zip(T.type, T.shapedev_r)])
-        if len(I):
-            print('Converting', len(I), 'bogus COMP galaxies to EXP')
-            for i in I:
-                T.type[i] = 'EXP'
-
-        # Same thing with the exp component.
-        # -> convert to DEV
-        I, = np.nonzero([t == 'COMP' and not np.isfinite(r) for t,r in zip(T.type, T.shapeexp_r)])
-        if len(I):
-            print('Converting', len(I), 'bogus COMP galaxies to DEV')
-            for i in I:
-                T.type[i] = 'DEV'
-
         if opt.write_cat:
             T.writeto(opt.write_cat)
             print('Wrote catalog to', opt.write_cat)
@@ -405,16 +415,11 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
             T.ra [I] = ra
             T.dec[I] = dec
 
-    kwargs = {}
-    cols = T.get_columns()
-    if 'flux_r' in cols and not 'decam_flux_r' in cols:
-        kwargs.update(fluxPrefix='')
-
     tnow = Time()
     print('Read catalog:', tnow-tlast)
     tlast = tnow
 
-    cat = read_fits_catalog(T, bands='r', **kwargs)
+    cat = read_fits_catalog(T, bands='r')
     # Replace the brightness (which will be a NanoMaggies with g,r,z)
     # with a NanoMaggies with this image's band only.
     for src in cat:
@@ -433,7 +438,8 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                         do_forced=opt.forced,
                         do_apphot=opt.apphot,
                         get_model=opt.save_model,
-                        ps=ps, timing=True)
+                        ps=ps, timing=True,
+                        ceres_threads=opt.ceres_threads)
 
     if opt.save_model:
         # unpack results
@@ -540,7 +546,8 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
 def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                     do_forced=True, do_apphot=True, get_model=False, ps=None,
                     timing=False,
-                    fixed_also=False):
+                    fixed_also=False,
+                    ceres_threads=1):
     '''
     fixed_also: if derivs=True, also run without derivatives and report
     that flux too?
@@ -554,7 +561,13 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
     if ceres:
         from tractor.ceres_optimizer import CeresOptimizer
         B = 8
-        opti = CeresOptimizer(BW=B, BH=B)
+
+        try:
+            opti = CeresOptimizer(BW=B, BH=B, threads=ceres_threads)
+        except:
+            if ceres_threads > 1:
+                raise RuntimeError('ceres_threads requested but not supported by tractor.ceres version')
+            opti = CeresOptimizer(BW=B, BH=B)
         #forced_kwargs.update(verbose=True)
 
     # nsize = 0

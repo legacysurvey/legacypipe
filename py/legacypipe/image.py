@@ -339,8 +339,8 @@ class LegacySurveyImage(object):
             invvar = self.remap_invvar(invvar, primhdr, img, dq)
 
         # header 'FWHM' is in pixels
-        assert(self.fwhm > 0)
-        psf_fwhm = self.fwhm
+        psf_fwhm = self.get_fwhm(primhdr, imghdr)
+        assert(psf_fwhm > 0)
         psf_sigma = psf_fwhm / 2.35
 
         # Ugly: occasionally the CP marks edge pixels with SATUR (and
@@ -535,6 +535,9 @@ class LegacySurveyImage(object):
         subh,subw = tim.shape
         tim.subwcs = tim.sip_wcs.get_subimage(tim.x0, tim.y0, subw, subh)
         return tim
+
+    def get_fwhm(self, primhdr, imghdr):
+        return self.fwhm
 
     def get_image_extent(self, wcs=None, slc=None, radecpoly=None):
         '''
@@ -757,7 +760,7 @@ class LegacySurveyImage(object):
                     thresh = 0.
                 invvar[invvar < thresh] = 0
 
-        assert(np.all(invvar >= 0.))
+        invvar[invvar < 0.] = 0.
         assert(np.all(np.isfinite(invvar)))
         return invvar
 
@@ -1602,7 +1605,7 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
             # Special handling for EXPNUM in some cases
             if 'EXPNUM' in hdr:
                 cpexpnum = hdr['EXPNUM']
-            else:
+            elif 'OBSID' in hdr:
                 # At the beginning of the MzLS survey, eg 2016-01-24, the EXPNUM
                 # cards are blank.  Fake up an expnum like 160125082555
                 # (yymmddhhmmss), same as the CP filename.
@@ -1628,6 +1631,9 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                     cpexpnum = int(re.sub(r'([a-z]+|\.+)','',base), 10)
                     if not quiet:
                         print('Faked up EXPNUM', cpexpnum)
+            else:
+                if not quiet:
+                    print('Missing EXPNUM and OBSID in header')
 
         for key,spval,targetval,strip in (#(procdatekey, None, procdate, True),
                                           ('PLVER', None, plver, True),
