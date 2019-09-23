@@ -755,7 +755,7 @@ class OneBlob(object):
                 trymodels.append(('gals', None))
         else:
             # If the source was initialized as a galaxy, try all models
-            trymodels.extend([('rex', nex),
+            trymodels.extend([('rex', rex),
                               ('dev', dev), ('exp', exp), ('comp', comp)])
 
         cputimes = {}
