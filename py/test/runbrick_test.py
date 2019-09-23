@@ -89,9 +89,6 @@ def rbmain():
     outdir = 'out-testcase6'
     main(args=['--brick', '1102p240', '--zoom', '500', '600', '650', '750',
                '--force-all', '--no-write', '--no-wise',
-               #'--blob-image', '--early-coadds',
-               #'--plots',
-               '--simp',
                '--survey-dir', surveydir,
                '--outdir', outdir] + extra_args)
     fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
@@ -139,10 +136,16 @@ def rbmain():
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase7')
     outdir = 'out-testcase7'
+    # remove --no-gaia
+    my_extra_args = [a for a in extra_args if a != '--no-gaia']
+    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia-dr2')
+    os.environ['GAIA_CAT_VER'] = '2'
     main(args=['--brick', '1102p240', '--zoom', '250', '350', '1550', '1650',
                '--force-all', '--no-write', '--no-wise', #'--plots',
                '--survey-dir', surveydir,
-               '--outdir', outdir] + extra_args)
+               '--outdir', outdir] + my_extra_args)
+    del os.environ['GAIA_CAT_DIR']
+    del os.environ['GAIA_CAT_VER']
     fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
     assert(os.path.exists(fn))
     T = fits_table(fn)

@@ -973,7 +973,6 @@ def stage_fitblobs(T=None,
                    write_metrics=True,
                    get_all_models=False,
                    refstars=None,
-                   rex=False,
                    bailout=False,
                    record_event=None,
                    custom_brick=False,
@@ -1194,7 +1193,7 @@ def stage_fitblobs(T=None,
     # Create the iterator over blobs to process
     blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, simul_opt, use_ceres,
-                          refmap, brick, rex,
+                          refmap, brick,
                           skipblobs=skipblobs,
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
     # to allow timingpool to queue tasks one at a time
@@ -1374,7 +1373,7 @@ def stage_fitblobs(T=None,
     assert(cat.numberOfParams() == len(invvars))
 
     if write_metrics or get_all_models:
-        TT,hdr = _format_all_models(T, newcat, BB, bands, rex)
+        TT,hdr = _format_all_models(T, newcat, BB, bands)
         if get_all_models:
             all_models = TT
         if write_metrics:
@@ -1472,7 +1471,7 @@ def _check_checkpoints(R, blobslices, brickname):
         keepR.append(ri)
     return keepR
 
-def _format_all_models(T, newcat, BB, bands, rex):
+def _format_all_models(T, newcat, BB, bands):
     from legacypipe.catalog import prepare_fits_catalog, fits_typemap
     from tractor import Catalog
 
@@ -1491,11 +1490,7 @@ def _format_all_models(T, newcat, BB, bands, rex):
 
     hdr = fitsio.FITSHDR()
 
-    if rex:
-        simpname = 'rex'
-    else:
-        simpname = 'simple'
-    srctypes = ['ptsrc', simpname, 'dev','exp','comp']
+    srctypes = ['ptsrc', 'rex', 'dev','exp','comp']
 
     for srctype in srctypes:
         # Create catalog with the fit results for each source type
@@ -1503,7 +1498,7 @@ def _format_all_models(T, newcat, BB, bands, rex):
         # NOTE that for Rex, the shapes have been converted to EllipseE
         # and the e1,e2 params are frozen.
 
-        namemap = dict(ptsrc='psf', simple='simp')
+        namemap = dict(ptsrc='psf')
         prefix = namemap.get(srctype,srctype)
 
         allivs = np.hstack([m.get(srctype,[]) for m in BB.all_model_ivs])
@@ -1525,7 +1520,7 @@ def _format_all_models(T, newcat, BB, bands, rex):
             TT.delete_column(col)
             continue
         # shapes for shapeless types
-        if (('psf_' in col or 'simp_' in col) and
+        if (('psf_' in col) and
             ('shape' in col or 'fracDev' in col)):
             TT.delete_column(col)
             continue
@@ -1537,16 +1532,14 @@ def _format_all_models(T, newcat, BB, bands, rex):
             continue
     TT.delete_column('dev_fracDev')
     TT.delete_column('dev_fracDev_ivar')
-    if rex:
-        TT.delete_column('rex_shapeExp_e1')
-        TT.delete_column('rex_shapeExp_e2')
-        TT.delete_column('rex_shapeExp_e1_ivar')
-        TT.delete_column('rex_shapeExp_e2_ivar')
+    TT.delete_column('rex_shapeExp_e1')
+    TT.delete_column('rex_shapeExp_e2')
+    TT.delete_column('rex_shapeExp_e1_ivar')
+    TT.delete_column('rex_shapeExp_e2_ivar')
     return TT,hdr
 
 def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
-               plots, ps, simul_opt, use_ceres, refmap,
-               brick, rex,
+               plots, ps, simul_opt, use_ceres, refmap, brick,
                skipblobs=None, max_blobsize=None, custom_brick=False):
     '''
     *blobs*: map, with -1 indicating no-blob, other values indexing *blobslices*,*blobsrcs*.
@@ -1655,7 +1648,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
         yield (brickname, iblob,
                (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-               simul_opt, use_ceres, rex, refmap[bslc]))
+               simul_opt, use_ceres, refmap[bslc]))
 
 def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &
@@ -2690,7 +2683,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               normalizePsf=False,
               apodize=False,
               rgb_kwargs=None,
-              rex=False,
               splinesky=True,
               subsky=True,
               constant_invvar=False,
@@ -2919,7 +2911,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   normalizePsf=normalizePsf,
                   apodize=apodize,
                   rgb_kwargs=rgb_kwargs,
-                  rex=rex,
                   constant_invvar=constant_invvar,
                   depth_cut=depth_cut,
                   splinesky=splinesky,
@@ -3239,9 +3230,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--apodize', default=False, action='store_true',
                         help='Apodize image edges for prettier pictures?')
 
-    parser.add_argument('--simp', dest='rex', default=True,
-                        action='store_false',
-                        help='Use SIMP rather than REX')
     parser.add_argument(
         '--coadd-bw', action='store_true', default=False,
         help='Create grayscale coadds if only one band is available?')
