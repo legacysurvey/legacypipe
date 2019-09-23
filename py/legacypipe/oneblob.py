@@ -12,7 +12,7 @@ from tractor import Tractor, PointSource, Image, Catalog, Patch
 from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev, FracDev, disable_galaxy_cache, enable_galaxy_cache
 from tractor.patch import ModelMask
 
-from legacypipe.survey import (SimpleGalaxy, RexGalaxy, GaiaSource,
+from legacypipe.survey import (RexGalaxy, GaiaSource,
                                LegacyEllipseWithPriors, get_rgb)
 from legacypipe.bits import IN_BLOB
 from legacypipe.runbrick import rgbkwargs, rgbkwargs_resid
@@ -35,7 +35,7 @@ def one_blob(X):
     if X is None:
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
-     srcs, bands, plots, ps, reoptimize, iterative, use_ceres, rex, refmap) = X
+     srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap) = X
 
     debug('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images' %
           (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs)))
@@ -88,7 +88,7 @@ def one_blob(X):
     B.hit_limit = np.zeros(len(B), bool)
 
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, use_ceres, rex, refmap)
+                 plots, ps, use_ceres, refmap)
     B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
@@ -111,9 +111,8 @@ def one_blob(X):
 
 class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, use_ceres, rex, refmap):
+                 plots, ps, use_ceres, refmap):
         self.name = name
-        self.rex = rex
         self.blobwcs = blobwcs
         self.pixscale = self.blobwcs.pixel_scale()
         self.blobmask = blobmask
@@ -980,8 +979,7 @@ class OneBlob(object):
 
         chisqs_none = _per_band_chisqs(srctractor, self.bands)
 
-        nparams = dict(ptsrc=2, simple=2, rex=3, exp=5, dev=5,
-                       ser=6, comp=9)
+        nparams = dict(ptsrc=2, rex=3, exp=5, dev=5, ser=6, comp=9)
         # This is our "upgrade" threshold: how much better a galaxy
         # fit has to be versus ptsrc, and comp versus galaxy.
         galaxy_margin = 3.**2 + (nparams['exp'] - nparams['ptsrc'])
@@ -990,14 +988,8 @@ class OneBlob(object):
         # larger is a better fit.
         chisqs = dict(none=0)
 
-        oldmodel, ptsrc, simple, dev, exp, comp = _initialize_models(
-            src, self.rex)
+        oldmodel, ptsrc, rex, dev, exp, comp = _initialize_models(src)
         ser = None
-
-        if self.rex:
-            simname = 'rex'
-        else:
-            simname = 'simple'
 
         trymodels = [('ptsrc', ptsrc)]
 
@@ -1010,13 +1002,13 @@ class OneBlob(object):
                 # Geometric mask
                 debug('Not computing galaxy models due to objects in blob')
             else:
-                trymodels.append((simname, simple))
-                # Try galaxy models if simple > ptsrc, or if bright.
+                trymodels.append(('rex', rex))
+                # Try galaxy models if rex > ptsrc, or if bright.
                 # The 'gals' model is just a marker
                 trymodels.append(('gals', None))
         else:
             # If the source was initialized as a galaxy, try all models
-            trymodels.extend([(simname, simple),
+            trymodels.extend([('rex', rex),
                               ('dev', dev), ('exp', exp), ('ser', None),
                               ('comp', comp)])
 
@@ -1025,18 +1017,18 @@ class OneBlob(object):
             cpum0 = time.clock()
 
             if name == 'gals':
-                # If 'simple' was better than 'ptsrc', or the source is
+                # If 'rex' was better than 'ptsrc', or the source is
                 # bright, try the galaxy models.
-                chi_sim = chisqs.get(simname, 0)
+                chi_rex = chisqs.get('rex', 0)
                 chi_psf = chisqs.get('ptsrc', 0)
-                if chi_sim > chi_psf or max(chi_psf, chi_sim) > 400:
+                if chi_rex > chi_psf or max(chi_psf, chi_rex) > 400:
                     trymodels.extend([
                         ('dev', dev), ('exp', exp), ('ser', None), ('comp', comp)])
                 continue
 
             if name == 'comp' and newsrc is None:
                 # Compute the comp model if exp or dev would be accepted
-                smod = _select_model(chisqs, nparams, galaxy_margin, self.rex)
+                smod = _select_model(chisqs, nparams, galaxy_margin)
                 if smod not in ['dev', 'exp']:
                     continue
                 newsrc = comp = FixedCompositeGalaxy(
@@ -1201,9 +1193,9 @@ class OneBlob(object):
         # Actually select which model to keep.  This "modnames"
         # array determines the order of the elements in the DCHISQ
         # column of the catalog.
-        modnames = ['ptsrc', simname, 'dev', 'exp', 'comp', 'ser']
-        keepmod = _select_model(chisqs, nparams, galaxy_margin, self.rex)
-        keepsrc = {'none':None, 'ptsrc':ptsrc, simname:simple,
+        modnames = ['ptsrc', 'rex', 'dev', 'exp', 'comp', 'ser']
+        keepmod = _select_model(chisqs, nparams, galaxy_margin)
+        keepsrc = {'none':None, 'ptsrc':ptsrc, 'rex':rex,
                    'dev':dev, 'exp':exp, 'comp':comp, 'ser':ser}[keepmod]
         bestchi = chisqs.get(keepmod, 0.)
 
@@ -1227,7 +1219,7 @@ class OneBlob(object):
         #     plt.clf()
         #     rows,cols = 3, 6
         #     mods = OrderedDict([
-        #         ('none',None), ('ptsrc',ptsrc), (simname,simple),
+        #         ('none',None), ('ptsrc',ptsrc), ('rex',rex),
         #         ('dev',dev), ('exp',exp), ('comp',comp)])
         #     for imod,modname in enumerate(mods.keys()):
         #         if modname != 'none' and not modname in chisqs:
@@ -1310,7 +1302,7 @@ class OneBlob(object):
             import pylab as plt
             plt.clf()
             rows,cols = 3, 7
-            modnames = ['none', 'ptsrc', simname, 'dev', 'exp', 'comp', 'ser']
+            modnames = ['none', 'ptsrc', 'rex', 'dev', 'exp', 'comp', 'ser']
 
             plt.subplot(rows, cols, 1)
             # Top-left: image
@@ -1821,16 +1813,12 @@ def _compute_source_metrics(srcs, tims, bands, tr):
     return dict(fracin=fracin, fracflux=fracflux, rchisq=rchi2,
                 fracmasked=fracmasked)
 
-def _initialize_models(src, rex):
+def _initialize_models(src):
+    from legacypipe.survey import LogRadius
     if isinstance(src, PointSource):
         ptsrc = src.copy()
-        if rex:
-            from legacypipe.survey import LogRadius
-            simple = RexGalaxy(src.getPosition(), src.getBrightness(),
-                               LogRadius(-1.)).copy()
-            #print('Created Rex:', simple)
-        else:
-            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
+        rex = RexGalaxy(src.getPosition(), src.getBrightness(),
+                        LogRadius(-1.)).copy()
         # logr, ee1, ee2
         shape = LegacyEllipseWithPriors(-1., 0., 0.)
         dev = DevGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
@@ -1839,12 +1827,8 @@ def _initialize_models(src, rex):
         oldmodel = 'ptsrc'
 
     elif isinstance(src, DevGalaxy):
-        if rex:
-            from legacypipe.survey import LogRadius
-            simple = RexGalaxy(src.getPosition(), src.getBrightness(),
-                               LogRadius(np.log(src.getShape().re))).copy()
-        else:
-            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
+        rex = RexGalaxy(src.getPosition(), src.getBrightness(),
+                        LogRadius(np.log(src.getShape().re))).copy()
         dev = src.copy()
         exp = ExpGalaxy(src.getPosition(), src.getBrightness(),
                         src.getShape()).copy()
@@ -1853,12 +1837,8 @@ def _initialize_models(src, rex):
 
     elif isinstance(src, ExpGalaxy):
         ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
-        if rex:
-            from legacypipe.survey import LogRadius
-            simple = RexGalaxy(src.getPosition(), src.getBrightness(),
-                               LogRadius(np.log(src.getShape().re))).copy()
-        else:
-            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
+        rex = RexGalaxy(src.getPosition(), src.getBrightness(),
+                        LogRadius(np.log(src.getShape().re))).copy()
         dev = DevGalaxy(src.getPosition(), src.getBrightness(),
                         src.getShape()).copy()
         exp = src.copy()
@@ -1873,13 +1853,8 @@ def _initialize_models(src, rex):
         else:
             shape = src.shapeExp
 
-        if rex:
-            from legacypipe.survey import LogRadius
-            simple = RexGalaxy(src.getPosition(), src.getBrightness(),
-                               LogRadius(np.log(shape.re))).copy()
-        else:
-            simple = SimpleGalaxy(src.getPosition(), src.getBrightness()).copy()
-
+        rex = RexGalaxy(src.getPosition(), src.getBrightness(),
+                        LogRadius(np.log(shape.re))).copy()
         dev = DevGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
         if frac < 1:
             shape = src.shapeExp
@@ -1889,7 +1864,7 @@ def _initialize_models(src, rex):
         comp = src.copy()
         oldmodel = 'comp'
 
-    return oldmodel, ptsrc, simple, dev, exp, comp
+    return oldmodel, ptsrc, rex, dev, exp, comp
 
 def _get_subimages(tims, mods, src):
     subtims = []
@@ -2054,7 +2029,7 @@ def _clip_model_to_blob(mod, sh, ie):
 
     return mod
 
-def _select_model(chisqs, nparams, galaxy_margin, rex):
+def _select_model(chisqs, nparams, galaxy_margin):
     '''
     Returns keepmod (string), the name of the preferred model.
     '''
@@ -2073,40 +2048,33 @@ def _select_model(chisqs, nparams, galaxy_margin, rex):
         # Drop this source
         return keepmod
 
-    # Now choose between point source and simple model (SIMP/REX)
-    if rex:
-        simname = 'rex'
-    else:
-        simname = 'simple'
-
-    if 'ptsrc' in chisqs and not simname in chisqs:
+    # Now choose between point source and REX
+    if 'ptsrc' in chisqs and not 'rex' in chisqs:
         # bright stars / reference stars: we don't test the simple model.
         return 'ptsrc'
 
-    #print('PSF', chisqs.get('ptsrc',0)-nparams['ptsrc'], 'vs REX', chisqs.get(simname,0)-nparams[simname])
+    #print('PSF', chisqs.get('ptsrc',0)-nparams['ptsrc'], 'vs REX', chisqs.get('rex',0)-nparams['rex'])
 
     # Is PSF good enough to keep?
-    if 'ptsrc' in chisqs and (
-            chisqs['ptsrc']-nparams['ptsrc'] >= cut):
+    if 'ptsrc' in chisqs and (chisqs['ptsrc']-nparams['ptsrc'] >= cut):
         keepmod = 'ptsrc'
 
-    # Now choose between point source and simple model (SIMP/REX)
+    # Now choose between point source and REX
     if 'ptsrc' in chisqs and (
-            chisqs['ptsrc']-nparams['ptsrc'] >= chisqs.get(simname,0)-nparams[simname]):
+            chisqs['ptsrc']-nparams['ptsrc'] >= chisqs.get('rex',0)-nparams['rex']):
         #print('Keeping PSF')
         keepmod = 'ptsrc'
-    elif simname in chisqs and (
-            chisqs[simname]-nparams[simname] > chisqs.get('ptsrc',0)-nparams['ptsrc']):
+    elif 'rex' in chisqs and (
+            chisqs['rex']-nparams['rex'] > chisqs.get('ptsrc',0)-nparams['ptsrc']):
         #print('REX is better fit than PSF.')
         oldkeepmod = keepmod
-        keepmod = simname
+        keepmod = 'rex'
         # For REX, we also demand a fractionally better fit
-        if simname == 'rex':
-            dchisq_psf = chisqs.get('ptsrc',0)
-            dchisq_rex = chisqs.get('rex',0)
-            if dchisq_psf > 0 and (dchisq_rex - dchisq_psf) < (0.01 * dchisq_psf):
-                #print('REX is not a fractionally better fit, keeping', oldkeepmod)
-                keepmod = oldkeepmod
+        dchisq_psf = chisqs.get('ptsrc',0)
+        dchisq_rex = chisqs.get('rex',0)
+        if dchisq_psf > 0 and (dchisq_rex - dchisq_psf) < (0.01 * dchisq_psf):
+            #print('REX is not a fractionally better fit, keeping', oldkeepmod)
+            keepmod = oldkeepmod
 
     if not ('exp' in chisqs or 'dev' in chisqs):
         #print('No EXP or DEV; keeping', keepmod)
