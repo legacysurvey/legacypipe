@@ -1534,7 +1534,7 @@ def _compute_source_metrics(srcs, tims, bands, tr):
     return dict(fracin=fracin, fracflux=fracflux, rchisq=rchi2,
                 fracmasked=fracmasked)
 
-def _initialize_models(src, rex):
+def _initialize_models(src):
     from legacypipe.survey import LogRadius
     if isinstance(src, PointSource):
         ptsrc = src.copy()
