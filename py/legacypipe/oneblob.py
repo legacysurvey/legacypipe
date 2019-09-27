@@ -931,8 +931,12 @@ class OneBlob(object):
         force_pointsource = (self.refmap[y0+iy,x0+ix] &
                              (IN_BLOB['BRIGHT'] | IN_BLOB['GALAXY'] |
                               IN_BLOB['CLUSTER'])) > 0
-        fit_background = (self.refmap[y0+iy,x0+ix] &
-                          (IN_BLOB['MEDIUM'] | IN_BLOB['GALAXY'])) > 0
+        #fit_background = (self.refmap[y0+iy,x0+ix] &
+        #                  (IN_BLOB['MEDIUM'] | IN_BLOB['GALAXY'])) > 0
+
+        # Fit the background for everything!
+        fit_background = True
+
         if is_galaxy:
             fit_background = False
 
