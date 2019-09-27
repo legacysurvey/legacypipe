@@ -71,7 +71,7 @@ def fix_hdu_post(tab):
     return tab
         
 
-if __name__ == "__main__":
+def main(args):
     parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.')
     parser.add_argument('--file_list',help='List of zeropoint fits files to concatenate')
     parser.add_argument('--nproc',type=int,default=1,help='number mpi tasks')
@@ -81,7 +81,8 @@ if __name__ == "__main__":
     parser.add_argument('--cut', action='store_true',default=False, help='Cut to ccd_cuts==0')
     parser.add_argument('--cut-expnum', action='store_true',default=False, help='Cut out rows with expnum==0')
     parser.add_argument('files', nargs='*', help='Zeropoint files to concatenate')
-    opt = parser.parse_args()
+ 
+    opt = parser.parse_args(args)
     
     fns = np.array(opt.files)
     if opt.file_list:
@@ -144,3 +145,8 @@ if __name__ == "__main__":
             cats.image_filename = np.array(fns)
         write_cat(cats, outname=opt.outname)
         print("Done")
+
+if __name__ == "__main__":
+    import sys
+    main(sys.argv[1:])
+
