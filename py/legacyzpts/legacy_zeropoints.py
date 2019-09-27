@@ -642,7 +642,7 @@ class Measurer(object):
         # Formerly we grabbed the PsfEx FWHM; instead just use the CP value!
         ccds['fwhm'] = ccds['fwhm_cp']
     
-    def run(self, ext=None, save_xy=False, splinesky=False, survey=None):
+    def run(self, ext=None, save_xy=False, splinesky=False, survey=None, plots=False):
 
         """Computes statistics for 1 CCD
         
@@ -660,7 +660,6 @@ class Measurer(object):
         t0= ptime('Measuring CCD=%s from image=%s' % (self.ccdname,self.fn),t0)
 
         ps = None
-        plots = True
         if plots:
             from astrometry.util.plotutils import PlotSequence
             ps = PlotSequence('zpt-%s' % self.expid)

@@ -164,38 +164,68 @@ class MosaicRawImage(MosaicImage):
 def main():
     from astrometry.util.multiproc import multiproc
     mp = multiproc()
-    imgfn = 'k4m_160504_030532_ori.fits.fz'
-    debug = True
-    measureargs = dict(measureclass=MosaicRawMeasurer, debug=debug, choose_ccd=False,
-                       splinesky=True, calibdir='calib', image_dir='.', camera='mosaic')
+    #imgfn = '20160503/k4m_160504_030532_ori.fits.fz'
+    #imgfn = '20160503/k4m_160504_031306_ori.fits.fz'
+    #imgfn = '20160503/k4m_160504_031425_ori.fits.fz'
+    for imgfn in [
+        '20160503/k4m_160504_030532_ori.fits.fz',
+        '20160503/k4m_160504_031306_ori.fits.fz',
+        '20160503/k4m_160504_031345_ori.fits.fz',
+        '20160503/k4m_160504_031425_ori.fits.fz',
+        '20160503/k4m_160504_031512_ori.fits.fz',
+        '20160503/k4m_160504_031552_ori.fits.fz',
+        '20160503/k4m_160504_031632_ori.fits.fz',
+        '20160503/k4m_160504_031722_ori.fits.fz',
+        '20160503/k4m_160504_031802_ori.fits.fz',
+        '20160503/k4m_160504_031843_ori.fits.fz',
+        '20160503/k4m_160504_031927_ori.fits.fz',
+        '20160503/k4m_160504_032007_ori.fits.fz',
+        '20160503/k4m_160504_032058_ori.fits.fz',
+        '20160503/k4m_160504_032137_ori.fits.fz',
+        '20160503/k4m_160504_032223_ori.fits.fz',
+    ]:
+        debug = False
+        plots = False
 
-    from legacyzpts.legacy_zeropoints import FakeLegacySurveyData
-    survey = FakeLegacySurveyData()
-    survey.imagedir = '.'
-    survey.calibdir = measureargs.get('calibdir')
-    survey.image_typemap.update({'mosaic': MosaicRawImage})
-    measureargs.update(survey=survey)
+        basefn = imgfn.replace('.fits.fz', '')
     
-    #measure = measure_image(imgfn, mp, image_dir='.',
-    #                        camera='mosaic', **measureargs)
-
-    photomfn = 'photom.fits'
-    surveyfn = 'survey.fits'
-    annfn = 'ann.fits'
-    runit(imgfn, photomfn, surveyfn, annfn, mp, **measureargs)
-
-    from astrometry.util.fits import fits_table
-    P = fits_table(photomfn)
-    S = fits_table(surveyfn)
-    zpt = S.ccdzpt[0]
-    I = np.flatnonzero((P.legacy_survey_mag > 10.) * (P.legacy_survey_mag < 25.))
-    import pylab as plt
-    plt.clf()
-    plt.plot(P.legacy_survey_mag[I], P.instpsfmag[I] + zpt - P.legacy_survey_mag[I], 'b.')
-    plt.xlabel('PS1 predicted mag')
-    plt.ylabel('Calibrated mag - PS1 predicted mag')
-    plt.savefig('zpt.png')
+        photomfn = basefn + '-photom.fits'
+        surveyfn = basefn + '-survey.fits'
+        annfn = basefn + '-ann.fits'
     
+        if os.path.exists(annfn):
+            continue
+        
+        image_dir = '/global/project/projectdirs/cosmo/staging/mosaic/MZLS_Raw/'
+        measureargs = dict(measureclass=MosaicRawMeasurer, debug=debug, choose_ccd=False,
+                           splinesky=True, calibdir='calib', image_dir=image_dir, camera='mosaic',
+                           plots=plots)
+    
+        from legacyzpts.legacy_zeropoints import FakeLegacySurveyData
+        survey = FakeLegacySurveyData()
+        survey.imagedir = image_dir
+        survey.calibdir = measureargs.get('calibdir')
+        survey.image_typemap.update({'mosaic': MosaicRawImage})
+        measureargs.update(survey=survey)
+        
+        #measure = measure_image(imgfn, mp, image_dir='.',
+        #                        camera='mosaic', **measureargs)
+    
+        runit(imgfn, photomfn, surveyfn, annfn, mp, **measureargs)
+    
+        if plots:
+            from astrometry.util.fits import fits_table
+            P = fits_table(photomfn)
+            S = fits_table(surveyfn)
+            zpt = S.ccdzpt[0]
+            I = np.flatnonzero((P.legacy_survey_mag > 10.) * (P.legacy_survey_mag < 25.))
+            import pylab as plt
+            plt.clf()
+            plt.plot(P.legacy_survey_mag[I], P.instpsfmag[I] + zpt - P.legacy_survey_mag[I], 'b.')
+            plt.xlabel('PS1 predicted mag')
+            plt.ylabel('Calibrated mag - PS1 predicted mag')
+            plt.savefig('zpt.png')
+
     
 if __name__ == '__main__':
     main()
