@@ -1112,7 +1112,7 @@ class LegacySurveyImage(object):
             raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
         
     def run_sky(self, splinesky=False, git_version=None, ps=None, survey=None,
-                gaia=True, release=0):
+                gaia=True, release=0, survey_blob_mask=None):
         from legacypipe.survey import get_version_header
         from scipy.ndimage.morphology import binary_dilation
         from astrometry.util.file import trymakedirs
@@ -1228,9 +1228,7 @@ class LegacySurveyImage(object):
             # Also mask based on reference stars and galaxies.
             from legacypipe.reference import get_reference_sources
             from legacypipe.oneblob import get_inblob_map
-
             wcs = self.get_wcs(hdr=imghdr)
-
             debug('Good image slice:', slc)
             if slc is not None:
                 sy,sx = slc
@@ -1238,14 +1236,35 @@ class LegacySurveyImage(object):
                 x0,x1 = sx.start, sx.stop
                 #print('x0,x1', x0,x1, 'y0,y1', y0,y1)
                 wcs = wcs.get_subimage(x0, y0, int(x1-x0), int(y1-y0))
-
-
             pixscale = wcs.pixel_scale()
             # only used to create galaxy objects (which we will discard)
             fakebands = ['r']
             refs,_ = get_reference_sources(survey, wcs, pixscale, fakebands,
                                            True, gaia, False)
             stargood = (get_inblob_map(wcs, refs) == 0)
+
+
+            if survey_blob_mask is not None:
+                # Read DR8 blob maps for all overlapping bricks and project them
+                # into this CCD's pixel space.
+                from legacypipe.survey import bricks_touching_wcs, wcs_for_brick
+                from astrometry.util.resample import resample_with_wcs
+
+                bricks = bricks_touching_wcs(wcs, survey=survey_blob_mask)
+                allblobs = np.zeros(wcs.shape, bool)
+                for brick in bricks:
+                    fn = survey.find_file('blobmap', brick=brick.brickname)
+                    if not os.path.exists(fn):
+                        print('Warning: blob map for brick', brick.brickname, 'does not exist:', fn)
+                        continue
+                    blobs = fitsio.read(fn)
+                    blobs = (blobs >= 0)
+                    brickwcs = wcs_for_brick(brick)
+                    Yo,Xo,Yi,Xi,_ = resample_with_wcs(wcs, brickwcs)
+                    allblobs[Yo,Xo] |= blobs[Yi,Xi]
+                ng = np.sum(good)
+                good[allblobs] = False
+                print('Masked', ng-np.sum(good), 'additional CCD pixels from blob maps')
 
             # Now find the final sky model using that more extensive mask
             skyobj = SplineSky.BlantonMethod(img - initsky, good * stargood, boxsize)
@@ -1404,7 +1423,8 @@ class LegacySurveyImage(object):
                    fcopy=False, use_mask=True,
                    force=False, git_version=None,
                    splinesky=False, ps=None, survey=None,
-                   gaia=True, old_calibs_ok=False):
+                   gaia=True, old_calibs_ok=False,
+                   survey_blob_mask=None):
         '''
         Run calibration pre-processing steps.
         '''
@@ -1444,7 +1464,7 @@ class LegacySurveyImage(object):
         if psfex:
             self.run_psfex(git_version=git_version, ps=ps)
         if sky:
-            self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia)
+            self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia, survey_blob_mask=survey_blob_mask)
 
 
 class LegacySplineSky(SplineSky):

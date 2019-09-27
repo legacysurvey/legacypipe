@@ -267,6 +267,10 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             kwa.update(splinesky=True)
         if not gaia_stars:
             kwa.update(gaia=False)
+
+        # HACK
+        kwa.update(survey_blob_mask=LegacySurveyData('/global/project/projectdirs/cosmo/data/legacysurvey/dr8/south'))
+
         # Run calibrations
         args = [(im, kwa) for im in ims]
         mp.map(run_calibs, args)
