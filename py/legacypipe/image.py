@@ -1251,9 +1251,10 @@ class LegacySurveyImage(object):
                 from astrometry.util.resample import resample_with_wcs
 
                 bricks = bricks_touching_wcs(wcs, survey=survey_blob_mask)
-                allblobs = np.zeros(wcs.shape, bool)
+                H,W = wcs.shape
+                allblobs = np.zeros((int(H),int(W)), bool)
                 for brick in bricks:
-                    fn = survey.find_file('blobmap', brick=brick.brickname)
+                    fn = survey_blob_mask.find_file('blobmap', brick=brick.brickname)
                     if not os.path.exists(fn):
                         print('Warning: blob map for brick', brick.brickname, 'does not exist:', fn)
                         continue
