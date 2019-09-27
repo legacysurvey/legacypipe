@@ -17,14 +17,14 @@ import numpy as np
 indir = '/global/cscratch1/sd/dstn/dr8-forced/forced'
 outdir = '/global/cscratch1/sd/dstn/dr8-forced-fixed'
 
-#fns = glob(indir + '/{90prime,decam,mosaic}/*/*.fits')
-
-#fns = glob(indir + '/*/*/*.fits')
-#fns = glob(indir + '/decam/00500/*.fits')
-fns = glob(indir + '/mosaic/00064/*.fits')
-
-#fns = glob(indir + '/decam/00500/*.fits')
-#print(len(fns))
+fns = glob(indir + '/*/*/*.fits')
+# Test sets!
+# fns = glob(indir + '/decam/00500/*.fits')
+# fns = glob(indir + '/mosaic/00064/*.fits')
+# fns = glob(indir + '/90prime/73380/*.fits')
+# fns = (glob(indir + '/decam/00500/*.fits')[:10] +
+#        glob(indir + '/mosaic/00064/*.fits')[:10] +
+#        glob(indir + '/90prime/73380/*.fits')[:10])
 fns.sort()
 
 for ifn,fn in enumerate(fns):
