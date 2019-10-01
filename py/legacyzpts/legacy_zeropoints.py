@@ -2132,6 +2132,8 @@ def runit(imgfn, photomfn, surveyfn, annfn, mp, bad_expid=None,
                        bad_expid=bad_expid)
     # survey --> annotated
     create_annotated_table(surveyfn, annfn, measureargs['camera'], survey, mp)
+    # Remove survey file
+    os.remove(surveyfn)
 
     t0 = ptime('write-results-to-fits',t0)
     
@@ -2273,6 +2275,8 @@ def main(image_list=None,args=None):
 
         if leg_ok and ann_ok and phot_ok and psf_ok and sky_ok:
             print('Already finished: {}'.format(F.annfn))
+            if leg_ok:
+                os.remove(F.surveyfn)
             continue
 
         if leg_ok and phot_ok and not ann_ok:
