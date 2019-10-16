@@ -24,6 +24,7 @@ def main():
     parser.add_argument('outdir', help='Output directory name')
     parser.add_argument('brick', help='Brick containing these images')
 
+    parser.add_argument('--survey-dir', type=str, default=None)
     parser.add_argument('--cache-dir', type=str, default=None,
                         help='Directory to search for cached files')
     parser.add_argument('--wise', help='For WISE outputs, give the path to a WCS file describing the sub-brick region of interest, eg, a coadd image')
@@ -39,7 +40,7 @@ def main():
     print(len(C), 'CCDs in', args.ccds)
     C.camera = np.array([c.strip() for c in C.camera])
     
-    survey = LegacySurveyData(cache_dir=args.cache_dir)
+    survey = LegacySurveyData(cache_dir=args.cache_dir, survey_dir=args.survey_dir)
 
     if ',' in args.brick:
         ra,dec = args.brick.split(',')
