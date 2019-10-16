@@ -114,6 +114,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         wcs_for_brick, read_one_tim)
     from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
 
+    from tractor import DevGalaxy
+    print('DeV profile:', DevGalaxy.getDevProfile())
+    
     tlast = Time()
     record_event and record_event('stage_tims: starting')
 

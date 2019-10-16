@@ -120,8 +120,8 @@ class OneBlob(object):
         self.bands = bands
         self.plots = plots
         self.refmap = refmap
-        self.plots_per_source = False
-        #self.plots_per_source = plots
+        #self.plots_per_source = False
+        self.plots_per_source = plots
         self.plots_per_model = False
         # blob-1-data.png, etc
         self.plots_single = False
@@ -1096,6 +1096,7 @@ class OneBlob(object):
             # First-round optimization (during model selection)
             R = srctractor.optimize_loop(**self.optargs)
             print('Fit result:', newsrc)
+            print('Steps:', R['steps'])
             hit_limit = R.get('hit_limit', False)
             if hit_limit:
                 if name in ['exp', 'rex', 'dev']:
