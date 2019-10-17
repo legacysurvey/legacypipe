@@ -447,6 +447,13 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
                 pass
 
     # Get additional paths from environment variables
+    dep = 'LARGEGALAXIES_CAT'
+    value = os.environ.get(dep, default_ver)
+    if value == default_ver:
+        print('Warning: failed to get version string for "%s"' % dep)
+    else:
+        depvers.append((dep, value))
+        
     for dep in ['TYCHO2_KD', 'GAIA_CAT', 'LARGEGALAXIES', 'WISE_PSF']:
         value = os.environ.get('%s_DIR' % dep, default_ver)
         if value == default_ver:
@@ -1129,13 +1136,11 @@ class LegacySurveyData(object):
             return swap(os.path.join(basedir, 'tycho2.kd.fits'))
 
         elif filetype == 'large-galaxies':
-            dirnm = os.environ.get('LARGEGALAXIES_DIR')
-            fn = 'LSLGA-v2.0.kd.fits'
-            if dirnm is not None:
-                fn = os.path.join(dirnm, fn)
-                if os.path.exists(fn):
+            fn = os.environ.get('LARGEGALAXIES_CAT')
+            if fn is not None:
+                if os.path.isfile(fn):
                     return fn
-            return swap(os.path.join(basedir, fn))
+            return glob(os.path.join(basedir, 'LSLGA-*.kd.fits'))
 
         elif filetype == 'annotated-ccds':
             return swaplist(
