@@ -170,7 +170,6 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
 RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe && echo 1
 
 ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
-ENV WISE_PSF_DIR /src/unwise_psf/etc
 
 ENV HOME /root
 
