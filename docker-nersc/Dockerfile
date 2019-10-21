@@ -164,13 +164,12 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # unwise_psf
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \
-    && cd unwise_psf && git checkout dr8
+    && cd unwise_psf && git checkout dr9.1
 
 # Legacypipe
 RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe && echo 1
 
-ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
-ENV WISE_PSF_DIR /src/unwise_psf/etc
+ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py/unwise_psf:/src/legacypipe/py
 
 ENV HOME /root
 
@@ -200,8 +199,8 @@ RUN cd /usr/local/lib/python3.5/dist-packages && \
 ENTRYPOINT ["/bin/bash", "-c"]
 CMD ["/bin/bash"]
 
-RUN    python    -m compileall /src/unwise_psf/py/unwise_psf.py \
-    && python -O -m compileall /src/unwise_psf/py/unwise_psf.py
+RUN    python    -m compileall /src/unwise_psf/py/unwise_psf/unwise_psf.py \
+    && python -O -m compileall /src/unwise_psf/py/unwise_psf/unwise_psf.py
 
 RUN python -O -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
            /usr/local/lib/python /usr/local/lib/python3.5/site-packages \
