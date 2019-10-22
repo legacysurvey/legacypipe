@@ -142,6 +142,7 @@ class LegacySurveyImage(object):
         self.pixscale = 3600. * np.sqrt(np.abs(ccd.cd1_1 * ccd.cd2_2 -
                                                ccd.cd1_2 * ccd.cd2_1))
 
+        """
         expstr = '%08i' % self.expnum
         self.name = '%s-%s-%s' % (self.camera, expstr, self.ccdname)
         calname = '%s/%s/%s-%s-%s' % (expstr[:5], expstr, self.camera,
@@ -155,6 +156,18 @@ class LegacySurveyImage(object):
                                          '%s-%s.fits' % (self.camera, expstr))
         self.merged_splineskyfn = os.path.join(calibdir, 'splinesky-merged', expstr[:5],
                                                '%s-%s.fits' % (self.camera, expstr))
+        """
+        tmpname = self.image_filename.replace(".fits.fz", "")
+        basename = tmpname.split('/')[-1]
+        calibdir = self.survey.get_calib_dir() + "/" + tmpname.replace(basename,"")
+        calname = basename+"-"+self.ccdname
+        self.name = calname
+        self.sefn = os.path.join(calibdir, basename, calname+"-se.fits")
+        self.psffn = os.path.join(calibdir, basename, calname+"-psfex.fits")
+        self.skyfn = os.path.join(calibdir, basename, calname+"-sky.fits")
+        self.splineskyfn = os.path.join(calibdir, basename, calname+"-splinesky.fits")
+        self.merged_psffn = os.path.join(calibdir, basename+"-psfex.fits")
+        self.merged_splineskyfn = os.path.join(calibdir, basename+"-splinesky.fits")
 
     def compute_filenames(self):
         # Compute data quality and weight-map filenames
