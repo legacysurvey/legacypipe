@@ -10,7 +10,7 @@ import tempfile
 
 def create_kdtree(infn, outfn, ccd_cuts):
 
-    tempdir_obj = tempfile.TemporaryDirectory(prefix='create-kdtree')
+    tempdir_obj = tempfile.TemporaryDirectory(prefix='create-kdtree-')
     tempdir = tempdir_obj.name
 
     T = fits_table(infn)
@@ -37,12 +37,13 @@ def create_kdtree(infn, outfn, ccd_cuts):
     ekd.write(efn)
 
     # merge
-    cmd = 'fitsgetext -i %s -o %s/ekd-%%02i -a -M' % (efn, tempdir)
+    cmd = 'fitsgetext -i %s -o %s/ekd-%%02i -a' % (efn, tempdir)
     print(cmd)
     rtn = os.system(cmd)
     assert(rtn == 0)
 
     cmd = 'cat %s %s/ekd-0[123456] > %s' % (sfn, tempdir, outfn)
+    print(cmd)
     rtn = os.system(cmd)
     assert(rtn == 0)
 
