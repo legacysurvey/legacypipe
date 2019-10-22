@@ -2,22 +2,27 @@ import os
 from astrometry.libkd.spherematch import *
 from astrometry.util.fits import fits_table
 import numpy as np
+import tempfile
 
 #  This script creates the survey-ccd-*.kd.fits kd-trees from
 # survey-ccds-*.fits.gz (zeropoints) files
 #
 
 def create_kdtree(infn, outfn, ccd_cuts):
+
+    tempdir_obj = tempfile.TemporaryDirectory(prefix='create-kdtree')
+    tempdir = tempdir_obj.name
+
     T = fits_table(infn)
     print('Read', len(T), 'from', infn)
     if ccd_cuts:
         T.cut(T.ccd_cuts == 0)
         print('Cut to', len(T), 'on ccd_cuts')
-    tfn = '/tmp/ccds.fits'
+    tfn = os.path.join(tempdir, 'ccds.fits')
     T.writeto(tfn)
 
     # startree
-    sfn = '/tmp/startree.fits'
+    sfn = os.path.join(tempdir, 'startree.fits')
     cmd = 'startree -i %s -o %s -P -T -k -n ccds' % (tfn, sfn)
     print(cmd)
     rtn = os.system(cmd)
@@ -28,16 +33,16 @@ def create_kdtree(infn, outfn, ccd_cuts):
     ekd = tree_build(np.atleast_2d(T.expnum.copy()).T.astype(float),
                      nleaf=60, bbox=False, split=True)
     ekd.set_name('expnum')
-    efn = '/tmp/ekd.fits'
+    efn = os.path.join(tempdir, 'ekd.fits')
     ekd.write(efn)
 
     # merge
-    cmd = 'fitsgetext -i %s -o /tmp/ekd-%%02i -a -M' % (efn)
+    cmd = 'fitsgetext -i %s -o %s/ekd-%%02i -a -M' % (efn, tempdir)
     print(cmd)
     rtn = os.system(cmd)
     assert(rtn == 0)
 
-    cmd = 'cat %s /tmp/ekd-0[123456] > %s' % (sfn, outfn)
+    cmd = 'cat %s %s/ekd-0[123456] > %s' % (sfn, tempdir, outfn)
     rtn = os.system(cmd)
     assert(rtn == 0)
 
