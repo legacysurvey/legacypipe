@@ -604,25 +604,25 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         if len(Igaia):
             from legacypipe.halos import subtract_halos
 
-            gaia.cut(Igaia)
+            halostars = gaia[Igaia]
             if plots:
                 coimgs,cons = quick_coadds(tims, bands, targetwcs)
                 plt.clf()
                 dimshow(get_rgb(coimgs, bands))
                 ax = plt.axis()
-                plt.plot(gaia.ibx, gaia.iby, 'o', mec='r', ms=15, mfc='none')
+                plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
                 plt.axis(ax)
                 plt.title('Before star halo subtraction')
                 ps.savefig()
 
-            subtract_halos(tims, gaia, bands, mp, plots, ps)
+            subtract_halos(tims, halostars, bands, mp, plots, ps)
 
             if plots:
                 coimgs2,cons = quick_coadds(tims, bands, targetwcs)
                 plt.clf()
                 dimshow(get_rgb(coimgs2, bands))
                 ax = plt.axis()
-                plt.plot(gaia.ibx, gaia.iby, 'o', mec='r', ms=15, mfc='none')
+                plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
                 plt.axis(ax)
                 plt.title('After star halo subtraction')
                 ps.savefig()
@@ -631,19 +631,19 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 dimshow(get_rgb([co-co2 for co,co2 in zip(coimgs,coimgs2)],
                                 bands))
                 ax = plt.axis()
-                plt.plot(gaia.ibx, gaia.iby, 'o', mec='r', ms=15, mfc='none')
+                plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
                 plt.axis(ax)
                 plt.title('Subtracted halos')
                 ps.savefig()
 
-                for i,g in enumerate(gaia[:10]):
+                for i,g in enumerate(halostars[:10]):
                     plt.clf()
                     pixrad = int(g.radius * 3600. / pixscale)
                     ax = [g.ibx-pixrad, g.ibx+pixrad, g.iby-pixrad, g.iby+pixrad]
                     ima = dict(interpolation='nearest', origin='lower')
                     plt.subplot(2,2,1)
                     plt.imshow(get_rgb(coimgs, bands), **ima)
-                    plt.plot(gaia.ibx, gaia.iby, 'o', mec='r', ms=15, mfc='none')
+                    plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
                     plt.axis(ax)
                     plt.subplot(2,2,2)
                     plt.imshow(get_rgb(coimgs2, bands), **ima)
