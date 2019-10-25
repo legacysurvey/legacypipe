@@ -101,7 +101,7 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import astrometry; print(astrometry.__version__)")
 
 # The Tractor
-RUN git clone http://github.com/dstndstn/tractor.git tractor && echo 2 \
+RUN git clone http://github.com/dstndstn/tractor.git tractor && echo 3 \
     && cd tractor \
     && make \
     && make ceres \
@@ -167,9 +167,10 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
     && cd unwise_psf && git checkout dr9.1
 
 # Legacypipe
-RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe && echo 1
+RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
+    && cd legacypipe && git checkout sersic+iter && git describe
 
-ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py/unwise_psf:/src/legacypipe/py
+ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 
 ENV HOME /root
 
@@ -202,11 +203,11 @@ CMD ["/bin/bash"]
 RUN python -O -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
            /usr/local/lib/python /usr/local/lib/python3.5/site-packages \
            /usr/local/lib/python3.5/dist-packages \
-           /src/unwise_psf/py/unwise_psf.py \
+           /src/unwise_psf/py \
            /src/legacypipe/py/{legacypipe,legacyzpts} && \
     python    -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
            /usr/local/lib/python /usr/local/lib/python3.5/site-packages \
            /usr/local/lib/python3.5/dist-packages \
-           /src/unwise_psf/py/unwise_psf.py \
+           /src/unwise_psf/py \
            /src/legacypipe/py/{legacypipe,legacyzpts}
 
