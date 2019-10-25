@@ -344,17 +344,20 @@ class Measurer(object):
     def get_radec_bore(self, primhdr):
         # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
         # In some DECam exposures, RA,DEC are floating-point, but RA is in *decimal hours*.
+        # In others, RA does not exist (eg CP/V4.8.2a/CP20160824/c4d_160825_062109_ooi_g_ls9.fits.fz)
         # Fall back to TELRA in that case.
+        ra_bore = dec_bore = None
         if 'RA' in primhdr.keys():
             try:
                 ra_bore = hmsstring2ra(primhdr['RA'])
                 dec_bore = dmsstring2dec(primhdr['DEC'])
             except:
-                if 'TELRA' in primhdr.keys():
-                    ra_bore = hmsstring2ra(primhdr['TELRA'])
-                    dec_bore = dmsstring2dec(primhdr['TELDEC'])
-                else:
-                    raise ValueError('Neither RA or TELRA in primary header')
+                pass
+        if dec_bore is None and 'TELRA' in primhdr.keys():
+            ra_bore = hmsstring2ra(primhdr['TELRA'])
+            dec_bore = dmsstring2dec(primhdr['TELDEC'])
+        if dec_bore is None:
+            raise ValueError('Failed to parse RA or TELRA in primary header to get telescope boresight')
         return ra_bore, dec_bore
 
     def get_good_image_subregion(self):
@@ -2132,6 +2135,8 @@ def runit(imgfn, photomfn, surveyfn, annfn, mp, bad_expid=None,
                        bad_expid=bad_expid)
     # survey --> annotated
     create_annotated_table(surveyfn, annfn, measureargs['camera'], survey, mp)
+    # Remove survey file
+    os.remove(surveyfn)
 
     t0 = ptime('write-results-to-fits',t0)
     
@@ -2273,6 +2278,8 @@ def main(image_list=None,args=None):
 
         if leg_ok and ann_ok and phot_ok and psf_ok and sky_ok:
             print('Already finished: {}'.format(F.annfn))
+            if leg_ok:
+                os.remove(F.surveyfn)
             continue
 
         if leg_ok and phot_ok and not ann_ok:

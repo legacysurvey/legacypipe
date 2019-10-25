@@ -17,13 +17,19 @@ import numpy as np
 indir = '/global/cscratch1/sd/dstn/dr8-forced/forced'
 outdir = '/global/cscratch1/sd/dstn/dr8-forced-fixed'
 
-#fns = glob(indir + '/{90prime,decam,mosaic}/*/*.fits')
 fns = glob(indir + '/*/*/*.fits')
-#fns = glob(indir + '/decam/00500/*.fits')
-#print(len(fns))
+# Test sets!
+# fns = glob(indir + '/decam/00500/*.fits')
+# fns = glob(indir + '/mosaic/00064/*.fits')
+# fns = glob(indir + '/90prime/73380/*.fits')
+# fns = (glob(indir + '/decam/00500/*.fits')[:10] +
+#        glob(indir + '/mosaic/00064/*.fits')[:10] +
+#        glob(indir + '/90prime/73380/*.fits')[:10])
 fns.sort()
 
 for ifn,fn in enumerate(fns):
+    print('Reading', ifn+1, 'of', len(fns), ':', fn)
+    
     outfn = fn.replace(indir, outdir)
     dirname = os.path.dirname(outfn)
     trymakedirs(dirname)
@@ -35,6 +41,7 @@ for ifn,fn in enumerate(fns):
     T.camera = T.camera.astype('S7')  # '90prime'
     T.ccdname = T.ccdname.astype('S4')   # 'CCD4'
     T.expnum = T.expnum.astype(np.int64)
+    T.ccd_cuts = T.ccd_cuts.astype(np.int64)
 
     units = dict()
     for i,c in enumerate(T.get_columns()):
@@ -49,5 +56,5 @@ for ifn,fn in enumerate(fns):
 
     T.writeto(outfn, primheader=primhdr, header=hdr, extname='FORCED_PHOTOM', units=units)
 
-    print('Wrote', ifn+1, 'of', len(fns), ':', outfn)
+    print('Wrote  ', ifn+1, 'of', len(fns), ':', outfn)
     
