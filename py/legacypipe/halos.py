@@ -35,10 +35,9 @@ def subtract_one(X):
 
 def subtract_one_real(X):
     tim, refs, fluxes = X
-
     assert(np.all(refs.ref_epoch > 0))
     from legacypipe.survey import radec_at_mjd
-    print('Moving', len(refs), 'Gaia stars to MJD', tim.time.toMjd())
+    #print('Moving', len(refs), 'Gaia stars to MJD', tim.time.toMjd())
     rr,dd = radec_at_mjd(refs.ra, refs.dec, refs.ref_epoch.astype(float),
                          refs.pmra, refs.pmdec, refs.parallax, tim.time.toMjd())
 
@@ -72,7 +71,7 @@ def subtract_one_real(X):
         # (Rongpu's "R3" and "R4")
         apr_i0 = 6.0 / pixscale
         apr_i1 = 6.8 / pixscale
-        apodize *= np.clip((rads - r0) / (r1 - r0), 0., 1.)
+        apodize *= np.clip((rads - apr_i0) / (apr_i1 - apr_i0), 0., 1.)
 
         # The analytic profiles are:
         #  f = 10^(c5 * x^5 + c4 * x^4 + ... + c1 * x^1 + c0) 
@@ -93,7 +92,7 @@ def subtract_one_real(X):
         for order,c in enumerate(coeffs):
             hh += c * xx**order
 
-        hh = flux * 10.**hh
+        hh = flux * 10.**hh * apodize
 
         # ASSUME tim is in nanomaggies units
         halo[ylo:yhi+1, xlo:xhi+1] += hh

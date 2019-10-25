@@ -678,6 +678,24 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 plt.title('Subtracted halos')
                 ps.savefig()
 
+                for i,g in enumerate(gaia[:10]):
+                    plt.clf()
+                    pixrad = int(g.radius * 3600. / pixscale)
+                    ax = [g.ibx-pixrad, g.ibx+pixrad, g.iby-pixrad, g.iby+pixrad]
+                    ima = dict(interpolation='nearest', origin='lower')
+                    plt.subplot(2,2,1)
+                    plt.imshow(get_rgb(coimgs, bands, **rgbkwargs), **ima)
+                    plt.plot(gaia.ibx, gaia.iby, 'o', mec='r', ms=15, mfc='none')
+                    plt.axis(ax)
+                    plt.subplot(2,2,2)
+                    plt.imshow(get_rgb(coimgs2, bands, **rgbkwargs), **ima)
+                    plt.axis(ax)
+                    plt.subplot(2,2,3)
+                    plt.imshow(get_rgb([co-co2 for co,co2 in zip(coimgs,coimgs2)],
+                                       bands, **rgbkwargs), **ima)
+                    plt.axis(ax)
+                    ps.savefig()
+
     if refstars or T_donotfit or T_clusters:
         allrefs = merge_tables([t for t in [refstars, T_donotfit, T_clusters] if t],
                                columns='fillzero')
