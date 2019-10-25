@@ -1162,7 +1162,7 @@ class OneBlob(object):
                    'dev':dev, 'exp':exp, 'ser':ser}[keepmod]
         bestchi = chisqs.get(keepmod, 0.)
         B.dchisq[srci, :] = np.array([chisqs.get(k,0) for k in modnames])
-        print('Keeping model', keepmod, '(chisqs: ', chisqs, ')')
+        #print('Keeping model', keepmod, '(chisqs: ', chisqs, ')')
 
         if keepsrc is not None and bestchi == 0.:
             # Weird edge case, or where some best-fit fluxes go
