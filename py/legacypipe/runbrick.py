@@ -63,6 +63,7 @@ def runbrick_global_init():
 
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                survey=None,
+               survey_blob_mask=None,
                ra=None, dec=None,
                release=None,
                plots=False, ps=None,
@@ -260,17 +261,15 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     if do_calibs:
         from legacypipe.survey import run_calibs
         record_event and record_event('stage_tims: starting calibs')
-        kwa = dict(git_version=gitver, survey=survey, old_calibs_ok=old_calibs_ok)
+        kwa = dict(git_version=gitver, survey=survey,
+                   old_calibs_ok=old_calibs_ok,
+                   survey_blob_mask=survey_blob_mask)
         if gaussPsf:
             kwa.update(psfex=False)
         if splinesky:
             kwa.update(splinesky=True)
         if not gaia_stars:
             kwa.update(gaia=False)
-
-        # HACK
-        from legacypipe.survey import LegacySurveyData
-        kwa.update(survey_blob_mask=LegacySurveyData('/global/project/projectdirs/cosmo/work/legacysurvey/dr8/south'))
 
         # Run calibrations
         args = [(im, kwa) for im in ims]
@@ -2666,6 +2665,7 @@ def stage_writecat(
 
 def run_brick(brick, survey, radec=None, pixscale=0.262,
               width=3600, height=3600,
+              survey_blob_mask=None,
               release=None,
               zoom=None,
               bands=None,
@@ -2911,6 +2911,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             release = 8888
 
     kwargs.update(ps=ps, nsigma=nsigma,
+                  survey_blob_mask=survey_blob_mask,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
                   release=release,
                   normalizePsf=normalizePsf,
@@ -3133,6 +3134,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--survey-dir', type=str, default=None,
                         help='Override the $LEGACY_SURVEY_DIR environment variable')
 
+    parser.add_argument('--blob-mask-dir', type=str, default=None,
+                        help='The base directory to search for blob masks during sky model construction')
+
     parser.add_argument('--cache-dir', type=str, default=None,
                         help='Directory to search for cached files')
 
@@ -3307,6 +3311,11 @@ def get_runbrick_kwargs(survey=None,
                             output_dir=output_dir,
                             cache_dir=cache_dir)
         info(survey)
+
+    blobdir = opt.pop('blob_mask_dir', None)
+    if blobdir is not None:
+        from legacypipe.survey import LegacySurveyData
+        opt.update(survey_blob_mask=LegacySurveyData(blobdir))
 
     if check_done or skip or skip_coadd:
         if skip_coadd:
