@@ -1268,10 +1268,7 @@ class LegacySurveyImage(object):
                 print('Masked', ng-np.sum(good), 'additional CCD pixels from blob maps')
 
             # Now find the final sky model using that more extensive mask
-            #skyobj = SplineSky.BlantonMethod(img - initsky, good * stargood, boxsize)
-
-            skyobj = ModifiedBlantonMethod(img - initsky, good * stargood, boxsize,
-                                           stat=estimate_mode)
+            skyobj = SplineSky.BlantonMethod(img - initsky, good * stargood, boxsize, estimator=estimate_mode)
 
             # add the initial sky estimate back in
             skyobj.offset(initsky)
@@ -1470,38 +1467,6 @@ class LegacySurveyImage(object):
             self.run_psfex(git_version=git_version, ps=ps)
         if sky:
             self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia, survey_blob_mask=survey_blob_mask)
-
-
-def ModifiedBlantonMethod(image, mask, gridsize, stat=np.median):
-    from tractor.splinesky import SplineSky
-    '''
-    mask: True to use pixel.  None for no masking.
-    '''
-    H, W = image.shape
-    halfbox = gridsize // 2
-
-    nx = int(np.round(W // float(halfbox))) + 2
-    x0 = int((W - (nx - 2) * halfbox) // 2)
-    xgrid = x0 + (halfbox * (np.arange(nx) - 0.5)).astype(int)
-
-    ny = int(np.round(H // float(halfbox))) + 2
-    y0 = int((H - (ny - 2) * halfbox) // 2)
-    ygrid = y0 + (halfbox * (np.arange(ny) - 0.5)).astype(int)
-
-    # Compute medians in grid cells
-    grid = np.zeros((ny, nx))
-    for iy, y in enumerate(ygrid):
-        ylo, yhi = int(max(0, y - halfbox)), int(min(H, y + halfbox))
-        for ix, x in enumerate(xgrid):
-            xlo, xhi = int(max(0, x - halfbox)), int(min(W, x + halfbox))
-            im = image[ylo:yhi, xlo:xhi]
-            if mask is not None:
-                im = im[mask[ylo:yhi, xlo:xhi]]
-            if len(im):
-                grid[iy, ix] = stat(im)
-    return SplineSky(xgrid, ygrid, grid)
-
-            
 
 class LegacySplineSky(SplineSky):
     @classmethod
