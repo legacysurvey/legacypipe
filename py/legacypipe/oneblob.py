@@ -1874,7 +1874,7 @@ def _select_model(chisqs, nparams, galaxy_margin):
     serdiff = chisqs['ser'] - chisqs[keepmod]
     fcut = 0.01 * chisqs[keepmod]
     cut = max(cut, fcut)
-    if diff < cut:
+    if serdiff < cut:
         return keepmod
     keepmod = 'ser'
     return keepmod
