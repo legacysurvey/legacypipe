@@ -3,10 +3,10 @@ from __future__ import print_function
 import numpy as np
 
 from tractor import PointSource, getParamTypeTree, RaDecPos
-from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
+from tractor.galaxy import ExpGalaxy, DevGalaxy
+from tractor.sersic import SersicGalaxy
 from tractor.sersic import SersicGalaxy
 from tractor.ellipses import EllipseESoft, EllipseE
-
 from legacypipe.survey import RexGalaxy, GaiaSource
 
 # FITS catalogs
@@ -14,7 +14,6 @@ fits_typemap = { PointSource: 'PSF',
                  ExpGalaxy: 'EXP',
                  DevGalaxy: 'DEV',
                  SersicGalaxy: 'SER',
-                 FixedCompositeGalaxy: 'COMP',
                  RexGalaxy: 'REX',
                  GaiaSource: 'PSF',
                  type(None): 'NONE' }
@@ -25,8 +24,7 @@ fits_reverse_typemap.update({ 'DUP': GaiaSource })
 fits_short_typemap = { PointSource: 'P',
                        ExpGalaxy: 'E',
                        DevGalaxy: 'D',
-                       FixedCompositeGalaxy: 'C',
-                       SersicGalaxy: 'I',
+                       SersicGalaxy: 'S',
                        RexGalaxy: 'R',
                        GaiaSource: 'G' }
 
@@ -149,8 +147,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
 
 def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
     typearray = np.array([fits_typemap[type(src)] for src in cat])
-    # If there are no "COMP" sources, the type will be 'S3' rather than 'S4'...
-    typearray = typearray.astype('S4')
+    typearray = typearray.astype('S3')
     T.set(pat % 'type', typearray)
 
     ra,dec = [],[]
@@ -165,46 +162,29 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
     T.set(pat % 'ra',  np.array(ra))
     T.set(pat % 'dec', np.array(dec))
 
-    shapeExp = np.zeros((len(T), 3), np.float32)
-    shapeDev = np.zeros((len(T), 3), np.float32)
-    fracDev  = np.zeros(len(T), np.float32)
-
+    shape = np.zeros((len(T), 3), np.float32)
     # sersic index
     sersic = np.zeros(len(T), np.float32)
 
     for i,src in enumerate(cat):
-        from tractor.sersic import SersicGalaxy
         #print('_get_tractor_fits_values for pattern', pat, 'src', src)
         if isinstance(src, RexGalaxy):
             #print('Rex shape', src.shape, 'params', src.shape.getAllParams())
-            shapeExp[i,0] = src.shape.getAllParams()[0]
-        elif isinstance(src, ExpGalaxy):
-            shapeExp[i,:] = src.shape.getAllParams()
-        elif isinstance(src, DevGalaxy):
-            shapeDev[i,:] = src.shape.getAllParams()
-            fracDev[i] = 1.
-        elif isinstance(src, SersicGalaxy):
-            # Arbitrary choice here to stick Sersic params in shapeExp!
-            shapeExp[i,:] = src.shape.getAllParams()
-            sersic[i] = src.sersicindex.getValue()
-        elif isinstance(src, FixedCompositeGalaxy):
-            shapeExp[i,:] = src.shapeExp.getAllParams()
-            shapeDev[i,:] = src.shapeDev.getAllParams()
-            fracDev[i] = src.fracDev.getValue()
+            shape[i,0] = src.shape.getAllParams()[0]
+        elif isinstance(src, (ExpGalaxy, DevGalaxy, SersicGalaxy)):
+            shape[i,:] = src.shape.getAllParams()
 
-    T.set(pat % 'fracDev', fracDev)
+        if isinstance(src, SersicGalaxy):
+            sersic[i] = src.sersicindex.getValue()
+
     T.set(pat % 'sersic',  sersic)
 
     if unpackShape:
-        T.set(pat % 'shapeExp_r',  shapeExp[:,0])
-        T.set(pat % 'shapeExp_e1', shapeExp[:,1])
-        T.set(pat % 'shapeExp_e2', shapeExp[:,2])
-        T.set(pat % 'shapeDev_r',  shapeDev[:,0])
-        T.set(pat % 'shapeDev_e1', shapeDev[:,1])
-        T.set(pat % 'shapeDev_e2', shapeDev[:,2])
+        T.set(pat % 'shape_r',  shape[:,0])
+        T.set(pat % 'shape_e1', shape[:,1])
+        T.set(pat % 'shape_e2', shape[:,2])
     else:
-        T.set(pat % 'shapeExp', shapeExp)
-        T.set(pat % 'shapeDev', shapeDev)
+        T.set(pat % 'shape', shape)
 
 def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                       allbands=None, ellipseClass=EllipseE,

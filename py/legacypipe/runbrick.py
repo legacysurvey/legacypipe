@@ -1329,8 +1329,7 @@ def stage_fitblobs(T=None,
     assert(nb == len(bands))
     ns,nb = BB.dchisq.shape
     assert(ns == len(cat))
-    ## FIXME Sersic
-    assert(nb == 6) # ptsrc, rex, dev, exp, comp
+    assert(nb == 5) # ptsrc, rex, dev, exp, ser
 
     # Renumber blobs to make them contiguous.
     oldblob = T.blob
@@ -1515,14 +1514,13 @@ def _format_all_models(T, newcat, BB, bands):
 
     hdr = fitsio.FITSHDR()
 
-    srctypes = ['ptsrc', 'rex', 'dev','exp','comp', 'ser']
+    srctypes = ['ptsrc', 'rex', 'dev', 'exp', 'ser']
 
     for srctype in srctypes:
         # Create catalog with the fit results for each source type
         xcat = Catalog(*[m.get(srctype,None) for m in BB.all_models])
         # NOTE that for Rex, the shapes have been converted to EllipseE
         # and the e1,e2 params are frozen.
-
         namemap = dict(ptsrc='psf')
         prefix = namemap.get(srctype,srctype)
 
@@ -1545,24 +1543,16 @@ def _format_all_models(T, newcat, BB, bands):
             TT.delete_column(col)
             continue
         # shapes for shapeless types
-        if (('psf_' in col) and
-            ('shape' in col or 'fracDev' in col)):
+        if ('psf_' in col) and ('shape' in col):
             TT.delete_column(col)
             continue
-        # shapeDev for exp sources, vice versa
-        # (NOTE, this also removes "fracDev" from 'exp' and 'ser'.
-        if (('exp_' in col and 'Dev' in col) or
-            ('ser_' in col and 'Dev' in col) or
-            ('dev_' in col and 'Exp' in col) or
-            ('rex_' in col and 'Dev' in col)):
+        if ('sersic' in col) and not col.startswith('ser_'):
             TT.delete_column(col)
             continue
-    TT.delete_column('dev_fracDev')
-    TT.delete_column('dev_fracDev_ivar')
-    TT.delete_column('rex_shapeExp_e1')
-    TT.delete_column('rex_shapeExp_e2')
-    TT.delete_column('rex_shapeExp_e1_ivar')
-    TT.delete_column('rex_shapeExp_e2_ivar')
+    TT.delete_column('rex_shape_e1')
+    TT.delete_column('rex_shape_e2')
+    TT.delete_column('rex_shape_e1_ivar')
+    TT.delete_column('rex_shape_e2_ivar')
     return TT,hdr
 
 def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
@@ -2013,7 +2003,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
         for i,(src,x,y,rr,dd) in enumerate(zip(cat, x1, y1, ra, dec)):
             from tractor import PointSource
-            from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy
+            from tractor.galaxy import DevGalaxy, ExpGalaxy, SersicGalaxy
             ee = []
             ec = []
             cc = None
@@ -2028,10 +2018,10 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                 ee = [src.shape]
                 cc = green
                 ec = [cc]
-            elif isinstance(src, FixedCompositeGalaxy):
-                ee = [src.shapeExp, src.shapeDev]
+            elif isinstance(src, SersicGalaxy):
+                ee = [src.shape]
                 cc = 'm'
-                ec = ['m', 'c']
+                ec = [cc]
             else:
                 print('Unknown type:', src)
                 continue

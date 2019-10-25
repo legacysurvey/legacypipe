@@ -64,7 +64,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
     # Nans,Infs
     # Ivar -> 0
     ivar_nans= ['ra_ivar','dec_ivar',
-                'shapeexp_r_ivar','shapeexp_e1_ivar','shapeexp_e2_ivar']
+                'shape_r_ivar','shape_e1_ivar','shape_e2_ivar']
     for key in ivar_nans:
         ind= np.isfinite(T.get(key)) == False
         if np.any(ind):
@@ -247,14 +247,10 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
                     newval[:, :ncopy] = oldval[:,:ncopy]
                     T.set(colname, newval)
     cols.extend([
-        'fracdev', 'fracdev_ivar',
         'sersic',  'sersic_ivar',
-        'shapeexp_r', 'shapeexp_r_ivar',
-        'shapeexp_e1', 'shapeexp_e1_ivar',
-        'shapeexp_e2', 'shapeexp_e2_ivar',
-        'shapedev_r',  'shapedev_r_ivar',
-        'shapedev_e1', 'shapedev_e1_ivar',
-        'shapedev_e2', 'shapedev_e2_ivar',])
+        'shape_r', 'shape_r_ivar',
+        'shape_e1', 'shape_e1_ivar',
+        'shape_e2', 'shape_e2_ivar'])
 
     debug('Columns:', cols)
     debug('T columns:', T.columns())
@@ -275,8 +271,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
     fluxiv = '1/nanomaggy^2'
     units = dict(
         ra=deg, dec=deg, ra_ivar=degiv, dec_ivar=degiv, ebv='mag',
-        shapeexp_r=arcsec, shapeexp_r_ivar='1/arcsec^2',
-        shapedev_r=arcsec, shapedev_r_ivar='1/arcsec^2')
+        shape_r=arcsec, shape_r_ivar='1/arcsec^2')
     # WISE fields
     wunits = dict(flux=flux, flux_ivar=fluxiv,
                   lc_flux=flux, lc_flux_ivar=fluxiv)

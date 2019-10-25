@@ -9,8 +9,10 @@ from astrometry.util.fits import fits_table
 from astrometry.util.plotutils import dimshow
 
 from tractor import Tractor, PointSource, Image, Catalog, Patch
-from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy, SoftenedFracDev, FracDev, disable_galaxy_cache, enable_galaxy_cache
+from tractor.galaxy import (DevGalaxy, ExpGalaxy,
+                            disable_galaxy_cache, enable_galaxy_cache)
 from tractor.patch import ModelMask
+from tractor.sersic import SersicGalaxy, SersicIndex
 
 from legacypipe.survey import (RexGalaxy, GaiaSource,
                                LegacyEllipseWithPriors, get_rgb)
@@ -43,7 +45,6 @@ def one_blob(X):
     if len(timargs) == 0:
         return None
 
-    from tractor.sersic import SersicIndex
     SersicIndex.stepsize = 0.001
     
     if plots:
@@ -351,8 +352,7 @@ class OneBlob(object):
         models.create(self.tims, cat, subtract=True)
 
         N = len(cat)
-        ## FIXME Sersic
-        B.dchisq = np.zeros((N, 6), np.float32)
+        B.dchisq = np.zeros((N, 5), np.float32)
         B.all_models    = np.array([{} for i in range(N)])
         B.all_model_ivs = np.array([{} for i in range(N)])
         B.all_model_cpu = np.array([{} for i in range(N)])
@@ -360,7 +360,6 @@ class OneBlob(object):
 
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
-
             src = cat[srci]
             debug('Model selection for source %i of %i in blob %s; sourcei %i' %
                   (numi+1, len(Ibright), self.name, srci))
@@ -942,9 +941,6 @@ class OneBlob(object):
                 print('Known galaxy.  Initial shape:', src.shape)
                 # MAGIC 2. = factor by which r_e is allowed to grow for an LSLGA galaxy.
                 known_galaxy_logrmax = np.log(src.shape.re * 2.)
-            elif isinstance(src, FixedCompositeGalaxy):
-                print('Known galaxy.  Initial shapes:', src.shapeExp, src.shapeDev)
-                known_galaxy_logrmax = np.log(max(src.shapeExp.re, src.shapeDev.re) * 2.)
             else:
                 print('WARNING: unknown galaxy type:', src)
 
@@ -979,16 +975,16 @@ class OneBlob(object):
 
         chisqs_none = _per_band_chisqs(srctractor, self.bands)
 
-        nparams = dict(ptsrc=2, rex=3, exp=5, dev=5, ser=6, comp=9)
+        nparams = dict(ptsrc=2, rex=3, exp=5, dev=5, ser=6)
         # This is our "upgrade" threshold: how much better a galaxy
-        # fit has to be versus ptsrc, and comp versus galaxy.
+        # fit has to be versus ptsrc
         galaxy_margin = 3.**2 + (nparams['exp'] - nparams['ptsrc'])
 
         # *chisqs* is actually chi-squared improvement vs no source;
         # larger is a better fit.
         chisqs = dict(none=0)
 
-        oldmodel, ptsrc, rex, dev, exp, comp = _initialize_models(src)
+        oldmodel, ptsrc, rex, dev, exp = _initialize_models(src)
         ser = None
 
         trymodels = [('ptsrc', ptsrc)]
@@ -1008,9 +1004,8 @@ class OneBlob(object):
                 trymodels.append(('gals', None))
         else:
             # If the source was initialized as a galaxy, try all models
-            trymodels.extend([('rex', rex),
-                              ('dev', dev), ('exp', exp), ('ser', None),
-                              ('comp', comp)])
+            trymodels.extend([('rex', rex), ('dev', dev), ('exp', exp),
+                              ('ser', None)])
 
         cputimes = {}
         for name,newsrc in trymodels:
@@ -1023,37 +1018,25 @@ class OneBlob(object):
                 chi_psf = chisqs.get('ptsrc', 0)
                 if chi_rex > chi_psf or max(chi_psf, chi_rex) > 400:
                     trymodels.extend([
-                        ('dev', dev), ('exp', exp), ('ser', None), ('comp', comp)])
+                        ('dev', dev), ('exp', exp), ('ser', None)])
                 continue
-
-            if name == 'comp' and newsrc is None:
-                # Compute the comp model if exp or dev would be accepted
-                smod = _select_model(chisqs, nparams, galaxy_margin)
-                if smod not in ['dev', 'exp']:
-                    continue
-                newsrc = comp = FixedCompositeGalaxy(
-                    src.getPosition(), src.getBrightness(),
-                    SoftenedFracDev(0.5), exp.getShape(),
-                    dev.getShape()).copy()
 
             if name == 'ser' and newsrc is None:
                 # Start at the better of exp or dev.
                 smod = _select_model(chisqs, nparams, galaxy_margin)
-                print('Sersic: chisqs', chisqs, 'selecting model:', smod)
+                #print('Sersic: chisqs', chisqs, 'selecting model:', smod)
                 if smod not in ['dev', 'exp']:
                     continue
                 if smod == 'dev':
-                    from tractor.sersic import SersicGalaxy, SersicIndex
-                    newsrc = ser = SersicGalaxy(#src.getPosition(), src.getBrightness(),
+                    newsrc = ser = SersicGalaxy(
                         dev.getPosition().copy(), dev.getBrightness().copy(),
                         dev.getShape().copy(), SersicIndex(4.))
                 elif smod == 'exp':
-                    from tractor.sersic import SersicGalaxy, SersicIndex
-                    newsrc = ser = SersicGalaxy(#src.getPosition(), src.getBrightness(),
+                    newsrc = ser = SersicGalaxy(
                         exp.getPosition().copy(), exp.getBrightness().copy(),
                         exp.getShape().copy(), SersicIndex(1.))
-                print('Initialized SER model:', newsrc)
-                    
+                #print('Initialized SER model:', newsrc)
+
             srccat[0] = newsrc
 
             # Set maximum galaxy model sizes
@@ -1062,9 +1045,6 @@ class OneBlob(object):
                 logrmax = known_galaxy_logrmax
                 if name in ('exp', 'rex', 'dev', 'ser'):
                     newsrc.shape.setMaxLogRadius(logrmax)
-                elif name == 'comp':
-                    newsrc.shapeExp.setMaxLogRadius(logrmax)
-                    newsrc.shapeDev.setMaxLogRadius(logrmax)
             else:
                 # FIXME -- could use different fractions for deV vs exp (or comp)
                 fblob = 0.8
@@ -1073,11 +1053,6 @@ class OneBlob(object):
                 if name in ['exp', 'rex', 'dev', 'ser']:
                     if logrmax < newsrc.shape.getMaxLogRadius():
                         newsrc.shape.setMaxLogRadius(logrmax)
-                elif name in ['comp']:
-                    if logrmax < newsrc.shapeExp.getMaxLogRadius():
-                        newsrc.shapeExp.setMaxLogRadius(logrmax)
-                    if logrmax < newsrc.shapeDev.getMaxLogRadius():
-                        newsrc.shapeDev.setMaxLogRadius(logrmax)
 
             # Use the same modelMask shapes as the original source ('src').
             # Need to create newsrc->mask mappings though:
@@ -1099,14 +1074,9 @@ class OneBlob(object):
             print('Steps:', R['steps'])
             hit_limit = R.get('hit_limit', False)
             if hit_limit:
-                if name in ['exp', 'rex', 'dev']:
+                if name in ['exp', 'rex', 'dev', 'ser']:
                     debug('Hit limit: r %.2f vs %.2f' %
                           (newsrc.shape.re, np.exp(logrmax)))
-                elif name in ['comp']:
-                    debug('Hit limit: r %.2f, %.2f vs %.2f' %
-                          (newsrc.shapeExp.re, newsrc.shapeDev.re,
-                           np.exp(logrmax)))
-
             ok,ix,iy = srcwcs.radec2pixelxy(newsrc.getPosition().ra,
                                             newsrc.getPosition().dec)
             ix = int(ix-1)
@@ -1138,14 +1108,8 @@ class OneBlob(object):
             # (but save old shapes first)
             # we do this (rather than making a copy) because we want to
             # use the same modelMask maps.
-
-
-            ## FIXME Sersic
-            from tractor.sersic import SersicGalaxy
             if isinstance(newsrc, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
                 oldshape = newsrc.shape
-            elif isinstance(newsrc, FixedCompositeGalaxy):
-                oldshape = (newsrc.shapeExp, newsrc.shapeDev,newsrc.fracDev)
 
             if fit_background:
                 # We have to freeze the sky here before computing
@@ -1167,8 +1131,6 @@ class OneBlob(object):
             # Now revert the ellipses!
             if isinstance(newsrc, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
                 newsrc.shape = oldshape
-            elif isinstance(newsrc, FixedCompositeGalaxy):
-                (newsrc.shapeExp, newsrc.shapeDev,newsrc.fracDev) = oldshape
 
             # Use the original 'srctractor' here so that the different
             # models are evaluated on the same pixels.
@@ -1194,15 +1156,13 @@ class OneBlob(object):
         # Actually select which model to keep.  This "modnames"
         # array determines the order of the elements in the DCHISQ
         # column of the catalog.
-        modnames = ['ptsrc', 'rex', 'dev', 'exp', 'comp', 'ser']
+        modnames = ['ptsrc', 'rex', 'dev', 'exp', 'ser']
         keepmod = _select_model(chisqs, nparams, galaxy_margin)
         keepsrc = {'none':None, 'ptsrc':ptsrc, 'rex':rex,
-                   'dev':dev, 'exp':exp, 'comp':comp, 'ser':ser}[keepmod]
+                   'dev':dev, 'exp':exp, 'ser':ser}[keepmod]
         bestchi = chisqs.get(keepmod, 0.)
-
-        print('Keeping model', keepmod, '(chisqs: ', chisqs, ')')
-
         B.dchisq[srci, :] = np.array([chisqs.get(k,0) for k in modnames])
+        print('Keeping model', keepmod, '(chisqs: ', chisqs, ')')
 
         if keepsrc is not None and bestchi == 0.:
             # Weird edge case, or where some best-fit fluxes go
@@ -1214,127 +1174,24 @@ class OneBlob(object):
         B.hit_limit[srci] = B.all_model_hit_limit[srci].get(keepmod, False)
 
         # This is the model-selection plot
-        # if self.plots_per_source:
-        #     from collections import OrderedDict
-        #     subplots = []
-        #     plt.clf()
-        #     rows,cols = 3, 6
-        #     mods = OrderedDict([
-        #         ('none',None), ('ptsrc',ptsrc), ('rex',rex),
-        #         ('dev',dev), ('exp',exp), ('comp',comp)])
-        #     for imod,modname in enumerate(mods.keys()):
-        #         if modname != 'none' and not modname in chisqs:
-        #             continue
-        #         srccat[0] = mods[modname]
-        #         srctractor.setModelMasks(None)
-        #         axes = []
-        #         plt.subplot(rows, cols, imod+1)
-        #         if modname == 'none':
-        #             # In the first panel, we show a coadd of the data
-        #             coimgs, cons = quick_coadds(srctims, self.bands,srcwcs)
-        #             rgbims = coimgs
-        #             rgb = get_rgb(coimgs, self.bands)
-        #             dimshow(rgb, ticks=False)
-        #             subplots.append(('data', rgb))
-        #             axes.append(plt.gca())
-        #             ax = plt.axis()
-        #             ok,x,y = srcwcs.radec2pixelxy(
-        #                 src.getPosition().ra, src.getPosition().dec)
-        #             plt.plot(x-1, y-1, 'r+')
-        #             plt.axis(ax)
-        #             tt = 'Image'
-        #             chis = [((tim.getImage()) * tim.getInvError())**2
-        #                       for tim in srctims]
-        #             res = [tim.getImage() for tim in srctims]
-        #         else:
-        #             modimgs = list(srctractor.getModelImages())
-        #             comods,nil = quick_coadds(srctims, self.bands, srcwcs,
-        #                                         images=modimgs)
-        #             rgbims = comods
-        #             rgb = get_rgb(comods, self.bands)
-        #             dimshow(rgb, ticks=False)
-        #             axes.append(plt.gca())
-        #             subplots.append(('mod'+modname, rgb))
-        #             tt = modname #+ '\n(%.0f s)' % cputimes[modname]
-        #             chis = [((tim.getImage() - mod) * tim.getInvError())**2
-        #                     for tim,mod in zip(srctims, modimgs)]
-        #             res = [(tim.getImage() - mod) for tim,mod in
-        #                    zip(srctims, modimgs)]
-        # 
-        #         # Second row: same rgb image with arcsinh stretch
-        #         plt.subplot(rows, cols, imod+1+cols)
-        #         dimshow(get_rgb(rgbims, self.bands, **rgbkwargs), ticks=False)
-        #         axes.append(plt.gca())
-        #         plt.title(tt)
-        # 
-        #         # Third row: residuals (not chis)
-        #         coresids,nil = quick_coadds(srctims, self.bands, srcwcs,
-        #                                     images=res)
-        #         plt.subplot(rows, cols, imod+1+2*cols)
-        #         rgb = get_rgb(coresids, self.bands, **rgbkwargs_resid)
-        #         dimshow(rgb, ticks=False)
-        #         axes.append(plt.gca())
-        #         subplots.append(('res'+modname, rgb))
-        #         plt.title('chisq %.0f' % chisqs[modname], fontsize=8)
-        # 
-        #         # Highlight the model to be kept
-        #         if modname == keepmod:
-        #             for ax in axes:
-        #                 for spine in ax.spines.values():
-        #                     spine.set_edgecolor('red')
-        #                     spine.set_linewidth(2)
-        #     plt.suptitle('Blob %s, source %i (ptsrc: %s, fitbg: %s): keep %s\nwas: %s' %
-        #                  (self.name, srci, force_pointsource, fit_background,
-        #                  keepmod, str(src)), fontsize=10)
-        #     self.ps.savefig()
-        # 
-        #     if self.plots_single:
-        #         for name,rgb in subplots:
-        #             plt.figure(2)
-        #             plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
-        #             dimshow(rgb, ticks=False)
-        #             fn = 'blob-%s-%i-%s.png' % (self.name, srci, name)
-        #             plt.savefig(fn)
-        #             print('Wrote', fn)
-        #             plt.figure(1)
-
-        # This is V2 of the model-selection plot
         if self.plots_per_source:
             import pylab as plt
             plt.clf()
-            rows,cols = 3, 7
-            modnames = ['none', 'ptsrc', 'rex', 'dev', 'exp', 'comp', 'ser']
-
-            plt.subplot(rows, cols, 1)
+            rows,cols = 3, 6
+            modnames = ['none', 'ptsrc', 'rex', 'dev', 'exp', 'ser']
             # Top-left: image
+            plt.subplot(rows, cols, 1)
             coimgs, cons = quick_coadds(srctims, self.bands, srcwcs)
             rgb = get_rgb(coimgs, self.bands)
             dimshow(rgb, ticks=False)
-
             # next over: rgb with same stretch as models
             plt.subplot(rows, cols, 2)
             rgb = get_rgb(coimgs, self.bands, **rgbkwargs)
             dimshow(rgb, ticks=False)
-
             for imod,modname in enumerate(modnames):
                 if modname != 'none' and not modname in chisqs:
                     continue
                 axes = []
-                #plt.subplot(rows, cols, 1+imod)
-                #if modname == 'none':
-                #    # In the first panel, we show a coadd of the data
-                #    coimgs, cons = quick_coadds(srctims, self.bands,srcwcs)
-                #    rgb = get_rgb(coimgs, self.bands)
-                #    dimshow(rgb, ticks=False)
-                #    subplots.append(('data', rgb))
-                #    axes.append(plt.gca())
-                #    ax = plt.axis()
-                #    ok,x,y = srcwcs.radec2pixelxy(
-                #        src.getPosition().ra, src.getPosition().dec)
-                #    plt.plot(x-1, y-1, 'r+')
-                #    plt.axis(ax)
-                #    tt = 'Image'
-                #else:
                 # Second row: models
                 plt.subplot(rows, cols, 1+imod+1*cols)
                 rgb = model_mod_rgb[modname]
@@ -1414,13 +1271,9 @@ class OneBlob(object):
 
             if self.bigblob:
                 # Create super-local sub-sub-tims around this source
-
                 # Make the subimages the same size as the modelMasks.
-                #tbb0 = Time()
                 mods = [mod[srci] for mod in models.models]
                 srctims,modelMasks = _get_subimages(self.tims, mods, src)
-                #print('Creating srctims:', Time()-tbb0)
-
                 # We plots only the first & last three sources
                 if self.plots_per_source and (numi < 3 or numi >= len(Ibright)-3):
                     import pylab as plt
@@ -1430,7 +1283,6 @@ class OneBlob(object):
                                                  fill_holes=False)
                     rgb = get_rgb(coimgs, self.bands)
                     dimshow(rgb)
-                    #dimshow(self.rgb)
                     ax = plt.axis()
                     for tim in srctims:
                         h,w = tim.shape
@@ -1454,62 +1306,12 @@ class OneBlob(object):
 
 
             srctractor = self.tractor(srctims, [src])
-            #print('Setting modelMasks:', modelMasks)
             srctractor.setModelMasks(modelMasks)
-
-            # if plots and False:
-            #     spmods,spnames = [],[]
-            #     spallmods,spallnames = [],[]
-            #     if numi == 0:
-            #         spallmods.append(list(tr.getModelImages()))
-            #         spallnames.append('Initial (all)')
-            #     spmods.append(list(srctractor.getModelImages()))
-            #     spnames.append('Initial')
 
             # First-round optimization
             #print('First-round initial log-prob:', srctractor.getLogProb())
             srctractor.optimize_loop(**self.optargs)
             #print('First-round final log-prob:', srctractor.getLogProb())
-
-            # if plots and False:
-            #     spmods.append(list(srctractor.getModelImages()))
-            #     spnames.append('Fit')
-            #     spallmods.append(list(tr.getModelImages()))
-            #     spallnames.append('Fit (all)')
-            # 
-            # if plots and False:
-            #     plt.figure(1, figsize=(8,6))
-            #     plt.subplots_adjust(left=0.01, right=0.99, top=0.95,
-            #                         bottom=0.01, hspace=0.1, wspace=0.05)
-            #     #plt.figure(2, figsize=(3,3))
-            #     #plt.subplots_adjust(left=0.005, right=0.995,
-            #     #                    top=0.995,bottom=0.005)
-            #     #_plot_mods(tims, spmods, spnames, bands, None, None, bslc,
-            #     #           blobw, blobh, ps, chi_plots=plots2)
-            #     plt.figure(2, figsize=(3,3.5))
-            #     plt.subplots_adjust(left=0.005, right=0.995,
-            #                         top=0.88, bottom=0.005)
-            #     plt.suptitle('Blob %i' % iblob)
-            #     tempims = [tim.getImage() for tim in tims]
-            # 
-            #     _plot_mods(list(srctractor.getImages()), spmods, spnames,
-            #                bands, None, None, bslc, blobw, blobh, ps,
-            #                chi_plots=plots2, rgb_plots=True, main_plot=False,
-            #                rgb_format=('spmods Blob %i, src %i: %%s' %
-            #                            (iblob, i)))
-            #     _plot_mods(tims, spallmods, spallnames, bands, None, None,
-            #                bslc, blobw, blobh, ps,
-            #                chi_plots=plots2, rgb_plots=True, main_plot=False,
-            #                rgb_format=('spallmods Blob %i, src %i: %%s' %
-            #                            (iblob, i)))
-            # 
-            #     models.restore_images(tims)
-            #     _plot_mods(tims, spallmods, spallnames, bands, None, None,
-            #                bslc, blobw, blobh, ps,
-            #                chi_plots=plots2, rgb_plots=True, main_plot=False,
-            #                rgb_format='Blob %i, src %i: %%s' % (iblob, i))
-            #     for tim,im in zip(tims, tempims):
-            #         tim.data = im
 
             # Re-remove the final fit model for this source
             models.update_and_subtract(srci, src, self.tims)
@@ -1595,15 +1397,6 @@ class OneBlob(object):
         plt.title('initial sources')
         self.ps.savefig()
 
-        # plt.clf()
-        # ccmap = dict(g='g', r='r', z='m')
-        # for tim in tims:
-        #     chi = (tim.data * tim.inverr)[tim.inverr > 0]
-        #     plt.hist(chi.ravel(), range=(-5,10), bins=100, histtype='step',
-        #              color=ccmap[tim.band])
-        # plt.xlabel('signal/noise per pixel')
-        # self.ps.savefig()
-
     def create_tims(self, timargs):
         # In order to make multiprocessing easier, the one_blob method
         # is passed all the ingredients to make local tractor Images
@@ -1649,10 +1442,6 @@ def _convert_ellipses(src):
         src.shape = src.shape.toEllipseE()
         if isinstance(src, RexGalaxy):
             src.shape.freezeParams('e1', 'e2')
-    elif isinstance(src, FixedCompositeGalaxy):
-        src.shapeExp = src.shapeExp.toEllipseE()
-        src.shapeDev = src.shapeDev.toEllipseE()
-        src.fracDev = FracDev(src.fracDev.clipped())
 
 def _compute_invvars(allderivs):
     ivs = []
@@ -1822,18 +1611,14 @@ def _initialize_models(src):
         shape = LegacyEllipseWithPriors(-1., 0., 0.)
         dev = DevGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
         exp = ExpGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
-        comp = None
         oldmodel = 'ptsrc'
-
     elif isinstance(src, DevGalaxy):
         rex = RexGalaxy(src.getPosition(), src.getBrightness(),
                         LogRadius(np.log(src.getShape().re))).copy()
         dev = src.copy()
         exp = ExpGalaxy(src.getPosition(), src.getBrightness(),
                         src.getShape()).copy()
-        comp = None
         oldmodel = 'dev'
-
     elif isinstance(src, ExpGalaxy):
         ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
         rex = RexGalaxy(src.getPosition(), src.getBrightness(),
@@ -1841,29 +1626,8 @@ def _initialize_models(src):
         dev = DevGalaxy(src.getPosition(), src.getBrightness(),
                         src.getShape()).copy()
         exp = src.copy()
-        comp = None
         oldmodel = 'exp'
-
-    elif isinstance(src, FixedCompositeGalaxy):
-        ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
-        frac = src.fracDev.clipped()
-        if frac > 0.5:
-            shape = src.shapeDev
-        else:
-            shape = src.shapeExp
-
-        rex = RexGalaxy(src.getPosition(), src.getBrightness(),
-                        LogRadius(np.log(shape.re))).copy()
-        dev = DevGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
-        if frac < 1:
-            shape = src.shapeExp
-        else:
-            shape = src.shapeDev
-        exp = ExpGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
-        comp = src.copy()
-        oldmodel = 'comp'
-
-    return oldmodel, ptsrc, rex, dev, exp, comp
+    return oldmodel, ptsrc, rex, dev, exp
 
 def _get_subimages(tims, mods, src):
     subtims = []
@@ -2033,7 +1797,6 @@ def _select_model(chisqs, nparams, galaxy_margin):
     Returns keepmod (string), the name of the preferred model.
     '''
     keepmod = 'none'
-
     #print('_select_model: chisqs', chisqs)
 
     # This is our "detection threshold": 5-sigma in
@@ -2080,13 +1843,12 @@ def _select_model(chisqs, nparams, galaxy_margin):
         return keepmod
 
     # This is our "upgrade" threshold: how much better a galaxy
-    # fit has to be versus ptsrc, and comp versus galaxy.
+    # fit has to be versus ptsrc
     cut = galaxy_margin
 
-    # This is the "fractional" upgrade threshold for ptsrc/simple->dev/exp:
+    # This is the "fractional" upgrade threshold for ptsrc/rex to dev/exp:
     # 1% of ptsrc vs nothing
     fcut = 0.01 * chisqs.get('ptsrc', 0.)
-    #print('Cut: absolute', galaxy_margin, 'fractional', fcut)
     cut = max(cut, fcut)
 
     expdiff = chisqs.get('exp', 0) - chisqs[keepmod]
@@ -2106,30 +1868,16 @@ def _select_model(chisqs, nparams, galaxy_margin):
         #print('Upgrading to DEV: diff', expdiff)
         keepmod = 'dev'
 
-    # Consider Sersic models using same cut as Composite
+    # Consider Sersic models using same upgrade cut
     if not 'ser' in chisqs:
         return keepmod
-    diff = chisqs['ser'] - chisqs[keepmod]
+    serdiff = chisqs['ser'] - chisqs[keepmod]
     fcut = 0.01 * chisqs[keepmod]
     cut = max(cut, fcut)
     if diff < cut:
         return keepmod
     keepmod = 'ser'
-    
-    if not 'comp' in chisqs:
-        return keepmod
-
-    diff = chisqs['comp'] - chisqs[keepmod]
-    #print('Comparing', keepmod, 'to comp.  cut:', cut, 'comp:', diff)
-    fcut = 0.01 * chisqs[keepmod]
-    cut = max(cut, fcut)
-    if diff < cut:
-        return keepmod
-
-    #print('Upgrading from dev/exp to composite.')
-    keepmod = 'comp'
     return keepmod
-
 
 def _chisq_improvement(src, chisqs, chisqs_none):
     '''
@@ -2157,15 +1905,6 @@ def _per_band_chisqs(tractor, bands):
         chi = tractor.getChiImage(img=img)
         chisqs[img.band] = chisqs[img.band] + (chi ** 2).sum()
     return chisqs
-
-def _limit_galaxy_stamp_size(src, tim, maxhalf=128):
-    from tractor.galaxy import ProfileGalaxy
-    if isinstance(src, ProfileGalaxy):
-        px,py = tim.wcs.positionToPixel(src.getPosition())
-        h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
-        if h > maxhalf:
-            #print('halfsize', h, 'for', src, '-> setting to', maxhalf)
-            src.halfsize = maxhalf
 
 def get_inblob_map(blobwcs, refs):
     bh,bw = blobwcs.shape
