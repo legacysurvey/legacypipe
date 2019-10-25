@@ -1070,8 +1070,8 @@ class OneBlob(object):
 
             # First-round optimization (during model selection)
             R = srctractor.optimize_loop(**self.optargs)
-            print('Fit result:', newsrc)
-            print('Steps:', R['steps'])
+            #print('Fit result:', newsrc)
+            #print('Steps:', R['steps'])
             hit_limit = R.get('hit_limit', False)
             if hit_limit:
                 if name in ['exp', 'rex', 'dev', 'ser']:

@@ -1509,12 +1509,8 @@ def fix_weight_quantization(wt, weightfn, ext, slc):
         hdu = fits_astropy.open(weightfn, disable_image_compression=True)[ext]
     hdr = hdu.header
     table = hdu.data
-    # This was an older way of accessing the compressed data table:
-    #hdu = fits_astropy.open(weightfn)[ext]
-    #table = hdu.compressed_data
-    #hdr = hdu._header
     zquant = hdr.get('ZQUANTIZ','').strip()
-    print('Fpack quantization method:', zquant)
+    #print('Fpack quantization method:', zquant)
     if len(zquant) == 0:
         # Not fpacked?
         return True
