@@ -573,7 +573,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                gaia_stars=False,
                large_galaxies=False,
                star_clusters=True,
-               star_halos=False,
+               star_halos=True,
                record_event=None,
                **kwargs):
     '''
