@@ -17,9 +17,10 @@ from tractor.sersic import SersicGalaxy, SersicIndex
 from legacypipe.survey import (RexGalaxy, GaiaSource,
                                LegacyEllipseWithPriors, get_rgb)
 from legacypipe.bits import IN_BLOB
-from legacypipe.runbrick import rgbkwargs, rgbkwargs_resid
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
+
+rgbkwargs_resid = dict(resids=True)
 
 import logging
 logger = logging.getLogger('legacypipe.oneblob')
@@ -220,7 +221,7 @@ class OneBlob(object):
                 plt.savefig('blob-%s-initmodel.png' % (self.name))
                 res = [(tim.getImage() - mod) for tim,mod in zip(self.tims, mods)]
                 coresids,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=res)
-                dimshow(get_rgb(coresids, self.bands, **rgbkwargs_resid), ticks=False)
+                dimshow(get_rgb(coresids, self.bands, resids=True), ticks=False)
                 plt.savefig('blob-%s-initresid.png' % (self.name))
                 dimshow(get_rgb(coresids, self.bands), ticks=False)
                 plt.savefig('blob-%s-initsub.png' % (self.name))
@@ -255,7 +256,7 @@ class OneBlob(object):
             plt.savefig('blob-%s-model.png' % (self.name))
             res = [(tim.getImage() - mod) for tim,mod in zip(self.tims, mods)]
             coresids,nil = quick_coadds(self.tims, self.bands, self.blobwcs, images=res)
-            dimshow(get_rgb(coresids, self.bands, **rgbkwargs_resid), ticks=False)
+            dimshow(get_rgb(coresids, self.bands, resids=True), ticks=False)
             plt.savefig('blob-%s-resid.png' % (self.name))
             plt.figure(1)
 
@@ -966,11 +967,11 @@ class OneBlob(object):
             # the "none" model
             modimgs = list(srctractor.getModelImages())
             co,nil = quick_coadds(srctims, self.bands, srcwcs, images=modimgs)
-            rgb = get_rgb(co, self.bands, **rgbkwargs)
+            rgb = get_rgb(co, self.bands)
             model_mod_rgb['none'] = rgb
             res = [(tim.getImage() - mod) for tim,mod in zip(srctims, modimgs)]
             co,nil = quick_coadds(srctims, self.bands, srcwcs, images=res)
-            rgb = get_rgb(co, self.bands, **rgbkwargs)
+            rgb = get_rgb(co, self.bands)
             model_resid_rgb['none'] = rgb
 
         chisqs_none = _per_band_chisqs(srctractor, self.bands)
@@ -1096,11 +1097,11 @@ class OneBlob(object):
                 # save RGB images for the model
                 modimgs = list(srctractor.getModelImages())
                 co,nil = quick_coadds(srctims, self.bands, srcwcs, images=modimgs)
-                rgb = get_rgb(co, self.bands, **rgbkwargs)
+                rgb = get_rgb(co, self.bands)
                 model_mod_rgb[name] = rgb
                 res = [(tim.getImage() - mod) for tim,mod in zip(srctims, modimgs)]
                 co,nil = quick_coadds(srctims, self.bands, srcwcs, images=res)
-                rgb = get_rgb(co, self.bands, **rgbkwargs)
+                rgb = get_rgb(co, self.bands)
                 model_resid_rgb[name] = rgb
 
             # Compute inverse-variances for each source.
@@ -1186,7 +1187,7 @@ class OneBlob(object):
             dimshow(rgb, ticks=False)
             # next over: rgb with same stretch as models
             plt.subplot(rows, cols, 2)
-            rgb = get_rgb(coimgs, self.bands, **rgbkwargs)
+            rgb = get_rgb(coimgs, self.bands)
             dimshow(rgb, ticks=False)
             for imod,modname in enumerate(modnames):
                 if modname != 'none' and not modname in chisqs:

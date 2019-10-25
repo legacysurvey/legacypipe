@@ -43,10 +43,6 @@ from legacypipe.bits import DQ_BITS, MASKBITS
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 
-# RGB image args used in the tile viewer:
-rgbkwargs = dict(mnmx=(-3,300.), arcsinh=1.)
-rgbkwargs_resid = dict(mnmx=(-5,5))
-
 import logging
 logger = logging.getLogger('legacypipe.runbrick')
 def info(*args):
@@ -431,7 +427,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        brickname=None, version_header=None,
                        plots=False, ps=None, coadd_bw=False, W=None, H=None,
                        brick=None, blobs=None, lanczos=True, ccds=None,
-                       rgb_kwargs=None,
                        write_metrics=True,
                        mp=None, record_event=None,
                        **kwargs):
@@ -471,20 +466,12 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
-    if rgb_kwargs is None:
-        rgb_kwargs = {}
-
-    coadd_list= [('image', C.coimgs, rgb_kwargs)]
+    coadd_list= [('image', C.coimgs)]
     if hasattr(tims[0], 'sims_image'):
-        coadd_list.append(('simscoadd', sims_coadd, rgb_kwargs))
+        coadd_list.append(('simscoadd', sims_coadd))
 
-    for name,ims,rgbkw in coadd_list:
-        #rgb = get_rgb(ims, bands, **rgbkw)
-        # kwargs used for the SDSS layer in the viewer.
-        #sdss_map_kwargs = dict(scales={'g':(2,2.5), 'r':(1,1.5), 'i':(0,1.0),
-        #                               'z':(0,0.4)}, m=0.02)
-        #rgb = sdss_rgb(ims, bands, **sdss_map_kwargs)
-        rgb = sdss_rgb(ims, bands, **rgbkw)
+    for name,ims in coadd_list:
+        rgb = get_rgb(ims, bands)
 
         kwa = {}
         if coadd_bw and len(bands) == 1:
@@ -530,35 +517,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                     out.fits.write(blobs, header=hdr)
         del rgb
     return None
-
-def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20):
-    rgbscales=dict(g=(2, 6.0),
-                   r=(1, 3.4),
-                   i=(0, 3.0),
-                   z=(0, 2.2))
-    # rgbscales = {'u': 1.5, #1.0,
-    #              'g': 2.5,
-    #              'r': 1.5,
-    #              'i': 1.0,
-    #              'z': 0.4, #0.3
-    #              }
-    if scales is not None:
-        rgbscales.update(scales)
-
-    I = 0
-    for img,band in zip(imgs, bands):
-        plane,scale = rgbscales[band]
-        img = np.maximum(0, img * scale + m)
-        I = I + img
-    I /= len(bands)
-    fI = np.arcsinh(Q * I) / np.sqrt(Q)
-    I += (I == 0.) * 1e-6
-    H,W = I.shape
-    rgb = np.zeros((H,W,3), np.float32)
-    for img,band in zip(imgs, bands):
-        plane,scale = rgbscales[band]
-        rgb[:,:,plane] = np.clip((img * scale + m) * fI / I, 0, 1)
-    return rgb
 
 def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                W=None,H=None,
@@ -650,7 +608,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             if plots:
                 coimgs,cons = quick_coadds(tims, bands, targetwcs)
                 plt.clf()
-                dimshow(get_rgb(coimgs, bands, **rgbkwargs))
+                dimshow(get_rgb(coimgs, bands))
                 ax = plt.axis()
                 plt.plot(gaia.ibx, gaia.iby, 'o', mec='r', ms=15, mfc='none')
                 plt.axis(ax)
@@ -662,7 +620,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             if plots:
                 coimgs2,cons = quick_coadds(tims, bands, targetwcs)
                 plt.clf()
-                dimshow(get_rgb(coimgs2, bands, **rgbkwargs))
+                dimshow(get_rgb(coimgs2, bands))
                 ax = plt.axis()
                 plt.plot(gaia.ibx, gaia.iby, 'o', mec='r', ms=15, mfc='none')
                 plt.axis(ax)
@@ -671,7 +629,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
                 plt.clf()
                 dimshow(get_rgb([co-co2 for co,co2 in zip(coimgs,coimgs2)],
-                                bands, **rgbkwargs))
+                                bands))
                 ax = plt.axis()
                 plt.plot(gaia.ibx, gaia.iby, 'o', mec='r', ms=15, mfc='none')
                 plt.axis(ax)
@@ -684,15 +642,15 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                     ax = [g.ibx-pixrad, g.ibx+pixrad, g.iby-pixrad, g.iby+pixrad]
                     ima = dict(interpolation='nearest', origin='lower')
                     plt.subplot(2,2,1)
-                    plt.imshow(get_rgb(coimgs, bands, **rgbkwargs), **ima)
+                    plt.imshow(get_rgb(coimgs, bands), **ima)
                     plt.plot(gaia.ibx, gaia.iby, 'o', mec='r', ms=15, mfc='none')
                     plt.axis(ax)
                     plt.subplot(2,2,2)
-                    plt.imshow(get_rgb(coimgs2, bands, **rgbkwargs), **ima)
+                    plt.imshow(get_rgb(coimgs2, bands), **ima)
                     plt.axis(ax)
                     plt.subplot(2,2,3)
                     plt.imshow(get_rgb([co-co2 for co,co2 in zip(coimgs,coimgs2)],
-                                       bands, **rgbkwargs), **ima)
+                                       bands), **ima)
                     plt.axis(ax)
                     ps.savefig()
 
@@ -722,7 +680,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # with Tycho-2 and Gaia stars and large galaxies, not needed.
 
     if plots:
-        rgb = get_rgb(detmaps, bands, **rgbkwargs)
+        rgb = get_rgb(detmaps, bands)
         plt.clf()
         dimshow(rgb)
         plt.title('detmaps')
@@ -739,7 +697,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
         if refstars:
             plt.clf()
-            dimshow(get_rgb(coimgs, bands, **rgbkwargs))
+            dimshow(get_rgb(coimgs, bands))
             ax = plt.axis()
             lp,lt = [],[]
             tycho = refstars[refstars.isbright]
@@ -1742,32 +1700,32 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         coimgs,_ = quick_coadds(tims, bands, targetwcs)
 
         plt.clf()
-        dimshow(get_rgb(coimgs, bands, **rgbkwargs))
+        dimshow(get_rgb(coimgs, bands))
         plt.title('First-round data')
         ps.savefig()
 
         plt.clf()
-        dimshow(get_rgb(coimgs_init, bands, **rgbkwargs))
+        dimshow(get_rgb(coimgs_init, bands))
         plt.title('First-round model fits')
         ps.savefig()
 
         plt.clf()
-        dimshow(get_rgb([img-mod for img,mod in zip(coimgs,coimgs_init)], bands, **rgbkwargs))
+        dimshow(get_rgb([img-mod for img,mod in zip(coimgs,coimgs_init)], bands))
         plt.title('First-round residuals')
         ps.savefig()
 
         plt.clf()
-        dimshow(get_rgb(coimgs_iter, bands, **rgbkwargs))
+        dimshow(get_rgb(coimgs_iter, bands))
         plt.title('Iterative model fits')
         ps.savefig()
 
         plt.clf()
-        dimshow(get_rgb([mod+mod2 for mod,mod2 in zip(coimgs_init, coimgs_iter)], bands, **rgbkwargs))
+        dimshow(get_rgb([mod+mod2 for mod,mod2 in zip(coimgs_init, coimgs_iter)], bands))
         plt.title('Initial + Iterative model fits')
         ps.savefig()
 
         plt.clf()
-        dimshow(get_rgb([img-mod-mod2 for img,mod,mod2 in zip(coimgs,coimgs_init,coimgs_iter)], bands, **rgbkwargs))
+        dimshow(get_rgb([img-mod-mod2 for img,mod,mod2 in zip(coimgs,coimgs_init,coimgs_iter)], bands))
         plt.title('Iterative model residuals')
         ps.savefig()
 
@@ -1880,11 +1838,11 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         D.writeto(None, fits_object=out.fits)
     del D
 
-    coadd_list= [('image', C.coimgs,   rgbkwargs),
-                 ('model', C.comods,   rgbkwargs),
-                 ('resid', C.coresids, rgbkwargs_resid)]
+    coadd_list= [('image', C.coimgs, {}),
+                 ('model', C.comods, {}),
+                 ('resid', C.coresids, dict(resids=True))]
     if hasattr(tims[0], 'sims_image'):
-        coadd_list.append(('simscoadd', sims_coadd, rgbkwargs))
+        coadd_list.append(('simscoadd', sims_coadd, {}))
 
     for name,ims,rgbkw in coadd_list:
         rgb = get_rgb(ims, bands, **rgbkw)
@@ -1980,7 +1938,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         dec = np.array([src.getPosition().dec for src in cat])
         ok,x0,y0 = targetwcs.radec2pixelxy(T.orig_ra, T.orig_dec)
         ok,x1,y1 = targetwcs.radec2pixelxy(ra, dec)
-        dimshow(get_rgb(C.coimgs, bands, **rgbkwargs))
+        dimshow(get_rgb(C.coimgs, bands))
         ax = plt.axis()
         #plt.plot(np.vstack((x0,x1))-1, np.vstack((y0,y1))-1, 'r-')
         I = np.flatnonzero(T.orig_ra != 0.)
@@ -1992,7 +1950,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ps.savefig()
 
         plt.clf()
-        dimshow(get_rgb(C.coimgs, bands, **rgbkwargs))
+        dimshow(get_rgb(C.coimgs, bands))
         ax = plt.axis()
         ps.savefig()
 
@@ -2744,7 +2702,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               hybridPsf=False,
               normalizePsf=False,
               apodize=False,
-              rgb_kwargs=None,
               splinesky=True,
               subsky=True,
               constant_invvar=False,
@@ -2970,7 +2927,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   release=release,
                   normalizePsf=normalizePsf,
                   apodize=apodize,
-                  rgb_kwargs=rgb_kwargs,
                   constant_invvar=constant_invvar,
                   depth_cut=depth_cut,
                   splinesky=splinesky,

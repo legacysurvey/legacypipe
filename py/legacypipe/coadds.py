@@ -311,13 +311,12 @@ def make_coadds(tims, bands, targetwcs,
             tim = tims[itim]
 
             if plots:
-                from legacypipe.runbrick import rgbkwargs
                 from legacypipe.survey import get_rgb
                 import pylab as plt
                 # # Make one grayscale, brick-space plot per image
                 # thisimg = np.zeros((H,W), np.float32)
                 # thisimg[Yo,Xo] = im
-                # rgb = get_rgb([thisimg], [band], **rgbkwargs)
+                # rgb = get_rgb([thisimg], [band])
                 # rgb = rgb.sum(axis=2)
                 # fn = ps.getnext()
                 # plt.imsave(fn, rgb, origin='lower', cmap='gray')
@@ -330,7 +329,7 @@ def make_coadds(tims, bands, targetwcs,
                 plt.subplot(2,2,1)
                 thisimg = np.zeros((H,W), np.float32)
                 thisimg[Yo,Xo] = im
-                rgb = get_rgb([thisimg], [band], **rgbkwargs)
+                rgb = get_rgb([thisimg], [band])
                 iplane = dict(g=2, r=1, z=0)[band]
                 rgbimg = rgb[:,:,iplane]
                 plt.imshow(rgbimg, interpolation='nearest', origin='lower', cmap='gray')
@@ -339,7 +338,7 @@ def make_coadds(tims, bands, targetwcs,
                     plt.subplot(2,2,2)
                     thismod = np.zeros((H,W), np.float32)
                     thismod[Yo,Xo] = mo
-                    rgb = get_rgb([thismod], [band], **rgbkwargs)
+                    rgb = get_rgb([thismod], [band])
                     rgbmod = rgb[:,:,iplane]
                     plt.imshow(rgbmod, interpolation='nearest', origin='lower', cmap='gray')
                     plt.xticks([]); plt.yticks([])
@@ -375,7 +374,7 @@ def make_coadds(tims, bands, targetwcs,
 
                         thisim = np.zeros((H,W), np.float32)
                         thisim[Yo,Xo] = goodpix * myim
-                        rgb = get_rgb([thisim], [band], **rgbkwargs)
+                        rgb = get_rgb([thisim], [band])
                         iplane = dict(g=2, r=1, z=0)[band]
                         rgbimg = rgb[:,:,iplane]
                         plt.subplot(2,2,3)

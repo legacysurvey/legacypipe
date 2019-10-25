@@ -595,8 +595,46 @@ def tim_get_resamp(tim, targetwcs):
         return None
     return Yo,Xo,Yi,Xi
 
-def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None,
-            clip=True):
+
+def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20):
+    rgbscales=dict(g=(2, 6.0),
+                   r=(1, 3.4),
+                   i=(0, 3.0),
+                   z=(0, 2.2))
+    # rgbscales = {'u': 1.5, #1.0,
+    #              'g': 2.5,
+    #              'r': 1.5,
+    #              'i': 1.0,
+    #              'z': 0.4, #0.3
+    #              }
+    if scales is not None:
+        rgbscales.update(scales)
+
+    I = 0
+    for img,band in zip(imgs, bands):
+        plane,scale = rgbscales[band]
+        img = np.maximum(0, img * scale + m)
+        I = I + img
+    I /= len(bands)
+    fI = np.arcsinh(Q * I) / np.sqrt(Q)
+    I += (I == 0.) * 1e-6
+    H,W = I.shape
+    rgb = np.zeros((H,W,3), np.float32)
+    for img,band in zip(imgs, bands):
+        plane,scale = rgbscales[band]
+        rgb[:,:,plane] = np.clip((img * scale + m) * fI / I, 0, 1)
+    return rgb
+
+def get_rgb(imgs, bands,
+            #mnmx=None, arcsinh=None, scales=None, clip=True):
+            resids=False):
+    ### FIXME!!
+    if resids:
+        return get_rgb_OLD(imgs, bands, mnmx=(-5,5))
+    return sdss_rgb(imgs, bands)
+    
+def get_rgb_OLD(imgs, bands, mnmx=None, arcsinh=None, scales=None,
+                clip=True):
     '''
     Given a list of images in the given bands, returns a scaled RGB
     image.
