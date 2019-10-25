@@ -6,6 +6,10 @@ def subtract_halos(tims, refs, bands, mp, plots, ps):
     color[np.logical_not(np.isfinite(color))] = 0.
     color = np.clip(color, -0.5, 3.3)
     G = refs.phot_g_mean_mag
+
+    print('Ref mags:', G[:10])
+    print('Ref colors:', color[:10])
+
     for i,b in enumerate(bands):
         # Use Arjun's Gaia-to-DECam transformations.
         coeffs = dict(
@@ -14,9 +18,12 @@ def subtract_halos(tims, refs, bands, mp, plots, ps):
             r=[ 0.10533,-0.22975, 0.06257,-0.24142, 0.24441,
                 -0.07248, 0.00676],
             z=[ 0.46744,-0.95143, 0.19729,-0.08810, 0.01566])[b]
-        mag = G
+        mag = G.copy()
         for order,c in enumerate(coeffs):
             mag += c * color**order
+
+        print('Band', b, 'coefficients:', coeffs)
+        print('Transformed mags:', mag[:10])
         fluxes[:,i] = 10.**((mag - 22.5) / -2.5)
 
     iband = dict([(b,i) for i,b in enumerate(bands)])
@@ -48,10 +55,13 @@ def subtract_one_real(X):
         x -= 1.
         y -= 1.
         pixscale = tim.imobj.pixscale
-        pixrad = int(np.ceil(ref.radius * 3600. / pixscale))
 
+        # Rongpu says only apply within 200"
+        rad_arcsec = ref.radius * 3600.
         ### FIXME -- we're going to try subtracting the halo out to TWICE our masking radius.
-        pixrad *= 2.
+        rad_arcsec *= 2.0
+        rad_arcsec = np.minimum(rad_arcsec, 200.)
+        pixrad = int(np.ceil(rad_arcsec / pixscale))
 
         xlo = int(np.clip(np.floor(x - pixrad), 0, W-1))
         xhi = int(np.clip(np.ceil (x + pixrad), 0, W-1))
