@@ -642,67 +642,40 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         Igaia, = np.nonzero(np.logical_or(refstars.isbright, refstars.ismedium) *
                             np.logical_not(refstars.iscluster) * refstars.pointsource)
         Igaia = Igaia[np.argsort(gaia.phot_g_mean_mag[Igaia])]
-        debug(len(Igaia), 'stars for halo fitting')
+        debug(len(Igaia), 'stars for halo subtraction')
         if len(Igaia):
-            from legacypipe.halos import fit_halos, subtract_halos
-            # FIXME -- another coadd...
-            coimgs,cons = quick_coadds(tims, bands, targetwcs)
-            fluxes,haloimgs = fit_halos(coimgs, cons, H, W, targetwcs, pixscale, bands,
-                                        gaia[Igaia], plots, ps)
-            init_fluxes = [(f and f[0] or None) for f in fluxes]
+            from legacypipe.halos import subtract_halos
 
+            gaia.cut(Igaia)
             if plots:
+                coimgs,cons = quick_coadds(tims, bands, targetwcs)
                 plt.clf()
                 dimshow(get_rgb(coimgs, bands, **rgbkwargs))
-                plt.title('data')
-                ps.savefig()
-                plt.clf()
-                dimshow(get_rgb(haloimgs, bands, **rgbkwargs))
-                plt.title('fit profiles')
-                ps.savefig()
-                plt.clf()
-                dimshow(get_rgb([c-h for c,h in zip(coimgs,haloimgs)], bands,
-                                **rgbkwargs))
-                plt.title('data - fit profiles')
+                ax = plt.axis()
+                plt.plot(gaia.ibx, gaia.iby, 'o', mec='r', ms=15, mfc='none')
+                plt.axis(ax)
+                plt.title('Before star halo subtraction')
                 ps.savefig()
 
-            # Subtract first-round halos from coadd
-            co2 = [c - h for c,h in zip(coimgs,haloimgs)]
-            del haloimgs
-
-            fluxes2,haloimgs2 = fit_halos(co2, cons, H, W, targetwcs, pixscale, bands,
-                                          gaia[Igaia], plots, ps,
-                                          init_fluxes=init_fluxes)
-            del co2, cons
-            fluxarray = np.array([f[0] for f in fluxes2])
-
-            for iband,b in enumerate(bands):
-                haloflux = np.zeros(len(refstars))
-                haloflux[Igaia] = fluxarray[:,iband]
-                refstars.set('star_halo_flux_%s' % b, haloflux)
+            subtract_halos(tims, gaia, bands, mp, plots, ps)
 
             if plots:
+                coimgs2,cons = quick_coadds(tims, bands, targetwcs)
                 plt.clf()
-                dimshow(get_rgb(haloimgs2, bands, **rgbkwargs))
-                plt.title('second-round fit profiles')
+                dimshow(get_rgb(coimgs2, bands, **rgbkwargs))
+                ax = plt.axis()
+                plt.plot(gaia.ibx, gaia.iby, 'o', mec='r', ms=15, mfc='none')
+                plt.axis(ax)
+                plt.title('After star halo subtraction')
                 ps.savefig()
+
                 plt.clf()
-                dimshow(get_rgb([c-h2 for c,h2 in zip(coimgs,haloimgs2)], bands,
-                                **rgbkwargs))
-                plt.title('second-round data - fit profiles')
-                ps.savefig()
-
-            del haloimgs2
-            del coimgs
-
-            # Actually subtract the halos from the tims!
-            subtract_halos(tims, gaia[Igaia], fluxarray, pixscale, bands, plots, ps,mp)
-
-            if plots:
-                coimgs,_ = quick_coadds(tims, bands, targetwcs)
-                plt.clf()
-                dimshow(get_rgb(coimgs, bands, **rgbkwargs))
-                plt.title('halos subtracted')
+                dimshow(get_rgb([co-co2 for co,co2 in zip(coimgs,coimgs2)],
+                                bands, **rgbkwargs))
+                ax = plt.axis()
+                plt.plot(gaia.ibx, gaia.iby, 'o', mec='r', ms=15, mfc='none')
+                plt.axis(ax)
+                plt.title('Subtracted halos')
                 ps.savefig()
 
     if refstars or T_donotfit or T_clusters:
