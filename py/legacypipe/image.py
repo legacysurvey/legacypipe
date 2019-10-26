@@ -158,8 +158,8 @@ class LegacySurveyImage(object):
                                                '%s-%s.fits' % (self.camera, expstr))
         """
         tmpname = self.image_filename.replace(".fits.fz", "")
-        basename = tmpname.split('/')[-1]
-        calibdir = self.survey.get_calib_dir() + "/" + tmpname.replace(basename,"")
+        basename = os.path.basename(tmpname)
+        calibdir = os.path.join(self.survey.get_calib_dir(), os.path.dirname(tmpname))
         calname = basename+"-"+self.ccdname
         self.name = calname
         self.sefn = os.path.join(calibdir, basename, basename+"-se-"+self.ccdname+".fits")
