@@ -162,10 +162,10 @@ class LegacySurveyImage(object):
         calibdir = self.survey.get_calib_dir() + "/" + tmpname.replace(basename,"")
         calname = basename+"-"+self.ccdname
         self.name = calname
-        self.sefn = os.path.join(calibdir, basename, calname+"-se.fits")
-        self.psffn = os.path.join(calibdir, basename, calname+"-psfex.fits")
-        self.skyfn = os.path.join(calibdir, basename, calname+"-sky.fits")
-        self.splineskyfn = os.path.join(calibdir, basename, calname+"-splinesky.fits")
+        self.sefn = os.path.join(calibdir, basename, basename+"-se-"+self.ccdname+".fits")
+        self.psffn = os.path.join(calibdir, basename, basename+"-psfex-"+self.ccdname+".fits")
+        self.skyfn = os.path.join(calibdir, basename, basename+"-sky-"+self.ccdname+".fits")
+        self.splineskyfn = os.path.join(calibdir, basename, basename+"-splinesky-"+self.ccdname+".fits")
         self.merged_psffn = os.path.join(calibdir, basename+"-psfex.fits")
         self.merged_splineskyfn = os.path.join(calibdir, basename+"-splinesky.fits")
 
