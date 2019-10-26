@@ -158,14 +158,14 @@ class LegacySurveyImage(object):
                                                '%s-%s.fits' % (self.camera, expstr))
         """
         tmpname = self.image_filename.replace(".fits.fz", "")
-        basename = tmpname.split('/')[-1]
-        calibdir = self.survey.get_calib_dir() + "/" + tmpname.replace(basename,"")
+        basename = os.path.basename(tmpname)
+        calibdir = os.path.join(self.survey.get_calib_dir(), os.path.dirname(tmpname))
         calname = basename+"-"+self.ccdname
         self.name = calname
-        self.sefn = os.path.join(calibdir, basename, basename+"-se-"+self.ccdname+".fits")
-        self.psffn = os.path.join(calibdir, basename, basename+"-psfex-"+self.ccdname+".fits")
-        self.skyfn = os.path.join(calibdir, basename, basename+"-sky-"+self.ccdname+".fits")
-        self.splineskyfn = os.path.join(calibdir, basename, basename+"-splinesky-"+self.ccdname+".fits")
+        self.sefn = os.path.join(calibdir, basename, basename+"-"+self.ccdname+"-se.fits")
+        self.psffn = os.path.join(calibdir, basename, basename+"-p-"+self.ccdname+"-psfex.fits")
+        self.skyfn = os.path.join(calibdir, basename, basename+"-"+self.ccdname+"-sky.fits")
+        self.splineskyfn = os.path.join(calibdir, basename, basename+"-"+self.ccdname+"-splinesky.fits")
         self.merged_psffn = os.path.join(calibdir, basename+"-psfex.fits")
         self.merged_splineskyfn = os.path.join(calibdir, basename+"-splinesky.fits")
 
