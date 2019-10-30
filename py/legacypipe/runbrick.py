@@ -73,7 +73,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                normalizePsf=False,
                apodize=False,
                constant_invvar=False,
-               depth_cut=None,
                read_image_pixels = True,
                min_mjd=None, max_mjd=None,
                gaia_stars=False,
@@ -2667,7 +2666,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               zoom=None,
               bands=None,
               allbands='grz',
-              depth_cut=None,
               nblobs=None, blob=None, blobxy=None, blobradec=None, blobid=None,
               max_blobsize=None,
               nsigma=6,
@@ -2911,7 +2909,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   normalizePsf=normalizePsf,
                   apodize=apodize,
                   constant_invvar=constant_invvar,
-                  depth_cut=depth_cut,
                   splinesky=splinesky,
                   subsky=subsky,
                   tycho_stars=tycho_stars,
@@ -3243,9 +3240,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--bands', default=None,
                         help='Set the list of bands (filters) that are included in processing: comma-separated list, default "g,r,z"')
-
-    parser.add_argument('--depth-cut', default=None, type=float,
-                        help='Margin in mags to use to cut to the set of CCDs required to reach our depth target + margin')
 
     parser.add_argument('--no-tycho', dest='tycho_stars', default=True,
                         action='store_false',
