@@ -224,23 +224,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     else:
         ccds = survey.ccds
 
-    if depth_cut:
-        from legacypipe.depthcut import make_depth_cut
-        # If we have many images, greedily select images until we have
-        # reached our target depth
-        debug('Cutting to CCDs required to hit our depth targets')
-        # Previously, depth_cut was a boolean; I turned it into a float margin;
-        # be a little backwards-compatible.
-        margin = float(depth_cut)
-        kwa = {}
-        if margin >= 0:
-            kwa.update(margin=depth_cut)
-        keep_ccds,_ = make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
-                                     plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf,
-                                     do_calibs, gitver, targetwcs, old_calibs_ok, **kwa)
-        ccds.cut(np.array(keep_ccds))
-        debug('Cut to', len(ccds), 'CCDs required to reach depth targets')
-
     # Create Image objects for each CCD
     ims = []
     info('Keeping', len(ccds), 'CCDs:')
