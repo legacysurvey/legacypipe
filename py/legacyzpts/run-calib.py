@@ -14,8 +14,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--force', action='store_true',
                       help='Run calib processes even if files already exist?')
-    parser.add_argument('--ccds', help='Set ccds.fits file to load')
-
+    parser.add_argument('--survey-dir', help='Override LEGACY_SURVEY_DIR')
     parser.add_argument('--expnum', type=str, help='Cut to a single or set of exposures; comma-separated list')
     parser.add_argument('--extname', '--ccdname', help='Cut to a single extension/CCD name')
 
@@ -25,7 +24,8 @@ def main():
                       help='Do not compute sky models')
     parser.add_argument('--run-se', action='store_true', help='Run SourceExtractor')
 
-    parser.add_argument('--splinesky', action='store_true', help='Spline sky, not constant')
+    parser.add_argument('--no-splinesky', dest='splinesky', default=True, action='store_false',
+                        help='Use constant, not splinesky')
     parser.add_argument('--threads', type=int, help='Run multi-threaded', default=None)
     parser.add_argument('--continue', dest='cont', default=False, action='store_true',
                         help='Continue even if one file fails?')
@@ -34,20 +34,17 @@ def main():
     parser.add_argument('args',nargs=argparse.REMAINDER)
     opt = parser.parse_args()
 
-    survey = LegacySurveyData() #output_dir=opt.output_dir)
+    survey = LegacySurveyData(survey_dir=opt.survey_dir)
     T = None
-    if opt.ccds is not None:
-        T = fits_table(opt.ccds)
-        T = survey.cleanup_ccds_table(T)
-        print('Read', len(T), 'from', opt.ccds)
-
     if len(opt.args) == 0:
         if opt.expnum is not None:
             expnums = set([int(e) for e in opt.expnum.split(',')])
             T = merge_tables([survey.find_ccds(expnum=e, ccdname=opt.extname) for e in expnums])
             print('Cut to', len(T), 'with expnum in', expnums, 'and extname', opt.extname)
-        opt.args = range(len(T))
-
+            opt.args = range(len(T))
+        else:
+            parser.print_help()
+            return 0
     ps = None
     if opt.plot_base is not None:
         from astrometry.util.plotutils import PlotSequence
