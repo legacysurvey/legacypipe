@@ -1266,7 +1266,7 @@ class LegacySurveyImage(object):
                 print('Masked', ng-np.sum(good), 'additional CCD pixels from blob maps')
 
             # Now find the final sky model using that more extensive mask
-            skyobj = SplineSky.BlantonMethod(img - initsky, good * stargood, boxsize, estimator=estimate_mode)
+            skyobj = SplineSky.BlantonMethod(img - initsky, good * stargood, boxsize)
 
             # add the initial sky estimate back in
             skyobj.offset(initsky)
