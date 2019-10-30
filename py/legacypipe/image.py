@@ -1278,6 +1278,9 @@ class LegacySurveyImage(object):
             pcts = [0,10,20,30,40,50,60,70,80,90,100]
             pctpix = (img - skypix)[good * stargood]
             if len(pctpix):
+                assert(np.all(np.isfinite(img[good * stargood])))
+                assert(np.all(np.isfinite(skypix[good * stargood])))
+                assert(np.all(np.isfinite(pctpix)))
                 pctvals = np.percentile((img - skypix)[good * stargood], pcts)
             else:
                 pctvals = [0] * len(pcts)

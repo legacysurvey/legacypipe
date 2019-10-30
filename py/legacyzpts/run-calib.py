@@ -31,6 +31,9 @@ def main():
                         help='Continue even if one file fails?')
     parser.add_argument('--plot-base', help='Make plots with this base filename')
 
+    parser.add_argument('--blob-mask-dir', type=str, default=None,
+                        help='The base directory to search for blob masks during sky model construction')
+
     parser.add_argument('args',nargs=argparse.REMAINDER)
     opt = parser.parse_args()
 
@@ -49,6 +52,10 @@ def main():
     if opt.plot_base is not None:
         from astrometry.util.plotutils import PlotSequence
         ps = PlotSequence(opt.plot_base)
+
+    survey_blob_mask=None
+    if opt.blob_mask_dir is not None:
+        survey_blob_mask = LegacySurveyData(opt.blob_mask_dir)
 
     args = []
     for a in opt.args:
@@ -73,7 +80,8 @@ def main():
         im = survey.get_image_object(t)
         print('Running', im.name)
         
-        kwargs = dict(psfex=opt.psfex, sky=opt.sky, ps=ps, survey=survey)
+        kwargs = dict(psfex=opt.psfex, sky=opt.sky, ps=ps, survey=survey,
+                      survey_blob_mask=survey_blob_mask)
         if opt.force:
             kwargs.update(force=True)
         if opt.run_se:
