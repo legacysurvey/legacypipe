@@ -1435,7 +1435,7 @@ class Measurer(object):
         print('Wrote %s' % fn)
 
     def run_calibs(self, survey, ext, psfex=True, splinesky=True, read_hdu=True,
-                   plots=False):
+                   plots=False, survey_blob_mask=None):
         # Initialize with some basic data
         self.set_hdu(ext)
 
@@ -1499,7 +1499,8 @@ class Measurer(object):
         im = survey.get_image_object(ccd)
         git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
         im.run_calibs(psfex=do_psf, sky=do_sky, splinesky=True,
-                      git_version=git_version, survey=survey, ps=ps)
+                      git_version=git_version, survey=survey, ps=ps,
+                      survey_blob_mask=survey_blob_mask)
         return ccd
 
 class FakeCCD(object):
@@ -1900,6 +1901,11 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     all_photom = []
     splinesky = measureargs['splinesky']
 
+    survey_blob_mask = None
+    blobdir = measureargs.pop('blob_mask_dir', None)
+    if blobdir is not None:
+        survey_blob_mask = LegacySurveyData(survey_dir=blobdir)
+
     do_splinesky = splinesky
     do_psfex = psfex
 
@@ -1918,7 +1924,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
 
     if do_splinesky or do_psfex:
         ccds = mp.map(run_one_calib, [(measure, survey, ext, do_psfex, do_splinesky,
-                                       plots)
+                                       plots, survey_blob_mask)
                                       for ext in extlist])
         
         from legacyzpts.merge_calibs import merge_splinesky, merge_psfex
@@ -2025,8 +2031,9 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     return all_ccds, all_photom, extra_info, measure
 
 def run_one_calib(X):
-    measure, survey, ext, psfex, splinesky, plots = X
-    return measure.run_calibs(survey, ext, psfex=psfex, splinesky=splinesky, plots=plots)
+    measure, survey, ext, psfex, splinesky, plots, survey_blob_mask = X
+    return measure.run_calibs(survey, ext, psfex=psfex, splinesky=splinesky, plots=plots,
+                              survey_blob_mask=survey_blob_mask)
 
 def run_one_ext(X):
     measure, ext, survey, psfex, splinesky, debug = X
@@ -2199,6 +2206,8 @@ def get_parser():
                         help='Only ensure calib files exist, do not compute zeropoints.')
     parser.add_argument('--no-splinesky', dest='splinesky', default=True, action='store_false',
                         help='Do not use spline sky model for sky subtraction?')
+    parser.add_argument('--blob-mask-dir', type=str, default=None,
+                        help='The base directory to search for blob masks during sky model construction')
     parser.add_argument('--calibdir', default=None, action='store',
                         help='if None will use LEGACY_SURVEY_DIR/calib, e.g. /global/cscratch1/sd/desiproc/dr5-new/calib')
     parser.add_argument('--threads', default=None, type=int,
