@@ -882,6 +882,21 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     debug('[serial srcs] Blobs:', tnow-tlast)
     tlast = tnow
 
+    sky_overlap = True
+    if sky_overlap:
+        print('Creating coadd for sky overlap...')
+        C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
+        for band,co,cowt in zip(bands, C.coimgs, C.cowimgs):
+            pix = co[(cowt > 0) * (blobs == -1)]
+            if len(pix) == 0:
+                continue
+            cosky = np.median(pix)
+            print('Median sky for', band, ':', cosky)
+            for tim in tims:
+                if tim.band != band:
+                    continue
+                tim.data -= cosky
+
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
             'ps', 'refstars', 'gaia_stars', 'saturated_pix',
             'T_donotfit', 'T_clusters']
