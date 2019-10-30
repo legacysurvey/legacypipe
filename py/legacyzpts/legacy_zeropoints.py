@@ -1104,15 +1104,20 @@ class Measurer(object):
         return ps1.median[:, ps1band] + np.clip(colorterm, -1., +1.)
 
     def get_splinesky_merged_filename(self):
-        expstr = '%08i' % self.expnum
-        fn = os.path.join(self.calibdir, self.camera, 'splinesky-merged', expstr[:5],
-                          '%s-%s.fits' % (self.camera, expstr))
+        basefn = os.path.basename(self.fn_base)
+        basedir = os.path.dirname(self.fn_base)
+        base = basefn.split('.')[0]
+        fn = base+"-splinesky.fits"
+        fn = os.path.join(self.calibdir, basedir, fn)
         return fn
 
     def get_splinesky_unmerged_filename(self):
-        expstr = '%08i' % self.expnum
-        return os.path.join(self.calibdir, self.camera, 'splinesky', expstr[:5], expstr,
-                            '%s-%s-%s.fits' % (self.camera, expstr, self.ext))
+        basefn = os.path.basename(self.fn_base)
+        basedir = os.path.dirname(self.fn_base)
+        base = basefn.split('.')[0]
+        fn = base+"-"+self.ccdname+"-splinesky.fits"
+        fn = os.path.join(self.calibdir, basedir, base, fn)
+        return fn
 
     def get_splinesky(self):
         # Find splinesky model file and read it
@@ -1318,15 +1323,20 @@ class Measurer(object):
         return cal
 
     def get_psfex_merged_filename(self):
-        expstr = '%08i' % self.expnum
-        fn = os.path.join(self.calibdir, self.camera, 'psfex-merged', expstr[:5],
-                          '%s-%s.fits' % (self.camera, expstr))
+        basefn = os.path.basename(self.fn_base)
+        basedir = os.path.dirname(self.fn_base)
+        base = basefn.split('.')[0]
+        fn = base+"-psfex.fits"
+        fn = os.path.join(self.calibdir, basedir, fn)
         return fn
 
     def get_psfex_unmerged_filename(self):
-        expstr = '%08i' % self.expnum
-        return os.path.join(self.calibdir, self.camera, 'psfex', expstr[:5], expstr,
-                          '%s-%s-%s.fits' % (self.camera, expstr, self.ext))
+        basefn = os.path.basename(self.fn_base)
+        basedir = os.path.dirname(self.fn_base)
+        base = basefn.split('.')[0]
+        fn = base+"-"+self.ccdname+"-psfex.fits"
+        fn = os.path.join(self.calibdir, basedir, base, fn)
+        return fn
 
     def get_psfex_model(self):
         import tractor
@@ -1975,6 +1985,16 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
             if os.path.isfile(sefn):
                 os.remove(sefn)
 
+    # Remove temporary individual files directory
+    basefn = os.path.basename(img_fn)
+    basedir = os.path.dirname(img_fn)
+    base = basefn.split('.')[0]
+    tmpdir = os.path.join(measure.calibdir, basedir, base)
+    try:
+        os.rmdir(tmpdir)
+    except OSError:
+        pass
+
     if run_calibs_only:
         return
 
@@ -2035,9 +2055,14 @@ class outputFns(object):
         self.imgfn = imgfn
         self.image_dir = image_dir
 
+        """
         # Keep the last directory component
         dirname = os.path.basename(os.path.dirname(self.imgfn))
         basedir = os.path.join(outdir, camera, dirname)
+        """
+        # Keep same path structure as the images
+        dirname = os.path.dirname(self.imgfn)
+        basedir = os.path.join(outdir, dirname)
         trymakedirs(basedir)
 
         basename = os.path.basename(self.imgfn) 
