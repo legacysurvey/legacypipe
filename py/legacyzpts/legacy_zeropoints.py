@@ -1101,29 +1101,19 @@ class Measurer(object):
         return ps1.median[:, ps1band] + np.clip(colorterm, -1., +1.)
 
     def get_splinesky_merged_filename(self):
-        """
-        expstr = '%08i' % self.expnum
-        fn = os.path.join(self.calibdir, self.camera, 'splinesky-merged', expstr[:5],
-                          '%s-%s.fits' % (self.camera, expstr)
-        """
         basefn = os.path.basename(self.fn_base)
         basedir = os.path.dirname(self.fn_base)
         base = basefn.split('.')[0]
-        fn0 = base+"-splinesky.fits"
-        fn = os.path.join(self.calibdir, basedir, fn0)
+        fn = base+"-splinesky.fits"
+        fn = os.path.join(self.calibdir, basedir, fn)
         return fn
 
     def get_splinesky_unmerged_filename(self):
-        """
-        expstr = '%08i' % self.expnum
-        return os.path.join(self.calibdir, self.camera, 'splinesky', expstr[:5], expstr,
-                            '%s-%s-%s.fits' % (self.camera, expstr, self.ext))
-        """
         basefn = os.path.basename(self.fn_base)
         basedir = os.path.dirname(self.fn_base)
         base = basefn.split('.')[0]
-        fn0 = base+"-"+self.ext+"-splinesky.fits"
-        fn = os.path.join(self.calibdir, basedir, base, fn0)
+        fn = base+"-"+self.ccdname+"-splinesky.fits"
+        fn = os.path.join(self.calibdir, basedir, base, fn)
         return fn
 
     def get_splinesky(self):
@@ -1330,29 +1320,19 @@ class Measurer(object):
         return cal
 
     def get_psfex_merged_filename(self):
-        """
-        expstr = '%08i' % self.expnum
-        fn = os.path.join(self.calibdir, self.camera, 'psfex-merged', expstr[:5],
-                          '%s-%s.fits' % (self.camera, expstr))
-        """
         basefn = os.path.basename(self.fn_base)
         basedir = os.path.dirname(self.fn_base)
         base = basefn.split('.')[0]
-        fn0 = base+"-psfex.fits"
-        fn = os.path.join(self.calibdir, basedir, fn0)
+        fn = base+"-psfex.fits"
+        fn = os.path.join(self.calibdir, basedir, fn)
         return fn
 
     def get_psfex_unmerged_filename(self):
-        """
-        expstr = '%08i' % self.expnum
-        return os.path.join(self.calibdir, self.camera, 'psfex', expstr[:5], expstr,
-                          '%s-%s-%s.fits' % (self.camera, expstr, self.ext))
-        """
         basefn = os.path.basename(self.fn_base)
         basedir = os.path.dirname(self.fn_base)
         base = basefn.split('.')[0]
-        fn0 = base+"-"+self.ext+"-psfex.fits"
-        fn = os.path.join(self.calibdir, basedir, base, fn0)
+        fn = base+"-"+self.ccdname+"-psfex.fits"
+        fn = os.path.join(self.calibdir, basedir, base, fn)
         return fn
 
     def get_psfex_model(self):
@@ -1993,7 +1973,6 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
             raise RuntimeError('Merged psfex file did not validate!')
         # At this point the merged file exists and has been validated, so remove
         # the individual PSFEx and SE files.
-        os.system("pwd")
         for ext in extlist:
             measure.ext = ext
             psffn = measure.get_psfex_unmerged_filename()
