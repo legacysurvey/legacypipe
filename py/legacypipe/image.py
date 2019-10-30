@@ -142,9 +142,17 @@ class LegacySurveyImage(object):
         self.pixscale = 3600. * np.sqrt(np.abs(ccd.cd1_1 * ccd.cd2_2 -
                                                ccd.cd1_2 * ccd.cd2_1))
         # Calib filenames
-        tmpname = self.image_filename.replace(".fits.fz", "")
-        basename = os.path.basename(tmpname)
-        calibdir = os.path.join(self.survey.get_calib_dir(), os.path.dirname(tmpname))
+        #tmpname = self.image_filename.replace(".fits.fz", "")
+        #tmpname = tmpname.replace(".fits", "")
+        #basename = os.path.basename(tmpname)
+
+        basename = os.path.basename(self.image_filename)
+        ### HACK -- keep only the first dotted component of the base filename.
+        # This allows, eg, create-testcase.py to use image filenames like BASE.N3.fits
+        # with only a single HDU.
+        basename = basename.split('.')[0]
+        
+        calibdir = os.path.join(self.survey.get_calib_dir(), os.path.dirname(self.image_filename))
         calname = basename+"-"+self.ccdname
         self.name = calname
         self.sefn               = os.path.join(calibdir, basename, calname + "-se.fits")
