@@ -149,6 +149,9 @@ def main():
 
         psfex.fwhm = tim.psf_fwhm
 
+        #### HACK
+        psfrow = None
+
         if psfrow is not None:
             print('PSF row:', psfrow)
         else:
@@ -161,6 +164,7 @@ def main():
             primhdr = fitsio.read_header(im.imgfn)
             imghdr = fitsio.read_header(im.imgfn, hdu=im.hdu)
             sky = im.read_sky_model(splinesky=True, primhdr=primhdr, imghdr=imghdr)
+            #skyhdr = fitsio.read_header(im.splineskyfn)
         else:
             sky = tim.getSky()
 
@@ -173,16 +177,28 @@ def main():
                 skyrow = T[I]
                 skyrow.x0[0] = ccd.ccd_x0
                 skyrow.y0[0] = ccd.ccd_y0
+
+                s_med = skyrow.sky_med[0]
+                s_john = skyrow.sky_john[0]
+
                 skyhdr = fitsio.read_header(im.merged_splineskyfn)
 
+        ### HACK
+        skyrow = None
+                
         if skyrow is not None:
             print('Sky row:', skyrow)
         else:
             print('Sky:', sky)
 
+
+        # Output filename format:
+        fn = ccd.image_filename.strip()
+        ccd.image_filename = os.path.join(os.path.dirname(fn),
+                                          '%s.%s.fits' % (os.path.basename(fn).split('.')[0], ccd.ccdname.strip()))
         outim = outsurvey.get_image_object(ccd)
         print('Output image:', outim)
-
+        
         print('Image filename:', outim.imgfn)
         trymakedirs(outim.imgfn, dir=True)
 
@@ -227,20 +243,20 @@ def main():
         # Add image extension to filename
         # fitsio doesn't compress .fz by default, so drop .fz suffix
         
-        outim.imgfn = outim.imgfn.replace('.fits', '-%s.fits' % im.ccdname)
+        #outim.imgfn = outim.imgfn.replace('.fits', '-%s.fits' % im.ccdname)
         if not args.fpack:
             outim.imgfn = outim.imgfn.replace('.fits.fz', '.fits')
         if args.gzip:
             outim.imgfn = outim.imgfn.replace('.fits', '.fits.gz')
 
-        outim.wtfn  = outim.wtfn.replace('.fits', '-%s.fits' % im.ccdname)
+        #outim.wtfn  = outim.wtfn.replace('.fits', '-%s.fits' % im.ccdname)
         if not args.fpack:
             outim.wtfn  = outim.wtfn.replace('.fits.fz', '.fits')
         if args.gzip:
             outim.wtfn = outim.wtfn.replace('.fits', '.fits.gz')
 
         if outim.dqfn is not None:
-            outim.dqfn  = outim.dqfn.replace('.fits', '-%s.fits' % im.ccdname)
+            #outim.dqfn  = outim.dqfn.replace('.fits', '-%s.fits' % im.ccdname)
             if not args.fpack:
                 outim.dqfn  = outim.dqfn.replace('.fits.fz', '.fits')
             if args.gzip:
@@ -345,7 +361,8 @@ def main():
             F = fitsio.FITS(psfout, 'rw')
             F[0].write_keys([dict(name='EXPNUM', value=ccd.expnum),
                              dict(name='PLVER',  value=psf.plver),
-                             dict(name='PROCDATE', value=psf.procdate),])
+                             dict(name='PROCDATE', value=psf.procdate),
+                             dict(name='PLPROCID', value=psf.plprocid),])
             F.close()
 
         skyout = outim.splineskyfn
@@ -359,9 +376,12 @@ def main():
         else:
             primhdr = fitsio.FITSHDR()
             primhdr['PLVER'] = sky.plver
+            primhdr['PLPROCID'] = sky.plprocid
             primhdr['PROCDATE'] = sky.procdate
             primhdr['EXPNUM'] = ccd.expnum
             primhdr['IMGDSUM'] = sky.datasum
+            primhdr['S_MED'] = s_med
+            primhdr['S_JOHN'] = s_john
             sky.write_fits(skyout, primhdr=primhdr)
 
         # HACK -- check result immediately.
