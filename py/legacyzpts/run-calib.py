@@ -1,5 +1,5 @@
 #! /usr/bin/env python
-"""This script runs calibration pre-processing steps including WCS, sky, and PSF models.
+"""This script runs calibration pre-processing steps including sky and PSF models.
 """
 from __future__ import print_function
 import numpy as np
@@ -30,9 +30,6 @@ def main():
     parser.add_argument('--continue', dest='cont', default=False, action='store_true',
                         help='Continue even if one file fails?')
     parser.add_argument('--plot-base', help='Make plots with this base filename')
-    # actually this doesn't work for calibs...
-    #parser.add_argument('--outdir', dest='output_dir', default=None,
-    #   help='Set output base directory')
 
     parser.add_argument('args',nargs=argparse.REMAINDER)
     opt = parser.parse_args()
@@ -42,22 +39,13 @@ def main():
     if opt.ccds is not None:
         T = fits_table(opt.ccds)
         T = survey.cleanup_ccds_table(T)
-
         print('Read', len(T), 'from', opt.ccds)
-    #else:
-    #    T = survey.get_ccds()
-    #    #print len(T), 'CCDs'
 
     if len(opt.args) == 0:
         if opt.expnum is not None:
             expnums = set([int(e) for e in opt.expnum.split(',')])
-            #T.cut(np.array([e in expnums for e in T.expnum]))
             T = merge_tables([survey.find_ccds(expnum=e, ccdname=opt.extname) for e in expnums])
             print('Cut to', len(T), 'with expnum in', expnums, 'and extname', opt.extname)
-        #if opt.extname is not None:
-        #    T.cut(np.array([(t.strip() == opt.extname) for t in T.ccdname]))
-        #    print('Cut to', len(T), 'with extname =', opt.extname)
-
         opt.args = range(len(T))
 
     ps = None
@@ -85,11 +73,6 @@ def main():
             print('Index', i)
             t = T[i]
 
-        #print('CCDnmatch', t.ccdnmatch)
-        #if t.ccdnmatch < 20 and not opt.force:
-        #    print('Skipping ccdnmatch = %i' % t.ccdnmatch)
-        #    continue
-            
         im = survey.get_image_object(t)
         print('Running', im.name)
         
@@ -100,7 +83,6 @@ def main():
             kwargs.update(se=True)
         if opt.splinesky:
             kwargs.update(splinesky=True)
-
         if opt.cont:
             kwargs.update(noraise=True)
             
