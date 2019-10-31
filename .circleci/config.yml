@@ -76,7 +76,7 @@ jobs:
           command: |
               pwd
               ls
-              export PYTHONPATH=${PYTHONPATH}:$(pwd)/unwise_psf/py/unwise_psf:.
+              export PYTHONPATH=${PYTHONPATH}:$(pwd)/unwise_psf/py:.
               export DUST_DIR=$(pwd)/dust
               cd py
               echo $PYTHONPATH
