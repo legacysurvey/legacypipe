@@ -27,9 +27,10 @@ install:
     - pip install astropy #==2.0rc1
     - pip install photutils
     - pip install coveralls
+    - pip install fitsio
     # fitsio master version
     #- pip install --no-deps --upgrade git+https://github.com/esheldon/fitsio.git#egg=fitsio
-    - pip install --no-deps --upgrade git+https://github.com/esheldon/fitsio.git@v0.9.12#egg=fitsio
+    #- pip install --no-deps --upgrade git+https://github.com/esheldon/fitsio.git@v0.9.12#egg=fitsio
     - pip install -v --no-deps --upgrade git+https://github.com/dstndstn/tractor.git
 
 before_script:
