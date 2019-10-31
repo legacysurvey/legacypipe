@@ -116,7 +116,8 @@ def main():
                                (yy >= 1.-margin) * (yy <= H+margin))
         hpcat.cut(onccd)
         if len(hpcat):
-            outfn = os.path.join(args.outdir, 'gaia/chunk-%05d.fits' % hp)
+            outfn = os.path.join(args.outdir, 'gaia', 'chunk-%05d.fits' % hp)
+            trymakedirs(os.path.join(args.outdir, 'gaia'))
             hpcat.writeto(outfn)
     
     outccds = C.copy()

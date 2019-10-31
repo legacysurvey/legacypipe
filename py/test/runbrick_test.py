@@ -67,10 +67,13 @@ def rbmain():
     outdir = 'out-testcase6-rex'
     the_args = ['--brick', '1102p240', '--zoom', '500', '600', '650', '750',
                '--force-all', '--no-write', '--no-wise',
+                '--skip-calibs',
     #'--rex', #'--plots',
                '--survey-dir', surveydir,
                '--outdir', outdir] + extra_args
     print('python legacypipe/runbrick.py', ' '.join(the_args))
+    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
+    os.environ['GAIA_CAT_VER'] = '2'
     main(args=the_args)
     fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
     assert(os.path.exists(fn))
@@ -78,7 +81,7 @@ def rbmain():
     assert(len(T) == 2)
     print('Types:', T.type)
     # Since there is a Tycho-2 star in the blob, forced to be PSF.
-    assert(T.type[0] == 'PSF ')
+    assert(T.type[0].strip() == 'PSF')
     cmd = ('(cd %s && sha256sum -c %s)' %
            (outdir, os.path.join('tractor', '110', 'brick-1102p240.sha256sum')))
     print(cmd)
@@ -99,7 +102,7 @@ def rbmain():
     assert(len(T) == 2)
     print('Types:', T.type)
     # Since there is a Tycho-2 star in the blob, forced to be PSF.
-    assert(T.type[0] == 'PSF ')
+    assert(T.type[0].strip() == 'PSF')
 
     # Test that we can run splinesky calib if required...
     
