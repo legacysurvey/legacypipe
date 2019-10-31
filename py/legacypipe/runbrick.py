@@ -173,9 +173,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                                 comment='Brick Dec min (deg)'))
     version_header.add_record(dict(name='DECMAX'  , value=brick.dec2,
                                 comment='Brick Dec max (deg)'))
-    #version_header.add_record(dict(name='BRICKRA' , value=brick.ra,comment='[deg] Brick center'))
-    #version_header.add_record(dict(name='BRICKDEC', value=brick.dec,comment='[deg] Brick center'))
-
     # Add NOAO-requested headers
     version_header.add_record(dict(
         name='RA', value=ra2hmsstring(brick.ra, separator=':'), comment='Brick center RA (hms)'))

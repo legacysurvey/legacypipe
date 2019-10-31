@@ -92,6 +92,32 @@ def main():
     rtn = os.system(cmd)
     assert(rtn == 0)
     os.unlink(tfn)
+
+    from legacypipe.gaiacat import GaiaCatalog
+    gcat = GaiaCatalog()
+    # from ps1cat.py:
+    wcs = targetwcs
+    step=100.
+    margin=10.
+    # Grid the CCD in pixel space
+    W,H = wcs.get_width(), wcs.get_height()
+    xx,yy = np.meshgrid(
+        np.linspace(1-margin, W+margin, 2+int((W+2*margin)/step)),
+        np.linspace(1-margin, H+margin, 2+int((H+2*margin)/step)))
+    # Convert to RA,Dec and then to unique healpixes
+    ra,dec = wcs.pixelxy2radec(xx.ravel(), yy.ravel())
+    healpixes = set()
+    for r,d in zip(ra,dec):
+        healpixes.add(gcat.healpix_for_radec(r, d))
+    for hp in healpixes:
+        hpcat = gcat.get_healpix_catalog(hp)
+        ok,xx,yy = wcs.radec2pixelxy(hpcat.ra, hpcat.dec)
+        onccd = np.flatnonzero((xx >= 1.-margin) * (xx <= W+margin) *
+                               (yy >= 1.-margin) * (yy <= H+margin))
+        hpcat.cut(onccd)
+        if len(hpcat):
+            outfn = os.path.join(args.outdir, 'gaia/chunk-%05d.fits' % hp)
+            hpcat.writeto(outfn)
     
     outccds = C.copy()
     cols = outccds.get_columns()

@@ -65,11 +65,13 @@ def rbmain():
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase6')
     outdir = 'out-testcase6-rex'
-    main(args=['--brick', '1102p240', '--zoom', '500', '600', '650', '750',
+    the_args = ['--brick', '1102p240', '--zoom', '500', '600', '650', '750',
                '--force-all', '--no-write', '--no-wise',
-            #'--rex', #'--plots',
+    #'--rex', #'--plots',
                '--survey-dir', surveydir,
-               '--outdir', outdir] + extra_args)
+               '--outdir', outdir] + extra_args
+    print('python legacypipe/runbrick.py', ' '.join(the_args))
+    main(args=the_args)
     fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
     assert(os.path.exists(fn))
     T = fits_table(fn)
