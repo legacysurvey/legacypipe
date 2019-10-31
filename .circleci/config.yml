@@ -65,7 +65,7 @@ jobs:
           command: |
                git clone https://github.com/legacysurvey/unwise_psf.git
                cd unwise_psf
-               git checkout strings
+               git checkout dr9.2
                export PYTHONPATH=${PYTHONPATH}:$(pwd)/unwise_psf/py
       - run:
           name: Test deps
