@@ -1115,7 +1115,7 @@ class Measurer(object):
         basefn = os.path.basename(self.fn_base)
         basedir = os.path.dirname(self.fn_base)
         base = basefn.split('.')[0]
-        fn = base+"-"+self.ccdname+"-splinesky.fits"
+        fn = base+"-"+self.ext+"-splinesky.fits"
         fn = os.path.join(self.calibdir, basedir, base, fn)
         return fn
 
@@ -1334,7 +1334,7 @@ class Measurer(object):
         basefn = os.path.basename(self.fn_base)
         basedir = os.path.dirname(self.fn_base)
         base = basefn.split('.')[0]
-        fn = base+"-"+self.ccdname+"-psfex.fits"
+        fn = base+"-"+self.ext+"-psfex.fits"
         fn = os.path.join(self.calibdir, basedir, base, fn)
         return fn
 
