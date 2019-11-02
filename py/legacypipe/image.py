@@ -1258,7 +1258,7 @@ class LegacySurveyImage(object):
                 # Read DR8 blob maps for all overlapping bricks and project them
                 # into this CCD's pixel space.
                 from legacypipe.survey import bricks_touching_wcs, wcs_for_brick
-                from astrometry.util.resample import resample_with_wcs
+                from astrometry.util.resample import resample_with_wcs, OverlapError
 
                 bricks = bricks_touching_wcs(wcs, survey=survey_blob_mask)
                 H,W = wcs.shape
@@ -1271,7 +1271,10 @@ class LegacySurveyImage(object):
                     blobs = fitsio.read(fn)
                     blobs = (blobs >= 0)
                     brickwcs = wcs_for_brick(brick)
-                    Yo,Xo,Yi,Xi,_ = resample_with_wcs(wcs, brickwcs)
+                    try:
+                        Yo,Xo,Yi,Xi,_ = resample_with_wcs(wcs, brickwcs)
+                    except OverlapError:
+                        continue
                     allblobs[Yo,Xo] |= blobs[Yi,Xi]
                 ng = np.sum(good)
                 good[allblobs] = False
