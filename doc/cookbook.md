@@ -18,7 +18,27 @@ NERSC. Instructions assume code is being run as desiproc.
 Environment
 ===========
 
-Un to and including DR6, the environment variables were set by loading
+Using Shifter
+---------
+
+Starting from DR8, we shifted to using shifter images for the environment. Shifter images are basically docker images. To use it, you can either directly type
+
+```bash
+shifter --image docker:legacysurvey/legacypipe:nersc-dr8.3.2 bash
+```
+
+Or you can add `shifter --image docker:legacysurvey/legacypipe:nersc-dr8.3.2 bash` to your srun command. Example:
+
+```bash
+srun -n 80 --ntasks-per-node=8 --cpus-per-task=8 --exclusive --cpu_bind=cores --threads-per-core=1 --image=docker:legacysurvey/legacypipe:nersc-dr8.3.0 shifter qdo_do.sh
+```
+
+From this point, feel free to skip to the qdo section. Or you can read the now deprecated non-shifter section below.
+
+Not Using Shifter
+---------
+
+Up to and including DR6, the environment variables were set by loading
 modules in the in the `~/.bashrc.ext` file. From DR7 onwards, the
 environment, except for QDO variables, can be set by sourcing\
 `legacypipe/bin/legacypipe-env` or a local copy. Note that some relevant
@@ -319,6 +339,44 @@ Afterwards, generate the final kd-tree survey-ccds file using the
 
 Running tractor
 ===============
+
+Using Farm.py
+--------
+
+In DR8, farm.py was introduced to maximize parallization at the fitblob stage. There are now three steps to tractor processing: 1. Pre-Farm 2. Farm.py 3. Post-Farm
+
+### Pre-Farm (Up to srcs stage)
+
+### Farm.py (Fitblobs stage)
+Detailed instructions can be found at legacypipe/bin/farm directory
+
+### Post-Farm (Rest of runbrick.py)
+
+1. Create a qdo queue containing the bricks to be processed
+
+2. Create a new directory and copy ` legacysurvey/doc/runbrick-shifter-dr8-postfarm.sh` into it
+
+3. Edit `runbrick-shifter-dr8-postfarm.sh` to fit your needs. Pay special attention to `outdir`, `ncores`, `--checkpoint` and `--pickle`
+
+4. Load qdo credentials into environment variables
+
+5. Launch jobs using commands similar to
+
+   ```bash
+   # Haswell
+   QDO_BATCH_PROFILE=cori-shifter qdo launch -v $QDO_QUEUE_NAME 8 --cores_per_worker 4 --walltime=0:30:00 --batchqueue=debug --keep_env --batchopts "--image=docker:legacysurvey/legacypipe:nersc-dr8.3.2" --script "/global/cscratch1/sd/ziyaoz/farm-post/runbrick-shifter-dr8-postfarm.sh"
+   
+   # KNL
+   QDO_BATCH_PROFILE=cori-knl-shifter qdo launch -v $QDO_QUEUE_NAME 80 --cores_per_worker 8 --walltime=4:00:00 --batchqueue=regular --keep_env --batchopts "--image=docker:legacysurvey/legacypipe:nersc-dr8.3.2" --script "/global/cscratch1/sd/ziyaoz/farm-post/runbrick-shifter-dr8-postfarm.sh"
+   ```
+
+And that's it! If you are curious, feel free to read the detailed description below for not using farm.py, or you can skip to the Post-Tractor Processing section.
+
+
+Not Using Farm.py
+---------
+The following details the steps used prior to DR8
+
 
 Staging of input data
 ---------------------
