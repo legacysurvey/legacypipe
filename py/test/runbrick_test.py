@@ -112,8 +112,11 @@ def rbmain():
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
     outdir = 'out-testcase4'
 
-    fn = os.path.join(surveydir, 'calib', 'decam', 'splinesky', '00431',
-                      '00431608', 'decam-00431608-N3.fits')
+    #fn = os.path.join(surveydir, 'calib', 'decam', 'splinesky', '00431',
+    #                  '00431608', 'decam-00431608-N3.fits')
+    fn = os.path.join(surveydir, 'calib', 'decam', 'CP', 'V4.8.2a',
+                      'CP20150410', 'c4d_150411_035242_ooi_z_ls9',
+                      'c4d_150411_035242_ooi_z_ls9-N3-splinesky.fits')
     if os.path.exists(fn):
         os.unlink(fn)
 
