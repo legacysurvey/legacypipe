@@ -1100,9 +1100,9 @@ class LegacySurveyImage(object):
             git_version = get_git_version()
         # We write the PSF model to a .fits.tmp file, then rename to .fits
         psfdir = os.path.dirname(self.psffn)
-        psfoutfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.fits')
-        psftmpfn = psfoutfn + '.tmp'
-        cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .fits.tmp -VERBOSE_TYPE QUIET %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, self.sefn)
+        # psfex decides for itself what it's going to name the output file....
+        psftmpfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.psf.tmp')
+        cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .psf.tmp -VERBOSE_TYPE QUIET %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, self.sefn)
         debug(cmd)
         rtn = os.system(cmd)
         if rtn:
@@ -1121,7 +1121,8 @@ class LegacySurveyImage(object):
         F[0].write_keys(hlist)
         F.close()
 
-        cmd = 'mv %s %s' % (psftmpfn, psfoutfn)
+        cmd = 'mv %s %s' % (psftmpfn, self.psffn)
+        debug(cmd)
         rtn = os.system(cmd)
         if rtn:
             raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
