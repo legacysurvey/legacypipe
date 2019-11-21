@@ -127,7 +127,12 @@ class LegacySurveyImage(object):
         self.sig1    = ccd.sig1
         # Use dummy values to accommodate old calibs (which will fail later
         # unless old-calibs-ok=True)
-        self.plver = getattr(ccd, 'plver', 'xxx').strip()
+        try:
+            self.plver = getattr(ccd, 'plver', 'xxx').strip()
+        except:
+            print('Failed to read PLVER header card as a string.  This probably means your python fitsio package is too old.')
+            print('Try upgrading to version 1.0.5 or later.')
+            raise
         self.procdate = getattr(ccd, 'procdate', 'xxxxxxx').strip()
         self.plprocid = getattr(ccd, 'plprocid', 'xxxxxxx').strip()
 
