@@ -281,9 +281,8 @@ def good_ccd_fraction(survey, ccds):
 
 def match(a, b):
     sa = numpy.argsort(a)
-    sb = numpy.argsort(b)
     ua = numpy.unique(a[sa])
-    if len(ua) != len(a):# or len(ub) != len(b):
+    if len(ua) != len(a):
         raise ValueError('All keys in a must be unique.')
     ind = numpy.searchsorted(a[sa], b)
     m = (ind >= 0) & (ind < len(a))
@@ -297,7 +296,7 @@ def patch_zeropoints(zps, ccds, ccdsa):
                      (ccdsa.image_filename == ccdsa.image_filename)):
         raise ValueError('ccds and ccdsa must be row matched!')
     mreplace = ccds.dec < -29.25
-    mok = ((zps.scatter > 0) & (zps.scatter < 0.05) & 
+    mok = ((zps.scatter > 0) & (zps.scatter < 0.05) &
            (numpy.abs(zps.resid) < 0.2))
     mz, mc = match(zps.mjd_obs, ccds.mjd_obs)
     m = mok[mz] & mreplace[mc]
