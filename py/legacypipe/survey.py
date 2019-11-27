@@ -471,11 +471,9 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
         # this is assumed to be only a single directory
         headers.append(('UNWISSKY', unwise_modelsky_dir, ''))
 
-    added_long = False
     for i,(name,value) in enumerate(depvers):
         headers.append(('DEPNAM%02i' % i, name, ''))
         headers.append(('DEPVER%02i' % i, value, ''))
-
     return headers
 
 class MyFITSHDR(fitsio.FITSHDR):

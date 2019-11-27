@@ -81,6 +81,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                unwise_dir=None,
                unwise_tr_dir=None,
                unwise_modelsky_dir=None,
+               command_line=None,
                **kwargs):
     '''
     This is the first stage in the pipeline.  It
@@ -157,7 +158,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     deps = get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir)
     for name,value,comment in deps:
         version_header.add_record(dict(name=name, value=value, comment=comment))
-
+    if command_line is not None:
+        version_header.add_record(dict(name='CMDLINE', value=command_line,
+                                       comment='runbrick command-line'))
     version_header.add_record(dict(name='BRICK', value=brickname,
                                 comment='LegacySurveys brick RRRr[pm]DDd'))
     version_header.add_record(dict(name='BRICKID' , value=brickid,
@@ -353,6 +356,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
 
+def _add_stage_version(version_header, short, stagename):
+    from legacypipe.survey import get_git_version
+    version_header.add_record(dict(name='VER_%s'%short, value=get_git_version(),
+                                   help='legacypipe version for stage_%s'%stagename))
+
 def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
                     mp=None, nsigma=None, plots=None, ps=None, record_event=None,
                     survey=None, brickname=None, version_header=None,
@@ -366,6 +374,7 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
     from legacypipe.outliers import patch_from_coadd, mask_outlier_pixels, read_outlier_mask_file
 
     record_event and record_event('stage_outliers: starting')
+    _add_stage_version(version_header, 'OUTL', 'outliers')
 
     # Check for existing MEF containing masks for all the chips we need.
     if not read_outlier_mask_file(survey, tims, brickname):
@@ -397,7 +406,7 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
         outfn = os.path.join(outdir, 'outliers-masked-neg-%s.jpg' % brickname)
         imsave_jpeg(outfn, get_rgb(badcoaddsneg, bands), origin='lower')
 
-    return dict(tims=tims)
+    return dict(tims=tims, version_header=version_header)
 
 def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        brickname=None, version_header=None,
@@ -526,6 +535,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     from legacypipe.reference import get_reference_sources
 
     record_event and record_event('stage_srcs: starting')
+    _add_stage_version(version_header, 'SRCS', 'srcs')
 
     tlast = Time()
 
@@ -893,7 +903,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
             'ps', 'refstars', 'gaia_stars', 'saturated_pix',
-            'T_donotfit', 'T_clusters']
+            'T_donotfit', 'T_clusters', 'version_header']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
@@ -1078,6 +1088,7 @@ def stage_fitblobs(T=None,
     from tractor import Catalog
 
     record_event and record_event('stage_fitblobs: starting')
+    _add_stage_version(version_header, 'FITB', 'fitblobs')
     tlast = Time()
 
     # How far down to render model profiles
@@ -1499,7 +1510,7 @@ def stage_fitblobs(T=None,
                 TT.writeto(None, fits_object=out.fits, header=hdr,
                            primheader=primhdr)
 
-    keys = ['cat', 'invvars', 'T', 'blobs', 'brightblobmask']
+    keys = ['cat', 'invvars', 'T', 'blobs', 'brightblobmask', 'version_header']
     if get_all_models:
         keys.append('all_models')
     if bailout:
@@ -1812,8 +1823,9 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     from functools import reduce
     from legacypipe.survey import apertures_arcsec
     from legacypipe.bits import IN_BLOB
-    tlast = Time()
     record_event and record_event('stage_coadds: starting')
+    _add_stage_version(version_header, 'COAD', 'coadds')
+    tlast = Time()
 
     # Write per-brick CCDs table
     primhdr = fitsio.FITSHDR()
@@ -2141,7 +2153,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     return dict(T=T, T_donotfit=T_donotfit, apertures_pix=apertures,
                 apertures_arcsec=apertures_arcsec,
                 maskbits=maskbits,
-                maskbits_header=maskbits_header)
+                maskbits_header=maskbits_header, version_header=version_header)
 
 def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
                      fibersize=1.5, seeing=1., year=2020.0,
@@ -2318,6 +2330,7 @@ def stage_wise_forced(
     from tractor import NanoMaggies
 
     record_event and record_event('stage_wise_forced: starting')
+    _add_stage_version(version_header, 'WISE', 'wise_forced')
 
     if not plots:
         ps = None
@@ -2514,7 +2527,8 @@ def stage_wise_forced(
     debug('Returning: WISE', WISE)
     debug('Returning: WISE_T', WISE_T)
 
-    return dict(WISE=WISE, WISE_T=WISE_T, wise_mask_maps=wise_mask_maps)
+    return dict(WISE=WISE, WISE_T=WISE_T, wise_mask_maps=wise_mask_maps,
+                version_header=version_header)
 
 def _fill_skipped_values(WISE, Nskipped, do_phot):
     # Fill in blank values for skipped (Icluster) sources
@@ -2564,6 +2578,7 @@ def stage_writecat(
     from legacypipe.catalog import prepare_fits_catalog
 
     record_event and record_event('stage_writecat: starting')
+    _add_stage_version(version_header, 'WCAT', 'writecat')
 
     if maskbits is not None:
         w1val = MASKBITS['WISEM1']
@@ -2810,7 +2825,7 @@ def stage_writecat(
 
     record_event and record_event('stage_writecat: done')
 
-    return dict(T2=T2)
+    return dict(T2=T2, version_header=version_header)
 
 def run_brick(brick, survey, radec=None, pixscale=0.262,
               width=3600, height=3600,
@@ -2854,6 +2869,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               threads=None,
               plots=False, plots2=False, coadd_bw=False,
               plot_base=None, plot_number=0,
+              command_line=None,
               record_event=None,
     # These are for the 'stages' infrastructure
               pickle_pat='pickles/runbrick-%(brick)s-%%(stage)s.pickle',
@@ -3082,6 +3098,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   unwise_dir=unwise_dir,
                   unwise_tr_dir=unwise_tr_dir,
                   unwise_modelsky_dir=unwise_modelsky_dir,
+                  command_line=command_line,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
                   force=forceStages, write=write_pickles,
                   record_event=record_event)
@@ -3549,10 +3566,6 @@ def main(args=None):
         print(cmd)
     else:
         print('Args:', args)
-    cid = os.environ.get('SLURM_CLUSTER_NAME', 'none')
-    jid = os.environ.get('SLURM_JOB_ID', 'none')
-    aid = os.environ.get('ARRAY_TASK_ID', 'none')
-    print('Slurm cluster/job/array:', cid, '/', jid, '/', aid)
     print()
 
     parser = get_parser()
@@ -3575,6 +3588,7 @@ def main(args=None):
     survey, kwargs = get_runbrick_kwargs(**optdict)
     if kwargs in [-1, 0]:
         return kwargs
+    kwargs.update(command_line=' '.join(sys.argv))
 
     if verbose == 0:
         lvl = logging.INFO
