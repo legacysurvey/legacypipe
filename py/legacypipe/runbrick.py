@@ -1467,12 +1467,12 @@ def stage_fitblobs(T=None,
     del ninblob
 
     # Copy blob results to table T
-    for k in ['fracflux', 'fracin', 'fracmasked', 'rchisq', 'cpu_source',
-              'cpu_blob', 'blob_width', 'blob_height', 'blob_npix',
+    for k in ['fracflux', 'fracin', 'fracmasked', 'rchisq',
+              'cpu_arch', 'cpu_source', 'cpu_blob',
+              'blob_width', 'blob_height', 'blob_npix',
               'blob_nimages', 'blob_totalpix',
-              'blob_symm_width', 'blob_symm_height',
-              'blob_symm_npix', 'blob_symm_nimages', 'brightblob',
-              'hit_limit', 'dchisq']:
+              'blob_symm_width', 'blob_symm_height', 'blob_symm_npix',
+              'blob_symm_nimages', 'brightblob', 'hit_limit', 'dchisq']:
         T.set(k, BB.get(k))
 
     # compute the pixel-space mask for *brightblob* values

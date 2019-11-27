@@ -38,10 +38,10 @@ def get_cpu_arch():
     import os
     if cpu_arch is not None:
         return cpu_arch
+    family = None
+    model = None
+    modelname = None
     if os.path.exists('/proc/cpuinfo'):
-        family = None
-        model = None
-        modelname = None
         for line in open('/proc/cpuinfo').readlines():
             words = [w.strip() for w in line.strip().split(':')]
             #print('words', words)
@@ -54,13 +54,12 @@ def get_cpu_arch():
             if words[0] == 'model name' and modelname is None:
                 modelname = words[1]
                 print('Set CPU model', modelname)
-        codenames = {
-            # NERSC Cori machines
-            (6, 63): 'has',
-            (6, 87): 'knl',
-            }
-        codename = codenames.get((family, model), '')
-        cpu_arch = codename
+    codenames = {
+        # NERSC Cori machines
+        (6, 63): 'has',
+        (6, 87): 'knl',
+    }
+    cpu_arch = codenames.get((family, model), '')
     return cpu_arch
 
 def one_blob(X):
