@@ -359,7 +359,7 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
     #lsdir_prefix1 = '/global/project/projectdirs'
     #lsdir_prefix2 = '/global/projecta/projectdirs'
     for s in [
-        'Data product of the DECam Legacy Survey (DECaLS)',
+        'Data product of the DESI Imaging Legacy Survey (DECaLS)',
         'Full documentation at http://legacysurvey.org',
         ]:
         hdr.add_record(dict(name='COMMENT', value=s, comment=s))
@@ -369,7 +369,7 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
     #                    comment='LegacySurveys Directory Prefix'))
     hdr.add_record(dict(name='LSDIR', value=survey_dir,
                         comment='$LEGACY_SURVEY_DIR directory'))
-    hdr.add_record(dict(name='LSDR', value='DR8',
+    hdr.add_record(dict(name='LSDR', value='DR9',
                         comment='Data release number'))
     hdr.add_record(dict(name='RUNDATE', value=datetime.datetime.now().isoformat(),
                         comment='%s run time' % program_name))
@@ -401,42 +401,36 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
     return hdr
 
 def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
+    import astrometry
+    import astropy
+    import matplotlib
+    try:
+        import mkl_fft
+    except:
+        mkl_fft = None
+    import photutils
+    import tractor
+    import scipy
+    import unwise_psf
+
     depvers = []
     headers = []
-    # Get DESICONDA version, and read file $DESICONDA/pkg_list.txt for
-    # other package versions.
     default_ver = 'UNAVAILABLE'
-    desiconda = os.environ.get('DESICONDA', default_ver)
-    # DESICONDA like .../edison/desiconda/20180512-1.2.5-img/conda
-    verstr = os.path.basename(os.path.dirname(desiconda))
-    depvers.append(('desiconda', verstr))
-
-    if desiconda != default_ver:
-        fn = os.path.join(desiconda, 'pkg_list.txt')
-        vers = {}
-        if not os.path.exists(fn):
-            print('Warning: expected file $DESICONDA/pkg_list.txt to exist but it does not!')
-        else:
-            # Read version numbers
-            for line in open(fn):
-                words = line.strip().split('=')
-                if len(words) >= 2:
-                    vers[words[0]] = words[1]
-
-        for pkg in ['astropy', 'matplotlib', 'mkl', 'numpy', 'python', 'scipy']:
-            verstr = vers.get(pkg, default_ver)
-            if verstr == default_ver:
-                print('Warning: failed to get version string for "%s"' % pkg)
-            else:
-                depvers.append((pkg, verstr))
-
-    import astrometry
-    import tractor
-
     for name,pkg in [('astrometry', astrometry),
+                     ('astropy', astropy),
+                     ('fitsio', fitsio),
+                     ('matplotlib', matplotlib),
+                     ('mkl_fft', mkl_fft),
+                     ('numpy', np),
+                     ('photutils', photutils),
+                     ('scipy', scipy),
                      ('tractor', tractor),
-                     ('fitsio', fitsio),]:
-        depvers.append((name + '-path', os.path.dirname(pkg.__file__)))
+                     ('unwise_psf', unwise_psf),
+                     ]:
+        if pkg is None:
+            depvers.append((name, 'none'))
+            continue
+        #depvers.append((name + '-path', os.path.dirname(pkg.__file__)))
         try:
             depvers.append((name, pkg.__version__))
         except:
