@@ -460,13 +460,11 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
         depvers.append(('unwise', unwise_dir))
         for i,d in enumerate(dirs):
             headers.append(('UNWISD%i' % (i+1), d, ''))
-            #headers.append(('UNWISD%i' % (i+1), d, 'unWISE dir(s)'))
 
     if unwise_tr_dir is not None:
         depvers.append(('unwise_tr', unwise_tr_dir))
         # this is assumed to be only a single directory
         headers.append(('UNWISTD', unwise_tr_dir, ''))
-        #headers.append(('UNWISTD', unwise_tr_dir, 'unWISE time-resolved dir'))
 
     if unwise_modelsky_dir is not None:
         depvers.append(('unwise_modelsky', unwise_modelsky_dir))
@@ -476,21 +474,7 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
     added_long = False
     for i,(name,value) in enumerate(depvers):
         headers.append(('DEPNAM%02i' % i, name, ''))
-        if len(value) > 68:
-            headers.append(('DEPVER%02i' % i, value[:67] + '&', ''))
-            while len(value):
-                value = value[67:]
-                if len(value) == 0:
-                    break
-                headers.append(('CONTINUE',
-                                "  '%s%s'" % (value[:67], '&' if len(value) > 67 else ''),
-                                None))
-        else:
-            headers.append(('DEPVER%02i' % i, value, ''))
-            added_long = True
-
-    if added_long:
-        headers = [('LONGSTRN', 'OGIP 1.0','CONTINUE cards are used')] + headers
+        headers.append(('DEPVER%02i' % i, value, ''))
 
     return headers
 
