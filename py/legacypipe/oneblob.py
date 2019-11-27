@@ -31,6 +31,38 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
+# singleton
+cpu_arch = None
+def get_cpu_arch():
+    global cpu_arch
+    import os
+    if cpu_arch is not None:
+        return cpu_arch
+    if os.path.exists('/proc/cpuinfo'):
+        family = None
+        model = None
+        modelname = None
+        for line in open('/proc/cpuinfo').readlines():
+            words = [w.strip() for w in line.strip().split(':')]
+            #print('words', words)
+            if words[0] == 'cpu family' and family is None:
+                family = int(words[1])
+                print('Set CPU family', family)
+            if words[0] == 'model' and model is None:
+                model = int(words[1])
+                print('Set CPU model', model)
+            if words[0] == 'model name' and modelname is None:
+                modelname = words[1]
+                print('Set CPU model', modelname)
+        codenames = {
+            # NERSC Cori machines
+            (6, 63): 'has',
+            (6, 87): 'knl',
+            }
+        codename = codenames.get((family, model), '')
+        cpu_arch = codename
+    return cpu_arch
+
 def one_blob(X):
     '''
     Fits sources contained within a "blob" of pixels.
@@ -65,7 +97,6 @@ def one_blob(X):
     B.iblob = iblob
     B.blob_x0 = np.zeros(len(B), np.int16) + bx0
     B.blob_y0 = np.zeros(len(B), np.int16) + by0
-
     # Did sources start within the blob?
     ok,x0,y0 = blobwcs.radec2pixelxy(
         np.array([src.getPosition().ra  for src in srcs]),
@@ -78,6 +109,8 @@ def one_blob(X):
     # This uses 'initial' pixel positions, because that's what determines
     # the fitting behaviors.
     B.brightblob = refmap[safe_y0, safe_x0].astype(np.int16)
+    B.cpu_arch = np.zeros(len(B), dtype='U3')
+    B.cpu_arch[:] = get_cpu_arch()
     B.cpu_source = np.zeros(len(B), np.float32)
     B.blob_width  = np.zeros(len(B), np.int16) + blobw
     B.blob_height = np.zeros(len(B), np.int16) + blobh

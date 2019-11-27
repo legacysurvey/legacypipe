@@ -1591,7 +1591,7 @@ def _format_all_models(T, newcat, BB, bands):
     # Copy only desired columns...
     for k in ['blob', 'brickid', 'brickname', 'dchisq', 'objid',
               'ra','dec',
-              'cpu_source', 'cpu_blob', 'ninblob',
+              'cpu_arch', 'cpu_source', 'cpu_blob', 'ninblob',
               'blob_width', 'blob_height', 'blob_npix', 'blob_nimages',
               'blob_totalpix',
               'blob_symm_width', 'blob_symm_height',
