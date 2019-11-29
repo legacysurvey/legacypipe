@@ -695,23 +695,6 @@ def get_rgb_OLD(imgs, bands, mnmx=None, arcsinh=None, scales=None,
         return np.clip(rgb, 0., 1.)
     return rgb
 
-def switch_to_soft_ellipses(cat):
-    '''
-    Converts our softened-ellipticity EllipseESoft parameters into
-    normal EllipseE ellipses.
-
-    *cat*: an iterable of tractor Sources, which will be modified
-     in-place.
-
-    '''
-    from tractor.galaxy import DevGalaxy, FixedCompositeGalaxy
-    for src in cat:
-        if isinstance(src, (DevGalaxy, ExpGalaxy)):
-            src.shape = EllipseESoft.fromEllipseE(src.shape)
-        elif isinstance(src, FixedCompositeGalaxy):
-            src.shapeDev = EllipseESoft.fromEllipseE(src.shapeDev)
-            src.shapeExp = EllipseESoft.fromEllipseE(src.shapeExp)
-
 def brick_catalog_for_radec_box(ralo, rahi, declo, dechi,
                                 survey, catpattern, bricks=None):
     '''
@@ -755,63 +738,6 @@ def brick_catalog_for_radec_box(ralo, rahi, declo, dechi,
     # arbitrarily keep the first header
     T._header = TT[0]._header
     return T
-
-def ccd_map_image(valmap, empty=0.):
-    '''valmap: { 'N7' : 1., 'N8' : 17.8 }
-
-    Returns: a numpy image (shape (12,14)) with values mapped to their
-    CCD locations.
-
-    '''
-    img = np.empty((12,14))
-    img[:,:] = empty
-    for k,v in valmap.items():
-        x0,x1,y0,y1 = ccd_map_extent(k)
-        #img[y0+6:y1+6, x0+7:x1+7] = v
-        img[y0:y1, x0:x1] = v
-    return img
-
-def ccd_map_center(ccdname):
-    x0,x1,y0,y1 = ccd_map_extent(ccdname)
-    return (x0+x1)/2., (y0+y1)/2.
-
-def ccd_map_extent(ccdname, inset=0.):
-    assert(ccdname.startswith('N') or ccdname.startswith('S'))
-    num = int(ccdname[1:])
-    assert(num >= 1 and num <= 31)
-    if num <= 7:
-        x0 = 7 - 2*num
-        y0 = 0
-    elif num <= 13:
-        x0 = 6 - (num - 7)*2
-        y0 = 1
-    elif num <= 19:
-        x0 = 6 - (num - 13)*2
-        y0 = 2
-    elif num <= 24:
-        x0 = 5 - (num - 19)*2
-        y0 = 3
-    elif num <= 28:
-        x0 = 4 - (num - 24)*2
-        y0 = 4
-    else:
-        x0 = 3 - (num - 28)*2
-        y0 = 5
-    if ccdname.startswith('N'):
-        (x0,x1,y0,y1) = (x0, x0+2, -y0-1, -y0)
-    else:
-        (x0,x1,y0,y1) = (x0, x0+2, y0, y0+1)
-
-    # Shift from being (0,0)-centered to being aligned with the
-    # ccd_map_image() image.
-    x0 += 7
-    x1 += 7
-    y0 += 6
-    y1 += 6
-
-    if inset == 0.:
-        return (x0,x1,y0,y1)
-    return (x0+inset, x1-inset, y0+inset, y1-inset)
 
 def wcs_for_brick(b, W=3600, H=3600, pixscale=0.262):
     '''
@@ -1232,21 +1158,6 @@ class LegacySurveyData(object):
             debug('Cached file hit:', fn, '->', cfn)
             return cfn
         debug('Cached file miss:', fn, '-/->', cfn)
-
-        ### HACK for post-DR5 NonDECaLS reorg / DMD
-        if 'CPHETDEX' in fn:
-            '''
-            Cached file miss:
-            /global/cscratch1/sd/dstn/dr5-new-sky/images/decam/NonDECaLS/CPHETDEX/c4d_130902_082433_oow_g_v1.fits.fz -/->
-            /global/cscratch1/sd/dstn/dr5-new-sky/cache/images/decam/NonDECaLS/CPHETDEX/c4d_130902_082433_oow_g_v1.fits.fz
-            '''
-            from glob import glob
-            pat = fn.replace('CPHETDEX', '*')
-            fns = glob(pat)
-            if len(fns) == 1:
-                debug('Globbed', pat, '->', fns[0])
-                return fns[0]
-
         return fn
 
     def get_compression_string(self, filetype, shape=None, **kwargs):
@@ -1611,12 +1522,6 @@ class LegacySurveyData(object):
         TT = []
         for fn in fns:
             debug('Reading CCDs from', fn)
-            # cols = (
-            #     'exptime filter propid crpix1 crpix2 crval1 crval2 ' +
-            #     'cd1_1 cd1_2 cd2_1 cd2_2 ccdname ccdzpt ccdraoff ccddecoff ' +
-            #     'ccdnmatch camera image_hdu image_filename width height ' +
-            #     'ra dec zpt expnum fwhm mjd_obs').split()
-            #T = fits_table(fn, columns=cols)
             T = fits_table(fn, **kwargs)
             debug('Got', len(T), 'CCDs')
             TT.append(T)
@@ -1626,18 +1531,6 @@ class LegacySurveyData(object):
             T = TT[0]
         debug('Total of', len(T), 'CCDs')
         del TT
-
-        cols = T.columns()
-        # Make DR1 CCDs table somewhat compatible with DR2
-        if 'extname' in cols and not 'ccdname' in cols:
-            T.ccdname = T.extname
-        if not 'camera' in cols:
-            T.camera = np.array(['decam'] * len(T))
-        if 'cpimage' in cols and not 'image_filename' in cols:
-            T.image_filename = T.cpimage
-        if 'cpimage_hdu' in cols and not 'image_hdu' in cols:
-            T.image_hdu = T.cpimage_hdu
-
         T = self.cleanup_ccds_table(T)
         return T
 
