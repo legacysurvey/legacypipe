@@ -2103,7 +2103,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
         for i,(src,x,y,rr,dd) in enumerate(zip(cat, x1, y1, ra, dec)):
             from tractor import PointSource
-            from tractor.galaxy import DevGalaxy, ExpGalaxy, SersicGalaxy
+            from tractor.galaxy import DevGalaxy, ExpGalaxy
+            from tractor.sersic import SersicGalaxy
             ee = []
             ec = []
             cc = None
