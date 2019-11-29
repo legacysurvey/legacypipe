@@ -39,9 +39,14 @@ class BokImage(LegacySurveyImage):
             mask = F[slice]
         else:
             mask = F.read()
+
         # Pixels where the mask==1 that are not already masked get marked
         # with code 1 ("bad").
-        dq[(mask == 1) * (dq == 0)] = 1
+        if mask.shape == dq.shape:
+            dq[(mask == 1) * (dq == 0)] = 1
+        else:
+            print('WARNING: static mask shape', mask.shape, 'does not equal DQ shape', dq.shape, '-- not applying static mask!')
+
         if header:
             return dq,hdr
         return dq

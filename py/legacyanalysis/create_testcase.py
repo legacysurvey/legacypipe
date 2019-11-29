@@ -190,25 +190,25 @@ def main():
         if args.pad:
             primhdr = fitsio.read_header(im.imgfn)
             imghdr = fitsio.read_header(im.imgfn, hdu=im.hdu)
+
             sky = im.read_sky_model(splinesky=True, primhdr=primhdr, imghdr=imghdr)
             #skyhdr = fitsio.read_header(im.splineskyfn)
+            msky = im.read_merged_splinesky_model(slc=slc, old_calibs_ok=True)
         else:
             sky = tim.getSky()
 
             # Did the sky model come from a merged file?
             msky = im.read_merged_splinesky_model(slc=slc, old_calibs_ok=True)
-            if msky is not None:
-                T = fits_table(im.merged_splineskyfn)
-                I, = np.nonzero((T.expnum == im.expnum) *
-                                np.array([c.strip() == im.ccdname for c in T.ccdname]))
-                skyrow = T[I]
-                skyrow.x0[0] = ccd.ccd_x0
-                skyrow.y0[0] = ccd.ccd_y0
-
-                s_med = skyrow.sky_med[0]
-                s_john = skyrow.sky_john[0]
-
-                skyhdr = fitsio.read_header(im.merged_splineskyfn)
+        if msky is not None:
+            T = fits_table(im.merged_splineskyfn)
+            I, = np.nonzero((T.expnum == im.expnum) *
+                            np.array([c.strip() == im.ccdname for c in T.ccdname]))
+            skyrow = T[I]
+            skyrow.x0[0] = ccd.ccd_x0
+            skyrow.y0[0] = ccd.ccd_y0
+            s_med = skyrow.sky_med[0]
+            s_john = skyrow.sky_john[0]
+            skyhdr = fitsio.read_header(im.merged_splineskyfn)
 
         ### HACK
         skyrow = None

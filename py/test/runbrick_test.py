@@ -62,6 +62,12 @@ def rbmain():
         sys.exit(0)
 
     # MzLS + BASS data
+    surveydir2 = os.path.join(os.path.dirname(__file__), 'mzlsbass2')
+    main(args=['--brick', '1773p595', '--zoom', '1300', '1500', '700', '900',
+               '--no-wise', '--force-all', '--no-write',
+               '--survey-dir', surveydir2,
+               '--outdir', 'out-mzlsbass2'])
+
     # surveydir2 = os.path.join(os.path.dirname(__file__), 'mzlsbass')
     # main(args=['--brick', '3521p002', '--zoom', '2400', '2450', '1200', '1250',
     #            '--no-wise', '--force-all', '--no-write',
