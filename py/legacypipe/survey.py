@@ -612,7 +612,7 @@ def get_rgb(imgs, bands,
             resids=False, mnmx=None, arcsinh=None):
     # (ignore arcsinh...)
     if resids:
-        mnmx = (-5, 5)
+        mnmx = (-0.1, 0.1)
     if mnmx is not None:
         #return get_rgb_OLD(imgs, bands, mnmx=(-5,5))
         return sdss_rgb(imgs, bands, m=0., Q=None, mnmx=mnmx)
