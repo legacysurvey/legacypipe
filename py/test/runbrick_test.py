@@ -61,6 +61,13 @@ def rbmain():
         
         sys.exit(0)
 
+    # MzLS + BASS data
+    # surveydir2 = os.path.join(os.path.dirname(__file__), 'mzlsbass')
+    # main(args=['--brick', '3521p002', '--zoom', '2400', '2450', '1200', '1250',
+    #            '--no-wise', '--force-all', '--no-write',
+    #            '--survey-dir', surveydir2,
+    #            '--outdir', 'out-mzlsbass'])
+        
     # Test RexGalaxy
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase6')
@@ -112,8 +119,6 @@ def rbmain():
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
     outdir = 'out-testcase4'
 
-    #fn = os.path.join(surveydir, 'calib', 'decam', 'splinesky', '00431',
-    #                  '00431608', 'decam-00431608-N3.fits')
     fn = os.path.join(surveydir, 'calib', 'decam', 'CP', 'V4.8.2a',
                       'CP20150410', 'c4d_150411_035242_ooi_z_ls9',
                       'c4d_150411_035242_ooi_z_ls9-N3-splinesky.fits')
@@ -124,6 +129,7 @@ def rbmain():
                '--force-all', '--no-write', '--coadd-bw',
                '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
                '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
+               '--unwise-coadds',
                '--blob-image', '--no-hybrid-psf',
                '--survey-dir', surveydir,
                '--outdir', outdir] + extra_args + ['-v'])
@@ -253,13 +259,6 @@ def rbmain():
                '--checkpoint', checkpoint_fn,
                '--checkpoint-period', '1' ] + extra_args)
     
-    # MzLS + BASS data
-    # surveydir2 = os.path.join(os.path.dirname(__file__), 'mzlsbass')
-    # main(args=['--brick', '3521p002', '--zoom', '2400', '2450', '1200', '1250',
-    #            '--no-wise', '--force-all', '--no-write',
-    #            '--survey-dir', surveydir2,
-    #            '--outdir', 'out-mzlsbass'])
-
     # From Kaylan's Bootes pre-DR4 run
     # surveydir2 = os.path.join(os.path.dirname(__file__), 'mzlsbass3')
     # main(args=['--brick', '2173p350', '--zoom', '100', '200', '100', '200',
