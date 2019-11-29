@@ -66,10 +66,15 @@ def rbmain():
     # fitscopy coadd/177/1773p595/legacysurvey-1773p595-ccds.fits"[#row<3 || #row==12]" cx.fits
     # python legacyanalysis/create_testcase.py cx.fits test/mzlsbass2 1773p595 --survey-dir dr9-north/ --fpack
     surveydir2 = os.path.join(os.path.dirname(__file__), 'mzlsbass2')
+    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir2, 'gaia')
+    os.environ['GAIA_CAT_VER'] = '2'
+    my_extra_args = [a for a in extra_args if a != '--no-gaia']
     main(args=['--brick', '1773p595', '--zoom', '1300', '1500', '700', '900',
                '--no-wise', '--force-all', '--no-write',
                '--survey-dir', surveydir2,
-               '--outdir', 'out-mzlsbass2'])
+               '--outdir', 'out-mzlsbass2'] + my_extra_args)
+    del os.environ['GAIA_CAT_DIR']
+    del os.environ['GAIA_CAT_VER']
 
     # surveydir2 = os.path.join(os.path.dirname(__file__), 'mzlsbass')
     # main(args=['--brick', '3521p002', '--zoom', '2400', '2450', '1200', '1250',
@@ -119,7 +124,9 @@ def rbmain():
     print('Types:', T.type)
     # Since there is a Tycho-2 star in the blob, forced to be PSF.
     assert(T.type[0].strip() == 'PSF')
-
+    del os.environ['GAIA_CAT_DIR']
+    del os.environ['GAIA_CAT_VER']
+    
     # Test that we can run splinesky calib if required...
     
     from legacypipe.decam import DecamImage
