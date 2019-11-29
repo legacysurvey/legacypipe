@@ -62,6 +62,9 @@ def rbmain():
         sys.exit(0)
 
     # MzLS + BASS data
+    # python legacypipe/runbrick.py --run north --brick 1773p595 --zoom 1300 1500 700 900 --survey-dir dr9-north -s coadds
+    # fitscopy coadd/177/1773p595/legacysurvey-1773p595-ccds.fits"[#row<3 || #row==12]" cx.fits
+    # python legacyanalysis/create_testcase.py cx.fits test/mzlsbass2 1773p595 --survey-dir dr9-north/ --fpack
     surveydir2 = os.path.join(os.path.dirname(__file__), 'mzlsbass2')
     main(args=['--brick', '1773p595', '--zoom', '1300', '1500', '700', '900',
                '--no-wise', '--force-all', '--no-write',
