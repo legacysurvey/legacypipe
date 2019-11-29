@@ -201,8 +201,8 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
     read the type from the header.
 
     If *unpackShapes* is True and *ellipseClass* is EllipseE, read
-    catalog entries "shapeexp_r", "shapeexp_e1", "shapeexp_e2" rather than
-    "shapeExp", and similarly for "dev".
+    catalog entries "shape_r", "shape_e1", "shape_e2" rather than
+    "shape", and similarly for "dev".
     '''
     from tractor import NanoMaggies
     if hdr is None:
@@ -215,8 +215,7 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
         print('Not doing unpackShape because ellipseClass != EllipseE.')
         unpackShape = False
     if unpackShape:
-        T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
-        T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
+        T.shape = np.vstack((T.shape_r, T.shape_e1, T.shape_e2)).T
 
     ibands = np.array([allbands.index(b) for b in bands])
 
@@ -256,7 +255,7 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                     fluxivs.append(t.get(fluxPrefix + 'flux_ivar_' + b))
             ivs.extend([t.ra_ivar, t.dec_ivar] + fluxivs)
 
-        if issubclass(clazz, (DevGalaxy, ExpGalaxy)):
+        if issubclass(clazz, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
             if ellipseClass is not None:
                 eclazz = ellipseClass
             else:
@@ -267,43 +266,11 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                 # look up that string... to avoid eval()
                 eclazz = ellipse_types[eclazz]
 
-            if issubclass(clazz, DevGalaxy):
-                assert(np.all([np.isfinite(x) for x in t.shapedev]))
-                ell = eclazz(*t.shapedev)
-            else:
-                assert(np.all([np.isfinite(x) for x in t.shapeexp]))
-                ell = eclazz(*t.shapeexp)
+            assert(np.all([np.isfinite(x) for x in t.shape]))
+            ell = eclazz(*t.shape)
             params.append(ell)
             if invvars:
-                if issubclass(clazz, DevGalaxy):
-                    ivs.extend(t.shapedev_ivar)
-                else:
-                    ivs.extend(t.shapeexp_ivar)
-
-        elif issubclass(clazz, FixedCompositeGalaxy):
-            # hard-code knowledge that params are fracDev, shapeE, shapeD
-            assert(np.isfinite(t.fracdev))
-            params.append(t.fracdev)
-            if ellipseClass is not None:
-                expeclazz = deveclazz = ellipseClass
-            else:
-                expeclazz = hdr['TR_%s_T4' % shorttype]
-                deveclazz = hdr['TR_%s_T5' % shorttype]
-                expeclazz = expeclazz.replace('"','')
-                deveclazz = deveclazz.replace('"','')
-                expeclazz = ellipse_types[expeclazz]
-                deveclazz = ellipse_types[deveclazz]
-            assert(np.all([np.isfinite(x) for x in t.shapedev]))
-            assert(np.all([np.isfinite(x) for x in t.shapeexp]))
-            ee = expeclazz(*t.shapeexp)
-            de = deveclazz(*t.shapedev)
-            params.append(ee)
-            params.append(de)
-
-            if invvars:
-                ivs.append(t.fracdev_ivar)
-                ivs.extend(t.shapeexp_ivar)
-                ivs.extend(t.shapedev_ivar)
+                ivs.extend(t.shape_ivar)
 
         elif issubclass(clazz, PointSource):
             pass

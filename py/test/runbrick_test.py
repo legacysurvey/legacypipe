@@ -152,7 +152,7 @@ def rbmain():
     outdir = 'out-testcase7'
     # remove --no-gaia
     my_extra_args = [a for a in extra_args if a != '--no-gaia']
-    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia-dr2')
+    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
     os.environ['GAIA_CAT_VER'] = '2'
     main(args=['--brick', '1102p240', '--zoom', '250', '350', '1550', '1650',
                '--force-all', '--no-write', '--no-wise', #'--plots',
