@@ -572,7 +572,7 @@ def tim_get_resamp(tim, targetwcs):
     return Yo,Xo,Yi,Xi
 
 
-def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20):
+def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None):
     rgbscales=dict(g=(2, 6.0),
                    r=(1, 3.4),
                    i=(0, 3.0),
@@ -592,21 +592,30 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20):
         img = np.maximum(0, img * scale + m)
         I = I + img
     I /= len(bands)
-    fI = np.arcsinh(Q * I) / np.sqrt(Q)
-    I += (I == 0.) * 1e-6
+    if Q is not None:
+        fI = np.arcsinh(Q * I) / np.sqrt(Q)
+        I += (I == 0.) * 1e-6
+        I = fI / I
     H,W = I.shape
     rgb = np.zeros((H,W,3), np.float32)
     for img,band in zip(imgs, bands):
         plane,scale = rgbscales[band]
-        rgb[:,:,plane] = np.clip((img * scale + m) * fI / I, 0, 1)
+        if mnmx is None:
+            rgb[:,:,plane] = np.clip((img * scale + m) * I, 0, 1)
+        else:
+            mn,mx = mnmx
+            rgb[:,:,plane] = np.clip(((img * scale + m) - mn) / (mx - mn), 0, 1)
     return rgb
 
 def get_rgb(imgs, bands,
             #mnmx=None, arcsinh=None, scales=None, clip=True):
-            resids=False):
-    ### FIXME!!
+            resids=False, mnmx=None, arcsinh=None):
+    # (ignore arcsinh...)
     if resids:
-        return get_rgb_OLD(imgs, bands, mnmx=(-5,5))
+        mnmx = (-5, 5)
+    if mnmx is not None:
+        #return get_rgb_OLD(imgs, bands, mnmx=(-5,5))
+        return sdss_rgb(imgs, bands, m=0., Q=None, mnmx=mnmx)
     return sdss_rgb(imgs, bands)
     
 def get_rgb_OLD(imgs, bands, mnmx=None, arcsinh=None, scales=None,
