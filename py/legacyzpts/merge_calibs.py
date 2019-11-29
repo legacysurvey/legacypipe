@@ -62,13 +62,12 @@ def main():
     if opt.ccds:
         ccds = fits_table(opt.ccds)
         ccds = survey.cleanup_ccds_table(ccds)
-    else:
-        ccds = survey.get_ccds()
-    print(len(ccds), 'CCDs')
+        survey.ccds = ccds
 
     if opt.expnum is not None:
         expnums = [(None, int(x, 10)) for x in opt.expnum.split(',')]
     else:
+        ccds = survey.get_ccds()
         expnums = set(zip(ccds.camera, ccds.expnum))
         print(len(expnums), 'unique camera+expnums')
 
@@ -76,23 +75,24 @@ def main():
         print()
         print('Exposure', i+1, 'of', len(expnums), ':', camera, 'expnum', expnum)
         if camera is None:
-            C = ccds[ccds.expnum == expnum]
+            C = survey.find_ccds(expnum=expnum)
             print(len(C), 'CCDs with expnum', expnum)
             camera = C.camera[0]
+            print('Set camera to', camera)
 
-        expnumstr = '%08i' % expnum
-        skyoutfn = os.path.join(opt.outdir, camera, 'splinesky', expnumstr[:5], '%s-%s.fits' % (camera, expnumstr))
-        psfoutfn = os.path.join(opt.outdir, camera, 'psfex', expnumstr[:5], '%s-%s.fits' % (camera, expnumstr))
+        C = survey.find_ccds(expnum=expnum, camera=camera)
+        print(len(C), 'CCDs with expnum', expnum, 'and camera', camera)
+
+        im0 = survey.get_image_object(C[0])
+
+        skyoutfn = im0.merged_splineskyfn
+        psfoutfn = im0.merged_psffn
 
         print('Checking for', skyoutfn)
         print('Checking for', psfoutfn)
         if os.path.exists(skyoutfn) and os.path.exists(psfoutfn):
             print('Exposure', expnum, 'is done already')
             continue
-
-        if camera is not None:
-            C = ccds[(ccds.expnum == expnum) * (ccds.camera == camera)]
-            print(len(C), 'CCDs with expnum', expnum, 'and camera', camera)
 
         if not os.path.exists(skyoutfn):
             try:
