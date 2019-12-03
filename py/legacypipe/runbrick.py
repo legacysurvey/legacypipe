@@ -361,11 +361,75 @@ def _add_stage_version(version_header, short, stagename):
     version_header.add_record(dict(name='VER_%s'%short, value=get_git_version(),
                                    help='legacypipe version for stage_%s'%stagename))
 
+def stage_refs(survey=None,
+               brick=None,
+               brickname=None,
+               #targetrd=None,
+               pixscale=None,
+               targetwcs=None,
+               bands=None,
+               version_header=None,
+               tycho_stars=False,
+               gaia_stars=False,
+               large_galaxies=False,
+               star_clusters=True,
+               record_event=None,
+               **kwargs):
+    from legacypipe.reference import get_reference_sources
+
+    record_event and record_event('stage_refs: starting')
+    _add_stage_version(version_header, 'REFS', 'refs')
+    refstars, refcat = get_reference_sources(survey, targetwcs, pixscale, bands,
+                                             tycho_stars=tycho_stars,
+                                             gaia_stars=gaia_stars,
+                                             large_galaxies=large_galaxies,
+                                             star_clusters=star_clusters)
+    # "refstars" is a table
+    # "refcat" is a list of tractor Sources
+    # They are aligned
+    T_donotfit = None
+    T_clusters = None
+    if refstars:
+        assert(len(refstars) == len(refcat))
+        # Pull out reference sources flagged do-not-fit; we add them
+        # back in (much) later.  These are Gaia sources near the
+        # centers of LSLGA large galaxies, so we want to propagate the
+        # Gaia catalog information, but don't want to fit them.
+        I, = np.nonzero(refstars.donotfit)
+        if len(I):
+            T_donotfit = refstars[I]
+            I, = np.nonzero(np.logical_not(refstars.donotfit))
+            refstars.cut(I)
+            refcat = [refcat[i] for i in I]
+            assert(len(refstars) == len(refcat))
+        # Pull out star clusters too.
+        I, = np.nonzero(refstars.iscluster)
+        if len(I):
+            T_clusters = refstars[I]
+            I, = np.nonzero(np.logical_not(refstars.iscluster))
+            refstars.cut(I)
+            refcat = [refcat[i] for i in I]
+            assert(len(refstars) == len(refcat))
+        del I
+
+    if refstars or T_donotfit or T_clusters:
+        allrefs = merge_tables([t for t in [refstars, T_donotfit, T_clusters] if t],
+                               columns='fillzero')
+        with survey.write_output('ref-sources', brick=brickname) as out:
+            allrefs.writeto(None, fits_object=out.fits, primheader=version_header)
+        del allrefs
+
+    keys = ['refstars', 'gaia_stars', 'T_donotfit', 'T_clusters', 'version_header',
+            'refcat']
+    L = locals()
+    rtn = dict([(k,L[k]) for k in keys])
+    return rtn
+
 def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
-                    mp=None, nsigma=None, plots=None, ps=None, record_event=None,
-                    survey=None, brickname=None, version_header=None,
-                    gaia_stars=False,
-                    **kwargs):
+                   mp=None, nsigma=None, plots=None, ps=None, record_event=None,
+                   survey=None, brickname=None, version_header=None,
+                   refstars=None,
+                   **kwargs):
     '''
     This pipeline stage tries to detect artifacts in the individual
     exposures, by blurring all images in the same band to the same PSF size,
@@ -394,7 +458,7 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
         make_badcoadds = True
         badcoaddspos, badcoaddsneg = mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
                                                          mp=mp, plots=plots, ps=ps, make_badcoadds=make_badcoadds,
-                                                         gaia_stars=gaia_stars)
+                                                         refstars=refstars)
 
         # Make before-n-after plots (after)
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
@@ -406,6 +470,83 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
         outfn = os.path.join(outdir, 'outliers-masked-neg-%s.jpg' % brickname)
         imsave_jpeg(outfn, get_rgb(badcoaddsneg, bands), origin='lower')
 
+    return dict(tims=tims, version_header=version_header)
+
+def stage_halos(targetrd=None, pixscale=None, targetwcs=None,
+                W=None,H=None,
+                bands=None, ps=None, tims=None,
+                plots=False, plots2=False,
+                brickname=None,
+                version_header=None,
+                mp=None, nsigma=None,
+                survey=None, brick=None,
+                refstars=None,
+                star_halos=True,
+                record_event=None,
+                **kwargs):
+    record_event and record_event('stage_halos: starting')
+    _add_stage_version(version_header, 'HALO', 'halos')
+
+    # Subtract star halos?
+    if star_halos and refstars:
+        Igaia = []
+        gaia = refstars
+        Igaia, = np.nonzero(np.logical_or(refstars.isbright, refstars.ismedium) *
+                            np.logical_not(refstars.iscluster) * refstars.pointsource)
+        Igaia = Igaia[np.argsort(gaia.phot_g_mean_mag[Igaia])]
+        debug(len(Igaia), 'stars for halo subtraction')
+        if len(Igaia):
+            from legacypipe.halos import subtract_halos
+
+            halostars = gaia[Igaia]
+            if plots:
+                coimgs,cons = quick_coadds(tims, bands, targetwcs)
+                plt.clf()
+                dimshow(get_rgb(coimgs, bands))
+                ax = plt.axis()
+                plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
+                plt.axis(ax)
+                plt.title('Before star halo subtraction')
+                ps.savefig()
+
+            subtract_halos(tims, halostars, bands, mp, plots, ps)
+
+            if plots:
+                coimgs2,cons = quick_coadds(tims, bands, targetwcs)
+                plt.clf()
+                dimshow(get_rgb(coimgs2, bands))
+                ax = plt.axis()
+                plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
+                plt.axis(ax)
+                plt.title('After star halo subtraction')
+                ps.savefig()
+
+                plt.clf()
+                dimshow(get_rgb([co-co2 for co,co2 in zip(coimgs,coimgs2)],
+                                bands))
+                ax = plt.axis()
+                plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
+                plt.axis(ax)
+                plt.title('Subtracted halos')
+                ps.savefig()
+
+                for i,g in enumerate(halostars[:10]):
+                    plt.clf()
+                    pixrad = int(g.radius * 3600. / pixscale)
+                    ax = [g.ibx-pixrad, g.ibx+pixrad, g.iby-pixrad, g.iby+pixrad]
+                    ima = dict(interpolation='nearest', origin='lower')
+                    plt.subplot(2,2,1)
+                    plt.imshow(get_rgb(coimgs, bands), **ima)
+                    plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
+                    plt.axis(ax)
+                    plt.subplot(2,2,2)
+                    plt.imshow(get_rgb(coimgs2, bands), **ima)
+                    plt.axis(ax)
+                    plt.subplot(2,2,3)
+                    plt.imshow(get_rgb([co-co2 for co,co2 in zip(coimgs,coimgs2)],
+                                       bands), **ima)
+                    plt.axis(ax)
+                    ps.savefig()
     return dict(tims=tims, version_header=version_header)
 
 def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
@@ -512,11 +653,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                mp=None, nsigma=None,
                survey=None, brick=None,
                bailout_sources=False,
-               tycho_stars=False,
-               gaia_stars=False,
-               large_galaxies=False,
-               star_clusters=True,
-               star_halos=True,
+               refcat=None, refstars=None,
+               T_donotfit=None, T_clusters=None,
                record_event=None,
                **kwargs):
     '''
@@ -532,45 +670,11 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                         run_sed_matched_filters, segment_and_group_sources)
     from scipy.ndimage.morphology import binary_dilation
     from scipy.ndimage.measurements import label, center_of_mass
-    from legacypipe.reference import get_reference_sources
 
     record_event and record_event('stage_srcs: starting')
     _add_stage_version(version_header, 'SRCS', 'srcs')
 
     tlast = Time()
-
-    refstars, refcat = get_reference_sources(survey, targetwcs, pixscale, bands,
-                                             tycho_stars=tycho_stars,
-                                             gaia_stars=gaia_stars,
-                                             large_galaxies=large_galaxies,
-                                             star_clusters=star_clusters)
-    # "refstars" is a table
-    # "refcat" is a list of tractor Sources
-    # They are aligned
-    T_donotfit = None
-    T_clusters = None
-    if refstars:
-        assert(len(refstars) == len(refcat))
-        # Pull out reference sources flagged do-not-fit; we add them
-        # back in (much) later.  These are Gaia sources near the
-        # centers of LSLGA large galaxies, so we want to propagate the
-        # Gaia catalog information, but don't want to fit them.
-        I, = np.nonzero(refstars.donotfit)
-        if len(I):
-            T_donotfit = refstars[I]
-            I, = np.nonzero(np.logical_not(refstars.donotfit))
-            refstars.cut(I)
-            refcat = [refcat[i] for i in I]
-            assert(len(refstars) == len(refcat))
-        # Pull out star clusters too.
-        I, = np.nonzero(refstars.iscluster)
-        if len(I):
-            T_clusters = refstars[I]
-            I, = np.nonzero(np.logical_not(refstars.iscluster))
-            refstars.cut(I)
-            refcat = [refcat[i] for i in I]
-            assert(len(refstars) == len(refcat))
-        del I
 
     if refstars:
         # Don't detect new sources where we already have reference stars
@@ -578,74 +682,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         avoid_y = refstars.iby[refstars.in_bounds]
     else:
         avoid_x, avoid_y = np.array([]), np.array([])
-
-    # Subtract star halos?
-    if star_halos and gaia_stars:
-        Igaia = []
-        gaia = refstars
-        Igaia, = np.nonzero(np.logical_or(refstars.isbright, refstars.ismedium) *
-                            np.logical_not(refstars.iscluster) * refstars.pointsource)
-        Igaia = Igaia[np.argsort(gaia.phot_g_mean_mag[Igaia])]
-        debug(len(Igaia), 'stars for halo subtraction')
-        if len(Igaia):
-            from legacypipe.halos import subtract_halos
-
-            halostars = gaia[Igaia]
-            if plots:
-                coimgs,cons = quick_coadds(tims, bands, targetwcs)
-                plt.clf()
-                dimshow(get_rgb(coimgs, bands))
-                ax = plt.axis()
-                plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
-                plt.axis(ax)
-                plt.title('Before star halo subtraction')
-                ps.savefig()
-
-            subtract_halos(tims, halostars, bands, mp, plots, ps)
-
-            if plots:
-                coimgs2,cons = quick_coadds(tims, bands, targetwcs)
-                plt.clf()
-                dimshow(get_rgb(coimgs2, bands))
-                ax = plt.axis()
-                plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
-                plt.axis(ax)
-                plt.title('After star halo subtraction')
-                ps.savefig()
-
-                plt.clf()
-                dimshow(get_rgb([co-co2 for co,co2 in zip(coimgs,coimgs2)],
-                                bands))
-                ax = plt.axis()
-                plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
-                plt.axis(ax)
-                plt.title('Subtracted halos')
-                ps.savefig()
-
-                for i,g in enumerate(halostars[:10]):
-                    plt.clf()
-                    pixrad = int(g.radius * 3600. / pixscale)
-                    ax = [g.ibx-pixrad, g.ibx+pixrad, g.iby-pixrad, g.iby+pixrad]
-                    ima = dict(interpolation='nearest', origin='lower')
-                    plt.subplot(2,2,1)
-                    plt.imshow(get_rgb(coimgs, bands), **ima)
-                    plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
-                    plt.axis(ax)
-                    plt.subplot(2,2,2)
-                    plt.imshow(get_rgb(coimgs2, bands), **ima)
-                    plt.axis(ax)
-                    plt.subplot(2,2,3)
-                    plt.imshow(get_rgb([co-co2 for co,co2 in zip(coimgs,coimgs2)],
-                                       bands), **ima)
-                    plt.axis(ax)
-                    ps.savefig()
-
-    if refstars or T_donotfit or T_clusters:
-        allrefs = merge_tables([t for t in [refstars, T_donotfit, T_clusters] if t],
-                               columns='fillzero')
-        with survey.write_output('ref-sources', brick=brickname) as out:
-            allrefs.writeto(None, fits_object=out.fits, primheader=version_header)
-        del allrefs
 
     record_event and record_event('stage_srcs: detection maps')
 
@@ -902,8 +938,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 tim.data -= cosky
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
-            'ps', 'refstars', 'gaia_stars', 'saturated_pix',
-            'T_donotfit', 'T_clusters', 'version_header']
+            'ps', 'saturated_pix', 'version_header']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
@@ -3140,8 +3175,10 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     prereqs = {
         'tims':None,
-        'outliers': 'tims',
-        'srcs': 'outliers',
+        'refs': 'tims',
+        'outliers': 'refs',
+        'halos': 'outliers',
+        'srcs': 'halos',
 
         'overlap_sky': 'srcs',
         
@@ -3168,7 +3205,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                 })
         else:
             prereqs.update({
-                'image_coadds':'outliers',
+                'image_coadds':'halos',
                 'srcs':'image_coadds',
                 'fitblobs':'srcs',
                 })

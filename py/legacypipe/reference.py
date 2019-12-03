@@ -45,6 +45,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         from astrometry.libkd.spherematch import match_radec
         gaia = read_gaia(marginwcs)
     if gaia is not None:
+        gaia.isgaia = np.ones(len(gaia), bool)
         gaia.isbright = (gaia.phot_g_mean_mag < 13.)
         gaia.ismedium = (gaia.phot_g_mean_mag < 16.)
         gaia.donotfit = np.zeros(len(gaia), bool)
