@@ -61,7 +61,7 @@ ENV ARCH_FLAGS ""
 # Pip installs -- built from source
 RUN for x in \
     photutils \
-    fitsio==0.9.12 \
+    fitsio \
     ; do pip3 --no-cache-dir install $x; done
 
 ENV PYTHON python3
@@ -168,7 +168,7 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
 
 # Legacypipe
 RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
-    && cd legacypipe && git checkout dr9-dev && git describe && echo 1
+    && cd legacypipe && git checkout dr9-dev && git describe && echo 2
 
 ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 
