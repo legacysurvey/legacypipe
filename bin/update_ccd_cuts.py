@@ -3,6 +3,7 @@ import numpy
 from astropy.io import fits
 import pdb
 from astrometry.util.fits import fits_table, merge_tables
+from legacyzpts import psfzpt_cuts
 
 
 class subslices:
@@ -45,7 +46,7 @@ def depthcut(survey, ccds, annotated, tilefile=None, imlist=None):
         return depthcut_decam(ccds, annotated, tilefile)
     elif survey == '90prime':
         imlist = fits_table(imlist)
-        ccds = repair_object_names(ccds, imlist)
+        ccds = repair_object_names(ccds, imlist, prefix='')
         return depthcut_90prime_alternative(ccds, annotated)
     elif survey == 'mosaic':
         return depthcut_mosaic(ccds, annotated, tilefile)
@@ -238,13 +239,27 @@ def depthcut_propid_decam(ccds):
     return m
 
 
-def make_plots(ccds, depthcut, rad=1., nside=512, 
-               xrange=[360, 0], yrange=[-90, 90], vmin=0, vmax=10, 
-               filename=None):
+def make_plots(ccds, camera, nside=512, 
+               xrange=[360, 0], yrange=[-90, 90],
+               filename=None, vmin=0, vmax=10):
     import util_efs
     from matplotlib import pyplot as p
-    ccdcut = ccds.ccd_cuts
-    filts = numpy.unique(ccds.filter[ccdcut])
+    if camera == 'decam':
+        rad = 1.0
+        ccds = ccds[ccds.ccdname == 'N4']
+    elif camera == 'mosaic':
+        rad = 0.33
+        ccds = ccds[ccds.ccdname == 'CCD1']
+    elif camera == '90prime':
+        rad = 0.5
+        ccds = ccds[ccds.ccdname == 'CCD1']
+    else:
+        raise ValueError('unrecognized camera!')
+    depthbit = psfzpt_cuts.CCD_CUT_BITS['depth_cut']
+    manybadbit = psfzpt_cuts.CCD_CUT_BITS['too_many_bad_ccds']
+    ccdcut = ccds.ccd_cuts & ~depthbit
+    depthcut = (ccds.ccd_cuts & depthbit) == 0  # passes depth cut
+    filts = numpy.unique(ccds.filter[ccdcut == 0])
     _, u = numpy.unique(ccds.expnum, return_index=True)
     for f in filts:
         mf = (ccds.filter[u] == f)
@@ -357,7 +372,6 @@ if __name__ == "__main__":
         zp = fits_table(args.zeropoints)
         patch_zeropoints(zp, ccds, annotated)
 
-    from legacyzpts import psfzpt_cuts
     from pkg_resources import resource_filename
     fn = resource_filename('legacyzpts', 
                            'data/{}-bad_expid.txt'.format(args.camera))
