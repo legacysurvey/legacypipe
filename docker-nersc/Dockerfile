@@ -100,12 +100,15 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && make clean \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import astrometry; print(astrometry.__version__)")
 
+RUN pip3 --no-cache-dir install cython
+
 # The Tractor
-RUN git clone http://github.com/dstndstn/tractor.git tractor && echo 3 \
+RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && make \
-    && make ceres \
-    && make install INSTALL_DIR=/usr/local \
+    && git checkout cython \
+    && python3 setup-cython.py install --home /usr/local \
+    && make ceres && make install-ceres INSTALL_DIR=/usr/local \
+    && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so") \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
 
@@ -168,7 +171,7 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
 
 # Legacypipe
 RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
-    && cd legacypipe && git checkout dr9-dev && git describe && echo 2
+    && cd legacypipe && git checkout dr9-dev && git describe && echo 3
 
 ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 

@@ -156,16 +156,16 @@ class LegacySurveyImage(object):
         # This allows, eg, create-testcase.py to use image filenames like BASE.N3.fits
         # with only a single HDU.
         basename = basename.split('.')[0]
-        
-        calibdir = os.path.join(self.survey.get_calib_dir(), os.path.dirname(self.image_filename))
+
+        imgdir = os.path.dirname(self.image_filename)
+        calibdir = self.survey.get_calib_dir()
         calname = basename+"-"+self.ccdname
         self.name = calname
-        self.sefn               = os.path.join(calibdir, basename, calname + "-se.fits")
-        self.psffn              = os.path.join(calibdir, basename, calname + "-psfex.fits")
-        self.skyfn              = os.path.join(calibdir, basename, calname + "-sky.fits")
-        self.splineskyfn        = os.path.join(calibdir, basename, calname + "-splinesky.fits")
-        self.merged_psffn       = os.path.join(calibdir, basename + "-psfex.fits")
-        self.merged_splineskyfn = os.path.join(calibdir, basename + "-splinesky.fits")
+        self.sefn               = os.path.join(calibdir, 'se',               imgdir, basename, calname + '-se.fits')
+        self.psffn              = os.path.join(calibdir, 'psfex-single',     imgdir, basename, calname + '-psfex.fits')
+        self.splineskyfn        = os.path.join(calibdir, 'splinesky-single', imgdir, basename, calname + '-splinesky.fits')
+        self.merged_psffn       = os.path.join(calibdir, 'psfex',            imgdir, basename + '-psfex.fits')
+        self.merged_splineskyfn = os.path.join(calibdir, 'splinesky',        imgdir, basename + '-splinesky.fits')
 
     def compute_filenames(self):
         # Compute data quality and weight-map filenames
@@ -1107,6 +1107,9 @@ class LegacySurveyImage(object):
         rtn = os.system(cmd)
         if rtn:
             raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
+
+        ## FIXME --
+        # Convert into a "merged psfex" format file, which is a table.
         
         # Update the header
         hlist = [

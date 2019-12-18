@@ -186,8 +186,11 @@ class OneBlob(object):
 
 
         #from legacypipe.constrained_optimizer import ConstrainedOptimizer
+
         from tractor.constrained_optimizer import ConstrainedOptimizer
-        self.trargs.update(optimizer=ConstrainedOptimizer())
+        from tractor.dense_optimizer import ConstrainedDenseOptimizer
+        #self.trargs.update(optimizer=ConstrainedOptimizer())
+        self.trargs.update(optimizer=ConstrainedDenseOptimizer())
 
         self.optargs.update(dchisq = 0.1)
 
