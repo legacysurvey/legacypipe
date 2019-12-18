@@ -208,7 +208,7 @@ class LegacySurveyImage(object):
         could be cached.
         '''
         return ['imgfn', 'dqfn', 'wtfn', 'psffn', 'merged_psffn',
-                'merged_splineskyfn', 'splineskyfn', 'skyfn']
+                'merged_splineskyfn', 'splineskyfn']
 
     def get_good_image_slice(self, extent, get_extent=False):
         '''
@@ -249,9 +249,9 @@ class LegacySurveyImage(object):
         return None,None,None,None
 
     def get_tractor_image(self, slc=None, radecpoly=None,
-                          gaussPsf=False, pixPsf=False, hybridPsf=False,
-                          normalizePsf=False,
-                          splinesky=False,
+                          gaussPsf=False, pixPsf=True, hybridPsf=True,
+                          normalizePsf=True,
+                          splinesky=True,
                           apodize=False,
                           nanomaggies=True, subsky=True, tiny=10,
                           dq=True, invvar=True, pixels=True,
@@ -293,7 +293,6 @@ class LegacySurveyImage(object):
 
         get_dq = dq
         get_invvar = invvar
-
         primhdr = self.read_image_primary_header()
 
         assert(validate_procdate_plver(self.imgfn, 'primaryheader',
@@ -803,90 +802,34 @@ class LegacySurveyImage(object):
         wcs.plver = phdr.get('PLVER', '').strip()
         return wcs
 
-    def read_sky_model(self, splinesky=False, slc=None, old_calibs_ok=False, **kwargs):
+    def read_sky_model(self, slc=None, old_calibs_ok=False, **kwargs):
         '''
         Reads the sky model, returning a Tractor Sky object.
         '''
         from tractor.utils import get_class_from_name
 
-        sky = None
-        if splinesky:
-            if self.merged_splineskyfn and os.path.exists(self.merged_splineskyfn):
-                sky = self.read_merged_splinesky_model(slc=slc, old_calibs_ok=old_calibs_ok)
-                if sky is not None:
-                    return sky
+        tryfns = []
+        if os.path.exists(self.merged_splineskyfn):
+            tryfns.append(self.merged_splineskyfn)
+        if os.path.exists(self.splineskyfn):
+            tryfns.append(self.splineskyfn)
+        Ti = None
+        for fn in tryfns:
+            T = fits_table(fn)
+            I, = np.nonzero((T.expnum == self.expnum) *
+                            np.array([c.strip() == self.ccdname
+                                      for c in T.ccdname]))
+            debug('Found', len(I), 'matching CCDs in merged splinesky file')
+            if len(I) != 1:
+                continue
+            if not validate_procdate_plver(fn, 'table',
+                                           self.expnum, self.plver, self.procdate,
+                                           self.plprocid, data=T, old_calibs_ok=old_calibs_ok):
+                raise RuntimeError('Splinesky file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' % fn)
+            Ti = T[I[0]]
+        if Ti is None:
+            raise RuntimeError('Failed to find sky model in files: %s' % ', '.join(tryfns))
 
-            if not os.path.exists(self.splineskyfn):
-                if self.merged_splineskyfn is not None:
-                    raise RuntimeError('Merged splinesky model {} not found'.format(self.merged_splineskyfn))
-                return None
-
-        fn = self.skyfn
-        if splinesky:
-            fn = self.splineskyfn
-
-        if not validate_procdate_plver(fn, 'primaryheader',
-                                       self.expnum, self.plver, self.procdate,
-                                       self.plprocid, old_calibs_ok=old_calibs_ok):
-            raise RuntimeError('Splinesky file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' % fn)
-
-        debug('Reading sky model from', fn)
-        hdr = fitsio.read_header(fn)
-        try:
-            skyclass = hdr['SKY']
-        except NameError:
-            raise NameError('SKY not in header: skyfn=%s, imgfn=%s' % (fn,self.imgfn))
-
-        # Replace splinesky cells that equal the "fallback" value of sky_med with sky_john instead.
-        # Note that this is for single-CCD splinesky files; see read_merged_splinesky_model for
-        # the merged version.
-        if splinesky and skyclass == 'tractor.splinesky.SplineSky':
-            clazz = LegacySplineSky
-        else:
-            clazz = get_class_from_name(skyclass)
-
-        if getattr(clazz, 'from_fits', None) is not None:
-            fromfits = getattr(clazz, 'from_fits')
-            sky = fromfits(fn, hdr)
-        else:
-            fromfits = getattr(clazz, 'fromFitsHeader')
-            sky = fromfits(hdr, prefix='SKY_')
-
-        if slc is not None:
-            sy,sx = slc
-            x0,y0 = sx.start,sy.start
-            sky.shift(x0, y0)
-
-        sky.version = hdr.get('LEGPIPEV', '')
-        if len(sky.version) == 0:
-            sky.version = hdr.get('TRACTORV', '').strip()
-            if len(sky.version) == 0:
-                sky.version = str(os.stat(fn).st_mtime)
-        sky.plver = hdr.get('PLVER', '').strip()
-        sky.procid = hdr.get('PLPROCID', '').strip()
-        sky.procdate = hdr.get('PROCDATE', '').strip()
-        sig1 = hdr.get('SIG1', None)
-        if sig1 is not None:
-            sky.sig1 = sig1
-        sky.datasum = hdr.get('IMGDSUM')
-        return sky
-
-    def read_merged_splinesky_model(self, slc=None, old_calibs_ok=False):
-        from tractor.utils import get_class_from_name
-        debug('Reading merged spline sky models from', self.merged_splineskyfn)
-        T = fits_table(self.merged_splineskyfn)
-        if not validate_procdate_plver(self.merged_splineskyfn, 'table',
-                                       self.expnum, self.plver, self.procdate,
-                                       self.plprocid, data=T, old_calibs_ok=old_calibs_ok):
-            raise RuntimeError('Merged splinesky file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' %
-                               self.merged_splineskyfn)
-        I, = np.nonzero((T.expnum == self.expnum) *
-                        np.array([c.strip() == self.ccdname
-                                  for c in T.ccdname]))
-        debug('Found', len(I), 'matching CCDs in merged splinesky file')
-        if len(I) != 1:
-            return None
-        Ti = T[I[0]]
         # Remove any padding
         h,w = Ti.gridh, Ti.gridw
         Ti.gridvals = Ti.gridvals[:h, :w]
@@ -908,10 +851,8 @@ class LegacySurveyImage(object):
         sky.plver = getattr(Ti, 'plver', '')
         sky.plprocid = getattr(Ti, 'plprocid', '')
         sky.procdate = getattr(Ti, 'procdate', '')
-        if 'sig1' in Ti.get_columns():
-            sky.sig1 = Ti.sig1
-        if 'imgdsum' in Ti.get_columns():
-            sky.datasum = Ti.imgdsum
+        sky.sig1 = Ti.sig1
+        sky.datasum = Ti.imgdsum
         return sky
 
     def read_psf_model(self, x0, y0,
@@ -1085,6 +1026,7 @@ class LegacySurveyImage(object):
         for k,v in [
                 ('legpipev', git_version),
                 ('expnum',   self.expnum),
+                ('ccdname',  self.ccdname),
                 ('plver',    plver),
                 ('plprocid', plprocid),
                 ('procdate', procdate),
@@ -1132,30 +1074,16 @@ class LegacySurveyImage(object):
         img = self.read_image(slice=slc)
         dq = self.read_dq(slice=slc)
         wt = self.read_invvar(slice=slc, dq=dq)
-        hdr = get_version_header(None, self.survey.get_survey_dir(), release,
-                                 git_version=git_version)
+
         primhdr = self.read_image_primary_header()
-        plver = primhdr.get('PLVER', 'V0.0')
-        plprocid = primhdr['PLPROCID']
+        plver = primhdr.get('PLVER', 'V0.0').strip()
+        plprocid = primhdr['PLPROCID'].strip()
         imghdr = self.read_image_header()
         datasum = imghdr.get('DATASUM', '0')
         procdate = primhdr['DATE']
+        if git_version is None:
+            git_version = get_git_version()
 
-        hdr.delete('PROCTYPE')
-        hdr.add_record(dict(name='PROCTYPE', value='ccd',
-                            comment='NOAO processing type'))
-        hdr.add_record(dict(name='PRODTYPE', value='skymodel',
-                            comment='NOAO product type'))
-        hdr.add_record(dict(name='PLVER', value=plver,
-                            comment='CP ver of image file'))
-        hdr.add_record(dict(name='PLPROCID', value=plprocid,
-                            comment='CP processing date hash'))
-        hdr.add_record(dict(name='IMGDSUM', value=datasum,
-                            comment='DATASUM of image file'))
-        hdr.add_record(dict(name='PROCDATE', value=procdate,
-                            comment='DATE of image file'))
-        hdr.add_record(dict(name='EXPNUM', value=self.expnum,
-                            comment='exposure number'))
         good = (wt > 0)
         if np.sum(good) == 0:
             raise RuntimeError('No pixels with weight > 0 in: ' + str(self))
@@ -1205,7 +1133,6 @@ class LegacySurveyImage(object):
 
             # Initial scalar sky estimate; also the fallback value if everything is masked
             # in one of the splinesky grid cells.
-            #initsky = sky_median
             initsky = sky_john
             if initsky == 0.0:
                 initsky = sky_clipped_median
@@ -1242,7 +1169,6 @@ class LegacySurveyImage(object):
                 sy,sx = slc
                 y0,y1 = sy.start, sy.stop
                 x0,x1 = sx.start, sx.stop
-                #print('x0,x1', x0,x1, 'y0,y1', y0,y1)
                 wcs = wcs.get_subimage(x0, y0, int(x1-x0), int(y1-y0))
             pixscale = wcs.pixel_scale()
             # only used to create galaxy objects (which we will discard)
@@ -1250,7 +1176,6 @@ class LegacySurveyImage(object):
             refs,_ = get_reference_sources(survey, wcs, pixscale, fakebands,
                                            True, gaia, False)
             stargood = (get_inblob_map(wcs, refs) == 0)
-
 
             if survey_blob_mask is not None:
                 # Read DR8 blob maps for all overlapping bricks and project them
@@ -1369,40 +1294,35 @@ class LegacySurveyImage(object):
                 plt.title('Fine sky model')
                 ps.savefig()
 
-
-
             if slc is not None:
                 sy,sx = slc
                 y0 = sy.start
                 x0 = sx.start
                 skyobj.shift(-x0, -y0)
 
-            hdr.add_record(dict(name='SIG1', value=sig1,
-                                comment='Median stdev of unmasked pixels'))
-            hdr.add_record(dict(name='SIG1B', value=sig1b,
-                                comment='Median stdev of unmasked pixels+'))
-
-            hdr.add_record(dict(name='S_MODE', value=sky_mode,
-                                comment='Sky estimate: mode'))
-            hdr.add_record(dict(name='S_MED', value=sky_median,
-                                comment='Sky estimate: median'))
-            hdr.add_record(dict(name='S_CMED', value=sky_clipped_median,
-                                comment='Sky estimate: clipped median'))
-            hdr.add_record(dict(name='S_JOHN', value=sky_john,
-                                comment='Sky estimate: John'))
-
-            for p,v in zip(pcts, pctvals):
-                hdr.add_record(dict(name='S_P%i' % p, value=v,
-                                    comment='Sky residual: percentile %i' % p))
-            hdr.add_record(dict(name='S_FMASKD', value=fmasked,
-                                comment='Sky: fraction masked'))
-            hdr.add_record(dict(name='S_FINE', value=fine_rms,
-                                comment='Sky: RMS resid fine - splinesky'))
+            T = skyobj.to_fits_table()
+            #('sig1b', sig1b),
+            for k,v in [('expnum', self.expnum),
+                        ('ccdname', self.ccdname),
+                        ('legpipev', git_version),
+                        ('plver',    plver),
+                        ('plprocid', plprocid),
+                        ('procdate', procdate),
+                        ('imgdsum',  datasum),
+                        ('sig1', sig1),
+                        ('sky_mode', sky_mode),
+                        ('sky_med', sky_median),
+                        ('sky_cmed', sky_clipped_median),
+                        ('sky_john', sky_john),
+                        ('sky_fine', fine_rms),
+                        ('sky_fmasked', fmasked),
+                        ] + [('sky_p%i' % p, v) for p,v in zip(pcts, pctvals)]:
+                T.set(k, np.array([v]))
 
             trymakedirs(self.splineskyfn, dir=True)
             tmpfn = os.path.join(os.path.dirname(self.splineskyfn),
                              'tmp-' + os.path.basename(self.splineskyfn))
-            skyobj.write_fits(tmpfn, primhdr=hdr)
+            T.writeto(tmpfn)
             os.rename(tmpfn, self.splineskyfn)
             debug('Wrote sky model', self.splineskyfn)
 
