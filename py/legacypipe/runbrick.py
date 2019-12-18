@@ -3636,6 +3636,13 @@ def main(args=None):
     # tractor logging is *soooo* chatty
     logging.getLogger('tractor.engine').setLevel(lvl + 10)
 
+    import warnings
+    # Neither of these seem to actually work to shut up the $%(*&^ warning
+    warnings.filterwarnings('once', module='fitsio.header', lineno=584)
+    warnings.simplefilter('once', lineno=584)
+    #FITSRuntimeWarning:
+    # /global/homes/d/dstn/fitsio-install/lib/python/fitsio-1.0.5-py3.6-linux-x86_64.egg/fitsio/header.py:584: FITSRuntimeWarning: warning: It is not FITS-compliant for a          header card to include an = sign. There may be slight inconsistencies if you write this back out to a file.
+    
     Time.add_measurement(MemMeas)
     if opt.plots:
         plt.figure(figsize=(12,9))
