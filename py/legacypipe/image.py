@@ -2,9 +2,9 @@ from __future__ import print_function
 import os, warnings
 import numpy as np
 import fitsio
-from astrometry.util.fits import fits_table
-from tractor import PixelizedPsfEx, PixelizedPSF
 from tractor.splinesky import SplineSky
+from tractor import PixelizedPsfEx, PixelizedPSF
+from astrometry.util.fits import fits_table
 from legacypipe.utils import read_primary_header
 from legacypipe.bits import DQ_BITS
 
@@ -161,11 +161,11 @@ class LegacySurveyImage(object):
         calibdir = self.survey.get_calib_dir()
         calname = basename+"-"+self.ccdname
         self.name = calname
-        self.sefn               = os.path.join(calibdir, 'se',               imgdir, basename, calname + '-se.fits')
-        self.psffn              = os.path.join(calibdir, 'psfex-single',     imgdir, basename, calname + '-psfex.fits')
-        self.splineskyfn        = os.path.join(calibdir, 'splinesky-single', imgdir, basename, calname + '-splinesky.fits')
-        self.merged_psffn       = os.path.join(calibdir, 'psfex',            imgdir, basename + '-psfex.fits')
-        self.merged_splineskyfn = os.path.join(calibdir, 'splinesky',        imgdir, basename + '-splinesky.fits')
+        self.sefn         = os.path.join(calibdir, 'se',           imgdir, basename, calname + '-se.fits')
+        self.psffn        = os.path.join(calibdir, 'psfex-single', imgdir, basename, calname + '-psfex.fits')
+        self.skyfn        = os.path.join(calibdir, 'sky-single',   imgdir, basename, calname + '-sky.fits')
+        self.merged_psffn = os.path.join(calibdir, 'psfex',        imgdir, basename + '-psfex.fits')
+        self.merged_skyfn = os.path.join(calibdir, 'sky',          imgdir, basename + '-sky.fits')
 
     def compute_filenames(self):
         # Compute data quality and weight-map filenames
@@ -208,7 +208,7 @@ class LegacySurveyImage(object):
         could be cached.
         '''
         return ['imgfn', 'dqfn', 'wtfn', 'psffn', 'merged_psffn',
-                'merged_splineskyfn', 'splineskyfn']
+                'merged_skyfn', 'skyfn']
 
     def get_good_image_slice(self, extent, get_extent=False):
         '''
@@ -251,7 +251,7 @@ class LegacySurveyImage(object):
     def get_tractor_image(self, slc=None, radecpoly=None,
                           gaussPsf=False, pixPsf=True, hybridPsf=True,
                           normalizePsf=True,
-                          splinesky=True,
+                          #splinesky=True,
                           apodize=False,
                           nanomaggies=True, subsky=True, tiny=10,
                           dq=True, invvar=True, pixels=True,
@@ -274,7 +274,7 @@ class LegacySurveyImage(object):
         - *hybridPsf*: combo pixelized PsfEx + Gaussian approx.
 
         Options determining the sky model to use:
-
+        
         - *splinesky*: median filter chunks of the image, then spline those.
 
         Options determining the units of the image:
@@ -408,8 +408,7 @@ class LegacySurveyImage(object):
             x0,x1,y0,y1 = x0_new,x1_new,y0_new,y1_new
             slc = slice(y0,y1), slice(x0,x1)
 
-        sky = self.read_sky_model(splinesky=splinesky, slc=slc,
-                                  primhdr=primhdr, imghdr=imghdr,
+        sky = self.read_sky_model(slc=slc, primhdr=primhdr, imghdr=imghdr,
                                   old_calibs_ok=old_calibs_ok)
         skymod = np.zeros_like(img)
         sky.addTo(skymod)
@@ -809,23 +808,23 @@ class LegacySurveyImage(object):
         from tractor.utils import get_class_from_name
 
         tryfns = []
-        if os.path.exists(self.merged_splineskyfn):
-            tryfns.append(self.merged_splineskyfn)
-        if os.path.exists(self.splineskyfn):
-            tryfns.append(self.splineskyfn)
+        if os.path.exists(self.merged_skyfn):
+            tryfns.append(self.merged_skyfn)
+        if os.path.exists(self.skyfn):
+            tryfns.append(self.skyfn)
         Ti = None
         for fn in tryfns:
             T = fits_table(fn)
             I, = np.nonzero((T.expnum == self.expnum) *
                             np.array([c.strip() == self.ccdname
                                       for c in T.ccdname]))
-            debug('Found', len(I), 'matching CCDs in merged splinesky file')
+            debug('Found', len(I), 'matching CCDs in merged sky file')
             if len(I) != 1:
                 continue
             if not validate_procdate_plver(fn, 'table',
                                            self.expnum, self.plver, self.procdate,
                                            self.plprocid, data=T, old_calibs_ok=old_calibs_ok):
-                raise RuntimeError('Splinesky file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' % fn)
+                raise RuntimeError('Sky file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' % fn)
             Ti = T[I[0]]
         if Ti is None:
             raise RuntimeError('Failed to find sky model in files: %s' % ', '.join(tryfns))
@@ -1061,7 +1060,7 @@ class LegacySurveyImage(object):
         os.remove(psftmpfn)
         os.rename(psftmpfn2, self.psffn)
         
-    def run_sky(self, splinesky=False, git_version=None, ps=None, survey=None,
+    def run_sky(self, splinesky=True, git_version=None, ps=None, survey=None,
                 gaia=True, release=0, survey_blob_mask=None):
         from legacypipe.survey import get_version_header
         from scipy.ndimage.morphology import binary_dilation
@@ -1102,7 +1101,6 @@ class LegacySurveyImage(object):
         sky_median = np.median(img[good])
 
         if splinesky:
-            from tractor.splinesky import SplineSky
             from scipy.ndimage.filters import uniform_filter
             from scipy.stats import sigmaclip
 
@@ -1327,6 +1325,8 @@ class LegacySurveyImage(object):
             debug('Wrote sky model', self.splineskyfn)
 
         else:
+            #### This branch has not been tested recently...
+
             from tractor.sky import ConstantSky
 
             if sky_mode != 0.:
@@ -1358,7 +1358,7 @@ class LegacySurveyImage(object):
     def run_calibs(self, psfex=True, sky=True, se=False,
                    fcopy=False, use_mask=True,
                    force=False, git_version=None,
-                   splinesky=False, ps=None, survey=None,
+                   splinesky=True, ps=None, survey=None,
                    gaia=True, old_calibs_ok=False,
                    survey_blob_mask=None):
         '''
@@ -1383,8 +1383,7 @@ class LegacySurveyImage(object):
         if sky and not force:
             # Check whether sky model already exists
             try:
-                self.read_sky_model(splinesky=splinesky,
-                                    old_calibs_ok=old_calibs_ok)
+                self.read_sky_model(old_calibs_ok=old_calibs_ok)
                 sky = False
             except Exception as e:
                 debug('Did not find existing sky model for', self, ':', e)
