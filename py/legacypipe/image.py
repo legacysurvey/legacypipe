@@ -251,7 +251,6 @@ class LegacySurveyImage(object):
     def get_tractor_image(self, slc=None, radecpoly=None,
                           gaussPsf=False, pixPsf=True, hybridPsf=True,
                           normalizePsf=True,
-                          #splinesky=True,
                           apodize=False,
                           nanomaggies=True, subsky=True, tiny=10,
                           dq=True, invvar=True, pixels=True,
@@ -272,10 +271,6 @@ class LegacySurveyImage(object):
         - *gaussPsf*: single circular Gaussian PSF based on header FWHM value.
         - *pixPsf*: pixelized PsfEx model.
         - *hybridPsf*: combo pixelized PsfEx + Gaussian approx.
-
-        Options determining the sky model to use:
-        
-        - *splinesky*: median filter chunks of the image, then spline those.
 
         Options determining the units of the image:
 
@@ -1317,12 +1312,12 @@ class LegacySurveyImage(object):
                         ] + [('sky_p%i' % p, v) for p,v in zip(pcts, pctvals)]:
                 T.set(k, np.array([v]))
 
-            trymakedirs(self.splineskyfn, dir=True)
-            tmpfn = os.path.join(os.path.dirname(self.splineskyfn),
-                             'tmp-' + os.path.basename(self.splineskyfn))
+            trymakedirs(self.skyfn, dir=True)
+            tmpfn = os.path.join(os.path.dirname(self.skyfn),
+                             'tmp-' + os.path.basename(self.skyfn))
             T.writeto(tmpfn)
-            os.rename(tmpfn, self.splineskyfn)
-            debug('Wrote sky model', self.splineskyfn)
+            os.rename(tmpfn, self.skyfn)
+            debug('Wrote sky model', self.skyfn)
 
         else:
             #### This branch has not been tested recently...

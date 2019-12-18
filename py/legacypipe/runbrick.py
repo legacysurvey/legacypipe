@@ -102,7 +102,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     Sky:
 
-    - *splinesky*: boolean.  Use SplineSky model, rather than ConstantSky?
+    - *splinesky*: boolean.  If we have to create sky calibs, create SplineSky model rather than ConstantSky?
     - *subsky*: boolean.  Subtract sky model from tims?
 
     '''
@@ -259,7 +259,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     # Read Tractor images
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
                                 hybridPsf=hybridPsf, normalizePsf=normalizePsf,
-                                splinesky=splinesky,
                                 subsky=subsky,
                                 apodize=apodize,
                                 constant_invvar=constant_invvar,
@@ -3585,7 +3584,6 @@ def get_runbrick_kwargs(survey=None,
     if bands is not None:
         bands = bands.split(',')
     opt.update(bands=bands)
-    #opt.update(splinesky=True)
     return survey, opt
 
 def main(args=None):

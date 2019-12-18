@@ -22,9 +22,6 @@ def main():
     parser = get_parser()
     parser.set_defaults(wise=False)
 
-    #hybridPsf=True, normalizePsf=True, rex=True, splinesky=True,
-    #gaia_stars=True, wise=False, ceres=False,
-    
     parser.add_argument('expnum', type=int, help='Exposure number')
     parser.add_argument('ccdname', help='CCD name (eg: "N4")')
 
@@ -78,9 +75,6 @@ def main():
     #if opt.brick is None and opt.radec is None:
 
     run_brick(None, survey, **kwargs)
-
-    #hybridPsf=True, normalizePsf=True, rex=True, splinesky=True,
-    #gaia_stars=True, wise=False, ceres=False,
 
     print('Finished:', Time()-t0)
 

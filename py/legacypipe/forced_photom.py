@@ -358,7 +358,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     if opt.do_calib:
         im.run_calibs(splinesky=True)
 
-    tim = im.get_tractor_image(slc=zoomslice, pixPsf=True, splinesky=True,
+    tim = im.get_tractor_image(slc=zoomslice, pixPsf=True,
                                constant_invvar=opt.constant_invvar,
                                hybridPsf=opt.hybrid_psf,
                                normalizePsf=opt.normalize_psf,
