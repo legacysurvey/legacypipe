@@ -448,7 +448,7 @@ def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
     H,W = targetwcs.shape
     ibands = dict([(b,i) for i,b in enumerate(bands)])
     for tim in tims:
-        ie = tim.getInvvar()
+        ie = tim.getInvError()
         img = tim.getImage()
         if np.any(ie == 0):
             # Patch from the coadd
