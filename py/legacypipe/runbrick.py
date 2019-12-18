@@ -2799,11 +2799,11 @@ def stage_writecat(
 
     if T_donotfit:
         if not 'type' in T_donotfit.get_columns():
-            T_donotfit.type = np.array(['DUP ']*len(T_donotfit))
+            T_donotfit.type = np.array(['DUP']*len(T_donotfit))
         else:
             for i in range(len(T_donotfit)):
                 if len(T_donotfit.type[i].strip()) == 0:
-                    T_donotfit.type[i] = 'DUP '
+                    T_donotfit.type[i] = 'DUP'
         T_donotfit.brickid = np.zeros(len(T_donotfit), np.int32) + brickid
         T_donotfit.brickname = np.array([brickname] * len(T_donotfit))
         T_donotfit.objid = np.arange(len(T_donotfit), dtype=np.int32) + len(T2)

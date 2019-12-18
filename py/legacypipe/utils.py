@@ -15,6 +15,8 @@ def log_debug(logger, args):
         msg = ' '.join(map(str, args))
         logger.debug(msg)
 
+galaxy_min_re = 0.01
+
 class EllipseWithPriors(EllipseESoft):
     '''An ellipse (used to represent galaxy shapes) with Gaussian priors
     over softened ellipticity parameters.  This class is used during
@@ -46,6 +48,7 @@ class EllipseWithPriors(EllipseESoft):
         # MAGIC -- 30" default max r_e!
         # SEE ALSO survey.py : class(LogRadius)!
         self.uppers[0] = np.log(30.)
+        self.lowers[0] = np.log(galaxy_min_re)
 
     def setMaxLogRadius(self, rmax):
         self.uppers[0] = rmax
@@ -59,7 +62,8 @@ class EllipseWithPriors(EllipseESoft):
         return cls(logr, ee1, ee2)
 
     def isLegal(self):
-        return self.logre <= self.uppers[0]
+        return ((self.logre <= self.uppers[0]) and
+                (self.logre >= self.lowers[0]))
 
     @classmethod
     def getName(cls):

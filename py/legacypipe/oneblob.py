@@ -1049,7 +1049,8 @@ class OneBlob(object):
                 # bright, try the galaxy models.
                 chi_rex = chisqs.get('rex', 0)
                 chi_psf = chisqs.get('ptsrc', 0)
-                if chi_rex > chi_psf or max(chi_psf, chi_rex) > 400:
+                margin = 1. # 1 parameter
+                if chi_rex > (chi_psf+margin) or max(chi_psf, chi_rex) > 400:
                     trymodels.extend([
                         ('dev', dev), ('exp', exp), ('ser', None)])
                 continue

@@ -14,7 +14,7 @@ from tractor.ellipses import EllipseESoft, EllipseE
 from tractor.galaxy import ExpGalaxy
 from tractor import PointSource, ParamList, ConstantFitsWcs
 
-from legacypipe.utils import EllipseWithPriors
+from legacypipe.utils import EllipseWithPriors, galaxy_min_re
 
 import logging
 logger = logging.getLogger('legacypipe.survey')
@@ -222,9 +222,11 @@ class LogRadius(EllipseESoft):
         # MAGIC -- 10" default max r_e!
         # SEE ALSO utils.py : class(EllipseWithPriors)!
         self.uppers = [np.log(10.)]
+        self.lowers = [np.log(galaxy_min_re)]
 
     def isLegal(self):
-        return self.logre <= self.uppers[0]
+        return ((self.logre <= self.uppers[0]) and
+                (self.logre >= self.lowers[0]))
 
     def setMaxLogRadius(self, rmax):
         self.uppers[0] = rmax
