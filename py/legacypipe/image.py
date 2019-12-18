@@ -1108,27 +1108,46 @@ class LegacySurveyImage(object):
         if rtn:
             raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
 
-        ## FIXME --
-        # Convert into a "merged psfex" format file, which is a table.
-        
-        # Update the header
-        hlist = [
-            {'name': 'LEGPIPEV', 'value': git_version, 'comment': "legacypipe git version"},
-            {'name': 'EXPNUM',   'value': self.expnum, 'comment': "exponsure number"},
-            {'name': 'PLVER',    'value': plver,       'comment': "CP version"},
-            {'name': 'PLPROCID', 'value': plprocid,    'comment': "CP processing date hash"},
-            {'name': 'PROCDATE', 'value': procdate,    'comment': "DATE of image file"},
-            {'name': 'IMGDSUM',  'value': datasum,     'comment': "DATASUM of image file"}
-            ]
-        F = fitsio.FITS(psftmpfn, 'rw')
-        F[0].write_keys(hlist)
-        F.close()
+        # Convert into a "merged psfex" format file.
+        T = fits_table(psftmpfn)
+        hdr = T.get_header()
+        # add our own metadata values
+        for k,v in [
+                ('legpipev', git_version),
+                ('expnum',   self.expnum),
+                ('plver',    plver),
+                ('plprocid', plprocid),
+                ('procdate', procdate),
+                ('imgdsum',  datasum),
+                ]:
+            T.set(k, np.array([v]))
+        # add values from PsfEx header cards
+        keys = ['LOADED', 'ACCEPTED', 'CHI2', 'POLNAXIS',
+                'POLNGRP', 'PSF_FWHM', 'PSF_SAMP', 'PSFNAXIS',
+                'PSFAXIS1', 'PSFAXIS2', 'PSFAXIS3']
+        if hdr['POLNAXIS'] == 0:
+            # No polynomials.  Fake it.
+            T.polgrp1 = np.array([0])
+            T.polgrp2 = np.array([0])
+            T.polname1 = np.array(['fake'])
+            T.polname2 = np.array(['fake'])
+            T.polzero1 = np.array([0])
+            T.polzero2 = np.array([0])
+            T.polscal1 = np.array([1])
+            T.polscal2 = np.array([1])
+            T.poldeg1 = np.array([0])
+        else:
+            keys.extend([
+                    'POLGRP1', 'POLNAME1', 'POLZERO1', 'POLSCAL1',
+                    'POLGRP2', 'POLNAME2', 'POLZERO2', 'POLSCAL2',
+                    'POLDEG1'])
+        for k in keys:
+            T.set(k.lower(), np.array([hdr[k]]))
 
-        cmd = 'mv %s %s' % (psftmpfn, self.psffn)
-        debug(cmd)
-        rtn = os.system(cmd)
-        if rtn:
-            raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
+        psftmpfn2 = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.psf.tmp2')
+        T.writeto(psftmpfn2)
+        os.remove(psftmpfn)
+        os.rename(psftmpfn2, self.psffn)
         
     def run_sky(self, splinesky=False, git_version=None, ps=None, survey=None,
                 gaia=True, release=0, survey_blob_mask=None):
