@@ -929,65 +929,29 @@ class LegacySurveyImage(object):
             return psf
 
         # spatially varying pixelized PsfEx
-        psf = None
-        if self.merged_psffn is not None:
-            if os.path.exists(self.merged_psffn):
-                psf = self.read_merged_psfex_model(normalizePsf=normalizePsf, old_calibs_ok=old_calibs_ok)
-            else:
-                if not os.path.exists(self.psffn):
-                    raise RuntimeError('Merged PsfEx model {} not found'.format(self.merged_psffn))
-
-        if psf is None:
-            debug('Reading PsfEx model from', self.psffn)
-            if normalizePsf:
-                debug('NORMALIZING PSF!')
-                psf = NormalizedPixelizedPsfEx(self.psffn)
-            else:
-                psf = PixelizedPsfEx(self.psffn)
-            hdr = fitsio.read_header(self.psffn)
-
-            if not validate_procdate_plver(self.psffn, 'primaryheader',
-                                           self.expnum, self.plver, self.procdate,
-                                           self.plprocid, data=hdr, old_calibs_ok=old_calibs_ok):
-                raise RuntimeError('PsfEx file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' %
-                                   self.psffn)
-
-            psf.version = hdr.get('LEGSURV', None)
-            if psf.version is None:
-                psf.version = str(os.stat(self.psffn).st_mtime)
-            psf.plver = hdr.get('PLVER', '').strip()
-            psf.plprocid = hdr.get('PLPROCID', '').strip()
-            psf.procdate = hdr.get('PROCDATE', '').strip()
-            psf.datasum = hdr.get('IMGDSUM', 0)
-            hdr = fitsio.read_header(self.psffn, ext=1)
-            psf.fwhm = hdr['PSF_FWHM']
-
-        psf.shift(x0, y0)
-        if hybridPsf:
-            from tractor.psf import HybridPixelizedPSF, NCircularGaussianPSF
-            psf = HybridPixelizedPSF(psf, cx=w/2., cy=h/2.,
-                                     gauss=NCircularGaussianPSF([psf.fwhm / 2.35], [1.]))
-        debug('Using PSF model', psf)
-        return psf
-
-    def read_merged_psfex_model(self, normalizePsf=False, old_calibs_ok=False):
         from tractor import PsfExModel
-        debug('Reading merged PsfEx models from', self.merged_psffn)
-        T = fits_table(self.merged_psffn)
-
-        if not validate_procdate_plver(self.merged_psffn, 'table',
-                                       self.expnum, self.plver, self.procdate,
-                                       self.plprocid, data=T, old_calibs_ok=old_calibs_ok):
-            raise RuntimeError('Merged PSFEx file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' %
-                  self.merged_psffn)
-
-        I, = np.nonzero((T.expnum == self.expnum) *
-                        np.array([c.strip() == self.ccdname
-                                  for c in T.ccdname]))
-        debug('Found', len(I), 'matching CCDs')
-        if len(I) != 1:
-            return None
-        Ti = T[I[0]]
+        tryfns = []
+        if os.path.exists(self.merged_psffn):
+            tryfns.append(self.merged_psffn)
+        if os.path.exists(self.psffn):
+            tryfns.append(self.psffn)
+        Ti = None
+        for fn in tryfns:
+            T = fits_table(fn)
+            I, = np.nonzero((T.expnum == self.expnum) *
+                            np.array([c.strip() == self.ccdname
+                                      for c in T.ccdname]))
+            debug('Found', len(I), 'matching CCDs')
+            if len(I) != 1:
+                continue
+            if not validate_procdate_plver(fn, 'table',
+                                           self.expnum, self.plver, self.procdate,
+                                           self.plprocid, data=T, old_calibs_ok=old_calibs_ok):
+                raise RuntimeError('Merged PSFEx file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' % fn)
+            Ti = T[I[0]]
+            break
+        if Ti is None:
+            raise RuntimeError('Failed to find PsfEx model in files: %s' % ', '.join(tryfns))
         # Remove any padding
         degree = Ti.poldeg1
         # number of terms in polynomial
@@ -1012,9 +976,15 @@ class LegacySurveyImage(object):
         psf.plver = getattr(Ti, 'plver', '')
         psf.procdate = getattr(Ti, 'procdate', '')
         psf.plprocid = getattr(Ti, 'plprocid', '')
-        if 'imgdsum' in Ti.get_columns():
-            psf.datasum = Ti.imgdsum
+        psf.datasum = Ti.imgdsum
         psf.fwhm = Ti.psf_fwhm
+
+        psf.shift(x0, y0)
+        if hybridPsf:
+            from tractor.psf import HybridPixelizedPSF, NCircularGaussianPSF
+            psf = HybridPixelizedPSF(psf, cx=w/2., cy=h/2.,
+                                     gauss=NCircularGaussianPSF([psf.fwhm / 2.35], [1.]))
+        debug('Using PSF model', psf)
         return psf
 
 
