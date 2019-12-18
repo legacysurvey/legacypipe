@@ -23,6 +23,8 @@ def _detmap(X):
     psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
     ie = tim.getInvError()
     detim = tim.getImage().copy()
+    # Zero out all masked pixels
+    detim[ie == 0] = 0.
     tim.getSky().addTo(detim, scale=-1.)
     detim = gaussian_filter(detim, tim.psf_sigma) / psfnorm**2
     detsig1 = tim.sig1 / psfnorm
