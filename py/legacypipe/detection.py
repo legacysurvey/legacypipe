@@ -21,7 +21,7 @@ def _detmap(X):
         return None,None,None,None,None
     assert(tim.psf_sigma > 0)
     psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
-    ie = tim.getInvvar()
+    ie = tim.getInvError()
     detim = tim.getImage().copy()
     tim.getSky().addTo(detim, scale=-1.)
     detim = gaussian_filter(detim, tim.psf_sigma) / psfnorm**2
