@@ -33,7 +33,7 @@ install:
     #- pip install -v --no-deps --upgrade git+https://github.com/dstndstn/tractor.git@cython
     - pip install cython
     - git clone https://github.com/dstndstn/tractor.git
-    - (cd tractor && git checkout cython && python setup-cython.py install && make version && cp tractor/version.py $(ls /home/travis/virtualenv/python*/lib/python*/site-packages/tractor/))
+    - (cd tractor && git checkout cython && python setup-cython.py install)
 
 before_script:
     - if [ ! -d "$HOME/astrometry.net" ]; then (cd $HOME; git clone https://github.com/dstndstn/astrometry.net.git); fi
