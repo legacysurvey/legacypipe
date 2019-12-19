@@ -250,8 +250,8 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
                     newval = np.zeros((n, N_wise_epochs), oldval.dtype)
                     newvals[colname] = newval
 
-                lc_nobs = T.get('lc_nobs_w%i' % band)
-                lc_mjd = T.get('lc_mjd_w%i' % band)
+                lc_nobs = T.get('lc_nobs_%s' % band)
+                lc_mjd = T.get('lc_mjd_%s' % band)
                 # Check each row (source) individually, since coverage isn't
                 # uniform across a brick
                 for row,(nobs,mjd) in enumerate(zip(lc_nobs, lc_mjd)):
