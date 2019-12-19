@@ -29,7 +29,10 @@ install:
     - pip install coveralls
     - pip install fitsio
     #- pip install --no-deps --upgrade git+https://github.com/esheldon/fitsio.git@v0.9.12#egg=fitsio
-    - pip install -v --no-deps --upgrade git+https://github.com/dstndstn/tractor.git
+    #- pip install -v --no-deps --upgrade git+https://github.com/dstndstn/tractor.git
+    #- pip install -v --no-deps --upgrade git+https://github.com/dstndstn/tractor.git@cython
+    - git clone https://github.com/dstndstn/tractor.git
+    - cd tractor && git checkout cython && python setup-cython.py install
 
 before_script:
     - if [ ! -d "$HOME/astrometry.net" ]; then (cd $HOME; git clone https://github.com/dstndstn/astrometry.net.git); fi

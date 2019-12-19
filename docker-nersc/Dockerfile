@@ -172,7 +172,7 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
 
 # Legacypipe
 RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
-    && cd legacypipe && git checkout dr9-dev && git describe && echo 4
+    && cd legacypipe && git checkout dr9-dev && git describe && echo 5
 
 ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 
