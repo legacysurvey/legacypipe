@@ -236,16 +236,46 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
             add_wiselike(c, bands=['w1','w2'])
         # Cut down to a fixed number of WISE time-resolved epochs?
         if N_wise_epochs is not None:
-            for col in lc_cols:
-                for band in ['w1','w2']:
+
+            # mapping from (nobs, mjd) to indices to keep
+            keep_epochs = {}
+            newvals = {}
+
+            for I,band in [(I1,'w1'), (I2,'w2')]:
+                # initialize new (cut) arrays
+                for col in lc_cols:
                     colname = col + '_' + band
-                    # Cut or pad old value to have N_wise_epochs-length arrays
                     oldval = T.get(colname)
                     n,ne = oldval.shape
-                    newval = np.zeros((n,N_wise_epochs), oldval.dtype)
-                    ncopy = min(N_wise_epochs,ne)
-                    newval[:, :ncopy] = oldval[:,:ncopy]
-                    T.set(colname, newval)
+                    newval = np.zeros((n, N_wise_epochs), oldval.dtype)
+                    newvals[colname] = newval
+
+                lc_nobs = T.get('lc_nobs_w%i' % band)
+                lc_mjd = T.get('lc_mjd_w%i' % band)
+                # Check each row (source) individually, since coverage isn't
+                # uniform across a brick
+                for row,(nobs,mjd) in enumerate(zip(lc_nobs, lc_mjd)):
+                    key = tuple(nobs) + tuple(mjd)
+                    if not key in keep_epochs:
+                        # required by one_lightcurve_bitmask!
+                        assert(N_wise_epochs == 13)
+                        I = one_lightcurve_bitmask(nobs, mjd)
+                        # convert to integer index list
+                        I = np.flatnonzero(I)
+                        keep_epochs[key] = I
+                    else:
+                        I = keep_epochs[key]
+
+                    for col in lc_cols:
+                        colname = col + '_' + band
+                        oldval = T.get(colname)
+                        newval = newvals[colname]
+                        newval[row,:len(I)] = oldval[row,I]
+
+            for k,v in newvals.items():
+                T.set(k, v)
+            del keep_epochs
+
     cols.extend([
         'sersic',  'sersic_ivar',
         'shape_r', 'shape_r_ivar',
@@ -297,6 +327,65 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
 
     T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units,
               **write_kwargs)
+
+def one_lightcurve_bitmask(lc_nobs, lc_mjd):
+    # row is a single tractor-i catalog row
+    # the only columns used from within this row are:
+    #     LC_NOBS_W[1-2]
+    #     LC_MJD_W[1-2]
+    # band should be an integer, either 1 (W1) or 2 (W2)
+    #
+    # return value is a 1D boolean numpy array with the same
+    # length as the input row's WISE lightcurve
+
+    #assert(band in [1, 2])
+    #row['LC_NOBS_W' + str(band)]
+    #row['LC_MJD_W' + str(band)]
+
+    nobs = lc_nobs
+    mjd = lc_mjd
+
+    n_epochs = len(nobs)
+
+    # could imagine making this a keyword arg rather than hardcoded
+    # but don't want to have to test that it works for other
+    # values...
+    n_final = 13 # NEO5
+
+    # if the number of epochs fits within the number available then
+    # retain all epochs
+    if n_epochs <= n_final:
+        return np.ones(n_epochs, dtype=bool)
+
+    # ceiling value for minimum required LC_NOBS_w[1-2]
+    nobs_min_ceil = 12
+    keep = np.zeros(n_epochs, dtype=bool)
+
+    sind = np.argsort(-1.0*nobs)
+
+    nobs_min = min(nobs[sind[n_final-1]], nobs_min_ceil)
+
+    is_cand = (nobs >= nobs_min)
+
+    if np.sum(is_cand) == n_final:
+        keep[sind[0:n_final]] = True
+        return keep
+
+    indmin = np.argmin(mjd + np.logical_not(is_cand)*(1.0e6))
+    keep[indmin] = True
+    is_cand[indmin] = False
+    t0 = mjd[indmin]
+
+    for j in range(1, n_final):
+        t_target = t0 + j*(365.25/2.0)
+        if (t0  < 56000) and (t_target > 55593):
+            t_target += (1046.0 - 365.25/2.0)
+
+        indmin = np.argmin(np.abs(mjd - t_target) + np.logical_not(is_cand)*1e6)
+        keep[indmin] = True
+        is_cand[indmin] = False
+
+    return keep
 
 if __name__ == '__main__':
     main()
