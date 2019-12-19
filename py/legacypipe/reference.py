@@ -37,6 +37,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     if tycho_stars:
         tycho = read_tycho2(survey, marginwcs)
         if len(tycho):
+            tycho.isgaia = np.zeros(len(tycho), bool)
             refs.append(tycho)
             
     # Add Gaia stars
@@ -77,6 +78,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         if clusters is not None:
             debug('Found', len(clusters), 'star clusters nearby')
             clusters.iscluster = np.ones(len(clusters), bool)
+            clusters.isgaia = np.zeros(len(clusters), bool)
             refs.append(clusters)
 
     # Read large galaxies nearby.
@@ -90,6 +92,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                 print('Matched', len(I), 'large galaxies to Gaia stars.')
                 if len(I):
                     gaia.donotfit[J] = True
+            galaxies.isgaia = np.zeros(len(galaxies), bool)
             refs.append(galaxies)
 
     refcat = None
