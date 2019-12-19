@@ -166,7 +166,12 @@ class LegacySurveyImage(object):
         self.skyfn        = os.path.join(calibdir, 'sky-single',   imgdir, basename, calname + '-sky.fits')
         self.merged_psffn = os.path.join(calibdir, 'psfex',        imgdir, basename + '-psfex.fits')
         self.merged_skyfn = os.path.join(calibdir, 'sky',          imgdir, basename + '-sky.fits')
-
+        self.old_merged_skyfn = os.path.join(calibdir, imgdir, basename + '-splinesky.fits')
+        self.old_merged_psffn = os.path.join(calibdir, imgdir, basename + '-psfex.fits')
+        # not used by this code -- here for the sake of legacyzpts/merge_calibs.py
+        self.old_single_psffn = os.path.join(calibdir, imgdir, basename, calname + '-psfex.fits')
+        self.old_single_skyfn = os.path.join(calibdir, imgdir, basename, calname + '-splinesky.fits')
+        
     def compute_filenames(self):
         # Compute data quality and weight-map filenames
         self.dqfn = self.imgfn.replace('_ooi_', '_ood_').replace('_oki_','_ood_')
@@ -803,12 +808,11 @@ class LegacySurveyImage(object):
         from tractor.utils import get_class_from_name
 
         tryfns = []
-        if os.path.exists(self.merged_skyfn):
-            tryfns.append(self.merged_skyfn)
-        if os.path.exists(self.skyfn):
-            tryfns.append(self.skyfn)
+        tryfns = [self.merged_skyfn, self.skyfn, self.old_merged_skyfn]
         Ti = None
         for fn in tryfns:
+            if not os.path.exists(fn):
+                continue
             T = fits_table(fn)
             I, = np.nonzero((T.expnum == self.expnum) *
                             np.array([c.strip() == self.ccdname
@@ -865,13 +869,11 @@ class LegacySurveyImage(object):
 
         # spatially varying pixelized PsfEx
         from tractor import PsfExModel
-        tryfns = []
-        if os.path.exists(self.merged_psffn):
-            tryfns.append(self.merged_psffn)
-        if os.path.exists(self.psffn):
-            tryfns.append(self.psffn)
+        tryfns = [self.merged_psffn, self.psffn, self.old_merged_psffn]
         Ti = None
         for fn in tryfns:
+            if not os.path.exists(fn):
+                continue
             T = fits_table(fn)
             I, = np.nonzero((T.expnum == self.expnum) *
                             np.array([c.strip() == self.ccdname
@@ -1014,47 +1016,22 @@ class LegacySurveyImage(object):
             raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
 
         # Convert into a "merged psfex" format file.
-        T = fits_table(psftmpfn)
-        hdr = T.get_header()
+        T = psfex_single_to_merged(psftmpfn, self.expnum, self.ccdname)
         # add our own metadata values
         for k,v in [
                 ('legpipev', git_version),
-                ('expnum',   self.expnum),
-                ('ccdname',  self.ccdname),
                 ('plver',    plver),
                 ('plprocid', plprocid),
                 ('procdate', procdate),
                 ('imgdsum',  datasum),
                 ]:
             T.set(k, np.array([v]))
-        # add values from PsfEx header cards
-        keys = ['LOADED', 'ACCEPTED', 'CHI2', 'POLNAXIS',
-                'POLNGRP', 'PSF_FWHM', 'PSF_SAMP', 'PSFNAXIS',
-                'PSFAXIS1', 'PSFAXIS2', 'PSFAXIS3']
-        if hdr['POLNAXIS'] == 0:
-            # No polynomials.  Fake it.
-            T.polgrp1 = np.array([0])
-            T.polgrp2 = np.array([0])
-            T.polname1 = np.array(['fake'])
-            T.polname2 = np.array(['fake'])
-            T.polzero1 = np.array([0])
-            T.polzero2 = np.array([0])
-            T.polscal1 = np.array([1])
-            T.polscal2 = np.array([1])
-            T.poldeg1 = np.array([0])
-        else:
-            keys.extend([
-                    'POLGRP1', 'POLNAME1', 'POLZERO1', 'POLSCAL1',
-                    'POLGRP2', 'POLNAME2', 'POLZERO2', 'POLSCAL2',
-                    'POLDEG1'])
-        for k in keys:
-            T.set(k.lower(), np.array([hdr[k]]))
 
         psftmpfn2 = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.psf.tmp2')
         T.writeto(psftmpfn2)
         os.remove(psftmpfn)
         os.rename(psftmpfn2, self.psffn)
-        
+
     def run_sky(self, splinesky=True, git_version=None, ps=None, survey=None,
                 gaia=True, release=0, survey_blob_mask=None):
         from legacypipe.survey import get_version_header
@@ -1395,6 +1372,39 @@ class LegacySurveyImage(object):
             self.run_psfex(git_version=git_version, ps=ps)
         if sky:
             self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia, survey_blob_mask=survey_blob_mask)
+
+def psfex_single_to_merged(infn, expnum, ccdname):
+    # returns table T
+    T = fits_table(infn)
+    hdr = T.get_header()
+    for k,v in [
+            ('expnum',   expnum),
+            ('ccdname',  ccdname),
+            ]:
+        T.set(k, np.array([v]))
+    # add values from PsfEx header cards
+    keys = ['LOADED', 'ACCEPTED', 'CHI2', 'POLNAXIS',
+            'POLNGRP', 'PSF_FWHM', 'PSF_SAMP', 'PSFNAXIS',
+            'PSFAXIS1', 'PSFAXIS2', 'PSFAXIS3']
+    if hdr['POLNAXIS'] == 0:
+        # No polynomials.  Fake it.
+        T.polgrp1 = np.array([0])
+        T.polgrp2 = np.array([0])
+        T.polname1 = np.array(['fake'])
+        T.polname2 = np.array(['fake'])
+        T.polzero1 = np.array([0])
+        T.polzero2 = np.array([0])
+        T.polscal1 = np.array([1])
+        T.polscal2 = np.array([1])
+        T.poldeg1 = np.array([0])
+    else:
+        keys.extend([
+                'POLGRP1', 'POLNAME1', 'POLZERO1', 'POLSCAL1',
+                'POLGRP2', 'POLNAME2', 'POLZERO2', 'POLSCAL2',
+                'POLDEG1'])
+    for k in keys:
+        T.set(k.lower(), np.array([hdr[k]]))
+    return T
 
 class LegacySplineSky(SplineSky):
     @classmethod

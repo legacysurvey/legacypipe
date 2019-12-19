@@ -120,9 +120,12 @@ def merge_psfex(survey, expnum, C, psfoutfn, opt):
     #psfhdrvals = []
     imobjs = []
     Cgood = []
+    fns = []
     for ccd in C:
         im = survey.get_image_object(ccd)
-        fn = im.psffn
+        for fn in [im.psffn, im.old_single_psffn]:
+            if os.path.exists(fn):
+                break
         if not os.path.exists(fn):
             print('File not found:', fn)
             if opt.all_found:
@@ -130,11 +133,19 @@ def merge_psfex(survey, expnum, C, psfoutfn, opt):
             continue
         imobjs.append(im)
         Cgood.append(ccd)
+        fns.append(fn)
 
-    for ccd,im in zip(Cgood, imobjs):
-        fn = im.psffn
+    for fn, ccd,im in zip(fns, Cgood, imobjs):
         print('Reading', fn)
         T = fits_table(fn)
+
+        cols = T.get_columns()
+        if not 'plver' in cols:
+            from legacypipe.image import psfex_single_to_merged
+            T = psfex_single_to_merged(fn, ccd.expnum, ccd.ccdname)
+            for k in ['plver', 'procdate', 'plprocid']:
+                T.set(k, np.array([getattr(ccd, k)]))
+
         #hdr = fitsio.read_header(fn, ext=1)
         # hdr = astropy.io.fits.getheader(fn, ext=1)
         # 

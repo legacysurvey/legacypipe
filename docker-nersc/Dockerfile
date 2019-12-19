@@ -105,7 +105,7 @@ RUN pip3 --no-cache-dir install cython
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && git checkout cython && echo 3 \
+    && git checkout cython && echo 5 \
     && python3 setup-cython.py --with-ceres install --home /usr/local \
     && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so") \
@@ -172,7 +172,7 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
 
 # Legacypipe
 RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
-    && cd legacypipe && git checkout dr9-dev && git describe && echo 3
+    && cd legacypipe && git checkout dr9-dev && git describe && echo 4
 
 ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 
@@ -222,3 +222,7 @@ RUN python -O -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
            /src/unwise_psf/py \
            /src/legacypipe/py/{legacypipe,legacyzpts}
 
+# update legacypipe
+#RUN cd /src/legacypipe && git pull && git describe \
+#    && python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
+#    && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
