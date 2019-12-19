@@ -751,10 +751,14 @@ class OneBlob(object):
                                          np.flipud(np.fliplr(sn[slc])))
                 # just OR the detection maps per-band...
                 flipblobs |= (flipsn > 5.)
+
+            #filled = binary_fill_holes(flipblobs)
+            #blobs,_ = label(filled)
+            flipblobs = binary_fill_holes(flipblobs)
             blobs,_ = label(flipblobs)
             goodblob = blobs[iy,ix]
 
-            if self.plots_per_source and False:
+            if self.plots_per_source and True:
                 # This plot is about the symmetric-blob definitions
                 # when fitting sources.
                 import pylab as plt
@@ -812,7 +816,8 @@ class OneBlob(object):
             # cause there to be no detection S/N because of masking, so do
             # a hole-fill before checking.
             # FIXME -- this could go before the label() call
-            if not binary_fill_holes(flipblobs)[iy,ix]:
+            #if not binary_fill_holes(flipblobs)[iy,ix]:
+            if not flipblobs[iy,ix]:
                 # The hole-fill can still fail (eg, in small test images) if
                 # the bleed trail splits the blob into two pieces.
                 # Skip this test for reference sources.
