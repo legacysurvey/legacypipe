@@ -241,7 +241,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
             keep_epochs = {}
             newvals = {}
 
-            for I,band in [(I1,'w1'), (I2,'w2')]:
+            for band in ['w1', 'w2']:
                 # initialize new (cut) arrays
                 for col in lc_cols:
                     colname = col + '_' + band
