@@ -490,8 +490,7 @@ def stage_halos(targetrd=None, pixscale=None, targetwcs=None,
     if star_halos and refstars:
         Igaia = []
         gaia = refstars
-        Igaia, = np.nonzero(np.logical_or(refstars.isbright, refstars.ismedium) *
-                            np.logical_not(refstars.iscluster) * refstars.pointsource)
+        Igaia, = np.nonzero(refstars.isgaia * refstars.pointsource)
         Igaia = Igaia[np.argsort(gaia.phot_g_mean_mag[Igaia])]
         debug(len(Igaia), 'stars for halo subtraction')
         if len(Igaia):
