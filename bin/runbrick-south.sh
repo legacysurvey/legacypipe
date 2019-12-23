@@ -25,10 +25,7 @@ export TYCHO2_KD_DIR=/global/project/projectdirs/cosmo/staging/tycho2
 export LARGEGALAXIES_CAT=/global/project/projectdirs/cosmo/staging/largegalaxies/v3.0/LSLGA-v3.0.kd.fits
 export PS1CAT_DIR=/global/project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v3
 
-# Use the unwise_psf version inside the container
-UNWISE_PSF_DIR=/src/unwise_psf
-
-export PYTHONPATH=/usr/local/lib/python:/usr/local/lib/python3.6/dist-packages:.:${UNWISE_PSF_DIR}/py
+export PYTHONPATH=/usr/local/lib/python:/usr/local/lib/python3.6/dist-packages:/src/unwise_psf/py:.
 
 # Don't add ~/.local/ to Python's sys.path
 export PYTHONNOUSERSITE=1
