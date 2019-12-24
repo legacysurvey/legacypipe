@@ -1053,6 +1053,7 @@ class LegacySurveyImage(object):
         datasum = imghdr.get('DATASUM', '0')
         procdate = primhdr['DATE']
         if git_version is None:
+            from legacypipe.survey import get_git_version
             git_version = get_git_version()
 
         good = (wt > 0)

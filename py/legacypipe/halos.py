@@ -38,7 +38,7 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj):
     W = int(W)
     halo = np.zeros((H,W), np.float32)
     for ref,flux,ra,dec in zip(refs, fluxes, rr, dd):
-        ok,x,y = wcs.radec2pixelxy(ra, dec)
+        _,x,y = wcs.radec2pixelxy(ra, dec)
         x -= 1.
         y -= 1.
         rad_arcsec = ref.radius * 3600.

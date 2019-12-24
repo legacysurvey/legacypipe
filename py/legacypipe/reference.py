@@ -174,17 +174,16 @@ def read_gaia(targetwcs):
     color = np.clip(color, -0.5, 3.3)
     # Use Arjun's Gaia-to-DECam transformations.
     for b,coeffs in [
-        ('g', [-0.11368, 0.37504, 0.17344, -0.08107, 0.28088,
-           -0.21250, 0.05773,-0.00525]),
-        ('r', [ 0.10533,-0.22975, 0.06257,-0.24142, 0.24441,
-            -0.07248, 0.00676]),
-        ('z', [ 0.46744,-0.95143, 0.19729,-0.08810, 0.01566])]:
+            ('g', [-0.11368, 0.37504, 0.17344, -0.08107, 0.28088,
+                   -0.21250, 0.05773,-0.00525]),
+            ('r', [ 0.10533,-0.22975, 0.06257,-0.24142, 0.24441,
+                    -0.07248, 0.00676]),
+            ('z', [ 0.46744,-0.95143, 0.19729,-0.08810, 0.01566])]:
         mag = gaia.G.copy()
         for order,c in enumerate(coeffs):
             mag += c * color**order
         gaia.set('decam_mag_%s' % b, mag)
 
-    AEN = gaia.astrometric_excess_noise
     gaia.pointsource = np.logical_or(
         (gaia.G <= 19.) *
         (gaia.astrometric_excess_noise < 10.**0.5),

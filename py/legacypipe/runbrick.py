@@ -498,7 +498,7 @@ def stage_halos(targetrd=None, pixscale=None, targetwcs=None,
 
             halostars = gaia[Igaia]
             if plots:
-                coimgs,cons = quick_coadds(tims, bands, targetwcs)
+                coimgs,_ = quick_coadds(tims, bands, targetwcs)
                 plt.clf()
                 dimshow(get_rgb(coimgs, bands))
                 ax = plt.axis()
@@ -528,7 +528,7 @@ def stage_halos(targetrd=None, pixscale=None, targetwcs=None,
                 plt.title('Subtracted halos')
                 ps.savefig()
 
-                for i,g in enumerate(halostars[:10]):
+                for g in halostars[:10]:
                     plt.clf()
                     pixrad = int(g.radius * 3600. / pixscale)
                     ax = [g.ibx-pixrad, g.ibx+pixrad, g.iby-pixrad, g.iby+pixrad]
@@ -1865,8 +1865,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
     if plots:
-        cat_init = [src for it,src in zip(T.iterative, cat) if it == False]
-        cat_iter = [src for it,src in zip(T.iterative, cat) if it == True ]
+        cat_init = [src for it,src in zip(T.iterative, cat) if not(it)]
+        cat_iter = [src for it,src in zip(T.iterative, cat) if it]
         print(len(cat_init), 'initial sources and', len(cat_iter), 'iterative')
         mods_init = mp.map(_get_mod, [(tim, cat_init) for tim in tims])
         mods_iter = mp.map(_get_mod, [(tim, cat_iter) for tim in tims])

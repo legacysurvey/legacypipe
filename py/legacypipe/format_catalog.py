@@ -256,7 +256,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
                 # uniform across a brick
                 for row,(nobs,mjd) in enumerate(zip(lc_nobs, lc_mjd)):
                     key = tuple(nobs) + tuple(mjd)
-                    if not key in keep_epochs:
+                    if key not in keep_epochs:
                         # required by one_lightcurve_bitmask!
                         assert(N_wise_epochs == 13)
                         I = one_lightcurve_bitmask(nobs, mjd)

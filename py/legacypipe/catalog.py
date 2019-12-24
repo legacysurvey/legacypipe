@@ -5,7 +5,6 @@ import numpy as np
 from tractor import PointSource, getParamTypeTree, RaDecPos
 from tractor.galaxy import ExpGalaxy, DevGalaxy
 from tractor.sersic import SersicGalaxy
-from tractor.sersic import SersicGalaxy
 from tractor.ellipses import EllipseESoft, EllipseE
 from legacypipe.survey import RexGalaxy, GaiaSource
 

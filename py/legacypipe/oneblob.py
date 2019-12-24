@@ -184,12 +184,9 @@ class OneBlob(object):
         # else:
         #     self.optargs.update(dchisq = 0.1)
 
-
-        #from legacypipe.constrained_optimizer import ConstrainedOptimizer
-
-        from tractor.constrained_optimizer import ConstrainedOptimizer
-        from tractor.dense_optimizer import ConstrainedDenseOptimizer
+        #from tractor.constrained_optimizer import ConstrainedOptimizer
         #self.trargs.update(optimizer=ConstrainedOptimizer())
+        from tractor.dense_optimizer import ConstrainedDenseOptimizer
         self.trargs.update(optimizer=ConstrainedDenseOptimizer())
 
         self.optargs.update(dchisq = 0.1)
@@ -540,7 +537,7 @@ class OneBlob(object):
         avoid_r = np.zeros(len(avoid_x), np.float32) + 2.
         nsigma = 6.
 
-        Tnew,newcat,hot = run_sed_matched_filters(
+        Tnew,newcat,_ = run_sed_matched_filters(
             SEDs, self.bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r),
             self.blobwcs, nsigma=nsigma, saturated_pix=satmaps, veto_map=None,
             plots=False, ps=None, mp=mp)
@@ -580,7 +577,7 @@ class OneBlob(object):
                            if s is not None])
             dd = np.array([s.getPosition().dec for s in Bold.sources
                            if s is not None])
-            ok,xx,yy = self.blobwcs.radec2pixelxy(rr, dd)
+            _,xx,yy = self.blobwcs.radec2pixelxy(rr, dd)
             plt.plot(xx-1, yy-1, 'r+', label='Old', **crossa)
             plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0), label='New',
                      **crossa)
@@ -1911,7 +1908,7 @@ def _select_model(chisqs, nparams, galaxy_margin):
         keepmod = 'dev'
 
     # Consider Sersic models using same upgrade cut
-    if not 'ser' in chisqs:
+    if 'ser' not in chisqs:
         return keepmod
     serdiff = chisqs['ser'] - chisqs[keepmod]
     fcut = 0.01 * chisqs[keepmod]
