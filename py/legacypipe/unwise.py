@@ -213,7 +213,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             ps.savefig()
 
         if pixelized_psf:
-            import unwise_psf
+            from unwise_psf import unwise_psf
             if (band == 1) or (band == 2):
                 # we only have updated PSFs for W1 and W2
                 psfimg = unwise_psf.get_unwise_psf(band, tile.coadd_id, 

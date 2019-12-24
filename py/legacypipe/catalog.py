@@ -3,29 +3,29 @@ from __future__ import print_function
 import numpy as np
 
 from tractor import PointSource, getParamTypeTree, RaDecPos
-from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
+from tractor.galaxy import ExpGalaxy, DevGalaxy
+from tractor.sersic import SersicGalaxy
 from tractor.ellipses import EllipseESoft, EllipseE
-
 from legacypipe.survey import RexGalaxy, GaiaSource
 
 # FITS catalogs
-fits_typemap = { PointSource: 'PSF',
-                 ExpGalaxy: 'EXP',
-                 DevGalaxy: 'DEV',
-                 FixedCompositeGalaxy: 'COMP',
-                 RexGalaxy: 'REX',
-                 GaiaSource: 'PSF',
-                 type(None): 'NONE' }
+fits_typemap = { PointSource:  'PSF',
+                 ExpGalaxy:    'EXP',
+                 DevGalaxy:    'DEV',
+                 SersicGalaxy: 'SER',
+                 RexGalaxy:    'REX',
+                 GaiaSource:   'PSF',
+                 type(None):   'NUN' }
 
 fits_reverse_typemap = dict([(v,k) for k,v in fits_typemap.items()])
 fits_reverse_typemap.update({ 'DUP': GaiaSource })
 
-fits_short_typemap = { PointSource: 'P',
-                       ExpGalaxy: 'E',
-                       DevGalaxy: 'D',
-                       FixedCompositeGalaxy: 'C',
-                       RexGalaxy: 'R',
-                       GaiaSource: 'G' }
+fits_short_typemap = { PointSource:  'P',
+                       ExpGalaxy:    'E',
+                       DevGalaxy:    'D',
+                       SersicGalaxy: 'S',
+                       RexGalaxy:    'R',
+                       GaiaSource:   'G' }
 
 def _typestring(t):
     return '%s.%s' % (t.__module__, t.__name__)
@@ -146,8 +146,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
 
 def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
     typearray = np.array([fits_typemap[type(src)] for src in cat])
-    # If there are no "COMP" sources, the type will be 'S3' rather than 'S4'...
-    typearray = typearray.astype('S4')
+    typearray = typearray.astype('S3')
     T.set(pat % 'type', typearray)
 
     ra,dec = [],[]
@@ -162,38 +161,29 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
     T.set(pat % 'ra',  np.array(ra))
     T.set(pat % 'dec', np.array(dec))
 
-    shapeExp = np.zeros((len(T), 3), np.float32)
-    shapeDev = np.zeros((len(T), 3), np.float32)
-    fracDev  = np.zeros(len(T), np.float32)
+    shape = np.zeros((len(T), 3), np.float32)
+    # sersic index
+    sersic = np.zeros(len(T), np.float32)
 
     for i,src in enumerate(cat):
         #print('_get_tractor_fits_values for pattern', pat, 'src', src)
         if isinstance(src, RexGalaxy):
             #print('Rex shape', src.shape, 'params', src.shape.getAllParams())
-            shapeExp[i,0] = src.shape.getAllParams()[0]
-        elif isinstance(src, ExpGalaxy):
-            shapeExp[i,:] = src.shape.getAllParams()
-        elif isinstance(src, DevGalaxy):
-            shapeDev[i,:] = src.shape.getAllParams()
-            fracDev[i] = 1.
-        elif isinstance(src, FixedCompositeGalaxy):
-            shapeExp[i,:] = src.shapeExp.getAllParams()
-            shapeDev[i,:] = src.shapeDev.getAllParams()
-            fracDev[i] = src.fracDev.getValue()
+            shape[i,0] = src.shape.getAllParams()[0]
+        elif isinstance(src, (ExpGalaxy, DevGalaxy, SersicGalaxy)):
+            shape[i,:] = src.shape.getAllParams()
 
-    T.set(pat % 'fracDev',   fracDev)
+        if isinstance(src, SersicGalaxy):
+            sersic[i] = src.sersicindex.getValue()
+
+    T.set(pat % 'sersic',  sersic)
 
     if unpackShape:
-        T.set(pat % 'shapeExp_r',  shapeExp[:,0])
-        T.set(pat % 'shapeExp_e1', shapeExp[:,1])
-        T.set(pat % 'shapeExp_e2', shapeExp[:,2])
-        T.set(pat % 'shapeDev_r',  shapeDev[:,0])
-        T.set(pat % 'shapeDev_e1', shapeDev[:,1])
-        T.set(pat % 'shapeDev_e2', shapeDev[:,2])
+        T.set(pat % 'shape_r',  shape[:,0])
+        T.set(pat % 'shape_e1', shape[:,1])
+        T.set(pat % 'shape_e2', shape[:,2])
     else:
-        T.set(pat % 'shapeExp', shapeExp)
-        T.set(pat % 'shapeDev', shapeDev)
-
+        T.set(pat % 'shape', shape)
 
 def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                       allbands=None, ellipseClass=EllipseE,
@@ -210,8 +200,8 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
     read the type from the header.
 
     If *unpackShapes* is True and *ellipseClass* is EllipseE, read
-    catalog entries "shapeexp_r", "shapeexp_e1", "shapeexp_e2" rather than
-    "shapeExp", and similarly for "dev".
+    catalog entries "shape_r", "shape_e1", "shape_e2" rather than
+    "shape", and similarly for "dev".
     '''
     from tractor import NanoMaggies
     if hdr is None:
@@ -224,8 +214,7 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
         print('Not doing unpackShape because ellipseClass != EllipseE.')
         unpackShape = False
     if unpackShape:
-        T.shapeexp = np.vstack((T.shapeexp_r, T.shapeexp_e1, T.shapeexp_e2)).T
-        T.shapedev = np.vstack((T.shapedev_r, T.shapedev_e1, T.shapedev_e2)).T
+        T.shape = np.vstack((T.shape_r, T.shape_e1, T.shape_e2)).T
 
     ibands = np.array([allbands.index(b) for b in bands])
 
@@ -265,7 +254,7 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                     fluxivs.append(t.get(fluxPrefix + 'flux_ivar_' + b))
             ivs.extend([t.ra_ivar, t.dec_ivar] + fluxivs)
 
-        if issubclass(clazz, (DevGalaxy, ExpGalaxy)):
+        if issubclass(clazz, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
             if ellipseClass is not None:
                 eclazz = ellipseClass
             else:
@@ -276,43 +265,11 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                 # look up that string... to avoid eval()
                 eclazz = ellipse_types[eclazz]
 
-            if issubclass(clazz, DevGalaxy):
-                assert(np.all([np.isfinite(x) for x in t.shapedev]))
-                ell = eclazz(*t.shapedev)
-            else:
-                assert(np.all([np.isfinite(x) for x in t.shapeexp]))
-                ell = eclazz(*t.shapeexp)
+            assert(np.all([np.isfinite(x) for x in t.shape]))
+            ell = eclazz(*t.shape)
             params.append(ell)
             if invvars:
-                if issubclass(clazz, DevGalaxy):
-                    ivs.extend(t.shapedev_ivar)
-                else:
-                    ivs.extend(t.shapeexp_ivar)
-
-        elif issubclass(clazz, FixedCompositeGalaxy):
-            # hard-code knowledge that params are fracDev, shapeE, shapeD
-            assert(np.isfinite(t.fracdev))
-            params.append(t.fracdev)
-            if ellipseClass is not None:
-                expeclazz = deveclazz = ellipseClass
-            else:
-                expeclazz = hdr['TR_%s_T4' % shorttype]
-                deveclazz = hdr['TR_%s_T5' % shorttype]
-                expeclazz = expeclazz.replace('"','')
-                deveclazz = deveclazz.replace('"','')
-                expeclazz = ellipse_types[expeclazz]
-                deveclazz = ellipse_types[deveclazz]
-            assert(np.all([np.isfinite(x) for x in t.shapedev]))
-            assert(np.all([np.isfinite(x) for x in t.shapeexp]))
-            ee = expeclazz(*t.shapeexp)
-            de = deveclazz(*t.shapedev)
-            params.append(ee)
-            params.append(de)
-
-            if invvars:
-                ivs.append(t.fracdev_ivar)
-                ivs.extend(t.shapeexp_ivar)
-                ivs.extend(t.shapedev_ivar)
+                ivs.extend(t.shape_ivar)
 
         elif issubclass(clazz, PointSource):
             pass

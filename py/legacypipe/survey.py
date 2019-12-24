@@ -14,7 +14,7 @@ from tractor.ellipses import EllipseESoft, EllipseE
 from tractor.galaxy import ExpGalaxy
 from tractor import PointSource, ParamList, ConstantFitsWcs
 
-from legacypipe.utils import EllipseWithPriors
+from legacypipe.utils import EllipseWithPriors, galaxy_min_re
 
 import logging
 logger = logging.getLogger('legacypipe.survey')
@@ -181,10 +181,15 @@ class GaiaSource(PointSource):
                            nantozero(g.pmra),
                            nantozero(g.pmdec),
                            nantozero(g.parallax))
-        # Assume color 0 from Gaia G mag as initial flux
-        m = g.phot_g_mean_mag
-        fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
-                       for band in bands])
+
+        # initialize from decam_mag_B if available, otherwise Gaia G.
+        fluxes = {}
+        for band in bands:
+            try:
+                mag = g.get('decam_mag_%s' % band)
+            except KeyError:
+                mag = g.phot_g_mean_mag
+            fluxes[band] = NanoMaggies.magToNanomaggies(mag)
         bright = NanoMaggies(order=bands, **fluxes)
         src = cls(pos, bright)
         src.forced_point_source = g.pointsource
@@ -222,9 +227,11 @@ class LogRadius(EllipseESoft):
         # MAGIC -- 10" default max r_e!
         # SEE ALSO utils.py : class(EllipseWithPriors)!
         self.uppers = [np.log(10.)]
+        self.lowers = [np.log(galaxy_min_re)]
 
     def isLegal(self):
-        return self.logre <= self.uppers[0]
+        return ((self.logre <= self.uppers[0]) and
+                (self.logre >= self.lowers[0]))
 
     def setMaxLogRadius(self, rmax):
         self.uppers[0] = rmax
@@ -359,7 +366,7 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
     #lsdir_prefix1 = '/global/project/projectdirs'
     #lsdir_prefix2 = '/global/projecta/projectdirs'
     for s in [
-        'Data product of the DECam Legacy Survey (DECaLS)',
+        'Data product of the DESI Imaging Legacy Survey (DECaLS)',
         'Full documentation at http://legacysurvey.org',
         ]:
         hdr.add_record(dict(name='COMMENT', value=s, comment=s))
@@ -369,7 +376,7 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
     #                    comment='LegacySurveys Directory Prefix'))
     hdr.add_record(dict(name='LSDIR', value=survey_dir,
                         comment='$LEGACY_SURVEY_DIR directory'))
-    hdr.add_record(dict(name='LSDR', value='DR8',
+    hdr.add_record(dict(name='LSDR', value='DR9',
                         comment='Data release number'))
     hdr.add_record(dict(name='RUNDATE', value=datetime.datetime.now().isoformat(),
                         comment='%s run time' % program_name))
@@ -401,42 +408,36 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
     return hdr
 
 def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
+    import astrometry
+    import astropy
+    import matplotlib
+    try:
+        import mkl_fft
+    except:
+        mkl_fft = None
+    import photutils
+    import tractor
+    import scipy
+    import unwise_psf
+
     depvers = []
     headers = []
-    # Get DESICONDA version, and read file $DESICONDA/pkg_list.txt for
-    # other package versions.
     default_ver = 'UNAVAILABLE'
-    desiconda = os.environ.get('DESICONDA', default_ver)
-    # DESICONDA like .../edison/desiconda/20180512-1.2.5-img/conda
-    verstr = os.path.basename(os.path.dirname(desiconda))
-    depvers.append(('desiconda', verstr))
-
-    if desiconda != default_ver:
-        fn = os.path.join(desiconda, 'pkg_list.txt')
-        vers = {}
-        if not os.path.exists(fn):
-            print('Warning: expected file $DESICONDA/pkg_list.txt to exist but it does not!')
-        else:
-            # Read version numbers
-            for line in open(fn):
-                words = line.strip().split('=')
-                if len(words) >= 2:
-                    vers[words[0]] = words[1]
-
-        for pkg in ['astropy', 'matplotlib', 'mkl', 'numpy', 'python', 'scipy']:
-            verstr = vers.get(pkg, default_ver)
-            if verstr == default_ver:
-                print('Warning: failed to get version string for "%s"' % pkg)
-            else:
-                depvers.append((pkg, verstr))
-
-    import astrometry
-    import tractor
-
     for name,pkg in [('astrometry', astrometry),
+                     ('astropy', astropy),
+                     ('fitsio', fitsio),
+                     ('matplotlib', matplotlib),
+                     ('mkl_fft', mkl_fft),
+                     ('numpy', np),
+                     ('photutils', photutils),
+                     ('scipy', scipy),
                      ('tractor', tractor),
-                     ('fitsio', fitsio),]:
-        depvers.append((name + '-path', os.path.dirname(pkg.__file__)))
+                     ('unwise_psf', unwise_psf),
+                     ]:
+        if pkg is None:
+            depvers.append((name, 'none'))
+            continue
+        #depvers.append((name + '-path', os.path.dirname(pkg.__file__)))
         try:
             depvers.append((name, pkg.__version__))
         except:
@@ -453,8 +454,12 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
         print('Warning: failed to get version string for "%s"' % dep)
     else:
         depvers.append((dep, value))
-        
-    for dep in ['TYCHO2_KD', 'GAIA_CAT', 'LARGEGALAXIES', 'WISE_PSF']:
+        if os.path.exists(value):
+            hdr = fitsio.read_header(value)
+            ver = hdr.get('LSLGAVER', 'L4')
+            depvers.append(('LARGEGALAXIES_VER', ver))
+
+    for dep in ['TYCHO2_KD', 'GAIA_CAT']:
         value = os.environ.get('%s_DIR' % dep, default_ver)
         if value == default_ver:
             print('Warning: failed to get version string for "%s"' % dep)
@@ -466,38 +471,20 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
         depvers.append(('unwise', unwise_dir))
         for i,d in enumerate(dirs):
             headers.append(('UNWISD%i' % (i+1), d, ''))
-            #headers.append(('UNWISD%i' % (i+1), d, 'unWISE dir(s)'))
 
     if unwise_tr_dir is not None:
         depvers.append(('unwise_tr', unwise_tr_dir))
         # this is assumed to be only a single directory
         headers.append(('UNWISTD', unwise_tr_dir, ''))
-        #headers.append(('UNWISTD', unwise_tr_dir, 'unWISE time-resolved dir'))
 
     if unwise_modelsky_dir is not None:
         depvers.append(('unwise_modelsky', unwise_modelsky_dir))
         # this is assumed to be only a single directory
         headers.append(('UNWISSKY', unwise_modelsky_dir, ''))
 
-    added_long = False
     for i,(name,value) in enumerate(depvers):
         headers.append(('DEPNAM%02i' % i, name, ''))
-        if len(value) > 68:
-            headers.append(('DEPVER%02i' % i, value[:67] + '&', ''))
-            while len(value):
-                value = value[67:]
-                if len(value) == 0:
-                    break
-                headers.append(('CONTINUE',
-                                "  '%s%s'" % (value[:67], '&' if len(value) > 67 else ''),
-                                None))
-        else:
-            headers.append(('DEPVER%02i' % i, value, ''))
-            added_long = True
-
-    if added_long:
-        headers = [('LONGSTRN', 'OGIP 1.0','CONTINUE cards are used')] + headers
-
+        headers.append(('DEPVER%02i' % i, value, ''))
     return headers
 
 class MyFITSHDR(fitsio.FITSHDR):
@@ -595,8 +582,55 @@ def tim_get_resamp(tim, targetwcs):
         return None
     return Yo,Xo,Yi,Xi
 
-def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None,
-            clip=True):
+
+def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None):
+    rgbscales=dict(g=(2, 6.0),
+                   r=(1, 3.4),
+                   i=(0, 3.0),
+                   z=(0, 2.2))
+    # rgbscales = {'u': 1.5, #1.0,
+    #              'g': 2.5,
+    #              'r': 1.5,
+    #              'i': 1.0,
+    #              'z': 0.4, #0.3
+    #              }
+    if scales is not None:
+        rgbscales.update(scales)
+
+    I = 0
+    for img,band in zip(imgs, bands):
+        plane,scale = rgbscales[band]
+        img = np.maximum(0, img * scale + m)
+        I = I + img
+    I /= len(bands)
+    if Q is not None:
+        fI = np.arcsinh(Q * I) / np.sqrt(Q)
+        I += (I == 0.) * 1e-6
+        I = fI / I
+    H,W = I.shape
+    rgb = np.zeros((H,W,3), np.float32)
+    for img,band in zip(imgs, bands):
+        plane,scale = rgbscales[band]
+        if mnmx is None:
+            rgb[:,:,plane] = np.clip((img * scale + m) * I, 0, 1)
+        else:
+            mn,mx = mnmx
+            rgb[:,:,plane] = np.clip(((img * scale + m) - mn) / (mx - mn), 0, 1)
+    return rgb
+
+def get_rgb(imgs, bands,
+            #mnmx=None, arcsinh=None, scales=None, clip=True):
+            resids=False, mnmx=None, arcsinh=None):
+    # (ignore arcsinh...)
+    if resids:
+        mnmx = (-0.1, 0.1)
+    if mnmx is not None:
+        #return get_rgb_OLD(imgs, bands, mnmx=(-5,5))
+        return sdss_rgb(imgs, bands, m=0., Q=None, mnmx=mnmx)
+    return sdss_rgb(imgs, bands)
+    
+def get_rgb_OLD(imgs, bands, mnmx=None, arcsinh=None, scales=None,
+                clip=True):
     '''
     Given a list of images in the given bands, returns a scaled RGB
     image.
@@ -672,23 +706,6 @@ def get_rgb(imgs, bands, mnmx=None, arcsinh=None, scales=None,
         return np.clip(rgb, 0., 1.)
     return rgb
 
-def switch_to_soft_ellipses(cat):
-    '''
-    Converts our softened-ellipticity EllipseESoft parameters into
-    normal EllipseE ellipses.
-
-    *cat*: an iterable of tractor Sources, which will be modified
-     in-place.
-
-    '''
-    from tractor.galaxy import DevGalaxy, FixedCompositeGalaxy
-    for src in cat:
-        if isinstance(src, (DevGalaxy, ExpGalaxy)):
-            src.shape = EllipseESoft.fromEllipseE(src.shape)
-        elif isinstance(src, FixedCompositeGalaxy):
-            src.shapeDev = EllipseESoft.fromEllipseE(src.shapeDev)
-            src.shapeExp = EllipseESoft.fromEllipseE(src.shapeExp)
-
 def brick_catalog_for_radec_box(ralo, rahi, declo, dechi,
                                 survey, catpattern, bricks=None):
     '''
@@ -732,63 +749,6 @@ def brick_catalog_for_radec_box(ralo, rahi, declo, dechi,
     # arbitrarily keep the first header
     T._header = TT[0]._header
     return T
-
-def ccd_map_image(valmap, empty=0.):
-    '''valmap: { 'N7' : 1., 'N8' : 17.8 }
-
-    Returns: a numpy image (shape (12,14)) with values mapped to their
-    CCD locations.
-
-    '''
-    img = np.empty((12,14))
-    img[:,:] = empty
-    for k,v in valmap.items():
-        x0,x1,y0,y1 = ccd_map_extent(k)
-        #img[y0+6:y1+6, x0+7:x1+7] = v
-        img[y0:y1, x0:x1] = v
-    return img
-
-def ccd_map_center(ccdname):
-    x0,x1,y0,y1 = ccd_map_extent(ccdname)
-    return (x0+x1)/2., (y0+y1)/2.
-
-def ccd_map_extent(ccdname, inset=0.):
-    assert(ccdname.startswith('N') or ccdname.startswith('S'))
-    num = int(ccdname[1:])
-    assert(num >= 1 and num <= 31)
-    if num <= 7:
-        x0 = 7 - 2*num
-        y0 = 0
-    elif num <= 13:
-        x0 = 6 - (num - 7)*2
-        y0 = 1
-    elif num <= 19:
-        x0 = 6 - (num - 13)*2
-        y0 = 2
-    elif num <= 24:
-        x0 = 5 - (num - 19)*2
-        y0 = 3
-    elif num <= 28:
-        x0 = 4 - (num - 24)*2
-        y0 = 4
-    else:
-        x0 = 3 - (num - 28)*2
-        y0 = 5
-    if ccdname.startswith('N'):
-        (x0,x1,y0,y1) = (x0, x0+2, -y0-1, -y0)
-    else:
-        (x0,x1,y0,y1) = (x0, x0+2, y0, y0+1)
-
-    # Shift from being (0,0)-centered to being aligned with the
-    # ccd_map_image() image.
-    x0 += 7
-    x1 += 7
-    y0 += 6
-    y1 += 6
-
-    if inset == 0.:
-        return (x0,x1,y0,y1)
-    return (x0+inset, x1-inset, y0+inset, y1-inset)
 
 def wcs_for_brick(b, W=3600, H=3600, pixscale=0.262):
     '''
@@ -1209,21 +1169,6 @@ class LegacySurveyData(object):
             debug('Cached file hit:', fn, '->', cfn)
             return cfn
         debug('Cached file miss:', fn, '-/->', cfn)
-
-        ### HACK for post-DR5 NonDECaLS reorg / DMD
-        if 'CPHETDEX' in fn:
-            '''
-            Cached file miss:
-            /global/cscratch1/sd/dstn/dr5-new-sky/images/decam/NonDECaLS/CPHETDEX/c4d_130902_082433_oow_g_v1.fits.fz -/->
-            /global/cscratch1/sd/dstn/dr5-new-sky/cache/images/decam/NonDECaLS/CPHETDEX/c4d_130902_082433_oow_g_v1.fits.fz
-            '''
-            from glob import glob
-            pat = fn.replace('CPHETDEX', '*')
-            fns = glob(pat)
-            if len(fns) == 1:
-                debug('Globbed', pat, '->', fns[0])
-                return fns[0]
-
         return fn
 
     def get_compression_string(self, filetype, shape=None, **kwargs):
@@ -1588,12 +1533,6 @@ class LegacySurveyData(object):
         TT = []
         for fn in fns:
             debug('Reading CCDs from', fn)
-            # cols = (
-            #     'exptime filter propid crpix1 crpix2 crval1 crval2 ' +
-            #     'cd1_1 cd1_2 cd2_1 cd2_2 ccdname ccdzpt ccdraoff ccddecoff ' +
-            #     'ccdnmatch camera image_hdu image_filename width height ' +
-            #     'ra dec zpt expnum fwhm mjd_obs').split()
-            #T = fits_table(fn, columns=cols)
             T = fits_table(fn, **kwargs)
             debug('Got', len(T), 'CCDs')
             TT.append(T)
@@ -1603,18 +1542,6 @@ class LegacySurveyData(object):
             T = TT[0]
         debug('Total of', len(T), 'CCDs')
         del TT
-
-        cols = T.columns()
-        # Make DR1 CCDs table somewhat compatible with DR2
-        if 'extname' in cols and not 'ccdname' in cols:
-            T.ccdname = T.extname
-        if not 'camera' in cols:
-            T.camera = np.array(['decam'] * len(T))
-        if 'cpimage' in cols and not 'image_filename' in cols:
-            T.image_filename = T.cpimage
-        if 'cpimage_hdu' in cols and not 'image_hdu' in cols:
-            T.image_hdu = T.cpimage_hdu
-
         T = self.cleanup_ccds_table(T)
         return T
 

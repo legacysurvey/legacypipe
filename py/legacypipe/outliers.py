@@ -94,7 +94,7 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
 
 def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
                         mp=None, plots=False, ps=None, make_badcoadds=True,
-                        gaia_stars=False):
+                        refstars=None):
     from legacypipe.bits import DQ_BITS
     from legacypipe.reference import read_gaia
     from scipy.ndimage.filters import gaussian_filter
@@ -113,9 +113,8 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
         badcoadds_neg = None
 
     star_veto = np.zeros(targetwcs.shape, np.bool)
-    if gaia_stars:
-        gaia = read_gaia(targetwcs)
-        #print(len(gaia), 'Gaia stars for outlier veto')
+    if refstars:
+        gaia = refstars[refstars.isgaia]
         # Not moving Gaia stars to epoch of individual images...
         ok,bx,by = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
         bx -= 1.
@@ -449,7 +448,7 @@ def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
     H,W = targetwcs.shape
     ibands = dict([(b,i) for i,b in enumerate(bands)])
     for tim in tims:
-        ie = tim.getInvvar()
+        ie = tim.getInvError()
         img = tim.getImage()
         if np.any(ie == 0):
             # Patch from the coadd
