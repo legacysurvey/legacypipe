@@ -386,8 +386,8 @@ def main():
                 assert(rtn == 0)
 
         psfout = outim.psffn
-        if psfrow:
-            psfout = outim.merged_psffn
+        #if psfrow:
+        #    psfout = outim.merged_psffn
         print('PSF output filename:', psfout)
         trymakedirs(psfout, dir=True)
         if psfrow:
