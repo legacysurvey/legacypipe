@@ -330,7 +330,7 @@ def read_large_galaxies(survey, targetwcs):
     #galaxies.radius *= 1.2 ...and then John taketh away.
     galaxies.delete_column('d25')
     galaxies.rename('lslga_id', 'ref_id')
-    galaxies.ref_cat = np.array(['L2'] * len(galaxies))
+    galaxies.ref_cat = np.array(['L4'] * len(galaxies))
     galaxies.islargegalaxy = np.ones(len(galaxies), bool)
     return galaxies
 
