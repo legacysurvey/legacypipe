@@ -19,8 +19,8 @@ def subtract_one_real(X):
     if tim.imobj.camera != 'decam':
         print('Warning: Stellar halo subtraction is only implemented for DECam')
         return 0.
-    return halo_model(refs, tim.time.toMjd(), tim.subwcs, tim.imobj.pixscale,
-                      tim.imobj)
+    return decam_halo_model(refs, tim.time.toMjd(), tim.subwcs,
+                            tim.imobj.pixscale, tim.band, tim.imobj)
 
 def moffat(rr, alpha, beta):
     return (beta-1.)/(np.pi * alpha**2)*(1. + (rr/alpha)**2)**(-beta)
@@ -34,6 +34,8 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj):
     fluxes = 10.**((mag - 22.5) / -2.5)
 
     H,W = wcs.shape
+    H = int(H)
+    W = int(W)
     halo = np.zeros((H,W), np.float32)
     for ref,flux,ra,dec in zip(refs, fluxes, rr, dd):
         ok,x,y = wcs.radec2pixelxy(ra, dec)
@@ -92,7 +94,7 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj):
         else:
              fd = dict(g=0.00045,
                        r=0.00033)
-             f = fd[tim.band]
+             f = fd[band]
 
              halo[ylo:yhi+1, xlo:xhi+1] += (flux * apodize * f * (rads*pixscale)**-2
                                             * pixscale**2)

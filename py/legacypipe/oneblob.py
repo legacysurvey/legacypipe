@@ -47,13 +47,13 @@ def get_cpu_arch():
             #print('words', words)
             if words[0] == 'cpu family' and family is None:
                 family = int(words[1])
-                print('Set CPU family', family)
+                #print('Set CPU family', family)
             if words[0] == 'model' and model is None:
                 model = int(words[1])
-                print('Set CPU model', model)
+                #print('Set CPU model', model)
             if words[0] == 'model name' and modelname is None:
                 modelname = words[1]
-                print('Set CPU model', modelname)
+                #print('CPU model', modelname)
     codenames = {
         # NERSC Cori machines
         (6, 63): 'has',

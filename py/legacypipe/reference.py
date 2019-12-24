@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import fitsio
 from astrometry.util.fits import fits_table, merge_tables
 
 import logging
@@ -326,7 +327,7 @@ def read_large_galaxies(survey, targetwcs):
                                                   'lslga_id', 'ba', 'pa'])
     del kd
 
-    hdr = fitsio.read(galfn)
+    hdr = fitsio.read_header(galfn)
     refcat = hdr.get('LSLGAVER', 'L4')
 
     # # D25 is diameter in arcmin

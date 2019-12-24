@@ -134,10 +134,12 @@ def rbmain():
     
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
     outdir = 'out-testcase4'
+    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
+    os.environ['GAIA_CAT_VER'] = '2'
 
-    fn = os.path.join(surveydir, 'calib', 'decam', 'CP', 'V4.8.2a',
-                      'CP20150410', 'c4d_150411_035242_ooi_z_ls9',
-                      'c4d_150411_035242_ooi_z_ls9-N3-splinesky.fits')
+    fn = os.path.join(surveydir, 'calib', 'sky-single', 'decam', 'CP', 'V4.8.2',
+                      'CP20170315', 'c4d_170316_062107_ooi_z_ls9',
+                      'c4d_170316_062107_ooi_z_ls9-N2-sky.fits')
     if os.path.exists(fn):
         os.unlink(fn)
 
@@ -156,6 +158,8 @@ def rbmain():
     # Wrap-around, hybrid PSF
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase8')
     outdir = 'out-testcase8'
+    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
+    os.environ['GAIA_CAT_VER'] = '2'
     
     main(args=['--brick', '1209p050', '--zoom', '720', '1095', '3220', '3500',
                '--force-all', '--no-write', '--no-wise', #'--plots',

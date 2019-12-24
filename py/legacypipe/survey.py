@@ -455,7 +455,7 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
     else:
         depvers.append((dep, value))
         if os.path.exists(value):
-            hdr = fitsio.read(value)
+            hdr = fitsio.read_header(value)
             ver = hdr.get('LSLGAVER', 'L4')
             depvers.append(('LARGEGALAXIES_VER', ver))
 
