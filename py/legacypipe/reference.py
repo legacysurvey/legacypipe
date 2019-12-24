@@ -166,9 +166,29 @@ def read_gaia(targetwcs):
     # [decam-data 2770] Re: [desi-milkyway 639] GAIA in DECaLS DR7
     # But shifted one mag to the right in G.
     gaia.G = gaia.phot_g_mean_mag
+
+    # Gaia to DECam color transformations for stars
+    color = gaia.phot_bp_mean_mag - gaia.phot_rp_mean_mag
+    color[np.logical_not(np.isfinite(color))] = 0.
+    color = np.clip(color, -0.5, 3.3)
+    # Use Arjun's Gaia-to-DECam transformations.
+    for b,coeffs in [
+        ('g', [-0.11368, 0.37504, 0.17344, -0.08107, 0.28088,
+           -0.21250, 0.05773,-0.00525]),
+        ('r', [ 0.10533,-0.22975, 0.06257,-0.24142, 0.24441,
+            -0.07248, 0.00676]),
+        ('z', [ 0.46744,-0.95143, 0.19729,-0.08810, 0.01566])]:
+        mag = gaia.G.copy()
+        for order,c in enumerate(coeffs):
+            mag += c * color**order
+        gaia.set('decam_mag_%s' % b, mag)
+
+    AEN = gaia.astrometric_excess_noise
     gaia.pointsource = np.logical_or(
-        (gaia.G <= 19.) * (gaia.astrometric_excess_noise < 10.**0.5),
-        (gaia.G >= 19.) * (gaia.astrometric_excess_noise < 10.**(0.5 + 0.2*(gaia.G - 19.))))
+        (gaia.G <= 19.) *
+        (gaia.astrometric_excess_noise < 10.**0.5),
+        (gaia.G >= 19.) *
+        (gaia.astrometric_excess_noise < 10.**(0.5 + 0.2*(gaia.G - 19.))))
     # in our catalog files, this is in float32; in the Gaia data model it's
     # a byte, with only values 3 and 31 in DR2.
     gaia.astrometric_params_solved = gaia.astrometric_params_solved.astype(np.uint8)
@@ -186,15 +206,15 @@ def read_gaia(targetwcs):
     gaia.ra_ivar  = 1./(gaia.ra_error  / 1000. / 3600.)**2
     gaia.dec_ivar = 1./(gaia.dec_error / 1000. / 3600.)**2
 
-    for c in ['ra_error', 'dec_error', 'parallax_error', 'pmra_error', 'pmdec_error']:
+    for c in ['ra_error', 'dec_error', 'parallax_error',
+              'pmra_error', 'pmdec_error']:
         gaia.delete_column(c)
-    for c in ['pmra', 'pmdec', 'parallax', 'pmra_ivar', 'pmdec_ivar', 'parallax_ivar']:
+    for c in ['pmra', 'pmdec', 'parallax', 'pmra_ivar', 'pmdec_ivar',
+              'parallax_ivar']:
         X = gaia.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
 
     # radius to consider affected by this star --
-    # FIXME -- want something more sophisticated here!
-    # (also see tycho.radius below)
     # This is in degrees and the magic 0.262 (indeed the whole
     # relation) is from eyeballing a radius-vs-mag plot that was in
     # pixels; that is unrelated to the present targetwcs pixel scale.

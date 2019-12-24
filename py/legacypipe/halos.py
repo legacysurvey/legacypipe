@@ -2,30 +2,9 @@ import numpy as np
 
 def subtract_halos(tims, refs, bands, mp, plots, ps):
     fluxes = np.zeros((len(refs),len(bands)))
-    color = refs.phot_bp_mean_mag - refs.phot_rp_mean_mag
-    color[np.logical_not(np.isfinite(color))] = 0.
-    color = np.clip(color, -0.5, 3.3)
-    G = refs.phot_g_mean_mag
-
-    print('Ref mags:', G[:10])
-    print('Ref colors:', color[:10])
-
     for i,b in enumerate(bands):
-        # Use Arjun's Gaia-to-DECam transformations.
-        coeffs = dict(
-            g=[-0.11368, 0.37504, 0.17344, -0.08107, 0.28088,
-               -0.21250, 0.05773,-0.00525],
-            r=[ 0.10533,-0.22975, 0.06257,-0.24142, 0.24441,
-                -0.07248, 0.00676],
-            z=[ 0.46744,-0.95143, 0.19729,-0.08810, 0.01566])[b]
-        mag = G.copy()
-        for order,c in enumerate(coeffs):
-            mag += c * color**order
-
-        print('Band', b, 'coefficients:', coeffs)
-        print('Transformed mags:', mag[:10])
+        mag = refs.get('decam_mag_%s' % b)
         fluxes[:,i] = 10.**((mag - 22.5) / -2.5)
-
     iband = dict([(b,i) for i,b in enumerate(bands)])
     args = [(tim, refs, fluxes[:,iband[tim.band]]) for tim in tims]
     haloimgs = mp.map(subtract_one, args)

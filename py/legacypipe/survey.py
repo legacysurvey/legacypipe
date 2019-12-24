@@ -181,10 +181,15 @@ class GaiaSource(PointSource):
                            nantozero(g.pmra),
                            nantozero(g.pmdec),
                            nantozero(g.parallax))
-        # Assume color 0 from Gaia G mag as initial flux
-        m = g.phot_g_mean_mag
-        fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
-                       for band in bands])
+
+        # initialize from decam_mag_B if available, otherwise Gaia G.
+        fluxes = []
+        for band in bands:
+            try:
+                mag = g.get('decam_mag_%s' % band)
+            except KeyError:
+                mag = g.phot_g_mean_mag
+            fluxes[band] = NanoMaggies.magToNanomaggies(mag)
         bright = NanoMaggies(order=bands, **fluxes)
         src = cls(pos, bright)
         src.forced_point_source = g.pointsource
