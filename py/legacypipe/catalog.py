@@ -10,23 +10,23 @@ from tractor.ellipses import EllipseESoft, EllipseE
 from legacypipe.survey import RexGalaxy, GaiaSource
 
 # FITS catalogs
-fits_typemap = { PointSource: 'PSF',
-                 ExpGalaxy: 'EXP',
-                 DevGalaxy: 'DEV',
+fits_typemap = { PointSource:  'PSF',
+                 ExpGalaxy:    'EXP',
+                 DevGalaxy:    'DEV',
                  SersicGalaxy: 'SER',
-                 RexGalaxy: 'REX',
-                 GaiaSource: 'PSF',
-                 type(None): 'NONE' }
+                 RexGalaxy:    'REX',
+                 GaiaSource:   'PSF',
+                 type(None):   'NUN' }
 
 fits_reverse_typemap = dict([(v,k) for k,v in fits_typemap.items()])
 fits_reverse_typemap.update({ 'DUP': GaiaSource })
 
-fits_short_typemap = { PointSource: 'P',
-                       ExpGalaxy: 'E',
-                       DevGalaxy: 'D',
+fits_short_typemap = { PointSource:  'P',
+                       ExpGalaxy:    'E',
+                       DevGalaxy:    'D',
                        SersicGalaxy: 'S',
-                       RexGalaxy: 'R',
-                       GaiaSource: 'G' }
+                       RexGalaxy:    'R',
+                       GaiaSource:   'G' }
 
 def _typestring(t):
     return '%s.%s' % (t.__module__, t.__name__)

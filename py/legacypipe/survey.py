@@ -181,10 +181,15 @@ class GaiaSource(PointSource):
                            nantozero(g.pmra),
                            nantozero(g.pmdec),
                            nantozero(g.parallax))
-        # Assume color 0 from Gaia G mag as initial flux
-        m = g.phot_g_mean_mag
-        fluxes = dict([(band, NanoMaggies.magToNanomaggies(m))
-                       for band in bands])
+
+        # initialize from decam_mag_B if available, otherwise Gaia G.
+        fluxes = {}
+        for band in bands:
+            try:
+                mag = g.get('decam_mag_%s' % band)
+            except KeyError:
+                mag = g.phot_g_mean_mag
+            fluxes[band] = NanoMaggies.magToNanomaggies(mag)
         bright = NanoMaggies(order=bands, **fluxes)
         src = cls(pos, bright)
         src.forced_point_source = g.pointsource
@@ -449,8 +454,12 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
         print('Warning: failed to get version string for "%s"' % dep)
     else:
         depvers.append((dep, value))
-        
-    for dep in ['TYCHO2_KD', 'GAIA_CAT', 'LARGEGALAXIES', 'WISE_PSF']:
+        if os.path.exists(value):
+            hdr = fitsio.read(value)
+            ver = hdr.get('LSLGAVER', 'L4')
+            depvers.append(('LARGEGALAXIES_VER', ver))
+
+    for dep in ['TYCHO2_KD', 'GAIA_CAT']:
         value = os.environ.get('%s_DIR' % dep, default_ver)
         if value == default_ver:
             print('Warning: failed to get version string for "%s"' % dep)

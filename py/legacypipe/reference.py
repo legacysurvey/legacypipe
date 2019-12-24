@@ -12,7 +12,9 @@ def debug(*args):
     log_debug(logger, args)
 
 def get_reference_sources(survey, targetwcs, pixscale, bands,
-                          tycho_stars=True, gaia_stars=True, large_galaxies=True,
+                          tycho_stars=True,
+                          gaia_stars=True,
+                          large_galaxies=True,
                           star_clusters=True):
 
     from legacypipe.survey import GaiaSource
@@ -37,7 +39,6 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     if tycho_stars:
         tycho = read_tycho2(survey, marginwcs)
         if len(tycho):
-            tycho.isgaia = np.zeros(len(tycho), bool)
             refs.append(tycho)
             
     # Add Gaia stars
@@ -78,7 +79,6 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         if clusters is not None:
             debug('Found', len(clusters), 'star clusters nearby')
             clusters.iscluster = np.ones(len(clusters), bool)
-            clusters.isgaia = np.zeros(len(clusters), bool)
             refs.append(clusters)
 
     # Read large galaxies nearby.
@@ -92,12 +92,12 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                 print('Matched', len(I), 'large galaxies to Gaia stars.')
                 if len(I):
                     gaia.donotfit[J] = True
-            galaxies.isgaia = np.zeros(len(galaxies), bool)
             refs.append(galaxies)
 
     refcat = None
     if len(refs):
-        refs = merge_tables([r for r in refs if r is not None], columns='fillzero')
+        refs = merge_tables([r for r in refs if r is not None],
+                            columns='fillzero')
     if len(refs) == 0:
         return None,None
 
@@ -115,7 +115,8 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     refs.in_bounds = ((refs.ibx >= 0) * (refs.ibx < W) *
                       (refs.iby >= 0) * (refs.iby < H))
 
-    for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster', 'donotfit']:
+    for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster', 'isgaia',
+                'donotfit']:
         if not col in refs.get_columns():
             refs.set(col, np.zeros(len(refs), bool))
 
@@ -165,9 +166,29 @@ def read_gaia(targetwcs):
     # [decam-data 2770] Re: [desi-milkyway 639] GAIA in DECaLS DR7
     # But shifted one mag to the right in G.
     gaia.G = gaia.phot_g_mean_mag
+
+    # Gaia to DECam color transformations for stars
+    color = gaia.phot_bp_mean_mag - gaia.phot_rp_mean_mag
+    color[np.logical_not(np.isfinite(color))] = 0.
+    color = np.clip(color, -0.5, 3.3)
+    # Use Arjun's Gaia-to-DECam transformations.
+    for b,coeffs in [
+        ('g', [-0.11368, 0.37504, 0.17344, -0.08107, 0.28088,
+           -0.21250, 0.05773,-0.00525]),
+        ('r', [ 0.10533,-0.22975, 0.06257,-0.24142, 0.24441,
+            -0.07248, 0.00676]),
+        ('z', [ 0.46744,-0.95143, 0.19729,-0.08810, 0.01566])]:
+        mag = gaia.G.copy()
+        for order,c in enumerate(coeffs):
+            mag += c * color**order
+        gaia.set('decam_mag_%s' % b, mag)
+
+    AEN = gaia.astrometric_excess_noise
     gaia.pointsource = np.logical_or(
-        (gaia.G <= 19.) * (gaia.astrometric_excess_noise < 10.**0.5),
-        (gaia.G >= 19.) * (gaia.astrometric_excess_noise < 10.**(0.5 + 0.2*(gaia.G - 19.))))
+        (gaia.G <= 19.) *
+        (gaia.astrometric_excess_noise < 10.**0.5),
+        (gaia.G >= 19.) *
+        (gaia.astrometric_excess_noise < 10.**(0.5 + 0.2*(gaia.G - 19.))))
     # in our catalog files, this is in float32; in the Gaia data model it's
     # a byte, with only values 3 and 31 in DR2.
     gaia.astrometric_params_solved = gaia.astrometric_params_solved.astype(np.uint8)
@@ -185,15 +206,15 @@ def read_gaia(targetwcs):
     gaia.ra_ivar  = 1./(gaia.ra_error  / 1000. / 3600.)**2
     gaia.dec_ivar = 1./(gaia.dec_error / 1000. / 3600.)**2
 
-    for c in ['ra_error', 'dec_error', 'parallax_error', 'pmra_error', 'pmdec_error']:
+    for c in ['ra_error', 'dec_error', 'parallax_error',
+              'pmra_error', 'pmdec_error']:
         gaia.delete_column(c)
-    for c in ['pmra', 'pmdec', 'parallax', 'pmra_ivar', 'pmdec_ivar', 'parallax_ivar']:
+    for c in ['pmra', 'pmdec', 'parallax', 'pmra_ivar', 'pmdec_ivar',
+              'parallax_ivar']:
         X = gaia.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
 
     # radius to consider affected by this star --
-    # FIXME -- want something more sophisticated here!
-    # (also see tycho.radius below)
     # This is in degrees and the magic 0.262 (indeed the whole
     # relation) is from eyeballing a radius-vs-mag plot that was in
     # pixels; that is unrelated to the present targetwcs pixel scale.
@@ -296,12 +317,17 @@ def read_large_galaxies(survey, targetwcs):
 
     kd = tree_open(galfn, 'largegals')
     I = tree_search_radec(kd, rc, dc, radius)
-    debug(len(I), 'large galaxies within', radius, 'deg of RA,Dec (%.3f, %.3f)' % (rc,dc))
+    debug(len(I), 'large galaxies within', radius,
+          'deg of RA,Dec (%.3f, %.3f)' % (rc,dc))
     if len(I) == 0:
         return None
     # Read only the rows within range.
-    galaxies = fits_table(galfn, rows=I, columns=['ra', 'dec', 'd25', 'mag', 'lslga_id', 'ba', 'pa'])
+    galaxies = fits_table(galfn, rows=I, columns=['ra', 'dec', 'd25', 'mag',
+                                                  'lslga_id', 'ba', 'pa'])
     del kd
+
+    hdr = fitsio.read(galfn)
+    refcat = hdr.get('LSLGAVER', 'L4')
 
     # # D25 is diameter in arcmin
     galaxies.radius = galaxies.d25 / 2. / 60.
@@ -309,7 +335,7 @@ def read_large_galaxies(survey, targetwcs):
     #galaxies.radius *= 1.2 ...and then John taketh away.
     galaxies.delete_column('d25')
     galaxies.rename('lslga_id', 'ref_id')
-    galaxies.ref_cat = np.array(['L2'] * len(galaxies))
+    galaxies.ref_cat = np.array([refcat] * len(galaxies))
     galaxies.islargegalaxy = np.ones(len(galaxies), bool)
     return galaxies
 

@@ -105,7 +105,7 @@ RUN pip3 --no-cache-dir install cython
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && git checkout cython && echo 5 \
+    && git checkout cython && echo 7 \
     && python3 setup-cython.py --with-ceres install --home /usr/local \
     && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so") \

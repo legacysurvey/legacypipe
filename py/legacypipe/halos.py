@@ -1,33 +1,7 @@
 import numpy as np
 
 def subtract_halos(tims, refs, bands, mp, plots, ps):
-    fluxes = np.zeros((len(refs),len(bands)))
-    color = refs.phot_bp_mean_mag - refs.phot_rp_mean_mag
-    color[np.logical_not(np.isfinite(color))] = 0.
-    color = np.clip(color, -0.5, 3.3)
-    G = refs.phot_g_mean_mag
-
-    print('Ref mags:', G[:10])
-    print('Ref colors:', color[:10])
-
-    for i,b in enumerate(bands):
-        # Use Arjun's Gaia-to-DECam transformations.
-        coeffs = dict(
-            g=[-0.11368, 0.37504, 0.17344, -0.08107, 0.28088,
-               -0.21250, 0.05773,-0.00525],
-            r=[ 0.10533,-0.22975, 0.06257,-0.24142, 0.24441,
-                -0.07248, 0.00676],
-            z=[ 0.46744,-0.95143, 0.19729,-0.08810, 0.01566])[b]
-        mag = G.copy()
-        for order,c in enumerate(coeffs):
-            mag += c * color**order
-
-        print('Band', b, 'coefficients:', coeffs)
-        print('Transformed mags:', mag[:10])
-        fluxes[:,i] = 10.**((mag - 22.5) / -2.5)
-
-    iband = dict([(b,i) for i,b in enumerate(bands)])
-    args = [(tim, refs, fluxes[:,iband[tim.band]]) for tim in tims]
+    args = [(tim, refs) for tim in tims]
     haloimgs = mp.map(subtract_one, args)
     for tim,h in zip(tims, haloimgs):
         tim.data -= h
@@ -40,33 +14,36 @@ def subtract_one(X):
         traceback.print_exc()
         raise
 
+def subtract_one_real(X):
+    tim, refs = X
+    if tim.imobj.camera != 'decam':
+        print('Warning: Stellar halo subtraction is only implemented for DECam')
+        return 0.
+    return halo_model(refs, tim.time.toMjd(), tim.subwcs, tim.imobj.pixscale,
+                      tim.imobj)
+
 def moffat(rr, alpha, beta):
     return (beta-1.)/(np.pi * alpha**2)*(1. + (rr/alpha)**2)**(-beta)
 
-def subtract_one_real(X):
-    tim, refs, fluxes = X
-    assert(np.all(refs.ref_epoch > 0))
+def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj):
     from legacypipe.survey import radec_at_mjd
-    #print('Moving', len(refs), 'Gaia stars to MJD', tim.time.toMjd())
+    assert(np.all(refs.ref_epoch > 0))
     rr,dd = radec_at_mjd(refs.ra, refs.dec, refs.ref_epoch.astype(float),
-                         refs.pmra, refs.pmdec, refs.parallax, tim.time.toMjd())
+                         refs.pmra, refs.pmdec, refs.parallax, mjd)
+    mag = refs.get('decam_mag_%s' % band)
+    fluxes = 10.**((mag - 22.5) / -2.5)
 
-    if tim.imobj.camera != 'decam':
-        print('Warning: Stellar halo subtraction not implemented for cameras != Decam')
-        return 0.
-
-    halo = np.zeros(tim.shape, np.float32)
+    H,W = wcs.shape
+    halo = np.zeros((H,W), np.float32)
     for ref,flux,ra,dec in zip(refs, fluxes, rr, dd):
-        H,W = tim.shape
-        ok,x,y = tim.subwcs.radec2pixelxy(ra, dec)
+        ok,x,y = wcs.radec2pixelxy(ra, dec)
         x -= 1.
         y -= 1.
-        pixscale = tim.imobj.pixscale
-
-        # Rongpu says only apply within 200"
         rad_arcsec = ref.radius * 3600.
-        ### FIXME -- we're going to try subtracting the halo out to TWICE our masking radius.
+        ### FIXME -- we're going to try subtracting the halo out to
+        ### TWICE our masking radius.
         rad_arcsec *= 2.0
+        # Rongpu says only apply within 200"
         rad_arcsec = np.minimum(rad_arcsec, 200.)
         pixrad = int(np.ceil(rad_arcsec / pixscale))
 
@@ -84,13 +61,13 @@ def subtract_one_real(X):
         apr = maxr*0.9
         apodize = np.clip((rads - maxr) / (apr - maxr), 0., 1.)
 
-        # Inner apodization: ramp from 0 up to 1 between radii 6" and 6.8".
-        # (Rongpu's "R3" and "R4")
+        # Inner apodization: ramp from 0 up to 1 between Rongpu's "R3"
+        # and "R4" radii
         apr_i0 = 7. / pixscale
         apr_i1 = 8. / pixscale
         apodize *= np.clip((rads - apr_i0) / (apr_i1 - apr_i0), 0., 1.)
 
-        if tim.band == 'z':
+        if band == 'z':
             '''
             For z band, the outer PSF is a weighted Moffat profile. For most
             CCDs, the Moffat parameters (with radius in arcsec and SB in nmgy per
@@ -103,7 +80,7 @@ def subtract_one_real(X):
             Moffat with the following parameters:
                 alpha, beta, weight = 16, 2.3, 0.0095
             '''
-            if tim.imobj.ccdname.strip() in ['N20', 'S8', 'S10', 'S18', 'S21', 'S27']:
+            if imobj.ccdname.strip() in ['N20', 'S8', 'S10', 'S18', 'S21', 'S27']:
                 alpha, beta, weight = 16, 2.3, 0.0095
             else:
                 alpha, beta, weight = 17.650, 1.7, 0.0145
@@ -119,6 +96,4 @@ def subtract_one_real(X):
 
              halo[ylo:yhi+1, xlo:xhi+1] += (flux * apodize * f * (rads*pixscale)**-2
                                             * pixscale**2)
-        # We ASSUME tim is in nanomaggies units
     return halo
-

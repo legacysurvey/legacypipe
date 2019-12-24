@@ -491,7 +491,7 @@ def stage_halos(targetrd=None, pixscale=None, targetwcs=None,
         Igaia = []
         gaia = refstars
         Igaia, = np.nonzero(refstars.isgaia * refstars.pointsource)
-        Igaia = Igaia[np.argsort(gaia.phot_g_mean_mag[Igaia])]
+        #Igaia = Igaia[np.argsort(gaia.phot_g_mean_mag[Igaia])]
         debug(len(Igaia), 'stars for halo subtraction')
         if len(Igaia):
             from legacypipe.halos import subtract_halos
