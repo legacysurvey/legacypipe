@@ -317,12 +317,17 @@ def read_large_galaxies(survey, targetwcs):
 
     kd = tree_open(galfn, 'largegals')
     I = tree_search_radec(kd, rc, dc, radius)
-    debug(len(I), 'large galaxies within', radius, 'deg of RA,Dec (%.3f, %.3f)' % (rc,dc))
+    debug(len(I), 'large galaxies within', radius,
+          'deg of RA,Dec (%.3f, %.3f)' % (rc,dc))
     if len(I) == 0:
         return None
     # Read only the rows within range.
-    galaxies = fits_table(galfn, rows=I, columns=['ra', 'dec', 'd25', 'mag', 'lslga_id', 'ba', 'pa'])
+    galaxies = fits_table(galfn, rows=I, columns=['ra', 'dec', 'd25', 'mag',
+                                                  'lslga_id', 'ba', 'pa'])
     del kd
+
+    hdr = fitsio.read(galfn)
+    refcat = hdr.get('LSLGAVER', 'L4')
 
     # # D25 is diameter in arcmin
     galaxies.radius = galaxies.d25 / 2. / 60.
@@ -330,7 +335,7 @@ def read_large_galaxies(survey, targetwcs):
     #galaxies.radius *= 1.2 ...and then John taketh away.
     galaxies.delete_column('d25')
     galaxies.rename('lslga_id', 'ref_id')
-    galaxies.ref_cat = np.array(['L4'] * len(galaxies))
+    galaxies.ref_cat = np.array([refcat] * len(galaxies))
     galaxies.islargegalaxy = np.ones(len(galaxies), bool)
     return galaxies
 

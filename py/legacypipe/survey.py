@@ -454,6 +454,10 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
         print('Warning: failed to get version string for "%s"' % dep)
     else:
         depvers.append((dep, value))
+        if os.path.exists(value):
+            hdr = fitsio.read(value)
+            ver = hdr.get('LSLGAVER', 'L4')
+            depvers.append(('LARGEGALAXIES_VER', ver))
 
     for dep in ['TYCHO2_KD', 'GAIA_CAT']:
         value = os.environ.get('%s_DIR' % dep, default_ver)
