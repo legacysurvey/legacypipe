@@ -1088,11 +1088,8 @@ class LegacySurveyImage(object):
             masked = (img - skyval) > (5.*sig1)
             masked = binary_dilation(masked, iterations=3)
             masked[wt == 0] = True
-            sig1b = 1./np.sqrt(np.median(wt[masked == False]))
             hdr.add_record(dict(name='SIG1', value=sig1,
                                 comment='Median stdev of unmasked pixels'))
-            hdr.add_record(dict(name='SIG1B', value=sig1,
-                                comment='Median stdev of unmasked pixels+'))
             trymakedirs(self.skyfn, dir=True)
             tmpfn = os.path.join(os.path.dirname(self.skyfn),
                              'tmp-' + os.path.basename(self.skyfn))
@@ -1157,10 +1154,6 @@ class LegacySurveyImage(object):
                         > (3.*bsig1))
         masked = binary_dilation(masked, iterations=3)
         good[masked] = False
-        if np.sum(good) > 0:
-            sig1b = 1./np.sqrt(np.median(wt[good]))
-        else:
-            sig1b = sig1
 
         # Also mask based on reference stars and galaxies.
         from legacypipe.reference import get_reference_sources
@@ -1307,7 +1300,6 @@ class LegacySurveyImage(object):
             skyobj.shift(-x0, -y0)
 
         T = skyobj.to_fits_table()
-        #('sig1b', sig1b),
         for k,v in [('expnum', self.expnum),
                     ('ccdname', self.ccdname),
                     ('legpipev', git_version),
