@@ -183,7 +183,7 @@ class GaiaSource(PointSource):
                            nantozero(g.parallax))
 
         # initialize from decam_mag_B if available, otherwise Gaia G.
-        fluxes = []
+        fluxes = {}
         for band in bands:
             try:
                 mag = g.get('decam_mag_%s' % band)
