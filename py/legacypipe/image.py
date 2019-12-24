@@ -1165,13 +1165,24 @@ class LegacySurveyImage(object):
             y0,y1 = sy.start, sy.stop
             x0,x1 = sx.start, sx.stop
             wcs = wcs.get_subimage(x0, y0, int(x1-x0), int(y1-y0))
-        pixscale = wcs.pixel_scale()
         # only used to create galaxy objects (which we will discard)
         fakebands = ['r']
-        refs,_ = get_reference_sources(survey, wcs, pixscale, fakebands,
+        refs,_ = get_reference_sources(survey, wcs, self.pixscale, fakebands,
                                        True, gaia, False)
         stargood = (get_inblob_map(wcs, refs) == 0)
 
+        # if halos and self.camera == 'decam':
+        #     # Subtract halos from Gaia stars
+        #     Igaia, = np.nonzero(refs.isgaia * refs.pointsource)
+        #     if len(Igaia):
+        #         print('Subtracting halos before estimating sky;', len(Igaia),
+        #               'Gaia stars')
+        #         from legacypipe.halos import decam_halo_model
+        #         # UGH can't do this because the halos are in nanomaggies and
+        #         # we don't have zeropoints at this point in the code.
+        #         halos = decam_halo_model(gaia[Igaia], self.mjdobs, wcs,
+        #                                  self.pixscale, self.band, self)
+        
         if survey_blob_mask is not None:
             # Read DR8 blob maps for all overlapping bricks and project them
             # into this CCD's pixel space.
