@@ -727,10 +727,13 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 lp.append(p)
                 lt.append('Tycho-2 only')
             if gaia_stars:
-                gaia = refstars[refstars.ref_cat == 'G2']
+                gaia = refstars[refstars.isgaia]
             if gaia_stars and len(gaia):
                 ok,ix,iy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
                 p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='c', mfc='none')
+                for x,y,g in zip(ix,iy,gaia.phot_g_mean_mag):
+                    plt.text(x, y, '%.1f' % g, color='k',
+                             bbox=dict(facecolor='w', alpha=0.5))
                 lp.append(p)
                 lt.append('Gaia')
             # star_clusters?
@@ -744,14 +747,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             plt.axis(ax)
             plt.title('Ref sources')
             plt.figlegend([p[0] for p in lp], lt)
-            ps.savefig()
-
-        if gaia_stars and len(gaia):
-            ok,ix,iy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
-            for x,y,g in zip(ix,iy,gaia.phot_g_mean_mag):
-                plt.text(x, y, '%.1f' % g, color='k',
-                         bbox=dict(facecolor='w', alpha=0.5))
-            plt.axis(ax)
             ps.savefig()
 
     # SED-matched detections

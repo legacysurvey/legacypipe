@@ -207,6 +207,7 @@ def rbmain():
     # Custom RA,Dec; blob ra,dec.
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
     outdir = 'out-testcase4b'
+    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
     # Catalog written with one entry (--blobradec)
     fn = os.path.join(outdir, 'tractor', 'cus',
                       'tractor-custom-186743p25461.fits')
@@ -225,6 +226,7 @@ def rbmain():
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase3')
     outdir = 'out-testcase3'
+    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
     checkpoint_fn = os.path.join(outdir, 'checkpoint.pickle')
     if os.path.exists(checkpoint_fn):
         os.unlink(checkpoint_fn)
@@ -252,11 +254,11 @@ def rbmain():
     src = cat[0]
     assert(type(src) == DevGalaxy)
     assert(np.abs(src.pos.ra  - 244.77973) < 0.00001)
-    assert(np.abs(src.pos.dec -  12.07233) < 0.00001)
+    assert(np.abs(src.pos.dec -  12.07235) < 0.00001)
     src = cat[1]
     print('Source', src)
     assert(type(src) in [PointSource, GaiaSource])
-    assert(np.abs(src.pos.ra  - 244.77830) < 0.00001)
+    assert(np.abs(src.pos.ra  - 244.77829) < 0.00001)
     assert(np.abs(src.pos.dec -  12.07250) < 0.00001)
     # DevGalaxy(pos=RaDecPos[244.77975494973529, 12.072348111713127], brightness=NanoMaggies: g=19.2, r=17.9, z=17.1, shape=re=2.09234, e1=-0.198453, e2=0.023652,
     # PointSource(RaDecPos[244.77833280764278, 12.072521274981987], NanoMaggies: g=25, r=23, z=21.7)
