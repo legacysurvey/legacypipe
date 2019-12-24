@@ -1118,7 +1118,8 @@ class LegacySurveyImage(object):
                                        mode='constant') > (3.*bsig1))
         masked = binary_dilation(masked, iterations=3)
         if np.sum(good * (masked==False)) > 100:
-            cimage, _, _ = sigmaclip(img[good * (masked==False)], low=2.0, high=2.0)
+            cimage, _, _ = sigmaclip(img[good * (masked==False)],
+                                     low=2.0, high=2.0)
             if len(cimage) > 0:
                 sky_john = np.median(cimage)
             else:
@@ -1129,13 +1130,14 @@ class LegacySurveyImage(object):
 
         boxsize = self.splinesky_boxsize
 
-        # Initial scalar sky estimate; also the fallback value if everything is masked
-        # in one of the splinesky grid cells.
+        # Initial scalar sky estimate; also the fallback value if
+        # everything is masked in one of the splinesky grid cells.
         initsky = sky_john
         if initsky == 0.0:
             initsky = sky_clipped_median
 
-        # For DECam chips where we drop half the chip, spline becomes underconstrained
+        # For DECam chips where we drop half the chip, spline becomes
+        # underconstrained
         if min(img.shape) / boxsize < 4:
             boxsize /= 2
 
@@ -1144,12 +1146,14 @@ class LegacySurveyImage(object):
         skymod = np.zeros_like(img)
         skyobj.addTo(skymod)
 
-        # Now mask bright objects in a boxcar-smoothed (image - initial sky model)
-        # Smooth by a boxcar filter before cutting pixels above threshold --
+        # Now mask bright objects in a boxcar-smoothed (image -
+        # initial sky model) Smooth by a boxcar filter before cutting
+        # pixels above threshold --
         boxcar = 5
         # Sigma of boxcar-smoothed image
         bsig1 = sig1 / boxcar
-        masked = np.abs(uniform_filter(img-initsky-skymod, size=boxcar, mode='constant')
+        masked = np.abs(uniform_filter(img-initsky-skymod,
+                                       size=boxcar, mode='constant')
                         > (3.*bsig1))
         masked = binary_dilation(masked, iterations=3)
         good[masked] = False
@@ -1185,9 +1189,10 @@ class LegacySurveyImage(object):
             H,W = wcs.shape
             allblobs = np.zeros((int(H),int(W)), bool)
             for brick in bricks:
-                fn = survey_blob_mask.find_file('blobmap', brick=brick.brickname)
+                fn = survey_blob_mask.find_file('blobmap',brick=brick.brickname)
                 if not os.path.exists(fn):
-                    print('Warning: blob map for brick', brick.brickname, 'does not exist:', fn)
+                    print('Warning: blob map for brick', brick.brickname,
+                          'does not exist:', fn)
                     continue
                 blobs = fitsio.read(fn)
                 blobs = (blobs >= 0)
@@ -1199,10 +1204,11 @@ class LegacySurveyImage(object):
                 allblobs[Yo,Xo] |= blobs[Yi,Xi]
             ng = np.sum(good)
             good[allblobs] = False
-            print('Masked', ng-np.sum(good), 'additional CCD pixels from blob maps')
+            print('Masked', ng-np.sum(good),
+                  'additional CCD pixels from blob maps')
 
         # Now find the final sky model using that more extensive mask
-        skyobj = SplineSky.BlantonMethod(img - initsky, good * stargood, boxsize)
+        skyobj = SplineSky.BlantonMethod(img - initsky, good*stargood, boxsize)
 
         # add the initial sky estimate back in
         skyobj.offset(initsky)
@@ -1224,25 +1230,27 @@ class LegacySurveyImage(object):
         fmasked = float(np.sum((good * stargood) == 0)) / (H*W)
 
         # DEBUG -- compute a splinesky on a finer grid and compare it.
-        fineskyobj = SplineSky.BlantonMethod(img - initsky, good * stargood, boxsize//2)
+        fineskyobj = SplineSky.BlantonMethod(img - initsky, good * stargood,
+                                             boxsize//2)
         fineskyobj.offset(initsky)
         fineskyobj.addTo(skypix, -1.)
         fine_rms = np.sqrt(np.mean(skypix**2))
 
         if plots:
             import pylab as plt
-            ima = dict(interpolation='nearest', origin='lower', vmin=initsky-2.*sig1,
-                       vmax=initsky+5.*sig1, cmap='gray')
-            ima2 = dict(interpolation='nearest', origin='lower', vmin=initsky-0.5*sig1,
-                       vmax=initsky+0.5*sig1, cmap='gray')
-
+            ima = dict(interpolation='nearest', origin='lower',
+                       vmin=initsky-2.*sig1, vmax=initsky+5.*sig1, cmap='gray')
+            ima2 = dict(interpolation='nearest', origin='lower',
+                        vmin=initsky-0.5*sig1,vmax=initsky+0.5*sig1,cmap='gray')
             plt.clf()
             plt.imshow(img.T, **ima)
-            plt.title('Image %s-%i-%s %s' % (self.camera, self.expnum, self.ccdname, self.band))
+            plt.title('Image %s-%i-%s %s' % (self.camera, self.expnum,
+                                             self.ccdname, self.band))
             ps.savefig()
 
             plt.clf()
-            plt.imshow(wt.T, interpolation='nearest', origin='lower', cmap='gray')
+            plt.imshow(wt.T, interpolation='nearest', origin='lower',
+                       cmap='gray')
             plt.title('Weight')
             ps.savefig()
 
@@ -1251,17 +1259,17 @@ class LegacySurveyImage(object):
             plt.hist(wt.ravel(), bins=100)
             plt.xlabel('Invvar weights')
             plt.subplot(2,1,2)
-
             origwt = self._read_fits(self.wtfn, self.hdu, slice=slc)
             mwt = np.median(origwt[origwt>0])
-
-            plt.hist(origwt.ravel(), bins=100, range=(-0.03 * mwt, 0.03 * mwt), histtype='step', label='oow file', lw=3, alpha=0.3, log=True)
-            plt.hist(wt.ravel(), bins=100, range=(-0.03 * mwt, 0.03 * mwt), histtype='step', label='clipped', log=True)
+            plt.hist(origwt.ravel(), bins=100, range=(-0.03 * mwt, 0.03 * mwt),
+                     histtype='step', label='oow file', lw=3, alpha=0.3,
+                     log=True)
+            plt.hist(wt.ravel(), bins=100, range=(-0.03 * mwt, 0.03 * mwt),
+                     histtype='step', label='clipped', log=True)
             plt.axvline(0.01 * mwt)
             plt.xlabel('Invvar weights')
             plt.legend()
             ps.savefig()
-
 
             plt.clf()
             plt.imshow((img.T - initsky)*good.T + initsky, **ima)
@@ -1323,7 +1331,6 @@ class LegacySurveyImage(object):
         T.writeto(tmpfn)
         os.rename(tmpfn, self.skyfn)
         debug('Wrote sky model', self.skyfn)
-
 
     def run_calibs(self, psfex=True, sky=True, se=False,
                    fcopy=False, use_mask=True,
