@@ -12,7 +12,9 @@ def debug(*args):
     log_debug(logger, args)
 
 def get_reference_sources(survey, targetwcs, pixscale, bands,
-                          tycho_stars=True, gaia_stars=True, large_galaxies=True,
+                          tycho_stars=True,
+                          gaia_stars=True,
+                          large_galaxies=True,
                           star_clusters=True):
 
     from legacypipe.survey import GaiaSource
@@ -37,7 +39,6 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     if tycho_stars:
         tycho = read_tycho2(survey, marginwcs)
         if len(tycho):
-            tycho.isgaia = np.zeros(len(tycho), bool)
             refs.append(tycho)
             
     # Add Gaia stars
@@ -78,7 +79,6 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         if clusters is not None:
             debug('Found', len(clusters), 'star clusters nearby')
             clusters.iscluster = np.ones(len(clusters), bool)
-            clusters.isgaia = np.zeros(len(clusters), bool)
             refs.append(clusters)
 
     # Read large galaxies nearby.
@@ -92,12 +92,12 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                 print('Matched', len(I), 'large galaxies to Gaia stars.')
                 if len(I):
                     gaia.donotfit[J] = True
-            galaxies.isgaia = np.zeros(len(galaxies), bool)
             refs.append(galaxies)
 
     refcat = None
     if len(refs):
-        refs = merge_tables([r for r in refs if r is not None], columns='fillzero')
+        refs = merge_tables([r for r in refs if r is not None],
+                            columns='fillzero')
     if len(refs) == 0:
         return None,None
 
@@ -115,7 +115,8 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     refs.in_bounds = ((refs.ibx >= 0) * (refs.ibx < W) *
                       (refs.iby >= 0) * (refs.iby < H))
 
-    for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster', 'donotfit']:
+    for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster', 'isgaia',
+                'donotfit']:
         if not col in refs.get_columns():
             refs.set(col, np.zeros(len(refs), bool))
 
