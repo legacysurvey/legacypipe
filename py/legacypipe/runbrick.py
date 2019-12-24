@@ -3254,8 +3254,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         help='Do a second round of model fitting after all model selections')
 
     parser.add_argument(
-        '--iterative', action='store_true', default=False,
-        help='Turn on iterative source detection?')
+        '--no-iterative', dest='iterative', action='store_false', default=True,
+        help='Turn off iterative source detection?')
 
     parser.add_argument('--no-wise', dest='wise', default=True,
                         action='store_false',
