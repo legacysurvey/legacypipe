@@ -250,13 +250,21 @@ def rbmain():
     T = fits_table(fn)
     cat = read_fits_catalog(T, fluxPrefix='')
     print('Read catalog:', cat)
+
+    '''
+    > tablist out-testcase3/tractor/244/tractor-2447p120.fits"[col ra;dec]"
+             ra                     dec
+    1        244.779723839951        12.0723498095523
+    2        244.778289029067        12.0725005395303
+    '''
     assert(len(cat) == 2)
     src = cat[0]
+    print('Source0', src)
     assert(type(src) == DevGalaxy)
     assert(np.abs(src.pos.ra  - 244.77973) < 0.00001)
     assert(np.abs(src.pos.dec -  12.07235) < 0.00001)
     src = cat[1]
-    print('Source', src)
+    print('Source1', src)
     assert(type(src) in [PointSource, GaiaSource])
     assert(np.abs(src.pos.ra  - 244.77829) < 0.00001)
     assert(np.abs(src.pos.dec -  12.07250) < 0.00001)
