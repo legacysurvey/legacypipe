@@ -284,21 +284,25 @@ class mysample(object):
 
 
         #Bands inputs
+        '''
+        MR: For ugrizY, the extinction coefficients are A / E(B-V) = 3.995, 3.214, 2.165, 1.592, 1.211, 1.064 
+        see http://legacysurvey.org/dr8/catalogs/#galactic-extinction-coefficients
+        '''
         if band == 'g':
             self.be = 1
-            self.extc = 3.303  #/2.751
+            self.extc = 3.214  #/2.751
             self.zp0 = 25.08
             self.recm = 24.
             self.phreq = 0.01
         if band == 'r':
             self.be = 2
-            self.extc = 2.285  #/2.751
+            self.extc = 2.165  #/2.751
             self.zp0 = 25.29
             self.recm = 23.4
             self.phreq = 0.01
         if band == 'z':
             self.be = 4
-            self.extc = 1.263  #/2.751
+            self.extc = 1.211  #/2.751
             self.zp0 = 24.92
             self.recm = 22.5
             self.phreq = 0.02
