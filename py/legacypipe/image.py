@@ -999,7 +999,10 @@ class LegacySurveyImage(object):
         trymakedirs(self.psffn, dir=True)
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', 'V0.0').strip()
-        plprocid = primhdr['PLPROCID'].strip()
+        try:
+            plprocid = primhdr['PLPROCID'].strip()
+        except:
+            plprocid = None
         imghdr = self.read_image_header()
         datasum = imghdr.get('DATASUM', '0')
         procdate = primhdr['DATE']
