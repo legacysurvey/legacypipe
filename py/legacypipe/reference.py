@@ -308,6 +308,17 @@ def read_tycho2(survey, targetwcs):
     tycho.ismedium = np.ones(len(tycho), bool)
     return tycho
 
+def get_large_galaxy_version(fn):
+    hdr = fitsio.read_header(fn)
+    try:
+        return hdr.get('LSLGAVER')
+    except KeyError:
+        pass
+    for k in ['3.0', '2.0']:
+        if k in fn:
+            return 'L'+k[0]
+    return 'LG'
+
 def read_large_galaxies(survey, targetwcs):
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
 
@@ -326,8 +337,7 @@ def read_large_galaxies(survey, targetwcs):
                                                   'lslga_id', 'ba', 'pa'])
     del kd
 
-    hdr = fitsio.read_header(galfn)
-    refcat = hdr.get('LSLGAVER', 'L4')
+    refcat = get_large_galaxy_version(galfn)
 
     # # D25 is diameter in arcmin
     galaxies.radius = galaxies.d25 / 2. / 60.
