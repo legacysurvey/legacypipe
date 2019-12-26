@@ -95,7 +95,8 @@ def get_expnum_90prime(primhdr):
 def flistsummary(flist):
     out = numpy.zeros(len(flist), dtype=[
         ('filename', 'U200'), ('object', 'U40'), ('propid', 'U20'),
-        ('expnum', 'i8'), ('obstype', 'U10'), ('wcscal', 'U20'),
+        ('expnum', 'i8'), ('obstype', 'U10'),
+        ('wcscal', 'U20'), ('scampflg', 'i4'),
         ('photcal', 'U20'), ('yshift', 'f4'),
         ('proctype', 'U20'), ('prodtype', 'U20'), ('exptime', 'f4'),
         ('ra', 'f8'), ('dec', 'f8'), ('date_obs', 'U26'),
@@ -144,9 +145,11 @@ def flistsummary(flist):
             elif field == 'procdate':
                 out[field][i] = hdr.get('DATE', 'empty')
             elif field in ['object', 'prodtype', 'filter', 'plver', 
-                           'wcscal', 'photcal', 'plprocid', 'propid']:
+                           'wcscal',
+                           'photcal', 'plprocid', 'propid']:
                 out[field][i] = hdr.get(field, 'empty')
-            elif field in ['sortver', 'airmass', 'exptime', 'mjd_obs']:
+            elif field in ['sortver', 'airmass', 'exptime', 'mjd_obs',
+                           'scampflg']:
                 out[field][i] = hdr.get(field.replace('_', '-'), -1)
             elif field == 'yshift':
                 out[field][i] = hdr.get(field, numpy.nan)
@@ -209,10 +212,11 @@ def most_recent_versions(flist):
 
 
 def flag_all(flist):
+    wcsok = (flist['wcscal'] == 'Successful') | (flist['scampflg'] == 0)
     flag = ((flist['expnum'] <= 0)*2**0 +
             (flist['exptime'] <= 29)*2**1 +
             (flist['proctype'] != 'InstCal')*2**2 +
-            (flist['wcscal'] != 'Successful')*2**3 +
+            (~wcsok)*2**3 +
             (check_ooidw(flist) == 0)*2**4)
     return flag
 
@@ -313,7 +317,7 @@ def report_problems(flist):
     print('')
 
 
-def filelist(flist, survey, stripndir=10, report=True):
+def filelist(flist, survey, stripndir=6, report=True):
     m, flag_a = qkeep_all(flist, problem=True)
     qkeepfun = { 'mosaic': qkeep_mosaic,
                  '90prime': qkeep_90prime,
@@ -337,9 +341,15 @@ def filelist(flist, survey, stripndir=10, report=True):
         # repair OBJECT keywords
         ind = numpy.flatnonzero(flist['object'] == '')
         for i, f in zip(ind, flist['filename'][ind]):
-            newpath = f.replace('BOK_CP', 'BOK_Raw')
-            newpath = newpath.replace('CP', '')
-            newpath = newpath[:-17]+'_ori.fits.fz'
+            #newpath = f.replace('BOK_CP', 'BOK_Raw')
+            #newpath = newpath.replace('CP', '')
+            dirs = f.split('/')
+            dirs = dirs[:-3]+dirs[-2:]  # get rid of V2.0
+            dirs[-3] = 'BOK_Raw'
+            dirs[-2] = dirs[-2][2:]
+            newpath = '/'.join(dirs)
+            cut = newpath.find('_ooi_')
+            newpath = newpath[:cut]+'_ori.fits.fz'
             flist['object'][i] = fits.getheader(newpath)['OBJECT']
             
     flist['filename'] = ['/'.join(f.split('/')[stripndir:])

@@ -637,7 +637,7 @@ def main(args):
         for iccd in allI:
             im = survey.get_image_object(T[iccd])
             fns.update([im.imgfn, im.wtfn, im.dqfn, im.psffn, im.merged_psffn,
-                   im.merged_splineskyfn, im.splineskyfn])
+                   im.merged_skyfn, im.skyfn])
         for i,fn in enumerate(fns):
             print('File', i+1, 'of', len(fns), ':', fn)
             if not os.path.exists(fn):

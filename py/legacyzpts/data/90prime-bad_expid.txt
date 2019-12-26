@@ -87,3 +87,26 @@
 75450118 CP20160605/ksb_160606_084503_ooi_r_v1.fits.fz - seeing>>3 arsec
 75450119 CP20160605/ksb_160606_085059_ooi_r_v1.fits.fz - seeing>>3 arsec
 74840189 fwhm==nan
+81870096 blobby/donutty PSF triggers CRs
+78130034 blobby/donutty PSF triggers CRs
+80830011 blobby/donutty PSF triggers CRs
+75800077 blobby/donutty PSF triggers CRs
+75800068 blobby/donutty PSF triggers CRs
+75800067 blobby/donutty PSF triggers CRs
+75800069 blobby/donutty PSF triggers CRs
+75800062 blobby/donutty PSF triggers CRs
+75800075 blobby/donutty PSF triggers CRs
+75800082 blobby/donutty PSF triggers CRs
+75800090 blobby/donutty PSF triggers CRs
+78390284 blobby/donutty PSF triggers CRs
+78390279 blobby/donutty PSF triggers CRs
+78390293 blobby/donutty PSF triggers CRs
+80850205 blobby/donutty PSF triggers CRs
+79200160 blobby/donutty PSF triggers CRs
+74340051 blobby/donutty PSF triggers CRs
+75810052 blobby/donutty PSF triggers CRs
+75810054 blobby/donutty PSF triggers CRs
+77890082 blobby/donutty PSF triggers CRs
+77890081 blobby/donutty PSF triggers CRs
+77890078 blobby/donutty PSF triggers CRs
+79650061 blobby/donutty PSF triggers CRs

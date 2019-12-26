@@ -28,6 +28,7 @@ class HealpixedCatalog(object):
     def get_healpix_catalog(self, healpix):
         from astrometry.util.fits import fits_table
         fname = self.fnpattern % dict(hp=healpix)
+        print('Reading', fname)
         return fits_table(fname)
     
     def get_healpix_catalogs(self, healpixes):
