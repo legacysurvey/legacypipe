@@ -1547,6 +1547,8 @@ class DecamMeasurer(Measurer):
         # zomg astropy's caching mechanism is horrific
         # return EarthLocation.of_site('ctio')
         from astropy.units import m
+        from astropy.utils import iers
+        iers.conf.auto_download = False  
         return EarthLocation(1814304. * m, -5214366. * m, -3187341. * m)
 
     def get_good_image_subregion(self):
@@ -1704,8 +1706,8 @@ class Mosaic3Measurer(Measurer):
     '''Class to measure a variety of quantities from a single Mosaic3 CCD.
     UNITS: e-/s'''
     def __init__(self, *args, **kwargs):
-        super(Mosaic3Measurer, self).__init__(*args, **kwargs)
         self.camera = 'mosaic'
+        super(Mosaic3Measurer, self).__init__(*args, **kwargs)
         self.pixscale = get_pixscale(self.camera)
 
         self.zp0 = dict(z = 26.552,
@@ -1773,6 +1775,13 @@ class Mosaic3Measurer(Measurer):
     def get_wcs(self):
         return wcs_pv2sip_hdr(self.hdr) # PV distortion
 
+    def get_site(self):
+        from astropy.coordinates import EarthLocation
+        from astropy.units import m
+        from astropy.utils import iers
+        iers.conf.auto_download = False  
+        return EarthLocation(-1994503. * m, -5037539. * m, 3358105. * m)
+    
     def remap_bitmask(self, mask):
         from legacypipe.image import remap_dq_cp_codes
         return remap_dq_cp_codes(mask)
