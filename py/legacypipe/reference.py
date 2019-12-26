@@ -359,6 +359,7 @@ def read_star_clusters(targetwcs):
     import numpy as np
     import numpy.ma as ma
     from astropy.io import ascii
+    from astropy.table import Table
     from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
     import desimodel.io
     import desimodel.footprint
@@ -395,6 +396,10 @@ def read_star_clusters(targetwcs):
     # for NGC7009, which is the only missing PN in the footprint).
     ma.set_fill_value(clusters['majax'], 0.4)
     clusters['majax'] = ma.filled(clusters['majax'].data)
+
+    # Increase the radius of IC4593
+    # https://github.com/legacysurvey/legacypipe/issues/347
+    clusters[clusters['name'] == 'IC4593']['majax'] = 0.5
     
     indesi = desimodel.footprint.is_point_in_desi(tiles, ma.getdata(clusters['ra']),
                                                   ma.getdata(clusters['dec']))
@@ -402,19 +407,29 @@ def read_star_clusters(targetwcs):
     bb = clusters[indesi]
     bb[np.argsort(bb['majax'])[::-1]]['name', 'ra', 'dec', 'majax', 'type']
     
-    clusters.write('NGC-star-clusters.fits', overwrite=True)
-
+    # Build the output catalog: select a subset of the columns and rename
+    # majax-->radius (arcmin-->degree)
+    out = Table()
+    out['name'] = clusters['name']
+    out['alt_name'] = ['' if mm == 0 else 'M{}'.format(str(mm))
+                       for mm in ma.getdata(clusters['messier'])]
+    out['ra'] = clusters['ra']
+    out['dec'] = clusters['dec']
+    out['radius'] = (clusters['majax'] / 60).astype('f4') # [degrees]
+    out.write('NGC-star-clusters.fits', overwrite=True)
+    print(out)
 
     # Code to help visually check all open clusters that are in the DESI footprint.
-    checktype = ('OCl', 'Cl+N')
-    check = np.zeros(len(NGC), dtype=bool)
-    for otype in checktype:
-        ww = [otype == tt for tt in objtype]
-        check = np.logical_or(check, ww)
-    check_clusters = NGC[check] # 845 of them
+    if False:
+        checktype = ('OCl', 'Cl+N')
+        check = np.zeros(len(NGC), dtype=bool)
+        for otype in checktype:
+            ww = [otype == tt for tt in objtype]
+            check = np.logical_or(check, ww)
+        check_clusters = NGC[check] # 845 of them
     
-    # Write out a catalog, load it into the viewer and look at each of them.
-    check_clusters[['ra', 'dec', 'name']][indesi].write('check.fits', overwrite=True) # 25 of them
+        # Write out a catalog, load it into the viewer and look at each of them.
+        check_clusters[['ra', 'dec', 'name']][indesi].write('check.fits', overwrite=True) # 25 of them
     
     """
     from pkg_resources import resource_filename
@@ -422,7 +437,7 @@ def read_star_clusters(targetwcs):
 
     clusterfile = resource_filename('legacypipe', 'data/NGC-star-clusters.fits')
     debug('Reading {}'.format(clusterfile))
-    clusters = fits_table(clusterfile, columns=['ra', 'dec', 'majax', 'type'])
+    clusters = fits_table(clusterfile, columns=['ra', 'dec', 'radius', 'type'])
     clusters.ref_id = np.arange(len(clusters))
 
     radius = 1.
@@ -433,15 +448,10 @@ def read_star_clusters(targetwcs):
         return None
     
     debug('Cut to {} star cluster(s) within the brick'.format(len(clusters)))
-
-    # For each cluster, add a single faint star at the same coordinates, but
-    # set the isbright bit so we get all the brightstarinblob logic.
-    #clusters.ref_cat = clusters.name
     clusters.ref_cat = np.array(['CL'] * len(clusters))
-    clusters.mag = np.array([35] * len(clusters))
 
-    # Radius in degrees (from "majax" in arcmin)
-    clusters.radius = clusters.majax / 60.
+    # Radius in degrees
+    clusters.radius = clusters.radius
     clusters.radius[np.logical_not(np.isfinite(clusters.radius))] = 1./60.
 
     # Set isbright=True
