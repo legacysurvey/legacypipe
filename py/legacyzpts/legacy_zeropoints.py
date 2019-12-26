@@ -299,7 +299,7 @@ class Measurer(object):
 
         self.ra_bore,self.dec_bore = self.get_radec_bore(self.primhdr)
 
-        if self.airmass is None:
+        if self.airmass is None or self.camera == 'mosaic':
             # Recompute it
             site = self.get_site()
             if site is None:
