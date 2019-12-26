@@ -43,10 +43,6 @@ from legacypipe.bits import DQ_BITS, MASKBITS
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 
-# RGB image args used in the tile viewer:
-rgbkwargs = dict(mnmx=(-3,300.), arcsinh=1.)
-rgbkwargs_resid = dict(mnmx=(-5,5))
-
 import logging
 logger = logging.getLogger('legacypipe.runbrick')
 def info(*args):
@@ -63,6 +59,7 @@ def runbrick_global_init():
 
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                survey=None,
+               survey_blob_mask=None,
                ra=None, dec=None,
                release=None,
                plots=False, ps=None,
@@ -76,7 +73,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                normalizePsf=False,
                apodize=False,
                constant_invvar=False,
-               depth_cut=None,
                read_image_pixels = True,
                min_mjd=None, max_mjd=None,
                gaia_stars=False,
@@ -85,6 +81,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                unwise_dir=None,
                unwise_tr_dir=None,
                unwise_modelsky_dir=None,
+               command_line=None,
                **kwargs):
     '''
     This is the first stage in the pipeline.  It
@@ -105,7 +102,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     Sky:
 
-    - *splinesky*: boolean.  Use SplineSky model, rather than ConstantSky?
+    - *splinesky*: boolean.  If we have to create sky calibs, create SplineSky model rather than ConstantSky?
     - *subsky*: boolean.  Subtract sky model from tims?
 
     '''
@@ -161,7 +158,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     deps = get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir)
     for name,value,comment in deps:
         version_header.add_record(dict(name=name, value=value, comment=comment))
-
+    if command_line is not None:
+        version_header.add_record(dict(name='CMDLINE', value=command_line,
+                                       comment='runbrick command-line'))
     version_header.add_record(dict(name='BRICK', value=brickname,
                                 comment='LegacySurveys brick RRRr[pm]DDd'))
     version_header.add_record(dict(name='BRICKID' , value=brickid,
@@ -174,9 +173,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                                 comment='Brick Dec min (deg)'))
     version_header.add_record(dict(name='DECMAX'  , value=brick.dec2,
                                 comment='Brick Dec max (deg)'))
-    #version_header.add_record(dict(name='BRICKRA' , value=brick.ra,comment='[deg] Brick center'))
-    #version_header.add_record(dict(name='BRICKDEC', value=brick.dec,comment='[deg] Brick center'))
-
     # Add NOAO-requested headers
     version_header.add_record(dict(
         name='RA', value=ra2hmsstring(brick.ra, separator=':'), comment='Brick center RA (hms)'))
@@ -224,23 +220,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     else:
         ccds = survey.ccds
 
-    if depth_cut:
-        from legacypipe.depthcut import make_depth_cut
-        # If we have many images, greedily select images until we have
-        # reached our target depth
-        debug('Cutting to CCDs required to hit our depth targets')
-        # Previously, depth_cut was a boolean; I turned it into a float margin;
-        # be a little backwards-compatible.
-        margin = float(depth_cut)
-        kwa = {}
-        if margin >= 0:
-            kwa.update(margin=depth_cut)
-        keep_ccds,_ = make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
-                                     plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf,
-                                     do_calibs, gitver, targetwcs, old_calibs_ok, **kwa)
-        ccds.cut(np.array(keep_ccds))
-        debug('Cut to', len(ccds), 'CCDs required to reach depth targets')
-
     # Create Image objects for each CCD
     ims = []
     info('Keeping', len(ccds), 'CCDs:')
@@ -260,13 +239,16 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     if do_calibs:
         from legacypipe.survey import run_calibs
         record_event and record_event('stage_tims: starting calibs')
-        kwa = dict(git_version=gitver, survey=survey, old_calibs_ok=old_calibs_ok)
+        kwa = dict(git_version=gitver, survey=survey,
+                   old_calibs_ok=old_calibs_ok,
+                   survey_blob_mask=survey_blob_mask)
         if gaussPsf:
             kwa.update(psfex=False)
         if splinesky:
             kwa.update(splinesky=True)
         if not gaia_stars:
             kwa.update(gaia=False)
+
         # Run calibrations
         args = [(im, kwa) for im in ims]
         mp.map(run_calibs, args)
@@ -277,7 +259,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     # Read Tractor images
     args = [(im, targetrd, dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
                                 hybridPsf=hybridPsf, normalizePsf=normalizePsf,
-                                splinesky=splinesky,
                                 subsky=subsky,
                                 apodize=apodize,
                                 constant_invvar=constant_invvar,
@@ -374,11 +355,80 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
 
+def _add_stage_version(version_header, short, stagename):
+    from legacypipe.survey import get_git_version
+    version_header.add_record(dict(name='VER_%s'%short, value=get_git_version(),
+                                   help='legacypipe version for stage_%s'%stagename))
+
+def stage_refs(survey=None,
+               brick=None,
+               brickname=None,
+               #targetrd=None,
+               pixscale=None,
+               targetwcs=None,
+               bands=None,
+               version_header=None,
+               tycho_stars=False,
+               gaia_stars=False,
+               large_galaxies=False,
+               star_clusters=True,
+               record_event=None,
+               **kwargs):
+    from legacypipe.reference import get_reference_sources
+
+    record_event and record_event('stage_refs: starting')
+    _add_stage_version(version_header, 'REFS', 'refs')
+    refstars, refcat = get_reference_sources(survey, targetwcs, pixscale, bands,
+                                             tycho_stars=tycho_stars,
+                                             gaia_stars=gaia_stars,
+                                             large_galaxies=large_galaxies,
+                                             star_clusters=star_clusters)
+    # "refstars" is a table
+    # "refcat" is a list of tractor Sources
+    # They are aligned
+    T_donotfit = None
+    T_clusters = None
+    if refstars:
+        assert(len(refstars) == len(refcat))
+        # Pull out reference sources flagged do-not-fit; we add them
+        # back in (much) later.  These are Gaia sources near the
+        # centers of LSLGA large galaxies, so we want to propagate the
+        # Gaia catalog information, but don't want to fit them.
+        I, = np.nonzero(refstars.donotfit)
+        if len(I):
+            T_donotfit = refstars[I]
+            I, = np.nonzero(np.logical_not(refstars.donotfit))
+            refstars.cut(I)
+            refcat = [refcat[i] for i in I]
+            assert(len(refstars) == len(refcat))
+        # Pull out star clusters too.
+        I, = np.nonzero(refstars.iscluster)
+        if len(I):
+            T_clusters = refstars[I]
+            I, = np.nonzero(np.logical_not(refstars.iscluster))
+            refstars.cut(I)
+            refcat = [refcat[i] for i in I]
+            assert(len(refstars) == len(refcat))
+        del I
+
+    if refstars or T_donotfit or T_clusters:
+        allrefs = merge_tables([t for t in [refstars, T_donotfit, T_clusters] if t],
+                               columns='fillzero')
+        with survey.write_output('ref-sources', brick=brickname) as out:
+            allrefs.writeto(None, fits_object=out.fits, primheader=version_header)
+        del allrefs
+
+    keys = ['refstars', 'gaia_stars', 'T_donotfit', 'T_clusters', 'version_header',
+            'refcat']
+    L = locals()
+    rtn = dict([(k,L[k]) for k in keys])
+    return rtn
+
 def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
-                    mp=None, nsigma=None, plots=None, ps=None, record_event=None,
-                    survey=None, brickname=None, version_header=None,
-                    gaia_stars=False,
-                    **kwargs):
+                   mp=None, nsigma=None, plots=None, ps=None, record_event=None,
+                   survey=None, brickname=None, version_header=None,
+                   refstars=None,
+                   **kwargs):
     '''
     This pipeline stage tries to detect artifacts in the individual
     exposures, by blurring all images in the same band to the same PSF size,
@@ -387,6 +437,7 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
     from legacypipe.outliers import patch_from_coadd, mask_outlier_pixels, read_outlier_mask_file
 
     record_event and record_event('stage_outliers: starting')
+    _add_stage_version(version_header, 'OUTL', 'outliers')
 
     # Check for existing MEF containing masks for all the chips we need.
     if not read_outlier_mask_file(survey, tims, brickname):
@@ -406,7 +457,7 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
         make_badcoadds = True
         badcoaddspos, badcoaddsneg = mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
                                                          mp=mp, plots=plots, ps=ps, make_badcoadds=make_badcoadds,
-                                                         gaia_stars=gaia_stars)
+                                                         refstars=refstars)
 
         # Make before-n-after plots (after)
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
@@ -418,13 +469,88 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
         outfn = os.path.join(outdir, 'outliers-masked-neg-%s.jpg' % brickname)
         imsave_jpeg(outfn, get_rgb(badcoaddsneg, bands), origin='lower')
 
-    return dict(tims=tims)
+    return dict(tims=tims, version_header=version_header)
+
+def stage_halos(targetrd=None, pixscale=None, targetwcs=None,
+                W=None,H=None,
+                bands=None, ps=None, tims=None,
+                plots=False, plots2=False,
+                brickname=None,
+                version_header=None,
+                mp=None, nsigma=None,
+                survey=None, brick=None,
+                refstars=None,
+                star_halos=True,
+                record_event=None,
+                **kwargs):
+    record_event and record_event('stage_halos: starting')
+    _add_stage_version(version_header, 'HALO', 'halos')
+
+    # Subtract star halos?
+    if star_halos and refstars:
+        Igaia = []
+        gaia = refstars
+        Igaia, = np.nonzero(refstars.isgaia * refstars.pointsource)
+        #Igaia = Igaia[np.argsort(gaia.phot_g_mean_mag[Igaia])]
+        debug(len(Igaia), 'stars for halo subtraction')
+        if len(Igaia):
+            from legacypipe.halos import subtract_halos
+
+            halostars = gaia[Igaia]
+            if plots:
+                coimgs,_ = quick_coadds(tims, bands, targetwcs)
+                plt.clf()
+                dimshow(get_rgb(coimgs, bands))
+                ax = plt.axis()
+                plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
+                plt.axis(ax)
+                plt.title('Before star halo subtraction')
+                ps.savefig()
+
+            subtract_halos(tims, halostars, bands, mp, plots, ps)
+
+            if plots:
+                coimgs2,cons = quick_coadds(tims, bands, targetwcs)
+                plt.clf()
+                dimshow(get_rgb(coimgs2, bands))
+                ax = plt.axis()
+                plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
+                plt.axis(ax)
+                plt.title('After star halo subtraction')
+                ps.savefig()
+
+                plt.clf()
+                dimshow(get_rgb([co-co2 for co,co2 in zip(coimgs,coimgs2)],
+                                bands))
+                ax = plt.axis()
+                plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
+                plt.axis(ax)
+                plt.title('Subtracted halos')
+                ps.savefig()
+
+                for g in halostars[:10]:
+                    plt.clf()
+                    pixrad = int(g.radius * 3600. / pixscale)
+                    ax = [g.ibx-pixrad, g.ibx+pixrad, g.iby-pixrad, g.iby+pixrad]
+                    ima = dict(interpolation='nearest', origin='lower')
+                    plt.subplot(2,2,1)
+                    plt.imshow(get_rgb(coimgs, bands), **ima)
+                    plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
+                    plt.axis(ax)
+                    plt.subplot(2,2,2)
+                    plt.imshow(get_rgb(coimgs2, bands), **ima)
+                    plt.axis(ax)
+                    plt.subplot(2,2,3)
+                    plt.imshow(get_rgb([co-co2 for co,co2 in zip(coimgs,coimgs2)],
+                                       bands), **ima)
+                    plt.axis(ax)
+                    ps.savefig()
+    return dict(tims=tims, version_header=version_header)
 
 def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        brickname=None, version_header=None,
                        plots=False, ps=None, coadd_bw=False, W=None, H=None,
                        brick=None, blobs=None, lanczos=True, ccds=None,
-                       rgb_kwargs=None,
                        write_metrics=True,
                        mp=None, record_event=None,
                        **kwargs):
@@ -464,20 +590,12 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
-    if rgb_kwargs is None:
-        rgb_kwargs = {}
-
-    coadd_list= [('image', C.coimgs, rgb_kwargs)]
+    coadd_list= [('image', C.coimgs)]
     if hasattr(tims[0], 'sims_image'):
-        coadd_list.append(('simscoadd', sims_coadd, rgb_kwargs))
+        coadd_list.append(('simscoadd', sims_coadd))
 
-    for name,ims,rgbkw in coadd_list:
-        #rgb = get_rgb(ims, bands, **rgbkw)
-        # kwargs used for the SDSS layer in the viewer.
-        #sdss_map_kwargs = dict(scales={'g':(2,2.5), 'r':(1,1.5), 'i':(0,1.0),
-        #                               'z':(0,0.4)}, m=0.02)
-        #rgb = sdss_rgb(ims, bands, **sdss_map_kwargs)
-        rgb = sdss_rgb(ims, bands, **rgbkw)
+    for name,ims in coadd_list:
+        rgb = get_rgb(ims, bands)
 
         kwa = {}
         if coadd_bw and len(bands) == 1:
@@ -524,35 +642,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         del rgb
     return None
 
-def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20):
-    rgbscales=dict(g=(2, 6.0),
-                   r=(1, 3.4),
-                   i=(0, 3.0),
-                   z=(0, 2.2))
-    # rgbscales = {'u': 1.5, #1.0,
-    #              'g': 2.5,
-    #              'r': 1.5,
-    #              'i': 1.0,
-    #              'z': 0.4, #0.3
-    #              }
-    if scales is not None:
-        rgbscales.update(scales)
-
-    I = 0
-    for img,band in zip(imgs, bands):
-        plane,scale = rgbscales[band]
-        img = np.maximum(0, img * scale + m)
-        I = I + img
-    I /= len(bands)
-    fI = np.arcsinh(Q * I) / np.sqrt(Q)
-    I += (I == 0.) * 1e-6
-    H,W = I.shape
-    rgb = np.zeros((H,W,3), np.float32)
-    for img,band in zip(imgs, bands):
-        plane,scale = rgbscales[band]
-        rgb[:,:,plane] = np.clip((img * scale + m) * fI / I, 0, 1)
-    return rgb
-
 def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                W=None,H=None,
                bands=None, ps=None, tims=None,
@@ -562,11 +651,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                mp=None, nsigma=None,
                survey=None, brick=None,
                bailout_sources=False,
-               tycho_stars=False,
-               gaia_stars=False,
-               large_galaxies=False,
-               star_clusters=True,
-               star_halos=False,
+               refcat=None, refstars=None,
+               T_donotfit=None, T_clusters=None,
                record_event=None,
                **kwargs):
     '''
@@ -582,44 +668,11 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                         run_sed_matched_filters, segment_and_group_sources)
     from scipy.ndimage.morphology import binary_dilation
     from scipy.ndimage.measurements import label, center_of_mass
-    from legacypipe.reference import get_reference_sources
 
     record_event and record_event('stage_srcs: starting')
+    _add_stage_version(version_header, 'SRCS', 'srcs')
 
     tlast = Time()
-
-    refstars, refcat = get_reference_sources(survey, targetwcs, pixscale, bands,
-                                             tycho_stars=tycho_stars,
-                                             gaia_stars=gaia_stars,
-                                             large_galaxies=large_galaxies,
-                                             star_clusters=star_clusters)
-    # "refstars" is a table
-    # "refcat" is a list of tractor Sources
-    # They are aligned
-    T_donotfit = None
-    T_clusters = None
-    if refstars:
-        assert(len(refstars) == len(refcat))
-        # Pull out reference sources flagged do-not-fit; we add them
-        # back in (much) later.  These are Gaia sources near the
-        # centers of LSLGA large galaxies, so we want to propagate the
-        # Gaia catalog information, but don't want to fit them.
-        I, = np.nonzero(refstars.donotfit)
-        if len(I):
-            T_donotfit = refstars[I]
-            I, = np.nonzero(np.logical_not(refstars.donotfit))
-            refstars.cut(I)
-            refcat = [refcat[i] for i in I]
-            assert(len(refstars) == len(refcat))
-        # Pull out star clusters too.
-        I, = np.nonzero(refstars.iscluster)
-        if len(I):
-            T_clusters = refstars[I]
-            I, = np.nonzero(np.logical_not(refstars.iscluster))
-            refstars.cut(I)
-            refcat = [refcat[i] for i in I]
-            assert(len(refstars) == len(refcat))
-        del I
 
     if refstars:
         # Don't detect new sources where we already have reference stars
@@ -627,83 +680,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         avoid_y = refstars.iby[refstars.in_bounds]
     else:
         avoid_x, avoid_y = np.array([]), np.array([])
-
-    # Subtract star halos?
-    if star_halos and gaia_stars:
-        Igaia = []
-        gaia = refstars
-        Igaia, = np.nonzero(np.logical_or(refstars.isbright, refstars.ismedium) *
-                            np.logical_not(refstars.iscluster) * refstars.pointsource)
-        Igaia = Igaia[np.argsort(gaia.phot_g_mean_mag[Igaia])]
-        debug(len(Igaia), 'stars for halo fitting')
-        if len(Igaia):
-            from legacypipe.halos import fit_halos, subtract_halos
-            # FIXME -- another coadd...
-            coimgs,cons = quick_coadds(tims, bands, targetwcs)
-            fluxes,haloimgs = fit_halos(coimgs, cons, H, W, targetwcs, pixscale, bands,
-                                        gaia[Igaia], plots, ps)
-            init_fluxes = [(f and f[0] or None) for f in fluxes]
-
-            if plots:
-                plt.clf()
-                dimshow(get_rgb(coimgs, bands, **rgbkwargs))
-                plt.title('data')
-                ps.savefig()
-                plt.clf()
-                dimshow(get_rgb(haloimgs, bands, **rgbkwargs))
-                plt.title('fit profiles')
-                ps.savefig()
-                plt.clf()
-                dimshow(get_rgb([c-h for c,h in zip(coimgs,haloimgs)], bands,
-                                **rgbkwargs))
-                plt.title('data - fit profiles')
-                ps.savefig()
-
-            # Subtract first-round halos from coadd
-            co2 = [c - h for c,h in zip(coimgs,haloimgs)]
-            del haloimgs
-
-            fluxes2,haloimgs2 = fit_halos(co2, cons, H, W, targetwcs, pixscale, bands,
-                                          gaia[Igaia], plots, ps,
-                                          init_fluxes=init_fluxes)
-            del co2, cons
-            fluxarray = np.array([f[0] for f in fluxes2])
-
-            for iband,b in enumerate(bands):
-                haloflux = np.zeros(len(refstars))
-                haloflux[Igaia] = fluxarray[:,iband]
-                refstars.set('star_halo_flux_%s' % b, haloflux)
-
-            if plots:
-                plt.clf()
-                dimshow(get_rgb(haloimgs2, bands, **rgbkwargs))
-                plt.title('second-round fit profiles')
-                ps.savefig()
-                plt.clf()
-                dimshow(get_rgb([c-h2 for c,h2 in zip(coimgs,haloimgs2)], bands,
-                                **rgbkwargs))
-                plt.title('second-round data - fit profiles')
-                ps.savefig()
-
-            del haloimgs2
-            del coimgs
-
-            # Actually subtract the halos from the tims!
-            subtract_halos(tims, gaia[Igaia], fluxarray, pixscale, bands, plots, ps,mp)
-
-            if plots:
-                coimgs,_ = quick_coadds(tims, bands, targetwcs)
-                plt.clf()
-                dimshow(get_rgb(coimgs, bands, **rgbkwargs))
-                plt.title('halos subtracted')
-                ps.savefig()
-
-    if refstars or T_donotfit or T_clusters:
-        allrefs = merge_tables([t for t in [refstars, T_donotfit, T_clusters] if t],
-                               columns='fillzero')
-        with survey.write_output('ref-sources', brick=brickname) as out:
-            allrefs.writeto(None, fits_object=out.fits, primheader=version_header)
-        del allrefs
 
     record_event and record_event('stage_srcs: detection maps')
 
@@ -724,7 +700,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # with Tycho-2 and Gaia stars and large galaxies, not needed.
 
     if plots:
-        rgb = get_rgb(detmaps, bands, **rgbkwargs)
+        rgb = get_rgb(detmaps, bands)
         plt.clf()
         dimshow(rgb)
         plt.title('detmaps')
@@ -741,7 +717,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
         if refstars:
             plt.clf()
-            dimshow(get_rgb(coimgs, bands, **rgbkwargs))
+            dimshow(get_rgb(coimgs, bands))
             ax = plt.axis()
             lp,lt = [],[]
             tycho = refstars[refstars.isbright]
@@ -751,10 +727,13 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 lp.append(p)
                 lt.append('Tycho-2 only')
             if gaia_stars:
-                gaia = refstars[refstars.ref_cat == 'G2']
+                gaia = refstars[refstars.isgaia]
             if gaia_stars and len(gaia):
                 ok,ix,iy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
                 p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='c', mfc='none')
+                for x,y,g in zip(ix,iy,gaia.phot_g_mean_mag):
+                    plt.text(x, y, '%.1f' % g, color='k',
+                             bbox=dict(facecolor='w', alpha=0.5))
                 lp.append(p)
                 lt.append('Gaia')
             # star_clusters?
@@ -768,14 +747,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             plt.axis(ax)
             plt.title('Ref sources')
             plt.figlegend([p[0] for p in lp], lt)
-            ps.savefig()
-
-        if gaia_stars and len(gaia):
-            ok,ix,iy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
-            for x,y,g in zip(ix,iy,gaia.phot_g_mean_mag):
-                plt.text(x, y, '%.1f' % g, color='k',
-                         bbox=dict(facecolor='w', alpha=0.5))
-            plt.axis(ax)
             ps.savefig()
 
     # SED-matched detections
@@ -944,9 +915,23 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     debug('[serial srcs] Blobs:', tnow-tlast)
     tlast = tnow
 
+    sky_overlap = True
+    if sky_overlap:
+        print('Creating coadd for sky overlap...')
+        C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
+        for band,co,cowt in zip(bands, C.coimgs, C.cowimgs):
+            pix = co[(cowt > 0) * (blobs == -1)]
+            if len(pix) == 0:
+                continue
+            cosky = np.median(pix)
+            print('Median sky for', band, ':', cosky)
+            for tim in tims:
+                if tim.band != band:
+                    continue
+                tim.data -= cosky
+
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
-            'ps', 'refstars', 'gaia_stars', 'saturated_pix',
-            'T_donotfit', 'T_clusters']
+            'ps', 'saturated_pix', 'version_header']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
@@ -966,14 +951,15 @@ def stage_fitblobs(T=None,
                    plots=False, plots2=False,
                    nblobs=None, blob0=None, blobxy=None, blobradec=None, blobid=None,
                    max_blobsize=None,
-                   simul_opt=False, use_ceres=True, mp=None,
+                   reoptimize=False,
+                   iterative=False,
+                   use_ceres=True, mp=None,
                    checkpoint_filename=None,
                    checkpoint_period=600,
                    write_pickle_filename=None,
                    write_metrics=True,
                    get_all_models=False,
                    refstars=None,
-                   rex=False,
                    bailout=False,
                    record_event=None,
                    custom_brick=False,
@@ -986,6 +972,7 @@ def stage_fitblobs(T=None,
     from tractor import Catalog
 
     record_event and record_event('stage_fitblobs: starting')
+    _add_stage_version(version_header, 'FITB', 'fitblobs')
     tlast = Time()
 
     # How far down to render model profiles
@@ -1193,8 +1180,8 @@ def stage_fitblobs(T=None,
 
     # Create the iterator over blobs to process
     blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims,
-                          cat, bands, plots, ps, simul_opt, use_ceres,
-                          refmap, brick, rex,
+                          cat, bands, plots, ps, reoptimize, iterative, use_ceres,
+                          refmap, brick,
                           skipblobs=skipblobs,
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
     # to allow timingpool to queue tasks one at a time
@@ -1273,8 +1260,27 @@ def stage_fitblobs(T=None,
     II = BB.Isrcs
     newcat = BB.sources
     # ... and make the table T parallel with BB.
+    # For iterative sources:
+    n_iter = np.sum(II < 0)
+    if n_iter:
+        n_old = len(T)
+        # first have to pad T with some new entries...
+        Tnew = fits_table()
+        Tnew.iterative = np.ones(n_iter, bool)
+        T = merge_tables([T, Tnew], columns='fillzero')
+        # ... and then point II at them.
+        II[II < 0] = n_old + np.arange(n_iter)
+    else:
+        T.iterative = np.zeros(len(T), bool)
+    assert(np.all(II >= 0))
+    assert(np.all(II < len(T)))
+    assert(len(np.unique(II)) == len(II))
     T.cut(II)
     assert(len(T) == len(BB))
+    del BB.Isrcs
+
+    # so that iterative detections get a blob number.
+    T.blob = BB.blob
 
     # Drop sources that exited the blob as a result of fitting.
     left_blob = np.logical_and(BB.started_in_blob,
@@ -1282,10 +1288,10 @@ def stage_fitblobs(T=None,
     I, = np.nonzero(np.logical_not(left_blob))
     if len(I) < len(BB):
         debug('Dropping', len(BB)-len(I), 'sources that exited their blobs during fitting')
-    BB.cut(I)
-    T.cut(I)
-    newcat = [newcat[i] for i in I]
-    assert(len(T) == len(BB))
+        BB.cut(I)
+        T.cut(I)
+        newcat = [newcat[i] for i in I]
+        assert(len(T) == len(BB))
 
     assert(len(T) == len(newcat))
     info('Old catalog:', len(cat))
@@ -1306,7 +1312,7 @@ def stage_fitblobs(T=None,
     assert(nb == len(bands))
     ns,nb = BB.dchisq.shape
     assert(ns == len(cat))
-    assert(nb == 5) # ptsrc, rex, dev, exp, comp
+    assert(nb == 5) # ptsrc, rex, dev, exp, ser
 
     # Renumber blobs to make them contiguous.
     oldblob = T.blob
@@ -1356,12 +1362,12 @@ def stage_fitblobs(T=None,
     del ninblob
 
     # Copy blob results to table T
-    for k in ['fracflux', 'fracin', 'fracmasked', 'rchisq', 'cpu_source',
-              'cpu_blob', 'blob_width', 'blob_height', 'blob_npix',
+    for k in ['fracflux', 'fracin', 'fracmasked', 'rchisq',
+              'cpu_arch', 'cpu_source', 'cpu_blob',
+              'blob_width', 'blob_height', 'blob_npix',
               'blob_nimages', 'blob_totalpix',
-              'blob_symm_width', 'blob_symm_height',
-              'blob_symm_npix', 'blob_symm_nimages', 'brightblob',
-              'hit_limit', 'dchisq']:
+              'blob_symm_width', 'blob_symm_height', 'blob_symm_npix',
+              'blob_symm_nimages', 'brightblob', 'hit_limit', 'dchisq']:
         T.set(k, BB.get(k))
 
     # compute the pixel-space mask for *brightblob* values
@@ -1374,7 +1380,7 @@ def stage_fitblobs(T=None,
     assert(cat.numberOfParams() == len(invvars))
 
     if write_metrics or get_all_models:
-        TT,hdr = _format_all_models(T, newcat, BB, bands, rex)
+        TT,hdr = _format_all_models(T, newcat, BB, bands)
         if get_all_models:
             all_models = TT
         if write_metrics:
@@ -1388,7 +1394,7 @@ def stage_fitblobs(T=None,
                 TT.writeto(None, fits_object=out.fits, header=hdr,
                            primheader=primhdr)
 
-    keys = ['cat', 'invvars', 'T', 'blobs', 'brightblobmask']
+    keys = ['cat', 'invvars', 'T', 'blobs', 'brightblobmask', 'version_header']
     if get_all_models:
         keys.append('all_models')
     if bailout:
@@ -1472,7 +1478,7 @@ def _check_checkpoints(R, blobslices, brickname):
         keepR.append(ri)
     return keepR
 
-def _format_all_models(T, newcat, BB, bands, rex):
+def _format_all_models(T, newcat, BB, bands):
     from legacypipe.catalog import prepare_fits_catalog, fits_typemap
     from tractor import Catalog
 
@@ -1480,7 +1486,7 @@ def _format_all_models(T, newcat, BB, bands, rex):
     # Copy only desired columns...
     for k in ['blob', 'brickid', 'brickname', 'dchisq', 'objid',
               'ra','dec',
-              'cpu_source', 'cpu_blob', 'ninblob',
+              'cpu_arch', 'cpu_source', 'cpu_blob', 'ninblob',
               'blob_width', 'blob_height', 'blob_npix', 'blob_nimages',
               'blob_totalpix',
               'blob_symm_width', 'blob_symm_height',
@@ -1491,19 +1497,14 @@ def _format_all_models(T, newcat, BB, bands, rex):
 
     hdr = fitsio.FITSHDR()
 
-    if rex:
-        simpname = 'rex'
-    else:
-        simpname = 'simple'
-    srctypes = ['ptsrc', simpname, 'dev','exp','comp']
+    srctypes = ['ptsrc', 'rex', 'dev', 'exp', 'ser']
 
     for srctype in srctypes:
         # Create catalog with the fit results for each source type
         xcat = Catalog(*[m.get(srctype,None) for m in BB.all_models])
         # NOTE that for Rex, the shapes have been converted to EllipseE
         # and the e1,e2 params are frozen.
-
-        namemap = dict(ptsrc='psf', simple='simp')
+        namemap = dict(ptsrc='psf')
         prefix = namemap.get(srctype,srctype)
 
         allivs = np.hstack([m.get(srctype,[]) for m in BB.all_model_ivs])
@@ -1525,28 +1526,21 @@ def _format_all_models(T, newcat, BB, bands, rex):
             TT.delete_column(col)
             continue
         # shapes for shapeless types
-        if (('psf_' in col or 'simp_' in col) and
-            ('shape' in col or 'fracDev' in col)):
+        if ('psf_' in col) and ('shape' in col):
             TT.delete_column(col)
             continue
-        # shapeDev for exp sources, vice versa
-        if (('exp_' in col and 'Dev' in col) or
-            ('dev_' in col and 'Exp' in col) or
-            ('rex_' in col and 'Dev' in col)):
+        if ('sersic' in col) and not col.startswith('ser_'):
             TT.delete_column(col)
             continue
-    TT.delete_column('dev_fracDev')
-    TT.delete_column('dev_fracDev_ivar')
-    if rex:
-        TT.delete_column('rex_shapeExp_e1')
-        TT.delete_column('rex_shapeExp_e2')
-        TT.delete_column('rex_shapeExp_e1_ivar')
-        TT.delete_column('rex_shapeExp_e2_ivar')
+    TT.delete_column('rex_shape_e1')
+    TT.delete_column('rex_shape_e2')
+    TT.delete_column('rex_shape_e1_ivar')
+    TT.delete_column('rex_shape_e2_ivar')
     return TT,hdr
 
 def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
-               plots, ps, simul_opt, use_ceres, refmap,
-               brick, rex,
+               plots, ps, reoptimize, iterative, use_ceres, refmap,
+               brick,
                skipblobs=None, max_blobsize=None, custom_brick=False):
     '''
     *blobs*: map, with -1 indicating no-blob, other values indexing *blobslices*,*blobsrcs*.
@@ -1638,24 +1632,25 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
             subimg = tim.getImage ()[subslc]
             subie  = tim.getInvError()[subslc]
             subwcs = tim.getWcs().shifted(sx0, sy0)
-            # Note that we *don't* shift the PSF here -- we do that
-            # in the one_blob code.
             subsky = tim.getSky().shifted(sx0, sy0)
+            subpsf = tim.getPsf().getShifted(sx0, sy0)
+            subwcsobj = tim.subwcs.get_subimage(int(sx0), int(sy0),
+                                                int(sx1-sx0), int(sy1-sy0))
             tim.imobj.psfnorm = tim.psfnorm
             tim.imobj.galnorm = tim.galnorm
             # FIXME -- maybe the cache is worth sending?
             if hasattr(tim.psf, 'clear_cache'):
                 tim.psf.clear_cache()
-            subtimargs.append((subimg, subie, subwcs, tim.subwcs,
+            subtimargs.append((subimg, subie, subwcs, subwcsobj,
                                tim.getPhotoCal(),
-                               subsky, tim.psf, tim.name, sx0, sx1, sy0, sy1,
+                               subsky, subpsf, tim.name, sx0, sx1, sy0, sy1,
                                tim.band, tim.sig1, tim.modelMinval,
                                tim.imobj))
 
         yield (brickname, iblob,
                (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-               simul_opt, use_ceres, rex, refmap[bslc]))
+               reoptimize, iterative, use_ceres, refmap[bslc]))
 
 def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &
@@ -1712,8 +1707,9 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     from functools import reduce
     from legacypipe.survey import apertures_arcsec
     from legacypipe.bits import IN_BLOB
-    tlast = Time()
     record_event and record_event('stage_coadds: starting')
+    _add_stage_version(version_header, 'COAD', 'coadds')
+    tlast = Time()
 
     # Write per-brick CCDs table
     primhdr = fitsio.FITSHDR()
@@ -1723,6 +1719,46 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                             comment='NOAO data product type'))
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
+
+    if plots:
+        cat_init = [src for it,src in zip(T.iterative, cat) if not(it)]
+        cat_iter = [src for it,src in zip(T.iterative, cat) if it]
+        print(len(cat_init), 'initial sources and', len(cat_iter), 'iterative')
+        mods_init = mp.map(_get_mod, [(tim, cat_init) for tim in tims])
+        mods_iter = mp.map(_get_mod, [(tim, cat_iter) for tim in tims])
+        coimgs_init,_ = quick_coadds(tims, bands, targetwcs, images=mods_init)
+        coimgs_iter,_ = quick_coadds(tims, bands, targetwcs, images=mods_iter)
+        coimgs,_ = quick_coadds(tims, bands, targetwcs)
+
+        plt.clf()
+        dimshow(get_rgb(coimgs, bands))
+        plt.title('First-round data')
+        ps.savefig()
+
+        plt.clf()
+        dimshow(get_rgb(coimgs_init, bands))
+        plt.title('First-round model fits')
+        ps.savefig()
+
+        plt.clf()
+        dimshow(get_rgb([img-mod for img,mod in zip(coimgs,coimgs_init)], bands))
+        plt.title('First-round residuals')
+        ps.savefig()
+
+        plt.clf()
+        dimshow(get_rgb(coimgs_iter, bands))
+        plt.title('Iterative model fits')
+        ps.savefig()
+
+        plt.clf()
+        dimshow(get_rgb([mod+mod2 for mod,mod2 in zip(coimgs_init, coimgs_iter)], bands))
+        plt.title('Initial + Iterative model fits')
+        ps.savefig()
+
+        plt.clf()
+        dimshow(get_rgb([img-mod-mod2 for img,mod,mod2 in zip(coimgs,coimgs_init,coimgs_iter)], bands))
+        plt.title('Iterative model residuals')
+        ps.savefig()
 
     tnow = Time()
     debug('[serial coadds]:', tnow-tlast)
@@ -1833,11 +1869,11 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         D.writeto(None, fits_object=out.fits)
     del D
 
-    coadd_list= [('image', C.coimgs,   rgbkwargs),
-                 ('model', C.comods,   rgbkwargs),
-                 ('resid', C.coresids, rgbkwargs_resid)]
+    coadd_list= [('image', C.coimgs, {}),
+                 ('model', C.comods, {}),
+                 ('resid', C.coresids, dict(resids=True))]
     if hasattr(tims[0], 'sims_image'):
-        coadd_list.append(('simscoadd', sims_coadd, rgbkwargs))
+        coadd_list.append(('simscoadd', sims_coadd, {}))
 
     for name,ims,rgbkw in coadd_list:
         rgb = get_rgb(ims, bands, **rgbkw)
@@ -1933,10 +1969,11 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         dec = np.array([src.getPosition().dec for src in cat])
         ok,x0,y0 = targetwcs.radec2pixelxy(T.orig_ra, T.orig_dec)
         ok,x1,y1 = targetwcs.radec2pixelxy(ra, dec)
-        dimshow(get_rgb(C.coimgs, bands, **rgbkwargs))
+        dimshow(get_rgb(C.coimgs, bands))
         ax = plt.axis()
         #plt.plot(np.vstack((x0,x1))-1, np.vstack((y0,y1))-1, 'r-')
-        for xx0,yy0,xx1,yy1 in zip(x0,y0,x1,y1):
+        I = np.flatnonzero(T.orig_ra != 0.)
+        for xx0,yy0,xx1,yy1 in zip(x0[I],y0[I],x1[I],y1[I]):
             plt.plot([xx0-1,xx1-1], [yy0-1,yy1-1], 'r-')
         plt.plot(x1-1, y1-1, 'r.')
         plt.axis(ax)
@@ -1944,13 +1981,14 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ps.savefig()
 
         plt.clf()
-        dimshow(get_rgb(C.coimgs, bands, **rgbkwargs))
+        dimshow(get_rgb(C.coimgs, bands))
         ax = plt.axis()
         ps.savefig()
 
         for i,(src,x,y,rr,dd) in enumerate(zip(cat, x1, y1, ra, dec)):
             from tractor import PointSource
-            from tractor.galaxy import DevGalaxy, ExpGalaxy, FixedCompositeGalaxy
+            from tractor.galaxy import DevGalaxy, ExpGalaxy
+            from tractor.sersic import SersicGalaxy
             ee = []
             ec = []
             cc = None
@@ -1965,10 +2003,10 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                 ee = [src.shape]
                 cc = green
                 ec = [cc]
-            elif isinstance(src, FixedCompositeGalaxy):
-                ee = [src.shapeExp, src.shapeDev]
+            elif isinstance(src, SersicGalaxy):
+                ee = [src.shape]
                 cc = 'm'
-                ec = ['m', 'c']
+                ec = [cc]
             else:
                 print('Unknown type:', src)
                 continue
@@ -1982,6 +2020,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                 r = rr + rd[:,0] * np.cos(np.deg2rad(dd))
                 d = dd + rd[:,1]
                 ok,xx,yy = targetwcs.radec2pixelxy(r, d)
+                xx -= 1.
+                yy -= 1.
                 x1,x2,x3 = xx[:3]
                 y1,y2,y3 = yy[:3]
                 plt.plot([x3, x1, x2], [y3, y1, y2], '-', color=c)
@@ -1998,7 +2038,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     return dict(T=T, T_donotfit=T_donotfit, apertures_pix=apertures,
                 apertures_arcsec=apertures_arcsec,
                 maskbits=maskbits,
-                maskbits_header=maskbits_header)
+                maskbits_header=maskbits_header, version_header=version_header)
 
 def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
                      fibersize=1.5, seeing=1., year=2020.0,
@@ -2175,6 +2215,7 @@ def stage_wise_forced(
     from tractor import NanoMaggies
 
     record_event and record_event('stage_wise_forced: starting')
+    _add_stage_version(version_header, 'WISE', 'wise_forced')
 
     if not plots:
         ps = None
@@ -2371,7 +2412,8 @@ def stage_wise_forced(
     debug('Returning: WISE', WISE)
     debug('Returning: WISE_T', WISE_T)
 
-    return dict(WISE=WISE, WISE_T=WISE_T, wise_mask_maps=wise_mask_maps)
+    return dict(WISE=WISE, WISE_T=WISE_T, wise_mask_maps=wise_mask_maps,
+                version_header=version_header)
 
 def _fill_skipped_values(WISE, Nskipped, do_phot):
     # Fill in blank values for skipped (Icluster) sources
@@ -2421,6 +2463,7 @@ def stage_writecat(
     from legacypipe.catalog import prepare_fits_catalog
 
     record_event and record_event('stage_writecat: starting')
+    _add_stage_version(version_header, 'WCAT', 'writecat')
 
     if maskbits is not None:
         w1val = MASKBITS['WISEM1']
@@ -2605,11 +2648,11 @@ def stage_writecat(
 
     if T_donotfit:
         if not 'type' in T_donotfit.get_columns():
-            T_donotfit.type = np.array(['DUP ']*len(T_donotfit))
+            T_donotfit.type = np.array(['DUP']*len(T_donotfit))
         else:
             for i in range(len(T_donotfit)):
                 if len(T_donotfit.type[i].strip()) == 0:
-                    T_donotfit.type[i] = 'DUP '
+                    T_donotfit.type[i] = 'DUP'
         T_donotfit.brickid = np.zeros(len(T_donotfit), np.int32) + brickid
         T_donotfit.brickname = np.array([brickname] * len(T_donotfit))
         T_donotfit.objid = np.arange(len(T_donotfit), dtype=np.int32) + len(T2)
@@ -2618,6 +2661,9 @@ def stage_writecat(
 
     # Brick pixel positions
     ok,bx,by = targetwcs.radec2pixelxy(T2.orig_ra, T2.orig_dec)
+    # iterative sources
+    bx[ok==False] = 1.
+    by[ok==False] = 1.
     T2.bx0 = (bx - 1.).astype(np.float32)
     T2.by0 = (by - 1.).astype(np.float32)
     ok,bx,by = targetwcs.radec2pixelxy(T2.ra, T2.dec)
@@ -2645,7 +2691,7 @@ def stage_writecat(
     with survey.write_output('tractor', brick=brickname) as out:
         format_catalog(T2, hdr, primhdr, survey.allbands, None, release,
                        write_kwargs=dict(fits_object=out.fits),
-                       N_wise_epochs=11, motions=gaia_stars, gaia_tagalong=True)
+                       N_wise_epochs=13, motions=gaia_stars, gaia_tagalong=True)
 
     # write fits file with galaxy-sim stuff (xy bounds of each sim)
     if 'sims_xy' in T.get_columns():
@@ -2664,19 +2710,20 @@ def stage_writecat(
 
     record_event and record_event('stage_writecat: done')
 
-    return dict(T2=T2)
+    return dict(T2=T2, version_header=version_header)
 
 def run_brick(brick, survey, radec=None, pixscale=0.262,
               width=3600, height=3600,
+              survey_blob_mask=None,
               release=None,
               zoom=None,
               bands=None,
               allbands='grz',
-              depth_cut=None,
               nblobs=None, blob=None, blobxy=None, blobradec=None, blobid=None,
               max_blobsize=None,
               nsigma=6,
-              simul_opt=False,
+              reoptimize=False,
+              iterative=False,
               wise=True,
               lanczos=True,
               early_coadds=False,
@@ -2689,8 +2736,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               hybridPsf=False,
               normalizePsf=False,
               apodize=False,
-              rgb_kwargs=None,
-              rex=False,
               splinesky=True,
               subsky=True,
               constant_invvar=False,
@@ -2709,6 +2754,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               threads=None,
               plots=False, plots2=False, coadd_bw=False,
               plot_base=None, plot_number=0,
+              command_line=None,
               record_event=None,
     # These are for the 'stages' infrastructure
               pickle_pat='pickles/runbrick-%(brick)s-%%(stage)s.pickle',
@@ -2784,9 +2830,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     - *max_blobsize*: int; ignore blobs with more than this many pixels
 
     - *nsigma*: float; detection threshold in sigmas.
-
-    - *simul_opt*: boolean; during fitting, if a blob contains multiple
-      sources, run a step of fitting the sources simultaneously?
 
     - *wise*: boolean; run WISE forced photometry?
 
@@ -2914,21 +2957,20 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             release = 8888
 
     kwargs.update(ps=ps, nsigma=nsigma,
+                  survey_blob_mask=survey_blob_mask,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
                   release=release,
                   normalizePsf=normalizePsf,
                   apodize=apodize,
-                  rgb_kwargs=rgb_kwargs,
-                  rex=rex,
                   constant_invvar=constant_invvar,
-                  depth_cut=depth_cut,
                   splinesky=splinesky,
                   subsky=subsky,
                   tycho_stars=tycho_stars,
                   gaia_stars=gaia_stars,
                   large_galaxies=large_galaxies,
                   min_mjd=min_mjd, max_mjd=max_mjd,
-                  simul_opt=simul_opt,
+                  reoptimize=reoptimize,
+                  iterative=iterative,
                   use_ceres=ceres,
                   wise_ceres=wise_ceres,
                   unwise_coadds=unwise_coadds,
@@ -2941,6 +2983,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   unwise_dir=unwise_dir,
                   unwise_tr_dir=unwise_tr_dir,
                   unwise_modelsky_dir=unwise_modelsky_dir,
+                  command_line=command_line,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
                   force=forceStages, write=write_pickles,
                   record_event=record_event)
@@ -2981,8 +3024,10 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     prereqs = {
         'tims':None,
-        'outliers': 'tims',
-        'srcs': 'outliers',
+        'refs': 'tims',
+        'outliers': 'refs',
+        'halos': 'outliers',
+        'srcs': 'halos',
 
         # fitblobs: see below
 
@@ -3007,7 +3052,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                 })
         else:
             prereqs.update({
-                'image_coadds':'outliers',
+                'image_coadds':'halos',
                 'srcs':'image_coadds',
                 'fitblobs':'srcs',
                 })
@@ -3137,6 +3182,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--survey-dir', type=str, default=None,
                         help='Override the $LEGACY_SURVEY_DIR environment variable')
 
+    parser.add_argument('--blob-mask-dir', type=str, default=None,
+                        help='The base directory to search for blob masks during sky model construction')
+
     parser.add_argument('--cache-dir', type=str, default=None,
                         help='Directory to search for cached files')
 
@@ -3202,8 +3250,12 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='Set N sigma source detection thresh')
 
     parser.add_argument(
-        '--simul-opt', action='store_true', default=False,
-        help='Do simultaneous optimization after model selection')
+        '--reoptimize', action='store_true', default=False,
+        help='Do a second round of model fitting after all model selections')
+
+    parser.add_argument(
+        '--no-iterative', dest='iterative', action='store_false', default=True,
+        help='Turn off iterative source detection?')
 
     parser.add_argument('--no-wise', dest='wise', default=True,
                         action='store_false',
@@ -3239,18 +3291,12 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--apodize', default=False, action='store_true',
                         help='Apodize image edges for prettier pictures?')
 
-    parser.add_argument('--simp', dest='rex', default=True,
-                        action='store_false',
-                        help='Use SIMP rather than REX')
     parser.add_argument(
         '--coadd-bw', action='store_true', default=False,
         help='Create grayscale coadds if only one band is available?')
 
     parser.add_argument('--bands', default=None,
                         help='Set the list of bands (filters) that are included in processing: comma-separated list, default "g,r,z"')
-
-    parser.add_argument('--depth-cut', default=None, type=float,
-                        help='Margin in mags to use to cut to the set of CCDs required to reach our depth target + margin')
 
     parser.add_argument('--no-tycho', dest='tycho_stars', default=True,
                         action='store_false',
@@ -3314,6 +3360,11 @@ def get_runbrick_kwargs(survey=None,
                             output_dir=output_dir,
                             cache_dir=cache_dir)
         info(survey)
+
+    blobdir = opt.pop('blob_mask_dir', None)
+    if blobdir is not None:
+        from legacypipe.survey import LegacySurveyData
+        opt.update(survey_blob_mask=LegacySurveyData(blobdir))
 
     if check_done or skip or skip_coadd:
         if skip_coadd:
@@ -3381,7 +3432,6 @@ def get_runbrick_kwargs(survey=None,
     if bands is not None:
         bands = bands.split(',')
     opt.update(bands=bands)
-    #opt.update(splinesky=True)
     return survey, opt
 
 def main(args=None):
@@ -3400,10 +3450,6 @@ def main(args=None):
         print(cmd)
     else:
         print('Args:', args)
-    cid = os.environ.get('SLURM_CLUSTER_NAME', 'none')
-    jid = os.environ.get('SLURM_JOB_ID', 'none')
-    aid = os.environ.get('ARRAY_TASK_ID', 'none')
-    print('Slurm cluster/job/array:', cid, '/', jid, '/', aid)
     print()
 
     parser = get_parser()
@@ -3426,6 +3472,7 @@ def main(args=None):
     survey, kwargs = get_runbrick_kwargs(**optdict)
     if kwargs in [-1, 0]:
         return kwargs
+    kwargs.update(command_line=' '.join(sys.argv))
 
     if verbose == 0:
         lvl = logging.INFO

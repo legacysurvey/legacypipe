@@ -1,3 +1,132 @@
+'''
+The farm.py script is a way of coordinating a bunch of worker
+processes (in worker.py) to run "blobs" of work for the Legacy Surveys
+data reduction.  In particular, it performs the work of the most
+time-consuming phase, "blob-fitting", where we fit forward models of
+stars and galaxies to overlapping images.
+
+Farm.py uses QDO to read the list of "bricks" it is going to process
+and to keep track of their status (ready / running / finished).
+
+For each brick, the input is a "pickle" file containing the results of
+the pipeline up to the blob-fitting stage.  The stage just before the
+blob-fitting stage (called "stage_fitblobs" in the runbrick.py code)
+is called "stage_srcs", because it determines the set of sources
+(stars and galaxies) we are going to fit.  Sources are grouped
+together into "blobs" if they overlap on the sky; if they overlap, we
+have to fit them together.  Blobs are processed independently of each
+other, and are the basic unit of work we are doing.
+
+For each brick, the output of farm.py is a "checkpoint" file, which
+contains the fitting results for the blobs in that brick.
+
+(Once we are done running farm.py, we will re-run the runbrick.py
+script, which will read the "srcs" pickle, start on the "fitblobs"
+stage of processing, find that a "checkpoint" file exists, and that
+most or all of its work is done; it will then proceed to the remaining
+stages of the pipeline.)
+
+Farm.py and its workers communicate over a ZeroMQ socket, which is a
+fancy software layer over top of (in our case) a TCP socket.  Farm.py
+acts as a server, and worker.py as clients.  When we launch worker.py
+processes, we have to tell them the address of the farm.py server they
+will get their work from.  Each worker.py will run independently on a
+single core, because the code that processes blobs is single-threaded.
+
+Farm.py is itself a multi-process application:
+- one process handles communication on the socket ("network_thread")
+- one process handles collecting & writing outputs ("output_thread")
+- multiple processes handle reading input pickle files and preparing
+  work packets ("input_thread")
+
+These processes communicate with each other over multiprocessing.Queue
+objects:
+
+- "inqueue" goes from input_threads to network_thread and contains
+  "work packets" that will be sent to the workers.
+- "outqueue" goes from network_thread to output_thread and contains
+  results received from workers.
+- "checkpointqueue" goes from input_threads to output_thread, and is
+  used to send results from an existing checkpoint file directly to
+  the output_thread.
+
+There is also a "bigqueue", which is like the "inqueue", but for "big
+blobs" -- chunks of work that we expect to take a long time to
+complete, so we handle them separately.  There's a "big" version of
+the network_thread that reads from this queue.
+
+  
+The overall data flow is:
+
+- one of the input_threads queries the QDO database for the next brick
+  is should work on
+
+- it reads the srcs pickle for that brick, and reads an existing
+  checkpoint file, if it exists.  (This happens in the "queue_work"
+  function.)  It calls the "get_blob_iter" function to produce a
+  series of work packets (one for each blob, containing subimages and
+  sources to be fit).  Each work packet gets put on the "input_queue".
+
+- a worker.py client sends a message to the farm.py socket.  The first
+  time it calls, it sends an empty message.
+
+- the network_thread receives the message, and replies with a work
+  packet (that it has pulled off the input_queue).
+
+- the worker.py calls the one_blob() function to perform the work in
+  its work packet.  It sends the result to the farm.py socket.  (And
+  receives in reply its next work assignment.)
+
+- the network_thread receives the message containing the results (and
+  replies with the next work packet for the worker).  It puts the
+  result on the output_queue.
+
+- the output_thread pops a result off the output_queue, and if it
+  determines that this is the final result for this brick, then it
+  will write the output checkpoint file and mark the brick as finished
+  in QDO.
+
+
+
+At present, we run this by starting the farm.py script on an
+interactive-queue node (preferably Haswell), copying the node's socket
+address into a script that we will use to launch worker.py processes
+via Slurm (on KNL nodes).  This gives the input_thread processes some
+time to prepare some work packets before the worker.py processes show
+up asking to be fed, and also allows us to monitor the overall state
+of the run.
+
+Going forward, it would probably be good to automatically start one
+farm.py process per Slurm job, and then start a bunch of worker.py
+processes to talk to it.
+
+The worker.py processes should not have to touch the filesystem to
+read any data.  If we run them within Shifter containers, then they
+should have little I/O overhead and should scale quite well.
+
+Bottlenecks in the current setup (as I understand them) are:
+- eventually the network link (which uses the infiniband fabric) will
+  saturate
+- the input_threads have to do a fair bit of work, so each one can
+  feed only a handful of worker.py nodes; eventually we'll fill a
+  Haswell node with input_threads.
+- last I profiled, it seemed like the network_thread was spending a
+  significant fraction of its time popping items from the input_queue
+  -- perhaps due to contention for the lock.  It could be that we want
+  to use one input_queue per input_thread, rather than having all of
+  them share a single queue.  There is no particular reason they need
+  to share a queue; we would then have to implement a simple
+  round-robin scheme to pull work from the different input_queues.
+- currently, the worker.py processes are synchronous: they ask for
+  work, wait for the reply, do the work, and send in the result.  We
+  could keep a short queue (per worker or even for the set of workers
+  sharing a node) to reduce this latency.
+
+Last I checked, I could keep up with about 64 KNL nodes x 68 worker.py
+processes with 8 input_thread processes, but efficiency was starting
+to drop.
+
+'''
 import sys
 import os
 import pickle
@@ -5,9 +134,7 @@ import time
 from collections import Counter
 
 import multiprocessing as mp
-import threading
 import queue
-
 import zmq
 
 from legacypipe.runbrick import _blob_iter, _write_checkpoint
@@ -32,6 +159,8 @@ def main():
                         help='Checkpoint filename pattern')
     parser.add_argument('--checkpoint-period', type=int, default=300,
                         help='Time between writing checkpoints')
+    parser.add_argument('--inthreads', type=int, default=1,
+                        help='Number of brick-processing processes to start')
     parser.add_argument('--port', default=5555, type=int,
                         help='Network port (TCP)')
     parser.add_argument('--command-port', default=5565, type=int,
@@ -77,18 +206,17 @@ def main():
     # results are read from disk.
     checkpointqueue = mp.Queue()
 
+    # queue from the input thread to output thread, used to communicate the number
+    # of blobs in a brick.  This is used by the output thread to decide that it has
+    # received all results for a brick.
     blobsizes = mp.Queue()
 
+    # queue from the output thread to the network thread, only for reporting
+    # that a brick has been finished.
     finished_bricks = mp.Queue()
 
-    # inthread = threading.Thread(target=input_thread,
-    #                             args=(queuename, inqueue, bigqueue, checkpointqueue,
-    #                                   blobsizes, opt),
-    #                             daemon=True)
-    # inthread.start()
-
     inthreads = []
-    for i in range(8):
+    for i in range(opt.inthreads):
         inthread = mp.Process(target=input_thread,
                               args=(queuename, inqueue, bigqueue, checkpointqueue,
                                     blobsizes, opt, i),
@@ -96,16 +224,13 @@ def main():
         inthreads.append(inthread)
         inthread.start()
 
-    #outthread = threading.Thread(target=output_thread,
     outthread = mp.Process(target=output_thread,
                                  args=(queuename, outqueue, checkpointqueue, blobsizes,
                                        finished_bricks, opt),
                                  daemon=True)
     outthread.start()
 
-    #ctx = zmq.Context()
     ctx = None
-    #networkthread = threading.Thread(target=network_thread,
     networkthread = mp.Process(target=network_thread,
                                args=(ctx, opt.port, opt.command_port, inqueue, outqueue,
                                      finished_bricks, 'main'),
@@ -113,7 +238,6 @@ def main():
     networkthread.start()
 
     if opt.big == 'queue':
-        #bignetworkthread = threading.Thread(target=network_thread,
         bignetworkthread = mp.Process(target=network_thread,
                                             args=(ctx, opt.big_port, opt.big_command_port,
                                                   bigqueue, outqueue, None, 'big'),
@@ -130,17 +254,16 @@ def main():
 
 
 def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, qname):
-
+    # Set my process name
     try:
         import setproctitle
         setproctitle.setproctitle('farm: network')
     except:
         pass
 
-    # Network thread:
+    # Set up ZeroMQ socket for communicating with workers
     import socket
     me = socket.gethostname()
-
     if ctx is None:
         ctx = zmq.Context()
     sock = ctx.socket(zmq.REP)
@@ -148,6 +271,7 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
     sock.bind(addr)
     print('Listening on tcp://%s:%i for work (queue: %s)' % (me, port, qname))
 
+    # Set up ZeroMQ socket for accepting control messages.
     command_sock = None
     if command_port is not None:
         command_sock = ctx.socket(zmq.REP)
@@ -175,6 +299,7 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
     from collections import Counter
     nwaitingCounter = Counter()
 
+    # For keeping track of how much time is spent in different parts of my job
     t_in = 0
     t_poll = 0
     t_recv = 0
@@ -214,7 +339,7 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
 
         debug('Network thread: work queue:', inqueue.qsize(), 'out queue:', outqueue.qsize(), 'work sent:', worksent, ', received:', resultsreceived, 'outstanding:', worksent-resultsreceived)
 
-        # Retrieve the next work assignment
+        # Retrieve the next work assignment from my input_threads.
         if not havework:
             try:
                 #arg = inqueue.get(block=False)
@@ -544,10 +669,12 @@ def get_blob_iter(skipblobs=None,
                   bands=None, ps=None, tims=None,
                   survey=None,
                   plots=False, plots2=False,
+                  mp=None,
                   max_blobsize=None,
-                  simul_opt=False, use_ceres=True, mp=None,
+                  use_ceres=True,
+                  reoptimize=False,
+                  iterative=True,
                   refstars=None,
-                  rex=False,
                   T_clusters=None,
                   custom_brick=False,
                   **kwargs):
@@ -570,9 +697,11 @@ def get_blob_iter(skipblobs=None,
         refmap = np.zeros((int(HH), int(WW)), np.uint8)
 
     # Create the iterator over blobs to process
-    blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims,
-                          cat, bands, plots, ps, simul_opt, use_ceres,
-                          refmap, brick, rex,
+    blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobs,
+                          targetwcs, tims,
+                          cat, bands, plots, ps,
+                          reoptimize, iterative, use_ceres,
+                          refmap, brick,
                           max_blobsize=max_blobsize, custom_brick=custom_brick,
                           skipblobs=skipblobs)
     return blobiter
@@ -584,28 +713,29 @@ class PrioritizedItem(object):
     def __lt__(self, other):
         return self.priority < other.priority
 
-class ThreadSafeDict(object):
-    def __init__(self):
-        import threading
-        self.d = dict()
-        self.lock = threading.Lock()
-    def set(self, k, v):
-        with self.lock:
-            self.d[k] = v
-    def get(self, k):
-        with self.lock:
-            return self.d.get(k)
-    def get_and_del(self, k):
-        with self.lock:
-            v = self.d.get(k)
-            del self.d[k]
-            return v
-    def delete(self, k):
-        with self.lock:
-            del self.d[k]
-    def copy(self):
-        with self.lock:
-            return self.d.copy()
+# we switched to multiprocessing and mp.Queue, so don't need this any more
+# class ThreadSafeDict(object):
+#     def __init__(self):
+#         import threading
+#         self.d = dict()
+#         self.lock = threading.Lock()
+#     def set(self, k, v):
+#         with self.lock:
+#             self.d[k] = v
+#     def get(self, k):
+#         with self.lock:
+#             return self.d.get(k)
+#     def get_and_del(self, k):
+#         with self.lock:
+#             v = self.d.get(k)
+#             del self.d[k]
+#             return v
+#     def delete(self, k):
+#         with self.lock:
+#             del self.d[k]
+#     def copy(self):
+#         with self.lock:
+#             return self.d.copy()
 
 def queue_work(brickname, inqueue, bigqueue, checkpointqueue, opt):
     '''

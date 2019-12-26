@@ -100,14 +100,16 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && make clean \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import astrometry; print(astrometry.__version__)")
 
+RUN pip3 --no-cache-dir install cython
+
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && make \
-    && make ceres \
-    && make install INSTALL_DIR=/usr/local \
+    && python3 setup-cython.py --with-ceres install --home /usr/local \
+    && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so") \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
+#    && make ceres && make install-ceres INSTALL_DIR=/usr/local \
 
 ######## Stage 2 ########
 FROM registry.services.nersc.gov/nersc/intel_cxx_fort_mpi_mkl_runtime
@@ -127,6 +129,7 @@ RUN apt -y update && apt install -y apt-utils \
     git \
     file \
     pkg-config \
+    swig \
     gdb \
     strace \
     vim \
@@ -164,13 +167,14 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # unwise_psf
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \
-    && cd unwise_psf && git checkout dr8
+    && cd unwise_psf && git checkout dr9.2
 
 # Legacypipe
-RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe && echo 1
+RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
+    && cd legacypipe && git describe
+# && git checkout dr9-dev && echo 6
 
 ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
-ENV WISE_PSF_DIR /src/unwise_psf/etc
 
 ENV HOME /root
 
@@ -200,17 +204,25 @@ RUN cd /usr/local/lib/python3.5/dist-packages && \
 ENTRYPOINT ["/bin/bash", "-c"]
 CMD ["/bin/bash"]
 
-RUN    python    -m compileall /src/unwise_psf/py/unwise_psf.py \
-    && python -O -m compileall /src/unwise_psf/py/unwise_psf.py
+# # update
+# RUN git clone http://github.com/dstndstn/tractor.git tractor \
+#     && cd tractor \
+#     && git checkout cython && echo 3 \
+#     && rm /usr/local/lib/python/tractor/dense_optimizer.cpython-35m-x86_64-linux-gnu.so \
+#     && cp tractor/dense_optimizer.py /usr/local/lib/python/tractor
 
 RUN python -O -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
            /usr/local/lib/python /usr/local/lib/python3.5/site-packages \
-           /usr/local/lib/python3.5/dist-packages && \
+           /usr/local/lib/python3.5/dist-packages \
+           /src/unwise_psf/py \
+           /src/legacypipe/py/{legacypipe,legacyzpts} && \
     python    -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
            /usr/local/lib/python /usr/local/lib/python3.5/site-packages \
-           /usr/local/lib/python3.5/dist-packages
+           /usr/local/lib/python3.5/dist-packages \
+           /src/unwise_psf/py \
+           /src/legacypipe/py/{legacypipe,legacyzpts}
 
-RUN cd /src/legacypipe/py && git pull && git describe && echo 1
-
-RUN    python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
+# update legacypipe
+RUN cd /src/legacypipe && git pull && git describe \
+    && python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
     && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}

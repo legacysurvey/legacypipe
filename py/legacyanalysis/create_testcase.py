@@ -24,6 +24,7 @@ def main():
     parser.add_argument('outdir', help='Output directory name')
     parser.add_argument('brick', help='Brick containing these images')
 
+    parser.add_argument('--survey-dir', type=str, default=None)
     parser.add_argument('--cache-dir', type=str, default=None,
                         help='Directory to search for cached files')
     parser.add_argument('--wise', help='For WISE outputs, give the path to a WCS file describing the sub-brick region of interest, eg, a coadd image')
@@ -39,7 +40,7 @@ def main():
     print(len(C), 'CCDs in', args.ccds)
     C.camera = np.array([c.strip() for c in C.camera])
     
-    survey = LegacySurveyData(cache_dir=args.cache_dir)
+    survey = LegacySurveyData(cache_dir=args.cache_dir, survey_dir=args.survey_dir)
 
     if ',' in args.brick:
         ra,dec = args.brick.split(',')
@@ -91,6 +92,33 @@ def main():
     rtn = os.system(cmd)
     assert(rtn == 0)
     os.unlink(tfn)
+
+    from legacypipe.gaiacat import GaiaCatalog
+    gcat = GaiaCatalog()
+    # from ps1cat.py:
+    wcs = targetwcs
+    step=100.
+    margin=10.
+    # Grid the CCD in pixel space
+    W,H = wcs.get_width(), wcs.get_height()
+    xx,yy = np.meshgrid(
+        np.linspace(1-margin, W+margin, 2+int((W+2*margin)/step)),
+        np.linspace(1-margin, H+margin, 2+int((H+2*margin)/step)))
+    # Convert to RA,Dec and then to unique healpixes
+    ra,dec = wcs.pixelxy2radec(xx.ravel(), yy.ravel())
+    healpixes = set()
+    for r,d in zip(ra,dec):
+        healpixes.add(gcat.healpix_for_radec(r, d))
+    for hp in healpixes:
+        hpcat = gcat.get_healpix_catalog(hp)
+        ok,xx,yy = wcs.radec2pixelxy(hpcat.ra, hpcat.dec)
+        onccd = np.flatnonzero((xx >= 1.-margin) * (xx <= W+margin) *
+                               (yy >= 1.-margin) * (yy <= H+margin))
+        hpcat.cut(onccd)
+        if len(hpcat):
+            outfn = os.path.join(args.outdir, 'gaia', 'chunk-%05d.fits' % hp)
+            trymakedirs(os.path.join(args.outdir, 'gaia'))
+            hpcat.writeto(outfn)
     
     outccds = C.copy()
     cols = outccds.get_columns()
@@ -119,7 +147,7 @@ def main():
         psfkwargs = dict(pixPsf=True, gaussPsf=False, hybridPsf=False,
                          normalizePsf=False)
 
-        tim = im.get_tractor_image(slc, pixPsf=True, splinesky=True,
+        tim = im.get_tractor_image(slc, pixPsf=True,
                                    subsky=False, nanomaggies=False,
                                    no_remap_invvar=True, old_calibs_ok=True)
         print('Tim:', tim.shape)
@@ -134,54 +162,81 @@ def main():
             psfex = psf.psfex
 
             # Did the PSF model come from a merged file?
-            mpsf = im.read_merged_psfex_model(old_calibs_ok=True)
-            if mpsf is not None:
-                T = fits_table(im.merged_psffn)
+            for fn in [im.merged_psffn, im.psffn, im.old_merged_psffn]:
+                if not os.path.exists(fn):
+                    continue
+                T = fits_table(fn)
                 I, = np.nonzero((T.expnum == im.expnum) *
                                 np.array([c.strip() == im.ccdname for c in T.ccdname]))
+                if len(I) != 1:
+                    continue
                 psfrow = T[I]
                 x0 = ccd.ccd_x0
                 y0 = ccd.ccd_y0
-                psfrow.polzero1[0] += x0
-                psfrow.polzero2[0] += y0
-                psfhdr = fitsio.read_header(im.merged_psffn)
-
+                psfrow.polzero1[0] -= x0
+                psfrow.polzero2[0] -= y0
+                #psfhdr = fitsio.read_header(im.merged_psffn)
+                break
         psfex.fwhm = tim.psf_fwhm
 
+        #### HACK
+        #psfrow = None
+        assert(psfrow is not None)
         if psfrow is not None:
             print('PSF row:', psfrow)
-        else:
-            print('PSF:', psf)
-            print('PsfEx:', psfex)
+        #else:
+        #    print('PSF:', psf)
+        #    print('PsfEx:', psfex)
 
         skyrow = skyhdr = None
 
         if args.pad:
             primhdr = fitsio.read_header(im.imgfn)
             imghdr = fitsio.read_header(im.imgfn, hdu=im.hdu)
+
             sky = im.read_sky_model(splinesky=True, primhdr=primhdr, imghdr=imghdr)
+            #skyhdr = fitsio.read_header(im.splineskyfn)
+            #msky = im.read_merged_splinesky_model(slc=slc, old_calibs_ok=True)
         else:
             sky = tim.getSky()
 
             # Did the sky model come from a merged file?
-            msky = im.read_merged_splinesky_model(slc=slc, old_calibs_ok=True)
-            if msky is not None:
-                T = fits_table(im.merged_splineskyfn)
-                I, = np.nonzero((T.expnum == im.expnum) *
-                                np.array([c.strip() == im.ccdname for c in T.ccdname]))
-                skyrow = T[I]
-                skyrow.x0[0] = ccd.ccd_x0
-                skyrow.y0[0] = ccd.ccd_y0
-                skyhdr = fitsio.read_header(im.merged_splineskyfn)
+            #msky = im.read_merged_splinesky_model(slc=slc, old_calibs_ok=True)
 
+        print('merged skyfn:', im.merged_skyfn)
+        print('single skyfn:', im.skyfn)
+        print('old merged skyfn:', im.old_merged_skyfn)
+
+        for fn in [im.merged_skyfn, im.skyfn, im.old_merged_skyfn]:
+            if not os.path.exists(fn):
+                continue
+            T = fits_table(fn)
+            I, = np.nonzero((T.expnum == im.expnum) *
+                            np.array([c.strip() == im.ccdname for c in T.ccdname]))
+            skyrow = T[I]
+            skyrow.x0[0] = ccd.ccd_x0
+            skyrow.y0[0] = ccd.ccd_y0
+            # s_med = skyrow.sky_med[0]
+            # s_john = skyrow.sky_john[0]
+            # skyhdr = fitsio.read_header(fn)
+
+        assert(skyrow is not None)
+        ### HACK
+        #skyrow = None
+                
         if skyrow is not None:
             print('Sky row:', skyrow)
         else:
             print('Sky:', sky)
 
+
+        # Output filename format:
+        fn = ccd.image_filename.strip()
+        ccd.image_filename = os.path.join(os.path.dirname(fn),
+                                          '%s.%s.fits' % (os.path.basename(fn).split('.')[0], ccd.ccdname.strip()))
         outim = outsurvey.get_image_object(ccd)
         print('Output image:', outim)
-
+        
         print('Image filename:', outim.imgfn)
         trymakedirs(outim.imgfn, dir=True)
 
@@ -226,20 +281,20 @@ def main():
         # Add image extension to filename
         # fitsio doesn't compress .fz by default, so drop .fz suffix
         
-        outim.imgfn = outim.imgfn.replace('.fits', '-%s.fits' % im.ccdname)
+        #outim.imgfn = outim.imgfn.replace('.fits', '-%s.fits' % im.ccdname)
         if not args.fpack:
             outim.imgfn = outim.imgfn.replace('.fits.fz', '.fits')
         if args.gzip:
             outim.imgfn = outim.imgfn.replace('.fits', '.fits.gz')
 
-        outim.wtfn  = outim.wtfn.replace('.fits', '-%s.fits' % im.ccdname)
+        #outim.wtfn  = outim.wtfn.replace('.fits', '-%s.fits' % im.ccdname)
         if not args.fpack:
             outim.wtfn  = outim.wtfn.replace('.fits.fz', '.fits')
         if args.gzip:
             outim.wtfn = outim.wtfn.replace('.fits', '.fits.gz')
 
         if outim.dqfn is not None:
-            outim.dqfn  = outim.dqfn.replace('.fits', '-%s.fits' % im.ccdname)
+            #outim.dqfn  = outim.dqfn.replace('.fits', '-%s.fits' % im.ccdname)
             if not args.fpack:
                 outim.dqfn  = outim.dqfn.replace('.fits.fz', '.fits')
             if args.gzip:
@@ -331,8 +386,8 @@ def main():
                 assert(rtn == 0)
 
         psfout = outim.psffn
-        if psfrow:
-            psfout = outim.merged_psffn
+        #if psfrow:
+        #    psfout = outim.merged_psffn
         print('PSF output filename:', psfout)
         trymakedirs(psfout, dir=True)
         if psfrow:
@@ -344,12 +399,13 @@ def main():
             F = fitsio.FITS(psfout, 'rw')
             F[0].write_keys([dict(name='EXPNUM', value=ccd.expnum),
                              dict(name='PLVER',  value=psf.plver),
-                             dict(name='PROCDATE', value=psf.procdate),])
+                             dict(name='PROCDATE', value=psf.procdate),
+                             dict(name='PLPROCID', value=psf.plprocid),])
             F.close()
 
-        skyout = outim.splineskyfn
-        if skyrow:
-            skyout = outim.merged_splineskyfn
+        skyout = outim.skyfn
+        #if skyrow:
+        #    skyout = outim.merged_splineskyfn
 
         print('Sky output filename:', skyout)
         trymakedirs(skyout, dir=True)
@@ -358,9 +414,12 @@ def main():
         else:
             primhdr = fitsio.FITSHDR()
             primhdr['PLVER'] = sky.plver
+            primhdr['PLPROCID'] = sky.plprocid
             primhdr['PROCDATE'] = sky.procdate
             primhdr['EXPNUM'] = ccd.expnum
             primhdr['IMGDSUM'] = sky.datasum
+            primhdr['S_MED'] = s_med
+            primhdr['S_JOHN'] = s_john
             sky.write_fits(skyout, primhdr=primhdr)
 
         # HACK -- check result immediately.
@@ -370,7 +429,7 @@ def main():
         occd = outC[iccd]
         outim = outsurvey.get_image_object(occd)
         print('Got output image:', outim)
-        otim = outim.get_tractor_image(pixPsf=True, splinesky=True,
+        otim = outim.get_tractor_image(pixPsf=True,
                                        hybridPsf=True, old_calibs_ok=True)
         print('Got output tim:', otim)
 
@@ -504,7 +563,7 @@ def main():
     for iccd,ccd in enumerate(outC):
         outim = outsurvey.get_image_object(ccd)
         print('Got output image:', outim)
-        otim = outim.get_tractor_image(pixPsf=True, splinesky=True,
+        otim = outim.get_tractor_image(pixPsf=True,
                                        hybridPsf=True, old_calibs_ok=True)
         print('Got output tim:', otim)
     

@@ -107,7 +107,9 @@ def detrend_decam_zeropoints(P):
     airmass_terms = [
         ('g', 0.173),
         ('r', 0.090),
-        ('z', 0.060),]
+        ('i', 0.054),
+        ('z', 0.060),
+        ('Y', 0.058)]
 
     mjd_terms = [
         ('g', 25.08, [
@@ -126,6 +128,7 @@ def detrend_decam_zeropoints(P):
             ( 950.0, 1250.0, 25.350, 25.260, 25.635,  -3.0000e-04),
             (1250.0, 1650.0, 25.320, 25.240, 25.570,  -2.0000e-04),
             (1650.0, 1900.0, 25.440, 25.380, 25.836,  -2.4001e-04),]),
+        ('i', 25.26, []),
         ('z', 24.92, [
             (   0.0,  160.0, 24.970, 24.970, 24.970,   0.0000e+00),
             ( 160.0,  480.0, 25.030, 24.950, 25.070,  -2.5000e-04),
@@ -134,7 +137,9 @@ def detrend_decam_zeropoints(P):
             ( 950.0, 1150.0, 25.030, 24.880, 25.743,  -7.5001e-04),
             (1150.0, 1270.0, 24.880, 25.030, 23.442,   1.2500e-03),
             (1270.0, 1650.0, 25.030, 24.890, 25.498,  -3.6842e-04),
-            (1650.0, 1900.0, 25.070, 24.940, 25.928,  -5.2000e-04),]),]
+            (1650.0, 1900.0, 25.070, 24.940, 25.928,  -5.2000e-04),]),
+        ('Y', 23.87, []),
+    ]
 
     return detrend_zeropoints(P, airmass_terms, mjd_terms)
 
@@ -222,13 +227,13 @@ def psf_zeropoint_cuts(P, pixscale,
         ccdzpt = detrend_mzlsbass_zeropoints(P)
 
     cuts = [
-        ('not_grz',   np.array([f.strip() not in keys for f in P.filter])),
+        ('not_grz',   np.array([f.strip() not in 'grz' for f in P.filter])),
         ('ccdnmatch', P.ccdnphotom < 20),
         ('zpt_small', np.array([zpt < zpt_cut_lo.get(f.strip(),0) for f,zpt in zip(P.filter, ccdzpt)])),
         ('zpt_large', np.array([zpt > zpt_cut_hi.get(f.strip(),0) for f,zpt in zip(P.filter, ccdzpt)])),
         ('phrms',     P.ccdphrms > 0.2),
         ('exptime', P.exptime < 30),
-        ('seeing_bad', np.logical_or(seeing < 0, seeing > 3.0)),
+        ('seeing_bad', np.logical_not(np.logical_and(seeing > 0, seeing < 3.0))),
         ('badexp_file', np.array([expnum in bad_expid for expnum in P.expnum])),
         ('radecrms',  np.hypot(P.ccdrarms, P.ccddecrms) > radec_rms),
         ('sky_is_bright', np.array([sky > skybright.get(f.strip(), 1e6) for f,sky in zip(P.filter, P.ccdskycounts)])),
@@ -301,17 +306,21 @@ def add_psfzpt_cuts(T, camera, bad_expid, image2coadd=''):
         # https://github.com/legacysurvey/legacypipe/blob/dr5.0/py/legacypipe/decam.py#L50
         g0 = 25.08
         r0 = 25.29
-        #i0 = 25.26
+        i0 = 25.26
         z0 = 24.92
+        Y0 = 23.87
         dg = (-0.5, 0.25)
-        #di = (-0.5, 0.25)
+        di = (-0.5, 0.25)
         dr = (-0.5, 0.25)
         dz = (-0.5, 0.25)
+        dY = (-0.5, 0.25)
         radec_rms = 0.4
         skybright = dict(g=90., r=150., z=180.)
         zpt_diff_avg = 0.25
-        zpt_lo = dict(g=g0+dg[0], r=r0+dr[0], z=z0+dz[0])#, i=i0+dr[0])
-        zpt_hi = dict(g=g0+dg[1], r=r0+dr[1], z=z0+dz[1])#, i=i0+dr[1])
+        zpt_lo = dict(g=g0+dg[0], r=r0+dr[0], z=z0+dz[0], i=i0+di[0],
+                      Y=Y0+dY[0])
+        zpt_hi = dict(g=g0+dg[1], r=r0+dr[1], z=z0+dz[1], i=i0+di[1],
+                      Y=Y0+dY[1])
         psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
                            skybright, zpt_diff_avg, image2coadd=image2coadd)
     else:

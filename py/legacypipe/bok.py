@@ -13,6 +13,16 @@ class BokImage(LegacySurveyImage):
     def __init__(self, survey, t):
         super(BokImage, self).__init__(survey, t)
 
+    def get_fwhm(self, primhdr, imghdr):
+        # exposure BOK_CP/CP20160405/ksb_160406_104543_ooi_r_v1.fits.f
+        # has SEEINGP1 in the primary header, nothing anywhere else,
+        # so FWHM in the CCDs file is NaN.
+        import numpy as np
+        print('90prime get_fwhm: self.fwhm =', self.fwhm)
+        if not np.isfinite(self.fwhm):
+            self.fwhm = primhdr.get('SEEINGP1', 0.0)
+        return self.fwhm
+
     def read_dq(self, slice=None, header=False, **kwargs):
         # Add supplemental static mask.
         import os
@@ -29,9 +39,14 @@ class BokImage(LegacySurveyImage):
             mask = F[slice]
         else:
             mask = F.read()
+
         # Pixels where the mask==1 that are not already masked get marked
         # with code 1 ("bad").
-        dq[(mask == 1) * (dq == 0)] = 1
+        if mask.shape == dq.shape:
+            dq[(mask == 1) * (dq == 0)] = 1
+        else:
+            print('WARNING: static mask shape', mask.shape, 'does not equal DQ shape', dq.shape, '-- not applying static mask!')
+
         if header:
             return dq,hdr
         return dq

@@ -64,12 +64,13 @@ class DecamImage(LegacySurveyImage):
         primhdr = read_primary_header(self.dqfn)
         plver = primhdr['PLVER']
         if decam_has_dq_codes(plver):
-            # IGNORE SATELLITE MASKER
-            debug('Remapping DQ bits for', str(self))
-            info('', np.sum(dq == 8), 'pixels have code 8 set')
+            if not decam_use_dq_cr(plver):
+                # In some runs of the pipeline (not captured by plver)
+                # the CR and Satellite masker codes got confused, so ignore
+                # both.
+                dq[dq == 5] = 0
+            # Always ignore the satellite masker code.
             dq[dq == 8] = 0
-            info('', np.sum(dq == 5), 'pixels have code 5 set')
-            dq[dq == 5] = 0
             dq = self.remap_dq_cp_codes(dq, hdr)
         else:
             from legacypipe.bits import DQ_BITS
@@ -84,7 +85,7 @@ class DecamImage(LegacySurveyImage):
                 assert(np.all((dq & bothbits) != bothbits))
         return dq
 
-def decam_has_dq_codes(plver):
+def decam_cp_version_after(plver, after):
     from distutils.version import StrictVersion
     # The format of the DQ maps changed as of version 3.5.0 of the
     # Community Pipeline.  Handle that here...
@@ -92,5 +93,14 @@ def decam_has_dq_codes(plver):
     plver = plver.replace('V','')
     plver = plver.replace('DES ', '')
     plver = plver.replace('+1', 'a1')
-    return StrictVersion(plver) >= StrictVersion('3.5.0')
+    #'4.8.2a'
+    if plver.endswith('2a'):
+        plver = plver.replace('.2a', '.2a1')
+    return StrictVersion(plver) >= StrictVersion(after)
 
+def decam_use_dq_cr(plver):
+    return decam_cp_version_after(plver, '4.8.0')
+
+def decam_has_dq_codes(plver):
+    # The format of the DQ maps changed as of version 3.5.0 of the CP
+    return decam_cp_version_after(plver, '3.5.0')

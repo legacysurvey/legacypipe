@@ -223,7 +223,12 @@ def write_survey_table(T, surveyfn, camera=None, bad_expid=None):
     T.cd2_1 = T.cd2_1.astype(np.float32)
     T.cd2_2 = T.cd2_2.astype(np.float32)
 
-    add_psfzpt_cuts(T, camera, bad_expid)
+    # add_psfzpt_cuts(T, camera, bad_expid)
+    # We now run this as a separate step at the end via
+    # update_ccd_cuts.
+    # replace with placeholder that masks everything until this is run.
+    from legacyzpts import psfzpt_cuts
+    T.ccd_cuts = np.zeros(len(T), np.int16) + psfzpt_cuts.CCD_CUT_BITS['err_legacyzpts']
 
     writeto_via_temp(surveyfn, T)
     print('Wrote %s' % surveyfn)
@@ -240,24 +245,6 @@ def create_annotated_table(leg_fn, ann_fn, camera, survey, mp):
 
 def getrms(x):
     return np.sqrt( np.mean( np.power(x,2) ) )
-
-def get_bitmask_fn(imgfn):
-    if 'ooi' in imgfn: 
-        fn= imgfn.replace('ooi','ood')
-    elif 'oki' in imgfn: 
-        fn= imgfn.replace('oki','ood')
-    else:
-        raise ValueError('bad imgfn? no ooi or oki: %s' % imgfn)
-    return fn
-
-def get_weight_fn(imgfn):
-    if 'ooi' in imgfn: 
-        fn= imgfn.replace('ooi','oow')
-    elif 'oki' in imgfn:
-        fn= imgfn.replace('oki','oow')
-    else:
-        raise ValueError('bad imgfn? no ooi or oki: %s' % imgfn)
-    return fn
 
 class Measurer(object):
     """Main image processing functions for all cameras.
@@ -285,22 +272,12 @@ class Measurer(object):
         self.calibdir = kwargs.get('calibdir')
 
         self.calibrate = calibrate
-        
-        try:
-            self.primhdr = read_primary_header(self.fn)
-        except ValueError:
-            # astropy can handle it
-            tmp= fits_astropy.open(self.fn)
-            self.primhdr= tmp[0].header
-            tmp.close()
-            del tmp
+
+        self.primhdr = self.read_primary_header()
 
         self.band = self.get_band()
         # CP WCS succeed?
-        self.goodWcs=True  
-        if not ('WCSCAL' in self.primhdr.keys() and
-                'success' in self.primhdr['WCSCAL'].strip().lower()):
-            self.goodWcs=False  
+        self.goodWcs = self.good_wcs(self.primhdr)
 
         # Camera-agnostic primary header cards
         try:
@@ -345,23 +322,44 @@ class Measurer(object):
             print('CP Header: PLPROCID = ',self.plprocid)
         self.obj = self.primhdr['OBJECT']
 
+    def get_extension_list(self, fn, debug=False):
+        raise RuntimeError('get_extension_list not implemented in type ' + str(type(self)))
+
+    def good_wcs(self, primhdr):
+        return primhdr.get('WCSCAL', '').strip().lower().startswith('success')
+
     def get_site(self):
         return None
+
+    def read_primary_header(self):
+        try:
+            primhdr = read_primary_header(self.fn)
+        except ValueError:
+            # astropy can handle it
+            tmp= fits_astropy.open(self.fn)
+            primhdr= tmp[0].header
+            tmp.close()
+            del tmp
+        return primhdr
+
 
     def get_radec_bore(self, primhdr):
         # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
         # In some DECam exposures, RA,DEC are floating-point, but RA is in *decimal hours*.
+        # In others, RA does not exist (eg CP/V4.8.2a/CP20160824/c4d_160825_062109_ooi_g_ls9.fits.fz)
         # Fall back to TELRA in that case.
+        ra_bore = dec_bore = None
         if 'RA' in primhdr.keys():
             try:
                 ra_bore = hmsstring2ra(primhdr['RA'])
                 dec_bore = dmsstring2dec(primhdr['DEC'])
             except:
-                if 'TELRA' in primhdr.keys():
-                    ra_bore = hmsstring2ra(primhdr['TELRA'])
-                    dec_bore = dmsstring2dec(primhdr['TELDEC'])
-                else:
-                    raise ValueError('Neither RA or TELRA in primary header')
+                pass
+        if dec_bore is None and 'TELRA' in primhdr.keys():
+            ra_bore = hmsstring2ra(primhdr['TELRA'])
+            dec_bore = dmsstring2dec(primhdr['TELDEC'])
+        if dec_bore is None:
+            raise ValueError('Failed to parse RA or TELRA in primary header to get telescope boresight')
         return ra_bore, dec_bore
 
     def get_good_image_subregion(self):
@@ -387,6 +385,9 @@ class Measurer(object):
     def extinction(self, band):
         return self.k_ext[band]
 
+    def read_header(self, ext):
+        return fitsio.read_header(self.fn, ext=ext)
+
     def set_hdu(self,ext):
         self.ext = ext.strip()
         self.ccdname= ext.strip()
@@ -394,7 +395,7 @@ class Measurer(object):
         hdulist= fitsio.FITS(self.fn)
         self.image_hdu= hdulist[ext].get_extnum() #NOT ccdnum in header!
         # use header
-        self.hdr = fitsio.read_header(self.fn, ext=ext)
+        self.hdr = self.read_header(ext)
         # Sanity check
         assert(self.ccdname.upper() == self.hdr['EXTNAME'].strip().upper())
         self.ccdnum = np.int(self.hdr.get('CCDNUM', 0))
@@ -403,27 +404,8 @@ class Measurer(object):
         self.wcs = self.get_wcs()
         # Pixscale is assumed CONSTANT! per camera
 
-        # From CP Header
-        hdrVal={}
-        # values we want
-        for ccd_col in ['width','height','fwhm_cp']:
-            # Possible keys in hdr for these values
-            for key in self.cp_header_keys[ccd_col]:
-                if key in self.hdr.keys():
-                    hdrVal[ccd_col]= self.hdr[key]
-                    break
-        for ccd_col in ['width','height','fwhm_cp']:
-            if ccd_col in hdrVal.keys():
-                #print('CP Header: %s = ' % ccd_col,hdrVal[ccd_col])
-                setattr(self, ccd_col, hdrVal[ccd_col])
-            else:
-                warning='Could not find %s, keys not in cp header: %s' % \
-                        (ccd_col,self.cp_header_keys[ccd_col])
-                if ccd_col == 'fwhm_cp':
-                    print('WARNING: %s' % warning)
-                    self.fwhm_cp = np.nan
-                else:
-                    raise KeyError(warning)
+        self.height, self.width = self.get_hdu_shape(self.hdr, hdulist[ext])
+        self.fwhm_cp = self.get_fwhm(self.hdr, hdulist[ext])
 
         x0,x1,y0,y1 = self.get_good_image_subregion()
         if x0 is None and x1 is None and y0 is None and y1 is None:
@@ -436,8 +418,15 @@ class Measurer(object):
             slc = slice(y0,y1),slice(x0,x1)
         self.slc = slc
 
+    def get_hdu_shape(self, hdr, hdu):
+        h,w = hdu.get_info()['dims']
+        return int(h), int(w)
+
+    def get_fwhm(self, hdr, hdu):
+        return hdr['FWHM']
+
     def read_bitmask(self):
-        dqfn= get_bitmask_fn(self.fn)
+        dqfn = self.get_bitmask_fn(self.fn)
         if self.slc is not None:
             mask = fitsio.FITS(dqfn)[self.ext][self.slc]
         else:
@@ -445,11 +434,29 @@ class Measurer(object):
         mask = self.remap_bitmask(mask)
         return mask
 
+    def get_bitmask_fn(self, imgfn):
+        if 'ooi' in imgfn: 
+            fn= imgfn.replace('ooi','ood')
+        elif 'oki' in imgfn: 
+            fn= imgfn.replace('oki','ood')
+        else:
+            raise ValueError('bad imgfn? no ooi or oki: %s' % imgfn)
+        return fn
+
+    def get_weight_fn(self, imgfn):
+        if 'ooi' in imgfn: 
+            fn= imgfn.replace('ooi','oow')
+        elif 'oki' in imgfn:
+            fn= imgfn.replace('oki','oow')
+        else:
+            raise ValueError('bad imgfn? no ooi or oki: %s' % imgfn)
+        return fn
+    
     def remap_bitmask(self, mask):
         return mask
     
     def read_weight(self, clip=True, clipThresh=0.1, scale=True, bitmask=None):
-        fn = get_weight_fn(self.fn)
+        fn = self.get_weight_fn(self.fn)
 
         if self.slc is not None:
             wt = fitsio.FITS(fn)[self.ext][self.slc]
@@ -483,7 +490,8 @@ class Measurer(object):
         if scale:
             wt = self.scale_weight(wt)
 
-        assert(np.all(wt >= 0.))
+        #assert(np.all(wt >= 0.))
+        wt[np.where(wt<0.0)] = 0.0
         assert(np.all(np.isfinite(wt)))
 
         return wt
@@ -1098,15 +1106,20 @@ class Measurer(object):
         return ps1.median[:, ps1band] + np.clip(colorterm, -1., +1.)
 
     def get_splinesky_merged_filename(self):
-        expstr = '%08i' % self.expnum
-        fn = os.path.join(self.calibdir, self.camera, 'splinesky-merged', expstr[:5],
-                          '%s-%s.fits' % (self.camera, expstr))
+        basefn = os.path.basename(self.fn_base)
+        basedir = os.path.dirname(self.fn_base)
+        base = basefn.split('.')[0]
+        fn = base+"-splinesky.fits"
+        fn = os.path.join(self.calibdir, basedir, fn)
         return fn
 
     def get_splinesky_unmerged_filename(self):
-        expstr = '%08i' % self.expnum
-        return os.path.join(self.calibdir, self.camera, 'splinesky', expstr[:5], expstr,
-                            '%s-%s-%s.fits' % (self.camera, expstr, self.ext))
+        basefn = os.path.basename(self.fn_base)
+        basedir = os.path.dirname(self.fn_base)
+        base = basefn.split('.')[0]
+        fn = base+"-"+self.ext+"-splinesky.fits"
+        fn = os.path.join(self.calibdir, basedir, base, fn)
+        return fn
 
     def get_splinesky(self):
         # Find splinesky model file and read it
@@ -1312,15 +1325,20 @@ class Measurer(object):
         return cal
 
     def get_psfex_merged_filename(self):
-        expstr = '%08i' % self.expnum
-        fn = os.path.join(self.calibdir, self.camera, 'psfex-merged', expstr[:5],
-                          '%s-%s.fits' % (self.camera, expstr))
+        basefn = os.path.basename(self.fn_base)
+        basedir = os.path.dirname(self.fn_base)
+        base = basefn.split('.')[0]
+        fn = base+"-psfex.fits"
+        fn = os.path.join(self.calibdir, basedir, fn)
         return fn
 
     def get_psfex_unmerged_filename(self):
-        expstr = '%08i' % self.expnum
-        return os.path.join(self.calibdir, self.camera, 'psfex', expstr[:5], expstr,
-                          '%s-%s-%s.fits' % (self.camera, expstr, self.ext))
+        basefn = os.path.basename(self.fn_base)
+        basedir = os.path.dirname(self.fn_base)
+        base = basefn.split('.')[0]
+        fn = base+"-"+self.ext+"-psfex.fits"
+        fn = os.path.join(self.calibdir, basedir, base, fn)
+        return fn
 
     def get_psfex_model(self):
         import tractor
@@ -1419,7 +1437,7 @@ class Measurer(object):
         print('Wrote %s' % fn)
 
     def run_calibs(self, survey, ext, psfex=True, splinesky=True, read_hdu=True,
-                   plots=False):
+                   plots=False, survey_blob_mask=None):
         # Initialize with some basic data
         self.set_hdu(ext)
 
@@ -1483,7 +1501,8 @@ class Measurer(object):
         im = survey.get_image_object(ccd)
         git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
         im.run_calibs(psfex=do_psf, sky=do_sky, splinesky=True,
-                      git_version=git_version, survey=survey, ps=ps)
+                      git_version=git_version, survey=survey, ps=ps,
+                      survey_blob_mask=survey_blob_mask)
         return ccd
 
 class FakeCCD(object):
@@ -1605,11 +1624,21 @@ class DecamMeasurer(Measurer):
         self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06,
                           #i, Y totally made up
                           i=0.08, Y=0.06)
-        # Dict: {"ccd col":[possible CP Header keys for that]}
-        self.cp_header_keys= {'width':['ZNAXIS1','NAXIS1'],
-                              'height':['ZNAXIS2','NAXIS2'],
-                              'fwhm_cp':['FWHM']}
 
+    def get_extension_list(self, fn, debug=False):
+        if debug:
+            return ['N4']
+        hdu = fitsio.FITS(fn)
+        extlist = [hdu[i].get_extname() for i in range(1,len(hdu))]
+        return extlist
+
+    def good_wcs(self, primhdr):
+        wcscal = primhdr.get('WCSCAL', '').strip().lower()
+        if wcscal.startswith('success'):  # success / successful
+            return True
+        # Frank's work-around for some with incorrect WCSCAL=Failed (DR9 re-reductions)
+        return primhdr.get('SCAMPFLG') == 0
+        
     def get_site(self):
         from astropy.coordinates import EarthLocation
         # zomg astropy's caching mechanism is horrific
@@ -1693,12 +1722,15 @@ class MegaPrimeMeasurer(Measurer):
         #                   #i, Y totally made up
         #                   i=0.08, Y=0.06)
         # --> e/sec
-        self.cp_header_keys= {'width':['ZNAXIS1','NAXIS1'],
-                              'height':['ZNAXIS2','NAXIS2'],
-                              'fwhm_cp':['FWHM']}
 
         self.primhdr['WCSCAL'] = 'success'
         self.goodWcs = True
+
+    def get_extension_list(self, fn, debug=False):
+        if debug:
+            return ['ccd03']
+        hdu = fitsio.FITS(fn)
+        return [hdu[i].get_extname() for i in range(1,len(hdu))]
 
     def get_ut(self, primhdr):
         return primhdr['UTC-OBS']
@@ -1773,12 +1805,23 @@ class Mosaic3Measurer(Measurer):
         self.camera = 'mosaic'
         self.pixscale = get_pixscale(self.camera)
 
-        self.zp0 = dict(z = 26.552)
-        self.k_ext = dict(z = 0.06)
-        # Dict: {"ccd col":[possible CP Header keys for that]}
-        self.cp_header_keys= {'width':['ZNAXIS1','NAXIS1'],
-                              'height':['ZNAXIS2','NAXIS2'],
-                              'fwhm_cp':['SEEINGP1','SEEINGP']}
+        self.zp0 = dict(z = 26.552,
+                        D51 = 24.351, # from obsbot
+        )
+        self.k_ext = dict(z = 0.06,
+                          D51 = 0.211, # from obsbot
+        )
+
+    def get_fwhm(self, hdr, hdu):
+        for key in ['SEEINGP1', 'SEEINGP']:
+            if key in hdr:
+                return hdr[key]
+        raise RuntimeError('No FWHM key in header')
+
+    def get_extension_list(self, fn, debug=False):
+        if debug:
+            return ['CCD2']
+        return ['CCD1', 'CCD2', 'CCD3', 'CCD4']
 
     def get_expnum(self, primhdr):
         if 'EXPNUM' in primhdr and primhdr['EXPNUM'] is not None:
@@ -1796,11 +1839,18 @@ class Mosaic3Measurer(Measurer):
 
     def get_band(self):
         band = self.primhdr['FILTER']
-        band = band.split()[0][0] # zd --> z
+        band = band.split()[0]
+        band = {'zd':'z'}.get(band, band) # zd --> z
         return band
 
     def get_gain(self,hdr):
         return hdr['GAIN']
+
+    def ps1_to_observed(self, ps1):
+        if self.band == 'D51':
+            ps1band = ps1cat.ps1band['g']
+            return ps1.median[:, ps1band]
+        return super(Mosaic3Measurer, self).ps1_to_observed(ps1)
 
     def colorterm_ps1_to_observed(self, ps1stars, band):
         """ps1stars: ps1.median 2D array of median mag for each band"""
@@ -1838,10 +1888,17 @@ class NinetyPrimeMeasurer(Measurer):
         # /global/homes/a/arjundey/idl/pro/observing/bokstat.pro
         self.zp0 =  dict(g = 26.93,r = 27.01,z = 26.552) # ADU/sec
         self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06)
-        # Dict: {"ccd col":[possible CP Header keys for that]}
-        self.cp_header_keys= {'width':['ZNAXIS1','NAXIS1'],
-                              'height':['ZNAXIS2','NAXIS2'],
-                              'fwhm_cp':['SEEINGP1','SEEINGP']}
+
+    def get_fwhm(self, hdr, hdu):
+        for key in ['SEEINGP1', 'SEEINGP']:
+            if key in hdr:
+                return hdr[key]
+        raise RuntimeError('No FWHM key in header')
+
+    def get_extension_list(self, fn, debug=False):
+        if debug:
+            return ['CCD1']
+        return ['CCD1', 'CCD2', 'CCD3', 'CCD4']
 
     def get_expnum(self, primhdr):
         """converts 90prime header key DTACQNAM into the unique exposure number"""
@@ -1884,43 +1941,6 @@ class NinetyPrimeMeasurer(Measurer):
     def remap_bitmask(self, mask):
         from legacypipe.image import remap_dq_cp_codes
         return remap_dq_cp_codes(mask)
-
-def get_extlist(camera,fn,debug=False,choose_ccd=None):
-    '''
-    Args:
-        fn: image fn to read hdu from
-        debug: use subset of the ccds
-        choose_ccd: if not None, use only this ccd given
-
-    Returns: 
-        list of hdu names 
-    '''
-    if camera == '90prime':
-        extlist = ['CCD1', 'CCD2', 'CCD3', 'CCD4']
-        if debug:
-            extlist = ['CCD1']
-    elif camera == 'mosaic':
-        extlist = ['CCD1', 'CCD2', 'CCD3', 'CCD4']
-        if debug:
-            extlist = ['CCD2']
-    elif camera == 'decam':
-        hdu= fitsio.FITS(fn)
-        extlist= [hdu[i].get_extname() for i in range(1,len(hdu))]
-        if debug:
-            extlist = ['N4'] #,'S4', 'S22','N19']
-    elif camera == 'megaprime':
-        hdu= fitsio.FITS(fn)
-        extlist= [hdu[i].get_extname() for i in range(1,len(hdu))]
-        if debug:
-            extlist = ['ccd03']
-    else:
-        print('Camera {} not recognized!'.format(camera))
-        raise ValueError
-    if choose_ccd:
-        print('CHOOSING CCD %s' % choose_ccd)
-        extlist= [choose_ccd]
-    return extlist
-   
  
 def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
                   just_measure=False,
@@ -1955,22 +1975,22 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     camera_check = primhdr.get('INSTRUME','').strip().lower()
     # mosaic listed as mosaic3 in header, other combos maybe
     assert(camera in camera_check or camera_check in camera)
-    
-    if camera == 'decam':
-        measure = DecamMeasurer(img_fn, image_dir=image_dir, **measureargs)
-    elif camera == 'mosaic':
-        measure = Mosaic3Measurer(img_fn, image_dir=image_dir, **measureargs)
-    elif camera == '90prime':
-        measure = NinetyPrimeMeasurer(img_fn, image_dir=image_dir, **measureargs)
-    elif camera == 'megaprime':
-        measure = MegaPrimeMeasurer(img_fn, image_dir=image_dir, **measureargs)
-        
+
+    measureclass = measureargs.get('measureclass')
+    if measureclass is None:
+        measureclass = { 'decam': DecamMeasurer,
+                         'mosaic': Mosaic3Measurer,
+                         '90prime': NinetyPrimeMeasurer,
+                         'megaprime': MegaPrimeMeasurer }[camera]
+    measure = measureclass(img_fn, image_dir=image_dir, **measureargs)
+                            
     if just_measure:
         return measure
 
-    extlist = get_extlist(camera, measure.fn, 
-                          debug=measureargs['debug'],
-                          choose_ccd=measureargs['choose_ccd'])
+    if measureargs['choose_ccd']:
+        extlist = [measureargs['choose_ccd']]
+    else:
+        extlist = measure.get_extension_list(measure.fn, debug=measureargs['debug'])
 
     extra_info = dict(zp_fid = measure.zeropoint( measure.band ),
                      ext_fid = measure.extinction( measure.band ),
@@ -1983,6 +2003,11 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     all_ccds = []
     all_photom = []
     splinesky = measureargs['splinesky']
+
+    survey_blob_mask = None
+    blobdir = measureargs.pop('blob_mask_dir', None)
+    if blobdir is not None:
+        survey_blob_mask = LegacySurveyData(survey_dir=blobdir)
 
     do_splinesky = splinesky
     do_psfex = psfex
@@ -2002,7 +2027,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
 
     if do_splinesky or do_psfex:
         ccds = mp.map(run_one_calib, [(measure, survey, ext, do_psfex, do_splinesky,
-                                       plots)
+                                       plots, survey_blob_mask)
                                       for ext in extlist])
         
         from legacyzpts.merge_calibs import merge_splinesky, merge_psfex
@@ -2069,6 +2094,16 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
             if os.path.isfile(sefn):
                 os.remove(sefn)
 
+    # Remove temporary individual files directory
+    basefn = os.path.basename(img_fn)
+    basedir = os.path.dirname(img_fn)
+    base = basefn.split('.')[0]
+    tmpdir = os.path.join(measure.calibdir, basedir, base)
+    try:
+        os.rmdir(tmpdir)
+    except OSError:
+        pass
+
     if run_calibs_only:
         return
 
@@ -2099,8 +2134,9 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     return all_ccds, all_photom, extra_info, measure
 
 def run_one_calib(X):
-    measure, survey, ext, psfex, splinesky, plots = X
-    return measure.run_calibs(survey, ext, psfex=psfex, splinesky=splinesky, plots=plots)
+    measure, survey, ext, psfex, splinesky, plots, survey_blob_mask = X
+    return measure.run_calibs(survey, ext, psfex=psfex, splinesky=splinesky, plots=plots,
+                              survey_blob_mask=survey_blob_mask)
 
 def run_one_ext(X):
     measure, ext, survey, psfex, splinesky, debug = X
@@ -2129,6 +2165,7 @@ class outputFns(object):
         self.imgfn = imgfn
         self.image_dir = image_dir
 
+        """
         # Keep the last directory component
         if camera == 'sdss':
             basedir = os.path.join(outdir, camera, '{}'.format(imgfn['RUN']))
@@ -2139,8 +2176,9 @@ class outputFns(object):
             self.surveyfn = os.path.join(basedir, base + '-survey.fits')
             self.annfn = os.path.join(basedir, base + '-annotated.fits')
         else:
-            dirname = os.path.basename(os.path.dirname(self.imgfn))
-            basedir = os.path.join(outdir, camera, dirname)
+            # Keep same path structure as the images
+            dirname = os.path.dirname(self.imgfn)
+            basedir = os.path.join(outdir, dirname)
             trymakedirs(basedir)
 
             basename = os.path.basename(self.imgfn) 
@@ -2152,10 +2190,29 @@ class outputFns(object):
                 base = base[:-len('.fits')]
             if debug:
                 base += '-debug'
-                
             self.photomfn = os.path.join(basedir, base + '-photom.fits')
             self.surveyfn = os.path.join(basedir, base + '-survey.fits')
             self.annfn = os.path.join(basedir, base + '-annotated.fits')
+        dirname = os.path.basename(os.path.dirname(self.imgfn))
+        basedir = os.path.join(outdir, camera, dirname)
+        """
+        # Keep same path structure as the images
+        dirname = os.path.dirname(self.imgfn)
+        basedir = os.path.join(outdir, dirname)
+        trymakedirs(basedir)
+
+        basename = os.path.basename(self.imgfn) 
+        # zpt,star fns
+        base = basename
+        if base.endswith('.fz'):
+            base = base[:-len('.fz')]
+        if base.endswith('.fits'):
+            base = base[:-len('.fits')]
+        if debug:
+            base += '-debug'
+        self.photomfn = os.path.join(basedir, base + '-photom.fits')
+        self.surveyfn = os.path.join(basedir, base + '-survey.fits')
+        self.annfn = os.path.join(basedir, base + '-annotated.fits')
             
 def writeto_via_temp(outfn, obj, func_write=False, **kwargs):
     tempfn = os.path.join(os.path.dirname(outfn), 'tmp-' + os.path.basename(outfn))
@@ -2239,6 +2296,8 @@ def runit(imgfn, photomfn, surveyfn, annfn, mp, bad_expid=None,
                        bad_expid=bad_expid)
     # survey --> annotated
     create_annotated_table(surveyfn, annfn, measureargs['camera'], survey, mp)
+    # Remove survey file
+    os.remove(surveyfn)
 
     t0 = ptime('write-results-to-fits',t0)
     
@@ -2276,6 +2335,8 @@ def get_parser():
                         help='Only ensure calib files exist, do not compute zeropoints.')
     parser.add_argument('--no-splinesky', dest='splinesky', default=True, action='store_false',
                         help='Do not use spline sky model for sky subtraction?')
+    parser.add_argument('--blob-mask-dir', type=str, default=None,
+                        help='The base directory to search for blob masks during sky model construction')
     parser.add_argument('--calibdir', default=None, action='store',
                         help='if None will use LEGACY_SURVEY_DIR/calib, e.g. /global/cscratch1/sd/desiproc/dr5-new/calib')
     parser.add_argument('--threads', default=None, type=int,
@@ -2381,6 +2442,8 @@ def main(image_list=None, args=None):
 
         if leg_ok and ann_ok and phot_ok and psf_ok and sky_ok:
             print('Already finished: {}'.format(F.annfn))
+            if leg_ok:
+                os.remove(F.surveyfn)
             continue
 
         if leg_ok and phot_ok and not ann_ok:
