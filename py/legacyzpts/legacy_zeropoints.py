@@ -305,9 +305,10 @@ class Measurer(object):
             if site is None:
                 print('AIRMASS missing and site not defined.')
             else:
+                print('Recomputing AIRMASS')
                 from astropy.time import Time
                 from astropy.coordinates import SkyCoord, AltAz
-                time = Time(self.mjd_obs, format='mjd')
+                time = Time(self.mjd_obs+0.5*self.exptime/24./3600., format='mjd')
                 coords = SkyCoord(self.ra_bore, self.dec_bore, unit='deg')
                 altaz = coords.transform_to(AltAz(obstime=time, location=site))
                 self.airmass = altaz.secz
@@ -1516,8 +1517,8 @@ class DecamMeasurer(Measurer):
     scatter.
     '''
     def __init__(self, *args, **kwargs):
-        super(DecamMeasurer, self).__init__(*args, **kwargs)
         self.camera = 'decam'
+        super(DecamMeasurer, self).__init__(*args, **kwargs)
         self.pixscale = get_pixscale(self.camera)
 
         # /global/homes/a/arjundey/idl/pro/observing/decstat.pro
@@ -1607,8 +1608,8 @@ class DecamMeasurer(Measurer):
 
 class MegaPrimeMeasurer(Measurer):
     def __init__(self, *args, **kwargs):
-        super(MegaPrimeMeasurer, self).__init__(*args, **kwargs)
         self.camera = 'megaprime'
+        super(MegaPrimeMeasurer, self).__init__(*args, **kwargs)
         self.pixscale = get_pixscale(self.camera)
 
         # # /global/homes/a/arjundey/idl/pro/observing/decstat.pro
@@ -1706,7 +1707,7 @@ class Mosaic3Measurer(Measurer):
     '''Class to measure a variety of quantities from a single Mosaic3 CCD.
     UNITS: e-/s'''
     def __init__(self, *args, **kwargs):
-        self.camera = 'mosaic'
+        self.camera = 'mosaic' # this has to appear before super to recompute airmass
         super(Mosaic3Measurer, self).__init__(*args, **kwargs)
         self.pixscale = get_pixscale(self.camera)
 
@@ -1791,8 +1792,8 @@ class NinetyPrimeMeasurer(Measurer):
     '''Class to measure a variety of quantities from a single 90prime CCD.
     UNITS -- CP e-/s'''
     def __init__(self, *args, **kwargs):
-        super(NinetyPrimeMeasurer, self).__init__(*args, **kwargs)
         self.camera = '90prime'
+        super(NinetyPrimeMeasurer, self).__init__(*args, **kwargs)
         self.pixscale = get_pixscale(self.camera)
 
         # Nominal zeropoints, sky brightness, and extinction values (taken from
