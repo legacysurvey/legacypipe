@@ -299,15 +299,16 @@ class Measurer(object):
 
         self.ra_bore,self.dec_bore = self.get_radec_bore(self.primhdr)
 
-        if self.airmass is None:
+        if self.airmass is None or self.camera == 'mosaic':
             # Recompute it
             site = self.get_site()
             if site is None:
                 print('AIRMASS missing and site not defined.')
             else:
+                print('Recomputing AIRMASS')
                 from astropy.time import Time
                 from astropy.coordinates import SkyCoord, AltAz
-                time = Time(self.mjd_obs, format='mjd')
+                time = Time(self.mjd_obs+0.5*self.exptime/24./3600., format='mjd')
                 coords = SkyCoord(self.ra_bore, self.dec_bore, unit='deg')
                 altaz = coords.transform_to(AltAz(obstime=time, location=site))
                 self.airmass = altaz.secz
@@ -1516,8 +1517,8 @@ class DecamMeasurer(Measurer):
     scatter.
     '''
     def __init__(self, *args, **kwargs):
-        super(DecamMeasurer, self).__init__(*args, **kwargs)
         self.camera = 'decam'
+        super(DecamMeasurer, self).__init__(*args, **kwargs)
         self.pixscale = get_pixscale(self.camera)
 
         # /global/homes/a/arjundey/idl/pro/observing/decstat.pro
@@ -1547,6 +1548,8 @@ class DecamMeasurer(Measurer):
         # zomg astropy's caching mechanism is horrific
         # return EarthLocation.of_site('ctio')
         from astropy.units import m
+        from astropy.utils import iers
+        iers.conf.auto_download = False  
         return EarthLocation(1814304. * m, -5214366. * m, -3187341. * m)
 
     def get_good_image_subregion(self):
@@ -1605,8 +1608,8 @@ class DecamMeasurer(Measurer):
 
 class MegaPrimeMeasurer(Measurer):
     def __init__(self, *args, **kwargs):
-        super(MegaPrimeMeasurer, self).__init__(*args, **kwargs)
         self.camera = 'megaprime'
+        super(MegaPrimeMeasurer, self).__init__(*args, **kwargs)
         self.pixscale = get_pixscale(self.camera)
 
         # # /global/homes/a/arjundey/idl/pro/observing/decstat.pro
@@ -1704,8 +1707,8 @@ class Mosaic3Measurer(Measurer):
     '''Class to measure a variety of quantities from a single Mosaic3 CCD.
     UNITS: e-/s'''
     def __init__(self, *args, **kwargs):
+        self.camera = 'mosaic' # this has to appear before super to recompute airmass
         super(Mosaic3Measurer, self).__init__(*args, **kwargs)
-        self.camera = 'mosaic'
         self.pixscale = get_pixscale(self.camera)
 
         self.zp0 = dict(z = 26.552,
@@ -1773,6 +1776,13 @@ class Mosaic3Measurer(Measurer):
     def get_wcs(self):
         return wcs_pv2sip_hdr(self.hdr) # PV distortion
 
+    def get_site(self):
+        from astropy.coordinates import EarthLocation
+        from astropy.units import m
+        from astropy.utils import iers
+        iers.conf.auto_download = False  
+        return EarthLocation(-1994503. * m, -5037539. * m, 3358105. * m)
+    
     def remap_bitmask(self, mask):
         from legacypipe.image import remap_dq_cp_codes
         return remap_dq_cp_codes(mask)
@@ -1782,8 +1792,8 @@ class NinetyPrimeMeasurer(Measurer):
     '''Class to measure a variety of quantities from a single 90prime CCD.
     UNITS -- CP e-/s'''
     def __init__(self, *args, **kwargs):
-        super(NinetyPrimeMeasurer, self).__init__(*args, **kwargs)
         self.camera = '90prime'
+        super(NinetyPrimeMeasurer, self).__init__(*args, **kwargs)
         self.pixscale = get_pixscale(self.camera)
 
         # Nominal zeropoints, sky brightness, and extinction values (taken from
