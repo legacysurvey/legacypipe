@@ -427,7 +427,7 @@ def stage_refs(survey=None,
 def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
                    mp=None, nsigma=None, plots=None, ps=None, record_event=None,
                    survey=None, brickname=None, version_header=None,
-                   refstars=None,
+                   refstars=None, outlier_mask_file=None, 
                    **kwargs):
     '''
     This pipeline stage tries to detect artifacts in the individual
@@ -440,7 +440,7 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
     _add_stage_version(version_header, 'OUTL', 'outliers')
 
     # Check for existing MEF containing masks for all the chips we need.
-    if not read_outlier_mask_file(survey, tims, brickname):
+    if not read_outlier_mask_file(survey, tims, brickname, outlier_mask_file=outlier_mask_file):
         from astrometry.util.file import trymakedirs
 
         # Make before-n-after plots (before)
