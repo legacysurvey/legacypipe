@@ -223,6 +223,6 @@ RUN python -O -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
            /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-RUN cd /src/legacypipe && git pull && git describe \
+RUN cd /src/legacypipe && git pull && git describe && echo 1 \
     && python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
     && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
