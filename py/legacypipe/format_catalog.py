@@ -230,10 +230,17 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
     if has_wise:
         cols.append('wise_coadd_id')
     if has_wise_lc:
+        trbands = ['w1','w2']
         lc_cols = ['lc_flux', 'lc_flux_ivar', 'lc_nobs', 'lc_fracflux',
                    'lc_rchisq','lc_mjd']
         for c in lc_cols:
-            add_wiselike(c, bands=['w1','w2'])
+            add_wiselike(c, bands=trbands)
+        add_wiselike('lc_epoch_index', bands=trbands)
+        T.lc_epoch_index_w1 = np.empty((len(T), N_wise_epochs), np.uint8)
+        T.lc_epoch_index_w2 = np.empty((len(T), N_wise_epochs), np.uint8)
+        # initialize...
+        T.lc_epoch_index_w1[:] = 255
+        T.lc_epoch_index_w2[:] = 255
         # Cut down to a fixed number of WISE time-resolved epochs?
         if N_wise_epochs is not None:
 
@@ -241,7 +248,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
             keep_epochs = {}
             newvals = {}
 
-            for band in ['w1', 'w2']:
+            for band in trbands:
                 # initialize new (cut) arrays
                 for col in lc_cols:
                     colname = col + '_' + band
@@ -252,6 +259,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
 
                 lc_nobs = T.get('lc_nobs_%s' % band)
                 lc_mjd = T.get('lc_mjd_%s' % band)
+                lc_epoch = T.get('lc_epoch_index_%s' % band)
                 # Check each row (source) individually, since coverage isn't
                 # uniform across a brick
                 for row,(nobs,mjd) in enumerate(zip(lc_nobs, lc_mjd)):
@@ -271,6 +279,8 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
                         oldval = T.get(colname)
                         newval = newvals[colname]
                         newval[row,:len(I)] = oldval[row,I]
+                    assert(np.all(I) < 255)
+                    lc_epoch[row, :len(I)] = I.astype(np.uint8)
 
             for k,v in newvals.items():
                 T.set(k, v)
