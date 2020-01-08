@@ -1436,7 +1436,11 @@ class Measurer(object):
         print('Wrote %s' % fn)
 
     def run_calibs(self, survey, ext, psfex=True, splinesky=True, read_hdu=True,
-                   plots=False, survey_blob_mask=None):
+                   plots=False, survey_blob_mask=None, survey_zeropoints=None):
+        '''
+        survey_zeropoints: LegacySurveyData object to use for fetching the
+        zeropoint for this CCD, which is used for subtracting stellar halos.
+        '''
         # Initialize with some basic data
         self.set_hdu(ext)
 
@@ -1448,7 +1452,7 @@ class Measurer(object):
         ccd.filter = self.band
         ccd.exptime = self.exptime
         ccd.camera = self.camera
-        ccd.ccdzpt = 25.0
+        ccd.ccdzpt = 0. ## ???
         ccd.ccdraoff = 0.
         ccd.ccddecoff = 0.
         ccd.fwhm = 0.
@@ -1496,6 +1500,12 @@ class Measurer(object):
             matplotlib.use('Agg')
             from astrometry.util.plotutils import PlotSequence
             ps = PlotSequence('%s-%i-%s' % (self.camera, self.expnum, self.ccdname))
+
+        if survey_zeropoints is not None:
+            ccds = survey_zeropoints.find_ccds(expnum=self.expnum, ccdname=self.ccdname, camera=self.camera)
+            assert(len(ccds) == 1)
+            imx = survey_zeropoints.get_image_object(ccds[0])
+            ccd.ccdzpt = imx.ccdzpt
 
         im = survey.get_image_object(ccd)
         git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
@@ -1916,6 +1926,11 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     if blobdir is not None:
         survey_blob_mask = LegacySurveyData(survey_dir=blobdir)
 
+    survey_zeropoints = None
+    zptdir = measureargs.pop('zeropoints_dir', None)
+    if zptdir is not None:
+        survey_zeropoints = LegacySurveyData(survey_dir=zptdir)
+
     do_splinesky = splinesky
     do_psfex = psfex
 
@@ -1934,7 +1949,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
 
     if do_splinesky or do_psfex:
         ccds = mp.map(run_one_calib, [(measure, survey, ext, do_psfex, do_splinesky,
-                                       plots, survey_blob_mask)
+                                       plots, survey_blob_mask, survey_zeropoints)
                                       for ext in extlist])
         
         from legacyzpts.merge_calibs import merge_splinesky, merge_psfex
@@ -2041,9 +2056,12 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     return all_ccds, all_photom, extra_info, measure
 
 def run_one_calib(X):
-    measure, survey, ext, psfex, splinesky, plots, survey_blob_mask = X
-    return measure.run_calibs(survey, ext, psfex=psfex, splinesky=splinesky, plots=plots,
-                              survey_blob_mask=survey_blob_mask)
+    (measure, survey, ext, psfex, splinesky, plots, survey_blob_mask,
+     survey_zeropoints) = X
+    return measure.run_calibs(survey, ext, psfex=psfex, splinesky=splinesky,
+                              plots=plots,
+                              survey_blob_mask=survey_blob_mask,
+                              survey_zeropoints=survey_zeropoints)
 
 def run_one_ext(X):
     measure, ext, survey, psfex, splinesky, debug = X
@@ -2218,6 +2236,8 @@ def get_parser():
                         help='Do not use spline sky model for sky subtraction?')
     parser.add_argument('--blob-mask-dir', type=str, default=None,
                         help='The base directory to search for blob masks during sky model construction')
+    parser.add_argument('--zeropoints-dir', type=str, default=None,
+                        help='The base directory to search for survey-ccds files for subtracting star halos before doing sky calibration.')
     parser.add_argument('--calibdir', default=None, action='store',
                         help='if None will use LEGACY_SURVEY_DIR/calib, e.g. /global/cscratch1/sd/desiproc/dr5-new/calib')
     parser.add_argument('--threads', default=None, type=int,
