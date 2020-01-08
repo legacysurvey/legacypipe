@@ -1036,7 +1036,8 @@ class LegacySurveyImage(object):
         os.rename(psftmpfn2, self.psffn)
 
     def run_sky(self, splinesky=True, git_version=None, ps=None, survey=None,
-                gaia=True, release=0, survey_blob_mask=None, halos=True):
+                gaia=True, release=0, survey_blob_mask=None,
+                halos=True):
         from legacypipe.survey import get_version_header
         from scipy.ndimage.morphology import binary_dilation
         from astrometry.util.file import trymakedirs
@@ -1175,17 +1176,24 @@ class LegacySurveyImage(object):
                                        True, gaia, False)
         stargood = (get_inblob_map(wcs, refs) == 0)
 
-        # if halos and self.camera == 'decam':
-        #     # Subtract halos from Gaia stars
-        #     Igaia, = np.nonzero(refs.isgaia * refs.pointsource)
-        #     if len(Igaia):
-        #         print('Subtracting halos before estimating sky;', len(Igaia),
-        #               'Gaia stars')
-        #         from legacypipe.halos import decam_halo_model
-        #         # UGH can't do this because the halos are in nanomaggies and
-        #         # we don't have zeropoints at this point in the code.
-        #         halos = decam_halo_model(gaia[Igaia], self.mjdobs, wcs,
-        #                                  self.pixscale, self.band, self)
+        haloimg = None
+        if halos and self.camera == 'decam':
+            # Subtract halos from Gaia stars
+            Igaia, = np.nonzero(refs.isgaia * refs.pointsource)
+            if len(Igaia):
+                print('Subtracting halos before estimating sky;', len(Igaia),
+                      'Gaia stars')
+                from legacypipe.halos import decam_halo_model
+                haloimg = decam_halo_model(gaia[Igaia], self.mjdobs, wcs,
+                                           self.pixscale, self.band, self)
+                # "haloimg" is in nanomaggies.  Convert to ADU via zeropoint...
+                from tractor.basics import NanoMaggies
+                zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
+                haloimg *= zpscale
+                print('Using zeropoint:', self.ccdzpt, 'to scale halo image by', zpscale)
+                img -= haloimg
+                if not plots:
+                    del haloimg
         
         if survey_blob_mask is not None:
             # Read DR8 blob maps for all overlapping bricks and project them
@@ -1255,6 +1263,14 @@ class LegacySurveyImage(object):
             plt.title('Image %s-%i-%s %s' % (self.camera, self.expnum,
                                              self.ccdname, self.band))
             ps.savefig()
+
+            if haloimg is not None:
+                plt.clf()
+                imx = dict(interpolation='nearest', origin='lower',
+                           vmin=-2*sig1,vmax=+2*sig1,cmap='gray')
+                plt.imshow(haloimg.T, **imx)
+                plt.title('Star halos')
+                ps.savefig()
 
             plt.clf()
             plt.imshow(wt.T, interpolation='nearest', origin='lower',
