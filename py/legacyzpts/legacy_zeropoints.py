@@ -1501,17 +1501,20 @@ class Measurer(object):
             from astrometry.util.plotutils import PlotSequence
             ps = PlotSequence('%s-%i-%s' % (self.camera, self.expnum, self.ccdname))
 
+        # Only do stellar halo subtraction if we have a zeropoint (via --zeropoint-dir)
+        dohalos = False
         if survey_zeropoints is not None:
             ccds = survey_zeropoints.find_ccds(expnum=self.expnum, ccdname=self.ccdname, camera=self.camera)
             assert(len(ccds) == 1)
-            imx = survey_zeropoints.get_image_object(ccds[0])
-            ccd.ccdzpt = imx.ccdzpt
+            #print('Plugging in ccdzpt', ccds[0].ccdzpt)
+            ccd.ccdzpt = ccds[0].ccdzpt
+            dohalos = True
 
         im = survey.get_image_object(ccd)
         git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
         im.run_calibs(psfex=do_psf, sky=do_sky, splinesky=True,
                       git_version=git_version, survey=survey, ps=ps,
-                      survey_blob_mask=survey_blob_mask)
+                      survey_blob_mask=survey_blob_mask, halos=dohalos)
         return ccd
 
 class FakeCCD(object):
