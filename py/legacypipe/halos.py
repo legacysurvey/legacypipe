@@ -1,7 +1,7 @@
 import numpy as np
 
-def subtract_halos(tims, refs, bands, mp, plots, ps):
-    args = [(tim, refs) for tim in tims]
+def subtract_halos(tims, refs, bands, mp, plots, ps, moffat=True):
+    args = [(tim, refs, moffat) for tim in tims]
     haloimgs = mp.map(subtract_one, args)
     for tim,h in zip(tims, haloimgs):
         tim.data -= h
@@ -15,23 +15,32 @@ def subtract_one(X):
         raise
 
 def subtract_one_real(X):
-    tim, refs = X
+    tim, refs, moffat = X
     if tim.imobj.camera != 'decam':
         print('Warning: Stellar halo subtraction is only implemented for DECam')
         return 0.
     return decam_halo_model(refs, tim.time.toMjd(), tim.subwcs,
-                            tim.imobj.pixscale, tim.band, tim.imobj)
+                            tim.imobj.pixscale, tim.band, tim.imobj, moffat)
 
 def moffat(rr, alpha, beta):
     return (beta-1.)/(np.pi * alpha**2)*(1. + (rr/alpha)**2)**(-beta)
 
-def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj):
+def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat):
     from legacypipe.survey import radec_at_mjd
     assert(np.all(refs.ref_epoch > 0))
     rr,dd = radec_at_mjd(refs.ra, refs.dec, refs.ref_epoch.astype(float),
                          refs.pmra, refs.pmdec, refs.parallax, mjd)
     mag = refs.get('decam_mag_%s' % band)
     fluxes = 10.**((mag - 22.5) / -2.5)
+
+    have_inner_moffat = False
+    if include_moffat:
+        psf = imobj.read_psf_model(0,0, pixPsf=True)
+        if hasattr(psf, 'moffat'):
+            have_inner_moffat = True
+            inner_alpha, inner_beta = psf.moffat
+            print('Read inner Moffat parameters', (inner_alpha, inner_beta),
+                  'from PsfEx file')
 
     H,W = wcs.shape
     H = int(H)
@@ -98,4 +107,10 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj):
 
              halo[ylo:yhi+1, xlo:xhi+1] += (flux * apodize * f * (rads*pixscale)**-2
                                             * pixscale**2)
+
+        if have_inner_moffat:
+            weight = 1.
+            halo[ylo:yhi+1, xlo:xhi+1] += (flux * apodize * weight *
+                                           moffat(rads*pixscale, inner_alpha, inner_beta) * pixscale**2)
+
     return halo

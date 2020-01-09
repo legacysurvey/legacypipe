@@ -922,6 +922,10 @@ class LegacySurveyImage(object):
             psf = HybridPixelizedPSF(psf, cx=w/2., cy=h/2.,
                                      gauss=NCircularGaussianPSF([psf.fwhm / 2.35], [1.]))
         debug('Using PSF model', psf)
+
+        cols = Ti.get_columns()
+        if 'moffat_alpha' in cols and 'moffat_beta' in cols:
+            psf.moffat = (Ti.moffat_alpha, Ti.moffat_beta)
         return psf
 
 
@@ -1184,8 +1188,11 @@ class LegacySurveyImage(object):
                 print('Subtracting halos before estimating sky;', len(Igaia),
                       'Gaia stars')
                 from legacypipe.halos import decam_halo_model
+                # Try to include inner Moffat component in star halos?
+                moffat = True
                 haloimg = decam_halo_model(gaia[Igaia], self.mjdobs, wcs,
-                                           self.pixscale, self.band, self)
+                                           self.pixscale, self.band, self,
+                                           moffat)
                 # "haloimg" is in nanomaggies.  Convert to ADU via zeropoint...
                 from tractor.basics import NanoMaggies
                 zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
