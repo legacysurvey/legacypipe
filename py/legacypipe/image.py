@@ -1200,6 +1200,13 @@ class LegacySurveyImage(object):
                 haloimg *= zpscale
                 print('Using zeropoint:', self.ccdzpt, 'to scale halo image by', zpscale)
                 img -= haloimg
+                if plots:
+                    # Also compute halo image without Moffat component
+                    nomoffhalo = decam_halo_model(refs[Igaia], self.mjdobs, wcs,
+                        self.pixscale, self.band, self, False)
+                    nomoffhalo *= zpscale
+                    moffhalo = haloimg - nomoffhalo
+                    del nomoffhalo
                 if not plots:
                     del haloimg
         
@@ -1283,6 +1290,13 @@ class LegacySurveyImage(object):
                            vmin=-2*sig1,vmax=+2*sig1,cmap='gray')
                 plt.imshow(haloimg.T, **imx)
                 plt.title('Star halos')
+                ps.savefig()
+
+                plt.clf()
+                imx = dict(interpolation='nearest', origin='lower',
+                           vmin=-2*sig1,vmax=+2*sig1,cmap='gray')
+                plt.imshow(moffhalo.T, **imx)
+                plt.title('Moffat component of star halos')
                 ps.savefig()
 
             plt.clf()
