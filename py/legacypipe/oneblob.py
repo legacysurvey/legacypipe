@@ -223,6 +223,68 @@ class OneBlob(object):
         if self.plots:
             self._plots(tr, 'Initial models')
 
+        ### Try using saddle criterion to segment the blob / mask other sources
+        if True:
+            from legacypipe.detection import detection_maps
+            from astrometry.util.multiproc import multiproc
+            from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
+            from scipy.ndimage.measurements import label
+            from collections import Counter
+
+            # Compute per-band detection maps
+            mp = multiproc()
+            detmaps,detivs,_ = detection_maps(
+                self.tims, self.blobwcs, self.bands, mp)
+            maxsn = 0
+            for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
+                sn = detmap * np.sqrt(detiv)
+                # HACK - no SEDs...
+                maxsn = np.maximum(maxsn, sn)
+
+            segmap = np.empty((self.blobh, self.blobw), int)
+            segmap[:,:] = -1
+
+            _,ix,iy = self.blobwcs.radec2pixelxy(
+                np.array([src.getPosition().ra  for src in self.srcs]),
+                np.array([src.getPosition().dec for src in self.srcs]))
+            ix = np.clip(np.round(ix)-1, 0, self.blobw-1).astype(int)
+            iy = np.clip(np.round(iy)-1, 0, self.blobh-1).astype(int)
+
+            todo = set(list(range(len(self.srcs))))
+            
+            for thresh in range(1, int(np.ceil(maxsn.max()))):
+                print('S/N', thresh, ':', len(todo), 'sources to find still')
+                if len(todo) == 0:
+                    break
+                hot = (maxsn >= thresh)
+                hot = binary_fill_holes(hot)
+                blobs,_ = label(hot)
+                srcblobs = blobs[iy, ix]
+                count = Counter(srcblobs)
+                done = set()
+                for t in todo:
+                    bl = blobs[iy[t], ix[t]]
+                    if bl == 0:
+                        continue
+                    n = count[bl]
+                    if n == 1:
+                        segmap[blobs == bl] = t
+                        #todo.remove(t)
+                        print('Source', t, 'is isolated at S/N', thresh)
+                        done.add(t)
+                todo.difference_update(done)
+
+            if self.plots:
+                import pylab as plt
+                plt.clf()
+                dimshow(segmap)
+                ax = plt.axis()
+                from legacypipe.detection import plot_boundary_map
+                plot_boundary_map(segmap >= 0)
+                plt.plot(ix, iy, 'r.')
+                plt.axis(ax)
+                self.ps.savefig()
+                        
         # Optimize individual sources, in order of flux.
         # First, choose the ordering...
         Ibright = _argsort_by_brightness(cat, self.bands)
@@ -725,9 +787,8 @@ class OneBlob(object):
             from scipy.ndimage.measurements import label
             # Compute per-band detection maps
             mp = multiproc()
-            detmaps,detivs,satmaps = detection_maps(
+            detmaps,detivs,_ = detection_maps(
                 srctims, srcwcs, self.bands, mp)
-            del satmaps
             # Compute the symmetric area that fits in this 'tim'
             pos = src.getPosition()
             ok,xx,yy = srcwcs.radec2pixelxy(pos.ra, pos.dec)
@@ -737,11 +798,12 @@ class OneBlob(object):
             flipw = min(ix, bw-1-ix)
             fliph = min(iy, bh-1-iy)
             flipblobs = np.zeros(srcblobmask.shape, bool)
+            # The slice where we can perform symmetrization
+            slc = (slice(iy-fliph, iy+fliph+1),
+                   slice(ix-flipw, ix+flipw+1))
             # Go through the per-band detection maps, marking significant pixels
             for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
                 sn = detmap * np.sqrt(detiv)
-                slc = (slice(iy-fliph, iy+fliph+1),
-                       slice(ix-flipw, ix+flipw+1))
                 flipsn = np.zeros_like(sn)
                 # Symmetrize
                 flipsn[slc] = np.minimum(sn[slc],
@@ -749,8 +811,6 @@ class OneBlob(object):
                 # just OR the detection maps per-band...
                 flipblobs |= (flipsn > 5.)
 
-            #filled = binary_fill_holes(flipblobs)
-            #blobs,_ = label(filled)
             flipblobs = binary_fill_holes(flipblobs)
             blobs,_ = label(flipblobs)
             goodblob = blobs[iy,ix]
@@ -767,7 +827,8 @@ class OneBlob(object):
                         break
                     detsn = detmap * np.sqrt(detiv)
                     plt.subplot(2,2, i+1)
-                    dimshow(detsn, vmin=-2, vmax=8)
+                    mx = detsn.max()
+                    dimshow(detsn, vmin=-2, vmax=max(8, mx))
                     ax = plt.axis()
                     plot_boundary_map(detsn >= 5.)
                     plt.plot(ix, iy, 'rx')
@@ -798,13 +859,13 @@ class OneBlob(object):
                 plt.colorbar()
                 plt.title('blob map; goodblob=%i' % goodblob)
                 plt.subplot(1,2,2)
-                dimshow(binary_fill_holes(flipblobs), vmin=0, vmax=1)
+                dimshow(flipblobs, vmin=0, vmax=1)
                 plt.colorbar()
-                plt.title('symmetric blob mask: 1 = good')
+                plt.title('symmetric blob mask: 1 = good; red=symm')
                 ax = plt.axis()
                 plt.plot(ix, iy, 'rx')
-                plt.plot([ix-flipw, ix-flipw, ix+flipw, ix+flipw, ix-flipw],
-                         [iy-fliph, iy+fliph, iy+fliph, iy-fliph, iy-fliph], 'r-')
+                plt.plot([ix-flipw-0.5, ix-flipw-0.5, ix+flipw+0.5, ix+flipw+0.5, ix-flipw-0.5],
+                         [iy-fliph-0.5, iy+fliph+0.5, iy+fliph+0.5, iy-fliph-0.5, iy-fliph-0.5], 'r-')
                 plt.axis(ax)
                 self.ps.savefig()
 
@@ -812,8 +873,6 @@ class OneBlob(object):
             # position, we want to drop this source.  However, saturation can
             # cause there to be no detection S/N because of masking, so do
             # a hole-fill before checking.
-            # FIXME -- this could go before the label() call
-            #if not binary_fill_holes(flipblobs)[iy,ix]:
             if not flipblobs[iy,ix]:
                 # The hole-fill can still fail (eg, in small test images) if
                 # the bleed trail splits the blob into two pieces.
@@ -826,6 +885,7 @@ class OneBlob(object):
 
             if goodblob != 0:
                 flipblobs = (blobs == goodblob)
+
             dilated = binary_dilation(flipblobs, iterations=4)
             if not np.any(dilated):
                 debug('No pixels in dilated symmetric mask')
