@@ -1678,7 +1678,6 @@ class LegacySurveyData(object):
         number, integer), *ccdname* (string), and *camera* (string),
         if given.
         '''
-
         if expnum is not None:
             C = self.try_expnum_kdtree(expnum)
             if C is not None:

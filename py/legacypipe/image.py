@@ -1006,7 +1006,7 @@ class LegacySurveyImage(object):
         try:
             plprocid = primhdr['PLPROCID'].strip()
         except:
-            plprocid = None
+            plprocid = 'xxx'
         imghdr = self.read_image_header()
         datasum = imghdr.get('DATASUM', '0')
         procdate = primhdr['DATE']
@@ -1188,9 +1188,10 @@ class LegacySurveyImage(object):
                 print('Subtracting halos before estimating sky;', len(Igaia),
                       'Gaia stars')
                 from legacypipe.halos import decam_halo_model
+
                 # Try to include inner Moffat component in star halos?
                 moffat = True
-                haloimg = decam_halo_model(gaia[Igaia], self.mjdobs, wcs,
+                haloimg = decam_halo_model(refs[Igaia], self.mjdobs, wcs,
                                            self.pixscale, self.band, self,
                                            moffat)
                 # "haloimg" is in nanomaggies.  Convert to ADU via zeropoint...
@@ -1272,6 +1273,11 @@ class LegacySurveyImage(object):
             ps.savefig()
 
             if haloimg is not None:
+                plt.clf()
+                plt.imshow(img.T + haloimg.T, **ima)
+                plt.title('Image with star halos')
+                ps.savefig()
+
                 plt.clf()
                 imx = dict(interpolation='nearest', origin='lower',
                            vmin=-2*sig1,vmax=+2*sig1,cmap='gray')
@@ -1367,7 +1373,7 @@ class LegacySurveyImage(object):
                    force=False, git_version=None,
                    splinesky=True, ps=None, survey=None,
                    gaia=True, old_calibs_ok=False,
-                   survey_blob_mask=None):
+                   survey_blob_mask=None, halos=True):
         '''
         Run calibration pre-processing steps.
         '''
@@ -1406,7 +1412,7 @@ class LegacySurveyImage(object):
         if psfex:
             self.run_psfex(git_version=git_version, ps=ps)
         if sky:
-            self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia, survey_blob_mask=survey_blob_mask)
+            self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia, survey_blob_mask=survey_blob_mask, halos=halos)
 
 def psfex_single_to_merged(infn, expnum, ccdname):
     # returns table T
