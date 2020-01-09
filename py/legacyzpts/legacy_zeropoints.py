@@ -1108,16 +1108,16 @@ class Measurer(object):
         basefn = os.path.basename(self.fn_base)
         basedir = os.path.dirname(self.fn_base)
         base = basefn.split('.')[0]
-        fn = base+"-splinesky.fits"
-        fn = os.path.join(self.calibdir, basedir, fn)
+        fn = base + '-splinesky.fits'
+        fn = os.path.join(self.calibdir, 'sky', basedir, fn)
         return fn
 
     def get_splinesky_unmerged_filename(self):
         basefn = os.path.basename(self.fn_base)
         basedir = os.path.dirname(self.fn_base)
         base = basefn.split('.')[0]
-        fn = base+"-"+self.ext+"-splinesky.fits"
-        fn = os.path.join(self.calibdir, basedir, base, fn)
+        fn = base + '-' + self.ext + '-splinesky.fits'
+        fn = os.path.join(self.calibdir, 'sky-single', basedir, base, fn)
         return fn
 
     def get_splinesky(self):
@@ -1327,16 +1327,16 @@ class Measurer(object):
         basefn = os.path.basename(self.fn_base)
         basedir = os.path.dirname(self.fn_base)
         base = basefn.split('.')[0]
-        fn = base+"-psfex.fits"
-        fn = os.path.join(self.calibdir, basedir, fn)
+        fn = base + '-psfex.fits'
+        fn = os.path.join(self.calibdir, 'psfex', basedir, fn)
         return fn
 
     def get_psfex_unmerged_filename(self):
         basefn = os.path.basename(self.fn_base)
         basedir = os.path.dirname(self.fn_base)
         base = basefn.split('.')[0]
-        fn = base+"-"+self.ext+"-psfex.fits"
-        fn = os.path.join(self.calibdir, basedir, base, fn)
+        fn = base + '-' + self.ext + '-psfex.fits'
+        fn = os.path.join(self.calibdir, 'psfex-single', basedir, base, fn)
         return fn
 
     def get_psfex_model(self):
@@ -1457,10 +1457,11 @@ class Measurer(object):
         ccd.ccddecoff = 0.
         ccd.fwhm = 0.
         ccd.propid = self.propid
-        # fake
+        # fake -- the image.py class only uses the CD matrix to compute
+        # the pixel scale, so this is ok
         ccd.cd1_1 = ccd.cd2_2 = self.pixscale / 3600.
         ccd.cd1_2 = ccd.cd2_1 = 0.
-        ccd.pixscale = self.pixscale ## units??
+        ccd.pixscale = self.pixscale
         ccd.mjd_obs = self.mjd_obs
         ccd.width = self.width
         ccd.height = self.height
@@ -1504,7 +1505,8 @@ class Measurer(object):
         # Only do stellar halo subtraction if we have a zeropoint (via --zeropoint-dir)
         dohalos = False
         if survey_zeropoints is not None:
-            ccds = survey_zeropoints.find_ccds(expnum=self.expnum, ccdname=self.ccdname, camera=self.camera)
+            ccds = survey_zeropoints.find_ccds(expnum=self.expnum, ccdname=self.ccdname,
+                                               camera=self.camera)
             assert(len(ccds) == 1)
             #print('Plugging in ccdzpt', ccds[0].ccdzpt)
             ccd.ccdzpt = ccds[0].ccdzpt
