@@ -1004,7 +1004,7 @@ class LegacySurveyImage(object):
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', 'V0.0').strip()
         try:
-            plprocid = primhdr['PLPROCID'].strip()
+            plprocid = str(primhdr['PLPROCID']).strip()
         except:
             plprocid = 'xxx'
         imghdr = self.read_image_header()
@@ -1056,7 +1056,7 @@ class LegacySurveyImage(object):
 
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', 'V0.0').strip()
-        plprocid = primhdr['PLPROCID'].strip()
+        plprocid = str(primhdr['PLPROCID']).strip()
         imghdr = self.read_image_header()
         datasum = imghdr.get('DATASUM', '0')
         procdate = primhdr['DATE']
