@@ -455,8 +455,8 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
     else:
         depvers.append((dep, value))
         if os.path.exists(value):
-            hdr = fitsio.read_header(value)
-            ver = hdr.get('LSLGAVER', 'L4')
+            from legacypipe.reference import get_large_galaxy_version
+            ver = get_large_galaxy_version(value)
             depvers.append(('LARGEGALAXIES_VER', ver))
 
     for dep in ['TYCHO2_KD', 'GAIA_CAT']:
@@ -1678,7 +1678,6 @@ class LegacySurveyData(object):
         number, integer), *ccdname* (string), and *camera* (string),
         if given.
         '''
-
         if expnum is not None:
             C = self.try_expnum_kdtree(expnum)
             if C is not None:

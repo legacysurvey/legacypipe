@@ -299,15 +299,16 @@ class Measurer(object):
 
         self.ra_bore,self.dec_bore = self.get_radec_bore(self.primhdr)
 
-        if self.airmass is None:
+        if self.airmass is None or self.camera == 'mosaic':
             # Recompute it
             site = self.get_site()
             if site is None:
                 print('AIRMASS missing and site not defined.')
             else:
+                print('Recomputing AIRMASS')
                 from astropy.time import Time
                 from astropy.coordinates import SkyCoord, AltAz
-                time = Time(self.mjd_obs, format='mjd')
+                time = Time(self.mjd_obs+0.5*self.exptime/24./3600., format='mjd')
                 coords = SkyCoord(self.ra_bore, self.dec_bore, unit='deg')
                 altaz = coords.transform_to(AltAz(obstime=time, location=site))
                 self.airmass = altaz.secz
@@ -1107,16 +1108,16 @@ class Measurer(object):
         basefn = os.path.basename(self.fn_base)
         basedir = os.path.dirname(self.fn_base)
         base = basefn.split('.')[0]
-        fn = base+"-splinesky.fits"
-        fn = os.path.join(self.calibdir, basedir, fn)
+        fn = base + '-splinesky.fits'
+        fn = os.path.join(self.calibdir, 'sky', basedir, fn)
         return fn
 
     def get_splinesky_unmerged_filename(self):
         basefn = os.path.basename(self.fn_base)
         basedir = os.path.dirname(self.fn_base)
         base = basefn.split('.')[0]
-        fn = base+"-"+self.ext+"-splinesky.fits"
-        fn = os.path.join(self.calibdir, basedir, base, fn)
+        fn = base + '-' + self.ext + '-splinesky.fits'
+        fn = os.path.join(self.calibdir, 'sky-single', basedir, base, fn)
         return fn
 
     def get_splinesky(self):
@@ -1326,16 +1327,16 @@ class Measurer(object):
         basefn = os.path.basename(self.fn_base)
         basedir = os.path.dirname(self.fn_base)
         base = basefn.split('.')[0]
-        fn = base+"-psfex.fits"
-        fn = os.path.join(self.calibdir, basedir, fn)
+        fn = base + '-psfex.fits'
+        fn = os.path.join(self.calibdir, 'psfex', basedir, fn)
         return fn
 
     def get_psfex_unmerged_filename(self):
         basefn = os.path.basename(self.fn_base)
         basedir = os.path.dirname(self.fn_base)
         base = basefn.split('.')[0]
-        fn = base+"-"+self.ext+"-psfex.fits"
-        fn = os.path.join(self.calibdir, basedir, base, fn)
+        fn = base + '-' + self.ext + '-psfex.fits'
+        fn = os.path.join(self.calibdir, 'psfex-single', basedir, base, fn)
         return fn
 
     def get_psfex_model(self):
@@ -1435,7 +1436,11 @@ class Measurer(object):
         print('Wrote %s' % fn)
 
     def run_calibs(self, survey, ext, psfex=True, splinesky=True, read_hdu=True,
-                   plots=False, survey_blob_mask=None):
+                   plots=False, survey_blob_mask=None, survey_zeropoints=None):
+        '''
+        survey_zeropoints: LegacySurveyData object to use for fetching the
+        zeropoint for this CCD, which is used for subtracting stellar halos.
+        '''
         # Initialize with some basic data
         self.set_hdu(ext)
 
@@ -1447,15 +1452,16 @@ class Measurer(object):
         ccd.filter = self.band
         ccd.exptime = self.exptime
         ccd.camera = self.camera
-        ccd.ccdzpt = 25.0
+        ccd.ccdzpt = 0. ## ???
         ccd.ccdraoff = 0.
         ccd.ccddecoff = 0.
         ccd.fwhm = 0.
         ccd.propid = self.propid
-        # fake
+        # fake -- the image.py class only uses the CD matrix to compute
+        # the pixel scale, so this is ok
         ccd.cd1_1 = ccd.cd2_2 = self.pixscale / 3600.
         ccd.cd1_2 = ccd.cd2_1 = 0.
-        ccd.pixscale = self.pixscale ## units??
+        ccd.pixscale = self.pixscale
         ccd.mjd_obs = self.mjd_obs
         ccd.width = self.width
         ccd.height = self.height
@@ -1496,11 +1502,21 @@ class Measurer(object):
             from astrometry.util.plotutils import PlotSequence
             ps = PlotSequence('%s-%i-%s' % (self.camera, self.expnum, self.ccdname))
 
+        # Only do stellar halo subtraction if we have a zeropoint (via --zeropoint-dir)
+        dohalos = False
+        if survey_zeropoints is not None:
+            ccds = survey_zeropoints.find_ccds(expnum=self.expnum, ccdname=self.ccdname,
+                                               camera=self.camera)
+            assert(len(ccds) == 1)
+            #print('Plugging in ccdzpt', ccds[0].ccdzpt)
+            ccd.ccdzpt = ccds[0].ccdzpt
+            dohalos = True
+
         im = survey.get_image_object(ccd)
         git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
         im.run_calibs(psfex=do_psf, sky=do_sky, splinesky=True,
                       git_version=git_version, survey=survey, ps=ps,
-                      survey_blob_mask=survey_blob_mask)
+                      survey_blob_mask=survey_blob_mask, halos=dohalos)
         return ccd
 
 class FakeCCD(object):
@@ -1516,8 +1532,8 @@ class DecamMeasurer(Measurer):
     scatter.
     '''
     def __init__(self, *args, **kwargs):
-        super(DecamMeasurer, self).__init__(*args, **kwargs)
         self.camera = 'decam'
+        super(DecamMeasurer, self).__init__(*args, **kwargs)
         self.pixscale = get_pixscale(self.camera)
 
         # /global/homes/a/arjundey/idl/pro/observing/decstat.pro
@@ -1547,6 +1563,8 @@ class DecamMeasurer(Measurer):
         # zomg astropy's caching mechanism is horrific
         # return EarthLocation.of_site('ctio')
         from astropy.units import m
+        from astropy.utils import iers
+        iers.conf.auto_download = False  
         return EarthLocation(1814304. * m, -5214366. * m, -3187341. * m)
 
     def get_good_image_subregion(self):
@@ -1605,8 +1623,8 @@ class DecamMeasurer(Measurer):
 
 class MegaPrimeMeasurer(Measurer):
     def __init__(self, *args, **kwargs):
-        super(MegaPrimeMeasurer, self).__init__(*args, **kwargs)
         self.camera = 'megaprime'
+        super(MegaPrimeMeasurer, self).__init__(*args, **kwargs)
         self.pixscale = get_pixscale(self.camera)
 
         # # /global/homes/a/arjundey/idl/pro/observing/decstat.pro
@@ -1704,8 +1722,8 @@ class Mosaic3Measurer(Measurer):
     '''Class to measure a variety of quantities from a single Mosaic3 CCD.
     UNITS: e-/s'''
     def __init__(self, *args, **kwargs):
+        self.camera = 'mosaic' # this has to appear before super to recompute airmass
         super(Mosaic3Measurer, self).__init__(*args, **kwargs)
-        self.camera = 'mosaic'
         self.pixscale = get_pixscale(self.camera)
 
         self.zp0 = dict(z = 26.552,
@@ -1773,6 +1791,13 @@ class Mosaic3Measurer(Measurer):
     def get_wcs(self):
         return wcs_pv2sip_hdr(self.hdr) # PV distortion
 
+    def get_site(self):
+        from astropy.coordinates import EarthLocation
+        from astropy.units import m
+        from astropy.utils import iers
+        iers.conf.auto_download = False  
+        return EarthLocation(-1994503. * m, -5037539. * m, 3358105. * m)
+    
     def remap_bitmask(self, mask):
         from legacypipe.image import remap_dq_cp_codes
         return remap_dq_cp_codes(mask)
@@ -1782,8 +1807,8 @@ class NinetyPrimeMeasurer(Measurer):
     '''Class to measure a variety of quantities from a single 90prime CCD.
     UNITS -- CP e-/s'''
     def __init__(self, *args, **kwargs):
-        super(NinetyPrimeMeasurer, self).__init__(*args, **kwargs)
         self.camera = '90prime'
+        super(NinetyPrimeMeasurer, self).__init__(*args, **kwargs)
         self.pixscale = get_pixscale(self.camera)
 
         # Nominal zeropoints, sky brightness, and extinction values (taken from
@@ -1906,6 +1931,11 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     if blobdir is not None:
         survey_blob_mask = LegacySurveyData(survey_dir=blobdir)
 
+    survey_zeropoints = None
+    zptdir = measureargs.pop('zeropoints_dir', None)
+    if zptdir is not None:
+        survey_zeropoints = LegacySurveyData(survey_dir=zptdir)
+
     do_splinesky = splinesky
     do_psfex = psfex
 
@@ -1924,7 +1954,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
 
     if do_splinesky or do_psfex:
         ccds = mp.map(run_one_calib, [(measure, survey, ext, do_psfex, do_splinesky,
-                                       plots, survey_blob_mask)
+                                       plots, survey_blob_mask, survey_zeropoints)
                                       for ext in extlist])
         
         from legacyzpts.merge_calibs import merge_splinesky, merge_psfex
@@ -2031,9 +2061,12 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     return all_ccds, all_photom, extra_info, measure
 
 def run_one_calib(X):
-    measure, survey, ext, psfex, splinesky, plots, survey_blob_mask = X
-    return measure.run_calibs(survey, ext, psfex=psfex, splinesky=splinesky, plots=plots,
-                              survey_blob_mask=survey_blob_mask)
+    (measure, survey, ext, psfex, splinesky, plots, survey_blob_mask,
+     survey_zeropoints) = X
+    return measure.run_calibs(survey, ext, psfex=psfex, splinesky=splinesky,
+                              plots=plots,
+                              survey_blob_mask=survey_blob_mask,
+                              survey_zeropoints=survey_zeropoints)
 
 def run_one_ext(X):
     measure, ext, survey, psfex, splinesky, debug = X
@@ -2208,6 +2241,8 @@ def get_parser():
                         help='Do not use spline sky model for sky subtraction?')
     parser.add_argument('--blob-mask-dir', type=str, default=None,
                         help='The base directory to search for blob masks during sky model construction')
+    parser.add_argument('--zeropoints-dir', type=str, default=None,
+                        help='The base directory to search for survey-ccds files for subtracting star halos before doing sky calibration.')
     parser.add_argument('--calibdir', default=None, action='store',
                         help='if None will use LEGACY_SURVEY_DIR/calib, e.g. /global/cscratch1/sd/desiproc/dr5-new/calib')
     parser.add_argument('--threads', default=None, type=int,
