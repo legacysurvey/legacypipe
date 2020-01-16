@@ -42,23 +42,38 @@ def _custom_sky(args):
     """Wrapper function for the multiprocessing."""
     return custom_sky(*args)
 
-def custom_sky(survey, brickname, targetwcs, apodize, ccd): 
+def custom_sky(survey, targetwcs, apodize, ccd): 
     """Perform custom sky-subtraction on a single CCD.
 
     """
     from astropy.stats import sigma_clipped_stats
+    from legacypipe.reference import get_reference_sources
+    from legacypipe.oneblob import get_inblob_map
 
     # Why is this a DecamImage Class instead of a LegacySurveyImage Class
+    im = survey.get_image_object(ccd)
     tim = im.get_tractor_image()
     #tim = im.get_tractor_image(splinesky=True, subsky=False, hybridPsf=True,
     #                           normalizePsf=True, apodize=apodize)
     img = tim.getImage()
     ivar = tim.getInvvar()
 
-    skypix = np
-    objmask = _build_objmask(img, ivar, skypix)
-    skymean, skymedian, skysig = sigma_clipped_stats(img, mask=~skypix, sigma=3.0)    
-    
+    refs, _ = get_reference_sources(survey, targetwcs, im.pixscale, ['r'],
+                                    tycho_stars=True, gaia_stars=True,
+                                    large_galaxies=True, star_clusters=True)
+    refmask = get_inblob_map(tim.subwcs, refs) != 0
+
+    skypix = ~refmask * (ivar != 0)
+    if np.sum(skypix) == 0:
+        print('No pixels to estimate sky...fix me!')
+        skymean, skymedian, skysig = 0., 0., 0.
+    else:
+        objmask = _build_objmask(img, ivar, skypix)
+        skypix = np.logical_or(objmask != 0, skypix)
+        skymean, skymedian, skysig = sigma_clipped_stats(img, mask=~skypix, sigma=3.0)    
+
+    return skymean, skymedian, skysig
+        
 def complicated_custom_sky(survey, brickname, targetwcs, apodize, ccd): 
     """Perform custom sky-subtraction on a single CCD.
 
@@ -233,16 +248,9 @@ def stage_largegalaxies(
     from tractor.wcs import ConstantFitsWcs
     from tractor import GaussianMixturePSF
     
-    # Custom sky-subtraction
-    #skyargs = [(survey, brickname, targetwcs, apodize, _ccd) for _ccd in ccds]
-    #result = mp.map(_custom_sky, skyargs)
-    #sky = dict()
-    #[sky.update(res) for res in result]
-    #del result
-
-    
-    
-    #import pdb ; pdb.set_trace()    
+    # Custom sky-subtraction. TODO: subtract from the tims...
+    sky = list(zip(*mp.map(_custom_sky, [(survey, targetwcs, apodize, _ccd) for _ccd in ccds])))
+    import pdb ; pdb.set_trace()
 
     # Create coadds and then build custom tims from them.
     C = make_coadds(tims, bands, targetwcs,
