@@ -146,14 +146,8 @@ RUN apt -y update && apt install -y apt-utils \
     libcfitsio-bin \
     libgoogle-glog-dev \
     libceres-dev \
-    # # Remove APT files
+    # Remove APT files
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-#     python3 \
-#     python3-dev \
-#     python3-pip \
-#     python3-pil \
-#     python3-tk \
 
 COPY --from=builder /usr/local /usr/local
 COPY --from=builder /opt/conda /opt/conda
@@ -168,7 +162,6 @@ RUN git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
     && python3 setup.py install
 
 # python = python3
-#RUN ln -s /usr/bin/python3 /usr/bin/python
 RUN ln -s $(which python3) /usr/bin/python
 
 # unwise_psf
@@ -178,7 +171,6 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
 # Legacypipe
 RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
     && cd legacypipe && git describe
-# && git checkout dr9-dev && echo 6
 
 ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 
@@ -196,16 +188,6 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> /root/.bashrc \
   # Download astropy site locations and USNO sky model
   && python -c "from astropy.coordinates import EarthLocation; EarthLocation._get_site_registry(force_download=True)" \
   && python -c "from astropy.coordinates import EarthLocation, SkyCoord, AltAz; from astropy.time import Time; print(EarthLocation.of_site('ctio')); print(SkyCoord(180.,-45.,unit='deg').transform_to(AltAz(obstime=Time(56806.0, format='mjd'), location=EarthLocation.of_site('ctio'))))"
-
-# Patch astropy:
-# ADD urlmap-readonly.patch /tmp/
-# RUN cd /usr/local/lib/python3.5/dist-packages && \
-#     patch -p1 < /tmp/urlmap-readonly.patch
-
-# Alternatively, could retrieve
-#   http://data.astropy.org/coordinates/sites.json
-# to
-#   /usr/local/lib/python3.5/dist-packages/astropy/coordinates/data/sites.json
 
 ENTRYPOINT ["/bin/bash", "-c"]
 CMD ["/bin/bash"]
