@@ -43,6 +43,8 @@ from legacypipe.bits import DQ_BITS, MASKBITS
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 
+from legacypipe.largegalaxies import stage_largegalaxies
+
 import logging
 logger = logging.getLogger('legacypipe.runbrick')
 def info(*args):
@@ -2742,6 +2744,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               tycho_stars=False,
               gaia_stars=False,
               large_galaxies=False,
+              largegalaxy_preburner=False,
               min_mjd=None, max_mjd=None,
               unwise_coadds=False,
               bail_out=False,
@@ -3071,6 +3074,12 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             'writecat': 'coadds',
             })
 
+    if largegalaxy_preburner:
+        prereqs.update({
+            'largegalaxies': 'halos',
+            'srcs': 'largegalaxies',
+        })
+        
     if prereqs_update is not None:
         prereqs.update(prereqs_update)
 
@@ -3326,6 +3335,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--bail-out-sources', default=False, action='store_true',
                         help='Avoid detecting new sources in large GALAXY and CLUSTER masked areas')
+
+    parser.add_argument('--largegalaxy-preburner', default=False, action='store_true',
+                        help='Pre-fitting of LSLGA galaxies')
 
     return parser
 
