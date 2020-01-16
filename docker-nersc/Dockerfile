@@ -61,7 +61,7 @@ ENV ARCH_FLAGS ""
 # Pip installs -- built from source
 RUN for x in \
     photutils \
-    fitsio==0.9.12 \
+    fitsio==1.0.5 \
     ; do pip3 --no-cache-dir install $x; done
 
 ENV PYTHON python3
