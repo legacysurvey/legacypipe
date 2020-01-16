@@ -210,13 +210,6 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> /root/.bashrc \
 ENTRYPOINT ["/bin/bash", "-c"]
 CMD ["/bin/bash"]
 
-# # update
-# RUN git clone http://github.com/dstndstn/tractor.git tractor \
-#     && cd tractor \
-#     && git checkout cython && echo 3 \
-#     && rm /usr/local/lib/python/tractor/dense_optimizer.cpython-35m-x86_64-linux-gnu.so \
-#     && cp tractor/dense_optimizer.py /usr/local/lib/python/tractor
-
 RUN python -O -m compileall \
     -x lib2to3 \
     /usr/local/lib/python \
@@ -231,6 +224,6 @@ RUN python -O -m compileall \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-#RUN cd /src/legacypipe && git pull && git describe && echo 1 \
-#    && python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
-#    && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
+RUN cd /src/legacypipe && git pull && git checkout calib-container && git describe && \
+  python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
+  python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
