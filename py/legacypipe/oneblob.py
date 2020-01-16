@@ -223,10 +223,97 @@ class OneBlob(object):
         if self.plots:
             self._plots(tr, 'Initial models')
 
+        ### Try using saddle criterion to segment the blob / mask other sources
+        if True:
+            from legacypipe.detection import detection_maps
+            from astrometry.util.multiproc import multiproc
+            from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
+            from scipy.ndimage.measurements import label
+
+            # Compute per-band detection maps
+            mp = multiproc()
+            detmaps,detivs,_ = detection_maps(
+                self.tims, self.blobwcs, self.bands, mp)
+            maxsn = 0
+            for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
+                sn = detmap * np.sqrt(detiv)
+                # HACK - no SEDs...
+                maxsn = np.maximum(maxsn, sn)
+
+            segmap = np.empty((self.blobh, self.blobw), int)
+            segmap[:,:] = -1
+
+            _,ix,iy = self.blobwcs.radec2pixelxy(
+                np.array([src.getPosition().ra  for src in self.srcs]),
+                np.array([src.getPosition().dec for src in self.srcs]))
+            ix = np.clip(np.round(ix)-1, 0, self.blobw-1).astype(int)
+            iy = np.clip(np.round(iy)-1, 0, self.blobh-1).astype(int)
+
+            Ibright = _argsort_by_brightness(cat, self.bands)
+            rank = np.empty(len(cat), int)
+            rank[Ibright] = np.arange(len(cat), dtype=int)
+
+            todo = set(list(range(len(self.srcs))))
+            thresholds = list(range(3, int(np.ceil(maxsn.max()))))
+            for thresh in thresholds:
+                print('S/N', thresh, ':', len(todo), 'sources to find still')
+                if len(todo) == 0:
+                    break
+                hot = (maxsn >= thresh)
+                hot = binary_fill_holes(hot)
+                blobs,_ = label(hot)
+                srcblobs = blobs[iy, ix]
+                done = set()
+
+                blobranks = {}
+                for i,(b,r) in enumerate(zip(srcblobs, rank)):
+                    if not b in blobranks:
+                        blobranks[b] = []
+                    blobranks[b].append(r)
+                
+                for t in todo:
+                    bl = blobs[iy[t], ix[t]]
+                    if bl == 0:
+                        # ??
+                        done.add(t)
+                        continue
+                    if rank[t] == min(blobranks[bl]):
+                        #print('Source', t, 'has rank', rank[t], 'vs blob ranks', blobranks[bl])
+                        segmap[blobs == bl] = t
+                        print('Source', t, 'is isolated at S/N', thresh)
+                        done.add(t)
+                todo.difference_update(done)
+            self.segmap = segmap
+
+            if self.plots:
+                import pylab as plt
+                plt.clf()
+                dimshow(segmap)
+                ax = plt.axis()
+                from legacypipe.detection import plot_boundary_map
+                plot_boundary_map(segmap >= 0)
+                plt.plot(ix, iy, 'r.')
+                plt.axis(ax)
+                plt.title('Segmentation map')
+                self.ps.savefig()
+
+                plt.clf()
+                dimshow(self.rgb)
+                ax = plt.axis()
+                for i in range(len(cat)):
+                    plot_boundary_map(segmap == i)
+                plt.plot(ix, iy, 'r.')
+                plt.axis(ax)
+                plt.title('Segments')
+                self.ps.savefig()
+                
         # Optimize individual sources, in order of flux.
         # First, choose the ordering...
         Ibright = _argsort_by_brightness(cat, self.bands)
 
+        # The sizes of the model patches fit here are determined by the
+        # sources themselves, ie by the size of the mod patch returned by
+        #  src.getModelPatch(tim)
         if len(cat) > 1:
             self._optimize_individual_sources_subtract(
                 cat, Ibright, B.cpu_source)
@@ -381,8 +468,33 @@ class OneBlob(object):
         models = SourceModels()
         # Remember original tim images
         models.save_images(self.tims)
+
+        # compute modelmasks based on segmap?
+        from scipy.ndimage.measurements import find_objects
+        slcs = find_objects(self.segmap + 1)
+        mm = [dict() for i in range(len(self.tims))]
+        for i,(src,slc) in enumerate(zip(cat,slcs)):
+            if slc is None:
+                continue
+            sy,sx = slc
+            y0,y1 = sy.start, sy.stop
+            x0,x1 = sx.start, sx.stop
+            print('source', i, ': values in segmap bbox:', np.unique(self.segmap[y0:y1, x0:x1]))
+            r,d = self.blobwcs.pixelxy2radec([x0+1,x0+1,x1+1,x1+1], [y0+1,y1+1,y1+1,y0+1])
+            for j,tim in enumerate(self.tims):
+                th,tw = tim.shape
+                _,x,y = tim.subwcs.radec2pixelxy(r, d)
+                xlo = int(np.clip(np.floor(min(x)-1), 0, tw-1))
+                xhi = int(np.clip(np.ceil (max(x)-1), 0, tw-1))
+                ylo = int(np.clip(np.floor(min(y)-1), 0, th-1))
+                yhi = int(np.clip(np.ceil (max(y)-1), 0, th-1))
+                if xlo==xhi or ylo==yhi:
+                    # no overlap
+                    continue
+                mm[j][src] = ModelMask(xlo, ylo, xhi-xlo, yhi-ylo)
+        
         # Create initial models for each tim x each source
-        models.create(self.tims, cat, subtract=True)
+        models.create(self.tims, cat, subtract=True, modelmasks=mm)
 
         N = len(cat)
         B.dchisq = np.zeros((N, 5), np.float32)
@@ -725,9 +837,8 @@ class OneBlob(object):
             from scipy.ndimage.measurements import label
             # Compute per-band detection maps
             mp = multiproc()
-            detmaps,detivs,satmaps = detection_maps(
+            detmaps,detivs,_ = detection_maps(
                 srctims, srcwcs, self.bands, mp)
-            del satmaps
             # Compute the symmetric area that fits in this 'tim'
             pos = src.getPosition()
             ok,xx,yy = srcwcs.radec2pixelxy(pos.ra, pos.dec)
@@ -737,11 +848,12 @@ class OneBlob(object):
             flipw = min(ix, bw-1-ix)
             fliph = min(iy, bh-1-iy)
             flipblobs = np.zeros(srcblobmask.shape, bool)
+            # The slice where we can perform symmetrization
+            slc = (slice(iy-fliph, iy+fliph+1),
+                   slice(ix-flipw, ix+flipw+1))
             # Go through the per-band detection maps, marking significant pixels
             for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
                 sn = detmap * np.sqrt(detiv)
-                slc = (slice(iy-fliph, iy+fliph+1),
-                       slice(ix-flipw, ix+flipw+1))
                 flipsn = np.zeros_like(sn)
                 # Symmetrize
                 flipsn[slc] = np.minimum(sn[slc],
@@ -749,8 +861,6 @@ class OneBlob(object):
                 # just OR the detection maps per-band...
                 flipblobs |= (flipsn > 5.)
 
-            #filled = binary_fill_holes(flipblobs)
-            #blobs,_ = label(filled)
             flipblobs = binary_fill_holes(flipblobs)
             blobs,_ = label(flipblobs)
             goodblob = blobs[iy,ix]
@@ -767,7 +877,8 @@ class OneBlob(object):
                         break
                     detsn = detmap * np.sqrt(detiv)
                     plt.subplot(2,2, i+1)
-                    dimshow(detsn, vmin=-2, vmax=8)
+                    mx = detsn.max()
+                    dimshow(detsn, vmin=-2, vmax=max(8, mx))
                     ax = plt.axis()
                     plot_boundary_map(detsn >= 5.)
                     plt.plot(ix, iy, 'rx')
@@ -793,27 +904,31 @@ class OneBlob(object):
                 self.ps.savefig()
 
                 plt.clf()
-                plt.subplot(1,2,1)
+                plt.subplot(2,2,1)
                 dimshow(blobs)
                 plt.colorbar()
                 plt.title('blob map; goodblob=%i' % goodblob)
-                plt.subplot(1,2,2)
-                dimshow(binary_fill_holes(flipblobs), vmin=0, vmax=1)
+                plt.subplot(2,2,2)
+                dimshow(flipblobs, vmin=0, vmax=1)
                 plt.colorbar()
-                plt.title('symmetric blob mask: 1 = good')
+                plt.title('symmetric blob mask: 1 = good; red=symm')
                 ax = plt.axis()
                 plt.plot(ix, iy, 'rx')
-                plt.plot([ix-flipw, ix-flipw, ix+flipw, ix+flipw, ix-flipw],
-                         [iy-fliph, iy+fliph, iy+fliph, iy-fliph, iy-fliph], 'r-')
+                plt.plot([ix-flipw-0.5, ix-flipw-0.5, ix+flipw+0.5, ix+flipw+0.5, ix-flipw-0.5],
+                         [iy-fliph-0.5, iy+fliph+0.5, iy+fliph+0.5, iy-fliph-0.5, iy-fliph-0.5], 'r-')
                 plt.axis(ax)
+
+                plt.subplot(2,2,3)
+                dh,dw = flipblobs.shape
+                sx0,sy0 = srcwcs_x0y0
+                dimshow(self.segmap[sy0:sy0+dh, sx0:sx0+dw])
+                plt.title('Segmentation map')
                 self.ps.savefig()
 
             # If there is no longer a source detected at the original source
             # position, we want to drop this source.  However, saturation can
             # cause there to be no detection S/N because of masking, so do
             # a hole-fill before checking.
-            # FIXME -- this could go before the label() call
-            #if not binary_fill_holes(flipblobs)[iy,ix]:
             if not flipblobs[iy,ix]:
                 # The hole-fill can still fail (eg, in small test images) if
                 # the bleed trail splits the blob into two pieces.
@@ -826,10 +941,22 @@ class OneBlob(object):
 
             if goodblob != 0:
                 flipblobs = (blobs == goodblob)
+
             dilated = binary_dilation(flipblobs, iterations=4)
             if not np.any(dilated):
                 debug('No pixels in dilated symmetric mask')
                 return None
+
+            #
+            #dh,dw = dilated.shape
+            dh,dw = flipblobs.shape
+            sx0,sy0 = srcwcs_x0y0
+            s = self.segmap[iy + sy0, ix + sx0]
+            #print('segmap at', (ix+sx0, iy+sy0), ':', s)
+            if s != -1:
+                dilated *= (self.segmap[sy0:sy0+dh, sx0:sx0+dw] == s)
+                #flipblobs *= (self.segmap[sy0:sy0+dh, sx0:sx0+dw] == s)
+
             yin = np.max(dilated, axis=1)
             xin = np.max(dilated, axis=0)
             yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
@@ -1739,17 +1866,22 @@ class SourceModels(object):
         for tim,img in zip(tims, self.orig_images):
             tim.data = img
 
-    def create(self, tims, srcs, subtract=False):
+    def create(self, tims, srcs, subtract=False, modelmasks=None):
         '''
         Note that this modifies the *tims* if subtract=True.
         '''
         self.models = []
-        for tim in tims:
+        for itim,tim in enumerate(tims):
             mods = []
             sh = tim.shape
             ie = tim.getInvError()
             for src in srcs:
-                mod = src.getModelPatch(tim)
+
+                mm = None
+                if modelmasks is not None:
+                    mm = modelmasks[itim].get(src, None)
+
+                mod = src.getModelPatch(tim, modelMask=mm)
                 if mod is not None and mod.patch is not None:
                     if not np.all(np.isfinite(mod.patch)):
                         print('Non-finite mod patch')
