@@ -13,7 +13,7 @@ def stage_largegalaxies(
     import numpy as np
     from legacypipe.coadds import make_coadds, write_coadd_images
     from legacypipe.bits import DQ_BITS
-    from legacypipe.survey import get_rgb, imsave_jpeg
+    from legacypipe.survey import get_rgb, imsave_jpeg, LegacySurveyWcs
 
     from tractor.image import Image
     from tractor.basics import NanoMaggies, LinearPhotoCal
@@ -55,9 +55,10 @@ def stage_largegalaxies(
         cotim.dq = np.zeros(cotim.shape, dtype=np.int16)
         cotim.dq_saturation_bits = DQ_BITS['satur']
         cotim.psfnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
+        cotim.galnorm = 1.0 # bogus!
         cotim.imobj = Duck()
+        cotim.imobj.fwhm = 2.35 * psf_sigma
         cotims.append(cotim)
-
         #import pdb ; pdb.set_trace()
 
         #return dict(cotims=cotims)
