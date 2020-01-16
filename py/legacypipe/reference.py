@@ -184,11 +184,7 @@ def read_gaia(targetwcs):
             mag += c * color**order
         gaia.set('decam_mag_%s' % b, mag)
 
-    gaia.pointsource = np.logical_or(
-        (gaia.G <= 19.) *
-        (gaia.astrometric_excess_noise < 10.**0.5),
-        (gaia.G >= 19.) *
-        (gaia.astrometric_excess_noise < 10.**(0.5 + 0.2*(gaia.G - 19.))))
+    gaia.pointsource = (gaia.G <= 19.) * (gaia.astrometric_excess_noise < 10.**0.5)
     # in our catalog files, this is in float32; in the Gaia data model it's
     # a byte, with only values 3 and 31 in DR2.
     gaia.astrometric_params_solved = gaia.astrometric_params_solved.astype(np.uint8)
