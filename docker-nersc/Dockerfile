@@ -1,6 +1,6 @@
 FROM registry.services.nersc.gov/nersc/intel_cxx_fort_mpi_mkl_devel as builder
 
-RUN apt -y update && apt install -y apt-utils && echo yes
+RUN apt -y update && apt install -y apt-utils && echo 3
 
 RUN DEBIAN_FRONTEND=noninteractive \
     apt install -y --no-install-recommends \
@@ -25,27 +25,30 @@ RUN DEBIAN_FRONTEND=noninteractive \
     libeigen3-dev \
     libgoogle-glog-dev \
     libceres-dev \
-    python3 \
-    python3-dev \
-    python3-pip \
-    python3-pil \
-    python3-tk \
-    # # Remove APT files
+    # Remove APT files
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-RUN echo "../site-packages" > /usr/local/lib/python3.5/dist-packages/site-packages.pth
+RUN echo 'PATH=/opt/conda/bin:$PATH' > /etc/profile.d/conda.sh
+
+RUN wget -nv https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh && \
+    bash miniconda.sh -b -p /opt/conda && \
+    conda config --add channels intel && \
+    conda config --set always_yes yes && \
+    conda update conda && \
+    conda install python=3.7 pip numpy scipy && \
+    conda clean -a -y
+
+#RUN echo "../site-packages" > /usr/local/lib/python3.5/dist-packages/site-packages.pth
 
 # Pip installs -- binary
 RUN for x in \
     setuptools \
     wheel \
-    intel-numpy \
-    intel-scipy \
     psycopg2-binary \
     matplotlib \
     astropy \
     zmq \
-    ; do pip3 --no-cache-dir install $x; done
+    ; do pip --no-cache-dir install $x; done
 
 # ugly: Tractor's mp_fourier module detects the $CC='icc' exactly
 # These are in /opt/intel/bin, which is on the PATH.
@@ -59,10 +62,7 @@ ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell -ax=knl
 ENV ARCH_FLAGS ""
 
 # Pip installs -- built from source
-RUN for x in \
-    photutils \
-    fitsio==1.0.5 \
-    ; do pip3 --no-cache-dir install $x; done
+RUN pip --no-cache-dir install photutils
 
 ENV PYTHON python3
 ENV PYTHON_CONFIG python3-config
@@ -100,7 +100,7 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && make clean \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import astrometry; print(astrometry.__version__)")
 
-RUN pip3 --no-cache-dir install cython
+RUN pip --no-cache-dir install cython
 
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
@@ -111,12 +111,15 @@ RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
 #    && make ceres && make install-ceres INSTALL_DIR=/usr/local \
 
+RUN pip --no-cache-dir install fitsio==1.0.5
+
 ######## Stage 2 ########
 FROM registry.services.nersc.gov/nersc/intel_cxx_fort_mpi_mkl_runtime
 
 ENV PYTHON python3
 ENV PYTHON_CONFIG python3-config
 ENV PYTHON_SCRIPT "/usr/bin/env python3"
+RUN echo 'PATH=/opt/conda/bin:$PATH' > /etc/profile.d/conda.sh
 
 RUN rm /root/.profile
 
@@ -143,17 +146,19 @@ RUN apt -y update && apt install -y apt-utils \
     libcfitsio-bin \
     libgoogle-glog-dev \
     libceres-dev \
-    python3 \
-    python3-dev \
-    python3-pip \
-    python3-pil \
-    python3-tk \
     # # Remove APT files
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-COPY --from=builder /usr/local /usr/local
+#     python3 \
+#     python3-dev \
+#     python3-pip \
+#     python3-pil \
+#     python3-tk \
 
-RUN pip3 --no-cache-dir install cython ipython
+COPY --from=builder /usr/local /usr/local
+COPY --from=builder /opt/conda /opt/conda
+
+RUN pip --no-cache-dir install cython ipython
 
 WORKDIR /src
 
@@ -163,7 +168,8 @@ RUN git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
     && python3 setup.py install
 
 # python = python3
-RUN ln -s /usr/bin/python3 /usr/bin/python
+#RUN ln -s /usr/bin/python3 /usr/bin/python
+RUN ln -s $(which python3) /usr/bin/python
 
 # unwise_psf
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \
@@ -192,9 +198,9 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> /root/.bashrc \
   && python -c "from astropy.coordinates import EarthLocation, SkyCoord, AltAz; from astropy.time import Time; print(EarthLocation.of_site('ctio')); print(SkyCoord(180.,-45.,unit='deg').transform_to(AltAz(obstime=Time(56806.0, format='mjd'), location=EarthLocation.of_site('ctio'))))"
 
 # Patch astropy:
-ADD urlmap-readonly.patch /tmp/
-RUN cd /usr/local/lib/python3.5/dist-packages && \
-    patch -p1 < /tmp/urlmap-readonly.patch
+# ADD urlmap-readonly.patch /tmp/
+# RUN cd /usr/local/lib/python3.5/dist-packages && \
+#     patch -p1 < /tmp/urlmap-readonly.patch
 
 # Alternatively, could retrieve
 #   http://data.astropy.org/coordinates/sites.json
@@ -211,18 +217,20 @@ CMD ["/bin/bash"]
 #     && rm /usr/local/lib/python/tractor/dense_optimizer.cpython-35m-x86_64-linux-gnu.so \
 #     && cp tractor/dense_optimizer.py /usr/local/lib/python/tractor
 
-RUN python -O -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
-           /usr/local/lib/python /usr/local/lib/python3.5/site-packages \
-           /usr/local/lib/python3.5/dist-packages \
-           /src/unwise_psf/py \
-           /src/legacypipe/py/{legacypipe,legacyzpts} && \
-    python    -m compileall /usr/lib/python3.5 /usr/lib/python3/dist-packages \
-           /usr/local/lib/python /usr/local/lib/python3.5/site-packages \
-           /usr/local/lib/python3.5/dist-packages \
-           /src/unwise_psf/py \
-           /src/legacypipe/py/{legacypipe,legacyzpts}
+RUN python -O -m compileall \
+    -x lib2to3 \
+    /usr/local/lib/python \
+    /opt/conda/lib/python3.7 \
+    /src/unwise_psf/py \
+    /src/legacypipe/py/{legacypipe,legacyzpts} && \
+    python    -m compileall \
+    -x lib2to3 \
+    /usr/local/lib/python \
+    /opt/conda/lib/python3.7 \
+    /src/unwise_psf/py \
+    /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-RUN cd /src/legacypipe && git pull && git describe && echo 1 \
-    && python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
-    && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
+#RUN cd /src/legacypipe && git pull && git describe && echo 1 \
+#    && python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
+#    && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
