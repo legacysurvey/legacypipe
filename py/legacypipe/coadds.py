@@ -442,7 +442,7 @@ def make_coadds(tims, bands, targetwcs,
 
             if psfsize:
                 # psfnorm is in units of 1/pixels.
-                # (eg, psfnorm for a gaussian is ~ 1/psf_sigma)
+                # (eg, psfnorm for a gaussian is 1./(2.*sqrt(pi) * psf_sigma) )
                 # Neff is in pixels**2
                 neff = 1./tim.psfnorm**2
                 # Narcsec is in arcsec**2

@@ -1,4 +1,7 @@
-from legacypipe.coadds import *
+from legacypipe.coadds import make_coadds
+from legacypipe.bits import DQ_BITS
+
+
 
 def stage_largegalaxies(
         survey=None, targetwcs=None, bands=None, tims=None,
@@ -25,11 +28,15 @@ def stage_largegalaxies(
     from tractor.basics import NanoMaggies, LinearPhotoCal
     from tractor.sky import ConstantSky
     from tractor.wcs import ConstantFitsWcs
+    from tractor import GaussianMixturePSF
     
     # TODO -- coadd PSF model?
-    
+
+    class Duck(object):
+        pass
+
     cotims = []
-    for band,img,iv in zip(bands, C.coimgs, C.cowimgs):
+    for band,img,iv,mask in zip(bands, C.coimgs, C.cowimgs, C.andmask):
         twcs = ConstantFitsWcs(targetwcs)
         # Totally bogus
         psf_sigma = np.mean([tim.psf_sigma for tim in tims if tim.band == band])
@@ -40,6 +47,12 @@ def stage_largegalaxies(
                       sky=ConstantSky(0.), name='coadd-'+band)
         cotim.band = band
         cotim.subwcs = targetwcs
+        cotim.psf_sigma = psf_sigma
+        cotim.sig1 = 1./np.sqrt(np.median(iv[iv>0]))
+        cotim.dq = mask
+        cotim.dq_saturation_bits = DQ_BITS['satur']
+        cotim.psfnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
+        cotim.imobj = Duck()
         cotims.append(cotim)
 
         #return dict(cotims=cotims)
