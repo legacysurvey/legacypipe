@@ -247,6 +247,9 @@ def stage_largegalaxies(
     from tractor.sky import ConstantSky
     from tractor.wcs import ConstantFitsWcs
     from tractor import GaussianMixturePSF
+    from tractor.tractortime import TAITime
+    import astropy.time
+    import fitsio
     
     # Custom sky-subtraction. TODO: subtract from the tims...
     sky = list(zip(*mp.map(_custom_sky, [(survey, targetwcs, apodize, _ccd) for _ccd in ccds])))
@@ -267,7 +270,11 @@ def stage_largegalaxies(
 
     cotims = []
     for band,img,iv,mask in zip(bands, C.coimgs, C.cowimgs, C.allmasks):
-        twcs = ConstantFitsWcs(targetwcs)
+        mjd = np.mean([tim.imobj.mjdobs for tim in tims if tim.band == band])
+        mjd_tai = astropy.time.Time(mjd, format='mjd', scale='utc').tai.mjd
+        tai = TAITime(None, mjd=mjd_tai)
+
+        twcs = LegacySurveyWcs(targetwcs, tai)
         # Totally bogus
         psf_sigma = np.mean([tim.psf_sigma for tim in tims if tim.band == band])
 
@@ -286,6 +293,9 @@ def stage_largegalaxies(
         cotim.galnorm = 1.0 # bogus!
         cotim.imobj = Duck()
         cotim.imobj.fwhm = 2.35 * psf_sigma
+        cotim.time = tai
+        cotim.primhdr = fitsio.FITSHDR()
+
         cotims.append(cotim)
         #import pdb ; pdb.set_trace()
 
