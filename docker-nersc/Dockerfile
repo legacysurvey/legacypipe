@@ -38,8 +38,6 @@ RUN wget -nv https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.
     conda install python=3.7 pip numpy scipy && \
     conda clean -a -y
 
-#RUN echo "../site-packages" > /usr/local/lib/python3.5/dist-packages/site-packages.pth
-
 # Pip installs -- binary
 RUN for x in \
     setuptools \
@@ -108,10 +106,11 @@ RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && python3 setup-cython.py --with-ceres install --home /usr/local \
     && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so") \
-    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
-#    && make ceres && make install-ceres INSTALL_DIR=/usr/local \
+    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)") \
+    && echo 1
 
-RUN pip --no-cache-dir install fitsio==0.9.12
+#RUN pip --no-cache-dir install fitsio==0.9.12
+RUN pip --no-cache-dir install git+https://github.com/esheldon/fitsio.git@fpack-in-filename
 
 ######## Stage 2 ########
 FROM registry.services.nersc.gov/nersc/intel_cxx_fort_mpi_mkl_runtime
@@ -152,7 +151,8 @@ RUN apt -y update && apt install -y apt-utils \
 COPY --from=builder /usr/local /usr/local
 COPY --from=builder /opt/conda /opt/conda
 
-RUN pip --no-cache-dir install cython ipython
+#RUN pip --no-cache-dir install cython ipython
+RUN pip --no-cache-dir install ipython
 
 WORKDIR /src
 
@@ -206,6 +206,6 @@ RUN python -O -m compileall \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-RUN cd /src/legacypipe && git pull && git checkout calib-container && git describe && \
+RUN cd /src/legacypipe && git pull && git checkout preburn-lslga && git describe && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
