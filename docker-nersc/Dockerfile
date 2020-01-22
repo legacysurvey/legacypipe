@@ -111,7 +111,8 @@ RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
 #    && make ceres && make install-ceres INSTALL_DIR=/usr/local \
 
-RUN pip --no-cache-dir install fitsio==1.0.5
+#RUN pip --no-cache-dir install fitsio==1.0.5
+RUN pip --no-cache-dir install git+https://github.com/esheldon/fitsio.git@v1.0.6
 
 ######## Stage 2 ########
 FROM registry.services.nersc.gov/nersc/intel_cxx_fort_mpi_mkl_runtime

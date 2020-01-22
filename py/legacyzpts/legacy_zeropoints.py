@@ -1028,7 +1028,7 @@ class Measurer(object):
         phot.ccd_decoff = np.zeros(len(phot), np.float32) + decoff
         phot.ccd_phoff  = np.zeros(len(phot), np.float32) + dzpt
         phot.ccd_zpt    = np.zeros(len(phot), np.float32) + zptmed
-        phot.expnum  = np.zeros(len(phot), np.int64) + self.expnum
+        phot.expnum  = np.zeros(len(phot), np.int64) + np.int64(self.expnum)
         phot.ccdname = np.array([self.ccdname] * len(phot))
         phot.filter  = np.array([self.band] * len(phot))
         # pad ccdname to 4 characters (Bok: "CCD1")
