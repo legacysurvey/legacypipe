@@ -11,7 +11,7 @@ def psf_cuts_to_string(ccd_cuts, join=', '):
             s.append(k)
     return join.join(s)
 
-# Bit codes for why a CCD got cut, used in cut_ccds().gg
+# Bit codes for why a CCD got cut, used in cut_ccds().
 CCD_CUT_BITS= dict(
     err_legacyzpts = 0x1,
     not_grz = 0x2,
