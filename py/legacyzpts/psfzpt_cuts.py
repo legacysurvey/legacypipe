@@ -11,7 +11,7 @@ def psf_cuts_to_string(ccd_cuts, join=', '):
             s.append(k)
     return join.join(s)
 
-# Bit codes for why a CCD got cut, used in cut_ccds().
+# Bit codes for why a CCD got cut, used in cut_ccds().gg
 CCD_CUT_BITS= dict(
     err_legacyzpts = 0x1,
     not_grz = 0x2,
@@ -231,7 +231,7 @@ def psf_zeropoint_cuts(P, pixscale,
         ('ccdnmatch', P.ccdnphotom < 20),
         ('zpt_small', np.array([zpt < zpt_cut_lo.get(f.strip(),0) for f,zpt in zip(P.filter, ccdzpt)])),
         ('zpt_large', np.array([zpt > zpt_cut_hi.get(f.strip(),0) for f,zpt in zip(P.filter, ccdzpt)])),
-        ('phrms',     P.ccdphrms > 0.2),
+        ('phrms',     P.ccdphrms > 0.05),
         ('exptime', P.exptime < 30),
         ('seeing_bad', np.logical_not(np.logical_and(seeing > 0, seeing < 3.0))),
         ('badexp_file', np.array([expnum in bad_expid for expnum in P.expnum])),
