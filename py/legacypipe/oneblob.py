@@ -256,7 +256,7 @@ class OneBlob(object):
             todo = set(list(range(len(self.srcs))))
             thresholds = list(range(3, int(np.ceil(maxsn.max()))))
             for thresh in thresholds:
-                print('S/N', thresh, ':', len(todo), 'sources to find still')
+                #print('S/N', thresh, ':', len(todo), 'sources to find still')
                 if len(todo) == 0:
                     break
                 hot = (maxsn >= thresh)
@@ -280,9 +280,11 @@ class OneBlob(object):
                     if rank[t] == min(blobranks[bl]):
                         #print('Source', t, 'has rank', rank[t], 'vs blob ranks', blobranks[bl])
                         segmap[blobs == bl] = t
-                        print('Source', t, 'is isolated at S/N', thresh)
+                        #print('Source', t, 'is isolated at S/N', thresh)
                         done.add(t)
                 todo.difference_update(done)
+
+                
             self.segmap = segmap
 
             if self.plots:
@@ -479,7 +481,6 @@ class OneBlob(object):
             sy,sx = slc
             y0,y1 = sy.start, sy.stop
             x0,x1 = sx.start, sx.stop
-            print('source', i, ': values in segmap bbox:', np.unique(self.segmap[y0:y1, x0:x1]))
             r,d = self.blobwcs.pixelxy2radec([x0+1,x0+1,x1+1,x1+1], [y0+1,y1+1,y1+1,y0+1])
             for j,tim in enumerate(self.tims):
                 th,tw = tim.shape
@@ -923,6 +924,18 @@ class OneBlob(object):
                 sx0,sy0 = srcwcs_x0y0
                 dimshow(self.segmap[sy0:sy0+dh, sx0:sx0+dw])
                 plt.title('Segmentation map')
+
+                plt.subplot(2,2,4)
+                dilated = binary_dilation(flipblobs, iterations=4)
+                s = self.segmap[iy + sy0, ix + sx0]
+                if s != -1:
+                    dilated *= (self.segmap[sy0:sy0+dh, sx0:sx0+dw] == s)
+                dimshow(dilated)
+                if s != -1:
+                    plt.title('Dilated goodblob * Segmentation map')
+                else:
+                    plt.title('Dilated goodblob (no Segmentation map)')
+
                 self.ps.savefig()
 
             # If there is no longer a source detected at the original source
