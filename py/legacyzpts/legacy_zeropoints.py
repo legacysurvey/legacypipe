@@ -1028,7 +1028,10 @@ class Measurer(object):
         phot.ccd_decoff = np.zeros(len(phot), np.float32) + decoff
         phot.ccd_phoff  = np.zeros(len(phot), np.float32) + dzpt
         phot.ccd_zpt    = np.zeros(len(phot), np.float32) + zptmed
-        phot.expnum  = np.zeros(len(phot), np.int64) + self.expnum
+        phot.expnum  = np.zeros(len(phot), np.int64)
+        # Can't just add it as in previous lines, because of weird int64 type issues in
+        # fitsio (see https://github.com/legacysurvey/legacypipe/issues/478)
+        phot.expnum += self.expnum
         phot.ccdname = np.array([self.ccdname] * len(phot))
         phot.filter  = np.array([self.band] * len(phot))
         # pad ccdname to 4 characters (Bok: "CCD1")

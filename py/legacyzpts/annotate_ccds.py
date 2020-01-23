@@ -156,7 +156,7 @@ def annotate_one_ccd(X):
             reg[i] = x
     result.update(good_region=reg)
 
-    kwargs = dict(pixPsf=True, splinesky=True, subsky=False,
+    kwargs = dict(pixPsf=True, subsky=False,
                   pixels=False, dq=False, invvar=False,
                   normalizePsf=normalizePsf)
     psf = None

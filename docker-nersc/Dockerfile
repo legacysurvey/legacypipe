@@ -111,7 +111,10 @@ RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
 #    && make ceres && make install-ceres INSTALL_DIR=/usr/local \
 
-RUN pip --no-cache-dir install fitsio==0.9.12
+#RUN pip --no-cache-dir install fitsio==1.0.5
+RUN pip --no-cache-dir install git+https://github.com/esheldon/fitsio.git@v1.0.6
+# HACK -- update version number string
+RUN sed -i -e s/1.0.5/1.0.6/g /opt/conda/lib/python3.7/site-packages/fitsio/__init__.py
 
 ######## Stage 2 ########
 FROM registry.services.nersc.gov/nersc/intel_cxx_fort_mpi_mkl_runtime
@@ -206,6 +209,6 @@ RUN python -O -m compileall \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-RUN cd /src/legacypipe && git pull && git checkout calib-container && git describe && \
-  python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
-  python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
+# RUN cd /src/legacypipe && git pull && git checkout calib-container && git describe && echo 4 &&\
+#   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
+#   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
