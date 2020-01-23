@@ -524,12 +524,6 @@ class OneBlob(object):
 
         SEDs = sed_matched_filters(self.bands)
 
-        # ok,old_x,old_y = self.blobwcs.radec2pixelxy(
-        #     np.array([src.getPosition().ra  for src in self.srcs if src is not None]),
-        #     np.array([src.getPosition().dec for src in self.srcs if src is not None]))
-        #avoid_x = (old_x - 1).astype(int)
-        #avoid_y = (old_y - 1).astype(int)
-
         # Avoid re-detecting sources at positions close to initial
         # source positions (including ones that will get cut!)
         avoid_x = Bold.init_x

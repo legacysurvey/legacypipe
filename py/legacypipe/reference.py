@@ -346,6 +346,8 @@ def read_large_galaxies(survey, targetwcs):
     galaxies.delete_column('d25')
     galaxies.rename('lslga_id', 'ref_id')
     galaxies.ref_cat = np.array([refcat] * len(galaxies))
+    print('Large galaxies reference catalog version', refcat)
+    #, type(refcat), galaxies.ref_cat.dtype, galaxies.ref_cat.shape)
     galaxies.islargegalaxy = np.ones(len(galaxies), bool)
     return galaxies
 

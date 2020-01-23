@@ -1267,6 +1267,7 @@ def stage_fitblobs(T=None,
         # first have to pad T with some new entries...
         Tnew = fits_table()
         Tnew.iterative = np.ones(n_iter, bool)
+        Tnew.ref_cat = np.array(['  '] * len(Tnew))
         T = merge_tables([T, Tnew], columns='fillzero')
         # ... and then point II at them.
         II[II < 0] = n_old + np.arange(n_iter)
