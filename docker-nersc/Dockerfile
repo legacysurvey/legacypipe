@@ -109,8 +109,10 @@ RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)") \
     && echo 1
 
-#RUN pip --no-cache-dir install fitsio==1.0.6
+#RUN pip --no-cache-dir install fitsio==1.0.5
 RUN pip --no-cache-dir install git+https://github.com/esheldon/fitsio.git@v1.0.6
+# HACK -- update version number string
+RUN sed -i -e s/1.0.5/1.0.6/g /opt/conda/lib/python3.7/site-packages/fitsio/__init__.py
 
 ######## Stage 2 ########
 FROM registry.services.nersc.gov/nersc/intel_cxx_fort_mpi_mkl_runtime
@@ -209,5 +211,3 @@ RUN python -O -m compileall \
 RUN cd /src/legacypipe && git pull && git checkout preburn-lslga && git describe && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
-
-ENV PATH /opt/conda/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
