@@ -2959,6 +2959,11 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         if release is None:
             release = 8888
 
+    if largegalaxy_preburner:
+        # Implied options!
+        subsky = False
+        large_galaxies = False
+
     kwargs.update(ps=ps, nsigma=nsigma,
                   survey_blob_mask=survey_blob_mask,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
@@ -3079,9 +3084,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             'largegalaxies': 'halos',
             'srcs': 'largegalaxies',
         })
-        # Implied options!
-        subsky = False
-        large_galaxies = False
         
     if prereqs_update is not None:
         prereqs.update(prereqs_update)
