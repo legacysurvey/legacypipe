@@ -207,6 +207,6 @@ RUN python -O -m compileall \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-RUN cd /src/legacypipe && git pull && git checkout calib-container && git describe && echo 2 &&\
+RUN cd /src/legacypipe && git pull && git checkout calib-container && git describe && echo 3 &&\
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
