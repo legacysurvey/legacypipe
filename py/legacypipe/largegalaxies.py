@@ -266,6 +266,9 @@ def stage_largegalaxies(
     #     tim.inverr = newie
 
     for tim in tims:
+        print(tim.origsky)
+    
+    for tim in tims:
         ie = tim.inverr
         median_ie = np.median(ie[ie>0])
         # newie = (ie / median_ie)**2 * median_ie

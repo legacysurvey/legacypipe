@@ -2961,7 +2961,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     if largegalaxy_preburner:
         # Implied options!
-        subsky = False
+        #subsky = False
         large_galaxies = False
 
     kwargs.update(ps=ps, nsigma=nsigma,
