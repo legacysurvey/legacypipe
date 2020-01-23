@@ -413,6 +413,7 @@ class LegacySurveyImage(object):
         skymod = np.zeros_like(img)
         sky.addTo(skymod)
         midsky = np.median(skymod)
+        orig_sky = sky
         if subsky:
             from tractor.sky import ConstantSky
             debug('Instantiating and subtracting sky model')
@@ -521,6 +522,9 @@ class LegacySurveyImage(object):
         tim.time = tai
         tim.slice = slc
         tim.zpscale = orig_zpscale
+        ## orig_sky: the splinesky model, in image counts; divide by
+        ## zpscale to get to nanomaggies.
+        tim.origsky = orig_sky
         tim.midsky = midsky
         tim.sig1 = self.sig1
         tim.psf_fwhm = psf_fwhm
