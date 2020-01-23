@@ -176,6 +176,7 @@ RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
     && cd legacypipe && git describe
 
 ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
+ENV PATH /opt/conda/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 ENV HOME /root
 
