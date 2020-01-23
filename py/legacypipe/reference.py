@@ -307,7 +307,9 @@ def read_tycho2(survey, targetwcs):
 def get_large_galaxy_version(fn):
     hdr = fitsio.read_header(fn)
     try:
-        return hdr.get('LSLGAVER')
+        v = hdr.get('LSLGAVER').strip()
+        assert(len(v) == 2)
+        return v
     except KeyError:
         pass
     for k in ['3.0', '2.0']:
