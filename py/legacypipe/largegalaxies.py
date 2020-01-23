@@ -256,6 +256,23 @@ def stage_largegalaxies(
     #import pdb ; pdb.set_trace()
 
     # Create coadds and then build custom tims from them.
+
+    # We tried setting the invvars constant per tim -- this makes things worse, since we *remove*
+    # the lowered invvars at the cores of galaxies.
+    # for tim in tims:
+    #     ie = tim.inverr
+    #     newie = np.ones(ie.shape, np.float32) / (tim.sig1)
+    #     newie[ie == 0] = 0.
+    #     tim.inverr = newie
+
+    for tim in tims:
+        ie = tim.inverr
+        median_ie = np.median(ie[ie>0])
+        # newie = (ie / median_ie)**2 * median_ie
+        newie = ie**2 / median_ie
+        tim.inverr = newie
+    
+
     C = make_coadds(tims, bands, targetwcs,
                     detmaps=True, ngood=True, lanczos=lanczos,
                     allmasks=True, mp=mp, plots=plots, ps=ps,
@@ -263,6 +280,14 @@ def stage_largegalaxies(
                     #callback=write_coadd_images,
                     #callback_args=(survey, brickname, version_header, tims, targetwcs)
                     )
+
+    if plots:
+        import pylab as plt
+        for band,iv in zip(bands, C.cowimgs):
+            plt.clf()
+            plt.imshow(np.sqrt(iv), interpolation='nearest', origin='lower')
+            plt.title('Coadd Inverr: band %s' % band)
+            ps.savefig()
     
     # TODO -- coadd PSF model?
 
