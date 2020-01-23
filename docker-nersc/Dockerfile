@@ -153,8 +153,7 @@ RUN apt -y update && apt install -y apt-utils \
 COPY --from=builder /usr/local /usr/local
 COPY --from=builder /opt/conda /opt/conda
 
-#RUN pip --no-cache-dir install cython ipython
-RUN pip --no-cache-dir install ipython Pillow
+RUN pip --no-cache-dir install ipython Pillow healpy seaborn
 
 WORKDIR /src
 
