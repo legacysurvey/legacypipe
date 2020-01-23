@@ -3079,6 +3079,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             'largegalaxies': 'halos',
             'srcs': 'largegalaxies',
         })
+        # Implied options!
+        subsky = False
+        large_galaxies = False
         
     if prereqs_update is not None:
         prereqs.update(prereqs_update)
