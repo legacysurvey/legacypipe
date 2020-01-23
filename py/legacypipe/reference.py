@@ -308,9 +308,10 @@ def get_large_galaxy_version(fn):
     hdr = fitsio.read_header(fn)
     try:
         v = hdr.get('LSLGAVER')
-        v = v.strip()
-        assert(len(v) == 2)
-        return v
+        if v is not None:
+            v = v.strip()
+            assert(len(v) == 2)
+            return v
     except KeyError:
         pass
     for k in ['3.0', '2.0']:
