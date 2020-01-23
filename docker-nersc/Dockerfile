@@ -147,6 +147,7 @@ RUN apt -y update && apt install -y apt-utils \
     libcfitsio-bin \
     libgoogle-glog-dev \
     libceres-dev \
+    imagemagick \
     # Remove APT files
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -207,6 +208,6 @@ RUN python -O -m compileall \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-RUN cd /src/legacypipe && git pull && git checkout preburn-lslga && git describe && \
+RUN cd /src/legacypipe && git pull && git checkout preburn-lslga && git describe && echo 1 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
