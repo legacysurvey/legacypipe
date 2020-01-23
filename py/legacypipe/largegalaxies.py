@@ -252,8 +252,8 @@ def stage_largegalaxies(
     import fitsio
     
     # Custom sky-subtraction. TODO: subtract from the tims...
-    sky = list(zip(*mp.map(_custom_sky, [(survey, targetwcs, apodize, _ccd) for _ccd in ccds])))
-    import pdb ; pdb.set_trace()
+    #sky = list(zip(*mp.map(_custom_sky, [(survey, targetwcs, apodize, _ccd) for _ccd in ccds])))
+    #import pdb ; pdb.set_trace()
 
     # Create coadds and then build custom tims from them.
     C = make_coadds(tims, bands, targetwcs,
@@ -263,8 +263,6 @@ def stage_largegalaxies(
                     #callback=write_coadd_images,
                     #callback_args=(survey, brickname, version_header, tims, targetwcs)
                     )
-    with survey.write_output('image-jpeg', brick=brickname) as out:
-        imsave_jpeg(out.fn, get_rgb(C.coimgs, bands), origin='lower')
     
     # TODO -- coadd PSF model?
 
