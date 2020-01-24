@@ -730,6 +730,7 @@ def _apphot_one(args):
 
 def write_coadd_images(band,
                        survey, brickname, version_header, tims, targetwcs,
+                       co_sky,
                        cowimg=None, cow=None, cowmod=None, cochi2=None,
                        psfdetiv=None, galdetiv=None, congood=None,
                        psfsize=None, **kwargs):
@@ -817,6 +818,9 @@ def write_coadd_images(band,
                                  comment='Magnitude zeropoint'))
             hdr2.add_record(dict(name='BUNIT', value='nanomaggy',
                                  comment='AB mag = 22.5 - 2.5*log10(nanomaggy)'))
+        if name == 'image' and co_sky is not None:
+            hdr2.add_record(dict(name='COSKY_%' % band.upper(), value=co_sky.get(band, 'None'),
+                                 comment='Sky level estimated (+subtracted) from coadd'))
         if name in ['invvar', 'depth', 'galdepth']:
             hdr2.add_record(dict(name='BUNIT', value='1/nanomaggy^2',
                                  comment='Ivar of ABmag=22.5-2.5*log10(nmgy)'))
