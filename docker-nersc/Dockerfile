@@ -48,6 +48,7 @@ RUN for x in \
     matplotlib \
     astropy \
     zmq \
+    cython \
     ; do pip --no-cache-dir install $x; done
 
 # ugly: Tractor's mp_fourier module detects the $CC='icc' exactly
@@ -60,9 +61,6 @@ ENV LDSHARED icc -shared
 # Just Cori
 ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell -ax=knl
 ENV ARCH_FLAGS ""
-
-# Pip installs -- built from source
-RUN pip --no-cache-dir install photutils
 
 ENV PYTHON python3
 ENV PYTHON_CONFIG python3-config
@@ -100,8 +98,6 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && make clean \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import astrometry; print(astrometry.__version__)")
 
-RUN pip --no-cache-dir install cython
-
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
@@ -111,9 +107,11 @@ RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
 #    && make ceres && make install-ceres INSTALL_DIR=/usr/local \
 
+# Pip installs -- built from source
+RUN pip --no-cache-dir install photutils
 #RUN pip --no-cache-dir install fitsio==1.0.5
 RUN pip --no-cache-dir install git+https://github.com/esheldon/fitsio.git@v1.0.6
-# HACK -- update version number string
+# HACK -- update fitsio version number string
 RUN sed -i -e s/1.0.5/1.0.6/g /opt/conda/lib/python3.7/site-packages/fitsio/__init__.py
 
 ######## Stage 2 ########
