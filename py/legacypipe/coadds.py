@@ -134,6 +134,7 @@ def make_coadds(tims, bands, targetwcs,
                 mods=None, xy=None, apertures=None, apxy=None,
                 ngood=False, detmaps=False, psfsize=False, allmasks=True,
                 max=False, sbscale=True,
+                psf_images=False,
                 callback=None, callback_args=None,
                 plots=False, ps=None,
                 lanczos=True, mp=None,
@@ -170,6 +171,8 @@ def make_coadds(tims, bands, targetwcs,
         C.allmasks = []
     if max:
         C.maximgs = []
+    if psf_images:
+        C.psf_imgs = []
 
     if xy:
         ix,iy = xy
@@ -303,6 +306,9 @@ def make_coadds(tims, bands, targetwcs,
         if max:
             maximg = np.zeros((H,W), np.float32)
             C.maximgs.append(maximg)
+
+        if psf_images:
+            psf_img = 0.
 
         for R in timiter:
             if R is None:
@@ -454,6 +460,12 @@ def make_coadds(tims, bands, targetwcs,
                 psfsizemap[Yo,Xo] += iv1 * (1. / narcsec)
                 flatcow   [Yo,Xo] += iv1
 
+            if psf_images:
+                h,w = tim.shape
+                patch = tim.psf.getPointSourcePatch(w//2, h//2).patch
+                patch /= np.sum(patch)
+                psf_img += (patch / tim.sig1**2)
+
             if detmaps:
                 # point-source depth
                 detsig1 = tim.sig1 / tim.psfnorm
@@ -494,6 +506,9 @@ def make_coadds(tims, bands, targetwcs,
 
         if allmasks:
             C.allmasks.append(andmask)
+
+        if psf_images:
+            C.psf_imgs.append(psf_img / np.sum(psf_img))
 
         if unweighted:
             coimg  /= np.maximum(con, 1)

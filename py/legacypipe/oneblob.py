@@ -471,7 +471,7 @@ class OneBlob(object):
         # Remember original tim images
         models.save_images(self.tims)
 
-        # compute modelmasks based on segmap?
+        # compute modelmasks based on segmap
         from scipy.ndimage.measurements import find_objects
         slcs = find_objects(self.segmap + 1)
         mm = [dict() for i in range(len(self.tims))]
