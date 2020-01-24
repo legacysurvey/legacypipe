@@ -819,7 +819,7 @@ def write_coadd_images(band,
             hdr2.add_record(dict(name='BUNIT', value='nanomaggy',
                                  comment='AB mag = 22.5 - 2.5*log10(nanomaggy)'))
         if name == 'image' and co_sky is not None:
-            hdr2.add_record(dict(name='COSKY_%' % band.upper(), value=co_sky.get(band, 'None'),
+            hdr2.add_record(dict(name='COSKY_%s' % band.upper(), value=co_sky.get(band, 'None'),
                                  comment='Sky level estimated (+subtracted) from coadd'))
         if name in ['invvar', 'depth', 'galdepth']:
             hdr2.add_record(dict(name='BUNIT', value='1/nanomaggy^2',

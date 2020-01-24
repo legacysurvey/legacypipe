@@ -540,13 +540,12 @@ class OneBlob(object):
         detlogger.setLevel(detloglvl)
 
         if Tnew is None:
-            print('No iterative sources detected!')
+            debug('No iterative sources detected!')
             return None
 
-        print('Found', len(Tnew), 'new sources')
-
+        debug('Found', len(Tnew), 'new sources')
         Tnew.cut(self.refmap[Tnew.iby, Tnew.ibx] == 0)
-        print('Cut to', len(Tnew), 'on refmap')
+        debug('Cut to', len(Tnew), 'on refmap')
         if len(Tnew) == 0:
             return None
 
@@ -616,14 +615,13 @@ class OneBlob(object):
 
         B = 0.2
         Tnew.cut(det_max > B * np.maximum(mod_max, 1.))
-        print('Cut to', len(Tnew), 'compared to model detection map')
+        debug('Cut to', len(Tnew), 'iterative sources compared to model detection map')
         if len(Tnew) == 0:
             return None
 
-        #del satmaps
+        info('Measuring', len(Tnew), 'iterative sources')
 
         from tractor import NanoMaggies, RaDecPos
-
         newsrcs = [PointSource(RaDecPos(t.ra, t.dec),
                                NanoMaggies(**dict([(b,1) for b in self.bands])))
                                for t in Tnew]
@@ -641,8 +639,15 @@ class OneBlob(object):
         Bnew.blob_symm_height  = np.zeros(len(Bnew), np.int16)
         Bnew.hit_limit = np.zeros(len(Bnew), bool)
 
+        # Be quieter during iterative detection!
+        bloblogger = logging.getLogger('legacypipe.oneblob')
+        loglvl = bloblogger.getEffectiveLevel()
+        bloblogger.setLevel(loglvl + 10)
+
         # Run the whole oneblob pipeline on the iterative sources!
         Bnew = self.run(Bnew, iterative_detection=False, compute_metrics=False)
+
+        bloblogger.setLevel(loglvl)
 
         # revert
         self.srcs = oldsrcs
