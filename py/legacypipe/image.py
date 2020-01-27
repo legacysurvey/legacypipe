@@ -163,9 +163,9 @@ class LegacySurveyImage(object):
         self.name = calname
         self.sefn         = os.path.join(calibdir, 'se',           imgdir, basename, calname + '-se.fits')
         self.psffn        = os.path.join(calibdir, 'psfex-single', imgdir, basename, calname + '-psfex.fits')
-        self.skyfn        = os.path.join(calibdir, 'sky-single',   imgdir, basename, calname + '-sky.fits')
+        self.skyfn        = os.path.join(calibdir, 'sky-single',   imgdir, basename, calname + '-splinesky.fits')
         self.merged_psffn = os.path.join(calibdir, 'psfex',        imgdir, basename + '-psfex.fits')
-        self.merged_skyfn = os.path.join(calibdir, 'sky',          imgdir, basename + '-sky.fits')
+        self.merged_skyfn = os.path.join(calibdir, 'sky',          imgdir, basename + '-splinesky.fits')
         self.old_merged_skyfn = os.path.join(calibdir, imgdir, basename + '-splinesky.fits')
         self.old_merged_psffn = os.path.join(calibdir, imgdir, basename + '-psfex.fits')
         # not used by this code -- here for the sake of legacyzpts/merge_calibs.py
