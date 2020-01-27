@@ -265,9 +265,12 @@ def stage_largegalaxies(
     #     newie[ie == 0] = 0.
     #     tim.inverr = newie
 
-    for tim in tims:
-        print(tim.origsky)
-    
+    #for tim in tims:
+    #    print(tim.origsky)
+
+    # Here we're hacking the relative weights -- squaring the weights but then making the median
+    # the same, ie, squaring the dynamic range or relative weights -- ie, downweighting the cores
+    # even more than they already are from source Poisson terms.
     for tim in tims:
         ie = tim.inverr
         median_ie = np.median(ie[ie>0])
@@ -278,11 +281,9 @@ def stage_largegalaxies(
 
     C = make_coadds(tims, bands, targetwcs,
                     detmaps=True, ngood=True, lanczos=lanczos,
-                    allmasks=True, mp=mp, plots=plots, ps=ps,
-                    callback=None,
-                    #callback=write_coadd_images,
-                    #callback_args=(survey, brickname, version_header, tims, targetwcs)
-                    )
+                    allmasks=True, psf_images=True,
+                    mp=mp, plots=plots, ps=ps,
+                    callback=None)
 
     if plots:
         import pylab as plt
@@ -291,20 +292,35 @@ def stage_largegalaxies(
             plt.imshow(np.sqrt(iv), interpolation='nearest', origin='lower')
             plt.title('Coadd Inverr: band %s' % band)
             ps.savefig()
-    
-    # TODO -- coadd PSF model?
+
+        for band,psf in zip(bands, C.psf_imgs):
+            plt.clf()
+            plt.imshow(psf, interpolation='nearest', origin='lower')
+            plt.title('Coadd PSF image: band %s' % band)
+            ps.savefig()
 
     cotims = []
-    for band,img,iv,mask in zip(bands, C.coimgs, C.cowimgs, C.allmasks):
+    for band,img,iv,mask,psfimg in zip(bands, C.coimgs, C.cowimgs, C.allmasks, C.psf_imgs):
         mjd = np.mean([tim.imobj.mjdobs for tim in tims if tim.band == band])
         mjd_tai = astropy.time.Time(mjd, format='mjd', scale='utc').tai.mjd
         tai = TAITime(None, mjd=mjd_tai)
 
         twcs = LegacySurveyWcs(targetwcs, tai)
-        # Totally bogus
-        psf_sigma = np.mean([tim.psf_sigma for tim in tims if tim.band == band])
 
-        psf = GaussianMixturePSF(1., 0., 0., psf_sigma**2, psf_sigma**2, 0.)
+        print('PSF sigmas (in pixels?) for band', band, ':',
+              ['%.2f' % tim.psf_sigma for tim in tims if tim.band == band])
+        psf_sigma = np.mean([tim.psf_sigma for tim in tims if tim.band == band])
+        print('Using average PSF sigma', psf_sigma)
+        #psf = GaussianMixturePSF(1., 0., 0., psf_sigma**2, psf_sigma**2, 0.)
+
+        from tractor.psf import PixelizedPSF
+        psf = PixelizedPSF(psfimg)
+        
+        gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
+
+        psfnorm = np.sqrt(np.sum(psfimg**2))
+        print('Gaussian PSF norm', gnorm, 'vs pixelized', psfnorm)
+        
         cotim = Image(img, invvar=iv, wcs=twcs, psf=psf,
                       photocal=LinearPhotoCal(1., band=band),
                       sky=ConstantSky(0.), name='coadd-'+band)
