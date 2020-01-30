@@ -245,15 +245,26 @@ def stage_largegalaxies(
     from tractor.image import Image
     from tractor.basics import NanoMaggies, LinearPhotoCal
     from tractor.sky import ConstantSky
-    from tractor.wcs import ConstantFitsWcs
-    from tractor import GaussianMixturePSF
+    from tractor.psf import PixelizedPSF
+    #from tractor.wcs import ConstantFitsWcs
+    #from tractor import GaussianMixturePSF
     from tractor.tractortime import TAITime
     import astropy.time
     import fitsio
     
-    # Custom sky-subtraction. TODO: subtract from the tims...
-    #sky = list(zip(*mp.map(_custom_sky, [(survey, targetwcs, apodize, _ccd) for _ccd in ccds])))
+    ## Custom sky-subtraction. TODO: subtract from the tims...
+    ##sky = list(zip(*mp.map(_custom_sky, [(survey, targetwcs, apodize, _ccd) for _ccd in ccds])))
+    ##import pdb ; pdb.set_trace()
+    #radec = []
+    #for tim in tims:
+    #   radec.append(tim.subwcs.crval)
+    #for ii, tim in enumerate(tims): # sort by distance from the center
+    #    if ii == 0:
     #import pdb ; pdb.set_trace()
+    #HH, WW = targetwcs.shape
+    #skyimg = np.zeros((HH, WW), np.float32)
+    #Yo, Xo, Yi, Xi, _ = resample_with_wcs(brickwcs, targetwcs)
+    #skyimg[Yo, Xo] = 
 
     # Create coadds and then build custom tims from them.
 
@@ -265,9 +276,6 @@ def stage_largegalaxies(
     #     newie[ie == 0] = 0.
     #     tim.inverr = newie
 
-    #for tim in tims:
-    #    print(tim.origsky)
-
     # Here we're hacking the relative weights -- squaring the weights but then making the median
     # the same, ie, squaring the dynamic range or relative weights -- ie, downweighting the cores
     # even more than they already are from source Poisson terms.
@@ -276,14 +284,16 @@ def stage_largegalaxies(
         median_ie = np.median(ie[ie>0])
         # newie = (ie / median_ie)**2 * median_ie
         newie = ie**2 / median_ie
-        tim.inverr = newie
-    
+        tim.inverr = newie    
 
     C = make_coadds(tims, bands, targetwcs,
                     detmaps=True, ngood=True, lanczos=lanczos,
                     allmasks=True, psf_images=True,
                     mp=mp, plots=plots, ps=ps,
                     callback=None)
+    if False: # useful for quickly looking at the image coadd
+        with survey.write_output('image-jpeg', brick=brickname) as out:
+            imsave_jpeg(out.fn, get_rgb(C.coimgs, bands), origin='lower')
 
     if plots:
         import pylab as plt
@@ -298,7 +308,7 @@ def stage_largegalaxies(
             plt.imshow(psf, interpolation='nearest', origin='lower')
             plt.title('Coadd PSF image: band %s' % band)
             ps.savefig()
-
+   
     cotims = []
     for band,img,iv,mask,psfimg in zip(bands, C.coimgs, C.cowimgs, C.allmasks, C.psf_imgs):
         mjd = np.mean([tim.imobj.mjdobs for tim in tims if tim.band == band])
@@ -313,9 +323,7 @@ def stage_largegalaxies(
         print('Using average PSF sigma', psf_sigma)
         #psf = GaussianMixturePSF(1., 0., 0., psf_sigma**2, psf_sigma**2, 0.)
 
-        from tractor.psf import PixelizedPSF
         psf = PixelizedPSF(psfimg)
-        
         gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
 
         psfnorm = np.sqrt(np.sum(psfimg**2))
@@ -339,9 +347,7 @@ def stage_largegalaxies(
         cotim.primhdr = fitsio.FITSHDR()
 
         cotims.append(cotim)
-        #import pdb ; pdb.set_trace()
 
-        #return dict(cotims=cotims)
     # EVIL
     return dict(tims=cotims)
 
