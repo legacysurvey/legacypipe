@@ -474,7 +474,9 @@ SWEEP_DTYPE = np.dtype([
     ('PMRA_IVAR', '>f4'),
     ('PMDEC', '>f4'),
     ('PMDEC_IVAR', '>f4'),
-    ('MASKBITS', '>i2')]
+    ('MASKBITS', '>i2'),
+    ('SERSIC', '>f4'),
+    ('SERSIC_IVAR', '>f4')]
 )
 
 def parse_args():
