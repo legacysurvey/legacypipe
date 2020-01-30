@@ -84,7 +84,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
 
     # Read large galaxies nearby.
     if large_galaxies:
-        galaxies = read_large_galaxies(survey, targetwcs)
+        galaxies = read_large_galaxies(survey, targetwcs, bands)
         if galaxies is not None:
             # Resolve possible Gaia-large-galaxy duplicates
             if gaia and len(gaia):
@@ -117,17 +117,33 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                       (refs.iby >= 0) * (refs.iby < H))
 
     for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster', 'isgaia',
-                'donotfit']:
+                'donotfit', 'freezeparams']:
         if not col in refs.get_columns():
             refs.set(col, np.zeros(len(refs), bool))
 
     ## Create Tractor sources from reference stars
     refcat = []
-    for g in refs:
+
+    fixed_sources = None
+    if 'sources' in refs.get_columns():
+        fixed_sources = refs.sources
+        # Empty entries get filled with zeros (thanks, merge_tables)
+        fixed_sources[fixed_sources == 0] = None
+        refs.delete_column('sources')
+    
+    for ig,g in enumerate(refs):
         if g.donotfit or g.iscluster:
             refcat.append(None)
 
+        elif g.freezeparams and fixed_sources is not None and fixed_sources[ig] is not None:
+            src = fixed_sources[ig]
+            src.freezeparams = True
+            #print('Plugging in pre-fix source:', src)
+            refcat.append(src)
+            
         elif g.islargegalaxy:
+            ### FIXME -- we shouldn't hit this any more
+
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
             assert(np.all(np.isfinite(list(fluxes.values()))))
             rr = g.radius * 3600. / 0.5 # factor of two accounts for R(25)-->reff
@@ -318,7 +334,7 @@ def get_large_galaxy_version(fn):
             return 'L'+k[0]
     return 'LG'
 
-def read_large_galaxies(survey, targetwcs):
+def read_large_galaxies(survey, targetwcs, bands):
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
 
     galfn = survey.find_file('large-galaxies')
@@ -332,8 +348,8 @@ def read_large_galaxies(survey, targetwcs):
     if len(I) == 0:
         return None
     # Read only the rows within range.
-    galaxies = fits_table(galfn, rows=I, columns=['ra', 'dec', 'd25', 'mag',
-                                                  'lslga_id', 'ba', 'pa'])
+    galaxies = fits_table(galfn, rows=I) #, columns=['ra', 'dec', 'd25', 'mag',
+                                         #         'lslga_id', 'ba', 'pa'])
     del kd
 
     refcat = get_large_galaxy_version(galfn)
@@ -346,6 +362,51 @@ def read_large_galaxies(survey, targetwcs):
     galaxies.rename('lslga_id', 'ref_id')
     galaxies.ref_cat = np.array([refcat] * len(galaxies))
     galaxies.islargegalaxy = np.ones(len(galaxies), bool)
+    galaxies.freezeparams = np.zeros(len(galaxies), bool)
+    
+    galaxies.sources = np.array([None] * len(galaxies))
+
+    ## FIXME
+    if 'sersic' in galaxies.get_columns():
+        from legacypipe.catalog import fits_reverse_typemap
+        from tractor.wcs import RaDecPos
+        from tractor import NanoMaggies
+        from tractor.ellipses import EllipseE
+        from tractor.galaxy import DevGalaxy, ExpGalaxy
+        from tractor.sersic import SersicGalaxy, SersicIndex
+
+        for i,g in enumerate(galaxies):
+            try:
+                typ = fits_reverse_typemap[g.type.strip()]
+                pos = RaDecPos(g.ra, g.dec)
+                fluxes = dict([(band, g.get('flux_%s' % band)) for band in bands])
+                bright = NanoMaggies(order=bands, **fluxes)
+                if issubclass(typ, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
+                    shape = EllipseE(g.shape_r, g.shape_e1, g.shape_e2)
+
+                if issubclass(typ, (DevGalaxy, ExpGalaxy)):
+                    src = typ(pos, bright, shape)
+                    print('Created', src)
+                elif issubclass(typ, (SersicGalaxy)):
+                    sersic = SersicIndex(g.sersic)
+                    src = typ(pos, bright, shape, sersic)
+                    print('Created', src)
+                else:
+                    print('Unknown type', typ)
+                galaxies.sources[i] = src
+                galaxies.freezeparams[i] = True
+
+            except:
+                import traceback
+                print('Failed to create Tractor source for LSLGA entry:', traceback.print_exc())
+
+
+    keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat','ref_id', 'ba', 'pa', 'sources',
+                    'islargegalaxy', 'freezeparams']
+    for c in galaxies.get_columns():
+        if not c in keep_columns:
+            galaxies.delete_column(c)
+
     return galaxies
 
 def read_star_clusters(targetwcs):

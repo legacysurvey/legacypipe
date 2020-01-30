@@ -44,7 +44,6 @@ def get_cpu_arch():
     if os.path.exists('/proc/cpuinfo'):
         for line in open('/proc/cpuinfo').readlines():
             words = [w.strip() for w in line.strip().split(':')]
-            #print('words', words)
             if words[0] == 'cpu family' and family is None:
                 family = int(words[1])
                 #print('Set CPU family', family)
@@ -325,6 +324,10 @@ class OneBlob(object):
         # Optimize all at once?
         if len(cat) > 1 and len(cat) <= 10:
             cat.thawAllParams()
+            for i,src in enumerate(cat):
+                if getattr(src, 'freezeparams', False):
+                    debug('Frozen source', src, '-- keeping as-is!')
+                cat.freezeParam(i)
             tr.optimize_loop(**self.optargs)
 
         if self.plots:
@@ -511,6 +514,11 @@ class OneBlob(object):
                   (numi+1, len(Ibright), self.name, srci))
             cpu0 = time.clock()
 
+            if getattr(src, 'freezeparams', False):
+                info('Frozen source', src, '-- keeping as-is!')
+                B.sources[srci] = src
+                continue
+            
             # Add this source's initial model back in.
             models.add(srci, self.tims)
 
@@ -1408,6 +1416,10 @@ class OneBlob(object):
         for i in Ibright:
             cpu0 = time.clock()
             cat.freezeAllBut(i)
+            src = cat[i]
+            if getattr(src, 'freezeparams', False):
+                debug('Frozen source', src, '-- keeping as-is!')
+                continue
             modelMasks = models.model_masks(0, cat[i])
             tr.setModelMasks(modelMasks)
             tr.optimize_loop(**self.optargs)
@@ -1443,6 +1455,9 @@ class OneBlob(object):
         for numi,srci in enumerate(Ibright):
             cpu0 = time.clock()
             src = cat[srci]
+            if getattr(src, 'freezeparams', False):
+                debug('Frozen source', src, '-- keeping as-is!')
+                continue
             debug('Fitting source', srci, '(%i of %i in blob %s)' %
                   (numi+1, len(Ibright), self.name), ':', src)
             # Add this source's initial model back in.
