@@ -70,8 +70,8 @@ out['alt_name'] = ['' if mm == 0 else 'M{}'.format(str(mm))
 out['type'] = clusters['type']
 out['ra'] = clusters['ra']
 out['dec'] = clusters['dec']
-out['radius_orig'] = (clusters['majax'] / 60).astype('f4') # [degrees]
-out['radius'] = out['radius_orig']
+out['radius'] = (clusters['majax'] / 60).astype('f4') # [degrees]
+#out['radius'] = out['radius_orig']
 
 # Read the ancillary globular cluster catalog and update the radii in the NGC.
 #https://heasarc.gsfc.nasa.gov/db-perl/W3Browse/w3table.pl?tablehead=name%3Dglobclust&Action=More+Options
