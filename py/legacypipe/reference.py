@@ -400,13 +400,12 @@ def read_large_galaxies(survey, targetwcs, bands):
                 except:
                     import traceback
                     print('Failed to create Tractor source for LSLGA entry:', traceback.print_exc())
-            keep_columns = ['ra', 'dec', 'radius', 'ref_cat','ref_id', 'sources',
+            keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'sources',
                             'islargegalaxy', 'freezeparams']
     else:
         # Original LSLGA
         galaxies.ref_cat = np.array([refcat] * len(galaxies))
-        galaxies.islargegalaxy = [1]
-        galaxies.freezeparams = np.zeros(len(galaxies), bool)
+        galaxies.islargegalaxy = np.ones(len(galaxies))
         
         # # D25 is diameter in arcmin
         galaxies.radius = galaxies.d25 / 2. / 60.
