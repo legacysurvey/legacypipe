@@ -2753,6 +2753,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               tycho_stars=False,
               gaia_stars=False,
               large_galaxies=False,
+              large_galaxies_force_pointsource=True,
               largegalaxy_preburner=False,
               min_mjd=None, max_mjd=None,
               unwise_coadds=False,
@@ -2968,10 +2969,13 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         if release is None:
             release = 8888
 
+    large_galaxies_force_pointsource = True
     if largegalaxy_preburner:
         # Implied options!
         #subsky = False
-        large_galaxies = False
+        #large_galaxies = False
+        large_galaxies = True
+        large_galaxies_force_pointsource = False
 
     kwargs.update(ps=ps, nsigma=nsigma,
                   survey_blob_mask=survey_blob_mask,
@@ -2985,6 +2989,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   tycho_stars=tycho_stars,
                   gaia_stars=gaia_stars,
                   large_galaxies=large_galaxies,
+                  large_galaxies_force_pointsource=large_galaxies_force_pointsource,
                   min_mjd=min_mjd, max_mjd=max_mjd,
                   reoptimize=reoptimize,
                   iterative=iterative,

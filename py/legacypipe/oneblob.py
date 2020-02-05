@@ -68,7 +68,8 @@ def one_blob(X):
     if X is None:
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
-     srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap) = X
+     srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap,
+     large_galaxies_force_pointsource) = X
 
     debug('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images' %
           (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs)))
@@ -122,7 +123,8 @@ def one_blob(X):
 
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap)
-    B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
+    B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative,
+               large_galaxies_force_pointsource=large_galaxies_force_pointsource)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
 
@@ -191,7 +193,8 @@ class OneBlob(object):
         self.optargs.update(dchisq = 0.1)
 
     def run(self, B, reoptimize=False, iterative_detection=True,
-            compute_metrics=True):
+            compute_metrics=True,
+            large_galaxies_force_pointsource=True):
         trun = tlast = Time()
         # Not quite so many plots...
         self.plots1 = self.plots
@@ -1119,14 +1122,20 @@ class OneBlob(object):
 
         from tractor import Galaxy
         is_galaxy = isinstance(src, Galaxy)
+        x0,y0 = srcwcs_x0y0
 
         # Fitting behaviors based on geometric masks.
-        x0,y0 = srcwcs_x0y0
-        force_pointsource = (self.refmap[y0+iy,x0+ix] &
-                             (IN_BLOB['BRIGHT'] | IN_BLOB['GALAXY'] |
-                              IN_BLOB['CLUSTER'])) > 0
-        fit_background = (self.refmap[y0+iy,x0+ix] &
-                          (IN_BLOB['MEDIUM'] | IN_BLOB['GALAXY'])) > 0
+        force_pointsource_mask = (IN_BLOB['BRIGHT'] | IN_BLOB['CLUSTER'])
+        if large_galaxies_force_pointsource:
+            force_pointsource_mask |= IN_BLOB['GALAXY']
+        force_pointsource = ((self.refmap[y0+iy,x0+ix] & force_pointsource_mask) > 0)
+
+        fit_background_mask = IN_BLOB['MEDIUM']
+        ### HACK
+        if large_galaxies_force_pointsource:
+            fit_background_mask |= IN_BLOB['GALAXY']
+        fit_background = ((self.refmap[y0+iy,x0+ix] & fit_background_mask) > 0)
+
         if is_galaxy:
             fit_background = False
 

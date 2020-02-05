@@ -114,6 +114,30 @@ RUN pip --no-cache-dir install git+https://github.com/esheldon/fitsio.git@v1.0.6
 # HACK -- update version number string
 RUN sed -i -e s/1.0.5/1.0.6/g /opt/conda/lib/python3.7/site-packages/fitsio/__init__.py
 
+RUN wget -nv https://www.mpich.org/static/downloads/3.3/mpich-3.3.tar.gz \
+    && tar xvzf mpich-3.3.tar.gz \
+    && cd mpich-3.3 \
+    && ./configure \
+    && make -j4 \
+    && make install \
+    && make clean \
+    && cd .. && rm -Rf mpich-3.3
+# defaults to installing in /usr/local
+
+# mpi4py / mpicc can't handle -ax=knl
+ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread
+
+RUN wget -nv https://bitbucket.org/mpi4py/mpi4py/downloads/mpi4py-3.0.3.tar.gz \
+         && tar xvzf mpi4py-3.0.3.tar.gz \
+         && cd mpi4py-3.0.3 \
+         && python setup.py build \
+         && python setup.py install \
+         && cd .. && rm -Rf mpi4py-3.0.3 mpi4py-3.0.3.tar.gz
+
+ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell -ax=knl
+
+RUN /sbin/ldconfig
+
 ######## Stage 2 ########
 FROM registry.services.nersc.gov/nersc/intel_cxx_fort_mpi_mkl_runtime
 
