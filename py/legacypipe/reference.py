@@ -410,87 +410,9 @@ def read_large_galaxies(survey, targetwcs, bands):
     return galaxies
 
 def read_star_clusters(targetwcs):
-    """
-    Code to regenerate the NGC-star-clusters-fits catalog:
+    """The code to generate the NGC-star-clusters-fits catalog is in
+    legacypipe/bin/build-cluster-catalog.py.
 
-    wget https://raw.githubusercontent.com/mattiaverga/OpenNGC/master/NGC.csv
-
-    import os
-    import numpy as np
-    import numpy.ma as ma
-    from astropy.io import ascii
-    from astropy.table import Table
-    from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
-    import desimodel.io
-    import desimodel.footprint
-        
-    tiles = desimodel.io.load_tiles(onlydesi=True)
-    
-    names = ('name', 'type', 'ra_hms', 'dec_dms', 'const', 'majax', 'minax',
-             'pa', 'bmag', 'vmag', 'jmag', 'hmag', 'kmag', 'sbrightn', 'hubble',
-             'cstarumag', 'cstarbmag', 'cstarvmag', 'messier', 'ngc', 'ic',
-             'cstarnames', 'identifiers', 'commonnames', 'nednotes', 'ongcnotes')
-    NGC = ascii.read('NGC.csv', delimiter=';', names=names)
-    NGC = NGC[(NGC['ra_hms'] != 'N/A')]
-  
-    ra, dec = [], []
-    for _ra, _dec in zip(ma.getdata(NGC['ra_hms']), ma.getdata(NGC['dec_dms'])):
-        ra.append(hmsstring2ra(_ra.replace('h', ':').replace('m', ':').replace('s','')))
-        dec.append(dmsstring2dec(_dec.replace('d', ':').replace('m', ':').replace('s','')))
-    NGC['ra'] = ra
-    NGC['dec'] = dec
-        
-    objtype = np.char.strip(ma.getdata(NGC['type']))
-
-    # Keep all globular clusters and planetary nebulae
-    keeptype = ('PN', 'GCl')
-    keep = np.zeros(len(NGC), dtype=bool)
-    for otype in keeptype:
-        ww = [otype == tt for tt in objtype]
-        keep = np.logical_or(keep, ww)
-    print(np.sum(keep))
-
-    clusters = NGC[keep]
-
-    # Fill missing major axes with a nominal 0.4 arcmin (roughly works
-    # for NGC7009, which is the only missing PN in the footprint).
-    ma.set_fill_value(clusters['majax'], 0.4)
-    clusters['majax'] = ma.filled(clusters['majax'].data)
-
-    # Increase the radius of IC4593
-    # https://github.com/legacysurvey/legacypipe/issues/347
-    clusters[clusters['name'] == 'IC4593']['majax'] = 0.5
-    
-    indesi = desimodel.footprint.is_point_in_desi(tiles, ma.getdata(clusters['ra']),
-                                                  ma.getdata(clusters['dec']))
-    print(np.sum(indesi))
-    bb = clusters[indesi]
-    bb[np.argsort(bb['majax'])[::-1]]['name', 'ra', 'dec', 'majax', 'type']
-    
-    # Build the output catalog: select a subset of the columns and rename
-    # majax-->radius (arcmin-->degree)
-    out = Table()
-    out['name'] = clusters['name']
-    out['alt_name'] = ['' if mm == 0 else 'M{}'.format(str(mm))
-                       for mm in ma.getdata(clusters['messier'])]
-    out['ra'] = clusters['ra']
-    out['dec'] = clusters['dec']
-    out['radius'] = (clusters['majax'] / 60).astype('f4') # [degrees]
-    out.write('NGC-star-clusters.fits', overwrite=True)
-    print(out)
-
-    # Code to help visually check all open clusters that are in the DESI footprint.
-    if False:
-        checktype = ('OCl', 'Cl+N')
-        check = np.zeros(len(NGC), dtype=bool)
-        for otype in checktype:
-            ww = [otype == tt for tt in objtype]
-            check = np.logical_or(check, ww)
-        check_clusters = NGC[check] # 845 of them
-    
-        # Write out a catalog, load it into the viewer and look at each of them.
-        check_clusters[['ra', 'dec', 'name']][indesi].write('check.fits', overwrite=True) # 25 of them
-    
     """
     from pkg_resources import resource_filename
     from astrometry.util.starutil_numpy import degrees_between
