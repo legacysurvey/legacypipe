@@ -43,6 +43,8 @@ from legacypipe.bits import DQ_BITS, MASKBITS
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 
+from legacypipe.largegalaxies import stage_largegalaxies
+
 import logging
 logger = logging.getLogger('legacypipe.runbrick')
 def info(*args):
@@ -427,7 +429,7 @@ def stage_refs(survey=None,
 def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
                    mp=None, nsigma=None, plots=None, ps=None, record_event=None,
                    survey=None, brickname=None, version_header=None,
-                   refstars=None,
+                   refstars=None, outlier_mask_file=None, 
                    **kwargs):
     '''
     This pipeline stage tries to detect artifacts in the individual
@@ -440,7 +442,7 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
     _add_stage_version(version_header, 'OUTL', 'outliers')
 
     # Check for existing MEF containing masks for all the chips we need.
-    if not read_outlier_mask_file(survey, tims, brickname):
+    if not read_outlier_mask_file(survey, tims, brickname, outlier_mask_file=outlier_mask_file):
         from astrometry.util.file import trymakedirs
 
         # Make before-n-after plots (before)
@@ -655,6 +657,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                T_donotfit=None, T_clusters=None,
                ccds=None,
                record_event=None,
+               gaia_stars=False,
+               large_galaxies=False,
                **kwargs):
     '''
     In this stage we run SED-matched detection to find objects in the
@@ -677,10 +681,20 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     if refstars:
         # Don't detect new sources where we already have reference stars
-        avoid_x = refstars.ibx[refstars.in_bounds]
-        avoid_y = refstars.iby[refstars.in_bounds]
+        avoid_x = refstars.ibx
+        avoid_y = refstars.iby
+        # Add a ~1" exclusion zone around reference stars and large galaxies
+        avoid_r = np.zeros_like(avoid_x) + 4
+        if T_clusters is not None:
+            print(len(T_clusters), 'CLUSTER reference sources')
+            if len(T_clusters):
+                avoid_x = np.append(avoid_x, T_clusters.ibx)
+                avoid_y = np.append(avoid_y, T_clusters.iby)
+                avoid_r = np.append(avoid_r, T_clusters.radius_pix)
+                print('CLUSTER pixel radii:', T_clusters.radius_pix)
+
     else:
-        avoid_x, avoid_y = np.array([]), np.array([])
+        avoid_x, avoid_y, avoid_r = np.array([]), np.array([]), np.array([])
 
     record_event and record_event('stage_srcs: detection maps')
 
@@ -754,9 +768,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     record_event and record_event('stage_srcs: SED-matched')
     info('Running source detection at', nsigma, 'sigma')
     SEDs = survey.sed_matched_filters(bands)
-
-    # Add a ~1" exclusion zone around reference stars and large galaxies
-    avoid_r = np.zeros_like(avoid_x) + 4
 
     veto_map = None
 
@@ -969,6 +980,7 @@ def stage_fitblobs(T=None,
                    max_blobsize=None,
                    reoptimize=False,
                    iterative=False,
+                   large_galaxies_force_pointsource=True,
                    use_ceres=True, mp=None,
                    checkpoint_filename=None,
                    checkpoint_period=600,
@@ -1197,7 +1209,7 @@ def stage_fitblobs(T=None,
     # Create the iterator over blobs to process
     blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, reoptimize, iterative, use_ceres,
-                          refmap, brick,
+                          refmap, large_galaxies_force_pointsource, brick,
                           skipblobs=skipblobs,
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
     # to allow timingpool to queue tasks one at a time
@@ -1557,6 +1569,7 @@ def _format_all_models(T, newcat, BB, bands):
 
 def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                plots, ps, reoptimize, iterative, use_ceres, refmap,
+               large_galaxies_force_pointsource,
                brick,
                skipblobs=None, max_blobsize=None, custom_brick=False):
     '''
@@ -1667,7 +1680,8 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
         yield (brickname, iblob,
                (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-               reoptimize, iterative, use_ceres, refmap[bslc]))
+               reoptimize, iterative, use_ceres, refmap[bslc],
+               large_galaxies_force_pointsource))
 
 def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &
@@ -2768,6 +2782,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               tycho_stars=False,
               gaia_stars=False,
               large_galaxies=False,
+              large_galaxies_force_pointsource=True,
+              largegalaxy_preburner=False,
               min_mjd=None, max_mjd=None,
               unwise_coadds=False,
               bail_out=False,
@@ -2982,6 +2998,14 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         if release is None:
             release = 8888
 
+    large_galaxies_force_pointsource = True
+    if largegalaxy_preburner:
+        # Implied options!
+        #subsky = False
+        #large_galaxies = False
+        large_galaxies = True
+        large_galaxies_force_pointsource = False
+
     kwargs.update(ps=ps, nsigma=nsigma,
                   survey_blob_mask=survey_blob_mask,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
@@ -2994,6 +3018,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   tycho_stars=tycho_stars,
                   gaia_stars=gaia_stars,
                   large_galaxies=large_galaxies,
+                  large_galaxies_force_pointsource=large_galaxies_force_pointsource,
                   min_mjd=min_mjd, max_mjd=max_mjd,
                   reoptimize=reoptimize,
                   iterative=iterative,
@@ -3097,6 +3122,12 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             'writecat': 'coadds',
             })
 
+    if largegalaxy_preburner:
+        prereqs.update({
+            'largegalaxies': 'halos',
+            'srcs': 'largegalaxies',
+        })
+        
     if prereqs_update is not None:
         prereqs.update(prereqs_update)
 
@@ -3352,6 +3383,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--bail-out-sources', default=False, action='store_true',
                         help='Avoid detecting new sources in large GALAXY and CLUSTER masked areas')
+
+    parser.add_argument('--largegalaxy-preburner', default=False, action='store_true',
+                        help='Pre-fitting of LSLGA galaxies')
 
     return parser
 

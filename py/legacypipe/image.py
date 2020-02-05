@@ -24,7 +24,7 @@ processed by variants of the NOAO Community Pipeline (CP), so this
 base class is pretty specific.
 '''
 
-def remap_dq_cp_codes(dq):
+def remap_dq_cp_codes(dq, ignore_codes=[]):
     '''
     Some versions of the CP use integer codes, not bit masks.
     This converts them.
@@ -48,14 +48,18 @@ def remap_dq_cp_codes(dq):
     from scipy.ndimage.morphology import binary_dilation
     dq[np.logical_and(dq == 1, binary_dilation(dq == 3))] = 3
 
-    dqbits[dq == 1] |= DQ_BITS['badpix']
-    dqbits[dq == 2] |= DQ_BITS['badpix']
-    dqbits[dq == 3] |= DQ_BITS['satur']
-    dqbits[dq == 4] |= DQ_BITS['bleed']
-    dqbits[dq == 5] |= DQ_BITS['cr']
-    dqbits[dq == 6] |= DQ_BITS['badpix']
-    dqbits[dq == 7] |= DQ_BITS['trans']
-    dqbits[dq == 8] |= DQ_BITS['trans']
+    for code,bitname in [(1, 'badpix'),
+                         (2, 'badpix'),
+                         (3, 'satur'),
+                         (4, 'bleed'),
+                         (5, 'cr'),
+                         (6, 'badpix'),
+                         (7, 'trans'),
+                         (8, 'trans'),
+                         ]:
+        if code in ignore_codes:
+            continue
+        dqbits[dq == code] |= DQ_BITS[bitname]
     return dqbits
 
 class LegacySurveyImage(object):
@@ -163,9 +167,9 @@ class LegacySurveyImage(object):
         self.name = calname
         self.sefn         = os.path.join(calibdir, 'se',           imgdir, basename, calname + '-se.fits')
         self.psffn        = os.path.join(calibdir, 'psfex-single', imgdir, basename, calname + '-psfex.fits')
-        self.skyfn        = os.path.join(calibdir, 'sky-single',   imgdir, basename, calname + '-sky.fits')
+        self.skyfn        = os.path.join(calibdir, 'sky-single',   imgdir, basename, calname + '-splinesky.fits')
         self.merged_psffn = os.path.join(calibdir, 'psfex',        imgdir, basename + '-psfex.fits')
-        self.merged_skyfn = os.path.join(calibdir, 'sky',          imgdir, basename + '-sky.fits')
+        self.merged_skyfn = os.path.join(calibdir, 'sky',          imgdir, basename + '-splinesky.fits')
         self.old_merged_skyfn = os.path.join(calibdir, imgdir, basename + '-splinesky.fits')
         self.old_merged_psffn = os.path.join(calibdir, imgdir, basename + '-psfex.fits')
         # not used by this code -- here for the sake of legacyzpts/merge_calibs.py
@@ -413,6 +417,7 @@ class LegacySurveyImage(object):
         skymod = np.zeros_like(img)
         sky.addTo(skymod)
         midsky = np.median(skymod)
+        orig_sky = sky
         if subsky:
             from tractor.sky import ConstantSky
             debug('Instantiating and subtracting sky model')
@@ -521,6 +526,9 @@ class LegacySurveyImage(object):
         tim.time = tai
         tim.slice = slc
         tim.zpscale = orig_zpscale
+        ## orig_sky: the splinesky model, in image counts; divide by
+        ## zpscale to get to nanomaggies.
+        tim.origsky = orig_sky
         tim.midsky = midsky
         tim.sig1 = self.sig1
         tim.psf_fwhm = psf_fwhm

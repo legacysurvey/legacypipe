@@ -84,7 +84,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
 
     # Read large galaxies nearby.
     if large_galaxies:
-        galaxies = read_large_galaxies(survey, targetwcs)
+        galaxies = read_large_galaxies(survey, targetwcs, bands)
         if galaxies is not None:
             # Resolve possible Gaia-large-galaxy duplicates
             if gaia and len(gaia):
@@ -117,17 +117,33 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                       (refs.iby >= 0) * (refs.iby < H))
 
     for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster', 'isgaia',
-                'donotfit']:
+                'donotfit', 'freezeparams']:
         if not col in refs.get_columns():
             refs.set(col, np.zeros(len(refs), bool))
 
     ## Create Tractor sources from reference stars
     refcat = []
-    for g in refs:
+
+    fixed_sources = None
+    if 'sources' in refs.get_columns():
+        fixed_sources = refs.sources
+        # Empty entries get filled with zeros (thanks, merge_tables)
+        fixed_sources[fixed_sources == 0] = None
+        refs.delete_column('sources')
+    
+    for ig,g in enumerate(refs):
         if g.donotfit or g.iscluster:
             refcat.append(None)
 
+        elif g.freezeparams and fixed_sources is not None and fixed_sources[ig] is not None:
+            src = fixed_sources[ig]
+            src.freezeparams = True
+            #print('Plugging in pre-fix source:', src)
+            refcat.append(src)
+            
         elif g.islargegalaxy:
+            ### FIXME -- we shouldn't hit this any more
+
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
             assert(np.all(np.isfinite(list(fluxes.values()))))
             rr = g.radius * 3600. / 0.5 # factor of two accounts for R(25)-->reff
@@ -184,7 +200,10 @@ def read_gaia(targetwcs):
             mag += c * color**order
         gaia.set('decam_mag_%s' % b, mag)
 
-    gaia.pointsource = (gaia.G <= 19.) * (gaia.astrometric_excess_noise < 10.**0.5)
+
+    #gaia.pointsource = (gaia.G <= 19.) * (gaia.astrometric_excess_noise < 10.**0.5)
+    gaia.pointsource = (gaia.G <= 18.) * (gaia.astrometric_excess_noise < 10.**0.5)
+
     # in our catalog files, this is in float32; in the Gaia data model it's
     # a byte, with only values 3 and 31 in DR2.
     gaia.astrometric_params_solved = gaia.astrometric_params_solved.astype(np.uint8)
@@ -319,7 +338,7 @@ def get_large_galaxy_version(fn):
             return 'L'+k[0]
     return 'LG'
 
-def read_large_galaxies(survey, targetwcs):
+def read_large_galaxies(survey, targetwcs, bands):
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
 
     galfn = survey.find_file('large-galaxies')
@@ -333,106 +352,85 @@ def read_large_galaxies(survey, targetwcs):
     if len(I) == 0:
         return None
     # Read only the rows within range.
-    galaxies = fits_table(galfn, rows=I, columns=['ra', 'dec', 'd25', 'mag',
-                                                  'lslga_id', 'ba', 'pa'])
+    galaxies = fits_table(galfn, rows=I) #, columns=['ra', 'dec', 'd25', 'mag',
+                                         #         'lslga_id', 'ba', 'pa'])
     del kd
 
     refcat = get_large_galaxy_version(galfn)
 
-    # # D25 is diameter in arcmin
-    galaxies.radius = galaxies.d25 / 2. / 60.
-    # John told me to do this...
-    #galaxies.radius *= 1.2 ...and then John taketh away.
-    galaxies.delete_column('d25')
-    galaxies.rename('lslga_id', 'ref_id')
-    galaxies.ref_cat = np.array([refcat] * len(galaxies))
-    print('Large galaxies reference catalog version', refcat)
-    #, type(refcat), galaxies.ref_cat.dtype, galaxies.ref_cat.shape)
-    galaxies.islargegalaxy = np.ones(len(galaxies), bool)
+    galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
+    galaxies.freezeparams = np.zeros(len(galaxies), bool)
+    galaxies.radius = np.zeros(len(galaxies)) # default
+    galaxies.sources = np.array([None] * len(galaxies))
+
+    ## FIXME -- better way of detecting a pre-burned LSLGA catalog?
+    if 'sersic' in galaxies.get_columns():
+        from legacypipe.catalog import fits_reverse_typemap
+        from tractor.wcs import RaDecPos
+        from tractor import NanoMaggies
+        from tractor.ellipses import EllipseE
+        from tractor.galaxy import DevGalaxy, ExpGalaxy
+        from tractor.sersic import SersicGalaxy, SersicIndex
+
+        # only fix pre-burned galaxies
+        I = np.where(galaxies.ref_cat == refcat)[0]
+        if len(I) > 0: # probably fragile...
+            for i,g in enumerate(galaxies[I]):
+                try:
+                    typ = fits_reverse_typemap[g.type.strip()]
+                    pos = RaDecPos(g.ra, g.dec)
+                    fluxes = dict([(band, g.get('flux_%s' % band)) for band in bands])
+                    bright = NanoMaggies(order=bands, **fluxes)
+                    if issubclass(typ, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
+                        shape = EllipseE(g.shape_r, g.shape_e1, g.shape_e2)
+
+                    if issubclass(typ, (DevGalaxy, ExpGalaxy)):
+                        src = typ(pos, bright, shape)
+                        print('Created', src)
+                    elif issubclass(typ, (SersicGalaxy)):
+                        sersic = SersicIndex(g.sersic)
+                        src = typ(pos, bright, shape, sersic)
+                        print('Created', src)
+                    else:
+                        print('Unknown type', typ)
+
+                    galaxies.sources[I[i]] = src
+                    galaxies.freezeparams[I[i]] = True
+
+                    # Hack! We want to use a surface brightness threshold here.
+                    galaxies.radius[I[i]] = g.shape_r * 4 / 3600
+                    
+
+                except:
+                    import traceback
+                    print('Failed to create Tractor source for LSLGA entry:', traceback.print_exc())
+            keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'sources',
+                            'islargegalaxy', 'freezeparams']
+    else:
+        # Original LSLGA
+        galaxies.ref_cat = np.array([refcat] * len(galaxies))
+        galaxies.islargegalaxy = np.ones(len(galaxies))
+        
+        # # D25 is diameter in arcmin
+        galaxies.radius = galaxies.d25 / 2. / 60.
+        # John told me to do this...
+        #galaxies.radius *= 1.2 ...and then John taketh away.
+        galaxies.delete_column('d25')
+
+        galaxies.rename('lslga_id', 'ref_id')
+        keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat','ref_id', 'ba', 'pa', 'sources',
+                        'islargegalaxy', 'freezeparams']
+
+    for c in galaxies.get_columns():
+        if not c in keep_columns:
+            galaxies.delete_column(c)
+
     return galaxies
 
 def read_star_clusters(targetwcs):
-    """
-    Code to regenerate the NGC-star-clusters-fits catalog:
+    """The code to generate the NGC-star-clusters-fits catalog is in
+    legacypipe/bin/build-cluster-catalog.py.
 
-    wget https://raw.githubusercontent.com/mattiaverga/OpenNGC/master/NGC.csv
-
-    import os
-    import numpy as np
-    import numpy.ma as ma
-    from astropy.io import ascii
-    from astropy.table import Table
-    from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
-    import desimodel.io
-    import desimodel.footprint
-        
-    tiles = desimodel.io.load_tiles(onlydesi=True)
-    
-    names = ('name', 'type', 'ra_hms', 'dec_dms', 'const', 'majax', 'minax',
-             'pa', 'bmag', 'vmag', 'jmag', 'hmag', 'kmag', 'sbrightn', 'hubble',
-             'cstarumag', 'cstarbmag', 'cstarvmag', 'messier', 'ngc', 'ic',
-             'cstarnames', 'identifiers', 'commonnames', 'nednotes', 'ongcnotes')
-    NGC = ascii.read('NGC.csv', delimiter=';', names=names)
-    NGC = NGC[(NGC['ra_hms'] != 'N/A')]
-  
-    ra, dec = [], []
-    for _ra, _dec in zip(ma.getdata(NGC['ra_hms']), ma.getdata(NGC['dec_dms'])):
-        ra.append(hmsstring2ra(_ra.replace('h', ':').replace('m', ':').replace('s','')))
-        dec.append(dmsstring2dec(_dec.replace('d', ':').replace('m', ':').replace('s','')))
-    NGC['ra'] = ra
-    NGC['dec'] = dec
-        
-    objtype = np.char.strip(ma.getdata(NGC['type']))
-
-    # Keep all globular clusters and planetary nebulae
-    keeptype = ('PN', 'GCl')
-    keep = np.zeros(len(NGC), dtype=bool)
-    for otype in keeptype:
-        ww = [otype == tt for tt in objtype]
-        keep = np.logical_or(keep, ww)
-    print(np.sum(keep))
-
-    clusters = NGC[keep]
-
-    # Fill missing major axes with a nominal 0.4 arcmin (roughly works
-    # for NGC7009, which is the only missing PN in the footprint).
-    ma.set_fill_value(clusters['majax'], 0.4)
-    clusters['majax'] = ma.filled(clusters['majax'].data)
-
-    # Increase the radius of IC4593
-    # https://github.com/legacysurvey/legacypipe/issues/347
-    clusters[clusters['name'] == 'IC4593']['majax'] = 0.5
-    
-    indesi = desimodel.footprint.is_point_in_desi(tiles, ma.getdata(clusters['ra']),
-                                                  ma.getdata(clusters['dec']))
-    print(np.sum(indesi))
-    bb = clusters[indesi]
-    bb[np.argsort(bb['majax'])[::-1]]['name', 'ra', 'dec', 'majax', 'type']
-    
-    # Build the output catalog: select a subset of the columns and rename
-    # majax-->radius (arcmin-->degree)
-    out = Table()
-    out['name'] = clusters['name']
-    out['alt_name'] = ['' if mm == 0 else 'M{}'.format(str(mm))
-                       for mm in ma.getdata(clusters['messier'])]
-    out['ra'] = clusters['ra']
-    out['dec'] = clusters['dec']
-    out['radius'] = (clusters['majax'] / 60).astype('f4') # [degrees]
-    out.write('NGC-star-clusters.fits', overwrite=True)
-    print(out)
-
-    # Code to help visually check all open clusters that are in the DESI footprint.
-    if False:
-        checktype = ('OCl', 'Cl+N')
-        check = np.zeros(len(NGC), dtype=bool)
-        for otype in checktype:
-            ww = [otype == tt for tt in objtype]
-            check = np.logical_or(check, ww)
-        check_clusters = NGC[check] # 845 of them
-    
-        # Write out a catalog, load it into the viewer and look at each of them.
-        check_clusters[['ra', 'dec', 'name']][indesi].write('check.fits', overwrite=True) # 25 of them
-    
     """
     from pkg_resources import resource_filename
     from astrometry.util.starutil_numpy import degrees_between

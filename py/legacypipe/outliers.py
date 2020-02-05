@@ -16,7 +16,8 @@ from legacypipe.bits import OUTLIER_POS, OUTLIER_NEG
 def get_bits_to_mask():
     return OUTLIER_POS | OUTLIER_NEG
 
-def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, ps=None):
+def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, ps=None,
+                           outlier_mask_file=None):
     '''if subimage=True, assume that 'tims' are subimages, and demand that they have the same
     x0,y0 pixel offsets and size as the outlier mask files.
 
@@ -28,7 +29,10 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
     '''
 
     from legacypipe.bits import DQ_BITS
-    fn = survey.find_file('outliers_mask', brick=brickname, output=output)
+    if outlier_mask_file is None:
+        fn = survey.find_file('outliers_mask', brick=brickname, output=output)
+    else:
+        fn = outlier_mask_file
     if not os.path.exists(fn):
         print('Failed to apply outlier mask: No such file:', fn)
         return False
