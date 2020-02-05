@@ -24,7 +24,7 @@ processed by variants of the NOAO Community Pipeline (CP), so this
 base class is pretty specific.
 '''
 
-def remap_dq_cp_codes(dq):
+def remap_dq_cp_codes(dq, ignore_codes=[]):
     '''
     Some versions of the CP use integer codes, not bit masks.
     This converts them.
@@ -48,14 +48,18 @@ def remap_dq_cp_codes(dq):
     from scipy.ndimage.morphology import binary_dilation
     dq[np.logical_and(dq == 1, binary_dilation(dq == 3))] = 3
 
-    dqbits[dq == 1] |= DQ_BITS['badpix']
-    dqbits[dq == 2] |= DQ_BITS['badpix']
-    dqbits[dq == 3] |= DQ_BITS['satur']
-    dqbits[dq == 4] |= DQ_BITS['bleed']
-    dqbits[dq == 5] |= DQ_BITS['cr']
-    dqbits[dq == 6] |= DQ_BITS['badpix']
-    dqbits[dq == 7] |= DQ_BITS['trans']
-    dqbits[dq == 8] |= DQ_BITS['trans']
+    for code,bitname in [(1, 'badpix'),
+                         (2, 'badpix'),
+                         (3, 'satur'),
+                         (4, 'bleed'),
+                         (5, 'cr'),
+                         (6, 'badpix'),
+                         (7, 'trans'),
+                         (8, 'trans'),
+                         ]:
+        if code in ignore_codes:
+            continue
+        dqbits[dq == code] |= DQ_BITS[bitname]
     return dqbits
 
 class LegacySurveyImage(object):

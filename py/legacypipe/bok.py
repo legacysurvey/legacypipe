@@ -54,3 +54,7 @@ class BokImage(LegacySurveyImage):
     def remap_invvar(self, invvar, primhdr, img, dq):
         return self.remap_invvar_shotnoise(invvar, primhdr, img, dq)
 
+    def remap_dq(self, dq, header):
+        from legacypipe.image import remap_dq_cp_codes
+        dq = remap_dq_cp_codes(dq, ignore_codes=[7]) # 8 also?
+        return dq

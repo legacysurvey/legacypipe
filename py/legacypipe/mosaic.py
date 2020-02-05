@@ -42,3 +42,11 @@ class MosaicImage(LegacySurveyImage):
     def remap_invvar(self, invvar, primhdr, img, dq):
         return self.remap_invvar_shotnoise(invvar, primhdr, img, dq)
 
+    def remap_dq(self, dq, header):
+        '''
+        Called by get_tractor_image() to map the results from read_dq
+        into a bitmask.
+        '''
+        from legacypipe.image import remap_dq_cp_codes
+        dq = remap_dq_cp_codes(dq, ignore_codes=[7]) # 8 also?
+        return dq
