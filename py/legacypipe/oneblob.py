@@ -122,9 +122,9 @@ def one_blob(X):
     B.hit_limit = np.zeros(len(B), bool)
 
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, use_ceres, refmap)
-    B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative,
-               large_galaxies_force_pointsource=large_galaxies_force_pointsource)
+                 plots, ps, use_ceres, refmap,
+                 large_galaxies_force_pointsource)
+    B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
 
@@ -146,7 +146,8 @@ def one_blob(X):
 
 class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, use_ceres, refmap):
+                 plots, ps, use_ceres, refmap,
+                 large_galaxies_force_pointsource):
         self.name = name
         self.blobwcs = blobwcs
         self.pixscale = self.blobwcs.pixel_scale()
@@ -163,6 +164,7 @@ class OneBlob(object):
         self.ps = ps
         self.use_ceres = use_ceres
         self.deblend = False
+        self.large_galaxies_force_pointsource = large_galaxies_force_pointsource
         self.tims = self.create_tims(timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
         self.plots2 = False
@@ -193,8 +195,7 @@ class OneBlob(object):
         self.optargs.update(dchisq = 0.1)
 
     def run(self, B, reoptimize=False, iterative_detection=True,
-            compute_metrics=True,
-            large_galaxies_force_pointsource=True):
+            compute_metrics=True):
         trun = tlast = Time()
         # Not quite so many plots...
         self.plots1 = self.plots
@@ -1126,13 +1127,13 @@ class OneBlob(object):
 
         # Fitting behaviors based on geometric masks.
         force_pointsource_mask = (IN_BLOB['BRIGHT'] | IN_BLOB['CLUSTER'])
-        if large_galaxies_force_pointsource:
+        if self.large_galaxies_force_pointsource:
             force_pointsource_mask |= IN_BLOB['GALAXY']
         force_pointsource = ((self.refmap[y0+iy,x0+ix] & force_pointsource_mask) > 0)
 
         fit_background_mask = IN_BLOB['MEDIUM']
         ### HACK
-        if large_galaxies_force_pointsource:
+        if self.large_galaxies_force_pointsource:
             fit_background_mask |= IN_BLOB['GALAXY']
         fit_background = ((self.refmap[y0+iy,x0+ix] & fit_background_mask) > 0)
 
