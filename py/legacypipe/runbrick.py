@@ -656,6 +656,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                refcat=None, refstars=None,
                T_donotfit=None, T_clusters=None,
                record_event=None,
+               gaia_stars=False,
+               large_galaxies=False,
                **kwargs):
     '''
     In this stage we run SED-matched detection to find objects in the
@@ -678,10 +680,20 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     if refstars:
         # Don't detect new sources where we already have reference stars
-        avoid_x = refstars.ibx[refstars.in_bounds]
-        avoid_y = refstars.iby[refstars.in_bounds]
+        avoid_x = refstars.ibx
+        avoid_y = refstars.iby
+        # Add a ~1" exclusion zone around reference stars and large galaxies
+        avoid_r = np.zeros_like(avoid_x) + 4
+        if T_clusters is not None:
+            print(len(T_clusters), 'CLUSTER reference sources')
+            if len(T_clusters):
+                avoid_x = np.append(avoid_x, T_clusters.ibx)
+                avoid_y = np.append(avoid_y, T_clusters.iby)
+                avoid_r = np.append(avoid_r, T_clusters.radius_pix)
+                print('CLUSTER pixel radii:', T_clusters.radius_pix)
+
     else:
-        avoid_x, avoid_y = np.array([]), np.array([])
+        avoid_x, avoid_y, avoid_r = np.array([]), np.array([]), np.array([])
 
     record_event and record_event('stage_srcs: detection maps')
 
@@ -755,9 +767,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     record_event and record_event('stage_srcs: SED-matched')
     info('Running source detection at', nsigma, 'sigma')
     SEDs = survey.sed_matched_filters(bands)
-
-    # Add a ~1" exclusion zone around reference stars and large galaxies
-    avoid_r = np.zeros_like(avoid_x) + 4
 
     veto_map = None
 

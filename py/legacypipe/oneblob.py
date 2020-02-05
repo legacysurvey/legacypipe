@@ -248,11 +248,18 @@ class OneBlob(object):
             ix = np.clip(np.round(ix)-1, 0, self.blobw-1).astype(int)
             iy = np.clip(np.round(iy)-1, 0, self.blobh-1).astype(int)
 
-            Ibright = _argsort_by_brightness(cat, self.bands)
-            rank = np.empty(len(cat), int)
-            rank[Ibright] = np.arange(len(cat), dtype=int)
+            # Do not compute segmentation map for sources in the CLUSTER mask
+            Iseg, = np.nonzero((self.refmap[iy, ix] & IN_BLOB['CLUSTER']) == 0)
+            # Zero out the S/N in CLUSTER mask??
+            maxsn[(self.refmap & IN_BLOB['CLUSTER']) > 0] = 0.
 
-            todo = set(list(range(len(self.srcs))))
+            Ibright = _argsort_by_brightness([cat[i] for i in Iseg], self.bands)
+            rank = np.empty(len(Iseg), int)
+            rank[Ibright] = np.arange(len(Iseg), dtype=int)
+            rankmap = dict([(Iseg[i],r) for r,i in enumerate(Ibright)])
+            del Ibright
+
+            todo = set(Iseg)
             thresholds = list(range(3, int(np.ceil(maxsn.max()))))
             for thresh in thresholds:
                 #print('S/N', thresh, ':', len(todo), 'sources to find still')
@@ -261,7 +268,7 @@ class OneBlob(object):
                 hot = (maxsn >= thresh)
                 hot = binary_fill_holes(hot)
                 blobs,_ = label(hot)
-                srcblobs = blobs[iy, ix]
+                srcblobs = blobs[iy[Iseg], ix[Iseg]]
                 done = set()
 
                 blobranks = {}
@@ -269,21 +276,20 @@ class OneBlob(object):
                     if not b in blobranks:
                         blobranks[b] = []
                     blobranks[b].append(r)
-                
+
                 for t in todo:
                     bl = blobs[iy[t], ix[t]]
                     if bl == 0:
                         # ??
                         done.add(t)
                         continue
-                    if rank[t] == min(blobranks[bl]):
+                    if rankmap[t] == min(blobranks[bl]):
                         #print('Source', t, 'has rank', rank[t], 'vs blob ranks', blobranks[bl])
                         segmap[blobs == bl] = t
                         #print('Source', t, 'is isolated at S/N', thresh)
                         done.add(t)
                 todo.difference_update(done)
 
-                
             self.segmap = segmap
 
             if self.plots:
@@ -479,6 +485,9 @@ class OneBlob(object):
         slcs = find_objects(self.segmap + 1)
         mm = [dict() for i in range(len(self.tims))]
         for i,(src,slc) in enumerate(zip(cat,slcs)):
+            # find_objects returns None if a number is not found in the map
+            # (eg, sources in the CLUSTER mask).  We then don't set a modelmask,
+            # so it should get automatically set by the source model patch.
             if slc is None:
                 continue
             sy,sx = slc
