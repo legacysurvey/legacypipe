@@ -394,7 +394,7 @@ def read_large_galaxies(survey, targetwcs, bands):
                     galaxies.freezeparams[I[i]] = True
 
                     # Hack! We want to use a surface brightness threshold here.
-                    galaxies.radius[I[i]] = g.shape_r * 4
+                    galaxies.radius[I[i]] = g.shape_r * 4 / 3600
                     
 
                 except:
