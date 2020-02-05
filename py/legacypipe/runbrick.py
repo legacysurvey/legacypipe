@@ -655,6 +655,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                bailout_sources=False,
                refcat=None, refstars=None,
                T_donotfit=None, T_clusters=None,
+               ccds=None,
                record_event=None,
                gaia_stars=False,
                large_galaxies=False,
@@ -927,22 +928,37 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tlast = tnow
 
     sky_overlap = True
+    ccds.co_sky = np.zeros(len(ccds), np.float32)
+    assert(len(ccds) == len(tims))
     if sky_overlap:
+        '''
+        A note about units here: we're passing 'sbscale=False' to the coadd
+        function, so images are *not* getting scaled to constant
+        surface-brightness -- so you don't want to mix-and-match cameras
+        with different pixel scales within a band!
+        We're therefore estimating the sky level as a surface brightness,
+        in nanomaggies per pixel of the CCDs.
+        '''
         print('Creating coadd for sky overlap...')
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
+        co_sky = {}
         for band,co,cowt in zip(bands, C.coimgs, C.cowimgs):
             pix = co[(cowt > 0) * (blobs == -1)]
             if len(pix) == 0:
                 continue
             cosky = np.median(pix)
             print('Median sky for', band, ':', cosky)
-            for tim in tims:
+            co_sky[band] = cosky
+            for itim,tim in enumerate(tims):
                 if tim.band != band:
                     continue
                 tim.data -= cosky
+                ccds.co_sky[itim] = cosky
+    else:
+        co_sky = None
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
-            'ps', 'saturated_pix', 'version_header']
+            'ps', 'saturated_pix', 'version_header', 'co_sky', 'ccds']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
@@ -1279,6 +1295,7 @@ def stage_fitblobs(T=None,
         # first have to pad T with some new entries...
         Tnew = fits_table()
         Tnew.iterative = np.ones(n_iter, bool)
+        Tnew.ref_cat = np.array(['  '] * len(Tnew))
         T = merge_tables([T, Tnew], columns='fillzero')
         # ... and then point II at them.
         II[II < 0] = n_old + np.arange(n_iter)
@@ -1707,6 +1724,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  T=None, T_donotfit=None, T_refbail=None,
                  cat=None, pixscale=None, plots=False,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
+                 co_sky=None,
                  saturated_pix=None,
                  brightblobmask=None,
                  bailout_mask=None,
@@ -1822,7 +1840,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     apertures=apertures, apxy=apxy,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims,
-                                   targetwcs),
+                                   targetwcs, co_sky),
                     plots=plots, ps=ps, mp=mp)
     record_event and record_event('stage_coadds: extras')
 
@@ -2468,6 +2486,7 @@ def stage_writecat(
     brick=None,
     invvars=None,
     gaia_stars=False,
+    co_sky=None,
     record_event=None,
     **kwargs):
     '''
@@ -2586,6 +2605,13 @@ def stage_writecat(
         primhdr.add_record(r)
     primhdr.add_record(dict(name='PRODTYPE', value='catalog',
                             comment='NOAO data product type'))
+
+    if co_sky is not None:
+        for band in bands:
+            if band in co_sky:
+                primhdr.add_record(dict(name='COSKY_%s' % band.upper(),
+                                        value=co_sky[band],
+                                        comment='Sky level estimated (+subtracted) from coadd'))
 
     for i,ap in enumerate(apertures_arcsec):
         primhdr.add_record(dict(name='APRAD%i' % i, value=ap,

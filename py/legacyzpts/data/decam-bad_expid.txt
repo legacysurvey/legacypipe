@@ -3177,21 +3177,24 @@
 
 660432 Trailed exposure found by DJS, 2019-04-29
 
-430480 3 pupil ghost subtraction problem?
-430481 3 pupil ghost subtraction problem?
-430482 3 pupil ghost subtraction problem?
-430483 3 pupil ghost subtraction problem?
-430484 3 pupil ghost subtraction problem?
-430485 3 pupil ghost subtraction problem?
-430486 3 pupil ghost subtraction problem?
-553845 3 pupil ghost subtraction problem?
+# Fixed in LS9 reprocessing
+# 430480 3 pupil ghost subtraction problem?
+# 430481 3 pupil ghost subtraction problem?
+# 430482 3 pupil ghost subtraction problem?
+# 430483 3 pupil ghost subtraction problem?
+# 430484 3 pupil ghost subtraction problem?
+# 430485 3 pupil ghost subtraction problem?
+# 430486 3 pupil ghost subtraction problem?
+# 553845 3 pupil ghost subtraction problem?
+# 580955 3 pupil ghost subtraction problem?
+# 574304 3 pupil ghost subtraction problem?
+
 721209 3 pupil ghost subtraction problem?
 763317 3 pupil ghost subtraction problem?
-368186 3 pupil ghost subtraction problem?
-580955 3 pupil ghost subtraction problem?
 780010 3 pupil ghost subtraction problem?
-420479 3 pupil ghost subtraction problem?
-574304 3 pupil ghost subtraction problem?
+368186 3 pupil ghost subtraction problem? / cloudy?
+420749 3 pupil ghost subtraction problem?
+
 
 301061 3 bright clouds
 321551 3 bright clouds
@@ -3205,27 +3208,28 @@
 552903 3 bright clouds
 552904 3 bright clouds
 
-262572 3 bad dark sky flat, could be reprocessed?
-262573 3 bad dark sky flat, could be reprocessed?
-262574 3 bad dark sky flat, could be reprocessed?
-262575 3 bad dark sky flat, could be reprocessed?
-262576 3 bad dark sky flat, could be reprocessed?
-262577 3 bad dark sky flat, could be reprocessed?
-262578 3 bad dark sky flat, could be reprocessed?
-262579 3 bad dark sky flat, could be reprocessed?
-262580 3 bad dark sky flat, could be reprocessed?
-262581 3 bad dark sky flat, could be reprocessed?
-262582 3 bad dark sky flat, could be reprocessed?
-262583 3 bad dark sky flat, could be reprocessed?
-262584 3 bad dark sky flat, could be reprocessed?
-262585 3 bad dark sky flat, could be reprocessed?
-262586 3 bad dark sky flat, could be reprocessed?
-262587 3 bad dark sky flat, could be reprocessed?
-262588 3 bad dark sky flat, could be reprocessed?
-262589 3 bad dark sky flat, could be reprocessed?
-262590 3 bad dark sky flat, could be reprocessed?
-262591 3 bad dark sky flat, could be reprocessed?
-262593 3 bad dark sky flat, could be reprocessed?
+# fixed in LS9 reprocessing.
+# 262572 3 bad dark sky flat, could be reprocessed?
+# 262573 3 bad dark sky flat, could be reprocessed?
+# 262574 3 bad dark sky flat, could be reprocessed?
+# 262575 3 bad dark sky flat, could be reprocessed?
+# 262576 3 bad dark sky flat, could be reprocessed?
+# 262577 3 bad dark sky flat, could be reprocessed?
+# 262578 3 bad dark sky flat, could be reprocessed?
+# 262579 3 bad dark sky flat, could be reprocessed?
+# 262580 3 bad dark sky flat, could be reprocessed?
+# 262581 3 bad dark sky flat, could be reprocessed?
+# 262582 3 bad dark sky flat, could be reprocessed?
+# 262583 3 bad dark sky flat, could be reprocessed?
+# 262584 3 bad dark sky flat, could be reprocessed?
+# 262585 3 bad dark sky flat, could be reprocessed?
+# 262586 3 bad dark sky flat, could be reprocessed?
+# 262587 3 bad dark sky flat, could be reprocessed?
+# 262588 3 bad dark sky flat, could be reprocessed?
+# 262589 3 bad dark sky flat, could be reprocessed?
+# 262590 3 bad dark sky flat, could be reprocessed?
+# 262591 3 bad dark sky flat, could be reprocessed?
+# 262593 3 bad dark sky flat, could be reprocessed?
 
 626512 3 weird sky structures
 664419 3 weird sky structures
