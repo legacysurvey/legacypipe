@@ -964,6 +964,7 @@ def stage_fitblobs(T=None,
                    max_blobsize=None,
                    reoptimize=False,
                    iterative=False,
+                   large_galaxies_force_pointsource=True,
                    use_ceres=True, mp=None,
                    checkpoint_filename=None,
                    checkpoint_period=600,
@@ -1192,7 +1193,7 @@ def stage_fitblobs(T=None,
     # Create the iterator over blobs to process
     blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, reoptimize, iterative, use_ceres,
-                          refmap, brick,
+                          refmap, large_galaxies_force_pointsource, brick,
                           skipblobs=skipblobs,
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
     # to allow timingpool to queue tasks one at a time
@@ -1551,6 +1552,7 @@ def _format_all_models(T, newcat, BB, bands):
 
 def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                plots, ps, reoptimize, iterative, use_ceres, refmap,
+               large_galaxies_force_pointsource,
                brick,
                skipblobs=None, max_blobsize=None, custom_brick=False):
     '''
@@ -1661,7 +1663,8 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
         yield (brickname, iblob,
                (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-               reoptimize, iterative, use_ceres, refmap[bslc]))
+               reoptimize, iterative, use_ceres, refmap[bslc],
+               large_galaxies_force_pointsource))
 
 def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &
