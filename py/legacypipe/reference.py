@@ -354,16 +354,9 @@ def read_large_galaxies(survey, targetwcs, bands):
 
     refcat = get_large_galaxy_version(galfn)
 
-    # # D25 is diameter in arcmin
-    galaxies.radius = galaxies.d25 / 2. / 60.
-    # John told me to do this...
-    #galaxies.radius *= 1.2 ...and then John taketh away.
-    galaxies.delete_column('d25')
-    galaxies.rename('lslga_id', 'ref_id')
-    galaxies.ref_cat = np.array([refcat] * len(galaxies))
-    galaxies.islargegalaxy = np.ones(len(galaxies), bool)
+    galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
     galaxies.freezeparams = np.zeros(len(galaxies), bool)
-    
+    galaxies.radius = np.zeros(len(galaxies)) # default
     galaxies.sources = np.array([None] * len(galaxies))
 
     ## FIXME
@@ -375,34 +368,56 @@ def read_large_galaxies(survey, targetwcs, bands):
         from tractor.galaxy import DevGalaxy, ExpGalaxy
         from tractor.sersic import SersicGalaxy, SersicIndex
 
-        for i,g in enumerate(galaxies):
-            try:
-                typ = fits_reverse_typemap[g.type.strip()]
-                pos = RaDecPos(g.ra, g.dec)
-                fluxes = dict([(band, g.get('flux_%s' % band)) for band in bands])
-                bright = NanoMaggies(order=bands, **fluxes)
-                if issubclass(typ, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
-                    shape = EllipseE(g.shape_r, g.shape_e1, g.shape_e2)
+        # only fix pre-burned galaxies
+        I = np.where(galaxies.ref_cat == refcat)[0]
+        if len(I) > 0: # probably fragile...
+            for i,g in enumerate(galaxies[I]):
+                try:
+                    typ = fits_reverse_typemap[g.type.strip()]
+                    pos = RaDecPos(g.ra, g.dec)
+                    fluxes = dict([(band, g.get('flux_%s' % band)) for band in bands])
+                    bright = NanoMaggies(order=bands, **fluxes)
+                    if issubclass(typ, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
+                        shape = EllipseE(g.shape_r, g.shape_e1, g.shape_e2)
 
-                if issubclass(typ, (DevGalaxy, ExpGalaxy)):
-                    src = typ(pos, bright, shape)
-                    print('Created', src)
-                elif issubclass(typ, (SersicGalaxy)):
-                    sersic = SersicIndex(g.sersic)
-                    src = typ(pos, bright, shape, sersic)
-                    print('Created', src)
-                else:
-                    print('Unknown type', typ)
-                galaxies.sources[i] = src
-                galaxies.freezeparams[i] = True
+                    if issubclass(typ, (DevGalaxy, ExpGalaxy)):
+                        src = typ(pos, bright, shape)
+                        print('Created', src)
+                    elif issubclass(typ, (SersicGalaxy)):
+                        sersic = SersicIndex(g.sersic)
+                        src = typ(pos, bright, shape, sersic)
+                        print('Created', src)
+                    else:
+                        print('Unknown type', typ)
 
-            except:
-                import traceback
-                print('Failed to create Tractor source for LSLGA entry:', traceback.print_exc())
+                    galaxies.sources[I[i]] = src
+                    galaxies.freezeparams[I[i]] = True
 
+                    # Hack! We want to use a surface brightness threshold here.
+                    galaxies.radius[I[i]] = g.shape_r * 4
+                    
 
-    keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat','ref_id', 'ba', 'pa', 'sources',
-                    'islargegalaxy', 'freezeparams']
+                except:
+                    import traceback
+                    print('Failed to create Tractor source for LSLGA entry:', traceback.print_exc())
+            keep_columns = ['ra', 'dec', 'radius', 'ref_cat','ref_id', 'sources',
+                            'islargegalaxy', 'freezeparams']
+    else:
+        # Original LSLGA
+        galaxies.ref_cat = np.array([refcat] * len(galaxies))
+        galaxies.islargegalaxy = [1]
+        galaxies.freezeparams = np.zeros(len(galaxies), bool)
+        
+        # # D25 is diameter in arcmin
+        galaxies.radius = galaxies.d25 / 2. / 60.
+        # John told me to do this...
+        #galaxies.radius *= 1.2 ...and then John taketh away.
+        galaxies.delete_column('d25')
+
+        galaxies.rename('lslga_id', 'ref_id')
+        keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat','ref_id', 'ba', 'pa', 'sources',
+                        'islargegalaxy', 'freezeparams']
+
     for c in galaxies.get_columns():
         if not c in keep_columns:
             galaxies.delete_column(c)
