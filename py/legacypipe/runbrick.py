@@ -929,7 +929,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     sky_overlap = True
     ccds.co_sky = np.zeros(len(ccds), np.float32)
-    assert(len(ccds) == len(tims))
     if sky_overlap:
         '''
         A note about units here: we're passing 'sbscale=False' to the coadd
