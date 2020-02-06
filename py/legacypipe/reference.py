@@ -454,8 +454,8 @@ def read_large_galaxies(survey, targetwcs, bands):
                     import traceback
                     print('Failed to create Tractor source for LSLGA entry:',
                           traceback.print_exc())
-            keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id',
-                            'sources', 'islargegalaxy', 'freezeparams']
+                    #keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id',
+                    #'sources', 'islargegalaxy', 'freezeparams']
 
     else:
         # Original LSLGA
@@ -465,8 +465,8 @@ def read_large_galaxies(survey, targetwcs, bands):
         galaxies.radius = galaxies.d25 / 2. / 60.
         galaxies.delete_column('d25')
         galaxies.rename('lslga_id', 'ref_id')
-        keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
-                        'sources', 'islargegalaxy', 'freezeparams']
+    keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
+                    'sources', 'islargegalaxy', 'freezeparams']
 
     for c in galaxies.get_columns():
         if not c in keep_columns:
