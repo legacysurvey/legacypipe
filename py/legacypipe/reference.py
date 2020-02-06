@@ -33,7 +33,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     ref_margin = 0.125
     mpix = int(np.ceil(ref_margin * 3600. / pixscale))
     marginwcs = targetwcs.get_subimage(-mpix, -mpix, W+2*mpix, H+2*mpix)
-    
+
     refs = []
 
     # Tycho-2 stars
@@ -41,7 +41,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         tycho = read_tycho2(survey, marginwcs)
         if len(tycho):
             refs.append(tycho)
-            
+
     # Add Gaia stars
     gaia = None
     if gaia_stars:
@@ -130,7 +130,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         # Empty entries get filled with zeros (thanks, merge_tables)
         fixed_sources[fixed_sources == 0] = None
         refs.delete_column('sources')
-    
+
     for ig,g in enumerate(refs):
         if g.donotfit or g.iscluster:
             refcat.append(None)
@@ -138,9 +138,9 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         elif g.freezeparams and fixed_sources is not None and fixed_sources[ig] is not None:
             src = fixed_sources[ig]
             src.freezeparams = True
-            #print('Plugging in pre-fix source:', src)
+            #print('Plugging in pre-fit source:', src)
             refcat.append(src)
-            
+
         elif g.islargegalaxy:
             ### FIXME -- we shouldn't hit this any more
 
@@ -296,7 +296,7 @@ def read_tycho2(survey, targetwcs):
     # See note on gaia.radius above -- don't change the 0.262 to
     # targetwcs.pixel_scale()!
     tycho.radius = np.minimum(1800., 150. * 2.5**((11. - tycho.mag)/3.)) * 0.262/3600.
-    
+
     for c in ['tyc1', 'tyc2', 'tyc3', 'mag_bt', 'mag_vt', 'mag_hp',
               'mean_ra', 'mean_dec',
               'sigma_pm_ra', 'sigma_pm_dec', 'sigma_ra', 'sigma_dec']:
@@ -352,8 +352,7 @@ def read_large_galaxies(survey, targetwcs, bands):
     if len(I) == 0:
         return None
     # Read only the rows within range.
-    galaxies = fits_table(galfn, rows=I) #, columns=['ra', 'dec', 'd25', 'mag',
-                                         #         'lslga_id', 'ba', 'pa'])
+    galaxies = fits_table(galfn, rows=I)
     del kd
 
     refcat = get_large_galaxy_version(galfn)
@@ -376,7 +375,7 @@ def read_large_galaxies(survey, targetwcs, bands):
         # only fix pre-burned galaxies
         I = np.where(galaxies.ref_cat == refcat)[0]
         if len(I) > 0: # probably fragile...
-            for i,g in enumerate(galaxies[I]):
+            for ii,g in zip(I, galaxies[I]):
                 try:
                     typ = fits_reverse_typemap[g.type.strip()]
                     pos = RaDecPos(g.ra, g.dec)
@@ -395,32 +394,30 @@ def read_large_galaxies(survey, targetwcs, bands):
                     else:
                         print('Unknown type', typ)
 
-                    galaxies.sources[I[i]] = src
-                    galaxies.freezeparams[I[i]] = True
+                    galaxies.sources[ii] = src
+                    galaxies.freezeparams[ii] = True
 
                     # Hack! We want to use a surface brightness threshold here.
-                    galaxies.radius[I[i]] = g.shape_r * 4 / 3600
-                    
+                    galaxies.radius[ii] = g.shape_r * 4 / 3600
+
 
                 except:
                     import traceback
-                    print('Failed to create Tractor source for LSLGA entry:', traceback.print_exc())
-            keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'sources',
-                            'islargegalaxy', 'freezeparams']
+                    print('Failed to create Tractor source for LSLGA entry:',
+                          traceback.print_exc())
+            keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id',
+                            'sources', 'islargegalaxy', 'freezeparams']
+
     else:
         # Original LSLGA
         galaxies.ref_cat = np.array([refcat] * len(galaxies))
         galaxies.islargegalaxy = np.ones(len(galaxies))
-        
         # # D25 is diameter in arcmin
         galaxies.radius = galaxies.d25 / 2. / 60.
-        # John told me to do this...
-        #galaxies.radius *= 1.2 ...and then John taketh away.
         galaxies.delete_column('d25')
-
         galaxies.rename('lslga_id', 'ref_id')
-        keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat','ref_id', 'ba', 'pa', 'sources',
-                        'islargegalaxy', 'freezeparams']
+        keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
+                        'sources', 'islargegalaxy', 'freezeparams']
 
     for c in galaxies.get_columns():
         if not c in keep_columns:
@@ -447,7 +444,7 @@ def read_star_clusters(targetwcs):
     clusters.cut(d < radius)
     if len(clusters) == 0:
         return None
-    
+
     debug('Cut to {} star cluster(s) within the brick'.format(len(clusters)))
     clusters.ref_cat = np.array(['CL'] * len(clusters))
 
@@ -460,4 +457,3 @@ def read_star_clusters(targetwcs):
     clusters.iscluster = np.ones(len(clusters), bool)
 
     return clusters
-
