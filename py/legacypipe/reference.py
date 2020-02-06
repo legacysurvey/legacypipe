@@ -338,6 +338,13 @@ def get_large_galaxy_version(fn):
             return 'L'+k[0]
     return 'LG'
 
+# From TheTractor/code/optimize_mixture_profiles.py
+from scipy.special import gammaincinv
+def sernorm(n):
+	return gammaincinv(2.*n, 0.5)
+def sersic_profile(x, n):
+    return np.exp(-sernorm(n) * (x ** (1./n) - 1.))
+
 def read_large_galaxies(survey, targetwcs, bands):
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
 
@@ -359,7 +366,6 @@ def read_large_galaxies(survey, targetwcs, bands):
 
     galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
     galaxies.freezeparams = np.zeros(len(galaxies), bool)
-    galaxies.radius = np.zeros(len(galaxies)) # default
     galaxies.sources = np.array([None] * len(galaxies))
 
     ## FIXME -- better way of detecting a pre-burned LSLGA catalog?
@@ -372,6 +378,10 @@ def read_large_galaxies(survey, targetwcs, bands):
         from tractor.sersic import SersicGalaxy
         from legacypipe.survey import LegacySersicIndex
 
+        galaxies.radius = np.zeros(len(galaxies), np.float32)
+        galaxies.pa = np.zeros(len(galaxies), np.float32)
+        galaxies.ba = np.zeros(len(galaxies), np.float32)
+
         # only fix pre-burned galaxies
         I = np.where(galaxies.ref_cat == refcat)[0]
         if len(I) > 0: # probably fragile...
@@ -381,13 +391,19 @@ def read_large_galaxies(survey, targetwcs, bands):
                     pos = RaDecPos(g.ra, g.dec)
                     fluxes = dict([(band, g.get('flux_%s' % band)) for band in bands])
                     bright = NanoMaggies(order=bands, **fluxes)
+                    shape = None
                     if issubclass(typ, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
                         shape = EllipseE(g.shape_r, g.shape_e1, g.shape_e2)
 
                     if issubclass(typ, (DevGalaxy, ExpGalaxy)):
                         src = typ(pos, bright, shape)
                         print('Created', src)
+                        if issubclass(typ, DevGalaxy):
+                            serindex = 4.
+                        else:
+                            serindex = 1.
                     elif issubclass(typ, (SersicGalaxy)):
+                        serindex = g.sersic
                         sersic = LegacySersicIndex(g.sersic)
                         src = typ(pos, bright, shape, sersic)
                         print('Created', src)
@@ -397,9 +413,42 @@ def read_large_galaxies(survey, targetwcs, bands):
                     galaxies.sources[ii] = src
                     galaxies.freezeparams[ii] = True
 
-                    # Hack! We want to use a surface brightness threshold here.
-                    galaxies.radius[ii] = g.shape_r * 4 / 3600
+                    # Masking radius based on surface brightness:
+                    ## Radii in our brick pixels
+                    pixradii = np.arange(2000)
+                    # -> in arcsec
+                    arcsec_radii = pixradii * targetwcs.pixel_scale()
+                    # -> effective radii for this galaxy
+                    eff_radii = arcsec_radii / g.shape_r
+                    # -> 1-d surface brightness profile
+                    pro = sersic_profile(eff_radii, serindex)
+                    # normalize by total flux to get surface brightness
+                    total = np.sum(pro * 2. * np.pi * pixradii)
+                    pro /= total
+                    # At this point, "pro" is fraction of total galaxy light per pixel.
+                    # -> nanomaggies per pixel:
+                    pro *= g.flux_r
+                    # -> nanomaggies / arcsec^2
+                    pro /= targetwcs.pixel_scale()**2
+                    # Take largest radius with surface brightness above thresh
+                    irad, = np.nonzero(pro > 25.0)
+                    if len(irad):
+                        irad = irad[-1]
+                    else:
+                        irad = 0
+                    # -> masking radius in *degrees*
+                    radius = arcsec_radii[irad] / 3600.
 
+                    # Hack! We want to use a surface brightness threshold here.
+                    #galaxies.radius[ii] = g.shape_r * 4 / 3600
+                    galaxies.radius[ii] = radius
+
+                    if shape is not None:
+                        e = shape.e
+                        ba = (1. - e) / (1. + e)
+                        pa = -np.rad2deg(np.arctan2(shape.e2, shape.e1) / 2.)
+                        galaxies.pa[ii] = pa
+                        galaxies.ba[ii] = ba
 
                 except:
                     import traceback
