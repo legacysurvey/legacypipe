@@ -217,7 +217,7 @@ class LegacyEllipseWithPriors(EllipseWithPriors):
     # Prior on (softened) ellipticity: Gaussian with this standard deviation
     ellipticityStd = 0.25
 
-from tractor.sersic import SersicGalaxy
+from tractor.sersic import SersicIndex
 
 class LegacySersicIndex(SersicIndex):
     def __init__(self, val=0):
