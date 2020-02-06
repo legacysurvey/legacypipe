@@ -38,17 +38,6 @@ RUN wget -nv https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.
     conda install python=3.7 pip numpy scipy && \
     conda clean -a -y
 
-# Pip installs -- binary
-RUN for x in \
-    setuptools \
-    wheel \
-    psycopg2-binary \
-    matplotlib \
-    astropy \
-    zmq \
-    cython \
-    ; do pip --no-cache-dir install $x; done
-
 # ugly: Tractor's mp_fourier module detects the $CC='icc' exactly
 # These are in /opt/intel/bin, which is on the PATH.
 ENV CC icc
@@ -69,6 +58,26 @@ WORKDIR /src
 
 ENV BLAS -L${MKLROOT}/lib/intel64 -lmkl_rt -fopenmp -lpthread -limf -lsvml -ldl
 ENV CPPFLAGS -I${MKLROOT}/include
+
+RUN wget -nv https://www.mpich.org/static/downloads/3.3/mpich-3.3.tar.gz \
+    && tar xvzf mpich-3.3.tar.gz \
+    && cd mpich-3.3 \
+    && ./configure \
+    && make -j4 \
+    && make install \
+    && make clean \
+    && cd .. && rm -Rf mpich-3.3
+# defaults to installing in /usr/local
+
+# mpi4py / mpicc can't handle -ax=knl
+ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread
+RUN wget -nv https://bitbucket.org/mpi4py/mpi4py/downloads/mpi4py-3.0.3.tar.gz \
+         && tar xvzf mpi4py-3.0.3.tar.gz \
+         && cd mpi4py-3.0.3 \
+         && python setup.py build \
+         && python setup.py install \
+         && cd .. && rm -Rf mpi4py-3.0.3 mpi4py-3.0.3.tar.gz
+ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell -ax=knl
 
 RUN git clone https://github.com/astromatic/sextractor.git sourceextractor \
     && cd sourceextractor \
@@ -96,6 +105,17 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && make clean \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import astrometry; print(astrometry.__version__)")
 
+# Pip installs -- binary.  We need cython for the tractor.
+RUN for x in \
+    setuptools \
+    wheel \
+    psycopg2-binary \
+    matplotlib \
+    astropy \
+    zmq \
+    cython \
+    ; do pip --no-cache-dir install $x; done
+
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
@@ -107,32 +127,9 @@ RUN git clone http://github.com/dstndstn/tractor.git tractor \
 
 # Pip installs -- built from source
 RUN pip --no-cache-dir install photutils
-#RUN pip --no-cache-dir install fitsio==1.0.5
 RUN pip --no-cache-dir install git+https://github.com/esheldon/fitsio.git@v1.0.6
 # HACK -- update fitsio version number string
 RUN sed -i -e s/1.0.5/1.0.6/g /opt/conda/lib/python3.7/site-packages/fitsio/__init__.py
-
-RUN wget -nv https://www.mpich.org/static/downloads/3.3/mpich-3.3.tar.gz \
-    && tar xvzf mpich-3.3.tar.gz \
-    && cd mpich-3.3 \
-    && ./configure \
-    && make -j4 \
-    && make install \
-    && make clean \
-    && cd .. && rm -Rf mpich-3.3
-# defaults to installing in /usr/local
-
-# mpi4py / mpicc can't handle -ax=knl
-ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread
-
-RUN wget -nv https://bitbucket.org/mpi4py/mpi4py/downloads/mpi4py-3.0.3.tar.gz \
-         && tar xvzf mpi4py-3.0.3.tar.gz \
-         && cd mpi4py-3.0.3 \
-         && python setup.py build \
-         && python setup.py install \
-         && cd .. && rm -Rf mpi4py-3.0.3 mpi4py-3.0.3.tar.gz
-
-ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell -ax=knl
 
 RUN /sbin/ldconfig
 
@@ -231,7 +228,7 @@ RUN python -O -m compileall \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-RUN cd /src/legacypipe && git pull && git checkout preburn-lslga && git describe && echo 1 && \
+RUN cd /src/legacypipe && git pull && git describe && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
