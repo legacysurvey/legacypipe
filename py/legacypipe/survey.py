@@ -217,6 +217,13 @@ class LegacyEllipseWithPriors(EllipseWithPriors):
     # Prior on (softened) ellipticity: Gaussian with this standard deviation
     ellipticityStd = 0.25
 
+from tractor.sersic import SersicGalaxy
+
+class LegacySersicIndex(SersicIndex):
+    def __init__(self, val=0):
+        super(LegacySersicIndex, self).__init__(val=val)
+        self.lower = 0.5
+
 class LogRadius(EllipseESoft):
     ''' Class used during fitting of the RexGalaxy type -- an ellipse
     type where only the radius is variable, and is represented in log

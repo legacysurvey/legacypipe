@@ -370,7 +370,8 @@ def read_large_galaxies(survey, targetwcs, bands):
         from tractor import NanoMaggies
         from tractor.ellipses import EllipseE
         from tractor.galaxy import DevGalaxy, ExpGalaxy
-        from tractor.sersic import SersicGalaxy, SersicIndex
+        from tractor.sersic import SersicGalaxy
+        from legacypipe.survey import LegacySersicIndex
 
         # only fix pre-burned galaxies
         I = np.where(galaxies.ref_cat == refcat)[0]
@@ -388,7 +389,7 @@ def read_large_galaxies(survey, targetwcs, bands):
                         src = typ(pos, bright, shape)
                         print('Created', src)
                     elif issubclass(typ, (SersicGalaxy)):
-                        sersic = SersicIndex(g.sersic)
+                        sersic = LegacySersicIndex(g.sersic)
                         src = typ(pos, bright, shape, sersic)
                         print('Created', src)
                     else:

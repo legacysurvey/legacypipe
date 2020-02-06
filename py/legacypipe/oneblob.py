@@ -12,10 +12,10 @@ from tractor import Tractor, PointSource, Image, Catalog, Patch
 from tractor.galaxy import (DevGalaxy, ExpGalaxy,
                             disable_galaxy_cache, enable_galaxy_cache)
 from tractor.patch import ModelMask
-from tractor.sersic import SersicGalaxy, SersicIndex
+from tractor.sersic import SersicGalaxy
 
 from legacypipe.survey import (RexGalaxy, GaiaSource,
-                               LegacyEllipseWithPriors, get_rgb)
+                               LegacyEllipseWithPriors, LegacySersicIndex, get_rgb)
 from legacypipe.bits import IN_BLOB
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
@@ -77,7 +77,7 @@ def one_blob(X):
     if len(timargs) == 0:
         return None
 
-    SersicIndex.stepsize = 0.001
+    LegacySersicIndex.stepsize = 0.001
     
     if plots:
         import pylab as plt
@@ -1235,11 +1235,11 @@ class OneBlob(object):
                 if smod == 'dev':
                     newsrc = ser = SersicGalaxy(
                         dev.getPosition().copy(), dev.getBrightness().copy(),
-                        dev.getShape().copy(), SersicIndex(4.))
+                        dev.getShape().copy(), LegacySersicIndex(4.))
                 elif smod == 'exp':
                     newsrc = ser = SersicGalaxy(
                         exp.getPosition().copy(), exp.getBrightness().copy(),
-                        exp.getShape().copy(), SersicIndex(1.))
+                        exp.getShape().copy(), LegacySersicIndex(1.))
                 #print('Initialized SER model:', newsrc)
 
             srccat[0] = newsrc
