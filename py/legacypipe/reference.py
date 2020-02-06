@@ -412,6 +412,7 @@ def read_large_galaxies(survey, targetwcs, bands):
 
                     galaxies.sources[ii] = src
                     galaxies.freezeparams[ii] = True
+                    galaxies.islargegalaxy[ii] = True
 
                     # Masking radius based on surface brightness:
                     ## Radii in our brick pixels
@@ -431,7 +432,8 @@ def read_large_galaxies(survey, targetwcs, bands):
                     # -> nanomaggies / arcsec^2
                     pro /= targetwcs.pixel_scale()**2
                     # Take largest radius with surface brightness above thresh
-                    irad, = np.nonzero(pro > 25.0)
+                    ## 0.1 nanomaggies = 25 mag/arcsec^2
+                    irad, = np.nonzero(pro > 0.1)
                     if len(irad):
                         irad = irad[-1]
                     else:
