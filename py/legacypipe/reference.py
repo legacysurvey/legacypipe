@@ -439,16 +439,12 @@ def read_large_galaxies(survey, targetwcs, bands):
                     else:
                         irad = 0
                     # -> masking radius in *degrees*
-                    radius = arcsec_radii[irad] / 3600.
-
-                    # Hack! We want to use a surface brightness threshold here.
-                    #galaxies.radius[ii] = g.shape_r * 4 / 3600
-                    galaxies.radius[ii] = radius
+                    galaxies.radius[ii] = arcsec_radii[irad] / 3600.
 
                     if shape is not None:
                         e = shape.e
                         ba = (1. - e) / (1. + e)
-                        pa = -np.rad2deg(np.arctan2(shape.e2, shape.e1) / 2.)
+                        pa = 180-np.rad2deg(np.arctan2(shape.e2, shape.e1) / 2.)
                         galaxies.pa[ii] = pa
                         galaxies.ba[ii] = ba
 
