@@ -334,13 +334,13 @@ def get_large_galaxy_version(fn):
                 preburn = True
                 v, _ = v.split('-')
             assert(len(v) == 2)
-            return v
+            return v, preburn
     except KeyError:
         pass
     for k in ['3.0', '2.0']:
         if k in fn:
             return 'L'+k[0]
-    return 'LG'
+    return 'LG', preburn
 
 # From TheTractor/code/optimize_mixture_profiles.py
 from scipy.special import gammaincinv
@@ -366,16 +366,12 @@ def read_large_galaxies(survey, targetwcs, bands):
     galaxies = fits_table(galfn, rows=I)
     del kd
 
-    refcat = get_large_galaxy_version(galfn)
+    refcat, preburn = get_large_galaxy_version(galfn)
 
     galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
-    galaxies.freezeparams = np.zeros(len(galaxies), bool)
     galaxies.sources = np.array([None] * len(galaxies))
 
-    #import pdb ; pdb.set_trace()
-
-    ## FIXME -- better way of detecting a pre-burned LSLGA catalog?
-    if 'sersic' in galaxies.get_columns():
+    if preburn: # use the pre-burned LSLGA catalog
         from legacypipe.catalog import fits_reverse_typemap
         from tractor.wcs import RaDecPos
         from tractor import NanoMaggies
@@ -386,11 +382,13 @@ def read_large_galaxies(survey, targetwcs, bands):
 
         galaxies.radius = np.zeros(len(galaxies), np.float32)
         galaxies.pa = np.zeros(len(galaxies), np.float32)
-        galaxies.ba = np.zeros(len(galaxies), np.float32)
+        galaxies.ba = np.ones(len(galaxies), np.float32)
+        galaxies.islargegalaxy = np.zeros(len(galaxies))
+        galaxies.freezeparams = np.zeros(len(galaxies), bool)
 
-        # only fix pre-burned galaxies
-        I = np.where(galaxies.ref_cat == refcat)[0]
-        if len(I) > 0: # probably fragile...
+        # only fix the parameters of pre-burned galaxies
+        I = np.where(galaxies.preburned)[0]
+        if len(I) > 0:
             for ii,g in zip(I, galaxies[I]):
                 try:
                     typ = fits_reverse_typemap[g.type.strip()]
@@ -417,57 +415,23 @@ def read_large_galaxies(survey, targetwcs, bands):
                         print('Unknown type', typ)
 
                     galaxies.sources[ii] = src
-                    galaxies.freezeparams[ii] = True
-                    galaxies.islargegalaxy[ii] = True
-
-                    # Masking radius based on surface brightness:
-                    ## Radii in our brick pixels
-                    pixradii = np.arange(2000)
-                    # -> in arcsec
-                    arcsec_radii = pixradii * targetwcs.pixel_scale()
-                    # -> effective radii for this galaxy
-                    eff_radii = arcsec_radii / g.shape_r
-                    # -> 1-d surface brightness profile
-                    pro = sersic_profile(eff_radii, serindex)
-                    # normalize by total flux to get surface brightness
-                    total = np.sum(pro * 2. * np.pi * pixradii)
-                    pro /= total
-                    # At this point, "pro" is fraction of total galaxy light per pixel.
-                    # -> nanomaggies per pixel:
-                    pro *= g.flux_r
-                    # -> nanomaggies / arcsec^2
-                    pro /= targetwcs.pixel_scale()**2
-                    # Take largest radius with surface brightness above thresh
-                    ## 0.1 nanomaggies = 25 mag/arcsec^2
-                    irad, = np.nonzero(pro > 0.1)
-                    if len(irad):
-                        irad = irad[-1]
-                    else:
-                        irad = 0
-                    # -> masking radius in *degrees*
-                    galaxies.radius[ii] = arcsec_radii[irad] / 3600.
-
-                    if shape is not None:
-                        e = shape.e
-                        ba = (1. - e) / (1. + e)
-                        pa = 180-np.rad2deg(np.arctan2(shape.e2, shape.e1) / 2.)
-                        galaxies.pa[ii] = pa
-                        galaxies.ba[ii] = ba
-
+                    if galaxies.freeze[ii]:
+                        galaxies.freezeparams[ii] = True
+                        galaxies.islargegalaxy[ii] = True
+                        galaxies.radius[ii] = galaxies.d25_model[ii] / 2 / 60 # [degree]
+                        galaxies.pa[ii] = galaxies.pa_model[ii]
+                        galaxies.ba[ii] = galaxies.ba_model[ii]
                 except:
                     import traceback
                     print('Failed to create Tractor source for LSLGA entry:',
                           traceback.print_exc())
-                    #keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id',
-                    #'sources', 'islargegalaxy', 'freezeparams']
-
     else:
         # Original LSLGA
         galaxies.ref_cat = np.array([refcat] * len(galaxies))
         galaxies.islargegalaxy = np.ones(len(galaxies))
-        # # D25 is diameter in arcmin
-        galaxies.radius = galaxies.d25 / 2. / 60.
-        galaxies.delete_column('d25')
+        galaxies.freezeparams = np.zeros(len(galaxies), bool)
+        galaxies.radius = galaxies.d25 / 2. / 60. # [degree]
+        #galaxies.delete_column('d25')
         galaxies.rename('lslga_id', 'ref_id')
     keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
                     'sources', 'islargegalaxy', 'freezeparams']
