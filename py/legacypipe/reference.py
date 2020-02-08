@@ -324,11 +324,15 @@ def read_tycho2(survey, targetwcs):
     return tycho
 
 def get_large_galaxy_version(fn):
+    preburn = False
     hdr = fitsio.read_header(fn)
     try:
         v = hdr.get('LSLGAVER')
         if v is not None:
             v = v.strip()
+            if 'model' in v.lower():
+                preburn = True
+                v, _ = v.split('-')
             assert(len(v) == 2)
             return v
     except KeyError:
@@ -367,6 +371,8 @@ def read_large_galaxies(survey, targetwcs, bands):
     galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
     galaxies.freezeparams = np.zeros(len(galaxies), bool)
     galaxies.sources = np.array([None] * len(galaxies))
+
+    #import pdb ; pdb.set_trace()
 
     ## FIXME -- better way of detecting a pre-burned LSLGA catalog?
     if 'sersic' in galaxies.get_columns():
