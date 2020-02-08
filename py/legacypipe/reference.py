@@ -355,7 +355,7 @@ def read_large_galaxies(survey, targetwcs, bands):
 
     # Need to initialize islargegalaxy to False because we will bring in
     # pre-burned sources that we do not want to mask.
-    galaxies.islargegalaxy = np.zeros(len(galaxies), bool) 
+    galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
     galaxies.freezeparams = np.zeros(len(galaxies), bool)
     galaxies.sources = np.array([None] * len(galaxies))
 
@@ -403,7 +403,7 @@ def read_large_galaxies(survey, targetwcs, bands):
                         galaxies.freezeparams[ii] = True
                         galaxies.islargegalaxy[ii] = True
                         galaxies.radius[ii] = galaxies.d25_model[ii] / 2 / 60 # [degree]
-                        galaxies.pa[ii] = galaxies.pa_model[ii]
+                        galaxies.pa[ii] = 180 - galaxies.pa_model[ii]         # note the 180 rotation
                         galaxies.ba[ii] = galaxies.ba_model[ii]
                 except:
                     import traceback
