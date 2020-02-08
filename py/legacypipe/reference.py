@@ -403,7 +403,7 @@ def read_large_galaxies(survey, targetwcs, bands):
                         galaxies.freezeparams[ii] = True
                         galaxies.islargegalaxy[ii] = True
                         galaxies.radius[ii] = galaxies.d25_model[ii] / 2 / 60 # [degree]
-                        galaxies.pa[ii] = 180 - galaxies.pa_model[ii]         # note the 180 rotation
+                        galaxies.pa[ii] = galaxies.pa_model[ii]
                         galaxies.ba[ii] = galaxies.ba_model[ii]
                 except:
                     import traceback
