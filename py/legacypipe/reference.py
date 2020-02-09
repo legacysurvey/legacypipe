@@ -426,14 +426,14 @@ def read_large_galaxies(survey, targetwcs, bands):
         galaxies.pa = np.zeros(len(galaxies), np.float32)
         gd = np.isfinite(galaxies.pa_orig)
         if np.count_nonzero(gd) > 0:
-            galaxies.pa[gd] = 180 - galaxies.pa_orig[gd] # [rotate relative to the parent LSLGA]
+            galaxies.pa[gd] = galaxies.pa_orig[gd]
 
         # Initialize each source with an exponential disk--
         for ii, g in enumerate(galaxies):
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
             assert(np.all(np.isfinite(list(fluxes.values()))))
             rr = g.radius * 3600. / 2 # factor of two accounts for R(25)-->reff [arcsec]
-            logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, g.ba, g.pa)
+            logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, g.ba, 180-g.pa) # note the 180 rotation
             src = ExpGalaxy(RaDecPos(g.ra, g.dec),
                             NanoMaggies(order=bands, **fluxes),
                             LegacyEllipseWithPriors(logr, ee1, ee2))
