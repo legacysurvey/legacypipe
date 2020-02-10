@@ -17,13 +17,6 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                           gaia_stars=True,
                           large_galaxies=True,
                           star_clusters=True):
-
-    from legacypipe.survey import GaiaSource
-    from legacypipe.survey import LegacyEllipseWithPriors
-    from tractor import NanoMaggies, RaDecPos
-    from tractor.galaxy import ExpGalaxy
-    from tractor.ellipses import EllipseESoft
-
     H,W = targetwcs.shape
     H,W = int(H),int(W)
 
@@ -34,11 +27,13 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     mpix = int(np.ceil(ref_margin * 3600. / pixscale))
     marginwcs = targetwcs.get_subimage(-mpix, -mpix, W+2*mpix, H+2*mpix)
 
+    # Table of reference-source properties, including a field 'sources',
+    # with tractor source objects.
     refs = []
 
     # Tycho-2 stars
     if tycho_stars:
-        tycho = read_tycho2(survey, marginwcs)
+        tycho = read_tycho2(survey, marginwcs, bands)
         if len(tycho):
             refs.append(tycho)
 
@@ -46,12 +41,8 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     gaia = None
     if gaia_stars:
         from astrometry.libkd.spherematch import match_radec
-        gaia = read_gaia(marginwcs)
+        gaia = read_gaia(marginwcs, bands)
     if gaia is not None:
-        gaia.isgaia = np.ones(len(gaia), bool)
-        gaia.isbright = (gaia.phot_g_mean_mag < 13.)
-        gaia.ismedium = (gaia.phot_g_mean_mag < 16.)
-        gaia.donotfit = np.zeros(len(gaia), bool)
         # Handle sources that appear in both Gaia and Tycho-2 by
         # dropping the entry from Tycho-2.
         if len(gaia) and len(tycho):
@@ -79,7 +70,6 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         clusters = read_star_clusters(marginwcs)
         if clusters is not None:
             debug('Found', len(clusters), 'star clusters nearby')
-            clusters.iscluster = np.ones(len(clusters), bool)
             refs.append(clusters)
 
     # Read large galaxies nearby.
@@ -95,13 +85,11 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                     gaia.donotfit[J] = True
             refs.append(galaxies)
 
-    refcat = None
     if len(refs):
         refs = merge_tables([r for r in refs if r is not None],
                             columns='fillzero')
     if len(refs) == 0:
         return None,None
-
     refs.radius_pix = np.ceil(refs.radius * 3600. / pixscale).astype(int)
 
     ok,xx,yy = targetwcs.radec2pixelxy(refs.ra, refs.dec)
@@ -121,58 +109,24 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         if not col in refs.get_columns():
             refs.set(col, np.zeros(len(refs), bool))
 
-    ## Create Tractor sources from reference stars
-    refcat = []
+    sources = refs.sources
+    refs.delete_column('sources')
+    for i,r in enumerate(refs):
+        if r.donotfit:
+            sources[i] = None
+        if sources[i] is None:
+            continue
+        sources[i].is_reference_source = True
+        if r.freezeparams:
+            sources[i].freezeparams = True
+    return refs, sources
 
-    fixed_sources = None
-    if 'sources' in refs.get_columns():
-        fixed_sources = refs.sources
-        # Empty entries get filled with zeros (thanks, merge_tables)
-        fixed_sources[fixed_sources == 0] = None
-        refs.delete_column('sources')
-
-    for ig,g in enumerate(refs):
-        if g.donotfit or g.iscluster:
-            refcat.append(None)
-
-        elif g.freezeparams and fixed_sources is not None and fixed_sources[ig] is not None:
-            src = fixed_sources[ig]
-            src.freezeparams = True
-            #print('Plugging in pre-fit source:', src)
-            refcat.append(src)
-
-        elif g.islargegalaxy:
-            ### FIXME -- we shouldn't hit this any more
-
-            fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
-            assert(np.all(np.isfinite(list(fluxes.values()))))
-            rr = g.radius * 3600. / 0.5 # factor of two accounts for R(25)-->reff
-            pa = 180 - g.pa
-            if not np.isfinite(pa):
-                pa = 0.
-            logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, g.ba, pa)
-            gal = ExpGalaxy(RaDecPos(g.ra, g.dec),
-                            NanoMaggies(order=bands, **fluxes),
-                            LegacyEllipseWithPriors(logr, ee1, ee2))
-            refcat.append(gal)
-
-        else:
-            # Gaia star -- which we want to create a source for, regardless of
-            # whether it is marked medium | bright (or neither).
-            refcat.append(GaiaSource.from_catalog(g, bands))
-
-    for src in refcat:
-        if src:
-            src.is_reference_source = True
-
-    return refs, refcat
-
-
-def read_gaia(targetwcs):
+def read_gaia(targetwcs, bands):
     '''
     *targetwcs* here should include margin
     '''
     from legacypipe.gaiacat import GaiaCatalog
+    from legacypipe.survey import GaiaSource
 
     gaia = GaiaCatalog().get_catalog_in_wcs(targetwcs)
     debug('Got', len(gaia), 'Gaia stars nearby')
@@ -199,7 +153,6 @@ def read_gaia(targetwcs):
         for order,c in enumerate(coeffs):
             mag += c * color**order
         gaia.set('decam_mag_%s' % b, mag)
-
 
     #gaia.pointsource = (gaia.G <= 19.) * (gaia.astrometric_excess_noise < 10.**0.5)
     gaia.pointsource = (gaia.G <= 18.) * (gaia.astrometric_excess_noise < 10.**0.5)
@@ -229,16 +182,34 @@ def read_gaia(targetwcs):
         X = gaia.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
 
-    # radius to consider affected by this star --
+    # radius to consider affected by this star
+    gaia.radius = mask_radius_for_mag(gaia.G)
+    gaia.delete_column('G')
+    gaia.isgaia = np.ones(len(gaia), bool)
+    gaia.isbright = (gaia.phot_g_mean_mag < 13.)
+    gaia.ismedium = (gaia.phot_g_mean_mag < 16.)
+    gaia.donotfit = np.zeros(len(gaia), bool)
+
+    # NOTE, must initialize gaia.sources array this way, or else numpy will try to be clever
+    # and create 2-d array because GaiaSource is iterable.
+    gaia.sources = np.empty(len(gaia), object)
+    for i,g in enumerate(gaia):
+        gaia.sources[i] = GaiaSource.from_catalog(g, bands)
+    return gaia
+
+def mask_radius_for_mag(mag):
+    # Returns a masking radius in degrees for a star of the given magnitude.
+    # Used for Tycho-2 and Gaia stars.
+
     # This is in degrees and the magic 0.262 (indeed the whole
     # relation) is from eyeballing a radius-vs-mag plot that was in
     # pixels; that is unrelated to the present targetwcs pixel scale.
-    gaia.radius = np.minimum(1800., 150. * 2.5**((11. - gaia.G)/3.)) * 0.262/3600.
-    gaia.delete_column('G')
-    return gaia
+    radius = np.minimum(1800., 150. * 2.5**((11. - mag)/3.)) * 0.262/3600.
+    return radius
 
-def read_tycho2(survey, targetwcs):
+def read_tycho2(survey, targetwcs, bands):
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
+    from legacypipe.survey import GaiaSource
     tycho2fn = survey.find_file('tycho2')
     radius = 1.
     ra,dec = targetwcs.radec_center()
@@ -295,7 +266,7 @@ def read_tycho2(survey, targetwcs):
 
     # See note on gaia.radius above -- don't change the 0.262 to
     # targetwcs.pixel_scale()!
-    tycho.radius = np.minimum(1800., 150. * 2.5**((11. - tycho.mag)/3.)) * 0.262/3600.
+    tycho.radius = mask_radius_for_mag(tycho.mag)
 
     for c in ['tyc1', 'tyc2', 'tyc3', 'mag_bt', 'mag_vt', 'mag_hp',
               'mean_ra', 'mean_dec',
@@ -321,32 +292,39 @@ def read_tycho2(survey, targetwcs):
     tycho.delete_column('epoch_dec')
     tycho.isbright = np.ones(len(tycho), bool)
     tycho.ismedium = np.ones(len(tycho), bool)
+    tycho.sources = np.empty(len(tycho), object)
+    for i,t in enumerate(tycho):
+        tycho.sources[i] = GaiaSource.from_catalog(t, bands)
     return tycho
 
 def get_large_galaxy_version(fn):
+    preburn = False
     hdr = fitsio.read_header(fn)
     try:
         v = hdr.get('LSLGAVER')
         if v is not None:
             v = v.strip()
+            if 'model' in v.lower():
+                preburn = True
+                v, _ = v.split('-')
             assert(len(v) == 2)
-            return v
+            return v, preburn
     except KeyError:
         pass
     for k in ['3.0', '2.0']:
         if k in fn:
             return 'L'+k[0]
-    return 'LG'
-
-# From TheTractor/code/optimize_mixture_profiles.py
-from scipy.special import gammaincinv
-def sernorm(n):
-	return gammaincinv(2.*n, 0.5)
-def sersic_profile(x, n):
-    return np.exp(-sernorm(n) * (x ** (1./n) - 1.))
+    return 'LG', preburn
 
 def read_large_galaxies(survey, targetwcs, bands):
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
+
+    from legacypipe.catalog import fits_reverse_typemap
+    from tractor import NanoMaggies, RaDecPos, PointSource
+    from tractor.ellipses import EllipseE, EllipseESoft
+    from tractor.galaxy import DevGalaxy, ExpGalaxy
+    from tractor.sersic import SersicGalaxy
+    from legacypipe.survey import LegacySersicIndex, LegacyEllipseWithPriors, LogRadius, RexGalaxy
 
     galfn = survey.find_file('large-galaxies')
     radius = 1.
@@ -362,111 +340,97 @@ def read_large_galaxies(survey, targetwcs, bands):
     galaxies = fits_table(galfn, rows=I)
     del kd
 
-    refcat = get_large_galaxy_version(galfn)
+    refcat, preburn = get_large_galaxy_version(galfn)
 
-    galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
-    galaxies.freezeparams = np.zeros(len(galaxies), bool)
-    galaxies.sources = np.array([None] * len(galaxies))
-
-    ## FIXME -- better way of detecting a pre-burned LSLGA catalog?
-    if 'sersic' in galaxies.get_columns():
-        from legacypipe.catalog import fits_reverse_typemap
-        from tractor.wcs import RaDecPos
-        from tractor import NanoMaggies
-        from tractor.ellipses import EllipseE
-        from tractor.galaxy import DevGalaxy, ExpGalaxy
-        from tractor.sersic import SersicGalaxy
-        from legacypipe.survey import LegacySersicIndex
-
-        galaxies.radius = np.zeros(len(galaxies), np.float32)
+    if not preburn:
+        # Original LSLGA
+        galaxies.rename('lslga_id', 'ref_id')
+        galaxies.ref_cat = np.array([refcat] * len(galaxies))
+        galaxies.islargegalaxy = np.array([True] * len(galaxies))
+        # Deal with NaN position angles.
+        galaxies.rename('pa', 'pa_orig')
         galaxies.pa = np.zeros(len(galaxies), np.float32)
-        galaxies.ba = np.zeros(len(galaxies), np.float32)
-
-        # only fix pre-burned galaxies
-        I = np.where(galaxies.ref_cat == refcat)[0]
-        if len(I) > 0: # probably fragile...
-            for ii,g in zip(I, galaxies[I]):
-                try:
-                    typ = fits_reverse_typemap[g.type.strip()]
-                    pos = RaDecPos(g.ra, g.dec)
-                    fluxes = dict([(band, g.get('flux_%s' % band)) for band in bands])
-                    bright = NanoMaggies(order=bands, **fluxes)
-                    shape = None
-                    if issubclass(typ, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
-                        shape = EllipseE(g.shape_r, g.shape_e1, g.shape_e2)
-
-                    if issubclass(typ, (DevGalaxy, ExpGalaxy)):
-                        src = typ(pos, bright, shape)
-                        print('Created', src)
-                        if issubclass(typ, DevGalaxy):
-                            serindex = 4.
-                        else:
-                            serindex = 1.
-                    elif issubclass(typ, (SersicGalaxy)):
-                        serindex = g.sersic
-                        sersic = LegacySersicIndex(g.sersic)
-                        src = typ(pos, bright, shape, sersic)
-                        print('Created', src)
-                    else:
-                        print('Unknown type', typ)
-
-                    galaxies.sources[ii] = src
-                    galaxies.freezeparams[ii] = True
-                    galaxies.islargegalaxy[ii] = True
-
-                    # Masking radius based on surface brightness:
-                    ## Radii in our brick pixels
-                    pixradii = np.arange(2000)
-                    # -> in arcsec
-                    arcsec_radii = pixradii * targetwcs.pixel_scale()
-                    # -> effective radii for this galaxy
-                    eff_radii = arcsec_radii / g.shape_r
-                    # -> 1-d surface brightness profile
-                    pro = sersic_profile(eff_radii, serindex)
-                    # normalize by total flux to get surface brightness
-                    total = np.sum(pro * 2. * np.pi * pixradii)
-                    pro /= total
-                    # At this point, "pro" is fraction of total galaxy light per pixel.
-                    # -> nanomaggies per pixel:
-                    pro *= g.flux_r
-                    # -> nanomaggies / arcsec^2
-                    pro /= targetwcs.pixel_scale()**2
-                    # Take largest radius with surface brightness above thresh
-                    ## 0.1 nanomaggies = 25 mag/arcsec^2
-                    irad, = np.nonzero(pro > 0.1)
-                    if len(irad):
-                        irad = irad[-1]
-                    else:
-                        irad = 0
-                    # -> masking radius in *degrees*
-                    radius = arcsec_radii[irad] / 3600.
-
-                    # Hack! We want to use a surface brightness threshold here.
-                    #galaxies.radius[ii] = g.shape_r * 4 / 3600
-                    galaxies.radius[ii] = radius
-
-                    if shape is not None:
-                        e = shape.e
-                        ba = (1. - e) / (1. + e)
-                        pa = -np.rad2deg(np.arctan2(shape.e2, shape.e1) / 2.)
-                        galaxies.pa[ii] = pa
-                        galaxies.ba[ii] = ba
-
-                except:
-                    import traceback
-                    print('Failed to create Tractor source for LSLGA entry:',
-                          traceback.print_exc())
-                    #keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id',
-                    #'sources', 'islargegalaxy', 'freezeparams']
+        gd = np.where(np.isfinite(galaxies.pa_orig))[0]
+        if len(gd) > 0:
+            galaxies.pa[gd] = galaxies.pa_orig[gd]
 
     else:
-        # Original LSLGA
-        galaxies.ref_cat = np.array([refcat] * len(galaxies))
-        galaxies.islargegalaxy = np.ones(len(galaxies))
-        # # D25 is diameter in arcmin
-        galaxies.radius = galaxies.d25 / 2. / 60.
-        galaxies.delete_column('d25')
-        galaxies.rename('lslga_id', 'ref_id')
+        # Need to initialize islargegalaxy to False because we will bring in
+        # pre-burned sources that we do not want to mask.
+        galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
+
+    galaxies.radius = galaxies.d25 / 2. / 60. # [degree]
+
+    galaxies.freezeparams = np.zeros(len(galaxies), bool)
+    galaxies.sources = np.empty(len(galaxies), object)
+    galaxies.sources[:] = None
+
+    # use the pre-burned LSLGA catalog
+    if 'preburned' in galaxies.get_columns():
+        preburned = np.logical_and(preburn, galaxies.preburned)
+    else:
+        preburned = np.zeros(len(galaxies), bool)
+
+    I, = np.nonzero(preburned)
+    # only fix the parameters of pre-burned galaxies
+    for ii,g in zip(I, galaxies[I]):
+        try:
+            typ = fits_reverse_typemap[g.type.strip()]
+            pos = RaDecPos(g.ra, g.dec)
+            fluxes = dict([(band, g.get('flux_%s' % band)) for band in bands])
+            bright = NanoMaggies(order=bands, **fluxes)
+            shape = None
+            # put the Rex branch first, because Rex is a subclass of ExpGalaxy!
+            if issubclass(typ, RexGalaxy):
+                shape = LogRadius(g.shape_r)
+            elif issubclass(typ, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
+                shape = EllipseE(g.shape_r, g.shape_e1, g.shape_e2)
+                # switch to softened ellipse (better fitting behavior)
+                shape = EllipseESoft.fromEllipseE(shape)
+                # and then to our custom ellipse class
+                shape = LegacyEllipseWithPriors(shape.logre, shape.ee1, shape.ee2)
+
+
+            if issubclass(typ, (DevGalaxy, ExpGalaxy)):
+                src = typ(pos, bright, shape)
+            elif issubclass(typ, (SersicGalaxy)):
+                sersic = LegacySersicIndex(g.sersic)
+                src = typ(pos, bright, shape, sersic)
+            elif issubclass(typ, PointSource):
+                src = typ(pos, bright)
+            else:
+                print('Unknown type', typ)
+            print('Created', src)
+
+            galaxies.sources[ii] = src
+
+            if galaxies.freeze[ii] and galaxies.ref_cat[ii] == refcat:
+                galaxies.islargegalaxy[ii] = True
+                ###
+                # galaxies.radius[ii] = galaxies.d25_model[ii] / 2 / 60 # [degree]
+                # galaxies.pa[ii] = galaxies.pa_model[ii]
+                # galaxies.ba[ii] = galaxies.ba_model[ii]
+
+            if galaxies.freeze[ii]:
+                galaxies.freezeparams[ii] = True
+        except:
+            import traceback
+            print('Failed to create Tractor source for LSLGA entry:',
+                  traceback.print_exc())
+            raise
+
+    I, = np.nonzero(np.logical_not(preburned))
+    for ii,g in zip(I, galaxies[I]):
+        # Initialize each source with an exponential disk--
+        fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
+        assert(np.all(np.isfinite(list(fluxes.values()))))
+        rr = g.radius * 3600. / 2 # factor of two accounts for R(25)-->reff [arcsec]
+        logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, g.ba, 180-g.pa) # note the 180 rotation
+        src = ExpGalaxy(RaDecPos(g.ra, g.dec),
+                        NanoMaggies(order=bands, **fluxes),
+                        LegacyEllipseWithPriors(logr, ee1, ee2))
+        galaxies.sources[ii] = src
+
     keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
                     'sources', 'islargegalaxy', 'freezeparams']
 
@@ -506,5 +470,7 @@ def read_star_clusters(targetwcs):
     # Set isbright=True
     clusters.isbright = np.zeros(len(clusters), bool)
     clusters.iscluster = np.ones(len(clusters), bool)
+
+    clusters.sources = np.array([None] * len(clusters))
 
     return clusters
