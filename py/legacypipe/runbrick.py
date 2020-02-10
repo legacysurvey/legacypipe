@@ -2997,7 +2997,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         if release is None:
             release = 8888
 
-    large_galaxies_force_pointsource = True
+    large_galaxies_force_pointsource = False # True
     if largegalaxy_preburner:
         # Implied options!
         #subsky = False
