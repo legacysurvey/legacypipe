@@ -324,8 +324,7 @@ def read_large_galaxies(survey, targetwcs, bands):
     from tractor.ellipses import EllipseE, EllipseESoft
     from tractor.galaxy import DevGalaxy, ExpGalaxy
     from tractor.sersic import SersicGalaxy
-    from legacypipe.survey import LegacySersicIndex
-    from legacypipe.survey import LegacyEllipseWithPriors
+    from legacypipe.survey import LegacySersicIndex, LegacyEllipseWithPriors, LogRadius
 
     galfn = survey.find_file('large-galaxies')
     radius = 1.
@@ -382,21 +381,27 @@ def read_large_galaxies(survey, targetwcs, bands):
             fluxes = dict([(band, g.get('flux_%s' % band)) for band in bands])
             bright = NanoMaggies(order=bands, **fluxes)
             shape = None
-            if issubclass(typ, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
+            # put the Rex branch first, because Rex is a subclass of ExpGalaxy!
+            if issubclass(typ, RexGalaxy):
+                shape = LogRadius(g.shape_r)
+            elif issubclass(typ, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
                 shape = EllipseE(g.shape_r, g.shape_e1, g.shape_e2)
                 # switch to softened ellipse (better fitting behavior)
                 shape = EllipseESoft.fromEllipseE(shape)
                 # and then to our custom ellipse class
                 shape = LegacyEllipseWithPriors(shape.logre, shape.ee1, shape.ee2)
 
+
             if issubclass(typ, (DevGalaxy, ExpGalaxy)):
                 src = typ(pos, bright, shape)
             elif issubclass(typ, (SersicGalaxy)):
                 sersic = LegacySersicIndex(g.sersic)
                 src = typ(pos, bright, shape, sersic)
-                print('Created', src)
+            elif issubclass(typ, PointSource):
+                src = typ(pos, bright)
             else:
                 print('Unknown type', typ)
+            print('Created', src)
 
             galaxies.sources[ii] = src
 
