@@ -399,6 +399,7 @@ def read_large_galaxies(survey, targetwcs, bands):
                         print('Unknown type', typ)
 
                     galaxies.sources[ii] = src
+                        
                     if galaxies.freeze[ii]:
                         galaxies.freezeparams[ii] = True
                         galaxies.islargegalaxy[ii] = True
@@ -424,8 +425,8 @@ def read_large_galaxies(survey, targetwcs, bands):
         # Deal with NaN position angles.
         galaxies.rename('pa', 'pa_orig')
         galaxies.pa = np.zeros(len(galaxies), np.float32)
-        gd = np.isfinite(galaxies.pa_orig)
-        if np.count_nonzero(gd) > 0:
+        gd = np.where(np.isfinite(galaxies.pa_orig))[0]
+        if len(gd) > 0:
             galaxies.pa[gd] = galaxies.pa_orig[gd]
 
         # Initialize each source with an exponential disk--
