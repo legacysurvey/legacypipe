@@ -139,7 +139,7 @@ def rbmain():
 
     fn = os.path.join(surveydir, 'calib', 'sky-single', 'decam', 'CP', 'V4.8.2',
                       'CP20170315', 'c4d_170316_062107_ooi_z_ls9',
-                      'c4d_170316_062107_ooi_z_ls9-N2-sky.fits')
+                      'c4d_170316_062107_ooi_z_ls9-N2-splinesky.fits')
     if os.path.exists(fn):
         os.unlink(fn)
 
@@ -153,7 +153,6 @@ def rbmain():
                '--outdir', outdir] + extra_args + ['-v'])
     print('Checking for calib file', fn)
     assert(os.path.exists(fn))
-
 
     # Wrap-around, hybrid PSF
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase8')
@@ -183,7 +182,7 @@ def rbmain():
     fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
     assert(os.path.exists(fn))
     T = fits_table(fn)
-    assert(len(T) == 4)
+    assert(len(T) == 3)
 
     # Check skipping blobs outside the brick's unique area.
     # (this now doesn't detect any sources at all, reasonably)
@@ -275,8 +274,8 @@ def rbmain():
     src = cat[1]
     print('Source1', src)
     assert(type(src) in [PointSource, GaiaSource])
-    assert(np.abs(src.pos.ra  - 244.77829) < 0.00001)
-    assert(np.abs(src.pos.dec -  12.07250) < 0.00001)
+    assert(np.abs(src.pos.ra  - 244.77828) < 0.00001)
+    assert(np.abs(src.pos.dec -  12.07248) < 0.00001)
     # DevGalaxy(pos=RaDecPos[244.77975494973529, 12.072348111713127], brightness=NanoMaggies: g=19.2, r=17.9, z=17.1, shape=re=2.09234, e1=-0.198453, e2=0.023652,
     # PointSource(RaDecPos[244.77833280764278, 12.072521274981987], NanoMaggies: g=25, r=23, z=21.7)
 
