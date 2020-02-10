@@ -316,13 +316,6 @@ def get_large_galaxy_version(fn):
             return 'L'+k[0]
     return 'LG', preburn
 
-# From TheTractor/code/optimize_mixture_profiles.py
-from scipy.special import gammaincinv
-def sernorm(n):
-	return gammaincinv(2.*n, 0.5)
-def sersic_profile(x, n):
-    return np.exp(-sernorm(n) * (x ** (1./n) - 1.))
-
 def read_large_galaxies(survey, targetwcs, bands):
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
 
@@ -398,13 +391,7 @@ def read_large_galaxies(survey, targetwcs, bands):
 
             if issubclass(typ, (DevGalaxy, ExpGalaxy)):
                 src = typ(pos, bright, shape)
-                print('Created', src)
-                if issubclass(typ, DevGalaxy):
-                    serindex = 4.
-                else:
-                    serindex = 1.
             elif issubclass(typ, (SersicGalaxy)):
-                serindex = g.sersic
                 sersic = LegacySersicIndex(g.sersic)
                 src = typ(pos, bright, shape, sersic)
                 print('Created', src)
