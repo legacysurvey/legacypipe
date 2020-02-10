@@ -347,7 +347,6 @@ def read_large_galaxies(survey, targetwcs, bands):
         galaxies.rename('lslga_id', 'ref_id')
         galaxies.ref_cat = np.array([refcat] * len(galaxies))
         galaxies.islargegalaxy = np.array([True] * len(galaxies))
-        galaxies.radius = galaxies.d25 / 2. / 60. # [degree]
         # Deal with NaN position angles.
         galaxies.rename('pa', 'pa_orig')
         galaxies.pa = np.zeros(len(galaxies), np.float32)
@@ -359,8 +358,8 @@ def read_large_galaxies(survey, targetwcs, bands):
         # Need to initialize islargegalaxy to False because we will bring in
         # pre-burned sources that we do not want to mask.
         galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
-        galaxies.radius = np.zeros(len(galaxies), np.float32)
-        galaxies.ba = np.ones(len(galaxies), np.float32)
+
+    galaxies.radius = galaxies.d25 / 2. / 60. # [degree]
 
     galaxies.freezeparams = np.zeros(len(galaxies), bool)
     galaxies.sources = np.empty(len(galaxies), object)
@@ -405,12 +404,15 @@ def read_large_galaxies(survey, targetwcs, bands):
 
             galaxies.sources[ii] = src
 
+            if galaxies.freeze[ii] and galaxies.ref_cat[ii] == refcat:
+                galaxies.islargegalaxy[ii] = True
+                ###
+                # galaxies.radius[ii] = galaxies.d25_model[ii] / 2 / 60 # [degree]
+                # galaxies.pa[ii] = galaxies.pa_model[ii]
+                # galaxies.ba[ii] = galaxies.ba_model[ii]
+
             if galaxies.freeze[ii]:
                 galaxies.freezeparams[ii] = True
-                galaxies.islargegalaxy[ii] = True
-                galaxies.radius[ii] = galaxies.d25_model[ii] / 2 / 60 # [degree]
-                galaxies.pa[ii] = galaxies.pa_model[ii]
-                galaxies.ba[ii] = galaxies.ba_model[ii]
         except:
             import traceback
             print('Failed to create Tractor source for LSLGA entry:',
