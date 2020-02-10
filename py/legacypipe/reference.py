@@ -320,11 +320,11 @@ def read_large_galaxies(survey, targetwcs, bands):
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
 
     from legacypipe.catalog import fits_reverse_typemap
-    from tractor import NanoMaggies, RaDecPos
+    from tractor import NanoMaggies, RaDecPos, PointSource
     from tractor.ellipses import EllipseE, EllipseESoft
     from tractor.galaxy import DevGalaxy, ExpGalaxy
     from tractor.sersic import SersicGalaxy
-    from legacypipe.survey import LegacySersicIndex, LegacyEllipseWithPriors, LogRadius
+    from legacypipe.survey import LegacySersicIndex, LegacyEllipseWithPriors, LogRadius, RexGalaxy
 
     galfn = survey.find_file('large-galaxies')
     radius = 1.
