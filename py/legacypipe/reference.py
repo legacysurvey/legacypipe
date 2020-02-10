@@ -17,9 +17,6 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                           gaia_stars=True,
                           large_galaxies=True,
                           star_clusters=True):
-
-    from legacypipe.survey import GaiaSource
-
     H,W = targetwcs.shape
     H,W = int(H),int(W)
 
@@ -93,7 +90,6 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                             columns='fillzero')
     if len(refs) == 0:
         return None,None
-
     refs.radius_pix = np.ceil(refs.radius * 3600. / pixscale).astype(int)
 
     ok,xx,yy = targetwcs.radec2pixelxy(refs.ra, refs.dec)
@@ -113,21 +109,24 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         if not col in refs.get_columns():
             refs.set(col, np.zeros(len(refs), bool))
 
-    refs.sources[refs.donotfit] = None
-    for i,r in enumerate(refs):
-        if r.freezeparams and r.sources:
-            r.sources.freezeparams = True
-        if r.sources:
-            r.sources.is_reference_source = True
-    refcat = refs.sources
+    sources = refs.sources
     refs.delete_column('sources')
-    return refs, refcat
+    for i,r in enumerate(refs):
+        if r.donotfit:
+            sources[i] = None
+        if sources[i] is None:
+            continue
+        sources[i].is_reference_source = True
+        if r.freezeparams:
+            sources[i].freezeparams = True
+    return refs, sources
 
 def read_gaia(targetwcs, bands):
     '''
     *targetwcs* here should include margin
     '''
     from legacypipe.gaiacat import GaiaCatalog
+    from legacypipe.survey import GaiaSource
 
     gaia = GaiaCatalog().get_catalog_in_wcs(targetwcs)
     debug('Got', len(gaia), 'Gaia stars nearby')
@@ -190,7 +189,12 @@ def read_gaia(targetwcs, bands):
     gaia.isbright = (gaia.phot_g_mean_mag < 13.)
     gaia.ismedium = (gaia.phot_g_mean_mag < 16.)
     gaia.donotfit = np.zeros(len(gaia), bool)
-    gaia.sources = np.array([GaiaSource.from_catalog(g, bands) for g in gaia])
+
+    # NOTE, must initialize gaia.sources array this way, or else numpy will try to be clever
+    # and create 2-d array because GaiaSource is iterable.
+    gaia.sources = np.empty(len(gaia), object)
+    for i,g in enumerate(gaia):
+        gaia.sources[i] = GaiaSource.from_catalog(g, bands)
     return gaia
 
 def mask_radius_for_mag(mag):
@@ -205,6 +209,7 @@ def mask_radius_for_mag(mag):
 
 def read_tycho2(survey, targetwcs, bands):
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
+    from legacypipe.survey import GaiaSource
     tycho2fn = survey.find_file('tycho2')
     radius = 1.
     ra,dec = targetwcs.radec_center()
@@ -287,7 +292,9 @@ def read_tycho2(survey, targetwcs, bands):
     tycho.delete_column('epoch_dec')
     tycho.isbright = np.ones(len(tycho), bool)
     tycho.ismedium = np.ones(len(tycho), bool)
-    tycho.sources = np.array([GaiaSource.from_catalog(t, bands) for t in tycho])
+    tycho.sources = np.empty(len(tycho), object)
+    for i,t in enumerate(tycho):
+        tycho.sources[i] = GaiaSource.from_catalog(t, bands)
     return tycho
 
 def get_large_galaxy_version(fn):
@@ -360,18 +367,18 @@ def read_large_galaxies(survey, targetwcs, bands):
         # Need to initialize islargegalaxy to False because we will bring in
         # pre-burned sources that we do not want to mask.
         galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
+        galaxies.radius = np.zeros(len(galaxies), np.float32)
+        galaxies.ba = np.ones(len(galaxies), np.float32)
 
     galaxies.freezeparams = np.zeros(len(galaxies), bool)
-    galaxies.sources = np.array([None] * len(galaxies))
+    galaxies.sources = np.empty(len(galaxies), object)
+    galaxies.sources[:] = None
 
     # use the pre-burned LSLGA catalog
     if 'preburned' in galaxies.get_columns():
         preburned = np.logical_and(preburn, galaxies.preburned)
     else:
         preburned = np.zeros(len(galaxies), bool)
-
-    galaxies.radius = np.zeros(len(galaxies), np.float32)
-    galaxies.ba = np.ones(len(galaxies), np.float32)
 
     I, = np.nonzero(preburned)
     # only fix the parameters of pre-burned galaxies
