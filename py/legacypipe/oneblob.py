@@ -226,98 +226,6 @@ class OneBlob(object):
         if self.plots:
             self._plots(tr, 'Initial models')
 
-        ### Try using saddle criterion to segment the blob / mask other sources
-        if True:
-            from legacypipe.detection import detection_maps
-            from astrometry.util.multiproc import multiproc
-            from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
-            from scipy.ndimage.measurements import label
-
-            # Compute per-band detection maps
-            mp = multiproc()
-            detmaps,detivs,_ = detection_maps(
-                self.tims, self.blobwcs, self.bands, mp)
-            maxsn = 0
-            for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
-                sn = detmap * np.sqrt(detiv)
-                # HACK - no SEDs...
-                maxsn = np.maximum(maxsn, sn)
-
-            segmap = np.empty((self.blobh, self.blobw), int)
-            segmap[:,:] = -1
-
-            _,ix,iy = self.blobwcs.radec2pixelxy(
-                np.array([src.getPosition().ra  for src in self.srcs]),
-                np.array([src.getPosition().dec for src in self.srcs]))
-            ix = np.clip(np.round(ix)-1, 0, self.blobw-1).astype(int)
-            iy = np.clip(np.round(iy)-1, 0, self.blobh-1).astype(int)
-
-            # Do not compute segmentation map for sources in the CLUSTER mask
-            Iseg, = np.nonzero((self.refmap[iy, ix] & IN_BLOB['CLUSTER']) == 0)
-            # Zero out the S/N in CLUSTER mask??
-            maxsn[(self.refmap & IN_BLOB['CLUSTER']) > 0] = 0.
-
-            Ibright = _argsort_by_brightness([cat[i] for i in Iseg], self.bands)
-            rank = np.empty(len(Iseg), int)
-            rank[Ibright] = np.arange(len(Iseg), dtype=int)
-            rankmap = dict([(Iseg[i],r) for r,i in enumerate(Ibright)])
-            del Ibright
-
-            todo = set(Iseg)
-            thresholds = list(range(3, int(np.ceil(maxsn.max()))))
-            for thresh in thresholds:
-                #print('S/N', thresh, ':', len(todo), 'sources to find still')
-                if len(todo) == 0:
-                    break
-                hot = (maxsn >= thresh)
-                hot = binary_fill_holes(hot)
-                blobs,_ = label(hot)
-                srcblobs = blobs[iy[Iseg], ix[Iseg]]
-                done = set()
-
-                blobranks = {}
-                for i,(b,r) in enumerate(zip(srcblobs, rank)):
-                    if not b in blobranks:
-                        blobranks[b] = []
-                    blobranks[b].append(r)
-
-                for t in todo:
-                    bl = blobs[iy[t], ix[t]]
-                    if bl == 0:
-                        # ??
-                        done.add(t)
-                        continue
-                    if rankmap[t] == min(blobranks[bl]):
-                        #print('Source', t, 'has rank', rank[t], 'vs blob ranks', blobranks[bl])
-                        segmap[blobs == bl] = t
-                        #print('Source', t, 'is isolated at S/N', thresh)
-                        done.add(t)
-                todo.difference_update(done)
-
-            self.segmap = segmap
-
-            if self.plots:
-                import pylab as plt
-                plt.clf()
-                dimshow(segmap)
-                ax = plt.axis()
-                from legacypipe.detection import plot_boundary_map
-                plot_boundary_map(segmap >= 0)
-                plt.plot(ix, iy, 'r.')
-                plt.axis(ax)
-                plt.title('Segmentation map')
-                self.ps.savefig()
-
-                plt.clf()
-                dimshow(self.rgb)
-                ax = plt.axis()
-                for i in range(len(cat)):
-                    plot_boundary_map(segmap == i)
-                plt.plot(ix, iy, 'r.')
-                plt.axis(ax)
-                plt.title('Segments')
-                self.ps.savefig()
-                
         # Optimize individual sources, in order of flux.
         # First, choose the ordering...
         Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
@@ -363,6 +271,8 @@ class OneBlob(object):
 
         debug('Blob', self.name, 'finished initial fitting:', Time()-tlast)
         tlast = Time()
+
+        self.compute_segmentation_map()
 
         # Next, model selections: point source vs dev/exp vs composite.
         B = self.run_model_selection(cat, Ibright, B,
@@ -467,6 +377,99 @@ class OneBlob(object):
 
         info('Blob', self.name, 'finished, total:', Time()-trun)
         return B
+
+    def compute_segmentation_map(self):
+        # Use ~ saddle criterion to segment the blob / mask other sources
+        from legacypipe.detection import detection_maps
+        from astrometry.util.multiproc import multiproc
+        from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
+        from scipy.ndimage.measurements import label
+
+        # Compute per-band detection maps
+        mp = multiproc()
+        detmaps,detivs,_ = detection_maps(
+            self.tims, self.blobwcs, self.bands, mp)
+        maxsn = 0
+        for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
+            sn = detmap * np.sqrt(detiv)
+            # HACK - no SEDs...
+            maxsn = np.maximum(maxsn, sn)
+
+        segmap = np.empty((self.blobh, self.blobw), int)
+        segmap[:,:] = -1
+
+        _,ix,iy = self.blobwcs.radec2pixelxy(
+            np.array([src.getPosition().ra  for src in self.srcs]),
+            np.array([src.getPosition().dec for src in self.srcs]))
+        ix = np.clip(np.round(ix)-1, 0, self.blobw-1).astype(int)
+        iy = np.clip(np.round(iy)-1, 0, self.blobh-1).astype(int)
+
+        # Do not compute segmentation map for sources in the CLUSTER mask
+        Iseg, = np.nonzero((self.refmap[iy, ix] & IN_BLOB['CLUSTER']) == 0)
+        # Zero out the S/N in CLUSTER mask
+        maxsn[(self.refmap & IN_BLOB['CLUSTER']) > 0] = 0.
+
+        Ibright = _argsort_by_brightness([self.srcs[i] for i in Iseg], self.bands)
+        rank = np.empty(len(Iseg), int)
+        rank[Ibright] = np.arange(len(Iseg), dtype=int)
+        rankmap = dict([(Iseg[i],r) for r,i in enumerate(Ibright)])
+        del Ibright
+
+        todo = set(Iseg)
+        thresholds = list(range(3, int(np.ceil(maxsn.max()))))
+        for thresh in thresholds:
+            #print('S/N', thresh, ':', len(todo), 'sources to find still')
+            if len(todo) == 0:
+                break
+            hot = (maxsn >= thresh)
+            hot = binary_fill_holes(hot)
+            blobs,_ = label(hot)
+            srcblobs = blobs[iy[Iseg], ix[Iseg]]
+            done = set()
+
+            blobranks = {}
+            for i,(b,r) in enumerate(zip(srcblobs, rank)):
+                if not b in blobranks:
+                    blobranks[b] = []
+                blobranks[b].append(r)
+
+            for t in todo:
+                bl = blobs[iy[t], ix[t]]
+                if bl == 0:
+                    # ??
+                    done.add(t)
+                    continue
+                if rankmap[t] == min(blobranks[bl]):
+                    #print('Source', t, 'has rank', rank[t], 'vs blob ranks', blobranks[bl])
+                    segmap[blobs == bl] = t
+                    #print('Source', t, 'is isolated at S/N', thresh)
+                    done.add(t)
+            todo.difference_update(done)
+
+        self.segmap = segmap
+
+        if self.plots:
+            import pylab as plt
+            plt.clf()
+            dimshow(segmap)
+            ax = plt.axis()
+            from legacypipe.detection import plot_boundary_map
+            plot_boundary_map(segmap >= 0)
+            plt.plot(ix, iy, 'r.')
+            plt.axis(ax)
+            plt.title('Segmentation map')
+            self.ps.savefig()
+
+            plt.clf()
+            dimshow(self.rgb)
+            ax = plt.axis()
+            for i in range(len(self.srcs)):
+                plot_boundary_map(segmap == i)
+            plt.plot(ix, iy, 'r.')
+            plt.axis(ax)
+            plt.title('Segments')
+            self.ps.savefig()
+
 
     def run_model_selection(self, cat, Ibright, B, iterative_detection=True):
         # We compute & subtract initial models for the other sources while
@@ -1605,6 +1608,11 @@ class OneBlob(object):
 
         ax = plt.axis()
         plt.plot(x0-1, y0-1, 'r.')
+        # ref sources
+        xr,yr = [],[]
+        for x,y,src in zip(x0,y0,self.srcs):
+            if is_reference_source(src):
+                plt.plot(x-1, y-1, 'o', mec='g', mfc='none')
         plt.axis(ax)
         plt.title('initial sources')
         self.ps.savefig()
