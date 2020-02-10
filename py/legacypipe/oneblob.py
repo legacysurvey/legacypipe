@@ -1609,7 +1609,6 @@ class OneBlob(object):
         ax = plt.axis()
         plt.plot(x0-1, y0-1, 'r.')
         # ref sources
-        xr,yr = [],[]
         for x,y,src in zip(x0,y0,self.srcs):
             if is_reference_source(src):
                 plt.plot(x-1, y-1, 'o', mec='g', mfc='none')
