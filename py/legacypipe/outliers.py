@@ -100,7 +100,6 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                         mp=None, plots=False, ps=None, make_badcoadds=True,
                         refstars=None):
     from legacypipe.bits import DQ_BITS
-    from legacypipe.reference import read_gaia
     from scipy.ndimage.filters import gaussian_filter
     from scipy.ndimage.morphology import binary_dilation
     from astrometry.util.resample import resample_with_wcs,OverlapError

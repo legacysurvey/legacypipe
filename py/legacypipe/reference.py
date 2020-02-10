@@ -30,11 +30,13 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     mpix = int(np.ceil(ref_margin * 3600. / pixscale))
     marginwcs = targetwcs.get_subimage(-mpix, -mpix, W+2*mpix, H+2*mpix)
 
+    # Table of reference-source properties, including a field 'sources',
+    # with tractor source objects.
     refs = []
 
     # Tycho-2 stars
     if tycho_stars:
-        tycho = read_tycho2(survey, marginwcs)
+        tycho = read_tycho2(survey, marginwcs, bands)
         if len(tycho):
             refs.append(tycho)
 
@@ -42,12 +44,8 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     gaia = None
     if gaia_stars:
         from astrometry.libkd.spherematch import match_radec
-        gaia = read_gaia(marginwcs)
+        gaia = read_gaia(marginwcs, bands)
     if gaia is not None:
-        gaia.isgaia = np.ones(len(gaia), bool)
-        gaia.isbright = (gaia.phot_g_mean_mag < 13.)
-        gaia.ismedium = (gaia.phot_g_mean_mag < 16.)
-        gaia.donotfit = np.zeros(len(gaia), bool)
         # Handle sources that appear in both Gaia and Tycho-2 by
         # dropping the entry from Tycho-2.
         if len(gaia) and len(tycho):
@@ -75,7 +73,6 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         clusters = read_star_clusters(marginwcs)
         if clusters is not None:
             debug('Found', len(clusters), 'star clusters nearby')
-            clusters.iscluster = np.ones(len(clusters), bool)
             refs.append(clusters)
 
     # Read large galaxies nearby.
@@ -91,7 +88,6 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                     gaia.donotfit[J] = True
             refs.append(galaxies)
 
-    refcat = None
     if len(refs):
         refs = merge_tables([r for r in refs if r is not None],
                             columns='fillzero')
@@ -117,42 +113,17 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         if not col in refs.get_columns():
             refs.set(col, np.zeros(len(refs), bool))
 
-    ## Create Tractor sources from reference stars
-    refcat = []
-
-    fixed_sources = None
-    if 'sources' in refs.get_columns():
-        fixed_sources = refs.sources
-        # Empty entries get filled with zeros (thanks, merge_tables)
-        fixed_sources[fixed_sources == 0] = None
-        refs.delete_column('sources')
-
-    for ig,g in enumerate(refs):
-        if g.donotfit or g.iscluster:
-            refcat.append(None)
-
-        elif g.freezeparams and fixed_sources is not None and fixed_sources[ig] is not None:
-            src = fixed_sources[ig]
-            src.freezeparams = True
-            #print('Plugging in pre-fit source:', src)
-            refcat.append(src)
-
-        elif g.islargegalaxy:
-            refcat.append(fixed_sources[ig])
-
-        else:
-            # Gaia star -- which we want to create a source for, regardless of
-            # whether it is marked medium | bright (or neither).
-            refcat.append(GaiaSource.from_catalog(g, bands))
-
-    for src in refcat:
-        if src:
-            src.is_reference_source = True
-
+    refs.sources[refs.donotfit] = None
+    for i,r in enumerate(refs):
+        if r.freezeparams and r.sources:
+            r.sources.freezeparams = True
+        if r.sources:
+            r.sources.is_reference_source = True
+    refcat = refs.sources
+    refs.delete_column('sources')
     return refs, refcat
 
-
-def read_gaia(targetwcs):
+def read_gaia(targetwcs, bands):
     '''
     *targetwcs* here should include margin
     '''
@@ -184,7 +155,6 @@ def read_gaia(targetwcs):
             mag += c * color**order
         gaia.set('decam_mag_%s' % b, mag)
 
-
     #gaia.pointsource = (gaia.G <= 19.) * (gaia.astrometric_excess_noise < 10.**0.5)
     gaia.pointsource = (gaia.G <= 18.) * (gaia.astrometric_excess_noise < 10.**0.5)
 
@@ -213,15 +183,27 @@ def read_gaia(targetwcs):
         X = gaia.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
 
-    # radius to consider affected by this star --
+    # radius to consider affected by this star
+    gaia.radius = mask_radius_for_mag(gaia.G)
+    gaia.delete_column('G')
+    gaia.isgaia = np.ones(len(gaia), bool)
+    gaia.isbright = (gaia.phot_g_mean_mag < 13.)
+    gaia.ismedium = (gaia.phot_g_mean_mag < 16.)
+    gaia.donotfit = np.zeros(len(gaia), bool)
+    gaia.sources = np.array([GaiaSource.from_catalog(g, bands) for g in gaia])
+    return gaia
+
+def mask_radius_for_mag(mag):
+    # Returns a masking radius in degrees for a star of the given magnitude.
+    # Used for Tycho-2 and Gaia stars.
+
     # This is in degrees and the magic 0.262 (indeed the whole
     # relation) is from eyeballing a radius-vs-mag plot that was in
     # pixels; that is unrelated to the present targetwcs pixel scale.
-    gaia.radius = np.minimum(1800., 150. * 2.5**((11. - gaia.G)/3.)) * 0.262/3600.
-    gaia.delete_column('G')
-    return gaia
+    radius = np.minimum(1800., 150. * 2.5**((11. - mag)/3.)) * 0.262/3600.
+    return radius
 
-def read_tycho2(survey, targetwcs):
+def read_tycho2(survey, targetwcs, bands):
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
     tycho2fn = survey.find_file('tycho2')
     radius = 1.
@@ -279,7 +261,7 @@ def read_tycho2(survey, targetwcs):
 
     # See note on gaia.radius above -- don't change the 0.262 to
     # targetwcs.pixel_scale()!
-    tycho.radius = np.minimum(1800., 150. * 2.5**((11. - tycho.mag)/3.)) * 0.262/3600.
+    tycho.radius = mask_radius_for_mag(tycho.mag)
 
     for c in ['tyc1', 'tyc2', 'tyc3', 'mag_bt', 'mag_vt', 'mag_hp',
               'mean_ra', 'mean_dec',
@@ -305,6 +287,7 @@ def read_tycho2(survey, targetwcs):
     tycho.delete_column('epoch_dec')
     tycho.isbright = np.ones(len(tycho), bool)
     tycho.ismedium = np.ones(len(tycho), bool)
+    tycho.sources = np.array([GaiaSource.from_catalog(t, bands) for t in tycho])
     return tycho
 
 def get_large_galaxy_version(fn):
@@ -334,7 +317,6 @@ def sersic_profile(x, n):
     return np.exp(-sernorm(n) * (x ** (1./n) - 1.))
 
 def read_large_galaxies(survey, targetwcs, bands):
-
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
 
     galfn = survey.find_file('large-galaxies')
@@ -479,5 +461,7 @@ def read_star_clusters(targetwcs):
     # Set isbright=True
     clusters.isbright = np.zeros(len(clusters), bool)
     clusters.iscluster = np.ones(len(clusters), bool)
+
+    clusters.sources = np.array([None] * len(clusters))
 
     return clusters
