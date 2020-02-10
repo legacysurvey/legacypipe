@@ -320,7 +320,7 @@ class OneBlob(object):
                 
         # Optimize individual sources, in order of flux.
         # First, choose the ordering...
-        Ibright = _argsort_by_brightness(cat, self.bands)
+        Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
 
         # The sizes of the model patches fit here are determined by the
         # sources themselves, ie by the size of the mod patch returned by
@@ -411,7 +411,7 @@ class OneBlob(object):
                 plt.title('Before final opt')
                 self.ps.savefig()
 
-            Ibright = _argsort_by_brightness(cat, self.bands)
+            Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
             if len(cat) > 1:
                 self._optimize_individual_sources_subtract(
                     cat, Ibright, B.cpu_source)
@@ -966,7 +966,7 @@ class OneBlob(object):
                 # The hole-fill can still fail (eg, in small test images) if
                 # the bleed trail splits the blob into two pieces.
                 # Skip this test for reference sources.
-                if getattr(src, 'is_reference_source', False):
+                if is_reference_source(src):
                     debug('Reference source center is outside symmetric blob; keeping')
                 else:
                     debug('Source center is not in the symmetric blob mask; skipping')
@@ -1669,15 +1669,21 @@ def _compute_invvars(allderivs):
         ivs.append(chisq)
     return ivs
 
-def _argsort_by_brightness(cat, bands):
+def _argsort_by_brightness(cat, bands, ref_first=False):
     fluxes = []
     for src in cat:
         # HACK -- here we just *sum* the nanomaggies in each band.  Bogus!
         br = src.getBrightness()
         flux = sum([br.getFlux(band) for band in bands])
+        if ref_first and is_reference_source(src):
+            # Put the reference sources at the front of the list!
+            flux += 1e6
         fluxes.append(flux)
     Ibright = np.argsort(-np.array(fluxes))
     return Ibright
+
+def is_reference_source(src):
+    return getattr(src, 'is_reference_source', False)
 
 def _compute_source_metrics(srcs, tims, bands, tr):
     # rchi2 quality-of-fit metric
