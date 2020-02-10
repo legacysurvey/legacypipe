@@ -319,6 +319,14 @@ def sersic_profile(x, n):
 def read_large_galaxies(survey, targetwcs, bands):
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
 
+    from legacypipe.catalog import fits_reverse_typemap
+    from tractor import NanoMaggies, RaDecPos
+    from tractor.ellipses import EllipseE, EllipseESoft
+    from tractor.galaxy import DevGalaxy, ExpGalaxy
+    from tractor.sersic import SersicGalaxy
+    from legacypipe.survey import LegacySersicIndex
+    from legacypipe.survey import LegacyEllipseWithPriors
+
     galfn = survey.find_file('large-galaxies')
     radius = 1.
     rc,dc = targetwcs.radec_center()
@@ -335,75 +343,12 @@ def read_large_galaxies(survey, targetwcs, bands):
 
     refcat, preburn = get_large_galaxy_version(galfn)
 
-    # Need to initialize islargegalaxy to False because we will bring in
-    # pre-burned sources that we do not want to mask.
-    galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
-    galaxies.freezeparams = np.zeros(len(galaxies), bool)
-    galaxies.sources = np.array([None] * len(galaxies))
-
-    if preburn: # use the pre-burned LSLGA catalog
-        from legacypipe.catalog import fits_reverse_typemap
-        from tractor import NanoMaggies, RaDecPos
-        from tractor.ellipses import EllipseE
-        from tractor.galaxy import DevGalaxy, ExpGalaxy
-        from tractor.sersic import SersicGalaxy
-        from legacypipe.survey import LegacySersicIndex
-
-        galaxies.radius = np.zeros(len(galaxies), np.float32)
-        galaxies.ba = np.ones(len(galaxies), np.float32)
-
-        # only fix the parameters of pre-burned galaxies
-        I = np.where(galaxies.preburned)[0]
-        if len(I) > 0:
-            for ii,g in zip(I, galaxies[I]):
-                try:
-                    typ = fits_reverse_typemap[g.type.strip()]
-                    pos = RaDecPos(g.ra, g.dec)
-                    fluxes = dict([(band, g.get('flux_%s' % band)) for band in bands])
-                    bright = NanoMaggies(order=bands, **fluxes)
-                    shape = None
-                    if issubclass(typ, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
-                        shape = EllipseE(g.shape_r, g.shape_e1, g.shape_e2)
-
-                    if issubclass(typ, (DevGalaxy, ExpGalaxy)):
-                        src = typ(pos, bright, shape)
-                        print('Created', src)
-                        if issubclass(typ, DevGalaxy):
-                            serindex = 4.
-                        else:
-                            serindex = 1.
-                    elif issubclass(typ, (SersicGalaxy)):
-                        serindex = g.sersic
-                        sersic = LegacySersicIndex(g.sersic)
-                        src = typ(pos, bright, shape, sersic)
-                        print('Created', src)
-                    else:
-                        print('Unknown type', typ)
-
-                    galaxies.sources[ii] = src
-                        
-                    if galaxies.freeze[ii]:
-                        galaxies.freezeparams[ii] = True
-                        galaxies.islargegalaxy[ii] = True
-                        galaxies.radius[ii] = galaxies.d25_model[ii] / 2 / 60 # [degree]
-                        galaxies.pa[ii] = galaxies.pa_model[ii]
-                        galaxies.ba[ii] = galaxies.ba_model[ii]
-                except:
-                    import traceback
-                    print('Failed to create Tractor source for LSLGA entry:',
-                          traceback.print_exc())
-    else:
-        from tractor import NanoMaggies, RaDecPos
-        from tractor.ellipses import EllipseESoft
-        from tractor.galaxy import ExpGalaxy
-        from legacypipe.survey import LegacyEllipseWithPriors
-
-        # Original LSLGA; initialize with an exponential galaxy.
+    if not preburn:
+        # Original LSLGA
         galaxies.rename('lslga_id', 'ref_id')
         galaxies.ref_cat = np.array([refcat] * len(galaxies))
         galaxies.islargegalaxy = np.array([True] * len(galaxies))
         galaxies.radius = galaxies.d25 / 2. / 60. # [degree]
-
         # Deal with NaN position angles.
         galaxies.rename('pa', 'pa_orig')
         galaxies.pa = np.zeros(len(galaxies), np.float32)
@@ -411,16 +356,79 @@ def read_large_galaxies(survey, targetwcs, bands):
         if len(gd) > 0:
             galaxies.pa[gd] = galaxies.pa_orig[gd]
 
-        # Initialize each source with an exponential disk--
-        for ii, g in enumerate(galaxies):
-            fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
-            assert(np.all(np.isfinite(list(fluxes.values()))))
-            rr = g.radius * 3600. / 2 # factor of two accounts for R(25)-->reff [arcsec]
-            logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, g.ba, 180-g.pa) # note the 180 rotation
-            src = ExpGalaxy(RaDecPos(g.ra, g.dec),
-                            NanoMaggies(order=bands, **fluxes),
-                            LegacyEllipseWithPriors(logr, ee1, ee2))
+    else:
+        # Need to initialize islargegalaxy to False because we will bring in
+        # pre-burned sources that we do not want to mask.
+        galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
+
+    galaxies.freezeparams = np.zeros(len(galaxies), bool)
+    galaxies.sources = np.array([None] * len(galaxies))
+
+    # use the pre-burned LSLGA catalog
+    if 'preburned' in galaxies.get_columns():
+        preburned = np.logical_and(preburn, galaxies.preburned)
+    else:
+        preburned = np.zeros(len(galaxies), bool)
+
+    galaxies.radius = np.zeros(len(galaxies), np.float32)
+    galaxies.ba = np.ones(len(galaxies), np.float32)
+
+    I, = np.nonzero(preburned)
+    # only fix the parameters of pre-burned galaxies
+    for ii,g in zip(I, galaxies[I]):
+        try:
+            typ = fits_reverse_typemap[g.type.strip()]
+            pos = RaDecPos(g.ra, g.dec)
+            fluxes = dict([(band, g.get('flux_%s' % band)) for band in bands])
+            bright = NanoMaggies(order=bands, **fluxes)
+            shape = None
+            if issubclass(typ, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
+                shape = EllipseE(g.shape_r, g.shape_e1, g.shape_e2)
+                # switch to softened ellipse (better fitting behavior)
+                shape = EllipseESoft.fromEllipseE(shape)
+                # and then to our custom ellipse class
+                shape = LegacyEllipseWithPriors(shape.logre, shape.ee1, shape.ee2)
+
+            if issubclass(typ, (DevGalaxy, ExpGalaxy)):
+                src = typ(pos, bright, shape)
+                print('Created', src)
+                if issubclass(typ, DevGalaxy):
+                    serindex = 4.
+                else:
+                    serindex = 1.
+            elif issubclass(typ, (SersicGalaxy)):
+                serindex = g.sersic
+                sersic = LegacySersicIndex(g.sersic)
+                src = typ(pos, bright, shape, sersic)
+                print('Created', src)
+            else:
+                print('Unknown type', typ)
+
             galaxies.sources[ii] = src
+
+            if galaxies.freeze[ii]:
+                galaxies.freezeparams[ii] = True
+                galaxies.islargegalaxy[ii] = True
+                galaxies.radius[ii] = galaxies.d25_model[ii] / 2 / 60 # [degree]
+                galaxies.pa[ii] = galaxies.pa_model[ii]
+                galaxies.ba[ii] = galaxies.ba_model[ii]
+        except:
+            import traceback
+            print('Failed to create Tractor source for LSLGA entry:',
+                  traceback.print_exc())
+            raise
+
+    I, = np.nonzero(np.logical_not(preburned))
+    for ii,g in zip(I, galaxies[I]):
+        # Initialize each source with an exponential disk--
+        fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
+        assert(np.all(np.isfinite(list(fluxes.values()))))
+        rr = g.radius * 3600. / 2 # factor of two accounts for R(25)-->reff [arcsec]
+        logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, g.ba, 180-g.pa) # note the 180 rotation
+        src = ExpGalaxy(RaDecPos(g.ra, g.dec),
+                        NanoMaggies(order=bands, **fluxes),
+                        LegacyEllipseWithPriors(logr, ee1, ee2))
+        galaxies.sources[ii] = src
 
     keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
                     'sources', 'islargegalaxy', 'freezeparams']
