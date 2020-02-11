@@ -74,11 +74,11 @@ out['radius'] = (clusters['majax'] / 60).astype('f4') # [degrees]
 #out['radius'] = out['radius_orig']
 
 # Read the updated radii based on visual inspection by Arjun Dey (Feb 2020):
-oldradii = out['radius'].copy()
 radiifile = resource_filename('legacypipe', 'data/NGC-star-clusters-radii.csv')
 newname, newradii = np.loadtxt(radiifile, dtype=str, delimiter=',', unpack=True)
 out['radius'][np.isin(out['name'], newname)] = newradii.astype('f4')
 
+#oldradii = out['radius'].copy()
 #import matplotlib.pyplot as plt
 #plt.scatter(oldradii*60, oldradii/out['radius'], s=15)
 #plt.xlabel('Old radii [arcmin]')
