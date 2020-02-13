@@ -73,6 +73,18 @@ out['dec'] = clusters['dec']
 out['radius'] = (clusters['majax'] / 60).astype('f4') # [degrees]
 #out['radius'] = out['radius_orig']
 
+# Read the updated radii based on visual inspection by Arjun Dey (Feb 2020):
+radiifile = resource_filename('legacypipe', 'data/NGC-star-clusters-radii.csv')
+newname, newradii = np.loadtxt(radiifile, dtype=str, delimiter=',', unpack=True)
+out['radius'][np.isin(out['name'], newname)] = newradii.astype('f4')
+
+#oldradii = out['radius'].copy()
+#import matplotlib.pyplot as plt
+#plt.scatter(oldradii*60, oldradii/out['radius'], s=15)
+#plt.xlabel('Old radii [arcmin]')
+#plt.ylabel('Old radii / New radii')
+#plt.show()
+
 # Read the ancillary globular cluster catalog and update the radii in the NGC.
 #https://heasarc.gsfc.nasa.gov/db-perl/W3Browse/w3table.pl?tablehead=name%3Dglobclust&Action=More+Options
 if False:
