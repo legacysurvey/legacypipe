@@ -382,7 +382,7 @@ def read_large_galaxies(survey, targetwcs, bands):
             shape = None
             # put the Rex branch first, because Rex is a subclass of ExpGalaxy!
             if issubclass(typ, RexGalaxy):
-                shape = LogRadius(g.shape_r)
+                shape = LogRadius(np.log(g.shape_r))
             elif issubclass(typ, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
                 shape = EllipseE(g.shape_r, g.shape_e1, g.shape_e2)
                 # switch to softened ellipse (better fitting behavior)
