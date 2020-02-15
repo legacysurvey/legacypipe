@@ -584,12 +584,13 @@ def main():
     rtrans = []
     ztrans = []
 
+    gcosky = []
+    rcosky = []
+    zcosky = []
+
     bricks = fits_table('survey-bricks.fits.gz')
 
-    #sfd = SFDMap()
-
     W = H = 3600
-    # xx,yy = np.meshgrid(np.arange(W), np.arange(H))
     unique = np.ones((H,W), bool)
     tlast = 0
 
@@ -613,6 +614,7 @@ def main():
                                              'mw_transmission_g', 'mw_transmission_r', 'mw_transmission_z',
                                              'nobs_w1', 'nobs_w2', 'nobs_w3', 'nobs_w4',
                                              'mw_transmission_w1', 'mw_transmission_w2', 'mw_transmission_w3', 'mw_transmission_w4'])
+                Thdr = T.get_header()
             except:
                 print('Failed to read FITS table', tfn)
                 import traceback
@@ -672,6 +674,10 @@ def main():
             gtrans.append(np.median(T.mw_transmission_g))
             rtrans.append(np.median(T.mw_transmission_r))
             ztrans.append(np.median(T.mw_transmission_z))
+
+            gcosky.append(Thdr.get('COSKY_G', 0.))
+            rcosky.append(Thdr.get('COSKY_R', 0.))
+            zcosky.append(Thdr.get('COSKY_Z', 0.))
 
             ebv.append(np.median(T.ebv))
 
@@ -756,6 +762,9 @@ def main():
     T.trans_g = np.array(gtrans).astype(np.float32)
     T.trans_r = np.array(rtrans).astype(np.float32)
     T.trans_z = np.array(ztrans).astype(np.float32)
+    T.cosky_g = np.array(gcosky).astype(np.float32)
+    T.cosky_r = np.array(rcosky).astype(np.float32)
+    T.cosky_z = np.array(zcosky).astype(np.float32)
     T.ext_g = -2.5 * np.log10(T.trans_g)
     T.ext_r = -2.5 * np.log10(T.trans_r)
     T.ext_z = -2.5 * np.log10(T.trans_z)
