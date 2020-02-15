@@ -562,6 +562,7 @@ def main():
     nexp  = []
     ndev  = []
     ncomp = []
+    nser  = []
     ndup  = []
 
     gpsfsize = []
@@ -642,6 +643,7 @@ def main():
             nexp.append(types['EXP'])
             ndev.append(types['DEV'])
             ncomp.append(types['COMP'])
+            nser.append(types['SER'])
             ndup.append(types['DUP'])
             print('N sources', nsrcs[-1])
 
@@ -735,6 +737,7 @@ def main():
     T.nexp   = np.array(nexp ).astype(np.int32)
     T.ndev   = np.array(ndev ).astype(np.int32)
     T.ncomp  = np.array(ncomp).astype(np.int32)
+    T.nser   = np.array(nser ).astype(np.int32)
     T.ndup   = np.array(ndup ).astype(np.int32)
     T.psfsize_g = np.array(gpsfsize).astype(np.float32)
     T.psfsize_r = np.array(rpsfsize).astype(np.float32)
