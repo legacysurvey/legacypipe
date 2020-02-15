@@ -1546,6 +1546,10 @@ def _format_all_models(T, newcat, BB, bands):
         TT.set('%s_hit_limit' % prefix,
                np.array([m.get(srctype,0)
                          for m in BB.all_model_hit_limit]).astype(bool))
+        if 'all_model_opt_steps' in BB.get_columns():
+            TT.set('%s_opt_steps' % prefix,
+                   np.array([m.get(srctype,-1)
+                             for m in BB.all_model_opt_steps]).astype(np.int16))
 
     # remove silly columns
     for col in TT.columns():

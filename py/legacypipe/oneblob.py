@@ -522,6 +522,7 @@ class OneBlob(object):
         B.all_model_ivs = np.array([{} for i in range(N)])
         B.all_model_cpu = np.array([{} for i in range(N)])
         B.all_model_hit_limit = np.array([{} for i in range(N)])
+        B.all_model_opt_steps = np.array([{} for i in range(N)])
 
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
@@ -1281,6 +1282,7 @@ class OneBlob(object):
             #print('Fit result:', newsrc)
             #print('Steps:', R['steps'])
             hit_limit = R.get('hit_limit', False)
+            opt_steps = R.get('steps', -1)
             if hit_limit:
                 if name in ['exp', 'rex', 'dev', 'ser']:
                     debug('Hit limit: r %.2f vs %.2f' %
@@ -1351,6 +1353,7 @@ class OneBlob(object):
             B.all_model_cpu[srci][name] = cpum1 - cpum0
             cputimes[name] = cpum1 - cpum0
             B.all_model_hit_limit[srci][name] = hit_limit
+            B.all_model_opt_steps[srci][name] = opt_steps
 
         if mask_others:
             for ie,tim in zip(saved_srctim_ies, srctims):
