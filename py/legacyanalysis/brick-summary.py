@@ -614,7 +614,9 @@ def main():
                                              'mw_transmission_g', 'mw_transmission_r', 'mw_transmission_z',
                                              'nobs_w1', 'nobs_w2', 'nobs_w3', 'nobs_w4',
                                              'mw_transmission_w1', 'mw_transmission_w2', 'mw_transmission_w3', 'mw_transmission_w4'])
-                Thdr = T.get_header()
+                # we need tho primary header, not the table-hdu header!
+                #Thdr = T.get_header()
+                Thdr = fitsio.read_header(tfn)
             except:
                 print('Failed to read FITS table', tfn)
                 import traceback
