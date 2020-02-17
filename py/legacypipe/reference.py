@@ -347,18 +347,24 @@ def read_large_galaxies(survey, targetwcs, bands):
         galaxies.rename('lslga_id', 'ref_id')
         galaxies.ref_cat = np.array([refcat] * len(galaxies))
         galaxies.islargegalaxy = np.array([True] * len(galaxies))
-        # Deal with NaN position angles.
-        galaxies.rename('pa', 'pa_orig')
-        galaxies.pa = np.zeros(len(galaxies), np.float32)
-        gd = np.where(np.isfinite(galaxies.pa_orig))[0]
-        if len(gd) > 0:
-            galaxies.pa[gd] = galaxies.pa_orig[gd]
 
     else:
         # Need to initialize islargegalaxy to False because we will bring in
         # pre-burned sources that we do not want to mask.
         galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
 
+    # Deal with NaN position angles & axis ratios
+    galaxies.rename('pa', 'pa_orig')
+    galaxies.pa = np.zeros(len(galaxies), np.float32)
+    gd = np.where(np.isfinite(galaxies.pa_orig))[0]
+    if len(gd) > 0:
+        galaxies.pa[gd] = galaxies.pa_orig[gd]
+    galaxies.rename('ba', 'ba_orig')
+    galaxies.ba = np.zeros(len(galaxies), np.float32)
+    gd = np.where(np.isfinite(galaxies.ba_orig))[0]
+    if len(gd) > 0:
+        galaxies.ba[gd] = galaxies.ba_orig[gd]
+        
     galaxies.radius = galaxies.d25 / 2. / 60. # [degree]
 
     galaxies.freezeparams = np.zeros(len(galaxies), bool)
