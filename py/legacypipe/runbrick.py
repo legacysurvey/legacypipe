@@ -555,6 +555,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        brick=None, blobs=None, lanczos=True, ccds=None,
                        write_metrics=True,
                        mp=None, record_event=None,
+                       co_sky=None,
                        **kwargs):
     record_event and record_event('stage_image_coadds: starting')
     '''
@@ -570,7 +571,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                     detmaps=True, ngood=True, lanczos=lanczos,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims,
-                                   targetwcs),
+                                   targetwcs, co_sky),
                     mp=mp, plots=plots, ps=ps)
 
     # Sims: coadds of galaxy sims only, image only
