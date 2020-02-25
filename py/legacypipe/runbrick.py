@@ -1134,8 +1134,15 @@ def stage_fitblobs(T=None,
         dimshow(blobs>=0, vmin=0, vmax=1)
         ax = plt.axis()
         plt.plot(refstars.ibx, refstars.iby, 'ro')
-        for x,y,mag in zip(refstars.ibx,refstars.iby,refstars.mag):
-            plt.text(x, y, '%.1f' % (mag),
+        for ref in refstars:
+            magstr = ref.ref_cat
+            if ref.ref_cat == 'T2':
+                mag = ref.mag
+                magstr = 'T(%.1f)' % mag
+            elif ref.ref_cat == 'G2':
+                mag = ref.phot_g_mean_mag
+                magstr = 'G(%.1f)' % mag
+            plt.text(ref.ibx, ref.iby, magstr,
                      color='r', fontsize=10,
                      bbox=dict(facecolor='w', alpha=0.5))
         plt.axis(ax)
