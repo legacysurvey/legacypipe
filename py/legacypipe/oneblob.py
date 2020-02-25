@@ -994,6 +994,10 @@ class OneBlob(object):
                 dilated *= (self.segmap[sy0:sy0+dh, sx0:sx0+dw] == s)
                 #flipblobs *= (self.segmap[sy0:sy0+dh, sx0:sx0+dw] == s)
 
+            if not np.any(dilated):
+                debug('No pixels in segmented dilated symmetric mask')
+                return None
+
             yin = np.max(dilated, axis=1)
             xin = np.max(dilated, axis=0)
             yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
