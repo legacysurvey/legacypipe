@@ -365,7 +365,7 @@ def _add_stage_version(version_header, short, stagename):
 def stage_refs(survey=None,
                brick=None,
                brickname=None,
-               #targetrd=None,
+               brickid=None,
                pixscale=None,
                targetwcs=None,
                bands=None,
@@ -419,6 +419,17 @@ def stage_refs(survey=None,
         with survey.write_output('ref-sources', brick=brickname) as out:
             allrefs.writeto(None, fits_object=out.fits, primheader=version_header)
         del allrefs
+
+    if T_donotfit:
+        # add columns for later...
+        if not 'type' in T_donotfit.get_columns():
+            T_donotfit.type = np.array(['DUP']*len(T_donotfit))
+        else:
+            for i in range(len(T_donotfit)):
+                if len(T_donotfit.type[i].strip()) == 0:
+                    T_donotfit.type[i] = 'DUP'
+        T_donotfit.brickid = np.zeros(len(T_donotfit), np.int32) + brickid
+        T_donotfit.brickname = np.array([brickname] * len(T_donotfit))
 
     keys = ['refstars', 'gaia_stars', 'T_donotfit', 'T_clusters', 'version_header',
             'refcat']
@@ -1416,12 +1427,18 @@ def stage_fitblobs(T=None,
     invvars = np.hstack(BB.srcinvvars)
     assert(cat.numberOfParams() == len(invvars))
 
+    if T_donotfit:
+        T_donotfit.objid = np.arange(len(T_donotfit), dtype=np.int32) + len(T)
+
     if write_metrics or get_all_models:
         from legacypipe.format_catalog import format_all_models
         T2 = T
+        cat2 = [src for src in newcat]
         if T_donotfit:
             T2 = merge_tables([T2, T_donotfit], columns='fillzero')
-        TT,hdr = format_all_models(T2, newcat, BB, bands, survey.allbands)
+            cat2.extend([None] * len(T_donotfit))
+
+        TT,hdr = format_all_models(T2, cat2, BB, bands, survey.allbands)
         if get_all_models:
             all_models = TT
         if write_metrics:
@@ -2639,16 +2656,6 @@ def stage_writecat(
         WISE = None
 
     if T_donotfit:
-        if not 'type' in T_donotfit.get_columns():
-            T_donotfit.type = np.array(['DUP']*len(T_donotfit))
-        else:
-            for i in range(len(T_donotfit)):
-                if len(T_donotfit.type[i].strip()) == 0:
-                    T_donotfit.type[i] = 'DUP'
-        T_donotfit.brickid = np.zeros(len(T_donotfit), np.int32) + brickid
-        T_donotfit.brickname = np.array([brickname] * len(T_donotfit))
-        T_donotfit.objid = np.arange(len(T_donotfit), dtype=np.int32) + len(T2)
-
         T2 = merge_tables([T2, T_donotfit], columns='fillzero')
 
     # Brick pixel positions

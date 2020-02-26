@@ -344,6 +344,11 @@ def format_all_models(T, newcat, BB, bands, allbands):
         allivs = np.hstack([m.get(srctype,[]) for m in BB.all_model_ivs])
         assert(len(allivs) == xcat.numberOfParams())
 
+        # pad 'xcat' to match length of T (eg, T_donotfit)
+        npad = len(T) - len(xcat)
+        if npad:
+            xcat.extend([None] * npad)
+
         TT,hdr = prepare_fits_catalog(xcat, allivs, TT, hdr, bands, None,
                                       prefix=prefix+'_')
 
@@ -353,14 +358,14 @@ def format_all_models(T, newcat, BB, bands, allbands):
 
         TT.set('%s_cpu' % prefix,
                np.array([m.get(srctype,0)
-                         for m in BB.all_model_cpu]).astype(np.float32))
+                         for m in BB.all_model_cpu] + [0.]*npad).astype(np.float32))
         TT.set('%s_hit_limit' % prefix,
                np.array([m.get(srctype,0)
-                         for m in BB.all_model_hit_limit]).astype(bool))
+                         for m in BB.all_model_hit_limit] + [False]*npad).astype(bool))
         if 'all_model_opt_steps' in BB.get_columns():
             TT.set('%s_opt_steps' % prefix,
                    np.array([m.get(srctype,-1)
-                             for m in BB.all_model_opt_steps]).astype(np.int16))
+                             for m in BB.all_model_opt_steps] + [0]*npad).astype(np.int16))
 
     # remove silly columns
     for col in TT.columns():
