@@ -83,8 +83,9 @@ def tim_plots(tims, bands, ps):
             ps.savefig()
 
             im = tim.imobj
-            from legacypipe.decam import decam_has_dq_codes
-            print(tim.name, ': plver "%s"' % im.plver, 'has DQ codes:', decam_has_dq_codes(im.plver))
+            if im.camera == 'decam':
+                from legacypipe.decam import decam_has_dq_codes
+                print(tim.name, ': plver "%s"' % im.plver, 'has DQ codes:', decam_has_dq_codes(im.plver))
             if im.camera == 'decam' and decam_has_dq_codes(im.plver):
                 # Integer codes, not bitmask.  Re-read and plot.
                 dq = im.read_dq(slice=tim.slice)
