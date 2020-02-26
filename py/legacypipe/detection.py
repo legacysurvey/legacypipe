@@ -503,7 +503,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             continue
 
         # one plot per peak is a little excessive!
-        if True and ps is not None:
+        if False and ps is not None:
             level = saddle_level(sedsn[y,x])
             _peak_plot_1(this_veto_map, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
                          level, dilate, saturated_pix, satur, ps)
@@ -540,10 +540,10 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                       (blobs[np.clip(oy,0,h-1), np.clip(ox,0,w-1)] == 
                        thisblob))
 
-        if True and cut and ps is not None:
+        if False and cut and ps is not None:
             _peak_plot_2(ox, oy, w, h, blobs, thisblob, sedsn, x0, y0,
                          x, y, level, ps)
-        if True and (not cut) and ps is not None:
+        if False and (not cut) and ps is not None:
             _peak_plot_3(sedsn, nsigma, x, y, x0, y0, slc, saddlemap,
                          xomit, yomit, px, py, keep, i, cut, ps)
 
