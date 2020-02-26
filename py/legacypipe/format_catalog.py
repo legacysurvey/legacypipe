@@ -11,38 +11,34 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
-def main(args=None):
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--in', dest='infn',
-                        help='Input intermediate tractor catalog file')
-    parser.add_argument('--out', help='Output catalog filename')
-    parser.add_argument('--allbands', default='ugrizY',
-                        help='Full set of bands to expand arrays out to')
-    parser.add_argument('--flux-prefix', default='',
-                        help='Prefix on FLUX etc columns (eg, "decam_" to match DR3) for output file')
-    parser.add_argument('--in-flux-prefix', default='',
-                        help='Prefix on FLUX etc columns (eg, "decam_" to match DR3) for input file')
-    parser.add_argument('--release', type=int, default=8000)
+def _expand_flux_columns(T, bands, allbands, keys):
+    # Expand out FLUX and related fields from grz arrays to 'allbands'
+    # # (eg, ugrizY) arrays.
+    B = np.array([allbands.index(band) for band in bands])
 
-    opt = parser.parse_args(args=args)
+    for key in keys:
+        X = T.get(key)
+        # Handle array columns (eg, apflux)
+        sh = X.shape
+        if len(sh) == 3:
+            nt,nb,N = sh
+            A = np.zeros((len(T), len(allbands), N), X.dtype)
+            A[:,B,:] = X
+        else:
+            A = np.zeros((len(T), len(allbands)), X.dtype)
+            # If there is only one band, these can show up as scalar arrays.
+            if len(sh) == 1:
+                A[:,B] = X[:,np.newaxis]
+            else:
+                A[:,B] = X
+        T.delete_column(key)
 
-    import fitsio
-    from astrometry.util.fits import fits_table
+        # FLUX_b for each band, rather than array columns.
+        for i,b in enumerate(allbands):
+            T.set('%s_%s' % (key, b), A[:,i])
 
-    T = fits_table(opt.infn)
-    hdr = T.get_header()
-    primhdr = fitsio.read_header(opt.infn)
-    allbands = opt.allbands
-
-    format_catalog(T, hdr, primhdr, allbands, opt.out, opt.release,
-                   in_flux_prefix=opt.in_flux_prefix,
-                   flux_prefix=opt.flux_prefix)
-    T.writeto(opt.out)
-    print('Wrote', opt.out)
 
 def format_catalog(T, hdr, primhdr, allbands, outfn, release,
-                   in_flux_prefix='', flux_prefix='',
                    write_kwargs=None, N_wise_epochs=None,
                    motions=True, gaia_tagalong=False):
     if write_kwargs is None:
@@ -78,34 +74,12 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
 
     # Expand out FLUX and related fields from grz arrays to 'allbands'
     # (eg, ugrizY) arrays.
-    B = np.array([allbands.index(band) for band in bands])
     keys = ['flux', 'flux_ivar', 'rchisq', 'fracflux', 'fracmasked', 'fracin',
             'nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth',
             'fiberflux', 'fibertotflux']
     if has_ap:
         keys.extend(['apflux', 'apflux_resid', 'apflux_ivar'])
-
-    for k in keys:
-        incol = '%s%s' % (in_flux_prefix, k)
-        X = T.get(incol)
-        # Handle array columns (eg, apflux)
-        sh = X.shape
-        if len(sh) == 3:
-            nt,nb,N = sh
-            A = np.zeros((len(T), len(allbands), N), X.dtype)
-            A[:,B,:] = X
-        else:
-            A = np.zeros((len(T), len(allbands)), X.dtype)
-            # If there is only one band, these can show up as scalar arrays.
-            if len(sh) == 1:
-                A[:,B] = X[:,np.newaxis]
-            else:
-                A[:,B] = X
-        T.delete_column(incol)
-
-        # FLUX_b for each band, rather than array columns.
-        for i,b in enumerate(allbands):
-            T.set('%s%s_%s' % (flux_prefix, k, b), A[:,i])
+    _expand_flux_columns(T, bands, allbands, keys)
 
     from tractor.sfd import SFDMap
     info('Reading SFD maps...')
@@ -189,7 +163,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
 
     def add_fluxlike(c):
         for b in allbands:
-            cols.append('%s%s_%s' % (flux_prefix, c, b))
+            cols.append('%s_%s' % (c, b))
     def add_wiselike(c, bands=None):
         if bands is None:
             bands = wbands
@@ -321,11 +295,9 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
         apflux=flux, apflux_ivar=fluxiv, apflux_resid=flux,
         psfdepth=fluxiv, galdepth=fluxiv, psfsize=arcsec,
         fiberflux=flux, fibertotflux=flux)
-    # add prefixes
-    units.update([('%s%s' % (flux_prefix, k), v) for k,v in funits.items()])
     # add bands
     for b in allbands:
-        units.update([('%s%s_%s' % (flux_prefix, k, b), v)
+        units.update([('%s_%s' % (k, b), v)
                       for k,v in funits.items()])
     # add WISE bands
     for b in wbands:
@@ -337,6 +309,77 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
 
     T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units,
               **write_kwargs)
+
+def format_all_models(T, newcat, BB, bands, allbands):
+    from astrometry.util.fits import fits_table
+    import fitsio
+    from legacypipe.catalog import prepare_fits_catalog, fits_typemap
+    from tractor import Catalog
+
+    TT = fits_table()
+    # Copy only desired columns...
+    for k in ['blob', 'brickid', 'brickname', 'dchisq', 'objid',
+              'ra','dec',
+              'cpu_arch', 'cpu_source', 'cpu_blob', 'ninblob',
+              'blob_width', 'blob_height', 'blob_npix', 'blob_nimages',
+              'blob_totalpix',
+              'blob_symm_width', 'blob_symm_height',
+              'blob_symm_npix', 'blob_symm_nimages',
+              'hit_limit']:
+        TT.set(k, T.get(k))
+    TT.type = np.array([fits_typemap[type(src)] for src in newcat])
+
+    hdr = fitsio.FITSHDR()
+
+    srctypes = ['ptsrc', 'rex', 'dev', 'exp', 'ser']
+
+    for srctype in srctypes:
+        # Create catalog with the fit results for each source type
+        xcat = Catalog(*[m.get(srctype,None) for m in BB.all_models])
+        # NOTE that for Rex, the shapes have been converted to EllipseE
+        # and the e1,e2 params are frozen.
+        namemap = dict(ptsrc='psf')
+        prefix = namemap.get(srctype,srctype)
+
+        allivs = np.hstack([m.get(srctype,[]) for m in BB.all_model_ivs])
+        assert(len(allivs) == xcat.numberOfParams())
+
+        TT,hdr = prepare_fits_catalog(xcat, allivs, TT, hdr, bands, None,
+                                      prefix=prefix+'_')
+
+        # # Expand out FLUX and related fields from grz arrays to 'allbands'
+        keys = ['%s_flux' % prefix, '%s_flux_ivar' % prefix]
+        _expand_flux_columns(TT, bands, allbands, keys)
+
+        TT.set('%s_cpu' % prefix,
+               np.array([m.get(srctype,0)
+                         for m in BB.all_model_cpu]).astype(np.float32))
+        TT.set('%s_hit_limit' % prefix,
+               np.array([m.get(srctype,0)
+                         for m in BB.all_model_hit_limit]).astype(bool))
+        if 'all_model_opt_steps' in BB.get_columns():
+            TT.set('%s_opt_steps' % prefix,
+                   np.array([m.get(srctype,-1)
+                             for m in BB.all_model_opt_steps]).astype(np.int16))
+
+    # remove silly columns
+    for col in TT.columns():
+        # all types
+        if '_type' in col:
+            TT.delete_column(col)
+            continue
+        # shapes for shapeless types
+        if ('psf_' in col) and ('shape' in col):
+            TT.delete_column(col)
+            continue
+        if ('sersic' in col) and not col.startswith('ser_'):
+            TT.delete_column(col)
+            continue
+    TT.delete_column('rex_shape_e1')
+    TT.delete_column('rex_shape_e2')
+    TT.delete_column('rex_shape_e1_ivar')
+    TT.delete_column('rex_shape_e2_ivar')
+    return TT,hdr
 
 def one_lightcurve_bitmask(lc_nobs, lc_mjd):
     # row is a single tractor-i catalog row
