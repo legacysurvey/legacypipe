@@ -865,7 +865,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         ps.savefig()
 
     # Find "hot" pixels that are separated by masked pixels?
-    if False:
+    if True:
         from scipy.ndimage.measurements import find_objects
         any_saturated = reduce(np.logical_or, saturated_pix)
         merging = np.zeros_like(any_saturated)
