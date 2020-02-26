@@ -1360,7 +1360,7 @@ def stage_fitblobs(T=None,
     assert(nb == len(bands))
     ns,nb = BB.dchisq.shape
     assert(ns == len(cat))
-    assert(nb == 5) # ptsrc, rex, dev, exp, ser
+    assert(nb == 5) # psf, rex, dev, exp, ser
 
     # Renumber blobs to make them contiguous.
     oldblob = T.blob

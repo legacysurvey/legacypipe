@@ -1187,21 +1187,21 @@ class OneBlob(object):
 
         chisqs_none = _per_band_chisqs(srctractor, self.bands)
 
-        nparams = dict(ptsrc=2, rex=3, exp=5, dev=5, ser=6)
+        nparams = dict(psf=2, rex=3, exp=5, dev=5, ser=6)
         # This is our "upgrade" threshold: how much better a galaxy
-        # fit has to be versus ptsrc
-        galaxy_margin = 3.**2 + (nparams['exp'] - nparams['ptsrc'])
+        # fit has to be versus psf
+        galaxy_margin = 3.**2 + (nparams['exp'] - nparams['psf'])
 
         # *chisqs* is actually chi-squared improvement vs no source;
         # larger is a better fit.
         chisqs = dict(none=0)
 
-        oldmodel, ptsrc, rex, dev, exp = _initialize_models(src)
+        oldmodel, psf, rex, dev, exp = _initialize_models(src)
         ser = None
 
-        trymodels = [('ptsrc', ptsrc)]
+        trymodels = [('psf', psf)]
 
-        if oldmodel == 'ptsrc':
+        if oldmodel == 'psf':
             if getattr(src, 'forced_point_source', False):
                 # This is set in the GaiaSource contructor from
                 # gaia.pointsource
@@ -1211,7 +1211,7 @@ class OneBlob(object):
                 debug('Not computing galaxy models due to objects in blob')
             else:
                 trymodels.append(('rex', rex))
-                # Try galaxy models if rex > ptsrc, or if bright.
+                # Try galaxy models if rex > psf, or if bright.
                 # The 'gals' model is just a marker
                 trymodels.append(('gals', None))
         else:
@@ -1224,10 +1224,10 @@ class OneBlob(object):
             cpum0 = time.clock()
 
             if name == 'gals':
-                # If 'rex' was better than 'ptsrc', or the source is
+                # If 'rex' was better than 'psf', or the source is
                 # bright, try the galaxy models.
                 chi_rex = chisqs.get('rex', 0)
-                chi_psf = chisqs.get('ptsrc', 0)
+                chi_psf = chisqs.get('psf', 0)
                 margin = 1. # 1 parameter
                 if chi_rex > (chi_psf+margin) or max(chi_psf, chi_rex) > 400:
                     trymodels.extend([
@@ -1371,9 +1371,9 @@ class OneBlob(object):
         # Actually select which model to keep.  This "modnames"
         # array determines the order of the elements in the DCHISQ
         # column of the catalog.
-        modnames = ['ptsrc', 'rex', 'dev', 'exp', 'ser']
+        modnames = ['psf', 'rex', 'dev', 'exp', 'ser']
         keepmod = _select_model(chisqs, nparams, galaxy_margin)
-        keepsrc = {'none':None, 'ptsrc':ptsrc, 'rex':rex,
+        keepsrc = {'none':None, 'psf':psf, 'rex':rex,
                    'dev':dev, 'exp':exp, 'ser':ser}[keepmod]
         bestchi = chisqs.get(keepmod, 0.)
         B.dchisq[srci, :] = np.array([chisqs.get(k,0) for k in modnames])
@@ -1393,7 +1393,7 @@ class OneBlob(object):
             import pylab as plt
             plt.clf()
             rows,cols = 3, 6
-            modnames = ['none', 'ptsrc', 'rex', 'dev', 'exp', 'ser']
+            modnames = ['none', 'psf', 'rex', 'dev', 'exp', 'ser']
             # Top-left: image
             plt.subplot(rows, cols, 1)
             coimgs, cons = quick_coadds(srctims, self.bands, srcwcs)
@@ -1425,7 +1425,7 @@ class OneBlob(object):
                         for spine in ax.spines.values():
                             spine.set_edgecolor('red')
                             spine.set_linewidth(2)
-            plt.suptitle('Blob %s, src %i (ptsrc: %s, fitbg: %s): keep %s\n%s\nwas: %s' %
+            plt.suptitle('Blob %s, src %i (psf: %s, fitbg: %s): keep %s\n%s\nwas: %s' %
                          (self.name, srci, force_pointsource, fit_background,
                           keepmod, str(keepsrc), str(src)), fontsize=10)
             self.ps.savefig()
@@ -1836,14 +1836,14 @@ def _compute_source_metrics(srcs, tims, bands, tr):
 def _initialize_models(src):
     from legacypipe.survey import LogRadius
     if isinstance(src, PointSource):
-        ptsrc = src.copy()
+        psf = src.copy()
         rex = RexGalaxy(src.getPosition(), src.getBrightness(),
                         LogRadius(-1.)).copy()
         # logr, ee1, ee2
         shape = LegacyEllipseWithPriors(-1., 0., 0.)
         dev = DevGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
         exp = ExpGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
-        oldmodel = 'ptsrc'
+        oldmodel = 'psf'
     elif isinstance(src, DevGalaxy):
         rex = RexGalaxy(src.getPosition(), src.getBrightness(),
                         LogRadius(np.log(src.getShape().re))).copy()
@@ -1852,14 +1852,14 @@ def _initialize_models(src):
                         src.getShape()).copy()
         oldmodel = 'dev'
     elif isinstance(src, ExpGalaxy):
-        ptsrc = PointSource(src.getPosition(), src.getBrightness()).copy()
+        psf = PointSource(src.getPosition(), src.getBrightness()).copy()
         rex = RexGalaxy(src.getPosition(), src.getBrightness(),
                         LogRadius(np.log(src.getShape().re))).copy()
         dev = DevGalaxy(src.getPosition(), src.getBrightness(),
                         src.getShape()).copy()
         exp = src.copy()
         oldmodel = 'exp'
-    return oldmodel, ptsrc, rex, dev, exp
+    return oldmodel, psf, rex, dev, exp
 
 def _get_subimages(tims, mods, src):
     subtims = []
@@ -2048,28 +2048,28 @@ def _select_model(chisqs, nparams, galaxy_margin):
         return keepmod
 
     # Now choose between point source and REX
-    if 'ptsrc' in chisqs and not 'rex' in chisqs:
+    if 'psf' in chisqs and not 'rex' in chisqs:
         # bright stars / reference stars: we don't test the simple model.
-        return 'ptsrc'
+        return 'psf'
 
-    #print('PSF', chisqs.get('ptsrc',0)-nparams['ptsrc'], 'vs REX', chisqs.get('rex',0)-nparams['rex'])
+    #print('PSF', chisqs.get('psf',0)-nparams['psf'], 'vs REX', chisqs.get('rex',0)-nparams['rex'])
 
     # Is PSF good enough to keep?
-    if 'ptsrc' in chisqs and (chisqs['ptsrc']-nparams['ptsrc'] >= cut):
-        keepmod = 'ptsrc'
+    if 'psf' in chisqs and (chisqs['psf']-nparams['psf'] >= cut):
+        keepmod = 'psf'
 
     # Now choose between point source and REX
-    if 'ptsrc' in chisqs and (
-            chisqs['ptsrc']-nparams['ptsrc'] >= chisqs.get('rex',0)-nparams['rex']):
+    if 'psf' in chisqs and (
+            chisqs['psf']-nparams['psf'] >= chisqs.get('rex',0)-nparams['rex']):
         #print('Keeping PSF')
-        keepmod = 'ptsrc'
+        keepmod = 'psf'
     elif 'rex' in chisqs and (
-            chisqs['rex']-nparams['rex'] > chisqs.get('ptsrc',0)-nparams['ptsrc']):
+            chisqs['rex']-nparams['rex'] > chisqs.get('psf',0)-nparams['psf']):
         #print('REX is better fit than PSF.')
         oldkeepmod = keepmod
         keepmod = 'rex'
         # For REX, we also demand a fractionally better fit
-        dchisq_psf = chisqs.get('ptsrc',0)
+        dchisq_psf = chisqs.get('psf',0)
         dchisq_rex = chisqs.get('rex',0)
         if dchisq_psf > 0 and (dchisq_rex - dchisq_psf) < (0.01 * dchisq_psf):
             #print('REX is not a fractionally better fit, keeping', oldkeepmod)
@@ -2080,12 +2080,12 @@ def _select_model(chisqs, nparams, galaxy_margin):
         return keepmod
 
     # This is our "upgrade" threshold: how much better a galaxy
-    # fit has to be versus ptsrc
+    # fit has to be versus psf
     cut = galaxy_margin
 
-    # This is the "fractional" upgrade threshold for ptsrc/rex to dev/exp:
-    # 1% of ptsrc vs nothing
-    fcut = 0.01 * chisqs.get('ptsrc', 0.)
+    # This is the "fractional" upgrade threshold for psf/rex to dev/exp:
+    # 1% of psf vs nothing
+    fcut = 0.01 * chisqs.get('psf', 0.)
     cut = max(cut, fcut)
 
     expdiff = chisqs.get('exp', 0) - chisqs[keepmod]

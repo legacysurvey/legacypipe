@@ -331,15 +331,14 @@ def format_all_models(T, newcat, BB, bands, allbands):
 
     hdr = fitsio.FITSHDR()
 
-    srctypes = ['ptsrc', 'rex', 'dev', 'exp', 'ser']
+    srctypes = ['psf', 'rex', 'dev', 'exp', 'ser']
 
     for srctype in srctypes:
         # Create catalog with the fit results for each source type
         xcat = Catalog(*[m.get(srctype,None) for m in BB.all_models])
-        # NOTE that for Rex, the shapes have been converted to EllipseE
+        # NOTE that for REX, the shapes have been converted to EllipseE
         # and the e1,e2 params are frozen.
-        namemap = dict(ptsrc='psf')
-        prefix = namemap.get(srctype,srctype)
+        prefix = srctype
 
         allivs = np.hstack([m.get(srctype,[]) for m in BB.all_model_ivs])
         assert(len(allivs) == xcat.numberOfParams())
