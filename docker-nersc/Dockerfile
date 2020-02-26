@@ -127,9 +127,7 @@ RUN git clone http://github.com/dstndstn/tractor.git tractor \
 
 # Pip installs -- built from source
 RUN pip --no-cache-dir install photutils
-RUN pip --no-cache-dir install git+https://github.com/esheldon/fitsio.git@v1.0.6
-# HACK -- update fitsio version number string
-RUN sed -i -e s/1.0.5/1.0.6/g /opt/conda/lib/python3.7/site-packages/fitsio/__init__.py
+RUN pip --no-cache-dir install fitsio==1.1.0
 
 RUN /sbin/ldconfig
 
