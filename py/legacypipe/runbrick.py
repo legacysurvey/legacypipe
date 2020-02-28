@@ -1369,18 +1369,18 @@ def stage_fitblobs(T=None,
     assert(len(iblob) == len(T))
     T.blob = iblob.astype(np.int32)
 
+    # Build map from (old+1) to new blob numbers, for the blob image.
+    blobmap = np.empty(blobs.max()+2, int)
+    # make sure that dropped blobs -> -1
+    blobmap[:] = -1
+    # in particular,
+    blobmap[0] = -1
+    blobmap[oldblob + 1] = iblob
+    blobs = blobmap[blobs+1]
+    del blobmap
+
     # write out blob map
     if write_metrics:
-        # Build map from (old+1) to new blob numbers, for the blob image.
-        blobmap = np.empty(blobs.max()+2, int)
-        # make sure that dropped blobs -> -1
-        blobmap[:] = -1
-        # in particular,
-        blobmap[0] = -1
-        blobmap[oldblob + 1] = iblob
-        blobs = blobmap[blobs+1]
-        del blobmap
-
         # copy version_header before modifying it.
         hdr = fitsio.FITSHDR()
         for r in version_header.records():
@@ -1391,8 +1391,8 @@ def stage_fitblobs(T=None,
         hdr.delete('IMAGEH')
         hdr.add_record(dict(name='IMTYPE', value='blobmap',
                             comment='LegacySurveys image type'))
-        hdr.add_record(dict(name='EQUINOX', value=2000.,comment='Observation epoch'))
-
+        hdr.add_record(dict(name='EQUINOX', value=2000.,
+                            comment='Observation epoch'))
         with survey.write_output('blobmap', brick=brickname, shape=blobs.shape) as out:
             out.fits.write(blobs, header=hdr)
     del iblob, oldblob
@@ -1422,7 +1422,7 @@ def stage_fitblobs(T=None,
     brightblobmask = refmap
 
     # Comment this out if you need to save the 'blobs' map for later (eg, sky fibers)
-    blobs = None
+    #blobs = None
 
     invvars = np.hstack(BB.srcinvvars)
     assert(cat.numberOfParams() == len(invvars))
@@ -1687,6 +1687,57 @@ def _get_mod(X):
 
     return mod
 
+def _get_both_mods(X):
+    from astrometry.util.resample import resample_with_wcs, OverlapError
+    from astrometry.util.miscutils import get_overlapping_region
+    (tim, srcs, srcblobs, blobmap, targetwcs) = X
+    t0 = Time()
+
+    mod = np.zeros(tim.getModelShape(), np.float32)
+    blobmod = np.zeros(tim.getModelShape(), np.float32)
+
+    assert(len(srcs) == len(srcblobs))
+
+    ### modelMasks during fitblobs()....?
+
+    print('blob map min:', blobmap.min())
+    
+    try:
+        Yo,Xo,Yi,Xi,_ = resample_with_wcs(tim.subwcs, targetwcs)
+    except OverlapError:
+        return None,None
+    timblobmap = np.empty(mod.shape, blobmap.dtype)
+    timblobmap[:,:] = -1
+    timblobmap[Yo,Xo] = blobmap[Yi,Xi]
+    del Yo,Xo,Yi,Xi
+    
+    for src,srcblob in zip(srcs, srcblobs):
+        patch = src.getModelPatch(tim)
+        if patch is None:
+            continue
+
+        #patch.addTo(mod)
+
+        # From patch.addTo()
+        (ih, iw) = mod.shape
+        (ph, pw) = patch.shape
+        (outx, inx) = get_overlapping_region(
+            patch.x0, patch.x0 + pw - 1, 0, iw - 1)
+        (outy, iny) = get_overlapping_region(
+            patch.y0, patch.y0 + ph - 1, 0, ih - 1)
+        if inx == [] or iny == []:
+            continue
+        p = patch.patch[iny, inx]
+        mod[outy, outx] += p
+
+        # mask by blob map
+        blobmod[outy, outx] += p * (timblobmap[outy,outx] == srcblob)
+
+    if hasattr(tim.psf, 'clear_cache'):
+        tim.psf.clear_cache()
+
+    return mod, blobmod
+
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  custom_brick=False,
@@ -1698,6 +1749,9 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  brightblobmask=None,
                  bailout_mask=None,
                  mp=None,
+
+                 blobs=None,
+
                  record_event=None,
                  **kwargs):
     '''
@@ -1766,7 +1820,12 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     tlast = tnow
     # Render model images...
     record_event and record_event('stage_coadds: model images')
-    mods = mp.map(_get_mod, [(tim, cat) for tim in tims])
+    #mods = mp.map(_get_mod, [(tim, cat) for tim in tims])
+    bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob, blobs, targetwcs) for tim in tims])
+
+    mods = [m for m,b in bothmods]
+    blobmods = [b for m,b in bothmods]
+    del bothmods
 
     tnow = Time()
     debug('[parallel coadds] Getting model images:', tnow-tlast)
@@ -1803,7 +1862,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     del xx,yy,ok,ra,dec
 
     record_event and record_event('stage_coadds: coadds')
-    C = make_coadds(tims, bands, targetwcs, mods=mods, xy=ixy,
+    C = make_coadds(tims, bands, targetwcs, mods=mods, blobmods=blobmods,
+                    xy=ixy,
                     ngood=True, detmaps=True, psfsize=True, allmasks=True,
                     lanczos=lanczos,
                     apertures=apertures, apxy=apxy,
@@ -1849,19 +1909,23 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     T.apflux       = np.zeros((len(T), len(bands), A), np.float32)
     T.apflux_ivar  = np.zeros((len(T), len(bands), A), np.float32)
     T.apflux_resid = np.zeros((len(T), len(bands), A), np.float32)
+    T.apflux_blobresid = np.zeros((len(T), len(bands), A), np.float32)
     if Nno:
         T_donotfit.apflux       = np.zeros((Nno, len(bands), A), np.float32)
         T_donotfit.apflux_ivar  = np.zeros((Nno, len(bands), A), np.float32)
         T_donotfit.apflux_resid = np.zeros((Nno, len(bands), A), np.float32)
+        T_donotfit.apflux_blobresid = np.zeros((Nno, len(bands), A), np.float32)
     AP = C.AP
     for iband,band in enumerate(bands):
         T.apflux      [:,iband,:] = AP.get('apflux_img_%s'      % band)[:Nyes,:]
         T.apflux_ivar [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)[:Nyes,:]
         T.apflux_resid[:,iband,:] = AP.get('apflux_resid_%s'    % band)[:Nyes,:]
+        T.apflux_blobresid[:,iband,:] = AP.get('apflux_blobresid_%s'    % band)[:Nyes,:]
         if Nno:
             T_donotfit.apflux      [:,iband,:] = AP.get('apflux_img_%s'      % band)[Nyes:,:]
             T_donotfit.apflux_ivar [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)[Nyes:,:]
             T_donotfit.apflux_resid[:,iband,:] = AP.get('apflux_resid_%s'    % band)[Nyes:,:]
+            T_donotfit.apflux_blobresid[:,iband,:] = AP.get('apflux_blobresid_%s'    % band)[Nyes:,:]
     del AP
 
     # Compute depth histogram
@@ -1872,7 +1936,9 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
     coadd_list= [('image', C.coimgs, {}),
                  ('model', C.comods, {}),
+                 ('blobmodel', C.coblobmods, {}),
                  ('resid', C.coresids, dict(resids=True))]
+    ### blobresids??
     if hasattr(tims[0], 'sims_image'):
         coadd_list.append(('simscoadd', sims_coadd, {}))
 

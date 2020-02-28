@@ -1131,13 +1131,15 @@ class LegacySurveyData(object):
                 os.path.join(codir, '%s-%s-%s.fits' % (sname, brick, ty)))
 
         elif filetype in ['image-jpeg', 'model-jpeg', 'resid-jpeg',
+                          'blobmodel-jpeg',
                           'imageblob-jpeg', 'simscoadd-jpeg','imagecoadd-jpeg',
                           'wise-jpeg', 'wisemodel-jpeg']:
             ty = filetype.split('-')[0]
             return swap(
                 os.path.join(codir, '%s-%s-%s.jpg' % (sname, brick, ty)))
 
-        elif filetype in ['invvar', 'chi2', 'image', 'model', 'depth', 'galdepth', 'nexp', 'psfsize']:
+        elif filetype in ['invvar', 'chi2', 'image', 'model', 'blobmodel',
+                          'depth', 'galdepth', 'nexp', 'psfsize']:
             return swap(os.path.join(codir, '%s-%s-%s-%s.fits.fz' %
                                      (sname, brick, filetype,band)))
 
