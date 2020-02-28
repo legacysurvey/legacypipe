@@ -108,8 +108,6 @@ def one_blob(X):
     # This uses 'initial' pixel positions, because that's what determines
     # the fitting behaviors.
     B.brightblob = refmap[safe_y0, safe_x0].astype(np.int16)
-    B.cpu_arch = np.zeros(len(B), dtype='U3')
-    B.cpu_arch[:] = get_cpu_arch()
     B.cpu_source = np.zeros(len(B), np.float32)
     B.blob_width  = np.zeros(len(B), np.int16) + blobw
     B.blob_height = np.zeros(len(B), np.int16) + blobh
@@ -137,11 +135,15 @@ def one_blob(X):
     assert(len(B.finished_in_blob) == len(B))
     assert(len(B.finished_in_blob) == len(B.started_in_blob))
 
+    # Setting values here (after .run() has completed) means that iterative sources
+    # (which get merged with the original table B) get values also.
+    B.cpu_arch = np.zeros(len(B), dtype='U3')
+    B.cpu_arch[:] = get_cpu_arch()
     B.cpu_blob = np.empty(len(B), np.float32)
     t1 = time.clock()
     B.cpu_blob[:] = t1 - t0
     B.blob = np.empty(len(B), np.int32)
-    B.blob[:] = nblob
+    B.blob[:] = iblob
     return B
 
 class OneBlob(object):
@@ -776,7 +778,7 @@ class OneBlob(object):
         Bnew.blob_symm_width   = np.zeros(len(Bnew), np.int16)
         Bnew.blob_symm_height  = np.zeros(len(Bnew), np.int16)
         Bnew.hit_limit = np.zeros(len(Bnew), bool)
-
+        Bnew.brightblob = self.refmap[Tnew.iby, Tnew.ibx].astype(np.int16)
         # Be quieter during iterative detection!
         bloblogger = logging.getLogger('legacypipe.oneblob')
         loglvl = bloblogger.getEffectiveLevel()

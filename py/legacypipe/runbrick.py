@@ -1553,7 +1553,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
 
     # sort blobs by size so that larger ones start running first
     blobvals = Counter(blobs[blobs>=0])
-    blob_order = np.array([i for i,npix in blobvals.most_common()])
+    blob_order = np.array([b for b,npix in blobvals.most_common()])
     del blobvals
 
     if custom_brick:
