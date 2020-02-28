@@ -1673,18 +1673,10 @@ def _get_mod(X):
     (tim, srcs) = X
     t0 = Time()
     tractor = Tractor([tim], srcs)
-
-    if hasattr(tim, 'modelMinval'):
-        debug('tim modelMinval', tim.modelMinval)
-    else:
-        # this doesn't really help when using pixelized PSFs / FFTs
-        tim.modelMinval = minval = tim.sig * 0.1
     mod = tractor.getModelImage(0)
     debug('Getting model for', tim, ':', Time()-t0)
-
     if hasattr(tim.psf, 'clear_cache'):
         tim.psf.clear_cache()
-
     return mod
 
 def _get_both_mods(X):
@@ -1692,16 +1684,10 @@ def _get_both_mods(X):
     from astrometry.util.miscutils import get_overlapping_region
     (tim, srcs, srcblobs, blobmap, targetwcs) = X
     t0 = Time()
-
     mod = np.zeros(tim.getModelShape(), np.float32)
     blobmod = np.zeros(tim.getModelShape(), np.float32)
-
     assert(len(srcs) == len(srcblobs))
-
     ### modelMasks during fitblobs()....?
-
-    print('blob map min:', blobmap.min())
-    
     try:
         Yo,Xo,Yi,Xi,_ = resample_with_wcs(tim.subwcs, targetwcs)
     except OverlapError:
@@ -1715,9 +1701,7 @@ def _get_both_mods(X):
         patch = src.getModelPatch(tim)
         if patch is None:
             continue
-
         #patch.addTo(mod)
-
         # From patch.addTo()
         (ih, iw) = mod.shape
         (ph, pw) = patch.shape
@@ -1729,19 +1713,17 @@ def _get_both_mods(X):
             continue
         p = patch.patch[iny, inx]
         mod[outy, outx] += p
-
         # mask by blob map
         blobmod[outy, outx] += p * (timblobmap[outy,outx] == srcblob)
-
     if hasattr(tim.psf, 'clear_cache'):
         tim.psf.clear_cache()
-
     return mod, blobmod
 
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  custom_brick=False,
                  T=None, T_donotfit=None, T_refbail=None,
+                 blobs=None,
                  cat=None, pixscale=None, plots=False,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
                  co_sky=None,
@@ -1749,9 +1731,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  brightblobmask=None,
                  bailout_mask=None,
                  mp=None,
-
-                 blobs=None,
-
                  record_event=None,
                  **kwargs):
     '''
