@@ -209,6 +209,10 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> /root/.bashrc \
   && python -c "from astropy.coordinates import EarthLocation; EarthLocation._get_site_registry(force_download=True)" \
   && python -c "from astropy.coordinates import EarthLocation, SkyCoord, AltAz; from astropy.time import Time; print(EarthLocation.of_site('ctio')); print(SkyCoord(180.,-45.,unit='deg').transform_to(AltAz(obstime=Time(56806.0, format='mjd'), location=EarthLocation.of_site('ctio'))))"
 
+# Curses upon you, astropy
+RUN wget -O /opt/conda/lib/python3.7/site-packages/astropy/utils/iers/data/Leap_Second.dat \
+    https://raw.githubusercontent.com/astropy/astropy/master/astropy/utils/iers/data/Leap_Second.dat
+
 ENTRYPOINT ["/bin/bash", "-c"]
 CMD ["/bin/bash"]
 
