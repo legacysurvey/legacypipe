@@ -439,7 +439,11 @@ def read_large_galaxies(survey, targetwcs, bands):
         assert(np.isfinite(rr))
         assert(np.isfinite(g.ba))
         assert(np.isfinite(g.pa))
-        logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, g.ba, 180-g.pa) # note the 180 rotation
+        ba = g.ba
+        if ba == 0.0:
+            # Make round!
+            ba = 1.0
+        logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, ba, 180-g.pa) # note the 180 rotation
         assert(np.isfinite(logr))
         assert(np.isfinite(ee1))
         assert(np.isfinite(ee2))
