@@ -388,18 +388,23 @@ def read_large_galaxies(survey, targetwcs, bands):
             shape = None
             # put the Rex branch first, because Rex is a subclass of ExpGalaxy!
             if issubclass(typ, RexGalaxy):
+                assert(np.isfinite(g.shape_r))
                 shape = LogRadius(np.log(g.shape_r))
             elif issubclass(typ, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
+                assert(np.isfinite(g.shape_r))
+                assert(np.isfinite(g.shape_e1))
+                assert(np.isfinite(g.shape_e2))
                 shape = EllipseE(g.shape_r, g.shape_e1, g.shape_e2)
                 # switch to softened ellipse (better fitting behavior)
                 shape = EllipseESoft.fromEllipseE(shape)
                 # and then to our custom ellipse class
                 shape = LegacyEllipseWithPriors(shape.logre, shape.ee1, shape.ee2)
-
+                assert(np.all(np.isfinite(shape.getParams())))
 
             if issubclass(typ, (DevGalaxy, ExpGalaxy)):
                 src = typ(pos, bright, shape)
             elif issubclass(typ, (SersicGalaxy)):
+                assert(np.isfinite(g.sersic))
                 sersic = LegacySersicIndex(g.sersic)
                 src = typ(pos, bright, shape, sersic)
             elif issubclass(typ, PointSource):
@@ -431,7 +436,13 @@ def read_large_galaxies(survey, targetwcs, bands):
         fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
         assert(np.all(np.isfinite(list(fluxes.values()))))
         rr = g.radius * 3600. / 2 # factor of two accounts for R(25)-->reff [arcsec]
+        assert(np.isfinite(rr))
+        assert(np.isfinite(g.ba))
+        assert(np.isfinite(g.pa))
         logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, g.ba, 180-g.pa) # note the 180 rotation
+        assert(np.isfinite(logr))
+        assert(np.isfinite(ee1))
+        assert(np.isfinite(ee2))
         src = ExpGalaxy(RaDecPos(g.ra, g.dec),
                         NanoMaggies(order=bands, **fluxes),
                         LegacyEllipseWithPriors(logr, ee1, ee2))
