@@ -1370,12 +1370,32 @@ class OneBlob(object):
             nsrcparams = newsrc.numberOfParams()
             _convert_ellipses(newsrc)
             assert(newsrc.numberOfParams() == nsrcparams)
+
+            # Compute a very approximate "fracin" metric (fraction of flux in masked model image
+            # versus total flux of model), to avoid wild extrapolation when nearly unconstrained.
+            fracin = dict([(b, []) for b in self.bands])
+            fluxes = dict([(b, newsrc.getBrightness().getFlux(b)) for b in self.bands])
+            for tim,mod in zip(srctims, srctractor.getModelImages()):
+                f = (mod * (tim.getInvError() > 0)).sum() / fluxes[tim.band]
+                #print('Model image for', tim.name, ': has fracin = %.3g' % f)
+                fracin[tim.band].append(f)
+            for band in self.bands:
+                if len(fracin[band]) == 0:
+                    continue
+                f = np.mean(fracin[band])
+                #print('Band', band, ': mean fracin', f)
+                if f < 1e-6:
+                    print('Source', newsrc, ': setting flux in band', band,
+                          'to zero based on fracin = %.3g' % f)
+                    newsrc.getBrightness().setFlux(band, 0.)
+
             # Compute inverse-variances
             # This uses the second-round modelMasks.
             allderivs = srctractor.getDerivs()
             ivars = _compute_invvars(allderivs)
             assert(len(ivars) == nsrcparams)
 
+            # If any fluxes have zero invvar, zero out the flux.
             params = newsrc.getParams()
             reset = False
             for i,(pname,p,iv) in enumerate(zip(newsrc.getParamNames(), newsrc.getParams(), ivars)):
