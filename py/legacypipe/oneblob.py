@@ -394,6 +394,24 @@ class OneBlob(object):
         maxsn = 0
         for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
             sn = detmap * np.sqrt(detiv)
+
+            if self.plots:
+                import pylab as plt
+                plt.clf()
+                plt.subplot(2,2,1)
+                plt.imshow(detmap, interpolation='nearest', origin='lower')
+                plt.title('detmap %s' % self.bands[i])
+                plt.colorbar()
+                plt.subplot(2,2,2)
+                plt.imshow(detiv, interpolation='nearest', origin='lower')
+                plt.title('detiv %s' % self.bands[i])
+                plt.colorbar()
+                plt.subplot(2,2,3)
+                plt.imshow(sn, interpolation='nearest', origin='lower')
+                plt.title('detsn %s' % self.bands[i])
+                plt.colorbar()
+                self.ps.savefig()
+
             # HACK - no SEDs...
             maxsn = np.maximum(maxsn, sn)
 
@@ -575,6 +593,30 @@ class OneBlob(object):
         # to be kept; the tims contain residual images.
 
         if iterative_detection:
+
+            if self.plots:
+                import pylab as plt
+                for tim in self.tims:
+                    plt.clf()
+                    plt.suptitle('Iterative detection: %s' % tim.name)
+                    plt.subplot(2,2,1)
+                    plt.imshow(tim.getImage(), interpolation='nearest', origin='lower',
+                               vmin=-5.*tim.sig1, vmax=10.*tim.sig1)
+                    plt.title('image')
+                    plt.subplot(2,2,2)
+                    plt.imshow(tim.getImage(), interpolation='nearest', origin='lower')
+                    plt.title('image')
+                    plt.colorbar()
+                    plt.subplot(2,2,3)
+                    plt.imshow(tim.getInvError(), interpolation='nearest', origin='lower')
+                    plt.title('inverr')
+                    plt.colorbar()
+                    plt.subplot(2,2,4)
+                    plt.imshow(tim.getImage() * (tim.getInvError() > 0), interpolation='nearest', origin='lower')
+                    plt.title('image*(inverr>0)')
+                    plt.colorbar()
+                    self.ps.savefig()
+
             Bnew = self.iterative_detection(B, models)
             if Bnew is not None:
                 from astrometry.util.fits import merge_tables
