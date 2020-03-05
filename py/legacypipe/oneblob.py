@@ -556,8 +556,8 @@ class OneBlob(object):
             B.sources[srci] = keepsrc
             cat[srci] = keepsrc
 
-            # Re-remove the final fit model for this source.
-            models.update_and_subtract(srci, keepsrc, self.tims)
+            if keepsrc is None:
+                models.update_and_subtract(srci, keepsrc, self.tims)
 
             if self.plots_single:
                 plt.figure(2)
@@ -986,15 +986,11 @@ class OneBlob(object):
                 debug('No pixels in dilated symmetric mask')
                 return None
 
-            #
-            #dh,dw = dilated.shape
             dh,dw = flipblobs.shape
             sx0,sy0 = srcwcs_x0y0
             s = self.segmap[iy + sy0, ix + sx0]
-            #print('segmap at', (ix+sx0, iy+sy0), ':', s)
             if s != -1:
                 dilated *= (self.segmap[sy0:sy0+dh, sx0:sx0+dw] == s)
-                #flipblobs *= (self.segmap[sy0:sy0+dh, sx0:sx0+dw] == s)
 
             if not np.any(dilated):
                 debug('No pixels in segmented dilated symmetric mask')
@@ -1004,13 +1000,10 @@ class OneBlob(object):
             xin = np.max(dilated, axis=0)
             yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
             xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
-            #print('Dilated: good bounds x', xl,xh, 'y', yl,yh)
-            #oldshape = srcwcs.shape
             (oldx0,oldy0) = srcwcs_x0y0
             srcwcs = srcwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
             srcwcs_x0y0 = (oldx0 + xl, oldy0 + yl)
             srcblobmask = srcblobmask[yl:yh+1, xl:xh+1]
-            #print('Cut srcwcs from', oldshape, 'to', srcwcs.shape)
             dilated = dilated[yl:yh+1, xl:xh+1]
             flipblobs = flipblobs[yl:yh+1, xl:xh+1]
 
@@ -1340,6 +1333,23 @@ class OneBlob(object):
             allderivs = srctractor.getDerivs()
             ivars = _compute_invvars(allderivs)
             assert(len(ivars) == nsrcparams)
+
+            params = newsrc.getParams()
+            reset = False
+            for i,(pname,p,iv) in enumerate(zip(newsrc.getParamNames(), newsrc.getParams(), ivars)):
+                #print('  ', pname, '=', p, 'iv', iv, 'sigma', 1./np.sqrt(iv))
+                if iv == 0:
+                    #print('Resetting', pname, '=', 0)
+                    params[i] = 0.
+                    reset = True
+
+            if reset:
+                newsrc.setParams(params)
+                #print('Source:', newsrc)
+                allderivs = srctractor.getDerivs()
+                ivars = _compute_invvars(allderivs)
+                assert(len(ivars) == nsrcparams)
+
             B.all_model_ivs[srci][name] = np.array(ivars).astype(np.float32)
             B.all_models[srci][name] = newsrc.copy()
             assert(B.all_models[srci][name].numberOfParams() == nsrcparams)
@@ -1361,8 +1371,13 @@ class OneBlob(object):
             B.all_model_hit_limit[srci][name] = hit_limit
             B.all_model_opt_steps[srci][name] = opt_steps
 
+        masked_tim_ies = None
         if mask_others:
+            masked_tim_ies = []
             for ie,tim in zip(saved_srctim_ies, srctims):
+                # save
+                masked_tim_ies.append(tim.inverr)
+                # revert tim to original (unmasked-by-others)
                 tim.inverr = ie
 
         # After model selection, revert the sky
@@ -1431,6 +1446,43 @@ class OneBlob(object):
                          (self.name, srci, force_pointsource, fit_background,
                           keepmod, str(keepsrc), str(src)), fontsize=10)
             self.ps.savefig()
+
+        #print('Removing final fit model for source:', keepsrc)
+        # The update_and_subtract call below is a bit awkward -- it must get passed
+        # arrays aligned with self.tims, but we want to pass in our symmetrized, etc
+        # masks.
+        masked_ies = []
+        the_tims = []
+        if self.bigblob:
+            # For big blobs, we created new 'srctims'; match them up.
+            # create temp full-sized ies, but masked
+            for tim in self.tims:
+                matched = False
+                for srctim,mie in zip(srctims, masked_tim_ies):
+                    if srctim.fulltim == tim:
+                        ie = np.zeros_like(tim.getInvError())
+                        mh,mw = mie.shape
+                        ie[srctim.y0:srctim.y0+mh, srctim.x0:srctim.x0+mw] = mie
+                        masked_ies.append(ie)
+                        the_tims.append(tim)
+                        matched = True
+                        break
+                if not matched:
+                    the_tims.append(None)
+                    masked_ies.append(None)
+        else:
+            # Non-bigblobs: srctims = (a subset of self.tims)
+            for tim in self.tims:
+                if tim in srctims:
+                    i = srctims.index(tim)
+                    mie = masked_tim_ies[i]
+                    masked_ies.append(mie)
+                    the_tims.append(tim)
+                else:
+                    masked_ies.append(None)
+                    the_tims.append(None)
+
+        models.update_and_subtract(srci, keepsrc, the_tims, tim_ies=masked_ies)
 
         return keepsrc
 
@@ -1908,6 +1960,7 @@ def _get_subtim(tim, x0, x1, y0, y1):
     subtim.modelMinval = tim.modelMinval
     subtim.x0 = x0
     subtim.y0 = y0
+    subtim.fulltim = tim
     subtim.meta = tim.meta
     subtim.psf_sigma = tim.psf_sigma
     if tim.dq is not None:
@@ -1972,15 +2025,57 @@ class SourceModels(object):
             if mod is not None:
                 mod.addTo(tim.getImage())
 
-    def update_and_subtract(self, i, src, tims):
-        for tim,mods in zip(tims, self.models):
+    def update_and_subtract(self, i, src, tims, tim_ies=None, ps=None):
+        for itim,(tim,mods) in enumerate(zip(tims, self.models)):
             if src is None:
-                mod = None
-            else:
-                mod = src.getModelPatch(tim)
-            if mod is not None:
-                mod.addTo(tim.getImage(), scale=-1)
+                mods[i] = None
+                continue
+
+            if tim is None:
+                continue
+            mod = src.getModelPatch(tim)
             mods[i] = mod
+            if mod is None:
+                continue
+
+            if tim_ies is not None:
+                # Apply an extra mask (ie, the mask_others segmentation mask)
+                ie = tim_ies[itim]
+                if ie is None:
+                    continue
+                inslice, outslice = mod.getSlices(tim.shape)
+                p = mod.patch[inslice]
+                img = tim.getImage()
+                img[outslice] -= p * (ie[outslice]>0)
+            else:
+                mod.addTo(tim.getImage(), scale=-1)
+            
+            # if mod.patch.max() > 1e6:
+            #     if ps is not None:
+            #         z = np.zeros_like(tim.getImage())
+            #         import pylab as plt
+            #         plt.clf()
+            #         plt.suptitle('tim: %s' % tim.name)
+            #         plt.subplot(2,2,1)
+            #         plt.imshow(mod.patch, interpolation='nearest', origin='lower')
+            #         plt.colorbar()
+            #         plt.title('mod')
+            #         plt.subplot(2,2,2)
+            #         plt.imshow(tim.getImage(), interpolation='nearest', origin='lower')
+            #         plt.colorbar()
+            #         plt.title('tim (before)')
+            #         mod.addTo(z, scale=1)
+            #         plt.subplot(2,2,3)
+            #         plt.imshow(z, interpolation='nearest', origin='lower')
+            #         plt.colorbar()
+            #         plt.title('mod')
+            #         img = tim.getImage().copy()
+            #         mod.addTo(img, scale=-1)
+            #         plt.subplot(2,2,4)
+            #         plt.imshow(img, interpolation='nearest', origin='lower')
+            #         plt.colorbar()
+            #         plt.title('tim-mod')
+            #         ps.savefig()
 
     def model_masks(self, i, src):
         modelMasks = []
