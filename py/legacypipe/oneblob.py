@@ -655,6 +655,10 @@ class OneBlob(object):
         detmaps,detivs,satmaps = detection_maps(
             self.tims, self.blobwcs, self.bands, mp)
 
+        # from runbrick.py
+        from scipy.ndimage.morphology import binary_dilation
+        satmaps = [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps]
+
         # Also compute detection maps on the (first-round) model images!
         # save tim.images (= residuals at this point)
         realimages = [tim.getImage() for tim in self.tims]
