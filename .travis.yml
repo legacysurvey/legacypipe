@@ -19,7 +19,7 @@ install:
     - export WCSLIB_INC="-I/usr/include/wcslib-4.20"
     - export WCSLIB_LIB="-lwcs"
 
-    - pip install Sphinx==1.5.4   # 1.5.6?
+    - pip install Sphinx #==1.5.4   # 1.5.6?
     - pip install numpy
     - pip install scipy
     - pip install Pillow
@@ -30,11 +30,9 @@ install:
     - pip install coveralls
     - pip install fitsio==1.1.1
     #- pip install --no-deps --upgrade git+https://github.com/esheldon/fitsio.git@v0.9.12#egg=fitsio
-    #- pip install -v --no-deps --upgrade git+https://github.com/dstndstn/tractor.git
     #- pip install -v --no-deps --upgrade git+https://github.com/dstndstn/tractor.git@cython
     - pip install cython
     - git clone https://github.com/dstndstn/tractor.git
-    #- (cd tractor && git checkout cython && python setup-cython.py install)
     - (cd tractor && python setup-cython.py install)
 
 before_script:
@@ -43,19 +41,6 @@ before_script:
     - (cd $HOME/astrometry.net && make && make py)
 
     - (cd $HOME && git clone https://github.com/legacysurvey/unwise_psf.git && cd unwise_psf && git checkout dr9.2)
-
-    # - if [ ! -d "$HOME/tractor-git" ]; then (cd $HOME; git clone https://github.com/dstndstn/tractor.git tractor-git); fi
-    # - (cd $HOME/tractor-git && git pull) || (rm -Rf $HOME/tractor-git && cd $HOME && git clone https://github.com/dstndstn/tractor.git tractor-git);
-    # - (cd $HOME/tractor-git && make)
-    # - ln -s $HOME/tractor-git/tractor .
-    # - ln -s $HOME/tractor-git/wise .
-
-    # pip install fitsio instead
-    #- if [ ! -d "$HOME/fitsio-git" ]; then (cd $HOME; git clone https://github.com/esheldon/fitsio.git fitsio-git); fi
-    #- (cd $HOME/fitsio-git && git pull) || (rm -Rf $HOME/fitsio-git && cd $HOME && git clone https://github.com/esheldon/fitsio.git fitsio-git);
-    #- (rm -Rf $HOME/fitsio-git && cd $HOME && git clone https://github.com/esheldon/fitsio.git fitsio-git);
-    #- (cd $HOME/fitsio-git && python setup.py install --home $HOME/fitsio)
-    #- ln -s $HOME/fitsio/lib/python/fitsio .
 
     - mkdir -p $HOME/dust/maps
     - (cd $HOME/dust/maps && wget -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_ngp.fits)
@@ -67,11 +52,6 @@ script:
     - ls $HOME
     - ls $HOME/astrometry.net
     - (cd doc && make)
-    # - echo $PYTHONPATH
-    # - python -c "import numpy; print(numpy.__file__)"
-    # - python -c "import matplotlib; print(matplotlib.__file__)"
-    # - python -c "import fitsio; print(fitsio.__file__)"
-    # - python -c "import tractor.emfit"
     - (cd py && coverage run test/runbrick_test.py travis && coverage run -a test/unit_tests.py)
 
 after_success:
