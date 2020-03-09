@@ -9,7 +9,6 @@ Welcome to legacypipe's documentation!
 Contents:
 
 .. toctree::
-    :maxdepth: 2
 
    running
 
