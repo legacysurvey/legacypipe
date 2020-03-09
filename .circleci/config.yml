@@ -26,7 +26,7 @@ jobs:
       - run:
          name: Pip packages
          command: |
-            for x in setuptools wheel intel-numpy intel-scipy psycopg2-binary fitsio matplotlib astropy photutils zmq; do pip3 install $x; done
+            for x in setuptools wheel intel-numpy intel-scipy psycopg2-binary fitsio matplotlib astropy photutils zmq cython; do pip3 install $x; done
             rm -Rf /root/.cache/pip
       - run:
           name: Dust maps
@@ -55,8 +55,9 @@ jobs:
                cd tractor
                export PYTHON=python3
                export PYTHON_CONFIG=python3-config
-               make
-               make ceres
+               python setup-cython.py install
+               # make
+               # make ceres
                make install INSTALL_DIR=/usr/local
                rm -R $(find . -name "*.o" -o -name "*.so")
                cd /tmp && python3 -c "from tractor import galaxy; print(galaxy.__file__)"
