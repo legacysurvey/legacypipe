@@ -62,11 +62,11 @@ def run(server):
 
         print('Calling one_blob...')
         t0_wall = time.time()
-        t0_cpu  = time.clock()
+        t0_cpu  = time.process_time()
 
         result = one_blob(args)
 
-        t1_cpu  = time.clock()
+        t1_cpu  = time.process_time()
         t1_wall = time.time()
         overhead = t0_wall - tprev_wall
         tprev_wall = t1_wall

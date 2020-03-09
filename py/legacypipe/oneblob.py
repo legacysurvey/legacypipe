@@ -85,7 +85,7 @@ def one_blob(X):
         plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
         plt.figure(1)
 
-    t0 = time.clock()
+    t0 = time.process_time()
     # A local WCS for this blob
     blobwcs = brickwcs.get_subimage(bx0, by0, blobw, blobh)
 
@@ -140,7 +140,7 @@ def one_blob(X):
     B.cpu_arch = np.zeros(len(B), dtype='U3')
     B.cpu_arch[:] = get_cpu_arch()
     B.cpu_blob = np.empty(len(B), np.float32)
-    t1 = time.clock()
+    t1 = time.process_time()
     B.cpu_blob[:] = t1 - t0
     B.blob = np.empty(len(B), np.int32)
     B.blob[:] = iblob
@@ -549,7 +549,7 @@ class OneBlob(object):
             src = cat[srci]
             debug('Model selection for source %i of %i in blob %s; sourcei %i' %
                   (numi+1, len(Ibright), self.name, srci))
-            cpu0 = time.clock()
+            cpu0 = time.process_time()
 
             if getattr(src, 'freezeparams', False):
                 info('Frozen source', src, '-- keeping as-is!')
@@ -586,7 +586,7 @@ class OneBlob(object):
                 plt.savefig('blob-%s-%i-sub.png' % (self.name, srci))
                 plt.figure(1)
 
-            cpu1 = time.clock()
+            cpu1 = time.process_time()
             B.cpu_source[srci] += (cpu1 - cpu0)
 
         # At this point, we have subtracted our best model fits for each source
@@ -1262,7 +1262,7 @@ class OneBlob(object):
 
         cputimes = {}
         for name,newsrc in trymodels:
-            cpum0 = time.clock()
+            cpum0 = time.process_time()
 
             if name == 'gals':
                 # If 'rex' was better than 'psf', or the source is
@@ -1431,7 +1431,7 @@ class OneBlob(object):
             ch = _per_band_chisqs(srctractor, self.bands)
 
             chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
-            cpum1 = time.clock()
+            cpum1 = time.process_time()
             B.all_model_cpu[srci][name] = cpum1 - cpum0
             cputimes[name] = cpum1 - cpum0
             B.all_model_hit_limit[srci][name] = hit_limit
@@ -1562,7 +1562,7 @@ class OneBlob(object):
         enable_galaxy_cache()
 
         for i in Ibright:
-            cpu0 = time.clock()
+            cpu0 = time.process_time()
             cat.freezeAllBut(i)
             src = cat[i]
             if getattr(src, 'freezeparams', False):
@@ -1571,7 +1571,7 @@ class OneBlob(object):
             modelMasks = models.model_masks(0, cat[i])
             tr.setModelMasks(modelMasks)
             tr.optimize_loop(**self.optargs)
-            cpu1 = time.clock()
+            cpu1 = time.process_time()
             cputime[i] += (cpu1 - cpu0)
 
         tr.setModelMasks(None)
@@ -1601,7 +1601,7 @@ class OneBlob(object):
 
         # For sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
-            cpu0 = time.clock()
+            cpu0 = time.process_time()
             src = cat[srci]
             if getattr(src, 'freezeparams', False):
                 debug('Frozen source', src, '-- keeping as-is!')
@@ -1663,7 +1663,7 @@ class OneBlob(object):
 
             #print('Fitting source took', Time()-tsrc)
             #print(src)
-            cpu1 = time.clock()
+            cpu1 = time.process_time()
             cputime[srci] += (cpu1 - cpu0)
 
         models.restore_images(self.tims)
