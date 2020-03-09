@@ -58,7 +58,7 @@ jobs:
                python setup-cython.py install
                # make
                # make ceres
-               make install INSTALL_DIR=/usr/local
+               #make install INSTALL_DIR=/usr/local
                rm -R $(find . -name "*.o" -o -name "*.so")
                cd /tmp && python3 -c "from tractor import galaxy; print(galaxy.__file__)"
       - run:
