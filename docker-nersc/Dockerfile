@@ -207,8 +207,10 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> /root/.bashrc \
   && ipython -c "print('hello')" \
   # Download astropy site locations and USNO sky model
   && python -c "from astropy.coordinates import EarthLocation; EarthLocation._get_site_registry(force_download=True)" \
-  && python -c "from astropy.coordinates import EarthLocation, SkyCoord, AltAz; from astropy.time import Time; print(EarthLocation.of_site('ctio')); print(SkyCoord(180.,-45.,unit='deg').transform_to(AltAz(obstime=Time(56806.0, format='mjd'), location=EarthLocation.of_site('ctio'))))"
-
+  && python -c "from astropy.coordinates import EarthLocation, SkyCoord, AltAz; from astropy.time import Time; print(EarthLocation.of_site('ctio')); print(SkyCoord(180.,-45.,unit='deg').transform_to(AltAz(obstime=Time(56806.0, format='mjd'), location=EarthLocation.of_site('ctio'))))" \
+  # Download astropy IERS leap-second list
+  && python -c "from astropy.time import Time; Time.now()"
+  
 # Curses upon you, astropy
 RUN wget -O /opt/conda/lib/python3.7/site-packages/astropy/utils/iers/data/Leap_Second.dat \
     https://raw.githubusercontent.com/astropy/astropy/master/astropy/utils/iers/data/Leap_Second.dat
@@ -230,9 +232,10 @@ RUN python -O -m compileall \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-RUN cd /src/legacypipe && git pull && git describe && echo 8 && \
+RUN cd /src/legacypipe && git pull && git describe && echo 10 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
-
 # python legacypipe/runbrick.py --radec 178.8495 54.6572 --survey-dir /global/cfs/projectdirs/cosmo/work/legacysurvey/dr9 --run north --width 500 --height 500 --largegalaxy-preburner --force-all --no-large-galaxies --apodize
+
+
