@@ -3,7 +3,8 @@
 # Default environment is Ubuntu 12.04.5 LTS "precise"
 # which is pretty old.
 # "trusty" is Ubuntu 14.04.5 LTS
-dist: trusty
+#dist: trusty
+dist: xenial
 
 # use the newer container-based infrastructure
 sudo: false
@@ -13,7 +14,7 @@ language: python
 python:
   - "3.6"
   - "3.7"
-  - "3.8"
+#  - "3.8"
 
 install:
     - export WCSLIB_INC="-I/usr/include/wcslib-4.20"
