@@ -2131,34 +2131,33 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
 
     # For each source, compute and measure its model, and accumulate
     for isrc,(src,sx,sy) in enumerate(zip(cat, xx-1., yy-1.)):
-        #print('Source', src)
         # This works even if bands[0] has zero flux (or no overlapping
         # images)
         ums = src.getUnitFluxModelPatches(faketim)
-        #print('ums', ums)
         assert(len(ums) == 1)
         patch = ums[0]
         if patch is None:
             continue
-        #print('sum', patch.patch.sum())
         br = src.getBrightness()
         for iband,(modimg,band) in enumerate(zip(modimgs,bands)):
             flux = br.getFlux(band)
             flux_iv = T.flux_ivar[isrc, iband]
-            #print('Band', band, 'flux', flux, 'iv', flux_iv)
-            if flux > 0 and flux_iv > 0:
-                # Accumulate
-                patch.addTo(modimg, scale=flux)
-                # Add to blank image & photometer
-                patch.addTo(onemod, scale=flux)
-                aper = photutils.CircularAperture((sx, sy), fiberrad)
-                p = photutils.aperture_photometry(onemod, aper)
-                f = p.field('aperture_sum')[0]
-                fiberflux[isrc,iband] = f
-                #print('Aperture flux:', f)
-                # Blank out the image again
-                x0,x1,y0,y1 = patch.getExtent()
-                onemod[y0:y1, x0:x1] = 0.
+            if flux <= 0 or flux_iv <= 0:
+                continue
+            # Accumulate into image containing all models
+            patch.addTo(modimg, scale=flux)
+            # Add to blank image & photometer
+            patch.addTo(onemod, scale=flux)
+            aper = photutils.CircularAperture((sx, sy), fiberrad)
+            p = photutils.aperture_photometry(onemod, aper)
+            f = p.field('aperture_sum')[0]
+            if not np.isfinite(f):
+                # If the source is off the brick (eg, ref sources), can be NaN
+                continue
+            fiberflux[isrc,iband] = f
+            # Blank out the image again
+            x0,x1,y0,y1 = patch.getExtent()
+            onemod[y0:y1, x0:x1] = 0.
 
     # Now photometer the accumulated images
     # Aperture photometry locations
@@ -2167,7 +2166,10 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
     for iband,modimg in enumerate(modimgs):
         p = photutils.aperture_photometry(modimg, aper)
         f = p.field('aperture_sum')
-        fibertotflux[:, iband] = f
+        # If the source is off the brick (eg, ref sources), can be NaN
+        I = np.isfinite(f)
+        if len(I):
+            fibertotflux[I, iband] = f[I]
 
     if plots:
         for modimg,band in zip(modimgs, bands):
