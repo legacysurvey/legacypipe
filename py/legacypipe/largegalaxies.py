@@ -60,7 +60,6 @@ def get_sky(survey, targetwcs, tim):
     refsky = np.zeros((imh, imw)).astype('f4')
     skymodel.addTo(refsky)
 
-
     img = tim.getImage()
     ivar = tim.getInvvar()
 
@@ -102,6 +101,8 @@ def stage_largegalaxies(
         mp=None, record_event=None,
         **kwargs):
 
+    from astrometry.util.starutil_numpy import degrees_between
+
     from legacypipe.coadds import make_coadds, write_coadd_images
     from legacypipe.bits import DQ_BITS
     from legacypipe.survey import get_rgb, imsave_jpeg, LegacySurveyWcs
@@ -113,38 +114,101 @@ def stage_largegalaxies(
     from tractor.tractortime import TAITime
     import astropy.time
     import fitsio
+
+    from astrometry.util.resample import resample_with_wcs
+    from legacypipe.reference import get_reference_sources
+    from legacypipe.oneblob import get_inblob_map
     
     # Custom sky-subtraction.
-    overlapimg = np.stack(mp.map(_get_sky, [(survey, targetwcs, tim) for tim in tims]))
-    radec = np.array([tim.subwcs.crval for tim in tims])
-    allbands = np.array([tim.band for tim in tims])
-    for band in set(allbands):
-        I = np.where(allbands == band)[0]
-        # Choose the reference image, read the full tim, and render the original
-        # sky image.
-        indx = np.argsort(radec[I][:, 0])
-        refindx = indx[0]
-        reftim = tims[I[refindx]]
+    #overlapimg = np.stack(mp.map(_get_sky, [(survey, targetwcs, tim) for tim in tims]))
 
-        #fulltim = reftim.imobj.get_tractor_image(slc=None, dq=False, invvar=False, pixels=False)
-        skymodel = reftim.imobj.read_sky_model(slc=None)
-        imh, imw = reftim.imobj.get_image_shape()
-        refsky = np.zeros((imh, imw)).astype('f4')
-        skymodel.addTo(refsky)
-
+    # Add the original sky background back into the tim.
+    for tim in tims:
+        img = tim.getImage()
+        origsky = np.zeros_like(img)
+        tim.origsky.addTo(origsky)
         tim.setImage(img + origsky)
 
-        
-        reftim = im.get_tractor_image(splinesky=True, subsky=False, hybridPsf=True,
-                                      normalizePsf=True, apodize=apodize)
-        
+    radec = np.array([tim.subwcs.crval for tim in tims])
+    ddeg = degrees_between(radec[:, 0], radec[:, 1], targetwcs.crval[0], targetwcs.crval[1])
+    
+    allbands = np.array([tim.band for tim in tims])
+    for band in sorted(set(allbands)):
+        I = np.where(allbands == band)[0]
+        nn = len(I)
 
+        # Build out the matrix of the number of overlapping pixels.
+        noverlap = np.zeros((nn, nn)).astype(int)
+        indx = np.arange(nn)
+        for ii in indx:
+            for jj in indx[ii:]:
+                try:
+                    Yo, Xo, Yi, Xi, _ = resample_with_wcs(tims[I[ii]].subwcs, tims[I[jj]].subwcs)
+                    noverlap[jj, ii] = len(Yo)
+                    #print(ii, jj, len(Yo), len(Xo))
+                except:
+                    pass
+
+        # Work from the inside out.
+        JJ = np.argsort(ddeg[I])
+
+        # Get the median sky background from the CCD that's furthest from the
+        # center of the field.
+        skytim = tims[I[JJ[-1]]]
+        skyimg = skytim.imobj.read_sky_model(slc=None)
+        skywcs = skytim.imobj.get_wcs()
+        imh, imw = skytim.imobj.get_image_shape()
+        refsky = np.zeros((imh, imw)).astype('f4')
+        skyimg.addTo(refsky)
         
-        refscale = np.max(overlapimg[I[indx[0]]])
-        for ii in indx: # sort by RA
-            scale = np.max(overlapimg[I[indx[ii]]])
-            print(refscale, scale, refscale / scale)
-            tims[I[ii]].setImage(tims[I[ii]].getImage() * refscale / scale)
+        refs, _ = get_reference_sources(survey, skywcs, skywcs.pixel_scale(), ['r'],
+                                        tycho_stars=True, gaia_stars=True,
+                                        large_galaxies=True, star_clusters=True)
+        skymask = get_inblob_map(skywcs, refs) != 0 # True=unmasked
+        medsky = np.median(refsky[skymask])
+        
+        for J in JJ:
+            # Sort the images that overlap with this image by increasing overlap
+            # (but skip the image itself).
+            #print(noverlap[J, :])
+            KK = np.argsort(noverlap[J, :])[::-1]
+            KK = KK[noverlap[J, KK] > 0]
+            for K in KK:
+                try:
+                    Yo, Xo, Yi, Xi, _ = resample_with_wcs(tims[I[J]].subwcs, tims[I[K]].subwcs)
+                except:
+                    import pdb ; pdb.set_trace()
+                delta = np.sum(tims[I[J]].getInvvar()[Yo, Xo]*(tims[I[J]].getImage()[Yo, Xo] - tims[I[K]].getImage()[Yi, Xi])) / np.sum(tims[I[J]].getInvvar()[Yo, Xo])
+                print(J, K, delta, medsky)
+                tims[I[K]].setImage(tims[I[K]].getImage() + delta - medsky)
+                
+        #import pdb ; pdb.set_trace()
+
+    #    # Choose the reference image, read the full tim, and render the original
+    #    # sky image.
+    #    indx = np.argsort(radec[I][:, 0])
+    #    refindx = indx[0]
+    #    reftim = tims[I[refindx]]
+    #
+    #    #fulltim = reftim.imobj.get_tractor_image(slc=None, dq=False, invvar=False, pixels=False)
+    #    skymodel = reftim.imobj.read_sky_model(slc=None)
+    #    imh, imw = reftim.imobj.get_image_shape()
+    #    refsky = np.zeros((imh, imw)).astype('f4')
+    #    skymodel.addTo(refsky)
+    #
+    #    tim.setImage(img + origsky)
+    #
+    #    
+    #    reftim = im.get_tractor_image(splinesky=True, subsky=False, hybridPsf=True,
+    #                                  normalizePsf=True, apodize=apodize)
+    #    
+    #
+    #    
+    #    refscale = np.max(overlapimg[I[indx[0]]])
+    #    for ii in indx: # sort by RA
+    #        scale = np.max(overlapimg[I[indx[ii]]])
+    #        print(refscale, scale, refscale / scale)
+    #        tims[I[ii]].setImage(tims[I[ii]].getImage() * refscale / scale)
         
     #ww = np.where([tim.band == 'r' for tim in tims])[0]
     #with fitsio.FITS('skytest.fits', 'rw') as ff:
