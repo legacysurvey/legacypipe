@@ -2151,7 +2151,9 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
             aper = photutils.CircularAperture((sx, sy), fiberrad)
             p = photutils.aperture_photometry(onemod, aper)
             f = p.field('aperture_sum')[0]
-            print('x,y', sx,sy, '-> Aperture flux:', f)
+            if not np.isfinite(f):
+                # If the source is off the brick (eg, ref sources), can be NaN
+                continue
             fiberflux[isrc,iband] = f
             # Blank out the image again
             x0,x1,y0,y1 = patch.getExtent()
@@ -2164,7 +2166,10 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
     for iband,modimg in enumerate(modimgs):
         p = photutils.aperture_photometry(modimg, aper)
         f = p.field('aperture_sum')
-        fibertotflux[:, iband] = f
+        # If the source is off the brick (eg, ref sources), can be NaN
+        I = np.isfinite(f)
+        if len(I):
+            fibertotflux[I, iband] = f[I]
 
     if plots:
         for modimg,band in zip(modimgs, bands):
