@@ -51,11 +51,26 @@ def get_sky(survey, targetwcs, tim):
     from legacypipe.reference import get_reference_sources
     from legacypipe.oneblob import get_inblob_map
 
+    # Read the full-image tim (not the one restricted to targetwcs) and estimate
+    # the sky background after aggressively masking.
+    tim.imobj.get_tractor_image(slc=None, dq=None)
+    
+    skymodel = reftim.imobj.read_sky_model(slc=None)
+    imh, imw = reftim.imobj.get_image_shape()
+    refsky = np.zeros((imh, imw)).astype('f4')
+    skymodel.addTo(refsky)
+
+
     img = tim.getImage()
     ivar = tim.getInvvar()
 
+    # Add the original sky background back into the tim.
+    origsky = np.zeros_like(img)
+    tim.origsky.addTo(origsky)
+    tim.setImage(img + origsky)
+
     (HH, WW), pixscale = targetwcs.shape, tim.subwcs.pixel_scale()
-    skyimg = np.zeros((HH, WW), np.float32)
+    overlapimg = np.zeros((HH, WW), np.float32)
 
     Yo, Xo, Yi, Xi, _ = resample_with_wcs(targetwcs, tim.subwcs)
 
@@ -73,9 +88,9 @@ def get_sky(survey, targetwcs, tim):
         #skypix = np.logical_or(objmask != 0, skypix)
         skymean, skymedian, skysig = sigma_clipped_stats(img[Yi, Xi], mask=~skypix[Yi, Xi], sigma=3.0)
     #print(skymedian)
-    skyimg[Yo, Xo] = skymedian
+    overlapimg[Yo, Xo] = skymedian
 
-    return skyimg
+    return overlapimg
         
 def stage_largegalaxies(
         survey=None, targetwcs=None, bands=None, tims=None,
@@ -95,25 +110,48 @@ def stage_largegalaxies(
     from tractor.basics import NanoMaggies, LinearPhotoCal
     from tractor.sky import ConstantSky
     from tractor.psf import PixelizedPSF
-    #from tractor.wcs import ConstantFitsWcs
-    #from tractor import GaussianMixturePSF
     from tractor.tractortime import TAITime
     import astropy.time
     import fitsio
     
-    # Custom sky-subtraction. TODO: subtract from the tims...
-    skyimg = np.stack(mp.map(_get_sky, [(survey, targetwcs, tim) for tim in tims]))
-    ww = np.where([tim.band == 'r' for tim in tims])[0]
-    with fitsio.FITS('skytest.fits', 'rw') as ff:
-        for w in ww:
-            ff.write(skyimg[w, :, :])
+    # Custom sky-subtraction.
+    overlapimg = np.stack(mp.map(_get_sky, [(survey, targetwcs, tim) for tim in tims]))
+    radec = np.array([tim.subwcs.crval for tim in tims])
+    allbands = np.array([tim.band for tim in tims])
+    for band in set(allbands):
+        I = np.where(allbands == band)[0]
+        # Choose the reference image, read the full tim, and render the original
+        # sky image.
+        indx = np.argsort(radec[I][:, 0])
+        refindx = indx[0]
+        reftim = tims[I[refindx]]
 
-    import pdb ; pdb.set_trace()
+        #fulltim = reftim.imobj.get_tractor_image(slc=None, dq=False, invvar=False, pixels=False)
+        skymodel = reftim.imobj.read_sky_model(slc=None)
+        imh, imw = reftim.imobj.get_image_shape()
+        refsky = np.zeros((imh, imw)).astype('f4')
+        skymodel.addTo(refsky)
 
-    skyimg = []
-    for tim in tims:
-        skyimg.append(get_sky(survey, targetwcs, tim))
-    import pdb ; pdb.set_trace()
+        tim.setImage(img + origsky)
+
+        
+        reftim = im.get_tractor_image(splinesky=True, subsky=False, hybridPsf=True,
+                                      normalizePsf=True, apodize=apodize)
+        
+
+        
+        refscale = np.max(overlapimg[I[indx[0]]])
+        for ii in indx: # sort by RA
+            scale = np.max(overlapimg[I[indx[ii]]])
+            print(refscale, scale, refscale / scale)
+            tims[I[ii]].setImage(tims[I[ii]].getImage() * refscale / scale)
+        
+    #ww = np.where([tim.band == 'r' for tim in tims])[0]
+    #with fitsio.FITS('skytest.fits', 'rw') as ff:
+    #    for w in ww:
+    #        ff.write(overlapimg[w, :, :])
+
+    #import pdb ; pdb.set_trace()
        
     # Create coadds and then build custom tims from them.
 
