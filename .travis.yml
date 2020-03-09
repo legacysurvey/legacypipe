@@ -24,7 +24,9 @@ install:
     - pip install Sphinx
     - pip install numpy
     - pip install scipy
-    - pip install Pillow
+    # matplotlib problem saving jpg (in python3.5 only):
+    # https://github.com/ipython/ipython/issues/8052
+    - pip install "Pillow<7"
     - pip install matplotlib
     - pip install numpydoc
     - pip install astropy
