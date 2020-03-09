@@ -69,7 +69,6 @@ addons:
     - libnetpbm10-dev
     - netpbm
     - wcslib-dev
-    - libcfitsio
     - libcfitsio-dev
     - swig
     - gsl-bin
