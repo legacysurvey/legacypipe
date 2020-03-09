@@ -12,7 +12,8 @@ sudo: false
 language: python
 python:
   - "3.6"
-#  - "3.7"
+  - "3.7"
+  - "3.8"
 
 install:
     - export WCSLIB_INC="-I/usr/include/wcslib-4.20"
