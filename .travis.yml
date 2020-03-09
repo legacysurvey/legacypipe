@@ -2,9 +2,12 @@
 
 # Default environment is Ubuntu 12.04.5 LTS "precise"
 # which is pretty old.
-# "trusty" is Ubuntu 14.04.5 LTS
+# "trusty" is Ubuntu 14.04 LTS
 #dist: trusty
+# "xenial" is Ubuntu 16.04 LTS
 dist: xenial
+# "bionic" is Ubuntu 18.04 LTS
+
 
 # use the newer container-based infrastructure
 sudo: false
@@ -66,11 +69,13 @@ addons:
     - libnetpbm10-dev
     - netpbm
     - wcslib-dev
-    - libcfitsio3
-    - libcfitsio3-dev
+    - libcfitsio
+    - libcfitsio-dev
     - swig
     - gsl-bin
     - libgsl0-dev
+#    - libcfitsio3
+#    - libcfitsio3-dev
 
 cache:
   directories:
