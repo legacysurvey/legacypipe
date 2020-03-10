@@ -2264,13 +2264,14 @@ def _select_model(chisqs, nparams, galaxy_margin):
         #print('Upgrading to DEV: diff', expdiff)
         keepmod = 'dev'
 
-    # Consider Sersic models using same upgrade cut
+    # Consider Sersic models
     if 'ser' not in chisqs:
         return keepmod
     serdiff = chisqs['ser'] - chisqs[keepmod]
-    fcut = 0.01 * chisqs[keepmod]
-    cut = max(cut, fcut)
-    if serdiff < cut:
+
+    sermargin = 100.
+
+    if serdiff < sermargin:
         return keepmod
     keepmod = 'ser'
     return keepmod
