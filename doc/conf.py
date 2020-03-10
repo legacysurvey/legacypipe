@@ -3,11 +3,12 @@
 # As per http://blog.rtwilson.com/how-to-make-your-sphinx-documentation-compile-with-readthedocs-when-youre-using-numpy-and-scipy/ :
 import sys, os
 
-from mock import Mock as MagicMock
+from unittest.mock import MagicMock as Mock
 
 MOCK_MODULES = [
-    'fitsio', 'astrometry', 'astrometry.util',
-    'astrometry.util.fits', 'astrometry.util.plotutils',
+    'fitsio',
+    'astrometry',
+    'astrometry.util', 'astrometry.util.fits', 'astrometry.util.plotutils',
     'astrometry.util.resample', 'astrometry.util.ttime',
     'astrometry.util.starutil_numpy', 'astrometry.util.miscutils',
     'astrometry.util.util', 'astrometry.util.multiproc',
@@ -17,27 +18,21 @@ MOCK_MODULES = [
     'tractor.ellipses', 'tractor.galaxy', 'tractor.utils',
     'tractor.basics', 'tractor.image', 'tractor.ceres_mixin',
     'tractor.engine', 'tractor.psfex', 'tractor.sfd', 'tractor.tractortime',
-    'tractor.sky', 'tractor.patch',
+    'tractor.sersic', 'tractor.sky', 'tractor.splinesky', 'tractor.patch',
     'numpy',
     'scipy',
     'scipy.interpolate', 'scipy.ndimage', 'scipy.ndimage.filters',
     'scipy.ndimage.measurements', 'scipy.ndimage.morphology',
-    'matplotlib', 'pylab', 'matplotlib.pyplot',
-    'astropy', 'astropy.time', 'astropy.io',
+    'matplotlib',
+    'matplotlib.pyplot',
+    'pylab', 
+    'astropy',
+    'astropy.time', 'astropy.io',
     ]
 
-# from mock import Mock
-# for mod_name in MOCK_MODULES:
-#     sys.modules[mod_name] = Mock()
+for mod_name in MOCK_MODULES:
+    sys.modules[mod_name] = Mock()
 
-class Mock(MagicMock):
-    @classmethod
-    def __getattr__(cls, name):
-            return Mock()
-
-sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
-
-#
 # legacypipe documentation build configuration file, created by
 # sphinx-quickstart on Fri Jul 10 15:38:03 2015.
 #
@@ -80,7 +75,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'legacypipe'
-copyright = u'2015, LegacySurvey.org'
+copyright = u'2015--2020, LegacySurvey.org'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the

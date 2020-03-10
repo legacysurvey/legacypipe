@@ -30,8 +30,8 @@ fits_short_typemap = { PointSource:  'P',
 def _typestring(t):
     return '%s.%s' % (t.__module__, t.__name__)
 
-ellipse_types = dict([(_typestring(t), t) for t in
-                      [ EllipseESoft, EllipseE, ]])
+def _get_ellipse_types():
+    return [EllipseE, EllipseESoft]
 
 def _source_param_types(src):
     def flatten_node(node):
@@ -218,6 +218,8 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
 
     ibands = np.array([allbands.index(b) for b in bands])
 
+    ellipse_types = dict([(_typestring(t), t) for t in
+                          _get_ellipse_types()])
     ivs = []
     cat = []
     for t in T:

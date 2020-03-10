@@ -223,6 +223,7 @@ class LegacySersicIndex(SersicIndex):
     def __init__(self, val=0):
         super(LegacySersicIndex, self).__init__(val=val)
         self.lower = 0.5
+        self.upper = 6.0
 
 class LogRadius(EllipseESoft):
     ''' Class used during fitting of the RexGalaxy type -- an ellipse
@@ -1221,7 +1222,9 @@ class LegacySurveyData(object):
 
     def write_output(self, filetype, hashsum=True, **kwargs):
         '''
-        Returns a context manager for writing an output file; use like:
+        Returns a context manager for writing an output file.
+
+        Example use: ::
 
         with survey.write_output('ccds', brick=brickname) as out:
             ccds.writeto(out.fn, primheader=primhdr)
@@ -1231,6 +1234,8 @@ class LegacySurveyData(object):
         sha256sum computed before the file contents are written out to
         the real disk file.  The 'out.fn' member variable is NOT set.
 
+        ::
+        
         with survey.write_output('ccds', brick=brickname) as out:
             ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
@@ -1358,7 +1363,7 @@ class LegacySurveyData(object):
 
     def __getstate__(self):
         '''
-        For pickling: clear the cached ZP and other tables.
+        For pickling; we omit cached tables.
         '''
         d = self.__dict__.copy()
         d['ccds'] = None
@@ -1519,7 +1524,7 @@ class LegacySurveyData(object):
     def filter_ccds_files(self, fns):
         '''
         When reading the list of CCDs, we find all files named
-        survey-ccds-*.fits.gz, then filter that list using this function.
+        survey-ccds-\*.fits.gz, then filter that list using this function.
         '''
         return fns
 
