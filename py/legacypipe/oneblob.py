@@ -1278,7 +1278,6 @@ class OneBlob(object):
             if name == 'ser' and newsrc is None:
                 # Start at the better of exp or dev.
                 smod = _select_model(chisqs, nparams, galaxy_margin)
-                #print('Sersic: chisqs', chisqs, 'selecting model:', smod)
                 if smod not in ['dev', 'exp']:
                     continue
                 if smod == 'dev':
@@ -1297,14 +1296,14 @@ class OneBlob(object):
             if is_galaxy:
                 # This is a known large galaxy -- set max size based on initial size.
                 logrmax = known_galaxy_logrmax
-                if name in ('exp', 'rex', 'dev', 'ser'):
+                if name in ('rex', 'exp', 'dev', 'ser'):
                     newsrc.shape.setMaxLogRadius(logrmax)
             else:
                 # FIXME -- could use different fractions for deV vs exp (or comp)
                 fblob = 0.8
                 sh,sw = srcwcs.shape
                 logrmax = np.log(fblob * max(sh, sw) * self.pixscale)
-                if name in ['exp', 'rex', 'dev', 'ser']:
+                if name in ['rex', 'exp', 'dev', 'ser']:
                     if logrmax < newsrc.shape.getMaxLogRadius():
                         newsrc.shape.setMaxLogRadius(logrmax)
 
@@ -1329,7 +1328,7 @@ class OneBlob(object):
             hit_limit = R.get('hit_limit', False)
             opt_steps = R.get('steps', -1)
             if hit_limit:
-                if name in ['exp', 'rex', 'dev', 'ser']:
+                if name in ['rex', 'exp', 'dev', 'ser']:
                     debug('Hit limit: r %.2f vs %.2f' %
                           (newsrc.shape.re, np.exp(logrmax)))
             ok,ix,iy = srcwcs.radec2pixelxy(newsrc.getPosition().ra,
@@ -1387,10 +1386,9 @@ class OneBlob(object):
                 if len(fracin[band]) == 0:
                     continue
                 f = np.mean(fracin[band])
-                #print('Band', band, ': mean fracin', f)
                 if f < 1e-6:
-                    print('Source', newsrc, ': setting flux in band', band,
-                          'to zero based on fracin = %.3g' % f)
+                    #print('Source', newsrc, ': setting flux in band', band,
+                    #      'to zero based on fracin = %.3g' % f)
                     newsrc.getBrightness().setFlux(band, 0.)
 
             # Compute inverse-variances
@@ -1408,10 +1406,8 @@ class OneBlob(object):
                     #print('Resetting', pname, '=', 0)
                     params[i] = 0.
                     reset = True
-
             if reset:
                 newsrc.setParams(params)
-                #print('Source:', newsrc)
                 allderivs = srctractor.getDerivs()
                 ivars = _compute_invvars(allderivs)
                 assert(len(ivars) == nsrcparams)
