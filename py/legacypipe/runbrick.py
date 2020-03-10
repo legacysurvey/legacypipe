@@ -844,15 +844,15 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         ps.savefig()
         ax = plt.axis()
         if len(refstars):
-            I, = np.nonzero([r[0] == 'T' for r in refstars.ref_cat])
+            I, = np.nonzero([len(r) and r[0] == 'T' for r in refstars.ref_cat])
             if len(I):
                 plt.plot(refstars.ibx[I], refstars.iby[I], '+', color=(0,1,1),
                          label='Tycho-2', **crossa)
-            I, = np.nonzero([r[0] == 'G' for r in refstars.ref_cat])
+            I, = np.nonzero([len(r) and r[0] == 'G' for r in refstars.ref_cat])
             if len(I):
                 plt.plot(refstars.ibx[I], refstars.iby[I], '+',
                          color=(0.2,0.2,1), label='Gaia', **crossa)
-            I, = np.nonzero([r[0] == 'L' for r in refstars.ref_cat])
+            I, = np.nonzero([len(r) and r[0] == 'L' for r in refstars.ref_cat])
             if len(I):
                 plt.plot(refstars.ibx[I], refstars.iby[I], '+',
                          color=(0.6,0.6,0.2), label='Large Galaxy', **crossa)
