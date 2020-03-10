@@ -480,7 +480,43 @@ def make_coadds(tims, bands, targetwcs,
                 h,w = tim.shape
                 patch = tim.psf.getPointSourcePatch(w//2, h//2).patch
                 patch /= np.sum(patch)
-                psf_img += (patch / tim.sig1**2)
+
+                # create a little local image, patch.addTo() it,
+                # create another local image with possibly larger size (tim.pixelscale / targetwcs.pixelscale)
+                # create a fake WCS for the patch
+                # resample_with_wcs from the patch into the coadd-scaled patch
+
+                ph,pw = patch.shape
+                pscale = tim.imobj.pixscale / targetwcs.pixel_scale()
+                coph = int(np.ceil(ph * pscale))
+                copw = int(np.ceil(pw * pscale))
+                coph = 2 * (coph//2) + 1
+                copw = 2 * (copw//2) + 1
+                print('copw,coph', copw,coph)
+                print('pw,ph', pw, ph)
+                print('pscale', pscale)
+                # want input image pixel coords that change by 1/pscale
+                # and are centered on pw//2, ph//2
+                cox = np.arange(copw) * 1./pscale
+                cox += pw//2 - cox[copw//2]
+                coy = np.arange(coph) * 1./pscale
+                coy += ph//2 - coy[coph//2]
+                print('Resampled pixel coords:', cox, coy)
+                fx,fy = np.meshgrid(cox,coy)
+                fx = fx.ravel()
+                fy = fy.ravel()
+                ix = (fx + 0.5).astype(np.int32)
+                iy = (fy + 0.5).astype(np.int32)
+                dx = (fx - ix).astype(np.float32)
+                dy = (fx - ix).astype(np.float32)
+                from astrometry.util.util import lanczos3_interpolate
+                copsf = np.zeros(coph*copw, np.float32)
+                rtn = lanczos3_interpolate(ix, iy, dx, dy, [copsf], [patch])
+                copsf = copsf.reshape((coph,copw))
+                copsf /= copsf.sum()
+                
+                psf_img += copsf / tim.sig1**2  # * pscale**2
+                #psf_img += (patch / tim.sig1**2)
 
             if detmaps:
                 # point-source depth
