@@ -229,7 +229,7 @@ def complicated_custom_sky(survey, brickname, targetwcs, apodize, ccd):
     return out
 
 def stage_largegalaxies(
-        survey=None, targetwcs=None, bands=None, tims=None,
+        survey=None, targetwcs=None, pixscale=None, bands=None, tims=None,
         brickname=None, version_header=None,
         apodize=True,
         plots=False, ps=None, coadd_bw=False, W=None, H=None,
@@ -251,6 +251,7 @@ def stage_largegalaxies(
     from tractor.tractortime import TAITime
     import astropy.time
     import fitsio
+    from collections import Counter
     
     ## Custom sky-subtraction. TODO: subtract from the tims...
     ##sky = list(zip(*mp.map(_custom_sky, [(survey, targetwcs, apodize, _ccd) for _ccd in ccds])))
@@ -285,7 +286,8 @@ def stage_largegalaxies(
         # newie = (ie / median_ie)**2 * median_ie
         newie = ie**2 / median_ie
         tim.inverr = newie    
-
+        #print('Tim', tim.name, ': dq values', Counter(tim.dq.ravel()))
+        
     C = make_coadds(tims, bands, targetwcs,
                     detmaps=True, ngood=True, lanczos=lanczos,
                     allmasks=True, psf_images=True,
@@ -308,6 +310,25 @@ def stage_largegalaxies(
             plt.imshow(psf, interpolation='nearest', origin='lower')
             plt.title('Coadd PSF image: band %s' % band)
             ps.savefig()
+
+        for band,img,iv in zip(bands, C.coimgs, C.cowimgs):
+            from scipy.ndimage.filters import gaussian_filter
+            plt.clf()
+            plt.hist((img * np.sqrt(iv))[iv>0], bins=50, range=(-5,8), log=True)
+            plt.title('Coadd pixel values (sigmas): band %s' % band)
+            ps.savefig()
+
+            psf_sigma = np.mean([(tim.psf_sigma * tim.imobj.pixscale / pixscale)
+                                 for tim in tims if tim.band == band])
+            gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
+            psfnorm = gnorm #np.sqrt(np.sum(psfimg**2))
+            detim = gaussian_filter(img, psf_sigma) / psfnorm**2
+            cosig1 = 1./np.sqrt(np.median(iv[iv>0]))
+            detsig1 = cosig1 / psfnorm
+            plt.clf()
+            plt.hist(detim.ravel() / detsig1, bins=50, range=(-5,8), log=True)
+            plt.title('Coadd detection map values (sigmas): band %s' % band)
+            ps.savefig()
    
     cotims = []
     for band,img,iv,mask,psfimg in zip(bands, C.coimgs, C.cowimgs, C.allmasks, C.psf_imgs):
@@ -317,18 +338,29 @@ def stage_largegalaxies(
 
         twcs = LegacySurveyWcs(targetwcs, tai)
 
-        print('PSF sigmas (in pixels?) for band', band, ':',
-              ['%.2f' % tim.psf_sigma for tim in tims if tim.band == band])
-        psf_sigma = np.mean([tim.psf_sigma for tim in tims if tim.band == band])
+        #print('PSF sigmas (in pixels) for band', band, ':',
+        #      ['%.2f' % tim.psf_sigma for tim in tims if tim.band == band])
+        print('PSF sigmas in coadd pixels:',
+              ['%.2f' % (tim.psf_sigma * tim.imobj.pixscale / pixscale)
+               for tim in tims if tim.band == band])
+        psf_sigma = np.mean([(tim.psf_sigma * tim.imobj.pixscale / pixscale)
+                             for tim in tims if tim.band == band])
         print('Using average PSF sigma', psf_sigma)
-        #psf = GaussianMixturePSF(1., 0., 0., psf_sigma**2, psf_sigma**2, 0.)
 
         psf = PixelizedPSF(psfimg)
         gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
 
         psfnorm = np.sqrt(np.sum(psfimg**2))
         print('Gaussian PSF norm', gnorm, 'vs pixelized', psfnorm)
-        
+
+        # if plots:
+        #     plt.clf()
+        #     plt.imshow(mask, interpolation='nearest', origin='lower')
+        #     plt.colorbar()
+        #     plt.title('allmask')
+        #     ps.savefig()
+        #     print('allmask for band', band, ': values:', Counter(mask.ravel()))
+
         cotim = Image(img, invvar=iv, wcs=twcs, psf=psf,
                       photocal=LinearPhotoCal(1., band=band),
                       sky=ConstantSky(0.), name='coadd-'+band)
@@ -336,10 +368,9 @@ def stage_largegalaxies(
         cotim.subwcs = targetwcs
         cotim.psf_sigma = psf_sigma
         cotim.sig1 = 1./np.sqrt(np.median(iv[iv>0]))
-        #cotim.dq = mask # hmm, not what we think this is
-        cotim.dq = np.zeros(cotim.shape, dtype=np.int16)
+        cotim.dq = mask
         cotim.dq_saturation_bits = DQ_BITS['satur']
-        cotim.psfnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
+        cotim.psfnorm = gnorm
         cotim.galnorm = 1.0 # bogus!
         cotim.imobj = Duck()
         cotim.imobj.fwhm = 2.35 * psf_sigma
