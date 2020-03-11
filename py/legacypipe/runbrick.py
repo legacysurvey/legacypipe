@@ -663,7 +663,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                brickname=None,
                version_header=None,
                mp=None, nsigma=None,
-               saddle_drop=None,
+               saddle_fraction=None,
+               saddle_min=None,
                survey=None, brick=None,
                bailout_sources=False,
                refcat=None, refstars=None,
@@ -812,7 +813,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
-        nsigma=nsigma, saddle_drop=saddle_drop,
+        nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
         saturated_pix=saturated_pix, veto_map=veto_map,
         plots=plots, ps=ps, mp=mp)
     if Tnew is None and not bailout_sources:
@@ -2779,7 +2780,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               nblobs=None, blob=None, blobxy=None, blobradec=None, blobid=None,
               max_blobsize=None,
               nsigma=6,
-              saddle_drop=0.1,
+              saddle_fraction=0.1,
+              saddle_min=2.,
               reoptimize=False,
               iterative=False,
               wise=True,
@@ -3024,7 +3026,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         large_galaxies = True
         large_galaxies_force_pointsource = False
 
-    kwargs.update(ps=ps, nsigma=nsigma, saddle_drop=saddle_drop,
+    kwargs.update(ps=ps, nsigma=nsigma, saddle_fraction=saddle_fraction,
+                  saddle_min=saddle_min,
                   survey_blob_mask=survey_blob_mask,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
                   release=release,

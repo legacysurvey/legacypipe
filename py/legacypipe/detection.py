@@ -103,7 +103,8 @@ def sed_matched_filters(bands):
 
 def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
                             targetwcs, nsigma=5,
-                            saddle_drop=0.1,
+                            saddle_fraction=0.1,
+                            saddle_min=2.,
                             saturated_pix=None,
                             exclusion_radius=4.,
                             veto_map=None,
@@ -183,7 +184,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
         #t0 = Time()
         sedhot,px,py,peakval,apval = sed_matched_detection(
             sedname, sed, detmaps, detivs, bands, xx, yy, rr,
-            nsigma=nsigma, saddle_drop=saddle_drop,
+            nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
             saturated_pix=saturated_pix, veto_map=veto_map,
             ps=pps)
         #info('SED took', Time()-t0)
@@ -252,7 +253,7 @@ def plot_boundary_map(X, rgb=(0,255,0), extent=None, iterations=1):
 def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                           xomit, yomit, romit,
                           nsigma=5.,
-                          saddle_drop=0.1,
+                          saddle_fraction=0.1,
                           saddle_min=2.,
                           saturated_pix=None,
                           veto_map=None,
@@ -361,7 +362,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         # sigma, or 10% of the peak height.
         # ("saddle" is passed in as an argument to the
         #  sed_matched_detection function)
-        drop = max(saddle_min, Y * saddle_drop)
+        drop = max(saddle_min, Y * saddle_fraction)
         return Y - drop
 
     lowest_saddle = nsigma - saddle
