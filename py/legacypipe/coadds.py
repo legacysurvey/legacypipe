@@ -481,6 +481,7 @@ def make_coadds(tims, bands, targetwcs,
                 h,w = tim.shape
                 patch = tim.psf.getPointSourcePatch(w//2, h//2).patch
                 patch /= np.sum(patch)
+
                 # In case the tim and coadd have different pixel scales,
                 # resample the PSF stamp.
                 ph,pw = patch.shape
@@ -529,8 +530,7 @@ def make_coadds(tims, bands, targetwcs,
                     plt.suptitle('Tim %s band %s' % (tim.name, band))
                     ps.savefig()
                 
-                psf_img += copsf / tim.sig1**2  # * pscale**2
-                #psf_img += (patch / tim.sig1**2)
+                psf_img += copsf / tim.sig1**2
 
             if detmaps:
                 # point-source depth
