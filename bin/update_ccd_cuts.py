@@ -6,6 +6,27 @@ from astrometry.util.fits import fits_table, merge_tables
 from legacyzpts import psfzpt_cuts
 
 
+ccdnamenumdict = {'S1': 25, 'S2': 26, 'S3': 27, 'S4':28,
+                  'S5': 29, 'S6': 30, 'S7': 31,
+                  'S8': 19, 'S9': 20, 'S10': 21, 'S11': 22, 'S12': 23,
+                  'S13': 24,
+                  'S14': 13, 'S15': 14, 'S16': 15, 'S17': 16, 'S18': 17,
+                  'S19': 18,
+                  'S20': 8, 'S21': 9, 'S22': 10, 'S23': 11, 'S24': 12,
+                  'S25': 4, 'S26': 5, 'S27': 6, 'S28': 7,
+                  'S29': 1, 'S30': 2, 'S31': 3,
+                  'N1': 32, 'N2': 33, 'N3': 34, 'N4': 35,
+                  'N5': 36, 'N6': 37, 'N7': 38,
+                  'N8': 39, 'N9': 40, 'N10': 41, 'N11': 42, 'N12': 43,
+                  'N13': 44,
+                  'N14': 45, 'N15': 46, 'N16': 47, 'N17': 48, 'N18': 49,
+                  'N19': 50,
+                  'N20': 51, 'N21': 52, 'N22': 53, 'N23': 54, 'N24': 55,
+                  'N25': 56, 'N26': 57, 'N27': 58, 'N28': 59,
+                  'N29': 60, 'N30': 61, 'N31': 62,
+                  }
+
+
 class subslices:
     "Iterator for looping over subsets of an array"
     def __init__(self, data, uind=None, **kw):
@@ -244,15 +265,16 @@ def make_plots(ccds, camera, nside=512,
                filename=None, vmin=0, vmax=10):
     import util_efs
     from matplotlib import pyplot as p
+    ccdname = numpy.array([name.strip() for name in ccds.ccdname])
     if camera == 'decam':
         rad = 1.0
-        ccds = ccds[ccds.ccdname == 'N4']
+        ccds = ccds[ccdname == 'N4']
     elif camera == 'mosaic':
         rad = 0.33
-        ccds = ccds[ccds.ccdname == 'CCD1']
+        ccds = ccds[ccdname == 'CCD1']
     elif camera == '90prime':
         rad = 0.5
-        ccds = ccds[ccds.ccdname == 'CCD1']
+        ccds = ccds[ccdname == 'CCD1']
     else:
         raise ValueError('unrecognized camera!')
     depthbit = psfzpt_cuts.CCD_CUT_BITS['depth_cut']
@@ -306,35 +328,48 @@ def match(a, b):
     return sa[ind[m]], numpy.flatnonzero(m)
 
 
-def patch_zeropoints(zps, ccds, ccdsa):
+def patch_zeropoints(zps, ccds, ccdsa, decboundary=-29.25):
     if not numpy.all((ccds.image_hdu == ccdsa.image_hdu) &
                      (ccdsa.image_filename == ccdsa.image_filename)):
         raise ValueError('ccds and ccdsa must be row matched!')
-    mreplace = ccds.dec < -29.25
-    mok = ((zps.scatter > 0) & (zps.scatter < 0.05) &
-           (numpy.abs(zps.resid) < 0.2))
+    mreplace = ccds.dec < decboundary
+    oldccdzpt = ccds.ccdzpt.copy()
+    ccds.zpt[mreplace] = 0
+    ccds.ccdzpt[mreplace] = 0
+    ccds.ccdphrms[mreplace] = 0
+    olderr = numpy.seterr(invalid='ignore')
+    mokim = ((zps.scatter > 0) & (zps.scatter < 0.02) &
+             (numpy.abs(zps.resid) < 0.2))
+    numpy.seterr(**olderr)
+    zps = zps[mokim]
     mz, mc = match(zps.mjd_obs, ccds.mjd_obs)
-    m = mok[mz] & mreplace[mc]
+    ccdnum = numpy.array([ccdnamenumdict[name.strip()]
+                          for name in ccds.ccdname])
+    newzpt = zps.zp[mz] - zps.resid[mz]
+    newccdzpt = zps.zp[mz] - zps.resid[mz] - zps.mnchip[mz, ccdnum[mc]]
+    newccdphrms = zps.sdchip[mz, ccdnum[mc]]
+    newccdnphotom = zps.nstarchip[mz, ccdnum[mc]]
+    m = ((ccds.dec[mc] < decboundary) & (newccdnphotom > 3) &
+         (newccdphrms > 0) & (newccdphrms < 0.02))
     mz = mz[m]
     mc = mc[m]
-    oldccdzpt = ccds.ccdzpt.copy()
-    ccds.zpt[mc] = (zps.zp-zps.resid)[mz]
-    ccds.ccdzpt[mc] = (zps.zp-zps.resid)[mz]
-    ccds.ccdphrms[mc] = zps.scatter[mz]
-    ccdsa.zpt[mc] = (zps.zp-zps.resid)[mz]
-    ccdsa.ccdzpt[mc] = (zps.zp-zps.resid)[mz]
-    ccdsa.ccdphrms[mc] = zps.scatter[mz]
-    oldzp = numpy.where(oldccdzpt[mc] != 0, oldccdzpt[mc], 22.5)
-    newzp = numpy.where(ccds.ccdzpt[mc] != 0, ccds.ccdzpt[mc], 22.5)
+    ccds.zpt[mc] = newzpt[m]
+    ccds.ccdzpt[mc] = newccdzpt[m]
+    ccds.ccdphrms[mc] = newccdphrms[m]
+    ccdsa.zpt[mc] = newzpt[m]
+    ccdsa.ccdzpt[mc] = newccdzpt[m]
+    ccdsa.ccdphrms[mc] = newccdphrms[m]
+    oldzp = numpy.where(oldccdzpt != 0, oldccdzpt, 22.5)
+    newzp = numpy.where(ccds.ccdzpt != 0, ccds.ccdzpt, 22.5)
     oldzpscale = 10.**((oldzp-22.5)/2.5)
     newzpscale = 10.**((newzp-22.5)/2.5)
-    ccds.sig1[mc] = ccds.sig1[mc]*oldzpscale/newzpscale
-    ccdsa.sig1[mc] = ccdsa.sig1[mc]*oldzpscale/newzpscale
+    ccds.sig1 = ccds.sig1*oldzpscale/newzpscale
+    ccdsa.sig1 = ccdsa.sig1*oldzpscale/newzpscale
     dzp = newzp-oldzp
-    ccdsa.psfdepth[mc] += dzp
-    ccdsa.gausspsfdepth[mc] += dzp
-    ccdsa.galdepth[mc] += dzp
-    ccdsa.gaussgaldepth[mc] += dzp
+    ccdsa.psfdepth += dzp
+    ccdsa.gausspsfdepth += dzp
+    ccdsa.galdepth += dzp
+    ccdsa.gaussgaldepth += dzp
 
 
 if __name__ == "__main__":
