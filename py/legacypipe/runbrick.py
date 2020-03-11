@@ -776,6 +776,15 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             plt.figlegend([p[0] for p in lp], lt)
             ps.savefig()
 
+        for band, detmap,detiv in zip(bands, detmaps, detivs):
+            plt.clf()
+            plt.subplot(2,1,1)
+            plt.hist((detmap * np.sqrt(detiv))[detiv>0], bins=50, range=(-5,8), log=True)
+            plt.title('Detection map pixel values (sigmas): band %s' % band)
+            plt.subplot(2,1,2)
+            plt.hist((detmap * np.sqrt(detiv))[detiv>0], bins=50, range=(-5,8))
+            ps.savefig()
+
     # SED-matched detections
     record_event and record_event('stage_srcs: SED-matched')
     info('Running source detection at', nsigma, 'sigma')

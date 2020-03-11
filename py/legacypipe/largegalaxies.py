@@ -87,10 +87,23 @@ def stage_largegalaxies(
             cosig1 = 1./np.sqrt(np.median(iv[iv>0]))
             detsig1 = cosig1 / psfnorm
             plt.clf()
+            plt.subplot(2,1,1)
             plt.hist(detim.ravel() / detsig1, bins=50, range=(-5,8), log=True)
-            plt.title('Coadd detection map values (sigmas): band %s' % band)
+            plt.title('Coadd detection map values / sig1 (sigmas): band %s' % band)
+            plt.subplot(2,1,2)
+            plt.hist(detim.ravel() / detsig1, bins=50, range=(-5,8))
             ps.savefig()
-   
+
+            # # as in detection.py
+            # detiv = np.zeros_like(detim) + (1. / detsig1**2)
+            # detiv[iv == 0] = 0.
+            # detiv = gaussian_filter(detiv, psf_sigma)
+            # 
+            # plt.clf()
+            # plt.hist((detim * np.sqrt(detiv)).ravel(), bins=50, range=(-5,8), log=True)
+            # plt.title('Coadd detection map values / detie (sigmas): band %s' % band)
+            # ps.savefig()
+
     cotims = []
     for band,img,iv,mask,psfimg in zip(bands, C.coimgs, C.cowimgs, C.allmasks, C.psf_imgs):
         mjd = np.mean([tim.imobj.mjdobs for tim in tims if tim.band == band])
