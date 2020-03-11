@@ -20,12 +20,17 @@ def subtract_one_real(X):
         print('Warning: Stellar halo subtraction is only implemented for DECam')
         return 0.
     return decam_halo_model(refs, tim.time.toMjd(), tim.subwcs,
-                            tim.imobj.pixscale, tim.band, tim.imobj, moffat)
+                            tim.imobj.pixscale, tim.band, tim.imobj, moffat,
+                            image=tim.getImage())
 
 def moffat(rr, alpha, beta):
     return (beta-1.)/(np.pi * alpha**2)*(1. + (rr/alpha)**2)**(-beta)
 
-def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat):
+def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
+                     image=None):
+
+    debug = True
+    
     from legacypipe.survey import radec_at_mjd
     assert(np.all(refs.ref_epoch > 0))
     rr,dd = radec_at_mjd(refs.ra, refs.dec, refs.ref_epoch.astype(float),
@@ -42,11 +47,26 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat):
             print('Read inner Moffat parameters', (inner_alpha, inner_beta),
                   'from PsfEx file')
 
+    if debug:
+        from astrometry.util.fits import fits_table
+        D = refs.copy()
+        D.mag = mag.copy()
+        D.flux = fluxes.copy()
+        D.halo_radius_pix = np.zeros(len(D), np.float32)
+        D.outer_moffat_a = np.zeros(len(D), np.float32)
+        D.outer_moffat_b = np.zeros(len(D), np.float32)
+        D.outer_moffat_w = np.zeros(len(D), np.float32)
+        D.outer_powerlaw_w = np.zeros(len(D), np.float32)
+        D.inner_moffat_a = np.zeros(len(D), np.float32)
+        D.inner_moffat_b = np.zeros(len(D), np.float32)
+        D.x_in_sub_ccd = np.zeros(len(D), np.int16)
+        D.y_in_sub_ccd = np.zeros(len(D), np.int16)
+
     H,W = wcs.shape
     H = int(H)
     W = int(W)
     halo = np.zeros((H,W), np.float32)
-    for ref,flux,ra,dec in zip(refs, fluxes, rr, dd):
+    for iref,(ref,flux,ra,dec) in enumerate(zip(refs, fluxes, rr, dd)):
         _,x,y = wcs.radec2pixelxy(ra, dec)
         x -= 1.
         y -= 1.
@@ -62,6 +82,11 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat):
         # Rongpu says only apply within 200"
         rad_arcsec = np.minimum(rad_arcsec, 200.)
         pixrad = int(np.ceil(rad_arcsec / pixscale))
+
+        if debug:
+            D.x_in_sub_ccd[iref] = int(np.round(x))
+            D.y_in_sub_ccd[iref] = int(np.round(y))
+            D.halo_radius_pix[iref] = pixrad
 
         xlo = int(np.clip(np.floor(x - pixrad), 0, W-1))
         xhi = int(np.clip(np.ceil (x + pixrad), 0, W-1))
@@ -105,6 +130,11 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat):
             halo[ylo:yhi+1, xlo:xhi+1] += (flux * apodize * weight *
                                            moffat(rads*pixscale, alpha, beta) * pixscale**2)
 
+            if debug:
+                D.outer_moffat_a[iref] = alpha
+                D.outer_moffat_b[iref] = beta
+                D.outer_moffat_w[iref] = weight
+
         else:
              fd = dict(g=0.00045,
                        r=0.00033)
@@ -113,9 +143,24 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat):
              halo[ylo:yhi+1, xlo:xhi+1] += (flux * apodize * f * (rads*pixscale)**-2
                                             * pixscale**2)
 
+             if debug:
+                 D.outer_powerlaw_w[iref] = f
+             
         if have_inner_moffat:
             weight = 1.
             halo[ylo:yhi+1, xlo:xhi+1] += (flux * apodize * weight *
                                            moffat(rads*pixscale, inner_alpha, inner_beta) * pixscale**2)
+            if debug:
+                D.inner_moffat_a[iref] = inner_alpha
+                D.inner_moffat_b[iref] = inner_beta
 
+    if debug:
+        fn = 'halo-%s-%s.fits' % (imobj.expnum, imobj.ccdname)
+        print('Writing halo image to', fn)
+        D.writeto(fn)
+        # Append the halo image!
+        import fitsio
+        fitsio.write(fn, halo)
+        fitsio.write(fn, image)
+            
     return halo
