@@ -365,7 +365,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         drop = max(saddle_min, Y * saddle_fraction)
         return Y - drop
 
-    lowest_saddle = nsigma - saddle
+    lowest_saddle = nsigma - saddle_min
 
     # zero out the edges -- larger margin here?
     peaks[0 ,:] = 0
