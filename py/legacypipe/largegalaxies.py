@@ -99,9 +99,6 @@ def stage_largegalaxies(
 
         twcs = LegacySurveyWcs(targetwcs, tai)
 
-        cscale = np.mean([tim.imobj.pixscale / pixscale for tim in tims])
-        print('average tim pixel scale / coadd scale:', cscale)
-
         #print('PSF sigmas (in pixels) for band', band, ':',
         #      ['%.2f' % tim.psf_sigma for tim in tims if tim.band == band])
         print('PSF sigmas in coadd pixels:',
@@ -126,6 +123,9 @@ def stage_largegalaxies(
         #     print('allmask for band', band, ': values:', Counter(mask.ravel()))
 
         # Scale invvar to take into account that we have resampled (~double-counted) pixels
+        cscale = np.mean([tim.imobj.pixscale / pixscale for tim in tims if tim.band == band])
+        print('average tim pixel scale / coadd scale:', cscale)
+
         iv /= cscale**2
 
         cotim = Image(img, invvar=iv, wcs=twcs, psf=psf,
