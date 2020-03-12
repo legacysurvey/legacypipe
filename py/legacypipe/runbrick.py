@@ -778,6 +778,15 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             plt.figlegend([p[0] for p in lp], lt)
             ps.savefig()
 
+        for band, detmap,detiv in zip(bands, detmaps, detivs):
+            plt.clf()
+            plt.subplot(2,1,1)
+            plt.hist((detmap * np.sqrt(detiv))[detiv>0], bins=50, range=(-5,8), log=True)
+            plt.title('Detection map pixel values (sigmas): band %s' % band)
+            plt.subplot(2,1,2)
+            plt.hist((detmap * np.sqrt(detiv))[detiv>0], bins=50, range=(-5,8))
+            ps.savefig()
+
     # SED-matched detections
     record_event and record_event('stage_srcs: SED-matched')
     info('Running source detection at', nsigma, 'sigma')
@@ -3317,6 +3326,12 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--nsigma', type=float, default=6.0,
                         help='Set N sigma source detection thresh')
+
+    parser.add_argument('--saddle-fraction', type=float, default=2.0,
+                        help='Fraction of the peak heigh for selecting new sources.')
+
+    parser.add_argument('--saddle-min', type=float, default=2.0,
+                        help='Saddle-point depth from existing sources down to new sources (sigma).')
 
     parser.add_argument(
         '--reoptimize', action='store_true', default=False,
