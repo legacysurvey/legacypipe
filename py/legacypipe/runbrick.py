@@ -3327,6 +3327,12 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--nsigma', type=float, default=6.0,
                         help='Set N sigma source detection thresh')
 
+    parser.add_argument('--saddle-fraction', type=float, default=2.0,
+                        help='Fraction of the peak heigh for selecting new sources.')
+
+    parser.add_argument('--saddle-min', type=float, default=2.0,
+                        help='Saddle-point depth from existing sources down to new sources (sigma).')
+
     parser.add_argument(
         '--reoptimize', action='store_true', default=False,
         help='Do a second round of model fitting after all model selections')
