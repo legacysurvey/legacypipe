@@ -281,12 +281,14 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         Previously known sources that are to be avoided; x,y +- radius
     nsigma : float, optional
         Detection threshold.
+    saddle_fraction : float, optional
+        Fraction of the peak heigh for selecting new sources.
+    saddle_min : float, optional
+        Saddle-point depth from existing sources down to new sources.
     saturated_pix : None or list of numpy arrays, boolean
         A map of pixels that are always considered "hot" when
         determining whether a new source touches hot pixels of an
         existing source.
-    saddle : float, optional
-        Saddle-point depth from existing sources down to new sources.
     cutonaper : bool, optional
         Apply a cut that the source's detection strength must be greater
         than `nsigma` above the 16th percentile of the detection strength in
