@@ -22,7 +22,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
 
     # How big of a margin to search for bright stars and star clusters --
     # this should be based on the maximum radius they are considered to
-    # affect.
+    # affect.  In degrees.
     ref_margin = 0.125
     mpix = int(np.ceil(ref_margin * 3600. / pixscale))
     marginwcs = targetwcs.get_subimage(-mpix, -mpix, W+2*mpix, H+2*mpix)
@@ -90,7 +90,14 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                             columns='fillzero')
     if len(refs) == 0:
         return None,None
-    refs.radius_pix = np.ceil(refs.radius * 3600. / pixscale).astype(int)
+    refs.radius_pix = np.ceil(refs.keep_radius * 3600. / pixscale).astype(int)
+
+    if 'keep_radius' in refs.columns():
+        keeprad = refs.keep_radius
+    else:
+        keeprad = refs.radius
+    # keeprad to pix
+    keeprad = np.ceil(keeprad * 3600. / pixscale).astype(int)
 
     ok,xx,yy = targetwcs.radec2pixelxy(refs.ra, refs.dec)
     # ibx = integer brick coords
@@ -98,8 +105,8 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     refs.iby = np.round(yy-1.).astype(int)
 
     # cut ones whose position + radius are outside the brick bounds.
-    refs.cut((xx > -refs.radius_pix) * (xx < W+refs.radius_pix) *
-             (yy > -refs.radius_pix) * (yy < H+refs.radius_pix))
+    refs.cut((xx > -keeprad) * (xx < W+keeprad) *
+             (yy > -keeprad) * (yy < H+keeprad))
     # mark ones that are actually inside the brick area.
     refs.in_bounds = ((refs.ibx >= 0) * (refs.ibx < W) *
                       (refs.iby >= 0) * (refs.iby < H))
@@ -154,7 +161,7 @@ def read_gaia(targetwcs, bands):
             mag += c * color**order
         gaia.set('decam_mag_%s' % b, mag)
 
-    #gaia.pointsource = (gaia.G <= 19.) * (gaia.astrometric_excess_noise < 10.**0.5)
+    # force this source to remain a point source?
     gaia.pointsource = (gaia.G <= 18.) * (gaia.astrometric_excess_noise < 10.**0.5)
 
     # in our catalog files, this is in float32; in the Gaia data model it's
@@ -163,7 +170,6 @@ def read_gaia(targetwcs, bands):
 
     # Gaia version?
     gaiaver = int(os.getenv('GAIA_CAT_VER', '1'))
-    #print('Assuming Gaia catalog Data Release', gaiaver)
     gaia_release = 'G%i' % gaiaver
     gaia.ref_cat = np.array([gaia_release] * len(gaia))
     gaia.ref_id  = gaia.source_id
@@ -182,16 +188,20 @@ def read_gaia(targetwcs, bands):
         X = gaia.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
 
-    # radius to consider affected by this star
+    # radius to consider affected by this star, for MASKBITS
     gaia.radius = mask_radius_for_mag(gaia.G)
+    # radius for keeping this source in the ref catalog
+    # (eg, for halo subtraction)
+    gaia.keep_radius = 2. * gaia.radius
     gaia.delete_column('G')
     gaia.isgaia = np.ones(len(gaia), bool)
     gaia.isbright = (gaia.phot_g_mean_mag < 13.)
     gaia.ismedium = (gaia.phot_g_mean_mag < 16.)
     gaia.donotfit = np.zeros(len(gaia), bool)
 
-    # NOTE, must initialize gaia.sources array this way, or else numpy will try to be clever
-    # and create 2-d array because GaiaSource is iterable.
+    # NOTE, must initialize gaia.sources array this way, or else numpy
+    # will try to be clever and create 2-d array because GaiaSource is
+    # iterable.
     gaia.sources = np.empty(len(gaia), object)
     for i,g in enumerate(gaia):
         gaia.sources[i] = GaiaSource.from_catalog(g, bands)
@@ -261,12 +271,12 @@ def read_tycho2(survey, targetwcs, bands):
     # Patch missing mag values...
     tycho.mag[tycho.mag == 0] = tycho.mag_hp[tycho.mag == 0]
     tycho.mag[tycho.mag == 0] = tycho.mag_bt[tycho.mag == 0]
-    # Per discussion in issue #306 -- cut on mag < 13.  This drops only 13k/2.5M stars
+    # Per discussion in issue #306 -- cut on mag < 13.
+    # This drops only 13k/2.5M stars.
     tycho.cut(tycho.mag < 13.)
 
-    # See note on gaia.radius above -- don't change the 0.262 to
-    # targetwcs.pixel_scale()!
     tycho.radius = mask_radius_for_mag(tycho.mag)
+    tycho.keep_radius = 2. * tycho.radius
 
     for c in ['tyc1', 'tyc2', 'tyc3', 'mag_bt', 'mag_vt', 'mag_hp',
               'mean_ra', 'mean_dec',
