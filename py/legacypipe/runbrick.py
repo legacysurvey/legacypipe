@@ -2729,6 +2729,10 @@ def stage_writecat(
                            np.clip(T2.bx, 0, W-1).astype(int)]
     del maskbits
 
+    # sigh, bytes vs strings.  In py3, T.type (dtype '|S3') are bytes.
+    T2.sersic[np.array([t in ['DEV',b'DEV'] for t in T2.type])] = 4.0
+    T2.sersic[np.array([t in ['EXP',b'EXP'] for t in T2.type])] = 1.0
+
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
         T2.writeto(None, fits_object=out.fits, primheader=primhdr, header=hdr)
 
