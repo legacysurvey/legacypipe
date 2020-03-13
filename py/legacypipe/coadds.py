@@ -791,6 +791,7 @@ def _resample_one(args):
     if lanczos:
         from astrometry.util.miscutils import patch_image
         patched = tim.getImage().copy()
+        assert(np.all(np.isfinite(tim.getInvError())))
         okpix = (tim.getInvError() > 0)
         patch_image(patched, okpix)
         del okpix

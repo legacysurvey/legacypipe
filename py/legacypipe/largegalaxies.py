@@ -21,13 +21,11 @@ def stage_largegalaxies(
     from tractor.basics import NanoMaggies, LinearPhotoCal
     from tractor.sky import ConstantSky
     from tractor.psf import PixelizedPSF
-    #from tractor.wcs import ConstantFitsWcs
-    #from tractor import GaussianMixturePSF
     from tractor.tractortime import TAITime
     import astropy.time
     import fitsio
     from collections import Counter
-    
+
     # Create coadds and then build custom tims from them.
 
     # We tried setting the invvars constant per tim -- this makes things worse, since we *remove*
@@ -41,14 +39,22 @@ def stage_largegalaxies(
     # Here we're hacking the relative weights -- squaring the weights but then making the median
     # the same, ie, squaring the dynamic range or relative weights -- ie, downweighting the cores
     # even more than they already are from source Poisson terms.
+    keeptims = []
     for tim in tims:
         ie = tim.inverr
+        if not np.any(ie > 0):
+            continue
         median_ie = np.median(ie[ie>0])
+        #print('Num pix with ie>0:', np.sum(ie>0))
+        #print('Median ie:', median_ie)
         # newie = (ie / median_ie)**2 * median_ie
-        newie = ie**2 / median_ie
-        tim.inverr = newie    
-        #print('Tim', tim.name, ': dq values', Counter(tim.dq.ravel()))
-        
+        if median_ie > 0:
+            newie = ie**2 / median_ie
+            tim.inverr = newie
+            assert(np.all(np.isfinite(tim.getInvError())))
+            keeptims.append(tim)
+    tims = keeptims
+
     C = make_coadds(tims, bands, targetwcs,
                     detmaps=True, ngood=True, lanczos=lanczos,
                     allmasks=True, psf_images=True,
