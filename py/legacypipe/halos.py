@@ -51,7 +51,7 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat):
         x -= 1.
         y -= 1.
 
-        if band == 'z' and x < 0 or y < 0 or x > W-1 or y > H-1:
+        if (band == 'z') and (x < 0 or y < 0 or x > W-1 or y > H-1):
             # Do not subtract z-band halos that are off the chip.
             continue
 
