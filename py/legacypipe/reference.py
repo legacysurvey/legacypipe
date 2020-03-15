@@ -90,6 +90,10 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                             columns='fillzero')
     if len(refs) == 0:
         return None,None
+
+    # radius / radius_pix are used to set the MASKBITS shapes;
+    # keep_radius determines which sources are kept (because we subtract
+    # stellar halos out to twice their radii)
     refs.radius_pix = np.ceil(refs.radius * 3600. / pixscale).astype(int)
 
     if 'keep_radius' in refs.columns():
