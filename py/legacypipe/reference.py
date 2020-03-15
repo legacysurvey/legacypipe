@@ -90,7 +90,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                             columns='fillzero')
     if len(refs) == 0:
         return None,None
-    refs.radius_pix = np.ceil(refs.keep_radius * 3600. / pixscale).astype(int)
+    refs.radius_pix = np.ceil(refs.radius * 3600. / pixscale).astype(int)
 
     if 'keep_radius' in refs.columns():
         keeprad = refs.keep_radius
