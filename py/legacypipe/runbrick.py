@@ -3020,7 +3020,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     if release is None:
         release = survey.get_default_release()
         if release is None:
-            release = 8888
+            release = 9999
 
     large_galaxies_force_pointsource = True
     if largegalaxy_preburner:
