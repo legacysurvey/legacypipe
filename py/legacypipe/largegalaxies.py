@@ -70,6 +70,18 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, qaplot=False):
         fig.savefig(pngfile)
         plt.close(fig)
         
+    ## Add the original sky background back into the tim.
+    ##fullimg, fullwcs = [], []
+    #fullwcs = []
+    #for tim in tims:
+    #    #img = tim.getImage()
+    #    #origsky = np.zeros_like(img)
+    #    #tim.origsky.addTo(origsky)
+    #    #tim.setImage(img + origsky)
+    #    #fullimg.append(tim.imobj.read_image())
+    #    fullwcs.append(tim.imobj.get_wcs())
+    #    #tims[0].imobj.read_sky_model()
+        
     # Read all the WCS objects and then build out the N**2/2 matrix of the
     # overlapping pixels.
     fullwcs = [tim.imobj.get_wcs() for tim in tims]
@@ -133,18 +145,6 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, qaplot=False):
                 print(J, K, noverlap[J, K], delta)
                 tims[I[K]].setImage(tims[I[K]].getImage() + delta)
 
-    # Add the original sky background back into the tim.
-    #fullimg, fullwcs = [], []
-    fullwcs = []
-    for tim in tims:
-        #img = tim.getImage()
-        #origsky = np.zeros_like(img)
-        #tim.origsky.addTo(origsky)
-        #tim.setImage(img + origsky)
-        #fullimg.append(tim.imobj.read_image())
-        fullwcs.append(tim.imobj.get_wcs())
-        #tims[0].imobj.read_sky_model()
-        
         # Get the median sky background from the CCD that's furthest from the
         # center of the field.
         skytim = tims[I[JJ[-1]]]
