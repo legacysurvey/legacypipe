@@ -2269,7 +2269,7 @@ def _select_model(chisqs, nparams, galaxy_margin):
         return keepmod
     serdiff = chisqs['ser'] - chisqs[keepmod]
 
-    sermargin = 100.
+    sermargin = 25.
 
     if serdiff < sermargin:
         return keepmod

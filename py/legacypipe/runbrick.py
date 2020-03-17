@@ -663,6 +663,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                brickname=None,
                version_header=None,
                mp=None, nsigma=None,
+               saddle_fraction=None,
+               saddle_min=None,
                survey=None, brick=None,
                bailout_sources=False,
                refcat=None, refstars=None,
@@ -776,6 +778,15 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             plt.figlegend([p[0] for p in lp], lt)
             ps.savefig()
 
+        for band, detmap,detiv in zip(bands, detmaps, detivs):
+            plt.clf()
+            plt.subplot(2,1,1)
+            plt.hist((detmap * np.sqrt(detiv))[detiv>0], bins=50, range=(-5,8), log=True)
+            plt.title('Detection map pixel values (sigmas): band %s' % band)
+            plt.subplot(2,1,2)
+            plt.hist((detmap * np.sqrt(detiv))[detiv>0], bins=50, range=(-5,8))
+            ps.savefig()
+
     # SED-matched detections
     record_event and record_event('stage_srcs: SED-matched')
     info('Running source detection at', nsigma, 'sigma')
@@ -802,7 +813,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
-        nsigma=nsigma, saturated_pix=saturated_pix, veto_map=veto_map,
+        nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
+        saturated_pix=saturated_pix, veto_map=veto_map,
         plots=plots, ps=ps, mp=mp)
     if Tnew is None and not bailout_sources:
         raise NothingToDoError('No sources detected.')
@@ -844,15 +856,15 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         ps.savefig()
         ax = plt.axis()
         if len(refstars):
-            I, = np.nonzero([r[0] == 'T' for r in refstars.ref_cat])
+            I, = np.nonzero([len(r) and r[0] == 'T' for r in refstars.ref_cat])
             if len(I):
                 plt.plot(refstars.ibx[I], refstars.iby[I], '+', color=(0,1,1),
                          label='Tycho-2', **crossa)
-            I, = np.nonzero([r[0] == 'G' for r in refstars.ref_cat])
+            I, = np.nonzero([len(r) and r[0] == 'G' for r in refstars.ref_cat])
             if len(I):
                 plt.plot(refstars.ibx[I], refstars.iby[I], '+',
                          color=(0.2,0.2,1), label='Gaia', **crossa)
-            I, = np.nonzero([r[0] == 'L' for r in refstars.ref_cat])
+            I, = np.nonzero([len(r) and r[0] == 'L' for r in refstars.ref_cat])
             if len(I):
                 plt.plot(refstars.ibx[I], refstars.iby[I], '+',
                          color=(0.6,0.6,0.2), label='Large Galaxy', **crossa)
@@ -2726,6 +2738,10 @@ def stage_writecat(
                            np.clip(T2.bx, 0, W-1).astype(int)]
     del maskbits
 
+    # sigh, bytes vs strings.  In py3, T.type (dtype '|S3') are bytes.
+    T2.sersic[np.array([t in ['DEV',b'DEV'] for t in T2.type])] = 4.0
+    T2.sersic[np.array([t in ['EXP',b'EXP'] for t in T2.type])] = 1.0
+
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
         T2.writeto(None, fits_object=out.fits, primheader=primhdr, header=hdr)
 
@@ -2768,6 +2784,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               nblobs=None, blob=None, blobxy=None, blobradec=None, blobid=None,
               max_blobsize=None,
               nsigma=6,
+              saddle_fraction=0.1,
+              saddle_min=2.,
               reoptimize=False,
               iterative=False,
               wise=True,
@@ -3002,17 +3020,17 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     if release is None:
         release = survey.get_default_release()
         if release is None:
-            release = 8888
+            release = 9999
 
-    large_galaxies_force_pointsource = False # True
+    large_galaxies_force_pointsource = True
     if largegalaxy_preburner:
         # Implied options!
         #subsky = False
-        #large_galaxies = False
         large_galaxies = True
         large_galaxies_force_pointsource = False
 
-    kwargs.update(ps=ps, nsigma=nsigma,
+    kwargs.update(ps=ps, nsigma=nsigma, saddle_fraction=saddle_fraction,
+                  saddle_min=saddle_min,
                   survey_blob_mask=survey_blob_mask,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
                   release=release,
@@ -3311,6 +3329,12 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--nsigma', type=float, default=6.0,
                         help='Set N sigma source detection thresh')
+
+    parser.add_argument('--saddle-fraction', type=float, default=2.0,
+                        help='Fraction of the peak heigh for selecting new sources.')
+
+    parser.add_argument('--saddle-min', type=float, default=2.0,
+                        help='Saddle-point depth from existing sources down to new sources (sigma).')
 
     parser.add_argument(
         '--reoptimize', action='store_true', default=False,
