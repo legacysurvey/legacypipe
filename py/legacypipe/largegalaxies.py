@@ -3,12 +3,14 @@ import numpy as np
 class Duck(object):
     pass
 
-def largegalaxy_sky(tims, targetwcs, survey, brickname, qaplot=False):
+def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, qaplot=False):
     
     from astrometry.util.starutil_numpy import degrees_between
     from astrometry.util.resample import resample_with_wcs
     from legacypipe.reference import get_reference_sources
     from legacypipe.oneblob import get_inblob_map
+    from legacypipe.coadds import make_coadds, write_coadd_images
+    from legacypipe.survey import get_rgb, imsave_jpeg
 
     if qaplot:
         import os
@@ -70,22 +72,6 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, qaplot=False):
         fig.savefig(pngfile)
         plt.close(fig)
         
-    ## Add the original sky background back into the tim.
-    ##fullimg, fullwcs = [], []
-    #fullwcs = []
-    #for tim in tims:
-    #    #img = tim.getImage()
-    #    #origsky = np.zeros_like(img)
-    #    #tim.origsky.addTo(origsky)
-    #    #tim.setImage(img + origsky)
-    #    #fullimg.append(tim.imobj.read_image())
-    #    fullwcs.append(tim.imobj.get_wcs())
-    #    #tims[0].imobj.read_sky_model()
-        
-    # Read all the WCS objects and then build out the N**2/2 matrix of the
-    # overlapping pixels.
-    #fullwcs = [tim.imobj.get_wcs() for tim in tims]
-
     if qaplot:
         mods = []
         for tim in tims:
@@ -96,8 +82,6 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, qaplot=False):
         imsave_jpeg('largegalaxy-sky-before.jpg', get_rgb(C.coimgs, bands),
                     origin='lower')
 
-
-    
     allbands = np.array([tim.band for tim in tims])
     for band in sorted(set(allbands)):
         print('Working on band {}'.format(band))
@@ -169,7 +153,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, qaplot=False):
         print('b:')
         print(b)
         
-        R = np.linalg.lstsq(A, b)
+        R = np.linalg.lstsq(A, b, rcond=None)
 
         x = R[0]
         print('x:')
@@ -204,6 +188,7 @@ def stage_largegalaxies(
         survey=None, targetwcs=None, pixscale=None, bands=None, tims=None,
         brickname=None, version_header=None,
         apodize=True,
+        subsky=True,
         plots=False, ps=None, coadd_bw=False, W=None, H=None,
         brick=None, blobs=None, lanczos=True, ccds=None,
         write_metrics=True,
@@ -225,8 +210,8 @@ def stage_largegalaxies(
 
     # Custom sky-subtraction for large galaxies.
     if not subsky:
-        tims = largegalaxy_sky(tims, targetwcs, survey, brickname)
-    #import pdb ; pdb.set_trace()
+        tims = largegalaxy_sky(tims, targetwcs, survey, brickname, bands, qaplot=True)
+    import pdb ; pdb.set_trace()
     
     # Create coadds and then build custom tims from them.
 
