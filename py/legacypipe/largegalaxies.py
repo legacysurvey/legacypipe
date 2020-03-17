@@ -132,8 +132,8 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
                 delta = np.sum(diff * iv)
                 weight = np.sum(iv)
 
-                A[ioverlap, ii] = -weight / 2.
-                A[ioverlap, jj] =  weight / 2.
+                A[ioverlap, ii] = -weight
+                A[ioverlap, jj] =  weight
 
                 b[ioverlap] = delta
 
@@ -156,9 +156,8 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
 
         if plots:
             plt.clf()
-            for correction,ii,bandtim in zip(x, I, bandtims):
-                #if tims[ii].band != band:
-                #continue
+            for j,(correction,ii,bandtim) in enumerate(zip(x, I, bandtims)):
+                plt.subplot(nimg, 1, j+1)
                 plt.hist(bandtim.data.ravel(), bins=50, histtype='step',
                          range=(-5, 5))
                 plt.axvline(-correction)
@@ -166,8 +165,9 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
             ps.savefig()
 
             plt.clf()
-            for correction,ii in zip(x, I):
-                plt.hist((tims[ii].data + correction).ravel(), bins=50, histtype='step')
+            for j,(correction,ii) in enumerate(zip(x, I)):
+                plt.subplot(nimg, 1, j+1)
+                plt.hist((tims[ii].data + correction).ravel(), bins=50, histtype='step', range=(-5, 5))
             plt.title('Band %s: tim pix + correction' % band)
             ps.savefig()
 
@@ -175,18 +175,29 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
             tims[ii].data += correction
             from tractor.sky import ConstantSky
             tims[ii].sky = ConstantSky(0.)
-        
+
 
     refs, _ = get_reference_sources(survey, targetwcs, targetwcs.pixel_scale(), ['r'],
                                     tycho_stars=True, gaia_stars=True,
                                     large_galaxies=True, star_clusters=True)
-    skymask = get_inblob_map(targetwcs, refs) == 0
+    skymask = (get_inblob_map(targetwcs, refs) == 0)
 
     C = make_coadds(tims, bands, targetwcs, callback=None, mp=mp)
     for coimg,coiv,band in zip(C.coimgs, C.cowimgs, bands):
         # FIXME -- more extensive masking here?
         cosky = np.median(coimg[skymask * (coiv > 0)])
         I = np.where(allbands == band)[0]
+        print('Band', band, ': I', I)
+        if plots:
+            plt.clf()
+            plt.hist(coimg.ravel(), bins=50, range=(-3,3), normed=True)
+            plt.axvline(cosky, color='k')
+            for ii in I:
+                print('Tim', tims[ii])
+                plt.hist(tims[ii].data.ravel() - cosky, bins=50, range=(-3,3), histtype='step', normed=True)
+            plt.title('Band %s: tim pix & cosky' % band)
+            ps.savefig()
+        
         for ii in I:
             tims[ii].data -= cosky
 

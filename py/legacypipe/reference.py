@@ -356,10 +356,10 @@ def read_large_galaxies(survey, targetwcs, bands):
 
     refcat, preburn = get_large_galaxy_version(galfn)
 
-    print('Large galaxy cat: ', refcat, 'preburn', preburn)
-    print('ref_cat:', galaxies.ref_cat, 'ref_id:', galaxies.ref_id)
-    galaxies.about()
-    print('lslga id:', galaxies.lslga_id)
+    #print('Large galaxy cat: ', refcat, 'preburn', preburn)
+    #print('ref_cat:', galaxies.ref_cat, 'ref_id:', galaxies.ref_id)
+    #galaxies.about()
+    #print('lslga id:', galaxies.lslga_id)
 
     if not preburn:
         # Original LSLGA
