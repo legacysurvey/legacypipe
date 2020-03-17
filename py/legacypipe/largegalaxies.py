@@ -168,7 +168,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False)
     refs, _ = get_reference_sources(survey, targetwcs, targetwcs.pixel_scale(), ['r'],
                                     tycho_stars=True, gaia_stars=True,
                                     large_galaxies=True, star_clusters=True)
-    skymask = get_inblob_map(targetwcs, refs) != 0 # True=unmasked
+    skymask = get_inblob_map(targetwcs, refs) == 0
 
     C = make_coadds(tims, bands, targetwcs, callback=None, mp=mp)
     for coimg,coiv,band in zip(C.coimgs, C.cowimgs, bands):
@@ -176,7 +176,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False)
         cosky = np.median(coimg[skymask * (coiv > 0)])
         I = np.where(allbands == band)[0]
         for ii in I:
-            tim[ii].data -= cosky
+            tims[ii].data -= cosky
 
     if qaplot:
         C = make_coadds(tims, bands, targetwcs, callback=None, mp=mp)
