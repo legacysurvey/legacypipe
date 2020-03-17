@@ -3,7 +3,7 @@ import numpy as np
 class Duck(object):
     pass
 
-def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, qaplot=False):
+def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False):
     
     from astrometry.util.starutil_numpy import degrees_between
     from astrometry.util.resample import resample_with_wcs
@@ -78,7 +78,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, qaplot=False):
             imcopy = tim.getImage().copy()
             tim.sky.addTo(imcopy, -1)
             mods.append(imcopy)
-        C = make_coadds(tims, bands, targetwcs, mods=mods, callback=None)
+        C = make_coadds(tims, bands, targetwcs, mods=mods, callback=None, mp=mp)
         imsave_jpeg('largegalaxy-sky-before.jpg', get_rgb(C.coimgs, bands),
                     origin='lower')
 
@@ -170,7 +170,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, qaplot=False):
                                     large_galaxies=True, star_clusters=True)
     skymask = get_inblob_map(targetwcs, refs) != 0 # True=unmasked
 
-    C = make_coadds(tims, bands, targetwcs, callback=None)
+    C = make_coadds(tims, bands, targetwcs, callback=None, mp=mp)
     for coimg,coiv,band in zip(C.coimgs, C.cowimgs, bands):
         # FIXME -- more extensive masking here?
         cosky = np.median(coimg[skymask * (coiv > 0)])
@@ -179,7 +179,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, qaplot=False):
             tim[ii].data -= cosky
 
     if qaplot:
-        C = make_coadds(tims, bands, targetwcs, callback=None)
+        C = make_coadds(tims, bands, targetwcs, callback=None, mp=mp)
         imsave_jpeg('largegalaxy-sky-after.jpg', get_rgb(C.coimgs, bands),
                     origin='lower')
     return tims
@@ -210,7 +210,7 @@ def stage_largegalaxies(
 
     # Custom sky-subtraction for large galaxies.
     if not subsky:
-        tims = largegalaxy_sky(tims, targetwcs, survey, brickname, bands, qaplot=True)
+        tims = largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=True)
     import pdb ; pdb.set_trace()
     
     # Create coadds and then build custom tims from them.
