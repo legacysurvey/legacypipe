@@ -84,118 +84,120 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, qaplot=False):
         
     # Read all the WCS objects and then build out the N**2/2 matrix of the
     # overlapping pixels.
-    fullwcs = [tim.imobj.get_wcs() for tim in tims]
+    #fullwcs = [tim.imobj.get_wcs() for tim in tims]
 
+    if qaplot:
+        mods = []
+        for tim in tims:
+            imcopy = tim.getImage().copy()
+            tim.sky.addTo(imcopy, -1)
+            mods.append(imcopy)
+        C = make_coadds(tims, bands, targetwcs, mods=mods, callback=None)
+        imsave_jpeg('largegalaxy-sky-before.jpg', get_rgb(C.coimgs, bands),
+                    origin='lower')
+
+
+    
     allbands = np.array([tim.band for tim in tims])
     for band in sorted(set(allbands)):
         print('Working on band {}'.format(band))
         I = np.where(allbands == band)[0]
-        nn = len(I)
+        nimg = len(I)
 
-        # Build out the matrix of the number of overlapping pixels.
-        noverlap = np.zeros((nn, nn)).astype(int)
-        indx = np.arange(nn)
-        for ii in indx:
-            for jj in indx[ii:]:
-                try:
-                    Yo, Xo, Yi, Xi, _ = resample_with_wcs(fullwcs[I[ii]], fullwcs[I[jj]])
-                    noverlap[jj, ii] = len(Yo)
-                    #print(ii, jj, len(Yo), len(Xo))
-                except:
-                    pass
-        print(noverlap)
-
-        # Work from the inside, out.
-        radec = np.array([wcs.crval for wcs in fullwcs])
-        ddeg = degrees_between(radec[:, 0], radec[:, 1], targetwcs.crval[0], targetwcs.crval[1])
-    
-        JJ = np.argsort(ddeg[I])
-
-        for J in JJ:
-            # Sort the images that overlap with this image by increasing overlap
-            # (but skip the image itself).
-            print(noverlap[J, :])
-            KK = np.argsort(noverlap[J, :])[::-1]
-            KK = KK[noverlap[J, KK] > 0]
-            for K in KK:
-                try:
-                    YJ, XJ, YK, XK, _ = resample_with_wcs(fullwcs[I[J]], fullwcs[I[K]])
-                except:
-                    print('This should not happen...')
-                    pass
-
-                # Now read the images. This is stupidly slow because we read the
-                # whole image and then slice it. Need to figure out the slices!
-                
-                #slcJ = slice(YJ.min(), YJ.max() + 1), slice(XJ.min(), XJ.max() + 1)
-                #slcK = slice(YK.min(), YK.max() + 1), slice(XK.min(), XK.max() + 1)
-                #imgK = tims[I[K]].imobj.read_image(slc=slcK) # [Yi, Xi]
-                #imgJ = tims[I[J]].imobj.read_image(slc=slcJ) # [Yo, Xo]
-                #invJ = tims[I[J]].imobj.read_invvar(slc=slcJ) # [Yo, Xo]
-                
-                imgK = tims[I[K]].imobj.read_image()[YK, XK]
-                imgJ = tims[I[J]].imobj.read_image()[YJ, XJ]
-                invJ = tims[I[J]].imobj.read_invvar()[YJ, XJ]
-
-                # Get the inverse-variance weighted average of the *difference*
-                # of the overlapping pixels.
-                delta = np.sum(invJ * (imgJ - imgK)) / np.sum(invJ)
-
-                # Apply the delta.
-                print(J, K, noverlap[J, K], delta)
-                tims[I[K]].setImage(tims[I[K]].getImage() + delta)
-
-        # Get the median sky background from the CCD that's furthest from the
-        # center of the field.
-        skytim = tims[I[JJ[-1]]]
-        skyimg = skytim.imobj.read_sky_model(slc=None)
-        skywcs = skytim.imobj.get_wcs()
-        imh, imw = skytim.imobj.get_image_shape()
-        refsky = np.zeros((imh, imw)).astype('f4')
-        skyimg.addTo(refsky)
-
-        refs, _ = get_reference_sources(survey, skywcs, skywcs.pixel_scale(), ['r'],
-                                        tycho_stars=True, gaia_stars=True,
-                                        large_galaxies=True, star_clusters=True)
-        skymask = get_inblob_map(skywcs, refs) != 0 # True=unmasked
-        medsky = np.median(refsky[skymask])
-
-        for J in JJ:
-            tims[I[J]].setImage(tims[I[J]].getImage() - medsky)
-            
-    #    # Choose the reference image, read the full tim, and render the original
-    #    # sky image.
-    #    indx = np.argsort(radec[I][:, 0])
-    #    refindx = indx[0]
-    #    reftim = tims[I[refindx]]
-    #
-    #    #fulltim = reftim.imobj.get_tractor_image(slc=None, dq=False, invvar=False, pixels=False)
-    #    skymodel = reftim.imobj.read_sky_model(slc=None)
-    #    imh, imw = reftim.imobj.get_image_shape()
-    #    refsky = np.zeros((imh, imw)).astype('f4')
-    #    skymodel.addTo(refsky)
-    #
-    #    tim.setImage(img + origsky)
-    #
-    #    
-    #    reftim = im.get_tractor_image(splinesky=True, subsky=False, hybridPsf=True,
-    #                                  normalizePsf=True, apodize=apodize)
-    #    
-    #
-    #    
-    #    refscale = np.max(overlapimg[I[indx[0]]])
-    #    for ii in indx: # sort by RA
-    #        scale = np.max(overlapimg[I[indx[ii]]])
-    #        print(refscale, scale, refscale / scale)
-    #        tims[I[ii]].setImage(tims[I[ii]].getImage() * refscale / scale)
+        '''
+        A x = b
+        A: weights 
+        A: shape noverlap x nimg
+        - entries have units of weights
         
-    #ww = np.where([tim.band == 'r' for tim in tims])[0]
-    #with fitsio.FITS('skytest.fits', 'rw') as ff:
-    #    for w in ww:
-    #        ff.write(overlapimg[w, :, :])
+        x_i: offset to apply to image i
+        x: length nimg
+        - entries will have values of image pixels
 
-    #import pdb ; pdb.set_trace()
+        b: (weighted) measured difference between image i and image j
+        b: length -- "noverlap" number of overlapping pairs of images -- filled-in elements in your array
+        - units of weighted image pixels
+        '''
+        indx = np.arange(nimg)
 
+        ## initialize A bigger than we will need, cut later
+        A = np.zeros((nimg*nimg, nimg), np.float32)
+        b = np.zeros((nimg*nimg), np.float32)
+        ioverlap = 0
+
+        bandtims = [tims[i].imobj.get_tractor_image(
+            gaussPsf=True, pixPsf=False, subsky=False, dq=False)
+            for i in I]
+        
+        for ii in indx:
+            for jj in indx[ii+1:]:
+                try:
+                    Yi, Xi, Yj, Xj, _ = resample_with_wcs(
+                        bandtims[ii].subwcs, bandtims[jj].subwcs)
+                    #fullwcs[I[ii]], fullwcs[I[jj]])
+                except:
+                    continue
+
+                imgI = bandtims[ii].getImage() [Yi, Xi]
+                imgJ = bandtims[jj].getImage() [Yj, Xj]
+                invI = bandtims[ii].getInvvar()[Yi, Xi]
+                invJ = bandtims[jj].getInvvar()[Yj, Xj]
+                # imgI = tims[I[ii]].imobj.read_image() [Yi, Xi]
+                # invI = tims[I[ii]].imobj.read_invvar()[Yi, Xi]
+                # imgJ = tims[I[jj]].imobj.read_image() [Yj, Xj]
+                # invJ = tims[I[jj]].imobj.read_invvar()[Yj, Xj]
+
+                good = (invI > 0) * (invJ > 0)
+                diff = (imgI - imgJ)[good]
+                iv = 1. / (1. / invI[good] + 1. / invJ[good])
+                delta = np.sum(diff * iv)
+                weight = np.sum(iv)
+
+                A[ioverlap, ii] = -weight / 2.
+                A[ioverlap, jj] =  weight / 2.
+
+                b[ioverlap] = delta
+
+                ioverlap += 1
+
+        noverlap = ioverlap
+        A = A[:noverlap, :]
+        b = b[:noverlap]
+
+        print('A:')
+        print(A)
+        print('b:')
+        print(b)
+        
+        R = np.linalg.lstsq(A, b)
+
+        x = R[0]
+        print('x:')
+        print(x)
+
+        for correction,ii in zip(x, I):
+            tims[ii].data += correction
+            from tractor.sky import ConstantSky
+            tims[ii].sky = ConstantSky(0.)
+        
+
+    refs, _ = get_reference_sources(survey, targetwcs, targetwcs.pixel_scale(), ['r'],
+                                    tycho_stars=True, gaia_stars=True,
+                                    large_galaxies=True, star_clusters=True)
+    skymask = get_inblob_map(targetwcs, refs) != 0 # True=unmasked
+
+    C = make_coadds(tims, bands, targetwcs, callback=None)
+    for coimg,coiv,band in zip(C.coimgs, C.cowimgs, bands):
+        # FIXME -- more extensive masking here?
+        cosky = np.median(coimg[skymask * (coiv > 0)])
+        I = np.where(allbands == band)[0]
+        for ii in I:
+            tim[ii].data -= cosky
+
+    if qaplot:
+        C = make_coadds(tims, bands, targetwcs, callback=None)
+        imsave_jpeg('largegalaxy-sky-after.jpg', get_rgb(C.coimgs, bands),
+                    origin='lower')
     return tims
 
 def stage_largegalaxies(
@@ -222,7 +224,8 @@ def stage_largegalaxies(
     from collections import Counter
 
     # Custom sky-subtraction for large galaxies.
-    tims = largegalaxy_sky(tims, targetwcs, survey, brickname)
+    if not subsky:
+        tims = largegalaxy_sky(tims, targetwcs, survey, brickname)
     #import pdb ; pdb.set_trace()
     
     # Create coadds and then build custom tims from them.

@@ -2808,6 +2808,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               large_galaxies=False,
               large_galaxies_force_pointsource=True,
               largegalaxy_preburner=False,
+              largegalaxy_skysub=False,
               min_mjd=None, max_mjd=None,
               unwise_coadds=False,
               bail_out=False,
@@ -3025,7 +3026,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     large_galaxies_force_pointsource = True
     if largegalaxy_preburner:
         # Implied options!
-        #subsky = False
+        if largegalaxy_skysub:
+            subsky = False
+            # ...
         large_galaxies = True
         large_galaxies_force_pointsource = False
 
@@ -3147,10 +3150,21 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             })
 
     if largegalaxy_preburner:
-        prereqs.update({
-            'largegalaxies': 'halos',
-            'srcs': 'largegalaxies',
-        })
+        # Normal order is tims -> refs -> outliers -> halos -> srcs
+        if largegalaxy_skysub:
+            # tims -> refs -> halos -> largegalaxies -> srcs
+            prereqs.update({
+                'halos': 'refs',
+                'largegalaxies': 'halos',
+                'srcs': 'largegalaxies',
+                })
+        else:
+            # tims -> refs -> outliers -> halos -> largegalaxies -> srcs
+            prereqs.update({
+                'largegalaxies': 'halos',
+                'srcs': 'largegalaxies',
+                })
+
         
     if prereqs_update is not None:
         prereqs.update(prereqs_update)
@@ -3416,6 +3430,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--largegalaxy-preburner', default=False, action='store_true',
                         help='Pre-fitting of LSLGA galaxies')
+
+    parser.add_argument('--largegalaxy-skysub', default=False, action='store_true',
+                        help='Special sky handling for largest of LSLGA galaxies? Requires --largegalaxy-preburner.')
 
     return parser
 
