@@ -3,7 +3,8 @@ import numpy as np
 class Duck(object):
     pass
 
-def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False):
+def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
+                    plots=False, ps=None):
     
     from astrometry.util.starutil_numpy import degrees_between
     from astrometry.util.resample import resample_with_wcs
@@ -66,10 +67,10 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False)
             #print(ax.get_xlim(), ax.get_ylim())
 
         plt.subplots_adjust(bottom=0.12, wspace=0.05, left=0.12, right=0.97, top=0.95)
-        pngfile = survey.write_output('image-jpeg', brick=brickname).fn.replace('.jpg', '-ccdpos.jpg')
-        os.rename(pngfile, pngfile.replace('tmp-', ''))
-        print('Writing {}'.format(pngfile))
-        fig.savefig(pngfile)
+        fn = survey.find_file('image-jpeg', brick=brickname).replace('.jpg', '-ccdpos.jpg')
+        with survey.write_output(None, filename=fn) as out:
+            fig.savefig(out.fn)
+        print('Wrote', fn)
         plt.close(fig)
         
     if qaplot:
@@ -118,7 +119,6 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False)
                 try:
                     Yi, Xi, Yj, Xj, _ = resample_with_wcs(
                         bandtims[ii].subwcs, bandtims[jj].subwcs)
-                    #fullwcs[I[ii]], fullwcs[I[jj]])
                 except:
                     continue
 
@@ -126,11 +126,6 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False)
                 imgJ = bandtims[jj].getImage() [Yj, Xj]
                 invI = bandtims[ii].getInvvar()[Yi, Xi]
                 invJ = bandtims[jj].getInvvar()[Yj, Xj]
-                # imgI = tims[I[ii]].imobj.read_image() [Yi, Xi]
-                # invI = tims[I[ii]].imobj.read_invvar()[Yi, Xi]
-                # imgJ = tims[I[jj]].imobj.read_image() [Yj, Xj]
-                # invJ = tims[I[jj]].imobj.read_invvar()[Yj, Xj]
-
                 good = (invI > 0) * (invJ > 0)
                 diff = (imgI - imgJ)[good]
                 iv = 1. / (1. / invI[good] + 1. / invJ[good])
@@ -158,6 +153,23 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False)
         x = R[0]
         print('x:')
         print(x)
+
+        if plots:
+            plt.clf()
+            for correction,ii,bandtim in zip(x, I, bandtims):
+                #if tims[ii].band != band:
+                #continue
+                plt.hist(bandtim.data.ravel(), bins=50, histtype='step',
+                         range=(-5, 5))
+                plt.axvline(-correction)
+            plt.title('Band %s: bandtim pix and -correction' % band)
+            ps.savefig()
+
+            plt.clf()
+            for correction,ii in zip(x, I):
+                plt.hist((tims[ii].data + correction).ravel(), bins=50, histtype='step')
+            plt.title('Band %s: tim pix + correction' % band)
+            ps.savefig()
 
         for correction,ii in zip(x, I):
             tims[ii].data += correction
@@ -210,7 +222,8 @@ def stage_largegalaxies(
 
     # Custom sky-subtraction for large galaxies.
     if not subsky:
-        tims = largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=True)
+        tims = largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=True,
+                               plots=plots, ps=ps)
     import pdb ; pdb.set_trace()
     
     # Create coadds and then build custom tims from them.
