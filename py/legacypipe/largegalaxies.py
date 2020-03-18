@@ -3,17 +3,110 @@ import numpy as np
 class Duck(object):
     pass
 
-def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
+def largegalaxy_ubercal(fulltims, coaddtims=None, plots=False, verbose=False):
+    """Bring individual CCDs onto a common flux scale based on overlapping pixels.
+
+    fulltims - full-CCD tims, used to derive the corrections
+    coaddtims - tims sliced to just the pixels contributing to the output coadd
+
+    Some notes on the procedure:
+
+    A x = b
+    A: weights 
+    A: shape noverlap x nimg
+    - entries have units of weights
+
+    x_i: offset to apply to image i
+    x: length nimg
+    - entries will have values of image pixels
+
+    b: (weighted) measured difference between image i and image j
+    b: length -- "noverlap" number of overlapping pairs of images -- filled-in elements in your array
+    - units of weighted image pixels
+
+    """
+    from astrometry.util.resample import resample_with_wcs
+
+    band = fulltims[0].band
+    
+    nimg = len(fulltims)
+    indx = np.arange(nimg)
+
+    ## initialize A bigger than we will need, cut later
+    A = np.zeros((nimg*nimg, nimg), np.float32)
+    b = np.zeros((nimg*nimg), np.float32)
+    ioverlap = 0
+
+    for ii in indx:
+        for jj in indx[ii+1:]:
+            try:
+                Yi, Xi, Yj, Xj, _ = resample_with_wcs(
+                    fulltims[ii].subwcs, fulltims[jj].subwcs)
+            except:
+                continue
+
+            imgI = fulltims[ii].getImage() [Yi, Xi]
+            imgJ = fulltims[jj].getImage() [Yj, Xj]
+            invI = fulltims[ii].getInvvar()[Yi, Xi]
+            invJ = fulltims[jj].getInvvar()[Yj, Xj]
+            good = (invI > 0) * (invJ > 0)
+            diff = (imgI - imgJ)[good]
+            iv = 1. / (1. / invI[good] + 1. / invJ[good])
+            delta = np.sum(diff * iv)
+            weight = np.sum(iv)
+
+            A[ioverlap, ii] = -weight
+            A[ioverlap, jj] =  weight
+
+            b[ioverlap] = delta
+
+            ioverlap += 1
+
+    noverlap = ioverlap
+    A = A[:noverlap, :]
+    b = b[:noverlap]
+    if verbose:
+        print('A:')
+        print(A)
+        print('b:')
+        print(b)
+
+    R = np.linalg.lstsq(A, b, rcond=None)
+
+    x = R[0]
+    print('Delta offsets to each image:')
+    print(x)
+
+    if plots:
+        plt.clf()
+        for j, (correction, fulltim) in enumerate(zip(x, fulltims)):
+            plt.subplot(nimg, 1, j+1)
+            plt.hist(fulltim.data.ravel(), bins=50, histtype='step',
+                     range=(-5, 5))
+            plt.axvline(-correction)
+        plt.title('Band %s: fulltim pix and -correction' % band)
+        ps.savefig()
+
+        if coaddtims is not None:
+            plt.clf()
+            for j,(correction,ii) in enumerate(zip(x, np.arange(coaddtims))):
+                plt.subplot(nimg, 1, j+1)
+                plt.hist((coaddtims[ii].data + correction).ravel(), bins=50, histtype='step', range=(-5, 5))
+            plt.title('Band %s: tim pix + correction' % band)
+            ps.savefig()
+    
+    return x
+
+def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, 
                     plots=False, ps=None, verbose=False):
     
-    from astrometry.util.starutil_numpy import degrees_between
-    from astrometry.util.resample import resample_with_wcs
+    from tractor.sky import ConstantSky
     from legacypipe.reference import get_reference_sources
     from legacypipe.oneblob import get_inblob_map
     from legacypipe.coadds import make_coadds
     from legacypipe.survey import get_rgb, imsave_jpeg
 
-    if qaplot:
+    if plots:
         import matplotlib.pyplot as plt
         import matplotlib.patches as patches
 
@@ -65,7 +158,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
             fig.savefig(out.fn)
         plt.close(fig)
         
-    if qaplot:
+    if plots:
         mods = []
         for tim in tims:
             imcopy = tim.getImage().copy()
@@ -80,95 +173,25 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
     for band in sorted(set(allbands)):
         print('Working on band {}'.format(band))
         I = np.where(allbands == band)[0]
-        nimg = len(I)
 
-        '''
-        A x = b
-        A: weights 
-        A: shape noverlap x nimg
-        - entries have units of weights
-        
-        x_i: offset to apply to image i
-        x: length nimg
-        - entries will have values of image pixels
+        fulltims = [tims[ii].imobj.get_tractor_image(
+            gaussPsf=True, pixPsf=False, subsky=False, dq=True, apodize=False)
+            for ii in I]
 
-        b: (weighted) measured difference between image i and image j
-        b: length -- "noverlap" number of overlapping pairs of images -- filled-in elements in your array
-        - units of weighted image pixels
-        '''
-        indx = np.arange(nimg)
-
-        ## initialize A bigger than we will need, cut later
-        A = np.zeros((nimg*nimg, nimg), np.float32)
-        b = np.zeros((nimg*nimg), np.float32)
-        ioverlap = 0
-
-        bandtims = [tims[i].imobj.get_tractor_image(
-            gaussPsf=True, pixPsf=False, subsky=False, dq=False, apodize=False)
-            for i in I]
-        
-        for ii in indx:
-            for jj in indx[ii+1:]:
-                try:
-                    Yi, Xi, Yj, Xj, _ = resample_with_wcs(
-                        bandtims[ii].subwcs, bandtims[jj].subwcs)
-                except:
-                    continue
-
-                imgI = bandtims[ii].getImage() [Yi, Xi]
-                imgJ = bandtims[jj].getImage() [Yj, Xj]
-                invI = bandtims[ii].getInvvar()[Yi, Xi]
-                invJ = bandtims[jj].getInvvar()[Yj, Xj]
-                good = (invI > 0) * (invJ > 0)
-                diff = (imgI - imgJ)[good]
-                iv = 1. / (1. / invI[good] + 1. / invJ[good])
-                delta = np.sum(diff * iv)
-                weight = np.sum(iv)
-
-                A[ioverlap, ii] = -weight
-                A[ioverlap, jj] =  weight
-
-                b[ioverlap] = delta
-
-                ioverlap += 1
-
-        noverlap = ioverlap
-        A = A[:noverlap, :]
-        b = b[:noverlap]
-        if verbose:
-            print('A:')
-            print(A)
-            print('b:')
-            print(b)
-
-        R = np.linalg.lstsq(A, b, rcond=None)
-
-        x = R[0]
-        print('Delta offsets to each image:')
-        print(x)
-
-        if plots:
-            plt.clf()
-            for j,(correction,ii,bandtim) in enumerate(zip(x, I, bandtims)):
-                plt.subplot(nimg, 1, j+1)
-                plt.hist(bandtim.data.ravel(), bins=50, histtype='step',
-                         range=(-5, 5))
-                plt.axvline(-correction)
-            plt.title('Band %s: bandtim pix and -correction' % band)
-            ps.savefig()
-
-            plt.clf()
-            for j,(correction,ii) in enumerate(zip(x, I)):
-                plt.subplot(nimg, 1, j+1)
-                plt.hist((tims[ii].data + correction).ravel(), bins=50, histtype='step', range=(-5, 5))
-            plt.title('Band %s: tim pix + correction' % band)
-            ps.savefig()
-
+        # Derive the correction and then apply it.
+        correction = largegalaxy_ubercal(fulltims, coaddtims=tims[I], plots=plots)
+        # Apply the correction and return the tims
         for correction,ii in zip(x, I):
-            tims[ii].data += correction
-            from tractor.sky import ConstantSky
-            tims[ii].sky = ConstantSky(0.)
+            coaddtims[ii].data += correction
+            coaddtims[ii].sky = ConstantSky(0.)
 
+        # Check--
+        for jj, correction in enumerate(x):
+            fulltims[jj].data += correction
+        newcorrection = largegalaxy_ubercal(fulltims)
+        print(newcorrection)
+
+    import pdb ; pdb.set_trace()
 
     refs, _ = get_reference_sources(survey, targetwcs, targetwcs.pixel_scale(), ['r'],
                                     tycho_stars=True, gaia_stars=True,
@@ -209,7 +232,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
         plt.imshow(get_rgb(C.coimgs, bands), origin='lower', interpolation='nearest')
         ps.savefig()
 
-    if qaplot:
+    if plots:
         C = make_coadds(tims, bands, targetwcs, callback=None,
                         mp=mp)
         imsave_jpeg('largegalaxy-sky-after.jpg', get_rgb(C.coimgs, bands),
@@ -250,7 +273,7 @@ def stage_largegalaxies(
 
     # Custom sky-subtraction for large galaxies.
     if not subsky:
-        tims = largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=True,
+        tims = largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, 
                                plots=plots, ps=ps)
     import pdb ; pdb.set_trace()
     
