@@ -4,7 +4,7 @@ class Duck(object):
     pass
 
 def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
-                    plots=False, ps=None):
+                    plots=False, ps=None, verbose=False):
     
     from astrometry.util.starutil_numpy import degrees_between
     from astrometry.util.resample import resample_with_wcs
@@ -63,7 +63,6 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
         fn = survey.find_file('image-jpeg', brick=brickname).replace('.jpg', '-ccdpos.jpg')
         with survey.write_output(None, filename=fn) as out:
             fig.savefig(out.fn)
-        print('Wrote', fn)
         plt.close(fig)
         
     if qaplot:
@@ -76,7 +75,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
             mods.append(imcopy)
         C = make_coadds(tims, bands, targetwcs, mods=mods, callback=None,
                         mp=mp)
-        imsave_jpeg('largegalaxy-sky-before.jpg', get_rgb(C.coimgs, bands),
+        imsave_jpeg('largegalaxy-sky-before.jpg', get_rgb(C.comods, bands),
                     origin='lower')
 
     allbands = np.array([tim.band for tim in tims])
@@ -107,7 +106,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
         ioverlap = 0
 
         bandtims = [tims[i].imobj.get_tractor_image(
-            gaussPsf=True, pixPsf=False, subsky=False, dq=False)
+            gaussPsf=True, pixPsf=False, subsky=False, dq=False, apodize=False)
             for i in I]
         
         for ii in indx:
@@ -138,16 +137,16 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
         noverlap = ioverlap
         A = A[:noverlap, :]
         b = b[:noverlap]
+        if verbose:
+            print('A:')
+            print(A)
+            print('b:')
+            print(b)
 
-        print('A:')
-        print(A)
-        print('b:')
-        print(b)
-        
         R = np.linalg.lstsq(A, b, rcond=None)
 
         x = R[0]
-        print('x:')
+        print('Delta offsets to each image:')
         print(x)
 
         if plots:
@@ -181,7 +180,11 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
     C = make_coadds(tims, bands, targetwcs, callback=None, sbscale=False, mp=mp)
     for coimg,coiv,band in zip(C.coimgs, C.cowimgs, bands):
         # FIXME -- more extensive masking here?
-        cosky = np.median(coimg[skymask * (coiv > 0)])
+        from astropy.stats import sigma_clipped_stats
+        #cosky = np.median(coimg[skymask * (coiv > 0)])
+        skymean, skymedian, skysig = sigma_clipped_stats(coimg, mask=skymask*(coiv > 0), sigma=3.0)
+        cosky = skymedian
+        
         I = np.where(allbands == band)[0]
         print('Band', band, ': I', I)
         print('Coadd sky:', cosky)
