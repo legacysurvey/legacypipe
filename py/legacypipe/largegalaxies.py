@@ -3,6 +3,37 @@ import numpy as np
 class Duck(object):
     pass
 
+def _build_objmask(img, ivar, skypix, boxcar=5, boxsize=1024):
+    """Build an object mask by doing a quick estimate of the sky background on a
+    given image.
+
+    """
+    from scipy.ndimage.morphology import binary_dilation
+    from scipy.ndimage.filters import uniform_filter
+    
+    from tractor.splinesky import SplineSky
+    
+    # Get an initial guess of the sky using the mode, otherwise the median.
+    skysig1 = 1.0 / np.sqrt(np.median(ivar[skypix]))
+    skyval = np.median(img[skypix])
+   
+    # Mask objects in a boxcar-smoothed (image - initial sky model), smoothed by
+    # a boxcar filter before cutting pixels above the n-sigma threshold.
+    if min(img.shape) / boxsize < 4: # handle half-DECam chips
+        boxsize /= 2
+
+    # Compute initial model...
+    skyobj = SplineSky.BlantonMethod(img - skyval, skypix, boxsize)
+    skymod = np.zeros_like(img)
+    skyobj.addTo(skymod)
+
+    bskysig1 = skysig1 / boxcar # sigma of boxcar-smoothed image.
+    objmask = np.abs(uniform_filter(img-skyval-skymod, size=boxcar,
+                                    mode='constant') > (3 * bskysig1))
+    objmask = binary_dilation(objmask, iterations=3)
+
+    return np.logical_or(~(objmask > 0), skypix) # True = object-free sky pixels
+
 def largegalaxy_ubercal(fulltims, coaddtims=None, plots=False, ps=None, verbose=False):
     """Bring individual CCDs onto a common flux scale based on overlapping pixels.
 
@@ -106,6 +137,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
     from legacypipe.oneblob import get_inblob_map
     from legacypipe.coadds import make_coadds
     from legacypipe.survey import get_rgb, imsave_jpeg
+    from astropy.stats import sigma_clipped_stats
 
     if plots:
         import matplotlib.pyplot as plt
@@ -163,8 +195,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
             imcopy = tim.getImage().copy()
             tim.sky.addTo(imcopy, -1)
             mods.append(imcopy)
-        C = make_coadds(tims, bands, targetwcs, mods=mods, callback=None,
-                        mp=mp)
+        C = make_coadds(tims, bands, targetwcs, mods=mods, callback=None, mp=mp)
         imsave_jpeg('{}-before.jpg'.format(ps.basefn), get_rgb(C.comods, bands), origin='lower')
 
     allbands = np.array([tim.band for tim in tims])
@@ -172,16 +203,25 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
         print('Working on band {}'.format(band))
         I = np.where(allbands == band)[0]
 
-        fulltims = [tims[ii].imobj.get_tractor_image(
+        bandtims = [tims[ii].imobj.get_tractor_image(
             gaussPsf=True, pixPsf=False, subsky=False, dq=True, apodize=False)
             for ii in I]
 
+        #if plots:
+        #    for bandtim in bandtims:
+        #        C = make_coadds(bandtim, band, targetwcs, callback=None, sbscale=False, mp=mp)
+        #        imsave_jpeg('{}-{}.jpg'.format(ps.basefn, bandtim.name.replace(' ', '-')),
+        #                                       get_rgb(C.coimgs, band), origin='lower')
+
         # Derive the correction and then apply it.
-        x = largegalaxy_ubercal(fulltims, coaddtims=[tims[ii] for ii in I], plots=plots, ps=ps)
+        x = largegalaxy_ubercal(bandtims, coaddtims=[tims[ii] for ii in I], plots=plots, ps=ps)
         # Apply the correction and return the tims
-        for correction,ii in zip(x, I):
+        for jj, (correction, ii) in enumerate(zip(x, I)):
             tims[ii].data += correction
-            tims[ii].sky = ConstantSky(0.)
+            tims[ii].sky = ConstantSky(0.0)
+            # Also correct the full-field mosaics
+            bandtims[jj].data += correction
+            bandtims[jj].sky = ConstantSky(0.0)
 
         ## Check--
         #for jj, correction in enumerate(x):
@@ -189,39 +229,52 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
         #newcorrection = largegalaxy_ubercal(fulltims)
         #print(newcorrection)
 
+        ## Build a full-field coadd.
+        #from astrometry.util.util import Tan
+        #from astrometry.util.starutil_numpy import degrees_between
+        #racen, deccen = targetwcs.crval[0], targetwcs.crval[1]
+        #corners = [bandtim.imobj.get_wcs().radec_bounds() for bandtim in bandtims]
+        #radius = np.max([degrees_between(racen, deccen, rr,  dd) for rr, dd in corners])
+        #
+        #bandpixscale = np.mean([bandtim.wcs.pixel_scale() for bandtim in bandtims])
+        #print('Mean pixel scale', bandpixscale)
+        #bandwcs = Tan(racen, deccen, radius+0.5, radius+0.5,
+        #              -bandpixscale/3600.0, 0.0, 0.0, bandpixscale/3600.0,
+        #              float(2*radius), float(2*radius))
+
     refs, _ = get_reference_sources(survey, targetwcs, targetwcs.pixel_scale(), ['r'],
                                     tycho_stars=True, gaia_stars=True,
                                     large_galaxies=True, star_clusters=True)
-    skymask = (get_inblob_map(targetwcs, refs) == 0)
+    refmask = (get_inblob_map(targetwcs, refs) == 0)
 
     C = make_coadds(tims, bands, targetwcs, callback=None, sbscale=False, mp=mp)
     for coimg,coiv,band in zip(C.coimgs, C.cowimgs, bands):
         # FIXME -- more extensive masking here?
-        from astropy.stats import sigma_clipped_stats
         #cosky = np.median(coimg[skymask * (coiv > 0)])
-        skymean, skymedian, skysig = sigma_clipped_stats(coimg, mask=np.logical_not(skymask*(coiv > 0)), sigma=3.0)
-        cosky = skymedian
+        skypix = _build_objmask(coimg, coiv, refmask * (coiv>0))
+        skymean, skymedian, skysig = sigma_clipped_stats(coimg, mask=~skypix, sigma=3.0)
         
         I = np.where(allbands == band)[0]
-        #print('Band', band, 'Coadd sky:', cosky)
+        #print('Band', band, 'Coadd sky:', skymedian)
 
         if plots:
             plt.clf()
-            plt.hist(coimg.ravel(), bins=50, range=(-3,3), normed=True)
-            plt.axvline(cosky, color='k')
+            plt.hist(coimg.ravel(), bins=50, range=(-3,3), density=True)
+            plt.axvline(skymedian, color='k')
             for ii in I:
                 #print('Tim', tims[ii], 'median', np.median(tims[ii].data))
-                plt.hist((tims[ii].data - cosky).ravel(), bins=50, range=(-3,3), histtype='step', normed=True)
-            plt.title('Band %s: tim pix & cosky' % band)
+                plt.hist((tims[ii].data - skymedian).ravel(), bins=50, range=(-3,3), histtype='step', density=True)
+            plt.title('Band %s: tim pix & skymedian' % band)
             ps.savefig()
 
-            # Produce cosky-subtracted, masked image for later RGB plot
-            coimg -= cosky
-            coimg[np.logical_not(skymask * (coiv > 0))] = 0.
+            # Produce skymedian-subtracted, masked image for later RGB plot
+            coimg -= skymedian
+            coimg[~skypix] = 0.
+            #coimg[np.logical_not(skymask * (coiv > 0))] = 0.
 
         for ii in I:
-            tims[ii].data -= cosky
-            #print('Tim', tims[ii], 'after subtracting cosky: median', np.median(tims[ii].data))
+            tims[ii].data -= skymedian
+            #print('Tim', tims[ii], 'after subtracting skymedian: median', np.median(tims[ii].data))
 
     if plots:
         plt.clf()
