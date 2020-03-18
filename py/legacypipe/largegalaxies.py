@@ -107,14 +107,6 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
     from legacypipe.coadds import make_coadds
     from legacypipe.survey import get_rgb, imsave_jpeg
 
-    plots = True
-
-    if plots:
-        if ps is None:
-            from astrometry.util.plotutils import PlotSequence
-            plot_base = 'largegalaxy-{}'.format(brickname)
-            ps = PlotSequence(plot_base)
-
     if plots:
         import matplotlib.pyplot as plt
         import matplotlib.patches as patches
@@ -173,7 +165,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
             mods.append(imcopy)
         C = make_coadds(tims, bands, targetwcs, mods=mods, callback=None,
                         mp=mp)
-        imsave_jpeg('{}-before.jpg'.format(plot_base), get_rgb(C.comods, bands), origin='lower')
+        imsave_jpeg('{}-before.jpg'.format(ps.basefn), get_rgb(C.comods, bands), origin='lower')
 
     allbands = np.array([tim.band for tim in tims])
     for band in sorted(set(allbands)):
@@ -239,7 +231,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
     if plots:
         C = make_coadds(tims, bands, targetwcs, callback=None,
                         mp=mp)
-        imsave_jpeg('{}-after.jpg'.format(plot_base), get_rgb(C.coimgs, bands), origin='lower')
+        imsave_jpeg('{}-after.jpg'.format(ps.basefn), get_rgb(C.coimgs, bands), origin='lower')
         if plots:
             plt.clf()
             for coimg,band in zip(C.coimgs, bands):
@@ -276,8 +268,12 @@ def stage_largegalaxies(
 
     # Custom sky-subtraction for large galaxies.
     if not subsky:
-        tims = largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, 
-                               plots=plots, ps=ps)
+        plots = True
+        if plots:
+            from astrometry.util.plotutils import PlotSequence
+            ps = PlotSequence('largegalaxy-{}'.format(brickname))
+        tims = largegalaxy_sky(tims, targetwcs, survey, brickname, bands,
+                               mp, plots=plots, ps=ps)
     import pdb ; pdb.set_trace()
     
     # Create coadds and then build custom tims from them.
