@@ -3,7 +3,7 @@ import numpy as np
 class Duck(object):
     pass
 
-def largegalaxy_ubercal(fulltims, coaddtims=None, plots=False, verbose=False):
+def largegalaxy_ubercal(fulltims, coaddtims=None, plots=False, ps=None, verbose=False):
     """Bring individual CCDs onto a common flux scale based on overlapping pixels.
 
     fulltims - full-CCD tims, used to derive the corrections
@@ -78,6 +78,7 @@ def largegalaxy_ubercal(fulltims, coaddtims=None, plots=False, verbose=False):
     print(x)
 
     if plots:
+        import matplotlib.pyplot as plt
         plt.clf()
         for j, (correction, fulltim) in enumerate(zip(x, fulltims)):
             plt.subplot(nimg, 1, j+1)
@@ -89,7 +90,7 @@ def largegalaxy_ubercal(fulltims, coaddtims=None, plots=False, verbose=False):
 
         if coaddtims is not None:
             plt.clf()
-            for j,(correction,ii) in enumerate(zip(x, np.arange(coaddtims))):
+            for j,(correction,ii) in enumerate(zip(x, np.arange(len(coaddtims)))):
                 plt.subplot(nimg, 1, j+1)
                 plt.hist((coaddtims[ii].data + correction).ravel(), bins=50, histtype='step', range=(-5, 5))
             plt.title('Band %s: tim pix + correction' % band)
@@ -105,6 +106,14 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
     from legacypipe.oneblob import get_inblob_map
     from legacypipe.coadds import make_coadds
     from legacypipe.survey import get_rgb, imsave_jpeg
+
+    plots = True
+
+    if plots:
+        if ps is None:
+            from astrometry.util.plotutils import PlotSequence
+            plot_base = 'largegalaxy-{}'.format(brickname)
+            ps = PlotSequence(plot_base)
 
     if plots:
         import matplotlib.pyplot as plt
@@ -123,6 +132,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
         xlim = bbcc[0] - delta, bbcc[0] + delta
         ylim = bbcc[1] - delta, bbcc[1] + delta
 
+        plt.clf()
         fig, allax = plt.subplots(1, 3, figsize=(12, 5), sharey=True, sharex=True)
         for ax, band in zip(allax, ('g', 'r', 'z')):
             ax.set_xlabel('RA (deg)')
@@ -153,10 +163,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
             ax.set_aspect('equal')
 
         plt.subplots_adjust(bottom=0.12, wspace=0.05, left=0.12, right=0.97, top=0.95)
-        fn = survey.find_file('image-jpeg', brick=brickname).replace('.jpg', '-ccdpos.jpg')
-        with survey.write_output(None, filename=fn) as out:
-            fig.savefig(out.fn)
-        plt.close(fig)
+        ps.savefig()
         
     if plots:
         mods = []
@@ -166,8 +173,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
             mods.append(imcopy)
         C = make_coadds(tims, bands, targetwcs, mods=mods, callback=None,
                         mp=mp)
-        imsave_jpeg('largegalaxy-sky-before.jpg', get_rgb(C.comods, bands),
-                    origin='lower')
+        imsave_jpeg('{}-before.jpg'.format(plot_base), get_rgb(C.comods, bands), origin='lower')
 
     allbands = np.array([tim.band for tim in tims])
     for band in sorted(set(allbands)):
@@ -179,19 +185,17 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
             for ii in I]
 
         # Derive the correction and then apply it.
-        correction = largegalaxy_ubercal(fulltims, coaddtims=tims[I], plots=plots)
+        x = largegalaxy_ubercal(fulltims, coaddtims=[tims[ii] for ii in I], plots=plots, ps=ps)
         # Apply the correction and return the tims
         for correction,ii in zip(x, I):
-            coaddtims[ii].data += correction
-            coaddtims[ii].sky = ConstantSky(0.)
+            tims[ii].data += correction
+            tims[ii].sky = ConstantSky(0.)
 
-        # Check--
-        for jj, correction in enumerate(x):
-            fulltims[jj].data += correction
-        newcorrection = largegalaxy_ubercal(fulltims)
-        print(newcorrection)
-
-    import pdb ; pdb.set_trace()
+        ## Check--
+        #for jj, correction in enumerate(x):
+        #    fulltims[jj].data += correction
+        #newcorrection = largegalaxy_ubercal(fulltims)
+        #print(newcorrection)
 
     refs, _ = get_reference_sources(survey, targetwcs, targetwcs.pixel_scale(), ['r'],
                                     tycho_stars=True, gaia_stars=True,
@@ -235,8 +239,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
     if plots:
         C = make_coadds(tims, bands, targetwcs, callback=None,
                         mp=mp)
-        imsave_jpeg('largegalaxy-sky-after.jpg', get_rgb(C.coimgs, bands),
-                    origin='lower')
+        imsave_jpeg('{}-after.jpg'.format(plot_base), get_rgb(C.coimgs, bands), origin='lower')
         if plots:
             plt.clf()
             for coimg,band in zip(C.coimgs, bands):
