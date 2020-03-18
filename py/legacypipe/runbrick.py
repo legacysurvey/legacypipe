@@ -440,13 +440,17 @@ def stage_refs(survey=None,
 def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
                    mp=None, nsigma=None, plots=None, ps=None, record_event=None,
                    survey=None, brickname=None, version_header=None,
-                   refstars=None, outlier_mask_file=None, 
+                   refstars=None, outlier_mask_file=None, mask_outliers=True,
                    **kwargs):
     '''
     This pipeline stage tries to detect artifacts in the individual
     exposures, by blurring all images in the same band to the same PSF size,
     then searching for outliers.
     '''
+    if not mask_outliers:
+        print('Not masking outliers')
+        return dict()
+
     from legacypipe.outliers import patch_from_coadd, mask_outlier_pixels, read_outlier_mask_file
 
     record_event and record_event('stage_outliers: starting')
@@ -2781,6 +2785,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               zoom=None,
               bands=None,
               allbands='grz',
+              mask_outliers=True,
               nblobs=None, blob=None, blobxy=None, blobradec=None, blobid=None,
               max_blobsize=None,
               nsigma=6,
@@ -3037,6 +3042,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   survey_blob_mask=survey_blob_mask,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
                   release=release,
+                  mask_outliers=mask_outliers,
                   normalizePsf=normalizePsf,
                   apodize=apodize,
                   constant_invvar=constant_invvar,
@@ -3409,6 +3415,10 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--no-large-galaxies', dest='large_galaxies', default=True,
                         action='store_false', help="Don't do the default large-galaxy magic.")
+
+    parser.add_argument('--no-mask-outliers', dest='mask_outliers', default=True,
+                        action='store_false', help='Do not detect & mask outlying pixels')
+
     # HACK -- Default value for DR8 MJD cut
     # DR8 -- drop early data from before additional baffling was added to the camera.
     # 56730 = 2014-03-14
