@@ -10,11 +10,10 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
     from astrometry.util.resample import resample_with_wcs
     from legacypipe.reference import get_reference_sources
     from legacypipe.oneblob import get_inblob_map
-    from legacypipe.coadds import make_coadds, write_coadd_images
+    from legacypipe.coadds import make_coadds
     from legacypipe.survey import get_rgb, imsave_jpeg
 
     if qaplot:
-        import os
         import matplotlib.pyplot as plt
         import matplotlib.patches as patches
 
@@ -42,16 +41,11 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
             ax.get_xaxis().get_major_formatter().set_useOffset(False)
             for gal in refs:
                 ax.add_patch(patches.Circle((gal.ra, gal.dec), gal.radius, fill=False, edgecolor='black', lw=2))
-                #ax.add_patch(patches.Circle((bbcc[0], bbcc[1]), 2*radius * pixscale / 3600, # inner sky annulus
-                #                            fill=False, edgecolor='black', lw=1))
-                #ax.add_patch(patches.Circle((bbcc[0], bbcc[1]), 5*radius * pixscale / 3600, # outer sky annulus
-                #                            fill=False, edgecolor='black', lw=1))
 
             these = np.where([tim.band == band for tim in tims])[0]
             col = plt.cm.Set1(np.linspace(0, 1, len(tims)))
             for ii, indx in enumerate(these):
                 tim = tims[indx]
-                #wcs = tim.imobj.get_wcs()
                 wcs = tim.subwcs
                 cc = wcs.radec_bounds()
                 ax.add_patch(patches.Rectangle((cc[0], cc[2]), cc[1]-cc[0],
@@ -64,7 +58,6 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
             ax.set_xlim(xlim)
             ax.invert_xaxis()
             ax.set_aspect('equal')
-            #print(ax.get_xlim(), ax.get_ylim())
 
         plt.subplots_adjust(bottom=0.12, wspace=0.05, left=0.12, right=0.97, top=0.95)
         fn = survey.find_file('image-jpeg', brick=brickname).replace('.jpg', '-ccdpos.jpg')
@@ -233,7 +226,7 @@ def stage_largegalaxies(
         mp=None, record_event=None,
         **kwargs):
 
-    from legacypipe.coadds import make_coadds, write_coadd_images
+    from legacypipe.coadds import make_coadds
     from legacypipe.bits import DQ_BITS
     from legacypipe.survey import get_rgb, imsave_jpeg, LegacySurveyWcs
 
@@ -244,7 +237,6 @@ def stage_largegalaxies(
     from tractor.tractortime import TAITime
     import astropy.time
     import fitsio
-    from collections import Counter
 
     # Custom sky-subtraction for large galaxies.
     if not subsky:
@@ -361,6 +353,7 @@ def stage_largegalaxies(
         print('Gaussian PSF norm', gnorm, 'vs pixelized', psfnorm)
 
         # if plots:
+        #     from collections import Counter
         #     plt.clf()
         #     plt.imshow(mask, interpolation='nearest', origin='lower')
         #     plt.colorbar()
