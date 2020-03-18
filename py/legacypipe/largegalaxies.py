@@ -69,9 +69,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
         mods = []
         for tim in tims:
             imcopy = tim.getImage().copy()
-            print('Tim', tim.name, ': median', np.median(imcopy))
             tim.sky.addTo(imcopy, -1)
-            print('  after sky sub:', np.median(imcopy))
             mods.append(imcopy)
         C = make_coadds(tims, bands, targetwcs, mods=mods, callback=None,
                         mp=mp)
@@ -182,40 +180,49 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, qaplot=False,
         # FIXME -- more extensive masking here?
         from astropy.stats import sigma_clipped_stats
         #cosky = np.median(coimg[skymask * (coiv > 0)])
-        skymean, skymedian, skysig = sigma_clipped_stats(coimg, mask=skymask*(coiv > 0), sigma=3.0)
+        skymean, skymedian, skysig = sigma_clipped_stats(coimg, mask=np.logical_not(skymask*(coiv > 0)), sigma=3.0)
         cosky = skymedian
         
         I = np.where(allbands == band)[0]
-        print('Band', band, ': I', I)
-        print('Coadd sky:', cosky)
+        #print('Band', band, 'Coadd sky:', cosky)
 
         if plots:
             plt.clf()
             plt.hist(coimg.ravel(), bins=50, range=(-3,3), normed=True)
             plt.axvline(cosky, color='k')
             for ii in I:
-                print('Tim', tims[ii], 'median', np.median(tims[ii].data))
+                #print('Tim', tims[ii], 'median', np.median(tims[ii].data))
                 plt.hist((tims[ii].data - cosky).ravel(), bins=50, range=(-3,3), histtype='step', normed=True)
             plt.title('Band %s: tim pix & cosky' % band)
             ps.savefig()
-        
+
+            # Produce cosky-subtracted, masked image for later RGB plot
+            coimg -= cosky
+            coimg[np.logical_not(skymask * (coiv > 0))] = 0.
+
         for ii in I:
             tims[ii].data -= cosky
-            print('Tim', tims[ii], 'after subtracting cosky: median', np.median(tims[ii].data))
+            #print('Tim', tims[ii], 'after subtracting cosky: median', np.median(tims[ii].data))
+
+    if plots:
+        plt.clf()
+        plt.imshow(get_rgb(C.coimgs, bands), origin='lower', interpolation='nearest')
+        ps.savefig()
 
     if qaplot:
         C = make_coadds(tims, bands, targetwcs, callback=None,
                         mp=mp)
+        imsave_jpeg('largegalaxy-sky-after.jpg', get_rgb(C.coimgs, bands),
+                    origin='lower')
         if plots:
             plt.clf()
             for coimg,band in zip(C.coimgs, bands):
-                plt.hist(coimg.ravel(), bins=50, range=(-3,3), histtype='step', label=band)
+                plt.hist(coimg.ravel(), bins=50, range=(-0.5,0.5),
+                         histtype='step', label=band)
             plt.legend()
             plt.title('After adjustment: coadds (sb scaled)')
             ps.savefig()
 
-        imsave_jpeg('largegalaxy-sky-after.jpg', get_rgb(C.coimgs, bands),
-                    origin='lower')
     return tims
 
 def stage_largegalaxies(
