@@ -458,10 +458,8 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
 
         # Make before-n-after plots (before)
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
-        outdir = os.path.join(survey.output_dir, 'metrics', brickname[:3])
-        trymakedirs(outdir)
-        outfn = os.path.join(outdir, 'outliers-pre-%s.jpg' % brickname)
-        imsave_jpeg(outfn, get_rgb(C.coimgs, bands), origin='lower')
+        with survey.write_output('outliers-pre', brick=brickname) as out:
+            imsave_jpeg(out.fn, get_rgb(C.coimgs, bands), origin='lower')
 
         # Patch individual-CCD masked pixels from a coadd
         patch_from_coadd(C.coimgs, targetwcs, bands, tims, mp=mp)
@@ -474,13 +472,12 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
 
         # Make before-n-after plots (after)
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
-        outfn = os.path.join(outdir, 'outliers-post-%s.jpg' % brickname)
-        imsave_jpeg(outfn, get_rgb(C.coimgs, bands), origin='lower')
-
-        outfn = os.path.join(outdir, 'outliers-masked-pos-%s.jpg' % brickname)
-        imsave_jpeg(outfn, get_rgb(badcoaddspos, bands), origin='lower')
-        outfn = os.path.join(outdir, 'outliers-masked-neg-%s.jpg' % brickname)
-        imsave_jpeg(outfn, get_rgb(badcoaddsneg, bands), origin='lower')
+        with survey.write_output('outliers-post', brick=brickname) as out:
+            imsave_jpeg(out.fn, get_rgb(C.coimgs, bands), origin='lower')
+        with survey.write_output('outliers-masked-pos', brick=brickname) as out:
+            imsave_jpeg(out.fn, get_rgb(badcoaddspos, bands), origin='lower')
+        with survey.write_output('outliers-masked-neg', brick=brickname) as out:
+            imsave_jpeg(out.fn, get_rgb(badcoaddsneg, bands), origin='lower')
 
     return dict(tims=tims, version_header=version_header)
 
