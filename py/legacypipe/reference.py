@@ -91,6 +91,11 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     if len(refs) == 0:
         return None,None
 
+    # these x,y are in the margin-padded WCS; not useful.
+    # See ibx,iby computed below instead.
+    refs.delete_column('x')
+    refs.delete_column('y')
+
     # radius / radius_pix are used to set the MASKBITS shapes;
     # keep_radius determines which sources are kept (because we subtract
     # stellar halos out to twice their radii)
