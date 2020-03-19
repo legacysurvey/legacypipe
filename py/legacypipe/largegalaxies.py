@@ -29,10 +29,10 @@ def _build_objmask(img, ivar, skypix, boxcar=5, boxsize=1024):
 
     bskysig1 = skysig1 / boxcar # sigma of boxcar-smoothed image.
     objmask = np.abs(uniform_filter(img-skyval-skymod, size=boxcar,
-                                    mode='constant') > (3 * bskysig1))
+                                    mode='constant')) > (3 * bskysig1)
     objmask = binary_dilation(objmask, iterations=3)
 
-    return np.logical_or(~(objmask > 0), skypix) # True = object-free sky pixels
+    return np.logical_and(~objmask, skypix) # True = object-free sky pixels
 
 def largegalaxy_ubercal(fulltims, coaddtims=None, plots=False, ps=None, verbose=False):
     """Bring individual CCDs onto a common flux scale based on overlapping pixels.
@@ -280,6 +280,17 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
         plt.clf()
         plt.imshow(get_rgb(C.coimgs, bands), origin='lower', interpolation='nearest')
         ps.savefig()
+
+        for band in bands:
+            for tim in tims:
+                if tim.band != band:
+                    continue
+                plt.clf()
+                C = make_coadds([tim], bands, targetwcs, callback=None, sbscale=False, mp=mp)
+                plt.imshow(get_rgb(C.coimgs, bands).sum(axis=2), cmap='gray',
+                           interpolation='nearest', origin='lower')
+                plt.title('Band %s: tim %s' % (band, tim.name))
+                ps.savefig()
 
     if plots:
         C = make_coadds(tims, bands, targetwcs, callback=None,
