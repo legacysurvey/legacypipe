@@ -1621,7 +1621,7 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
         cpexpnum = None
         if cpheader:
             # Special handling for EXPNUM in some cases
-            if 'EXPNUM' in hdr:
+            if 'EXPNUM' in hdr and hdr['EXPNUM'] is not None:
                 cpexpnum = hdr['EXPNUM']
             elif 'OBSID' in hdr:
                 # At the beginning of the MzLS survey, eg 2016-01-24, the EXPNUM

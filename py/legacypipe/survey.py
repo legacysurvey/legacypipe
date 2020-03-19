@@ -1139,6 +1139,12 @@ class LegacySurveyData(object):
             return swap(
                 os.path.join(codir, '%s-%s-%s.jpg' % (sname, brick, ty)))
 
+        elif filetype in ['outliers-pre', 'outliers-post',
+                          'outliers-masked-pos', 'outliers-masked-neg']:
+            return swap(
+                os.path.join(basedir, 'metrics', brickpre,
+                             '%s-%s.jpg' % (filetype, brick)))
+
         elif filetype in ['invvar', 'chi2', 'image', 'model', 'blobmodel',
                           'depth', 'galdepth', 'nexp', 'psfsize']:
             return swap(os.path.join(codir, '%s-%s-%s-%s.fits.fz' %

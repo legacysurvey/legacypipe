@@ -71,7 +71,7 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
         x -= 1.
         y -= 1.
 
-        if band == 'z' and x < 0 or y < 0 or x > W-1 or y > H-1:
+        if (band == 'z') and (x < 0 or y < 0 or x > W-1 or y > H-1):
             # Do not subtract z-band halos that are off the chip.
             continue
 
@@ -79,8 +79,8 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
         ### FIXME -- we're going to try subtracting the halo out to
         ### TWICE our masking radius.
         rad_arcsec *= 2.0
-        # Rongpu says only apply within 200"
-        rad_arcsec = np.minimum(rad_arcsec, 200.)
+        # Rongpu says only apply within:
+        rad_arcsec = np.minimum(rad_arcsec, 400.)
         pixrad = int(np.ceil(rad_arcsec / pixscale))
 
         if debug:
