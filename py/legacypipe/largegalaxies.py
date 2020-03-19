@@ -190,6 +190,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
         ps.savefig()
         
     if plots:
+        plt.figure(figsize=(8,6))
         mods = []
         for tim in tims:
             imcopy = tim.getImage().copy()
