@@ -517,7 +517,8 @@ def stage_halos(targetrd=None, pixscale=None, targetwcs=None,
                 plt.title('Before star halo subtraction')
                 ps.savefig()
 
-            subtract_halos(tims, halostars, bands, mp, plots, ps)
+            subtract_halos(tims, halostars, bands, mp, plots, ps,
+                           brickname=brickname)
 
             if plots:
                 coimgs2,cons = quick_coadds(tims, bands, targetwcs)

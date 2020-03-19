@@ -1,7 +1,8 @@
 import numpy as np
 
-def subtract_halos(tims, refs, bands, mp, plots, ps, moffat=True):
-    args = [(tim, refs, moffat) for tim in tims]
+def subtract_halos(tims, refs, bands, mp, plots, ps, moffat=True,
+                   brickname=None):
+    args = [(tim, refs, moffat, brickname) for tim in tims]
     haloimgs = mp.map(subtract_one, args)
     for tim,h in zip(tims, haloimgs):
         tim.data -= h
@@ -15,19 +16,19 @@ def subtract_one(X):
         raise
 
 def subtract_one_real(X):
-    tim, refs, moffat = X
+    tim, refs, moffat, brickname = X
     if tim.imobj.camera != 'decam':
         print('Warning: Stellar halo subtraction is only implemented for DECam')
         return 0.
     return decam_halo_model(refs, tim.time.toMjd(), tim.subwcs,
                             tim.imobj.pixscale, tim.band, tim.imobj, moffat,
-                            image=tim.getImage())
+                            image=tim.getImage(), brickname=brickname)
 
 def moffat(rr, alpha, beta):
     return (beta-1.)/(np.pi * alpha**2)*(1. + (rr/alpha)**2)**(-beta)
 
 def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
-                     image=None):
+                     image=None, brickname=None):
 
     debug = True
     
@@ -155,7 +156,7 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
                 D.inner_moffat_b[iref] = inner_beta
 
     if debug:
-        fn = 'halo-%s-%s.fits' % (imobj.expnum, imobj.ccdname)
+        fn = 'halo-%s-%s-%s-%s.fits' % (brickname, imobj.band, imobj.expnum, imobj.ccdname)
         print('Writing halo image to', fn)
         D.writeto(fn)
         # Append the halo image!
