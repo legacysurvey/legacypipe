@@ -507,6 +507,9 @@ class OneBlob(object):
         # Remember original tim images
         models.save_images(self.tims)
 
+        # Create initial models for each tim x each source
+        models.create(self.tims, cat, subtract=True) #, modelmasks=mm)
+
         # compute modelmasks based on segmap
         from scipy.ndimage.measurements import find_objects
         slcs = find_objects(self.segmap + 1)
@@ -533,9 +536,6 @@ class OneBlob(object):
                     continue
                 mm[j][src] = ModelMask(xlo, ylo, xhi-xlo, yhi-ylo)
         
-        # Create initial models for each tim x each source
-        models.create(self.tims, cat, subtract=True, modelmasks=mm)
-
         N = len(cat)
         B.dchisq = np.zeros((N, 5), np.float32)
         B.all_models    = np.array([{} for i in range(N)])
@@ -569,7 +569,10 @@ class OneBlob(object):
                            origin='lower')
                 plt.figure(1)
 
-            # only plot models for one source
+            # Model selection for this source.
+            # Note that this concludes with a "models.update_and_subtract()"
+            # (unless keepsrc=None, which is why we have to tweak models below
+            #  in that case)
             keepsrc = self.model_selection_one_source(src, srci, models, B)
             B.sources[srci] = keepsrc
             cat[srci] = keepsrc
@@ -594,7 +597,8 @@ class OneBlob(object):
 
         if iterative_detection:
 
-            if self.plots:
+            if self.plots and False:
+                # One plot per tim is a little much, even for me...
                 import pylab as plt
                 for tim in self.tims:
                     plt.clf()
@@ -1544,7 +1548,7 @@ class OneBlob(object):
                     masked_ies.append(None)
                     the_tims.append(None)
 
-        models.update_and_subtract(srci, keepsrc, the_tims, tim_ies=masked_ies)
+        models.update_and_subtract(srci, keepsrc, the_tims)#, tim_ies=masked_ies)
 
         return keepsrc
 
