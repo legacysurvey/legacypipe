@@ -51,10 +51,6 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat):
         x -= 1.
         y -= 1.
 
-        if (band == 'z') and (x < 0 or y < 0 or x > W-1 or y > H-1):
-            # Do not subtract z-band halos that are off the chip.
-            continue
-
         rad_arcsec = ref.radius * 3600.
         # We subtract halos out to N x their masking radii.
         rad_arcsec *= 4.0
@@ -99,6 +95,10 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat):
                 alpha, beta, weight = 16, 2.3, 0.0095
             else:
                 alpha, beta, weight = 17.650, 1.7, 0.0145
+
+            if x < 0 or y < 0 or x > W-1 or y > H-1:
+                # Reduce the weight by half for z-band halos that are off the chip.
+                weight *= 0.5
 
             # The 'pixscale**2' is because Rongpu's formula is in nanomaggies/arcsec^2
             halo[ylo:yhi+1, xlo:xhi+1] += (flux * apodize * weight *
