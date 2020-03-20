@@ -1287,9 +1287,6 @@ class OneBlob(object):
             srctractor.setModelMasks(mm)
             enable_galaxy_cache()
 
-            # Save these modelMasks for later...
-            newsrc_mm = mm
-
             if fit_background:
                 # Reset sky params
                 srctractor.images.setParams(skyparams)
@@ -1396,10 +1393,7 @@ class OneBlob(object):
 
             # Use the original 'srctractor' here so that the different
             # models are evaluated on the same pixels.
-            # ---> AND with the same modelMasks as the original source...
-            srctractor.setModelMasks(newsrc_mm)
             ch = _per_band_chisqs(srctractor, self.bands)
-
             chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
             cpum1 = time.process_time()
             B.all_model_cpu[srci][name] = cpum1 - cpum0
