@@ -155,12 +155,13 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
                 D.inner_moffat_b[iref] = inner_beta
 
     if debug:
-        fn = 'halo-%s-%s-%s-%s.fits' % (brickname, imobj.band, imobj.expnum, imobj.ccdname)
+        fn = 'halo-debug/halo-%s-%s-%s-%s.fits' % (brickname, imobj.band, imobj.expnum, imobj.ccdname)
         print('Writing halo image to', fn)
         D.writeto(fn)
         # Append the halo image!
         import fitsio
         fitsio.write(fn, halo)
-        fitsio.write(fn, image)
+        if image is not None:
+            fitsio.write(fn, image)
             
     return halo
