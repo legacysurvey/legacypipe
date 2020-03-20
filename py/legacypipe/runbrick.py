@@ -462,10 +462,8 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
 
         # Make before-n-after plots (before)
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
-        outdir = os.path.join(survey.output_dir, 'metrics', brickname[:3])
-        trymakedirs(outdir)
-        outfn = os.path.join(outdir, 'outliers-pre-%s.jpg' % brickname)
-        imsave_jpeg(outfn, get_rgb(C.coimgs, bands), origin='lower')
+        with survey.write_output('outliers-pre', brick=brickname) as out:
+            imsave_jpeg(out.fn, get_rgb(C.coimgs, bands), origin='lower')
 
         # Patch individual-CCD masked pixels from a coadd
         patch_from_coadd(C.coimgs, targetwcs, bands, tims, mp=mp)
@@ -478,13 +476,12 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
 
         # Make before-n-after plots (after)
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
-        outfn = os.path.join(outdir, 'outliers-post-%s.jpg' % brickname)
-        imsave_jpeg(outfn, get_rgb(C.coimgs, bands), origin='lower')
-
-        outfn = os.path.join(outdir, 'outliers-masked-pos-%s.jpg' % brickname)
-        imsave_jpeg(outfn, get_rgb(badcoaddspos, bands), origin='lower')
-        outfn = os.path.join(outdir, 'outliers-masked-neg-%s.jpg' % brickname)
-        imsave_jpeg(outfn, get_rgb(badcoaddsneg, bands), origin='lower')
+        with survey.write_output('outliers-post', brick=brickname) as out:
+            imsave_jpeg(out.fn, get_rgb(C.coimgs, bands), origin='lower')
+        with survey.write_output('outliers-masked-pos', brick=brickname) as out:
+            imsave_jpeg(out.fn, get_rgb(badcoaddspos, bands), origin='lower')
+        with survey.write_output('outliers-masked-neg', brick=brickname) as out:
+            imsave_jpeg(out.fn, get_rgb(badcoaddsneg, bands), origin='lower')
 
     return dict(tims=tims, version_header=version_header)
 
@@ -3350,8 +3347,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--nsigma', type=float, default=6.0,
                         help='Set N sigma source detection thresh')
 
-    parser.add_argument('--saddle-fraction', type=float, default=2.0,
-                        help='Fraction of the peak heigh for selecting new sources.')
+    parser.add_argument('--saddle-fraction', type=float, default=0.1,
+                        help='Fraction of the peak height for selecting new sources.')
 
     parser.add_argument('--saddle-min', type=float, default=2.0,
                         help='Saddle-point depth from existing sources down to new sources (sigma).')

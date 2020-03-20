@@ -56,9 +56,8 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat):
             continue
 
         rad_arcsec = ref.radius * 3600.
-        ### FIXME -- we're going to try subtracting the halo out to
-        ### TWICE our masking radius.
-        rad_arcsec *= 2.0
+        # We subtract halos out to N x their masking radii.
+        rad_arcsec *= 4.0
         # Rongpu says only apply within:
         rad_arcsec = np.minimum(rad_arcsec, 400.)
         pixrad = int(np.ceil(rad_arcsec / pixscale))
@@ -74,7 +73,7 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat):
                         np.arange(xlo, xhi+1)[np.newaxis,:] - x)
         maxr = pixrad
         # Outer apodization
-        apr = maxr*0.9
+        apr = maxr*0.5
         apodize = np.clip((rads - maxr) / (apr - maxr), 0., 1.)
 
         # Inner apodization: ramp from 0 up to 1 between Rongpu's "R3"

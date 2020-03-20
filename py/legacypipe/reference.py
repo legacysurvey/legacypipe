@@ -91,9 +91,14 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     if len(refs) == 0:
         return None,None
 
+    # these x,y are in the margin-padded WCS; not useful.
+    # See ibx,iby computed below instead.
+    refs.delete_column('x')
+    refs.delete_column('y')
+
     # radius / radius_pix are used to set the MASKBITS shapes;
     # keep_radius determines which sources are kept (because we subtract
-    # stellar halos out to twice their radii)
+    # stellar halos out to N x their radii)
     refs.radius_pix = np.ceil(refs.radius * 3600. / pixscale).astype(int)
 
     if 'keep_radius' in refs.columns():
@@ -196,7 +201,7 @@ def read_gaia(targetwcs, bands):
     gaia.radius = mask_radius_for_mag(gaia.G)
     # radius for keeping this source in the ref catalog
     # (eg, for halo subtraction)
-    gaia.keep_radius = 2. * gaia.radius
+    gaia.keep_radius = 4. * gaia.radius
     gaia.delete_column('G')
     gaia.isgaia = np.ones(len(gaia), bool)
     gaia.isbright = (gaia.phot_g_mean_mag < 13.)
