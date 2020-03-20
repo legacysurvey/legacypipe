@@ -7,7 +7,7 @@ import os
 import numpy as np
 import numpy.ma as ma
 from astropy.io import ascii
-from astropy.table import Table
+from astropy.table import Table, vstack
 from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
 from astrometry.libkd.spherematch import match_radec
 from pkg_resources import resource_filename
@@ -92,6 +92,18 @@ if False:
     gcs = Table.read(gcfile)
     I, J, _ = match_radec(clusters['ra'], clusters['dec'], gcs['RA'], gcs['DEC'], 10./3600., nearest=True)
     out['radius'][I] = (gcs['HALF_LIGHT_RADIUS'][J] / 60).astype('f4') # [degrees]
+
+# Read the supplemental catalog of globular clusters and (compact) open clusters
+# from Arjun Dey (Mar 2020). Note that the NGC open clusters were culled above,
+# but we put them back here because the diameters have been vetted. 
+names = ('name', 'alt_name', 'ra', 'dec', 'type', 'radius')
+suppfile = resource_filename('legacypipe', 'data/star-clusters-supplemental.csv')
+supp = ascii.read(suppfile, delimiter=',', names=names, fill_values='')
+#supp['alt_name'] = supp['alt_name'].astype('U4')
+supp['radius'] = supp['radius'].astype('f4')
+
+out = vstack((out, supp))
+out = out[np.argsort(out['ra'])]
 
 if False: # debugging
     bb = out[['M' in nn for nn in out['alt_name']]]
