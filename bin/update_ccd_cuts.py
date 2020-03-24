@@ -74,11 +74,6 @@ def depthcut(survey, ccds, annotated, tilefile=None, imlist=None):
     raise ValueError('No such survey?')
 
 
-def keep_deepest_des(ccds, annotated):
-    tileid = ccds.object
-    return keep_deepest_ccds(ccds.image_filename, tileid, ccds.filter,
-                             annotated.psfdepth, n=1)
-
 def depthcut_90prime_alternative(ccds, annotated, n=6):
     s = numpy.lexsort([ccds.image_hdu, ccds.image_filename])
     ccds = ccds[s]
@@ -201,18 +196,13 @@ def keep_deepest_tiles(ccds, annotated, tilefile, n=2):
 def keep_deepest_des(ccds, annotated):
     tileid = ccds.object
     return keep_deepest_ccds(ccds.image_filename, tileid, ccds.filter,
-                             annotated.psfdepth, n=1)
+                             annotated.psfdepth, n=2)
 
 
 def depthcut_decam(ccds, annotated, tilefile):
     if len(tilefile) == 0:
         raise ValueError('DECam depth cut requires a tile file.')
     # need ccds & annotated ccds: former has ccd_cuts, latter has psfdepth
-    # these are not row matched!
-    s = numpy.lexsort([ccds.image_hdu, ccds.image_filename])
-    ccds = ccds[s]
-    sa = numpy.lexsort([annotated.image_hdu, annotated.image_filename])
-    annotated = annotated[sa]
     if not numpy.all((ccds.image_hdu == annotated.image_hdu) &
                      (ccds.image_filename == annotated.image_filename)):
         raise ValueError('Inconsistent ccds & annotated ccds file?')
@@ -227,9 +217,7 @@ def depthcut_decam(ccds, annotated, tilefile):
     keep[m & keep] = keep_deepest_tiles(
         ccds[m & keep], annotated[m & keep], tilefile)
     keep[~m & keep] = keep_deepest_des(ccds[~m & keep], annotated[~m & keep])
-    keep_unsorted = numpy.zeros(len(keep), dtype='bool')
-    keep_unsorted[s] = keep
-    return keep_unsorted
+    return keep
     
 
 
@@ -247,6 +235,7 @@ def depthcut_propid_decam(ccds):
     # by object name.  This excludes, e.g., special DECaLS observations on the 
     # COSMOS field, DES SN fields, ...
     mobject = numpy.array([('DECaLS_' in o) or ('DES survey' in o) or 
+                           ('DES wide' in o) or
                            ('BLISS field' in o) or ('DeCaLS' == o.strip()) or 
                            ('Tile ' in o) for o in ccds.object])
     def isint(x):
