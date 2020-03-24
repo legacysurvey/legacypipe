@@ -507,34 +507,8 @@ class OneBlob(object):
         # Remember original tim images
         models.save_images(self.tims)
 
-        # compute modelmasks based on segmap
-        from scipy.ndimage.measurements import find_objects
-        slcs = find_objects(self.segmap + 1)
-        mm = [dict() for i in range(len(self.tims))]
-        for i,(src,slc) in enumerate(zip(cat,slcs)):
-            # find_objects returns None if a number is not found in the map
-            # (eg, sources in the CLUSTER mask).  We then don't set a modelmask,
-            # so it should get automatically set by the source model patch.
-            if slc is None:
-                continue
-            sy,sx = slc
-            y0,y1 = sy.start, sy.stop
-            x0,x1 = sx.start, sx.stop
-            r,d = self.blobwcs.pixelxy2radec([x0+1,x0+1,x1+1,x1+1], [y0+1,y1+1,y1+1,y0+1])
-            for j,tim in enumerate(self.tims):
-                th,tw = tim.shape
-                _,x,y = tim.subwcs.radec2pixelxy(r, d)
-                xlo = int(np.clip(np.floor(min(x)-1), 0, tw-1))
-                xhi = int(np.clip(np.ceil (max(x)-1), 0, tw-1))
-                ylo = int(np.clip(np.floor(min(y)-1), 0, th-1))
-                yhi = int(np.clip(np.ceil (max(y)-1), 0, th-1))
-                if xlo==xhi or ylo==yhi:
-                    # no overlap
-                    continue
-                mm[j][src] = ModelMask(xlo, ylo, xhi-xlo, yhi-ylo)
-        
         # Create initial models for each tim x each source
-        models.create(self.tims, cat, subtract=True, modelmasks=mm)
+        models.create(self.tims, cat, subtract=True)
 
         N = len(cat)
         B.dchisq = np.zeros((N, 5), np.float32)
@@ -569,13 +543,12 @@ class OneBlob(object):
                            origin='lower')
                 plt.figure(1)
 
-            # only plot models for one source
+            # Model selection for this source.
             keepsrc = self.model_selection_one_source(src, srci, models, B)
             B.sources[srci] = keepsrc
             cat[srci] = keepsrc
 
-            if keepsrc is None:
-                models.update_and_subtract(srci, keepsrc, self.tims)
+            models.update_and_subtract(srci, keepsrc, self.tims)
 
             if self.plots_single:
                 plt.figure(2)
@@ -594,7 +567,8 @@ class OneBlob(object):
 
         if iterative_detection:
 
-            if self.plots:
+            if self.plots and False:
+                # One plot per tim is a little much, even for me...
                 import pylab as plt
                 for tim in self.tims:
                     plt.clf()
@@ -1313,9 +1287,6 @@ class OneBlob(object):
             srctractor.setModelMasks(mm)
             enable_galaxy_cache()
 
-            # Save these modelMasks for later...
-            newsrc_mm = mm
-
             if fit_background:
                 # Reset sky params
                 srctractor.images.setParams(skyparams)
@@ -1422,10 +1393,7 @@ class OneBlob(object):
 
             # Use the original 'srctractor' here so that the different
             # models are evaluated on the same pixels.
-            # ---> AND with the same modelMasks as the original source...
-            srctractor.setModelMasks(newsrc_mm)
             ch = _per_band_chisqs(srctractor, self.bands)
-
             chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
             cpum1 = time.process_time()
             B.all_model_cpu[srci][name] = cpum1 - cpum0
@@ -1433,12 +1401,8 @@ class OneBlob(object):
             B.all_model_hit_limit[srci][name] = hit_limit
             B.all_model_opt_steps[srci][name] = opt_steps
 
-        masked_tim_ies = None
         if mask_others:
-            masked_tim_ies = []
-            for ie,tim in zip(saved_srctim_ies, srctims):
-                # save
-                masked_tim_ies.append(tim.inverr)
+            for tim,ie in zip(srctims, saved_srctim_ies):
                 # revert tim to original (unmasked-by-others)
                 tim.inverr = ie
 
@@ -1508,43 +1472,6 @@ class OneBlob(object):
                          (self.name, srci, force_pointsource, fit_background,
                           keepmod, str(keepsrc), str(src)), fontsize=10)
             self.ps.savefig()
-
-        #print('Removing final fit model for source:', keepsrc)
-        # The update_and_subtract call below is a bit awkward -- it must get passed
-        # arrays aligned with self.tims, but we want to pass in our symmetrized, etc
-        # masks.
-        masked_ies = []
-        the_tims = []
-        if self.bigblob:
-            # For big blobs, we created new 'srctims'; match them up.
-            # create temp full-sized ies, but masked
-            for tim in self.tims:
-                matched = False
-                for srctim,mie in zip(srctims, masked_tim_ies):
-                    if srctim.fulltim == tim:
-                        ie = np.zeros_like(tim.getInvError())
-                        mh,mw = mie.shape
-                        ie[srctim.y0:srctim.y0+mh, srctim.x0:srctim.x0+mw] = mie
-                        masked_ies.append(ie)
-                        the_tims.append(tim)
-                        matched = True
-                        break
-                if not matched:
-                    the_tims.append(None)
-                    masked_ies.append(None)
-        else:
-            # Non-bigblobs: srctims = (a subset of self.tims)
-            for tim in self.tims:
-                if tim in srctims:
-                    i = srctims.index(tim)
-                    mie = masked_tim_ies[i]
-                    masked_ies.append(mie)
-                    the_tims.append(tim)
-                else:
-                    masked_ies.append(None)
-                    the_tims.append(None)
-
-        models.update_and_subtract(srci, keepsrc, the_tims, tim_ies=masked_ies)
 
         return keepsrc
 

@@ -93,8 +93,9 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
 
     # these x,y are in the margin-padded WCS; not useful.
     # See ibx,iby computed below instead.
-    refs.delete_column('x')
-    refs.delete_column('y')
+    for c in ['x','y']:
+        if c in refs.get_columns():
+            refs.delete_column(c)
 
     # radius / radius_pix are used to set the MASKBITS shapes;
     # keep_radius determines which sources are kept (because we subtract
