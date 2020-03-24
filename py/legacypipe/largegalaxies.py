@@ -7,6 +7,8 @@ def _build_objmask(img, ivar, skypix, boxcar=5, boxsize=1024):
     """Build an object mask by doing a quick estimate of the sky background on a
     given image.
 
+    skypix - True is unmasked pixels
+
     """
     from scipy.ndimage.morphology import binary_dilation
     from scipy.ndimage.filters import uniform_filter
@@ -23,16 +25,19 @@ def _build_objmask(img, ivar, skypix, boxcar=5, boxsize=1024):
         boxsize /= 2
 
     # Compute initial model...
-    skyobj = SplineSky.BlantonMethod(img - skyval, skypix, boxsize)
-    skymod = np.zeros_like(img)
-    skyobj.addTo(skymod)
+    if img.shape[0] > boxsize:
+        skyobj = SplineSky.BlantonMethod(img - skyval, skypix, boxsize)
+        skymod = np.zeros_like(img)
+        skyobj.addTo(skymod)
+    else:
+        skymod = np.zeros_like(img)
 
     bskysig1 = skysig1 / boxcar # sigma of boxcar-smoothed image.
     objmask = np.abs(uniform_filter(img-skyval-skymod, size=boxcar,
                                     mode='constant')) > (3 * bskysig1)
     objmask = binary_dilation(objmask, iterations=3)
 
-    return np.logical_and(~objmask, skypix) # True = object-free sky pixels
+    return np.logical_and(~objmask, skypix) # True = sky pixels
 
 def largegalaxy_ubercal(fulltims, coaddtims=None, plots=False, ps=None, verbose=False):
     """Bring individual CCDs onto a common flux scale based on overlapping pixels.
@@ -108,7 +113,8 @@ def largegalaxy_ubercal(fulltims, coaddtims=None, plots=False, ps=None, verbose=
     print('Delta offsets to each image:')
     print(x)
 
-    if plots:
+    # Plot to assess the sign of the correction.
+    if plots and False:
         import matplotlib.pyplot as plt
         plt.clf()
         for j, (correction, fulltim) in enumerate(zip(x, fulltims)):
@@ -130,7 +136,7 @@ def largegalaxy_ubercal(fulltims, coaddtims=None, plots=False, ps=None, verbose=
     return x
 
 def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, 
-                    plots=False, ps=None, verbose=False):
+                    plots=False, plots2=False, ps=None, verbose=False):
     
     from tractor.sky import ConstantSky
     from legacypipe.reference import get_reference_sources
@@ -140,6 +146,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
     from astropy.stats import sigma_clipped_stats
 
     if plots:
+        import os
         import matplotlib.pyplot as plt
         import matplotlib.patches as patches
 
@@ -187,7 +194,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
             ax.set_aspect('equal')
 
         plt.subplots_adjust(bottom=0.12, wspace=0.05, left=0.12, right=0.97, top=0.95)
-        ps.savefig()
+        plt.savefig(os.path.join(survey.output_dir, 'metrics', 'cus', '{}-ccdpos.jpg'.format(ps.basefn)))
         
     if plots:
         plt.figure(figsize=(8,6))
@@ -197,7 +204,8 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
             tim.sky.addTo(imcopy, -1)
             mods.append(imcopy)
         C = make_coadds(tims, bands, targetwcs, mods=mods, callback=None, mp=mp)
-        imsave_jpeg('{}-before.jpg'.format(ps.basefn), get_rgb(C.comods, bands), origin='lower')
+        imsave_jpeg(os.path.join(survey.output_dir, 'metrics', 'cus', '{}-pipelinesky.jpg'.format(ps.basefn)),
+                    get_rgb(C.comods, bands), origin='lower')
 
     allbands = np.array([tim.band for tim in tims])
     for band in sorted(set(allbands)):
@@ -207,12 +215,6 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
         bandtims = [tims[ii].imobj.get_tractor_image(
             gaussPsf=True, pixPsf=False, subsky=False, dq=True, apodize=False)
             for ii in I]
-
-        #if plots:
-        #    for bandtim in bandtims:
-        #        C = make_coadds(bandtim, band, targetwcs, callback=None, sbscale=False, mp=mp)
-        #        imsave_jpeg('{}-{}.jpg'.format(ps.basefn, bandtim.name.replace(' ', '-')),
-        #                                       get_rgb(C.coimgs, band), origin='lower')
 
         # Derive the correction and then apply it.
         x = largegalaxy_ubercal(bandtims, coaddtims=[tims[ii] for ii in I], plots=plots, ps=ps)
@@ -230,19 +232,6 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
         #newcorrection = largegalaxy_ubercal(fulltims)
         #print(newcorrection)
 
-        ## Build a full-field coadd.
-        #from astrometry.util.util import Tan
-        #from astrometry.util.starutil_numpy import degrees_between
-        #racen, deccen = targetwcs.crval[0], targetwcs.crval[1]
-        #corners = [bandtim.imobj.get_wcs().radec_bounds() for bandtim in bandtims]
-        #radius = np.max([degrees_between(racen, deccen, rr,  dd) for rr, dd in corners])
-        #
-        #bandpixscale = np.mean([bandtim.wcs.pixel_scale() for bandtim in bandtims])
-        #print('Mean pixel scale', bandpixscale)
-        #bandwcs = Tan(racen, deccen, radius+0.5, radius+0.5,
-        #              -bandpixscale/3600.0, 0.0, 0.0, bandpixscale/3600.0,
-        #              float(2*radius), float(2*radius))
-
     refs, _ = get_reference_sources(survey, targetwcs, targetwcs.pixel_scale(), ['r'],
                                     tycho_stars=True, gaia_stars=True,
                                     large_galaxies=True, star_clusters=True)
@@ -250,15 +239,14 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
 
     C = make_coadds(tims, bands, targetwcs, callback=None, sbscale=False, mp=mp)
     for coimg,coiv,band in zip(C.coimgs, C.cowimgs, bands):
-        # FIXME -- more extensive masking here?
-        #cosky = np.median(coimg[skymask * (coiv > 0)])
+        #cosky = np.median(coimg[refmask * (coiv > 0)])
         skypix = _build_objmask(coimg, coiv, refmask * (coiv>0))
         skymean, skymedian, skysig = sigma_clipped_stats(coimg, mask=~skypix, sigma=3.0)
         
         I = np.where(allbands == band)[0]
         #print('Band', band, 'Coadd sky:', skymedian)
 
-        if plots:
+        if plots2:
             plt.clf()
             plt.hist(coimg.ravel(), bins=50, range=(-3,3), density=True)
             plt.axvline(skymedian, color='k')
@@ -277,7 +265,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
             tims[ii].data -= skymedian
             #print('Tim', tims[ii], 'after subtracting skymedian: median', np.median(tims[ii].data))
 
-    if plots:
+    if plots2:
         plt.clf()
         plt.imshow(get_rgb(C.coimgs, bands), origin='lower', interpolation='nearest')
         ps.savefig()
@@ -294,17 +282,18 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
                 ps.savefig()
 
     if plots:
-        C = make_coadds(tims, bands, targetwcs, callback=None,
-                        mp=mp)
-        imsave_jpeg('{}-after.jpg'.format(ps.basefn), get_rgb(C.coimgs, bands), origin='lower')
-        if plots:
-            plt.clf()
-            for coimg,band in zip(C.coimgs, bands):
-                plt.hist(coimg.ravel(), bins=50, range=(-0.5,0.5),
-                         histtype='step', label=band)
-            plt.legend()
-            plt.title('After adjustment: coadds (sb scaled)')
-            ps.savefig()
+        C = make_coadds(tims, bands, targetwcs, callback=None, mp=mp)
+        imsave_jpeg(os.path.join(survey.output_dir, 'metrics', 'cus', '{}-customsky.jpg'.format(ps.basefn)),
+                    get_rgb(C.coimgs, bands), origin='lower')
+        
+    if plots2:
+        plt.clf()
+        for coimg,band in zip(C.coimgs, bands):
+            plt.hist(coimg.ravel(), bins=50, range=(-0.5,0.5),
+                     histtype='step', label=band)
+        plt.legend()
+        plt.title('After adjustment: coadds (sb scaled)')
+        ps.savefig()
 
     return tims
 
@@ -313,7 +302,7 @@ def stage_largegalaxies(
         brickname=None, version_header=None,
         apodize=True,
         subsky=True,
-        plots=False, ps=None, coadd_bw=False, W=None, H=None,
+        plots=False, plots2=False, ps=None, coadd_bw=False, W=None, H=None,
         brick=None, blobs=None, lanczos=True, ccds=None,
         write_metrics=True,
         mp=None, record_event=None,
@@ -333,13 +322,12 @@ def stage_largegalaxies(
 
     # Custom sky-subtraction for large galaxies.
     if not subsky:
-        plots = True
+        plots, plots2 = True, False
         if plots:
             from astrometry.util.plotutils import PlotSequence
             ps = PlotSequence('largegalaxy-{}'.format(brickname))
         tims = largegalaxy_sky(tims, targetwcs, survey, brickname, bands,
-                               mp, plots=plots, ps=ps)
-    import pdb ; pdb.set_trace()
+                               mp, plots=plots, plots2=plots2, ps=ps)
     
     # Create coadds and then build custom tims from them.
 
@@ -378,9 +366,8 @@ def stage_largegalaxies(
     if True: # useful for quickly looking at the image coadd
         with survey.write_output('image-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, get_rgb(C.coimgs, bands), origin='lower')
-    import pdb ; pdb.set_trace()
 
-    if plots:
+    if plots2:
         import pylab as plt
         for band,iv in zip(bands, C.cowimgs):
             plt.clf()
