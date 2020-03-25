@@ -39,7 +39,8 @@ def _build_objmask(img, ivar, skypix, boxcar=5, boxsize=1024):
 
     return np.logical_and(~objmask, skypix) # True = sky pixels
 
-def largegalaxy_ubercal(fulltims, coaddtims=None, plots=False, ps=None, verbose=False):
+def largegalaxy_ubercal(fulltims, coaddtims=None, plots=False, plots2=False,
+                        ps=None, verbose=False):
     """Bring individual CCDs onto a common flux scale based on overlapping pixels.
 
     fulltims - full-CCD tims, used to derive the corrections
@@ -114,7 +115,7 @@ def largegalaxy_ubercal(fulltims, coaddtims=None, plots=False, ps=None, verbose=
     print(x)
 
     # Plot to assess the sign of the correction.
-    if plots and False:
+    if plots2:
         import matplotlib.pyplot as plt
         plt.clf()
         for j, (correction, fulltim) in enumerate(zip(x, fulltims)):
@@ -217,7 +218,8 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
             for ii in I]
 
         # Derive the correction and then apply it.
-        x = largegalaxy_ubercal(bandtims, coaddtims=[tims[ii] for ii in I], plots=plots, ps=ps)
+        x = largegalaxy_ubercal(bandtims, coaddtims=[tims[ii] for ii in I],
+                                plots=plots, plots2=plots2, ps=ps)
         # Apply the correction and return the tims
         for jj, (correction, ii) in enumerate(zip(x, I)):
             tims[ii].data += correction
@@ -361,11 +363,10 @@ def stage_largegalaxies(
     C = make_coadds(tims, bands, targetwcs,
                     detmaps=True, ngood=True, lanczos=lanczos,
                     allmasks=True, psf_images=True,
-                    mp=mp, plots=plots, ps=ps,
+                    mp=mp, plots=plots2, ps=ps, # note plots2 here!
                     callback=None)
-    if True: # useful for quickly looking at the image coadd
-        with survey.write_output('image-jpeg', brick=brickname) as out:
-            imsave_jpeg(out.fn, get_rgb(C.coimgs, bands), origin='lower')
+    #with survey.write_output('image-jpeg', brick=brickname) as out:
+    #    imsave_jpeg(out.fn, get_rgb(C.coimgs, bands), origin='lower')
 
     if plots2:
         import pylab as plt
