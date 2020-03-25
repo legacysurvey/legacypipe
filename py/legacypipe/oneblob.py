@@ -422,6 +422,13 @@ class OneBlob(object):
             # HACK - no SEDs...
             maxsn = np.maximum(maxsn, sn)
 
+        if self.plots:
+            plt.clf()
+            plt.imshow(saturated_pix, interpolation='nearest', origin='lower',
+                       vmin=0, vmax=1, cmap='gray')
+            plt.title('saturated pix')
+            self.ps.savefig()
+
         segmap = np.empty((self.blobh, self.blobw), int)
         segmap[:,:] = -1
 
@@ -1684,12 +1691,13 @@ class OneBlob(object):
         self.ps.savefig()
 
     def create_tims(self, timargs):
+        from legacypipe.bits import DQ_BITS
         # In order to make multiprocessing easier, the one_blob method
         # is passed all the ingredients to make local tractor Images
         # rather than the Images themselves.  Here we build the
         # 'tims'.
         tims = []
-        for (img, inverr, twcs, wcsobj, pcal, sky, subpsf, name,
+        for (img, inverr, dq, twcs, wcsobj, pcal, sky, subpsf, name,
              sx0, sx1, sy0, sy1,
              band, sig1, modelMinval, imobj) in timargs:
             # Mask out inverr for pixels that are not within the blob.
@@ -1719,7 +1727,8 @@ class OneBlob(object):
             tim.subwcs = wcsobj
             tim.meta = imobj
             tim.psf_sigma = imobj.fwhm / 2.35
-            tim.dq = None
+            tim.dq = dq
+            tim.dq_saturation_bits = DQ_BITS['satur']
             tims.append(tim)
         return tims
 
@@ -1971,10 +1980,10 @@ def _get_subtim(tim, x0, x1, y0, y1):
     subtim.psf_sigma = tim.psf_sigma
     if tim.dq is not None:
         subtim.dq = tim.dq[slc]
+        subtim.dq_saturation_bits = tim.dq_saturation_bits
     else:
         subtim.dq = None
     return subtim
-
 
 class SourceModels(object):
     '''

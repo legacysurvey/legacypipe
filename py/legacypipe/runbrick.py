@@ -1639,6 +1639,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
             subslc = slice(sy0,sy1),slice(sx0,sx1)
             subimg = tim.getImage ()[subslc]
             subie  = tim.getInvError()[subslc]
+            subdq  = tim.dq[subslc]
             subwcs = tim.getWcs().shifted(sx0, sy0)
             subsky = tim.getSky().shifted(sx0, sy0)
             subpsf = tim.getPsf().getShifted(sx0, sy0)
@@ -1649,7 +1650,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
             # FIXME -- maybe the cache is worth sending?
             if hasattr(tim.psf, 'clear_cache'):
                 tim.psf.clear_cache()
-            subtimargs.append((subimg, subie, subwcs, subwcsobj,
+            subtimargs.append((subimg, subie, subdq, subwcs, subwcsobj,
                                tim.getPhotoCal(),
                                subsky, subpsf, tim.name, sx0, sx1, sy0, sy1,
                                tim.band, tim.sig1, tim.modelMinval,
