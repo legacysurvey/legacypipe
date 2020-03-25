@@ -9,7 +9,7 @@ class DecamSurvey(LegacySurveyData):
     def filter_ccds_files(self, fns):
         return [fn for fn in fns if 'decam' in fn]
     def get_default_release(self):
-        return 9000
+        return 9002
 
 class NinetyPrimeMosaic(LegacySurveyData):
     def filter_ccd_kd_files(self, fns):
@@ -17,7 +17,7 @@ class NinetyPrimeMosaic(LegacySurveyData):
     def filter_ccds_files(self, fns):
         return [fn for fn in fns if ('90prime' in fn) or ('mosaic' in fn)]
     def get_default_release(self):
-        return 9001
+        return 9003
 
 runs = {
     'decam': DecamSurvey,
