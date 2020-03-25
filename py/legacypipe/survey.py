@@ -193,7 +193,7 @@ class GaiaSource(PointSource):
         bright = NanoMaggies(order=bands, **fluxes)
         src = cls(pos, bright)
         src.forced_point_source = g.pointsource
-        src.reference_star = g.isgaia or g.isbright
+        src.reference_star = getattr(g, 'isgaia', False) or getattr(g, 'isbright', False)
         return src
 
 #

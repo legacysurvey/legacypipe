@@ -382,6 +382,7 @@ class OneBlob(object):
 
     def compute_segmentation_map(self):
         # Use ~ saddle criterion to segment the blob / mask other sources
+        from functools import reduce
         from legacypipe.detection import detection_maps
         from astrometry.util.multiproc import multiproc
         from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
@@ -395,7 +396,7 @@ class OneBlob(object):
         # same as in runbrick.py
         saturated_pix = reduce(np.logical_or,
                                [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps])
-        del satmaps, satmap
+        del satmaps
 
         maxsn = 0
         for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
@@ -430,7 +431,7 @@ class OneBlob(object):
         ix = np.clip(np.round(ix)-1, 0, self.blobw-1).astype(int)
         iy = np.clip(np.round(iy)-1, 0, self.blobh-1).astype(int)
 
-        # Do not compute osegmentation map for sources in the CLUSTER mask
+        # Do not compute segmentation map for sources in the CLUSTER mask
         Iseg, = np.nonzero((self.refmap[iy, ix] & IN_BLOB['CLUSTER']) == 0)
         # Zero out the S/N in CLUSTER mask
         maxsn[(self.refmap & IN_BLOB['CLUSTER']) > 0] = 0.
