@@ -389,8 +389,14 @@ class OneBlob(object):
 
         # Compute per-band detection maps
         mp = multiproc()
-        detmaps,detivs,_ = detection_maps(
+        detmaps,detivs,satmaps = detection_maps(
             self.tims, self.blobwcs, self.bands, mp)
+
+        # same as in runbrick.py
+        saturated_pix = reduce(np.logical_or,
+                               [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps])
+        del satmaps, satmap
+
         maxsn = 0
         for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
             sn = detmap * np.sqrt(detiv)
@@ -424,10 +430,13 @@ class OneBlob(object):
         ix = np.clip(np.round(ix)-1, 0, self.blobw-1).astype(int)
         iy = np.clip(np.round(iy)-1, 0, self.blobh-1).astype(int)
 
-        # Do not compute segmentation map for sources in the CLUSTER mask
+        # Do not compute osegmentation map for sources in the CLUSTER mask
         Iseg, = np.nonzero((self.refmap[iy, ix] & IN_BLOB['CLUSTER']) == 0)
         # Zero out the S/N in CLUSTER mask
         maxsn[(self.refmap & IN_BLOB['CLUSTER']) > 0] = 0.
+
+        # (also zero out the satmap)
+        saturated_pix[(self.refmap & IN_BLOB['CLUSTER']) > 0] = False
 
         Ibright = _argsort_by_brightness([self.srcs[i] for i in Iseg], self.bands)
         rank = np.empty(len(Iseg), int)
@@ -441,7 +450,8 @@ class OneBlob(object):
             #print('S/N', thresh, ':', len(todo), 'sources to find still')
             if len(todo) == 0:
                 break
-            hot = (maxsn >= thresh)
+            ####
+            hot = np.logical_or(maxsn >= thresh, saturated_pix)
             hot = binary_fill_holes(hot)
             blobs,_ = label(hot)
             srcblobs = blobs[iy[Iseg], ix[Iseg]]
