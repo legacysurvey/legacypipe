@@ -1416,6 +1416,12 @@ class OneBlob(object):
         # column of the catalog.
         modnames = ['psf', 'rex', 'dev', 'exp', 'ser']
         keepmod = _select_model(chisqs, nparams, galaxy_margin)
+
+        if keepmod is None and getattr(src, 'reference_star', False):
+            # Definitely keep ref stars (Gaia & Tycho)
+            print('Forcing keeping reference source:', psf)
+            keepmod = 'psf'
+
         keepsrc = {'none':None, 'psf':psf, 'rex':rex,
                    'dev':dev, 'exp':exp, 'ser':ser}[keepmod]
         bestchi = chisqs.get(keepmod, 0.)
