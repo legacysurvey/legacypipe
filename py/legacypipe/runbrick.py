@@ -191,36 +191,33 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             name='CORN%iDEC'%(i+1), value=d, comment='Brick corner Dec (deg)'))
 
     # Find CCDs
-    if survey.ccds is None:
-        ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
-        if ccds is None:
-            raise NothingToDoError('No CCDs touching brick')
-        debug(len(ccds), 'CCDs touching target WCS')
+    ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
+    if ccds is None:
+        raise NothingToDoError('No CCDs touching brick')
+    debug(len(ccds), 'CCDs touching target WCS')
 
-        if 'ccd_cuts' in ccds.get_columns():
-            ccds.cut(ccds.ccd_cuts == 0)
-            debug(len(ccds), 'CCDs survive cuts')
-        else:
-            print('WARNING: not applying CCD cuts')
-
-        # Cut on bands to be used
-        ccds.cut(np.array([b in bands for b in ccds.filter]))
-        debug('Cut to', len(ccds), 'CCDs in bands', ','.join(bands))
-
-        debug('Cutting on CCDs to be used for fitting...')
-        I = survey.ccds_for_fitting(brick, ccds)
-        if I is not None:
-            debug('Cutting to', len(I), 'of', len(ccds), 'CCDs for fitting.')
-            ccds.cut(I)
-
-        if min_mjd is not None:
-            ccds.cut(ccds.mjd_obs >= min_mjd)
-            debug('Cut to', len(ccds), 'after MJD', min_mjd)
-        if max_mjd is not None:
-            ccds.cut(ccds.mjd_obs <= max_mjd)
-            debug('Cut to', len(ccds), 'before MJD', max_mjd)
+    if 'ccd_cuts' in ccds.get_columns():
+        ccds.cut(ccds.ccd_cuts == 0)
+        debug(len(ccds), 'CCDs survive cuts')
     else:
-        ccds = survey.ccds
+        print('WARNING: not applying CCD cuts')
+
+    # Cut on bands to be used
+    ccds.cut(np.array([b in bands for b in ccds.filter]))
+    debug('Cut to', len(ccds), 'CCDs in bands', ','.join(bands))
+
+    debug('Cutting on CCDs to be used for fitting...')
+    I = survey.ccds_for_fitting(brick, ccds)
+    if I is not None:
+        debug('Cutting to', len(I), 'of', len(ccds), 'CCDs for fitting.')
+        ccds.cut(I)
+
+    if min_mjd is not None:
+        ccds.cut(ccds.mjd_obs >= min_mjd)
+        debug('Cut to', len(ccds), 'after MJD', min_mjd)
+    if max_mjd is not None:
+        ccds.cut(ccds.mjd_obs <= max_mjd)
+        debug('Cut to', len(ccds), 'before MJD', max_mjd)
 
     # Create Image objects for each CCD
     ims = []
