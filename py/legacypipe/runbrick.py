@@ -285,8 +285,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     # Check calibration product versions
     for tim in tims:
-        for cal,ver in [('sky', tim.skyver), ('wcs', tim.wcsver),
-                        ('psf', tim.psfver)]:
+        for cal,ver in [('sky', tim.skyver), ('psf', tim.psfver)]:
             if tim.plver.strip() != ver[1].strip():
                 print(('Warning: image "%s" PLVER is "%s" but %s calib was run'
                       +' on PLVER "%s"') % (str(tim), tim.plver, cal, ver[1]))
@@ -315,10 +314,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     ccds.propid = np.array([tim.propid for tim in tims])
     ccds.plver  = np.array([tim.plver for tim in tims])
     ccds.skyver = np.array([tim.skyver[0] for tim in tims])
-    ccds.wcsver = np.array([tim.wcsver[0] for tim in tims])
     ccds.psfver = np.array([tim.psfver[0] for tim in tims])
     ccds.skyplver = np.array([tim.skyver[1] for tim in tims])
-    ccds.wcsplver = np.array([tim.wcsver[1] for tim in tims])
     ccds.psfplver = np.array([tim.psfver[1] for tim in tims])
 
     # Cut "bands" down to just the bands for which we have images.

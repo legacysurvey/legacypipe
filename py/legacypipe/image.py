@@ -542,7 +542,6 @@ class LegacySurveyImage(object):
         tim.plver = primhdr.get('PLVER','').strip()
         tim.plprocid = str(primhdr.get('PLPROCID','')).strip()
         tim.skyver = (getattr(sky, 'version', ''), getattr(sky, 'plver', ''))
-        tim.wcsver = (getattr(wcs, 'version', ''), getattr(wcs, 'plver', ''))
         tim.psfver = (getattr(psf, 'version', ''), getattr(psf, 'plver', ''))
         tim.datasum = imghdr.get('DATASUM')
         tim.procdate = primhdr['DATE']

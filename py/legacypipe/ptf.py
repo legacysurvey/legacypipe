@@ -488,7 +488,6 @@ class PtfImage(LegacySurveyImage):
         tim.hdr = imghdr
         tim.plver = str(primhdr['PTFVERSN']).strip()
         tim.skyver = (sky.version, sky.plver)
-        tim.wcsver = ('-1','-1') #wcs.version, wcs.plver)
         tim.psfver = (psf.version, psf.plver)
         if get_dq:
             tim.dq = dq
