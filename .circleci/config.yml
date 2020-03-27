@@ -95,4 +95,5 @@ jobs:
               echo "COVERALLS_REPO_TOKEN=${COVERALLS_REPO_TOKEN} bundle exec rspec spec" > .coveralls.yml
               #coveralls debug
               coveralls
+              ./codecov-upload.sh
 
