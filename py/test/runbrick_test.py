@@ -38,7 +38,7 @@ def rbmain():
     # Gaia star becomes a DUP!
     assert(np.sum([t == 'DUP' for t in T.type]) == 1)
     # LSLGA galaxy exists!
-    Igal = np.flatnonzero([r == 'L6' for r in T.ref_cat])\
+    Igal = np.flatnonzero([r == 'L6' for r in T.ref_cat])
     assert(len(Igal) == 1)
     assert(np.all(T.ref_id[Igal] > 0))
     assert(T.type[Igal[0]] == 'SER')
