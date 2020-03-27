@@ -266,7 +266,8 @@ def rbmain():
     assert(len(cat) == 2)
     src = cat[0]
     print('Source0', src)
-    assert(type(src) == DevGalaxy)
+    from tractor.sersic import SersicGalaxy
+    assert(type(src) in [DevGalaxy, SersicGalaxy])
     assert(np.abs(src.pos.ra  - 244.77973) < 0.00001)
     # Results on travis vs local seem to differ?!
     assert(np.abs(src.pos.dec -  12.07234) < 0.00002)

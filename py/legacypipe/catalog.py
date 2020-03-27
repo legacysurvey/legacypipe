@@ -4,7 +4,7 @@ import numpy as np
 
 from tractor import PointSource, getParamTypeTree, RaDecPos
 from tractor.galaxy import ExpGalaxy, DevGalaxy
-from tractor.sersic import SersicGalaxy
+from tractor.sersic import SersicGalaxy, SersicIndex
 from tractor.ellipses import EllipseESoft, EllipseE
 from legacypipe.survey import RexGalaxy, GaiaSource
 
@@ -277,6 +277,21 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
             pass
         else:
             raise RuntimeError('Unknown class %s' % str(clazz))
+
+        from legacypipe.survey import LegacySersicIndex
+        sersic_index_types = dict([(_typestring(t), t) for t in
+                                   [SersicIndex, LegacySersicIndex]])
+
+        if issubclass(clazz, SersicGalaxy):
+            # hard-code knowledge that fourth param is the Sersic index
+            iclazz = hdr['TR_%s_T4' % shorttype]
+            iclazz = iclazz.replace('"','')
+            # look up that string... to avoid eval()
+            iclazz = sersic_index_types[iclazz]
+            si = iclazz(t.sersic)
+            params.append(si)
+            if invvars:
+                ivs.append(t.sersic_ivar)
 
         src = clazz(*params)
         cat.append(src)
