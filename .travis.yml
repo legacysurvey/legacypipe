@@ -62,6 +62,7 @@ script:
 after_success:
     - (cd py && coveralls debug)
     - (cd py && coveralls)
+    - (cd py && ./codecov-upload.sh)
 
 addons:
   apt:
