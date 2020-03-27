@@ -45,7 +45,7 @@ def _source_param_types(src):
     return types
 
 def prepare_fits_catalog(cat, invvars, T, hdr, bands, allbands=None,
-                         prefix='', save_invvars=True, unpackShape=True):
+                         prefix='', save_invvars=True):
     if T is None:
         from astrometry.util.fits import fits_table
         T = fits_table()
@@ -104,20 +104,19 @@ def prepare_fits_catalog(cat, invvars, T, hdr, bands, allbands=None,
     if save_invvars:
         T.set('%sflux_ivar' % prefix, flux_ivar)
 
-    _get_tractor_fits_values(T, cat, '%s%%s' % prefix, unpackShape=unpackShape)
+    _get_tractor_fits_values(T, cat, '%s%%s' % prefix)
 
     if save_invvars:
         if invvars is not None:
             cat.setParams(invvars)
         else:
             cat.setParams(np.zeros(cat.numberOfParams()))
-        _get_tractor_fits_values(T, cat, '%s%%s_ivar' % prefix,
-                                 unpackShape=unpackShape)
+        _get_tractor_fits_values(T, cat, '%s%%s_ivar' % prefix)
         # Heh, "no uncertainty here!"
         T.delete_column('%stype_ivar' % prefix)
     cat.setParams(params0)
 
-    # mod
+    # mod RA
     ra = T.get('%sra' % prefix)
     ra += (ra <   0) * 360.
     ra -= (ra > 360) * 360.
@@ -134,10 +133,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, bands, allbands=None,
 
     return T, hdr
 
-# We'll want to compute errors in our native representation, so have a
-# FITS output routine that can convert those into output format.
-
-def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
+def _get_tractor_fits_values(T, cat, pat):
     typearray = np.array([fits_typemap[type(src)] for src in cat])
     typearray = typearray.astype('S3')
     T.set(pat % 'type', typearray)
@@ -159,9 +155,7 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
     sersic = np.zeros(len(T), np.float32)
 
     for i,src in enumerate(cat):
-        #print('_get_tractor_fits_values for pattern', pat, 'src', src)
         if isinstance(src, RexGalaxy):
-            #print('Rex shape', src.shape, 'params', src.shape.getAllParams())
             shape[i,0] = src.shape.getAllParams()[0]
         elif isinstance(src, (ExpGalaxy, DevGalaxy, SersicGalaxy)):
             shape[i,:] = src.shape.getAllParams()
@@ -171,16 +165,13 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
 
     T.set(pat % 'sersic',  sersic)
 
-    if unpackShape:
-        T.set(pat % 'shape_r',  shape[:,0])
-        T.set(pat % 'shape_e1', shape[:,1])
-        T.set(pat % 'shape_e2', shape[:,2])
-    else:
-        T.set(pat % 'shape', shape)
+    T.set(pat % 'shape_r',  shape[:,0])
+    T.set(pat % 'shape_e1', shape[:,1])
+    T.set(pat % 'shape_e2', shape[:,2])
 
 def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                       allbands=None, ellipseClass=EllipseE,
-                      unpackShape=True, fluxPrefix=''):
+                      fluxPrefix=''):
     '''
     This is currently a weird hybrid of dynamic and hard-coded.
 
@@ -191,10 +182,6 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
 
     If *ellipseClass* is set, assume that type for galaxy shapes; if None,
     read the type from the header.
-
-    If *unpackShapes* is True and *ellipseClass* is EllipseE, read
-    catalog entries "shape_r", "shape_e1", "shape_e2" rather than
-    "shape", and similarly for "dev".
     '''
     from tractor import NanoMaggies
     if hdr is None:
@@ -203,11 +190,7 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
         allbands = bands
     rev_typemap = fits_reverse_typemap
 
-    if unpackShape and ellipseClass != EllipseE:
-        print('Not doing unpackShape because ellipseClass != EllipseE.')
-        unpackShape = False
-    if unpackShape:
-        T.shape = np.vstack((T.shape_r, T.shape_e1, T.shape_e2)).T
+    T.shape = np.vstack((T.shape_r, T.shape_e1, T.shape_e2)).T
 
     ibands = np.array([allbands.index(b) for b in bands])
 
