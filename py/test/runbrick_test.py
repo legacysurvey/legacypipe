@@ -4,7 +4,7 @@ if __name__ == '__main__':
     matplotlib.use('Agg')
 import os
 import sys
-from glob import glob
+import time
 import numpy as np
 from legacypipe.runbrick import main
 #from legacyanalysis.decals_sim import main as sim_main
@@ -27,8 +27,9 @@ def rbmain():
                                                    'lslga-sub.kd.fits')
     main(args=['--radec', '9.1228', '3.3975', '--width', '100',
                '--height', '100', '--old-calibs-ok', '--no-wise-ceres',
-               '--no-wise', '--survey-dir',
-               surveydir, '--outdir', 'out-testcase9'])
+               '--no-wise', '--survey-dir', surveydir,
+               '--outdir', 'out-testcase9', '--skip',
+               '--ps', 'tc9-ps.fits', '--ps-t0', str(int(time.time()))])
     # (omit --force-all --no-write... reading from pickles below!)
     
     main(args=['--radec', '9.1228', '3.3975', '--width', '100',
