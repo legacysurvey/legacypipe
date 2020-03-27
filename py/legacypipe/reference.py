@@ -344,6 +344,9 @@ def read_large_galaxies(survey, targetwcs, bands):
     from legacypipe.survey import LegacySersicIndex, LegacyEllipseWithPriors, LogRadius, RexGalaxy
 
     galfn = survey.find_file('large-galaxies')
+    if galfn is None:
+        debug('No large-galaxies catalog file')
+        return None
     radius = 1.
     rc,dc = targetwcs.radec_center()
 

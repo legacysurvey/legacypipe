@@ -1109,7 +1109,14 @@ class LegacySurveyData(object):
             if fn is not None:
                 if os.path.isfile(fn):
                     return fn
-            return glob(os.path.join(basedir, 'LSLGA-*.kd.fits'))
+            pat = os.path.join(basedir, 'LSLGA-*.kd.fits')
+            fns = glob(pat)
+            if len(fns) == 0:
+                return None
+            if len(fns) > 2:
+                print('More than one filename matched large-galaxy pattern', pat,
+                      '; using the first one,', fns[0])
+            return fns[0]
 
         elif filetype == 'annotated-ccds':
             return swaplist(
