@@ -44,7 +44,7 @@ def _source_param_types(src):
     types = flatten_node(tree)
     return types
 
-def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
+def prepare_fits_catalog(cat, invvars, T, hdr, bands, fs, allbands=None,
                          prefix='', save_invvars=True, unpackShape=True):
     if T is None:
         from astrometry.util.fits import fits_table
@@ -53,7 +53,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
         import fitsio
         hdr = fitsio.FITSHDR()
     if allbands is None:
-        allbands = filts
+        allbands = bands
 
     hdr.add_record(dict(name='TR_VER', value=1, comment='Tractor output format version'))
 
@@ -81,11 +81,11 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
     flux = np.zeros((len(cat), len(allbands)), np.float32)
     flux_ivar = np.zeros((len(cat), len(allbands)), np.float32)
 
-    for filt in filts:
-        i = allbands.index(filt)
+    for band in bands:
+        i = allbands.index(band)
         for j,src in enumerate(cat):
             if src is not None:
-                flux[j,i] = sum(b.getFlux(filt) for b in src.getBrightnesses())
+                flux[j,i] = sum(b.getFlux(band) for b in src.getBrightnesses())
 
         if invvars is None:
             continue
@@ -96,7 +96,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
 
         for j,src in enumerate(cat):
             if src is not None:
-                flux_ivar[j,i] = sum(b.getFlux(filt) for b in src.getBrightnesses())
+                flux_ivar[j,i] = sum(b.getFlux(band) for b in src.getBrightnesses())
 
         cat.setParams(params0)
 
