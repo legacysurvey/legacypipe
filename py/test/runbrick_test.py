@@ -27,8 +27,22 @@ def rbmain():
                                                    'lslga-sub.kd.fits')
     main(args=['--radec', '9.1228', '3.3975', '--width', '100',
                '--height', '100', '--old-calibs-ok', '--no-wise-ceres',
-               '--no-wise', '--force-all', '--no-write', '--survey-dir',
+               '--no-wise', '--survey-dir',
                surveydir, '--outdir', 'out-testcase9'])
+    # (omit --force-all --no-write... reading from pickles below!)
+    
+    main(args=['--radec', '9.1228', '3.3975', '--width', '100',
+               '--height', '100', '--old-calibs-ok', '--no-wise-ceres',
+               '--no-wise', '--survey-dir',
+               surveydir, '--outdir', 'out-testcase9',
+               '--plots', '--stage', 'halos'])
+    
+    main(args=['--radec', '9.1228', '3.3975', '--width', '100',
+               '--height', '100', '--old-calibs-ok', '--no-wise-ceres',
+               '--no-wise', '--survey-dir',
+               surveydir, '--outdir', 'out-testcase9-coadds',
+               '--stage', 'image_coadds'])
+
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']
     del os.environ['LARGEGALAXIES_CAT']
