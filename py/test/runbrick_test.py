@@ -4,6 +4,7 @@ if __name__ == '__main__':
     matplotlib.use('Agg')
 import os
 import sys
+from glob import glob
 import numpy as np
 from legacypipe.runbrick import main
 #from legacyanalysis.decals_sim import main as sim_main
@@ -17,6 +18,30 @@ def rbmain():
         ]
     if travis:
         extra_args.extend(['--no-wise-ceres', '--no-gaia', '--no-large-galaxies'])
+
+
+    surveydir = os.path.join(os.path.dirname(__file__), 'testcase9')
+    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
+    os.environ['GAIA_CAT_VER'] = '2'
+    os.environ['LARGEGALAXIES_CAT'] = os.path.join(surveydir,
+                                                   'lslga-sub.kd.fits')
+    main(args=['--radec', '9.1228', '3.3975', '--width', '100',
+               '--height', '100', '--old-calibs-ok', '--no-wise-ceres',
+               '--no-wise', '--force-all', '--no-write', '--survey-dir',
+               surveydir, '--outdir', 'out-testcase9'])
+    del os.environ['GAIA_CAT_DIR']
+    del os.environ['GAIA_CAT_VER']
+    del os.environ['LARGEGALAXIES_CAT']
+
+    T = fits_table('out-testcase9/tractor/cus/tractor-custom-009122p03397.fits')
+    assert(len(T) == 4)
+    # Gaia star becomes a DUP!
+    assert(np.sum([t == 'DUP' for t in T.type]) == 1)
+    # LSLGA galaxy exists!
+    Igal = np.flatnonzero([r == 'L6' for r in T.ref_cat])\
+    assert(len(Igal) == 1)
+    assert(np.all(T.ref_id[Igal] > 0))
+    assert(T.type[Igal[0]] == 'SER')
     
     if 'ceres' in sys.argv:
         surveydir = os.path.join(os.path.dirname(__file__), 'testcase3')
