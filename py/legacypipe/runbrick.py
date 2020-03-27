@@ -9,7 +9,9 @@ For calling from other scripts, see:
 Or for much more fine-grained control, see the individual stages:
 
 - :py:func:`stage_tims`
+- :py:func:`stage_refs`
 - :py:func:`stage_outliers`
+- :py:func:`stage_halos`
 - :py:func:`stage_image_coadds`
 - :py:func:`stage_srcs`
 - :py:func:`stage_fitblobs`
@@ -721,46 +723,12 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     tlast = tnow
 
     if plots:
-        coimgs,cons = quick_coadds(tims, bands, targetwcs)
-        crossa = dict(ms=10, mew=1.5)
-        plt.clf()
-        dimshow(get_rgb(coimgs, bands))
-        plt.title('Detections')
-        ps.savefig()
-        ax = plt.axis()
-        if len(refstars):
-            I, = np.nonzero([len(r) and r[0] == 'T' for r in refstars.ref_cat])
-            if len(I):
-                plt.plot(refstars.ibx[I], refstars.iby[I], '+', color=(0,1,1),
-                         label='Tycho-2', **crossa)
-            I, = np.nonzero([len(r) and r[0] == 'G' for r in refstars.ref_cat])
-            if len(I):
-                plt.plot(refstars.ibx[I], refstars.iby[I], '+',
-                         color=(0.2,0.2,1), label='Gaia', **crossa)
-            I, = np.nonzero([len(r) and r[0] == 'L' for r in refstars.ref_cat])
-            if len(I):
-                plt.plot(refstars.ibx[I], refstars.iby[I], '+',
-                         color=(0.6,0.6,0.2), label='Large Galaxy', **crossa)
-        plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0),
-                 label='New SED-matched detections', **crossa)
-        plt.axis(ax)
-        plt.title('Detections')
-        plt.legend(loc='upper left')
-        ps.savefig()
+        from legacypipe.runbrick_plots import detection_plots_2
+        detection_plots_2(tims, bands, targetwcs, refstars, Tnew, hot,
+                          saturated_pix, ps)
 
-        plt.clf()
-        plt.subplot(1,2,1)
-        dimshow(hot, vmin=0, vmax=1, cmap='hot')
-        plt.title('hot')
-        plt.subplot(1,2,2)
-        rgb = np.zeros((H,W,3))
-        for i,satpix in enumerate(saturated_pix):
-            rgb[:,:,2-i] = satpix
-        dimshow(rgb)
-        plt.title('saturated_pix')
-        ps.savefig()
-
-    # Find "hot" pixels that are separated by masked pixels?
+    # Find "hot" pixels that are separated by masked pixels,
+    # to connect blobs across, eg, bleed trails and saturated cores.
     if True:
         from scipy.ndimage.measurements import find_objects
         any_saturated = reduce(np.logical_or, saturated_pix)
@@ -827,14 +795,14 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     ccds.co_sky = np.zeros(len(ccds), np.float32)
     if sky_overlap:
         '''
-        A note about units here: we're passing 'sbscale=False' to the coadd
-        function, so images are *not* getting scaled to constant
-        surface-brightness -- so you don't want to mix-and-match cameras
-        with different pixel scales within a band!
-        We're therefore estimating the sky level as a surface brightness,
-        in nanomaggies per pixel of the CCDs.
+        A note about units here: we're passing 'sbscale=False' to the
+        coadd function, so images are *not* getting scaled to constant
+        surface-brightness -- so you don't want to mix-and-match
+        cameras with different pixel scales within a band!  We're
+        estimating the sky level as a surface brightness, in
+        nanomaggies per pixel of the CCDs.
         '''
-        print('Creating coadd for sky overlap...')
+        debug('Creating coadd for sky overlap...')
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
         co_sky = {}
         for band,co,cowt in zip(bands, C.coimgs, C.cowimgs):
@@ -842,7 +810,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             if len(pix) == 0:
                 continue
             cosky = np.median(pix)
-            print('Median sky for', band, ':', cosky)
+            info('Median coadd sky for', band, ':', cosky)
             co_sky[band] = cosky
             for itim,tim in enumerate(tims):
                 if tim.band != band:
@@ -899,65 +867,10 @@ def stage_fitblobs(T=None,
     _add_stage_version(version_header, 'FITB', 'fitblobs')
     tlast = Time()
 
-    # How far down to render model profiles
-    minsigma = 0.1
-    for tim in tims:
-        tim.modelMinval = minsigma * tim.sig1
-
     if plots:
-        coimgs,_ = quick_coadds(tims, bands, targetwcs)
-        plt.clf()
-        dimshow(get_rgb(coimgs, bands))
-        ax = plt.axis()
-        for i,bs in enumerate(blobslices):
-            sy,sx = bs
-            by0,by1 = sy.start, sy.stop
-            bx0,bx1 = sx.start, sx.stop
-            plt.plot([bx0, bx0, bx1, bx1, bx0], [by0, by1, by1, by0, by0],'r-')
-            plt.text((bx0+bx1)/2., by0, '%i' % i,
-                     ha='center', va='bottom', color='r')
-        plt.axis(ax)
-        plt.title('Blobs')
-        ps.savefig()
-
-        for i,Isrcs in enumerate(blobsrcs):
-            for isrc in Isrcs:
-                src = cat[isrc]
-                ra,dec = src.getPosition().ra, src.getPosition().dec
-                ok,x,y = targetwcs.radec2pixelxy(ra, dec)
-                plt.text(x, y, 'b%i/s%i' % (i,isrc),
-                         ha='center', va='bottom', color='r')
-        plt.axis(ax)
-        plt.title('Blobs + Sources')
-        ps.savefig()
-
-        plt.clf()
-        dimshow(blobs)
-        ax = plt.axis()
-        for i,bs in enumerate(blobslices):
-            sy,sx = bs
-            by0,by1 = sy.start, sy.stop
-            bx0,bx1 = sx.start, sx.stop
-            plt.plot([bx0,bx0, bx1, bx1, bx0], [by0, by1, by1, by0, by0], 'r-')
-            plt.text((bx0+bx1)/2., by0, '%i' % i,
-                     ha='center', va='bottom', color='r')
-        plt.axis(ax)
-        plt.title('Blobs')
-        ps.savefig()
-
-        plt.clf()
-        dimshow(blobs != -1)
-        ax = plt.axis()
-        for i,bs in enumerate(blobslices):
-            sy,sx = bs
-            by0,by1 = sy.start, sy.stop
-            bx0,bx1 = sx.start, sx.stop
-            plt.plot([bx0, bx0, bx1, bx1, bx0], [by0, by1, by1, by0,by0], 'r-')
-            plt.text((bx0+bx1)/2., by0, '%i' % i,
-                     ha='center', va='bottom', color='r')
-        plt.axis(ax)
-        plt.title('Blobs')
-        ps.savefig()
+        from legacypipe.runbrick_plots import fitblobs_plots
+        fitblobs_plots(tims, bands, targetwcs, blobslices, blobsrcs, cat,
+                       blobs, ps)
 
     T.orig_ra  = T.ra.copy()
     T.orig_dec = T.dec.copy()
@@ -1015,8 +928,8 @@ def stage_fitblobs(T=None,
         blobmap[keepblobs + 1] = np.arange(len(keepblobs))
         # apply the map!
         blobs = blobmap[blobs + 1]
-        # 'blobslices' and 'blobsrcs' are lists where the index corresponds to the
-        # value in the 'blobs' map.
+        # 'blobslices' and 'blobsrcs' are lists where the index
+        # corresponds to the value in the 'blobs' map.
         blobslices = [blobslices[i] for i in keepblobs]
         blobsrcs   = [blobsrcs  [i] for i in keepblobs]
         # one more place where blob numbers are recorded...
@@ -1026,24 +939,8 @@ def stage_fitblobs(T=None,
     survey.drop_cache()
 
     if plots and refstars:
-        plt.clf()
-        dimshow(blobs>=0, vmin=0, vmax=1)
-        ax = plt.axis()
-        plt.plot(refstars.ibx, refstars.iby, 'ro')
-        for ref in refstars:
-            magstr = ref.ref_cat
-            if ref.ref_cat == 'T2':
-                mag = ref.mag
-                magstr = 'T(%.1f)' % mag
-            elif ref.ref_cat == 'G2':
-                mag = ref.phot_g_mean_mag
-                magstr = 'G(%.1f)' % mag
-            plt.text(ref.ibx, ref.iby, magstr,
-                     color='r', fontsize=10,
-                     bbox=dict(facecolor='w', alpha=0.5))
-        plt.axis(ax)
-        plt.title('Reference stars')
-        ps.savefig()
+        from legacypipe.runbrick_plots import fitblobs_plots_2
+        fitblobs_plots_2(blobs, refstars, ps)
 
     skipblobs = []
     R = []

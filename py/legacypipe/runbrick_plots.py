@@ -4,6 +4,124 @@ from astrometry.util.plotutils import dimshow
 from legacypipe.survey import *
 from legacypipe.coadds import quick_coadds
 
+def fitblobs_plots_2(blobs, refstars, ps):
+    plt.clf()
+    dimshow(blobs>=0, vmin=0, vmax=1)
+    ax = plt.axis()
+    plt.plot(refstars.ibx, refstars.iby, 'ro')
+    for ref in refstars:
+        magstr = ref.ref_cat
+        if ref.ref_cat == 'T2':
+            mag = ref.mag
+            magstr = 'T(%.1f)' % mag
+        elif ref.ref_cat == 'G2':
+            mag = ref.phot_g_mean_mag
+            magstr = 'G(%.1f)' % mag
+        plt.text(ref.ibx, ref.iby, magstr,
+                 color='r', fontsize=10,
+                 bbox=dict(facecolor='w', alpha=0.5))
+    plt.axis(ax)
+    plt.title('Reference stars')
+    ps.savefig()
+
+def fitblobs_plots(tims, bands, targetwcs, blobslices, blobsrcs, cat,
+                   blobs, ps):
+    coimgs,_ = quick_coadds(tims, bands, targetwcs)
+    plt.clf()
+    dimshow(get_rgb(coimgs, bands))
+    ax = plt.axis()
+    for i,bs in enumerate(blobslices):
+        sy,sx = bs
+        by0,by1 = sy.start, sy.stop
+        bx0,bx1 = sx.start, sx.stop
+        plt.plot([bx0, bx0, bx1, bx1, bx0], [by0, by1, by1, by0, by0],'r-')
+        plt.text((bx0+bx1)/2., by0, '%i' % i,
+                 ha='center', va='bottom', color='r')
+    plt.axis(ax)
+    plt.title('Blobs')
+    ps.savefig()
+    
+    for i,Isrcs in enumerate(blobsrcs):
+        for isrc in Isrcs:
+            src = cat[isrc]
+            ra,dec = src.getPosition().ra, src.getPosition().dec
+            ok,x,y = targetwcs.radec2pixelxy(ra, dec)
+            plt.text(x, y, 'b%i/s%i' % (i,isrc),
+                     ha='center', va='bottom', color='r')
+    plt.axis(ax)
+    plt.title('Blobs + Sources')
+    ps.savefig()
+
+    plt.clf()
+    dimshow(blobs)
+    ax = plt.axis()
+    for i,bs in enumerate(blobslices):
+        sy,sx = bs
+        by0,by1 = sy.start, sy.stop
+        bx0,bx1 = sx.start, sx.stop
+        plt.plot([bx0,bx0, bx1, bx1, bx0], [by0, by1, by1, by0, by0], 'r-')
+        plt.text((bx0+bx1)/2., by0, '%i' % i,
+                 ha='center', va='bottom', color='r')
+    plt.axis(ax)
+    plt.title('Blobs')
+    ps.savefig()
+
+    plt.clf()
+    dimshow(blobs != -1)
+    ax = plt.axis()
+    for i,bs in enumerate(blobslices):
+        sy,sx = bs
+        by0,by1 = sy.start, sy.stop
+        bx0,bx1 = sx.start, sx.stop
+        plt.plot([bx0, bx0, bx1, bx1, bx0], [by0, by1, by1, by0,by0], 'r-')
+        plt.text((bx0+bx1)/2., by0, '%i' % i,
+                 ha='center', va='bottom', color='r')
+    plt.axis(ax)
+    plt.title('Blobs')
+    ps.savefig()
+
+def detection_plots_2(tims, bands, targetwcs, refstars, Tnew, hot,
+                      saturated_pix, ps):
+    coimgs,cons = quick_coadds(tims, bands, targetwcs)
+    crossa = dict(ms=10, mew=1.5)
+    plt.clf()
+    dimshow(get_rgb(coimgs, bands))
+    plt.title('Detections')
+    ps.savefig()
+    ax = plt.axis()
+    if len(refstars):
+        I, = np.nonzero([len(r) and r[0] == 'T' for r in refstars.ref_cat])
+        if len(I):
+            plt.plot(refstars.ibx[I], refstars.iby[I], '+', color=(0,1,1),
+                     label='Tycho-2', **crossa)
+        I, = np.nonzero([len(r) and r[0] == 'G' for r in refstars.ref_cat])
+        if len(I):
+            plt.plot(refstars.ibx[I], refstars.iby[I], '+',
+                     color=(0.2,0.2,1), label='Gaia', **crossa)
+        I, = np.nonzero([len(r) and r[0] == 'L' for r in refstars.ref_cat])
+        if len(I):
+            plt.plot(refstars.ibx[I], refstars.iby[I], '+',
+                     color=(0.6,0.6,0.2), label='Large Galaxy', **crossa)
+    plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0),
+             label='New SED-matched detections', **crossa)
+    plt.axis(ax)
+    plt.title('Detections')
+    plt.legend(loc='upper left')
+    ps.savefig()
+
+    plt.clf()
+    plt.subplot(1,2,1)
+    dimshow(hot, vmin=0, vmax=1, cmap='hot')
+    plt.title('hot')
+    plt.subplot(1,2,2)
+    H,W = targetwcs.shape
+    rgb = np.zeros((H,W,3))
+    for i,satpix in enumerate(saturated_pix):
+        rgb[:,:,2-i] = satpix
+    dimshow(rgb)
+    plt.title('saturated_pix')
+    ps.savefig()
+
 def detection_plots(detmaps, detivs, bands, saturated_pix, tims,
                     targetwcs, refstars, large_galaxies, ps):
     rgb = get_rgb(detmaps, bands)
