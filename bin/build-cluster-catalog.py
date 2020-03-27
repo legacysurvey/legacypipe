@@ -115,14 +115,14 @@ out['ba'] = np.ones(len(out), dtype='f4')
 # Sculptor 15.039166666666665 -33.70916666666666    45.2    99    0.68
 
 dwarfs = Table()
-dwarfs['name'] = ['Fornax', 'Sculptor']
+dwarfs['name'] = ['Sculptor', 'Fornax']
 dwarfs['alt_name'] = ['', '']
 dwarfs['type'] = ['Dwrf', 'Dwrf']
-dwarfs['ra'] = [39.99708333333332, -34.449166666666656]
-dwarfs['dec'] = [15.039166666666665 -33.70916666666666]
-dwarfs['radius'] = np.array([0.5533333333333333, 0.3766666666666667]).astype('f4')
-dwarfs['pa'] = np.array([41, 99]).astype('f4')
-dwarfs['ba'] = np.array([0.7, 0.68]).astype('f4')
+dwarfs['ra'] = np.array([15.039166666666665, 39.99708333333332]).astype('f8')
+dwarfs['dec'] = np.array([-33.70916666666666, -34.449166666666656]).astype('f8')
+dwarfs['radius'] = np.array([45.2/2/60, 66.4/2/60]).astype('f4')
+dwarfs['pa'] = np.array([99, 41]).astype('f4')
+dwarfs['ba'] = np.array([0.68, 0.7]).astype('f4')
 out = vstack((out, dwarfs))
 
 if False: # debugging
