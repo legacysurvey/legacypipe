@@ -617,7 +617,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                saddle_fraction=None,
                saddle_min=None,
                survey=None, brick=None,
-               bailout_sources=False,
                refcat=None, refstars=None,
                T_donotfit=None, T_clusters=None,
                ccds=None,
@@ -650,20 +649,18 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         # Add a ~1" exclusion zone around reference stars and large galaxies
         avoid_r = np.zeros_like(avoid_x) + 4
         if T_clusters is not None:
-            print(len(T_clusters), 'CLUSTER reference sources')
+            info('Avoiding source detection in', len(T_clusters), 'CLUSTERs')
             if len(T_clusters):
                 avoid_x = np.append(avoid_x, T_clusters.ibx)
                 avoid_y = np.append(avoid_y, T_clusters.iby)
                 avoid_r = np.append(avoid_r, T_clusters.radius_pix)
-                print('CLUSTER pixel radii:', T_clusters.radius_pix)
-
+                debug('CLUSTER pixel radii:', T_clusters.radius_pix)
     else:
         avoid_x, avoid_y, avoid_r = np.array([]), np.array([]), np.array([])
 
     record_event and record_event('stage_srcs: detection maps')
-
     tnow = Time()
-    info('Rendering detection maps...')
+    debug('Rendering detection maps...')
     detmaps, detivs, satmaps = detection_maps(tims, targetwcs, bands, mp,
                                               apodize=10)
     tnow = Time()
@@ -688,30 +685,11 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     info('Running source detection at', nsigma, 'sigma')
     SEDs = survey.sed_matched_filters(bands)
-    veto_map = None
-
-    ## FIXME -- do we need this?!
-    if bailout_sources:
-        from legacypipe.oneblob import get_inblob_map
-        from legacypipe.bits import IN_BLOB
-        refs = refstars[refstars.donotfit == False]
-        # CUT to real large galaxies and bright stars
-        refs.cut(np.logical_or(refs.islargegalaxy * (refs.radius > 5./60.),
-                               refs.isbright))
-        print('Cut to', np.sum(refs.islargegalaxy), 'large galaxies (> 5 arcmin radius)',
-              'and', np.sum(refs.isbright), 'bright stars')
-        if T_clusters is not None:
-            refs = merge_tables([refs, T_clusters], columns='fillzero')
-        refmap = get_inblob_map(targetwcs, refs)
-        del refs
-        veto_map = (refmap > 0)
-        del refmap
 
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
         nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
-        saturated_pix=saturated_pix, veto_map=veto_map,
-        plots=plots, ps=ps, mp=mp)
+        saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
     if Tnew is None and not bailout_sources:
         raise NothingToDoError('No sources detected.')
     assert(len(Tnew) == len(newcat))
@@ -2702,7 +2680,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               min_mjd=None, max_mjd=None,
               unwise_coadds=False,
               bail_out=False,
-              bail_out_sources=False,
               ceres=True,
               wise_ceres=True,
               unwise_dir=None,
@@ -2941,7 +2918,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   wise_ceres=wise_ceres,
                   unwise_coadds=unwise_coadds,
                   bailout=bail_out,
-                  bailout_sources=bail_out_sources,
                   do_calibs=do_calibs,
                   old_calibs_ok=old_calibs_ok,
                   write_metrics=write_metrics,
@@ -3301,9 +3277,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--bail-out', default=False, action='store_true',
                         help='Bail out of "fitblobs" processing, writing all blobs from the checkpoint and skipping any remaining ones.')
-
-    parser.add_argument('--bail-out-sources', default=False, action='store_true',
-                        help='Avoid detecting new sources in large GALAXY and CLUSTER masked areas')
 
     parser.add_argument('--largegalaxy-preburner', default=False, action='store_true',
                         help='Pre-fitting of LSLGA galaxies')
