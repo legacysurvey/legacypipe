@@ -2602,8 +2602,8 @@ def stage_writecat(
     #print('Catalog table contents:')
     #TT.about()
 
-    hdr = fs = None
-    T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, fs)
+    hdr = None
+    T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands)
 
     # The "ra_ivar" values coming out of the tractor fits do *not*
     # have a cos(Dec) term -- ie, they give the inverse-variance on

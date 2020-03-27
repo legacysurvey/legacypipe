@@ -44,7 +44,7 @@ def _source_param_types(src):
     types = flatten_node(tree)
     return types
 
-def prepare_fits_catalog(cat, invvars, T, hdr, bands, fs, allbands=None,
+def prepare_fits_catalog(cat, invvars, T, hdr, bands, allbands=None,
                          prefix='', save_invvars=True, unpackShape=True):
     if T is None:
         from astrometry.util.fits import fits_table
@@ -103,13 +103,6 @@ def prepare_fits_catalog(cat, invvars, T, hdr, bands, fs, allbands=None,
     T.set('%sflux' % prefix, flux)
     if save_invvars:
         T.set('%sflux_ivar' % prefix, flux_ivar)
-
-    if fs is not None:
-        fskeys = ['prochi2', 'pronpix', 'profracflux', 'proflux', 'npix']
-        for k in fskeys:
-            x = getattr(fs, k)
-            x = np.array(x).astype(np.float32)
-            T.set('%s_%s' % (prefix, k), x.astype(np.float32))
 
     _get_tractor_fits_values(T, cat, '%s%%s' % prefix, unpackShape=unpackShape)
 
