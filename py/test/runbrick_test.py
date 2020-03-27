@@ -20,6 +20,17 @@ def rbmain():
         extra_args.extend(['--no-wise-ceres', '--no-gaia', '--no-large-galaxies'])
 
 
+    surveydir = os.path.join(os.path.dirname(__file__), 'testcase12')
+    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
+    os.environ['GAIA_CAT_VER'] = '2'
+    #python legacypipe/runbrick.py --radec  --width 100 --height 100 --outdir dup5b --survey-dir test/testcase12 --force-all --no-wise
+    main(args=['--radec', '346.684', '12.791', '--width', '100',
+               '--height', '100', '--no-wise-ceres',
+               '--no-wise', '--survey-dir', surveydir,
+               '--outdir', 'out-testcase12', '--skip-coadd', '--force-all', '--no-write'])
+    del os.environ['GAIA_CAT_DIR']
+    del os.environ['GAIA_CAT_VER']
+
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase9')
     os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
     os.environ['GAIA_CAT_VER'] = '2'
@@ -28,7 +39,7 @@ def rbmain():
     main(args=['--radec', '9.1228', '3.3975', '--width', '100',
                '--height', '100', '--old-calibs-ok', '--no-wise-ceres',
                '--no-wise', '--survey-dir', surveydir,
-               '--outdir', 'out-testcase9', '--skip',
+               '--outdir', 'out-testcase9', '--skip', '--force-all',
                '--ps', 'tc9-ps.fits', '--ps-t0', str(int(time.time()))])
     # (omit --force-all --no-write... reading from pickles below!)
     
