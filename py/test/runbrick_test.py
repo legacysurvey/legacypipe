@@ -41,7 +41,7 @@ def rbmain():
                '--height', '100', '--old-calibs-ok', '--no-wise-ceres',
                '--no-wise', '--survey-dir',
                surveydir, '--outdir', 'out-testcase9-coadds',
-               '--stage', 'image_coadds'])
+               '--stage', 'image_coadds', '--blob-image'])
 
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']
