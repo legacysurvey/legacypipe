@@ -6,6 +6,7 @@ import os
 import sys
 import time
 import numpy as np
+import fitsio
 from legacypipe.runbrick import main
 #from legacyanalysis.decals_sim import main as sim_main
 from astrometry.util.fits import fits_table
@@ -30,6 +31,14 @@ def rbmain():
                '--outdir', 'out-testcase12', '--skip-coadd', '--force-all', '--no-write'])
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']
+
+    M = fitsio.read('out-testcase12/coadd/cus/custom-346684p12791/legacysurvey-custom-346684p12791-maskbits.fits.fz')
+    # Count masked & unmasked bits (the cluster splits this 100x100 field)
+    from collections import Counter
+    c = Counter(M.ravel())
+    from legacypipe.bits import MASKBITS
+    assert(c[0] >= 4000)
+    assert(c[MASKBITS['CLUSTER']] >= 4000)
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase9')
     os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
