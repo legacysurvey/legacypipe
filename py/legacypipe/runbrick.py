@@ -969,7 +969,7 @@ def stage_fitblobs(T=None,
         new_skipblobs = np.unique(blobs[blobs>=0])
         # Which blobs are we bailing out on?
         bailing = set(new_skipblobs) - set(skipblobs)
-        print('Bailing out on blobs:', bailing)
+        info('Bailing out on blobs:', bailing)
         if len(bailing):
             Ibail = np.hstack([blobsrcs[b] for b in bailing])
             # Find reference sources in bailout blobs
@@ -988,7 +988,7 @@ def stage_fitblobs(T=None,
                 # Sets TYPE, etc for T_refbail table.
                 _get_tractor_fits_values(T_refbail, cat_refbail, '%s')
 
-            print('Found', len(T_refbail), 'reference sources in bail-out blobs')
+            info('Found', len(T_refbail), 'reference sources in bail-out blobs')
 
         skipblobs = new_skipblobs
         # append empty results so that a later assert on the lengths will pass
@@ -1069,7 +1069,7 @@ def stage_fitblobs(T=None,
 
     # Repackage the results from one_blob...
 
-    # one_blob can reduce the number and change the types of sources.
+    # one_blob can change the number and types of sources.
     # Reorder the sources:
     assert(len(R) == len(blobsrcs))
     # drop brickname,iblob
@@ -1202,9 +1202,6 @@ def stage_fitblobs(T=None,
     # compute the pixel-space mask for *brightblob* values
     brightblobmask = refmap
 
-    # Comment this out if you need to save the 'blobs' map for later (eg, sky fibers)
-    #blobs = None
-
     invvars = np.hstack(BB.srcinvvars)
     assert(cat.numberOfParams() == len(invvars))
 
@@ -1213,12 +1210,13 @@ def stage_fitblobs(T=None,
 
     if write_metrics or get_all_models:
         from legacypipe.format_catalog import format_all_models
+        # append our 'do not fit' sources so that the all-models file
+        # matches the tractor catalog
         T2 = T
         cat2 = [src for src in newcat]
         if T_donotfit:
             T2 = merge_tables([T2, T_donotfit], columns='fillzero')
             cat2.extend([None] * len(T_donotfit))
-
         TT,hdr = format_all_models(T2, cat2, BB, bands, survey.allbands)
         if get_all_models:
             all_models = TT
@@ -1228,7 +1226,6 @@ def stage_fitblobs(T=None,
                 primhdr.add_record(r)
                 primhdr.add_record(dict(name='PRODTYPE', value='catalog',
                                         comment='NOAO data product type'))
-
             with survey.write_output('all-models', brick=brickname) as out:
                 TT.writeto(None, fits_object=out.fits, header=hdr,
                            primheader=primhdr)
