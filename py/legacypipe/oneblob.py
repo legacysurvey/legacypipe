@@ -429,6 +429,11 @@ class OneBlob(object):
             plt.title('saturated pix')
             self.ps.savefig()
 
+            plt.clf()
+            plt.imshow(maxsn, interpolation='nearest', origin='lower')
+            plt.title('max s/n for segmentation')
+            self.ps.savefig()
+
         segmap = np.empty((self.blobh, self.blobw), int)
         segmap[:,:] = -1
 
