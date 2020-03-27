@@ -499,56 +499,17 @@ def stage_halos(targetrd=None, pixscale=None, targetwcs=None,
         debug(len(Igaia), 'stars for halo subtraction')
         if len(Igaia):
             from legacypipe.halos import subtract_halos
-
             halostars = gaia[Igaia]
+
             if plots:
-                coimgs,_ = quick_coadds(tims, bands, targetwcs)
-                plt.clf()
-                dimshow(get_rgb(coimgs, bands))
-                ax = plt.axis()
-                plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
-                plt.axis(ax)
-                plt.title('Before star halo subtraction')
-                ps.savefig()
+                from legacypipe.runbrick_plots import halo_plots_before, halo_plots_after
+                coimgs = halo_plots_before(tims, bands, targetwcs, halostars, ps)
 
             subtract_halos(tims, halostars, bands, mp, plots, ps)
 
             if plots:
-                coimgs2,cons = quick_coadds(tims, bands, targetwcs)
-                plt.clf()
-                dimshow(get_rgb(coimgs2, bands))
-                ax = plt.axis()
-                plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
-                plt.axis(ax)
-                plt.title('After star halo subtraction')
-                ps.savefig()
+                halo_plots_after(tims, bands, targetwcs, halostars, coimgs, ps)
 
-                plt.clf()
-                dimshow(get_rgb([co-co2 for co,co2 in zip(coimgs,coimgs2)],
-                                bands))
-                ax = plt.axis()
-                plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
-                plt.axis(ax)
-                plt.title('Subtracted halos')
-                ps.savefig()
-
-                for g in halostars[:10]:
-                    plt.clf()
-                    pixrad = int(g.radius * 3600. / pixscale)
-                    ax = [g.ibx-pixrad, g.ibx+pixrad, g.iby-pixrad, g.iby+pixrad]
-                    ima = dict(interpolation='nearest', origin='lower')
-                    plt.subplot(2,2,1)
-                    plt.imshow(get_rgb(coimgs, bands), **ima)
-                    plt.plot(halostars.ibx, halostars.iby, 'o', mec='r', ms=15, mfc='none')
-                    plt.axis(ax)
-                    plt.subplot(2,2,2)
-                    plt.imshow(get_rgb(coimgs2, bands), **ima)
-                    plt.axis(ax)
-                    plt.subplot(2,2,3)
-                    plt.imshow(get_rgb([co-co2 for co,co2 in zip(coimgs,coimgs2)],
-                                       bands), **ima)
-                    plt.axis(ax)
-                    ps.savefig()
     return dict(tims=tims, version_header=version_header)
 
 def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
@@ -601,7 +562,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
 
     for name,ims in coadd_list:
         rgb = get_rgb(ims, bands)
-
         kwa = {}
         if coadd_bw and len(bands) == 1:
             rgb = rgb.sum(axis=2)
@@ -681,7 +641,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     record_event and record_event('stage_srcs: starting')
     _add_stage_version(version_header, 'SRCS', 'srcs')
-
     tlast = Time()
 
     if refstars:
@@ -720,71 +679,18 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # with Tycho-2 and Gaia stars and large galaxies, not needed.
 
     if plots:
-        rgb = get_rgb(detmaps, bands)
-        plt.clf()
-        dimshow(rgb)
-        plt.title('detmaps')
-        ps.savefig()
-
-        for i,satpix in enumerate(saturated_pix):
-            rgb[:,:,2-i][satpix] = 1
-        plt.clf()
-        dimshow(rgb)
-        plt.title('detmaps & saturated')
-        ps.savefig()
-
-        coimgs,cons = quick_coadds(tims, bands, targetwcs, fill_holes=False)
-
-        if refstars:
-            plt.clf()
-            dimshow(get_rgb(coimgs, bands))
-            ax = plt.axis()
-            lp,lt = [],[]
-            tycho = refstars[refstars.isbright]
-            if len(tycho):
-                ok,ix,iy = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
-                p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=14, mec='r', mfc='none')
-                lp.append(p)
-                lt.append('Tycho-2 only')
-            if gaia_stars:
-                gaia = refstars[refstars.isgaia]
-            if gaia_stars and len(gaia):
-                ok,ix,iy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
-                p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='c', mfc='none')
-                for x,y,g in zip(ix,iy,gaia.phot_g_mean_mag):
-                    plt.text(x, y, '%.1f' % g, color='k',
-                             bbox=dict(facecolor='w', alpha=0.5))
-                lp.append(p)
-                lt.append('Gaia')
-            # star_clusters?
-            if large_galaxies:
-                galaxies = refstars[refstars.islargegalaxy]
-            if large_galaxies and len(galaxies):
-                ok,ix,iy = targetwcs.radec2pixelxy(galaxies.ra, galaxies.dec)
-                p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=14, mec=(0,1,0), mfc='none')
-                lp.append(p)
-                lt.append('Galaxies')
-            plt.axis(ax)
-            plt.title('Ref sources')
-            plt.figlegend([p[0] for p in lp], lt)
-            ps.savefig()
-
-        for band, detmap,detiv in zip(bands, detmaps, detivs):
-            plt.clf()
-            plt.subplot(2,1,1)
-            plt.hist((detmap * np.sqrt(detiv))[detiv>0], bins=50, range=(-5,8), log=True)
-            plt.title('Detection map pixel values (sigmas): band %s' % band)
-            plt.subplot(2,1,2)
-            plt.hist((detmap * np.sqrt(detiv))[detiv>0], bins=50, range=(-5,8))
-            ps.savefig()
+        from legacypipe.runbrick_plots import detection_plots
+        detection_plots(detmaps, detivs, bands, saturated_pix, tims,
+                        targetwcs, refstars, large_galaxies, ps)
 
     # SED-matched detections
     record_event and record_event('stage_srcs: SED-matched')
+
     info('Running source detection at', nsigma, 'sigma')
     SEDs = survey.sed_matched_filters(bands)
-
     veto_map = None
 
+    ## FIXME -- do we need this?!
     if bailout_sources:
         from legacypipe.oneblob import get_inblob_map
         from legacypipe.bits import IN_BLOB
@@ -799,7 +705,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         refmap = get_inblob_map(targetwcs, refs)
         del refs
         veto_map = (refmap > 0)
-        #veto_map = (refmap & (IN_BLOB['CLUSTER'] | IN_BLOB['GALAXY'] | IN_BLOB['BRIGHT']) > 0)
         del refmap
 
     Tnew,newcat,hot = run_sed_matched_filters(
@@ -2593,9 +2498,6 @@ def stage_writecat(
     for k in ['ibx','iby']:
         TT.delete_column(k)
 
-    #print('Catalog table contents:')
-    #TT.about()
-
     hdr = None
     T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands)
 
@@ -2616,9 +2518,6 @@ def stage_writecat(
         if len(I):
             T2.ra_ivar [I] = T.ra_ivar[I]
             T2.dec_ivar[I] = T.dec_ivar[I]
-
-    # print('T2:')
-    # T2.about()
 
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
