@@ -2264,7 +2264,7 @@ def get_inblob_map(blobwcs, refs):
     # circular/elliptical regions:
     for col,bit,ellipse in [('isbright', 'BRIGHT', False),
                             ('ismedium', 'MEDIUM', False),
-                            ('iscluster', 'CLUSTER', False),
+                            ('iscluster', 'CLUSTER', True),
                             ('islargegalaxy', 'GALAXY', True),]:
         isit = refs.get(col)
         if not np.any(isit):
@@ -2297,7 +2297,7 @@ def get_inblob_map(blobwcs, refs):
                 xgrid,ygrid = np.meshgrid(np.arange(xlo,xhi), np.arange(ylo,yhi))
                 dx = xgrid - (x-1)
                 dy = ygrid - (y-1)
-                debug('Galaxy: PA', ref.pa, 'BA', ref.ba, 'Radius', ref.radius, 'pix', ref.radius_pix)
+                debug('Object: PA', ref.pa, 'BA', ref.ba, 'Radius', ref.radius, 'pix', ref.radius_pix)
                 if not np.isfinite(ref.pa):
                     ref.pa = 0.
                 v1x = -np.sin(np.deg2rad(ref.pa))
