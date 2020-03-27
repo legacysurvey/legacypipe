@@ -101,9 +101,29 @@ suppfile = resource_filename('legacypipe', 'data/star-clusters-supplemental.csv'
 supp = ascii.read(suppfile, delimiter=',', names=names, fill_values='')
 #supp['alt_name'] = supp['alt_name'].astype('U4')
 supp['radius'] = supp['radius'].astype('f4')
-
 out = vstack((out, supp))
-out = out[np.argsort(out['ra'])]
+
+# add a position angle and ellipticity (b/a)
+out['pa'] = np.zeros(len(out), dtype='f4')
+out['ba'] = np.ones(len(out), dtype='f4')
+
+# add Fornax and Scluptor -- LG dwarfs by hand
+#  GALAXY         RA                DEC           D25     PA     BA
+# bytes24      float64            float64       float32 int16 float32
+# ------- ----------------- ------------------- ------- ----- -------
+#   Fornax 39.99708333333332 -34.449166666666656    66.4    41     0.7
+# Sculptor 15.039166666666665 -33.70916666666666    45.2    99    0.68
+
+dwarfs = Table()
+dwarfs['name'] = ['Fornax', 'Sculptor']
+dwarfs['alt_name'] = ['', '']
+dwarfs['type'] = ['Dwrf', 'Dwrf']
+dwarfs['ra'] = [39.99708333333332, -34.449166666666656]
+dwarfs['dec'] = [15.039166666666665 -33.70916666666666]
+dwarfs['radius'] = np.array([0.5533333333333333, 0.3766666666666667]).astype('f4')
+dwarfs['pa'] = np.array([41, 99]).astype('f4')
+dwarfs['ba'] = np.array([0.7, 0.68]).astype('f4')
+out = vstack((out, dwarfs))
 
 if False: # debugging
     bb = out[['M' in nn for nn in out['alt_name']]]
@@ -112,6 +132,8 @@ if False: # debugging
     bb['radius_orig'] *= 60
     print(bb)
 
+out = out[np.argsort(out['ra'])]
+print(out)
 clusterfile = resource_filename('legacypipe', 'data/NGC-star-clusters.fits')
 
 print('Writing {}'.format(clusterfile))

@@ -491,7 +491,7 @@ def read_star_clusters(targetwcs):
 
     clusterfile = resource_filename('legacypipe', 'data/NGC-star-clusters.fits')
     debug('Reading {}'.format(clusterfile))
-    clusters = fits_table(clusterfile, columns=['ra', 'dec', 'radius', 'type'])
+    clusters = fits_table(clusterfile, columns=['ra', 'dec', 'radius', 'type', 'ba', 'pa'])
     clusters.ref_id = np.arange(len(clusters))
 
     radius = 1.
