@@ -572,17 +572,6 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
     # nsize = 0
     for src in cat:
-        # Limit sizes of huge models
-        # from tractor.galaxy import ProfileGalaxy
-        # if isinstance(src, ProfileGalaxy):
-        #     px,py = tim.wcs.positionToPixel(src.getPosition())
-        #     h = src._getUnitFluxPatchSize(tim, px, py, tim.modelMinval)
-        #     MAXHALF = 128
-        #     if h > MAXHALF:
-        #         #print('halfsize', h,'for',src,'-> setting to',MAXHALF)
-        #         nsize += 1
-        #         src.halfsize = MAXHALF
-
         src.freezeAllBut('brightness')
         src.getBrightness().freezeAllBut(tim.band)
     #print('Limited the size of', nsize, 'large galaxy models')
@@ -880,7 +869,7 @@ class SourceDerivatives(MultiParams, BasicSource):
         return dict(dra=0, ddec=1)
 
     # forced photom calls getUnitFluxModelPatches
-    def getUnitFluxModelPatches(self, img, minval=0., modelMask=None):
+    def getUnitFluxModelPatches(self, img, modelMask=None):
         return self.umods
 
     def getModelPatch(self, img, minsb=0., modelMask=None):

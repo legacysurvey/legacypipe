@@ -495,7 +495,6 @@ def stage_halos(targetrd=None, pixscale=None, targetwcs=None,
         Igaia = []
         gaia = refstars
         Igaia, = np.nonzero(refstars.isgaia * refstars.pointsource)
-        #Igaia = Igaia[np.argsort(gaia.phot_g_mean_mag[Igaia])]
         debug(len(Igaia), 'stars for halo subtraction')
         if len(Igaia):
             from legacypipe.halos import subtract_halos
@@ -804,7 +803,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             dimshow((hot*1) + (any_saturated*1), vmin=0, vmax=2, cmap='hot')
             plt.title('hot + saturated')
             ps.savefig()
-
             plt.clf()
             plt.subplot(1,2,1)
             dimshow(merging, vmin=0, vmax=1, cmap='hot')
@@ -1530,8 +1528,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
             subtimargs.append((subimg, subie, subdq, subwcs, subwcsobj,
                                tim.getPhotoCal(),
                                subsky, subpsf, tim.name, sx0, sx1, sy0, sy1,
-                               tim.band, tim.sig1, tim.modelMinval,
-                               tim.imobj))
+                               tim.band, tim.sig1, tim.imobj))
 
         yield (brickname, iblob,
                (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,

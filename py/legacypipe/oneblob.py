@@ -1703,8 +1703,7 @@ class OneBlob(object):
         # 'tims'.
         tims = []
         for (img, inverr, dq, twcs, wcsobj, pcal, sky, subpsf, name,
-             sx0, sx1, sy0, sy1,
-             band, sig1, modelMinval, imobj) in timargs:
+             sx0, sx1, sy0, sy1, band, sig1, imobj) in timargs:
             # Mask out inverr for pixels that are not within the blob.
             try:
                 Yo,Xo,Yi,Xi,_ = resample_with_wcs(wcsobj, self.blobwcs,
@@ -1728,7 +1727,6 @@ class OneBlob(object):
                         psf=subpsf, photocal=pcal, sky=sky, name=name)
             tim.band = band
             tim.sig1 = sig1
-            tim.modelMinval = modelMinval
             tim.subwcs = wcsobj
             tim.meta = imobj
             tim.psf_sigma = imobj.fwhm / 2.35
@@ -1802,7 +1800,7 @@ def _compute_source_metrics(srcs, tims, bands, tr):
             # For each source, compute its model and record its flux
             # in this image.  Also compute the full model *mod*.
             for isrc,src in enumerate(srcs):
-                patch = tr.getModelPatch(tim, src, minsb=tim.modelMinval)
+                patch = tr.getModelPatch(tim, src)
                 if patch is None or patch.patch is None:
                     continue
                 counts[isrc] = np.sum([np.abs(pcal.brightnessToCounts(b))
@@ -1977,7 +1975,6 @@ def _get_subtim(tim, x0, x1, y0, y1):
     subtim.subwcs = tim.subwcs.get_subimage(x0, y0, sw, sh)
     subtim.band = tim.band
     subtim.sig1 = tim.sig1
-    subtim.modelMinval = tim.modelMinval
     subtim.x0 = x0
     subtim.y0 = y0
     subtim.fulltim = tim
