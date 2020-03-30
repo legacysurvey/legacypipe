@@ -612,18 +612,7 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None):
     return rgb
 
 def get_rgb(imgs, bands,
-            #mnmx=None, arcsinh=None, scales=None, clip=True):
             resids=False, mnmx=None, arcsinh=None):
-    # (ignore arcsinh...)
-    if resids:
-        mnmx = (-0.1, 0.1)
-    if mnmx is not None:
-        #return get_rgb_OLD(imgs, bands, mnmx=(-5,5))
-        return sdss_rgb(imgs, bands, m=0., Q=None, mnmx=mnmx)
-    return sdss_rgb(imgs, bands)
-    
-def get_rgb_OLD(imgs, bands, mnmx=None, arcsinh=None, scales=None,
-                clip=True):
     '''
     Given a list of images in the given bands, returns a scaled RGB
     image.
@@ -637,68 +626,13 @@ def get_rgb_OLD(imgs, bands, mnmx=None, arcsinh=None, scales=None,
 
     Returns a (H,W,3) numpy array with values between 0 and 1.
     '''
-    bands = ''.join(bands)
-
-    grzscales = dict(g = (2, 0.0066),
-                      r = (1, 0.01),
-                      z = (0, 0.025),
-                      )
-
-    # print('get_rgb: bands', bands)
-
-    if scales is None:
-        if bands == 'grz':
-            scales = grzscales
-        elif bands == 'urz':
-            scales = dict(u = (2, 0.0066),
-                          r = (1, 0.01),
-                          z = (0, 0.025),
-                          )
-        elif bands == 'gri':
-            # scales = dict(g = (2, 0.004),
-            #               r = (1, 0.0066),
-            #               i = (0, 0.01),
-            #               )
-            scales = dict(g = (2, 0.002),
-                          r = (1, 0.004),
-                          i = (0, 0.005),
-                          )
-        elif bands == 'ugriz':
-            scales = dict(g = (2, 0.0066),
-                          r = (1, 0.01),
-                          i = (0, 0.05),
-                          )
-        else:
-            scales = grzscales
-
-    # print('Using scales:', scales)
-    h,w = imgs[0].shape
-    rgb = np.zeros((h,w,3), np.float32)
-    for im,band in zip(imgs, bands):
-        if not band in scales:
-            print('Warning: band', band, 'not used in creating RGB image')
-            continue
-        plane,scale = scales.get(band, (0,1.))
-        # print('RGB: band', band, 'in plane', plane, 'scaled by', scale)
-        rgb[:,:,plane] = (im / scale).astype(np.float32)
-
-    if mnmx is None:
-        mn,mx = -3, 10
-    else:
-        mn,mx = mnmx
-
-    if arcsinh is not None:
-        def nlmap(x):
-            return np.arcsinh(x * arcsinh) / np.sqrt(arcsinh)
-        rgb = nlmap(rgb)
-        mn = nlmap(mn)
-        mx = nlmap(mx)
-
-    rgb = (rgb - mn) / (mx - mn)
-    if clip:
-        return np.clip(rgb, 0., 1.)
-    return rgb
-
+    # (ignore arcsinh...)
+    if resids:
+        mnmx = (-0.1, 0.1)
+    if mnmx is not None:
+        return sdss_rgb(imgs, bands, m=0., Q=None, mnmx=mnmx)
+    return sdss_rgb(imgs, bands)
+    
 def brick_catalog_for_radec_box(ralo, rahi, declo, dechi,
                                 survey, catpattern, bricks=None):
     '''
