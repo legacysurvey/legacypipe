@@ -632,50 +632,6 @@ def get_rgb(imgs, bands,
     if mnmx is not None:
         return sdss_rgb(imgs, bands, m=0., Q=None, mnmx=mnmx)
     return sdss_rgb(imgs, bands)
-    
-def brick_catalog_for_radec_box(ralo, rahi, declo, dechi,
-                                survey, catpattern, bricks=None):
-    '''
-    Merges multiple Tractor brick catalogs to cover an RA,Dec
-    bounding-box.
-
-    No cleverness with RA wrap-around; assumes ralo < rahi.
-
-    survey: LegacySurveyData object
-
-    bricks: table of bricks, eg from LegacySurveyData.get_bricks()
-
-    catpattern: filename pattern of catalog files to read,
-        eg "pipebrick-cats/tractor-phot-%06i.its"
-    '''
-    assert(ralo < rahi)
-    assert(declo < dechi)
-
-    if bricks is None:
-        bricks = survey.get_bricks_readonly()
-    I = survey.bricks_touching_radec_box(bricks, ralo, rahi, declo, dechi)
-    print(len(I), 'bricks touch RA,Dec box')
-    TT = []
-    for i in I:
-        brick = bricks[i]
-        fn = catpattern % brick.brickid
-        print('Catalog', fn)
-        if not os.path.exists(fn):
-            print('Warning: catalog does not exist:', fn)
-            continue
-        T = fits_table(fn, header=True)
-        if T is None or len(T) == 0:
-            print('Warning: empty catalog', fn)
-            continue
-        T.cut((T.ra  >= ralo ) * (T.ra  <= rahi) *
-              (T.dec >= declo) * (T.dec <= dechi))
-        TT.append(T)
-    if len(TT) == 0:
-        return None
-    T = merge_tables(TT)
-    # arbitrarily keep the first header
-    T._header = TT[0]._header
-    return T
 
 def wcs_for_brick(b, W=3600, H=3600, pixscale=0.262):
     '''
