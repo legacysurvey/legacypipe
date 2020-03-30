@@ -340,6 +340,22 @@ def stage_3(resid=None, sky=None, ps=None, tim=None, mask=None,
 
     return dict(filters=filters, radii_arcsec=radii_arcsec)
 
+def bin_image_with_invvar(data, invvar, S):
+    # rebin image data
+    H,W = data.shape
+    sH,sW = (H+S-1)//S, (W+S-1)//S
+    newdata = np.zeros((sH,sW), dtype=data.dtype)
+    newiv = np.zeros((sH,sW), dtype=invvar.dtype)
+    for i in range(S):
+        for j in range(S):
+            iv = invvar[i::S, j::S]
+            subh,subw = iv.shape
+            newdata[:subh,:subw] += data[i::S, j::S] * iv
+            newiv  [:subh,:subw] += iv
+    newdata /= (newiv + (newiv == 0)*1.)
+    newdata[newiv == 0] = 0.
+    return newdata,newiv
+
 def stage_4(resid=None, sky=None, ps=None, tim=None,
             mask=None, sourcepix=None,
             filters=None, radii_arcsec=None,
