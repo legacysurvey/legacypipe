@@ -89,16 +89,18 @@ def get_parser():
 
     return parser
 
-def main(survey=None, opt=None):
+def main(survey=None, opt=None, args=None):
 
-    print(' '.join(sys.argv))
+    if args is None:
+        args = sys.argv[1:]
+    print(' '.join(args))
 
     '''Driver function for forced photometry of individual Legacy
     Survey images.
     '''
     if opt is None:
         parser = get_parser()
-        opt = parser.parse_args()
+        opt = parser.parse_args(args)
 
     Time.add_measurement(MemMeas)
     t0 = tlast = Time()
@@ -293,10 +295,8 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
             print('Reading', fn)
             T = fits_table(fn, columns=[
                 'ra', 'dec', 'brick_primary', 'type', 'release',
-                'brickid', 'brickname', 'objid',
-                'fracdev', 'flux_r',
-                'shapedev_r', 'shapedev_e1', 'shapedev_e2',
-                'shapeexp_r', 'shapeexp_e1', 'shapeexp_e2',
+                'brickid', 'brickname', 'objid', 'flux_r',
+                'sersic', 'shape_r', 'shape_e1', 'shape_e2',
                 'ref_epoch', 'pmra', 'pmdec', 'parallax'
                 ])
             if resolve_dec is not None and b.gal_b > 0:
@@ -331,22 +331,6 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
     del TT
     print('Total of', len(T), 'catalog sources')
 
-    # Fix up various failure modes:
-    # FixedCompositeGalaxy(pos=RaDecPos[240.51147402832561, 10.385488075518923], brightness=NanoMaggies: g=(flux -2.87), r=(flux -5.26), z=(flux -7.65), fracDev=FracDev(0.60177207), shapeExp=re=3.78351e-44, e1=9.30367e-13, e2=1.24392e-16, shapeDev=re=inf, e1=-0, e2=-0)
-    # -> convert to EXP
-    I, = np.nonzero([t == 'COMP' and not np.isfinite(r) for t,r in zip(T.type, T.shapedev_r)])
-    if len(I):
-        print('Converting', len(I), 'bogus COMP galaxies to EXP')
-        for i in I:
-            T.type[i] = 'EXP'
-
-    # Same thing with the exp component.
-    # -> convert to DEV
-    I, = np.nonzero([t == 'COMP' and not np.isfinite(r) for t,r in zip(T.type, T.shapeexp_r)])
-    if len(I):
-        print('Converting', len(I), 'bogus COMP galaxies to DEV')
-        for i in I:
-            T.type[i] = 'DEV'
     return T
 
 def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,

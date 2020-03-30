@@ -51,7 +51,7 @@ def rbmain():
                '--outdir', 'out-testcase9', '--skip', '--force-all',
                '--ps', 'tc9-ps.fits', '--ps-t0', str(int(time.time()))])
     # (omit --force-all --no-write... reading from pickles below!)
-    
+
     main(args=['--radec', '9.1228', '3.3975', '--width', '100',
                '--height', '100', '--old-calibs-ok', '--no-wise-ceres',
                '--no-wise', '--survey-dir',
@@ -64,10 +64,6 @@ def rbmain():
                surveydir, '--outdir', 'out-testcase9-coadds',
                '--stage', 'image_coadds', '--blob-image'])
 
-    del os.environ['GAIA_CAT_DIR']
-    del os.environ['GAIA_CAT_VER']
-    del os.environ['LARGEGALAXIES_CAT']
-
     T = fits_table('out-testcase9/tractor/cus/tractor-custom-009122p03397.fits')
     assert(len(T) == 4)
     # Gaia star becomes a DUP!
@@ -77,6 +73,28 @@ def rbmain():
     assert(len(Igal) == 1)
     assert(np.all(T.ref_id[Igal] > 0))
     assert(T.type[Igal[0]] == 'SER')
+
+
+    # --brick and --zoom rather than --radec --width --height
+    main(args=['--survey-dir', surveydir, '--outdir', 'out-testcase9b',
+               '--zoom', '1950', '2050', '340', '440', '--brick', '0091p035'])
+
+    # test forced phot??
+    rtn = os.system('cp test/testcase9/survey-bricks.fits.gz out-testcase9b')
+    assert(rtn == 0)
+
+    from legacypipe.forced_photom import main as forced_main
+    forced_main(args=['--survey-dir', surveydir,
+                      '--no-ceres',
+                      '--catalog-dir', 'out-testcase9b',
+                      '372546', 'N26', 'forced1.fits'])
+    assert(os.path.exists('forced1.fits'))
+    F = fits_table('forced1.fits')
+    # ... more tests...!
+    
+    del os.environ['GAIA_CAT_DIR']
+    del os.environ['GAIA_CAT_VER']
+    del os.environ['LARGEGALAXIES_CAT']
     
     if 'ceres' in sys.argv:
         surveydir = os.path.join(os.path.dirname(__file__), 'testcase3')
