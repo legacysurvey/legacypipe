@@ -1028,7 +1028,8 @@ class LegacySurveyData(object):
                              '%s-%s.jpg' % (filetype, brick)))
 
         elif filetype in ['invvar', 'chi2', 'image', 'model', 'blobmodel',
-                          'depth', 'galdepth', 'nexp', 'psfsize']:
+                          'depth', 'galdepth', 'nexp', 'psfsize',
+                          'copsf']:
             return swap(os.path.join(codir, '%s-%s-%s-%s.fits.fz' %
                                      (sname, brick, filetype,band)))
 

@@ -142,7 +142,9 @@ def stage_largegalaxies(
         #     print('allmask for band', band, ': values:', Counter(mask.ravel()))
 
         # Scale invvar to take into account that we have resampled (~double-counted) pixels
-        cscale = np.mean([tim.imobj.pixscale / pixscale for tim in tims if tim.band == band])
+        tim_pixscale = np.mean([tim.imobj.pixscale for tim in tims
+                                if tim.band == band])
+        cscale = tim_pixscale / pixscale
         print('average tim pixel scale / coadd scale:', cscale)
 
         iv /= cscale**2
@@ -164,6 +166,27 @@ def stage_largegalaxies(
         cotim.primhdr = fitsio.FITSHDR()
 
         cotims.append(cotim)
+
+        # Save an image of the coadd PSF
+
+        # copy version_header before modifying it.
+        hdr = fitsio.FITSHDR()
+        for r in version_header.records():
+            hdr.add_record(r)
+        hdr.add_record(dict(name='IMTYPE', value='coaddpsf',
+                            comment='LegacySurveys image type'))
+        hdr.add_record(dict(name='BAND', value=band,
+                            comment='Band of this coadd/PSF'))
+        hdr.add_record(dict(name='PSF_SIG', value=psf_sigma,
+                            comment='Average PSF sigma (pixels)'))
+        hdr.add_record(dict(name='PIXSCAL', value=tim_pixscale,
+                            comment='Average pixel scale for this PSF'))
+        hdr.add_record(dict(name='MJD', value=mjd,
+                            comment='Average MJD for coadd'))
+        hdr.add_record(dict(name='MJD_TAI', value=mjd_tai,
+                            comment='Average MJD (in TAI) for coadd'))
+        with survey.write_output('copsf', brick=brickname, band=band) as out:
+            out.fits.write(psfimg, header=hdr)
 
     # EVIL
     return dict(tims=cotims)
