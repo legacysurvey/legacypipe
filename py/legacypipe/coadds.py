@@ -895,16 +895,26 @@ def write_coadd_images(band,
     mjds = [tim.time.toMjd() for tim in tims if tim.band == band]
     minmjd = min(mjds)
     maxmjd = max(mjds)
+    meanmjd = np.mean(mjds)
+    hdr.add_record(dict(name='MDJ_MIN', value=minmjd,
+                        comment='Earliest MJD in coadd (TAI)'))
+    hdr.add_record(dict(name='MDJ_MAX', value=maxmjd,
+                        comment='Latest MJD in coadd (TAI)'))
+    hdr.add_record(dict(name='MDJ_MEAN', value=minmjd,
+                        comment='Mean MJD in coadd (TAI)'))
     # back to date string in UTC...
     import astropy.time
     tt = [astropy.time.Time(mjd, format='mjd', scale='tai').utc.isot
-          for mjd in [minmjd, maxmjd]]
+          for mjd in [minmjd, maxmjd, meanmjd]]
     hdr.add_record(dict(
         name='DATEOBS1', value=tt[0],
         comment='DATE-OBS for the first image in the stack (UTC)'))
     hdr.add_record(dict(
         name='DATEOBS2', value=tt[1],
         comment='DATE-OBS for the last  image in the stack (UTC)'))
+    hdr.add_record(dict(
+        name='DATEOBS', value=tt[2],
+        comment='Mean DATE-OBS for the stack (UTC)'))
 
     # Plug the WCS header cards into these images
     targetwcs.add_to_header(hdr)
