@@ -561,22 +561,6 @@ class MyFITSHDR(fitsio.FITSHDR):
                     names=['%s%d' % (n,i) for n in nbase]
                     self.delete(names)
 
-def bin_image(data, invvar, S):
-    # rebin image data
-    H,W = data.shape
-    sH,sW = (H+S-1)//S, (W+S-1)//S
-    newdata = np.zeros((sH,sW), dtype=data.dtype)
-    newiv = np.zeros((sH,sW), dtype=invvar.dtype)
-    for i in range(S):
-        for j in range(S):
-            iv = invvar[i::S, j::S]
-            subh,subw = iv.shape
-            newdata[:subh,:subw] += data[i::S, j::S] * iv
-            newiv  [:subh,:subw] += iv
-    newdata /= (newiv + (newiv == 0)*1.)
-    newdata[newiv == 0] = 0.
-    return newdata,newiv
-
 def tim_get_resamp(tim, targetwcs):
     from astrometry.util.resample import resample_with_wcs,OverlapError
 
@@ -628,18 +612,7 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None):
     return rgb
 
 def get_rgb(imgs, bands,
-            #mnmx=None, arcsinh=None, scales=None, clip=True):
             resids=False, mnmx=None, arcsinh=None):
-    # (ignore arcsinh...)
-    if resids:
-        mnmx = (-0.1, 0.1)
-    if mnmx is not None:
-        #return get_rgb_OLD(imgs, bands, mnmx=(-5,5))
-        return sdss_rgb(imgs, bands, m=0., Q=None, mnmx=mnmx)
-    return sdss_rgb(imgs, bands)
-    
-def get_rgb_OLD(imgs, bands, mnmx=None, arcsinh=None, scales=None,
-                clip=True):
     '''
     Given a list of images in the given bands, returns a scaled RGB
     image.
@@ -653,111 +626,12 @@ def get_rgb_OLD(imgs, bands, mnmx=None, arcsinh=None, scales=None,
 
     Returns a (H,W,3) numpy array with values between 0 and 1.
     '''
-    bands = ''.join(bands)
-
-    grzscales = dict(g = (2, 0.0066),
-                      r = (1, 0.01),
-                      z = (0, 0.025),
-                      )
-
-    # print('get_rgb: bands', bands)
-
-    if scales is None:
-        if bands == 'grz':
-            scales = grzscales
-        elif bands == 'urz':
-            scales = dict(u = (2, 0.0066),
-                          r = (1, 0.01),
-                          z = (0, 0.025),
-                          )
-        elif bands == 'gri':
-            # scales = dict(g = (2, 0.004),
-            #               r = (1, 0.0066),
-            #               i = (0, 0.01),
-            #               )
-            scales = dict(g = (2, 0.002),
-                          r = (1, 0.004),
-                          i = (0, 0.005),
-                          )
-        elif bands == 'ugriz':
-            scales = dict(g = (2, 0.0066),
-                          r = (1, 0.01),
-                          i = (0, 0.05),
-                          )
-        else:
-            scales = grzscales
-
-    # print('Using scales:', scales)
-    h,w = imgs[0].shape
-    rgb = np.zeros((h,w,3), np.float32)
-    for im,band in zip(imgs, bands):
-        if not band in scales:
-            print('Warning: band', band, 'not used in creating RGB image')
-            continue
-        plane,scale = scales.get(band, (0,1.))
-        # print('RGB: band', band, 'in plane', plane, 'scaled by', scale)
-        rgb[:,:,plane] = (im / scale).astype(np.float32)
-
-    if mnmx is None:
-        mn,mx = -3, 10
-    else:
-        mn,mx = mnmx
-
-    if arcsinh is not None:
-        def nlmap(x):
-            return np.arcsinh(x * arcsinh) / np.sqrt(arcsinh)
-        rgb = nlmap(rgb)
-        mn = nlmap(mn)
-        mx = nlmap(mx)
-
-    rgb = (rgb - mn) / (mx - mn)
-    if clip:
-        return np.clip(rgb, 0., 1.)
-    return rgb
-
-def brick_catalog_for_radec_box(ralo, rahi, declo, dechi,
-                                survey, catpattern, bricks=None):
-    '''
-    Merges multiple Tractor brick catalogs to cover an RA,Dec
-    bounding-box.
-
-    No cleverness with RA wrap-around; assumes ralo < rahi.
-
-    survey: LegacySurveyData object
-
-    bricks: table of bricks, eg from LegacySurveyData.get_bricks()
-
-    catpattern: filename pattern of catalog files to read,
-        eg "pipebrick-cats/tractor-phot-%06i.its"
-    '''
-    assert(ralo < rahi)
-    assert(declo < dechi)
-
-    if bricks is None:
-        bricks = survey.get_bricks_readonly()
-    I = survey.bricks_touching_radec_box(bricks, ralo, rahi, declo, dechi)
-    print(len(I), 'bricks touch RA,Dec box')
-    TT = []
-    for i in I:
-        brick = bricks[i]
-        fn = catpattern % brick.brickid
-        print('Catalog', fn)
-        if not os.path.exists(fn):
-            print('Warning: catalog does not exist:', fn)
-            continue
-        T = fits_table(fn, header=True)
-        if T is None or len(T) == 0:
-            print('Warning: empty catalog', fn)
-            continue
-        T.cut((T.ra  >= ralo ) * (T.ra  <= rahi) *
-              (T.dec >= declo) * (T.dec <= dechi))
-        TT.append(T)
-    if len(TT) == 0:
-        return None
-    T = merge_tables(TT)
-    # arbitrarily keep the first header
-    T._header = TT[0]._header
-    return T
+    # (ignore arcsinh...)
+    if resids:
+        mnmx = (-0.1, 0.1)
+    if mnmx is not None:
+        return sdss_rgb(imgs, bands, m=0., Q=None, mnmx=mnmx)
+    return sdss_rgb(imgs, bands)
 
 def wcs_for_brick(b, W=3600, H=3600, pixscale=0.262):
     '''
@@ -1154,7 +1028,8 @@ class LegacySurveyData(object):
                              '%s-%s.jpg' % (filetype, brick)))
 
         elif filetype in ['invvar', 'chi2', 'image', 'model', 'blobmodel',
-                          'depth', 'galdepth', 'nexp', 'psfsize']:
+                          'depth', 'galdepth', 'nexp', 'psfsize',
+                          'copsf']:
             return swap(os.path.join(codir, '%s-%s-%s-%s.fits.fz' %
                                      (sname, brick, filetype,band)))
 

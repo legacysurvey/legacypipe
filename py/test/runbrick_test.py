@@ -51,7 +51,7 @@ def rbmain():
                '--outdir', 'out-testcase9', '--skip', '--force-all',
                '--ps', 'tc9-ps.fits', '--ps-t0', str(int(time.time()))])
     # (omit --force-all --no-write... reading from pickles below!)
-    
+
     main(args=['--radec', '9.1228', '3.3975', '--width', '100',
                '--height', '100', '--old-calibs-ok', '--no-wise-ceres',
                '--no-wise', '--survey-dir',
@@ -64,10 +64,6 @@ def rbmain():
                surveydir, '--outdir', 'out-testcase9-coadds',
                '--stage', 'image_coadds', '--blob-image'])
 
-    del os.environ['GAIA_CAT_DIR']
-    del os.environ['GAIA_CAT_VER']
-    del os.environ['LARGEGALAXIES_CAT']
-
     T = fits_table('out-testcase9/tractor/cus/tractor-custom-009122p03397.fits')
     assert(len(T) == 4)
     # Gaia star becomes a DUP!
@@ -77,6 +73,28 @@ def rbmain():
     assert(len(Igal) == 1)
     assert(np.all(T.ref_id[Igal] > 0))
     assert(T.type[Igal[0]] == 'SER')
+
+
+    # --brick and --zoom rather than --radec --width --height
+    main(args=['--survey-dir', surveydir, '--outdir', 'out-testcase9b',
+               '--zoom', '1950', '2050', '340', '440', '--brick', '0091p035'])
+
+    # test forced phot??
+    rtn = os.system('cp test/testcase9/survey-bricks.fits.gz out-testcase9b')
+    assert(rtn == 0)
+
+    from legacypipe.forced_photom import main as forced_main
+    forced_main(args=['--survey-dir', surveydir,
+                      '--no-ceres',
+                      '--catalog-dir', 'out-testcase9b',
+                      '372546', 'N26', 'forced1.fits'])
+    assert(os.path.exists('forced1.fits'))
+    F = fits_table('forced1.fits')
+    # ... more tests...!
+    
+    del os.environ['GAIA_CAT_DIR']
+    del os.environ['GAIA_CAT_VER']
+    del os.environ['LARGEGALAXIES_CAT']
     
     if 'ceres' in sys.argv:
         surveydir = os.path.join(os.path.dirname(__file__), 'testcase3')
@@ -133,15 +151,43 @@ def rbmain():
                '--no-wise', '--force-all', '--no-write',
                '--survey-dir', surveydir2,
                '--outdir', 'out-mzlsbass2'] + my_extra_args)
+
+    T = fits_table('out-mzlsbass2/tractor/177/tractor-1773p595.fits')
+    assert(np.sum(T.ref_cat == 'G2') == 3)
+    assert(np.sum(T.ref_id > 0) == 3)
+
+    # Test --max-blobsize, --checkpoint, --bail-out
+
+    outdir = 'out-mzlsbass2b'
+    chk = 'checkpoint-mzb2b.p'
+    if os.path.exists(chk):
+        os.unlink(chk)
+    main(args=['--brick', '1773p595', '--zoom', '1300', '1500', '700', '900',
+               '--no-wise', '--force-all', '--stage', 'fitblobs',
+               '--write-stage', 'srcs',
+               '--survey-dir', surveydir2,
+               '--outdir', outdir,
+               '--checkpoint', chk,
+               '--nblobs', '3'] + my_extra_args)
+    # err... --max-blobsize does not result in bailed-out blobs masked,
+    # because it treats large blobs as *completed*...
+    #'--max-blobsize', '3000',
+
+    outdir = 'out-mzlsbass2c'
+    main(args=['--brick', '1773p595', '--zoom', '1300', '1500', '700', '900',
+               '--no-wise', '--force-all',
+               '--survey-dir', surveydir2,
+               '--outdir', outdir, '--bail-out', '--checkpoint', chk,
+               '--no-write'] +
+               my_extra_args)
+
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']
 
-    # surveydir2 = os.path.join(os.path.dirname(__file__), 'mzlsbass')
-    # main(args=['--brick', '3521p002', '--zoom', '2400', '2450', '1200', '1250',
-    #            '--no-wise', '--force-all', '--no-write',
-    #            '--survey-dir', surveydir2,
-    #            '--outdir', 'out-mzlsbass'])
-        
+    M = fitsio.read(os.path.join(outdir, 'coadd', '177', '1773p595',
+                                 'legacysurvey-1773p595-maskbits.fits.fz'))
+    assert(np.sum((M & MASKBITS['BAILOUT'] ) > 0) >= 1000)
+
     # Test RexGalaxy
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase6')
