@@ -178,9 +178,11 @@ def stage_largegalaxies(
         hdr.add_record(dict(name='BAND', value=band,
                             comment='Band of this coadd/PSF'))
         hdr.add_record(dict(name='PSF_SIG', value=psf_sigma,
-                            comment='Average PSF sigma (pixels)'))
-        hdr.add_record(dict(name='PIXSCAL', value=tim_pixscale,
-                            comment='Average pixel scale for this PSF'))
+                            comment='Average PSF sigma (coadd pixels)'))
+        hdr.add_record(dict(name='PIXSCAL', value=pixscale,
+                            comment='Pixel scale of this PSF (arcsec)'))
+        hdr.add_record(dict(name='INPIXSC', value=tim_pixscale,
+                            comment='Native image pixscale scale (average, arcsec)'))
         hdr.add_record(dict(name='MJD', value=mjd,
                             comment='Average MJD for coadd'))
         hdr.add_record(dict(name='MJD_TAI', value=mjd_tai,
