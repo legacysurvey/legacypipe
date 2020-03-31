@@ -1031,7 +1031,7 @@ class LegacySurveyData(object):
                           'depth', 'galdepth', 'nexp', 'psfsize',
                           'copsf']:
             return swap(os.path.join(codir, '%s-%s-%s-%s.fits.fz' %
-                                     (sname, brick, filetype,band)))
+                                     (sname, brick, filetype, band)))
 
         elif filetype in ['blobmap']:
             return swap(os.path.join(basedir, 'metrics', brickpre,
@@ -1432,6 +1432,9 @@ class LegacySurveyData(object):
             fns = self.find_file('ccds')
             fns.sort()
             fns = self.filter_ccds_files(fns)
+            if len(fns) == 0:
+                print('Failed to find any valid survey-ccds tables')
+                raise RuntimeError('No survey-ccds files')
 
         TT = []
         for fn in fns:
