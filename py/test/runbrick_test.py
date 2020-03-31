@@ -151,15 +151,43 @@ def rbmain():
                '--no-wise', '--force-all', '--no-write',
                '--survey-dir', surveydir2,
                '--outdir', 'out-mzlsbass2'] + my_extra_args)
+
+    T = fits_table('out-mzlsbass2/tractor/177/tractor-1773p595.fits')
+    assert(np.sum(T.ref_cat == 'G2') == 3)
+    assert(np.sum(T.ref_id > 0) == 3)
+
+    # Test --max-blobsize, --checkpoint, --bail-out
+
+    outdir = 'out-mzlsbass2b'
+    chk = 'checkpoint-mzb2b.p'
+    if os.path.exists(chk):
+        os.unlink(chk)
+    main(args=['--brick', '1773p595', '--zoom', '1300', '1500', '700', '900',
+               '--no-wise', '--force-all', '--stage', 'fitblobs',
+               '--write-stage', 'srcs',
+               '--survey-dir', surveydir2,
+               '--outdir', outdir,
+               '--checkpoint', chk,
+               '--nblobs', '3'] + my_extra_args)
+    # err... --max-blobsize does not result in bailed-out blobs masked,
+    # because it treats large blobs as *completed*...
+    #'--max-blobsize', '3000',
+
+    outdir = 'out-mzlsbass2c'
+    main(args=['--brick', '1773p595', '--zoom', '1300', '1500', '700', '900',
+               '--no-wise', '--force-all',
+               '--survey-dir', surveydir2,
+               '--outdir', outdir, '--bail-out', '--checkpoint', chk,
+               '--no-write'] +
+               my_extra_args)
+
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']
 
-    # surveydir2 = os.path.join(os.path.dirname(__file__), 'mzlsbass')
-    # main(args=['--brick', '3521p002', '--zoom', '2400', '2450', '1200', '1250',
-    #            '--no-wise', '--force-all', '--no-write',
-    #            '--survey-dir', surveydir2,
-    #            '--outdir', 'out-mzlsbass'])
-        
+    M = fitsio.read(os.path.join(outdir, 'coadd', '177', '1773p595',
+                                 'legacysurvey-1773p595-maskbits.fits.fz'))
+    assert(np.sum((M & MASKBITS['BAILOUT'] ) > 0) >= 1000)
+
     # Test RexGalaxy
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase6')

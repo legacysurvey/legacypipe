@@ -988,7 +988,8 @@ def stage_fitblobs(T=None,
                 # Sets TYPE, etc for T_refbail table.
                 _get_tractor_fits_values(T_refbail, cat_refbail, '%s')
 
-            info('Found', len(T_refbail), 'reference sources in bail-out blobs')
+            if T_refbail is not None:
+                info('Found', len(T_refbail), 'reference sources in bail-out blobs')
 
         skipblobs = new_skipblobs
         # append empty results so that a later assert on the lengths will pass
