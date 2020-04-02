@@ -630,18 +630,23 @@ class LegacySurveyImage(object):
                             (f.strip() == self.band) and
                             (ccd.strip() == self.ccdname) and
                             (not(np.isfinite(mjdstart)) or (self.mjdobs >= mjdstart)) and
-                            (not(np.isfinite(mjdend  )) or (self.mjdobj <= mjdend))
+                            (not(np.isfinite(mjdend  )) or (self.mjdobs <= mjdend))
                             for cam,f,ccd,mjdstart,mjdend
                             in zip(A.camera, A.filter, A.ccdname,
                                    A.mjd_start, A.mjd_end)])
-        print('Found', len(I), 'relevant rows in amp-corrections file.')
+        debug('Found', len(I), 'relevant rows in amp-corrections file.')
         if len(I) == 0:
-            continue
+            return
         H,W = img.shape
         # x0,y0 are integer pixel coords
         # x1,y1 are INCLUSIVE integer pixel coords
         x1 = x0 + W - 1
         y1 = y0 + H - 1
+
+        debug_corr = False
+        if debug_corr:
+            count_corr = np.zeros((H,W), np.uint8)
+
         for a in A[I]:
             # In the file, xhi,yhi are NON-inclusive.
             if a.xlo > x1 or a.xhi <= x0:
@@ -649,16 +654,22 @@ class LegacySurveyImage(object):
             if a.ylo > y1 or a.yhi <= y0:
                 continue
             # Overlap!
-            print('Found overlap: image x', x0, x1, 'and amp range', a.xlo, a.xhi-1)
-            xstart = max(0,    a.xlo - x0)
-            xend   = min(x1+1, a.xhi - x0)
-            ystart = max(0,    a.ylo - y0)
-            yend   = min(y1+1, a.yhi - y0)
-            print('Range in image: x', xstart, xend, ', y', ystart, yend)
+            debug('Found overlap: image x', x0, x1, 'and amp range', a.xlo, a.xhi-1,
+                  'and image y', y0, y1, 'and amp range', a.ylo, a.yhi-1)
+            xstart = max(0, a.xlo - x0)
+            xend   = min(W, a.xhi - x0)
+            ystart = max(0, a.ylo - y0)
+            yend   = min(H, a.yhi - y0)
+            debug('Range in image: x', xstart, xend, ', y', ystart, yend, '(with image size %i x %i)' % (W,H))
             scale = 10.**(0.4 * a.dzp)
-            print('dzp', a.dzp, '-> scaling image by', scale)
+            debug('dzp', a.dzp, '-> scaling image by', scale)
             img   [ystart:yend, xstart:xend] *= scale
             invvar[ystart:yend, xstart:xend] /= scale**2
+            if debug_corr:
+                count_corr[ystart:yend, xstart:xend] += 1
+
+        if debug_corr:
+            assert(np.all(count_corr == 1))
 
     def check_image_header(self, imghdr):
         # check consistency between the CCDs table and the image header
