@@ -78,7 +78,6 @@ class LegacySurveyImage(object):
     # images used in unit tests): box size for SplineSky model
     splinesky_boxsize = 1024
 
-
     def __init__(self, survey, ccd):
         '''
         Create a new LegacySurveyImage object, from a LegacySurveyData object,
@@ -151,10 +150,6 @@ class LegacySurveyImage(object):
         self.pixscale = 3600. * np.sqrt(np.abs(ccd.cd1_1 * ccd.cd2_2 -
                                                ccd.cd1_2 * ccd.cd2_1))
         # Calib filenames
-        #tmpname = self.image_filename.replace(".fits.fz", "")
-        #tmpname = tmpname.replace(".fits", "")
-        #basename = os.path.basename(tmpname)
-
         basename = os.path.basename(self.image_filename)
         ### HACK -- keep only the first dotted component of the base filename.
         # This allows, eg, create-testcase.py to use image filenames like BASE.N3.fits
@@ -187,13 +182,6 @@ class LegacySurveyImage(object):
             fn = getattr(self, attr)
             if os.path.exists(fn):
                 continue
-            if fn.endswith('.fz'):
-                fun = fn[:-3]
-                if os.path.exists(fun):
-                    debug('Using      ', fun)
-                    debug('rather than', fn)
-                    setattr(self, attr, fun)
-                    fn = fun
 
     def __str__(self):
         return self.name
