@@ -754,6 +754,8 @@ class OneBlob(object):
             dd = np.array([s.getPosition().dec for s in Bold.sources
                            if s is not None])
             _,xx,yy = self.blobwcs.radec2pixelxy(rr, dd)
+
+            plt.plot(Bold.init_x, Bold.init_y, 'o', ms=5, mec='r', mfc='none', label='Avoid (r=2)')
             plt.plot(xx-1, yy-1, 'r+', label='Old', **crossa)
             plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0), label='New',
                      **crossa)
