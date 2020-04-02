@@ -853,7 +853,7 @@ class SourceDerivatives(MultiParams, BasicSource):
         return dict(dra=0, ddec=1)
 
     # forced photom calls getUnitFluxModelPatches
-    def getUnitFluxModelPatches(self, img, modelMask=None):
+    def getUnitFluxModelPatches(self, img, modelMask=None, minval=None):
         return self.umods
 
     def getModelPatch(self, img, minsb=0., modelMask=None):

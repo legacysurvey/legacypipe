@@ -91,6 +91,23 @@ def rbmain():
     assert(os.path.exists('forced1.fits'))
     F = fits_table('forced1.fits')
     # ... more tests...!
+
+    forced_main(args=['--survey-dir', surveydir,
+                      '--no-ceres',
+                      '--catalog-dir', 'out-testcase9b',
+                      '--derivs', '--threads', '2',
+                      '--apphot',
+                      '372546', 'N26', 'forced2.fits'])
+    assert(os.path.exists('forced2.fits'))
+    F = fits_table('forced2.fits')
+
+    forced_main(args=['--survey-dir', surveydir,
+                      '--no-ceres',
+                      '--catalog-dir', 'out-testcase9b',
+                      '--agn',
+                      '372546', 'N26', 'forced3.fits'])
+    assert(os.path.exists('forced3.fits'))
+    F = fits_table('forced2.fits')
     
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']

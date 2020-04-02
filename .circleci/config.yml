@@ -93,7 +93,7 @@ jobs:
               # set in the circleci build config,
               # https://circleci.com/gh/legacysurvey/legacypipe/edit#env-vars
               echo "COVERALLS_REPO_TOKEN=${COVERALLS_REPO_TOKEN} bundle exec rspec spec" > .coveralls.yml
-              #coveralls debug
-              coveralls
-              ./codecov-upload.sh
+              # Let travis do the coveralls upload!
+              #coveralls
+              #./codecov-upload.sh
 
