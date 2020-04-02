@@ -481,6 +481,9 @@ class LegacySurveyImage(object):
                 print('WARNING: image median', imgmed, 'is more than 1 sigma',
                       'away from zero!')
 
+        if subsky:
+            self.apply_amp_correction(img, invvar, x0, y0)
+
         # Convert MJD-OBS, in UTC, into TAI
         mjd_tai = astropy.time.Time(self.mjdobs, format='mjd', scale='utc').tai.mjd
         tai = TAITime(None, mjd=mjd_tai)
@@ -607,6 +610,55 @@ class LegacySurveyImage(object):
         wt[dq != 0] = 0.
 
         return wt
+
+    # Default: do nothing.
+    def apply_amp_correction(self, img, invvar, x0, y0):
+        pass
+
+    # A function that can be called by subclassers to apply a per-amp
+    # zeropoint correction.
+    def apply_amp_correction_northern(self, img, invvar, x0, y0):
+        from pkg_resources import resource_filename
+        dirname = resource_filename('legacypipe', 'data')
+        fn = os.path.join(dirname, 'ampcorrections.fits')
+        A = fits_table(fn)
+        # Find relevant row -- camera, filter, ccdname, mjd_start, mjd_end,
+        # And then multiple of:
+        #   xlo, xhi, ylo, yhi -> dzp
+        # that might overlap this image.
+        I = np.flatnonzero([(cam.strip() == self.camera) and
+                            (f.strip() == self.band) and
+                            (ccd.strip() == self.ccdname) and
+                            (not(np.isfinite(mjdstart)) or (self.mjdobs >= mjdstart)) and
+                            (not(np.isfinite(mjdend  )) or (self.mjdobj <= mjdend))
+                            for cam,f,ccd,mjdstart,mjdend
+                            in zip(A.camera, A.filter, A.ccdname,
+                                   A.mjd_start, A.mjd_end)])
+        print('Found', len(I), 'relevant rows in amp-corrections file.')
+        if len(I) == 0:
+            continue
+        H,W = img.shape
+        # x0,y0 are integer pixel coords
+        # x1,y1 are INCLUSIVE integer pixel coords
+        x1 = x0 + W - 1
+        y1 = y0 + H - 1
+        for a in A[I]:
+            # In the file, xhi,yhi are NON-inclusive.
+            if a.xlo > x1 or a.xhi <= x0:
+                continue
+            if a.ylo > y1 or a.yhi <= y0:
+                continue
+            # Overlap!
+            print('Found overlap: image x', x0, x1, 'and amp range', a.xlo, a.xhi-1)
+            xstart = max(0,    a.xlo - x0)
+            xend   = min(x1+1, a.xhi - x0)
+            ystart = max(0,    a.ylo - y0)
+            yend   = min(y1+1, a.yhi - y0)
+            print('Range in image: x', xstart, xend, ', y', ystart, yend)
+            scale = 10.**(0.4 * a.dzp)
+            print('dzp', a.dzp, '-> scaling image by', scale)
+            img   [ystart:yend, xstart:xend] *= scale
+            invvar[ystart:yend, xstart:xend] /= scale**2
 
     def check_image_header(self, imghdr):
         # check consistency between the CCDs table and the image header
