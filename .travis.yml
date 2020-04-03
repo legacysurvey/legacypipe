@@ -75,7 +75,7 @@ addons:
     - swig
     - gsl-bin
     - libgsl0-dev
-    - ceres-solver
+    - libceres-dev
     - libcfitsio-bin # fpack
     - sextractor # for calibs
     - psfex # for calibs
