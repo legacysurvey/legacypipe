@@ -75,6 +75,9 @@ addons:
     - swig
     - gsl-bin
     - libgsl0-dev
+    - libcfitsio-bin # fpack
+    - sextractor # for calibs
+    - psfex # for calibs
 
 cache:
   directories:
