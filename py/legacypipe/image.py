@@ -680,7 +680,8 @@ class LegacySurveyImage(object):
     # A function that can be called by subclassers to apply a per-amp
     # zeropoint correction.
     def apply_amp_correction_northern(self, img, invvar, x0, y0):
-        apply_amp_correction_northern(self.camera, self.band, self.ccdname, img, invvar, x0, y0)
+        apply_amp_correction_northern(self.camera, self.band, self.ccdname, self.mjdobs,
+                                      img, invvar, x0, y0)
 
     def check_image_header(self, imghdr):
         # check consistency between the CCDs table and the image header
