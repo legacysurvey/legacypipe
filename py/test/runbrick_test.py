@@ -13,7 +13,8 @@ from astrometry.util.fits import fits_table
 
 def rbmain():
     travis = 'travis' in sys.argv
-
+    psfex = 'psfex' in sys.argv
+    
     extra_args = ['--old-calibs-ok',
     #'--verbose',
         ]
@@ -251,7 +252,7 @@ def rbmain():
     del os.environ['GAIA_CAT_VER']
     
     # Test that we can run splinesky calib if required...
-    
+
     from legacypipe.decam import DecamImage
     DecamImage.splinesky_boxsize = 128
     
@@ -277,6 +278,25 @@ def rbmain():
     print('Checking for calib file', fn)
     assert(os.path.exists(fn))
 
+    if psfex:
+        # Check that we can regenerate PsfEx files if necessary.
+        fn = os.path.join(surveydir, 'calib', 'psfex', 'decam', 'CP', 'V4.8.2',
+                          'CP20170315', 'c4d_170316_062107_ooi_z_ls9-psfex.fits')
+        if os.path.exists(fn):
+            os.unlink(fn)
+
+        main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
+                   '--force-all', '--no-write', '--coadd-bw',
+                   '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
+                   '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
+                   '--unwise-coadds',
+                   '--blob-image',
+                   '--survey-dir', surveydir,
+                   '--outdir', outdir] + extra_args + ['-v'])
+        print('After generating PsfEx calib:')
+        os.system('find %s' % (os.path.join(surveyydir, 'calib')))
+
+    
     # Wrap-around, hybrid PSF
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase8')
     outdir = 'out-testcase8'

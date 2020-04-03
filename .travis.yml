@@ -57,7 +57,7 @@ script:
     - ls $HOME
     - ls $HOME/astrometry.net
     - (cd doc && make)
-    - (cd py && coverage run test/runbrick_test.py travis && coverage run -a test/unit_tests.py)
+    - (cd py && coverage run test/runbrick_test.py travis psfex && coverage run -a test/unit_tests.py)
 
 after_success:
     - (cd py && coveralls debug)
