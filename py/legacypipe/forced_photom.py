@@ -594,18 +594,17 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
     if agn:
         from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
         from tractor import PointSource
-        from legacypipe.survey import SimpleGalaxy, RexGalaxy
+        from tractor.sersic import SersicGalaxy
+        from legacypipe.survey import RexGalaxy
 
         realsrcs = []
         agnsrcs = []
         iagn = []
         for i,src in enumerate(cat):
             realsrcs.append(src)
-            ## ??
-            if isinstance(src, (SimpleGalaxy, RexGalaxy)):
-                #print('Skipping SIMP or REX:', src)
+            if isinstance(src, RexGalaxy):
                 continue
-            if isinstance(src, (ExpGalaxy, DevGalaxy, FixedCompositeGalaxy)):
+            if isinstance(src, (ExpGalaxy, DevGalaxy, SersicGalaxy)):
                 iagn.append(i)
                 bright = src.getBrightness().copy()
                 bright.setParams(np.zeros(bright.numberOfParams()))
@@ -730,8 +729,9 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         if agn:
             F.flux_agn = np.zeros(len(F), np.float32)
             F.flux_agn_ivar = np.zeros(len(F), np.float32)
-            F.flux_agn[iagn] = np.array([src.getParams()[0] for src in agnsrcs])
-            F.flux_agn_ivar[iagn] = R.IV[N:].astype(np.float32)
+            if len(iagn):
+                F.flux_agn[iagn] = np.array([src.getParams()[0] for src in agnsrcs])
+                F.flux_agn_ivar[iagn] = R.IV[N:].astype(np.float32)
 
         if timing:
             t = Time()
