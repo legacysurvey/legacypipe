@@ -294,7 +294,7 @@ def rbmain():
                    '--survey-dir', surveydir,
                    '--outdir', outdir] + extra_args + ['-v'])
         print('After generating PsfEx calib:')
-        os.system('find %s' % (os.path.join(surveyydir, 'calib')))
+        os.system('find %s' % (os.path.join(surveydir, 'calib')))
 
     
     # Wrap-around, hybrid PSF
