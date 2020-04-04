@@ -22,6 +22,8 @@ python:
 #  - "3.8"
 
 install:
+    # ubuntu's source extractor package renames the executable.
+    - ln -s /usr/bin/sextractor /usr/local/bin/sex
     - pip install Sphinx
     - pip install numpy
     - pip install scipy
