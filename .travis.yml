@@ -23,7 +23,9 @@ python:
 
 install:
     # ubuntu's source extractor package renames the executable.
-    - ln -s /usr/bin/sextractor /usr/local/bin/sex
+    - mkdir ~/bin
+    - ln -s /usr/bin/sextractor ~/bin/sex
+    - export PATH=${PATH}:~/bin
     - pip install Sphinx
     - pip install numpy
     - pip install scipy
