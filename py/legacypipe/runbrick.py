@@ -436,7 +436,8 @@ def stage_refs(survey=None,
 def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
                    mp=None, nsigma=None, plots=None, ps=None, record_event=None,
                    survey=None, brickname=None, version_header=None,
-                   refstars=None, outlier_mask_file=None, 
+                   refstars=None, outlier_mask_file=None,
+                   outliers=True,
                    **kwargs):
     '''
     This pipeline stage tries to detect artifacts in the individual
@@ -449,7 +450,7 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
     _add_stage_version(version_header, 'OUTL', 'outliers')
 
     # Check for existing MEF containing masks for all the chips we need.
-    if not read_outlier_mask_file(survey, tims, brickname, outlier_mask_file=outlier_mask_file):
+    if outliers and not read_outlier_mask_file(survey, tims, brickname, outlier_mask_file=outlier_mask_file):
         from astrometry.util.file import trymakedirs
 
         # Make before-n-after plots (before)
@@ -2553,6 +2554,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               reoptimize=False,
               iterative=False,
               wise=True,
+              outliers=True,
               lanczos=True,
               early_coadds=False,
               blob_image=False,
@@ -2809,6 +2811,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   min_mjd=min_mjd, max_mjd=max_mjd,
                   reoptimize=reoptimize,
                   iterative=iterative,
+                  outliers=outliers,
                   use_ceres=ceres,
                   wise_ceres=wise_ceres,
                   unwise_coadds=unwise_coadds,
@@ -3169,6 +3172,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         action='store_false', help='Use constant sky rather than spline.')
     parser.add_argument('--unwise-coadds', default=False,
                         action='store_true', help='Write FITS and JPEG unWISE coadds?')
+
+    parser.add_argument('--no-outliers', dest='outliers', default=True,
+                        action='store_false', help='Do not compute or apply outlier masks')
 
     parser.add_argument('--bail-out', default=False, action='store_true',
                         help='Bail out of "fitblobs" processing, writing all blobs from the checkpoint and skipping any remaining ones.')
