@@ -36,6 +36,8 @@ class HealpixedCatalog(object):
         cats = []
         for hp in healpixes:
             cats.append(self.get_healpix_catalog(hp))
+        if len(cats) == 1:
+            return cats[0]
         return merge_tables(cats)
 
     def get_catalog_in_wcs(self, wcs, step=100., margin=10):
