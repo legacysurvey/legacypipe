@@ -125,14 +125,15 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
 
     sources = refs.sources
     refs.delete_column('sources')
-    for i,r in enumerate(refs):
-        if r.donotfit:
+    for i,(donotfit,freeze) in enumerate(zip(refs.donotfit, refs.freezeparams)):
+        if donotfit:
             sources[i] = None
         if sources[i] is None:
             continue
         sources[i].is_reference_source = True
-        if r.freezeparams:
+        if freeze:
             sources[i].freezeparams = True
+
     return refs,sources
 
 def read_gaia(targetwcs, bands):
@@ -210,7 +211,7 @@ def read_gaia(targetwcs, bands):
     # will try to be clever and create 2-d array because GaiaSource is
     # iterable.
     gaia.sources = np.empty(len(gaia), object)
-    if bands in not None:
+    if bands is not None:
         for i,g in enumerate(gaia):
             gaia.sources[i] = GaiaSource.from_catalog(g, bands)
     return gaia
@@ -311,7 +312,7 @@ def read_tycho2(survey, targetwcs, bands):
     tycho.isbright = np.ones(len(tycho), bool)
     tycho.ismedium = np.ones(len(tycho), bool)
     tycho.sources = np.empty(len(tycho), object)
-    if bands in not None:
+    if bands is not None:
         for i,t in enumerate(tycho):
             tycho.sources[i] = GaiaSource.from_catalog(t, bands)
     return tycho
