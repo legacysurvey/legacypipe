@@ -133,7 +133,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         sources[i].is_reference_source = True
         if r.freezeparams:
             sources[i].freezeparams = True
-    return refs, sources
+    return refs,sources
 
 def read_gaia(targetwcs, bands):
     '''
@@ -210,8 +210,9 @@ def read_gaia(targetwcs, bands):
     # will try to be clever and create 2-d array because GaiaSource is
     # iterable.
     gaia.sources = np.empty(len(gaia), object)
-    for i,g in enumerate(gaia):
-        gaia.sources[i] = GaiaSource.from_catalog(g, bands)
+    if bands in not None:
+        for i,g in enumerate(gaia):
+            gaia.sources[i] = GaiaSource.from_catalog(g, bands)
     return gaia
 
 def mask_radius_for_mag(mag):
@@ -310,8 +311,9 @@ def read_tycho2(survey, targetwcs, bands):
     tycho.isbright = np.ones(len(tycho), bool)
     tycho.ismedium = np.ones(len(tycho), bool)
     tycho.sources = np.empty(len(tycho), object)
-    for i,t in enumerate(tycho):
-        tycho.sources[i] = GaiaSource.from_catalog(t, bands)
+    if bands in not None:
+        for i,t in enumerate(tycho):
+            tycho.sources[i] = GaiaSource.from_catalog(t, bands)
     return tycho
 
 def get_large_galaxy_version(fn):

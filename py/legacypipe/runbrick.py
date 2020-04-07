@@ -376,11 +376,11 @@ def stage_refs(survey=None,
 
     record_event and record_event('stage_refs: starting')
     _add_stage_version(version_header, 'REFS', 'refs')
-    refstars, refcat = get_reference_sources(survey, targetwcs, pixscale, bands,
-                                             tycho_stars=tycho_stars,
-                                             gaia_stars=gaia_stars,
-                                             large_galaxies=large_galaxies,
-                                             star_clusters=star_clusters)
+    refstars,refcat = get_reference_sources(survey, targetwcs, pixscale, bands,
+                                            tycho_stars=tycho_stars,
+                                            gaia_stars=gaia_stars,
+                                            large_galaxies=large_galaxies,
+                                            star_clusters=star_clusters)
     # "refstars" is a table
     # "refcat" is a list of tractor Sources
     # They are aligned

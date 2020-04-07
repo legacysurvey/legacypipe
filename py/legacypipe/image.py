@@ -1184,7 +1184,9 @@ class LegacySurveyImage(object):
         # only used to create galaxy objects (which we will discard)
         fakebands = ['r']
         refs,_ = get_reference_sources(survey, wcs, self.pixscale, fakebands,
-                                       True, gaia, False)
+                                       tycho_stars=True, gaia_stars=gaia,
+                                       large_galaxies=False,
+                                       star_clusters=False)
         stargood = (get_inblob_map(wcs, refs) == 0)
 
         haloimg = None
