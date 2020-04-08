@@ -455,7 +455,6 @@ class OneBlob(object):
         rank = np.empty(len(Iseg), int)
         rank[Ibright] = np.arange(len(Iseg), dtype=int)
         rankmap = dict([(Iseg[i],r) for r,i in enumerate(Ibright)])
-        del Ibright
 
         todo = set(Iseg)
         thresholds = list(range(3, int(np.ceil(maxsn.max()))))
@@ -488,6 +487,23 @@ class OneBlob(object):
                     #print('Source', t, 'is isolated at S/N', thresh)
                     done.add(t)
             todo.difference_update(done)
+        del hot, maxsn, saturated_pix
+
+        # ensure that each source owns a tiny radius around its center in the segmentation map.
+        # should we do this in brightness order (or reverse)?
+        # We could also make it segment into nearest-source, in the case of very nearby sources.
+        kingdom = np.zeros(segmap.shape, bool)
+        h,w = kingdom.shape
+        for i in Ibright:
+            radius = 3
+            x,y = ix[i], iy[i]
+            kingdom[y, x] = True
+            slc = (slice(max(0, y-radius), min(h, y+radius+1)),
+                   slice(max(0, x-radius), min(w, x+radius+1)))
+            kingdom[slc] = binary_dilation(kingdom[slc], iterations=radius)
+            segmap[slc][kingdom[slc]] = i
+            kingdom[slc] = False
+        del kingdom
 
         self.segmap = segmap
 
