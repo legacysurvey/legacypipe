@@ -9,16 +9,18 @@ from tractor.ellipses import EllipseESoft, EllipseE
 from legacypipe.survey import RexGalaxy, GaiaSource
 
 # FITS catalogs
-fits_typemap = { PointSource:  'PSF',
-                 ExpGalaxy:    'EXP',
-                 DevGalaxy:    'DEV',
-                 SersicGalaxy: 'SER',
-                 RexGalaxy:    'REX',
-                 GaiaSource:   'PSF',
-                 type(None):   'NUN' }
 
-fits_reverse_typemap = dict([(v,k) for k,v in fits_typemap.items()])
-fits_reverse_typemap.update({ 'DUP': GaiaSource })
+fits_reverse_typemap = { 'PSF': PointSource,
+                         'EXP': ExpGalaxy,
+                         'DEV': DevGalaxy,
+                         'SER': SersicGalaxy,
+                         'REX': RexGalaxy,
+                         'NUN': type(None),
+                         'DUP': GaiaSource,
+                         }
+
+fits_typemap = dict([(v,k) for k,v in fits_reverse_typemap.items()])
+fits_typemap[GaiaSource] = 'PSF'
 
 fits_short_typemap = { PointSource:  'P',
                        ExpGalaxy:    'E',
@@ -199,7 +201,11 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
     ivs = []
     cat = []
     for t in T:
-        clazz = rev_typemap[t.type.strip()]
+        typestr = t.type.strip()
+        # # Gaia -- check REF_CAT = 'G2'
+        # if t.ref_cat == 'G2' and typestr == 'PSF':
+        #     clazz = GaiaSource
+        clazz = rev_typemap[typestr]
         pos = RaDecPos(t.ra, t.dec)
         assert(np.isfinite(t.ra))
         assert(np.isfinite(t.dec))
