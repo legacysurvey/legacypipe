@@ -261,6 +261,7 @@ class LegacySurveyImage(object):
                           gaussPsf=False, pixPsf=True, hybridPsf=True,
                           normalizePsf=True,
                           apodize=False,
+                          readsky=True,
                           nanomaggies=True, subsky=True, tiny=10,
                           dq=True, invvar=True, pixels=True,
                           no_remap_invvar=False,
@@ -412,8 +413,12 @@ class LegacySurveyImage(object):
             x0,x1,y0,y1 = x0_new,x1_new,y0_new,y1_new
             slc = slice(y0,y1), slice(x0,x1)
 
-        sky = self.read_sky_model(slc=slc, primhdr=primhdr, imghdr=imghdr,
-                                  old_calibs_ok=old_calibs_ok)
+        if readsky:
+            sky = self.read_sky_model(slc=slc, primhdr=primhdr, imghdr=imghdr,
+                                      old_calibs_ok=old_calibs_ok)
+        else:
+            from tractor.sky import ConstantSky
+            sky = ConstantSky(0.)
         skymod = np.zeros_like(img)
         sky.addTo(skymod)
         midsky = np.median(skymod)
