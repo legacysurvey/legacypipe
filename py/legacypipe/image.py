@@ -317,9 +317,11 @@ class LegacySurveyImage(object):
         band = self.band
         wcs = self.get_wcs()
 
+        orig_slc = slc
         x0,x1,y0,y1,slc = self.get_image_extent(wcs=wcs, slc=slc, radecpoly=radecpoly)
         if y1 - y0 < tiny or x1 - x0 < tiny:
-            debug('Skipping tiny subimage')
+            debug('Skipping tiny subimage (y %i to %i, x %i to %i)' % (y0, y1, x0, x1))
+            debug('slice:', orig_slc, '->', slc, 'radecpoly', radecpoly)
             return None
 
         # Read image pixels
