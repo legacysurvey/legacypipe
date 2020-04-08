@@ -492,17 +492,32 @@ class OneBlob(object):
         # ensure that each source owns a tiny radius around its center in the segmentation map.
         # should we do this in brightness order (or reverse)?
         # We could also make it segment into nearest-source, in the case of very nearby sources.
-        kingdom = np.zeros(segmap.shape, bool)
+
+        # record the current distance to nearest source
+        kingdom = np.empty(segmap.shape, np.uint8)
+        kingdom[:,:,] = 255
+
+        H,W = segmap.shape
+        xcoords = np.arange(W)
+        ycoords = np.arange(H)
         h,w = kingdom.shape
         for i in Ibright:
-            radius = 3
+            radius = 5
             x,y = ix[i], iy[i]
             kingdom[y, x] = True
-            slc = (slice(max(0, y-radius), min(h, y+radius+1)),
-                   slice(max(0, x-radius), min(w, x+radius+1)))
-            kingdom[slc] = binary_dilation(kingdom[slc], iterations=radius)
-            segmap[slc][kingdom[slc]] = i
-            kingdom[slc] = False
+            yslc = slice(max(0, y-radius), min(h, y+radius+1))
+            xslc = slice(max(0, x-radius), min(w, x+radius+1))
+            slc = (yslc, xslc)
+            oldr = kingdom[slc]
+            newr = np.hypot(xcoords[np.newaxis, xslc] - x, ycoords[yslc, np.newaxis] - y)
+            assert(newr.shape == oldr.shape)
+            newr = (newr + 0.5).astype(np.uint8)
+            owned = (newr < oldr) * (newr <= radius)
+            #kingdom[slc] = binary_dilation(kingdom[slc], iterations=radius)
+            #segmap[slc][kingdom[slc]] = i
+            #kingdom[slc] = False
+            segmap[slc][owned] = i
+            kingdom[slc][owned] = newr[owned]
         del kingdom
 
         self.segmap = segmap
