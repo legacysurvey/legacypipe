@@ -105,8 +105,17 @@ def rbmain():
                       '--agn',
                       '372546', 'N26', 'forced3.fits'])
     assert(os.path.exists('forced3.fits'))
-    F = fits_table('forced2.fits')
-    
+    F = fits_table('forced3.fits')
+
+    if ceres:
+        forced_main(args=['--survey-dir', surveydir,
+                          '--catalog-dir', 'out-testcase9b',
+                          '--derivs', '--threads', '2',
+                          '--apphot',
+                          '372546', 'N26', 'forced4.fits'])
+        assert(os.path.exists('forced4.fits'))
+        F = fits_table('forced4.fits')
+
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']
     del os.environ['LARGEGALAXIES_CAT']
