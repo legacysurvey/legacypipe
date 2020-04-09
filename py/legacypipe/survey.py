@@ -465,8 +465,9 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
         depvers.append((dep, value))
         if os.path.exists(value):
             from legacypipe.reference import get_large_galaxy_version
-            ver = get_large_galaxy_version(value)
+            ver,preburn = get_large_galaxy_version(value)
             depvers.append(('LARGEGALAXIES_VER', ver))
+            depvers.append(('LARGEGALAXIES_PREBURN', preburn))
 
     for dep in ['TYCHO2_KD', 'GAIA_CAT']:
         value = os.environ.get('%s_DIR' % dep, default_ver)
