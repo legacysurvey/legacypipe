@@ -17,6 +17,7 @@ def rbmain():
     from legacypipe.survey import LegacySurveyData, GaiaSource, wcs_for_brick
     from tractor.galaxy import DevGalaxy
     from tractor import PointSource
+    from tractor import GaussianMixturePSF
     from legacypipe.survey import BrickDuck
     from legacypipe.forced_photom import main as forced_main
     from astrometry.util.file import trymakedirs
@@ -56,7 +57,11 @@ def rbmain():
     assert(np.abs(u / target - 1.) < 0.001)
     tim3 = im.get_tractor_image(radecpoly=targetrd, invvar=False, dq=False)
     assert(not hasattr(tim3, 'dq'))
-        
+    tim5 = im.get_tractor_image(radecpoly=targetrd, gaussPsf=True)
+    print(tim5.getPsf())
+    assert(isinstance(tim5.getPsf(), GaussianMixturePSF))
+
+
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase12')
     os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
     os.environ['GAIA_CAT_VER'] = '2'
