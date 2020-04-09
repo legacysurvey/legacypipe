@@ -56,7 +56,6 @@ def rbmain():
     assert(np.abs(u / target - 1.) < 0.001)
     tim3 = im.get_tractor_image(radecpoly=targetrd, invvar=False, dq=False)
     assert(not hasattr(tim3, 'dq'))
-    
         
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase12')
     os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
@@ -89,6 +88,12 @@ def rbmain():
                '--ps', 'tc9-ps.fits', '--ps-t0', str(int(time.time()))])
     # (omit --force-all --no-write... reading from pickles below!)
 
+    # Test with --apodize
+    main(args=['--radec', '9.1228', '3.3975', '--width', '100',
+               '--height', '100', '--old-calibs-ok', '--no-wise',
+               '--force-all', '--no-write', '--survey-dir', surveydir,
+               '--outdir', 'out-testcase9-ap'])
+    
     main(args=['--radec', '9.1228', '3.3975', '--width', '100',
                '--height', '100', '--old-calibs-ok', '--no-wise-ceres',
                '--no-wise', '--survey-dir',
@@ -199,40 +204,6 @@ def rbmain():
     #                '--survey-dir', surveydir,
     #                '--outdir', 'out-testcase3-ceres',
     #                '--no-depth-cut'])
-    
-    # demo RexGalaxy, with plots
-    if False:
-        from legacypipe.survey import RexGalaxy
-        from tractor import NanoMaggies, PixPos
-        from tractor import Image, GaussianMixturePSF, LinearPhotoCal
-        from legacypipe.survey import LogRadius
-        rex = RexGalaxy(
-            PixPos(1., 2.),
-            NanoMaggies(r=3.),
-            LogRadius(0.))
-        print('Rex:', rex)
-        print('Rex params:', rex.getParams())
-        print('Rex nparams:', rex.numberOfParams())
-        H,W = 100,100
-        tim = Image(data=np.zeros((H,W), np.float32),
-                    inverr=np.ones((H,W), np.float32),
-                    psf=GaussianMixturePSF(1., 0., 0., 4., 4., 0.),
-                    photocal=LinearPhotoCal(1., band='r'))
-        derivs = rex.getParamDerivatives(tim)
-        print('Derivs:', len(derivs))
-        print('Rex params:', rex.getParamNames())
-    
-        import pylab as plt
-        from astrometry.util.plotutils import PlotSequence
-        ps = PlotSequence('rex')
-    
-        for d,nm in zip(derivs, rex.getParamNames()):
-            plt.clf()
-            plt.imshow(d.patch, interpolation='nearest', origin='lower')
-            plt.title('Derivative %s' % nm)
-            ps.savefig()
-        
-        sys.exit(0)
 
     # MzLS + BASS data
     # python legacypipe/runbrick.py --run north --brick 1773p595 --zoom 1300 1500 700 900 --survey-dir dr9-north -s coadds
