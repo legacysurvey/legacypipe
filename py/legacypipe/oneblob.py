@@ -455,7 +455,6 @@ class OneBlob(object):
         rank = np.empty(len(Iseg), int)
         rank[Ibright] = np.arange(len(Iseg), dtype=int)
         rankmap = dict([(Iseg[i],r) for r,i in enumerate(Ibright)])
-        del Ibright
 
         todo = set(Iseg)
         thresholds = list(range(3, int(np.ceil(maxsn.max()))))
@@ -488,6 +487,33 @@ class OneBlob(object):
                     #print('Source', t, 'is isolated at S/N', thresh)
                     done.add(t)
             todo.difference_update(done)
+        del hot, maxsn, saturated_pix
+
+        # ensure that each source owns a tiny radius around its center in the segmentation map.
+        # If there is more than one source in that radius, each pixel gets assigned to its nearest source.
+        # record the current distance to nearest source
+        kingdom = np.empty(segmap.shape, np.uint8)
+        kingdom[:,:,] = 255
+        H,W = segmap.shape
+        xcoords = np.arange(W)
+        ycoords = np.arange(H)
+        for i in Ibright:
+            radius = 5
+            x,y = ix[i], iy[i]
+            yslc = slice(max(0, y-radius), min(H, y+radius+1))
+            xslc = slice(max(0, x-radius), min(W, x+radius+1))
+            slc = (yslc, xslc)
+            # Radius to nearest earlier source
+            oldr = kingdom[slc]
+            # Radius to new source
+            newr = np.hypot(xcoords[np.newaxis, xslc] - x, ycoords[yslc, np.newaxis] - y)
+            assert(newr.shape == oldr.shape)
+            newr = (newr + 0.5).astype(np.uint8)
+            # Pixels that are within range and closer to this source than any other.
+            owned = (newr <= radius) * (newr < oldr)
+            segmap[slc][owned] = i
+            kingdom[slc][owned] = newr[owned]
+        del kingdom, xcoords, ycoords
 
         self.segmap = segmap
 
