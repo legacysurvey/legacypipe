@@ -341,7 +341,6 @@ def rbmain():
     print('Checking for calib file', fn)
     assert(os.path.exists(fn))
 
-    sys.exit(0)
     
     if ceres:    
         main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
