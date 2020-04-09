@@ -13,6 +13,16 @@ from legacypipe.runbrick import main
 from astrometry.util.fits import fits_table
 
 def rbmain():
+    from legacypipe.catalog import read_fits_catalog
+    from legacypipe.survey import LegacySurveyData, GaiaSource, wcs_for_brick
+    from tractor.galaxy import DevGalaxy
+    from tractor import PointSource
+    from legacypipe.survey import BrickDuck
+    from legacypipe.forced_photom import main as forced_main
+    from astrometry.util.file import trymakedirs
+    import shutil
+
+
     travis = 'travis' in sys.argv
     ceres  = 'ceres'  in sys.argv
     psfex  = 'psfex'  in sys.argv
@@ -20,6 +30,34 @@ def rbmain():
     if 'LARGEGALAXIES_CAT' in os.environ:
         del os.environ['LARGEGALAXIES_CAT']
 
+    surveydir = os.path.join(os.path.dirname(__file__), 'testcase9')
+
+    # Test for some get_tractor_image kwargs
+    survey = LegacySurveyData(surveydir)
+    fakebrick = BrickDuck(9.1228, 3.3975, 'quack')
+    wcs = wcs_for_brick(fakebrick, W=100, H=100)
+    ccds = survey.ccds_touching_wcs(wcs)
+    ccd = ccds[0]
+    im = survey.get_image_object(ccd)
+    H,W = wcs.shape
+    targetrd = np.array([wcs.pixelxy2radec(x,y) for x,y in
+                         [(1,1),(W,1),(W,H),(1,H),(1,1)]])
+    tim = im.get_tractor_image(radecpoly=targetrd)
+    assert(tim.getImage() is not None)
+    assert(tim.getInvError() is not None)
+    assert(tim.dq is not None)
+    tim2 = im.get_tractor_image(radecpoly=targetrd, pixels=False)
+    assert(np.all(tim2.getImage() == 0.))
+    tim4 = im.get_tractor_image(radecpoly=targetrd, invvar=False)
+    u = np.unique(tim4.inverr)
+    assert(len(u) == 1)
+    u = u[0]
+    target = tim4.zpscale / tim4.sig1
+    assert(np.abs(u / target - 1.) < 0.001)
+    tim3 = im.get_tractor_image(radecpoly=targetrd, invvar=False, dq=False)
+    assert(not hasattr(tim3, 'dq'))
+    
+        
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase12')
     os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
     os.environ['GAIA_CAT_VER'] = '2'
@@ -82,7 +120,6 @@ def rbmain():
     rtn = os.system('cp test/testcase9/survey-bricks.fits.gz out-testcase9b')
     assert(rtn == 0)
 
-    from legacypipe.forced_photom import main as forced_main
     forced_main(args=['--survey-dir', surveydir,
                       '--no-ceres',
                       '--catalog-dir', 'out-testcase9b',
@@ -117,8 +154,6 @@ def rbmain():
         assert(os.path.exists('forced4.fits'))
         F = fits_table('forced4.fits')
 
-    from astrometry.util.file import trymakedirs
-    import shutil
     # Test cache_dir
     with tempfile.TemporaryDirectory() as cachedir, \
         tempfile.TemporaryDirectory() as tempsurveydir:
@@ -156,7 +191,7 @@ def rbmain():
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']
     del os.environ['LARGEGALAXIES_CAT']
-
+    
     # if ceres:
     #     surveydir = os.path.join(os.path.dirname(__file__), 'testcase3')
     #     main(args=['--brick', '2447p120', '--zoom', '1020', '1070', '2775', '2815',
@@ -429,11 +464,6 @@ def rbmain():
                '--threads', '2'])
 
     # Read catalog into Tractor sources to test read_fits_catalog
-    from legacypipe.catalog import read_fits_catalog
-    from legacypipe.survey import LegacySurveyData, GaiaSource
-    from tractor.galaxy import DevGalaxy
-    from tractor import PointSource
-
     survey = LegacySurveyData(survey_dir=outdir)
     fn = survey.find_file('tractor', brick='2447p120')
     print('Checking', fn)

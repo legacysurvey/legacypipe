@@ -339,7 +339,7 @@ class LegacySurveyImage(object):
         if get_invvar:
             invvar = self.read_invvar(slice=slc, dq=dq)
         else:
-            invvar = np.ones_like(img)
+            invvar = np.ones_like(img) * 1./self.sig1**2
         if np.all(invvar == 0.):
             debug('Skipping zero-invvar image')
             return None
@@ -421,7 +421,8 @@ class LegacySurveyImage(object):
         if subsky:
             from tractor.sky import ConstantSky
             debug('Instantiating and subtracting sky model')
-            img -= skymod
+            if pixels:
+                img -= skymod
             zsky = ConstantSky(0.)
             zsky.version = getattr(sky, 'version', '')
             zsky.plver = getattr(sky, 'plver', '')
