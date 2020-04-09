@@ -214,6 +214,7 @@ def halo_plots_after(tims, bands, targetwcs, halostars, coimgs, ps):
 
     for g in halostars[:10]:
         plt.clf()
+        pixscale = targetwcs.pixel_scale()
         pixrad = int(g.radius * 3600. / pixscale)
         ax = [g.ibx-pixrad, g.ibx+pixrad, g.iby-pixrad, g.iby+pixrad]
         ima = dict(interpolation='nearest', origin='lower')

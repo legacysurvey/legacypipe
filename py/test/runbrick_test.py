@@ -329,6 +329,20 @@ def rbmain():
     print('Checking for calib file', fn)
     assert(os.path.exists(fn))
 
+    # Test with blob-masking when creating sky calib.
+    os.unlink(fn)
+    
+    main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
+               '--force-all', '--no-write', '--coadd-bw',
+               '--blob-mask-dir', surveydir,
+               '--survey-dir', surveydir,
+               '--stage', 'image_coadds',
+               '--outdir', 'out-testcase4b', '--plots'])
+    print('Checking for calib file', fn)
+    assert(os.path.exists(fn))
+
+    sys.exit(0)
+    
     if ceres:    
         main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
                    '--force-all', '--no-write', '--coadd-bw',
