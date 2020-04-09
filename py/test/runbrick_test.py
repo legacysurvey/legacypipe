@@ -5,6 +5,7 @@ if __name__ == '__main__':
 import os
 import sys
 import time
+import tempfile
 import numpy as np
 import fitsio
 from legacypipe.runbrick import main
@@ -116,10 +117,46 @@ def rbmain():
         assert(os.path.exists('forced4.fits'))
         F = fits_table('forced4.fits')
 
+    from astrometry.util.file import trymakedirs
+    import shutil
+    # Test cache_dir
+    with tempfile.TemporaryDirectory() as cachedir, \
+        tempfile.TemporaryDirectory() as tempsurveydir:
+        files = []
+        for dirpath, dirnames, filenames in os.walk(surveydir):
+            for fn in filenames:
+                path = os.path.join(dirpath, fn)
+                relpath = os.path.relpath(path, surveydir)
+                files.append(relpath)
+
+        # cache or no?
+        files_cache = files[::2]
+        files_nocache = files[1::2]
+
+        for fn in files_cache:
+            src = os.path.join(surveydir, fn)
+            dst = os.path.join(cachedir, fn)
+            trymakedirs(dst, dir=True)
+            print('Copy', src, dst)
+            shutil.copy(src, dst)
+
+        for fn in files_nocache:
+            src = os.path.join(surveydir, fn)
+            dst = os.path.join(tempsurveydir, fn)
+            trymakedirs(dst, dir=True)
+            print('Copy', src, dst)
+            shutil.copy(src, dst)
+
+        main(args=['--radec', '9.1228', '3.3975', '--width', '100',
+                   '--height', '100', '--no-wise',
+                   '--survey-dir', tempsurveydir,
+                   '--cache-dir', cachedir,
+                   '--outdir', 'out-testcase9cache', '--force-all'])
+
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']
     del os.environ['LARGEGALAXIES_CAT']
-    
+
     # if ceres:
     #     surveydir = os.path.join(os.path.dirname(__file__), 'testcase3')
     #     main(args=['--brick', '2447p120', '--zoom', '1020', '1070', '2775', '2815',

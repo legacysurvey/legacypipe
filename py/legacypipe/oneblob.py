@@ -1200,6 +1200,7 @@ class OneBlob(object):
 
         # Fitting behaviors based on geometric masks.
         force_pointsource_mask = (IN_BLOB['BRIGHT'] | IN_BLOB['CLUSTER'])
+        # large_galaxies_force_pointsource is True by default.
         if self.large_galaxies_force_pointsource:
             force_pointsource_mask |= IN_BLOB['GALAXY']
         force_pointsource = ((self.refmap[y0+iy,x0+ix] & force_pointsource_mask) > 0)

@@ -187,13 +187,6 @@ class LegacySurveyImage(object):
             fn = getattr(self, attr)
             if os.path.exists(fn):
                 continue
-            if fn.endswith('.fz'):
-                fun = fn[:-3]
-                if os.path.exists(fun):
-                    debug('Using      ', fun)
-                    debug('rather than', fn)
-                    setattr(self, attr, fun)
-                    fn = fun
 
     def __str__(self):
         return self.name
