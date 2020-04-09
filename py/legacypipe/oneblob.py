@@ -490,35 +490,30 @@ class OneBlob(object):
         del hot, maxsn, saturated_pix
 
         # ensure that each source owns a tiny radius around its center in the segmentation map.
-        # should we do this in brightness order (or reverse)?
-        # We could also make it segment into nearest-source, in the case of very nearby sources.
-
+        # If there is more than one source in that radius, each pixel gets assigned to its nearest source.
         # record the current distance to nearest source
         kingdom = np.empty(segmap.shape, np.uint8)
         kingdom[:,:,] = 255
-
         H,W = segmap.shape
         xcoords = np.arange(W)
         ycoords = np.arange(H)
-        h,w = kingdom.shape
         for i in Ibright:
             radius = 5
             x,y = ix[i], iy[i]
-            kingdom[y, x] = True
-            yslc = slice(max(0, y-radius), min(h, y+radius+1))
-            xslc = slice(max(0, x-radius), min(w, x+radius+1))
+            yslc = slice(max(0, y-radius), min(H, y+radius+1))
+            xslc = slice(max(0, x-radius), min(W, x+radius+1))
             slc = (yslc, xslc)
+            # Radius to nearest earlier source
             oldr = kingdom[slc]
+            # Radius to new source
             newr = np.hypot(xcoords[np.newaxis, xslc] - x, ycoords[yslc, np.newaxis] - y)
             assert(newr.shape == oldr.shape)
             newr = (newr + 0.5).astype(np.uint8)
-            owned = (newr < oldr) * (newr <= radius)
-            #kingdom[slc] = binary_dilation(kingdom[slc], iterations=radius)
-            #segmap[slc][kingdom[slc]] = i
-            #kingdom[slc] = False
+            # Pixels that are within range and closer to this source than any other.
+            owned = (newr <= radius) * (newr < oldr)
             segmap[slc][owned] = i
             kingdom[slc][owned] = newr[owned]
-        del kingdom
+        del kingdom, xcoords, ycoords
 
         self.segmap = segmap
 
