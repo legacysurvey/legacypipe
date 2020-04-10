@@ -3181,6 +3181,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--largegalaxy-preburner', default=False, action='store_true',
                         help='Pre-fitting of LSLGA galaxies')
+    parser.add_argument('--no-galaxy-forcepsf', dest='large_galaxies_force_pointsource',
+                        default=True, action='store_false',
+                        help='Do not force PSFs within galaxy mask.')
 
     return parser
 
