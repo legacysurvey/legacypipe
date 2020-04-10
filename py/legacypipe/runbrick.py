@@ -871,6 +871,9 @@ def stage_fitblobs(T=None,
     _add_stage_version(version_header, 'FITB', 'fitblobs')
     tlast = Time()
 
+    version_header.add_record(dict(name='GALFRPSF', value=large_galaxies_force_pointsource,
+                                   help='Large galaxies force PSF?'))
+
     if plots:
         from legacypipe.runbrick_plots import fitblobs_plots
         fitblobs_plots(tims, bands, targetwcs, blobslices, blobsrcs, cat,
