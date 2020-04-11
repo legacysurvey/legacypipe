@@ -62,6 +62,68 @@ def remap_dq_cp_codes(dq, ignore_codes=[]):
         dqbits[dq == code] |= DQ_BITS[bitname]
     return dqbits
 
+def apply_amp_correction_northern(camera, band, ccdname, mjdobs,
+                                  img, invvar, x0, y0):
+    from pkg_resources import resource_filename
+    dirname = resource_filename('legacypipe', 'data')
+    fn = os.path.join(dirname, 'ampcorrections.fits')
+    A = fits_table(fn)
+    # Find relevant row -- camera, filter, ccdname, mjd_start, mjd_end,
+    # And then multiple of:
+    #   xlo, xhi, ylo, yhi -> dzp
+    # that might overlap this image.
+    I = np.flatnonzero([(cam.strip() == camera) and
+                        (f.strip() == band) and
+                        (ccd.strip() == ccdname) and
+                        (not(np.isfinite(mjdstart)) or (mjdobs >= mjdstart)) and
+                        (not(np.isfinite(mjdend  )) or (mjdobs <= mjdend))
+                        for cam,f,ccd,mjdstart,mjdend
+                        in zip(A.camera, A.filter, A.ccdname,
+                               A.mjd_start, A.mjd_end)])
+    info('Found', len(I), 'relevant rows in amp-corrections file.')
+    if len(I) == 0:
+        return
+    if img is not None:
+        H,W = img.shape
+    else:
+        H,W = invvar.shape
+    # x0,y0 are integer pixel coords
+    # x1,y1 are INCLUSIVE integer pixel coords
+    x1 = x0 + W - 1
+    y1 = y0 + H - 1
+
+    debug_corr = False
+    if debug_corr:
+        count_corr = np.zeros((H,W), np.uint8)
+
+    for a in A[I]:
+        # In the file, xhi,yhi are NON-inclusive.
+        if a.xlo > x1 or a.xhi <= x0:
+            continue
+        if a.ylo > y1 or a.yhi <= y0:
+            continue
+        # Overlap!
+        info('Found overlap: image x', x0, x1, 'and amp range', a.xlo, a.xhi-1,
+              'and image y', y0, y1, 'and amp range', a.ylo, a.yhi-1)
+        xstart = max(0, a.xlo - x0)
+        xend   = min(W, a.xhi - x0)
+        ystart = max(0, a.ylo - y0)
+        yend   = min(H, a.yhi - y0)
+        info('Range in image: x', xstart, xend, ', y', ystart, yend, '(with image size %i x %i)' % (W,H))
+        scale = 10.**(0.4 * a.dzp)
+        info('dzp', a.dzp, '-> scaling image by', scale)
+        if img is not None:
+            img   [ystart:yend, xstart:xend] *= scale
+        if invvar is not None:
+            invvar[ystart:yend, xstart:xend] /= scale**2
+
+        if debug_corr:
+            count_corr[ystart:yend, xstart:xend] += 1
+
+    if debug_corr:
+        assert(np.all(count_corr == 1))
+
+
 class LegacySurveyImage(object):
     '''A base class containing common code for the images we handle.
 
@@ -77,7 +139,6 @@ class LegacySurveyImage(object):
     # this is defined here for testing purposes (to handle the small
     # images used in unit tests): box size for SplineSky model
     splinesky_boxsize = 1024
-
 
     def __init__(self, survey, ccd):
         '''
@@ -151,10 +212,6 @@ class LegacySurveyImage(object):
         self.pixscale = 3600. * np.sqrt(np.abs(ccd.cd1_1 * ccd.cd2_2 -
                                                ccd.cd1_2 * ccd.cd2_1))
         # Calib filenames
-        #tmpname = self.image_filename.replace(".fits.fz", "")
-        #tmpname = tmpname.replace(".fits", "")
-        #basename = os.path.basename(tmpname)
-
         basename = os.path.basename(self.image_filename)
         ### HACK -- keep only the first dotted component of the base filename.
         # This allows, eg, create-testcase.py to use image filenames like BASE.N3.fits
@@ -494,6 +551,9 @@ class LegacySurveyImage(object):
                 print('WARNING: image median', imgmed, 'is more than 1 sigma',
                       'away from zero!')
 
+        if subsky:
+            self.apply_amp_correction(img, invvar, x0, y0)
+
         # Convert MJD-OBS, in UTC, into TAI
         mjd_tai = astropy.time.Time(self.mjdobs, format='mjd', scale='utc').tai.mjd
         tai = TAITime(None, mjd=mjd_tai)
@@ -620,6 +680,16 @@ class LegacySurveyImage(object):
         wt[dq != 0] = 0.
 
         return wt
+
+    # Default: do nothing.
+    def apply_amp_correction(self, img, invvar, x0, y0):
+        pass
+
+    # A function that can be called by subclassers to apply a per-amp
+    # zeropoint correction.
+    def apply_amp_correction_northern(self, img, invvar, x0, y0):
+        apply_amp_correction_northern(self.camera, self.band, self.ccdname, self.mjdobs,
+                                      img, invvar, x0, y0)
 
     def check_image_header(self, imghdr):
         # check consistency between the CCDs table and the image header

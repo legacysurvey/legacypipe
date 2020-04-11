@@ -13,6 +13,9 @@ class BokImage(LegacySurveyImage):
     def __init__(self, survey, t):
         super(BokImage, self).__init__(survey, t)
 
+    def apply_amp_correction(self, img, invvar, x0, y0):
+        self.apply_amp_correction_northern(img, invvar, x0, y0)
+
     def get_fwhm(self, primhdr, imghdr):
         # exposure BOK_CP/CP20160405/ksb_160406_104543_ooi_r_v1.fits.f
         # has SEEINGP1 in the primary header, nothing anywhere else,

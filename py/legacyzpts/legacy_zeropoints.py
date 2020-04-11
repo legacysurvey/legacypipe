@@ -341,7 +341,6 @@ class Measurer(object):
             del tmp
         return primhdr
 
-
     def get_radec_bore(self, primhdr):
         # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
         # In some DECam exposures, RA,DEC are floating-point, but RA is in *decimal hours*.
@@ -732,7 +731,6 @@ class Measurer(object):
         zp0 = self.zeropoint(self.band)
         #print('Computing the sky background.')
         sky_img, skymed, skyrms = self.get_sky_and_sigma(self.img)
-        img_sub_sky= self.img - sky_img
 
         # Bunch of sky estimates
         # Median of absolute deviation (MAD), std dev = 1.4826 * MAD
@@ -805,6 +803,9 @@ class Measurer(object):
             fit_img = self.img - skymod
         else:
             fit_img = self.img - sky_img
+
+        # after sky subtraction, apply optional per-amp relative zeropoints.
+        self.apply_amp_correction(fit_img, self.invvar)
 
         with np.errstate(invalid='ignore'):
             # sqrt(0.) can trigger complaints;
@@ -1101,6 +1102,19 @@ class Measurer(object):
             self.make_plots(phot,dmag,ccds['zpt'],ccds['transp'])
             t0= ptime('made-plots',t0)
         return ccds, phot
+
+    def apply_amp_correction(self, img, invvar):
+        pass
+
+    def apply_amp_correction_northern(self, img, invvar):
+        from legacypipe.image import apply_amp_correction_northern
+        x0 = y0 = 0
+        if self.slc is not None:
+            sy,sx = self.slc
+            x0 = sx.start
+            y0 = sy.start
+        apply_amp_correction_northern(self.camera, self.band, self.ccdname, self.mjd_obs,
+                                      img, invvar, x0, y0)
 
     def ps1_to_observed(self, ps1):
         colorterm = self.colorterm_ps1_to_observed(ps1.median, self.band)
@@ -1736,6 +1750,9 @@ class Mosaic3Measurer(Measurer):
                           D51 = 0.211, # from obsbot
         )
 
+    def apply_amp_correction(self, img, invvar):
+        self.apply_amp_correction_northern(img, invvar)
+
     def get_fwhm(self, hdr, hdu):
         for key in ['SEEINGP1', 'SEEINGP']:
             if key in hdr:
@@ -1819,6 +1836,9 @@ class NinetyPrimeMeasurer(Measurer):
         # /global/homes/a/arjundey/idl/pro/observing/bokstat.pro
         self.zp0 =  dict(g = 26.93,r = 27.01,z = 26.552) # ADU/sec
         self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06)
+
+    def apply_amp_correction(self, img, invvar):
+        self.apply_amp_correction_northern(img, invvar)
 
     def get_fwhm(self, hdr, hdu):
         for key in ['SEEINGP1', 'SEEINGP']:

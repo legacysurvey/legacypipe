@@ -4,8 +4,9 @@ import numpy as np
 import os
 import fitsio
 
-import matplotlib
-matplotlib.use('Agg')
+if __name__ == '__main__':
+    import matplotlib
+    matplotlib.use('Agg')
 
 import astropy.io.fits
 from astrometry.util.fits import fits_table, merge_tables

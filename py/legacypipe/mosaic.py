@@ -30,6 +30,9 @@ class MosaicImage(LegacySurveyImage):
                     setattr(self, attr, fnother)
                     fn = fnother
 
+    def apply_amp_correction(self, img, invvar, x0, y0):
+        self.apply_amp_correction_northern(img, invvar, x0, y0)
+
     def get_fwhm(self, primhdr, imghdr):
         # exposure 88865 has SEEINGP1 in the primary header, nothing anywhere else,
         # so FWHM in the CCDs file is NaN.
