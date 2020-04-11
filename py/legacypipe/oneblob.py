@@ -1210,7 +1210,7 @@ class OneBlob(object):
                               force_pointsource_mask) > 0)
 
         fit_background_mask = 0
-        if not less_masking:
+        if not self.less_masking:
             fit_background_mask |= IN_BLOB['MEDIUM']
         ### HACK -- re-use this variable
         if self.large_galaxies_force_pointsource:
