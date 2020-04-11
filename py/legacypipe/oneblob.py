@@ -1206,14 +1206,17 @@ class OneBlob(object):
         # large_galaxies_force_pointsource is True by default.
         if self.large_galaxies_force_pointsource:
             force_pointsource_mask |= IN_BLOB['GALAXY']
-        force_pointsource = ((self.refmap[y0+iy,x0+ix] & force_pointsource_mask) > 0)
+        force_pointsource = ((self.refmap[y0+iy,x0+ix] &
+                              force_pointsource_mask) > 0)
 
-        fit_background_mask = IN_BLOB['MEDIUM']
-        ### HACK
+        fit_background_mask = 0
+        if not less_masking:
+            fit_background_mask |= IN_BLOB['MEDIUM']
+        ### HACK -- re-use this variable
         if self.large_galaxies_force_pointsource:
             fit_background_mask |= IN_BLOB['GALAXY']
-        fit_background = ((self.refmap[y0+iy,x0+ix] & fit_background_mask) > 0)
-
+        fit_background = ((self.refmap[y0+iy,x0+ix] &
+                           fit_background_mask) > 0)
         if is_galaxy:
             fit_background = False
 

@@ -529,6 +529,8 @@ def read_star_clusters(targetwcs):
     return clusters
 
 def get_reference_map(wcs, refs):
+    from legacypipe.bits import IN_BLOB
+
     H,W = wcs.shape
     H = int(H)
     W = int(W)

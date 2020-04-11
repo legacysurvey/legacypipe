@@ -1013,6 +1013,12 @@ def stage_fitblobs(T=None,
         refs = refstars[refstars.donotfit == False]
         if T_clusters is not None:
             refs = merge_tables([refs, T_clusters], columns='fillzero')
+
+        if less_masking:
+            # Reduce BRIGHT radius by 50%
+            refs[refs.isbright].radius_pix *= 0.5
+            # (Also turn off special behavior for MEDIUM, in oneblob.py)
+
         refmap = get_reference_map(targetwcs, refs)
         del refs
     else:
