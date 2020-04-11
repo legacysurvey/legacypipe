@@ -1244,7 +1244,7 @@ class LegacySurveyImage(object):
 
         # Also mask based on reference stars and galaxies.
         from legacypipe.reference import get_reference_sources
-        from legacypipe.oneblob import get_inblob_map
+        from legacypipe.survey import get_reference_map
         wcs = self.get_wcs(hdr=imghdr)
         debug('Good image slice:', slc)
         if slc is not None:
@@ -1258,7 +1258,7 @@ class LegacySurveyImage(object):
                                        tycho_stars=True, gaia_stars=gaia,
                                        large_galaxies=False,
                                        star_clusters=False)
-        stargood = (get_inblob_map(wcs, refs) == 0)
+        stargood = (get_reference_map(wcs, refs) == 0)
 
         haloimg = None
         if halos and self.camera == 'decam':

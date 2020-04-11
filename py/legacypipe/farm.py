@@ -687,11 +687,11 @@ def get_blob_iter(skipblobs=None,
     survey.drop_cache()
 
     if refstars:
-        from legacypipe.oneblob import get_inblob_map
+        from legacypipe.survey import get_reference_map
         refs = refstars[refstars.donotfit == False]
         if T_clusters is not None:
             refs = merge_tables([refs, T_clusters], columns='fillzero')
-        refmap = get_inblob_map(targetwcs, refs)
+        refmap = get_reference_map(targetwcs, refs)
         del refs
     else:
         HH, WW = targetwcs.shape

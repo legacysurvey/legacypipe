@@ -1741,11 +1741,11 @@ class SchlegelPsfModel(PsfExModel):
             bh,bw = self.psfbases[0].shape
             self.radius = (bh+1)/2.
 
-def get_inblob_map(blobwcs, refs):
-    bh,bw = blobwcs.shape
-    bh = int(bh)
-    bw = int(bw)
-    blobmap = np.zeros((bh,bw), np.uint8)
+def get_reference_map(wcs, refs):
+    H,W = wcs.shape
+    H = int(H)
+    W = int(W)
+    refmap = np.zeros((H,W), np.uint8)
     # circular/elliptical regions:
     for col,bit,ellipse in [('isbright', 'BRIGHT', False),
                             ('ismedium', 'MEDIUM', False),
@@ -1761,13 +1761,13 @@ def get_inblob_map(blobwcs, refs):
             continue
 
         thisrefs = refs[I]
-        ok,xx,yy = blobwcs.radec2pixelxy(thisrefs.ra, thisrefs.dec)
+        ok,xx,yy = wcs.radec2pixelxy(thisrefs.ra, thisrefs.dec)
         for x,y,ref in zip(xx,yy,thisrefs):
             # Cut to L1 rectangle
-            xlo = int(np.clip(np.floor(x-1 - ref.radius_pix), 0, bw))
-            xhi = int(np.clip(np.ceil (x   + ref.radius_pix), 0, bw))
-            ylo = int(np.clip(np.floor(y-1 - ref.radius_pix), 0, bh))
-            yhi = int(np.clip(np.ceil (y   + ref.radius_pix), 0, bh))
+            xlo = int(np.clip(np.floor(x-1 - ref.radius_pix), 0, W))
+            xhi = int(np.clip(np.ceil (x   + ref.radius_pix), 0, W))
+            ylo = int(np.clip(np.floor(y-1 - ref.radius_pix), 0, H))
+            yhi = int(np.clip(np.ceil (y   + ref.radius_pix), 0, H))
             #print('x range', xlo,xhi, 'y range', ylo,yhi)
             if xlo == xhi or ylo == yhi:
                 continue
@@ -1795,5 +1795,5 @@ def get_inblob_map(blobwcs, refs):
                 r2 = ref.radius_pix * ref.ba
                 masked = (dot1**2 / r1**2 + dot2**2 / r2**2 < 1.)
 
-            blobmap[ylo:yhi, xlo:xhi] |= (bitval * masked)
-    return blobmap
+            refmap[ylo:yhi, xlo:xhi] |= (bitval * masked)
+    return refmap
