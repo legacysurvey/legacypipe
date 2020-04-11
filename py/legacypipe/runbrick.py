@@ -844,11 +844,13 @@ def stage_fitblobs(T=None,
                    bands=None, ps=None, tims=None,
                    survey=None,
                    plots=False, plots2=False,
-                   nblobs=None, blob0=None, blobxy=None, blobradec=None, blobid=None,
+                   nblobs=None, blob0=None, blobxy=None,
+                   blobradec=None, blobid=None,
                    max_blobsize=None,
                    reoptimize=False,
                    iterative=False,
                    large_galaxies_force_pointsource=True,
+                   less_masking=False,
                    use_ceres=True, mp=None,
                    checkpoint_filename=None,
                    checkpoint_period=600,
@@ -871,9 +873,12 @@ def stage_fitblobs(T=None,
     _add_stage_version(version_header, 'FITB', 'fitblobs')
     tlast = Time()
 
-    version_header.add_record(dict(name='GALFRPSF', value=large_galaxies_force_pointsource,
+    version_header.add_record(dict(name='GALFRPSF',
+                                   value=large_galaxies_force_pointsource,
                                    help='Large galaxies force PSF?'))
-
+    version_header.add_record(dict(name='LESSMASK',
+                                   value=less_masking,
+                                   help='Reduce masking behaviors?'))
     if plots:
         from legacypipe.runbrick_plots import fitblobs_plots
         fitblobs_plots(tims, bands, targetwcs, blobslices, blobsrcs, cat,
@@ -1017,7 +1022,7 @@ def stage_fitblobs(T=None,
     # Create the iterator over blobs to process
     blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, reoptimize, iterative, use_ceres,
-                          refmap, large_galaxies_force_pointsource, brick,
+                          refmap, large_galaxies_force_pointsource, less_masking, brick,
                           skipblobs=skipblobs,
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
     # to allow timingpool to queue tasks one at a time
@@ -1324,7 +1329,7 @@ def _check_checkpoints(R, blobslices, brickname):
 
 def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                plots, ps, reoptimize, iterative, use_ceres, refmap,
-               large_galaxies_force_pointsource,
+               large_galaxies_force_pointsource, less_masking,
                brick,
                skipblobs=None, max_blobsize=None, custom_brick=False):
     '''
@@ -1436,7 +1441,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
                (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
                reoptimize, iterative, use_ceres, refmap[bslc],
-               large_galaxies_force_pointsource))
+               large_galaxies_force_pointsource, less_masking))
 
 def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &
@@ -2576,6 +2581,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               gaia_stars=False,
               large_galaxies=False,
               large_galaxies_force_pointsource=True,
+              less_masking=False,
               largegalaxy_preburner=False,
               min_mjd=None, max_mjd=None,
               unwise_coadds=False,
@@ -2810,6 +2816,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   gaia_stars=gaia_stars,
                   large_galaxies=large_galaxies,
                   large_galaxies_force_pointsource=large_galaxies_force_pointsource,
+                  less_masking=less_masking,
                   min_mjd=min_mjd, max_mjd=max_mjd,
                   reoptimize=reoptimize,
                   iterative=iterative,
@@ -3186,6 +3193,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--no-galaxy-forcepsf', dest='large_galaxies_force_pointsource',
                         default=True, action='store_false',
                         help='Do not force PSFs within galaxy mask.')
+
+    parser.add_argument('--less-masking', default=False, action='store_true',
+                        help='Reduce size of BRIGHT mask, and turn off MEDIUM mask behaviors.')
 
     return parser
 

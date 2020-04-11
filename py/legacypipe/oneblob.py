@@ -69,7 +69,7 @@ def one_blob(X):
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
      srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap,
-     large_galaxies_force_pointsource) = X
+     large_galaxies_force_pointsource, less_masking) = X
 
     debug('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images' %
           (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs)))
@@ -121,7 +121,8 @@ def one_blob(X):
 
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
-                 large_galaxies_force_pointsource)
+                 large_galaxies_force_pointsource,
+                 less_masking)
     B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
@@ -149,7 +150,8 @@ def one_blob(X):
 class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
-                 large_galaxies_force_pointsource):
+                 large_galaxies_force_pointsource,
+                 less_masking):
         self.name = name
         self.blobwcs = blobwcs
         self.pixscale = self.blobwcs.pixel_scale()
@@ -167,6 +169,7 @@ class OneBlob(object):
         self.use_ceres = use_ceres
         self.deblend = False
         self.large_galaxies_force_pointsource = large_galaxies_force_pointsource
+        self.less_masking = less_masking
         self.tims = self.create_tims(timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
         self.plots2 = False
