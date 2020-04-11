@@ -1209,7 +1209,7 @@ class OneBlob(object):
         force_pointsource = ((self.refmap[y0+iy,x0+ix] &
                               force_pointsource_mask) > 0)
 
-        fit_background_mask = 0
+        fit_background_mask = IN_BLOB['BRIGHT']
         if not self.less_masking:
             fit_background_mask |= IN_BLOB['MEDIUM']
         ### HACK -- re-use this variable
