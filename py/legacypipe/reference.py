@@ -280,6 +280,9 @@ def read_tycho2(survey, targetwcs, bands):
     # Patch missing mag values...
     tycho.mag[tycho.mag == 0] = tycho.mag_hp[tycho.mag == 0]
     tycho.mag[tycho.mag == 0] = tycho.mag_bt[tycho.mag == 0]
+    # Use zguess
+    I = np.flatnonzero(np.isfinite(tycho.zguess) * (tycho.zguess < tycho.mag))
+    tycho.mag[I] = tycho.zguess[I]
     # Per discussion in issue #306 -- cut on mag < 13.
     # This drops only 13k/2.5M stars.
     tycho.cut(tycho.mag < 13.)
