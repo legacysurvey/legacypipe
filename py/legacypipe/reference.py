@@ -197,7 +197,7 @@ def read_gaia(targetwcs, bands):
         X[np.logical_not(np.isfinite(X))] = 0.
 
     # Take the brighter of G, z to expand masks around red stars.
-    gaia.mask_mag = np.minimum(gaia.G, gaia.decam_mag_z)
+    gaia.mask_mag = np.minimum(gaia.G, gaia.decam_mag_z + 1.)
 
     # radius to consider affected by this star, for MASKBITS
     gaia.radius = mask_radius_for_mag(gaia.mask_mag)
@@ -286,7 +286,8 @@ def read_tycho2(survey, targetwcs, bands):
 
     # Use zguess
     tycho.mask_mag = tycho.mag
-    I = np.flatnonzero(np.isfinite(tycho.zguess) * (tycho.zguess < tycho.mag))
+    I = np.flatnonzero(np.isfinite(tycho.zguess) *
+                       (tycho.zguess + 1. < tycho.mag))
     tycho.mask_mag[I] = tycho.zguess[I]
     # Per discussion in issue #306 -- cut on mag < 13.
     # This drops only 13k/2.5M stars.
