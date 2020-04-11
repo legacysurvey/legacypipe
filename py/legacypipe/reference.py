@@ -196,8 +196,11 @@ def read_gaia(targetwcs, bands):
         X = gaia.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
 
+    # Take the brighter of G, z to expand masks around red stars.
+    gaia.mask_mag = np.minimum(gaia.G, gaia.decam_mag_z)
+
     # radius to consider affected by this star, for MASKBITS
-    gaia.radius = mask_radius_for_mag(gaia.G)
+    gaia.radius = mask_radius_for_mag(gaia.mask_mag)
     # radius for keeping this source in the ref catalog
     # (eg, for halo subtraction)
     gaia.keep_radius = 4. * gaia.radius
@@ -208,7 +211,7 @@ def read_gaia(targetwcs, bands):
     gaia.donotfit = np.zeros(len(gaia), bool)
 
     # NOTE, must initialize gaia.sources array this way, or else numpy
-    # will try to be clever and create 2-d array because GaiaSource is
+    # will try to be clever and create a 2-d array, because GaiaSource is
     # iterable.
     gaia.sources = np.empty(len(gaia), object)
     if bands is not None:
@@ -280,14 +283,16 @@ def read_tycho2(survey, targetwcs, bands):
     # Patch missing mag values...
     tycho.mag[tycho.mag == 0] = tycho.mag_hp[tycho.mag == 0]
     tycho.mag[tycho.mag == 0] = tycho.mag_bt[tycho.mag == 0]
+
     # Use zguess
+    tycho.mask_mag = tycho.mag
     I = np.flatnonzero(np.isfinite(tycho.zguess) * (tycho.zguess < tycho.mag))
-    tycho.mag[I] = tycho.zguess[I]
+    tycho.mask_mag[I] = tycho.zguess[I]
     # Per discussion in issue #306 -- cut on mag < 13.
     # This drops only 13k/2.5M stars.
-    tycho.cut(tycho.mag < 13.)
+    tycho.cut(tycho.mask_mag < 13.)
 
-    tycho.radius = mask_radius_for_mag(tycho.mag)
+    tycho.radius = mask_radius_for_mag(tycho.mask_mag)
     tycho.keep_radius = 2. * tycho.radius
 
     for c in ['tyc1', 'tyc2', 'tyc3', 'mag_bt', 'mag_vt', 'mag_hp',
