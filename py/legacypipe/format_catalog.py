@@ -241,9 +241,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
                 for row,(nobs,mjd) in enumerate(zip(lc_nobs, lc_mjd)):
                     key = tuple(nobs) + tuple(mjd)
                     if key not in keep_epochs:
-                        # required by one_lightcurve_bitmask!
-                        assert(N_wise_epochs == 13)
-                        I = one_lightcurve_bitmask(nobs, mjd)
+                        I = one_lightcurve_bitmask(nobs, mjd, n_final=N_wise_epochs)
                         # convert to integer index list
                         I = np.flatnonzero(I)
                         keep_epochs[key] = I
@@ -388,7 +386,7 @@ def format_all_models(T, newcat, BB, bands, allbands):
     TT.delete_column('rex_shape_e2_ivar')
     return TT,hdr
 
-def one_lightcurve_bitmask(lc_nobs, lc_mjd):
+def one_lightcurve_bitmask(lc_nobs, lc_mjd, n_final=13):
     # row is a single tractor-i catalog row
     # the only columns used from within this row are:
     #     LC_NOBS_W[1-2]
@@ -406,11 +404,6 @@ def one_lightcurve_bitmask(lc_nobs, lc_mjd):
     mjd = lc_mjd
 
     n_epochs = len(nobs)
-
-    # could imagine making this a keyword arg rather than hardcoded
-    # but don't want to have to test that it works for other
-    # values...
-    n_final = 13 # NEO5
 
     # if the number of epochs fits within the number available then
     # retain all epochs
