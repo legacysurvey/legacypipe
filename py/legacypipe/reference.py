@@ -527,3 +527,60 @@ def read_star_clusters(targetwcs):
     clusters.sources = np.array([None] * len(clusters))
 
     return clusters
+
+def get_reference_map(wcs, refs):
+    H,W = wcs.shape
+    H = int(H)
+    W = int(W)
+    refmap = np.zeros((H,W), np.uint8)
+    # circular/elliptical regions:
+    for col,bit,ellipse in [('isbright', 'BRIGHT', False),
+                            ('ismedium', 'MEDIUM', False),
+                            ('iscluster', 'CLUSTER', True),
+                            ('islargegalaxy', 'GALAXY', True),]:
+        isit = refs.get(col)
+        if not np.any(isit):
+            debug('None marked', col)
+            continue
+        I, = np.nonzero(isit)
+        debug(len(I), 'with', col, 'set')
+        if len(I) == 0:
+            continue
+
+        thisrefs = refs[I]
+        ok,xx,yy = wcs.radec2pixelxy(thisrefs.ra, thisrefs.dec)
+        for x,y,ref in zip(xx,yy,thisrefs):
+            # Cut to L1 rectangle
+            xlo = int(np.clip(np.floor(x-1 - ref.radius_pix), 0, W))
+            xhi = int(np.clip(np.ceil (x   + ref.radius_pix), 0, W))
+            ylo = int(np.clip(np.floor(y-1 - ref.radius_pix), 0, H))
+            yhi = int(np.clip(np.ceil (y   + ref.radius_pix), 0, H))
+            #print('x range', xlo,xhi, 'y range', ylo,yhi)
+            if xlo == xhi or ylo == yhi:
+                continue
+
+            bitval = np.uint8(IN_BLOB[bit])
+            if not ellipse:
+                rr = ((np.arange(ylo,yhi)[:,np.newaxis] - (y-1))**2 +
+                      (np.arange(xlo,xhi)[np.newaxis,:] - (x-1))**2)
+                masked = (rr <= ref.radius_pix**2)
+            else:
+                # *should* have ba and pa if we got here...
+                xgrid,ygrid = np.meshgrid(np.arange(xlo,xhi), np.arange(ylo,yhi))
+                dx = xgrid - (x-1)
+                dy = ygrid - (y-1)
+                debug('Object: PA', ref.pa, 'BA', ref.ba, 'Radius', ref.radius, 'pix', ref.radius_pix)
+                if not np.isfinite(ref.pa):
+                    ref.pa = 0.
+                v1x = -np.sin(np.deg2rad(ref.pa))
+                v1y =  np.cos(np.deg2rad(ref.pa))
+                v2x =  v1y
+                v2y = -v1x
+                dot1 = dx * v1x + dy * v1y
+                dot2 = dx * v2x + dy * v2y
+                r1 = ref.radius_pix
+                r2 = ref.radius_pix * ref.ba
+                masked = (dot1**2 / r1**2 + dot2**2 / r2**2 < 1.)
+
+            refmap[ylo:yhi, xlo:xhi] |= (bitval * masked)
+    return refmap

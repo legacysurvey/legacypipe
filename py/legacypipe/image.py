@@ -1244,7 +1244,7 @@ class LegacySurveyImage(object):
 
         # Also mask based on reference stars and galaxies.
         from legacypipe.reference import get_reference_sources
-        from legacypipe.survey import get_reference_map
+        from legacypipe.reference import get_reference_map
         wcs = self.get_wcs(hdr=imghdr)
         debug('Good image slice:', slc)
         if slc is not None:

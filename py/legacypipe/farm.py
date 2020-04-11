@@ -687,7 +687,7 @@ def get_blob_iter(skipblobs=None,
     survey.drop_cache()
 
     if refstars:
-        from legacypipe.survey import get_reference_map
+        from legacypipe.reference import get_reference_map
         refs = refstars[refstars.donotfit == False]
         if T_clusters is not None:
             refs = merge_tables([refs, T_clusters], columns='fillzero')
