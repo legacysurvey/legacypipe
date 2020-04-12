@@ -900,7 +900,7 @@ def write_coadd_images(band,
                         comment='Earliest MJD in coadd (TAI)'))
     hdr.add_record(dict(name='MJD_MAX', value=maxmjd,
                         comment='Latest MJD in coadd (TAI)'))
-    hdr.add_record(dict(name='MJD_MEAN', value=minmjd,
+    hdr.add_record(dict(name='MJD_MEAN', value=meanmjd,
                         comment='Mean MJD in coadd (TAI)'))
     # back to date string in UTC...
     import astropy.time
