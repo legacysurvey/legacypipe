@@ -1016,7 +1016,7 @@ def stage_fitblobs(T=None,
 
         if less_masking:
             # Reduce BRIGHT radius by 50%
-            refs[refs.isbright].radius_pix //= 2
+            refs.radius_pix[refs.isbright] //= 2
             # (Also turn off special behavior for MEDIUM, in oneblob.py)
 
         refmap = get_reference_map(targetwcs, refs)
