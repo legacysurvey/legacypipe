@@ -1257,8 +1257,8 @@ class LegacySurveyImage(object):
         fakebands = ['r']
         refs,_ = get_reference_sources(survey, wcs, self.pixscale, fakebands,
                                        tycho_stars=True, gaia_stars=gaia,
-                                       large_galaxies=False,
-                                       star_clusters=False)
+                                       large_galaxies=True,
+                                       star_clusters=True)
         stargood = (get_reference_map(wcs, refs) == 0)
 
         haloimg = None
