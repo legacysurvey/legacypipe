@@ -1252,30 +1252,34 @@ class LegacySurveyImage(object):
             y0,y1 = sy.start, sy.stop
             x0,x1 = sx.start, sx.stop
             wcs = wcs.get_subimage(x0, y0, int(x1-x0), int(y1-y0))
-        # only used to create galaxy objects (which we will discard)
+        # Grab reference sources.  'fakebands' is only used to create
+        # source objects(which we don't need).
         fakebands = ['r']
         refs,_ = get_reference_sources(survey, wcs, self.pixscale, fakebands,
                                        tycho_stars=True, gaia_stars=gaia,
-                                       large_galaxies=False,
-                                       star_clusters=False)
-        stargood = (get_reference_map(wcs, refs) == 0)
+                                       large_galaxies=True,
+                                       star_clusters=True)
+        refgood = (get_reference_map(wcs, refs) == 0)
 
         haloimg = None
         if halos and self.camera == 'decam':
-            # Subtract halos from Gaia stars
-            Igaia, = np.nonzero(refs.isgaia * refs.pointsource)
+            # Subtract halos from Gaia stars.
+            # "refs.donotfit" are Gaia sources that are near LSLGA galaxies.
+            Igaia, = np.nonzero(refs.isgaia * refs.pointsource *
+                                np.logical_not(refs.donotfit))
             if len(Igaia):
                 print('Subtracting halos before estimating sky;', len(Igaia),
                       'Gaia stars')
                 from legacypipe.halos import decam_halo_model
 
-                # Try to include inner Moffat component in star halos?
+                # moffat=True: include inner Moffat component in star halos.
                 moffat = True
                 haloimg = decam_halo_model(refs[Igaia], self.mjdobs, wcs,
                                            self.pixscale, self.band, self,
                                            moffat)
                 # "haloimg" is in nanomaggies.  Convert to ADU via zeropoint...
                 from tractor.basics import NanoMaggies
+                assert(self.ccdzpt > 0)
                 zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
                 haloimg *= zpscale
                 print('Using zeropoint:', self.ccdzpt, 'to scale halo image by', zpscale)
@@ -1289,7 +1293,7 @@ class LegacySurveyImage(object):
                     del nomoffhalo
                 if not plots:
                     del haloimg
-        
+
         if survey_blob_mask is not None:
             # Read DR8 blob maps for all overlapping bricks and project them
             # into this CCD's pixel space.
@@ -1319,7 +1323,7 @@ class LegacySurveyImage(object):
                   'additional CCD pixels from blob maps')
 
         # Now find the final sky model using that more extensive mask
-        skyobj = SplineSky.BlantonMethod(img - initsky, good*stargood, boxsize)
+        skyobj = SplineSky.BlantonMethod(img - initsky, good*refgood, boxsize)
 
         # add the initial sky estimate back in
         skyobj.offset(initsky)
@@ -1329,19 +1333,19 @@ class LegacySurveyImage(object):
         skyobj.addTo(skypix)
 
         pcts = [0,10,20,30,40,50,60,70,80,90,100]
-        pctpix = (img - skypix)[good * stargood]
+        pctpix = (img - skypix)[good * refgood]
         if len(pctpix):
-            assert(np.all(np.isfinite(img[good * stargood])))
-            assert(np.all(np.isfinite(skypix[good * stargood])))
+            assert(np.all(np.isfinite(img[good * refgood])))
+            assert(np.all(np.isfinite(skypix[good * refgood])))
             assert(np.all(np.isfinite(pctpix)))
-            pctvals = np.percentile((img - skypix)[good * stargood], pcts)
+            pctvals = np.percentile((img - skypix)[good * refgood], pcts)
         else:
             pctvals = [0] * len(pcts)
         H,W = img.shape
-        fmasked = float(np.sum((good * stargood) == 0)) / (H*W)
+        fmasked = float(np.sum((good * refgood) == 0)) / (H*W)
 
         # DEBUG -- compute a splinesky on a finer grid and compare it.
-        fineskyobj = SplineSky.BlantonMethod(img - initsky, good * stargood,
+        fineskyobj = SplineSky.BlantonMethod(img - initsky, good * refgood,
                                              boxsize//2)
         fineskyobj.offset(initsky)
         fineskyobj.addTo(skypix, -1.)
@@ -1408,12 +1412,12 @@ class LegacySurveyImage(object):
             ps.savefig()
 
             plt.clf()
-            plt.imshow((img.T - initsky)*stargood.T + initsky, **ima)
+            plt.imshow((img.T - initsky)*refgood.T + initsky, **ima)
             plt.title('Image (star masked)')
             ps.savefig()
 
             plt.clf()
-            plt.imshow((img.T - initsky)*(stargood * good).T + initsky, **ima)
+            plt.imshow((img.T - initsky)*(refgood * good).T + initsky, **ima)
             plt.title('Image (boxcar & star masked)')
             ps.savefig()
 
