@@ -1259,7 +1259,7 @@ class LegacySurveyImage(object):
                                        tycho_stars=True, gaia_stars=gaia,
                                        large_galaxies=True,
                                        star_clusters=True)
-        stargood = (get_reference_map(wcs, refs) == 0)
+        refgood = (get_reference_map(wcs, refs) == 0)
 
         haloimg = None
         if halos and self.camera == 'decam':
@@ -1323,7 +1323,7 @@ class LegacySurveyImage(object):
                   'additional CCD pixels from blob maps')
 
         # Now find the final sky model using that more extensive mask
-        skyobj = SplineSky.BlantonMethod(img - initsky, good*stargood, boxsize)
+        skyobj = SplineSky.BlantonMethod(img - initsky, good*refgood, boxsize)
 
         # add the initial sky estimate back in
         skyobj.offset(initsky)
@@ -1333,19 +1333,19 @@ class LegacySurveyImage(object):
         skyobj.addTo(skypix)
 
         pcts = [0,10,20,30,40,50,60,70,80,90,100]
-        pctpix = (img - skypix)[good * stargood]
+        pctpix = (img - skypix)[good * refgood]
         if len(pctpix):
-            assert(np.all(np.isfinite(img[good * stargood])))
-            assert(np.all(np.isfinite(skypix[good * stargood])))
+            assert(np.all(np.isfinite(img[good * refgood])))
+            assert(np.all(np.isfinite(skypix[good * refgood])))
             assert(np.all(np.isfinite(pctpix)))
-            pctvals = np.percentile((img - skypix)[good * stargood], pcts)
+            pctvals = np.percentile((img - skypix)[good * refgood], pcts)
         else:
             pctvals = [0] * len(pcts)
         H,W = img.shape
-        fmasked = float(np.sum((good * stargood) == 0)) / (H*W)
+        fmasked = float(np.sum((good * refgood) == 0)) / (H*W)
 
         # DEBUG -- compute a splinesky on a finer grid and compare it.
-        fineskyobj = SplineSky.BlantonMethod(img - initsky, good * stargood,
+        fineskyobj = SplineSky.BlantonMethod(img - initsky, good * refgood,
                                              boxsize//2)
         fineskyobj.offset(initsky)
         fineskyobj.addTo(skypix, -1.)
@@ -1412,12 +1412,12 @@ class LegacySurveyImage(object):
             ps.savefig()
 
             plt.clf()
-            plt.imshow((img.T - initsky)*stargood.T + initsky, **ima)
+            plt.imshow((img.T - initsky)*refgood.T + initsky, **ima)
             plt.title('Image (star masked)')
             ps.savefig()
 
             plt.clf()
-            plt.imshow((img.T - initsky)*(stargood * good).T + initsky, **ima)
+            plt.imshow((img.T - initsky)*(refgood * good).T + initsky, **ima)
             plt.title('Image (boxcar & star masked)')
             ps.savefig()
 
