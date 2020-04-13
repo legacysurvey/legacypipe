@@ -623,7 +623,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                T_donotfit=None, T_clusters=None,
                ccds=None,
                record_event=None,
-               gaia_stars=True,
                large_galaxies=True,
                **kwargs):
     '''
@@ -692,7 +691,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
         nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
         saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
-
 
     #if Tnew is None:
     #    raise NothingToDoError('No sources detected.')
