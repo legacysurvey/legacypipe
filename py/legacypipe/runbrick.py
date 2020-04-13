@@ -449,6 +449,10 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
     record_event and record_event('stage_outliers: starting')
     _add_stage_version(version_header, 'OUTL', 'outliers')
 
+    version_header.add_record(dict(name='OUTLIER',
+                                   value=outliers,
+                                   help='Are we applying outlier rejection?'))
+
     # Check for existing MEF containing masks for all the chips we need.
     if outliers and not read_outlier_mask_file(survey, tims, brickname, outlier_mask_file=outlier_mask_file):
         from astrometry.util.file import trymakedirs
