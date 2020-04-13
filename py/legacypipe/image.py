@@ -1252,7 +1252,8 @@ class LegacySurveyImage(object):
             y0,y1 = sy.start, sy.stop
             x0,x1 = sx.start, sx.stop
             wcs = wcs.get_subimage(x0, y0, int(x1-x0), int(y1-y0))
-        # only used to create galaxy objects (which we will discard)
+        # Grab reference sources.  'fakebands' is only used to create
+        # source objects(which we don't need).
         fakebands = ['r']
         refs,_ = get_reference_sources(survey, wcs, self.pixscale, fakebands,
                                        tycho_stars=True, gaia_stars=gaia,
@@ -1269,13 +1270,14 @@ class LegacySurveyImage(object):
                       'Gaia stars')
                 from legacypipe.halos import decam_halo_model
 
-                # Try to include inner Moffat component in star halos?
+                # moffat=True: include inner Moffat component in star halos.
                 moffat = True
                 haloimg = decam_halo_model(refs[Igaia], self.mjdobs, wcs,
                                            self.pixscale, self.band, self,
                                            moffat)
                 # "haloimg" is in nanomaggies.  Convert to ADU via zeropoint...
                 from tractor.basics import NanoMaggies
+                assert(self.ccdzpt > 0)
                 zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
                 haloimg *= zpscale
                 print('Using zeropoint:', self.ccdzpt, 'to scale halo image by', zpscale)

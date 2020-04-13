@@ -1469,7 +1469,7 @@ class Measurer(object):
         ccd.filter = self.band
         ccd.exptime = self.exptime
         ccd.camera = self.camera
-        ccd.ccdzpt = 0. ## ???
+        ccd.ccdzpt = 0. # <-- we update this below if survey_zeropoints is available.
         ccd.ccdraoff = 0.
         ccd.ccddecoff = 0.
         ccd.fwhm = 0.
@@ -1520,6 +1520,8 @@ class Measurer(object):
             ps = PlotSequence('%s-%i-%s' % (self.camera, self.expnum, self.ccdname))
 
         # Only do stellar halo subtraction if we have a zeropoint (via --zeropoint-dir)
+        # Note that this is the only place we use survey_zeropoints; it does not get
+        # passed to image.run_calibs().
         dohalos = False
         if survey_zeropoints is not None:
             ccds = survey_zeropoints.find_ccds(expnum=self.expnum, ccdname=self.ccdname,
