@@ -2112,8 +2112,9 @@ def stage_wise_forced(
         wtiles.unwise_dir = np.array([unwise_dir]*len(tiles))
         for band in [1,2,3,4]:
             get_masks = targetwcs if (band == 1) else None
-            args.append((wcat, wtiles, band, roiradec,
-                         wise_ceres, wpixpsf, unwise_coadds, get_masks, ps, True, unwise_modelsky_dir))
+            args.append((wcat, wtiles, band, roiradec, wise_ceres, wpixpsf,
+                         unwise_coadds, get_masks, ps, True,
+                         unwise_modelsky_dir))
 
     # Add time-resolved WISE coadds
     # Skip if $UNWISE_COADDS_TIMERESOLVED_DIR or --unwise-tr-dir not set.
@@ -3287,12 +3288,9 @@ def get_runbrick_kwargs(survey=None,
     if unwise_tr_dir is None:
         unwise_tr_dir = os.environ.get('UNWISE_COADDS_TIMERESOLVED_DIR', None)
     if unwise_modelsky_dir is None:
-        unwise_modelsky_dir = os.path.join(survey.get_calib_dir(), 'wise', 'modelsky')
-        if not os.path.exists(unwise_modelsky_dir):
-            print('WARNING: no WISE sky background maps in {}'.format(unwise_modelsky_dir))
-            unwise_modelsky_dir = None
-        else:
-            unwise_modelsky_dir = os.path.realpath(unwise_modelsky_dir) # follow the soft link
+        unwise_modelsky_dir = os.environ.get('UNWISE_MODEL_SKY_DIR', None)
+        if unwise_modelsky_dir is not None and not os.path.exists(unwise_modelsky_dir):
+            raise RuntimeError('The directory specified in $UNWISE_MODEL_SKY_DIR does not exist!')
     opt.update(unwise_dir=unwise_dir, unwise_tr_dir=unwise_tr_dir, unwise_modelsky_dir=unwise_modelsky_dir)
 
     # list of strings if -w / --write-stage is given; False if
