@@ -173,10 +173,15 @@ def rbmain():
                 path = os.path.join(dirpath, fn)
                 relpath = os.path.relpath(path, surveydir)
                 files.append(relpath)
-
         # cache or no?
+        files.sort()
         files_cache = files[::2]
         files_nocache = files[1::2]
+        # Survey-ccds *must* be in nocache.
+        fn = 'survey-ccds-1.fits.gz'
+        if fn in files_cache:
+            files_cache.remove(fn)
+            files_nocache.append(fn)
 
         for fn in files_cache:
             src = os.path.join(surveydir, fn)
