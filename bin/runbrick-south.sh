@@ -87,7 +87,6 @@ python -O legacypipe/runbrick.py \
      --blob-mask-dir ${BLOB_MASK_DIR} \
      --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
-     --unwise-coadds \
      --outdir $outdir \
      --ps "${outdir}/metrics/${bri}/ps-${brick}-${SLURM_JOB_ID}.fits" \
      --ps-t0 $(date "+%s") \

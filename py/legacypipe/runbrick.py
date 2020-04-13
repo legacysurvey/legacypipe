@@ -2046,7 +2046,7 @@ def stage_wise_forced(
     unwise_modelsky_dir=None,
     brick=None,
     wise_ceres=True,
-    unwise_coadds=False,
+    unwise_coadds=True,
     version_header=None,
     maskbits=None,
     mp=None,
@@ -2592,7 +2592,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               less_masking=False,
               largegalaxy_preburner=False,
               min_mjd=None, max_mjd=None,
-              unwise_coadds=False,
+              unwise_coadds=True,
               bail_out=False,
               ceres=True,
               wise_ceres=True,
@@ -3187,9 +3187,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--no-splinesky', dest='splinesky', default=True,
                         action='store_false', help='Use constant sky rather than spline.')
-    parser.add_argument('--unwise-coadds', default=False,
-                        action='store_true', help='Write FITS and JPEG unWISE coadds?')
-
+    parser.add_argument('--no-unwise-coadds', dest='unwise_coadds', default=True,
+                        action='store_false', help='Turn off writing FITS and JPEG unWISE coadds?')
     parser.add_argument('--no-outliers', dest='outliers', default=True,
                         action='store_false', help='Do not compute or apply outlier masks')
 
