@@ -1293,7 +1293,7 @@ class LegacySurveyImage(object):
                     del nomoffhalo
                 if not plots:
                     del haloimg
-        
+
         if survey_blob_mask is not None:
             # Read DR8 blob maps for all overlapping bricks and project them
             # into this CCD's pixel space.
