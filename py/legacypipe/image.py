@@ -1263,8 +1263,10 @@ class LegacySurveyImage(object):
 
         haloimg = None
         if halos and self.camera == 'decam':
-            # Subtract halos from Gaia stars
-            Igaia, = np.nonzero(refs.isgaia * refs.pointsource)
+            # Subtract halos from Gaia stars.
+            # "refs.donotfit" are Gaia sources that are near LSLGA galaxies.
+            Igaia, = np.nonzero(refs.isgaia * refs.pointsource *
+                                np.logical_not(refs.donotfit))
             if len(Igaia):
                 print('Subtracting halos before estimating sky;', len(Igaia),
                       'Gaia stars')
