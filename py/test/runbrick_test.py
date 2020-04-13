@@ -23,7 +23,6 @@ def rbmain():
     from astrometry.util.file import trymakedirs
     import shutil
 
-
     travis = 'travis' in sys.argv
     ceres  = 'ceres'  in sys.argv
     psfex  = 'psfex'  in sys.argv
@@ -327,7 +326,6 @@ def rbmain():
                '--force-all', '--no-write', '--coadd-bw',
                '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
                '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
-               '--unwise-coadds',
                '--blob-image', '--no-hybrid-psf',
                '--survey-dir', surveydir,
                '--outdir', outdir, '-v', '--no-wise-ceres'])
@@ -352,7 +350,6 @@ def rbmain():
                    '--force-all', '--no-write', '--coadd-bw',
                    '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
                    '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
-                   '--unwise-coadds',
                    '--survey-dir', surveydir,
                    '--outdir', outdir])
     
@@ -367,7 +364,6 @@ def rbmain():
                    '--force-all', '--no-write', '--coadd-bw',
                    '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
                    '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
-                   '--unwise-coadds',
                    '--blob-image',
                    '--survey-dir', surveydir,
                    '--outdir', outdir, '-v'])
