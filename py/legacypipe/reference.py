@@ -574,12 +574,11 @@ def get_reference_map(wcs, refs):
         thisrefs = refs[I]
         ok,xx,yy = wcs.radec2pixelxy(thisrefs.ra, thisrefs.dec)
         for x,y,ref in zip(xx,yy,thisrefs):
-            # Cut to L1 rectangle
+            # Cut to bounding square
             xlo = int(np.clip(np.floor(x-1 - ref.radius_pix), 0, W))
             xhi = int(np.clip(np.ceil (x   + ref.radius_pix), 0, W))
             ylo = int(np.clip(np.floor(y-1 - ref.radius_pix), 0, H))
             yhi = int(np.clip(np.ceil (y   + ref.radius_pix), 0, H))
-            #print('x range', xlo,xhi, 'y range', ylo,yhi)
             if xlo == xhi or ylo == yhi:
                 continue
 
