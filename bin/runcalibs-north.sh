@@ -52,7 +52,7 @@ export KMP_AFFINITY=disabled
 image_fn="$1"
 
 # Get the camera from the filename
-echo $image_fn
+#echo $image_fn
 if [[ $image_fn == *"90prime"* ]]; then
   camera=90prime
 elif [[ $image_fn == *"mosaic"* ]]; then

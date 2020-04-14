@@ -49,7 +49,7 @@ export KMP_AFFINITY=disabled
 
 image_fn="$1"
 
-echo $image_fn
+#echo $image_fn
 camera=decam
 
 # Redirect logs to a nested directory.
