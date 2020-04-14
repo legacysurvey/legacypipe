@@ -2,7 +2,7 @@
 
 # Run legacy_zeropoints on a single image within a Shifter container at NERSC.
 
-export LEGACY_SURVEY_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr9
+export LEGACY_SURVEY_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr9-cal
 
 # NOTE: if you only want to regenerate sky calibs, MUST create a symlink
 # in $calibdir/psfex, eg to
