@@ -70,7 +70,7 @@ log=`echo $(basename ${image_fn} | sed s#.fits.fz#.log#g)`
 tmplog=/tmp/$log
 log=$logdir/$log
 
-cmd="python /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
+cmd="python -u /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
 	--camera ${camera} \
     --image ${image_fn} \
     --image_dir ${imagedir} \
@@ -82,7 +82,7 @@ cmd="python /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
     --run-calibs-only \
     --blob-mask-dir ${blob_dir}"
 
-echo $cmd >> $tmplog
+echo $cmd > $tmplog
 $cmd >> $tmplog 2>&1
 # Save the return value from the python command -- otherwise we
 # exit 0 because the mv succeeds!
