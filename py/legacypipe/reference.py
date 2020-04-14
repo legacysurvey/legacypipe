@@ -308,8 +308,9 @@ def read_tycho2(survey, targetwcs, bands):
 
     # Use zguess
     tycho.mask_mag = tycho.mag
-    I = np.flatnonzero(np.isfinite(tycho.zguess) *
-                       (tycho.zguess + 1. < tycho.mag))
+    with np.errstate(invalid='ignore'):
+        I = np.flatnonzero(np.isfinite(tycho.zguess) *
+                           (tycho.zguess + 1. < tycho.mag))
     tycho.mask_mag[I] = tycho.zguess[I]
     # Per discussion in issue #306 -- cut on mag < 13.
     # This drops only 13k/2.5M stars.
