@@ -1226,7 +1226,8 @@ class LegacySurveyImage(object):
             boxsize /= 2
 
         # Compute initial model...
-        skyobj = SplineSky.BlantonMethod(img - initsky, good, boxsize)
+        skyobj = SplineSky.BlantonMethod(img - initsky, good, boxsize,
+                                         min_fraction=0.25)
         skymod = np.zeros_like(img)
         skyobj.addTo(skymod)
 
@@ -1236,7 +1237,7 @@ class LegacySurveyImage(object):
         boxcar = 5
         # Sigma of boxcar-smoothed image
         bsig1 = sig1 / boxcar
-        masked = np.abs(uniform_filter(img-initsky-skymod,
+        masked = np.abs(uniform_filter(img - initsky - skymod,
                                        size=boxcar, mode='constant')
                         > (3.*bsig1))
         masked = binary_dilation(masked, iterations=3)
@@ -1318,13 +1319,17 @@ class LegacySurveyImage(object):
                     continue
                 allblobs[Yo,Xo] |= blobs[Yi,Xi]
             ng = np.sum(good)
+            if plots:
+                boxcargood = good.copy()
+                blobgood = np.logical_not(allblobs)
             good[allblobs] = False
+            del allblobs
             print('Masked', ng-np.sum(good),
                   'additional CCD pixels from blob maps')
 
         # Now find the final sky model using that more extensive mask
-        skyobj = SplineSky.BlantonMethod(img - initsky, good*refgood, boxsize)
-
+        skyobj = SplineSky.BlantonMethod(img - initsky, good*refgood, boxsize,
+                                         min_fraction=0.25)
         # add the initial sky estimate back in
         skyobj.offset(initsky)
 
@@ -1346,7 +1351,8 @@ class LegacySurveyImage(object):
 
         # DEBUG -- compute a splinesky on a finer grid and compare it.
         fineskyobj = SplineSky.BlantonMethod(img - initsky, good * refgood,
-                                             boxsize//2)
+                                             boxsize//2,
+                                             min_fraction=0.25)
         fineskyobj.offset(initsky)
         fineskyobj.addTo(skypix, -1.)
         fine_rms = np.sqrt(np.mean(skypix**2))
@@ -1357,6 +1363,7 @@ class LegacySurveyImage(object):
                        vmin=initsky-2.*sig1, vmax=initsky+5.*sig1, cmap='gray')
             ima2 = dict(interpolation='nearest', origin='lower',
                         vmin=initsky-0.5*sig1,vmax=initsky+0.5*sig1,cmap='gray')
+
             plt.clf()
             plt.imshow(img.T, **ima)
             plt.title('Image %s-%i-%s %s' % (self.camera, self.expnum,
@@ -1406,26 +1413,71 @@ class LegacySurveyImage(object):
             plt.legend()
             ps.savefig()
 
+            from legacypipe.detection import plot_mask
+
             plt.clf()
-            plt.imshow((img.T - initsky)*good.T + initsky, **ima)
+            plt.imshow((img.T - initsky)*boxcargood.T + initsky, **ima)
+            plot_mask(np.logical_not(boxcargood.T))
             plt.title('Image (boxcar masked)')
             ps.savefig()
 
             plt.clf()
+            plt.imshow((img.T - initsky)*blobgood.T + initsky, **ima)
+            plot_mask(np.logical_not(blobgood.T))
+            plt.title('Image (blob masked)')
+            ps.savefig()
+
+            plt.clf()
             plt.imshow((img.T - initsky)*refgood.T + initsky, **ima)
-            plt.title('Image (star masked)')
+            plot_mask(np.logical_not(refgood.T))
+            plt.title('Image (reference masked)')
             ps.savefig()
 
             plt.clf()
             plt.imshow((img.T - initsky)*(refgood * good).T + initsky, **ima)
-            plt.title('Image (boxcar & star masked)')
+            plot_mask(np.logical_not(refgood * good).T)
+            plt.title('Image (all masked)')
+            ps.savefig()
+
+            ax = plt.axis()
+            for x in skyobj.xgrid:
+                # We transpose the image!
+                #plt.axvline(x, color='r')
+                plt.axhline(x, color='r')
+            for y in skyobj.ygrid:
+                #plt.axhline(y, color='r')
+                plt.axvline(y, color='r')
+            plt.axis(ax)
+            ps.savefig()
+
+            plt.clf()
+            plt.hist((img[good * refgood] - initsky).ravel(), bins=50)
+            plt.title('Unmasked pixels')
+            ps.savefig()
+            
+            gridvals = skyobj.spl(skyobj.xgrid, skyobj.ygrid) - initsky
+            plt.clf()
+            plt.imshow(gridvals,
+                       interpolation='nearest', origin='lower',
+                       vmin=-2.*sig1, vmax=+5.*sig1, cmap='gray')
+            plt.colorbar()
+            plot_mask(gridvals == 0)
+            plt.title('Splinesky grid values')
+            ps.savefig()
+
+            plt.clf()
+            plt.imshow(gridvals,
+                       interpolation='nearest', origin='lower',
+                       vmin=-0.5*sig1, vmax=+0.5*sig1, cmap='gray')
+            plt.colorbar()
+            plt.title('Splinesky grid values')
             ps.savefig()
 
             skypix = np.zeros_like(img)
             skyobj.addTo(skypix)
             plt.clf()
             plt.imshow(skypix.T, **ima2)
-            plt.title('Sky model (boxcar & star)')
+            plt.title('Sky model')
             ps.savefig()
 
             skypix2 = np.zeros_like(img)
