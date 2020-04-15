@@ -1262,6 +1262,11 @@ class LegacySurveyImage(object):
                                        star_clusters=True)
         refgood = (get_reference_map(wcs, refs) == 0)
 
+        debugimgs = True
+        if debugimgs:
+            name = 'sky-%s-%s-%s' % (self.camera, self.expnum, self.ccdname)
+            fitsio.write(name + '-image-orig.fits', img, clobber=True)
+        
         haloimg = None
         if halos and self.camera == 'decam':
             # Subtract halos from Gaia stars.
@@ -1295,6 +1300,9 @@ class LegacySurveyImage(object):
                 if not plots:
                     del haloimg
 
+            if debugimgs:
+                fitsio.write(name + '-image-halosub.fits', img, clobber=True)
+                    
         if survey_blob_mask is not None:
             # Read DR8 blob maps for all overlapping bricks and project them
             # into this CCD's pixel space.
@@ -1323,6 +1331,10 @@ class LegacySurveyImage(object):
                 boxcargood = good.copy()
                 blobgood = np.logical_not(allblobs)
             good[allblobs] = False
+
+            if debugimgs:
+                fitsio.write(name + '-blobmask.fits', np.logical_not(allblobs).astype(np.uint8), clobber=True)
+
             del allblobs
             print('Masked', ng-np.sum(good),
                   'additional CCD pixels from blob maps')
@@ -1337,6 +1349,11 @@ class LegacySurveyImage(object):
         skypix = np.zeros_like(img)
         skyobj.addTo(skypix)
 
+        if debugimgs:
+            fitsio.write(name + '-refmask.fits', refgood.astype(np.uint8), clobber=True)
+            fitsio.write(name + '-allmask.fits', (good * refgood).astype(np.uint8), clobber=True)
+            fitsio.write(name + '-splinesky.fits', skypix, clobber=True)
+        
         pcts = [0,10,20,30,40,50,60,70,80,90,100]
         pctpix = (img - skypix)[good * refgood]
         if len(pctpix):
