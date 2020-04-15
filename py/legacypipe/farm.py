@@ -674,6 +674,7 @@ def get_blob_iter(skipblobs=None,
                   use_ceres=True,
                   reoptimize=False,
                   iterative=True,
+                  less_masking=False,
                   large_galaxies_force_pointsource=True,
                   refstars=None,
                   T_clusters=None,
@@ -686,16 +687,7 @@ def get_blob_iter(skipblobs=None,
     # drop any cached data before we start pickling/multiprocessing
     survey.drop_cache()
 
-    if refstars:
-        from legacypipe.reference import get_reference_map
-        refs = refstars[refstars.donotfit == False]
-        if T_clusters is not None:
-            refs = merge_tables([refs, T_clusters], columns='fillzero')
-        refmap = get_reference_map(targetwcs, refs)
-        del refs
-    else:
-        HH, WW = targetwcs.shape
-        refmap = np.zeros((int(HH), int(WW)), np.uint8)
+    refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
 
     # Create the iterator over blobs to process
     blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobs,
@@ -704,6 +696,7 @@ def get_blob_iter(skipblobs=None,
                           reoptimize, iterative, use_ceres,
                           refmap, 
                           large_galaxies_force_pointsource,
+                          less_masking,
                           brick,
                           max_blobsize=max_blobsize, custom_brick=custom_brick,
                           skipblobs=skipblobs)

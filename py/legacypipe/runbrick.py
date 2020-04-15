@@ -1010,23 +1010,7 @@ def stage_fitblobs(T=None,
         while len(R) < len(blobsrcs):
             R.append(dict(brickname=brickname, iblob=-1, result=None))
 
-    if refstars:
-        from legacypipe.reference import get_reference_map
-        refs = refstars[refstars.donotfit == False]
-        if T_clusters is not None:
-            refs = merge_tables([refs, T_clusters], columns='fillzero')
-
-        if less_masking:
-            # Reduce BRIGHT radius by 50%
-            refs.radius_pix[refs.isbright] //= 2
-            # (Also turn off special behavior for MEDIUM, in oneblob.py)
-
-        refmap = get_reference_map(targetwcs, refs)
-        del refs
-    else:
-        HH, WW = targetwcs.shape
-        refmap = np.zeros((int(HH), int(WW)), np.uint8)
-
+    refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
     # Create the iterator over blobs to process
     blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, reoptimize, iterative, use_ceres,
@@ -1259,6 +1243,26 @@ def stage_fitblobs(T=None,
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
+
+# Also called by farm.py
+def get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs):
+    if refstars:
+        from legacypipe.reference import get_reference_map
+        refs = refstars[refstars.donotfit == False]
+        if T_clusters is not None:
+            refs = merge_tables([refs, T_clusters], columns='fillzero')
+
+        if less_masking:
+            # Reduce BRIGHT radius by 50%
+            refs.radius_pix[refs.isbright] //= 2
+            # (Also turn off special behavior for MEDIUM, in oneblob.py)
+
+        refmap = get_reference_map(targetwcs, refs)
+        del refs
+    else:
+        HH, WW = targetwcs.shape
+        refmap = np.zeros((int(HH), int(WW)), np.uint8)
+    return refmap
 
 def _get_bailout_mask(blobs, skipblobs, targetwcs, W, H, brick, blobslices):
     maxblob = blobs.max()
