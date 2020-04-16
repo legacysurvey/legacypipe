@@ -1113,7 +1113,8 @@ class Measurer(object):
             sy,sx = self.slc
             x0 = sx.start
             y0 = sy.start
-        apply_amp_correction_northern(self.camera, self.band, self.ccdname, self.mjd_obs,
+        apply_amp_correction_northern(self.camera, self.band, self.expnum,
+                                      self.ccdname, self.mjd_obs,
                                       img, invvar, x0, y0)
 
     def ps1_to_observed(self, ps1):
