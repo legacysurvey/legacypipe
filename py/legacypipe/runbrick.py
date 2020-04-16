@@ -79,7 +79,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                constant_invvar=False,
                read_image_pixels = True,
                min_mjd=None, max_mjd=None,
-               gaia_stars=False,
+               gaia_stars=True,
                mp=None,
                record_event=None,
                unwise_dir=None,
@@ -366,9 +366,9 @@ def stage_refs(survey=None,
                targetwcs=None,
                bands=None,
                version_header=None,
-               tycho_stars=False,
-               gaia_stars=False,
-               large_galaxies=False,
+               tycho_stars=True,
+               gaia_stars=True,
+               large_galaxies=True,
                star_clusters=True,
                record_event=None,
                **kwargs):
@@ -448,6 +448,10 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
 
     record_event and record_event('stage_outliers: starting')
     _add_stage_version(version_header, 'OUTL', 'outliers')
+
+    version_header.add_record(dict(name='OUTLIER',
+                                   value=outliers,
+                                   help='Are we applying outlier rejection?'))
 
     # Check for existing MEF containing masks for all the chips we need.
     if outliers and not read_outlier_mask_file(survey, tims, brickname, outlier_mask_file=outlier_mask_file):
@@ -623,8 +627,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                T_donotfit=None, T_clusters=None,
                ccds=None,
                record_event=None,
-               gaia_stars=False,
-               large_galaxies=False,
+               large_galaxies=True,
                **kwargs):
     '''
     In this stage we run SED-matched detection to find objects in the
@@ -692,7 +695,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
         nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
         saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
-
 
     #if Tnew is None:
     #    raise NothingToDoError('No sources detected.')
@@ -1008,23 +1010,7 @@ def stage_fitblobs(T=None,
         while len(R) < len(blobsrcs):
             R.append(dict(brickname=brickname, iblob=-1, result=None))
 
-    if refstars:
-        from legacypipe.reference import get_reference_map
-        refs = refstars[refstars.donotfit == False]
-        if T_clusters is not None:
-            refs = merge_tables([refs, T_clusters], columns='fillzero')
-
-        if less_masking:
-            # Reduce BRIGHT radius by 50%
-            refs.radius_pix[refs.isbright] //= 2
-            # (Also turn off special behavior for MEDIUM, in oneblob.py)
-
-        refmap = get_reference_map(targetwcs, refs)
-        del refs
-    else:
-        HH, WW = targetwcs.shape
-        refmap = np.zeros((int(HH), int(WW)), np.uint8)
-
+    refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
     # Create the iterator over blobs to process
     blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, reoptimize, iterative, use_ceres,
@@ -1257,6 +1243,26 @@ def stage_fitblobs(T=None,
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
+
+# Also called by farm.py
+def get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs):
+    if refstars:
+        from legacypipe.reference import get_reference_map
+        refs = refstars[refstars.donotfit == False]
+        if T_clusters is not None:
+            refs = merge_tables([refs, T_clusters], columns='fillzero')
+
+        if less_masking:
+            # Reduce BRIGHT radius by 50%
+            refs.radius_pix[refs.isbright] //= 2
+            # (Also turn off special behavior for MEDIUM, in oneblob.py)
+
+        refmap = get_reference_map(targetwcs, refs)
+        del refs
+    else:
+        HH, WW = targetwcs.shape
+        refmap = np.zeros((int(HH), int(WW)), np.uint8)
+    return refmap
 
 def _get_bailout_mask(blobs, skipblobs, targetwcs, W, H, brick, blobslices):
     maxblob = blobs.max()
@@ -2044,7 +2050,7 @@ def stage_wise_forced(
     unwise_modelsky_dir=None,
     brick=None,
     wise_ceres=True,
-    unwise_coadds=False,
+    unwise_coadds=True,
     version_header=None,
     maskbits=None,
     mp=None,
@@ -2110,8 +2116,9 @@ def stage_wise_forced(
         wtiles.unwise_dir = np.array([unwise_dir]*len(tiles))
         for band in [1,2,3,4]:
             get_masks = targetwcs if (band == 1) else None
-            args.append((wcat, wtiles, band, roiradec,
-                         wise_ceres, wpixpsf, unwise_coadds, get_masks, ps, True, unwise_modelsky_dir))
+            args.append((wcat, wtiles, band, roiradec, wise_ceres, wpixpsf,
+                         unwise_coadds, get_masks, ps, True,
+                         unwise_modelsky_dir))
 
     # Add time-resolved WISE coadds
     # Skip if $UNWISE_COADDS_TIMERESOLVED_DIR or --unwise-tr-dir not set.
@@ -2298,7 +2305,7 @@ def stage_writecat(
     brickid=None,
     brick=None,
     invvars=None,
-    gaia_stars=False,
+    gaia_stars=True,
     co_sky=None,
     record_event=None,
     **kwargs):
@@ -2583,14 +2590,14 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               splinesky=True,
               subsky=True,
               constant_invvar=False,
-              tycho_stars=False,
-              gaia_stars=False,
-              large_galaxies=False,
+              tycho_stars=True,
+              gaia_stars=True,
+              large_galaxies=True,
               large_galaxies_force_pointsource=True,
               less_masking=False,
               largegalaxy_preburner=False,
               min_mjd=None, max_mjd=None,
-              unwise_coadds=False,
+              unwise_coadds=True,
               bail_out=False,
               ceres=True,
               wise_ceres=True,
@@ -3185,9 +3192,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--no-splinesky', dest='splinesky', default=True,
                         action='store_false', help='Use constant sky rather than spline.')
-    parser.add_argument('--unwise-coadds', default=False,
-                        action='store_true', help='Write FITS and JPEG unWISE coadds?')
-
+    parser.add_argument('--no-unwise-coadds', dest='unwise_coadds', default=True,
+                        action='store_false', help='Turn off writing FITS and JPEG unWISE coadds?')
     parser.add_argument('--no-outliers', dest='outliers', default=True,
                         action='store_false', help='Do not compute or apply outlier masks')
 
@@ -3286,12 +3292,9 @@ def get_runbrick_kwargs(survey=None,
     if unwise_tr_dir is None:
         unwise_tr_dir = os.environ.get('UNWISE_COADDS_TIMERESOLVED_DIR', None)
     if unwise_modelsky_dir is None:
-        unwise_modelsky_dir = os.path.join(survey.get_calib_dir(), 'wise', 'modelsky')
-        if not os.path.exists(unwise_modelsky_dir):
-            print('WARNING: no WISE sky background maps in {}'.format(unwise_modelsky_dir))
-            unwise_modelsky_dir = None
-        else:
-            unwise_modelsky_dir = os.path.realpath(unwise_modelsky_dir) # follow the soft link
+        unwise_modelsky_dir = os.environ.get('UNWISE_MODEL_SKY_DIR', None)
+        if unwise_modelsky_dir is not None and not os.path.exists(unwise_modelsky_dir):
+            raise RuntimeError('The directory specified in $UNWISE_MODEL_SKY_DIR does not exist!')
     opt.update(unwise_dir=unwise_dir, unwise_tr_dir=unwise_tr_dir, unwise_modelsky_dir=unwise_modelsky_dir)
 
     # list of strings if -w / --write-stage is given; False if

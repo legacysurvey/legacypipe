@@ -12,18 +12,19 @@ else
   outdir=$DW_PERSISTENT_STRIPED_DR9/south
 fi
 
-BLOB_MASK_DIR=/global/project/projectdirs/cosmo/work/legacysurvey/dr8/south
+BLOB_MASK_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr8/south
 
 export LEGACY_SURVEY_DIR=/global/cscratch1/sd/desiproc/dr9c
 
-export DUST_DIR=/global/project/projectdirs/cosmo/data/dust/v0_1
-export UNWISE_COADDS_DIR=/global/project/projectdirs/cosmo/work/wise/outputs/merge/neo5/fulldepth:/global/project/projectdirs/cosmo/data/unwise/allwise/unwise-coadds/fulldepth
-export UNWISE_COADDS_TIMERESOLVED_DIR=/global/project/projectdirs/cosmo/work/wise/outputs/merge/neo5
-export GAIA_CAT_DIR=/global/project/projectdirs/cosmo/work/gaia/chunks-gaia-dr2-astrom-2
+export DUST_DIR=/global/cfs/cdirs/cosmo/data/dust/v0_1
+export UNWISE_COADDS_DIR=/global/cfs/cdirs/cosmo/work/wise/outputs/merge/neo5/fulldepth:/global/cfs/cdirs/cosmo/data/unwise/allwise/unwise-coadds/fulldepth
+export UNWISE_COADDS_TIMERESOLVED_DIR=/global/cfs/cdirs/cosmo/work/wise/outputs/merge/neo5
+export UNWISE_MODEL_SKY_DIR=/global/cfs/cdirs/cosmo/work/wise/unwise_catalog/dr2/mod
+export GAIA_CAT_DIR=/global/cfs/cdirs/cosmo/work/gaia/chunks-gaia-dr2-astrom-2
 export GAIA_CAT_VER=2
-export TYCHO2_KD_DIR=/global/project/projectdirs/cosmo/staging/tycho2
-export LARGEGALAXIES_CAT=/global/project/projectdirs/cosmo/staging/largegalaxies/v4.0/LSLGA-v4.0.kd.fits
-export PS1CAT_DIR=/global/project/projectdirs/cosmo/work/ps1/cats/chunks-qz-star-v3
+export TYCHO2_KD_DIR=/global/cfs/cdirs/cosmo/staging/tycho2
+export LARGEGALAXIES_CAT=/global/cfs/cdirs/cosmo/staging/largegalaxies/v6.0/LSLGA-model-v6.0.kd.fits
+export PS1CAT_DIR=/global/cfs/cdirs/cosmo/work/ps1/cats/chunks-qz-star-v3
 
 export PYTHONPATH=/usr/local/lib/python:/usr/local/lib/python3.6/dist-packages:/src/unwise_psf/py:.
 
@@ -87,7 +88,6 @@ python -O legacypipe/runbrick.py \
      --blob-mask-dir ${BLOB_MASK_DIR} \
      --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
-     --unwise-coadds \
      --outdir $outdir \
      --ps "${outdir}/metrics/${bri}/ps-${brick}-${SLURM_JOB_ID}.fits" \
      --ps-t0 $(date "+%s") \

@@ -62,14 +62,14 @@ def remap_dq_cp_codes(dq, ignore_codes=[]):
         dqbits[dq == code] |= DQ_BITS[bitname]
     return dqbits
 
-def apply_amp_correction_northern(camera, band, ccdname, mjdobs,
+def apply_amp_correction_northern(camera, band, expnum, ccdname, mjdobs,
                                   img, invvar, x0, y0):
     from pkg_resources import resource_filename
     dirname = resource_filename('legacypipe', 'data')
     fn = os.path.join(dirname, 'ampcorrections.fits')
     A = fits_table(fn)
     # Find relevant row -- camera, filter, ccdname, mjd_start, mjd_end,
-    # And then multiple of:
+    # And then multiple rows of:
     #   xlo, xhi, ylo, yhi -> dzp
     # that might overlap this image.
     I = np.flatnonzero([(cam.strip() == camera) and
@@ -95,6 +95,8 @@ def apply_amp_correction_northern(camera, band, ccdname, mjdobs,
     debug_corr = False
     if debug_corr:
         count_corr = np.zeros((H,W), np.uint8)
+        corr_map = np.zeros((H,W), np.float32)
+        fitsio.write('amp-corr-image-before-%s-%s-%s.fits' % (camera, expnum, ccdname), img, clobber=True)
 
     for a in A[I]:
         # In the file, xhi,yhi are NON-inclusive.
@@ -119,10 +121,12 @@ def apply_amp_correction_northern(camera, band, ccdname, mjdobs,
 
         if debug_corr:
             count_corr[ystart:yend, xstart:xend] += 1
+            corr_map[ystart:yend, xstart:xend] = scale
 
     if debug_corr:
         assert(np.all(count_corr == 1))
-
+        fitsio.write('amp-corr-image-after-%s-%s-%s.fits' % (camera, expnum, ccdname), img, clobber=True)
+        fitsio.write('amp-corr-map-%s-%s-%s.fits' % (camera, expnum, ccdname), corr_map, clobber=True)
 
 class LegacySurveyImage(object):
     '''A base class containing common code for the images we handle.
@@ -688,7 +692,8 @@ class LegacySurveyImage(object):
     # A function that can be called by subclassers to apply a per-amp
     # zeropoint correction.
     def apply_amp_correction_northern(self, img, invvar, x0, y0):
-        apply_amp_correction_northern(self.camera, self.band, self.ccdname, self.mjdobs,
+        apply_amp_correction_northern(self.camera, self.band, self.expnum, 
+                                      self.ccdname, self.mjdobs,
                                       img, invvar, x0, y0)
 
     def check_image_header(self, imghdr):
@@ -1227,7 +1232,8 @@ class LegacySurveyImage(object):
             boxsize /= 2
 
         # Compute initial model...
-        skyobj = SplineSky.BlantonMethod(img - initsky, good, boxsize)
+        skyobj = SplineSky.BlantonMethod(img - initsky, good, boxsize,
+                                         min_fraction=0.25)
         skymod = np.zeros_like(img)
         skyobj.addTo(skymod)
 
@@ -1237,7 +1243,7 @@ class LegacySurveyImage(object):
         boxcar = 5
         # Sigma of boxcar-smoothed image
         bsig1 = sig1 / boxcar
-        masked = np.abs(uniform_filter(img-initsky-skymod,
+        masked = np.abs(uniform_filter(img - initsky - skymod,
                                        size=boxcar, mode='constant')
                         > (3.*bsig1))
         masked = binary_dilation(masked, iterations=3)
@@ -1253,30 +1259,34 @@ class LegacySurveyImage(object):
             y0,y1 = sy.start, sy.stop
             x0,x1 = sx.start, sx.stop
             wcs = wcs.get_subimage(x0, y0, int(x1-x0), int(y1-y0))
-        # only used to create galaxy objects (which we will discard)
+        # Grab reference sources.  'fakebands' is only used to create
+        # source objects(which we don't need).
         fakebands = ['r']
         refs,_ = get_reference_sources(survey, wcs, self.pixscale, fakebands,
                                        tycho_stars=True, gaia_stars=gaia,
-                                       large_galaxies=False,
-                                       star_clusters=False)
-        stargood = (get_reference_map(wcs, refs) == 0)
+                                       large_galaxies=True,
+                                       star_clusters=True)
+        refgood = (get_reference_map(wcs, refs) == 0)
 
         haloimg = None
         if halos and self.camera == 'decam':
-            # Subtract halos from Gaia stars
-            Igaia, = np.nonzero(refs.isgaia * refs.pointsource)
+            # Subtract halos from Gaia stars.
+            # "refs.donotfit" are Gaia sources that are near LSLGA galaxies.
+            Igaia, = np.nonzero(refs.isgaia * refs.pointsource *
+                                np.logical_not(refs.donotfit))
             if len(Igaia):
                 print('Subtracting halos before estimating sky;', len(Igaia),
                       'Gaia stars')
                 from legacypipe.halos import decam_halo_model
 
-                # Try to include inner Moffat component in star halos?
+                # moffat=True: include inner Moffat component in star halos.
                 moffat = True
                 haloimg = decam_halo_model(refs[Igaia], self.mjdobs, wcs,
                                            self.pixscale, self.band, self,
                                            moffat)
                 # "haloimg" is in nanomaggies.  Convert to ADU via zeropoint...
                 from tractor.basics import NanoMaggies
+                assert(self.ccdzpt > 0)
                 zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
                 haloimg *= zpscale
                 print('Using zeropoint:', self.ccdzpt, 'to scale halo image by', zpscale)
@@ -1290,7 +1300,7 @@ class LegacySurveyImage(object):
                     del nomoffhalo
                 if not plots:
                     del haloimg
-        
+
         if survey_blob_mask is not None:
             # Read DR8 blob maps for all overlapping bricks and project them
             # into this CCD's pixel space.
@@ -1315,13 +1325,17 @@ class LegacySurveyImage(object):
                     continue
                 allblobs[Yo,Xo] |= blobs[Yi,Xi]
             ng = np.sum(good)
+            if plots:
+                boxcargood = good.copy()
+                blobgood = np.logical_not(allblobs)
             good[allblobs] = False
+            del allblobs
             print('Masked', ng-np.sum(good),
                   'additional CCD pixels from blob maps')
 
         # Now find the final sky model using that more extensive mask
-        skyobj = SplineSky.BlantonMethod(img - initsky, good*stargood, boxsize)
-
+        skyobj = SplineSky.BlantonMethod(img - initsky, good*refgood, boxsize,
+                                         min_fraction=0.25)
         # add the initial sky estimate back in
         skyobj.offset(initsky)
 
@@ -1330,20 +1344,21 @@ class LegacySurveyImage(object):
         skyobj.addTo(skypix)
 
         pcts = [0,10,20,30,40,50,60,70,80,90,100]
-        pctpix = (img - skypix)[good * stargood]
+        pctpix = (img - skypix)[good * refgood]
         if len(pctpix):
-            assert(np.all(np.isfinite(img[good * stargood])))
-            assert(np.all(np.isfinite(skypix[good * stargood])))
+            assert(np.all(np.isfinite(img[good * refgood])))
+            assert(np.all(np.isfinite(skypix[good * refgood])))
             assert(np.all(np.isfinite(pctpix)))
-            pctvals = np.percentile((img - skypix)[good * stargood], pcts)
+            pctvals = np.percentile((img - skypix)[good * refgood], pcts)
         else:
             pctvals = [0] * len(pcts)
         H,W = img.shape
-        fmasked = float(np.sum((good * stargood) == 0)) / (H*W)
+        fmasked = float(np.sum((good * refgood) == 0)) / (H*W)
 
         # DEBUG -- compute a splinesky on a finer grid and compare it.
-        fineskyobj = SplineSky.BlantonMethod(img - initsky, good * stargood,
-                                             boxsize//2)
+        fineskyobj = SplineSky.BlantonMethod(img - initsky, good * refgood,
+                                             boxsize//2,
+                                             min_fraction=0.25)
         fineskyobj.offset(initsky)
         fineskyobj.addTo(skypix, -1.)
         fine_rms = np.sqrt(np.mean(skypix**2))
@@ -1354,6 +1369,7 @@ class LegacySurveyImage(object):
                        vmin=initsky-2.*sig1, vmax=initsky+5.*sig1, cmap='gray')
             ima2 = dict(interpolation='nearest', origin='lower',
                         vmin=initsky-0.5*sig1,vmax=initsky+0.5*sig1,cmap='gray')
+
             plt.clf()
             plt.imshow(img.T, **ima)
             plt.title('Image %s-%i-%s %s' % (self.camera, self.expnum,
@@ -1403,26 +1419,71 @@ class LegacySurveyImage(object):
             plt.legend()
             ps.savefig()
 
+            from legacypipe.detection import plot_mask
+
             plt.clf()
-            plt.imshow((img.T - initsky)*good.T + initsky, **ima)
+            plt.imshow((img.T - initsky)*boxcargood.T + initsky, **ima)
+            plot_mask(np.logical_not(boxcargood.T))
             plt.title('Image (boxcar masked)')
             ps.savefig()
 
             plt.clf()
-            plt.imshow((img.T - initsky)*stargood.T + initsky, **ima)
-            plt.title('Image (star masked)')
+            plt.imshow((img.T - initsky)*blobgood.T + initsky, **ima)
+            plot_mask(np.logical_not(blobgood.T))
+            plt.title('Image (blob masked)')
             ps.savefig()
 
             plt.clf()
-            plt.imshow((img.T - initsky)*(stargood * good).T + initsky, **ima)
-            plt.title('Image (boxcar & star masked)')
+            plt.imshow((img.T - initsky)*refgood.T + initsky, **ima)
+            plot_mask(np.logical_not(refgood.T))
+            plt.title('Image (reference masked)')
+            ps.savefig()
+
+            plt.clf()
+            plt.imshow((img.T - initsky)*(refgood * good).T + initsky, **ima)
+            plot_mask(np.logical_not(refgood * good).T)
+            plt.title('Image (all masked)')
+            ps.savefig()
+
+            ax = plt.axis()
+            for x in skyobj.xgrid:
+                # We transpose the image!
+                #plt.axvline(x, color='r')
+                plt.axhline(x, color='r')
+            for y in skyobj.ygrid:
+                #plt.axhline(y, color='r')
+                plt.axvline(y, color='r')
+            plt.axis(ax)
+            ps.savefig()
+
+            plt.clf()
+            plt.hist((img[good * refgood] - initsky).ravel(), bins=50)
+            plt.title('Unmasked pixels')
+            ps.savefig()
+            
+            gridvals = skyobj.spl(skyobj.xgrid, skyobj.ygrid) - initsky
+            plt.clf()
+            plt.imshow(gridvals,
+                       interpolation='nearest', origin='lower',
+                       vmin=-2.*sig1, vmax=+5.*sig1, cmap='gray')
+            plt.colorbar()
+            plot_mask(gridvals == 0)
+            plt.title('Splinesky grid values')
+            ps.savefig()
+
+            plt.clf()
+            plt.imshow(gridvals,
+                       interpolation='nearest', origin='lower',
+                       vmin=-0.5*sig1, vmax=+0.5*sig1, cmap='gray')
+            plt.colorbar()
+            plt.title('Splinesky grid values')
             ps.savefig()
 
             skypix = np.zeros_like(img)
             skyobj.addTo(skypix)
             plt.clf()
             plt.imshow(skypix.T, **ima2)
-            plt.title('Sky model (boxcar & star)')
+            plt.title('Sky model')
             ps.savefig()
 
             skypix2 = np.zeros_like(img)

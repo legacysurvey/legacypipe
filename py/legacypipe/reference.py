@@ -155,19 +155,41 @@ def read_gaia(targetwcs, bands):
 
     # Gaia to DECam color transformations for stars
     color = gaia.phot_bp_mean_mag - gaia.phot_rp_mean_mag
-    color[np.logical_not(np.isfinite(color))] = 0.
-    color = np.clip(color, -0.5, 3.3)
-    # Use Arjun's Gaia-to-DECam transformations.
+    # From Rongpu, 2020-04-12
+    # no BP-RP color: use average color
+    color[np.logical_not(np.isfinite(color))] = 1.4
+    # clip to reasonable range for the polynomial fit
+    color = np.clip(color, -0.6, 4.1)
     for b,coeffs in [
-            ('g', [-0.11368, 0.37504, 0.17344, -0.08107, 0.28088,
-                   -0.21250, 0.05773,-0.00525]),
-            ('r', [ 0.10533,-0.22975, 0.06257,-0.24142, 0.24441,
-                    -0.07248, 0.00676]),
-            ('z', [ 0.46744,-0.95143, 0.19729,-0.08810, 0.01566])]:
+            ('g', [-0.1178631039, 0.3650113495, 0.5608615360, -0.2850687702,
+                   -1.0243473939, 1.4378375491, 0.0679401731, -1.1713172509,
+                   0.9107811975, -0.3374324004, 0.0683946390, -0.0073089582,
+                   0.0003230170]),
+            ('r', [0.1139078673, -0.2868955307, 0.0013196434, 0.1029151074,
+                   0.1196710702, -0.3729031390, 0.1859874242, 0.1370162451,
+                   -0.1808580848, 0.0803219195, -0.0180218196, 0.0020584707,
+                   -0.0000953486]),
+            ('z', [0.4811198057, -0.9990015041, 0.1403990019, 0.2150988888,
+                   -0.2917655866, 0.1326831887, -0.0259205004, 0.0018548776])]:
         mag = gaia.G.copy()
         for order,c in enumerate(coeffs):
             mag += c * color**order
         gaia.set('decam_mag_%s' % b, mag)
+
+    ''' For possible future use:
+    BASS/MzLS:
+    coeffs = dict(
+    g = [-0.1299895823, 0.3120393968, 0.5989482686, 0.3125882487,
+        -1.9401592247, 1.1011670449, 2.0741304659, -3.3930306403,
+        2.1857291197, -0.7674676232, 0.1542300648, -0.0167007725,
+        0.0007573720],
+    r = [0.0901464643, -0.2463711147, 0.0094963025, -0.1187138789,
+        0.4131107392, -0.1832183301, -0.6015486252, 0.9802538471,
+        -0.6613809948, 0.2426395251, -0.0505867727, 0.0056462458,
+        -0.0002625789],
+    z = [0.4862049092, -1.0278704657, 0.1220984456, 0.3000129189,
+        -0.3770662617, 0.1696090596, -0.0331679127, 0.0023867628])
+    '''
 
     # force this source to remain a point source?
     gaia.pointsource = (gaia.G <= 18.) * (gaia.astrometric_excess_noise < 10.**0.5)
@@ -286,8 +308,9 @@ def read_tycho2(survey, targetwcs, bands):
 
     # Use zguess
     tycho.mask_mag = tycho.mag
-    I = np.flatnonzero(np.isfinite(tycho.zguess) *
-                       (tycho.zguess + 1. < tycho.mag))
+    with np.errstate(invalid='ignore'):
+        I = np.flatnonzero(np.isfinite(tycho.zguess) *
+                           (tycho.zguess + 1. < tycho.mag))
     tycho.mask_mag[I] = tycho.zguess[I]
     # Per discussion in issue #306 -- cut on mag < 13.
     # This drops only 13k/2.5M stars.
@@ -552,12 +575,11 @@ def get_reference_map(wcs, refs):
         thisrefs = refs[I]
         ok,xx,yy = wcs.radec2pixelxy(thisrefs.ra, thisrefs.dec)
         for x,y,ref in zip(xx,yy,thisrefs):
-            # Cut to L1 rectangle
+            # Cut to bounding square
             xlo = int(np.clip(np.floor(x-1 - ref.radius_pix), 0, W))
             xhi = int(np.clip(np.ceil (x   + ref.radius_pix), 0, W))
             ylo = int(np.clip(np.floor(y-1 - ref.radius_pix), 0, H))
             yhi = int(np.clip(np.ceil (y   + ref.radius_pix), 0, H))
-            #print('x range', xlo,xhi, 'y range', ylo,yhi)
             if xlo == xhi or ylo == yhi:
                 continue
 
