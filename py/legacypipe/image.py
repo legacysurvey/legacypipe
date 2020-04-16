@@ -928,7 +928,8 @@ class LegacySurveyImage(object):
         sky.plprocid = getattr(Ti, 'plprocid', '')
         sky.procdate = getattr(Ti, 'procdate', '')
         sky.sig1 = Ti.sig1
-        sky.datasum = Ti.imgdsum
+        if hasattr(Ti, 'imgdsum'):
+            sky.datasum = Ti.imgdsum
         return sky
 
     def read_psf_model(self, x0, y0,
