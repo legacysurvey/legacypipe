@@ -62,14 +62,14 @@ def remap_dq_cp_codes(dq, ignore_codes=[]):
         dqbits[dq == code] |= DQ_BITS[bitname]
     return dqbits
 
-def apply_amp_correction_northern(camera, band, ccdname, mjdobs,
+def apply_amp_correction_northern(camera, band, expnum, ccdname, mjdobs,
                                   img, invvar, x0, y0):
     from pkg_resources import resource_filename
     dirname = resource_filename('legacypipe', 'data')
     fn = os.path.join(dirname, 'ampcorrections.fits')
     A = fits_table(fn)
     # Find relevant row -- camera, filter, ccdname, mjd_start, mjd_end,
-    # And then multiple of:
+    # And then multiple rows of:
     #   xlo, xhi, ylo, yhi -> dzp
     # that might overlap this image.
     I = np.flatnonzero([(cam.strip() == camera) and
@@ -95,6 +95,8 @@ def apply_amp_correction_northern(camera, band, ccdname, mjdobs,
     debug_corr = False
     if debug_corr:
         count_corr = np.zeros((H,W), np.uint8)
+        corr_map = np.zeros((H,W), np.float32)
+        fitsio.write('amp-corr-image-before-%s-%s-%s.fits' % (self.camera, self.expnum, self.ccdname), img, clobber=True)
 
     for a in A[I]:
         # In the file, xhi,yhi are NON-inclusive.
@@ -119,10 +121,12 @@ def apply_amp_correction_northern(camera, band, ccdname, mjdobs,
 
         if debug_corr:
             count_corr[ystart:yend, xstart:xend] += 1
+            corr_map[ystart:yend, xstart:xend] = scale
 
     if debug_corr:
         assert(np.all(count_corr == 1))
-
+        fitsio.write('amp-corr-image-after-%s-%s-%s.fits' % (self.camera, self.expnum, self.ccdname), img, clobber=True)
+        fitsio.write('amp-corr-map-%s-%s-%s.fits' % (self.camera, self.expnum, self.ccdname), corr_map, clobber=True)
 
 class LegacySurveyImage(object):
     '''A base class containing common code for the images we handle.
@@ -688,7 +692,8 @@ class LegacySurveyImage(object):
     # A function that can be called by subclassers to apply a per-amp
     # zeropoint correction.
     def apply_amp_correction_northern(self, img, invvar, x0, y0):
-        apply_amp_correction_northern(self.camera, self.band, self.ccdname, self.mjdobs,
+        apply_amp_correction_northern(self.camera, self.band, self.expnum, 
+                                      self.ccdname, self.mjdobs,
                                       img, invvar, x0, y0)
 
     def check_image_header(self, imghdr):
