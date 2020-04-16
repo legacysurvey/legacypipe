@@ -96,7 +96,7 @@ def apply_amp_correction_northern(camera, band, expnum, ccdname, mjdobs,
     if debug_corr:
         count_corr = np.zeros((H,W), np.uint8)
         corr_map = np.zeros((H,W), np.float32)
-        fitsio.write('amp-corr-image-before-%s-%s-%s.fits' % (self.camera, self.expnum, self.ccdname), img, clobber=True)
+        fitsio.write('amp-corr-image-before-%s-%s-%s.fits' % (camera, expnum, ccdname), img, clobber=True)
 
     for a in A[I]:
         # In the file, xhi,yhi are NON-inclusive.
@@ -125,8 +125,8 @@ def apply_amp_correction_northern(camera, band, expnum, ccdname, mjdobs,
 
     if debug_corr:
         assert(np.all(count_corr == 1))
-        fitsio.write('amp-corr-image-after-%s-%s-%s.fits' % (self.camera, self.expnum, self.ccdname), img, clobber=True)
-        fitsio.write('amp-corr-map-%s-%s-%s.fits' % (self.camera, self.expnum, self.ccdname), corr_map, clobber=True)
+        fitsio.write('amp-corr-image-after-%s-%s-%s.fits' % (camera, expnum, ccdname), img, clobber=True)
+        fitsio.write('amp-corr-map-%s-%s-%s.fits' % (camera, expnum, ccdname), corr_map, clobber=True)
 
 class LegacySurveyImage(object):
     '''A base class containing common code for the images we handle.
