@@ -27,7 +27,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
     *get_masks*: the WCS to resample mask bits into.
     '''
-    from tractor import NanoMaggies, PointSource, Tractor, ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
+    from tractor import NanoMaggies, PointSource, Tractor, ExpGalaxy, DevGalaxy
+    from tractor.sersic import SersicGalaxy
 
     if not pixelized_psf and psf_broadening is None:
         # PSF broadening in post-reactivation data, by band.
@@ -338,10 +339,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             ### FIXME -- sizes for galaxies..... can we set PSF size separately?
             galrad = 0
             # RexGalaxy is a subclass of ExpGalaxy
-            if isinstance(src, (ExpGalaxy, DevGalaxy)):
+            if isinstance(src, (ExpGalaxy, DevGalaxy, SersicGalaxy)):
                 galrad = src.shape.re
-            elif isinstance(src, FixedCompositeGalaxy):
-                galrad = max(src.shapeExp.re, src.shapeDev.re)
             pixscale = 2.75
             src.halfsize = int(np.hypot(R, galrad * 5 / pixscale))
 
