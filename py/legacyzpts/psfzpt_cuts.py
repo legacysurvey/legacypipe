@@ -30,6 +30,7 @@ CCD_CUT_BITS= dict(
     depth_cut = 0x4000,
     too_many_bad_ccds = 0x8000,
     flagged_in_des = 0x10000,
+    phrms_s7 = 0x20000,
 )
 
 MJD_EARLY_DECAM = 56730.
@@ -225,19 +226,21 @@ def psf_zeropoint_cuts(P, pixscale,
         ccdzpt = detrend_decam_zeropoints(P)
     else:
         ccdzpt = detrend_mzlsbass_zeropoints(P)
+    ccdname = np.array([n.strip() for n in P.ccdname])
 
     cuts = [
         ('not_grz',   np.array([f.strip() not in 'grz' for f in P.filter])),
         ('ccdnmatch', P.ccdnphotom < 20),
         ('zpt_small', np.array([zpt < zpt_cut_lo.get(f.strip(),0) for f,zpt in zip(P.filter, ccdzpt)])),
         ('zpt_large', np.array([zpt > zpt_cut_hi.get(f.strip(),0) for f,zpt in zip(P.filter, ccdzpt)])),
-        ('phrms',     P.ccdphrms > 0.1),
+        ('phrms',     P.phrms > 0.1),
         ('exptime', P.exptime < 30),
         ('seeing_bad', np.logical_not(np.logical_and(seeing > 0, seeing < 3.0))),
         ('badexp_file', np.array([expnum in bad_expid for expnum in P.expnum])),
         ('radecrms',  np.hypot(P.ccdrarms, P.ccddecrms) > radec_rms),
         ('sky_is_bright', np.array([sky > skybright.get(f.strip(), 1e6) for f,sky in zip(P.filter, P.ccdskycounts)])),
         ('zpt_diff_avg', np.abs(P.ccdzpt - P.zpt) > zpt_diff_avg),
+        ('phrms_s7', (P.ccdphrms > 0.1) & (ccdname == 'S7')),
     ]
 
     if camera == 'mosaic':

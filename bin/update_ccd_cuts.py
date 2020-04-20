@@ -338,16 +338,20 @@ def patch_zeropoints(zps, ccds, ccdsa, decboundary=-29.25):
     newccdzpt = zps.zp[mz] - zps.resid[mz] - zps.mnchip[mz, ccdnum[mc]]
     newccdphrms = zps.sdchip[mz, ccdnum[mc]]
     newccdnphotom = zps.nstarchip[mz, ccdnum[mc]]
-    m = ((ccds.dec[mc] < decboundary) & (newccdnphotom > 3) &
-         (newccdphrms > 0) & (newccdphrms < 0.02))
+    m = (ccds.dec[mc] < decboundary)
+    # S7 == ccdnum 31; removes worst-performing 5% of S7 CCDs.
+    ms7 = (ccdnum[mc] != 31) | ((newccdnphotom > 3) & (newccdphrms < 0.02))
+    m = m & ms7
     mz = mz[m]
     mc = mc[m]
     ccds.zpt[mc] = newzpt[m]
     ccds.ccdzpt[mc] = newccdzpt[m]
     ccds.ccdphrms[mc] = newccdphrms[m]
+    ccds.phrms[mc] = zps.scatter[mz]
     ccdsa.zpt[mc] = newzpt[m]
     ccdsa.ccdzpt[mc] = newccdzpt[m]
     ccdsa.ccdphrms[mc] = newccdphrms[m]
+    ccdsa.phrms[mc] = zps.scatter[mz]
     oldzp = numpy.where(oldccdzpt != 0, oldccdzpt, 22.5)
     newzp = numpy.where(ccds.ccdzpt != 0, ccds.ccdzpt, 22.5)
     oldzpscale = 10.**((oldzp-22.5)/2.5)
@@ -383,9 +387,32 @@ if __name__ == "__main__":
                         help='list of DES good exposures')
     parser.add_argument('--zeropoints', type=str, default='',
                         help='ucal zero points for declination < -29.25')
+    parser.add_argument('--newccdphrms', type=str, default=None,
+                        help='filename for replacement ccdphrms file')
+    numpy.seterr(invalid='raise')
     args = parser.parse_args()
     ccds = fits_table(getattr(args, 'survey-ccds'))
     annotated = fits_table(getattr(args, 'ccds-annotated'))
+    if args.newccdphrms is not None:
+        ccdphrms = fits_table(args.newccdphrms)
+        okrms = numpy.isfinite(ccdphrms.ccdphrms)
+        ccds.ccdphrms = numpy.where(okrms, ccdphrms.ccdphrms, 0.)
+        annotated.ccdphrms = ccds.ccdphrms
+        ccds.ccdzpt = numpy.where(okrms, ccdphrms.ccdzpt, 0.)
+        annotated.ccdzpt = ccds.ccdzpt
+        s = numpy.argsort(ccds.image_filename)
+        ccds.phrms = numpy.zeros_like(ccds.ccdphrms)
+        for f, l in subslices(ccds.image_filename[s]):
+            ind = s[f:l]
+            m = ccds.ccdzpt[ind] != 0
+            if numpy.sum(m) == 0:
+                ccds.zpt[ind] = 0
+                ccds.phrms[ind] = 0
+            else:
+                ccds.zpt[ind[m]] = numpy.nanmedian(ccds.ccdzpt[ind[m]])
+                ccds.phrms[ind[m]] = numpy.nanmedian(ccds.ccdphrms[ind[m]])
+        annotated.zpt = ccds.zpt
+        annotated.phrms = ccds.phrms
     if numpy.any((ccds.image_filename != annotated.image_filename) |
                  (ccds.image_hdu != annotated.image_hdu)):
         raise ValueError('survey and annotated CCDs files must be row-matched!')

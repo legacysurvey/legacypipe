@@ -35,6 +35,7 @@ from legacypipe.survey import radec_at_mjd, get_git_version
 from legacypipe.image import validate_procdate_plver
 
 CAMERAS=['decam','mosaic','90prime','megaprime']
+MAGLIM=dict(g=[16, 20], r=[16, 19.5], z=[16.5, 19])
 
 def ptime(text,t0):
     tnow=Time()
@@ -172,7 +173,7 @@ def cols_for_survey_table(which='all'):
                            'mjd_obs',
                            'fwhm','zpt','ccdzpt','ccdraoff','ccddecoff',
                            'ccdrarms', 'ccddecrms', 'ccdskycounts',
-                           'ccdphrms',
+                           'phrms', 'ccdphrms',
                            'cd1_1','cd2_2','cd1_2','cd2_1',
                            'crval1','crval2','crpix1','crpix2']
         dustins_keys= ['skyrms', 'sig1', 'yshift']
@@ -206,6 +207,7 @@ def write_survey_table(T, surveyfn, camera=None, bad_expid=None):
                   ('rarms',  'ccdrarms'),
                   ('decrms', 'ccddecrms'),
                   ('phrms', 'ccdphrms'),
+                  ('phrmsavg', 'phrms'),
                   ('nstars_astrom','ccdnastrom'),
                   ('nstars_photom','ccdnphotom')]
     for old,new in rename_keys:
@@ -982,7 +984,11 @@ class Measurer(object):
         # (eg, will work where we don't have PS1)
         nphotom = np.sum(phot.flux_sn > 5.)
 
-        dmag = (refs.legacy_survey_mag - phot.instpsfmag)[refs.photom]
+        dmag = refs.legacy_survey_mag - phot.instpsfmag
+        maglo, maghi = MAGLIM[self.band]
+        dmag = dmag[refs.photom &
+                    (refs.legacy_survey_mag > maglo) &
+                    (refs.legacy_survey_mag < maghi)]
         if len(dmag):
             dmag = dmag[np.isfinite(dmag)]
             print('Zeropoint: using', len(dmag), 'good stars')
@@ -2082,6 +2088,10 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     zptgood = np.isfinite(zpts)
     if np.sum(zptgood) > 0:
         all_ccds['zptavg'] = np.median(zpts[zptgood])
+    phrms = all_ccds['phrms']
+    phrmsgood = np.isfinite(phrms) & (all_ccds['phrms'] > 0)
+    if np.sum(phrmsgood) > 0:
+        all_ccds['phrmsavg'] = np.median(phrms[phrmsgood])
 
     t0 = ptime('measure-image-%s' % img_fn,t0)
     return all_ccds, all_photom, extra_info, measure
