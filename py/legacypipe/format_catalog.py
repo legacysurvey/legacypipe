@@ -212,11 +212,11 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
         for c in lc_cols:
             add_wiselike(c, bands=trbands)
         add_wiselike('lc_epoch_index', bands=trbands)
-        T.lc_epoch_index_w1 = np.empty((len(T), N_wise_epochs), np.uint8)
-        T.lc_epoch_index_w2 = np.empty((len(T), N_wise_epochs), np.uint8)
+        T.lc_epoch_index_w1 = np.empty((len(T), N_wise_epochs), np.int16)
+        T.lc_epoch_index_w2 = np.empty((len(T), N_wise_epochs), np.int16)
         # initialize...
-        T.lc_epoch_index_w1[:] = 255
-        T.lc_epoch_index_w2[:] = 255
+        T.lc_epoch_index_w1[:] = -1
+        T.lc_epoch_index_w2[:] = -1
         # Cut down to a fixed number of WISE time-resolved epochs?
         if N_wise_epochs is not None:
 
@@ -254,7 +254,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
                         newval = newvals[colname]
                         newval[row,:len(I)] = oldval[row,I]
                     assert(np.all(I) < 255)
-                    lc_epoch[row, :len(I)] = I.astype(np.uint8)
+                    lc_epoch[row, :len(I)] = I.astype(np.int16)
 
             for k,v in newvals.items():
                 T.set(k, v)
