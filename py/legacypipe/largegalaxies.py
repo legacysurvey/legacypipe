@@ -43,6 +43,7 @@ def stage_largegalaxies(
     for tim in tims:
         ie = tim.inverr
         if not np.any(ie > 0):
+            print('Negative inverse error in image {}'.format(tim.name))
             continue
         median_ie = np.median(ie[ie>0])
         #print('Num pix with ie>0:', np.sum(ie>0))
