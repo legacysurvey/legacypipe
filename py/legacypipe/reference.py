@@ -220,8 +220,10 @@ def read_gaia(targetwcs, bands):
         X = gaia.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
 
+    # uniform name w/ Tycho-2
+    gaia.zguess = gaia.decam_mag_z
     # Take the brighter of G, z to expand masks around red stars.
-    gaia.mask_mag = np.minimum(gaia.G, gaia.decam_mag_z + 1.)
+    gaia.mask_mag = np.minimum(gaia.G, gaia.zguess + 1.)
 
     # radius to consider affected by this star, for MASKBITS
     gaia.radius = mask_radius_for_mag(gaia.mask_mag)
