@@ -146,11 +146,6 @@ def read_gaia(targetwcs, bands):
     gaia = GaiaCatalog().get_catalog_in_wcs(targetwcs)
     debug('Got', len(gaia), 'Gaia stars nearby')
 
-    # DJS, [decam-chatter 5486] Solved! GAIA separation of point sources
-    #   from extended sources
-    # Updated for Gaia DR2 by Eisenstein,
-    # [decam-data 2770] Re: [desi-milkyway 639] GAIA in DECaLS DR7
-    # But shifted one mag to the right in G.
     gaia.G = gaia.phot_g_mean_mag
 
     # Gaia to DECam color transformations for stars
@@ -192,6 +187,11 @@ def read_gaia(targetwcs, bands):
     '''
 
     # force this source to remain a point source?
+    # Long history here, starting DJS, [decam-chatter 5486] Solved! GAIA separation
+    #   of point sources from extended sources
+    # Updated for Gaia DR2 by Eisenstein,
+    # [decam-data 2770] Re: [desi-milkyway 639] GAIA in DECaLS DR7
+    # And made far more restrictive following BGS feedback.
     gaia.pointsource = (gaia.G <= 18.) * (gaia.astrometric_excess_noise < 10.**0.5)
 
     # in our catalog files, this is in float32; in the Gaia data model it's
