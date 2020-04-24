@@ -222,6 +222,7 @@ def read_gaia(targetwcs, bands):
 
     # uniform name w/ Tycho-2
     gaia.zguess = gaia.decam_mag_z
+    gaia.mag = gaia.G
     # Take the brighter of G, z to expand masks around red stars.
     gaia.mask_mag = np.minimum(gaia.G, gaia.zguess + 1.)
 
