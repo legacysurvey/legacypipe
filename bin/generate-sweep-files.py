@@ -112,7 +112,11 @@ def list_bricks(ns):
 
     if ns.bricksdesc is not None:
         bricksdesc = fitsio.read(ns.bricksdesc, 1, upper=True)
-        bricksdesc = dict([(item['BRICKNAME'].decode(), item) for item in bricksdesc])
+        # ADM convert from bytes_ to str_ type if fitsio version < 1.
+        if bricksdesc["BRICKNAME"].dtype.type == np.bytes_:
+            bricksdesc = dict([(item['BRICKNAME'].decode(), item) for item in bricksdesc])
+        else:
+            bricksdesc = dict([(item['BRICKNAME'], item) for item in bricksdesc])
     else:
         bricksdesc = None
 
@@ -191,6 +195,10 @@ def make_sweep(sweep, bricks, ns):
                 tflds = objects.dtype.fields
                 for fld in sflds:
                     sdt, tdt = sflds[fld][0], tflds[fld][0]
+                    # ADM handle the case where str_ type is converted
+                    # ADM to bytes_ type by fitsio versions < 1.
+                    if sdt.char=="S" and tdt.char=='U':
+                        sdt = '<U{}'.format(sdt.itemsize)
                     if sdt != tdt:
                         msg = 'sweeps/Tractor dtypes differ for field '
                         msg += '{}. Sweeps: {}, Tractor: {}'.format(fld, sdt, tdt)
