@@ -1201,7 +1201,8 @@ def stage_fitblobs(T=None,
               'blob_width', 'blob_height', 'blob_npix',
               'blob_nimages', 'blob_totalpix',
               'blob_symm_width', 'blob_symm_height', 'blob_symm_npix',
-              'blob_symm_nimages', 'brightblob', 'hit_limit', 'dchisq']:
+              'blob_symm_nimages', 'brightblob', 'hit_limit', 'dchisq',
+              'force_keep_source']:
         T.set(k, BB.get(k))
 
     # compute the pixel-space mask for *brightblob* values
@@ -1222,7 +1223,8 @@ def stage_fitblobs(T=None,
         if T_donotfit:
             T2 = merge_tables([T2, T_donotfit], columns='fillzero')
             cat2.extend([None] * len(T_donotfit))
-        TT,hdr = format_all_models(T2, cat2, BB, bands, survey.allbands)
+        TT,hdr = format_all_models(T2, cat2, BB, bands, survey.allbands,
+                                   force_keep=T2.force_keep_source)
         if get_all_models:
             all_models = TT
         if write_metrics:
@@ -2394,7 +2396,7 @@ def stage_writecat(
         TT.delete_column(k)
 
     hdr = None
-    T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands)
+    T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, force_keep=TT.force_keep_source)
 
     # The "ra_ivar" values coming out of the tractor fits do *not*
     # have a cos(Dec) term -- ie, they give the inverse-variance on

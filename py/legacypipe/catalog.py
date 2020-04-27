@@ -47,7 +47,7 @@ def _source_param_types(src):
     return types
 
 def prepare_fits_catalog(cat, invvars, T, hdr, bands, allbands=None,
-                         prefix='', save_invvars=True):
+                         prefix='', save_invvars=True, force_keep=None):
     if T is None:
         from astrometry.util.fits import fits_table
         T = fits_table()
@@ -131,7 +131,10 @@ def prepare_fits_catalog(cat, invvars, T, hdr, bands, allbands=None,
     # Zero out unconstrained values
     flux = T.get('%s%s' % (prefix, 'flux'))
     iv = T.get('%s%s' % (prefix, 'flux_ivar'))
-    flux[iv == 0] = 0.
+    if force_keep is not None:
+        flux[(iv == 0) * np.logical_not(force_keep[:,np.newaxis])] = 0.
+    else:
+        flux[iv == 0] = 0.
 
     return T, hdr
 

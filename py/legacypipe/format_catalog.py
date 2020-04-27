@@ -311,7 +311,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
     T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units,
               **write_kwargs)
 
-def format_all_models(T, newcat, BB, bands, allbands):
+def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
     from astrometry.util.fits import fits_table
     import fitsio
     from legacypipe.catalog import prepare_fits_catalog, fits_typemap
@@ -350,7 +350,7 @@ def format_all_models(T, newcat, BB, bands, allbands):
             xcat.extend([None] * npad)
 
         TT,hdr = prepare_fits_catalog(xcat, allivs, TT, hdr, bands,
-                                      prefix=prefix+'_')
+                                      prefix=prefix+'_', force_keep=force_keep)
 
         # # Expand out FLUX and related fields from grz arrays to 'allbands'
         keys = ['%s_flux' % prefix, '%s_flux_ivar' % prefix]

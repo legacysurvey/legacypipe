@@ -206,6 +206,11 @@ class OneBlob(object):
         self.plots1 = self.plots
         cat = Catalog(*self.srcs)
 
+        # Save initial fluxes for all sources (used if we force
+        # keeping a reference star)
+        for src in self.srcs:
+            src.initial_brightness = src.brightness.copy()
+
         if self.plots:
             import pylab as plt
             self._initial_plots()
@@ -356,6 +361,10 @@ class OneBlob(object):
                     continue
                 # Convert to "vanilla" ellipse parameterization
                 nsrcparams = src.numberOfParams()
+                if B.force_keep_source[isub]:
+                    B.srcinvvars[isub] = np.zeros(nsrcparams, np.float32)
+                    cat.freezeParam(isub)
+                    continue
                 _convert_ellipses(src)
                 assert(src.numberOfParams() == nsrcparams)
                 # Compute inverse-variances
@@ -369,7 +378,8 @@ class OneBlob(object):
             # Check for sources with zero inverse-variance -- I think these
             # can be generated during the "Simultaneous re-opt" stage above --
             # sources can get scattered outside the blob.
-            I, = np.nonzero([np.sum(iv) > 0 for iv in B.srcinvvars])
+            I, = np.nonzero([np.sum(iv) > 0 or force
+                             for iv,force in zip(B.srcinvvars, B.force_keep_source)])
             if len(I) < len(B):
                 debug('Keeping', len(I), 'of', len(B),'sources with non-zero ivar')
                 B.cut(I)
@@ -577,6 +587,7 @@ class OneBlob(object):
         B.all_model_cpu = np.array([{} for i in range(N)])
         B.all_model_hit_limit = np.array([{} for i in range(N)])
         B.all_model_opt_steps = np.array([{} for i in range(N)])
+        B.force_keep_source = np.zeros(N, bool)
 
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
@@ -606,6 +617,7 @@ class OneBlob(object):
             # Model selection for this source.
             keepsrc = self.model_selection_one_source(src, srci, models, B)
             B.sources[srci] = keepsrc
+            B.force_keep_source[srci] = getattr(keepsrc, 'force_keep_source', False)
             cat[srci] = keepsrc
 
             models.update_and_subtract(srci, keepsrc, self.tims)
@@ -1483,10 +1495,15 @@ class OneBlob(object):
         modnames = ['psf', 'rex', 'dev', 'exp', 'ser']
         keepmod = _select_model(chisqs, nparams, galaxy_margin)
 
-        if keepmod is None and getattr(src, 'reference_star', False):
+        force_keep_source = False
+        if keepmod == 'none' and getattr(src, 'reference_star', False):
             # Definitely keep ref stars (Gaia & Tycho)
             print('Forcing keeping reference source:', psf)
+            force_keep_source = True
             keepmod = 'psf'
+            psf.brightness = src.initial_brightness
+            print('Reset brightness to', psf.brightness)
+            psf.force_keep_source = True
 
         keepsrc = {'none':None, 'psf':psf, 'rex':rex,
                    'dev':dev, 'exp':exp, 'ser':ser}[keepmod]
@@ -1494,7 +1511,7 @@ class OneBlob(object):
         B.dchisq[srci, :] = np.array([chisqs.get(k,0) for k in modnames])
         #print('Keeping model', keepmod, '(chisqs: ', chisqs, ')')
 
-        if keepsrc is not None and bestchi == 0.:
+        if keepsrc is not None and bestchi == 0. and not force_keep_source:
             # Weird edge case, or where some best-fit fluxes go
             # negative. eg
             # https://github.com/legacysurvey/legacypipe/issues/174
