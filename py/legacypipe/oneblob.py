@@ -460,9 +460,17 @@ class OneBlob(object):
         rankmap = dict([(Iseg[i],r) for r,i in enumerate(Ibright)])
 
         todo = set(Iseg)
-        thresholds = list(range(3, int(np.ceil(maxsn.max()))))
+        mx = int(np.ceil(maxsn.max()))
+        thresholds = list(range(3, min(mx, 100)))
+        if mx > 100:
+            thresholds.extend(list(range(100, min(mx, 500)+4, 5)))
+            if mx > 500:
+                thresholds.extend(list(range(500, min(mx, 2500)+24, 25)))
+                if mx > 200:
+                    thresholds.extend(list(range(2500, mx+99, 100)))
+        debug('thresholds:', thresholds)
         for thresh in thresholds:
-            #print('S/N', thresh, ':', len(todo), 'sources to find still')
+            debug('S/N', thresh, ':', len(todo), 'sources to find still')
             if len(todo) == 0:
                 break
             ####
