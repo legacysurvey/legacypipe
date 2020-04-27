@@ -28,33 +28,11 @@ def stage_largegalaxies(
 
     # Create coadds and then build custom tims from them.
 
-    # We tried setting the invvars constant per tim -- this makes things worse, since we *remove*
-    # the lowered invvars at the cores of galaxies.
-    # for tim in tims:
-    #     ie = tim.inverr
-    #     newie = np.ones(ie.shape, np.float32) / (tim.sig1)
-    #     newie[ie == 0] = 0.
-    #     tim.inverr = newie
-
-    # Here we're hacking the relative weights -- squaring the weights but then making the median
-    # the same, ie, squaring the dynamic range or relative weights -- ie, downweighting the cores
-    # even more than they already are from source Poisson terms.
-    keeptims = []
     for tim in tims:
         ie = tim.inverr
-        if not np.any(ie > 0):
+        if np.any(ie < 0):
             print('Negative inverse error in image {}'.format(tim.name))
-            continue
-        median_ie = np.median(ie[ie>0])
-        #print('Num pix with ie>0:', np.sum(ie>0))
-        #print('Median ie:', median_ie)
-        # newie = (ie / median_ie)**2 * median_ie
-        if median_ie > 0:
-            newie = ie**2 / median_ie
-            tim.inverr = newie
-            assert(np.all(np.isfinite(tim.getInvError())))
-            keeptims.append(tim)
-    tims = keeptims
+
 
     C = make_coadds(tims, bands, targetwcs,
                     detmaps=True, ngood=True, lanczos=lanczos,
@@ -147,8 +125,22 @@ def stage_largegalaxies(
                                 if tim.band == band])
         cscale = tim_pixscale / pixscale
         print('average tim pixel scale / coadd scale:', cscale)
-
         iv /= cscale**2
+
+        # We first tried setting the invvars constant per tim -- this
+        # makes things worse, since we *remove* the lowered invvars at
+        # the cores of galaxies.
+        #
+        # Here we're hacking the relative weights -- squaring the
+        # weights but then making the median the same, ie, squaring
+        # the dynamic range or relative weights -- ie, downweighting
+        # the cores even more than they already are from source
+        # Poisson terms.
+        median_iv = np.median(iv[iv>0])
+        assert(median_iv > 0)
+        iv = iv * np.sqrt(iv) / np.sqrt(median_iv)
+        assert(np.all(np.isfinite(iv)))
+        assert(np.all(iv >= 0))
 
         cotim = Image(img, invvar=iv, wcs=twcs, psf=psf,
                       photocal=LinearPhotoCal(1., band=band),
