@@ -1,5 +1,14 @@
 import numpy as np
 
+import logging
+logger = logging.getLogger('legacypipe.halos')
+# def info(*args):
+#     from legacypipe.utils import log_info
+#     log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
+
 def subtract_halos(tims, refs, bands, mp, plots, ps, moffat=True):
     args = [(tim, refs, moffat) for tim in tims]
     haloimgs = mp.map(subtract_one, args)
@@ -39,7 +48,7 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat):
         if hasattr(psf, 'moffat'):
             have_inner_moffat = True
             inner_alpha, inner_beta = psf.moffat
-            print('Read inner Moffat parameters', (inner_alpha, inner_beta),
+            debug('Read inner Moffat parameters', (inner_alpha, inner_beta),
                   'from PsfEx file')
 
     H,W = wcs.shape
