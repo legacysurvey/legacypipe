@@ -158,8 +158,10 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
             if plots:
                 plt.clf()
-                plt.plot((1. / tim.inverr[tim.inverr>0]).ravel(), (1./new_ie[tim.inverr>0]).ravel(), 'b.')
-                plt.title('unWISE per-pixel error: %s band %i' % (tile.coadd_id, band))
+                plt.plot((1. / tim.inverr[tim.inverr>0]).ravel(),
+                         (1./new_ie[tim.inverr>0]).ravel(), 'b.')
+                plt.title('unWISE per-pixel error: %s band %i' %
+                          (tile.coadd_id, band))
                 plt.xlabel('original')
                 plt.ylabel('floored')
                 ps.savefig()
@@ -201,12 +203,14 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 try:
                     tanwcs = tim.wcs.wcs
                     assert(tanwcs.shape == tilemask.shape)
-                    Yo,Xo,Yi,Xi,_ = resample_with_wcs(get_masks, tanwcs, intType=np.int16)
+                    Yo,Xo,Yi,Xi,_ = resample_with_wcs(get_masks, tanwcs,
+                                                      intType=np.int16)
                     # Only deal with mask pixels that are set.
                     I, = np.nonzero(tilemask[Yi,Xi] > 0)
                     # Trim to unique area for this tile
                     rr,dd = get_masks.pixelxy2radec(Yo[I]+1, Xo[I]+1)
-                    good = radec_in_unique_area(rr, dd, tile.ra1, tile.ra2, tile.dec1, tile.dec2)
+                    good = radec_in_unique_area(rr, dd, tile.ra1, tile.ra2,
+                                                tile.dec1, tile.dec2)
                     I = I[good]
                     maskmap[Yo[I],Xo[I]] = tilemask[Yi[I], Xi[I]]
                 except OverlapError:
@@ -218,7 +222,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         th,tw = tim.shape
         xx,yy = np.meshgrid(np.arange(tw), np.arange(th))
         rr,dd = tim.wcs.wcs.pixelxy2radec(xx+1, yy+1)
-        unique = radec_in_unique_area(rr, dd, tile.ra1, tile.ra2, tile.dec1, tile.dec2)
+        unique = radec_in_unique_area(rr, dd, tile.ra1, tile.ra2,
+                                      tile.dec1, tile.dec2)
         #print(np.sum(unique), 'of', (th*tw), 'pixels in this tile are unique')
         tim.inverr[unique == False] = 0.
         del xx,yy,rr,dd,unique
