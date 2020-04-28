@@ -570,7 +570,7 @@ def tim_get_resamp(tim, targetwcs):
     try:
         Yo,Xo,Yi,Xi,_ = resample_with_wcs(targetwcs, tim.subwcs, intType=np.int16)
     except OverlapError:
-        print('No overlap')
+        debug('No overlap between tim', tim.name, 'and target WCS')
         return None
     if len(Yo) == 0:
         return None
