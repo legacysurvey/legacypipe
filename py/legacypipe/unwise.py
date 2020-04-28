@@ -166,6 +166,22 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
             tim.inverr = new_ie
 
+            # Expand a 3-pixel radius around weight=0 (saturated) pixels
+            # from Eddie via crowdsource
+            # https://github.com/schlafly/crowdsource/blob/7069da3e7d9d3124be1cbbe1d21ffeb63fc36dcc/python/wise_proc.py#L74
+            ## FIXME -- W3/W4 ??
+            satlimit = 85000
+            msat = ((tim.data > satlimit) | ((tim.nims == 0) & (tims.nuims > 1)))
+            from scipy.ndimage.morphology import binary_dilation
+            xx, yy = numpy.mgrid[-3:3+1, -3:3+1]
+            dilate = xx**2+yy**2 <= 3**2
+            msat = binary_dilation(msat, dilate)
+            nbefore = np.sum(tim.inverr == 0)
+            tim.inverr[msat] = 0
+            nafter = np.sum(tim.inverr == 0)
+            print('Masking an additional', (nafter-nbefore), 'near-saturated pixels in unWISE',
+                  tile.coadd_id, 'band', band)
+
         # Read mask file?
         if get_masks:
             from astrometry.util.resample import resample_with_wcs, OverlapError
