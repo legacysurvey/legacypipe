@@ -143,12 +143,17 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             # Actually subtract the background!
             tim.data -= bg
 
-        # Floor the per-pixel variances
+        # Floor the per-pixel variances,
+        # and add Poisson contribution from sources
         if band in [1,2]:
             # in Vega nanomaggies per pixel
             floor_sigma = {1: 0.5, 2: 2.0}
+            poissons = {1: 0.15, 2: 0.3}
             with np.errstate(divide='ignore'):
-                new_ie = 1. / np.hypot(1./tim.inverr, floor_sigma[band])
+                new_ie = 1. / np.sqrt(
+                    (1./tim.inverr)**2 +
+                    floor_sigma[band] +
+                    poissons[band]**2 * np.maximum(0., tim.data))
             new_ie[tim.inverr == 0] = 0.
 
             if plots:
