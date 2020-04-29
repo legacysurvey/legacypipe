@@ -1690,25 +1690,29 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     assert(C.AP is not None)
     # How many apertures?
     A = len(apertures_arcsec)
-    T.apflux       = np.zeros((len(T), len(bands), A), np.float32)
-    T.apflux_ivar  = np.zeros((len(T), len(bands), A), np.float32)
-    T.apflux_resid = np.zeros((len(T), len(bands), A), np.float32)
+    T.apflux        = np.zeros((len(T), len(bands), A), np.float32)
+    T.apflux_ivar   = np.zeros((len(T), len(bands), A), np.float32)
+    T.apflux_masked = np.zeros((len(T), len(bands), A), np.float32)
+    T.apflux_resid  = np.zeros((len(T), len(bands), A), np.float32)
     T.apflux_blobresid = np.zeros((len(T), len(bands), A), np.float32)
     if Nno:
-        T_donotfit.apflux       = np.zeros((Nno, len(bands), A), np.float32)
-        T_donotfit.apflux_ivar  = np.zeros((Nno, len(bands), A), np.float32)
-        T_donotfit.apflux_resid = np.zeros((Nno, len(bands), A), np.float32)
+        T_donotfit.apflux        = np.zeros((Nno, len(bands), A), np.float32)
+        T_donotfit.apflux_ivar   = np.zeros((Nno, len(bands), A), np.float32)
+        T_donotfit.apflux_masked = np.zeros((Nno, len(bands), A), np.float32)
+        T_donotfit.apflux_resid  = np.zeros((Nno, len(bands), A), np.float32)
         T_donotfit.apflux_blobresid = np.zeros((Nno, len(bands), A), np.float32)
     AP = C.AP
     for iband,band in enumerate(bands):
-        T.apflux      [:,iband,:] = AP.get('apflux_img_%s'      % band)[:Nyes,:]
-        T.apflux_ivar [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)[:Nyes,:]
-        T.apflux_resid[:,iband,:] = AP.get('apflux_resid_%s'    % band)[:Nyes,:]
+        T.apflux       [:,iband,:] = AP.get('apflux_img_%s'      % band)[:Nyes,:]
+        T.apflux_ivar  [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)[:Nyes,:]
+        T.apflux_masked[:,iband,:] = AP.get('apflux_masked_%s'   % band)[:Nyes,:]
+        T.apflux_resid [:,iband,:] = AP.get('apflux_resid_%s'    % band)[:Nyes,:]
         T.apflux_blobresid[:,iband,:] = AP.get('apflux_blobresid_%s'    % band)[:Nyes,:]
         if Nno:
-            T_donotfit.apflux      [:,iband,:] = AP.get('apflux_img_%s'      % band)[Nyes:,:]
-            T_donotfit.apflux_ivar [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)[Nyes:,:]
-            T_donotfit.apflux_resid[:,iband,:] = AP.get('apflux_resid_%s'    % band)[Nyes:,:]
+            T_donotfit.apflux       [:,iband,:] = AP.get('apflux_img_%s'      % band)[Nyes:,:]
+            T_donotfit.apflux_ivar  [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)[Nyes:,:]
+            T_donotfit.apflux_masked[:,iband,:] = AP.get('apflux_masked_%s'   % band)[Nyes:,:]
+            T_donotfit.apflux_resid [:,iband,:] = AP.get('apflux_resid_%s'    % band)[Nyes:,:]
             T_donotfit.apflux_blobresid[:,iband,:] = AP.get('apflux_blobresid_%s'    % band)[Nyes:,:]
     del AP
 

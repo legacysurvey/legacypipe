@@ -527,16 +527,21 @@ def make_coadds(tims, bands, targetwcs,
 
         if apertures is not None:
             # Aperture photometry
+            # photutils.aperture_photometry: mask=True means IGNORE
+            mask = (cow == 0)
             with np.errstate(divide='ignore'):
-                imsigma = 1.0/np.sqrt(coiv)
-                imsigma[coiv == 0] = 0
+                imsigma = 1.0/np.sqrt(cow)
+                imsigma[mask] = 0.
 
             for irad,rad in enumerate(apertures):
-                apargs.append((irad, band, rad, coimg, imsigma, True, apxy))
+                apargs.append((irad, band, rad, cowimg, imsigma, mask,
+                               True, apxy))
                 if mods is not None:
-                    apargs.append((irad, band, rad, coresid, None, False, apxy))
+                    apargs.append((irad, band, rad, coresid, None, None,
+                                   False, apxy))
                 if blobmods is not None:
-                    apargs.append((irad, band, rad, coblobresid, None, False, apxy))
+                    apargs.append((irad, band, rad, coblobresid, None, None,
+                                   False, apxy))
 
         if callback is not None:
             callback(band, *callback_args, **kwargs)
@@ -566,39 +571,47 @@ def make_coadds(tims, bands, targetwcs,
         for iband,band in enumerate(bands):
             apimg = []
             apimgerr = []
+            apmask = []
             if mods is not None:
                 apres = []
             if blobmods is not None:
                 apblobres = []
             for irad,rad in enumerate(apertures):
-                (airad, aband, isimg, ap_img, ap_err) = next(apresults)
+                (airad, aband, isimg, ap_img, ap_err, ap_mask) = next(apresults)
                 assert(airad == irad)
                 assert(aband == band)
                 assert(isimg)
                 apimg.append(ap_img)
                 apimgerr.append(ap_err)
+                apmask.append(ap_mask)
 
                 if mods is not None:
-                    (airad, aband, isimg, ap_img, ap_err) = next(apresults)
+                    (airad, aband, isimg, ap_img, ap_err, ap_mask) = next(apresults)
                     assert(airad == irad)
                     assert(aband == band)
                     assert(not isimg)
                     apres.append(ap_img)
                     assert(ap_err is None)
+                    assert(ap_mask is None)
 
                 if blobmods is not None:
-                    (airad, aband, isimg, ap_img, ap_err) = next(apresults)
+                    (airad, aband, isimg, ap_img, ap_err, ap_mask) = next(apresults)
                     assert(airad == irad)
                     assert(aband == band)
                     assert(not isimg)
                     apblobres.append(ap_img)
                     assert(ap_err is None)
+                    assert(ap_mask is None)
+
             ap = np.vstack(apimg).T
             ap[np.logical_not(np.isfinite(ap))] = 0.
             C.AP.set('apflux_img_%s' % band, ap)
             ap = 1./(np.vstack(apimgerr).T)**2
             ap[np.logical_not(np.isfinite(ap))] = 0.
             C.AP.set('apflux_img_ivar_%s' % band, ap)
+            ap = np.vstack(apmask).T
+            ap[np.logical_not(np.isfinite(ap))] = 0.
+            C.AP.set('apflux_masked_%s' % band, ap)
             if mods is not None:
                 ap = np.vstack(apres).T
                 ap[np.logical_not(np.isfinite(ap))] = 0.
@@ -842,16 +855,24 @@ def _resample_one(args):
     return itim,Yo,Xo,iv,im,mo,bmo,dq
 
 def _apphot_one(args):
-    (irad, band, rad, img, sigma, isimage, apxy) = args
+    (irad, band, rad, img, sigma, mask, isimage, apxy) = args
     import photutils
     result = [irad, band, isimage]
     aper = photutils.CircularAperture(apxy, rad)
-    p = photutils.aperture_photometry(img, aper, error=sigma)
+    p = photutils.aperture_photometry(img, aper, error=sigma, mask=mask)
     result.append(p.field('aperture_sum'))
     if sigma is not None:
         result.append(p.field('aperture_sum_err'))
     else:
         result.append(None)
+
+    # If a mask is passed, also photometer it!
+    if mask is not None:
+        p = photutils.aperture_photometry(mask, aper)
+        result.append(p.field('aperture_sum'))
+    else:
+        result.append(None)
+
     return result
 
 def write_coadd_images(band,
