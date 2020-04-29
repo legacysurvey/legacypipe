@@ -123,7 +123,7 @@ RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so") \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)") \
-    && echo 1
+    && echo 2
 
 # Pip installs -- built from source
 RUN pip --no-cache-dir install photutils
@@ -232,7 +232,7 @@ RUN python -O -m compileall \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-RUN cd /src/legacypipe && git pull && git describe && echo 11 && \
+RUN cd /src/legacypipe && git pull && git describe && echo 17 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 

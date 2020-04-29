@@ -69,7 +69,7 @@ def one_blob(X):
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
      srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap,
-     large_galaxies_force_pointsource) = X
+     large_galaxies_force_pointsource, less_masking) = X
 
     debug('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images' %
           (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs)))
@@ -121,7 +121,8 @@ def one_blob(X):
 
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
-                 large_galaxies_force_pointsource)
+                 large_galaxies_force_pointsource,
+                 less_masking)
     B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
@@ -149,7 +150,8 @@ def one_blob(X):
 class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
-                 large_galaxies_force_pointsource):
+                 large_galaxies_force_pointsource,
+                 less_masking):
         self.name = name
         self.blobwcs = blobwcs
         self.pixscale = self.blobwcs.pixel_scale()
@@ -167,6 +169,7 @@ class OneBlob(object):
         self.use_ceres = use_ceres
         self.deblend = False
         self.large_galaxies_force_pointsource = large_galaxies_force_pointsource
+        self.less_masking = less_masking
         self.tims = self.create_tims(timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
         self.plots2 = False
@@ -202,6 +205,11 @@ class OneBlob(object):
         # Not quite so many plots...
         self.plots1 = self.plots
         cat = Catalog(*self.srcs)
+
+        # Save initial fluxes for all sources (used if we force
+        # keeping a reference star)
+        for src in self.srcs:
+            src.initial_brightness = src.brightness.copy()
 
         if self.plots:
             import pylab as plt
@@ -353,6 +361,10 @@ class OneBlob(object):
                     continue
                 # Convert to "vanilla" ellipse parameterization
                 nsrcparams = src.numberOfParams()
+                if B.force_keep_source[isub]:
+                    B.srcinvvars[isub] = np.zeros(nsrcparams, np.float32)
+                    cat.freezeParam(isub)
+                    continue
                 _convert_ellipses(src)
                 assert(src.numberOfParams() == nsrcparams)
                 # Compute inverse-variances
@@ -366,7 +378,8 @@ class OneBlob(object):
             # Check for sources with zero inverse-variance -- I think these
             # can be generated during the "Simultaneous re-opt" stage above --
             # sources can get scattered outside the blob.
-            I, = np.nonzero([np.sum(iv) > 0 for iv in B.srcinvvars])
+            I, = np.nonzero([np.sum(iv) > 0 or force
+                             for iv,force in zip(B.srcinvvars, B.force_keep_source)])
             if len(I) < len(B):
                 debug('Keeping', len(I), 'of', len(B),'sources with non-zero ivar')
                 B.cut(I)
@@ -382,6 +395,7 @@ class OneBlob(object):
 
     def compute_segmentation_map(self):
         # Use ~ saddle criterion to segment the blob / mask other sources
+        from functools import reduce
         from legacypipe.detection import detection_maps
         from astrometry.util.multiproc import multiproc
         from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
@@ -389,8 +403,14 @@ class OneBlob(object):
 
         # Compute per-band detection maps
         mp = multiproc()
-        detmaps,detivs,_ = detection_maps(
+        detmaps,detivs,satmaps = detection_maps(
             self.tims, self.blobwcs, self.bands, mp)
+
+        # same as in runbrick.py
+        saturated_pix = reduce(np.logical_or,
+                               [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps])
+        del satmaps
+
         maxsn = 0
         for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
             sn = detmap * np.sqrt(detiv)
@@ -415,6 +435,18 @@ class OneBlob(object):
             # HACK - no SEDs...
             maxsn = np.maximum(maxsn, sn)
 
+        if self.plots:
+            plt.clf()
+            plt.imshow(saturated_pix, interpolation='nearest', origin='lower',
+                       vmin=0, vmax=1, cmap='gray')
+            plt.title('saturated pix')
+            self.ps.savefig()
+
+            plt.clf()
+            plt.imshow(maxsn, interpolation='nearest', origin='lower')
+            plt.title('max s/n for segmentation')
+            self.ps.savefig()
+
         segmap = np.empty((self.blobh, self.blobw), int)
         segmap[:,:] = -1
 
@@ -429,19 +461,30 @@ class OneBlob(object):
         # Zero out the S/N in CLUSTER mask
         maxsn[(self.refmap & IN_BLOB['CLUSTER']) > 0] = 0.
 
+        # (also zero out the satmap)
+        saturated_pix[(self.refmap & IN_BLOB['CLUSTER']) > 0] = False
+
         Ibright = _argsort_by_brightness([self.srcs[i] for i in Iseg], self.bands)
         rank = np.empty(len(Iseg), int)
         rank[Ibright] = np.arange(len(Iseg), dtype=int)
         rankmap = dict([(Iseg[i],r) for r,i in enumerate(Ibright)])
-        del Ibright
 
         todo = set(Iseg)
-        thresholds = list(range(3, int(np.ceil(maxsn.max()))))
+        mx = int(np.ceil(maxsn.max()))
+        thresholds = list(range(3, min(mx, 100)))
+        if mx > 100:
+            thresholds.extend(list(range(100, min(mx, 500)+4, 5)))
+            if mx > 500:
+                thresholds.extend(list(range(500, min(mx, 2500)+24, 25)))
+                if mx > 200:
+                    thresholds.extend(list(range(2500, mx+99, 100)))
+        debug('thresholds:', thresholds)
         for thresh in thresholds:
-            #print('S/N', thresh, ':', len(todo), 'sources to find still')
+            debug('S/N', thresh, ':', len(todo), 'sources to find still')
             if len(todo) == 0:
                 break
-            hot = (maxsn >= thresh)
+            ####
+            hot = np.logical_or(maxsn >= thresh, saturated_pix)
             hot = binary_fill_holes(hot)
             blobs,_ = label(hot)
             srcblobs = blobs[iy[Iseg], ix[Iseg]]
@@ -465,6 +508,33 @@ class OneBlob(object):
                     #print('Source', t, 'is isolated at S/N', thresh)
                     done.add(t)
             todo.difference_update(done)
+        del hot, maxsn, saturated_pix
+
+        # ensure that each source owns a tiny radius around its center in the segmentation map.
+        # If there is more than one source in that radius, each pixel gets assigned to its nearest source.
+        # record the current distance to nearest source
+        kingdom = np.empty(segmap.shape, np.uint8)
+        kingdom[:,:,] = 255
+        H,W = segmap.shape
+        xcoords = np.arange(W)
+        ycoords = np.arange(H)
+        for i in Ibright:
+            radius = 5
+            x,y = ix[i], iy[i]
+            yslc = slice(max(0, y-radius), min(H, y+radius+1))
+            xslc = slice(max(0, x-radius), min(W, x+radius+1))
+            slc = (yslc, xslc)
+            # Radius to nearest earlier source
+            oldr = kingdom[slc]
+            # Radius to new source
+            newr = np.hypot(xcoords[np.newaxis, xslc] - x, ycoords[yslc, np.newaxis] - y)
+            assert(newr.shape == oldr.shape)
+            newr = (newr + 0.5).astype(np.uint8)
+            # Pixels that are within range and closer to this source than any other.
+            owned = (newr <= radius) * (newr < oldr)
+            segmap[slc][owned] = i
+            kingdom[slc][owned] = newr[owned]
+        del kingdom, xcoords, ycoords
 
         self.segmap = segmap
 
@@ -517,6 +587,7 @@ class OneBlob(object):
         B.all_model_cpu = np.array([{} for i in range(N)])
         B.all_model_hit_limit = np.array([{} for i in range(N)])
         B.all_model_opt_steps = np.array([{} for i in range(N)])
+        B.force_keep_source = np.zeros(N, bool)
 
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
@@ -546,6 +617,7 @@ class OneBlob(object):
             # Model selection for this source.
             keepsrc = self.model_selection_one_source(src, srci, models, B)
             B.sources[srci] = keepsrc
+            B.force_keep_source[srci] = getattr(keepsrc, 'force_keep_source', False)
             cat[srci] = keepsrc
 
             models.update_and_subtract(srci, keepsrc, self.tims)
@@ -731,6 +803,8 @@ class OneBlob(object):
             dd = np.array([s.getPosition().dec for s in Bold.sources
                            if s is not None])
             _,xx,yy = self.blobwcs.radec2pixelxy(rr, dd)
+
+            plt.plot(Bold.init_x, Bold.init_y, 'o', ms=5, mec='r', mfc='none', label='Avoid (r=2)')
             plt.plot(xx-1, yy-1, 'r+', label='Old', **crossa)
             plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0), label='New',
                      **crossa)
@@ -1149,16 +1223,20 @@ class OneBlob(object):
 
         # Fitting behaviors based on geometric masks.
         force_pointsource_mask = (IN_BLOB['BRIGHT'] | IN_BLOB['CLUSTER'])
+        # large_galaxies_force_pointsource is True by default.
         if self.large_galaxies_force_pointsource:
             force_pointsource_mask |= IN_BLOB['GALAXY']
-        force_pointsource = ((self.refmap[y0+iy,x0+ix] & force_pointsource_mask) > 0)
+        force_pointsource = ((self.refmap[y0+iy,x0+ix] &
+                              force_pointsource_mask) > 0)
 
-        fit_background_mask = IN_BLOB['MEDIUM']
-        ### HACK
+        fit_background_mask = IN_BLOB['BRIGHT']
+        if not self.less_masking:
+            fit_background_mask |= IN_BLOB['MEDIUM']
+        ### HACK -- re-use this variable
         if self.large_galaxies_force_pointsource:
             fit_background_mask |= IN_BLOB['GALAXY']
-        fit_background = ((self.refmap[y0+iy,x0+ix] & fit_background_mask) > 0)
-
+        fit_background = ((self.refmap[y0+iy,x0+ix] &
+                           fit_background_mask) > 0)
         if is_galaxy:
             fit_background = False
 
@@ -1416,13 +1494,24 @@ class OneBlob(object):
         # column of the catalog.
         modnames = ['psf', 'rex', 'dev', 'exp', 'ser']
         keepmod = _select_model(chisqs, nparams, galaxy_margin)
+
+        force_keep_source = False
+        if keepmod == 'none' and getattr(src, 'reference_star', False):
+            # Definitely keep ref stars (Gaia & Tycho)
+            print('Forcing keeping reference source:', psf)
+            force_keep_source = True
+            keepmod = 'psf'
+            psf.brightness = src.initial_brightness
+            print('Reset brightness to', psf.brightness)
+            psf.force_keep_source = True
+
         keepsrc = {'none':None, 'psf':psf, 'rex':rex,
                    'dev':dev, 'exp':exp, 'ser':ser}[keepmod]
         bestchi = chisqs.get(keepmod, 0.)
         B.dchisq[srci, :] = np.array([chisqs.get(k,0) for k in modnames])
         #print('Keeping model', keepmod, '(chisqs: ', chisqs, ')')
 
-        if keepsrc is not None and bestchi == 0.:
+        if keepsrc is not None and bestchi == 0. and not force_keep_source:
             # Weird edge case, or where some best-fit fluxes go
             # negative. eg
             # https://github.com/legacysurvey/legacypipe/issues/174
@@ -1667,14 +1756,14 @@ class OneBlob(object):
         self.ps.savefig()
 
     def create_tims(self, timargs):
+        from legacypipe.bits import DQ_BITS
         # In order to make multiprocessing easier, the one_blob method
         # is passed all the ingredients to make local tractor Images
         # rather than the Images themselves.  Here we build the
         # 'tims'.
         tims = []
-        for (img, inverr, twcs, wcsobj, pcal, sky, subpsf, name,
-             sx0, sx1, sy0, sy1,
-             band, sig1, modelMinval, imobj) in timargs:
+        for (img, inverr, dq, twcs, wcsobj, pcal, sky, subpsf, name,
+             sx0, sx1, sy0, sy1, band, sig1, imobj) in timargs:
             # Mask out inverr for pixels that are not within the blob.
             try:
                 Yo,Xo,Yi,Xi,_ = resample_with_wcs(wcsobj, self.blobwcs,
@@ -1698,11 +1787,11 @@ class OneBlob(object):
                         psf=subpsf, photocal=pcal, sky=sky, name=name)
             tim.band = band
             tim.sig1 = sig1
-            tim.modelMinval = modelMinval
             tim.subwcs = wcsobj
             tim.meta = imobj
             tim.psf_sigma = imobj.fwhm / 2.35
-            tim.dq = None
+            tim.dq = dq
+            tim.dq_saturation_bits = DQ_BITS['satur']
             tims.append(tim)
         return tims
 
@@ -1771,7 +1860,7 @@ def _compute_source_metrics(srcs, tims, bands, tr):
             # For each source, compute its model and record its flux
             # in this image.  Also compute the full model *mod*.
             for isrc,src in enumerate(srcs):
-                patch = tr.getModelPatch(tim, src, minsb=tim.modelMinval)
+                patch = tr.getModelPatch(tim, src)
                 if patch is None or patch.patch is None:
                     continue
                 counts[isrc] = np.sum([np.abs(pcal.brightnessToCounts(b))
@@ -1946,7 +2035,6 @@ def _get_subtim(tim, x0, x1, y0, y1):
     subtim.subwcs = tim.subwcs.get_subimage(x0, y0, sw, sh)
     subtim.band = tim.band
     subtim.sig1 = tim.sig1
-    subtim.modelMinval = tim.modelMinval
     subtim.x0 = x0
     subtim.y0 = y0
     subtim.fulltim = tim
@@ -1954,10 +2042,10 @@ def _get_subtim(tim, x0, x1, y0, y1):
     subtim.psf_sigma = tim.psf_sigma
     if tim.dq is not None:
         subtim.dq = tim.dq[slc]
+        subtim.dq_saturation_bits = tim.dq_saturation_bits
     else:
         subtim.dq = None
     return subtim
-
 
 class SourceModels(object):
     '''
@@ -2230,59 +2318,3 @@ def _per_band_chisqs(tractor, bands):
         chisqs[img.band] = chisqs[img.band] + (chi ** 2).sum()
     return chisqs
 
-def get_inblob_map(blobwcs, refs):
-    bh,bw = blobwcs.shape
-    bh = int(bh)
-    bw = int(bw)
-    blobmap = np.zeros((bh,bw), np.uint8)
-    # circular/elliptical regions:
-    for col,bit,ellipse in [('isbright', 'BRIGHT', False),
-                            ('ismedium', 'MEDIUM', False),
-                            ('iscluster', 'CLUSTER', False),
-                            ('islargegalaxy', 'GALAXY', True),]:
-        isit = refs.get(col)
-        if not np.any(isit):
-            debug('None marked', col)
-            continue
-        I, = np.nonzero(isit)
-        debug(len(I), 'with', col, 'set')
-        if len(I) == 0:
-            continue
-
-        thisrefs = refs[I]
-        ok,xx,yy = blobwcs.radec2pixelxy(thisrefs.ra, thisrefs.dec)
-        for x,y,ref in zip(xx,yy,thisrefs):
-            # Cut to L1 rectangle
-            xlo = int(np.clip(np.floor(x-1 - ref.radius_pix), 0, bw))
-            xhi = int(np.clip(np.ceil (x   + ref.radius_pix), 0, bw))
-            ylo = int(np.clip(np.floor(y-1 - ref.radius_pix), 0, bh))
-            yhi = int(np.clip(np.ceil (y   + ref.radius_pix), 0, bh))
-            #print('x range', xlo,xhi, 'y range', ylo,yhi)
-            if xlo == xhi or ylo == yhi:
-                continue
-
-            bitval = np.uint8(IN_BLOB[bit])
-            if not ellipse:
-                rr = ((np.arange(ylo,yhi)[:,np.newaxis] - (y-1))**2 +
-                      (np.arange(xlo,xhi)[np.newaxis,:] - (x-1))**2)
-                masked = (rr <= ref.radius_pix**2)
-            else:
-                # *should* have ba and pa if we got here...
-                xgrid,ygrid = np.meshgrid(np.arange(xlo,xhi), np.arange(ylo,yhi))
-                dx = xgrid - (x-1)
-                dy = ygrid - (y-1)
-                debug('Galaxy: PA', ref.pa, 'BA', ref.ba, 'Radius', ref.radius, 'pix', ref.radius_pix)
-                if not np.isfinite(ref.pa):
-                    ref.pa = 0.
-                v1x = -np.sin(np.deg2rad(ref.pa))
-                v1y =  np.cos(np.deg2rad(ref.pa))
-                v2x =  v1y
-                v2y = -v1x
-                dot1 = dx * v1x + dy * v1y
-                dot2 = dx * v2x + dy * v2y
-                r1 = ref.radius_pix
-                r2 = ref.radius_pix * ref.ba
-                masked = (dot1**2 / r1**2 + dot2**2 / r2**2 < 1.)
-
-            blobmap[ylo:yhi, xlo:xhi] |= (bitval * masked)
-    return blobmap

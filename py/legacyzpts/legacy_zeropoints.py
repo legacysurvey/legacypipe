@@ -35,6 +35,7 @@ from legacypipe.survey import radec_at_mjd, get_git_version
 from legacypipe.image import validate_procdate_plver
 
 CAMERAS=['decam','mosaic','90prime','megaprime']
+MAGLIM=dict(g=[16, 20], r=[16, 19.5], z=[16.5, 19])
 
 def ptime(text,t0):
     tnow=Time()
@@ -172,7 +173,7 @@ def cols_for_survey_table(which='all'):
                            'mjd_obs',
                            'fwhm','zpt','ccdzpt','ccdraoff','ccddecoff',
                            'ccdrarms', 'ccddecrms', 'ccdskycounts',
-                           'ccdphrms',
+                           'phrms', 'ccdphrms',
                            'cd1_1','cd2_2','cd1_2','cd2_1',
                            'crval1','crval2','crpix1','crpix2']
         dustins_keys= ['skyrms', 'sig1', 'yshift']
@@ -206,6 +207,7 @@ def write_survey_table(T, surveyfn, camera=None, bad_expid=None):
                   ('rarms',  'ccdrarms'),
                   ('decrms', 'ccddecrms'),
                   ('phrms', 'ccdphrms'),
+                  ('phrmsavg', 'phrms'),
                   ('nstars_astrom','ccdnastrom'),
                   ('nstars_photom','ccdnphotom')]
     for old,new in rename_keys:
@@ -340,7 +342,6 @@ class Measurer(object):
             tmp.close()
             del tmp
         return primhdr
-
 
     def get_radec_bore(self, primhdr):
         # {RA,DEC}: center of exposure, TEL{RA,DEC}: boresight of telescope
@@ -732,7 +733,6 @@ class Measurer(object):
         zp0 = self.zeropoint(self.band)
         #print('Computing the sky background.')
         sky_img, skymed, skyrms = self.get_sky_and_sigma(self.img)
-        img_sub_sky= self.img - sky_img
 
         # Bunch of sky estimates
         # Median of absolute deviation (MAD), std dev = 1.4826 * MAD
@@ -805,6 +805,9 @@ class Measurer(object):
             fit_img = self.img - skymod
         else:
             fit_img = self.img - sky_img
+
+        # after sky subtraction, apply optional per-amp relative zeropoints.
+        self.apply_amp_correction(fit_img, self.invvar)
 
         with np.errstate(invalid='ignore'):
             # sqrt(0.) can trigger complaints;
@@ -981,7 +984,11 @@ class Measurer(object):
         # (eg, will work where we don't have PS1)
         nphotom = np.sum(phot.flux_sn > 5.)
 
-        dmag = (refs.legacy_survey_mag - phot.instpsfmag)[refs.photom]
+        dmag = refs.legacy_survey_mag - phot.instpsfmag
+        maglo, maghi = MAGLIM[self.band]
+        dmag = dmag[refs.photom &
+                    (refs.legacy_survey_mag > maglo) &
+                    (refs.legacy_survey_mag < maghi)]
         if len(dmag):
             dmag = dmag[np.isfinite(dmag)]
             print('Zeropoint: using', len(dmag), 'good stars')
@@ -1101,6 +1108,20 @@ class Measurer(object):
             self.make_plots(phot,dmag,ccds['zpt'],ccds['transp'])
             t0= ptime('made-plots',t0)
         return ccds, phot
+
+    def apply_amp_correction(self, img, invvar):
+        pass
+
+    def apply_amp_correction_northern(self, img, invvar):
+        from legacypipe.image import apply_amp_correction_northern
+        x0 = y0 = 0
+        if self.slc is not None:
+            sy,sx = self.slc
+            x0 = sx.start
+            y0 = sy.start
+        apply_amp_correction_northern(self.camera, self.band, self.expnum,
+                                      self.ccdname, self.mjd_obs,
+                                      img, invvar, x0, y0)
 
     def ps1_to_observed(self, ps1):
         colorterm = self.colorterm_ps1_to_observed(ps1.median, self.band)
@@ -1455,7 +1476,7 @@ class Measurer(object):
         ccd.filter = self.band
         ccd.exptime = self.exptime
         ccd.camera = self.camera
-        ccd.ccdzpt = 0. ## ???
+        ccd.ccdzpt = 0. # <-- we update this below if survey_zeropoints is available.
         ccd.ccdraoff = 0.
         ccd.ccddecoff = 0.
         ccd.fwhm = 0.
@@ -1506,6 +1527,8 @@ class Measurer(object):
             ps = PlotSequence('%s-%i-%s' % (self.camera, self.expnum, self.ccdname))
 
         # Only do stellar halo subtraction if we have a zeropoint (via --zeropoint-dir)
+        # Note that this is the only place we use survey_zeropoints; it does not get
+        # passed to image.run_calibs().
         dohalos = False
         if survey_zeropoints is not None:
             ccds = survey_zeropoints.find_ccds(expnum=self.expnum, ccdname=self.ccdname,
@@ -1736,6 +1759,9 @@ class Mosaic3Measurer(Measurer):
                           D51 = 0.211, # from obsbot
         )
 
+    def apply_amp_correction(self, img, invvar):
+        self.apply_amp_correction_northern(img, invvar)
+
     def get_fwhm(self, hdr, hdu):
         for key in ['SEEINGP1', 'SEEINGP']:
             if key in hdr:
@@ -1819,6 +1845,9 @@ class NinetyPrimeMeasurer(Measurer):
         # /global/homes/a/arjundey/idl/pro/observing/bokstat.pro
         self.zp0 =  dict(g = 26.93,r = 27.01,z = 26.552) # ADU/sec
         self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06)
+
+    def apply_amp_correction(self, img, invvar):
+        self.apply_amp_correction_northern(img, invvar)
 
     def get_fwhm(self, hdr, hdu):
         for key in ['SEEINGP1', 'SEEINGP']:
@@ -2059,6 +2088,10 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     zptgood = np.isfinite(zpts)
     if np.sum(zptgood) > 0:
         all_ccds['zptavg'] = np.median(zpts[zptgood])
+    phrms = all_ccds['phrms']
+    phrmsgood = np.isfinite(phrms) & (all_ccds['phrms'] > 0)
+    if np.sum(phrmsgood) > 0:
+        all_ccds['phrmsavg'] = np.median(phrms[phrmsgood])
 
     t0 = ptime('measure-image-%s' % img_fn,t0)
     return all_ccds, all_photom, extra_info, measure

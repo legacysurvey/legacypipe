@@ -212,11 +212,11 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
         for c in lc_cols:
             add_wiselike(c, bands=trbands)
         add_wiselike('lc_epoch_index', bands=trbands)
-        T.lc_epoch_index_w1 = np.empty((len(T), N_wise_epochs), np.uint8)
-        T.lc_epoch_index_w2 = np.empty((len(T), N_wise_epochs), np.uint8)
+        T.lc_epoch_index_w1 = np.empty((len(T), N_wise_epochs), np.int16)
+        T.lc_epoch_index_w2 = np.empty((len(T), N_wise_epochs), np.int16)
         # initialize...
-        T.lc_epoch_index_w1[:] = 255
-        T.lc_epoch_index_w2[:] = 255
+        T.lc_epoch_index_w1[:] = -1
+        T.lc_epoch_index_w2[:] = -1
         # Cut down to a fixed number of WISE time-resolved epochs?
         if N_wise_epochs is not None:
 
@@ -241,9 +241,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
                 for row,(nobs,mjd) in enumerate(zip(lc_nobs, lc_mjd)):
                     key = tuple(nobs) + tuple(mjd)
                     if key not in keep_epochs:
-                        # required by one_lightcurve_bitmask!
-                        assert(N_wise_epochs == 13)
-                        I = one_lightcurve_bitmask(nobs, mjd)
+                        I = one_lightcurve_bitmask(nobs, mjd, n_final=N_wise_epochs)
                         # convert to integer index list
                         I = np.flatnonzero(I)
                         keep_epochs[key] = I
@@ -256,7 +254,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
                         newval = newvals[colname]
                         newval[row,:len(I)] = oldval[row,I]
                     assert(np.all(I) < 255)
-                    lc_epoch[row, :len(I)] = I.astype(np.uint8)
+                    lc_epoch[row, :len(I)] = I.astype(np.int16)
 
             for k,v in newvals.items():
                 T.set(k, v)
@@ -313,7 +311,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
     T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units,
               **write_kwargs)
 
-def format_all_models(T, newcat, BB, bands, allbands):
+def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
     from astrometry.util.fits import fits_table
     import fitsio
     from legacypipe.catalog import prepare_fits_catalog, fits_typemap
@@ -351,8 +349,8 @@ def format_all_models(T, newcat, BB, bands, allbands):
         if npad:
             xcat.extend([None] * npad)
 
-        TT,hdr = prepare_fits_catalog(xcat, allivs, TT, hdr, bands, None,
-                                      prefix=prefix+'_')
+        TT,hdr = prepare_fits_catalog(xcat, allivs, TT, hdr, bands,
+                                      prefix=prefix+'_', force_keep=force_keep)
 
         # # Expand out FLUX and related fields from grz arrays to 'allbands'
         keys = ['%s_flux' % prefix, '%s_flux_ivar' % prefix]
@@ -388,7 +386,7 @@ def format_all_models(T, newcat, BB, bands, allbands):
     TT.delete_column('rex_shape_e2_ivar')
     return TT,hdr
 
-def one_lightcurve_bitmask(lc_nobs, lc_mjd):
+def one_lightcurve_bitmask(lc_nobs, lc_mjd, n_final=13):
     # row is a single tractor-i catalog row
     # the only columns used from within this row are:
     #     LC_NOBS_W[1-2]
@@ -406,11 +404,6 @@ def one_lightcurve_bitmask(lc_nobs, lc_mjd):
     mjd = lc_mjd
 
     n_epochs = len(nobs)
-
-    # could imagine making this a keyword arg rather than hardcoded
-    # but don't want to have to test that it works for other
-    # values...
-    n_final = 13 # NEO5
 
     # if the number of epochs fits within the number available then
     # retain all epochs

@@ -6,7 +6,8 @@ The license is 3-clause BSD.
 Travis: [![Build Status](https://travis-ci.org/legacysurvey/legacypipe.svg?branch=master)](https://travis-ci.org/legacysurvey/legacypipe)
 CircleCI: [![Build Status](https://img.shields.io/circleci/project/github/legacysurvey/legacypipe.svg)](https://circleci.com/gh/legacysurvey/legacypipe)
 [![Docs](https://readthedocs.org/projects/legacypipe/badge/?version=latest)](http://legacypipe.readthedocs.org/en/latest/)
-[![Coverage](https://coveralls.io/repos/github/legacysurvey/legacypipe/badge.svg?branch=master)](https://coveralls.io/github/legacysurvey/legacypipe)
+Coveralls: [![Coverage](https://coveralls.io/repos/github/legacysurvey/legacypipe/badge.svg?branch=master)](https://coveralls.io/github/legacysurvey/legacypipe)
+Codecov: [![codecov](https://codecov.io/gh/legacysurvey/legacypipe/branch/master/graph/badge.svg)](https://codecov.io/gh/legacysurvey/legacypipe)
 
 Code for the analysis of the Legacy Surveys (DECam/DECaLS, MzLS+BASS).
 ========================

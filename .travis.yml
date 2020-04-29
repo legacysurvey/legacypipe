@@ -22,6 +22,10 @@ python:
 #  - "3.8"
 
 install:
+    # ubuntu's source extractor package renames the executable.
+    #- mkdir ~/bin # exists
+    - ln -s /usr/bin/sextractor ~/bin/sex
+    - export PATH=${PATH}:~/bin
     - pip install Sphinx
     - pip install numpy
     - pip install scipy
@@ -38,7 +42,7 @@ install:
     #- pip install -v --no-deps --upgrade git+https://github.com/dstndstn/tractor.git@cython
     - pip install cython
     - git clone https://github.com/dstndstn/tractor.git
-    - (cd tractor && python setup-cython.py install)
+    - (cd tractor && python setup-cython.py install --with-ceres)
 
 before_script:
     - if [ ! -d "$HOME/astrometry.net" ]; then (cd $HOME; git clone https://github.com/dstndstn/astrometry.net.git); fi
@@ -57,11 +61,12 @@ script:
     - ls $HOME
     - ls $HOME/astrometry.net
     - (cd doc && make)
-    - (cd py && coverage run test/runbrick_test.py travis && coverage run -a test/unit_tests.py)
+    - (cd py && coverage run test/runbrick_test.py travis psfex ceres && coverage run -a test/unit_tests.py)
 
 after_success:
     - (cd py && coveralls debug)
     - (cd py && coveralls)
+    - (cd py && ./codecov-upload.sh)
 
 addons:
   apt:
@@ -74,6 +79,10 @@ addons:
     - swig
     - gsl-bin
     - libgsl0-dev
+    - libceres-dev
+    - libcfitsio-bin # fpack
+    - sextractor # for calibs
+    - psfex # for calibs
 
 cache:
   directories:

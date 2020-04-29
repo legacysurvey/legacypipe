@@ -4,21 +4,23 @@ import numpy as np
 
 from tractor import PointSource, getParamTypeTree, RaDecPos
 from tractor.galaxy import ExpGalaxy, DevGalaxy
-from tractor.sersic import SersicGalaxy
+from tractor.sersic import SersicGalaxy, SersicIndex
 from tractor.ellipses import EllipseESoft, EllipseE
 from legacypipe.survey import RexGalaxy, GaiaSource
 
 # FITS catalogs
-fits_typemap = { PointSource:  'PSF',
-                 ExpGalaxy:    'EXP',
-                 DevGalaxy:    'DEV',
-                 SersicGalaxy: 'SER',
-                 RexGalaxy:    'REX',
-                 GaiaSource:   'PSF',
-                 type(None):   'NUN' }
 
-fits_reverse_typemap = dict([(v,k) for k,v in fits_typemap.items()])
-fits_reverse_typemap.update({ 'DUP': GaiaSource })
+fits_reverse_typemap = { 'PSF': PointSource,
+                         'EXP': ExpGalaxy,
+                         'DEV': DevGalaxy,
+                         'SER': SersicGalaxy,
+                         'REX': RexGalaxy,
+                         'NUN': type(None),
+                         'DUP': GaiaSource,
+                         }
+
+fits_typemap = dict([(v,k) for k,v in fits_reverse_typemap.items()])
+fits_typemap[GaiaSource] = 'PSF'
 
 fits_short_typemap = { PointSource:  'P',
                        ExpGalaxy:    'E',
@@ -44,8 +46,8 @@ def _source_param_types(src):
     types = flatten_node(tree)
     return types
 
-def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
-                         prefix='', save_invvars=True, unpackShape=True):
+def prepare_fits_catalog(cat, invvars, T, hdr, bands, allbands=None,
+                         prefix='', save_invvars=True, force_keep=None):
     if T is None:
         from astrometry.util.fits import fits_table
         T = fits_table()
@@ -53,7 +55,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
         import fitsio
         hdr = fitsio.FITSHDR()
     if allbands is None:
-        allbands = filts
+        allbands = bands
 
     hdr.add_record(dict(name='TR_VER', value=1, comment='Tractor output format version'))
 
@@ -81,11 +83,11 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
     flux = np.zeros((len(cat), len(allbands)), np.float32)
     flux_ivar = np.zeros((len(cat), len(allbands)), np.float32)
 
-    for filt in filts:
-        i = allbands.index(filt)
+    for band in bands:
+        i = allbands.index(band)
         for j,src in enumerate(cat):
             if src is not None:
-                flux[j,i] = sum(b.getFlux(filt) for b in src.getBrightnesses())
+                flux[j,i] = sum(b.getFlux(band) for b in src.getBrightnesses())
 
         if invvars is None:
             continue
@@ -96,7 +98,7 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
 
         for j,src in enumerate(cat):
             if src is not None:
-                flux_ivar[j,i] = sum(b.getFlux(filt) for b in src.getBrightnesses())
+                flux_ivar[j,i] = sum(b.getFlux(band) for b in src.getBrightnesses())
 
         cat.setParams(params0)
 
@@ -104,27 +106,19 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
     if save_invvars:
         T.set('%sflux_ivar' % prefix, flux_ivar)
 
-    if fs is not None:
-        fskeys = ['prochi2', 'pronpix', 'profracflux', 'proflux', 'npix']
-        for k in fskeys:
-            x = getattr(fs, k)
-            x = np.array(x).astype(np.float32)
-            T.set('%s_%s' % (prefix, k), x.astype(np.float32))
-
-    _get_tractor_fits_values(T, cat, '%s%%s' % prefix, unpackShape=unpackShape)
+    _get_tractor_fits_values(T, cat, '%s%%s' % prefix)
 
     if save_invvars:
         if invvars is not None:
             cat.setParams(invvars)
         else:
             cat.setParams(np.zeros(cat.numberOfParams()))
-        _get_tractor_fits_values(T, cat, '%s%%s_ivar' % prefix,
-                                 unpackShape=unpackShape)
+        _get_tractor_fits_values(T, cat, '%s%%s_ivar' % prefix)
         # Heh, "no uncertainty here!"
         T.delete_column('%stype_ivar' % prefix)
     cat.setParams(params0)
 
-    # mod
+    # mod RA
     ra = T.get('%sra' % prefix)
     ra += (ra <   0) * 360.
     ra -= (ra > 360) * 360.
@@ -137,14 +131,14 @@ def prepare_fits_catalog(cat, invvars, T, hdr, filts, fs, allbands=None,
     # Zero out unconstrained values
     flux = T.get('%s%s' % (prefix, 'flux'))
     iv = T.get('%s%s' % (prefix, 'flux_ivar'))
-    flux[iv == 0] = 0.
+    if force_keep is not None:
+        flux[(iv == 0) * np.logical_not(force_keep[:,np.newaxis])] = 0.
+    else:
+        flux[iv == 0] = 0.
 
     return T, hdr
 
-# We'll want to compute errors in our native representation, so have a
-# FITS output routine that can convert those into output format.
-
-def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
+def _get_tractor_fits_values(T, cat, pat):
     typearray = np.array([fits_typemap[type(src)] for src in cat])
     typearray = typearray.astype('S3')
     T.set(pat % 'type', typearray)
@@ -166,9 +160,7 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
     sersic = np.zeros(len(T), np.float32)
 
     for i,src in enumerate(cat):
-        #print('_get_tractor_fits_values for pattern', pat, 'src', src)
         if isinstance(src, RexGalaxy):
-            #print('Rex shape', src.shape, 'params', src.shape.getAllParams())
             shape[i,0] = src.shape.getAllParams()[0]
         elif isinstance(src, (ExpGalaxy, DevGalaxy, SersicGalaxy)):
             shape[i,:] = src.shape.getAllParams()
@@ -178,16 +170,13 @@ def _get_tractor_fits_values(T, cat, pat, unpackShape=True):
 
     T.set(pat % 'sersic',  sersic)
 
-    if unpackShape:
-        T.set(pat % 'shape_r',  shape[:,0])
-        T.set(pat % 'shape_e1', shape[:,1])
-        T.set(pat % 'shape_e2', shape[:,2])
-    else:
-        T.set(pat % 'shape', shape)
+    T.set(pat % 'shape_r',  shape[:,0])
+    T.set(pat % 'shape_e1', shape[:,1])
+    T.set(pat % 'shape_e2', shape[:,2])
 
 def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                       allbands=None, ellipseClass=EllipseE,
-                      unpackShape=True, fluxPrefix=''):
+                      fluxPrefix=''):
     '''
     This is currently a weird hybrid of dynamic and hard-coded.
 
@@ -198,10 +187,6 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
 
     If *ellipseClass* is set, assume that type for galaxy shapes; if None,
     read the type from the header.
-
-    If *unpackShapes* is True and *ellipseClass* is EllipseE, read
-    catalog entries "shape_r", "shape_e1", "shape_e2" rather than
-    "shape", and similarly for "dev".
     '''
     from tractor import NanoMaggies
     if hdr is None:
@@ -210,11 +195,7 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
         allbands = bands
     rev_typemap = fits_reverse_typemap
 
-    if unpackShape and ellipseClass != EllipseE:
-        print('Not doing unpackShape because ellipseClass != EllipseE.')
-        unpackShape = False
-    if unpackShape:
-        T.shape = np.vstack((T.shape_r, T.shape_e1, T.shape_e2)).T
+    T.shape = np.vstack((T.shape_r, T.shape_e1, T.shape_e2)).T
 
     ibands = np.array([allbands.index(b) for b in bands])
 
@@ -223,7 +204,11 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
     ivs = []
     cat = []
     for t in T:
-        clazz = rev_typemap[t.type.strip()]
+        typestr = t.type.strip()
+        # # Gaia -- check REF_CAT = 'G2'
+        # if t.ref_cat == 'G2' and typestr == 'PSF':
+        #     clazz = GaiaSource
+        clazz = rev_typemap[typestr]
         pos = RaDecPos(t.ra, t.dec)
         assert(np.isfinite(t.ra))
         assert(np.isfinite(t.dec))
@@ -277,6 +262,21 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
             pass
         else:
             raise RuntimeError('Unknown class %s' % str(clazz))
+
+        from legacypipe.survey import LegacySersicIndex
+        sersic_index_types = dict([(_typestring(t), t) for t in
+                                   [SersicIndex, LegacySersicIndex]])
+
+        if issubclass(clazz, SersicGalaxy):
+            # hard-code knowledge that fourth param is the Sersic index
+            iclazz = hdr['TR_%s_T4' % shorttype]
+            iclazz = iclazz.replace('"','')
+            # look up that string... to avoid eval()
+            iclazz = sersic_index_types[iclazz]
+            si = iclazz(t.sersic)
+            params.append(si)
+            if invvars:
+                ivs.append(t.sersic_ivar)
 
         src = clazz(*params)
         cat.append(src)
