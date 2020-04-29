@@ -546,36 +546,7 @@ def make_coadds(tims, bands, targetwcs,
     debug('coadds: images:', t2-t0)
 
     if plots:
-        I = np.argsort([a[0] for a in allresids])
-        cols = int(np.ceil(np.sqrt(len(I))))
-        rows = int(np.ceil(len(I) / float(cols)))
-        allresids = [allresids[i] for i in I]
-        plt.clf()
-        for i,(y,n,img,mod,res) in enumerate(allresids):
-            plt.subplot(rows,cols,i+1)
-            plt.imshow(img, interpolation='nearest', origin='lower', cmap='gray')
-            plt.xticks([]); plt.yticks([])
-            plt.title('%.1f: %s' % (y, n))
-        plt.suptitle('Data')
-        ps.savefig()
-        if mods is not None:
-            plt.clf()
-            for i,(y,n,img,mod,res) in enumerate(allresids):
-                plt.subplot(rows,cols,i+1)
-                plt.imshow(mod, interpolation='nearest', origin='lower', cmap='gray')
-                plt.xticks([]); plt.yticks([])
-                plt.title('%.1f: %s' % (y, n))
-            plt.suptitle('Model')
-            ps.savefig()
-            plt.clf()
-            for i,(y,n,img,mod,res) in enumerate(allresids):
-                plt.subplot(rows,cols,i+1)
-                plt.imshow(res, interpolation='nearest', origin='lower', cmap='gray',
-                           vmin=-20, vmax=20)
-                plt.xticks([]); plt.yticks([])
-                plt.title('%.1f: %s' % (y, n))
-            plt.suptitle('Resids')
-            ps.savefig()
+        _make_coadds_plots_4(allresids, mods, ps)
 
     if xy is not None:
         C.T.mjd_min = mjds[mjd_argmins[iy,ix]]
@@ -641,6 +612,39 @@ def make_coadds(tims, bands, targetwcs,
         debug('coadds apphot:', t3-t2)
 
     return C
+
+def _make_coadds_plots_4(allresids, mods, ps):
+    import pylab as plt
+    I = np.argsort([a[0] for a in allresids])
+    cols = int(np.ceil(np.sqrt(len(I))))
+    rows = int(np.ceil(len(I) / float(cols)))
+    allresids = [allresids[i] for i in I]
+    plt.clf()
+    for i,(y,n,img,mod,res) in enumerate(allresids):
+        plt.subplot(rows,cols,i+1)
+        plt.imshow(img, interpolation='nearest', origin='lower', cmap='gray')
+        plt.xticks([]); plt.yticks([])
+        plt.title('%.1f: %s' % (y, n))
+    plt.suptitle('Data')
+    ps.savefig()
+    if mods is not None:
+        plt.clf()
+        for i,(y,n,img,mod,res) in enumerate(allresids):
+            plt.subplot(rows,cols,i+1)
+            plt.imshow(mod, interpolation='nearest', origin='lower', cmap='gray')
+            plt.xticks([]); plt.yticks([])
+            plt.title('%.1f: %s' % (y, n))
+        plt.suptitle('Model')
+        ps.savefig()
+        plt.clf()
+        for i,(y,n,img,mod,res) in enumerate(allresids):
+            plt.subplot(rows,cols,i+1)
+            plt.imshow(res, interpolation='nearest', origin='lower', cmap='gray',
+                       vmin=-20, vmax=20)
+            plt.xticks([]); plt.yticks([])
+            plt.title('%.1f: %s' % (y, n))
+        plt.suptitle('Resids')
+        ps.savefig()
 
 def _make_coadds_plots_3(cowimg, cow, coimg, band, ps):
     import pylab as plt
