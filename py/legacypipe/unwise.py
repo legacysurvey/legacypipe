@@ -173,9 +173,9 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             # https://github.com/schlafly/crowdsource/blob/7069da3e7d9d3124be1cbbe1d21ffeb63fc36dcc/python/wise_proc.py#L74
             ## FIXME -- W3/W4 ??
             satlimit = 85000
-            msat = ((tim.data > satlimit) | ((tim.nims == 0) & (tims.nuims > 1)))
+            msat = ((tim.data > satlimit) | ((tim.nims == 0) & (tim.nuims > 1)))
             from scipy.ndimage.morphology import binary_dilation
-            xx, yy = numpy.mgrid[-3:3+1, -3:3+1]
+            xx, yy = np.mgrid[-3:3+1, -3:3+1]
             dilate = xx**2+yy**2 <= 3**2
             msat = binary_dilation(msat, dilate)
             nbefore = np.sum(tim.inverr == 0)
