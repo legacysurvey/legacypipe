@@ -146,6 +146,10 @@ def make_coadds(tims, bands, targetwcs,
     if callback_args is None:
         callback_args = []
 
+    if plots:
+        from legacypipe.survey import get_rgb
+        import pylab as plt
+
     class Duck(object):
         pass
     C = Duck()
@@ -332,91 +336,9 @@ def make_coadds(tims, bands, targetwcs,
             tim = tims[itim]
 
             if plots:
-                from legacypipe.survey import get_rgb
-                import pylab as plt
-                # # Make one grayscale, brick-space plot per image
-                # thisimg = np.zeros((H,W), np.float32)
-                # thisimg[Yo,Xo] = im
-                # rgb = get_rgb([thisimg], [band])
-                # rgb = rgb.sum(axis=2)
-                # fn = ps.getnext()
-                # plt.imsave(fn, rgb, origin='lower', cmap='gray')
-                #plt.clf()
-                #plt.imshow(rgb, interpolation='nearest', origin='lower', cmap='gray')
-                #plt.xticks([]); plt.yticks([])
-                #ps.savefig()
-                # Image, Model, and Resids
-                plt.clf()
-                plt.subplot(2,2,1)
-                thisimg = np.zeros((H,W), np.float32)
-                thisimg[Yo,Xo] = im
-                rgb = get_rgb([thisimg], [band])
-                iplane = dict(g=2, r=1, z=0)[band]
-                rgbimg = rgb[:,:,iplane]
-                plt.imshow(rgbimg, interpolation='nearest', origin='lower', cmap='gray')
-                plt.xticks([]); plt.yticks([])
-                if mods is not None:
-                    plt.subplot(2,2,2)
-                    thismod = np.zeros((H,W), np.float32)
-                    thismod[Yo,Xo] = mo
-                    rgb = get_rgb([thismod], [band])
-                    rgbmod = rgb[:,:,iplane]
-                    plt.imshow(rgbmod, interpolation='nearest', origin='lower', cmap='gray')
-                    plt.xticks([]); plt.yticks([])
-                    plt.subplot(2,2,3)
-                    thisres = np.zeros((H,W), np.float32)
-                    thisres[Yo,Xo] = (im - mo) * np.sqrt(iv)
-                    plt.imshow(thisres, interpolation='nearest', origin='lower', cmap='gray',
-                               vmin=-20, vmax=20)
-                    plt.xticks([]); plt.yticks([])
-                else:
-                    if unweighted and (dq is not None):
-
-                        # HACK -- copy-n-pasted code from below.
-                        okbits = 0
-                        #for bitname in ['satur', 'bleed']:
-                        for bitname in ['satur']:
-                            okbits |= DQ_BITS[bitname]
-                        brightpix = ((dq & okbits) != 0)
-                        myim = im.copy()
-                        if satur_val is not None:
-                            # HACK -- force SATUR pix to be bright
-                            myim[brightpix] = satur_val
-                        #for bitname in ['interp']:
-                        for bitname in ['interp', 'bleed']:
-                            okbits |= DQ_BITS[bitname]
-                        goodpix = ((dq & ~okbits) == 0)
-                        thisgood = np.zeros((H,W), np.float32)
-                        thisgood[Yo,Xo] = goodpix
-                        plt.subplot(2,2,2)
-                        plt.imshow(thisgood, interpolation='nearest', origin='lower', cmap='gray', vmin=0, vmax=1)
-                        plt.xticks([]); plt.yticks([])
-                        plt.title('goodpix')
-
-                        thisim = np.zeros((H,W), np.float32)
-                        thisim[Yo,Xo] = goodpix * myim
-                        rgb = get_rgb([thisim], [band])
-                        iplane = dict(g=2, r=1, z=0)[band]
-                        rgbimg = rgb[:,:,iplane]
-                        plt.subplot(2,2,3)
-                        plt.imshow(rgbimg, interpolation='nearest', origin='lower', cmap='gray')
-                        plt.xticks([]); plt.yticks([])
-                        plt.title('goodpix rgb')
-
-
-                    rgbmod=None
-                    thisres=None
-
-                plt.subplot(2,2,4)
-                thisiv = np.zeros((H,W), np.float32)
-                thisiv[Yo,Xo] = iv
-                plt.imshow(thisiv, interpolation='nearest', origin='lower', cmap='gray')
-                plt.xticks([]); plt.yticks([])
-                plt.title('invvar')
-                plt.suptitle(tim.name + ': %.2f' % (tim.time.toYear()))
-                ps.savefig()
-                allresids.append((tim.time.toYear(), tim.name, rgbimg,rgbmod,thisres))
-
+                _make_coadds_plots_1(im, band, mods, mo, iv, unweighted,
+                                     dq, satur_val, allresids, ps, H, W,
+                                     tim, Yo, Xo)
             # invvar-weighted image
             cowimg[Yo,Xo] += iv * im
             cow   [Yo,Xo] += iv
@@ -656,8 +578,7 @@ def make_coadds(tims, bands, targetwcs,
                 C.T.psfsize[:,iband] = psfsizemap[iy,ix]
 
         if apertures is not None:
-            # Aperture photometry, using the unweighted "coimg" and
-            # "coiv" arrays.
+            # Aperture photometry
             with np.errstate(divide='ignore'):
                 imsigma = 1.0/np.sqrt(coiv)
                 imsigma[coiv == 0] = 0
@@ -772,6 +693,94 @@ def make_coadds(tims, bands, targetwcs,
         debug('coadds apphot:', t3-t2)
 
     return C
+
+def _make_coadds_plots_1(im, band, mods, mo, iv, unweighted,
+                         dq, satur_val, allresids, ps, H, W,
+                         tim, Yo, Xo):
+    from legacypipe.survey import get_rgb
+    import pylab as plt
+    # # Make one grayscale, brick-space plot per image
+    # thisimg = np.zeros((H,W), np.float32)
+    # thisimg[Yo,Xo] = im
+    # rgb = get_rgb([thisimg], [band])
+    # rgb = rgb.sum(axis=2)
+    # fn = ps.getnext()
+    # plt.imsave(fn, rgb, origin='lower', cmap='gray')
+    #plt.clf()
+    #plt.imshow(rgb, interpolation='nearest', origin='lower', cmap='gray')
+    #plt.xticks([]); plt.yticks([])
+    #ps.savefig()
+    # Image, Model, and Resids
+    plt.clf()
+    plt.subplot(2,2,1)
+    thisimg = np.zeros((H,W), np.float32)
+    thisimg[Yo,Xo] = im
+    rgb = get_rgb([thisimg], [band])
+    iplane = dict(g=2, r=1, z=0)[band]
+    rgbimg = rgb[:,:,iplane]
+    plt.imshow(rgbimg, interpolation='nearest', origin='lower', cmap='gray')
+    plt.xticks([]); plt.yticks([])
+    if mods is not None:
+        plt.subplot(2,2,2)
+        thismod = np.zeros((H,W), np.float32)
+        thismod[Yo,Xo] = mo
+        rgb = get_rgb([thismod], [band])
+        rgbmod = rgb[:,:,iplane]
+        plt.imshow(rgbmod, interpolation='nearest', origin='lower', cmap='gray')
+        plt.xticks([]); plt.yticks([])
+        plt.subplot(2,2,3)
+        thisres = np.zeros((H,W), np.float32)
+        thisres[Yo,Xo] = (im - mo) * np.sqrt(iv)
+        plt.imshow(thisres, interpolation='nearest', origin='lower', cmap='gray',
+                   vmin=-20, vmax=20)
+        plt.xticks([]); plt.yticks([])
+    else:
+        if unweighted and (dq is not None):
+
+            # HACK -- copy-n-pasted code from below.
+            okbits = 0
+            #for bitname in ['satur', 'bleed']:
+            for bitname in ['satur']:
+                okbits |= DQ_BITS[bitname]
+            brightpix = ((dq & okbits) != 0)
+            myim = im.copy()
+            if satur_val is not None:
+                # HACK -- force SATUR pix to be bright
+                myim[brightpix] = satur_val
+            #for bitname in ['interp']:
+            for bitname in ['interp', 'bleed']:
+                okbits |= DQ_BITS[bitname]
+            goodpix = ((dq & ~okbits) == 0)
+            thisgood = np.zeros((H,W), np.float32)
+            thisgood[Yo,Xo] = goodpix
+            plt.subplot(2,2,2)
+            plt.imshow(thisgood, interpolation='nearest', origin='lower', cmap='gray', vmin=0, vmax=1)
+            plt.xticks([]); plt.yticks([])
+            plt.title('goodpix')
+
+            thisim = np.zeros((H,W), np.float32)
+            thisim[Yo,Xo] = goodpix * myim
+            rgb = get_rgb([thisim], [band])
+            iplane = dict(g=2, r=1, z=0)[band]
+            rgbimg = rgb[:,:,iplane]
+            plt.subplot(2,2,3)
+            plt.imshow(rgbimg, interpolation='nearest', origin='lower', cmap='gray')
+            plt.xticks([]); plt.yticks([])
+            plt.title('goodpix rgb')
+
+
+        rgbmod=None
+        thisres=None
+
+    plt.subplot(2,2,4)
+    thisiv = np.zeros((H,W), np.float32)
+    thisiv[Yo,Xo] = iv
+    plt.imshow(thisiv, interpolation='nearest', origin='lower', cmap='gray')
+    plt.xticks([]); plt.yticks([])
+    plt.title('invvar')
+    plt.suptitle(tim.name + ': %.2f' % (tim.time.toYear()))
+    ps.savefig()
+    allresids.append((tim.time.toYear(), tim.name, rgbimg,rgbmod,thisres))
 
 def _resample_one(args):
     (itim,tim,mod,blobmod,lanczos,targetwcs,sbscale) = args
