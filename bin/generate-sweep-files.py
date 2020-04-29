@@ -112,7 +112,11 @@ def list_bricks(ns):
 
     if ns.bricksdesc is not None:
         bricksdesc = fitsio.read(ns.bricksdesc, 1, upper=True)
-        bricksdesc = dict([(item['BRICKNAME'].decode(), item) for item in bricksdesc])
+        # ADM convert from bytes_ to str_ type if fitsio version < 1.
+        if bricksdesc["BRICKNAME"].dtype.type == np.bytes_:
+            bricksdesc = dict([(item['BRICKNAME'].decode(), item) for item in bricksdesc])
+        else:
+            bricksdesc = dict([(item['BRICKNAME'], item) for item in bricksdesc])
     else:
         bricksdesc = None
 
@@ -191,6 +195,10 @@ def make_sweep(sweep, bricks, ns):
                 tflds = objects.dtype.fields
                 for fld in sflds:
                     sdt, tdt = sflds[fld][0], tflds[fld][0]
+                    # ADM handle the case where str_ type is converted
+                    # ADM to bytes_ type by fitsio versions < 1.
+                    if sdt.char=="S" and tdt.char=='U':
+                        sdt = '<U{}'.format(sdt.itemsize)
                     if sdt != tdt:
                         msg = 'sweeps/Tractor dtypes differ for field '
                         msg += '{}. Sweeps: {}, Tractor: {}'.format(fld, sdt, tdt)
@@ -414,14 +422,14 @@ SWEEP_DTYPE = np.dtype([
     ('PSFDEPTH_W1', '>f4'),
     ('PSFDEPTH_W2', '>f4'),
     ('WISE_COADD_ID', 'S8'),
-    ('LC_FLUX_W1', '>f4', (13,)),
-    ('LC_FLUX_W2', '>f4', (13,)),
-    ('LC_FLUX_IVAR_W1', '>f4', (13,)),
-    ('LC_FLUX_IVAR_W2', '>f4', (13,)),
-    ('LC_NOBS_W1', '>i2', (13,)),
-    ('LC_NOBS_W2', '>i2', (13,)),
-    ('LC_MJD_W1', '>f8', (13,)),
-    ('LC_MJD_W2', '>f8', (13,)),
+    ('LC_FLUX_W1', '>f4', (15,)),
+    ('LC_FLUX_W2', '>f4', (15,)),
+    ('LC_FLUX_IVAR_W1', '>f4', (15,)),
+    ('LC_FLUX_IVAR_W2', '>f4', (15,)),
+    ('LC_NOBS_W1', '>i2', (15,)),
+    ('LC_NOBS_W2', '>i2', (15,)),
+    ('LC_MJD_W1', '>f8', (15,)),
+    ('LC_MJD_W2', '>f8', (15,)),
 #    ('FRACDEV', '>f4'),
 #    ('FRACDEV_IVAR', '>f4'),
     ('SHAPE_R', '>f4'),
