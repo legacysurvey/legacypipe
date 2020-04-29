@@ -373,7 +373,6 @@ def make_coadds(tims, bands, targetwcs,
             if xy:
                 # raw exposure count
                 nobs[Yo,Xo] += 1
-
                 # mjd_min/max
                 update = np.logical_or(mjd_argmins[Yo,Xo] == -1,
                                        (mjd_argmins[Yo,Xo] > -1) *
@@ -393,8 +392,6 @@ def make_coadds(tims, bands, targetwcs,
                 # Narcsec is in arcsec**2
                 narcsec = neff * tim.wcs.pixel_scale()**2
                 # Make smooth maps -- don't ignore CRs, saturated pix, etc
-                #psfsizemap[Yo,Xo] += (iv>0) * (1/tim.sig1**2) * (1. / narcsec)
-                #flatcow[Yo,Xo] += (iv>0) * (1/tim.sig1**2)
                 iv1 = 1./tim.sig1**2
                 psfsizemap[Yo,Xo] += iv1 * (1. / narcsec)
                 flatcow   [Yo,Xo] += iv1
@@ -403,7 +400,6 @@ def make_coadds(tims, bands, targetwcs,
                 h,w = tim.shape
                 patch = tim.psf.getPointSourcePatch(w//2, h//2).patch
                 patch /= np.sum(patch)
-
                 # In case the tim and coadd have different pixel scales,
                 # resample the PSF stamp.
                 ph,pw = patch.shape
@@ -412,16 +408,12 @@ def make_coadds(tims, bands, targetwcs,
                 copw = int(np.ceil(pw * pscale))
                 coph = 2 * (coph//2) + 1
                 copw = 2 * (copw//2) + 1
-                #print('copw,coph', copw,coph)
-                #print('pw,ph', pw, ph)
-                #print('pscale', pscale)
                 # want input image pixel coords that change by 1/pscale
                 # and are centered on pw//2, ph//2
                 cox = np.arange(copw) * 1./pscale
                 cox += pw//2 - cox[copw//2]
                 coy = np.arange(coph) * 1./pscale
                 coy += ph//2 - coy[coph//2]
-                #print('Resampled pixel coords:', cox, coy)
                 fx,fy = np.meshgrid(cox,coy)
                 fx = fx.ravel()
                 fy = fy.ravel()
@@ -434,24 +426,9 @@ def make_coadds(tims, bands, targetwcs,
                 rtn = lanczos3_interpolate(ix, iy, dx, dy, [copsf], [patch])
                 copsf = copsf.reshape((coph,copw))
                 copsf /= copsf.sum()
-
                 if plots:
-                    plt.clf()
-                    plt.subplot(2,2,1)
-                    plt.imshow(patch, interpolation='nearest', origin='lower')
-                    plt.title('PSF')
-                    plt.subplot(2,2,2)
-                    plt.imshow(copsf, interpolation='nearest', origin='lower')
-                    plt.title('resampled PSF')
-                    plt.subplot(2,2,3)
-                    plt.imshow(np.atleast_2d(psf_img), interpolation='nearest', origin='lower')
-                    plt.title('PSF acc')
-                    plt.subplot(2,2,4)
-                    plt.imshow(psf_img + copsf/tim.sig1**2, interpolation='nearest', origin='lower')
-                    plt.title('PSF acc after')
-                    plt.suptitle('Tim %s band %s' % (tim.name, band))
-                    ps.savefig()
-                
+                    _make_coadds_plots_2(patch, copsf, psf_img, tim, band, ps)
+
                 psf_img += copsf / tim.sig1**2
 
             if detmaps:
@@ -693,6 +670,24 @@ def make_coadds(tims, bands, targetwcs,
         debug('coadds apphot:', t3-t2)
 
     return C
+
+def _make_coadds_plots_2(patch, copsf, psf_img, tim, band, ps):
+    import pylab as plt
+    plt.clf()
+    plt.subplot(2,2,1)
+    plt.imshow(patch, interpolation='nearest', origin='lower')
+    plt.title('PSF')
+    plt.subplot(2,2,2)
+    plt.imshow(copsf, interpolation='nearest', origin='lower')
+    plt.title('resampled PSF')
+    plt.subplot(2,2,3)
+    plt.imshow(np.atleast_2d(psf_img), interpolation='nearest', origin='lower')
+    plt.title('PSF acc')
+    plt.subplot(2,2,4)
+    plt.imshow(psf_img + copsf/tim.sig1**2, interpolation='nearest', origin='lower')
+    plt.title('PSF acc after')
+    plt.suptitle('Tim %s band %s' % (tim.name, band))
+    ps.savefig()
 
 def _make_coadds_plots_1(im, band, mods, mo, iv, unweighted,
                          dq, satur_val, allresids, ps, H, W,
