@@ -127,7 +127,7 @@ RUN git clone http://github.com/dstndstn/tractor.git tractor \
 
 # Pip installs -- built from source
 RUN pip --no-cache-dir install photutils
-RUN pip --no-cache-dir install fitsio==1.1.1
+RUN pip --no-cache-dir install fitsio==1.1.2
 
 RUN /sbin/ldconfig
 
