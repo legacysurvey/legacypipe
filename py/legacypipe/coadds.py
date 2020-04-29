@@ -731,12 +731,7 @@ def make_coadds(tims, bands, targetwcs,
             if blobmods is not None:
                 apblobres = []
             for irad,rad in enumerate(apertures):
-                # py2
-                if hasattr(apresults, 'next'):
-                    (airad, aband, isimg, ap_img, ap_err) = apresults.next()
-                # py3
-                else:
-                    (airad, aband, isimg, ap_img, ap_err) = apresults.__next__()
+                (airad, aband, isimg, ap_img, ap_err) = next(apresults)
                 assert(airad == irad)
                 assert(aband == band)
                 assert(isimg)
@@ -744,11 +739,7 @@ def make_coadds(tims, bands, targetwcs,
                 apimgerr.append(ap_err)
 
                 if mods is not None:
-                    # py2
-                    if hasattr(apresults, 'next'):
-                        (airad, aband, isimg, ap_img, ap_err) = apresults.next()
-                    else:
-                        (airad, aband, isimg, ap_img, ap_err) = apresults.__next__()
+                    (airad, aband, isimg, ap_img, ap_err) = next(apresults)
                     assert(airad == irad)
                     assert(aband == band)
                     assert(not isimg)
@@ -756,11 +747,7 @@ def make_coadds(tims, bands, targetwcs,
                     assert(ap_err is None)
 
                 if blobmods is not None:
-                    # py2
-                    if hasattr(apresults, 'next'):
-                        (airad, aband, isimg, ap_img, ap_err) = apresults.next()
-                    else:
-                        (airad, aband, isimg, ap_img, ap_err) = apresults.__next__()
+                    (airad, aband, isimg, ap_img, ap_err) = next(apresults)
                     assert(airad == irad)
                     assert(aband == band)
                     assert(not isimg)
