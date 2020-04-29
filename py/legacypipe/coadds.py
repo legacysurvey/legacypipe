@@ -869,7 +869,10 @@ def _apphot_one(args):
     # If a mask is passed, also photometer it!
     if mask is not None:
         p = photutils.aperture_photometry(mask, aper)
-        result.append(p.field('aperture_sum'))
+        maskedpix = p.field('aperture_sum')
+        # normalize by number of pixels (pi * rad**2)
+        maskedpix /= (np.pi * rad**2)
+        result.append(maskedpix)
     else:
         result.append(None)
 
