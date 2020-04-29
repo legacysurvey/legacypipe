@@ -435,7 +435,6 @@ def make_coadds(tims, bands, targetwcs,
                 # point-source depth
                 detsig1 = tim.sig1 / tim.psfnorm
                 psfdetiv[Yo,Xo] += (iv > 0) * (1. / detsig1**2)
-
                 # Galaxy detection map
                 gdetsig1 = tim.sig1 / tim.galnorm
                 galdetiv[Yo,Xo] += (iv > 0) * (1. / gdetsig1**2)
@@ -494,35 +493,7 @@ def make_coadds(tims, bands, targetwcs,
             del con
 
             if plots:
-                plt.clf()
-                plt.subplot(2,2,1)
-                mn,mx = cowimg.min(), cowimg.max()
-                plt.imshow(cowimg, interpolation='nearest', origin='lower', cmap='gray',
-                           vmin=mn, vmax=mx)
-                plt.xticks([]); plt.yticks([])
-                plt.title('weighted img')
-                plt.subplot(2,2,2)
-                mycow = cow.copy()
-                # mark zero as special color
-                #mycow[mycow == 0] = np.nan
-                plt.imshow(mycow, interpolation='nearest', origin='lower', cmap='gray',
-                           vmin=0)
-                plt.xticks([]); plt.yticks([])
-                plt.title('weights')
-                plt.subplot(2,2,3)
-                plt.imshow(coimg, interpolation='nearest', origin='lower', cmap='gray')
-                plt.xticks([]); plt.yticks([])
-                plt.title('unweighted img')
-                mycowimg = cowimg.copy()
-                mycowimg[cow == 0] = coimg[cow == 0]
-                plt.subplot(2,2,4)
-                plt.imshow(mycowimg, interpolation='nearest', origin='lower',
-                           cmap='gray', vmin=mn, vmax=mx)
-                plt.xticks([]); plt.yticks([])
-                plt.title('patched img')
-                plt.suptitle('band %s' % band)
-                ps.savefig()
-
+                _make_coadds_plots_3(cowimg, cow, coimg, band, ps)
 
             cowimg[cow == 0] = coimg[cow == 0]
             if mods is not None:
@@ -670,6 +641,37 @@ def make_coadds(tims, bands, targetwcs,
         debug('coadds apphot:', t3-t2)
 
     return C
+
+def _make_coadds_plots_3(cowimg, cow, coimg, band, ps):
+    import pylab as plt
+    plt.clf()
+    plt.subplot(2,2,1)
+    mn,mx = cowimg.min(), cowimg.max()
+    plt.imshow(cowimg, interpolation='nearest', origin='lower', cmap='gray',
+               vmin=mn, vmax=mx)
+    plt.xticks([]); plt.yticks([])
+    plt.title('weighted img')
+    plt.subplot(2,2,2)
+    mycow = cow.copy()
+    # mark zero as special color
+    #mycow[mycow == 0] = np.nan
+    plt.imshow(mycow, interpolation='nearest', origin='lower', cmap='gray',
+               vmin=0)
+    plt.xticks([]); plt.yticks([])
+    plt.title('weights')
+    plt.subplot(2,2,3)
+    plt.imshow(coimg, interpolation='nearest', origin='lower', cmap='gray')
+    plt.xticks([]); plt.yticks([])
+    plt.title('unweighted img')
+    mycowimg = cowimg.copy()
+    mycowimg[cow == 0] = coimg[cow == 0]
+    plt.subplot(2,2,4)
+    plt.imshow(mycowimg, interpolation='nearest', origin='lower',
+               cmap='gray', vmin=mn, vmax=mx)
+    plt.xticks([]); plt.yticks([])
+    plt.title('patched img')
+    plt.suptitle('band %s' % band)
+    ps.savefig()
 
 def _make_coadds_plots_2(patch, copsf, psf_img, tim, band, ps):
     import pylab as plt
