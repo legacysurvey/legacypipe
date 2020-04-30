@@ -100,11 +100,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                         mp=None, plots=False, ps=None, make_badcoadds=True,
                         refstars=None):
     from legacypipe.bits import DQ_BITS
-    from scipy.ndimage.filters import gaussian_filter
     from scipy.ndimage.morphology import binary_dilation
-    from astrometry.util.resample import resample_with_wcs,OverlapError
-    if plots:
-        import pylab as plt
 
     H,W = targetwcs.shape
 
@@ -119,7 +115,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
     if refstars:
         gaia = refstars[refstars.isgaia]
         # Not moving Gaia stars to epoch of individual images...
-        ok,bx,by = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
+        _,bx,by = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
         bx -= 1.
         by -= 1.
         # Radius to mask around Gaia stars, in arcsec
@@ -137,6 +133,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             star_veto[ylo:yhi+1, xlo:xhi+1] |= (r2 < pixrad)
 
     # if plots:
+    #     import pylab as plt
     #     plt.clf()
     #     plt.imshow(star_veto, interpolation='nearest', origin='lower',
     #                vmin=0, vmax=1, cmap='hot')
@@ -150,7 +147,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
         # empty Primary HDU
         out.fits.write(None, header=version_header)
 
-        for iband,band in enumerate(bands):
+        for band in bands:
             btims = [tim for tim in tims if tim.band == band]
             if len(btims) == 0:
                 continue
@@ -344,38 +341,38 @@ def compare_one(X):
         # plt.ylabel('Relative difference')
         # plt.title('Outliers: ' + tim.name)
         # ps.savefig()
-    
+
     del otherimg
-    
+
     # Significant pixels
     hotpix = ((sndiff > 5.) * (reldiff > 2.) *
               (otherwt > 1e-16) * (wt > 0.) *
               (veto[Yo,Xo] == False))
-    
+
     coldpix = ((sndiff < -5.) * (reldiff < -2.) *
                (otherwt > 1e-16) * (wt > 0.) *
                (veto[Yo,Xo] == False))
-    
+
     del reldiff, otherwt
-    
+
     if (not np.any(hotpix)) and (not np.any(coldpix)):
         return None
-    
+
     hot = np.zeros((H,W), bool)
     hot[Yo,Xo] = hotpix
     cold = np.zeros((H,W), bool)
     cold[Yo,Xo] = coldpix
     del hotpix, coldpix
-    
+
     snmap = np.zeros((H,W), np.float32)
     snmap[Yo,Xo] = sndiff
-    
+
     hot = binary_dilation(hot, iterations=1)
     cold = binary_dilation(cold, iterations=1)
     if plots:
         heat = np.zeros(hot.shape, np.int8)
         heat += hot
-        heat += -1 * cold
+        heat -= cold
     # "warm"
     hot = np.logical_or(hot,
                         binary_dilation(hot, iterations=5) * (snmap > 3.))
@@ -383,10 +380,10 @@ def compare_one(X):
     cold = np.logical_or(cold,
                          binary_dilation(cold, iterations=5) * (snmap < -3.))
     cold = binary_dilation(cold, iterations=1)
-    
+
     if plots:
         heat += hot
-        heat +- -1*cold
+        heat -= cold
     # "lukewarm"
     hot = np.logical_or(hot,
                         binary_dilation(hot, iterations=5) * (snmap > 2.))
@@ -394,7 +391,7 @@ def compare_one(X):
     cold = np.logical_or(cold,
                          binary_dilation(cold, iterations=5) * (snmap < -2.))
     cold = binary_dilation(cold, iterations=3)
-    
+
     if plots:
         heat += hot
         heat +- -1*cold
@@ -417,7 +414,7 @@ def compare_one(X):
     # Actually do the masking!
     # Resample "hot" (in brick coords) back to tim coords.
     try:
-        mYo,mXo,mYi,mXi,nil = resample_with_wcs(
+        mYo,mXo,mYi,mXi,_ = resample_with_wcs(
             tim.subwcs, targetwcs, intType=np.int16)
     except OverlapError:
         return None
@@ -461,7 +458,7 @@ def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
             if len(iy) == 0:
                 continue
             ra,dec = tim.subwcs.pixelxy2radec(ix+1, iy+1)[-2:]
-            ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
+            _,xx,yy = targetwcs.radec2pixelxy(ra, dec)
             xx = (xx - 1. + 0.5).astype(np.int16)
             yy = (yy - 1. + 0.5).astype(np.int16)
             keep = (xx >= 0) * (xx < W) * (yy >= 0) * (yy < H)
