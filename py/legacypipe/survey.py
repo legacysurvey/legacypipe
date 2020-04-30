@@ -1110,7 +1110,7 @@ class LegacySurveyData(object):
                 tileh += 1
         return pat % dict(tilew=tilew,tileh=tileh)
 
-    def write_output(self, filetype, hashsum=True, **kwargs):
+    def write_output(self, filetype, hashsum=True, filename=None, **kwargs):
         '''
         Returns a context manager for writing an output file.
 
@@ -1228,8 +1228,11 @@ class LegacySurveyData(object):
             # end of OutputFileContext class
 
 
-        # Get the output filename for this filetype
-        fn = self.find_file(filetype, output=True, **kwargs)
+        if filename is not None:
+            fn = filename
+        else:
+            # Get the output filename for this filetype
+            fn = self.find_file(filetype, output=True, **kwargs)
 
         compress = self.get_compression_string(filetype, **kwargs)
 
