@@ -173,7 +173,6 @@ def make_coadds(tims, bands, targetwcs,
         C.coblobmods = []
         C.coblobresids = []
     if apertures is not None:
-        unweighted = True
         C.AP = fits_table()
     if allmasks:
         C.allmasks = []
