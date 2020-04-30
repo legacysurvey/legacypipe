@@ -616,6 +616,15 @@ class OneBlob(object):
 
             # Model selection for this source.
             keepsrc = self.model_selection_one_source(src, srci, models, B)
+
+            # Definitely keep ref stars (Gaia & Tycho)
+            if keepsrc is None and getattr(src, 'reference_star', False):
+                print('Dropped reference star:', src)
+                src.brightness = src.initial_brightness
+                print('Reset brightness to', src.brightness)
+                src.force_keep_source = True
+                keepsrc = src
+
             B.sources[srci] = keepsrc
             B.force_keep_source[srci] = getattr(keepsrc, 'force_keep_source', False)
             cat[srci] = keepsrc
@@ -1492,24 +1501,13 @@ class OneBlob(object):
         # column of the catalog.
         modnames = ['psf', 'rex', 'dev', 'exp', 'ser']
         keepmod = _select_model(chisqs, nparams, galaxy_margin)
-
-        force_keep_source = False
-        if keepmod == 'none' and getattr(src, 'reference_star', False):
-            # Definitely keep ref stars (Gaia & Tycho)
-            print('Forcing keeping reference source:', psf)
-            force_keep_source = True
-            keepmod = 'psf'
-            psf.brightness = src.initial_brightness
-            print('Reset brightness to', psf.brightness)
-            psf.force_keep_source = True
-
         keepsrc = {'none':None, 'psf':psf, 'rex':rex,
                    'dev':dev, 'exp':exp, 'ser':ser}[keepmod]
         bestchi = chisqs.get(keepmod, 0.)
         B.dchisq[srci, :] = np.array([chisqs.get(k,0) for k in modnames])
         #print('Keeping model', keepmod, '(chisqs: ', chisqs, ')')
 
-        if keepsrc is not None and bestchi == 0. and not force_keep_source:
+        if keepsrc is not None and bestchi == 0.:
             # Weird edge case, or where some best-fit fluxes go
             # negative. eg
             # https://github.com/legacysurvey/legacypipe/issues/174
