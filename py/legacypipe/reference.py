@@ -233,8 +233,8 @@ def read_gaia(targetwcs, bands):
     gaia.keep_radius = 4. * gaia.radius
     gaia.delete_column('G')
     gaia.isgaia = np.ones(len(gaia), bool)
-    gaia.isbright = (gaia.phot_g_mean_mag < 13.)
-    gaia.ismedium = (gaia.phot_g_mean_mag < 16.)
+    gaia.isbright = (gaia.mask_mag < 13.)
+    gaia.ismedium = (gaia.mask_mag < 16.)
     gaia.donotfit = np.zeros(len(gaia), bool)
 
     # NOTE, must initialize gaia.sources array this way, or else numpy
