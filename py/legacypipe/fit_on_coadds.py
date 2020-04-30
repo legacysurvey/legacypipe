@@ -308,6 +308,7 @@ def stage_fit_on_coadds(
         brickname=None, version_header=None,
         apodize=True,
         subsky=True,
+        fitoncoadds_reweight_ivar=True,
         plots=False, plots2=False, ps=None, coadd_bw=False, W=None, H=None,
         brick=None, blobs=None, lanczos=True, ccds=None,
         write_metrics=True,
@@ -436,21 +437,23 @@ def stage_fit_on_coadds(
         print('average tim pixel scale / coadd scale:', cscale)
         iv /= cscale**2
 
-        # We first tried setting the invvars constant per tim -- this
-        # makes things worse, since we *remove* the lowered invvars at
-        # the cores of galaxies.
-        #
-        # Here we're hacking the relative weights -- squaring the
-        # weights but then making the median the same, ie, squaring
-        # the dynamic range or relative weights -- ie, downweighting
-        # the cores even more than they already are from source
-        # Poisson terms.
-        median_iv = np.median(iv[iv>0])
-        assert(median_iv > 0)
-        iv = iv * np.sqrt(iv) / np.sqrt(median_iv)
-        assert(np.all(np.isfinite(iv)))
-        assert(np.all(iv >= 0))
-
+        pdb.set_trace()
+        if fitoncoadds_reweight_ivar:
+            # We first tried setting the invvars constant per tim -- this
+            # makes things worse, since we *remove* the lowered invvars at
+            # the cores of galaxies.
+            #
+            # Here we're hacking the relative weights -- squaring the
+            # weights but then making the median the same, ie, squaring
+            # the dynamic range or relative weights -- ie, downweighting
+            # the cores even more than they already are from source
+            # Poisson terms.
+            median_iv = np.median(iv[iv>0])
+            assert(median_iv > 0)
+            iv = iv * np.sqrt(iv) / np.sqrt(median_iv)
+            assert(np.all(np.isfinite(iv)))
+            assert(np.all(iv >= 0))
+    
         cotim = Image(img, invvar=iv, wcs=twcs, psf=psf,
                       photocal=LinearPhotoCal(1., band=band),
                       sky=ConstantSky(0.), name='coadd-'+band)

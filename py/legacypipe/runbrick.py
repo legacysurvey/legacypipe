@@ -2809,6 +2809,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         # Implied options!
         #subsky = False
         large_galaxies = True
+        fitoncoadds_reweight_ivar = True
         large_galaxies_force_pointsource = False
 
     kwargs.update(ps=ps, nsigma=nsigma, saddle_fraction=saddle_fraction,
@@ -3198,6 +3199,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--fit-on-coadds', default=False, action='store_true',
                         help='Fit to coadds rather than individual CCDs (e.g., large galaxies).')
+    parser.add_argument('--no-ivar-reweighting', dest='fitoncoadds_reweight_ivar',
+                        default=True, action='store_false',
+                        help='Reweight the inverse variance when fitting on coadds.')
     parser.add_argument('--no-galaxy-forcepsf', dest='large_galaxies_force_pointsource',
                         default=True, action='store_false',
                         help='Do not force PSFs within galaxy mask.')
