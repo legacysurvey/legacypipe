@@ -1,3 +1,7 @@
+"""Module to generate tims from coadds, to allow Tractor fitting to the coadds
+rather than to the individual CCDs.
+
+"""
 import numpy as np
 
 class Duck(object):
@@ -39,8 +43,8 @@ def _build_objmask(img, ivar, skypix, boxcar=5, boxsize=1024):
 
     return np.logical_and(~objmask, skypix) # True = sky pixels
 
-def largegalaxy_ubercal(fulltims, coaddtims=None, plots=False, plots2=False,
-                        ps=None, verbose=False):
+def coadds_ubercal(fulltims, coaddtims=None, plots=False, plots2=False,
+                   ps=None, verbose=False):
     """Bring individual CCDs onto a common flux scale based on overlapping pixels.
 
     fulltims - full-CCD tims, used to derive the corrections
@@ -136,8 +140,8 @@ def largegalaxy_ubercal(fulltims, coaddtims=None, plots=False, plots2=False,
     
     return x
 
-def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp, 
-                    plots=False, plots2=False, ps=None, verbose=False):
+def coadds_sky(tims, targetwcs, survey, brickname, bands, mp, 
+               plots=False, plots2=False, ps=None, verbose=False):
     
     from tractor.sky import ConstantSky
     from legacypipe.reference import get_reference_sources
@@ -218,8 +222,8 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
             for ii in I]
 
         # Derive the correction and then apply it.
-        x = largegalaxy_ubercal(bandtims, coaddtims=[tims[ii] for ii in I],
-                                plots=plots, plots2=plots2, ps=ps)
+        x = coadds_ubercal(bandtims, coaddtims=[tims[ii] for ii in I],
+                           plots=plots, plots2=plots2, ps=ps)
         # Apply the correction and return the tims
         for jj, (correction, ii) in enumerate(zip(x, I)):
             tims[ii].data += correction
@@ -231,7 +235,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
         ## Check--
         #for jj, correction in enumerate(x):
         #    fulltims[jj].data += correction
-        #newcorrection = largegalaxy_ubercal(fulltims)
+        #newcorrection = coadds_ubercal(fulltims)
         #print(newcorrection)
 
     refs, _ = get_reference_sources(survey, targetwcs, targetwcs.pixel_scale(), ['r'],
@@ -299,7 +303,7 @@ def largegalaxy_sky(tims, targetwcs, survey, brickname, bands, mp,
 
     return tims
 
-def stage_largegalaxies(
+def stage_fitoncoadds(
         survey=None, targetwcs=None, pixscale=None, bands=None, tims=None,
         brickname=None, version_header=None,
         apodize=True,
@@ -327,9 +331,9 @@ def stage_largegalaxies(
         plots, plots2 = True, False
         if plots:
             from astrometry.util.plotutils import PlotSequence
-            ps = PlotSequence('largegalaxy-{}'.format(brickname))
-        tims = largegalaxy_sky(tims, targetwcs, survey, brickname, bands,
-                               mp, plots=plots, plots2=plots2, ps=ps)
+            ps = PlotSequence('fitoncoadds-{}'.format(brickname))
+        tims = coadds_sky(tims, targetwcs, survey, brickname, bands,
+                          mp, plots=plots, plots2=plots2, ps=ps)
     
     # Create coadds and then build custom tims from them.
 

@@ -45,6 +45,8 @@ from legacypipe.bits import DQ_BITS, MASKBITS
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 
+from legacypipe.fit_on_coadds import stage_fitoncoadds
+
 import logging
 logger = logging.getLogger('legacypipe.runbrick')
 def info(*args):
