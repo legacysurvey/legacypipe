@@ -127,7 +127,7 @@ def one_blob(X):
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
 
-    ok,x1,y1 = blobwcs.radec2pixelxy(
+    _,x1,y1 = blobwcs.radec2pixelxy(
         np.array([src.getPosition().ra  for src in B.sources]),
         np.array([src.getPosition().dec for src in B.sources]))
     B.finished_in_blob = blobmask[
@@ -607,8 +607,8 @@ class OneBlob(object):
             if self.plots_single:
                 import pylab as plt
                 plt.figure(2)
-                coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
-                                           fill_holes=False)
+                coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
+                                        fill_holes=False)
                 rgb = get_rgb(coimgs,self.bands)
                 plt.imsave('blob-%s-%s-bdata.png' % (self.name, srci), rgb,
                            origin='lower')
@@ -688,8 +688,8 @@ class OneBlob(object):
         from astrometry.util.multiproc import multiproc
 
         if self.plots:
-            coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
-                                       fill_holes=False)
+            coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
+                                    fill_holes=False)
             import pylab as plt
             plt.clf()
             dimshow(get_rgb(coimgs,self.bands), ticks=False)
@@ -715,7 +715,7 @@ class OneBlob(object):
                 mod.addTo(modimg)
             tim.data = modimg
         if self.plots:
-            coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
+            coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
                                        fill_holes=False)
             import pylab as plt
             plt.clf()
@@ -789,8 +789,8 @@ class OneBlob(object):
         del detsns, modsns
 
         if self.plots:
-            coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
-                                       fill_holes=False)
+            coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
+                                    fill_holes=False)
             import pylab as plt
             plt.clf()
             dimshow(get_rgb(coimgs,self.bands), ticks=False)
@@ -934,8 +934,8 @@ class OneBlob(object):
             # going into the fit.
             import pylab as plt
             plt.clf()
-            nil,nil,coimgs,nil = quick_coadds(srctims, self.bands,self.blobwcs,
-                                              fill_holes=False, get_cow=True)
+            _,_,coimgs,_ = quick_coadds(srctims, self.bands,self.blobwcs,
+                                        fill_holes=False, get_cow=True)
             dimshow(get_rgb(coimgs, self.bands))
             ax = plt.axis()
             pos = src.getPosition()
@@ -960,7 +960,7 @@ class OneBlob(object):
                 srctims, srcwcs, self.bands, mp)
             # Compute the symmetric area that fits in this 'tim'
             pos = src.getPosition()
-            ok,xx,yy = srcwcs.radec2pixelxy(pos.ra, pos.dec)
+            _,xx,yy = srcwcs.radec2pixelxy(pos.ra, pos.dec)
             bh,bw = srcblobmask.shape
             ix = int(np.clip(np.round(xx-1), 0, bw-1))
             iy = int(np.clip(np.round(yy-1), 0, bh-1))
@@ -1107,7 +1107,7 @@ class OneBlob(object):
                 # Zero out inverse-errors for all pixels outside
                 # 'dilated'.
                 try:
-                    Yo,Xo,Yi,Xi,nil = resample_with_wcs(
+                    Yo,Xo,Yi,Xi,_ = resample_with_wcs(
                         tim.subwcs, srcwcs, intType=np.int16)
                 except OverlapError:
                     continue
@@ -1202,8 +1202,8 @@ class OneBlob(object):
         srctractor.setModelMasks(modelMasks)
         srccat = srctractor.getCatalog()
 
-        ok,ix,iy = srcwcs.radec2pixelxy(src.getPosition().ra,
-                                        src.getPosition().dec)
+        _,ix,iy = srcwcs.radec2pixelxy(src.getPosition().ra,
+                                       src.getPosition().dec)
         ix = int(ix-1)
         iy = int(iy-1)
         # Start in blob
@@ -1268,11 +1268,11 @@ class OneBlob(object):
             model_resid_rgb = {}
             # the "none" model
             modimgs = list(srctractor.getModelImages())
-            co,nil = quick_coadds(srctims, self.bands, srcwcs, images=modimgs)
+            co,_ = quick_coadds(srctims, self.bands, srcwcs, images=modimgs)
             rgb = get_rgb(co, self.bands)
             model_mod_rgb['none'] = rgb
             res = [(tim.getImage() - mod) for tim,mod in zip(srctims, modimgs)]
-            co,nil = quick_coadds(srctims, self.bands, srcwcs, images=res)
+            co,_ = quick_coadds(srctims, self.bands, srcwcs, images=res)
             rgb = get_rgb(co, self.bands)
             model_resid_rgb['none'] = rgb
 
@@ -1396,11 +1396,11 @@ class OneBlob(object):
             if self.plots_per_source:
                 # save RGB images for the model
                 modimgs = list(srctractor.getModelImages())
-                co,nil = quick_coadds(srctims, self.bands, srcwcs, images=modimgs)
+                co,_ = quick_coadds(srctims, self.bands, srcwcs, images=modimgs)
                 rgb = get_rgb(co, self.bands)
                 model_mod_rgb[name] = rgb
                 res = [(tim.getImage() - mod) for tim,mod in zip(srctims, modimgs)]
-                co,nil = quick_coadds(srctims, self.bands, srcwcs, images=res)
+                co,_ = quick_coadds(srctims, self.bands, srcwcs, images=res)
                 rgb = get_rgb(co, self.bands)
                 model_resid_rgb[name] = rgb
 
@@ -2121,7 +2121,7 @@ class SourceModels(object):
                 img[outslice] -= p * (ie[outslice]>0)
             else:
                 mod.addTo(tim.getImage(), scale=-1)
-            
+
             # if mod.patch.max() > 1e6:
             #     if ps is not None:
             #         z = np.zeros_like(tim.getImage())
@@ -2312,4 +2312,3 @@ def _per_band_chisqs(tractor, bands):
         chi = tractor.getChiImage(img=img)
         chisqs[img.band] = chisqs[img.band] + (chi ** 2).sum()
     return chisqs
-
