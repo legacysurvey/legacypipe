@@ -45,8 +45,6 @@ from legacypipe.bits import DQ_BITS, MASKBITS
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 
-from legacypipe.largegalaxies import stage_largegalaxies
-
 import logging
 logger = logging.getLogger('legacypipe.runbrick')
 def info(*args):
@@ -148,10 +146,10 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                          [(1,1),(W,1),(W,H),(1,H),(1,1)]])
     # custom brick -- set RA,Dec bounds
     if custom_brick:
-        brick.ra1,nil  = targetwcs.pixelxy2radec(W, H/2)
-        brick.ra2,nil  = targetwcs.pixelxy2radec(1, H/2)
-        nil, brick.dec1 = targetwcs.pixelxy2radec(W/2, 1)
-        nil, brick.dec2 = targetwcs.pixelxy2radec(W/2, H)
+        brick.ra1,_  = targetwcs.pixelxy2radec(W, H/2)
+        brick.ra2,_  = targetwcs.pixelxy2radec(1, H/2)
+        _, brick.dec1 = targetwcs.pixelxy2radec(W/2, 1)
+        _, brick.dec2 = targetwcs.pixelxy2radec(W/2, H)
 
     # Create FITS header with version strings
     gitver = get_git_version()
@@ -303,7 +301,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                     for tim,x0,y0,x1,y1 in
                     zip(tims, ccds.ccd_x0+1, ccds.ccd_y0+1,
                         ccds.ccd_x1, ccds.ccd_y1)])
-    ok,x,y = targetwcs.radec2pixelxy(rd[:,:,0], rd[:,:,1])
+    _,x,y = targetwcs.radec2pixelxy(rd[:,:,0], rd[:,:,1])
     ccds.brick_x0 = np.floor(np.min(x, axis=1)).astype(np.int16)
     ccds.brick_x1 = np.ceil (np.max(x, axis=1)).astype(np.int16)
     ccds.brick_y0 = np.floor(np.min(y, axis=1)).astype(np.int16)
@@ -455,8 +453,6 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
 
     # Check for existing MEF containing masks for all the chips we need.
     if outliers and not read_outlier_mask_file(survey, tims, brickname, outlier_mask_file=outlier_mask_file):
-        from astrometry.util.file import trymakedirs
-
         # Make before-n-after plots (before)
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
         with survey.write_output('outliers-pre', brick=brickname) as out:
@@ -637,11 +633,11 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     of these blobs will be processed independently.
     '''
     from functools import reduce
-    from tractor import PointSource, NanoMaggies, RaDecPos, Catalog
+    from tractor import PointSource, NanoMaggies, Catalog
     from legacypipe.detection import (detection_maps,
                         run_sed_matched_filters, segment_and_group_sources)
     from scipy.ndimage.morphology import binary_dilation
-    from scipy.ndimage.measurements import label, center_of_mass
+    from scipy.ndimage.measurements import label
 
     record_event and record_event('stage_srcs: starting')
     _add_stage_version(version_header, 'SRCS', 'srcs')
@@ -739,7 +735,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         from scipy.ndimage.measurements import find_objects
         any_saturated = reduce(np.logical_or, saturated_pix)
         merging = np.zeros_like(any_saturated)
-        h,w = any_saturated.shape
+        _,w = any_saturated.shape
         # All our cameras have bleed trails that go along image rows.
         # We go column by column, checking whether blobs of "hot" pixels
         # get joined up when merged with SATUR pixels.
@@ -758,15 +754,12 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 counts = Counter()
                 for slc in slcs:
                     (slc,) = slc
-                    #print('slice', slc, 'cblobs2 shape', cblobs2.shape,
-                    #      'blob index', cblobs2[slc.start])
                     mergedblob = cblobs2[slc.start]
                     counts[mergedblob] += 1
                 slcs2 = find_objects(cblobs2)
                 for blob,n in counts.most_common():
                     if n == 1:
                         break
-                    #print('Index', index)
                     (slc,) = slcs2[blob-1]
                     merging[slc, i] = True
         hot |= merging
@@ -898,7 +891,7 @@ def stage_fitblobs(T=None,
     if blobradec is not None:
         # blobradec is a list like [(ra0,dec0), ...]
         rd = np.array(blobradec)
-        ok,x,y = targetwcs.radec2pixelxy(rd[:,0], rd[:,1])
+        _,x,y = targetwcs.radec2pixelxy(rd[:,0], rd[:,1])
         x = (x - 1).astype(int)
         y = (y - 1).astype(int)
         blobxy = list(zip(x, y))
@@ -1421,7 +1414,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
         subtimargs = []
         for tim in tims:
             h,w = tim.shape
-            ok,x,y = tim.subwcs.radec2pixelxy(rr,dd)
+            _,x,y = tim.subwcs.radec2pixelxy(rr,dd)
             sx0,sx1 = x.min(), x.max()
             sy0,sy1 = y.min(), y.max()
             #print('blob extent in pixel space of', tim.name, ': x',
@@ -1476,7 +1469,6 @@ def _bounce_one_blob(X):
 def _get_mod(X):
     from tractor import Tractor
     (tim, srcs) = X
-    t0 = Time()
     tractor = Tractor([tim], srcs)
     mod = tractor.getModelImage(0)
     debug('Getting model for', tim, ':', Time()-t0)
@@ -1665,11 +1657,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         sims_coadd = T_sims_coadds.comods
         del T_sims_coadds
         image_only_mods= [tim.data-tim.sims_image for tim in tims]
-        T_image_coadds = make_coadds(tims, bands, targetwcs,
-                                     mods=image_only_mods,
-                                     lanczos=lanczos, mp=mp)
-        image_coadd= T_image_coadds.comods
-        del T_image_coadds
+        make_coadds(tims, bands, targetwcs, mods=image_only_mods,
+                    lanczos=lanczos, mp=mp)
     ###
 
     # Save per-source measurements of the maps produced during coadding
@@ -1836,7 +1825,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ax = plt.axis()
         ps.savefig()
 
-        for i,(src,x,y,rr,dd) in enumerate(zip(cat, x1, y1, ra, dec)):
+        for src,x,y,rr,dd in zip(cat, x1, y1, ra, dec):
             from tractor import PointSource
             from tractor.galaxy import DevGalaxy, ExpGalaxy
             from tractor.sersic import SersicGalaxy
@@ -1899,8 +1888,7 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
     import astropy.time
     from tractor.tractortime import TAITime
     from tractor.image import Image
-    from tractor.basics import NanoMaggies, LinearPhotoCal
-    from astrometry.util.util import Tan
+    from tractor.basics import LinearPhotoCal
     import photutils
 
     # Compute source pixel positions
@@ -2143,7 +2131,7 @@ def stage_wise_forced(
         # axis= arg to np.count_nonzero is new in numpy 1.12
         Nepochs = max(np.atleast_1d([np.count_nonzero(e)
                                      for e in TR.epoch_bitmask]))
-        nil,ne = TR.epoch_bitmask.shape
+        _,ne = TR.epoch_bitmask.shape
         info('Max number of time-resolved unWISE epochs for these tiles:', Nepochs)
         debug('epoch bitmask length:', ne)
         # Add time-resolved coadds
@@ -2243,7 +2231,7 @@ def stage_wise_forced(
     if WISE_T is not None:
         WISE_T = fits_table()
         phots = phots[len(args):]
-        for (ie,a),r in zip(eargs, phots):
+        for (ie,_),r in zip(eargs, phots):
             debug('Epoch', ie, 'photometry:')
             if r is None:
                 debug('Failed.')
@@ -2614,7 +2602,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     # These are for the 'stages' infrastructure
               pickle_pat='pickles/runbrick-%(brick)s-%%(stage)s.pickle',
               stages=['writecat'],
-              force=[], forceall=False, write_pickles=True,
+              force=None, forceall=False, write_pickles=True,
               checkpoint_filename=None,
               checkpoint_period=None,
               prereqs_update=None,
@@ -2756,9 +2744,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     from astrometry.util.multiproc import multiproc
     from astrometry.util.plotutils import PlotSequence
 
-    # print('Total Memory Available to Job:')
-    # get_ulimit()
-
     # *initargs* are passed to the first stage (stage_tims)
     # so should be quantities that shouldn't get updated from their pickled
     # values.
@@ -2766,6 +2751,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     # *kwargs* update the pickled values from previous stages
     kwargs = {}
 
+    if force is None:
+        force = []
     forceStages = [s for s in stages]
     forceStages.extend(force)
     if forceall:
@@ -3187,7 +3174,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     # HACK -- Default value for DR8 MJD cut
     # DR8 -- drop early data from before additional baffling was added to the camera.
     # 56730 = 2014-03-14
-    parser.add_argument('--min-mjd', type=float, 
+    parser.add_argument('--min-mjd', type=float,
                         help='Only keep images taken after the given MJD')
     parser.add_argument('--max-mjd', type=float,
                         help='Only keep images taken before the given MJD')
