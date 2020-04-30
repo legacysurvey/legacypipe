@@ -5,7 +5,6 @@ if False:
     if __name__ == '__main__':
         import matplotlib
         matplotlib.use('Agg')
-    import matplotlib.pyplot as plt
 
 import os
 import argparse
@@ -17,7 +16,6 @@ from scipy.stats import sigmaclip
 import fitsio
 from astropy.io import fits as fits_astropy
 from astropy.table import Table, vstack
-from photutils import CircularAperture, aperture_photometry
 
 from astrometry.util.file import trymakedirs
 from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
@@ -129,7 +127,7 @@ def _ccds_table(camera='decam'):
         ]
     ccds = Table(np.zeros(1, dtype=cols))
     return ccds
-     
+
 def _stars_table(nstars=1):
     '''Initialize the stars table.
 
@@ -137,11 +135,12 @@ def _stars_table(nstars=1):
     https://github.com/legacysurvey/legacyzpts/blob/master/DESCRIPTION_OF_OUTPUTS.md
     '''
     cols = [('image_filename', 'S100'),('image_hdu', 'i2'),
-            ('expid', 'S16'), ('filter', 'S1'),('nstars', 'i2'), 
+            ('expid', 'S16'), ('filter', 'S1'),('nstars', 'i2'),
             ('x', 'f4'), ('y', 'f4'), ('expnum', 'i8'),
             ('plver', 'S8'), ('procdate', 'S19'), ('plprocid', 'S7'),
             ('gain', 'f4'),
-            ('ra', 'f8'), ('dec', 'f8'), ('apmag', 'f4'),('apflux', 'f4'),('apskyflux', 'f4'),('apskyflux_perpix', 'f4'),
+            ('ra', 'f8'), ('dec', 'f8'),
+            ('apmag', 'f4'),('apflux', 'f4'),('apskyflux', 'f4'),('apskyflux_perpix', 'f4'),
             ('radiff', 'f8'), ('decdiff', 'f8'),
             ('ps1_mag', 'f4'),
             ('gaia_g','f8'),('ps1_g','f8'),('ps1_r','f8'),('ps1_i','f8'),('ps1_z','f8'),
@@ -159,8 +158,8 @@ def cols_for_survey_table(which='all'):
     """Return list of -survey.fits table colums
 
     Args:
-        which: all, numeric, 
-        nonzero_diff (numeric and expect non-zero diff with reference 
+        which: all, numeric,
+        nonzero_diff (numeric and expect non-zero diff with reference
         when compute it)
     """
     assert(which in ['all','numeric','nonzero_diff'])
@@ -191,10 +190,8 @@ def cols_for_survey_table(which='all'):
                            'fwhm','zpt','ccdzpt','ccdraoff','ccddecoff']
         dustins_keys= ['skyrms']
     return need_arjuns_keys + dustins_keys + martins_keys + gods_keys
- 
-def write_survey_table(T, surveyfn, camera=None, bad_expid=None):
-    from legacyzpts.psfzpt_cuts import add_psfzpt_cuts
 
+def write_survey_table(T, surveyfn, camera=None, bad_expid=None):
     assert(camera in CAMERAS)
     need_keys = cols_for_survey_table(which='all')
     # Rename
@@ -212,7 +209,7 @@ def write_survey_table(T, surveyfn, camera=None, bad_expid=None):
                   ('nstars_photom','ccdnphotom')]
     for old,new in rename_keys:
         T.rename(old,new)
-    # Delete 
+    # Delete
     del_keys= list( set(T.get_columns()).difference(set(need_keys)) )
     for key in del_keys:
         T.delete_column(key)
@@ -224,13 +221,10 @@ def write_survey_table(T, surveyfn, camera=None, bad_expid=None):
     T.cd2_1 = T.cd2_1.astype(np.float32)
     T.cd2_2 = T.cd2_2.astype(np.float32)
 
-    # add_psfzpt_cuts(T, camera, bad_expid)
-    # We now run this as a separate step at the end via
-    # update_ccd_cuts.
-    # replace with placeholder that masks everything until this is run.
+    # Set placeholder that masks everything until update_ccd_cuts is
+    # run.
     from legacyzpts import psfzpt_cuts
     T.ccd_cuts = np.zeros(len(T), np.int16) + psfzpt_cuts.CCD_CUT_BITS['err_legacyzpts']
-
     writeto_via_temp(surveyfn, T)
     print('Wrote %s' % surveyfn)
 
@@ -252,7 +246,7 @@ class Measurer(object):
 
     Args:
         match_radius: arcsec matching to gaia/ps1
-        sn_min,sn_max: if not None then then {min,max} S/N will be enforced from 
+        sn_min,sn_max: if not None then then {min,max} S/N will be enforced from
             aperture photoemtry, where S/N = apflux/sqrt(skyflux)
     """
 
@@ -264,7 +258,7 @@ class Measurer(object):
         self.zptsfile= kwargs.get('zptsfile')
         self.prefix= kwargs.get('prefix')
         self.verboseplots= kwargs.get('verboseplots')
-        
+
         self.fn = os.path.join(image_dir, fn)
         self.fn_base = fn
         self.debug= kwargs.get('debug')
@@ -308,9 +302,9 @@ class Measurer(object):
                 print('AIRMASS missing and site not defined.')
             else:
                 print('Recomputing AIRMASS')
-                from astropy.time import Time
+                from astropy.time import Time as apyTime
                 from astropy.coordinates import SkyCoord, AltAz
-                time = Time(self.mjd_obs+0.5*self.exptime/24./3600., format='mjd')
+                time = apyTime(self.mjd_obs + 0.5*self.exptime/3600./24., format='mjd')
                 coords = SkyCoord(self.ra_bore, self.dec_bore, unit='deg')
                 altaz = coords.transform_to(AltAz(obstime=time, location=site))
                 self.airmass = altaz.secz
@@ -435,26 +429,26 @@ class Measurer(object):
         return mask
 
     def get_bitmask_fn(self, imgfn):
-        if 'ooi' in imgfn: 
+        if 'ooi' in imgfn:
             fn= imgfn.replace('ooi','ood')
-        elif 'oki' in imgfn: 
+        elif 'oki' in imgfn:
             fn= imgfn.replace('oki','ood')
         else:
             raise ValueError('bad imgfn? no ooi or oki: %s' % imgfn)
         return fn
 
     def get_weight_fn(self, imgfn):
-        if 'ooi' in imgfn: 
+        if 'ooi' in imgfn:
             fn= imgfn.replace('ooi','oow')
         elif 'oki' in imgfn:
             fn= imgfn.replace('oki','oow')
         else:
             raise ValueError('bad imgfn? no ooi or oki: %s' % imgfn)
         return fn
-    
+
     def remap_bitmask(self, mask):
         return mask
-    
+
     def read_weight(self, clip=True, clipThresh=0.1, scale=True, bitmask=None):
         fn = self.get_weight_fn(self.fn)
 
@@ -467,7 +461,7 @@ class Measurer(object):
             # Set all masked pixels to have weight zero.
             # bitmask value 1 = bad
             wt[bitmask > 0] = 0.
-            
+
         if clip and np.any(wt > 0):
 
             fixed = False
@@ -525,7 +519,7 @@ class Measurer(object):
         #  function.)
         #
         print('Remapping weight map for', self.fn)
-        const_sky = primhdr['SKYADU'] # e/s, Recommended sky level keyword from Frank 
+        const_sky = primhdr['SKYADU'] # e/s, Recommended sky level keyword from Frank
         expt = primhdr['EXPTIME'] # s
         with np.errstate(divide='ignore'):
             var_SR = 1./invvar # e**2
@@ -534,29 +528,33 @@ class Measurer(object):
 
         var_Astro = np.abs(img - const_sky * expt) # img in electrons; Poisson process so variance = mean
         wt = 1./(var_SR + var_Astro) # 1/(e**2)
-        # Zero out NaNs and masked pixels 
+        # Zero out NaNs and masked pixels
         wt[np.isfinite(wt) == False] = 0.
         wt[dq != 0] = 0.
         return wt
 
-    def create_zero_one_mask(self,bitmask,good=[]):
+    def create_zero_one_mask(self,bitmask,good=None):
         """Return zero_one_mask array given a bad pixel map and good pix values
         bitmask: ood image
         good: list of values to treat as good in the bitmask
         """
         # 0 == good, 1 == bad
+        if good is None:
+            good = []
         zero_one_mask= bitmask.copy()
         for val in good:
-            zero_one_mask[zero_one_mask == val]= 0 
+            zero_one_mask[zero_one_mask == val]= 0
         zero_one_mask[zero_one_mask > 0]= 1
         return zero_one_mask
 
-    def get_zero_one_mask(self,bitmask,good=[]):
+    def get_zero_one_mask(self,bitmask,good=None):
         """Convert bitmask into a zero and ones mask, 1 = bad, 0 = good
         bitmask: ood image
         good: (optional) list of values to treat as good in the bitmask
             default is to use appropiate values for the camera
         """
+        if good is None:
+            good = []
         # Defaults
         if len(good) == 0:
             if self.camera == 'decam':
@@ -575,7 +573,7 @@ class Measurer(object):
         '''sigmaclip returns unclipped pixels, lo,hi, where lo,hi are the
         mean(goodpix) +- nsigma * sigma
         '''
-        goodpix, lo, hi = sigmaclip(arr, low=nsigma, high=nsigma)
+        goodpix, lo, _ = sigmaclip(arr, low=nsigma, high=nsigma)
         meanval = np.mean(goodpix)
         sigma = (meanval - lo) / nsigma
         return meanval, sigma
@@ -587,7 +585,7 @@ class Measurer(object):
             skyobj = SplineSky.BlantonMethod(img, None, 256)
             skyimg = np.zeros_like(img)
             skyobj.addTo(skyimg)
-            mnsky, skystd = self.sensible_sigmaclip(img - skyimg,nsigma=nsigma)
+            _, skystd = self.sensible_sigmaclip(img - skyimg,nsigma=nsigma)
             skymed= np.median(skyimg)
         else:
             if self.camera in ['decam', 'megaprime']:
@@ -597,8 +595,8 @@ class Measurer(object):
             else:
                 raise RuntimeError('unknown camera %s' % self.camera)
             clip_vals,_,_ = sigmaclip(img[tuple(slc)],low=nsigma,high=nsigma)
-            skymed= np.median(clip_vals) 
-            skystd= np.std(clip_vals) 
+            skymed= np.median(clip_vals)
+            skystd= np.std(clip_vals)
             skyimg= np.zeros(img.shape) + skymed
         return skyimg, skymed, skystd
 
@@ -610,16 +608,16 @@ class Measurer(object):
         return ((ps1.nmag_ok[:, 0] > 0) &
                 (ps1.nmag_ok[:, 1] > 0) &
                 (ps1.nmag_ok[:, 2] > 0) &
-                (gicolor > 0.4) & 
+                (gicolor > 0.4) &
                 (gicolor < 2.7))
-   
+
     def return_on_error(self,err_message='',
                         ccds=None, stars_photom=None):
-        """Sets ccds table err message, zpt to nan, and returns appropriately for self.run() 
-        
-        Args: 
-         err_message: length <= 30 
-         ccds, stars_photom, stars_astrom: (optional) tables partially filled by run() 
+        """Sets ccds table err message, zpt to nan, and returns appropriately for self.run()
+
+        Args:
+         err_message: length <= 30
+         ccds, stars_photom, stars_astrom: (optional) tables partially filled by run()
         """
         assert(len(err_message) > 0 & len(err_message) <= 30)
         if ccds is None:
@@ -646,32 +644,31 @@ class Measurer(object):
 
         # Formerly we grabbed the PsfEx FWHM; instead just use the CP value!
         ccds['fwhm'] = ccds['fwhm_cp']
-    
+
     def run(self, ext=None, save_xy=False, splinesky=False, survey=None):
 
         """Computes statistics for 1 CCD
-        
-        Args: 
+
+        Args:
             ext: ccdname
             save_xy: save daophot x,y and x,y after various cuts to dict and save
                 to json
-        
+
         Returns:
             ccds, stars_photom, stars_astrom
         """
         self.set_hdu(ext)
-        # 
+        #
         t0= Time()
         t0= ptime('Measuring CCD=%s from image=%s' % (self.ccdname,self.fn),t0)
 
-        # Initialize 
+        # Initialize
         ccds = _ccds_table(self.camera)
 
         self.init_ccd(ccds)
 
-        hdr_fwhm = self.fwhm_cp
         notneeded_cols= ['avsky']
-        for ccd_col in ['avsky', 'crpix1', 'crpix2', 'crval1', 'crval2', 
+        for ccd_col in ['avsky', 'crpix1', 'crpix2', 'crval1', 'crval2',
                         'cd1_1','cd1_2', 'cd2_1', 'cd2_2']:
             if ccd_col.upper() in self.hdr.keys():
                 #print('CP Header: %s = ' % ccd_col,self.hdr[ccd_col])
@@ -717,7 +714,7 @@ class Measurer(object):
             print('PsfEx model number of stars accepted:', nacc)
             return self.return_on_error(err_message='Bad PSF model', ccds=ccds)
 
-        self.img,hdr = self.read_image()
+        self.img,_ = self.read_image()
 
         # Per-pixel error
         medweight = np.median(weight[(weight > 0) * (self.bitmask == 0)])
@@ -748,7 +745,7 @@ class Measurer(object):
         # Load PS1 & Gaia catalogues
         # We will only used detected sources that have PS1 or Gaia matches
         # So cut to this super set immediately
-        
+
         ps1 = None
         try:
             ps1 = ps1cat(ccdwcs=self.wcs).get_stars(magrange=None)
@@ -824,7 +821,6 @@ class Measurer(object):
         gaia.ra_now = ra
         gaia.dec_now = dec
         for b in ['g', 'bp', 'rp']:
-            mag = gaia.get('phot_%s_mean_mag' % b)
             sn = gaia.get('phot_%s_mean_flux_over_error' % b)
             magerr = np.abs(2.5/np.log(10.) * 1./np.fmax(1., sn))
             gaia.set('phot_%s_mean_mag_error' % b, magerr)
@@ -856,7 +852,7 @@ class Measurer(object):
             ps1.photom = np.ones (len(ps1), bool)
 
             # Match PS1 to Gaia stars within 1".
-            I,J,d = match_radec(gaia.ra_gaia, gaia.dec_gaia,
+            I,J,_ = match_radec(gaia.ra_gaia, gaia.dec_gaia,
                                 ps1.ra_ps1, ps1.dec_ps1, 1./3600.,
                                 nearest=True)
             print(len(I), 'of', len(gaia), 'Gaia and', len(ps1), 'PS1 stars matched')
@@ -1146,7 +1142,6 @@ class Measurer(object):
 
     def get_splinesky(self):
         # Find splinesky model file and read it
-        import tractor
         from tractor.utils import get_class_from_name
 
         # Look for merged file
@@ -1222,8 +1217,8 @@ class Measurer(object):
         cal.chi2 = []
         cal.fracmasked = []
 
-        for istar in range(len(ref_ra)):
-            ok,x,y = self.wcs.radec2pixelxy(ref_ra[istar], ref_dec[istar])
+        for istar,(ra,dec) in enumerate(zip(ref_ra, ref_dec)):
+            _,x,y = self.wcs.radec2pixelxy(ra, dec)
             x -= 1
             y -= 1
             # Fitting radius
@@ -1298,7 +1293,7 @@ class Measurer(object):
 
             # Now the position and flux fit
             for step in range(50):
-                dlnp, x, alpha = tr.optimize(**optargs)
+                dlnp,_,_ = tr.optimize(**optargs)
                 if dlnp == 0:
                     break
             variance = tr.optimize(variance=True, just_variance=True, **optargs)
@@ -1368,7 +1363,6 @@ class Measurer(object):
 
         # Look for merged PsfEx file
         fn = self.get_psfex_merged_filename()
-        expstr = '%08i' % self.expnum
         #print('Looking for PsfEx file', fn)
         if os.path.exists(fn):
             #print('Reading psfex-merged {}'.format(fn))
@@ -1406,29 +1400,20 @@ class Measurer(object):
         psf.header = hdr
         psf.fwhm = hdr['PSF_FWHM']
         return psf
-    
+
     def make_plots(self,stars,dmag,zpt,transp):
         '''stars -- stars table'''
         import pylab as plt
         suffix='_qa_%s.png' % stars['expid'][0][-4:]
-        fig,ax=plt.subplots(1,2,figsize=(10,4))
+        _,ax=plt.subplots(1,2,figsize=(10,4))
         plt.subplots_adjust(wspace=0.2,bottom=0.2,right=0.8)
         for key in ['astrom_gaia','photom']:
-            if key == 'astrom_gaia':    
+            if key == 'astrom_gaia':
                 ax[0].scatter(stars['radiff'],stars['decdiff'])
                 xlab=ax[0].set_xlabel(r'$\Delta Ra$ (Gaia - CCD)')
                 ylab=ax[0].set_ylabel(r'$\Delta Dec$ (Gaia - CCD)')
-            elif key == 'astrom_ps1':  
-                raise ValueError('not needed')  
-                ax.scatter(stars['radiff_ps1'],stars['decdiff_ps1'])
-                ax.set_xlabel(r'$\Delta Ra [arcsec]$ (PS1 - CCD)')
-                ax.set_ylabel(r'$\Delta Dec [arcsec]$ (PS1 - CCD)')
-                ax.text(0.02, 0.95,'Median: %.4f,%.4f' % \
-                          (np.median(stars['radiff_ps1']),np.median(stars['decdiff_ps1'])),\
-                        va='center',ha='left',transform=ax.transAxes,fontsize=20)
-                ax.text(0.02, 0.85,'RMS: %.4f,%.4f' % \
-                          (getrms(stars['radiff_ps1']),getrms(stars['decdiff_ps1'])),\
-                        va='center',ha='left',transform=ax.transAxes,fontsize=20)
+            elif key == 'astrom_ps1':
+                raise ValueError('not needed')
             elif key == 'photom':
                 ax[1].hist(dmag)
                 xlab=ax[1].set_xlabel('PS1 - AP mag (main seq, 2.5 clipping)')
@@ -1494,7 +1479,7 @@ class Measurer(object):
         ccd.plver = self.plver
         ccd.procdate = self.procdate
         ccd.plprocid = self.plprocid
-        
+
         if not self.goodWcs:
             print('WCS Failed on CCD {}, skipping calibs'.format(self.ccdname))
             return ccd
@@ -1583,14 +1568,14 @@ class DecamMeasurer(Measurer):
             return True
         # Frank's work-around for some with incorrect WCSCAL=Failed (DR9 re-reductions)
         return primhdr.get('SCAMPFLG') == 0
-        
+
     def get_site(self):
         from astropy.coordinates import EarthLocation
         # zomg astropy's caching mechanism is horrific
         # return EarthLocation.of_site('ctio')
         from astropy.units import m
         from astropy.utils import iers
-        iers.conf.auto_download = False  
+        iers.conf.auto_download = False
         return EarthLocation(1814304. * m, -5214366. * m, -3187341. * m)
 
     def get_good_image_subregion(self):
@@ -1723,7 +1708,7 @@ class MegaPrimeMeasurer(Measurer):
 
     def read_weight(self, clip=True, clipThresh=0.01, **kwargs):
         # Just estimate from image...
-        img,hdr = self.read_image()
+        img,_ = self.read_image()
         print('Image:', img.shape, img.dtype)
 
         # Estimate per-pixel noise via Blanton's 5-pixel MAD
@@ -1824,9 +1809,9 @@ class Mosaic3Measurer(Measurer):
         from astropy.coordinates import EarthLocation
         from astropy.units import m
         from astropy.utils import iers
-        iers.conf.auto_download = False  
+        iers.conf.auto_download = False
         return EarthLocation(-1994503. * m, -5037539. * m, 3358105. * m)
-    
+
     def remap_bitmask(self, mask):
         from legacypipe.image import remap_dq_cp_codes
         return remap_dq_cp_codes(mask)
@@ -1868,7 +1853,7 @@ class NinetyPrimeMeasurer(Measurer):
                .replace('.fits','')
                .replace('.fz',''))
         return int( re.sub(r'([a-z]+|\.+)','',base) )
-    
+
     def get_gain(self,hdr):
         return 1.4
 
@@ -1901,7 +1886,7 @@ class NinetyPrimeMeasurer(Measurer):
     def remap_bitmask(self, mask):
         from legacypipe.image import remap_dq_cp_codes
         return remap_dq_cp_codes(mask)
- 
+
 def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
                   just_measure=False,
                   survey=None, psfex=True, **measureargs):
@@ -1924,7 +1909,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
         primhdr = tmp[0].header
         tmp.close()
         del tmp
-    
+
     camera = measureargs['camera']
     camera_check = primhdr.get('INSTRUME','').strip().lower()
     # mosaic listed as mosaic3 in header, other combos maybe
@@ -1937,7 +1922,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
                          '90prime': NinetyPrimeMeasurer,
                          'megaprime': MegaPrimeMeasurer }[camera]
     measure = measureclass(img_fn, image_dir=image_dir, **measureargs)
-                            
+
     if just_measure:
         return measure
 
@@ -1988,7 +1973,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
         ccds = mp.map(run_one_calib, [(measure, survey, ext, do_psfex, do_splinesky,
                                        plots, survey_blob_mask, survey_zeropoints)
                                       for ext in extlist])
-        
+
         from legacyzpts.merge_calibs import merge_splinesky, merge_psfex
         class FakeOpts(object):
             pass
@@ -2032,7 +2017,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
             fn = measure.get_splinesky_unmerged_filename()
             if os.path.isfile(fn):
                 os.remove(fn)
-        
+
     if psfex:
         fn = measure.get_psfex_merged_filename()
         if not os.path.exists(fn):
@@ -2141,7 +2126,7 @@ class outputFns(object):
         basedir = os.path.join(outdir, dirname)
         trymakedirs(basedir)
 
-        basename = os.path.basename(self.imgfn) 
+        basename = os.path.basename(self.imgfn)
         # zpt,star fns
         base = basename
         if base.endswith('.fz'):
@@ -2153,7 +2138,7 @@ class outputFns(object):
         self.photomfn = os.path.join(basedir, base + '-photom.fits')
         self.surveyfn = os.path.join(basedir, base + '-survey.fits')
         self.annfn = os.path.join(basedir, base + '-annotated.fits')
-            
+
 def writeto_via_temp(outfn, obj, func_write=False, **kwargs):
     tempfn = os.path.join(os.path.dirname(outfn), 'tmp-' + os.path.basename(outfn))
     if func_write:
@@ -2240,9 +2225,9 @@ def runit(imgfn, photomfn, surveyfn, annfn, mp, bad_expid=None,
     os.remove(surveyfn)
 
     t0 = ptime('write-results-to-fits',t0)
-    
+
 def parse_coords(s):
-    '''stackoverflow: 
+    '''stackoverflow:
     https://stackoverflow.com/questions/9978880/python-argument-parser-list-of-list-or-tuple-of-tuples'''
     try:
         x, y = map(int, s.split(','))
@@ -2288,7 +2273,7 @@ def get_parser():
     return parser
 
 
-def main(image_list=None,args=None): 
+def main(image_list=None,args=None):
     ''' Produce zeropoints for all CP images in image_list
     image_list -- iterable list of image filenames
     args -- parsed argparser objection from get_parser()
@@ -2298,9 +2283,8 @@ def main(image_list=None,args=None):
 
     assert(not args is None)
     assert(not image_list is None)
-    t0 = Time()
-    tbegin = t0
-    
+    t0 = tbegin = Time()
+
     # Build a dictionary with the optional inputs.
     measureargs = vars(args)
     measureargs.pop('image_list')
@@ -2312,7 +2296,7 @@ def main(image_list=None,args=None):
     from astrometry.util.multiproc import multiproc
     threads = measureargs.pop('threads')
     mp = multiproc(nthreads=(threads or 1))
-    
+
     import logging
     #if quiet:
     lvl = logging.INFO
@@ -2376,7 +2360,7 @@ def main(image_list=None,args=None):
             print('Already finished {}'.format(psffn))
             print('Already finished {}'.format(skyfn))
             continue
-            
+
         phot_ok = validate_procdate_plver(F.photomfn, 'header', measure.expnum,
                                          measure.plver, measure.procdate,
                                          measure.plprocid, ext=1, quiet=quiet)
@@ -2441,7 +2425,7 @@ def read_primary_header(fn):
                           ('"%s"; skipped' % line.strip()))
                     #import traceback
                     #traceback.print_exc()
-                          
+
             if line == (b'END' + b' '*77):
                 foundEnd = True
                 break
@@ -2451,9 +2435,9 @@ def read_primary_header(fn):
             break
     ff.close()
     return hdr
-   
+
 if __name__ == "__main__":
-    parser= get_parser()  
+    parser= get_parser()
     args = parser.parse_args()
 
     if args.overhead is not None:
@@ -2465,7 +2449,7 @@ if __name__ == "__main__":
         print('Startup time:', time.time()-t0, 'seconds')
 
     if args.image_list:
-        images= read_lines(args.image_list) 
+        images= read_lines(args.image_list)
     elif args.image:
         images= [args.image]
 

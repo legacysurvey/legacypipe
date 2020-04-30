@@ -17,20 +17,17 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
-
 '''
 Base class for handling the images we process.  These are all
 processed by variants of the NOAO Community Pipeline (CP), so this
 base class is pretty specific.
 '''
 
-def remap_dq_cp_codes(dq, ignore_codes=[]):
+def remap_dq_cp_codes(dq, ignore_codes=None):
     '''
     Some versions of the CP use integer codes, not bit masks.
     This converts them.
-    '''
-    dqbits = np.zeros(dq.shape, np.int16)
-    '''
+
     1 = bad
     2 = no value (for remapped and stacked data)
     3 = saturated
@@ -40,6 +37,9 @@ def remap_dq_cp_codes(dq, ignore_codes=[]):
     7 = diff detect (multi-exposure difference detection from median)
     8 = long streak (e.g. satellite trail)
     '''
+    if ignore_codes is None:
+        ignore_codes = []
+    dqbits = np.zeros(dq.shape, np.int16)
 
     # Some images (eg, 90prime//CP20160403/ksb_160404_103333_ood_g_v1-CCD1.fits)
     # around saturated stars have the core with value 3 (satur), surrounded by one
@@ -633,7 +633,7 @@ class LegacySurveyImage(object):
         if slc is None and radecpoly is not None:
             from astrometry.util.miscutils import clip_polygon
             imgpoly = [(1,1),(1,imh),(imw,imh),(imw,1)]
-            ok,tx,ty = wcs.radec2pixelxy(radecpoly[:-1,0], radecpoly[:-1,1])
+            _,tx,ty = wcs.radec2pixelxy(radecpoly[:-1,0], radecpoly[:-1,1])
             tpoly = list(zip(tx,ty))
             clip = clip_polygon(imgpoly, tpoly)
             clip = np.array(clip)
@@ -672,7 +672,7 @@ class LegacySurveyImage(object):
     # if desired, to include the contribution from the source Poisson fluctuations
     def remap_invvar_shotnoise(self, invvar, primhdr, img, dq):
         debug('Remapping weight map for', self.name)
-        const_sky = primhdr['SKYADU'] # e/s, Recommended sky level keyword from Frank 
+        const_sky = primhdr['SKYADU'] # e/s, Recommended sky level keyword from Frank
         expt = primhdr['EXPTIME'] # s
         with np.errstate(divide='ignore'):
             var_SR = 1./invvar # e/s
@@ -692,7 +692,7 @@ class LegacySurveyImage(object):
     # A function that can be called by subclassers to apply a per-amp
     # zeropoint correction.
     def apply_amp_correction_northern(self, img, invvar, x0, y0):
-        apply_amp_correction_northern(self.camera, self.band, self.expnum, 
+        apply_amp_correction_northern(self.camera, self.band, self.expnum,
                                       self.ccdname, self.mjdobs,
                                       img, invvar, x0, y0)
 
@@ -1126,7 +1126,6 @@ class LegacySurveyImage(object):
     def run_sky(self, splinesky=True, git_version=None, ps=None, survey=None,
                 gaia=True, release=0, survey_blob_mask=None,
                 halos=True):
-        from legacypipe.survey import get_version_header
         from scipy.ndimage.morphology import binary_dilation
         from astrometry.util.file import trymakedirs
         from astrometry.util.miscutils import estimate_mode
@@ -1460,7 +1459,7 @@ class LegacySurveyImage(object):
             plt.hist((img[good * refgood] - initsky).ravel(), bins=50)
             plt.title('Unmasked pixels')
             ps.savefig()
-            
+
             gridvals = skyobj.spl(skyobj.xgrid, skyobj.ygrid) - initsky
             plt.clf()
             plt.imshow(gridvals,
@@ -1748,9 +1747,6 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                 hdr = fitsio.FITS(fn)[ext].read_header()
         else:
             hdr = data
-        procdatekey = 'PROCDATE'
-        if cpheader:
-            procdatekey = 'DATE'
 
         cpexpnum = None
         if cpheader:
@@ -1787,8 +1783,7 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                 if not quiet:
                     print('Missing EXPNUM and OBSID in header')
 
-        for key,spval,targetval,strip in (#(procdatekey, None, procdate, True),
-                                          ('PLVER', None, plver, True),
+        for key,spval,targetval,strip in (('PLVER', None, plver, True),
                                           ('PLPROCID', None, plprocid, True),
                                           ('EXPNUM', cpexpnum, expnum, False)):
             if spval is not None:

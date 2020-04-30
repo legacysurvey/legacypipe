@@ -478,7 +478,7 @@ def make_coadds(tims, bands, targetwcs,
             cowblobmod  /= np.maximum(cow, tinyw)
             C.coblobmods.append(cowblobmod)
             coblobresid = cowimg - cowblobmod
-            coresid[cow == 0] = 0.
+            coblobresid[cow == 0] = 0.
             C.coblobresids.append(coblobresid)
 
         if allmasks:
