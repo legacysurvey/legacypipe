@@ -437,7 +437,6 @@ def stage_fit_on_coadds(
         print('average tim pixel scale / coadd scale:', cscale)
         iv /= cscale**2
 
-        pdb.set_trace()
         if fitoncoadds_reweight_ivar:
             # We first tried setting the invvars constant per tim -- this
             # makes things worse, since we *remove* the lowered invvars at
