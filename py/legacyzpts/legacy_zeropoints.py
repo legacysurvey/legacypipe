@@ -5,7 +5,6 @@ if False:
     if __name__ == '__main__':
         import matplotlib
         matplotlib.use('Agg')
-    import matplotlib.pyplot as plt
 
 import os
 import argparse
@@ -247,7 +246,7 @@ class Measurer(object):
 
     Args:
         match_radius: arcsec matching to gaia/ps1
-        sn_min,sn_max: if not None then then {min,max} S/N will be enforced from 
+        sn_min,sn_max: if not None then then {min,max} S/N will be enforced from
             aperture photoemtry, where S/N = apflux/sqrt(skyflux)
     """
 
@@ -305,7 +304,7 @@ class Measurer(object):
                 print('Recomputing AIRMASS')
                 from astropy.time import Time as apyTime
                 from astropy.coordinates import SkyCoord, AltAz
-                time = aptTime(self.mjd_obs + 0.5*self.exptime/3600./24., format='mjd')
+                time = apyTime(self.mjd_obs + 0.5*self.exptime/3600./24., format='mjd')
                 coords = SkyCoord(self.ra_bore, self.dec_bore, unit='deg')
                 altaz = coords.transform_to(AltAz(obstime=time, location=site))
                 self.airmass = altaz.secz
@@ -520,7 +519,7 @@ class Measurer(object):
         #  function.)
         #
         print('Remapping weight map for', self.fn)
-        const_sky = primhdr['SKYADU'] # e/s, Recommended sky level keyword from Frank 
+        const_sky = primhdr['SKYADU'] # e/s, Recommended sky level keyword from Frank
         expt = primhdr['EXPTIME'] # s
         with np.errstate(divide='ignore'):
             var_SR = 1./invvar # e**2
@@ -614,11 +613,11 @@ class Measurer(object):
 
     def return_on_error(self,err_message='',
                         ccds=None, stars_photom=None):
-        """Sets ccds table err message, zpt to nan, and returns appropriately for self.run() 
+        """Sets ccds table err message, zpt to nan, and returns appropriately for self.run()
 
         Args:
          err_message: length <= 30
-         ccds, stars_photom, stars_astrom: (optional) tables partially filled by run() 
+         ccds, stars_photom, stars_astrom: (optional) tables partially filled by run()
         """
         assert(len(err_message) > 0 & len(err_message) <= 30)
         if ccds is None:
@@ -1406,7 +1405,7 @@ class Measurer(object):
         '''stars -- stars table'''
         import pylab as plt
         suffix='_qa_%s.png' % stars['expid'][0][-4:]
-        fig,ax=plt.subplots(1,2,figsize=(10,4))
+        _,ax=plt.subplots(1,2,figsize=(10,4))
         plt.subplots_adjust(wspace=0.2,bottom=0.2,right=0.8)
         for key in ['astrom_gaia','photom']:
             if key == 'astrom_gaia':
@@ -1415,15 +1414,6 @@ class Measurer(object):
                 ylab=ax[0].set_ylabel(r'$\Delta Dec$ (Gaia - CCD)')
             elif key == 'astrom_ps1':
                 raise ValueError('not needed')
-                ax.scatter(stars['radiff_ps1'],stars['decdiff_ps1'])
-                ax.set_xlabel(r'$\Delta Ra [arcsec]$ (PS1 - CCD)')
-                ax.set_ylabel(r'$\Delta Dec [arcsec]$ (PS1 - CCD)')
-                ax.text(0.02, 0.95,'Median: %.4f,%.4f' % \
-                          (np.median(stars['radiff_ps1']),np.median(stars['decdiff_ps1'])),\
-                        va='center',ha='left',transform=ax.transAxes,fontsize=20)
-                ax.text(0.02, 0.85,'RMS: %.4f,%.4f' % \
-                          (getrms(stars['radiff_ps1']),getrms(stars['decdiff_ps1'])),\
-                        va='center',ha='left',transform=ax.transAxes,fontsize=20)
             elif key == 'photom':
                 ax[1].hist(dmag)
                 xlab=ax[1].set_xlabel('PS1 - AP mag (main seq, 2.5 clipping)')
@@ -1718,7 +1708,7 @@ class MegaPrimeMeasurer(Measurer):
 
     def read_weight(self, clip=True, clipThresh=0.01, **kwargs):
         # Just estimate from image...
-        img,hdr = self.read_image()
+        img,_ = self.read_image()
         print('Image:', img.shape, img.dtype)
 
         # Estimate per-pixel noise via Blanton's 5-pixel MAD
@@ -2136,7 +2126,7 @@ class outputFns(object):
         basedir = os.path.join(outdir, dirname)
         trymakedirs(basedir)
 
-        basename = os.path.basename(self.imgfn) 
+        basename = os.path.basename(self.imgfn)
         # zpt,star fns
         base = basename
         if base.endswith('.fz'):
@@ -2293,7 +2283,7 @@ def main(image_list=None,args=None):
 
     assert(not args is None)
     assert(not image_list is None)
-    tbegin = Time()
+    t0 = tbegin = Time()
 
     # Build a dictionary with the optional inputs.
     measureargs = vars(args)
