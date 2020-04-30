@@ -743,7 +743,7 @@ def ccds_touching_wcs(targetwcs, ccds, ccdrad=None, polygons=True):
         poly = []
         for x,y in [(0.5,0.5),(W+0.5,0.5),(W+0.5,H+0.5),(0.5,H+0.5)]:
             rr,dd = wcs.pixelxy2radec(x,y)
-            ok,xx,yy = targetwcs.radec2pixelxy(rr,dd)
+            _,xx,yy = targetwcs.radec2pixelxy(rr,dd)
             poly.append((xx,yy))
         if wdet > 0:
             poly = list(reversed(poly))
@@ -1125,7 +1125,7 @@ class LegacySurveyData(object):
         the real disk file.  The 'out.fn' member variable is NOT set.
 
         ::
-        
+
         with survey.write_output('ccds', brick=brickname) as out:
             ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
@@ -1704,7 +1704,7 @@ class SchlegelPsfModel(PsfExModel):
 
             ims = fitsio.read(fn, ext=2)
             print('Eigen-images', ims.shape)
-            nsch,h,w = ims.shape
+            _,h,w = ims.shape
 
             hdr = fitsio.read_header(fn)
             x0 = 0.
@@ -1741,6 +1741,6 @@ class SchlegelPsfModel(PsfExModel):
             self.x0,self.y0 = x0,y0
             self.degree = degree
             print('SchlegelPsfEx degree:', self.degree)
-            bh,bw = self.psfbases[0].shape
+            bh,_ = self.psfbases[0].shape
             self.radius = (bh+1)/2.
 
