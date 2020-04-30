@@ -585,8 +585,8 @@ def get_reference_map(wcs, refs):
 
         if bit == 'BRIGHT':
             # decrease the BRIGHT masking radius by a factor of two!
-            debug('Scaling BRIGHT masking radius by a factor of 0.5')
-            thisrefs.radius_pix *= 0.5
+            debug('Scaling down BRIGHT masking radius by a factor of 2')
+            thisrefs.radius_pix[:] = (thisrefs.radius_pix + 1) // 2
 
         ok,xx,yy = wcs.radec2pixelxy(thisrefs.ra, thisrefs.dec)
         for x,y,ref in zip(xx,yy,thisrefs):
