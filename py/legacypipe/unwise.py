@@ -143,23 +143,46 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             # Actually subtract the background!
             tim.data -= bg
 
-        # Floor the per-pixel variances
+        # Floor the per-pixel variances,
+        # and add Poisson contribution from sources
         if band in [1,2]:
             # in Vega nanomaggies per pixel
             floor_sigma = {1: 0.5, 2: 2.0}
+            poissons = {1: 0.15, 2: 0.3}
             with np.errstate(divide='ignore'):
-                new_ie = 1. / np.hypot(1./tim.inverr, floor_sigma[band])
+                new_ie = 1. / np.sqrt(
+                    (1./tim.inverr)**2 +
+                    floor_sigma[band] +
+                    poissons[band]**2 * np.maximum(0., tim.data))
             new_ie[tim.inverr == 0] = 0.
 
             if plots:
                 plt.clf()
-                plt.plot((1. / tim.inverr[tim.inverr>0]).ravel(), (1./new_ie[tim.inverr>0]).ravel(), 'b.')
-                plt.title('unWISE per-pixel error: %s band %i' % (tile.coadd_id, band))
+                plt.plot((1. / tim.inverr[tim.inverr>0]).ravel(),
+                         (1./new_ie[tim.inverr>0]).ravel(), 'b.')
+                plt.title('unWISE per-pixel error: %s band %i' %
+                          (tile.coadd_id, band))
                 plt.xlabel('original')
                 plt.ylabel('floored')
                 ps.savefig()
 
             tim.inverr = new_ie
+
+            # Expand a 3-pixel radius around weight=0 (saturated) pixels
+            # from Eddie via crowdsource
+            # https://github.com/schlafly/crowdsource/blob/7069da3e7d9d3124be1cbbe1d21ffeb63fc36dcc/python/wise_proc.py#L74
+            ## FIXME -- W3/W4 ??
+            satlimit = 85000
+            msat = ((tim.data > satlimit) | ((tim.nims == 0) & (tim.nuims > 1)))
+            from scipy.ndimage.morphology import binary_dilation
+            xx, yy = np.mgrid[-3:3+1, -3:3+1]
+            dilate = xx**2+yy**2 <= 3**2
+            msat = binary_dilation(msat, dilate)
+            nbefore = np.sum(tim.inverr == 0)
+            tim.inverr[msat] = 0
+            nafter = np.sum(tim.inverr == 0)
+            print('Masking an additional', (nafter-nbefore), 'near-saturated pixels in unWISE',
+                  tile.coadd_id, 'band', band)
 
         # Read mask file?
         if get_masks:
@@ -180,12 +203,14 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 try:
                     tanwcs = tim.wcs.wcs
                     assert(tanwcs.shape == tilemask.shape)
-                    Yo,Xo,Yi,Xi,_ = resample_with_wcs(get_masks, tanwcs, intType=np.int16)
+                    Yo,Xo,Yi,Xi,_ = resample_with_wcs(get_masks, tanwcs,
+                                                      intType=np.int16)
                     # Only deal with mask pixels that are set.
                     I, = np.nonzero(tilemask[Yi,Xi] > 0)
                     # Trim to unique area for this tile
                     rr,dd = get_masks.pixelxy2radec(Yo[I]+1, Xo[I]+1)
-                    good = radec_in_unique_area(rr, dd, tile.ra1, tile.ra2, tile.dec1, tile.dec2)
+                    good = radec_in_unique_area(rr, dd, tile.ra1, tile.ra2,
+                                                tile.dec1, tile.dec2)
                     I = I[good]
                     maskmap[Yo[I],Xo[I]] = tilemask[Yi[I], Xi[I]]
                 except OverlapError:
@@ -197,7 +222,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         th,tw = tim.shape
         xx,yy = np.meshgrid(np.arange(tw), np.arange(th))
         rr,dd = tim.wcs.wcs.pixelxy2radec(xx+1, yy+1)
-        unique = radec_in_unique_area(rr, dd, tile.ra1, tile.ra2, tile.dec1, tile.dec2)
+        unique = radec_in_unique_area(rr, dd, tile.ra1, tile.ra2,
+                                      tile.dec1, tile.dec2)
         #print(np.sum(unique), 'of', (th*tw), 'pixels in this tile are unique')
         tim.inverr[unique == False] = 0.
         del xx,yy,rr,dd,unique
