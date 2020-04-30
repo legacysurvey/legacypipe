@@ -303,7 +303,7 @@ def coadds_sky(tims, targetwcs, survey, brickname, bands, mp,
 
     return tims
 
-def stage_fitoncoadds(
+def stage_fit_on_coadds(
         survey=None, targetwcs=None, pixscale=None, bands=None, tims=None,
         brickname=None, version_header=None,
         apodize=True,
