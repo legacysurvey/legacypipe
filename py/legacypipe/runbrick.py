@@ -1441,7 +1441,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
                 tim.psf.clear_cache()
             subtimargs.append((subimg, subie, subdq, subwcs, subwcsobj,
                                tim.getPhotoCal(),
-                               subsky, subpsf, tim.name, sx0, sx1, sy0, sy1,
+                               subsky, subpsf, tim.name,
                                tim.band, tim.sig1, tim.imobj))
 
         yield (brickname, iblob,
@@ -1469,6 +1469,7 @@ def _bounce_one_blob(X):
 def _get_mod(X):
     from tractor import Tractor
     (tim, srcs) = X
+    t0 = Time()
     tractor = Tractor([tim], srcs)
     mod = tractor.getModelImage(0)
     debug('Getting model for', tim, ':', Time()-t0)

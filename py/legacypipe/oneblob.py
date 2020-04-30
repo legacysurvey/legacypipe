@@ -14,7 +14,7 @@ from tractor.galaxy import (DevGalaxy, ExpGalaxy,
 from tractor.patch import ModelMask
 from tractor.sersic import SersicGalaxy
 
-from legacypipe.survey import (RexGalaxy, GaiaSource,
+from legacypipe.survey import (RexGalaxy,
                                LegacyEllipseWithPriors, LegacySersicIndex, get_rgb)
 from legacypipe.bits import IN_BLOB
 from legacypipe.coadds import quick_coadds
@@ -97,7 +97,7 @@ def one_blob(X):
     B.blob_x0 = np.zeros(len(B), np.int16) + bx0
     B.blob_y0 = np.zeros(len(B), np.int16) + by0
     # Did sources start within the blob?
-    ok,x0,y0 = blobwcs.radec2pixelxy(
+    _,x0,y0 = blobwcs.radec2pixelxy(
         np.array([src.getPosition().ra  for src in srcs]),
         np.array([src.getPosition().dec for src in srcs]))
     safe_x0 = np.clip(np.round(x0-1).astype(int), 0,blobw-1)
@@ -304,12 +304,12 @@ class OneBlob(object):
         if self.plots_single:
             plt.figure(2)
             mods = list(tr.getModelImages())
-            coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs, images=mods,
-                                       fill_holes=False)
+            coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=mods,
+                                    fill_holes=False)
             dimshow(get_rgb(coimgs,self.bands), ticks=False)
             plt.savefig('blob-%s-model.png' % (self.name))
             res = [(tim.getImage() - mod) for tim,mod in zip(self.tims, mods)]
-            coresids,nil = quick_coadds(self.tims, self.bands, self.blobwcs, images=res)
+            coresids,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=res)
             dimshow(get_rgb(coresids, self.bands, resids=True), ticks=False)
             plt.savefig('blob-%s-resid.png' % (self.name))
             plt.figure(1)
@@ -624,8 +624,7 @@ class OneBlob(object):
 
             if self.plots_single:
                 plt.figure(2)
-                tr = self.tractor(self.tims, cat)
-                coimgs,cons = quick_coadds(self.tims, self.bands, self.blobwcs,
+                coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
                                            fill_holes=False)
                 dimshow(get_rgb(coimgs,self.bands), ticks=False)
                 plt.savefig('blob-%s-%i-sub.png' % (self.name, srci))
@@ -763,11 +762,10 @@ class OneBlob(object):
         avoid_r = np.zeros(len(avoid_x), np.float32) + 2.
         nsigma = 6.
 
-        Tnew,newcat,_ = run_sed_matched_filters(
+        Tnew,_,_ = run_sed_matched_filters(
             SEDs, self.bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r),
             self.blobwcs, nsigma=nsigma, saturated_pix=satmaps, veto_map=None,
             plots=False, ps=None, mp=mp)
-            #plots=self.plots, ps=self.ps, mp=mp)
 
         detlogger.setLevel(detloglvl)
 
@@ -902,9 +900,9 @@ class OneBlob(object):
             insrc = np.zeros((self.blobh,self.blobw), bool)
             for tim in srctims:
                 try:
-                    Yo,Xo,Yi,Xi,nil = resample_with_wcs(
+                    Yo,Xo,Yi,Xi,_ = resample_with_wcs(
                         self.blobwcs, tim.subwcs, intType=np.int16)
-                except:
+                except OverlapError:
                     continue
                 insrc[Yo,Xo] |= (tim.inverr[Yi,Xi] > 0)
 
@@ -941,7 +939,7 @@ class OneBlob(object):
             dimshow(get_rgb(coimgs, self.bands))
             ax = plt.axis()
             pos = src.getPosition()
-            ok,x,y = self.blobwcs.radec2pixelxy(pos.ra, pos.dec)
+            _,x,y = self.blobwcs.radec2pixelxy(pos.ra, pos.dec)
             ix,iy = int(np.round(x-1)), int(np.round(y-1))
             plt.plot(x-1, y-1, 'r+')
             plt.axis(ax)
@@ -1423,21 +1421,22 @@ class OneBlob(object):
             _convert_ellipses(newsrc)
             assert(newsrc.numberOfParams() == nsrcparams)
 
-            # Compute a very approximate "fracin" metric (fraction of flux in masked model image
-            # versus total flux of model), to avoid wild extrapolation when nearly unconstrained.
+            # Compute a very approximate "fracin" metric (fraction of
+            # flux in masked model image versus total flux of model),
+            # to avoid wild extrapolation when nearly unconstrained.
             fracin = dict([(b, []) for b in self.bands])
-            fluxes = dict([(b, newsrc.getBrightness().getFlux(b)) for b in self.bands])
+            fluxes = dict([(b, newsrc.getBrightness().getFlux(b))
+                           for b in self.bands])
             for tim,mod in zip(srctims, srctractor.getModelImages()):
                 f = (mod * (tim.getInvError() > 0)).sum() / fluxes[tim.band]
-                #print('Model image for', tim.name, ': has fracin = %.3g' % f)
                 fracin[tim.band].append(f)
             for band in self.bands:
                 if len(fracin[band]) == 0:
                     continue
                 f = np.mean(fracin[band])
                 if f < 1e-6:
-                    #print('Source', newsrc, ': setting flux in band', band,
-                    #      'to zero based on fracin = %.3g' % f)
+                    debug('Source', newsrc, ': setting flux in band', band,
+                          'to zero based on fracin = %.3g' % f)
                     newsrc.getBrightness().setFlux(band, 0.)
 
             # Compute inverse-variances
@@ -1449,10 +1448,9 @@ class OneBlob(object):
             # If any fluxes have zero invvar, zero out the flux.
             params = newsrc.getParams()
             reset = False
-            for i,(pname,p,iv) in enumerate(zip(newsrc.getParamNames(), newsrc.getParams(), ivars)):
-                #print('  ', pname, '=', p, 'iv', iv, 'sigma', 1./np.sqrt(iv))
+            for i,(pname,iv) in enumerate(zip(newsrc.getParamNames(), ivars)):
                 if iv == 0:
-                    #print('Resetting', pname, '=', 0)
+                    debug('Zeroing out flux', pname, 'based on iv==0')
                     params[i] = 0.
                     reset = True
             if reset:
@@ -1528,7 +1526,7 @@ class OneBlob(object):
             modnames = ['none', 'psf', 'rex', 'dev', 'exp', 'ser']
             # Top-left: image
             plt.subplot(rows, cols, 1)
-            coimgs, cons = quick_coadds(srctims, self.bands, srcwcs)
+            coimgs,_ = quick_coadds(srctims, self.bands, srcwcs)
             rgb = get_rgb(coimgs, self.bands)
             dimshow(rgb, ticks=False)
             # next over: rgb with same stretch as models
@@ -1645,10 +1643,10 @@ class OneBlob(object):
                               for xi,yi in zip(tx,ty)]
                         ra  = [p.ra  for p in rd]
                         dec = [p.dec for p in rd]
-                        ok,x,y = self.blobwcs.radec2pixelxy(ra, dec)
+                        _,x,y = self.blobwcs.radec2pixelxy(ra, dec)
                         plt.plot(x, y, 'b-')
                         ra,dec = tim.subwcs.pixelxy2radec(tx, ty)
-                        ok,x,y = self.blobwcs.radec2pixelxy(ra, dec)
+                        _,x,y = self.blobwcs.radec2pixelxy(ra, dec)
                         plt.plot(x, y, 'c-')
                     plt.title('source %i of %i' % (numi, len(Ibright)))
                     plt.axis(ax)
@@ -1763,7 +1761,7 @@ class OneBlob(object):
         # 'tims'.
         tims = []
         for (img, inverr, dq, twcs, wcsobj, pcal, sky, subpsf, name,
-             sx0, sx1, sy0, sy1, band, sig1, imobj) in timargs:
+             band, sig1, imobj) in timargs:
             # Mask out inverr for pixels that are not within the blob.
             try:
                 Yo,Xo,Yi,Xi,_ = resample_with_wcs(wcsobj, self.blobwcs,
@@ -1939,14 +1937,11 @@ def _compute_source_metrics(srcs, tims, bands, tr):
                 # Also, to normalize by the number of images.  (Being
                 # on the edge of an image is like being in half an
                 # image.)
-                rchi2_num[isrc,iband] += (np.sum(chisq[slc] * patch.patch) / 
+                rchi2_num[isrc,iband] += (np.sum(chisq[slc] * patch.patch) /
                                           counts[isrc])
                 # If the source is not near an image edge,
                 # sum(patch.patch) == counts[isrc].
                 rchi2_den[isrc,iband] += np.sum(patch.patch) / counts[isrc]
-
-    #print('Fracflux_num:', fracflux_num)
-    #print('Fracflux_den:', fracflux_den)
 
     fracflux   = fracflux_num   / fracflux_den
     rchi2      = rchi2_num      / rchi2_den
