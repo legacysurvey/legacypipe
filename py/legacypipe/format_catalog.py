@@ -79,7 +79,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
             'fiberflux', 'fibertotflux']
     if has_ap:
         keys.extend(['apflux', 'apflux_resid', 'apflux_blobresid',
-                     'apflux_ivar'])
+                     'apflux_ivar', 'apflux_masked'])
     _expand_flux_columns(T, bands, allbands, keys)
 
     from tractor.sfd import SFDMap
@@ -181,7 +181,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
     add_fluxlike('fibertotflux')
     if has_ap:
         for c in ['apflux', 'apflux_resid', 'apflux_blobresid',
-                  'apflux_ivar']:
+                  'apflux_ivar', 'apflux_masked']:
             add_fluxlike(c)
 
     cols.extend(trans_cols_opt)

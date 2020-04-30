@@ -146,6 +146,10 @@ def make_coadds(tims, bands, targetwcs,
     if callback_args is None:
         callback_args = []
 
+    if plots:
+        from legacypipe.survey import get_rgb
+        import pylab as plt
+
     class Duck(object):
         pass
     C = Duck()
@@ -169,7 +173,6 @@ def make_coadds(tims, bands, targetwcs,
         C.coblobmods = []
         C.coblobresids = []
     if apertures is not None:
-        unweighted = True
         C.AP = fits_table()
     if allmasks:
         C.allmasks = []
@@ -332,91 +335,9 @@ def make_coadds(tims, bands, targetwcs,
             tim = tims[itim]
 
             if plots:
-                from legacypipe.survey import get_rgb
-                import pylab as plt
-                # # Make one grayscale, brick-space plot per image
-                # thisimg = np.zeros((H,W), np.float32)
-                # thisimg[Yo,Xo] = im
-                # rgb = get_rgb([thisimg], [band])
-                # rgb = rgb.sum(axis=2)
-                # fn = ps.getnext()
-                # plt.imsave(fn, rgb, origin='lower', cmap='gray')
-                #plt.clf()
-                #plt.imshow(rgb, interpolation='nearest', origin='lower', cmap='gray')
-                #plt.xticks([]); plt.yticks([])
-                #ps.savefig()
-                # Image, Model, and Resids
-                plt.clf()
-                plt.subplot(2,2,1)
-                thisimg = np.zeros((H,W), np.float32)
-                thisimg[Yo,Xo] = im
-                rgb = get_rgb([thisimg], [band])
-                iplane = dict(g=2, r=1, z=0)[band]
-                rgbimg = rgb[:,:,iplane]
-                plt.imshow(rgbimg, interpolation='nearest', origin='lower', cmap='gray')
-                plt.xticks([]); plt.yticks([])
-                if mods is not None:
-                    plt.subplot(2,2,2)
-                    thismod = np.zeros((H,W), np.float32)
-                    thismod[Yo,Xo] = mo
-                    rgb = get_rgb([thismod], [band])
-                    rgbmod = rgb[:,:,iplane]
-                    plt.imshow(rgbmod, interpolation='nearest', origin='lower', cmap='gray')
-                    plt.xticks([]); plt.yticks([])
-                    plt.subplot(2,2,3)
-                    thisres = np.zeros((H,W), np.float32)
-                    thisres[Yo,Xo] = (im - mo) * np.sqrt(iv)
-                    plt.imshow(thisres, interpolation='nearest', origin='lower', cmap='gray',
-                               vmin=-20, vmax=20)
-                    plt.xticks([]); plt.yticks([])
-                else:
-                    if unweighted and (dq is not None):
-
-                        # HACK -- copy-n-pasted code from below.
-                        okbits = 0
-                        #for bitname in ['satur', 'bleed']:
-                        for bitname in ['satur']:
-                            okbits |= DQ_BITS[bitname]
-                        brightpix = ((dq & okbits) != 0)
-                        myim = im.copy()
-                        if satur_val is not None:
-                            # HACK -- force SATUR pix to be bright
-                            myim[brightpix] = satur_val
-                        #for bitname in ['interp']:
-                        for bitname in ['interp', 'bleed']:
-                            okbits |= DQ_BITS[bitname]
-                        goodpix = ((dq & ~okbits) == 0)
-                        thisgood = np.zeros((H,W), np.float32)
-                        thisgood[Yo,Xo] = goodpix
-                        plt.subplot(2,2,2)
-                        plt.imshow(thisgood, interpolation='nearest', origin='lower', cmap='gray', vmin=0, vmax=1)
-                        plt.xticks([]); plt.yticks([])
-                        plt.title('goodpix')
-
-                        thisim = np.zeros((H,W), np.float32)
-                        thisim[Yo,Xo] = goodpix * myim
-                        rgb = get_rgb([thisim], [band])
-                        iplane = dict(g=2, r=1, z=0)[band]
-                        rgbimg = rgb[:,:,iplane]
-                        plt.subplot(2,2,3)
-                        plt.imshow(rgbimg, interpolation='nearest', origin='lower', cmap='gray')
-                        plt.xticks([]); plt.yticks([])
-                        plt.title('goodpix rgb')
-
-
-                    rgbmod=None
-                    thisres=None
-
-                plt.subplot(2,2,4)
-                thisiv = np.zeros((H,W), np.float32)
-                thisiv[Yo,Xo] = iv
-                plt.imshow(thisiv, interpolation='nearest', origin='lower', cmap='gray')
-                plt.xticks([]); plt.yticks([])
-                plt.title('invvar')
-                plt.suptitle(tim.name + ': %.2f' % (tim.time.toYear()))
-                ps.savefig()
-                allresids.append((tim.time.toYear(), tim.name, rgbimg,rgbmod,thisres))
-
+                _make_coadds_plots_1(im, band, mods, mo, iv, unweighted,
+                                     dq, satur_val, allresids, ps, H, W,
+                                     tim, Yo, Xo)
             # invvar-weighted image
             cowimg[Yo,Xo] += iv * im
             cow   [Yo,Xo] += iv
@@ -451,7 +372,6 @@ def make_coadds(tims, bands, targetwcs,
             if xy:
                 # raw exposure count
                 nobs[Yo,Xo] += 1
-
                 # mjd_min/max
                 update = np.logical_or(mjd_argmins[Yo,Xo] == -1,
                                        (mjd_argmins[Yo,Xo] > -1) *
@@ -471,8 +391,6 @@ def make_coadds(tims, bands, targetwcs,
                 # Narcsec is in arcsec**2
                 narcsec = neff * tim.wcs.pixel_scale()**2
                 # Make smooth maps -- don't ignore CRs, saturated pix, etc
-                #psfsizemap[Yo,Xo] += (iv>0) * (1/tim.sig1**2) * (1. / narcsec)
-                #flatcow[Yo,Xo] += (iv>0) * (1/tim.sig1**2)
                 iv1 = 1./tim.sig1**2
                 psfsizemap[Yo,Xo] += iv1 * (1. / narcsec)
                 flatcow   [Yo,Xo] += iv1
@@ -481,7 +399,6 @@ def make_coadds(tims, bands, targetwcs,
                 h,w = tim.shape
                 patch = tim.psf.getPointSourcePatch(w//2, h//2).patch
                 patch /= np.sum(patch)
-
                 # In case the tim and coadd have different pixel scales,
                 # resample the PSF stamp.
                 ph,pw = patch.shape
@@ -490,16 +407,12 @@ def make_coadds(tims, bands, targetwcs,
                 copw = int(np.ceil(pw * pscale))
                 coph = 2 * (coph//2) + 1
                 copw = 2 * (copw//2) + 1
-                #print('copw,coph', copw,coph)
-                #print('pw,ph', pw, ph)
-                #print('pscale', pscale)
                 # want input image pixel coords that change by 1/pscale
                 # and are centered on pw//2, ph//2
                 cox = np.arange(copw) * 1./pscale
                 cox += pw//2 - cox[copw//2]
                 coy = np.arange(coph) * 1./pscale
                 coy += ph//2 - coy[coph//2]
-                #print('Resampled pixel coords:', cox, coy)
                 fx,fy = np.meshgrid(cox,coy)
                 fx = fx.ravel()
                 fy = fy.ravel()
@@ -512,31 +425,15 @@ def make_coadds(tims, bands, targetwcs,
                 rtn = lanczos3_interpolate(ix, iy, dx, dy, [copsf], [patch])
                 copsf = copsf.reshape((coph,copw))
                 copsf /= copsf.sum()
-
                 if plots:
-                    plt.clf()
-                    plt.subplot(2,2,1)
-                    plt.imshow(patch, interpolation='nearest', origin='lower')
-                    plt.title('PSF')
-                    plt.subplot(2,2,2)
-                    plt.imshow(copsf, interpolation='nearest', origin='lower')
-                    plt.title('resampled PSF')
-                    plt.subplot(2,2,3)
-                    plt.imshow(np.atleast_2d(psf_img), interpolation='nearest', origin='lower')
-                    plt.title('PSF acc')
-                    plt.subplot(2,2,4)
-                    plt.imshow(psf_img + copsf/tim.sig1**2, interpolation='nearest', origin='lower')
-                    plt.title('PSF acc after')
-                    plt.suptitle('Tim %s band %s' % (tim.name, band))
-                    ps.savefig()
-                
+                    _make_coadds_plots_2(patch, copsf, psf_img, tim, band, ps)
+
                 psf_img += copsf / tim.sig1**2
 
             if detmaps:
                 # point-source depth
                 detsig1 = tim.sig1 / tim.psfnorm
                 psfdetiv[Yo,Xo] += (iv > 0) * (1. / detsig1**2)
-
                 # Galaxy detection map
                 gdetsig1 = tim.sig1 / tim.galnorm
                 galdetiv[Yo,Xo] += (iv > 0) * (1. / gdetsig1**2)
@@ -595,35 +492,7 @@ def make_coadds(tims, bands, targetwcs,
             del con
 
             if plots:
-                plt.clf()
-                plt.subplot(2,2,1)
-                mn,mx = cowimg.min(), cowimg.max()
-                plt.imshow(cowimg, interpolation='nearest', origin='lower', cmap='gray',
-                           vmin=mn, vmax=mx)
-                plt.xticks([]); plt.yticks([])
-                plt.title('weighted img')
-                plt.subplot(2,2,2)
-                mycow = cow.copy()
-                # mark zero as special color
-                #mycow[mycow == 0] = np.nan
-                plt.imshow(mycow, interpolation='nearest', origin='lower', cmap='gray',
-                           vmin=0)
-                plt.xticks([]); plt.yticks([])
-                plt.title('weights')
-                plt.subplot(2,2,3)
-                plt.imshow(coimg, interpolation='nearest', origin='lower', cmap='gray')
-                plt.xticks([]); plt.yticks([])
-                plt.title('unweighted img')
-                mycowimg = cowimg.copy()
-                mycowimg[cow == 0] = coimg[cow == 0]
-                plt.subplot(2,2,4)
-                plt.imshow(mycowimg, interpolation='nearest', origin='lower',
-                           cmap='gray', vmin=mn, vmax=mx)
-                plt.xticks([]); plt.yticks([])
-                plt.title('patched img')
-                plt.suptitle('band %s' % band)
-                ps.savefig()
-
+                _make_coadds_plots_3(cowimg, cow, coimg, band, ps)
 
             cowimg[cow == 0] = coimg[cow == 0]
             if mods is not None:
@@ -656,18 +525,22 @@ def make_coadds(tims, bands, targetwcs,
                 C.T.psfsize[:,iband] = psfsizemap[iy,ix]
 
         if apertures is not None:
-            # Aperture photometry, using the unweighted "coimg" and
-            # "coiv" arrays.
+            # Aperture photometry
+            # photutils.aperture_photometry: mask=True means IGNORE
+            mask = (cow == 0)
             with np.errstate(divide='ignore'):
-                imsigma = 1.0/np.sqrt(coiv)
-                imsigma[coiv == 0] = 0
+                imsigma = 1.0/np.sqrt(cow)
+                imsigma[mask] = 0.
 
             for irad,rad in enumerate(apertures):
-                apargs.append((irad, band, rad, coimg, imsigma, True, apxy))
+                apargs.append((irad, band, rad, cowimg, imsigma, mask,
+                               True, apxy))
                 if mods is not None:
-                    apargs.append((irad, band, rad, coresid, None, False, apxy))
+                    apargs.append((irad, band, rad, coresid, None, None,
+                                   False, apxy))
                 if blobmods is not None:
-                    apargs.append((irad, band, rad, coblobresid, None, False, apxy))
+                    apargs.append((irad, band, rad, coblobresid, None, None,
+                                   False, apxy))
 
         if callback is not None:
             callback(band, *callback_args, **kwargs)
@@ -677,36 +550,7 @@ def make_coadds(tims, bands, targetwcs,
     debug('coadds: images:', t2-t0)
 
     if plots:
-        I = np.argsort([a[0] for a in allresids])
-        cols = int(np.ceil(np.sqrt(len(I))))
-        rows = int(np.ceil(len(I) / float(cols)))
-        allresids = [allresids[i] for i in I]
-        plt.clf()
-        for i,(y,n,img,mod,res) in enumerate(allresids):
-            plt.subplot(rows,cols,i+1)
-            plt.imshow(img, interpolation='nearest', origin='lower', cmap='gray')
-            plt.xticks([]); plt.yticks([])
-            plt.title('%.1f: %s' % (y, n))
-        plt.suptitle('Data')
-        ps.savefig()
-        if mods is not None:
-            plt.clf()
-            for i,(y,n,img,mod,res) in enumerate(allresids):
-                plt.subplot(rows,cols,i+1)
-                plt.imshow(mod, interpolation='nearest', origin='lower', cmap='gray')
-                plt.xticks([]); plt.yticks([])
-                plt.title('%.1f: %s' % (y, n))
-            plt.suptitle('Model')
-            ps.savefig()
-            plt.clf()
-            for i,(y,n,img,mod,res) in enumerate(allresids):
-                plt.subplot(rows,cols,i+1)
-                plt.imshow(res, interpolation='nearest', origin='lower', cmap='gray',
-                           vmin=-20, vmax=20)
-                plt.xticks([]); plt.yticks([])
-                plt.title('%.1f: %s' % (y, n))
-            plt.suptitle('Resids')
-            ps.savefig()
+        _make_coadds_plots_4(allresids, mods, ps)
 
     if xy is not None:
         C.T.mjd_min = mjds[mjd_argmins[iy,ix]]
@@ -726,39 +570,47 @@ def make_coadds(tims, bands, targetwcs,
         for iband,band in enumerate(bands):
             apimg = []
             apimgerr = []
+            apmask = []
             if mods is not None:
                 apres = []
             if blobmods is not None:
                 apblobres = []
             for irad,rad in enumerate(apertures):
-                (airad, aband, isimg, ap_img, ap_err) = next(apresults)
+                (airad, aband, isimg, ap_img, ap_err, ap_mask) = next(apresults)
                 assert(airad == irad)
                 assert(aband == band)
                 assert(isimg)
                 apimg.append(ap_img)
                 apimgerr.append(ap_err)
+                apmask.append(ap_mask)
 
                 if mods is not None:
-                    (airad, aband, isimg, ap_img, ap_err) = next(apresults)
+                    (airad, aband, isimg, ap_img, ap_err, ap_mask) = next(apresults)
                     assert(airad == irad)
                     assert(aband == band)
                     assert(not isimg)
                     apres.append(ap_img)
                     assert(ap_err is None)
+                    assert(ap_mask is None)
 
                 if blobmods is not None:
-                    (airad, aband, isimg, ap_img, ap_err) = next(apresults)
+                    (airad, aband, isimg, ap_img, ap_err, ap_mask) = next(apresults)
                     assert(airad == irad)
                     assert(aband == band)
                     assert(not isimg)
                     apblobres.append(ap_img)
                     assert(ap_err is None)
+                    assert(ap_mask is None)
+
             ap = np.vstack(apimg).T
             ap[np.logical_not(np.isfinite(ap))] = 0.
             C.AP.set('apflux_img_%s' % band, ap)
             ap = 1./(np.vstack(apimgerr).T)**2
             ap[np.logical_not(np.isfinite(ap))] = 0.
             C.AP.set('apflux_img_ivar_%s' % band, ap)
+            ap = np.vstack(apmask).T
+            ap[np.logical_not(np.isfinite(ap))] = 0.
+            C.AP.set('apflux_masked_%s' % band, ap)
             if mods is not None:
                 ap = np.vstack(apres).T
                 ap[np.logical_not(np.isfinite(ap))] = 0.
@@ -772,6 +624,176 @@ def make_coadds(tims, bands, targetwcs,
         debug('coadds apphot:', t3-t2)
 
     return C
+
+def _make_coadds_plots_4(allresids, mods, ps):
+    import pylab as plt
+    I = np.argsort([a[0] for a in allresids])
+    cols = int(np.ceil(np.sqrt(len(I))))
+    rows = int(np.ceil(len(I) / float(cols)))
+    allresids = [allresids[i] for i in I]
+    plt.clf()
+    for i,(y,n,img,mod,res) in enumerate(allresids):
+        plt.subplot(rows,cols,i+1)
+        plt.imshow(img, interpolation='nearest', origin='lower', cmap='gray')
+        plt.xticks([]); plt.yticks([])
+        plt.title('%.1f: %s' % (y, n))
+    plt.suptitle('Data')
+    ps.savefig()
+    if mods is not None:
+        plt.clf()
+        for i,(y,n,img,mod,res) in enumerate(allresids):
+            plt.subplot(rows,cols,i+1)
+            plt.imshow(mod, interpolation='nearest', origin='lower', cmap='gray')
+            plt.xticks([]); plt.yticks([])
+            plt.title('%.1f: %s' % (y, n))
+        plt.suptitle('Model')
+        ps.savefig()
+        plt.clf()
+        for i,(y,n,img,mod,res) in enumerate(allresids):
+            plt.subplot(rows,cols,i+1)
+            plt.imshow(res, interpolation='nearest', origin='lower', cmap='gray',
+                       vmin=-20, vmax=20)
+            plt.xticks([]); plt.yticks([])
+            plt.title('%.1f: %s' % (y, n))
+        plt.suptitle('Resids')
+        ps.savefig()
+
+def _make_coadds_plots_3(cowimg, cow, coimg, band, ps):
+    import pylab as plt
+    plt.clf()
+    plt.subplot(2,2,1)
+    mn,mx = cowimg.min(), cowimg.max()
+    plt.imshow(cowimg, interpolation='nearest', origin='lower', cmap='gray',
+               vmin=mn, vmax=mx)
+    plt.xticks([]); plt.yticks([])
+    plt.title('weighted img')
+    plt.subplot(2,2,2)
+    mycow = cow.copy()
+    # mark zero as special color
+    #mycow[mycow == 0] = np.nan
+    plt.imshow(mycow, interpolation='nearest', origin='lower', cmap='gray',
+               vmin=0)
+    plt.xticks([]); plt.yticks([])
+    plt.title('weights')
+    plt.subplot(2,2,3)
+    plt.imshow(coimg, interpolation='nearest', origin='lower', cmap='gray')
+    plt.xticks([]); plt.yticks([])
+    plt.title('unweighted img')
+    mycowimg = cowimg.copy()
+    mycowimg[cow == 0] = coimg[cow == 0]
+    plt.subplot(2,2,4)
+    plt.imshow(mycowimg, interpolation='nearest', origin='lower',
+               cmap='gray', vmin=mn, vmax=mx)
+    plt.xticks([]); plt.yticks([])
+    plt.title('patched img')
+    plt.suptitle('band %s' % band)
+    ps.savefig()
+
+def _make_coadds_plots_2(patch, copsf, psf_img, tim, band, ps):
+    import pylab as plt
+    plt.clf()
+    plt.subplot(2,2,1)
+    plt.imshow(patch, interpolation='nearest', origin='lower')
+    plt.title('PSF')
+    plt.subplot(2,2,2)
+    plt.imshow(copsf, interpolation='nearest', origin='lower')
+    plt.title('resampled PSF')
+    plt.subplot(2,2,3)
+    plt.imshow(np.atleast_2d(psf_img), interpolation='nearest', origin='lower')
+    plt.title('PSF acc')
+    plt.subplot(2,2,4)
+    plt.imshow(psf_img + copsf/tim.sig1**2, interpolation='nearest', origin='lower')
+    plt.title('PSF acc after')
+    plt.suptitle('Tim %s band %s' % (tim.name, band))
+    ps.savefig()
+
+def _make_coadds_plots_1(im, band, mods, mo, iv, unweighted,
+                         dq, satur_val, allresids, ps, H, W,
+                         tim, Yo, Xo):
+    from legacypipe.survey import get_rgb
+    import pylab as plt
+    # # Make one grayscale, brick-space plot per image
+    # thisimg = np.zeros((H,W), np.float32)
+    # thisimg[Yo,Xo] = im
+    # rgb = get_rgb([thisimg], [band])
+    # rgb = rgb.sum(axis=2)
+    # fn = ps.getnext()
+    # plt.imsave(fn, rgb, origin='lower', cmap='gray')
+    #plt.clf()
+    #plt.imshow(rgb, interpolation='nearest', origin='lower', cmap='gray')
+    #plt.xticks([]); plt.yticks([])
+    #ps.savefig()
+    # Image, Model, and Resids
+    plt.clf()
+    plt.subplot(2,2,1)
+    thisimg = np.zeros((H,W), np.float32)
+    thisimg[Yo,Xo] = im
+    rgb = get_rgb([thisimg], [band])
+    iplane = dict(g=2, r=1, z=0)[band]
+    rgbimg = rgb[:,:,iplane]
+    plt.imshow(rgbimg, interpolation='nearest', origin='lower', cmap='gray')
+    plt.xticks([]); plt.yticks([])
+    if mods is not None:
+        plt.subplot(2,2,2)
+        thismod = np.zeros((H,W), np.float32)
+        thismod[Yo,Xo] = mo
+        rgb = get_rgb([thismod], [band])
+        rgbmod = rgb[:,:,iplane]
+        plt.imshow(rgbmod, interpolation='nearest', origin='lower', cmap='gray')
+        plt.xticks([]); plt.yticks([])
+        plt.subplot(2,2,3)
+        thisres = np.zeros((H,W), np.float32)
+        thisres[Yo,Xo] = (im - mo) * np.sqrt(iv)
+        plt.imshow(thisres, interpolation='nearest', origin='lower', cmap='gray',
+                   vmin=-20, vmax=20)
+        plt.xticks([]); plt.yticks([])
+    else:
+        if unweighted and (dq is not None):
+
+            # HACK -- copy-n-pasted code from below.
+            okbits = 0
+            #for bitname in ['satur', 'bleed']:
+            for bitname in ['satur']:
+                okbits |= DQ_BITS[bitname]
+            brightpix = ((dq & okbits) != 0)
+            myim = im.copy()
+            if satur_val is not None:
+                # HACK -- force SATUR pix to be bright
+                myim[brightpix] = satur_val
+            #for bitname in ['interp']:
+            for bitname in ['interp', 'bleed']:
+                okbits |= DQ_BITS[bitname]
+            goodpix = ((dq & ~okbits) == 0)
+            thisgood = np.zeros((H,W), np.float32)
+            thisgood[Yo,Xo] = goodpix
+            plt.subplot(2,2,2)
+            plt.imshow(thisgood, interpolation='nearest', origin='lower', cmap='gray', vmin=0, vmax=1)
+            plt.xticks([]); plt.yticks([])
+            plt.title('goodpix')
+
+            thisim = np.zeros((H,W), np.float32)
+            thisim[Yo,Xo] = goodpix * myim
+            rgb = get_rgb([thisim], [band])
+            iplane = dict(g=2, r=1, z=0)[band]
+            rgbimg = rgb[:,:,iplane]
+            plt.subplot(2,2,3)
+            plt.imshow(rgbimg, interpolation='nearest', origin='lower', cmap='gray')
+            plt.xticks([]); plt.yticks([])
+            plt.title('goodpix rgb')
+
+
+        rgbmod=None
+        thisres=None
+
+    plt.subplot(2,2,4)
+    thisiv = np.zeros((H,W), np.float32)
+    thisiv[Yo,Xo] = iv
+    plt.imshow(thisiv, interpolation='nearest', origin='lower', cmap='gray')
+    plt.xticks([]); plt.yticks([])
+    plt.title('invvar')
+    plt.suptitle(tim.name + ': %.2f' % (tim.time.toYear()))
+    ps.savefig()
+    allresids.append((tim.time.toYear(), tim.name, rgbimg,rgbmod,thisres))
 
 def _resample_one(args):
     (itim,tim,mod,blobmod,lanczos,targetwcs,sbscale) = args
@@ -832,16 +854,27 @@ def _resample_one(args):
     return itim,Yo,Xo,iv,im,mo,bmo,dq
 
 def _apphot_one(args):
-    (irad, band, rad, img, sigma, isimage, apxy) = args
+    (irad, band, rad, img, sigma, mask, isimage, apxy) = args
     import photutils
     result = [irad, band, isimage]
     aper = photutils.CircularAperture(apxy, rad)
-    p = photutils.aperture_photometry(img, aper, error=sigma)
+    p = photutils.aperture_photometry(img, aper, error=sigma, mask=mask)
     result.append(p.field('aperture_sum'))
     if sigma is not None:
         result.append(p.field('aperture_sum_err'))
     else:
         result.append(None)
+
+    # If a mask is passed, also photometer it!
+    if mask is not None:
+        p = photutils.aperture_photometry(mask, aper)
+        maskedpix = p.field('aperture_sum')
+        # normalize by number of pixels (pi * rad**2)
+        maskedpix /= (np.pi * rad**2)
+        result.append(maskedpix)
+    else:
+        result.append(None)
+
     return result
 
 def write_coadd_images(band,
