@@ -12,6 +12,7 @@ Or for much more fine-grained control, see the individual stages:
 - :py:func:`stage_refs`
 - :py:func:`stage_outliers`
 - :py:func:`stage_halos`
+- :py:func:`stage_fit_on_coadds [optional]`
 - :py:func:`stage_image_coadds`
 - :py:func:`stage_srcs`
 - :py:func:`stage_fitblobs`
@@ -45,7 +46,7 @@ from legacypipe.bits import DQ_BITS, MASKBITS
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 
-from legacypipe.largegalaxies import stage_largegalaxies
+from legacypipe.fit_on_coadds import stage_fit_on_coadds
 
 import logging
 logger = logging.getLogger('legacypipe.runbrick')
@@ -2591,8 +2592,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               gaia_stars=True,
               large_galaxies=True,
               large_galaxies_force_pointsource=True,
+              fitoncoadds_reweight_ivar=True,
               less_masking=False,
-              largegalaxy_preburner=False,
+              fit_on_coadds=False,
               min_mjd=None, max_mjd=None,
               unwise_coadds=True,
               bail_out=False,
@@ -2805,10 +2807,11 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         if release is None:
             release = 9999
 
-    if largegalaxy_preburner:
+    if fit_on_coadds:
         # Implied options!
         #subsky = False
         large_galaxies = True
+        fitoncoadds_reweight_ivar = True
         large_galaxies_force_pointsource = False
 
     kwargs.update(ps=ps, nsigma=nsigma, saddle_fraction=saddle_fraction,
@@ -2825,6 +2828,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   gaia_stars=gaia_stars,
                   large_galaxies=large_galaxies,
                   large_galaxies_force_pointsource=large_galaxies_force_pointsource,
+                  fitoncoadds_reweight_ivar=fitoncoadds_reweight_ivar,
                   less_masking=less_masking,
                   min_mjd=min_mjd, max_mjd=max_mjd,
                   reoptimize=reoptimize,
@@ -2929,10 +2933,10 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             'writecat': 'coadds',
             })
 
-    if largegalaxy_preburner:
+    if fit_on_coadds:
         prereqs.update({
-            'largegalaxies': 'halos',
-            'srcs': 'largegalaxies',
+            'fit_on_coadds': 'halos',
+            'srcs': 'fit_on_coadds',
         })
         
     if prereqs_update is not None:
@@ -3177,7 +3181,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help="Don't use Gaia sources as fixed stars")
 
     parser.add_argument('--no-large-galaxies', dest='large_galaxies', default=True,
-                        action='store_false', help="Don't do the default large-galaxy magic.")
+                        action='store_false', help="Don't seed (or mask in and around) large galaxies.")
     # HACK -- Default value for DR8 MJD cut
     # DR8 -- drop early data from before additional baffling was added to the camera.
     # 56730 = 2014-03-14
@@ -3196,8 +3200,11 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--bail-out', default=False, action='store_true',
                         help='Bail out of "fitblobs" processing, writing all blobs from the checkpoint and skipping any remaining ones.')
 
-    parser.add_argument('--largegalaxy-preburner', default=False, action='store_true',
-                        help='Pre-fitting of LSLGA galaxies')
+    parser.add_argument('--fit-on-coadds', default=False, action='store_true',
+                        help='Fit to coadds rather than individual CCDs (e.g., large galaxies).')
+    parser.add_argument('--no-ivar-reweighting', dest='fitoncoadds_reweight_ivar',
+                        default=True, action='store_false',
+                        help='Reweight the inverse variance when fitting on coadds.')
     parser.add_argument('--no-galaxy-forcepsf', dest='large_galaxies_force_pointsource',
                         default=True, action='store_false',
                         help='Do not force PSFs within galaxy mask.')
