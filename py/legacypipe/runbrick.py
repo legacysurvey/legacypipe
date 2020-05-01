@@ -627,6 +627,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                ccds=None,
                record_event=None,
                large_galaxies=True,
+               gaia_stars=True,
                **kwargs):
     '''
     In this stage we run SED-matched detection to find objects in the
@@ -682,7 +683,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     if plots:
         from legacypipe.runbrick_plots import detection_plots
         detection_plots(detmaps, detivs, bands, saturated_pix, tims,
-                        targetwcs, refstars, large_galaxies, ps)
+                        targetwcs, refstars, large_galaxies, gaia_stars, ps)
 
     # SED-matched detections
     record_event and record_event('stage_srcs: SED-matched')

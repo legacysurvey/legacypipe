@@ -123,7 +123,7 @@ def detection_plots_2(tims, bands, targetwcs, refstars, Tnew, hot,
     ps.savefig()
 
 def detection_plots(detmaps, detivs, bands, saturated_pix, tims,
-                    targetwcs, refstars, large_galaxies, ps):
+                    targetwcs, refstars, large_galaxies, gaia_stars, ps):
     rgb = get_rgb(detmaps, bands)
     plt.clf()
     dimshow(rgb)
