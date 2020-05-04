@@ -138,14 +138,14 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
 
     return refs,sources
 
-def read_gaia(targetwcs, bands):
+def read_gaia(wcs, bands):
     '''
-    *targetwcs* here should include margin
+    *wcs* here should include margin
     '''
     from legacypipe.gaiacat import GaiaCatalog
     from legacypipe.survey import GaiaSource
 
-    gaia = GaiaCatalog().get_catalog_in_wcs(targetwcs)
+    gaia = GaiaCatalog().get_catalog_in_wcs(wcs)
     debug('Got', len(gaia), 'Gaia stars nearby')
 
     gaia.G = gaia.phot_g_mean_mag
