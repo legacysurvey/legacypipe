@@ -60,6 +60,18 @@ def remap_dq_cp_codes(dq, ignore_codes=None):
         if code in ignore_codes:
             continue
         dqbits[dq == code] |= DQ_BITS[bitname]
+
+    # As above, ALSO expand SATUR masks into surrounding BLEED pixels.
+    nbefore = np.sum((dqbits & DQ_BITS['satur']) != 0)
+    R = 5
+    xx, yy = np.mgrid[-R:R+1, -R:R+1]
+    dilate = xx**2+yy**2 <= R**2
+    dqbits[np.logical_and((dqbits & DQ_BITS['bleed']) != 0,
+                          binary_dilation((dqbits & DQ_BITS['satur']) != 0, dilate))] |= DQ_BITS['satur']
+    nafter = np.sum((dqbits & DQ_BITS['satur']) != 0)
+    if nafter > nbefore:
+        debug('Set SATUR on an additional', (nafter - nbefore), 'pixels that were BLEED near SATUR')
+
     return dqbits
 
 def apply_amp_correction_northern(camera, band, expnum, ccdname, mjdobs,
