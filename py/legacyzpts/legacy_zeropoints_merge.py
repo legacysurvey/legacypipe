@@ -47,7 +47,7 @@ def fix_hdu_b4merge(zpt_one_exposure):
     hdulist= fitsio.FITS(fn)
     for i,ccdname in enumerate(zpt_one_exposure.ccdname):
         zpt_one_exposure.image_hdu[i]= hdulist[ccdname.strip()].get_extnum()
-            
+
 def fix_hdu_post(tab):
     import fitsio
     proj= '/project/projectdirs/cosmo/staging'
@@ -69,7 +69,6 @@ def fix_hdu_post(tab):
         hdus.append( hdulist[ccdname].get_extnum() )
     tab.set('image_hdu', np.array(hdus))
     return tab
-        
 
 def main(args):
     parser = argparse.ArgumentParser(description='Generate a legacypipe-compatible CCDs file from a set of reduced imaging.')
@@ -81,9 +80,9 @@ def main(args):
     parser.add_argument('--cut', action='store_true',default=False, help='Cut to ccd_cuts==0')
     parser.add_argument('--cut-expnum', action='store_true',default=False, help='Cut out rows with expnum==0')
     parser.add_argument('files', nargs='*', help='Zeropoint files to concatenate')
- 
+
     opt = parser.parse_args(args)
-    
+
     fns = np.array(opt.files)
     if opt.file_list:
         fns = np.hstack([fns, read_lines(opt.file_list)])
@@ -149,4 +148,3 @@ def main(args):
 if __name__ == "__main__":
     import sys
     main(sys.argv[1:])
-

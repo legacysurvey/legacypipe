@@ -108,7 +108,7 @@ def repair_object_names(ccds, imlist, prefix='90prime/'):
     imlist = imlist[s]
     imfilename = imfilename[s]
     cobjectname = numpy.array([o.strip() for o in ccds.object])
-    iobjectname = numpy.array([o.replace("'",'').strip() 
+    iobjectname = numpy.array([o.replace("'",'').strip()
                                for o in imlist.object])
     m = (cobjectname == '')
     cfilename = numpy.array([f.strip() for f in ccds.image_filename])
@@ -126,9 +126,9 @@ def depthcut_90prime(ccds, annotated, tilefile, n=6):
 def depthcut_mosaic(ccds, annotated, tilefile, n=2):
     if len(tilefile) == 0:
         raise ValueError('Mosaic depth cut requires a tile file.')
-    # original proposal was something like take only 'MzLS'.  
+    # original proposal was something like take only 'MzLS'.
     # 2677 OBJECT Observation(s) in tile file.
-    # 361 MOSAIC_XYZ_z observations in file list.  None in tile file.  
+    # 361 MOSAIC_XYZ_z observations in file list.  None in tile file.
     # 2015B-2001
     s = numpy.lexsort([ccds.image_hdu, ccds.image_filename])
     ccds = ccds[s]
@@ -179,13 +179,13 @@ def keep_deepest_tiles(ccds, annotated, tilefile, n=2):
     res = numpy.zeros(len(ccds), dtype='bool')
     m = numpy.flatnonzero(ccds.ccd_cuts == 0)
     ct = SkyCoord(ra=tiles.ra*u.degree, dec=tiles.dec*u.degree)
-    cc = SkyCoord(ra=ccds.ra_bore[m]*u.degree, 
+    cc = SkyCoord(ra=ccds.ra_bore[m]*u.degree,
                   dec=ccds.dec_bore[m]*u.degree)
     mt, dct, _ = cc.match_to_catalog_sky(ct)
     tileid = tiles.tileid[mt]
     mmatch = (dct < 0.05*u.degree)
     m = m[mmatch]
-    keep = keep_deepest_ccds(ccds.image_filename[m], tileid[mmatch], 
+    keep = keep_deepest_ccds(ccds.image_filename[m], tileid[mmatch],
                              ccds.filter[m], annotated.psfdepth[m], n=n)
     m = m[keep]
     res = numpy.zeros(len(ccds), dtype='bool')
@@ -218,8 +218,6 @@ def depthcut_decam(ccds, annotated, tilefile):
         ccds[m & keep], annotated[m & keep], tilefile)
     keep[~m & keep] = keep_deepest_des(ccds[~m & keep], annotated[~m & keep])
     return keep
-    
-
 
 def depthcut_propid_decam(ccds):
     # this just takes everything in certain propids, that have certain
@@ -228,15 +226,15 @@ def depthcut_propid_decam(ccds):
     # explicitly tries to limit the number of epochs on each tile center.
     mpropid = numpy.zeros(len(ccds), dtype='bool')
     # DECaLS, DECaLS+, DES, Bonaca, BLISS, DeROSITA
-    for pid in ['2014B-0404', '2016A-0190', '2012B-0001', '2015A-0620', 
-                '2017A-0260', '2017A-0388']: 
+    for pid in ['2014B-0404', '2016A-0190', '2012B-0001', '2015A-0620',
+                '2017A-0260', '2017A-0388']:
         mpropid = mpropid | (ccds.propid  == pid)
     # within these surveys, limit to 'normal' program, as identified
-    # by object name.  This excludes, e.g., special DECaLS observations on the 
+    # by object name.  This excludes, e.g., special DECaLS observations on the
     # COSMOS field, DES SN fields, ...
-    mobject = numpy.array([('DECaLS_' in o) or ('DES survey' in o) or 
+    mobject = numpy.array([('DECaLS_' in o) or ('DES survey' in o) or
                            ('DES wide' in o) or
-                           ('BLISS field' in o) or ('DeCaLS' == o.strip()) or 
+                           ('BLISS field' in o) or ('DeCaLS' == o.strip()) or
                            ('Tile ' in o) for o in ccds.object])
     def isint(x):
         try:
@@ -249,7 +247,7 @@ def depthcut_propid_decam(ccds):
     return m
 
 
-def make_plots(ccds, camera, nside=512, 
+def make_plots(ccds, camera, nside=512,
                xrange=[360, 0], yrange=[-90, 90],
                filename=None, vmin=0, vmax=10):
     import util_efs
@@ -279,11 +277,11 @@ def make_plots(ccds, camera, nside=512,
                 'excluded': (mf & (ccdcut[u] == 0) & ~depthcut[u])}
         for (label, m) in maps.items():
             _, ncov = util_efs.paint_map(
-                ccds.ra_bore[u[m]], ccds.dec_bore[u[m]], 
+                ccds.ra_bore[u[m]], ccds.dec_bore[u[m]],
                 numpy.ones(numpy.sum(m)), rad, nside=nside)
             p.figure(label)
             p.clf()
-            util_efs.imshow(ncov, xrange=xrange, yrange=yrange, 
+            util_efs.imshow(ncov, xrange=xrange, yrange=yrange,
                             vmin=vmin, vmax=vmax)
             p.colorbar().set_label('n_exp')
             p.title(label)
@@ -424,10 +422,10 @@ if __name__ == "__main__":
         patch_zeropoints(zp, ccds, annotated)
 
     from pkg_resources import resource_filename
-    fn = resource_filename('legacyzpts', 
+    fn = resource_filename('legacyzpts',
                            'data/{}-bad_expid.txt'.format(args.camera))
     bad_expid = psfzpt_cuts.read_bad_expid(fn)
-    psfzpt_cuts.add_psfzpt_cuts(ccds, args.camera, bad_expid, 
+    psfzpt_cuts.add_psfzpt_cuts(ccds, args.camera, bad_expid,
                                 image2coadd=args.image2coadd)
 
     depthbit = psfzpt_cuts.CCD_CUT_BITS['depth_cut']

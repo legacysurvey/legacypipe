@@ -530,7 +530,7 @@ def main(args):
             # a brick-ccd pair within this radius must be touching.
             closest_radius = 0.95 * (bricksize + 0.262 * 2048 / 3600.) / 2.
 
-            J1,nil,nil = match_radec(B.ra, B.dec, T.ra, T.dec, closest_radius, nearest=True)
+            J1,_,_ = match_radec(B.ra, B.dec, T.ra, T.dec, closest_radius, nearest=True)
             log(len(J1), 'of', len(B), 'bricks definitely touch CCDs')
             tocheck = np.ones(len(B), bool)
             tocheck[J1] = False

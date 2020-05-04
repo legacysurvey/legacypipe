@@ -47,8 +47,7 @@ class UnwiseCoadd(object):
             # With the move_crpix option (Aaron's updated astrometry),
             # the WCS for each band can be different, so we call resample_with_wcs
             # for each band with (potentially) slightly different WCSes.
-            (mod, img, ie, roi, wcs) = wise_models[(tile, band)]
-
+            (mod, img, ie, _, wcs) = wise_models[(tile, band)]
             debug('WISE: resampling', wcs, 'to', self.unwise_wcs)
             try:
                 Yo,Xo,Yi,Xi,resam = resample_with_wcs(self.unwise_wcs, wcs,
@@ -145,10 +144,6 @@ def make_coadds(tims, bands, targetwcs,
 
     if callback_args is None:
         callback_args = []
-
-    if plots:
-        from legacypipe.survey import get_rgb
-        import pylab as plt
 
     class Duck(object):
         pass
@@ -396,6 +391,7 @@ def make_coadds(tims, bands, targetwcs,
                 flatcow   [Yo,Xo] += iv1
 
             if psf_images:
+                from astrometry.util.util import lanczos3_interpolate
                 h,w = tim.shape
                 patch = tim.psf.getPointSourcePatch(w//2, h//2).patch
                 patch /= np.sum(patch)
@@ -420,9 +416,9 @@ def make_coadds(tims, bands, targetwcs,
                 iy = (fy + 0.5).astype(np.int32)
                 dx = (fx - ix).astype(np.float32)
                 dy = (fy - iy).astype(np.float32)
-                from astrometry.util.util import lanczos3_interpolate
                 copsf = np.zeros(coph*copw, np.float32)
                 rtn = lanczos3_interpolate(ix, iy, dx, dy, [copsf], [patch])
+                assert(rtn == 0)
                 copsf = copsf.reshape((coph,copw))
                 copsf /= copsf.sum()
                 if plots:
@@ -478,7 +474,7 @@ def make_coadds(tims, bands, targetwcs,
             cowblobmod  /= np.maximum(cow, tinyw)
             C.coblobmods.append(cowblobmod)
             coblobresid = cowimg - cowblobmod
-            coresid[cow == 0] = 0.
+            coblobresid[cow == 0] = 0.
             C.coblobresids.append(coblobresid)
 
         if allmasks:

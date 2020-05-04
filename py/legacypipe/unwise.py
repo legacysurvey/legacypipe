@@ -42,7 +42,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     plots = (ps is not None)
     if plots:
         import pylab as plt
-    
+
     wantims = (plots or save_fits or get_models)
     wanyband = 'w'
     if get_models:
@@ -72,7 +72,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     if get_masks:
         mh,mw = get_masks.shape
         maskmap = np.zeros((mh,mw), np.uint32)
-    
+
     for tile in tiles:
         print('Reading WISE tile', tile.coadd_id, 'band', band)
 
@@ -243,7 +243,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             from unwise_psf import unwise_psf
             if (band == 1) or (band == 2):
                 # we only have updated PSFs for W1 and W2
-                psfimg = unwise_psf.get_unwise_psf(band, tile.coadd_id, 
+                psfimg = unwise_psf.get_unwise_psf(band, tile.coadd_id,
                                                    modelname='neo5_unwisecat')
             else:
                 psfimg = unwise_psf.get_unwise_psf(band, tile.coadd_id)

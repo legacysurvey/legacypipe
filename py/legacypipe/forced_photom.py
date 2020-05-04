@@ -306,7 +306,7 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
                 else:
                     T.cut(T.dec <  resolve_dec)
                     print('Cut to', len(T), 'south of the resolve line')
-            ok,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
+            _,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
             W,H = chipwcs.get_width(), chipwcs.get_height()
             I, = np.nonzero((xx >= -margin) * (xx <= (W+margin)) *
                             (yy >= -margin) * (yy <= (H+margin)))
