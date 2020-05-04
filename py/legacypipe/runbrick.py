@@ -2518,8 +2518,8 @@ def stage_writecat(
     T2.brick_primary = ((T2.ra  >= brick.ra1 ) * (T2.ra  < brick.ra2) *
                         (T2.dec >= brick.dec1) * (T2.dec < brick.dec2))
     H,W = maskbits.shape
-    T2.maskbits = maskbits[np.clip(T2.by, 0, H-1).astype(int),
-                           np.clip(T2.bx, 0, W-1).astype(int)]
+    T2.maskbits = maskbits[np.clip(np.round(T2.by), 0, H-1).astype(int),
+                           np.clip(np.round(T2.bx), 0, W-1).astype(int)]
     del maskbits
 
     # sigh, bytes vs strings.  In py3, T.type (dtype '|S3') are bytes.
