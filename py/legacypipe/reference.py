@@ -25,7 +25,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     # How big of a margin to search for bright stars and star clusters --
     # this should be based on the maximum radius they are considered to
     # affect.  In degrees.
-    ref_margin = 0.125
+    ref_margin = mask_radius_for_mag(0.)
     mpix = int(np.ceil(ref_margin * 3600. / pixscale))
     marginwcs = targetwcs.get_subimage(-mpix, -mpix, W+2*mpix, H+2*mpix)
 
