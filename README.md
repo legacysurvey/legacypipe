@@ -1,5 +1,5 @@
 # legacypipe
-Our image data reduction pipeline, using the Tractor framework
+DESI Imaging Legacy Surveys data reduction pipeline, using the Tractor framework
 
 The license is 3-clause BSD.
 
@@ -10,8 +10,7 @@ Coveralls: [![Coverage](https://coveralls.io/repos/github/legacysurvey/legacypip
 Codecov: [![codecov](https://codecov.io/gh/legacysurvey/legacypipe/branch/master/graph/badge.svg)](https://codecov.io/gh/legacysurvey/legacypipe)
 Codacy: [![Codacy Badge](https://api.codacy.com/project/badge/Grade/6bfbaebbe95c4d6d8b4fbf580ea3f520)](https://www.codacy.com/manual/dstndstn/legacypipe?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=legacysurvey/legacypipe&amp;utm_campaign=Badge_Grade)
 
-Code for the analysis of the Legacy Surveys (DECam/DECaLS, MzLS+BASS).
-========================
+## Code for the analysis of the Legacy Surveys (DECam/DECaLS, MzLS+BASS)
 
 Some notable contents:
 

@@ -126,8 +126,7 @@ def rbmain():
                '--zoom', '1950', '2050', '340', '440', '--brick', '0091p035', '--force-all'])
 
     # test forced phot??
-    rtn = os.system('cp test/testcase9/survey-bricks.fits.gz out-testcase9b')
-    assert(rtn == 0)
+    shutil.copy('test/testcase9/survey-bricks.fits.gz', 'out-testcase9b')
 
     forced_main(args=['--survey-dir', surveydir,
                       '--no-ceres',

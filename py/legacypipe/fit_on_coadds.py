@@ -66,7 +66,7 @@ def coadds_ubercal(fulltims, coaddtims=None, plots=False, plots2=False,
     - units of weighted image pixels
 
     """
-    from astrometry.util.resample import resample_with_wcs
+    from astrometry.util.resample import resample_with_wcs, OverlapError
 
     band = fulltims[0].band
     
@@ -83,7 +83,7 @@ def coadds_ubercal(fulltims, coaddtims=None, plots=False, plots2=False,
             try:
                 Yi, Xi, Yj, Xj, _ = resample_with_wcs(
                     fulltims[ii].subwcs, fulltims[jj].subwcs)
-            except:
+            except OverlapError:
                 continue
 
             imgI = fulltims[ii].getImage() [Yi, Xi]
