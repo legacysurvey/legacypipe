@@ -344,7 +344,7 @@ def rbmain():
     assert(os.path.exists(fn))
 
     
-    if ceres:    
+    if ceres:
         main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
                    '--force-all', '--no-write', '--coadd-bw',
                    '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),

@@ -18,8 +18,8 @@ CCD_CUT_BITS= dict(
     not_third_pix = 0x4, # Mosaic3 one-third-pixel interpolation problem
     exptime = 0x8,
     ccdnmatch = 0x10,
-    zpt_diff_avg = 0x20, 
-    zpt_small = 0x40,  
+    zpt_diff_avg = 0x20,
+    zpt_small = 0x40,
     zpt_large = 0x80,
     sky_is_bright = 0x100,
     badexp_file = 0x200,
@@ -36,20 +36,20 @@ CCD_CUT_BITS= dict(
 MJD_EARLY_DECAM = 56730.
 
 # DECam CCD name to number mapping.
-ccdnamenumdict = {'S1': 25, 'S2': 26, 'S3': 27, 'S4':28, 
+ccdnamenumdict = {'S1': 25, 'S2': 26, 'S3': 27, 'S4':28,
                   'S5': 29, 'S6': 30, 'S7': 31,
                   'S8': 19, 'S9': 20, 'S10': 21, 'S11': 22, 'S12': 23,
                   'S13': 24,
-                  'S14': 13, 'S15': 14, 'S16': 15, 'S17': 16, 'S18': 17, 
+                  'S14': 13, 'S15': 14, 'S16': 15, 'S17': 16, 'S18': 17,
                   'S19': 18,
                   'S20': 8, 'S21': 9, 'S22': 10, 'S23': 11, 'S24': 12,
                   'S25': 4, 'S26': 5, 'S27': 6, 'S28': 7,
                   'S29': 1, 'S30': 2, 'S31': 3,
-                  'N1': 32, 'N2': 33, 'N3': 34, 'N4': 35, 
+                  'N1': 32, 'N2': 33, 'N3': 34, 'N4': 35,
                   'N5': 36, 'N6': 37, 'N7': 38,
                   'N8': 39, 'N9': 40, 'N10': 41, 'N11': 42, 'N12': 43,
                   'N13': 44,
-                  'N14': 45, 'N15': 46, 'N16': 47, 'N17': 48, 'N18': 49, 
+                  'N14': 45, 'N15': 46, 'N16': 47, 'N17': 48, 'N18': 49,
                   'N19': 50,
                   'N20': 51, 'N21': 52, 'N22': 53, 'N23': 54, 'N24': 55,
                   'N25': 56, 'N26': 57, 'N27': 58, 'N28': 59,
@@ -257,10 +257,9 @@ def psf_zeropoint_cuts(P, pixscale,
         P.ccd_cuts += CCD_CUT_BITS[name] * cut
         print(np.count_nonzero(cut), 'CCDs cut by', name)
 
-
 def not_in_image2coadd(P, image2coadd):
     image2coadd = fits_table(image2coadd)
-    ccdid = (P.expnum * 100 + 
+    ccdid = (P.expnum * 100 +
              np.array([ccdnamenumdict[c.strip()] for c in P.ccdname]))
     ccdidi2c = image2coadd.expnum * 100 + image2coadd.ccdnum
     s = np.argsort(ccdidi2c)
@@ -269,7 +268,7 @@ def not_in_image2coadd(P, image2coadd):
     match[match] = ccdidi2c[s[ind[match]]] == ccdid[match]
     desy1mjd = 57432
     # max MJD in image2coadd.fits is ~57431.3
-    print('Flagging images not in DES image2coadd.fits before MJD %d' 
+    print('Flagging images not in DES image2coadd.fits before MJD %d'
           % desy1mjd)
     mindesy1 = (P.propid == '2012B-0001') & (P.mjd_obs < desy1mjd)
     return mindesy1 & ~match
@@ -328,7 +327,7 @@ def add_psfzpt_cuts(T, camera, bad_expid, image2coadd=''):
                            skybright, zpt_diff_avg, image2coadd=image2coadd)
     else:
         assert(False)
-        
+
 def read_bad_expid(fn='bad_expid.txt'):
     bad_expid = {}
     f = open(fn)
@@ -403,9 +402,8 @@ if __name__ == '__main__':
         loghist(T.mjd_obs[I], np.clip(detrend, ylo, yhi), **ha)
         plt.title('Detrended')
         plt.savefig('detrend-h2-%s.png' % band)
-    
     sys.exit(0)
-    
+
     # DECam updated for DR8, post detrend_decam_zeropoints.
     camera = 'decam'
     fn = resource_filename('legacyzpts', 'data/{}-bad_expid.txt'.format(camera))
@@ -415,26 +413,26 @@ if __name__ == '__main__':
     else:
         print('No bad exposure file for camera {}'.format(camera))
         raise IOError
-                
+
     # T = fits_table()
     # T.mjd_obs = np.arange(56658, 58500)
     # T.airmass = np.ones(len(T))
     # T.ccdzpt = np.zeros(len(T)) + 25.0
-    # 
+    #
     # T.filter = np.array(['g'] * len(T))
     # corr = detrend_decam_zeropoints(T)
-    # 
+    #
     # plt.clf()
     # plt.plot(T.mjd_obs, corr, 'g.')
-    # 
+    #
     # T.filter = np.array(['r'] * len(T))
     # corr = detrend_decam_zeropoints(T)
-    # 
+    #
     # plt.plot(T.mjd_obs, corr, 'r.')
-    # 
+    #
     # T.filter = np.array(['z'] * len(T))
     # corr = detrend_decam_zeropoints(T)
-    # 
+    #
     # plt.plot(T.mjd_obs, corr, 'm.')
     # plt.savefig('corr.png')
     # sys.exit(0)
@@ -515,7 +513,7 @@ if __name__ == '__main__':
         loghist(T.mjd_obs, np.clip(detrend, ylo, yhi), **ha)
         plt.title('Detrended')
         plt.savefig('detrend-h2-%s.png' % band)
-        
+
         psf_zeropoint_cuts(T, 0.262, zpt_lo, zpt_hi, bad_expid, camera)
         print('Final:', np.sum(T.ccd_cuts == 0), 'CCDs pass cuts')
         TT.append(T)
@@ -541,36 +539,35 @@ if __name__ == '__main__':
     dz = (-0.6, 0.6)
 
     P = fits_table('psfzpts-pre-cuts-mosaic-dr6plus5.fits')
-    S = psf_zeropoint_cuts(P, 0.262,
-                           dict(z=z0+dz[0]), dict(z=z0+dz[1]),
-                           bad_expid, 'mosaic')
-    S.writeto('survey-ccds-mosaic-dr6plus5.fits')
+    psf_zeropoint_cuts(P, 0.262,
+                       dict(z=z0+dz[0]), dict(z=z0+dz[1]),
+                       bad_expid, 'mosaic')
+    P.writeto('survey-ccds-mosaic-dr6plus5.fits')
     sys.exit(0)
 
     P = fits_table('psfzpts-pre-cuts-mosaic-dr6plus4.fits')
-    S = psf_zeropoint_cuts(P, ['z'], 0.262,
-                           z0+dz[0], z0+dz[1], bad_expid, 'mosaic')
-    S.writeto('survey-ccds-mosaic-dr6plus4.fits')
+    psf_zeropoint_cuts(P, ['z'], 0.262,
+                       z0+dz[0], z0+dz[1], bad_expid, 'mosaic')
+    P.writeto('survey-ccds-mosaic-dr6plus4.fits')
     sys.exit(0)
 
     P = fits_table('psfzpts-pre-cuts-mosaic-dr6plus3.fits')
-    S = psf_zeropoint_cuts(P, ['z'], 0.262,
-                           z0+dz[0], z0+dz[1], bad_expid, 'mosaic')
-    S.writeto('survey-ccds-mosaic-dr6plus3.fits')
+    psf_zeropoint_cuts(P, ['z'], 0.262,
+                       z0+dz[0], z0+dz[1], bad_expid, 'mosaic')
+    P.writeto('survey-ccds-mosaic-dr6plus3.fits')
     sys.exit(0)
 
     P = fits_table('psfzpts-pre-cuts-mosaic-dr6plus2.fits')
-    S = psf_zeropoint_cuts(P, ['z'], 0.262,
-                           z0+dz[0], z0+dz[1], bad_expid, 'mosaic')
-    S.writeto('survey-ccds-mosaic-dr6plus2.fits')
+    psf_zeropoint_cuts(P, ['z'], 0.262,
+                       z0+dz[0], z0+dz[1], bad_expid, 'mosaic')
+    P.writeto('survey-ccds-mosaic-dr6plus2.fits')
     sys.exit(0)
 
     P = fits_table('dr6plus.fits')
-    S = psf_zeropoint_cuts(P, ['z'], 0.262,
-                           z0+dz[0], z0+dz[1], bad_expid, 'mosaic')
-    S.writeto('survey-ccds-dr6plus.fits')
+    psf_zeropoint_cuts(P, ['z'], 0.262,
+                       z0+dz[0], z0+dz[1], bad_expid, 'mosaic')
+    P.writeto('survey-ccds-dr6plus.fits')
     sys.exit(0)
-    
 
     for X in [
             (#'apzpts/survey-ccds-90prime-legacypipe.fits.gz',
@@ -595,6 +592,4 @@ if __name__ == '__main__':
                 #25.2, 26.8,
                 z0+dz[0], z0+dz[1], bad_expid, 'mosaic'),
     ]:
-        run(*X)    
-
-
+        run(*X)

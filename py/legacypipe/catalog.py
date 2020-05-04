@@ -2,13 +2,11 @@ from __future__ import print_function
 
 import numpy as np
 
-from tractor import PointSource, getParamTypeTree, RaDecPos
+from tractor import PointSource
 from tractor.galaxy import ExpGalaxy, DevGalaxy
 from tractor.sersic import SersicGalaxy, SersicIndex
-from tractor.ellipses import EllipseESoft, EllipseE
+from tractor.ellipses import EllipseE
 from legacypipe.survey import RexGalaxy, GaiaSource
-
-# FITS catalogs
 
 fits_reverse_typemap = { 'PSF': PointSource,
                          'EXP': ExpGalaxy,
@@ -20,6 +18,7 @@ fits_reverse_typemap = { 'PSF': PointSource,
                          }
 
 fits_typemap = dict([(v,k) for k,v in fits_reverse_typemap.items()])
+# We only want this mapping one-way
 fits_typemap[GaiaSource] = 'PSF'
 
 def _typestring(t):
@@ -140,7 +139,7 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz', allbands=None,
     If *ellipseClass* is set, assume that type for galaxy shapes; if None,
     read the type from the header.
     '''
-    from tractor import NanoMaggies
+    from tractor import NanoMaggies, RaDecPos
     if hdr is None:
         hdr = T._header
     if allbands is None:

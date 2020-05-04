@@ -1,7 +1,6 @@
 from __future__ import print_function
 import pylab as plt
 import numpy as np
-from astrometry.util.ttime import Time
 
 import logging
 logger = logging.getLogger('legacypipe.detection')
@@ -176,18 +175,15 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     apsn = []
 
     for sedname,sed in SEDs:
-        #info('SED', sedname)
         if plots:
             pps = ps
         else:
             pps = None
-        #t0 = Time()
         sedhot,px,py,peakval,apval = sed_matched_detection(
             sedname, sed, detmaps, detivs, bands, xx, yy, rr,
             nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
             saturated_pix=saturated_pix, veto_map=veto_map,
             ps=pps)
-        #info('SED took', Time()-t0)
         if sedhot is None:
             continue
         info('SED', sedname, ':', len(px), 'new peaks')
@@ -316,9 +312,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     from scipy.ndimage.measurements import label, find_objects
     from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
 
-    #t0 = Time()
     H,W = detmaps[0].shape
-
     allzero = True
     for iband in range(len(bands)):
         if sed[iband] == 0:
@@ -353,10 +347,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     sedmap /= np.maximum(1e-16, sediv)
     sedsn   = sedmap * np.sqrt(sediv)
     del sedmap
-
     peaks = (sedsn > nsigma)
-    #info('SED sn:', Time()-t0)
-    #t0 = Time()
 
     def saddle_level(Y):
         # Require a saddle that drops by (the larger of) "saddle"
@@ -391,8 +382,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[0:-2,2:  ])
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[2:  ,0:-2])
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[2:  ,2:  ])
-    #info('Peaks:', Time()-t0)
-    #t0 = Time()
 
     if ps is not None:
         from astrometry.util.plotutils import dimshow
@@ -605,12 +594,9 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     info('Of', len(px), 'potential peaks:', nveto, 'in veto map,', nsaddle, 'cut by saddle test,',
           naper, 'cut by aper test,', np.sum(keep), 'kept')
 
-    #info('New sources:', Time()-t0)
-
     if ps is not None:
         pxdrop = px[np.logical_not(keep)]
         pydrop = py[np.logical_not(keep)]
-
     py = py[keep]
     px = px[keep]
 
