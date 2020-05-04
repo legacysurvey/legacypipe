@@ -250,11 +250,8 @@ def mask_radius_for_mag(mag):
     # Returns a masking radius in degrees for a star of the given magnitude.
     # Used for Tycho-2 and Gaia stars.
 
-    # This is in degrees and the magic 0.262 (indeed the whole
-    # relation) is from eyeballing a radius-vs-mag plot that was in
-    # pixels; that is unrelated to the present targetwcs pixel scale.
-    radius = np.minimum(1800., 150. * 2.5**((11. - mag)/3.)) * 0.262/3600.
-    return radius
+    # This is in degrees, and is from Rongpu in the thread [desi-imaging 1439].
+    return 1630./3600. * 1.396**(-mag)
 
 def read_tycho2(survey, targetwcs, bands):
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
