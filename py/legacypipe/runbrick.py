@@ -2529,6 +2529,10 @@ def stage_writecat(
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
         T2.writeto(None, fits_object=out.fits, primheader=primhdr, header=hdr)
 
+    # After writing tractor-i file, drop (reference) sources outside the brick.
+    T2.cut((T2.bx >= -0.5) * (T2.bx <= W-0.5) *
+           (T2.by >= -0.5) * (T2.by <= H-0.5))
+
     # The "format_catalog" code expects all lower-case column names...
     for c in T2.columns():
         if c != c.lower():
