@@ -2215,13 +2215,6 @@ def _select_model(chisqs, nparams, galaxy_margin):
         # Drop this source
         return keepmod
 
-    # Now choose between point source and REX
-    if 'psf' in chisqs and not 'rex' in chisqs:
-        # bright stars / reference stars: we don't test the simple model.
-        return 'psf'
-
-    #print('PSF', chisqs.get('psf',0)-nparams['psf'], 'vs REX', chisqs.get('rex',0)-nparams['rex'])
-
     # Is PSF good enough to keep?
     if 'psf' in chisqs and (chisqs['psf']-nparams['psf'] >= cut):
         keepmod = 'psf'
