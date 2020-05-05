@@ -394,7 +394,7 @@ def compare_one(X):
 
     if plots:
         heat += hot
-        heat +- -1*cold
+        heat -= cold
         plt.clf()
         plt.imshow(heat, interpolation='nearest', origin='lower', cmap='RdBu_r', vmin=-3, vmax=+3)
         plt.title(tim.name + ': outliers')

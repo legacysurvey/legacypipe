@@ -106,7 +106,7 @@ for re in [10., 1, 1e-1, 1e-2, 1e-3, 1e-4, 1e-6, 1e-10]:
     print('REX (shifted) 3rd-bottom:', row[np.argmax(np.abs(row))], row)
     row = psfmod2[2,:]
     print('PSF (shifted) 3rd-bottom:', row[np.argmax(np.abs(row))], row)
-    
+
     row = rexmod2[1,:]
     print('REX (shifted) 2nd-bottom:', row[np.argmax(np.abs(row))], row)
     row = psfmod2[1,:]

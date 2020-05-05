@@ -704,8 +704,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     #if Tnew is None:
     #    raise NothingToDoError('No sources detected.')
 
-    assert(len(Tnew) == len(newcat))
     if Tnew is not None:
+        assert(len(Tnew) == len(newcat))
         Tnew.delete_column('peaksn')
         Tnew.delete_column('apsn')
         Tnew.ref_cat = np.array(['  '] * len(Tnew))

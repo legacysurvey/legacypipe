@@ -295,8 +295,6 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
     last_check_command = time.time()
 
     nworkpackets = nworkbytes = 0
-
-    from collections import Counter
     nwaitingCounter = Counter()
 
     # For keeping track of how much time is spent in different parts of my job
