@@ -502,8 +502,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     for k in fskeys:
         phot.set(wband + '_' + k, fitstats[k])
     phot.set(wband + '_nexp', nexp)
-    if not np.all(mjd == 0):
-        phot.set(wband + '_mjd', mjd)
+    phot.set(wband + '_mjd', mjd)
 
     rtn = wphotduck()
     rtn.phot = phot
