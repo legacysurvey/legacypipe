@@ -479,6 +479,7 @@ class OneBlob(object):
                 if mx > 200:
                     thresholds.extend(list(range(2500, mx+99, 100)))
         debug('thresholds:', thresholds)
+        hot = None
         for thresh in thresholds:
             debug('S/N', thresh, ':', len(todo), 'sources to find still')
             if len(todo) == 0:
