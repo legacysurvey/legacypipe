@@ -1380,8 +1380,7 @@ class OneBlob(object):
 
             # First-round optimization (during model selection)
             R = srctractor.optimize_loop(**self.optargs)
-            #print('Fit result:', newsrc)
-            #print('Steps:', R['steps'])
+            debug('Fit result:', newsrc)
             hit_limit = R.get('hit_limit', False)
             opt_steps = R.get('steps', -1)
             if hit_limit:
@@ -1395,7 +1394,8 @@ class OneBlob(object):
             sh,sw = srcblobmask.shape
             if ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
                 # Exited blob!
-                debug('Source exited sub-blob!')
+                debug('Source exited sub-blob: x,y %i,%i vs shape %i x %i, src blob %s' %
+                      (ix, iy, sw, sh, srcblobmask[np.clip(iy,0,sh-1),np.clip(ix,0,sw-1)]))
                 if mask_others:
                     for ie,tim in zip(saved_srctim_ies, srctims):
                         tim.inverr = ie
@@ -1481,6 +1481,7 @@ class OneBlob(object):
             # models are evaluated on the same pixels.
             ch = _per_band_chisqs(srctractor, self.bands)
             chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
+            debug('chisq for', name, '= %g' % chisqs[name])
             cpum1 = time.process_time()
             B.all_model_cpu[srci][name] = cpum1 - cpum0
             cputimes[name] = cpum1 - cpum0
@@ -1504,6 +1505,7 @@ class OneBlob(object):
         keepmod = _select_model(chisqs, nparams, galaxy_margin)
         keepsrc = {'none':None, 'psf':psf, 'rex':rex,
                    'dev':dev, 'exp':exp, 'ser':ser}[keepmod]
+        debug('Selected model:', keepmod, ':', keepsrc)
         bestchi = chisqs.get(keepmod, 0.)
         B.dchisq[srci, :] = np.array([chisqs.get(k,0) for k in modnames])
         #print('Keeping model', keepmod, '(chisqs: ', chisqs, ')')
@@ -2202,7 +2204,8 @@ def _select_model(chisqs, nparams, galaxy_margin):
     Returns keepmod (string), the name of the preferred model.
     '''
     keepmod = 'none'
-    #print('_select_model: chisqs', chisqs)
+
+    debug('_select_model: chisqs', chisqs, 'nparams', nparams)
 
     # This is our "detection threshold": 5-sigma in
     # *parameter-penalized* units; ie, ~5.2-sigma for point sources
