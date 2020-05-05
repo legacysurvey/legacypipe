@@ -231,8 +231,3 @@ for testcase, ra,dec,pmra,pmdec in [(10, 0.,0., 1000., 0.),
     plt.ylabel('dDec (arcsec)')
     plt.title('Test sources: RA,Dec %g,%g, pm (%g, %g)  parallax 0 / 1 arcsec' % (ra,dec, pmra,pmdec))
     plt.savefig('rd%i.png' % testcase)
-
-
-
-
-

@@ -123,7 +123,7 @@ def main():
         #print('Edge pixels touch!')
         #plt.plot(br,bd, 'r-', zorder=20)
 
-        ok,x,y = brickwcs.radec2pixelxy(rr[I], dd[I])
+        _,x,y = brickwcs.radec2pixelxy(rr[I], dd[I])
         x = np.round(x).astype(int)-1
         y = np.round(y).astype(int)-1
         print('Pixel ranges X', x.min(), x.max(), 'Y', y.min(), y.max())

@@ -699,8 +699,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     #if Tnew is None:
     #    raise NothingToDoError('No sources detected.')
 
-    assert(len(Tnew) == len(newcat))
     if Tnew is not None:
+        assert(len(Tnew) == len(newcat))
         Tnew.delete_column('peaksn')
         Tnew.delete_column('apsn')
         Tnew.ref_cat = np.array(['  '] * len(Tnew))
@@ -2519,8 +2519,8 @@ def stage_writecat(
     T2.brick_primary = ((T2.ra  >= brick.ra1 ) * (T2.ra  < brick.ra2) *
                         (T2.dec >= brick.dec1) * (T2.dec < brick.dec2))
     H,W = maskbits.shape
-    T2.maskbits = maskbits[np.clip(T2.by, 0, H-1).astype(int),
-                           np.clip(T2.bx, 0, W-1).astype(int)]
+    T2.maskbits = maskbits[np.clip(np.round(T2.by), 0, H-1).astype(int),
+                           np.clip(np.round(T2.bx), 0, W-1).astype(int)]
     del maskbits
 
     # sigh, bytes vs strings.  In py3, T.type (dtype '|S3') are bytes.
@@ -2529,6 +2529,10 @@ def stage_writecat(
 
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
         T2.writeto(None, fits_object=out.fits, primheader=primhdr, header=hdr)
+
+    # After writing tractor-i file, drop (reference) sources outside the brick.
+    T2.cut((T2.bx >= -0.5) * (T2.bx <= W-0.5) *
+           (T2.by >= -0.5) * (T2.by <= H-0.5))
 
     # The "format_catalog" code expects all lower-case column names...
     for c in T2.columns():

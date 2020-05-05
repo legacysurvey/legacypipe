@@ -8,7 +8,6 @@ if __name__ == '__main__':
     import matplotlib
     matplotlib.use('Agg')
 
-import astropy.io.fits
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
 from legacypipe.survey import LegacySurveyData

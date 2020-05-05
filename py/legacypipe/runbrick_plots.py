@@ -137,7 +137,7 @@ def detection_plots(detmaps, detivs, bands, saturated_pix, tims,
     plt.title('detmaps & saturated')
     ps.savefig()
 
-    coimgs,cons = quick_coadds(tims, bands, targetwcs, fill_holes=False)
+    coimgs,_ = quick_coadds(tims, bands, targetwcs, fill_holes=False)
 
     if refstars:
         plt.clf()
