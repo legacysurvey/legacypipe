@@ -57,6 +57,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     phot = fits_table()
     # Filled in based on unique tile overlap
     phot.wise_coadd_id = np.array(['        '] * Nsrcs)
+    phot.wise_x = np.zeros(Nsrcs, np.float32)
+    phot.wise_y = np.zeros(Nsrcs, np.float32)
     phot.set(wband + '_psfdepth', np.zeros(len(phot), np.float32))
 
     ra  = np.array([src.getPosition().ra  for src in cat])
@@ -315,6 +317,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         if hasattr(tim, 'mjdmin') and hasattr(tim, 'mjdmax'):
             mjd[I] = (tim.mjdmin + tim.mjdmax) / 2.
         phot.wise_coadd_id[I] = tile.coadd_id
+        phot.wise_x[I] = x - 1.
+        phot.wise_y[I] = y - 1.
 
         central_flux[I] = tim.getImage()[y[I], x[I]]
         del x,y,good,usrc

@@ -2201,7 +2201,13 @@ def stage_wise_forced(
             if WISE is None:
                 WISE = p.phot
             else:
-                p.phot.delete_column('wise_coadd_id') # duplicate
+                # remove duplicates
+                p.phot.delete_column('wise_coadd_id')
+                # (with move_crpix -- Aaron's update astrometry -- the
+                # pixel positions can be *slightly* different per
+                # band.  Ignoring that here.)
+                p.phot.delete_column('wise_x')
+                p.phot.delete_column('wise_y')
                 WISE.add_columns_from(p.phot)
 
         if wise_mask_maps is not None:
