@@ -67,7 +67,6 @@ cpdir=`echo $(basename $(dirname ${image_fn}))`
 logdir=$outdir/logs-calibs/$camera/$cpdir
 mkdir -p $logdir
 log=`echo $(basename ${image_fn} | sed s#.fits.fz#.log#g)`
-tmplog=/tmp/$log
 log=$logdir/$log
 
 cmd="python -u /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
@@ -82,10 +81,5 @@ cmd="python -u /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
     --run-calibs-only \
     --blob-mask-dir ${blob_dir}"
 
-echo $cmd > $tmplog
-$cmd >> $tmplog 2>&1
-# Save the return value from the python command -- otherwise we
-# exit 0 because the mv succeeds!
-status=$?
-cat $tmplog >> $log
-exit $status
+echo $cmd > $log
+$cmd >> $log 2>&1
