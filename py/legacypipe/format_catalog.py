@@ -204,7 +204,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
         add_wiselike('psfdepth')
 
     if has_wise:
-        cols.append('wise_coadd_id')
+        cols.extend(['wise_coadd_id', 'wise_x', 'wise_y'])
     if has_wise_lc:
         trbands = ['w1','w2']
         lc_cols = ['lc_flux', 'lc_flux_ivar', 'lc_nobs', 'lc_fracflux',

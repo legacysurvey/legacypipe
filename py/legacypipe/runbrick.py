@@ -2258,6 +2258,8 @@ def stage_wise_forced(
             assert(ie < Nepochs)
             phot = r.phot
             phot.delete_column('wise_coadd_id')
+            phot.delete_column('wise_x')
+            phot.delete_column('wise_y')
             for c in phot.columns():
                 if not c in WISE_T.columns():
                     x = phot.get(c)
@@ -2465,6 +2467,8 @@ def stage_writecat(
                 comment='WISE Vega to AB conv for band %i' % band))
 
         T2.wise_coadd_id = WISE.wise_coadd_id
+        T2.wise_x = WISE.wise_x
+        T2.wise_y = WISE.wise_y
         T2.wise_mask = WISE.wise_mask
 
         for band in [1,2,3,4]:
