@@ -580,8 +580,13 @@ def get_reference_map(wcs, refs):
         debug(len(I), 'with', col, 'set')
         if len(I) == 0:
             continue
-
         thisrefs = refs[I]
+
+        if bit == 'BRIGHT':
+            # decrease the BRIGHT masking radius by a factor of two!
+            debug('Scaling down BRIGHT masking radius by a factor of 2')
+            thisrefs.radius_pix[:] = (thisrefs.radius_pix + 1) // 2
+
         ok,xx,yy = wcs.radec2pixelxy(thisrefs.ra, thisrefs.dec)
         for x,y,ref in zip(xx,yy,thisrefs):
             # Cut to bounding square
@@ -591,7 +596,6 @@ def get_reference_map(wcs, refs):
             yhi = int(np.clip(np.ceil (y   + ref.radius_pix), 0, H))
             if xlo == xhi or ylo == yhi:
                 continue
-
             bitval = np.uint8(IN_BLOB[bit])
             if not ellipse:
                 rr = ((np.arange(ylo,yhi)[:,np.newaxis] - (y-1))**2 +
@@ -614,6 +618,5 @@ def get_reference_map(wcs, refs):
                 r1 = ref.radius_pix
                 r2 = ref.radius_pix * ref.ba
                 masked = (dot1**2 / r1**2 + dot2**2 / r2**2 < 1.)
-
             refmap[ylo:yhi, xlo:xhi] |= (bitval * masked)
     return refmap
