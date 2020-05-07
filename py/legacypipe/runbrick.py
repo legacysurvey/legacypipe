@@ -688,13 +688,18 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # SED-matched detections
     record_event and record_event('stage_srcs: SED-matched')
 
-    info('Running source detection at', nsigma, 'sigma')
+    debug('Running source detection at', nsigma, 'sigma')
     SEDs = survey.sed_matched_filters(bands)
+
+    kwa = {}
+    if plots:
+        coims,_ = quick_coadds(tims, bands, targetwcs)
+        kwa.update(rgbimg=get_rgb(coims, bands))
 
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
         nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
-        saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
+        saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp, **kwa)
 
     #if Tnew is None:
     #    raise NothingToDoError('No sources detected.')

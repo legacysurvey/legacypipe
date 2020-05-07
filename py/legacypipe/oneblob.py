@@ -509,7 +509,8 @@ class OneBlob(object):
                     #print('Source', t, 'is isolated at S/N', thresh)
                     done.add(t)
             todo.difference_update(done)
-        del hot, maxsn, saturated_pix
+            del hot
+        del maxsn, saturated_pix
 
         # ensure that each source owns a tiny radius around its center in the segmentation map.
         # If there is more than one source in that radius, each pixel gets assigned to its nearest source.
