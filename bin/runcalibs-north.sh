@@ -13,12 +13,12 @@ zptsdir=${outdir}/zpts
 calibdir=${outdir}/calib
 imagedir=${LEGACY_SURVEY_DIR}/images
 
-blob_dir=/global/cfs/cdirs/cosmo/work/legacysurvey/dr8-blobmask-north
+blob_dir=/global/cfs/cdirs/cosmo/work/legacysurvey/dr8/north
 # Zeropoint_dir is only required for star halo subtraction, which we're
 # not using in the north.
 #zeropoints_dir=${LEGACY_SURVEY_DIR}
 
-# dr8-blobmask-north contains:
+# work/dr8/north includes:
 #   coadd -> /global/cfs/cdirs/cosmo/data/legacysurvey/dr8/north/coadd/
 #   metrics -> /global/cfs/cdirs/cosmo/data/legacysurvey/dr8/north/metrics/
 #   survey-bricks.fits.gz -> /global/cfs/cdirs/cosmo/data/legacysurvey/dr8/survey-bricks.fits.gz
