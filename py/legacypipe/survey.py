@@ -1078,7 +1078,7 @@ class LegacySurveyData(object):
             model = '[compress R %(tilew)i,%(tileh)i; qz -1e-4]',
             chi2  = '[compress R %(tilew)i,%(tileh)i; qz -0.1]',
             # qz +8: 9 MB, qz +16: 10.5 MB
-            invvar = '[compress R %(tilew)i,%(tileh)i; qz 16]',
+            invvar = '[compress R %(tilew)i,%(tileh)i; q0 16]',
             nexp   = '[compress H %(tilew)i,%(tileh)i]',
             maskbits = '[compress H %(tilew)i,%(tileh)i]',
             depth  = '[compress G %(tilew)i,%(tileh)i; qz 0]',
