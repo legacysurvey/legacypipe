@@ -25,7 +25,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     # How big of a margin to search for bright stars and star clusters --
     # this should be based on the maximum radius they are considered to
     # affect.  In degrees.
-    ref_margin = 0.125
+    ref_margin = mask_radius_for_mag(0.)
     mpix = int(np.ceil(ref_margin * 3600. / pixscale))
     marginwcs = targetwcs.get_subimage(-mpix, -mpix, W+2*mpix, H+2*mpix)
 
@@ -138,14 +138,14 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
 
     return refs,sources
 
-def read_gaia(targetwcs, bands):
+def read_gaia(wcs, bands):
     '''
-    *targetwcs* here should include margin
+    *wcs* here should include margin
     '''
     from legacypipe.gaiacat import GaiaCatalog
     from legacypipe.survey import GaiaSource
 
-    gaia = GaiaCatalog().get_catalog_in_wcs(targetwcs)
+    gaia = GaiaCatalog().get_catalog_in_wcs(wcs)
     debug('Got', len(gaia), 'Gaia stars nearby')
 
     gaia.G = gaia.phot_g_mean_mag
@@ -232,8 +232,8 @@ def read_gaia(targetwcs, bands):
     gaia.keep_radius = 4. * gaia.radius
     gaia.delete_column('G')
     gaia.isgaia = np.ones(len(gaia), bool)
-    gaia.isbright = (gaia.phot_g_mean_mag < 13.)
-    gaia.ismedium = (gaia.phot_g_mean_mag < 16.)
+    gaia.isbright = (gaia.mask_mag < 13.)
+    gaia.ismedium = (gaia.mask_mag < 16.)
     gaia.donotfit = np.zeros(len(gaia), bool)
 
     # NOTE, must initialize gaia.sources array this way, or else numpy
@@ -249,11 +249,8 @@ def mask_radius_for_mag(mag):
     # Returns a masking radius in degrees for a star of the given magnitude.
     # Used for Tycho-2 and Gaia stars.
 
-    # This is in degrees and the magic 0.262 (indeed the whole
-    # relation) is from eyeballing a radius-vs-mag plot that was in
-    # pixels; that is unrelated to the present targetwcs pixel scale.
-    radius = np.minimum(1800., 150. * 2.5**((11. - mag)/3.)) * 0.262/3600.
-    return radius
+    # This is in degrees, and is from Rongpu in the thread [desi-imaging 1439].
+    return 1630./3600. * 1.396**(-mag)
 
 def read_tycho2(survey, targetwcs, bands):
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
