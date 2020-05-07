@@ -873,18 +873,7 @@ def _apphot_one(args):
 
     return result
 
-def write_coadd_images(band,
-                       survey, brickname, version_header, tims, targetwcs,
-                       co_sky,
-                       cowimg=None, cow=None, cowmod=None, cochi2=None,
-                       cowblobmod=None,
-                       psfdetiv=None, galdetiv=None, congood=None,
-                       psfsize=None, **kwargs):
-
-    # copy version_header before modifying...
-    hdr = fitsio.FITSHDR()
-    for r in version_header.records():
-        hdr.add_record(r)
+def get_coadd_headers(hdr, tims, band):
     # Grab these keywords from all input files for this band...
     keys = ['OBSERVAT', 'TELESCOP','OBS-LAT','OBS-LONG','OBS-ELEV',
             'INSTRUME','FILTER']
@@ -931,6 +920,21 @@ def write_coadd_images(band,
     hdr.add_record(dict(
         name='DATEOBS', value=tt[2],
         comment='Mean DATE-OBS for the stack (UTC)'))
+
+def write_coadd_images(band,
+                       survey, brickname, version_header, tims, targetwcs,
+                       co_sky,
+                       cowimg=None, cow=None, cowmod=None, cochi2=None,
+                       cowblobmod=None,
+                       psfdetiv=None, galdetiv=None, congood=None,
+                       psfsize=None, **kwargs):
+
+    # copy version_header before modifying...
+    hdr = fitsio.FITSHDR()
+    for r in version_header.records():
+        hdr.add_record(r)
+    # Grab headers from input images...
+    get_coadd_headers(hdr, tims, band)
 
     # Plug the WCS header cards into these images
     targetwcs.add_to_header(hdr)
