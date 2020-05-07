@@ -54,7 +54,7 @@ class HealpixedCatalog(object):
         # Read catalog in those healpixes
         cat = self.get_healpix_catalogs(healpixes)
         # Cut to sources actually within the CCD.
-        ok,xx,yy = wcs.radec2pixelxy(cat.ra, cat.dec)
+        _,xx,yy = wcs.radec2pixelxy(cat.ra, cat.dec)
         cat.x = xx
         cat.y = yy
         onccd = np.flatnonzero((xx >= 1.-margin) * (xx <= W+margin) *
@@ -199,4 +199,4 @@ def ps1_to_mosaic(psmags, band):
     colorterm = -(coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
     print('Using Mosaic3 ColorTerm')
     return colorterm
-    
+

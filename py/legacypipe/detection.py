@@ -1,5 +1,4 @@
 from __future__ import print_function
-import pylab as plt
 import numpy as np
 
 import logging
@@ -14,7 +13,7 @@ def debug(*args):
 def _detmap(X):
     from scipy.ndimage.filters import gaussian_filter
     from legacypipe.survey import tim_get_resamp
-    (tim, targetwcs, H, W, apodize) = X
+    (tim, targetwcs, apodize) = X
     R = tim_get_resamp(tim, targetwcs)
     if R is None:
         return None,None,None,None,None
@@ -70,7 +69,7 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None):
     detivs  = [np.zeros((H,W), np.float32) for b in bands]
     satmaps = [np.zeros((H,W), bool)       for b in bands]
     for tim, (Yo,Xo,incmap,inciv,sat) in zip(
-        tims, mp.map(_detmap, [(tim, targetwcs, H, W, apodize) for tim in tims])):
+        tims, mp.map(_detmap, [(tim, targetwcs, apodize) for tim in tims])):
         if Yo is None:
             continue
         ib = ibands[tim.band]
@@ -234,6 +233,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     return Tnew, newcat, hot
 
 def plot_mask(X, rgb=(0,255,0), extent=None):
+    import pylab as plt
     H,W = X.shape
     rgba = np.zeros((H, W, 4), np.uint8)
     rgba[:,:,0] = X*rgb[0]
@@ -341,7 +341,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     if saturated_pix is not None:
         satur  = np.zeros((H,W), bool)
 
-    for iband,band in enumerate(bands):
+    for iband in range(len(bands)):
         if sed[iband] == 0:
             continue
         # We convert the detmap to canonical band via
@@ -395,6 +395,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[2:  ,2:  ])
 
     if ps is not None:
+        import pylab as plt
         from astrometry.util.plotutils import dimshow
         plt.clf()
         plt.subplot(1,2,2)
@@ -428,7 +429,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # We dilate the blobs a bit too, to
     # catch slight differences in centroid positions.
     dilate = 1
-    
+
     # For efficiency, segment at the minimum saddle level to compute
     # slices; the operations described above need only happen within
     # the slice.
@@ -524,7 +525,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             saddlemap |= satur[slc]
         saddlemap *= (allblobs[slc] == ablob)
         saddlemap = binary_fill_holes(saddlemap)
-        blobs,nblobs = label(saddlemap)
+        blobs,_ = label(saddlemap)
         x0,y0 = allx0[index], ally0[index]
         thisblob = blobs[y-y0, x-x0]
 
@@ -539,8 +540,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             ox = ox.astype(int)
             oy = oy.astype(int)
             cut = any((ox >= 0) * (ox < w) * (oy >= 0) * (oy < h) *
-                      (blobs[np.clip(oy,0,h-1), np.clip(ox,0,w-1)] == 
-                       thisblob))
+                      (blobs[np.clip(oy,0,h-1), np.clip(ox,0,w-1)] == thisblob))
 
         # one plot per peak is a little excessive!
         if ps is not None and i<10:
@@ -646,6 +646,7 @@ def _peak_plot_1(vetomap, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
                  level, dilate, saturated_pix, satur, ps, rgbimg, cut):
     from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
     from scipy.ndimage.measurements import label
+    import pylab as plt
     plt.clf()
     plt.suptitle('Peak at %i,%i (%s)' % (x,y, ('cut' if cut else 'kept')))
     newsym = '+'
@@ -733,6 +734,7 @@ def _peak_plot_1(vetomap, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
 
 def _peak_plot_2(ox, oy, w, h, blobs, thisblob, sedsn, x0, y0,
                  x, y, level, ps):
+    import pylab as plt
     I = np.flatnonzero((ox >= 0) * (ox < w) * (oy >= 0) * (oy < h) *
                        (blobs[np.clip(oy,0,h-1), np.clip(ox,0,w-1)] ==
                         thisblob))
@@ -764,6 +766,7 @@ def _peak_plot_2(ox, oy, w, h, blobs, thisblob, sedsn, x0, y0,
 
 def _peak_plot_3(sedsn, nsigma, x, y, x0, y0, slc, saddlemap,
                  xomit, yomit, px, py, keep, i, cut, ps):
+    import pylab as plt
     green = (0,1,0)
     plt.clf()
     plt.subplot(1,2,1)
@@ -863,9 +866,7 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     inblobs = np.zeros(len(T), bool)
     for Isrcs in blobsrcs:
         inblobs[Isrcs] = True
-    noblobs = np.flatnonzero(np.logical_not(inblobs))
     del inblobs
-    #info(len(noblobs), 'sources are not in blobs')
 
     # Remap the "blobs" image so that empty regions are = -1 and the blob values
     # correspond to their indices in the "blobsrcs" list.

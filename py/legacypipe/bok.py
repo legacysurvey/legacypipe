@@ -54,7 +54,8 @@ class BokImage(LegacySurveyImage):
             return dq,hdr
         return dq
 
-    def remap_invvar(self, invvar, primhdr, img, dq):
+    def remap_invvar
+        (self, invvar, primhdr, img, dq):
         return self.remap_invvar_shotnoise(invvar, primhdr, img, dq)
 
     def remap_dq(self, dq, header):

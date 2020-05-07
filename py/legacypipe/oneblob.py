@@ -871,7 +871,7 @@ class OneBlob(object):
         # Save
         oldsrcs = self.srcs
         self.srcs = newsrcs
-        
+
         Bnew = fits_table()
         Bnew.sources = newsrcs
         Bnew.Isrcs = np.array([-1]*len(Bnew))
@@ -1389,8 +1389,8 @@ class OneBlob(object):
                 if name in ['rex', 'exp', 'dev', 'ser']:
                     debug('Hit limit: r %.2f vs %.2f' %
                           (newsrc.shape.re, np.exp(logrmax)))
-            ok,ix,iy = srcwcs.radec2pixelxy(newsrc.getPosition().ra,
-                                            newsrc.getPosition().dec)
+            _,ix,iy = srcwcs.radec2pixelxy(newsrc.getPosition().ra,
+                                           newsrc.getPosition().dec)
             ix = int(ix-1)
             iy = int(iy-1)
             sh,sw = srcblobmask.shape
@@ -1739,7 +1739,7 @@ class OneBlob(object):
             plt.savefig('blob-%s-data.png' % (self.name))
             plt.figure(1)
 
-        ok,x0,y0 = self.blobwcs.radec2pixelxy(
+        _,x0,y0 = self.blobwcs.radec2pixelxy(
             np.array([src.getPosition().ra  for src in self.srcs]),
             np.array([src.getPosition().dec for src in self.srcs]))
 

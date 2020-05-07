@@ -232,7 +232,8 @@ RUN python -O -m compileall \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-RUN cd /src/legacypipe && git pull && git describe && echo 17 && \
+RUN cd /src/legacypipe && git pull && \
+git checkout dev && git describe && echo 19 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 

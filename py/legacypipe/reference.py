@@ -108,7 +108,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     # keeprad to pix
     keeprad = np.ceil(keeprad * 3600. / pixscale).astype(int)
 
-    ok,xx,yy = targetwcs.radec2pixelxy(refs.ra, refs.dec)
+    _,xx,yy = targetwcs.radec2pixelxy(refs.ra, refs.dec)
     # ibx = integer brick coords
     refs.ibx = np.round(xx-1.).astype(int)
     refs.iby = np.round(yy-1.).astype(int)
@@ -425,7 +425,7 @@ def read_large_galaxies(survey, targetwcs, bands):
     gd = np.where(np.isfinite(galaxies.ba_orig))[0]
     if len(gd) > 0:
         galaxies.ba[gd] = galaxies.ba_orig[gd]
-        
+
     galaxies.radius = galaxies.d25 / 2. / 60. # [degree]
 
     galaxies.freezeparams = np.zeros(len(galaxies), bool)
@@ -584,7 +584,7 @@ def get_reference_map(wcs, refs):
             debug('Scaling down BRIGHT masking radius by a factor of 2')
             thisrefs.radius_pix[:] = (thisrefs.radius_pix + 1) // 2
 
-        ok,xx,yy = wcs.radec2pixelxy(thisrefs.ra, thisrefs.dec)
+        _,xx,yy = wcs.radec2pixelxy(thisrefs.ra, thisrefs.dec)
         for x,y,ref in zip(xx,yy,thisrefs):
             # Cut to bounding square
             xlo = int(np.clip(np.floor(x-1 - ref.radius_pix), 0, W))

@@ -1079,7 +1079,7 @@ class LegacySurveyImage(object):
         if rtn:
             raise RuntimeError('Command failed: ' + cmd)
         os.rename(tmpfn, self.sefn)
-        
+
     def run_psfex(self, git_version=None, ps=None):
         from astrometry.util.file import trymakedirs
         from legacypipe.survey import get_git_version

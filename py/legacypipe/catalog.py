@@ -3,6 +3,7 @@ from __future__ import print_function
 import numpy as np
 
 from tractor import PointSource
+
 from tractor.galaxy import ExpGalaxy, DevGalaxy
 from tractor.sersic import SersicGalaxy, SersicIndex
 from tractor.ellipses import EllipseE
@@ -144,7 +145,6 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz', allbands=None,
         hdr = T._header
     if allbands is None:
         allbands = bands
-    ibands = np.array([allbands.index(b) for b in bands])
     rev_typemap = fits_reverse_typemap
 
     ivs = []

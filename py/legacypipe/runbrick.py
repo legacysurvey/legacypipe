@@ -637,7 +637,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     of these blobs will be processed independently.
     '''
     from functools import reduce
-    from tractor import PointSource, NanoMaggies, Catalog
+    from tractor import PointSource, Catalog
     from legacypipe.detection import (detection_maps,
                         run_sed_matched_filters, segment_and_group_sources)
     from scipy.ndimage.morphology import binary_dilation
@@ -1490,7 +1490,6 @@ def _get_both_mods(X):
     from astrometry.util.resample import resample_with_wcs, OverlapError
     from astrometry.util.miscutils import get_overlapping_region
     (tim, srcs, srcblobs, blobmap, targetwcs) = X
-    t0 = Time()
     mod = np.zeros(tim.getModelShape(), np.float32)
     blobmod = np.zeros(tim.getModelShape(), np.float32)
     assert(len(srcs) == len(srcblobs))
@@ -2620,7 +2619,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               record_event=None,
     # These are for the 'stages' infrastructure
               pickle_pat='pickles/runbrick-%(brick)s-%%(stage)s.pickle',
-              stages=['writecat'],
+              stages=None,
               force=None, forceall=False, write_pickles=True,
               checkpoint_filename=None,
               checkpoint_period=None,
@@ -2772,6 +2771,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     if force is None:
         force = []
+    if stages is None:
+        stages=['writecat']
     forceStages = [s for s in stages]
     forceStages.extend(force)
     if forceall:
@@ -2948,7 +2949,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             'fit_on_coadds': 'halos',
             'srcs': 'fit_on_coadds',
         })
-        
+
     if prereqs_update is not None:
         prereqs.update(prereqs_update)
 
@@ -3338,7 +3339,7 @@ def main(args=None):
         print('Command-line args:', sys.argv)
         cmd = 'python'
         for vv in sys.argv:
-            cmd += ' {}'.format(vv) 
+            cmd += ' {}'.format(vv)
         print(cmd)
     else:
         print('Args:', args)

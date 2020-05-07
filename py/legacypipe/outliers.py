@@ -300,7 +300,7 @@ def compare_one(X):
     
     with np.errstate(divide='ignore'):
         reldiff = ((rimg - otherimg) / np.maximum(otherimg, this_sig1))
-    
+
     if plots:
         plt.clf()
         showimg = np.zeros((H,W),np.float32)
