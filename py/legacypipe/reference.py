@@ -432,6 +432,9 @@ def read_large_galaxies(survey, targetwcs, bands):
     galaxies.sources = np.empty(len(galaxies), object)
     galaxies.sources[:] = None
 
+    # Factor of HyperLEDA to set the galaxy max radius
+    radius_max_factor = 2.
+
     # use the pre-burned LSLGA catalog
     if 'preburned' in galaxies.get_columns():
         preburned = np.logical_and(preburn, galaxies.preburned)
@@ -451,7 +454,10 @@ def read_large_galaxies(survey, targetwcs, bands):
                 # put the Rex branch first, because Rex is a subclass of ExpGalaxy!
                 if issubclass(typ, RexGalaxy):
                     assert(np.isfinite(g.shape_r))
-                    shape = LogRadius(np.log(g.shape_r))
+                    logre = np.log(g.shape_r)
+                    shape = LogRadius(logre)
+                    # set prior max at 2x HyperLEDA radius
+                    shape.setMaxLogRadius(logre + np.log(radius_max_factor))
                 elif issubclass(typ, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
                     assert(np.isfinite(g.shape_r))
                     assert(np.isfinite(g.shape_e1))
@@ -460,8 +466,11 @@ def read_large_galaxies(survey, targetwcs, bands):
                     # switch to softened ellipse (better fitting behavior)
                     shape = EllipseESoft.fromEllipseE(shape)
                     # and then to our custom ellipse class
-                    shape = LegacyEllipseWithPriors(shape.logre, shape.ee1, shape.ee2)
+                    logre = shape.logre
+                    shape = LegacyEllipseWithPriors(logre, shape.ee1, shape.ee2)
                     assert(np.all(np.isfinite(shape.getParams())))
+                    # set prior max at 2x HyperLEDA radius
+                    shape.setMaxLogRadius(logre + np.log(radius_max_factor))
 
                 if issubclass(typ, (DevGalaxy, ExpGalaxy)):
                     src = typ(pos, bright, shape)
@@ -474,6 +483,7 @@ def read_large_galaxies(survey, targetwcs, bands):
                 else:
                     print('Unknown type', typ)
                 debug('Created', src)
+                assert(np.isfinite(src.getLogPrior()))
                 galaxies.sources[ii] = src
 
                 if galaxies.freeze[ii] and galaxies.ref_cat[ii] == refcat:
@@ -508,9 +518,12 @@ def read_large_galaxies(survey, targetwcs, bands):
             assert(np.isfinite(logr))
             assert(np.isfinite(ee1))
             assert(np.isfinite(ee2))
+            shape = LegacyEllipseWithPriors(logr, ee1, ee2)
+            shape.setMaxLogRadius(logr + np.log(radius_max_factor))
             src = ExpGalaxy(RaDecPos(g.ra, g.dec),
                             NanoMaggies(order=bands, **fluxes),
-                            LegacyEllipseWithPriors(logr, ee1, ee2))
+                            shape)
+            assert(np.isfinite(src.getLogPrior()))
             galaxies.sources[ii] = src
 
     keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',

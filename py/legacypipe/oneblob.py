@@ -1251,7 +1251,7 @@ class OneBlob(object):
 
             # LSLGA galaxy: set the maximum allowed r_e.
             known_galaxy_logrmax = 0.
-            if isinstance(src, (DevGalaxy,ExpGalaxy)):
+            if isinstance(src, (DevGalaxy,ExpGalaxy, SersicGalaxy)):
                 print('Known galaxy.  Initial shape:', src.shape)
                 # MAGIC 2. = factor by which r_e is allowed to grow for an LSLGA galaxy.
                 known_galaxy_logrmax = np.log(src.shape.re * 2.)
