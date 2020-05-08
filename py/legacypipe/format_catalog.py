@@ -184,6 +184,11 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
                   'apflux_ivar', 'apflux_masked']:
             add_fluxlike(c)
 
+    if has_wise and has_ap and 'apflux_w1' in T.get_columns():
+        add_wiselike('apflux')
+        add_wiselike('apflux_resid')
+        add_wiselike('apflux_ivar')
+
     cols.extend(trans_cols_opt)
     cols.extend(trans_cols_wise)
 
@@ -205,6 +210,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
 
     if has_wise:
         cols.extend(['wise_coadd_id', 'wise_x', 'wise_y'])
+
     if has_wise_lc:
         trbands = ['w1','w2']
         lc_cols = ['lc_flux', 'lc_flux_ivar', 'lc_nobs', 'lc_fracflux',

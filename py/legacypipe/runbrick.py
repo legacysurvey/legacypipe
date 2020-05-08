@@ -2217,13 +2217,28 @@ def stage_wise_forced(
 
         if unwise_coadds:
             from legacypipe.coadds import UnwiseCoadd
+            from legacypipe.survey import wise_apertures_arcsec
             # Create the WCS into which we'll resample the tiles.
             # Same center as "targetwcs" but bigger pixel scale.
             wpixscale = 2.75
+            wra  = np.array([src.getPosition().ra  for src in cat])
+            wdec = np.array([src.getPosition().dec for src in cat])
+
             wcoadds = UnwiseCoadd(targetwcs, W, H, pixscale, wpixscale)
             for tile in tiles.coadd_id:
                 wcoadds.add(tile, wise_models)
-            wcoadds.finish(survey, brickname, version_header)
+            apphot = wcoadds.finish(survey, brickname, version_header,
+                                    apradec=(wra,wdec),
+                                    apertures=wise_apertures_arcsec/wpixscale)
+            api,apd,apr = apphot
+            for iband,band in enumerate([1,2,3,4]):
+                WISE.set('apflux_w%i' % band, api[iband])
+                WISE.set('apflux_resid_w%i' % band, apr[iband])
+                d = apd[iband]
+                iv = np.zeros_like(d)
+                iv[d != 0.] = 1./(d[d != 0]**2)
+                WISE.set('apflux_ivar_w%i' % band, iv)
+                print('Setting WISE apphot')
 
         if Nskipped > 0:
             assert(len(WISE) == len(wcat))
@@ -2471,6 +2486,12 @@ def stage_writecat(
         T2.wise_y = WISE.wise_y
         T2.wise_mask = WISE.wise_mask
 
+        if 'apflux_w1' in WISE.get_columns():
+            from legacypipe.survey import wise_apertures_arcsec
+            for i,ap in enumerate(wise_apertures_arcsec):
+                primhdr.add_record(dict(name='WAPRAD%i' % i, value=ap,
+                                        comment='WISE aperture radius, in arcsec'))
+
         for band in [1,2,3,4]:
             # Apply the Vega-to-AB shift *while* copying columns from
             # WISE to T2.
@@ -2494,6 +2515,14 @@ def stage_writecat(
             c = 'w%i_psfdepth' % band
             t = 'psfdepth_w%i' % band
             T2.set(t, WISE.get(c) / fluxfactor**2)
+
+            if 'apflux_w%i'%band in WISE.get_columns():
+                t = c = 'apflux_w%i' % band
+                T2.set(t, WISE.get(c) * fluxfactor)
+                t = c = 'apflux_resid_w%i' % band
+                T2.set(t, WISE.get(c) * fluxfactor)
+                t = c = 'apflux_ivar_w%i' % band
+                T2.set(t, WISE.get(c) / fluxfactor**2)
 
         # Rename some WISE columns
         for cin,cout in [('w%i_nexp',        'nobs_w%i'),
