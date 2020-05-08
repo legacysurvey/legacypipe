@@ -185,7 +185,7 @@ RUN ln -s $(which python3) /usr/bin/python
 
 # unwise_psf
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \
-    && cd unwise_psf && git checkout dr9.2
+    && cd unwise_psf && git checkout dr9.3
 
 # Legacypipe
 RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
