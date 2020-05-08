@@ -305,9 +305,9 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 print('WARNING: cannot apply psf_broadening to WISE PSF of type', type(psf))
 
         wcs = tim.wcs.wcs
-        ok,x,y = wcs.radec2pixelxy(ra, dec)
-        x = np.round(x - 1.).astype(int)
-        y = np.round(y - 1.).astype(int)
+        ok,fx,fy = wcs.radec2pixelxy(ra, dec)
+        x = np.round(fx - 1.).astype(int)
+        y = np.round(fy - 1.).astype(int)
         good = (x >= 0) * (x < tw) * (y >= 0) * (y < th)
         # Which sources are in this brick's unique area?
         usrc = radec_in_unique_area(ra, dec, tile.ra1, tile.ra2, tile.dec1, tile.dec2)
@@ -317,8 +317,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         if hasattr(tim, 'mjdmin') and hasattr(tim, 'mjdmax'):
             mjd[I] = (tim.mjdmin + tim.mjdmax) / 2.
         phot.wise_coadd_id[I] = tile.coadd_id
-        phot.wise_x[I] = x - 1.
-        phot.wise_y[I] = y - 1.
+        phot.wise_x[I] = fx[I] - 1.
+        phot.wise_y[I] = fy[I] - 1.
 
         central_flux[I] = tim.getImage()[y[I], x[I]]
         del x,y,good,usrc
