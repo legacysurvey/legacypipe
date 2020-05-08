@@ -115,6 +115,7 @@ def _ccds_table(camera='decam'):
         ('goodps1_wbadpix5', 'i2'),
         ('phoff', 'f4'),
         ('phrms', 'f4'),
+        ('phrmsavg', 'f4'),
         ('zpt', 'f4'),
         ('zpt_wbadpix5', 'f4'),
         ('transp', 'f4'),
