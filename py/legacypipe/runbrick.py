@@ -1437,7 +1437,10 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
             subslc = slice(sy0,sy1),slice(sx0,sx1)
             subimg = tim.getImage ()[subslc]
             subie  = tim.getInvError()[subslc]
-            subdq  = tim.dq[subslc]
+            if tim.dq is None:
+                subdq = None
+            else:
+                subdq  = tim.dq[subslc]
             subwcs = tim.getWcs().shifted(sx0, sy0)
             subsky = tim.getSky().shifted(sx0, sy0)
             subpsf = tim.getPsf().getShifted(sx0, sy0)
