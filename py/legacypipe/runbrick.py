@@ -2419,8 +2419,7 @@ def stage_writecat(
     for k in ['ibx','iby']:
         TT.delete_column(k)
 
-    hdr = None
-    T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, force_keep=TT.force_keep_source)
+    T2 = prepare_fits_catalog(cat, invvars, TT, bands, force_keep=TT.force_keep_source)
 
     # The "ra_ivar" values coming out of the tractor fits do *not*
     # have a cos(Dec) term -- ie, they give the inverse-variance on
@@ -2571,7 +2570,7 @@ def stage_writecat(
     T2.sersic[np.array([t in ['EXP',b'EXP'] for t in T2.type])] = 1.0
 
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
-        T2.writeto(None, fits_object=out.fits, primheader=primhdr, header=hdr)
+        T2.writeto(None, fits_object=out.fits, primheader=primhdr)
 
     # After writing tractor-i file, drop (reference) sources outside the brick.
     T2.cut((T2.bx >= -0.5) * (T2.bx <= W-0.5) *
@@ -2583,7 +2582,7 @@ def stage_writecat(
             T2.rename(c, c.lower())
     from legacypipe.format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
-        format_catalog(T2, hdr, primhdr, survey.allbands, None, release,
+        format_catalog(T2, None, primhdr, survey.allbands, None, release,
                        write_kwargs=dict(fits_object=out.fits),
                        N_wise_epochs=15, motions=gaia_stars, gaia_tagalong=True)
 

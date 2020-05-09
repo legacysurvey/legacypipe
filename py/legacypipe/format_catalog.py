@@ -355,8 +355,8 @@ def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
         if npad:
             xcat.extend([None] * npad)
 
-        TT,hdr = prepare_fits_catalog(xcat, allivs, TT, hdr, bands,
-                                      prefix=prefix+'_', force_keep=force_keep)
+        TT = prepare_fits_catalog(xcat, allivs, TT, bands,
+                                  prefix=prefix+'_', force_keep=force_keep)
 
         # # Expand out FLUX and related fields from grz arrays to 'allbands'
         keys = ['%s_flux' % prefix, '%s_flux_ivar' % prefix]

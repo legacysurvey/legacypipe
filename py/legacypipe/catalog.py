@@ -25,14 +25,11 @@ fits_typemap[GaiaSource] = 'PSF'
 def _typestring(t):
     return '%s.%s' % (t.__module__, t.__name__)
 
-def prepare_fits_catalog(cat, invvars, T, hdr, bands, allbands=None,
+def prepare_fits_catalog(cat, invvars, T, bands, allbands=None,
                          prefix='', save_invvars=True, force_keep=None):
     if T is None:
         from astrometry.util.fits import fits_table
         T = fits_table()
-    if hdr is None:
-        import fitsio
-        hdr = fitsio.FITSHDR()
     if allbands is None:
         allbands = bands
 
@@ -82,19 +79,20 @@ def prepare_fits_catalog(cat, invvars, T, hdr, bands, allbands=None,
     ra -= (ra > 360) * 360.
 
     # Downconvert RA,Dec invvars to float32
-    for c in ['ra','dec']:
-        col = '%s%s_ivar' % (prefix, c)
-        T.set(col, T.get(col).astype(np.float32))
+    if save_invvars:
+        for c in ['ra','dec']:
+            col = '%s%s_ivar' % (prefix, c)
+            T.set(col, T.get(col).astype(np.float32))
 
-    # Zero out unconstrained values
-    flux = T.get('%s%s' % (prefix, 'flux'))
-    iv = T.get('%s%s' % (prefix, 'flux_ivar'))
-    if force_keep is not None:
-        flux[(iv == 0) * np.logical_not(force_keep[:,np.newaxis])] = 0.
-    else:
-        flux[iv == 0] = 0.
+        # Zero out unconstrained values
+        flux = T.get('%s%s' % (prefix, 'flux'))
+        iv = T.get('%s%s' % (prefix, 'flux_ivar'))
+        if force_keep is not None:
+            flux[(iv == 0) * np.logical_not(force_keep[:,np.newaxis])] = 0.
+        else:
+            flux[iv == 0] = 0.
 
-    return T, hdr
+    return T
 
 def _get_tractor_fits_values(T, cat, pat):
     typearray = np.array([fits_typemap[type(src)] for src in cat])
