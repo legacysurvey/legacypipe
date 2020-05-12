@@ -1174,18 +1174,18 @@ class LegacySurveyImage(object):
                 skyval = sky_median
                 skymeth = 'median'
             tsky = ConstantSky(skyval)
-            hdr.add_record(dict(name='SKYMETH', value=skymeth,
+            primhdr.add_record(dict(name='SKYMETH', value=skymeth,
                                 comment='estimate_mode, or fallback to median?'))
             sig1 = 1./np.sqrt(np.median(wt[wt>0]))
             masked = (img - skyval) > (5.*sig1)
             masked = binary_dilation(masked, iterations=3)
             masked[wt == 0] = True
-            hdr.add_record(dict(name='SIG1', value=sig1,
+            primhdr.add_record(dict(name='SIG1', value=sig1,
                                 comment='Median stdev of unmasked pixels'))
             trymakedirs(self.skyfn, dir=True)
             tmpfn = os.path.join(os.path.dirname(self.skyfn),
                              'tmp-' + os.path.basename(self.skyfn))
-            tsky.write_fits(tmpfn, hdr=hdr)
+            tsky.write_fits(tmpfn, hdr=primhdr)
             os.rename(tmpfn, self.skyfn)
             debug('Wrote sky model', self.skyfn)
             return

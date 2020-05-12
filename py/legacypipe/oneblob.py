@@ -192,8 +192,6 @@ class OneBlob(object):
         # else:
         #     self.optargs.update(dchisq = 0.1)
 
-        #from tractor.constrained_optimizer import ConstrainedOptimizer
-        #self.trargs.update(optimizer=ConstrainedOptimizer())
         from tractor.dense_optimizer import ConstrainedDenseOptimizer
         self.trargs.update(optimizer=ConstrainedDenseOptimizer())
 

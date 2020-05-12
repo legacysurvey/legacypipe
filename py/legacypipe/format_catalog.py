@@ -446,5 +446,3 @@ def one_lightcurve_bitmask(lc_nobs, lc_mjd, n_final=13):
 
     return keep
 
-if __name__ == '__main__':
-    main()
