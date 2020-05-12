@@ -232,11 +232,6 @@ RUN python -O -m compileall \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-RUN cd /src/legacypipe && git pull && \
-git checkout dev && git describe && echo 19 && \
+RUN cd /src/legacypipe && git pull && git describe && echo 20 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
-
-# python legacypipe/runbrick.py --radec 178.8495 54.6572 --survey-dir /global/cfs/projectdirs/cosmo/work/legacysurvey/dr9 --run north --width 500 --height 500 --largegalaxy-preburner --force-all --no-large-galaxies --apodize
-
-

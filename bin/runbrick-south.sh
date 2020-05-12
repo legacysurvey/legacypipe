@@ -41,11 +41,11 @@ export MPICH_GNI_FORK_MODE=FULLCOPY
 export KMP_AFFINITY=disabled
 
 # Limit memory to avoid killing the whole MPI job...
-ncores=16
+ncores=8
 
-# 128 GB / Cori Haswell node = 134217728 kbytes
+# 128 GB / Cori Haswell node = 134217728 kbytes, 32 cores
 maxmem=134217728
-let usemem=${maxmem}*${ncores}/64
+let usemem=${maxmem}*${ncores}/32
 
 # Can detect Cori KNL node (96 GB) via:
 # grep -q "Xeon Phi" /proc/cpuinfo && echo Yes
