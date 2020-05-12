@@ -637,7 +637,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     of these blobs will be processed independently.
     '''
     from functools import reduce
-    from tractor import PointSource, NanoMaggies, Catalog
+    from tractor import Catalog
     from legacypipe.detection import (detection_maps,
                         run_sed_matched_filters, segment_and_group_sources)
     from scipy.ndimage.morphology import binary_dilation
@@ -688,13 +688,18 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     # SED-matched detections
     record_event and record_event('stage_srcs: SED-matched')
 
-    info('Running source detection at', nsigma, 'sigma')
+    debug('Running source detection at', nsigma, 'sigma')
     SEDs = survey.sed_matched_filters(bands)
+
+    kwa = {}
+    if plots:
+        coims,_ = quick_coadds(tims, bands, targetwcs)
+        kwa.update(rgbimg=get_rgb(coims, bands))
 
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
         nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
-        saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp)
+        saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp, **kwa)
 
     #if Tnew is None:
     #    raise NothingToDoError('No sources detected.')
@@ -1432,7 +1437,10 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
             subslc = slice(sy0,sy1),slice(sx0,sx1)
             subimg = tim.getImage ()[subslc]
             subie  = tim.getInvError()[subslc]
-            subdq  = tim.dq[subslc]
+            if tim.dq is None:
+                subdq = None
+            else:
+                subdq  = tim.dq[subslc]
             subwcs = tim.getWcs().shifted(sx0, sy0)
             subsky = tim.getSky().shifted(sx0, sy0)
             subpsf = tim.getPsf().getShifted(sx0, sy0)
@@ -1485,7 +1493,6 @@ def _get_both_mods(X):
     from astrometry.util.resample import resample_with_wcs, OverlapError
     from astrometry.util.miscutils import get_overlapping_region
     (tim, srcs, srcblobs, blobmap, targetwcs) = X
-    t0 = Time()
     mod = np.zeros(tim.getModelShape(), np.float32)
     blobmod = np.zeros(tim.getModelShape(), np.float32)
     assert(len(srcs) == len(srcblobs))
@@ -1498,7 +1505,7 @@ def _get_both_mods(X):
     timblobmap[:,:] = -1
     timblobmap[Yo,Xo] = blobmap[Yi,Xi]
     del Yo,Xo,Yi,Xi
-    
+
     for src,srcblob in zip(srcs, srcblobs):
         patch = src.getModelPatch(tim)
         if patch is None:
@@ -2197,7 +2204,13 @@ def stage_wise_forced(
             if WISE is None:
                 WISE = p.phot
             else:
-                p.phot.delete_column('wise_coadd_id') # duplicate
+                # remove duplicates
+                p.phot.delete_column('wise_coadd_id')
+                # (with move_crpix -- Aaron's update astrometry -- the
+                # pixel positions can be *slightly* different per
+                # band.  Ignoring that here.)
+                p.phot.delete_column('wise_x')
+                p.phot.delete_column('wise_y')
                 WISE.add_columns_from(p.phot)
 
         if wise_mask_maps is not None:
@@ -2207,13 +2220,28 @@ def stage_wise_forced(
 
         if unwise_coadds:
             from legacypipe.coadds import UnwiseCoadd
+            from legacypipe.survey import wise_apertures_arcsec
             # Create the WCS into which we'll resample the tiles.
             # Same center as "targetwcs" but bigger pixel scale.
             wpixscale = 2.75
+            wra  = np.array([src.getPosition().ra  for src in cat])
+            wdec = np.array([src.getPosition().dec for src in cat])
+
             wcoadds = UnwiseCoadd(targetwcs, W, H, pixscale, wpixscale)
             for tile in tiles.coadd_id:
                 wcoadds.add(tile, wise_models)
-            wcoadds.finish(survey, brickname, version_header)
+            apphot = wcoadds.finish(survey, brickname, version_header,
+                                    apradec=(wra,wdec),
+                                    apertures=wise_apertures_arcsec/wpixscale)
+            api,apd,apr = apphot
+            for iband,band in enumerate([1,2,3,4]):
+                WISE.set('apflux_w%i' % band, api[iband])
+                WISE.set('apflux_resid_w%i' % band, apr[iband])
+                d = apd[iband]
+                iv = np.zeros_like(d)
+                iv[d != 0.] = 1./(d[d != 0]**2)
+                WISE.set('apflux_ivar_w%i' % band, iv)
+                print('Setting WISE apphot')
 
         if Nskipped > 0:
             assert(len(WISE) == len(wcat))
@@ -2248,6 +2276,8 @@ def stage_wise_forced(
             assert(ie < Nepochs)
             phot = r.phot
             phot.delete_column('wise_coadd_id')
+            phot.delete_column('wise_x')
+            phot.delete_column('wise_y')
             for c in phot.columns():
                 if not c in WISE_T.columns():
                     x = phot.get(c)
@@ -2392,8 +2422,7 @@ def stage_writecat(
     for k in ['ibx','iby']:
         TT.delete_column(k)
 
-    hdr = None
-    T2,hdr = prepare_fits_catalog(cat, invvars, TT, hdr, bands, force_keep=TT.force_keep_source)
+    T2 = prepare_fits_catalog(cat, invvars, TT, bands, force_keep=TT.force_keep_source)
 
     # The "ra_ivar" values coming out of the tractor fits do *not*
     # have a cos(Dec) term -- ie, they give the inverse-variance on
@@ -2455,7 +2484,15 @@ def stage_writecat(
                 comment='WISE Vega to AB conv for band %i' % band))
 
         T2.wise_coadd_id = WISE.wise_coadd_id
+        T2.wise_x = WISE.wise_x
+        T2.wise_y = WISE.wise_y
         T2.wise_mask = WISE.wise_mask
+
+        if 'apflux_w1' in WISE.get_columns():
+            from legacypipe.survey import wise_apertures_arcsec
+            for i,ap in enumerate(wise_apertures_arcsec):
+                primhdr.add_record(dict(name='WAPRAD%i' % i, value=ap,
+                                        comment='WISE aperture radius, in arcsec'))
 
         for band in [1,2,3,4]:
             # Apply the Vega-to-AB shift *while* copying columns from
@@ -2480,6 +2517,14 @@ def stage_writecat(
             c = 'w%i_psfdepth' % band
             t = 'psfdepth_w%i' % band
             T2.set(t, WISE.get(c) / fluxfactor**2)
+
+            if 'apflux_w%i'%band in WISE.get_columns():
+                t = c = 'apflux_w%i' % band
+                T2.set(t, WISE.get(c) * fluxfactor)
+                t = c = 'apflux_resid_w%i' % band
+                T2.set(t, WISE.get(c) * fluxfactor)
+                t = c = 'apflux_ivar_w%i' % band
+                T2.set(t, WISE.get(c) / fluxfactor**2)
 
         # Rename some WISE columns
         for cin,cout in [('w%i_nexp',        'nobs_w%i'),
@@ -2528,7 +2573,7 @@ def stage_writecat(
     T2.sersic[np.array([t in ['EXP',b'EXP'] for t in T2.type])] = 1.0
 
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
-        T2.writeto(None, fits_object=out.fits, primheader=primhdr, header=hdr)
+        T2.writeto(None, fits_object=out.fits, primheader=primhdr)
 
     # After writing tractor-i file, drop (reference) sources outside the brick.
     T2.cut((T2.bx >= -0.5) * (T2.bx <= W-0.5) *
@@ -2540,7 +2585,7 @@ def stage_writecat(
             T2.rename(c, c.lower())
     from legacypipe.format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
-        format_catalog(T2, hdr, primhdr, survey.allbands, None, release,
+        format_catalog(T2, None, primhdr, survey.allbands, None, release,
                        write_kwargs=dict(fits_object=out.fits),
                        N_wise_epochs=15, motions=gaia_stars, gaia_tagalong=True)
 
@@ -2615,7 +2660,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               record_event=None,
     # These are for the 'stages' infrastructure
               pickle_pat='pickles/runbrick-%(brick)s-%%(stage)s.pickle',
-              stages=['writecat'],
+              stages=None,
               force=None, forceall=False, write_pickles=True,
               checkpoint_filename=None,
               checkpoint_period=None,
@@ -2767,6 +2812,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     if force is None:
         force = []
+    if stages is None:
+        stages=['writecat']
     forceStages = [s for s in stages]
     forceStages.extend(force)
     if forceall:
@@ -2943,7 +2990,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             'fit_on_coadds': 'halos',
             'srcs': 'fit_on_coadds',
         })
-        
+
     if prereqs_update is not None:
         prereqs.update(prereqs_update)
 
@@ -3229,7 +3276,7 @@ def get_runbrick_kwargs(survey=None,
                         check_done=False,
                         skip=False,
                         skip_coadd=False,
-                        stage=[],
+                        stage=None,
                         unwise_dir=None,
                         unwise_tr_dir=None,
                         unwise_modelsky_dir=None,
@@ -3238,6 +3285,8 @@ def get_runbrick_kwargs(survey=None,
                         gpsf=False,
                         bands=None,
                         **opt):
+    if stage is None:
+        stage = []
     if brick is not None and radec is not None:
         print('Only ONE of --brick and --radec may be specified.')
         return None, -1
@@ -3333,7 +3382,7 @@ def main(args=None):
         print('Command-line args:', sys.argv)
         cmd = 'python'
         for vv in sys.argv:
-            cmd += ' {}'.format(vv) 
+            cmd += ' {}'.format(vv)
         print(cmd)
     else:
         print('Args:', args)

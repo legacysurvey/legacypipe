@@ -57,6 +57,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     phot = fits_table()
     # Filled in based on unique tile overlap
     phot.wise_coadd_id = np.array(['        '] * Nsrcs)
+    phot.wise_x = np.zeros(Nsrcs, np.float32)
+    phot.wise_y = np.zeros(Nsrcs, np.float32)
     phot.set(wband + '_psfdepth', np.zeros(len(phot), np.float32))
 
     ra  = np.array([src.getPosition().ra  for src in cat])
@@ -244,7 +246,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             if (band == 1) or (band == 2):
                 # we only have updated PSFs for W1 and W2
                 psfimg = unwise_psf.get_unwise_psf(band, tile.coadd_id,
-                                                   modelname='neo5_unwisecat')
+                                                   modelname='neo6_unwisecat')
             else:
                 psfimg = unwise_psf.get_unwise_psf(band, tile.coadd_id)
 
@@ -303,9 +305,9 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 print('WARNING: cannot apply psf_broadening to WISE PSF of type', type(psf))
 
         wcs = tim.wcs.wcs
-        ok,x,y = wcs.radec2pixelxy(ra, dec)
-        x = np.round(x - 1.).astype(int)
-        y = np.round(y - 1.).astype(int)
+        ok,fx,fy = wcs.radec2pixelxy(ra, dec)
+        x = np.round(fx - 1.).astype(int)
+        y = np.round(fy - 1.).astype(int)
         good = (x >= 0) * (x < tw) * (y >= 0) * (y < th)
         # Which sources are in this brick's unique area?
         usrc = radec_in_unique_area(ra, dec, tile.ra1, tile.ra2, tile.dec1, tile.dec2)
@@ -315,6 +317,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         if hasattr(tim, 'mjdmin') and hasattr(tim, 'mjdmax'):
             mjd[I] = (tim.mjdmin + tim.mjdmax) / 2.
         phot.wise_coadd_id[I] = tile.coadd_id
+        phot.wise_x[I] = fx[I] - 1.
+        phot.wise_y[I] = fy[I] - 1.
 
         central_flux[I] = tim.getImage()[y[I], x[I]]
         del x,y,good,usrc
@@ -412,7 +416,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     if save_fits:
         for i,tim in enumerate(tims):
             tile = tim.tile
-            (dat, mod, ie, chi, roi) = ims1[i]
+            (dat, mod, ie, chi, _) = ims1[i]
             wcshdr = fitsio.FITSHDR()
             tim.wcs.wcs.add_to_header(wcshdr)
             tag = 'fit-%s-w%i' % (tile.coadd_id, band)
@@ -644,8 +648,8 @@ def unwise_tiles_touching_wcs(wcs, polygons=True):
         H, W = wwcs.shape
         poly = []
         for x, y in [(0.5, 0.5), (W + 0.5, 0.5), (W + 0.5, H + 0.5), (0.5, H + 0.5)]:
-            rr, dd = wwcs.pixelxy2radec(x, y)
-            ok, xx, yy = wcs.radec2pixelxy(rr, dd)
+            rr,dd = wwcs.pixelxy2radec(x, y)
+            _,xx,yy = wcs.radec2pixelxy(rr, dd)
             poly.append((xx, yy))
         if wdet > 0:
             poly = list(reversed(poly))

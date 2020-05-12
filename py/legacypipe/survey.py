@@ -31,6 +31,9 @@ tempdir = tempfile.gettempdir()
 # The apertures we use in aperture photometry, in ARCSEC radius
 apertures_arcsec = np.array([0.5, 0.75, 1., 1.5, 2., 3.5, 5., 7.])
 
+# WISE apertures, in ARCSEC radius
+wise_apertures_arcsec = np.array([3., 5., 7., 9., 11.])
+
 # Ugly hack: for sphinx documentation, the astrometry and tractor (and
 # other) packages are replaced by mock objects.  But you can't
 # subclass a mock object correctly, so we have to un-mock

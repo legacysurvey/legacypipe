@@ -318,6 +318,7 @@ def stage_fit_on_coadds(
     from legacypipe.coadds import make_coadds
     from legacypipe.bits import DQ_BITS
     from legacypipe.survey import get_rgb, imsave_jpeg, LegacySurveyWcs
+    from legacypipe.coadds import get_coadd_headers
 
     from tractor.image import Image
     from tractor.basics import NanoMaggies, LinearPhotoCal
@@ -342,7 +343,6 @@ def stage_fit_on_coadds(
         ie = tim.inverr
         if np.any(ie < 0):
             print('Negative inverse error in image {}'.format(tim.name))
-
 
     C = make_coadds(tims, bands, targetwcs,
                     detmaps=True, ngood=True, lanczos=lanczos,
@@ -468,6 +468,7 @@ def stage_fit_on_coadds(
         cotim.imobj.fwhm = 2.35 * psf_sigma
         cotim.time = tai
         cotim.primhdr = fitsio.FITSHDR()
+        get_coadd_headers(cotim.primhdr, tims, band)
 
         cotims.append(cotim)
 

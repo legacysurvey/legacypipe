@@ -2,7 +2,6 @@ from __future__ import print_function
 import sys
 import numpy as np
 import os
-import fitsio
 
 if __name__ == '__main__':
     import matplotlib

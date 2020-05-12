@@ -192,8 +192,6 @@ class OneBlob(object):
         # else:
         #     self.optargs.update(dchisq = 0.1)
 
-        #from tractor.constrained_optimizer import ConstrainedOptimizer
-        #self.trargs.update(optimizer=ConstrainedOptimizer())
         from tractor.dense_optimizer import ConstrainedDenseOptimizer
         self.trargs.update(optimizer=ConstrainedDenseOptimizer())
 
@@ -509,7 +507,8 @@ class OneBlob(object):
                     #print('Source', t, 'is isolated at S/N', thresh)
                     done.add(t)
             todo.difference_update(done)
-        del hot, maxsn, saturated_pix
+            del hot
+        del maxsn, saturated_pix
 
         # ensure that each source owns a tiny radius around its center in the segmentation map.
         # If there is more than one source in that radius, each pixel gets assigned to its nearest source.
@@ -601,7 +600,7 @@ class OneBlob(object):
                 info('Frozen source', src, '-- keeping as-is!')
                 B.sources[srci] = src
                 continue
-            
+
             # Add this source's initial model back in.
             models.add(srci, self.tims)
 
@@ -870,7 +869,7 @@ class OneBlob(object):
         # Save
         oldsrcs = self.srcs
         self.srcs = newsrcs
-        
+
         Bnew = fits_table()
         Bnew.sources = newsrcs
         Bnew.Isrcs = np.array([-1]*len(Bnew))
@@ -1250,7 +1249,7 @@ class OneBlob(object):
 
             # LSLGA galaxy: set the maximum allowed r_e.
             known_galaxy_logrmax = 0.
-            if isinstance(src, (DevGalaxy,ExpGalaxy)):
+            if isinstance(src, (DevGalaxy,ExpGalaxy, SersicGalaxy)):
                 print('Known galaxy.  Initial shape:', src.shape)
                 # MAGIC 2. = factor by which r_e is allowed to grow for an LSLGA galaxy.
                 known_galaxy_logrmax = np.log(src.shape.re * 2.)
@@ -1388,8 +1387,8 @@ class OneBlob(object):
                 if name in ['rex', 'exp', 'dev', 'ser']:
                     debug('Hit limit: r %.2f vs %.2f' %
                           (newsrc.shape.re, np.exp(logrmax)))
-            ok,ix,iy = srcwcs.radec2pixelxy(newsrc.getPosition().ra,
-                                            newsrc.getPosition().dec)
+            _,ix,iy = srcwcs.radec2pixelxy(newsrc.getPosition().ra,
+                                           newsrc.getPosition().dec)
             ix = int(ix-1)
             iy = int(iy-1)
             sh,sw = srcblobmask.shape
@@ -1738,7 +1737,7 @@ class OneBlob(object):
             plt.savefig('blob-%s-data.png' % (self.name))
             plt.figure(1)
 
-        ok,x0,y0 = self.blobwcs.radec2pixelxy(
+        _,x0,y0 = self.blobwcs.radec2pixelxy(
             np.array([src.getPosition().ra  for src in self.srcs]),
             np.array([src.getPosition().dec for src in self.srcs]))
 
@@ -1829,6 +1828,7 @@ def is_reference_source(src):
     return getattr(src, 'is_reference_source', False)
 
 def _compute_source_metrics(srcs, tims, bands, tr):
+    import warnings
     # rchi2 quality-of-fit metric
     rchi2_num    = np.zeros((len(srcs),len(bands)), np.float32)
     rchi2_den    = np.zeros((len(srcs),len(bands)), np.float32)
@@ -1942,9 +1942,11 @@ def _compute_source_metrics(srcs, tims, bands, tr):
                 # sum(patch.patch) == counts[isrc].
                 rchi2_den[isrc,iband] += np.sum(patch.patch) / counts[isrc]
 
-    fracflux   = fracflux_num   / fracflux_den
-    rchi2      = rchi2_num      / rchi2_den
-    fracmasked = fracmasked_num / fracmasked_den
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        fracflux   = fracflux_num   / fracflux_den
+        rchi2      = rchi2_num      / rchi2_den
+        fracmasked = fracmasked_num / fracmasked_den
 
     # Eliminate NaNs (these happen when, eg, we have no coverage in one band but
     # sources detected in another band, hence denominator is zero)

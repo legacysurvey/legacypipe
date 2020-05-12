@@ -8,7 +8,6 @@ from __future__ import division, print_function
 import os
 import argparse
 import numpy as np
-import pickle
 from collections import defaultdict
 try:
     from astrometry.util.fits import fits_table, merge_tables

@@ -1,6 +1,5 @@
 from __future__ import print_function
 import numpy as np
-import fitsio
 from astrometry.util.fits import fits_table, merge_tables
 from collections import Counter
 
@@ -220,8 +219,6 @@ def psf_zeropoint_cuts(P, pixscale,
     P.ccdrarms[np.logical_not(np.isfinite(P.ccdrarms))] = 1.
     P.ccddecrms[np.logical_not(np.isfinite(P.ccddecrms))] = 1.
 
-    keys = zpt_cut_lo.keys()
-
     if camera == 'decam':
         ccdzpt = detrend_decam_zeropoints(P)
     else:
@@ -356,8 +353,6 @@ if __name__ == '__main__':
 
     # MzLS, BASS DR8b updates
     T = fits_table('/global/project/projectdirs/cosmo/work/legacysurvey/dr8b/runbrick-90prime-mosaic/survey-ccds-dr8b-90prime-mosaic-nocuts.kd.fits')
-
-    from collections import Counter
     print('Cameras:', Counter(T.camera))
 
     camera = 'mosaic'

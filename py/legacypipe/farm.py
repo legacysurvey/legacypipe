@@ -623,7 +623,7 @@ def output_thread(queuename, outqueue, checkpointqueue, blobsizes,
             c[brick] += 1
         #if len(c):
         #    print('Read checkpointed results:', c)
-        for brick,n in c.most_common():
+        for brick,_ in c.most_common():
             nblobs,_ = get_brick_nblobs(brick, '(unknown)')
             #print('Brick', brick, ': now', len(allresults[brick]), 'of', nblobs, 'done')
             check_brick_done(brick)
@@ -678,10 +678,9 @@ def get_blob_iter(skipblobs=None,
                   T_clusters=None,
                   custom_brick=False,
                   **kwargs):
-    import numpy as np
     if skipblobs is None:
         skipblobs = []
-    
+
     # drop any cached data before we start pickling/multiprocessing
     survey.drop_cache()
 
@@ -692,7 +691,7 @@ def get_blob_iter(skipblobs=None,
                           targetwcs, tims,
                           cat, bands, plots, ps,
                           reoptimize, iterative, use_ceres,
-                          refmap, 
+                          refmap,
                           large_galaxies_force_pointsource,
                           less_masking,
                           brick,
@@ -773,8 +772,6 @@ def queue_work(brickname, inqueue, bigqueue, checkpointqueue, opt):
     if opt.big == 'keep':
         big_npix = 10000 * 10000
 
-    mypid = os.getpid()
-
     nq = 0
     for arg in blobiter:
         if arg is None:
@@ -805,6 +802,7 @@ def queue_work(brickname, inqueue, bigqueue, checkpointqueue, opt):
         qitem = PrioritizedItem(priority=priority, item=(br, iblob, picl))
 
         #debug('Queuing blob', (nq+1), 'for brick', brickname, '- queue size ~', inqueue.qsize())
+        #mypid = os.getpid()
         #print('Input proc', mypid, 'queuing blob', (nq+1), 'for brick', brickname, 'qsize ~', inqueue.qsize())
         nq += 1
         dest_queue.put(qitem)

@@ -2,7 +2,8 @@
 """This script runs calibration pre-processing steps including sky and PSF models.
 """
 from __future__ import print_function
-from astrometry.util.fits import fits_table, merge_tables
+
+from astrometry.util.fits import merge_tables
 
 from legacypipe.survey import run_calibs, LegacySurveyData
 
@@ -78,7 +79,7 @@ def main():
 
         im = survey.get_image_object(t)
         print('Running', im.name)
-        
+
         kwargs = dict(psfex=opt.psfex, sky=opt.sky, ps=ps, survey=survey,
                       survey_blob_mask=survey_blob_mask)
         if opt.force:
@@ -89,7 +90,7 @@ def main():
             kwargs.update(splinesky=True)
         if opt.cont:
             kwargs.update(noraise=True)
-            
+
         if opt.threads:
             args.append((im, kwargs))
         else:
@@ -99,7 +100,7 @@ def main():
         from astrometry.util.multiproc import multiproc
         mp = multiproc(opt.threads)
         mp.map(time_run_calibs, args)
-        
+
     return 0
 
 def time_run_calibs(*args):

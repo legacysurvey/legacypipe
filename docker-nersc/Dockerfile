@@ -185,7 +185,7 @@ RUN ln -s $(which python3) /usr/bin/python
 
 # unwise_psf
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \
-    && cd unwise_psf && git checkout dr9.2
+    && cd unwise_psf && git checkout dr9.3
 
 # Legacypipe
 RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
@@ -232,10 +232,6 @@ RUN python -O -m compileall \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-RUN cd /src/legacypipe && git pull && git describe && echo 17 && \
+RUN cd /src/legacypipe && git pull && git describe && echo 20 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
-
-# python legacypipe/runbrick.py --radec 178.8495 54.6572 --survey-dir /global/cfs/projectdirs/cosmo/work/legacysurvey/dr9 --run north --width 500 --height 500 --largegalaxy-preburner --force-all --no-large-galaxies --apodize
-
-

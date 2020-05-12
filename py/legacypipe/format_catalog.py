@@ -184,6 +184,11 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
                   'apflux_ivar', 'apflux_masked']:
             add_fluxlike(c)
 
+    if has_wise and has_ap and 'apflux_w1' in T.get_columns():
+        add_wiselike('apflux')
+        add_wiselike('apflux_resid')
+        add_wiselike('apflux_ivar')
+
     cols.extend(trans_cols_opt)
     cols.extend(trans_cols_wise)
 
@@ -204,7 +209,8 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
         add_wiselike('psfdepth')
 
     if has_wise:
-        cols.append('wise_coadd_id')
+        cols.extend(['wise_coadd_id', 'wise_x', 'wise_y'])
+
     if has_wise_lc:
         trbands = ['w1','w2']
         lc_cols = ['lc_flux', 'lc_flux_ivar', 'lc_nobs', 'lc_fracflux',
@@ -349,8 +355,8 @@ def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
         if npad:
             xcat.extend([None] * npad)
 
-        TT,hdr = prepare_fits_catalog(xcat, allivs, TT, hdr, bands,
-                                      prefix=prefix+'_', force_keep=force_keep)
+        TT = prepare_fits_catalog(xcat, allivs, TT, bands,
+                                  prefix=prefix+'_', force_keep=force_keep)
 
         # # Expand out FLUX and related fields from grz arrays to 'allbands'
         keys = ['%s_flux' % prefix, '%s_flux_ivar' % prefix]
@@ -440,5 +446,3 @@ def one_lightcurve_bitmask(lc_nobs, lc_mjd, n_final=13):
 
     return keep
 
-if __name__ == '__main__':
-    main()

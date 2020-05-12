@@ -236,7 +236,7 @@ class LegacySurveyImage(object):
         # not used by this code -- here for the sake of legacyzpts/merge_calibs.py
         self.old_single_psffn = os.path.join(calibdir, imgdir, basename, calname + '-psfex.fits')
         self.old_single_skyfn = os.path.join(calibdir, imgdir, basename, calname + '-splinesky.fits')
-        
+
     def compute_filenames(self):
         # Compute data quality and weight-map filenames
         self.dqfn = self.imgfn.replace('_ooi_', '_ood_').replace('_oki_','_ood_')
@@ -1079,7 +1079,7 @@ class LegacySurveyImage(object):
         if rtn:
             raise RuntimeError('Command failed: ' + cmd)
         os.rename(tmpfn, self.sefn)
-        
+
     def run_psfex(self, git_version=None, ps=None):
         from astrometry.util.file import trymakedirs
         from legacypipe.survey import get_git_version
@@ -1174,18 +1174,18 @@ class LegacySurveyImage(object):
                 skyval = sky_median
                 skymeth = 'median'
             tsky = ConstantSky(skyval)
-            hdr.add_record(dict(name='SKYMETH', value=skymeth,
+            primhdr.add_record(dict(name='SKYMETH', value=skymeth,
                                 comment='estimate_mode, or fallback to median?'))
             sig1 = 1./np.sqrt(np.median(wt[wt>0]))
             masked = (img - skyval) > (5.*sig1)
             masked = binary_dilation(masked, iterations=3)
             masked[wt == 0] = True
-            hdr.add_record(dict(name='SIG1', value=sig1,
+            primhdr.add_record(dict(name='SIG1', value=sig1,
                                 comment='Median stdev of unmasked pixels'))
             trymakedirs(self.skyfn, dir=True)
             tmpfn = os.path.join(os.path.dirname(self.skyfn),
                              'tmp-' + os.path.basename(self.skyfn))
-            tsky.write_fits(tmpfn, hdr=hdr)
+            tsky.write_fits(tmpfn, hdr=primhdr)
             os.rename(tmpfn, self.skyfn)
             debug('Wrote sky model', self.skyfn)
             return

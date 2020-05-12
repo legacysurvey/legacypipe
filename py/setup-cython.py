@@ -6,16 +6,16 @@ os.environ['CFLAGS'] = '-march=native'
 
 setup(
     ext_modules = cythonize([
+        'legacypipe/bits.py',
         'legacypipe/bok.py',
         'legacypipe/catalog.py',
         'legacypipe/coadds.py',
-        'legacypipe/constrained_optimizer.py',
         'legacypipe/decam.py',
         'legacypipe/detection.py',
         'legacypipe/format_catalog.py',
         'legacypipe/gaiacat.py',
         'legacypipe/halos.py',
-        # 'legacypipe/image.py',
+        'legacypipe/image.py',
         'legacypipe/mosaic.py',
         'legacypipe/oneblob.py',
         'legacypipe/outliers.py',

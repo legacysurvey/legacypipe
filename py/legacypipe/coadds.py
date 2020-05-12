@@ -62,10 +62,29 @@ class UnwiseCoadd(object):
             except OverlapError:
                 debug('No overlap between WISE model tile', tile, 'and brick')
 
-    def finish(self, survey, brickname, version_header):
+    def finish(self, survey, brickname, version_header,
+               apradec=None, apertures=None):
+        # apradec = (ra,dec): aperture photometry locations
+        # apertures: RADII in PIXELS
         from legacypipe.survey import imsave_jpeg
-        for band,co,n,com,coiv in zip([1,2,3,4],
-                                      self.unwise_co,  self.unwise_con, self.unwise_com, self.unwise_coiv):
+
+        if apradec is not None:
+            assert(apertures is not None)
+            (ra,dec) = apradec
+            ok,xx,yy = self.unwise_wcs.radec2pixelxy(ra, dec)
+            assert(np.all(ok))
+            del ok
+            apxy = np.vstack((xx - 1., yy - 1.)).T
+            ap_iphots = [np.zeros((len(ra), len(apertures)), np.float32)
+                         for band in [1,2,3,4]]
+            ap_dphots = [np.zeros((len(ra), len(apertures)), np.float32)
+                         for band in [1,2,3,4]]
+            ap_rphots = [np.zeros((len(ra), len(apertures)), np.float32)
+                         for band in [1,2,3,4]]
+
+        for iband,(band,co,n,com,coiv) in enumerate(
+                zip([1,2,3,4], self.unwise_co,  self.unwise_con,
+                    self.unwise_com, self.unwise_coiv)):
             hdr = fitsio.FITSHDR()
             for r in version_header.records():
                 hdr.add_record(r)
@@ -79,18 +98,34 @@ class UnwiseCoadd(object):
             hdr.add_record(dict(name='MAGZERO', value=22.5,
                                     comment='Magnitude zeropoint'))
             hdr.add_record(dict(name='MAGSYS', value='Vega',
-                                    comment='This WISE image is in Vega fluxes'))
+                                comment='This WISE image is in Vega fluxes'))
             co  /= np.maximum(n, 1)
             com /= np.maximum(n, 1)
-            with survey.write_output('image', brick=brickname, band='W%i' % band,
+            with survey.write_output('image', brick=brickname, band='W%i'%band,
                                      shape=co.shape) as out:
                 out.fits.write(co, header=hdr)
-            with survey.write_output('model', brick=brickname, band='W%i' % band,
+            with survey.write_output('model', brick=brickname, band='W%i'%band,
                                      shape=com.shape) as out:
                 out.fits.write(com, header=hdr)
-            with survey.write_output('invvar', brick=brickname, band='W%i' % band,
+            with survey.write_output('invvar', brick=brickname, band='W%i'%band,
                                      shape=co.shape) as out:
                 out.fits.write(coiv, header=hdr)
+
+            if apradec is not None:
+                import photutils
+                mask = (coiv == 0)
+                with np.errstate(divide='ignore'):
+                    imsigma = 1.0/np.sqrt(coiv)
+                imsigma[mask] = 0.
+                for irad,rad in enumerate(apertures):
+                    aper = photutils.CircularAperture(apxy, rad)
+                    p = photutils.aperture_photometry(co, aper, error=imsigma,
+                                                      mask=mask)
+                    ap_iphots[iband][:,irad] = p.field('aperture_sum')
+                    ap_dphots[iband][:,irad] = p.field('aperture_sum_err')
+                    p = photutils.aperture_photometry(co-com, aper, mask=mask)
+                    ap_rphots[iband][:,irad] = p.field('aperture_sum')
+
         # W1/W2 color jpeg
         rgb = _unwise_to_rgb(self.unwise_co[:2])
         with survey.write_output('wise-jpeg', brick=brickname) as out:
@@ -100,6 +135,9 @@ class UnwiseCoadd(object):
         with survey.write_output('wisemodel-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower')
             info('Wrote', out.fn)
+
+        if apradec is not None:
+            return ap_iphots, ap_dphots, ap_rphots
 
 def _unwise_to_rgb(imgs):
     img = imgs[0]
@@ -601,7 +639,8 @@ def make_coadds(tims, bands, targetwcs,
             ap = np.vstack(apimg).T
             ap[np.logical_not(np.isfinite(ap))] = 0.
             C.AP.set('apflux_img_%s' % band, ap)
-            ap = 1./(np.vstack(apimgerr).T)**2
+            with np.errstate(divide='ignore'):
+                ap = 1./(np.vstack(apimgerr).T)**2
             ap[np.logical_not(np.isfinite(ap))] = 0.
             C.AP.set('apflux_img_ivar_%s' % band, ap)
             ap = np.vstack(apmask).T
@@ -873,18 +912,7 @@ def _apphot_one(args):
 
     return result
 
-def write_coadd_images(band,
-                       survey, brickname, version_header, tims, targetwcs,
-                       co_sky,
-                       cowimg=None, cow=None, cowmod=None, cochi2=None,
-                       cowblobmod=None,
-                       psfdetiv=None, galdetiv=None, congood=None,
-                       psfsize=None, **kwargs):
-
-    # copy version_header before modifying...
-    hdr = fitsio.FITSHDR()
-    for r in version_header.records():
-        hdr.add_record(r)
+def get_coadd_headers(hdr, tims, band):
     # Grab these keywords from all input files for this band...
     keys = ['OBSERVAT', 'TELESCOP','OBS-LAT','OBS-LONG','OBS-ELEV',
             'INSTRUME','FILTER']
@@ -931,6 +959,21 @@ def write_coadd_images(band,
     hdr.add_record(dict(
         name='DATEOBS', value=tt[2],
         comment='Mean DATE-OBS for the stack (UTC)'))
+
+def write_coadd_images(band,
+                       survey, brickname, version_header, tims, targetwcs,
+                       co_sky,
+                       cowimg=None, cow=None, cowmod=None, cochi2=None,
+                       cowblobmod=None,
+                       psfdetiv=None, galdetiv=None, congood=None,
+                       psfsize=None, **kwargs):
+
+    # copy version_header before modifying...
+    hdr = fitsio.FITSHDR()
+    for r in version_header.records():
+        hdr.add_record(r)
+    # Grab headers from input images...
+    get_coadd_headers(hdr, tims, band)
 
     # Plug the WCS header cards into these images
     targetwcs.add_to_header(hdr)
