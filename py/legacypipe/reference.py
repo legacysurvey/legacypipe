@@ -327,6 +327,10 @@ def read_tycho2(survey, targetwcs, bands):
     # add Gaia-style columns
     # No parallaxes in Tycho-2
     tycho.parallax = np.zeros(len(tycho), np.float32)
+    # Tycho-2 "supplement" stars, from Hipparcos and Tycho-1 catalogs, have
+    # ref_epoch = 0.  Fill in with the 1991.25 epoch of those catalogs.
+    tycho.epoch_ra [tycho.epoch_ra  == 0] = 1991.25
+    tycho.epoch_dec[tycho.epoch_dec == 0] = 1991.25
     # Tycho-2 has separate epoch_ra and epoch_dec.
     # Move source to the mean epoch.
     tycho.ref_epoch = (tycho.epoch_ra + tycho.epoch_dec) / 2.
