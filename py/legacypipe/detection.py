@@ -318,7 +318,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     --------
     sed_matched_filters : creates the `(sedname, sed)` pairs used here
     run_sed_matched_filters : calls this method
-    
     '''
     from scipy.ndimage.measurements import label, find_objects
     from scipy.ndimage.morphology import binary_dilation, binary_fill_holes

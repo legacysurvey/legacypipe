@@ -637,7 +637,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     of these blobs will be processed independently.
     '''
     from functools import reduce
-    from tractor import PointSource, Catalog
+    from tractor import Catalog
     from legacypipe.detection import (detection_maps,
                         run_sed_matched_filters, segment_and_group_sources)
     from scipy.ndimage.morphology import binary_dilation
@@ -1505,7 +1505,7 @@ def _get_both_mods(X):
     timblobmap[:,:] = -1
     timblobmap[Yo,Xo] = blobmap[Yi,Xi]
     del Yo,Xo,Yi,Xi
-    
+
     for src,srcblob in zip(srcs, srcblobs):
         patch = src.getModelPatch(tim)
         if patch is None:
@@ -3276,7 +3276,7 @@ def get_runbrick_kwargs(survey=None,
                         check_done=False,
                         skip=False,
                         skip_coadd=False,
-                        stage=[],
+                        stage=None,
                         unwise_dir=None,
                         unwise_tr_dir=None,
                         unwise_modelsky_dir=None,
@@ -3285,6 +3285,8 @@ def get_runbrick_kwargs(survey=None,
                         gpsf=False,
                         bands=None,
                         **opt):
+    if stage is None:
+        stage = []
     if brick is not None and radec is not None:
         print('Only ONE of --brick and --radec may be specified.')
         return None, -1

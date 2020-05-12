@@ -177,7 +177,7 @@ def ps1_to_90prime(psmags, band):
     colorterm = -(coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
     print('Using 90prime ColorTerm')
     return colorterm
-    
+
 def ps1_to_mosaic(psmags, band):
     '''
     psmags: 2-d array (Nstars, Nbands)

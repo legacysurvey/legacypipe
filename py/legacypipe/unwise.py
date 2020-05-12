@@ -416,7 +416,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     if save_fits:
         for i,tim in enumerate(tims):
             tile = tim.tile
-            (dat, mod, ie, chi, roi) = ims1[i]
+            (dat, mod, ie, chi, _) = ims1[i]
             wcshdr = fitsio.FITSHDR()
             tim.wcs.wcs.add_to_header(wcshdr)
             tag = 'fit-%s-w%i' % (tile.coadd_id, band)
@@ -648,8 +648,8 @@ def unwise_tiles_touching_wcs(wcs, polygons=True):
         H, W = wwcs.shape
         poly = []
         for x, y in [(0.5, 0.5), (W + 0.5, 0.5), (W + 0.5, H + 0.5), (0.5, H + 0.5)]:
-            rr, dd = wwcs.pixelxy2radec(x, y)
-            ok, xx, yy = wcs.radec2pixelxy(rr, dd)
+            rr,dd = wwcs.pixelxy2radec(x, y)
+            _,xx,yy = wcs.radec2pixelxy(rr, dd)
             poly.append((xx, yy))
         if wdet > 0:
             poly = list(reversed(poly))

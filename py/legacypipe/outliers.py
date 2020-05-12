@@ -297,7 +297,7 @@ def compare_one(X):
     with np.errstate(divide='ignore'):
         diffvar = 1./wt + 1./otherwt
         sndiff = (rimg - otherimg) / np.sqrt(diffvar)
-    
+
     with np.errstate(divide='ignore'):
         reldiff = ((rimg - otherimg) / np.maximum(otherimg, this_sig1))
 

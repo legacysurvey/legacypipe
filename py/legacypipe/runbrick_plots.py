@@ -45,7 +45,7 @@ def fitblobs_plots(tims, bands, targetwcs, blobslices, blobsrcs, cat,
         for isrc in Isrcs:
             src = cat[isrc]
             ra,dec = src.getPosition().ra, src.getPosition().dec
-            ok,x,y = targetwcs.radec2pixelxy(ra, dec)
+            _,x,y = targetwcs.radec2pixelxy(ra, dec)
             plt.text(x, y, 'b%i/s%i' % (i,isrc),
                      ha='center', va='bottom', color='r')
     plt.axis(ax)
@@ -82,7 +82,7 @@ def fitblobs_plots(tims, bands, targetwcs, blobslices, blobsrcs, cat,
 
 def detection_plots_2(tims, bands, targetwcs, refstars, Tnew, hot,
                       saturated_pix, ps):
-    coimgs,cons = quick_coadds(tims, bands, targetwcs)
+    coimgs,_ = quick_coadds(tims, bands, targetwcs)
     crossa = dict(ms=10, mew=1.5)
     plt.clf()
     dimshow(get_rgb(coimgs, bands))
@@ -146,7 +146,7 @@ def detection_plots(detmaps, detivs, bands, saturated_pix, tims,
         lp,lt = [],[]
         tycho = refstars[refstars.isbright]
         if len(tycho):
-            ok,ix,iy = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
+            _,ix,iy = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
             p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=14, mec='r', mfc='none')
             lp.append(p)
             lt.append('Tycho-2 only')
@@ -194,7 +194,7 @@ def halo_plots_before(tims, bands, targetwcs, halostars, ps):
     return coimgs
 
 def halo_plots_after(tims, bands, targetwcs, halostars, coimgs, ps):
-    coimgs2,cons = quick_coadds(tims, bands, targetwcs)
+    coimgs2,_ = quick_coadds(tims, bands, targetwcs)
     plt.clf()
     dimshow(get_rgb(coimgs2, bands))
     ax = plt.axis()
@@ -409,7 +409,7 @@ def _plot_mods(tims, mods, blobwcs, titles, bands, coimgs, cons, bslc,
         plt.title('RGB')
         plt.subplot(rows,cols,5)
         plt.title('RGB(stretch)')
-        
+
         imgs = []
         themods = []
         resids = []

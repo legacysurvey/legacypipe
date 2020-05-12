@@ -602,7 +602,7 @@ class OneBlob(object):
                 info('Frozen source', src, '-- keeping as-is!')
                 B.sources[srci] = src
                 continue
-            
+
             # Add this source's initial model back in.
             models.add(srci, self.tims)
 

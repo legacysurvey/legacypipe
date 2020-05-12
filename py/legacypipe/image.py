@@ -236,7 +236,7 @@ class LegacySurveyImage(object):
         # not used by this code -- here for the sake of legacyzpts/merge_calibs.py
         self.old_single_psffn = os.path.join(calibdir, imgdir, basename, calname + '-psfex.fits')
         self.old_single_skyfn = os.path.join(calibdir, imgdir, basename, calname + '-splinesky.fits')
-        
+
     def compute_filenames(self):
         # Compute data quality and weight-map filenames
         self.dqfn = self.imgfn.replace('_ooi_', '_ood_').replace('_oki_','_ood_')

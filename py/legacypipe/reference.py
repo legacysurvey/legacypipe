@@ -408,8 +408,8 @@ def read_large_galaxies(survey, targetwcs, bands):
         galaxies.rename('lslga_id', 'ref_id')
         galaxies.ref_cat = np.array([refcat] * len(galaxies))
         galaxies.islargegalaxy = np.array([True] * len(galaxies))
-        galaxies.preburned = np.zeros(len(galaxies), bool)        
-        
+        galaxies.preburned = np.zeros(len(galaxies), bool)
+
         # Deal with NaN position angles & axis ratios (only affects earlier
         # versions of the large-galaxy catalog)
         galaxies.rename('pa', 'pa_orig')
