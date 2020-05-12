@@ -850,7 +850,7 @@ class OneBlob(object):
             plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0), label='New',
                      **crossa)
             for x,y,r1,r2 in zip(Tnew.ibx, Tnew.iby, det_max/np.maximum(mod_max, 1.), det_sum/np.maximum(mod_sum, len(self.bands))):
-                plt.text(x, y, '%.1f, %.1f' % (r1,r2),
+                plt.text(x, y, '%.2f, %.2f' % (r1,r2),
                          color='k', fontsize=10,
                          bbox=dict(facecolor='w', alpha=0.5))
             plt.axis(ax)
