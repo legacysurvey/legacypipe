@@ -1830,6 +1830,7 @@ def is_reference_source(src):
     return getattr(src, 'is_reference_source', False)
 
 def _compute_source_metrics(srcs, tims, bands, tr):
+    import warnings
     # rchi2 quality-of-fit metric
     rchi2_num    = np.zeros((len(srcs),len(bands)), np.float32)
     rchi2_den    = np.zeros((len(srcs),len(bands)), np.float32)
@@ -1943,9 +1944,11 @@ def _compute_source_metrics(srcs, tims, bands, tr):
                 # sum(patch.patch) == counts[isrc].
                 rchi2_den[isrc,iband] += np.sum(patch.patch) / counts[isrc]
 
-    fracflux   = fracflux_num   / fracflux_den
-    rchi2      = rchi2_num      / rchi2_den
-    fracmasked = fracmasked_num / fracmasked_den
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        fracflux   = fracflux_num   / fracflux_den
+        rchi2      = rchi2_num      / rchi2_den
+        fracmasked = fracmasked_num / fracmasked_den
 
     # Eliminate NaNs (these happen when, eg, we have no coverage in one band but
     # sources detected in another band, hence denominator is zero)
