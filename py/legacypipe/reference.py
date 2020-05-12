@@ -357,7 +357,7 @@ def get_large_galaxy_version(fn):
         v = hdr.get('LSLGAVER')
         if v is not None:
             v = v.strip()
-            if 'model' in v.lower():
+            if 'ellipse' in v.lower():
                 preburn = True
                 v, _ = v.split('-')
             assert(len(v) == 2)
