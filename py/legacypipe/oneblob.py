@@ -785,7 +785,9 @@ class OneBlob(object):
             return None
 
         debug('Found', len(Tnew), 'new sources')
-        Tnew.cut(self.refmap[Tnew.iby, Tnew.ibx] == 0)
+
+        refok = IN_BLOB['MEDIUM']
+        Tnew.cut((self.refmap[Tnew.iby, Tnew.ibx] & ~refok) == 0)
         debug('Cut to', len(Tnew), 'on refmap')
         if len(Tnew) == 0:
             return None
