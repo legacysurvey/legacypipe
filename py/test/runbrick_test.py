@@ -88,6 +88,13 @@ def rbmain():
                        '--outdir', outdir, '--skip'])
         assert(r == 0)
 
+        # NothingToDoError (neighbouring brick)
+        r = main(args=['--brick', '1102p240', '--zoom', '0','100','0','100',
+                       '--force-all', '--no-write', '--no-wise', '--no-gaia',
+                       '--survey-dir', surveydir,
+                       '--outdir', outdir])
+        assert(r == 0)
+
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase9')
 
     # Test for some get_tractor_image kwargs
