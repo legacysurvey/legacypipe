@@ -596,14 +596,8 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
 
             # write out blob map
             if write_metrics:
-                # copy version_header before modifying it.
-                hdr = fitsio.FITSHDR()
-                for r in version_header.records():
-                    hdr.add_record(r)
-                # Plug the WCS header cards into these images
-                targetwcs.add_to_header(hdr)
-                hdr.delete('IMAGEW')
-                hdr.delete('IMAGEH')
+                from legacypipe.utils import copy_header_with_wcs
+                hdr = copy_header_with_wcs(version_header, targetwcs)
                 hdr.add_record(dict(name='IMTYPE', value='blobmap',
                                     comment='LegacySurveys image type'))
                 with survey.write_output('blobmap', brick=brickname,
@@ -1169,18 +1163,10 @@ def stage_fitblobs(T=None,
 
     # write out blob map
     if write_metrics:
-        # copy version_header before modifying it.
-        hdr = fitsio.FITSHDR()
-        for r in version_header.records():
-            hdr.add_record(r)
-        # Plug the WCS header cards into these images
-        targetwcs.add_to_header(hdr)
-        hdr.delete('IMAGEW')
-        hdr.delete('IMAGEH')
+        from legacypipe.utils import copy_header_with_wcs
+        hdr = copy_header_with_wcs(version_header, targetwcs)
         hdr.add_record(dict(name='IMTYPE', value='blobmap',
                             comment='LegacySurveys image type'))
-        hdr.add_record(dict(name='EQUINOX', value=2000.,
-                            comment='Observation epoch'))
         with survey.write_output('blobmap', brick=brickname, shape=blobs.shape) as out:
             out.fits.write(blobs, header=hdr)
     del iblob, oldblob
@@ -2342,73 +2328,74 @@ def stage_writecat(
     catalog.
     '''
     from legacypipe.catalog import prepare_fits_catalog
+    from legacypipe.utils import copy_header_with_wcs
 
     record_event and record_event('stage_writecat: starting')
     _add_stage_version(version_header, 'WCAT', 'writecat')
 
-    if maskbits is not None:
-        w1val = MASKBITS['WISEM1']
-        w2val = MASKBITS['WISEM2']
+    assert(maskbits is not None)
 
-        if wise_mask_maps is not None:
-            # Add the WISE masks in!
-            maskbits |= w1val * (wise_mask_maps[0] != 0)
-            maskbits |= w2val * (wise_mask_maps[1] != 0)
+    w1val = MASKBITS['WISEM1']
+    w2val = MASKBITS['WISEM2']
+    if wise_mask_maps is not None:
+        # Add the WISE masks in!
+        maskbits |= w1val * (wise_mask_maps[0] != 0)
+        maskbits |= w2val * (wise_mask_maps[1] != 0)
 
-        hdr = maskbits_header
-        if hdr is not None:
-            hdr.add_record(dict(name='WISEM1', value=w1val,
-                                comment='Mask value for WISE W1 (all masks)'))
-            hdr.add_record(dict(name='WISEM2', value=w2val,
-                                comment='Mask value for WISE W2 (all masks)'))
+    hdr = version_header
+    hdr.add_record(dict(name='MB_WISEM1', value=w1val,
+                        comment='Maskbit: WISE W1 (all masks)'))
+    hdr.add_record(dict(name='MB_WISEM2', value=w2val,
+                        comment='Maskbit: WISE W2 (all masks)'))
 
-        hdr.add_record(dict(name='BITNM0', value='NPRIMARY',
-                            comment='maskbits bit 0: not-brick-primary'))
-        hdr.add_record(dict(name='BITNM1', value='BRIGHT',
-                            comment='maskbits bit 1: bright star in blob'))
-        hdr.add_record(dict(name='BITNM2', value='SATUR_G',
-                            comment='maskbits bit 2: g saturated + margin'))
-        hdr.add_record(dict(name='BITNM3', value='SATUR_R',
-                            comment='maskbits bit 3: r saturated + margin'))
-        hdr.add_record(dict(name='BITNM4', value='SATUR_Z',
-                            comment='maskbits bit 4: z saturated + margin'))
-        hdr.add_record(dict(name='BITNM5', value='ALLMASK_G',
-                            comment='maskbits bit 5: any ALLMASK_G bit set'))
-        hdr.add_record(dict(name='BITNM6', value='ALLMASK_R',
-                            comment='maskbits bit 6: any ALLMASK_R bit set'))
-        hdr.add_record(dict(name='BITNM7', value='ALLMASK_Z',
-                            comment='maskbits bit 7: any ALLMASK_Z bit set'))
-        hdr.add_record(dict(name='BITNM8', value='WISEM1',
-                            comment='maskbits bit 8: WISE W1 bright star mask'))
-        hdr.add_record(dict(name='BITNM9', value='WISEM2',
-                            comment='maskbits bit 9: WISE W2 bright star mask'))
-        hdr.add_record(dict(name='BITNM10', value='BAILOUT',
-                            comment='maskbits bit 10: Bailed out of processing'))
-        hdr.add_record(dict(name='BITNM11', value='MEDIUM',
-                            comment='maskbits bit 11: Medium-bright star'))
-        hdr.add_record(dict(name='BITNM12', value='GALAXY',
-                            comment='maskbits bit 12: LSLGA large galaxy'))
-        hdr.add_record(dict(name='BITNM13', value='CLUSTER',
-                            comment='maskbits bit 13: Cluster'))
+    revmap = dict([(bit,name) for name,bit in MASKBITS.items()])
+    descr = dict(NPRIMARY='not-brick-primary',
+                 BRIGHT='bright star nearby',
+                 SATUR_G='g band saturated',
+                 SATUR_R='r band saturated',
+                 SATUR_Z='z band saturated',
+                 ALLMASK_G='any ALLMASK_G bit set',
+                 ALLMASK_R='any ALLMASK_R bit set',
+                 ALLMASK_Z='any ALLMASK_Z bit set',
+                 WISEM1='WISE W1 bright star mask',
+                 WISEM2='WISE W2 bright star mask',
+                 BAILOUT='Bailed out of processing',
+                 MEDIUM='medium-bright star nearby',
+                 GALAXY='LSLGA large galaxy nearby',
+                 CLUSTER='Globular cluster nearby')
 
-        if wise_mask_maps is not None:
-            wisehdr = fitsio.FITSHDR()
-            wisehdr.add_record(dict(name='WBITNM0', value='BRIGHT',
-                                    comment='Bright star core and wings'))
-            wisehdr.add_record(dict(name='WBITNM1', value='SPIKE',
-                                    comment='PSF-based diffraction spike'))
-            wisehdr.add_record(dict(name='WBITNM2', value='GHOST',
-                                    commet='Optical ghost'))
-            wisehdr.add_record(dict(name='WBITNM3', value='LATENT',
-                                    comment='First latent'))
-            wisehdr.add_record(dict(name='WBITNM4', value='LATENT2',
-                                    comment='Second latent image'))
-            wisehdr.add_record(dict(name='WBITNM5', value='HALO',
-                                    comment='AllWISE-like circular halo'))
-            wisehdr.add_record(dict(name='WBITNM6', value='SATUR',
-                                    comment='Bright star saturation'))
-            wisehdr.add_record(dict(name='WBITNM7', value='SPIKE2',
-                                    comment='Geometric diffraction spike'))
+    for bit in range(16):
+        bitval = 1<<bit
+        if not bitval in revmap:
+            continue
+        name = revmap[bitval]
+        nice = descr.get(name, '')
+        hdr.add_record(dict(name='MBIT_%i' % bit, value=name,
+                            comment='maskbits bit %i: %s' % nice))
+
+    if wise_mask_maps is not None:
+        wisehdr = fitsio.FITSHDR()
+        wisehdr.add_record(dict(name='WBIT_0', value='BRIGHT',
+                                comment='Bright star core and wings'))
+        wisehdr.add_record(dict(name='WBIT_1', value='SPIKE',
+                                comment='PSF-based diffraction spike'))
+        wisehdr.add_record(dict(name='WBIT_2', value='GHOST',
+                                commet='Optical ghost'))
+        wisehdr.add_record(dict(name='WBIT_3', value='LATENT',
+                                comment='First latent'))
+        wisehdr.add_record(dict(name='WBIT_4', value='LATENT2',
+                                comment='Second latent image'))
+        wisehdr.add_record(dict(name='WBIT_5', value='HALO',
+                                comment='AllWISE-like circular halo'))
+        wisehdr.add_record(dict(name='WBIT_6', value='SATUR',
+                                comment='Bright star saturation'))
+        wisehdr.add_record(dict(name='WBIT_7', value='SPIKE2',
+                                comment='Geometric diffraction spike'))
+
+    # copy version_header before modifying it, for maskbit output
+    hdr = copy_header_with_wcs(version_header, targetwcs)
+    hdr.add_record(dict(name='IMTYPE', value='maskbits',
+                        comment='LegacySurveys image type'))
 
         with survey.write_output('maskbits', brick=brickname, shape=maskbits.shape) as out:
             out.fits.write(maskbits, header=hdr)

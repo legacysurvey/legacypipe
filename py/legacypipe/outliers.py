@@ -226,12 +226,8 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 tim.dq[(mask & maskbits) > 0] |= DQ_BITS['outlier']
 
                 # Write output!
-                # copy version_header before modifying it.
-                hdr = fitsio.FITSHDR()
-                # Plug in the tim WCS header
-                tim.subwcs.add_to_header(hdr)
-                hdr.delete('IMAGEW')
-                hdr.delete('IMAGEH')
+                from legacypipe.utils import copy_header_with_wcs
+                hdr = copy_header_with_wcs(None, tim.subwcs)
                 hdr.add_record(dict(name='IMTYPE', value='outlier_mask',
                                     comment='LegacySurvey image type'))
                 hdr.add_record(dict(name='CAMERA',  value=tim.imobj.camera))
