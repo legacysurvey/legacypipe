@@ -244,11 +244,6 @@ class LegacySurveyImage(object):
         assert(self.dqfn != self.imgfn)
         assert(self.wtfn != self.imgfn)
 
-        for attr in ['imgfn', 'dqfn', 'wtfn']:
-            fn = getattr(self, attr)
-            if os.path.exists(fn):
-                continue
-
     def __str__(self):
         return self.name
 
@@ -388,6 +383,12 @@ class LegacySurveyImage(object):
             img = np.zeros((y1-y0, x1-x0), np.float32)
             imghdr = self.read_image_header()
         assert(np.all(np.isfinite(img)))
+
+        if pixels:
+            template = self.get_sky_template(slc=slc)
+            if template is not None:
+                debug('Subtracting sky template')
+                img -= template
 
         # Read data-quality (flags) map and zero out the invvars of masked pixels
         if get_invvar:
@@ -616,6 +617,9 @@ class LegacySurveyImage(object):
         subh,subw = tim.shape
         tim.subwcs = tim.sip_wcs.get_subimage(tim.x0, tim.y0, subw, subh)
         return tim
+
+    def get_sky_template(self, slc=None):
+        return None
 
     def get_fwhm(self, primhdr, imghdr):
         return self.fwhm
@@ -1136,6 +1140,11 @@ class LegacySurveyImage(object):
         img = self.read_image(slice=slc)
         dq = self.read_dq(slice=slc)
         wt = self.read_invvar(slice=slc, dq=dq)
+
+        template = self.get_sky_template(slc=slc)
+        if template is not None:
+            debug('Subtracting sky template before computing splinesky')
+            img -= template
 
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', 'V0.0').strip()
