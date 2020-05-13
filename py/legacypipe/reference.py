@@ -414,30 +414,20 @@ def read_large_galaxies(survey, targetwcs, bands):
         galaxies.islargegalaxy = np.array([True] * len(galaxies))
         galaxies.preburned = np.zeros(len(galaxies), bool)
 
-        # Deal with NaN position angles & axis ratios (only affects earlier
-        # versions of the large-galaxy catalog)
-        galaxies.rename('pa', 'pa_orig')
-        galaxies.pa = np.zeros(len(galaxies), np.float32)
-        gd = np.where(np.isfinite(galaxies.pa_orig))[0]
-        if len(gd) > 0:
-            galaxies.pa[gd] = galaxies.pa_orig[gd]
-        galaxies.rename('ba', 'ba_orig')
-        galaxies.ba = np.zeros(len(galaxies), np.float32)
-        gd = np.where(np.isfinite(galaxies.ba_orig))[0]
-        if len(gd) > 0:
-            galaxies.ba[gd] = galaxies.ba_orig[gd]
-
+        # Everything here has ref_cat==refcat.
         galaxies.radius = galaxies.d25 / 2. / 60. # [degree]
     else:
         # Need to initialize islargegalaxy to False because we will bring in
-        # pre-burned sources that we do not want to mask.
-        assert(np.all(galaxies.preburned))
+        # pre-burned sources that we do not want to use in MASKBITS.
         galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
         galaxies.radius = np.zeros(len(galaxies), 'f4')
 
-        lgal = np.where(galaxies.ref_cat == refcat)[0]
-        if len(lgal) > 0:
-            galaxies.radius[lgal] = galaxies.diam[lgal] / 2. / 60. # [degree]
+        # Only the preburned large galaxies have ref_cat==refcat, but some
+        # galaxies on the perimeter of the "preburn" region can have
+        # preburn==False.
+        I = np.where(galaxies.ref_cat == refcat)[0]
+        if len(I) > 0:
+            galaxies.radius[I] = galaxies.diam[I] / 2. / 60. # [degree]
 
     galaxies.freezeparams = np.zeros(len(galaxies), bool)
     galaxies.sources = np.empty(len(galaxies), object)
@@ -536,7 +526,7 @@ def read_large_galaxies(survey, targetwcs, bands):
                             shape)
             assert(np.isfinite(src.getLogPrior()))
             galaxies.sources[ii] = src
-
+       
     keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
                     'sources', 'islargegalaxy', 'freezeparams']
 
