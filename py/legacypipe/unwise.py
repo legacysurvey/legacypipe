@@ -6,6 +6,15 @@ from astrometry.util.ttime import Time
 
 from wise.unwise import get_unwise_tractor_image
 
+import logging
+logger = logging.getLogger('legacypipe.unwise')
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
+
 '''
 This function was imported whole from the tractor repo:
 wise/forcedphot.py because I figured we were doing enough
@@ -76,12 +85,12 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         maskmap = np.zeros((mh,mw), np.uint32)
 
     for tile in tiles:
-        print('Reading WISE tile', tile.coadd_id, 'band', band)
+        info('Reading WISE tile', tile.coadd_id, 'band', band)
 
         tim = get_unwise_tractor_image(tile.unwise_dir, tile.coadd_id, band,
                                        bandname=wanyband, roiradecbox=roiradecbox)
         if tim is None:
-            print('Actually, no overlap with tile', tile.coadd_id)
+            debug('Actually, no overlap with tile', tile.coadd_id)
             continue
 
         if plots:
@@ -108,7 +117,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             dx = tile_crpix[0] - 1024.5
             dy = tile_crpix[1] - 1024.5
             realwcs.set_crpix(x+dx, y+dy)
-            #print('CRPIX', x,y, 'shift by', dx,dy, 'to', realwcs.crpix)
+            debug('unWISE', tile.coadd_id, 'band', band, 'CRPIX', x,y,
+                  'shift by', dx,dy, 'to', realwcs.crpix)
 
         if modelsky_dir and band in [1, 2]:
             fn = os.path.join(modelsky_dir, '%s.%i.mod.fits' % (tile.coadd_id, band))
@@ -116,7 +126,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 raise RuntimeError('WARNING: does not exist:', fn)
             x0,x1,y0,y1 = tim.roi
             bg = fitsio.FITS(fn)[2][y0:y1, x0:x1]
-            #print('Read background map:', bg.shape, bg.dtype, 'vs image', tim.shape)
+            assert(bg.shape == tim.shape)
 
             if plots:
                 plt.clf()
@@ -183,7 +193,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             nbefore = np.sum(tim.inverr == 0)
             tim.inverr[msat] = 0
             nafter = np.sum(tim.inverr == 0)
-            print('Masking an additional', (nafter-nbefore), 'near-saturated pixels in unWISE',
+            debug('Masking an additional', (nafter-nbefore), 'near-saturated pixels in unWISE',
                   tile.coadd_id, 'band', band)
 
         # Read mask file?
@@ -195,12 +205,12 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 fn = os.path.join(d, tile.coadd_id[:3], tile.coadd_id,
                                   'unwise-%s-msk.fits.gz' % tile.coadd_id)
                 if os.path.exists(fn):
-                    print('Reading unWISE mask file', fn)
+                    debug('Reading unWISE mask file', fn)
                     x0,x1,y0,y1 = tim.roi
                     tilemask = fitsio.FITS(fn)[0][y0:y1,x0:x1]
                     break
             if tilemask is None:
-                print('unWISE mask file for tile', tile.coadd_id, 'does not exist')
+                info('unWISE mask file for tile', tile.coadd_id, 'does not exist')
             else:
                 try:
                     tanwcs = tim.wcs.wcs
@@ -217,7 +227,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                     maskmap[Yo[I],Xo[I]] = tilemask[Yi[I], Xi[I]]
                 except OverlapError:
                     # Shouldn't happen by this point
-                    print('No overlap between WISE tile', tile.coadd_id, 'and brick')
+                    print('Warning: no overlap between WISE tile', tile.coadd_id, 'and brick')
 
         # The tiles have some overlap, so zero out pixels outside the
         # tile's unique area.
@@ -226,7 +236,6 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         rr,dd = tim.wcs.wcs.pixelxy2radec(xx+1, yy+1)
         unique = radec_in_unique_area(rr, dd, tile.ra1, tile.ra2,
                                       tile.dec1, tile.dec2)
-        #print(np.sum(unique), 'of', (th*tw), 'pixels in this tile are unique')
         tim.inverr[unique == False] = 0.
         del xx,yy,rr,dd,unique
 
@@ -293,14 +302,13 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             psf = tim.getPsf()
             from tractor import GaussianMixturePSF
             if isinstance(psf, GaussianMixturePSF):
-                #
-                print('Broadening PSF: from', psf)
+                debug('Broadening PSF: from', psf)
                 p0 = psf.getParams()
                 pnames = psf.getParamNames()
                 p1 = [p * psf_broadening**2 if 'var' in name else p
                       for (p, name) in zip(p0, pnames)]
                 psf.setParams(p1)
-                print('Broadened PSF:', psf)
+                debug('Broadened PSF:', psf)
             else:
                 print('WARNING: cannot apply psf_broadening to WISE PSF of type', type(psf))
 
@@ -373,11 +381,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 galrad = src.shape.re
             pixscale = 2.75
             src.halfsize = int(np.hypot(R, galrad * 5 / pixscale))
-
-    #print('Set WISE source sizes:', nbig, 'big', nmedium, 'medium', nsmall, 'small')
-
-    minsb = 0.
-    fitsky = False
+    debug('Set WISE source sizes:', nbig, 'big', nmedium, 'medium', nsmall, 'small')
 
     tractor = Tractor(tims, cat)
     if use_ceres:
@@ -390,20 +394,17 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     t0 = Time()
 
     R = tractor.optimize_forced_photometry(
-        minsb=minsb, mindlnp=1., sky=fitsky, fitstats=True,
-        variance=True, shared_params=False,
+        fitstats=True, variance=True, shared_params=False,
         wantims=wantims, **kwa)
-    print('unWISE forced photometry took', Time() - t0)
+    info('unWISE forced photometry took', Time() - t0)
 
     if use_ceres:
         term = R.ceres_status['termination']
-        # Running out of memory can cause failure to converge
-        # and term status = 2.
-        # Fail completely in this case.
+        # Running out of memory can cause failure to converge and term
+        # status = 2.  Fail completely in this case.
         if term != 0:
-            print('Ceres termination status:', term)
-            raise RuntimeError(
-                'Ceres terminated with status %i' % term)
+            info('Ceres termination status:', term)
+            raise RuntimeError('Ceres terminated with status %i' % term)
 
     if wantims:
         ims1 = R.ims1
@@ -431,7 +432,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         # Create models for just the brightest sources
         bright_cat = [src for src in cat
                       if src.getBrightness().getBand(wanyband) > 1000]
-        print('Bright soures:', len(bright_cat))
+        debug('Bright soures:', len(bright_cat))
         btr = Tractor(tims, bright_cat)
         for tim in tims:
             mod = btr.getModelImage(tim)
@@ -476,7 +477,6 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             plt.colorbar()
             plt.title('%s: chi' % tag)
             ps.savefig()
-
 
     nm = np.array([src.getBrightness().getBand(wanyband) for src in cat])
     nm_ivar = flux_invvars
