@@ -132,6 +132,7 @@ def rbmain():
     os.environ['TYCHO2_KD_DIR'] = surveydir
     os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
     os.environ['GAIA_CAT_VER'] = '2'
+    os.environ['UNWISE_MODEL_SKY_DIR'] = os.path.join(surveydir, 'images', 'unwise-mod')
     #python legacypipe/runbrick.py --radec  --width 100 --height 100 --outdir dup5b --survey-dir test/testcase12 --force-all --no-wise
     unwdir = os.path.join(surveydir, 'images', 'unwise')
     main(args=['--radec', '346.684', '12.791', '--width', '100',
@@ -148,6 +149,7 @@ def rbmain():
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']
     del os.environ['TYCHO2_KD_DIR']
+    del os.environ['UNWISE_MODEL_SKY_DIR']
 
     M = fitsio.read('out-testcase12/coadd/cus/custom-346684p12791/legacysurvey-custom-346684p12791-maskbits.fits.fz')
     # Count masked & unmasked bits (the cluster splits this 100x100 field)
