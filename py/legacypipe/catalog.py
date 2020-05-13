@@ -22,9 +22,6 @@ fits_typemap = dict([(v,k) for k,v in fits_reverse_typemap.items()])
 # We only want this mapping one-way
 fits_typemap[GaiaSource] = 'PSF'
 
-def _typestring(t):
-    return '%s.%s' % (t.__module__, t.__name__)
-
 def prepare_fits_catalog(cat, invvars, T, bands, allbands=None,
                          prefix='', save_invvars=True, force_keep=None):
     if T is None:

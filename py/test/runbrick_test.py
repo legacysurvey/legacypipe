@@ -15,7 +15,7 @@ def rbmain():
     from legacypipe.catalog import read_fits_catalog
     from legacypipe.survey import LegacySurveyData, GaiaSource, wcs_for_brick
     from tractor.galaxy import DevGalaxy
-    from tractor import PointSource
+    from tractor import PointSource, Catalog
     from tractor import GaussianMixturePSF
     from legacypipe.survey import BrickDuck
     from legacypipe.forced_photom import main as forced_main
@@ -74,6 +74,18 @@ def rbmain():
         assert(len(I) == 1)
         assert(T.ref_id[I][0] == 1909016711)
         del os.environ['TYCHO2_KD_DIR']
+
+        from legacypipe.catalog import read_fits_catalog
+        cat = read_fits_catalog(T)
+        assert(len(cat) == 2)
+        assert(isinstance(cat[0], PointSource))
+        assert(isinstance(cat[1], PointSource))
+        cat,ivs = read_fits_catalog(T, invvars=True)
+        assert(len(cat) == 2)
+        assert(isinstance(cat[0], PointSource))
+        assert(isinstance(cat[1], PointSource))
+        cat2 = Catalog(*cat)
+        assert(len(ivs) == len(cat2.getParams()))
 
         # test --skip-coadds
         r = main(args=['--brick', '1102p240',
