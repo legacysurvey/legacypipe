@@ -107,7 +107,6 @@ def one_blob(X):
     B.started_in_blob = blobmask[safe_y0, safe_x0]
     # This uses 'initial' pixel positions, because that's what determines
     # the fitting behaviors.
-    B.brightblob = refmap[safe_y0, safe_x0].astype(np.int16)
     B.cpu_source = np.zeros(len(B), np.float32)
     B.blob_width  = np.zeros(len(B), np.int16) + blobw
     B.blob_height = np.zeros(len(B), np.int16) + blobh
@@ -879,7 +878,6 @@ class OneBlob(object):
         Bnew.blob_symm_width   = np.zeros(len(Bnew), np.int16)
         Bnew.blob_symm_height  = np.zeros(len(Bnew), np.int16)
         Bnew.hit_limit = np.zeros(len(Bnew), bool)
-        Bnew.brightblob = self.refmap[Tnew.iby, Tnew.ibx].astype(np.int16)
         # Be quieter during iterative detection!
         bloblogger = logging.getLogger('legacypipe.oneblob')
         loglvl = bloblogger.getEffectiveLevel()

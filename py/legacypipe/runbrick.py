@@ -1203,12 +1203,9 @@ def stage_fitblobs(T=None,
               'blob_width', 'blob_height', 'blob_npix',
               'blob_nimages', 'blob_totalpix',
               'blob_symm_width', 'blob_symm_height', 'blob_symm_npix',
-              'blob_symm_nimages', 'brightblob', 'hit_limit', 'dchisq',
+              'blob_symm_nimages', 'hit_limit', 'dchisq',
               'force_keep_source']:
         T.set(k, BB.get(k))
-
-    # compute the pixel-space mask for *brightblob* values
-    brightblobmask = refmap
 
     invvars = np.hstack(BB.srcinvvars)
     assert(cat.numberOfParams() == len(invvars))
@@ -1239,7 +1236,7 @@ def stage_fitblobs(T=None,
                 TT.writeto(None, fits_object=out.fits, header=hdr,
                            primheader=primhdr)
 
-    keys = ['cat', 'invvars', 'T', 'blobs', 'brightblobmask', 'version_header']
+    keys = ['cat', 'invvars', 'T', 'blobs', 'refmap', 'version_header']
     if get_all_models:
         keys.append('all_models')
     if bailout:
@@ -1537,7 +1534,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
                  co_sky=None,
                  saturated_pix=None,
-                 brightblobmask=None,
+                 refmap=None,
                  bailout_mask=None,
                  mp=None,
                  record_event=None,
@@ -1746,38 +1743,38 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # Construct a mask bits map
     maskbits = np.zeros((H,W), np.int16)
     # !PRIMARY
-    if custom_brick:
-        U = None
-    else:
+    if not custom_brick:
         U = find_unique_pixels(targetwcs, W, H, None,
                                brick.ra1, brick.ra2, brick.dec1, brick.dec2)
-        maskbits += MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int16)
+        maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int16)
         del U
 
     # BRIGHT
-    if brightblobmask is not None:
-        maskbits += MASKBITS['BRIGHT'] * ((brightblobmask & IN_BLOB['BRIGHT']) > 0)
-        maskbits += MASKBITS['MEDIUM'] * ((brightblobmask & IN_BLOB['MEDIUM']) > 0)
-        maskbits += MASKBITS['GALAXY'] * ((brightblobmask & IN_BLOB['GALAXY']) > 0)
-        maskbits += MASKBITS['CLUSTER'] * ((brightblobmask & IN_BLOB['CLUSTER']) > 0)
+    if refmap is not None:
+        maskbits |= MASKBITS['BRIGHT']  * ((refmap & IN_BLOB['BRIGHT'] ) > 0)
+        maskbits |= MASKBITS['MEDIUM']  * ((refmap & IN_BLOB['MEDIUM'] ) > 0)
+        maskbits |= MASKBITS['GALAXY']  * ((refmap & IN_BLOB['GALAXY'] ) > 0)
+        maskbits |= MASKBITS['CLUSTER'] * ((refmap & IN_BLOB['CLUSTER']) > 0)
+        del refmap
 
     # SATUR
     saturvals = dict(g=MASKBITS['SATUR_G'], r=MASKBITS['SATUR_R'], z=MASKBITS['SATUR_Z'])
     if saturated_pix is not None:
         for b,sat in zip(bands, saturated_pix):
-            maskbits += saturvals[b] * sat.astype(np.int16)
+            maskbits |= (saturvals[b] * sat).astype(np.int16)
 
     # ALLMASK_{g,r,z}
-    allmaskvals = dict(g=MASKBITS['ALLMASK_G'], r=MASKBITS['ALLMASK_R'],
+    allmaskvals = dict(g=MASKBITS['ALLMASK_G'],
+                       r=MASKBITS['ALLMASK_R'],
                        z=MASKBITS['ALLMASK_Z'])
     for b,allmask in zip(bands, C.allmasks):
         if not b in allmaskvals:
             continue
-        maskbits += allmaskvals[b]* (allmask > 0).astype(np.int16)
+        maskbits |= (allmaskvals[b] * (allmask > 0)).astype(np.int16)
 
     # BAILOUT_MASK
     if bailout_mask is not None:
-        maskbits += MASKBITS['BAILOUT'] * bailout_mask.astype(bool)
+        maskbits |= MASKBITS['BAILOUT'] * bailout_mask.astype(bool)
 
     # copy version_header before modifying it.
     hdr = fitsio.FITSHDR()
@@ -2355,8 +2352,8 @@ def stage_writecat(
 
         if wise_mask_maps is not None:
             # Add the WISE masks in!
-            maskbits += w1val * (wise_mask_maps[0] != 0)
-            maskbits += w2val * (wise_mask_maps[1] != 0)
+            maskbits |= w1val * (wise_mask_maps[0] != 0)
+            maskbits |= w2val * (wise_mask_maps[1] != 0)
 
         hdr = maskbits_header
         if hdr is not None:
