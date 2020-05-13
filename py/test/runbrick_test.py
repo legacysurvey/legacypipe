@@ -29,6 +29,45 @@ def rbmain():
     if 'LARGEGALAXIES_CAT' in os.environ:
         del os.environ['LARGEGALAXIES_CAT']
 
+    # Test create_kdtree and (reading CCD kd-tree)!
+    indir = os.path.join(os.path.dirname(__file__), 'testcase6')
+    with tempfile.TemporaryDirectory() as surveydir:
+        files = ['calib', 'gaia', 'images', 'survey-bricks.fits.gz',
+                 'tycho2.kd.fits']
+        for fn in files:
+            src = os.path.join(indir, fn)
+            dst = os.path.join(surveydir, fn)
+            #trymakedirs(dst, dir=True)
+            print('Copy', src, dst)
+            if os.path.isfile(src):
+                shutil.copy(src, dst)
+            else:
+                shutil.copytree(src, dst)
+
+        from legacypipe.create_kdtrees import create_kdtree
+        infn = os.path.join(indir, 'survey-ccds-1.fits.gz')
+        outfn = os.path.join(surveydir, 'survey-ccds-1.kd.fits')
+        create_kdtree(infn, outfn, False)
+
+        os.environ['TYCHO2_KD_DIR'] = surveydir
+        outdir = 'out-testcase6-kd'
+        main(args=['--brick', '1102p240', '--zoom', '500', '600', '650', '750',
+                   '--force-all', '--no-write', '--no-wise', '--no-gaia',
+                   '--survey-dir', surveydir,
+                   '--outdir', outdir])
+        fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
+        assert(os.path.exists(fn))
+        T = fits_table(fn)
+        assert(len(T) == 2)
+        # Since there is a Tycho-2 star in the blob, forced to be PSF.
+        assert(T.type[0].strip() == 'PSF')
+        assert(T.type[1].strip() == 'PSF')
+        # There is a Tycho-2 star in the blob.
+        I = np.flatnonzero(T.ref_cat == 'T2')
+        assert(len(I) == 1)
+        assert(T.ref_id[I][0] == 1909016711)
+        del os.environ['TYCHO2_KD_DIR']
+
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase9')
 
     # Test for some get_tractor_image kwargs
