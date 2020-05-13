@@ -36,6 +36,10 @@ def main():
     
     args = parser.parse_args()
 
+    v = 'SKY_TEMPLATE_DIR'
+    if v in os.environ:
+        del os.environ[v]
+
     C = fits_table(args.ccds)
     print(len(C), 'CCDs in', args.ccds)
     C.camera = np.array([c.strip() for c in C.camera])
@@ -475,7 +479,7 @@ def main():
 
         # full depth
         for band in [1,2,3,4]:
-            wisedata.append((unwise_dir, wise_out, tiles.coadd_id, band))
+            wisedata.append((unwise_dir, wise_out, tiles.coadd_id, band, True))
 
         # time-resolved
         for band in [1,2]:
@@ -489,18 +493,49 @@ def main():
                 print('Epoch %i: %i tiles:' % (e, len(I)), W.coadd_id[I])
                 edir = os.path.join(unwise_tr_dir, 'e%03i' % e)
                 eoutdir = os.path.join(wise_tr_out, 'e%03i' % e)
-                wisedata.append((edir, eoutdir, tiles.coadd_id[I], band))
+                wisedata.append((edir, eoutdir, tiles.coadd_id[I], band, False))
 
         wrote_masks = set()
 
-        for indir, outdir, tiles, band in wisedata:
+        model_dir = os.environ.get('UNWISE_MODEL_SKY_DIR')
+        if model_dir is not None:
+            model_dir_out = os.path.join(args.outdir, 'images', 'unwise-mod')
+            trymakedirs(model_dir_out)
+
+        for indir, outdir, tiles, band, fulldepth in wisedata:
             for tile in tiles:
                 wanyband = 'w'
                 tim = get_unwise_tractor_image(indir, tile, band,
                                                bandname=wanyband, roiradecbox=roiradec)
                 print('Got unWISE tim', tim)
                 print(tim.shape)
-                
+
+                if model_dir is not None and fulldepth and band in [1,2]:
+                    print('ROI', tim.roi)
+                    #0387p575.1.mod.fits
+                    fn = '%s.%i.mod.fits' % (tile, band)
+                    print('Filename', fn)
+                    F = fitsio.FITS(os.path.join(model_dir, fn))
+                    x0,x1,y0,y1 = tim.roi
+                    slc = slice(y0,y1),slice(x0,x1)
+
+                    phdr = F[0].read_header()
+
+                    outfn = os.path.join(model_dir_out, fn)
+                    for e,extname in [(1,'MODEL'), (2,'SKY')]:
+                        pix = F[e][slc]
+                        hdr = F[e].read_header()
+                        crpix1 = hdr['CRPIX1']
+                        crpix2 = hdr['CRPIX2']
+                        hdr['CRPIX1'] -= x0
+                        hdr['CRPIX2'] -= y0
+                        #print('mod', mod)
+                        #print('Model', mod.shape)
+                        if e == 1:
+                            fitsio.write(outfn, None, clobber=True, header=phdr)
+                        fitsio.write(outfn, pix, header=hdr, extname=extname)
+                    print('Wrote', outfn)
+
                 thisdir = get_unwise_tile_dir(outdir, tile)
                 print('Directory for this WISE tile:', thisdir)
                 base = os.path.join(thisdir, 'unwise-%s-w%i-' % (tile, band))
