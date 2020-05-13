@@ -59,8 +59,8 @@ def rbmain():
     print(tim5.getPsf())
     assert(isinstance(tim5.getPsf(), GaussianMixturePSF))
 
-
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase12')
+    os.environ['TYCHO2_KD_DIR'] = surveydir
     os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
     os.environ['GAIA_CAT_VER'] = '2'
     #python legacypipe/runbrick.py --radec  --width 100 --height 100 --outdir dup5b --survey-dir test/testcase12 --force-all --no-wise
@@ -70,6 +70,7 @@ def rbmain():
                '--outdir', 'out-testcase12', '--skip-coadd', '--force-all', '--no-write'])
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']
+    del os.environ['TYCHO2_KD_DIR']
 
     M = fitsio.read('out-testcase12/coadd/cus/custom-346684p12791/legacysurvey-custom-346684p12791-maskbits.fits.fz')
     # Count masked & unmasked bits (the cluster splits this 100x100 field)
