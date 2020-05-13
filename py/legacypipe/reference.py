@@ -414,6 +414,7 @@ def read_large_galaxies(survey, targetwcs, bands):
         galaxies.islargegalaxy = np.array([True] * len(galaxies))
         galaxies.preburned = np.zeros(len(galaxies), bool)
 
+        # Everything here has ref_cat==refcat.
         galaxies.radius = galaxies.d25 / 2. / 60. # [degree]
     else:
         # Need to initialize islargegalaxy to False because we will bring in
@@ -421,6 +422,9 @@ def read_large_galaxies(survey, targetwcs, bands):
         galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
         galaxies.radius = np.zeros(len(galaxies), 'f4')
 
+        # Only the preburned large galaxies have ref_cat==refcat, but some
+        # galaxies on the perimeter of the "preburn" region can have
+        # preburn==False.
         I = np.where(galaxies.ref_cat == refcat)[0]
         if len(I) > 0:
             galaxies.radius[I] = galaxies.diam[I] / 2. / 60. # [degree]
