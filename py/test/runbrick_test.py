@@ -31,6 +31,8 @@ def rbmain():
         if v in os.environ:
             del os.environ[v]
 
+    main()
+
     # Test create_kdtree and (reading CCD kd-tree)!
     indir = os.path.join(os.path.dirname(__file__), 'testcase6')
     with tempfile.TemporaryDirectory() as surveydir:
@@ -69,6 +71,29 @@ def rbmain():
         assert(len(I) == 1)
         assert(T.ref_id[I][0] == 1909016711)
         del os.environ['TYCHO2_KD_DIR']
+
+        # test --skip-coadds
+        r = main(args=['--brick', '1102p240',
+                       '--zoom', '500', '600', '650', '750',
+                       '--force-all', '--no-write', '--no-wise', '--no-gaia',
+                       '--survey-dir', surveydir,
+                       '--outdir', outdir, '--skip-coadd'])
+        assert(r == 0)
+
+        # test --skip
+        r = main(args=['--brick', '1102p240',
+                       '--zoom', '500', '600', '650', '750',
+                       '--force-all', '--no-write', '--no-wise', '--no-gaia',
+                       '--survey-dir', surveydir,
+                       '--outdir', outdir, '--skip'])
+        assert(r == 0)
+
+        # NothingToDoError (neighbouring brick)
+        r = main(args=['--brick', '1102p240', '--zoom', '0','100','0','100',
+                       '--force-all', '--no-write', '--no-wise', '--no-gaia',
+                       '--survey-dir', surveydir,
+                       '--outdir', outdir])
+        assert(r == 0)
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase9')
 
@@ -110,7 +135,14 @@ def rbmain():
     main(args=['--radec', '346.684', '12.791', '--width', '100',
                '--height', '100', '--no-wise-ceres',
                '--unwise-dir', unwdir, '--survey-dir', surveydir,
-               '--outdir', 'out-testcase12', '--skip-coadd', '--force-all', '--no-write'])
+               '--outdir', 'out-testcase12', '--skip-coadd', '--force-all'])
+
+    # --plots for stage_wise_forced
+    main(args=['--radec', '346.684', '12.791', '--width', '100',
+               '--height', '100', '--no-wise-ceres',
+               '--unwise-dir', unwdir, '--survey-dir', surveydir,
+               '--outdir', 'out-testcase12', '--stage', 'wise_forced',
+               '--plots'])
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']
     del os.environ['TYCHO2_KD_DIR']
