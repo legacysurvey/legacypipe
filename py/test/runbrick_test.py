@@ -134,7 +134,14 @@ def rbmain():
     main(args=['--radec', '346.684', '12.791', '--width', '100',
                '--height', '100', '--no-wise-ceres',
                '--unwise-dir', unwdir, '--survey-dir', surveydir,
-               '--outdir', 'out-testcase12', '--skip-coadd', '--force-all', '--no-write'])
+               '--outdir', 'out-testcase12', '--skip-coadd', '--force-all'])
+
+    # --plots for stage_wise_forced
+    main(args=['--radec', '346.684', '12.791', '--width', '100',
+               '--height', '100', '--no-wise-ceres',
+               '--unwise-dir', unwdir, '--survey-dir', surveydir,
+               '--outdir', 'out-testcase12', '--stage', 'wise_forced',
+               '--plots'])
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']
     del os.environ['TYCHO2_KD_DIR']
