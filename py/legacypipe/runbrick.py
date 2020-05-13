@@ -1762,45 +1762,34 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     if bailout_mask is not None:
         maskbits |= MASKBITS['BAILOUT'] * bailout_mask.astype(bool)
 
-    # copy version_header before modifying it.
-    hdr = fitsio.FITSHDR()
-    for r in version_header.records():
-        hdr.add_record(r)
-    # Plug the WCS header cards into these images
-    targetwcs.add_to_header(hdr)
-    hdr.add_record(dict(name='EQUINOX', value=2000., comment='Observation epoch'))
-    hdr.delete('IMAGEW')
-    hdr.delete('IMAGEH')
-    hdr.add_record(dict(name='IMTYPE', value='maskbits',
-                        comment='LegacySurveys image type'))
     # NOTE that we pass the "maskbits" and "maskbits_header" variables
     # on to later stages, because we will add in the WISE mask planes
     # later (and write the result in the writecat stage. THEREFORE, if
     # you make changes to the bit mappings here, you MUST also adjust
     # the header values (and bit mappings for the WISE masks) in
     # stage_writecat.
-    hdr.add_record(dict(name='NPRIMARY', value=MASKBITS['NPRIMARY'],
-                        comment='Mask value for non-primary brick area'))
-    hdr.add_record(dict(name='BRIGHT', value=MASKBITS['BRIGHT'],
-                        comment='Mask value for bright star in blob'))
-    hdr.add_record(dict(name='BAILOUT', value=MASKBITS['BAILOUT'],
-                        comment='Mask value for bailed-out processing'))
-    hdr.add_record(dict(name='MEDIUM', value=MASKBITS['MEDIUM'],
-                        comment='Mask value for medium-bright star in blob'))
-    hdr.add_record(dict(name='GALAXY', value=MASKBITS['GALAXY'],
-                        comment='Mask value for LSLGA large galaxy'))
-    hdr.add_record(dict(name='CLUSTER', value=MASKBITS['CLUSTER'],
-                        comment='Mask value for Cluster'))
+    hdr = version_header
+    hdr.add_record(dict(name='MB_NPRIM', value=MASKBITS['NPRIMARY'],
+                        comment='Maskbit: non-primary brick area'))
+    hdr.add_record(dict(name='MB_BRIGH', value=MASKBITS['BRIGHT'],
+                        comment='Maskbit: bright star in blob'))
+    hdr.add_record(dict(name='MB_BAIL',  value=MASKBITS['BAILOUT'],
+                        comment='Maskbit: bailed-out processing'))
+    hdr.add_record(dict(name='MB_MED',   value=MASKBITS['MEDIUM'],
+                        comment='Maskbit: medium-bright star in blob'))
+    hdr.add_record(dict(name='MB_GAL',   value=MASKBITS['GALAXY'],
+                        comment='Maskbit: LSLGA large galaxy'))
+    hdr.add_record(dict(name='MB_CLUST', value=MASKBITS['CLUSTER'],
+                        comment='Maskbit: Cluster'))
     keys = sorted(saturvals.keys())
     for b in keys:
-        k = 'SATUR_%s' % b.upper()
+        k = 'MB_SAT_%s' % b.upper()
         hdr.add_record(dict(name=k, value=MASKBITS[k],
-                            comment='Mask value for saturated (& nearby) pixels in %s band' % b))
+                            comment='Maskbit: saturated (& nearby), %s band' % b))
     keys = sorted(allmaskvals.keys())
     for b in keys:
-        hdr.add_record(dict(name='ALLM_%s' % b.upper(), value=allmaskvals[b],
-                            comment='Mask value for ALLMASK band %s' % b))
-    maskbits_header = hdr
+        hdr.add_record(dict(name='MB_ALL_%s' % b.upper(), value=allmaskvals[b],
+                            comment='Maskbit: ALLMASK band %s' % b))
 
     if plots:
         plt.clf()
@@ -1877,7 +1866,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     return dict(T=T, T_donotfit=T_donotfit, apertures_pix=apertures,
                 apertures_arcsec=apertures_arcsec,
                 maskbits=maskbits,
-                maskbits_header=maskbits_header, version_header=version_header)
+                version_header=version_header)
 
 def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
                      fibersize=1.5, seeing=1., year=2020.0,
@@ -2307,7 +2296,6 @@ def stage_writecat(
     WISE=None,
     WISE_T=None,
     maskbits=None,
-    maskbits_header=None,
     wise_mask_maps=None,
     apertures_arcsec=None,
     wise_apertures_arcsec=None,
@@ -2456,7 +2444,7 @@ def stage_writecat(
     for i in range(16):
         bit = 1<<i
         if bit in bitmap:
-            primhdr.add_record(dict(name='MASKB%i' % i, value=bitmap[bit],
+            primhdr.add_record(dict(name='AMASK%i' % i, value=bitmap[bit],
                                     comment='ALLMASK/ANYMASK bit 2**%i=%i meaning' %
                                     (i, bit)))
 
