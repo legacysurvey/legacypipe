@@ -9,7 +9,6 @@ import tempfile
 import numpy as np
 import fitsio
 from legacypipe.runbrick import main
-#from legacyanalysis.decals_sim import main as sim_main
 from astrometry.util.fits import fits_table
 
 def rbmain():
@@ -96,8 +95,8 @@ def rbmain():
     main(args=['--radec', '9.1228', '3.3975', '--width', '100',
                '--height', '100', '--old-calibs-ok', '--no-wise',
                '--force-all', '--no-write', '--survey-dir', surveydir,
-               '--outdir', 'out-testcase9-ap'])
-    
+               '--outdir', 'out-testcase9-ap', '--apodize'])
+
     main(args=['--radec', '9.1228', '3.3975', '--width', '100',
                '--height', '100', '--old-calibs-ok', '--no-wise-ceres',
                '--no-wise', '--survey-dir',

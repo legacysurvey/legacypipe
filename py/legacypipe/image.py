@@ -1604,21 +1604,13 @@ def psfex_single_to_merged(infn, expnum, ccdname):
 
 class LegacySplineSky(SplineSky):
     @classmethod
-    def from_fits(cls, filename, header, row=0):
-        T = fits_table(filename)
-        T = T[row]
-        T.sky_med  = header['S_MED']
-        T.sky_john = header['S_JOHN']
-        return cls.from_fits_row(T)
-
-    @classmethod
     def from_fits_row(cls, Ti):
         gridvals = Ti.gridvals.copy()
         # DR7 & previous don't have this...
         if 'sky_med' in Ti.get_columns():
             nswap = np.sum(gridvals == Ti.sky_med)
             if nswap:
-                print('Swapping in SKY_JOHN values for', nswap, 'splinesky cells;', Ti.sky_med, '->', Ti.sky_john)
+                info('Swapping in SKY_JOHN values for', nswap, 'splinesky cells;', Ti.sky_med, '->', Ti.sky_john)
             gridvals[gridvals == Ti.sky_med] = Ti.sky_john
         sky = cls(Ti.xgrid, Ti.ygrid, gridvals, order=Ti.order)
         sky.shift(Ti.x0, Ti.y0)
@@ -1630,19 +1622,15 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
 
     def getFourierTransform(self, px, py, radius):
         fft, (cx,cy), shape, (v,w) = super(NormalizedPixelizedPsfEx, self).getFourierTransform(px, py, radius)
-        #print('NormalizedPSF: getFourierTransform at', (px,py), ': sum', fft.sum(), 'zeroth element:', fft[0][0], 'max', np.max(np.abs(fft)))
         fft /= np.abs(fft[0][0])
-        #print('NormalizedPixelizedPsfEx: getFourierTransform at', (px,py), ': sum', sum)
         return fft, (cx,cy), shape, (v,w)
 
     def getImage(self, px, py):
-        #print('NormalizedPixelizedPsfEx: getImage at', px,py)
         img = super(NormalizedPixelizedPsfEx, self).getImage(px, py)
         img /= np.sum(img)
         return img
 
     def constantPsfAt(self, x, y):
-        #print('NormalizedPixelizedPsfEx: constantPsf at', x,y)
         pix = self.psfex.at(x, y)
         pix /= pix.sum()
         return PixelizedPSF(pix)
