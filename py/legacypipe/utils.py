@@ -163,6 +163,7 @@ def read_primary_header(fn):
     return fitsio.read_header(fn)
 
 def copy_header_with_wcs(source_header, wcs):
+    import fitsio
     hdr = fitsio.FITSHDR()
     if source_header is not None:
         for r in source_header.records():

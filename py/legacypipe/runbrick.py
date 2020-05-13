@@ -1744,7 +1744,9 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         del refmap
 
     # SATUR
-    saturvals = dict(g=MASKBITS['SATUR_G'], r=MASKBITS['SATUR_R'], z=MASKBITS['SATUR_Z'])
+    saturvals = dict(g=MASKBITS['SATUR_G'],
+                     r=MASKBITS['SATUR_R'],
+                     z=MASKBITS['SATUR_Z'])
     if saturated_pix is not None:
         for b,sat in zip(bands, saturated_pix):
             maskbits |= (saturvals[b] * sat).astype(np.int16)
@@ -1784,11 +1786,12 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     keys = sorted(saturvals.keys())
     for b in keys:
         k = 'MB_SAT_%s' % b.upper()
-        hdr.add_record(dict(name=k, value=MASKBITS[k],
+        hdr.add_record(dict(name=k, value=saturvals[b],
                             comment='Maskbit: saturated (& nearby), %s band' % b))
     keys = sorted(allmaskvals.keys())
     for b in keys:
-        hdr.add_record(dict(name='MB_ALL_%s' % b.upper(), value=allmaskvals[b],
+        hdr.add_record(dict(name='MB_ALL_%s' % b.upper(),
+                            value=allmaskvals[b],
                             comment='Maskbit: ALLMASK band %s' % b))
 
     if plots:
@@ -2359,7 +2362,8 @@ def stage_writecat(
         name = revmap[bitval]
         nice = descr.get(name, '')
         hdr.add_record(dict(name='MBIT_%i' % bit, value=name,
-                            comment='maskbits bit %i: %s' % nice))
+                            comment='maskbits bit %i (0x%x): %s' %
+                            (bit, bitval, nice)))
 
     if wise_mask_maps is not None:
         wisehdr = fitsio.FITSHDR()
@@ -2385,11 +2389,11 @@ def stage_writecat(
     hdr.add_record(dict(name='IMTYPE', value='maskbits',
                         comment='LegacySurveys image type'))
 
-        with survey.write_output('maskbits', brick=brickname, shape=maskbits.shape) as out:
-            out.fits.write(maskbits, header=hdr)
-            if wise_mask_maps is not None:
-                out.fits.write(wise_mask_maps[0], header=wisehdr)
-                out.fits.write(wise_mask_maps[1], header=wisehdr)
+    with survey.write_output('maskbits', brick=brickname, shape=maskbits.shape) as out:
+        out.fits.write(maskbits, header=hdr)
+        if wise_mask_maps is not None:
+            out.fits.write(wise_mask_maps[0], header=wisehdr)
+            out.fits.write(wise_mask_maps[1], header=wisehdr)
         del wise_mask_maps
 
     TT = T.copy()
@@ -2401,8 +2405,8 @@ def stage_writecat(
     # The "ra_ivar" values coming out of the tractor fits do *not*
     # have a cos(Dec) term -- ie, they give the inverse-variance on
     # the numerical value of RA -- so we want to make the ra_sigma
-    #  values smaller by multiplying by cos(Dec); so invvars are /=
-    #  cosdec^2
+    # values smaller by multiplying by cos(Dec); so invvars are /=
+    # cosdec^2
     T2.ra_ivar /= np.cos(np.deg2rad(T2.dec))**2
 
     # Compute fiber fluxes
