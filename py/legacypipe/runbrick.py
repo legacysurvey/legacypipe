@@ -2334,9 +2334,9 @@ def stage_writecat(
         maskbits |= w2val * (wise_mask_maps[1] != 0)
 
     hdr = version_header
-    hdr.add_record(dict(name='MB_WISEM1', value=w1val,
+    hdr.add_record(dict(name='MB_WISE1', value=w1val,
                         comment='Maskbit: WISE W1 (all masks)'))
-    hdr.add_record(dict(name='MB_WISEM2', value=w2val,
+    hdr.add_record(dict(name='MB_WISE2', value=w2val,
                         comment='Maskbit: WISE W2 (all masks)'))
 
     revmap = dict([(bit,name) for name,bit in MASKBITS.items()])
