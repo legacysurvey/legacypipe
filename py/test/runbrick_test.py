@@ -25,9 +25,11 @@ def rbmain():
     travis = 'travis' in sys.argv
     ceres  = 'ceres'  in sys.argv
     psfex  = 'psfex'  in sys.argv
-    
-    if 'LARGEGALAXIES_CAT' in os.environ:
-        del os.environ['LARGEGALAXIES_CAT']
+
+    for v in ['UNWISE_COADDS_TIMERESOLVED_DIR', 'SKY_TEMPLATE_DIR',
+              'LARGEGALAXIES_CAT', 'GAIA_CAT_DIR', 'TYCHO2_KD_DIR']:
+        if v in os.environ:
+            del os.environ[v]
 
     # Test create_kdtree and (reading CCD kd-tree)!
     indir = os.path.join(os.path.dirname(__file__), 'testcase6')
@@ -103,9 +105,10 @@ def rbmain():
     os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
     os.environ['GAIA_CAT_VER'] = '2'
     #python legacypipe/runbrick.py --radec  --width 100 --height 100 --outdir dup5b --survey-dir test/testcase12 --force-all --no-wise
+    unwdir = os.path.join(surveydir, 'images', 'unwise')
     main(args=['--radec', '346.684', '12.791', '--width', '100',
                '--height', '100', '--no-wise-ceres',
-               '--no-wise', '--survey-dir', surveydir,
+               '--unwise-dir', unwdir, '--survey-dir', surveydir,
                '--outdir', 'out-testcase12', '--skip-coadd', '--force-all', '--no-write'])
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']
