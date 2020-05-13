@@ -31,7 +31,10 @@ def rbmain():
         if v in os.environ:
             del os.environ[v]
 
+    oldargs = sys.argv
+    sys.argv = [sys.argv[0]]
     main()
+    sys.argv = oldargs
 
     # Test create_kdtree and (reading CCD kd-tree)!
     indir = os.path.join(os.path.dirname(__file__), 'testcase6')
