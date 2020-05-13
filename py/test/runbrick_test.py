@@ -31,6 +31,8 @@ def rbmain():
         if v in os.environ:
             del os.environ[v]
 
+    main()
+
     # Test create_kdtree and (reading CCD kd-tree)!
     indir = os.path.join(os.path.dirname(__file__), 'testcase6')
     with tempfile.TemporaryDirectory() as surveydir:
@@ -69,6 +71,22 @@ def rbmain():
         assert(len(I) == 1)
         assert(T.ref_id[I][0] == 1909016711)
         del os.environ['TYCHO2_KD_DIR']
+
+        # test --skip-coadds
+        r = main(args=['--brick', '1102p240',
+                       '--zoom', '500', '600', '650', '750',
+                       '--force-all', '--no-write', '--no-wise', '--no-gaia',
+                       '--survey-dir', surveydir,
+                       '--outdir', outdir, '--skip-coadd'])
+        assert(r == 0)
+
+        # test --skip
+        r = main(args=['--brick', '1102p240',
+                       '--zoom', '500', '600', '650', '750',
+                       '--force-all', '--no-write', '--no-wise', '--no-gaia',
+                       '--survey-dir', surveydir,
+                       '--outdir', outdir, '--skip'])
+        assert(r == 0)
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase9')
 
