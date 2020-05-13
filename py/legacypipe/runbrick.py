@@ -2069,6 +2069,7 @@ def stage_wise_forced(
     photometry of the unWISE coadds.
     '''
     from legacypipe.unwise import unwise_phot, collapse_unwise_bitmask, unwise_tiles_touching_wcs
+    from legacypipe.survey import wise_apertures_arcsec
     from tractor import NanoMaggies
 
     record_event and record_event('stage_wise_forced: starting')
@@ -2220,7 +2221,6 @@ def stage_wise_forced(
 
         if unwise_coadds:
             from legacypipe.coadds import UnwiseCoadd
-            from legacypipe.survey import wise_apertures_arcsec
             # Create the WCS into which we'll resample the tiles.
             # Same center as "targetwcs" but bigger pixel scale.
             wpixscale = 2.75
@@ -2294,7 +2294,8 @@ def stage_wise_forced(
     debug('Returning: WISE_T', WISE_T)
 
     return dict(WISE=WISE, WISE_T=WISE_T, wise_mask_maps=wise_mask_maps,
-                version_header=version_header)
+                version_header=version_header,
+                wise_apertures_arcsec=wise_apertures_arcsec)
 
 def _fill_skipped_values(WISE, Nskipped, do_phot):
     # Fill in blank values for skipped (Icluster) sources
@@ -2326,6 +2327,7 @@ def stage_writecat(
     maskbits_header=None,
     wise_mask_maps=None,
     apertures_arcsec=None,
+    wise_apertures_arcsec=None,
     cat=None, pixscale=None, targetwcs=None,
     W=None,H=None,
     bands=None, ps=None,
@@ -2457,7 +2459,11 @@ def stage_writecat(
 
     for i,ap in enumerate(apertures_arcsec):
         primhdr.add_record(dict(name='APRAD%i' % i, value=ap,
-                                comment='Aperture radius, in arcsec'))
+                                comment='(optical) Aperture radius, in arcsec'))
+    if wise_apertures_arcsec is not None:
+        for i,ap in enumerate(wise_apertures_arcsec):
+            primhdr.add_record(dict(name='WAPRAD%i' % i, value=ap,
+                                    comment='(unWISE) Aperture radius, in arcsec'))
 
     # Record the meaning of mask bits
     bits = list(DQ_BITS.values())
@@ -2487,12 +2493,6 @@ def stage_writecat(
         T2.wise_x = WISE.wise_x
         T2.wise_y = WISE.wise_y
         T2.wise_mask = WISE.wise_mask
-
-        if 'apflux_w1' in WISE.get_columns():
-            from legacypipe.survey import wise_apertures_arcsec
-            for i,ap in enumerate(wise_apertures_arcsec):
-                primhdr.add_record(dict(name='WAPRAD%i' % i, value=ap,
-                                        comment='WISE aperture radius, in arcsec'))
 
         for band in [1,2,3,4]:
             # Apply the Vega-to-AB shift *while* copying columns from
