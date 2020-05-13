@@ -366,6 +366,7 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
     Creates a fitsio header describing a DECaLS data product.
     '''
     import datetime
+    import socket
 
     if program_name is None:
         import sys
@@ -375,17 +376,13 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
         git_version = get_git_version()
 
     hdr = fitsio.FITSHDR()
-    #lsdir_prefix1 = '/global/project/projectdirs'
-    #lsdir_prefix2 = '/global/projecta/projectdirs'
     for s in [
-        'Data product of the DESI Imaging Legacy Survey (DECaLS)',
+        'Data product of the DESI Imaging Legacy Surveys',
         'Full documentation at http://legacysurvey.org',
         ]:
         hdr.add_record(dict(name='COMMENT', value=s, comment=s))
     hdr.add_record(dict(name='LEGPIPEV', value=git_version,
                         comment='legacypipe git version'))
-    #hdr.add_record(dict(name='LSDIRPFX', value=lsdir_prefix1,
-    #                    comment='LegacySurveys Directory Prefix'))
     hdr.add_record(dict(name='LSDIR', value=survey_dir,
                         comment='$LEGACY_SURVEY_DIR directory'))
     hdr.add_record(dict(name='LSDR', value='DR9',
@@ -397,8 +394,6 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
     # Requested by NOAO
     hdr.add_record(dict(name='SURVEYID', value='DECaLS BASS MzLS',
                         comment='Survey names'))
-    #hdr.add_record(dict(name='SURVEYID', value='DECam Legacy Survey (DECaLS)',
-    #hdr.add_record(dict(name='SURVEYID', value='BASS MzLS',
     hdr.add_record(dict(name='DRVERSIO', value=release,
                         comment='LegacySurveys Data Release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
@@ -406,17 +401,14 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
     hdr.add_record(dict(name='PROCTYPE', value='tile',
                         comment='Processing type'))
 
-    import socket
     hdr.add_record(dict(name='NODENAME', value=socket.gethostname(),
                         comment='Machine where script was run'))
-    #hdr.add_record(dict(name='HOSTFQDN', value=socket.getfqdn(),comment='Machine where script was run'))
     hdr.add_record(dict(name='HOSTNAME', value=os.environ.get('NERSC_HOST', 'none'),
                         comment='NERSC machine where script was run'))
     hdr.add_record(dict(name='JOB_ID', value=os.environ.get('SLURM_JOB_ID', 'none'),
                         comment='SLURM job id'))
     hdr.add_record(dict(name='ARRAY_ID', value=os.environ.get('ARRAY_TASK_ID', 'none'),
                         comment='SLURM job array id'))
-
     return hdr
 
 def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
@@ -449,7 +441,6 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
         if pkg is None:
             depvers.append((name, 'none'))
             continue
-        #depvers.append((name + '-path', os.path.dirname(pkg.__file__)))
         try:
             depvers.append((name, pkg.__version__))
         except:
@@ -472,7 +463,7 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
             depvers.append(('LARGEGALAXIES_VER', ver))
             depvers.append(('LARGEGALAXIES_PREBURN', preburn))
 
-    for dep in ['TYCHO2_KD', 'GAIA_CAT']:
+    for dep in ['TYCHO2_KD', 'GAIA_CAT', 'SKY_TEMPLATE']:
         value = os.environ.get('%s_DIR' % dep, default_ver)
         if value == default_ver:
             print('Warning: failed to get version string for "%s"' % dep)

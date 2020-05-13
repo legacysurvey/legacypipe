@@ -31,6 +31,61 @@ class DecamImage(LegacySurveyImage):
 
     glowmjd = astropy.time.Time('2014-08-01').utc.mjd
 
+    def get_sky_template(self, slc=None):
+        import os
+        import fitsio
+        from astrometry.util.fits import fits_table
+        dirnm = os.environ.get('SKY_TEMPLATE_DIR', None)
+        if dirnm is None:
+            print('decam: no SKY_TEMPLATE_DIR environment variable set.')
+            return None
+        '''
+        # Create an expnum-tree via:
+        S = fits_table('legacypipe/py/sky-templates/sky-scales.fits')
+        ekd = tree_build(np.atleast_2d(S.expnum.copy()).T.astype(float),
+            nleaf=60, bbox=False, split=True)
+        ekd.set_name('expnum')
+        ekd.write('ekd.fits')
+        cmd = 'fitsgetext -i ekd.fits -o ekd-%02i -a -M'
+        os.system(cmd)
+        cmd = 'cat legacypipe/py/sky-templates/sky-scales.fits ekd-0[1-6] > legacypipe/py/sky-templates/sky-scales.kd.fits'
+        os.system(cmd)
+        '''
+        fn = os.path.join(dirnm, 'sky-scales.kd.fits')
+        if not os.path.exists(fn):
+            print('decam: no $SKY_TEMPLATE_DIR/sky-scales.kd.fits file.')
+            return None
+        from astrometry.libkd.spherematch import tree_open
+        kd = tree_open(fn, 'expnum')
+        I = kd.search(np.array([self.expnum]), 0.5, 0, 0)
+        if len(I) == 0:
+            print('decam: expnum %i not found in file %s' % (self.expnum, fn))
+            return None
+        # Read only the CCD-table rows within range.
+        S = fits_table(fn, rows=I)
+        S.cut(np.array([c.strip() == self.ccdname for c in S.ccdname]))
+        if len(S) == 0:
+            print('decam: ccdname %s, expnum %i not found in file %s' %
+                  (self.ccdname, self.expnum, fn))
+            return None
+        assert(len(S) == 1)
+        sky = S[0]
+        if sky.run == -1:
+            debug('sky template: run=-1 for expnum %i, ccdname %s' % (self.expnum, self.ccdname))
+            return None
+        assert(self.band == sky.filter)
+        tfn = os.path.join(dirnm, 'sky_templates',
+                           'sky_template_%s_%i.fits.fz' % (self.band, sky.run))
+        if not os.path.exists(tfn):
+            print('Sky template file %s does not exist' % tfn)
+            return None
+        f = fitsio.FITS(tfn)[self.ccdname]
+        if slc is None:
+            template = f.read()
+        else:
+            template = f[slc]
+        return template * sky.skyscale
+
     def get_good_image_subregion(self):
         x0,x1,y0,y1 = None,None,None,None
 
