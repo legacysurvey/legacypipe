@@ -1002,13 +1002,12 @@ def write_coadd_images(band,
     if cowblobmod is not None:
         imgs.append(('blobmodel', 'blobmodel', cowblobmod))
     for name,prodtype,img in imgs:
-        from legacypipe.survey import MyFITSHDR
         if img is None:
             debug('Image type', prodtype, 'is None -- skipping')
             continue
         # Make a copy, because each image has different values for
         # these headers...
-        hdr2 = MyFITSHDR()
+        hdr2 = fitsio.FITSHDR()
         for r in hdr.records():
             hdr2.add_record(r)
         hdr2.add_record(dict(name='IMTYPE', value=name,
