@@ -235,7 +235,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
               'object', getattr(ccd, 'object', '').strip())
 
     tnow = Time()
-    debug('[serial tims] Finding images touching brick:', tnow-tlast)
+    debug('Finding images touching brick:', tnow-tlast)
     tlast = tnow
 
     if do_calibs:
@@ -255,7 +255,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         args = [(im, kwa) for im in ims]
         mp.map(run_calibs, args)
         tnow = Time()
-        debug('[parallel tims] Calibrations:', tnow-tlast)
+        debug('Calibrations:', tnow-tlast)
         tlast = tnow
 
     # Read Tractor images
@@ -272,7 +272,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     record_event and record_event('stage_tims: done read_tims')
 
     tnow = Time()
-    debug('[parallel tims] Read', len(ccds), 'images:', tnow-tlast)
+    debug('Read', len(ccds), 'images:', tnow-tlast)
     tlast = tnow
 
     # Cut the table of CCDs to match the 'tims' list
@@ -669,7 +669,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     detmaps, detivs, satmaps = detection_maps(tims, targetwcs, bands, mp,
                                               apodize=10)
     tnow = Time()
-    debug('[parallel srcs] Detmaps:', tnow-tlast)
+    debug('Detmaps:', tnow-tlast)
     tlast = tnow
     record_event and record_event('stage_srcs: sources')
 
@@ -730,7 +730,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     assert(len(cat) == len(T))
 
     tnow = Time()
-    debug('[serial srcs] Peaks:', tnow-tlast)
+    debug('Peaks:', tnow-tlast)
     tlast = tnow
 
     if plots:
@@ -796,7 +796,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     del hot
 
     tnow = Time()
-    debug('[serial srcs] Blobs:', tnow-tlast)
+    debug('Blobs:', tnow-tlast)
     tlast = tnow
 
     sky_overlap = True
@@ -892,7 +892,7 @@ def stage_fitblobs(T=None,
     T.orig_dec = T.dec.copy()
 
     tnow = Time()
-    debug('[serial fitblobs]:', tnow-tlast)
+    debug('Fitblobs:', tnow-tlast)
     tlast = tnow
 
     # Were we asked to only run a subset of blobs?
@@ -1072,7 +1072,7 @@ def stage_fitblobs(T=None,
 
         debug('Got', n_finished_total, 'results; wrote', len(R), 'to checkpoint')
 
-    debug('[parallel fitblobs] Fitting sources took:', Time()-tlast)
+    debug('Fitting sources:', Time()-tlast)
 
     # Repackage the results from one_blob...
 
@@ -1601,7 +1601,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ps.savefig()
 
     tnow = Time()
-    debug('[serial coadds]:', tnow-tlast)
+    debug('Coadds:', tnow-tlast)
     tlast = tnow
     # Render model images...
     record_event and record_event('stage_coadds: model images')
@@ -1613,7 +1613,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     del bothmods
 
     tnow = Time()
-    debug('[parallel coadds] Getting model images:', tnow-tlast)
+    debug('Model images:', tnow-tlast)
     tlast = tnow
 
     # Compute source pixel positions
@@ -1886,7 +1886,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ps.savefig()
 
     tnow = Time()
-    debug('[serial coadds] Aperture photometry, wrap-up', tnow-tlast)
+    debug('Aperture photometry wrap-up:', tnow-tlast)
 
     return dict(T=T, T_donotfit=T_donotfit, apertures_pix=apertures,
                 apertures_arcsec=apertures_arcsec,
