@@ -553,7 +553,8 @@ def make_coadds(tims, bands, targetwcs,
             # Conversion factor to FWHM (2.35)
             tofwhm = 2. * np.sqrt(2. * np.log(2.))
             # Scale back to units of linear arcsec.
-            psfsizemap[:,:] = (1. / np.sqrt(psfsizemap)) * tosigma * tofwhm
+            with np.errstate(divide='ignore'):
+                psfsizemap[:,:] = (1. / np.sqrt(psfsizemap)) * tosigma * tofwhm
             psfsizemap[flatcow == 0] = 0.
             if xy:
                 C.T.psfsize[:,iband] = psfsizemap[iy,ix]
@@ -564,7 +565,7 @@ def make_coadds(tims, bands, targetwcs,
             mask = (cow == 0)
             with np.errstate(divide='ignore'):
                 imsigma = 1.0/np.sqrt(cow)
-                imsigma[mask] = 0.
+            imsigma[mask] = 0.
 
             for irad,rad in enumerate(apertures):
                 apargs.append((irad, band, rad, cowimg, imsigma, mask,
