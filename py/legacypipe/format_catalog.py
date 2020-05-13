@@ -129,7 +129,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
                 T.set(c, np.zeros(len(T), np.float32))
 
     if gaia_tagalong:
-        gaia_cols = [#('source_id', np.int64),  # already have this in ref_id
+        gaia_cols = [
             ('pointsource', bool),  # did we force it to be a point source?
             ('phot_g_mean_mag', np.float32),
             ('phot_g_mean_flux_over_error', np.float32),
@@ -184,7 +184,9 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
                   'apflux_ivar', 'apflux_masked']:
             add_fluxlike(c)
 
+    wise_apflux = False
     if has_wise and has_ap and 'apflux_w1' in T.get_columns():
+        wise_apflux = True
         add_wiselike('apflux')
         add_wiselike('apflux_resid')
         add_wiselike('apflux_ivar')
@@ -289,12 +291,25 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
     arcsec = 'arcsec'
     flux = 'nanomaggy'
     fluxiv = '1/nanomaggy^2'
+    pm = 'mas/yr'
+    pmiv = '1/(mas/yr)^2'
     units = dict(
         ra=deg, dec=deg, ra_ivar=degiv, dec_ivar=degiv, ebv='mag',
         shape_r=arcsec, shape_r_ivar='1/arcsec^2')
+    if motions:
+        units.update(pmra=pm, pmdec=pm, pmra_ivar=pmiv, pmdec_ivar=pmiv,
+                     parallax='mas', parallax_ivar='1/mas^2')
+    if gaia_tagalong:
+        units.update(gaia_phot_g_mean_mag='mag',
+                     gaia_phot_bp_mean_mag='mag',
+                     gaia_phot_rp_mean_mag='mag')
     # WISE fields
     wunits = dict(flux=flux, flux_ivar=fluxiv,
-                  lc_flux=flux, lc_flux_ivar=fluxiv)
+                  lc_flux=flux, lc_flux_ivar=fluxiv,
+                  psfdepth=fluxiv)
+    if wise_apflux:
+        wunits.update(apflux=flux, apflux_resid=flux,
+                      apflux_ivar=fluxiv)
     # Fields that take prefixes (and have bands)
     funits = dict(
         flux=flux, flux_ivar=fluxiv,
