@@ -1555,49 +1555,37 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         coimgs_init,_ = quick_coadds(tims, bands, targetwcs, images=mods_init)
         coimgs_iter,_ = quick_coadds(tims, bands, targetwcs, images=mods_iter)
         coimgs,_ = quick_coadds(tims, bands, targetwcs)
-
         plt.clf()
         dimshow(get_rgb(coimgs, bands))
         plt.title('First-round data')
         ps.savefig()
-
         plt.clf()
         dimshow(get_rgb(coimgs_init, bands))
         plt.title('First-round model fits')
         ps.savefig()
-
         plt.clf()
         dimshow(get_rgb([img-mod for img,mod in zip(coimgs,coimgs_init)], bands))
         plt.title('First-round residuals')
         ps.savefig()
-
         plt.clf()
         dimshow(get_rgb(coimgs_iter, bands))
         plt.title('Iterative model fits')
         ps.savefig()
-
         plt.clf()
         dimshow(get_rgb([mod+mod2 for mod,mod2 in zip(coimgs_init, coimgs_iter)], bands))
         plt.title('Initial + Iterative model fits')
         ps.savefig()
-
         plt.clf()
         dimshow(get_rgb([img-mod-mod2 for img,mod,mod2 in zip(coimgs,coimgs_init,coimgs_iter)], bands))
         plt.title('Iterative model residuals')
         ps.savefig()
 
-    tnow = Time()
-    debug('Coadds:', tnow-tlast)
-    tlast = tnow
     # Render model images...
     record_event and record_event('stage_coadds: model images')
-    #mods = mp.map(_get_mod, [(tim, cat) for tim in tims])
     bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob, blobs, targetwcs) for tim in tims])
-
     mods = [m for m,b in bothmods]
     blobmods = [b for m,b in bothmods]
     del bothmods
-
     tnow = Time()
     debug('Model images:', tnow-tlast)
     tlast = tnow
@@ -1613,7 +1601,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
             T_donotfit = merge_tables([T_donotfit, T_refbail], columns='fillzero')
         else:
             T_donotfit = T_refbail
-
     # We tag the "T_donotfit" sources on the end to get aperture phot
     # and other metrics.
     if T_donotfit:
@@ -1710,7 +1697,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  ('model', C.comods, {}),
                  ('blobmodel', C.coblobmods, {}),
                  ('resid', C.coresids, dict(resids=True))]
-    ### blobresids??
     if hasattr(tims[0], 'sims_image'):
         coadd_list.append(('simscoadd', sims_coadd, {}))
 
@@ -1744,55 +1730,50 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         del refmap
 
     # SATUR
-    saturvals = dict(g=MASKBITS['SATUR_G'],
-                     r=MASKBITS['SATUR_R'],
-                     z=MASKBITS['SATUR_Z'])
     if saturated_pix is not None:
-        for b,sat in zip(bands, saturated_pix):
-            maskbits |= (saturvals[b] * sat).astype(np.int16)
+        for b, sat in zip(bands, saturated_pix):
+            maskbits |= (MASKBITS['SATUR_' + b.upper()] * sat).astype(np.int16)
 
     # ALLMASK_{g,r,z}
-    allmaskvals = dict(g=MASKBITS['ALLMASK_G'],
-                       r=MASKBITS['ALLMASK_R'],
-                       z=MASKBITS['ALLMASK_Z'])
     for b,allmask in zip(bands, C.allmasks):
-        if not b in allmaskvals:
-            continue
-        maskbits |= (allmaskvals[b] * (allmask > 0)).astype(np.int16)
+        maskbits |= (MASKBITS['ALLMASK_' + b.upper()] * (allmask > 0))
 
     # BAILOUT_MASK
     if bailout_mask is not None:
         maskbits |= MASKBITS['BAILOUT'] * bailout_mask.astype(bool)
 
-    # NOTE that we pass the "maskbits" and "maskbits_header" variables
-    # on to later stages, because we will add in the WISE mask planes
-    # later (and write the result in the writecat stage. THEREFORE, if
-    # you make changes to the bit mappings here, you MUST also adjust
-    # the header values (and bit mappings for the WISE masks) in
-    # stage_writecat.
-    hdr = version_header
-    hdr.add_record(dict(name='MB_NPRIM', value=MASKBITS['NPRIMARY'],
-                        comment='Maskbit: non-primary brick area'))
-    hdr.add_record(dict(name='MB_BRIGH', value=MASKBITS['BRIGHT'],
-                        comment='Maskbit: bright star in blob'))
-    hdr.add_record(dict(name='MB_BAIL',  value=MASKBITS['BAILOUT'],
-                        comment='Maskbit: bailed-out processing'))
-    hdr.add_record(dict(name='MB_MED',   value=MASKBITS['MEDIUM'],
-                        comment='Maskbit: medium-bright star in blob'))
-    hdr.add_record(dict(name='MB_GAL',   value=MASKBITS['GALAXY'],
-                        comment='Maskbit: LSLGA large galaxy'))
-    hdr.add_record(dict(name='MB_CLUST', value=MASKBITS['CLUSTER'],
-                        comment='Maskbit: Cluster'))
-    keys = sorted(saturvals.keys())
-    for b in keys:
-        k = 'MB_SAT_%s' % b.upper()
-        hdr.add_record(dict(name=k, value=saturvals[b],
-                            comment='Maskbit: saturated (& nearby), %s band' % b))
-    keys = sorted(allmaskvals.keys())
-    for b in keys:
-        hdr.add_record(dict(name='MB_ALL_%s' % b.upper(),
-                            value=allmaskvals[b],
-                            comment='Maskbit: ALLMASK band %s' % b))
+    # Add the maskbits header cards to version_header
+    mbits = [
+        ('NPRIMARY',  'NPRIM', 'not primary brick area'),
+        ('BRIGHT',    'BRIGH', 'bright star nearby'),
+        ('SATUR_G',   'SAT_G', 'g band saturated'),
+        ('SATUR_R',   'SAT_R', 'r band saturated'),
+        ('SATUR_Z',   'SAT_Z', 'z band saturated'),
+        ('ALLMASK_G', 'ALL_G', 'any ALLMASK_G bit set'),
+        ('ALLMASK_R', 'ALL_R', 'any ALLMASK_R bit set'),
+        ('ALLMASK_Z', 'ALL_Z', 'any ALLMASK_Z bit set'),
+        ('WISEM1',    'WISE1', 'WISE W1 (all masks)'),
+        ('WISEM2',    'WISE2', 'WISE W2 (all masks)'),
+        ('BAILOUT',   'BAIL',  'Bailed out processing'),
+        ('MEDIUM',    'MED',   'medium-bright star'),
+        ('GALAXY',    'GAL',   'LSLGA large galaxy'),
+        ('CLUSTER',   'CLUST', 'Globular cluster')]
+    version_header.add_record(dict(name='COMMENT', value='maskbits bits:'))
+    for key,short,comm in mbits:
+        version_header.add_record(
+            dict(name='MB_%s'%short, value=MASKBITS[key],
+                 comment='Maskbit: %s'%comm))
+    revmap = dict([(bit,name) for name,bit in MASKBITS.items()])
+    nicemap = dict([(k,c) for k,short,c in mbits])
+    for bit in range(16):
+        bitval = 1<<bit
+        if not bitval in revmap:
+            continue
+        name = revmap[bitval]
+        nice = nicemap.get(name, '')
+        version_header.add_record(
+            dict(name='MBIT_%i' % bit, value=name,
+                 comment='maskbits bit %i (0x%x): %s' % (bit, bitval, nice)))
 
     if plots:
         plt.clf()
@@ -2326,74 +2307,58 @@ def stage_writecat(
 
     assert(maskbits is not None)
 
-    w1val = MASKBITS['WISEM1']
-    w2val = MASKBITS['WISEM2']
     if wise_mask_maps is not None:
         # Add the WISE masks in!
-        maskbits |= w1val * (wise_mask_maps[0] != 0)
-        maskbits |= w2val * (wise_mask_maps[1] != 0)
+        maskbits |= MASKBITS['WISEM1'] * (wise_mask_maps[0] != 0)
+        maskbits |= MASKBITS['WISEM2'] * (wise_mask_maps[1] != 0)
 
-    hdr = version_header
-    hdr.add_record(dict(name='MB_WISE1', value=w1val,
-                        comment='Maskbit: WISE W1 (all masks)'))
-    hdr.add_record(dict(name='MB_WISE2', value=w2val,
-                        comment='Maskbit: WISE W2 (all masks)'))
+    version_header.add_record(dict(name='COMMENT', value='wisemask bits:'))
+    wbits = [
+        (0, 'BRIGHT',  'BRIGH', 'Bright star core/wings'),
+        (1, 'SPIKE',   'SPIKE', 'PSF-based diffraction spike'),
+        (2, 'GHOST',   'GHOST', 'Optical ghost'),
+        (3, 'LATENT',  'LATNT', 'First latent'),
+        (4, 'LATENT2', 'LATN2', 'Second latent image'),
+        (5, 'HALO',    'HALO',  'AllWISE-like circular halo'),
+        (6, 'SATUR',   'SATUR', 'Bright star saturation'),
+        (7, 'SPIKE2',  'SPIK2', 'Geometric diffraction spike')]
+    for bit,name,short,comm in wbits:
+        version_header.add_record(dict(
+            name='WB_%s' % short, value=1<<bit,
+            comment='WISE mask bit %i: %s, %s' % (bit, name, comm)))
+    for bit,name,_,comm in wbits:
+        version_header.add_record(dict(
+            name='WBIT_%i' % bit, value=name, comment='WISE: %s' % comm))
 
-    revmap = dict([(bit,name) for name,bit in MASKBITS.items()])
-    descr = dict(NPRIMARY='not-brick-primary',
-                 BRIGHT='bright star nearby',
-                 SATUR_G='g band saturated',
-                 SATUR_R='r band saturated',
-                 SATUR_Z='z band saturated',
-                 ALLMASK_G='any ALLMASK_G bit set',
-                 ALLMASK_R='any ALLMASK_R bit set',
-                 ALLMASK_Z='any ALLMASK_Z bit set',
-                 WISEM1='WISE W1 bright star mask',
-                 WISEM2='WISE W2 bright star mask',
-                 BAILOUT='Bailed out of processing',
-                 MEDIUM='medium-bright star nearby',
-                 GALAXY='LSLGA large galaxy nearby',
-                 CLUSTER='Globular cluster nearby')
-
-    for bit in range(16):
-        bitval = 1<<bit
-        if not bitval in revmap:
+    # Record the meaning of ALLMASK/ANYMASK bits
+    version_header.add_record(dict(name='COMMENT', value='allmask/anymask bits:'))
+    bits = list(DQ_BITS.values())
+    bits.sort()
+    bitmap = dict((v,k) for k,v in DQ_BITS.items())
+    for i in range(16):
+        bit = 1<<i
+        if not bit in bitmap:
             continue
-        name = revmap[bitval]
-        nice = descr.get(name, '')
-        hdr.add_record(dict(name='MBIT_%i' % bit, value=name,
-                            comment='maskbits bit %i (0x%x): %s' %
-                            (bit, bitval, nice)))
+        version_header.add_record(
+            dict(name='ABIT_%i' % i, value=bitmap[bit],
+                 comment='ALLMASK/ANYMASK bit 2**%i=%i meaning' % (i, bit)))
+    for i in range(16):
+        bit = 1<<i
+        if not bit in bitmap:
+            continue
+        version_header.add_record(
+            dict(name='AM_%s' % bitmap[bit].upper()[:5], value=bit,
+                 comment='ALLMASK/ANYMASK bit 2**%i' % i))
 
-    if wise_mask_maps is not None:
-        wisehdr = fitsio.FITSHDR()
-        wisehdr.add_record(dict(name='WBIT_0', value='BRIGHT',
-                                comment='Bright star core and wings'))
-        wisehdr.add_record(dict(name='WBIT_1', value='SPIKE',
-                                comment='PSF-based diffraction spike'))
-        wisehdr.add_record(dict(name='WBIT_2', value='GHOST',
-                                commet='Optical ghost'))
-        wisehdr.add_record(dict(name='WBIT_3', value='LATENT',
-                                comment='First latent'))
-        wisehdr.add_record(dict(name='WBIT_4', value='LATENT2',
-                                comment='Second latent image'))
-        wisehdr.add_record(dict(name='WBIT_5', value='HALO',
-                                comment='AllWISE-like circular halo'))
-        wisehdr.add_record(dict(name='WBIT_6', value='SATUR',
-                                comment='Bright star saturation'))
-        wisehdr.add_record(dict(name='WBIT_7', value='SPIKE2',
-                                comment='Geometric diffraction spike'))
-
-    # copy version_header before modifying it, for maskbit output
+    # create maskbits header
     hdr = copy_header_with_wcs(version_header, targetwcs)
     hdr.add_record(dict(name='IMTYPE', value='maskbits',
                         comment='LegacySurveys image type'))
-
     with survey.write_output('maskbits', brick=brickname, shape=maskbits.shape) as out:
-        out.fits.write(maskbits, header=hdr)
+        out.fits.write(maskbits, header=hdr, extname='MASKBITS')
         if wise_mask_maps is not None:
-            out.fits.write(wise_mask_maps[0], header=wisehdr)
-            out.fits.write(wise_mask_maps[1], header=wisehdr)
+            out.fits.write(wise_mask_maps[0], extname='WISEM1')
+            out.fits.write(wise_mask_maps[1], extname='WISEM2')
         del wise_mask_maps
 
     TT = T.copy()
@@ -2440,17 +2405,6 @@ def stage_writecat(
         for i,ap in enumerate(wise_apertures_arcsec):
             primhdr.add_record(dict(name='WAPRAD%i' % i, value=ap,
                                     comment='(unWISE) Aperture radius, in arcsec'))
-
-    # Record the meaning of mask bits
-    bits = list(DQ_BITS.values())
-    bits.sort()
-    bitmap = dict((v,k) for k,v in DQ_BITS.items())
-    for i in range(16):
-        bit = 1<<i
-        if bit in bitmap:
-            primhdr.add_record(dict(name='AMASK%i' % i, value=bitmap[bit],
-                                    comment='ALLMASK/ANYMASK bit 2**%i=%i meaning' %
-                                    (i, bit)))
 
     if WISE is not None:
         # Convert WISE fluxes from Vega to AB.
