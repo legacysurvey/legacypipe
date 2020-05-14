@@ -17,7 +17,7 @@ if __name__ == "__main__":
     parser0 = argparse.ArgumentParser(description='Generates an annotated CCDs file and a legacypipe-compatible CCDs file from a set of reduced imaging.')
     parser0.add_argument('--file_list',help='List of zeropoint fits files to concatenate')
     parser0.add_argument('--camera', type=str, help='decam, mosaic or 90prime')
-    parser0.add_argument('--data_release', type=int, help='Number of LS DR')
+    parser0.add_argument('--data_release', type=int, default=None, help='Number of LS DR')
     opt = parser0.parse_args()
 
     fna = "ccds-annotated-"+opt.camera+"-dr"+str(opt.data_release)+".fits"
@@ -63,6 +63,7 @@ if __name__ == "__main__":
             'sig1',
             'ccdzpt',
             'zpt',
+            'phrms',
             'ccdraoff',
             'ccddecoff',
             'ccdskycounts',
