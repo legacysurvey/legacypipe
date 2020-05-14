@@ -235,7 +235,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
               'object', getattr(ccd, 'object', '').strip())
 
     tnow = Time()
-    debug('[serial tims] Finding images touching brick:', tnow-tlast)
+    debug('Finding images touching brick:', tnow-tlast)
     tlast = tnow
 
     if do_calibs:
@@ -255,7 +255,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         args = [(im, kwa) for im in ims]
         mp.map(run_calibs, args)
         tnow = Time()
-        debug('[parallel tims] Calibrations:', tnow-tlast)
+        debug('Calibrations:', tnow-tlast)
         tlast = tnow
 
     # Read Tractor images
@@ -272,7 +272,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     record_event and record_event('stage_tims: done read_tims')
 
     tnow = Time()
-    debug('[parallel tims] Read', len(ccds), 'images:', tnow-tlast)
+    debug('Read', len(ccds), 'images:', tnow-tlast)
     tlast = tnow
 
     # Cut the table of CCDs to match the 'tims' list
@@ -596,14 +596,8 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
 
             # write out blob map
             if write_metrics:
-                # copy version_header before modifying it.
-                hdr = fitsio.FITSHDR()
-                for r in version_header.records():
-                    hdr.add_record(r)
-                # Plug the WCS header cards into these images
-                targetwcs.add_to_header(hdr)
-                hdr.delete('IMAGEW')
-                hdr.delete('IMAGEH')
+                from legacypipe.utils import copy_header_with_wcs
+                hdr = copy_header_with_wcs(version_header, targetwcs)
                 hdr.add_record(dict(name='IMTYPE', value='blobmap',
                                     comment='LegacySurveys image type'))
                 with survey.write_output('blobmap', brick=brickname,
@@ -669,7 +663,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     detmaps, detivs, satmaps = detection_maps(tims, targetwcs, bands, mp,
                                               apodize=10)
     tnow = Time()
-    debug('[parallel srcs] Detmaps:', tnow-tlast)
+    debug('Detmaps:', tnow-tlast)
     tlast = tnow
     record_event and record_event('stage_srcs: sources')
 
@@ -730,7 +724,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     assert(len(cat) == len(T))
 
     tnow = Time()
-    debug('[serial srcs] Peaks:', tnow-tlast)
+    debug('Peaks:', tnow-tlast)
     tlast = tnow
 
     if plots:
@@ -796,7 +790,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     del hot
 
     tnow = Time()
-    debug('[serial srcs] Blobs:', tnow-tlast)
+    debug('Blobs:', tnow-tlast)
     tlast = tnow
 
     sky_overlap = True
@@ -892,7 +886,7 @@ def stage_fitblobs(T=None,
     T.orig_dec = T.dec.copy()
 
     tnow = Time()
-    debug('[serial fitblobs]:', tnow-tlast)
+    debug('Fitblobs:', tnow-tlast)
     tlast = tnow
 
     # Were we asked to only run a subset of blobs?
@@ -1072,7 +1066,7 @@ def stage_fitblobs(T=None,
 
         debug('Got', n_finished_total, 'results; wrote', len(R), 'to checkpoint')
 
-    debug('[parallel fitblobs] Fitting sources took:', Time()-tlast)
+    debug('Fitting sources:', Time()-tlast)
 
     # Repackage the results from one_blob...
 
@@ -1169,18 +1163,10 @@ def stage_fitblobs(T=None,
 
     # write out blob map
     if write_metrics:
-        # copy version_header before modifying it.
-        hdr = fitsio.FITSHDR()
-        for r in version_header.records():
-            hdr.add_record(r)
-        # Plug the WCS header cards into these images
-        targetwcs.add_to_header(hdr)
-        hdr.delete('IMAGEW')
-        hdr.delete('IMAGEH')
+        from legacypipe.utils import copy_header_with_wcs
+        hdr = copy_header_with_wcs(version_header, targetwcs)
         hdr.add_record(dict(name='IMTYPE', value='blobmap',
                             comment='LegacySurveys image type'))
-        hdr.add_record(dict(name='EQUINOX', value=2000.,
-                            comment='Observation epoch'))
         with survey.write_output('blobmap', brick=brickname, shape=blobs.shape) as out:
             out.fits.write(blobs, header=hdr)
     del iblob, oldblob
@@ -1203,12 +1189,9 @@ def stage_fitblobs(T=None,
               'blob_width', 'blob_height', 'blob_npix',
               'blob_nimages', 'blob_totalpix',
               'blob_symm_width', 'blob_symm_height', 'blob_symm_npix',
-              'blob_symm_nimages', 'brightblob', 'hit_limit', 'dchisq',
+              'blob_symm_nimages', 'hit_limit', 'dchisq',
               'force_keep_source']:
         T.set(k, BB.get(k))
-
-    # compute the pixel-space mask for *brightblob* values
-    brightblobmask = refmap
 
     invvars = np.hstack(BB.srcinvvars)
     assert(cat.numberOfParams() == len(invvars))
@@ -1239,7 +1222,7 @@ def stage_fitblobs(T=None,
                 TT.writeto(None, fits_object=out.fits, header=hdr,
                            primheader=primhdr)
 
-    keys = ['cat', 'invvars', 'T', 'blobs', 'brightblobmask', 'version_header']
+    keys = ['cat', 'invvars', 'T', 'blobs', 'refmap', 'version_header']
     if get_all_models:
         keys.append('all_models')
     if bailout:
@@ -1537,7 +1520,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
                  co_sky=None,
                  saturated_pix=None,
-                 brightblobmask=None,
+                 refmap=None,
                  bailout_mask=None,
                  mp=None,
                  record_event=None,
@@ -1572,51 +1555,39 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         coimgs_init,_ = quick_coadds(tims, bands, targetwcs, images=mods_init)
         coimgs_iter,_ = quick_coadds(tims, bands, targetwcs, images=mods_iter)
         coimgs,_ = quick_coadds(tims, bands, targetwcs)
-
         plt.clf()
         dimshow(get_rgb(coimgs, bands))
         plt.title('First-round data')
         ps.savefig()
-
         plt.clf()
         dimshow(get_rgb(coimgs_init, bands))
         plt.title('First-round model fits')
         ps.savefig()
-
         plt.clf()
         dimshow(get_rgb([img-mod for img,mod in zip(coimgs,coimgs_init)], bands))
         plt.title('First-round residuals')
         ps.savefig()
-
         plt.clf()
         dimshow(get_rgb(coimgs_iter, bands))
         plt.title('Iterative model fits')
         ps.savefig()
-
         plt.clf()
         dimshow(get_rgb([mod+mod2 for mod,mod2 in zip(coimgs_init, coimgs_iter)], bands))
         plt.title('Initial + Iterative model fits')
         ps.savefig()
-
         plt.clf()
         dimshow(get_rgb([img-mod-mod2 for img,mod,mod2 in zip(coimgs,coimgs_init,coimgs_iter)], bands))
         plt.title('Iterative model residuals')
         ps.savefig()
 
-    tnow = Time()
-    debug('[serial coadds]:', tnow-tlast)
-    tlast = tnow
     # Render model images...
     record_event and record_event('stage_coadds: model images')
-    #mods = mp.map(_get_mod, [(tim, cat) for tim in tims])
     bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob, blobs, targetwcs) for tim in tims])
-
     mods = [m for m,b in bothmods]
     blobmods = [b for m,b in bothmods]
     del bothmods
-
     tnow = Time()
-    debug('[parallel coadds] Getting model images:', tnow-tlast)
+    debug('Model images:', tnow-tlast)
     tlast = tnow
 
     # Compute source pixel positions
@@ -1630,7 +1601,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
             T_donotfit = merge_tables([T_donotfit, T_refbail], columns='fillzero')
         else:
             T_donotfit = T_refbail
-
     # We tag the "T_donotfit" sources on the end to get aperture phot
     # and other metrics.
     if T_donotfit:
@@ -1727,7 +1697,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  ('model', C.comods, {}),
                  ('blobmodel', C.coblobmods, {}),
                  ('resid', C.coresids, dict(resids=True))]
-    ### blobresids??
     if hasattr(tims[0], 'sims_image'):
         coadd_list.append(('simscoadd', sims_coadd, {}))
 
@@ -1746,78 +1715,65 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # Construct a mask bits map
     maskbits = np.zeros((H,W), np.int16)
     # !PRIMARY
-    if custom_brick:
-        U = None
-    else:
+    if not custom_brick:
         U = find_unique_pixels(targetwcs, W, H, None,
                                brick.ra1, brick.ra2, brick.dec1, brick.dec2)
-        maskbits += MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int16)
+        maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int16)
         del U
 
     # BRIGHT
-    if brightblobmask is not None:
-        maskbits += MASKBITS['BRIGHT'] * ((brightblobmask & IN_BLOB['BRIGHT']) > 0)
-        maskbits += MASKBITS['MEDIUM'] * ((brightblobmask & IN_BLOB['MEDIUM']) > 0)
-        maskbits += MASKBITS['GALAXY'] * ((brightblobmask & IN_BLOB['GALAXY']) > 0)
-        maskbits += MASKBITS['CLUSTER'] * ((brightblobmask & IN_BLOB['CLUSTER']) > 0)
+    if refmap is not None:
+        maskbits |= MASKBITS['BRIGHT']  * ((refmap & IN_BLOB['BRIGHT'] ) > 0)
+        maskbits |= MASKBITS['MEDIUM']  * ((refmap & IN_BLOB['MEDIUM'] ) > 0)
+        maskbits |= MASKBITS['GALAXY']  * ((refmap & IN_BLOB['GALAXY'] ) > 0)
+        maskbits |= MASKBITS['CLUSTER'] * ((refmap & IN_BLOB['CLUSTER']) > 0)
+        del refmap
 
     # SATUR
-    saturvals = dict(g=MASKBITS['SATUR_G'], r=MASKBITS['SATUR_R'], z=MASKBITS['SATUR_Z'])
     if saturated_pix is not None:
-        for b,sat in zip(bands, saturated_pix):
-            maskbits += saturvals[b] * sat.astype(np.int16)
+        for b, sat in zip(bands, saturated_pix):
+            maskbits |= (MASKBITS['SATUR_' + b.upper()] * sat).astype(np.int16)
 
     # ALLMASK_{g,r,z}
-    allmaskvals = dict(g=MASKBITS['ALLMASK_G'], r=MASKBITS['ALLMASK_R'],
-                       z=MASKBITS['ALLMASK_Z'])
     for b,allmask in zip(bands, C.allmasks):
-        if not b in allmaskvals:
-            continue
-        maskbits += allmaskvals[b]* (allmask > 0).astype(np.int16)
+        maskbits |= (MASKBITS['ALLMASK_' + b.upper()] * (allmask > 0))
 
     # BAILOUT_MASK
     if bailout_mask is not None:
-        maskbits += MASKBITS['BAILOUT'] * bailout_mask.astype(bool)
+        maskbits |= MASKBITS['BAILOUT'] * bailout_mask.astype(bool)
 
-    # copy version_header before modifying it.
-    hdr = fitsio.FITSHDR()
-    for r in version_header.records():
-        hdr.add_record(r)
-    # Plug the WCS header cards into these images
-    targetwcs.add_to_header(hdr)
-    hdr.add_record(dict(name='EQUINOX', value=2000., comment='Observation epoch'))
-    hdr.delete('IMAGEW')
-    hdr.delete('IMAGEH')
-    hdr.add_record(dict(name='IMTYPE', value='maskbits',
-                        comment='LegacySurveys image type'))
-    # NOTE that we pass the "maskbits" and "maskbits_header" variables
-    # on to later stages, because we will add in the WISE mask planes
-    # later (and write the result in the writecat stage. THEREFORE, if
-    # you make changes to the bit mappings here, you MUST also adjust
-    # the header values (and bit mappings for the WISE masks) in
-    # stage_writecat.
-    hdr.add_record(dict(name='NPRIMARY', value=MASKBITS['NPRIMARY'],
-                        comment='Mask value for non-primary brick area'))
-    hdr.add_record(dict(name='BRIGHT', value=MASKBITS['BRIGHT'],
-                        comment='Mask value for bright star in blob'))
-    hdr.add_record(dict(name='BAILOUT', value=MASKBITS['BAILOUT'],
-                        comment='Mask value for bailed-out processing'))
-    hdr.add_record(dict(name='MEDIUM', value=MASKBITS['MEDIUM'],
-                        comment='Mask value for medium-bright star in blob'))
-    hdr.add_record(dict(name='GALAXY', value=MASKBITS['GALAXY'],
-                        comment='Mask value for LSLGA large galaxy'))
-    hdr.add_record(dict(name='CLUSTER', value=MASKBITS['CLUSTER'],
-                        comment='Mask value for Cluster'))
-    keys = sorted(saturvals.keys())
-    for b in keys:
-        k = 'SATUR_%s' % b.upper()
-        hdr.add_record(dict(name=k, value=MASKBITS[k],
-                            comment='Mask value for saturated (& nearby) pixels in %s band' % b))
-    keys = sorted(allmaskvals.keys())
-    for b in keys:
-        hdr.add_record(dict(name='ALLM_%s' % b.upper(), value=allmaskvals[b],
-                            comment='Mask value for ALLMASK band %s' % b))
-    maskbits_header = hdr
+    # Add the maskbits header cards to version_header
+    mbits = [
+        ('NPRIMARY',  'NPRIM', 'not primary brick area'),
+        ('BRIGHT',    'BRIGH', 'bright star nearby'),
+        ('SATUR_G',   'SAT_G', 'g band saturated'),
+        ('SATUR_R',   'SAT_R', 'r band saturated'),
+        ('SATUR_Z',   'SAT_Z', 'z band saturated'),
+        ('ALLMASK_G', 'ALL_G', 'any ALLMASK_G bit set'),
+        ('ALLMASK_R', 'ALL_R', 'any ALLMASK_R bit set'),
+        ('ALLMASK_Z', 'ALL_Z', 'any ALLMASK_Z bit set'),
+        ('WISEM1',    'WISE1', 'WISE W1 (all masks)'),
+        ('WISEM2',    'WISE2', 'WISE W2 (all masks)'),
+        ('BAILOUT',   'BAIL',  'Bailed out processing'),
+        ('MEDIUM',    'MED',   'medium-bright star'),
+        ('GALAXY',    'GAL',   'LSLGA large galaxy'),
+        ('CLUSTER',   'CLUST', 'Globular cluster')]
+    version_header.add_record(dict(name='COMMENT', value='maskbits bits:'))
+    for key,short,comm in mbits:
+        version_header.add_record(
+            dict(name='MB_%s'%short, value=MASKBITS[key],
+                 comment='Maskbit: %s'%comm))
+    revmap = dict([(bit,name) for name,bit in MASKBITS.items()])
+    nicemap = dict([(k,c) for k,short,c in mbits])
+    for bit in range(16):
+        bitval = 1<<bit
+        if not bitval in revmap:
+            continue
+        name = revmap[bitval]
+        nice = nicemap.get(name, '')
+        version_header.add_record(
+            dict(name='MBIT_%i' % bit, value=name,
+                 comment='maskbits bit %i (0x%x): %s' % (bit, bitval, nice)))
 
     if plots:
         plt.clf()
@@ -1889,12 +1845,12 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ps.savefig()
 
     tnow = Time()
-    debug('[serial coadds] Aperture photometry, wrap-up', tnow-tlast)
+    debug('Aperture photometry wrap-up:', tnow-tlast)
 
     return dict(T=T, T_donotfit=T_donotfit, apertures_pix=apertures,
                 apertures_arcsec=apertures_arcsec,
                 maskbits=maskbits,
-                maskbits_header=maskbits_header, version_header=version_header)
+                version_header=version_header)
 
 def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
                      fibersize=1.5, seeing=1., year=2020.0,
@@ -2324,7 +2280,6 @@ def stage_writecat(
     WISE=None,
     WISE_T=None,
     maskbits=None,
-    maskbits_header=None,
     wise_mask_maps=None,
     apertures_arcsec=None,
     wise_apertures_arcsec=None,
@@ -2345,79 +2300,65 @@ def stage_writecat(
     catalog.
     '''
     from legacypipe.catalog import prepare_fits_catalog
+    from legacypipe.utils import copy_header_with_wcs
 
     record_event and record_event('stage_writecat: starting')
     _add_stage_version(version_header, 'WCAT', 'writecat')
 
-    if maskbits is not None:
-        w1val = MASKBITS['WISEM1']
-        w2val = MASKBITS['WISEM2']
+    assert(maskbits is not None)
 
+    if wise_mask_maps is not None:
+        # Add the WISE masks in!
+        maskbits |= MASKBITS['WISEM1'] * (wise_mask_maps[0] != 0)
+        maskbits |= MASKBITS['WISEM2'] * (wise_mask_maps[1] != 0)
+
+    version_header.add_record(dict(name='COMMENT', value='wisemask bits:'))
+    wbits = [
+        (0, 'BRIGHT',  'BRIGH', 'Bright star core/wings'),
+        (1, 'SPIKE',   'SPIKE', 'PSF-based diffraction spike'),
+        (2, 'GHOST',   'GHOST', 'Optical ghost'),
+        (3, 'LATENT',  'LATNT', 'First latent'),
+        (4, 'LATENT2', 'LATN2', 'Second latent image'),
+        (5, 'HALO',    'HALO',  'AllWISE-like circular halo'),
+        (6, 'SATUR',   'SATUR', 'Bright star saturation'),
+        (7, 'SPIKE2',  'SPIK2', 'Geometric diffraction spike')]
+    for bit,name,short,comm in wbits:
+        version_header.add_record(dict(
+            name='WB_%s' % short, value=1<<bit,
+            comment='WISE mask bit %i: %s, %s' % (bit, name, comm)))
+    for bit,name,_,comm in wbits:
+        version_header.add_record(dict(
+            name='WBIT_%i' % bit, value=name, comment='WISE: %s' % comm))
+
+    # Record the meaning of ALLMASK/ANYMASK bits
+    version_header.add_record(dict(name='COMMENT', value='allmask/anymask bits:'))
+    bits = list(DQ_BITS.values())
+    bits.sort()
+    bitmap = dict((v,k) for k,v in DQ_BITS.items())
+    for i in range(16):
+        bit = 1<<i
+        if not bit in bitmap:
+            continue
+        version_header.add_record(
+            dict(name='AM_%s' % bitmap[bit].upper()[:5], value=bit,
+                 comment='ALLMASK/ANYMASK bit 2**%i' % i))
+    for i in range(16):
+        bit = 1<<i
+        if not bit in bitmap:
+            continue
+        version_header.add_record(
+            dict(name='ABIT_%i' % i, value=bitmap[bit],
+                 comment='ALLMASK/ANYMASK bit 2**%i=%i meaning' % (i, bit)))
+
+    # create maskbits header
+    hdr = copy_header_with_wcs(version_header, targetwcs)
+    hdr.add_record(dict(name='IMTYPE', value='maskbits',
+                        comment='LegacySurveys image type'))
+    with survey.write_output('maskbits', brick=brickname, shape=maskbits.shape) as out:
+        out.fits.write(maskbits, header=hdr, extname='MASKBITS')
         if wise_mask_maps is not None:
-            # Add the WISE masks in!
-            maskbits += w1val * (wise_mask_maps[0] != 0)
-            maskbits += w2val * (wise_mask_maps[1] != 0)
-
-        hdr = maskbits_header
-        if hdr is not None:
-            hdr.add_record(dict(name='WISEM1', value=w1val,
-                                comment='Mask value for WISE W1 (all masks)'))
-            hdr.add_record(dict(name='WISEM2', value=w2val,
-                                comment='Mask value for WISE W2 (all masks)'))
-
-        hdr.add_record(dict(name='BITNM0', value='NPRIMARY',
-                            comment='maskbits bit 0: not-brick-primary'))
-        hdr.add_record(dict(name='BITNM1', value='BRIGHT',
-                            comment='maskbits bit 1: bright star in blob'))
-        hdr.add_record(dict(name='BITNM2', value='SATUR_G',
-                            comment='maskbits bit 2: g saturated + margin'))
-        hdr.add_record(dict(name='BITNM3', value='SATUR_R',
-                            comment='maskbits bit 3: r saturated + margin'))
-        hdr.add_record(dict(name='BITNM4', value='SATUR_Z',
-                            comment='maskbits bit 4: z saturated + margin'))
-        hdr.add_record(dict(name='BITNM5', value='ALLMASK_G',
-                            comment='maskbits bit 5: any ALLMASK_G bit set'))
-        hdr.add_record(dict(name='BITNM6', value='ALLMASK_R',
-                            comment='maskbits bit 6: any ALLMASK_R bit set'))
-        hdr.add_record(dict(name='BITNM7', value='ALLMASK_Z',
-                            comment='maskbits bit 7: any ALLMASK_Z bit set'))
-        hdr.add_record(dict(name='BITNM8', value='WISEM1',
-                            comment='maskbits bit 8: WISE W1 bright star mask'))
-        hdr.add_record(dict(name='BITNM9', value='WISEM2',
-                            comment='maskbits bit 9: WISE W2 bright star mask'))
-        hdr.add_record(dict(name='BITNM10', value='BAILOUT',
-                            comment='maskbits bit 10: Bailed out of processing'))
-        hdr.add_record(dict(name='BITNM11', value='MEDIUM',
-                            comment='maskbits bit 11: Medium-bright star'))
-        hdr.add_record(dict(name='BITNM12', value='GALAXY',
-                            comment='maskbits bit 12: LSLGA large galaxy'))
-        hdr.add_record(dict(name='BITNM13', value='CLUSTER',
-                            comment='maskbits bit 13: Cluster'))
-
-        if wise_mask_maps is not None:
-            wisehdr = fitsio.FITSHDR()
-            wisehdr.add_record(dict(name='WBITNM0', value='BRIGHT',
-                                    comment='Bright star core and wings'))
-            wisehdr.add_record(dict(name='WBITNM1', value='SPIKE',
-                                    comment='PSF-based diffraction spike'))
-            wisehdr.add_record(dict(name='WBITNM2', value='GHOST',
-                                    commet='Optical ghost'))
-            wisehdr.add_record(dict(name='WBITNM3', value='LATENT',
-                                    comment='First latent'))
-            wisehdr.add_record(dict(name='WBITNM4', value='LATENT2',
-                                    comment='Second latent image'))
-            wisehdr.add_record(dict(name='WBITNM5', value='HALO',
-                                    comment='AllWISE-like circular halo'))
-            wisehdr.add_record(dict(name='WBITNM6', value='SATUR',
-                                    comment='Bright star saturation'))
-            wisehdr.add_record(dict(name='WBITNM7', value='SPIKE2',
-                                    comment='Geometric diffraction spike'))
-
-        with survey.write_output('maskbits', brick=brickname, shape=maskbits.shape) as out:
-            out.fits.write(maskbits, header=hdr)
-            if wise_mask_maps is not None:
-                out.fits.write(wise_mask_maps[0], header=wisehdr)
-                out.fits.write(wise_mask_maps[1], header=wisehdr)
+            out.fits.write(wise_mask_maps[0], extname='WISEM1')
+            out.fits.write(wise_mask_maps[1], extname='WISEM2')
         del wise_mask_maps
 
     TT = T.copy()
@@ -2429,8 +2370,8 @@ def stage_writecat(
     # The "ra_ivar" values coming out of the tractor fits do *not*
     # have a cos(Dec) term -- ie, they give the inverse-variance on
     # the numerical value of RA -- so we want to make the ra_sigma
-    #  values smaller by multiplying by cos(Dec); so invvars are /=
-    #  cosdec^2
+    # values smaller by multiplying by cos(Dec); so invvars are /=
+    # cosdec^2
     T2.ra_ivar /= np.cos(np.deg2rad(T2.dec))**2
 
     # Compute fiber fluxes
@@ -2464,17 +2405,6 @@ def stage_writecat(
         for i,ap in enumerate(wise_apertures_arcsec):
             primhdr.add_record(dict(name='WAPRAD%i' % i, value=ap,
                                     comment='(unWISE) Aperture radius, in arcsec'))
-
-    # Record the meaning of mask bits
-    bits = list(DQ_BITS.values())
-    bits.sort()
-    bitmap = dict((v,k) for k,v in DQ_BITS.items())
-    for i in range(16):
-        bit = 1<<i
-        if bit in bitmap:
-            primhdr.add_record(dict(name='MASKB%i' % i, value=bitmap[bit],
-                                    comment='ALLMASK/ANYMASK bit 2**%i=%i meaning' %
-                                    (i, bit)))
 
     if WISE is not None:
         # Convert WISE fluxes from Vega to AB.

@@ -5,6 +5,7 @@ from astrometry.util.fits import fits_table
 from astrometry.util.resample import resample_with_wcs, OverlapError
 from legacypipe.bits import DQ_BITS
 from legacypipe.survey import tim_get_resamp
+from legacypipe.utils import copy_header_with_wcs
 
 import logging
 logger = logging.getLogger('legacypipe.coadds')
@@ -85,16 +86,10 @@ class UnwiseCoadd(object):
         for iband,(band,co,n,com,coiv) in enumerate(
                 zip([1,2,3,4], self.unwise_co,  self.unwise_con,
                     self.unwise_com, self.unwise_coiv)):
-            hdr = fitsio.FITSHDR()
-            for r in version_header.records():
-                hdr.add_record(r)
+            hdr = copy_header_with_wcs(version_header, self.unwise_wcs)
             hdr.add_record(dict(name='TELESCOP', value='WISE'))
             hdr.add_record(dict(name='FILTER', value='W%i' % band,
                                     comment='WISE band'))
-            self.unwise_wcs.add_to_header(hdr)
-            hdr.delete('IMAGEW')
-            hdr.delete('IMAGEH')
-            hdr.add_record(dict(name='EQUINOX', value=2000.))
             hdr.add_record(dict(name='MAGZERO', value=22.5,
                                     comment='Magnitude zeropoint'))
             hdr.add_record(dict(name='MAGSYS', value='Vega',
@@ -969,19 +964,9 @@ def write_coadd_images(band,
                        psfdetiv=None, galdetiv=None, congood=None,
                        psfsize=None, **kwargs):
 
-    # copy version_header before modifying...
-    hdr = fitsio.FITSHDR()
-    for r in version_header.records():
-        hdr.add_record(r)
+    hdr = copy_header_with_wcs(version_header, targetwcs)
     # Grab headers from input images...
     get_coadd_headers(hdr, tims, band)
-
-    # Plug the WCS header cards into these images
-    targetwcs.add_to_header(hdr)
-    hdr.delete('IMAGEW')
-    hdr.delete('IMAGEH')
-    hdr.add_record(dict(name='EQUINOX', value=2000., comment='Observation Epoch'))
-
     imgs = [
         ('image',  'image', cowimg),
         ('invvar', 'wtmap', cow   ),

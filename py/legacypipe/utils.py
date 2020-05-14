@@ -162,6 +162,19 @@ def read_primary_header(fn):
     import fitsio
     return fitsio.read_header(fn)
 
+def copy_header_with_wcs(source_header, wcs):
+    import fitsio
+    hdr = fitsio.FITSHDR()
+    if source_header is not None:
+        for r in source_header.records():
+            hdr.add_record(r)
+    # Plug the WCS header cards into these images
+    wcs.add_to_header(hdr)
+    hdr.add_record(dict(name='EQUINOX', value=2000., comment='WCS epoch'))
+    hdr.delete('IMAGEW')
+    hdr.delete('IMAGEH')
+    return hdr
+
 def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
     from astrometry.util.run_command import run_command
     from astrometry.util.fits import fits_table, merge_tables
