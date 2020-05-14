@@ -2340,15 +2340,15 @@ def stage_writecat(
         if not bit in bitmap:
             continue
         version_header.add_record(
-            dict(name='ABIT_%i' % i, value=bitmap[bit],
-                 comment='ALLMASK/ANYMASK bit 2**%i=%i meaning' % (i, bit)))
+            dict(name='AM_%s' % bitmap[bit].upper()[:5], value=bit,
+                 comment='ALLMASK/ANYMASK bit 2**%i' % i))
     for i in range(16):
         bit = 1<<i
         if not bit in bitmap:
             continue
         version_header.add_record(
-            dict(name='AM_%s' % bitmap[bit].upper()[:5], value=bit,
-                 comment='ALLMASK/ANYMASK bit 2**%i' % i))
+            dict(name='ABIT_%i' % i, value=bitmap[bit],
+                 comment='ALLMASK/ANYMASK bit 2**%i=%i meaning' % (i, bit)))
 
     # create maskbits header
     hdr = copy_header_with_wcs(version_header, targetwcs)
