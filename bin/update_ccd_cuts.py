@@ -354,8 +354,14 @@ def patch_zeropoints(zps, ccds, ccdsa, decboundary=-29.25):
     newzp = numpy.where(ccds.ccdzpt != 0, ccds.ccdzpt, 22.5)
     oldzpscale = 10.**((oldzp-22.5)/2.5)
     newzpscale = 10.**((newzp-22.5)/2.5)
-    ccds.sig1 = ccds.sig1*oldzpscale/newzpscale
-    ccdsa.sig1 = ccdsa.sig1*oldzpscale/newzpscale
+    rescale1 = oldzpscale/newzpscale
+    ccds.sig1 = ccds.sig1*rescale1
+    ccdsa.sig1 = ccdsa.sig1*rescale1
+    rescale2 = 10.**((oldccdzpt-ccds.ccdzpt)/2.5)
+    ccdsa.meansky = ccdsa.meansky*rescale2
+    ccdsa.stdsky = ccdsa.stdsky*rescale2
+    ccdsa.minsky = ccdsa.minsky*rescale2
+    ccdsa.maxsky = ccdsa.maxsky*rescale2
     dzp = newzp-oldzp
     ccdsa.psfdepth += dzp
     ccdsa.gausspsfdepth += dzp

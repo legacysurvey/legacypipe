@@ -30,8 +30,10 @@ export DUST_DIR=/global/cfs/cdirs/cosmo/data/dust/v0_1
 export GAIA_CAT_DIR=/global/cfs/cdirs/cosmo/work/gaia/chunks-gaia-dr2-astrom-2
 export GAIA_CAT_VER=2
 export TYCHO2_KD_DIR=/global/cfs/cdirs/cosmo/staging/tycho2
-export LARGEGALAXIES_CAT=/global/cfs/cdirs/cosmo/staging/largegalaxies/v6.0/LSLGA-v6.0.kd.fits
+export LARGEGALAXIES_CAT=/global/cfs/cdirs/cosmo/staging/largegalaxies/v7.0/LSLGA-v7.0.kd.fits
 export PS1CAT_DIR=/global/cfs/cdirs/cosmo/work/ps1/cats/chunks-qz-star-v3
+# DECam
+export SKY_TEMPLATE_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/sky-templates
 
 # Don't add ~/.local/ to Python's sys.path
 export PYTHONNOUSERSITE=1
@@ -57,7 +59,6 @@ cpdir=`echo $(basename $(dirname ${image_fn}))`
 logdir=$outdir/logs-calibs/$camera/$cpdir
 mkdir -p $logdir
 log=`echo $(basename ${image_fn} | sed s#.fits.fz#.log#g)`
-tmplog=/tmp/$log
 log=$logdir/$log
 
 cmd="python -u /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
@@ -73,10 +74,5 @@ cmd="python -u /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
     --blob-mask-dir ${blob_dir} \
     --zeropoints-dir ${zeropoints_dir}"
 
-echo $cmd > $tmplog
-$cmd >> $tmplog 2>&1
-# Save the return value from the python command -- otherwise we
-# exit 0 because the mv succeeds!
-status=$?
-cat $tmplog >> $log
-exit $status
+echo $cmd > $log
+$cmd >> $log 2>&1
