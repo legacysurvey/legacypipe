@@ -231,8 +231,8 @@ class LegacySurveyImage(object):
         self.skyfn        = os.path.join(calibdir, 'sky-single',   imgdir, basename, calname + '-splinesky.fits')
         self.merged_psffn = os.path.join(calibdir, 'psfex',        imgdir, basename + '-psfex.fits')
         self.merged_skyfn = os.path.join(calibdir, 'sky',          imgdir, basename + '-splinesky.fits')
-        self.old_merged_skyfn = os.path.join(calibdir, imgdir, basename + '-splinesky.fits')
-        self.old_merged_psffn = os.path.join(calibdir, imgdir, basename + '-psfex.fits')
+        self.old_merged_skyfns = [os.path.join(calibdir, imgdir, basename + '-splinesky.fits')]
+        self.old_merged_psffns = [os.path.join(calibdir, imgdir, basename + '-psfex.fits')]
         # not used by this code -- here for the sake of legacyzpts/merge_calibs.py
         self.old_single_psffn = os.path.join(calibdir, imgdir, basename, calname + '-psfex.fits')
         self.old_single_skyfn = os.path.join(calibdir, imgdir, basename, calname + '-splinesky.fits')
@@ -895,7 +895,7 @@ class LegacySurveyImage(object):
         from tractor.utils import get_class_from_name
 
         tryfns = []
-        tryfns = [self.merged_skyfn, self.skyfn, self.old_merged_skyfn]
+        tryfns = [self.merged_skyfn, self.skyfn] + self.old_merged_skyfn
         Ti = None
         for fn in tryfns:
             if not os.path.exists(fn):
@@ -957,7 +957,7 @@ class LegacySurveyImage(object):
 
         # spatially varying pixelized PsfEx
         from tractor import PsfExModel
-        tryfns = [self.merged_psffn, self.psffn, self.old_merged_psffn]
+        tryfns = [self.merged_psffn, self.psffn] + self.old_merged_psffn
         Ti = None
         for fn in tryfns:
             if not os.path.exists(fn):
