@@ -409,13 +409,18 @@ def read_large_galaxies(survey, targetwcs, bands):
 
     if not preburn:
         # Original LSLGA
-        galaxies.rename('lslga_id', 'ref_id')
         galaxies.ref_cat = np.array([refcat] * len(galaxies))
         galaxies.islargegalaxy = np.array([True] * len(galaxies))
         galaxies.preburned = np.zeros(len(galaxies), bool)
 
         # Everything here has ref_cat==refcat.
-        galaxies.radius = galaxies.d25 / 2. / 60. # [degree]
+        if 'diam' in galaxies.get_columns(): # new data model
+            galaxies.rename('id', 'ref_id')
+            galaxies.mag = galaxies.mag_leda
+            galaxies.radius = galaxies.diam / 2. / 60. # [degree]
+        else: # old data model
+            galaxies.rename('lslga_id', 'ref_id')
+            galaxies.radius = galaxies.d25 / 2. / 60. # [degree] 
     else:
         # Need to initialize islargegalaxy to False because we will bring in
         # pre-burned sources that we do not want to use in MASKBITS.
