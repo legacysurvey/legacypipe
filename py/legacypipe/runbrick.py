@@ -18,6 +18,7 @@ Or for much more fine-grained control, see the individual stages:
 - :py:func:`stage_fitblobs`
 - :py:func:`stage_coadds`
 - :py:func:`stage_wise_forced`
+- :py:func:`stage_galex_forced` [optional]
 - :py:func:`stage_writecat`
 
 To see the code we run on each "blob" of pixels, see "oneblob.py".
@@ -86,6 +87,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                unwise_dir=None,
                unwise_tr_dir=None,
                unwise_modelsky_dir=None,
+               galex_dir=None,
                command_line=None,
                **kwargs):
     '''
@@ -160,7 +162,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     version_header = get_version_header(program_name, survey.survey_dir, release,
                                         git_version=gitver)
 
-    deps = get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir)
+    deps = get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir)
     for name,value,comment in deps:
         version_header.add_record(dict(name=name, value=value, comment=comment))
     if command_line is not None:
@@ -3124,6 +3126,13 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         '--unwise-tr-dir', default=None,
         help='Base directory for unWISE time-resolved coadds; may be a colon-separated list')
 
+    parser.add_argument('--galex', dest='galex', default=False,
+                        action='store_true',
+                        help='Perform GALEX forced photometry')
+    parser.add_argument(
+        '--galex-dir', default=None,
+        help='Base directory for GALEX coadds')
+    
     parser.add_argument('--early-coadds', action='store_true', default=False,
                         help='Make early coadds?')
     parser.add_argument('--blob-image', action='store_true', default=False,
@@ -3210,6 +3219,7 @@ def get_runbrick_kwargs(survey=None,
                         unwise_dir=None,
                         unwise_tr_dir=None,
                         unwise_modelsky_dir=None,
+                        galex_dir=None,
                         write_stage=None,
                         write=True,
                         gpsf=False,
@@ -3282,7 +3292,10 @@ def get_runbrick_kwargs(survey=None,
         unwise_modelsky_dir = os.environ.get('UNWISE_MODEL_SKY_DIR', None)
         if unwise_modelsky_dir is not None and not os.path.exists(unwise_modelsky_dir):
             raise RuntimeError('The directory specified in $UNWISE_MODEL_SKY_DIR does not exist!')
-    opt.update(unwise_dir=unwise_dir, unwise_tr_dir=unwise_tr_dir, unwise_modelsky_dir=unwise_modelsky_dir)
+    if galex_dir is None:
+        galex_dir = os.environ.get('GALEX_DIR', None)
+    opt.update(unwise_dir=unwise_dir, unwise_tr_dir=unwise_tr_dir,
+               unwise_modelsky_dir=unwise_modelsky_dir, galex_dir=galex_dir)
 
     # list of strings if -w / --write-stage is given; False if
     # --no-write given; True by default.
