@@ -2255,6 +2255,165 @@ def stage_wise_forced(
                 version_header=version_header,
                 wise_apertures_arcsec=wise_apertures_arcsec)
 
+def stage_galex(
+    survey=None,
+    cat=None,
+    T=None,
+    targetwcs=None,
+    targetrd=None,
+    W=None, H=None,
+    pixscale=None,
+    brickname=None,
+    galex_dir=None,
+    brick=None,
+    version_header=None,
+    maskbits=None,
+    mp=None,
+    record_event=None,
+    ps=None,
+    plots=False,
+    **kwargs):
+    '''
+    After the model fits are finished, we can perform forced
+    photometry of the GALEX coadds.
+    '''
+    from legacypipe.galex import galex_phot, galex_tiles_touching_wcs
+    #from legacypipe.unwise import unwise_phot, collapse_unwise_bitmask, unwise_tiles_touching_wcs
+    #from legacypipe.survey import wise_apertures_arcsec
+    from tractor import NanoMaggies
+
+    record_event and record_event('stage_galex_forced: starting')
+    _add_stage_version(version_header, 'GALEX', 'galex_forced')
+
+    if not plots:
+        ps = None
+
+    tiles = galex_tiles_touching_wcs(targetwcs)
+    info('Cut to', len(tiles), 'GALEX tiles')
+
+    # the way the roiradec box is used, the min/max order doesn't matter
+    roiradec = [targetrd[0,0], targetrd[2,0], targetrd[0,1], targetrd[2,1]]
+
+    # Sources to photometer
+    do_phot = np.ones(len(cat), bool)
+
+    # Drop sources within the CLUSTER mask from forced photometry.
+    Icluster = None
+    if maskbits is not None:
+        incluster = (maskbits & MASKBITS['CLUSTER'] > 0)
+        if np.any(incluster):
+            print('Checking for sources inside CLUSTER mask')
+            ra  = np.array([src.getPosition().ra  for src in cat])
+            dec = np.array([src.getPosition().dec for src in cat])
+            ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
+            xx = np.round(xx - 1).astype(int)
+            yy = np.round(yy - 1).astype(int)
+            I = np.flatnonzero(ok * (xx >= 0)*(xx < W) * (yy >= 0)*(yy < H))
+            if len(I):
+                Icluster = I[incluster[yy[I], xx[I]]]
+                print('Found', len(Icluster), 'of', len(cat), 'sources inside CLUSTER mask')
+                do_phot[Icluster] = False
+    Nskipped = len(do_phot) - np.sum(do_phot)
+
+    wcat = []
+    for i in np.flatnonzero(do_phot):
+        src = cat[i]
+        src = src.copy()
+        src.setBrightness(NanoMaggies(w=1.))
+        wcat.append(src)
+
+    # use pixelized PSF model
+    wpixpsf = True
+
+    # Create list of groups-of-tiles to photometer
+    args = []
+    # Skip if $GALEX_DIR or --galex-dir not set.
+    if galex_dir is not None:
+        wtiles = tiles.copy()
+        wtiles.galex_dir = np.array([galex_dir]*len(tiles))
+        for band in [1,2]:
+            get_masks = targetwcs if (band == 1) else None
+            args.append((wcat, wtiles, band, roiradec, wise_ceres, wpixpsf,
+                         get_masks, ps, True,
+                         unwise_modelsky_dir))
+
+    # Run the forced photometry!
+    record_event and record_event('stage_galex_forced: photometry')
+    phots = mp.map(galex_phot, args + [a for ie,a in eargs])
+    record_event and record_event('stage_galex_forced: results')
+
+    # Unpack results...
+    GALEX = None
+    if len(phots):
+        # The "phot" results for the full-depth coadds are one table per
+        # band.  Merge all those columns.
+        galex_models = {}
+        for i,p in enumerate(phots[:len(args)]):
+            if p is None:
+                (wcat,tiles,band) = args[i+1][:3]
+                print('"None" result from GALEX forced phot:', tiles, band)
+                continue
+            galex_models.update(p.models)
+            if GALEX is None:
+                GALEX = p.phot
+            else:
+                # remove duplicates
+                p.phot.delete_column('wise_coadd_id')
+                # (with move_crpix -- Aaron's update astrometry -- the
+                # pixel positions can be *slightly* different per
+                # band.  Ignoring that here.)
+                p.phot.delete_column('wise_x')
+                p.phot.delete_column('wise_y')
+                galex.add_columns_from(p.phot)
+
+        from legacypipe.coadds import GalexCoadd
+        # Create the WCS into which we'll resample the tiles.
+        # Same center as "targetwcs" but bigger pixel scale.
+        wpixscale = 1.5
+        wra  = np.array([src.getPosition().ra  for src in cat])
+        wdec = np.array([src.getPosition().dec for src in cat])
+
+        wcoadds = GalexCoadd(targetwcs, W, H, pixscale, wpixscale)
+        for tile in tiles.coadd_id:
+            wcoadds.add(tile, galex_models)
+        #apphot = wcoadds.finish(survey, brickname, version_header,
+        #                        apradec=(wra,wdec),
+        #                        apertures=wise_apertures_arcsec/wpixscale)
+        #api,apd,apr = apphot
+        #for iband,band in enumerate([1,2,3,4]):
+        #    WISE.set('apflux_w%i' % band, api[iband])
+        #    WISE.set('apflux_resid_w%i' % band, apr[iband])
+        #    d = apd[iband]
+        #    iv = np.zeros_like(d)
+        #    iv[d != 0.] = 1./(d[d != 0]**2)
+        #    WISE.set('apflux_ivar_w%i' % band, iv)
+        #    print('Setting WISE apphot')
+
+        if Nskipped > 0:
+            assert(len(GALEX) == len(wcat))
+            WISE = _fill_skipped_values(GALEX, Nskipped, do_phot)
+            assert(len(GALEX) == len(cat))
+            assert(len(GALEX) == len(T))
+
+        ## Look up mask values for sources
+        #WISE.wise_mask = np.zeros((len(cat), 2), np.uint8)
+        #ra  = np.array([src.getPosition().ra  for src in cat])
+        #dec = np.array([src.getPosition().dec for src in cat])
+        #ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
+        #xx = np.round(xx - 1).astype(int)
+        #yy = np.round(yy - 1).astype(int)
+        #I = np.flatnonzero(ok * (xx >= 0)*(xx < W) * (yy >= 0)*(yy < H))
+        #if len(I):
+        #    WISE.wise_mask[I,0] = wise_mask_maps[0][yy[I], xx[I]]
+        #    WISE.wise_mask[I,1] = wise_mask_maps[1][yy[I], xx[I]]
+
+    debug('Returning: GALEX', GALEX)
+
+    return dict(GALEX=GALEX,
+                #wise_mask_maps=wise_mask_maps,
+                version_header=version_header)#,
+                #wise_apertures_arcsec=wise_apertures_arcsec)
+
 def _fill_skipped_values(WISE, Nskipped, do_phot):
     # Fill in blank values for skipped (Icluster) sources
     # Append empty rows to the WISE results for !do_phot sources.
