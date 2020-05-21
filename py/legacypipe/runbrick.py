@@ -1242,11 +1242,6 @@ def get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs):
         if T_clusters is not None:
             refs = merge_tables([refs, T_clusters], columns='fillzero')
 
-        if less_masking:
-            # Reduce BRIGHT radius by 50%
-            refs.radius_pix[refs.isbright] //= 2
-            # (Also turn off special behavior for MEDIUM, in oneblob.py)
-
         refmap = get_reference_map(targetwcs, refs)
         del refs
     else:
