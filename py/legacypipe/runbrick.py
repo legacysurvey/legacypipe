@@ -3398,8 +3398,8 @@ def main(args=None):
     return rtn
 
 if __name__ == '__main__':
-    Time.add_measurement(MemMeas)
     from astrometry.util.ttime import MemMeas
+    Time.add_measurement(MemMeas)
     sys.exit(main())
 
 # Test bricks & areas
