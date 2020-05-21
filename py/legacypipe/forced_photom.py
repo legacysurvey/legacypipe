@@ -209,6 +209,12 @@ def main(survey=None, opt=None, args=None):
         tm = Time()
         FF = mp.map(bounce_one_ccd, args)
         print('Multi-processing forced-phot:', Time()-tm)
+        del mp
+        Time.measurements.remove(poolmeas)
+        del poolmeas
+        pool.close()
+        pool.join()
+        del pool
     else:
         FF = map(bounce_one_ccd, args)
 
