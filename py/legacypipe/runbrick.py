@@ -3293,7 +3293,6 @@ def get_runbrick_kwargs(survey=None,
 
 def main(args=None):
     import datetime
-    from astrometry.util.ttime import MemMeas
     from legacypipe.survey import get_git_version
 
     print()
@@ -3339,7 +3338,6 @@ def main(args=None):
     # tractor logging is *soooo* chatty
     logging.getLogger('tractor.engine').setLevel(lvl + 10)
 
-    Time.add_measurement(MemMeas)
     if opt.plots:
         plt.figure(figsize=(12,9))
         plt.subplots_adjust(left=0.07, right=0.99, bottom=0.07, top=0.93,
@@ -3400,6 +3398,8 @@ def main(args=None):
     return rtn
 
 if __name__ == '__main__':
+    Time.add_measurement(MemMeas)
+    from astrometry.util.ttime import MemMeas
     sys.exit(main())
 
 # Test bricks & areas
