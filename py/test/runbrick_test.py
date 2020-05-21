@@ -231,7 +231,7 @@ def rbmain():
                       '--catalog-dir', 'out-testcase9b',
                       '--derivs', '--threads', '2',
                       '--apphot',
-                      '372546', 'N26', 'forced2.fits'])
+                      '372547', 'N26', 'forced2.fits'])
     assert(os.path.exists('forced2.fits'))
     F = fits_table('forced2.fits')
 
@@ -239,7 +239,7 @@ def rbmain():
                       '--no-ceres',
                       '--catalog-dir', 'out-testcase9b',
                       '--agn',
-                      '372546', 'N26', 'forced3.fits'])
+                      '257266', 'S21', 'forced3.fits'])
     assert(os.path.exists('forced3.fits'))
     F = fits_table('forced3.fits')
 

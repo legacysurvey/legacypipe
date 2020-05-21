@@ -102,6 +102,9 @@ def main(survey=None, opt=None, args=None):
         parser = get_parser()
         opt = parser.parse_args(args)
 
+    print('Opt:', opt)
+    print('Opt:', vars(opt))
+
     t0 = tlast = Time()
     if opt.skip and os.path.exists(opt.outfn):
         print('Ouput file exists:', opt.outfn)
@@ -335,6 +338,8 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                 ccd, opt, zoomslice, ps):
     tlast = Time()
 
+    print('Opt:', opt)
+
     im = survey.get_image_object(ccd)
 
     if opt.do_calib:
@@ -451,6 +456,8 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     # F.psfdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.psfnorm) - 9)] * len(F)).astype(np.float32)
     # F.galdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.galnorm) - 9)] * len(F)).astype(np.float32)
 
+    print('opt.derivs:', opt.derivs)
+    
     # super units questions here
     if opt.derivs:
         cosdec = np.cos(np.deg2rad(T.dec))
