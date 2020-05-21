@@ -758,10 +758,10 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         H,W = img.shape
         Iap = np.flatnonzero((apxy[:,0] >= 0)   * (apxy[:,1] >= 0) *
                              (apxy[:,0] <= W-1) * (apxy[:,1] <= H-1))
-        print('Aperture photometry for', len(Iap), 'of', len(apxy[0,:]), 'sources within image bounds')
+        print('Aperture photometry for', len(Iap), 'of', len(apxy[:,0]), 'sources within image bounds')
 
         for rad in apertures:
-            aper = photutils.CircularAperture(apxy[:,Iap], rad)
+            aper = photutils.CircularAperture(apxy[Iap,:], rad)
             p = photutils.aperture_photometry(img, aper, error=imsigma)
             apimg.append(p.field('aperture_sum'))
             apimgerr.append(p.field('aperture_sum_err'))
