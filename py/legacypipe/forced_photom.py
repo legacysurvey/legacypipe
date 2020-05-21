@@ -12,7 +12,7 @@ import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
-from astrometry.util.ttime import Time, MemMeas
+from astrometry.util.ttime import Time
 
 from tractor import Tractor, Catalog, NanoMaggies
 from tractor.galaxy import disable_galaxy_cache
@@ -93,7 +93,7 @@ def main(survey=None, opt=None, args=None):
 
     if args is None:
         args = sys.argv[1:]
-    print(' '.join(args))
+    print('forced_photom.py', ' '.join(args))
 
     '''Driver function for forced photometry of individual Legacy
     Survey images.
@@ -102,9 +102,7 @@ def main(survey=None, opt=None, args=None):
         parser = get_parser()
         opt = parser.parse_args(args)
 
-    Time.add_measurement(MemMeas)
     t0 = tlast = Time()
-
     if opt.skip and os.path.exists(opt.outfn):
         print('Ouput file exists:', opt.outfn)
         sys.exit(0)
@@ -750,19 +748,16 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         apimg = []
         apimgerr = []
 
-        # Aperture photometry locations
-        xxyy = np.vstack([tim.wcs.positionToPixel(src.getPosition()) for src in cat]).T
-        apxy = xxyy - 1.
+        # Aperture photometry locations -- this is using the Tractor wcs infrastructure,
+        # so pixel positions are 0-indexed.
+        apxy = np.vstack([tim.wcs.positionToPixel(src.getPosition()) for src in cat])
 
         apertures = apertures_arcsec / tim.wcs.pixel_scale()
-        #print('Apertures:', apertures, 'pixels')
-
-        #print('apxy shape', apxy.shape)  # --> (2,N)
 
         # The aperture photometry routine doesn't like pixel positions outside the image
         H,W = img.shape
-        Iap = np.flatnonzero((apxy[0,:] >= 0)   * (apxy[1,:] >= 0) *
-                             (apxy[0,:] <= W-1) * (apxy[1,:] <= H-1))
+        Iap = np.flatnonzero((apxy[:,0] >= 0)   * (apxy[:,1] >= 0) *
+                             (apxy[:,0] <= W-1) * (apxy[:,1] <= H-1))
         print('Aperture photometry for', len(Iap), 'of', len(apxy[0,:]), 'sources within image bounds')
 
         for rad in apertures:
@@ -778,7 +773,6 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         apimgerr = np.vstack(apimgerr).T
         apiv = np.zeros(apimgerr.shape, np.float32)
         apiv[apimgerr != 0] = 1./apimgerr[apimgerr != 0]**2
-
         F.apflux_ivar = np.zeros((len(F), len(apertures)), np.float32)
         F.apflux_ivar[Iap,:] = apiv
         if timing:
@@ -864,4 +858,6 @@ class SourceDerivatives(MultiParams, BasicSource):
         return add_patches(p1, p2)
 
 if __name__ == '__main__':
+    from astrometry.util.ttime import MemMeas
+    Time.add_measurement(MemMeas)
     sys.exit(main())
