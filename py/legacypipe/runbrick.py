@@ -3187,7 +3187,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='Do not force PSFs within galaxy mask.')
 
     parser.add_argument('--less-masking', default=False, action='store_true',
-                        help='Reduce size of BRIGHT mask, and turn off MEDIUM mask behaviors.')
+                        help='Turn off background fitting within MEDIUM mask.')
 
     return parser
 
