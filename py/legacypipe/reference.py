@@ -370,7 +370,7 @@ def get_large_galaxy_version(fn):
         pass
     for k in ['3.0', '2.0']:
         if k in fn:
-            return 'L'+k[0]
+            return 'L'+k[0], preburn
     return 'LG', preburn
 
 def read_large_galaxies(survey, targetwcs, bands):
