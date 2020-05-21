@@ -211,7 +211,6 @@ def rbmain():
     assert(np.all(T.ref_id[Igal] > 0))
     assert(T.type[Igal[0]] == 'SER')
 
-
     # --brick and --zoom rather than --radec --width --height
     main(args=['--survey-dir', surveydir, '--outdir', 'out-testcase9b',
                '--zoom', '1950', '2050', '340', '440', '--brick', '0091p035', '--force-all'])
@@ -402,6 +401,14 @@ def rbmain():
     DecamImage.splinesky_boxsize = 128
     
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
+
+    survey = LegacySurveyData(surveydir)
+    # get brick by id
+    brickid = 473357
+    brick = survey.get_brick(brickid)
+    assert(brick.brickname == '1867p255')
+    assert(brick.brickid == brickid)
+
     outdir = 'out-testcase4'
     os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
     os.environ['GAIA_CAT_VER'] = '2'
