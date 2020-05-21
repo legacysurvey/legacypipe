@@ -165,6 +165,9 @@ def stage_galex_forced(
 
     debug('Returning: GALEX', GALEX)
 
+    #### FIXME DEBUG
+    GALEX.writeto('galex-phot.fits')
+    
     return dict(GALEX=GALEX,
                 version_header=version_header)#,
                 #wise_apertures_arcsec=wise_apertures_arcsec)
