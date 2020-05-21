@@ -266,7 +266,7 @@ def rbmain():
         files_cache = files[::2]
         files_nocache = files[1::2]
         # Survey-ccds *must* be in nocache.
-        fn = 'survey-ccds-1.fits.gz'
+        fn = 'survey-ccds-1.kd.fits'
         if fn in files_cache:
             files_cache.remove(fn)
             files_nocache.append(fn)
