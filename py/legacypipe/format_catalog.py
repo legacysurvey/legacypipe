@@ -347,7 +347,7 @@ def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
               'blob_totalpix',
               'blob_symm_width', 'blob_symm_height',
               'blob_symm_npix', 'blob_symm_nimages',
-              'hit_limit']:
+              'hit_limit', 'fit_background', 'forced_pointsource']:
         TT.set(k, T.get(k))
     TT.type = np.array([fits_typemap[type(src)] for src in newcat])
 

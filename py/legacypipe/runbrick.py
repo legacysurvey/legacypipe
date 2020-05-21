@@ -1190,7 +1190,7 @@ def stage_fitblobs(T=None,
               'blob_nimages', 'blob_totalpix',
               'blob_symm_width', 'blob_symm_height', 'blob_symm_npix',
               'blob_symm_nimages', 'hit_limit', 'dchisq',
-              'force_keep_source']:
+              'force_keep_source', 'fit_background', 'forced_pointsource']:
         T.set(k, BB.get(k))
 
     invvars = np.hstack(BB.srcinvvars)
@@ -1238,11 +1238,6 @@ def get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs):
         refs = refstars[refstars.donotfit == False]
         if T_clusters is not None:
             refs = merge_tables([refs, T_clusters], columns='fillzero')
-
-        if less_masking:
-            # Reduce BRIGHT radius by 50%
-            refs.radius_pix[refs.isbright] //= 2
-            # (Also turn off special behavior for MEDIUM, in oneblob.py)
 
         refmap = get_reference_map(targetwcs, refs)
         del refs
@@ -2151,7 +2146,7 @@ def stage_wise_forced(
         wise_models = {}
         for i,p in enumerate(phots[:len(args)]):
             if p is None:
-                (wcat,tiles,band) = args[i+1][:3]
+                (wcat,tiles,band) = args[i][:3]
                 print('"None" result from WISE forced phot:', tiles, band)
                 continue
             if unwise_coadds:
@@ -2419,10 +2414,9 @@ def stage_writecat(
                 name='WISEAB%i' % band, value=vega_to_ab['w%i' % band],
                 comment='WISE Vega to AB conv for band %i' % band))
 
-        T2.wise_coadd_id = WISE.wise_coadd_id
-        T2.wise_x = WISE.wise_x
-        T2.wise_y = WISE.wise_y
-        T2.wise_mask = WISE.wise_mask
+        # Copy columns:
+        for c in ['wise_coadd_id', 'wise_x', 'wise_y', 'wise_mask']:
+            T2.set(c, WISE.get(c))
 
         for band in [1,2,3,4]:
             # Apply the Vega-to-AB shift *while* copying columns from
@@ -2430,22 +2424,19 @@ def stage_writecat(
             dm = vega_to_ab['w%i' % band]
             fluxfactor = 10.** (dm / -2.5)
             # fluxes
-            c = 'w%i_nanomaggies' % band
-            t = 'flux_w%i' % band
+            c = t = 'flux_w%i' % band
             T2.set(t, WISE.get(c) * fluxfactor)
             if WISE_T is not None and band <= 2:
                 t = 'lc_flux_w%i' % band
                 T2.set(t, WISE_T.get(c) * fluxfactor)
             # ivars
-            c = 'w%i_nanomaggies_ivar' % band
-            t = 'flux_ivar_w%i' % band
+            c = t = 'flux_ivar_w%i' % band
             T2.set(t, WISE.get(c) / fluxfactor**2)
             if WISE_T is not None and band <= 2:
                 t = 'lc_flux_ivar_w%i' % band
                 T2.set(t, WISE_T.get(c) / fluxfactor**2)
             # This is in 1/nanomaggies**2 units also
-            c = 'w%i_psfdepth' % band
-            t = 'psfdepth_w%i' % band
+            c = t = 'psfdepth_w%i' % band
             T2.set(t, WISE.get(c) / fluxfactor**2)
 
             if 'apflux_w%i'%band in WISE.get_columns():
@@ -2456,18 +2447,18 @@ def stage_writecat(
                 t = c = 'apflux_ivar_w%i' % band
                 T2.set(t, WISE.get(c) / fluxfactor**2)
 
-        # Rename some WISE columns
-        for cin,cout in [('w%i_nexp',        'nobs_w%i'),
-                         ('w%i_profracflux', 'fracflux_w%i'),
-                         ('w%i_prochi2',     'rchisq_w%i')]:
+        # Rename more columns
+        for cin,cout in [('nobs_w%i',        'nobs_w%i'    ),
+                         ('profracflux_w%i', 'fracflux_w%i'),
+                         ('prochi2_w%i',     'rchisq_w%i'  )]:
             for band in [1,2,3,4]:
                 T2.set(cout % band, WISE.get(cin % band))
 
         if WISE_T is not None:
-            for cin,cout in [('w%i_nexp',        'lc_nobs_w%i'),
-                             ('w%i_profracflux', 'lc_fracflux_w%i'),
-                             ('w%i_prochi2',     'lc_rchisq_w%i'),
-                             ('w%i_mjd',         'lc_mjd_w%i'),]:
+            for cin,cout in [('nobs_w%i',        'lc_nobs_w%i'),
+                             ('profracflux_w%i', 'lc_fracflux_w%i'),
+                             ('prochi2_w%i',     'lc_rchisq_w%i'),
+                             ('mjd_w%i',         'lc_mjd_w%i'),]:
                 for band in [1,2]:
                     T2.set(cout % band, WISE_T.get(cin % band))
         # Done with these now!
@@ -3192,7 +3183,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='Do not force PSFs within galaxy mask.')
 
     parser.add_argument('--less-masking', default=False, action='store_true',
-                        help='Reduce size of BRIGHT mask, and turn off MEDIUM mask behaviors.')
+                        help='Turn off background fitting within MEDIUM mask.')
 
     return parser
 
