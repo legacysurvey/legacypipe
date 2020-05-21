@@ -43,11 +43,6 @@ if 'Mock' in str(type(EllipseWithPriors)):
         pass
     EllipseWithPriors = duck
 
-def year_to_mjd(year):
-    # year_to_mjd(2015.5) -> 57205.875
-    from tractor.tractortime import TAITime
-    return (year - 2000.) * TAITime.daysperyear + TAITime.mjd2k
-
 def mjd_to_year(mjd):
     # mjd_to_year(57205.875) -> 2015.5
     from tractor.tractortime import TAITime
