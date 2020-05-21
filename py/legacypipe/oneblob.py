@@ -587,6 +587,8 @@ class OneBlob(object):
         B.all_model_hit_limit = np.array([{} for i in range(N)])
         B.all_model_opt_steps = np.array([{} for i in range(N)])
         B.force_keep_source = np.zeros(N, bool)
+        B.fit_background = np.zeros(N, bool)
+        B.forced_pointsource = np.zeros(N, bool)
 
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
@@ -1255,6 +1257,9 @@ class OneBlob(object):
                 print('WARNING: unknown galaxy type:', src)
 
         debug('Source at blob coordinates', x0+ix, y0+iy, '- forcing pointsource?', force_pointsource, ', is large galaxy?', is_galaxy, ', fitting sky background:', fit_background)
+
+        B.forced_pointsource[srci] = force_pointsource
+        B.fit_background[srci] = fit_background
 
         if fit_background:
             for tim in srctims:

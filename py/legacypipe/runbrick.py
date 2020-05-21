@@ -1190,7 +1190,7 @@ def stage_fitblobs(T=None,
               'blob_nimages', 'blob_totalpix',
               'blob_symm_width', 'blob_symm_height', 'blob_symm_npix',
               'blob_symm_nimages', 'hit_limit', 'dchisq',
-              'force_keep_source']:
+              'force_keep_source', 'fit_background', 'forced_pointsource']:
         T.set(k, BB.get(k))
 
     invvars = np.hstack(BB.srcinvvars)
