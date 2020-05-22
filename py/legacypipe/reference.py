@@ -413,23 +413,19 @@ def read_large_galaxies(survey, targetwcs, bands):
         galaxies.islargegalaxy = np.array([True] * len(galaxies))
         galaxies.preburned = np.zeros(len(galaxies), bool)
 
-        # Everything here has ref_cat==refcat.
-        if 'diam' in galaxies.get_columns(): # new data model
-            galaxies.rename('id', 'ref_id')
-            galaxies.mag = galaxies.mag_leda
-            galaxies.radius = galaxies.diam / 2. / 60. # [degree]
-        else: # old data model
-            galaxies.rename('lslga_id', 'ref_id')
-            galaxies.radius = galaxies.d25 / 2. / 60. # [degree] 
+        # new data model
+        galaxies.rename('id', 'ref_id')
+        galaxies.rename('mag_leda', 'mag')
+        galaxies.radius = galaxies.diam / 2. / 60. # [degree]
     else:
         # Need to initialize islargegalaxy to False because we will bring in
         # pre-burned sources that we do not want to use in MASKBITS.
         galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
         galaxies.radius = np.zeros(len(galaxies), 'f4')
+        galaxies.rename('mag_leda', 'mag')
 
-        # Only the preburned large galaxies have ref_cat==refcat, but some
-        # galaxies on the perimeter of the "preburn" region can have
-        # preburn==False.
+        # All the large galaxies have ref_cat==refcat and a measured diameter
+        # (but not all of them necessarily have preburned=True).
         I = np.where(galaxies.ref_cat == refcat)[0]
         if len(I) > 0:
             galaxies.radius[I] = galaxies.diam[I] / 2. / 60. # [degree]
