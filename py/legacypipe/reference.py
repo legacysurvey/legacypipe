@@ -423,12 +423,7 @@ def read_large_galaxies(survey, targetwcs, bands):
         galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
         galaxies.radius = np.zeros(len(galaxies), 'f4')
         galaxies.rename('mag_leda', 'mag')
-
-        # All the large galaxies have ref_cat==refcat and a measured diameter
-        # (but not all of them necessarily have preburned=True).
-        I = np.where(galaxies.ref_cat == refcat)[0]
-        if len(I) > 0:
-            galaxies.radius[I] = galaxies.diam[I] / 2. / 60. # [degree]
+        galaxies.radius = galaxies.diam / 2. / 60. # [degree]
 
     galaxies.freezeparams = np.zeros(len(galaxies), bool)
     galaxies.sources = np.empty(len(galaxies), object)
