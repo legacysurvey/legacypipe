@@ -895,7 +895,7 @@ class LegacySurveyImage(object):
         from tractor.utils import get_class_from_name
 
         tryfns = []
-        tryfns = [self.merged_skyfn, self.skyfn] + self.old_merged_skyfn
+        tryfns = [self.merged_skyfn, self.skyfn] + self.old_merged_skyfns
         Ti = None
         for fn in tryfns:
             if not os.path.exists(fn):
@@ -957,7 +957,7 @@ class LegacySurveyImage(object):
 
         # spatially varying pixelized PsfEx
         from tractor import PsfExModel
-        tryfns = [self.merged_psffn, self.psffn] + self.old_merged_psffn
+        tryfns = [self.merged_psffn, self.psffn] + self.old_merged_psffns
         Ti = None
         for fn in tryfns:
             if not os.path.exists(fn):

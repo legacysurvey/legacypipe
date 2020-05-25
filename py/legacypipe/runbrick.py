@@ -2146,14 +2146,14 @@ def stage_wise_forced(
     if len(phots):
         # The "phot" results for the full-depth coadds are one table per
         # band.  Merge all those columns.
-        wise_models = {}
+        wise_models = []
         for i,p in enumerate(phots[:len(args)]):
             if p is None:
-                (wcat,tiles,band) = args[i+1][:3]
+                (wcat,tiles,band) = args[i][:3]
                 print('"None" result from WISE forced phot:', tiles, band)
                 continue
             if unwise_coadds:
-                wise_models.update(p.models)
+                wise_models.extend(p.models)
             if p.maskmap is not None:
                 wise_mask_maps = p.maskmap
             if WISE is None:
@@ -2181,9 +2181,11 @@ def stage_wise_forced(
             wra  = np.array([src.getPosition().ra  for src in cat])
             wdec = np.array([src.getPosition().dec for src in cat])
 
-            wcoadds = UnwiseCoadd(targetwcs, W, H, pixscale, wpixscale)
-            for tile in tiles.coadd_id:
-                wcoadds.add(tile, wise_models)
+            rc,dc = targetwcs.radec_center()
+            ww = int(W * pixscale / wpixscale)
+            hh = int(H * pixscale / wpixscale)
+            wcoadds = UnwiseCoadd(rc, dc, ww, hh, wpixscale)
+            wcoadds.add(wise_models)
             apphot = wcoadds.finish(survey, brickname, version_header,
                                     apradec=(wra,wdec),
                                     apertures=wise_apertures_arcsec/wpixscale)

@@ -411,7 +411,7 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
                         comment='SLURM job array id'))
     return hdr
 
-def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
+def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir):
     import astrometry
     import astropy
     import matplotlib
@@ -469,6 +469,9 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir):
             print('Warning: failed to get version string for "%s"' % dep)
         else:
             depvers.append((dep, value))
+
+    if galex_dir is not None:
+        depvers.append(('galex', galex_dir))
 
     if unwise_dir is not None:
         dirs = unwise_dir.split(':')
