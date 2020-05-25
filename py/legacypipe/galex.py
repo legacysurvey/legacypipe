@@ -55,7 +55,7 @@ def stage_galex_forced(
     record_event and record_event('stage_galex_forced: starting')
     _add_stage_version(version_header, 'GALEX', 'galex_forced')
 
-    galex_apertures_arccsec = wise_apertures_arcsec
+    galex_apertures_arcsec = wise_apertures_arcsec
 
     if not plots:
         ps = None
@@ -150,12 +150,13 @@ def stage_galex_forced(
                                 apertures=galex_apertures_arcsec/gpixscale)
         api,apd,apr = apphot
         for iband,band in enumerate(['n','f']):
-            GALEX.set('apflux_w%i' % band, api[iband])
-            GALEX.set('apflux_resid_w%i' % band, apr[iband])
+            niceband = band + 'uv'
+            GALEX.set('apflux_%s' % niceband, api[iband])
+            GALEX.set('apflux_resid_%s' % niceband, apr[iband])
             d = apd[iband]
             iv = np.zeros_like(d)
             iv[d != 0.] = 1./(d[d != 0]**2)
-            GALEX.set('apflux_ivar_w%i' % band, iv)
+            GALEX.set('apflux_ivar_%s' % niceband, iv)
             print('Setting GALEX apphot')
 
         if Nskipped > 0:

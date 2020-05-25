@@ -86,7 +86,7 @@ class SimpleCoadd(object):
 
             with np.errstate(divide='ignore'):
                 coimg /= coiv
-                comod /= comod
+                comod /= coiv
             coimg[coiv == 0] = 0.
             comod[coiv == 0] = 0.
             coimgs.append(coimg)

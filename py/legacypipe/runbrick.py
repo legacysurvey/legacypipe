@@ -2284,6 +2284,8 @@ def stage_writecat(
     wise_mask_maps=None,
     apertures_arcsec=None,
     wise_apertures_arcsec=None,
+    GALEX=None,
+    galex_apertures_arcsec=None,
     cat=None, pixscale=None, targetwcs=None,
     W=None,H=None,
     bands=None, ps=None,
@@ -2406,6 +2408,10 @@ def stage_writecat(
         for i,ap in enumerate(wise_apertures_arcsec):
             primhdr.add_record(dict(name='WAPRAD%i' % i, value=ap,
                                     comment='(unWISE) Aperture radius, in arcsec'))
+    if galex_apertures_arcsec is not None:
+        for i,ap in enumerate(galex_apertures_arcsec):
+            primhdr.add_record(dict(name='GAPRAD%i' % i, value=ap,
+                                    comment='GALEX aperture radius, in arcsec'))
 
     if WISE is not None:
         # Convert WISE fluxes from Vega to AB.
@@ -2474,6 +2480,10 @@ def stage_writecat(
         # Done with these now!
         WISE_T = None
         WISE = None
+
+    if GALEX is not None:
+
+        GALEX = None
 
     if T_donotfit:
         T2 = merge_tables([T2, T_donotfit], columns='fillzero')
