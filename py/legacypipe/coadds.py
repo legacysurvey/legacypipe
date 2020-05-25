@@ -62,8 +62,6 @@ class SimpleCoadd(object):
                apradec=None, apertures=None):
         # apradec = (ra,dec): aperture photometry locations
         # apertures: RADII in PIXELS
-        from legacypipe.survey import imsave_jpeg
-
         if apradec is not None:
             assert(apertures is not None)
             (ra,dec) = apradec
@@ -95,7 +93,7 @@ class SimpleCoadd(object):
             comods.append(comod)
             
             hdr = copy_header_with_wcs(version_header, self.wcs)
-            self.add_to_header(band)
+            self.add_to_header(hdr, band)
             self.write_coadds(survey, brickname, hdr, band, coimg, comod, coiv, con)
 
             if apradec is not None:
@@ -151,6 +149,7 @@ class UnwiseCoadd(SimpleCoadd):
             out.fits.write(coiv, header=hdr)
 
     def write_color_image(self, survey, brickname, coimgs, comods):
+        from legacypipe.survey import imsave_jpeg
         # W1/W2 color jpeg
         rgb = _unwise_to_rgb(coimgs[:2])
         with survey.write_output('wise-jpeg', brick=brickname) as out:

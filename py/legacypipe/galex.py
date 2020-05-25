@@ -49,11 +49,13 @@ def stage_galex_forced(
     from legacypipe.bits import MASKBITS
     #from legacypipe.galex import galex_phot, galex_tiles_touching_wcs
     #from legacypipe.unwise import unwise_phot, collapse_unwise_bitmask, unwise_tiles_touching_wcs
-    #from legacypipe.survey import wise_apertures_arcsec
+    from legacypipe.survey import wise_apertures_arcsec
     from tractor import NanoMaggies
 
     record_event and record_event('stage_galex_forced: starting')
     _add_stage_version(version_header, 'GALEX', 'galex_forced')
+
+    galex_apertures_arccsec = wise_apertures_arcsec
 
     if not plots:
         ps = None
@@ -117,13 +119,13 @@ def stage_galex_forced(
     if len(phots):
         # The "phot" results for the full-depth coadds are one table per
         # band.  Merge all those columns.
-        galex_models = {}
+        galex_models = []
         for i,p in enumerate(phots[:len(args)]):
             if p is None:
                 (_,_,tiles,band) = args[i][:4]
                 print('"None" result from GALEX forced phot:', tiles, band)
                 continue
-            galex_models.update(p.models)
+            galex_models.extend(p.models)
             if GALEX is None:
                 GALEX = p.phot
             else:
@@ -133,33 +135,32 @@ def stage_galex_forced(
                 #p.phot.delete_column('galex_y')
                 GALEX.add_columns_from(p.phot)
 
-        if False:
-            from legacypipe.coadds import GalexCoadd
-            # Create the WCS into which we'll resample the tiles.
-            # Same center as "targetwcs" but bigger pixel scale.
-            gpixscale = 1.5
-            gra  = np.array([src.getPosition().ra  for src in cat])
-            gdec = np.array([src.getPosition().dec for src in cat])
-    
-            gcoadds = GalexCoadd(targetwcs, W, H, pixscale, gpixscale)
-            for tile in tiles.tilename:
-                gcoadds.add(tile, galex_models)
-        #apphot = wcoadds.finish(survey, brickname, version_header,
-        #                        apradec=(wra,wdec),
-        #                        apertures=wise_apertures_arcsec/wpixscale)
-        #api,apd,apr = apphot
-        #for iband,band in enumerate([1,2,3,4]):
-        #    WISE.set('apflux_w%i' % band, api[iband])
-        #    WISE.set('apflux_resid_w%i' % band, apr[iband])
-        #    d = apd[iband]
-        #    iv = np.zeros_like(d)
-        #    iv[d != 0.] = 1./(d[d != 0]**2)
-        #    WISE.set('apflux_ivar_w%i' % band, iv)
-        #    print('Setting WISE apphot')
+        # Create the WCS into which we'll resample the tiles.
+        # Same center as "targetwcs" but bigger pixel scale.
+        gpixscale = 1.5
+        gra  = np.array([src.getPosition().ra  for src in cat])
+        gdec = np.array([src.getPosition().dec for src in cat])
+        rc,dc = targetwcs.radec_center()
+        ww = int(W * pixscale / gpixscale)
+        hh = int(H * pixscale / gpixscale)
+        gcoadds = GalexCoadd(rc, dc, ww, hh, gpixscale)
+        gcoadds.add(galex_models)
+        apphot = gcoadds.finish(survey, brickname, version_header,
+                                apradec=(gra,gdec),
+                                apertures=galex_apertures_arcsec/gpixscale)
+        api,apd,apr = apphot
+        for iband,band in enumerate(['n','f']):
+            GALEX.set('apflux_w%i' % band, api[iband])
+            GALEX.set('apflux_resid_w%i' % band, apr[iband])
+            d = apd[iband]
+            iv = np.zeros_like(d)
+            iv[d != 0.] = 1./(d[d != 0]**2)
+            GALEX.set('apflux_ivar_w%i' % band, iv)
+            print('Setting GALEX apphot')
 
         if Nskipped > 0:
             assert(len(GALEX) == len(wcat))
-            WISE = _fill_skipped_values(GALEX, Nskipped, do_phot)
+            GALEX = _fill_skipped_values(GALEX, Nskipped, do_phot)
             assert(len(GALEX) == len(cat))
             assert(len(GALEX) == len(T))
 
@@ -169,8 +170,8 @@ def stage_galex_forced(
     GALEX.writeto('galex-phot.fits')
     
     return dict(GALEX=GALEX,
-                version_header=version_header)#,
-                #wise_apertures_arcsec=wise_apertures_arcsec)
+                version_header=version_header,
+                galex_apertures_arcsec=galex_apertures_arcsec)
 
 def galex_phot(X):
     '''
@@ -179,14 +180,14 @@ def galex_phot(X):
     (galex_dir, cat, tiles, band, roiradec, pixelized_psf, ps) = X
     kwargs = dict(pixelized_psf=pixelized_psf, ps=ps)
 
-    W = None
+    G = None
     try:
-        W = galex_forcedphot(galex_dir, cat, tiles, band, roiradec, **kwargs)
+        G = galex_forcedphot(galex_dir, cat, tiles, band, roiradec, **kwargs)
     except:
         import traceback
         print('galex_forcedphot failed:')
         traceback.print_exc()
-    return W
+    return G
 
 def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
                      pixelized_psf=False, ps=None):
@@ -361,11 +362,11 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
     #         ps.savefig()
 
     if get_models:
-        models = {}
+        models = []
         for i,tim in enumerate(tims):
             tile = tim.tile
             (dat, mod, ie, chi, roi) = ims1[i]
-            models[(tile.visitname, band)] = (mod, dat, ie, tim.roi, tim.wcs.wcs)
+            models.append((tile.visitname, band, tim.wcs.wcs, dat, mod, ie))
 
     if plots:
         for i,tim in enumerate(tims):
@@ -416,6 +417,45 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
 class gphotduck(object):
     pass
 
+
+from legacypipe.coadds import SimpleCoadd
+class GalexCoadd(SimpleCoadd):
+    def __init__(self, ra, dec, W, H, pixscale):
+        super().__init__(ra, dec, W, H, pixscale, ['n', 'f'])
+
+    def add_to_header(self, hdr, band):
+        hdr.add_record(dict(name='TELESCOP', value='GALEX'))
+        hdr.add_record(dict(name='FILTER', value=band, comment='GALEX band'))
+        hdr.add_record(dict(name='MAGZERO', value=22.5,
+                            comment='Magnitude zeropoint'))
+        hdr.add_record(dict(name='MAGSYS', value='AB',
+                            comment='This GALEX image is in AB fluxes'))
+
+    def write_coadds(self, survey, brickname, hdr, band, coimg, comod, coiv, con):
+        niceband = dict(n='NUV', f='FUV')[band]
+
+        with survey.write_output('image', brick=brickname, band=niceband,
+                                 shape=coimg.shape) as out:
+            out.fits.write(coimg, header=hdr)
+        with survey.write_output('model', brick=brickname, band=niceband,
+                                 shape=comod.shape) as out:
+            out.fits.write(comod, header=hdr)
+        with survey.write_output('invvar', brick=brickname, band=niceband,
+                                 shape=coiv.shape) as out:
+            out.fits.write(coiv, header=hdr)
+
+    def write_color_image(self, survey, brickname, coimgs, comods):
+        from legacypipe.survey import imsave_jpeg
+        rgbfunc = _galex_rgb_moustakas
+        # W1/W2 color jpeg
+        rgb = rgbfunc(coimgs)
+        with survey.write_output('galex-jpeg', brick=brickname) as out:
+            imsave_jpeg(out.fn, rgb, origin='lower')
+            info('Wrote', out.fn)
+        rgb = rgbfunc(comods)
+        with survey.write_output('galexmodel-jpeg', brick=brickname) as out:
+            imsave_jpeg(out.fn, rgb, origin='lower')
+            info('Wrote', out.fn)
 
 def _ra_ranges_overlap(ralo, rahi, ra1, ra2):
     import numpy as np

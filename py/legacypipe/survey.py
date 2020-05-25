@@ -918,7 +918,9 @@ class LegacySurveyData(object):
         elif filetype in ['image-jpeg', 'model-jpeg', 'resid-jpeg',
                           'blobmodel-jpeg',
                           'imageblob-jpeg', 'simscoadd-jpeg','imagecoadd-jpeg',
-                          'wise-jpeg', 'wisemodel-jpeg']:
+                          'wise-jpeg', 'wisemodel-jpeg',
+                          'galex-jpeg', 'galexmodel-jpeg',
+                          ]:
             ty = filetype.split('-')[0]
             return swap(
                 os.path.join(codir, '%s-%s-%s.jpg' % (sname, brick, ty)))
