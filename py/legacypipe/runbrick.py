@@ -2478,7 +2478,10 @@ def stage_writecat(
         WISE = None
 
     if GALEX is not None:
-
+        for c in ['flux_nuv', 'flux_ivar_nuv', 'flux_fuv', 'flux_ivar_fuv',
+                  'apflux_nuv', 'apflux_resid_nuv', 'apflux_ivar_nuv',
+                  'apflux_fuv', 'apflux_resid_fuv', 'apflux_ivar_fuv', ]:
+            T2.set(c, GALEX.get(c))
         GALEX = None
 
     if T_donotfit:

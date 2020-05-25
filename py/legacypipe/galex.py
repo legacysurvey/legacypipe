@@ -401,8 +401,9 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
     # (1-sigma or whatever) initial fluxes.  Zero them out instead.
     nm[nm_ivar == 0] = 0.
 
-    phot.set(band + '_nanomaggies', nm.astype(np.float32))
-    phot.set(band + '_nanomaggies_ivar', nm_ivar.astype(np.float32))
+    niceband = band + 'uv'
+    phot.set('flux_' + niceband, nm.astype(np.float32))
+    phot.set('flux_ivar_' + niceband, nm_ivar.astype(np.float32))
     #for k in fskeys:
     #    phot.set(band + '_' + k, fitstats[k])
     #phot.set(band + '_nexp', nexp)

@@ -55,6 +55,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
 
     has_wise =    'flux_w1'    in T.columns()
     has_wise_lc = 'lc_flux_w1' in T.columns()
+    has_galex =   'flux_nuv'   in T.columns()
     has_ap =      'apflux'     in T.columns()
 
     # Nans,Infs
@@ -95,11 +96,11 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
         wise_ext  = ext[:,len(allbands):]
 
     wbands = ['w1','w2','w3','w4']
+    gbands = ['nuv','fuv']
 
     trans_cols_opt  = []
     trans_cols_wise = []
 
-    # No MW_TRANSMISSION_* columns at all
     for i,b in enumerate(allbands):
         col = 'mw_transmission_%s' % b
         T.set(col, 10.**(-decam_ext[:,i] / 2.5))
@@ -170,13 +171,20 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
             bands = wbands
         for b in bands:
             cols.append('%s_%s' % (c, b))
+    def add_galexlike(c):
+        for b in gbands:
+            cols.append('%s_%s' % (c, b))
 
     add_fluxlike('flux')
     if has_wise:
         add_wiselike('flux')
+    if has_galex:
+        add_galexlike('flux')
     add_fluxlike('flux_ivar')
     if has_wise:
         add_wiselike('flux_ivar')
+    if has_galex:
+        add_galexlike('flux_ivar')
     add_fluxlike('fiberflux')
     add_fluxlike('fibertotflux')
     if has_ap:
@@ -190,6 +198,13 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
         add_wiselike('apflux')
         add_wiselike('apflux_resid')
         add_wiselike('apflux_ivar')
+
+    galex_apflux = False
+    if has_galex and has_ap and 'apflux_nuv' in T.get_columns():
+        galex_apflux = True
+        add_galexlike('apflux')
+        add_galexlike('apflux_resid')
+        add_galexlike('apflux_ivar')
 
     cols.extend(trans_cols_opt)
     cols.extend(trans_cols_wise)
@@ -323,6 +338,10 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
                       for k,v in funits.items()])
     # add WISE bands
     for b in wbands:
+        units.update([('%s_%s' % (k, b), v)
+                      for k,v in wunits.items()])
+    # add GALEX bands
+    for b in gbands:
         units.update([('%s_%s' % (k, b), v)
                       for k,v in wunits.items()])
 
