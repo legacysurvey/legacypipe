@@ -43,11 +43,6 @@ if 'Mock' in str(type(EllipseWithPriors)):
         pass
     EllipseWithPriors = duck
 
-def year_to_mjd(year):
-    # year_to_mjd(2015.5) -> 57205.875
-    from tractor.tractortime import TAITime
-    return (year - 2000.) * TAITime.daysperyear + TAITime.mjd2k
-
 def mjd_to_year(mjd):
     # mjd_to_year(57205.875) -> 2015.5
     from tractor.tractortime import TAITime
@@ -882,17 +877,11 @@ class LegacySurveyData(object):
 
         elif filetype == 'large-galaxies':
             fn = os.environ.get('LARGEGALAXIES_CAT')
-            if fn is not None:
-                if os.path.isfile(fn):
-                    return fn
-            pat = os.path.join(basedir, 'LSLGA-*.kd.fits')
-            fns = glob(pat)
-            if len(fns) == 0:
+            if fn is None:
                 return None
-            if len(fns) > 2:
-                print('More than one filename matched large-galaxy pattern', pat,
-                      '; using the first one,', fns[0])
-            return fns[0]
+            if os.path.isfile(fn):
+                return fn
+            return None
 
         elif filetype == 'annotated-ccds':
             return swaplist(
@@ -1593,57 +1582,4 @@ def read_one_tim(X):
     #print('Reading', im)
     tim = im.get_tractor_image(radecpoly=targetrd, **kwargs)
     return tim
-
-from tractor.psfex import PsfExModel
-
-class SchlegelPsfModel(PsfExModel):
-    def __init__(self, fn=None, ext=1):
-        '''
-        `ext` is ignored.
-        '''
-        if fn is not None:
-            T = fits_table(fn)
-            T.about()
-
-            ims = fitsio.read(fn, ext=2)
-            print('Eigen-images', ims.shape)
-            _,h,w = ims.shape
-
-            hdr = fitsio.read_header(fn)
-            x0 = 0.
-            y0 = 0.
-            xscale = 1. / hdr['XSCALE']
-            yscale = 1. / hdr['YSCALE']
-            degree = (T.xexp + T.yexp).max()
-            self.sampling = 1.
-
-            # Reorder the 'ims' to match the way PsfEx sorts its polynomial terms
-
-            # number of terms in polynomial
-            ne = (degree + 1) * (degree + 2) // 2
-            print('Number of eigen-PSFs required for degree=', degree, 'is', ne)
-
-            self.psfbases = np.zeros((ne, h,w))
-
-            for d in range(degree + 1):
-                # x polynomial degree = j
-                # y polynomial degree = k
-                for j in range(d+1):
-                    k = d - j
-                    ii = j + (degree+1) * k - (k * (k-1))// 2
-
-                    jj = np.flatnonzero((T.xexp == j) * (T.yexp == k))
-                    if len(jj) == 0:
-                        print('Schlegel image for power', j,k, 'not found')
-                        continue
-                    im = ims[jj,:,:]
-                    print('Schlegel image for power', j,k, 'has range', im.min(), im.max(), 'sum', im.sum())
-                    self.psfbases[ii,:,:] = ims[jj,:,:]
-
-            self.xscale, self.yscale = xscale, yscale
-            self.x0,self.y0 = x0,y0
-            self.degree = degree
-            print('SchlegelPsfEx degree:', self.degree)
-            bh,_ = self.psfbases[0].shape
-            self.radius = (bh+1)/2.
 

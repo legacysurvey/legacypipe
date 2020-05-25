@@ -59,8 +59,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
     wband = 'w%i' % band
 
-    fskeys = ['prochi2', 'pronpix', 'profracflux', 'proflux', 'npix',
-              'pronexp']
+    fskeys = ['prochi2', 'profracflux']
 
     Nsrcs = len(cat)
     phot = fits_table()
@@ -68,7 +67,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     phot.wise_coadd_id = np.array(['        '] * Nsrcs)
     phot.wise_x = np.zeros(Nsrcs, np.float32)
     phot.wise_y = np.zeros(Nsrcs, np.float32)
-    phot.set(wband + '_psfdepth', np.zeros(len(phot), np.float32))
+    phot.set('psfdepth_%s' % wband, np.zeros(len(phot), np.float32))
 
     ra  = np.array([src.getPosition().ra  for src in cat])
     dec = np.array([src.getPosition().dec for src in cat])
@@ -337,8 +336,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         patch = psf.getPointSourcePatch(h//2, w//2).patch
         psfnorm = np.sqrt(np.sum(patch**2))
         # To handle zero-depth, we return 1/nanomaggies^2 units rather than mags.
-        psfdepth = 1. / (tim.sig1 / psfnorm)**2
-        phot.get(wband + '_psfdepth')[I] = psfdepth
+        phot.get('psfdepth_%s' % wband)[I] = 1. / (tim.sig1 / psfnorm)**2
 
         tim.tile = tile
         tims.append(tim)
@@ -390,12 +388,9 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     tractor.freezeParamsRecursive('*')
     tractor.thawPathsTo(wanyband)
 
-    kwa = dict(fitstat_extras=[('pronexp', [tim.nims for tim in tims])])
     t0 = Time()
-
     R = tractor.optimize_forced_photometry(
-        fitstats=True, variance=True, shared_params=False,
-        wantims=wantims, **kwa)
+        fitstats=True, variance=True, shared_params=False, wantims=wantims)
     info('unWISE forced photometry took', Time() - t0)
 
     if use_ceres:
@@ -484,29 +479,12 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     # (1-sigma or whatever) initial fluxes.  Zero them out instead.
     nm[nm_ivar == 0] = 0.
 
-    phot.set(wband + '_nanomaggies', nm.astype(np.float32))
-    phot.set(wband + '_nanomaggies_ivar', nm_ivar.astype(np.float32))
-    dnm = np.zeros(len(nm_ivar), np.float32)
-    okiv = (nm_ivar > 0)
-    dnm[okiv] = (1. / np.sqrt(nm_ivar[okiv])).astype(np.float32)
-    okflux = (nm > 0)
-    mag = np.zeros(len(nm), np.float32)
-    mag[okflux] = (NanoMaggies.nanomaggiesToMag(nm[okflux])
-                   ).astype(np.float32)
-    dmag = np.zeros(len(nm), np.float32)
-    ok = (okiv * okflux)
-    dmag[ok] = (np.abs((-2.5 / np.log(10.)) * dnm[ok] / nm[ok])
-                ).astype(np.float32)
-    mag[np.logical_not(okflux)] = np.nan
-    dmag[np.logical_not(ok)] = np.nan
-
-    phot.set(wband + '_mag', mag)
-    phot.set(wband + '_mag_err', dmag)
-
+    phot.set('flux_%s' % wband, nm.astype(np.float32))
+    phot.set('flux_ivar_%s' % wband, nm_ivar.astype(np.float32))
     for k in fskeys:
-        phot.set(wband + '_' + k, fitstats[k])
-    phot.set(wband + '_nexp', nexp)
-    phot.set(wband + '_mjd', mjd)
+        phot.set(k + '_' + wband, fitstats[k])
+    phot.set('nobs_%s' % wband, nexp)
+    phot.set('mjd_%s'  % wband, mjd)
 
     rtn = wphotduck()
     rtn.phot = phot

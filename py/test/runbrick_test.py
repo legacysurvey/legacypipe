@@ -206,11 +206,10 @@ def rbmain():
     # Gaia star becomes a DUP!
     assert(np.sum([t == 'DUP' for t in T.type]) == 1)
     # LSLGA galaxy exists!
-    Igal = np.flatnonzero([r == 'L6' for r in T.ref_cat])
+    Igal = np.flatnonzero([r == 'L3' for r in T.ref_cat])
     assert(len(Igal) == 1)
     assert(np.all(T.ref_id[Igal] > 0))
     assert(T.type[Igal[0]] == 'SER')
-
 
     # --brick and --zoom rather than --radec --width --height
     main(args=['--survey-dir', surveydir, '--outdir', 'out-testcase9b',
@@ -232,7 +231,7 @@ def rbmain():
                       '--catalog-dir', 'out-testcase9b',
                       '--derivs', '--threads', '2',
                       '--apphot',
-                      '372546', 'N26', 'forced2.fits'])
+                      '372547', 'N26', 'forced2.fits'])
     assert(os.path.exists('forced2.fits'))
     F = fits_table('forced2.fits')
 
@@ -240,7 +239,7 @@ def rbmain():
                       '--no-ceres',
                       '--catalog-dir', 'out-testcase9b',
                       '--agn',
-                      '372546', 'N26', 'forced3.fits'])
+                      '257266', 'S21', 'forced3.fits'])
     assert(os.path.exists('forced3.fits'))
     F = fits_table('forced3.fits')
 
@@ -267,7 +266,7 @@ def rbmain():
         files_cache = files[::2]
         files_nocache = files[1::2]
         # Survey-ccds *must* be in nocache.
-        fn = 'survey-ccds-1.fits.gz'
+        fn = 'survey-ccds-1.kd.fits'
         if fn in files_cache:
             files_cache.remove(fn)
             files_nocache.append(fn)
@@ -402,6 +401,14 @@ def rbmain():
     DecamImage.splinesky_boxsize = 128
     
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
+
+    survey = LegacySurveyData(surveydir)
+    # get brick by id
+    brickid = 473357
+    brick = survey.get_brick(brickid)
+    assert(brick.brickname == '1867p255')
+    assert(brick.brickid == brickid)
+
     outdir = 'out-testcase4'
     os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
     os.environ['GAIA_CAT_VER'] = '2'
