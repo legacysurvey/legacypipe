@@ -219,7 +219,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                     # Only deal with mask pixels that are set.
                     I, = np.nonzero(tilemask[Yi,Xi] > 0)
                     # Trim to unique area for this tile
-                    rr,dd = get_masks.pixelxy2radec(Yo[I]+1, Xo[I]+1)
+                    rr,dd = get_masks.pixelxy2radec(Xo[I]+1, Yo[I]+1)
                     good = radec_in_unique_area(rr, dd, tile.ra1, tile.ra2,
                                                 tile.dec1, tile.dec2)
                     I = I[good]
