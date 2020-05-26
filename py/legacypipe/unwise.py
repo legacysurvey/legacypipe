@@ -228,6 +228,16 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                     # Shouldn't happen by this point
                     print('Warning: no overlap between WISE tile', tile.coadd_id, 'and brick')
 
+            if plots:
+                plt.clf()
+                plt.imshow(tilemask, interpolation='nearest', origin='lower')
+                plt.title('Tile %s: mask' % tile.coadd_id)
+                ps.savefig()
+                plt.clf()
+                plt.imshow(maskmap, interpolation='nearest', origin='lower')
+                plt.title('Tile %s: accumulated maskmap' % tile.coadd_id)
+                ps.savefig()
+
         # The tiles have some overlap, so zero out pixels outside the
         # tile's unique area.
         th,tw = tim.shape
