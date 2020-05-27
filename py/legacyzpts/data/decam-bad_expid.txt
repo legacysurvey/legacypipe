@@ -3233,3 +3233,9 @@
 
 626512 3 weird sky structures
 664419 3 weird sky structures
+
+803349 3 bolide
+392060 3 weird sky structure
+512030 3 weird scattered light
+392104 3 weird scattered light
+635994 3 weird scattered light
