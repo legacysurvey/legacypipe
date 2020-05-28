@@ -80,7 +80,11 @@ def main():
     
     survey, kwargs = get_runbrick_kwargs(**optdict)
 
-    kwargs.update(radec=(ra,dec), width=W, height=H, bands=[ccd.filter])
+    # Only set W,H if they were not specified (to other than default values) on the command-line
+    if opt.W == 3600 and opt.H = 3600:
+        kwargs.update(width=W, height=H)
+
+    kwargs.update(radec=(ra,dec), bands=[ccd.filter])
     
     #if opt.brick is None and opt.radec is None:
 
