@@ -1001,7 +1001,7 @@ class LegacySurveyImage(object):
         psf.plver = getattr(Ti, 'plver', '')
         psf.procdate = getattr(Ti, 'procdate', '')
         psf.plprocid = getattr(Ti, 'plprocid', '')
-        psf.datasum = Ti.imgdsum
+        psf.datasum  = getattr(Ti, 'imgdsum', '')
         psf.fwhm = Ti.psf_fwhm
 
         psf.shift(x0, y0)
