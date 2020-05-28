@@ -29,6 +29,16 @@ def main():
     optdict = vars(opt)
     verbose = optdict.pop('verbose')
 
+    import logging
+    import sys
+    if verbose == 0:
+        lvl = logging.INFO
+    else:
+        lvl = logging.DEBUG
+    logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+    # tractor logging is *soooo* chatty
+    logging.getLogger('tractor.engine').setLevel(lvl + 10)
+
     expnum = optdict.pop('expnum')
     ccdname = optdict.pop('ccdname')
     
