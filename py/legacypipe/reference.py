@@ -249,7 +249,7 @@ def mask_radius_for_mag(mag):
     # Returns a masking radius in degrees for a star of the given magnitude.
     # Used for Tycho-2 and Gaia stars.
 
-    # This is in degrees, and is from Rongpu in the thread [desi-imaging 1439].
+    # This is in degrees, and is from Rongpu in the thread [decam-chatter 12099].
     return 1630./3600. * 1.396**(-mag)
 
 def read_tycho2(survey, targetwcs, bands):
