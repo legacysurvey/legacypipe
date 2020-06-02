@@ -193,7 +193,8 @@ def read_gaia(wcs, bands):
     # Updated for Gaia DR2 by Eisenstein,
     # [decam-data 2770] Re: [desi-milkyway 639] GAIA in DECaLS DR7
     # And made far more restrictive following BGS feedback.
-    gaia.pointsource = (gaia.G <= 18.) * (gaia.astrometric_excess_noise < 10.**0.5)
+    gaia.pointsource = np.logical_or((gaia.G <= 18.) * (gaia.astrometric_excess_noise < 10.**0.5),
+                                     (gaia.G <= 13.))
 
     # in our catalog files, this is in float32; in the Gaia data model it's
     # a byte, with only values 3 and 31 in DR2.
