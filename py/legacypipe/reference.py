@@ -389,7 +389,7 @@ def read_large_galaxies(survey, targetwcs, bands):
     if galfn is None:
         debug('No large-galaxies catalog file')
         return None
-    radius = 1.
+    radius = 2.
     rc,dc = targetwcs.radec_center()
 
     kd = tree_open(galfn, 'largegals')
@@ -403,11 +403,6 @@ def read_large_galaxies(survey, targetwcs, bands):
     del kd
 
     refcat, preburn = get_large_galaxy_version(galfn)
-
-    #print('Large galaxy cat: ', refcat, 'preburn', preburn)
-    #print('ref_cat:', galaxies.ref_cat, 'ref_id:', galaxies.ref_id)
-    #galaxies.about()
-    #print('lslga id:', galaxies.lslga_id)
 
     if not preburn:
         # Original LSLGA
@@ -427,6 +422,7 @@ def read_large_galaxies(survey, targetwcs, bands):
         galaxies.rename('mag_leda', 'mag')
         galaxies.radius = galaxies.diam / 2. / 60. # [degree]
 
+    galaxies.keep_radius = 2. * galaxies.radius
     galaxies.freezeparams = np.zeros(len(galaxies), bool)
     galaxies.sources = np.empty(len(galaxies), object)
     galaxies.sources[:] = None
@@ -434,12 +430,7 @@ def read_large_galaxies(survey, targetwcs, bands):
     # Factor of HyperLEDA to set the galaxy max radius
     radius_max_factor = 2.
 
-    ## use the pre-burned LSLGA catalog
-    #if 'preburned' in galaxies.get_columns():
-    #    preburned = np.logical_and(preburn, galaxies.preburned)
-    #else:
-    #    preburned = np.zeros(len(galaxies), bool)
-
+    # If we're creating tractor Source objects...
     if bands is not None:
         I, = np.nonzero(galaxies.preburned)
         # only fix the parameters of pre-burned galaxies
