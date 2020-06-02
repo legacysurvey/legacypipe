@@ -1176,6 +1176,8 @@ def stage_fitblobs(T=None,
     if len(T.brickname) == 0:
         T.brickname = T.brickname.astype('S8')
     T.objid = np.arange(len(T), dtype=np.int32)
+    if T_donotfit:
+        T_donotfit.objid = np.arange(len(T_donotfit), dtype=np.int32) + len(T)
 
     # How many sources in each blob?
     from collections import Counter
@@ -1195,9 +1197,6 @@ def stage_fitblobs(T=None,
 
     invvars = np.hstack(BB.srcinvvars)
     assert(cat.numberOfParams() == len(invvars))
-
-    if T_donotfit:
-        T_donotfit.objid = np.arange(len(T_donotfit), dtype=np.int32) + len(T)
 
     if write_metrics or get_all_models:
         from legacypipe.format_catalog import format_all_models
@@ -1510,6 +1509,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  custom_brick=False,
                  T=None, T_donotfit=None, T_refbail=None,
+                 refstars=None,
                  blobs=None,
                  cat=None, pixscale=None, plots=False,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
@@ -1577,6 +1577,21 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
     # Render model images...
     record_event and record_event('stage_coadds: model images')
+
+    ## reference sources with frozen params that did not get assigned to
+    ## blobs -- add them back in!
+    #refstars=None,
+    #cat=None,
+    #T=None,
+    # --> T.ref_cat, T.ref_id vs refstars
+    print('T')
+    T.about()
+    print('refstars')
+    refstars.about()
+    print('T ref_cat, ref_id:', np.zip(T.ref_cat[T.ref_id > 0], T.ref_id[T.ref_id > 0]))
+    print('refstars ref_cat, ref_id:', np.zip(refstars.ref_cat, refstars.ref_id))
+
+
     bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob, blobs, targetwcs) for tim in tims])
     mods = [m for m,b in bothmods]
     blobmods = [b for m,b in bothmods]
