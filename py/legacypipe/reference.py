@@ -358,7 +358,9 @@ def get_large_galaxy_version(fn):
     preburn = False
     hdr = fitsio.read_header(fn)
     try:
-        v = hdr.get('LSLGAVER')
+        v = hdr.get('SGAVER')
+        if v is None: # old version
+            v = hdr.get('LSLGAVER')
         if v is not None:
             v = v.strip()
             if 'ellipse' in v.lower():
@@ -414,7 +416,7 @@ def read_large_galaxies(survey, targetwcs, bands):
         galaxies.preburned = np.zeros(len(galaxies), bool)
 
         # new data model
-        galaxies.rename('id', 'ref_id')
+        galaxies.rename('sga_id', 'ref_id')
         galaxies.rename('mag_leda', 'mag')
         galaxies.radius = galaxies.diam / 2. / 60. # [degree]
     else:
