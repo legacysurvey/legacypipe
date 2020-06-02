@@ -417,10 +417,15 @@ def read_large_galaxies(survey, targetwcs, bands):
     else:
         # Need to initialize islargegalaxy to False because we will bring in
         # pre-burned sources that we do not want to use in MASKBITS.
+        # (we'll set individual .islargegalaxy entries below)
+        # NOTE: fields such as ref_cat, preburned, etc, already exist in the
+        # "galaxies" catalog read from disk.
         galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
         galaxies.radius = np.zeros(len(galaxies), 'f4')
         galaxies.rename('mag_leda', 'mag')
         galaxies.radius = galaxies.diam / 2. / 60. # [degree]
+        from collections import Counter
+        print('Read preburned catalog.  ref_cat entries:', Counter(galaxies.ref_cat).most_common())
 
     galaxies.keep_radius = 2. * galaxies.radius
     galaxies.freezeparams = np.zeros(len(galaxies), bool)

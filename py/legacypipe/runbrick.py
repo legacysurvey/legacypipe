@@ -1584,13 +1584,19 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     #cat=None,
     #T=None,
     # --> T.ref_cat, T.ref_id vs refstars
+    # refstars.in_bounds?? no, we want to keep ones in non-unique area too
     print('T')
     T.about()
     print('refstars')
     refstars.about()
-    print('T ref_cat, ref_id:', np.zip(T.ref_cat[T.ref_id > 0], T.ref_id[T.ref_id > 0]))
-    print('refstars ref_cat, ref_id:', np.zip(refstars.ref_cat, refstars.ref_id))
-
+    print('T ref_cat, ref_id:', list(zip(T.ref_cat[T.ref_id > 0], T.ref_id[T.ref_id > 0])))
+    print('refstars ref_cat, ref_id:', list(zip(refstars.ref_cat, refstars.ref_id)))
+    I = (T.ref_id > 0)
+    kept_refs = set(list(zip(T.ref_cat[I], T.ref_id[I])))
+    I = (refstars.freezeparams)
+    orig_refs = set(list(zip(refstars.ref_cat[I], refstars.ref_id[I])))
+    dropped_refs = orig_refs - kept_refs
+    print('Dropped ref sources:', dropped_refs)
 
     bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob, blobs, targetwcs) for tim in tims])
     mods = [m for m,b in bothmods]
