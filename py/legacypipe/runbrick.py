@@ -1006,11 +1006,13 @@ def stage_fitblobs(T=None,
         while len(R) < len(blobsrcs):
             R.append(dict(brickname=brickname, iblob=-1, result=None))
 
+    frozen_galaxies = get_frozen_galaxies(T, blobsrcs, blobs, targetwcs, cat)
     refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
     # Create the iterator over blobs to process
     blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, reoptimize, iterative, use_ceres,
                           refmap, large_galaxies_force_pointsource, less_masking, brick,
+                          frozen_galaxies,
                           skipblobs=skipblobs,
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
     # to allow timingpool to queue tasks one at a time
@@ -1245,6 +1247,58 @@ def get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs):
         refmap = np.zeros((int(HH), int(WW)), np.uint8)
     return refmap
 
+# Also called by farm.py
+def get_frozen_galaxies(T, blobsrcs, blobs, targetwcs, cat):
+    # Find reference (frozen) large galaxies that touch blobs that
+    # they are not part of, to get their profiles subtracted.
+    # Generate a blob -> [sources] mapping.
+    frozen_galaxies = {}
+    cols = T.get_columns()
+    if not ('islargegalaxy' in cols and 'freezeparams' in cols):
+        return frozen_galaxies
+    Igals = np.flatnonzero(T.islargegalaxy * T.freezeparams)
+    if len(Igals) == 0:
+        return frozen_galaxies
+    from legacypipe.reference import get_reference_map
+    debug('Found', len(Igals), 'frozen large galaxies')
+    # create map in pixel space for each one.
+    for ii in Igals:
+        # length-1 table
+        refgal = T[np.array([ii])].copy()
+        refgal.radius_pix *= 2
+        galmap = get_reference_map(targetwcs, refgal)
+        debug(np.sum(galmap), 'pixels set in refmap for galaxy id', refgal.ref_id[0])
+        galblobs = set(blobs[galmap > 0])
+        debug('galaxy mask overlaps blobs:', galblobs)
+        if -1 in galblobs:
+            galblobs.remove(-1)
+        debug('source:', cat[ii])
+        debug('ibx,iby', refgal.ibx[0], refgal.iby[0])
+        if refgal.in_bounds:
+            # If in-bounds, remove the blob that this source is
+            # already part of, if it exists; it will get processed
+            # within that blob.
+            for ib,bsrcs in enumerate(blobsrcs):
+                if ii in bsrcs:
+                    if ib in galblobs:
+                        debug('in bounds; removing frozen-galaxy entry for blob', ib, 'bsrcs', bsrcs)
+                        galblobs.remove(ib)
+        else:
+            # Otherwise, remove this from any 'blobsrcs' members it is
+            # part of -- this can happen when we clip a source
+            # position outside the brick to the brick bounds and that
+            # happens to touch a blob.
+            for j,bsrcs in enumerate(blobsrcs):
+                if ii in bsrcs:
+                    blobsrcs[j] = bsrcs[bsrcs != ii]
+                    debug('removed source', ii, 'from blob', j, 'blobsrcs', bsrcs, '->', blobsrcs[j])
+
+        for blob in galblobs:
+            if not blob in frozen_galaxies:
+                frozen_galaxies[blob] = []
+            frozen_galaxies[blob].append(cat[ii])
+    return frozen_galaxies
+
 def _get_bailout_mask(blobs, skipblobs, targetwcs, W, H, brick, blobslices):
     maxblob = blobs.max()
     # mark all as bailed out...
@@ -1323,7 +1377,7 @@ def _check_checkpoints(R, blobslices, brickname):
 def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                plots, ps, reoptimize, iterative, use_ceres, refmap,
                large_galaxies_force_pointsource, less_masking,
-               brick,
+               brick, frozen_galaxies,
                skipblobs=None, max_blobsize=None, custom_brick=False):
     '''
     *blobs*: map, with -1 indicating no-blob, other values indexing *blobslices*,*blobsrcs*.
