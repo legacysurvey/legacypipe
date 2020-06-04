@@ -104,6 +104,8 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     # stellar halos out to N x their radii)
     refs.radius_pix = np.ceil(refs.radius * 3600. / pixscale).astype(int)
 
+    debug('Increasing radius for', np.sum(refs.keep_radius > refs.radius),
+          'ref sources based on keep_radius')
     keeprad = np.maximum(refs.keep_radius, refs.radius)
     # keeprad to pix
     keeprad = np.ceil(keeprad * 3600. / pixscale).astype(int)
@@ -392,6 +394,7 @@ def read_large_galaxies(survey, targetwcs, bands):
     radius = 2.
     rc,dc = targetwcs.radec_center()
 
+    debug('Reading', galfn)
     kd = tree_open(galfn, 'largegals')
     I = tree_search_radec(kd, rc, dc, radius)
     debug(len(I), 'large galaxies within', radius,
@@ -403,6 +406,7 @@ def read_large_galaxies(survey, targetwcs, bands):
     del kd
 
     refcat, preburn = get_large_galaxy_version(galfn)
+    debug('Large galaxies version: "%s", preburned?' % refcat, preburn)
 
     if not preburn:
         # Original LSLGA
@@ -421,7 +425,6 @@ def read_large_galaxies(survey, targetwcs, bands):
         # NOTE: fields such as ref_cat, preburned, etc, already exist in the
         # "galaxies" catalog read from disk.
         galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
-        galaxies.radius = np.zeros(len(galaxies), 'f4')
         galaxies.rename('mag_leda', 'mag')
         galaxies.radius = galaxies.diam / 2. / 60. # [degree]
         from collections import Counter
@@ -432,12 +435,13 @@ def read_large_galaxies(survey, targetwcs, bands):
     galaxies.sources = np.empty(len(galaxies), object)
     galaxies.sources[:] = None
 
-    # Factor of HyperLEDA to set the galaxy max radius
+    # Factor of HyperLEDA radius to set the galaxy max radius
     radius_max_factor = 2.
 
     # If we're creating tractor Source objects...
     if bands is not None:
         I, = np.nonzero(galaxies.preburned)
+        debug(len(I), 'preburned galaxies')
         # only fix the parameters of pre-burned galaxies
         for ii,g in zip(I, galaxies[I]):
             try:
@@ -492,11 +496,12 @@ def read_large_galaxies(survey, targetwcs, bands):
                     galaxies.freezeparams[ii] = True
             except:
                 import traceback
-                print('Failed to create Tractor source for LSLGA entry:',
+                print('Failed to create Tractor source for SGA entry:',
                       traceback.print_exc())
                 raise
 
         I, = np.nonzero(np.logical_not(galaxies.preburned))
+        debug(len(I), 'non-preburned galaxies')
         for ii,g in zip(I, galaxies[I]):
             # Initialize each source with an exponential disk--
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
@@ -522,7 +527,7 @@ def read_large_galaxies(survey, targetwcs, bands):
             galaxies.sources[ii] = src
        
     keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
-                    'sources', 'islargegalaxy', 'freezeparams']
+                    'sources', 'islargegalaxy', 'freezeparams', 'keep_radius']
 
     for c in galaxies.get_columns():
         if not c in keep_columns:
