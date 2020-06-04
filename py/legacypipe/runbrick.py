@@ -1159,8 +1159,22 @@ def stage_fitblobs(T=None,
     blobmap[:] = -1
     # in particular,
     blobmap[0] = -1
+    # (this +1 business is because we're using a numpy array for the map)
     blobmap[oldblob + 1] = iblob
     blobs = blobmap[blobs+1]
+
+    # Frozen galaxies: while remapping, flip from blob->[srcs] to src->[blobs].
+    fro_gals = {}
+    for b,gals in frozen_galaxies.items():
+        for gal in gals:
+            if not gal in fro_gals:
+                fro_gals[gal] = []
+            bnew = blobmap[b+1]
+            if bnew != -1:
+                fro_gals[gal].append(bnew)
+    frozen_galaxies = fro_gals
+    debug('Remapped frozen_galaxies:', frozen_galaxies)
+
     del blobmap
 
     # write out blob map
@@ -1223,7 +1237,7 @@ def stage_fitblobs(T=None,
                 TT.writeto(None, fits_object=out.fits, header=hdr,
                            primheader=primhdr)
 
-    keys = ['cat', 'invvars', 'T', 'blobs', 'refmap', 'version_header']
+    keys = ['cat', 'invvars', 'T', 'blobs', 'refmap', 'version_header', 'frozen_galaxies']
     if get_all_models:
         keys.append('all_models')
     if bailout:
@@ -1270,8 +1284,7 @@ def get_frozen_galaxies(T, blobsrcs, blobs, targetwcs, cat):
         debug(np.sum(galmap), 'pixels set in refmap for galaxy id', refgal.ref_id[0])
         galblobs = set(blobs[galmap > 0])
         debug('galaxy mask overlaps blobs:', galblobs)
-        if -1 in galblobs:
-            galblobs.remove(-1)
+        galblobs.discard(-1)
         debug('source:', cat[ii])
         debug('ibx,iby', refgal.ibx[0], refgal.iby[0])
         if refgal.in_bounds:
@@ -1524,7 +1537,7 @@ def _get_mod(X):
 def _get_both_mods(X):
     from astrometry.util.resample import resample_with_wcs, OverlapError
     from astrometry.util.miscutils import get_overlapping_region
-    (tim, srcs, srcblobs, blobmap, targetwcs) = X
+    (tim, srcs, srcblobs, blobmap, targetwcs, frozen_galaxies) = X
     mod = np.zeros(tim.getModelShape(), np.float32)
     blobmod = np.zeros(tim.getModelShape(), np.float32)
     assert(len(srcs) == len(srcblobs))
@@ -1538,11 +1551,30 @@ def _get_both_mods(X):
     timblobmap[Yo,Xo] = blobmap[Yi,Xi]
     del Yo,Xo,Yi,Xi
 
+    if frozen_galaxies is not None:
+        from tractor.patch import ModelMask
+        timblobs = set(timblobmap.ravel())
+        timblobs.discard(-1)
+        h,w = tim.shape
+        mm = ModelMask(0, 0, w, h)
+        for src,bb in frozen_galaxies.items():
+            # Does this source (which touches blobs bb) touch any blobs in this tim?
+            touchedblobs = timblobs.intersection(bb)
+            if len(touchedblobs) == 0:
+                continue
+            patch = src.getModelPatch(tim, modelMask=mm)
+            if patch is None:
+                continue
+            patch.addTo(mod)
+
+            assert(patch.shape == mod.shape)
+            blobmask = np.isin(timblobmap, touchedblobs)
+            blobmod += patch.patch * blobmask
+
     for src,srcblob in zip(srcs, srcblobs):
         patch = src.getModelPatch(tim)
         if patch is None:
             continue
-        #patch.addTo(mod)
         # From patch.addTo()
         (ih, iw) = mod.shape
         (ph, pw) = patch.shape
@@ -1556,6 +1588,7 @@ def _get_both_mods(X):
         mod[outy, outx] += p
         # mask by blob map
         blobmod[outy, outx] += p * (timblobmap[outy,outx] == srcblob)
+
     if hasattr(tim.psf, 'clear_cache'):
         tim.psf.clear_cache()
     return mod, blobmod
@@ -1571,6 +1604,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  co_sky=None,
                  saturated_pix=None,
                  refmap=None,
+                 frozen_galaxies=None,
                  bailout_mask=None,
                  mp=None,
                  record_event=None,
@@ -1633,27 +1667,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # Render model images...
     record_event and record_event('stage_coadds: model images')
 
-    ## reference sources with frozen params that did not get assigned to
-    ## blobs -- add them back in!
-    #refstars=None,
-    #cat=None,
-    #T=None,
-    # --> T.ref_cat, T.ref_id vs refstars
-    # refstars.in_bounds?? no, we want to keep ones in non-unique area too
-    print('T')
-    T.about()
-    print('refstars')
-    refstars.about()
-    print('T ref_cat, ref_id:', list(zip(T.ref_cat[T.ref_id > 0], T.ref_id[T.ref_id > 0])))
-    print('refstars ref_cat, ref_id:', list(zip(refstars.ref_cat, refstars.ref_id)))
-    I = (T.ref_id > 0)
-    kept_refs = set(list(zip(T.ref_cat[I], T.ref_id[I])))
-    I = (refstars.freezeparams)
-    orig_refs = set(list(zip(refstars.ref_cat[I], refstars.ref_id[I])))
-    dropped_refs = orig_refs - kept_refs
-    print('Dropped ref sources:', dropped_refs)
-
-    bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob, blobs, targetwcs) for tim in tims])
+    bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob, blobs, targetwcs, frozen_galaxies)
+                                       for tim in tims])
     mods = [m for m,b in bothmods]
     blobmods = [b for m,b in bothmods]
     del bothmods
