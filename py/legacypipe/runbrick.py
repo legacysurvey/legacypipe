@@ -1489,9 +1489,10 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
 
         yield (brickname, iblob,
                (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
-               blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-               reoptimize, iterative, use_ceres, refmap[bslc],
-               large_galaxies_force_pointsource, less_masking))
+                blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
+                reoptimize, iterative, use_ceres, refmap[bslc],
+                large_galaxies_force_pointsource, less_masking,
+                frozen_galaxies.get(iblob, [])))
 
 def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &
