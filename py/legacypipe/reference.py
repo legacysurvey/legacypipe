@@ -427,8 +427,6 @@ def read_large_galaxies(survey, targetwcs, bands):
         galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
         galaxies.rename('mag_leda', 'mag')
         galaxies.radius = galaxies.diam / 2. / 60. # [degree]
-        from collections import Counter
-        print('Read preburned catalog.  ref_cat entries:', Counter(galaxies.ref_cat).most_common())
 
     galaxies.keep_radius = 2. * galaxies.radius
     galaxies.freezeparams = np.zeros(len(galaxies), bool)

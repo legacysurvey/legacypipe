@@ -1537,7 +1537,7 @@ def _get_mod(X):
 def _get_both_mods(X):
     from astrometry.util.resample import resample_with_wcs, OverlapError
     from astrometry.util.miscutils import get_overlapping_region
-    (tim, srcs, srcblobs, blobmap, targetwcs, frozen_galaxies) = X
+    (tim, srcs, srcblobs, blobmap, targetwcs, frozen_galaxies, ps, plots) = X
     mod = np.zeros(tim.getModelShape(), np.float32)
     blobmod = np.zeros(tim.getModelShape(), np.float32)
     assert(len(srcs) == len(srcblobs))
@@ -1571,14 +1571,28 @@ def _get_both_mods(X):
             patch.addTo(mod)
 
             assert(patch.shape == mod.shape)
-            blobmask = np.isin(timblobmap, touchedblobs)
+            # np.isin doesn't work with a *set* argument!
+            blobmask = np.isin(timblobmap, list(touchedblobs))
             blobmod += patch.patch * blobmask
+
+            if plots:
+                plt.clf()
+                plt.imshow(blobmask, interpolation='nearest', origin='lower', vmin=0, vmax=1,
+                           cmap='gray')
+                plt.title('tim %s: frozen-galaxy blobmask' % tim.name)
+                ps.savefig()
+                plt.clf()
+                plt.imshow(patch.patch, interpolation='nearest', origin='lower',
+                           cmap='gray')
+                plt.title('tim %s: frozen-galaxy patch' % tim.name)
+                ps.savefig()
 
             # Drop this frozen galaxy from the catalog to render, if it is present
             # (ie, if it is in_bounds)
             # Can't use "==": they're not the same objects; the "srcs" have been
             # to oneblob.py and back, and, eg, get their EllipseE types changed.
-            srcs_blobs = [(s,b) for s,b in srcs_blobs if not (s.pos.ra == src.pos.ra and s.pos.dec == src.pos.dec)]
+            srcs_blobs = [(s,b) for s,b in srcs_blobs
+                          if not (s.pos.ra == src.pos.ra and s.pos.dec == src.pos.dec)]
 
     for src,srcblob in srcs_blobs:
         patch = src.getModelPatch(tim)
@@ -1639,7 +1653,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
-    if plots:
+    if plots and False:
         cat_init = [src for it,src in zip(T.iterative, cat) if not(it)]
         cat_iter = [src for it,src in zip(T.iterative, cat) if it]
         print(len(cat_init), 'initial sources and', len(cat_iter), 'iterative')
@@ -1677,7 +1691,22 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     record_event and record_event('stage_coadds: model images')
 
     debug('Frozen_galaxies:', frozen_galaxies)
-    bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob, blobs, targetwcs, frozen_galaxies)
+    # Re-add the blob that this galaxy is actually inside
+    # (that blob got dropped way earlier, before fitblobs)
+    if frozen_galaxies is not None:
+        for src,bb in frozen_galaxies.items():
+            _,xx,yy = targetwcs.radec2pixelxy(src.pos.ra, src.pos.dec)
+            xx = int(xx-1)
+            yy = int(yy-1)
+            bh,bw = blobs.shape
+            if xx >= 0 and xx < bw and yy >= 0 and yy < bh:
+                # in bounds!
+                debug('Frozen galaxy', src, 'lands in blob', blobs[yy,xx])
+                if blobs[yy,xx] != -1:
+                    bb.append(blobs[yy,xx])
+    #debug('Frozen_galaxies:', frozen_galaxies)
+
+    bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob, blobs, targetwcs, frozen_galaxies, ps, plots)
                                        for tim in tims])
     mods = [m for m,b in bothmods]
     blobmods = [b for m,b in bothmods]
