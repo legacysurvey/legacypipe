@@ -1551,6 +1551,8 @@ def _get_both_mods(X):
     timblobmap[Yo,Xo] = blobmap[Yi,Xi]
     del Yo,Xo,Yi,Xi
 
+    srcs_blobs = zip(srcs, srcblobs)
+
     if frozen_galaxies is not None:
         from tractor.patch import ModelMask
         timblobs = set(timblobmap.ravel())
@@ -1571,7 +1573,11 @@ def _get_both_mods(X):
             blobmask = np.isin(timblobmap, touchedblobs)
             blobmod += patch.patch * blobmask
 
-    for src,srcblob in zip(srcs, srcblobs):
+            # Drop this frozen galaxy from the catalog to render, if it is present
+            # (ie, if it is in_bounds)
+            srcs_blobs = [(s,b) for s,b in srcs_blobs if s != src]
+
+    for src,srcblob in srcs_blobs:
         patch = src.getModelPatch(tim)
         if patch is None:
             continue
@@ -1667,6 +1673,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # Render model images...
     record_event and record_event('stage_coadds: model images')
 
+    debug('Frozen_galaxies:', frozen_galaxies)
     bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob, blobs, targetwcs, frozen_galaxies)
                                        for tim in tims])
     mods = [m for m,b in bothmods]
