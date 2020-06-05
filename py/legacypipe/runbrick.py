@@ -1551,7 +1551,7 @@ def _get_both_mods(X):
     timblobmap[Yo,Xo] = blobmap[Yi,Xi]
     del Yo,Xo,Yi,Xi
 
-    srcs_blobs = zip(srcs, srcblobs)
+    srcs_blobs = list(zip(srcs, srcblobs))
 
     if frozen_galaxies is not None:
         from tractor.patch import ModelMask
@@ -1562,6 +1562,7 @@ def _get_both_mods(X):
         for src,bb in frozen_galaxies.items():
             # Does this source (which touches blobs bb) touch any blobs in this tim?
             touchedblobs = timblobs.intersection(bb)
+            #debug(len(touchedblobs), 'blobs in frozen galaxy intersect this tim')
             if len(touchedblobs) == 0:
                 continue
             patch = src.getModelPatch(tim, modelMask=mm)
@@ -1575,7 +1576,9 @@ def _get_both_mods(X):
 
             # Drop this frozen galaxy from the catalog to render, if it is present
             # (ie, if it is in_bounds)
-            srcs_blobs = [(s,b) for s,b in srcs_blobs if s != src]
+            # Can't use "==": they're not the same objects; the "srcs" have been
+            # to oneblob.py and back, and, eg, get their EllipseE types changed.
+            srcs_blobs = [(s,b) for s,b in srcs_blobs if not (s.pos.ra == src.pos.ra and s.pos.dec == src.pos.dec)]
 
     for src,srcblob in srcs_blobs:
         patch = src.getModelPatch(tim)
