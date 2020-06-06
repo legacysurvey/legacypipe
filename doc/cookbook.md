@@ -512,7 +512,7 @@ After running this for the first time, should you change the settings again (i.e
 ### Running SDO
 Every time sdo executes, it automatically updates the html report and schedules new jobs, until all the bricks have either finished or failed. To start a run, use `python main.py`.
 If you want to run sdo every x minutes while also keeping an log of the output, here's one way of doing it:
-```python
+```bash
 ssh cori21
 tmux
 <activate python3 environment that has qdo>
