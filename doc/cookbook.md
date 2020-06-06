@@ -340,7 +340,7 @@ Afterwards, generate the final kd-tree survey-ccds file using the
 Running tractor
 ===============
 
-Using Farm.py
+Method 1: Using Farm.py
 --------
 
 In DR8, farm.py was introduced to maximize parallization at the fitblob stage. There are now three steps to tractor processing: 1. Pre-Farm 2. Farm.py 3. Post-Farm
@@ -373,7 +373,7 @@ Detailed instructions can be found at legacypipe/bin/farm directory
 And that's it! If you are curious, feel free to read the detailed description below for not using farm.py, or you can skip to the Post-Tractor Processing section.
 
 
-Not Using Farm.py
+Method 2: Not Using Farm.py
 ---------
 The following details the steps used prior to DR8
 
@@ -470,6 +470,55 @@ to very bright stars, large galaxies or large artefacts. For DR7, a new
 option to `runbrick.py` was introduced: `–bail-out`. Re-starting the
 remaining bricks from the checkpoints (making a backup might be prudent)
 to finish the bricks can be done mostly on the debug queue.
+
+Method 3: Using SDO
+--------
+This is the method used for dr9. Sdo can automatically queue up new jobs, move failed bricks to queues with larger memory, and generate an html report everytime it runs.
+
+### Getting sdo
+`git clone https://github.com/ziyaointl/sdo.git`
+
+### Setting up
+If you want to use the default queue settings (e.g. how many cores per worker, machine type), the only file you'll need to edit is settings.py. Look through the settings and their descriptions, making changes as needed.
+
+If you want to change the queue settings, there are two relevant files: `init.py` and `main.py`.
+
+`init.py` generates `runbrick.py` scripts (and optionally `farm.py` scripts) for each queue. To modify any of the queues, change the parameters passed to `write_runbrick()`
+```python
+write_runbrick(PREFARM_QNAME,     # Qdo queue name
+                8,                # How many cores the worker will use
+                'srcs',           # Run until which runbrick stage
+                KNL_MEM // 8      # How much memory the worker can use
+                )
+```
+
+`main.py` declares the queues.
+```python
+PostFarmStage(                    # Queue type, a python class that includes definitions for how to recover failed jobs and how to schedule new jobs; for more types, see stages.py
+              POSTFARM_QNAME,     # Qdo queue name
+              sentinel,           # Previous queue instance
+              4,                  # Estimated bricks per hour, used to calculate how many jobs are scheduled
+              cores_per_worker=17,# Number of cores to allocated to a worker. This should >= the number of cores specified in init.py. In rare cases, set this larger than the cores actually used to prevent OOM errors.
+              arch='knl'          # Machine type, can be knl or haswell
+              )
+```
+
+In hindsight, it would've been better to combine queue decalaration and script generation into one data structure. If there will be a DR10, this refactor should be a priority.
+
+### Generating the scripts
+Before starting tractor processing, run `python init.py`. This generates the scripts needed from the templates, creates a database, and does some other housekeeping.
+After running this for the first time, should you change the settings again (i.e. `settings.py`, `init.py`, or `main.py`), run `python init.py` again.
+
+### Running SDO
+Every time sdo executes, it automatically updates the html report and schedules new jobs, until all the bricks have either finished or failed. To start a run, use `python main.py`.
+If you want to run sdo every x minutes while also keeping an log of the output, here's one way of doing it:
+```python
+ssh cori21
+tmux
+<activate python3 environment that has qdo>
+cd <sdo-folder>
+while true; do python -u main.py | tee -a logs.txt; sleep 10m; done
+```
 
 Post-tractor processing
 =======================
