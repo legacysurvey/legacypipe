@@ -1274,6 +1274,7 @@ class LegacySurveyImage(object):
         from legacypipe.reference import get_reference_map
         wcs = self.get_wcs(hdr=imghdr)
         debug('Good image slice:', slc)
+        x0 = y0 = 0
         if slc is not None:
             sy,sx = slc
             y0,y1 = sy.start, sy.stop
