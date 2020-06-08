@@ -1117,7 +1117,7 @@ class LegacySurveyImage(object):
 
     def run_sky(self, splinesky=True, git_version=None, ps=None, survey=None,
                 gaia=True, release=0, survey_blob_mask=None,
-                halos=True):
+                halos=True, subtract_largegalaxies=True):
         from scipy.ndimage.morphology import binary_dilation
         from astrometry.util.file import trymakedirs
         from astrometry.util.miscutils import estimate_mode
@@ -1247,6 +1247,7 @@ class LegacySurveyImage(object):
 
         # Also mask based on reference stars and galaxies.
         from legacypipe.reference import get_reference_sources
+        from legacypipe.reference import get_galaxy_sources
         from legacypipe.reference import get_reference_map
         wcs = self.get_wcs(hdr=imghdr)
         debug('Good image slice:', slc)
@@ -1255,12 +1256,44 @@ class LegacySurveyImage(object):
             y0,y1 = sy.start, sy.stop
             x0,x1 = sx.start, sx.stop
             wcs = wcs.get_subimage(x0, y0, int(x1-x0), int(y1-y0))
-        # Grab reference sources.
+        # Grab reference sources
         refs,_ = get_reference_sources(survey, wcs, self.pixscale, None,
                                        tycho_stars=True, gaia_stars=gaia,
                                        large_galaxies=True,
                                        star_clusters=True)
         refgood = (get_reference_map(wcs, refs) == 0)
+
+        sub_galaxies = None
+        if subtract_largegalaxies:
+            # we only want to subtract pre-burned, frozen galaxies.
+            I = np.flatnonzero(refs.islargegalaxy * refs.freezeparams)
+            if len(I):
+                sub_galaxies = get_galaxy_sources(refs[I], [self.band])
+        galmod = None
+        if sub_galaxies is not None:
+            info('Subtracting SGA galaxies before estimating sky;',
+                 len(sub_galaxies), 'galaxies')
+            psf_fwhm = self.get_fwhm(primhdr, imghdr)
+            psf = self.read_psf_model(0, 0, pixPsf=True, hybridPsf=True,
+                                      normalizePsf=True, psf_sigma=psf_sigma)
+            fakesky = ConstantSky(0.)
+            twcs = ConstantFitsWCS(wcs)
+            from tractor.basics import NanoMaggies
+            assert(self.ccdzpt > 0)
+            zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
+            # uh yeah hi
+            tim = Image(img, invvar=wt, wcs=twcs, psf=psf,
+                        photocal=LinearPhotoCal(zpscale, band=self.band),
+                        sky=fakesky)
+            tr = Tractor([tim], sub_galaxies)
+            galmod = tr.getModelImage(0)
+            # model image is in nanomaggies.  Convert to ADU via zeropoint...
+            galmod *= zpscale
+            debug('Using zeropoint:', self.ccdzpt, 'to scale galaxy model by',
+                  zpscale)
+            img -= galmod
+            if not plots:
+                del galmod
 
         haloimg = None
         if halos and self.camera == 'decam':
@@ -1269,10 +1302,9 @@ class LegacySurveyImage(object):
             Igaia, = np.nonzero(refs.isgaia * refs.pointsource *
                                 np.logical_not(refs.donotfit))
             if len(Igaia):
-                print('Subtracting halos before estimating sky;', len(Igaia),
-                      'Gaia stars')
+                info('Subtracting halos before estimating sky;', len(Igaia),
+                     'Gaia stars')
                 from legacypipe.halos import decam_halo_model
-
                 # moffat=True: include inner Moffat component in star halos.
                 moffat = True
                 haloimg = decam_halo_model(refs[Igaia], self.mjdobs, wcs,
@@ -1283,7 +1315,8 @@ class LegacySurveyImage(object):
                 assert(self.ccdzpt > 0)
                 zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
                 haloimg *= zpscale
-                print('Using zeropoint:', self.ccdzpt, 'to scale halo image by', zpscale)
+                debug('Using zeropoint:', self.ccdzpt, 'to scale halo image by',
+                      zpscale)
                 img -= haloimg
                 if plots:
                     # Also compute halo image without Moffat component
@@ -1324,8 +1357,7 @@ class LegacySurveyImage(object):
                 blobgood = np.logical_not(allblobs)
             good[allblobs] = False
             del allblobs
-            print('Masked', ng-np.sum(good),
-                  'additional CCD pixels from blob maps')
+            info('Masked', ng-np.sum(good), 'additional CCD pixels from blob maps')
 
         # Now find the final sky model using that more extensive mask
         skyobj = SplineSky.BlantonMethod(img - initsky, good*refgood, boxsize,
@@ -1369,6 +1401,17 @@ class LegacySurveyImage(object):
             plt.title('Image %s-%i-%s %s' % (self.camera, self.expnum,
                                              self.ccdname, self.band))
             ps.savefig()
+
+            if galmod is not None:
+                plt.clf()
+                plt.imshow(img.T + galmod.T, **ima)
+                plt.title('Image with SGA galaxies')
+                ps.savefig()
+
+                plt.clf()
+                plt.imshow(galmod.T, **ima)
+                plt.title('SGA galaxies subtracted')
+                ps.savefig()
 
             if haloimg is not None:
                 plt.clf()

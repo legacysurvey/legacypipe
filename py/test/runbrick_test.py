@@ -399,7 +399,7 @@ def rbmain():
 
     from legacypipe.decam import DecamImage
     DecamImage.splinesky_boxsize = 128
-    
+
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
 
     survey = LegacySurveyData(surveydir)
@@ -431,7 +431,7 @@ def rbmain():
 
     # Test with blob-masking when creating sky calib.
     os.unlink(fn)
-    
+
     main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
                '--force-all', '--no-write', '--coadd-bw',
                '--blob-mask-dir', surveydir,
