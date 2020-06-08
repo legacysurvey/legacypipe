@@ -385,13 +385,17 @@ def stage_refs(survey=None,
     # "refstars" is a table
     # "refcat" is a list of tractor Sources
     # They are aligned
+    if refstars:
+        assert(len(refstars) == len(refcat))
+        with survey.write_output('ref-sources', brick=brickname) as out:
+            refstars.writeto(None, fits_object=out.fits, primheader=version_header)
+
     T_donotfit = None
     T_clusters = None
     if refstars:
-        assert(len(refstars) == len(refcat))
         # Pull out reference sources flagged do-not-fit; we add them
         # back in (much) later.  These are Gaia sources near the
-        # centers of LSLGA large galaxies, so we want to propagate the
+        # centers of SGA large galaxies, so we want to propagate the
         # Gaia catalog information, but don't want to fit them.
         I, = np.nonzero(refstars.donotfit)
         if len(I):
@@ -409,24 +413,6 @@ def stage_refs(survey=None,
             refcat = [refcat[i] for i in I]
             assert(len(refstars) == len(refcat))
         del I
-
-    if refstars or T_donotfit or T_clusters:
-        allrefs = merge_tables([t for t in [refstars, T_donotfit, T_clusters] if t],
-                               columns='fillzero')
-        with survey.write_output('ref-sources', brick=brickname) as out:
-            allrefs.writeto(None, fits_object=out.fits, primheader=version_header)
-        del allrefs
-
-    if T_donotfit:
-        # add columns for later...
-        if not 'type' in T_donotfit.get_columns():
-            T_donotfit.type = np.array(['DUP']*len(T_donotfit))
-        else:
-            for i in range(len(T_donotfit)):
-                if len(T_donotfit.type[i].strip()) == 0:
-                    T_donotfit.type[i] = 'DUP'
-        T_donotfit.brickid = np.zeros(len(T_donotfit), np.int32) + brickid
-        T_donotfit.brickname = np.array([brickname] * len(T_donotfit))
 
     keys = ['refstars', 'gaia_stars', 'T_donotfit', 'T_clusters', 'version_header',
             'refcat']
@@ -617,7 +603,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                saddle_min=None,
                survey=None, brick=None,
                refcat=None, refstars=None,
-               T_donotfit=None, T_clusters=None,
+               T_clusters=None,
                ccds=None,
                record_event=None,
                large_galaxies=True,
@@ -1197,7 +1183,10 @@ def stage_fitblobs(T=None,
     assert(cat.numberOfParams() == len(invvars))
 
     if T_donotfit:
+        T_donotfit.type = np.array(['DUP']*len(T_donotfit))
         T_donotfit.objid = np.arange(len(T_donotfit), dtype=np.int32) + len(T)
+        T_donotfit.brickid = np.zeros(len(T_donotfit), np.int32) + brickid
+        T_donotfit.brickname = np.array([brickname] * len(T_donotfit))
 
     if write_metrics or get_all_models:
         from legacypipe.format_catalog import format_all_models
