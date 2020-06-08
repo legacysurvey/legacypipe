@@ -1260,7 +1260,8 @@ class LegacySurveyImage(object):
         refs,_ = get_reference_sources(survey, wcs, self.pixscale, None,
                                        tycho_stars=True, gaia_stars=gaia,
                                        large_galaxies=True,
-                                       star_clusters=True)
+                                       star_clusters=True,
+                                       clean_columns=False)
         refgood = (get_reference_map(wcs, refs) == 0)
 
         sub_galaxies = None
@@ -1271,14 +1272,17 @@ class LegacySurveyImage(object):
                 sub_galaxies = get_galaxy_sources(refs[I], [self.band])
         galmod = None
         if sub_galaxies is not None:
+            from tractor import ConstantSky, ConstantFitsWcs, NanoMaggies, LinearPhotoCal
+            from tractor import Image, Tractor
             info('Subtracting SGA galaxies before estimating sky;',
                  len(sub_galaxies), 'galaxies')
             psf_fwhm = self.get_fwhm(primhdr, imghdr)
+            assert(psf_fwhm > 0)
+            psf_sigma = psf_fwhm / 2.35
             psf = self.read_psf_model(0, 0, pixPsf=True, hybridPsf=True,
                                       normalizePsf=True, psf_sigma=psf_sigma)
             fakesky = ConstantSky(0.)
-            twcs = ConstantFitsWCS(wcs)
-            from tractor.basics import NanoMaggies
+            twcs = ConstantFitsWcs(wcs)
             assert(self.ccdzpt > 0)
             zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
             # uh yeah hi
@@ -1458,17 +1462,18 @@ class LegacySurveyImage(object):
 
             from legacypipe.detection import plot_mask
 
-            plt.clf()
-            plt.imshow((img.T - initsky)*boxcargood.T + initsky, **ima)
-            plot_mask(np.logical_not(boxcargood.T))
-            plt.title('Image (boxcar masked)')
-            ps.savefig()
+            if survey_blob_mask is not None:
+                plt.clf()
+                plt.imshow((img.T - initsky)*boxcargood.T + initsky, **ima)
+                plot_mask(np.logical_not(boxcargood.T))
+                plt.title('Image (boxcar masked)')
+                ps.savefig()
 
-            plt.clf()
-            plt.imshow((img.T - initsky)*blobgood.T + initsky, **ima)
-            plot_mask(np.logical_not(blobgood.T))
-            plt.title('Image (blob masked)')
-            ps.savefig()
+                plt.clf()
+                plt.imshow((img.T - initsky)*blobgood.T + initsky, **ima)
+                plot_mask(np.logical_not(blobgood.T))
+                plt.title('Image (blob masked)')
+                ps.savefig()
 
             plt.clf()
             plt.imshow((img.T - initsky)*refgood.T + initsky, **ima)

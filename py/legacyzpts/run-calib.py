@@ -33,9 +33,20 @@ def main():
 
     parser.add_argument('--blob-mask-dir', type=str, default=None,
                         help='The base directory to search for blob masks during sky model construction')
+    parser.add_argument('-v', '--verbose', dest='verbose', action='count',
+                        default=0, help='Make more verbose')
 
     parser.add_argument('args',nargs=argparse.REMAINDER)
     opt = parser.parse_args()
+
+    import logging
+    if opt.verbose:
+        lvl = logging.DEBUG
+    else:
+        lvl = logging.INFO
+    logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+    # tractor logging is *soooo* chatty
+    logging.getLogger('tractor.engine').setLevel(lvl + 10)
 
     survey = LegacySurveyData(survey_dir=opt.survey_dir)
     T = None
