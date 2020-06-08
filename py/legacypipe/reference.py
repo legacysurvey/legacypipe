@@ -435,11 +435,14 @@ def read_large_galaxies(survey, targetwcs, bands):
     # Factor of HyperLEDA to set the galaxy max radius
     radius_max_factor = 2.
 
-    I, = np.nonzero(galaxies.preburned * galaxies.freeze *
-                    (galaxies.ref_cat == refcat))
-    galaxies.islargegalaxy[I] = True
-    I, = np.nonzero(galaxies.preburned * galaxies.freeze)
-    galaxies.freezeparams[I] = True
+    I, = np.nonzero(galaxies.preburned)
+    if len(I):
+        # Non-preburned catalogs might not even have the 'freeze' column
+        I, = np.nonzero(galaxies.preburned * galaxies.freeze *
+                        (galaxies.ref_cat == refcat))
+        galaxies.islargegalaxy[I] = True
+        I, = np.nonzero(galaxies.preburned * galaxies.freeze)
+        galaxies.freezeparams[I] = True
 
     if bands is not None:
         galaxies.sources[:] = get_galaxy_sources(galaxies, bands)
