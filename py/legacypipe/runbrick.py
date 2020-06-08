@@ -400,19 +400,18 @@ def stage_refs(survey=None,
         I, = np.nonzero(refstars.donotfit)
         if len(I):
             T_donotfit = refstars[I]
-            I, = np.nonzero(np.logical_not(refstars.donotfit))
-            refstars.cut(I)
-            refcat = [refcat[i] for i in I]
-            assert(len(refstars) == len(refcat))
         # Pull out star clusters too.
         I, = np.nonzero(refstars.iscluster)
         if len(I):
             T_clusters = refstars[I]
-            I, = np.nonzero(np.logical_not(refstars.iscluster))
+        # Drop from refstars & refcat
+        drop = np.logical_or(refstars.donotfit, refstars.iscluster)
+        if np.any(drop):
+            I, = np.nonzero(np.logical_not(drop))
             refstars.cut(I)
             refcat = [refcat[i] for i in I]
             assert(len(refstars) == len(refcat))
-        del I
+        del I,drop
 
     keys = ['refstars', 'gaia_stars', 'T_donotfit', 'T_clusters', 'version_header',
             'refcat']
