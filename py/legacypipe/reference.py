@@ -378,14 +378,6 @@ def get_large_galaxy_version(fn):
 
 def read_large_galaxies(survey, targetwcs, bands):
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
-
-    from legacypipe.catalog import fits_reverse_typemap
-    from tractor import NanoMaggies, RaDecPos, PointSource
-    from tractor.ellipses import EllipseE, EllipseESoft
-    from tractor.galaxy import DevGalaxy, ExpGalaxy
-    from tractor.sersic import SersicGalaxy
-    from legacypipe.survey import LegacySersicIndex, LegacyEllipseWithPriors, LogRadius, RexGalaxy
-
     galfn = survey.find_file('large-galaxies')
     if galfn is None:
         debug('No large-galaxies catalog file')
@@ -432,9 +424,6 @@ def read_large_galaxies(survey, targetwcs, bands):
     galaxies.sources = np.empty(len(galaxies), object)
     galaxies.sources[:] = None
 
-    # Factor of HyperLEDA to set the galaxy max radius
-    radius_max_factor = 2.
-
     I, = np.nonzero(galaxies.preburned)
     if len(I):
         # Non-preburned catalogs might not even have the 'freeze' column
@@ -455,6 +444,16 @@ def read_large_galaxies(survey, targetwcs, bands):
     return galaxies
 
 def get_galaxy_sources(galaxies, bands):
+    from legacypipe.catalog import fits_reverse_typemap
+    from tractor import NanoMaggies, RaDecPos, PointSource
+    from tractor.ellipses import EllipseE, EllipseESoft
+    from tractor.galaxy import DevGalaxy, ExpGalaxy
+    from tractor.sersic import SersicGalaxy
+    from legacypipe.survey import LegacySersicIndex, LegacyEllipseWithPriors, LogRadius, RexGalaxy
+
+    # Factor of HyperLEDA to set the galaxy max radius
+    radius_max_factor = 2.
+
     srcs = [None for g in galaxies]
     I, = np.nonzero(galaxies.preburned)
     # only fix the parameters of pre-burned galaxies
