@@ -606,24 +606,26 @@ def get_reference_map(wcs, refs):
             radius_pix = (radius_pix + 1) // 2
 
         _,xx,yy = wcs.radec2pixelxy(thisrefs.ra, thisrefs.dec)
+        xx -= 1.
+        yy -= 1.
         for x,y,rpix,ref in zip(xx,yy,radius_pix,thisrefs):
             # Cut to bounding square
-            xlo = int(np.clip(np.floor(x-1 - rpix), 0, W))
-            xhi = int(np.clip(np.ceil (x   + rpix), 0, W))
-            ylo = int(np.clip(np.floor(y-1 - rpix), 0, H))
-            yhi = int(np.clip(np.ceil (y   + rpix), 0, H))
+            xlo = int(np.clip(np.floor(x   - rpix), 0, W))
+            xhi = int(np.clip(np.ceil (x+1 + rpix), 0, W))
+            ylo = int(np.clip(np.floor(y   - rpix), 0, H))
+            yhi = int(np.clip(np.ceil (y+1 + rpix), 0, H))
             if xlo == xhi or ylo == yhi:
                 continue
             bitval = np.uint8(IN_BLOB[bit])
             if not ellipse:
-                rr = ((np.arange(ylo,yhi)[:,np.newaxis] - (y-1))**2 +
-                      (np.arange(xlo,xhi)[np.newaxis,:] - (x-1))**2)
+                rr = ((np.arange(ylo,yhi)[:,np.newaxis] - y)**2 +
+                      (np.arange(xlo,xhi)[np.newaxis,:] - x)**2)
                 masked = (rr <= rpix**2)
             else:
                 # *should* have ba and pa if we got here...
                 xgrid,ygrid = np.meshgrid(np.arange(xlo,xhi), np.arange(ylo,yhi))
-                dx = xgrid - (x-1)
-                dy = ygrid - (y-1)
+                dx = xgrid - x
+                dy = ygrid - y
                 debug('Object: PA', ref.pa, 'BA', ref.ba, 'Radius', ref.radius, 'pix', rpix)
                 if not np.isfinite(ref.pa):
                     ref.pa = 0.
