@@ -519,29 +519,17 @@ class LegacySurveyImage(object):
             rampy = np.arctan(xx)
             rampy = (rampy - rampy.min()) / (rampy.max() - rampy.min())
 
-            apo = False
-            #if y0 == 0:
-            if True:
-                #debug('Apodize bottom')
-                invvar[:len(rampy),:] *= rampy[:,np.newaxis]
-                apo = True
-            #if x0 == 0:
-            if True:
-                #debug('Apodize left')
-                invvar[:,:len(rampx)] *= rampx[np.newaxis,:]
-                apo = True
-            #if y1 >= H:
-            if True:
-                #debug('Apodize top')
-                invvar[-len(rampy):,:] *= rampy[::-1][:,np.newaxis]
-                apo = True
-            #if x1 >= W:
-            if True:
-                #debug('Apodize right')
-                invvar[:,-len(rampx):] *= rampx[::-1][np.newaxis,:]
-                apo = True
+            apo = True
+            # bottom
+            invvar[:len(rampy),:] *= rampy[:,np.newaxis]
+            # left
+            invvar[:,:len(rampx)] *= rampx[np.newaxis,:]
+            # top
+            invvar[-len(rampy):,:] *= rampy[::-1][:,np.newaxis]
+            # right
+            invvar[:,-len(rampx):] *= rampx[::-1][np.newaxis,:]
 
-            if apo and False:
+            if False:
                 import pylab as plt
                 plt.clf()
                 plt.imshow(invvar, interpolation='nearest', origin='lower')
