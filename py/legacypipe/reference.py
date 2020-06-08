@@ -435,11 +435,11 @@ def read_large_galaxies(survey, targetwcs, bands):
     # Factor of HyperLEDA to set the galaxy max radius
     radius_max_factor = 2.
 
-    ## use the pre-burned LSLGA catalog
-    #if 'preburned' in galaxies.get_columns():
-    #    preburned = np.logical_and(preburn, galaxies.preburned)
-    #else:
-    #    preburned = np.zeros(len(galaxies), bool)
+    I, = np.nonzero(galaxies.preburned * galaxies.freeze *
+                    (galaxies.ref_cat == refcat))
+    galaxies.islargegalaxy[I] = True
+    I, = np.nonzero(galaxies.preburned * galaxies.freeze)
+    galaxies.freezeparams[I] = True
 
     if bands is not None:
         I, = np.nonzero(galaxies.preburned)
@@ -486,25 +486,21 @@ def read_large_galaxies(survey, targetwcs, bands):
                 assert(np.isfinite(src.getLogPrior()))
                 galaxies.sources[ii] = src
 
-                if galaxies.freeze[ii] and galaxies.ref_cat[ii] == refcat:
-                    galaxies.islargegalaxy[ii] = True
-                    assert((galaxies.radius[ii] > 0) * np.isfinite(galaxies.radius[ii]))
-                    assert((galaxies.pa[ii] >= 0) * (galaxies.pa[ii] <= 180) * np.isfinite(galaxies.pa[ii]))
-                    assert((galaxies.ba[ii] > 0) * (galaxies.ba[ii] <= 1.0) * np.isfinite(galaxies.ba[ii]))
-                    #print(galaxies.ref_cat[ii], galaxies.ref_id[ii], galaxies.radius[ii], galaxies.pa[ii], galaxies.ba[ii])
-
-                if galaxies.freeze[ii]:
-                    galaxies.freezeparams[ii] = True
+                if g.islargegalaxy:
+                    assert((g.radius > 0) * np.isfinite(g.radius))
+                    assert((g.pa >= 0) * (g.pa <= 180) * np.isfinite(g.pa[ii]))
+                    assert((g.ba > 0) * (g.ba <= 1.0) * np.isfinite(g.ba))
             except:
                 import traceback
-                print('Failed to create Tractor source for LSLGA entry:',
+                print('Failed to create Tractor source for SGA entry:',
                       traceback.print_exc())
                 raise
 
         I, = np.nonzero(np.logical_not(galaxies.preburned))
         for ii,g in zip(I, galaxies[I]):
             # Initialize each source with an exponential disk--
-            fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag)) for band in bands])
+            fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag))
+                           for band in bands])
             assert(np.all(np.isfinite(list(fluxes.values()))))
             rr = g.radius * 3600. / 2 # factor of two accounts for R(25)-->reff [arcsec]
             assert(np.isfinite(rr))
@@ -525,7 +521,7 @@ def read_large_galaxies(survey, targetwcs, bands):
                             shape)
             assert(np.isfinite(src.getLogPrior()))
             galaxies.sources[ii] = src
-       
+
     keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
                     'sources', 'islargegalaxy', 'freezeparams']
 
