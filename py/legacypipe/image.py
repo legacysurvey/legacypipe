@@ -1251,6 +1251,7 @@ class LegacySurveyImage(object):
         from legacypipe.reference import get_reference_map
         wcs = self.get_wcs(hdr=imghdr)
         debug('Good image slice:', slc)
+        x0 = y0 = 0
         if slc is not None:
             sy,sx = slc
             y0,y1 = sy.start, sy.stop
@@ -1281,7 +1282,7 @@ class LegacySurveyImage(object):
             psf_fwhm = self.get_fwhm(primhdr, imghdr)
             assert(psf_fwhm > 0)
             psf_sigma = psf_fwhm / 2.35
-            psf = self.read_psf_model(0, 0, pixPsf=True, hybridPsf=True,
+            psf = self.read_psf_model(x0, y0, pixPsf=True, hybridPsf=True,
                                       normalizePsf=True, psf_sigma=psf_sigma)
             fakesky = ConstantSky(0.)
             twcs = ConstantFitsWcs(wcs)
