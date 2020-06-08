@@ -1276,6 +1276,8 @@ class LegacySurveyImage(object):
             from tractor import Image, Tractor
             info('Subtracting SGA galaxies before estimating sky;',
                  len(sub_galaxies), 'galaxies')
+            for g in sub_galaxies:
+                debug('  ', g)
             psf_fwhm = self.get_fwhm(primhdr, imghdr)
             assert(psf_fwhm > 0)
             psf_sigma = psf_fwhm / 2.35
@@ -1285,16 +1287,14 @@ class LegacySurveyImage(object):
             twcs = ConstantFitsWcs(wcs)
             assert(self.ccdzpt > 0)
             zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
-            # uh yeah hi
-            tim = Image(img, invvar=wt, wcs=twcs, psf=psf,
-                        photocal=LinearPhotoCal(zpscale, band=self.band),
-                        sky=fakesky)
+            # create tractor Image to render galaxy model.  The "img" element is
+            # not used, but has the correct shape / type.
+            tim = Image(img, wcs=twcs, psf=psf, sky=fakesky,
+                        photocal=LinearPhotoCal(zpscale, band=self.band))
             tr = Tractor([tim], sub_galaxies)
             galmod = tr.getModelImage(0)
-            # model image is in nanomaggies.  Convert to ADU via zeropoint...
-            galmod *= zpscale
-            debug('Using zeropoint:', self.ccdzpt, 'to scale galaxy model by',
-                  zpscale)
+            # we set zpscale, so model image is in ADU.
+            debug('Using zeropoint:', self.ccdzpt, 'to scale galaxy model by', zpscale)
             img -= galmod
             if not plots:
                 del galmod
@@ -1413,7 +1413,7 @@ class LegacySurveyImage(object):
                 ps.savefig()
 
                 plt.clf()
-                plt.imshow(galmod.T, **ima)
+                plt.imshow(initsky + galmod.T, **ima)
                 plt.title('SGA galaxies subtracted')
                 ps.savefig()
 
