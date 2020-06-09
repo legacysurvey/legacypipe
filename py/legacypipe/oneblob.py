@@ -473,16 +473,19 @@ class OneBlob(object):
             thresholds.extend(list(range(100, min(mx, 500)+4, 5)))
             if mx > 500:
                 thresholds.extend(list(range(500, min(mx, 2500)+24, 25)))
-                if mx > 200:
+                if mx > 2500:
                     thresholds.extend(list(range(2500, mx+99, 100)))
+                    if mx > 10000:
+                        thresholds.extend(list(range(10000, mx+499, 500)))
         debug('thresholds:', thresholds)
         hot = None
         for thresh in thresholds:
             debug('S/N', thresh, ':', len(todo), 'sources to find still')
             if len(todo) == 0:
                 break
-            ####
-            hot = np.logical_or(maxsn >= thresh, saturated_pix)
+            # We previously filled saturated pixels with a max value,
+            # so this is maybe not necessary?
+            hot = np.logical_or(maxsn >= thresh) #, saturated_pix)
             hot = binary_fill_holes(hot)
             blobs,_ = label(hot)
             srcblobs = blobs[iy[Iseg], ix[Iseg]]
