@@ -384,12 +384,13 @@ class LegacySurveyImage(object):
             imghdr = self.read_image_header()
         assert(np.all(np.isfinite(img)))
 
+        template_meta = None
         if pixels:
             template = self.get_sky_template(slc=slc)
             if template is not None:
                 debug('Subtracting sky template')
                 # unpack
-                template,meta = template
+                template,template_meta = template
                 img -= template
 
         # Read data-quality (flags) map and zero out the invvars of masked pixels
@@ -474,7 +475,8 @@ class LegacySurveyImage(object):
 
         if readsky:
             sky = self.read_sky_model(slc=slc, primhdr=primhdr, imghdr=imghdr,
-                                      old_calibs_ok=old_calibs_ok)
+                                      old_calibs_ok=old_calibs_ok,
+                                      template_meta=template_meta)
         else:
             from tractor.sky import ConstantSky
             sky = ConstantSky(0.)
@@ -878,7 +880,8 @@ class LegacySurveyImage(object):
         wcs.plver = phdr.get('PLVER', '').strip()
         return wcs
 
-    def read_sky_model(self, slc=None, old_calibs_ok=False, **kwargs):
+    def read_sky_model(self, slc=None, old_calibs_ok=False,
+                       template_meta=None, **kwargs):
         '''
         Reads the sky model, returning a Tractor Sky object.
         '''
@@ -904,6 +907,22 @@ class LegacySurveyImage(object):
             Ti = T[I[0]]
         if Ti is None:
             raise RuntimeError('Failed to find sky model in files: %s' % ', '.join(tryfns))
+
+        if template_meta is not None:
+            # Check sky-template subtraction metadata!
+            sver = getattr(Ti, 'templ_ver', -2)
+            tver = template_meta.get('ver', -3)
+            srun = getattr(Ti, 'templ_run', -2)
+            trun = template_meta.get('run', -3)
+            sscale = getattr(Ti, 'templ_scale', -2)
+            tscale = template_meta.get('scale', -3)
+            if sver != tver or srun != trun or sscale != tscale:
+                if old_calibs_ok:
+                    print('Warning: splinesky template version/run/scale',
+                          sver, srun, sscale, 'does not match sky template',
+                          tver, trun, tscale, '(but old_calibs_ok)')
+                else:
+                    raise RuntimeError('Splinesky template version/run/scale %s/%s/%s does not match sky template %s/%s/%s' % (sver, srun, sscale, tver, trun, tscale))
 
         # Remove any padding
         h,w = Ti.gridh, Ti.gridw
