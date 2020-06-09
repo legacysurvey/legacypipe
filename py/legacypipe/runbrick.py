@@ -509,6 +509,11 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        write_metrics=True,
                        mp=None, record_event=None,
                        co_sky=None,
+                       custom_brick=False,
+                       refstars=None,
+                       T_clusters=None,
+                       saturated_pix=None,
+                       less_masking=False,
                        **kwargs):
     record_event and record_event('stage_image_coadds: starting')
     '''
@@ -526,6 +531,37 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                     callback_args=(survey, brickname, version_header, tims,
                                    targetwcs, co_sky),
                     mp=mp, plots=plots, ps=ps)
+
+    # interim maskbits
+    from legacypipe.utils import copy_header_with_wcs
+    from legacypipe.bits import IN_BLOB
+    refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
+    # Construct a mask bits map
+    maskbits = np.zeros((H,W), np.int16)
+    # !PRIMARY
+    if not custom_brick:
+        U = find_unique_pixels(targetwcs, W, H, None,
+                               brick.ra1, brick.ra2, brick.dec1, brick.dec2)
+        maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int16)
+        del U
+    # BRIGHT
+    if refmap is not None:
+        maskbits |= MASKBITS['BRIGHT']  * ((refmap & IN_BLOB['BRIGHT'] ) > 0)
+        maskbits |= MASKBITS['MEDIUM']  * ((refmap & IN_BLOB['MEDIUM'] ) > 0)
+        maskbits |= MASKBITS['GALAXY']  * ((refmap & IN_BLOB['GALAXY'] ) > 0)
+        maskbits |= MASKBITS['CLUSTER'] * ((refmap & IN_BLOB['CLUSTER']) > 0)
+        del refmap
+    # SATUR
+    if saturated_pix is not None:
+        for b, sat in zip(bands, saturated_pix):
+            maskbits |= (MASKBITS['SATUR_' + b.upper()] * sat).astype(np.int16)
+    # ALLMASK_{g,r,z}
+    for b,allmask in zip(bands, C.allmasks):
+        maskbits |= (MASKBITS['ALLMASK_' + b.upper()] * (allmask > 0))
+    # omitting maskbits header cards, bailout, & WISE
+    hdr = copy_header_with_wcs(version_header, targetwcs)
+    with survey.write_output('maskbits', brick=brickname, shape=maskbits.shape) as out:
+        out.fits.write(maskbits, header=hdr, extname='MASKBITS')
 
     # Sims: coadds of galaxy sims only, image only
     if hasattr(tims[0], 'sims_image'):
