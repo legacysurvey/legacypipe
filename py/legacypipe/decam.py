@@ -36,16 +36,9 @@ class DecamImage(LegacySurveyImage):
             print('decam: no SKY_TEMPLATE_DIR environment variable set.')
             return None
         '''
-        # Create an expnum-tree via:
-        S = fits_table('legacypipe/py/sky-templates/sky-scales.fits')
-        ekd = tree_build(np.atleast_2d(S.expnum.copy()).T.astype(float),
-            nleaf=60, bbox=False, split=True)
-        ekd.set_name('expnum')
-        ekd.write('ekd.fits')
-        cmd = 'fitsgetext -i ekd.fits -o ekd-%02i -a -M'
-        os.system(cmd)
-        cmd = 'cat legacypipe/py/sky-templates/sky-scales.fits ekd-0[1-6] > legacypipe/py/sky-templates/sky-scales.kd.fits'
-        os.system(cmd)
+        # Create this sky-scales.kd.fits file via:
+        python legacypipe/create-sky-template-kdtree.py skyscales_ccds.fits \
+        sky-scales.kd.fits
         '''
         fn = os.path.join(dirnm, 'sky-scales.kd.fits')
         if not os.path.exists(fn):
@@ -75,12 +68,17 @@ class DecamImage(LegacySurveyImage):
         if not os.path.exists(tfn):
             print('Sky template file %s does not exist' % tfn)
             return None
-        f = fitsio.FITS(tfn)[self.ccdname]
+        F = fitsio.FITS(tfn)
+        f = F[self.ccdname]
         if slc is None:
             template = f.read()
         else:
             template = f[slc]
-        return template * sky.skyscale
+        hdr = F[0].read_header()
+        ver = hdr.get('SKYTMPL', -1)
+        meta = dict(sky_scales_fn=fn, template_fn=tfn, sky_template_dir=dirnm,
+                    run=sky.run, scale=sky.skyscale, version=ver)
+        return template * sky.skyscale, meta
 
     def get_good_image_subregion(self):
         x0,x1,y0,y1 = None,None,None,None
