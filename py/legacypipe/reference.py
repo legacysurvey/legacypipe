@@ -580,6 +580,10 @@ def get_reference_map(wcs, refs):
     W = int(W)
     refmap = np.zeros((H,W), np.uint8)
     pixscale = wcs.pixel_scale()
+    cd = wcs.cd
+    debug('CD matrix:', cd, 'pixscale', pixscale)
+    cd = np.reshape(cd, (2,2)) / (pixscale / 3600.)
+    debug('Unit CD matrix:', cd)
 
     # circular/elliptical regions:
     for col,bit,ellipse in [('isbright', 'BRIGHT', False),
@@ -624,17 +628,18 @@ def get_reference_map(wcs, refs):
                 xgrid,ygrid = np.meshgrid(np.arange(xlo,xhi), np.arange(ylo,yhi))
                 dx = xgrid - x
                 dy = ygrid - y
+                # Rotate to "intermediate world coords" via the unit-scaled CD matrix
+                du = cd[0][0] * dx + cd[0][1] * dy
+                dv = cd[1][0] * dx + cd[1][1] * dy
                 debug('Object: PA', ref.pa, 'BA', ref.ba, 'Radius', ref.radius, 'pix', rpix)
                 if not np.isfinite(ref.pa):
                     ref.pa = 0.
-                v1x = -np.sin(np.deg2rad(ref.pa))
-                v1y =  np.cos(np.deg2rad(ref.pa))
-                v2x =  v1y
-                v2y = -v1x
-                dot1 = dx * v1x + dy * v1y
-                dot2 = dx * v2x + dy * v2y
+                ct = np.cos(np.deg2rad(90.+ref.pa))
+                st = np.sin(np.deg2rad(90.+ref.pa))
+                v1 = ct * du + -st * dv
+                v2 = st * du +  ct * dv
                 r1 = rpix
                 r2 = rpix * ref.ba
-                masked = (dot1**2 / r1**2 + dot2**2 / r2**2 < 1.)
+                masked = (v1**2 / r1**2 + v2**2 / r2**2 < 1.)
             refmap[ylo:yhi, xlo:xhi] |= (bitval * masked)
     return refmap
