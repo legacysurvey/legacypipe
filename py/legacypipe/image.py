@@ -1131,11 +1131,12 @@ class LegacySurveyImage(object):
         dq = self.read_dq(slice=slc)
         wt = self.read_invvar(slice=slc, dq=dq)
 
+        template_meta = {}
         template = self.get_sky_template(slc=slc)
         if template is not None:
             debug('Subtracting sky template before computing splinesky')
             # unpack
-            template,meta = template
+            template,template_meta = template
             img -= template
 
         primhdr = self.read_image_primary_header()
@@ -1267,6 +1268,7 @@ class LegacySurveyImage(object):
         refgood = (get_reference_map(wcs, refs) == 0)
 
         haloimg = None
+        halozpt = 0.
         if halos and self.camera == 'decam':
             # Subtract halos from Gaia stars.
             # "refs.donotfit" are Gaia sources that are near LSLGA galaxies.
@@ -1288,6 +1290,7 @@ class LegacySurveyImage(object):
                 zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
                 haloimg *= zpscale
                 print('Using zeropoint:', self.ccdzpt, 'to scale halo image by', zpscale)
+                halozpt = self.ccdzpt
                 img -= haloimg
                 if plots:
                     # Also compute halo image without Moffat component
@@ -1299,6 +1302,7 @@ class LegacySurveyImage(object):
                 if not plots:
                     del haloimg
 
+        blobmasked = False
         if survey_blob_mask is not None:
             # Read DR8 blob maps for all overlapping bricks and project them
             # into this CCD's pixel space.
@@ -1330,6 +1334,7 @@ class LegacySurveyImage(object):
             del allblobs
             print('Masked', ng-np.sum(good),
                   'additional CCD pixels from blob maps')
+            blobmasked = True
 
         # Now find the final sky model using that more extensive mask
         skyobj = SplineSky.BlantonMethod(img - initsky, good*refgood, boxsize,
@@ -1506,6 +1511,11 @@ class LegacySurveyImage(object):
                     ('procdate', procdate),
                     ('imgdsum',  datasum),
                     ('sig1', sig1),
+                    ('templ_ver', template_meta.get('ver', -1)),
+                    ('templ_run', template_meta.get('run', -1)),
+                    ('templ_scale', template_meta.get('scale', 0.)),
+                    ('halo_zpt', halozpt),
+                    ('blob_masked', blobmasked),
                     ('sky_mode', sky_mode),
                     ('sky_med', sky_median),
                     ('sky_cmed', sky_clipped_median),
