@@ -3,6 +3,7 @@ from astrometry.libkd.spherematch import tree_build
 import numpy as np
 import os
 import argparse
+import sys
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -22,4 +23,4 @@ if __name__ == '__main__':
     cmd = 'cat %s ekd-0[1-6] > %s' % (infn, outfn)
     rtn = os.system(cmd)
     assert(rtn == 0)
-    return 0
+    sys.exit(0)
