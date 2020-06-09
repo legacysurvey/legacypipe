@@ -1,8 +1,6 @@
 from __future__ import print_function
 import numpy as np
 
-import astropy.time
-
 from legacypipe.image import LegacySurveyImage
 from legacypipe.utils import read_primary_header
 
@@ -28,8 +26,6 @@ class DecamImage(LegacySurveyImage):
         super(DecamImage, self).__init__(survey, t)
         # Adjust zeropoint for exposure time
         self.ccdzpt += 2.5 * np.log10(self.exptime)
-
-    glowmjd = astropy.time.Time('2014-08-01').utc.mjd
 
     def get_sky_template(self, slc=None):
         import os
@@ -89,11 +85,10 @@ class DecamImage(LegacySurveyImage):
     def get_good_image_subregion(self):
         x0,x1,y0,y1 = None,None,None,None
 
-        # Handle 'glowing' edges in DES r-band images
-        # aww yeah
-        if self.band == 'r' and (
-                ('DES' in self.imgfn) or ('COSMOS' in self.imgfn) or
-                (self.mjdobs < DecamImage.glowmjd)):
+        glow_expnum = 298251
+
+        # Handle 'glowing' edges in early r-band images
+        if self.band == 'r' and self.expnum < glow_expnum:
             # Northern chips: drop 100 pix off the bottom
             if 'N' in self.ccdname:
                 debug('Clipping bottom part of northern DES r-band chip')

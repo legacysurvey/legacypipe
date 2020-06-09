@@ -29,6 +29,16 @@ def main():
     optdict = vars(opt)
     verbose = optdict.pop('verbose')
 
+    import logging
+    import sys
+    if verbose == 0:
+        lvl = logging.INFO
+    else:
+        lvl = logging.DEBUG
+    logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+    # tractor logging is *soooo* chatty
+    logging.getLogger('tractor.engine').setLevel(lvl + 10)
+
     expnum = optdict.pop('expnum')
     ccdname = optdict.pop('ccdname')
     
@@ -70,10 +80,15 @@ def main():
     
     survey, kwargs = get_runbrick_kwargs(**optdict)
 
-    kwargs.update(radec=(ra,dec), width=W, height=H, bands=[ccd.filter])
-    
-    #if opt.brick is None and opt.radec is None:
+    # Only set W,H if they were not specified (to other than default values) on the command-line
+    if opt.width == 3600 and opt.height == 3600:
+        kwargs.update(width=W, height=H)
+    if opt.radec is None and opt.brick is None:
+        kwargs.update(radec=(ra,dec))
+    kwargs.update(bands=[ccd.filter])
 
+    print('kwargs:', kwargs)
+    
     run_brick(None, survey, **kwargs)
 
     print('Finished:', Time()-t0)

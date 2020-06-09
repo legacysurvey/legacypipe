@@ -175,7 +175,7 @@ def rbmain():
     os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
     os.environ['GAIA_CAT_VER'] = '2'
     os.environ['LARGEGALAXIES_CAT'] = os.path.join(surveydir,
-                                                   'lslga-sub.kd.fits')
+                                                   'sga-sub.kd.fits')
     main(args=['--radec', '9.1228', '3.3975', '--width', '100',
                '--height', '100', '--old-calibs-ok', '--no-wise-ceres',
                '--no-wise', '--survey-dir', surveydir,
