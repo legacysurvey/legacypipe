@@ -36,16 +36,9 @@ class DecamImage(LegacySurveyImage):
             print('decam: no SKY_TEMPLATE_DIR environment variable set.')
             return None
         '''
-        # Create an expnum-tree via:
-        S = fits_table('legacypipe/py/sky-templates/sky-scales.fits')
-        ekd = tree_build(np.atleast_2d(S.expnum.copy()).T.astype(float),
-            nleaf=60, bbox=False, split=True)
-        ekd.set_name('expnum')
-        ekd.write('ekd.fits')
-        cmd = 'fitsgetext -i ekd.fits -o ekd-%02i -a -M'
-        os.system(cmd)
-        cmd = 'cat legacypipe/py/sky-templates/sky-scales.fits ekd-0[1-6] > legacypipe/py/sky-templates/sky-scales.kd.fits'
-        os.system(cmd)
+        # Create this sky-scales.kd.fits file via:
+        python legacypipe/create-sky-template-kdtree.py skyscales_ccds.fits \
+        sky-scales.kd.fits
         '''
         fn = os.path.join(dirnm, 'sky-scales.kd.fits')
         if not os.path.exists(fn):
