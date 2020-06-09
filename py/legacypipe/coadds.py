@@ -1019,7 +1019,8 @@ def write_coadd_images(band,
 
 # Pretty much only used for plots; the real deal is make_coadds()
 def quick_coadds(tims, bands, targetwcs, images=None,
-                 get_cow=False, get_n2=False, fill_holes=True, get_max=False):
+                 get_cow=False, get_n2=False, fill_holes=True, get_max=False,
+                 get_saturated=False):
 
     W = int(targetwcs.get_width())
     H = int(targetwcs.get_height())
@@ -1034,6 +1035,8 @@ def quick_coadds(tims, bands, targetwcs, images=None,
         wimgs = []
     if get_max:
         maximgs = []
+    if get_saturated:
+        satur = np.zeros((H,W), np.bool)
 
     for band in bands:
         coimg  = np.zeros((H,W), np.float32)
@@ -1068,6 +1071,8 @@ def quick_coadds(tims, bands, targetwcs, images=None,
             if get_cow:
                 cowimg[Yo,Xo] += tim.getInvvar()[Yi,Xi] * tim.getImage()[Yi,Xi]
                 wimg  [Yo,Xo] += tim.getInvvar()[Yi,Xi]
+            if get_saturated and tim.dq is not None:
+                satur[Yo,Xo] |= ((tim.dq[Yi,Xi] & tim.dq_saturation_bits) > 0)
             con2  [Yo,Xo] += 1
         coimg /= np.maximum(con,1)
         if fill_holes:
@@ -1091,4 +1096,6 @@ def quick_coadds(tims, bands, targetwcs, images=None,
         rtn.append(cons2)
     if get_max:
         rtn.append(maximgs)
+    if get_saturated:
+        rtn.append(satur)
     return rtn

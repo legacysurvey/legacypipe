@@ -1726,8 +1726,8 @@ class OneBlob(object):
     def _initial_plots(self):
         import pylab as plt
         debug('Plotting blob image for blob', self.name)
-        coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
-                                fill_holes=False)
+        coimgs,_,sat = quick_coadds(self.tims, self.bands, self.blobwcs,
+                                    fill_holes=False, get_saturated=True)
         self.rgb = get_rgb(coimgs, self.bands)
         plt.clf()
         dimshow(self.rgb)
@@ -1744,12 +1744,19 @@ class OneBlob(object):
             np.array([src.getPosition().ra  for src in self.srcs]),
             np.array([src.getPosition().dec for src in self.srcs]))
 
+        h,w = sat.shape
+        ix = np.clip(np.round(x0)-1, 0, w).astype(int)
+        iy = np.clip(np.round(y0)-1, 0, h).astype(int)
+        srcsat = sat[iy,ix]
+
         ax = plt.axis()
         plt.plot(x0-1, y0-1, 'r.')
+        if len(srcsat):
+            plt.plot(x0[srcsat]-1, y0[srcsat]-1, 'o', mec='orange', mfc='none', ms=5, mew=2)
         # ref sources
         for x,y,src in zip(x0,y0,self.srcs):
             if is_reference_source(src):
-                plt.plot(x-1, y-1, 'o', mec='g', mfc='none')
+                plt.plot(x-1, y-1, 'o', mec='g', mfc='none', ms=8, mew=2)
         plt.axis(ax)
         plt.title('initial sources')
         self.ps.savefig()
