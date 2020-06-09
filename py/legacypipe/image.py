@@ -384,10 +384,13 @@ class LegacySurveyImage(object):
             imghdr = self.read_image_header()
         assert(np.all(np.isfinite(img)))
 
+        template_meta = None
         if pixels:
             template = self.get_sky_template(slc=slc)
             if template is not None:
                 debug('Subtracting sky template')
+                # unpack
+                template,template_meta = template
                 img -= template
 
         # Read data-quality (flags) map and zero out the invvars of masked pixels
@@ -472,7 +475,8 @@ class LegacySurveyImage(object):
 
         if readsky:
             sky = self.read_sky_model(slc=slc, primhdr=primhdr, imghdr=imghdr,
-                                      old_calibs_ok=old_calibs_ok)
+                                      old_calibs_ok=old_calibs_ok,
+                                      template_meta=template_meta)
         else:
             from tractor.sky import ConstantSky
             sky = ConstantSky(0.)
@@ -876,7 +880,8 @@ class LegacySurveyImage(object):
         wcs.plver = phdr.get('PLVER', '').strip()
         return wcs
 
-    def read_sky_model(self, slc=None, old_calibs_ok=False, **kwargs):
+    def read_sky_model(self, slc=None, old_calibs_ok=False,
+                       template_meta=None, **kwargs):
         '''
         Reads the sky model, returning a Tractor Sky object.
         '''
@@ -902,6 +907,22 @@ class LegacySurveyImage(object):
             Ti = T[I[0]]
         if Ti is None:
             raise RuntimeError('Failed to find sky model in files: %s' % ', '.join(tryfns))
+
+        if template_meta is not None:
+            # Check sky-template subtraction metadata!
+            sver = getattr(Ti, 'templ_ver', -2)
+            tver = template_meta.get('ver', -3)
+            srun = getattr(Ti, 'templ_run', -2)
+            trun = template_meta.get('run', -3)
+            sscale = getattr(Ti, 'templ_scale', -2)
+            tscale = template_meta.get('scale', -3)
+            if sver != tver or srun != trun or sscale != tscale:
+                if old_calibs_ok:
+                    print('Warning: splinesky template version/run/scale',
+                          sver, srun, sscale, 'does not match sky template',
+                          tver, trun, tscale, '(but old_calibs_ok)')
+                else:
+                    raise RuntimeError('Splinesky template version/run/scale %s/%s/%s does not match sky template %s/%s/%s' % (sver, srun, sscale, tver, trun, tscale))
 
         # Remove any padding
         h,w = Ti.gridh, Ti.gridw
@@ -1129,9 +1150,12 @@ class LegacySurveyImage(object):
         dq = self.read_dq(slice=slc)
         wt = self.read_invvar(slice=slc, dq=dq)
 
+        template_meta = {}
         template = self.get_sky_template(slc=slc)
         if template is not None:
             debug('Subtracting sky template before computing splinesky')
+            # unpack
+            template,template_meta = template
             img -= template
 
         primhdr = self.read_image_primary_header()
@@ -1250,6 +1274,7 @@ class LegacySurveyImage(object):
         from legacypipe.reference import get_reference_map
         wcs = self.get_wcs(hdr=imghdr)
         debug('Good image slice:', slc)
+        x0 = y0 = 0
         if slc is not None:
             sy,sx = slc
             y0,y1 = sy.start, sy.stop
@@ -1263,6 +1288,7 @@ class LegacySurveyImage(object):
         refgood = (get_reference_map(wcs, refs) == 0)
 
         haloimg = None
+        halozpt = 0.
         if halos and self.camera == 'decam':
             # Subtract halos from Gaia stars.
             # "refs.donotfit" are Gaia sources that are near LSLGA galaxies.
@@ -1284,6 +1310,7 @@ class LegacySurveyImage(object):
                 zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
                 haloimg *= zpscale
                 print('Using zeropoint:', self.ccdzpt, 'to scale halo image by', zpscale)
+                halozpt = self.ccdzpt
                 img -= haloimg
                 if plots:
                     # Also compute halo image without Moffat component
@@ -1295,6 +1322,7 @@ class LegacySurveyImage(object):
                 if not plots:
                     del haloimg
 
+        blobmasked = False
         if survey_blob_mask is not None:
             # Read DR8 blob maps for all overlapping bricks and project them
             # into this CCD's pixel space.
@@ -1326,6 +1354,7 @@ class LegacySurveyImage(object):
             del allblobs
             print('Masked', ng-np.sum(good),
                   'additional CCD pixels from blob maps')
+            blobmasked = True
 
         # Now find the final sky model using that more extensive mask
         skyobj = SplineSky.BlantonMethod(img - initsky, good*refgood, boxsize,
@@ -1502,6 +1531,11 @@ class LegacySurveyImage(object):
                     ('procdate', procdate),
                     ('imgdsum',  datasum),
                     ('sig1', sig1),
+                    ('templ_ver', template_meta.get('ver', -1)),
+                    ('templ_run', template_meta.get('run', -1)),
+                    ('templ_scale', template_meta.get('scale', 0.)),
+                    ('halo_zpt', halozpt),
+                    ('blob_masked', blobmasked),
                     ('sky_mode', sky_mode),
                     ('sky_med', sky_median),
                     ('sky_cmed', sky_clipped_median),

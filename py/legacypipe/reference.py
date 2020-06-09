@@ -579,6 +579,12 @@ def get_reference_map(wcs, refs):
     H = int(H)
     W = int(W)
     refmap = np.zeros((H,W), np.uint8)
+    pixscale = wcs.pixel_scale()
+    cd = wcs.cd
+    debug('CD matrix:', cd, 'pixscale', pixscale)
+    cd = np.reshape(cd, (2,2)) / (pixscale / 3600.)
+    debug('Unit CD matrix:', cd)
+
     # circular/elliptical regions:
     for col,bit,ellipse in [('isbright', 'BRIGHT', False),
                             ('ismedium', 'MEDIUM', False),
@@ -594,41 +600,46 @@ def get_reference_map(wcs, refs):
             continue
         thisrefs = refs[I]
 
+        radius_pix = np.ceil(thisrefs.radius * 3600. / pixscale).astype(int)
+
         if bit == 'BRIGHT':
             # decrease the BRIGHT masking radius by a factor of two!
             debug('Scaling down BRIGHT masking radius by a factor of 2')
-            thisrefs.radius_pix[:] = (thisrefs.radius_pix + 1) // 2
+            radius_pix = (radius_pix + 1) // 2
 
         _,xx,yy = wcs.radec2pixelxy(thisrefs.ra, thisrefs.dec)
-        for x,y,ref in zip(xx,yy,thisrefs):
+        xx -= 1.
+        yy -= 1.
+        for x,y,rpix,ref in zip(xx,yy,radius_pix,thisrefs):
             # Cut to bounding square
-            xlo = int(np.clip(np.floor(x-1 - ref.radius_pix), 0, W))
-            xhi = int(np.clip(np.ceil (x   + ref.radius_pix), 0, W))
-            ylo = int(np.clip(np.floor(y-1 - ref.radius_pix), 0, H))
-            yhi = int(np.clip(np.ceil (y   + ref.radius_pix), 0, H))
+            xlo = int(np.clip(np.floor(x   - rpix), 0, W))
+            xhi = int(np.clip(np.ceil (x+1 + rpix), 0, W))
+            ylo = int(np.clip(np.floor(y   - rpix), 0, H))
+            yhi = int(np.clip(np.ceil (y+1 + rpix), 0, H))
             if xlo == xhi or ylo == yhi:
                 continue
             bitval = np.uint8(IN_BLOB[bit])
             if not ellipse:
-                rr = ((np.arange(ylo,yhi)[:,np.newaxis] - (y-1))**2 +
-                      (np.arange(xlo,xhi)[np.newaxis,:] - (x-1))**2)
-                masked = (rr <= ref.radius_pix**2)
+                rr = ((np.arange(ylo,yhi)[:,np.newaxis] - y)**2 +
+                      (np.arange(xlo,xhi)[np.newaxis,:] - x)**2)
+                masked = (rr <= rpix**2)
             else:
                 # *should* have ba and pa if we got here...
                 xgrid,ygrid = np.meshgrid(np.arange(xlo,xhi), np.arange(ylo,yhi))
-                dx = xgrid - (x-1)
-                dy = ygrid - (y-1)
-                debug('Object: PA', ref.pa, 'BA', ref.ba, 'Radius', ref.radius, 'pix', ref.radius_pix)
+                dx = xgrid - x
+                dy = ygrid - y
+                # Rotate to "intermediate world coords" via the unit-scaled CD matrix
+                du = cd[0][0] * dx + cd[0][1] * dy
+                dv = cd[1][0] * dx + cd[1][1] * dy
+                debug('Object: PA', ref.pa, 'BA', ref.ba, 'Radius', ref.radius, 'pix', rpix)
                 if not np.isfinite(ref.pa):
                     ref.pa = 0.
-                v1x = -np.sin(np.deg2rad(ref.pa))
-                v1y =  np.cos(np.deg2rad(ref.pa))
-                v2x =  v1y
-                v2y = -v1x
-                dot1 = dx * v1x + dy * v1y
-                dot2 = dx * v2x + dy * v2y
-                r1 = ref.radius_pix
-                r2 = ref.radius_pix * ref.ba
-                masked = (dot1**2 / r1**2 + dot2**2 / r2**2 < 1.)
+                ct = np.cos(np.deg2rad(90.+ref.pa))
+                st = np.sin(np.deg2rad(90.+ref.pa))
+                v1 = ct * du + -st * dv
+                v2 = st * du +  ct * dv
+                r1 = rpix
+                r2 = rpix * ref.ba
+                masked = (v1**2 / r1**2 + v2**2 / r2**2 < 1.)
             refmap[ylo:yhi, xlo:xhi] |= (bitval * masked)
     return refmap
