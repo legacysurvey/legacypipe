@@ -1038,7 +1038,7 @@ def stage_fitblobs(T=None,
     blobiter = iterwrapper(blobiter, len(blobsrcs))
 
     if checkpoint_filename is None:
-        R = mp.map(_bounce_one_blob, blobiter)
+        R.extend(mp.map(_bounce_one_blob, blobiter))
     else:
         from astrometry.util.ttime import CpuMeas
 
