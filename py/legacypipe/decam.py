@@ -68,12 +68,17 @@ class DecamImage(LegacySurveyImage):
         if not os.path.exists(tfn):
             print('Sky template file %s does not exist' % tfn)
             return None
-        f = fitsio.FITS(tfn)[self.ccdname]
+        F = fitsio.FITS(tfn)
+        f = F[self.ccdname]
         if slc is None:
             template = f.read()
         else:
             template = f[slc]
-        return template * sky.skyscale
+        hdr = F[0].read_header()
+        ver = hdr.get('SKYTMPL', -1)
+        meta = dict(sky_scales_fn=fn, template_fn=tfn, sky_template_dir=dirnm,
+                    run=sky.run, scale=sky.skyscale, version=ver)
+        return template * sky.skyscale, meta
 
     def get_good_image_subregion(self):
         x0,x1,y0,y1 = None,None,None,None

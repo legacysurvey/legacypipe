@@ -388,6 +388,8 @@ class LegacySurveyImage(object):
             template = self.get_sky_template(slc=slc)
             if template is not None:
                 debug('Subtracting sky template')
+                # unpack
+                template,meta = template
                 img -= template
 
         # Read data-quality (flags) map and zero out the invvars of masked pixels
@@ -1132,6 +1134,8 @@ class LegacySurveyImage(object):
         template = self.get_sky_template(slc=slc)
         if template is not None:
             debug('Subtracting sky template before computing splinesky')
+            # unpack
+            template,meta = template
             img -= template
 
         primhdr = self.read_image_primary_header()
