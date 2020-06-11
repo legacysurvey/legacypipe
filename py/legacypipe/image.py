@@ -1322,6 +1322,9 @@ class LegacySurveyImage(object):
                 if not plots:
                     del haloimg
 
+        if plots:
+            boxcargood = good.copy()
+
         blobmasked = False
         if survey_blob_mask is not None:
             # Read DR8 blob maps for all overlapping bricks and project them
@@ -1348,7 +1351,6 @@ class LegacySurveyImage(object):
                 allblobs[Yo,Xo] |= blobs[Yi,Xi]
             ng = np.sum(good)
             if plots:
-                boxcargood = good.copy()
                 blobgood = np.logical_not(allblobs)
             good[allblobs] = False
             del allblobs
@@ -1394,33 +1396,33 @@ class LegacySurveyImage(object):
                         vmin=initsky-0.5*sig1,vmax=initsky+0.5*sig1,cmap='gray')
 
             plt.clf()
-            plt.imshow(img.T, **ima)
+            plt.imshow(img, **ima)
             plt.title('Image %s-%i-%s %s' % (self.camera, self.expnum,
                                              self.ccdname, self.band))
             ps.savefig()
 
             if haloimg is not None:
                 plt.clf()
-                plt.imshow(img.T + haloimg.T, **ima)
+                plt.imshow(img + haloimg, **ima)
                 plt.title('Image with star halos')
                 ps.savefig()
 
                 plt.clf()
                 imx = dict(interpolation='nearest', origin='lower',
                            vmin=-2*sig1,vmax=+2*sig1,cmap='gray')
-                plt.imshow(haloimg.T, **imx)
+                plt.imshow(haloimg, **imx)
                 plt.title('Star halos')
                 ps.savefig()
 
                 plt.clf()
                 imx = dict(interpolation='nearest', origin='lower',
                            vmin=-2*sig1,vmax=+2*sig1,cmap='gray')
-                plt.imshow(moffhalo.T, **imx)
+                plt.imshow(moffhalo, **imx)
                 plt.title('Moffat component of star halos')
                 ps.savefig()
 
             plt.clf()
-            plt.imshow(wt.T, interpolation='nearest', origin='lower',
+            plt.imshow(wt, interpolation='nearest', origin='lower',
                        cmap='gray')
             plt.title('Weight')
             ps.savefig()
@@ -1445,26 +1447,27 @@ class LegacySurveyImage(object):
             from legacypipe.detection import plot_mask
 
             plt.clf()
-            plt.imshow((img.T - initsky)*boxcargood.T + initsky, **ima)
-            plot_mask(np.logical_not(boxcargood.T))
+            plt.imshow((img - initsky)*boxcargood + initsky, **ima)
+            plot_mask(np.logical_not(boxcargood))
             plt.title('Image (boxcar masked)')
             ps.savefig()
 
-            plt.clf()
-            plt.imshow((img.T - initsky)*blobgood.T + initsky, **ima)
-            plot_mask(np.logical_not(blobgood.T))
-            plt.title('Image (blob masked)')
-            ps.savefig()
+            if survey_blob_mask is not None:
+                plt.clf()
+                plt.imshow((img - initsky)*blobgood + initsky, **ima)
+                plot_mask(np.logical_not(blobgood))
+                plt.title('Image (blob masked)')
+                ps.savefig()
 
             plt.clf()
-            plt.imshow((img.T - initsky)*refgood.T + initsky, **ima)
-            plot_mask(np.logical_not(refgood.T))
+            plt.imshow((img - initsky)*refgood + initsky, **ima)
+            plot_mask(np.logical_not(refgood))
             plt.title('Image (reference masked)')
             ps.savefig()
 
             plt.clf()
-            plt.imshow((img.T - initsky)*(refgood * good).T + initsky, **ima)
-            plot_mask(np.logical_not(refgood * good).T)
+            plt.imshow((img - initsky)*(refgood * good) + initsky, **ima)
+            plot_mask(np.logical_not(refgood * good))
             plt.title('Image (all masked)')
             ps.savefig()
 
@@ -1505,14 +1508,14 @@ class LegacySurveyImage(object):
             skypix = np.zeros_like(img)
             skyobj.addTo(skypix)
             plt.clf()
-            plt.imshow(skypix.T, **ima2)
+            plt.imshow(skypix, **ima2)
             plt.title('Sky model')
             ps.savefig()
 
             skypix2 = np.zeros_like(img)
             fineskyobj.addTo(skypix2)
             plt.clf()
-            plt.imshow(skypix2.T, **ima2)
+            plt.imshow(skypix2, **ima2)
             plt.title('Fine sky model')
             ps.savefig()
 
