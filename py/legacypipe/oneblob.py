@@ -485,7 +485,8 @@ class OneBlob(object):
                 break
             # We previously filled saturated pixels with a max value,
             # so this is maybe not necessary?
-            hot = np.logical_or(maxsn >= thresh) #, saturated_pix)
+            #hot = np.logical_or(maxsn >= thresh, saturated_pix)
+            hot = (maxsn >= thresh)
             hot = binary_fill_holes(hot)
             blobs,_ = label(hot)
             srcblobs = blobs[iy[Iseg], ix[Iseg]]
