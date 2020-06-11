@@ -1289,6 +1289,7 @@ class LegacySurveyImage(object):
                                        clean_columns=False)
         refgood = (get_reference_map(wcs, refs) == 0)
 
+        sub_sga_version = '  '
         sub_galaxies = None
         if subtract_largegalaxies:
             # we only want to subtract pre-burned, frozen galaxies.
@@ -1303,6 +1304,8 @@ class LegacySurveyImage(object):
                  len(sub_galaxies), 'galaxies')
             for g in sub_galaxies:
                 debug('  ', g)
+            galfn = survey.find_file('large-galaxies')
+            sub_sga_version,_ = get_large_galaxy_version(galfn)
             psf_fwhm = self.get_fwhm(primhdr, imghdr)
             assert(psf_fwhm > 0)
             psf_sigma = psf_fwhm / 2.35
@@ -1585,6 +1588,7 @@ class LegacySurveyImage(object):
                     ('templ_scale', template_meta.get('scale', 0.)),
                     ('halo_zpt', halozpt),
                     ('blob_masked', blobmasked),
+                    ('sub_sga_ver', sub_sga_ver),
                     ('sky_mode', sky_mode),
                     ('sky_med', sky_median),
                     ('sky_cmed', sky_clipped_median),
