@@ -911,7 +911,7 @@ class LegacySurveyImage(object):
         if template_meta is not None:
             # Check sky-template subtraction metadata!
             sver = getattr(Ti, 'templ_ver', -2)
-            tver = template_meta.get('ver', -3)
+            tver = template_meta.get('version', -3)
             srun = getattr(Ti, 'templ_run', -2)
             trun = template_meta.get('run', -3)
             sscale = getattr(Ti, 'templ_scale', -2)
