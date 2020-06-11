@@ -1534,7 +1534,7 @@ class LegacySurveyImage(object):
                     ('procdate', procdate),
                     ('imgdsum',  datasum),
                     ('sig1', sig1),
-                    ('templ_ver', template_meta.get('ver', -1)),
+                    ('templ_ver', template_meta.get('version', -1)),
                     ('templ_run', template_meta.get('run', -1)),
                     ('templ_scale', template_meta.get('scale', 0.)),
                     ('halo_zpt', halozpt),
