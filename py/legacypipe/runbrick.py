@@ -3191,6 +3191,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--no-splinesky', dest='splinesky', default=True,
                         action='store_false', help='Use constant sky rather than spline.')
+    parser.add_argument('--no-subsky', dest='subsky', default=True,
+                        action='store_false', help='Do not subtract the sky background.')
     parser.add_argument('--no-unwise-coadds', dest='unwise_coadds', default=True,
                         action='store_false', help='Turn off writing FITS and JPEG unWISE coadds?')
     parser.add_argument('--no-outliers', dest='outliers', default=True,
@@ -3212,7 +3214,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='Turn off background fitting within MEDIUM mask.')
 
     parser.add_argument('--skymask-radius', type=float, default=None,
-                        help='Masking radius [arcsec] before pedestal sky-subtraction (only used with --fit-on-coadds and --no-splinesky.')
+                        help='Masking radius [arcsec] before pedestal sky-subtraction (only used with --fit-on-coadds and --no-subsky.')
     
     return parser
 
