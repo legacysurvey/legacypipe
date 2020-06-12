@@ -124,7 +124,7 @@ def _get_tractor_fits_values(T, cat, pat):
     T.set(pat % 'shape_e1', shape[:,1])
     T.set(pat % 'shape_e2', shape[:,2])
 
-def read_fits_catalog(T, hdr=None, invvars=False, bands='grz', allbands=None,
+def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                       ellipseClass=EllipseE, sersicIndexClass=SersicIndex):
     '''
     Return list of tractor Sources.
@@ -138,8 +138,6 @@ def read_fits_catalog(T, hdr=None, invvars=False, bands='grz', allbands=None,
     from tractor import NanoMaggies, RaDecPos
     if hdr is None:
         hdr = T._header
-    if allbands is None:
-        allbands = bands
     rev_typemap = fits_reverse_typemap
 
     ivs = []
