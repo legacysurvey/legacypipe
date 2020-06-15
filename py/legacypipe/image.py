@@ -1302,6 +1302,7 @@ class LegacySurveyImage(object):
         if sub_galaxies is not None:
             from tractor import ConstantSky, ConstantFitsWcs, NanoMaggies, LinearPhotoCal
             from tractor import Image, Tractor
+            from legacypipe.reference import get_large_galaxy_version
             info('Subtracting SGA galaxies before estimating sky;',
                  len(sub_galaxies), 'galaxies')
             for g in sub_galaxies:
