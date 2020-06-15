@@ -921,6 +921,8 @@ class LegacySurveyImage(object):
                     print('Warning: splinesky template version/run/scale',
                           sver, srun, sscale, 'does not match sky template',
                           tver, trun, tscale, '(but old_calibs_ok)')
+                elif sver == -2 and srun == -2 and sscale == -2:
+                    print('Warning: splinesky does not have sky-template version/run/scale values')
                 else:
                     raise RuntimeError('Splinesky template version/run/scale %s/%s/%s does not match sky template %s/%s/%s' % (sver, srun, sscale, tver, trun, tscale))
 
