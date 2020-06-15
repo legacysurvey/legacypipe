@@ -1588,7 +1588,7 @@ class LegacySurveyImage(object):
                     ('templ_scale', template_meta.get('scale', 0.)),
                     ('halo_zpt', halozpt),
                     ('blob_masked', blobmasked),
-                    ('sub_sga_ver', sub_sga_ver),
+                    ('sub_sga_ver', sub_sga_version),
                     ('sky_mode', sky_mode),
                     ('sky_med', sky_median),
                     ('sky_cmed', sky_clipped_median),
