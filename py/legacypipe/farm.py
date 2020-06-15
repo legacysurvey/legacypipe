@@ -684,6 +684,7 @@ def get_blob_iter(skipblobs=None,
     # drop any cached data before we start pickling/multiprocessing
     survey.drop_cache()
 
+    frozen_galaxies = get_frozen_galaxies(T, blobsrcs, blobs, targetwcs, cat)
     refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
 
     # Create the iterator over blobs to process
@@ -695,6 +696,7 @@ def get_blob_iter(skipblobs=None,
                           large_galaxies_force_pointsource,
                           less_masking,
                           brick,
+                          frozen_galaxies,
                           max_blobsize=max_blobsize, custom_brick=custom_brick,
                           skipblobs=skipblobs)
     return blobiter

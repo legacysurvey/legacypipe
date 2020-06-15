@@ -69,13 +69,18 @@ def one_blob(X):
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
      srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap,
-     large_galaxies_force_pointsource, less_masking) = X
+     large_galaxies_force_pointsource, less_masking, frozen_galaxies) = X
 
-    debug('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images' %
-          (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs)))
+    debug('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
+          (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
 
     if len(timargs) == 0:
         return None
+    if len(Isrcs) == 0:
+        return None
+
+    for g in frozen_galaxies:
+        debug('Frozen galaxy:', g)
 
     LegacySersicIndex.stepsize = 0.001
     
@@ -121,7 +126,7 @@ def one_blob(X):
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
-                 less_masking)
+                 less_masking, frozen_galaxies)
     B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
@@ -150,7 +155,7 @@ class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
-                 less_masking):
+                 less_masking, frozen_galaxies):
         self.name = name
         self.blobwcs = blobwcs
         self.pixscale = self.blobwcs.pixel_scale()
@@ -180,6 +185,34 @@ class OneBlob(object):
         if self.bigblob:
             debug('Big blob:', name)
         self.trargs = dict()
+
+        if len(frozen_galaxies):
+            debug('Subtracting frozen galaxy models...')
+            tr = Tractor(self.tims, Catalog(*frozen_galaxies))
+            mm = [dict([(g, ModelMask(*((0,0)+tim.shape))) for g in frozen_galaxies])
+                       for tim in self.tims]
+            tr.setModelMasks(mm)
+            if self.plots:
+                mods = []
+            for tim in self.tims:
+                mod = tr.getModelImage(tim)
+                tim.data -= mod
+                if self.plots:
+                    mods.append(mod)
+            if self.plots:
+                import pylab as plt
+                coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=mods,
+                                        fill_holes=False)
+                plt.clf()
+                dimshow(get_rgb(coimgs, self.bands))
+                plt.title('Subtracted frozen galaxies')
+                self.ps.savefig()
+                coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
+                                        fill_holes=False)
+                plt.clf()
+                dimshow(get_rgb(coimgs, self.bands))
+                plt.title('After subtracting frozen galaxies')
+                self.ps.savefig()
 
         # if use_ceres:
         #     from tractor.ceres_optimizer import CeresOptimizer

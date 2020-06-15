@@ -1027,11 +1027,13 @@ def stage_fitblobs(T=None,
         while len(R) < len(blobsrcs):
             R.append(dict(brickname=brickname, iblob=-1, result=None))
 
+    frozen_galaxies = get_frozen_galaxies(T, blobsrcs, blobs, targetwcs, cat)
     refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
     # Create the iterator over blobs to process
     blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims,
                           cat, bands, plots, ps, reoptimize, iterative, use_ceres,
                           refmap, large_galaxies_force_pointsource, less_masking, brick,
+                          frozen_galaxies,
                           skipblobs=skipblobs,
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
     # to allow timingpool to queue tasks one at a time
@@ -1178,8 +1180,22 @@ def stage_fitblobs(T=None,
     blobmap[:] = -1
     # in particular,
     blobmap[0] = -1
+    # (this +1 business is because we're using a numpy array for the map)
     blobmap[oldblob + 1] = iblob
     blobs = blobmap[blobs+1]
+
+    # Frozen galaxies: while remapping, flip from blob->[srcs] to src->[blobs].
+    fro_gals = {}
+    for b,gals in frozen_galaxies.items():
+        for gal in gals:
+            if not gal in fro_gals:
+                fro_gals[gal] = []
+            bnew = blobmap[b+1]
+            if bnew != -1:
+                fro_gals[gal].append(bnew)
+    frozen_galaxies = fro_gals
+    debug('Remapped frozen_galaxies:', frozen_galaxies)
+
     del blobmap
 
     # write out blob map
@@ -1246,7 +1262,7 @@ def stage_fitblobs(T=None,
                 TT.writeto(None, fits_object=out.fits, header=hdr,
                            primheader=primhdr)
 
-    keys = ['cat', 'invvars', 'T', 'blobs', 'refmap', 'version_header']
+    keys = ['cat', 'invvars', 'T', 'blobs', 'refmap', 'version_header', 'frozen_galaxies']
     if get_all_models:
         keys.append('all_models')
     if bailout:
@@ -1269,6 +1285,57 @@ def get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs):
         HH, WW = targetwcs.shape
         refmap = np.zeros((int(HH), int(WW)), np.uint8)
     return refmap
+
+# Also called by farm.py
+def get_frozen_galaxies(T, blobsrcs, blobs, targetwcs, cat):
+    # Find reference (frozen) large galaxies that touch blobs that
+    # they are not part of, to get their profiles subtracted.
+    # Generate a blob -> [sources] mapping.
+    frozen_galaxies = {}
+    cols = T.get_columns()
+    if not ('islargegalaxy' in cols and 'freezeparams' in cols):
+        return frozen_galaxies
+    Igals = np.flatnonzero(T.islargegalaxy * T.freezeparams)
+    if len(Igals) == 0:
+        return frozen_galaxies
+    from legacypipe.reference import get_reference_map
+    debug('Found', len(Igals), 'frozen large galaxies')
+    # create map in pixel space for each one.
+    for ii in Igals:
+        # length-1 table
+        refgal = T[np.array([ii])].copy()
+        refgal.radius_pix *= 2
+        galmap = get_reference_map(targetwcs, refgal)
+        debug(np.sum(galmap), 'pixels set in refmap for galaxy id', refgal.ref_id[0])
+        galblobs = set(blobs[galmap > 0])
+        debug('galaxy mask overlaps blobs:', galblobs)
+        galblobs.discard(-1)
+        debug('source:', cat[ii])
+        debug('ibx,iby', refgal.ibx[0], refgal.iby[0])
+        if refgal.in_bounds:
+            # If in-bounds, remove the blob that this source is
+            # already part of, if it exists; it will get processed
+            # within that blob.
+            for ib,bsrcs in enumerate(blobsrcs):
+                if ii in bsrcs:
+                    if ib in galblobs:
+                        debug('in bounds; removing frozen-galaxy entry for blob', ib, 'bsrcs', bsrcs)
+                        galblobs.remove(ib)
+        else:
+            # Otherwise, remove this from any 'blobsrcs' members it is
+            # part of -- this can happen when we clip a source
+            # position outside the brick to the brick bounds and that
+            # happens to touch a blob.
+            for j,bsrcs in enumerate(blobsrcs):
+                if ii in bsrcs:
+                    blobsrcs[j] = bsrcs[bsrcs != ii]
+                    debug('removed source', ii, 'from blob', j, 'blobsrcs', bsrcs, '->', blobsrcs[j])
+
+        for blob in galblobs:
+            if not blob in frozen_galaxies:
+                frozen_galaxies[blob] = []
+            frozen_galaxies[blob].append(cat[ii])
+    return frozen_galaxies
 
 def _get_bailout_mask(blobs, skipblobs, targetwcs, W, H, brick, blobslices):
     maxblob = blobs.max()
@@ -1348,7 +1415,7 @@ def _check_checkpoints(R, blobslices, brickname):
 def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                plots, ps, reoptimize, iterative, use_ceres, refmap,
                large_galaxies_force_pointsource, less_masking,
-               brick,
+               brick, frozen_galaxies,
                skipblobs=None, max_blobsize=None, custom_brick=False):
     '''
     *blobs*: map, with -1 indicating no-blob, other values indexing *blobslices*,*blobsrcs*.
@@ -1460,9 +1527,10 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
 
         yield (brickname, iblob,
                (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
-               blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-               reoptimize, iterative, use_ceres, refmap[bslc],
-               large_galaxies_force_pointsource, less_masking))
+                blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
+                reoptimize, iterative, use_ceres, refmap[bslc],
+                large_galaxies_force_pointsource, less_masking,
+                frozen_galaxies.get(iblob, [])))
 
 def _bounce_one_blob(X):
     ''' This just wraps the one_blob function, for debugging &
@@ -1494,7 +1562,7 @@ def _get_mod(X):
 def _get_both_mods(X):
     from astrometry.util.resample import resample_with_wcs, OverlapError
     from astrometry.util.miscutils import get_overlapping_region
-    (tim, srcs, srcblobs, blobmap, targetwcs) = X
+    (tim, srcs, srcblobs, blobmap, targetwcs, frozen_galaxies, ps, plots) = X
     mod = np.zeros(tim.getModelShape(), np.float32)
     blobmod = np.zeros(tim.getModelShape(), np.float32)
     assert(len(srcs) == len(srcblobs))
@@ -1508,11 +1576,53 @@ def _get_both_mods(X):
     timblobmap[Yo,Xo] = blobmap[Yi,Xi]
     del Yo,Xo,Yi,Xi
 
-    for src,srcblob in zip(srcs, srcblobs):
+    srcs_blobs = list(zip(srcs, srcblobs))
+
+    if frozen_galaxies is not None:
+        from tractor.patch import ModelMask
+        timblobs = set(timblobmap.ravel())
+        timblobs.discard(-1)
+        h,w = tim.shape
+        mm = ModelMask(0, 0, w, h)
+        for src,bb in frozen_galaxies.items():
+            # Does this source (which touches blobs bb) touch any blobs in this tim?
+            touchedblobs = timblobs.intersection(bb)
+            #debug(len(touchedblobs), 'blobs in frozen galaxy intersect this tim')
+            if len(touchedblobs) == 0:
+                continue
+            patch = src.getModelPatch(tim, modelMask=mm)
+            if patch is None:
+                continue
+            patch.addTo(mod)
+
+            assert(patch.shape == mod.shape)
+            # np.isin doesn't work with a *set* argument!
+            blobmask = np.isin(timblobmap, list(touchedblobs))
+            blobmod += patch.patch * blobmask
+
+            if plots:
+                plt.clf()
+                plt.imshow(blobmask, interpolation='nearest', origin='lower', vmin=0, vmax=1,
+                           cmap='gray')
+                plt.title('tim %s: frozen-galaxy blobmask' % tim.name)
+                ps.savefig()
+                plt.clf()
+                plt.imshow(patch.patch, interpolation='nearest', origin='lower',
+                           cmap='gray')
+                plt.title('tim %s: frozen-galaxy patch' % tim.name)
+                ps.savefig()
+
+            # Drop this frozen galaxy from the catalog to render, if it is present
+            # (ie, if it is in_bounds)
+            # Can't use "==": they're not the same objects; the "srcs" have been
+            # to oneblob.py and back, and, eg, get their EllipseE types changed.
+            srcs_blobs = [(s,b) for s,b in srcs_blobs
+                          if not (s.pos.ra == src.pos.ra and s.pos.dec == src.pos.dec)]
+
+    for src,srcblob in srcs_blobs:
         patch = src.getModelPatch(tim)
         if patch is None:
             continue
-        #patch.addTo(mod)
         # From patch.addTo()
         (ih, iw) = mod.shape
         (ph, pw) = patch.shape
@@ -1526,6 +1636,7 @@ def _get_both_mods(X):
         mod[outy, outx] += p
         # mask by blob map
         blobmod[outy, outx] += p * (timblobmap[outy,outx] == srcblob)
+
     if hasattr(tim.psf, 'clear_cache'):
         tim.psf.clear_cache()
     return mod, blobmod
@@ -1534,12 +1645,14 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  custom_brick=False,
                  T=None, T_dup=None, T_refbail=None,
+                 refstars=None,
                  blobs=None,
                  cat=None, pixscale=None, plots=False,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
                  co_sky=None,
                  saturated_pix=None,
                  refmap=None,
+                 frozen_galaxies=None,
                  bailout_mask=None,
                  mp=None,
                  record_event=None,
@@ -1565,7 +1678,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
-    if plots:
+    if plots and False:
         cat_init = [src for it,src in zip(T.iterative, cat) if not(it)]
         cat_iter = [src for it,src in zip(T.iterative, cat) if it]
         print(len(cat_init), 'initial sources and', len(cat_iter), 'iterative')
@@ -1601,7 +1714,25 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
     # Render model images...
     record_event and record_event('stage_coadds: model images')
-    bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob, blobs, targetwcs) for tim in tims])
+
+    debug('Frozen_galaxies:', frozen_galaxies)
+    # Re-add the blob that this galaxy is actually inside
+    # (that blob got dropped way earlier, before fitblobs)
+    if frozen_galaxies is not None:
+        for src,bb in frozen_galaxies.items():
+            _,xx,yy = targetwcs.radec2pixelxy(src.pos.ra, src.pos.dec)
+            xx = int(xx-1)
+            yy = int(yy-1)
+            bh,bw = blobs.shape
+            if xx >= 0 and xx < bw and yy >= 0 and yy < bh:
+                # in bounds!
+                debug('Frozen galaxy', src, 'lands in blob', blobs[yy,xx])
+                if blobs[yy,xx] != -1:
+                    bb.append(blobs[yy,xx])
+    #debug('Frozen_galaxies:', frozen_galaxies)
+
+    bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob, blobs, targetwcs, frozen_galaxies, ps, plots)
+                                       for tim in tims])
     mods = [m for m,b in bothmods]
     blobmods = [b for m,b in bothmods]
     del bothmods

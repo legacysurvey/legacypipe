@@ -105,6 +105,8 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     # stellar halos out to N x their radii)
     refs.radius_pix = np.ceil(refs.radius * 3600. / pixscale).astype(int)
 
+    debug('Increasing radius for', np.sum(refs.keep_radius > refs.radius),
+          'ref sources based on keep_radius')
     keeprad = np.maximum(refs.keep_radius, refs.radius)
     # keeprad to pix
     keeprad = np.ceil(keeprad * 3600. / pixscale).astype(int)
@@ -383,9 +385,10 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True):
     if galfn is None:
         debug('No large-galaxies catalog file')
         return None
-    radius = 1.
+    radius = 2.
     rc,dc = targetwcs.radec_center()
 
+    debug('Reading', galfn)
     kd = tree_open(galfn, 'largegals')
     I = tree_search_radec(kd, rc, dc, radius)
     debug(len(I), 'large galaxies within', radius,
@@ -397,11 +400,7 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True):
     del kd
 
     refcat, preburn = get_large_galaxy_version(galfn)
-
-    #print('Large galaxy cat: ', refcat, 'preburn', preburn)
-    #print('ref_cat:', galaxies.ref_cat, 'ref_id:', galaxies.ref_id)
-    #galaxies.about()
-    #print('lslga id:', galaxies.lslga_id)
+    debug('Large galaxies version: "%s", preburned?' % refcat, preburn)
 
     if not preburn:
         # Original LSLGA
@@ -416,11 +415,14 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True):
     else:
         # Need to initialize islargegalaxy to False because we will bring in
         # pre-burned sources that we do not want to use in MASKBITS.
+        # (we'll set individual .islargegalaxy entries below)
+        # NOTE: fields such as ref_cat, preburned, etc, already exist in the
+        # "galaxies" catalog read from disk.
         galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
-        galaxies.radius = np.zeros(len(galaxies), 'f4')
         galaxies.rename('mag_leda', 'mag')
         galaxies.radius = galaxies.diam / 2. / 60. # [degree]
 
+    galaxies.keep_radius = 2. * galaxies.radius
     galaxies.freezeparams = np.zeros(len(galaxies), bool)
     galaxies.sources = np.empty(len(galaxies), object)
     galaxies.sources[:] = None
@@ -439,7 +441,7 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True):
 
     if clean_columns:
         keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
-                        'sources', 'islargegalaxy', 'freezeparams']
+                        'sources', 'islargegalaxy', 'freezeparams', 'keep_radius']
         for c in galaxies.get_columns():
             if not c in keep_columns:
                 galaxies.delete_column(c)
