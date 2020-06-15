@@ -384,10 +384,13 @@ class LegacySurveyImage(object):
             imghdr = self.read_image_header()
         assert(np.all(np.isfinite(img)))
 
+        template_meta = None
         if pixels:
             template = self.get_sky_template(slc=slc)
             if template is not None:
                 debug('Subtracting sky template')
+                # unpack
+                template,template_meta = template
                 img -= template
 
         # Read data-quality (flags) map and zero out the invvars of masked pixels
@@ -472,7 +475,8 @@ class LegacySurveyImage(object):
 
         if readsky:
             sky = self.read_sky_model(slc=slc, primhdr=primhdr, imghdr=imghdr,
-                                      old_calibs_ok=old_calibs_ok)
+                                      old_calibs_ok=old_calibs_ok,
+                                      template_meta=template_meta)
         else:
             from tractor.sky import ConstantSky
             sky = ConstantSky(0.)
@@ -519,29 +523,17 @@ class LegacySurveyImage(object):
             rampy = np.arctan(xx)
             rampy = (rampy - rampy.min()) / (rampy.max() - rampy.min())
 
-            apo = False
-            #if y0 == 0:
-            if True:
-                #debug('Apodize bottom')
-                invvar[:len(rampy),:] *= rampy[:,np.newaxis]
-                apo = True
-            #if x0 == 0:
-            if True:
-                #debug('Apodize left')
-                invvar[:,:len(rampx)] *= rampx[np.newaxis,:]
-                apo = True
-            #if y1 >= H:
-            if True:
-                #debug('Apodize top')
-                invvar[-len(rampy):,:] *= rampy[::-1][:,np.newaxis]
-                apo = True
-            #if x1 >= W:
-            if True:
-                #debug('Apodize right')
-                invvar[:,-len(rampx):] *= rampx[::-1][np.newaxis,:]
-                apo = True
+            apo = True
+            # bottom
+            invvar[:len(rampy),:] *= rampy[:,np.newaxis]
+            # left
+            invvar[:,:len(rampx)] *= rampx[np.newaxis,:]
+            # top
+            invvar[-len(rampy):,:] *= rampy[::-1][:,np.newaxis]
+            # right
+            invvar[:,-len(rampx):] *= rampx[::-1][np.newaxis,:]
 
-            if apo and False:
+            if False:
                 import pylab as plt
                 plt.clf()
                 plt.imshow(invvar, interpolation='nearest', origin='lower')
@@ -888,7 +880,8 @@ class LegacySurveyImage(object):
         wcs.plver = phdr.get('PLVER', '').strip()
         return wcs
 
-    def read_sky_model(self, slc=None, old_calibs_ok=False, **kwargs):
+    def read_sky_model(self, slc=None, old_calibs_ok=False,
+                       template_meta=None, **kwargs):
         '''
         Reads the sky model, returning a Tractor Sky object.
         '''
@@ -914,6 +907,24 @@ class LegacySurveyImage(object):
             Ti = T[I[0]]
         if Ti is None:
             raise RuntimeError('Failed to find sky model in files: %s' % ', '.join(tryfns))
+
+        if template_meta is not None:
+            # Check sky-template subtraction metadata!
+            sver = getattr(Ti, 'templ_ver', -2)
+            tver = template_meta.get('version', -3)
+            srun = getattr(Ti, 'templ_run', -2)
+            trun = template_meta.get('run', -3)
+            sscale = getattr(Ti, 'templ_scale', -2)
+            tscale = template_meta.get('scale', -3)
+            if sver != tver or srun != trun or sscale != tscale:
+                if old_calibs_ok:
+                    print('Warning: splinesky template version/run/scale',
+                          sver, srun, sscale, 'does not match sky template',
+                          tver, trun, tscale, '(but old_calibs_ok)')
+                elif sver == -2 and srun == -2 and sscale == -2:
+                    print('Warning: splinesky does not have sky-template version/run/scale values')
+                else:
+                    raise RuntimeError('Splinesky template version/run/scale %s/%s/%s does not match sky template %s/%s/%s' % (sver, srun, sscale, tver, trun, tscale))
 
         # Remove any padding
         h,w = Ti.gridh, Ti.gridw
@@ -1141,9 +1152,12 @@ class LegacySurveyImage(object):
         dq = self.read_dq(slice=slc)
         wt = self.read_invvar(slice=slc, dq=dq)
 
+        template_meta = {}
         template = self.get_sky_template(slc=slc)
         if template is not None:
             debug('Subtracting sky template before computing splinesky')
+            # unpack
+            template,template_meta = template
             img -= template
 
         primhdr = self.read_image_primary_header()
@@ -1262,21 +1276,21 @@ class LegacySurveyImage(object):
         from legacypipe.reference import get_reference_map
         wcs = self.get_wcs(hdr=imghdr)
         debug('Good image slice:', slc)
+        x0 = y0 = 0
         if slc is not None:
             sy,sx = slc
             y0,y1 = sy.start, sy.stop
             x0,x1 = sx.start, sx.stop
             wcs = wcs.get_subimage(x0, y0, int(x1-x0), int(y1-y0))
-        # Grab reference sources.  'fakebands' is only used to create
-        # source objects(which we don't need).
-        fakebands = ['r']
-        refs,_ = get_reference_sources(survey, wcs, self.pixscale, fakebands,
+        # Grab reference sources.
+        refs,_ = get_reference_sources(survey, wcs, self.pixscale, None,
                                        tycho_stars=True, gaia_stars=gaia,
                                        large_galaxies=True,
                                        star_clusters=True)
         refgood = (get_reference_map(wcs, refs) == 0)
 
         haloimg = None
+        halozpt = 0.
         if halos and self.camera == 'decam':
             # Subtract halos from Gaia stars.
             # "refs.donotfit" are Gaia sources that are near LSLGA galaxies.
@@ -1298,6 +1312,7 @@ class LegacySurveyImage(object):
                 zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
                 haloimg *= zpscale
                 print('Using zeropoint:', self.ccdzpt, 'to scale halo image by', zpscale)
+                halozpt = self.ccdzpt
                 img -= haloimg
                 if plots:
                     # Also compute halo image without Moffat component
@@ -1309,6 +1324,10 @@ class LegacySurveyImage(object):
                 if not plots:
                     del haloimg
 
+        if plots:
+            boxcargood = good.copy()
+
+        blobmasked = False
         if survey_blob_mask is not None:
             # Read DR8 blob maps for all overlapping bricks and project them
             # into this CCD's pixel space.
@@ -1334,12 +1353,12 @@ class LegacySurveyImage(object):
                 allblobs[Yo,Xo] |= blobs[Yi,Xi]
             ng = np.sum(good)
             if plots:
-                boxcargood = good.copy()
                 blobgood = np.logical_not(allblobs)
             good[allblobs] = False
             del allblobs
             print('Masked', ng-np.sum(good),
                   'additional CCD pixels from blob maps')
+            blobmasked = True
 
         # Now find the final sky model using that more extensive mask
         skyobj = SplineSky.BlantonMethod(img - initsky, good*refgood, boxsize,
@@ -1379,33 +1398,33 @@ class LegacySurveyImage(object):
                         vmin=initsky-0.5*sig1,vmax=initsky+0.5*sig1,cmap='gray')
 
             plt.clf()
-            plt.imshow(img.T, **ima)
+            plt.imshow(img, **ima)
             plt.title('Image %s-%i-%s %s' % (self.camera, self.expnum,
                                              self.ccdname, self.band))
             ps.savefig()
 
             if haloimg is not None:
                 plt.clf()
-                plt.imshow(img.T + haloimg.T, **ima)
+                plt.imshow(img + haloimg, **ima)
                 plt.title('Image with star halos')
                 ps.savefig()
 
                 plt.clf()
                 imx = dict(interpolation='nearest', origin='lower',
                            vmin=-2*sig1,vmax=+2*sig1,cmap='gray')
-                plt.imshow(haloimg.T, **imx)
+                plt.imshow(haloimg, **imx)
                 plt.title('Star halos')
                 ps.savefig()
 
                 plt.clf()
                 imx = dict(interpolation='nearest', origin='lower',
                            vmin=-2*sig1,vmax=+2*sig1,cmap='gray')
-                plt.imshow(moffhalo.T, **imx)
+                plt.imshow(moffhalo, **imx)
                 plt.title('Moffat component of star halos')
                 ps.savefig()
 
             plt.clf()
-            plt.imshow(wt.T, interpolation='nearest', origin='lower',
+            plt.imshow(wt, interpolation='nearest', origin='lower',
                        cmap='gray')
             plt.title('Weight')
             ps.savefig()
@@ -1430,26 +1449,27 @@ class LegacySurveyImage(object):
             from legacypipe.detection import plot_mask
 
             plt.clf()
-            plt.imshow((img.T - initsky)*boxcargood.T + initsky, **ima)
-            plot_mask(np.logical_not(boxcargood.T))
+            plt.imshow((img - initsky)*boxcargood + initsky, **ima)
+            plot_mask(np.logical_not(boxcargood))
             plt.title('Image (boxcar masked)')
             ps.savefig()
 
-            plt.clf()
-            plt.imshow((img.T - initsky)*blobgood.T + initsky, **ima)
-            plot_mask(np.logical_not(blobgood.T))
-            plt.title('Image (blob masked)')
-            ps.savefig()
+            if survey_blob_mask is not None:
+                plt.clf()
+                plt.imshow((img - initsky)*blobgood + initsky, **ima)
+                plot_mask(np.logical_not(blobgood))
+                plt.title('Image (blob masked)')
+                ps.savefig()
 
             plt.clf()
-            plt.imshow((img.T - initsky)*refgood.T + initsky, **ima)
-            plot_mask(np.logical_not(refgood.T))
+            plt.imshow((img - initsky)*refgood + initsky, **ima)
+            plot_mask(np.logical_not(refgood))
             plt.title('Image (reference masked)')
             ps.savefig()
 
             plt.clf()
-            plt.imshow((img.T - initsky)*(refgood * good).T + initsky, **ima)
-            plot_mask(np.logical_not(refgood * good).T)
+            plt.imshow((img - initsky)*(refgood * good) + initsky, **ima)
+            plot_mask(np.logical_not(refgood * good))
             plt.title('Image (all masked)')
             ps.savefig()
 
@@ -1490,14 +1510,14 @@ class LegacySurveyImage(object):
             skypix = np.zeros_like(img)
             skyobj.addTo(skypix)
             plt.clf()
-            plt.imshow(skypix.T, **ima2)
+            plt.imshow(skypix, **ima2)
             plt.title('Sky model')
             ps.savefig()
 
             skypix2 = np.zeros_like(img)
             fineskyobj.addTo(skypix2)
             plt.clf()
-            plt.imshow(skypix2.T, **ima2)
+            plt.imshow(skypix2, **ima2)
             plt.title('Fine sky model')
             ps.savefig()
 
@@ -1516,6 +1536,11 @@ class LegacySurveyImage(object):
                     ('procdate', procdate),
                     ('imgdsum',  datasum),
                     ('sig1', sig1),
+                    ('templ_ver', template_meta.get('version', -1)),
+                    ('templ_run', template_meta.get('run', -1)),
+                    ('templ_scale', template_meta.get('scale', 0.)),
+                    ('halo_zpt', halozpt),
+                    ('blob_masked', blobmasked),
                     ('sky_mode', sky_mode),
                     ('sky_med', sky_median),
                     ('sky_cmed', sky_clipped_median),

@@ -385,50 +385,35 @@ def stage_refs(survey=None,
     # "refstars" is a table
     # "refcat" is a list of tractor Sources
     # They are aligned
-    T_donotfit = None
-    T_clusters = None
     if refstars:
         assert(len(refstars) == len(refcat))
+        with survey.write_output('ref-sources', brick=brickname) as out:
+            refstars.writeto(None, fits_object=out.fits, primheader=version_header)
+
+    T_dup = None
+    T_clusters = None
+    if refstars:
         # Pull out reference sources flagged do-not-fit; we add them
         # back in (much) later.  These are Gaia sources near the
-        # centers of LSLGA large galaxies, so we want to propagate the
+        # centers of SGA large galaxies, so we want to propagate the
         # Gaia catalog information, but don't want to fit them.
         I, = np.nonzero(refstars.donotfit)
         if len(I):
-            T_donotfit = refstars[I]
-            I, = np.nonzero(np.logical_not(refstars.donotfit))
-            refstars.cut(I)
-            refcat = [refcat[i] for i in I]
-            assert(len(refstars) == len(refcat))
+            T_dup = refstars[I]
         # Pull out star clusters too.
         I, = np.nonzero(refstars.iscluster)
         if len(I):
             T_clusters = refstars[I]
-            I, = np.nonzero(np.logical_not(refstars.iscluster))
+        # Drop from refstars & refcat
+        drop = np.logical_or(refstars.donotfit, refstars.iscluster)
+        if np.any(drop):
+            I, = np.nonzero(np.logical_not(drop))
             refstars.cut(I)
             refcat = [refcat[i] for i in I]
             assert(len(refstars) == len(refcat))
-        del I
+        del I,drop
 
-    if refstars or T_donotfit or T_clusters:
-        allrefs = merge_tables([t for t in [refstars, T_donotfit, T_clusters] if t],
-                               columns='fillzero')
-        with survey.write_output('ref-sources', brick=brickname) as out:
-            allrefs.writeto(None, fits_object=out.fits, primheader=version_header)
-        del allrefs
-
-    if T_donotfit:
-        # add columns for later...
-        if not 'type' in T_donotfit.get_columns():
-            T_donotfit.type = np.array(['DUP']*len(T_donotfit))
-        else:
-            for i in range(len(T_donotfit)):
-                if len(T_donotfit.type[i].strip()) == 0:
-                    T_donotfit.type[i] = 'DUP'
-        T_donotfit.brickid = np.zeros(len(T_donotfit), np.int32) + brickid
-        T_donotfit.brickname = np.array([brickname] * len(T_donotfit))
-
-    keys = ['refstars', 'gaia_stars', 'T_donotfit', 'T_clusters', 'version_header',
+    keys = ['refstars', 'gaia_stars', 'T_dup', 'T_clusters', 'version_header',
             'refcat']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
@@ -524,6 +509,11 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        write_metrics=True,
                        mp=None, record_event=None,
                        co_sky=None,
+                       custom_brick=False,
+                       refstars=None,
+                       T_clusters=None,
+                       saturated_pix=None,
+                       less_masking=False,
                        **kwargs):
     record_event and record_event('stage_image_coadds: starting')
     '''
@@ -541,6 +531,37 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                     callback_args=(survey, brickname, version_header, tims,
                                    targetwcs, co_sky),
                     mp=mp, plots=plots, ps=ps)
+
+    # interim maskbits
+    from legacypipe.utils import copy_header_with_wcs
+    from legacypipe.bits import IN_BLOB
+    refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
+    # Construct a mask bits map
+    maskbits = np.zeros((H,W), np.int16)
+    # !PRIMARY
+    if not custom_brick:
+        U = find_unique_pixels(targetwcs, W, H, None,
+                               brick.ra1, brick.ra2, brick.dec1, brick.dec2)
+        maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int16)
+        del U
+    # BRIGHT
+    if refmap is not None:
+        maskbits |= MASKBITS['BRIGHT']  * ((refmap & IN_BLOB['BRIGHT'] ) > 0)
+        maskbits |= MASKBITS['MEDIUM']  * ((refmap & IN_BLOB['MEDIUM'] ) > 0)
+        maskbits |= MASKBITS['GALAXY']  * ((refmap & IN_BLOB['GALAXY'] ) > 0)
+        maskbits |= MASKBITS['CLUSTER'] * ((refmap & IN_BLOB['CLUSTER']) > 0)
+        del refmap
+    # SATUR
+    if saturated_pix is not None:
+        for b, sat in zip(bands, saturated_pix):
+            maskbits |= (MASKBITS['SATUR_' + b.upper()] * sat).astype(np.int16)
+    # ALLMASK_{g,r,z}
+    for b,allmask in zip(bands, C.allmasks):
+        maskbits |= (MASKBITS['ALLMASK_' + b.upper()] * (allmask > 0))
+    # omitting maskbits header cards, bailout, & WISE
+    hdr = copy_header_with_wcs(version_header, targetwcs)
+    with survey.write_output('maskbits', brick=brickname, shape=maskbits.shape) as out:
+        out.fits.write(maskbits, header=hdr, extname='MASKBITS')
 
     # Sims: coadds of galaxy sims only, image only
     if hasattr(tims[0], 'sims_image'):
@@ -617,7 +638,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                saddle_min=None,
                survey=None, brick=None,
                refcat=None, refstars=None,
-               T_donotfit=None, T_clusters=None,
+               T_clusters=None,
                ccds=None,
                record_event=None,
                large_galaxies=True,
@@ -830,7 +851,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
 def stage_fitblobs(T=None,
                    T_clusters=None,
-                   T_donotfit=None,
+                   T_dup=None,
                    brickname=None,
                    brickid=None,
                    brick=None,
@@ -1192,8 +1213,6 @@ def stage_fitblobs(T=None,
     if len(T.brickname) == 0:
         T.brickname = T.brickname.astype('S8')
     T.objid = np.arange(len(T), dtype=np.int32)
-    if T_donotfit:
-        T_donotfit.objid = np.arange(len(T_donotfit), dtype=np.int32) + len(T)
 
     # How many sources in each blob?
     from collections import Counter
@@ -1214,15 +1233,21 @@ def stage_fitblobs(T=None,
     invvars = np.hstack(BB.srcinvvars)
     assert(cat.numberOfParams() == len(invvars))
 
+    if T_dup:
+        T_dup.type = np.array(['DUP']*len(T_dup))
+        T_dup.objid = np.arange(len(T_dup), dtype=np.int32) + len(T)
+        T_dup.brickid = np.zeros(len(T_dup), np.int32) + brickid
+        T_dup.brickname = np.array([brickname] * len(T_dup))
+
     if write_metrics or get_all_models:
         from legacypipe.format_catalog import format_all_models
         # append our 'do not fit' sources so that the all-models file
         # matches the tractor catalog
         T2 = T
         cat2 = [src for src in newcat]
-        if T_donotfit:
-            T2 = merge_tables([T2, T_donotfit], columns='fillzero')
-            cat2.extend([None] * len(T_donotfit))
+        if T_dup:
+            T2 = merge_tables([T2, T_dup], columns='fillzero')
+            cat2.extend([None] * len(T_dup))
         TT,hdr = format_all_models(T2, cat2, BB, bands, survey.allbands,
                                    force_keep=T2.force_keep_source)
         if get_all_models:
@@ -1619,7 +1644,7 @@ def _get_both_mods(X):
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  custom_brick=False,
-                 T=None, T_donotfit=None, T_refbail=None,
+                 T=None, T_dup=None, T_refbail=None,
                  refstars=None,
                  blobs=None,
                  cat=None, pixscale=None, plots=False,
@@ -1720,17 +1745,17 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     ra  = np.array([src.getPosition().ra  for src in cat])
     dec = np.array([src.getPosition().dec for src in cat])
 
-    # T_refbail and T_donotfit sources get the same treatment...
+    # T_refbail and T_dup sources get the same treatment...
     if T_refbail is not None:
-        if T_donotfit is not None:
-            T_donotfit = merge_tables([T_donotfit, T_refbail], columns='fillzero')
+        if T_dup is not None:
+            T_dup = merge_tables([T_dup, T_refbail], columns='fillzero')
         else:
-            T_donotfit = T_refbail
-    # We tag the "T_donotfit" sources on the end to get aperture phot
+            T_dup = T_refbail
+    # We tag the "T_dup" sources on the end to get aperture phot
     # and other metrics.
-    if T_donotfit:
-        ra  = np.append(ra,  T_donotfit.ra)
-        dec = np.append(dec, T_donotfit.dec)
+    if T_dup:
+        ra  = np.append(ra,  T_dup.ra)
+        dec = np.append(dec, T_dup.dec)
     ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
 
     # Get integer brick pixel coords for each source, for referencing maps
@@ -1775,14 +1800,14 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     if 'sims_xy' in C.T.get_columns():
         cols.append('sims_xy')
 
-    Nno = T_donotfit and len(T_donotfit) or 0
+    Nno = T_dup and len(T_dup) or 0
     Nyes = len(T)
     for c in cols:
         val = C.T.get(c)
         T.set(c, val[:Nyes])
-        # We appended T_donotfit; peel off those results
+        # We appended T_dup; peel off those results
         if Nno:
-            T_donotfit.set(c, val[Nyes:])
+            T_dup.set(c, val[Nyes:])
     assert(C.AP is not None)
     # How many apertures?
     A = len(apertures_arcsec)
@@ -1792,11 +1817,11 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     T.apflux_resid  = np.zeros((len(T), len(bands), A), np.float32)
     T.apflux_blobresid = np.zeros((len(T), len(bands), A), np.float32)
     if Nno:
-        T_donotfit.apflux        = np.zeros((Nno, len(bands), A), np.float32)
-        T_donotfit.apflux_ivar   = np.zeros((Nno, len(bands), A), np.float32)
-        T_donotfit.apflux_masked = np.zeros((Nno, len(bands), A), np.float32)
-        T_donotfit.apflux_resid  = np.zeros((Nno, len(bands), A), np.float32)
-        T_donotfit.apflux_blobresid = np.zeros((Nno, len(bands), A), np.float32)
+        T_dup.apflux        = np.zeros((Nno, len(bands), A), np.float32)
+        T_dup.apflux_ivar   = np.zeros((Nno, len(bands), A), np.float32)
+        T_dup.apflux_masked = np.zeros((Nno, len(bands), A), np.float32)
+        T_dup.apflux_resid  = np.zeros((Nno, len(bands), A), np.float32)
+        T_dup.apflux_blobresid = np.zeros((Nno, len(bands), A), np.float32)
     AP = C.AP
     for iband,band in enumerate(bands):
         T.apflux       [:,iband,:] = AP.get('apflux_img_%s'      % band)[:Nyes,:]
@@ -1805,11 +1830,11 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         T.apflux_resid [:,iband,:] = AP.get('apflux_resid_%s'    % band)[:Nyes,:]
         T.apflux_blobresid[:,iband,:] = AP.get('apflux_blobresid_%s'    % band)[:Nyes,:]
         if Nno:
-            T_donotfit.apflux       [:,iband,:] = AP.get('apflux_img_%s'      % band)[Nyes:,:]
-            T_donotfit.apflux_ivar  [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)[Nyes:,:]
-            T_donotfit.apflux_masked[:,iband,:] = AP.get('apflux_masked_%s'   % band)[Nyes:,:]
-            T_donotfit.apflux_resid [:,iband,:] = AP.get('apflux_resid_%s'    % band)[Nyes:,:]
-            T_donotfit.apflux_blobresid[:,iband,:] = AP.get('apflux_blobresid_%s'    % band)[Nyes:,:]
+            T_dup.apflux       [:,iband,:] = AP.get('apflux_img_%s'      % band)[Nyes:,:]
+            T_dup.apflux_ivar  [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)[Nyes:,:]
+            T_dup.apflux_masked[:,iband,:] = AP.get('apflux_masked_%s'   % band)[Nyes:,:]
+            T_dup.apflux_resid [:,iband,:] = AP.get('apflux_resid_%s'    % band)[Nyes:,:]
+            T_dup.apflux_blobresid[:,iband,:] = AP.get('apflux_blobresid_%s'    % band)[Nyes:,:]
     del AP
 
     # Compute depth histogram
@@ -1972,7 +1997,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     tnow = Time()
     debug('Aperture photometry wrap-up:', tnow-tlast)
 
-    return dict(T=T, T_donotfit=T_donotfit, apertures_pix=apertures,
+    return dict(T=T, T_dup=T_dup, apertures_pix=apertures,
                 apertures_arcsec=apertures_arcsec,
                 maskbits=maskbits,
                 version_header=version_header)
@@ -2401,7 +2426,7 @@ def stage_writecat(
     version_header=None,
     release=None,
     T=None,
-    T_donotfit=None,
+    T_dup=None,
     WISE=None,
     WISE_T=None,
     maskbits=None,
@@ -2595,8 +2620,8 @@ def stage_writecat(
         WISE_T = None
         WISE = None
 
-    if T_donotfit:
-        T2 = merge_tables([T2, T_donotfit], columns='fillzero')
+    if T_dup:
+        T2 = merge_tables([T2, T_dup], columns='fillzero')
 
     # Brick pixel positions
     ok,bx,by = targetwcs.radec2pixelxy(T2.orig_ra, T2.orig_dec)

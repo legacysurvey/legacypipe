@@ -506,16 +506,20 @@ class OneBlob(object):
             thresholds.extend(list(range(100, min(mx, 500)+4, 5)))
             if mx > 500:
                 thresholds.extend(list(range(500, min(mx, 2500)+24, 25)))
-                if mx > 200:
+                if mx > 2500:
                     thresholds.extend(list(range(2500, mx+99, 100)))
+                    if mx > 10000:
+                        thresholds.extend(list(range(10000, mx+499, 500)))
         debug('thresholds:', thresholds)
         hot = None
         for thresh in thresholds:
             debug('S/N', thresh, ':', len(todo), 'sources to find still')
             if len(todo) == 0:
                 break
-            ####
-            hot = np.logical_or(maxsn >= thresh, saturated_pix)
+            # We previously filled saturated pixels with a max value,
+            # so this is maybe not necessary?
+            #hot = np.logical_or(maxsn >= thresh, saturated_pix)
+            hot = (maxsn >= thresh)
             hot = binary_fill_holes(hot)
             blobs,_ = label(hot)
             srcblobs = blobs[iy[Iseg], ix[Iseg]]
@@ -1759,8 +1763,8 @@ class OneBlob(object):
     def _initial_plots(self):
         import pylab as plt
         debug('Plotting blob image for blob', self.name)
-        coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
-                                fill_holes=False)
+        coimgs,_,sat = quick_coadds(self.tims, self.bands, self.blobwcs,
+                                    fill_holes=False, get_saturated=True)
         self.rgb = get_rgb(coimgs, self.bands)
         plt.clf()
         dimshow(self.rgb)
@@ -1777,12 +1781,19 @@ class OneBlob(object):
             np.array([src.getPosition().ra  for src in self.srcs]),
             np.array([src.getPosition().dec for src in self.srcs]))
 
+        h,w = sat.shape
+        ix = np.clip(np.round(x0)-1, 0, w).astype(int)
+        iy = np.clip(np.round(y0)-1, 0, h).astype(int)
+        srcsat = sat[iy,ix]
+
         ax = plt.axis()
         plt.plot(x0-1, y0-1, 'r.')
+        if len(srcsat):
+            plt.plot(x0[srcsat]-1, y0[srcsat]-1, 'o', mec='orange', mfc='none', ms=5, mew=2)
         # ref sources
         for x,y,src in zip(x0,y0,self.srcs):
             if is_reference_source(src):
-                plt.plot(x-1, y-1, 'o', mec='g', mfc='none')
+                plt.plot(x-1, y-1, 'o', mec='g', mfc='none', ms=8, mew=2)
         plt.axis(ax)
         plt.title('initial sources')
         self.ps.savefig()
