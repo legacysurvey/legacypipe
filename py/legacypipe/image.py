@@ -1297,6 +1297,9 @@ class LegacySurveyImage(object):
             from legacypipe.reference import get_large_galaxy_version
             galfn = survey.find_file('large-galaxies')
             debug('Large-galaxies filename:', galfn)
+            if galfn is None:
+                subtract_largegalaxies = False
+        if subtract_largegalaxies:
             sub_sga_version,_ = get_large_galaxy_version(galfn)
             debug('SGA version:', sub_sga_version)
             debug('Large galaxies:', np.sum(refs.islargegalaxy))
