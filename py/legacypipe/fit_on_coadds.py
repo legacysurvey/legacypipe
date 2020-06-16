@@ -308,6 +308,7 @@ def stage_fit_on_coadds(
         brickname=None, version_header=None,
         apodize=True,
         subsky=True,
+        skymask_radius=None,
         fitoncoadds_reweight_ivar=True,
         plots=False, plots2=False, ps=None, coadd_bw=False, W=None, H=None,
         brick=None, blobs=None, lanczos=True, ccds=None,
