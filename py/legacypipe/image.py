@@ -1294,21 +1294,26 @@ class LegacySurveyImage(object):
         sub_sga_version = '  '
         sub_galaxies = None
         if subtract_largegalaxies:
+            from legacypipe.reference import get_large_galaxy_version
+            galfn = survey.find_file('large-galaxies')
+            debug('Large-galaxies filename:', galfn)
+            sub_sga_version,_ = get_large_galaxy_version(galfn)
+            debug('SGA version:', sub_sga_version)
+            debug('Large galaxies:', np.sum(refs.islargegalaxy))
+            debug('Freezeparams:', np.sum(refs.islargegalaxy * refs.freezeparams))
             # we only want to subtract pre-burned, frozen galaxies.
             I = np.flatnonzero(refs.islargegalaxy * refs.freezeparams)
+            debug('Found', len(I), 'SGA galaxies to subtract before sky')
             if len(I):
                 sub_galaxies = get_galaxy_sources(refs[I], [self.band])
         galmod = None
         if sub_galaxies is not None:
             from tractor import ConstantSky, ConstantFitsWcs, NanoMaggies, LinearPhotoCal
             from tractor import Image, Tractor
-            from legacypipe.reference import get_large_galaxy_version
             info('Subtracting SGA galaxies before estimating sky;',
                  len(sub_galaxies), 'galaxies')
             for g in sub_galaxies:
                 debug('  ', g)
-            galfn = survey.find_file('large-galaxies')
-            sub_sga_version,_ = get_large_galaxy_version(galfn)
             psf_fwhm = self.get_fwhm(primhdr, imghdr)
             assert(psf_fwhm > 0)
             psf_sigma = psf_fwhm / 2.35
