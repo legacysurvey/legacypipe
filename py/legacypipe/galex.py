@@ -12,6 +12,7 @@ import fitsio
 
 from astrometry.util.util import Tan
 from astrometry.util.fits import fits_table
+from tractor.psf import PixelizedPSF
 
 import logging
 logger = logging.getLogger('legacypipe.galex')
@@ -22,7 +23,17 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
-
+def galex_psf(band, galex_dir):
+    band2file = {
+        'f': os.path.join(galex_dir, 'PSFfuv.fits'),
+        'n': os.path.join(galex_dir, 'PSFnuv_faint.fits')
+        }
+    debug('Reading {}'.format(band2file[band]))
+    psfimg = fitsio.read(band2file[band])
+    psfimg = psfimg[:psfimg.shape[0] -1, :psfimg.shape[0] -1] # make odd
+    psfimg /= psfimg.sum()
+    return psfimg
+    
 def stage_galex_forced(
     survey=None,
     cat=None,
@@ -168,7 +179,7 @@ def stage_galex_forced(
     debug('Returning: GALEX', GALEX)
 
     #### FIXME DEBUG
-    GALEX.writeto('galex-phot.fits')
+    #GALEX.writeto('galex-phot.fits')
     
     return dict(GALEX=GALEX,
                 version_header=version_header,
@@ -252,17 +263,9 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
         #     plt.title('%s: tim data' % tag)
         #     ps.savefig()
 
-        # if pixelized_psf:
-        #     from unwise_psf import unwise_psf
-        #     if (band == 1) or (band == 2):
-        #         # we only have updated PSFs for W1 and W2
-        #         psfimg = unwise_psf.get_unwise_psf(band, tile.tilename,
-        #                                            modelname='neo6_unwisecat')
-        #     from tractor.psf import PixelizedPSF
-        #     psfimg /= psfimg.sum()
-        #     fluxrescales = {1: 1.04, 2: 1.005, 3: 1.0, 4: 1.0}
-        #     psfimg *= fluxrescales[band]
-        #     tim.psf = PixelizedPSF(psfimg)
+        if pixelized_psf:
+            psfimg = galex_psf(band, galex_dir)
+            tim.psf = PixelizedPSF(psfimg)
 
         # nexp[I] = tim.nuims[y[I], x[I]]
         # if hasattr(tim, 'mjdmin') and hasattr(tim, 'mjdmax'):
@@ -283,34 +286,6 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
 
         tim.tile = tile
         tims.append(tim)
-
-    # # Eddie's non-secret recipe:
-    # #- central pixel <= 1000: 19x19 pix box size
-    # #- central pixel in 1000 - 20000: 59x59 box size
-    # #- central pixel > 20000 or saturated: 149x149 box size
-    # #- object near "bright star": 299x299 box size
-    # nbig = nmedium = nsmall = 0
-    # for src,cflux in zip(cat, central_flux):
-    #     if cflux > 20000:
-    #         R = 100
-    #         nbig += 1
-    #     elif cflux > 1000:
-    #         R = 30
-    #         nmedium += 1
-    #     else:
-    #         R = 15
-    #         nsmall += 1
-    #     if isinstance(src, PointSource):
-    #         src.fixedRadius = R
-    #     else:
-    #         ### FIXME -- sizes for galaxies..... can we set PSF size separately?
-    #         galrad = 0
-    #         # RexGalaxy is a subclass of ExpGalaxy
-    #         if isinstance(src, (ExpGalaxy, DevGalaxy, SersicGalaxy)):
-    #             galrad = src.shape.re
-    #         pixscale = 2.75
-    #         src.halfsize = int(np.hypot(R, galrad * 5 / pixscale))
-    # debug('Set WISE source sizes:', nbig, 'big', nmedium, 'medium', nsmall, 'small')
 
     tractor = Tractor(tims, cat)
     if use_ceres:
@@ -636,12 +611,15 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname):
 
     name = 'GALEX ' + hdr['OBJECT'] + ' ' + band
 
-    # HACK -- circular Gaussian PSF of fixed size...
-    # in arcsec
-    fwhms = dict(n=6.0, f=6.0)
-    # -> sigma in pixels
-    sig = fwhms[band] / 2.35 / twcs.pixel_scale()
-    tpsf = NCircularGaussianPSF([sig], [1.])
+    ## HACK -- circular Gaussian PSF of fixed size...
+    ## in arcsec
+    #fwhms = dict(n=6.0, f=6.0)
+    ## -> sigma in pixels
+    #sig = fwhms[band] / 2.35 / twcs.pixel_scale()
+    #tpsf = NCircularGaussianPSF([sig], [1.])
+
+    psfimg = galex_psf(band, galex_dir)
+    tpsf = PixelizedPSF(psfimg)
 
     tim = Image(data=img, inverr=inverr, psf=tpsf, wcs=twcs,
                 sky=tsky, photocal=photocal, name=name)
@@ -808,8 +786,11 @@ def galex_coadds(onegal, galaxy=None, radius_mosaic=30, radius_mask=None,
             #fwhms = dict(NUV=6.0, FUV=6.0)
             # -> sigma in pixels
             #sig = fwhms[band] / 2.35 / twcs.pixel_scale()
-            sig = 6.0 / np.sqrt(8 * np.log(2)) / twcs.pixel_scale()
-            tpsf = NCircularGaussianPSF([sig], [1.])
+            #sig = 6.0 / np.sqrt(8 * np.log(2)) / twcs.pixel_scale()
+            #tpsf = NCircularGaussianPSF([sig], [1.])
+
+            psfimg = galex_psf(band, galex_dir)
+            tpsf = PixelizedPSF(psfimg)
 
             tim = Image(data=timg, inverr=tie, psf=tpsf, wcs=twcs, sky=tsky,
                         photocal=photocal, name='GALEX ' + band + tile.tilename)
