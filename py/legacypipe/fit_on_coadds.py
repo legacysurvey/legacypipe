@@ -140,7 +140,8 @@ def coadds_ubercal(fulltims, coaddtims=None, plots=False, plots2=False,
     
     return x
 
-def coadds_sky(tims, targetwcs, survey, brickname, bands, mp, 
+def coadds_sky(tims, targetwcs, survey, brickname, bands, mp,
+               ubercal=False, subsky_radii=None,
                plots=False, plots2=False, ps=None, verbose=False):
     
     from tractor.sky import ConstantSky
@@ -308,7 +309,7 @@ def stage_fit_on_coadds(
         brickname=None, version_header=None,
         apodize=True,
         subsky=True,
-        skymask_radius=None,
+        subsky_radii=None,
         fitoncoadds_reweight_ivar=True,
         plots=False, plots2=False, ps=None, coadd_bw=False, W=None, H=None,
         brick=None, blobs=None, lanczos=True, ccds=None,
@@ -329,6 +330,8 @@ def stage_fit_on_coadds(
     import astropy.time
     import fitsio
 
+    import pdb ; pdb.set_trace()
+
     # Custom sky-subtraction for large galaxies.
     if not subsky:
         plots, plots2 = True, False
@@ -336,7 +339,9 @@ def stage_fit_on_coadds(
             from astrometry.util.plotutils import PlotSequence
             ps = PlotSequence('fitoncoadds-{}'.format(brickname))
         tims = coadds_sky(tims, targetwcs, survey, brickname, bands,
-                          mp, plots=plots, plots2=plots2, ps=ps)
+                          mp, plots=plots, plots2=plots2, ps=ps,
+                          ubercal=False, # to be implemented later
+                          subsky_radii=subsky_radii)
     
     # Create coadds and then build custom tims from them.
 
