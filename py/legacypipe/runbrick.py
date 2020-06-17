@@ -2584,7 +2584,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               nsigma=6,
               saddle_fraction=0.1,
               saddle_min=2.,
-              skymask_radius=None,
+              subsky_radii=None,
               reoptimize=False,
               iterative=False,
               wise=True,
@@ -2835,7 +2835,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     kwargs.update(ps=ps, nsigma=nsigma, saddle_fraction=saddle_fraction,
                   saddle_min=saddle_min,
-                  skymask_radius=skymask_radius,
+                  subsky_radii=subsky_radii,
                   survey_blob_mask=survey_blob_mask,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
                   release=release,
@@ -3257,8 +3257,10 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--less-masking', default=False, action='store_true',
                         help='Turn off background fitting within MEDIUM mask.')
 
-    parser.add_argument('--skymask-radius', type=float, default=None,
-                        help='Masking radius [arcsec] before pedestal sky-subtraction (only used with --fit-on-coadds and --no-subsky.')
+    parser.add_argument('--subsky-radii', type=float, nargs=3, default=None,
+                        help="""Sky-subtraction radii: rmask, rin, rout [arcsec] (only used with --fit-on-coadds and --no-subsky).
+                        Image pixels r<rmask are fully masked and the pedestal sky background is estimated from an annulus
+                        rin<r<rout on each CCD centered on the targetwcs.crval coordinates.""")
     
     return parser
 
