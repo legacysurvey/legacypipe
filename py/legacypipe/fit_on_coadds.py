@@ -213,6 +213,11 @@ def coadds_sky(tims, targetwcs, survey, brickname, bands, mp,
         imsave_jpeg(os.path.join(survey.output_dir, 'metrics', 'cus', '{}-pipelinesky.jpg'.format(ps.basefn)),
                     get_rgb(C.comods, bands), origin='lower')
 
+    refs, _ = get_reference_sources(survey, targetwcs, targetwcs.pixel_scale(), ['r'],
+                                    tycho_stars=True, gaia_stars=True,
+                                    large_galaxies=True, star_clusters=True)
+    refmask = (get_inblob_map(targetwcs, refs) == 0)
+
     allbands = np.array([tim.band for tim in tims])
     for band in sorted(set(allbands)):
         print('Working on band {}'.format(band))
@@ -222,27 +227,23 @@ def coadds_sky(tims, targetwcs, survey, brickname, bands, mp,
             gaussPsf=True, pixPsf=False, subsky=False, dq=True, apodize=False)
             for ii in I]
 
-        # Derive the correction and then apply it.
-        x = coadds_ubercal(bandtims, coaddtims=[tims[ii] for ii in I],
-                           plots=plots, plots2=plots2, ps=ps)
-        # Apply the correction and return the tims
-        for jj, (correction, ii) in enumerate(zip(x, I)):
-            tims[ii].data += correction
-            tims[ii].sky = ConstantSky(0.0)
-            # Also correct the full-field mosaics
-            bandtims[jj].data += correction
-            bandtims[jj].sky = ConstantSky(0.0)
+        # Derive the ubercal correction and then apply it.
+        if ubercal:
+            x = coadds_ubercal(bandtims, coaddtims=[tims[ii] for ii in I],
+                               plots=plots, plots2=plots2, ps=ps)
+            # Apply the correction and return the tims
+            for jj, (correction, ii) in enumerate(zip(x, I)):
+                tims[ii].data += correction
+                tims[ii].sky = ConstantSky(0.0)
+                # Also correct the full-field mosaics
+                bandtims[jj].data += correction
+                bandtims[jj].sky = ConstantSky(0.0)
 
         ## Check--
         #for jj, correction in enumerate(x):
         #    fulltims[jj].data += correction
         #newcorrection = coadds_ubercal(fulltims)
         #print(newcorrection)
-
-    refs, _ = get_reference_sources(survey, targetwcs, targetwcs.pixel_scale(), ['r'],
-                                    tycho_stars=True, gaia_stars=True,
-                                    large_galaxies=True, star_clusters=True)
-    refmask = (get_inblob_map(targetwcs, refs) == 0)
 
     C = make_coadds(tims, bands, targetwcs, callback=None, sbscale=False, mp=mp)
     for coimg,coiv,band in zip(C.coimgs, C.cowimgs, bands):
