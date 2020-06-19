@@ -814,8 +814,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     debug('Blobs:', tnow-tlast)
     tlast = tnow
 
-    sky_overlap = True
     ccds.co_sky = np.zeros(len(ccds), np.float32)
+    sky_overlap = True
     if sky_overlap:
         '''
         A note about units here: we're passing 'sbscale=False' to the
@@ -831,6 +831,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         for band,co,cowt in zip(bands, C.coimgs, C.cowimgs):
             pix = co[(cowt > 0) * (blobs == -1)]
             if len(pix) == 0:
+                debug('Cosky band', band, ': no unmasked pixels outside blobs')
                 continue
             cosky = np.median(pix)
             info('Median coadd sky for', band, ':', cosky)
@@ -1035,6 +1036,7 @@ def stage_fitblobs(T=None,
                           refmap, large_galaxies_force_pointsource, less_masking, brick,
                           frozen_galaxies,
                           skipblobs=skipblobs,
+                          single_thread=(mp is None or mp.pool is None),
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
     # to allow timingpool to queue tasks one at a time
     blobiter = iterwrapper(blobiter, len(blobsrcs))
@@ -1415,7 +1417,7 @@ def _check_checkpoints(R, blobslices, brickname):
 def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
                plots, ps, reoptimize, iterative, use_ceres, refmap,
                large_galaxies_force_pointsource, less_masking,
-               brick, frozen_galaxies,
+               brick, frozen_galaxies, single_thread=False,
                skipblobs=None, max_blobsize=None, custom_brick=False):
     '''
     *blobs*: map, with -1 indicating no-blob, other values indexing *blobslices*,*blobsrcs*.
@@ -1520,6 +1522,13 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
             # FIXME -- maybe the cache is worth sending?
             if hasattr(tim.psf, 'clear_cache'):
                 tim.psf.clear_cache()
+            # Yuck!  If we not running with --threads AND oneblob.py modifies the data,
+            # bad things happen.
+            if single_thread:
+                subimg = subimg.copy()
+                subie = subie.copy()
+                subdq = subdq.copy()
+                # ...
             subtimargs.append((subimg, subie, subdq, subwcs, subwcsobj,
                                tim.getPhotoCal(),
                                subsky, subpsf, tim.name,

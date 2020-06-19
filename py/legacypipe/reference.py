@@ -585,9 +585,7 @@ def get_reference_map(wcs, refs):
     refmap = np.zeros((H,W), np.uint8)
     pixscale = wcs.pixel_scale()
     cd = wcs.cd
-    debug('CD matrix:', cd, 'pixscale', pixscale)
     cd = np.reshape(cd, (2,2)) / (pixscale / 3600.)
-    debug('Unit CD matrix:', cd)
 
     # circular/elliptical regions:
     for col,bit,ellipse in [('isbright', 'BRIGHT', False),
