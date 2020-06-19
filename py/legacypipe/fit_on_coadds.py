@@ -140,6 +140,124 @@ def coadds_ubercal(fulltims, coaddtims=None, plots=False, plots2=False,
     
     return x
 
+def ubercal_sky(tims, targetwcs, survey, brickname, bands, mp,
+                plots=False, plots2=False, ps=None, verbose=False):
+    """With the ubercal option, we (1) read the full-field mosaics ('bandtims') for
+    a given bandpass and put them all on the same 'system' using the overlapping
+    pixels; (2) apply the derived corrections to the in-field 'tims'; (3) build
+    the coadds (per bandpass) from the 'tims'; and (4) subtract the median sky
+    from the mosaic (after aggressively masking objects and reference sources).
+
+    """
+    from tractor.sky import ConstantSky
+    from legacypipe.reference import get_reference_sources
+    from legacypipe.oneblob import get_inblob_map
+    from legacypipe.coadds import make_coadds
+    from legacypipe.survey import get_rgb, imsave_jpeg
+    from astropy.stats import sigma_clipped_stats
+
+    if plots:
+        plt.figure(figsize=(8,6))
+        mods = []
+        for tim in tims:
+            imcopy = tim.getImage().copy()
+            tim.sky.addTo(imcopy, -1)
+            mods.append(imcopy)
+        C = make_coadds(tims, bands, targetwcs, mods=mods, callback=None, mp=mp)
+        imsave_jpeg(os.path.join(survey.output_dir, 'metrics', 'cus', '{}-pipelinesky.jpg'.format(ps.basefn)),
+                    get_rgb(C.comods, bands), origin='lower')
+
+    refs, _ = get_reference_sources(survey, targetwcs, targetwcs.pixel_scale(), ['r'],
+                                    tycho_stars=True, gaia_stars=True,
+                                    large_galaxies=True, star_clusters=True)
+    refmask = (get_inblob_map(targetwcs, refs) == 0)
+
+    allbands = np.array([tim.band for tim in tims])
+    for band in sorted(set(allbands)):
+        print('Working on band {}'.format(band))
+        I = np.where(allbands == band)[0]
+
+        bandtims = [tims[ii].imobj.get_tractor_image(
+            gaussPsf=True, pixPsf=False, subsky=False, dq=True, apodize=False)
+            for ii in I]
+
+        # Derive the ubercal correction and then apply it.
+        x = coadds_ubercal(bandtims, coaddtims=[tims[ii] for ii in I],
+                           plots=plots, plots2=plots2, ps=ps)
+        # Apply the correction and return the tims
+        for jj, (correction, ii) in enumerate(zip(x, I)):
+            tims[ii].data += correction
+            tims[ii].sky = ConstantSky(0.0)
+            # Also correct the full-field mosaics
+            bandtims[jj].data += correction
+            bandtims[jj].sky = ConstantSky(0.0)
+
+        ## Check--
+        #for jj, correction in enumerate(x):
+        #    fulltims[jj].data += correction
+        #newcorrection = coadds_ubercal(fulltims)
+        #print(newcorrection)
+
+    C = make_coadds(tims, bands, targetwcs, callback=None, sbscale=False, mp=mp)
+    for coimg,coiv,band in zip(C.coimgs, C.cowimgs, bands):
+        #cosky = np.median(coimg[refmask * (coiv > 0)])
+        skypix = _build_objmask(coimg, coiv, refmask * (coiv>0))
+        skymean, skymedian, skysig = sigma_clipped_stats(coimg, mask=~skypix, sigma=3.0)
+        
+        I = np.where(allbands == band)[0]
+        #print('Band', band, 'Coadd sky:', skymedian)
+
+        if plots2:
+            plt.clf()
+            plt.hist(coimg.ravel(), bins=50, range=(-3,3), density=True)
+            plt.axvline(skymedian, color='k')
+            for ii in I:
+                #print('Tim', tims[ii], 'median', np.median(tims[ii].data))
+                plt.hist((tims[ii].data - skymedian).ravel(), bins=50, range=(-3,3), histtype='step', density=True)
+            plt.title('Band %s: tim pix & skymedian' % band)
+            ps.savefig()
+
+            # Produce skymedian-subtracted, masked image for later RGB plot
+            coimg -= skymedian
+            coimg[~skypix] = 0.
+            #coimg[np.logical_not(skymask * (coiv > 0))] = 0.
+
+        for ii in I:
+            tims[ii].data -= skymedian
+            #print('Tim', tims[ii], 'after subtracting skymedian: median', np.median(tims[ii].data))
+
+    if plots2:
+        plt.clf()
+        plt.imshow(get_rgb(C.coimgs, bands), origin='lower', interpolation='nearest')
+        ps.savefig()
+
+        for band in bands:
+            for tim in tims:
+                if tim.band != band:
+                    continue
+                plt.clf()
+                C = make_coadds([tim], bands, targetwcs, callback=None, sbscale=False, mp=mp)
+                plt.imshow(get_rgb(C.coimgs, bands).sum(axis=2), cmap='gray',
+                           interpolation='nearest', origin='lower')
+                plt.title('Band %s: tim %s' % (band, tim.name))
+                ps.savefig()
+
+    if plots:
+        C = make_coadds(tims, bands, targetwcs, callback=None, mp=mp)
+        imsave_jpeg(os.path.join(survey.output_dir, 'metrics', 'cus', '{}-customsky.jpg'.format(ps.basefn)),
+                    get_rgb(C.coimgs, bands), origin='lower')
+        
+    if plots2:
+        plt.clf()
+        for coimg,band in zip(C.coimgs, bands):
+            plt.hist(coimg.ravel(), bins=50, range=(-0.5,0.5),
+                     histtype='step', label=band)
+        plt.legend()
+        plt.title('After adjustment: coadds (sb scaled)')
+        ps.savefig()
+
+    return tims
+
 def coadds_sky(tims, targetwcs, survey, brickname, bands, mp,
                ubercal=False, subsky_radii=None,
                plots=False, plots2=False, ps=None, verbose=False):
@@ -339,9 +457,11 @@ def stage_fit_on_coadds(
         if plots:
             from astrometry.util.plotutils import PlotSequence
             ps = PlotSequence('fitoncoadds-{}'.format(brickname))
+        # ubercal_sky works, but is not being used right now--
+        #tims = ubercal_sky(tims, targetwcs, survey, brickname, bands, 
+        #                   mp, plots=plots, plots2=plots2, ps=ps)
         tims = coadds_sky(tims, targetwcs, survey, brickname, bands,
                           mp, plots=plots, plots2=plots2, ps=ps,
-                          ubercal=False, # to be implemented later
                           subsky_radii=subsky_radii)
     
     # Create coadds and then build custom tims from them.
