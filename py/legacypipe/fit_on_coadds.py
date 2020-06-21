@@ -150,8 +150,7 @@ def ubercal_sky(tims, targetwcs, survey, brickname, bands, mp,
 
     """
     from tractor.sky import ConstantSky
-    from legacypipe.reference import get_reference_sources
-    from legacypipe.oneblob import get_inblob_map
+    from legacypipe.reference import get_reference_sources, get_reference_map
     from legacypipe.coadds import make_coadds
     from legacypipe.survey import get_rgb, imsave_jpeg
     from astropy.stats import sigma_clipped_stats
@@ -170,7 +169,7 @@ def ubercal_sky(tims, targetwcs, survey, brickname, bands, mp,
     refs, _ = get_reference_sources(survey, targetwcs, targetwcs.pixel_scale(), ['r'],
                                     tycho_stars=True, gaia_stars=True,
                                     large_galaxies=True, star_clusters=True)
-    refmask = (get_inblob_map(targetwcs, refs) == 0)
+    refmask = get_reference_map(targetwcs, refs) == 0
 
     allbands = np.array([tim.band for tim in tims])
     for band in sorted(set(allbands)):
@@ -263,8 +262,7 @@ def coadds_sky(tims, targetwcs, survey, brickname, bands, mp,
                ps=None, verbose=False):
     
     from tractor.sky import ConstantSky
-    from legacypipe.reference import get_reference_sources
-    from legacypipe.oneblob import get_inblob_map
+    from legacypipe.reference import get_reference_sources, get_reference_map
     from legacypipe.coadds import make_coadds
     from legacypipe.survey import get_rgb, imsave_jpeg
     from astropy.stats import sigma_clipped_stats
@@ -342,7 +340,7 @@ def coadds_sky(tims, targetwcs, survey, brickname, bands, mp,
         refs, _ = get_reference_sources(survey, tim.subwcs, pixel_scale, ['r'],
                                         tycho_stars=True, gaia_stars=True,
                                         large_galaxies=True, star_clusters=True)
-        refmask = (get_inblob_map(tim.subwcs, refs) == 0)
+        refmask = get_reference_map(tim.subwcs, refs) == 0
     
         # Mask the center of the (target) field--
         #http://stackoverflow.com/questions/8647024/how-to-apply-a-disc-shaped-mask-to-a-numpy-array
@@ -351,6 +349,8 @@ def coadds_sky(tims, targetwcs, survey, brickname, bands, mp,
         ymask, xmask = np.ogrid[-ycen:H-ycen, -xcen:W-xcen]
         cenmask = (xmask**2 + ymask**2) <= (subsky_radii[0] / pixel_scale)**2
         
+        import pdb ; pdb.set_trace()
+
     allbands = np.array([tim.band for tim in tims])
     for band in sorted(set(allbands)):
         print('Working on band {}'.format(band))
@@ -400,8 +400,6 @@ def stage_fit_on_coadds(
     from tractor.tractortime import TAITime
     import astropy.time
     import fitsio
-
-    import pdb ; pdb.set_trace()
 
     # Custom sky-subtraction for large galaxies.
     if not subsky:
