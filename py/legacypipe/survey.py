@@ -223,6 +223,7 @@ class LegacySersicIndex(SersicIndex):
         super(LegacySersicIndex, self).__init__(val=val)
         self.lower = 0.5
         self.upper = 6.0
+        self.maxstep = 0.25
 
 class LogRadius(EllipseESoft):
     ''' Class used during fitting of the RexGalaxy type -- an ellipse

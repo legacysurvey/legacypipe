@@ -501,7 +501,7 @@ def get_galaxy_sources(galaxies, bands):
 
             if g.islargegalaxy:
                 assert((g.radius > 0) * np.isfinite(g.radius))
-                assert((g.pa >= 0) * (g.pa <= 180) * np.isfinite(g.pa[ii]))
+                assert((g.pa >= 0) * (g.pa <= 180) * np.isfinite(g.pa))
                 assert((g.ba > 0) * (g.ba <= 1.0) * np.isfinite(g.ba))
         except:
             import traceback
