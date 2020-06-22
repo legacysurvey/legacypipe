@@ -190,9 +190,10 @@ class OneBlob(object):
         if len(frozen_galaxies):
             debug('Subtracting frozen galaxy models...')
             tr = Tractor(self.tims, Catalog(*frozen_galaxies))
-            mh,mw = tim.shape
-            mm = [dict([(g, ModelMask(0, 0, mw, mh)) for g in frozen_galaxies])
-                       for tim in self.tims]
+            mm = []
+            for tim in self.tims:
+                mh,mw = tim.shape
+                mm.append(dict([(g, ModelMask(0, 0, mw, mh)) for g in frozen_galaxies]))
             tr.setModelMasks(mm)
             if self.plots:
                 mods = []
