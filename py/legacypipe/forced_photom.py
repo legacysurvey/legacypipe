@@ -603,7 +603,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             cat = realsrcs + derivsrcs
 
     if agn:
-        from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
+        from tractor.galaxy import ExpGalaxy, DevGalaxy
         from tractor import PointSource
         from tractor.sersic import SersicGalaxy
         from legacypipe.survey import RexGalaxy

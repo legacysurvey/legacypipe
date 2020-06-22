@@ -319,7 +319,7 @@ def stage_fit_on_coadds(
     from legacypipe.coadds import get_coadd_headers
 
     from tractor.image import Image
-    from tractor.basics import NanoMaggies, LinearPhotoCal
+    from tractor.basics import LinearPhotoCal
     from tractor.sky import ConstantSky
     from tractor.psf import PixelizedPSF
     from tractor.tractortime import TAITime

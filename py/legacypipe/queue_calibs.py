@@ -451,7 +451,7 @@ def main(args):
 
     log(len(T), 'CCDs')
     log(len(B), 'Bricks')
-    I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, search_radius,
+    I,J,_ = match_radec(B.ra, B.dec, T.ra, T.dec, search_radius,
                         nearest=True)
     B.cut(I)
     log('Cut to', len(B), 'bricks near CCDs')
@@ -566,9 +566,9 @@ def main(args):
 
     elif opt.near:
         # Find CCDs near bricks
-        allI,nil,nil = match_radec(T.ra, T.dec, B.ra, B.dec, search_radius, nearest=True)
+        allI,_,_ = match_radec(T.ra, T.dec, B.ra, B.dec, search_radius, nearest=True)
         # Find bricks near CCDs
-        J,nil,nil = match_radec(B.ra, B.dec, T.ra, T.dec, search_radius, nearest=True)
+        J,_,_ = match_radec(B.ra, B.dec, T.ra, T.dec, search_radius, nearest=True)
         B.cut(J)
         log('Cut to', len(B), 'bricks near CCDs')
 
@@ -576,7 +576,7 @@ def main(args):
         allI = np.arange(len(T))
 
     if opt.byexp:
-        nil,eI = np.unique(T.expnum[allI], return_index=True)
+        _,eI = np.unique(T.expnum[allI], return_index=True)
         allI = allI[eI]
         print('Cut to', len(allI), 'expnums')
 

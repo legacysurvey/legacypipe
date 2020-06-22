@@ -63,10 +63,10 @@ else
 fi
 
 # Redirect logs to a nested directory.
-cpdir=`echo $(basename $(dirname ${image_fn}))`
+cpdir=$(basename $(dirname ${image_fn}))
 logdir=$outdir/logs-calibs/$camera/$cpdir
 mkdir -p $logdir
-log=`echo $(basename ${image_fn} | sed s#.fits.fz#.log#g)`
+log=$(echo $(basename ${image_fn} | sed s#.fits.fz#.log#g))
 log=$logdir/$log
 
 cmd="python -u /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \

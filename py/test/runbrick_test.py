@@ -13,7 +13,7 @@ from astrometry.util.fits import fits_table
 
 def rbmain():
     from legacypipe.catalog import read_fits_catalog
-    from legacypipe.survey import LegacySurveyData, GaiaSource, wcs_for_brick
+    from legacypipe.survey import LegacySurveyData, wcs_for_brick
     from tractor.galaxy import DevGalaxy
     from tractor import PointSource, Catalog
     from tractor import GaussianMixturePSF
@@ -22,7 +22,6 @@ def rbmain():
     from astrometry.util.file import trymakedirs
     import shutil
 
-    travis = 'travis' in sys.argv
     ceres  = 'ceres'  in sys.argv
     psfex  = 'psfex'  in sys.argv
 
@@ -561,7 +560,6 @@ def rbmain():
     from tractor.sersic import SersicGalaxy
     assert(type(src) in [DevGalaxy, SersicGalaxy])
     assert(np.abs(src.pos.ra  - 244.77973) < 0.00001)
-    # Results on travis vs local seem to differ?!
     assert(np.abs(src.pos.dec -  12.07234) < 0.00002)
     src = cat[1]
     print('Source1', src)
