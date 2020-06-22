@@ -1316,6 +1316,26 @@ class OneBlob(object):
         if fit_background:
             srctractor.optimize_loop(**self.optargs)
 
+        chisqs_none = _per_band_chisqs(srctractor, self.bands)
+
+        if not fit_background:
+            for tim in srctims:
+                tim.freezeAllBut('sky')
+            srctractor.thawParam('images')
+            srctractor.optimize_loop(**self.optargs)
+            chisqs_piston = _per_band_chisqs(srctractor, self.bands)
+            piston_params = srctractor.images.getParams()
+            srctractor.freezeParam('images')
+            debug('Chisqs for no-source:', chisqs_none)
+            debug('Chisqs for piston:', chisqs_piston)
+            debug('Sky levels for piston:')
+            for t,p in zip(srctims,piston_params):
+                debug('  tim', t.name, 'sky', p)
+            debug('Piston improvement vs no-source:',
+                  np.sum(chisqs_none[b] - chisqs_piston[b] for b in self.bands))
+        else:
+            chisqs_piston = chisqs_none
+
         if self.plots_per_source:
             model_mod_rgb = {}
             model_resid_rgb = {}
@@ -1328,8 +1348,6 @@ class OneBlob(object):
             co,_ = quick_coadds(srctims, self.bands, srcwcs, images=res)
             rgb = get_rgb(co, self.bands)
             model_resid_rgb['none'] = rgb
-
-        chisqs_none = _per_band_chisqs(srctractor, self.bands)
 
         nparams = dict(psf=2, rex=3, exp=5, dev=5, ser=6)
         # This is our "upgrade" threshold: how much better a galaxy
