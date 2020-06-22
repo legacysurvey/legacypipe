@@ -164,8 +164,8 @@ class OneBlob(object):
         self.bands = bands
         self.plots = plots
         self.refmap = refmap
-        #self.plots_per_source = False
-        self.plots_per_source = plots
+        self.plots_per_source = False
+        #self.plots_per_source = plots
         self.plots_per_model = False
         # blob-1-data.png, etc
         self.plots_single = False
@@ -447,7 +447,7 @@ class OneBlob(object):
         for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
             sn = detmap * np.sqrt(detiv)
 
-            if self.plots:
+            if self.plots and False:
                 import pylab as plt
                 plt.clf()
                 plt.subplot(2,2,1)
@@ -468,6 +468,7 @@ class OneBlob(object):
             maxsn = np.maximum(maxsn, sn)
 
         if self.plots:
+            import pylab as plt
             plt.clf()
             plt.imshow(saturated_pix, interpolation='nearest', origin='lower',
                        vmin=0, vmax=1, cmap='gray')
@@ -1040,37 +1041,37 @@ class OneBlob(object):
                 import pylab as plt
                 from legacypipe.detection import plot_boundary_map
 
-                plt.clf()
-                for i,(band,detmap,detiv) in enumerate(zip(self.bands, detmaps, detivs)):
-                    if i >= 4:
-                        break
-                    detsn = detmap * np.sqrt(detiv)
-                    plt.subplot(2,2, i+1)
-                    mx = detsn.max()
-                    dimshow(detsn, vmin=-2, vmax=max(8, mx))
-                    ax = plt.axis()
-                    plot_boundary_map(detsn >= 5.)
-                    plt.plot(ix, iy, 'rx')
-                    plt.plot([ix-flipw, ix-flipw, ix+flipw, ix+flipw, ix-flipw],
-                             [iy-fliph, iy+fliph, iy+fliph, iy-fliph, iy-fliph], 'r-')
-                    plt.axis(ax)
-                    plt.title('det S/N: ' + band)
-                plt.subplot(2,2,4)
-                dimshow(flipblobs, vmin=0, vmax=1)
-                plt.colorbar()
-                ax = plt.axis()
-                plot_boundary_map(blobs == goodblob)
-                if binary_fill_holes(flipblobs)[iy,ix]:
-                    fb = (blobs == goodblob)
-                    di = binary_dilation(fb, iterations=4)
-                    if np.any(di):
-                        plot_boundary_map(di, rgb=(255,0,0))
-                plt.plot(ix, iy, 'rx')
-                plt.plot([ix-flipw, ix-flipw, ix+flipw, ix+flipw, ix-flipw],
-                         [iy-fliph, iy+fliph, iy+fliph, iy-fliph, iy-fliph], 'r-')
-                plt.axis(ax)
-                plt.title('good blob')
-                self.ps.savefig()
+                # plt.clf()
+                # for i,(band,detmap,detiv) in enumerate(zip(self.bands, detmaps, detivs)):
+                #     if i >= 4:
+                #         break
+                #     detsn = detmap * np.sqrt(detiv)
+                #     plt.subplot(2,2, i+1)
+                #     mx = detsn.max()
+                #     dimshow(detsn, vmin=-2, vmax=max(8, mx))
+                #     ax = plt.axis()
+                #     plot_boundary_map(detsn >= 5.)
+                #     plt.plot(ix, iy, 'rx')
+                #     plt.plot([ix-flipw, ix-flipw, ix+flipw, ix+flipw, ix-flipw],
+                #              [iy-fliph, iy+fliph, iy+fliph, iy-fliph, iy-fliph], 'r-')
+                #     plt.axis(ax)
+                #     plt.title('det S/N: ' + band)
+                # plt.subplot(2,2,4)
+                # dimshow(flipblobs, vmin=0, vmax=1)
+                # plt.colorbar()
+                # ax = plt.axis()
+                # plot_boundary_map(blobs == goodblob)
+                # if binary_fill_holes(flipblobs)[iy,ix]:
+                #     fb = (blobs == goodblob)
+                #     di = binary_dilation(fb, iterations=4)
+                #     if np.any(di):
+                #         plot_boundary_map(di, rgb=(255,0,0))
+                # plt.plot(ix, iy, 'rx')
+                # plt.plot([ix-flipw, ix-flipw, ix+flipw, ix+flipw, ix-flipw],
+                #          [iy-fliph, iy+fliph, iy+fliph, iy-fliph, iy-fliph], 'r-')
+                # plt.axis(ax)
+                # plt.title('good blob')
+                # self.ps.savefig()
 
                 plt.clf()
                 plt.subplot(2,2,1)
@@ -1786,8 +1787,8 @@ class OneBlob(object):
             np.array([src.getPosition().dec for src in self.srcs]))
 
         h,w = sat.shape
-        ix = np.clip(np.round(x0)-1, 0, w).astype(int)
-        iy = np.clip(np.round(y0)-1, 0, h).astype(int)
+        ix = np.clip(np.round(x0)-1, 0, w-1).astype(int)
+        iy = np.clip(np.round(y0)-1, 0, h-1).astype(int)
         srcsat = sat[iy,ix]
 
         ax = plt.axis()
