@@ -2052,8 +2052,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     if run_calibs_only:
         return
 
-    rtns = mp.map(run_one_ext, [(measure, ext, survey, psfex, splinesky,
-                                 measureargs['debug'])
+    rtns = mp.map(run_one_ext, [(measure, ext, survey, splinesky, measureargs['debug'])
                                 for ext in extlist])
 
     for ext,(ccds,photom) in zip(extlist,rtns):
@@ -2091,7 +2090,7 @@ def run_one_calib(X):
                               survey_zeropoints=survey_zeropoints)
 
 def run_one_ext(X):
-    measure, ext, survey, psfex, splinesky, debug = X
+    measure, ext, survey, splinesky, debug = X
     rtns = measure.run(ext, splinesky=splinesky, survey=survey, save_xy=debug)
     return rtns
 

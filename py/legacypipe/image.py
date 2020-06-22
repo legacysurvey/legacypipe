@@ -522,8 +522,6 @@ class LegacySurveyImage(object):
             xx = np.linspace(-np.pi, np.pi, min(H,100))
             rampy = np.arctan(xx)
             rampy = (rampy - rampy.min()) / (rampy.max() - rampy.min())
-
-            apo = True
             # bottom
             invvar[:len(rampy),:] *= rampy[:,np.newaxis]
             # left

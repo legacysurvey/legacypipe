@@ -152,7 +152,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
         Create plots?
     mp : multiproc object
         Multiprocessing
-        
+
     Returns
     -------
     Tnew : fits_table
@@ -162,11 +162,11 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
         PointSource objects.
     hot : numpy array of bool
         "Hot pixels" containing sources.
-        
+
     See also
     --------
     sed_matched_detection : run a single SED-matched filter.
-    
+
     '''
     from astrometry.util.fits import fits_table
     from tractor import PointSource, RaDecPos, NanoMaggies
@@ -506,18 +506,12 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     naper = 0
     for i,(x,y) in enumerate(zip(px, py)):
         if this_veto_map[y,x]:
-            #info('  in veto map!')
             nveto += 1
             continue
-
         level = saddle_level(sedsn[y,x])
         ablob = allblobs[y,x]
         index = int(ablob - 1)
         slc = allslices[index]
-
-        #info('source', i, 'of', len(px), 'at', x,y, 'S/N', sedsn[y,x], 'saddle', level)
-        #info('  allblobs slice', slc)
-
         saddlemap = (sedsn[slc] > level)
         saddlemap = binary_dilation(saddlemap, iterations=dilate)
         if saturated_pix is not None:
@@ -527,7 +521,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         blobs,_ = label(saddlemap)
         x0,y0 = allx0[index], ally0[index]
         thisblob = blobs[y-y0, x-x0]
-
         saddlemap *= (blobs == thisblob)
 
         # previously found sources:
@@ -545,7 +538,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         if ps is not None and i<10:
             _peak_plot_1(this_veto_map, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
                          level, dilate, saturated_pix, satur, ps, rgbimg, cut)
-
         if False and cut and ps is not None:
             _peak_plot_2(ox, oy, w, h, blobs, thisblob, sedsn, x0, y0,
                          x, y, level, ps)
@@ -555,11 +547,9 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 
         if cut:
             # in same blob as previously found source.
-            #info('  cut')
             # update vetomap
             this_veto_map[slc] |= saddlemap
             nsaddle += 1
-            #info('Added to vetomap:', np.sum(saddlemap), 'pixels set; now total of', np.sum(this_veto_map), 'pixels set')
             continue
 
         # Measure in aperture...
@@ -586,9 +576,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         aper.append(m)
         peakval.append(sedsn[y,x])
         keep[i] = True
-
         this_veto_map[slc] |= saddlemap
-        #info('Added to vetomap:', np.sum(saddlemap), 'pixels set; now total of', np.sum(this_veto_map), 'pixels set')
 
         if False and ps is not None:
             plt.clf()

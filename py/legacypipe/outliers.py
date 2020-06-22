@@ -25,9 +25,7 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
     apply the mask to the relevant subimage.
 
     *output* determines where we search for the file: treating it as output, or input?
-
     '''
-
     from legacypipe.bits import DQ_BITS
     if outlier_mask_file is None:
         fn = survey.find_file('outliers_mask', brick=brickname, output=output)
@@ -79,7 +77,6 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
                 print('y slice: mask', my, 'tim', ty)
                 print('tim shape:', tim.shape)
                 print('mask shape:', mask.shape)
-                
                 newdq = np.zeros(tim.shape, bool)
                 newdq[ty, tx] = ((mask[my, mx] & maskbits) > 0)
                 print('Total of', np.sum(newdq), 'pixels masked')
@@ -90,10 +87,9 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
                 plot_boundary_map(newdq, iterations=3, rgb=(0,128,255))
                 plt.axis(ax)
                 ps.savefig()
-
                 plt.axis([tx.start, tx.stop, ty.start, ty.stop])
                 ps.savefig()
-            
+
     return True
 
 def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
@@ -152,7 +148,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             if len(btims) == 0:
                 continue
             debug(len(btims), 'images for band', band)
-            
+
             H,W = targetwcs.shape
             # Build blurred reference image
             sigs = np.array([tim.psf_sigma for tim in btims])
@@ -164,7 +160,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             coimg = np.zeros((H,W), np.float32)
             cow   = np.zeros((H,W), np.float32)
             masks = np.zeros((H,W), np.int16)
-    
+
             R = mp.map(blur_resample_one, [(tim,sig,targetwcs) for tim,sig in zip(btims,addsigs)])
             for tim,r in zip(btims, R):
                 if r is None:
@@ -175,24 +171,24 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 masks[Yo,Xo] |= macc
                 del Yo,Xo,iacc,wacc,macc
             del r,R
-    
+
             #
             veto = np.logical_or(star_veto,
                                  np.logical_or(
                 binary_dilation(masks & DQ_BITS['bleed'], iterations=3),
                 binary_dilation(masks & DQ_BITS['satur'], iterations=10)))
             del masks
-        
+
             # if plots:
             #     plt.clf()
             #     plt.imshow(veto, interpolation='nearest', origin='lower', cmap='gray')
             #     plt.title('SATUR, BLEED veto (%s band)' % band)
             #     ps.savefig()
-        
+
             R = mp.map(compare_one, [(tim, sig, targetwcs, coimg,cow, veto, make_badcoadds, plots,ps)
                                      for tim,sig in zip(btims,addsigs)])
             del coimg, cow, veto
-    
+
             masks = []
             badcoadd_pos = None
             badcoadd_neg = None
@@ -219,7 +215,6 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                         del yo,xo,bimg, badhot,badcold
                     del badco
 
-
                 # Apply the mask!
                 maskbits = get_bits_to_mask()
                 tim.inverr[(mask & maskbits) > 0] = 0.
@@ -244,7 +239,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 out.fits.write(mask, header=hdr, extname=extname, compress='HCOMPRESS')
 
             del r,R
-        
+
             if make_badcoadds:
                 badcoadd_pos /= np.maximum(badcon_pos, 1)
                 badcoadd_neg /= np.maximum(badcon_neg, 1)
@@ -280,14 +275,14 @@ def compare_one(X):
 
     # Compare against reference image...
     maskedpix = np.zeros(tim.shape, np.uint8)
-    
+
     # Subtract this image from the coadd
     otherwt = cow[Yo,Xo] - wt
     otherimg = (coimg[Yo,Xo] - rimg*wt) / np.maximum(otherwt, 1e-16)
     this_sig1 = 1./np.sqrt(np.median(wt[wt>0]))
-    
+
     ## FIXME -- this image edges??
-    
+
     # Compute the error on our estimate of (thisimg - co) =
     # sum in quadrature of the errors on thisimg and co.
     with np.errstate(divide='ignore'):

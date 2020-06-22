@@ -21,7 +21,7 @@ def _expand_flux_columns(T, bands, allbands, keys):
         # Handle array columns (eg, apflux)
         sh = X.shape
         if len(sh) == 3:
-            nt,nb,N = sh
+            nt,_,N = sh
             A = np.zeros((len(T), len(allbands), N), X.dtype)
             A[:,B,:] = X
         else:
@@ -237,7 +237,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
                 for col in lc_cols:
                     colname = col + '_' + band
                     oldval = T.get(colname)
-                    n,ne = oldval.shape
+                    n,_ = oldval.shape
                     newval = np.zeros((n, N_wise_epochs), oldval.dtype)
                     newvals[colname] = newval
 

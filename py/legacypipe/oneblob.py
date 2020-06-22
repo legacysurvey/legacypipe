@@ -83,7 +83,7 @@ def one_blob(X):
         debug('Frozen galaxy:', g)
 
     LegacySersicIndex.stepsize = 0.001
-    
+
     if plots:
         import pylab as plt
         plt.figure(2, figsize=(3,3))
