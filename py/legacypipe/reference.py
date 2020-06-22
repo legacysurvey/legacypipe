@@ -67,7 +67,9 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
             gra  = gaia.ra[J]  + dt * gaia.pmra[J]  / (3600.*1000.) / cosdec
             gdec = gaia.dec[J] + dt * gaia.pmdec[J] / (3600.*1000.)
             dists = np.hypot((gra - tycho.ra[I]) * cosdec, gdec - tycho.dec[I])
-            I = np.flatnonzero(dists <= 1./3600.)
+            K = np.flatnonzero(dists <= 1./3600.)
+            I = I[K]
+            J = J[K]
             debug('Matched', len(I), 'Tycho-2 stars to Gaia stars.')
             if len(I):
                 keep = np.ones(len(tycho), bool)
