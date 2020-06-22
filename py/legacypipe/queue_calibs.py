@@ -732,11 +732,8 @@ def main(args):
     f.close()
     log('Wrote', opt.out)
     return 0
-#
-#
-#
+
 if __name__ == '__main__':
-    import sys
     main(sys.argv[1:])
 
 

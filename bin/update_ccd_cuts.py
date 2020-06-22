@@ -1,4 +1,3 @@
-import os
 import numpy
 from astropy.io import fits
 import pdb

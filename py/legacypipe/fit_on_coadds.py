@@ -16,13 +16,13 @@ def _build_objmask(img, ivar, skypix, boxcar=5, boxsize=1024):
     """
     from scipy.ndimage.morphology import binary_dilation
     from scipy.ndimage.filters import uniform_filter
-    
+
     from tractor.splinesky import SplineSky
-    
+
     # Get an initial guess of the sky using the mode, otherwise the median.
     skysig1 = 1.0 / np.sqrt(np.median(ivar[skypix]))
     skyval = np.median(img[skypix])
-   
+
     # Mask objects in a boxcar-smoothed (image - initial sky model), smoothed by
     # a boxcar filter before cutting pixels above the n-sigma threshold.
     if min(img.shape) / boxsize < 4: # handle half-DECam chips
@@ -53,7 +53,7 @@ def coadds_ubercal(fulltims, coaddtims=None, plots=False, plots2=False,
     Some notes on the procedure:
 
     A x = b
-    A: weights 
+    A: weights
     A: shape noverlap x nimg
     - entries have units of weights
 
@@ -69,7 +69,7 @@ def coadds_ubercal(fulltims, coaddtims=None, plots=False, plots2=False,
     from astrometry.util.resample import resample_with_wcs, OverlapError
 
     band = fulltims[0].band
-    
+
     nimg = len(fulltims)
     indx = np.arange(nimg)
 
@@ -137,12 +137,11 @@ def coadds_ubercal(fulltims, coaddtims=None, plots=False, plots2=False,
                 plt.hist((coaddtims[ii].data + correction).ravel(), bins=50, histtype='step', range=(-5, 5))
             plt.title('Band %s: tim pix + correction' % band)
             ps.savefig()
-    
+
     return x
 
-def coadds_sky(tims, targetwcs, survey, brickname, bands, mp, 
+def coadds_sky(tims, targetwcs, survey, brickname, bands, mp,
                plots=False, plots2=False, ps=None, verbose=False):
-    
     from tractor.sky import ConstantSky
     from legacypipe.reference import get_reference_sources
     from legacypipe.oneblob import get_inblob_map
@@ -158,9 +157,9 @@ def coadds_sky(tims, targetwcs, survey, brickname, bands, mp,
         refs, _ = get_reference_sources(survey, targetwcs, targetwcs.pixel_scale(), ['r'],
                                         tycho_stars=False, gaia_stars=False,
                                         large_galaxies=True, star_clusters=False)
-        
+
         pixscale = targetwcs.pixel_scale()
-        width, height = targetwcs.get_width() * pixscale / 3600, targetwcs.get_height() * pixscale / 3600 # [degrees]
+        width = targetwcs.get_width() * pixscale / 3600  # [degrees]
         bb, bbcc = targetwcs.radec_bounds(), targetwcs.radec_center() # [degrees]
         pad = 0.5 * width # [degrees]
 
@@ -188,7 +187,7 @@ def coadds_sky(tims, targetwcs, survey, brickname, bands, mp,
                 wcs = tim.subwcs
                 cc = wcs.radec_bounds()
                 ax.add_patch(patches.Rectangle((cc[0], cc[2]), cc[1]-cc[0],
-                                               cc[3]-cc[2], fill=False, lw=2, 
+                                               cc[3]-cc[2], fill=False, lw=2,
                                                edgecolor=col[these[ii]],
                                                label='ccd{:02d}'.format(these[ii])))
                 ax.legend(ncol=2, frameon=False, loc='upper left', fontsize=10)
@@ -200,7 +199,7 @@ def coadds_sky(tims, targetwcs, survey, brickname, bands, mp,
 
         plt.subplots_adjust(bottom=0.12, wspace=0.05, left=0.12, right=0.97, top=0.95)
         plt.savefig(os.path.join(survey.output_dir, 'metrics', 'cus', '{}-ccdpos.jpg'.format(ps.basefn)))
-        
+
     if plots:
         plt.figure(figsize=(8,6))
         mods = []
@@ -248,7 +247,7 @@ def coadds_sky(tims, targetwcs, survey, brickname, bands, mp,
         #cosky = np.median(coimg[refmask * (coiv > 0)])
         skypix = _build_objmask(coimg, coiv, refmask * (coiv>0))
         skymean, skymedian, skysig = sigma_clipped_stats(coimg, mask=~skypix, sigma=3.0)
-        
+
         I = np.where(allbands == band)[0]
         #print('Band', band, 'Coadd sky:', skymedian)
 
@@ -291,7 +290,6 @@ def coadds_sky(tims, targetwcs, survey, brickname, bands, mp,
         C = make_coadds(tims, bands, targetwcs, callback=None, mp=mp)
         imsave_jpeg(os.path.join(survey.output_dir, 'metrics', 'cus', '{}-customsky.jpg'.format(ps.basefn)),
                     get_rgb(C.coimgs, bands), origin='lower')
-        
     if plots2:
         plt.clf()
         for coimg,band in zip(C.coimgs, bands):
@@ -336,7 +334,7 @@ def stage_fit_on_coadds(
             ps = PlotSequence('fitoncoadds-{}'.format(brickname))
         tims = coadds_sky(tims, targetwcs, survey, brickname, bands,
                           mp, plots=plots, plots2=plots2, ps=ps)
-    
+
     # Create coadds and then build custom tims from them.
 
     for tim in tims:
@@ -392,7 +390,7 @@ def stage_fit_on_coadds(
             # detiv = np.zeros_like(detim) + (1. / detsig1**2)
             # detiv[iv == 0] = 0.
             # detiv = gaussian_filter(detiv, psf_sigma)
-            # 
+            #
             # plt.clf()
             # plt.hist((detim * np.sqrt(detiv)).ravel(), bins=50, range=(-5,8), log=True)
             # plt.title('Coadd detection map values / detie (sigmas): band %s' % band)
@@ -452,7 +450,7 @@ def stage_fit_on_coadds(
             iv = iv * np.sqrt(iv) / np.sqrt(median_iv)
             assert(np.all(np.isfinite(iv)))
             assert(np.all(iv >= 0))
-    
+
         cotim = Image(img, invvar=iv, wcs=twcs, psf=psf,
                       photocal=LinearPhotoCal(1., band=band),
                       sky=ConstantSky(0.), name='coadd-'+band)
@@ -497,4 +495,3 @@ def stage_fit_on_coadds(
 
     # EVIL
     return dict(tims=cotims)
-

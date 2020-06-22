@@ -12,12 +12,9 @@ from astrometry.util.file import trymakedirs
 from legacypipe.survey import LegacySurveyData
 
 '''
-
 This script is for merging per-CCD calibration files (PsfEx,
 splinesky) into larger per-exposure files.
-
 '''
-
 
 def pad_arrays(A):
     '''
@@ -42,77 +39,6 @@ def pad_arrays(A):
         p[s] = a
         padded.append(p)
     return padded
-
-def main():
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--expnum', type=str, help='Run specified exposure numbers (can be comma-separated list')
-    parser.add_argument('--all-found', action='store_true', default=False, help='Only write output if all required input files are found')
-    parser.add_argument('--ccds', help='Set ccds.fits file to load, default is all')
-    parser.add_argument('--continue', dest='con',
-                        help='Continue even if one exposure is bad',
-                        action='store_true', default=False)
-    parser.add_argument('--outdir', help='Output directory, default %(default)s',
-                        default='calib')
-
-    opt = parser.parse_args()
-
-    survey = LegacySurveyData()
-    if opt.ccds:
-        ccds = fits_table(opt.ccds)
-        ccds = survey.cleanup_ccds_table(ccds)
-        survey.ccds = ccds
-
-    if opt.expnum is not None:
-        expnums = [(None, int(x, 10)) for x in opt.expnum.split(',')]
-    else:
-        ccds = survey.get_ccds()
-        expnums = set(zip(ccds.camera, ccds.expnum))
-        print(len(expnums), 'unique camera+expnums')
-
-    for i,(camera,expnum) in enumerate(expnums):
-        print()
-        print('Exposure', i+1, 'of', len(expnums), ':', camera, 'expnum', expnum)
-        if camera is None:
-            C = survey.find_ccds(expnum=expnum)
-            print(len(C), 'CCDs with expnum', expnum)
-            camera = C.camera[0]
-            print('Set camera to', camera)
-
-        C = survey.find_ccds(expnum=expnum, camera=camera)
-        print(len(C), 'CCDs with expnum', expnum, 'and camera', camera)
-
-        im0 = survey.get_image_object(C[0])
-
-        skyoutfn = im0.merged_skyfn
-        psfoutfn = im0.merged_psffn
-
-        print('Checking for', skyoutfn)
-        print('Checking for', psfoutfn)
-        if os.path.exists(skyoutfn) and os.path.exists(psfoutfn):
-            print('Exposure', expnum, 'is done already')
-            continue
-
-        if not os.path.exists(skyoutfn):
-            try:
-                merge_splinesky(survey, expnum, C, skyoutfn, opt)
-            except:
-                if not opt.con:
-                    raise
-                import traceback
-                traceback.print_exc()
-                print('Exposure failed:', expnum, '.  Continuing...')
-
-        if not os.path.exists(psfoutfn):
-            try:
-                merge_psfex(survey, expnum, C, psfoutfn, opt)
-            except:
-                if not opt.con:
-                    raise
-                import traceback
-                traceback.print_exc()
-                print('Exposure failed:', expnum, '.  Continuing...')
-
 
 def merge_psfex(survey, expnum, C, psfoutfn, opt):
     psfex = []
@@ -212,6 +138,76 @@ def merge_splinesky(survey, expnum, C, skyoutfn, opt):
     os.rename(tmpfn, fn)
     print('Wrote', fn)
     return 1
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--expnum', type=str, help='Run specified exposure numbers (can be comma-separated list')
+    parser.add_argument('--all-found', action='store_true', default=False, help='Only write output if all required input files are found')
+    parser.add_argument('--ccds', help='Set ccds.fits file to load, default is all')
+    parser.add_argument('--continue', dest='con',
+                        help='Continue even if one exposure is bad',
+                        action='store_true', default=False)
+    parser.add_argument('--outdir', help='Output directory, default %(default)s',
+                        default='calib')
+
+    opt = parser.parse_args()
+
+    survey = LegacySurveyData()
+    if opt.ccds:
+        ccds = fits_table(opt.ccds)
+        ccds = survey.cleanup_ccds_table(ccds)
+        survey.ccds = ccds
+
+    if opt.expnum is not None:
+        expnums = [(None, int(x, 10)) for x in opt.expnum.split(',')]
+    else:
+        ccds = survey.get_ccds()
+        expnums = set(zip(ccds.camera, ccds.expnum))
+        print(len(expnums), 'unique camera+expnums')
+
+    for i,(camera,expnum) in enumerate(expnums):
+        print()
+        print('Exposure', i+1, 'of', len(expnums), ':', camera, 'expnum', expnum)
+        if camera is None:
+            C = survey.find_ccds(expnum=expnum)
+            print(len(C), 'CCDs with expnum', expnum)
+            camera = C.camera[0]
+            print('Set camera to', camera)
+
+        C = survey.find_ccds(expnum=expnum, camera=camera)
+        print(len(C), 'CCDs with expnum', expnum, 'and camera', camera)
+
+        im0 = survey.get_image_object(C[0])
+
+        skyoutfn = im0.merged_skyfn
+        psfoutfn = im0.merged_psffn
+
+        print('Checking for', skyoutfn)
+        print('Checking for', psfoutfn)
+        if os.path.exists(skyoutfn) and os.path.exists(psfoutfn):
+            print('Exposure', expnum, 'is done already')
+            continue
+
+        if not os.path.exists(skyoutfn):
+            try:
+                merge_splinesky(survey, expnum, C, skyoutfn, opt)
+            except:
+                if not opt.con:
+                    raise
+                import traceback
+                traceback.print_exc()
+                print('Exposure failed:', expnum, '.  Continuing...')
+
+        if not os.path.exists(psfoutfn):
+            try:
+                merge_psfex(survey, expnum, C, psfoutfn, opt)
+            except:
+                if not opt.con:
+                    raise
+                import traceback
+                traceback.print_exc()
+                print('Exposure failed:', expnum, '.  Continuing...')
 
 if __name__ == '__main__':
     main()
