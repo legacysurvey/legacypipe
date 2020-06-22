@@ -185,6 +185,7 @@ class OneBlob(object):
         if self.bigblob:
             debug('Big blob:', name)
         self.trargs = dict()
+        self.frozen_galaxy_mods = []
 
         if len(frozen_galaxies):
             debug('Subtracting frozen galaxy models...')
@@ -196,6 +197,7 @@ class OneBlob(object):
                 mods = []
             for tim in self.tims:
                 mod = tr.getModelImage(tim)
+                self.frozen_galaxy_mods.append(mod)
                 tim.data -= mod
                 if self.plots:
                     mods.append(mod)
@@ -754,12 +756,14 @@ class OneBlob(object):
         # Also compute detection maps on the (first-round) model images!
         # save tim.images (= residuals at this point)
         realimages = [tim.getImage() for tim in self.tims]
-        for tim,mods in zip(self.tims, models.models):
+        for itim,(tim,mods) in enumerate(zip(self.tims, models.models)):
             modimg = np.zeros_like(tim.getImage())
             for mod in mods:
                 if mod is None:
                     continue
                 mod.addTo(modimg)
+            if len(self.frozen_galaxy_mods):
+                modimg += self.frozen_galaxy_mods[itim]
             tim.data = modimg
         if self.plots:
             coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
