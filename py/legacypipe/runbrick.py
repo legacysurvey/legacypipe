@@ -678,8 +678,6 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 xy.update(zip(np.round(xx-1.).astype(int), np.round(yy-1.).astype(int)))
         ns = np.sum(refstars.in_bounds * (refstars.ref_epoch == 0))
         debug('Avoiding', ns, 'stationary and', len(xy)-ns, '(from %i stars) pixels' % np.sum(refstars.in_bounds * (refstars.ref_epoch > 0)))
-        #avoid_x = refstars.ibx
-        #avoid_y = refstars.iby
         # Add a ~1" exclusion zone around reference stars and large galaxies
         # (assuming pixel_scale ~ 0.25")
         xy = np.array(list(xy))
