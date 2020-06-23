@@ -1041,8 +1041,7 @@ class OneBlob(object):
                 # This plot is about the symmetric-blob definitions
                 # when fitting sources.
                 import pylab as plt
-                from legacypipe.detection import plot_boundary_map
-
+                #from legacypipe.detection import plot_boundary_map
                 # plt.clf()
                 # for i,(band,detmap,detiv) in enumerate(zip(self.bands, detmaps, detivs)):
                 #     if i >= 4:
