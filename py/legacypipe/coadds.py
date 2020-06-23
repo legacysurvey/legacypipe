@@ -16,95 +16,84 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
-class UnwiseCoadd(object):
-    def __init__(self, targetwcs, W, H, pixscale, wpixscale):
+class SimpleCoadd(object):
+    '''A class for handling coadds of unWISE (and GALEX) images.
+    '''
+    def __init__(self, ra, dec, W, H, pixscale, bands):
         from legacypipe.survey import wcs_for_brick, BrickDuck
-
-        self.wW = int(W * pixscale / wpixscale)
-        self.wH = int(H * pixscale / wpixscale)
-        rc,dc = targetwcs.radec_center()
-        # quack
-        brick = BrickDuck(rc, dc, 'quack')
-        self.unwise_wcs = wcs_for_brick(brick, W=self.wW, H=self.wH,
-                                        pixscale=wpixscale)
+        self.W = W
+        self.H = H
+        self.bands = bands
+        brick = BrickDuck(ra, dec, 'quack')
+        self.wcs = wcs_for_brick(brick, W=self.W, H=self.H,
+                                        pixscale=pixscale)
         # images
-        self.unwise_co  = [np.zeros((self.wH,self.wW), np.float32)
-                           for band in [1,2,3,4]]
-        self.unwise_con = [np.zeros((self.wH,self.wW), np.uint16)
-                           for band in [1,2,3,4]]
+        self.co_images = dict([(band, np.zeros((self.H,self.W), np.float32))
+                               for band in bands])
+        self.co_nobs = dict([(band, np.zeros((self.H,self.W), np.uint16))
+                             for band in bands])
         # models
-        self.unwise_com  = [np.zeros((self.wH,self.wW), np.float32)
-                            for band in [1,2,3,4]]
+        self.co_models = dict([(band, np.zeros((self.H,self.W), np.float32))
+                               for band in bands])
         # invvars
-        self.unwise_coiv  = [np.zeros((self.wH,self.wW), np.float32)
-                             for band in [1,2,3,4]]
+        self.co_invvars = dict([(band, np.zeros((self.H,self.W), np.float32))
+                                for band in bands])
 
-    def add(self, tile, wise_models):
-        for band in [1,2,3,4]:
-            if not (tile, band) in wise_models:
-                debug('Tile', tile, 'band', band, '-- model not found')
-                continue
-
-            # With the move_crpix option (Aaron's updated astrometry),
-            # the WCS for each band can be different, so we call resample_with_wcs
-            # for each band with (potentially) slightly different WCSes.
-            (mod, img, ie, _, wcs) = wise_models[(tile, band)]
-            debug('WISE: resampling', wcs, 'to', self.unwise_wcs)
+    def add(self, models):
+        for name, band, wcs, img, mod, ie in models:
+            debug('Accumulating tile', name, 'band', band)
             try:
-                Yo,Xo,Yi,Xi,resam = resample_with_wcs(self.unwise_wcs, wcs,
+                Yo,Xo,Yi,Xi,resam = resample_with_wcs(self.wcs, wcs,
                                                       [img, mod], intType=np.int16)
-                rimg,rmod = resam
-                debug('Adding', len(Yo), 'pixels from tile', tile, 'to coadd')
-                self.unwise_co [band-1][Yo,Xo] += rimg
-                self.unwise_com[band-1][Yo,Xo] += rmod
-                self.unwise_con[band-1][Yo,Xo] += 1
-                self.unwise_coiv[band-1][Yo,Xo] += ie[Yi, Xi]**2
-                debug('Band', band, ': now', np.sum(self.unwise_con[band-1]>0), 'pixels are set in image coadd')
             except OverlapError:
-                debug('No overlap between WISE model tile', tile, 'and brick')
+                debug('No overlap between tile', name, 'and coadd')
+                continue
+            rimg,rmod = resam
+            debug('Adding', len(Yo), 'pixels from tile', name, 'to coadd')
+
+            iv = ie[Yi,Xi]**2
+            self.co_images [band][Yo,Xo] += rimg * iv
+            self.co_models [band][Yo,Xo] += rmod * iv
+            self.co_nobs   [band][Yo,Xo] += 1
+            self.co_invvars[band][Yo,Xo] += iv
+            debug('Band', band, ': now', np.sum(self.co_nobs[band]>0), 'pixels are set in image coadd')
 
     def finish(self, survey, brickname, version_header,
                apradec=None, apertures=None):
         # apradec = (ra,dec): aperture photometry locations
         # apertures: RADII in PIXELS
-        from legacypipe.survey import imsave_jpeg
-
         if apradec is not None:
             assert(apertures is not None)
             (ra,dec) = apradec
-            ok,xx,yy = self.unwise_wcs.radec2pixelxy(ra, dec)
+            ok,xx,yy = self.wcs.radec2pixelxy(ra, dec)
             assert(np.all(ok))
             del ok
             apxy = np.vstack((xx - 1., yy - 1.)).T
             ap_iphots = [np.zeros((len(ra), len(apertures)), np.float32)
-                         for band in [1,2,3,4]]
+                         for band in self.bands]
             ap_dphots = [np.zeros((len(ra), len(apertures)), np.float32)
-                         for band in [1,2,3,4]]
+                         for band in self.bands]
             ap_rphots = [np.zeros((len(ra), len(apertures)), np.float32)
-                         for band in [1,2,3,4]]
+                         for band in self.bands]
 
-        for iband,(band,co,n,com,coiv) in enumerate(
-                zip([1,2,3,4], self.unwise_co,  self.unwise_con,
-                    self.unwise_com, self.unwise_coiv)):
-            hdr = copy_header_with_wcs(version_header, self.unwise_wcs)
-            hdr.add_record(dict(name='TELESCOP', value='WISE'))
-            hdr.add_record(dict(name='FILTER', value='W%i' % band,
-                                    comment='WISE band'))
-            hdr.add_record(dict(name='MAGZERO', value=22.5,
-                                    comment='Magnitude zeropoint'))
-            hdr.add_record(dict(name='MAGSYS', value='Vega',
-                                comment='This WISE image is in Vega fluxes'))
-            co  /= np.maximum(n, 1)
-            com /= np.maximum(n, 1)
-            with survey.write_output('image', brick=brickname, band='W%i'%band,
-                                     shape=co.shape) as out:
-                out.fits.write(co, header=hdr)
-            with survey.write_output('model', brick=brickname, band='W%i'%band,
-                                     shape=com.shape) as out:
-                out.fits.write(com, header=hdr)
-            with survey.write_output('invvar', brick=brickname, band='W%i'%band,
-                                     shape=co.shape) as out:
-                out.fits.write(coiv, header=hdr)
+        coimgs = []
+        comods = []
+        for iband,band in enumerate(self.bands):
+            coimg = self.co_images[band]
+            comod = self.co_models[band]
+            coiv  = self.co_invvars[band]
+            con   = self.co_nobs[band]
+            with np.errstate(divide='ignore', invalid='ignore'):
+                coimg /= coiv
+                comod /= coiv
+            coimg[coiv == 0] = 0.
+            comod[coiv == 0] = 0.
+            coimgs.append(coimg)
+            comods.append(comod)
+            
+            hdr = copy_header_with_wcs(version_header, self.wcs)
+            self.add_to_header(hdr, band)
+            self.write_coadds(survey, brickname, hdr, band, coimg, comod, coiv, con)
 
             if apradec is not None:
                 import photutils
@@ -114,26 +103,62 @@ class UnwiseCoadd(object):
                 imsigma[mask] = 0.
                 for irad,rad in enumerate(apertures):
                     aper = photutils.CircularAperture(apxy, rad)
-                    p = photutils.aperture_photometry(co, aper, error=imsigma,
+                    p = photutils.aperture_photometry(coimg, aper, error=imsigma,
                                                       mask=mask)
                     ap_iphots[iband][:,irad] = p.field('aperture_sum')
                     ap_dphots[iband][:,irad] = p.field('aperture_sum_err')
-                    p = photutils.aperture_photometry(co-com, aper, mask=mask)
+                    p = photutils.aperture_photometry(coimg - comod, aper, mask=mask)
                     ap_rphots[iband][:,irad] = p.field('aperture_sum')
 
-        # W1/W2 color jpeg
-        rgb = _unwise_to_rgb(self.unwise_co[:2])
-        with survey.write_output('wise-jpeg', brick=brickname) as out:
-            imsave_jpeg(out.fn, rgb, origin='lower')
-            info('Wrote', out.fn)
-        rgb = _unwise_to_rgb(self.unwise_com[:2])
-        with survey.write_output('wisemodel-jpeg', brick=brickname) as out:
-            imsave_jpeg(out.fn, rgb, origin='lower')
-            info('Wrote', out.fn)
+        self.write_color_image(survey, brickname, coimgs, comods)
 
         if apradec is not None:
             return ap_iphots, ap_dphots, ap_rphots
 
+    def add_to_header(self, hdr, band):
+        pass
+
+    def write_coadds(self, survey, brickname, hdr, band, coimg, comod, coiv, con):
+        pass
+        
+    def write_color_image(self, survey, brickname, coimgs, comods):
+        pass
+
+class UnwiseCoadd(SimpleCoadd):
+    def __init__(self, ra, dec, W, H, pixscale):
+        super().__init__(ra, dec, W, H, pixscale, [1,2,3,4])
+
+    def add_to_header(self, hdr, band):
+        hdr.add_record(dict(name='TELESCOP', value='WISE'))
+        hdr.add_record(dict(name='FILTER', value='W%i' % band, comment='WISE band'))
+        hdr.add_record(dict(name='MAGZERO', value=22.5,
+                            comment='Magnitude zeropoint'))
+        hdr.add_record(dict(name='MAGSYS', value='Vega',
+                            comment='This WISE image is in Vega fluxes'))
+
+    def write_coadds(self, survey, brickname, hdr, band, coimg, comod, coiv, con):
+        with survey.write_output('image', brick=brickname, band='W%i'%band,
+                                 shape=coimg.shape) as out:
+            out.fits.write(coimg, header=hdr)
+        with survey.write_output('model', brick=brickname, band='W%i'%band,
+                                 shape=comod.shape) as out:
+            out.fits.write(comod, header=hdr)
+        with survey.write_output('invvar', brick=brickname, band='W%i'%band,
+                                 shape=coiv.shape) as out:
+            out.fits.write(coiv, header=hdr)
+
+    def write_color_image(self, survey, brickname, coimgs, comods):
+        from legacypipe.survey import imsave_jpeg
+        # W1/W2 color jpeg
+        rgb = _unwise_to_rgb(coimgs[:2])
+        with survey.write_output('wise-jpeg', brick=brickname) as out:
+            imsave_jpeg(out.fn, rgb, origin='lower')
+            info('Wrote', out.fn)
+        rgb = _unwise_to_rgb(comods[:2])
+        with survey.write_output('wisemodel-jpeg', brick=brickname) as out:
+            imsave_jpeg(out.fn, rgb, origin='lower')
+            info('Wrote', out.fn)
+        
 def _unwise_to_rgb(imgs):
     img = imgs[0]
     H,W = img.shape

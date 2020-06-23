@@ -436,6 +436,7 @@ def read_large_galaxies(survey, targetwcs, bands):
     galaxies.freezeparams = np.zeros(len(galaxies), bool)
     galaxies.sources = np.empty(len(galaxies), object)
     galaxies.sources[:] = None
+    galaxies.keep_radius = galaxies.radius
 
     I, = np.nonzero(galaxies.preburned)
     if len(I):
@@ -449,7 +450,7 @@ def read_large_galaxies(survey, targetwcs, bands):
     if bands is not None:
         galaxies.sources[:] = get_galaxy_sources(galaxies, bands)
 
-    keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
+    keep_columns = ['ra', 'dec', 'radius', 'keep_radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
                     'sources', 'islargegalaxy', 'freezeparams']
     for c in galaxies.get_columns():
         if not c in keep_columns:
