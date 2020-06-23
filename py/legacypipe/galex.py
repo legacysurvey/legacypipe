@@ -140,10 +140,6 @@ def stage_galex_forced(
             if GALEX is None:
                 GALEX = p.phot
             else:
-                # remove duplicates
-                #p.phot.delete_column('galex_tile')
-                #p.phot.delete_column('galex_x')
-                #p.phot.delete_column('galex_y')
                 GALEX.add_columns_from(p.phot)
 
         # Create the WCS into which we'll resample the tiles.
@@ -168,7 +164,10 @@ def stage_galex_forced(
             iv = np.zeros_like(d)
             iv[d != 0.] = 1./(d[d != 0]**2)
             GALEX.set('apflux_ivar_%s' % niceband, iv)
-            print('Setting GALEX apphot')
+            fluxcol = 'flux_'+niceband
+            if not fluxcol in GALEX.get_columns():
+                GALEX.set(fluxcol, np.zeros(len(GALEX), np.float32))
+                GALEX.set('flux_ivar_'+niceband, np.zeros(len(GALEX), np.float32))
 
         if Nskipped > 0:
             assert(len(GALEX) == len(wcat))
@@ -177,10 +176,9 @@ def stage_galex_forced(
             assert(len(GALEX) == len(T))
 
     debug('Returning: GALEX', GALEX)
+    if logger.isEnabledFor(logging.DEBUG):
+        GALEX.about()
 
-    #### FIXME DEBUG
-    #GALEX.writeto('galex-phot.fits')
-    
     return dict(GALEX=GALEX,
                 version_header=version_header,
                 galex_apertures_arcsec=galex_apertures_arcsec)
