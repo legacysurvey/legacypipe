@@ -854,7 +854,7 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     else:
         maxblob = 0
     maxblob = max(maxblob, blobs.max())
-    bm = np.zeros(maxblob + 1, int)
+    bm = np.zeros(maxblob + 1, np.int32)
     for k,v in blobmap.items():
         bm[k] = v
     bm[0] = -1

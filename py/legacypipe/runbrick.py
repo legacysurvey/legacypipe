@@ -508,7 +508,7 @@ def stage_halos(targetrd=None, pixscale=None, targetwcs=None,
 def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        brickname=None, version_header=None,
                        plots=False, ps=None, coadd_bw=False, W=None, H=None,
-                       brick=None, blobs=None, lanczos=True, ccds=None,
+                       brick=None, blobmap=None, lanczos=True, ccds=None,
                        write_metrics=True,
                        mp=None, record_event=None,
                        co_sky=None,
@@ -601,11 +601,11 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
             debug('Wrote', out.fn)
 
         # Blob-outlined version
-        if blobs is not None:
+        if blobmap is not None:
             from scipy.ndimage.morphology import binary_dilation
             outline = np.logical_xor(
-                binary_dilation(blobs >= 0, structure=np.ones((3,3))),
-                (blobs >= 0))
+                binary_dilation(blobmap >= 0, structure=np.ones((3,3))),
+                (blobmap >= 0))
             # coadd_bw
             if len(rgb.shape) == 2:
                 rgb = np.repeat(rgb[:,:,np.newaxis], 3, axis=2)
@@ -624,8 +624,8 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                 hdr.add_record(dict(name='IMTYPE', value='blobmap',
                                     comment='LegacySurveys image type'))
                 with survey.write_output('blobmap', brick=brickname,
-                                         shape=blobs.shape) as out:
-                    out.fits.write(blobs, header=hdr)
+                                         shape=blobmap.shape) as out:
+                    out.fits.write(blobmap, header=hdr)
         del rgb
     return None
 
@@ -829,7 +829,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         del merging, any_saturated
 
     # Segment, and record which sources fall into each blob
-    blobs,blobsrcs,blobslices = segment_and_group_sources(hot, T, name=brickname,
+    blobmap,blobsrcs,blobslices = segment_and_group_sources(hot, T, name=brickname,
                                                           ps=ps, plots=plots)
     del hot
 
@@ -852,7 +852,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
         co_sky = {}
         for band,co,cowt in zip(bands, C.coimgs, C.cowimgs):
-            pix = co[(cowt > 0) * (blobs == -1)]
+            pix = co[(cowt > 0) * (blobmap == -1)]
             if len(pix) == 0:
                 debug('Cosky band', band, ': no unmasked pixels outside blobs')
                 continue
@@ -867,7 +867,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     else:
         co_sky = None
 
-    keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobs', 'cat',
+    keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobmap', 'cat',
             'ps', 'saturated_pix', 'version_header', 'co_sky', 'ccds']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
@@ -880,7 +880,7 @@ def stage_fitblobs(T=None,
                    brickid=None,
                    brick=None,
                    version_header=None,
-                   blobsrcs=None, blobslices=None, blobs=None,
+                   blobsrcs=None, blobslices=None, blobmap=None,
                    cat=None,
                    targetwcs=None,
                    W=None,H=None,
@@ -925,7 +925,7 @@ def stage_fitblobs(T=None,
     if plots:
         from legacypipe.runbrick_plots import fitblobs_plots
         fitblobs_plots(tims, bands, targetwcs, blobslices, blobsrcs, cat,
-                       blobs, ps)
+                       blobmap, ps)
 
     T.orig_ra  = T.ra.copy()
     T.orig_dec = T.dec.copy()
@@ -953,7 +953,7 @@ def stage_fitblobs(T=None,
                 print('Warning: clipping blob x,y to brick bounds', x,y)
                 x = np.clip(x, 0, W-1)
                 y = np.clip(y, 0, H-1)
-            blob = blobs[y,x]
+            blob = blobmap[y,x]
             if blob >= 0:
                 keepblobs.append(blob)
             else:
@@ -973,29 +973,29 @@ def stage_fitblobs(T=None,
 
     # keepblobs can be None or empty list
     if keepblobs is not None and len(keepblobs):
-        # 'blobs' is an image with values -1 for no blob, or the index
+        # 'blobmap' is an image with values -1 for no blob, or the index
         # of the blob.  Create a map from old 'blob number+1' to new
         # 'blob number', keeping only blobs in the 'keepblobs' list.
         # The +1 is so that -1 is a valid index in the mapping.
         NB = len(blobslices)
-        blobmap = np.empty(NB+1, int)
-        blobmap[:] = -1
-        blobmap[keepblobs + 1] = np.arange(len(keepblobs))
+        remap = np.empty(NB+1, np.int32)
+        remap[:] = -1
+        remap[keepblobs + 1] = np.arange(len(keepblobs))
         # apply the map!
-        blobs = blobmap[blobs + 1]
+        blobmap = remap[blobmap + 1]
         # 'blobslices' and 'blobsrcs' are lists where the index
         # corresponds to the value in the 'blobs' map.
         blobslices = [blobslices[i] for i in keepblobs]
         blobsrcs   = [blobsrcs  [i] for i in keepblobs]
         # one more place where blob numbers are recorded...
-        T.blob = blobs[np.clip(T.iby, 0, H-1), np.clip(T.ibx, 0, W-1)]
+        T.blob = blobmap[np.clip(T.iby, 0, H-1), np.clip(T.ibx, 0, W-1)]
 
     # drop any cached data before we start pickling/multiprocessing
     survey.drop_cache()
 
     if plots and refstars:
         from legacypipe.runbrick_plots import fitblobs_plots_2
-        fitblobs_plots_2(blobs, refstars, ps)
+        fitblobs_plots_2(blobmap, refstars, ps)
 
     skipblobs = []
     R = []
@@ -1018,10 +1018,10 @@ def stage_fitblobs(T=None,
     bailout_mask = None
     T_refbail = None
     if bailout:
-        bailout_mask = _get_bailout_mask(blobs, skipblobs, targetwcs, W, H, brick,
+        bailout_mask = _get_bailout_mask(blobmap, skipblobs, targetwcs, W, H, brick,
                                          blobslices)
         # skip all blobs!
-        new_skipblobs = np.unique(blobs[blobs>=0])
+        new_skipblobs = np.unique(blobmap[blobmap>=0])
         # Which blobs are we bailing out on?
         bailing = set(new_skipblobs) - set(skipblobs)
         info('Bailing out on blobs:', bailing)
@@ -1037,24 +1037,22 @@ def stage_fitblobs(T=None,
                 from legacypipe.oneblob import _convert_ellipses
                 T_refbail = T[np.array(Irefbail)]
                 cat_refbail = [cat[i] for i in Irefbail]
-                # For LSLGA sources
+                # For SGA sources
                 for src in cat_refbail:
                     _convert_ellipses(src)
                 # Sets TYPE, etc for T_refbail table.
                 _get_tractor_fits_values(T_refbail, cat_refbail, '%s')
-
             if T_refbail is not None:
                 info('Found', len(T_refbail), 'reference sources in bail-out blobs')
-
         skipblobs = new_skipblobs
         # append empty results so that a later assert on the lengths will pass
         while len(R) < len(blobsrcs):
             R.append(dict(brickname=brickname, iblob=-1, result=None))
 
-    frozen_galaxies = get_frozen_galaxies(T, blobsrcs, blobs, targetwcs, cat)
+    frozen_galaxies = get_frozen_galaxies(T, blobsrcs, blobmap, targetwcs, cat)
     refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
     # Create the iterator over blobs to process
-    blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims,
+    blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims,
                           cat, bands, plots, ps, reoptimize, iterative, use_ceres,
                           refmap, large_galaxies_force_pointsource, less_masking, brick,
                           frozen_galaxies,
@@ -1068,7 +1066,6 @@ def stage_fitblobs(T=None,
         R.extend(mp.map(_bounce_one_blob, blobiter))
     else:
         from astrometry.util.ttime import CpuMeas
-
         # Begin running one_blob on each blob...
         Riter = mp.imap_unordered(_bounce_one_blob, blobiter)
         # measure wall time and write out checkpoint file periodically.
@@ -1089,7 +1086,7 @@ def stage_fitblobs(T=None,
                     dt = 0.
                     n_finished = 0
                 except:
-                    print('Failed to rename checkpoint file', checkpoint_filename)
+                    print('Failed to write checkpoint file', checkpoint_filename)
                     import traceback
                     traceback.print_exc()
             # Wait for results (with timeout)
@@ -1103,17 +1100,12 @@ def stage_fitblobs(T=None,
                 n_finished += 1
                 n_finished_total += 1
             except StopIteration:
-                debug('Done')
                 break
             except multiprocessing.TimeoutError:
-                # print('Timed out waiting for result')
                 continue
-
         # Write checkpoint when done!
         _write_checkpoint(R, checkpoint_filename)
-
         debug('Got', n_finished_total, 'results; wrote', len(R), 'to checkpoint')
-
     debug('Fitting sources:', Time()-tlast)
 
     # Repackage the results from one_blob...
@@ -1200,14 +1192,14 @@ def stage_fitblobs(T=None,
     T.blob = iblob.astype(np.int32)
 
     # Build map from (old+1) to new blob numbers, for the blob image.
-    blobmap = np.empty(blobs.max()+2, int)
+    remap = np.empty(blobmap.max()+2, np.int32)
     # make sure that dropped blobs -> -1
-    blobmap[:] = -1
+    remap[:] = -1
     # in particular,
-    blobmap[0] = -1
+    remap[0] = -1
     # (this +1 business is because we're using a numpy array for the map)
-    blobmap[oldblob + 1] = iblob
-    blobs = blobmap[blobs+1]
+    remap[oldblob + 1] = iblob
+    blobmap = remap[blobmap+1]
 
     # Frozen galaxies: while remapping, flip from blob->[srcs] to src->[blobs].
     fro_gals = {}
@@ -1215,13 +1207,13 @@ def stage_fitblobs(T=None,
         for gal in gals:
             if not gal in fro_gals:
                 fro_gals[gal] = []
-            bnew = blobmap[b+1]
+            bnew = remap[b+1]
             if bnew != -1:
                 fro_gals[gal].append(bnew)
     frozen_galaxies = fro_gals
     debug('Remapped frozen_galaxies:', frozen_galaxies)
 
-    del blobmap
+    del remap
 
     # write out blob map
     if write_metrics:
@@ -1229,8 +1221,8 @@ def stage_fitblobs(T=None,
         hdr = copy_header_with_wcs(version_header, targetwcs)
         hdr.add_record(dict(name='IMTYPE', value='blobmap',
                             comment='LegacySurveys image type'))
-        with survey.write_output('blobmap', brick=brickname, shape=blobs.shape) as out:
-            out.fits.write(blobs, header=hdr)
+        with survey.write_output('blobmap', brick=brickname, shape=blobmap.shape) as out:
+            out.fits.write(blobmap, header=hdr)
     del iblob, oldblob
 
     T.brickid = np.zeros(len(T), np.int32) + brickid
@@ -1287,7 +1279,7 @@ def stage_fitblobs(T=None,
                 TT.writeto(None, fits_object=out.fits, header=hdr,
                            primheader=primhdr)
 
-    keys = ['cat', 'invvars', 'T', 'blobs', 'refmap', 'version_header', 'frozen_galaxies']
+    keys = ['cat', 'invvars', 'T', 'blobmap', 'refmap', 'version_header', 'frozen_galaxies']
     if get_all_models:
         keys.append('all_models')
     if bailout:
@@ -1312,7 +1304,7 @@ def get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs):
     return refmap
 
 # Also called by farm.py
-def get_frozen_galaxies(T, blobsrcs, blobs, targetwcs, cat):
+def get_frozen_galaxies(T, blobsrcs, blobmap, targetwcs, cat):
     # Find reference (frozen) large galaxies that touch blobs that
     # they are not part of, to get their profiles subtracted.
     # Generate a blob -> [sources] mapping.
@@ -1332,7 +1324,7 @@ def get_frozen_galaxies(T, blobsrcs, blobs, targetwcs, cat):
         refgal.radius_pix *= 2
         galmap = get_reference_map(targetwcs, refgal)
         debug(np.sum(galmap), 'pixels set in refmap for galaxy id', refgal.ref_id[0])
-        galblobs = set(blobs[galmap > 0])
+        galblobs = set(blobmap[galmap > 0])
         debug('galaxy mask overlaps blobs:', galblobs)
         galblobs.discard(-1)
         debug('source:', cat[ii])
@@ -1362,8 +1354,8 @@ def get_frozen_galaxies(T, blobsrcs, blobs, targetwcs, cat):
             frozen_galaxies[blob].append(cat[ii])
     return frozen_galaxies
 
-def _get_bailout_mask(blobs, skipblobs, targetwcs, W, H, brick, blobslices):
-    maxblob = blobs.max()
+def _get_bailout_mask(blobmap, skipblobs, targetwcs, W, H, brick, blobslices):
+    maxblob = blobmap.max()
     # mark all as bailed out...
     bmap = np.ones(maxblob+2, bool)
     # except no-blob
@@ -1374,17 +1366,17 @@ def _get_bailout_mask(blobs, skipblobs, targetwcs, W, H, brick, blobslices):
     # and blobs that are completely outside the primary region of this brick.
     U = find_unique_pixels(targetwcs, W, H, None,
                            brick.ra1, brick.ra2, brick.dec1, brick.dec2)
-    for iblob in np.unique(blobs):
+    for iblob in np.unique(blobmap):
         if iblob == -1:
             continue
         if iblob in skipblobs:
             continue
         bslc  = blobslices[iblob]
-        blobmask = (blobs[bslc] == iblob)
+        blobmask = (blobmap[bslc] == iblob)
         if np.all(U[bslc][blobmask] == False):
             debug('Blob', iblob, 'is completely outside the PRIMARY region')
             bmap[iblob+1] = False
-    bailout_mask = bmap[blobs+1]
+    bailout_mask = bmap[blobmap+1]
     return bailout_mask
 
 def _write_checkpoint(R, checkpoint_filename):
@@ -1437,29 +1429,28 @@ def _check_checkpoints(R, blobslices, brickname):
         keepR.append(ri)
     return keepR
 
-def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, bands,
+def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, bands,
                plots, ps, reoptimize, iterative, use_ceres, refmap,
                large_galaxies_force_pointsource, less_masking,
                brick, frozen_galaxies, single_thread=False,
                skipblobs=None, max_blobsize=None, custom_brick=False):
     '''
-    *blobs*: map, with -1 indicating no-blob, other values indexing *blobslices*,*blobsrcs*.
+    *blobmap*: map, with -1 indicating no-blob, other values indexing *blobslices*,*blobsrcs*.
     '''
     from collections import Counter
 
     if skipblobs is None:
         skipblobs = []
 
-    H,W = targetwcs.shape
-
     # sort blobs by size so that larger ones start running first
-    blobvals = Counter(blobs[blobs>=0])
+    blobvals = Counter(blobmap[blobmap>=0])
     blob_order = np.array([b for b,npix in blobvals.most_common()])
     del blobvals
 
     if custom_brick:
         U = None
     else:
+        H,W = targetwcs.shape
         U = find_unique_pixels(targetwcs, W, H, None,
                                brick.ra1, brick.ra2, brick.dec1, brick.dec2)
 
@@ -1478,10 +1469,12 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
         bx0,bx1 = sx.start, sx.stop
         blobh,blobw = by1 - by0, bx1 - bx0
 
-        # Here we assume the "blobs" array has been remapped so that
+        # Here we assume the "blobmap" array has been remapped so that
         # -1 means "no blob", while 0 and up label the blobs, thus
-        # iblob equals the value in the "blobs" map.
-        blobmask = (blobs[bslc] == iblob)
+        # iblob equals the value in the "blobmap" map.
+        blobmask = (blobmap[bslc] == iblob)
+        # at least one pixel should be set!
+        assert(np.any(blobmask))
 
         if U is not None:
             # If the blob is solely outside the unique region of this brick,
@@ -1524,12 +1517,12 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
             # (sx0,sx1), 'y', (sy0,sy1), 'tim shape', (h,w))
             if sx1 < 0 or sy1 < 0 or sx0 > w or sy0 > h:
                 continue
-            sx0 = np.clip(int(np.floor(sx0)), 0, w-1)
-            sx1 = np.clip(int(np.ceil (sx1)), 0, w-1) + 1
-            sy0 = np.clip(int(np.floor(sy0)), 0, h-1)
-            sy1 = np.clip(int(np.ceil (sy1)), 0, h-1) + 1
+            sx0 = int(np.clip(int(np.floor(sx0)), 0, w-1))
+            sx1 = int(np.clip(int(np.ceil (sx1)), 0, w-1)) + 1
+            sy0 = int(np.clip(int(np.floor(sy0)), 0, h-1))
+            sy1 = int(np.clip(int(np.ceil (sy1)), 0, h-1)) + 1
             subslc = slice(sy0,sy1),slice(sx0,sx1)
-            subimg = tim.getImage ()[subslc]
+            subimg = tim.getImage   ()[subslc]
             subie  = tim.getInvError()[subslc]
             if tim.dq is None:
                 subdq = None
@@ -1538,24 +1531,21 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobs, targetwcs, tims, cat, ban
             subwcs = tim.getWcs().shifted(sx0, sy0)
             subsky = tim.getSky().shifted(sx0, sy0)
             subpsf = tim.getPsf().getShifted(sx0, sy0)
-            subwcsobj = tim.subwcs.get_subimage(int(sx0), int(sy0),
-                                                int(sx1-sx0), int(sy1-sy0))
+            subwcsobj = tim.subwcs.get_subimage(sx0, sy0, sx1-sx0, sy1-sy0)
             tim.imobj.psfnorm = tim.psfnorm
             tim.imobj.galnorm = tim.galnorm
             # FIXME -- maybe the cache is worth sending?
             if hasattr(tim.psf, 'clear_cache'):
                 tim.psf.clear_cache()
             # Yuck!  If we not running with --threads AND oneblob.py modifies the data,
-            # bad things happen.
+            # bad things happen!
             if single_thread:
                 subimg = subimg.copy()
                 subie = subie.copy()
                 subdq = subdq.copy()
-                # ...
             subtimargs.append((subimg, subie, subdq, subwcs, subwcsobj,
                                tim.getPhotoCal(),
-                               subsky, subpsf, tim.name,
-                               tim.band, tim.sig1, tim.imobj))
+                               subsky, subpsf, tim.name, tim.band, tim.sig1, tim.imobj))
 
         yield (brickname, iblob,
                (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
@@ -1678,7 +1668,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  custom_brick=False,
                  T=None, T_dup=None, T_refbail=None,
                  refstars=None,
-                 blobs=None,
+                 blobmap=None,
                  cat=None, pixscale=None, plots=False,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
                  co_sky=None,
@@ -1755,15 +1745,15 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
             _,xx,yy = targetwcs.radec2pixelxy(src.pos.ra, src.pos.dec)
             xx = int(xx-1)
             yy = int(yy-1)
-            bh,bw = blobs.shape
+            bh,bw = blobmap.shape
             if xx >= 0 and xx < bw and yy >= 0 and yy < bh:
                 # in bounds!
-                debug('Frozen galaxy', src, 'lands in blob', blobs[yy,xx])
-                if blobs[yy,xx] != -1:
-                    bb.append(blobs[yy,xx])
+                debug('Frozen galaxy', src, 'lands in blob', blobmap[yy,xx])
+                if blobmap[yy,xx] != -1:
+                    bb.append(blobmap[yy,xx])
     #debug('Frozen_galaxies:', frozen_galaxies)
 
-    bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob, blobs, targetwcs, frozen_galaxies, ps, plots)
+    bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob, blobmap, targetwcs, frozen_galaxies, ps, plots)
                                        for tim in tims])
     mods = [m for m,b in bothmods]
     blobmods = [b for m,b in bothmods]
@@ -3385,9 +3375,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--no-large-galaxies', dest='large_galaxies', default=True,
                         action='store_false', help="Don't seed (or mask in and around) large galaxies.")
-    # HACK -- Default value for DR8 MJD cut
-    # DR8 -- drop early data from before additional baffling was added to the camera.
-    # 56730 = 2014-03-14
     parser.add_argument('--min-mjd', type=float,
                         help='Only keep images taken after the given MJD')
     parser.add_argument('--max-mjd', type=float,
