@@ -83,8 +83,7 @@ class SimpleCoadd(object):
             comod = self.co_models[band]
             coiv  = self.co_invvars[band]
             con   = self.co_nobs[band]
-
-            with np.errstate(divide='ignore'):
+            with np.errstate(divide='ignore', invalid='ignore'):
                 coimg /= coiv
                 comod /= coiv
             coimg[coiv == 0] = 0.
