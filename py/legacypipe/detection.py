@@ -807,7 +807,7 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     blobslices = find_objects(blobmap)
     clipx = np.clip(T.ibx, 0, W-1)
     clipy = np.clip(T.iby, 0, H-1)
-    T.blob = blobmap[clipy, clipx]
+    source_blobs = blobmap[clipy, clipx]
 
     if plots:
         import pylab as plt
@@ -835,7 +835,7 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     keepslices = []
     blobindex = {}
     for blob in range(1, nblobs+1):
-        Isrcs, = np.nonzero(T.blob == blob)
+        Isrcs, = np.nonzero(source_blobs == blob)
         if len(Isrcs) == 0:
             blobindex[blob] = -1
             continue
@@ -891,6 +891,5 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
                 info('Expected blob value', j, 'but got',
                       blobmap[clipy[i], clipx[i]])
 
-    T.blob = blobmap[clipy, clipx]
     assert(len(blobsrcs) == len(blobslices))
     return blobmap, blobsrcs, blobslices
