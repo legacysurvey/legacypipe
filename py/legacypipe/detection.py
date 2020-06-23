@@ -847,14 +847,6 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
 
     blobslices = keepslices
 
-    # Find sources that do not belong to a blob and add them as
-    # singleton "blobs"; otherwise they don't get optimized.
-    # for sources outside the image bounds, what should we do?
-    inblobs = np.zeros(len(T), bool)
-    for Isrcs in blobsrcs:
-        inblobs[Isrcs] = True
-    del inblobs
-
     # Remap the "blobs" image so that empty regions are = -1 and the blob values
     # correspond to their indices in the "blobsrcs" list.
     if len(blobmap):

@@ -16,7 +16,8 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                           tycho_stars=True,
                           gaia_stars=True,
                           large_galaxies=True,
-                          star_clusters=True):
+                          star_clusters=True,
+                          clean_columns=True):
     # If bands = None, does not create sources.
 
     H,W = targetwcs.shape
@@ -89,7 +90,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
 
     # Read large galaxies nearby.
     if large_galaxies:
-        galaxies = read_large_galaxies(survey, targetwcs, bands)
+        galaxies = read_large_galaxies(survey, targetwcs, bands, clean_columns=clean_columns)
         if galaxies is not None:
             # Resolve possible Gaia-large-galaxy duplicates
             if gaia and len(gaia):
@@ -117,6 +118,8 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     # stellar halos out to N x their radii)
     refs.radius_pix = np.ceil(refs.radius * 3600. / pixscale).astype(int)
 
+    debug('Increasing radius for', np.sum(refs.keep_radius > refs.radius),
+          'ref sources based on keep_radius')
     keeprad = np.maximum(refs.keep_radius, refs.radius)
     # keeprad to pix
     keeprad = np.ceil(keeprad * 3600. / pixscale).astype(int)
@@ -389,15 +392,16 @@ def get_large_galaxy_version(fn):
             return 'L'+k[0], preburn
     return 'LG', preburn
 
-def read_large_galaxies(survey, targetwcs, bands):
+def read_large_galaxies(survey, targetwcs, bands, clean_columns=True):
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
     galfn = survey.find_file('large-galaxies')
     if galfn is None:
         debug('No large-galaxies catalog file')
         return None
-    radius = 1.
+    radius = 2.
     rc,dc = targetwcs.radec_center()
 
+    debug('Reading', galfn)
     kd = tree_open(galfn, 'largegals')
     I = tree_search_radec(kd, rc, dc, radius)
     debug(len(I), 'large galaxies within', radius,
@@ -409,11 +413,7 @@ def read_large_galaxies(survey, targetwcs, bands):
     del kd
 
     refcat, preburn = get_large_galaxy_version(galfn)
-
-    #print('Large galaxy cat: ', refcat, 'preburn', preburn)
-    #print('ref_cat:', galaxies.ref_cat, 'ref_id:', galaxies.ref_id)
-    #galaxies.about()
-    #print('lslga id:', galaxies.lslga_id)
+    debug('Large galaxies version: "%s", preburned?' % refcat, preburn)
 
     if not preburn:
         # Original LSLGA
@@ -428,11 +428,14 @@ def read_large_galaxies(survey, targetwcs, bands):
     else:
         # Need to initialize islargegalaxy to False because we will bring in
         # pre-burned sources that we do not want to use in MASKBITS.
+        # (we'll set individual .islargegalaxy entries below)
+        # NOTE: fields such as ref_cat, preburned, etc, already exist in the
+        # "galaxies" catalog read from disk.
         galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
-        galaxies.radius = np.zeros(len(galaxies), 'f4')
         galaxies.rename('mag_leda', 'mag')
         galaxies.radius = galaxies.diam / 2. / 60. # [degree]
 
+    galaxies.keep_radius = 2. * galaxies.radius
     galaxies.freezeparams = np.zeros(len(galaxies), bool)
     galaxies.sources = np.empty(len(galaxies), object)
     galaxies.sources[:] = None
@@ -450,11 +453,12 @@ def read_large_galaxies(survey, targetwcs, bands):
     if bands is not None:
         galaxies.sources[:] = get_galaxy_sources(galaxies, bands)
 
-    keep_columns = ['ra', 'dec', 'radius', 'keep_radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
-                    'sources', 'islargegalaxy', 'freezeparams']
-    for c in galaxies.get_columns():
-        if not c in keep_columns:
-            galaxies.delete_column(c)
+    if clean_columns:
+        keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
+                        'sources', 'islargegalaxy', 'freezeparams', 'keep_radius']
+        for c in galaxies.get_columns():
+            if not c in keep_columns:
+                galaxies.delete_column(c)
     return galaxies
 
 def get_galaxy_sources(galaxies, bands):
@@ -469,7 +473,7 @@ def get_galaxy_sources(galaxies, bands):
     radius_max_factor = 2.
 
     srcs = [None for g in galaxies]
-    I, = np.nonzero(galaxies.preburned)
+    I, = np.nonzero(galaxies.freezeparams)
     # only fix the parameters of pre-burned galaxies
     for ii,g in zip(I, galaxies[I]):
         try:
@@ -523,7 +527,7 @@ def get_galaxy_sources(galaxies, bands):
                   traceback.print_exc())
             raise
 
-    I, = np.nonzero(np.logical_not(galaxies.preburned))
+    I, = np.nonzero(np.logical_not(galaxies.freezeparams))
     for ii,g in zip(I, galaxies[I]):
         # Initialize each source with an exponential disk--
         fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag))
@@ -595,9 +599,7 @@ def get_reference_map(wcs, refs):
     refmap = np.zeros((H,W), np.uint8)
     pixscale = wcs.pixel_scale()
     cd = wcs.cd
-    debug('CD matrix:', cd, 'pixscale', pixscale)
     cd = np.reshape(cd, (2,2)) / (pixscale / 3600.)
-    debug('Unit CD matrix:', cd)
 
     # circular/elliptical regions:
     for col,bit,ellipse in [('isbright', 'BRIGHT', False),

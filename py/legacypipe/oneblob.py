@@ -69,13 +69,18 @@ def one_blob(X):
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
      srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap,
-     large_galaxies_force_pointsource, less_masking) = X
+     large_galaxies_force_pointsource, less_masking, frozen_galaxies) = X
 
-    debug('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images' %
-          (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs)))
+    debug('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
+          (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
 
     if len(timargs) == 0:
         return None
+    if len(Isrcs) == 0:
+        return None
+
+    for g in frozen_galaxies:
+        debug('Frozen galaxy:', g)
 
     LegacySersicIndex.stepsize = 0.001
 
@@ -121,7 +126,7 @@ def one_blob(X):
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
-                 less_masking)
+                 less_masking, frozen_galaxies)
     B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
 
     B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
@@ -150,7 +155,7 @@ class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
-                 less_masking):
+                 less_masking, frozen_galaxies):
         self.name = name
         self.blobwcs = blobwcs
         self.pixscale = self.blobwcs.pixel_scale()
@@ -159,8 +164,8 @@ class OneBlob(object):
         self.bands = bands
         self.plots = plots
         self.refmap = refmap
-        #self.plots_per_source = False
-        self.plots_per_source = plots
+        self.plots_per_source = False
+        #self.plots_per_source = plots
         self.plots_per_model = False
         # blob-1-data.png, etc
         self.plots_single = False
@@ -180,6 +185,38 @@ class OneBlob(object):
         if self.bigblob:
             debug('Big blob:', name)
         self.trargs = dict()
+        self.frozen_galaxy_mods = []
+
+        if len(frozen_galaxies):
+            debug('Subtracting frozen galaxy models...')
+            tr = Tractor(self.tims, Catalog(*frozen_galaxies))
+            mm = []
+            for tim in self.tims:
+                mh,mw = tim.shape
+                mm.append(dict([(g, ModelMask(0, 0, mw, mh)) for g in frozen_galaxies]))
+            tr.setModelMasks(mm)
+            if self.plots:
+                mods = []
+            for tim in self.tims:
+                mod = tr.getModelImage(tim)
+                self.frozen_galaxy_mods.append(mod)
+                tim.data -= mod
+                if self.plots:
+                    mods.append(mod)
+            if self.plots:
+                import pylab as plt
+                coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=mods,
+                                        fill_holes=False)
+                plt.clf()
+                dimshow(get_rgb(coimgs, self.bands))
+                plt.title('Subtracted frozen galaxies')
+                self.ps.savefig()
+                coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
+                                        fill_holes=False)
+                plt.clf()
+                dimshow(get_rgb(coimgs, self.bands))
+                plt.title('After subtracting frozen galaxies')
+                self.ps.savefig()
 
         # if use_ceres:
         #     from tractor.ceres_optimizer import CeresOptimizer
@@ -412,7 +449,7 @@ class OneBlob(object):
         for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
             sn = detmap * np.sqrt(detiv)
 
-            if self.plots:
+            if self.plots and False:
                 import pylab as plt
                 plt.clf()
                 plt.subplot(2,2,1)
@@ -433,6 +470,7 @@ class OneBlob(object):
             maxsn = np.maximum(maxsn, sn)
 
         if self.plots:
+            import pylab as plt
             plt.clf()
             plt.imshow(saturated_pix, interpolation='nearest', origin='lower',
                        vmin=0, vmax=1, cmap='gray')
@@ -721,12 +759,14 @@ class OneBlob(object):
         # Also compute detection maps on the (first-round) model images!
         # save tim.images (= residuals at this point)
         realimages = [tim.getImage() for tim in self.tims]
-        for tim,mods in zip(self.tims, models.models):
+        for itim,(tim,mods) in enumerate(zip(self.tims, models.models)):
             modimg = np.zeros_like(tim.getImage())
             for mod in mods:
                 if mod is None:
                     continue
                 mod.addTo(modimg)
+            if len(self.frozen_galaxy_mods):
+                modimg += self.frozen_galaxy_mods[itim]
             tim.data = modimg
         if self.plots:
             coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
@@ -1003,37 +1043,37 @@ class OneBlob(object):
                 import pylab as plt
                 from legacypipe.detection import plot_boundary_map
 
-                plt.clf()
-                for i,(band,detmap,detiv) in enumerate(zip(self.bands, detmaps, detivs)):
-                    if i >= 4:
-                        break
-                    detsn = detmap * np.sqrt(detiv)
-                    plt.subplot(2,2, i+1)
-                    mx = detsn.max()
-                    dimshow(detsn, vmin=-2, vmax=max(8, mx))
-                    ax = plt.axis()
-                    plot_boundary_map(detsn >= 5.)
-                    plt.plot(ix, iy, 'rx')
-                    plt.plot([ix-flipw, ix-flipw, ix+flipw, ix+flipw, ix-flipw],
-                             [iy-fliph, iy+fliph, iy+fliph, iy-fliph, iy-fliph], 'r-')
-                    plt.axis(ax)
-                    plt.title('det S/N: ' + band)
-                plt.subplot(2,2,4)
-                dimshow(flipblobs, vmin=0, vmax=1)
-                plt.colorbar()
-                ax = plt.axis()
-                plot_boundary_map(blobs == goodblob)
-                if binary_fill_holes(flipblobs)[iy,ix]:
-                    fb = (blobs == goodblob)
-                    di = binary_dilation(fb, iterations=4)
-                    if np.any(di):
-                        plot_boundary_map(di, rgb=(255,0,0))
-                plt.plot(ix, iy, 'rx')
-                plt.plot([ix-flipw, ix-flipw, ix+flipw, ix+flipw, ix-flipw],
-                         [iy-fliph, iy+fliph, iy+fliph, iy-fliph, iy-fliph], 'r-')
-                plt.axis(ax)
-                plt.title('good blob')
-                self.ps.savefig()
+                # plt.clf()
+                # for i,(band,detmap,detiv) in enumerate(zip(self.bands, detmaps, detivs)):
+                #     if i >= 4:
+                #         break
+                #     detsn = detmap * np.sqrt(detiv)
+                #     plt.subplot(2,2, i+1)
+                #     mx = detsn.max()
+                #     dimshow(detsn, vmin=-2, vmax=max(8, mx))
+                #     ax = plt.axis()
+                #     plot_boundary_map(detsn >= 5.)
+                #     plt.plot(ix, iy, 'rx')
+                #     plt.plot([ix-flipw, ix-flipw, ix+flipw, ix+flipw, ix-flipw],
+                #              [iy-fliph, iy+fliph, iy+fliph, iy-fliph, iy-fliph], 'r-')
+                #     plt.axis(ax)
+                #     plt.title('det S/N: ' + band)
+                # plt.subplot(2,2,4)
+                # dimshow(flipblobs, vmin=0, vmax=1)
+                # plt.colorbar()
+                # ax = plt.axis()
+                # plot_boundary_map(blobs == goodblob)
+                # if binary_fill_holes(flipblobs)[iy,ix]:
+                #     fb = (blobs == goodblob)
+                #     di = binary_dilation(fb, iterations=4)
+                #     if np.any(di):
+                #         plot_boundary_map(di, rgb=(255,0,0))
+                # plt.plot(ix, iy, 'rx')
+                # plt.plot([ix-flipw, ix-flipw, ix+flipw, ix+flipw, ix-flipw],
+                #          [iy-fliph, iy+fliph, iy+fliph, iy-fliph, iy-fliph], 'r-')
+                # plt.axis(ax)
+                # plt.title('good blob')
+                # self.ps.savefig()
 
                 plt.clf()
                 plt.subplot(2,2,1)
@@ -1749,8 +1789,8 @@ class OneBlob(object):
             np.array([src.getPosition().dec for src in self.srcs]))
 
         h,w = sat.shape
-        ix = np.clip(np.round(x0)-1, 0, w).astype(int)
-        iy = np.clip(np.round(y0)-1, 0, h).astype(int)
+        ix = np.clip(np.round(x0)-1, 0, w-1).astype(int)
+        iy = np.clip(np.round(y0)-1, 0, h-1).astype(int)
         srcsat = sat[iy,ix]
 
         ax = plt.axis()
