@@ -55,7 +55,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     wantims = (plots or save_fits or get_models)
     wanyband = 'w'
     if get_models:
-        models = {}
+        models = []
 
     wband = 'w%i' % band
 
@@ -454,8 +454,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     if get_models:
         for i,tim in enumerate(tims):
             tile = tim.tile
-            (dat, mod, ie, chi, _) = ims1[i]
-            models[(tile.coadd_id, band)] = (mod, dat, ie, tim.roi, tim.wcs.wcs)
+            (dat, mod, ie, _, _) = ims1[i]
+            models.append((tile.coadd_id, band, tim.wcs.wcs, dat, mod, ie))
 
     if plots:
         for i,tim in enumerate(tims):

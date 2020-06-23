@@ -51,13 +51,26 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         if len(gaia) and len(tycho):
             # Before matching, apply proper motions to bring them to
             # the same epoch.  We want to use the more-accurate Gaia
-            # proper motions, so rewind Gaia positions to the
-            # approximate epoch of Tycho-2: 1991.5.
+            # proper motions, so rewind Gaia positions to the Tycho
+            # epoch.  (Note that in read_tycho2, we massaged the
+            # epochs)
             cosdec = np.cos(np.deg2rad(gaia.dec))
-            gra  = gaia.ra +  (1991.5 - gaia.ref_epoch) * gaia.pmra  / (3600.*1000.) / cosdec
-            gdec = gaia.dec + (1991.5 - gaia.ref_epoch) * gaia.pmdec / (3600.*1000.)
-            I,J,_ = match_radec(tycho.ra, tycho.dec, gra, gdec, 1./3600.,
+            # First do a coarse matching with the approximate epoch:
+            dt = 1991.5 - gaia.ref_epoch
+            gra  = gaia.ra  + dt * gaia.pmra  / (3600.*1000.) / cosdec
+            gdec = gaia.dec + dt * gaia.pmdec / (3600.*1000.)
+            # Max Tycho-2 PM is 10"/yr, max |epoch_ra,epoch_dec - mean| = 0.5
+            I,J,_ = match_radec(tycho.ra, tycho.dec, gra, gdec, 10./3600.,
                                 nearest=True)
+            debug('Initially matched', len(I), 'Tycho-2 stars to Gaia stars (10").')
+            dt = tycho.ref_epoch[I] - gaia.ref_epoch[J]
+            cosdec = np.cos(np.deg2rad(gaia.dec[J]))
+            gra  = gaia.ra[J]  + dt * gaia.pmra[J]  / (3600.*1000.) / cosdec
+            gdec = gaia.dec[J] + dt * gaia.pmdec[J] / (3600.*1000.)
+            dists = np.hypot((gra - tycho.ra[I]) * cosdec, gdec - tycho.dec[I])
+            K = np.flatnonzero(dists <= 1./3600.)
+            I = I[K]
+            J = J[K]
             debug('Matched', len(I), 'Tycho-2 stars to Gaia stars.')
             if len(I):
                 keep = np.ones(len(tycho), bool)
@@ -426,6 +439,7 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True):
     galaxies.freezeparams = np.zeros(len(galaxies), bool)
     galaxies.sources = np.empty(len(galaxies), object)
     galaxies.sources[:] = None
+    galaxies.keep_radius = galaxies.radius
 
     I, = np.nonzero(galaxies.preburned)
     if len(I):

@@ -18,6 +18,7 @@ Or for much more fine-grained control, see the individual stages:
 - :py:func:`stage_fitblobs`
 - :py:func:`stage_coadds`
 - :py:func:`stage_wise_forced`
+- :py:func:`stage_galex_forced` [optional]
 - :py:func:`stage_writecat`
 
 To see the code we run on each "blob" of pixels, see "oneblob.py".
@@ -47,6 +48,7 @@ from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper, find_
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 
 from legacypipe.fit_on_coadds import stage_fit_on_coadds
+from legacypipe.galex import stage_galex_forced
 
 import logging
 logger = logging.getLogger('legacypipe.runbrick')
@@ -86,6 +88,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                unwise_dir=None,
                unwise_tr_dir=None,
                unwise_modelsky_dir=None,
+               galex_dir=None,
                command_line=None,
                **kwargs):
     '''
@@ -160,7 +163,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     version_header = get_version_header(program_name, survey.survey_dir, release,
                                         git_version=gitver)
 
-    deps = get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir)
+    deps = get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir)
     for name,value,comment in deps:
         version_header.add_record(dict(name=name, value=value, comment=comment))
     if command_line is not None:
@@ -2306,14 +2309,14 @@ def stage_wise_forced(
     if len(phots):
         # The "phot" results for the full-depth coadds are one table per
         # band.  Merge all those columns.
-        wise_models = {}
+        wise_models = []
         for i,p in enumerate(phots[:len(args)]):
             if p is None:
                 (wcat,tiles,band) = args[i][:3]
                 print('"None" result from WISE forced phot:', tiles, band)
                 continue
             if unwise_coadds:
-                wise_models.update(p.models)
+                wise_models.extend(p.models)
             if p.maskmap is not None:
                 wise_mask_maps = p.maskmap
             if WISE is None:
@@ -2341,9 +2344,11 @@ def stage_wise_forced(
             wra  = np.array([src.getPosition().ra  for src in cat])
             wdec = np.array([src.getPosition().dec for src in cat])
 
-            wcoadds = UnwiseCoadd(targetwcs, W, H, pixscale, wpixscale)
-            for tile in tiles.coadd_id:
-                wcoadds.add(tile, wise_models)
+            rc,dc = targetwcs.radec_center()
+            ww = int(W * pixscale / wpixscale)
+            hh = int(H * pixscale / wpixscale)
+            wcoadds = UnwiseCoadd(rc, dc, ww, hh, wpixscale)
+            wcoadds.add(wise_models)
             apphot = wcoadds.finish(survey, brickname, version_header,
                                     apradec=(wra,wdec),
                                     apertures=wise_apertures_arcsec/wpixscale)
@@ -2411,6 +2416,7 @@ def stage_wise_forced(
                 version_header=version_header,
                 wise_apertures_arcsec=wise_apertures_arcsec)
 
+
 def _fill_skipped_values(WISE, Nskipped, do_phot):
     # Fill in blank values for skipped (Icluster) sources
     # Append empty rows to the WISE results for !do_phot sources.
@@ -2441,6 +2447,8 @@ def stage_writecat(
     wise_mask_maps=None,
     apertures_arcsec=None,
     wise_apertures_arcsec=None,
+    GALEX=None,
+    galex_apertures_arcsec=None,
     cat=None, pixscale=None, targetwcs=None,
     W=None,H=None,
     bands=None, ps=None,
@@ -2563,6 +2571,10 @@ def stage_writecat(
         for i,ap in enumerate(wise_apertures_arcsec):
             primhdr.add_record(dict(name='WAPRAD%i' % i, value=ap,
                                     comment='(unWISE) Aperture radius, in arcsec'))
+    if galex_apertures_arcsec is not None:
+        for i,ap in enumerate(galex_apertures_arcsec):
+            primhdr.add_record(dict(name='GAPRAD%i' % i, value=ap,
+                                    comment='GALEX aperture radius, in arcsec'))
 
     if WISE is not None:
         # Convert WISE fluxes from Vega to AB.
@@ -2627,6 +2639,13 @@ def stage_writecat(
         # Done with these now!
         WISE_T = None
         WISE = None
+
+    if GALEX is not None:
+        for c in ['flux_nuv', 'flux_ivar_nuv', 'flux_fuv', 'flux_ivar_fuv',
+                  'apflux_nuv', 'apflux_resid_nuv', 'apflux_ivar_nuv',
+                  'apflux_fuv', 'apflux_resid_fuv', 'apflux_ivar_fuv', ]:
+            T2.set(c, GALEX.get(c))
+        GALEX = None
 
     if T_dup:
         T2 = merge_tables([T2, T_dup], columns='fillzero')
@@ -2704,6 +2723,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               nsigma=6,
               saddle_fraction=0.1,
               saddle_min=2.,
+              subsky_radii=None,
               reoptimize=False,
               iterative=False,
               wise=True,
@@ -2737,6 +2757,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               unwise_dir=None,
               unwise_tr_dir=None,
               unwise_modelsky_dir=None,
+              galex=False,
+              galex_dir=None,
               threads=None,
               plots=False, plots2=False, coadd_bw=False,
               plot_base=None, plot_number=0,
@@ -2952,6 +2974,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     kwargs.update(ps=ps, nsigma=nsigma, saddle_fraction=saddle_fraction,
                   saddle_min=saddle_min,
+                  subsky_radii=subsky_radii,
                   survey_blob_mask=survey_blob_mask,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
                   release=release,
@@ -2981,6 +3004,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   unwise_dir=unwise_dir,
                   unwise_tr_dir=unwise_tr_dir,
                   unwise_modelsky_dir=unwise_modelsky_dir,
+                  galex=galex,
+                  galex_dir=galex_dir,
                   command_line=command_line,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
                   force=forceStages, write=write_pickles,
@@ -3059,15 +3084,29 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             'fitblobs':'srcs',
             })
 
+    # not sure how to set up the prereqs here. --galex could always require --wise?
     if wise:
-        prereqs.update({
-            'wise_forced': 'coadds',
-            'writecat': 'wise_forced',
-            })
+        if galex:
+            prereqs.update({
+                'wise_forced': 'coadds',
+                'galex_forced': 'wise_forced',
+                'writecat': 'galex_forced',
+                })
+        else:
+            prereqs.update({
+                'wise_forced': 'coadds',
+                'writecat': 'wise_forced',
+                })
     else:
-        prereqs.update({
-            'writecat': 'coadds',
-            })
+        if galex:
+            prereqs.update({
+                'galex_forced': 'coadds',
+                'writecat': 'galex_forced',
+                })
+        else:
+            prereqs.update({
+                'writecat': 'coadds',
+                })
 
     if fit_on_coadds:
         prereqs.update({
@@ -3278,6 +3317,13 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         '--unwise-tr-dir', default=None,
         help='Base directory for unWISE time-resolved coadds; may be a colon-separated list')
 
+    parser.add_argument('--galex', dest='galex', default=False,
+                        action='store_true',
+                        help='Perform GALEX forced photometry')
+    parser.add_argument(
+        '--galex-dir', default=None,
+        help='Base directory for GALEX coadds')
+    
     parser.add_argument('--early-coadds', action='store_true', default=False,
                         help='Make early coadds?')
     parser.add_argument('--blob-image', action='store_true', default=False,
@@ -3328,6 +3374,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--no-splinesky', dest='splinesky', default=True,
                         action='store_false', help='Use constant sky rather than spline.')
+    parser.add_argument('--no-subsky', dest='subsky', default=True,
+                        action='store_false', help='Do not subtract the sky background.')
     parser.add_argument('--no-unwise-coadds', dest='unwise_coadds', default=True,
                         action='store_false', help='Turn off writing FITS and JPEG unWISE coadds?')
     parser.add_argument('--no-outliers', dest='outliers', default=True,
@@ -3348,6 +3396,11 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--less-masking', default=False, action='store_true',
                         help='Turn off background fitting within MEDIUM mask.')
 
+    parser.add_argument('--subsky-radii', type=float, nargs=3, default=None,
+                        help="""Sky-subtraction radii: rmask, rin, rout [arcsec] (only used with --fit-on-coadds and --no-subsky).
+                        Image pixels r<rmask are fully masked and the pedestal sky background is estimated from an annulus
+                        rin<r<rout on each CCD centered on the targetwcs.crval coordinates.""")
+    
     return parser
 
 def get_runbrick_kwargs(survey=None,
@@ -3364,6 +3417,7 @@ def get_runbrick_kwargs(survey=None,
                         unwise_dir=None,
                         unwise_tr_dir=None,
                         unwise_modelsky_dir=None,
+                        galex_dir=None,
                         write_stage=None,
                         write=True,
                         gpsf=False,
@@ -3436,7 +3490,10 @@ def get_runbrick_kwargs(survey=None,
         unwise_modelsky_dir = os.environ.get('UNWISE_MODEL_SKY_DIR', None)
         if unwise_modelsky_dir is not None and not os.path.exists(unwise_modelsky_dir):
             raise RuntimeError('The directory specified in $UNWISE_MODEL_SKY_DIR does not exist!')
-    opt.update(unwise_dir=unwise_dir, unwise_tr_dir=unwise_tr_dir, unwise_modelsky_dir=unwise_modelsky_dir)
+    if galex_dir is None:
+        galex_dir = os.environ.get('GALEX_DIR', None)
+    opt.update(unwise_dir=unwise_dir, unwise_tr_dir=unwise_tr_dir,
+               unwise_modelsky_dir=unwise_modelsky_dir, galex_dir=galex_dir)
 
     # list of strings if -w / --write-stage is given; False if
     # --no-write given; True by default.
