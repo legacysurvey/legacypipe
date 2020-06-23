@@ -107,8 +107,8 @@ def merge_splinesky(survey, expnum, C, skyoutfn, opt):
         T = None
         try:
             T = fits_table(fn)
-        except KeyboardInterrupt:
-            raise
+        except KeyboardInterrupt as e:
+            raise e
         except:
             print('Failed to read file', fn, ':', sys.exc_info()[1])
         if T is not None:

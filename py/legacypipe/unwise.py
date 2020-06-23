@@ -461,7 +461,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         for i,tim in enumerate(tims):
             tile = tim.tile
             tag = '%s W%i' % (tile.coadd_id, band)
-            (dat, mod, ie, chi, roi) = ims1[i]
+            (dat, mod, ie, chi, _) = ims1[i]
             sig1 = tim.sig1
             plt.clf()
             plt.imshow(dat, interpolation='nearest', origin='lower',

@@ -7,7 +7,6 @@ class TestOneblob(unittest.TestCase):
 
         nparams = dict(psf=2, rex=3, exp=5, dev=5, comp=9)
         galaxy_margin = 3.**2 + (nparams['exp'] - nparams['psf'])
-        rex = True
 
         chisqs = dict(psf=0, rex=0)
         mod = _select_model(chisqs, nparams, galaxy_margin)

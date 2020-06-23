@@ -74,7 +74,6 @@ def rbmain():
         assert(T.ref_id[I][0] == 1909016711)
         del os.environ['TYCHO2_KD_DIR']
 
-        from legacypipe.catalog import read_fits_catalog
         cat = read_fits_catalog(T)
         assert(len(cat) == 2)
         assert(isinstance(cat[0], PointSource))
@@ -222,7 +221,7 @@ def rbmain():
                       '--catalog-dir', 'out-testcase9b',
                       '372546', 'N26', 'forced1.fits'])
     assert(os.path.exists('forced1.fits'))
-    F = fits_table('forced1.fits')
+    _ = fits_table('forced1.fits')
     # ... more tests...!
 
     forced_main(args=['--survey-dir', surveydir,
@@ -609,7 +608,7 @@ def rbmain():
     # Check if correct files written out
     #rt_dir= os.path.join(os.getenv('DECALS_SIM_DIR'),brick,'star','001')
     #assert( os.path.exists(os.path.join(rt_dir,'../','metacat-'+brick+'-star.fits')) )
-    #for fn in ['tractor-%s-star-01.fits' % brick,'simcat-%s-star-01.fits' % brick]: 
+    #for fn in ['tractor-%s-star-01.fits' % brick,'simcat-%s-star-01.fits' % brick]:
     #    assert( os.path.exists(os.path.join(rt_dir,fn)) )
     #for fn in ['image','model','resid','simscoadd']:
     #    assert( os.path.exists(os.path.join(rt_dir,'qa-'+brick+'-star-'+fn+'-01.jpg')) )

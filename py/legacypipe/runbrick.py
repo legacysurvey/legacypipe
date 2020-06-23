@@ -3344,7 +3344,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument(
         '--galex-dir', default=None,
         help='Base directory for GALEX coadds')
-    
+
     parser.add_argument('--early-coadds', action='store_true', default=False,
                         help='Make early coadds?')
     parser.add_argument('--blob-image', action='store_true', default=False,
@@ -3421,7 +3421,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help="""Sky-subtraction radii: rmask, rin, rout [arcsec] (only used with --fit-on-coadds and --no-subsky).
                         Image pixels r<rmask are fully masked and the pedestal sky background is estimated from an annulus
                         rin<r<rout on each CCD centered on the targetwcs.crval coordinates.""")
-    
     return parser
 
 def get_runbrick_kwargs(survey=None,

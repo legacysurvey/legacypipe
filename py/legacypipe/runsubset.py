@@ -7,8 +7,8 @@ class SurveySubset(LegacySurveyData):
         super(SurveySubset, self).__init__(**kwargs)
         self.mjd_step = mjd_step
         self.mjd_period = mjd_period
-        
-    def get_ccds(self):
+
+    def get_ccds(self, **kwargs):
         CCDs = super(SurveySubset, self).get_ccds()
         print(len(CCDs), 'CCDs total')
         mjd0 = CCDs.mjd_obs.min()
@@ -30,10 +30,10 @@ class SurveySubset(LegacySurveyData):
             k += 1
         print('Returning', len(CCDs), 'CCDs')
         return CCDs
-    
+
 def main():
     from runbrick import run_brick, get_parser, get_runbrick_kwargs
-    
+
     parser = get_parser()
     # subset number
     parser.add_argument('--mjd-period', type=float, help='How long to make periods (in days), default 30', default=30)
@@ -48,7 +48,7 @@ def main():
     survey = SurveySubset(opt.mjd_period, opt.subset, survey_dir=opt.survey_dir, output_dir=opt.outdir)
     run_brick(opt.brick, survey, **kwargs)
     return 0
-    
+
 if __name__ == '__main__':
     import sys
     sys.exit(main())

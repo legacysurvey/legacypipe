@@ -2,11 +2,10 @@ from __future__ import print_function
 import numpy as np
 import os
 
-from astrometry.util.fits import fits_table, merge_tables
+from astrometry.util.fits import fits_table
 from astrometry.util.starutil_numpy import degrees_between
 from astrometry.util.util import Tan
 from astrometry.util.miscutils import polygon_area
-from legacypipe.survey import LegacySurveyData
 import tractor.sfd
 
 def annotate(ccds, survey, mp=None, mzls=False, bass=False, normalizePsf=True,
@@ -285,7 +284,7 @@ def annotate_one_ccd(X):
         rc,dc = wcs.pixelxy2radec(x, y)
         # project around a tiny little TAN WCS at (x,y), with 1" pixels
         locwcs = Tan(rc, dc, 0., 0., 1./3600, 0., 0., 1./3600, 1., 1.)
-        ok,lx,ly = locwcs.radec2pixelxy(sr, sd)
+        _,lx,ly = locwcs.radec2pixelxy(sr, sd)
         A = polygon_area((lx, ly))
         pixscale.append(np.sqrt(A / (2*step)**2))
     result.update(pixscale_mean = np.mean(pixscale),

@@ -86,7 +86,7 @@ for re in [10., 1, 1e-1, 1e-2, 1e-3, 1e-4, 1e-6, 1e-10]:
     dmx2 = np.abs(rexmod2 - psfmod2).max()
 
     doff = max(dmx, dmx2)
-    
+
     plt.clf()
     #ima = dict(vmin=-0.1*mx, vmax=mx, ticks=False)
     ima = dict(vmin=-6+np.log10(mx), vmax=np.log10(mx), ticks=False)
