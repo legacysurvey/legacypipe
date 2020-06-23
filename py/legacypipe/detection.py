@@ -790,9 +790,9 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     pix pos).  Note: ".blob" field is added.
     *name*: for debugging only
 
-    Returns: (blobs, blobsrcs, blobslices)
+    Returns: (blobmap, blobsrcs, blobslices)
 
-    *blobs*: image, values -1 = no blob, integer blob indices
+    *blobmap*: image, values -1 = no blob, integer blob indices
     *blobsrcs*: list of np arrays of integers, elements in T within each blob
     *blobslices*: list of slice objects for blob bounding-boxes.
     '''
@@ -800,21 +800,20 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     from scipy.ndimage.measurements import label, find_objects
 
     image = binary_fill_holes(image)
-    blobs,nblobs = label(image)
-    #info('Detected blobs:', nblobs)
+    blobmap,nblobs = label(image)
     H,W = image.shape
     del image
 
-    blobslices = find_objects(blobs)
+    blobslices = find_objects(blobmap)
     clipx = np.clip(T.ibx, 0, W-1)
     clipy = np.clip(T.iby, 0, H-1)
-    T.blob = blobs[clipy, clipx]
+    T.blob = blobmap[clipy, clipx]
 
     if plots:
         import pylab as plt
         from astrometry.util.plotutils import dimshow
         plt.clf()
-        dimshow(blobs > 0, vmin=0, vmax=1)
+        dimshow(blobmap > 0, vmin=0, vmax=1)
         ax = plt.axis()
         for i,bs in enumerate(blobslices):
             sy,sx = bs
@@ -834,37 +833,39 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     # Find sets of sources within blobs
     blobsrcs = []
     keepslices = []
-    blobmap = {}
+    blobindex = {}
     for blob in range(1, nblobs+1):
         Isrcs, = np.nonzero(T.blob == blob)
         if len(Isrcs) == 0:
-            blobmap[blob] = -1
+            blobindex[blob] = -1
             continue
-        blobmap[blob] = len(blobsrcs)
+        blobindex[blob] = len(blobsrcs)
         blobsrcs.append(Isrcs)
         bslc = blobslices[blob-1]
         keepslices.append(bslc)
 
     blobslices = keepslices
 
-    # Remap the "blobs" image so that empty regions are = -1 and the blob values
+    # Remap the "blobmap" image so that empty regions are = -1 and the blob values
     # correspond to their indices in the "blobsrcs" list.
-    if len(blobmap):
-        maxblob = max(blobmap.keys())
+    if len(blobindex):
+        maxblob = max(blobindex.keys())
     else:
         maxblob = 0
-    maxblob = max(maxblob, blobs.max())
-    bm = np.zeros(maxblob + 1, np.int32)
-    for k,v in blobmap.items():
-        bm[k] = v
-    bm[0] = -1
+    maxblob = max(maxblob, blobmap.max())
+    remap = np.zeros(maxblob + 1, np.int32)
+    for k,v in blobindex.items():
+        remap[k] = v
+    remap[0] = -1
     # Remap blob numbers
-    blobs = bm[blobs]
+    blobmap = remap[blobmap]
+    del remap
+    del blobindex
 
     if plots:
         from astrometry.util.plotutils import dimshow
         plt.clf()
-        dimshow(blobs > -1, vmin=0, vmax=1)
+        dimshow(blobmap > -1, vmin=0, vmax=1)
         ax = plt.axis()
         for i,bs in enumerate(blobslices):
             sy,sx = bs
@@ -883,13 +884,13 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
 
     for j,Isrcs in enumerate(blobsrcs):
         for i in Isrcs:
-            if (blobs[clipy[i], clipx[i]] != j):
+            if (blobmap[clipy[i], clipx[i]] != j):
                 info('---------------------------!!!-------------------------')
                 info('Blob', j, 'sources', Isrcs)
                 info('Source', i, 'coords x,y', T.ibx[i], T.iby[i])
                 info('Expected blob value', j, 'but got',
-                      blobs[clipy[i], clipx[i]])
+                      blobmap[clipy[i], clipx[i]])
 
-    T.blob = blobs[clipy, clipx]
+    T.blob = blobmap[clipy, clipx]
     assert(len(blobsrcs) == len(blobslices))
-    return blobs, blobsrcs, blobslices
+    return blobmap, blobsrcs, blobslices

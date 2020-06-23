@@ -987,8 +987,6 @@ def stage_fitblobs(T=None,
         # corresponds to the value in the 'blobs' map.
         blobslices = [blobslices[i] for i in keepblobs]
         blobsrcs   = [blobsrcs  [i] for i in keepblobs]
-        # one more place where blob numbers are recorded...
-        T.blob = blobmap[np.clip(T.iby, 0, H-1), np.clip(T.ibx, 0, W-1)]
 
     # drop any cached data before we start pickling/multiprocessing
     survey.drop_cache()
@@ -1119,9 +1117,6 @@ def stage_fitblobs(T=None,
     R = [r for r in R if r is not None and len(r)]
     if len(R) == 0:
         raise NothingToDoError('No sources passed significance tests.')
-    # Sort results R by 'iblob'
-    J = np.argsort([B.iblob for B in R])
-    R = [R[j] for j in J]
     # Merge results R into one big table
     BB = merge_tables(R)
     del R
