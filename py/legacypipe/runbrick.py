@@ -664,7 +664,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     if refstars:
         # Don't detect new sources where we already have reference stars
         I = np.flatnonzero(refstars.in_bounds * (refstars.ref_epoch == 0))
-        xy = set(refstars.ibx[I], refstars.iby[I])
+        xy = set(zip(refstars.ibx[I], refstars.iby[I]))
         # For moving stars, evaluate position at epoch of each input image
         I = np.flatnonzero(refstars.in_bounds * (refstars.ref_epoch > 0))
         if len(I):
@@ -682,7 +682,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         #avoid_y = refstars.iby
         # Add a ~1" exclusion zone around reference stars and large galaxies
         # (assuming pixel_scale ~ 0.25")
-        xy = np.array(list(s))
+        xy = np.array(list(xy))
         avoid_x = xy[:,0]
         avoid_y = xy[:,1]
         avoid_r = np.zeros_like(avoid_x) + 4
