@@ -683,13 +683,13 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
         debug('Avoiding', ns, 'stationary and', len(xy)-ns, '(from %i stars) pixels' % np.sum(refstars.in_bounds * (refstars.ref_epoch > 0)))
         # Add a ~1" exclusion zone around reference stars and large galaxies
         # (assuming pixel_scale ~ 0.25")
-        xy = np.array(list(xy)).astype(np.float32)
+        xy = np.array(list(xy)).astype(np.int32)
         if len(xy):
             avoid_x = xy[:,0]
             avoid_y = xy[:,1]
         else:
-            avoid_x = np.array([])
-            avoid_y = np.array([])
+            avoid_x = np.array([], np.int32)
+            avoid_y = np.array([], np.int32)
         avoid_r = np.zeros_like(avoid_x) + 4
         if T_clusters is not None:
             info('Avoiding source detection in', len(T_clusters), 'CLUSTERs')
@@ -699,7 +699,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
                 avoid_r = np.append(avoid_r, T_clusters.radius_pix)
                 debug('CLUSTER pixel radii:', T_clusters.radius_pix)
     else:
-        avoid_x, avoid_y, avoid_r = np.array([]), np.array([]), np.array([])
+        avoid_x, avoid_y, avoid_r = np.array([], np.int32), np.array([], np.int32), np.array([])
 
     record_event and record_event('stage_srcs: detection maps')
     tnow = Time()
