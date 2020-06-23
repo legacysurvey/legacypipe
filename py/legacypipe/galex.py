@@ -341,8 +341,8 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
         models = []
         for i,tim in enumerate(tims):
             tile = tim.tile
-            (dat, mod, ie, chi, roi) = ims1[i]
-            models.append((tile.visitname, band, tim.wcs.wcs, dat, mod, ie))
+            (dat, mod, ie, chi, _) = ims1[i]
+            models[(tile.visitname, band)] = (mod, dat, ie, tim.roi, tim.wcs.wcs)
 
     if plots:
         for i,tim in enumerate(tims):
