@@ -56,12 +56,12 @@ def fix_hdu_post(tab):
     for cnt,T in enumerate(tab):
         if cnt % 100 == 0:
             print('%d/%d' % (cnt,len(tab)))
-        fn= T.image_filename.strip() 
+        fn= T.image_filename.strip()
         ccdname= T.ccdname.strip().upper()
-        try: 
+        try:
             hdulist= fitsio.FITS(os.path.join(proj,fn))
         except IOError:
-            try: 
+            try:
                 hdulist= fitsio.FITS(os.path.join(proja,fn))
             except:
                 raise IOError('could not find this fn on proj or proja! %s' % fn)

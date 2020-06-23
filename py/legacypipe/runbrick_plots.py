@@ -40,7 +40,7 @@ def fitblobs_plots(tims, bands, targetwcs, blobslices, blobsrcs, cat,
     plt.axis(ax)
     plt.title('Blobs')
     ps.savefig()
-    
+
     for i,Isrcs in enumerate(blobsrcs):
         for isrc in Isrcs:
             src = cat[isrc]
@@ -153,7 +153,7 @@ def detection_plots(detmaps, detivs, bands, saturated_pix, tims,
         if gaia_stars:
             gaia = refstars[refstars.isgaia]
         if gaia_stars and len(gaia):
-            ok,ix,iy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
+            _,ix,iy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
             p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='c', mfc='none')
             for x,y,g in zip(ix,iy,gaia.phot_g_mean_mag):
                 plt.text(x, y, '%.1f' % g, color='k',
@@ -339,7 +339,7 @@ def _plot_mods(tims, mods, blobwcs, titles, bands, coimgs, cons, bslc,
 
     subims = [[] for m in mods]
     chis = dict([(b,[]) for b in bands])
-    
+
     make_coimgs = (coimgs is None)
     if make_coimgs:
         print('_plot_mods: blob shape', (blobh, blobw))
@@ -378,7 +378,7 @@ def _plot_mods(tims, mods, blobwcs, titles, bands, coimgs, cons, bslc,
                 nn = (tim.getInvError()[Yi,Xi] > 0)
                 coimgs[iband][Yo,Xo] += tim.getImage()[Yi,Xi] * nn
                 cons  [iband][Yo,Xo] += nn
-                
+
         if make_coimgs:
             coimgs[iband] /= np.maximum(cons[iband], 1)
             coimg  = coimgs[iband]
@@ -386,7 +386,7 @@ def _plot_mods(tims, mods, blobwcs, titles, bands, coimgs, cons, bslc,
         else:
             coimg = coimgs[iband][bslc]
             coimgn = cons[iband][bslc]
-            
+
         for comod in comods:
             comod /= np.maximum(comodn, 1)
         ima = dict(vmin=mn, vmax=mx, ticks=False)
@@ -489,4 +489,3 @@ def _plot_mods(tims, mods, blobwcs, titles, bands, coimgs, cons, bslc,
                 plt.title(tims[itim].name)
         #plt.suptitle(titles[imod])
         ps.savefig()
-

@@ -603,7 +603,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             cat = realsrcs + derivsrcs
 
     if agn:
-        from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
+        from tractor.galaxy import ExpGalaxy, DevGalaxy
         from tractor import PointSource
         from tractor.sersic import SersicGalaxy
         from legacypipe.survey import RexGalaxy
@@ -670,7 +670,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                                           **forced_kwargs)
 
         if ps is not None or get_model:
-            (data,mod,ie,chi,roi) = R.ims1[0]
+            (data,mod,ie,chi,_) = R.ims1[0]
 
         if ps is not None:
             ima = dict(vmin=-2.*tim.sig1, vmax=5.*tim.sig1,

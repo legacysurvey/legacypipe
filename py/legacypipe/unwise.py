@@ -36,7 +36,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
     *get_masks*: the WCS to resample mask bits into.
     '''
-    from tractor import NanoMaggies, PointSource, Tractor, ExpGalaxy, DevGalaxy
+    from tractor import PointSource, Tractor, ExpGalaxy, DevGalaxy
     from tractor.sersic import SersicGalaxy
 
     if not pixelized_psf and psf_broadening is None:
@@ -322,7 +322,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 print('WARNING: cannot apply psf_broadening to WISE PSF of type', type(psf))
 
         wcs = tim.wcs.wcs
-        ok,fx,fy = wcs.radec2pixelxy(ra, dec)
+        _,fx,fy = wcs.radec2pixelxy(ra, dec)
         x = np.round(fx - 1.).astype(int)
         y = np.round(fy - 1.).astype(int)
         good = (x >= 0) * (x < tw) * (y >= 0) * (y < th)
@@ -454,8 +454,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     if get_models:
         for i,tim in enumerate(tims):
             tile = tim.tile
-            (dat, mod, ie, chi, roi) = ims1[i]
-            models.append((tile.coadd_id, band, tim.wcs.wcs, dat, mod, ie))
+            (dat, mod, ie, chi, _) = ims1[i]
+            models[(tile.coadd_id, band)] = (mod, dat, ie, tim.roi, tim.wcs.wcs)
 
     if plots:
         for i,tim in enumerate(tims):

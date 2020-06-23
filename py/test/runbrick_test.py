@@ -13,7 +13,7 @@ from astrometry.util.fits import fits_table
 
 def rbmain():
     from legacypipe.catalog import read_fits_catalog
-    from legacypipe.survey import LegacySurveyData, GaiaSource, wcs_for_brick
+    from legacypipe.survey import LegacySurveyData, wcs_for_brick
     from tractor.galaxy import DevGalaxy
     from tractor import PointSource, Catalog
     from tractor import GaussianMixturePSF
@@ -22,7 +22,6 @@ def rbmain():
     from astrometry.util.file import trymakedirs
     import shutil
 
-    travis = 'travis' in sys.argv
     ceres  = 'ceres'  in sys.argv
     psfex  = 'psfex'  in sys.argv
 
@@ -194,7 +193,7 @@ def rbmain():
                '--no-wise', '--survey-dir',
                surveydir, '--outdir', 'out-testcase9',
                '--plots', '--stage', 'halos'])
-    
+
     main(args=['--radec', '9.1228', '3.3975', '--width', '100',
                '--height', '100', '--old-calibs-ok', '--no-wise-ceres',
                '--no-wise', '--survey-dir',
@@ -256,7 +255,7 @@ def rbmain():
     with tempfile.TemporaryDirectory() as cachedir, \
         tempfile.TemporaryDirectory() as tempsurveydir:
         files = []
-        for dirpath, dirnames, filenames in os.walk(surveydir):
+        for dirpath, _, filenames in os.walk(surveydir):
             for fn in filenames:
                 path = os.path.join(dirpath, fn)
                 relpath = os.path.relpath(path, surveydir)
@@ -294,7 +293,7 @@ def rbmain():
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']
     del os.environ['LARGEGALAXIES_CAT']
-    
+
     # if ceres:
     #     surveydir = os.path.join(os.path.dirname(__file__), 'testcase3')
     #     main(args=['--brick', '2447p120', '--zoom', '1020', '1070', '2775', '2815',
@@ -394,12 +393,12 @@ def rbmain():
     assert(T.type[0].strip() == 'PSF')
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']
-    
+
     # Test that we can run splinesky calib if required...
 
     from legacypipe.decam import DecamImage
     DecamImage.splinesky_boxsize = 128
-    
+
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
 
     survey = LegacySurveyData(surveydir)
@@ -431,7 +430,7 @@ def rbmain():
 
     # Test with blob-masking when creating sky calib.
     os.unlink(fn)
-    
+
     main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
                '--force-all', '--no-write', '--coadd-bw',
                '--blob-mask-dir', surveydir,
@@ -441,7 +440,6 @@ def rbmain():
     print('Checking for calib file', fn)
     assert(os.path.exists(fn))
 
-    
     if ceres:
         main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
                    '--force-all', '--no-write', '--coadd-bw',
@@ -449,7 +447,6 @@ def rbmain():
                    '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
                    '--survey-dir', surveydir,
                    '--outdir', outdir])
-    
     if psfex:
         # Check that we can regenerate PsfEx files if necessary.
         fn = os.path.join(surveydir, 'calib', 'psfex', 'decam', 'CP', 'V4.8.2',
@@ -467,18 +464,17 @@ def rbmain():
         print('After generating PsfEx calib:')
         os.system('find %s' % (os.path.join(surveydir, 'calib')))
 
-    
     # Wrap-around, hybrid PSF
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase8')
     outdir = 'out-testcase8'
     os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
     os.environ['GAIA_CAT_VER'] = '2'
-    
+
     main(args=['--brick', '1209p050', '--zoom', '720', '1095', '3220', '3500',
                '--force-all', '--no-write', '--no-wise', #'--plots',
                '--survey-dir', surveydir,
                '--outdir', outdir])
-    
+
     # Test with a Tycho-2 star + another saturated star in the blob.
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase7')
@@ -500,17 +496,17 @@ def rbmain():
     # (this now doesn't detect any sources at all, reasonably)
     # surveydir = os.path.join(os.path.dirname(__file__), 'testcase5')
     # outdir = 'out-testcase5'
-    # 
+    #
     # fn = os.path.join(outdir, 'tractor', '186', 'tractor-1867p255.fits')
     # if os.path.exists(fn):
     #     os.unlink(fn)
-    # 
+    #
     # main(args=['--brick', '1867p255', '--zoom', '0', '150', '0', '150',
     #            '--force-all', '--no-write', '--coadd-bw',
     #            '--survey-dir', surveydir,
     #            '--early-coadds',
     #            '--outdir', outdir] + extra_args)
-    # 
+    #
     # assert(os.path.exists(fn))
     # T = fits_table(fn)
     # assert(len(T) == 1)
@@ -564,7 +560,6 @@ def rbmain():
     from tractor.sersic import SersicGalaxy
     assert(type(src) in [DevGalaxy, SersicGalaxy])
     assert(np.abs(src.pos.ra  - 244.77973) < 0.00001)
-    # Results on travis vs local seem to differ?!
     assert(np.abs(src.pos.dec -  12.07234) < 0.00002)
     src = cat[1]
     print('Source1', src)
@@ -589,7 +584,7 @@ def rbmain():
                '--outdir', outdir,
                '--checkpoint', checkpoint_fn,
                '--checkpoint-period', '1' ])
-    
+
     # From Kaylan's Bootes pre-DR4 run
     # surveydir2 = os.path.join(os.path.dirname(__file__), 'mzlsbass3')
     # main(args=['--brick', '2173p350', '--zoom', '100', '200', '100', '200',
@@ -616,7 +611,7 @@ def rbmain():
     #assert( os.path.exists(os.path.join(rt_dir,'../','metacat-'+brick+'-star.fits')) )
     #for fn in ['tractor-%s-star-01.fits' % brick,'simcat-%s-star-01.fits' % brick]: 
     #    assert( os.path.exists(os.path.join(rt_dir,fn)) )
-    #for fn in ['image','model','resid','simscoadd']: 
+    #for fn in ['image','model','resid','simscoadd']:
     #    assert( os.path.exists(os.path.join(rt_dir,'qa-'+brick+'-star-'+fn+'-01.jpg')) )
 
     # if ceres:
@@ -628,4 +623,3 @@ def rbmain():
 
 if __name__ == '__main__':
     rbmain()
-

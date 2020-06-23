@@ -620,7 +620,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
 
             # write out blob map
             if write_metrics:
-                from legacypipe.utils import copy_header_with_wcs
                 hdr = copy_header_with_wcs(version_header, targetwcs)
                 hdr.add_record(dict(name='IMTYPE', value='blobmap',
                                     comment='LegacySurveys image type'))
