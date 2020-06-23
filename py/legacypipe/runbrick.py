@@ -663,9 +663,28 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
 
     if refstars:
         # Don't detect new sources where we already have reference stars
-        avoid_x = refstars.ibx
-        avoid_y = refstars.iby
+        I = np.flatnonzero(refstars.in_bounds * (refstars.ref_epoch == 0))
+        xy = set(refstars.ibx[I], refstars.iby[I])
+        # For moving stars, evaluate position at epoch of each input image
+        I = np.flatnonzero(refstars.in_bounds * (refstars.ref_epoch > 0))
+        if len(I):
+            from legacypipe.survey import radec_at_mjd
+            for tim in tims:
+                ra,dec = radec_at_mjd(
+                    refstars.ra[I], refstars.dec[I], refstars.ref_epoch[I].astype(float),
+                    refstars.pmra[I], refstars.pmdec[I], refstars.parallax[I],
+                    tim.time.toMjd())
+                _,xx,yy = targetwcs.radec2pixelxy(ra, dec)
+                xy.update(zip(np.round(xx-1.).astype(int), np.round(yy-1.).astype(int)))
+        ns = np.sum(refstars.in_bounds * (refstars.ref_epoch == 0))
+        debug('Avoiding', ns, 'stationary and', len(xy)-ns, '(from %i stars) pixels' % np.sum(refstars.in_bounds * (refstars.ref_epoch > 0)))
+        #avoid_x = refstars.ibx
+        #avoid_y = refstars.iby
         # Add a ~1" exclusion zone around reference stars and large galaxies
+        # (assuming pixel_scale ~ 0.25")
+        xy = np.array(list(s))
+        avoid_x = xy[:,0]
+        avoid_y = xy[:,1]
         avoid_r = np.zeros_like(avoid_x) + 4
         if T_clusters is not None:
             info('Avoiding source detection in', len(T_clusters), 'CLUSTERs')
