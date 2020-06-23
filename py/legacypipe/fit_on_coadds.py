@@ -349,8 +349,6 @@ def coadds_sky(tims, targetwcs, survey, brickname, bands, mp,
         ymask, xmask = np.ogrid[-ycen:H-ycen, -xcen:W-xcen]
         cenmask = (xmask**2 + ymask**2) <= (subsky_radii[0] / pixel_scale)**2
         
-        import pdb ; pdb.set_trace()
-
     allbands = np.array([tim.band for tim in tims])
     for band in sorted(set(allbands)):
         print('Working on band {}'.format(band))
