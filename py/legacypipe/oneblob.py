@@ -147,8 +147,6 @@ def one_blob(X):
     B.cpu_blob = np.empty(len(B), np.float32)
     t1 = time.process_time()
     B.cpu_blob[:] = t1 - t0
-    B.blob = np.empty(len(B), np.int32)
-    B.blob[:] = iblob
     return B
 
 class OneBlob(object):

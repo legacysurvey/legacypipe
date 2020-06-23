@@ -126,8 +126,8 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
 
     _,xx,yy = targetwcs.radec2pixelxy(refs.ra, refs.dec)
     # ibx = integer brick coords
-    refs.ibx = np.round(xx-1.).astype(int)
-    refs.iby = np.round(yy-1.).astype(int)
+    refs.ibx = np.round(xx-1.).astype(np.int32)
+    refs.iby = np.round(yy-1.).astype(np.int32)
 
     # cut ones whose position + radius are outside the brick bounds.
     refs.cut((xx > -keeprad) * (xx < W+keeprad) *

@@ -1144,9 +1144,6 @@ def stage_fitblobs(T=None,
     assert(len(T) == len(BB))
     del BB.Isrcs
 
-    # so that iterative detections get a blob number.
-    T.blob = BB.blob
-
     # Drop sources that exited the blob as a result of fitting.
     left_blob = np.logical_and(BB.started_in_blob,
                                np.logical_not(BB.finished_in_blob))
@@ -1179,24 +1176,38 @@ def stage_fitblobs(T=None,
     assert(ns == len(cat))
     assert(nb == 5) # psf, rex, dev, exp, ser
 
+    # Arbitrarily order sources by RA.
+    I = np.argsort(T.ra)
+    T.cut(I)
+    BB.cut(I)
+
+    # Set blob numbers
+    _,bx,by = targetwcs.radec2pixelxy(T.ra, T.dec)
+    T.bx = (bx - 1.).astype(np.float32)
+    T.by = (by - 1.).astype(np.float32)
+    ibx = np.round(T.bx).astype(np.int32)
+    iby = np.round(T.by).astype(np.int32)
+    T.blob = np.empty(len(T), np.int32)
+    T.blob[:] = -1
+    in_bounds = ((ibx >= 0) * (iby >= 0) * (ibx < W) * (iby < H))
+    T.blob[in_bounds] = blobmap[iby[in_bounds], ibx[in_bounds]]
+    del in_bounds, ibx, iby
     # Renumber blobs to make them contiguous.
-    oldblob = T.blob
-    ublob,iblob = np.unique(T.blob, return_inverse=True)
-    del ublob
-    assert(len(iblob) == len(T))
-    T.blob = iblob.astype(np.int32)
-
-    # Build map from (old+1) to new blob numbers, for the blob image.
-    remap = np.empty(blobmap.max()+2, np.int32)
-    # make sure that dropped blobs -> -1
+    goodblobs = (T.blob > -1)
+    oldblobs = T.blob[goodblobs]
+    _,iblob = np.unique(oldblobs, return_inverse=True)
+    T.blob[goodblobs] = iblob #.astype(np.int32)
+    del goodblobs
+    # Renumber the blob map to match
+    remap = np.empty(blobmap.max() + 2, np.int32)
+    # dropped blobs -> -1
     remap[:] = -1
-    # in particular,
-    remap[0] = -1
     # (this +1 business is because we're using a numpy array for the map)
-    remap[oldblob + 1] = iblob
+    remap[oldblobs + 1] = iblob
     blobmap = remap[blobmap+1]
-
-    # Frozen galaxies: while remapping, flip from blob->[srcs] to src->[blobs].
+    del iblob, oldblobs
+    # Frozen galaxies: update blob numbers.
+    # while remapping, flip from blob->[srcs] to src->[blobs].
     fro_gals = {}
     for b,gals in frozen_galaxies.items():
         for gal in gals:
@@ -1207,7 +1218,6 @@ def stage_fitblobs(T=None,
                 fro_gals[gal].append(bnew)
     frozen_galaxies = fro_gals
     debug('Remapped frozen_galaxies:', frozen_galaxies)
-
     del remap
 
     # write out blob map
@@ -1218,7 +1228,6 @@ def stage_fitblobs(T=None,
                             comment='LegacySurveys image type'))
         with survey.write_output('blobmap', brick=brickname, shape=blobmap.shape) as out:
             out.fits.write(blobmap, header=hdr)
-    del iblob, oldblob
 
     T.brickid = np.zeros(len(T), np.int32) + brickid
     T.brickname = np.array([brickname] * len(T))
@@ -1229,7 +1238,8 @@ def stage_fitblobs(T=None,
     # How many sources in each blob?
     from collections import Counter
     ninblob = Counter(T.blob)
-    T.ninblob = np.array([ninblob[b] for b in T.blob]).astype(np.int16)
+    ninblob[-1] = 0
+    T.ninblob = np.array([ninblob[b] for b in T.blob]).astype(np.int32)
     del ninblob
 
     # Copy blob results to table T
@@ -2663,10 +2673,6 @@ def stage_writecat(
     by[ok==False] = 1.
     T2.bx0 = (bx - 1.).astype(np.float32)
     T2.by0 = (by - 1.).astype(np.float32)
-    ok,bx,by = targetwcs.radec2pixelxy(T2.ra, T2.dec)
-    T2.bx = (bx - 1.).astype(np.float32)
-    T2.by = (by - 1.).astype(np.float32)
-
     T2.delete_column('orig_ra')
     T2.delete_column('orig_dec')
 
@@ -2714,7 +2720,6 @@ def stage_writecat(
         f.close()
 
     record_event and record_event('stage_writecat: done')
-
     return dict(T2=T2, version_header=version_header)
 
 def run_brick(brick, survey, radec=None, pixscale=0.262,
