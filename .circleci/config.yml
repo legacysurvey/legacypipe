@@ -109,8 +109,7 @@ jobs:
           name: Unit tests
           command: |
               cd py
-              echo $PYTHONPATH
-              pwd
+              export PYTHONPATH=${PYTHONPATH}:$(pwd)
               python3 -c "import sys; print(sys.path)"
               python3 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
               #coverage run test/unit_tests.py
