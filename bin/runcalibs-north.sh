@@ -2,26 +2,19 @@
 
 # Run legacy_zeropoints on a single image within a Shifter container at NERSC.
 
-export LEGACY_SURVEY_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr9
+export LEGACY_SURVEY_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr9k
 
 # NOTE: if you only want to regenerate sky calibs, MUST create a symlink
 # in $calibdir/psfex, eg to
 #   /global/cfs/cdirs/cosmo/work/legacysurvey/dr9/calib/psfex
 
-outdir=$CSCRATCH/dr9-north-calib
+outdir=$CSCRATCH/dr9k-north-calib
 zptsdir=${outdir}/zpts
-calibdir=${outdir}/calib
+calibdir=${LEGACY_SURVEY_DIR}/calib
 imagedir=${LEGACY_SURVEY_DIR}/images
 
 blob_dir=/global/cfs/cdirs/cosmo/work/legacysurvey/dr8/north
-# Zeropoint_dir is only required for star halo subtraction, which we're
-# not using in the north.
-#zeropoints_dir=${LEGACY_SURVEY_DIR}
-
-# work/dr8/north includes:
-#   coadd -> /global/cfs/cdirs/cosmo/data/legacysurvey/dr8/north/coadd/
-#   metrics -> /global/cfs/cdirs/cosmo/data/legacysurvey/dr8/north/metrics/
-#   survey-bricks.fits.gz -> /global/cfs/cdirs/cosmo/data/legacysurvey/dr8/survey-bricks.fits.gz
+zeropoints_dir=${LEGACY_SURVEY_DIR}
 
 ncores=4
 
@@ -32,7 +25,7 @@ export DUST_DIR=/global/cfs/cdirs/cosmo/data/dust/v0_1
 export GAIA_CAT_DIR=/global/cfs/cdirs/cosmo/work/gaia/chunks-gaia-dr2-astrom-2
 export GAIA_CAT_VER=2
 export TYCHO2_KD_DIR=/global/cfs/cdirs/cosmo/staging/tycho2
-export LARGEGALAXIES_CAT=/global/cfs/cdirs/cosmo/staging/largegalaxies/v7.0/LSLGA-v7.0.kd.fits
+export LARGEGALAXIES_CAT=/global/cfs/cdirs/cosmo/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
 export PS1CAT_DIR=/global/cfs/cdirs/cosmo/work/ps1/cats/chunks-qz-star-v3
 
 # Don't add ~/.local/ to Python's sys.path
@@ -79,7 +72,8 @@ cmd="python -u /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
     --overhead ${starttime} \
     --quiet \
     --run-calibs-only \
-    --blob-mask-dir ${blob_dir}"
+    --blob-mask-dir ${blob_dir} \
+    --zeropoints-dir ${zeropoints_dir}"
 
 echo $cmd > $log
 $cmd >> $log 2>&1
