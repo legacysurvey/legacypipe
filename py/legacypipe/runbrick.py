@@ -1180,6 +1180,7 @@ def stage_fitblobs(T=None,
     I = np.argsort(T.ra)
     T.cut(I)
     BB.cut(I)
+    newcat = [newcat[i] for i in I]
 
     # Set blob numbers
     _,bx,by = targetwcs.radec2pixelxy(T.ra, T.dec)
