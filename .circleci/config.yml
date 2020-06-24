@@ -85,15 +85,41 @@ jobs:
               python3 -c "import sys; print(sys.path)"
               python3 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
               coverage run test/unit_tests.py
-              coverage run -a test/runbrick_test.py travis
+              coverage run -a test/runbrick_test.py
+      # - run:
+      #     name: Coveralls
+      #     command: |
+      #         cd py
+      #         # set in the circleci build config,
+      #         # https://circleci.com/gh/legacysurvey/legacypipe/edit#env-vars
+      #         echo "COVERALLS_REPO_TOKEN=${COVERALLS_REPO_TOKEN} bundle exec rspec spec" > .coveralls.yml
+      #         # Let travis do the coveralls upload!
+      #         #coveralls
+      #         #./codecov-upload.sh
+
+  build-from-docker:
+    docker:
+      - image: legacysurvey/circleci-build
+    steps:
       - run:
-          name: Coveralls
+          name: CPU info
+          command: cat /proc/cpuinfo
+      - checkout
+      - run:
+          name: Unit tests
           command: |
               cd py
-              # set in the circleci build config,
-              # https://circleci.com/gh/legacysurvey/legacypipe/edit#env-vars
-              echo "COVERALLS_REPO_TOKEN=${COVERALLS_REPO_TOKEN} bundle exec rspec spec" > .coveralls.yml
-              # Let travis do the coveralls upload!
-              #coveralls
-              #./codecov-upload.sh
+              export PYTHONPATH=${PYTHONPATH}:$(pwd)
+              python3 -c "import sys; print(sys.path)"
+              python3 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
+              #coverage run test/unit_tests.py
+              #coverage run -a test/runbrick_test.py
+              python3 test/unit_tests.py
+              python3 test/runbrick_test.py
 
+workflows:
+  version: 2
+  build:
+    jobs:
+      - "build"
+      - "build-from-docker"

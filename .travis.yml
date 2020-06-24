@@ -62,7 +62,7 @@ script:
     - ls $HOME
     - ls $HOME/astrometry.net
     - (cd doc && make)
-    - (cd py && coverage run --concurrency=multiprocessing test/runbrick_test.py travis psfex ceres && coverage run --concurrency=multiprocessing -a test/unit_tests.py && coverage combine)
+    - (cd py && coverage run --concurrency=multiprocessing test/runbrick_test.py psfex ceres && coverage run --concurrency=multiprocessing -a test/unit_tests.py && coverage combine)
 
 after_success:
     #- (cd py && coveralls debug)
