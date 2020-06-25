@@ -2237,7 +2237,7 @@ def stage_wise_forced(
                 Icluster = I[incluster[yy[I], xx[I]]]
                 print('Found', len(Icluster), 'of', len(cat), 'sources inside CLUSTER mask')
                 do_phot[Icluster] = False
-    Nskipped = len(do_phot) - np.sum(do_phot)
+    Nskipped = len(T) - np.sum(do_phot)
 
     wcat = []
     for i in np.flatnonzero(do_phot):
@@ -2353,6 +2353,12 @@ def stage_wise_forced(
                 collapse_unwise_bitmask(wise_mask_maps, 1),
                 collapse_unwise_bitmask(wise_mask_maps, 2)]
 
+        if Nskipped > 0:
+            assert(len(WISE) == len(wcat))
+            WISE = _fill_skipped_values(WISE, Nskipped, do_phot)
+            assert(len(WISE) == len(cat))
+            assert(len(WISE) == len(T))
+
         if unwise_coadds:
             from legacypipe.coadds import UnwiseCoadd
             # Create the WCS into which we'll resample the tiles.
@@ -2378,12 +2384,6 @@ def stage_wise_forced(
                 iv[d != 0.] = 1./(d[d != 0]**2)
                 WISE.set('apflux_ivar_w%i' % band, iv)
                 print('Setting WISE apphot')
-
-        if Nskipped > 0:
-            assert(len(WISE) == len(wcat))
-            WISE = _fill_skipped_values(WISE, Nskipped, do_phot)
-            assert(len(WISE) == len(cat))
-            assert(len(WISE) == len(T))
 
         # Look up mask values for sources
         WISE.wise_mask = np.zeros((len(cat), 2), np.uint8)

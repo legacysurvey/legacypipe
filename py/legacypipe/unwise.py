@@ -64,7 +64,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     Nsrcs = len(cat)
     phot = fits_table()
     # Filled in based on unique tile overlap
-    phot.wise_coadd_id = np.array(['        '] * Nsrcs)
+    phot.wise_coadd_id = np.array(['        '] * Nsrcs, dtype='U8')
     phot.wise_x = np.zeros(Nsrcs, np.float32)
     phot.wise_y = np.zeros(Nsrcs, np.float32)
     phot.set('psfdepth_%s' % wband, np.zeros(len(phot), np.float32))
@@ -413,6 +413,10 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
     if wantims:
         ims1 = R.ims1
+        # can happen if empty source list (we still want to generate coadds)
+        if ims1 is None:
+            ims1 = R.ims0
+
     flux_invvars = R.IV
     if R.fitstats is not None:
         for k in fskeys:
@@ -492,7 +496,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     phot.set('flux_%s' % wband, nm.astype(np.float32))
     phot.set('flux_ivar_%s' % wband, nm_ivar.astype(np.float32))
     for k in fskeys:
-        phot.set(k + '_' + wband, fitstats[k])
+        phot.set(k + '_' + wband, fitstats.get(k, np.zeros(len(phot), np.float32)))
     phot.set('nobs_%s' % wband, nexp)
     phot.set('mjd_%s'  % wband, mjd)
 
@@ -532,6 +536,9 @@ def unwise_phot(X):
                   modelsky_dir=modelsky_dir)
     if get_mods:
         kwargs.update(get_models=get_mods)
+
+    if wise_ceres and len(wcat) == 0:
+        wise_ceres = False
 
     # DEBUG
     #kwargs.update(save_fits=True)
