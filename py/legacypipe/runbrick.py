@@ -1221,7 +1221,8 @@ def stage_fitblobs(T=None,
     # (Here we're just setting 'objid', not actually reordering arrays.)
     # (put all the regular * in_bounds sources, then dup in-bound, then oob)
     I = np.argsort(T.ra + (-2000 * T.in_bounds) + (-1000 * T.regular))
-    T.objid = I.astype(np.int32)
+    T.objid = np.empty(len(T), np.int32)
+    T.objid[I] = np.arange(len(T))
 
     # Extend catalog with None "sources" for T_dup entries
     cat = Catalog(*(newcat + [None]*(len(T)-len(newcat))))
@@ -2667,7 +2668,7 @@ def stage_writecat(
     T.sersic[np.array([t in ['EXP',b'EXP'] for t in T.type])] = 1.0
 
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
-        T.writeto(None, fits_object=out.fits, primheader=primhdr)
+        T[np.argsort(T.objid)].writeto(None, fits_object=out.fits, primheader=primhdr)
 
     # After writing tractor-i file, drop (reference) sources outside the brick.
     T.cut(T.in_bounds)
@@ -2678,7 +2679,7 @@ def stage_writecat(
             T.rename(c, c.lower())
     from legacypipe.format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
-        format_catalog(T, None, primhdr, survey.allbands, None, release,
+        format_catalog(T[np.argsort(T.objid)], None, primhdr, survey.allbands, None, release,
                        write_kwargs=dict(fits_object=out.fits),
                        N_wise_epochs=15, motions=gaia_stars, gaia_tagalong=True)
 
