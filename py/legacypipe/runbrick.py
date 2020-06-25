@@ -2368,15 +2368,6 @@ def stage_wise_forced(
 
         # Look up mask values for sources
         WISE.wise_mask = np.zeros((len(cat), 2), np.uint8)
-        #ra  = np.array([src.getPosition().ra  for src in cat])
-        #dec = np.array([src.getPosition().dec for src in cat])
-        # ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
-        # xx = np.round(xx - 1).astype(int)
-        # yy = np.round(yy - 1).astype(int)
-        # I = np.flatnonzero(ok * (xx >= 0)*(xx < W) * (yy >= 0)*(yy < H))
-        # if len(I):
-        #     WISE.wise_mask[I,0] = wise_mask_maps[0][yy[I], xx[I]]
-        #     WISE.wise_mask[I,1] = wise_mask_maps[1][yy[I], xx[I]]
         WISE.wise_mask[T.in_bounds,0] = wise_mask_maps[0][T.iby[T.in_bounds], T.ibx[T.in_bounds]]
         WISE.wise_mask[T.in_bounds,1] = wise_mask_maps[1][T.iby[T.in_bounds], T.ibx[T.in_bounds]]
 
