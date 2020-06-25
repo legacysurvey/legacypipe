@@ -2525,27 +2525,29 @@ def stage_writecat(
             out.fits.write(wise_mask_maps[1], extname='WISEM2')
         del wise_mask_maps
 
-    T2 = prepare_fits_catalog(cat, invvars, T, bands, force_keep=T.force_keep_source)
+    T_orig = T.copy()
+
+    T = prepare_fits_catalog(cat, invvars, T, bands, force_keep=T.force_keep_source)
     # Override type for DUP objects
-    T2.type[T.dup] = 'DUP'
+    T.type[T.dup] = 'DUP'
 
     # The "ra_ivar" values coming out of the tractor fits do *not*
     # have a cos(Dec) term -- ie, they give the inverse-variance on
     # the numerical value of RA -- so we want to make the ra_sigma
     # values smaller by multiplying by cos(Dec); so invvars are /=
     # cosdec^2
-    T2.ra_ivar /= np.cos(np.deg2rad(T2.dec))**2
+    T.ra_ivar /= np.cos(np.deg2rad(T.dec))**2
 
     # Compute fiber fluxes
-    T2.fiberflux, T2.fibertotflux = get_fiber_fluxes(
-        cat, T2, targetwcs, H, W, pixscale, bands, plots=plots, ps=ps)
+    T.fiberflux, T.fibertotflux = get_fiber_fluxes(
+        cat, T, targetwcs, H, W, pixscale, bands, plots=plots, ps=ps)
 
     # For reference stars, plug in the reference-catalog inverse-variances.
     if 'ref_id' in T.get_columns() and 'ra_ivar' in T.get_columns():
         I, = np.nonzero(T.ref_id)
         if len(I):
-            T2.ra_ivar [I] = T.ra_ivar[I]
-            T2.dec_ivar[I] = T.dec_ivar[I]
+            T.ra_ivar [I] = T_orig.ra_ivar [I]
+            T.dec_ivar[I] = T_orig.dec_ivar[I]
 
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
@@ -2587,43 +2589,43 @@ def stage_writecat(
 
         # Copy columns:
         for c in ['wise_coadd_id', 'wise_x', 'wise_y', 'wise_mask']:
-            T2.set(c, WISE.get(c))
+            T.set(c, WISE.get(c))
 
         for band in [1,2,3,4]:
             # Apply the Vega-to-AB shift *while* copying columns from
-            # WISE to T2.
+            # WISE to T.
             dm = vega_to_ab['w%i' % band]
             fluxfactor = 10.** (dm / -2.5)
             # fluxes
             c = t = 'flux_w%i' % band
-            T2.set(t, WISE.get(c) * fluxfactor)
+            T.set(t, WISE.get(c) * fluxfactor)
             if WISE_T is not None and band <= 2:
                 t = 'lc_flux_w%i' % band
-                T2.set(t, WISE_T.get(c) * fluxfactor)
+                T.set(t, WISE_T.get(c) * fluxfactor)
             # ivars
             c = t = 'flux_ivar_w%i' % band
-            T2.set(t, WISE.get(c) / fluxfactor**2)
+            T.set(t, WISE.get(c) / fluxfactor**2)
             if WISE_T is not None and band <= 2:
                 t = 'lc_flux_ivar_w%i' % band
-                T2.set(t, WISE_T.get(c) / fluxfactor**2)
+                T.set(t, WISE_T.get(c) / fluxfactor**2)
             # This is in 1/nanomaggies**2 units also
             c = t = 'psfdepth_w%i' % band
-            T2.set(t, WISE.get(c) / fluxfactor**2)
+            T.set(t, WISE.get(c) / fluxfactor**2)
 
             if 'apflux_w%i'%band in WISE.get_columns():
                 t = c = 'apflux_w%i' % band
-                T2.set(t, WISE.get(c) * fluxfactor)
+                T.set(t, WISE.get(c) * fluxfactor)
                 t = c = 'apflux_resid_w%i' % band
-                T2.set(t, WISE.get(c) * fluxfactor)
+                T.set(t, WISE.get(c) * fluxfactor)
                 t = c = 'apflux_ivar_w%i' % band
-                T2.set(t, WISE.get(c) / fluxfactor**2)
+                T.set(t, WISE.get(c) / fluxfactor**2)
 
         # Rename more columns
         for cin,cout in [('nobs_w%i',        'nobs_w%i'    ),
                          ('profracflux_w%i', 'fracflux_w%i'),
                          ('prochi2_w%i',     'rchisq_w%i'  )]:
             for band in [1,2,3,4]:
-                T2.set(cout % band, WISE.get(cin % band))
+                T.set(cout % band, WISE.get(cin % band))
 
         if WISE_T is not None:
             for cin,cout in [('nobs_w%i',        'lc_nobs_w%i'),
@@ -2631,7 +2633,7 @@ def stage_writecat(
                              ('prochi2_w%i',     'lc_rchisq_w%i'),
                              ('mjd_w%i',         'lc_mjd_w%i'),]:
                 for band in [1,2]:
-                    T2.set(cout % band, WISE_T.get(cin % band))
+                    T.set(cout % band, WISE_T.get(cin % band))
         # Done with these now!
         WISE_T = None
         WISE = None
@@ -2640,48 +2642,43 @@ def stage_writecat(
         for c in ['flux_nuv', 'flux_ivar_nuv', 'flux_fuv', 'flux_ivar_fuv',
                   'apflux_nuv', 'apflux_resid_nuv', 'apflux_ivar_nuv',
                   'apflux_fuv', 'apflux_resid_fuv', 'apflux_ivar_fuv', ]:
-            T2.set(c, GALEX.get(c))
+            T.set(c, GALEX.get(c))
         GALEX = None
 
-    #if T_dup:
-    #T2 = merge_tables([T2, T_dup], columns='fillzero')
-
     # Brick pixel positions
-    ok,bx,by = targetwcs.radec2pixelxy(T2.orig_ra, T2.orig_dec)
+    ok,bx,by = targetwcs.radec2pixelxy(T.orig_ra, T.orig_dec)
     # iterative sources
     bx[ok==False] = 1.
     by[ok==False] = 1.
-    T2.bx0 = (bx - 1.).astype(np.float32)
-    T2.by0 = (by - 1.).astype(np.float32)
-    T2.delete_column('orig_ra')
-    T2.delete_column('orig_dec')
+    T.bx0 = (bx - 1.).astype(np.float32)
+    T.by0 = (by - 1.).astype(np.float32)
+    T.delete_column('orig_ra')
+    T.delete_column('orig_dec')
 
-    T2.brick_primary = ((T2.ra  >= brick.ra1 ) * (T2.ra  < brick.ra2) *
-                        (T2.dec >= brick.dec1) * (T2.dec < brick.dec2))
+    T.brick_primary = ((T.ra  >= brick.ra1 ) * (T.ra  < brick.ra2) *
+                        (T.dec >= brick.dec1) * (T.dec < brick.dec2))
     H,W = maskbits.shape
-    T2.maskbits = maskbits[np.clip(np.round(T2.by), 0, H-1).astype(int),
-                           np.clip(np.round(T2.bx), 0, W-1).astype(int)]
+    T.maskbits = maskbits[np.clip(T.iby, 0, H-1).astype(int),
+                          np.clip(T.ibx, 0, W-1).astype(int)]
     del maskbits
 
     # sigh, bytes vs strings.  In py3, T.type (dtype '|S3') are bytes.
-    T2.sersic[np.array([t in ['DEV',b'DEV'] for t in T2.type])] = 4.0
-    T2.sersic[np.array([t in ['EXP',b'EXP'] for t in T2.type])] = 1.0
+    T.sersic[np.array([t in ['DEV',b'DEV'] for t in T.type])] = 4.0
+    T.sersic[np.array([t in ['EXP',b'EXP'] for t in T.type])] = 1.0
 
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
-        T2.writeto(None, fits_object=out.fits, primheader=primhdr)
+        T.writeto(None, fits_object=out.fits, primheader=primhdr)
 
     # After writing tractor-i file, drop (reference) sources outside the brick.
-    #T2.cut((T2.bx >= -0.5) * (T2.bx <= W-0.5) *
-    #       (T2.by >= -0.5) * (T2.by <= H-0.5))
-    T2.cut(T2.in_bounds)
+    T.cut(T.in_bounds)
 
     # The "format_catalog" code expects all lower-case column names...
-    for c in T2.columns():
+    for c in T.columns():
         if c != c.lower():
-            T2.rename(c, c.lower())
+            T.rename(c, c.lower())
     from legacypipe.format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
-        format_catalog(T2, None, primhdr, survey.allbands, None, release,
+        format_catalog(T, None, primhdr, survey.allbands, None, release,
                        write_kwargs=dict(fits_object=out.fits),
                        N_wise_epochs=15, motions=gaia_stars, gaia_tagalong=True)
 
@@ -2701,7 +2698,7 @@ def stage_writecat(
         f.close()
 
     record_event and record_event('stage_writecat: done')
-    return dict(T2=T2, version_header=version_header)
+    return dict(T=T, version_header=version_header)
 
 def run_brick(brick, survey, radec=None, pixscale=0.262,
               width=3600, height=3600,
