@@ -1207,6 +1207,8 @@ def stage_fitblobs(T=None,
         Tall.append(T_refbail)
     if len(Tall) > 1:
         T = merge_tables(Tall, columns='fillzero')
+    T_dup = None
+    del T_refbail
 
     _,bx,by = targetwcs.radec2pixelxy(T.ra, T.dec)
     T.bx = (bx - 1.).astype(np.float32)
@@ -1216,20 +1218,21 @@ def stage_fitblobs(T=None,
     T.in_bounds = ((T.ibx >= 0) * (T.iby >= 0) * (T.ibx < W) * (T.iby < H))
 
     # Arbitrarily order sources by RA.
-    # (first put all the regular * in_bounds sources, then dup in-bound, then oob)
+    # (Here we're just setting 'objid', not actually reordering arrays.)
+    # (put all the regular * in_bounds sources, then dup in-bound, then oob)
     I = np.argsort(T.ra + (-2000 * T.in_bounds) + (-1000 * T.regular))
     T.objid = I.astype(np.int32)
-    #T.cut(I)
-    #BB = [BB[i] for i,r in zip(I, T.regular) if r else None]
-    # # just the regular sources
-    # IB = I[T.regular]
-    # BB.cut(IB)
-    # newcat = [newcat[i] for i in IB]
 
-    # Extend catalog with None "sources" for T_dup entries?
+    # Extend catalog with None "sources" for T_dup entries
     cat = Catalog(*(newcat + [None]*(len(T)-len(newcat))))
+    del newcat
+    assert(len(cat) == len(T))
     invvars = np.hstack(BB.srcinvvars)
     assert(cat.numberOfParams() == len(invvars))
+    # NOTE that "BB" can now be shorter than cat and T.
+    assert(np.sum(T.regular) == len(BB))
+    # We assume below (when unpacking BB for all-models) that the
+    # "regular" entries are at the beginning of T.
 
     # Set blob numbers
     T.blob = np.empty(len(T), np.int32)
@@ -1241,7 +1244,7 @@ def stage_fitblobs(T=None,
     _,iblob = np.unique(oldblobs, return_inverse=True)
     T.blob[goodblobs] = iblob
     del goodblobs
-    # Renumber the blob map to match
+    # Renumber blobmap to match T.blob
     remap = np.empty(blobmap.max() + 2, np.int32)
     # dropped blobs -> -1
     remap[:] = -1
@@ -1263,6 +1266,13 @@ def stage_fitblobs(T=None,
     debug('Remapped frozen_galaxies:', frozen_galaxies)
     del remap
 
+    # How many sources in each blob?
+    from collections import Counter
+    ninblob = Counter(T.blob)
+    ninblob[-1] = 0
+    T.ninblob = np.array([ninblob[b] for b in T.blob]).astype(np.int32)
+    del ninblob
+
     # write out blob map
     if write_metrics:
         from legacypipe.utils import copy_header_with_wcs
@@ -1274,34 +1284,9 @@ def stage_fitblobs(T=None,
 
     T.brickid = np.zeros(len(T), np.int32) + brickid
     T.brickname = np.array([brickname] * len(T))
-    if len(T.brickname) == 0:
-        T.brickname = T.brickname.astype('S8')
-    #T.objid = np.arange(len(T), dtype=np.int32)
-
-    # How many sources in each blob?
-    from collections import Counter
-    ninblob = Counter(T.blob)
-    ninblob[-1] = 0
-    T.ninblob = np.array([ninblob[b] for b in T.blob]).astype(np.int32)
-    del ninblob
 
     if write_metrics or get_all_models:
         from legacypipe.format_catalog import format_all_models
-        # append our 'do not fit' sources so that the all-models file
-        # matches the tractor catalog
-
-        #T2 = T
-        #cat2 = [src for src in newcat]
-        #if T_dup:
-        #    T2 = merge_tables([T2, T_dup], columns='fillzero')
-        #    cat2.extend([None] * len(T_dup))
-        #TT,hdr = format_all_models(T2, cat2, BB, bands, survey.allbands,
-        #                           force_keep=T2.force_keep_source)
-
-        #cat2 = newcat + [None]*(len(T)-len(newcat))
-        #TT,hdr = format_all_models(T, cat2, BB, bands, survey.allbands,
-        #                           force_keep=T.force_keep_source)
-
         TT,hdr = format_all_models(T, cat, BB, bands, survey.allbands,
                                    force_keep=T.force_keep_source)
         if get_all_models:
@@ -1316,11 +1301,12 @@ def stage_fitblobs(T=None,
                 TT.writeto(None, fits_object=out.fits, header=hdr,
                            primheader=primhdr)
 
-    keys = ['cat', 'invvars', 'T', 'blobmap', 'refmap', 'version_header', 'frozen_galaxies']
+    keys = ['cat', 'invvars', 'T', 'blobmap', 'refmap', 'version_header',
+            'frozen_galaxies', 'T_dup']
     if get_all_models:
         keys.append('all_models')
     if bailout:
-        keys.extend(['bailout_mask', 'T_refbail'])
+        keys.extend(['bailout_mask'])
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
@@ -1705,7 +1691,7 @@ def _get_both_mods(X):
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  custom_brick=False,
-                 T=None, T_dup=None, T_refbail=None,
+                 T=None,
                  refstars=None,
                  blobmap=None,
                  cat=None, pixscale=None, plots=False,
@@ -1792,7 +1778,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     bb.append(blobmap[yy,xx])
     #debug('Frozen_galaxies:', frozen_galaxies)
 
-    bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob[:len(cat)], blobmap,
+    #bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob[:len(cat)], blobmap,
+    bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob, blobmap,
                                         targetwcs, frozen_galaxies, ps, plots)
                                        for tim in tims])
     mods = [m for m,b in bothmods]
@@ -1803,30 +1790,11 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     tlast = tnow
 
     # Compute source pixel positions
-    ra  = T.ra
-    dec = T.dec
-    # T_refbail and T_dup sources get the same treatment...
-    if T_refbail is not None:
-        if T_dup is not None:
-            T_dup = merge_tables([T_dup, T_refbail], columns='fillzero')
-        else:
-            T_dup = T_refbail
-    # We tag the "T_dup" sources on the end to get aperture phot
-    # and other metrics.
-    if T_dup:
-        ra  = np.append(ra,  T_dup.ra)
-        dec = np.append(dec, T_dup.dec)
-    ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
-    # Get integer brick pixel coords for each source, for referencing maps
-    #T.out_of_bounds = reduce(np.logical_or, [xx < 0.5, yy < 0.5,
-    #                                         xx > W+0.5, yy > H+0.5])[:len(T)]
-    ixy = (np.clip(np.round(xx - 1), 0, W-1).astype(int),
-           np.clip(np.round(yy - 1), 0, H-1).astype(int))
+    ixy = (np.clip(T.ibx, 0, W-1).astype(int), np.clip(T.iby, 0, H-1).astype(int))
     # convert apertures to pixels
     apertures = apertures_arcsec / pixscale
     # Aperture photometry locations
-    apxy = np.vstack((xx - 1., yy - 1.)).T
-    del xx,yy,ok,ra,dec
+    apxy = np.vstack((T.bx, T.by)).T
 
     record_event and record_event('stage_coadds: coadds')
     C = make_coadds(tims, bands, targetwcs, mods=mods, blobmods=blobmods,
@@ -1859,14 +1827,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     if 'sims_xy' in C.T.get_columns():
         cols.append('sims_xy')
 
-    Nno = T_dup and len(T_dup) or 0
-    Nyes = len(T)
     for c in cols:
-        val = C.T.get(c)
-        T.set(c, val[:Nyes])
-        # We appended T_dup; peel off those results
-        if Nno:
-            T_dup.set(c, val[Nyes:])
+        T.set(c, C.T.get(c))
     assert(C.AP is not None)
     # How many apertures?
     A = len(apertures_arcsec)
@@ -1875,12 +1837,10 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     ('apflux_masked_%s',    'apflux_masked'),
                     ('apflux_resid_%s',     'apflux_resid'),
                     ('apflux_blobresid_%s', 'apflux_blobresid'),]:
-        X = np.zeros((Nyes+Nno, len(bands), A), np.float32)
+        X = np.zeros((len(T), len(bands), A), np.float32)
         for iband,band in enumerate(bands):
             X[:,iband,:] = C.AP.get(src % band)
-        T.set(dst, X[:Nyes,:,:])
-        if Nno:
-            T_dup.set(dst, X[Nyes:,:,:])
+        T.set(dst, X)
 
     # Compute depth histogram
     D = _depth_histogram(brick, targetwcs, bands, C.psfdetivs, C.galdetivs)
@@ -2042,7 +2002,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     tnow = Time()
     debug('Aperture photometry wrap-up:', tnow-tlast)
 
-    return dict(T=T, T_dup=T_dup, apertures_pix=apertures,
+    return dict(T=T, apertures_pix=apertures,
                 apertures_arcsec=apertures_arcsec,
                 maskbits=maskbits,
                 version_header=version_header)
@@ -2239,7 +2199,6 @@ def stage_wise_forced(
     roiradec = [targetrd[0,0], targetrd[2,0], targetrd[0,1], targetrd[2,1]]
 
     # Sources to photometer
-    #do_phot = np.ones(len(cat), bool)
     do_phot = T.regular.copy()
 
     # Drop sources within the CLUSTER mask from forced photometry.
@@ -2408,15 +2367,17 @@ def stage_wise_forced(
 
         # Look up mask values for sources
         WISE.wise_mask = np.zeros((len(cat), 2), np.uint8)
-        ra  = np.array([src.getPosition().ra  for src in cat])
-        dec = np.array([src.getPosition().dec for src in cat])
-        ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
-        xx = np.round(xx - 1).astype(int)
-        yy = np.round(yy - 1).astype(int)
-        I = np.flatnonzero(ok * (xx >= 0)*(xx < W) * (yy >= 0)*(yy < H))
-        if len(I):
-            WISE.wise_mask[I,0] = wise_mask_maps[0][yy[I], xx[I]]
-            WISE.wise_mask[I,1] = wise_mask_maps[1][yy[I], xx[I]]
+        #ra  = np.array([src.getPosition().ra  for src in cat])
+        #dec = np.array([src.getPosition().dec for src in cat])
+        # ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
+        # xx = np.round(xx - 1).astype(int)
+        # yy = np.round(yy - 1).astype(int)
+        # I = np.flatnonzero(ok * (xx >= 0)*(xx < W) * (yy >= 0)*(yy < H))
+        # if len(I):
+        #     WISE.wise_mask[I,0] = wise_mask_maps[0][yy[I], xx[I]]
+        #     WISE.wise_mask[I,1] = wise_mask_maps[1][yy[I], xx[I]]
+        WISE.wise_mask[T.in_bounds,0] = wise_mask_maps[0][T.iby[T.in_bounds], T.ibx[T.in_bounds]]
+        WISE.wise_mask[T.in_bounds,1] = wise_mask_maps[1][T.iby[T.in_bounds], T.ibx[T.in_bounds]]
 
     # Unpack time-resolved results...
     WISE_T = None
@@ -2478,7 +2439,6 @@ def stage_writecat(
     version_header=None,
     release=None,
     T=None,
-    T_dup=None,
     WISE=None,
     WISE_T=None,
     maskbits=None,
@@ -2565,12 +2525,9 @@ def stage_writecat(
             out.fits.write(wise_mask_maps[1], extname='WISEM2')
         del wise_mask_maps
 
-    TT = T.copy()
-    for k in ['ibx','iby']:
-        TT.delete_column(k)
-
-    T2 = prepare_fits_catalog(cat, invvars, TT, bands, force_keep=TT.force_keep_source)
-    T2.type[TT.dup] = 'DUP'
+    T2 = prepare_fits_catalog(cat, invvars, T, bands, force_keep=T.force_keep_source)
+    # Override type for DUP objects
+    T2.type[T.dup] = 'DUP'
 
     # The "ra_ivar" values coming out of the tractor fits do *not*
     # have a cos(Dec) term -- ie, they give the inverse-variance on
