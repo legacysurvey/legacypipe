@@ -1159,45 +1159,87 @@ def stage_fitblobs(T=None,
     info('Old catalog:', len(cat))
     info('New catalog:', len(newcat))
     assert(len(newcat) > 0)
-    cat = Catalog(*newcat)
     ns,nb = BB.fracflux.shape
-    assert(ns == len(cat))
+    assert(ns == len(newcat))
     assert(nb == len(bands))
     ns,nb = BB.fracmasked.shape
-    assert(ns == len(cat))
+    assert(ns == len(newcat))
     assert(nb == len(bands))
     ns,nb = BB.fracin.shape
-    assert(ns == len(cat))
+    assert(ns == len(newcat))
     assert(nb == len(bands))
     ns,nb = BB.rchisq.shape
-    assert(ns == len(cat))
+    assert(ns == len(newcat))
     assert(nb == len(bands))
     ns,nb = BB.dchisq.shape
-    assert(ns == len(cat))
+    assert(ns == len(newcat))
     assert(nb == 5) # psf, rex, dev, exp, ser
 
-    # Arbitrarily order sources by RA.
-    I = np.argsort(T.ra)
-    T.cut(I)
-    BB.cut(I)
-    newcat = [newcat[i] for i in I]
+    # We want to order sources (and assign objids) so that sources outside the brick
+    # are at the end, and T_dup sources are included.
 
-    # Set blob numbers
+    # Grab source positions
+    T.ra  = np.array([src.getPosition().ra  for src in newcat])
+    T.dec = np.array([src.getPosition().dec for src in newcat])
+
+    # Copy blob results to table T
+    for k in ['fracflux', 'fracin', 'fracmasked', 'rchisq',
+              'cpu_arch', 'cpu_source', 'cpu_blob',
+              'blob_width', 'blob_height', 'blob_npix',
+              'blob_nimages', 'blob_totalpix',
+              'blob_symm_width', 'blob_symm_height', 'blob_symm_npix',
+              'blob_symm_nimages', 'hit_limit', 'dchisq',
+              'force_keep_source', 'fit_background', 'forced_pointsource']:
+        T.set(k, BB.get(k))
+
+    T.regular = np.ones(len(T), bool)
+    T.dup = np.zeros(len(T), bool)
+    Tall = [T]
+    if T_dup:
+        print('T_dup:')
+        T_dup.about()
+        T_dup.type = np.array(['DUP']*len(T_dup))
+        T_dup.dup = np.ones(len(T_dup), bool)
+        Tall.append(T_dup)
+    if T_refbail:
+        print('T_refbail:')
+        T_refbail.about()
+        Tall.append(T_refbail)
+    if len(Tall) > 1:
+        T = merge_tables(Tall, columns='fillzero')
+
     _,bx,by = targetwcs.radec2pixelxy(T.ra, T.dec)
     T.bx = (bx - 1.).astype(np.float32)
     T.by = (by - 1.).astype(np.float32)
-    ibx = np.round(T.bx).astype(np.int32)
-    iby = np.round(T.by).astype(np.int32)
+    T.ibx = np.round(T.bx).astype(np.int32)
+    T.iby = np.round(T.by).astype(np.int32)
+    T.in_bounds = ((T.ibx >= 0) * (T.iby >= 0) * (T.ibx < W) * (T.iby < H))
+
+    # Arbitrarily order sources by RA.
+    # (first put all the regular * in_bounds sources, then dup in-bound, then oob)
+    I = np.argsort(T.ra + (-2000 * T.in_bounds) + (-1000 * T.regular))
+    T.objid = I.astype(np.int32)
+    #T.cut(I)
+    #BB = [BB[i] for i,r in zip(I, T.regular) if r else None]
+    # # just the regular sources
+    # IB = I[T.regular]
+    # BB.cut(IB)
+    # newcat = [newcat[i] for i in IB]
+
+    # Extend catalog with None "sources" for T_dup entries?
+    cat = Catalog(*(newcat + [None]*(len(T)-len(newcat))))
+    invvars = np.hstack(BB.srcinvvars)
+    assert(cat.numberOfParams() == len(invvars))
+
+    # Set blob numbers
     T.blob = np.empty(len(T), np.int32)
     T.blob[:] = -1
-    in_bounds = ((ibx >= 0) * (iby >= 0) * (ibx < W) * (iby < H))
-    T.blob[in_bounds] = blobmap[iby[in_bounds], ibx[in_bounds]]
-    del in_bounds, ibx, iby
+    T.blob[T.in_bounds] = blobmap[T.iby[T.in_bounds], T.ibx[T.in_bounds]]
     # Renumber blobs to make them contiguous.
     goodblobs = (T.blob > -1)
     oldblobs = T.blob[goodblobs]
     _,iblob = np.unique(oldblobs, return_inverse=True)
-    T.blob[goodblobs] = iblob #.astype(np.int32)
+    T.blob[goodblobs] = iblob
     del goodblobs
     # Renumber the blob map to match
     remap = np.empty(blobmap.max() + 2, np.int32)
@@ -1234,7 +1276,7 @@ def stage_fitblobs(T=None,
     T.brickname = np.array([brickname] * len(T))
     if len(T.brickname) == 0:
         T.brickname = T.brickname.astype('S8')
-    T.objid = np.arange(len(T), dtype=np.int32)
+    #T.objid = np.arange(len(T), dtype=np.int32)
 
     # How many sources in each blob?
     from collections import Counter
@@ -1243,36 +1285,25 @@ def stage_fitblobs(T=None,
     T.ninblob = np.array([ninblob[b] for b in T.blob]).astype(np.int32)
     del ninblob
 
-    # Copy blob results to table T
-    for k in ['fracflux', 'fracin', 'fracmasked', 'rchisq',
-              'cpu_arch', 'cpu_source', 'cpu_blob',
-              'blob_width', 'blob_height', 'blob_npix',
-              'blob_nimages', 'blob_totalpix',
-              'blob_symm_width', 'blob_symm_height', 'blob_symm_npix',
-              'blob_symm_nimages', 'hit_limit', 'dchisq',
-              'force_keep_source', 'fit_background', 'forced_pointsource']:
-        T.set(k, BB.get(k))
-
-    invvars = np.hstack(BB.srcinvvars)
-    assert(cat.numberOfParams() == len(invvars))
-
-    if T_dup:
-        T_dup.type = np.array(['DUP']*len(T_dup))
-        T_dup.objid = np.arange(len(T_dup), dtype=np.int32) + len(T)
-        T_dup.brickid = np.zeros(len(T_dup), np.int32) + brickid
-        T_dup.brickname = np.array([brickname] * len(T_dup))
-
     if write_metrics or get_all_models:
         from legacypipe.format_catalog import format_all_models
         # append our 'do not fit' sources so that the all-models file
         # matches the tractor catalog
-        T2 = T
-        cat2 = [src for src in newcat]
-        if T_dup:
-            T2 = merge_tables([T2, T_dup], columns='fillzero')
-            cat2.extend([None] * len(T_dup))
-        TT,hdr = format_all_models(T2, cat2, BB, bands, survey.allbands,
-                                   force_keep=T2.force_keep_source)
+
+        #T2 = T
+        #cat2 = [src for src in newcat]
+        #if T_dup:
+        #    T2 = merge_tables([T2, T_dup], columns='fillzero')
+        #    cat2.extend([None] * len(T_dup))
+        #TT,hdr = format_all_models(T2, cat2, BB, bands, survey.allbands,
+        #                           force_keep=T2.force_keep_source)
+
+        #cat2 = newcat + [None]*(len(T)-len(newcat))
+        #TT,hdr = format_all_models(T, cat2, BB, bands, survey.allbands,
+        #                           force_keep=T.force_keep_source)
+
+        TT,hdr = format_all_models(T, cat, BB, bands, survey.allbands,
+                                   force_keep=T.force_keep_source)
         if get_all_models:
             all_models = TT
         if write_metrics:
@@ -1648,6 +1679,8 @@ def _get_both_mods(X):
                           if not (s.pos.ra == src.pos.ra and s.pos.dec == src.pos.dec)]
 
     for src,srcblob in srcs_blobs:
+        if src is None:
+            continue
         patch = src.getModelPatch(tim)
         if patch is None:
             continue
@@ -1759,7 +1792,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     bb.append(blobmap[yy,xx])
     #debug('Frozen_galaxies:', frozen_galaxies)
 
-    bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob, blobmap, targetwcs, frozen_galaxies, ps, plots)
+    bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob[:len(cat)], blobmap,
+                                        targetwcs, frozen_galaxies, ps, plots)
                                        for tim in tims])
     mods = [m for m,b in bothmods]
     blobmods = [b for m,b in bothmods]
@@ -1769,10 +1803,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     tlast = tnow
 
     # Compute source pixel positions
-    assert(len(T) == len(cat))
-    ra  = np.array([src.getPosition().ra  for src in cat])
-    dec = np.array([src.getPosition().dec for src in cat])
-
+    ra  = T.ra
+    dec = T.dec
     # T_refbail and T_dup sources get the same treatment...
     if T_refbail is not None:
         if T_dup is not None:
@@ -1785,10 +1817,9 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ra  = np.append(ra,  T_dup.ra)
         dec = np.append(dec, T_dup.dec)
     ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
-
     # Get integer brick pixel coords for each source, for referencing maps
-    T.out_of_bounds = reduce(np.logical_or, [xx < 0.5, yy < 0.5,
-                                             xx > W+0.5, yy > H+0.5])[:len(T)]
+    #T.out_of_bounds = reduce(np.logical_or, [xx < 0.5, yy < 0.5,
+    #                                         xx > W+0.5, yy > H+0.5])[:len(T)]
     ixy = (np.clip(np.round(xx - 1), 0, W-1).astype(int),
            np.clip(np.round(yy - 1), 0, H-1).astype(int))
     # convert apertures to pixels
@@ -1839,31 +1870,17 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     assert(C.AP is not None)
     # How many apertures?
     A = len(apertures_arcsec)
-    T.apflux        = np.zeros((len(T), len(bands), A), np.float32)
-    T.apflux_ivar   = np.zeros((len(T), len(bands), A), np.float32)
-    T.apflux_masked = np.zeros((len(T), len(bands), A), np.float32)
-    T.apflux_resid  = np.zeros((len(T), len(bands), A), np.float32)
-    T.apflux_blobresid = np.zeros((len(T), len(bands), A), np.float32)
-    if Nno:
-        T_dup.apflux        = np.zeros((Nno, len(bands), A), np.float32)
-        T_dup.apflux_ivar   = np.zeros((Nno, len(bands), A), np.float32)
-        T_dup.apflux_masked = np.zeros((Nno, len(bands), A), np.float32)
-        T_dup.apflux_resid  = np.zeros((Nno, len(bands), A), np.float32)
-        T_dup.apflux_blobresid = np.zeros((Nno, len(bands), A), np.float32)
-    AP = C.AP
-    for iband,band in enumerate(bands):
-        T.apflux       [:,iband,:] = AP.get('apflux_img_%s'      % band)[:Nyes,:]
-        T.apflux_ivar  [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)[:Nyes,:]
-        T.apflux_masked[:,iband,:] = AP.get('apflux_masked_%s'   % band)[:Nyes,:]
-        T.apflux_resid [:,iband,:] = AP.get('apflux_resid_%s'    % band)[:Nyes,:]
-        T.apflux_blobresid[:,iband,:] = AP.get('apflux_blobresid_%s'    % band)[:Nyes,:]
+    for src,dst in [('apflux_img_%s',       'apflux'),
+                    ('apflux_img_ivar_%s',  'apflux_ivar'),
+                    ('apflux_masked_%s',    'apflux_masked'),
+                    ('apflux_resid_%s',     'apflux_resid'),
+                    ('apflux_blobresid_%s', 'apflux_blobresid'),]:
+        X = np.zeros((Nyes+Nno, len(bands), A), np.float32)
+        for iband,band in enumerate(bands):
+            X[:,iband,:] = C.AP.get(src % band)
+        T.set(dst, X[:Nyes,:,:])
         if Nno:
-            T_dup.apflux       [:,iband,:] = AP.get('apflux_img_%s'      % band)[Nyes:,:]
-            T_dup.apflux_ivar  [:,iband,:] = AP.get('apflux_img_ivar_%s' % band)[Nyes:,:]
-            T_dup.apflux_masked[:,iband,:] = AP.get('apflux_masked_%s'   % band)[Nyes:,:]
-            T_dup.apflux_resid [:,iband,:] = AP.get('apflux_resid_%s'    % band)[Nyes:,:]
-            T_dup.apflux_blobresid[:,iband,:] = AP.get('apflux_blobresid_%s'    % band)[Nyes:,:]
-    del AP
+            T_dup.set(dst, X[Nyes:,:,:])
 
     # Compute depth histogram
     D = _depth_histogram(brick, targetwcs, bands, C.psfdetivs, C.galdetivs)
@@ -2042,10 +2059,11 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
     import photutils
 
     # Compute source pixel positions
-    ra  = np.array([src.getPosition().ra  for src in cat])
-    dec = np.array([src.getPosition().dec for src in cat])
-    ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
-    del ok,ra,dec
+    #ra  = np.array([src.getPosition().ra  for src in cat])
+    #dec = np.array([src.getPosition().dec for src in cat])
+    #ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
+    #del ok,ra,dec
+    _,xx,yy = targetwcs.radec2pixelxy(T.ra, T.dec)
 
     # Create a fake tim for each band to construct the models in 1" seeing
     # For Gaia stars, we need to give a time for evaluating the models.
@@ -2074,6 +2092,8 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
 
     # For each source, compute and measure its model, and accumulate
     for isrc,(src,sx,sy) in enumerate(zip(cat, xx-1., yy-1.)):
+        if src is None:
+            continue
         # This works even if bands[0] has zero flux (or no overlapping
         # images)
         ums = src.getUnitFluxModelPatches(faketim)
@@ -2219,7 +2239,8 @@ def stage_wise_forced(
     roiradec = [targetrd[0,0], targetrd[2,0], targetrd[0,1], targetrd[2,1]]
 
     # Sources to photometer
-    do_phot = np.ones(len(cat), bool)
+    #do_phot = np.ones(len(cat), bool)
+    do_phot = T.regular.copy()
 
     # Drop sources within the CLUSTER mask from forced photometry.
     Icluster = None
@@ -2549,6 +2570,7 @@ def stage_writecat(
         TT.delete_column(k)
 
     T2 = prepare_fits_catalog(cat, invvars, TT, bands, force_keep=TT.force_keep_source)
+    T2.type[TT.dup] = 'DUP'
 
     # The "ra_ivar" values coming out of the tractor fits do *not*
     # have a cos(Dec) term -- ie, they give the inverse-variance on
@@ -2664,8 +2686,8 @@ def stage_writecat(
             T2.set(c, GALEX.get(c))
         GALEX = None
 
-    if T_dup:
-        T2 = merge_tables([T2, T_dup], columns='fillzero')
+    #if T_dup:
+    #T2 = merge_tables([T2, T_dup], columns='fillzero')
 
     # Brick pixel positions
     ok,bx,by = targetwcs.radec2pixelxy(T2.orig_ra, T2.orig_dec)
@@ -2692,8 +2714,9 @@ def stage_writecat(
         T2.writeto(None, fits_object=out.fits, primheader=primhdr)
 
     # After writing tractor-i file, drop (reference) sources outside the brick.
-    T2.cut((T2.bx >= -0.5) * (T2.bx <= W-0.5) *
-           (T2.by >= -0.5) * (T2.by <= H-0.5))
+    #T2.cut((T2.bx >= -0.5) * (T2.bx <= W-0.5) *
+    #       (T2.by >= -0.5) * (T2.by <= H-0.5))
+    T2.cut(T2.in_bounds)
 
     # The "format_catalog" code expects all lower-case column names...
     for c in T2.columns():
