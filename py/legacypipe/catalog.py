@@ -32,8 +32,8 @@ def prepare_fits_catalog(cat, invvars, T, bands, allbands=None,
 
     params0 = cat.getParams()
 
-    flux = np.zeros((len(cat), len(allbands)), np.float32)
-    flux_ivar = np.zeros((len(cat), len(allbands)), np.float32)
+    flux = np.zeros((len(T), len(allbands)), np.float32)
+    flux_ivar = np.zeros((len(T), len(allbands)), np.float32)
 
     for band in bands:
         i = allbands.index(band)

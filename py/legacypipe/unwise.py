@@ -59,37 +59,34 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
     wband = 'w%i' % band
 
-    fskeys = ['prochi2', 'profracflux']
-
     Nsrcs = len(cat)
     phot = fits_table()
     # Filled in based on unique tile overlap
     phot.wise_coadd_id = np.array(['        '] * Nsrcs, dtype='U8')
     phot.wise_x = np.zeros(Nsrcs, np.float32)
     phot.wise_y = np.zeros(Nsrcs, np.float32)
-    phot.set('psfdepth_%s' % wband, np.zeros(len(phot), np.float32))
-
-    ra  = np.array([src.getPosition().ra  for src in cat])
-    dec = np.array([src.getPosition().dec for src in cat])
-
+    phot.set('psfdepth_%s' % wband, np.zeros(Nsrcs, np.float32))
     nexp = np.zeros(Nsrcs, np.int16)
     mjd  = np.zeros(Nsrcs, np.float64)
     central_flux = np.zeros(Nsrcs, np.float32)
 
+    ra  = np.array([src.getPosition().ra  for src in cat])
+    dec = np.array([src.getPosition().dec for src in cat])
+
+    fskeys = ['prochi2', 'profracflux']
     fitstats = {}
-    tims = []
 
     if get_masks:
         mh,mw = get_masks.shape
         maskmap = np.zeros((mh,mw), np.uint32)
 
+    tims = []
     for tile in tiles:
         info('Reading WISE tile', tile.coadd_id, 'band', band)
-
         tim = get_unwise_tractor_image(tile.unwise_dir, tile.coadd_id, band,
                                        bandname=wanyband, roiradecbox=roiradecbox)
         if tim is None:
-            debug('Actually, no overlap with tile', tile.coadd_id)
+            debug('Actually, no overlap with WISE coadd tile', tile.coadd_id)
             continue
 
         if plots:
@@ -101,7 +98,6 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             tag = '%s W%i' % (tile.coadd_id, band)
             plt.title('%s: tim data' % tag)
             ps.savefig()
-
             plt.clf()
             plt.hist((tim.getImage() * tim.inverr)[tim.inverr > 0].ravel(),
                      range=(-5,10), bins=100)
@@ -138,7 +134,6 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 tag = '%s W%i' % (tile.coadd_id, band)
                 plt.suptitle(tag)
                 ps.savefig()
-
                 plt.clf()
                 ha = dict(range=(-5,10), bins=100, histtype='step')
                 plt.hist((tim.getImage() * tim.inverr)[tim.inverr > 0].ravel(),
@@ -177,6 +172,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 plt.ylabel('floored')
                 ps.savefig()
 
+            assert(np.all(np.isfinite(new_ie)))
+            assert(np.all(new_ie >= 0.))
             tim.inverr = new_ie
 
             # Expand a 3-pixel radius around weight=0 (saturated) pixels
@@ -245,6 +242,14 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         rr,dd = tim.wcs.wcs.pixelxy2radec(xx+1, yy+1)
         unique = radec_in_unique_area(rr, dd, tile.ra1, tile.ra2,
                                       tile.dec1, tile.dec2)
+        debug('Tile', tile.coadd_id, '- total of', np.sum(unique),
+              'unique pixels out of', len(unique.flat), 'total pixels')
+        if get_models:
+            # Save the inverr before blanking out non-unique pixels, for making coadds with no gaps!
+            # (actually, slightly more subtly, expand unique area by 1 pixel)
+            from scipy.ndimage.morphology import binary_dilation
+            du = binary_dilation(unique)
+            tim.coadd_inverr = tim.inverr * du
         tim.inverr[unique == False] = 0.
         del xx,yy,rr,dd,unique
 
@@ -458,8 +463,9 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     if get_models:
         for i,tim in enumerate(tims):
             tile = tim.tile
-            (dat, mod, ie, _, _) = ims1[i]
-            models.append((tile.coadd_id, band, tim.wcs.wcs, dat, mod, ie))
+            (dat, mod, _, _, _) = ims1[i]
+            models.append((tile.coadd_id, band, tim.wcs.wcs, dat, mod,
+                           tim.coadd_inverr))
 
     if plots:
         for i,tim in enumerate(tims):
@@ -489,8 +495,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
     nm = np.array([src.getBrightness().getBand(wanyband) for src in cat])
     nm_ivar = flux_invvars
-    # Sources out of bounds, eg, never change from their default
-    # (1-sigma or whatever) initial fluxes.  Zero them out instead.
+    # Sources out of bounds, eg, never change from their initial
+    # fluxes.  Zero them out instead.
     nm[nm_ivar == 0] = 0.
 
     phot.set('flux_%s' % wband, nm.astype(np.float32))

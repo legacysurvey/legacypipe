@@ -554,13 +554,13 @@ def rbmain():
     print('Read catalog:', cat)
 
     assert(len(cat) == 2)
-    src = cat[0]
+    src = cat[1]
     print('Source0', src)
     from tractor.sersic import SersicGalaxy
     assert(type(src) in [DevGalaxy, SersicGalaxy])
     assert(np.abs(src.pos.ra  - 244.77973) < 0.00001)
     assert(np.abs(src.pos.dec -  12.07234) < 0.00002)
-    src = cat[1]
+    src = cat[0]
     print('Source1', src)
     assert(type(src) ==  PointSource)
     assert(np.abs(src.pos.ra  - 244.77828) < 0.00001)
