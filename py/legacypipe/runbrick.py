@@ -1195,16 +1195,21 @@ def stage_fitblobs(T=None,
     T.regular = np.ones(len(T), bool)
     T.dup = np.zeros(len(T), bool)
     Tall = [T]
+    dup_cat = []
     if T_dup:
         print('T_dup:')
         T_dup.about()
         T_dup.type = np.array(['DUP']*len(T_dup))
         T_dup.dup = np.ones(len(T_dup), bool)
         Tall.append(T_dup)
+        # re-create source objects for DUP stars
+        for g in T_dup:
+            dup_cat.append(GaiaSource.from_catalog(g, bands))
     if T_refbail:
         print('T_refbail:')
         T_refbail.about()
         Tall.append(T_refbail)
+        dup_cat.extend([None] * len(T_refbail))
     if len(Tall) > 1:
         T = merge_tables(Tall, columns='fillzero')
     T_dup = None
@@ -1225,8 +1230,9 @@ def stage_fitblobs(T=None,
     T.objid[I] = np.arange(len(T))
 
     # Extend catalog with None "sources" for T_dup entries
-    cat = Catalog(*(newcat + [None]*(len(T)-len(newcat))))
+    cat = Catalog(*(newcat + dup_cat))
     del newcat
+    del dup_cat
     assert(len(cat) == len(T))
     invvars = np.hstack(BB.srcinvvars)
     assert(cat.numberOfParams() == len(invvars))
@@ -1781,10 +1787,11 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     bb.append(blobmap[yy,xx])
     #debug('Frozen_galaxies:', frozen_galaxies)
 
-    bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob, blobmap,
+    I = np.flatnonzero(T.regular)
+    bothmods = mp.map(_get_both_mods, [(tim, [cat[i] for i in I], T.blob[I], blobmap,
                                         targetwcs, frozen_galaxies, ps, plots)
                                        for tim in tims])
-    mods = [m for m,b in bothmods]
+    mods     = [m for m,b in bothmods]
     blobmods = [b for m,b in bothmods]
     del bothmods
     tnow = Time()
