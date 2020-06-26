@@ -1232,6 +1232,9 @@ def stage_fitblobs(T=None,
 
     # Extend catalog with None "sources" for T_dup entries
     cat = Catalog(*(newcat + dup_cat))
+    # freeze DUP entries
+    for i in range(len(newcat), len(cat)):
+        cat.freezeParam(i)
     del newcat
     del dup_cat
     assert(len(cat) == len(T))
