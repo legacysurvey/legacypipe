@@ -176,8 +176,11 @@ def _unwise_to_rgb(imgs):
             return np.arcsinh(x * arcsinh) / np.sqrt(arcsinh)
         mean = (img1 + img2) / 2.
         I = nlmap(mean)
-        img1 = img1 / mean * I
-        img2 = img2 / mean * I
+        with np.errstate(divide='ignore'):
+            img1 = I * img1 / mean
+            img2 = I * img2 / mean
+        img1[mean == 0] = 0.
+        img2[mean == 0] = 0.
         mn = nlmap(mn)
         mx = nlmap(mx)
     img1 = (img1 - mn) / (mx - mn)
