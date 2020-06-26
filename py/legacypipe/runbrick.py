@@ -2084,7 +2084,7 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
 
     # Now photometer the accumulated images
     # Aperture photometry locations
-    apxy = np.vstack((xx - 1., yy - 1.)).T
+    apxy = np.vstack((T.bx, T.by)).T
     aper = photutils.CircularAperture(apxy, fiberrad)
     for iband,modimg in enumerate(modimgs):
         p = photutils.aperture_photometry(modimg, aper)
@@ -2344,15 +2344,13 @@ def stage_wise_forced(
             # Create the WCS into which we'll resample the tiles.
             # Same center as "targetwcs" but bigger pixel scale.
             wpixscale = 2.75
-            wra  = T.ra
-            wdec = T.dec
             rc,dc = targetwcs.radec_center()
             ww = int(W * pixscale / wpixscale)
             hh = int(H * pixscale / wpixscale)
             wcoadds = UnwiseCoadd(rc, dc, ww, hh, wpixscale)
             wcoadds.add(wise_models, unique=True)
             apphot = wcoadds.finish(survey, brickname, version_header,
-                                    apradec=(wra,wdec),
+                                    apradec=(T.ra,T.dec),
                                     apertures=wise_apertures_arcsec/wpixscale)
             api,apd,apr = apphot
             for iband,band in enumerate([1,2,3,4]):
