@@ -1663,7 +1663,9 @@ def _get_both_mods(X):
             # Can't use "==": they're not the same objects; the "srcs" have been
             # to oneblob.py and back, and, eg, get their EllipseE types changed.
             srcs_blobs = [(s,b) for s,b in srcs_blobs
-                          if not (s.pos.ra == src.pos.ra and s.pos.dec == src.pos.dec)]
+                          if not (s is not None and
+                                  s.pos.ra  == src.pos.ra and
+                                  s.pos.dec == src.pos.dec)]
 
     for src,srcblob in srcs_blobs:
         if src is None:
@@ -1779,7 +1781,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     bb.append(blobmap[yy,xx])
     #debug('Frozen_galaxies:', frozen_galaxies)
 
-    #bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob[:len(cat)], blobmap,
     bothmods = mp.map(_get_both_mods, [(tim, cat, T.blob, blobmap,
                                         targetwcs, frozen_galaxies, ps, plots)
                                        for tim in tims])
