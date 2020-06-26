@@ -1223,16 +1223,16 @@ def stage_fitblobs(T=None,
     T.iby = np.round(T.by).astype(np.int32)
     T.in_bounds = ((T.ibx >= 0) * (T.iby >= 0) * (T.ibx < W) * (T.iby < H))
 
-    # Arbitrarily order sources by RA.
+    # Order sources by RA.
     # (Here we're just setting 'objid', not actually reordering arrays.)
     # (put all the regular * in_bounds sources, then dup in-bound, then oob)
     I = np.argsort(T.ra + (-2000 * T.in_bounds) + (-1000 * T.regular))
     T.objid = np.empty(len(T), np.int32)
     T.objid[I] = np.arange(len(T))
 
-    # Extend catalog with None "sources" for T_dup entries
+    # Extend catalog with sources for T_dup entries
     cat = Catalog(*(newcat + dup_cat))
-    # freeze DUP entries
+    # freeze DUP entries (so that number of catalog parameters is corrrect)
     for i in range(len(newcat), len(cat)):
         cat.freezeParam(i)
     del newcat
@@ -1274,7 +1274,6 @@ def stage_fitblobs(T=None,
             if bnew != -1:
                 fro_gals[gal].append(bnew)
     frozen_galaxies = fro_gals
-    debug('Remapped frozen_galaxies:', frozen_galaxies)
     del remap
 
     # How many sources in each blob?
@@ -1357,12 +1356,10 @@ def get_frozen_galaxies(T, blobsrcs, blobmap, targetwcs, cat):
         refgal = T[np.array([ii])].copy()
         refgal.radius_pix *= 2
         galmap = get_reference_map(targetwcs, refgal)
-        debug(np.sum(galmap), 'pixels set in refmap for galaxy id', refgal.ref_id[0])
         galblobs = set(blobmap[galmap > 0])
         debug('galaxy mask overlaps blobs:', galblobs)
         galblobs.discard(-1)
         debug('source:', cat[ii])
-        debug('ibx,iby', refgal.ibx[0], refgal.iby[0])
         if refgal.in_bounds:
             # If in-bounds, remove the blob that this source is
             # already part of, if it exists; it will get processed
@@ -1643,7 +1640,6 @@ def _get_both_mods(X):
         for src,bb in frozen_galaxies.items():
             # Does this source (which touches blobs bb) touch any blobs in this tim?
             touchedblobs = timblobs.intersection(bb)
-            #debug(len(touchedblobs), 'blobs in frozen galaxy intersect this tim')
             if len(touchedblobs) == 0:
                 continue
             patch = src.getModelPatch(tim, modelMask=mm)
@@ -1775,7 +1771,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # Render model images...
     record_event and record_event('stage_coadds: model images')
 
-    debug('Frozen_galaxies:', frozen_galaxies)
     # Re-add the blob that this galaxy is actually inside
     # (that blob got dropped way earlier, before fitblobs)
     if frozen_galaxies is not None:
@@ -1789,7 +1784,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                 debug('Frozen galaxy', src, 'lands in blob', blobmap[yy,xx])
                 if blobmap[yy,xx] != -1:
                     bb.append(blobmap[yy,xx])
-    #debug('Frozen_galaxies:', frozen_galaxies)
 
     I = np.flatnonzero(T.regular)
     bothmods = mp.map(_get_both_mods, [(tim, [cat[i] for i in I], T.blob[I], blobmap,
@@ -1802,7 +1796,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     debug('Model images:', tnow-tlast)
     tlast = tnow
 
-    # Compute source pixel positions
+    # source pixel positions to probe depth maps, etc
     ixy = (np.clip(T.ibx, 0, W-1).astype(int), np.clip(T.iby, 0, H-1).astype(int))
     # convert apertures to pixels
     apertures = apertures_arcsec / pixscale
@@ -2031,13 +2025,6 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
     from tractor.basics import LinearPhotoCal
     import photutils
 
-    # Compute source pixel positions
-    #ra  = np.array([src.getPosition().ra  for src in cat])
-    #dec = np.array([src.getPosition().dec for src in cat])
-    #ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
-    #del ok,ra,dec
-    _,xx,yy = targetwcs.radec2pixelxy(T.ra, T.dec)
-
     # Create a fake tim for each band to construct the models in 1" seeing
     # For Gaia stars, we need to give a time for evaluating the models.
     mjd_tai = astropy.time.Time(year, format='jyear').tai.mjd
@@ -2064,7 +2051,7 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
     fiberrad = (fibersize / pixscale) / 2.
 
     # For each source, compute and measure its model, and accumulate
-    for isrc,(src,sx,sy) in enumerate(zip(cat, xx-1., yy-1.)):
+    for isrc,(src,sx,sy) in enumerate(zip(cat, T.bx, T.by)):
         if src is None:
             continue
         # This works even if bands[0] has zero flux (or no overlapping
@@ -2346,13 +2333,19 @@ def stage_wise_forced(
                 collapse_unwise_bitmask(wise_mask_maps, 1),
                 collapse_unwise_bitmask(wise_mask_maps, 2)]
 
+        if Nskipped > 0:
+            assert(len(WISE) == len(wcat))
+            WISE = _fill_skipped_values(WISE, Nskipped, do_phot)
+            assert(len(WISE) == len(cat))
+            assert(len(WISE) == len(T))
+
         if unwise_coadds:
             from legacypipe.coadds import UnwiseCoadd
             # Create the WCS into which we'll resample the tiles.
             # Same center as "targetwcs" but bigger pixel scale.
             wpixscale = 2.75
-            wra  = np.array([src.getPosition().ra  for src in wcat])
-            wdec = np.array([src.getPosition().dec for src in wcat])
+            wra  = T.ra
+            wdec = T.dec
             rc,dc = targetwcs.radec_center()
             ww = int(W * pixscale / wpixscale)
             hh = int(H * pixscale / wpixscale)
@@ -2370,12 +2363,6 @@ def stage_wise_forced(
                 iv[d != 0.] = 1./(d[d != 0]**2)
                 WISE.set('apflux_ivar_w%i' % band, iv)
                 print('Setting WISE apphot')
-
-        if Nskipped > 0:
-            assert(len(WISE) == len(wcat))
-            WISE = _fill_skipped_values(WISE, Nskipped, do_phot)
-            assert(len(WISE) == len(cat))
-            assert(len(WISE) == len(T))
 
         # Look up mask values for sources
         WISE.wise_mask = np.zeros((len(cat), 2), np.uint8)
