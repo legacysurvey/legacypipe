@@ -2340,9 +2340,8 @@ def stage_wise_forced(
             # Create the WCS into which we'll resample the tiles.
             # Same center as "targetwcs" but bigger pixel scale.
             wpixscale = 2.75
-            wra  = np.array([src.getPosition().ra  for src in cat])
-            wdec = np.array([src.getPosition().dec for src in cat])
-
+            wra  = np.array([src.getPosition().ra  for src in wcat])
+            wdec = np.array([src.getPosition().dec for src in wcat])
             rc,dc = targetwcs.radec_center()
             ww = int(W * pixscale / wpixscale)
             hh = int(H * pixscale / wpixscale)
