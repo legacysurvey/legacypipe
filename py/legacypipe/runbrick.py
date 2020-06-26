@@ -1197,6 +1197,7 @@ def stage_fitblobs(T=None,
     Tall = [T]
     dup_cat = []
     if T_dup:
+        from legacypipe.survey import GaiaSource
         print('T_dup:')
         T_dup.about()
         T_dup.type = np.array(['DUP']*len(T_dup))
@@ -2353,7 +2354,7 @@ def stage_wise_forced(
             ww = int(W * pixscale / wpixscale)
             hh = int(H * pixscale / wpixscale)
             wcoadds = UnwiseCoadd(rc, dc, ww, hh, wpixscale)
-            wcoadds.add(wise_models)
+            wcoadds.add(wise_models, unique=True)
             apphot = wcoadds.finish(survey, brickname, version_header,
                                     apradec=(wra,wdec),
                                     apertures=wise_apertures_arcsec/wpixscale)

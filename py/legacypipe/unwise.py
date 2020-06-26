@@ -244,6 +244,12 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                                       tile.dec1, tile.dec2)
         debug('Tile', tile.coadd_id, '- total of', np.sum(unique),
               'unique pixels out of', len(unique.flat), 'total pixels')
+        if get_models:
+            # Save the inverr before blanking out non-unique pixels, for making coadds with no gaps!
+            # (actually, slightly more subtly, expand unique area by 1 pixel)
+            from scipy.ndimage.morphology import binary_dilation
+            du = binary_dilation(unique)
+            tim.coadd_inverr = tim.inverr * du
         tim.inverr[unique == False] = 0.
         del xx,yy,rr,dd,unique
 
@@ -453,8 +459,9 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     if get_models:
         for i,tim in enumerate(tims):
             tile = tim.tile
-            (dat, mod, ie, _, _) = ims1[i]
-            models.append((tile.coadd_id, band, tim.wcs.wcs, dat, mod, ie))
+            (dat, mod, _, _, _) = ims1[i]
+            models.append((tile.coadd_id, band, tim.wcs.wcs, dat, mod,
+                           tim.coadd_inverr))
 
     if plots:
         for i,tim in enumerate(tims):
