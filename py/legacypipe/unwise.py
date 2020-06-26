@@ -172,6 +172,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 plt.ylabel('floored')
                 ps.savefig()
 
+            assert(np.all(np.isfinite(new_ie)))
+            assert(np.all(new_ie >= 0.))
             tim.inverr = new_ie
 
             # Expand a 3-pixel radius around weight=0 (saturated) pixels
@@ -241,7 +243,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         unique = radec_in_unique_area(rr, dd, tile.ra1, tile.ra2,
                                       tile.dec1, tile.dec2)
         debug('Tile', tile.coadd_id, '- total of', np.sum(unique),
-              'unique pixels out of', len(unique), 'total pixels')
+              'unique pixels out of', len(unique.flat), 'total pixels')
         tim.inverr[unique == False] = 0.
         del xx,yy,rr,dd,unique
 

@@ -52,6 +52,7 @@ class SimpleCoadd(object):
             debug('Adding', len(Yo), 'pixels from tile', name, 'to coadd')
 
             iv = ie[Yi,Xi]**2
+            debug('Tile:', np.sum(iv>0), 'of', len(iv), 'pixels have IV')
             self.co_images [band][Yo,Xo] += rimg * iv
             self.co_models [band][Yo,Xo] += rmod * iv
             self.co_nobs   [band][Yo,Xo] += 1
