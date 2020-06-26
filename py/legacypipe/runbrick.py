@@ -1309,8 +1309,8 @@ def stage_fitblobs(T=None,
                 primhdr.add_record(dict(name='PRODTYPE', value='catalog',
                                         comment='NOAO data product type'))
             with survey.write_output('all-models', brick=brickname) as out:
-                TT.writeto(None, fits_object=out.fits, header=hdr,
-                           primheader=primhdr)
+                TT[np.argsort(TT.objid)].writeto(None, fits_object=out.fits, header=hdr,
+                                                 primheader=primhdr)
 
     keys = ['cat', 'invvars', 'T', 'blobmap', 'refmap', 'version_header',
             'frozen_galaxies', 'T_dup']
