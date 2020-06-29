@@ -39,7 +39,7 @@ class SimpleCoadd(object):
         self.co_invvars = dict([(band, np.zeros((self.H,self.W), np.float32))
                                 for band in bands])
 
-    def add(self, models):
+    def add(self, models, unique=False):
         for name, band, wcs, img, mod, ie in models:
             debug('Accumulating tile', name, 'band', band)
             try:
@@ -50,8 +50,17 @@ class SimpleCoadd(object):
                 continue
             rimg,rmod = resam
             debug('Adding', len(Yo), 'pixels from tile', name, 'to coadd')
-
             iv = ie[Yi,Xi]**2
+            if unique:
+                K = np.flatnonzero((self.co_nobs[band][Yo,Xo] == 0) * (iv>0))
+                iv = iv[K]
+                rimg = rimg[K]
+                rmod = rmod[K]
+                Yo = Yo[K]
+                Xo = Xo[K]
+                debug('Cut to', len(Yo), 'unique pixels w/ iv>0')
+
+            debug('Tile:', np.sum(iv>0), 'of', len(iv), 'pixels have IV')
             self.co_images [band][Yo,Xo] += rimg * iv
             self.co_models [band][Yo,Xo] += rmod * iv
             self.co_nobs   [band][Yo,Xo] += 1
@@ -176,8 +185,11 @@ def _unwise_to_rgb(imgs):
             return np.arcsinh(x * arcsinh) / np.sqrt(arcsinh)
         mean = (img1 + img2) / 2.
         I = nlmap(mean)
-        img1 = img1 / mean * I
-        img2 = img2 / mean * I
+        with np.errstate(divide='ignore'):
+            img1 = I * img1 / mean
+            img2 = I * img2 / mean
+        img1[mean == 0] = 0.
+        img2[mean == 0] = 0.
         mn = nlmap(mn)
         mx = nlmap(mx)
     img1 = (img1 - mn) / (mx - mn)

@@ -369,6 +369,8 @@ def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
               'hit_limit', 'fit_background', 'forced_pointsource']:
         TT.set(k, T.get(k))
     TT.type = np.array([fits_typemap[type(src)] for src in newcat])
+    # Override type for DUP objects
+    TT.type[T.dup] = 'DUP'
 
     hdr = fitsio.FITSHDR()
 
@@ -384,7 +386,7 @@ def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
         allivs = np.hstack([m.get(srctype,[]) for m in BB.all_model_ivs])
         assert(len(allivs) == xcat.numberOfParams())
 
-        # pad 'xcat' to match length of T (eg, T_donotfit)
+        # pad 'xcat' to match length of T (for dups)
         npad = len(T) - len(xcat)
         if npad:
             xcat.extend([None] * npad)
@@ -402,10 +404,9 @@ def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
         TT.set('%s_hit_limit' % prefix,
                np.array([m.get(srctype,0)
                          for m in BB.all_model_hit_limit] + [False]*npad).astype(bool))
-        if 'all_model_opt_steps' in BB.get_columns():
-            TT.set('%s_opt_steps' % prefix,
-                   np.array([m.get(srctype,-1)
-                             for m in BB.all_model_opt_steps] + [0]*npad).astype(np.int16))
+        TT.set('%s_opt_steps' % prefix,
+               np.array([m.get(srctype,-1)
+                         for m in BB.all_model_opt_steps] + [0]*npad).astype(np.int16))
 
     # remove silly columns
     for col in TT.columns():
@@ -435,14 +436,8 @@ def one_lightcurve_bitmask(lc_nobs, lc_mjd, n_final=13):
     #
     # return value is a 1D boolean numpy array with the same
     # length as the input row's WISE lightcurve
-
-    #assert(band in [1, 2])
-    #row['LC_NOBS_W' + str(band)]
-    #row['LC_MJD_W' + str(band)]
-
     nobs = lc_nobs
     mjd = lc_mjd
-
     n_epochs = len(nobs)
 
     # if the number of epochs fits within the number available then
