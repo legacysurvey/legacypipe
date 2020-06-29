@@ -1465,7 +1465,7 @@ class Measurer(object):
         ccd.ccdzpt = 0. # <-- we update this below if survey_zeropoints is available.
         ccd.ccdraoff = 0.
         ccd.ccddecoff = 0.
-        ccd.fwhm = 0.
+        ccd.fwhm = self.fwhm_cp
         ccd.propid = self.propid
         # fake -- the image.py class only uses the CD matrix to compute
         # the pixel scale, so this is ok
