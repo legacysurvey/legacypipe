@@ -1522,6 +1522,8 @@ class Measurer(object):
             assert(len(ccds) == 1)
             #print('Plugging in ccdzpt', ccds[0].ccdzpt)
             ccd.ccdzpt = ccds[0].ccdzpt
+            ccd.ccdraoff = ccds[0].ccdraoff
+            ccd.ccddecoff = ccds[0].ccddecoff
             dohalos = True
 
         im = survey.get_image_object(ccd)
