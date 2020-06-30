@@ -43,7 +43,7 @@ from astrometry.util.plotutils import dimshow
 from astrometry.util.ttime import Time
 
 from legacypipe.survey import get_rgb, imsave_jpeg
-from legacypipe.bits import DQ_BITS, MASKBITS
+from legacypipe.bits import DQ_BITS, MASKBITS, FITBITS
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 
@@ -1921,21 +1921,18 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ('GALAXY',    'GAL',   'LSLGA large galaxy'),
         ('CLUSTER',   'CLUST', 'Globular cluster')]
     version_header.add_record(dict(name='COMMENT', value='maskbits bits:'))
-    for key,short,comm in mbits:
-        version_header.add_record(
-            dict(name='MB_%s'%short, value=MASKBITS[key],
-                 comment='Maskbit: %s'%comm))
-    revmap = dict([(bit,name) for name,bit in MASKBITS.items()])
-    nicemap = dict([(k,c) for k,short,c in mbits])
-    for bit in range(16):
-        bitval = 1<<bit
-        if not bitval in revmap:
-            continue
-        name = revmap[bitval]
-        nice = nicemap.get(name, '')
-        version_header.add_record(
-            dict(name='MBIT_%i' % bit, value=name,
-                 comment='maskbits bit %i (0x%x): %s' % (bit, bitval, nice)))
+    _add_bit_description(version_header, MASKBITS, mbits,
+                         'MB_%s', 'MBIT_%i', 'maskbits')
+
+    # Add the fitbits header cards to version_header
+    fbits = [
+        ('FORCED_POINTSOURCE',  'FPSF',  'forced to be PSF'),
+        ('FIT_BACKGROUND',      'FITBG', 'background levels fit'),
+        ('HIT_LIMIT',           'LIMIT', 'hit param limit during optim')
+        ]
+    version_header.add_record(dict(name='COMMENT', value='fitbits bits:'))
+    _add_bit_description(version_header, FITBITS, fbits,
+                         'FB_%s', 'FBIT_%i', 'fitbits')
 
     if plots:
         plt.clf()
@@ -2013,6 +2010,23 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                 apertures_arcsec=apertures_arcsec,
                 maskbits=maskbits,
                 version_header=version_header)
+
+def _add_bit_description(header, BITS, bits, bnpat, bitpat, bitmapname):
+    for key,short,comm in bits:
+        header.add_record(
+            dict(name=bnpat % short, value=BITS[key],
+                 comment='%s: %s' % (bitmapname, comm)))
+    revmap = dict([(bit,name) for name,bit in MASKBITS.items()])
+    nicemap = dict([(k,c) for k,short,c in bits])
+    for bit in range(16):
+        bitval = 1<<bit
+        if not bitval in revmap:
+            continue
+        name = revmap[bitval]
+        nice = nicemap.get(name, '')
+        header.add_record(
+            dict(name=bitpat % bit, value=name,
+                 comment='%s bit %i (0x%x): %s' % (bitmapname, bit, bitval, nice)))
 
 def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
                      fibersize=1.5, seeing=1., year=2020.0,
@@ -2653,6 +2667,11 @@ def stage_writecat(
     # sigh, bytes vs strings.  In py3, T.type (dtype '|S3') are bytes.
     T.sersic[np.array([t in ['DEV',b'DEV'] for t in T.type])] = 4.0
     T.sersic[np.array([t in ['EXP',b'EXP'] for t in T.type])] = 1.0
+
+    T.fitbits = np.zeros(len(T), np.uint8)
+    T.fitbits[T.forced_pointsource] |= FITBITS['FORCED_POINTSOURCE']
+    T.fitbits[T.fit_background]     |= FITBITS['FIT_BACKGROUND']
+    T.fitbits[T.hit_limit]          |= FITBITS['HIT_LIMIT']
 
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
         T[np.argsort(T.objid)].writeto(None, fits_object=out.fits, primheader=primhdr)

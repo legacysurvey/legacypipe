@@ -22,6 +22,12 @@ DQ_BITS = dict(badpix=1,
                outlier = 2048,
     )
 
+FITBITS = dict(
+    FORCED_POINTSOURCE = 0x1,
+    FIT_BACKGROUND     = 0x2,
+    HIT_LIMIT          = 0x4,
+)
+
 # Outlier mask bit values
 OUTLIER_POS = 1
 OUTLIER_NEG = 2
