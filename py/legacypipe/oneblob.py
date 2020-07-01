@@ -115,24 +115,12 @@ def one_blob(X):
     B.started_in_blob = blobmask[safe_y0, safe_x0]
     # This uses 'initial' pixel positions, because that's what determines
     # the fitting behaviors.
-    B.cpu_source = np.zeros(len(B), np.float32)
-    B.blob_width  = np.zeros(len(B), np.int16) + blobw
-    B.blob_height = np.zeros(len(B), np.int16) + blobh
-    B.blob_npix   = np.zeros(len(B), np.int32) + np.sum(blobmask)
-    B.blob_nimages= np.zeros(len(B), np.int16) + len(timargs)
-    B.blob_symm_width   = np.zeros(len(B), np.int16)
-    B.blob_symm_height  = np.zeros(len(B), np.int16)
-    B.blob_symm_npix    = np.zeros(len(B), np.int32)
-    B.blob_symm_nimages = np.zeros(len(B), np.int16)
-    B.hit_limit = np.zeros(len(B), bool)
 
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
                  less_masking, frozen_galaxies)
     B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
-
-    B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
 
     _,x1,y1 = blobwcs.radec2pixelxy(
         np.array([src.getPosition().ra  for src in B.sources]),
@@ -145,6 +133,11 @@ def one_blob(X):
 
     # Setting values here (after .run() has completed) means that iterative sources
     # (which get merged with the original table B) get values also.
+    B.blob_width  = np.zeros(len(B), np.int16) + blobw
+    B.blob_height = np.zeros(len(B), np.int16) + blobh
+    B.blob_npix   = np.zeros(len(B), np.int32) + np.sum(blobmask)
+    B.blob_nimages= np.zeros(len(B), np.int16) + len(timargs)
+    B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
     B.cpu_arch = np.zeros(len(B), dtype='U3')
     B.cpu_arch[:] = get_cpu_arch()
     B.cpu_blob = np.empty(len(B), np.float32)
@@ -240,6 +233,17 @@ class OneBlob(object):
         # Not quite so many plots...
         self.plots1 = self.plots
         cat = Catalog(*self.srcs)
+
+        N = len(B)
+        B.cpu_source         = np.zeros(N, np.float32)
+        B.force_keep_source  = np.zeros(N, bool)
+        B.fit_background     = np.zeros(N, bool)
+        B.forced_pointsource = np.zeros(N, bool)
+        B.hit_limit          = np.zeros(N, bool)
+        B.blob_symm_width    = np.zeros(N, np.int16)
+        B.blob_symm_height   = np.zeros(N, np.int16)
+        B.blob_symm_npix     = np.zeros(N, np.int32)
+        B.blob_symm_nimages  = np.zeros(N, np.int16)
 
         # Save initial fluxes for all sources (used if we force
         # keeping a reference star)
@@ -629,9 +633,6 @@ class OneBlob(object):
         B.all_model_cpu = np.array([{} for i in range(N)])
         B.all_model_hit_limit = np.array([{} for i in range(N)])
         B.all_model_opt_steps = np.array([{} for i in range(N)])
-        B.force_keep_source = np.zeros(N, bool)
-        B.fit_background = np.zeros(N, bool)
-        B.forced_pointsource = np.zeros(N, bool)
 
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
@@ -919,12 +920,6 @@ class OneBlob(object):
         Bnew = fits_table()
         Bnew.sources = newsrcs
         Bnew.Isrcs = np.array([-1]*len(Bnew))
-        Bnew.cpu_source = np.zeros(len(Bnew), np.float32)
-        Bnew.blob_symm_nimages = np.zeros(len(Bnew), np.int16)
-        Bnew.blob_symm_npix    = np.zeros(len(Bnew), np.int32)
-        Bnew.blob_symm_width   = np.zeros(len(Bnew), np.int16)
-        Bnew.blob_symm_height  = np.zeros(len(Bnew), np.int16)
-        Bnew.hit_limit = np.zeros(len(Bnew), bool)
         # Be quieter during iterative detection!
         bloblogger = logging.getLogger('legacypipe.oneblob')
         loglvl = bloblogger.getEffectiveLevel()
