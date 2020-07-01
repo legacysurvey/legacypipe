@@ -729,6 +729,8 @@ class OneBlob(object):
                 iblob = B.iblob
                 B.delete_column('iblob')
                 B = merge_tables([B, Bnew], columns='fillzero')
+                # columns not in Bnew:
+                # {'started_in_blob', 'blob_x0', 'blob_y0', 'init_x', 'init_y'}
                 B.sources = srcs + newsrcs
                 B.iblob = iblob
 
