@@ -911,6 +911,7 @@ def stage_fitblobs(T=None,
     the sources contained within that blob.
     '''
     from tractor import Catalog
+    from legacypipe.oneblob import MODEL_NAMES
 
     record_event and record_event('stage_fitblobs: starting')
     _add_stage_version(version_header, 'FITB', 'fitblobs')
@@ -922,6 +923,11 @@ def stage_fitblobs(T=None,
     version_header.add_record(dict(name='LESSMASK',
                                    value=less_masking,
                                    help='Reduce masking behaviors?'))
+
+    version_header.add_record(dict(name='COMMENT', value='DCHISQ array model names'))
+    for i,mod in enumerate(MODEL_NAMES):
+        version_header.add_record(dict(name='DCHISQ_%i' % i, value=mod.upper()))
+
     if plots:
         from legacypipe.runbrick_plots import fitblobs_plots
         fitblobs_plots(tims, bands, targetwcs, blobslices, blobsrcs, cat,
@@ -1205,7 +1211,9 @@ def stage_fitblobs(T=None,
         Tall.append(T_dup)
         # re-create source objects for DUP stars
         for g in T_dup:
-            dup_cat.append(GaiaSource.from_catalog(g, bands))
+            src = GaiaSource.from_catalog(g, bands)
+            src.brightness.setParams([0] * src.brightness.numberOfParams())
+            dup_cat.append(src)
     if T_refbail:
         print('T_refbail:')
         T_refbail.about()

@@ -31,6 +31,9 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
+# Determines the order of elements in the DCHISQ array.
+MODEL_NAMES = ['psf', 'rex', 'dev', 'exp', 'ser']
+
 # singleton
 cpu_arch = None
 def get_cpu_arch():
@@ -1543,7 +1546,7 @@ class OneBlob(object):
         # Actually select which model to keep.  This "modnames"
         # array determines the order of the elements in the DCHISQ
         # column of the catalog.
-        modnames = ['psf', 'rex', 'dev', 'exp', 'ser']
+        modnames = MODEL_NAMES
         keepmod = _select_model(chisqs, nparams, galaxy_margin)
         keepsrc = {'none':None, 'psf':psf, 'rex':rex,
                    'dev':dev, 'exp':exp, 'ser':ser}[keepmod]
