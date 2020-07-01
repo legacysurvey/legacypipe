@@ -1211,7 +1211,9 @@ def stage_fitblobs(T=None,
         Tall.append(T_dup)
         # re-create source objects for DUP stars
         for g in T_dup:
-            dup_cat.append(GaiaSource.from_catalog(g, bands))
+            src = GaiaSource.from_catalog(g, bands)
+            src.brightness.setParams([0] * src.brightness.numberOfParams())
+            dup_cat.append(src)
     if T_refbail:
         print('T_refbail:')
         T_refbail.about()
