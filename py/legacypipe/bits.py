@@ -26,6 +26,7 @@ FITBITS = dict(
     FORCED_POINTSOURCE = 0x1,
     FIT_BACKGROUND     = 0x2,
     HIT_LIMIT          = 0x4,
+    FROZEN             = 0x8, # all source parameters were frozen at ref-cat values
 )
 
 # Outlier mask bit values

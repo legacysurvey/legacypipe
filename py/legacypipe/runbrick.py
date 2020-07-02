@@ -1936,7 +1936,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     fbits = [
         ('FORCED_POINTSOURCE',  'FPSF',  'forced to be PSF'),
         ('FIT_BACKGROUND',      'FITBG', 'background levels fit'),
-        ('HIT_LIMIT',           'LIMIT', 'hit param limit during optim')
+        ('HIT_LIMIT',           'LIMIT', 'hit param limit during optim'),
+        ('FROZEN',              'FROZE', 'parameters were not fit')
         ]
     version_header.add_record(dict(name='COMMENT', value='fitbits bits:'))
     _add_bit_description(version_header, FITBITS, fbits,
@@ -2682,6 +2683,8 @@ def stage_writecat(
     T.fitbits[T.forced_pointsource] |= FITBITS['FORCED_POINTSOURCE']
     T.fitbits[T.fit_background]     |= FITBITS['FIT_BACKGROUND']
     T.fitbits[T.hit_limit]          |= FITBITS['HIT_LIMIT']
+    if 'freezeparams' in T.get_columns():
+        T.fitbits[T.freezeparams]       |= FITBITS['FROZEN']
 
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
         T[np.argsort(T.objid)].writeto(None, fits_object=out.fits, primheader=primhdr)
