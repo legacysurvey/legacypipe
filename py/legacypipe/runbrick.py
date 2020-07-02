@@ -2552,9 +2552,9 @@ def stage_writecat(
     T.fiberflux, T.fibertotflux = get_fiber_fluxes(
         cat, T, targetwcs, H, W, pixscale, bands, plots=plots, ps=ps)
 
-    # For reference stars, plug in the reference-catalog inverse-variances.
-    if 'ref_id' in T.get_columns() and 'ra_ivar' in T.get_columns():
-        I, = np.nonzero(T.ref_id)
+    # For reference *stars* only, plug in the reference-catalog inverse-variances.
+    if 'ref_cat' in T.get_columns() and 'ra_ivar' in T.get_columns():
+        I, = np.isin(T.ref_cat, ['G2', 'T2'])
         if len(I):
             T.ra_ivar [I] = T_orig.ra_ivar [I]
             T.dec_ivar[I] = T_orig.dec_ivar[I]
