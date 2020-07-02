@@ -2672,9 +2672,11 @@ def stage_writecat(
                           np.clip(T.ibx, 0, W-1).astype(int)]
     del maskbits
 
+    # Set Sersic indices for all galaxy types.
     # sigh, bytes vs strings.  In py3, T.type (dtype '|S3') are bytes.
     T.sersic[np.array([t in ['DEV',b'DEV'] for t in T.type])] = 4.0
     T.sersic[np.array([t in ['EXP',b'EXP'] for t in T.type])] = 1.0
+    T.sersic[np.array([t in ['REX',b'REX'] for t in T.type])] = 1.0
 
     T.fitbits = np.zeros(len(T), np.uint8)
     T.fitbits[T.forced_pointsource] |= FITBITS['FORCED_POINTSOURCE']
