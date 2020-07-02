@@ -2553,8 +2553,8 @@ def stage_writecat(
         cat, T, targetwcs, H, W, pixscale, bands, plots=plots, ps=ps)
 
     # For reference *stars* only, plug in the reference-catalog inverse-variances.
-    if 'ref_cat' in T.get_columns() and 'ra_ivar' in T.get_columns():
-        I, = np.isin(T.ref_cat, ['G2', 'T2'])
+    if 'ref_cat' in T.get_columns() and 'ra_ivar' in T_orig.get_columns():
+        I = np.isin(T.ref_cat, ['G2', 'T2'])
         if len(I):
             T.ra_ivar [I] = T_orig.ra_ivar [I]
             T.dec_ivar[I] = T_orig.dec_ivar[I]
