@@ -422,7 +422,7 @@ def stage_fit_on_coadds(
 
     C = make_coadds(tims, bands, targetwcs,
                     detmaps=True, ngood=True, lanczos=lanczos,
-                    allmasks=True, psf_images=True,
+                    allmasks=True, anymasks=True, psf_images=True,
                     mp=mp, plots=plots2, ps=ps, # note plots2 here!
                     callback=None)
     #with survey.write_output('image-jpeg', brick=brickname) as out:
@@ -475,7 +475,8 @@ def stage_fit_on_coadds(
             # ps.savefig()
 
     cotims = []
-    for band,img,iv,mask,psfimg in zip(bands, C.coimgs, C.cowimgs, C.allmasks, C.psf_imgs):
+    for band,img,iv,allmask,anymask,psfimg in zip(
+            bands, C.coimgs, C.cowimgs, C.allmasks, C.anymasks, C.psf_imgs):
         mjd = np.mean([tim.imobj.mjdobs for tim in tims if tim.band == band])
         mjd_tai = astropy.time.Time(mjd, format='mjd', scale='utc').tai.mjd
         tai = TAITime(None, mjd=mjd_tai)
@@ -536,6 +537,12 @@ def stage_fit_on_coadds(
         cotim.subwcs = targetwcs
         cotim.psf_sigma = psf_sigma
         cotim.sig1 = 1./np.sqrt(np.median(iv[iv>0]))
+
+        # Saturated in any image -> treat as saturated in coadd
+        # (otherwise you get weird systematics in the weighted coadds, and weird source detection!)
+        mask = allmask
+        mask[anymask & DQ_BITS['satur']] |= DQ_BITS['satur']
+
         cotim.dq = mask
         cotim.dq_saturation_bits = DQ_BITS['satur']
         cotim.psfnorm = gnorm
