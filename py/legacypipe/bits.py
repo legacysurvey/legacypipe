@@ -25,8 +25,14 @@ DQ_BITS = dict(badpix=1,
 FITBITS = dict(
     FORCED_POINTSOURCE = 0x1,
     FIT_BACKGROUND     = 0x2,
-    HIT_LIMIT          = 0x4,
-    FROZEN             = 0x8, # all source parameters were frozen at ref-cat values
+    HIT_RADIUS_LIMIT   = 0x4,
+    HIT_SERSIC_LIMIT   = 0x8,
+    FROZEN             = 0x10, # all source parameters were frozen at ref-cat values
+    BRIGHT             = 0x20,
+    MEDIUM             = 0x40,
+    GAIA               = 0x80,
+    TYCHO2             = 0x100,
+    LARGEGALAXY        = 0x200,
 )
 
 # Outlier mask bit values

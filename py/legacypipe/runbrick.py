@@ -1194,7 +1194,8 @@ def stage_fitblobs(T=None,
               'blob_width', 'blob_height', 'blob_npix',
               'blob_nimages', 'blob_totalpix',
               'blob_symm_width', 'blob_symm_height', 'blob_symm_npix',
-              'blob_symm_nimages', 'hit_limit', 'dchisq',
+              'blob_symm_nimages', 'hit_limit', 'hit_ser_limit', 'hit_r_limit',
+              'dchisq',
               'force_keep_source', 'fit_background', 'forced_pointsource']:
         T.set(k, BB.get(k))
 
@@ -1936,8 +1937,14 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     fbits = [
         ('FORCED_POINTSOURCE',  'FPSF',  'forced to be PSF'),
         ('FIT_BACKGROUND',      'FITBG', 'background levels fit'),
-        ('HIT_LIMIT',           'LIMIT', 'hit param limit during optim'),
-        ('FROZEN',              'FROZE', 'parameters were not fit')
+        ('HIT_RADIUS_LIMIT',    'RLIM',  'hit radius limit during fit'),
+        ('HIT_SERSIC_LIMIT',    'SLIM',  'hit Sersic index limit during fit'),
+        ('FROZEN',              'FROZE', 'parameters were not fit'),
+        ('BRIGHT',              'BRITE', 'bright star'),
+        ('MEDIUM',              'MED',   'medium-bright star'),
+        ('GAIA',                'GAIA',  'Gaia source'),
+        ('TYCHO2',              'TYCHO', 'Tycho-2 star'),
+        ('LARGEGALAXY',         'LGAL',  'SGA large galaxy'),
         ]
     version_header.add_record(dict(name='COMMENT', value='fitbits bits:'))
     _add_bit_description(version_header, FITBITS, fbits,
@@ -2679,12 +2686,21 @@ def stage_writecat(
     T.sersic[np.array([t in ['EXP',b'EXP'] for t in T.type])] = 1.0
     T.sersic[np.array([t in ['REX',b'REX'] for t in T.type])] = 1.0
 
-    T.fitbits = np.zeros(len(T), np.uint8)
+    T.fitbits = np.zeros(len(T), np.int16)
     T.fitbits[T.forced_pointsource] |= FITBITS['FORCED_POINTSOURCE']
     T.fitbits[T.fit_background]     |= FITBITS['FIT_BACKGROUND']
-    T.fitbits[T.hit_limit]          |= FITBITS['HIT_LIMIT']
-    if 'freezeparams' in T.get_columns():
-        T.fitbits[T.freezeparams]       |= FITBITS['FROZEN']
+    T.fitbits[T.hit_r_limit]        |= FITBITS['HIT_RADIUS_LIMIT']
+    T.fitbits[T.hit_ser_limit]      |= FITBITS['HIT_SERSIC_LIMIT']
+
+    for col,bit in [('freezeparams',  'FROZEN'),
+                    ('isbright',      'BRIGHT'),
+                    ('ismedium',      'MEDIUM'),
+                    ('isgaia',        'GAIA'),
+                    ('istycho',       'TYCHO2'),
+                    ('islargegalaxy', 'LARGEGALAXY')]:
+        if not col in T.get_columns():
+            continue
+        T.fitbits[T.get(col)] |= FITBITS[bit]
 
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
         T[np.argsort(T.objid)].writeto(None, fits_object=out.fits, primheader=primhdr)

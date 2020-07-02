@@ -352,10 +352,11 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
               **write_kwargs)
 
 def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
-    from astrometry.util.fits import fits_table
     import fitsio
-    from legacypipe.catalog import prepare_fits_catalog, fits_typemap
+    from astrometry.util.fits import fits_table
     from tractor import Catalog
+    from legacypipe.catalog import prepare_fits_catalog, fits_typemap
+    from legacypipe.oneblob import MODEL_NAMES
 
     TT = fits_table()
     # Copy only desired columns...
@@ -366,7 +367,8 @@ def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
               'blob_totalpix',
               'blob_symm_width', 'blob_symm_height',
               'blob_symm_npix', 'blob_symm_nimages',
-              'hit_limit', 'fit_background', 'forced_pointsource']:
+              'hit_limit', 'hit_r_limit', 'hit_ser_limit',
+              'fit_background', 'forced_pointsource']:
         TT.set(k, T.get(k))
     TT.type = np.array([fits_typemap[type(src)] for src in newcat])
     # Override type for DUP objects
@@ -374,9 +376,7 @@ def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
 
     hdr = fitsio.FITSHDR()
 
-    srctypes = ['psf', 'rex', 'dev', 'exp', 'ser']
-
-    for srctype in srctypes:
+    for srctype in MODEL_NAMES:
         # Create catalog with the fit results for each source type
         xcat = Catalog(*[m.get(srctype,None) for m in BB.all_models])
         # NOTE that for REX, the shapes have been converted to EllipseE
@@ -404,6 +404,9 @@ def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
         TT.set('%s_hit_limit' % prefix,
                np.array([m.get(srctype,0)
                          for m in BB.all_model_hit_limit] + [False]*npad).astype(bool))
+        TT.set('%s_hit_r_limit' % prefix,
+               np.array([m.get(srctype,0)
+                         for m in BB.all_model_hit_r_limit] + [False]*npad).astype(bool))
         TT.set('%s_opt_steps' % prefix,
                np.array([m.get(srctype,-1)
                          for m in BB.all_model_opt_steps] + [0]*npad).astype(np.int16))
@@ -421,6 +424,7 @@ def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
         if ('sersic' in col) and not col.startswith('ser_'):
             TT.delete_column(col)
             continue
+    TT.delete_column('psf_hit_r_limit')
     TT.delete_column('rex_shape_e1')
     TT.delete_column('rex_shape_e2')
     TT.delete_column('rex_shape_e1_ivar')
