@@ -1794,15 +1794,18 @@ class OneBlob(object):
         srcsat = sat[iy,ix]
 
         ax = plt.axis()
-        plt.plot(x0-1, y0-1, 'r.')
+        plt.plot(x0-1, y0-1, 'r.', label='Sources')
         if len(srcsat):
-            plt.plot(x0[srcsat]-1, y0[srcsat]-1, 'o', mec='orange', mfc='none', ms=5, mew=2)
+            plt.plot(x0[srcsat]-1, y0[srcsat]-1, 'o', mec='orange', mfc='none', ms=5, mew=2,
+                     label='SATUR at center')
         # ref sources
         for x,y,src in zip(x0,y0,self.srcs):
             if is_reference_source(src):
-                plt.plot(x-1, y-1, 'o', mec='g', mfc='none', ms=8, mew=2)
+                plt.plot(x-1, y-1, 'o', mec='g', mfc='none', ms=8, mew=2,
+                         label='Ref source')
         plt.axis(ax)
         plt.title('initial sources')
+        plt.legend()
         self.ps.savefig()
 
     def create_tims(self, timargs):
