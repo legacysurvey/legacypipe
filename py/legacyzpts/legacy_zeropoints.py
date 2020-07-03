@@ -985,9 +985,9 @@ class Measurer(object):
         maglo, maghi = MAGLIM[self.band]
         dmag = dmag[refs.photom &
                     (refs.legacy_survey_mag > maglo) &
-                    (refs.legacy_survey_mag < maghi)]
+                    (refs.legacy_survey_mag < maghi) &
+                    np.isfinite(dmag)]
         if len(dmag):
-            dmag = dmag[np.isfinite(dmag)]
             print('Zeropoint: using', len(dmag), 'good stars')
             dmag, _, _ = sigmaclip(dmag, low=2.5, high=2.5)
             print('Zeropoint: using', len(dmag), 'stars after sigma-clipping')
