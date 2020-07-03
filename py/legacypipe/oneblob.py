@@ -524,12 +524,7 @@ class OneBlob(object):
         Ibright = _argsort_by_brightness([self.srcs[i] for i in Irank], self.bands)
         rank = np.empty(len(Irank), int)
         rank[Ibright] = np.arange(len(Irank), dtype=int)
-        # rankmap: source index -> numerical rank (low = brightest)
-        rankmap = dict([(Irank[i],r) for r,i in enumerate(Ibright)])
         del Ibright
-
-        print('rank:', rank)
-        print('rankmap:', rankmap)
 
         todo = set(Iseg)
         mx = int(np.ceil(maxsn.max()))
@@ -570,7 +565,7 @@ class OneBlob(object):
                     done.add(t)
                     continue
                 # Is this source the brightest in this blob?
-                if rankmap[t] == min(blobranks[bl]):
+                if rank[t] == min(blobranks[bl]):
                     # Claim all the territory in my thresholded blob.
                     # Other (fainter) sources may still claim sub-regions at higher
                     # threshold levels.
