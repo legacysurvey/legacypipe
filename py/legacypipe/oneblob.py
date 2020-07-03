@@ -500,6 +500,9 @@ class OneBlob(object):
         # (also zero out the satmap)
         saturated_pix[(self.refmap & IN_BLOB['CLUSTER']) > 0] = False
 
+        # Iseg are the indices in self.srcs of sources to segment
+        # Ibright are indices in Iseg!
+        # rankmap is ~inverse of Ibright -- gives order of each source
         Ibright = _argsort_by_brightness([self.srcs[i] for i in Iseg], self.bands)
         rank = np.empty(len(Iseg), int)
         rank[Ibright] = np.arange(len(Iseg), dtype=int)
@@ -522,15 +525,12 @@ class OneBlob(object):
             debug('S/N', thresh, ':', len(todo), 'sources to find still')
             if len(todo) == 0:
                 break
-            # We previously filled saturated pixels with a max value,
-            # so this is maybe not necessary?
-            #hot = np.logical_or(maxsn >= thresh, saturated_pix)
             hot = (maxsn >= thresh)
             hot = binary_fill_holes(hot)
             blobs,_ = label(hot)
             srcblobs = blobs[iy[Iseg], ix[Iseg]]
             done = set()
-
+            # We build up a map of blob -> (ranks of sources in blob)
             blobranks = {}
             for i,(b,r) in enumerate(zip(srcblobs, rank)):
                 if not b in blobranks:
@@ -540,11 +540,14 @@ class OneBlob(object):
             for t in todo:
                 bl = blobs[iy[t], ix[t]]
                 if bl == 0:
-                    # ??
+                    # source not in a blob...
                     done.add(t)
                     continue
+                # Is this source the brightest in this blob?
                 if rankmap[t] == min(blobranks[bl]):
-                    #print('Source', t, 'has rank', rank[t], 'vs blob ranks', blobranks[bl])
+                    # Claim all the territory in my thresholded blob.
+                    # Other (fainter) sources may still claim sub-regions at higher
+                    # threshold levels.
                     segmap[blobs == bl] = t
                     #print('Source', t, 'is isolated at S/N', thresh)
                     done.add(t)
@@ -552,9 +555,10 @@ class OneBlob(object):
             del hot
         del maxsn, saturated_pix
 
-        # ensure that each source owns a tiny radius around its center in the segmentation map.
-        # If there is more than one source in that radius, each pixel gets assigned to its nearest source.
-        # record the current distance to nearest source
+        # ensure that each source owns a tiny radius around its center
+        # in the segmentation map.  If there is more than one source
+        # in that radius, each pixel gets assigned to its nearest
+        # source.  record the current distance to nearest source
         kingdom = np.empty(segmap.shape, np.uint8)
         kingdom[:,:,] = 255
         H,W = segmap.shape
