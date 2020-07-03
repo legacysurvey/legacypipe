@@ -1799,9 +1799,9 @@ class OneBlob(object):
             plt.plot(x0[srcsat]-1, y0[srcsat]-1, 'o', mec='orange', mfc='none', ms=5, mew=2,
                      label='SATUR at center')
         # ref sources
-        for x,y,src in zip(x0,y0,self.srcs):
-            if is_reference_source(src):
-                plt.plot(x-1, y-1, 'o', mec='g', mfc='none', ms=8, mew=2,
+        Ir = np.flatnonzero([is_reference_source(src) for src in self.srcs])
+        if len(Ir):
+            plt.plot(x0[Ir]-1, y0[Ir]-1, 'o', mec='g', mfc='none', ms=8, mew=2,
                          label='Ref source')
         plt.axis(ax)
         plt.title('initial sources')

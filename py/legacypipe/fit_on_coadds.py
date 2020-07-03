@@ -538,10 +538,40 @@ def stage_fit_on_coadds(
         cotim.psf_sigma = psf_sigma
         cotim.sig1 = 1./np.sqrt(np.median(iv[iv>0]))
 
+        # Often, SATUR masks on galaxies / stars are surrounded by BLEED pixels.  Soak these into
+        # the SATUR mask.
+
+        if plots:
+            import pylab as plt
+
+        if plots:
+            plt.clf()
+            h,w = cotim.shape
+            rgb = np.zeros((h,w,3), np.uint8)
+            rgb[:,:,0] = (anymask & DQ_BITS['satur'] > 0) * 255
+            rgb[:,:,1] = (anymask & DQ_BITS['bleed'] > 0) * 255
+            plt.imshow(rgb, origin='lower')
+            plt.suptitle('BEFORE anymask band %s: red = SATUR, green = BLEED' % band)
+            ps.savefig()
+
+        from scipy.ndimage.morphology import binary_dilation
+        anymask |= np.logical_and(((anymask & DQ_BITS['bleed']) > 0),
+                                  binary_dilation(((anymask & DQ_BITS['satur']) > 0), iterations=10)) * DQ_BITS['satur']
+
+        if plots:
+            plt.clf()
+            h,w = cotim.shape
+            rgb = np.zeros((h,w,3), np.uint8)
+            rgb[:,:,0] = (anymask & DQ_BITS['satur'] > 0) * 255
+            rgb[:,:,1] = (anymask & DQ_BITS['bleed'] > 0) * 255
+            plt.imshow(rgb, origin='lower')
+            plt.suptitle('AFTER anymask band %s: red = SATUR, green = BLEED' % band)
+            ps.savefig()
+
         # Saturated in any image -> treat as saturated in coadd
         # (otherwise you get weird systematics in the weighted coadds, and weird source detection!)
         mask = allmask
-        mask[anymask & DQ_BITS['satur']] |= DQ_BITS['satur']
+        mask[(anymask & DQ_BITS['satur'] > 0)] |= DQ_BITS['satur']
 
         cotim.dq = mask
         cotim.dq_saturation_bits = DQ_BITS['satur']
@@ -554,6 +584,32 @@ def stage_fit_on_coadds(
         get_coadd_headers(cotim.primhdr, tims, band)
 
         cotims.append(cotim)
+
+        if plots:
+            plt.clf()
+            bitmap = dict([(v,k) for k,v in DQ_BITS.items()])
+            k = 1
+            for i in range(12):
+                bitval = 1 << i
+                if not bitval in bitmap:
+                    continue
+                # only 9 bits are actually used
+                plt.subplot(3,3,k)
+                k+=1
+                plt.imshow((cotim.dq & bitval) > 0,
+                           vmin=0, vmax=1.5, cmap='hot', origin='lower')
+                plt.title(bitmap[bitval])
+            plt.suptitle('Coadd mask planes %s band' % band)
+            ps.savefig()
+
+            plt.clf()
+            h,w = cotim.shape
+            rgb = np.zeros((h,w,3), np.uint8)
+            rgb[:,:,0] = (cotim.dq & DQ_BITS['satur'] > 0) * 255
+            rgb[:,:,1] = (cotim.dq & DQ_BITS['bleed'] > 0) * 255
+            plt.imshow(rgb, origin='lower')
+            plt.suptitle('Coadd DQ band %s: red = SATUR, green = BLEED' % band)
+            ps.savefig()
 
         # Save an image of the coadd PSF
 
