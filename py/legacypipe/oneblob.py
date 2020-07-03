@@ -165,8 +165,8 @@ class OneBlob(object):
         self.bands = bands
         self.plots = plots
         self.refmap = refmap
-        self.plots_per_source = False
-        #self.plots_per_source = plots
+        #self.plots_per_source = False
+        self.plots_per_source = plots
         self.plots_per_model = False
         # blob-1-data.png, etc
         self.plots_single = False
@@ -1093,7 +1093,14 @@ class OneBlob(object):
                 plt.subplot(2,2,3)
                 dh,dw = flipblobs.shape
                 sx0,sy0 = srcwcs_x0y0
-                dimshow(self.segmap[sy0:sy0+dh, sx0:sx0+dw])
+                mysegmap = self.segmap[sy0:sy0+dh, sx0:sx0+dw]
+                # renumber for plotting
+                _,S = np.unique(mysegmap, return_inverse=True)
+                dimshow(S.reshape(mysegmap.shape), cmap='tab20',
+                        interpolation='nearest', origin='lower')
+                ax = plt.axis()
+                plt.plot(ix, iy, 'kx', ms=15, mew=3)
+                plt.axis(ax)
                 plt.title('Segmentation map')
 
                 plt.subplot(2,2,4)
