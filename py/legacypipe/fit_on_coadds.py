@@ -544,29 +544,9 @@ def stage_fit_on_coadds(
         if plots:
             import pylab as plt
 
-        if plots:
-            plt.clf()
-            h,w = cotim.shape
-            rgb = np.zeros((h,w,3), np.uint8)
-            rgb[:,:,0] = (anymask & DQ_BITS['satur'] > 0) * 255
-            rgb[:,:,1] = (anymask & DQ_BITS['bleed'] > 0) * 255
-            plt.imshow(rgb, origin='lower')
-            plt.suptitle('BEFORE anymask band %s: red = SATUR, green = BLEED' % band)
-            ps.savefig()
-
         from scipy.ndimage.morphology import binary_dilation
         anymask |= np.logical_and(((anymask & DQ_BITS['bleed']) > 0),
                                   binary_dilation(((anymask & DQ_BITS['satur']) > 0), iterations=10)) * DQ_BITS['satur']
-
-        if plots:
-            plt.clf()
-            h,w = cotim.shape
-            rgb = np.zeros((h,w,3), np.uint8)
-            rgb[:,:,0] = (anymask & DQ_BITS['satur'] > 0) * 255
-            rgb[:,:,1] = (anymask & DQ_BITS['bleed'] > 0) * 255
-            plt.imshow(rgb, origin='lower')
-            plt.suptitle('AFTER anymask band %s: red = SATUR, green = BLEED' % band)
-            ps.savefig()
 
         # Saturated in any image -> treat as saturated in coadd
         # (otherwise you get weird systematics in the weighted coadds, and weird source detection!)
