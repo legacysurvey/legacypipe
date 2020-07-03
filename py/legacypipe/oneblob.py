@@ -499,13 +499,37 @@ class OneBlob(object):
         # (also zero out the satmap in the CLUSTER mask)
         saturated_pix[(self.refmap & IN_BLOB['CLUSTER']) > 0] = False
 
+        Irank = Iseg
+        # Start by setting the segmentation map for reference sources
+        # that are forced to be point sources, to the size of the
+        # point source model.
+        ref_radius = 25
+        refpsf = np.array([getattr(self.srcs[i], 'forced_point_source', False)
+                           for i in Iseg])
+        Irefpsf = Iseg[refpsf]
+        refclaimed = None
+        if len(Irefpsf):
+            debug('Setting segmentation map for', len(Irefpsf), 'forced-point-source refs')
+            Ibr = _argsort_by_brightness([self.srcs[i] for i in Irefpsf], self.bands)
+            _set_kingdoms(segmap, ref_radius, Irefpsf[Ibr], ix, iy)
+            del Ibr
+            refclaimed = (segmap != -1)
+            # Now we remove these sources from the list of sources that we need
+            # to find segmentations for.  They remain in 'Irank', which are the ones
+            # that compete for rank.
+            Iseg = Iseg[np.logical_not(refpsf)]
+        del refpsf
+
         # Iseg are the indices in self.srcs of sources to segment
-        # Ibright are indices in Iseg!
-        # rankmap is ~inverse of Ibright -- gives order of each source
-        Ibright = _argsort_by_brightness([self.srcs[i] for i in Iseg], self.bands)
-        rank = np.empty(len(Iseg), int)
-        rank[Ibright] = np.arange(len(Iseg), dtype=int)
-        rankmap = dict([(Iseg[i],r) for r,i in enumerate(Ibright)])
+        Ibright = _argsort_by_brightness([self.srcs[i] for i in Irank], self.bands)
+        rank = np.empty(len(Irank), int)
+        rank[Ibright] = np.arange(len(Irank), dtype=int)
+        # rankmap: source index -> numerical rank (low = brightest)
+        rankmap = dict([(Irank[i],r) for r,i in enumerate(Ibright)])
+        del Ibright
+
+        print('rank:', rank)
+        print('rankmap:', rankmap)
 
         todo = set(Iseg)
         mx = int(np.ceil(maxsn.max()))
@@ -527,14 +551,17 @@ class OneBlob(object):
             hot = (maxsn >= thresh)
             hot = binary_fill_holes(hot)
             blobs,_ = label(hot)
-            srcblobs = blobs[iy[Iseg], ix[Iseg]]
+            srcblobs = blobs[iy[Irank], ix[Irank]]
             done = set()
             # We build up a map of blob -> (ranks of sources in blob)
             blobranks = {}
+            blobsrcs = {}
             for i,(b,r) in enumerate(zip(srcblobs, rank)):
                 if not b in blobranks:
                     blobranks[b] = []
+                    blobsrcs[b] = []
                 blobranks[b].append(r)
+                blobsrcs[b].append(i)
 
             for t in todo:
                 bl = blobs[iy[t], ix[t]]
@@ -550,6 +577,27 @@ class OneBlob(object):
                     segmap[blobs == bl] = t
                     #print('Source', t, 'is isolated at S/N', thresh)
                     done.add(t)
+                # Is this source outside the regions claimed by brighter (ref) sources?
+                else:
+                    ok = True
+                    for r,isrc in zip(blobranks[bl], blobsrcs[bl]):
+                        if not isrc in Irefpsf:
+                            # regular (non-ref-PSF) source; its claim holds
+                            ok = False
+                            break
+                        r2 = (ix[t] - ix[isrc])**2 + (iy[t] - iy[isrc])**2
+                        if r2 <= ref_radius**2:
+                            # within ref source's claimed region; its claim holds
+                            ok = False
+                            break
+                    if ok:
+                        # If we got here, we share a blob with a
+                        # brighter ref source, but are far enough away
+                        # from it.  We claim the blob, except for what
+                        # the ref source has already claimed.
+                        segmap[(blobs == bl) * (refclaimed == False)] = t
+                        done.add(t)
+
             todo.difference_update(done)
             del hot
         del maxsn, saturated_pix
@@ -559,6 +607,7 @@ class OneBlob(object):
         # in that radius, each pixel gets assigned to its nearest
         # source.
         radius = 5
+        Ibright = _argsort_by_brightness([self.srcs[i] for i in Iseg], self.bands)
         _set_kingdoms(segmap, radius, Iseg[Ibright], ix, iy)
 
         self.segmap = segmap
