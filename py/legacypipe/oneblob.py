@@ -559,7 +559,7 @@ class OneBlob(object):
         # in that radius, each pixel gets assigned to its nearest
         # source.
         radius = 5
-        _set_kingdoms(segmap, radius, Ibright, ix, iy)
+        _set_kingdoms(segmap, radius, Iseg[Ibright], ix, iy)
 
         self.segmap = segmap
 
