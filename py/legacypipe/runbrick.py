@@ -2726,6 +2726,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               apodize=False,
               splinesky=True,
               subsky=True,
+              ubercal_sky=False,
               constant_invvar=False,
               tycho_stars=True,
               gaia_stars=True,
@@ -2968,6 +2969,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   constant_invvar=constant_invvar,
                   splinesky=splinesky,
                   subsky=subsky,
+                  ubercal_sky=ubercal_sky,
                   tycho_stars=tycho_stars,
                   gaia_stars=gaia_stars,
                   large_galaxies=large_galaxies,
@@ -3374,10 +3376,11 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--no-galaxy-forcepsf', dest='large_galaxies_force_pointsource',
                         default=True, action='store_false',
                         help='Do not force PSFs within galaxy mask.')
-
     parser.add_argument('--less-masking', default=False, action='store_true',
                         help='Turn off background fitting within MEDIUM mask.')
 
+    parser.add_argument('--ubercal-sky', dest='ubercal_sky', default=False,
+                        action='store_true', help='Use the ubercal sky-subtraction (only used with --fit-on-coadds and --no-subsky).')
     parser.add_argument('--subsky-radii', type=float, nargs=3, default=None,
                         help="""Sky-subtraction radii: rmask, rin, rout [arcsec] (only used with --fit-on-coadds and --no-subsky).
                         Image pixels r<rmask are fully masked and the pedestal sky background is estimated from an annulus
