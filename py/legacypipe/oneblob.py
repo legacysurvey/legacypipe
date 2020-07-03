@@ -496,8 +496,7 @@ class OneBlob(object):
         Iseg, = np.nonzero((self.refmap[iy, ix] & IN_BLOB['CLUSTER']) == 0)
         # Zero out the S/N in CLUSTER mask
         maxsn[(self.refmap & IN_BLOB['CLUSTER']) > 0] = 0.
-
-        # (also zero out the satmap)
+        # (also zero out the satmap in the CLUSTER mask)
         saturated_pix[(self.refmap & IN_BLOB['CLUSTER']) > 0] = False
 
         # Iseg are the indices in self.srcs of sources to segment
@@ -558,29 +557,9 @@ class OneBlob(object):
         # ensure that each source owns a tiny radius around its center
         # in the segmentation map.  If there is more than one source
         # in that radius, each pixel gets assigned to its nearest
-        # source.  record the current distance to nearest source
-        kingdom = np.empty(segmap.shape, np.uint8)
-        kingdom[:,:,] = 255
-        H,W = segmap.shape
-        xcoords = np.arange(W)
-        ycoords = np.arange(H)
-        for i in Ibright:
-            radius = 5
-            x,y = ix[i], iy[i]
-            yslc = slice(max(0, y-radius), min(H, y+radius+1))
-            xslc = slice(max(0, x-radius), min(W, x+radius+1))
-            slc = (yslc, xslc)
-            # Radius to nearest earlier source
-            oldr = kingdom[slc]
-            # Radius to new source
-            newr = np.hypot(xcoords[np.newaxis, xslc] - x, ycoords[yslc, np.newaxis] - y)
-            assert(newr.shape == oldr.shape)
-            newr = (newr + 0.5).astype(np.uint8)
-            # Pixels that are within range and closer to this source than any other.
-            owned = (newr <= radius) * (newr < oldr)
-            segmap[slc][owned] = i
-            kingdom[slc][owned] = newr[owned]
-        del kingdom, xcoords, ycoords
+        # source.
+        radius = 5
+        _set_kingdoms(segmap, radius, Ibright, ix, iy)
 
         self.segmap = segmap
 
@@ -1848,6 +1827,39 @@ class OneBlob(object):
             tim.dq_saturation_bits = DQ_BITS['satur']
             tims.append(tim)
         return tims
+
+def _set_kingdoms(segmap, radius, I, ix, iy):
+    '''
+    radius: int
+    ix,iy: int arrays
+    I: indices into ix,iy that will be placed into 'segmap'
+    '''
+    # ensure that each source owns a tiny radius around its center
+    # in the segmentation map.  If there is more than one source
+    # in that radius, each pixel gets assigned to its nearest
+    # source.
+    # 'kingdom' records the current distance to nearest source
+    assert(radius < 255)
+    kingdom = np.empty(segmap.shape, np.uint8)
+    kingdom[:,:,] = 255
+    H,W = segmap.shape
+    xcoords = np.arange(W)
+    ycoords = np.arange(H)
+    for i in I:
+        x,y = ix[i], iy[i]
+        yslc = slice(max(0, y-radius), min(H, y+radius+1))
+        xslc = slice(max(0, x-radius), min(W, x+radius+1))
+        slc = (yslc, xslc)
+        # Radius to nearest earlier source
+        oldr = kingdom[slc]
+        # Radius to new source
+        newr = np.hypot(xcoords[np.newaxis, xslc] - x, ycoords[yslc, np.newaxis] - y)
+        assert(newr.shape == oldr.shape)
+        newr = (newr + 0.5).astype(np.uint8)
+        # Pixels that are within range and closer to this source than any other.
+        owned = (newr <= radius) * (newr < oldr)
+        segmap[slc][owned] = i
+        kingdom[slc][owned] = newr[owned]
 
 def _convert_ellipses(src):
     if isinstance(src, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
