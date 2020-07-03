@@ -155,6 +155,10 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
     from legacypipe.survey import get_rgb, imsave_jpeg
     from astropy.stats import sigma_clipped_stats
 
+    if plots or plots2:
+        import os
+        import matplotlib.pyplot as plt
+
     if plots:
         plt.figure(figsize=(8,6))
         mods = []
@@ -267,9 +271,11 @@ def coadds_skysub(tims, targetwcs, survey, brickname, bands, mp,
     from legacypipe.survey import get_rgb, imsave_jpeg
     from astropy.stats import sigma_clipped_stats
 
-    if plots:
+    if plots or plots2:
         import os
         import matplotlib.pyplot as plt
+        
+    if plots:
         import matplotlib.patches as patches
 
         refs, _ = get_reference_sources(survey, targetwcs, targetwcs.pixel_scale(), ['r'],
