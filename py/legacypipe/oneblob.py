@@ -165,8 +165,8 @@ class OneBlob(object):
         self.bands = bands
         self.plots = plots
         self.refmap = refmap
-        self.plots_per_source = False
-        #self.plots_per_source = plots
+        #self.plots_per_source = False
+        self.plots_per_source = plots
         self.plots_per_model = False
         # blob-1-data.png, etc
         self.plots_single = False
@@ -1093,7 +1093,14 @@ class OneBlob(object):
                 plt.subplot(2,2,3)
                 dh,dw = flipblobs.shape
                 sx0,sy0 = srcwcs_x0y0
-                dimshow(self.segmap[sy0:sy0+dh, sx0:sx0+dw])
+                mysegmap = self.segmap[sy0:sy0+dh, sx0:sx0+dw]
+                # renumber for plotting
+                _,S = np.unique(mysegmap, return_inverse=True)
+                dimshow(S.reshape(mysegmap.shape), cmap='tab20',
+                        interpolation='nearest', origin='lower')
+                ax = plt.axis()
+                plt.plot(ix, iy, 'kx', ms=15, mew=3)
+                plt.axis(ax)
                 plt.title('Segmentation map')
 
                 plt.subplot(2,2,4)
@@ -1794,15 +1801,18 @@ class OneBlob(object):
         srcsat = sat[iy,ix]
 
         ax = plt.axis()
-        plt.plot(x0-1, y0-1, 'r.')
+        plt.plot(x0-1, y0-1, 'r.', label='Sources')
         if len(srcsat):
-            plt.plot(x0[srcsat]-1, y0[srcsat]-1, 'o', mec='orange', mfc='none', ms=5, mew=2)
+            plt.plot(x0[srcsat]-1, y0[srcsat]-1, 'o', mec='orange', mfc='none', ms=5, mew=2,
+                     label='SATUR at center')
         # ref sources
-        for x,y,src in zip(x0,y0,self.srcs):
-            if is_reference_source(src):
-                plt.plot(x-1, y-1, 'o', mec='g', mfc='none', ms=8, mew=2)
+        Ir = np.flatnonzero([is_reference_source(src) for src in self.srcs])
+        if len(Ir):
+            plt.plot(x0[Ir]-1, y0[Ir]-1, 'o', mec='g', mfc='none', ms=8, mew=2,
+                         label='Ref source')
         plt.axis(ax)
         plt.title('initial sources')
+        plt.legend()
         self.ps.savefig()
 
     def create_tims(self, timargs):

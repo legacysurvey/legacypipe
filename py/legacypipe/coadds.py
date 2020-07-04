@@ -202,7 +202,8 @@ def _unwise_to_rgb(imgs):
 def make_coadds(tims, bands, targetwcs,
                 mods=None, blobmods=None,
                 xy=None, apertures=None, apxy=None,
-                ngood=False, detmaps=False, psfsize=False, allmasks=True,
+                ngood=False, detmaps=False, psfsize=False,
+                allmasks=True, anymasks=False,
                 max=False, sbscale=True,
                 psf_images=False,
                 callback=None, callback_args=None,
@@ -241,6 +242,8 @@ def make_coadds(tims, bands, targetwcs,
         C.AP = fits_table()
     if allmasks:
         C.allmasks = []
+    if anymasks:
+        C.anymasks = []
     if max:
         C.maximgs = []
     if psf_images:
@@ -364,7 +367,7 @@ def make_coadds(tims, bands, targetwcs,
             congood = np.zeros((H,W), np.int16)
             kwargs.update(congood=congood)
 
-        if xy or allmasks:
+        if xy or allmasks or anymasks:
             # These match the type of the "DQ" images.
             # "any" mask
             ormask  = np.zeros((H,W), np.int16)
@@ -430,7 +433,7 @@ def make_coadds(tims, bands, targetwcs,
                 con  [Yo,Xo] += goodpix
                 coiv [Yo,Xo] += goodpix * 1./(tim.sig1 * tim.sbscale)**2  # ...ish
 
-            if xy or allmasks:
+            if xy or allmasks or anymasks:
                 if dq is not None:
                     ormask [Yo,Xo] |= dq
                     andmask[Yo,Xo] &= dq
@@ -549,6 +552,8 @@ def make_coadds(tims, bands, targetwcs,
 
         if allmasks:
             C.allmasks.append(andmask)
+        if anymasks:
+            C.anymasks.append(ormask)
 
         if psf_images:
             C.psf_imgs.append(psf_img / np.sum(psf_img))
