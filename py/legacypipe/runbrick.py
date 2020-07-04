@@ -2032,7 +2032,7 @@ def _add_bit_description(header, BITS, bits, bnpat, bitpat, bitmapname):
         header.add_record(
             dict(name=bnpat % short, value=BITS[key],
                  comment='%s: %s' % (bitmapname, comm)))
-    revmap = dict([(bit,name) for name,bit in MASKBITS.items()])
+    revmap = dict([(bit,name) for name,bit in BITS.items()])
     nicemap = dict([(k,c) for k,short,c in bits])
     for bit in range(16):
         bitval = 1<<bit
