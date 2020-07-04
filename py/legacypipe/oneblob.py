@@ -513,7 +513,7 @@ class OneBlob(object):
         # point source model.
         ref_radius = 25
         refpsf = np.array([getattr(self.srcs[i], 'forced_point_source', False)
-                           for i in Iseg])
+                           for i in Iseg], dtype=bool)
         Irefpsf = Iseg[refpsf]
         refclaimed = None
         if len(Irefpsf):
@@ -533,6 +533,12 @@ class OneBlob(object):
         rank = np.empty(len(Irank), int)
         rank[Ibright] = np.arange(len(Irank), dtype=int)
         del Ibright
+        # rankmap goes from source index to rank
+        # (unlike 'rank', which is for sources in Iranks)
+        rankmap = dict(zip(Irank, rank))
+        print('Irank:', Irank)
+        print('rank:' ,rank)
+        print('rankmap:', rankmap)
 
         todo = set(Iseg)
         mx = int(np.ceil(maxsn.max()))
@@ -573,7 +579,7 @@ class OneBlob(object):
                     done.add(t)
                     continue
                 # Is this source the brightest in this blob?
-                if rank[t] == min(blobranks[bl]):
+                if rankmap[t] == min(blobranks[bl]):
                     # Claim all the territory in my thresholded blob.
                     # Other (fainter) sources may still claim sub-regions at higher
                     # threshold levels.
