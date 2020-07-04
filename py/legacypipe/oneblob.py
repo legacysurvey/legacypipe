@@ -30,6 +30,8 @@ def info(*args):
 def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
+def is_debug():
+    return logger.isEnabledFor(logging.DEBUG)
 
 # Determines the order of elements in the DCHISQ array.
 MODEL_NAMES = ['psf', 'rex', 'dev', 'exp', 'ser']
@@ -115,24 +117,12 @@ def one_blob(X):
     B.started_in_blob = blobmask[safe_y0, safe_x0]
     # This uses 'initial' pixel positions, because that's what determines
     # the fitting behaviors.
-    B.cpu_source = np.zeros(len(B), np.float32)
-    B.blob_width  = np.zeros(len(B), np.int16) + blobw
-    B.blob_height = np.zeros(len(B), np.int16) + blobh
-    B.blob_npix   = np.zeros(len(B), np.int32) + np.sum(blobmask)
-    B.blob_nimages= np.zeros(len(B), np.int16) + len(timargs)
-    B.blob_symm_width   = np.zeros(len(B), np.int16)
-    B.blob_symm_height  = np.zeros(len(B), np.int16)
-    B.blob_symm_npix    = np.zeros(len(B), np.int32)
-    B.blob_symm_nimages = np.zeros(len(B), np.int16)
-    B.hit_limit = np.zeros(len(B), bool)
 
     ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
                  less_masking, frozen_galaxies)
     B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
-
-    B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
 
     _,x1,y1 = blobwcs.radec2pixelxy(
         np.array([src.getPosition().ra  for src in B.sources]),
@@ -145,6 +135,11 @@ def one_blob(X):
 
     # Setting values here (after .run() has completed) means that iterative sources
     # (which get merged with the original table B) get values also.
+    B.blob_width  = np.zeros(len(B), np.int16) + blobw
+    B.blob_height = np.zeros(len(B), np.int16) + blobh
+    B.blob_npix   = np.zeros(len(B), np.int32) + np.sum(blobmask)
+    B.blob_nimages= np.zeros(len(B), np.int16) + len(timargs)
+    B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
     B.cpu_arch = np.zeros(len(B), dtype='U3')
     B.cpu_arch[:] = get_cpu_arch()
     B.cpu_blob = np.empty(len(B), np.float32)
@@ -240,6 +235,19 @@ class OneBlob(object):
         # Not quite so many plots...
         self.plots1 = self.plots
         cat = Catalog(*self.srcs)
+
+        N = len(B)
+        B.cpu_source         = np.zeros(N, np.float32)
+        B.force_keep_source  = np.zeros(N, bool)
+        B.fit_background     = np.zeros(N, bool)
+        B.forced_pointsource = np.zeros(N, bool)
+        B.hit_limit          = np.zeros(N, bool)
+        B.hit_ser_limit      = np.zeros(N, bool)
+        B.hit_r_limit        = np.zeros(N, bool)
+        B.blob_symm_width    = np.zeros(N, np.int16)
+        B.blob_symm_height   = np.zeros(N, np.int16)
+        B.blob_symm_npix     = np.zeros(N, np.int32)
+        B.blob_symm_nimages  = np.zeros(N, np.int16)
 
         # Save initial fluxes for all sources (used if we force
         # keeping a reference star)
@@ -627,11 +635,9 @@ class OneBlob(object):
         B.all_models    = np.array([{} for i in range(N)])
         B.all_model_ivs = np.array([{} for i in range(N)])
         B.all_model_cpu = np.array([{} for i in range(N)])
-        B.all_model_hit_limit = np.array([{} for i in range(N)])
-        B.all_model_opt_steps = np.array([{} for i in range(N)])
-        B.force_keep_source = np.zeros(N, bool)
-        B.fit_background = np.zeros(N, bool)
-        B.forced_pointsource = np.zeros(N, bool)
+        B.all_model_hit_limit     = np.array([{} for i in range(N)])
+        B.all_model_hit_r_limit   = np.array([{} for i in range(N)])
+        B.all_model_opt_steps     = np.array([{} for i in range(N)])
 
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
@@ -728,6 +734,8 @@ class OneBlob(object):
                 iblob = B.iblob
                 B.delete_column('iblob')
                 B = merge_tables([B, Bnew], columns='fillzero')
+                # columns not in Bnew:
+                # {'started_in_blob', 'blob_x0', 'blob_y0', 'init_x', 'init_y'}
                 B.sources = srcs + newsrcs
                 B.iblob = iblob
 
@@ -919,12 +927,6 @@ class OneBlob(object):
         Bnew = fits_table()
         Bnew.sources = newsrcs
         Bnew.Isrcs = np.array([-1]*len(Bnew))
-        Bnew.cpu_source = np.zeros(len(Bnew), np.float32)
-        Bnew.blob_symm_nimages = np.zeros(len(Bnew), np.int16)
-        Bnew.blob_symm_npix    = np.zeros(len(Bnew), np.int32)
-        Bnew.blob_symm_width   = np.zeros(len(Bnew), np.int16)
-        Bnew.blob_symm_height  = np.zeros(len(Bnew), np.int16)
-        Bnew.hit_limit = np.zeros(len(Bnew), bool)
         # Be quieter during iterative detection!
         bloblogger = logging.getLogger('legacypipe.oneblob')
         loglvl = bloblogger.getEffectiveLevel()
@@ -1437,10 +1439,30 @@ class OneBlob(object):
             #print('Steps:', R['steps'])
             hit_limit = R.get('hit_limit', False)
             opt_steps = R.get('steps', -1)
+            hit_ser_limit = False
+            hit_r_limit = False
             if hit_limit:
+                debug('Source', newsrc, 'hit limit:')
+                if is_debug():
+                    for nm,p,low,upp in zip(newsrc.getParamNames(), newsrc.getParams(),
+                                            newsrc.getLowerBounds(), newsrc.getUpperBounds()):
+                        debug('  ', nm, '=', p, 'bounds', low, upp)
+
+                if name == 'ser':
+                    si = newsrc.sersicindex
+                    sival = si.getValue()
+                    # Can end up close, but not exactly at a limit...
+                    if min(sival - si.lower, si.upper - sival) < 1e-3:
+                        hit_ser_limit = True
+                        debug('Hit sersic limit')
                 if name in ['rex', 'exp', 'dev', 'ser']:
-                    debug('Hit limit: r %.2f vs %.2f' %
-                          (newsrc.shape.re, np.exp(logrmax)))
+                    shape = newsrc.shape
+                    logr = shape.logre
+                    if min(logr - shape.getLowerBounds()[0],
+                           shape.getUpperBounds()[0] - logr) < 0.01:
+                        hit_r_limit = True
+                        debug('Hit radius limit')
+
             _,ix,iy = srcwcs.radec2pixelxy(newsrc.getPosition().ra,
                                            newsrc.getPosition().dec)
             ix = int(ix-1)
@@ -1537,8 +1559,11 @@ class OneBlob(object):
             cpum1 = time.process_time()
             B.all_model_cpu[srci][name] = cpum1 - cpum0
             cputimes[name] = cpum1 - cpum0
-            B.all_model_hit_limit[srci][name] = hit_limit
-            B.all_model_opt_steps[srci][name] = opt_steps
+            B.all_model_hit_limit  [srci][name] = hit_limit
+            B.all_model_hit_r_limit[srci][name] = hit_r_limit
+            B.all_model_opt_steps  [srci][name] = opt_steps
+            if name == 'ser':
+                B.hit_ser_limit[srci] = hit_ser_limit
 
         if mask_others:
             for tim,ie in zip(srctims, saved_srctim_ies):
@@ -1550,15 +1575,14 @@ class OneBlob(object):
         if fit_background:
             srctractor.images.setParams(skyparams)
 
-        # Actually select which model to keep.  This "modnames"
+        # Actually select which model to keep.  The MODEL_NAMES
         # array determines the order of the elements in the DCHISQ
         # column of the catalog.
-        modnames = MODEL_NAMES
         keepmod = _select_model(chisqs, nparams, galaxy_margin)
         keepsrc = {'none':None, 'psf':psf, 'rex':rex,
                    'dev':dev, 'exp':exp, 'ser':ser}[keepmod]
         bestchi = chisqs.get(keepmod, 0.)
-        B.dchisq[srci, :] = np.array([chisqs.get(k,0) for k in modnames])
+        B.dchisq[srci, :] = np.array([chisqs.get(k,0) for k in MODEL_NAMES])
         #print('Keeping model', keepmod, '(chisqs: ', chisqs, ')')
 
         if keepsrc is not None and bestchi == 0.:
@@ -1568,7 +1592,10 @@ class OneBlob(object):
             debug('Best dchisq is 0 -- dropping source')
             keepsrc = None
 
-        B.hit_limit[srci] = B.all_model_hit_limit[srci].get(keepmod, False)
+        B.hit_limit    [srci] = B.all_model_hit_limit    [srci].get(keepmod, False)
+        B.hit_r_limit  [srci] = B.all_model_hit_r_limit  [srci].get(keepmod, False)
+        if keepmod != 'ser':
+            B.hit_ser_limit[srci] = False
 
         # This is the model-selection plot
         if self.plots_per_source:
