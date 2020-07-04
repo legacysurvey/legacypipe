@@ -513,7 +513,7 @@ class OneBlob(object):
         # point source model.
         ref_radius = 25
         refpsf = np.array([getattr(self.srcs[i], 'forced_point_source', False)
-                           for i in Iseg])
+                           for i in Iseg], dtype=bool)
         Irefpsf = Iseg[refpsf]
         refclaimed = None
         if len(Irefpsf):
@@ -539,7 +539,7 @@ class OneBlob(object):
         print('Irank:', Irank)
         print('rank:' ,rank)
         print('rankmap:', rankmap)
-        
+
         todo = set(Iseg)
         mx = int(np.ceil(maxsn.max()))
         thresholds = list(range(3, min(mx, 100)))
