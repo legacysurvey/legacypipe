@@ -140,8 +140,8 @@ def coadds_ubercal(fulltims, coaddtims=None, plots=False, plots2=False,
     
     return x
 
-def ubercal_sky(tims, targetwcs, survey, brickname, bands, mp,
-                plots=False, plots2=False, ps=None, verbose=False):
+def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
+                   plots=False, plots2=False, ps=None, verbose=False):
     """With the ubercal option, we (1) read the full-field mosaics ('bandtims') for
     a given bandpass and put them all on the same 'system' using the overlapping
     pixels; (2) apply the derived corrections to the in-field 'tims'; (3) build
@@ -154,6 +154,10 @@ def ubercal_sky(tims, targetwcs, survey, brickname, bands, mp,
     from legacypipe.coadds import make_coadds
     from legacypipe.survey import get_rgb, imsave_jpeg
     from astropy.stats import sigma_clipped_stats
+
+    if plots or plots2:
+        import os
+        import matplotlib.pyplot as plt
 
     if plots:
         plt.figure(figsize=(8,6))
@@ -257,9 +261,9 @@ def ubercal_sky(tims, targetwcs, survey, brickname, bands, mp,
 
     return tims
 
-def coadds_sky(tims, targetwcs, survey, brickname, bands, mp,
-               subsky_radii=None, plots=False, plots2=False,
-               ps=None, verbose=False):
+def coadds_skysub(tims, targetwcs, survey, brickname, bands, mp,
+                  subsky_radii=None, plots=False, plots2=False,
+                  ps=None, verbose=False):
     
     from tractor.sky import ConstantSky
     from legacypipe.reference import get_reference_sources, get_reference_map
@@ -267,9 +271,11 @@ def coadds_sky(tims, targetwcs, survey, brickname, bands, mp,
     from legacypipe.survey import get_rgb, imsave_jpeg
     from astropy.stats import sigma_clipped_stats
 
-    if plots:
+    if plots or plots2:
         import os
         import matplotlib.pyplot as plt
+        
+    if plots:
         import matplotlib.patches as patches
 
         refs, _ = get_reference_sources(survey, targetwcs, targetwcs.pixel_scale(), ['r'],
@@ -378,6 +384,7 @@ def stage_fit_on_coadds(
         brickname=None, version_header=None,
         apodize=True,
         subsky=True,
+        ubercal_sky=False,
         subsky_radii=None,
         fitoncoadds_reweight_ivar=True,
         plots=False, plots2=False, ps=None, coadd_bw=False, W=None, H=None,
@@ -401,18 +408,22 @@ def stage_fit_on_coadds(
 
     # Custom sky-subtraction for large galaxies.
     if not subsky:
-        plots, plots2 = True, False
-        if plots:
+        plots, plots2, verbose = True, False, True
+        if plots or plots2:
             from astrometry.util.plotutils import PlotSequence
             ps = PlotSequence('fitoncoadds-{}'.format(brickname))
-        # ubercal_sky works, but is not being used right now--
-        #tims = ubercal_sky(tims, targetwcs, survey, brickname, bands, 
-        #                   mp, plots=plots, plots2=plots2, ps=ps)
-        if subsky_radii is not None:
-            tims = coadds_sky(tims, targetwcs, survey, brickname, bands,
-                              mp, plots=plots, plots2=plots2, ps=ps,
-                              subsky_radii=subsky_radii)
-    
+        if ubercal_sky:
+            tims = ubercal_skysub(tims, targetwcs, survey, brickname, bands, 
+                                  mp, plots=plots, plots2=plots2, ps=ps,
+                                  verbose=verbose)
+        elif subsky_radii is not None:
+            tims = coadds_skysub(tims, targetwcs, survey, brickname, bands,
+                                 mp, plots=plots, plots2=plots2, ps=ps,
+                                 subsky_radii=subsky_radii)
+        else:
+            print('Skipping sky-subtraction entirely.')
+            pass
+            
     # Create coadds and then build custom tims from them.
 
     for tim in tims:
