@@ -77,6 +77,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                 keep[I] = False
                 tycho.cut(keep)
                 gaia.isbright[J] = True
+                gaia.istycho[J] = True
         if gaia is not None and len(gaia) > 0:
             refs.append(gaia)
 
@@ -137,7 +138,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                       (refs.iby >= 0) * (refs.iby < H))
 
     for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster', 'isgaia',
-                'donotfit', 'freezeparams']:
+                'istycho', 'donotfit', 'freezeparams']:
         if not col in refs.get_columns():
             refs.set(col, np.zeros(len(refs), bool))
 
@@ -249,6 +250,7 @@ def read_gaia(wcs, bands):
     gaia.keep_radius = 4. * gaia.radius
     gaia.delete_column('G')
     gaia.isgaia = np.ones(len(gaia), bool)
+    gaia.istycho = np.zeros(len(gaia), bool)
     gaia.isbright = (gaia.mask_mag < 13.)
     gaia.ismedium = (gaia.mask_mag < 16.)
     gaia.donotfit = np.zeros(len(gaia), bool)
@@ -363,6 +365,7 @@ def read_tycho2(survey, targetwcs, bands):
     tycho.phot_g_mean_mag = tycho.mag
     tycho.delete_column('epoch_ra')
     tycho.delete_column('epoch_dec')
+    tycho.istycho = np.ones(len(tycho), bool)
     tycho.isbright = np.ones(len(tycho), bool)
     tycho.ismedium = np.ones(len(tycho), bool)
     tycho.sources = np.empty(len(tycho), object)
@@ -416,16 +419,16 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True):
     debug('Large galaxies version: "%s", preburned?' % refcat, preburn)
 
     if not preburn:
-        # Original LSLGA
+        # SGA parent catalog
         galaxies.ref_cat = np.array([refcat] * len(galaxies))
         galaxies.islargegalaxy = np.array([True] * len(galaxies))
         galaxies.preburned = np.zeros(len(galaxies), bool)
-
         # new data model
         galaxies.rename('sga_id', 'ref_id')
         galaxies.rename('mag_leda', 'mag')
         galaxies.radius = galaxies.diam / 2. / 60. # [degree]
     else:
+        # SGA
         # Need to initialize islargegalaxy to False because we will bring in
         # pre-burned sources that we do not want to use in MASKBITS.
         # (we'll set individual .islargegalaxy entries below)

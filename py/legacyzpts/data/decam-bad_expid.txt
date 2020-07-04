@@ -3239,3 +3239,5 @@
 512030 3 weird scattered light
 392104 3 weird scattered light
 635994 3 weird scattered light
+
+747320 double image
