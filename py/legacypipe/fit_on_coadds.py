@@ -538,6 +538,7 @@ def stage_fit_on_coadds(
 
         # custom sky-subtraction (implies ubercal_sky)
         if bool(skydict):
+            nccds = len(np.atleast_1d(skydict[band]['ccds']))
             if subsky_radii:
                 cotim.primhdr.add_record(dict(name='SKYRAD0', value=np.float32(subsky_radii[0]),
                                               comment='sky masking radius [arcsec]'))
@@ -545,27 +546,20 @@ def stage_fit_on_coadds(
                                               comment='sky inner annulus radius [arcsec]'))
                 cotim.primhdr.add_record(dict(name='SKYRAD2', value=np.float32(subsky_radii[2]),
                                               comment='sky outer annulus radius [arcsec]'))
-            for band in bands:
-                nccds = len(np.atleast_1d(skydict[band]['ccds']))
-                for ii in np.arange(nccds):
-                    cotim.primhdr.add_record(dict(name='SKCCD{}'.format(ii), value=skydict[band]['ccds'][ii],
-                                                  comment='ubersky CCD {} name'.format(ii)))
-                for ii in np.arange(nccds):
-                    cotim.primhdr.add_record(dict(name='SKCOR{}'.format(ii), value=np.float32(skydict[band]['delta'][ii]),
-                                                  comment='ubersky for CCD {} [nanomaggies]'.format(ii)))
-                    
-            for band in bands:
-                cotim.primhdr.add_record(dict(name='SKYMEAN{}'.format(band.upper()), value=skydict[band]['mean'],
-                                              comment='mean {} sky background [nanomaggies]'.format(band)))
-            for band in bands:
-                cotim.primhdr.add_record(dict(name='SKYMED{}'.format(band.upper()), value=skydict[band]['median'],
-                                              comment='median {} sky background [nanomaggies]'.format(band)))
-            for band in bands:
-                cotim.primhdr.add_record(dict(name='SKYSIG{}'.format(band.upper()), value=skydict[band]['sigma'],
-                                              comment='sigma {} sky background [nanomaggies]'.format(band)))
-            for band in bands:
-                cotim.primhdr.add_record(dict(name='SKYPIX{}'.format(band.upper()), value=skydict[band]['npix'],
-                                              comment='number of pixels in {} sky background'.format(band)))
+            for ii in np.arange(nccds):
+                cotim.primhdr.add_record(dict(name='SKCCD{}'.format(ii), value=skydict[band]['ccds'][ii],
+                                              comment='ubersky CCD {} name'.format(ii)))
+            for ii in np.arange(nccds):
+                cotim.primhdr.add_record(dict(name='SKCOR{}'.format(ii), value=np.float32(skydict[band]['delta'][ii]),
+                                              comment='ubersky for CCD {} [nanomaggies]'.format(ii)))
+            cotim.primhdr.add_record(dict(name='SKYMEAN{}'.format(band.upper()), value=skydict[band]['mean'],
+                                          comment='mean {} sky background [nanomaggies]'.format(band)))
+            cotim.primhdr.add_record(dict(name='SKYMED{}'.format(band.upper()), value=skydict[band]['median'],
+                                          comment='median {} sky background [nanomaggies]'.format(band)))
+            cotim.primhdr.add_record(dict(name='SKYSIG{}'.format(band.upper()), value=skydict[band]['sigma'],
+                                          comment='sigma {} sky background [nanomaggies]'.format(band)))
+            cotim.primhdr.add_record(dict(name='SKYPIX{}'.format(band.upper()), value=skydict[band]['npix'],
+                                          comment='number of pixels in {} sky background'.format(band)))
             
         cotims.append(cotim)
 
