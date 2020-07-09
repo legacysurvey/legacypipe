@@ -536,9 +536,6 @@ class OneBlob(object):
         # rankmap goes from source index to rank
         # (unlike 'rank', which is for sources in Iranks)
         rankmap = dict(zip(Irank, rank))
-        print('Irank:', Irank)
-        print('rank:' ,rank)
-        print('rankmap:', rankmap)
 
         todo = set(Iseg)
         mx = int(np.ceil(maxsn.max()))

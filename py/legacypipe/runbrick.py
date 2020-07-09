@@ -695,6 +695,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     else:
         avoid_x, avoid_y, avoid_r = np.array([], np.int32), np.array([], np.int32), np.array([])
     if T_clusters is not None and len(T_clusters) > 0:
+        from legacypipe.reference import get_reference_map
         info('Avoiding source detection in', len(T_clusters), 'CLUSTER masks')
         avoid_map = (get_reference_map(targetwcs, T_clusters) != 0)
 
