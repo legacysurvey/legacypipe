@@ -664,6 +664,7 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     _add_stage_version(version_header, 'SRCS', 'srcs')
     tlast = Time()
 
+    avoid_map = None
     if refstars:
         # Don't detect new sources where we already have reference stars
         I = np.flatnonzero(refstars.in_bounds * (refstars.ref_epoch == 0))
@@ -691,15 +692,12 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
             avoid_x = np.array([], np.int32)
             avoid_y = np.array([], np.int32)
         avoid_r = np.zeros_like(avoid_x) + 4
-        if T_clusters is not None:
-            info('Avoiding source detection in', len(T_clusters), 'CLUSTERs')
-            if len(T_clusters):
-                avoid_x = np.append(avoid_x, T_clusters.ibx)
-                avoid_y = np.append(avoid_y, T_clusters.iby)
-                avoid_r = np.append(avoid_r, T_clusters.radius_pix)
-                debug('CLUSTER pixel radii:', T_clusters.radius_pix)
     else:
         avoid_x, avoid_y, avoid_r = np.array([], np.int32), np.array([], np.int32), np.array([])
+    if T_clusters is not None and len(T_clusters) > 0:
+        from legacypipe.reference import get_reference_map
+        info('Avoiding source detection in', len(T_clusters), 'CLUSTER masks')
+        avoid_map = (get_reference_map(targetwcs, T_clusters) != 0)
 
     record_event and record_event('stage_srcs: detection maps')
     tnow = Time()
@@ -737,10 +735,8 @@ def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
         nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
-        saturated_pix=saturated_pix, plots=plots, ps=ps, mp=mp, **kwa)
-
-    #if Tnew is None:
-    #    raise NothingToDoError('No sources detected.')
+        saturated_pix=saturated_pix, veto_map=avoid_map,
+        plots=plots, ps=ps, mp=mp, **kwa)
 
     if Tnew is not None:
         assert(len(Tnew) == len(newcat))
@@ -2032,7 +2028,7 @@ def _add_bit_description(header, BITS, bits, bnpat, bitpat, bitmapname):
         header.add_record(
             dict(name=bnpat % short, value=BITS[key],
                  comment='%s: %s' % (bitmapname, comm)))
-    revmap = dict([(bit,name) for name,bit in MASKBITS.items()])
+    revmap = dict([(bit,name) for name,bit in BITS.items()])
     nicemap = dict([(k,c) for k,short,c in bits])
     for bit in range(16):
         bitval = 1<<bit
