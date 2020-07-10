@@ -476,8 +476,9 @@ def get_galaxy_sources(galaxies, bands):
     radius_max_factor = 2.
 
     srcs = [None for g in galaxies]
-    I, = np.nonzero(galaxies.freezeparams)
-    # only fix the parameters of pre-burned galaxies
+
+    # If we have pre-burned galaxies, re-create the Tractor sources for them.
+    I, = np.nonzero(galaxies.preburned)
     for ii,g in zip(I, galaxies[I]):
         try:
             typ = fits_reverse_typemap[g.type.strip()]
@@ -530,7 +531,8 @@ def get_galaxy_sources(galaxies, bands):
                   traceback.print_exc())
             raise
 
-    I, = np.nonzero(np.logical_not(galaxies.freezeparams))
+    # SGA parent catalog: 'preburned' is not set
+    I, = np.nonzero(np.logical_not(galaxies.preburned))
     for ii,g in zip(I, galaxies[I]):
         # Initialize each source with an exponential disk--
         fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag))
