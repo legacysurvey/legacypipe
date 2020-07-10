@@ -1309,10 +1309,9 @@ class LegacySurveyImage(object):
                 sub_galaxies = get_galaxy_sources(refs[I], [self.band])
         galmod = None
         if sub_galaxies is not None:
-            from tractor import ConstantSky, ConstantFitsWcs, NanoMaggies, LinearPhotoCal
-            from tractor import Image, Tractor
-            info('Subtracting SGA galaxies before estimating sky;',
-                 len(sub_galaxies), 'galaxies')
+            from tractor import (ConstantSky, ConstantFitsWcs, NanoMaggies,
+                                 LinearPhotoCal, Image, Tractor)
+            info('Subtracting %i SGA galaxies before estimating sky' % len(sub_galaxies))
             for g in sub_galaxies:
                 debug('  ', g)
             psf_fwhm = self.get_fwhm(primhdr, imghdr)
@@ -1344,14 +1343,12 @@ class LegacySurveyImage(object):
             Igaia, = np.nonzero(refs.isgaia * refs.pointsource *
                                 np.logical_not(refs.donotfit))
             if len(Igaia):
-                info('Subtracting halos before estimating sky;', len(Igaia),
-                     'Gaia stars')
+                info('Subtracting %i Gaia halos before estimating sky' % len(Igaia))
                 from legacypipe.halos import decam_halo_model
                 # moffat=True: include inner Moffat component in star halos.
                 moffat = True
                 haloimg = decam_halo_model(refs[Igaia], self.mjdobs, wcs,
-                                           self.pixscale, self.band, self,
-                                           moffat)
+                                           self.pixscale, self.band, self, moffat)
                 # "haloimg" is in nanomaggies.  Convert to ADU via zeropoint...
                 from tractor.basics import NanoMaggies
                 assert(self.ccdzpt > 0)

@@ -142,6 +142,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         if not col in refs.get_columns():
             refs.set(col, np.zeros(len(refs), bool))
 
+    # Copy flags from the 'refs' table to the source objects themselves.
     sources = refs.sources
     refs.delete_column('sources')
     for i,(donotfit,freeze) in enumerate(zip(refs.donotfit, refs.freezeparams)):
@@ -466,11 +467,12 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True):
 
 def get_galaxy_sources(galaxies, bands):
     from legacypipe.catalog import fits_reverse_typemap
+    from legacypipe.survey import (LegacySersicIndex, LegacyEllipseWithPriors,
+                                   LogRadius, RexGalaxy)
     from tractor import NanoMaggies, RaDecPos, PointSource
     from tractor.ellipses import EllipseE, EllipseESoft
     from tractor.galaxy import DevGalaxy, ExpGalaxy
     from tractor.sersic import SersicGalaxy
-    from legacypipe.survey import LegacySersicIndex, LegacyEllipseWithPriors, LogRadius, RexGalaxy
 
     # Factor of HyperLEDA to set the galaxy max radius
     radius_max_factor = 2.
@@ -491,7 +493,7 @@ def get_galaxy_sources(galaxies, bands):
                 assert(np.isfinite(g.shape_r))
                 logre = np.log(g.shape_r)
                 shape = LogRadius(logre)
-                # set prior max at 2x HyperLEDA radius
+                # set prior max at 2x SGA radius
                 shape.setMaxLogRadius(logre + np.log(radius_max_factor))
             elif issubclass(typ, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
                 assert(np.isfinite(g.shape_r))
@@ -504,17 +506,18 @@ def get_galaxy_sources(galaxies, bands):
                 logre = shape.logre
                 shape = LegacyEllipseWithPriors(logre, shape.ee1, shape.ee2)
                 assert(np.all(np.isfinite(shape.getParams())))
-                # set prior max at 2x HyperLEDA radius
+                # set prior max at 2x SGA radius
                 shape.setMaxLogRadius(logre + np.log(radius_max_factor))
 
-            if issubclass(typ, (DevGalaxy, ExpGalaxy)):
+            if issubclass(typ, PointSource):
+                src = typ(pos, bright)
+            # this catches Rex too
+            elif issubclass(typ, (DevGalaxy, ExpGalaxy)):
                 src = typ(pos, bright, shape)
             elif issubclass(typ, (SersicGalaxy)):
                 assert(np.isfinite(g.sersic))
                 sersic = LegacySersicIndex(g.sersic)
                 src = typ(pos, bright, shape, sersic)
-            elif issubclass(typ, PointSource):
-                src = typ(pos, bright)
             else:
                 print('Unknown type', typ)
             debug('Created', src)
