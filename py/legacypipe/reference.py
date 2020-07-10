@@ -422,37 +422,25 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True):
     if not preburn:
         # SGA parent catalog
         galaxies.ref_cat = np.array([refcat] * len(galaxies))
-        galaxies.islargegalaxy = np.array([True] * len(galaxies))
+        galaxies.islargegalaxy = np.ones(len(galaxies, bool)
+        galaxies.freezeparams = np.zeros(len(galaxies), bool)
         galaxies.preburned = np.zeros(len(galaxies), bool)
-        # new data model
         galaxies.rename('sga_id', 'ref_id')
-        galaxies.rename('mag_leda', 'mag')
-        galaxies.radius = galaxies.diam / 2. / 60. # [degree]
     else:
         # SGA
-        # Need to initialize islargegalaxy to False because we will bring in
-        # pre-burned sources that we do not want to use in MASKBITS.
-        # (we'll set individual .islargegalaxy entries below)
         # NOTE: fields such as ref_cat, preburned, etc, already exist in the
         # "galaxies" catalog read from disk.
-        galaxies.islargegalaxy = np.zeros(len(galaxies), bool)
-        galaxies.rename('mag_leda', 'mag')
-        galaxies.radius = galaxies.diam / 2. / 60. # [degree]
+        # The galaxies we want to appear in MASKBITS get 'islargegalaxy' set
+        galaxies.islargegalaxy = (galaxies.preburned * galaxies.freeze *
+                                  (galaxies.ref_cat == refcat))
+        # The pre-fit galaxies whose parameters will stay fixed
+        galaxies.freezeparams = (galaxies.preburned * galaxies.freeze)
 
+    galaxies.rename('mag_leda', 'mag')
+    galaxies.radius = galaxies.diam / 2. / 60. # [degree]
     galaxies.keep_radius = 2. * galaxies.radius
-    galaxies.freezeparams = np.zeros(len(galaxies), bool)
     galaxies.sources = np.empty(len(galaxies), object)
     galaxies.sources[:] = None
-    galaxies.keep_radius = galaxies.radius
-
-    I, = np.nonzero(galaxies.preburned)
-    if len(I):
-        # Non-preburned catalogs might not even have the 'freeze' column
-        I, = np.nonzero(galaxies.preburned * galaxies.freeze *
-                        (galaxies.ref_cat == refcat))
-        galaxies.islargegalaxy[I] = True
-        I, = np.nonzero(galaxies.preburned * galaxies.freeze)
-        galaxies.freezeparams[I] = True
 
     if bands is not None:
         galaxies.sources[:] = get_galaxy_sources(galaxies, bands)
