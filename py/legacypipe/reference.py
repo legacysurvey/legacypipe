@@ -422,7 +422,7 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True):
     if not preburn:
         # SGA parent catalog
         galaxies.ref_cat = np.array([refcat] * len(galaxies))
-        galaxies.islargegalaxy = np.ones(len(galaxies, bool)
+        galaxies.islargegalaxy = np.ones(len(galaxies), bool)
         galaxies.freezeparams = np.zeros(len(galaxies), bool)
         galaxies.preburned = np.zeros(len(galaxies), bool)
         galaxies.rename('sga_id', 'ref_id')
