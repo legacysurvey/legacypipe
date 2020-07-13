@@ -1616,7 +1616,8 @@ class LegacySurveyImage(object):
                    force=False, git_version=None,
                    splinesky=True, ps=None, survey=None,
                    gaia=True, old_calibs_ok=False,
-                   survey_blob_mask=None, halos=True):
+                   survey_blob_mask=None, halos=True,
+                   subtract_largegalaxies=True):
         '''
         Run calibration pre-processing steps.
         '''
@@ -1655,7 +1656,7 @@ class LegacySurveyImage(object):
         if psfex:
             self.run_psfex(git_version=git_version, ps=ps)
         if sky:
-            self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia, survey_blob_mask=survey_blob_mask, halos=halos)
+            self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia, survey_blob_mask=survey_blob_mask, halos=halos, subtract_largegalaxies=subtract_largegalaxies)
 
 def psfex_single_to_merged(infn, expnum, ccdname):
     # returns table T
