@@ -1449,7 +1449,8 @@ class Measurer(object):
                    plots=False, survey_blob_mask=None, survey_zeropoints=None):
         '''
         survey_zeropoints: LegacySurveyData object to use for fetching the
-        zeropoint for this CCD, which is used for subtracting stellar halos.
+        zeropoint for this CCD, which is used for subtracting stellar halos
+        and SGA galaxies.
         '''
         # Initialize with some basic data
         self.set_hdu(ext)
@@ -1515,7 +1516,7 @@ class Measurer(object):
         # Only do stellar halo subtraction if we have a zeropoint (via --zeropoint-dir)
         # Note that this is the only place we use survey_zeropoints; it does not get
         # passed to image.run_calibs().
-        dohalos = False
+        have_zpt = False
         if survey_zeropoints is not None:
             ccds = survey_zeropoints.find_ccds(expnum=self.expnum, ccdname=self.ccdname,
                                                camera=self.camera)
@@ -1524,13 +1525,15 @@ class Measurer(object):
             ccd.ccdzpt = ccds[0].ccdzpt
             ccd.ccdraoff = ccds[0].ccdraoff
             ccd.ccddecoff = ccds[0].ccddecoff
-            dohalos = True
+            have_zpt = True
 
         im = survey.get_image_object(ccd)
         git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
         im.run_calibs(psfex=do_psf, sky=do_sky, splinesky=True,
                       git_version=git_version, survey=survey, ps=ps,
-                      survey_blob_mask=survey_blob_mask, halos=dohalos)
+                      survey_blob_mask=survey_blob_mask,
+                      halos=have_zpt,
+                      subtract_largegalaxies=have_zpt)
         return ccd
 
 class FakeCCD(object):
