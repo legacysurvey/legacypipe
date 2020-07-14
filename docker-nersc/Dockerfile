@@ -194,14 +194,15 @@ RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
 ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 ENV PATH /opt/conda/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-ENV HOME /root
+RUN mkdir /homedir && chmod 777 /homedir
+ENV HOME /homedir
 
 # set prompt and default shell
 SHELL ["/bin/bash", "-c"]
 
-RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> /root/.bashrc \
-  # Create config files in /root
-  && mkdir /root/.qdo && echo "[qdo]" > /root/.qdo/qdorc \
+RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
+  # Create config files in $HOME
+  && mkdir $HOME/.qdo && echo "[qdo]" > $HOME/.qdo/qdorc \
   && python -c "import astropy" \
   && python -c "import matplotlib.font_manager as fm; f = fm.FontManager()" \
   && ipython -c "print('hello')" \
@@ -213,7 +214,8 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> /root/.bashrc \
   
 # Curses upon you, astropy
 RUN wget -O /opt/conda/lib/python3.7/site-packages/astropy/utils/iers/data/Leap_Second.dat \
-    https://raw.githubusercontent.com/astropy/astropy/master/astropy/utils/iers/data/Leap_Second.dat
+    https://raw.githubusercontent.com/astropy/astropy/master/astropy/utils/iers/data/Leap_Second.dat \
+    && rm $HOME/.wget-hsts
 
 ENTRYPOINT ["/bin/bash", "-c"]
 CMD ["/bin/bash"]
@@ -232,6 +234,6 @@ RUN python -O -m compileall \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-RUN cd /src/legacypipe && git pull && git describe && echo 32 && \
+RUN cd /src/legacypipe && git pull && git describe && echo 34 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
