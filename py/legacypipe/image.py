@@ -853,7 +853,7 @@ class LegacySurveyImage(object):
         #   mean value    = 0.0235224
         #   minimum value = -14.2634
         #   maximum value = 1628.22
-        medwt = np.median(invvar > 0)
+        medwt = np.median(invvar[invvar > 0])
         thresh = 100. * medwt
         n = np.sum(invvar > thresh)
         if n > 100:
