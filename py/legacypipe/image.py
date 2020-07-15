@@ -846,6 +846,22 @@ class LegacySurveyImage(object):
                     thresh = 0.
                 invvar[invvar < thresh] = 0
 
+        # ALSO hack around an issue in some ls9 reprocessings where isolated pixels have
+        # anomalously large values.  Eg
+        # > imstat /global/cfs/cdirs/cosmo/work/legacysurvey/dr9/images/decam/CP/V4.8.2a/CP20160301/c4d_160302_035101_oow_g_ls9.fits.fz"[S31]"
+        # Statistics of 2046 x 4094  image
+        #   mean value    = 0.0235224
+        #   minimum value = -14.2634
+        #   maximum value = 1628.22
+        medwt = np.median(invvar > 0)
+        thresh = 100. * medwt
+        n = np.sum(invvar > thresh)
+        if n > 100:
+            raise RuntimeError('More than 100 pixels have anomalously large oow values: max %g vs median %g' % (np.max(invvar), medwt))
+        if n > 0:
+            info('Masking %i pixels with anomalously large oow values: max %g vs median %g' % (n, np.max(invvar), medwt))
+            invvar[invvar > thresh] = 0.
+
         invvar[invvar < 0.] = 0.
         assert(np.all(np.isfinite(invvar)))
         return invvar
