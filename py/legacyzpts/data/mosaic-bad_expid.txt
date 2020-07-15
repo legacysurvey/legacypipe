@@ -5700,3 +5700,5 @@
 
 80665 fwhm==nan
 122019 fwhm==nan
+
+151122115612 corrupt ccd
