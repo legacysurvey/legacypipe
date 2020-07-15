@@ -406,7 +406,10 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True):
     rc,dc = targetwcs.radec_center()
 
     debug('Reading', galfn)
-    kd = tree_open(galfn, 'largegals')
+    try:
+        kd = tree_open(galfn, 'stars')
+    except:
+        kd = tree_open(galfn, 'largegals')
     I = tree_search_radec(kd, rc, dc, radius)
     debug(len(I), 'large galaxies within', radius,
           'deg of RA,Dec (%.3f, %.3f)' % (rc,dc))
