@@ -18,8 +18,7 @@ python:
   - "3.5"
   - "3.6"
   - "3.7"
-# astrometry.util.timingpool error!
-#  - "3.8"
+  - "3.8"
 
 install:
     # ubuntu's source extractor package renames the executable.
@@ -58,7 +57,7 @@ before_script:
 
 script:
     - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$HOME/astrometry.net:$HOME/unwise_psf/py
-    - export PATH=${PATH}:$HOME/astrometry.net/blind:$HOME/astrometry.net/util
+    - export PATH=${PATH}:$HOME/astrometry.net/solver:$HOME/astrometry.net/util
     - ls $HOME
     - ls $HOME/astrometry.net
     - (cd doc && make)
