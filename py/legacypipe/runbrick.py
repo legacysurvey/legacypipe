@@ -3171,6 +3171,10 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                      initial_args=initargs, **kwargs)
 
     info('All done:', StageTime()-t0)
+
+    if pool is not None:
+        pool.close()
+        pool.join()
     return R
 
 def flush(x=None):
