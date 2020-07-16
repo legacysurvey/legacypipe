@@ -16,9 +16,11 @@ python:
   - "3.6"
   - "3.7"
   - "3.8"
+  - "nightly"
 
 install:
     # ubuntu's source extractor package renames the executable.
+    - python --version
     - ln -s /usr/bin/sextractor ~/bin/sex
     - export PATH=${PATH}:~/bin
     - pip install Sphinx
