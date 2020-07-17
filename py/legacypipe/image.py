@@ -1320,7 +1320,7 @@ class LegacySurveyImage(object):
             debug('Freezeparams:', np.sum(refs.islargegalaxy * refs.freezeparams))
             # we only want to subtract pre-burned, frozen galaxies.
             I = np.flatnonzero(refs.islargegalaxy * refs.freezeparams)
-            debug('Found', len(I), 'SGA galaxies to subtract before sky')
+            info('Found', len(I), 'SGA galaxies to subtract before sky')
             if len(I):
                 sub_galaxies = get_galaxy_sources(refs[I], [self.band])
         galmod = None
