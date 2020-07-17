@@ -192,7 +192,7 @@ def cols_for_survey_table(which='all'):
         dustins_keys= ['skyrms']
     return need_arjuns_keys + dustins_keys + martins_keys + gods_keys
 
-def write_survey_table(T, surveyfn, camera=None, bad_expid=None):
+def prep_survey_table(T, camera=None, bad_expid=None):
     assert(camera in CAMERAS)
     need_keys = cols_for_survey_table(which='all')
     # Rename
@@ -226,12 +226,10 @@ def write_survey_table(T, surveyfn, camera=None, bad_expid=None):
     # run.
     from legacyzpts import psfzpt_cuts
     T.ccd_cuts = np.zeros(len(T), np.int16) + psfzpt_cuts.CCD_CUT_BITS['err_legacyzpts']
-    writeto_via_temp(surveyfn, T)
-    print('Wrote %s' % surveyfn)
+    return T
 
-def create_annotated_table(leg_fn, ann_fn, camera, survey, mp):
+def create_annotated_table(T, ann_fn, camera, survey, mp):
     from legacyzpts.annotate_ccds import annotate, init_annotations
-    T = fits_table(leg_fn)
     T = survey.cleanup_ccds_table(T)
     init_annotations(T)
     annotate(T, survey, mp=mp, mzls=(camera == 'mosaic'), bass=(camera == '90prime'),
@@ -2141,7 +2139,6 @@ class outputFns(object):
         if debug:
             base += '-debug'
         self.photomfn = os.path.join(basedir, base + '-photom.fits')
-        self.surveyfn = os.path.join(basedir, base + '-survey.fits')
         self.annfn = os.path.join(basedir, base + '-annotated.fits')
 
 def writeto_via_temp(outfn, obj, func_write=False, **kwargs):
@@ -2152,7 +2149,7 @@ def writeto_via_temp(outfn, obj, func_write=False, **kwargs):
         obj.writeto(tempfn, **kwargs)
     os.rename(tempfn, outfn)
 
-def runit(imgfn, photomfn, surveyfn, annfn, mp, bad_expid=None,
+def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
           survey=None, run_calibs_only=False, **measureargs):
     '''Generate a legacypipe-compatible (survey) CCDs file for a given image.
     '''
@@ -2222,12 +2219,9 @@ def runit(imgfn, photomfn, surveyfn, annfn, mp, bad_expid=None,
     accds = astropy_to_astrometry_table(ccds)
 
     # survey table
-    write_survey_table(accds, surveyfn, camera=measureargs['camera'],
-                       bad_expid=bad_expid)
+    T = prep_survey_table(accds, camera=measureargs['camera'], bad_expid=bad_expid)
     # survey --> annotated
-    create_annotated_table(surveyfn, annfn, measureargs['camera'], survey, mp)
-    # Remove survey file
-    os.remove(surveyfn)
+    create_annotated_table(T, annfn, measureargs['camera'], survey, mp)
 
     t0 = ptime('write-results-to-fits',t0)
 
@@ -2356,10 +2350,10 @@ def main(image_list=None,args=None):
         psffn = measure.get_psfex_merged_filename()
         skyfn = measure.get_splinesky_merged_filename()
 
-        leg_ok, ann_ok, psf_ok, sky_ok = [validate_procdate_plver(
+        ann_ok, psf_ok, sky_ok = [validate_procdate_plver(
             fn, 'table', measure.expnum, measure.plver, measure.procdate,
             measure.plprocid, quiet=quiet)
-            for fn in [F.surveyfn, F.annfn, psffn, skyfn]]
+            for fn in [F.annfn, psffn, skyfn]]
 
         if measureargs['run_calibs_only'] and psf_ok and sky_ok:
             print('Already finished {}'.format(psffn))
@@ -2370,20 +2364,13 @@ def main(image_list=None,args=None):
                                          measure.plver, measure.procdate,
                                          measure.plprocid, ext=1, quiet=quiet)
 
-        if leg_ok and ann_ok and phot_ok and psf_ok and sky_ok:
+        if ann_ok and phot_ok and psf_ok and sky_ok:
             print('Already finished: {}'.format(F.annfn))
-            if leg_ok:
-                os.remove(F.surveyfn)
-            continue
-
-        if leg_ok and phot_ok and not ann_ok:
-            # survey --> annotated
-            create_annotated_table(F.surveyfn, F.annfn, camera, survey, mp)
             continue
 
         # Create the file
         t0 = ptime('before-run',t0)
-        runit(F.imgfn, F.photomfn, F.surveyfn, F.annfn, mp, **measureargs)
+        runit(F.imgfn, F.photomfn, F.annfn, mp, **measureargs)
         t0 = ptime('after-run',t0)
     tnow = Time()
     print("TIMING:total %s" % (tnow-tbegin,))
