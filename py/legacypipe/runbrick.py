@@ -374,6 +374,7 @@ def stage_refs(survey=None,
                gaia_stars=True,
                large_galaxies=True,
                star_clusters=True,
+               plots=False, ps=None,
                record_event=None,
                **kwargs):
     from legacypipe.reference import get_reference_sources
@@ -384,7 +385,8 @@ def stage_refs(survey=None,
                                             tycho_stars=tycho_stars,
                                             gaia_stars=gaia_stars,
                                             large_galaxies=large_galaxies,
-                                            star_clusters=star_clusters)
+                                            star_clusters=star_clusters,
+                                            plots=plots, ps=ps)
     # "refstars" is a table
     # "refcat" is a list of tractor Sources
     # They are aligned
@@ -469,7 +471,7 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
 
     return dict(tims=tims, version_header=version_header)
 
-def stage_halos(targetrd=None, pixscale=None, targetwcs=None,
+def stage_halos(pixscale=None, targetwcs=None,
                 W=None,H=None,
                 bands=None, ps=None, tims=None,
                 plots=False, plots2=False,
@@ -629,7 +631,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         del rgb
     return None
 
-def stage_srcs(targetrd=None, pixscale=None, targetwcs=None,
+def stage_srcs(pixscale=None, targetwcs=None,
                W=None,H=None,
                bands=None, ps=None, tims=None,
                plots=False, plots2=False,

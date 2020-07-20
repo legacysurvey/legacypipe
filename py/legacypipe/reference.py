@@ -17,7 +17,8 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                           gaia_stars=True,
                           large_galaxies=True,
                           star_clusters=True,
-                          clean_columns=True):
+                          clean_columns=True,
+                          plots=False, ps=None):
     # If bands = None, does not create sources.
 
     H,W = targetwcs.shape
@@ -63,12 +64,31 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
             I,J,_ = match_radec(tycho.ra, tycho.dec, gra, gdec, 10./3600.,
                                 nearest=True)
             debug('Initially matched', len(I), 'Tycho-2 stars to Gaia stars (10").')
+
+            if plots:
+                import pylab as plt
+                plt.clf()
+                plt.plot(gra, gdec, 'bo', label='Gaia (1991.5)')
+                plt.plot(gaia.ra, gaia.dec, 'gx', label='Gaia (2015.5)')
+                plt.plot([gaia.ra, gra], [gaia.dec, gdec], 'k-')
+                plt.plot([tycho.ra[I], gra[J]], [tycho.dec[I], gdec[J]], 'r-')
+                plt.plot(tycho.ra, tycho.dec, 'rx', label='Tycho-2')
+                plt.plot(tycho.ra[I], tycho.dec[I], 'o', mec='r', ms=8, mfc='none',
+                         label='Tycho-2 matched')
+                plt.legend()
+                r0,r1,d0,d1 = targetwcs.radec_bounds()
+                plt.axis([r0,r1,d0,d1])
+                plt.title('Initial (10") matching')
+                ps.savefig()
+
             dt = tycho.ref_epoch[I] - gaia.ref_epoch[J]
             cosdec = np.cos(np.deg2rad(gaia.dec[J]))
             gra  = gaia.ra[J]  + dt * gaia.pmra[J]  / (3600.*1000.) / cosdec
             gdec = gaia.dec[J] + dt * gaia.pmdec[J] / (3600.*1000.)
             dists = np.hypot((gra - tycho.ra[I]) * cosdec, gdec - tycho.dec[I])
             K = np.flatnonzero(dists <= 1./3600.)
+            if len(K)<len(I):
+                debug('Unmatched Tycho-2 - Gaia stars: dists', dists[dists > 1./3600.]*3600.)
             I = I[K]
             J = J[K]
             debug('Matched', len(I), 'Tycho-2 stars to Gaia stars.')
