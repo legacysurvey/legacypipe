@@ -36,6 +36,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     refs = []
 
     # Tycho-2 stars
+    tycho = []
     if tycho_stars:
         tycho = read_tycho2(survey, marginwcs, bands)
         if tycho and len(tycho):
