@@ -2372,8 +2372,10 @@ def _select_model(chisqs, nparams, galaxy_margin):
         return keepmod
 
     # Now choose between point source and REX
-    if 'psf' in chisqs and not 'rex' in chisqs:
-        # bright stars / reference stars: we don't test the simple model.
+    if 'psf' in chisqs and (not 'rex' in chisqs) and (not 'dev' in chisqs) and (not 'exp' in chisqs) and (not 'ser' in chisqs):
+        # bright stars / reference stars: we don't compute the REX or any other models.
+        # We also need to check existence of the *other* models because sometimes REX can fail
+        # in ways where we don't even compute a chisq (eg, source leaves blob)
         return 'psf'
 
     #print('PSF', chisqs.get('psf',0)-nparams['psf'], 'vs REX', chisqs.get('rex',0)-nparams['rex'])
