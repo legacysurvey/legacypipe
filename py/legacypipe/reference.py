@@ -121,6 +121,13 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                 info('Matched', len(I), 'large galaxies to Gaia stars.')
                 if len(I):
                     gaia.donotfit[J] = True
+            # Resolve possible Tycho2-large-galaxy duplicates (with larger radius)
+            if tycho and len(tycho):
+                I,J,_ = match_radec(galaxies.ra, galaxies.dec, tycho.ra, tycho.dec,
+                                    5./3600., nearest=True)
+                info('Matched', len(I), 'large galaxies to Tycho-2 stars.')
+                if len(I):
+                    tycho.donotfit[J] = True
             refs.append(galaxies)
 
     if len(refs):
@@ -394,6 +401,7 @@ def read_tycho2(survey, targetwcs, bands):
     tycho.istycho = np.ones(len(tycho), bool)
     tycho.isbright = np.ones(len(tycho), bool)
     tycho.ismedium = np.ones(len(tycho), bool)
+    tycho.donotfit = np.zeros(len(tycho), bool)
     tycho.sources = np.empty(len(tycho), object)
     if bands is not None:
         for i,t in enumerate(tycho):
