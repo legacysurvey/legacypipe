@@ -391,9 +391,28 @@ def stage_refs(survey=None,
     # "refcat" is a list of tractor Sources
     # They are aligned
     if refstars:
+        from legacypipe.format_catalog import get_units_for_columns
         assert(len(refstars) == len(refcat))
+        cols = ['ra', 'dec', 'ref_cat', 'ref_id', 'mag',
+                'istycho', 'isgaia', 'islargegalaxy', 'iscluster',
+                'isbright', 'ismedium', 'freezeparams', 'pointsource', 'donotfit', 'in_bounds',
+                'ba', 'pa', 'decam_mag_g', 'decam_mag_r', 'decam_mag_z',
+                'zguess', 'mask_mag', 'radius', 'keep_radius', 'radius_pix', 'ibx', 'iby',
+                'ref_epoch', 'pmra', 'pmdec', 'parallax',
+                'ra_ivar', 'dec_ivar', 'pmra_ivar', 'pmdec_ivar', 'parallax_ivar',
+                # Gaia
+                'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag', 'phot_g_mean_flux_over_error',
+                'phot_bp_mean_flux_over_error', 'phot_rp_mean_flux_over_error', 'phot_g_n_obs',
+                'phot_bp_n_obs', 'phot_rp_n_obs', 'phot_variable_flag', 'astrometric_excess_noise',
+                'astrometric_excess_noise_sig', 'astrometric_n_obs_al', 'astrometric_n_good_obs_al',
+                'astrometric_weight_al', 'duplicated_source', 'a_g_val', 'e_bp_min_rp_val',
+                'phot_bp_rp_excess_factor', 'astrometric_sigma5d_max', 'astrometric_params_solved',
+                ]
+        extra_units = dict(zguess='mag', pa='deg', radius='deg', keep_radius='deg')
+        units = get_units_for_columns(cols, [], extra_units)
         with survey.write_output('ref-sources', brick=brickname) as out:
-            refstars.writeto(None, fits_object=out.fits, primheader=version_header)
+            refstars.writeto(None, fits_object=out.fits, primheader=version_header,
+                             columns=cols, units=units)
 
     T_dup = None
     T_clusters = None

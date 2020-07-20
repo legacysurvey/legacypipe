@@ -187,6 +187,8 @@ def read_gaia(wcs, bands):
     debug('Got', len(gaia), 'Gaia stars nearby')
 
     gaia.G = gaia.phot_g_mean_mag
+    # Sort by brightness (for reference-*.fits output table)
+    gaia.cut(np.argsort(gaia.G))
 
     # Gaia to DECam color transformations for stars
     color = gaia.phot_bp_mean_mag - gaia.phot_rp_mean_mag
@@ -210,6 +212,7 @@ def read_gaia(wcs, bands):
         for order,c in enumerate(coeffs):
             mag += c * color**order
         gaia.set('decam_mag_%s' % b, mag)
+    del color
 
     #  For possible future use:
     #  BASS/MzLS:
@@ -333,8 +336,9 @@ def read_tycho2(survey, targetwcs, bands):
                     tycho.tyc2.astype(np.int64)*10 +
                     tycho.tyc3.astype(np.int64))
     with np.errstate(divide='ignore'):
-        tycho.pmra_ivar = 1./tycho.sigma_pm_ra**2
-        tycho.pmdec_ivar = 1./tycho.sigma_pm_dec**2
+        # In our Tycho-2 catalog, sigma_pm_* are in *arcsec/yr*, Gaia is in mas/yr.
+        tycho.pmra_ivar  = 1./(tycho.sigma_pm_ra  * 1000.)**2
+        tycho.pmdec_ivar = 1./(tycho.sigma_pm_dec * 1000.)**2
         tycho.ra_ivar  = 1./tycho.sigma_ra **2
         tycho.dec_ivar = 1./tycho.sigma_dec**2
     tycho.rename('pm_ra', 'pmra')
@@ -635,7 +639,7 @@ def get_reference_map(wcs, refs):
             continue
         thisrefs = refs[I]
 
-        radius_pix = np.ceil(thisrefs.radius * 3600. / pixscale).astype(int)
+        radius_pix = np.ceil(thisrefs.radius * 3600. / pixscale).astype(np.int32)
 
         if bit == 'BRIGHT':
             # decrease the BRIGHT masking radius by a factor of two!
