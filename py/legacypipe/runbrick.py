@@ -408,6 +408,10 @@ def stage_refs(survey=None,
                 'astrometric_weight_al', 'duplicated_source', 'a_g_val', 'e_bp_min_rp_val',
                 'phot_bp_rp_excess_factor', 'astrometric_sigma5d_max', 'astrometric_params_solved',
                 ]
+        # Drop columns that don't exist (because one of the ref catalogs has no entries or is
+        # not being used)
+        refcols = refstars.get_columns()
+        cols = [c for c in cols if c in refcols]
         extra_units = dict(zguess='mag', pa='deg', radius='deg', keep_radius='deg')
         units = get_units_for_columns(cols, [], extra_units)
         with survey.write_output('ref-sources', brick=brickname) as out:

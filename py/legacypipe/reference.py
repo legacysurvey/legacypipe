@@ -157,11 +157,11 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     refs.in_bounds = ((refs.ibx >= 0) * (refs.ibx < W) *
                       (refs.iby >= 0) * (refs.iby < H))
 
+    # ensure bool columns
     for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster', 'isgaia',
                 'istycho', 'donotfit', 'freezeparams']:
         if not col in refs.get_columns():
             refs.set(col, np.zeros(len(refs), bool))
-
     # Copy flags from the 'refs' table to the source objects themselves.
     sources = refs.sources
     refs.delete_column('sources')
