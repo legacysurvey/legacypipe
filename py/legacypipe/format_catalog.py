@@ -336,7 +336,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
             j = cclower.index(c)
             cols[i] = cc[j]
 
-    units = get_units_for_columns(cols, allbands + wbands + gbands)
+    units = get_units_for_columns(cols, list(allbands) + wbands + gbands)
 
     T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units,
               **write_kwargs)
