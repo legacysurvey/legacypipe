@@ -3,6 +3,7 @@ import os
 import fitsio
 import numpy as np
 from scipy.ndimage.filters import median_filter
+from scipy.ndimage.morphology import binary_dilation
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.multiproc import multiproc
 
@@ -18,6 +19,8 @@ def one_file(fn):
     T.acqnam = []
     T.filter = []
     T.wcs_ok = []
+    T.n_masked = []
+    T.n_dilated_masked = []
     
     T.oow_min = []
     T.oow_max = []
@@ -28,6 +31,11 @@ def one_file(fn):
     T.oow_unmasked_max = []
     T.oow_unmasked_median = []
     T.oow_unmasked_percentiles = []
+
+    T.oow_dilated_min = []
+    T.oow_dilated_max = []
+    T.oow_dilated_median = []
+    T.oow_dilated_percentiles = []
 
     T.oow_m3_min = []
     T.oow_m3_max = []
@@ -64,6 +72,26 @@ def one_file(fn):
         T.obsid.append(phdr.get('OBSID', ''))
         T.acqnam.append(phdr.get('DTACQNAM', ''))
         T.filter.append(phdr.get('FILTER'))
+
+        bad = (ood > 0)
+        T.n_masked = np.sum(bad)
+        dbad = binary_dilation(bad, structure=np.ones((3,3),bool))
+        T.n_dilated_masked = np.sum(dbad)
+        uw = oow[np.logical_not(dbad)]
+        if len(uw) == 0:
+            med = np.median(oow)
+            T.oow_dilated_min.append(0.)
+            T.oow_dilated_max.append(0.)
+            T.oow_dilated_median.append(0.)
+            T.oow_dilated_percentiles.append(np.zeros(len(pct), np.float32))
+        else:
+            med = np.median(uw)
+            T.oow_dilated_min.append(uw.min())
+            T.oow_dilated_max.append(uw.max())
+            T.oow_dilated_median.append(np.median(uw))
+            T.oow_dilated_percentiles.append(np.percentile(uw, pct, interpolation='nearest').astype(np.float32))
+
+        
         T.oow_min.append(oow.min())
         T.oow_max.append(oow.max())
         T.oow_median.append(np.median(oow))
