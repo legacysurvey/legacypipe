@@ -576,17 +576,20 @@ class OneBlob(object):
                     done.add(t)
                     continue
                 # Is this source the brightest in this blob?
-                if rankmap[t] == min(blobranks[bl]):
+                myrank = rankmap[t]
+                if myrank == min(blobranks[bl]):
                     # Claim all the territory in my thresholded blob.
                     # Other (fainter) sources may still claim sub-regions at higher
                     # threshold levels.
                     segmap[blobs == bl] = t
-                    #print('Source', t, 'is isolated at S/N', thresh)
                     done.add(t)
                 # Is this source outside the regions claimed by brighter (ref) sources?
                 else:
                     ok = True
                     for r,isrc in zip(blobranks[bl], blobsrcs[bl]):
+                        # skip fainter sources (including myself!)
+                        if r >= myrank:
+                            continue
                         if not isrc in Irefpsf:
                             # regular (non-ref-PSF) source; its claim holds
                             ok = False
