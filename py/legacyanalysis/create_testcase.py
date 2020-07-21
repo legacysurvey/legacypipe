@@ -166,7 +166,7 @@ def main():
             psfex = psf.psfex
 
             # Did the PSF model come from a merged file?
-            for fn in [im.merged_psffn, im.psffn, im.old_merged_psffn]:
+            for fn in [im.merged_psffn, im.psffn] + im.old_merged_psffns:
                 if not os.path.exists(fn):
                     continue
                 T = fits_table(fn)
@@ -209,9 +209,9 @@ def main():
 
         print('merged skyfn:', im.merged_skyfn)
         print('single skyfn:', im.skyfn)
-        print('old merged skyfn:', im.old_merged_skyfn)
+        print('old merged skyfns:', im.old_merged_skyfns)
 
-        for fn in [im.merged_skyfn, im.skyfn, im.old_merged_skyfn]:
+        for fn in [im.merged_skyfn, im.skyfn] + im.old_merged_skyfns:
             if not os.path.exists(fn):
                 continue
             T = fits_table(fn)
