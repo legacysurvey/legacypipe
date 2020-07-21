@@ -1784,7 +1784,7 @@ class OneBlob(object):
             disable_galaxy_cache()
 
             #print('Fitting source took', Time()-tsrc)
-            #print(src)
+            debug('Finished fitting:', src)
             cpu1 = time.process_time()
             cputime[srci] += (cpu1 - cpu0)
 
