@@ -1703,11 +1703,16 @@ def _get_both_mods(X):
                                   s.pos.ra  == src.pos.ra and
                                   s.pos.dec == src.pos.dec)]
 
+    NEA = []
+    no_nea = [0.,0.,0.,0.]
+    pcal = tim.getPhotoCal()
     for src,srcblob in srcs_blobs:
         if src is None:
+            NEA.append(no_nea)
             continue
         patch = src.getModelPatch(tim)
         if patch is None:
+            NEA.append(no_nea)
             continue
         # From patch.addTo()
         (ih, iw) = mod.shape
@@ -1717,15 +1722,31 @@ def _get_both_mods(X):
         (outy, iny) = get_overlapping_region(
             patch.y0, patch.y0 + ph - 1, 0, ih - 1)
         if inx == [] or iny == []:
+            NEA.append(no_nea)
             continue
         p = patch.patch[iny, inx]
         mod[outy, outx] += p
         # mask by blob map
-        blobmod[outy, outx] += p * (timblobmap[outy,outx] == srcblob)
+        maskedp = p * (timblobmap[outy,outx] == srcblob)
+        blobmod[outy, outx] += maskedp
+        flux = pcal.brightnessToCounts(src.brightness)
+        pflux = np.sum(p)
+        mflux = np.sum(maskedp)
+        fracflux  = pflux / flux
+        mfracflux = mflux / flux
+        if pflux == 0:
+            nea = 0.
+        else:
+            nea = pflux**2 / np.sum(p**2)
+        if mflux == 0:
+            mnea = 0.
+        else:
+            mnea = mflux**2 / np.sum(maskedp**2)
+        NEA.append((nea, mnea, fracflux, mfracflux))
 
     if hasattr(tim.psf, 'clear_cache'):
         tim.psf.clear_cache()
-    return mod, blobmod
+    return mod, blobmod, NEA
 
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
@@ -1815,16 +1836,57 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                 if blobmap[yy,xx] != -1:
                     bb.append(blobmap[yy,xx])
 
-    I = np.flatnonzero(T.regular)
-    bothmods = mp.map(_get_both_mods, [(tim, [cat[i] for i in I], T.blob[I], blobmap,
+    Ireg = np.flatnonzero(T.regular)
+    Nreg = len(Ireg)
+    bothmods = mp.map(_get_both_mods, [(tim, [cat[i] for i in Ireg], T.blob[Ireg], blobmap,
                                         targetwcs, frozen_galaxies, ps, plots)
                                        for tim in tims])
-    mods     = [m for m,b in bothmods]
-    blobmods = [b for m,b in bothmods]
+    mods     = [r[0] for r in bothmods]
+    blobmods = [r[1] for r in bothmods]
+    NEA      = [r[2] for r in bothmods]
+    NEA = np.array(NEA)
+    # NEA shape (tims, srcs, 4:[nea, blobnea, nea_wt, blobnea_wt])
+    neas        = NEA[:,:,0]
+    blobneas    = NEA[:,:,1]
+    nea_wts     = NEA[:,:,2]
+    blobnea_wts = NEA[:,:,3]
     del bothmods
     tnow = Time()
     debug('Model images:', tnow-tlast)
     tlast = tnow
+
+    # avg by band
+    for band in bands:
+        num  = np.zeros(Nreg, np.float32)
+        den  = np.zeros(Nreg, np.float32)
+        bnum = np.zeros(Nreg, np.float32)
+        bden = np.zeros(Nreg, np.float32)
+        for tim,nea,bnea,nea_wt,bnea_wt in zip(
+                tims, neas, blobneas, nea_wts, blobnea_wts):
+            if not tim.band == band:
+                continue
+            iv = 1./(tim.sig1**2)
+            I, = np.nonzero(nea > 0)
+            wt = nea_wt[I]
+            num[I] += iv * wt * 1./nea[I]
+            den[I] += iv * wt
+            I, = np.nonzero(bnea > 0)
+            wt = bnea_wt[I]
+            bnum[I] += iv * wt * 1./bnea[I]
+            bden[I] += iv * wt
+        # numerator and denominator are for the inverse-NEA!
+        with np.errstate(divide='ignore'):
+            nea  = den  / num
+            bnea = bden / bnum
+        nea [np.logical_not(np.isfinite(nea ))] = 0.
+        bnea[np.logical_not(np.isfinite(bnea))] = 0.
+        # Set T columns
+        tnea = np.zeros(len(T), np.float32)
+        tnea[Ireg] = nea
+        T.set('nea_%s' % band, tnea)
+        tnea = np.zeros(len(T), np.float32)
+        tnea[Ireg] = bnea
+        T.set('blob_nea_%s' % band, tnea)
 
     # source pixel positions to probe depth maps, etc
     ixy = (np.clip(T.ibx, 0, W-1).astype(int), np.clip(T.iby, 0, H-1).astype(int))
