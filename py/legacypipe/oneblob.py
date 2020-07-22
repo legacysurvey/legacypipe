@@ -1545,7 +1545,7 @@ class OneBlob(object):
             fracin = dict([(b, []) for b in self.bands])
             fluxes = dict([(b, newsrc.getBrightness().getFlux(b))
                            for b in self.bands])
-            for tim,mod in zip(srctims, srctractor.getModelImages()):
+            for tim,mod in zip(srctims, srctractor.getModelImages(sky=False)):
                 f = (mod * (tim.getInvError() > 0)).sum() / fluxes[tim.band]
                 fracin[tim.band].append(f)
             for band in self.bands:
