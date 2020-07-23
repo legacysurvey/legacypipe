@@ -1538,6 +1538,7 @@ class Measurer(object):
         from tractor.brightness import NanoMaggies
         zpscale = NanoMaggies.zeropointToScale(ccd.ccdzpt)
         medweight = np.median(wt[(wt > 0) * (bitmask == 0)])
+        # note, read_weight() for Mosaic and 90prime scales by 1/exptime**2
         ccd.sig1 = (1. / np.sqrt(medweight)) / self.exptime / zpscale
 
         im = survey.get_image_object(ccd)

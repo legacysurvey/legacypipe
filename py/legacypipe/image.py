@@ -858,9 +858,9 @@ class LegacySurveyImage(object):
 
         from tractor.basics import NanoMaggies
         zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
-        fixedwt = 1. / (self.sig1 * zpscale * self.exptime)**2
+        fixedwt = 1. / (self.sig1 * zpscale)**2
 
-        print('Median wt %.4g vs sig1-based wt %.4g' % (medwt, fixedwt))
+        print('Median wt %.4g vs sig1-based wt %.4g factor %.4g' % (medwt, fixedwt, medwt/fixedwt))
         thresh = 1.3 * fixedwt
         n = np.sum(invvar > thresh)
         if n > 0:
