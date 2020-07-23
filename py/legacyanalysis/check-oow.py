@@ -74,9 +74,9 @@ def one_file(fn):
         T.filter.append(phdr.get('FILTER'))
 
         bad = (ood > 0)
-        T.n_masked = np.sum(bad)
+        T.n_masked.append(np.sum(bad))
         dbad = binary_dilation(bad, structure=np.ones((3,3),bool))
-        T.n_dilated_masked = np.sum(dbad)
+        T.n_dilated_masked.append(np.sum(dbad))
         uw = oow[np.logical_not(dbad)]
         if len(uw) == 0:
             med = np.median(oow)
@@ -91,7 +91,6 @@ def one_file(fn):
             T.oow_dilated_median.append(np.median(uw))
             T.oow_dilated_percentiles.append(np.percentile(uw, pct, interpolation='nearest').astype(np.float32))
 
-        
         T.oow_min.append(oow.min())
         T.oow_max.append(oow.max())
         T.oow_median.append(np.median(oow))
@@ -130,13 +129,24 @@ def one_file(fn):
     return T
 
 def main():
+
+    # one_file('/global/cfs/cdirs/cosmo/staging/decam/CP/V4.8.2a/CP20190719/c4d_190720_102549_oow_r_v1.fits.fz')
+    # one_file('/global/cfs/cdirs/cosmo/staging/decam/CP/V4.8.2a/CP20190719/c4d_190720_100244_oow_g_v1.fits.fz')
+    # one_file('/global/cfs/cdirs/cosmo/staging/decam/CP/V4.8.2a/CP20190719/c4d_190720_100433_oow_g_v1.fits.fz')
+    # one_file('/global/cfs/cdirs/cosmo/staging/decam/CP/V4.8.2a/CP20190719/c4d_190720_102401_oow_g_v1.fits.fz')
+    # one_file('/global/cfs/cdirs/cosmo/staging/decam/CP/V4.8.2a/CP20190719/c4d_190720_100622_oow_r_v1.fits.fz')
+    # one_file('/global/cfs/cdirs/cosmo/staging/decam/CP/V4.8.2a/CP20190719/c4d_190720_100802_oow_r_v1.fits.fz')
+    # one_file('/global/cfs/cdirs/cosmo/staging/decam/CP/V4.8.2a/CP20190719/c4d_190720_102727_oow_r_v1.fits.fz')
+    # one_file('/global/cfs/cdirs/cosmo/staging/decam/CP/V4.8.2a/CP20190719/c4d_190720_102212_oow_g_v1.fits.fz')
+    # return
+    
     #dirs = glob(dirprefix + '90prime/CP/V2.3/CP*')
     #dirs = glob(dirprefix + 'mosaic/CP/V4.3/CP*')
     dirs = glob(dirprefix + 'decam/CP/V4.8.2a/CP*')
     dirs.sort()
     dirs = list(reversed(dirs))
 
-    mp = multiproc(16)
+    mp = multiproc(32)
     #mp = multiproc(1)
     
     for dirnm in dirs:
