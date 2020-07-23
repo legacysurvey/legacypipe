@@ -1661,18 +1661,19 @@ def _get_both_mods(X):
 
     srcs_blobs = list(zip(srcs, srcblobs))
 
+    fro_rd = set()
     if frozen_galaxies is not None:
         from tractor.patch import ModelMask
         timblobs = set(timblobmap.ravel())
         timblobs.discard(-1)
         h,w = tim.shape
         mm = ModelMask(0, 0, w, h)
-        for src,bb in frozen_galaxies.items():
+        for fro,bb in frozen_galaxies.items():
             # Does this source (which touches blobs bb) touch any blobs in this tim?
             touchedblobs = timblobs.intersection(bb)
             if len(touchedblobs) == 0:
                 continue
-            patch = src.getModelPatch(tim, modelMask=mm)
+            patch = fro.getModelPatch(tim, modelMask=mm)
             if patch is None:
                 continue
             patch.addTo(mod)
@@ -1696,18 +1697,17 @@ def _get_both_mods(X):
 
             # Drop this frozen galaxy from the catalog to render, if it is present
             # (ie, if it is in_bounds)
-            # Can't use "==": they're not the same objects; the "srcs" have been
-            # to oneblob.py and back, and, eg, get their EllipseE types changed.
-            srcs_blobs = [(s,b) for s,b in srcs_blobs
-                          if not (s is not None and
-                                  s.pos.ra  == src.pos.ra and
-                                  s.pos.dec == src.pos.dec)]
+            fro_rd.add((fro.pos.ra, fro.pos.dec))
 
     NEA = []
     no_nea = [0.,0.,0.,0.]
     pcal = tim.getPhotoCal()
     for src,srcblob in srcs_blobs:
         if src is None:
+            NEA.append(no_nea)
+            continue
+        if (src.pos.ra, src.pos.dec) in fro_rd:
+            # Skip frozen galaxy source (here we choose not to compute NEA)
             NEA.append(no_nea)
             continue
         patch = src.getModelPatch(tim)
@@ -1742,7 +1742,7 @@ def _get_both_mods(X):
             mnea = 0.
         else:
             mnea = mflux**2 / np.sum(maskedp**2)
-        NEA.append((nea, mnea, fracflux, mfracflux))
+        NEA.append([nea, mnea, fracflux, mfracflux])
 
     if hasattr(tim.psf, 'clear_cache'):
         tim.psf.clear_cache()
