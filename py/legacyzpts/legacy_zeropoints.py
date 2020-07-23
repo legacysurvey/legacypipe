@@ -623,7 +623,7 @@ class Measurer(object):
             ccds= _ccds_table(self.camera)
             ccds['image_filename'] = self.fn_base
         ccds['err_message']= err_message
-        ccds['zpt']= np.nan
+        ccds['zpt']= 0
         return ccds, stars_photom
 
     def init_ccd(self, ccds):
@@ -1215,6 +1215,8 @@ class Measurer(object):
         cal.iref = []
         cal.chi2 = []
         cal.fracmasked = []
+        nzeroivar = 0
+        noffim = 0
 
         for istar,(ra,dec) in enumerate(zip(ref_ra, ref_dec)):
             _,x,y = self.wcs.radec2pixelxy(ra, dec)
@@ -1226,10 +1228,12 @@ class Measurer(object):
             xlo = int(x - R)
             ylo = int(y - R)
             if xlo < 0 or ylo < 0:
+                noffim += 1
                 continue
             xhi = xlo + R*2
             yhi = ylo + R*2
             if xhi >= W or yhi >= H:
+                noffim += 1
                 continue
             subimg = img[ylo:yhi+1, xlo:xhi+1]
             # FIXME -- check that ierr is correct
@@ -1252,7 +1256,8 @@ class Measurer(object):
             subpsf = PixelizedPSF(psfimg)
 
             if np.all(subie == 0):
-                #print('Inverse-variance map is all zero')
+                nzeroivar += 1
+                # print('Inverse-variance map is all zero')
                 continue
 
             tim = tractor.Image(data=subimg, inverr=subie, psf=subpsf)
@@ -1337,6 +1342,10 @@ class Measurer(object):
                 plt.suptitle('After')
                 ps.savefig()
 
+        if nzeroivar > 0:
+            print('Zero ivar for %d stars' % nzeroivar)
+        if noffim > 0:
+            print('Off image for %d stars' % noffim)
         cal.to_np_arrays()
         cal.ra_fit,cal.dec_fit = self.wcs.pixelxy2radec(cal.x1 + 1, cal.y1 + 1)
         return cal
@@ -1760,7 +1769,9 @@ class Mosaic3Measurer(Measurer):
     def get_extension_list(self, fn, debug=False):
         if debug:
             return ['CCD2']
-        return ['CCD1', 'CCD2', 'CCD3', 'CCD4']
+        hdu = fitsio.FITS(fn)
+        extlist = [hdu[i].get_extname() for i in range(1,len(hdu))]
+        return extlist
 
     def get_expnum(self, primhdr):
         if 'EXPNUM' in primhdr and primhdr['EXPNUM'] is not None:
@@ -1847,7 +1858,9 @@ class NinetyPrimeMeasurer(Measurer):
     def get_extension_list(self, fn, debug=False):
         if debug:
             return ['CCD1']
-        return ['CCD1', 'CCD2', 'CCD3', 'CCD4']
+        hdu = fitsio.FITS(fn)
+        extlist = [hdu[i].get_extname() for i in range(1,len(hdu))]
+        return extlist
 
     def get_expnum(self, primhdr):
         """converts 90prime header key DTACQNAM into the unique exposure number"""
