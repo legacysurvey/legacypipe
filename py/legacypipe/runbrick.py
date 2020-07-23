@@ -1855,7 +1855,11 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     debug('Model images:', tnow-tlast)
     tlast = tnow
 
-    # avg by band
+    # average NEA stats per band
+    # first init all bands expected by format_catalog
+    for band in survey.allbands:
+        T.set('nea_%s' % band, np.zeros(len(T), np.float32))
+        T.set('blob_nea_%s' % band, np.zeros(len(T), np.float32))
     for band in bands:
         num  = np.zeros(Nreg, np.float32)
         den  = np.zeros(Nreg, np.float32)
@@ -1880,13 +1884,9 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
             bnea = bden / bnum
         nea [np.logical_not(np.isfinite(nea ))] = 0.
         bnea[np.logical_not(np.isfinite(bnea))] = 0.
-        # Set T columns
-        tnea = np.zeros(len(T), np.float32)
-        tnea[Ireg] = nea
-        T.set('nea_%s' % band, tnea)
-        tnea = np.zeros(len(T), np.float32)
-        tnea[Ireg] = bnea
-        T.set('blob_nea_%s' % band, tnea)
+        # Set vals in T
+        T.get('nea_%s' % band)[Ireg] = nea
+        T.get('blob_nea_%s' % band)[Ireg] = bnea
 
     # source pixel positions to probe depth maps, etc
     ixy = (np.clip(T.ibx, 0, W-1).astype(int), np.clip(T.iby, 0, H-1).astype(int))
