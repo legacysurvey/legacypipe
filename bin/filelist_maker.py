@@ -1,6 +1,6 @@
 # example usage: python filelist_maker.py decam filelist dr8-ondisk-decam-v5.fits --allsummaryfn dr8-allfiles-decam-v5.fits
-# 'filelist' is the result from something like: 
-# find $IMDIR/BOK_CP/ $IMDIR/BOK_TEST/ > filelist 
+# 'filelist' is the result from something like:
+# find $IMDIR/BOK_CP/ $IMDIR/BOK_TEST/ > filelist
 # dr8-ondisk-decam-v5.fits is the final
 # output file list the 'allsummary' file contains the scraped headers
 # from all files (not just the matching image files, but weight and dq
@@ -15,37 +15,39 @@ import numpy
 from astropy.io import fits
 from astropy.coordinates import Angle
 
+
 def match(tfile, calib, flavor):
     res = [0, 0, 0]
     for i, field in enumerate(['expnum', 'plver', 'procdate']):
         if field not in calib.dtype.names:
-#            print('Missing field %s for expnum %d, %s' % 
-#                  (field, tfile['expnum'], flavor))
+            #            print('Missing field %s for expnum %d, %s' %
+            #                  (field, tfile['expnum'], flavor))
             res[i] = res[i] | 2**0
         elif not numpy.all(calib[field] == tfile[field]):
-#            print('Mismatch in %s for expnum %d, %s' % 
-#                  (field, tfile['expnum'], flavor))
+            #            print('Mismatch in %s for expnum %d, %s' %
+            #                  (field, tfile['expnum'], flavor))
             res[i] = res[i] | 2**1
     return res
+
 
 def check(flist, calibdir, prefix, mask=True):
     if mask:
         flist = flist[flist['qkeep'] != 0]
     # at the moment, check merged skies and merged psf match David's file.
-    res = numpy.zeros(len(flist), 
+    res = numpy.zeros(len(flist),
                       dtype=[('splinesky', '3i4'), ('psfex', '3i4')])
     for i, tfile in enumerate(flist):
         if (i % 1000) == 0:
             print('Progress %d/%d' % (i, len(flist)))
         expnum = tfile['expnum']
-        procdate = tfile['procdate']
-        plver = tfile['plver']
-        filt = tfile['filter']
+        # procdate = tfile['procdate']
+        # plver = tfile['plver']
+        # filt = tfile['filter']
         # just read merged, for the moment.
         expnumstr = '%08d' % expnum
         try:
             psfex = fits.getdata(os.path.join(
-                calibdir, 'psfex-merged', expnumstr[:5], 
+                calibdir, 'psfex-merged', expnumstr[:5],
                 '%s-%s.fits' % (prefix, expnumstr)))
             res['psfex'][i, :] = match(tfile, psfex, 'psfex')
         except FileNotFoundError:
@@ -53,7 +55,7 @@ def check(flist, calibdir, prefix, mask=True):
             res['psfex'][i, :] |= 2**2
         try:
             splinesky = fits.getdata(os.path.join(
-                calibdir, 'splinesky-merged', expnumstr[:5], 
+                calibdir, 'splinesky-merged', expnumstr[:5],
                 '%s-%s.fits' % (prefix, expnumstr)))
             res['splinesky'][i, :] = match(tfile, splinesky, 'splinesky')
         except FileNotFoundError:
@@ -87,9 +89,9 @@ def get_expnum_90prime(primhdr):
     import re
     # /descache/bass/20160710/d7580.0144.fits --> 75800144
     base = (os.path.basename(primhdr['DTACQNAM'])
-            .replace('.fits','')
-            .replace('.fz',''))
-    return int( re.sub(r'([a-z]+|\.+)','',base) )
+            .replace('.fits', '')
+            .replace('.fz', ''))
+    return int(re.sub(r'([a-z]+|\.+)', '', base))
 
 
 def flistsummary(flist):
@@ -109,7 +111,7 @@ def flistsummary(flist):
         out['filename'][i] = flist[i]
         try:
             hdr = fits.getheader(f)
-            expnum = get_expnum(hdr)
+            _ = get_expnum(hdr)
         except (OSError, fits.VerifyError):
             out['expnum'][i] = -1
             out['object'][i] = 'could not read in, corrupt?'
@@ -144,7 +146,7 @@ def flistsummary(flist):
                     out[field][i] = numpy.nan
             elif field == 'procdate':
                 out[field][i] = hdr.get('DATE', 'empty')
-            elif field in ['object', 'prodtype', 'filter', 'plver', 
+            elif field in ['object', 'prodtype', 'filter', 'plver',
                            'wcscal',
                            'photcal', 'plprocid', 'propid']:
                 out[field][i] = hdr.get(field, 'empty')
@@ -163,7 +165,7 @@ def check_ooidw(flist, fields=['plprocid', 'plver', 'expnum']):
     # exist.  Their prodtypes should also match their names.
     idw = numpy.zeros(len(flist), dtype='bool')
     dirs = numpy.array([os.path.dirname(f) for f in flist['filename']])
-    s = numpy.lexsort((dirs,)+ tuple(flist[f] for f in fields))
+    s = numpy.lexsort((dirs,) + tuple(flist[f] for f in fields))
     inds = [tuple(x) for x in zip(
         dirs[s], *(flist[f][s] for f in fields))]
     delts = numpy.array([i != j for i, j in zip(inds[:-1], inds[1:])])
@@ -203,7 +205,7 @@ def most_recent_versions(flist):
     versions = [version.LooseVersion(v)
                 for v in flist['plver']]
     s = numpy.lexsort((dirs, flist['plprocid'], versions, flist['expnum']))
-    delts = numpy.array([i != j for i, j in 
+    delts = numpy.array([i != j for i, j in
                          zip(flist['expnum'][s[:-1]], flist['expnum'][s[1:]])])
     linds = numpy.concatenate([numpy.flatnonzero(delts), [len(flist)-1]])
     m = numpy.zeros(len(flist), dtype='bool')
@@ -236,6 +238,7 @@ def flag_mosaic(flist):
     return ((flist['filter'] != 'zd DECam k1038')*2**0 +
             ((flist['mjd_obs'] <= 57674) & (shifted == 0))*2**1)
 
+
 def qkeep_mosaic(flist, problem=False):
     # m = flist['filter'] == 'zd DECam k1038'
     # yshift = flist['yshift'].copy()
@@ -259,9 +262,9 @@ def qkeep_decam(flist, problem=False):
         'i DECam SDSS c0003 7835.0 1470.0',
         'z DECam SDSS c0004 9260.0 1520.0',
         'Y DECam c0005 10095.0 1130.0',
-#        'VR DECam c0007 6300.0 2600.0',
-#        'solid plate 0.0 0.0',
-#        'u DECam c0006 3500.0 1000.0',
+        #        'VR DECam c0007 6300.0 2600.0',
+        #        'solid plate 0.0 0.0',
+        #        'u DECam c0006 3500.0 1000.0',
     ]
     for f in filters:
         m = m | (flist['filter'] == f)
@@ -291,14 +294,14 @@ def fits_to_flist(fits):
     for field, _ in newdtype:
         out[field] = fits[field]
     return out
-    
 
 
 def report_problems(flist):
     # want all the exposures that have qkeep = 0
     # for all versions, because of inconsistency
     s = numpy.argsort(flist['expnum'])
-    mcorrupt = numpy.array(['could not read in' in o for o in flist['object']])
+    mcorrupt = numpy.array(['could not read in' in o
+                            for o in flist['object']])
     ind = numpy.flatnonzero(mcorrupt)
     if numpy.any(ind):
         print('Corrupt files:')
@@ -310,18 +313,18 @@ def report_problems(flist):
     _, finds = numpy.unique(flists['expnum'], return_index=True)
     linds = numpy.concatenate([finds[1:]-1, [len(s)-1]])
     print('Inconsistent/absent ooi/oow/ood...')
-    import pdb
     for f, l in zip(finds, linds):
         if numpy.all((flists['flag1'][f:l] & 2**4) != 0):
             print(flists['filename'][f])
     print('')
 
 
-def filelist(flist, survey, stripndir=6, report=True):
+def filelist(flist, survey, report=True,
+             rawdir='/global/cfs/cdirs/cosmo/staging'):
     m, flag_a = qkeep_all(flist, problem=True)
-    qkeepfun = { 'mosaic': qkeep_mosaic,
-                 '90prime': qkeep_90prime,
-                 'decam': qkeep_decam }
+    qkeepfun = {'mosaic': qkeep_mosaic,
+                '90prime': qkeep_90prime,
+                'decam': qkeep_decam}
     if survey in qkeepfun:
         ms, flag_s = qkeepfun[survey](flist, problem=True)
     else:
@@ -332,7 +335,7 @@ def filelist(flist, survey, stripndir=6, report=True):
     flist = rec_append_fields(flist, ['flag1', 'flag2'], [flag_a, flag_s])
     if report:
         report_problems(flist)
-    flist = flist[(flist['prodtype'] == 'image') & 
+    flist = flist[(flist['prodtype'] == 'image') &
                   (flist['proctype'] == 'InstCal')]
     m = flist['qkeep'] != 0
     m2 = most_recent_versions(flist[m])
@@ -341,18 +344,24 @@ def filelist(flist, survey, stripndir=6, report=True):
         # repair OBJECT keywords
         ind = numpy.flatnonzero(flist['object'] == '')
         for i, f in zip(ind, flist['filename'][ind]):
-            #newpath = f.replace('BOK_CP', 'BOK_Raw')
-            #newpath = newpath.replace('CP', '')
+            # newpath = f.replace('BOK_CP', 'BOK_Raw')
+            # newpath = newpath.replace('CP', '')
             dirs = f.split('/')
             dirs = dirs[:-3]+dirs[-2:]  # get rid of V2.0
             dirs[-3] = 'BOK_Raw'
             dirs[-2] = dirs[-2][2:]
+            dirs = [rawdir] + dirs[-4:]
             newpath = '/'.join(dirs)
+            newpath = newpath.replace('work/legacysurvey/dr9/images',
+                                      'staging')
             cut = newpath.find('_ooi_')
             newpath = newpath[:cut]+'_ori.fits.fz'
             flist['object'][i] = fits.getheader(newpath)['OBJECT']
-            
-    flist['filename'] = ['/'.join(f.split('/')[stripndir:])
+
+    imagesind = numpy.flatnonzero([f == 'images'
+                                   for f in flist['filename'][0].split('/')])
+    imagesind = imagesind[0]
+    flist['filename'] = ['/'.join(f.split('/')[imagesind+1:])
                          for f in flist['filename']]
     return flist
 
@@ -363,7 +372,7 @@ if __name__ == "__main__":
         description='Make file list.',
         epilog='EXAMPLE: %(prog)s survey flist outflist.fits')
     parser.add_argument('survey', type=str, help='decam, 90prime, or mosaic')
-    parser.add_argument('filelist', type=str, 
+    parser.add_argument('filelist', type=str,
                         help='output of `find` listing files to consider')
     parser.add_argument('outfn', type=str,
                         help='output file name (.fits)')
