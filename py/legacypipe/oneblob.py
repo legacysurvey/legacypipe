@@ -1733,6 +1733,14 @@ class OneBlob(object):
             # Add this source's initial model back in.
             models.add(srci, self.tims)
 
+            from tractor import Galaxy
+            is_galaxy = isinstance(src, Galaxy)
+            if is_galaxy:
+                # During SGA pre-burns, freeze initial positions (fit other parameters),
+                # to avoid problems like NGC0943, where one galaxy in a pair moves a large distance
+                # to fit the overall light profile.
+                src.freezeParam('pos')
+
             if self.bigblob:
                 # Create super-local sub-sub-tims around this source
                 # Make the subimages the same size as the modelMasks.
@@ -1776,6 +1784,9 @@ class OneBlob(object):
             #print('First-round initial log-prob:', srctractor.getLogProb())
             srctractor.optimize_loop(**self.optargs)
             #print('First-round final log-prob:', srctractor.getLogProb())
+
+            if is_galaxy:
+                src.thawParam('pos')
 
             # Re-remove the final fit model for this source
             models.update_and_subtract(srci, src, self.tims)
