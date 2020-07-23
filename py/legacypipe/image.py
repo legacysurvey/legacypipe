@@ -853,14 +853,19 @@ class LegacySurveyImage(object):
         #   mean value    = 0.0235224
         #   minimum value = -14.2634
         #   maximum value = 1628.22
+
         medwt = np.median(invvar[invvar > 0])
-        thresh = 100. * medwt
+
+        from tractor.basics import NanoMaggies
+        zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
+        fixedwt = 1. / (self.sig1 * zpscale * self.exptime)**2
+
+        print('Median wt %.4g vs sig1-based wt %.4g' % (medwt, fixedwt))
+        thresh = 1.3 * fixedwt
         n = np.sum(invvar > thresh)
-        if n > 100:
-            raise RuntimeError('More than 100 pixels have anomalously large oow values: max %g vs median %g' % (np.max(invvar), medwt))
         if n > 0:
-            info('Masking %i pixels with anomalously large oow values: max %g vs median %g' % (n, np.max(invvar), medwt))
-            invvar[invvar > thresh] = 0.
+            info('Clipping %i pixels with anomalously large oow values: max %g vs median %g' % (n, np.max(invvar), fixedwt))
+            invvar[invvar > thresh] = fixedwt
 
         invvar[invvar < 0.] = 0.
         assert(np.all(np.isfinite(invvar)))

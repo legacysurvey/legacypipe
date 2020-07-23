@@ -1484,7 +1484,7 @@ class Measurer(object):
         ccd.width = self.width
         ccd.height = self.height
         ccd.arawgain = self.gain
-        ccd.sig1 = None
+        ccd.sig1 = 0.
         ccd.plver = self.plver
         ccd.procdate = self.procdate
         ccd.plprocid = self.plprocid
@@ -1533,6 +1533,12 @@ class Measurer(object):
             ccd.ccdraoff = ccds[0].ccdraoff
             ccd.ccddecoff = ccds[0].ccddecoff
             have_zpt = True
+
+        # Set sig1 after (possibly) updating zeropoint!
+        from tractor.brightness import NanoMaggies
+        zpscale = NanoMaggies.zeropointToScale(ccd.ccdzpt)
+        medweight = np.median(wt[(wt > 0) * (bitmask == 0)])
+        ccd.sig1 = (1. / np.sqrt(medweight)) / self.exptime / zpscale
 
         im = survey.get_image_object(ccd)
         git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
