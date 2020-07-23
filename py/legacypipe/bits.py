@@ -33,6 +33,8 @@ FITBITS = dict(
     GAIA               = 0x80,
     TYCHO2             = 0x100,
     LARGEGALAXY        = 0x200,
+    WALKER             = 0x400,
+    RUNNER             = 0x800,
 )
 
 # Outlier mask bit values
