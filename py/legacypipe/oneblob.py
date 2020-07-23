@@ -104,17 +104,16 @@ def one_blob(X):
     B.sources = srcs
     B.Isrcs = Isrcs
     B.iblob = iblob
-    B.blob_x0 = np.zeros(len(B), np.int16) + bx0
-    B.blob_y0 = np.zeros(len(B), np.int16) + by0
     # Did sources start within the blob?
     _,x0,y0 = blobwcs.radec2pixelxy(
         np.array([src.getPosition().ra  for src in srcs]),
         np.array([src.getPosition().dec for src in srcs]))
-    safe_x0 = np.clip(np.round(x0-1).astype(int), 0,blobw-1)
-    safe_y0 = np.clip(np.round(y0-1).astype(int), 0,blobh-1)
-    B.init_x = safe_x0
-    B.init_y = safe_y0
-    B.started_in_blob = blobmask[safe_y0, safe_x0]
+    # blob-relative initial positions (zero-indexed)
+    B.x0 = (x0 - 1.).astype(np.float32)
+    B.y0 = (y0 - 1.).astype(np.float32)
+    B.safe_x0 = np.clip(np.round(x0-1).astype(int), 0,blobw-1)
+    B.safe_y0 = np.clip(np.round(y0-1).astype(int), 0,blobh-1)
+    B.started_in_blob = blobmask[B.safe_y0, B.safe_x0]
     # This uses 'initial' pixel positions, because that's what determines
     # the fitting behaviors.
 
@@ -135,6 +134,8 @@ def one_blob(X):
 
     # Setting values here (after .run() has completed) means that iterative sources
     # (which get merged with the original table B) get values also.
+    B.blob_x0     = np.zeros(len(B), np.int16) + bx0
+    B.blob_y0     = np.zeros(len(B), np.int16) + by0
     B.blob_width  = np.zeros(len(B), np.int16) + blobw
     B.blob_height = np.zeros(len(B), np.int16) + blobh
     B.blob_npix   = np.zeros(len(B), np.int32) + np.sum(blobmask)
@@ -143,6 +144,14 @@ def one_blob(X):
     B.cpu_arch = np.zeros(len(B), dtype='U3')
     B.cpu_arch[:] = get_cpu_arch()
     B.cpu_blob = np.empty(len(B), np.float32)
+    # Convert to whole-brick (zero-indexed) pixel positions.
+    # (do this here rather than above to ease handling iterative detections)
+    B.x0 += bx0
+    B.y0 += by0
+    # these are now in brick coords... rename for consistency in runbrick.py
+    B.rename('x0', 'bx0')
+    B.rename('y0', 'by0')
+
     t1 = time.process_time()
     B.cpu_blob[:] = t1 - t0
     return B
@@ -768,7 +777,7 @@ class OneBlob(object):
                 B.delete_column('iblob')
                 B = merge_tables([B, Bnew], columns='fillzero')
                 # columns not in Bnew:
-                # {'started_in_blob', 'blob_x0', 'blob_y0', 'init_x', 'init_y'}
+                # {'safe_x0', 'safe_y0', 'started_in_blob'}
                 B.sources = srcs + newsrcs
                 B.iblob = iblob
 
@@ -853,8 +862,8 @@ class OneBlob(object):
 
         # Avoid re-detecting sources at positions close to initial
         # source positions (including ones that will get cut!)
-        avoid_x = Bold.init_x
-        avoid_y = Bold.init_y
+        avoid_x = Bold.safe_x0
+        avoid_y = Bold.safe_y0
         avoid_r = np.zeros(len(avoid_x), np.float32) + 2.
         nsigma = 6.
 
@@ -898,7 +907,8 @@ class OneBlob(object):
                            if s is not None])
             _,xx,yy = self.blobwcs.radec2pixelxy(rr, dd)
 
-            plt.plot(Bold.init_x, Bold.init_y, 'o', ms=5, mec='r', mfc='none', label='Avoid (r=2)')
+            plt.plot(Bold.safe_x0, Bold.safe_y0, 'o', ms=5, mec='r',
+                     mfc='none', label='Avoid (r=2)')
             plt.plot(xx-1, yy-1, 'r+', label='Old', **crossa)
             plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0), label='New',
                      **crossa)
@@ -960,6 +970,8 @@ class OneBlob(object):
         Bnew = fits_table()
         Bnew.sources = newsrcs
         Bnew.Isrcs = np.array([-1]*len(Bnew))
+        Bnew.x0 = Tnew.ibx.astype(np.float32)
+        Bnew.y0 = Tnew.iby.astype(np.float32)
         # Be quieter during iterative detection!
         bloblogger = logging.getLogger('legacypipe.oneblob')
         loglvl = bloblogger.getEffectiveLevel()

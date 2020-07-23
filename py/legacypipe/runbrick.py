@@ -954,9 +954,6 @@ def stage_fitblobs(T=None,
         fitblobs_plots(tims, bands, targetwcs, blobslices, blobsrcs, cat,
                        blobmap, ps)
 
-    T.orig_ra  = T.ra.copy()
-    T.orig_dec = T.dec.copy()
-
     tnow = Time()
     debug('Fitblobs:', tnow-tlast)
     tlast = tnow
@@ -1215,7 +1212,8 @@ def stage_fitblobs(T=None,
               'blob_width', 'blob_height', 'blob_npix',
               'blob_nimages', 'blob_totalpix',
               'blob_symm_width', 'blob_symm_height', 'blob_symm_npix',
-              'blob_symm_nimages', 'hit_limit', 'hit_ser_limit', 'hit_r_limit',
+              'blob_symm_nimages', 'bx0', 'by0',
+              'hit_limit', 'hit_ser_limit', 'hit_r_limit',
               'dchisq',
               'force_keep_source', 'fit_background', 'forced_pointsource']:
         T.set(k, BB.get(k))
@@ -1975,15 +1973,15 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         plt.clf()
         ra  = np.array([src.getPosition().ra  for src in cat])
         dec = np.array([src.getPosition().dec for src in cat])
-        ok,x0,y0 = targetwcs.radec2pixelxy(T.orig_ra, T.orig_dec)
+        x0,y0 = T.bx0, T.by0
         ok,x1,y1 = targetwcs.radec2pixelxy(ra, dec)
+        x1 -= 1.
+        y1 -= 1.
         dimshow(get_rgb(C.coimgs, bands))
         ax = plt.axis()
-        #plt.plot(np.vstack((x0,x1))-1, np.vstack((y0,y1))-1, 'r-')
-        I = np.flatnonzero(T.orig_ra != 0.)
-        for xx0,yy0,xx1,yy1 in zip(x0[I],y0[I],x1[I],y1[I]):
-            plt.plot([xx0-1,xx1-1], [yy0-1,yy1-1], 'r-')
-        plt.plot(x1-1, y1-1, 'r.')
+        for xx0,yy0,xx1,yy1 in zip(x0,y0,x1,y1):
+            plt.plot([xx0,xx1], [yy0,yy1], 'r-')
+        plt.plot(x1, y1, 'r.')
         plt.axis(ax)
         plt.title('Original to final source positions')
         ps.savefig()
@@ -2683,16 +2681,6 @@ def stage_writecat(
                   'apflux_fuv', 'apflux_resid_fuv', 'apflux_ivar_fuv', ]:
             T.set(c, GALEX.get(c))
         GALEX = None
-
-    # Brick pixel positions
-    ok,bx,by = targetwcs.radec2pixelxy(T.orig_ra, T.orig_dec)
-    # iterative sources
-    bx[ok==False] = 1.
-    by[ok==False] = 1.
-    T.bx0 = (bx - 1.).astype(np.float32)
-    T.by0 = (by - 1.).astype(np.float32)
-    T.delete_column('orig_ra')
-    T.delete_column('orig_dec')
 
     T.brick_primary = ((T.ra  >= brick.ra1 ) * (T.ra  < brick.ra2) *
                         (T.dec >= brick.dec1) * (T.dec < brick.dec2))
