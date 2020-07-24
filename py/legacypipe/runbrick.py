@@ -1224,8 +1224,6 @@ def stage_fitblobs(T=None,
     dup_cat = []
     if T_dup:
         from legacypipe.survey import GaiaSource
-        print('T_dup:')
-        T_dup.about()
         T_dup.type = np.array(['DUP']*len(T_dup))
         T_dup.dup = np.ones(len(T_dup), bool)
         Tall.append(T_dup)
