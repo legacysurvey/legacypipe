@@ -53,7 +53,7 @@ MASKBITS = dict(
     WISEM2     = 0x200,
     BAILOUT    = 0x400, # bailed out of processing
     MEDIUM     = 0x800, # medium-bright star
-    GALAXY     = 0x1000, # LSLGA large galaxy
+    GALAXY     = 0x1000, # SGA large galaxy
     CLUSTER    = 0x2000, # Cluster catalog source
 )
 
@@ -62,6 +62,6 @@ IN_BLOB = dict(
     BRIGHT  = 0x1,   # "bright" star
     MEDIUM  = 0x2,   # "medium-bright" star
     CLUSTER = 0x4,   # Globular cluster
-    GALAXY  = 0x8,   # large LSLGA galaxy
+    GALAXY  = 0x8,   # large SGA galaxy
 )
 

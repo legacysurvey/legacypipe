@@ -1948,7 +1948,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ('WISEM2',    'WISE2', 'WISE W2 (all masks)'),
         ('BAILOUT',   'BAIL',  'Bailed out processing'),
         ('MEDIUM',    'MED',   'medium-bright star'),
-        ('GALAXY',    'GAL',   'LSLGA large galaxy'),
+        ('GALAXY',    'GAL',   'SGA large galaxy'),
         ('CLUSTER',   'CLUST', 'Globular cluster')]
     version_header.add_record(dict(name='COMMENT', value='maskbits bits:'))
     _add_bit_description(version_header, MASKBITS, mbits,

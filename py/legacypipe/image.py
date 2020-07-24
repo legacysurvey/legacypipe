@@ -1357,7 +1357,7 @@ class LegacySurveyImage(object):
         halozpt = 0.
         if halos and self.camera == 'decam':
             # Subtract halos from Gaia stars.
-            # "refs.donotfit" are Gaia sources that are near LSLGA galaxies.
+            # "refs.donotfit" are Gaia sources that are near SGA galaxies.
             Igaia, = np.nonzero(refs.isgaia * refs.pointsource *
                                 np.logical_not(refs.donotfit))
             if len(Igaia):

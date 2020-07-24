@@ -1333,11 +1333,11 @@ class OneBlob(object):
         if is_galaxy:
             fit_background = False
 
-            # LSLGA galaxy: set the maximum allowed r_e.
+            # SGA galaxy: set the maximum allowed r_e.
             known_galaxy_logrmax = 0.
             if isinstance(src, (DevGalaxy,ExpGalaxy, SersicGalaxy)):
                 print('Known galaxy.  Initial shape:', src.shape)
-                # MAGIC 2. = factor by which r_e is allowed to grow for an LSLGA galaxy.
+                # MAGIC 2. = factor by which r_e is allowed to grow for an SGA galaxy.
                 known_galaxy_logrmax = np.log(src.shape.re * 2.)
             else:
                 print('WARNING: unknown galaxy type:', src)
