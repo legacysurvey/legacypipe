@@ -1250,6 +1250,9 @@ def stage_fitblobs(T=None,
     T.ibx = np.round(T.bx).astype(np.int32)
     T.iby = np.round(T.by).astype(np.int32)
     T.in_bounds = ((T.ibx >= 0) * (T.iby >= 0) * (T.ibx < W) * (T.iby < H))
+    # DUP sources are Gaia/Tycho-2 stars, so fill in bx0=bx.
+    T.bx0[T.dup] = T.bx[T.dup]
+    T.by0[T.dup] = T.by[T.dup]
 
     # Order sources by RA.
     # (Here we're just setting 'objid', not actually reordering arrays.)
