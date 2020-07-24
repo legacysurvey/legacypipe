@@ -1969,6 +1969,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ('LARGEGALAXY',         'LGAL',  'SGA large galaxy'),
         ('WALKER',              'WALK',  'fitting moved pos > 1 arcsec'),
         ('RUNNER',              'RUN',   'fitting moved pos > 2.5 arcsec'),
+        ('GAIA_POINTSOURCE',    'GPSF',  'Gaia source treated as point source'),
+        ('ITERATIVE',           'ITER',  'source detected during iterative detection'),
         ]
     version_header.add_record(dict(name='COMMENT', value='fitbits bits:'))
     _add_bit_description(version_header, FITBITS, fbits,
@@ -2705,13 +2707,17 @@ def stage_writecat(
     T.fitbits[T.fit_background]     |= FITBITS['FIT_BACKGROUND']
     T.fitbits[T.hit_r_limit]        |= FITBITS['HIT_RADIUS_LIMIT']
     T.fitbits[T.hit_ser_limit]      |= FITBITS['HIT_SERSIC_LIMIT']
-    # WALKER/RUNNING
+    # WALKER/RUNNER
     moved = np.hypot(T.bx - T.bx0, T.by - T.by0)
     # radii in pixels:
     walk_radius = 1.  / pixscale
     run_radius  = 2.5 / pixscale
     T.fitbits[moved > walk_radius] |= FITBITS['WALKER']
     T.fitbits[moved > run_radius ] |= FITBITS['RUNNER']
+    # do we have Gaia?
+    if 'pointsource' in T.get_columns():
+        T.fitbits[T.pointsource]       |= FITBITS['GAIA_POINTSOURCE']
+    T.fitbits[T.iterative]         |= FITBITS['ITERATIVE']
 
     for col,bit in [('freezeparams',  'FROZEN'),
                     ('isbright',      'BRIGHT'),
