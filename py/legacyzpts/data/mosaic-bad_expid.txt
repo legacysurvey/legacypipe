@@ -5700,3 +5700,7 @@
 
 80665 fwhm==nan
 122019 fwhm==nan
+
+71342 CCD4 has a garbage amplifier
+77270 CCD4 has two amplifiers with garbage on edge
+
