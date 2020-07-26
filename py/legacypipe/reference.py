@@ -509,59 +509,50 @@ def get_galaxy_sources(galaxies, bands):
     # If we have pre-burned galaxies, re-create the Tractor sources for them.
     I, = np.nonzero(galaxies.preburned)
     for ii,g in zip(I, galaxies[I]):
-        try:
-            typ = fits_reverse_typemap[g.type.strip()]
-            pos = RaDecPos(g.ra, g.dec)
-            fluxes = dict([(band, g.get('flux_%s' % band)) for band in bands])
-            bright = NanoMaggies(order=bands, **fluxes)
-            shape = None
-            # put the Rex branch first, because Rex is a subclass of ExpGalaxy!
-            if issubclass(typ, RexGalaxy):
-                assert(np.isfinite(g.shape_r))
-                logre = np.log(g.shape_r)
-                shape = LogRadius(logre)
-                # set prior max at 2x SGA radius
-                shape.setMaxLogRadius(logre + np.log(radius_max_factor))
-            elif issubclass(typ, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
-                assert(np.isfinite(g.shape_r))
-                assert(np.isfinite(g.shape_e1))
-                assert(np.isfinite(g.shape_e2))
-                shape = EllipseE(g.shape_r, g.shape_e1, g.shape_e2)
-                # switch to softened ellipse (better fitting behavior)
-                shape = EllipseESoft.fromEllipseE(shape)
-                # and then to our custom ellipse class
-                logre = shape.logre
-                shape = LegacyEllipseWithPriors(logre, shape.ee1, shape.ee2)
-                assert(np.all(np.isfinite(shape.getParams())))
-                # set prior max at 2x SGA radius
-                shape.setMaxLogRadius(logre + np.log(radius_max_factor))
+        typ = fits_reverse_typemap[g.type.strip()]
+        pos = RaDecPos(g.ra, g.dec)
+        fluxes = dict([(band, g.get('flux_%s' % band)) for band in bands])
+        bright = NanoMaggies(order=bands, **fluxes)
+        shape = None
+        # put the Rex branch first, because Rex is a subclass of ExpGalaxy!
+        if issubclass(typ, RexGalaxy):
+            assert(np.isfinite(g.shape_r))
+            logre = np.log(g.shape_r)
+            shape = LogRadius(logre)
+            # set prior max at 2x SGA radius
+            shape.setMaxLogRadius(logre + np.log(radius_max_factor))
+        elif issubclass(typ, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
+            assert(np.isfinite(g.shape_r))
+            assert(np.isfinite(g.shape_e1))
+            assert(np.isfinite(g.shape_e2))
+            shape = EllipseE(g.shape_r, g.shape_e1, g.shape_e2)
+            # switch to softened ellipse (better fitting behavior)
+            shape = EllipseESoft.fromEllipseE(shape)
+            # and then to our custom ellipse class
+            logre = shape.logre
+            shape = LegacyEllipseWithPriors(logre, shape.ee1, shape.ee2)
+            assert(np.all(np.isfinite(shape.getParams())))
+            # set prior max at 2x SGA radius
+            shape.setMaxLogRadius(logre + np.log(radius_max_factor))
 
-            if issubclass(typ, PointSource):
-                src = typ(pos, bright)
-            # this catches Rex too
-            elif issubclass(typ, (DevGalaxy, ExpGalaxy)):
-                src = typ(pos, bright, shape)
-            elif issubclass(typ, (SersicGalaxy)):
-                assert(np.isfinite(g.sersic))
-                sersic = LegacySersicIndex(g.sersic)
-                src = typ(pos, bright, shape, sersic)
-            else:
-                print('Unknown type', typ)
-            debug('Created', src)
-            assert(np.isfinite(src.getLogPrior()))
-            srcs[ii] = src
-
-            if g.islargegalaxy:
-                assert((g.radius > 0) * np.isfinite(g.radius))
-                assert((g.pa >= 0) * (g.pa <= 180) * np.isfinite(g.pa))
-                assert((g.ba > 0) * (g.ba <= 1.0) * np.isfinite(g.ba))
-        except:
-            import traceback
-            print('Failed to create Tractor source for SGA entry:',
-                  traceback.print_exc())
-            raise
+        if issubclass(typ, PointSource):
+            src = typ(pos, bright)
+        # this catches Rex too
+        elif issubclass(typ, (DevGalaxy, ExpGalaxy)):
+            src = typ(pos, bright, shape)
+        elif issubclass(typ, (SersicGalaxy)):
+            assert(np.isfinite(g.sersic))
+            sersic = LegacySersicIndex(g.sersic)
+            src = typ(pos, bright, shape, sersic)
+        else:
+            raise RuntimeError('Unknown preburned SGA source type "%s"' % typ)
+        debug('Created', src)
+        assert(np.isfinite(src.getLogPrior()))
+        srcs[ii] = src
 
     # SGA parent catalog: 'preburned' is not set
+    # This also can happen in the preburned/ellipse catalog when fitting
+    # fails, or no-grz, etc.
     I, = np.nonzero(np.logical_not(galaxies.preburned))
     for ii,g in zip(I, galaxies[I]):
         # Initialize each source with an exponential disk--
