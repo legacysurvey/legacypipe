@@ -954,9 +954,6 @@ def stage_fitblobs(T=None,
         fitblobs_plots(tims, bands, targetwcs, blobslices, blobsrcs, cat,
                        blobmap, ps)
 
-    T.orig_ra  = T.ra.copy()
-    T.orig_dec = T.dec.copy()
-
     tnow = Time()
     debug('Fitblobs:', tnow-tlast)
     tlast = tnow
@@ -1215,7 +1212,8 @@ def stage_fitblobs(T=None,
               'blob_width', 'blob_height', 'blob_npix',
               'blob_nimages', 'blob_totalpix',
               'blob_symm_width', 'blob_symm_height', 'blob_symm_npix',
-              'blob_symm_nimages', 'hit_limit', 'hit_ser_limit', 'hit_r_limit',
+              'blob_symm_nimages', 'bx0', 'by0',
+              'hit_limit', 'hit_ser_limit', 'hit_r_limit',
               'dchisq',
               'force_keep_source', 'fit_background', 'forced_pointsource']:
         T.set(k, BB.get(k))
@@ -1226,8 +1224,6 @@ def stage_fitblobs(T=None,
     dup_cat = []
     if T_dup:
         from legacypipe.survey import GaiaSource
-        print('T_dup:')
-        T_dup.about()
         T_dup.type = np.array(['DUP']*len(T_dup))
         T_dup.dup = np.ones(len(T_dup), bool)
         Tall.append(T_dup)
@@ -1252,6 +1248,9 @@ def stage_fitblobs(T=None,
     T.ibx = np.round(T.bx).astype(np.int32)
     T.iby = np.round(T.by).astype(np.int32)
     T.in_bounds = ((T.ibx >= 0) * (T.iby >= 0) * (T.ibx < W) * (T.iby < H))
+    # DUP sources are Gaia/Tycho-2 stars, so fill in bx0=bx.
+    T.bx0[T.dup] = T.bx[T.dup]
+    T.by0[T.dup] = T.by[T.dup]
 
     # Order sources by RA.
     # (Here we're just setting 'objid', not actually reordering arrays.)
@@ -1966,6 +1965,10 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ('GAIA',                'GAIA',  'Gaia source'),
         ('TYCHO2',              'TYCHO', 'Tycho-2 star'),
         ('LARGEGALAXY',         'LGAL',  'SGA large galaxy'),
+        ('WALKER',              'WALK',  'fitting moved pos > 1 arcsec'),
+        ('RUNNER',              'RUN',   'fitting moved pos > 2.5 arcsec'),
+        ('GAIA_POINTSOURCE',    'GPSF',  'Gaia source treated as point source'),
+        ('ITERATIVE',           'ITER',  'source detected during iterative detection'),
         ]
     version_header.add_record(dict(name='COMMENT', value='fitbits bits:'))
     _add_bit_description(version_header, FITBITS, fbits,
@@ -1975,15 +1978,15 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         plt.clf()
         ra  = np.array([src.getPosition().ra  for src in cat])
         dec = np.array([src.getPosition().dec for src in cat])
-        ok,x0,y0 = targetwcs.radec2pixelxy(T.orig_ra, T.orig_dec)
+        x0,y0 = T.bx0, T.by0
         ok,x1,y1 = targetwcs.radec2pixelxy(ra, dec)
+        x1 -= 1.
+        y1 -= 1.
         dimshow(get_rgb(C.coimgs, bands))
         ax = plt.axis()
-        #plt.plot(np.vstack((x0,x1))-1, np.vstack((y0,y1))-1, 'r-')
-        I = np.flatnonzero(T.orig_ra != 0.)
-        for xx0,yy0,xx1,yy1 in zip(x0[I],y0[I],x1[I],y1[I]):
-            plt.plot([xx0-1,xx1-1], [yy0-1,yy1-1], 'r-')
-        plt.plot(x1-1, y1-1, 'r.')
+        for xx0,yy0,xx1,yy1 in zip(x0,y0,x1,y1):
+            plt.plot([xx0,xx1], [yy0,yy1], 'r-')
+        plt.plot(x1, y1, 'r.')
         plt.axis(ax)
         plt.title('Original to final source positions')
         ps.savefig()
@@ -2684,16 +2687,6 @@ def stage_writecat(
             T.set(c, GALEX.get(c))
         GALEX = None
 
-    # Brick pixel positions
-    ok,bx,by = targetwcs.radec2pixelxy(T.orig_ra, T.orig_dec)
-    # iterative sources
-    bx[ok==False] = 1.
-    by[ok==False] = 1.
-    T.bx0 = (bx - 1.).astype(np.float32)
-    T.by0 = (by - 1.).astype(np.float32)
-    T.delete_column('orig_ra')
-    T.delete_column('orig_dec')
-
     T.brick_primary = ((T.ra  >= brick.ra1 ) * (T.ra  < brick.ra2) *
                         (T.dec >= brick.dec1) * (T.dec < brick.dec2))
     H,W = maskbits.shape
@@ -2712,6 +2705,17 @@ def stage_writecat(
     T.fitbits[T.fit_background]     |= FITBITS['FIT_BACKGROUND']
     T.fitbits[T.hit_r_limit]        |= FITBITS['HIT_RADIUS_LIMIT']
     T.fitbits[T.hit_ser_limit]      |= FITBITS['HIT_SERSIC_LIMIT']
+    # WALKER/RUNNER
+    moved = np.hypot(T.bx - T.bx0, T.by - T.by0)
+    # radii in pixels:
+    walk_radius = 1.  / pixscale
+    run_radius  = 2.5 / pixscale
+    T.fitbits[moved > walk_radius] |= FITBITS['WALKER']
+    T.fitbits[moved > run_radius ] |= FITBITS['RUNNER']
+    # do we have Gaia?
+    if 'pointsource' in T.get_columns():
+        T.fitbits[T.pointsource]       |= FITBITS['GAIA_POINTSOURCE']
+    T.fitbits[T.iterative]         |= FITBITS['ITERATIVE']
 
     for col,bit in [('freezeparams',  'FROZEN'),
                     ('isbright',      'BRIGHT'),

@@ -151,7 +151,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
 
     # Column ordering...
     cols = ['release', 'brickid', 'brickname', 'objid', 'brick_primary',
-            'maskbits', 'fitbits', 'iterative',
+            'maskbits', 'fitbits',
             'type', 'ra', 'dec', 'ra_ivar', 'dec_ivar',
             'bx', 'by', 'dchisq', 'ebv', 'mjd_min', 'mjd_max',
             'ref_cat', 'ref_id']
@@ -167,7 +167,6 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
 
     if gaia_tagalong:
         gaia_cols = [
-            ('pointsource', bool),  # did we force it to be a point source?
             ('phot_g_mean_mag', np.float32),
             ('phot_g_mean_flux_over_error', np.float32),
             ('phot_g_n_obs', np.int16),
