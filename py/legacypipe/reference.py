@@ -463,12 +463,15 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True):
         galaxies.preburned = np.zeros(len(galaxies), bool)
         galaxies.rename('sga_id', 'ref_id')
     else:
-        # SGA
+        # SGA ellipse catalog
         # NOTE: fields such as ref_cat, preburned, etc, already exist in the
         # "galaxies" catalog read from disk.
-        # The galaxies we want to appear in MASKBITS get 'islargegalaxy' set
-        galaxies.islargegalaxy = (galaxies.preburned * galaxies.freeze *
-                                  (galaxies.ref_cat == refcat))
+        # The galaxies we want to appear in MASKBITS get
+        # 'islargegalaxy' set.  This includes both pre-burned
+        # galaxies, and ones where the preburning failed and we want
+        # to fall back to the SGA-parent ellipse for masking.
+        galaxies.islargegalaxy = ((galaxies.ref_cat == refcat) *
+                                  (galaxies.sga_id > -1))
         # The pre-fit galaxies whose parameters will stay fixed
         galaxies.freezeparams = (galaxies.preburned * galaxies.freeze)
 
