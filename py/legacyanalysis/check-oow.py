@@ -72,7 +72,7 @@ def one_file(fn):
         if expnum is None:
             expnum = 0
         print(fn, ext, expnum)
-        T.expnum.append(phdr.get('EXPNUM', 0))
+        T.expnum.append(expnum)
         T.obsid.append(phdr.get('OBSID', ''))
         T.acqnam.append(phdr.get('DTACQNAM', ''))
         T.filter.append(phdr.get('FILTER'))
