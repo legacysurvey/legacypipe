@@ -1740,13 +1740,13 @@ def _get_both_mods(X):
         # weighting -- fraction of flux that is in the patch
         fracin = pflux / flux
         # nea
-        if pflux == 0: # sum(p**2) can only be zero if all(p==0)
-            nea = np.inf
+        if pflux == 0: # sum(p**2) can only be zero if all(p==0), and then pflux==0
+            nea = 0.
         else:
             nea = pflux**2 / np.sum(p**2)
         mpsq = np.sum(maskedp**2)
-        if mpsq == 0:
-            mnea = np.inf
+        if mpsq == 0 or pflux == 0:
+            mnea = 0.
         else:
             mnea = pflux**2 / mpsq
         NEA.append([nea, mnea, fracin])
@@ -1916,18 +1916,20 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
             if not tim.band == band:
                 continue
             iv = 1./(tim.sig1**2)
-            num += iv * nea_wt * 1./nea
-            den += iv * nea_wt
-            bnum += iv * 1./bnea
-            bden += iv
-        ################# Need to rewrite this part! #######################
-        # bden should be the coadded per-pixel inverse variance derived from psfdepth and psfsize
-        # C and iband have not been defined!!!
-        iv = T.psfdepth[:,iband] * (4 * np.pi * (T.psfsize[:,iband]/2.3548)**2)
+            I, = np.nonzero(nea)
+            wt = nea_wt[I]
+            num[I] += iv * wt * 1./nea[I]
+            den[I] += iv * wt
+            I, = np.nonzero(bnea)
+            bnum[I] += iv * 1./bnea[I]
+            bden[I] += iv
+        # bden is the coadded per-pixel inverse variance derived from psfdepth and psfsize
+        iv = T.psfdepth[Ireg,iband] * (4 * np.pi * (T.psfsize[Ireg,iband]/2.3548)**2)
         print('bden from sum(1/sig1**2):', bden)
         print('bden from psfdepth & psfsize:', iv)
+        print('min/max ratio:',  np.min(bden/iv), np.max(bden/iv))
         bden = iv
-        ####################################################################
+
         # numerator and denominator are for the inverse-NEA!
         with np.errstate(divide='ignore'):
             nea  = den  / num
