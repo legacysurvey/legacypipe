@@ -1909,7 +1909,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         num  = np.zeros(Nreg, np.float32)
         den  = np.zeros(Nreg, np.float32)
         bnum = np.zeros(Nreg, np.float32)
-        bden = np.zeros(Nreg, np.float32)
         for tim,nea,bnea,nea_wt in zip(
                 tims, neas, blobneas, nea_wts):
             if not tim.band == band:
@@ -1921,15 +1920,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
             den[I] += iv * wt
             I, = np.nonzero(bnea)
             bnum[I] += iv * 1./bnea[I]
-            bden[I] += iv
         # bden is the coadded per-pixel inverse variance derived from psfdepth and psfsize
-        iv = T.psfdepth[Ireg,iband] * (4 * np.pi * (T.psfsize[Ireg,iband]/2.3548)**2)
-        print('bden from sum(1/sig1**2):', bden)
-        print('bden from psfdepth & psfsize:', iv)
-        ratio = bden[(iv>0) * (bden>0)] / iv[(iv>0)*(bden>0)]
-        print('min/median/max ratio:',  np.min(ratio), np.median(ratio), np.max(ratio))
-        bden = iv
-
+        bden = T.psfdepth[Ireg,iband] * (4 * np.pi * (T.psfsize[Ireg,iband]/2.3548)**2)
         # numerator and denominator are for the inverse-NEA!
         with np.errstate(divide='ignore', invalid='ignore'):
             nea  = den  / num
