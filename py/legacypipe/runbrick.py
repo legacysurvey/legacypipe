@@ -1916,11 +1916,12 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
             iv = 1./(tim.sig1**2)
             I, = np.nonzero(nea)
             wt = nea_wt[I]
-            num[I] += iv * wt * 1./nea[I]
+            num[I] += iv * wt * 1./(nea[I] * tim.imobj.pixscale**2)
             den[I] += iv * wt
             I, = np.nonzero(bnea)
             bnum[I] += iv * 1./bnea[I]
         # bden is the coadded per-pixel inverse variance derived from psfdepth and psfsize
+        # this ends up in arcsec units, not pixels
         bden = T.psfdepth[Ireg,iband] * (4 * np.pi * (T.psfsize[Ireg,iband]/2.3548)**2)
         # numerator and denominator are for the inverse-NEA!
         with np.errstate(divide='ignore', invalid='ignore'):
