@@ -1700,7 +1700,7 @@ def _get_both_mods(X):
             fro_rd.add((fro.pos.ra, fro.pos.dec))
 
     NEA = []
-    no_nea = [0.,0.,0.,0.]
+    no_nea = [0.,0.,0.]
     pcal = tim.getPhotoCal()
     for src,srcblob in srcs_blobs:
         if src is None:
@@ -1731,18 +1731,16 @@ def _get_both_mods(X):
         blobmod[outy, outx] += maskedp
         flux = pcal.brightnessToCounts(src.brightness)
         pflux = np.sum(p)
-        mflux = np.sum(maskedp)
-        fracflux  = pflux / flux
-        mfracflux = mflux / flux
+        fracin  = pflux / flux
         if pflux == 0:
-            nea = 0.
+            nea = np.inf
         else:
             nea = pflux**2 / np.sum(p**2)
-        if mflux == 0:
-            mnea = 0.
+        if maskedp == 0:
+            mnea = np.inf
         else:
-            mnea = mflux**2 / np.sum(maskedp**2)
-        NEA.append([nea, mnea, fracflux, mfracflux])
+            mnea = pflux**2 / np.sum(maskedp**2)
+        NEA.append([nea, mnea, fracin])
 
     if hasattr(tim.psf, 'clear_cache'):
         tim.psf.clear_cache()
@@ -1845,11 +1843,10 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     blobmods = [r[1] for r in bothmods]
     NEA      = [r[2] for r in bothmods]
     NEA = np.array(NEA)
-    # NEA shape (tims, srcs, 4:[nea, blobnea, nea_wt, blobnea_wt])
+    # NEA shape (tims, srcs, 4:[nea, blobnea, nea_wt])
     neas        = NEA[:,:,0]
     blobneas    = NEA[:,:,1]
     nea_wts     = NEA[:,:,2]
-    blobnea_wts = NEA[:,:,3]
     del bothmods
     tnow = Time()
     debug('Model images:', tnow-tlast)
@@ -1865,8 +1862,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         den  = np.zeros(Nreg, np.float32)
         bnum = np.zeros(Nreg, np.float32)
         bden = np.zeros(Nreg, np.float32)
-        for tim,nea,bnea,nea_wt,bnea_wt in zip(
-                tims, neas, blobneas, nea_wts, blobnea_wts):
+        for tim,nea,bnea,nea_wt in zip(
+                tims, neas, blobneas, nea_wts):
             if not tim.band == band:
                 continue
             iv = 1./(tim.sig1**2)
@@ -1875,9 +1872,15 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
             num[I] += iv * wt * 1./nea[I]
             den[I] += iv * wt
             I, = np.nonzero(bnea > 0)
-            wt = bnea_wt[I]
-            bnum[I] += iv * wt * 1./bnea[I]
-            bden[I] += iv * wt
+            bnum[I] += iv * 1./bnea[I]
+        
+        ################# Need to rewrite this part! #######################
+        # bden should be the coadded per-pixel inverse variance derived from psfdepth and psfsize
+        # C and iband have not been defined!!!
+        iv = C.T.psfdepth[:,iband] * (4 * np.pi * (C.T.psfsize[:,iband]/2.3548)**2)
+        bden[I] = iv
+        ####################################################################
+
         # numerator and denominator are for the inverse-NEA!
         with np.errstate(divide='ignore'):
             nea  = den  / num
