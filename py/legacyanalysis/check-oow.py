@@ -67,6 +67,10 @@ def one_file(fn):
         T.ext.append(ext)
         T.ccdname.append(hdr['EXTNAME'])
         expnum = phdr.get('EXPNUM', 0)
+        # /global/cfs/cdirs/cosmo/staging/mosaic/CP/V4.3/CP20160124/k4m_160125_104535_oow_zd_ls9.fits.fz
+        # has EXPNUM blank -> becomes None
+        if expnum is None:
+            expnum = 0
         print(fn, ext, expnum)
         T.expnum.append(phdr.get('EXPNUM', 0))
         T.obsid.append(phdr.get('OBSID', ''))
@@ -139,13 +143,39 @@ def main():
     # one_file('/global/cfs/cdirs/cosmo/staging/decam/CP/V4.8.2a/CP20190719/c4d_190720_102727_oow_r_v1.fits.fz')
     # one_file('/global/cfs/cdirs/cosmo/staging/decam/CP/V4.8.2a/CP20190719/c4d_190720_102212_oow_g_v1.fits.fz')
     # return
-    
-    #dirs = glob(dirprefix + '90prime/CP/V2.3/CP*')
-    #dirs = glob(dirprefix + 'mosaic/CP/V4.3/CP*')
-    dirs = glob(dirprefix + 'decam/CP/V4.8.2a/CP*')
-    dirs.sort()
-    dirs = list(reversed(dirs))
 
+    if True:
+        #dirs = glob(dirprefix + '90prime/CP/V2.3/CP*')
+        dirs = glob(dirprefix + 'mosaic/CP/V4.3/CP*')
+        #dirs = glob(dirprefix + 'mosaic/CP/V4.3/CP2017*')
+        #dirs = (glob(dirprefix + 'mosaic/CP/V4.3/CP2015*') +
+        #        glob(dirprefix + 'mosaic/CP/V4.3/CP2016*'))
+        #dirs = glob(dirprefix + 'decam/CP/V4.8.2a/CP*')
+        dirs.sort()
+        dirs = list(reversed(dirs))
+    
+        keepdirs = []
+        for dirnm in dirs:
+            outfn = 'oow-stats-' + '-'.join(dirnm.split('/')[-4:]) + '.fits'
+            if os.path.exists(outfn):
+                print('skipping', outfn)
+                continue
+            keepdirs.append(dirnm)
+        dirs = keepdirs
+    
+        print('Directories to run:')
+        for dirnm in dirs:
+            print('  ', dirnm)
+
+    # import argparse
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('dirs', nargs='+',
+    #                     help='Directories to process')
+    # args = parser.parse_args()
+    # 
+    # dirs = args.dirs
+    # print('Dirs:', dirs)
+    
     mp = multiproc(32)
     #mp = multiproc(1)
     
