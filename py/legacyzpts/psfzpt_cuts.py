@@ -235,7 +235,10 @@ def psf_zeropoint_cuts(P, pixscale,
         ('seeing_bad', np.logical_not(np.logical_and(seeing > 0, seeing < 3.0))),
         ('badexp_file', np.array([expnum in bad_expid for expnum in P.expnum])),
         ('radecrms',  np.hypot(P.ccdrarms, P.ccddecrms) > radec_rms),
-        ('sky_is_bright', np.array([sky > skybright.get(f.strip(), 1e6) for f,sky in zip(P.filter, P.ccdskycounts)])),
+        ('sky_is_bright', np.array([
+            ((sky > skybright.get(f.strip(), 1e6)) |
+             (sky*exptime > 35000))
+            for (f, sky, exptime) in zip(P.filter, P.ccdskycounts, P.exptime)])),
         ('zpt_diff_avg', np.abs(P.ccdzpt - P.zpt) > zpt_diff_avg),
         ('phrms_s7', (P.ccdphrms > 0.1) & (ccdname == 'S7')),
     ]

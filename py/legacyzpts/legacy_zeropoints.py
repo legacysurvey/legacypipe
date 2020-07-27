@@ -1777,7 +1777,8 @@ class Mosaic3Measurer(Measurer):
         if debug:
             return ['CCD2']
         hdu = fitsio.FITS(fn)
-        extlist = [hdu[i].get_extname() for i in range(1,len(hdu))]
+        extlist = [hdu[i].get_extname().upper().strip()
+                   for i in range(1,len(hdu))]
         return extlist
 
     def get_expnum(self, primhdr):
@@ -1866,7 +1867,8 @@ class NinetyPrimeMeasurer(Measurer):
         if debug:
             return ['CCD1']
         hdu = fitsio.FITS(fn)
-        extlist = [hdu[i].get_extname() for i in range(1,len(hdu))]
+        extlist = [hdu[i].get_extname().upper().strip()
+                   for i in range(1,len(hdu))]
         return extlist
 
     def get_expnum(self, primhdr):

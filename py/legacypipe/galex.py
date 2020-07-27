@@ -1,6 +1,6 @@
 """
-LSLGA.galex
-===========
+legacypipe.galex
+================
 
 Code to generate GALEX custom coadds / mosaics.
 

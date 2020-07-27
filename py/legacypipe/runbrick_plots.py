@@ -287,7 +287,8 @@ def tim_plots(tims, bands, ps):
         plt.subplot(2,2,4)
         dimshow(tim.getImage() * (tim.getInvError() > 0),
                 vmin=-3.*tim.sig1, vmax=10.*tim.sig1)
-        plt.title('image (masked)')
+        okpix = tim.getImage()[tim.getInvError() > 0]
+        plt.title('image (masked) range [%.3g, %.3g]' % (np.min(okpix), np.max(okpix)))
         plt.suptitle(tim.name)
         ps.savefig()
 
