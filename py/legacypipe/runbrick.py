@@ -1714,7 +1714,7 @@ def _get_both_mods(X):
         if patch is None:
             NEA.append(no_nea)
             continue
-        # From patch.addTo()
+        # From patch.addTo() -- find pixel overlap region
         (ih, iw) = mod.shape
         (ph, pw) = patch.shape
         (outx, inx) = get_overlapping_region(
@@ -1724,22 +1724,31 @@ def _get_both_mods(X):
         if inx == [] or iny == []:
             NEA.append(no_nea)
             continue
+        # model image patch
         p = patch.patch[iny, inx]
+        # add to model image
         mod[outy, outx] += p
         # mask by blob map
         maskedp = p * (timblobmap[outy,outx] == srcblob)
+        # add to blob-masked image
         blobmod[outy, outx] += maskedp
+        # per-image NEA computations
+        # total flux
         flux = pcal.brightnessToCounts(src.brightness)
+        # flux in patch
         pflux = np.sum(p)
-        fracin  = pflux / flux
-        if pflux == 0:
+        # weighting -- fraction of flux that is in the patch
+        fracin = pflux / flux
+        # nea
+        if pflux == 0: # sum(p**2) can only be zero if all(p==0)
             nea = np.inf
         else:
             nea = pflux**2 / np.sum(p**2)
-        if maskedp == 0:
+        mpsq = np.sum(maskedp**2)
+        if mpsq == 0:
             mnea = np.inf
         else:
-            mnea = pflux**2 / np.sum(maskedp**2)
+            mnea = pflux**2 / mpsq
         NEA.append([nea, mnea, fracin])
 
     if hasattr(tim.psf, 'clear_cache'):
@@ -1843,53 +1852,14 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     blobmods = [r[1] for r in bothmods]
     NEA      = [r[2] for r in bothmods]
     NEA = np.array(NEA)
-    # NEA shape (tims, srcs, 4:[nea, blobnea, nea_wt])
+    # NEA shape (tims, srcs, 3:[nea, blobnea, weight])
     neas        = NEA[:,:,0]
     blobneas    = NEA[:,:,1]
     nea_wts     = NEA[:,:,2]
-    del bothmods
+    del bothmods, NEA
     tnow = Time()
     debug('Model images:', tnow-tlast)
     tlast = tnow
-
-    # average NEA stats per band
-    # first init all bands expected by format_catalog
-    for band in survey.allbands:
-        T.set('nea_%s' % band, np.zeros(len(T), np.float32))
-        T.set('blob_nea_%s' % band, np.zeros(len(T), np.float32))
-    for band in bands:
-        num  = np.zeros(Nreg, np.float32)
-        den  = np.zeros(Nreg, np.float32)
-        bnum = np.zeros(Nreg, np.float32)
-        bden = np.zeros(Nreg, np.float32)
-        for tim,nea,bnea,nea_wt in zip(
-                tims, neas, blobneas, nea_wts):
-            if not tim.band == band:
-                continue
-            iv = 1./(tim.sig1**2)
-            I, = np.nonzero(nea > 0)
-            wt = nea_wt[I]
-            num[I] += iv * wt * 1./nea[I]
-            den[I] += iv * wt
-            I, = np.nonzero(bnea > 0)
-            bnum[I] += iv * 1./bnea[I]
-        
-        ################# Need to rewrite this part! #######################
-        # bden should be the coadded per-pixel inverse variance derived from psfdepth and psfsize
-        # C and iband have not been defined!!!
-        iv = C.T.psfdepth[:,iband] * (4 * np.pi * (C.T.psfsize[:,iband]/2.3548)**2)
-        bden[I] = iv
-        ####################################################################
-
-        # numerator and denominator are for the inverse-NEA!
-        with np.errstate(divide='ignore'):
-            nea  = den  / num
-            bnea = bden / bnum
-        nea [np.logical_not(np.isfinite(nea ))] = 0.
-        bnea[np.logical_not(np.isfinite(bnea))] = 0.
-        # Set vals in T
-        T.get('nea_%s' % band)[Ireg] = nea
-        T.get('blob_nea_%s' % band)[Ireg] = bnea
 
     # source pixel positions to probe depth maps, etc
     ixy = (np.clip(T.ibx, 0, W-1).astype(int), np.clip(T.iby, 0, H-1).astype(int))
@@ -1928,9 +1898,47 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # store galaxy sim bounding box in Tractor cat
     if 'sims_xy' in C.T.get_columns():
         cols.append('sims_xy')
-
     for c in cols:
         T.set(c, C.T.get(c))
+
+    # average NEA stats per band -- after psfsize,psfdepth computed.
+    # first init all bands expected by format_catalog
+    for band in survey.allbands:
+        T.set('nea_%s' % band, np.zeros(len(T), np.float32))
+        T.set('blob_nea_%s' % band, np.zeros(len(T), np.float32))
+    for iband,band in enumerate(bands):
+        num  = np.zeros(Nreg, np.float32)
+        den  = np.zeros(Nreg, np.float32)
+        bnum = np.zeros(Nreg, np.float32)
+        bden = np.zeros(Nreg, np.float32)
+        for tim,nea,bnea,nea_wt in zip(
+                tims, neas, blobneas, nea_wts):
+            if not tim.band == band:
+                continue
+            iv = 1./(tim.sig1**2)
+            num += iv * nea_wt * 1./nea
+            den += iv * nea_wt
+            bnum += iv * 1./bnea
+            bden += iv
+        ################# Need to rewrite this part! #######################
+        # bden should be the coadded per-pixel inverse variance derived from psfdepth and psfsize
+        # C and iband have not been defined!!!
+        iv = T.psfdepth[:,iband] * (4 * np.pi * (T.psfsize[:,iband]/2.3548)**2)
+        print('bden from sum(1/sig1**2):', bden)
+        print('bden from psfdepth & psfsize:', iv)
+        bden = iv
+        ####################################################################
+        # numerator and denominator are for the inverse-NEA!
+        with np.errstate(divide='ignore'):
+            nea  = den  / num
+            bnea = bden / bnum
+        nea [np.logical_not(np.isfinite(nea ))] = 0.
+        bnea[np.logical_not(np.isfinite(bnea))] = 0.
+        # Set vals in T
+        T.get('nea_%s' % band)[Ireg] = nea
+        T.get('blob_nea_%s' % band)[Ireg] = bnea
+
+    # Grab aperture fluxes
     assert(C.AP is not None)
     # How many apertures?
     A = len(apertures_arcsec)
@@ -1950,6 +1958,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         D.writeto(None, fits_object=out.fits)
     del D
 
+    # Create JPEG coadds
     coadd_list= [('image', C.coimgs, {}),
                  ('model', C.comods, {}),
                  ('blobmodel', C.coblobmods, {}),
@@ -1963,13 +1972,12 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         if coadd_bw and len(bands) == 1:
             rgb = rgb.sum(axis=2)
             kwa = dict(cmap='gray')
-
         with survey.write_output(name + '-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
             info('Wrote', out.fn)
         del rgb
 
-    # Construct a mask bits map
+    # Construct the maskbits map
     maskbits = np.zeros((H,W), np.int16)
     # !PRIMARY
     if not custom_brick:
