@@ -1927,11 +1927,12 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         iv = T.psfdepth[Ireg,iband] * (4 * np.pi * (T.psfsize[Ireg,iband]/2.3548)**2)
         print('bden from sum(1/sig1**2):', bden)
         print('bden from psfdepth & psfsize:', iv)
-        print('min/max ratio:',  np.min(bden/iv), np.max(bden/iv))
+        ratio = bden[(iv>0) * (bden>0)] / iv[(iv>0)*(bden>0)]
+        print('min/median/max ratio:',  np.min(ratio), np.median(ratio), np.max(ratio))
         bden = iv
 
         # numerator and denominator are for the inverse-NEA!
-        with np.errstate(divide='ignore'):
+        with np.errstate(divide='ignore', invalid='ignore'):
             nea  = den  / num
             bnea = bden / bnum
         nea [np.logical_not(np.isfinite(nea ))] = 0.
