@@ -1747,7 +1747,7 @@ def _get_both_mods(X):
         if mpsq == 0 or pflux == 0:
             mnea = 0.
         else:
-            mnea = pflux**2 / mpsq
+            mnea = flux**2 / mpsq
         NEA.append([nea, mnea, fracin])
 
     if hasattr(tim.psf, 'clear_cache'):
