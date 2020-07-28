@@ -2749,7 +2749,8 @@ def stage_writecat(
             T.rename(c, c.lower())
     from legacypipe.format_catalog import format_catalog
     with survey.write_output('tractor', brick=brickname) as out:
-        format_catalog(T[np.argsort(T.objid)], None, primhdr, survey.allbands, None, release,
+        format_catalog(T[np.argsort(T.objid)], None, primhdr, bands,
+                       survey.allbands, None, release,
                        write_kwargs=dict(fits_object=out.fits),
                        N_wise_epochs=15, motions=gaia_stars, gaia_tagalong=True)
 
