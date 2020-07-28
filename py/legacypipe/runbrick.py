@@ -2593,13 +2593,15 @@ def stage_writecat(
 
     # In oneblob.py we have a step where we zero out the fluxes for sources
     # with tiny "fracin" values.  Repeat that here, but zero out more stuff...
-    for band in bands:
-        fracin = T.get('fracin_%s' % band)
-        I = np.flatnonzero(fracin < 1e-3)
-        # zero out:
-        T.get('flux_%s' % band)[I] = 0.
-        T.get('flux_ivar_%s' % band)[I] = 0.
-        # zero out fracin itself??
+    for iband,band in enumerate(bands):
+        # we could do this on the 2d arrays...
+        I = np.flatnonzero(T.fracin[:,iband] < 1e-3)
+        debug('Zeroing out', len(I), 'objs in', band, 'band with small fracin.')
+        if len(I):
+            # zero out:
+            T.flux[I,iband] = 0.
+            T.flux_ivar[I,iband] = 0.
+            # zero out fracin itself??
 
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
