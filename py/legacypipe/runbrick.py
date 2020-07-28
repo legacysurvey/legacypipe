@@ -2591,6 +2591,16 @@ def stage_writecat(
             T.ra_ivar [I] = T_orig.ra_ivar [I]
             T.dec_ivar[I] = T_orig.dec_ivar[I]
 
+    # In oneblob.py we have a step where we zero out the fluxes for sources
+    # with tiny "fracin" values.  Repeat that here, but zero out more stuff...
+    for band in bands:
+        fracin = T.get('fracin_%s' % band)
+        I = np.flatnonzero(fracin < 1e-3)
+        # zero out:
+        T.get('flux_%s' % band)[I] = 0.
+        T.get('flux_ivar_%s' % band)[I] = 0.
+        # zero out fracin itself??
+
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
         primhdr.add_record(r)
