@@ -74,21 +74,11 @@ def get_units_for_columns(cols, bands, extras={}):
     units = [units.get(c, '') for c in cols]
     return units
 
-def format_catalog(T, hdr, primhdr, allbands, outfn, release,
+def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
                    write_kwargs=None, N_wise_epochs=None,
                    motions=True, gaia_tagalong=False):
     if write_kwargs is None:
         write_kwargs = {}
-    # Retrieve the bands in this catalog.
-    bands = []
-    for i in range(10):
-        b = primhdr.get('BAND%i' % i)
-        if b is None:
-            break
-        b = b.strip()
-        bands.append(b)
-    debug('Bands in this catalog:', bands)
-
     has_wise =    'flux_w1'    in T.columns()
     has_wise_lc = 'lc_flux_w1' in T.columns()
     has_galex =   'flux_nuv'   in T.columns()
