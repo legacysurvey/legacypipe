@@ -72,7 +72,6 @@ def rbmain():
         I = np.flatnonzero(T.ref_cat == 'T2')
         assert(len(I) == 1)
         assert(T.ref_id[I][0] == 1909016711)
-        del os.environ['TYCHO2_KD_DIR']
 
         cat = read_fits_catalog(T)
         assert(len(cat) == 2)
@@ -91,6 +90,19 @@ def rbmain():
                    '--force-all', '--no-write', '--no-wise', '--no-gaia',
                    '--survey-dir', surveydir, '--fit-on-coadds',
                    '--outdir', outdir])
+
+        fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
+        assert(os.path.exists(fn))
+        T = fits_table(fn)
+        assert(len(T) == 2)
+        # Since there is a Tycho-2 star in the blob, forced to be PSF.
+        assert(T.type[0].strip() == 'PSF')
+        assert(T.type[1].strip() == 'PSF')
+        # There is a Tycho-2 star in the blob.
+        I = np.flatnonzero(T.ref_cat == 'T2')
+        assert(len(I) == 1)
+        assert(T.ref_id[I][0] == 1909016711)
+        del os.environ['TYCHO2_KD_DIR']
 
         # test --skip-coadds
         r = main(args=['--brick', '1102p240',
