@@ -258,7 +258,7 @@ def rbmain():
                       '--agn',
                       '257266', 'S21', 'forced3.fits'])
     assert(os.path.exists('forced3.fits'))
-    F = fits_table('forced3.fits')
+    _ = fits_table('forced3.fits')
 
     if ceres:
         forced_main(args=['--survey-dir', surveydir,
@@ -267,7 +267,7 @@ def rbmain():
                           '--apphot',
                           '372546', 'N26', 'forced4.fits'])
         assert(os.path.exists('forced4.fits'))
-        F = fits_table('forced4.fits')
+        _ = fits_table('forced4.fits')
 
     # Test cache_dir
     with tempfile.TemporaryDirectory() as cachedir, \
