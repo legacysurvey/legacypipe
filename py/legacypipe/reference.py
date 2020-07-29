@@ -18,7 +18,9 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                           large_galaxies=True,
                           star_clusters=True,
                           clean_columns=True,
-                          plots=False, ps=None):
+                          plots=False, ps=None,
+                          gaia_margin=None,
+                          galaxy_margin=None):
     # If bands = None, does not create sources.
 
     H,W = targetwcs.shape
@@ -27,7 +29,10 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     # How big of a margin to search for bright stars and star clusters --
     # this should be based on the maximum radius they are considered to
     # affect.  In degrees.
-    ref_margin = mask_radius_for_mag(0.)
+    if gaia_margin is not None:
+        ref_margin = gaia_margin
+    else:
+        ref_margin = mask_radius_for_mag(0.)
     mpix = int(np.ceil(ref_margin * 3600. / pixscale))
     marginwcs = targetwcs.get_subimage(-mpix, -mpix, W+2*mpix, H+2*mpix)
 
@@ -112,7 +117,10 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
 
     # Read large galaxies nearby.
     if large_galaxies:
-        galaxies = read_large_galaxies(survey, targetwcs, bands, clean_columns=clean_columns)
+        kw = {}
+        if galaxy_margin is not None:
+            kw.update(max_radius=galaxy_margin + np.hypot(H,W)/2.*pixscale/3600)
+        galaxies = read_large_galaxies(survey, targetwcs, bands, clean_columns=clean_columns, **kw)
         if galaxies is not None:
             # Resolve possible Gaia-large-galaxy duplicates
             if gaia and len(gaia):
@@ -429,13 +437,15 @@ def get_large_galaxy_version(fn):
             return 'L'+k[0], preburn
     return 'LG', preburn
 
-def read_large_galaxies(survey, targetwcs, bands, clean_columns=True):
+def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
+                        max_radius=2.):
+    # Note, max_radius must include the brick radius!
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
     galfn = survey.find_file('large-galaxies')
     if galfn is None:
         debug('No large-galaxies catalog file')
         return None
-    radius = 2.
+    radius = max_radius
     rc,dc = targetwcs.radec_center()
 
     debug('Reading', galfn)
@@ -444,8 +454,8 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True):
     except:
         kd = tree_open(galfn, 'largegals')
     I = tree_search_radec(kd, rc, dc, radius)
-    debug(len(I), 'large galaxies within', radius,
-          'deg of RA,Dec (%.3f, %.3f)' % (rc,dc))
+    debug('%i large galaxies within %.3g deg of RA,Dec (%.3f, %.3f)' %
+          (len(I), radius, rc,dc))
     if len(I) == 0:
         return None
     # Read only the rows within range.
