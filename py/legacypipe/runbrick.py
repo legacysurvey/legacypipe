@@ -1660,18 +1660,19 @@ def _get_both_mods(X):
 
     srcs_blobs = list(zip(srcs, srcblobs))
 
+    fro_rd = set()
     if frozen_galaxies is not None:
         from tractor.patch import ModelMask
         timblobs = set(timblobmap.ravel())
         timblobs.discard(-1)
         h,w = tim.shape
         mm = ModelMask(0, 0, w, h)
-        for src,bb in frozen_galaxies.items():
+        for fro,bb in frozen_galaxies.items():
             # Does this source (which touches blobs bb) touch any blobs in this tim?
             touchedblobs = timblobs.intersection(bb)
             if len(touchedblobs) == 0:
                 continue
-            patch = src.getModelPatch(tim, modelMask=mm)
+            patch = fro.getModelPatch(tim, modelMask=mm)
             if patch is None:
                 continue
             patch.addTo(mod)
@@ -1695,20 +1696,24 @@ def _get_both_mods(X):
 
             # Drop this frozen galaxy from the catalog to render, if it is present
             # (ie, if it is in_bounds)
-            # Can't use "==": they're not the same objects; the "srcs" have been
-            # to oneblob.py and back, and, eg, get their EllipseE types changed.
-            srcs_blobs = [(s,b) for s,b in srcs_blobs
-                          if not (s is not None and
-                                  s.pos.ra  == src.pos.ra and
-                                  s.pos.dec == src.pos.dec)]
+            fro_rd.add((fro.pos.ra, fro.pos.dec))
 
+    NEA = []
+    no_nea = [0.,0.,0.]
+    pcal = tim.getPhotoCal()
     for src,srcblob in srcs_blobs:
         if src is None:
+            NEA.append(no_nea)
+            continue
+        if (src.pos.ra, src.pos.dec) in fro_rd:
+            # Skip frozen galaxy source (here we choose not to compute NEA)
+            NEA.append(no_nea)
             continue
         patch = src.getModelPatch(tim)
         if patch is None:
+            NEA.append(no_nea)
             continue
-        # From patch.addTo()
+        # From patch.addTo() -- find pixel overlap region
         (ih, iw) = mod.shape
         (ph, pw) = patch.shape
         (outx, inx) = get_overlapping_region(
@@ -1716,15 +1721,38 @@ def _get_both_mods(X):
         (outy, iny) = get_overlapping_region(
             patch.y0, patch.y0 + ph - 1, 0, ih - 1)
         if inx == [] or iny == []:
+            NEA.append(no_nea)
             continue
+        # model image patch
         p = patch.patch[iny, inx]
+        # add to model image
         mod[outy, outx] += p
         # mask by blob map
-        blobmod[outy, outx] += p * (timblobmap[outy,outx] == srcblob)
+        maskedp = p * (timblobmap[outy,outx] == srcblob)
+        # add to blob-masked image
+        blobmod[outy, outx] += maskedp
+        # per-image NEA computations
+        # total flux
+        flux = pcal.brightnessToCounts(src.brightness)
+        # flux in patch
+        pflux = np.sum(p)
+        # weighting -- fraction of flux that is in the patch
+        fracin = pflux / flux
+        # nea
+        if pflux == 0: # sum(p**2) can only be zero if all(p==0), and then pflux==0
+            nea = 0.
+        else:
+            nea = pflux**2 / np.sum(p**2)
+        mpsq = np.sum(maskedp**2)
+        if mpsq == 0 or pflux == 0:
+            mnea = 0.
+        else:
+            mnea = flux**2 / mpsq
+        NEA.append([nea, mnea, fracin])
 
     if hasattr(tim.psf, 'clear_cache'):
         tim.psf.clear_cache()
-    return mod, blobmod
+    return mod, blobmod, NEA
 
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
@@ -1814,13 +1842,20 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                 if blobmap[yy,xx] != -1:
                     bb.append(blobmap[yy,xx])
 
-    I = np.flatnonzero(T.regular)
-    bothmods = mp.map(_get_both_mods, [(tim, [cat[i] for i in I], T.blob[I], blobmap,
+    Ireg = np.flatnonzero(T.regular)
+    Nreg = len(Ireg)
+    bothmods = mp.map(_get_both_mods, [(tim, [cat[i] for i in Ireg], T.blob[Ireg], blobmap,
                                         targetwcs, frozen_galaxies, ps, plots)
                                        for tim in tims])
-    mods     = [m for m,b in bothmods]
-    blobmods = [b for m,b in bothmods]
-    del bothmods
+    mods     = [r[0] for r in bothmods]
+    blobmods = [r[1] for r in bothmods]
+    NEA      = [r[2] for r in bothmods]
+    NEA = np.array(NEA)
+    # NEA shape (tims, srcs, 3:[nea, blobnea, weight])
+    neas        = NEA[:,:,0]
+    blobneas    = NEA[:,:,1]
+    nea_wts     = NEA[:,:,2]
+    del bothmods, NEA
     tnow = Time()
     debug('Model images:', tnow-tlast)
     tlast = tnow
@@ -1862,9 +1897,43 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # store galaxy sim bounding box in Tractor cat
     if 'sims_xy' in C.T.get_columns():
         cols.append('sims_xy')
-
     for c in cols:
         T.set(c, C.T.get(c))
+
+    # average NEA stats per band -- after psfsize,psfdepth computed.
+    # first init all bands expected by format_catalog
+    for band in survey.allbands:
+        T.set('nea_%s' % band, np.zeros(len(T), np.float32))
+        T.set('blob_nea_%s' % band, np.zeros(len(T), np.float32))
+    for iband,band in enumerate(bands):
+        num  = np.zeros(Nreg, np.float32)
+        den  = np.zeros(Nreg, np.float32)
+        bnum = np.zeros(Nreg, np.float32)
+        for tim,nea,bnea,nea_wt in zip(
+                tims, neas, blobneas, nea_wts):
+            if not tim.band == band:
+                continue
+            iv = 1./(tim.sig1**2)
+            I, = np.nonzero(nea)
+            wt = nea_wt[I]
+            num[I] += iv * wt * 1./(nea[I] * tim.imobj.pixscale**2)
+            den[I] += iv * wt
+            I, = np.nonzero(bnea)
+            bnum[I] += iv * 1./bnea[I]
+        # bden is the coadded per-pixel inverse variance derived from psfdepth and psfsize
+        # this ends up in arcsec units, not pixels
+        bden = T.psfdepth[Ireg,iband] * (4 * np.pi * (T.psfsize[Ireg,iband]/2.3548)**2)
+        # numerator and denominator are for the inverse-NEA!
+        with np.errstate(divide='ignore', invalid='ignore'):
+            nea  = den  / num
+            bnea = bden / bnum
+        nea [np.logical_not(np.isfinite(nea ))] = 0.
+        bnea[np.logical_not(np.isfinite(bnea))] = 0.
+        # Set vals in T
+        T.get('nea_%s' % band)[Ireg] = nea
+        T.get('blob_nea_%s' % band)[Ireg] = bnea
+
+    # Grab aperture fluxes
     assert(C.AP is not None)
     # How many apertures?
     A = len(apertures_arcsec)
@@ -1884,6 +1953,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         D.writeto(None, fits_object=out.fits)
     del D
 
+    # Create JPEG coadds
     coadd_list= [('image', C.coimgs, {}),
                  ('model', C.comods, {}),
                  ('blobmodel', C.coblobmods, {}),
@@ -1897,13 +1967,12 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         if coadd_bw and len(bands) == 1:
             rgb = rgb.sum(axis=2)
             kwa = dict(cmap='gray')
-
         with survey.write_output(name + '-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
             info('Wrote', out.fn)
         del rgb
 
-    # Construct a mask bits map
+    # Construct the maskbits map
     maskbits = np.zeros((H,W), np.int16)
     # !PRIMARY
     if not custom_brick:

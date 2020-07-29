@@ -245,7 +245,7 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
             col = 'wisemask_%s' % (b)
             T.set(col, T.wise_mask[:,i])
             cols.append(col)
-    for c in ['psfsize', 'psfdepth', 'galdepth']:
+    for c in ['psfsize', 'psfdepth', 'galdepth', 'nea', 'blob_nea']:
         add_fluxlike(c)
     if has_wise:
         add_wiselike('psfdepth')
