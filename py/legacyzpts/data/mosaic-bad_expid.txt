@@ -5711,3 +5711,4 @@
 148572-CCD3 one amp misbehaving badly
 148673-CCD1 significant sky offsets between different amps; weird horizontal features
 3103609-CCD3 one amp is close to all zeros, another is very noisy
+129926-CCD4 weird blurring artifacts on some amps
