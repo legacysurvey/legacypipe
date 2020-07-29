@@ -233,7 +233,9 @@ def psf_zeropoint_cuts(P, pixscale,
         ('phrms',     P.phrms > 0.1),
         ('exptime', P.exptime < 30),
         ('seeing_bad', np.logical_not(np.logical_and(seeing > 0, seeing < 3.0))),
-        ('badexp_file', np.array([expnum in bad_expid for expnum in P.expnum])),
+        ('badexp_file', np.array([((expnum, None) in bad_expid or
+                                   (expnum, ccdname0) in bad_expid)
+                                  for expnum, ccdname0 in zip(P.expnum, ccdname)])),
         ('radecrms',  np.hypot(P.ccdrarms, P.ccddecrms) > radec_rms),
         ('sky_is_bright', np.array([
             ((sky > skybright.get(f.strip(), 1e6)) |
@@ -338,13 +340,24 @@ def read_bad_expid(fn='bad_expid.txt'):
         if line[0] == '#':
             continue
         words = line.split()
-        if len(words) < 2:
+        if len(words) < 1:
             continue
+        if '-' in words[0]:
+            idparts = words[0].split('-')
+            if len(idparts) != 2:
+                print('Skipping line', line)
+                continue
+            expidstr = idparts[0]
+            ccd = idparts[1].strip()
+        else:
+            expidstr = words[0]
+            ccd = None
         try:
-            expnum = int(words[0], 10)
+            expnum = int(expidstr, 10)
         except ValueError:
             print('Skipping line', line)
             continue
-        reason = ' '.join(words[1:])
-        bad_expid[expnum] = reason
+        reason = words[1:] if len(words) > 1 else 'unknown'
+        reason = ' '.join(reason)
+        bad_expid[(expnum, ccd)] = reason
     return bad_expid
