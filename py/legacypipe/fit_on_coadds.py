@@ -532,6 +532,7 @@ def stage_fit_on_coadds(
         cotim.galnorm = 1.0 # bogus!
         cotim.imobj = Duck()
         cotim.imobj.fwhm = 2.35 * psf_sigma
+        cotim.imobj.pixscale = pixscale
         cotim.time = tai
         cotim.primhdr = fitsio.FITSHDR()
         get_coadd_headers(cotim.primhdr, tims, band)
