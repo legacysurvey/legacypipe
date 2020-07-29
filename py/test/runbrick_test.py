@@ -250,7 +250,7 @@ def rbmain():
                       '--apphot',
                       '372547', 'N26', 'forced2.fits'])
     assert(os.path.exists('forced2.fits'))
-    F = fits_table('forced2.fits')
+    _ = fits_table('forced2.fits')
 
     forced_main(args=['--survey-dir', surveydir,
                       '--no-ceres',
