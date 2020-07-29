@@ -85,6 +85,13 @@ def rbmain():
         cat2 = Catalog(*cat)
         assert(len(ivs) == len(cat2.getParams()))
 
+        # test --fit-on-coadds
+        outdir = 'out-testcase6-coadds'
+        main(args=['--brick', '1102p240', '--zoom', '500', '600', '650', '750',
+                   '--force-all', '--no-write', '--no-wise', '--no-gaia',
+                   '--survey-dir', surveydir, '--fit-on-coadds',
+                   '--outdir', outdir])
+
         # test --skip-coadds
         r = main(args=['--brick', '1102p240',
                        '--zoom', '500', '600', '650', '750',
