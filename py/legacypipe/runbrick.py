@@ -722,7 +722,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
         r_sga_excl = 8
         J = np.flatnonzero(refstars.islargegalaxy * refstars.in_bounds)
         avoid_xyr.extend([(x,y,r_sga_excl) for x,y in zip(refstars.ibx[J], refstars.iby[J])])
-    avoid_xyr = np.array(avoid_xyr, dtyppe=np.int32)
+    avoid_xyr = np.array(avoid_xyr, dtype=np.int32)
     avoid_x = avoid_xyr[:,0]
     avoid_y = avoid_xyr[:,1]
     avoid_r = avoid_xyr[:,2]
