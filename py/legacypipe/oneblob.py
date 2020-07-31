@@ -263,6 +263,10 @@ class OneBlob(object):
         for src in self.srcs:
             src.initial_brightness = src.brightness.copy()
 
+        # Set the freezeparams field for each source.
+        for src in self.srcs:
+            src.freezeparams = getattr(src, 'freezeparams', False)
+
         if self.plots:
             import pylab as plt
             self._initial_plots()
@@ -305,9 +309,9 @@ class OneBlob(object):
         if len(cat) > 1 and len(cat) <= 10:
             cat.thawAllParams()
             for i,src in enumerate(cat):
-                if getattr(src, 'freezeparams', False):
+                if src.freezeparams:
                     debug('Frozen source', src, '-- keeping as-is!')
-                cat.freezeParam(i)
+                    cat.freezeParam(i)
             tr.optimize_loop(**self.optargs)
 
         if self.plots:
@@ -688,7 +692,7 @@ class OneBlob(object):
                   (numi+1, len(Ibright), self.name, srci))
             cpu0 = time.process_time()
 
-            if getattr(src, 'freezeparams', False):
+            if src.freezeparams:
                 info('Frozen source', src, '-- keeping as-is!')
                 B.sources[srci] = src
                 continue
@@ -1699,7 +1703,7 @@ class OneBlob(object):
             cpu0 = time.process_time()
             cat.freezeAllBut(i)
             src = cat[i]
-            if getattr(src, 'freezeparams', False):
+            if src.freezeparams:
                 debug('Frozen source', src, '-- keeping as-is!')
                 continue
             modelMasks = models.model_masks(0, cat[i])
@@ -1737,7 +1741,7 @@ class OneBlob(object):
         for numi,srci in enumerate(Ibright):
             cpu0 = time.process_time()
             src = cat[srci]
-            if getattr(src, 'freezeparams', False):
+            if src.freezeparams:
                 debug('Frozen source', src, '-- keeping as-is!')
                 continue
             debug('Fitting source', srci, '(%i of %i in blob %s)' %
@@ -1815,17 +1819,20 @@ class OneBlob(object):
         del models
 
     def _fit_fluxes(self, cat, tims, bands):
-        cat.thawAllRecursive()
-        for src in cat:
+        fitcat = [src for src in cat if not src.freezeparams]
+        #cat.thawAllRecursive()
+        for src in fitcat:
             src.freezeAllBut('brightness')
         for b in bands:
-            for src in cat:
+            for src in fitcat:
                 src.getBrightness().freezeAllBut(b)
             # Images for this band
             btims = [tim for tim in tims if tim.band == b]
             btr = self.tractor(btims, cat)
             btr.optimize_forced_photometry(shared_params=False, wantims=False)
-        cat.thawAllRecursive()
+        #cat.thawAllRecursive()
+        for src in fitcat:
+            src.thawAllParams()
 
     def _plots(self, tr, title):
         plotmods = []
