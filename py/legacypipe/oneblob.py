@@ -1820,17 +1820,18 @@ class OneBlob(object):
 
     def _fit_fluxes(self, cat, tims, bands):
         fitcat = [src for src in cat if not src.freezeparams]
-        #cat.thawAllRecursive()
+        if len(fitcat) == 0:
+            return
         for src in fitcat:
             src.freezeAllBut('brightness')
+        debug('Fitting fluxes for %i of %i sources' % (len(fitcat), len(cat)))
         for b in bands:
             for src in fitcat:
                 src.getBrightness().freezeAllBut(b)
             # Images for this band
             btims = [tim for tim in tims if tim.band == b]
-            btr = self.tractor(btims, cat)
+            btr = self.tractor(btims, fitcat)
             btr.optimize_forced_photometry(shared_params=False, wantims=False)
-        #cat.thawAllRecursive()
         for src in fitcat:
             src.thawAllParams()
 
