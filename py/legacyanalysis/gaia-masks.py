@@ -50,16 +50,24 @@ def main():
     iset = 0
     while len(BG):
         N = 10000
-        Gset = mp.map(bounce_one_brick, [(brick,survey) for brick in BG[:N]])
-        Gset = [G for G in Gset if G is not None]
-        Gset = merge_tables(Gset)
-        Gset.writeto('/global/cscratch1/sd/dstn/gaia-mask-set%i.fits' % iset)
+        outfn = '/global/cscratch1/sd/dstn/gaia-mask-dr9-set%i.fits' % iset
+        if os.path.exists(outfn):
+            Gset = fits_table(outfn)
+            print('Read', outfn)
+            nb = len(set(Gset.brickname))
+            if nb != N:
+                print('Warning: file contains', nb, 'bricks, vs', N)
+        else:
+            Gset = mp.map(bounce_one_brick, [(brick,survey) for brick in BG[:N]])
+            Gset = [G for G in Gset if G is not None]
+            Gset = merge_tables(Gset, columns='fillzero')
+            Gset.writeto(outfn)
         GG.append(Gset)
         iset += 1
         BG = BG[N:]
-                      
-    G = merge_tables(GG)
-    G.writeto('/global/cscratch1/sd/dstn/gaia-mask.fits')
+
+    G = merge_tables(GG, columns='fillzero')
+    G.writeto('/global/cscratch1/sd/dstn/gaia-mask-dr9.fits')
 
 def bounce_one_brick(X):
     return one_brick(*X)
