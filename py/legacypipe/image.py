@@ -1175,7 +1175,7 @@ class LegacySurveyImage(object):
         primhdr = self.read_image_primary_header()
         imghdr = self.read_image_header()
 
-        self.fix_saturation(img, dq, invvar, primhdr, imghdr)
+        self.fix_saturation(img, dq, wt, primhdr, imghdr)
 
         template_meta = {}
         template = self.get_sky_template(slc=slc)
