@@ -305,15 +305,6 @@ class OneBlob(object):
         else:
             self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source)
 
-        # Optimize all at once?
-        if len(cat) > 1 and len(cat) <= 10:
-            cat.thawAllParams()
-            for i,src in enumerate(cat):
-                if src.freezeparams:
-                    debug('Frozen source', src, '-- keeping as-is!')
-                    cat.freezeParam(i)
-            tr.optimize_loop(**self.optargs)
-
         if self.plots:
             self._plots(tr, 'After source fitting')
             plt.clf()
