@@ -111,3 +111,7 @@
 77890078 blobby/donutty PSF triggers CRs
 79650061 blobby/donutty PSF triggers CRs
 75140200 weird duplicate image
+
+80670065-CCD1 weird rectangular sky offsets
+80670098-CCD1 weird rectangular sky offsets
+80670139-CCD1 weird rectangular sky offsets

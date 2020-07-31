@@ -26,10 +26,10 @@
 60409 trailed
 60423 shifted image
 60436 4MAPS not settled, bad PSF
-60437 4MAPS not settled, bad PSF 
-60437 4MAPS not settled, bad PSF 
-60438 4MAPS not settled, bad PSF 
-60439 4MAPS not settled, bad PSF 
+60437 4MAPS not settled, bad PSF
+60437 4MAPS not settled, bad PSF
+60438 4MAPS not settled, bad PSF
+60439 4MAPS not settled, bad PSF
 60440 4MAPS not settled, bad PSF
 60411 shifted image
 60412 shifted image
@@ -235,7 +235,7 @@
 # Bad data from 14/15 Dec 2015
 63072 4MAPS not settled, bad
 63079 4MAPS not settled, bad
-63090 4MAPS crashed, bad 
+63090 4MAPS crashed, bad
 
 # Bad data from 24/25 Jan 2016
 64118 Very bright sky due to increasing clouds
@@ -666,17 +666,17 @@
 74501 too many clouds?
 74502 too many clouds?
 74503 too many clouds?
-74523 E-W trailed. 
+74523 E-W trailed.
 74559 too many clouds?
 74560 too many clouds?
 74561 too many clouds?
 74562 too many clouds?
 74563 too many clouds? 41%
 74564 too many clouds? 36%
-74565 too many clouds? 
-74566 too many clouds? 
-74567 too many clouds? 
-74568 too many clouds? 
+74565 too many clouds?
+74566 too many clouds?
+74567 too many clouds?
+74568 too many clouds?
 74569 too many clouds? 29%
 74570 too many clouds? 30%
 
@@ -686,11 +686,11 @@
 74771 PIXCNT CCD4
 74811 bad focus
 74812 bad focus
-74901 PIXCNT CCD4 
+74901 PIXCNT CCD4
 74924 PIXCNT CCD4 also was not proper tile for this time.
 
 # Bad data 11/12 March 2016
-75240 Wind forced us to move dome out of wind during exposure. 
+75240 Wind forced us to move dome out of wind during exposure.
 75265 PIXCNT CCD3
 
 # Bad data 12/13 March 2016
@@ -1053,10 +1053,10 @@
 82230 pixcnt flag
 
 # Bad data 14/15 April 2016
-82322 time out, all zeroes. This is a zero frame after flats. 
+82322 time out, all zeroes. This is a zero frame after flats.
 82356 Pixcnt CCD4, im 9, 11
 82370 Pixcnt CCD3
-82385 elong PA -30 issue? 
+82385 elong PA -30 issue?
 82386 same as 385
 82391 pixcnt CCD1
 82494 pixcnt CCD2
@@ -1065,17 +1065,17 @@
 
 # Bad data 15/16 April 2016
 82589 elongated. 4MAPS suspect i11.
-82590 same. 
-82595 blue i11 on 4MAPS. Elong. 
+82590 same.
+82595 blue i11 on 4MAPS. Elong.
 82601 pixcnt CCD2
-82602 blue i11 Elong. 
+82602 blue i11 Elong.
 82603 same.
 82607 same.
-82611 same, but not elong much. maybe useful. 
+82611 same, but not elong much. maybe useful.
 
 # Bad data 16/17 April 2016
 82663 pixcnt CCD1
-82705 time out. 
+82705 time out.
 82756 pixcnt CCD2
 82783 time out
 
@@ -1088,9 +1088,9 @@
 83273 pixcnt CCD1
 
 #Bad data 19/20 April 2016
-83445 saturated background from clouds and moon 
-83446 saturated background from clouds and moon  
-83447 saturated background from clouds and moon 
+83445 saturated background from clouds and moon
+83446 saturated background from clouds and moon
+83447 saturated background from clouds and moon
 83430 Pass1 image taken under non-photometric conditions
 83431 Pass1 image taken under non-photometric conditions
 83432 Pass1 image taken under non-photometric conditions
@@ -1120,7 +1120,7 @@
 84990 pixcnt CCD2
 85038 depth factor <0.3
 85039 depth factor <0.3
-85042 
+85042
 85043 mirror cover not fully open, depth factor <0.3
 85044 mirror cover not fully open, depth factor <0.3
 #85045 mirror cover not fully open
@@ -1143,8 +1143,8 @@
 85230 pixcnt CCD2
 
 #Bad data 27/28 April 2016
-85352 depth factor <0.3 
-85353 depth factor <0.3 
+85352 depth factor <0.3
+85353 depth factor <0.3
 85358 pixcnt CCD4
 85371 pixcnt CCD4
 85452 pixcnt CCD2
@@ -1172,7 +1172,7 @@
 86480 pixcnt CCD2
 
 #Bad data 02/03 May 2016
-86545 pixcnt CCD3 flat image. 
+86545 pixcnt CCD3 flat image.
 86610 4maps down, trefoil!
 86665 pixcnt CCD1
 86669 pixcnt CCD4
@@ -1231,12 +1231,12 @@
 88596 Aborted exposure
 
 # Bad date 12/13 May 2016
-88700 pass2 empty image due to time out error 
+88700 pass2 empty image due to time out error
 88809 bad image no counts
-88819 no counts  
+88819 no counts
 
 # Bad images 13/14 May 2016
-89014 no counts 
+89014 no counts
 89117 poor transparency (high rms- <30% transparency)
 89118 poor transparency
 89119 poor transparency
@@ -1246,7 +1246,7 @@
 #Bad images 14/15 May 2016
 89151 timeout --> no counts
 89204 timeout --> no counts
-89205 zeros after the time out  
+89205 zeros after the time out
 89206 no counts
 
 
@@ -1257,7 +1257,7 @@
 
 #bad images 16/17 M
 89705 terrible focus
-89706 terrible 
+89706 terrible
 89707 terrible focus
 89738 shifted
 89740 interrupted
@@ -1315,7 +1315,7 @@
 
 93171   empty due to timeout error
 93289   ditto
-93306   ditto 
+93306   ditto
 
 #2016-06-04
 
@@ -1429,27 +1429,27 @@
 101180 clouds & background
 101181 clouds & background
 101182 clouds & background
-101185 telescope moved during exposure 
+101185 telescope moved during exposure
 101235 timeout all zeroes
 101292 timeout all zeroes
 101332 clouds & background
-101333 abort              
+101333 abort
 
 # 2016-12-13
 101377 depth < 0.3
 101409 depth < 0.3
-101412 short test exposure. 
+101412 short test exposure.
 101413 short test exposure.
 101414 short test exposure.
 101416 short test exposure.
 101418 short test exposure.
 101420 short test exposure.
-101421 depth < 0.3 
-101422 depth < 0.3 
-101423 depth < 0.3 
-101427 depth < 0.3 
-101435 depth < 0.3 
-101436 depth < 0.3 
+101421 depth < 0.3
+101422 depth < 0.3
+101423 depth < 0.3
+101427 depth < 0.3
+101435 depth < 0.3
+101436 depth < 0.3
 
 #2016-12-14
 101490 depth < 0.3
@@ -1485,7 +1485,7 @@
 101532 test image
 101533 test image
 101543 depth < 0.3
-101544 depth=0.31,mosbot had gone to pass 
+101544 depth=0.31,mosbot had gone to pass
 101545 depth < 0.3
 101547 depth < 0.3
 101548 depth < 0.3
@@ -1532,7 +1532,7 @@
 101532 test image
 101533 test image
 101543 depth < 0.3
-101544 depth=0.31,mosbot had gone to pass 
+101544 depth=0.31,mosbot had gone to pass
 101545 depth < 0.3
 101547 depth < 0.3
 101548 depth < 0.3
@@ -1579,7 +1579,7 @@
 101532 test image
 101533 test image
 101543 depth < 0.3
-101544 depth=0.31,mosbot had gone to pass 
+101544 depth=0.31,mosbot had gone to pass
 101545 depth < 0.3
 101547 depth < 0.3
 101548 depth < 0.3
@@ -1839,7 +1839,7 @@
 106468 trans=0.265 depfac=0.245
 106469 trans=0.269 depfac=0.339
 
-# 2017-02-03 
+# 2017-02-03
 106563 trans=0.166 depfac=0.000
 106625 CCD1 unresponsive
 106626 CCD1 unresponsive
@@ -2004,17 +2004,17 @@
 108564 depfac<0.3
 108571 expfactor=0.291  0.909     7.657 MzLS_609833_
 108575 trans<0.5 depfac<0.3
- 
+
 #2017-02-15
-108765  empty frame, timeout 
+108765  empty frame, timeout
 
 #2017-02-16
 108952 empty frame, timeout
-108953 saturated zero 
+108953 saturated zero
 108977 seeing >2 arcsec, poor wather condition, terrible PSF
 108977 seeing >2 arcsec, poor wather condition, terrible PSF
 108978 seeing >2 arcsec, seeing >2 arcsec, poor wather condition, terrible PSF
-108979 poor wather condition, terrible PSF 
+108979 poor wather condition, terrible PSF
 108980 seeing >2 arcsec, poor wather condition, terrible PSF
 108981 16% transparency right before ending the tonight.sh due to bad seeing condition seeing >2"
 108982 expfactor=0.003  0.065   911.349 MzLS_577114_
@@ -2030,7 +2030,7 @@
 109013 poor quality,bright sky due to moonlight reflection on clouds
 109014 ditto
 109015 ditto
-109016 ditto 
+109016 ditto
 109017 ditto
 109020 expfactor=0.251  0.611     3.197 MzLS_585408_
 109023 expfactor=0.077  0.293    32.561 MzLS_618220_
@@ -2312,7 +2312,7 @@
 115775 transparency 0.20, pass3
 
 
-# 2017-03-20 
+# 2017-03-20
 115941 bad zero after det timeout recovery
 # 115957 big star glint
 115978 expfactor=0.469  0.258     5.332 MzLS_577198_
@@ -2325,7 +2325,7 @@
 116016 expfactor=0.039  0.099    63.537 MzLS_601260_
 116017 expfactor=0.099  0.153    25.271 MzLS_601262_
 116018 expfactor=0.228  0.212    10.970 MzLS_601265_
-116019 trans < 0.1 
+116019 trans < 0.1
 116020 trans < 0.1
 116036 trans < 0.2
 116037 trans < 0.5
@@ -2356,7 +2356,7 @@
 # 117311 on amp 9 there appears to be a strange blob of light slightly resembling a massive spiral galaxy. Could be due to some light scattering.
 # 117333 on amp 14 similar problem is observed, but not as big
 # 117349 on amp 14 same problem appears. This time it is very bright. It also spills into amp 16.
-# 117383 on amp 14 same problem appears. 
+# 117383 on amp 14 same problem appears.
 # 117402 on amp 9 same problem.
 # 117423 on amp 9 same problem, fainter.
 117454 very bad focus. Might be windshake.
@@ -2365,16 +2365,16 @@
 #2017-03-27
 # 117508 bad column on amp 6 at x=7394. Also observed a shadow on amp 8 same column.
 # 117509 all subsequent frames are affected (and the flats).
-# 117528 strange blob of light again on amp 14. 
+# 117528 strange blob of light again on amp 14.
 117546 no data on this file. Timeout
-117589 very bad clouds, stars are hard to see. 
+117589 very bad clouds, stars are hard to see.
 117590 even worse. Had to stop.
 117591 very  bad, will be last image for a while.
 
 #2017-03-28
 # 117695 blob of light visible on amp 14. Resembles a spiral galaxy but much bigger.
-# 117700 blob of light appears again, this time on amp 9. 
-# 117701 blob of light on amp 14. This time its so bright it is causing saturation and bleeding. 
+# 117700 blob of light appears again, this time on amp 9.
+# 117701 blob of light on amp 14. This time its so bright it is causing saturation and bleeding.
 # 117799 blob of light on amp 9.
 # 117872 blob of light on amp 9.
 117878 triangle stars, looks like mirror went of air.
@@ -2509,7 +2509,7 @@
 122769 trans < 30
 122770 trans < 30
 122771 trans < 30
-122822 tracking dropped with power. Trailed. 
+122822 tracking dropped with power. Trailed.
 
 #2017-04-18
 123153 bad amp ccd1
@@ -2706,7 +2706,7 @@
 133222 pass=1 and seeing= 1.606  57918.193  0.230  1.010     3.480 MzLS_565676_
 
 
-# 2017-05-14 
+# 2017-05-14
 128006  Depth factor = 0.300  0.847     3.342 MzLS_577116_
 128034  Depth factor = 0.156  0.281    15.995
 128035  Depth factor = 0.207  0.294    12.100
@@ -2792,43 +2792,43 @@
 130789 Depth factor = 0.171  0.225    11.212
 
 # 2017-05-30
-130584 Depth factor = 0.000  
+130584 Depth factor = 0.000
 130856 very bad weather, cloudy
-130857 
+130857
 130858
 130859
 130860
-130861 Depth factor = 0.000  0.08   
+130861 Depth factor = 0.000  0.08
 130862
 130863
-130864  
+130864
 130865
 130866
 130867
 130868 Depth factor = 0.01 0.09
-130869 
+130869
 130870
 130871
 130872 Depth factor = 0.06
 130873 Depth factor = 0.14
-130874 Depth factor = 0.18 
+130874 Depth factor = 0.18
 130945 Depth factor = 0.27 cirrus passing by
-130946 Depth factor = 0.08 
-130948 Depth factor = 0.01 
-130949 Depth factor = 0.03 
+130946 Depth factor = 0.08
+130948 Depth factor = 0.01
+130949 Depth factor = 0.03
 130950 Depth factor = 0.04
 130957 Depth factor = 0.15
-130968 Depth factor = 0.03 
+130968 Depth factor = 0.03
 130969 Depth factor = 0.10  0.27
 130970 Depth factor = 0.18
 
 # 2017-05-31
-131031 Depth factor = 0.00 
-131032 Depth factor = 0.00 
-131033 Depth factor = 0.00 
-131034 Depth factor = 0.00 
-131035 Depth factor = 0.14 
-131036 Depth factor = 0.17 
+131031 Depth factor = 0.00
+131032 Depth factor = 0.00
+131033 Depth factor = 0.00
+131034 Depth factor = 0.00
+131035 Depth factor = 0.14
+131036 Depth factor = 0.17
 131039 Depth factor = 0.21
 131040 Depth factor = 0.13
 131041 Depth factor = 0.10
@@ -2854,31 +2854,31 @@
 131069 Depth factor = 0.05
 131070 Depth factor = 0.15
 131071 Depth factor = 0.19 0.37
-131082 Depth factor = 0.17 
-131084 Depth factor = 0.01 
-131085 Depth factor = 0.01 
-131086 Depth factor = 0.00 
+131082 Depth factor = 0.17
+131084 Depth factor = 0.01
+131085 Depth factor = 0.01
+131086 Depth factor = 0.00
 131087 Depth factor = 0.00
 131088 Depth factor = 0.00
 131089 Depth factor = 0.00
 131091 Depth factor = 0.00 Test image
 131092 Depth factor = 0.00 Test image
-131094 Depth factor = 0.01 bad weather 
-131095 Depth factor = 0.00 
-131096 Depth factor = 0.00 
+131094 Depth factor = 0.01 bad weather
+131095 Depth factor = 0.00
+131096 Depth factor = 0.00
 131097 Depth factor = 0.06
 131098 Depth factor = 0.07
 131099 Depth factor = 0.11
 131100 Depth factor = 0.26  0.15 transparency
 131101 Depth factor = 0.11
 131102 Depth factor = 0.11
-131103 Depth factor = 0.02 
+131103 Depth factor = 0.02
 131104 Depth factor = 0.04 0.34
 131108 Depth factor = 0.14 0.15 no matched stars
 131109 no matched stars
-131110 Depth factor = 0.08 
-131111 Depth factor = 0.01 
-131112 Depth factor = 0.009 
+131110 Depth factor = 0.08
+131111 Depth factor = 0.01
+131112 Depth factor = 0.009
 
 # 2017-06-01
 131154 Depth factor = 0.268  0.823     2.991 MzLS_650993_
@@ -3777,7 +3777,7 @@
 145282 expfactor=0.002  0.029  1555.963 MzLS_723892_
 145283 expfactor=0.009  0.065   288.351 MzLS_716147_
 145284 expfactor=0.083  0.213    30.310 MzLS_722901_
-145286 expfactor=0.144  0.355    17.390 MzLS_709984_ pass=1 and seeing= 1.740  
+145286 expfactor=0.144  0.355    17.390 MzLS_709984_ pass=1 and seeing= 1.740
 145287 expfactor=0.047  0.186    53.466 MzLS_725775_
 145288 expfactor=0.210  0.368    11.936 MzLS_724854_
 145293 expfactor=0.020  0.182    50.196 MzLS_717370_
@@ -3893,9 +3893,9 @@
 145497 expfactor=0.00 MzLS_372482_
 145499 expfactor=0.00 MzLS_372484_
 145500 expfactor=0.00 MzLS_376235_
-145501 bright background	
+145501 bright background
 145502 shutter closed manually before end to prevent saturation
-145505 bright background	
+145505 bright background
 145506 shutter closed manually before end to prevent saturation
 145507 expfactor=0.03 MzLS_691779_
 145508 expfactor=0.01 MzLS_693559_
@@ -4597,7 +4597,7 @@
 151124 nmatched message in copilotm, expfactor=0.00
 151184 nmatched, expfactor=0.03
 151201 seeing over the top (1.8") compared to median seeing ~1.3", expfactor=0.56, bad PSF
- 
+
 # 2017-12-14
 151360 - telescope was still slewing, 'nmatched'
 151361 - Test exposure for Behzad - Active mirror mode
@@ -4637,7 +4637,7 @@
 151625 - seeing=1.67 - poor seeing pass=1
 151627 - seeing=1.63 - poor seeing pass=1
 151628 - seeing=1.73 - poor seeing pass=1
-151668 - sky_brightness<18.21 - too bright for pass1 tile  
+151668 - sky_brightness<18.21 - too bright for pass1 tile
 151697 expfactor=0.151  0.317    16.613 MzLS_721864_
 151698 expfactor=0.259  0.351     9.622 MzLS_722869_
 
@@ -4653,10 +4653,10 @@
 151747
 
 # 2017-12-18
-151808 - elongated. 
+151808 - elongated.
 151833 - M1 air off
 151834 - M1 air off
-151835 - elongated. 
+151835 - elongated.
 151836 - elongated.
 151874 pass=1 and seeing= 1.773  58106.500  0.867  0.933     2.099 MzLS_712711_
 151875 pass=1 and seeing= 1.661  58106.503  0.927  0.941     1.921 MzLS_704078_
@@ -5474,7 +5474,7 @@
 # 2018-01-29
 158871 expfactor=0.20 MzLS_369330_
 158872 expfactor=0.29 MzLS_365587_
-158877 - images trailed/elongated 
+158877 - images trailed/elongated
 158880 seeing=2.30 MzLS_371218_
 158881 pass=1 and seeing= 1.909  58148.103  0.580  1.008     3.551 MzLS_373718_
 158885 pass=1 and seeing= 1.644  58148.114  0.805  1.040     2.608 MzLS_369974_
@@ -5588,7 +5588,7 @@
 159268 expfactor=0.155  0.680     6.834 MzLS_631778_
 
 #2018-02-01
-159803 out of focus 
+159803 out of focus
 159804 out of focus
 159819 expfactor = 0.4, out of focus
 159820 expfactor = 0.4, out of focus
@@ -5701,7 +5701,14 @@
 80665 fwhm==nan
 122019 fwhm==nan
 
-71342 CCD4 has a garbage amplifier
-77270 CCD4 has two amplifiers with garbage on edge
-151120035107 CCD2 has DQREJ set, does not track saturation.
+71342-CCD4 has a garbage amplifier
+77270-CCD4 has two amplifiers with garbage on edge
+151120035107-CCD2 has DQREJ set, does not track saturation.
 
+3106381-CCD3 one amp misbehaving badly
+140870-CCD3 one amp misbehaving badly
+71342-CCD4 one amp misbehaving badly
+148572-CCD3 one amp misbehaving badly
+148673-CCD1 significant sky offsets between different amps; weird horizontal features
+3103609-CCD3 one amp is close to all zeros, another is very noisy
+129926-CCD4 weird blurring artifacts on some amps
