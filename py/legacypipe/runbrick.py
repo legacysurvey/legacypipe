@@ -690,12 +690,19 @@ def stage_srcs(pixscale=None, targetwcs=None,
     tlast = Time()
 
     avoid_map = None
+    avoid_xyr = []
     if refstars:
         # Don't detect new sources where we already have reference stars
-        I = np.flatnonzero(refstars.in_bounds * (refstars.ref_epoch == 0))
+        # To treat fast-moving stars, we evaluate proper motions at each image
+        # epoch and exclude the set of integer pixel locations.
+        # Init with ref sources without proper motions:
+        I = np.flatnonzero(refstars.in_bounds * (refstars.ref_epoch == 0) *
+                           np.logical_not(refstars.islargegalaxy))
         xy = set(zip(refstars.ibx[I], refstars.iby[I]))
+        ns = len(xy)
         # For moving stars, evaluate position at epoch of each input image
-        I = np.flatnonzero(refstars.in_bounds * (refstars.ref_epoch > 0))
+        I = np.flatnonzero(refstars.in_bounds * (refstars.ref_epoch > 0) *
+                           np.logical_not(refstars.islargegalaxy))
         if len(I):
             from legacypipe.survey import radec_at_mjd
             for tim in tims:
@@ -705,20 +712,25 @@ def stage_srcs(pixscale=None, targetwcs=None,
                     tim.time.toMjd())
                 _,xx,yy = targetwcs.radec2pixelxy(ra, dec)
                 xy.update(zip(np.round(xx-1.).astype(int), np.round(yy-1.).astype(int)))
-        ns = np.sum(refstars.in_bounds * (refstars.ref_epoch == 0))
         debug('Avoiding', ns, 'stationary and', len(xy)-ns, '(from %i stars) pixels' % np.sum(refstars.in_bounds * (refstars.ref_epoch > 0)))
-        # Add a ~1" exclusion zone around reference stars and large galaxies
+        # Add a ~1" exclusion zone around reference stars
         # (assuming pixel_scale ~ 0.25")
-        xy = np.array(list(xy)).astype(np.int32)
-        if len(xy):
-            avoid_x = xy[:,0]
-            avoid_y = xy[:,1]
-        else:
-            avoid_x = np.array([], np.int32)
-            avoid_y = np.array([], np.int32)
-        avoid_r = np.zeros_like(avoid_x) + 4
+        r_excl = 4
+        avoid_xyr.extend([(x,y,r_excl) for x,y in xy])
+
+        # Larger exclusion radius on SGA sources! (For pre-burning SGA catalog)
+        r_sga_excl = 8
+        J = np.flatnonzero(refstars.islargegalaxy * refstars.in_bounds)
+        avoid_xyr.extend([(x,y,r_sga_excl) for x,y in zip(refstars.ibx[J], refstars.iby[J])])
+    avoid_xyr = np.array(avoid_xyr, dtype=np.int32)
+    if len(avoid_xyr) > 0:
+        avoid_x = avoid_xyr[:,0]
+        avoid_y = avoid_xyr[:,1]
+        avoid_r = avoid_xyr[:,2]
     else:
-        avoid_x, avoid_y, avoid_r = np.array([], np.int32), np.array([], np.int32), np.array([])
+        avoid_x = avoid_y = avoid_r = np.array([], dtype=np.int32)
+    del avoid_xyr
+
     if T_clusters is not None and len(T_clusters) > 0:
         from legacypipe.reference import get_reference_map
         info('Avoiding source detection in', len(T_clusters), 'CLUSTER masks')
