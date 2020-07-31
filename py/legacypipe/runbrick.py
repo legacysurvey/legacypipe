@@ -693,6 +693,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
     if refstars:
         # Don't detect new sources where we already have reference stars
         I = np.flatnonzero(refstars.in_bounds * (refstars.ref_epoch == 0))
+        J = np.flatnonzero(refstars.islargegalaxy[I])
         xy = set(zip(refstars.ibx[I], refstars.iby[I]))
         # For moving stars, evaluate position at epoch of each input image
         I = np.flatnonzero(refstars.in_bounds * (refstars.ref_epoch > 0))
@@ -717,6 +718,8 @@ def stage_srcs(pixscale=None, targetwcs=None,
             avoid_x = np.array([], np.int32)
             avoid_y = np.array([], np.int32)
         avoid_r = np.zeros_like(avoid_x) + 4
+        if len(J):
+            avoid_r[J] = 8
     else:
         avoid_x, avoid_y, avoid_r = np.array([], np.int32), np.array([], np.int32), np.array([])
     if T_clusters is not None and len(T_clusters) > 0:
