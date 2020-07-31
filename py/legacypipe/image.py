@@ -610,7 +610,7 @@ class LegacySurveyImage(object):
         tim.subwcs = tim.sip_wcs.get_subimage(tim.x0, tim.y0, subw, subh)
         return tim
 
-    def fix_saturation(self, img, dq, invvar, imghdr):
+    def fix_saturation(self, img, dq, invvar, primhdr, imghdr):
         pass
 
     def get_sky_template(self, slc=None):
