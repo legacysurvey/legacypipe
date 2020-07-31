@@ -483,6 +483,7 @@ SWEEP_DTYPE = np.dtype([
     ('PMDEC', '>f4'),
     ('PMDEC_IVAR', '>f4'),
     ('MASKBITS', '>i2'),
+    ('FITBITS', '>i2'),
     ('SERSIC', '>f4'),
     ('SERSIC_IVAR', '>f4')]
 )
