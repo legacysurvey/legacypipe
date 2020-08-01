@@ -233,9 +233,9 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         if survey.cache_dir is not None:
             im.check_for_cached_files(survey)
         ims.append(im)
-        info('  ', os.path.basename(im.imgfn), im, im.band, 'exptime', im.exptime, 'propid', ccd.propid,
+        info(' ', im, im.band, 'expnum', im.expnum, 'exptime', im.exptime, 'propid', ccd.propid,
               'seeing %.2f' % (ccd.fwhm*im.pixscale), 'MJD %.3f' % ccd.mjd_obs,
-              'object', getattr(ccd, 'object', '').strip())
+              'object', getattr(ccd, 'object', '').strip(), '\n   ', im.print_imgpath)
 
     tnow = Time()
     debug('Finding images touching brick:', tnow-tlast)
