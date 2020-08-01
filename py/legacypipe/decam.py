@@ -139,7 +139,7 @@ class DecamImage(LegacySurveyImage):
             return
         if self.ccdname != 'S19':
             return
-        I,J = np.nonzero((img > 46000) * (dq == 0))
+        I,J = np.nonzero((img > 46000) * (dq == 0) * (invvar > 0))
         info('Masking', len(I), 'additional saturated pixels in DECam S19 CCD')
         from legacypipe.bits import DQ_BITS
         dq[I,J] |= DQ_BITS['satur']
