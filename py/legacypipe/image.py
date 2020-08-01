@@ -402,7 +402,7 @@ class LegacySurveyImage(object):
             debug('Skipping zero-invvar image')
             return None
 
-        self.fix_saturation(img, dq, invvar, primhdr, imghdr)
+        self.fix_saturation(img, dq, invvar, primhdr, imghdr, slc)
 
         template_meta = None
         if pixels:
@@ -612,7 +612,7 @@ class LegacySurveyImage(object):
         tim.subwcs = tim.sip_wcs.get_subimage(tim.x0, tim.y0, subw, subh)
         return tim
 
-    def fix_saturation(self, img, dq, invvar, primhdr, imghdr):
+    def fix_saturation(self, img, dq, invvar, primhdr, imghdr, slc):
         pass
 
     def get_sky_template(self, slc=None):

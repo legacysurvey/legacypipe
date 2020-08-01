@@ -133,7 +133,7 @@ class DecamImage(LegacySurveyImage):
                 assert(np.all((dq & bothbits) != bothbits))
         return dq
 
-    def fix_saturation(self, img, dq, invvar, primhdr, imghdr):
+    def fix_saturation(self, img, dq, invvar, primhdr, imghdr, slc):
         plver = primhdr['PLVER']
         if decam_s19_satur_ok(plver):
             return
@@ -141,7 +141,7 @@ class DecamImage(LegacySurveyImage):
             return
         I,J = np.nonzero((img > 46000) * (dq == 0) * (invvar > 0))
         info('Masking %i additional saturated pixels in DECam expnum %i S19 CCD, %s' %
-             (len(I), self.expnum, self.print_imgpath))
+             (len(I), self.expnum, self.print_imgpath), 'slice', slc)
         from legacypipe.bits import DQ_BITS
         dq[I,J] |= DQ_BITS['satur']
         invvar[I,J] = 0.
