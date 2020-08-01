@@ -486,7 +486,8 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
         galaxies.rename('sga_id', 'ref_id')
 
     galaxies.rename('mag_leda', 'mag')
-    galaxies.radius = galaxies.diam / 2. / 60. # [degree]
+    # Pre-burned, frozen but non-SGA sources have diam=-1.
+    galaxies.radius = np.maximum(0., galaxies.diam / 2. / 60.) # [degree]
     galaxies.keep_radius = 2. * galaxies.radius
     galaxies.sources = np.empty(len(galaxies), object)
     galaxies.sources[:] = None
