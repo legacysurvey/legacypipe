@@ -133,6 +133,18 @@ class DecamImage(LegacySurveyImage):
                 assert(np.all((dq & bothbits) != bothbits))
         return dq
 
+    def fix_saturation(self, img, dq, invvar, primhdr, imghdr):
+        plver = primhdr['PLVER']
+        if decam_s19_satur_ok(plver):
+            return
+        if self.ccdname != 'S19':
+            return
+        I,J = np.nonzero((img > 46000) * (dq == 0))
+        info('Masking', len(I), 'additional saturated pixels in DECam S19 CCD')
+        from legacypipe.bits import DQ_BITS
+        dq[I,J] |= DQ_BITS['satur']
+        invvar[I,J] = 0.
+
 def decam_cp_version_after(plver, after):
     from distutils.version import StrictVersion
     # The format of the DQ maps changed as of version 3.5.0 of the
@@ -145,6 +157,9 @@ def decam_cp_version_after(plver, after):
     if plver.endswith('2a'):
         plver = plver.replace('.2a', '.2a1')
     return StrictVersion(plver) >= StrictVersion(after)
+
+def decam_s19_satur_ok(plver):
+    return decam_cp_version_after(plver, '4.9.0')
 
 def decam_use_dq_cr(plver):
     return decam_cp_version_after(plver, '4.8.0')

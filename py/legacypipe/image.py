@@ -384,15 +384,6 @@ class LegacySurveyImage(object):
             imghdr = self.read_image_header()
         assert(np.all(np.isfinite(img)))
 
-        template_meta = None
-        if pixels:
-            template = self.get_sky_template(slc=slc)
-            if template is not None:
-                debug('Subtracting sky template')
-                # unpack
-                template,template_meta = template
-                img -= template
-
         # Read data-quality (flags) map and zero out the invvars of masked pixels
         if get_invvar:
             get_dq = True
@@ -408,6 +399,17 @@ class LegacySurveyImage(object):
         if np.all(invvar == 0.):
             debug('Skipping zero-invvar image')
             return None
+
+        self.fix_saturation(img, dq, invvar, primhdr, imghdr)
+
+        template_meta = None
+        if pixels:
+            template = self.get_sky_template(slc=slc)
+            if template is not None:
+                debug('Subtracting sky template')
+                # unpack
+                template,template_meta = template
+                img -= template
 
         # for create_testcase: omit remappings.
         if not no_remap_invvar:
@@ -607,6 +609,9 @@ class LegacySurveyImage(object):
         subh,subw = tim.shape
         tim.subwcs = tim.sip_wcs.get_subimage(tim.x0, tim.y0, subw, subh)
         return tim
+
+    def fix_saturation(self, img, dq, invvar, primhdr, imghdr):
+        pass
 
     def get_sky_template(self, slc=None):
         return None
@@ -1167,6 +1172,10 @@ class LegacySurveyImage(object):
         img = self.read_image(slice=slc)
         dq = self.read_dq(slice=slc)
         wt = self.read_invvar(slice=slc, dq=dq)
+        primhdr = self.read_image_primary_header()
+        imghdr = self.read_image_header()
+
+        self.fix_saturation(img, dq, wt, primhdr, imghdr)
 
         template_meta = {}
         template = self.get_sky_template(slc=slc)
@@ -1176,10 +1185,8 @@ class LegacySurveyImage(object):
             template,template_meta = template
             img -= template
 
-        primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', 'V0.0').strip()
         plprocid = str(primhdr['PLPROCID']).strip()
-        imghdr = self.read_image_header()
         datasum = imghdr.get('DATASUM', '0')
         procdate = primhdr['DATE']
         if git_version is None:
