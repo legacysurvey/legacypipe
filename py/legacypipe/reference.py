@@ -465,14 +465,7 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
     refcat, preburn = get_large_galaxy_version(galfn)
     debug('Large galaxies version: "%s", preburned?' % refcat, preburn)
 
-    if not preburn:
-        # SGA parent catalog
-        galaxies.ref_cat = np.array([refcat] * len(galaxies))
-        galaxies.islargegalaxy = np.ones(len(galaxies), bool)
-        galaxies.freezeparams = np.zeros(len(galaxies), bool)
-        galaxies.preburned = np.zeros(len(galaxies), bool)
-        galaxies.rename('sga_id', 'ref_id')
-    else:
+    if preburn:
         # SGA ellipse catalog
         # NOTE: fields such as ref_cat, preburned, etc, already exist in the
         # "galaxies" catalog read from disk.
@@ -484,6 +477,13 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
                                   (galaxies.sga_id > -1))
         # The pre-fit galaxies whose parameters will stay fixed
         galaxies.freezeparams = (galaxies.preburned * galaxies.freeze)
+    else:
+        # SGA parent catalog
+        galaxies.ref_cat = np.array([refcat] * len(galaxies))
+        galaxies.islargegalaxy = np.ones(len(galaxies), bool)
+        galaxies.freezeparams = np.zeros(len(galaxies), bool)
+        galaxies.preburned = np.zeros(len(galaxies), bool)
+        galaxies.rename('sga_id', 'ref_id')
 
     galaxies.rename('mag_leda', 'mag')
     galaxies.radius = galaxies.diam / 2. / 60. # [degree]
