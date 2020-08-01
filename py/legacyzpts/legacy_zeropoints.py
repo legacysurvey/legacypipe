@@ -1525,14 +1525,22 @@ class Measurer(object):
         # passed to image.run_calibs().
         have_zpt = False
         if survey_zeropoints is not None:
-            ccds = survey_zeropoints.find_ccds(expnum=self.expnum, ccdname=self.ccdname,
-                                               camera=self.camera)
-            assert(len(ccds) == 1)
-            #print('Plugging in ccdzpt', ccds[0].ccdzpt)
-            ccd.ccdzpt = ccds[0].ccdzpt
-            ccd.ccdraoff = ccds[0].ccdraoff
-            ccd.ccddecoff = ccds[0].ccddecoff
-            have_zpt = True
+            ccds = survey_zeropoints.find_ccds(
+                expnum=self.expnum, ccdname=self.ccdname, camera=self.camera)
+            if len(ccds) != 1:
+                print('WARNING, did not find a zeropoint for', self.fn_base,
+                      'by camera', self.camera, 'expnum', self.expnum,
+                      'ccdname', self.ccdname)
+            else:
+                ccd.ccdzpt = ccds[0].ccdzpt
+                ccd.ccdraoff = ccds[0].ccdraoff
+                ccd.ccddecoff = ccds[0].ccddecoff
+                if ccd.ccdzpt == 0.:
+                    print('WARNING, found zeropoint=0 for', self.fn_base,
+                          'by camera', self.camera, 'expnum', self.expnum,
+                          'ccdname', self.ccdname)
+                else:
+                    have_zpt = True
 
         # Set sig1 after (possibly) updating zeropoint!
         from tractor.brightness import NanoMaggies
