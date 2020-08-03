@@ -115,3 +115,5 @@
 80670065-CCD1 weird rectangular sky offsets
 80670098-CCD1 weird rectangular sky offsets
 80670139-CCD1 weird rectangular sky offsets
+
+78090134 double image
