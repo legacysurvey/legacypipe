@@ -5712,3 +5712,12 @@
 148673-CCD1 significant sky offsets between different amps; weird horizontal features
 3103609-CCD3 one amp is close to all zeros, another is very noisy
 129926-CCD4 weird blurring artifacts on some amps
+
+# bright star artifact on CCD4 on these pointings.  Adding all but one of these CCDs on this pointing to bad_expid to allow outlier masking to eliminate this artifact.
+72006-CCD4 bright star artifact
+108129-CCD4 bright star artifact
+# 115789 keep only this exposure
+116028-CCD4 bright star artifact
+116647-CCD4 bright star artifact
+117164-CCD4 bright star artifact
+
