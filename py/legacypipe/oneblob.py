@@ -235,7 +235,6 @@ class OneBlob(object):
 
         from tractor.dense_optimizer import ConstrainedDenseOptimizer
         self.trargs.update(optimizer=ConstrainedDenseOptimizer())
-
         self.optargs.update(dchisq = 0.1)
 
     def run(self, B, reoptimize=False, iterative_detection=True,
@@ -263,7 +262,8 @@ class OneBlob(object):
         for src in self.srcs:
             src.initial_brightness = src.brightness.copy()
 
-        # Set the freezeparams field for each source.
+        # Set the freezeparams field for each source.  (This is set for
+        # large galaxies with the 'freeze' column set.)
         for src in self.srcs:
             src.freezeparams = getattr(src, 'freezeparams', False)
 
@@ -287,6 +287,7 @@ class OneBlob(object):
         if not self.bigblob:
             debug('Fitting just fluxes using initial models...')
             self._fit_fluxes(cat, self.tims, self.bands)
+
         tr = self.tractor(self.tims, cat)
 
         if self.plots:
@@ -1743,10 +1744,16 @@ class OneBlob(object):
             from tractor import Galaxy
             is_galaxy = isinstance(src, Galaxy)
             if is_galaxy:
-                # During SGA pre-burns, freeze initial positions (fit other parameters),
-                # to avoid problems like NGC0943, where one galaxy in a pair moves a large distance
-                # to fit the overall light profile.
-                src.freezeParam('pos')
+                # During SGA pre-burns, limit initial positions (fit
+                # other parameters), to avoid problems like NGC0943,
+                # where one galaxy in a pair moves a large distance to
+                # fit the overall light profile.
+                ra,dec = src.pos.getParams()
+                cosdec = np.cos(np.deg2rad(dec))
+                # max allowed motion in deg
+                maxmove = 5. / 3600.
+                src.pos.lowers = [ra - maxmove/cosdec, dec - maxmove]
+                src.pos.uppers = [ra + maxmove/cosdec, dec + maxmove]
 
             if self.bigblob:
                 # Create super-local sub-sub-tims around this source
@@ -1783,7 +1790,6 @@ class OneBlob(object):
                 srctims = self.tims
                 modelMasks = models.model_masks(srci, src)
 
-
             srctractor = self.tractor(srctims, [src])
             srctractor.setModelMasks(modelMasks)
 
@@ -1793,7 +1799,9 @@ class OneBlob(object):
             #print('First-round final log-prob:', srctractor.getLogProb())
 
             if is_galaxy:
-                src.thawParam('pos')
+                # Drop limits on SGA positions
+                src.pos.lowers = [None, None]
+                src.pos.uppers = [None, None]
 
             # Re-remove the final fit model for this source
             models.update_and_subtract(srci, src, self.tims)
@@ -1801,7 +1809,6 @@ class OneBlob(object):
             srctractor.setModelMasks(None)
             disable_galaxy_cache()
 
-            #print('Fitting source took', Time()-tsrc)
             debug('Finished fitting:', src)
             cpu1 = time.process_time()
             cputime[srci] += (cpu1 - cpu0)

@@ -718,8 +718,9 @@ def stage_srcs(pixscale=None, targetwcs=None,
         r_excl = 4
         avoid_xyr.extend([(x,y,r_excl) for x,y in xy])
 
-        # Larger exclusion radius on SGA sources! (For pre-burning SGA catalog)
-        r_sga_excl = 8
+        # (We tried a larger exclusion radius on SGA sources, for
+        # pre-burning SGA catalog; results were so-so)
+        r_sga_excl = r_excl
         J = np.flatnonzero(refstars.islargegalaxy * refstars.in_bounds)
         avoid_xyr.extend([(x,y,r_sga_excl) for x,y in zip(refstars.ibx[J], refstars.iby[J])])
     avoid_xyr = np.array(avoid_xyr, dtype=np.int32)
