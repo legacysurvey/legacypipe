@@ -1075,6 +1075,9 @@ class OneBlob(object):
                 mysegmap = self.segmap[sy0:sy0+dh, sx0:sx0+dw]
                 # renumber for plotting
                 _,S = np.unique(mysegmap, return_inverse=True)
+                # 'tab20' colormap -- try skipping every 20th value
+                S = (S-1)%19 + 1
+                S[0] = 0
                 dimshow(S.reshape(mysegmap.shape), cmap='tab20',
                         interpolation='nearest', origin='lower')
                 ax = plt.axis()
