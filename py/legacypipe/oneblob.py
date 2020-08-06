@@ -8,7 +8,7 @@ from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.util.fits import fits_table
 from astrometry.util.plotutils import dimshow
 
-from tractor import Tractor, PointSource, Image, Catalog, Patch
+from tractor import Tractor, PointSource, Image, Catalog, Patch, Galaxy
 from tractor.galaxy import (DevGalaxy, ExpGalaxy,
                             disable_galaxy_cache, enable_galaxy_cache)
 from tractor.patch import ModelMask
@@ -330,9 +330,49 @@ class OneBlob(object):
         debug('Blob', self.name, 'finished initial fitting:', Time()-tlast)
         tlast = Time()
 
-        self.compute_segmentation_map()
+        # Match (SGA pre-burn) galaxies to non-galaxies within an exclusion radius
+        is_galaxy = np.array([isinstance(src, Galaxy) for src in cat])
+        if np.any(is_galaxy):
+            from astrometry.libkd.spherematch import match_radec
+            ras  = np.array([src.pos.ra  for src in cat])
+            decs = np.array([src.pos.dec for src in cat])
+            not_galaxy = np.logical_not(is_galaxy)
+            I,J,d = match_radec(ras[is_galaxy], decs[is_galaxy],
+                                ras[not_galaxy], decs[not_galaxy], 1./3600.)
+            debug('Matched', len(I), 'galaxies to non-galaxies after initial fitting.')
+            # Drop the non-galaxies and re-run the source fitting on the rest
+            # (with the matched galaxies first)
+            IG, = np.nonzero(is_galaxy)
+            IN, = np.nonzero(not_galaxy)
+            for i,j in zip(I,J):
+                debug(' Matched', cat[IG[i]])
+                debug('      to', cat[IN[j]])
+            IG = IG[I]
+            IGbright = _argsort_by_brightness([cat[i] for i in IG], self.bands, ref_first=True)
+            # drop the matched non-galaxies
+            for j in J:
+                cat[IN[j]] = None
+                B.sources[IN[j]] = None
+            IN[J] = -1
+            IN = IN[IN >= 0]
+            INbright = _argsort_by_brightness([cat[i] for i in IN], self.bands, ref_first=True)
+            Ibright = np.hstack((IG[IGbright], IN[INbright]))
+            debug('Brightness order for post-merge re-fitting:')
+            for i in Ibright:
+                debug(' ', cat[i])
 
-        # Next, model selections: point source vs dev/exp vs composite.
+            self._optimize_individual_sources_subtract(cat, Ibright, B.cpu_source)
+
+            if self.plots:
+                self._plots(tr, 'After merging nearby galaxy and non-galaxy sources')
+                plt.clf()
+                self._plot_coadd(self.tims, self.blobwcs, model=tr)
+                plt.title('After merging nearby galaxy and non-galaxy sources')
+                self.ps.savefig()
+
+        self.compute_segmentation_map(cat)
+
+        # Next, model selections: point source vs rex, dev/exp, ser.
         B = self.run_model_selection(cat, Ibright, B,
                                      iterative_detection=iterative_detection)
 
@@ -441,7 +481,7 @@ class OneBlob(object):
         info('Blob', self.name, 'finished, total:', Time()-trun)
         return B
 
-    def compute_segmentation_map(self):
+    def compute_segmentation_map(self, cat):
         from functools import reduce
         from legacypipe.detection import detection_maps
         from astrometry.util.multiproc import multiproc
@@ -496,13 +536,18 @@ class OneBlob(object):
             self.ps.savefig()
 
         _,ix,iy = self.blobwcs.radec2pixelxy(
-            np.array([src.getPosition().ra  for src in self.srcs]),
-            np.array([src.getPosition().dec for src in self.srcs]))
+            np.array([0. if src is None else src.getPosition().ra  for src in cat]),
+            np.array([0. if src is None else src.getPosition().dec for src in cat]))
+        good = np.array([(src is not None) for src in cat])
         ix = np.clip(np.round(ix)-1, 0, self.blobw-1).astype(int)
         iy = np.clip(np.round(iy)-1, 0, self.blobh-1).astype(int)
 
         # Do not compute segmentation map for sources in the CLUSTER mask
-        Iseg, = np.nonzero((self.refmap[iy, ix] & IN_BLOB['CLUSTER']) == 0)
+        Iseg, = np.nonzero(good * ((self.refmap[iy, ix] & IN_BLOB['CLUSTER']) == 0))
+        del good
+        for i in Iseg:
+            assert(cat[i] is not None)
+            assert(cat[i].getBrightness() is not None)
         # Zero out the S/N in CLUSTER mask
         maxsn[(self.refmap & IN_BLOB['CLUSTER']) > 0] = 0.
         # (also zero out the satmap in the CLUSTER mask)
@@ -557,7 +602,7 @@ class OneBlob(object):
         # in that radius, each pixel gets assigned to its nearest
         # source.
         radius = 5
-        Ibright = _argsort_by_brightness([self.srcs[i] for i in Iseg], self.bands)
+        Ibright = _argsort_by_brightness([cat[i] for i in Iseg], self.bands)
         _set_kingdoms(segmap, radius, Iseg[Ibright], ix, iy)
 
         self.segmap = segmap
@@ -1257,7 +1302,6 @@ class OneBlob(object):
                     tim.inverr = ie
             return None
 
-        from tractor import Galaxy
         is_galaxy = isinstance(src, Galaxy)
         x0,y0 = srcwcs_x0y0
 
@@ -1672,6 +1716,8 @@ class OneBlob(object):
         for numi,srci in enumerate(Ibright):
             cpu0 = time.process_time()
             src = cat[srci]
+            if src is None:
+                continue
             if src.freezeparams:
                 debug('Frozen source', src, '-- keeping as-is!')
                 continue
@@ -1680,7 +1726,6 @@ class OneBlob(object):
             # Add this source's initial model back in.
             models.add(srci, self.tims)
 
-            from tractor import Galaxy
             is_galaxy = isinstance(src, Galaxy)
             if is_galaxy:
                 # During SGA pre-burns, limit initial positions (fit
@@ -2195,12 +2240,13 @@ class SourceModels(object):
             sh = tim.shape
             ie = tim.getInvError()
             for src in srcs:
-
-                mm = None
-                if modelmasks is not None:
-                    mm = modelmasks[itim].get(src, None)
-
-                mod = src.getModelPatch(tim, modelMask=mm)
+                if src is None:
+                    mod = None
+                else:
+                    mm = None
+                    if modelmasks is not None:
+                        mm = modelmasks[itim].get(src, None)
+                    mod = src.getModelPatch(tim, modelMask=mm)
                 if mod is not None and mod.patch is not None:
                     if not np.all(np.isfinite(mod.patch)):
                         print('Non-finite mod patch')
