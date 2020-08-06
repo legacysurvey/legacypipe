@@ -5721,3 +5721,29 @@
 116647-CCD4 bright star artifact
 117164-CCD4 bright star artifact
 
+# double image / trailing found in PSFEx; see [decam-chatter 13635]
+161884 double image / trailing
+64436 double image / trailing
+151119115424 double image / trailing
+81482 double image / trailing
+70491 double image / trailing
+70825 double image / trailing
+64417 double image / trailing
+68412 double image / trailing
+71609 double image / trailing
+68315 double image / trailing
+62926 double image / trailing
+151124081239 double image / trailing
+151124073306 double image / trailing
+67589 double image / trailing
+81512 double image / trailing
+68569 double image / trailing
+151124091939 double image / trailing
+92803 double image / trailing
+68677 double image / trailing
+62952 double image / trailing
+62915 double image / trailing
+80166 double image / trailing
+3103267 double image / trailing
+120528 double image / trailing
+80161 double image / trailing
