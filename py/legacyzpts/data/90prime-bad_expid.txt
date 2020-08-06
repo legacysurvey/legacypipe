@@ -117,3 +117,7 @@
 80670139-CCD1 weird rectangular sky offsets
 
 78090134 double image
+
+75430191 double image / trailing
+75430161 double image / trailing
+75430213 double image / trailing
