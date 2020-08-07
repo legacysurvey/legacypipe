@@ -789,6 +789,10 @@ def stage_srcs(pixscale=None, targetwcs=None,
     cats = []
     tables = []
     if Tnew is not None:
+        for src,ix,iy in zip(newcat, Tnew.ibx, Tnew.iby):
+            for satmap in saturated_pix:
+                if satmap[iy, ix]:
+                    src.needs_initial_flux = True
         cats.extend(newcat)
         tables.append(Tnew)
     if refstars and len(refstars):

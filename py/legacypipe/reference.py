@@ -588,6 +588,7 @@ def get_galaxy_sources(galaxies, bands):
                         NanoMaggies(order=bands, **fluxes),
                         shape)
         assert(np.isfinite(src.getLogPrior()))
+        src.needs_initial_flux = True
         srcs[ii] = src
 
     return srcs
