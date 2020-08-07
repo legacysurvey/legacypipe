@@ -3251,3 +3251,12 @@
 587384 trailed image
 396407 trailed image
 768990 trailed image
+
+# More trailed images or asymetric PSFs; see [decam-chatter 13635]
+246862 trailed image / asymetric PSFs
+625795 trailed image / asymetric PSFs
+625821 trailed image / asymetric PSFs
+661341 trailed image / asymetric PSFs
+661345 trailed image / asymetric PSFs
+661352 trailed image / asymetric PSFs
+764255 trailed image / asymetric PSFs
