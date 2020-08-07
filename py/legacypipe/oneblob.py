@@ -284,11 +284,15 @@ class OneBlob(object):
             plt.title('Reference-source Masks')
             self.ps.savefig()
 
-        if not self.bigblob:
-            debug('Fitting just fluxes using initial models...')
-            self._fit_fluxes(cat, self.tims, self.bands)
-
         tr = self.tractor(self.tims, cat)
+
+        # Fit any sources marked with 'needs_initial_flux' -- saturated, and SGA
+        fitflux = [src for src in cat if getattr(src, 'needs_initial_flux', False)]
+        if len(fitflux):
+            self._fit_fluxes(cat, self.tims, self.bands, fitcat=fitflux)
+            if self.plots:
+                self._plots(tr, 'Fitting initial fluxes')
+        del fitflux
 
         if self.plots:
             self._plots(tr, 'Initial models')
@@ -689,9 +693,9 @@ class OneBlob(object):
 
             # Definitely keep ref stars (Gaia & Tycho)
             if keepsrc is None and getattr(src, 'reference_star', False):
-                print('Dropped reference star:', src)
+                info('Dropped reference star:', src)
                 src.brightness = src.initial_brightness
-                print('Reset brightness to', src.brightness)
+                info('Reset brightness to', src.brightness)
                 src.force_keep_source = True
                 keepsrc = src
 
@@ -1801,8 +1805,9 @@ class OneBlob(object):
         models.restore_images(self.tims)
         del models
 
-    def _fit_fluxes(self, cat, tims, bands):
-        fitcat = [src for src in cat if not src.freezeparams]
+    def _fit_fluxes(self, cat, tims, bands, fitcat=None):
+        if fitcat is None:
+            fitcat = [src for src in cat if not src.freezeparams]
         if len(fitcat) == 0:
             return
         for src in fitcat:
