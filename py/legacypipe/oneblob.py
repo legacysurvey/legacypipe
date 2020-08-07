@@ -442,7 +442,6 @@ class OneBlob(object):
         return B
 
     def compute_segmentation_map(self):
-        # Use ~ saddle criterion to segment the blob / mask other sources
         from functools import reduce
         from legacypipe.detection import detection_maps
         from astrometry.util.multiproc import multiproc
@@ -496,9 +495,6 @@ class OneBlob(object):
             plt.title('max s/n for segmentation')
             self.ps.savefig()
 
-        segmap = np.empty((self.blobh, self.blobw), int)
-        segmap[:,:] = -1
-
         _,ix,iy = self.blobwcs.radec2pixelxy(
             np.array([src.getPosition().ra  for src in self.srcs]),
             np.array([src.getPosition().dec for src in self.srcs]))
@@ -512,108 +508,48 @@ class OneBlob(object):
         # (also zero out the satmap in the CLUSTER mask)
         saturated_pix[(self.refmap & IN_BLOB['CLUSTER']) > 0] = False
 
-        Irank = Iseg
-        # Start by setting the segmentation map for reference sources
-        # that are forced to be point sources, to the size of the
-        # point source model.
-        ref_radius = 25
-        refpsf = np.array([getattr(self.srcs[i], 'forced_point_source', False)
-                           for i in Iseg], dtype=bool)
-        Irefpsf = Iseg[refpsf]
-        refclaimed = None
-        if len(Irefpsf):
-            debug('Setting segmentation map for', len(Irefpsf), 'forced-point-source refs')
-            Ibr = _argsort_by_brightness([self.srcs[i] for i in Irefpsf], self.bands)
-            _set_kingdoms(segmap, ref_radius, Irefpsf[Ibr], ix, iy)
-            del Ibr
-            refclaimed = (segmap != -1)
-            # Now we remove these sources from the list of sources that we need
-            # to find segmentations for.  They remain in 'Irank', which are the ones
-            # that compete for rank.
-            Iseg = Iseg[np.logical_not(refpsf)]
-        del refpsf
-
+        import heapq
+        H,W = self.blobh, self.blobw
+        segmap = np.empty((H,W), np.int32)
+        segmap[:,:] = -1
         # Iseg are the indices in self.srcs of sources to segment
-        Ibright = _argsort_by_brightness([self.srcs[i] for i in Irank], self.bands)
-        rank = np.empty(len(Irank), int)
-        rank[Ibright] = np.arange(len(Irank), dtype=int)
-        del Ibright
-        # rankmap goes from source index to rank
-        # (unlike 'rank', which is for sources in Iranks)
-        rankmap = dict(zip(Irank, rank))
-
-        todo = set(Iseg)
-        mx = int(np.ceil(maxsn.max()))
-        thresholds = list(range(3, min(mx, 100)))
-        if mx > 100:
-            thresholds.extend(list(range(100, min(mx, 500)+4, 5)))
-            if mx > 500:
-                thresholds.extend(list(range(500, min(mx, 2500)+24, 25)))
-                if mx > 2500:
-                    thresholds.extend(list(range(2500, mx+99, 100)))
-                    if mx > 10000:
-                        thresholds.extend(list(range(10000, mx+499, 500)))
-        debug('thresholds:', thresholds)
-        hot = None
-        for thresh in thresholds:
-            debug('S/N', thresh, ':', len(todo), 'sources to find still')
-            if len(todo) == 0:
-                break
-            hot = (maxsn >= thresh)
-            hot = binary_fill_holes(hot)
-            blobs,_ = label(hot)
-            srcblobs = blobs[iy[Irank], ix[Irank]]
-            done = set()
-            # We build up a map of blob -> (ranks of sources in blob)
-            blobranks = {}
-            blobsrcs = {}
-            for i,(b,r) in enumerate(zip(srcblobs, rank)):
-                if not b in blobranks:
-                    blobranks[b] = []
-                    blobsrcs[b] = []
-                blobranks[b].append(r)
-                blobsrcs[b].append(i)
-
-            for t in todo:
-                bl = blobs[iy[t], ix[t]]
-                if bl == 0:
-                    # source not in a blob...
-                    done.add(t)
+        sy = iy[Iseg]
+        sx = ix[Iseg]
+        segmap[sy, sx] = Iseg
+        maxr2 = np.zeros(len(Iseg), np.int32)
+        # Reference sources forced to be point sources get a max radius:
+        ref_radius = 25
+        for j,i in enumerate(Iseg):
+            if getattr(self.srcs[i], 'forced_point_source', False):
+                maxr2[j] = ref_radius**2
+        mask = self.blobmask
+        # Watershed by priority-fill.
+        # values are (-sn, key, x, y, center_x, center_y, maxr2)
+        q = [(-maxsn[y,x], segmap[y,x],x,y,x,y,r2)
+             for x,y,r2 in zip(sx,sy,maxr2)]
+        heapq.heapify(q)
+        while len(q):
+            v,key,x,y,cx,cy,r2 = heapq.heappop(q)
+            segmap[y,x] = key
+            # 4-connected neighbours
+            for x,y in [(x, y-1), (x, y+1), (x-1, y), (x+1, y),]:
+                # out of bounds?
+                if x<0 or y<0 or x==W or y==H:
                     continue
-                # Is this source the brightest in this blob?
-                myrank = rankmap[t]
-                if myrank == min(blobranks[bl]):
-                    # Claim all the territory in my thresholded blob.
-                    # Other (fainter) sources may still claim sub-regions at higher
-                    # threshold levels.
-                    segmap[blobs == bl] = t
-                    done.add(t)
-                # Is this source outside the regions claimed by brighter (ref) sources?
-                else:
-                    ok = True
-                    for r,isrc in zip(blobranks[bl], blobsrcs[bl]):
-                        # skip fainter sources (including myself!)
-                        if r >= myrank:
-                            continue
-                        if not isrc in Irefpsf:
-                            # regular (non-ref-PSF) source; its claim holds
-                            ok = False
-                            break
-                        r2 = (ix[t] - ix[isrc])**2 + (iy[t] - iy[isrc])**2
-                        if r2 <= ref_radius**2:
-                            # within ref source's claimed region; its claim holds
-                            ok = False
-                            break
-                    if ok:
-                        # If we got here, we share a blob with a
-                        # brighter ref source, but are far enough away
-                        # from it.  We claim the blob, except for what
-                        # the ref source has already claimed.
-                        segmap[(blobs == bl) * (refclaimed == False)] = t
-                        done.add(t)
-
-            todo.difference_update(done)
-            del hot
+                # not in blobmask?
+                if not mask[y,x]:
+                    continue
+                # already queued or segmented?
+                if segmap[y,x] != -1:
+                    continue
+                # outside the ref source radius?
+                if r2 > 0 and (x-cx)**2 + (y-cy)**2 > r2:
+                    continue
+                # mark as queued
+                segmap[y,x] = -2
+                # enqueue!
+                heapq.heappush(q, (-maxsn[y,x], key, x, y, cx, cy, r2))
+        del q, maxr2
         del maxsn, saturated_pix
 
         # ensure that each source owns a tiny radius around its center
