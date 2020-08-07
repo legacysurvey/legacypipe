@@ -336,7 +336,7 @@ class OneBlob(object):
 
         # Match (SGA pre-burn) galaxies to non-galaxies within an exclusion radius
         is_galaxy = np.array([isinstance(src, Galaxy) for src in cat])
-        if np.any(is_galaxy):
+        if np.any(is_galaxy) and not np.all(is_galaxy):
             from astrometry.libkd.spherematch import match_radec
             ras  = np.array([src.pos.ra  for src in cat])
             decs = np.array([src.pos.dec for src in cat])
