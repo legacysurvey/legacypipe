@@ -1989,7 +1989,11 @@ def _compute_invvars(allderivs):
 
 def _argsort_by_brightness(cat, bands, ref_first=False):
     fluxes = []
-    for src in cat:
+    good = []
+    for i,src in enumerate(cat):
+        if src is None:
+            continue
+        good.append(i)
         # HACK -- here we just *sum* the nanomaggies in each band.  Bogus!
         br = src.getBrightness()
         flux = sum([br.getFlux(band) for band in bands])
@@ -1997,8 +2001,9 @@ def _argsort_by_brightness(cat, bands, ref_first=False):
             # Put the reference sources at the front of the list!
             flux += 1e6
         fluxes.append(flux)
+    good = np.array(good)
     Ibright = np.argsort(-np.array(fluxes))
-    return Ibright
+    return good[Ibright]
 
 def is_reference_source(src):
     return getattr(src, 'is_reference_source', False)
