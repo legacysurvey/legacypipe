@@ -340,39 +340,40 @@ class OneBlob(object):
             I,J,d = match_radec(ras[is_galaxy], decs[is_galaxy],
                                 ras[not_galaxy], decs[not_galaxy], 1./3600.)
             debug('Matched', len(I), 'galaxies to non-galaxies after initial fitting.')
-            # Drop the non-galaxies and re-run the source fitting on the rest
-            # (with the matched galaxies first)
-            IG, = np.nonzero(is_galaxy)
-            IN, = np.nonzero(not_galaxy)
-            for i,j in zip(I,J):
-                debug(' Matched', cat[IG[i]])
-                debug('      to', cat[IN[j]])
-            IG = IG[I]
-            IGbright = _argsort_by_brightness([cat[i] for i in IG], self.bands, ref_first=True)
-            # drop the matched non-galaxies
-            for j in J:
-                cat[IN[j]] = None
-                B.sources[IN[j]] = None
-            IN[J] = -1
-            IN = IN[IN >= 0]
-            INbright = _argsort_by_brightness([cat[i] for i in IN], self.bands, ref_first=True)
-            Ibright = np.hstack((IG[IGbright], IN[INbright]))
-            debug('Brightness order for post-merge re-fitting:')
-            for i in Ibright:
-                debug(' ', cat[i])
+            if len(I):
+                # Drop the non-galaxies and re-run the source fitting on the rest
+                # (with the matched galaxies first)
+                IG, = np.nonzero(is_galaxy)
+                IN, = np.nonzero(not_galaxy)
+                for i,j in zip(I,J):
+                    debug(' Matched', cat[IG[i]])
+                    debug('      to', cat[IN[j]])
+                IG = IG[np.unique(I)]
+                IG = IG[_argsort_by_brightness([cat[i] for i in IG], self.bands, ref_first=True)]
+                # drop the matched non-galaxies
+                for j in J:
+                    cat[IN[j]] = None
+                    B.sources[IN[j]] = None
+                IN[J] = -1
+                IN = IN[IN >= 0]
+                IN = IN[_argsort_by_brightness([cat[i] for i in IN], self.bands, ref_first=True)]
+                Ibr = np.hstack((IG, IN))
+                debug('Brightness order for post-merge re-fitting:')
+                for i in Ibr:
+                    debug(' ', cat[i])
+                self._optimize_individual_sources_subtract(cat, Ibr, B.cpu_source)
 
-            self._optimize_individual_sources_subtract(cat, Ibright, B.cpu_source)
-
-            if self.plots:
-                self._plots(tr, 'After merging nearby galaxy and non-galaxy sources')
-                plt.clf()
-                self._plot_coadd(self.tims, self.blobwcs, model=tr)
-                plt.title('After merging nearby galaxy and non-galaxy sources')
-                self.ps.savefig()
+                if self.plots:
+                    self._plots(tr, 'After merging nearby galaxy and non-galaxy sources')
+                    plt.clf()
+                    self._plot_coadd(self.tims, self.blobwcs, model=tr)
+                    plt.title('After merging nearby galaxy and non-galaxy sources')
+                    self.ps.savefig()
 
         self.compute_segmentation_map(cat)
 
         # Next, model selections: point source vs rex, dev/exp, ser.
+        Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
         B = self.run_model_selection(cat, Ibright, B,
                                      iterative_detection=iterative_detection)
 
