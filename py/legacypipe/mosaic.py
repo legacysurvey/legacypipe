@@ -36,5 +36,6 @@ class MosaicImage(LegacySurveyImage):
         into a bitmask.
         '''
         from legacypipe.image import remap_dq_cp_codes
-        dq = remap_dq_cp_codes(dq, ignore_codes=[7]) # 8 also?
+        # code 8: https://github.com/legacysurvey/legacypipe/issues/644
+        dq = remap_dq_cp_codes(dq, ignore_codes=[7, 8])
         return dq

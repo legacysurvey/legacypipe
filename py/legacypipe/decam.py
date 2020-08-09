@@ -112,14 +112,15 @@ class DecamImage(LegacySurveyImage):
         primhdr = read_primary_header(self.dqfn)
         plver = primhdr['PLVER']
         if decam_has_dq_codes(plver):
+            from legacypipe.image import remap_dq_cp_codes
+            # Always ignore the satellite masker code.
+            ignore = [8]
             if not decam_use_dq_cr(plver):
                 # In some runs of the pipeline (not captured by plver)
                 # the CR and Satellite masker codes got confused, so ignore
                 # both.
-                dq[dq == 5] = 0
-            # Always ignore the satellite masker code.
-            dq[dq == 8] = 0
-            dq = self.remap_dq_cp_codes(dq, hdr)
+                ignore.append(5)
+            dq = remap_dq_cp_codes(dq, ignore_codes=ignore)
         else:
             from legacypipe.bits import DQ_BITS
             dq = dq.astype(np.int16)

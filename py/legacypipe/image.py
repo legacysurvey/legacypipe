@@ -820,9 +820,6 @@ class LegacySurveyImage(object):
         Called by get_tractor_image() to map the results from read_dq
         into a bitmask.
         '''
-        return self.remap_dq_cp_codes(dq, header)
-
-    def remap_dq_cp_codes(self, dq, header):
         return remap_dq_cp_codes(dq)
 
     def read_invvar(self, clip=True, clipThresh=0.1, dq=None, slice=None,
