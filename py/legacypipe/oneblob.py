@@ -341,6 +341,12 @@ class OneBlob(object):
             ras  = np.array([src.pos.ra  for src in cat])
             decs = np.array([src.pos.dec for src in cat])
             not_galaxy = np.logical_not(is_galaxy)
+
+            # # DEBUG -- what's the closest non-galaxy source to each galaxy source?
+            # I,J,d = match_radec(ras[is_galaxy], decs[is_galaxy],
+            #                     ras[not_galaxy], decs[not_galaxy], 5./3600., nearest=True)
+            # debug('Matched', len(I), 'of', np.sum(is_galaxy), 'galaxy sources to non-galaxies within 5"; nearest:', (d*3600.).astype(np.float32))
+
             I,J,d = match_radec(ras[is_galaxy], decs[is_galaxy],
                                 ras[not_galaxy], decs[not_galaxy], 1./3600.)
             debug('Matched', len(I), 'galaxies to non-galaxies after initial fitting.')
@@ -374,10 +380,48 @@ class OneBlob(object):
                     plt.title('After merging nearby galaxy and non-galaxy sources')
                     self.ps.savefig()
 
+        ellipses = []
+        have_ellipses = False
+        for src in cat:
+            ell = None
+            if is_reference_source(src):
+                ref = getattr(src, 'ref_cat_entry', None)
+                print('Reference source:', src)
+                print('  cat entry:', ref)
+                if ref:
+                    ref = ref[0]
+                    if ref.islargegalaxy:
+                        print('  cat entry:', ref[0])
+                        ell = ref
+                        have_ellipses = True
+            ellipses.append(ell)
+
         self.compute_segmentation_map(cat)
 
-        # Next, model selections: point source vs rex, dev/exp, ser.
         Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
+
+        if have_ellipses:
+            debug('Re-running kingdoms...')
+            radius = 5
+            _,ix,iy = self.blobwcs.radec2pixelxy(
+                np.array([0. if src is None else src.getPosition().ra  for src in cat]),
+                np.array([0. if src is None else src.getPosition().dec for src in cat]))
+            ix = np.clip(np.round(ix)-1, 0, self.blobw-1).astype(int)
+            iy = np.clip(np.round(iy)-1, 0, self.blobh-1).astype(int)
+            _set_kingdoms(self.segmap, radius, Ibright, ix, iy, ellipses, radius_type=np.uint16)
+
+            if self.plots:
+                plt.clf()
+                dimshow(self.rgb)
+                ax = plt.axis()
+                for i in range(len(self.srcs)):
+                    plot_boundary_map(self.segmap == i)
+                plt.plot(ix, iy, 'r.')
+                plt.axis(ax)
+                plt.title('Segments after ref-ellipse kingdoms')
+                self.ps.savefig()
+
+        # Next, model selections: point source vs rex, dev/exp, ser.
         B = self.run_model_selection(cat, Ibright, B,
                                      iterative_detection=iterative_detection)
 
@@ -1934,7 +1978,7 @@ class OneBlob(object):
             tims.append(tim)
         return tims
 
-def _set_kingdoms(segmap, radius, I, ix, iy):
+def _set_kingdoms(segmap, radius, I, ix, iy, ellipses=None, radius_type=np.uint8):
     '''
     radius: int
     ix,iy: int arrays
@@ -1945,25 +1989,55 @@ def _set_kingdoms(segmap, radius, I, ix, iy):
     # in that radius, each pixel gets assigned to its nearest
     # source.
     # 'kingdom' records the current distance to nearest source
-    assert(radius < 255)
-    kingdom = np.empty(segmap.shape, np.uint8)
-    kingdom[:,:,] = 255
+    max_radius = np.iinfo(radius_type).max
+    assert(radius < max_radius)
+    kingdom = np.empty(segmap.shape, radius_type)
+    kingdom[:,:,] = max_radius
     H,W = segmap.shape
     xcoords = np.arange(W)
     ycoords = np.arange(H)
     for i in I:
         x,y = ix[i], iy[i]
-        yslc = slice(max(0, y-radius), min(H, y+radius+1))
-        xslc = slice(max(0, x-radius), min(W, x+radius+1))
-        slc = (yslc, xslc)
-        # Radius to nearest earlier source
-        oldr = kingdom[slc]
-        # Radius to new source
-        newr = np.hypot(xcoords[np.newaxis, xslc] - x, ycoords[yslc, np.newaxis] - y)
-        assert(newr.shape == oldr.shape)
-        newr = (newr + 0.5).astype(np.uint8)
-        # Pixels that are within range and closer to this source than any other.
-        owned = (newr <= radius) * (newr < oldr)
+        if ellipses is not None and ellipses[i] is not None:
+            ### (Note, we're using the *refit* x,y positions but old PA,BA,RADIUS)
+            ell = ellipses[i]
+            r = ell.radius_pix
+            yslc = slice(max(0, y-r), min(H, y+r+1))
+            xslc = slice(max(0, x-r), min(W, x+r+1))
+            slc = (yslc, xslc)
+            # Radius to nearest earlier source
+            oldr = kingdom[slc]
+            # Radius to new source
+            dx = xcoords[np.newaxis, xslc] - x
+            dy = ycoords[yslc, np.newaxis] - y
+            newr = np.hypot(dx, dy)
+            assert(newr.shape == oldr.shape)
+            newr = (newr + 0.5).astype(radius_type)
+            # Pixels that are within range and closer to this source than any other.
+            #owned = (newr <= radius) * (newr < oldr)
+            # CD matrix
+            du = -dx
+            dv =  dy
+            ct = np.cos(np.deg2rad(90.+ell.pa))
+            st = np.sin(np.deg2rad(90.+ell.pa))
+            v1 = ct * du + -st * dv
+            v2 = st * du +  ct * dv
+            r1 = r
+            r2 = r * ell.ba
+            owned = (newr < oldr) * (v1**2 / r1**2 + v2**2 / r2**2 < 1.)
+            
+        else:
+            yslc = slice(max(0, y-radius), min(H, y+radius+1))
+            xslc = slice(max(0, x-radius), min(W, x+radius+1))
+            slc = (yslc, xslc)
+            # Radius to nearest earlier source
+            oldr = kingdom[slc]
+            # Radius to new source
+            newr = np.hypot(xcoords[np.newaxis, xslc] - x, ycoords[yslc, np.newaxis] - y)
+            assert(newr.shape == oldr.shape)
+            newr = (newr + 0.5).astype(radius_type)
+            # Pixels that are within range and closer to this source than any other.
+            owned = (newr <= radius) * (newr < oldr)
         segmap[slc][owned] = i
         kingdom[slc][owned] = newr[owned]
 

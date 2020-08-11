@@ -189,6 +189,9 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         sources[i].is_reference_source = True
         if freeze:
             sources[i].freezeparams = True
+        # Cut the table down to a one-element table (not a single row object),
+        # so that we can, eg, pass it to get_reference_map().
+        sources[i].ref_cat_entry = refs[np.array([i])]
 
     return refs,sources
 
