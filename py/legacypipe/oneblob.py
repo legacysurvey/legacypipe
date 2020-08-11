@@ -349,7 +349,8 @@ class OneBlob(object):
 
             I,J,d = match_radec(ras[is_galaxy], decs[is_galaxy],
                                 ras[not_galaxy], decs[not_galaxy], 1./3600.)
-            debug('Matched', len(I), 'galaxies to non-galaxies after initial fitting.')
+            debug('Matched', len(I), 'of', np.sum(is_galaxy), 'galaxies to', np.sum(not_galaxy),
+                  'non-galaxies after initial fitting.')
             if len(I):
                 # Drop the non-galaxies and re-run the source fitting on the rest
                 # (with the matched galaxies first)
@@ -366,11 +367,11 @@ class OneBlob(object):
                     B.sources[IN[j]] = None
                 IN[J] = -1
                 IN = IN[IN >= 0]
-                IN = IN[_argsort_by_brightness([cat[i] for i in IN], self.bands, ref_first=True)]
-                Ibr = np.hstack((IG, IN))
-                debug('Brightness order for post-merge re-fitting:')
-                for i in Ibr:
-                    debug(' ', cat[i])
+                if len(IN):
+                    IN = IN[_argsort_by_brightness([cat[i] for i in IN], self.bands,ref_first=True)]
+                    Ibr = np.hstack((IG, IN))
+                else:
+                    Ibr = IG
                 self._optimize_individual_sources_subtract(cat, Ibr, B.cpu_source)
 
                 if self.plots:
