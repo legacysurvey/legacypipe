@@ -402,14 +402,16 @@ class OneBlob(object):
 
         if have_ellipses:
             debug('Re-running kingdoms...')
-            radius = 5
+            old_segmap = self.segmap.copy()
+
+            radius = 25
             _,ix,iy = self.blobwcs.radec2pixelxy(
                 np.array([0. if src is None else src.getPosition().ra  for src in cat]),
                 np.array([0. if src is None else src.getPosition().dec for src in cat]))
             ix = np.clip(np.round(ix)-1, 0, self.blobw-1).astype(int)
             iy = np.clip(np.round(iy)-1, 0, self.blobh-1).astype(int)
-            _set_kingdoms(self.segmap, radius, Ibright, ix, iy, ellipses, radius_type=np.uint16)
-
+            _set_kingdoms(self.segmap, radius, Ibright, ix, iy, ellipses, mask=old_segmap,
+                          radius_type=np.uint16)
             if self.plots:
                 plt.clf()
                 dimshow(self.rgb)
@@ -1978,7 +1980,8 @@ class OneBlob(object):
             tims.append(tim)
         return tims
 
-def _set_kingdoms(segmap, radius, I, ix, iy, ellipses=None, radius_type=np.uint8):
+def _set_kingdoms(segmap, radius, I, ix, iy, ellipses=None, mask=None,
+                  radius_type=np.uint8):
     '''
     radius: int
     ix,iy: int arrays
@@ -2001,7 +2004,7 @@ def _set_kingdoms(segmap, radius, I, ix, iy, ellipses=None, radius_type=np.uint8
         if ellipses is not None and ellipses[i] is not None:
             ### (Note, we're using the *refit* x,y positions but old PA,BA,RADIUS)
             ell = ellipses[i]
-            r = ell.radius_pix
+            r = ell.radius_pix // 2
             yslc = slice(max(0, y-r), min(H, y+r+1))
             xslc = slice(max(0, x-r), min(W, x+r+1))
             slc = (yslc, xslc)
@@ -2014,8 +2017,7 @@ def _set_kingdoms(segmap, radius, I, ix, iy, ellipses=None, radius_type=np.uint8
             assert(newr.shape == oldr.shape)
             newr = (newr + 0.5).astype(radius_type)
             # Pixels that are within range and closer to this source than any other.
-            #owned = (newr <= radius) * (newr < oldr)
-            # CD matrix
+            # intermediate world coords, assuming standard CD matrix
             du = -dx
             dv =  dy
             ct = np.cos(np.deg2rad(90.+ell.pa))
@@ -2025,7 +2027,7 @@ def _set_kingdoms(segmap, radius, I, ix, iy, ellipses=None, radius_type=np.uint8
             r1 = r
             r2 = r * ell.ba
             owned = (newr < oldr) * (v1**2 / r1**2 + v2**2 / r2**2 < 1.)
-            
+
         else:
             yslc = slice(max(0, y-radius), min(H, y+radius+1))
             xslc = slice(max(0, x-radius), min(W, x+radius+1))
@@ -2037,7 +2039,10 @@ def _set_kingdoms(segmap, radius, I, ix, iy, ellipses=None, radius_type=np.uint8
             assert(newr.shape == oldr.shape)
             newr = (newr + 0.5).astype(radius_type)
             # Pixels that are within range and closer to this source than any other.
-            owned = (newr <= radius) * (newr < oldr)
+            if mask is not None:
+                owned = (newr <= radius) * (newr < oldr) * (mask[slc] == i)
+            else:
+                owned = (newr <= radius) * (newr < oldr)
         segmap[slc][owned] = i
         kingdom[slc][owned] = newr[owned]
 
