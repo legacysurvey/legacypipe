@@ -1808,7 +1808,7 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                             old_calibs_ok=False, quiet=False):
     if not os.path.exists(fn):
         if not quiet:
-            print('File not found {}'.format(fn))
+            info('File not found {}'.format(fn))
         return False
     # Check the data model
     if filetype == 'table':
@@ -1817,9 +1817,7 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
         else:
             T = data
         cols = T.get_columns()
-        ### FIXME -- once we don't need procdate, clean up special-casing below!!
-        for key,targetval,strip in (#('procdate', procdate, True),
-                                    ('plver', plver, True),
+        for key,targetval,strip in (('plver', plver, True),
                                     ('plprocid', plprocid, True),
                                     ('expnum', expnum, False)):
             if targetval is None:
@@ -1828,20 +1826,20 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                 continue
             if key not in cols:
                 if old_calibs_ok:
-                    print('WARNING: {} table missing {} but old_calibs_ok=True'.format(fn, key))
+                    info('WARNING: {} table missing {} but old_calibs_ok=True'.format(fn, key))
                     continue
                 else:
-                    #print('WARNING: {} missing {}'.format(fn, key))
+                    debug('WARNING: {} missing {}'.format(fn, key))
                     return False
             val = T.get(key)
             if strip:
                 val = np.array([str(v).strip() for v in val])
             if not np.all(val == targetval):
                 if old_calibs_ok:
-                    print('WARNING: {} {}!={} in {} table but old_calibs_ok=True'.format(key, val, targetval, fn))
+                    info('WARNING: {} {}!={} in {} table but old_calibs_ok=True'.format(key, val, targetval, fn))
                     continue
                 else:
-                    print('WARNING: {} {}!={} in {} table'.format(key, val, targetval, fn))
+                    debug('WARNING: {} {}!={} in {} table'.format(key, val, targetval, fn))
                     return False
         return True
     elif filetype in ['primaryheader', 'header']:
@@ -1871,22 +1869,19 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                     obsid = int(obsid[2:], 10)
                     cpexpnum = obsid
                     if not quiet:
-                        print('Faked up EXPNUM', cpexpnum)
+                        debug('Faked up EXPNUM', cpexpnum)
                 elif obsid.startswith('ksb'):
                     import re
-                    # obsid = obsid[3:]
-                    # obsid = int(obsid[2:], 10)
-                    # cpexpnum = obsid
-                    # DTACQNAM= '/descache/bass/20160504/d7513.0033.fits'
+                    # DTACQNAM are like /descache/bass/20160504/d7513.0033.fits
                     base= (os.path.basename(hdr['DTACQNAM'])
                            .replace('.fits','')
                            .replace('.fz',''))
                     cpexpnum = int(re.sub(r'([a-z]+|\.+)','',base), 10)
                     if not quiet:
-                        print('Faked up EXPNUM', cpexpnum)
+                        debug('Faked up EXPNUM', cpexpnum)
             else:
                 if not quiet:
-                    print('Missing EXPNUM and OBSID in header')
+                    info('Missing EXPNUM and OBSID in header')
 
         for key,spval,targetval,strip in (('PLVER', None, plver, True),
                                           ('PLPROCID', None, plprocid, True),
@@ -1896,10 +1891,10 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
             else:
                 if key not in hdr:
                     if old_calibs_ok:
-                        print('WARNING: {} header missing {} but old_calibs_ok=True'.format(fn, key))
+                        info('WARNING: {} header missing {} but old_calibs_ok=True'.format(fn, key))
                         continue
                     else:
-                        #print('WARNING: {} header missing {}'.format(fn, key))
+                        debug('WARNING: {} header missing {}'.format(fn, key))
                         return False
                 val = hdr[key]
 
@@ -1909,10 +1904,10 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                 val = val.strip()
             if val != targetval:
                 if old_calibs_ok:
-                    print('WARNING: {} {}!={} in {} header but old_calibs_ok=True'.format(key, val, targetval, fn))
+                    info('WARNING: {} {}!={} in {} header but old_calibs_ok=True'.format(key, val, targetval, fn))
                     continue
                 else:
-                    print('WARNING: {} {}!={} in {} header'.format(key, val, targetval, fn))
+                    debug('WARNING: {} {}!={} in {} header'.format(key, val, targetval, fn))
                     return False
         return True
 
