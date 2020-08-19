@@ -33,7 +33,7 @@ class DecamImage(LegacySurveyImage):
         from astrometry.util.fits import fits_table
         dirnm = os.environ.get('SKY_TEMPLATE_DIR', None)
         if dirnm is None:
-            print('decam: no SKY_TEMPLATE_DIR environment variable set.')
+            info('decam: no SKY_TEMPLATE_DIR environment variable set.')
             return None
         '''
         # Create this sky-scales.kd.fits file via:
@@ -42,19 +42,19 @@ class DecamImage(LegacySurveyImage):
         '''
         fn = os.path.join(dirnm, 'sky-scales.kd.fits')
         if not os.path.exists(fn):
-            print('decam: no $SKY_TEMPLATE_DIR/sky-scales.kd.fits file.')
+            info('decam: no $SKY_TEMPLATE_DIR/sky-scales.kd.fits file.')
             return None
         from astrometry.libkd.spherematch import tree_open
         kd = tree_open(fn, 'expnum')
         I = kd.search(np.array([self.expnum]), 0.5, 0, 0)
         if len(I) == 0:
-            print('decam: expnum %i not found in file %s' % (self.expnum, fn))
+            info('decam: expnum %i not found in file %s' % (self.expnum, fn))
             return None
         # Read only the CCD-table rows within range.
         S = fits_table(fn, rows=I)
         S.cut(np.array([c.strip() == self.ccdname for c in S.ccdname]))
         if len(S) == 0:
-            print('decam: ccdname %s, expnum %i not found in file %s' %
+            info('decam: ccdname %s, expnum %i not found in file %s' %
                   (self.ccdname, self.expnum, fn))
             return None
         assert(len(S) == 1)
@@ -71,7 +71,7 @@ class DecamImage(LegacySurveyImage):
         tfn = os.path.join(dirnm, 'sky_templates',
                            'sky_template_%s_%i.fits.fz' % (self.band, sky.run))
         if not os.path.exists(tfn):
-            print('Sky template file %s does not exist' % tfn)
+            info('Sky template file %s does not exist' % tfn)
             return None
         F = fitsio.FITS(tfn)
         f = F[self.ccdname]
