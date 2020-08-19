@@ -1822,6 +1822,10 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                                     ('plver', plver, True),
                                     ('plprocid', plprocid, True),
                                     ('expnum', expnum, False)):
+            if targetval is None:
+                # Skip this check
+                debug('Skipping check of', key, 'for', fn)
+                continue
             if key not in cols:
                 if old_calibs_ok:
                     print('WARNING: {} table missing {} but old_calibs_ok=True'.format(fn, key))
