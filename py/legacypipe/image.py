@@ -351,18 +351,11 @@ class LegacySurveyImage(object):
         get_invvar = invvar
         primhdr = self.read_image_primary_header()
 
-        assert(validate_procdate_plver(self.imgfn, 'primaryheader',
-                                       self.expnum, self.plver, self.plprocid,
-                                       data=primhdr, cpheader=True,
-                                       old_calibs_ok=old_calibs_ok))
-        assert(validate_procdate_plver(self.wtfn, 'primaryheader',
-                                       self.expnum, self.plver, self.plprocid,
-                                       cpheader=True,
-                                       old_calibs_ok=old_calibs_ok))
-        assert(validate_procdate_plver(self.dqfn, 'primaryheader',
-                                       self.expnum, self.plver, self.plprocid,
-                                       cpheader=True,
-                                       old_calibs_ok=old_calibs_ok))
+        for fn,kw in [(self.imgfn, dict(data=primhdr)), (self.wtfn, {}), (self.dqfn, {})]:
+            if not validate_procdate_plver(fn, 'primaryheader',
+                                           self.expnum, self.plver, self.plprocid,
+                                           cpheader=True, old_calibs_ok=old_calibs_ok, **kw):
+                raise RuntimeError('Version validation failed for filename %s (PLVER/PLPROCID)' % fn)
         band = self.band
         wcs = self.get_wcs()
 
@@ -920,7 +913,7 @@ class LegacySurveyImage(object):
             if not validate_procdate_plver(
                     fn, 'table', self.expnum, self.plver, self.plprocid,
                     data=T, old_calibs_ok=old_calibs_ok):
-                raise RuntimeError('Sky file %s did not pass consistency validation (PLVER, PROCDATPLPROCID, EXPNUM)' % fn)
+                raise RuntimeError('Sky file %s did not pass consistency validation (PLVER, PLPROCID, EXPNUM)' % fn)
             Ti = T[I[0]]
         if Ti is None:
             raise RuntimeError('Failed to find sky model in files: %s' % ', '.join(tryfns))
