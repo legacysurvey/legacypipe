@@ -352,7 +352,7 @@ class LegacySurveyImage(object):
         primhdr = self.read_image_primary_header()
 
         for fn,kw in [(self.imgfn, dict(data=primhdr)), (self.wtfn, {}), (self.dqfn, {})]:
-            if not validate_procdate_plver(fn, 'primaryheader',
+            if not validate_version(fn, 'primaryheader',
                                            self.expnum, self.plver, self.plprocid,
                                            cpheader=True, old_calibs_ok=old_calibs_ok, **kw):
                 raise RuntimeError('Version validation failed for filename %s (PLVER/PLPROCID)' % fn)
@@ -910,7 +910,7 @@ class LegacySurveyImage(object):
             debug('Found', len(I), 'matching CCDs in merged sky file')
             if len(I) != 1:
                 continue
-            if not validate_procdate_plver(
+            if not validate_version(
                     fn, 'table', self.expnum, self.plver, self.plprocid,
                     data=T, old_calibs_ok=old_calibs_ok):
                 raise RuntimeError('Sky file %s did not pass consistency validation (PLVER, PLPROCID, EXPNUM)' % fn)
@@ -990,7 +990,7 @@ class LegacySurveyImage(object):
             debug('Found', len(I), 'matching CCDs')
             if len(I) != 1:
                 continue
-            if not validate_procdate_plver(
+            if not validate_version(
                     fn, 'table', self.expnum, self.plver, self.plprocid,
                     data=T, old_calibs_ok=old_calibs_ok):
                 raise RuntimeError('Merged PSFEx file %s did not pass consistency validation (PLVER, PLPROCID, EXPNUM)' % fn)
@@ -1792,9 +1792,9 @@ def fix_weight_quantization(wt, weightfn, ext, slc):
     wt[wt <= zscale[:,np.newaxis]*0.5] = 0.
     return True
 
-def validate_procdate_plver(fn, filetype, expnum, plver, plprocid,
-                            data=None, ext=1, cpheader=False,
-                            old_calibs_ok=False, quiet=False):
+def validate_version(fn, filetype, expnum, plver, plprocid,
+                     data=None, ext=1, cpheader=False,
+                     old_calibs_ok=False, quiet=False):
     if not os.path.exists(fn):
         if not quiet:
             info('File not found {}'.format(fn))

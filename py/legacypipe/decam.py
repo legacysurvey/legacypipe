@@ -1,7 +1,7 @@
 from __future__ import print_function
 import numpy as np
 
-from legacypipe.image import LegacySurveyImage
+from legacypipe.image import LegacySurveyImage, validate_version
 from legacypipe.utils import read_primary_header
 
 import logging
@@ -60,7 +60,7 @@ class DecamImage(LegacySurveyImage):
         assert(len(S) == 1)
         sky = S[0]
         # Check PLPROCID only
-        if not validate_procdate_plver(
+        if not validate_version(
                 fn, 'table', self.expnum, None, self.plprocid, data=S):
             raise RuntimeError('Sky template for expnum=%i, ccdname=%s did not pass consistency validation (PLPROCID, EXPNUM)' % (self.expnum, self.ccdname))
 

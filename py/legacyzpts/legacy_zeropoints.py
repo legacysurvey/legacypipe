@@ -30,7 +30,7 @@ import legacypipe
 from legacypipe.ps1cat import ps1cat
 from legacypipe.gaiacat import GaiaCatalog
 from legacypipe.survey import radec_at_mjd, get_git_version
-from legacypipe.image import validate_procdate_plver
+from legacypipe.image import validate_version
 
 CAMERAS=['decam','mosaic','90prime','megaprime']
 MAGLIM=dict(g=[16, 20], r=[16, 19.5], z=[16.5, 19])
@@ -310,10 +310,8 @@ class Measurer(object):
 
         self.expnum = self.get_expnum(self.primhdr)
         if not quiet:
-            print('CP Header: EXPNUM = ',self.expnum)
-            print('CP Header: PROCDATE = ',self.procdate)
-            print('CP Header: PLVER = ',self.plver)
-            print('CP Header: PLPROCID = ',self.plprocid)
+            print('CP Header: EXPNUM', self.expnum, 'PLVER', self.plver,
+                  'PLPROCID', self.plprocid)
         self.obj = self.primhdr['OBJECT']
 
     def get_extension_list(self, fn, debug=False):
@@ -1147,7 +1145,7 @@ class Measurer(object):
         fn = self.get_splinesky_merged_filename()
         if os.path.exists(fn):
             T = fits_table(fn)
-            if validate_procdate_plver(fn, 'table', self.expnum, self.plver,
+            if validate_version(fn, 'table', self.expnum, self.plver,
                                        self.plprocid, data=T, quiet=self.quiet):
                 I, = np.nonzero((T.expnum == self.expnum) *
                                 np.array([c.strip() == self.ext for c in T.ccdname]))
@@ -1169,7 +1167,7 @@ class Measurer(object):
         if not os.path.exists(fn):
             return None
         hdr = read_primary_header(fn)
-        if not validate_procdate_plver(fn, 'primaryheader', self.expnum, self.plver,
+        if not validate_version(fn, 'primaryheader', self.expnum, self.plver,
                                        self.plprocid, data=hdr, quiet=self.quiet):
             return None
         try:
@@ -1373,7 +1371,7 @@ class Measurer(object):
         if os.path.exists(fn):
             #print('Reading psfex-merged {}'.format(fn))
             T = fits_table(fn)
-            if validate_procdate_plver(fn, 'table', self.expnum, self.plver,
+            if validate_version(fn, 'table', self.expnum, self.plver,
                                        self.plprocid, data=T, quiet=self.quiet):
                 I, = np.nonzero((T.expnum == self.expnum) *
                                 np.array([c.strip() == self.ext for c in T.ccdname]))
@@ -1395,7 +1393,7 @@ class Measurer(object):
         if not os.path.exists(fn):
             return None
         hdr = read_primary_header(fn)
-        if not validate_procdate_plver(fn, 'primaryheader', self.expnum, self.plver,
+        if not validate_version(fn, 'primaryheader', self.expnum, self.plver,
                                        self.plprocid, data=hdr, quiet=self.quiet):
             return None
 
@@ -1989,12 +1987,12 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     # Validate the splinesky and psfex merged files, and (re)make them if
     # they're missing.
     if splinesky:
-        if validate_procdate_plver(measure.get_splinesky_merged_filename(),
+        if validate_version(measure.get_splinesky_merged_filename(),
                                    'table', measure.expnum, measure.plver,
                                    measure.plprocid, quiet=quiet):
             do_splinesky = False
     if psfex:
-        if validate_procdate_plver(measure.get_psfex_merged_filename(),
+        if validate_version(measure.get_psfex_merged_filename(),
                                    'table', measure.expnum, measure.plver,
                                    measure.plprocid, quiet=quiet):
             do_psfex = False
@@ -2036,7 +2034,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
         if not os.path.exists(fn):
             print('Merged splinesky file not found {}'.format(fn))
             return []
-        if not validate_procdate_plver(measure.get_splinesky_merged_filename(),
+        if not validate_version(measure.get_splinesky_merged_filename(),
                                        'table', measure.expnum, measure.plver,
                                        measure.plprocid):
             raise RuntimeError('Merged splinesky file did not validate!')
@@ -2053,7 +2051,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
         if not os.path.exists(fn):
             print('Merged psfex file not found {}'.format(fn))
             return []
-        if not validate_procdate_plver(measure.get_psfex_merged_filename(),
+        if not validate_version(measure.get_psfex_merged_filename(),
                                    'table', measure.expnum, measure.plver,
                                    measure.plprocid):
             raise RuntimeError('Merged psfex file did not validate!')
@@ -2376,7 +2374,7 @@ def main(image_list=None,args=None):
         psffn = measure.get_psfex_merged_filename()
         skyfn = measure.get_splinesky_merged_filename()
 
-        ann_ok, psf_ok, sky_ok = [validate_procdate_plver(
+        ann_ok, psf_ok, sky_ok = [validate_version(
             fn, 'table', measure.expnum, measure.plver,
             measure.plprocid, quiet=quiet)
             for fn in [F.annfn, psffn, skyfn]]
@@ -2386,9 +2384,9 @@ def main(image_list=None,args=None):
             print('Already finished {}'.format(skyfn))
             continue
 
-        phot_ok = validate_procdate_plver(F.photomfn, 'header', measure.expnum,
-                                         measure.plver, measure.plprocid,
-                                         ext=1, quiet=quiet)
+        phot_ok = validate_version(F.photomfn, 'header', measure.expnum,
+                                   measure.plver, measure.plprocid,
+                                   ext=1, quiet=quiet)
 
         if ann_ok and phot_ok and psf_ok and sky_ok:
             print('Already finished: {}'.format(F.annfn))
