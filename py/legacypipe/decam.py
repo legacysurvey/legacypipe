@@ -61,7 +61,7 @@ class DecamImage(LegacySurveyImage):
         sky = S[0]
         # Check PLPROCID only
         if not validate_procdate_plver(
-                fn, 'table', self.expnum, None, None, self.plprocid, data=S):
+                fn, 'table', self.expnum, None, self.plprocid, data=S):
             raise RuntimeError('Sky template for expnum=%i, ccdname=%s did not pass consistency validation (PLPROCID, EXPNUM)' % (self.expnum, self.ccdname))
 
         if sky.run == -1:

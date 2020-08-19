@@ -1148,8 +1148,7 @@ class Measurer(object):
         if os.path.exists(fn):
             T = fits_table(fn)
             if validate_procdate_plver(fn, 'table', self.expnum, self.plver,
-                                       self.procdate, self.plprocid, data=T,
-                                       quiet=self.quiet):
+                                       self.plprocid, data=T, quiet=self.quiet):
                 I, = np.nonzero((T.expnum == self.expnum) *
                                 np.array([c.strip() == self.ext for c in T.ccdname]))
                 if len(I) == 1:
@@ -1171,8 +1170,7 @@ class Measurer(object):
             return None
         hdr = read_primary_header(fn)
         if not validate_procdate_plver(fn, 'primaryheader', self.expnum, self.plver,
-                                       self.procdate, self.plprocid, data=hdr,
-                                       quiet=self.quiet):
+                                       self.plprocid, data=hdr, quiet=self.quiet):
             return None
         try:
             skyclass = hdr['SKY']
@@ -1376,8 +1374,7 @@ class Measurer(object):
             #print('Reading psfex-merged {}'.format(fn))
             T = fits_table(fn)
             if validate_procdate_plver(fn, 'table', self.expnum, self.plver,
-                                       self.procdate, self.plprocid, data=T,
-                                       quiet=self.quiet):
+                                       self.plprocid, data=T, quiet=self.quiet):
                 I, = np.nonzero((T.expnum == self.expnum) *
                                 np.array([c.strip() == self.ext for c in T.ccdname]))
                 if len(I) == 1:
@@ -1399,8 +1396,7 @@ class Measurer(object):
             return None
         hdr = read_primary_header(fn)
         if not validate_procdate_plver(fn, 'primaryheader', self.expnum, self.plver,
-                                       self.procdate, self.plprocid, data=hdr,
-                                       quiet=self.quiet):
+                                       self.plprocid, data=hdr, quiet=self.quiet):
             return None
 
         hdr = fitsio.read_header(fn, ext=1)
@@ -1995,12 +1991,12 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     if splinesky:
         if validate_procdate_plver(measure.get_splinesky_merged_filename(),
                                    'table', measure.expnum, measure.plver,
-                                   measure.procdate, measure.plprocid, quiet=quiet):
+                                   measure.plprocid, quiet=quiet):
             do_splinesky = False
     if psfex:
         if validate_procdate_plver(measure.get_psfex_merged_filename(),
                                    'table', measure.expnum, measure.plver,
-                                   measure.procdate, measure.plprocid, quiet=quiet):
+                                   measure.plprocid, quiet=quiet):
             do_psfex = False
 
     if do_splinesky or do_psfex:
@@ -2042,7 +2038,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
             return []
         if not validate_procdate_plver(measure.get_splinesky_merged_filename(),
                                        'table', measure.expnum, measure.plver,
-                                       measure.procdate, measure.plprocid):
+                                       measure.plprocid):
             raise RuntimeError('Merged splinesky file did not validate!')
         # At this point the merged file exists and has been validated, so remove
         # the individual splinesky files.
@@ -2059,7 +2055,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
             return []
         if not validate_procdate_plver(measure.get_psfex_merged_filename(),
                                    'table', measure.expnum, measure.plver,
-                                   measure.procdate, measure.plprocid):
+                                   measure.plprocid):
             raise RuntimeError('Merged psfex file did not validate!')
         # At this point the merged file exists and has been validated, so remove
         # the individual PSFEx and SE files.
@@ -2381,7 +2377,7 @@ def main(image_list=None,args=None):
         skyfn = measure.get_splinesky_merged_filename()
 
         ann_ok, psf_ok, sky_ok = [validate_procdate_plver(
-            fn, 'table', measure.expnum, measure.plver, measure.procdate,
+            fn, 'table', measure.expnum, measure.plver,
             measure.plprocid, quiet=quiet)
             for fn in [F.annfn, psffn, skyfn]]
 
@@ -2391,8 +2387,8 @@ def main(image_list=None,args=None):
             continue
 
         phot_ok = validate_procdate_plver(F.photomfn, 'header', measure.expnum,
-                                         measure.plver, measure.procdate,
-                                         measure.plprocid, ext=1, quiet=quiet)
+                                         measure.plver, measure.plprocid,
+                                         ext=1, quiet=quiet)
 
         if ann_ok and phot_ok and psf_ok and sky_ok:
             print('Already finished: {}'.format(F.annfn))

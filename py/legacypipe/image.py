@@ -352,18 +352,15 @@ class LegacySurveyImage(object):
         primhdr = self.read_image_primary_header()
 
         assert(validate_procdate_plver(self.imgfn, 'primaryheader',
-                                       self.expnum, self.plver, self.procdate,
-                                       self.plprocid,
+                                       self.expnum, self.plver, self.plprocid,
                                        data=primhdr, cpheader=True,
                                        old_calibs_ok=old_calibs_ok))
         assert(validate_procdate_plver(self.wtfn, 'primaryheader',
-                                       self.expnum, self.plver, self.procdate,
-                                       self.plprocid,
+                                       self.expnum, self.plver, self.plprocid,
                                        cpheader=True,
                                        old_calibs_ok=old_calibs_ok))
         assert(validate_procdate_plver(self.dqfn, 'primaryheader',
-                                       self.expnum, self.plver, self.procdate,
-                                       self.plprocid,
+                                       self.expnum, self.plver, self.plprocid,
                                        cpheader=True,
                                        old_calibs_ok=old_calibs_ok))
         band = self.band
@@ -920,10 +917,10 @@ class LegacySurveyImage(object):
             debug('Found', len(I), 'matching CCDs in merged sky file')
             if len(I) != 1:
                 continue
-            if not validate_procdate_plver(fn, 'table',
-                                           self.expnum, self.plver, self.procdate,
-                                           self.plprocid, data=T, old_calibs_ok=old_calibs_ok):
-                raise RuntimeError('Sky file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' % fn)
+            if not validate_procdate_plver(
+                    fn, 'table', self.expnum, self.plver, self.plprocid,
+                    data=T, old_calibs_ok=old_calibs_ok):
+                raise RuntimeError('Sky file %s did not pass consistency validation (PLVER, PROCDATPLPROCID, EXPNUM)' % fn)
             Ti = T[I[0]]
         if Ti is None:
             raise RuntimeError('Failed to find sky model in files: %s' % ', '.join(tryfns))
@@ -1000,10 +997,10 @@ class LegacySurveyImage(object):
             debug('Found', len(I), 'matching CCDs')
             if len(I) != 1:
                 continue
-            if not validate_procdate_plver(fn, 'table',
-                                           self.expnum, self.plver, self.procdate,
-                                           self.plprocid, data=T, old_calibs_ok=old_calibs_ok):
-                raise RuntimeError('Merged PSFEx file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' % fn)
+            if not validate_procdate_plver(
+                    fn, 'table', self.expnum, self.plver, self.plprocid,
+                    data=T, old_calibs_ok=old_calibs_ok):
+                raise RuntimeError('Merged PSFEx file %s did not pass consistency validation (PLVER, PLPROCID, EXPNUM)' % fn)
             Ti = T[I[0]]
             break
         if Ti is None:
@@ -1802,8 +1799,7 @@ def fix_weight_quantization(wt, weightfn, ext, slc):
     wt[wt <= zscale[:,np.newaxis]*0.5] = 0.
     return True
 
-def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
-                            plprocid,
+def validate_procdate_plver(fn, filetype, expnum, plver, plprocid,
                             data=None, ext=1, cpheader=False,
                             old_calibs_ok=False, quiet=False):
     if not os.path.exists(fn):
