@@ -499,14 +499,16 @@ class OneBlob(object):
             plt.title('max s/n for segmentation')
             self.ps.savefig()
 
-        _,ix,iy = self.blobwcs.radec2pixelxy(
+        ok,ix,iy = self.blobwcs.radec2pixelxy(
             np.array([src.getPosition().ra  for src in self.srcs]),
             np.array([src.getPosition().dec for src in self.srcs]))
-        ix = np.clip(np.round(ix)-1, 0, self.blobw-1).astype(int)
-        iy = np.clip(np.round(iy)-1, 0, self.blobh-1).astype(int)
+        ix = np.clip(np.round(ix)-1, 0, self.blobw-1).astype(np.int32)
+        iy = np.clip(np.round(iy)-1, 0, self.blobh-1).astype(np.int32)
 
         # Do not compute segmentation map for sources in the CLUSTER mask
-        Iseg, = np.nonzero((self.refmap[iy, ix] & IN_BLOB['CLUSTER']) == 0)
+        # (or with very bad coords)
+        Iseg, = np.nonzero(ok * ((self.refmap[iy, ix] & IN_BLOB['CLUSTER']) == 0))
+        del ok
         # Zero out the S/N in CLUSTER mask
         maxsn[(self.refmap & IN_BLOB['CLUSTER']) > 0] = 0.
         # (also zero out the satmap in the CLUSTER mask)
