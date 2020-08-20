@@ -149,6 +149,8 @@ def main(survey=None, opt=None, args=None):
     if survey is None:
         survey = LegacySurveyData(survey_dir=opt.survey_dir)
 
+    # If there is only one catalog survey_dir, we pass it to get_catalog_in_wcs
+    # as the northern survey.
     catsurvey_north = survey
     catsurvey_south = None
 
@@ -157,8 +159,7 @@ def main(survey=None, opt=None, args=None):
         assert(opt.catalog_resolve_dec_ngc is not None)
         catsurvey_north = LegacySurveyData(survey_dir = opt.catalog_dir_north)
         catsurvey_south = LegacySurveyData(survey_dir = opt.catalog_dir_south)
-
-    if opt.catalog_dir is not None:
+    elif opt.catalog_dir is not None:
         catsurvey_north = LegacySurveyData(survey_dir = opt.catalog_dir)
 
     if filename is not None and hdu >= 0:
@@ -269,8 +270,6 @@ def main(survey=None, opt=None, args=None):
 
 def bounce_one_ccd(X):
     # for multiprocessing
-    #survey,catsurvey,ccd,opt,zoomslice,ps = X
-    #return run_one_ccd(survey, ccd, opt)
     return run_one_ccd(*X)
 
 def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_dec=None,
@@ -321,10 +320,6 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
             print('Cut to', len(T), 'sources within image + margin')
             T.cut(T.brick_primary)
             print('Cut to', len(T), 'on brick_primary')
-            for col in ['out_of_bounds', 'left_blob']:
-                if col in T.get_columns():
-                    T.cut(T.get(col) == False)
-                    print('Cut to', len(T), 'on', col)
             # drop DUP sources
             I, = np.nonzero([t.strip() != 'DUP' for t in T.type])
             T.cut(I)
@@ -337,7 +332,6 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
     T._header = TT[0]._header
     del TT
     print('Total of', len(T), 'catalog sources')
-
     return T
 
 def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
@@ -463,7 +457,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     # F.galdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.galnorm) - 9)] * len(F)).astype(np.float32)
 
     print('opt.derivs:', opt.derivs)
-    
+
     # super units questions here
     if opt.derivs:
         cosdec = np.cos(np.deg2rad(T.dec))
@@ -486,7 +480,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     F.ra  = T.ra
     F.dec = T.dec
 
-    ok,x,y = tim.sip_wcs.radec2pixelxy(T.ra, T.dec)
+    _,x,y = tim.sip_wcs.radec2pixelxy(T.ra, T.dec)
     F.x = (x-1).astype(np.float32)
     F.y = (y-1).astype(np.float32)
 
