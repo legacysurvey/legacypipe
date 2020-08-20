@@ -396,7 +396,7 @@ class LegacySurveyImage(object):
 
         template_meta = None
         if pixels:
-            template = self.get_sky_template(slc=slc)
+            template = self.get_sky_template(slc=slc, old_calibs_ok=old_calibs_ok)
             if template is not None:
                 debug('Subtracting sky template')
                 # unpack
@@ -605,7 +605,7 @@ class LegacySurveyImage(object):
     def fix_saturation(self, img, dq, invvar, primhdr, imghdr, slc):
         pass
 
-    def get_sky_template(self, slc=None):
+    def get_sky_template(self, slc=None, old_calibs_ok=False):
         return None
 
     def get_fwhm(self, primhdr, imghdr):

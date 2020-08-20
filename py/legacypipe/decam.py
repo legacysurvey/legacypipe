@@ -27,7 +27,7 @@ class DecamImage(LegacySurveyImage):
         # Adjust zeropoint for exposure time
         self.ccdzpt += 2.5 * np.log10(self.exptime)
 
-    def get_sky_template(self, slc=None):
+    def get_sky_template(self, slc=None, old_calibs_ok=False):
         import os
         import fitsio
         from astrometry.util.fits import fits_table
@@ -59,19 +59,23 @@ class DecamImage(LegacySurveyImage):
             return None
         assert(len(S) == 1)
         sky = S[0]
-        # Check PLPROCID only
-        if not validate_version(
-                fn, 'table', self.expnum, None, self.plprocid, data=S):
-            raise RuntimeError('Sky template for expnum=%i, ccdname=%s did not pass consistency validation (PLPROCID, EXPNUM)' % (self.expnum, self.ccdname))
-
         if sky.run == -1:
             debug('sky template: run=-1 for expnum %i, ccdname %s' % (self.expnum, self.ccdname))
             return None
+        # Check PLPROCID only
+        if not validate_version(
+                fn, 'table', self.expnum, None, self.plprocid, data=S):
+            txt = ('Sky template for expnum=%i, ccdname=%s did not pass consistency validation (EXPNUM, PLPROCID) -- image %i,%s vs template table %i,%s' %
+                   (self.expnum, self.ccdname, self.expnum, self.plprocid, sky.expnum, sky.plprocid))
+            if old_calibs_ok:
+                info('Warning:', txt, '-- but old_calibs_ok')
+            else:
+                raise RuntimeError(txt)
         assert(self.band == sky.filter)
         tfn = os.path.join(dirnm, 'sky_templates',
                            'sky_template_%s_%i.fits.fz' % (self.band, sky.run))
         if not os.path.exists(tfn):
-            info('Sky template file %s does not exist' % tfn)
+            info('WARNING: Sky template file %s does not exist' % tfn)
             return None
         F = fitsio.FITS(tfn)
         f = F[self.ccdname]
