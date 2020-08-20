@@ -288,11 +288,13 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
 
         for b in bricks:
             # Skip bricks that are entirely on the wrong side of the resolve line (NGC only)
-            if resolve_dec is not None and b.gal_b > 0:
+            if resolve_dec is not None:
+                # Northern survey, brick too far south (max dec is below the resolve line)
                 if north and b.dec2 <= resolve_dec:
                     continue
-                if not(north) and b.dec1 >= resolve_dec:
-                    continue
+                # Southern survey, brick too far north (min dec is above the resolve line), but only in the North Galactic Cap
+                if not(north) and b.dec1 >= resolve_dec and b.gal_b > 0:
+                     continue
             # there is some overlap with this brick... read the catalog.
             fn = catsurvey.find_file('tractor', brick=b.brickname)
             if not os.path.exists(fn):
@@ -305,11 +307,12 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
                 'sersic', 'shape_r', 'shape_e1', 'shape_e2',
                 'ref_epoch', 'pmra', 'pmdec', 'parallax'
                 ])
-            if resolve_dec is not None and b.gal_b > 0:
+            if resolve_dec is not None:
                 if north:
                     T.cut(T.dec >= resolve_dec)
                     print('Cut to', len(T), 'north of the resolve line')
-                else:
+                elif b.gal_b > 0:
+                    # Northern galactic cap only: cut Southern survey
                     T.cut(T.dec <  resolve_dec)
                     print('Cut to', len(T), 'south of the resolve line')
             _,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
