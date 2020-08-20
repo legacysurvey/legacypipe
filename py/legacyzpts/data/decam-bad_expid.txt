@@ -3260,3 +3260,8 @@
 661345 trailed image / asymetric PSFs
 661352 trailed image / asymetric PSFs
 764255 trailed image / asymetric PSFs
+
+# high ccdphrms; see [decam-chatter 13853]
+754142-S29 very noisy, slight amp jump, high ccdphrms
+630734-N18 some unmasked register overflow
+630995-N25 very high ccdphrms, not clear why (image looks fine)
