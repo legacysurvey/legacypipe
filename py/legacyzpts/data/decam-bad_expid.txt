@@ -3265,3 +3265,5 @@
 754142-S29 very noisy, slight amp jump, high ccdphrms
 630734-N18 some unmasked register overflow
 630995-N25 very high ccdphrms, not clear why (image looks fine)
+
+640712 double image
