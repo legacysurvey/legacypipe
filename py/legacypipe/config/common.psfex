@@ -18,7 +18,7 @@ PHOTFLUXERR_KEY FLUXERR_APER(4) # Catalogue parameter for photometric error
 
 PSFVAR_KEYS     X_IMAGE,Y_IMAGE # Catalogue or FITS (preceded by :) params
 PSFVAR_GROUPS   1,1             # Group tag for each context key
-PSFVAR_DEGREES  0               # Polynom degree for each group
+PSFVAR_DEGREES  2               # Polynom degree for each group
 
 #----------------------------- Sample selection ------------------------------
 

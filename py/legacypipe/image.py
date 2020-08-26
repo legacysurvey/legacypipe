@@ -1125,7 +1125,9 @@ class LegacySurveyImage(object):
         psfdir = os.path.dirname(self.psffn)
         # psfex decides for itself what it's going to name the output file....
         psftmpfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.psf.tmp')
-        cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .psf.tmp -VERBOSE_TYPE QUIET %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, self.sefn)
+        psfexflags = self.survey.get_psfex_conf(self.camera,
+                                                self.expnum, self.ccdname)
+        cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .psf.tmp -VERBOSE_TYPE QUIET %s %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, psfexflags, self.sefn)
         debug(cmd)
         rtn = os.system(cmd)
         if rtn:

@@ -771,6 +771,8 @@ class LegacySurveyData(object):
         ### HACK! Hard-coded brick edge size, in degrees!
         self.bricksize = 0.25
 
+        self.psfex_conf = None
+
         # Cached CCD kd-tree --
         # - initially None, then a list of (fn, kd)
         self.ccd_kdtrees = None
@@ -1002,6 +1004,23 @@ class LegacySurveyData(object):
                     break
                 tileh += 1
         return pat % dict(tilew=tilew,tileh=tileh)
+
+    def get_psfex_conf(self, camera, expnum, ccdname):
+        '''
+        Return additional psfex configuration flags for a given expnum and
+        ccdname.
+
+        Extra config flags are in the file $PSFEX_CONF_FILE.
+        '''
+        if self.psfex_conf is None:
+            self.psfex_conf = {}
+        if self.psfex_conf.get(camera, None) is None:
+            self.psfex_conf[camera] = read_psfex_conf(camera)
+        camconf = self.psfex_conf[camera]
+        res = camconf.get((expnum, ccdname.strip().upper()), '')
+        if res == '':
+            res = camconf.get((expnum, None), '')
+        return res
 
     def write_output(self, filetype, hashsum=True, filename=None, **kwargs):
         '''
@@ -1584,3 +1603,42 @@ def read_one_tim(X):
     tim = im.get_tractor_image(radecpoly=targetrd, **kwargs)
     return tim
 
+
+def read_psfex_conf(camera):
+    psfex_conf = {}
+    from pkg_resources import resource_filename
+    dirname = resource_filename('legacypipe', 'data')
+    fn = os.path.join(dirname, f'{camera}-special-psfex-conf.dat')
+    if not os.path.exists(fn):
+        info(f'could not find special psfex configuration file for {camera} '
+             'not using per-image psfex configurations.')
+        return psfex_conf
+    f = open(fn)
+    for line in f.readlines():
+        line = line.strip()
+        if len(line) == 0:
+            continue
+        if line[0] == '#':
+            continue
+        parts = line.split(None, maxsplit=1)
+        if len(parts) != 2:
+            print('Skipping line ', line)
+            continue
+        expname, flags = parts
+        if '-' in expname:
+            idparts = expname.split('-')
+            if len(idparts) != 2:
+                print('Skipping line ', line)
+                continue
+            expidstr = idparts[0].strip()
+            ccd = idparts[1].strip().upper()
+        else:
+            expidstr = expname.strip()
+            ccd = None
+        try:
+            expnum = int(expidstr, 10)
+        except ValueError:
+            print('Skipping line', line)
+            continue
+        psfex_conf[(expnum, ccd)] = flags
+    return psfex_conf
