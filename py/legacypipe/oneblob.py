@@ -1772,6 +1772,9 @@ class OneBlob(object):
             # Images for this band
             btims = [tim for tim in tims if tim.band == b]
             btr = self.tractor(btims, fitcat)
+            ceres_block = 8
+            from tractor.ceres_optimizer import CeresOptimizer
+            btr.optimizer = CeresOptimizer(BW=ceres_block, BH=ceres_block)
             btr.optimize_forced_photometry(shared_params=False, wantims=False)
         for src in fitcat:
             src.thawAllParams()
