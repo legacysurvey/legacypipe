@@ -5747,3 +5747,67 @@
 3103267 double image / trailing
 120528 double image / trailing
 80161 double image / trailing
+
+
+# more bad PSF images from Rongpu's PSF analysis; [decam-chatter 14061]
+154240 out of focus
+63089 bad PSF (bad tracking?)
+65487 bad PSF
+66454 trailed PSF
+69064 trailed PSF
+76499 bad PSF
+78678 bad PSF (bad tracking?)
+81514 double image
+84639 trailed PSF
+87439 donutty PSF
+88653 bad (donutty) PSF
+88654 bad (donutty) PSF
+90355 bad (donutty) PSF
+115568 bad (donutty) PSF
+116717 donutty PSF
+119072 bad PSF
+121494 bad PSF
+122882 trailed PSF
+123148 trailed PSF
+138491 bad (donutty) PSF
+138661 bad (donutty) PSF
+138662 bad PSF
+141118 bad (donutty) PSF
+141526 bad (donutty) PSF
+141527 bad PSF
+142286 bad (donutty) PSF
+144359 bad PSF
+144792 bad PSF
+144985 bad (donutty) PSF
+146101 bad (donutty) PSF
+146102 bad (donutty) PSF
+146646 bad (donutty) PSF
+3106878 bad PSF
+3107172 bad (donutty) PSF
+3107173 bad (donutty) PSF
+3107279 bad (donutty) PSF
+3135717 bad (trailed) PSF
+3135718 bad (trailed) PSF
+3135830 trailed PSF
+151119114832 trailed PSF
+
+64428 trailed PSF
+66356 trailed PSF
+83172 asymmetric/donutty PSF
+91601 asymmetric/donutty PSF
+91977 asymmetric/donutty PSF
+107475 asymmetric/donutty PSF
+107676 asymmetric/donutty PSF
+111472 trailed/asymmetric PSF
+114939 donutty PSF
+114940 donutty PSF
+114941 donutty PSF
+133010 donutty PSF
+144641 donutty PSF
+147277 donutty PSF
+147278 donutty PSF
+150867 trailed PSF
+155288 asymmetric/donutty PSF
+155364 asymmetric/donutty PSF
+3103614 trailed/asymmetric PSF
+151124071032 trailed PSF
