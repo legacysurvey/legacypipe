@@ -1,5 +1,24 @@
 import os, sys
 import re
+import fitsio
+
+def get_units(filename):
+    """Extract a dictionary of {FIELD: unit} from (extension 1 of) a
+    Tractor (or similar FITS) file.
+    """
+    # ADM the header for the first extension.
+    hdr = fitsio.read_header(filename, 1)
+
+    # ADM grab the potential names of each unit for each possible field.
+    tunits = ["TUNIT{}".format(i) for i in range(1, hdr["TFIELDS"]+1)]
+    tfields = [hdr["TTYPE{}".format(i)] for i in range(1, hdr["TFIELDS"]+1)]
+
+    # ADM a dictionary of the unit for each field. The dictionary will
+    # ADM have an empty string for units not included in the Tractor file.
+    unitdict = {tfld.upper(): hdr[tunit] if tunit in hdr.keys() else ""
+                for tfld, tunit in zip(tfields, tunits)}
+
+    return unitdict
 
 def parse_filename(filename):
     """parse filename to check if this is a tractor brick file;
