@@ -193,7 +193,7 @@ def make_sweep(sweep, bricks, ns):
                 return None, None
             try:
                 objects = fitsio.read(filename, 1, upper=True)
-                chunkheader = fitsio.read_header(filename, 0, upper=True)
+                chunkheader = fitsio.read_header(filename, 0)
             except:
                 if ns.ignore_errors:
                     print('IO error on %s' % filename)
