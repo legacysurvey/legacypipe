@@ -28,6 +28,17 @@ def main():
     # bricks = [(name, filepath, region), ...]
     bricks = list_bricks(ns)
 
+    # ADM extract a dictionary of {FIELD: unit} from a Tractor file.
+    fn = bricks[0][1]
+    hdr = fitsio.read_header(fn, 1)
+    # ADM grab the potential names of each unit for each possible field.
+    tunits = ["TUNIT{}".format(i) for i in range(1, hdr["TFIELDS"]+1)]
+    tfields = [hdr["TTYPE{}".format(i)] for i in range(1, hdr["TFIELDS"]+1)]
+    # ADM a dictionary of the unit for each field. The dictionary will
+    # ADM have an empty string for units not included in the Tractor file.
+    unitdict = {tfld.upper(): hdr[tunit] if tunit in hdr.keys() else ""
+                for tfld, tunit in zip(tfields, tunits)}
+
     t0 = time()
 
     try:
@@ -76,7 +87,7 @@ def main():
 
             if len(data) > 0:
                 save_sweep_file(os.path.join(ns.dest, filename),
-                    data, header, format)
+                                data, header, format, unitdict)
 
         return filename, nbricks, len(data)
 
@@ -239,13 +250,16 @@ def make_sweep(sweep, bricks, ns):
     return data, header, neff
 
 
-def save_sweep_file(filename, data, header, format):
+def save_sweep_file(filename, data, header, format, unitdict):
     if format == 'fits':
+        # ADM derive the units from the data columns.
+        units = [unitdict[col] for col in data.dtype.names]
+
         header = [dict(name=key, value=header[key]) for key in sorted(header.keys())]
         with fitsio.FITS(filename, mode='rw', clobber=True) as ff:
             ff.create_image_hdu()
             ff[0].write_keys(header)
-            ff.write_table(data, extname='SWEEP', header=header)
+            ff.write_table(data, extname='SWEEP', units=units)
 
     elif format == 'hdf5':
         import h5py
