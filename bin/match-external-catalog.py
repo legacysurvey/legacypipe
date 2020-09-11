@@ -5,7 +5,7 @@ from __future__ import print_function, division
 import numpy as np
 
 from legacypipe.internal import sharedmem
-from legacypipe.internal.io import iter_tractor, parse_filename, get_units
+from legacypipe.internal.io import iter_tractor, parse_filename, get_units, git_version
 
 import argparse
 import os, sys
@@ -155,6 +155,17 @@ def save_file(filename, data, header, format, unitdict=None):
             # ADM units, so pass an empty string for external columns.
             units = [unitdict[col] if col in unitdict.keys() else ""
                      for col in data.dtype.names]
+
+        # ADM add the external match code version header dependency.
+        dep = [int(key.split("DEPNAM")[-1]) for key in header.keys()
+               if 'DEPNAM' in key]
+        if len(dep) == 0:
+            nextdep = 0
+        else:
+            nextdep = np.max(dep) + 1
+        header["DEPNAM{:02d}".format(nextdep)] = 'match_external'
+        header["DEPVER{:02d}".format(nextdep)] = git_version()
+
         filename = basename + '.fits'
         fitsio.write(filename, data, extname='MATCHED', header=header,
                      clobber=True, units=units)

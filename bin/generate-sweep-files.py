@@ -5,7 +5,7 @@ from __future__ import print_function, division
 import numpy as np
 
 from legacypipe.internal import sharedmem
-from legacypipe.internal.io import iter_tractor, parse_filename, get_units
+from legacypipe.internal.io import iter_tractor, parse_filename, get_units, git_version
 
 import argparse
 import os, sys
@@ -15,7 +15,6 @@ import fitsio
 
 def main():
     ns = parse_args()
-
     if ns.ignore_errors:
         print("Warning: *** Will ignore broken tractor catalogue files ***")
         print("         *** Disable -I for final data product.         ***")
@@ -249,6 +248,16 @@ def save_sweep_file(filename, data, header, format, unitdict=None):
         # ADM derive the units from the data columns if possible.
         if unitdict is not None:
             units = [unitdict[col] for col in data.dtype.names]
+
+        # ADM add the sweep code version header dependency.
+        dep = [int(key.split("DEPNAM")[-1]) for key in header.keys()
+               if 'DEPNAM' in key]
+        if len(dep) == 0:
+            nextdep = 0
+        else:
+            nextdep = np.max(dep) + 1
+        header["DEPNAM{:02d}".format(nextdep)] = 'gen_sweep'
+        header["DEPVER{:02d}".format(nextdep)] = git_version()
 
         header = [dict(name=key, value=header[key]) for key in sorted(header.keys())]
         with fitsio.FITS(filename, mode='rw', clobber=True) as ff:

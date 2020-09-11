@@ -2,6 +2,26 @@ import os, sys
 import re
 import fitsio
 
+def git_version():
+    """Returns `git describe, or 'unknown' if not a git repo"""
+    # ADM mostly stolen from desitarget.io.gitversion()
+    import os
+    from subprocess import Popen, PIPE, STDOUT
+    origdir = os.getcwd()
+    os.chdir(os.path.dirname(__file__))
+    try:
+        p = Popen(['git', "describe"], stdout=PIPE, stderr=STDOUT)
+    except EnvironmentError:
+        return 'unknown'
+
+    os.chdir(origdir)
+    out = p.communicate()[0]
+    if p.returncode == 0:
+        # - avoid py3 bytes and py3 unicode; get native str in both cases.
+        return str(out.rstrip().decode('ascii'))
+    else:
+        return 'unknown'
+
 def get_units(filename):
     """Extract a dictionary of {FIELD: unit} from (extension 1 of) a
     Tractor (or similar FITS) file.
