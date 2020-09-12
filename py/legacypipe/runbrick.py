@@ -126,6 +126,10 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     if bands is None:
         bands = ['g','r','z']
+    
+    # serialize image loading
+    from astrometry.util.multiproc import multiproc
+    mp = multiproc()
 
     # Get brick object
     custom_brick = (ra is not None)
