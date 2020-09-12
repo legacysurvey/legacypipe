@@ -62,7 +62,7 @@ do
     # ADM write the bricks of interest to the output directory.
     find $TRACTOR_INDIR -name 'tractor-*.fits' > $TRACTOR_FILELIST
     echo wrote list of tractor files to $TRACTOR_FILELIST
-    
+
     # ADM run the sweeps. Should never have to use the --ignore option here,
     # ADM which usually means tthere are some discrepancies in the data model!
     echo running sweeps for the $survey
@@ -79,7 +79,7 @@ do
          $TRACTOR_INDIR \
          $EXTERNAL_OUTDIR/survey-$dr-$survey-dr7Q.fits --copycols SMJD PLATE FIBER RERUN
     echo done making $EXTERNAL_OUTDIR/survey-$dr-$survey-dr7Q.fits
-    
+
     echo making $EXTERNAL_OUTDIR/survey-$dr-$survey-dr12Q.fits
     time srun -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
          -v --numproc $NUMPROC -f fits -F $TRACTOR_FILELIST \
@@ -95,7 +95,7 @@ do
          $TRACTOR_INDIR \
          $EXTERNAL_OUTDIR/survey-$dr-$survey-superset-dr12Q.fits --copycols MJD PLATE FIBERID
     echo done making $EXTERNAL_OUTDIR/survey-$dr-$survey-superset-dr12Q.fits
-    
+
     echo making $EXTERNAL_OUTDIR/survey-$dr-$survey-specObj-dr16.fits
     time srun -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
          -v --numproc $NUMPROC -f fits -F $TRACTOR_FILELIST \
@@ -103,7 +103,7 @@ do
          $TRACTOR_INDIR \
          $EXTERNAL_OUTDIR/survey-$dr-$survey-specObj-dr16.fits --copycols MJD PLATE FIBERID RUN2D
     echo done making $EXTERNAL_OUTDIR/survey-$dr-$survey-specObj-dr16.fits
-    
+
     echo making $EXTERNAL_OUTDIR/survey-$dr-$survey-dr16Q-v4.fits
     time srun -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
          -v --numproc $NUMPROC -f fits -F $TRACTOR_FILELIST \
@@ -111,7 +111,7 @@ do
          $TRACTOR_INDIR \
          $EXTERNAL_OUTDIR/survey-$dr-$survey-dr16Q-v4.fits --copycols MJD PLATE FIBERID
     echo done making $EXTERNAL_OUTDIR/survey-$dr-$survey-dr16Q-v4.fits
-    
+
     echo making $EXTERNAL_OUTDIR/survey-$dr-$survey-superset-dr16q-v3.fits
     time srun -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
          -v --numproc $NUMPROC -f fits -F $TRACTOR_FILELIST \
