@@ -90,6 +90,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                unwise_modelsky_dir=None,
                galex_dir=None,
                command_line=None,
+               read_parallel=True,
                **kwargs):
     '''
     This is the first stage in the pipeline.  It
@@ -271,7 +272,10 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                                 old_calibs_ok=old_calibs_ok))
                                 for im in ims]
     record_event and record_event('stage_tims: starting read_tims')
-    tims = list(mp.map(read_one_tim, args))
+    if read_parallel:
+        tims = list(mp.map(read_one_tim, args))
+    else:
+        tims = list(map(read_one_tim, args))
     record_event and record_event('stage_tims: done read_tims')
 
     tnow = Time()
@@ -2913,6 +2917,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               plots=False, plots2=False, coadd_bw=False,
               plot_base=None, plot_number=0,
               command_line=None,
+              read_parallel=True,
               record_event=None,
     # These are for the 'stages' infrastructure
               pickle_pat='pickles/runbrick-%(brick)s-%%(stage)s.pickle',
@@ -3158,6 +3163,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   galex=galex,
                   galex_dir=galex_dir,
                   command_line=command_line,
+                  read_parallel=read_parallel,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
                   force=forceStages, write=write_pickles,
                   record_event=record_event)
@@ -3553,6 +3559,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help="""Sky-subtraction radii: rmask, rin, rout [arcsec] (only used with --fit-on-coadds and --no-subsky).
                         Image pixels r<rmask are fully masked and the pedestal sky background is estimated from an annulus
                         rin<r<rout on each CCD centered on the targetwcs.crval coordinates.""")
+    parser.add_argument('--read-serial', dest='read_parallel', default=True,
+                        action='store_false', help='Read images in series, not in parallel?')
     return parser
 
 def get_runbrick_kwargs(survey=None,
