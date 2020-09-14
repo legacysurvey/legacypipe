@@ -1579,8 +1579,12 @@ def run_calibs(X):
             raise
 
 def read_one_tim(X):
+    from astrometry.util.ttime import Time
     (im, targetrd, kwargs) = X
-    #print('Reading', im)
+    t0 = Time()
     tim = im.get_tractor_image(radecpoly=targetrd, **kwargs)
+    if tim is not None:
+        th,tw = tim.shape
+        print('Time to read %i x %i image, hdu %i:' % (tw,th, im.hdu), Time()-t0)
     return tim
 
