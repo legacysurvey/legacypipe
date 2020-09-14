@@ -197,8 +197,13 @@ ENV PATH /opt/conda/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 RUN mkdir /homedir && chmod 777 /homedir
 ENV HOME /homedir
 
+# Handy to be able to run a Jupyter notebook (eg at NERSC)
+RUN pip install ipykernel
+
 # set prompt and default shell
 SHELL ["/bin/bash", "-c"]
+ENTRYPOINT ["/bin/bash", "-c"]
+CMD ["/bin/bash"]
 
 RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
   # Create config files in $HOME
@@ -217,9 +222,6 @@ RUN wget -O /opt/conda/lib/python3.7/site-packages/astropy/utils/iers/data/Leap_
     https://raw.githubusercontent.com/astropy/astropy/master/astropy/utils/iers/data/Leap_Second.dat \
     && rm $HOME/.wget-hsts
 
-ENTRYPOINT ["/bin/bash", "-c"]
-CMD ["/bin/bash"]
-
 RUN python -O -m compileall \
     -x lib2to3 \
     /usr/local/lib/python \
@@ -234,6 +236,7 @@ RUN python -O -m compileall \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-RUN cd /src/legacypipe && git pull && git describe && echo 34 && \
+RUN cd /src/legacypipe && git pull && git describe && echo 965c && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
+
