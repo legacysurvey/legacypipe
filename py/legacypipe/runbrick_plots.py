@@ -164,7 +164,7 @@ def detection_plots(detmaps, detivs, bands, saturated_pix, tims,
         if large_galaxies:
             galaxies = refstars[refstars.islargegalaxy]
         if large_galaxies and len(galaxies):
-            ok,ix,iy = targetwcs.radec2pixelxy(galaxies.ra, galaxies.dec)
+            _,ix,iy = targetwcs.radec2pixelxy(galaxies.ra, galaxies.dec)
             p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=14, mec=(0,1,0), mfc='none')
             lp.append(p)
             lt.append('Galaxies')

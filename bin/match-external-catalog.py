@@ -5,7 +5,7 @@ from __future__ import print_function, division
 import numpy as np
 
 from legacypipe.internal import sharedmem
-from legacypipe.internal.io import iter_tractor, parse_filename
+from legacypipe.internal.io import iter_tractor, parse_filename, get_units, git_version
 
 import argparse
 import os, sys
@@ -25,6 +25,9 @@ def main():
         print("         *** Disable -I for final data product.         ***")
 
     bricks = list_bricks(ns)
+
+    # ADM grab a {FIELD: unit} dict from the first Tractor file.
+    unitdict = get_units(bricks[0][1])
 
     tree, nobj, morecols = read_external(ns.external, ns)
 
@@ -140,13 +143,32 @@ def main():
             del _matched_catalog
 
         for format in ns.format:
-            save_file(ns.dest, matched_catalog, hdr, format)
+            save_file(ns.dest, matched_catalog, hdr, format, unitdict=unitdict)
 
-def save_file(filename, data, header, format):
+def save_file(filename, data, header, format, unitdict=None):
     basename = os.path.splitext(filename)[0]
     if format == 'fits':
+        units = None
+	# ADM derive the units from the data columns if possible.
+        if unitdict is not None:
+            # ADM some columns from external-match files might not have
+            # ADM units, so pass an empty string for external columns.
+            units = [unitdict[col] if col in unitdict.keys() else ""
+                     for col in data.dtype.names]
+
+        # ADM add the external match code version header dependency.
+        dep = [int(key.split("DEPNAM")[-1]) for key in header.keys()
+               if 'DEPNAM' in key]
+        if len(dep) == 0:
+            nextdep = 0
+        else:
+            nextdep = np.max(dep) + 1
+        header["DEPNAM{:02d}".format(nextdep)] = 'match_external'
+        header["DEPVER{:02d}".format(nextdep)] = git_version()
+
         filename = basename + '.fits'
-        fitsio.write(filename, data, extname='MATCHED', header=header, clobber=True)
+        fitsio.write(filename, data, extname='MATCHED', header=header,
+                     clobber=True, units=units)
     elif format == 'hdf5':
         filename = basename + '.hdf5'
         import h5py

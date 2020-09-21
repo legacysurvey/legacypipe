@@ -465,7 +465,7 @@ def main(args):
     # plt.savefig('bricks.png')
 
     if opt.touching:
-        I,J,d = match_radec(T.ra, T.dec, B.ra, B.dec, search_radius,
+        I,J,_ = match_radec(T.ra, T.dec, B.ra, B.dec, search_radius,
                             nearest=True)
         # list the ones that will be cut
         # drop = np.ones(len(T))

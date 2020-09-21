@@ -1,7 +1,6 @@
 from __future__ import print_function
 import numpy as np
-from astrometry.util.fits import fits_table, merge_tables
-from collections import Counter
+from astrometry.util.fits import fits_table
 
 def psf_cuts_to_string(ccd_cuts, join=', '):
     s = []

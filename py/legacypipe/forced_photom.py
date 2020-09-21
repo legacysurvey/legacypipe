@@ -105,7 +105,7 @@ def main(survey=None, opt=None, args=None):
     print('Opt:', opt)
     print('Opt:', vars(opt))
 
-    t0 = tlast = Time()
+    t0 = Time()
     if opt.skip and os.path.exists(opt.outfn):
         print('Ouput file exists:', opt.outfn)
         sys.exit(0)
