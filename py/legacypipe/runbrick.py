@@ -354,6 +354,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         version_header.add_record(dict(name='BAND%i' % i, value=band,
                                        comment='Band name in this catalog'))
 
+    _add_stage_version(version_header, 'TIMS', 'tims')
     keys = ['version_header', 'targetrd', 'pixscale', 'targetwcs', 'W','H',
             'bands', 'tims', 'ps', 'brickid', 'brickname', 'brick', 'custom_brick',
             'target_extent', 'ccds', 'bands', 'survey']

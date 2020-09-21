@@ -431,7 +431,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     if save_fits:
         for i,tim in enumerate(tims):
             tile = tim.tile
-            (dat, mod, ie, chi, _) = ims1[i]
+            (dat, mod, _, chi, _) = ims1[i]
             wcshdr = fitsio.FITSHDR()
             tim.wcs.wcs.add_to_header(wcshdr)
             tag = 'fit-%s-w%i' % (tile.coadd_id, band)

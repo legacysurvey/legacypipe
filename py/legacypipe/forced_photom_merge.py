@@ -40,7 +40,7 @@ for band in bands:
 
     # we use uint8 below...
     assert(NB < 256)
-    
+
     sourcearrays = []
     sourcearrays2 = []
     destarrays = []

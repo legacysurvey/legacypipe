@@ -99,7 +99,7 @@ class SimpleCoadd(object):
             comod[coiv == 0] = 0.
             coimgs.append(coimg)
             comods.append(comod)
-            
+
             hdr = copy_header_with_wcs(version_header, self.wcs)
             self.add_to_header(hdr, band)
             self.write_coadds(survey, brickname, hdr, band, coimg, comod, coiv, con)

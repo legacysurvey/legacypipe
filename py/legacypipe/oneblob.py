@@ -450,7 +450,6 @@ class OneBlob(object):
         from legacypipe.detection import detection_maps
         from astrometry.util.multiproc import multiproc
         from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
-        from scipy.ndimage.measurements import label
 
         # Compute per-band detection maps
         mp = multiproc()
@@ -535,7 +534,7 @@ class OneBlob(object):
              for x,y,r2 in zip(sx,sy,maxr2)]
         heapq.heapify(q)
         while len(q):
-            v,key,x,y,cx,cy,r2 = heapq.heappop(q)
+            _,key,x,y,cx,cy,r2 = heapq.heappop(q)
             segmap[y,x] = key
             # 4-connected neighbours
             for x,y in [(x, y-1), (x, y+1), (x-1, y), (x+1, y),]:
@@ -725,6 +724,7 @@ class OneBlob(object):
 
     def iterative_detection(self, Bold, models):
         # Compute per-band detection maps
+        from scipy.ndimage.morphology import binary_dilation
         from legacypipe.detection import sed_matched_filters, detection_maps, run_sed_matched_filters
         from astrometry.util.multiproc import multiproc
 
@@ -742,7 +742,6 @@ class OneBlob(object):
             self.tims, self.blobwcs, self.bands, mp)
 
         # from runbrick.py
-        from scipy.ndimage.morphology import binary_dilation
         satmaps = [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps]
 
         # Also compute detection maps on the (first-round) model images!
