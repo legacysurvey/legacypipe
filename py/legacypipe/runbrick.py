@@ -2865,6 +2865,21 @@ def stage_writecat(
     record_event and record_event('stage_writecat: done')
     return dict(T=T, version_header=version_header)
 
+def stage_checksum(
+        survey=None,
+        brickname=None,
+        **kwargs):
+    '''
+    For debugging / special-case processing, write out the current checksums file.
+    '''
+    # produce per-brick checksum file.
+    with survey.write_output('checksums', brick=brickname, hashsum=False) as out:
+        f = open(out.fn, 'w')
+        # Write our pre-computed hashcodes.
+        for fn,hashsum in survey.output_file_hashes.items():
+            f.write('%s *%s\n' % (hashsum, fn))
+        f.close()
+
 def run_brick(brick, survey, radec=None, pixscale=0.262,
               width=3600, height=3600,
               survey_blob_mask=None,
@@ -3271,6 +3286,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             'fit_on_coadds': 'halos',
             'srcs': 'fit_on_coadds',
         })
+
+    # HACK -- set the prereq to the stage after which you'd like to write out checksums.
+    prereqs.update({'checksum': 'outliers'})
 
     if prereqs_update is not None:
         prereqs.update(prereqs_update)
