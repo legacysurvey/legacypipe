@@ -449,7 +449,7 @@ class OneBlob(object):
         from functools import reduce
         from legacypipe.detection import detection_maps
         from astrometry.util.multiproc import multiproc
-        from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
+        from scipy.ndimage.morphology import binary_dilation
 
         # Compute per-band detection maps
         mp = multiproc()

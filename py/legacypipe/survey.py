@@ -413,7 +413,7 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, gale
     import matplotlib
     try:
         import mkl_fft
-    except:
+    except ModuleNotFoundError:
         mkl_fft = None
     import photutils
     import tractor

@@ -272,7 +272,7 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
         wantims=wantims)
     info('GALEX forced photometry took', Time() - t0)
     #info('Result:', R)
-    
+
     if use_ceres:
         term = R.ceres_status['termination']
         # Running out of memory can cause failure to converge and term
@@ -450,7 +450,6 @@ def _galex_rgb_official(imgs, **kwargs):
 def _galex_rgb_moustakas(imgs, **kwargs):
     #from scipy.ndimage.filters import uniform_filter, gaussian_filter
     nuv,fuv = imgs
-    h,w = nuv.shape
     red = nuv * 0.206 * 2297
     blue = fuv * 1.4 * 1525
     #blue = uniform_filter(blue, 3)
@@ -589,13 +588,11 @@ def galex_coadds(onegal, galaxy=None, radius_mosaic=30, radius_mask=None,
     pixscale: GALEX pixel scale in arcsec/pixel.
 
     '''
-    import matplotlib.pyplot as plt
-
+    #import matplotlib.pyplot as plt
     from astrometry.libkd.spherematch import match_radec
     from astrometry.util.resample import resample_with_wcs, OverlapError
     from tractor import (Tractor, NanoMaggies, Image, LinearPhotoCal,
                          ConstantFitsWcs, ConstantSky)
-
     from legacypipe.survey import imsave_jpeg
     from legacypipe.catalog import read_fits_catalog
 

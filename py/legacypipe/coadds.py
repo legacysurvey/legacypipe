@@ -129,7 +129,7 @@ class SimpleCoadd(object):
 
     def write_coadds(self, survey, brickname, hdr, band, coimg, comod, coiv, con):
         pass
-        
+
     def write_color_image(self, survey, brickname, coimgs, comods):
         pass
 
@@ -204,7 +204,7 @@ def make_coadds(tims, bands, targetwcs,
                 xy=None, apertures=None, apxy=None,
                 ngood=False, detmaps=False, psfsize=False,
                 allmasks=True, anymasks=False,
-                max=False, sbscale=True,
+                get_max=False, sbscale=True,
                 psf_images=False,
                 callback=None, callback_args=None,
                 plots=False, ps=None,

@@ -131,7 +131,7 @@ def main(survey=None, opt=None, args=None):
     try:
         expnum = int(opt.expnum)
         filename = None
-    except:
+    except ValueError:
         # make this 'None' for survey.find_ccds()
         expnum = None
         filename = opt.expnum
