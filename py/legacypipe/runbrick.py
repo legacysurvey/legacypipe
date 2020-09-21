@@ -456,12 +456,16 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
                    mp=None, nsigma=None, plots=None, ps=None, record_event=None,
                    survey=None, brickname=None, version_header=None,
                    refstars=None, outlier_mask_file=None,
-                   outliers=True,
+                   outliers=True, cache_outliers=False,
                    **kwargs):
-    '''
-    This pipeline stage tries to detect artifacts in the individual
+    '''This pipeline stage tries to detect artifacts in the individual
     exposures, by blurring all images in the same band to the same PSF size,
     then searching for outliers.
+
+    *cache_outliers*: bool: if the outliers-mask*.fits.fz file exists
+    (from a previous run), use it.  We turn this off in production
+    because we still want to create the JPEGs and the checksum entry
+    for the outliers file.
     '''
     from legacypipe.outliers import patch_from_coadd, mask_outlier_pixels, read_outlier_mask_file
 
@@ -473,7 +477,9 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
                                    help='Are we applying outlier rejection?'))
 
     # Check for existing MEF containing masks for all the chips we need.
-    if outliers and not read_outlier_mask_file(survey, tims, brickname, outlier_mask_file=outlier_mask_file):
+    if (outliers and
+        not (cache_outliers and
+             read_outlier_mask_file(survey, tims, brickname, outlier_mask_file=outlier_mask_file))):
         # Make before-n-after plots (before)
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
         with survey.write_output('outliers-pre', brick=brickname) as out:
@@ -2897,6 +2903,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               iterative=False,
               wise=True,
               outliers=True,
+              cache_outliers=False,
               lanczos=True,
               early_coadds=False,
               blob_image=False,
@@ -3165,6 +3172,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   reoptimize=reoptimize,
                   iterative=iterative,
                   outliers=outliers,
+                  cache_outliers=cache_outliers,
                   use_ceres=ceres,
                   wise_ceres=wise_ceres,
                   unwise_coadds=unwise_coadds,
@@ -3557,6 +3565,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         action='store_false', help='Turn off writing FITS and JPEG unWISE coadds?')
     parser.add_argument('--no-outliers', dest='outliers', default=True,
                         action='store_false', help='Do not compute or apply outlier masks')
+    parser.add_argument('--cache-outliers', default=False,
+                        action='store_true', help='Use outlier-mask file if it exists?')
 
     parser.add_argument('--bail-out', default=False, action='store_true',
                         help='Bail out of "fitblobs" processing, writing all blobs from the checkpoint and skipping any remaining ones.')
