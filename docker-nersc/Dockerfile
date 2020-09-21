@@ -103,7 +103,8 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && make extra \
     && make install INSTALL_DIR=/usr/local \
     && make clean \
-    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import astrometry; print(astrometry.__version__)")
+    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import astrometry; print(astrometry.__version__)") \
+    && git describe
 
 # Pip installs -- binary.  We need cython for the tractor.
 RUN for x in \
@@ -119,11 +120,11 @@ RUN for x in \
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
+    && git checkout dr9.4 \
     && python3 setup-cython.py --with-ceres install --home /usr/local \
     && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so") \
-    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)") \
-    && echo 2
+    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
 
 # Pip installs -- built from source
 RUN pip --no-cache-dir install photutils
@@ -171,7 +172,8 @@ RUN apt -y update && apt install -y apt-utils \
 COPY --from=builder /usr/local /usr/local
 COPY --from=builder /opt/conda /opt/conda
 
-RUN pip --no-cache-dir install ipython Pillow healpy seaborn
+RUN conda update --no-deps certifi
+RUN pip --no-cache-dir install ipython Pillow healpy seaborn ipykernel
 
 WORKDIR /src
 
@@ -196,9 +198,6 @@ ENV PATH /opt/conda/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 RUN mkdir /homedir && chmod 777 /homedir
 ENV HOME /homedir
-
-# Handy to be able to run a Jupyter notebook (eg at NERSC)
-RUN pip install ipykernel
 
 # set prompt and default shell
 SHELL ["/bin/bash", "-c"]
@@ -236,7 +235,7 @@ RUN python -O -m compileall \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-RUN cd /src/legacypipe && git pull && git describe && echo 965c && \
+RUN cd /src/legacypipe && git pull && git describe && echo 966 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
