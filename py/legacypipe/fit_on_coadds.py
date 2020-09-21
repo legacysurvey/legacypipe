@@ -361,7 +361,7 @@ def stage_fit_on_coadds(
 
     from legacypipe.coadds import make_coadds
     from legacypipe.bits import DQ_BITS
-    from legacypipe.survey import get_rgb, LegacySurveyWcs
+    from legacypipe.survey import LegacySurveyWcs
     from legacypipe.coadds import get_coadd_headers
 
     from tractor.image import Image

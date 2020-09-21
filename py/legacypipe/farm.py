@@ -376,7 +376,7 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
                     print('Finished bricks:')
                 for br,nb in all_finished_bricks.items():
                     print('  %s: %i blobs' % (br, nb))
-                    
+
             print()
             print('Work queue:', inqueue.qsize(), 'out queue:', outqueue.qsize(), 'work sent:', worksent, ', received:', resultsreceived, 'outstanding:', worksent-resultsreceived)
             #print('Outstanding work:')
