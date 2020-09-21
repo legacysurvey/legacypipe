@@ -23,13 +23,13 @@ def stage_merge_checksums(
                 fn = fn[1:]
             hashcode = words[0]
             checksums[fn] = hashcode
-    #print('Old checksums:', checksums)
 
     # produce per-brick checksum file.
     with survey.write_output('checksums', brick=brickname, hashsum=False) as out:
         f = open(out.fn, 'w')
         # Update hashsums
         for fn,hashsum in survey.output_file_hashes.items():
+            print('Updating checksum', fn, '=', hashsum)
             checksums[fn] = hashsum
         # Write outputs
         for fn,hashsum in checksums.items():
@@ -75,14 +75,17 @@ def main():
     old_survey = LegacySurveyData(survey_dir=old_output_dir,
                                   output_dir=old_output_dir)
     kwargs.update(old_survey=old_survey)
-    
+    brickname = optdict['brick']
+
     from astrometry.util.stages import CallGlobalTime, runstage
 
-    prereqs = {}
-    prereqs.update({'merge_checksums': 'outliers',
-                    'outliers': None})
+    prereqs = {
+        'outliers': None,
+    }
+    prereqs.update({
+        'merge_checksums': 'outliers'
+    })
 
-    brickname = optdict['brick']
     pickle_pat = optdict['pickle_pat']
     pickle_pat = pickle_pat % dict(brick=brickname)
 

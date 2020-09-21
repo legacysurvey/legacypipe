@@ -356,7 +356,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     _add_stage_version(version_header, 'TIMS', 'tims')
     keys = ['version_header', 'targetrd', 'pixscale', 'targetwcs', 'W','H',
-            'bands', 'tims', 'ps', 'brickid', 'brickname', 'brick', 'custom_brick',
+            'tims', 'ps', 'brickid', 'brickname', 'brick', 'custom_brick',
             'target_extent', 'ccds', 'bands', 'survey']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
