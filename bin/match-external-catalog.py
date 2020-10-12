@@ -60,19 +60,40 @@ def main():
                     raise
 
             # ADM limit to just PRIMARY objects from imaging.
-            ii = objects["BRICK_PRIMARY"]
-            objects = objects[ii]
+            bp = objects["BRICK_PRIMARY"]
+            objects = objects[bp]
             pos = radec2pos(objects['RA'], objects['DEC'])
 
             # ADM query tree allowing duplicates.
-            d, i = tree.query(pos, maxdups, distance_upper_bound=tol)
+            dd, ii = tree.query(pos, maxdups, distance_upper_bound=tol)
+
+            # ADM collect relevant information (retaining duplicates).
+            _s = ii[dd < tol]           # ADM the spec object indices.
+            _p = np.where(dd < tol)[0]  # ADM the imaging object indices.
+            _d = dd[dd < tol]           # ADM the matching distances.
+
+            # ADM look-up dictionaries of the relevant distances and
+            # ADM imaging object indices for each spec object index.
+            ddict, pdict = {i: [] for i in _s}, {i: [] for i in _s}
+            _ = [ddict[s].append(d) for s, d in zip(_s, _d)]
+            _ = [pdict[s].append(p) for s, p in zip(_s, _p)]
+
+            # ADM collapse the lookup dict based on minimum distances.
+            sdp = [[s, d[np.argmin(d)], p[np.argmin(d)]] for s, d, p in
+                   zip(ddict.keys(), ddict.values(), pdict.values())]
+
+            # ADM we're left with the spectroscopic and photometric indexes
+            # ADM distances and indexes contingent on the minimum distances.
+            i = np.array(sdp, dtype='i4')[:,0]
+            d = np.array(sdp, dtype='f4')[:,1]
+            iphot = np.array(sdp, dtype='i4')[:,2]
 
             assert (objects['OBJID'] != -1).all()
             with pool.critical:
                 mask = d < matched_distance[i]
-                mask &= objects['BRICK_PRIMARY'] 
                 i = i[mask]
-                matched_catalog[i] = objects[mask][list(matched_catalog.dtype.names)]
+                iphot = iphot[mask]
+                matched_catalog[i] = objects[iphot][list(matched_catalog.dtype.names)]
                 matched_distance[i] = d[mask]
             matched = mask.sum()
 
@@ -86,7 +107,7 @@ def main():
             ntotal[...] += total
             if ns.verbose:
                 if nprocessed % 1000 == 0:
-                    print("Processed %d files, %g / second, matched %d / %d objects."
+                    print("Processed %d files, %g / second, matched %d / %d brick primary objects."
                         % (nprocessed, nprocessed / (time() - t0), nmatched, ntotal)
                         )
 
