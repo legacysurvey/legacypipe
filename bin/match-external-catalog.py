@@ -198,11 +198,18 @@ def radec2pos(ra, dec):
     pos[:, 1] *= np.cos(ra / 180. * np.pi)
     return pos
 
-def read_external(filename, ns):
+def read_external(filename, ns=None):
     t0 = time()
     cat = fitsio.FITS(filename, upper=True)[1][:]
 
-    if ns.verbose:
+    # ADM some defaults to make it easier to import this function.
+    _verbose = True
+    _copycols = None
+    if ns is not None:
+        _verbose = ns.verbose
+        _copycols = ns.copycols
+
+    if _verbose:
         print("reading external catalog took %g seconds." % (time() - t0))
         print("%d objects." % len(cat))
 
@@ -215,7 +222,7 @@ def read_external(filename, ns):
         and decname in cat.dtype.names: 
             ra = cat[raname]
             dec = cat[decname]
-            if ns.verbose:
+            if _verbose:
                 print('using %s/%s for positions.' % (raname, decname))
             break
     else:
@@ -227,11 +234,11 @@ def read_external(filename, ns):
 
     tree = KDTree(pos)
 
-    if ns.verbose:
+    if _verbose:
         print("Building KD-Tree took %g seconds." % (time() - t0))
 
     morecols = []
-    if ns.copycols is not None:
+    if _copycols is not None:
         for col in np.atleast_1d(ns.copycols):
             if col not in cat.dtype.names:
                 print('Column {} does not exist in external catalog!'.format(col))
