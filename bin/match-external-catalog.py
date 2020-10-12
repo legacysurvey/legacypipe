@@ -58,9 +58,18 @@ def main():
                     return None, None, None
                 else:
                     raise
-        
+
+            # ADM limit to just PRIMARY objects from imaging.
+            ii = objects["BRICK_PRIMARY"]
+            objects = objects[ii]
+
+            # ADM build a tree for the imaging objects.
             pos = radec2pos(objects['RA'], objects['DEC'])
-            d, i = tree.query(pos, 1)
+            imtree = KDTree(pos)
+
+            # ADM match objects in imaging to objects in spectroscopy so
+            # ADM every spectroscopic object finds its nearest match
+            d, i = imtree.query(tree.data, 1)
             assert (objects['OBJID'] != -1).all()
             with pool.critical:
                 mask = d < matched_distance[i]
