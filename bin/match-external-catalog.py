@@ -29,7 +29,7 @@ def main():
     # ADM grab a {FIELD: unit} dict from the first Tractor file.
     unitdict = get_units(bricks[0][1])
 
-    tree, nobj, morecols = read_external(ns.external, ns)
+    tree, nobj, morecols, maxdups = read_external(ns.external, tol, ns)
 
     # get the data type of the match
     brickname, path = bricks[0]
@@ -62,14 +62,11 @@ def main():
             # ADM limit to just PRIMARY objects from imaging.
             ii = objects["BRICK_PRIMARY"]
             objects = objects[ii]
-
-            # ADM build a tree for the imaging objects.
             pos = radec2pos(objects['RA'], objects['DEC'])
-            imtree = KDTree(pos)
 
-            # ADM match objects in imaging to objects in spectroscopy so
-            # ADM every spectroscopic object finds its nearest match
-            d, i = imtree.query(tree.data, 1)
+            # ADM query tree allowing duplicates.
+            d, i = tree.query(pos, maxdups, distance_upper_bound=tol)
+
             assert (objects['OBJID'] != -1).all()
             with pool.critical:
                 mask = d < matched_distance[i]
@@ -198,7 +195,7 @@ def radec2pos(ra, dec):
     pos[:, 1] *= np.cos(ra / 180. * np.pi)
     return pos
 
-def read_external(filename, ns=None):
+def read_external(filename, tol, ns=None):
     t0 = time()
     cat = fitsio.FITS(filename, upper=True)[1][:]
 
@@ -234,6 +231,18 @@ def read_external(filename, ns=None):
 
     tree = KDTree(pos)
 
+    # ADM determine the maximum possible number of duplicated objects.
+    ndups = 0
+    maxdups = 1000
+    if _verbose:
+        print("Determing max number of duplicates in external catalog")
+    while ndups < maxdups:
+        ndups += 100
+        d, _ = tree.query(pos, ndups, distance_upper_bound=2*tol)
+        maxdups = np.max(np.sum(d != np.inf, axis=1))
+        if _verbose:
+            print("maximum number of duplicates is {}".format(maxdups))
+
     if _verbose:
         print("Building KD-Tree took %g seconds." % (time() - t0))
 
@@ -245,7 +254,7 @@ def read_external(filename, ns=None):
                 raise IOError
             morecols.append(cat[col])
 
-    return tree, len(cat), morecols
+    return tree, len(cat), morecols, maxdups
 
 def list_bricks(ns):
     t0 = time()
