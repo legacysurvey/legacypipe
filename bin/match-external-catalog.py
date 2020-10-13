@@ -29,6 +29,9 @@ def main():
     # ADM grab a {FIELD: unit} dict from the first Tractor file.
     unitdict = get_units(bricks[0][1])
 
+    # convert to radian
+    tol = ns.tolerance / (60. * 60.)  * (np.pi / 180)
+
     tree, nobj, morecols, maxdups = read_external(ns.external, tol, ns)
 
     # get the data type of the match
@@ -38,9 +41,6 @@ def main():
     matched_catalog['OBJID'] = -1
 
     matched_distance = sharedmem.empty(nobj, dtype='f4')
-
-    # convert to radian
-    tol = ns.tolerance / (60. * 60.)  * (np.pi / 180)
 
     matched_distance[:] = tol
     nprocessed = np.zeros((), dtype='i8')
@@ -72,9 +72,13 @@ def main():
             _p = np.where(dd < tol)[0]  # ADM the imaging object indices.
             _d = dd[dd < tol]           # ADM the matching distances.
 
+            # ADM bail if there are no matches.
+            if len(_s) == 0:
+                return brickname, 0, len(objects)
+
             # ADM look-up dictionaries of the relevant distances and
             # ADM imaging object indices for each spec object index.
-            ddict, pdict = {i: [] for i in _s}, {i: [] for i in _s}
+            ddict, pdict = {s: [] for s in _s}, {s: [] for s in _s}
             _ = [ddict[s].append(d) for s, d in zip(_s, _d)]
             _ = [pdict[s].append(p) for s, p in zip(_s, _p)]
 
