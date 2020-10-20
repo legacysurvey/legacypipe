@@ -27,19 +27,14 @@ To see the code we run on each "blob" of pixels, see "oneblob.py".
 
 '''
 from __future__ import print_function
-if __name__ == '__main__':
-    import matplotlib
-    matplotlib.use('Agg')
 import sys
 import os
 
-import pylab as plt
 import numpy as np
 
 import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
-from astrometry.util.plotutils import dimshow
 from astrometry.util.ttime import Time
 
 from legacypipe.survey import get_rgb, imsave_jpeg
@@ -861,6 +856,8 @@ def stage_srcs(pixscale=None, targetwcs=None,
         hot |= merging
 
         if plots:
+            import pylab as plt
+            from astrometry.util.plotutils import dimshow
             plt.clf()
             plt.subplot(1,2,1)
             dimshow((hot*1) + (any_saturated*1), vmin=0, vmax=2, cmap='hot')
@@ -1711,6 +1708,7 @@ def _get_both_mods(X):
             blobmod += patch.patch * blobmask
 
             if plots:
+                import pylab as plt
                 plt.clf()
                 plt.imshow(blobmask, interpolation='nearest', origin='lower', vmin=0, vmax=1,
                            cmap='gray')
@@ -1820,6 +1818,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
     if plots and False:
+        import pylab as plt
+        from astrometry.util.plotutils import dimshow
         cat_init = [src for it,src in zip(T.iterative, cat) if not(it)]
         cat_iter = [src for it,src in zip(T.iterative, cat) if it]
         print(len(cat_init), 'initial sources and', len(cat_iter), 'iterative')
@@ -2072,6 +2072,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                          'FB_%s', 'FBIT_%i', 'fitbits')
 
     if plots:
+        import pylab as plt
+        from astrometry.util.plotutils import dimshow
         plt.clf()
         ra  = np.array([src.getPosition().ra  for src in cat])
         dec = np.array([src.getPosition().dec for src in cat])
@@ -2246,6 +2248,7 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
             fibertotflux[I, iband] = f[I]
 
     if plots:
+        import pylab as plt
         for modimg,band in zip(modimgs, bands):
             plt.clf()
             plt.imshow(modimg, interpolation='nearest', origin='lower',
@@ -3748,6 +3751,9 @@ def main(args=None):
     logging.getLogger('tractor.engine').setLevel(lvl + 10)
 
     if opt.plots:
+        import matplotlib
+        matplotlib.use('Agg')
+        import pylab as plt
         plt.figure(figsize=(12,9))
         plt.subplots_adjust(left=0.07, right=0.99, bottom=0.07, top=0.93,
                             hspace=0.2, wspace=0.05)
