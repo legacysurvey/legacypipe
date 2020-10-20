@@ -69,7 +69,7 @@ def write_partial_map(filename, indices, values, nside, nest=False):
     tbhdu.header['GRAIN'] = 1
     tbhdu.header['OBJECT'] = 'PARTIAL'
     tbhdu.header['INDXSCHM'] = ('EXPLICIT', 'Indexing: IMPLICIT or EXPLICIT')
-    tbhdu.writeto(filename,clobber=True)
+    tbhdu.writeto(filename, overwrite=True)
     subprocess.call("gzip -f "+filename,shell=True)
 
 # ---------------------------------------------------------------------------------------- #
