@@ -28,15 +28,32 @@ target = dict(g=24.0, r=23.4, z=22.5)
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--region', default='cosmos', help='Region: "cosmos", "s82qso"')
+parser.add_argument('-v', '--verbose', dest='verbose', action='count',
+                    default=0, help='Make more verbose')
 opt = parser.parse_args()
 
+import sys
+import logging
+if opt.verbose == 0:
+    lvl = logging.INFO
+else:
+    lvl = logging.DEBUG
+logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+
 region = opt.region
+
+run = 'south'
 
 # We cache the table of good CCDs in the region of interest in this file...
 cfn = '%s-all-ccds.fits' % region
 if not os.path.exists(cfn):
-    survey = LegacySurveyData()
-    
+    from legacypipe.runs import get_survey
+
+    import legacypipe.runs
+    print(legacypipe.runs.__file__)
+    #survey = LegacySurveyData()
+    survey = get_survey(run)
+
     C = survey.get_annotated_ccds()
     print(len(C), 'annotated CCDs')
 

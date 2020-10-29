@@ -1348,11 +1348,19 @@ class LegacySurveyData(object):
         T = self.cleanup_ccds_table(T)
         return T
 
+    def filter_annotated_ccds_files(self, fns):
+        '''
+        When reading the list of annotated CCDs,
+        filter file list using this function.
+        '''
+        return fns
+
     def get_annotated_ccds(self):
         '''
         Returns the annotated table of CCDs.
         '''
         fns = self.find_file('annotated-ccds')
+        fns = self.filter_annotated_ccds_files(fns)
         TT = []
         for fn in fns:
             debug('Reading annotated CCDs from', fn)
