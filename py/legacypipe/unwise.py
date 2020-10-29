@@ -351,7 +351,9 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         patch = psf.getPointSourcePatch(h//2, w//2).patch
         psfnorm = np.sqrt(np.sum(patch**2))
         # To handle zero-depth, we return 1/nanomaggies^2 units rather than mags.
-        phot.get('psfdepth_%s' % wband)[I] = 1. / (tim.sig1 / psfnorm)**2
+        # In the small empty patches of the sky (eg W4 in 0922p702), we get sig1 = NaN
+        if np.isfinite(tim.sig1):
+            phot.get('psfdepth_%s' % wband)[I] = 1. / (tim.sig1 / psfnorm)**2
 
         tim.tile = tile
         tims.append(tim)
