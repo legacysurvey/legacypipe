@@ -413,7 +413,7 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, gale
     import matplotlib
     try:
         import mkl_fft
-    except ModuleNotFoundError:
+    except ImportError:
         mkl_fft = None
     import photutils
     import tractor
@@ -695,13 +695,13 @@ def imsave_jpeg(jpegfn, img, **kwargs):
     *jpegfn*: JPEG filename
     *img*: image, in the typical matplotlib formats (see plt.imsave)
     '''
-    import pylab as plt
+    from matplotlib.pyplot import imsave
     if True:
         kwargs.update(format='jpg')
-        plt.imsave(jpegfn, img, **kwargs)
+        imsave(jpegfn, img, **kwargs)
     else:
         tmpfn = create_temp(suffix='.png')
-        plt.imsave(tmpfn, img, **kwargs)
+        imsave(tmpfn, img, **kwargs)
         cmd = ('pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn))
         rtn = os.system(cmd)
         print(cmd, '->', rtn)
