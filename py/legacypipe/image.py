@@ -935,7 +935,8 @@ class LegacySurveyImage(object):
                 elif sver == -2 and srun == -2 and sscale == -2:
                     print('Warning: splinesky does not have sky-template version/run/scale values')
                 else:
-                    raise RuntimeError('Splinesky template version/run/scale %s/%s/%s does not match sky template %s/%s/%s' % (sver, srun, sscale, tver, trun, tscale))
+                    raise RuntimeError('Splinesky template version/run/scale %s/%s/%s does not match sky template %s/%s/%s, CCD %s' %
+                                       (sver, srun, sscale, tver, trun, tscale, self.name))
 
         # Remove any padding
         h,w = Ti.gridh, Ti.gridw
