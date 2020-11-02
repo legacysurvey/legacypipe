@@ -5812,3 +5812,7 @@
 155364 asymmetric/donutty PSF
 3103614 trailed/asymmetric PSF
 151124071032 trailed PSF
+
+# astrometric issues [decam-chatter 14683]
+145151-CCD1
+145151-CCD2
