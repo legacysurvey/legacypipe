@@ -3367,3 +3367,8 @@
 583824 trailed PSF
 661307 trailed PSF
 763218 double vision/trailed PSF
+
+# bad astrometry [decam-chatter 14536]
+784312-S30
+784312-S31
+
