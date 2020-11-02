@@ -2514,7 +2514,6 @@ def stage_wise_forced(
                 iv = np.zeros_like(d)
                 iv[d != 0.] = 1./(d[d != 0]**2)
                 WISE.set('apflux_ivar_w%i' % band, iv)
-                print('Setting WISE apphot')
 
         # Look up mask values for sources
         WISE.wise_mask = np.zeros((len(cat), 2), np.uint8)
