@@ -152,8 +152,11 @@ class DecamImage(LegacySurveyImage):
         I,J = np.nonzero((img > 46000) * (dq == 0) * (invvar > 0))
         info('Masking %i additional saturated pixels in DECam expnum %i S19 CCD, %s' %
              (len(I), self.expnum, self.print_imgpath), 'slice', slc)
+        if len(I) == 0:
+            return
         from legacypipe.bits import DQ_BITS
-        dq[I,J] |= DQ_BITS['satur']
+        if dq is not None:
+            dq[I,J] |= DQ_BITS['satur']
         invvar[I,J] = 0.
 
 def decam_cp_version_after(plver, after):

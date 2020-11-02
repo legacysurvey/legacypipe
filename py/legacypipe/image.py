@@ -377,6 +377,7 @@ class LegacySurveyImage(object):
         assert(np.all(np.isfinite(img)))
 
         # Read data-quality (flags) map and zero out the invvars of masked pixels
+        dq = None
         if get_invvar:
             get_dq = True
         if get_dq:
