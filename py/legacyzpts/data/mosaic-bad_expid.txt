@@ -2510,6 +2510,7 @@
 122770 trans < 30
 122771 trans < 30
 122822 tracking dropped with power. Trailed.
+122956 no stars
 
 #2017-04-18
 123153 bad amp ccd1
