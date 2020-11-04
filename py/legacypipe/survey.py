@@ -1608,10 +1608,10 @@ def read_psfex_conf(camera):
     psfex_conf = {}
     from pkg_resources import resource_filename
     dirname = resource_filename('legacypipe', 'data')
-    fn = os.path.join(dirname, f'{camera}-special-psfex-conf.dat')
+    fn = os.path.join(dirname, camera + '-special-psfex-conf.dat')
     if not os.path.exists(fn):
-        info(f'could not find special psfex configuration file for {camera} '
-             'not using per-image psfex configurations.')
+        info('could not find special psfex configuration file for ' +
+             camera + ' not using per-image psfex configurations.')
         return psfex_conf
     f = open(fn)
     for line in f.readlines():
