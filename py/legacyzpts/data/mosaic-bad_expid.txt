@@ -5816,3 +5816,4 @@
 # astrometric issues [decam-chatter 14683]
 145151-CCD1
 145151-CCD2
+79807-CCD4
