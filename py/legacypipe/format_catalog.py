@@ -21,7 +21,7 @@ def _expand_flux_columns(T, bands, allbands, keys):
         # Handle array columns (eg, apflux)
         sh = X.shape
         if len(sh) == 3:
-            nt,nb,N = sh
+            _,_,N = sh
             A = np.zeros((len(T), len(allbands), N), X.dtype)
             A[:,B,:] = X
         else:
@@ -37,24 +37,52 @@ def _expand_flux_columns(T, bands, allbands, keys):
         for i,b in enumerate(allbands):
             T.set('%s_%s' % (key, b), A[:,i])
 
+def get_units_for_columns(cols, bands, extras=None):
+    # Units
+    deg = 'deg'
+    degiv = '1/deg^2'
+    arcsec = 'arcsec'
+    flux = 'nanomaggy'
+    fluxiv = '1/nanomaggy^2'
+    pm = 'mas/yr'
+    pmiv = '1/(mas/yr)^2'
+    units = dict(
+        ra=deg, dec=deg, ra_ivar=degiv, dec_ivar=degiv, ebv='mag',
+        shape_r=arcsec, shape_r_ivar='1/arcsec^2')
+    units.update(pmra=pm, pmdec=pm, pmra_ivar=pmiv, pmdec_ivar=pmiv,
+                 parallax='mas', parallax_ivar='1/mas^2')
+    units.update(gaia_phot_g_mean_mag='mag',
+                 gaia_phot_bp_mean_mag='mag',
+                 gaia_phot_rp_mean_mag='mag')
 
-def format_catalog(T, hdr, primhdr, allbands, outfn, release,
+    # Fields that have band suffixes
+    funits = dict(
+        flux=flux, flux_ivar=fluxiv,
+        apflux=flux, apflux_ivar=fluxiv, apflux_resid=flux,
+        apflux_blobresid=flux,
+        psfdepth=fluxiv, galdepth=fluxiv, psfsize=arcsec,
+        fiberflux=flux, fibertotflux=flux,
+        lc_flux=flux, lc_flux_ivar=fluxiv,
+    )
+    for b in bands:
+        units.update([('%s_%s' % (k, b), v)
+                      for k,v in funits.items()])
+
+    if extras is not None:
+        units.update(extras)
+
+    # Create a list of units aligned with 'cols'
+    units = [units.get(c, '') for c in cols]
+    return units
+
+def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
                    write_kwargs=None, N_wise_epochs=None,
                    motions=True, gaia_tagalong=False):
     if write_kwargs is None:
         write_kwargs = {}
-    # Retrieve the bands in this catalog.
-    bands = []
-    for i in range(10):
-        b = primhdr.get('BAND%i' % i)
-        if b is None:
-            break
-        b = b.strip()
-        bands.append(b)
-    debug('Bands in this catalog:', bands)
-
     has_wise =    'flux_w1'    in T.columns()
     has_wise_lc = 'lc_flux_w1' in T.columns()
+    has_galex =   'flux_nuv'   in T.columns()
     has_ap =      'apflux'     in T.columns()
 
     # Nans,Infs
@@ -95,11 +123,11 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
         wise_ext  = ext[:,len(allbands):]
 
     wbands = ['w1','w2','w3','w4']
+    gbands = ['nuv','fuv']
 
     trans_cols_opt  = []
     trans_cols_wise = []
 
-    # No MW_TRANSMISSION_* columns at all
     for i,b in enumerate(allbands):
         col = 'mw_transmission_%s' % b
         T.set(col, 10.**(-decam_ext[:,i] / 2.5))
@@ -114,7 +142,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
 
     # Column ordering...
     cols = ['release', 'brickid', 'brickname', 'objid', 'brick_primary',
-            'brightblob', 'maskbits', 'iterative',
+            'maskbits', 'fitbits',
             'type', 'ra', 'dec', 'ra_ivar', 'dec_ivar',
             'bx', 'by', 'dchisq', 'ebv', 'mjd_min', 'mjd_max',
             'ref_cat', 'ref_id']
@@ -129,8 +157,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
                 T.set(c, np.zeros(len(T), np.float32))
 
     if gaia_tagalong:
-        gaia_cols = [#('source_id', np.int64),  # already have this in ref_id
-            ('pointsource', bool),  # did we force it to be a point source?
+        gaia_cols = [
             ('phot_g_mean_mag', np.float32),
             ('phot_g_mean_flux_over_error', np.float32),
             ('phot_g_n_obs', np.int16),
@@ -170,19 +197,36 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
             bands = wbands
         for b in bands:
             cols.append('%s_%s' % (c, b))
+    def add_galexlike(c):
+        for b in gbands:
+            cols.append('%s_%s' % (c, b))
 
     add_fluxlike('flux')
     if has_wise:
         add_wiselike('flux')
+    if has_galex:
+        add_galexlike('flux')
     add_fluxlike('flux_ivar')
     if has_wise:
         add_wiselike('flux_ivar')
+    if has_galex:
+        add_galexlike('flux_ivar')
     add_fluxlike('fiberflux')
     add_fluxlike('fibertotflux')
     if has_ap:
         for c in ['apflux', 'apflux_resid', 'apflux_blobresid',
                   'apflux_ivar', 'apflux_masked']:
             add_fluxlike(c)
+
+    if has_wise and has_ap and 'apflux_w1' in T.get_columns():
+        add_wiselike('apflux')
+        add_wiselike('apflux_resid')
+        add_wiselike('apflux_ivar')
+
+    if has_galex and has_ap and 'apflux_nuv' in T.get_columns():
+        add_galexlike('apflux')
+        add_galexlike('apflux_resid')
+        add_galexlike('apflux_ivar')
 
     cols.extend(trans_cols_opt)
     cols.extend(trans_cols_wise)
@@ -198,13 +242,14 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
             col = 'wisemask_%s' % (b)
             T.set(col, T.wise_mask[:,i])
             cols.append(col)
-    for c in ['psfsize', 'psfdepth', 'galdepth']:
+    for c in ['psfsize', 'psfdepth', 'galdepth', 'nea', 'blob_nea']:
         add_fluxlike(c)
     if has_wise:
         add_wiselike('psfdepth')
 
     if has_wise:
-        cols.append('wise_coadd_id')
+        cols.extend(['wise_coadd_id', 'wise_x', 'wise_y'])
+
     if has_wise_lc:
         trbands = ['w1','w2']
         lc_cols = ['lc_flux', 'lc_flux_ivar', 'lc_nobs', 'lc_fracflux',
@@ -229,7 +274,7 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
                 for col in lc_cols:
                     colname = col + '_' + band
                     oldval = T.get(colname)
-                    n,ne = oldval.shape
+                    n,_ = oldval.shape
                     newval = np.zeros((n, N_wise_epochs), oldval.dtype)
                     newvals[colname] = newval
 
@@ -277,45 +322,17 @@ def format_catalog(T, hdr, primhdr, allbands, outfn, release,
             j = cclower.index(c)
             cols[i] = cc[j]
 
-    # Units
-    deg = 'deg'
-    degiv = '1/deg^2'
-    arcsec = 'arcsec'
-    flux = 'nanomaggy'
-    fluxiv = '1/nanomaggy^2'
-    units = dict(
-        ra=deg, dec=deg, ra_ivar=degiv, dec_ivar=degiv, ebv='mag',
-        shape_r=arcsec, shape_r_ivar='1/arcsec^2')
-    # WISE fields
-    wunits = dict(flux=flux, flux_ivar=fluxiv,
-                  lc_flux=flux, lc_flux_ivar=fluxiv)
-    # Fields that take prefixes (and have bands)
-    funits = dict(
-        flux=flux, flux_ivar=fluxiv,
-        apflux=flux, apflux_ivar=fluxiv, apflux_resid=flux,
-        apflux_blobresid=flux,
-        psfdepth=fluxiv, galdepth=fluxiv, psfsize=arcsec,
-        fiberflux=flux, fibertotflux=flux)
-    # add bands
-    for b in allbands:
-        units.update([('%s_%s' % (k, b), v)
-                      for k,v in funits.items()])
-    # add WISE bands
-    for b in wbands:
-        units.update([('%s_%s' % (k, b), v)
-                      for k,v in wunits.items()])
-
-    # Create a list of units aligned with 'cols'
-    units = [units.get(c, '') for c in cols]
+    units = get_units_for_columns(cols, list(allbands) + wbands + gbands)
 
     T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units,
               **write_kwargs)
 
 def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
-    from astrometry.util.fits import fits_table
     import fitsio
-    from legacypipe.catalog import prepare_fits_catalog, fits_typemap
+    from astrometry.util.fits import fits_table
     from tractor import Catalog
+    from legacypipe.catalog import prepare_fits_catalog, fits_typemap
+    from legacypipe.oneblob import MODEL_NAMES
 
     TT = fits_table()
     # Copy only desired columns...
@@ -326,15 +343,16 @@ def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
               'blob_totalpix',
               'blob_symm_width', 'blob_symm_height',
               'blob_symm_npix', 'blob_symm_nimages',
-              'hit_limit']:
+              'hit_limit', 'hit_r_limit', 'hit_ser_limit',
+              'fit_background', 'forced_pointsource']:
         TT.set(k, T.get(k))
     TT.type = np.array([fits_typemap[type(src)] for src in newcat])
+    # Override type for DUP objects
+    TT.type[T.dup] = 'DUP'
 
     hdr = fitsio.FITSHDR()
 
-    srctypes = ['psf', 'rex', 'dev', 'exp', 'ser']
-
-    for srctype in srctypes:
+    for srctype in MODEL_NAMES:
         # Create catalog with the fit results for each source type
         xcat = Catalog(*[m.get(srctype,None) for m in BB.all_models])
         # NOTE that for REX, the shapes have been converted to EllipseE
@@ -344,13 +362,13 @@ def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
         allivs = np.hstack([m.get(srctype,[]) for m in BB.all_model_ivs])
         assert(len(allivs) == xcat.numberOfParams())
 
-        # pad 'xcat' to match length of T (eg, T_donotfit)
+        # pad 'xcat' to match length of T (for dups)
         npad = len(T) - len(xcat)
         if npad:
             xcat.extend([None] * npad)
 
-        TT,hdr = prepare_fits_catalog(xcat, allivs, TT, hdr, bands,
-                                      prefix=prefix+'_', force_keep=force_keep)
+        TT = prepare_fits_catalog(xcat, allivs, TT, bands,
+                                  prefix=prefix+'_', force_keep=force_keep)
 
         # # Expand out FLUX and related fields from grz arrays to 'allbands'
         keys = ['%s_flux' % prefix, '%s_flux_ivar' % prefix]
@@ -362,10 +380,12 @@ def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
         TT.set('%s_hit_limit' % prefix,
                np.array([m.get(srctype,0)
                          for m in BB.all_model_hit_limit] + [False]*npad).astype(bool))
-        if 'all_model_opt_steps' in BB.get_columns():
-            TT.set('%s_opt_steps' % prefix,
-                   np.array([m.get(srctype,-1)
-                             for m in BB.all_model_opt_steps] + [0]*npad).astype(np.int16))
+        TT.set('%s_hit_r_limit' % prefix,
+               np.array([m.get(srctype,0)
+                         for m in BB.all_model_hit_r_limit] + [False]*npad).astype(bool))
+        TT.set('%s_opt_steps' % prefix,
+               np.array([m.get(srctype,-1)
+                         for m in BB.all_model_opt_steps] + [0]*npad).astype(np.int16))
 
     # remove silly columns
     for col in TT.columns():
@@ -380,6 +400,7 @@ def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
         if ('sersic' in col) and not col.startswith('ser_'):
             TT.delete_column(col)
             continue
+    TT.delete_column('psf_hit_r_limit')
     TT.delete_column('rex_shape_e1')
     TT.delete_column('rex_shape_e2')
     TT.delete_column('rex_shape_e1_ivar')
@@ -395,14 +416,8 @@ def one_lightcurve_bitmask(lc_nobs, lc_mjd, n_final=13):
     #
     # return value is a 1D boolean numpy array with the same
     # length as the input row's WISE lightcurve
-
-    #assert(band in [1, 2])
-    #row['LC_NOBS_W' + str(band)]
-    #row['LC_MJD_W' + str(band)]
-
     nobs = lc_nobs
     mjd = lc_mjd
-
     n_epochs = len(nobs)
 
     # if the number of epochs fits within the number available then
@@ -440,5 +455,3 @@ def one_lightcurve_bitmask(lc_nobs, lc_mjd, n_final=13):
 
     return keep
 
-if __name__ == '__main__':
-    main()

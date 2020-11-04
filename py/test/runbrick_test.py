@@ -9,26 +9,123 @@ import tempfile
 import numpy as np
 import fitsio
 from legacypipe.runbrick import main
-#from legacyanalysis.decals_sim import main as sim_main
 from astrometry.util.fits import fits_table
 
 def rbmain():
     from legacypipe.catalog import read_fits_catalog
-    from legacypipe.survey import LegacySurveyData, GaiaSource, wcs_for_brick
+    from legacypipe.survey import LegacySurveyData, wcs_for_brick
     from tractor.galaxy import DevGalaxy
-    from tractor import PointSource
+    from tractor import PointSource, Catalog
     from tractor import GaussianMixturePSF
     from legacypipe.survey import BrickDuck
     from legacypipe.forced_photom import main as forced_main
     from astrometry.util.file import trymakedirs
     import shutil
 
-    travis = 'travis' in sys.argv
     ceres  = 'ceres'  in sys.argv
     psfex  = 'psfex'  in sys.argv
-    
-    if 'LARGEGALAXIES_CAT' in os.environ:
-        del os.environ['LARGEGALAXIES_CAT']
+
+    for v in ['UNWISE_COADDS_TIMERESOLVED_DIR', 'SKY_TEMPLATE_DIR',
+              'LARGEGALAXIES_CAT', 'GAIA_CAT_DIR', 'TYCHO2_KD_DIR']:
+        if v in os.environ:
+            del os.environ[v]
+
+    oldargs = sys.argv
+    sys.argv = [sys.argv[0]]
+    main()
+    sys.argv = oldargs
+
+    # Test create_kdtree and (reading CCD kd-tree)!
+    indir = os.path.join(os.path.dirname(__file__), 'testcase6')
+    with tempfile.TemporaryDirectory() as surveydir:
+        files = ['calib', 'gaia', 'images', 'survey-bricks.fits.gz',
+                 'tycho2.kd.fits']
+        for fn in files:
+            src = os.path.join(indir, fn)
+            dst = os.path.join(surveydir, fn)
+            #trymakedirs(dst, dir=True)
+            print('Copy', src, dst)
+            if os.path.isfile(src):
+                shutil.copy(src, dst)
+            else:
+                shutil.copytree(src, dst)
+
+        from legacypipe.create_kdtrees import create_kdtree
+        infn = os.path.join(indir, 'survey-ccds-1.fits.gz')
+        outfn = os.path.join(surveydir, 'survey-ccds-1.kd.fits')
+        create_kdtree(infn, outfn, False)
+
+        os.environ['TYCHO2_KD_DIR'] = surveydir
+        outdir = 'out-testcase6-kd'
+        main(args=['--brick', '1102p240', '--zoom', '500', '600', '650', '750',
+                   '--force-all', '--no-write', '--no-wise', '--no-gaia',
+                   '--survey-dir', surveydir,
+                   '--outdir', outdir])
+        fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
+        assert(os.path.exists(fn))
+        T = fits_table(fn)
+        assert(len(T) == 2)
+        # Since there is a Tycho-2 star in the blob, forced to be PSF.
+        assert(T.type[0].strip() == 'PSF')
+        assert(T.type[1].strip() == 'PSF')
+        # There is a Tycho-2 star in the blob.
+        I = np.flatnonzero(T.ref_cat == 'T2')
+        assert(len(I) == 1)
+        assert(T.ref_id[I][0] == 1909016711)
+
+        cat = read_fits_catalog(T)
+        assert(len(cat) == 2)
+        assert(isinstance(cat[0], PointSource))
+        assert(isinstance(cat[1], PointSource))
+        cat,ivs = read_fits_catalog(T, invvars=True)
+        assert(len(cat) == 2)
+        assert(isinstance(cat[0], PointSource))
+        assert(isinstance(cat[1], PointSource))
+        cat2 = Catalog(*cat)
+        assert(len(ivs) == len(cat2.getParams()))
+
+        # test --fit-on-coadds
+        outdir = 'out-testcase6-coadds'
+        main(args=['--brick', '1102p240', '--zoom', '500', '600', '650', '750',
+                   '--force-all', '--no-write', '--no-wise', '--no-gaia',
+                   '--survey-dir', surveydir, '--fit-on-coadds',
+                   '--outdir', outdir])
+
+        fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
+        assert(os.path.exists(fn))
+        T = fits_table(fn)
+        assert(len(T) == 2)
+        # Since there is a Tycho-2 star in the blob, forced to be PSF.
+        assert(T.type[0].strip() == 'PSF')
+        assert(T.type[1].strip() == 'PSF')
+        # There is a Tycho-2 star in the blob.
+        I = np.flatnonzero(T.ref_cat == 'T2')
+        assert(len(I) == 1)
+        assert(T.ref_id[I][0] == 1909016711)
+        del os.environ['TYCHO2_KD_DIR']
+
+        # test --skip-coadds
+        r = main(args=['--brick', '1102p240',
+                       '--zoom', '500', '600', '650', '750',
+                       '--force-all', '--no-write', '--no-wise', '--no-gaia',
+                       '--survey-dir', surveydir,
+                       '--outdir', outdir, '--skip-coadd'])
+        assert(r == 0)
+
+        # test --skip
+        r = main(args=['--brick', '1102p240',
+                       '--zoom', '500', '600', '650', '750',
+                       '--force-all', '--no-write', '--no-wise', '--no-gaia',
+                       '--survey-dir', surveydir,
+                       '--outdir', outdir, '--skip'])
+        assert(r == 0)
+
+        # NothingToDoError (neighbouring brick)
+        r = main(args=['--brick', '1102p240', '--zoom', '0','100','0','100',
+                       '--force-all', '--no-write', '--no-wise', '--no-gaia',
+                       '--survey-dir', surveydir,
+                       '--outdir', outdir])
+        assert(r == 0)
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase9')
 
@@ -60,17 +157,28 @@ def rbmain():
     print(tim5.getPsf())
     assert(isinstance(tim5.getPsf(), GaussianMixturePSF))
 
-
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase12')
+    os.environ['TYCHO2_KD_DIR'] = surveydir
     os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
     os.environ['GAIA_CAT_VER'] = '2'
+    os.environ['UNWISE_MODEL_SKY_DIR'] = os.path.join(surveydir, 'images', 'unwise-mod')
     #python legacypipe/runbrick.py --radec  --width 100 --height 100 --outdir dup5b --survey-dir test/testcase12 --force-all --no-wise
+    unwdir = os.path.join(surveydir, 'images', 'unwise')
     main(args=['--radec', '346.684', '12.791', '--width', '100',
                '--height', '100', '--no-wise-ceres',
-               '--no-wise', '--survey-dir', surveydir,
-               '--outdir', 'out-testcase12', '--skip-coadd', '--force-all', '--no-write'])
+               '--unwise-dir', unwdir, '--survey-dir', surveydir,
+               '--outdir', 'out-testcase12', '--skip-coadd', '--force-all'])
+
+    # --plots for stage_wise_forced
+    main(args=['--radec', '346.684', '12.791', '--width', '100',
+               '--height', '100', '--no-wise-ceres',
+               '--unwise-dir', unwdir, '--survey-dir', surveydir,
+               '--outdir', 'out-testcase12', '--stage', 'wise_forced',
+               '--plots'])
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']
+    del os.environ['TYCHO2_KD_DIR']
+    del os.environ['UNWISE_MODEL_SKY_DIR']
 
     M = fitsio.read('out-testcase12/coadd/cus/custom-346684p12791/legacysurvey-custom-346684p12791-maskbits.fits.fz')
     # Count masked & unmasked bits (the cluster splits this 100x100 field)
@@ -84,7 +192,7 @@ def rbmain():
     os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
     os.environ['GAIA_CAT_VER'] = '2'
     os.environ['LARGEGALAXIES_CAT'] = os.path.join(surveydir,
-                                                   'lslga-sub.kd.fits')
+                                                   'sga-sub.kd.fits')
     main(args=['--radec', '9.1228', '3.3975', '--width', '100',
                '--height', '100', '--old-calibs-ok', '--no-wise-ceres',
                '--no-wise', '--survey-dir', surveydir,
@@ -96,14 +204,14 @@ def rbmain():
     main(args=['--radec', '9.1228', '3.3975', '--width', '100',
                '--height', '100', '--old-calibs-ok', '--no-wise',
                '--force-all', '--no-write', '--survey-dir', surveydir,
-               '--outdir', 'out-testcase9-ap'])
-    
+               '--outdir', 'out-testcase9-ap', '--apodize'])
+
     main(args=['--radec', '9.1228', '3.3975', '--width', '100',
                '--height', '100', '--old-calibs-ok', '--no-wise-ceres',
                '--no-wise', '--survey-dir',
                surveydir, '--outdir', 'out-testcase9',
                '--plots', '--stage', 'halos'])
-    
+
     main(args=['--radec', '9.1228', '3.3975', '--width', '100',
                '--height', '100', '--old-calibs-ok', '--no-wise-ceres',
                '--no-wise', '--survey-dir',
@@ -115,26 +223,24 @@ def rbmain():
     # Gaia star becomes a DUP!
     assert(np.sum([t == 'DUP' for t in T.type]) == 1)
     # LSLGA galaxy exists!
-    Igal = np.flatnonzero([r == 'L6' for r in T.ref_cat])
+    Igal = np.flatnonzero([r == 'L3' for r in T.ref_cat])
     assert(len(Igal) == 1)
     assert(np.all(T.ref_id[Igal] > 0))
     assert(T.type[Igal[0]] == 'SER')
-
 
     # --brick and --zoom rather than --radec --width --height
     main(args=['--survey-dir', surveydir, '--outdir', 'out-testcase9b',
                '--zoom', '1950', '2050', '340', '440', '--brick', '0091p035', '--force-all'])
 
     # test forced phot??
-    rtn = os.system('cp test/testcase9/survey-bricks.fits.gz out-testcase9b')
-    assert(rtn == 0)
+    shutil.copy('test/testcase9/survey-bricks.fits.gz', 'out-testcase9b')
 
     forced_main(args=['--survey-dir', surveydir,
                       '--no-ceres',
                       '--catalog-dir', 'out-testcase9b',
                       '372546', 'N26', 'forced1.fits'])
     assert(os.path.exists('forced1.fits'))
-    F = fits_table('forced1.fits')
+    _ = fits_table('forced1.fits')
     # ... more tests...!
 
     forced_main(args=['--survey-dir', surveydir,
@@ -142,17 +248,17 @@ def rbmain():
                       '--catalog-dir', 'out-testcase9b',
                       '--derivs', '--threads', '2',
                       '--apphot',
-                      '372546', 'N26', 'forced2.fits'])
+                      '372547', 'N26', 'forced2.fits'])
     assert(os.path.exists('forced2.fits'))
-    F = fits_table('forced2.fits')
+    _ = fits_table('forced2.fits')
 
     forced_main(args=['--survey-dir', surveydir,
                       '--no-ceres',
                       '--catalog-dir', 'out-testcase9b',
                       '--agn',
-                      '372546', 'N26', 'forced3.fits'])
+                      '257266', 'S21', 'forced3.fits'])
     assert(os.path.exists('forced3.fits'))
-    F = fits_table('forced3.fits')
+    _ = fits_table('forced3.fits')
 
     if ceres:
         forced_main(args=['--survey-dir', surveydir,
@@ -161,13 +267,13 @@ def rbmain():
                           '--apphot',
                           '372546', 'N26', 'forced4.fits'])
         assert(os.path.exists('forced4.fits'))
-        F = fits_table('forced4.fits')
+        _ = fits_table('forced4.fits')
 
     # Test cache_dir
     with tempfile.TemporaryDirectory() as cachedir, \
         tempfile.TemporaryDirectory() as tempsurveydir:
         files = []
-        for dirpath, dirnames, filenames in os.walk(surveydir):
+        for dirpath, _, filenames in os.walk(surveydir):
             for fn in filenames:
                 path = os.path.join(dirpath, fn)
                 relpath = os.path.relpath(path, surveydir)
@@ -177,7 +283,7 @@ def rbmain():
         files_cache = files[::2]
         files_nocache = files[1::2]
         # Survey-ccds *must* be in nocache.
-        fn = 'survey-ccds-1.fits.gz'
+        fn = 'survey-ccds-1.kd.fits'
         if fn in files_cache:
             files_cache.remove(fn)
             files_nocache.append(fn)
@@ -205,7 +311,7 @@ def rbmain():
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']
     del os.environ['LARGEGALAXIES_CAT']
-    
+
     # if ceres:
     #     surveydir = os.path.join(os.path.dirname(__file__), 'testcase3')
     #     main(args=['--brick', '2447p120', '--zoom', '1020', '1070', '2775', '2815',
@@ -305,13 +411,21 @@ def rbmain():
     assert(T.type[0].strip() == 'PSF')
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']
-    
+
     # Test that we can run splinesky calib if required...
 
     from legacypipe.decam import DecamImage
     DecamImage.splinesky_boxsize = 128
-    
+
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
+
+    survey = LegacySurveyData(surveydir)
+    # get brick by id
+    brickid = 473357
+    brick = survey.get_brick(brickid)
+    assert(brick.brickname == '1867p255')
+    assert(brick.brickid == brickid)
+
     outdir = 'out-testcase4'
     os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
     os.environ['GAIA_CAT_VER'] = '2'
@@ -334,7 +448,7 @@ def rbmain():
 
     # Test with blob-masking when creating sky calib.
     os.unlink(fn)
-    
+
     main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
                '--force-all', '--no-write', '--coadd-bw',
                '--blob-mask-dir', surveydir,
@@ -344,15 +458,13 @@ def rbmain():
     print('Checking for calib file', fn)
     assert(os.path.exists(fn))
 
-    
-    if ceres:    
+    if ceres:
         main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
                    '--force-all', '--no-write', '--coadd-bw',
                    '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
                    '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
                    '--survey-dir', surveydir,
                    '--outdir', outdir])
-    
     if psfex:
         # Check that we can regenerate PsfEx files if necessary.
         fn = os.path.join(surveydir, 'calib', 'psfex', 'decam', 'CP', 'V4.8.2',
@@ -370,18 +482,17 @@ def rbmain():
         print('After generating PsfEx calib:')
         os.system('find %s' % (os.path.join(surveydir, 'calib')))
 
-    
     # Wrap-around, hybrid PSF
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase8')
     outdir = 'out-testcase8'
     os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
     os.environ['GAIA_CAT_VER'] = '2'
-    
+
     main(args=['--brick', '1209p050', '--zoom', '720', '1095', '3220', '3500',
                '--force-all', '--no-write', '--no-wise', #'--plots',
                '--survey-dir', surveydir,
                '--outdir', outdir])
-    
+
     # Test with a Tycho-2 star + another saturated star in the blob.
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase7')
@@ -403,17 +514,17 @@ def rbmain():
     # (this now doesn't detect any sources at all, reasonably)
     # surveydir = os.path.join(os.path.dirname(__file__), 'testcase5')
     # outdir = 'out-testcase5'
-    # 
+    #
     # fn = os.path.join(outdir, 'tractor', '186', 'tractor-1867p255.fits')
     # if os.path.exists(fn):
     #     os.unlink(fn)
-    # 
+    #
     # main(args=['--brick', '1867p255', '--zoom', '0', '150', '0', '150',
     #            '--force-all', '--no-write', '--coadd-bw',
     #            '--survey-dir', surveydir,
     #            '--early-coadds',
     #            '--outdir', outdir] + extra_args)
-    # 
+    #
     # assert(os.path.exists(fn))
     # T = fits_table(fn)
     # assert(len(T) == 1)
@@ -462,14 +573,13 @@ def rbmain():
     print('Read catalog:', cat)
 
     assert(len(cat) == 2)
-    src = cat[0]
+    src = cat[1]
     print('Source0', src)
     from tractor.sersic import SersicGalaxy
     assert(type(src) in [DevGalaxy, SersicGalaxy])
     assert(np.abs(src.pos.ra  - 244.77973) < 0.00001)
-    # Results on travis vs local seem to differ?!
     assert(np.abs(src.pos.dec -  12.07234) < 0.00002)
-    src = cat[1]
+    src = cat[0]
     print('Source1', src)
     assert(type(src) ==  PointSource)
     assert(np.abs(src.pos.ra  - 244.77828) < 0.00001)
@@ -492,7 +602,7 @@ def rbmain():
                '--outdir', outdir,
                '--checkpoint', checkpoint_fn,
                '--checkpoint-period', '1' ])
-    
+
     # From Kaylan's Bootes pre-DR4 run
     # surveydir2 = os.path.join(os.path.dirname(__file__), 'mzlsbass3')
     # main(args=['--brick', '2173p350', '--zoom', '100', '200', '100', '200',
@@ -517,9 +627,9 @@ def rbmain():
     # Check if correct files written out
     #rt_dir= os.path.join(os.getenv('DECALS_SIM_DIR'),brick,'star','001')
     #assert( os.path.exists(os.path.join(rt_dir,'../','metacat-'+brick+'-star.fits')) )
-    #for fn in ['tractor-%s-star-01.fits' % brick,'simcat-%s-star-01.fits' % brick]: 
+    #for fn in ['tractor-%s-star-01.fits' % brick,'simcat-%s-star-01.fits' % brick]:
     #    assert( os.path.exists(os.path.join(rt_dir,fn)) )
-    #for fn in ['image','model','resid','simscoadd']: 
+    #for fn in ['image','model','resid','simscoadd']:
     #    assert( os.path.exists(os.path.join(rt_dir,'qa-'+brick+'-star-'+fn+'-01.jpg')) )
 
     # if ceres:
@@ -531,4 +641,3 @@ def rbmain():
 
 if __name__ == '__main__':
     rbmain()
-

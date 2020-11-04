@@ -40,12 +40,12 @@ def fitblobs_plots(tims, bands, targetwcs, blobslices, blobsrcs, cat,
     plt.axis(ax)
     plt.title('Blobs')
     ps.savefig()
-    
+
     for i,Isrcs in enumerate(blobsrcs):
         for isrc in Isrcs:
             src = cat[isrc]
             ra,dec = src.getPosition().ra, src.getPosition().dec
-            ok,x,y = targetwcs.radec2pixelxy(ra, dec)
+            _,x,y = targetwcs.radec2pixelxy(ra, dec)
             plt.text(x, y, 'b%i/s%i' % (i,isrc),
                      ha='center', va='bottom', color='r')
     plt.axis(ax)
@@ -82,7 +82,7 @@ def fitblobs_plots(tims, bands, targetwcs, blobslices, blobsrcs, cat,
 
 def detection_plots_2(tims, bands, targetwcs, refstars, Tnew, hot,
                       saturated_pix, ps):
-    coimgs,cons = quick_coadds(tims, bands, targetwcs)
+    coimgs,_ = quick_coadds(tims, bands, targetwcs)
     crossa = dict(ms=10, mew=1.5)
     plt.clf()
     dimshow(get_rgb(coimgs, bands))
@@ -123,7 +123,7 @@ def detection_plots_2(tims, bands, targetwcs, refstars, Tnew, hot,
     ps.savefig()
 
 def detection_plots(detmaps, detivs, bands, saturated_pix, tims,
-                    targetwcs, refstars, large_galaxies, ps):
+                    targetwcs, refstars, large_galaxies, gaia_stars, ps):
     rgb = get_rgb(detmaps, bands)
     plt.clf()
     dimshow(rgb)
@@ -137,7 +137,7 @@ def detection_plots(detmaps, detivs, bands, saturated_pix, tims,
     plt.title('detmaps & saturated')
     ps.savefig()
 
-    coimgs,cons = quick_coadds(tims, bands, targetwcs, fill_holes=False)
+    coimgs,_ = quick_coadds(tims, bands, targetwcs, fill_holes=False)
 
     if refstars:
         plt.clf()
@@ -146,14 +146,14 @@ def detection_plots(detmaps, detivs, bands, saturated_pix, tims,
         lp,lt = [],[]
         tycho = refstars[refstars.isbright]
         if len(tycho):
-            ok,ix,iy = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
+            _,ix,iy = targetwcs.radec2pixelxy(tycho.ra, tycho.dec)
             p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=14, mec='r', mfc='none')
             lp.append(p)
             lt.append('Tycho-2 only')
         if gaia_stars:
             gaia = refstars[refstars.isgaia]
         if gaia_stars and len(gaia):
-            ok,ix,iy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
+            _,ix,iy = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
             p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=10, mec='c', mfc='none')
             for x,y,g in zip(ix,iy,gaia.phot_g_mean_mag):
                 plt.text(x, y, '%.1f' % g, color='k',
@@ -164,7 +164,7 @@ def detection_plots(detmaps, detivs, bands, saturated_pix, tims,
         if large_galaxies:
             galaxies = refstars[refstars.islargegalaxy]
         if large_galaxies and len(galaxies):
-            ok,ix,iy = targetwcs.radec2pixelxy(galaxies.ra, galaxies.dec)
+            _,ix,iy = targetwcs.radec2pixelxy(galaxies.ra, galaxies.dec)
             p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=14, mec=(0,1,0), mfc='none')
             lp.append(p)
             lt.append('Galaxies')
@@ -194,7 +194,7 @@ def halo_plots_before(tims, bands, targetwcs, halostars, ps):
     return coimgs
 
 def halo_plots_after(tims, bands, targetwcs, halostars, coimgs, ps):
-    coimgs2,cons = quick_coadds(tims, bands, targetwcs)
+    coimgs2,_ = quick_coadds(tims, bands, targetwcs)
     plt.clf()
     dimshow(get_rgb(coimgs2, bands))
     ax = plt.axis()
@@ -287,7 +287,8 @@ def tim_plots(tims, bands, ps):
         plt.subplot(2,2,4)
         dimshow(tim.getImage() * (tim.getInvError() > 0),
                 vmin=-3.*tim.sig1, vmax=10.*tim.sig1)
-        plt.title('image (masked)')
+        okpix = tim.getImage()[tim.getInvError() > 0]
+        plt.title('image (masked) range [%.3g, %.3g]' % (np.min(okpix), np.max(okpix)))
         plt.suptitle(tim.name)
         ps.savefig()
 
@@ -339,7 +340,7 @@ def _plot_mods(tims, mods, blobwcs, titles, bands, coimgs, cons, bslc,
 
     subims = [[] for m in mods]
     chis = dict([(b,[]) for b in bands])
-    
+
     make_coimgs = (coimgs is None)
     if make_coimgs:
         print('_plot_mods: blob shape', (blobh, blobw))
@@ -378,7 +379,7 @@ def _plot_mods(tims, mods, blobwcs, titles, bands, coimgs, cons, bslc,
                 nn = (tim.getInvError()[Yi,Xi] > 0)
                 coimgs[iband][Yo,Xo] += tim.getImage()[Yi,Xi] * nn
                 cons  [iband][Yo,Xo] += nn
-                
+
         if make_coimgs:
             coimgs[iband] /= np.maximum(cons[iband], 1)
             coimg  = coimgs[iband]
@@ -386,7 +387,7 @@ def _plot_mods(tims, mods, blobwcs, titles, bands, coimgs, cons, bslc,
         else:
             coimg = coimgs[iband][bslc]
             coimgn = cons[iband][bslc]
-            
+
         for comod in comods:
             comod /= np.maximum(comodn, 1)
         ima = dict(vmin=mn, vmax=mx, ticks=False)
@@ -409,7 +410,7 @@ def _plot_mods(tims, mods, blobwcs, titles, bands, coimgs, cons, bslc,
         plt.title('RGB')
         plt.subplot(rows,cols,5)
         plt.title('RGB(stretch)')
-        
+
         imgs = []
         themods = []
         resids = []
@@ -489,4 +490,3 @@ def _plot_mods(tims, mods, blobwcs, titles, bands, coimgs, cons, bslc,
                 plt.title(tims[itim].name)
         #plt.suptitle(titles[imod])
         ps.savefig()
-

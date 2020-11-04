@@ -2,15 +2,15 @@
 
 # Run legacy_zeropoints on a single image within a Shifter container at NERSC.
 
-export LEGACY_SURVEY_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr9-cal
+export LEGACY_SURVEY_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr9k
 
 # NOTE: if you only want to regenerate sky calibs, MUST create a symlink
 # in $calibdir/psfex, eg to
 #   /global/cfs/cdirs/cosmo/work/legacysurvey/dr9/calib/psfex
 
-outdir=$CSCRATCH/dr9-south-calib
+outdir=$CSCRATCH/dr9k-south-calib
 zptsdir=${outdir}/zpts
-calibdir=${outdir}/calib
+calibdir=${LEGACY_SURVEY_DIR}/calib
 imagedir=${LEGACY_SURVEY_DIR}/images
 
 blob_dir=/global/cfs/cdirs/cosmo/work/legacysurvey/dr8-blobmask-south
@@ -30,8 +30,10 @@ export DUST_DIR=/global/cfs/cdirs/cosmo/data/dust/v0_1
 export GAIA_CAT_DIR=/global/cfs/cdirs/cosmo/work/gaia/chunks-gaia-dr2-astrom-2
 export GAIA_CAT_VER=2
 export TYCHO2_KD_DIR=/global/cfs/cdirs/cosmo/staging/tycho2
-export LARGEGALAXIES_CAT=/global/cfs/cdirs/cosmo/staging/largegalaxies/v6.0/LSLGA-v6.0.kd.fits
+export LARGEGALAXIES_CAT=/global/cfs/cdirs/cosmo/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
 export PS1CAT_DIR=/global/cfs/cdirs/cosmo/work/ps1/cats/chunks-qz-star-v3
+# DECam
+export SKY_TEMPLATE_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr9k/calib/sky_pattern
 
 # Don't add ~/.local/ to Python's sys.path
 export PYTHONNOUSERSITE=1
@@ -53,11 +55,10 @@ image_fn="$1"
 camera=decam
 
 # Redirect logs to a nested directory.
-cpdir=`echo $(basename $(dirname ${image_fn}))`
+cpdir=$(basename $(dirname ${image_fn}))
 logdir=$outdir/logs-calibs/$camera/$cpdir
 mkdir -p $logdir
-log=`echo $(basename ${image_fn} | sed s#.fits.fz#.log#g)`
-tmplog=/tmp/$log
+log=$(echo $(basename ${image_fn} | sed s#.fits.fz#.log#g))
 log=$logdir/$log
 
 cmd="python -u /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
@@ -73,10 +74,5 @@ cmd="python -u /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
     --blob-mask-dir ${blob_dir} \
     --zeropoints-dir ${zeropoints_dir}"
 
-echo $cmd > $tmplog
-$cmd >> $tmplog 2>&1
-# Save the return value from the python command -- otherwise we
-# exit 0 because the mv succeeds!
-status=$?
-cat $tmplog >> $log
-exit $status
+echo $cmd > $log
+$cmd >> $log 2>&1

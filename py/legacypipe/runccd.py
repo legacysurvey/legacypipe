@@ -29,11 +29,18 @@ def main():
     optdict = vars(opt)
     verbose = optdict.pop('verbose')
 
+    import logging
+    import sys
+    if verbose == 0:
+        lvl = logging.INFO
+    else:
+        lvl = logging.DEBUG
+    logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+    # tractor logging is *soooo* chatty
+    logging.getLogger('tractor.engine').setLevel(lvl + 10)
+
     expnum = optdict.pop('expnum')
     ccdname = optdict.pop('ccdname')
-    
-    #print('optdict:', optdict)
-    
     survey = FakeLegacySurveyData(survey_dir=opt.survey_dir,
                                   output_dir=opt.output_dir,
                                   cache_dir=opt.cache_dir)
@@ -47,7 +54,6 @@ def main():
     # Force the CCDs
     survey.ccds = ccds
     survey.no_kd = True
-
     ccd = ccds[0]
     print('Found CCD', ccd)
 
@@ -57,7 +63,7 @@ def main():
     rr,dd = awcs.pixelxy2radec([1,1,w,w], [1,h,h,1])
     # Rotate RAs to be around RA=180 to avoid wrap-around
     rotra = np.fmod((rr - ra + 180) + 360, 360.)
-    
+
     # assume default pixscale
     pixscale = 0.262 / 3600
 
@@ -67,15 +73,16 @@ def main():
     print('W, H', W, H)
 
     optdict.update(survey=survey)
-    
     survey, kwargs = get_runbrick_kwargs(**optdict)
 
-    kwargs.update(radec=(ra,dec), width=W, height=H, bands=[ccd.filter])
-    
-    #if opt.brick is None and opt.radec is None:
-
+    # Only set W,H if they were not specified (to other than default values) on the command-line
+    if opt.width == 3600 and opt.height == 3600:
+        kwargs.update(width=W, height=H)
+    if opt.radec is None and opt.brick is None:
+        kwargs.update(radec=(ra,dec))
+    kwargs.update(bands=[ccd.filter])
+    print('kwargs:', kwargs)
     run_brick(None, survey, **kwargs)
-
     print('Finished:', Time()-t0)
 
 if __name__ == '__main__':

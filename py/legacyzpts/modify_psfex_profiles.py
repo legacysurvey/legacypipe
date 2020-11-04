@@ -11,7 +11,7 @@ from scipy.optimize import curve_fit
 def get_frac_moffat(r, alpha, beta):
     """
     Calculate the fraction of light within radius r of a Moffat profile.
-    """    
+    """
     frac = 1 - alpha**(2*(beta-1))*(alpha**2 + r**2)**(1-beta)
     return(frac)
 

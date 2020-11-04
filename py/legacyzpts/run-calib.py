@@ -2,8 +2,8 @@
 """This script runs calibration pre-processing steps including sky and PSF models.
 """
 from __future__ import print_function
-import numpy as np
-from astrometry.util.fits import fits_table, merge_tables
+
+from astrometry.util.fits import merge_tables
 
 from legacypipe.survey import run_calibs, LegacySurveyData
 
@@ -33,9 +33,20 @@ def main():
 
     parser.add_argument('--blob-mask-dir', type=str, default=None,
                         help='The base directory to search for blob masks during sky model construction')
+    parser.add_argument('-v', '--verbose', dest='verbose', action='count',
+                        default=0, help='Make more verbose')
 
     parser.add_argument('args',nargs=argparse.REMAINDER)
     opt = parser.parse_args()
+
+    import logging
+    if opt.verbose:
+        lvl = logging.DEBUG
+    else:
+        lvl = logging.INFO
+    logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+    # tractor logging is *soooo* chatty
+    logging.getLogger('tractor.engine').setLevel(lvl + 10)
 
     survey = LegacySurveyData(survey_dir=opt.survey_dir)
     T = None
@@ -79,7 +90,7 @@ def main():
 
         im = survey.get_image_object(t)
         print('Running', im.name)
-        
+
         kwargs = dict(psfex=opt.psfex, sky=opt.sky, ps=ps, survey=survey,
                       survey_blob_mask=survey_blob_mask)
         if opt.force:
@@ -90,7 +101,7 @@ def main():
             kwargs.update(splinesky=True)
         if opt.cont:
             kwargs.update(noraise=True)
-            
+
         if opt.threads:
             args.append((im, kwargs))
         else:
@@ -100,7 +111,7 @@ def main():
         from astrometry.util.multiproc import multiproc
         mp = multiproc(opt.threads)
         mp.map(time_run_calibs, args)
-        
+
     return 0
 
 def time_run_calibs(*args):

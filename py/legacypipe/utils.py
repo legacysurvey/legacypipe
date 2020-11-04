@@ -162,6 +162,19 @@ def read_primary_header(fn):
     import fitsio
     return fitsio.read_header(fn)
 
+def copy_header_with_wcs(source_header, wcs):
+    import fitsio
+    hdr = fitsio.FITSHDR()
+    if source_header is not None:
+        for r in source_header.records():
+            hdr.add_record(r)
+    # Plug the WCS header cards into these images
+    wcs.add_to_header(hdr)
+    hdr.add_record(dict(name='EQUINOX', value=2000., comment='WCS epoch'))
+    hdr.delete('IMAGEW')
+    hdr.delete('IMAGEH')
+    return hdr
+
 def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
     from astrometry.util.run_command import run_command
     from astrometry.util.fits import fits_table, merge_tables
@@ -411,22 +424,3 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
         print('ps -- writing', fn)
         T = merge_tables(TT, columns='fillzero')
         write_results(fn, T, events, fitshdr)
-
-# Memory Limits
-def get_ulimit():
-    import resource
-    for name, desc in [
-        ('RLIMIT_AS', 'VMEM'),
-        ('RLIMIT_CORE', 'core file size'),
-        ('RLIMIT_CPU',  'CPU time'),
-        ('RLIMIT_FSIZE', 'file size'),
-        ('RLIMIT_DATA', 'heap size'),
-        ('RLIMIT_STACK', 'stack size'),
-        ('RLIMIT_RSS', 'resident set size'),
-        ('RLIMIT_NPROC', 'number of processes'),
-        ('RLIMIT_NOFILE', 'number of open files'),
-        ('RLIMIT_MEMLOCK', 'lockable memory address'),
-        ]:
-        limit_num = getattr(resource, name)
-        soft, hard = resource.getrlimit(limit_num)
-        print('Maximum %-25s (%-15s) : %20s %20s' % (desc, name, soft, hard))

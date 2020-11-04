@@ -19,8 +19,8 @@ class GaiaCatalog(HealpixedCatalog):
             wrap = True
 
         # Prepare RA,Dec grid to pick up overlapping healpixes
-        rr,dd = np.meshgrid(np.linspace(ralo,  rahi,  2+( rahi- ralo)/0.1),
-                            np.linspace(declo, dechi, 2+(dechi-declo)/0.1))
+        rr,dd = np.meshgrid(np.linspace(ralo,  rahi,  2+int(( rahi- ralo)/0.1)),
+                            np.linspace(declo, dechi, 2+int((dechi-declo)/0.1)))
         healpixes = set()
         for r,d in zip(rr.ravel(), dd.ravel()):
             healpixes.add(self.healpix_for_radec(r, d))

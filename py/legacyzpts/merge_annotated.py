@@ -70,11 +70,11 @@ if __name__ == "__main__":
             'ccdrarms',
             'ccddecrms',
             'ccdphrms',
+            'phrms',
             'ccdnastrom',
             'ccdnphotom',
             'ccd_cuts']
 
     t = fits_table(fna)
     t.writeto(fns, columns=keys)
-
 

@@ -33,8 +33,8 @@ def zeropoint_for_ptf(hdr):
 def read_image(imgfn,hdu):
     '''return gain*pixel DN as numpy array'''
     print('Reading image from', imgfn, 'hdu', hdu)
-    img,hdr= fitsio.read(imgfn, ext=hdu, header=True) 
-    return img,hdr 
+    img,hdr= fitsio.read(imgfn, ext=hdu, header=True)
+    return img,hdr
 
 def read_dq(dqfn,hdu):
     '''return bit mask which Tractor calls "data quality" image
@@ -60,7 +60,7 @@ def read_dq(dqfn,hdu):
     print('Reading data quality image from', dqfn, 'hdu', hdu)
     mask= fitsio.read(dqfn, ext=hdu, header=False)
     mask[mask > 0]= mask[mask > 0]-2 #pixels flagged as SEXtractor objects == 2 so are good
-    return mask.astype(np.int16) 
+    return mask.astype(np.int16)
 
 def read_invvar(imgfn,dqfn,hdu, clip=False):
     img,hdr= read_image(imgfn,hdu)
@@ -77,13 +77,13 @@ def read_invvar(imgfn,dqfn,hdu, clip=False):
         else:
             thresh = 0.
         invvar[invvar < thresh] = 0
-    if np.any(invvar < 0): 
+    if np.any(invvar < 0):
         if invvar[invvar < 0].shape[0] <= 10:
             print('invvar < 0 at %d pixels setting to 0 there, image= %s' % (invvar[invvar < 0].shape[0],imgfn))
             invvar[invvar < 0]= 0.
-        else: 
+        else:
             print('---WARNING--- invvar < 0 at > 10 pixels, something bad could be happening, img=  %s' % imgfn)
-            print('writing invvar and where invvar to ./ then crashing code') 
+            print('writing invvar and where invvar to ./ then crashing code')
             hdu = astro_fits.PrimaryHDU(invvar)
             hdu.writeto('./bad_invvar_%s' % os.path.basename(imgfn))
             new= np.zeros(invvar.shape).astype('int')
@@ -98,7 +98,6 @@ def isPTF(bands):
 
 class PtfImage(LegacySurveyImage):
     '''
-   
     A LegacySurveyImage subclass to handle images from the Dark Energy
     Camera, DECam, on the Blanco telescope.
 
@@ -164,7 +163,7 @@ class PtfImage(LegacySurveyImage):
 
     def __str__(self):
         return 'PTF ' + self.name
-    
+
     #override funcs get_tractor_image calls
     def get_wcs(self):
         return self.read_pv_wcs()
@@ -177,7 +176,7 @@ class PtfImage(LegacySurveyImage):
                      hdr['CD1_1'],hdr['CD1_2'],hdr['CD2_1'],hdr['CD2_2'],\
                      float(W),float(H))
         return wcs
-    #    wcs.version = '0' #done in bok.py 
+    #    wcs.version = '0' #done in bok.py
     #    wcs.plver = '0'
     #    return wcs
         #from astrometry.util.util import Sip
@@ -198,17 +197,17 @@ class PtfImage(LegacySurveyImage):
 
     def get_good_image_subregion(self):
         pass
-       
+
     def read_image(self,**kwargs):
         '''returns tuple of img,hdr'''
-        return read_image(self.imgfn,self.hdu) 
+        return read_image(self.imgfn,self.hdu)
 
     def read_dq(self,**kwargs):
         return read_dq(self.dqfn,self.hdu)
 
     def read_invvar(self, clip=False, clipThresh=0.2, **kwargs):
         return read_invvar(self.imgfn,self.dqfn,self.hdu)
-    
+
     def read_sky_model(self, **kwargs):
         print('Constant sky model, median of ', self.imgfn)
         img,hdr = self.read_image(header=True)
@@ -222,7 +221,7 @@ class PtfImage(LegacySurveyImage):
     def run_calibs(self, psfex=True, sky=True, funpack=False, git_version=None,
                        force=False,
                        **kwargs):
-        print('run_calibs for', self.name, ': sky=', sky, 'kwargs', kwargs) 
+        print('run_calibs for', self.name, ': sky=', sky, 'kwargs', kwargs)
         se = False
         if psfex and os.path.exists(self.psffn) and (not force):
             psfex = False
@@ -245,7 +244,7 @@ class PtfImage(LegacySurveyImage):
             fitsio.write(maskfn, mask)
             fitsio.write(invvarfn, invvar)
             print('wrote mask-2 to %s, invvar to %s' % (maskfn,invvarfn))
-            #run se 
+            #run se
             hdr=fitsio.read_header(self.imgfn,ext=hdu)
             magzp  = zeropoint_for_ptf(hdr)
             seeing = hdr['PIXSCALE'] * hdr['MEDFWHM']
@@ -278,14 +277,13 @@ class PtfImage(LegacySurveyImage):
             if os.path.exists(oldfn):
                 print('Moving', oldfn, 'to', self.psffn)
                 os.rename(oldfn, self.psffn)
-            else: 
+            else:
                 cmd= ' '.join(['psfex',self.sefn,'-c', os.path.join(sedir,'ptf.psfex'),
                     '-PSF_DIR',os.path.dirname(self.psffn)])
                 print(cmd)
                 if os.system(cmd):
                     raise RuntimeError('Command failed: ' + cmd)
 
-    
     def get_tractor_image(self, slc=None, radecpoly=None,
                           gaussPsf=False, const2psf=False, pixPsf=False,
                           splinesky=False,
@@ -293,7 +291,7 @@ class PtfImage(LegacySurveyImage):
                           dq=True, invvar=True, pixels=True):
         '''
         Returns a tractor.Image ("tim") object for this image.
-        
+
         Options describing a subimage to return:
 
         - *slc*: y,x slice objects
@@ -306,7 +304,7 @@ class PtfImage(LegacySurveyImage):
         - *pixPsf*: pixelized PsfEx model at image center.
 
         Options determining the sky model to use:
-        
+
         - *splinesky*: median filter chunks of the image, then spline those.
 
         Options determining the units of the image:
@@ -321,7 +319,7 @@ class PtfImage(LegacySurveyImage):
         from astrometry.util.miscutils import clip_polygon
         get_dq = dq
         get_invvar = invvar
-        
+
         band = self.band
         imh,imw = self.get_image_shape()
         wcs = self.get_wcs()
@@ -369,12 +367,12 @@ class PtfImage(LegacySurveyImage):
             imghdr = dict()
             if slc is not None:
                 img = img[slc]
-            
+
         if get_invvar:
             invvar = self.read_invvar(slice=slc, clipThresh=0.)
         else:
             invvar = np.ones_like(img)
-            
+
         if get_dq:
             dq = self.read_dq(slice=slc)
             invvar[dq != 0] = 0.
@@ -430,7 +428,7 @@ class PtfImage(LegacySurveyImage):
             sig1 = 1.4826 * mad / np.sqrt(2.)
             print('sig1 estimate:', sig1)
             invvar *= (1. / sig1**2)
-            
+
         assert(np.all(np.isfinite(img)))
         assert(np.all(np.isfinite(invvar)))
         assert(np.isfinite(sig1))
@@ -456,7 +454,7 @@ class PtfImage(LegacySurveyImage):
                     photocal=LinearPhotoCal(zpscale, band=band),
                     sky=sky, name=self.name + ' ' + band)
         assert(np.all(np.isfinite(tim.getInvError())))
-        
+
         # PSF norm
         psfnorm = self.psf_norm(tim)
         print('PSF norm', psfnorm, 'vs Gaussian',
@@ -466,7 +464,7 @@ class PtfImage(LegacySurveyImage):
         tim.band = band
         galnorm = self.galaxy_norm(tim)
         print('Galaxy norm:', galnorm)
-        
+
         # CP (DECam) images include DATE-OBS and MJD-OBS, in UTC.
         import astropy.time
         #mjd_utc = mjd=primhdr.get('MJD-OBS', 0)
@@ -501,11 +499,3 @@ class PtfImage(LegacySurveyImage):
         subh,subw = tim.shape
         tim.subwcs = tim.sip_wcs.get_subimage(tim.x0, tim.y0, subw, subh)
         return tim
-
-
-
-def make_dir(name):
-    if not os.path.exists(name): os.makedirs(name)
-    else: print('WARNING path exists: ',name)
-
-

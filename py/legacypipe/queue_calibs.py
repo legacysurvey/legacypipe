@@ -451,7 +451,7 @@ def main(args):
 
     log(len(T), 'CCDs')
     log(len(B), 'Bricks')
-    I,J,d = match_radec(B.ra, B.dec, T.ra, T.dec, search_radius,
+    I,J,_ = match_radec(B.ra, B.dec, T.ra, T.dec, search_radius,
                         nearest=True)
     B.cut(I)
     log('Cut to', len(B), 'bricks near CCDs')
@@ -465,7 +465,7 @@ def main(args):
     # plt.savefig('bricks.png')
 
     if opt.touching:
-        I,J,d = match_radec(T.ra, T.dec, B.ra, B.dec, search_radius,
+        I,J,_ = match_radec(T.ra, T.dec, B.ra, B.dec, search_radius,
                             nearest=True)
         # list the ones that will be cut
         # drop = np.ones(len(T))
@@ -530,7 +530,7 @@ def main(args):
             # a brick-ccd pair within this radius must be touching.
             closest_radius = 0.95 * (bricksize + 0.262 * 2048 / 3600.) / 2.
 
-            J1,nil,nil = match_radec(B.ra, B.dec, T.ra, T.dec, closest_radius, nearest=True)
+            J1,_,_ = match_radec(B.ra, B.dec, T.ra, T.dec, closest_radius, nearest=True)
             log(len(J1), 'of', len(B), 'bricks definitely touch CCDs')
             tocheck = np.ones(len(B), bool)
             tocheck[J1] = False
@@ -566,9 +566,9 @@ def main(args):
 
     elif opt.near:
         # Find CCDs near bricks
-        allI,nil,nil = match_radec(T.ra, T.dec, B.ra, B.dec, search_radius, nearest=True)
+        allI,_,_ = match_radec(T.ra, T.dec, B.ra, B.dec, search_radius, nearest=True)
         # Find bricks near CCDs
-        J,nil,nil = match_radec(B.ra, B.dec, T.ra, T.dec, search_radius, nearest=True)
+        J,_,_ = match_radec(B.ra, B.dec, T.ra, T.dec, search_radius, nearest=True)
         B.cut(J)
         log('Cut to', len(B), 'bricks near CCDs')
 
@@ -576,7 +576,7 @@ def main(args):
         allI = np.arange(len(T))
 
     if opt.byexp:
-        nil,eI = np.unique(T.expnum[allI], return_index=True)
+        _,eI = np.unique(T.expnum[allI], return_index=True)
         allI = allI[eI]
         print('Cut to', len(allI), 'expnums')
 
@@ -732,11 +732,8 @@ def main(args):
     f.close()
     log('Wrote', opt.out)
     return 0
-#
-#
-#
+
 if __name__ == '__main__':
-    import sys
     main(sys.argv[1:])
 
 

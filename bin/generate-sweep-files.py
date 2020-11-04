@@ -5,7 +5,7 @@ from __future__ import print_function, division
 import numpy as np
 
 from legacypipe.internal import sharedmem
-from legacypipe.internal.io import iter_tractor, parse_filename
+from legacypipe.internal.io import iter_tractor, parse_filename, get_units, git_version
 
 import argparse
 import os, sys
@@ -15,7 +15,6 @@ import fitsio
 
 def main():
     ns = parse_args()
-
     if ns.ignore_errors:
         print("Warning: *** Will ignore broken tractor catalogue files ***")
         print("         *** Disable -I for final data product.         ***")
@@ -27,6 +26,10 @@ def main():
     # access
     # bricks = [(name, filepath, region), ...]
     bricks = list_bricks(ns)
+
+    # ADM get a {FIELD: unit} dictionary from one of the Tractor files.
+    fn = bricks[0][1]
+    unitdict = get_units(fn)
 
     t0 = time()
 
@@ -76,7 +79,7 @@ def main():
 
             if len(data) > 0:
                 save_sweep_file(os.path.join(ns.dest, filename),
-                    data, header, format)
+                                data, header, format, unitdict=unitdict)
 
         return filename, nbricks, len(data)
 
@@ -182,7 +185,7 @@ def make_sweep(sweep, bricks, ns):
                 return None, None
             try:
                 objects = fitsio.read(filename, 1, upper=True)
-                chunkheader = fitsio.read_header(filename, 0, upper=True)
+                chunkheader = fitsio.read_header(filename, 0)
             except:
                 if ns.ignore_errors:
                     print('IO error on %s' % filename)
@@ -239,13 +242,28 @@ def make_sweep(sweep, bricks, ns):
     return data, header, neff
 
 
-def save_sweep_file(filename, data, header, format):
+def save_sweep_file(filename, data, header, format, unitdict=None):
     if format == 'fits':
+        units = None
+        # ADM derive the units from the data columns if possible.
+        if unitdict is not None:
+            units = [unitdict[col] for col in data.dtype.names]
+
+        # ADM add the sweep code version header dependency.
+        dep = [int(key.split("DEPNAM")[-1]) for key in header.keys()
+               if 'DEPNAM' in key]
+        if len(dep) == 0:
+            nextdep = 0
+        else:
+            nextdep = np.max(dep) + 1
+        header["DEPNAM{:02d}".format(nextdep)] = 'gen_sweep'
+        header["DEPVER{:02d}".format(nextdep)] = git_version()
+
         header = [dict(name=key, value=header[key]) for key in sorted(header.keys())]
         with fitsio.FITS(filename, mode='rw', clobber=True) as ff:
             ff.create_image_hdu()
             ff[0].write_keys(header)
-            ff.write_table(data, extname='SWEEP', header=header)
+            ff.write_table(data, extname='SWEEP', units=units)
 
     elif format == 'hdf5':
         import h5py
@@ -483,6 +501,7 @@ SWEEP_DTYPE = np.dtype([
     ('PMDEC', '>f4'),
     ('PMDEC_IVAR', '>f4'),
     ('MASKBITS', '>i2'),
+    ('FITBITS', '>i2'),
     ('SERSIC', '>f4'),
     ('SERSIC_IVAR', '>f4')]
 )

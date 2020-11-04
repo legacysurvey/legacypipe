@@ -6,6 +6,15 @@ from astrometry.util.ttime import Time
 
 from wise.unwise import get_unwise_tractor_image
 
+import logging
+logger = logging.getLogger('legacypipe.unwise')
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
+
 '''
 This function was imported whole from the tractor repo:
 wise/forcedphot.py because I figured we were doing enough
@@ -27,7 +36,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
     *get_masks*: the WCS to resample mask bits into.
     '''
-    from tractor import NanoMaggies, PointSource, Tractor, ExpGalaxy, DevGalaxy
+    from tractor import PointSource, Tractor, ExpGalaxy, DevGalaxy
     from tractor.sersic import SersicGalaxy
 
     if not pixelized_psf and psf_broadening is None:
@@ -42,44 +51,42 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     plots = (ps is not None)
     if plots:
         import pylab as plt
-    
+
     wantims = (plots or save_fits or get_models)
     wanyband = 'w'
     if get_models:
-        models = {}
+        models = []
 
     wband = 'w%i' % band
-
-    fskeys = ['prochi2', 'pronpix', 'profracflux', 'proflux', 'npix',
-              'pronexp']
 
     Nsrcs = len(cat)
     phot = fits_table()
     # Filled in based on unique tile overlap
-    phot.wise_coadd_id = np.array(['        '] * Nsrcs)
-    phot.set(wband + '_psfdepth', np.zeros(len(phot), np.float32))
-
-    ra  = np.array([src.getPosition().ra  for src in cat])
-    dec = np.array([src.getPosition().dec for src in cat])
-
+    phot.wise_coadd_id = np.array(['        '] * Nsrcs, dtype='U8')
+    phot.wise_x = np.zeros(Nsrcs, np.float32)
+    phot.wise_y = np.zeros(Nsrcs, np.float32)
+    phot.set('psfdepth_%s' % wband, np.zeros(Nsrcs, np.float32))
     nexp = np.zeros(Nsrcs, np.int16)
     mjd  = np.zeros(Nsrcs, np.float64)
     central_flux = np.zeros(Nsrcs, np.float32)
 
+    ra  = np.array([src.getPosition().ra  for src in cat])
+    dec = np.array([src.getPosition().dec for src in cat])
+
+    fskeys = ['prochi2', 'profracflux']
     fitstats = {}
-    tims = []
 
     if get_masks:
         mh,mw = get_masks.shape
         maskmap = np.zeros((mh,mw), np.uint32)
-    
-    for tile in tiles:
-        print('Reading WISE tile', tile.coadd_id, 'band', band)
 
+    tims = []
+    for tile in tiles:
+        info('Reading WISE tile', tile.coadd_id, 'band', band)
         tim = get_unwise_tractor_image(tile.unwise_dir, tile.coadd_id, band,
                                        bandname=wanyband, roiradecbox=roiradecbox)
         if tim is None:
-            print('Actually, no overlap with tile', tile.coadd_id)
+            debug('Actually, no overlap with WISE coadd tile', tile.coadd_id)
             continue
 
         if plots:
@@ -91,7 +98,6 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             tag = '%s W%i' % (tile.coadd_id, band)
             plt.title('%s: tim data' % tag)
             ps.savefig()
-
             plt.clf()
             plt.hist((tim.getImage() * tim.inverr)[tim.inverr > 0].ravel(),
                      range=(-5,10), bins=100)
@@ -106,7 +112,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             dx = tile_crpix[0] - 1024.5
             dy = tile_crpix[1] - 1024.5
             realwcs.set_crpix(x+dx, y+dy)
-            #print('CRPIX', x,y, 'shift by', dx,dy, 'to', realwcs.crpix)
+            debug('unWISE', tile.coadd_id, 'band', band, 'CRPIX', x,y,
+                  'shift by', dx,dy, 'to', realwcs.crpix)
 
         if modelsky_dir and band in [1, 2]:
             fn = os.path.join(modelsky_dir, '%s.%i.mod.fits' % (tile.coadd_id, band))
@@ -114,7 +121,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 raise RuntimeError('WARNING: does not exist:', fn)
             x0,x1,y0,y1 = tim.roi
             bg = fitsio.FITS(fn)[2][y0:y1, x0:x1]
-            #print('Read background map:', bg.shape, bg.dtype, 'vs image', tim.shape)
+            assert(bg.shape == tim.shape)
 
             if plots:
                 plt.clf()
@@ -127,7 +134,6 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 tag = '%s W%i' % (tile.coadd_id, band)
                 plt.suptitle(tag)
                 ps.savefig()
-
                 plt.clf()
                 ha = dict(range=(-5,10), bins=100, histtype='step')
                 plt.hist((tim.getImage() * tim.inverr)[tim.inverr > 0].ravel(),
@@ -166,6 +172,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 plt.ylabel('floored')
                 ps.savefig()
 
+            assert(np.all(np.isfinite(new_ie)))
+            assert(np.all(new_ie >= 0.))
             tim.inverr = new_ie
 
             # Expand a 3-pixel radius around weight=0 (saturated) pixels
@@ -181,7 +189,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             nbefore = np.sum(tim.inverr == 0)
             tim.inverr[msat] = 0
             nafter = np.sum(tim.inverr == 0)
-            print('Masking an additional', (nafter-nbefore), 'near-saturated pixels in unWISE',
+            debug('Masking an additional', (nafter-nbefore), 'near-saturated pixels in unWISE',
                   tile.coadd_id, 'band', band)
 
         # Read mask file?
@@ -193,12 +201,12 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 fn = os.path.join(d, tile.coadd_id[:3], tile.coadd_id,
                                   'unwise-%s-msk.fits.gz' % tile.coadd_id)
                 if os.path.exists(fn):
-                    print('Reading unWISE mask file', fn)
+                    debug('Reading unWISE mask file', fn)
                     x0,x1,y0,y1 = tim.roi
                     tilemask = fitsio.FITS(fn)[0][y0:y1,x0:x1]
                     break
             if tilemask is None:
-                print('unWISE mask file for tile', tile.coadd_id, 'does not exist')
+                info('unWISE mask file for tile', tile.coadd_id, 'does not exist')
             else:
                 try:
                     tanwcs = tim.wcs.wcs
@@ -208,14 +216,24 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                     # Only deal with mask pixels that are set.
                     I, = np.nonzero(tilemask[Yi,Xi] > 0)
                     # Trim to unique area for this tile
-                    rr,dd = get_masks.pixelxy2radec(Yo[I]+1, Xo[I]+1)
+                    rr,dd = get_masks.pixelxy2radec(Xo[I]+1, Yo[I]+1)
                     good = radec_in_unique_area(rr, dd, tile.ra1, tile.ra2,
                                                 tile.dec1, tile.dec2)
                     I = I[good]
                     maskmap[Yo[I],Xo[I]] = tilemask[Yi[I], Xi[I]]
                 except OverlapError:
                     # Shouldn't happen by this point
-                    print('No overlap between WISE tile', tile.coadd_id, 'and brick')
+                    print('Warning: no overlap between WISE tile', tile.coadd_id, 'and brick')
+
+            if plots:
+                plt.clf()
+                plt.imshow(tilemask, interpolation='nearest', origin='lower')
+                plt.title('Tile %s: mask' % tile.coadd_id)
+                ps.savefig()
+                plt.clf()
+                plt.imshow(maskmap, interpolation='nearest', origin='lower')
+                plt.title('Tile %s: accumulated maskmap' % tile.coadd_id)
+                ps.savefig()
 
         # The tiles have some overlap, so zero out pixels outside the
         # tile's unique area.
@@ -224,7 +242,14 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         rr,dd = tim.wcs.wcs.pixelxy2radec(xx+1, yy+1)
         unique = radec_in_unique_area(rr, dd, tile.ra1, tile.ra2,
                                       tile.dec1, tile.dec2)
-        #print(np.sum(unique), 'of', (th*tw), 'pixels in this tile are unique')
+        debug('Tile', tile.coadd_id, '- total of', np.sum(unique),
+              'unique pixels out of', len(unique.flat), 'total pixels')
+        if get_models:
+            # Save the inverr before blanking out non-unique pixels, for making coadds with no gaps!
+            # (actually, slightly more subtly, expand unique area by 1 pixel)
+            from scipy.ndimage.morphology import binary_dilation
+            du = binary_dilation(unique)
+            tim.coadd_inverr = tim.inverr * du
         tim.inverr[unique == False] = 0.
         del xx,yy,rr,dd,unique
 
@@ -243,8 +268,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             from unwise_psf import unwise_psf
             if (band == 1) or (band == 2):
                 # we only have updated PSFs for W1 and W2
-                psfimg = unwise_psf.get_unwise_psf(band, tile.coadd_id, 
-                                                   modelname='neo5_unwisecat')
+                psfimg = unwise_psf.get_unwise_psf(band, tile.coadd_id,
+                                                   modelname='neo6_unwisecat')
             else:
                 psfimg = unwise_psf.get_unwise_psf(band, tile.coadd_id)
 
@@ -291,21 +316,20 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             psf = tim.getPsf()
             from tractor import GaussianMixturePSF
             if isinstance(psf, GaussianMixturePSF):
-                #
-                print('Broadening PSF: from', psf)
+                debug('Broadening PSF: from', psf)
                 p0 = psf.getParams()
                 pnames = psf.getParamNames()
                 p1 = [p * psf_broadening**2 if 'var' in name else p
                       for (p, name) in zip(p0, pnames)]
                 psf.setParams(p1)
-                print('Broadened PSF:', psf)
+                debug('Broadened PSF:', psf)
             else:
                 print('WARNING: cannot apply psf_broadening to WISE PSF of type', type(psf))
 
         wcs = tim.wcs.wcs
-        ok,x,y = wcs.radec2pixelxy(ra, dec)
-        x = np.round(x - 1.).astype(int)
-        y = np.round(y - 1.).astype(int)
+        _,fx,fy = wcs.radec2pixelxy(ra, dec)
+        x = np.round(fx - 1.).astype(int)
+        y = np.round(fy - 1.).astype(int)
         good = (x >= 0) * (x < tw) * (y >= 0) * (y < th)
         # Which sources are in this brick's unique area?
         usrc = radec_in_unique_area(ra, dec, tile.ra1, tile.ra2, tile.dec1, tile.dec2)
@@ -315,6 +339,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         if hasattr(tim, 'mjdmin') and hasattr(tim, 'mjdmax'):
             mjd[I] = (tim.mjdmin + tim.mjdmax) / 2.
         phot.wise_coadd_id[I] = tile.coadd_id
+        phot.wise_x[I] = fx[I] - 1.
+        phot.wise_y[I] = fy[I] - 1.
 
         central_flux[I] = tim.getImage()[y[I], x[I]]
         del x,y,good,usrc
@@ -325,8 +351,9 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         patch = psf.getPointSourcePatch(h//2, w//2).patch
         psfnorm = np.sqrt(np.sum(patch**2))
         # To handle zero-depth, we return 1/nanomaggies^2 units rather than mags.
-        psfdepth = 1. / (tim.sig1 / psfnorm)**2
-        phot.get(wband + '_psfdepth')[I] = psfdepth
+        # In the small empty patches of the sky (eg W4 in 0922p702), we get sig1 = NaN
+        if np.isfinite(tim.sig1):
+            phot.get('psfdepth_%s' % wband)[I] = 1. / (tim.sig1 / psfnorm)**2
 
         tim.tile = tile
         tims.append(tim)
@@ -369,11 +396,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 galrad = src.shape.re
             pixscale = 2.75
             src.halfsize = int(np.hypot(R, galrad * 5 / pixscale))
-
-    #print('Set WISE source sizes:', nbig, 'big', nmedium, 'medium', nsmall, 'small')
-
-    minsb = 0.
-    fitsky = False
+    debug('Set WISE source sizes:', nbig, 'big', nmedium, 'medium', nsmall, 'small')
 
     tractor = Tractor(tims, cat)
     if use_ceres:
@@ -382,27 +405,25 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     tractor.freezeParamsRecursive('*')
     tractor.thawPathsTo(wanyband)
 
-    kwa = dict(fitstat_extras=[('pronexp', [tim.nims for tim in tims])])
     t0 = Time()
-
     R = tractor.optimize_forced_photometry(
-        minsb=minsb, mindlnp=1., sky=fitsky, fitstats=True,
-        variance=True, shared_params=False,
-        wantims=wantims, **kwa)
-    print('unWISE forced photometry took', Time() - t0)
+        fitstats=True, variance=True, shared_params=False, wantims=wantims)
+    info('unWISE forced photometry took', Time() - t0)
 
     if use_ceres:
         term = R.ceres_status['termination']
-        # Running out of memory can cause failure to converge
-        # and term status = 2.
-        # Fail completely in this case.
+        # Running out of memory can cause failure to converge and term
+        # status = 2.  Fail completely in this case.
         if term != 0:
-            print('Ceres termination status:', term)
-            raise RuntimeError(
-                'Ceres terminated with status %i' % term)
+            info('Ceres termination status:', term)
+            raise RuntimeError('Ceres terminated with status %i' % term)
 
     if wantims:
         ims1 = R.ims1
+        # can happen if empty source list (we still want to generate coadds)
+        if ims1 is None:
+            ims1 = R.ims0
+
     flux_invvars = R.IV
     if R.fitstats is not None:
         for k in fskeys:
@@ -412,7 +433,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     if save_fits:
         for i,tim in enumerate(tims):
             tile = tim.tile
-            (dat, mod, ie, chi, roi) = ims1[i]
+            (dat, mod, _, chi, _) = ims1[i]
             wcshdr = fitsio.FITSHDR()
             tim.wcs.wcs.add_to_header(wcshdr)
             tag = 'fit-%s-w%i' % (tile.coadd_id, band)
@@ -427,7 +448,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         # Create models for just the brightest sources
         bright_cat = [src for src in cat
                       if src.getBrightness().getBand(wanyband) > 1000]
-        print('Bright soures:', len(bright_cat))
+        debug('Bright soures:', len(bright_cat))
         btr = Tractor(tims, bright_cat)
         for tim in tims:
             mod = btr.getModelImage(tim)
@@ -444,14 +465,15 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     if get_models:
         for i,tim in enumerate(tims):
             tile = tim.tile
-            (dat, mod, ie, chi, roi) = ims1[i]
-            models[(tile.coadd_id, band)] = (mod, dat, ie, tim.roi, tim.wcs.wcs)
+            (dat, mod, _, _, _) = ims1[i]
+            models.append((tile.coadd_id, band, tim.wcs.wcs, dat, mod,
+                           tim.coadd_inverr))
 
     if plots:
         for i,tim in enumerate(tims):
             tile = tim.tile
             tag = '%s W%i' % (tile.coadd_id, band)
-            (dat, mod, ie, chi, roi) = ims1[i]
+            (dat, mod, _, chi, _) = ims1[i]
             sig1 = tim.sig1
             plt.clf()
             plt.imshow(dat, interpolation='nearest', origin='lower',
@@ -473,37 +495,18 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             plt.title('%s: chi' % tag)
             ps.savefig()
 
-
     nm = np.array([src.getBrightness().getBand(wanyband) for src in cat])
     nm_ivar = flux_invvars
-    # Sources out of bounds, eg, never change from their default
-    # (1-sigma or whatever) initial fluxes.  Zero them out instead.
+    # Sources out of bounds, eg, never change from their initial
+    # fluxes.  Zero them out instead.
     nm[nm_ivar == 0] = 0.
 
-    phot.set(wband + '_nanomaggies', nm.astype(np.float32))
-    phot.set(wband + '_nanomaggies_ivar', nm_ivar.astype(np.float32))
-    dnm = np.zeros(len(nm_ivar), np.float32)
-    okiv = (nm_ivar > 0)
-    dnm[okiv] = (1. / np.sqrt(nm_ivar[okiv])).astype(np.float32)
-    okflux = (nm > 0)
-    mag = np.zeros(len(nm), np.float32)
-    mag[okflux] = (NanoMaggies.nanomaggiesToMag(nm[okflux])
-                   ).astype(np.float32)
-    dmag = np.zeros(len(nm), np.float32)
-    ok = (okiv * okflux)
-    dmag[ok] = (np.abs((-2.5 / np.log(10.)) * dnm[ok] / nm[ok])
-                ).astype(np.float32)
-    mag[np.logical_not(okflux)] = np.nan
-    dmag[np.logical_not(ok)] = np.nan
-
-    phot.set(wband + '_mag', mag)
-    phot.set(wband + '_mag_err', dmag)
-
+    phot.set('flux_%s' % wband, nm.astype(np.float32))
+    phot.set('flux_ivar_%s' % wband, nm_ivar.astype(np.float32))
     for k in fskeys:
-        phot.set(wband + '_' + k, fitstats[k])
-    phot.set(wband + '_nexp', nexp)
-    if not np.all(mjd == 0):
-        phot.set(wband + '_mjd', mjd)
+        phot.set(k + '_' + wband, fitstats.get(k, np.zeros(len(phot), np.float32)))
+    phot.set('nobs_%s' % wband, nexp)
+    phot.set('mjd_%s'  % wband, mjd)
 
     rtn = wphotduck()
     rtn.phot = phot
@@ -541,6 +544,9 @@ def unwise_phot(X):
                   modelsky_dir=modelsky_dir)
     if get_mods:
         kwargs.update(get_models=get_mods)
+
+    if wise_ceres and len(wcat) == 0:
+        wise_ceres = False
 
     # DEBUG
     #kwargs.update(save_fits=True)
@@ -645,8 +651,8 @@ def unwise_tiles_touching_wcs(wcs, polygons=True):
         H, W = wwcs.shape
         poly = []
         for x, y in [(0.5, 0.5), (W + 0.5, 0.5), (W + 0.5, H + 0.5), (0.5, H + 0.5)]:
-            rr, dd = wwcs.pixelxy2radec(x, y)
-            ok, xx, yy = wcs.radec2pixelxy(rr, dd)
+            rr,dd = wwcs.pixelxy2radec(x, y)
+            _,xx,yy = wcs.radec2pixelxy(rr, dd)
             poly.append((xx, yy))
         if wdet > 0:
             poly = list(reversed(poly))

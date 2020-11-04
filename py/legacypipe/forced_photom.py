@@ -12,7 +12,7 @@ import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
-from astrometry.util.ttime import Time, MemMeas
+from astrometry.util.ttime import Time
 
 from tractor import Tractor, Catalog, NanoMaggies
 from tractor.galaxy import disable_galaxy_cache
@@ -93,7 +93,7 @@ def main(survey=None, opt=None, args=None):
 
     if args is None:
         args = sys.argv[1:]
-    print(' '.join(args))
+    print('forced_photom.py', ' '.join(args))
 
     '''Driver function for forced photometry of individual Legacy
     Survey images.
@@ -102,9 +102,10 @@ def main(survey=None, opt=None, args=None):
         parser = get_parser()
         opt = parser.parse_args(args)
 
-    Time.add_measurement(MemMeas)
-    t0 = tlast = Time()
+    print('Opt:', opt)
+    print('Opt:', vars(opt))
 
+    t0 = Time()
     if opt.skip and os.path.exists(opt.outfn):
         print('Ouput file exists:', opt.outfn)
         sys.exit(0)
@@ -130,7 +131,7 @@ def main(survey=None, opt=None, args=None):
     try:
         expnum = int(opt.expnum)
         filename = None
-    except:
+    except ValueError:
         # make this 'None' for survey.find_ccds()
         expnum = None
         filename = opt.expnum
@@ -148,6 +149,8 @@ def main(survey=None, opt=None, args=None):
     if survey is None:
         survey = LegacySurveyData(survey_dir=opt.survey_dir)
 
+    # If there is only one catalog survey_dir, we pass it to get_catalog_in_wcs
+    # as the northern survey.
     catsurvey_north = survey
     catsurvey_south = None
 
@@ -156,8 +159,7 @@ def main(survey=None, opt=None, args=None):
         assert(opt.catalog_resolve_dec_ngc is not None)
         catsurvey_north = LegacySurveyData(survey_dir = opt.catalog_dir_north)
         catsurvey_south = LegacySurveyData(survey_dir = opt.catalog_dir_south)
-
-    if opt.catalog_dir is not None:
+    elif opt.catalog_dir is not None:
         catsurvey_north = LegacySurveyData(survey_dir = opt.catalog_dir)
 
     if filename is not None and hdu >= 0:
@@ -208,6 +210,12 @@ def main(survey=None, opt=None, args=None):
         tm = Time()
         FF = mp.map(bounce_one_ccd, args)
         print('Multi-processing forced-phot:', Time()-tm)
+        del mp
+        Time.measurements.remove(poolmeas)
+        del poolmeas
+        pool.close()
+        pool.join()
+        del pool
     else:
         FF = map(bounce_one_ccd, args)
 
@@ -262,8 +270,6 @@ def main(survey=None, opt=None, args=None):
 
 def bounce_one_ccd(X):
     # for multiprocessing
-    #survey,catsurvey,ccd,opt,zoomslice,ps = X
-    #return run_one_ccd(survey, ccd, opt)
     return run_one_ccd(*X)
 
 def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_dec=None,
@@ -282,11 +288,13 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
 
         for b in bricks:
             # Skip bricks that are entirely on the wrong side of the resolve line (NGC only)
-            if resolve_dec is not None and b.gal_b > 0:
+            if resolve_dec is not None:
+                # Northern survey, brick too far south (max dec is below the resolve line)
                 if north and b.dec2 <= resolve_dec:
                     continue
-                if not(north) and b.dec1 >= resolve_dec:
-                    continue
+                # Southern survey, brick too far north (min dec is above the resolve line), but only in the North Galactic Cap
+                if not(north) and b.dec1 >= resolve_dec and b.gal_b > 0:
+                     continue
             # there is some overlap with this brick... read the catalog.
             fn = catsurvey.find_file('tractor', brick=b.brickname)
             if not os.path.exists(fn):
@@ -299,14 +307,15 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
                 'sersic', 'shape_r', 'shape_e1', 'shape_e2',
                 'ref_epoch', 'pmra', 'pmdec', 'parallax'
                 ])
-            if resolve_dec is not None and b.gal_b > 0:
+            if resolve_dec is not None:
                 if north:
                     T.cut(T.dec >= resolve_dec)
                     print('Cut to', len(T), 'north of the resolve line')
-                else:
+                elif b.gal_b > 0:
+                    # Northern galactic cap only: cut Southern survey
                     T.cut(T.dec <  resolve_dec)
                     print('Cut to', len(T), 'south of the resolve line')
-            ok,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
+            _,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
             W,H = chipwcs.get_width(), chipwcs.get_height()
             I, = np.nonzero((xx >= -margin) * (xx <= (W+margin)) *
                             (yy >= -margin) * (yy <= (H+margin)))
@@ -314,10 +323,6 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
             print('Cut to', len(T), 'sources within image + margin')
             T.cut(T.brick_primary)
             print('Cut to', len(T), 'on brick_primary')
-            for col in ['out_of_bounds', 'left_blob']:
-                if col in T.get_columns():
-                    T.cut(T.get(col) == False)
-                    print('Cut to', len(T), 'on', col)
             # drop DUP sources
             I, = np.nonzero([t.strip() != 'DUP' for t in T.type])
             T.cut(I)
@@ -330,12 +335,13 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
     T._header = TT[0]._header
     del TT
     print('Total of', len(T), 'catalog sources')
-
     return T
 
 def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                 ccd, opt, zoomslice, ps):
     tlast = Time()
+
+    print('Opt:', opt)
 
     im = survey.get_image_object(ccd)
 
@@ -453,6 +459,8 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     # F.psfdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.psfnorm) - 9)] * len(F)).astype(np.float32)
     # F.galdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.galnorm) - 9)] * len(F)).astype(np.float32)
 
+    print('opt.derivs:', opt.derivs)
+
     # super units questions here
     if opt.derivs:
         cosdec = np.cos(np.deg2rad(T.dec))
@@ -475,7 +483,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     F.ra  = T.ra
     F.dec = T.dec
 
-    ok,x,y = tim.sip_wcs.radec2pixelxy(T.ra, T.dec)
+    _,x,y = tim.sip_wcs.radec2pixelxy(T.ra, T.dec)
     F.x = (x-1).astype(np.float32)
     F.y = (y-1).astype(np.float32)
 
@@ -592,7 +600,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             cat = realsrcs + derivsrcs
 
     if agn:
-        from tractor.galaxy import ExpGalaxy, DevGalaxy, FixedCompositeGalaxy
+        from tractor.galaxy import ExpGalaxy, DevGalaxy
         from tractor import PointSource
         from tractor.sersic import SersicGalaxy
         from legacypipe.survey import RexGalaxy
@@ -659,7 +667,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                                           **forced_kwargs)
 
         if ps is not None or get_model:
-            (data,mod,ie,chi,roi) = R.ims1[0]
+            (data,mod,ie,chi,_) = R.ims1[0]
 
         if ps is not None:
             ima = dict(vmin=-2.*tim.sig1, vmax=5.*tim.sig1,
@@ -750,23 +758,20 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         apimg = []
         apimgerr = []
 
-        # Aperture photometry locations
-        xxyy = np.vstack([tim.wcs.positionToPixel(src.getPosition()) for src in cat]).T
-        apxy = xxyy - 1.
+        # Aperture photometry locations -- this is using the Tractor wcs infrastructure,
+        # so pixel positions are 0-indexed.
+        apxy = np.vstack([tim.wcs.positionToPixel(src.getPosition()) for src in cat])
 
         apertures = apertures_arcsec / tim.wcs.pixel_scale()
-        #print('Apertures:', apertures, 'pixels')
-
-        #print('apxy shape', apxy.shape)  # --> (2,N)
 
         # The aperture photometry routine doesn't like pixel positions outside the image
         H,W = img.shape
-        Iap = np.flatnonzero((apxy[0,:] >= 0)   * (apxy[1,:] >= 0) *
-                             (apxy[0,:] <= W-1) * (apxy[1,:] <= H-1))
-        print('Aperture photometry for', len(Iap), 'of', len(apxy[0,:]), 'sources within image bounds')
+        Iap = np.flatnonzero((apxy[:,0] >= 0)   * (apxy[:,1] >= 0) *
+                             (apxy[:,0] <= W-1) * (apxy[:,1] <= H-1))
+        print('Aperture photometry for', len(Iap), 'of', len(apxy[:,0]), 'sources within image bounds')
 
         for rad in apertures:
-            aper = photutils.CircularAperture(apxy[:,Iap], rad)
+            aper = photutils.CircularAperture(apxy[Iap,:], rad)
             p = photutils.aperture_photometry(img, aper, error=imsigma)
             apimg.append(p.field('aperture_sum'))
             apimgerr.append(p.field('aperture_sum_err'))
@@ -778,7 +783,6 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         apimgerr = np.vstack(apimgerr).T
         apiv = np.zeros(apimgerr.shape, np.float32)
         apiv[apimgerr != 0] = 1./apimgerr[apimgerr != 0]**2
-
         F.apflux_ivar = np.zeros((len(F), len(apertures)), np.float32)
         F.apflux_ivar[Iap,:] = apiv
         if timing:
@@ -864,4 +868,6 @@ class SourceDerivatives(MultiParams, BasicSource):
         return add_patches(p1, p2)
 
 if __name__ == '__main__':
+    from astrometry.util.ttime import MemMeas
+    Time.add_measurement(MemMeas)
     sys.exit(main())

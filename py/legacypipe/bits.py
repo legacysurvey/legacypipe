@@ -22,6 +22,23 @@ DQ_BITS = dict(badpix=1,
                outlier = 2048,
     )
 
+FITBITS = dict(
+    FORCED_POINTSOURCE = 0x1,
+    FIT_BACKGROUND     = 0x2,
+    HIT_RADIUS_LIMIT   = 0x4,
+    HIT_SERSIC_LIMIT   = 0x8,
+    FROZEN             = 0x10, # all source parameters were frozen at ref-cat values
+    BRIGHT             = 0x20,
+    MEDIUM             = 0x40,
+    GAIA               = 0x80,
+    TYCHO2             = 0x100,
+    LARGEGALAXY        = 0x200,
+    WALKER             = 0x400,
+    RUNNER             = 0x800,
+    GAIA_POINTSOURCE   = 0x1000,
+    ITERATIVE          = 0x2000,
+)
+
 # Outlier mask bit values
 OUTLIER_POS = 1
 OUTLIER_NEG = 2
@@ -40,7 +57,7 @@ MASKBITS = dict(
     WISEM2     = 0x200,
     BAILOUT    = 0x400, # bailed out of processing
     MEDIUM     = 0x800, # medium-bright star
-    GALAXY     = 0x1000, # LSLGA large galaxy
+    GALAXY     = 0x1000, # SGA large galaxy
     CLUSTER    = 0x2000, # Cluster catalog source
 )
 
@@ -49,6 +66,6 @@ IN_BLOB = dict(
     BRIGHT  = 0x1,   # "bright" star
     MEDIUM  = 0x2,   # "medium-bright" star
     CLUSTER = 0x4,   # Globular cluster
-    GALAXY  = 0x8,   # large LSLGA galaxy
+    GALAXY  = 0x8,   # large SGA galaxy
 )
 

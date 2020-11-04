@@ -32,6 +32,12 @@ def removeckpt(brick, rundir):
     silentremove(filename)
     filename = rundir + "pickles/" + subdir + "/runbrick-" + brick + "-writecat.pickle"
     silentremove(filename)
+    filename = rundir + "pickles/" + subdir + "/runbrick-" + brick + "-halos.pickle"
+    silentremove(filename)
+    filename = rundir + "pickles/" + subdir + "/runbrick-" + brick + "-outliers.pickle"
+    silentremove(filename)
+    filename = rundir + "pickles/" + subdir + "/runbrick-" + brick + "-refs.pickle"
+    silentremove(filename)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Removes checkpoint and pickle files for given brick.')

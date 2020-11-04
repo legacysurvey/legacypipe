@@ -26,7 +26,13 @@ SAMPLE_FWHMRANGE   2.0,10.0     # Allowed FWHM range
 SAMPLE_VARIABILITY 0.2          # Allowed FWHM variability (1.0 = 100%)
 SAMPLE_MINSN       20           # Minimum S/N for a source to be used
 SAMPLE_MAXELLIP    0.3          # Maximum (A-B)/(A+B) for a source to be used
- 
+
+SAMPLE_FLAGMASK    0x00fe       # Rejection mask on SExtractor FLAGS
+SAMPLE_WFLAGMASK   0x0000       # Rejection mask on SExtractor FLAGS_WEIGHT
+SAMPLE_IMAFLAGMASK 0xff       # Rejection mask on SExtractor IMAFLAGS_ISO
+BADPIXEL_FILTER    N            # Filter bad-pixels in samples (Y/N) ?
+BADPIXEL_NMAX      0            # Maximum number of bad pixels allowed
+
 #------------------------------- Check-plots ----------------------------------
  
 CHECKPLOT_DEV       PNG         # NULL, XWIN, TK, PS, PSC, XFIG, PNG,

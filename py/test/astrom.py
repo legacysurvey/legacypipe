@@ -4,7 +4,7 @@ import pylab as plt
 import numpy as np
 from legacypipe.survey import LegacySurveyData
 from legacyanalysis.gaiacat import GaiaCatalog
-from legacypipe.survey import GaiaSource, GaiaPosition, LegacySurveyWcs
+from legacypipe.survey import GaiaSource, GaiaPosition
 from astrometry.util.util import Tan
 from astrometry.util.starutil_numpy import mjdtodate
 from tractor import TAITime
@@ -152,7 +152,7 @@ for testcase, ra,dec in [(1, 0.,0.),
     pos1 = GaiaPosition(ra, dec, ref_tai.getValue(), 0., 0., 1000.)
     pos2 = GaiaPosition(ra, dec, ref_tai.getValue(), 0., 0.,  500.)
     #fakewcs1 = Tan(0., 0., W/2., H/2., -cd, 0., 0., cd, float(W), float(H))
-    
+
     MJD = np.linspace(ref_mjd, ref_mjd + 365.25, 200)
     rr1,dd1 = np.zeros(len(MJD)), np.zeros(len(MJD))
     rr2,dd2 = np.zeros(len(MJD)), np.zeros(len(MJD))
@@ -165,17 +165,17 @@ for testcase, ra,dec in [(1, 0.,0.),
         rd = pos2.getPositionAtTime(TAITime(None, mjd=mjd))
         rr2[i] = rd.ra
         dd2[i] = rd.dec
-    
+
     # wrap
     rr1 += -360.*(rr1 > 180)
     rr2 += -360.*(rr2 > 180)
-    
+
     cosdec = np.cos(np.deg2rad(dec))
     dr1 = 3600. * (rr1 - ra) * cosdec
     dd1 = 3600. * (dd1 - dec)
     dr2 = 3600. * (rr2 - ra) * cosdec
     dd2 = 3600. * (dd2 - dec)
-    
+
     plt.clf()
     plt.plot(dr1, dd1, 'k-')
     plt.plot(dr2, dd2, 'r-')
@@ -196,7 +196,7 @@ for testcase, ra,dec,pmra,pmdec in [(10, 0.,0., 1000., 0.),
                                     (12, 45.,45., 1000., 0.),]:
     pos1 = GaiaPosition(ra, dec, ref_tai.getValue(), pmra, pmdec, 0.)
     pos2 = GaiaPosition(ra, dec, ref_tai.getValue(), pmra, pmdec, 1000.)
-    
+
     MJD = np.linspace(ref_mjd, ref_mjd + 365.25*5, 200)
     rr1,dd1 = np.zeros(len(MJD)), np.zeros(len(MJD))
     rr2,dd2 = np.zeros(len(MJD)), np.zeros(len(MJD))
@@ -207,17 +207,17 @@ for testcase, ra,dec,pmra,pmdec in [(10, 0.,0., 1000., 0.),
         rd = pos2.getPositionAtTime(TAITime(None, mjd=mjd))
         rr2[i] = rd.ra
         dd2[i] = rd.dec
-    
+
     # wrap
     rr1 += -360.*(rr1 > 180)
     rr2 += -360.*(rr2 > 180)
-    
+
     cosdec = np.cos(np.deg2rad(dec))
     dr1 = 3600. * (rr1 - ra) * cosdec
     dd1 = 3600. * (dd1 - dec)
     dr2 = 3600. * (rr2 - ra) * cosdec
     dd2 = 3600. * (dd2 - dec)
-    
+
     plt.clf()
     plt.plot(dr1, dd1, 'k-')
     plt.plot(dr2, dd2, 'r-')
@@ -231,8 +231,3 @@ for testcase, ra,dec,pmra,pmdec in [(10, 0.,0., 1000., 0.),
     plt.ylabel('dDec (arcsec)')
     plt.title('Test sources: RA,Dec %g,%g, pm (%g, %g)  parallax 0 / 1 arcsec' % (ra,dec, pmra,pmdec))
     plt.savefig('rd%i.png' % testcase)
-
-
-
-
-

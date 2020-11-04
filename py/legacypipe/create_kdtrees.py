@@ -9,7 +9,6 @@ import tempfile
 #
 
 def create_kdtree(infn, outfn, ccd_cuts):
-
     tempdir_obj = tempfile.TemporaryDirectory(prefix='create-kdtree-')
     tempdir = tempdir_obj.name
 
@@ -47,23 +46,11 @@ def create_kdtree(infn, outfn, ccd_cuts):
     rtn = os.system(cmd)
     assert(rtn == 0)
 
-
-def pre_depthcut():
-    indir = '/global/projecta/projectdirs/cosmo/work/legacysurvey/dr8/DECaLS/'
-    outdir = '/global/cscratch1/sd/dstn/dr8new'
-    bands = 'grizY'
-    for band in bands:
-        infn = indir + 'survey-ccds-decam-%s.fits.gz' % band
-        print('Input:', infn)
-        outfn = outdir + '/survey-ccds-decam-%s.kd.fits' % band
-        create_kdtree(infn, outfn, True)
-
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('infn', help='Input filename (CCDs file)')
     parser.add_argument('outfn', help='Output filename (survey-ccds-X.kd.fits file')
     parser.add_argument('--no-cut', dest='ccd_cuts', default=True, action='store_false')
-
     opt = parser.parse_args()
     create_kdtree(opt.infn, opt.outfn, opt.ccd_cuts)

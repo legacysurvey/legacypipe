@@ -1,11 +1,8 @@
 # Travis-CI.org build script
 
-# Default environment is Ubuntu 12.04.5 LTS "precise"
-# which is pretty old.
+# Default: "precise" is Ubuntu 12.04.5 LTS which is pretty old.
 # "trusty" is Ubuntu 14.04 LTS
-#dist: trusty
 # "xenial" is Ubuntu 16.04 LTS
-#dist: xenial
 # "bionic" is Ubuntu 18.04 LTS
 dist: bionic
 
@@ -18,12 +15,14 @@ python:
   - "3.5"
   - "3.6"
   - "3.7"
-# astrometry.util.timingpool error!
-#  - "3.8"
+  - "3.8"
+# scipy doesn't build
+#  - "3.9-dev"
+#  - "nightly"
 
 install:
+    - python --version
     # ubuntu's source extractor package renames the executable.
-    #- mkdir ~/bin # exists
     - ln -s /usr/bin/sextractor ~/bin/sex
     - export PATH=${PATH}:~/bin
     - pip install Sphinx
@@ -37,9 +36,7 @@ install:
     - pip install astropy
     - pip install photutils
     - pip install coveralls
-    - pip install fitsio==1.1.1
-    #- pip install --no-deps --upgrade git+https://github.com/esheldon/fitsio.git@v0.9.12#egg=fitsio
-    #- pip install -v --no-deps --upgrade git+https://github.com/dstndstn/tractor.git@cython
+    - pip install fitsio==1.1.2
     - pip install cython
     - git clone https://github.com/dstndstn/tractor.git
     - (cd tractor && python setup-cython.py install --with-ceres)
@@ -48,9 +45,7 @@ before_script:
     - if [ ! -d "$HOME/astrometry.net" ]; then (cd $HOME; git clone https://github.com/dstndstn/astrometry.net.git); fi
     - (cd $HOME/astrometry.net && git pull) || (rm -Rf $HOME/astrometry.net && cd $HOME && git clone https://github.com/dstndstn/astrometry.net.git);
     - (cd $HOME/astrometry.net && make && make py)
-
-    - (cd $HOME && git clone https://github.com/legacysurvey/unwise_psf.git && cd unwise_psf && git checkout dr9.2)
-
+    - (cd $HOME && git clone https://github.com/legacysurvey/unwise_psf.git && cd unwise_psf && git checkout dr9.3)
     - mkdir -p $HOME/dust/maps
     - (cd $HOME/dust/maps && wget -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_ngp.fits)
     - (cd $HOME/dust/maps && wget -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_sgp.fits)
@@ -58,13 +53,13 @@ before_script:
 
 script:
     - export PYTHONPATH=${PYTHONPATH}:$(pwd)/py:$HOME/astrometry.net:$HOME/unwise_psf/py
+    - export PATH=${PATH}:$HOME/astrometry.net/solver:$HOME/astrometry.net/util
     - ls $HOME
     - ls $HOME/astrometry.net
     - (cd doc && make)
-    - (cd py && coverage run test/runbrick_test.py travis psfex ceres && coverage run -a test/unit_tests.py)
+    - (cd py && coverage run --concurrency=multiprocessing test/runbrick_test.py psfex ceres && coverage run --concurrency=multiprocessing -a test/unit_tests.py && coverage combine)
 
 after_success:
-    - (cd py && coveralls debug)
     - (cd py && coveralls)
     - (cd py && ./codecov-upload.sh)
 

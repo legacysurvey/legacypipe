@@ -55,7 +55,7 @@ blobs" -- chunks of work that we expect to take a long time to
 complete, so we handle them separately.  There's a "big" version of
 the network_thread that reads from this queue.
 
-  
+
 The overall data flow is:
 
 - one of the input_threads queries the QDO database for the next brick
@@ -295,8 +295,6 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
     last_check_command = time.time()
 
     nworkpackets = nworkbytes = 0
-
-    from collections import Counter
     nwaitingCounter = Counter()
 
     # For keeping track of how much time is spent in different parts of my job
@@ -378,7 +376,7 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
                     print('Finished bricks:')
                 for br,nb in all_finished_bricks.items():
                     print('  %s: %i blobs' % (br, nb))
-                    
+
             print()
             print('Work queue:', inqueue.qsize(), 'out queue:', outqueue.qsize(), 'work sent:', worksent, ', received:', resultsreceived, 'outstanding:', worksent-resultsreceived)
             #print('Outstanding work:')
@@ -405,7 +403,7 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
             cputimes = {}
 
             ## outstanding_work[(br,iblob)] = (worker, tnow)
-            for i,(k,v) in enumerate(outstanding_work.items()):
+            for k,v in outstanding_work.items():
                 (worker,tstart) = v
                 (br,ib) = k
                 # if i < 10:
@@ -625,7 +623,7 @@ def output_thread(queuename, outqueue, checkpointqueue, blobsizes,
             c[brick] += 1
         #if len(c):
         #    print('Read checkpointed results:', c)
-        for brick,n in c.most_common():
+        for brick,_ in c.most_common():
             nblobs,_ = get_brick_nblobs(brick, '(unknown)')
             #print('Brick', brick, ': now', len(allresults[brick]), 'of', nblobs, 'done')
             check_brick_done(brick)
@@ -680,13 +678,13 @@ def get_blob_iter(skipblobs=None,
                   T_clusters=None,
                   custom_brick=False,
                   **kwargs):
-    import numpy as np
     if skipblobs is None:
         skipblobs = []
-    
+
     # drop any cached data before we start pickling/multiprocessing
     survey.drop_cache()
 
+    frozen_galaxies = get_frozen_galaxies(T, blobsrcs, blobs, targetwcs, cat)
     refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
 
     # Create the iterator over blobs to process
@@ -694,10 +692,11 @@ def get_blob_iter(skipblobs=None,
                           targetwcs, tims,
                           cat, bands, plots, ps,
                           reoptimize, iterative, use_ceres,
-                          refmap, 
+                          refmap,
                           large_galaxies_force_pointsource,
                           less_masking,
                           brick,
+                          frozen_galaxies,
                           max_blobsize=max_blobsize, custom_brick=custom_brick,
                           skipblobs=skipblobs)
     return blobiter
@@ -775,8 +774,6 @@ def queue_work(brickname, inqueue, bigqueue, checkpointqueue, opt):
     if opt.big == 'keep':
         big_npix = 10000 * 10000
 
-    mypid = os.getpid()
-
     nq = 0
     for arg in blobiter:
         if arg is None:
@@ -807,6 +804,7 @@ def queue_work(brickname, inqueue, bigqueue, checkpointqueue, opt):
         qitem = PrioritizedItem(priority=priority, item=(br, iblob, picl))
 
         #debug('Queuing blob', (nq+1), 'for brick', brickname, '- queue size ~', inqueue.qsize())
+        #mypid = os.getpid()
         #print('Input proc', mypid, 'queuing blob', (nq+1), 'for brick', brickname, 'qsize ~', inqueue.qsize())
         nq += 1
         dest_queue.put(qitem)

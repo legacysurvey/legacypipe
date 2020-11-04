@@ -30,7 +30,7 @@ class HealpixedCatalog(object):
         fname = self.fnpattern % dict(hp=healpix)
         print('Reading', fname)
         return fits_table(fname)
-    
+
     def get_healpix_catalogs(self, healpixes):
         from astrometry.util.fits import merge_tables
         cats = []
@@ -54,15 +54,14 @@ class HealpixedCatalog(object):
         # Read catalog in those healpixes
         cat = self.get_healpix_catalogs(healpixes)
         # Cut to sources actually within the CCD.
-        ok,xx,yy = wcs.radec2pixelxy(cat.ra, cat.dec)
+        _,xx,yy = wcs.radec2pixelxy(cat.ra, cat.dec)
         cat.x = xx
         cat.y = yy
         onccd = np.flatnonzero((xx >= 1.-margin) * (xx <= W+margin) *
                                (yy >= 1.-margin) * (yy <= H+margin))
         cat.cut(onccd)
         return cat
-    
-    
+
 class ps1cat(HealpixedCatalog):
     ps1band = dict(g=0,r=1,i=2,z=3,Y=4)
     def __init__(self,expnum=None,ccdname=None,ccdwcs=None):
@@ -78,7 +77,7 @@ class ps1cat(HealpixedCatalog):
             raise ValueError('You must have the PS1CAT_DIR environment variable set to point to healpixed PS1 catalogs')
         fnpattern = os.path.join(self.ps1catdir, 'ps1-%(hp)05d.fits')
         super(ps1cat, self).__init__(fnpattern)
-        
+
         if ccdwcs is None:
             from legacypipe.survey import LegacySurveyData
             survey = LegacySurveyData()
@@ -145,7 +144,7 @@ def ps1_to_decam(psmags, band):
     colorterm = coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3
     #print('Using DECam ColorTerm')
     return colorterm
-    
+
 def ps1_to_90prime(psmags, band):
     '''
     psmags: 2-d array (Nstars, Nbands)
@@ -153,7 +152,6 @@ def ps1_to_90prime(psmags, band):
 
     color terms are taken from:
       https://desi.lbl.gov/trac/wiki/BokLegacy/Photometric
-    
     '''
     g_index = ps1cat.ps1band['g']
     i_index = ps1cat.ps1band['i']
@@ -177,7 +175,7 @@ def ps1_to_90prime(psmags, band):
     colorterm = -(coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
     print('Using 90prime ColorTerm')
     return colorterm
-    
+
 def ps1_to_mosaic(psmags, band):
     '''
     psmags: 2-d array (Nstars, Nbands)
@@ -199,4 +197,3 @@ def ps1_to_mosaic(psmags, band):
     colorterm = -(coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
     print('Using Mosaic3 ColorTerm')
     return colorterm
-    
