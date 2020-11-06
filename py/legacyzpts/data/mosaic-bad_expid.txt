@@ -620,8 +620,7 @@
 73691 Low Transparency
 73692 Low Transparency
 73693 Low Transparency
-73694 shifted image CCD3 PIXCNT
-73694 Low Transparency
+73694 Low Transparency, shifted image CCD3 PIXCNT
 73695 Low Transparency
 73696 Low Transparency
 73697 Low Transparency
@@ -997,7 +996,6 @@
 81475 elongated
 81478 slightly elongated
 81479 pixcnt error
-81481 elongated
 81481 badly elongated
 81482 double image / trailing, see [decam-chatter 13635]
 81485 terribly elongated
@@ -1023,7 +1021,6 @@
 
 # 2016-04-09
 81591 double peaked
-81592 elongated but not as bad
 81592 elongated
 81593 badly elongated
 81594 elongated
@@ -1737,7 +1734,6 @@
 3104212 trans=0.258 depfac=0.128
 3104213 expfactor=0.159  0.308    15.699 MzLS_570943_
 3104214 expfactor=0.282  0.379     8.454 MzLS_564633_
-3104215 expfactor=0.048  0.172    49.651 MzLS_564634_
 3104215 trans=0.172 depfac=0.048
 3104216 trans=0.100 depfac=0.018
 3104217 trans=0.073 depfac=0.009
@@ -1962,7 +1958,6 @@
 108952 empty frame, timeout
 108953 saturated zero
 108977 seeing >2 arcsec, poor wather condition, terrible PSF
-108977 seeing >2 arcsec, poor wather condition, terrible PSF
 108978 seeing >2 arcsec, seeing >2 arcsec, poor wather condition, terrible PSF
 108979 poor wather condition, terrible PSF
 108980 seeing >2 arcsec, poor wather condition, terrible PSF
@@ -2047,7 +2042,6 @@
 111472 trailed/asymmetric PSF, see [decam-chatter 14061]
 111474 trans very low (pass 3)
 111475 trans very low (pass 1)
-111479 trans very low (pass 2)
 111479 trans very low (pass 2)
 111482 trans very low (pass 3)
 111483 trans very low (pass 3)
@@ -2803,7 +2797,6 @@
 131066 Depth factor = 0.02
 131067 Depth factor = 0.06
 131068 Depth factor = 0.04
-131069 Depth factor = 0.05 0.21
 131069 Depth factor = 0.05
 131070 Depth factor = 0.15
 131071 Depth factor = 0.19 0.37
@@ -4033,7 +4026,6 @@
 146400 expfactor=0.051  0.176    48.969 MzLS_712749_
 146401 expfactor=0.003  0.046   787.948 MzLS_714062_
 146402 expfactor=0.001  0.021  3379.409 MzLS_710486_
-146403 expfactor=0.003  0.040   886.593 MzLS_709552_
 146403 expfactor=0.00 MzLS_709552
 146404 expfactor=0.01 MzLS_712750_
 146405 expfactor=0.01 MzLS_666523_
@@ -4077,7 +4069,6 @@
 146852 expfactor=0.20 MzLS_727528_
 146864 expfactor=0.266  0.455     5.766 MzLS_709552_
 146904 expfactor=0.29 MzLS_731583_
-147197 expfactor=0.136  0.319    18.328 MzLS_693580_
 
 # 2017-11-16
 147197 expfactor=0.136  0.319    18.328 MzLS_693580_
@@ -4853,7 +4844,6 @@
 154740 expfactor=0.00 MzLS_695259_
 154741 expfactor=0.00 MzLS_688055_
 154742 expfactor=1.40 but large seeing 2.78
-154742 expfr=0.01 MzLS_732938_
 154743 expfactor=0.001  seeing=0.803
 154744 expfactor=0.058  seeing=0.526
 154751 expfactor=0.01 MzLS_732938_
@@ -5062,7 +5052,6 @@
 156605 out of focus - elongated image
 156606 out of focus - elongated image
 156607 out of focus - elongated image
-156610 out of focus - elongated image
 156610 out of focus - elongated image
 156611 out of focus - elongated image
 156612 out of focus - elongated image
