@@ -2302,6 +2302,9 @@ def main(image_list=None,args=None):
     args -- parsed argparser objection from get_parser()
 
     '''
+    from astrometry.util.ttime import MemMeas
+    Time.add_measurement(MemMeas)
+
     from pkg_resources import resource_filename
 
     assert(not args is None)

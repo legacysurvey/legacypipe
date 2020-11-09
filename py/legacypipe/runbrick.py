@@ -743,6 +743,24 @@ def stage_srcs(pixscale=None, targetwcs=None,
         info('Avoiding source detection in', len(T_clusters), 'CLUSTER masks')
         avoid_map = (get_reference_map(targetwcs, T_clusters) != 0)
 
+    if refstars:
+        J = np.flatnonzero(refstars.islargegalaxy * refstars.in_bounds)
+        from legacypipe.reference import get_reference_map
+        info('Avoiding source detection in', len(J), 'large galaxies')
+        gal_avoid_map = (get_reference_map(targetwcs, refstars[J]) != 0)
+        if avoid_map is None:
+            avoid_map = gal_avoid_map
+        else:
+            avoid_map |= gal_avoid_map
+        if plots:
+            import pylab as plt
+            plt.clf()
+            plt.imshow(avoid_map, origin='lower', interpolation='nearest', vmin=0, vmax=1,
+                       cmap='gray')
+            plt.title('Avoid source det map')
+            plt.colorbar()
+            ps.savefig()
+        
     record_event and record_event('stage_srcs: detection maps')
     tnow = Time()
     debug('Rendering detection maps...')
