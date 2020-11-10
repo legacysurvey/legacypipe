@@ -15,8 +15,8 @@ import fitsio
 
 # ADM these are the directory names for the sweep directory,
 # ADM the "light-curves only" directory,
-# ADM and the "remaining Tractor columns not in the sweeps directory".
-# ADM (first is "" as this applies BELOW the level of the /sweep directory.
+# ADM and the "extra Tractor columns not in the sweeps directory".
+# ADM (these apply BELOW the level of the /sweep directory.
 outdirnames = ["X.X", "X.X-lightcurves", "X.X-extra"]
 
 def main():
@@ -97,7 +97,7 @@ def main():
                 sweepdt = [dt for dt in SWEEP_DTYPE.descr if 'LC' not in dt[0]]
                 # ADM    the SWEEP_DTYPE columns (just light-curves).
                 lcdt = uniqid + [dt for dt in SWEEP_DTYPE.descr if 'LC' in dt[0]]
-                # ADM    the remaining columns.
+                # ADM    the remaining "extra" columns.
                 alldt = uniqid + [dt for dt in ALL_DTYPE.descr if dt[0] not in SWEEP_DTYPE.names]
                 ender = [".fits", "-lc.fits", "-ex.fits"]
                 for dt, odn, end in zip([sweepdt, lcdt, alldt], outdirnames, ender):
@@ -333,7 +333,7 @@ def read_region(brickname, filename, bricksdesc):
 SWEEP_DTYPE = np.dtype([
 # ADM everything IN this list will be written to sweep files
 # ADM with the light-curve columns spun off to their own files.
-# ADM anything NOT in this list will be written to a separate file set.
+# ADM anything NOT in this list will be written to an "extra" file set.
 #   ('BRICK_PRIMARY', '?'),
     ('RELEASE', '>i2'),
     ('BRICKID', '>i4'),
