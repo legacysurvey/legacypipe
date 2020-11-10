@@ -17,7 +17,7 @@ import fitsio
 # ADM the "light-curves only" directory,
 # ADM and the "remaining Tractor columns not in the sweeps directory".
 # ADM (first is "" as this applies BELOW the level of the /sweep directory.
-outdirnames = ["", "lightcurves", "remainder"]
+outdirnames = ["X.X", "X.X-lightcurves", "X.X-extra"]
 
 def main():
     ns = parse_args()
@@ -89,18 +89,20 @@ def main():
                      format=format)
 
             if len(data) > 0:
-                # ADM write our separate sweeps for:
+                # ADM the columns to always include to form a unique ID.
+                uniqid = [dt for dt in SWEEP_DTYPE.descr if
+                          dt[0]=="RELEASE" or dt[0]=="BRICKID" or dt[0]=="OBJID"]
+                # ADM write out separate sweeps for:
                 # ADM    the SWEEP_DTYPE columns (without light-curves).
                 sweepdt = [dt for dt in SWEEP_DTYPE.descr if 'LC' not in dt[0]]
                 # ADM    the SWEEP_DTYPE columns (just light-curves).
-                lcdt = [dt for dt in SWEEP_DTYPE.descr if 'LC' in dt[0]]
+                lcdt = uniqid + [dt for dt in SWEEP_DTYPE.descr if 'LC' in dt[0]]
                 # ADM    the remaining columns.
-                alldt = [dt for dt in ALL_DTYPE.descr if dt[0] not in SWEEP_DTYPE.names]
-                for dt, preform in zip([sweepdt, lcdt, alldt], outdirnames):
-                    dest = os.path.join(ns.dest, filename)
-                    if len(preform) > 0:
-                        dest = os.path.join(ns.dest, preform,
-                                            "{}-{}".format(preform, filename))
+                alldt = uniqid + [dt for dt in ALL_DTYPE.descr if dt[0] not in SWEEP_DTYPE.names]
+                ender = [".fits", "-lc.fits", "-ex.fits"]
+                for dt, odn, end in zip([sweepdt, lcdt, alldt], outdirnames, ender):
+                    fn = filename.replace(".fits", end)
+                    dest = os.path.join(ns.dest, odn, fn)
                     if len(dt) > 0:
                         newdata = np.empty(len(data), dtype=dt)
                         for col in newdata.dtype.names:
@@ -480,6 +482,12 @@ SWEEP_DTYPE = np.dtype([
     ('LC_NOBS_W2', '>i2', (15,)),
     ('LC_MJD_W1', '>f8', (15,)),
     ('LC_MJD_W2', '>f8', (15,)),
+    ('LC_FRACFLUX_W1', '>f4', (15,)),
+    ('LC_FRACFLUX_W2', '>f4', (15,)),
+    ('LC_RCHISQ_W1', '>f4', (15,)),
+    ('LC_RCHISQ_W2', '>f4', (15,)),
+    ('LC_EPOCH_INDEX_W1', '>i2', (15,)),
+    ('LC_EPOCH_INDEX_W2', '>i2', (15,)),
 #    ('FRACDEV', '>f4'),
 #    ('FRACDEV_IVAR', '>f4'),
     ('SHAPE_R', '>f4'),
