@@ -81,9 +81,9 @@ def add_brick_data(T, north):
     from desitarget.io import desitarget_resolve_dec
     decsplit = desitarget_resolve_dec()
     if north:
-        T.survey_primary = (ll > 0) * (T.dec >= decsplit)
+        T.survey_primary = (bb > 0) * (T.dec >= decsplit)
     else:
-        T.survey_primary = np.logical_not((ll > 0) * (T.dec >= decsplit))
+        T.survey_primary = np.logical_not((bb > 0) * (T.dec >= decsplit))
 
     print('Looking up in_desi')
     from desimodel.io import load_tiles
