@@ -61,6 +61,36 @@ def colorbar_axes(parent, frac=0.12, pad=0.03, aspect=20):
     parent.get_figure().sca(parent)
     return cax
 
+def add_brick_data(T, north):
+    B = fits_table('survey-bricks.fits.gz')
+    print('Looking up brick bounds')
+    ibrick = dict([(n,i) for i,n in enumerate(B.brickname)])
+    bi = np.array([ibrick[n] for n in T.brickname])
+    T.brickid = B.brickid[bi]
+    T.ra1  = B.ra1[bi]
+    T.ra2  = B.ra2[bi]
+    T.dec1 = B.dec1[bi]
+    T.dec2 = B.dec2[bi]
+    assert(np.all(T.ra2 > T.ra1))
+    T.area = ((T.ra2 - T.ra1) * (T.dec2 - T.dec1) *
+              np.cos(np.deg2rad((T.dec1 + T.dec2) / 2.)))
+
+    print('Resolving north/south split')
+    from astrometry.util.starutil_numpy import radectolb
+    ll,bb = radectolb(T.ra, T.dec)
+    from desitarget.io import desitarget_resolve_dec
+    decsplit = desitarget_resolve_dec()
+    if north:
+        T.survey_primary = (ll > 0) * (T.dec >= decsplit)
+    else:
+        T.survey_primary = np.logical_not((ll > 0) * (T.dec >= decsplit))
+
+    print('Looking up in_desi')
+    from desimodel.io import load_tiles
+    from desimodel.footprint import is_point_in_desi
+    desitiles = load_tiles()
+    T.in_desi = is_point_in_desi(desitiles, T.ra, T.dec)
+
 def depth_hist(opt):
     filename = opt.files[0]
     T = fits_table(filename)
@@ -582,6 +612,7 @@ def main():
     parser.add_argument('-o', '--out', dest='outfn', help='Output filename',
                       default='TMP/nexp.fits')
     parser.add_argument('--merge', action='store_true', help='Merge sub-tables')
+    parser.add_argument('--north', action='store_true', default=False, help='Northern survey?')
     parser.add_argument('--plot', action='store_true', help='Plot results')
     parser.add_argument('--depth-hist', action='store_true', help='Depth histograms')
     parser.add_argument('files', metavar='nexp-file.fits.gz', nargs='+',
@@ -598,12 +629,16 @@ def main():
             print(fn, '->', len(T))
             TT.append(T)
         T = merge_tables(TT)
+
+        add_brick_data(T, opt.north)
+
         T.writeto(opt.outfn)
         print('Wrote', opt.outfn)
         return
 
     if opt.plot:
         plots(opt)
+        depth_hist(opt)
         return
     if opt.depth_hist:
         depth_hist(opt)
