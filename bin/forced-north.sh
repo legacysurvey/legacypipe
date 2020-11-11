@@ -1,6 +1,6 @@
 #! /bin/bash
 
-DIR=/global/project/projectdirs/cosmo/work/legacysurvey/dr8
+DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr9m
 
 # Don't add ~/.local/ to Python's sys.path
 export PYTHONNOUSERSITE=1
@@ -17,7 +17,7 @@ outfn=$4
 
 exppre=$(echo $expnum | cut -c 1-3)
 
-outdir=$CSCRATCH/dr8-forced
+outdir=$CSCRATCH/dr9-forced
 
 logdir=$outdir/forced/logs/$camera-$exppre
 mkdir -p $logdir
@@ -36,6 +36,7 @@ let usemem=${maxmem}*${ncores}/32
 
 echo "Logging to $logfile"
 python -u legacypipe/forced_photom.py --survey-dir $DIR --catalog-dir-north $DIR/north --catalog-dir-south $DIR/south --catalog-resolve-dec-ngc 32.375 \
-    --skip-calibs --apphot --derivs --camera $camera \
-    $expnum $ccdname $outdir/$outfn > $logfile 2>&1
+       --skip-calibs --apphot --derivs --camera $camera \
+       --threads $ncores \
+       $expnum $ccdname $outdir/$outfn > $logfile 2>&1
 
