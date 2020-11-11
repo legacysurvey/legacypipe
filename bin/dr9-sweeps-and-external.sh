@@ -38,6 +38,8 @@ export SDSSDIR=/global/cfs/cdirs/sdss/data/sdss/
 
 # ADM a sensible number of processors on which to run.
 export NUMPROC=$(($SLURM_CPUS_ON_NODE / 2))
+# ADM the sweeps need more memory since we started to write three files.
+export SWEEPS_NUMPROC=$(($SLURM_CPUS_ON_NODE / 5))
 
 # ADM run once for each of the DECaLS and MzLS/BASS surveys.
 for survey in north south
@@ -67,7 +69,7 @@ do
     # ADM which usually means tthere are some discrepancies in the data model!
     echo running sweeps for the $survey
     time srun -N 1 python $LEGACYPIPE_DIR/bin/generate-sweep-files.py \
-         -v --numproc $NUMPROC -f fits -F $TRACTOR_FILELIST --schema blocks \
+         -v --numproc $SWEEPS_NUMPROC -f fits -F $TRACTOR_FILELIST --schema blocks \
          -d $BRICKSFILE $TRACTOR_INDIR $SWEEP_OUTDIR
     echo done running sweeps for the $survey
 
