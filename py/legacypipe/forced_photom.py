@@ -61,7 +61,7 @@ def get_parser():
                         help='Include RA,Dec derivatives in forced photometry?')
 
     parser.add_argument('--agn', action='store_true',
-                        help='Add a point source to the center of each DEV/EXP/COMP galaxy?')
+                        help='Add a point source to the center of each DEV/EXP/SER galaxy?')
 
     parser.add_argument('--constant-invvar', action='store_true',
                         help='Set inverse-variance to a constant across the image?')

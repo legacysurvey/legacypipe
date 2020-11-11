@@ -8,8 +8,8 @@ from collections import Counter
 
 import matplotlib
 matplotlib.use('Agg')
-matplotlib.rc('text', usetex=True)
-matplotlib.rc('font', family='serif')
+#matplotlib.rc('text', usetex=True)
+#matplotlib.rc('font', family='serif')
 import pylab as plt
 
 from astrometry.util.fits import fits_table
@@ -60,6 +60,76 @@ def colorbar_axes(parent, frac=0.12, pad=0.03, aspect=20):
     cax.set_aspect(aspect, anchor=((0.0, 0.5)), adjustable='box')
     parent.get_figure().sca(parent)
     return cax
+
+def depth_hist(opt):
+    filename = opt.files[0]
+    T = fits_table(filename)
+    north = 'north' in filename
+
+    if north:
+        surveys = dict(g='BASS', r='BASS', z='MzLS')
+        hemi='north'
+    else:
+        surveys = dict(g='DECaLS', r='DECaLS', z='DECaLS')
+        hemi='south'
+    dr = 'DR9'
+
+    print('Read', len(T), 'bricks summarized in', opt.files[0])
+    import pylab as plt
+    import matplotlib
+
+    B = fits_table('survey-bricks.fits.gz')
+    print('Looking up brick bounds')
+    ibrick = dict([(n,i) for i,n in enumerate(B.brickname)])
+    bi = np.array([ibrick[n] for n in T.brickname])
+    T.ra1 = B.ra1[bi]
+    T.ra2 = B.ra2[bi]
+    T.dec1 = B.dec1[bi]
+    T.dec2 = B.dec2[bi]
+    assert(np.all(T.ra2 > T.ra1))
+    T.area = ((T.ra2 - T.ra1) * (T.dec2 - T.dec1) *
+              np.cos(np.deg2rad((T.dec1 + T.dec2) / 2.)))
+    del B
+    del bi
+    del ibrick
+
+    print('Total sources:', sum(T.nobjs))
+    print('Approx area:', len(T)/16., 'sq deg')
+    print('Area:', np.sum(T.area))
+    print('g,r,z coverage:', sum((T.nexp_g > 0) * (T.nexp_r > 0) * (T.nexp_z > 0)) / 16.)
+
+    depthlo,depthhi = 21.5, 25.5
+    for band in 'grz':
+        depth = T.get('psfdepth_%s' % band)
+        nexp = T.get('nexp_%s' % band)
+        lo,hi = depthlo-0.05, depthhi+0.05
+        nbins = 1 + int((depthhi - depthlo) / 0.1)
+        ha = dict(histtype='step',  bins=nbins, range=(lo,hi))
+        ccmap = dict(g='g', r='r', z='m')
+        plt.clf()
+        I = np.flatnonzero((depth > 0) * (nexp == 1))
+        plt.hist(depth[I], label='%s band, 1 exposure' % band,
+                 color=ccmap[band], lw=1,
+                 weights=T.area[I],
+                 **ha)
+        I = np.flatnonzero((depth > 0) * (nexp == 2))
+        plt.hist(depth[I], label='%s band, 2 exposures' % band,
+                 color=ccmap[band], lw=2, alpha=0.5,
+                 weights=T.area[I],
+                 **ha)
+        I = np.flatnonzero((depth > 0) * (nexp >= 3))
+        plt.hist(depth[I], label='%s band, 3+ exposures' % band,
+                 color=ccmap[band], lw=3, alpha=0.3,
+                 weights=T.area[I],
+                 **ha)
+
+        plt.title('%s, %s PSF depths, %s band' % (surveys[band], dr, band))
+        plt.xlabel('5-sigma PSF depth (mag)')
+        plt.ylabel('Square degrees')
+        plt.xlim(lo, hi)
+        plt.xticks(np.arange(depthlo, depthhi+0.01, 0.4))
+        plt.legend(loc='upper left')
+        plt.savefig('depth-hist-%s-%s-%s.png' % (band, dr.lower(), hemi))
 
 def plots(opt):
     from astrometry.util.plotutils import antigray
@@ -513,6 +583,7 @@ def main():
                       default='TMP/nexp.fits')
     parser.add_argument('--merge', action='store_true', help='Merge sub-tables')
     parser.add_argument('--plot', action='store_true', help='Plot results')
+    parser.add_argument('--depth-hist', action='store_true', help='Depth histograms')
     parser.add_argument('files', metavar='nexp-file.fits.gz', nargs='+',
                         help='List of nexp files to process')
 
@@ -533,6 +604,9 @@ def main():
 
     if opt.plot:
         plots(opt)
+        return
+    if opt.depth_hist:
+        depth_hist(opt)
         return
 
     fns.sort()
