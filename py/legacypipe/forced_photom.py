@@ -359,6 +359,20 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     print('Read image:', tnow-tlast)
     tlast = tnow
 
+    # The "north" and "south" directories often don't have
+    # 'survey-bricks" files of their own -- use the 'survey' one
+    # instead.
+    if catsurvey_south is not None:
+        try:
+            catsurvey_south.get_bricks_readonly()
+        except:
+            catsurvey_south.bricks = survey.get_bricks_readonly()
+    if catsurvey_north is not None:
+        try:
+            catsurvey_north.get_bricks_readonly()
+        except:
+            catsurvey_north.bricks = survey.get_bricks_readonly()
+
     # Apply outlier masks
     if True:
         # Outliers masks are computed within a survey (north/south for dr8), and are stored
