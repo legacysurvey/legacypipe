@@ -1,6 +1,6 @@
 #! /bin/bash
 
-DIR=/global/project/projectdirs/cosmo/work/legacysurvey/dr8
+DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr9m
 
 # Don't add ~/.local/ to Python's sys.path
 export PYTHONNOUSERSITE=1
@@ -17,7 +17,7 @@ outfn=$4
 
 exppre=$(echo $expnum | cut -c 1-3)
 
-outdir=$CSCRATCH/dr8-forced
+outdir=$CSCRATCH/dr9-forced
 
 logdir=$outdir/forced/logs/$camera-$exppre
 mkdir -p $logdir

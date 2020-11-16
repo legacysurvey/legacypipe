@@ -61,7 +61,7 @@ def get_parser():
                         help='Include RA,Dec derivatives in forced photometry?')
 
     parser.add_argument('--agn', action='store_true',
-                        help='Add a point source to the center of each DEV/EXP/COMP galaxy?')
+                        help='Add a point source to the center of each DEV/EXP/SER galaxy?')
 
     parser.add_argument('--constant-invvar', action='store_true',
                         help='Set inverse-variance to a constant across the image?')
@@ -358,6 +358,20 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     tnow = Time()
     print('Read image:', tnow-tlast)
     tlast = tnow
+
+    # The "north" and "south" directories often don't have
+    # 'survey-bricks" files of their own -- use the 'survey' one
+    # instead.
+    if catsurvey_south is not None:
+        try:
+            catsurvey_south.get_bricks_readonly()
+        except:
+            catsurvey_south.bricks = survey.get_bricks_readonly()
+    if catsurvey_north is not None:
+        try:
+            catsurvey_north.get_bricks_readonly()
+        except:
+            catsurvey_north.bricks = survey.get_bricks_readonly()
 
     # Apply outlier masks
     if True:
