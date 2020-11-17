@@ -359,6 +359,13 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     del sedmap
     peaks = (sedsn > nsigma)
 
+    info(np.sum(np.logical_not(np.isfinite(sedsn))), 'SED S/N pixels are NaN')
+
+    import fitsio
+    fn = 'sed-sn-%s.fits' % sedname.lower()
+    fitsio.write(fn, sedsn)
+    info('Wrote', fn)
+
     def saddle_level(Y):
         # Require a saddle that drops by (the larger of) "saddle"
         # sigma, or 10% of the peak height.
@@ -383,6 +390,9 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     hotblobs,nhot = label(binary_fill_holes(
             binary_dilation(peaks, iterations=dilate)))
 
+    info('Number of pixels above threshold:', np.sum(peaks))
+    info('Number of blobs:', nhot)
+    
     # find pixels that are larger than their 8 neighbors
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[0:-2,1:-1])
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[2:  ,1:-1])
@@ -441,6 +451,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     ally0 = [sy.start for sy,sx in allslices]
     allx0 = [sx.start for sy,sx in allslices]
 
+    info('At lowest saddle level,', len(allslices), 'blobs')
+    
     # brightest peaks first
     py,px = np.nonzero(peaks)
     I = np.argsort(-sedsn[py,px])
@@ -501,6 +513,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # search within its "allblob", which is defined by the lowest
     # saddle.
     info('Found', len(px), 'potential peaks')
+    info('Of those,', np.sum(this_veto_map[py,px]), 'are in initial veto map')
     nveto = 0
     nsaddle = 0
     naper = 0

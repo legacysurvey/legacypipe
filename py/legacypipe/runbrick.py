@@ -691,6 +691,9 @@ def stage_srcs(pixscale=None, targetwcs=None,
     from scipy.ndimage.morphology import binary_dilation
     from scipy.ndimage.measurements import label
 
+    import legacypipe.detection
+    print('legacypipe.detection:', legacypipe.detection.__file__)
+    
     record_event and record_event('stage_srcs: starting')
     _add_stage_version(version_header, 'SRCS', 'srcs')
     tlast = Time()
@@ -743,6 +746,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
         info('Avoiding source detection in', len(T_clusters), 'CLUSTER masks')
         avoid_map = (get_reference_map(targetwcs, T_clusters) != 0)
 
+    gal_avoid_map = None
     if refstars:
         J = np.flatnonzero(refstars.islargegalaxy * refstars.in_bounds)
         from legacypipe.reference import get_reference_map
@@ -770,6 +774,13 @@ def stage_srcs(pixscale=None, targetwcs=None,
     debug('Detmaps:', tnow-tlast)
     tlast = tnow
     record_event and record_event('stage_srcs: sources')
+
+    if gal_avoid_map is not None:
+        debug('Zeroing detection maps inside galaxy veto map')
+        for detmap in detmaps:
+            detmap[gal_avoid_map] = 0.
+        for satmap in satmaps:
+            satmap[gal_avoid_map] = False
 
     # Expand the mask around saturated pixels to avoid generating
     # peaks at the edge of the mask.
@@ -2969,7 +2980,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               checkpoint_filename=None,
               checkpoint_period=None,
               prereqs_update=None,
-              stagefunc = None,
+              stagefunc=None, 
+              stagefunc_vars=None,
               ):
     '''Run the full Legacy Survey data reduction pipeline.
 
@@ -3148,7 +3160,10 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     initargs.update(brickname=brick, survey=survey)
 
     if stagefunc is None:
-        stagefunc = CallGlobalTime('stage_%s', globals())
+        G = globals()
+        if stagefunc_vars is not None:
+            G.update(stagefunc_vars)
+        stagefunc = CallGlobalTime('stage_%s', G)
 
     plot_base_default = 'brick-%(brick)s'
     if plot_base is None:
@@ -3320,7 +3335,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     if prereqs_update is not None:
         prereqs.update(prereqs_update)
-
+    print('prereqs:', prereqs)
+    
     initargs.update(W=width, H=height, pixscale=pixscale,
                     target_extent=zoom)
     if bands is not None:
