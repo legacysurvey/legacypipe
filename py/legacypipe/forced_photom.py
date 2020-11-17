@@ -245,7 +245,7 @@ def main(survey=None, opt=None, args=None):
     order = ['release', 'brickid', 'brickname', 'objid', 'camera', 'expnum', 'ccdname',
              'filter', 'mjd', 'exptime', 'psfsize', 'ccd_cuts', 'airmass', 'sky',
              'psfdepth', 'galdepth',
-             'ra', 'dec', 'flux', 'flux_ivar', 'fracflux', 'rchisq', 'fracmasked',
+             'ra', 'dec', 'flux', 'flux_ivar', 'fracflux', 'rchisq', 'fracmasked', 'fracin',
              'apflux', 'apflux_ivar', 'x', 'y', 'dqmask', 'dra', 'ddec', 'dra_ivar', 'ddec_ivar']
     columns = [c for c in order if c in columns]
 
@@ -730,11 +730,9 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         F.flux_ivar = R.IV[:N].astype(np.float32)
 
         F.fracflux = R.fitstats.profracflux[:N].astype(np.float32)
+        F.fracin   = R.fitstats.fracin     [:N].astype(np.float32)
         F.rchisq   = R.fitstats.prochi2    [:N].astype(np.float32)
-        try:
-            F.fracmasked = R.fitstats.promasked[:N].astype(np.float32)
-        except:
-            print('No "fracmasked" available (only in recent Tractor versions)')
+        F.fracmasked = R.fitstats.promasked[:N].astype(np.float32)
 
         if derivs:
             F.flux_dra  = np.zeros(len(F), np.float32)
