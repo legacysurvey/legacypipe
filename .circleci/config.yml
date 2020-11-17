@@ -177,12 +177,52 @@ jobs:
               python3.8 test/unit_tests.py
               python3.8 test/runbrick_test.py
 
+  build-from-docker-u2004-py3.8:
+    docker:
+      - image: legacysurvey/circleci-build-ubuntu20.04
+    steps:
+      - run:
+          name: CPU info
+          command: cat /proc/cpuinfo
+      - checkout
+      - run:
+          name: Unit tests
+          command: |
+              cd py
+              export PYTHONPATH=${PYTHONPATH}:$(pwd)
+              python3.8 -c "import sys; print(sys.path)"
+              python3.8 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
+              #coverage run test/unit_tests.py
+              #coverage run -a test/runbrick_test.py
+              python3.8 test/unit_tests.py
+              python3.8 test/runbrick_test.py
+
+  build-from-docker-u2004-py3.9:
+    docker:
+      - image: legacysurvey/circleci-build-ubuntu20.04
+    steps:
+      - run:
+          name: CPU info
+          command: cat /proc/cpuinfo
+      - checkout
+      - run:
+          name: Unit tests
+          command: |
+              cd py
+              export PYTHONPATH=${PYTHONPATH}:$(pwd)
+              python3.9 -c "import sys; print(sys.path)"
+              python3.9 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
+              #coverage run test/unit_tests.py
+              #coverage run -a test/runbrick_test.py
+              python3.9 test/unit_tests.py
+              python3.9 test/runbrick_test.py
+
 workflows:
   version: 2
   build:
     jobs:
-      - "build"
-      - "build-from-docker"
       - "build-from-docker-py3.6"
       - "build-from-docker-py3.7"
       - "build-from-docker-py3.8"
+      - "build-from-docker-u2004-py3.8"
+      - "build-from-docker-u2004-py3.9"
