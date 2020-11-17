@@ -117,9 +117,72 @@ jobs:
               python3 test/unit_tests.py
               python3 test/runbrick_test.py
 
+  build-from-docker-py3.6:
+    docker:
+      - image: legacysurvey/circleci-build:beta
+    steps:
+      - run:
+          name: CPU info
+          command: cat /proc/cpuinfo
+      - checkout
+      - run:
+          name: Unit tests
+          command: |
+              cd py
+              export PYTHONPATH=${PYTHONPATH}:$(pwd)
+              python3.6 -c "import sys; print(sys.path)"
+              python3.6 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
+              #coverage run test/unit_tests.py
+              #coverage run -a test/runbrick_test.py
+              python3.6 test/unit_tests.py
+              python3.6 test/runbrick_test.py
+
+  build-from-docker-py3.7:
+    docker:
+      - image: legacysurvey/circleci-build:beta
+    steps:
+      - run:
+          name: CPU info
+          command: cat /proc/cpuinfo
+      - checkout
+      - run:
+          name: Unit tests
+          command: |
+              cd py
+              export PYTHONPATH=${PYTHONPATH}:$(pwd)
+              python3.7 -c "import sys; print(sys.path)"
+              python3.7 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
+              #coverage run test/unit_tests.py
+              #coverage run -a test/runbrick_test.py
+              python3.7 test/unit_tests.py
+              python3.7 test/runbrick_test.py
+
+  build-from-docker-py3.8:
+    docker:
+      - image: legacysurvey/circleci-build:beta
+    steps:
+      - run:
+          name: CPU info
+          command: cat /proc/cpuinfo
+      - checkout
+      - run:
+          name: Unit tests
+          command: |
+              cd py
+              export PYTHONPATH=${PYTHONPATH}:$(pwd)
+              python3.8 -c "import sys; print(sys.path)"
+              python3.8 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
+              #coverage run test/unit_tests.py
+              #coverage run -a test/runbrick_test.py
+              python3.8 test/unit_tests.py
+              python3.8 test/runbrick_test.py
+
 workflows:
   version: 2
   build:
     jobs:
       - "build"
       - "build-from-docker"
+      - "build-from-docker-py3.6"
+      - "build-from-docker-py3.7"
+      - "build-from-docker-py3.8"
