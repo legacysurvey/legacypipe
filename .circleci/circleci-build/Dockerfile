@@ -34,7 +34,10 @@ RUN apt -y update && apt install -y apt-utils && \
     python3-pip \
     python3-pil \
     python3-tk \
-    python3-setuptools python3-wheel \
+    python3-setuptools \
+    python3-wheel \
+    python3.7 \
+    python3.8 \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # multiprocessing.pool from official python 3.6.8 release
@@ -56,8 +59,12 @@ RUN for x in \
     astropy \
     photutils \
     zmq \
-    ; do pip3 install --no-cache-dir $x; done
-# psycopg2 \
+    ; do \
+    python3.6 -m pip install $x; \
+    python3.7 -m pip install $x; \
+    python3.8 -m pip install $x; \
+    done; && \
+    rm -R /root/.cache/pip
 
 RUN mkdir /src
 WORKDIR /src
@@ -66,9 +73,13 @@ WORKDIR /src
 RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
     && make \
-    && make py \
     && make extra \
-    && make install INSTALL_DIR=/usr/local \
+    && make py PYTHON=python3.6 \
+    && make py PYTHON=python3.7 \
+    && make py PYTHON=python3.8 \
+    && make install INSTALL_DIR=/usr/local PYTHON=python3.6 \
+    && make install INSTALL_DIR=/usr/local PYTHON=python3.7 \
+    && make install INSTALL_DIR=/usr/local PYTHON=python3.8 \
     && make clean
 
 ENV PYTHON=python3
@@ -76,11 +87,13 @@ ENV PYTHON=python3
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && python3 setup-cython.py --with-ceres install --home /usr/local \
+    && python3.6 setup-cython.py --with-ceres install --home /usr/local \
+    && python3.7 setup-cython.py --with-ceres install --home /usr/local \
+    && python3.8 setup-cython.py --with-ceres install --home /usr/local \
     && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so") \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
-    
+
 # python = python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
