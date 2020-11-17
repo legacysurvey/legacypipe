@@ -552,8 +552,8 @@ def make_coadds(tims, bands, targetwcs,
 
             
         if xy or allmasks or anymasks:
-            # unless there were no images there...
-            andmask[nobs == 0] = 0
+            # If there is no coverage, andmask remains = allbits; fix that.
+            andmask[ormask == 0] = 0
 
         if allmasks:
             C.allmasks.append(andmask)
