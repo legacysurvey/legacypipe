@@ -114,13 +114,13 @@ do
          $EXTERNAL_OUTDIR/survey-$dr-$survey-dr16Q-v4.fits --copycols MJD PLATE FIBERID
     echo done making $EXTERNAL_OUTDIR/survey-$dr-$survey-dr16Q-v4.fits
 
-    echo making $EXTERNAL_OUTDIR/survey-$dr-$survey-superset-dr16q-v3.fits
+    echo making $EXTERNAL_OUTDIR/survey-$dr-$survey-superset-dr16Q-v3.fits
     time srun -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
          -v --numproc $NUMPROC -f fits -F $TRACTOR_FILELIST \
 	 $SDSSDIR/dr16/eboss/qso/DR16Q/DR16Q_Superset_v3.fits \
          $TRACTOR_INDIR \
-         $EXTERNAL_OUTDIR/survey-$dr-$survey-superset-dr16q-v3.fits --copycols MJD PLATE FIBERID
-    echo done making $EXTERNAL_OUTDIR/survey-$dr-$survey-superset-dr16q-v3.fits
+         $EXTERNAL_OUTDIR/survey-$dr-$survey-superset-dr16Q-v3.fits --copycols MJD PLATE FIBERID
+    echo done making $EXTERNAL_OUTDIR/survey-$dr-$survey-superset-dr16Q-v3.fits
 done
 
 wait
