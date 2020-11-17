@@ -339,12 +339,12 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
 
 def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                 ccd, opt, zoomslice, ps):
+    from functools import reduce
+    from legacypipe.bits import DQ_BITS
+
     tlast = Time()
-
-    print('Opt:', opt)
-
+    #print('Opt:', opt)
     im = survey.get_image_object(ccd)
-
     if opt.do_calib:
         im.run_calibs(splinesky=True)
 
@@ -502,8 +502,11 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     F.y = (y-1).astype(np.float32)
 
     h,w = tim.shape
-    F.dqmask = tim.dq[np.clip(np.round(F.y).astype(int), 0, h-1),
-                      np.clip(np.round(F.x).astype(int), 0, w-1)]
+    ix = np.round(F.x).astype(int)
+    iy = np.round(F.y).astype(int)
+    F.dqmask = tim.dq[np.clip(iy, 0, h-1), np.clip(ix, 0, w-1)]
+    # Set an OUT-OF-BOUNDS bit.
+    F.dqmask[reduce(np.logical_or, [ix < 0, ix >= w, iy < 0, iy >= h])] |= DQ_BITS['edge2']
 
     program_name = sys.argv[0]
     ## FIXME -- from catalog?
