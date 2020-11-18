@@ -1,142 +1,141 @@
 
 #EXPID  Comments
 
-# Bad data from 28/29 Oct 2015
-59957 shifted image, CCD2
-59951 shifted image, CCD2
-59958 shifted image, CCD2 and CCD3
-59961 shifted image, CCD3
-59962 shifted image, CCD2
-59968 shifted image, CCD2 and CCD3
-59970 shifted image, CCD2
-59974 shifted image, CCD2
-59975 shifted image, CCD2
+# 2015-10-28
+#59957 shifted image, CCD2
+#59951 shifted image, CCD2
+#59958 shifted image, CCD2 and CCD3
+#59961 shifted image, CCD3
+#59962 shifted image, CCD2
+#59968 shifted image, CCD2 and CCD3
+#59970 shifted image, CCD2
+#59974 shifted image, CCD2
+#59975 shifted image, CCD2
 
-# Bad data from 18/19 Nov 2015
-60211 shifted image
-60214 shifted image
-60224 shifted image
-60236 shifted image
-60244 shifted image
-60252 readout timeout
-60374 trailed image
-60381 very poor seeing
-60385 shifted image
-60395 4MAPS not settled, bad PSF
-60409 trailed
-60423 shifted image
-60436 4MAPS not settled, bad PSF
-60437 4MAPS not settled, bad PSF
-60437 4MAPS not settled, bad PSF
-60438 4MAPS not settled, bad PSF
-60439 4MAPS not settled, bad PSF
-60440 4MAPS not settled, bad PSF
-60411 shifted image
-60412 shifted image
-60413 shifted image
-60414 shifted image
-60415 shifted image
-60416 shifted image
-60417 shifted image
-60418 shifted image
-60419 shifted image
-60420 shifted image
-60421 shifted image
-60422 shifted image
-60423 shifted image
-60424 shifted image
-60425 shifted image
-60426 shifted image
-60427 shifted image
-60428 shifted image
-60429 shifted image
-60430 shifted image
-60431 shifted image
-60432 shifted image
-60433 shifted image
-60434 shifted image
-60435 shifted image
-60436 shifted image
-60437 shifted image
-60438 shifted image
-60439 shifted image
-60440 shifted image
-60441 shifted image
-60442 shifted image
-60443 shifted image
-60444 shifted image
-60445 shifted image
-60453 shifted image
-60456 shifted image
+# 2015-11-18
+#60211 shifted image
+#60214 shifted image
+#60224 shifted image
+#60236 shifted image
+#60244 shifted image
+#60252 readout timeout
+151119075127 trailed image
+151119080208 very poor seeing
+151119082905 shifted image
+151119085014 4MAPS not settled, bad PSF
+151119090722 trailed
+151119090930 shifted image
+151119091031 shifted image
+151119091143 shifted image
+151119091253 shifted image
+151119091346 shifted image
+151119091454 shifted image
+151119091603 shifted image
+151119091657 shifted image
+151119091806 shifted image
+151119091920 shifted image
+151119092016 shifted image
+151119092109 shifted image
+#60423 shifted image
+#60424 shifted image
+151119094451 shifted image
+151119094614 shifted image
+151119094725 shifted image
+151119095108 shifted image
+151119095225 shifted image
+151119095406 shifted image
+151119095515 shifted image
+151119095617 shifted image
+151119095738 shifted image
+151119095821 shifted image
+151119095910 shifted image
+151119100030 4MAPS not settled, bad PSF, shifted image
+151119100150 4MAPS not settled, bad PSF, shifted image
+151119100302 4MAPS not settled, bad PSF, shifted image
+151119100408 4MAPS not settled, bad PSF, shifted image
+151119100524 4MAPS not settled, bad PSF, shifted image
+151119100615 shifted image
+151119100653 shifted image
+151119100745 shifted image
+#60444 shifted image
+151119102957 shifted image
+151119111705 shifted image
+151119112922 shifted image
+151119114832 trailed PSF, see [decam-chatter 14061]
+151119115424 double image / trailing, see [decam-chatter 13635]
 
-# Bad data from 19/20 Nov 2015
-60521 shifted image
-60523 shifted image
-60589 4MAPS not settled, bad PSF
-60622 shifted image CCD1
-60635 most are shifted images, do not use
-60636 most are shifted images, do not use
-60637 most are shifted images, do not use
-60638 most are shifted images, do not use
-60639 most are shifted images, do not use
-60640 most are shifted images, do not use
-60671 shifted image CCD4
-60716 4MAPS not settled, trailed
-60752 shifted image CCD2
-60759 junk image
-60762 shifted image CCD2; 4MAPS not settled
-60769 4MAPS not settled, bad PSF
-60772 4MAPS not settled, bad PSF
+# 2015-11-19
+#60521 shifted image
+#60523 shifted image
+#60589 4MAPS not settled, bad PSF
+151120035107-CCD2 has DQREJ set, does not track saturation.
+151120035859 shifted image CCD1
+#60635 most are shifted images, do not use
+#60636 most are shifted images, do not use
+#60637 most are shifted images, do not use
+#60638 most are shifted images, do not use
+#60639 most are shifted images, do not use
+#60640 most are shifted images, do not use
+151120062905 shifted image CCD4
+151120080054 4MAPS not settled, trailed
+151120101340 shifted image CCD2
+151120104644 junk image
+151120105811 shifted image CCD2; 4MAPS not settled
+151120112420 4MAPS not settled, bad PSF
+#60772 4MAPS not settled, bad PSF
 
-# Bad data from 20/21 Nov 2015
-60851 shifted image, CCD3
-60929 shifted image, CCD3
-60987 shifted image, CCD4
-61010 shifted image, CCD4
-61041 shifted image, CCD4
-61072 shifted image, CCD1
-61076 junk
-61205 4MAPS not settled, bad PSF
-61206 4MAPS not settled, bad PSF
-61216 4MAPS not settled, bad PSF
+# 2015-11-20
+#60851 shifted image, CCD3
+151121031258 shifted image, CCD3
+151121055414 shifted image, CCD4
+151121070740 shifted image, CCD4
+151121091449 shifted image, CCD4
+151121115529 shifted image, CCD1
+#61076 junk
 
-# Bad data from 21/22 Nov 2015
-61372 shifted image, CCD3
-61379 shifted image, CCD3
-61387 shifted image, CCD2
-61427 shifted image, CCD1
-61446 shifted image, CCD4
-61452 shifted image, CCD1
+# 2015-11-21
+151122063842 4MAPS not settled, bad PSF
+151122064213 4MAPS not settled, bad PSF
+151122071557 4MAPS not settled, bad PSF
+#61372 shifted image, CCD3
+#61379 shifted image, CCD3
+#61387 shifted image, CCD2
 
-# Bad data from 22/23 Nov 2015
-61436 4MAPS not settled, bad PSF
-61452 4MAPS not settled, bad PSF
-61453 4MAPS not settled, bad PSF
-61461 4MAPS not settled, bad PSF
-61466 4MAPS not settled, bad PSF
-61473 bad PSF?
-61505 very high background (~34,000)
+# 2015-11-22
+151123034215 shifted image, CCD1
+151123041623 4MAPS not settled, bad PSF
+151123045039 shifted image, CCD4
+151123051116 4MAPS not settled, bad PSF, shifted image, CCD1
+151123051433 4MAPS not settled, bad PSF
+151123054022 4MAPS not settled, bad PSF
+151123055624 4MAPS not settled, bad PSF
+151123061941 bad PSF?
+151123083141 very high background (~34,000)
 
-# Bad data from 23/24 Nov 2015
-61555 shutter did not open
-61556 shutter did not open
-61557 shutter did not open
-61558 shutter did not open
-61563 bad image, clouds
-61564 bad image, clouds
-61565 bad image, clouds
-61615 first exposure after restart, may be bad
-61660 4MAPS not settled, bad PSF
-61696 4MAPS not settled, bad PSF
-61698 4MAPS not settled, bad PSF
-61699 4MAPS not settled, bad PSF
-61719 4MAPS not settled,bad PSF
-61737 shifted image
-61739 shifted image
-61745 trailed image
-61761 shifted image, CCD3
+# 2015-11-23
+#61555 shutter did not open
+#61556 shutter did not open
+#61557 shutter did not open
+#61558 shutter did not open
+#61563 bad image, clouds
+#61564 bad image, clouds
+#61565 bad image, clouds
+#61615 first exposure after restart, may be bad
+151124023547 4MAPS not settled, bad PSF
+151124061231 4MAPS not settled, bad PSF
+151124061852 4MAPS not settled, bad PSF
+151124062201 4MAPS not settled, bad PSF
+#61719 4MAPS not settled,bad PSF
+151124071032 trailed PSF, see [decam-chatter 14061]
+151124073306 double image / trailing, see [decam-chatter 13635]
+151124081239 double image / trailing, see [decam-chatter 13635]
+151124085704 shifted image
+151124090335 shifted image
+151124091939 double image / trailing, see [decam-chatter 13635]
+#61745 trailed image
+151124105429 shifted image, CCD3
 
-# Bad data from 11/12 Dec 2015
+# 2015-12-11
 62008 CCD locations 1 and 2 swapped
 62009 CCD locations 1 and 2 swapped
 62010 CCD locations 1 and 2 swapped
@@ -209,7 +208,7 @@
 62077 CCD locations 1 and 2 swapped
 62078 CCD locations 1 and 2 swapped
 
-# Bad data from 13/14 Dec 2015
+# 2015-12-13
 62786 4MAPS not settled, bad PSF
 62817 bad
 62818 bad
@@ -221,7 +220,10 @@
 62897 trailed
 62898 trailed
 62900 wind shake
+62915 double image / trailing, see [decam-chatter 13635]
+62926 double image / trailing, see [decam-chatter 13635]
 62950 readout timed out, all zeros
+62952 double image / trailing, see [decam-chatter 13635]
 62955 shifted image
 62959 shifted image
 62976 4MAPS not settled, bad PSF
@@ -232,34 +234,35 @@
 62983 readout problems
 62985 trailed
 
-# Bad data from 14/15 Dec 2015
+# 2015-12-14
 63072 4MAPS not settled, bad
 63079 4MAPS not settled, bad
+63089 bad PSF (bad tracking?), see [decam-chatter 14061]
 63090 4MAPS crashed, bad
 
-# Bad data from 24/25 Jan 2016
-64118 Very bright sky due to increasing clouds
-64119 Very bright sky due to increasing clouds
-64120 Very bright sky due to increasing clouds
-64121 Very bright sky due to increasing clouds
-64122 Very bright sky due to increasing clouds
-64123 Very bright sky due to increasing clouds
-64124 Very bright sky due to increasing clouds
-64125 Very bright sky due to increasing clouds
-64126 Very bright sky due to increasing clouds
-64127 Very bright sky due to increasing clouds
-64128 Very bright sky due to increasing clouds
-64129 Very bright sky due to increasing clouds
-64130 Very bright sky due to increasing clouds
-64131 Very bright sky due to increasing clouds
+# 2016-01-24
+160125105725 Very bright sky due to increasing clouds
+160125105949 Very bright sky due to increasing clouds
+160125110212 Very bright sky due to increasing clouds
+160125110435 Very bright sky due to increasing clouds
+160125110657 Very bright sky due to increasing clouds
+160125110920 Very bright sky due to increasing clouds
+160125111142 Very bright sky due to increasing clouds
+160125111404 Very bright sky due to increasing clouds
+160125111625 Very bright sky due to increasing clouds
+160125111846 Very bright sky due to increasing clouds
+160125112109 Very bright sky due to increasing clouds
+160125112331 Very bright sky due to increasing clouds
+160125112552 Very bright sky due to increasing clouds
+160125112814 Very bright sky due to increasing clouds
 
-# Bad data from 25/26 Jan 2016
+# 2016-01-25
 64252 Very bright sky due to increasing clouds
 64253 Very bright sky due to increasing clouds
 64254 Very bright sky due to increasing clouds
 64255 Very bright sky due to increasing clouds
 
-# Bad data from 26/27 Jan 2016
+# 2016-01-26
 64261 One amp bad at beginning of night before NOCS restart
 64262 One amp bad at beginning of night before NOCS restart
 64263 One amp bad at beginning of night before NOCS restart
@@ -267,18 +270,21 @@
 64407 Duplicate image
 64408 Duplicate image
 64409 Duplicate image
+64417 double image / trailing, see [decam-chatter 13635]
+64428 trailed PSF, see [decam-chatter 14061]
+64436 double image / trailing, see [decam-chatter 13635]
 
-# Bad data from 29/30 Jan 2016
+# 2016-01-29
 64459 Shifted image (dome flat)
 64497 Shifted image (zero)
 64551 Shifted image (object)
 64554 Shifted image (focus)
 64563 Shifted image (object)
 
-# Bad data from 30/31 Jan 2016
+# 2016-01-30
 64586 Shifted image (test)
 
-# Bad data from 2/3 Feb 2016
+# 2016-02-02
 64864 Shift in readout of CCD2 (object)
 64892 Shift in readout of CCD1 and CCD2 (object)
 64907 Shift in readout of CCD3 (object)
@@ -297,7 +303,7 @@
 65076 4MAPS failure and bad image
 65111 Shift in readout (zero)
 
-# Bad data from 3/4 Feb 2016
+# 2016-02-03
 65163 Duplicate domeflat image and should be ignored
 65164 Duplicate domeflat image and should be ignored
 65165 Duplicate domeflat image and should be ignored
@@ -321,9 +327,10 @@
 65353 Duplicate to be ignored
 65354 Duplicate to be ignored
 
-# Bad data from 4/5 Feb 2016
+# 2016-02-04
 65443 Shift in readout (zero)
 65463 Shift in readout (zero)
+65487 bad PSF, see [decam-chatter 14061]
 65540 All zeros in images
 65560 All zeros in images
 65570 Shift in readout (object)
@@ -338,7 +345,7 @@
 65747 shifted image CCD3 (object)
 65770 4MAPS failure and bad image
 
-# Bad data from 5/6 Feb 2016
+# 2016-02-05
 65776 shifted image (zero)
 65814 shifted image (zero)
 65839 shifted image (zero)
@@ -362,29 +369,32 @@
 66170 shifted image CCD1 (object)
 66182 shifted image CCD2 (dome flat)
 
-# Bad data from 6/7 Feb 2016
+# 2016-02-06
 66225 shifted image (zero)
 66245 shifted image CCD4 (object)
 66354 small telescope jump (but may be OK???)
+66356 trailed PSF, see [decam-chatter 14061]
 66428 shifted image CCD4 (object)
 66429 shifted image CCD4 (object)
 66453 shifted image CCD4 (object)
+66454 trailed PSF, see [decam-chatter 14061]
 66472 shifted image (object)
 
-# Bad data from 8/9 Feb 2016
+# 2016-02-08
 67186 shifted image CCD4 (object)
 67278 Telescope offset during exposure
 67289 shifted image CCD2 (object)
 67374 Aborted file, all zeros
 
-# Bad data from 9/10 Feb 2016
+# 2016-02-09
 67461 shifted image CCD3 (zero)
 67517 Telescope jumped N-S
+67589 double image / trailing, see [decam-chatter 13635]
 67612 Telescope jump?
 67653 shifted image CCD3 (object)
 67740 shifted image CCD1 (object)
 
-# Bad data from 10/11 Feb 2016
+# 2016-02-10
 67817 Telescope jumped SE-NW
 67843 No image shows up
 67874 shifted image CCD2 (object)
@@ -392,30 +402,35 @@
 67971 shifted image CCD4 (object)
 68116 shifted image (object)
 
-# Bad data from 11/12 Feb 2016
+# 2016-02-11
 68143 shifted image (zero)
 68230 shifted image CCD4 (object)
 68236 shifted image CCD1 (object)
 68278 telescope jump
+68315 double image / trailing, see [decam-chatter 13635]
+68412 double image / trailing, see [decam-chatter 13635]
 68416 close shutter as sky is bright
 
-# Bad data from 12/13 Feb 2016
+# 2016-02-12
 68424 shift image (zero)
 68474 shift image (object)
+68569 double image / trailing, see [decam-chatter 13635]
+68677 double image / trailing, see [decam-chatter 13635]
 
-# Bad data from 13/14 Feb 2016
+# 2016-02-13
 68760 shift image (zero)
 68771 shift image (object)
 68877 shift image (object)
 68898 shift image (object)
 
-# Bad data from 14/15 Feb 2016
+# 2016-02-14
 68954 shift image (object)
 69017 shift image (object)
+69064 trailed PSF, see [decam-chatter 14061]
 69170 shift image CCD 1 (object)
 69180 shift image CCD 2 (object)
 
-# Bad data from 15/16 Feb 2016
+# 2016-02-15
 69223 shift image (zero)
 69260 shift image (dome flat)
 69261 shift image (dome flat)
@@ -427,21 +442,21 @@
 69494 shift image (object)
 69580 shift image CCD3 (object)
 
-# Bad data from 16/17 Feb 2016
+# 2016-02-16
 69710 shift image (object)
 69744 shift image (object)
 69809 shift image (object)
 69844 shift image (object)
 
-# Bad data from 17/18 Feb 2016
+# 2016-02-17
 70034 shift image (object)
 70141 shift image (object)
 70213 shift image (zero)
 
-# Bad data from 18/19 Feb 2016
+# 2016-02-18
 70325 shift image (dome flat)
 
-# Bad data from 19/20 Feb 2016
+# 2016-02-19
 70410 saturated (zero)
 70430 saturated bright sky (object)
 70436 saturated bright sky (object)
@@ -449,8 +464,9 @@
 70470 saturated bright sky (object)
 70484 saturated bright sky (object)
 70485 saturated bright sky (object)
+70491 double image / trailing, see [decam-chatter 13635]
 
-# Bad data from 24/25 Feb 2016
+# 2016-02-24
 # Potentially poorly centered (bad?) exposures: 70574-70579
 70528 failed zero
 70529 failed zero
@@ -466,15 +482,16 @@
 70581 pointing way off; odd illumination gradient
 70731 shifted image
 
-# Bad data from 25/26 Feb 2016
+# 2016-02-25
 70758 failed zero (detector timeout)
 70759 failed zero (detector timeout)
+70825 double image / trailing, see [decam-chatter 13635]
 70941 shifted image
 71059 shifted image
 71072 shifted image
 71073 shifted image
 
-# Bad data from 26/27 Feb 2016
+# 2016-02-26
 71154 shifted image
 71230 detector timeout, all zeros
 71231 all zeros
@@ -484,10 +501,11 @@
 71339 saturated in im11
 71340 saturated in im11
 71341 saturated in im11
+71342-CCD4 one amp misbehaving badly
 71343 all zeros
 71344 all zeros
 
-# Bad data from 27/28 Feb 2016
+# 2016-02-27
 71389 TIMEOUT
 71434 stars with tails (moved during exposure?)
 71467 stars with tails
@@ -500,10 +518,11 @@
 71557 PIXCNT
 71569 PIXCNT
 71608 PIXCNT
+71609 double image / trailing, see [decam-chatter 13635]
 71658 PIXCNT
 71670 all zeros
 
-# Bad data from 28/29 Feb 2016
+# 2016-02-28
 71692 PIXCNT
 71739 CCD1 PIXCNT
 71760 CCD2 PIXCNT
@@ -518,16 +537,17 @@
 71912 CCD2 PIXCNT
 71938 CCD1 PIXCNT
 71955 CCD4 PIXCNT
+72006-CCD4 bright star artifact
 72033 all zeros after camera restart
 
-# Bad data from 29 Feb/1 Mar 2016
+# 2016-02-29
 72097 CCD1 PIXCNT
 72105 Telescope Jump
 72209 CCD3 PIXCNT
 72285 CCD2 PIXCNT
 72366 CCD3 PIXCNT
 
-# Bad data from 1/2 Mar 2016
+# 2016-03-01
 72383 PIXCNT
 72388 all zeros
 72454 PIXCNT
@@ -537,7 +557,7 @@
 72609 telescope jump
 72710 CCD3 PIXCNT
 
-# Bad data from 2/3 Mar 2016
+# 2016-03-02
 72874 PIXCNT
 72884 PIXCNT
 72917 all zeros after time out
@@ -553,14 +573,14 @@
 73154 all zeros
 73155 all zeros
 
-# Bad data from 3/4 Mar 2016
+# 2016-03-03
 73164 all zeros
 73179 PIXCNT
 73180 PIXCNT
 73346 CCD4 PIXCNT
 73407 CCD4 PIXCNT
 
-# Bad Data from 04/05 March 2016
+# 2016-03-04
 73518 shifted image CCD1 PIXCNT
 73589 shifted image CCD4 PIXCNT
 73651 Low Trans
@@ -600,8 +620,7 @@
 73691 Low Transparency
 73692 Low Transparency
 73693 Low Transparency
-73694 shifted image CCD3 PIXCNT
-73694 Low Transparency
+73694 Low Transparency, shifted image CCD3 PIXCNT
 73695 Low Transparency
 73696 Low Transparency
 73697 Low Transparency
@@ -646,21 +665,21 @@
 73748 shifted image CCD3
 73852 PIXCNT
 
-# Bad Data from 06/07 March 2016
+# 2016-03-06
 73885 PIXCNT
 73963 pixcnt error
 #73988 images elongated due E-W probably windshake just opened louvers slightly, retain anyway -DJS
 #73989 images still elongated E-W windshake, retain anyway -DJS
 #73990 images still elongated E-W closed louvers during this, retain anyway -DJS
 
-# Bad data 08/09 March 2016
+# 2016-03-08
 #74059 EW elong. Small HA. Shut lower dome shutter, retain anyway -DJS
 74066 CCD4 shifted image PIXCNT
 74225 CCD2 shifted image PIXCNT
 74253 PIXCNT
 74282 PIXCNT
 
-# Bad data 09/10 March 2016
+# 2016-03-09
 74404 PIXCNT
 74480 trailed due to power glitch
 74501 too many clouds?
@@ -680,7 +699,7 @@
 74569 too many clouds? 29%
 74570 too many clouds? 30%
 
-# Bad data 10/11 March 2016
+# 2016-03-10
 74719 PIXCNT CCD1
 74720 PIXCNT CCD1
 74771 PIXCNT CCD4
@@ -689,32 +708,33 @@
 74901 PIXCNT CCD4
 74924 PIXCNT CCD4 also was not proper tile for this time.
 
-# Bad data 11/12 March 2016
+# 2016-03-11
 75240 Wind forced us to move dome out of wind during exposure.
 75265 PIXCNT CCD3
 
-# Bad data 12/13 March 2016
+# 2016-03-12
 75390 PIXCNT CCD3
 75425 PIXCNT CCD4
 75426 PIXCNT CCD4
 75571 PIXCNT CCD4
 75617 PIXCNT CCD3
 
-# Bad data 13/14 March 2016
+# 2016-03-13
 75780 bad tracking
 75842 PIXCNT CCD3
 75885 PIXCNT CCD2
 75898 PIXCNT CCD2
 76017 PIXCNT CCD1
 
-# Bad data 14/15 March 2016
+# 2016-03-14
 76152 PIXCNT CCD1
 76189 PIXCNT CCD2
 76203 PIXCNT CCD3
 76207 PIXCNT CCD4
 76352 PIXCNT CCD3
 
-# Bad data 15/16 March 2016
+# 2016-03-15
+76499 bad PSF, see [decam-chatter 14061]
 76557 PIXCNT CCD4
 76572 PIXCNT CCD2
 76580 PIXCNT CCD3
@@ -723,29 +743,29 @@
 76706 PIXCNT CCD4
 76713 PIXCNT CCD3
 
-#Bad data 16/17 March 2016
+# 2016-03-16
 76881 PIXCNT CCD1
 76908 PIXCNT CCD2
 76980 PIXCNT CCD1
 77051 PIXCNT
 
-
-#Bad data 17/18 March 2016
+# 2016-03-17
 77190 PIXCNT CCD3
 77226 PIXCNT CCD2
+77270-CCD4 has two amplifiers with garbage on edge
 77432 PIXCNT CCD1
 
-#Bad data 18/19 March 2016
+# 2016-03-18
 77685 PIXCNT CCD1
 77686 PIXCNT
 77730 PIXCNT CCD4
 77740 PIXCNT CCD3
 
-#Bad data 19/20 March 2016
+# 2016-03-19
 78147 PIXCNT CCD4
 78163 PIXCNT CCD2
 
-# Bad data 20/21 March 2016
+# 2016-03-20
 # 78320 to 78419 - all frames with bad amps 11 and 12 (frames 78420-78499 - 79 frames - OK)
 78318 frames with bad amps 11 and 12
 78319 frames with bad amps 11 and 12
@@ -837,7 +857,8 @@
 78418 frames with bad amps 11 and 12
 78419 frames with bad amps 11 and 12
 
-# Bad data 25/26 March 2016
+# 2016-03-25
+78678 bad PSF (bad tracking?), see [decam-chatter 14061]
 78783 Poor Transparency
 78784 Poor Transparency
 78792 Poor Transparency
@@ -845,17 +866,17 @@
 78800 Poor Transparency
 78801 Poor Transparency
 
-# Bad data 26/27 March 2016
+# 2016-03-26
 78894 PIXCNT CCD3
-79053 PIXCNT CCD1
 79044 PIXCNT CCD1
+79053 PIXCNT CCD1
 79061 Shutter error
 
-# Bad data 27/28 March 2016
+# 2016-03-27
 79289 PIXCNT CCD1
 79380 PIXCNT CCD2
 
-# Bad data 28/29 March 2016
+# 2016-03-28
 79420 restart after debiasing ccds
 79421 same
 79422 zero after restart
@@ -883,7 +904,7 @@
 79488 poor transparency
 79489 poor transparency
 
-# Bad data 29/30 March 2016
+# 2016-03-29
 79516 dome flat - pupil vignetted by incompletely opened mirror covers
 79517 ditto
 79518 ditto
@@ -896,16 +917,19 @@
 79525 ditto
 79526 ditto
 
-# Bad data 30/31 March 2016
+# 2016-03-30
 79680 PIXCNT CCD4
 79720 Lost frame (NOCS timeout)
 79734 PIXCNT CCD4
+79807-CCD4 astrometric issues [decam-chatter 14683]
 
-# Bad data 31/1 March/April 2016
+# 2016-03-31
 80049 Lost frame (Semaphore faliure)
 80105 PixCnt
+80161 double image / trailing, see [decam-chatter 13635]
+80166 double image / trailing, see [decam-chatter 13635]
 
-# Bad data 01/02 April 2016
+# 2016-04-01
 80269 PixCnt CCD4
 80270 all zero, readout time out
 80284 all zero, readout time out
@@ -914,20 +938,21 @@
 80436 all zero, readout time out
 80463 PixCnt CCD1
 
-# Bad data 02/03 April 2016
+# 2016-04-02
 80563 bad focus image
 80564 bad focus image
 80624 all zero, readout time out
+80665 fwhm==nan
 80777 PixCnt CCD4
 80785 PixCnt CCD4
 
-# Bad data 03/04 April 2016
+# 2016-04-03
 81073 PixCnt CCD1
 
-# Bad data 04/05 April 2016
+# 2016-04-04
 81226 PixCnt CCD3
 
-# Bad data 08/09 April 2016
+# 2016-04-08
 81336 First zero after restart, noise is high
 81349 Test zero after post-dinner restart
 81350 Test zero after post-dinner restart
@@ -971,8 +996,8 @@
 81475 elongated
 81478 slightly elongated
 81479 pixcnt error
-81481 elongated
 81481 badly elongated
+81482 double image / trailing, see [decam-chatter 13635]
 81485 terribly elongated
 81486 badly elongated
 81487 somewhat elongated
@@ -984,6 +1009,8 @@
 81497 somewhat elongated
 81500 double peaked and elongated
 81501 double peaked again
+81512 double image / trailing, see [decam-chatter 13635]
+81514 double image, see [decam-chatter 14061]
 81530 very double peaked
 81531 badly double peaked
 81534 elongated
@@ -992,12 +1019,10 @@
 81542 slightly elongated
 81544 slew to zenith to close dome while exposure in progress
 
-# Bad data 09/10 April 2016
+# 2016-04-09
 81591 double peaked
-81592 elongated but not as bad
-81593 badly elongated
 81592 elongated
-81593 elongated
+81593 badly elongated
 81594 elongated
 81595 slightly elongated
 81596 slightly elongated
@@ -1037,22 +1062,22 @@
 81709 transparency 0.12
 81710 transparency 0.08
 
-# Bad data 11/12 April 2016
+# 2016-04-11
 81757 transparency 0.1
 81758 transparency 0.7 but oa closed due to low clouds
 
-# Bad data 12/13 April 2016
+# 2016-04-12
 81968 pixcnt flag:  shifted pixels
 82027 pixcnt flag:  shifted pixels
 
-# Bad data 13/14 April 2016
+# 2016-04-13
 82111 very elongated images SSW-NNE
 82122 very elongated images SSW-NNE
 82123 images round but seeing 2.0 (~7.8pix)
 82156 pixcnt flag
 82230 pixcnt flag
 
-# Bad data 14/15 April 2016
+# 2016-04-14
 82322 time out, all zeroes. This is a zero frame after flats.
 82356 Pixcnt CCD4, im 9, 11
 82370 Pixcnt CCD3
@@ -1063,7 +1088,7 @@
 82510 elongated 30 deg CW from +Y.
 82533 pix cnt CCD4.
 
-# Bad data 15/16 April 2016
+# 2016-04-15
 82589 elongated. 4MAPS suspect i11.
 82590 same.
 82595 blue i11 on 4MAPS. Elong.
@@ -1073,32 +1098,33 @@
 82607 same.
 82611 same, but not elong much. maybe useful.
 
-# Bad data 16/17 April 2016
+# 2016-04-16
 82663 pixcnt CCD1
 82705 time out.
 82756 pixcnt CCD2
 82783 time out
 
-#Bad data 17/18 April 2016
+# 2016-04-17
 83045 pixcnt CCD2
 83085 pixcnt CCD4
 
-#Bad data 18/19 April 2016
+# 2016-04-18
+83172 asymmetric/donutty PSF, see [decam-chatter 14061]
 83240 pixcnt CCD4
 83273 pixcnt CCD1
 
-#Bad data 19/20 April 2016
-83445 saturated background from clouds and moon
-83446 saturated background from clouds and moon
-83447 saturated background from clouds and moon
+# 2016-04-19
 83430 Pass1 image taken under non-photometric conditions
 83431 Pass1 image taken under non-photometric conditions
 83432 Pass1 image taken under non-photometric conditions
+83445 saturated background from clouds and moon
+83446 saturated background from clouds and moon
+83447 saturated background from clouds and moon
 83575 pixcnt CCD1
 83612 junk image after Mosaic3 timeout
 83630 no light in image, shutter never opened?
-#
-#Bad data 23/24 April 2016
+
+# 2016-04-23
 84343 low transparency; depth factor <0.3
 84344 low transparency; depth factor <0.3
 84363 pixcnt CCD4
@@ -1106,16 +1132,17 @@
 84391 pixcnt CCD1
 84502 pixcnt CCD1
 84582 pixcnt CCD4
-#
-#Bad data 24/25 April 2016
+
+# 2016-04-24
+84639 trailed PSF, see [decam-chatter 14061]
 84641 windshake (M67 pointing)
 84642 windshake (M67 pointing)
 84643 windshake (M67 pointing)
 84644 windshake (M67 pointing)
 84645 windshake (M67 pointing)
 84646 windshake (M67 pointing)
-#
-#Bad data 25/26 April 2016
+
+# 2016-04-25
 84941 pixcnt CCD1
 84990 pixcnt CCD2
 85038 depth factor <0.3
@@ -1137,12 +1164,12 @@
 #85060 mirror cover not fully open
 #85061 mirror cover not fully open
 #85062 mirror cover not fully open
-#
-#Bad data 26/27 April 2016
+
+# 2016-04-26
 85138 pixcnt CCD2
 85230 pixcnt CCD2
 
-#Bad data 27/28 April 2016
+# 2016-04-27
 85352 depth factor <0.3
 85353 depth factor <0.3
 85358 pixcnt CCD4
@@ -1150,28 +1177,28 @@
 85452 pixcnt CCD2
 85546 pixcnt CCD4
 
-#Bad data 28/29 April 2016
+# 2016-04-28
 85663 pixcnt CCD2
 
-#Bad data 29/30 April 2016
+# 2016-04-29
 85941 pixcnt CCD2
 85962 pixcnt (don't see it on display?)
 86106 pixcnt CCD3
 
-#Bad data 30 April/01 May 2016
+# 2016-04-30
 86185 pixcnt CCD1
 86216 pixcnt CCD4
 86257 whoping scattered light? ALF Lyr? mag0 delta scuti
 86266 whoping scattered light? ALF Lyr? mag0 delta scuti
 
-#Bad data 01/02 May 2016
+# 2016-05-01
 86332 pixcnt CCD3
 86377 pixcnt CCD3
 86398 pixcnt CCD2
 86445 timeout
 86480 pixcnt CCD2
 
-#Bad data 02/03 May 2016
+# 2016-05-02
 86545 pixcnt CCD3 flat image.
 86610 4maps down, trefoil!
 86665 pixcnt CCD1
@@ -1179,13 +1206,14 @@
 86735 pixcnt CCD3
 86767 pixcnt CCD2
 
-# Bad data 03/04 May 2016
+# 2016-05-03
 87068 pixcnt CCD3
 
-# Bad data 04/05 May 2016
+# 2016-05-04
 87190 pixcnt CCD1
 
-# Bad data 07/08 May 2016
+# 2016-05-07
+87439 donutty PSF, see [decam-chatter 14061]
 87468 pixcnt CCD2
 87481 timeout
 87486 nmatched, bad trans
@@ -1194,17 +1222,17 @@
 87494 nmatched
 87498 timeout
 
-# Bad data 08/09 May 2016
+# 2016-05-08
 87704 pixcnt CCD3
 
-# Bad data 09/10 May 2016
+# 2016-05-09
 87970 has pixcnt issue on CCD2
 87973 has pixcnt issue on CCD2
 87985 has pixcnt issue on CCD4
 87986 has pixcnt issue on CCD4
 88133 sky too bright for pass 1
 
-# Bad data 10/11 May 2016
+# 2016-05-10
 88143 bad zero
 88177 Pass1 image in poor seeing
 88190 Pass2 image in >2 arcsec seeing
@@ -1213,7 +1241,7 @@
 88360 Pass1 image in <90% transparency
 88412 Background too bright, clouds with bright sky
 
-# Bad data 11/12 May 2016
+# 2016-05-11
 88465 Pass2 image in poor (Pass3) conditions
 88466 Pass2 image in poor (Pass3) conditions
 88467 Pass2 image in poor (Pass3) conditions
@@ -1230,12 +1258,14 @@
 88592 Pass2 image in poor (Pass3) conditions
 88596 Aborted exposure
 
-# Bad date 12/13 May 2016
+# 2016-05-12
+88653 bad (donutty) PSF, see [decam-chatter 14061]
+88654 bad (donutty) PSF, see [decam-chatter 14061]
 88700 pass2 empty image due to time out error
 88809 bad image no counts
 88819 no counts
 
-# Bad images 13/14 May 2016
+# 2016-05-13
 89014 no counts
 89117 poor transparency (high rms- <30% transparency)
 89118 poor transparency
@@ -1243,29 +1273,26 @@
 89120 poor transparency
 89121 poor transparency
 
-#Bad images 14/15 May 2016
+# 2016-05-14
 89151 timeout --> no counts
 89204 timeout --> no counts
 89205 zeros after the time out
 89206 no counts
 
-
-#bad images 15/16 May 2016
+# 2016-05-15
 89328 amp6 has a weird reflection pattern- rms of amp 6 is 160 comapred to the rest with rms ~50-60
 
-
-
-#bad images 16/17 M
+# 2016-05-16
 89705 terrible focus
 89706 terrible
 89707 terrible focus
 89738 shifted
 89740 interrupted
 
-#bad images May17th 2016
+# 2016-05-17
 89908 underexposed 0.3
 89909 ditto
-88910 ditto
+89910 ditto
 89944 clouds "nmatched" no standards visible
 89945 ditto
 89946 ditto
@@ -1279,7 +1306,8 @@
 89959 underexposed 0.3
 89972 pass1 should have been pass2
 
-#2016-05-19
+# 2016-05-19
+90355 bad (donutty) PSF, see [decam-chatter 14061]
 90357 underexposed 0.4
 90473 bad amp 11 and scattered light artifact spanning 3 amps looks like shock front
 90474 scattered light from moon reflection inside dome
@@ -1288,7 +1316,7 @@
 90502 ditto
 90507 ditto
 
-#2016-05-22
+# 2016-05-22
 90859 through the clouds
 90860 ditto
 90861 ditto
@@ -1305,34 +1333,38 @@
 90906 ditto
 90907 ditto
 
-#2016-05-24
-
+# 2016-05-24
 91455 looks like a zero eventhiugh it should be and object
 91456 readout timeout
 91468 ditto
 
-#2016-06-03
+# 2016-05-25
+91601 asymmetric/donutty PSF, see [decam-chatter 14061]
 
+# 2016-05-27
+91977 asymmetric/donutty PSF, see [decam-chatter 14061]
+
+# 2016-06-01
+92803 double image / trailing, see [decam-chatter 13635]
+
+# 2016-06-03
 93171   empty due to timeout error
 93289   ditto
 93306   ditto
 
-#2016-06-04
-
+# 2016-06-04
 93479 highly out of focus
 93480 highly out of focus
 
-#2016-06-06
-
+# 2016-06-06
 94067 empty due to timeout error
 
-#2016-06-10
+# 2016-06-10
 94678 hit by passing clou
 94679 hit by passing cloud
 94680 hit by passing cloud
 
-#2016-06-12
-
+# 2016-06-12
 94909   empty due to readout error
 94927   empty due to readout error
 94991   ignore - it's not an MzLS exposure - forgot set project
@@ -1395,7 +1427,6 @@
 99457 expfactor=0.189  0.849     6.085 MzLS_623614_
 99458 expfactor=0.216  0.887     5.146 MzLS_641901_
 99459 expfactor=0.199  0.892     5.484 MzLS_646873_
-99537  clouds
 99498  timeout
 99504  position offset by -62,-10
 99505  position offset by -62,-10
@@ -1404,8 +1435,8 @@
 99508  position offset by -62,-10
 
 # 2016-11-09
-100099 expfactor=0.176  0.898     4.552 MzLS_364271_
-100100 expfactor=0.209  0.918     3.834 MzLS_368021_
+3100099 expfactor=0.176  0.898     4.552 MzLS_364271_
+3100100 expfactor=0.209  0.918     3.834 MzLS_368021_
 
 # 2016-12-12
 101090 clouds & background
@@ -1451,7 +1482,7 @@
 101435 depth < 0.3
 101436 depth < 0.3
 
-#2016-12-14
+# 2016-12-14
 101490 depth < 0.3
 101492 depth < 0.3
 101493 depth < 0.3
@@ -1498,100 +1529,6 @@
 101555 depth < 0.3
 101556 depth < 0.3
 101557 test image
-#2016-12-14
-101490 depth < 0.3
-101492 depth < 0.3
-101493 depth < 0.3
-101494 depth < 0.3
-101495 depth < 0.3
-101496 depth < 0.3
-101497 depth < 0.3
-101498 depth < 0.3
-101499 depth < 0.3
-101500 depth < 0.3
-101501 depth < 0.3
-101502 depth < 0.3
-101503 depth < 0.3
-101505 depth < 0.3
-101506 depth < 0.3
-101507 depth < 0.3
-101508 depth < 0.3
-101509 depth < 0.3
-101510 depth < 0.3
-101511 depth < 0.3
-101512 depth < 0.3
-101513 depth < 0.3
-101514 depth < 0.3
-101515 depth < 0.3
-101516 depth < 0.3
-101517 depth < 0.3
-101518 depth < 0.3
-101528 went off active optics, crazy PSF
-101530 depth < 0.3
-101531 depth < 0.3
-101532 test image
-101533 test image
-101543 depth < 0.3
-101544 depth=0.31,mosbot had gone to pass
-101545 depth < 0.3
-101547 depth < 0.3
-101548 depth < 0.3
-101549 depth < 0.3
-101550 depth < 0.3
-101551 depth < 0.3
-101552 depth < 0.3
-101553 depth < 0.3
-101554 depth < 0.3
-101555 depth < 0.3
-101556 depth < 0.3
-101557 test unage
-#2016-12-14
-101490 depth < 0.3
-101492 depth < 0.3
-101493 depth < 0.3
-101494 depth < 0.3
-101495 depth < 0.3
-101496 depth < 0.3
-101497 depth < 0.3
-101498 depth < 0.3
-101499 depth < 0.3
-101500 depth < 0.3
-101501 depth < 0.3
-101502 depth < 0.3
-101503 depth < 0.3
-101505 depth < 0.3
-101506 depth < 0.3
-101507 depth < 0.3
-101508 depth < 0.3
-101509 depth < 0.3
-101510 depth < 0.3
-101511 depth < 0.3
-101512 depth < 0.3
-101513 depth < 0.3
-101514 depth < 0.3
-101515 depth < 0.3
-101516 depth < 0.3
-101517 depth < 0.3
-101518 depth < 0.3
-101528 went off active optics, crazy PSF
-101530 depth < 0.3
-101531 depth < 0.3
-101532 test image
-101533 test image
-101543 depth < 0.3
-101544 depth=0.31,mosbot had gone to pass
-101545 depth < 0.3
-101547 depth < 0.3
-101548 depth < 0.3
-101549 depth < 0.3
-101550 depth < 0.3
-101551 depth < 0.3
-101552 depth < 0.3
-101553 depth < 0.3
-101554 depth < 0.3
-101555 depth < 0.3
-101556 depth < 0.3
-101557 test unage
 101558 depth < 0.3
 101559 depth < 0.3
 101560 depth < 0.3
@@ -1614,317 +1551,322 @@
 101610 depth < 0.3 (test image)
 101667 pass1 frame under pass3 conditions
 101670 sky too bright, depth < 0
-#
-#2017-01-02
-102279 telescope jumped?  star images almost doubled
-102289 seeing climbing from 0.8 to 1.15 over next 5 images
-102310 seeing jumped from 0.9 in last image to 1.15
-102323 transparency below 0.5 now, and dropping
-102336 bright streak from moving object all the way across from im1 to im8
-102359 is zero taken after system restart from tonight.sh crash
-102360 expfactor=0.199  0.385     4.024 MzLS_563632_
-102361 transparency=0.209 depfac=0.057
-102362 transparency=0.145 depfac=0.025
-102363 transparency=0.078 depfac=0.020
-102364 transparency=0.098 depfac=0.030 - stopped here for the night
-#
-#2017-01-03
-102394 done before focusing, quit tonight.sh, focused, then restarted
-102395 focus frame
-102396 same pointing as 102394 but in focus this time
-#
-#2017-01-04
-102532 trans=0.215 depfac=0.195
-102533 trans=0.239 depfac=0.283
-102548 trans=0.275 depfac=0.326
-102549 trans=0.282 depfac=0.252
-102552 trans=0.288 depfac=0.222
-102555 trans=0.243 depfac=0.298
-102556 trans=0.145 depfac=0.032
-102558 trans=0.294 depfac=0.405
-102559 trans=0.197 depfac=0.174
-102561 trans=0.291 depfac=0.354
-102563 trans=0.286 depfac=0.328
-102568 trans=0.064 depfac=0.005
-102642 trans=0.262 depfac=0.327
-102643 trans=0.266 depfac=0.343
-102644 trans=0.220 depfac=0.246
-102645 trans=0.177 depfac=0.160
-102646 trans=0.131 depfac=0.085
-102647 trans=0.136 depfac=0.090
-102648 trans=0.163 depfac=0.139
-102649 trans=0.295 depfac=0.478
-102650 trans=0.088 depfac=0.041
-102651 trans=0.185 depfac=0.168
-102653 trans=0.077 depfac=0.020
-102654 trans=0.071 depfac=0.011
-102655 trans=0.094 depfac=0.011
-#
-#2017-01-05
-#
-#2017-01-06
-103128 images trailed wind shake
-103139 getting out of focus made adjustment per temperature
-103267 images elongated SW-NE due to focus drift
-103268 images elongated SW-NE due to focus drift
-#
-#2017-01-07
-103434 trans=0.220 depfac=0.019
-103435 expfactor=0.178  0.499     4.511 MzLS_648524_
-103446 expfactor=0.153  0.332     5.250 MzLS_564612_
-103447 trans=0.270 depfac=0.164
-103449 trans=0.236 depfac=0.175
-#
-#2017-01-08
-103605 CCD3 not working properly
-103606 CCD3 not working properly
-103607 CCD3 not working properly
-103608 CCD3 not working properly
-103609 CCD3 not working properly
-103610 CCD3 not working properly
-103611 CCD3 not working properly
-103612 CCD3 not working properly
-103613 CCD3 not working properly
-103614 CCD3 not working properly
-103615 CCD3 not working properly
-103616 CCD3 not working properly
-103617 CCD3 not working properly
-103618 CCD3 not working properly
-103619 CCD3 not working properly
-103620 CCD3 not working properly
-103621 CCD3 not working properly
-103622 CCD3 not working properly
-103623 CCD3 not working properly
-103624 CCD3 not working properly
-103625 CCD3 not working properly
-103626 CCD3 not working properly
-103627 CCD3 not working properly
-103628 CCD3 not working properly
-103629 CCD3 not working properly
-103630 CCD3 not working properly
-103631 CCD3 not working properly
-103632 CCD3 not working properly
-103633 CCD3 not working properly
-103634 CCD3 not working properly
-103635 CCD3 not working properly
-103636 CCD3 not working properly
-103637 CCD3 not working properly also wind shake distorting stellar profiles
-103638 CCD3 not working properly also wind shake distorting stellar profiles
-103639 CCD3 not working properly
-103640 CCD3 not working properly
-103641 CCD3 not working properly
-103642 CCD3 not working properly
-103643 CCD3 not working properly
-103644 CCD3 not working properly
-103645 CCD3 not working properly
-103646 CCD3 not working properly
-103647 CCD3 not working properly
-103648 CCD3 not working properly
-103649 CCD3 not working properly
-103650 CCD3 not working properly
-103651 CCD3 not working properly
-103652 CCD3 not working properly
-103653 CCD3 not working properly
-103654 CCD3 not working properly
-103655 CCD3 not working properly
-103656 CCD3 not working properly
-103657 CCD3 not working properly
-103658 CCD3 not working properly
-103659 CCD3 not working properly
-103660 CCD3 not working properly
-103661 CCD3 not working properly
-103662 CCD3 not working properly
-103663 CCD3 not working properly
-103664 CCD3 not working properly
-103665 CCD3 not working properly
-103666 CCD3 not working properly
-103667 CCD3 not working properly
-103668 CCD3 not working properly
-103669 CCD3 not working properly
-103670 CCD3 not working properly
-103671 CCD3 not working properly
-103672 CCD3 not working properly
-103673 CCD3 not working properly
-103674 CCD3 not working properly
-103675 CCD3 not working properly
-103676 CCD3 not working properly
-103677 CCD3 not working properly
-103678 CCD3 not working properly
-103679 CCD3 not working properly
-103680 CCD3 not working properly
-103681 CCD3 not working properly
-103682 CCD3 not working properly
-103683 CCD3 not working properly
-103684 CCD3 not working properly
-103685 CCD3 not working properly
-103686 CCD3 not working properly
-103687 CCD3 not working properly
-103688 CCD3 not working properly
-103689 CCD3 not working properly
-103690 CCD3 not working properly
-103691 CCD3 not working properly transparency 0.36
-103692 CCD3 not working properly transparency 0.13
-103693 CCD3 not working properly transparency 0.08
-103694 CCD3 not working properly transparency 0.33
+
+# 2017-01-02
+3102279 telescope jumped?  star images almost doubled
+3102289 seeing climbing from 0.8 to 1.15 over next 5 images
+3102310 seeing jumped from 0.9 in last image to 1.15
+3102323 transparency below 0.5 now, and dropping
+3102336 bright streak from moving object all the way across from im1 to im8
+3102359 is zero taken after system restart from tonight.sh crash
+3102360 expfactor=0.199  0.385     4.024 MzLS_563632_
+3102361 transparency=0.209 depfac=0.057
+3102362 transparency=0.145 depfac=0.025
+3102363 transparency=0.078 depfac=0.020
+3102364 transparency=0.098 depfac=0.030 - stopped here for the night
+
+# 2017-01-03
+3102394 done before focusing, quit tonight.sh, focused, then restarted
+3102395 focus frame
+3102396 same pointing as 102394 but in focus this time
+
+# 2017-01-04
+3102532 trans=0.215 depfac=0.195
+3102533 trans=0.239 depfac=0.283
+3102548 trans=0.275 depfac=0.326
+3102549 trans=0.282 depfac=0.252
+3102552 trans=0.288 depfac=0.222
+3102555 trans=0.243 depfac=0.298
+3102556 trans=0.145 depfac=0.032
+3102558 trans=0.294 depfac=0.405
+3102559 trans=0.197 depfac=0.174
+3102561 trans=0.291 depfac=0.354
+3102563 trans=0.286 depfac=0.328
+3102568 trans=0.064 depfac=0.005
+3102642 trans=0.262 depfac=0.327
+3102643 trans=0.266 depfac=0.343
+3102644 trans=0.220 depfac=0.246
+3102645 trans=0.177 depfac=0.160
+3102646 trans=0.131 depfac=0.085
+3102647 trans=0.136 depfac=0.090
+3102648 trans=0.163 depfac=0.139
+3102649 trans=0.295 depfac=0.478
+3102650 trans=0.088 depfac=0.041
+3102651 trans=0.185 depfac=0.168
+3102653 trans=0.077 depfac=0.020
+3102654 trans=0.071 depfac=0.011
+3102655 trans=0.094 depfac=0.011
+
+# 2017-01-05
+
+# 2017-01-06
+3103128 images trailed wind shake
+3103139 getting out of focus made adjustment per temperature
+3103267 images elongated SW-NE due to focus drift, see [decam-chatter 13635]
+3103268 images elongated SW-NE due to focus drift
+
+# 2017-01-07
+3103434 trans=0.220 depfac=0.019
+3103435 expfactor=0.178  0.499     4.511 MzLS_648524_
+3103446 expfactor=0.153  0.332     5.250 MzLS_564612_
+3103447 trans=0.270 depfac=0.164
+3103449 trans=0.236 depfac=0.175
+
+# 2017-01-08
+3103605-CCD3 CCD3 not working properly
+3103606-CCD3 CCD3 not working properly
+3103607-CCD3 CCD3 not working properly
+3103608-CCD3 CCD3 not working properly
+3103609-CCD3 CCD3 not working properly
+3103610-CCD3 CCD3 not working properly
+3103611-CCD3 CCD3 not working properly
+3103612-CCD3 CCD3 not working properly
+3103613-CCD3 CCD3 not working properly
+3103614 CCD3 not working properly, trailed/asymmetric PSF, see [decam-chatter 14061]
+3103615-CCD3 CCD3 not working properly
+3103616-CCD3 CCD3 not working properly
+3103617-CCD3 CCD3 not working properly
+3103618-CCD3 CCD3 not working properly
+3103619-CCD3 CCD3 not working properly
+3103620-CCD3 CCD3 not working properly
+3103621-CCD3 CCD3 not working properly
+3103622-CCD3 CCD3 not working properly
+3103623-CCD3 CCD3 not working properly
+3103624-CCD3 CCD3 not working properly
+3103625-CCD3 CCD3 not working properly
+3103626-CCD3 CCD3 not working properly
+3103627-CCD3 CCD3 not working properly
+3103628-CCD3 CCD3 not working properly
+3103629-CCD3 CCD3 not working properly
+3103630-CCD3 CCD3 not working properly
+3103631-CCD3 CCD3 not working properly
+3103632-CCD3 CCD3 not working properly
+3103633-CCD3 CCD3 not working properly
+3103634-CCD3 CCD3 not working properly
+3103635-CCD3 CCD3 not working properly
+3103636-CCD3 CCD3 not working properly
+3103637 CCD3 not working properly also wind shake distorting stellar profiles
+3103638 CCD3 not working properly also wind shake distorting stellar profiles
+3103639-CCD3 CCD3 not working properly
+3103640-CCD3 CCD3 not working properly
+3103641-CCD3 CCD3 not working properly
+3103642-CCD3 CCD3 not working properly
+3103643-CCD3 CCD3 not working properly
+3103644-CCD3 CCD3 not working properly
+3103645-CCD3 CCD3 not working properly
+3103646-CCD3 CCD3 not working properly
+3103647-CCD3 CCD3 not working properly
+3103648-CCD3 CCD3 not working properly
+3103649-CCD3 CCD3 not working properly
+3103650-CCD3 CCD3 not working properly
+3103651-CCD3 CCD3 not working properly
+3103652-CCD3 CCD3 not working properly
+3103653-CCD3 CCD3 not working properly
+3103654-CCD3 CCD3 not working properly
+3103655-CCD3 CCD3 not working properly
+3103656-CCD3 CCD3 not working properly
+3103657-CCD3 CCD3 not working properly
+3103658-CCD3 CCD3 not working properly
+3103659-CCD3 CCD3 not working properly
+3103660-CCD3 CCD3 not working properly
+3103661-CCD3 CCD3 not working properly
+3103662-CCD3 CCD3 not working properly
+3103663-CCD3 CCD3 not working properly
+3103664-CCD3 CCD3 not working properly
+3103665-CCD3 CCD3 not working properly
+3103666-CCD3 CCD3 not working properly
+3103667-CCD3 CCD3 not working properly
+3103668-CCD3 CCD3 not working properly
+3103669-CCD3 CCD3 not working properly
+3103670-CCD3 CCD3 not working properly
+3103671-CCD3 CCD3 not working properly
+3103672-CCD3 CCD3 not working properly
+3103673-CCD3 CCD3 not working properly
+3103674-CCD3 CCD3 not working properly
+3103675-CCD3 CCD3 not working properly
+3103676-CCD3 CCD3 not working properly
+3103677-CCD3 CCD3 not working properly
+3103678-CCD3 CCD3 not working properly
+3103679-CCD3 CCD3 not working properly
+3103680-CCD3 CCD3 not working properly
+3103681-CCD3 CCD3 not working properly
+3103682-CCD3 CCD3 not working properly
+3103683-CCD3 CCD3 not working properly
+3103684-CCD3 CCD3 not working properly
+3103685-CCD3 CCD3 not working properly
+3103686-CCD3 CCD3 not working properly
+3103687-CCD3 CCD3 not working properly
+3103688-CCD3 CCD3 not working properly
+3103689-CCD3 CCD3 not working properly
+3103690-CCD3 CCD3 not working properly
+3103691 CCD3 not working properly, transparency 0.36
+3103692 CCD3 not working properly, transparency 0.13
+3103693 CCD3 not working properly, transparency 0.08
+3103694 CCD3 not working properly, transparency 0.33
 
 # 2017-01-17
-103821 depth factor < 0.3
-103970 timeout
-103972 5s frame
-103981 CCD4 not OK
-103982 timeout
-103983 5s frame
-#
+3103821 depth factor < 0.3
+3103970 timeout
+3103972 5s frame
+3103981 CCD4 not OK
+3103982 timeout
+3103983 5s frame
+
 # 2017-01-18
-104184 trans=0.245 depfac=0.002
-104187 trans=0.104 depfac=0.014
-104188 trans=0.179 depfac=0.048
-104189 trans=0.245 depfac=0.209
-104191 trans=0.175 depfac=0.068
-104192 trans=0.222 depfac=0.158
-104199 trans=0.200 depfac=0.045
-104200 trans=0.060 depfac=0.003
-104201 trans=0.171 depfac=0.065
-104202 trans=0.029 depfac=0.001
-104203 trans=0.006 depfac=0.000
-104204 trans=0.029 depfac=0.002
-104205 trans=0.105 depfac=0.028
-104206 trans=0.207 depfac=0.107
-104207 trans=0.249 depfac=0.153
-104208 trans=0.182 depfac=0.063
-104210 trans=0.078 depfac=0.010
-104211 trans=0.250 depfac=0.140
-104212 trans=0.258 depfac=0.128
-104213 expfactor=0.159  0.308    15.699 MzLS_570943_
-104214 expfactor=0.282  0.379     8.454 MzLS_564633_
-104215 expfactor=0.048  0.172    49.651 MzLS_564634_
-104215 trans=0.172 depfac=0.048
-104216 trans=0.100 depfac=0.018
-104217 trans=0.073 depfac=0.009
-104218 trans=0.064 depfac=0.005
-104219 trans=0.028 depfac=0.001
+3104184 trans=0.245 depfac=0.002
+3104187 trans=0.104 depfac=0.014
+3104188 trans=0.179 depfac=0.048
+3104189 trans=0.245 depfac=0.209
+3104191 trans=0.175 depfac=0.068
+3104192 trans=0.222 depfac=0.158
+3104199 trans=0.200 depfac=0.045
+3104200 trans=0.060 depfac=0.003
+3104201 trans=0.171 depfac=0.065
+3104202 trans=0.029 depfac=0.001
+3104203 trans=0.006 depfac=0.000
+3104204 trans=0.029 depfac=0.002
+3104205 trans=0.105 depfac=0.028
+3104206 trans=0.207 depfac=0.107
+3104207 trans=0.249 depfac=0.153
+3104208 trans=0.182 depfac=0.063
+3104210 trans=0.078 depfac=0.010
+3104211 trans=0.250 depfac=0.140
+3104212 trans=0.258 depfac=0.128
+3104213 expfactor=0.159  0.308    15.699 MzLS_570943_
+3104214 expfactor=0.282  0.379     8.454 MzLS_564633_
+3104215 trans=0.172 depfac=0.048
+3104216 trans=0.100 depfac=0.018
+3104217 trans=0.073 depfac=0.009
+3104218 trans=0.064 depfac=0.005
+3104219 trans=0.028 depfac=0.001
 
 # 2017-01-25
-104648
+3104648
 
 # 2017-01-26
-104780 pass=1 and seeing= 1.762  57780.118  0.483  0.920     2.071 MzLS_682965_
-104785 expfactor=0.265  0.893     3.772 MzLS_688057_
-104795 expfactor=0.164  0.807     6.118 MzLS_620894_
-104796 expfactor=0.135  0.792     7.433 MzLS_618148_
+3104780 pass=1 and seeing= 1.762  57780.118  0.483  0.920     2.071 MzLS_682965_
+3104785 expfactor=0.265  0.893     3.772 MzLS_688057_
+3104795 expfactor=0.164  0.807     6.118 MzLS_620894_
+3104796 expfactor=0.135  0.792     7.433 MzLS_618148_
 
 # 2017-01-27
-105059 expfactor=0.101  0.336     7.962 MzLS_571922_
+3105059 expfactor=0.101  0.336     7.962 MzLS_571922_
 
 # 2017-01-28
-105256 pass=1 and seeing= 1.924  57782.091  0.281  0.949     2.848 MzLS_682965_
-105257 expfactor=0.231  0.927     3.472 MzLS_684261_
+3105256 pass=1 and seeing= 1.924  57782.091  0.281  0.949     2.848 MzLS_682965_
+3105257 expfactor=0.231  0.927     3.472 MzLS_684261_
 
 # 2017-02-01
-105908 pass=1 with very bad seeing
-105909 pass=1 with very bad seeing
-105910 pass=1 with very bad seeing
+3105908 pass=1 with very bad seeing
+3105909 pass=1 with very bad seeing
+3105910 pass=1 with very bad seeing
 
 # 2017-02-02
-106313 expfactor=0.092  0.196    27.214 MzLS_615390_
-106314 trans=0.098 depfac=0.022
-106315 expfactor=0.261  0.304     9.594 MzLS_615391_
-106339 expfactor=0.252  0.430     3.174 MzLS_673526_
-106418 expfactor=0.205  0.317     3.915 MzLS_677714_
-106390 trans=0.244 depfac=0.127
-106434 trans=0.026 depfac=0.002
-106443 trans=0.232 depfac=0.165
-106444 trans=0.164 depfac=0.078
-106445 trans=0.234 depfac=0.453
-106468 trans=0.265 depfac=0.245
-106469 trans=0.269 depfac=0.339
+3106313 expfactor=0.092  0.196    27.214 MzLS_615390_
+3106314 trans=0.098 depfac=0.022
+3106315 expfactor=0.261  0.304     9.594 MzLS_615391_
+3106339 expfactor=0.252  0.430     3.174 MzLS_673526_
+3106381-CCD3 one amp misbehaving badly
+3106390 trans=0.244 depfac=0.127
+3106418 expfactor=0.205  0.317     3.915 MzLS_677714_
+3106434 trans=0.026 depfac=0.002
+3106443 trans=0.232 depfac=0.165
+3106444 trans=0.164 depfac=0.078
+3106445 trans=0.234 depfac=0.453
+3106468 trans=0.265 depfac=0.245
+3106469 trans=0.269 depfac=0.339
 
 # 2017-02-03
-106563 trans=0.166 depfac=0.000
-106625 CCD1 unresponsive
-106626 CCD1 unresponsive
-106627 CCD1 unresponsive
-106628 CCD1 unresponsive
-106629 CCD1 unresponsive
-106630 CCD1 unresponsive
-106631 CCD1 unresponsive
-106632 CCD1 unresponsive
-106785 pass2 with low transparency <50%
-106786 pass2 with transparency <50%
+3106563 trans=0.166 depfac=0.000
+3106625 CCD1 unresponsive
+3106626 CCD1 unresponsive
+3106627 CCD1 unresponsive
+3106628 CCD1 unresponsive
+3106629 CCD1 unresponsive
+3106630 CCD1 unresponsive
+3106631 CCD1 unresponsive
+3106632 CCD1 unresponsive
+3106785 pass2 with low transparency <50%
+3106786 pass2 with transparency <50%
 
 # 2017-02-04
-106877 trans=0.136 depfac=0.000
-106904 pass1 underexposed
-107018 pass3 transparency near 50%
-107019 pass3 transparency below <50%
-107020 pass3 transparency below <50%
-107021 pass3 transparency below <50%
-107022 pass3 transparency below <50%
-107023 pass3 transparency near 50%
-107075 pass3 transparency below <50%
-107076 pass3 transparency below <50%
-107077 pass3 transparency below <50%
-107078 pass3 transparency below <50%
-107079 pass3 transparency below <50%
-107080 pass3 transparency below <50%
-107081 pass3 transparency below <50%
-107089 pass3 transparency below <50%
-107090 pass3 transparency below <50%
-107091 pass3 transparency below <50%
-107092 pass3 transparency below <50%
-107093 pass3 transparency below <50%
-107094 pass3 transparency below <50%
-107098 pass3 transparency below <50%
-107099 pass3 transparency below <50%
-107100 pass3 transparency below <50%
-107101 pass3 transparency below <50%
-107102 pass3 transparency below <50%
-107104 pass3 transparency below <50%
-107105 pass3 transparency below <50%
-107114 pass3 transparency below <50%
-107115 pass3 transparency below <50%
-107116 pass3 transparency below <50%
-107117 pass3 transparency below <50%
+3106877 trans=0.136 depfac=0.000
+3106878 bad PSF, see [decam-chatter 14061]
+3106904 pass1 underexposed
+3107018 pass3 transparency near 50%
+3107019 pass3 transparency below <50%
+3107020 pass3 transparency below <50%
+3107021 pass3 transparency below <50%
+3107022 pass3 transparency below <50%
+3107023 pass3 transparency near 50%
+3107075 pass3 transparency below <50%
+3107076 pass3 transparency below <50%
+3107077 pass3 transparency below <50%
+3107078 pass3 transparency below <50%
+3107079 pass3 transparency below <50%
+3107080 pass3 transparency below <50%
+3107081 pass3 transparency below <50%
+3107089 pass3 transparency below <50%
+3107090 pass3 transparency below <50%
+3107091 pass3 transparency below <50%
+3107092 pass3 transparency below <50%
+3107093 pass3 transparency below <50%
+3107094 pass3 transparency below <50%
+3107098 pass3 transparency below <50%
+3107099 pass3 transparency below <50%
+3107100 pass3 transparency below <50%
+3107101 pass3 transparency below <50%
+3107102 pass3 transparency below <50%
+3107104 pass3 transparency below <50%
+3107105 pass3 transparency below <50%
+3107114 pass3 transparency below <50%
+3107115 pass3 transparency below <50%
+3107116 pass3 transparency below <50%
+3107117 pass3 transparency below <50%
 
 # 2017-02-05
-107187 pass2 dome vignetting telescope.
-107188 pass2 dome vignetting telescope.
-107204 pass2 transparency below 50%.
-107205 pass2 transparency below 50%.
-107208 pass3 transparency below 50%.
-107209 pass3 transparency well below 50%.
-107210 pass3 transparency well below 50%.
-107235 pass3 transparency well below 50%.
-107236 pass3 transparency well below 50%.
-107237 pass3 transparency well below 50%.
+3107172 bad (donutty) PSF, see [decam-chatter 14061]
+3107173 bad (donutty) PSF, see [decam-chatter 14061]
+3107187 pass2 dome vignetting telescope.
+3107188 pass2 dome vignetting telescope.
+3107204 pass2 transparency below 50%.
+3107205 pass2 transparency below 50%.
+3107208 pass3 transparency below 50%.
+3107209 pass3 transparency well below 50%.
+3107210 pass3 transparency well below 50%.
+3107235 pass3 transparency well below 50%.
+3107236 pass3 transparency well below 50%.
+3107237 pass3 transparency well below 50%.
 
 # 2017-02-06
-107281 pass2 transparency below 50%.
-107282 pass2 transparency below 50%.
-107283 pass3 transparency below 50%.
-107284 pass2 transparency below 50%.
-107285 expfactor=0.060  0.510    11.639 MzLS_730485_
-107286 pass3 transparency below 50%.
-107287 pass3 may have picked up some stray light.
-107288 pass2? transparency well below 50%.
-107289 pass2? transparency well below 50%.
-107290 pass2? transparency well below 50%.
-107291 pass2? transparency well below 50%.
-107292 pass3 transparency well below 50%.
-107293 pass3 transparency well below 50%.
-107297 pass2? transparency below 50%.
-107331 pass2? transparency well below 50%.
-107332 pass3 transparency below 50%.
-107333 pass3 transparency below 50%.
-107334 pass3 transparency below 50%.
-107338 expfactor=0.299  0.516     7.369 MzLS_714822_
-107339 pass3 may have picked up some stray light.
-107340 pass3 probably pointed at bright cloud.
-107341 pass3 transparency well below 50%.
-107343 expfactor=0.260  0.659     3.078 MzLS_702978_
-107346 pass3 transparency below 50%.
+3107279 bad (donutty) PSF, see [decam-chatter 14061]
+3107281 pass2 transparency below 50%.
+3107282 pass2 transparency below 50%.
+3107283 pass3 transparency below 50%.
+3107284 pass2 transparency below 50%.
+3107285 expfactor=0.060  0.510    11.639 MzLS_730485_
+3107286 pass3 transparency below 50%.
+3107287 pass3 may have picked up some stray light.
+3107288 pass2? transparency well below 50%.
+3107289 pass2? transparency well below 50%.
+3107290 pass2? transparency well below 50%.
+3107291 pass2? transparency well below 50%.
+3107292 pass3 transparency well below 50%.
+3107293 pass3 transparency well below 50%.
+3107297 pass2? transparency below 50%.
+3107331 pass2? transparency well below 50%.
+3107332 pass3 transparency below 50%.
+3107333 pass3 transparency below 50%.
+3107334 pass3 transparency below 50%.
+3107338 expfactor=0.299  0.516     7.369 MzLS_714822_
+3107339 pass3 may have picked up some stray light.
+3107340 pass3 probably pointed at bright cloud.
+3107341 pass3 transparency well below 50%.
+3107343 expfactor=0.260  0.659     3.078 MzLS_702978_
+3107346 pass3 transparency below 50%.
 
 # 2017-02-07
+107475 asymmetric/donutty PSF, see [decam-chatter 14061]
 107478 expfactor=0.287  0.813     2.795 MzLS_729782_
 107481 pass2 seeing >1.3 arcsec, non-photometric
 107482 pass2 seeing >1.3 arcsec, non-photometric
@@ -1942,6 +1884,7 @@
 107539 expfactor=0.172  0.443     9.202 MzLS_592394_
 
 # 2017-02-08
+107676 asymmetric/donutty PSF, see [decam-chatter 14061]
 107684 pass2 high sky background from bright moon and cirrus
 107685 pass2 high sky background from bright moon and cirrus
 107692 expfactor=0.293  0.745     3.996 MzLS_715645_
@@ -1982,6 +1925,9 @@
 107840 pass3 high sky background from twilight and cirrus
 107841 pass3 high sky background from twilight and cirrus, nearly saturated
 
+# 2017-02-09
+108129-CCD4 bright star artifact
+
 # 2017-02-14
 108502 trans<0.5 depfac<0.3
 108503 trans<0.5 depfac<0.3
@@ -2005,13 +1951,12 @@
 108571 expfactor=0.291  0.909     7.657 MzLS_609833_
 108575 trans<0.5 depfac<0.3
 
-#2017-02-15
+# 2017-02-15
 108765  empty frame, timeout
 
-#2017-02-16
+# 2017-02-16
 108952 empty frame, timeout
 108953 saturated zero
-108977 seeing >2 arcsec, poor wather condition, terrible PSF
 108977 seeing >2 arcsec, poor wather condition, terrible PSF
 108978 seeing >2 arcsec, seeing >2 arcsec, poor wather condition, terrible PSF
 108979 poor wather condition, terrible PSF
@@ -2076,7 +2021,6 @@
 110590 trans<0.8 (pass 1)
 110591 trans<0.5 (pass 2)
 110592 trans<0.5 (pass 2)
-110462 trans<0.3 (pass 3)
 110615 trans<0.3 (pass 3)
 110616 expfactor=0.168  0.216    12.353 MzLS_620915_
 110617 expfactor=0.065  0.124    38.331 MzLS_623635_
@@ -2095,9 +2039,9 @@
 110991 telescope moved during exposure
 
 # 2017-03-02
+111472 trailed/asymmetric PSF, see [decam-chatter 14061]
 111474 trans very low (pass 3)
 111475 trans very low (pass 1)
-111479 trans very low (pass 2)
 111479 trans very low (pass 2)
 111482 trans very low (pass 3)
 111483 trans very low (pass 3)
@@ -2122,27 +2066,11 @@
 111506 trans < 0.1 (pass 2)
 111507 trans < 0.1 (pass 2)
 111508 trans < 0.1 (pass 3)
-111755 out of focus
-111756 out of focus
-111757 mirror covers were closed
-# anything before-111792 Due to a cloudy weather, the dome is closed (no useful data tonight)
-
-113282 counts > 50k
-113283 counts > 50k
-113284 counts > 50k
-113287 trans < 0.5
-113288 trans < 0.5
-113289 trans < 0.5
-113290 trans < 0.5
-113291 trans < 0.5
-113292 trans < 0.5
-113293 trans < 0.5
-113294 trans < 0.62
-113295 trans < 0.5
-113296 trans < 0.1
 
 # 2017-03-04
 111755 expfactor=0.231  0.902     3.471 MzLS_711737_
+111756 out of focus
+111757 mirror covers were closed
 111759 expfactor=0.162  0.503     8.650 MzLS_714803_
 111760 expfactor=0.136  0.379    16.295 MzLS_714804_
 111761 expfactor=0.010  0.122   196.302 MzLS_712183_
@@ -2300,9 +2228,13 @@
 114771 depth factor 0.5, transparency <0.5
 
 # 2017-03-17
+114939 donutty PSF, see [decam-chatter 14061]
+114940 donutty PSF, see [decam-chatter 14061]
+114941 donutty PSF, see [decam-chatter 14061]
 115163 corrupted file, timed out
 
 # 2017-03-19
+115568 bad (donutty) PSF, see [decam-chatter 14061]
 115632 transparency <0.5, in pass2
 115637 transparency <0.2, depth 0.1, pass 3
 115638 transparency <0.2, depth 0.06, pass 3
@@ -2310,7 +2242,6 @@
 115773 transparency 0.36, depth 0.28, pass 3
 115774 transparency 0.28, pass 3
 115775 transparency 0.20, pass3
-
 
 # 2017-03-20
 115941 bad zero after det timeout recovery
@@ -2327,6 +2258,7 @@
 116018 expfactor=0.228  0.212    10.970 MzLS_601265_
 116019 trans < 0.1
 116020 trans < 0.1
+116028-CCD4 bright star artifact
 116036 trans < 0.2
 116037 trans < 0.5
 116044 trans < 0.1
@@ -2346,12 +2278,17 @@
 116513 elongated slightly E-W windshake
 116514 elongated slightly E-W windshake
 116515 elongated slightly E-W windshake
+116647-CCD4 bright star artifact
 
 # 2017-03-24
+116717 donutty PSF, see [decam-chatter 14061]
 116789 pass=1 and seeing= 1.647  57837.268  1.054  0.937     0.893 MzLS_661889_
 116790 pass=1 and seeing= 1.646  57837.269  1.113  0.936     0.944 MzLS_650171_
 
-#2017-03-26
+# 2017-03-25
+117164-CCD4 bright star artifact
+
+# 2017-03-26
 117271 elongated due to poor focus and loss of air.
 # 117311 on amp 9 there appears to be a strange blob of light slightly resembling a massive spiral galaxy. Could be due to some light scattering.
 # 117333 on amp 14 similar problem is observed, but not as big
@@ -2362,7 +2299,7 @@
 117454 very bad focus. Might be windshake.
 117455 bad focus.
 
-#2017-03-27
+# 2017-03-27
 # 117508 bad column on amp 6 at x=7394. Also observed a shadow on amp 8 same column.
 # 117509 all subsequent frames are affected (and the flats).
 # 117528 strange blob of light again on amp 14.
@@ -2371,7 +2308,7 @@
 117590 even worse. Had to stop.
 117591 very  bad, will be last image for a while.
 
-#2017-03-28
+# 2017-03-28
 # 117695 blob of light visible on amp 14. Resembles a spiral galaxy but much bigger.
 # 117700 blob of light appears again, this time on amp 9.
 # 117701 blob of light on amp 14. This time its so bright it is causing saturation and bleeding.
@@ -2380,12 +2317,12 @@
 117878 triangle stars, looks like mirror went of air.
 117879 same problem as last image.
 
-#2017-03-29
+# 2017-03-29
 118275 bad focus.
 118276 bad focus
 118277 bad focus
 
-#2017-03-31
+# 2017-03-31
 118571 very low transparency
 118572 very low transparency
 118574 very low transparency
@@ -2398,26 +2335,27 @@
 118725 depthfactor=0.03
 118726 depthfactor=0.1
 
-#2017-04-01
+# 2017-04-01
 118789 expfactor=0.161  0.307    10.448 MzLS_733090_
 119006 image with elongated objects (bad tracking??)
 
-#2017-04-02
+# 2017-04-02
+119072 bad PSF, see [decam-chatter 14061]
 119165 pass=1 and seeing= 1.707  57846.270  0.777  0.883     1.366 MzLS_668572_
 119166 pass=1 and seeing= 1.821  57846.272  0.732  0.881     1.464 MzLS_661908_
 119201 pass=1 and seeing= 1.754  57846.324  0.726  0.893     1.103 MzLS_661931_
 
-#2017-04-03
+# 2017-04-03
 119437 shifted image
 119444 bright streak down the side between im14 and im9
 
-#2017-04-03
+# 2017-04-03
 119499 the telescope was accidentally offset during exposure.
 
-#2017-04-05
+# 2017-04-05
 120007 expfactor=0.076  0.504    13.728 MzLS_599407_
 
-#2017-04-06
+# 2017-04-06
 120086 expfactor=0.039  0.335    56.568 MzLS_646904_
 120087 expfactor=0.014  0.261   106.242 MzLS_651763_
 120088 expfactor=0.045  0.495    18.105 MzLS_651761_
@@ -2443,21 +2381,25 @@
 120109 expfactor=0.015  0.323    78.471 MzLS_639401_
 120191 expfactor=1.520  0.952     0.527 MzLS_666440_
 
-#2017-04-07
+# 2017-04-07
 120310 expfactor=0.110  0.560     7.266 MzLS_661094_
 120311 expfactor=0.114  0.565     7.015 MzLS_663358_
 120312 expfactor=0.238  0.683     3.362 MzLS_663359_
+120528 double image / trailing, see [decam-chatter 13635]
 
-#2017-04-09
+# 2017-04-09
 120886 MAPS off air
 # 121005 v. bright star; lots of nasty reflections
 
-#2017-04-11
+# 2017-04-11
 121310 pointing off by > 60"
 121311 pointing off by > 60"
 121312 pointing off by > 60"
 
-#2017-04-14
+# 2017-04-12
+121494 bad PSF, see [decam-chatter 14061]
+
+# 2017-04-14
 121721 depthfactor=0.000 trans=0.082
 121723 depthfactor=0.011 trans=0.084
 121724 depthfactor=0.000 trans=0.017
@@ -2489,30 +2431,33 @@
 121752 depthfactor=0.039 trans=0.188
 121753 depthfactor=0.074 trans=0.227
 121754 depthfactor=0.097 trans=0.257
+122019 fwhm==nan
 
-#2017-04-14
+# 2017-04-14
 122080 expfactor=0.200  0.785     4.002 MzLS_701446_
 
-#2017-04-15
+# 2017-04-15
 122268 timeout (corrupted file)
 122276 bad PSF; pass 1 tile in poor conditions
 122282 bad PSF with seeing~2" (outlier)
 122311 corrupt frame (looks like a zero instead of science)
 122312 timeout (corrupted file)
 
-#2017-04-16
+# 2017-04-16
 122501 low trans
 122502 low trans
 122671 timeout, bad image
 
-#2017-04-17
+# 2017-04-17
 122769 trans < 30
 122770 trans < 30
 122771 trans < 30
 122822 tracking dropped with power. Trailed.
+122882 trailed PSF, see [decam-chatter 14061]
 122956 no stars
 
-#2017-04-18
+# 2017-04-18
+123148 trailed PSF, see [decam-chatter 14061]
 123153 bad amp ccd1
 123154 bad amp ccd1
 123155 bad amp ccd1
@@ -2521,18 +2466,18 @@
 123158 bad amp ccd1
 123288 mirror off air
 
-#2017-04-19
+# 2017-04-19
 123459 TO
 123543 TO
 
-#2017-04-20
+# 2017-04-20
 123666 Null image after detector timeout
 123672 Null image after detector timeout
 123682 Null image after detector timeout
 123690 Null image after detector timeout
 123695 Null image after detector timeout
 
-#2017-04-21
+# 2017-04-21
 123907 bad focus
 123996 Trefoil PSF
 123997 Trefoil PSF
@@ -2540,7 +2485,7 @@
 124085 E-W elongated PSF
 124086 E-W elongated PSF
 
-#2017-04-22
+# 2017-04-22
 124112 Null image after detector timeout
 124113 Junk image after detector timeout
 124161 Null image after detector timeout
@@ -2553,7 +2498,7 @@
 124297 Junk image after detector timeout
 124317 Null image
 
-#2017-04-23
+# 2017-04-23
 124373 Null image after detector timeout
 124374 Junk image after detector timeout
 124385 Null image after detector timeout
@@ -2569,8 +2514,7 @@
 124484 expfactor=0.026  0.609    31.500 MzLS_719278_Bad exposure mistake on focus entry
 124485 expfactor=0.026  0.596    30.309 MzLS_719279_Bad exposure mistake on focus entry
 
-
-#2017-04-25
+# 2017-04-25
 124699 expfactor=0.231  0.610     4.329 MzLS_641935_
 124700 expfactor=0.176  0.508     5.687 MzLS_641936_
 124701 expfactor=0.214  0.363    11.700 MzLS_641938_
@@ -2584,7 +2528,7 @@
 124791 expfactor=0.096  0.146    26.001 MzLS_629150_
 124792 expfactor=0.185  0.205    13.508 MzLS_629152_
 
-#2017-04-26
+# 2017-04-26
 124886 expfactor=*****  0.000     0.000 MzLS_620976_
 124887 Junk image after detector timeout
 124888 Null image after detector timeout
@@ -2600,7 +2544,7 @@
 124919 expfactor=0.043  0.106    57.938 MzLS_639489_
 
 
-#2017-04-27
+# 2017-04-27
 124956 Amp 7 inoperable
 124957 Amp 7 inoperable
 124958 Amp 7 inoperable
@@ -2616,7 +2560,7 @@
 124983 expfactor=0.067  0.278    11.957 MzLS_642006_
 124984 expfactor=0.136  0.230    18.328 MzLS_642017_
 
-#2017-04-28
+# 2017-04-28
 125073 expfactor=0.262  0.803     3.822 MzLS_641949_
 125074 expfactor=0.300  0.727     8.349 MzLS_641942_
 125077 expfactor=0.163  0.724     6.142 MzLS_629028_
@@ -2653,10 +2597,10 @@
 125138 Pointing test
 125139 Focus test, cloud cover midway through
 
-#2017-05-01
+# 2017-05-01
 125959 corrupt frame (looks like zero instead of science)
 
-#2017-05-05
+# 2017-05-05
 126806 transparency < 0.3
 126807 transparency < 0.3
 126808 transparency < 0.3
@@ -2698,14 +2642,11 @@
 127853 pass=1 and seeing= 1.672  57887.189  1.251  0.911     1.807 MzLS_686839_
 127854 pass=1 and seeing= 1.684  57887.192  1.440  0.946     1.736 MzLS_686841_
 127855 pass=1 and seeing= 1.681  57887.196  1.243  0.905     1.457 MzLS_686849_
+127893 pass=1 and seeing= 1.618  57887.293  1.083  0.933     1.376 MzLS_699264_
 127964 high background (24,000)
 127965 high background (30,000)
 127966 hit the Dark button to avoid overexposing
 127967 high background, short exposure
-127893 pass=1 and seeing= 1.618  57887.293  1.083  0.933     1.376 MzLS_699264_
-133218 pass=1 and seeing= 1.775  57918.178  0.233  0.417     8.176 MzLS_697557_
-133222 pass=1 and seeing= 1.606  57918.193  0.230  1.010     3.480 MzLS_565676_
-
 
 # 2017-05-14
 128006  Depth factor = 0.300  0.847     3.342 MzLS_577116_
@@ -2734,9 +2675,6 @@
 128183 Depth factor = 0.180  0.940     5.575 MzLS_569834_
 128184 Depth factor = 0.267  0.963     5.359 MzLS_572967_
 
-# 2017-05-17
-129585 timeout error, bad image
-
 # 2017-05-19
 128937 Depth factor = 0.095  0.942     8.414 MzLS_651734_
 128938 expfactor=0.267  0.953     1.203 MzLS_651774_
@@ -2747,6 +2685,15 @@
 
 # 2017-05-21
 129512 timeout error, corrupted image
+
+# 2017-05-22
+129585 timeout error, bad image
+
+# 2017-05-23
+129926-CCD4 weird blurring artifacts on some amps
+
+# 2017-05-28
+130584 Depth factor = 0.000
 
 # 2017-05-29
 130712 Depth factor = 0.015  0.147    54.685
@@ -2793,7 +2740,6 @@
 130789 Depth factor = 0.171  0.225    11.212
 
 # 2017-05-30
-130584 Depth factor = 0.000
 130856 very bad weather, cloudy
 130857
 130858
@@ -2851,7 +2797,6 @@
 131066 Depth factor = 0.02
 131067 Depth factor = 0.06
 131068 Depth factor = 0.04
-131069 Depth factor = 0.05 0.21
 131069 Depth factor = 0.05
 131070 Depth factor = 0.15
 131071 Depth factor = 0.19 0.37
@@ -2895,7 +2840,6 @@
 131820 Bad image by detector timeout
 
 # 2017-06-05
-
 131942 Depth factor = 0.054  0.535    14.914 MzLS_597288_
 131943 Depth factor = 0.067  0.552    12.009 MzLS_597289_
 131944 Depth factor = 0.028  0.414    37.165 MzLS_564605_
@@ -3030,6 +2974,7 @@
 # 2017-06-12
 133007 Depth factor = 0.177  1.005     4.523 MzLS_600208_
 133008 Depth factor = 0.191  0.975     4.190 MzLS_608851_
+133010 donutty PSF, see [decam-chatter 14061]
 
 # 2017-06-13
 133217 Dome obstructing the telescope
@@ -3047,35 +2992,38 @@
 133624 Seeing = 2.39, depth factor = 0.45
 133625 Seeing = 2.25
 
-
 # 2017-08-01
 135517 very thick clouds
 135518 very thick clouds
 135519 very thick clouds
 
-# 2017-08-04
-135778 expfactor=0.239  MzLS_697086_
-135825 expfactor=0.015  MzLS_698229_
-135826 expfactor=0.021  MzLS_698232_
-135827 expfactor=0.001  MzLS_698233_
-135830 expfactor=0.000  MzLS_601380_
-135831 expfactor=0.003  MzLS_604277_
-135832 expfactor=0.003  MzLS_604278_
-135833 expfactor=0.224  MzLS_601382_
-135872 expfactor=0.237  MzLS_664844_
-135873 expfactor=0.282  MzLS_681664_
-135874 expfactor=0.143  MzLS_628976_
+# 2017-08-03
 
-#2017-08-05
-135916  expfactor=0.001 MzLS_725473_
-135917  expfactor=0.031 MzLS_726372_
-135918  expfactor=0.220 MzLS_727235_
-135919  expfactor=0.017 MzLS_727236_
-135920  expfactor=0.021 MzLS_727237_
-135921  expfactor=0.183 MzLS_726374_
-135922  nmatched < 10
-136019  expfactor=0.181 MzLS_689298_
-136024  expfactor=0.206 MzLS_641901_
+# 2017-08-04
+3135717 bad (trailed) PSF, see [decam-chatter 14061]
+3135718 bad (trailed) PSF, see [decam-chatter 14061]
+3135778 expfactor=0.239  MzLS_697086_
+3135825 expfactor=0.015  MzLS_698229_
+3135826 expfactor=0.021  MzLS_698232_
+3135827 expfactor=0.001  MzLS_698233_
+3135830 expfactor=0.000  MzLS_601380_, trailed PSF, see [decam-chatter 14061]
+3135831 expfactor=0.003  MzLS_604277_
+3135832 expfactor=0.003  MzLS_604278_
+3135833 expfactor=0.224  MzLS_601382_
+3135872 expfactor=0.237  MzLS_664844_
+3135873 expfactor=0.282  MzLS_681664_
+3135874 expfactor=0.143  MzLS_628976_
+
+# 2017-08-05
+3135916  expfactor=0.001 MzLS_725473_
+3135917  expfactor=0.031 MzLS_726372_
+3135918  expfactor=0.220 MzLS_727235_
+3135919  expfactor=0.017 MzLS_727236_
+3135920  expfactor=0.021 MzLS_727237_
+3135921  expfactor=0.183 MzLS_726374_
+3135922  nmatched < 10
+3136019  expfactor=0.181 MzLS_689298_
+3136024  expfactor=0.206 MzLS_641901_
 
 # 2017-08-06
 136221 expfactor=0.288 MzLS_696393_
@@ -3087,7 +3035,7 @@
 136398 expfactor=0.161 MzLS_623614_
 136399 expfactor< 0.3  MzLS_620894_
 
-#2017-08-08
+# 2017-08-08
 136573 expfactor=0.17 MzLS_637030_
 136577 expfactor=0.27 MzLS_642109_
 136578 expfactor=0.29 MzLS_642111_
@@ -3185,7 +3133,6 @@
 137917 expfactor=*****  MzLS_577141_
 
 # 2017-09-02
-
 137966 expfactor=0.010  MzLS_709514_
 137967 expfactor=0.040  MzLS_708081_
 137968 expfactor=0.005  MzLS_709516_
@@ -3309,10 +3256,9 @@
 # 2017-09-05
 138466 flats with lamp off
 138467 flats with lamp off
-138506 telescope is slewing when taking exposure
+138491 bad (donutty) PSF, see [decam-chatter 14061]
+138506 expfactor=0.016 MzLS_603313_, telescope is slewing when taking exposure
 138511 test zero
-138596 test zero
-138506 expfactor=0.016 MzLS_603313_
 138531 expfactor=0.251 MzLS_674384_
 138532 expfactor=0.253 MzLS_674384_
 138544 expfactor=0.267 MzLS_684437_
@@ -3339,11 +3285,14 @@
 138566 expfactor=0.254 MzLS_669965_
 138571 expfactor=0.281 MzLS_630748_
 138573 expfactor=0.280 MzLS_649328_
+138596 test zero
 138597 expfactor=0.120 MzLS_567768_
 138598 expfactor=0.070 MzLS_567771_
 138599 expfactor=0.079 MzLS_635983_
 
 # 2017-09-06
+138661 bad (donutty) PSF, see [decam-chatter 14061]
+138662 bad PSF, see [decam-chatter 14061]
 138665 expfactor=0.279 MzLS_709504_
 138666 expfactor=0.253 MzLS_710902_
 138669 expfactor=0.252 MzLS_710905_
@@ -3391,7 +3340,6 @@
 138740 expfactor=0.147 MzLS_682484_
 
 # 2017-09-07
-
 138886 expfactor=0.274 MzLS_680513_
 138887 expfactor=0.259 MzLS_680517_
 138888 expfactor<0.3   MzLS_680522_
@@ -3499,7 +3447,7 @@
 140544 expfactor=0.24 seeing=3.48 MzLS_700410
 140545 expfactor=0.15 seeing=3.70 MzLS_665766
 140546 expfactor=0.25 seeing=3.37 MzLS_615612
-149547 expfactor=0.10 seeing=4.4- MzLS_656668
+140547 expfactor=0.10 seeing=4.4- MzLS_656668
 140548 seeing=3.17 MzLS_676457
 140549 expfactor=0.13 seeing=4.08 MzLS_690061
 140550 expfactor=0.12 seeing=4.06 MzLS_690059
@@ -3559,6 +3507,7 @@
 140774 seeing=2.14 MzLS_703612
 
 # 2017-09-25
+140870-CCD3 one amp misbehaving badly
 140881 seeing=2.34 MzLS_647075
 140914 seeing=2.20 MzLS_695406
 140915 seeing=2.36 MzLS_698790
@@ -3579,16 +3528,19 @@
 141038 seeing=2.14 MzLS_691879
 141040 seeing=2.09 MzLS_676466
 
-# 2017-09-28
-141262 seeing=2.05 MzLS_703556
-141263 seeing=2.35 MzLS_709502
-141333 seeing=2.30 MzLS_705134
+# 2017-09-27
+141118 bad (donutty) PSF, see [decam-chatter 14061]
 
-# 2017-09-29
-141413 seeing=2.04 MzLS_709506
+# 2017-09-28
+141213 seeing=2.04 MzLS_709506
 141214 seeing=2.26 MzLS_709502
 141215 seeing=2.30 MzLS_710900
 141217 seeing=2.04 MzLS_712265
+141262 seeing=2.05 MzLS_703556
+141263 seeing=2.35 MzLS_709502
+
+# 2017-09-29
+141333 seeing=2.30 MzLS_705134
 141444 seeing=2.45 MzLS_706634
 141446 seeing=2.13 MzLS_703597
 141448 seeing=2.11 MzLS_697104
@@ -3600,6 +3552,8 @@
 141454 seeing=2.61 MzLS_706635
 
 # 2017-09-30
+141526 bad (donutty) PSF, see [decam-chatter 14061]
+141527 bad PSF, see [decam-chatter 14061]
 141628 bad image produced by detector time out
 141641 lost tracking due to hitting hour angle limit
 141671 bad image produced by detector time out
@@ -3630,7 +3584,8 @@
 142031  expfactor=0.147  0.787     6.832 MzLS_710940_
 142046  expfactor=0.278  0.861     7.454 MzLS_717384_
 
-#2017-10-04
+# 2017-10-04
+142286 bad (donutty) PSF, see [decam-chatter 14061]
 142289 expfactor=0.260  0.686     3.850 MzLS_709548_
 142290 expfactor=0.253  0.702     3.964 MzLS_708117_
 142291 expfactor=0.241  0.679     4.153 MzLS_709548_
@@ -3648,27 +3603,19 @@
 142627 detector timeout
 142653 Weird extra observation in focus script
 
-#2017-10-07
+# 2017-10-07
 142830 expfactor
-142831 expfactor
-142892 timeout
-142894 dome drive tripped
-142904 dome drive tripped
-142905 dome drive tripped
-142906 dome drive tripped
-142907 dome drive tripped
-142908 dome drive tripped
 142831 expfactor=0.124  0.836     6.462 MzLS_700421_
-142894 expfactor=0.408  0.392     1.963 MzLS_728798_
-142904 expfactor=0.007  0.076   149.436 MzLS_732172_
-142905 expfactor=*****  0.000     0.000 MzLS_731572_
-142906 expfactor=0.000  0.009  4413.938 MzLS_731571_
-142907 expfactor=0.000  0.007  7412.473 MzLS_730931_
-142908 expfactor=0.044  0.114    38.966 MzLS_730930_
+142892 timeout
+142894 expfactor=0.408  0.392     1.963 MzLS_728798_, dome drive tripped
+142904 expfactor=0.007  0.076   149.436 MzLS_732172_, dome drive tripped
+142905 expfactor=*****  0.000     0.000 MzLS_731572_, dome drive tripped
+142906 expfactor=0.000  0.009  4413.938 MzLS_731571_, dome drive tripped
+142907 expfactor=0.000  0.007  7412.473 MzLS_730931_, dome drive tripped
+142908 expfactor=0.044  0.114    38.966 MzLS_730930_, dome drive tripped
 142945 expfactor=0.212  0.906     8.561 MzLS_725439_
 142946 expfactor=0.180  0.931     8.189 MzLS_725435_
 142947 expfactor=0.100  0.907     9.881 MzLS_721470_
-
 
 # 2017-10-08
 142997 pass=1 and seeing= 1.612  58035.116  0.769  0.965     2.343 MzLS_705601_
@@ -3679,26 +3626,27 @@
 143021 pre-timeout
 143043 expfactor=0.01 (twi) pass=1 and seeing= 2.923  58035.527  0.007  0.307   250.547 MzLS_697561_
 
-#2017-10-27
+# 2017-10-27
 143684 slewing while integrating
 143755 expfactor=0.013  0.115   125.795 MzLS_733904_
 143757 expfactor=0.007  0.076   204.572 MzLS_733426_
 
-#2017-10-28
+# 2017-10-28
 143869 expfactor=0.003  0.044   437.677 MzLS_705600_
 143876 pass=1 and seeing= 1.777  58055.093  0.707  0.906     2.506 MzLS_705611_
 143879 pass=1 and seeing= 1.730  58055.102  0.853  0.892     2.169 MzLS_705619_
 143954 bad focus expfactor=0.023  0.449    71.458 MzLS_700971_
 143955 bad focus expfactor=0.018  0.433    71.241 MzLS_702566_
 
-#2017-10-29
+# 2017-10-29
 144205 moved in middle of exposure
 144262 expfactor=0.785  0.810     1.313 MzLS_733424_
 144263 expfactor=3.324  1.610     0.331 MzLS_733901_
 144264 expfactor=0.072  0.209    15.796 MzLS_734337_
 144271 expfactor=0.184  0.359    11.559 MzLS_732371_
 
-#2017-10-30
+# 2017-10-30
+144359 bad PSF, see [decam-chatter 14061]
 144396 expfactor=0.224  0.826     4.474 MzLS_709545_
 144397 expfactor=0.171  0.804     5.857 MzLS_710942_
 144398 expfactor=0.349  0.162     2.870 MzLS_710943_
@@ -3710,7 +3658,7 @@
 144407 expfactor=0.113  0.852     8.838 MzLS_717383_
 144445 expfactor=0.026  0.166    71.713 MzLS_733906_
 
-#2017-10-31
+# 2017-10-31
 144577 expfactor=0.092  0.196    24.022 MzLS_680376_
 144597 expfactor=0.163  0.261     7.722 MzLS_682374_
 144598 expfactor=0.077  0.126    32.350 MzLS_680395_
@@ -3720,10 +3668,12 @@
 144603 expfactor=0.061  0.162    40.929 MzLS_729793_
 144604 expfactor=0.015  0.103   170.309 MzLS_729054_
 
-#2017-11-01
+# 2017-11-01
+144641 donutty PSF, see [decam-chatter 14061]
 144743 expfactor=0.139  0.789    12.278 MzLS_682390_
 
-#2017-11-02
+# 2017-11-02
+144792 bad PSF, see [decam-chatter 14061]
 144799 telescope moved while integrating
 144811 telescope went beyond western limit and tracking was off
 144856 expfactor=0.219  0.929     4.575 MzLS_369269_
@@ -3731,13 +3681,14 @@
 144858 pass=1 and seeing= 1.619  58060.233  0.716  0.951     2.975 MzLS_366781_
 144874 focus change in the middle of integrations
 
-#2017-11-04
+# 2017-11-04
+144985 bad (donutty) PSF, see [decam-chatter 14061]
 145023 too much clouds with moon, >30kadu in background
 
-#2017-11-05
+# 2017-11-05
 # Clouds and moon gives a high background.
-# From copilot : Possible bad_expid.txt entries:
-145206 expfactor=0.19 MzLS_727206_
+145151-CCD1 astrometric issues [decam-chatter 14683]
+145151-CCD2 astrometric issues [decam-chatter 14683]
 145193 expfactor=0.12 MzLS_682351_
 145194 expfactor=0.24 MzLS_682352_
 145195 expfactor=0.19 MzLS_680376_
@@ -3747,6 +3698,7 @@
 145200 expfactor=0.14 MzLS_686210_
 145202 expfactor=0.27 MzLS_686227_
 145203 expfactor=0.25 MzLS_686233_
+145206 expfactor=0.19 MzLS_727206_
 145208 expfactor=0.26 MzLS_688100_
 145216 expfactor=0.22 MzLS_688113_
 145218 expfactor=0.21 MzLS_688119_
@@ -3769,7 +3721,7 @@
 145237 expfactor=0.06 MzLS_689929_
 145238 expfactor=0.01 MzLS_688085_
 
-#2017-11-06
+# 2017-11-06
 145277 expfactor=0.145  0.455     6.900 MzLS_721863_
 145278 expfactor=0.037  0.218    27.086 MzLS_721864_
 145279 expfactor=0.070  0.235    35.518 MzLS_722894_
@@ -3791,7 +3743,7 @@
 145311 expfactor=0.000  0.013 36013.413 MzLS_709545_ high background some amp look satured
 145312 expfactor=0.000  0.022  9115.222 MzLS_709550_ shutter closed during the exposure to avoid saturation
 
-#2017-11-07
+# 2017-11-07
 145358 expfactor=0.258  0.812     3.874 MzLS_705033_
 145359 expfactor=0.258  0.819     3.876 MzLS_708012_
 145360 expfactor=0.219  0.798     4.570 MzLS_713536_
@@ -3818,7 +3770,7 @@
 145382 expfactor=*****  0.000     0.000 MzLS_693545_ high background
 145383 shutter closed during the exposure to avoid saturation
 
-#2017-11-08
+# 2017-11-08
 145421 expfactor=0.001  0.036  1879.857 MzLS_709990_
 145422 expfactor=0.001  0.033   829.008 MzLS_726662_
 145423 expfactor=0.001  0.019  1817.157 MzLS_723896_
@@ -3879,8 +3831,8 @@
 145478 expfactor=0.08 MzLS_374293_
 145479 expfactor=0.00 MzLS_378046_
 145480 expfactor=0.00 MzLS_374297_
-145482 expfactor=0.00 MzLS_368078_
 145481 expfactor=0.00 MzLS_376827_
+145482 expfactor=0.00 MzLS_368078_
 145483 expfactor=0.01,seeing=2.46 MzLS_365578_
 145484 expfactor=0.07,seeing=2.05 MzLS_369341_
 145485 expfactor=0.09 MzLS_361220_
@@ -3990,7 +3942,9 @@
 145966 expfactor=0.01 MzLS_693569_
 145969 expfactor=0.19 MzLS_684337_
 
-#2017-11-11
+# 2017-11-11
+146101 bad (donutty) PSF, see [decam-chatter 14061]
+146102 bad (donutty) PSF, see [decam-chatter 14061]
 146145 expfactor=0.23 MzLS_725446_
 146146 expfactor=0.26 MzLS_723539_
 146147 expfactor=0.11 MzLS_689930_
@@ -4004,7 +3958,7 @@
 146157 expfactor=0.08 MzLS_682398_
 146158 expfactor=0.07 MzLS_682394_
 
-#2017-11-12
+# 2017-11-12
 146212 expfactor=0.05 MzLS_723899_
 146213 expfactor=0.13,seeing=2.35 MzLS_723901_
 146252 expfactor=0.30 MzLS_719707_
@@ -4042,7 +3996,7 @@
 146321 expfactor=0.12 MzLS_691766_
 146322 expfactor=0.000  0.004 ********* MzLS_682390_
 
-#2017-11-13
+# 2017-11-13
 146361 expfactor=0.000  0.030  3761.624 MzLS_730531_
 146362 expfactor=0.049  0.190    20.542 MzLS_731191_
 146363 expfactor=0.013  0.074    79.668 MzLS_732948_
@@ -4072,7 +4026,6 @@
 146400 expfactor=0.051  0.176    48.969 MzLS_712749_
 146401 expfactor=0.003  0.046   787.948 MzLS_714062_
 146402 expfactor=0.001  0.021  3379.409 MzLS_710486_
-146403 expfactor=0.003  0.040   886.593 MzLS_709552_
 146403 expfactor=0.00 MzLS_709552
 146404 expfactor=0.01 MzLS_712750_
 146405 expfactor=0.01 MzLS_666523_
@@ -4105,22 +4058,22 @@
 146489 expfactor=0.04 MzLS_725444_
 146504 expfactor=0.17 MzLS_730962_
 
-#2017-11-14
+# 2017-11-14
 146572 expfactor=0.27 MzLS_719696_
 146589 expfactor=0.27 MzLS_725486_
 146590 expfactor=0.25 MzLS_718558_
+146646 bad (donutty) PSF, see [decam-chatter 14061]
 146659 expfactor=0.081  0.129    30.695 MzLS_693522_
 
-#2017-11-15
+# 2017-11-15
 146852 expfactor=0.20 MzLS_727528_
 146864 expfactor=0.266  0.455     5.766 MzLS_709552_
 146904 expfactor=0.29 MzLS_731583_
+
+# 2017-11-16
 147197 expfactor=0.136  0.319    18.328 MzLS_693580_
 
-#2017-11-16
-147197 expfactor=0.136  0.319    18.328 MzLS_693580_
-
-#2017-11-17
+# 2017-11-17
 147258 expfactor=0.20 MzLS_712729_
 147259 expfactor=0.14 MzLS_714041_
 147262 expfactor=0.16 MzLS_727514_
@@ -4131,6 +4084,8 @@
 147273 expfcator=0.008  0.077   125.817 MzLS_730540_
 147274 expfcator=0.000  0.008  8369.822 MzLS_729105_
 147275 expfcator=0.003  0.041   830.760 MzLS_727525_
+147277 donutty PSF, see [decam-chatter 14061]
+147278 donutty PSF, see [decam-chatter 14061]
 147291 expfactor=0.30 MzLS_368726_
 147292 expfactor=0.01 MzLS_361228_
 147293 expfactor=0.23 MzLS_361230_
@@ -4138,7 +4093,7 @@
 147296 expfactor=0.17 MzLS_361233_
 147307 expfactor=0.23 MzLS_684275_
 
-#2017-11-18
+# 2017-11-18
 147470 expfactor=0.14,seeing=2.61 MzLS_714040_
 147471 expfactor=0.20,seeing=2.31 MzLS_712728_
 147472 seeing=2.24 MzLS_714043_
@@ -4166,7 +4121,7 @@
 147541 expfactor=0.01
 147569 expfactor=0.04
 
-#2017-11-19
+# 2017-11-19
 147685 pass=1 and seeing= 1.630  58077.084  1.437  1.017     1.712 MzLS_715322_
 147735 pass=1 and seeing= 1.765  58077.191  0.420  0.798     2.693 MzLS_685083_
 147736 pass=1 and seeing= 1.615  58077.192  1.072  1.005     1.494 MzLS_679186_
@@ -4194,7 +4149,7 @@
 147844 expfactor=0.26 MzLS_700358_
 147845 very high sky background
 
-#2017-11-20
+# 2017-11-20
 147894 expfactor=0.205  0.484     4.882 MzLS_715315_
 147895 expfactor=0.224  0.520     4.475 MzLS_726666_
 147898 expfactor=0.171  0.300    14.610 MzLS_728325_
@@ -4233,7 +4188,7 @@
 148044 expfactor=0.199  0.229    12.568 MzLS_700361_
 148045 expfactor=0.137  0.224    18.197 MzLS_700362_
 
-#2017-11-21
+# 2017-11-21
 148116 expfactor=0.11 MzLS_730311_
 148117 expfactor=0.15 MzLS_728333_
 148118 expfactor=0.10 MzLS_728334_
@@ -4280,6 +4235,8 @@
 
 # 2017-11-23
 148498 moved telescope during exposure
+148572-CCD3 one amp misbehaving badly
+148673-CCD1 significant sky offsets between different amps; weird horizontal features
 148789 bright sky, & moved telescope during exposure
 
 # 2017-11-26
@@ -4341,7 +4298,7 @@
 149682 expfactor=0.13 MzLS_697043_
 149683 expfactor=0.18 MzLS_705081_
 
-#2017-12-02
+# 2017-12-02
 149845 expfactor=0.273 MzLS_734209_
 149846 expfactor=0.177 MzLS_734617_
 149848 expfactor=0.042 MzLS_730960_
@@ -4349,18 +4306,17 @@
 149852 expfactor=0.30 MzLS_734210_
 149853 expfactor=0.27 MzLS_734618_
 149866 expfactor=0.21 MzLS_733768_
-149869 expfactor=0.13 MzLS_732202_
 149868 expfactor=0.065 MzLS_697042_
+149869 expfactor=0.13 MzLS_732202_
 149870 expfactor=0.04 MzLS_733284_
 149871 expfactor=0.02 MzLS_733769_
 149872 expfactor=0.04 MzLS_732203_
-149868 expfactor=0.07 MzLS_697042_
 149873 expfactor=0.05 MzLS_729584_
 149874 expfactor=0.07 MzLS_724529_
 149875 expfactor=0.15 MzLS_730296_
 149881 expfactor=0.05 MzLS_687534_
 
-#2017-12-03
+# 2017-12-03
 149960 expfactor=0.15
 149961 expfactor=0.07
 
@@ -4589,6 +4545,7 @@
 150850 expfactor=0.12
 150851 expfactor=0.30
 150852 expfactor=0.10
+150867 trailed PSF, see [decam-chatter 14061]
 
 # 2017-12-13
 151107 pass=1 and seeing= 1.629  58101.125  0.761  0.932     2.313 MzLS_716570_
@@ -4620,7 +4577,6 @@
 151378 - poor seeing pass=1 see=2.37
 151379 - poor seeing pass=1 see=2.06
 151380 - poor seeing pass=1 see=2.19
-151378 - underexposed - expfactor=0.48
 151409 - expfactor=0.29
 151463 - timeout (all zeros)
 151492 - timeout (all zeros)
@@ -4778,7 +4734,7 @@
 152357 seeing=2.49 MzLS_723891_
 152358 seeing=2.30 MzLS_723892_
 
-#2017-12-22
+# 2017-12-22
 152424 pass=1 and seeing= 1.808  58110.088  0.909  0.981     2.442 MzLS_717769_
 152425 pass=1 and seeing= 1.712  58110.091  1.017  0.984     2.134 MzLS_721169_
 152427 pass=1 and seeing= 1.611  58110.098  1.166  0.979     2.050 MzLS_727792_
@@ -4789,7 +4745,7 @@
 152441 seeing=2.80 MzLS_720076_
 152471 expfactor=0.26 MzLS_701912_ dome drive trip
 
-#2017-12-26
+# 2017-12-26
 152670 bad night
 152672 bad night
 152673 bad night
@@ -4826,19 +4782,20 @@
 152981 pass=1 and seeing= 1.665  58116.144  0.584  1.052     3.342 MzLS_721175_
 153148 pass=1 and seeing= 1.635  58116.535  0.647  0.945     1.933 MzLS_717759_
 
-#2018-01-02
+# 2018-01-02
 153971 dome not moved completely
 154052 expfactor=0.624  seeing=2.259
 154054 expfactor=0.784  seeing=2.046
 154074 expfactor=0.271  seeing=1.145
 154075 expfactor=0.031  seeing=1.155
 
-#2018-01-04
+# 2018-01-04
 154234 expfactor=1.151  seeing=2.019
 154237 expfactor=0.577  seeing=2.153
 154238 expfactor=0.699  seeing=2.316
+154240 out of focus, see [decam-chatter 14061]
 
-#2018-01-05
+# 2018-01-05
 154488 expfactor=0.26
 154491 expfactor=0.25
 154492 expfactor=0.06
@@ -4854,7 +4811,7 @@
 154526 expfactor=0.15
 154532 expfactor=0.04
 
-#2018-01-07
+# 2018-01-07
 154633 pass=1 and seeing= 1.620  58126.147  0.620  0.410     4.033 MzLS_366281_
 154646 expfactor=0.00 MzLS_362535_
 154650 expfactor=0.24 MzLS_376287_
@@ -4887,7 +4844,6 @@
 154740 expfactor=0.00 MzLS_695259_
 154741 expfactor=0.00 MzLS_688055_
 154742 expfactor=1.40 but large seeing 2.78
-154742 expfr=0.01 MzLS_732938_
 154743 expfactor=0.001  seeing=0.803
 154744 expfactor=0.058  seeing=0.526
 154751 expfactor=0.01 MzLS_732938_
@@ -4920,24 +4876,26 @@
 154781 expfactor=0.00,seeing=2.91 MzLS_732402_
 154782 seeing=3.22
 
-#2018-01-11
+# 2018-01-11
 155014 expfactor=0.761  seeing=2.011
 155016 expfactor=0.573  seeing=2.003
 155049 expfactor=0.107  seeing=1.149
 155050 bad pointing, no objects
 155060 expfactor=0.285  seeing=1.308
 
-#2018-01-12
+# 2018-01-12
 155234 dome stopped moving
 155281 expfactor=0.438  seeing=2.356
 155285 expfactor=0.694  seeing=2.100
+155288 asymmetric/donutty PSF, see [decam-chatter 14061]
 
-#2018-01-13
+# 2018-01-13
 155344 expfactor=0.661  seeing=2.052
+155364 asymmetric/donutty PSF, see [decam-chatter 14061]
 155567 expfactor=0.234  seeing=1.632
 155568 expfactor=0.108  seeing=1.486
 
-#2018-01-14
+# 2018-01-14
 155607 expfactor=0.171  seeing=1.125
 155608 expfactor=0.160  seeing=1.136
 155610 expfactor=0.289  seeing=1.205
@@ -4961,7 +4919,7 @@
 155787 expfactor=0.000  seeing=1.200
 155788 expfactor=0.000  seeing=1.062
 
-#2018-01-15
+# 2018-01-15
 155934 expfactor=0.081  seeing=0.927
 155935 expfactor=0.072  seeing=0.985
 155936 expfactor=0.244  seeing=0.869
@@ -4997,7 +4955,7 @@
 155994 expfactor=0.003  seeing=1.428
 155995 expfactor=0.000  seeing=1.065
 
-#2018-01-16
+# 2018-01-16
 156038 expfactor=0.227  seeing=1.109
 156103 expfactor=0.135  seeing=1.007
 156104 expfactor=0.171  seeing=1.022
@@ -5019,7 +4977,7 @@
 156126 expfactor=0.182  seeing=1.125
 156135 expfactor=0.097  seeing=1.110
 
-#2018-01-17
+# 2018-01-17
 156395 expfactor=0.885  seeing=2.048
 156396 expfactor=0.846  seeing=2.205
 156397 expfactor=0.838  seeing=2.180
@@ -5058,7 +5016,7 @@
 156433 expfactor=0.707  seeing=2.072
 156434 expfactor=0.501  seeing=2.079
 
-#2018-01-18
+# 2018-01-18
 156557 expfactor=0.184  seeing=1.075
 156558 expfactor=0.138  seeing=1.165
 156559 expfactor=0.257  seeing=1.183
@@ -5095,7 +5053,6 @@
 156606 out of focus - elongated image
 156607 out of focus - elongated image
 156610 out of focus - elongated image
-156610 out of focus - elongated image
 156611 out of focus - elongated image
 156612 out of focus - elongated image
 156613 out of focus - elongated image
@@ -5115,7 +5072,7 @@
 156639 expfactor=0.359  seeing=2.294
 156640 expfactor=0.219  seeing=2.783
 
-#2018-01-19
+# 2018-01-19
 156781 pass=1 and seeing= 1.623  58138.261  0.869  0.900     0.922 MzLS_729319_
 156782 pass=1 and seeing= 1.636  58138.262  0.898  0.913     1.795 MzLS_734061_
 156785 pass=1 and seeing= 1.642  58138.270  0.905  0.896     1.482 MzLS_734063_
@@ -5145,7 +5102,7 @@
 156891 expfactor=0.251  0.738     3.989 MzLS_716155_
 156892 expfactor=0.126  0.597     7.934 MzLS_720806_
 
-#2018-01-20
+# 2018-01-20
 156933 expfactor=0.515  seeing=2.435
 156934 expfactor=0.487  seeing=2.508
 156935 expfactor=0.980  seeing=2.582
@@ -5221,7 +5178,7 @@
 157012 expfactor=0.382  seeing=2.894
 157013 expfactor=0.330  seeing=3.033
 
-#2018-01-21
+# 2018-01-21
 157192 out of focus
 157193 out of focus
 157194 out of focus
@@ -5291,24 +5248,23 @@
 157258 expfactor=0.004  0.098   584.010 MzLS_706642_
 157259 expfactor=0.003  0.087   755.346 MzLS_705137_
 
-#2018-01-22
+# 2018-01-22
 157477 expfactor=0.891  0.968     1.045 MzLS_666440_
 
-
-#2018-01-23
-157704 seeing=2.16 MzLS_589375_
+# 2018-01-23
 157606 expfactor=0.194  0.904     5.147 MzLS_612582_
 157607 expfactor=0.262  0.944     3.055 MzLS_729784_
+157614 seeing=2.10 MzLS_729045_
+157616 seeing=2.01 MzLS_706519_
+157624 seeing=2.26 MzLS_674214_
+157625 seeing=2.10 MzLS_667793_
+157704 seeing=2.16 MzLS_589375_
 157708 expfactor=0.296  0.894     3.383 MzLS_698711_
 157709 expfactor=0.260  0.863     3.855 MzLS_700356_
 157710 seeing=2.01 MzLS_701964_
 157711 seeing=2.14 MzLS_700359_
 157712 expfactor=0.229  0.795    10.907 MzLS_701967_
-157614 seeing=2.10 MzLS_729045_
 157715 seeing=2.25 MzLS_705083_
-157616 seeing=2.01 MzLS_706519_
-157624 seeing=2.26 MzLS_674214_
-157625 seeing=2.10 MzLS_667793_
 157717 seeing=2.07 MzLS_709494_
 157778 seeing=2.08 MzLS_721875_
 157779 seeing=2.14 MzLS_720803_
@@ -5318,7 +5274,7 @@
 157806 seeing=2.63 MzLS_725791_
 157807 seeing=2.55 MzLS_730540_
 
-#2018-01-25
+# 2018-01-25
 158058 expfactor=0.188  0.502    11.571 MzLS_364334_
 158059 expfactor=0.250  0.564     7.128 MzLS_365587_
 158060 expfactor=0.214  0.562     7.342 MzLS_365588_
@@ -5368,7 +5324,7 @@
 158131 expfactor=0.225  0.429    11.130 MzLS_719685_
 158134 expfactor=0.295  0.534     8.479 MzLS_725777_
 
-#2018-01-26
+# 2018-01-26
 158138 expfactor=0.951  seeing=2.021
 158139 expfactor=0.869  seeing=2.127
 158141 expfactor=0.690  seeing=2.335
@@ -5401,13 +5357,10 @@
 158417 expfactor=0.269  seeing=3.067
 158418 expfactor=0.296  seeing=2.148
 
-#2018-01-27
+# 2018-01-27
 158458 expfactor=0.06 transparency=0.4  MzLS_368723_
 158459 expfactor=0.26 transparency=0.65 MzLS_364972_
 158460 expfactor=0.24 transparency=0.75 MzLS_364973_
-158458 expfactor=0.061  0.390    32.932 MzLS_368723_
-158459 expfactor=0.259  0.667     7.740 MzLS_364972_
-158460 expfactor=0.237  0.770     4.397 MzLS_364973_
 158605 pass=1 and seeing= 1.771  58146.387  0.804  0.894     1.768 MzLS_723231_
 158606 pass=1 and seeing= 1.664  58146.389  0.891  0.899     1.539 MzLS_724215_
 158607 pass=1 and seeing= 1.753  58146.391  1.133  0.912     1.705 MzLS_722213_
@@ -5442,17 +5395,7 @@
 158651 expfactor=0.077  0.714    32.424 MzLS_717383_
 158652 expfactor=0.038  0.668    65.017 MzLS_712303_
 
-#2018-01-28
-#From end_of_night
-158748 seeing=2.22 MzLS_727737_
-158749 seeing=2.07 MzLS_733087_
-158750 seeing=2.42 MzLS_732551_
-158751 seeing=2.30 MzLS_731363_
-158752 seeing=2.07 MzLS_732552_
-158807 seeing=2.05 MzLS_699332_
-158808 seeing=2.38 MzLS_679168_
-158811 seeing=2.02 MzLS_590540_
-158712 seeing=2.23 MzLS_724483_
+# 2018-01-28
 158700 seeing=2.20 MzLS_361842_
 158701 seeing=2.53 MzLS_369341_
 158702 seeing=2.84 MzLS_368718_
@@ -5460,17 +5403,24 @@
 158704 seeing=2.62 MzLS_364969_
 158705 seeing=2.60 MzLS_361220_
 158706 seeing=2.19 MzLS_364971_
+158712 seeing=2.23 MzLS_724483_
 158713 seeing=2.08 MzLS_727464_
 158726 seeing=2.15 MzLS_730488_
+158748 seeing=2.22 MzLS_727737_
+158749 seeing=2.07 MzLS_733087_
+158750 seeing=2.42 MzLS_732551_
+158751 seeing=2.30 MzLS_731363_
+158752 seeing=2.07 MzLS_732552_
 158754 seeing=2.17 MzLS_733430_
 158774 seeing=2.05 MzLS_607092_
+158807 seeing=2.05 MzLS_699332_
+158808 seeing=2.38 MzLS_679168_
+158811 seeing=2.02 MzLS_590540_
+158817 Dome tripped causing scope to be obscured
+158818 Idem
 158823 seeing=2.13 MzLS_609999_
 158824 seeing=2.04 MzLS_609998_
 158826 expfactor=0.00,seeing=4.24 MzLS_659000_
-#Other
-158817 Dome tripped causing scope to be obscured
-158818 Idem
-
 
 # 2018-01-29
 158871 expfactor=0.20 MzLS_369330_
@@ -5508,7 +5458,6 @@
 159069 pass=1 and seeing= 1.769  58148.558  0.807  0.947     2.045 MzLS_722221_
 
 # 2018-01-30
-
 159124 expfactor=0.283  0.756     4.281 MzLS_729782_
 159141 expfactor=0.238  0.759     4.206 MzLS_731148_
 159142 expfactor=0.267  0.778     3.753 MzLS_729785_
@@ -5588,7 +5537,7 @@
 159267 expfactor=0.194  0.797     4.178 MzLS_676404_
 159268 expfactor=0.155  0.680     6.834 MzLS_631778_
 
-#2018-02-01
+# 2018-02-01
 159803 out of focus
 159804 out of focus
 159819 expfactor = 0.4, out of focus
@@ -5598,13 +5547,13 @@
 159842 expfactor=0.14 MzLS_712298_
 159843 expfactor=0.23 MzLS_710939_
 159844 expfactor=0.28 MzLS_706642_
-158945 expfactor=0.31
-158946 expfactor=0.35
-158947 expfactor=0.4
+159845 expfactor=0.31
+159846 expfactor=0.35
+159847 expfactor=0.4
 159849 expfactor=0.27 MzLS_682487_
 159850 expfactor=0.19 MzLS_682485_
 
-#2018-02-03
+# 2018-02-03
 159998 out of focus, seeing 2.1" pass 1
 159999 seeing 1.7", pass 1
 160005 seeing > 1.5" pass 1
@@ -5642,11 +5591,11 @@
 160948 pass=1 and seeing= 1.843  58156.113  0.970  0.914     2.577 MzLS_610583_
 160949 pass=1 and seeing= 1.936  58156.116  0.587  0.901     4.258 MzLS_610584_
 160950 expfactor=0.25,seeing=2.15 MzLS_610585_
-161051 pass=1 and seeing= 1.951  58156.535  0.311  0.968     7.916 MzLS_708602_
 160952 pass=1 and seeing= 2.178  58156.126  0.707  0.906     3.540 MzLS_613399_
 160953 pass=1 and seeing= 2.368  58156.129  0.573  0.901     4.364 MzLS_613400_
 160954 pass=1 and seeing= 2.100  58156.133  0.332  0.933     7.538 MzLS_613401_
 161006 seeing=2.11 MzLS_732751_
+161051 pass=1 and seeing= 1.951  58156.535  0.311  0.968     7.916 MzLS_708602_
 
 # 2018-02-09
 161610 expfactor=0.20 MzLS_637842_
@@ -5677,8 +5626,7 @@
 161747 expfactor=0.01
 161748 expfactor=0.01
 
-#20180-02-11
-
+# 2018-02-11
 161799 expfactor=0.191  0.910     5.229 MzLS_607742_
 161804 expfactor=0.262  0.859     3.816 MzLS_610585_
 161816 expfactor=0.251  0.869     3.989 MzLS_611526_
@@ -5686,6 +5634,7 @@
 161824 expfactor=0.166  0.869     6.048 MzLS_609640_
 161827 expfactor=0.239  0.923     4.185 MzLS_612465_
 161872 trailed images (tracking problem with new-MPK test)
+161884 double image / trailing, see [decam-chatter 13635]
 161887 expfactor=0.212  0.687     4.728 MzLS_671386_
 161901 pass=1 and seeing= 1.957  58161.352  0.624  0.882     4.011 MzLS_722177_
 161904 seeing=2"
@@ -5693,122 +5642,8 @@
 161906 seeing=2"
 161908 seeing=2"
 161909 seeing=2"
-161908 seeing=2"
 161945 expfactor=0.214  0.547     5.611 MzLS_563681_
 161949 expfactor=0.186  0.338    13.468 MzLS_563718_
 161950 expfactor=0.021  0.117    95.535 MzLS_563719_
 161951 expfactor=0.002  0.035  1085.322 MzLS_637842_
 
-80665 fwhm==nan
-122019 fwhm==nan
-
-71342-CCD4 has a garbage amplifier
-77270-CCD4 has two amplifiers with garbage on edge
-151120035107-CCD2 has DQREJ set, does not track saturation.
-
-3106381-CCD3 one amp misbehaving badly
-140870-CCD3 one amp misbehaving badly
-71342-CCD4 one amp misbehaving badly
-148572-CCD3 one amp misbehaving badly
-148673-CCD1 significant sky offsets between different amps; weird horizontal features
-3103609-CCD3 one amp is close to all zeros, another is very noisy
-129926-CCD4 weird blurring artifacts on some amps
-
-# bright star artifact on CCD4 on these pointings.  Adding all but one of these CCDs on this pointing to bad_expid to allow outlier masking to eliminate this artifact.
-72006-CCD4 bright star artifact
-108129-CCD4 bright star artifact
-# 115789 keep only this exposure
-116028-CCD4 bright star artifact
-116647-CCD4 bright star artifact
-117164-CCD4 bright star artifact
-
-# double image / trailing found in PSFEx; see [decam-chatter 13635]
-161884 double image / trailing
-64436 double image / trailing
-151119115424 double image / trailing
-81482 double image / trailing
-70491 double image / trailing
-70825 double image / trailing
-64417 double image / trailing
-68412 double image / trailing
-71609 double image / trailing
-68315 double image / trailing
-62926 double image / trailing
-151124081239 double image / trailing
-151124073306 double image / trailing
-67589 double image / trailing
-81512 double image / trailing
-68569 double image / trailing
-151124091939 double image / trailing
-92803 double image / trailing
-68677 double image / trailing
-62952 double image / trailing
-62915 double image / trailing
-80166 double image / trailing
-3103267 double image / trailing
-120528 double image / trailing
-80161 double image / trailing
-
-
-# more bad PSF images from Rongpu's PSF analysis; [decam-chatter 14061]
-154240 out of focus
-63089 bad PSF (bad tracking?)
-65487 bad PSF
-66454 trailed PSF
-69064 trailed PSF
-76499 bad PSF
-78678 bad PSF (bad tracking?)
-81514 double image
-84639 trailed PSF
-87439 donutty PSF
-88653 bad (donutty) PSF
-88654 bad (donutty) PSF
-90355 bad (donutty) PSF
-115568 bad (donutty) PSF
-116717 donutty PSF
-119072 bad PSF
-121494 bad PSF
-122882 trailed PSF
-123148 trailed PSF
-138491 bad (donutty) PSF
-138661 bad (donutty) PSF
-138662 bad PSF
-141118 bad (donutty) PSF
-141526 bad (donutty) PSF
-141527 bad PSF
-142286 bad (donutty) PSF
-144359 bad PSF
-144792 bad PSF
-144985 bad (donutty) PSF
-146101 bad (donutty) PSF
-146102 bad (donutty) PSF
-146646 bad (donutty) PSF
-3106878 bad PSF
-3107172 bad (donutty) PSF
-3107173 bad (donutty) PSF
-3107279 bad (donutty) PSF
-3135717 bad (trailed) PSF
-3135718 bad (trailed) PSF
-3135830 trailed PSF
-151119114832 trailed PSF
-
-64428 trailed PSF
-66356 trailed PSF
-83172 asymmetric/donutty PSF
-91601 asymmetric/donutty PSF
-91977 asymmetric/donutty PSF
-107475 asymmetric/donutty PSF
-107676 asymmetric/donutty PSF
-111472 trailed/asymmetric PSF
-114939 donutty PSF
-114940 donutty PSF
-114941 donutty PSF
-133010 donutty PSF
-144641 donutty PSF
-147277 donutty PSF
-147278 donutty PSF
-150867 trailed PSF
-155288 asymmetric/donutty PSF
-155364 asymmetric/donutty PSF
-3103614 trailed/asymmetric PSF
-151124071032 trailed PSF
