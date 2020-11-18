@@ -104,7 +104,7 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && make install INSTALL_DIR=/usr/local \
     && make clean \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import astrometry; print(astrometry.__version__)") \
-    && git describe
+    && git describe && echo 0.84
 
 # Pip installs -- binary.  We need cython for the tractor.
 RUN for x in \
@@ -235,7 +235,11 @@ RUN python -O -m compileall \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-RUN cd /src/legacypipe && git pull && git describe && echo 966 && \
+RUN cd /src/legacypipe && git pull && git checkout DR9.6.7 && git describe && echo 967 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
+# QDO
+RUN cd qdo && git remote add dstn https://bitbucket.org/dstn/qdo.git \
+    && git fetch dstn && git checkout handle-oom \
+    && pip install . && echo 3 #python3 setup.py install

@@ -3806,7 +3806,7 @@ def main(args=None):
         ps_shutdown.set()
         print('Attempting to join the ps thread...')
         ps_thread.join(1.0)
-        if ps_thread.isAlive():
+        if ps_thread.is_alive():
             print('ps thread is still alive.')
 
     return rtn
