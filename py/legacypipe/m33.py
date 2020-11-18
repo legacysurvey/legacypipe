@@ -6,6 +6,7 @@ import pylab as plt
 from collections import Counter
 
 from scipy.ndimage.filters import gaussian_filter
+from scipy.ndimage.measurements import label, find_objects
 
 from astrometry.util.plotutils import dimshow
 
@@ -14,7 +15,11 @@ from tractor.psf import PixelizedPSF
 from tractor.psf import HybridPixelizedPSF, NCircularGaussianPSF
 from tractor import Image
 from tractor.dense_optimizer import ConstrainedDenseOptimizer
+from tractor.lsqr_optimizer import LsqrOptimizer
+from tractor.sersic import SersicGalaxy, SersicIndex
+from tractor import Catalog
 
+from legacypipe.reference import get_reference_map
 from legacypipe.survey import LegacySurveyWcs
 from legacypipe.survey import LegacySurveyWcs
 from legacypipe.bits import DQ_BITS
@@ -391,9 +396,6 @@ def stage_m33_f(pixscale=None, targetwcs=None,
     galslc = blobslices[galblob-1]
     print('Large galaxy slice:', galslc)
 
-    from legacypipe.reference import get_reference_map
-    from scipy.ndimage.measurements import label, find_objects
-
     Igals = np.flatnonzero(refstars.islargegalaxy)
     igal = np.argsort(-refstars.radius[Igals])[0]
     igal = Igals[igal]
@@ -401,10 +403,27 @@ def stage_m33_f(pixscale=None, targetwcs=None,
     # table of one element
     refgal = refstars[np.array([igal])]
     print('ref gal:', refgal)
-    galmap = (get_reference_map(targetwcs, refgal) != 0)
+
+    # make the mask at 2 x radius
+    rgcopy = refgal.copy()
+    rgcopy.radius *= 2.0
+    galmap = (get_reference_map(targetwcs, rgcopy) != 0)
+
     refgalslc = find_objects(galmap.astype(int))[0]
     print('ref gal slice:', refgalslc)
 
+    # find the other galaxy within the mask
+    _,xx,yy = targetwcs.radec2pixelxy(refstars.ra, refstars.dec)
+    H,W = targetwcs.shape
+    xx = np.clip((xx - 1).astype(int), 0, W-1)
+    yy = np.clip((yy - 1).astype(int), 0, H-1)
+    Iothers = np.flatnonzero(galmap[yy[Igals], xx[Igals]] *
+                             (refstars.ref_id[Igals] != refgal.ref_id[0]))
+    Iothers = Igals[Iothers]
+    print('Galaxies within M33 mask:', Iothers)
+    #refothers = refstars[Iothers]
+    #catothers = [refcat[i] for i in Iothers]
+    
     if plots:
         plt.clf()
         plt.imshow(blobmap == galblob, interpolation='nearest', origin='lower')
@@ -413,6 +432,9 @@ def stage_m33_f(pixscale=None, targetwcs=None,
 
         plt.clf()
         plt.imshow(galmap, interpolation='nearest', origin='lower')
+        #ax = plt.axis()
+        #plt.plot(xx, yy, 'ro')
+        #plt.axis(ax)
         plt.title('Reference galaxy ellipse')
         ps.savefig()
 
@@ -420,11 +442,18 @@ def stage_m33_f(pixscale=None, targetwcs=None,
     galsrc = refcat[igal]
     print('Large galaxy source:', galsrc)
 
+    if False:
+        sersrc = SersicGalaxy(galsrc.pos, galsrc.brightness, galsrc.shape, SersicIndex(1.0))
+        refcat[igal] = sersrc
+        galsrc = refcat[igal]
+        print('Switched to:', galsrc)
+
     slc = refgalslc
 
     subtims = []
     for band,tim in zip(bands, tims):
-        simg = tim.data[slc]
+        # Make a copy of the image because we're going to subtract out models below!
+        simg = tim.data[slc].copy()
         sie = tim.inverr[slc].copy()
 
         # Zero out inverr outside the galaxy ellipse!!
@@ -452,7 +481,20 @@ def stage_m33_f(pixscale=None, targetwcs=None,
     print('Optimizing!')
     tr.optimize_loop(dchisq=0.1, shared_params=False, priors=True, alphas=[0.1, 0.3, 1.0])
 
-    return dict(refgalslc=refgalslc, galsrc=galsrc, refcat=refcat)
+    # Fit other galaxy
+    tr.optimizer = LsqrOptimizer()
+    for i in Iothers:
+        print('Fitting galaxy:', refcat[i])
+        # subtract out previous fit galaxy
+        mods = list(tr.getModelImages())
+        for mod,subtim in zip(mods, subtims):
+            subtim.data -= mod
+        tr.catalog = Catalog(refcat[i])
+        print('Optimizing!')
+        tr.optimize_loop(dchisq=0.1, shared_params=False, priors=True, alphas=[0.1, 0.3, 1.0])
+    
+    return dict(refgalslc=refgalslc, galsrc=galsrc, refcat=refcat, galmap=galmap,
+                Iothers=Iothers)
         
 def stage_m33_g(pixscale=None, targetwcs=None,
                W=None,H=None,
@@ -477,6 +519,23 @@ def stage_m33_g(pixscale=None, targetwcs=None,
 
     print('Fit M33:', galsrc)
 
+    Igals = np.flatnonzero(refstars.islargegalaxy)
+    igal = np.argsort(-refstars.radius[Igals])[0]
+    igal = Igals[igal]
+    print('Largest galaxy: radius', refstars.radius[igal])
+    # table of one element
+    refgal = refstars[np.array([igal])]
+    galmap = (get_reference_map(targetwcs, refgal) != 0)
+    # find the other galaxy within the mask
+    _,xx,yy = targetwcs.radec2pixelxy(refstars.ra, refstars.dec)
+    H,W = targetwcs.shape
+    xx = np.clip((xx - 1).astype(int), 0, W-1)
+    yy = np.clip((yy - 1).astype(int), 0, H-1)
+    Iothers = np.flatnonzero(galmap[yy[Igals], xx[Igals]] *
+                             (refstars.ref_id[Igals] != refgal.ref_id[0]))
+    Iothers = Igals[Iothers]
+    print('Galaxies within M33 mask:', Iothers)
+
     if plots:
         tr = Tractor(tims, [galsrc], optimizer=ConstrainedDenseOptimizer())
         tr.freezeParam('images')
@@ -491,18 +550,54 @@ def stage_m33_g(pixscale=None, targetwcs=None,
         dimshow(get_rgb([tim.data - mod for tim,mod in zip(tims,mods)], bands, resids=True))
         ps.savefig()
 
+    from legacypipe.catalog import prepare_fits_catalog
+    from legacypipe.utils import copy_header_with_wcs
+    from tractor import Catalog
 
-    #pass
-    # from legacypipe.bits import DQ_BITS
-    # 
-    # for band,tim in zip(bands,tims):
-    #     tim.dq_saturation_bits = DQ_BITS['satur']
-    #     tim.band = band
-    #     print('Tim shape', tim.shape)
-    # D = 4
-    # sh,sw = tims[0].shape
-    # subwcs = targetwcs.get_subimage(0,0,sw*D,sh*D).scale(1./D)
-    # 
+    # Igals = np.flatnonzero(refstars.islargegalaxy)
+    # igal = np.argsort(-refstars.radius[Igals])[0]
+    # igal = Igals[igal]
+    # print('galsrc:', galsrc)
+
+    cat = Catalog(galsrc, *[refcat[i] for i in Iothers])
+    T = refstars[np.append(np.array([igal]), Iothers)]
+
+    for src in cat:
+        src.shape = src.shape.toEllipseE()
+
+    #invvars = np.zeros(cat.numberOfParams(), np.float32)
+    invvars=None
+
+    T = prepare_fits_catalog(cat, invvars, T, bands, save_invvars=False)
+
+    # Set Sersic indices for all galaxy types.
+    # sigh, bytes vs strings.  In py3, T.type (dtype '|S3') are bytes.
+    T.sersic[np.array([t in ['DEV',b'DEV'] for t in T.type])] = 4.0
+    T.sersic[np.array([t in ['EXP',b'EXP'] for t in T.type])] = 1.0
+    T.sersic[np.array([t in ['REX',b'REX'] for t in T.type])] = 1.0
+
+    T.writeto('cat-m33.fits')
+
+    T.dchisq = np.zeros((len(T),5), np.float32)
+    for c in ['rchisq', 'fracflux', 'fracmasked', 'fracin',
+              'nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth',
+              'fiberflux', 'fibertotflux',
+              'flux_ivar']:
+        T.set(c, np.zeros((len(T),3), np.float32))
+
+    for c in ['mjd_min', 'mjd_max', 'nea_g', 'nea_r', 'nea_z',
+              'blob_nea_g', 'blob_nea_r', 'blob_nea_z',
+              'shape_r_ivar', 'shape_e1_ivar', 'shape_e2_ivar', 'sersic_ivar']:
+        T.set(c, np.zeros(len(T), np.float32))
+    # The "format_catalog" code expects all lower-case column names...
+    for c in T.columns():
+        if c != c.lower():
+            T.rename(c, c.lower())
+    from legacypipe.format_catalog import format_catalog
+    outfn = 'tractor-m33-ser.fits'
+    release = 9999
+    format_catalog(T, None, None, bands, 'grz', outfn, release)
+
     # if plots:
     #     import pylab as plt
     #     for band,tim in zip(bands,tims):
@@ -524,31 +619,13 @@ def stage_m33_g(pixscale=None, targetwcs=None,
     #         plt.colorbar()
     #         plt.title('Inverr: %s band' % band)
     #         ps.savefig()
-    
-    # D = 4
-    # sh,sw = tims[0].shape
-    # subwcs = targetwcs.get_subimage(0,0,sw*D,sh*D).scale(1./D)
-    # 
     # # we blurred by a sigma=D gaussian,
     # psfnorm = 1./(2. * np.sqrt(np.pi) * 4)
     # for band,tim in zip(bands, tims):
-    #     # undo previous wrong scaling
-    #     tim.data *= 1./(D*D)
-    #     tim.inverr *= 1./D
-    #     # correct scaling
     #     #tim.data *= 1./(psfnorm**2)
     #     #tim.inverr *= psfnorm
     #     tim.data *= (D*D)
     #     tim.inverr *= (1./D)
-    # 
-    #     if plots:
-    #         import pylab as plt
-    #         plt.clf()
-    #         plt.hist((tim.data * tim.inverr).ravel(), range=(-5,5), bins=50)
-    #         plt.title('Scaled image: %s band' % band)
-    #         ps.savefig()
-    # 
-    #return dict(tims=tims, targetwcs=subwcs)
 
 def main():
     from runbrick import run_brick, get_parser, get_runbrick_kwargs
