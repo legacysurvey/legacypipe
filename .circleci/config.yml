@@ -35,11 +35,11 @@ jobs:
               export PYTHONPATH=${PYTHONPATH}:$(pwd)
               python3.7 -c "import sys; print(sys.path)"
               python3.7 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
-	      coverage run --concurrency=multiprocessing test/runbrick_test.py psfex ceres
-	      coverage run --concurrency=multiprocessing -a test/unit_tests.py
-	      coverage combine
-	      coveralls
-	      ./codecov-upload.sh
+              coverage run --concurrency=multiprocessing test/runbrick_test.py psfex ceres
+              coverage run --concurrency=multiprocessing -a test/unit_tests.py
+              coverage combine
+              coveralls
+              ./codecov-upload.sh
               #python3.7 test/unit_tests.py
               #python3.7 test/runbrick_test.py
 
