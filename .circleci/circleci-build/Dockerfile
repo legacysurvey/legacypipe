@@ -117,3 +117,5 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
     && git checkout dr9.3
 
 ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
+
+RUN python3.7 -m pip install --no-cache-dir coverage
