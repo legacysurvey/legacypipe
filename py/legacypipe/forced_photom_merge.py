@@ -2,13 +2,77 @@
 After running forced_photom.py on a set of CCDs, this script merges
 the results back into a catalog.
 '''
-from astrometry.util.fits import *
+import sys
+import logging
 import numpy as np
 from glob import glob
 from collections import Counter
 
+from astrometry.util.fits import *
+
 from legacypipe.survey import LegacySurveyData
 
+def merge_forced(survey, brickname):
+    ccdfn = survey.find_file('ccds-table', brick=brickname)
+    CCDs = fits_table(ccdfn)
+    print('Read', len(CCDs), 'CCDs')
+    camexp = set()
+    for ccd in CCDs:
+        cam = ccd.camera.strip()
+        key = (cam, ccd.expnum)
+        if key in camexp:
+            # already read this camera-expnum
+            continue
+        camexp.add(key)
+        ffn = survey.find_file('forced', camera=cam, expnum=ccd.expnum)
+        print('Forced phot filename:', ffn)
+        F = fits_table(ffn)
+        
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-b', '--brick',
+        help='Brick name to run; required unless --radec is given')
+    parser.add_argument('--survey-dir', type=str, default=None,
+                        help='Override the $LEGACY_SURVEY_DIR environment variable')
+    parser.add_argument('-d', '--outdir', dest='output_dir',
+                        help='Set output base directory, default "."')
+    parser.add_argument('-r', '--run', default=None,
+                        help='Set the run type to execute')
+    parser.add_argument('-v', '--verbose', dest='verbose', action='count',
+                        default=0, help='Make more verbose')
+
+    opt = parser.parse_args()
+    if opt.brick is None:
+        parser.print_help()
+        return -1
+    #optdict = vars(opt)
+    #verbose = optdict.pop('verbose')
+    verbose = opt.verbose
+
+    from legacypipe.runs import get_survey
+    survey = get_survey(opt.run,
+                        survey_dir=opt.survey_dir,
+                        output_dir=opt.output_dir)
+    if verbose == 0:
+        lvl = logging.INFO
+    else:
+        lvl = logging.DEBUG
+    logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+    # tractor logging is *soooo* chatty
+    logging.getLogger('tractor.engine').setLevel(lvl + 10)
+
+    merge_forced(survey, opt.brick)
+    
+        
+if __name__ == '__main__':
+    main()
+
+
+
+'''
 fns = glob('forced/*/*/forced-*.fits')
 F = merge_tables([fits_table(fn) for fn in fns])
 
@@ -80,3 +144,4 @@ for band in bands:
 
 T.writeto('forced-merged.fits')
 
+'''

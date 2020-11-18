@@ -952,6 +952,11 @@ class LegacySurveyData(object):
             return swap(os.path.join(basedir, 'metrics', brickpre,
                                      'outlier-mask-%s.fits.fz' % (brick)))
 
+        elif filetype == 'forced':
+            estr = '%08i' % expnum
+            return swap(os.path.join(basedir, 'forced', camera, estr[:5],
+                                     'forced-%s-%i.fits' % (camera, expnum)))
+
         print('Unknown filetype "%s"' % filetype)
         assert(False)
 
