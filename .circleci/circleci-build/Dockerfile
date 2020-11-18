@@ -120,3 +120,9 @@ ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 
 RUN python3.7 -m pip install --no-cache-dir coverage coveralls
 
+# ubuntu renames the (awfully named) executable
+RUN apt update && \
+    apt install -y --no-install-recommends \
+    sextractor psfex && \
+    apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+RUN ln -s /usr/bin/sextractor /usr/bin/sex
