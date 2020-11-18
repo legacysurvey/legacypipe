@@ -57,8 +57,7 @@ def merge_forced(survey, brickname, cat, bands='grz', Nmax=0):
     F = merge_tables(FF)
     del FF
 
-    I = np.lexsort((F.ccdname, F.expnum, F.camera,
-                    F.filter, F.objid, F.brickid, F.release))
+    I = np.lexsort((F.expnum, F.camera, F.filter, F.objid, F.brickid, F.release))
     F.cut(I)
 
     for i,(r,brick,o,band) in enumerate(
@@ -129,10 +128,12 @@ def main():
                         survey_dir=opt.survey_dir,
                         output_dir=opt.output_dir)
 
+    columns = ['release', 'brickid', 'objid',]
+
     cat = None
     catsurvey = survey
     if opt.catalog is not None:
-        cat = fits_table(opt.catalog)
+        cat = fits_table(opt.catalog, columns=columns)
         print('Read', len(cat), 'sources from', opt.catalog)
     else:
         from astrometry.util.starutil_numpy import radectolb
@@ -147,12 +148,7 @@ def main():
                 catsurvey = LegacySurveyData(survey_dir=opt.catalog_dir_south)
 
         fn = catsurvey.find_file('tractor', brick=opt.brick)
-        cat = fits_table(fn, columns=[
-            'ra', 'dec', 'brick_primary', 'type', 'release',
-            'brickid', 'brickname', 'objid', 'flux_r',
-            'sersic', 'shape_r', 'shape_e1', 'shape_e2',
-            'ref_epoch', 'pmra', 'pmdec', 'parallax'
-            ])
+        cat = fits_table(fn, columns=columns)
         print('Read', len(cat), 'sources from', fn)
 
     cat,forced = merge_forced(survey, opt.brick, cat)
