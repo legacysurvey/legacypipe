@@ -777,6 +777,19 @@ def stage_srcs(pixscale=None, targetwcs=None,
 
     if gal_avoid_map is not None:
         debug('Zeroing detection maps inside galaxy veto map')
+        # Punch out holes in the gal_avoid_map around Gaia stars...
+        # ignore this many at the end of avoid_xyr
+        J = np.flatnonzero(refstars.islargegalaxy * refstars.in_bounds)
+        h,w = gal_avoid_map.shape
+        rkeep = 4
+        debug('Allowing detections around', len(avoid_x)-len(J), 'ref stars')
+        for x,y in zip(avoid_x[:-len(J)], avoid_y[:-len(J)]):
+            ylo = max(0, y-rkeep)
+            yhi = min(h-1, y+rkeep)
+            xlo = max(0, x-rkeep)
+            xhi = min(w-1, x+rkeep)
+            gal_avoid_map[ylo:yhi+1, xlo:xhi+1] = False
+        
         for detmap in detmaps:
             detmap[gal_avoid_map] = 0.
         for satmap in satmaps:
@@ -1195,6 +1208,8 @@ def stage_fitblobs(T=None,
     R = [r for r in R if r is not None and len(r)]
     if len(R) == 0:
         raise NothingToDoError('No sources passed significance tests.')
+        # M33 custom!!
+        #print('No sources passed significance tests.')
     # Merge results R into one big table
     BB = merge_tables(R)
     del R
