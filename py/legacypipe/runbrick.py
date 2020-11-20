@@ -748,9 +748,9 @@ def stage_srcs(pixscale=None, targetwcs=None,
 
     gal_avoid_map = None
     if refstars:
-        J = np.flatnonzero(refstars.islargegalaxy * refstars.in_bounds)
+        J = np.flatnonzero(refstars.islargegalaxy * (refstars.radius > 0.5))
         from legacypipe.reference import get_reference_map
-        info('Avoiding source detection in', len(J), 'large galaxies')
+        info('Avoiding source detection in', len(J), 'very large galaxies')
         gal_avoid_map = (get_reference_map(targetwcs, refstars[J]) != 0)
         if avoid_map is None:
             avoid_map = gal_avoid_map
