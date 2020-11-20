@@ -515,6 +515,9 @@ def stage_m33_g(pixscale=None, targetwcs=None,
                 blobmap=None, blobslices=None,
 
                 galsrc=None,
+                galmap=None,
+                refgalslc=None,
+                
                 **kwargs):
 
     print('Fit M33:', galsrc)
@@ -565,10 +568,58 @@ def stage_m33_g(pixscale=None, targetwcs=None,
     for src in cat:
         src.shape = src.shape.toEllipseE()
 
-    #invvars = np.zeros(cat.numberOfParams(), np.float32)
-    invvars=None
 
-    T = prepare_fits_catalog(cat, invvars, T, bands, save_invvars=False)
+        
+    # Compute invvars
+    slc = refgalslc
+    subtims = []
+    for band,tim in zip(bands, tims):
+        # Make a copy of the image because we're going to subtract out models below!
+        simg = tim.data[slc]
+        sie = tim.inverr[slc].copy()
+        # Zero out inverr outside the galaxy ellipse!!
+        sie[np.logical_not(galmap[slc])] = 0.
+        subdq = tim.dq[slc]
+        sy,sx = slc
+        y0,y1 = sy.start,sy.stop
+        x0,x1 = sx.start,sx.stop
+        subwcs = tim.subwcs.get_subimage(x0, y0, x1-x0, y1-y0)
+        twcs = LegacySurveyWcs(subwcs, tim.wcs.tai)
+        subtim = Image(simg, inverr=sie, psf=tim.psf, wcs=twcs, photocal=tim.photocal)
+        subtim.subwcs = subwcs
+        subtim.psf_sigma = tim.psf_sigma
+        subtim.sig1 = tim.sig1
+        subtim.imobj = tim.imobj
+        subtim.time = tim.time
+        subtim.dq = subdq
+        subtim.dq_saturation_bits = tim.dq_saturation_bits
+        subtim.band = tim.band
+        subtims.append(subtim)
+    tr = Tractor(subtims, cat) #, optimizer=ConstrainedDenseOptimizer())
+    tr.freezeParam('images')
+    from legacypipe.oneblob import _compute_invvars
+    cat.thawAllRecursive()
+    cat.freezeAllParams()
+    invvars = []
+    for isub in range(len(cat)):
+        cat.thawParam(isub)
+        src = cat[isub]
+        print('Computing invvars for', src)
+        # Compute inverse-variances
+        allderivs = tr.getDerivs()
+        ivars = _compute_invvars(allderivs)
+        invvars.append(ivars)
+        assert(len(ivars) == src.numberOfParams())
+        cat.freezeParam(isub)
+    cat.thawAllRecursive()
+    invvars = np.hstack(invvars)
+    # end of invvars
+    print('Invvars:', invvars)
+    
+    #invvars = np.zeros(cat.numberOfParams(), np.float32)
+    #invvars=None
+
+    T = prepare_fits_catalog(cat, invvars, T, bands) #, save_invvars=False)
 
     # Set Sersic indices for all galaxy types.
     # sigh, bytes vs strings.  In py3, T.type (dtype '|S3') are bytes.
@@ -578,16 +629,20 @@ def stage_m33_g(pixscale=None, targetwcs=None,
 
     T.writeto('cat-m33.fits')
 
+    #from astrometry.util.fits import fits_table
+    #T = fits_table('cat-m33.fits')
+        
     T.dchisq = np.zeros((len(T),5), np.float32)
     for c in ['rchisq', 'fracflux', 'fracmasked', 'fracin',
               'nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth',
               'fiberflux', 'fibertotflux',
-              'flux_ivar']:
+              #'flux_ivar'
+    ]:
         T.set(c, np.zeros((len(T),3), np.float32))
 
     for c in ['mjd_min', 'mjd_max', 'nea_g', 'nea_r', 'nea_z',
               'blob_nea_g', 'blob_nea_r', 'blob_nea_z',
-              'shape_r_ivar', 'shape_e1_ivar', 'shape_e2_ivar', 'sersic_ivar']:
+    ]:#          'shape_r_ivar', 'shape_e1_ivar', 'shape_e2_ivar', 'sersic_ivar']:
         T.set(c, np.zeros(len(T), np.float32))
     # The "format_catalog" code expects all lower-case column names...
     for c in T.columns():
