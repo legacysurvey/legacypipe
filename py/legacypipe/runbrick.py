@@ -782,8 +782,9 @@ def stage_srcs(pixscale=None, targetwcs=None,
         J = np.flatnonzero(refstars.islargegalaxy * refstars.in_bounds)
         h,w = gal_avoid_map.shape
         rkeep = 4
-        debug('Allowing detections around', len(avoid_x)-len(J), 'ref stars')
-        for x,y in zip(avoid_x[:-len(J)], avoid_y[:-len(J)]):
+        nstar = len(avoid_x)-len(J)
+        info('Allowing detections around', nstar, 'ref stars')
+        for x,y in zip(avoid_x[:nstar], avoid_y[:nstar]):
             ylo = max(0, y-rkeep)
             yhi = min(h-1, y+rkeep)
             xlo = max(0, x-rkeep)
