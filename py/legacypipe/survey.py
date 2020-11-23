@@ -1405,18 +1405,22 @@ class LegacySurveyData(object):
             ccds.filter = np.array([f.strip() for f in ccds.filter])
         return ccds
 
-    def ccds_touching_wcs(self, wcs, **kwargs):
+    def ccds_touching_wcs(self, wcs, max_ccd_radius=0.5, **kwargs):
         '''
         Returns a table of the CCDs touching the given *wcs* region.
+
+        max_ccd_radius is the largest radius of CCDs in this survey, in degrees.
+        It's fine to over-estimate this.
         '''
         kdfns = self.get_ccd_kdtrees()
 
         if len(kdfns):
             from astrometry.libkd.spherematch import tree_search_radec
-            # MAGIC number: we'll search a 1-degree radius for CCDs
-            # roughly in range, then refine using the
-            # ccds_touching_wcs() function.
-            radius = 1.
+            h,w = wcs.shape
+            radius = max_ccd_radius + 1.1 * wcs.pixel_scale() * np.hypot(w, h) / 2. / 3600.
+            info('Searching a radius of %.2f deg for CCDs touching WCS' % radius)
+            # We do a rough search for CCDs in range, then refine
+            # using the ccds_touching_wcs() function.
             ra,dec = wcs.radec_center()
             TT = []
             for fn,kd in kdfns:
