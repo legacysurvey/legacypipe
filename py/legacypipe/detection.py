@@ -361,10 +361,10 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 
     info(np.sum(np.logical_not(np.isfinite(sedsn))), 'SED S/N pixels are NaN')
 
-    import fitsio
-    fn = 'sed-sn-%s.fits' % sedname.lower()
-    fitsio.write(fn, sedsn)
-    info('Wrote', fn)
+    # import fitsio
+    # fn = 'sed-sn-%s.fits' % sedname.lower()
+    # fitsio.write(fn, sedsn)
+    # info('Wrote', fn)
 
     def saddle_level(Y):
         # Require a saddle that drops by (the larger of) "saddle"
