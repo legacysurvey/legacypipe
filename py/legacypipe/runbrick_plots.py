@@ -277,9 +277,9 @@ def tim_plots(tims, bands, ps):
         dimshow(tim.getInvError(), vmin=0, vmax=1.1/tim.sig1)
         plt.title('inverr')
         if tim.dq is not None:
-            plt.subplot(2,2,3)
-            dimshow(tim.dq, vmin=0, vmax=tim.dq.max())
-            plt.title('DQ')
+            # plt.subplot(2,2,3)
+            # dimshow(tim.dq, vmin=0, vmax=tim.dq.max())
+            # plt.title('DQ')
             plt.subplot(2,2,3)
             dimshow(((tim.dq & tim.dq_saturation_bits) > 0),
                     vmin=0, vmax=1.5, cmap='hot')
