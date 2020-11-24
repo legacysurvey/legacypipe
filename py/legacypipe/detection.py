@@ -13,10 +13,10 @@ def debug(*args):
 def _detmap(X):
     from scipy.ndimage.filters import gaussian_filter
     from legacypipe.survey import tim_get_resamp
-    (tim, targetwcs, apodize) = X
+    (itim, tim, targetwcs, apodize) = X
     R = tim_get_resamp(tim, targetwcs)
     if R is None:
-        return None,None,None,None,None
+        return itim,None,None,None,None,None
     assert(tim.psf_sigma > 0)
     psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
     ie = tim.getInvError()
@@ -57,7 +57,7 @@ def _detmap(X):
         detiv[-len(ramp):,:] *= ramp[::-1][:,np.newaxis]
         detiv[:,-len(ramp):] *= ramp[::-1][np.newaxis,:]
 
-    return Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
+    return itim, Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
 
 def detection_maps(tims, targetwcs, bands, mp, apodize=None):
     # Render the detection maps
@@ -68,10 +68,13 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None):
     detmaps = [np.zeros((H,W), np.float32) for b in bands]
     detivs  = [np.zeros((H,W), np.float32) for b in bands]
     satmaps = [np.zeros((H,W), bool)       for b in bands]
-    for tim, (Yo,Xo,incmap,inciv,sat) in zip(
-        tims, mp.map(_detmap, [(tim, targetwcs, apodize) for tim in tims])):
+    R = mp.imap_unordered(_detmap, [(itim, tim, targetwcs, apodize)
+                                    for itim,tim in enumerate(tims)])
+    for r in R:
+        (itim,Yo,Xo,incmap,inciv,sat) = r
         if Yo is None:
             continue
+        tim = tims[itim]
         ib = ibands[tim.band]
         detmaps[ib][Yo,Xo] += incmap * inciv
         detivs [ib][Yo,Xo] += inciv
