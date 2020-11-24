@@ -13,10 +13,10 @@ def debug(*args):
 def _detmap(X):
     from scipy.ndimage.filters import gaussian_filter
     from legacypipe.survey import tim_get_resamp
-    (tim, targetwcs, apodize) = X
+    (itim, tim, targetwcs, apodize) = X
     R = tim_get_resamp(tim, targetwcs)
     if R is None:
-        return None,None,None,None,None
+        return itim,None,None,None,None,None
     assert(tim.psf_sigma > 0)
     psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
     ie = tim.getInvError()
@@ -57,7 +57,7 @@ def _detmap(X):
         detiv[-len(ramp):,:] *= ramp[::-1][:,np.newaxis]
         detiv[:,-len(ramp):] *= ramp[::-1][np.newaxis,:]
 
-    return Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
+    return itim, Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
 
 def detection_maps(tims, targetwcs, bands, mp, apodize=None):
     # Render the detection maps
@@ -68,10 +68,13 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None):
     detmaps = [np.zeros((H,W), np.float32) for b in bands]
     detivs  = [np.zeros((H,W), np.float32) for b in bands]
     satmaps = [np.zeros((H,W), bool)       for b in bands]
-    for tim, (Yo,Xo,incmap,inciv,sat) in zip(
-        tims, mp.map(_detmap, [(tim, targetwcs, apodize) for tim in tims])):
+    R = mp.imap_unordered(_detmap, [(itim, tim, targetwcs, apodize)
+                                    for itim,tim in enumerate(tims)])
+    for r in R:
+        (itim,Yo,Xo,incmap,inciv,sat) = r
         if Yo is None:
             continue
+        tim = tims[itim]
         ib = ibands[tim.band]
         detmaps[ib][Yo,Xo] += incmap * inciv
         detivs [ib][Yo,Xo] += inciv
@@ -193,7 +196,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
             sedname, sed, detmaps, detivs, bands, xx, yy, rr,
             nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
             saturated_pix=saturated_pix, veto_map=veto_map,
-            ps=pps, rgbimg=rgbimg)
+            ps=pps, rgbimg=rgbimg, mp=mp)
         if sedhot is None:
             continue
         info('SED', sedname, ':', len(px), 'new peaks')
@@ -256,6 +259,86 @@ def plot_boundary_map(X, rgb=(0,255,0), extent=None, iterations=1):
         extent = [x0-it, x1+it, y0-it, y1+it]
     plot_mask(bounds, rgb=rgb, extent=extent)
 
+def _one_blob_peaks(X):
+    from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
+    from scipy.ndimage.measurements import label
+    (this_veto_map, sedsn, sediv, allblobs, satur, px, py, Ipeaks, ablob,
+     saddle_args, dilate, omit_xyr, apout, apin, nsigma, cutonaper) = X
+
+    H,W = sedsn.shape
+    ikeep = []
+    aper = []
+    peakval = []
+    nveto = nsaddle = naper = 0
+    for i,(x,y) in enumerate(zip(px, py)):
+        if this_veto_map[y,x]:
+            nveto += 1
+            continue
+        level = saddle_level(sedsn[y,x], *saddle_args)
+        saddlemap = (sedsn > level)
+        saddlemap = binary_dilation(saddlemap, iterations=dilate)
+        if satur is not None:
+            saddlemap |= satur
+        saddlemap *= (allblobs == ablob)
+        saddlemap = binary_fill_holes(saddlemap)
+        blobs,_ = label(saddlemap)
+        thisblob = blobs[y, x]
+        saddlemap *= (blobs == thisblob)
+
+        # previously found sources:
+        ox = np.array([x for x,y,r in omit_xyr] + [px[i] for i in ikeep])
+        oy = np.array([y for x,y,r in omit_xyr] + [py[i] for i in ikeep])
+        h,w = blobs.shape
+        cut = False
+        if len(ox):
+            ox = ox.astype(int)
+            oy = oy.astype(int)
+            cut = any((ox >= 0) * (ox < w) * (oy >= 0) * (oy < h) *
+                      (blobs[np.clip(oy,0,h-1), np.clip(ox,0,w-1)] == thisblob))
+        if cut:
+            # in same blob as previously found source.
+            # update vetomap
+            this_veto_map |= saddlemap
+            nsaddle += 1
+            continue
+
+        # Measure in aperture...
+        ap   =  sedsn[max(0, y-apout):min(H,y+apout+1),
+                      max(0, x-apout):min(W,x+apout+1)]
+        apiv = (sediv[max(0, y-apout):min(H,y+apout+1),
+                      max(0, x-apout):min(W,x+apout+1)] > 0)
+        aph,apw = ap.shape
+        apx0, apy0 = max(0, x - apout), max(0, y - apout)
+        R2 = ((np.arange(aph)+apy0 - y)[:,np.newaxis]**2 +
+              (np.arange(apw)+apx0 - x)[np.newaxis,:]**2)
+        ap = ap[apiv * (R2 >= apin**2) * (R2 <= apout**2)]
+        if len(ap):
+            # 16th percentile ~ -1 sigma point.
+            m = np.percentile(ap, 16.)
+        else:
+            # fake
+            m = -1.
+        if cutonaper:
+            if sedsn[y,x] - m < nsigma:
+                naper += 1
+                continue
+
+        aper.append(m)
+        peakval.append(sedsn[y,x])
+        ikeep.append(i)
+        this_veto_map |= saddlemap
+
+    return Ipeaks[np.array(ikeep, dtype=int)], aper, peakval, nveto, nsaddle, naper
+
+
+def saddle_level(Y, saddle_min, saddle_fraction):
+    # Require a saddle that drops by (the larger of) "saddle"
+    # sigma, or 10% of the peak height.
+    # ("saddle" is passed in as an argument to the
+    #  sed_matched_detection function)
+    drop = max(saddle_min, Y * saddle_fraction)
+    return Y - drop
+
 def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                           xomit, yomit, romit,
                           nsigma=5.,
@@ -264,7 +347,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                           saturated_pix=None,
                           veto_map=None,
                           cutonaper=True,
-                          ps=None, rgbimg=None):
+                          ps=None, rgbimg=None,
+                          mp=None):
     '''
     Runs a single SED-matched detection filter.
 
@@ -366,14 +450,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # fitsio.write(fn, sedsn)
     # info('Wrote', fn)
 
-    def saddle_level(Y):
-        # Require a saddle that drops by (the larger of) "saddle"
-        # sigma, or 10% of the peak height.
-        # ("saddle" is passed in as an argument to the
-        #  sed_matched_detection function)
-        drop = max(saddle_min, Y * saddle_fraction)
-        return Y - drop
-
     lowest_saddle = nsigma - saddle_min
 
     # zero out the edges -- larger margin here?
@@ -439,6 +515,12 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # catch slight differences in centroid positions.
     dilate = 1
 
+    # brightest peaks first
+    py,px = np.nonzero(peaks)
+    I = np.argsort(-sedsn[py,px])
+    py = py[I]
+    px = px[I]
+
     # For efficiency, segment at the minimum saddle level to compute
     # slices; the operations described above need only happen within
     # the slice.
@@ -450,17 +532,9 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     allslices = find_objects(allblobs)
     ally0 = [sy.start for sy,sx in allslices]
     allx0 = [sx.start for sy,sx in allslices]
-
     info('At lowest saddle level,', len(allslices), 'blobs')
     
-    # brightest peaks first
-    py,px = np.nonzero(peaks)
-    I = np.argsort(-sedsn[py,px])
-    py = py[I]
-    px = px[I]
-
     keep = np.zeros(len(px), bool)
-
     peakval = []
     aper = []
     apin = 10
@@ -508,109 +582,100 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         plt.title('Saddle map (lowest level): %i blobs' % len(allslices))
         ps.savefig()
 
+    # Process "allblobs" in parallel
+    # how many of those are populated by potential peaks?
+    info('Found', len(px), 'potential peaks')
+    Igood = np.flatnonzero(this_veto_map[py,px] == 0)
+    info('Of those,', (len(px)-len(Igood)), 'are in initial veto map')
+    ap = allblobs[py[Igood],px[Igood]]
+    peaks_in_a = {}
+    for i,a in zip(Igood,ap):
+        if not a in peaks_in_a:
+            peaks_in_a[a] = []
+        peaks_in_a[a].append(i)
+    omit_in_a = {}
+    for a,x,y,r in zip(allblobs[yomit,xomit], xomit, yomit, romit):
+        if a == 0:
+            continue
+        if not a in omit_in_a:
+            omit_in_a[a] = []
+        omit_in_a[a].append((x - allx0[a-1], y - ally0[a-1], r))
+
     # For each peak, determine whether it is isolated enough --
     # separated by a low enough saddle from other sources.  Need only
     # search within its "allblob", which is defined by the lowest
     # saddle.
-    info('Found', len(px), 'potential peaks')
-    info('Of those,', np.sum(this_veto_map[py,px]), 'are in initial veto map')
-    nveto = 0
-    nsaddle = 0
-    naper = 0
-    for i,(x,y) in enumerate(zip(px, py)):
-        if this_veto_map[y,x]:
-            nveto += 1
-            continue
-        level = saddle_level(sedsn[y,x])
-        ablob = allblobs[y,x]
-        index = int(ablob - 1)
-        slc = allslices[index]
-        saddlemap = (sedsn[slc] > level)
-        saddlemap = binary_dilation(saddlemap, iterations=dilate)
-        if saturated_pix is not None:
-            saddlemap |= satur[slc]
-        saddlemap *= (allblobs[slc] == ablob)
-        saddlemap = binary_fill_holes(saddlemap)
-        blobs,_ = label(saddlemap)
-        x0,y0 = allx0[index], ally0[index]
-        thisblob = blobs[y-y0, x-x0]
-        saddlemap *= (blobs == thisblob)
+    info(len(np.unique(ap)), 'lowest-saddle-level blobs are populated')
+    from collections import Counter
+    cap = Counter(ap)
+    info('Most populated ones:', cap.most_common(5))
+    args = []
+    for a,_ in cap.most_common():
+        aindex = a-1
+        aslc = allslices[aindex]
+        ax0,ay0 = allx0[aindex], ally0[aindex]
+        sy,sx = aslc
+        ax1,ay1 = sx.stop, sy.stop
 
-        # previously found sources:
-        ox = np.append(xomit, px[:i][keep[:i]]) - x0
-        oy = np.append(yomit, py[:i][keep[:i]]) - y0
-        h,w = blobs.shape
-        cut = False
-        if len(ox):
-            ox = ox.astype(int)
-            oy = oy.astype(int)
-            cut = any((ox >= 0) * (ox < w) * (oy >= 0) * (oy < h) *
-                      (blobs[np.clip(oy,0,h-1), np.clip(ox,0,w-1)] == thisblob))
+        I = np.array(peaks_in_a[a])
+        # Compute the region we need for aperture tests
+        minpx = min(px[I])
+        maxpx = max(px[I])
+        minpy = min(py[I])
+        maxpy = max(py[I])
+        apy0 = max(0, minpy-apout)
+        apy1 = min(H, maxpy+apout+1)
+        apx0 = max(0, minpx-apout)
+        apx1 = min(W, maxpx+apout+1)
 
-        # one plot per peak is a little excessive!
-        if ps is not None and i<10:
-            _peak_plot_1(this_veto_map, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
-                         level, dilate, saturated_pix, satur, ps, rgbimg, cut)
-        if False and cut and ps is not None:
-            _peak_plot_2(ox, oy, w, h, blobs, thisblob, sedsn, x0, y0,
-                         x, y, level, ps)
-        if False and (not cut) and ps is not None:
-            _peak_plot_3(sedsn, nsigma, x, y, x0, y0, slc, saddlemap,
-                         xomit, yomit, px, py, keep, i, cut, ps)
+        y0 = min(apy0, ay0)
+        x0 = min(apx0, ax0)
+        slc = (slice(y0, max(apy1, ay1)),
+               slice(x0, max(apx1, ax1)))
 
-        if cut:
-            # in same blob as previously found source.
-            # update vetomap
-            this_veto_map[slc] |= saddlemap
-            nsaddle += 1
-            continue
+        hh,ww = sedsn[slc].shape
+        assert(np.all(px[I] - x0 >= 0))
+        assert(np.all(py[I] - y0 >= 0))
+        assert(np.all(px[I] - x0 < ww))
+        assert(np.all(py[I] - y0 < hh))
 
-        # Measure in aperture...
-        ap   =  sedsn[max(0, y-apout):min(H,y+apout+1),
-                      max(0, x-apout):min(W,x+apout+1)]
-        apiv = (sediv[max(0, y-apout):min(H,y+apout+1),
-                      max(0, x-apout):min(W,x+apout+1)] > 0)
-        aph,apw = ap.shape
-        apx0, apy0 = max(0, x - apout), max(0, y - apout)
-        R2 = ((np.arange(aph)+apy0 - y)[:,np.newaxis]**2 +
-              (np.arange(apw)+apx0 - x)[np.newaxis,:]**2)
-        ap = ap[apiv * (R2 >= apin**2) * (R2 <= apout**2)]
-        if len(ap):
-            # 16th percentile ~ -1 sigma point.
-            m = np.percentile(ap, 16.)
-        else:
-            # fake
-            m = -1.
-        if cutonaper:
-            if sedsn[y,x] - m < nsigma:
-                naper += 1
-                continue
+        args.append((this_veto_map[slc], sedsn[slc], sediv[slc], allblobs[slc],
+                     satur[slc] if (saturated_pix is not None) else None,
+                     px[I]-x0, py[I]-y0, I, a, (saddle_min, saddle_fraction),
+                     dilate, omit_in_a.get(a, []), apout, apin, nsigma, cutonaper))
 
-        aper.append(m)
-        peakval.append(sedsn[y,x])
-        keep[i] = True
-        this_veto_map[slc] |= saddlemap
+    if mp is None:
+        R = [_one_blob_peaks(a) for a in args]
+    else:
+        R = mp.imap_unordered(_one_blob_peaks, args)
+    Ikeep = []
+    aper = []
+    peakval = []
+    nveto = nsaddle = naper = 0
+    for r in R:
+        ikeep, ap, pk, nv, ns, na = r
+        Ikeep.append(ikeep)
+        aper.extend(ap)
+        peakval.extend(pk)
+        nveto   += nv
+        nsaddle += ns
+        naper   += na
 
-        if False and ps is not None:
-            plt.clf()
-            plt.subplot(1,2,1)
-            dimshow(ap, vmin=-2, vmax=10, cmap='hot',
-                    extent=[apx0,apx0+apw,apy0,apy0+aph])
-            plt.subplot(1,2,2)
-            dimshow(ap * ((R2 >= apin**2) * (R2 <= apout**2)),
-                    vmin=-2, vmax=10, cmap='hot',
-                    extent=[apx0,apx0+apw,apy0,apy0+aph])
-            plt.suptitle('peak %.1f vs ap %.1f' % (sedsn[y,x], m))
-            ps.savefig()
+    if len(Ikeep):
+        Ikeep = np.hstack(Ikeep)
+    else:
+        Ikeep = np.array([], dtype=int)
 
     info('Of', len(px), 'potential peaks:', nveto, 'in veto map,', nsaddle, 'cut by saddle test,',
-          naper, 'cut by aper test,', np.sum(keep), 'kept')
+          naper, 'cut by aper test,', len(Ikeep), 'kept')
 
     if ps is not None:
-        pxdrop = px[np.logical_not(keep)]
-        pydrop = py[np.logical_not(keep)]
-    py = py[keep]
-    px = px[keep]
+        dropped = np.ones(len(px), bool)
+        dropped[Ikeep] = False
+        pxdrop = px[dropped]
+        pydrop = py[dropped]
+    py = py[Ikeep]
+    px = px[Ikeep]
 
     # Which of the hotblobs yielded sources?  Those are the ones to keep.
     hbmap = np.zeros(nhot+1, bool)
