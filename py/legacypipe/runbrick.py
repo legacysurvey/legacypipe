@@ -485,7 +485,10 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
         patch_from_coadd(C.coimgs, targetwcs, bands, tims, mp=mp)
         del C
 
-        make_badcoadds = True
+        #make_badcoadds = True
+        # M33
+        make_badcoadds = False
+
         badcoaddspos, badcoaddsneg = mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
                                                          mp=mp, plots=plots, ps=ps, make_badcoadds=make_badcoadds,
                                                          refstars=refstars)
@@ -494,10 +497,11 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
         with survey.write_output('outliers-post', brick=brickname) as out:
             imsave_jpeg(out.fn, get_rgb(C.coimgs, bands), origin='lower')
-        with survey.write_output('outliers-masked-pos', brick=brickname) as out:
-            imsave_jpeg(out.fn, get_rgb(badcoaddspos, bands), origin='lower')
-        with survey.write_output('outliers-masked-neg', brick=brickname) as out:
-            imsave_jpeg(out.fn, get_rgb(badcoaddsneg, bands), origin='lower')
+        if make_badcoadds:
+            with survey.write_output('outliers-masked-pos', brick=brickname) as out:
+                imsave_jpeg(out.fn, get_rgb(badcoaddspos, bands), origin='lower')
+            with survey.write_output('outliers-masked-neg', brick=brickname) as out:
+                imsave_jpeg(out.fn, get_rgb(badcoaddsneg, bands), origin='lower')
 
     return dict(tims=tims, version_header=version_header)
 
