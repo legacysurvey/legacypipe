@@ -12,7 +12,7 @@ from astrometry.util.util import wcs_pv2sip_hdr, Tan
 from astrometry.util.resample import *
 from astrometry.libkd.spherematch import match_radec
 from astrometry.util.plotutils import *
-from astrometry.blind.plotstuff import *
+from astrometry.plot.plotstuff import *
 from astrometry.util.util import anwcs_new_sip
 
 def mosaic():
@@ -159,6 +159,15 @@ def decam():
     
     T = fits_table('obstatus/decam-tiles_obstatus.fits')
     T.rename('pass', 'passnum')
+    print('Passes:', np.unique(T.passnum))
+
+    for p in np.unique(T.passnum):
+        I = np.flatnonzero(T.passnum == p)
+        plt.clf()
+        plt.plot(T.ra[I], T.dec[I], 'b.')
+        plt.title('Pass %s' % p)
+        plt.savefig('pass%i.png' % p)
+    
     ra,dec = 0.933, 0.
     I,J,d = match_radec(T.ra, T.dec, ra, dec, 5.) #2.8)
     print(len(I), 'tiles near 0,0')
@@ -236,11 +245,12 @@ def decam():
             print('Coverage counts:', Counter(cov.ravel()).most_common())
             bins = -0.5 + np.arange(8)
             plt.clf()
-            n,b,p = plt.hist(cov.ravel(), bins=bins, normed=True)
-            #plt.hist(cov.ravel(), bins=bins, normed=True, cumulative=True, histtype='step')
+            ncov = cov.ravel()
+            ncov = ncov / np.sum(ncov)
+            n,b,p = plt.hist(ncov, bins=bins)
             # Cumulative histogram from the right...
             xx,yy = [],[]
-            for blo,bhi,ni in reversed(zip(bins, bins[1:], n)):
+            for blo,bhi,ni in reversed(list(zip(bins, bins[1:], n))):
                 nc = float(np.sum(cov.ravel() > blo)) / len(cov.ravel())
                 yy.extend([nc,nc])
                 xx.extend([bhi,blo])
@@ -266,4 +276,5 @@ def decam():
         
 
 
-mosaic()
+#mosaic()
+decam()
