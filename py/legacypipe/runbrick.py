@@ -192,6 +192,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         version_header.add_record(dict(
             name='CORN%iDEC'%(i+1), value=d, comment='Brick corner Dec (deg)'))
 
+    _add_stage_version(version_header, 'TIMS', 'tims')
+
     # Find CCDs
     ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
     if ccds is None:
@@ -349,7 +351,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         version_header.add_record(dict(name='BAND%i' % i, value=band,
                                        comment='Band name in this catalog'))
 
-    _add_stage_version(version_header, 'TIMS', 'tims')
     keys = ['version_header', 'targetrd', 'pixscale', 'targetwcs', 'W','H',
             'tims', 'ps', 'brickid', 'brickname', 'brick', 'custom_brick',
             'target_extent', 'ccds', 'bands', 'survey']
