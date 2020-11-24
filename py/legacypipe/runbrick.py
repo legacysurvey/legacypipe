@@ -466,7 +466,7 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
     from legacypipe.outliers import patch_from_coadd, mask_outlier_pixels, read_outlier_mask_file
 
     record_event and record_event('stage_outliers: starting')
-    _add_stage_version(version_header, 'OUTL', 'outliers')
+    #_add_stage_version(version_header, 'OUTL', 'outliers')
 
     version_header.add_record(dict(name='OUTLIER',
                                    value=outliers,
@@ -502,6 +502,7 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
                 imsave_jpeg(out.fn, get_rgb(badcoaddspos, bands), origin='lower')
             with survey.write_output('outliers-masked-neg', brick=brickname) as out:
                 imsave_jpeg(out.fn, get_rgb(badcoaddsneg, bands), origin='lower')
+        del C
 
     return dict(tims=tims, version_header=version_header)
 
@@ -565,7 +566,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         ccds.writeto(None, fits_object=out.fits, primheader=version_header)
 
     C = make_coadds(tims, bands, targetwcs,
-                    detmaps=True, ngood=True, lanczos=lanczos,
+                    detmaps=True, ngood=True, lanczos=lanczos, allmasks=True,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims,
                                    targetwcs, co_sky),
@@ -958,6 +959,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
                     continue
                 tim.data -= cosky
                 ccds.co_sky[itim] = cosky
+        del C
     else:
         co_sky = None
 

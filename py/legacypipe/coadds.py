@@ -203,7 +203,7 @@ def make_coadds(tims, bands, targetwcs,
                 mods=None, blobmods=None,
                 xy=None, apertures=None, apxy=None,
                 ngood=False, detmaps=False, psfsize=False,
-                allmasks=True, anymasks=False,
+                allmasks=False, anymasks=False,
                 get_max=False, sbscale=True,
                 psf_images=False,
                 callback=None, callback_args=None,
@@ -270,6 +270,7 @@ def make_coadds(tims, bands, targetwcs,
 
     # We create one iterator per band to do the tim resampling.  These all run in
     # parallel when multi-processing.
+    debug('Coadds: Starting multi-processing tim resampling')
     imaps = []
     for band in bands:
         args = []

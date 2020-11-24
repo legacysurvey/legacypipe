@@ -109,6 +109,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
         badcoadds_pos = None
         badcoadds_neg = None
 
+    info('Outliers: building star veto map')
     star_veto = np.zeros(targetwcs.shape, np.bool)
     if refstars:
         gaia = refstars[refstars.isgaia]
@@ -119,7 +120,10 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
         # Radius to mask around Gaia stars, in arcsec
         radius = 1.0
         pixrad = radius / targetwcs.pixel_scale()
-        for x,y in zip(bx,by):
+        debug('Gaia stars:', len(bx))
+        for i,(x,y) in enumerate(zip(bx,by)):
+            if i%1000 == 0:
+                debug('Star', i, '/', len(bx))
             xlo = int(np.clip(np.floor(x - pixrad), 0, W-1))
             xhi = int(np.clip(np.ceil (x + pixrad), 0, W-1))
             ylo = int(np.clip(np.floor(y - pixrad), 0, H-1))
@@ -181,6 +185,8 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 del Yo,Xo,iacc,wacc,macc
             del r,R
 
+            info('Outliers: built coadd for band', band)
+            
             # Don't flag outliers around BLEED or SATUR masks
             veto = star_veto | binary_dilation(masks & DQ_BITS['bleed'], iterations=3)
             veto |= binary_dilation(masks & DQ_BITS['satur'], iterations=10)
@@ -195,6 +201,8 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             # Compare each tim to a subimage of the reference image.
             args = []
             for itim,(tim,sig) in enumerate(zip(btims, addsigs)):
+                if not itim in timranges:
+                    continue
                 y0,y1,x0,x1 = timranges[itim]
                 subtarget = targetwcs.get_subimage(x0, y0, x1-x0, y1-y0)
                 args.append((itim, tim, sig, subtarget, coimg[y0:y1, x0:x1], cow[y0:y1, x0:x1], veto[y0:y1, x0:x1],
@@ -214,6 +222,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             for r in R:
                 itim,r = r
                 tim = btims[itim]
+                info('Writing outlier mask for', tim.name)
                 yoff,_,xoff,_ = timranges[itim]
                 if r is None:
                     # none masked
