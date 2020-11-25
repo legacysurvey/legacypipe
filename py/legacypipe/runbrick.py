@@ -2952,6 +2952,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               checkpoint_period=None,
               prereqs_update=None,
               stagefunc = None,
+              pool = None,
               ):
     '''Run the full Legacy Survey data reduction pipeline.
 
@@ -3199,10 +3200,11 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         if checkpoint_period is not None:
             kwargs.update(checkpoint_period=checkpoint_period)
 
-    if threads and threads > 1:
+    if pool or (threads and threads > 1):
         from astrometry.util.timingpool import TimingPool, TimingPoolMeas
-        pool = TimingPool(threads, initializer=runbrick_global_init,
-                          initargs=[])
+        if pool is None:
+            pool = TimingPool(threads, initializer=runbrick_global_init,
+                              initargs=[])
         poolmeas = TimingPoolMeas(pool, pickleTraffic=False)
         StageTime.add_measurement(poolmeas)
         mp = multiproc(None, pool=pool)
