@@ -233,7 +233,9 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
                                     tycho_stars=True, gaia_stars=True,
                                     large_galaxies=True, star_clusters=True)
     refmask = get_reference_map(targetwcs, refs) == 0 # True=skypix
-    skydict = {'radii': subsky_radii}
+    skydict = {}
+    for irad, rad in enumerate(subsky_radii):
+        skydict.update({'SKYRAD{:02d}'.format(irad): (np.float32(rad), 'sky radius {} [arcsec]'.format(irad))})
 
     allbands = np.array([tim.band for tim in tims])
     for band in sorted(set(allbands)):
@@ -247,7 +249,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
         # Derive the ubercal correction and then apply it.
         x = coadds_ubercal(bandtims, coaddtims=[tims[ii] for ii in I],
                            plots=plots, plots2=plots2, ps=ps, verbose=True)
-        skydict[band] = {'ccds': [tims[ii].name for ii in I], 'delta': x}
+        #skydict[band] = {'ccds': [tims[ii].name for ii in I], 'delta': x}
 
         # Apply the correction and return the tims
         for jj, (correction, ii) in enumerate(zip(x, I)):
@@ -274,22 +276,35 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
             xcen, ycen = np.round(x0 - 1).astype('int'), np.round(y0 - 1).astype('int')
             ymask, xmask = np.ogrid[-ycen:H-ycen, -xcen:W-xcen]
 
-            #cenmask = (xmask**2 + ymask**2) <= (subsky_radii[0] / pixscale)**2 # True=object pixels
-            inmask = (xmask**2 + ymask**2) <= (subsky_radii[1] / pixscale)**2
-            outmask = (xmask**2 + ymask**2) <= (subsky_radii[2] / pixscale)**2
-            skymask = (outmask*1 - inmask*1) == 1 # True=skypix
-
-            # Find and mask objects, then get the sky.
             skypix = _build_objmask(coimg, coiv, refmask * (coiv>0))
-            skypix = np.logical_and(skypix, skymask)
-            #plt.imshow(skypix, origin='lower') ; plt.savefig('junk.png')
+            for irad, (rin, rout) in enumerate(zip(subsky_radii[0:-1], subsky_radii[1:])):
+                inmask = (xmask**2 + ymask**2) <= (rin / pixscale)**2
+                outmask = (xmask**2 + ymask**2) <= (rout / pixscale)**2
+                skymask = (outmask*1 - inmask*1) == 1 # True=skypix
+
+                # Find and mask objects, then get the sky.
+                skypix_annulus = np.logical_and(skypix, skymask)
+                _skymean, _skymedian, _skysig = sigma_clipped_stats(coimg, mask=np.logical_not(skypix_annulus), sigma=3.0)
+
+                skydict.update({'SKYMN{:02d}{}'.format(irad, band): (np.float32(_skymean), 'mean {} sky in annulus {} [nanomaggy]'.format(band, irad))})
+                skydict.update({'SKYMD{:02d}{}'.format(irad, band): (np.float32(_skymedian), 'median {} sky in annulus {} [nanomaggy]'.format(band, irad))})
+                skydict.update({'SKYSG{:02d}{}'.format(irad, band): (np.float32(_skysig), 'sigma {} sky in annulus {} [nanomaggy]'.format(band, irad))})
+                skydict.update({'SKYNP{:02d}{}'.format(irad, band): (np.sum(skypix_annulus), 'npix {} sky in annulus {}'.format(band, irad))})
+                
+                # reference annulus
+                if irad == 0:
+                    skymean, skymedian, skysig = _skymean, _skymedian, _skysig
+                    skypix_mask = skypix_annulus
+
         else:
             skypix = refmask * (coiv>0)
-            skypix = _build_objmask(coimg, coiv, skypix)
-
-        skymean, skymedian, skysig = sigma_clipped_stats(coimg, mask=np.logical_not(skypix), sigma=3.0)
-        skydict[band].update({'mean': skymean, 'median': skymedian, 'sigma': skysig,
-                              'npix': np.sum(skypix)})
+            skypix_mask = _build_objmask(coimg, coiv, skypix)
+            skymean, skymedian, skysig = sigma_clipped_stats(coimg, mask=np.logical_not(skypix_mask), sigma=3.0)
+            
+            skydict.update({'SKYMN00{}'.format(irad, band): (np.float32(_skymean), 'mean {} sky [nanomaggy]'.format(band))})
+            skydict.update({'SKYMD00{}'.format(irad, band): (np.float32(_skymedian), 'mean {} sky [nanomaggy]'.format(band))})
+            skydict.update({'SKYSG00{}'.format(irad, band): (np.float32(_skysig), 'sigma {} sky [nanomaggy]'.format(band))})
+            skydict.update({'SKYNP00{}'.format(irad, band): (np.sum(skypix_mask), 'npix {} sky'.format(band))})
 
         I = np.where(allbands == band)[0]
         #print('Band', band, 'Coadd sky:', skymedian)
@@ -306,7 +321,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
 
             # Produce skymedian-subtracted, masked image for later RGB plot
             coimg -= skymedian
-            coimg[~skypix] = 0.
+            coimg[~skypix_mask] = 0.
             #coimg[np.logical_not(skymask * (coiv > 0))] = 0.
 
         for ii in I:
@@ -532,30 +547,30 @@ def stage_fit_on_coadds(
         cotim.primhdr = fitsio.FITSHDR()
         get_coadd_headers(cotim.primhdr, tims, band)
 
-        # custom sky-subtraction (implies ubercal_sky)
-        if bool(skydict):
-            nccds = len(np.atleast_1d(skydict[band]['ccds']))
-            if subsky_radii:
-                cotim.primhdr.add_record(dict(name='SKYRAD0', value=np.float32(subsky_radii[0]),
-                                              comment='sky masking radius [arcsec]'))
-                cotim.primhdr.add_record(dict(name='SKYRAD1', value=np.float32(subsky_radii[1]),
-                                              comment='sky inner annulus radius [arcsec]'))
-                cotim.primhdr.add_record(dict(name='SKYRAD2', value=np.float32(subsky_radii[2]),
-                                              comment='sky outer annulus radius [arcsec]'))
-            for ii in np.arange(nccds):
-                cotim.primhdr.add_record(dict(name='SKCCD{}'.format(ii), value=skydict[band]['ccds'][ii],
-                                              comment='ubersky CCD {} name'.format(ii)))
-            for ii in np.arange(nccds):
-                cotim.primhdr.add_record(dict(name='SKCOR{}'.format(ii), value=np.float32(skydict[band]['delta'][ii]),
-                                              comment='ubersky for CCD {} [nanomaggies]'.format(ii)))
-            cotim.primhdr.add_record(dict(name='SKYMEAN{}'.format(band.upper()), value=skydict[band]['mean'],
-                                          comment='mean {} sky background [nanomaggies]'.format(band)))
-            cotim.primhdr.add_record(dict(name='SKYMED{}'.format(band.upper()), value=skydict[band]['median'],
-                                          comment='median {} sky background [nanomaggies]'.format(band)))
-            cotim.primhdr.add_record(dict(name='SKYSIG{}'.format(band.upper()), value=skydict[band]['sigma'],
-                                          comment='sigma {} sky background [nanomaggies]'.format(band)))
-            cotim.primhdr.add_record(dict(name='SKYPIX{}'.format(band.upper()), value=skydict[band]['npix'],
-                                          comment='number of pixels in {} sky background'.format(band)))
+        ## custom sky-subtraction (implies ubercal_sky)
+        #if bool(skydict):
+        #    nccds = len(np.atleast_1d(skydict[band]['ccds']))
+        #    if subsky_radii:
+        #        cotim.primhdr.add_record(dict(name='SKYRAD0', value=np.float32(subsky_radii[0]),
+        #                                      comment='sky masking radius [arcsec]'))
+        #        cotim.primhdr.add_record(dict(name='SKYRAD1', value=np.float32(subsky_radii[1]),
+        #                                      comment='sky inner annulus radius [arcsec]'))
+        #        cotim.primhdr.add_record(dict(name='SKYRAD2', value=np.float32(subsky_radii[2]),
+        #                                      comment='sky outer annulus radius [arcsec]'))
+        #    for ii in np.arange(nccds):
+        #        cotim.primhdr.add_record(dict(name='SKCCD{}'.format(ii), value=skydict[band]['ccds'][ii],
+        #                                      comment='ubersky CCD {} name'.format(ii)))
+        #    for ii in np.arange(nccds):
+        #        cotim.primhdr.add_record(dict(name='SKCOR{}'.format(ii), value=np.float32(skydict[band]['delta'][ii]),
+        #                                      comment='ubersky for CCD {} [nanomaggies]'.format(ii)))
+        #    cotim.primhdr.add_record(dict(name='SKYMEAN{}'.format(band.upper()), value=skydict[band]['mean'],
+        #                                  comment='mean {} sky background [nanomaggies]'.format(band)))
+        #    cotim.primhdr.add_record(dict(name='SKYMED{}'.format(band.upper()), value=skydict[band]['median'],
+        #                                  comment='median {} sky background [nanomaggies]'.format(band)))
+        #    cotim.primhdr.add_record(dict(name='SKYSIG{}'.format(band.upper()), value=skydict[band]['sigma'],
+        #                                  comment='sigma {} sky background [nanomaggies]'.format(band)))
+        #    cotim.primhdr.add_record(dict(name='SKYPIX{}'.format(band.upper()), value=skydict[band]['npix'],
+        #                                  comment='number of pixels in {} sky background'.format(band)))
 
         cotims.append(cotim)
 
@@ -609,4 +624,4 @@ def stage_fit_on_coadds(
             out.fits.write(psfimg, header=hdr)
 
     # EVIL
-    return dict(tims=cotims)
+    return dict(tims=cotims, coadd_headers=skydict)
