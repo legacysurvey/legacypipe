@@ -537,8 +537,8 @@ def unwise_phot(X):
     '''
     This is the entry-point from runbrick.py, called via mp.map()
     '''
-    (wcat, tiles, band, roiradec, wise_ceres, pixelized_psf, get_mods, get_masks, ps,
-     move_crpix, modelsky_dir) = X
+    (key, (wcat, tiles, band, roiradec, wise_ceres, pixelized_psf, get_mods, get_masks, ps,
+           move_crpix, modelsky_dir)) = X
     kwargs = dict(roiradecbox=roiradec, band=band, pixelized_psf=pixelized_psf,
                   get_masks=get_masks, ps=ps, move_crpix=move_crpix,
                   modelsky_dir=modelsky_dir)
@@ -564,7 +564,7 @@ def unwise_phot(X):
             except:
                 print('unwise_forcedphot failed (2):')
                 traceback.print_exc()
-    return W
+    return key,W
 
 def collapse_unwise_bitmask(bitmask, band):
     '''

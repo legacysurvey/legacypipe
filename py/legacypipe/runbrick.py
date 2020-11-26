@@ -2329,6 +2329,8 @@ def stage_wise_forced(
     maskbits=None,
     mp=None,
     record_event=None,
+    wise_checkpoint_filename=None,
+    wise_checkpoint_period=600,
     ps=None,
     plots=False,
     **kwargs):
@@ -2391,9 +2393,10 @@ def stage_wise_forced(
         wtiles.unwise_dir = np.array([unwise_dir]*len(tiles))
         for band in [1,2,3,4]:
             get_masks = targetwcs if (band == 1) else None
-            args.append((wcat, wtiles, band, roiradec, wise_ceres, wpixpsf,
-                         unwise_coadds, get_masks, ps, True,
-                         unwise_modelsky_dir))
+            args.append(((-1,band),
+                         (wcat, wtiles, band, roiradec, wise_ceres, wpixpsf,
+                          unwise_coadds, get_masks, ps, True,
+                          unwise_modelsky_dir)))
 
     # Add time-resolved WISE coadds
     # Skip if $UNWISE_COADDS_TIMERESOLVED_DIR or --unwise-tr-dir not set.
@@ -2446,12 +2449,99 @@ def stage_wise_forced(
                 eptiles = TR[I]
                 eptiles.unwise_dir = np.array([os.path.join(tdir, 'e%03i'%ep)
                                               for ep in epochs[I,ie]])
-                eargs.append((ie,(wcat, eptiles, band, roiradec,
-                                  wise_ceres, wpixpsf, False, None, ps, False, unwise_modelsky_dir)))
+                eargs.append(((ie,band),
+                              (wcat, eptiles, band, roiradec,
+                               wise_ceres, wpixpsf, False, None, ps, False, unwise_modelsky_dir)))
+
+    runargs = args + eargs
+    photresults = {}
+    # Check for existing checkpoint file.
+    if wise_checkpoint_filename and os.path.exists(wise_checkpoint_filename):
+        from astrometry.util.file import unpickle_from_file
+        info('Reading', wise_checkpoint_filename)
+        try:
+            photresults = unpickle_from_file(wise_checkpoint_filename)
+            debug('Read', len(photresults), 'results from checkpoint file', wise_checkpoint_filename)
+        except:
+            import traceback
+            print('Failed to read checkpoint file', wise_checkpoint_filename)
+            traceback.print_exc()
+
+        keepargs = [(key,a) for (key,a) in runargs if not key in photresults]
+        print('Running', len(keepargs), 'of', len(runargs), 'images not in checkpoint')
+        runargs = keepargs
 
     # Run the forced photometry!
     record_event and record_event('stage_wise_forced: photometry')
-    phots = mp.map(unwise_phot, args + [a for ie,a in eargs])
+    info('unWISE forced phot: total of', len(args)+len(eargs), 'images to photometer')
+    #phots = mp.map(unwise_phot, args + eargs)
+
+    if wise_checkpoint_filename is None:
+        res = mp.map(unwise_phot, runargs)
+        for k,v in res:
+            photresults[k] = v
+        del res
+    else:
+        is_mpi = mp.pool is not None and getattr(mp.pool, 'is_mpi', False)
+        info('is_mpi:', is_mpi)
+        if is_mpi:
+            # yuck!
+            mp.pool.imap_timeout = timeout=wise_checkpoint_period/4
+
+        res = mp.imap_unordered(unwise_phot, runargs)
+
+        from astrometry.util.ttime import CpuMeas
+        import multiprocessing
+        import concurrent.futures
+        last_checkpoint = CpuMeas()
+        n_finished = 0
+        n_finished_total = 0
+        while True:
+            # Time to write a checkpoint file? (And have something to write?)
+            tnow = CpuMeas()
+            dt = tnow.wall_seconds_since(last_checkpoint)
+            if dt >= wise_checkpoint_period and n_finished > 0:
+                # Write checkpoint!
+                info('Writing', n_finished, 'new results; total for this run', n_finished_total)
+                try:
+                    _write_checkpoint(photresults, wise_checkpoint_filename)
+                    last_checkpoint = tnow
+                    dt = 0.
+                    n_finished = 0
+                except:
+                    print('Failed to write checkpoint file', wise_checkpoint_filename)
+                    import traceback
+                    traceback.print_exc()
+            # Wait for results (with timeout)
+            try:
+                info('waiting for result...')
+                if mp.pool is not None and not is_mpi:
+                    timeout = max(1, wise_checkpoint_period - dt)
+                    r = res.next(timeout)
+                else:
+                    r = next(res)
+                k,v = r
+                info('got result for', k)
+                photresults[k] = v
+                n_finished += 1
+                n_finished_total += 1
+            except StopIteration:
+                info('got StopIteration')
+                break
+            except multiprocessing.TimeoutError:
+                info('got TimeoutError')
+                continue
+            except concurrent.futures.TimeoutError:
+                info('got MPI TimeoutError')
+                continue
+            except:
+                import traceback
+                traceback.print_exc()
+        # Write checkpoint when done!
+        _write_checkpoint(photresults, wise_checkpoint_filename)
+        info('Got', n_finished_total, 'results; wrote', len(photresults), 'to checkpoint')
+
+    phots = [photresults[k] for k,a in (args + eargs)]
     record_event and record_event('stage_wise_forced: results')
 
     # Unpack results...
@@ -2527,7 +2617,8 @@ def stage_wise_forced(
     if WISE_T is not None:
         WISE_T = fits_table()
         phots = phots[len(args):]
-        for (ie,_),r in zip(eargs, phots):
+        # eargs contains [ (key,args) ]
+        for ((ie,_),_),r in zip(eargs, phots):
             debug('Epoch', ie, 'photometry:')
             if r is None:
                 debug('Failed.')
@@ -2950,6 +3041,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               force=None, forceall=False, write_pickles=True,
               checkpoint_filename=None,
               checkpoint_period=None,
+              wise_checkpoint_filename=None,
+              wise_checkpoint_period=None,
               prereqs_update=None,
               stagefunc = None,
               pool = None,
@@ -3199,6 +3292,10 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         kwargs.update(checkpoint_filename=checkpoint_filename)
         if checkpoint_period is not None:
             kwargs.update(checkpoint_period=checkpoint_period)
+    if wise_checkpoint_filename is not None:
+        kwargs.update(wise_checkpoint_filename=wise_checkpoint_filename)
+        if wise_checkpoint_period is not None:
+            kwargs.update(wise_checkpoint_period=wise_checkpoint_period)
 
     if pool or (threads and threads > 1):
         from astrometry.util.timingpool import TimingPool, TimingPoolMeas
@@ -3393,6 +3490,13 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument(
         '--checkpoint-period', type=int, default=None,
         help='Period for writing checkpoint files, in seconds; default 600')
+
+    parser.add_argument(
+        '--wise-checkpoint', dest='wise_checkpoint_filename', default=None,
+        help='Write WISE to checkpoint file?')
+    parser.add_argument(
+        '--wise-checkpoint-period', type=int, default=None,
+        help='Period for writing WISE checkpoint files, in seconds; default 600')
 
     parser.add_argument('-b', '--brick',
         help='Brick name to run; required unless --radec is given')

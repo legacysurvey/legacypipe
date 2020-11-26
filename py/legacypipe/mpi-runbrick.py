@@ -10,7 +10,17 @@ def hello(i):
     print('Hello', i, 'from', socket.gethostname(), 'pid', os.getpid())
     time.sleep(2)
 
-
+def global_init(loglevel):
+    import logging
+    import socket
+    import os
+    from mpi4py import MPI
+    print('MPI4PY process starting on', socket.gethostname(), 'pid', os.getpid(),
+          'MPI rank', MPI.COMM_WORLD.Get_rank())
+    logging.basicConfig(level=loglevel, format='%(message)s', stream=sys.stdout)
+    # tractor logging is *soooo* chatty
+    logging.getLogger('tractor.engine').setLevel(loglevel + 10)
+    
 def main(args=None):
     import os
     import datetime
@@ -49,9 +59,7 @@ def main(args=None):
         lvl = logging.INFO
     else:
         lvl = logging.DEBUG
-    logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
-    # tractor logging is *soooo* chatty
-    logging.getLogger('tractor.engine').setLevel(lvl + 10)
+    global_init(lvl)
 
     if opt.plots:
         import matplotlib
@@ -66,10 +74,13 @@ def main(args=None):
     class MyMPIPool(object):
         def __init__(self, **kwargs):
             self.real = MPIPoolExecutor(**kwargs)
+            self.is_mpi = True
+            self.imap_timeout = None
         def map(self, func, args, chunksize=1):
             return list(self.real.map(func, args, chunksize=chunksize))
         def imap_unordered(self, func, args, chunksize=1):
-            return self.real.map(func, args, chunksize=chunksize, unordered=True)
+            return self.real.map(func, args, chunksize=chunksize, unordered=True,
+                                 timeout=self.imap_timeout)
         def bootup(self, **kwargs):
             return self.real.bootup(**kwargs)
         def shutdown(self, **kwargs):
@@ -81,7 +92,7 @@ def main(args=None):
             pass
 
         def apply_async(self, *args, **kwargs):
-            raise RuntimeError('APPLY_ASNCY NOT IMPLEMENTED IN MyMPIPool')
+            raise RuntimeError('APPLY_ASYNC NOT IMPLEMENTED IN MyMPIPool')
         def get_worker_cpu(self):
             return 0.
         def get_worker_wall(self):
@@ -91,24 +102,22 @@ def main(args=None):
         def get_pickle_traffic_string(self):
             return 'nope'
 
-    # print('ENV:')
-    # keys = list(os.environ.keys())
-    # keys.sort()
-    # for k in keys:
-    #     print('  ',k, '=', os.environ[k])
-
-    pool = MyMPIPool()
-    #n = MPI.COMM_WORLD.size
+    # initializer only available in mpi4py master
+    pool = MyMPIPool(initializer=global_init, initargs=(lvl,))
     u = int(os.environ.get('OMPI_UNIVERSE_SIZE', '0'))
     if u == 0:
         u = int(os.environ.get('MPICH_UNIVERSE_SIZE', '0'))
+    if u == 0:
+        from mpi4py import MPI
+        u = MPI.COMM_WORLD.Get_size()
+
     print('Booting up MPI pool with', u, 'workers...')
     pool.bootup()
     print('Booted up MPI pool.')
     pool._processes = u
     kwargs.update(pool=pool)
 
-    pool.map(hello, np.arange(128))
+    #pool.map(hello, np.arange(128))
 
     rtn = -1
     try:
@@ -149,4 +158,21 @@ if __name__ == '__main__':
 # mpirun -n 64 --map-by core --rank-by node python -m mpi4py.futures legacypipe/mpi-runbrick.py --no-wise-ceres --brick 0715m657 --zoom 100 300 100 300 --run south --outdir $CSCRATCH/mpi --stage wise_forced
 
 
+# cray-mpich version:
+# srun -n 64 --distribution cyclic:cyclic python -m mpi4py.futures legacypipe/mpi-runbrick.py --no-wise-ceres --brick 0715m657 --zoom 100 300 100 300 --run south --outdir $CSCRATCH/mpi --stage wise_forced
+# 
     
+'''
+mpi4py setup:
+cray-mpich module, PrgEnv-intel/6.0.5
+
+mpi.cfg:
+[mpi]
+# CRAY_MPICH2_DIR
+mpi_dir = /opt/cray/pe/mpt/7.7.10/gni/mpich-intel/16.0
+include_dirs         = %(mpi_dir)s/include
+libraries            = mpich
+library_dirs         = %(mpi_dir)s/lib
+runtime_library_dirs = %(mpi_dir)s/lib
+'''
+
