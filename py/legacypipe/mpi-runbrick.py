@@ -126,6 +126,26 @@ def main(args=None):
         lvl = logging.DEBUG
     global_init(lvl)
 
+    # matplotlib config directory, when running in shifter...
+    for tag in ['CACHE', 'CONFIG']:
+        if not 'XDG_%s_HOME'%tag in os.environ:
+            src = os.path.expanduser('~/.%s' % (tag.lower()))
+            # Read-only?
+            if os.path.isdir(src) and not(os.access(src, os.W_OK)):
+                import shutil
+                import tempfile
+                tempdir = tempfile.mkdtemp(prefix='%s-' % tag.lower())
+                os.rmdir(tempdir)
+                shutil.copytree(src, tempdir, symlinks=True) #dirs_exist_ok=True)
+                # astropy config file: if XDG_CONFIG_HOME is set,
+                # expect to find $XDG_CONFIG_HOME/astropy, not
+                # ~/.astropy.
+                if tag == 'CONFIG':
+                    shutil.copytree(os.path.expanduser('~/.astropy'),
+                                    os.path.join(tempdir, 'astropy'),
+                                    symlinks=True) #dirs_exist_ok=True)
+                os.environ['XDG_%s_HOME' % tag] = tempdir
+
     if opt.plots:
         import matplotlib
         matplotlib.use('Agg')
