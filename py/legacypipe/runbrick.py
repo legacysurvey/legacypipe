@@ -2506,7 +2506,7 @@ def stage_wise_forced(
                     traceback.print_exc()
             # Wait for results (with timeout)
             try:
-                info('waiting for result...')
+                info('waiting for result (%i to go)...' % (len(runargs)-n_finished_total))
                 if mp.pool is not None:
                     timeout = max(1, wise_checkpoint_period - dt)
                     # If we don't have any new results to write, wait indefinitely
