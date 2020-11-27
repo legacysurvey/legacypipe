@@ -2454,6 +2454,7 @@ def stage_wise_forced(
                                wise_ceres, wpixpsf, False, None, ps, False, unwise_modelsky_dir)))
 
     runargs = args + eargs
+    info('unWISE forced phot: total of', len(runargs), 'images to photometer')
     photresults = {}
     # Check for existing checkpoint file.
     if wise_checkpoint_filename and os.path.exists(wise_checkpoint_filename):
@@ -2461,36 +2462,26 @@ def stage_wise_forced(
         info('Reading', wise_checkpoint_filename)
         try:
             photresults = unpickle_from_file(wise_checkpoint_filename)
-            debug('Read', len(photresults), 'results from checkpoint file', wise_checkpoint_filename)
+            info('Read', len(photresults), 'results from checkpoint file', wise_checkpoint_filename)
         except:
             import traceback
             print('Failed to read checkpoint file', wise_checkpoint_filename)
             traceback.print_exc()
-
         keepargs = [(key,a) for (key,a) in runargs if not key in photresults]
         print('Running', len(keepargs), 'of', len(runargs), 'images not in checkpoint')
         runargs = keepargs
 
     # Run the forced photometry!
     record_event and record_event('stage_wise_forced: photometry')
-    info('unWISE forced phot: total of', len(args)+len(eargs), 'images to photometer')
     #phots = mp.map(unwise_phot, args + eargs)
 
-    if wise_checkpoint_filename is None:
+    if wise_checkpoint_filename is None or mp is None:
         res = mp.map(unwise_phot, runargs)
         for k,v in res:
             photresults[k] = v
         del res
-    else:
-        is_mpi = mp.pool is not None and getattr(mp.pool, 'is_mpi', False)
-        info('is_mpi:', is_mpi)
-        if is_mpi:
-            # yuck!
-            pass
-
+    elif len(runargs) > 0:
         res = mp.imap_unordered(unwise_phot, runargs)
-        print('imap_unordered return type:', res)
-
         from astrometry.util.ttime import CpuMeas
         import multiprocessing
         import concurrent.futures
@@ -2516,31 +2507,33 @@ def stage_wise_forced(
             # Wait for results (with timeout)
             try:
                 info('waiting for result...')
-                if mp.pool is not None and not is_mpi:
+                if mp.pool is not None:
                     timeout = max(1, wise_checkpoint_period - dt)
                     r = res.next(timeout)
                 else:
                     r = next(res)
                 k,v = r
-                info('got result for', k)
+                info('got result for epoch,band', k)
                 photresults[k] = v
                 n_finished += 1
                 n_finished_total += 1
             except StopIteration:
-                info('got StopIteration')
+                #info('got StopIteration')
                 break
             except multiprocessing.TimeoutError:
-                info('got TimeoutError')
+                #info('got TimeoutError')
                 continue
             except concurrent.futures.TimeoutError:
-                info('got MPI TimeoutError')
+                #info('got MPI TimeoutError')
+                continue
+            except TimeoutError:
                 continue
             except:
                 import traceback
                 traceback.print_exc()
         # Write checkpoint when done!
         _write_checkpoint(photresults, wise_checkpoint_filename)
-        info('Got', n_finished_total, 'results; wrote', len(photresults), 'to checkpoint')
+        info('Computed', n_finished_total, 'new results; wrote', len(photresults), 'to checkpoint')
 
     phots = [photresults[k] for k,a in (args + eargs)]
     record_event and record_event('stage_wise_forced: results')
