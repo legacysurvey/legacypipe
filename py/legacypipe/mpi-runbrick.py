@@ -1,7 +1,4 @@
 import sys
-from legacypipe.runbrick import (get_parser, get_runbrick_kwargs, run_brick,
-                                 NothingToDoError, RunbrickError)
-import numpy as np
 
 def hello(i):
     import socket
@@ -12,27 +9,91 @@ def hello(i):
     return i
 
 def global_init(loglevel):
-    import logging
+    '''
+    Global initialization routine called by mpi4py when each worker is started.
+    '''
     import socket
     import os
     from mpi4py import MPI
     print('MPI4PY process starting on', socket.gethostname(), 'pid', os.getpid(),
           'MPI rank', MPI.COMM_WORLD.Get_rank())
+
+    import logging
     logging.basicConfig(level=loglevel, format='%(message)s', stream=sys.stdout)
     # tractor logging is *soooo* chatty
     logging.getLogger('tractor.engine').setLevel(loglevel + 10)
 
     from astrometry.util.ttime import Time, MemMeas
     Time.add_measurement(MemMeas)
+
+# mpi4py to multiprocssing.Pool adapters:
+
+# This is an adapter class that provides an iterator over
+# imap_unordered results with a next(timeout) function, required
+# for checkpointing.
+from concurrent.futures import wait as cfwait, FIRST_COMPLETED
+class result_iter(object):
+    def __init__(self, futures):
+        self.futures = futures
+    def next(self, timeout=None):
+        if len(self.futures) == 0:
+            raise StopIteration()
+        # Have any of the elements completed?
+        for f in self.futures:
+            if f.done():
+                self.futures.remove(f)
+                return f.result()
+        # Wait for the first one to complete, with timeout
+        done,_ = cfwait(self.futures, timeout=timeout,
+                        return_when=FIRST_COMPLETED)
+        if len(done):
+            f = done.pop()
+            self.futures.remove(f)
+            return f.result()
+        raise TimeoutError()
+
+# Wrapper over MPIPoolExecutor to make it look like a multiprocessing.Pool
+# (actually, an astrometry.util.timingpool!)
+class MyMPIPool(object):
+    def __init__(self, **kwargs):
+        from mpi4py.futures import MPIPoolExecutor
+        self.real = MPIPoolExecutor(**kwargs)
+    def map(self, func, args, chunksize=1):
+        return list(self.real.map(func, args, chunksize=chunksize))
+    def imap_unordered(self, func, args, chunksize=1):
+        return result_iter([self.real.submit(func, a) for a in args])
+    def bootup(self, **kwargs):
+        return self.real.bootup(**kwargs)
+    def shutdown(self, **kwargs):
+        return self.real.shutdown(**kwargs)
+
+    def close(self):
+        self.shutdown()
+    def join(self):
+        pass
+
+    def apply_async(self, *args, **kwargs):
+        raise RuntimeError('APPLY_ASYNC NOT IMPLEMENTED IN MyMPIPool')
+    def get_worker_cpu(self):
+        return 0.
+    def get_worker_wall(self):
+        return 0.
+    def get_pickle_traffic(self):
+        return None
+    def get_pickle_traffic_string(self):
+        return 'nope'
     
 def main(args=None):
     import os
     import datetime
     import logging
+    import numpy as np
     from legacypipe.survey import get_git_version
+    from legacypipe.runbrick import (get_parser, get_runbrick_kwargs, run_brick,
+                                     NothingToDoError, RunbrickError)
 
     print()
-    print('runbrick.py starting at', datetime.datetime.now().isoformat())
+    print('mpi-runbrick.py starting at', datetime.datetime.now().isoformat())
     print('legacypipe git version:', get_git_version())
     if args is None:
         print('Command-line args:', sys.argv)
@@ -73,62 +134,7 @@ def main(args=None):
         plt.subplots_adjust(left=0.07, right=0.99, bottom=0.07, top=0.93,
                             hspace=0.2, wspace=0.05)
 
-    from mpi4py.futures import MPIPoolExecutor
-
-    import concurrent.futures
-    class result_iter(object):
-        def __init__(self, futures):
-            self.futures = futures
-        def next(self, timeout=None):
-            if len(self.futures) == 0:
-                raise StopIteration()
-            for f in self.futures:
-                if f.done():
-                    self.futures.remove(f)
-                    return f.result()
-            done,_ = concurrent.futures.wait(self.futures, timeout=timeout,
-                                                   return_when=concurrent.futures.FIRST_COMPLETED)
-            if len(done):
-                f = done.pop()
-                self.futures.remove(f)
-                return f.result()
-            raise TimeoutError()
-
-    # Wrapper
-    class MyMPIPool(object):
-        def __init__(self, **kwargs):
-            self.real = MPIPoolExecutor(**kwargs)
-            self.is_mpi = True
-        def map(self, func, args, chunksize=1):
-            return list(self.real.map(func, args, chunksize=chunksize))
-
-        #def imap_unordered(self, func, args, chunksize=1):
-        #    return self.real.map(func, args, chunksize=chunksize, unordered=True)
-        def imap_unordered(self, func, args, chunksize=1):
-            return result_iter([self.real.submit(func, a) for a in args])
-
-        def bootup(self, **kwargs):
-            return self.real.bootup(**kwargs)
-        def shutdown(self, **kwargs):
-            return self.real.shutdown(**kwargs)
-
-        def close(self):
-            self.shutdown()
-        def join(self):
-            pass
-
-        def apply_async(self, *args, **kwargs):
-            raise RuntimeError('APPLY_ASYNC NOT IMPLEMENTED IN MyMPIPool')
-        def get_worker_cpu(self):
-            return 0.
-        def get_worker_wall(self):
-            return 0.
-        def get_pickle_traffic(self):
-            return None
-        def get_pickle_traffic_string(self):
-            return 'nope'
-
-    # initializer only available in mpi4py master
+    # The "initializer" arg is only available in mpi4py master
     pool = MyMPIPool(initializer=global_init, initargs=(lvl,))
 
     u = int(os.environ.get('OMPI_UNIVERSE_SIZE', '0'))
@@ -188,18 +194,15 @@ if __name__ == '__main__':
 # cray-mpich version:
 # srun -n 64 --distribution cyclic:cyclic python -m mpi4py.futures legacypipe/mpi-runbrick.py --no-wise-ceres --brick 0715m657 --zoom 100 300 100 300 --run south --outdir $CSCRATCH/mpi --stage wise_forced
 # 
-    
-'''
-mpi4py setup:
-cray-mpich module, PrgEnv-intel/6.0.5
-
-mpi.cfg:
-[mpi]
-# CRAY_MPICH2_DIR
-mpi_dir = /opt/cray/pe/mpt/7.7.10/gni/mpich-intel/16.0
-include_dirs         = %(mpi_dir)s/include
-libraries            = mpich
-library_dirs         = %(mpi_dir)s/lib
-runtime_library_dirs = %(mpi_dir)s/lib
-'''
-
+#     
+# mpi4py setup:
+# cray-mpich module, PrgEnv-intel/6.0.5
+# 
+# mpi.cfg:
+# [mpi]
+# # $CRAY_MPICH2_DIR
+# mpi_dir = /opt/cray/pe/mpt/7.7.10/gni/mpich-intel/16.0
+# include_dirs         = %(mpi_dir)s/include
+# libraries            = mpich
+# library_dirs         = %(mpi_dir)s/lib
+# runtime_library_dirs = %(mpi_dir)s/lib
