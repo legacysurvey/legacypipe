@@ -71,12 +71,12 @@ RUN wget -nv https://www.mpich.org/static/downloads/3.3/mpich-3.3.tar.gz \
 
 # mpi4py / mpicc can't handle -ax=knl
 ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread
-RUN wget -nv https://bitbucket.org/mpi4py/mpi4py/downloads/mpi4py-3.0.3.tar.gz \
-         && tar xvzf mpi4py-3.0.3.tar.gz \
-         && cd mpi4py-3.0.3 \
+RUN wget -nv https://github.com/mpi4py/mpi4py/archive/master.zip \
+         && unzip master.zip \
+         && (cd mpi4py \
          && python setup.py build \
-         && python setup.py install \
-         && cd .. && rm -Rf mpi4py-3.0.3 mpi4py-3.0.3.tar.gz
+         && python setup.py install) \
+         && rm -Rf mpi4py
 ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell -ax=knl
 
 RUN git clone https://github.com/astromatic/sextractor.git sourceextractor \
