@@ -9,6 +9,7 @@ def hello(i):
     import time
     print('Hello', i, 'from', socket.gethostname(), 'pid', os.getpid())
     time.sleep(2)
+    return i
 
 def global_init(loglevel):
     import logging
@@ -70,17 +71,40 @@ def main(args=None):
                             hspace=0.2, wspace=0.05)
 
     from mpi4py.futures import MPIPoolExecutor
+
+    import concurrent.futures
+    class result_iter(object):
+        def __init__(self, futures):
+            self.futures = futures
+        def next(self, timeout=None):
+            if len(self.futures) == 0:
+                raise StopIteration()
+            for f in self.futures:
+                if f.done():
+                    self.futures.remove(f)
+                    return f.result()
+            done,notdone = concurrent.futures.wait(self.futures, timeout=timeout,
+                                                   return_when=concurrent.futures.FIRST_COMPLETED)
+            if len(done):
+                f = done.pop()
+                self.futures.remove(f)
+                return f.result()
+            raise TimeoutError()
+
     # Wrapper
     class MyMPIPool(object):
         def __init__(self, **kwargs):
             self.real = MPIPoolExecutor(**kwargs)
             self.is_mpi = True
-            self.imap_timeout = None
         def map(self, func, args, chunksize=1):
             return list(self.real.map(func, args, chunksize=chunksize))
+
+        #def imap_unordered(self, func, args, chunksize=1):
+        #    return self.real.map(func, args, chunksize=chunksize, unordered=True)
         def imap_unordered(self, func, args, chunksize=1):
-            return self.real.map(func, args, chunksize=chunksize, unordered=True,
-                                 timeout=self.imap_timeout)
+            return result_iter([self.real.submit(func, a) for a in args])
+        #    return self.real.map(func, args, chunksize=chunksize, unordered=True)
+
         def bootup(self, **kwargs):
             return self.real.bootup(**kwargs)
         def shutdown(self, **kwargs):
@@ -104,6 +128,24 @@ def main(args=None):
 
     # initializer only available in mpi4py master
     pool = MyMPIPool(initializer=global_init, initargs=(lvl,))
+
+    from astrometry.util.multiproc import multiproc
+    mp = multiproc(None, pool=pool)
+    res = mp.imap_unordered(hello, np.arange(20))
+    while True:
+        try:
+            print('Trying res.next...')
+            x = res.next(1)
+            print('got', x)
+        except StopIteration:
+            print('stop')
+            break
+        except TimeoutError:
+            print('timeout')
+            #import traceback
+            #traceback.print_exc()
+    sys.exit(0)
+    
     u = int(os.environ.get('OMPI_UNIVERSE_SIZE', '0'))
     if u == 0:
         u = int(os.environ.get('MPICH_UNIVERSE_SIZE', '0'))

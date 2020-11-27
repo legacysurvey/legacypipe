@@ -2486,9 +2486,10 @@ def stage_wise_forced(
         info('is_mpi:', is_mpi)
         if is_mpi:
             # yuck!
-            mp.pool.imap_timeout = timeout=wise_checkpoint_period/4
+            pass
 
         res = mp.imap_unordered(unwise_phot, runargs)
+        print('imap_unordered return type:', res)
 
         from astrometry.util.ttime import CpuMeas
         import multiprocessing
