@@ -8,7 +8,7 @@
 # #SBATCH --time=48:00:00
 # #SBATCH --licenses=SCRATCH
 # #SBATCH -C haswell
-# #cores=96
+# nmpi=96
 
 # # Quarter-subscribed
 # #SBATCH --qos=premium
@@ -38,12 +38,12 @@ brick=0715m657
 
 #brick=$1
 
-#module unload cray-mpich
-#module load   openmpi
+# This seem to be the default at NERSC?
+# module load cray-mpich
+
 export PYTHONPATH=$(pwd):${PYTHONPATH}
 
 outdir=/global/cscratch1/sd/dstn/dr9m-mpi
-#outdir=/global/cscratch1/sd/dstn/mpi-test
 
 BLOB_MASK_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr8/south
 
@@ -94,28 +94,28 @@ echo >> $log
 echo -e "\nStarting on $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
+# When I was trying mpi4py compiled with openmpi...
 #mpirun -n $nmpi --map-by core --rank-by node \
 
+# cray-mpich doesn't support this kind of --distribution
 #srun -n $nmpi --distribution cyclic:cyclic
 
+# Cray-mpich does round-robin placement of ranks on nodes with this setting -- good for memory load balancing.
 export MPICH_RANK_REORDER_METHOD=0
+
 srun -n $nmpi \
      python -u -O -m mpi4py.futures \
      legacypipe/mpi-runbrick.py \
        --no-wise-ceres \
        --run south \
        --brick $brick \
+       --skip \
        --skip-calibs \
        --blob-mask-dir ${BLOB_MASK_DIR} \
        --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle \
        --wise-checkpoint ${outdir}/checkpoints/${bri}/wise-${brick}.pickle \
-       --stage wise_forced \
        --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
        --outdir $outdir \
        >> $log 2>&1
-
-#       --skip \
-#     --ps "${outdir}/metrics/${bri}/ps-${brick}-${SLURM_JOB_ID}.fits" \
-#     --ps-t0 $(date "+%s") \
 
 # QDO_BATCH_PROFILE=cori-shifter qdo launch -v tst 1 --cores_per_worker 8 --walltime=30:00 --batchqueue=debug --keep_env --batchopts "--image=docker:dstndstn/legacypipe:intel" --script "/src/legacypipe/bin/runbrick-shifter.sh"
