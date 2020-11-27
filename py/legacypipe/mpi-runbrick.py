@@ -127,27 +127,24 @@ def main(args=None):
     global_init(lvl)
 
     # matplotlib config directory, when running in shifter...
-    import matplotlib as mpl
-    cdir = mpl.get_configdir()
-    print('matplotlib config dir:', cdir)
-    if os.path.isdir(cdir) and not(os.access(cdir, os.W_OK)):
-        # Read-only config dir -- create a temp dir and copy cdir there.
-        import shutil
-        import tempfile
-        f,tempdir = tempfile.mkdtemp(prefix='matplotlib-')
-        os.close(f)
-        print('copying config dir', cdir, 'to', tempdir)
-        os.system('find %s' % cdir)
-
-        shutil.copytree(cdir, tempdir, symlinks=True, dirs_exist_ok=True)
-        cdir = mpl.get_cachedir()
-        if os.path.isdir(cdir):
-            print('copying cache dir', cdir, 'to', tempdir)
-            os.system('find %s' % cdir)
-            shutil.copytree(cdir, tempdir, symlinks=True, dirs_exist_ok=True)
-        print('temp dir:')
-        os.system('find %s' % tempdir)
-        os.environ['MPLCONFIGDIR'] = tempdir
+    for tag in ['CACHE', 'CONFIG']:
+        if not 'XDG_%s_HOME'%tag in os.environ:
+            src = os.path.expanduser('~/.%s' % (tag.lower()))
+            # Read-only?
+            if os.path.isdir(src) and not(os.access(src, os.W_OK)):
+                import shutil
+                import tempfile
+                tempdir = tempfile.mkdtemp(prefix='%s-' % tag.lower())
+                os.rmdir(tempdir)
+                shutil.copytree(src, tempdir, symlinks=True) #dirs_exist_ok=True)
+                # astropy config file: if XDG_CONFIG_HOME is set,
+                # expect to find $XDG_CONFIG_HOME/astropy, not
+                # ~/.astropy.
+                if tag == 'CONFIG':
+                    shutil.copytree(os.path.expanduser('~/.astropy'),
+                                    os.path.join(tempdir, 'astropy'),
+                                    symlinks=True) #dirs_exist_ok=True)
+                os.environ['XDG_%s_HOME' % tag] = tempdir
 
     if opt.plots:
         import matplotlib
