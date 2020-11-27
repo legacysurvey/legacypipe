@@ -10,28 +10,21 @@
 # #SBATCH -C haswell
 # nmpi=96
 
-# # Quarter-subscribed
-# #SBATCH --qos=premium
-# #SBATCH --nodes=3
-# #SBATCH --ntasks-per-node=8
-# #SBATCH --cpus-per-task=8
-# #SBATCH --time=48:00:00
-# #SBATCH --licenses=SCRATCH
-# #SBATCH -C haswell
-# nmpi=24
-# brick=0137m377
-
 # Half-subscribed, 96 tasks
-#SBATCH --qos=premium
-#SBATCH --nodes=6
+##SBATCH --qos=premium
+##SBATCH --time=48:00:00
+#SBATCH -p debug
+#SBATCH --time=30:00
+#SBATCH --nodes=3
 #SBATCH --ntasks-per-node=16
 #SBATCH --cpus-per-task=4
-#SBATCH --time=48:00:00
 #SBATCH --licenses=SCRATCH
 #SBATCH -C haswell
-#SBATCH --job-name 0715m657
-nmpi=96
-brick=0715m657
+#SBATCH --job-name 0744m640
+#SBATCH --image=docker:legacysurvey/legacypipe:mpi
+#SBATCH --module=mpich-cle6
+nmpi=48
+brick=0744m640
 
 #nmpi=4
 #brick=0309p335
@@ -41,7 +34,7 @@ brick=0715m657
 # This seem to be the default at NERSC?
 # module load cray-mpich
 
-export PYTHONPATH=$(pwd):${PYTHONPATH}
+#export PYTHONPATH=$(pwd):${PYTHONPATH}
 
 outdir=/global/cscratch1/sd/dstn/dr9m-mpi
 
@@ -61,7 +54,7 @@ export PS1CAT_DIR=/global/cfs/cdirs/cosmo/work/ps1/cats/chunks-qz-star-v3
 export SKY_TEMPLATE_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/sky-templates
 
 # Don't add ~/.local/ to Python's sys.path
-#export PYTHONNOUSERSITE=1
+export PYTHONNOUSERSITE=1
 
 # Force MKL single-threaded
 # https://software.intel.com/en-us/articles/using-threaded-intel-mkl-in-multi-thread-application
@@ -104,8 +97,9 @@ echo "--------------------------------------------------------------------------
 export MPICH_RANK_REORDER_METHOD=0
 
 srun -n $nmpi \
+     shifter \
      python -u -O -m mpi4py.futures \
-     legacypipe/mpi-runbrick.py \
+     /src/legacypipe/py/legacypipe/mpi-runbrick.py \
        --no-wise-ceres \
        --run south \
        --brick $brick \
