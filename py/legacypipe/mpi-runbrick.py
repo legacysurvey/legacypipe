@@ -126,6 +126,29 @@ def main(args=None):
         lvl = logging.DEBUG
     global_init(lvl)
 
+    # matplotlib config directory, when running in shifter...
+    import matplotlib as mpl
+    cdir = mpl.get_configdir()
+    print('matplotlib config dir:', cdir)
+    if os.path.isdir(cdir) and not(os.access(cdir, os.W_OK)):
+        # Read-only config dir -- create a temp dir and copy cdir there.
+        import shutil
+        import tempfile
+        f,tempdir = tempfile.mkdtemp(prefix='matplotlib-')
+        os.close(f)
+        print('copying config dir', cdir, 'to', tempdir)
+        os.system('find %s' % cdir)
+
+        shutil.copytree(cdir, tempdir, symlinks=True, dirs_exist_ok=True)
+        cdir = mpl.get_cachedir()
+        if os.path.isdir(cdir):
+            print('copying cache dir', cdir, 'to', tempdir)
+            os.system('find %s' % cdir)
+            shutil.copytree(cdir, tempdir, symlinks=True, dirs_exist_ok=True)
+        print('temp dir:')
+        os.system('find %s' % tempdir)
+        os.environ['MPLCONFIGDIR'] = tempdir
+
     if opt.plots:
         import matplotlib
         matplotlib.use('Agg')
