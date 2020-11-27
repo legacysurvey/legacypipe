@@ -29,7 +29,7 @@
 #SBATCH --time=48:00:00
 #SBATCH --licenses=SCRATCH
 #SBATCH -C haswell
-#SBATCH --name 0715m657
+#SBATCH --job-name 0715m657
 nmpi=96
 brick=0715m657
 
@@ -96,7 +96,10 @@ echo "--------------------------------------------------------------------------
 
 #mpirun -n $nmpi --map-by core --rank-by node \
 
-srun -n $nmpi --distribution cyclic:cyclic \
+#srun -n $nmpi --distribution cyclic:cyclic
+
+export MPICH_RANK_REORDER_METHOD=0
+srun -n $nmpi \
      python -u -O -m mpi4py.futures \
      legacypipe/mpi-runbrick.py \
        --no-wise-ceres \
