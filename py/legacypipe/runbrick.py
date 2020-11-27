@@ -2494,7 +2494,7 @@ def stage_wise_forced(
             dt = tnow.wall_seconds_since(last_checkpoint)
             if dt >= wise_checkpoint_period and n_finished > 0:
                 # Write checkpoint!
-                info('Writing', n_finished, 'new results; total for this run', n_finished_total)
+                info('Writing checkpoint:', n_finished, 'new results; total for this run', n_finished_total, 'total:', len(photresults))
                 try:
                     _write_checkpoint(photresults, wise_checkpoint_filename)
                     last_checkpoint = tnow

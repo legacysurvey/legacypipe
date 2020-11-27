@@ -21,6 +21,9 @@ def global_init(loglevel):
     logging.basicConfig(level=loglevel, format='%(message)s', stream=sys.stdout)
     # tractor logging is *soooo* chatty
     logging.getLogger('tractor.engine').setLevel(loglevel + 10)
+
+    from astrometry.util.ttime import Time, MemMeas
+    Time.add_measurement(MemMeas)
     
 def main(args=None):
     import os
