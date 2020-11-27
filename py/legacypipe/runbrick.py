@@ -2509,6 +2509,9 @@ def stage_wise_forced(
                 info('waiting for result...')
                 if mp.pool is not None:
                     timeout = max(1, wise_checkpoint_period - dt)
+                    # If we don't have any new results to write, wait indefinitely
+                    if n_finished == 0:
+                        timeout = None
                     r = res.next(timeout)
                 else:
                     r = next(res)
