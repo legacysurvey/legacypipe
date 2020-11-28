@@ -71,12 +71,11 @@ RUN wget -nv https://www.mpich.org/static/downloads/3.3/mpich-3.3.tar.gz \
 
 # mpi4py / mpicc can't handle -ax=knl
 ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread
-RUN wget -nv https://bitbucket.org/mpi4py/mpi4py/downloads/mpi4py-3.0.3.tar.gz \
-         && tar xvzf mpi4py-3.0.3.tar.gz \
-         && cd mpi4py-3.0.3 \
+RUN git clone https://github.com/mpi4py/mpi4py.git \
+         && (cd mpi4py \
          && python setup.py build \
-         && python setup.py install \
-         && cd .. && rm -Rf mpi4py-3.0.3 mpi4py-3.0.3.tar.gz
+         && python setup.py install) \
+         && rm -Rf mpi4py
 ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell -ax=knl
 
 RUN git clone https://github.com/astromatic/sextractor.git sourceextractor \
@@ -214,7 +213,9 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
   && python -c "from astropy.coordinates import EarthLocation; EarthLocation._get_site_registry(force_download=True)" \
   && python -c "from astropy.coordinates import EarthLocation, SkyCoord, AltAz; from astropy.time import Time; print(EarthLocation.of_site('ctio')); print(SkyCoord(180.,-45.,unit='deg').transform_to(AltAz(obstime=Time(56806.0, format='mjd'), location=EarthLocation.of_site('ctio'))))" \
   # Download astropy IERS leap-second list
-  && python -c "from astropy.time import Time; Time.now()"
+  && python -c "from astropy.time import Time; Time.now()" \
+  # Make astropy cache files readable!?!!
+  && chmod -R a+rwX $HOME/.astropy
   
 # Curses upon you, astropy
 RUN wget -O /opt/conda/lib/python3.7/site-packages/astropy/utils/iers/data/Leap_Second.dat \
@@ -235,11 +236,11 @@ RUN python -O -m compileall \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-RUN cd /src/legacypipe && git pull && git checkout DR9.6.7 && git describe && echo 967 && \
+RUN cd /src/legacypipe && git pull && git describe && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
-# QDO
-RUN cd qdo && git remote add dstn https://bitbucket.org/dstn/qdo.git \
-    && git fetch dstn && git checkout handle-oom \
-    && pip install . && echo 3 #python3 setup.py install
+# # QDO
+# RUN cd qdo && git remote add dstn https://bitbucket.org/dstn/qdo.git \
+#     && git fetch dstn && git checkout handle-oom \
+#     && pip install . && echo 3 #python3 setup.py install
