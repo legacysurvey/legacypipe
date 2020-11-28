@@ -234,8 +234,10 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
                                     large_galaxies=True, star_clusters=True)
     refmask = get_reference_map(targetwcs, refs) == 0 # True=skypix
     skydict = {}
-    for irad, rad in enumerate(subsky_radii):
-        skydict.update({'SKYRAD{:02d}'.format(irad): (np.float32(rad), 'sky radius {} [arcsec]'.format(irad))})
+    if subsky_radii:
+        skydict.update({'NSKYRAD': (len(subsky_radii), 'number of sky radii')})
+        for irad, rad in enumerate(subsky_radii):
+            skydict.update({'SKYRAD{:02d}'.format(irad): (np.float32(rad), 'sky radius {} [arcsec]'.format(irad))})
 
     allbands = np.array([tim.band for tim in tims])
     for band in sorted(set(allbands)):
@@ -277,7 +279,10 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
             ymask, xmask = np.ogrid[-ycen:H-ycen, -xcen:W-xcen]
 
             skypix = _build_objmask(coimg, coiv, refmask * (coiv>0))
-            for irad, (rin, rout) in enumerate(zip(subsky_radii[0:-1], subsky_radii[1:])):
+            allrin = subsky_radii[0::2]
+            allrout = subsky_radii[1::2]
+            for irad, (rin, rout) in enumerate(zip(allrin, allrout)):
+            #for irad, (rin, rout) in enumerate(zip(subsky_radii[0:-1], subsky_radii[1:])):
                 inmask = (xmask**2 + ymask**2) <= (rin / pixscale)**2
                 outmask = (xmask**2 + ymask**2) <= (rout / pixscale)**2
                 skymask = (outmask*1 - inmask*1) == 1 # True=skypix
@@ -302,7 +307,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
             skymean, skymedian, skysig = sigma_clipped_stats(coimg, mask=np.logical_not(skypix_mask), sigma=3.0)
             
             skydict.update({'SKYMN00{}'.format(irad, band): (np.float32(_skymean), 'mean {} sky [nanomaggy]'.format(band))})
-            skydict.update({'SKYMD00{}'.format(irad, band): (np.float32(_skymedian), 'mean {} sky [nanomaggy]'.format(band))})
+            skydict.update({'SKYMD00{}'.format(irad, band): (np.float32(_skymedian), 'median {} sky [nanomaggy]'.format(band))})
             skydict.update({'SKYSG00{}'.format(irad, band): (np.float32(_skysig), 'sigma {} sky [nanomaggy]'.format(band))})
             skydict.update({'SKYNP00{}'.format(irad, band): (np.sum(skypix_mask), 'npix {} sky'.format(band))})
 
