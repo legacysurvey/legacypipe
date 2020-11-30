@@ -51,6 +51,11 @@ class result_iter(object):
             self.futures.remove(f)
             return f.result()
         raise TimeoutError()
+    # implement iterator interface
+    def __iter__(self):
+        return self
+    def __next__(self):
+        return self.next()
 
 # Wrapper over MPIPoolExecutor to make it look like a multiprocessing.Pool
 # (actually, an astrometry.util.timingpool!)
