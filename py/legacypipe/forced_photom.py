@@ -245,7 +245,7 @@ def main(survey=None, opt=None, args=None):
     order = ['release', 'brickid', 'brickname', 'objid', 'camera', 'expnum', 'ccdname',
              'filter', 'mjd', 'exptime', 'psfsize', 'ccd_cuts', 'airmass', 'sky',
              'psfdepth', 'galdepth',
-             'ra', 'dec', 'flux', 'flux_ivar', 'fracflux', 'rchisq', 'fracmasked',
+             'ra', 'dec', 'flux', 'flux_ivar', 'fracflux', 'rchisq', 'fracmasked', 'fracin',
              'apflux', 'apflux_ivar', 'x', 'y', 'dqmask', 'dra', 'ddec', 'dra_ivar', 'ddec_ivar']
     columns = [c for c in order if c in columns]
 
@@ -339,12 +339,12 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
 
 def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                 ccd, opt, zoomslice, ps):
+    from functools import reduce
+    from legacypipe.bits import DQ_BITS
+
     tlast = Time()
-
-    print('Opt:', opt)
-
+    #print('Opt:', opt)
     im = survey.get_image_object(ccd)
-
     if opt.do_calib:
         im.run_calibs(splinesky=True)
 
@@ -502,8 +502,11 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     F.y = (y-1).astype(np.float32)
 
     h,w = tim.shape
-    F.dqmask = tim.dq[np.clip(np.round(F.y).astype(int), 0, h-1),
-                      np.clip(np.round(F.x).astype(int), 0, w-1)]
+    ix = np.round(F.x).astype(int)
+    iy = np.round(F.y).astype(int)
+    F.dqmask = tim.dq[np.clip(iy, 0, h-1), np.clip(ix, 0, w-1)]
+    # Set an OUT-OF-BOUNDS bit.
+    F.dqmask[reduce(np.logical_or, [ix < 0, ix >= w, iy < 0, iy >= h])] |= DQ_BITS['edge2']
 
     program_name = sys.argv[0]
     ## FIXME -- from catalog?
@@ -730,11 +733,9 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         F.flux_ivar = R.IV[:N].astype(np.float32)
 
         F.fracflux = R.fitstats.profracflux[:N].astype(np.float32)
+        F.fracin   = R.fitstats.fracin     [:N].astype(np.float32)
         F.rchisq   = R.fitstats.prochi2    [:N].astype(np.float32)
-        try:
-            F.fracmasked = R.fitstats.promasked[:N].astype(np.float32)
-        except:
-            print('No "fracmasked" available (only in recent Tractor versions)')
+        F.fracmasked = R.fitstats.promasked[:N].astype(np.float32)
 
         if derivs:
             F.flux_dra  = np.zeros(len(F), np.float32)

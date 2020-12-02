@@ -10,16 +10,16 @@
 # 16  -- single exposure cosmic ray   InstCal/Resampled
 # 64  -- bleed trail                  InstCal/Resampled
 # 128 -- multi-exposure transient     InstCal/Resampled
-DQ_BITS = dict(badpix=1,
-               satur=2,
-               interp=4,
-               cr=16,
-               bleed=64,
-               trans=128,
-               edge = 256,
-               edge2 = 512,
+DQ_BITS = dict(badpix  =    1,
+               satur   =    2,
+               interp  =    4,
+               cr      =   16,   # 0x 10
+               bleed   =   64,   # 0x 40
+               trans   =  128,   # 0x 80
+               edge    =  256,   # 0x100
+               edge2   =  512,   # 0x200
                # Added by our stage_outliers rejection
-               outlier = 2048,
+               outlier = 2048,   # 0x800
     )
 
 FITBITS = dict(
