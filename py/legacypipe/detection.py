@@ -660,7 +660,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         nveto   += nv
         nsaddle += ns
         naper   += na
-
+        
     if len(Ikeep):
         Ikeep = np.hstack(Ikeep)
     else:

@@ -24,42 +24,11 @@ from legacypipe.survey import LegacySurveyWcs
 from legacypipe.survey import LegacySurveyWcs
 from legacypipe.bits import DQ_BITS
 from legacypipe.survey import get_rgb
+from legacypipe.catalog import prepare_fits_catalog
+from legacypipe.utils import copy_header_with_wcs
+from legacypipe.oneblob import _compute_invvars
 
-def stage_m33_a(survey=None,
-                refstars=None,
-                T_dup=None,
-                T_clusters=None,
-                refcat=None,
-               tycho_stars=True,
-               gaia_stars=True,
-               large_galaxies=True,
-               star_clusters=True,
-               brick=None,
-               brickname=None,
-               brickid=None,
-               pixscale=None,
-               targetwcs=None,
-               bands=None,
-               version_header=None,
-               plots=False, ps=None,
-               record_event=None,
-               **kwargs):
-    #from legacypipe.reference import get_reference_sources
-    from legacypipe.runbrick import stage_refs
-
-    # I previously ran stage_refs pointing to SGA rather than SGA-parent.  Fix that by
-    # replacing the large-galaxy entries in 'refs'
-    os.environ['LARGEGALAXIES_CAT'] = '/global/cfs/cdirs/cosmo/staging/largegalaxies/v3.0/SGA-parent-v3.0.kd.fits'
-    R = stage_refs(survey=survey, brick=brick, brickname=brickname, brickid=brickid,
-                   pixscale=pixscale, targetwcs=targetwcs, bands=bands,
-                   version_header=version_header, tycho_stars=tycho_stars, gaia_stars=gaia_stars,
-                   large_galaxies=large_galaxies, star_clusters=star_clusters,
-                   plots=plots, ps=ps, record_event=record_event)
-    return R
-
-
-
-def stage_m33_b(pixscale=None, targetwcs=None,
+def stage_m33_a(pixscale=None, targetwcs=None,
                W=None,H=None,
                bands=None, ps=None, tims=None,
                plots=False, plots2=False,
@@ -79,12 +48,78 @@ def stage_m33_b(pixscale=None, targetwcs=None,
     # This is coming in after 'fit_on_coadds', so we have not done source detection
     # or blobs yet.
 
+    # Find M33 entry in ref catalog
+    Igals = np.flatnonzero(refstars.islargegalaxy)
+    igal = np.argsort(-refstars.radius[Igals])[0]
+    igal = Igals[igal]
+    print('Largest galaxy: radius', refstars.radius[igal])
+    # table of one element
+    refgal = refstars[np.array([igal])]
+    print('ref gal:', refgal)
+    galsrc = refcat[igal]
+    print('Large galaxy source:', galsrc)
+
+    rgcopy = refgal.copy()
+    # make the mask at 1 x radius
+    #rgcopy.radius *= 2.0
+    galmap = (get_reference_map(targetwcs, rgcopy) != 0)
+
+    refgalslc = find_objects(galmap.astype(int))[0]
+    print('ref gal slice:', refgalslc)
+
+    # find the other galaxy within the mask
+    _,xx,yy = targetwcs.radec2pixelxy(refstars.ra, refstars.dec)
+    H,W = targetwcs.shape
+    xx = np.clip((xx - 1).astype(int), 0, W-1)
+    yy = np.clip((yy - 1).astype(int), 0, H-1)
+    Iothers = np.flatnonzero(galmap[yy[Igals], xx[Igals]] *
+                             (refstars.ref_id[Igals] != refgal.ref_id[0]))
+    Iothers = Igals[Iothers]
+    print('Galaxies within M33 mask:', Iothers)
+
+    # Find reference stars within the ellipse that we'll fit out.
+    H,W = galmap.shape
+    Istars = np.flatnonzero(np.logical_or(refstars.isgaia, refstars.istycho) *
+                            galmap[np.clip(refstars.iby, 0, H-1), np.clip(refstars.ibx, 0, W-1)])
+    print(len(Istars), 'stars inside galaxy ellipse')
+
+
+
+
+    
+    slc = refgalslc
+
+    subtims = []
+    for band,tim in zip(bands, tims):
+        # Make a copy of the image because we're going to subtract out models below!
+        simg = tim.data[slc].copy()
+        sie = tim.inverr[slc].copy()
+
+        # Zero out inverr outside the galaxy ellipse!!
+        sie[np.logical_not(galmap[slc])] = 0.
+
+        subdq = tim.dq[slc]
+        sy,sx = slc
+        y0,y1 = sy.start,sy.stop
+        x0,x1 = sx.start,sx.stop
+        subwcs = tim.subwcs.get_subimage(x0, y0, x1-x0, y1-y0)
+        twcs = LegacySurveyWcs(subwcs, tim.wcs.tai)
+        subtim = Image(simg, inverr=sie, psf=tim.psf, wcs=twcs, photocal=tim.photocal)
+        subtim.subwcs = subwcs
+        subtim.psf_sigma = tim.psf_sigma
+        subtim.sig1 = tim.sig1
+        subtim.imobj = tim.imobj
+        subtim.time = tim.time
+        subtim.dq = subdq
+        subtim.dq_saturation_bits = tim.dq_saturation_bits
+        subtim.band = tim.band
+        subtims.append(subtim)
+
     # Fit out Gaia stars before proceeding to do something with M33 itself.
     from tractor import Tractor
-    I = np.flatnonzero(np.logical_or(refstars.isgaia, refstars.istycho))
-    print(len(I), 'stars')
-    cat = [refcat[i] for i in I]
-    print('Sources:')
+
+    cat = [refcat[i] for i in Istars]
+    print('Stars:')
     for src in cat:
         src.freezeAllBut('brightness')
         #print(' ', src.numberOfParams(), src)
@@ -94,7 +129,7 @@ def stage_m33_b(pixscale=None, targetwcs=None,
 
     # we're running after fit_on_coadds, so assume one tim per band.
     assert(len(tims) == 3)
-    for band,tim in zip(bands, tims):
+    for band,tim in zip(bands, subtims):
         print('Band', band)
         for src in cat:
             src.brightness.freezeAllBut(band)
@@ -105,10 +140,113 @@ def stage_m33_b(pixscale=None, targetwcs=None,
         tr.optimize_forced_photometry(shared_params=False, wantims=False)
         print('Finished forced phot')
 
+        print('Getting model image...')
+        mod = tr.getModelImage(0)
+        tim.data -= mod
+        
     for src in cat:
         src.brightness.thawAllParams()
         src.thawAllParams()
-    return dict(refcat=refcat)
+
+    return dict(refcat=refcat, subtims=subtims, Im33=Igals, Iothers=Iothers, galmap=galmap,
+                Istars=Istars)
+
+def stage_m33_b(pixscale=None, targetwcs=None,
+               W=None,H=None,
+               bands=None, ps=None, tims=None,
+               plots=False, plots2=False,
+               brickname=None,
+               version_header=None,
+               mp=None, nsigma=None,
+               saddle_fraction=None,
+               saddle_min=None,
+               survey=None, brick=None,
+               refcat=None, refstars=None,
+               T_clusters=None,
+               ccds=None,
+               record_event=None,
+               large_galaxies=True,
+               gaia_stars=True,
+
+                subtims=None,
+                Im33=None,
+                Iothers=None,
+                
+               **kwargs):
+
+    # Fit M33 model (after switching it to SER)
+    igal = np.argsort(-refstars.radius[Im33])[0]
+    igal = Im33[igal]
+    refgal = refstars[np.array([igal])]
+    print('ref gal:', refgal)
+    galsrc = refcat[igal]
+    print('Large galaxy source:', galsrc)
+
+    # Fit M33 (EXP)
+    tr = Tractor(subtims, [galsrc], optimizer=ConstrainedDenseOptimizer())
+    tr.freezeParam('images')
+    print('Thawed parameters:')
+    tr.printThawedParams()
+    print('Optimizing!')
+    tr.optimize_loop(dchisq=0.1, shared_params=False, priors=True, alphas=[0.1, 0.3, 1.0])
+    print('Fit:', galsrc)
+    expsrc = galsrc
+    
+    sersrc = SersicGalaxy(galsrc.pos, galsrc.brightness, galsrc.shape, SersicIndex(1.0))
+    refcat[igal] = sersrc
+    galsrc = refcat[igal]
+    print('Switched to:', galsrc)
+
+    # Fit M33!
+    tr = Tractor(subtims, [galsrc], optimizer=ConstrainedDenseOptimizer())
+    tr.freezeParam('images')
+    print('Thawed parameters:')
+    tr.printThawedParams()
+
+    print('Optimizing!')
+    tr.optimize_loop(dchisq=0.1, shared_params=False, priors=True, alphas=[0.1, 0.3, 1.0])
+    print('Fit:', galsrc)
+
+    if plots:
+        plt.clf()
+        dimshow(get_rgb([tim.data for tim in subtims], bands))
+        plt.title('Sub-images')
+        ps.savefig()
+        
+        modims = [np.zeros_like(t.data) for t in subtims]
+
+    # Fit other galaxies (just one)
+    tr.optimizer = LsqrOptimizer()
+    for i in Iothers:
+        print('Fitting galaxy:', refcat[i])
+        # subtract out previous fit galaxy (ie, m33 the first time through this loop)
+        mods = list(tr.getModelImages())
+        for itim,(mod,subtim) in enumerate(zip(mods, subtims)):
+            subtim.data -= mod
+            if plots:
+                modims[itim] += mod
+        del mods,mod
+        tr.catalog = Catalog(refcat[i])
+        print('Optimizing!')
+        tr.optimize_loop(dchisq=0.1, shared_params=False, priors=True, alphas=[0.1, 0.3, 1.0])
+        print('Fit:', refcat[i])
+
+    if plots:
+        # add model for final fit galaxy
+        mods = list(tr.getModelImages())
+        for itim,(mod,subtim) in enumerate(zip(mods, subtims)):
+            modims[itim] += mod
+        del mods,mod
+
+    if plots:
+        plt.clf()
+        dimshow(get_rgb(modims, bands))
+        plt.title('Fit models')
+        ps.savefig()
+        
+    return dict(igal=igal, galsrc=galsrc, refcat=refcat, subtims=None,
+                sersrc=sersrc, expsrc=expsrc)
+
 
 def stage_m33_c(pixscale=None, targetwcs=None,
                W=None,H=None,
@@ -125,52 +263,181 @@ def stage_m33_c(pixscale=None, targetwcs=None,
                ccds=None,
                record_event=None,
                large_galaxies=True,
-               gaia_stars=True,
-               **kwargs):
+                gaia_stars=True,
+                blobmap=None, blobslices=None,
 
-    # Subtract already-fit Gaia models
-    from tractor import Tractor
-    I = np.flatnonzero(np.logical_or(refstars.isgaia, refstars.istycho))
-    print(len(I), 'stars')
-    cat = [refcat[i] for i in I]
+                galsrc=None,
+                galmap=None,
+                refgalslc=None,
+                subtims=None,
+                Im33=None,
+                Iothers=None,
+                Istars=None,
+                igal=None,
+                
+                **kwargs):
 
-    if plots:
-        #from legacypipe.coadds import quick_coadds
-        from legacypipe.survey import get_rgb
-        from astrometry.util.plotutils import dimshow
-        import pylab as plt
-        plt.clf()
-        dimshow(get_rgb([tim.data for tim in tims], bands))
-        ps.savefig()
+    print('Fit M33:', galsrc)
 
-        mods = []
+    for src in [galsrc]+[refcat[i] for i in Iothers]:
+        src.shape = src.shape.toEllipseE()
     
-    # we're running after fit_on_coadds, so assume one tim per band.
-    assert(len(tims) == 3)
+    cat = Catalog(galsrc, *[refcat[i] for i in np.append(Iothers, Istars)])
+    T = refstars[np.hstack((np.array([igal]), Iothers, Istars))]
+
+    refgalslc = find_objects(galmap.astype(int))[0]
+    print('ref gal slice:', refgalslc)
+    slc = refgalslc
+
+    ## oops, we dropped subtims at the end of the last stage, so gotta regenerate 'em
+    ## for invvars, etc.
+    subtims = []
     for band,tim in zip(bands, tims):
-        print('Band', band)
-        tr = Tractor([tim], cat)
-        print('Getting model image...')
-        mod = tr.getModelImage(0)
-        if plots:
-            mods.append(mod)
-        tim.data -= mod
+        # Make a copy of the image because we're going to subtract out models below!
+        #simg = tim.data[slc].copy()
+        simg = tim.data[slc]
+        sie = tim.inverr[slc].copy()
+        # Zero out inverr outside the galaxy ellipse!!
+        sie[np.logical_not(galmap[slc])] = 0.
+        subdq = tim.dq[slc]
+        sy,sx = slc
+        y0,y1 = sy.start,sy.stop
+        x0,x1 = sx.start,sx.stop
+        subwcs = tim.subwcs.get_subimage(x0, y0, x1-x0, y1-y0)
+        twcs = LegacySurveyWcs(subwcs, tim.wcs.tai)
+        subtim = Image(simg, inverr=sie, psf=tim.psf, wcs=twcs, photocal=tim.photocal)
+        subtim.subwcs = subwcs
+        subtim.psf_sigma = tim.psf_sigma
+        subtim.sig1 = tim.sig1
+        subtim.imobj = tim.imobj
+        subtim.time = tim.time
+        subtim.dq = subdq
+        subtim.dq_saturation_bits = tim.dq_saturation_bits
+        subtim.band = tim.band
+        subtims.append(subtim)
 
-    if plots:
-        plt.clf()
-        dimshow(get_rgb(mods, bands))
-        ps.savefig()
-        plt.clf()
-        dimshow(get_rgb([tim.data for tim in tims], bands))
-        ps.savefig()
-        
-    return dict(tims=tims)
+    tr = Tractor(subtims, cat) #, optimizer=ConstrainedDenseOptimizer())
+    tr.freezeParam('images')
+    cat.thawAllRecursive()
+    cat.freezeAllParams()
+    invvars = []
+    for isub in range(len(cat)):
+        cat.thawParam(isub)
+        src = cat[isub]
+        print('Computing invvars for', src)
+        # Compute inverse-variances
+        allderivs = tr.getDerivs()
+        ivars = _compute_invvars(allderivs)
+        invvars.append(ivars)
+        assert(len(ivars) == src.numberOfParams())
+        cat.freezeParam(isub)
+    cat.thawAllRecursive()
+    invvars = np.hstack(invvars)
+
+    T = prepare_fits_catalog(cat, invvars, T, bands) #, save_invvars=False)
+    # Set Sersic indices for all galaxy types.
+    # sigh, bytes vs strings.  In py3, T.type (dtype '|S3') are bytes.
+    T.sersic[np.array([t in ['DEV',b'DEV'] for t in T.type])] = 4.0
+    T.sersic[np.array([t in ['EXP',b'EXP'] for t in T.type])] = 1.0
+    T.sersic[np.array([t in ['REX',b'REX'] for t in T.type])] = 1.0
+    T.writeto('cat-m33.fits')
+
+    T.dchisq = np.zeros((len(T),5), np.float32)
+    for c in ['rchisq', 'fracflux', 'fracmasked', 'fracin',
+              'nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth',
+              'fiberflux', 'fibertotflux',]:
+        T.set(c, np.zeros((len(T),3), np.float32))
+
+    for c in ['mjd_min', 'mjd_max', 'nea_g', 'nea_r', 'nea_z',
+              'blob_nea_g', 'blob_nea_r', 'blob_nea_z',
+    ]:
+        T.set(c, np.zeros(len(T), np.float32))
+    # The "format_catalog" code expects all lower-case column names...
+    for c in T.columns():
+        if c != c.lower():
+            T.rename(c, c.lower())
+    from legacypipe.format_catalog import format_catalog
+    outfn = 'tractor-m33-ser.fits'
+    release = 9999
+    format_catalog(T, None, None, bands, 'grz', outfn, release)
 
 
+def stage_m33_d(pixscale=None, targetwcs=None,
+               W=None,H=None,
+               bands=None, ps=None, tims=None,
+               plots=False, plots2=False,
+               brickname=None,
+               version_header=None,
+               mp=None, nsigma=None,
+               saddle_fraction=None,
+               saddle_min=None,
+               survey=None, brick=None,
+               refcat=None, refstars=None,
+               T_clusters=None,
+               ccds=None,
+               record_event=None,
+               large_galaxies=True,
+                gaia_stars=True,
+                blobmap=None, blobslices=None,
+
+                galsrc=None,
+                galmap=None,
+                refgalslc=None,
+                subtims=None,
+                Im33=None,
+                Iothers=None,
+                Istars=None,
+                igal=None,
+                
+                **kwargs):
+
+    # Set up for stage_coadds
+    
+    print('Fit M33:', galsrc)
+    #for src in [galsrc]+[refcat[i] for i in Iothers]:
+    #    src.shape = src.shape.toEllipseE()
+    
+    cat = Catalog(galsrc, *[refcat[i] for i in np.append(Iothers, Istars)])
+    T = refstars[np.hstack((np.array([igal]), Iothers, Istars))]
+
+    refgalslc = find_objects(galmap.astype(int))[0]
+    print('ref gal slice:', refgalslc)
+    slc = refgalslc
+
+    fakeblobmap = np.empty(targetwcs.shape, np.int16)
+    fakeblobmap[:,:] = -1
+    print('fakeblobmap shape:', fakeblobmap.shape)
+    print('galmap shape:', galmap.shape)
+    print('fakeblobmap[refgalslc]', fakeblobmap[refgalslc].shape)
+    fakeblobmap[galmap] = 0
+
+    T.ra  = np.array([src.getPosition().ra  for src in cat])
+    T.dec = np.array([src.getPosition().dec for src in cat])
+    T.regular = np.ones(len(T), bool)
+    T.dup = np.zeros(len(T), bool)
+    _,bx,by = targetwcs.radec2pixelxy(T.ra, T.dec)
+    T.bx = (bx - 1.).astype(np.float32)
+    T.by = (by - 1.).astype(np.float32)
+    T.ibx = np.round(T.bx).astype(np.int32)
+    T.iby = np.round(T.by).astype(np.int32)
+    T.in_bounds = ((T.ibx >= 0) * (T.iby >= 0) * (T.ibx < W) * (T.iby < H))
+    T.objid = np.arange(len(T)).astype(np.int32)
+    #T.brickid = np.zeros(len(T), np.int32) + brickid
+    T.brickname = np.array([brickname] * len(T))
+
+    T.blob = np.empty(len(T), np.int32)
+    T.blob[:] = -1
+    T.blob[T.in_bounds] = fakeblobmap[T.iby[T.in_bounds], T.ibx[T.in_bounds]]
+
+    return dict(T=T, cat=cat,
+                origblobmap=blobmap, blobmap=fakeblobmap,
+    )
+
+    
 class Duck(object):
     pass
 
-def stage_m33_d(pixscale=None, targetwcs=None,
+def stage_m33_X_d(pixscale=None, targetwcs=None,
                W=None,H=None,
                bands=None, ps=None, tims=None,
                plots=False, plots2=False,
@@ -553,10 +820,6 @@ def stage_m33_g(pixscale=None, targetwcs=None,
         dimshow(get_rgb([tim.data - mod for tim,mod in zip(tims,mods)], bands, resids=True))
         ps.savefig()
 
-    from legacypipe.catalog import prepare_fits_catalog
-    from legacypipe.utils import copy_header_with_wcs
-    from tractor import Catalog
-
     # Igals = np.flatnonzero(refstars.islargegalaxy)
     # igal = np.argsort(-refstars.radius[Igals])[0]
     # igal = Igals[igal]
@@ -567,8 +830,6 @@ def stage_m33_g(pixscale=None, targetwcs=None,
 
     for src in cat:
         src.shape = src.shape.toEllipseE()
-
-
         
     # Compute invvars
     slc = refgalslc
@@ -597,7 +858,6 @@ def stage_m33_g(pixscale=None, targetwcs=None,
         subtims.append(subtim)
     tr = Tractor(subtims, cat) #, optimizer=ConstrainedDenseOptimizer())
     tr.freezeParam('images')
-    from legacypipe.oneblob import _compute_invvars
     cat.thawAllRecursive()
     cat.freezeAllParams()
     invvars = []
@@ -705,22 +965,25 @@ def main():
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
 
     kwargs.update(
-        prereqs_update={'m33_a': 'fit_on_coadds',
-                        'm33_b': 'm33_a',
-                        'm33_c': 'm33_b',
-                        'm33_d': 'm33_c',
-                        'm33_e': 'm33_d',
-                        'm33_f': 'm33_e',
-                        'm33_g': 'm33_f',
-                        'srcs': 'm33_d',
+        prereqs_update={
+            'm33_a': 'fit_on_coadds',
+            'm33_b': 'm33_a',
+            'm33_c': 'm33_b',
+            'm33_d': 'm33_c',
+            'coadds': 'm33_d',
+            # 'm33_b': 'fit_on_coadds',
+            # 'm33_e': 'm33_d',
+            # 'm33_f': 'm33_e',
+            # 'm33_g': 'm33_f',
+            # 'srcs': 'm33_d',
         },
         stagefunc_vars={'stage_m33_a':stage_m33_a,
                         'stage_m33_b':stage_m33_b,
                         'stage_m33_c':stage_m33_c,
                         'stage_m33_d':stage_m33_d,
-                        'stage_m33_e':stage_m33_e,
-                        'stage_m33_f':stage_m33_f,
-                        'stage_m33_g':stage_m33_g,
+                        # 'stage_m33_e':stage_m33_e,
+                        # 'stage_m33_f':stage_m33_f,
+                        # 'stage_m33_g':stage_m33_g,
         },
     )
     
