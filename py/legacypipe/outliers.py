@@ -17,7 +17,7 @@ def get_bits_to_mask():
     return OUTLIER_POS | OUTLIER_NEG
 
 def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, ps=None,
-                           outlier_mask_file=None, apply_masks=True):
+                           outlier_mask_file=None, apply_masks=True, get_headers=False):
     '''if subimage=True, assume that 'tims' are subimages, and demand that they have the same
     x0,y0 pixel offsets and size as the outlier mask files.
 
@@ -27,6 +27,7 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
     *output* determines where we search for the file: treating it as output, or input?
     '''
     from legacypipe.bits import DQ_BITS
+    headers = []
     if outlier_mask_file is None:
         fn = survey.find_file('outliers_mask', brick=brickname, output=output)
     else:
@@ -46,6 +47,8 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
             if mask.shape != tim.shape:
                 print('Warning: Outlier mask', fn, 'does not match shape of tim', tim)
                 return False
+        if get_headers:
+            headers.append(hdr)
         x0 = hdr['X0']
         y0 = hdr['Y0']
         maskbits = get_bits_to_mask()
@@ -92,6 +95,8 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
                 plt.axis([tx.start, tx.stop, ty.start, ty.stop])
                 ps.savefig()
 
+    if get_headers:
+        return headers
     return True
 
 def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,

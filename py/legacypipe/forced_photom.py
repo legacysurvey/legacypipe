@@ -83,21 +83,23 @@ def get_parser():
 
     parser.add_argument('--camera', help='Cut to only CCD with given camera name?')
 
-    parser.add_argument('expnum', help='Exposure number')
-    parser.add_argument('ccdname', help='Image HDU OR CCD name OR "all".')
-    parser.add_argument('outfn', help='Output catalog filename.')
+    parser.add_argument('--expnum', type=int, help='Exposure number')
+    parser.add_argument('--ccdname', default=None, help='CCD name to cut to (default: all)')
+    parser.add_argument('--out', help='Output catalog filename (default: use --out-dir)')
+    parser.add_argument('--out-dir', help='Output base directory')
 
+    parser.add_argument('--outlier-mask', nargs='?', const='default',
+                        help='Write the reassembled outlier mask?  Optionally include output filename; default use --out-dir')
     return parser
 
 def main(survey=None, opt=None, args=None):
-
+    '''Driver function for forced photometry of individual Legacy
+    Survey images.
+    '''
     if args is None:
         args = sys.argv[1:]
     print('forced_photom.py', ' '.join(args))
 
-    '''Driver function for forced photometry of individual Legacy
-    Survey images.
-    '''
     if opt is None:
         parser = get_parser()
         opt = parser.parse_args(args)
@@ -108,11 +110,19 @@ def main(survey=None, opt=None, args=None):
     t0 = Time()
     if opt.skip and os.path.exists(opt.outfn):
         print('Ouput file exists:', opt.outfn)
-        sys.exit(0)
+        return 0
 
     if opt.derivs and opt.agn:
         print('Sorry, can\'t do --derivs AND --agn')
-        sys.exit(0)
+        return -1
+
+    if opt.out is None and opt.out_dir is None:
+        print('Must supply either --out or --out-dir')
+        return -1
+
+    if opt.expnum is None and opt.out is None:
+        print('If no --expnum is given, must supply --out filename')
+        return -1
 
     if not opt.forced:
         opt.apphot = True
@@ -127,27 +137,16 @@ def main(survey=None, opt=None, args=None):
         from astrometry.util.plotutils import PlotSequence
         ps = PlotSequence(opt.plots)
 
-    # Try parsing first arg as exposure number (otherwise, it's a filename)
-    try:
-        expnum = int(opt.expnum)
-        filename = None
-    except ValueError:
-        # make this 'None' for survey.find_ccds()
-        expnum = None
-        filename = opt.expnum
-
-    # Try parsing HDU: "all" or HDU name or HDU number.
-    all_hdus = (opt.ccdname == 'all')
-    hdu = -1
-    ccdname = None
-    if not all_hdus:
-        try:
-            hdu = int(opt.ccdname)
-        except:
-            ccdname = opt.ccdname
-
     if survey is None:
-        survey = LegacySurveyData(survey_dir=opt.survey_dir)
+        survey = LegacySurveyData(survey_dir=opt.survey_dir,
+                                  output_dir=opt.out_dir)
+
+    # Read metadata from survey-ccds.fits table
+    ccds = survey.find_ccds(camera=opt.camera, expnum=opt.expnum,
+                         ccdname=opt.ccdname)
+    print(len(ccds), 'with camera', opt.camera, 'and expnum', opt.expnum, 'and ccdname', opt.ccdname)
+    # sort CCDs
+    ccds.cut(np.lexsort((ccds.ccdname, ccds.expnum, ccds.camera)))
 
     # If there is only one catalog survey_dir, we pass it to get_catalog_in_wcs
     # as the northern survey.
@@ -162,40 +161,8 @@ def main(survey=None, opt=None, args=None):
     elif opt.catalog_dir is not None:
         catsurvey_north = LegacySurveyData(survey_dir = opt.catalog_dir)
 
-    if filename is not None and hdu >= 0:
-        # FIXME -- try looking up in CCDs file?
-        # Read metadata from file
-        print('Warning: faking metadata from file contents')
-        T = exposure_metadata([filename], hdus=[hdu])
-        print('Metadata:')
-        T.about()
-
-        if not 'ccdzpt' in T.columns():
-            phdr = fitsio.read_header(filename)
-            T.ccdzpt = np.array([phdr['MAGZERO']])
-            print('WARNING: using header MAGZERO')
-            T.ccdraoff = np.array([0.])
-            T.ccddecoff = np.array([0.])
-            print('WARNING: setting CCDRAOFF, CCDDECOFF to zero.')
-
-    else:
-        # Read metadata from survey-ccds.fits table
-        T = survey.find_ccds(expnum=expnum, ccdname=ccdname)
-        print(len(T), 'with expnum', expnum, 'and ccdname', ccdname)
-        if hdu >= 0:
-            T.cut(T.image_hdu == hdu)
-            print(len(T), 'with HDU', hdu)
-        if filename is not None:
-            T.cut(np.array([f.strip() == filename for f in T.image_filename]))
-            print(len(T), 'with filename', filename)
-        if opt.camera is not None:
-            T.cut(T.camera == opt.camera)
-            print(len(T), 'with camera', opt.camera)
-        if not all_hdus:
-            assert(len(T) == 1)
-
     args = []
-    for ccd in T:
+    for ccd in ccds:
         args.append((survey,
                      catsurvey_north, catsurvey_south, opt.catalog_resolve_dec_ngc,
                      ccd, opt, zoomslice, ps))
@@ -224,11 +191,14 @@ def main(survey=None, opt=None, args=None):
         print('No photometry results to write.')
         return 0
     # Keep only the first header
-    _,version_hdr = FF[0]
-    FF = [F for F,hdr in FF]
+    _,version_hdr,_,_ = FF[0]
+    # unpack results
+    outlier_masks = [m for _,_,m,_ in FF]
+    outlier_hdrs  = [h for _,_,_,h in FF]
+    FF            = [F for F,_,_,_ in FF]
     F = merge_tables(FF)
 
-    if all_hdus:
+    if len(ccds):
         version_hdr.delete('CPHDU')
         version_hdr.delete('CCDNAME')
 
@@ -242,11 +212,12 @@ def main(survey=None, opt=None, args=None):
                       'dra_ivar':'1/arcsec^2', 'ddec_ivar':'1/arcsec^2'})
 
     columns = F.get_columns()
-    order = ['release', 'brickid', 'brickname', 'objid', 'camera', 'expnum', 'ccdname',
-             'filter', 'mjd', 'exptime', 'psfsize', 'ccd_cuts', 'airmass', 'sky',
-             'psfdepth', 'galdepth',
-             'ra', 'dec', 'flux', 'flux_ivar', 'fracflux', 'rchisq', 'fracmasked', 'fracin',
-             'apflux', 'apflux_ivar', 'x', 'y', 'dqmask', 'dra', 'ddec', 'dra_ivar', 'ddec_ivar']
+    order = ['release', 'brickid', 'brickname', 'objid', 'camera', 'expnum',
+             'ccdname', 'filter', 'mjd', 'exptime', 'psfsize', 'ccd_cuts',
+             'airmass', 'sky', 'psfdepth', 'galdepth', 'ra', 'dec', 'flux',
+             'flux_ivar', 'fracflux', 'rchisq', 'fracmasked', 'fracin',
+             'apflux', 'apflux_ivar', 'x', 'y', 'dqmask', 'dra', 'ddec',
+             'dra_ivar', 'ddec_ivar']
     columns = [c for c in order if c in columns]
 
     # Set units headers (must happen after column ordering is set!)
@@ -255,14 +226,44 @@ def main(survey=None, opt=None, args=None):
         if col in units:
             hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
 
-    outdir = os.path.dirname(opt.outfn)
-    if len(outdir):
-        trymakedirs(outdir)
-    tmpfn = os.path.join(outdir, 'tmp-' + os.path.basename(opt.outfn))
-    fitsio.write(tmpfn, None, header=version_hdr, clobber=True)
-    F.writeto(tmpfn, header=hdr, append=True, columns=columns)
-    os.rename(tmpfn, opt.outfn)
-    print('Wrote', opt.outfn)
+    if opt.out is not None:
+        outdir = os.path.dirname(opt.outfn)
+        if len(outdir):
+            trymakedirs(outdir)
+        tmpfn = os.path.join(outdir, 'tmp-' + os.path.basename(opt.outfn))
+        fitsio.write(tmpfn, None, header=version_hdr, clobber=True)
+        F.writeto(tmpfn, header=hdr, append=True, columns=columns)
+        os.rename(tmpfn, opt.outfn)
+        print('Wrote', opt.outfn)
+    else:
+        with survey.write_output('forced', camera=opt.camera, expnum=opt.expnum) as out:
+            F.writeto(None, fits_object=out.fits, primheader=version_hdr,
+                      header=hdr)
+            print('Wrote', out.real_fn)
+
+    if opt.outlier_mask == 'default':
+        outdir = os.path.join(opt.out_dir, 'outlier-masks')
+        camexp = set(zip(ccds.camera, ccds.expnum))
+        for c,e in camexp:
+            I = np.flatnonzero((ccds.camera == c) * (ccds.expnum == e))
+            ccd = ccds[I[0]]
+            imfn = ccd.image_filename.strip()
+            outfn = os.path.join(outdir, imfn.replace('.fits', '-outlier.fits'))
+            from astrometry.util.file import trymakedirs
+            trymakedirs(outfn, dir=True)
+            tempfn = outfn.replace('.fits', '-tmp.fits')
+            with fitsio.FITS(tempfn, 'w', clobber=True) as fits:
+                fits.write(None, header=version_hdr)
+                for i in I:
+                    fits.write(outlier_masks[i], header=outlier_hdrs[i])
+            os.rename(tempfn, outfn)
+            print('Wrote', outfn)
+    elif opt.outlier_mask is not None:
+        with fitsio.FITS(opt.outlier_mask, 'w', clobber=True) as F:
+            F.write(None, header=version_hdr)
+            for hdr,mask in zip(outlier_hdrs,outlier_masks):
+                F.write(mask, header=hdr)
+        print('Wrote', opt.outlier_mask)
 
     tnow = Time()
     print('Total:', tnow-t0)
@@ -374,22 +375,27 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
             catsurvey_north.bricks = survey.get_bricks_readonly()
 
     # Apply outlier masks
-    if True:
-        # Outliers masks are computed within a survey (north/south for dr8), and are stored
-        # in a brick-oriented way, in the results directories.
-        north_ccd = (ccd.camera.strip() != 'decam')
-        catsurvey = catsurvey_north
-        if not north_ccd and catsurvey_south is not None:
-            catsurvey = catsurvey_south
-        chipwcs = tim.subwcs
-        bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
-        for b in bricks:
-            from legacypipe.outliers import read_outlier_mask_file
-            print('Reading outlier mask for brick', b.brickname)
-            ok = read_outlier_mask_file(catsurvey, [tim], b.brickname, subimage=False, output=False,
-                                        ps=ps)
-            if not ok:
-                print('WARNING: failed to read outliers mask file for brick', b.brickname)
+    outlier_header = None
+    # Outliers masks are computed within a survey (north/south for dr9), and are stored
+    # in a brick-oriented way, in the results directories.
+    north_ccd = (ccd.camera.strip() != 'decam')
+    catsurvey = catsurvey_north
+    if not north_ccd and catsurvey_south is not None:
+        catsurvey = catsurvey_south
+    chipwcs = tim.subwcs
+    bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
+    for b in bricks:
+        from legacypipe.outliers import read_outlier_mask_file
+        print('Reading outlier mask for brick', b.brickname)
+        hdrs = read_outlier_mask_file(catsurvey, [tim], b.brickname,
+                                      subimage=False, output=False, ps=ps)
+        if hdrs is False:
+            print('WARNING: failed to read outliers mask file for brick', b.brickname)
+            continue
+        assert(len(hdrs) == 1)
+        outlier_header = hdrs[0]
+        outlier_header.delete('X0')
+        outlier_header.delete('Y0')
 
     if opt.catalog:
         T = fits_table(opt.catalog)
@@ -510,7 +516,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
 
     program_name = sys.argv[0]
     ## FIXME -- from catalog?
-    release = 8002
+    release = 9999
     version_hdr = get_version_header(program_name, surveydir, release)
     filename = getattr(ccd, 'image_filename')
     if filename is None:
@@ -548,9 +554,13 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         fitsio.write(opt.save_data, tim.getImage(), header=hdr, clobber=True)
         print('Wrote', opt.save_data)
 
+    outlier_mask = None
+    if opt.outlier_mask is not None:
+        outlier_mask = ((tim.dq & DQ_BITS['outlier']) != 0)
+
     tnow = Time()
     print('Forced phot:', tnow-tlast)
-    return F,version_hdr
+    return F,version_hdr,outlier_mask,outlier_header
 
 def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                     do_forced=True, do_apphot=True, get_model=False, ps=None,
