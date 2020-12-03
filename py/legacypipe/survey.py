@@ -971,25 +971,31 @@ class LegacySurveyData(object):
         debug('Cached file miss:', fn, '-/->', cfn)
         return fn
 
-    def get_compression_string(self, filetype, shape=None, **kwargs):
-        pat = dict(# g: sigma ~ 0.002.  qz -1e-3: 6 MB, -1e-4: 10 MB
-            image = '[compress R %(tilew)i,%(tileh)i; qz -1e-4]',
-            # g: qz -1e-3: 2 MB, -1e-4: 2.75 MB
-            model = '[compress R %(tilew)i,%(tileh)i; qz -1e-4]',
-            chi2  = '[compress R %(tilew)i,%(tileh)i; qz -0.1]',
-            # qz +8: 9 MB, qz +16: 10.5 MB
-            invvar = '[compress R %(tilew)i,%(tileh)i; q0 16]',
-            nexp   = '[compress H %(tilew)i,%(tileh)i]',
-            maskbits = '[compress H %(tilew)i,%(tileh)i]',
-            depth  = '[compress G %(tilew)i,%(tileh)i; qz 0]',
-            galdepth = '[compress G %(tilew)i,%(tileh)i; qz 0]',
-            psfsize = '[compress G %(tilew)i,%(tileh)i; qz 0]',
-            outliers_mask = '[compress G]',
-        ).get(filetype)
-        #outliers_mask = '[compress H %i,%i]',
-        if pat is None:
-            return pat
-        # Tile compression size
+    def get_compression_args(self, filetype, shape=None):
+        comp = dict(# g: sigma ~ 0.002.  qz -1e-3: 6 MB, -1e-4: 10 MB
+            image         = ('R', 'qz -1e-4'),
+            model         = ('R', 'qz -1e-4'),
+            chi2          = ('R', 'qz -0.1'),
+            invvar        = ('R' 'q0 16'),
+            nexp          = ('H', None),
+            outliers_mask = ('R', None),
+            maskbits      = ('H', None),
+            depth         = ('G', 'qz 0'),
+            galdepth      = ('G', 'qz 0'),
+            psfsize       = ('G', 'qz 0'),
+            ).get(filetype)
+        if comp is None:
+            return None
+        method, args = comp
+        mname = dict(R='RICE',
+                     H='HCOMPRESS',
+                     G='GZIP',
+                     ).get(method)
+        if args is None:
+            pat = '[compress %s %%(tilew)i,%%(tileh)i]' % method
+        else:
+            pat = '[compress %s %%(tilew)i,%%(tileh)i; %s]' % (method, args)
+        # Default tile compression size:
         tilew,tileh = 100,100
         if shape is not None:
             H,W = shape
@@ -1008,7 +1014,14 @@ class LegacySurveyData(object):
                 if remain == 0 or remain >= 4:
                     break
                 tileh += 1
-        return pat % dict(tilew=tilew,tileh=tileh)
+        s = pat % dict(tilew=tilew, tileh=tileh)
+        return s, method, args, mname, (tilew,tileh)
+
+    def get_compression_string(self, filetype, shape=None, **kwargs):
+        A = self.get_compression_args(filetype, shape=shape)
+        if A is None:
+            return None
+        return A[0]
 
     def get_psfex_conf(self, camera, expnum, ccdname):
         '''

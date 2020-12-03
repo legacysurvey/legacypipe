@@ -17,8 +17,9 @@ from astrometry.util.ttime import Time
 from tractor import Tractor, Catalog, NanoMaggies
 from tractor.galaxy import disable_galaxy_cache
 
-from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version_header, apertures_arcsec
+from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version_header, apertures_arcsec, radec_at_mjd
 from legacypipe.catalog import read_fits_catalog
+from legacypipe.outliers import read_outlier_mask_file
 
 def get_parser():
     '''
@@ -103,9 +104,6 @@ def main(survey=None, opt=None, args=None):
     if opt is None:
         parser = get_parser()
         opt = parser.parse_args(args)
-
-    print('Opt:', opt)
-    print('Opt:', vars(opt))
 
     t0 = Time()
     if opt.skip and os.path.exists(opt.outfn):
@@ -241,6 +239,10 @@ def main(survey=None, opt=None, args=None):
                       header=hdr)
             print('Wrote', out.real_fn)
 
+    if opt.outlier_mask is not None:
+        # fitsio doesn't support binary images, convert to uint8
+        outlier_masks = [m.astype(np.uint8) for m in outlier_masks]
+
     if opt.outlier_mask == 'default':
         outdir = os.path.join(opt.out_dir, 'outlier-masks')
         camexp = set(zip(ccds.camera, ccds.expnum))
@@ -252,17 +254,22 @@ def main(survey=None, opt=None, args=None):
             from astrometry.util.file import trymakedirs
             trymakedirs(outfn, dir=True)
             tempfn = outfn.replace('.fits', '-tmp.fits')
-            with fitsio.FITS(tempfn, 'w', clobber=True) as fits:
+            with fitsio.FITS(tempfn, 'rw', clobber=True) as fits:
                 fits.write(None, header=version_hdr)
                 for i in I:
-                    fits.write(outlier_masks[i], header=outlier_hdrs[i])
+                    mask = outlier_masks[i]
+                    _,_,_,meth,tile = survey.get_compression_args('outliers_mask', shape=mask.shape)
+                    fits.write(mask, header=outlier_hdrs[i], extname=ccds.ccdname[i],
+                               compress=meth, tile_dims=tile)
             os.rename(tempfn, outfn)
             print('Wrote', outfn)
     elif opt.outlier_mask is not None:
-        with fitsio.FITS(opt.outlier_mask, 'w', clobber=True) as F:
+        with fitsio.FITS(opt.outlier_mask, 'rw', clobber=True) as F:
             F.write(None, header=version_hdr)
-            for hdr,mask in zip(outlier_hdrs,outlier_masks):
-                F.write(mask, header=hdr)
+            for i,(hdr,mask) in enumerate(zip(outlier_hdrs,outlier_masks)):
+                _,_,_,meth,tile = survey.get_compression_args('outliers_mask', shape=mask.shape)
+                F.write(mask, header=hdr, extname=ccds.ccdname[i],
+                        compress=meth, tile_dims=tile)
         print('Wrote', opt.outlier_mask)
 
     tnow = Time()
@@ -376,6 +383,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
 
     # Apply outlier masks
     outlier_header = None
+    outlier_mask = None
     # Outliers masks are computed within a survey (north/south for dr9), and are stored
     # in a brick-oriented way, in the results directories.
     north_ccd = (ccd.camera.strip() != 'decam')
@@ -385,17 +393,31 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     chipwcs = tim.subwcs
     bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
     for b in bricks:
-        from legacypipe.outliers import read_outlier_mask_file
         print('Reading outlier mask for brick', b.brickname)
-        hdrs = read_outlier_mask_file(catsurvey, [tim], b.brickname,
+        hdrs = read_outlier_mask_file(catsurvey, [tim], b.brickname, get_headers=True,
                                       subimage=False, output=False, ps=ps)
         if hdrs is False:
             print('WARNING: failed to read outliers mask file for brick', b.brickname)
             continue
         assert(len(hdrs) == 1)
+        # Keep the header from the first brick only
+        if outlier_header is not None:
+            continue
         outlier_header = hdrs[0]
+        # shift WCS
+        crpix1 = outlier_header['CRPIX1']
+        crpix2 = outlier_header['CRPIX2']
+        x0 = outlier_header['X0']
+        y0 = outlier_header['Y0']
+        outlier_header['CRPIX1'] = crpix1 + x0
+        outlier_header['CRPIX2'] = crpix2 + y0
         outlier_header.delete('X0')
         outlier_header.delete('Y0')
+
+    if opt.outlier_mask is not None:
+        outlier_mask = np.zeros((ccd.height, ccd.width), bool)
+        H,W = tim.shape
+        outlier_mask[tim.y0:tim.y0+H, tim.x0:tim.x0+W] = ((tim.dq & DQ_BITS['outlier']) != 0)
 
     if opt.catalog:
         T = fits_table(opt.catalog)
@@ -417,7 +439,6 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         # Gaia stars: move RA,Dec to the epoch of this image.
         I = np.flatnonzero(T.ref_epoch > 0)
         if len(I):
-            from legacypipe.survey import radec_at_mjd
             print('Moving', len(I), 'Gaia stars to MJD', tim.time.toMjd())
             ra,dec = radec_at_mjd(T.ra[I], T.dec[I], T.ref_epoch[I].astype(float),
                                   T.pmra[I], T.pmdec[I], T.parallax[I],
@@ -479,13 +500,14 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     # F.psfdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.psfnorm) - 9)] * len(F)).astype(np.float32)
     # F.galdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.galnorm) - 9)] * len(F)).astype(np.float32)
 
-    print('opt.derivs:', opt.derivs)
-
     # super units questions here
     if opt.derivs:
         cosdec = np.cos(np.deg2rad(T.dec))
-        F.dra  = (F.flux_dra  / F.flux) * 3600. / cosdec
-        F.ddec = (F.flux_ddec / F.flux) * 3600.
+        with np.errstate(divide='ignore', invalid='ignore'):
+            F.dra  = (F.flux_dra  / F.flux) * 3600. / cosdec
+            F.ddec = (F.flux_ddec / F.flux) * 3600.
+        F.dra [F.flux == 0] = 0.
+        F.ddec[F.flux == 0] = 0.
         F.dra_ivar  = F.flux_dra_ivar  * (F.flux / 3600. * cosdec)**2
         F.ddec_ivar = F.flux_ddec_ivar * (F.flux / 3600.)**2
         F.delete_column('flux_dra')
@@ -553,10 +575,6 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     if opt.save_data:
         fitsio.write(opt.save_data, tim.getImage(), header=hdr, clobber=True)
         print('Wrote', opt.save_data)
-
-    outlier_mask = None
-    if opt.outlier_mask is not None:
-        outlier_mask = ((tim.dq & DQ_BITS['outlier']) != 0)
 
     tnow = Time()
     print('Forced phot:', tnow-tlast)
