@@ -976,7 +976,7 @@ class LegacySurveyData(object):
             image         = ('R', 'qz -1e-4'),
             model         = ('R', 'qz -1e-4'),
             chi2          = ('R', 'qz -0.1'),
-            invvar        = ('R' 'q0 16'),
+            invvar        = ('R', 'q0 16'),
             nexp          = ('H', None),
             outliers_mask = ('R', None),
             maskbits      = ('H', None),
