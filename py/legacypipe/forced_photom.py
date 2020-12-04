@@ -394,31 +394,16 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
     for b in bricks:
         print('Reading outlier mask for brick', b.brickname)
-        hdrs = read_outlier_mask_file(catsurvey, [tim], b.brickname, get_headers=True,
+        ok = read_outlier_mask_file(catsurvey, [tim], b.brickname,
                                       subimage=False, output=False, ps=ps)
-        if hdrs is False:
+        if not ok:
             print('WARNING: failed to read outliers mask file for brick', b.brickname)
-            continue
-        # assert(len(hdrs) == 1)
-        # # Keep the header from the first brick only
-        # if outlier_header is not None:
-        #     continue
-        # outlier_header = hdrs[0]
-        # # shift WCS
-        # crpix1 = outlier_header['CRPIX1']
-        # crpix2 = outlier_header['CRPIX2']
-        # x0 = outlier_header['X0']
-        # y0 = outlier_header['Y0']
-        # outlier_header['CRPIX1'] = crpix1 + x0
-        # outlier_header['CRPIX2'] = crpix2 + y0
-        # outlier_header.delete('X0')
-        # outlier_header.delete('Y0')
 
     if opt.outlier_mask is not None:
         outlier_mask = np.zeros((ccd.height, ccd.width), bool)
         H,W = tim.shape
         outlier_mask[tim.y0:tim.y0+H, tim.x0:tim.x0+W] = ((tim.dq & DQ_BITS['outlier']) != 0)
-
+        # Grab original image headers (including WCS)
         im = survey.get_image_object(ccd)
         imhdr = im.read_image_header()
         imhdr['CAMERA'] = ccd.camera
