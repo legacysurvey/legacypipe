@@ -238,7 +238,7 @@ def rbmain():
     forced_main(args=['--survey-dir', surveydir,
                       '--no-ceres',
                       '--catalog-dir', 'out-testcase9b',
-                      '372546', 'N26', 'forced1.fits'])
+                      '--expnum', '372546', '--ccdname', 'N26', '--out', 'forced1.fits'])
     assert(os.path.exists('forced1.fits'))
     _ = fits_table('forced1.fits')
     # ... more tests...!
@@ -248,7 +248,7 @@ def rbmain():
                       '--catalog-dir', 'out-testcase9b',
                       '--derivs', '--threads', '2',
                       '--apphot',
-                      '372547', 'N26', 'forced2.fits'])
+                      '--expnum', '372547', '--ccdname', 'N26', '--out', 'forced2.fits'])
     assert(os.path.exists('forced2.fits'))
     _ = fits_table('forced2.fits')
 
@@ -256,7 +256,7 @@ def rbmain():
                       '--no-ceres',
                       '--catalog-dir', 'out-testcase9b',
                       '--agn',
-                      '257266', 'S21', 'forced3.fits'])
+                      '--expnum', '257266', '--ccdname', 'S21', '--out', 'forced3.fits'])
     assert(os.path.exists('forced3.fits'))
     _ = fits_table('forced3.fits')
 
@@ -265,7 +265,7 @@ def rbmain():
                           '--catalog-dir', 'out-testcase9b',
                           '--derivs', '--threads', '2',
                           '--apphot',
-                          '372546', 'N26', 'forced4.fits'])
+                          '--expnum', '372546', '--ccdname', 'N26', '--out', 'forced4.fits'])
         assert(os.path.exists('forced4.fits'))
         _ = fits_table('forced4.fits')
 

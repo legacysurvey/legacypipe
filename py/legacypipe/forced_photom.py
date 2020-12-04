@@ -106,8 +106,8 @@ def main(survey=None, opt=None, args=None):
         opt = parser.parse_args(args)
 
     t0 = Time()
-    if opt.skip and os.path.exists(opt.outfn):
-        print('Ouput file exists:', opt.outfn)
+    if opt.skip and os.path.exists(opt.out):
+        print('Ouput file exists:', opt.out)
         return 0
 
     if opt.derivs and opt.agn:
@@ -225,14 +225,14 @@ def main(survey=None, opt=None, args=None):
             hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
 
     if opt.out is not None:
-        outdir = os.path.dirname(opt.outfn)
+        outdir = os.path.dirname(opt.out)
         if len(outdir):
             trymakedirs(outdir)
-        tmpfn = os.path.join(outdir, 'tmp-' + os.path.basename(opt.outfn))
+        tmpfn = os.path.join(outdir, 'tmp-' + os.path.basename(opt.out))
         fitsio.write(tmpfn, None, header=version_hdr, clobber=True)
         F.writeto(tmpfn, header=hdr, append=True, columns=columns)
-        os.rename(tmpfn, opt.outfn)
-        print('Wrote', opt.outfn)
+        os.rename(tmpfn, opt.out)
+        print('Wrote', opt.out)
     else:
         with survey.write_output('forced', camera=opt.camera, expnum=opt.expnum) as out:
             F.writeto(None, fits_object=out.fits, primheader=version_hdr,
