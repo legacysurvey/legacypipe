@@ -240,6 +240,8 @@ RUN cd /src/legacypipe && git pull && git describe && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
+ENV LEGACYPIPE_DIR /src/legacypipe/py
+
 # # QDO
 # RUN cd qdo && git remote add dstn https://bitbucket.org/dstn/qdo.git \
 #     && git fetch dstn && git checkout handle-oom \
