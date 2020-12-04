@@ -17,6 +17,7 @@ def get_bits_to_mask():
     return OUTLIER_POS | OUTLIER_NEG
 
 def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, ps=None,
+                           pos_neg_mask=None,
                            outlier_mask_file=None, apply_masks=True, get_headers=False):
     '''if subimage=True, assume that 'tims' are subimages, and demand that they have the same
     x0,y0 pixel offsets and size as the outlier mask files.
@@ -60,6 +61,8 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
                 # Apply this mask!
                 tim.dq |= ((mask & maskbits) > 0) * DQ_BITS['outlier']
                 tim.inverr[(mask & maskbits) > 0] = 0.
+            if pos_neg_mask is not None:
+                pos_neg_mask |= mask
         else:
             from astrometry.util.miscutils import get_overlapping_region
             mh,mw = mask.shape
@@ -73,6 +76,8 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
                 # Apply this mask!
                 tim.dq[ty, tx] |= ((mask[my, mx] & maskbits) > 0) * DQ_BITS['outlier']
                 tim.inverr[ty, tx][(mask[my, mx] & maskbits) > 0] = 0.
+            if pos_neg_mask is not None:
+                pos_neg_mask[ty,tx] |= mask[my, mx]
 
             if ps is not None:
                 import pylab as plt

@@ -242,6 +242,12 @@ def main(survey=None, opt=None, args=None):
     if opt.outlier_mask is not None:
         # fitsio doesn't support binary images, convert to uint8
         outlier_masks = [m.astype(np.uint8) for m in outlier_masks]
+        # Add outlier bit meanings to the primary header
+        version_hdr.add_record(dict(name='COMMENT', value='Outlier mask bit meanings'))
+        version_hdr.add_record(dict(name='OUTL_POS', value=1,
+                                    comment='Outlier mask bit for Positive outlier'))
+        version_hdr.add_record(dict(name='OUTL_NEG', value=2,
+                                    comment='Outlier mask bit for Negative outlier'))
 
     if opt.outlier_mask == 'default':
         outdir = os.path.join(opt.out_dir, 'outlier-masks')
@@ -384,6 +390,9 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     # Apply outlier masks
     outlier_header = None
     outlier_mask = None
+    posneg_mask = None
+    if opt.outlier_mask is not None:
+        posneg_mask = np.zeros(tim.shape, np.uint8)
     # Outliers masks are computed within a survey (north/south for dr9), and are stored
     # in a brick-oriented way, in the results directories.
     north_ccd = (ccd.camera.strip() != 'decam')
@@ -394,15 +403,16 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
     for b in bricks:
         print('Reading outlier mask for brick', b.brickname)
-        ok = read_outlier_mask_file(catsurvey, [tim], b.brickname,
-                                      subimage=False, output=False, ps=ps)
+        ok = read_outlier_mask_file(catsurvey, [tim], b.brickname, pos_neg_mask=posneg_mask,
+                                    subimage=False, output=False, ps=ps)
         if not ok:
             print('WARNING: failed to read outliers mask file for brick', b.brickname)
 
     if opt.outlier_mask is not None:
-        outlier_mask = np.zeros((ccd.height, ccd.width), bool)
         H,W = tim.shape
-        outlier_mask[tim.y0:tim.y0+H, tim.x0:tim.x0+W] = ((tim.dq & DQ_BITS['outlier']) != 0)
+        outlier_mask = np.zeros((ccd.height, ccd.width), np.uint8)
+        outlier_mask[tim.y0:tim.y0+H, tim.x0:tim.x0+W] = posneg_mask
+        del posneg_mask
         # Grab original image headers (including WCS)
         im = survey.get_image_object(ccd)
         imhdr = im.read_image_header()
