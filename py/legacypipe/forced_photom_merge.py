@@ -10,9 +10,9 @@ from collections import Counter
 
 from astrometry.util.fits import fits_table, merge_tables
 
-from legacypipe.survey import LegacySurveyData
+from legacypipe.survey import LegacySurveyData, get_version_header, apertures_arcsec
 
-def merge_forced(survey, brickname, cat, bands='grz', Nmax=0):
+def merge_forced(survey, brickname, cat, bands='grz'):
     ccdfn = survey.find_file('ccds-table', brick=brickname)
     CCDs = fits_table(ccdfn)
     print('Read', len(CCDs), 'CCDs')
@@ -48,6 +48,7 @@ def merge_forced(survey, brickname, cat, bands='grz', Nmax=0):
         print('Cut to', len(F), 'phot entries matching catalog')
         FF.append(F)
     F = merge_tables(FF)
+    F._header = FF[0]._header
     del FF
 
     I = np.lexsort((F.expnum, F.camera, F.filter, F.objid, F.brickid, F.release))
@@ -60,15 +61,14 @@ def merge_forced(survey, brickname, cat, bands='grz', Nmax=0):
             phot_index[key] = []
         phot_index[key].append(i)
 
-    if Nmax == 0:
-        # find largest number of photometry measurements!
-        Nmax = max([len(inds) for inds in phot_index.values()])
-        print('Maximum number of photometry entries:', Nmax)
+    # find largest number of photometry measurements!
+    Nmax = max([len(inds) for inds in phot_index.values()])
+    print('Maximum number of photometry entries:', Nmax)
 
     for band in bands:
-        nobs = np.zeros(len(cat), np.int16)
-        indx = np.empty((len(cat), Nmax), np.int32)
-        indx[:,:] = -1
+        nobs = np.zeros(len(cat), np.int32)
+        indx = np.empty(len(cat), np.int32)
+        indx[:] = -1
         cat.set('nobs_%s' % band, nobs)
         cat.set('forced_index_%s' % band, indx)
 
@@ -79,7 +79,9 @@ def merge_forced(survey, brickname, cat, bands='grz', Nmax=0):
             except KeyError:
                 continue
             nobs[i] = len(inds)
-            indx[i, :min(Nmax, len(inds))] = inds
+            # Indices are all contiguous (so we only need store the first one)
+            assert(np.all(np.array(inds) == (np.arange(len(inds)) + inds[0])))
+            indx[i] = inds[0]
     return cat, F
 
 def main():
@@ -139,6 +141,8 @@ def main():
                 brick = s.get_brick_by_name(opt.brick)
                 break
             except:
+                import traceback
+                traceback.print_exc()
                 pass
 
         l,b = radectolb(brick.ra, brick.dec)
@@ -154,14 +158,33 @@ def main():
         cat = fits_table(fn, columns=columns)
         print('Read', len(cat), 'sources from', fn)
 
+    program_name = sys.argv[0]
+    ## FIXME -- from catalog?
+    release = 9999
+    version_hdr = get_version_header(program_name, opt.survey_dir, release)
+
+    from legacypipe.utils import add_bits
+    from legacypipe.bits import DQ_BITS
+    add_bits(version_hdr, DQ_BITS, 'DQMASK', 'DQ', 'D')
+    from legacyzpts.psfzpt_cuts import CCD_CUT_BITS
+    add_bits(version_hdr, CCD_CUT_BITS, 'CCD_CUTS', 'CC', 'C')
+    for i,ap in enumerate(apertures_arcsec):
+        version_hdr.add_record(dict(name='APRAD%i' % i, value=ap,
+                                    comment='(optical) Aperture radius, in arcsec'))
+
     cat,forced = merge_forced(survey, opt.brick, cat)
+    units = []
+    for i,col in enumerate(forced.get_columns()):
+        units.append(forced._header.get('TUNIT%i' % (i+1), ''))
+    cols = forced.get_columns()
+
     if opt.out:
-        cat.writeto(opt.out)
-        forced.writeto(opt.out, append=True)
+        cat.writeto(opt.out, primheader=version_hdr)
+        forced.writeto(opt.out, append=True, units=units, columns=cols)
     else:
         with survey.write_output('forced-brick', brick=opt.brick) as out:
-            cat.writeto(None, fits_object=out.fits)
-            forced.writeto(None, fits_object=out.fits, append=True)
+            cat.writeto(None, fits_object=out.fits, primheader=version_hdr)
+            forced.writeto(None, fits_object=out.fits, append=True, units=units, columns=cols)
 
 if __name__ == '__main__':
     main()

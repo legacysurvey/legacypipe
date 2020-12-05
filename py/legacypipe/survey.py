@@ -958,7 +958,7 @@ class LegacySurveyData(object):
                                      'forced-%s-%i.fits' % (camera, expnum)))
 
         elif filetype == 'forced-brick':
-            return swap(os.path.join(basedir, 'forced', brickpre,
+            return swap(os.path.join(basedir, 'forced-brick', brickpre,
                                      'forced-%s.fits' % brick))
         print('Unknown filetype "%s"' % filetype)
         assert(False)

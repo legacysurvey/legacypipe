@@ -2693,7 +2693,7 @@ def stage_writecat(
     catalog.
     '''
     from legacypipe.catalog import prepare_fits_catalog
-    from legacypipe.utils import copy_header_with_wcs
+    from legacypipe.utils import copy_header_with_wcs, add_bits
 
     record_event and record_event('stage_writecat: starting')
     _add_stage_version(version_header, 'WCAT', 'writecat')
@@ -2724,24 +2724,7 @@ def stage_writecat(
             name='WBIT_%i' % bit, value=name, comment='WISE: %s' % comm))
 
     # Record the meaning of ALLMASK/ANYMASK bits
-    version_header.add_record(dict(name='COMMENT', value='allmask/anymask bits:'))
-    bits = list(DQ_BITS.values())
-    bits.sort()
-    bitmap = dict((v,k) for k,v in DQ_BITS.items())
-    for i in range(16):
-        bit = 1<<i
-        if not bit in bitmap:
-            continue
-        version_header.add_record(
-            dict(name='AM_%s' % bitmap[bit].upper()[:5], value=bit,
-                 comment='ALLMASK/ANYMASK bit 2**%i' % i))
-    for i in range(16):
-        bit = 1<<i
-        if not bit in bitmap:
-            continue
-        version_header.add_record(
-            dict(name='ABIT_%i' % i, value=bitmap[bit],
-                 comment='ALLMASK/ANYMASK bit 2**%i=%i meaning' % (i, bit)))
+    add_bits(version_header, DQ_BITS, 'allmask/anymask', 'AM', 'A')
 
     # create maskbits header
     hdr = copy_header_with_wcs(version_header, targetwcs)

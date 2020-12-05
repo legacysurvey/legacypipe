@@ -200,29 +200,41 @@ def main(survey=None, opt=None, args=None):
         version_hdr.delete('CPHDU')
         version_hdr.delete('CCDNAME')
 
-    units = {'exptime':'sec',
-             'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2',
-             'apflux':'nanomaggy', 'apflux_ivar':'1/nanomaggy^2',
-             'psfdepth':'1/nanomaggy^2', 'galdepth':'1/nanomaggy^2',
-             'sky':'nanomaggy/arcsec^2', 'psfsize':'arcsec' }
-    if opt.derivs:
-        units.update({'dra':'arcsec', 'ddec':'arcsec',
-                      'dra_ivar':'1/arcsec^2', 'ddec_ivar':'1/arcsec^2'})
+    from legacypipe.utils import add_bits
+    from legacypipe.bits import DQ_BITS
+    add_bits(version_hdr, DQ_BITS, 'DQMASK', 'DQ', 'D')
+    from legacyzpts.psfzpt_cuts import CCD_CUT_BITS
+    add_bits(version_hdr, CCD_CUT_BITS, 'CCD_CUTS', 'CC', 'C')
+    for i,ap in enumerate(apertures_arcsec):
+        version_hdr.add_record(dict(name='APRAD%i' % i, value=ap,
+                                    comment='(optical) Aperture radius, in arcsec'))
+
+    unitmap = {'exptime':'sec',
+               'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2',
+               'apflux':'nanomaggy', 'apflux_ivar':'1/nanomaggy^2',
+               'psfdepth':'1/nanomaggy^2', 'galdepth':'1/nanomaggy^2',
+               'sky':'nanomaggy/arcsec^2', 'psfsize':'arcsec',
+               'fwhm':'pixels', 'ccdrarms':'arcsec', 'ccddecrms':'arcsec',
+               'ra':'deg', 'dec':'deg', 'skyrms':'counts/sec',
+               'dra':'arcsec', 'ddec':'arcsec',
+               'dra_ivar':'1/arcsec^2', 'ddec_ivar':'1/arcsec^2'}
 
     columns = F.get_columns()
     order = ['release', 'brickid', 'brickname', 'objid', 'camera', 'expnum',
-             'ccdname', 'filter', 'mjd', 'exptime', 'psfsize', 'ccd_cuts',
-             'airmass', 'sky', 'psfdepth', 'galdepth', 'ra', 'dec', 'flux',
+             'ccdname', 'filter', 'mjd', 'exptime', 'psfsize', 'fwhm', 'ccd_cuts',
+             'airmass', 'sky', 'skyrms', 'psfdepth', 'galdepth', 'ccdzpt',
+             'ccdrarms', 'ccddecrms', 'ccdphrms', 'ra', 'dec', 'flux',
              'flux_ivar', 'fracflux', 'rchisq', 'fracmasked', 'fracin',
              'apflux', 'apflux_ivar', 'x', 'y', 'dqmask', 'dra', 'ddec',
              'dra_ivar', 'ddec_ivar']
     columns = [c for c in order if c in columns]
 
     # Set units headers (must happen after column ordering is set!)
-    hdr = fitsio.FITSHDR()
-    for i,col in enumerate(columns):
-        if col in units:
-            hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
+    #hdr = fitsio.FITSHDR()
+    #for i,col in enumerate(columns):
+    #    if col in units:
+    #        hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
+    units = [unitmap.get(c,'') for c in columns]
 
     if opt.out is not None:
         outdir = os.path.dirname(opt.out)
@@ -230,13 +242,13 @@ def main(survey=None, opt=None, args=None):
             trymakedirs(outdir)
         tmpfn = os.path.join(outdir, 'tmp-' + os.path.basename(opt.out))
         fitsio.write(tmpfn, None, header=version_hdr, clobber=True)
-        F.writeto(tmpfn, header=hdr, append=True, columns=columns)
+        F.writeto(tmpfn, units=units, append=True, columns=columns)
         os.rename(tmpfn, opt.out)
         print('Wrote', opt.out)
     else:
         with survey.write_output('forced', camera=opt.camera, expnum=opt.expnum) as out:
             F.writeto(None, fits_object=out.fits, primheader=version_hdr,
-                      header=hdr)
+                      units=units, columns=columns)
             print('Wrote', out.real_fn)
 
     if opt.outlier_mask is not None:
@@ -485,25 +497,28 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     F.objid     = T.objid
 
     F.camera  = np.array([ccd.camera] * len(F))
-    F.expnum  = np.array([im.expnum]  * len(F)).astype(np.int64)
+    F.expnum  = np.array([im.expnum]  * len(F), dtype=np.int64)
     F.ccdname = np.array([im.ccdname] * len(F))
 
     # "Denormalizing"
     F.filter  = np.array([tim.band]               * len(F))
     F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(F))
-    F.exptime = np.array([tim.primhdr['EXPTIME']] * len(F)).astype(np.float32)
-    F.psfsize = np.array([tim.psf_fwhm * tim.imobj.pixscale] * len(F)).astype(np.float32)
+    F.exptime = np.array([tim.primhdr['EXPTIME']] * len(F), dtype=np.float32)
+    F.psfsize = np.array([tim.psf_fwhm * tim.imobj.pixscale] * len(F), dtype=np.float32)
     F.ccd_cuts = np.array([ccd.ccd_cuts] * len(F))
-    F.airmass  = np.array([ccd.airmass ] * len(F))
+    F.airmass  = np.array([ccd.airmass ] * len(F), dtype=np.float32)
     ### --> also add units to the dict below so the FITS headers have units
-    F.sky     = np.array([tim.midsky / tim.zpscale / tim.imobj.pixscale**2] * len(F)).astype(np.float32)
+    F.sky     = np.array([tim.midsky / tim.zpscale / tim.imobj.pixscale**2] * len(F), dtype=np.float32)
     # in the same units as the depth maps -- flux inverse-variance.
-    F.psfdepth = np.array([(1. / (tim.sig1 / tim.psfnorm)**2)] * len(F)).astype(np.float32)
-    F.galdepth = np.array([(1. / (tim.sig1 / tim.galnorm)**2)] * len(F)).astype(np.float32)
-    # F.psfdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.psfnorm) - 9)] * len(F)).astype(np.float32)
-    # F.galdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.galnorm) - 9)] * len(F)).astype(np.float32)
+    F.psfdepth = np.array([(1. / (tim.sig1 / tim.psfnorm)**2)] * len(F), dtype=np.float32)
+    F.galdepth = np.array([(1. / (tim.sig1 / tim.galnorm)**2)] * len(F), dtype=np.float32)
+    F.fwhm     = np.array([tim.psf_fwhm] * len(F), dtype=np.float32)
+    F.skyrms   = np.array([ccd.skyrms]   * len(F), dtype=np.float32)
+    F.ccdzpt   = np.array([ccd.ccdzpt]   * len(F), dtype=np.float32)
+    F.ccdrarms = np.array([ccd.ccdrarms] * len(F), dtype=np.float32)
+    F.ccddecrms= np.array([ccd.ccddecrms]* len(F), dtype=np.float32)
+    F.ccdphrms = np.array([ccd.ccdphrms] * len(F), dtype=np.float32)
 
-    # super units questions here
     if opt.derivs:
         cosdec = np.cos(np.deg2rad(T.dec))
         with np.errstate(divide='ignore', invalid='ignore'):
