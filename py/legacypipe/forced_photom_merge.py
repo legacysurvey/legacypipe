@@ -70,7 +70,7 @@ def merge_forced(survey, brickname, cat, bands='grz'):
         indx = np.empty(len(cat), np.int32)
         indx[:] = -1
         cat.set('nobs_%s' % band, nobs)
-        cat.set('forced_index_%s' % band, indx)
+        cat.set('index_%s' % band, indx)
 
         for i,(r,brick,o) in enumerate(zip(cat.release, cat.brickid, cat.objid)):
             key = (r,brick,o,band)
