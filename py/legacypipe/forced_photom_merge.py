@@ -35,13 +35,6 @@ def merge_forced(survey, brickname, cat, bands='grz', Nmax=0):
         camexp.add(key)
         ffn = survey.find_file('forced', camera=cam, expnum=ccd.expnum)
         print('Forced phot filename:', ffn)
-
-        # DEBUG
-        # if not os.path.exists(ffn):
-        #     cmd = 'rsync -LRarv cori:/global/cscratch1/sd/dstn/dr9-forced/./%s dr9-north' % ffn.replace('dr9-north', '')
-        #     print(cmd)
-        #     os.system(cmd)
-
         F = fits_table(ffn)
         print('Read', len(F), 'forced-phot entries for CCD')
         ikeep = []
@@ -98,6 +91,7 @@ def main():
                         help='Override the $LEGACY_SURVEY_DIR environment variable')
     parser.add_argument('-d', '--outdir', dest='output_dir',
                         help='Set output base directory, default "."')
+    parser.add_argument('--out', help='Output filename -- if not set, defaults to path within --outdir.')
     parser.add_argument('-r', '--run', default=None,
                         help='Set the run type to execute (for images)')
 
@@ -106,7 +100,6 @@ def main():
     parser.add_argument('--catalog-dir-north', help='Set LEGACY_SURVEY_DIR to use to read Northern catalogs')
     parser.add_argument('--catalog-dir-south', help='Set LEGACY_SURVEY_DIR to use to read Southern catalogs')
     parser.add_argument('--catalog-resolve-dec-ngc', type=float, help='Dec at which to switch from Northern to Southern catalogs (NGC only)', default=32.375)
-
     parser.add_argument('-v', '--verbose', dest='verbose', action='count',
                         default=0, help='Make more verbose')
 
@@ -137,7 +130,17 @@ def main():
         print('Read', len(cat), 'sources from', opt.catalog)
     else:
         from astrometry.util.starutil_numpy import radectolb
-        brick = survey.get_brick_by_name(opt.brick)
+        # The "north" and "south" directories often don't have
+        # 'survey-bricks" files of their own -- use the 'survey' one
+        # instead.
+        brick = None
+        for s in [survey, catsurvey]:
+            try:
+                brick = s.get_brick_by_name(opt.brick)
+                break
+            except:
+                pass
+
         l,b = radectolb(brick.ra, brick.dec)
         # NGC and above resolve line? -> north
         if b > 0 and brick.dec >= opt.catalog_resolve_dec_ngc:
@@ -152,85 +155,13 @@ def main():
         print('Read', len(cat), 'sources from', fn)
 
     cat,forced = merge_forced(survey, opt.brick, cat)
-    outfn = 'merged.fits'
-    cat.writeto(outfn)
-    forced.writeto(outfn, append=True)
+    if opt.out:
+        cat.writeto(opt.out)
+        forced.writeto(opt.out, append=True)
+    else:
+        with survey.write_output('forced-brick', brick=opt.brick) as out:
+            cat.writeto(None, fits_object=out.fits)
+            forced.writeto(None, fits_object=out.fits, append=True)
 
 if __name__ == '__main__':
     main()
-
-
-
-'''
-fns = glob('forced/*/*/forced-*.fits')
-F = merge_tables([fits_table(fn) for fn in fns])
-
-dr6 = LegacySurveyData('/project/projectdirs/cosmo/data/legacysurvey/dr6')
-B = dr6.get_bricks_readonly()
-
-I = np.flatnonzero((B.ra1 < F.ra.max()) * (B.ra2 > F.ra.min()) * (B.dec1 < F.dec.max()) * (B.dec2 > F.dec.min()))
-print(len(I), 'bricks')
-T = merge_tables([fits_table(dr6.find_file('tractor', brick=B.brickname[i])) for i in I])
-print(len(T), 'sources')
-T.cut(T.brick_primary)
-print(len(T), 'primary')
-
-# map from F to T index
-imap = dict([((b,o),i) for i,(b,o) in enumerate(zip(T.brickid, T.objid))])
-F.tindex = np.array([imap[(b,o)] for b,o in zip(F.brickid, F.objid)])
-assert(np.all(T.brickid[F.tindex] == F.brickid))
-assert(np.all(T.objid[F.tindex] == F.objid))
-
-fcols = 'apflux apflux_ivar camera expnum ccdname exptime flux flux_ivar fracflux mask mjd rchi2 x y brickid objid'.split()
-
-bands = np.unique(F.filter)
-for band in bands:
-    Fb = F[F.filter == band]
-    print(len(Fb), 'in band', band)
-    c = Counter(zip(Fb.brickid, Fb.objid))
-    NB = c.most_common()[0][1]
-    print('Maximum of', NB, 'exposures per object')
-
-    # we use uint8 below...
-    assert(NB < 256)
-
-    sourcearrays = []
-    sourcearrays2 = []
-    destarrays = []
-    destarrays2 = []
-    for c in fcols:
-        src = Fb.get(c)
-        if len(src.shape) == 2:
-            narray = src.shape[1]
-            dest = np.zeros((len(T), Nb, narray), src.dtype)
-            T.set('forced_%s_%s' % (band, c), dest)
-            sourcearrays2.append(src)
-            destarrays2.append(dest)
-        else:
-            dest = np.zeros((len(T), Nb), src.dtype)
-            T.set('forced_%s_%s' % (band, c), dest)
-            sourcearrays.append(src)
-            destarrays.append(dest)
-    nf = np.zeros(len(T), np.uint8)
-    T.set('forced_%s_n' % band, nf)
-    for i,ti in enumerate(Fb.tindex):
-        k = nf[ti]
-        for src,dest in zip(sourcearrays, destarrays):
-            dest[ti,k] = src[i]
-        for src,dest in zip(sourcearrays2, destarrays2):
-            dest[ti,k,:] = src[i,:]
-        nf[ti] += 1
-
-for band in bands:
-    flux = T.get('forced_%s_flux' % band)
-    ivar = T.get('forced_%s_flux_ivar' % band)
-    miv = np.sum(ivar, axis=1)
-    T.set('forced_%s_mean_flux' % band, np.sum(flux * ivar, axis=1) / np.maximum(1e-16, miv))
-    T.set('forced_%s_mean_flux_ivar' % band, miv)
-
-#K = np.flatnonzero(np.logical_or(T.forced_mean_u_flux_ivar > 0, T.forced_mean_r_flux_ivar > 0))
-#T[K].writeto('forced/forced-cfis-deep2f2.fits')
-
-T.writeto('forced-merged.fits')
-
-'''
