@@ -22,11 +22,11 @@ logfile=$logdir/$expnum.log
 
 ncores=32
 # 128 GB / Cori Haswell node = 134217728 kbytes
-#maxmem=134217728
-#let usemem=${maxmem}*${ncores}/32
+maxmem=134217728
+let usemem=${maxmem}*${ncores}/32
+ulimit -Sv $usemem
 # Can detect Cori KNL node (96 GB) via:
 # grep -q "Xeon Phi" /proc/cpuinfo && echo Yes
-#ulimit -Sv $usemem
 
 echo "Logging to $logfile"
 
@@ -35,6 +35,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/forced_photom.py \
        --catalog-dir-north $DIR/north \
        --catalog-dir-south $DIR/south \
        --catalog-resolve-dec-ngc 32.375 \
+       --skip \
        --skip-calibs \
        --apphot \
        --derivs \

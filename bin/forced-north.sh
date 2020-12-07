@@ -35,6 +35,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/forced_photom.py \
        --catalog-dir-north $DIR/north \
        --catalog-dir-south $DIR/south \
        --catalog-resolve-dec-ngc 32.375 \
+       --skip \
        --skip-calibs \
        --apphot \
        --derivs \
