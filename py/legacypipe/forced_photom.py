@@ -106,9 +106,15 @@ def main(survey=None, opt=None, args=None):
         opt = parser.parse_args(args)
 
     t0 = Time()
-    if opt.skip and os.path.exists(opt.out):
-        print('Ouput file exists:', opt.out)
-        return 0
+    if opt.skip:
+        if opt.out is not None:
+            outfn = opt.out
+        else:
+            outfn = survey.find_file('forced', output=True,
+                                     camera=opt.camera, expnum=opt.expnum)
+        if os.path.exists(outfn):
+            print('Ouput file exists:', outfn)
+            return 0
 
     if opt.derivs and opt.agn:
         print('Sorry, can\'t do --derivs AND --agn')
@@ -228,12 +234,6 @@ def main(survey=None, opt=None, args=None):
              'apflux', 'apflux_ivar', 'x', 'y', 'dqmask', 'dra', 'ddec',
              'dra_ivar', 'ddec_ivar']
     columns = [c for c in order if c in columns]
-
-    # Set units headers (must happen after column ordering is set!)
-    #hdr = fitsio.FITSHDR()
-    #for i,col in enumerate(columns):
-    #    if col in units:
-    #        hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
     units = [unitmap.get(c,'') for c in columns]
 
     if opt.out is not None:
@@ -252,8 +252,6 @@ def main(survey=None, opt=None, args=None):
             print('Wrote', out.real_fn)
 
     if opt.outlier_mask is not None:
-        # fitsio doesn't support binary images, convert to uint8
-        outlier_masks = [m.astype(np.uint8) for m in outlier_masks]
         # Add outlier bit meanings to the primary header
         version_hdr.add_record(dict(name='COMMENT', value='Outlier mask bit meanings'))
         version_hdr.add_record(dict(name='OUTL_POS', value=1,
