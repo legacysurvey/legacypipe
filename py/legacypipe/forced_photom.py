@@ -106,6 +106,9 @@ def main(survey=None, opt=None, args=None):
         opt = parser.parse_args(args)
 
     t0 = Time()
+    if survey is None:
+        survey = LegacySurveyData(survey_dir=opt.survey_dir,
+                                  output_dir=opt.out_dir)
     if opt.skip:
         if opt.out is not None:
             outfn = opt.out
@@ -140,10 +143,6 @@ def main(survey=None, opt=None, args=None):
     if opt.plots is not None:
         from astrometry.util.plotutils import PlotSequence
         ps = PlotSequence(opt.plots)
-
-    if survey is None:
-        survey = LegacySurveyData(survey_dir=opt.survey_dir,
-                                  output_dir=opt.out_dir)
 
     # Read metadata from survey-ccds.fits table
     ccds = survey.find_ccds(camera=opt.camera, expnum=opt.expnum,
