@@ -425,15 +425,249 @@ def stage_m33_d(pixscale=None, targetwcs=None,
     #T.brickid = np.zeros(len(T), np.int32) + brickid
     T.brickname = np.array([brickname] * len(T))
 
+    #
+    T.bx0 = T.bx
+    T.by0 = T.by
+    
     T.blob = np.empty(len(T), np.int32)
     T.blob[:] = -1
     T.blob[T.in_bounds] = fakeblobmap[T.iby[T.in_bounds], T.ibx[T.in_bounds]]
 
+    # Fix non-finite inverr in z-band...?!
+    for tim in tims:
+        I,J = np.nonzero(np.logical_not(np.isfinite(tim.getInvError())))
+        print('Zeroing out', len(I), 'bad inverr pixels in', tim.band, 'band')
+        tim.inverr[I,J] = 0
+    
     return dict(T=T, cat=cat,
-                origblobmap=blobmap, blobmap=fakeblobmap,
+                origblobmap=blobmap, blobmap=fakeblobmap, tims=tims
     )
 
+
+
+def stage_m33_e(pixscale=None, targetwcs=None,
+               W=None,H=None,
+               bands=None, ps=None, tims=None,
+               plots=False, plots2=False,
+               brickname=None,
+                brickid=None,
+               version_header=None,
+               mp=None, nsigma=None,
+               saddle_fraction=None,
+               saddle_min=None,
+               survey=None, brick=None,
+               refcat=None, refstars=None,
+               T_clusters=None,
+               ccds=None,
+               record_event=None,
+               large_galaxies=True,
+                gaia_stars=True,
+                blobmap=None, blobslices=None,
+                T=None,
+
+                galsrc=None,
+                galmap=None,
+                refgalslc=None,
+                subtims=None,
+                Im33=None,
+                Iothers=None,
+                Istars=None,
+                igal=None,
+                
+                **kwargs):
+    print('galmap:', galmap)
+    print('refstars:', len(refstars))
+    print('Istars:', len(Istars))
+    print(len(Istars), 'stars inside galaxy ellipse')
+    print('Iothers:', len(Iothers))
+    print('Im33:', len(Im33))
+    print('T:')
+    T.about()
+    print('Fit M33:', galsrc)
+
+    for src in [galsrc]+[refcat[i] for i in Iothers]:
+        src.shape = src.shape.toEllipseE()
     
+    cat = Catalog(galsrc, *[refcat[i] for i in np.append(Iothers, Istars)])
+    # (we already did this in m33_d, and we've added things to T in stage_coadds)
+    #T = refstars[np.hstack((np.array([igal]), Iothers, Istars))]
+
+    refgalslc = find_objects(galmap.astype(int))[0]
+    print('ref gal slice:', refgalslc)
+    slc = refgalslc
+
+    ## oops, we dropped subtims at the end of the last stage, so gotta regenerate 'em
+    ## for invvars, etc.
+    subtims = []
+    for band,tim in zip(bands, tims):
+        # Make a copy of the image because we're going to subtract out models below!
+        #simg = tim.data[slc].copy()
+        simg = tim.data[slc]
+        sie = tim.inverr[slc].copy()
+        # Zero out inverr outside the galaxy ellipse!!
+        sie[np.logical_not(galmap[slc])] = 0.
+        subdq = tim.dq[slc]
+        sy,sx = slc
+        y0,y1 = sy.start,sy.stop
+        x0,x1 = sx.start,sx.stop
+        subwcs = tim.subwcs.get_subimage(x0, y0, x1-x0, y1-y0)
+        twcs = LegacySurveyWcs(subwcs, tim.wcs.tai)
+        subtim = Image(simg, inverr=sie, psf=tim.psf, wcs=twcs, photocal=tim.photocal)
+        subtim.subwcs = subwcs
+        subtim.psf_sigma = tim.psf_sigma
+        subtim.sig1 = tim.sig1
+        subtim.imobj = tim.imobj
+        subtim.time = tim.time
+        subtim.dq = subdq
+        subtim.dq_saturation_bits = tim.dq_saturation_bits
+        subtim.band = tim.band
+        subtims.append(subtim)
+
+    tr = Tractor(subtims, cat) #, optimizer=ConstrainedDenseOptimizer())
+    tr.freezeParam('images')
+    cat.thawAllRecursive()
+    cat.freezeAllParams()
+    invvars = []
+    for isub in range(len(cat)):
+        cat.thawParam(isub)
+        src = cat[isub]
+        if isub < 10 or isub%1000 == 0:
+            print('Computing invvars for', src)
+        # Compute inverse-variances
+        allderivs = tr.getDerivs()
+        ivars = _compute_invvars(allderivs)
+        invvars.append(ivars)
+        assert(len(ivars) == src.numberOfParams())
+        cat.freezeParam(isub)
+    cat.thawAllRecursive()
+    invvars = np.hstack(invvars)
+
+    #T = prepare_fits_catalog(cat, invvars, T, bands) #, save_invvars=False)
+
+    T.brickid = np.zeros(len(T), np.int32) + brickid
+    #T.brickname = np.array([brickname] * len(T))
+    T.dchisq = np.zeros((len(T),5), np.float32)
+    cols = T.get_columns()
+    # N x 3 floats
+    for c in ['rchisq', 'fracflux', 'fracmasked', 'fracin',
+              #'psfsize', 'psfdepth', 'galdepth',
+              #'fiberflux', 'fibertotflux',
+    ]:
+        if not c in cols:
+            print('Adding zero column', c)
+            T.set(c, np.zeros((len(T),3), np.float32))
+    # N x 3 ints
+    # for c in ['nobs', 'anymask', 'allmask',]:
+    #     if not c in cols:
+    #         print('Adding zero column', c)
+    #         T.set(c, np.zeros((len(T),3), np.int16))
+    # N floats
+    # for c in ['mjd_min', 'mjd_max', 'nea_g', 'nea_r', 'nea_z',
+    #           'blob_nea_g', 'blob_nea_r', 'blob_nea_z',]:
+    #     if not c in cols:
+    #         print('Adding zero column', c)
+    #         T.set(c, np.zeros(len(T), np.float32))
+
+    # N bools
+    for c in ['force_keep_source', 'dup', 'forced_pointsource',
+              'fit_background', 'hit_r_limit', 'hit_ser_limit', 'iterative']:
+        if not c in cols:
+            T.set(c, np.zeros(len(T), bool))
+
+    #_,bx,by = targetwcs.radec2pixelxy(T.ra, T.dec)
+    #T.bx = (bx - 1.).astype(np.float32)
+    #T.by = (by - 1.).astype(np.float32)
+    #T.ibx = np.round(T.bx).astype(np.int32)
+    #T.iby = np.round(T.by).astype(np.int32)
+    #T.in_bounds = ((T.ibx >= 0) * (T.iby >= 0) * (T.ibx < W) * (T.iby < H))
+    T.objid = np.arange(len(T)).astype(np.int32)
+    #T.bx0 = T.bx
+    #T.by0 = T.by
+    #T.forced_pointsource = np.zeros(len(T), bool)
+    #T.fit_background = np.zeros(len(T), bool)
+    #T.hit_r_limit = np.zeros(len(T), bool)
+    #T.hit_ser_limit = np.zeros(len(T), bool)
+    #T.iterative = np.zeros(len(T), bool)
+
+    # Copy ivars from Gaia
+    T.ra_ivar = np.zeros(len(T), np.float32)
+    T.dec_ivar = np.zeros(len(T), np.float32)
+    # T: M33, Iothers, Istars
+    T.ra_ivar[1+len(Iothers):] = refstars.ra_ivar[Istars]
+    T.dec_ivar[1+len(Iothers):] = refstars.dec_ivar[Istars]
+
+    # otherwise fluxes and flux_ivars get zeroed out!
+    T.fracin = np.ones((len(T),len(bands)), np.float32)
+            
+    return dict(invvars=invvars, T=T)
+
+
+def stage_m33_f(pixscale=None, targetwcs=None,
+               W=None,H=None,
+               bands=None, ps=None, tims=None,
+               plots=False, plots2=False,
+               brickname=None,
+                brickid=None,
+               version_header=None,
+               mp=None, nsigma=None,
+               saddle_fraction=None,
+               saddle_min=None,
+               survey=None, brick=None,
+               refcat=None, refstars=None,
+               T_clusters=None,
+               ccds=None,
+               record_event=None,
+               large_galaxies=True,
+                gaia_stars=True,
+                blobmap=None, blobslices=None,
+                T=None,
+
+                galsrc=None,
+                galmap=None,
+                refgalslc=None,
+                subtims=None,
+                Im33=None,
+                Iothers=None,
+                Istars=None,
+                igal=None,
+                
+                **kwargs):
+    T.about()
+    for t in T:
+        print(t)
+        break
+    T.force_keep_source = np.zeros(len(T), bool)
+    T.dup = np.zeros(len(T), bool)
+    _,bx,by = targetwcs.radec2pixelxy(T.ra, T.dec)
+    T.bx = (bx - 1.).astype(np.float32)
+    T.by = (by - 1.).astype(np.float32)
+    T.ibx = np.round(T.bx).astype(np.int32)
+    T.iby = np.round(T.by).astype(np.int32)
+    T.in_bounds = ((T.ibx >= 0) * (T.iby >= 0) * (T.ibx < W) * (T.iby < H))
+    T.objid = np.arange(len(T)).astype(np.int32)
+    T.bx0 = T.bx
+    T.by0 = T.by
+    T.forced_pointsource = np.zeros(len(T), bool)
+    T.fit_background = np.zeros(len(T), bool)
+    T.hit_r_limit = np.zeros(len(T), bool)
+    T.hit_ser_limit = np.zeros(len(T), bool)
+    T.iterative = np.zeros(len(T), bool)
+
+    T.ra_ivar = np.zeros(len(T), np.float32)
+    T.dec_ivar = np.zeros(len(T), np.float32)
+    # T: M33, Iothers, Istars
+    T.ra_ivar[1+len(Iothers):] = refstars.ra_ivar[Istars]
+    T.dec_ivar[1+len(Iothers):] = refstars.dec_ivar[Istars]
+
+    # otherwise fluxes and flux_ivars get zeroed out!
+    T.fracin = np.ones((len(T),len(bands)), np.float32)
+    
+    # T.blob = np.empty(len(T), np.int32)
+    # T.blob[:] = -1
+    # T.blob[T.in_bounds] = blobmap[T.iby[T.in_bounds], T.ibx[T.in_bounds]]
+    return dict(T=T)
+
+
 class Duck(object):
     pass
 
@@ -534,7 +768,7 @@ def stage_m33_X_d(pixscale=None, targetwcs=None,
     return dict(tims=subtims, targetwcs=subwcs, H=H, W=W)
 
 
-def stage_m33_e(pixscale=None, targetwcs=None,
+def stage_m33_X_e(pixscale=None, targetwcs=None,
                W=None,H=None,
                bands=None, ps=None, tims=None,
                plots=False, plots2=False,
@@ -633,7 +867,7 @@ def stage_m33_e(pixscale=None, targetwcs=None,
         blobmap=blobs, blobslices=blobslices)
 
 
-def stage_m33_f(pixscale=None, targetwcs=None,
+def stage_m33_X_f(pixscale=None, targetwcs=None,
                W=None,H=None,
                bands=None, ps=None, tims=None,
                plots=False, plots2=False,
@@ -971,9 +1205,10 @@ def main():
             'm33_c': 'm33_b',
             'm33_d': 'm33_c',
             'coadds': 'm33_d',
-            # 'm33_b': 'fit_on_coadds',
+            'm33_e': 'coadds',
+            'writecat': 'm33_e',
+            #'m33_f': 'm33_e',
             # 'm33_e': 'm33_d',
-            # 'm33_f': 'm33_e',
             # 'm33_g': 'm33_f',
             # 'srcs': 'm33_d',
         },
@@ -981,8 +1216,8 @@ def main():
                         'stage_m33_b':stage_m33_b,
                         'stage_m33_c':stage_m33_c,
                         'stage_m33_d':stage_m33_d,
-                        # 'stage_m33_e':stage_m33_e,
-                        # 'stage_m33_f':stage_m33_f,
+                        'stage_m33_e':stage_m33_e,
+                        'stage_m33_f':stage_m33_f,
                         # 'stage_m33_g':stage_m33_g,
         },
     )
@@ -991,6 +1226,20 @@ def main():
     return 0
 
 if __name__ == '__main__':
+    # from astrometry.util.file import unpickle_from_file
+    # for fn in [
+    #         '/global/cscratch1/sd/dstn/NGC0598_GROUP-3/NGC0598_GROUP-largegalaxy-fit_on_coadds.p',
+    #         '/global/cscratch1/sd/dstn/NGC0598_GROUP-3/NGC0598_GROUP-largegalaxy-m33_a.p',
+    #         '/global/cscratch1/sd/dstn/NGC0598_GROUP-3/NGC0598_GROUP-largegalaxy-m33_b.p',
+    #         '/global/cscratch1/sd/dstn/NGC0598_GROUP-3/NGC0598_GROUP-largegalaxy-m33_c.p',
+    #         '/global/cscratch1/sd/dstn/NGC0598_GROUP-3/NGC0598_GROUP-largegalaxy-m33_d.p',
+    #         '/global/cscratch1/sd/dstn/NGC0598_GROUP-3/NGC0598_GROUP-largegalaxy-coadds.p',
+    #         ]:
+    #     X = unpickle_from_file(fn)
+    #     print()
+    #     print(fn)
+    #     for k in X.keys():
+    #         print('  ', k, ('= None' if X[k] is None else ''))
     import sys
     sys.exit(main())
 
