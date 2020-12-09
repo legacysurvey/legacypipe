@@ -295,12 +295,17 @@ def bounce_one_ccd(X):
     # for multiprocessing
     return run_one_ccd(*X)
 
-def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_dec=None,
+def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None, resolve_dec=None,
                        margin=20):
     TT = []
     surveys = [(catsurvey_north, True)]
     if catsurvey_south is not None:
         surveys.append((catsurvey_south, False))
+
+    columns = ['ra', 'dec', 'brick_primary', 'type', 'release',
+               'brickid', 'brickname', 'objid', 'flux_r',
+               'sersic', 'shape_r', 'shape_e1', 'shape_e2',
+               'ref_epoch', 'pmra', 'pmdec', 'parallax', 'ref_cat', 'ref_id',]
 
     for catsurvey,north in surveys:
         bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
@@ -324,12 +329,7 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
                 print('WARNING: catalog', fn, 'does not exist.  Skipping!')
                 continue
             print('Reading', fn)
-            T = fits_table(fn, columns=[
-                'ra', 'dec', 'brick_primary', 'type', 'release',
-                'brickid', 'brickname', 'objid', 'flux_r',
-                'sersic', 'shape_r', 'shape_e1', 'shape_e2',
-                'ref_epoch', 'pmra', 'pmdec', 'parallax'
-                ])
+            T = fits_table(fn, columns=columns)
             if resolve_dec is not None:
                 if north:
                     T.cut(T.dec >= resolve_dec)
@@ -359,33 +359,54 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
     del TT
     print('Total of', len(T), 'catalog sources')
 
+    SGA = find_missing_sga(T, chipwcs, survey, surveys, columns)
+    if SGA is not None:
+        ## Add 'em in!
+        T = merge_tables([T, SGA], columns='fillzero')
+    return T
+
+def find_missing_sga(T, chipwcs, survey, surveys, columns):
     # Look up SGA large galaxies touching this chip.
     # The ones inside this chip(+margin) will already exist in the catalog;
     # we'll find the ones we're missing and read those extra brick catalogs.
     from legacypipe.reference import read_large_galaxies
-    sga = read_large_galaxies(catsurvey, chipwcs, bands=None)
-    print('Read', len(sga), 'SGA galaxies touching chip.')
+
+    sga = read_large_galaxies(survey, chipwcs, bands=None)
+    if sga is None:
+        print('No SGA galaxies found')
+        return None
+    # keep_radius to pix
+    keeprad = np.ceil(sga.keep_radius * 3600. / chipwcs.pixel_scale()).astype(int)
+    _,xx,yy = chipwcs.radec2pixelxy(sga.ra, sga.dec)
+    H,W = chipwcs.shape
+    # cut ones whose position + radius are outside the brick bounds.
+    sga.cut((xx > -keeprad) * (xx < W+keeprad) *
+            (yy > -keeprad) * (yy < H+keeprad))
+    #print('Read', len(sga), 'SGA galaxies touching the chip.')
+    if len(sga) == 0:
+        return None
     Tsga = T[T.ref_cat == 'L3']
-    print(np.len(Tsga), 'already exist in catalog')
-    # sga_ids = set(sga.ref_id)
-    # t_ids = set(Tsga.ref_id)
-    # missing_ids = sga_ids - t_ids
-    # print(len(missing_ids), 'need to be found')
+    #print(len(Tsga), 'SGA entries already exist in catalog')
     Isga = np.array([i for i,sga_id in enumerate(sga.ref_id) if not sga_id in set(Tsga.ref_id)])
-    print(len(Isga), 'need to be found')
     assert(len(Isga) + len(Tsga) == len(sga))
+    if len(Isga) == 0:
+        return None
+    print(len(Isga), 'SGA entries need to be found')
     sga.cut(Isga)
+    #print('Finding bricks to read...')
     sgabricks = []
     for ra,dec in zip(sga.ra, sga.dec):
         # MAGIC 0.2 ~ brick radius
         bricks = survey.get_bricks_near(ra, dec, 0.2)
-        brick = bricks[(ra  >= bricks.ra1 ) * (ra  < bricks.ra2) *
-                       (dec >= bricks.dec1) * (dec < bricks.dec2)]
-        sgabricks.append(brick)
+        bricks = bricks[(ra  >= bricks.ra1 ) * (ra  < bricks.ra2) *
+                        (dec >= bricks.dec1) * (dec < bricks.dec2)]
+        if len(bricks):
+            sgabricks.append(bricks)
     sgabricks = merge_tables(sgabricks)
     _,I = np.unique(sgabricks.brickname, return_index=True)
     sgabricks.cut(I)
     print('Need to read', len(sgabricks), 'bricks to pick up SGA sources')
+    #print('Reading bricks...')
     SGA = []
     for brick in sgabricks.brickname:
         # For picking up these SGA bricks, resolve doesn't matter (they're fixed
@@ -393,24 +414,20 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
         for catsurvey,north in surveys:
             fn = catsurvey.find_file('tractor', brick=brick)
             if os.path.exists(fn):
-                T = fits_table(fn, columns=['ref_cat', 'ref_id'])
-                I = np.flatnonzero(T.ref_cat == 'L3')
-                print('Read', len(I), 'SGA entries from', brick)
-                SGA.append(fits_table(fn, rows=I))
+                t = fits_table(fn, columns=['ref_cat', 'ref_id'])
+                I = np.flatnonzero(t.ref_cat == 'L3')
+                #print('Read', len(I), 'SGA entries from', brick)
+                SGA.append(fits_table(fn, columns=columns, rows=I))
                 break
-    SGA = merge_table(SGA)
-    print('Total of', len(SGA), 'sources')
+    SGA = merge_tables(SGA)
+    #print('Total of', len(SGA), 'sources')
     I = np.array([i for i,ref_id in enumerate(SGA.ref_id) if ref_id in set(sga.ref_id)])
     SGA.cut(I)
-    print('Cut to', len(SGA), 'desired REF_IDs')
-    print('Want:', sga.ref_id)
-    print('Got:', SGA.ref_id)
+    print('Got', len(SGA), 'desired SGA sources')
+    #print('Want:', sga.ref_id)
+    #print('Got:', SGA.ref_id)
     assert(len(sga) == len(SGA))
-
-    ## Add 'em in!
-    T = merge_tables([T, SGA])
-
-    return T
+    return SGA
 
 def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                 ccd, opt, zoomslice, ps):
@@ -487,7 +504,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         T = fits_table(opt.catalog)
     else:
         chipwcs = tim.subwcs
-        T = get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=catsurvey_south,
+        T = get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=catsurvey_south,
                                resolve_dec=resolve_dec)
         if T is None:
             print('No sources to photometer.')
