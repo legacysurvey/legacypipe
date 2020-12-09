@@ -371,7 +371,7 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     # we'll find the ones we're missing and read those extra brick catalogs.
     from legacypipe.reference import read_large_galaxies
 
-    sga = read_large_galaxies(survey, chipwcs, bands=None)
+    sga = read_large_galaxies(survey, chipwcs, bands=None, extra_columns=['brickname'])
     if sga is None:
         print('No SGA galaxies found')
         return None
@@ -395,13 +395,21 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     sga.cut(Isga)
     #print('Finding bricks to read...')
     sgabricks = []
-    for ra,dec in zip(sga.ra, sga.dec):
-        # MAGIC 0.2 ~ brick radius
-        bricks = survey.get_bricks_near(ra, dec, 0.2)
-        bricks = bricks[(ra  >= bricks.ra1 ) * (ra  < bricks.ra2) *
-                        (dec >= bricks.dec1) * (dec < bricks.dec2)]
-        if len(bricks):
+
+    todo = []
+    for ra,dec,brick in zip(sga.ra, sga.dec, sga.brickname):
+        bricks = survey.get_bricks_by_name(brick)
+        brick = bricks[0]
+        # The SGA catalog has a "brickname", but it unfortunately is not always exactly correct
+        if ra >= brick.ra1 and ra < brick.ra2 and dec >= brick.dec1 and dec < brick.dec2:
             sgabricks.append(bricks)
+        else:
+            # MAGIC 0.2 ~ brick radius
+            bricks = survey.get_bricks_near(ra, dec, 0.2)
+            bricks = bricks[(ra  >= bricks.ra1 ) * (ra  < bricks.ra2) *
+                            (dec >= bricks.dec1) * (dec < bricks.dec2)]
+            if len(bricks):
+                sgabricks.append(bricks)
     sgabricks = merge_tables(sgabricks)
     _,I = np.unique(sgabricks.brickname, return_index=True)
     sgabricks.cut(I)

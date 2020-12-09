@@ -1276,6 +1276,16 @@ class LegacySurveyData(object):
             return None
         return B[I[0]]
 
+    def get_bricks_by_name(self, brickname):
+        '''
+        Returns a brick (as a table with one row) by name (string).
+        '''
+        B = self.get_bricks_readonly()
+        I, = np.nonzero(np.array([n == brickname for n in B.brickname]))
+        if len(I) == 0:
+            return None
+        return B[I]
+
     def get_bricks_near(self, ra, dec, radius):
         '''
         Returns a set of bricks near the given RA,Dec and radius (all in degrees).

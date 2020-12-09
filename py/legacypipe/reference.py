@@ -438,6 +438,7 @@ def get_large_galaxy_version(fn):
     return 'LG', preburn
 
 def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
+                        extra_columns=None,
                         max_radius=2.):
     # Note, max_radius must include the brick radius!
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
@@ -498,6 +499,8 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
     if clean_columns:
         keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
                         'sources', 'islargegalaxy', 'freezeparams', 'keep_radius']
+        if extra_columns is not None:
+            keep_columns.extend(extra_columns)
         for c in galaxies.get_columns():
             if not c in keep_columns:
                 galaxies.delete_column(c)
