@@ -22,6 +22,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                           gaia_margin=None,
                           galaxy_margin=None):
     # If bands = None, does not create sources.
+    from astrometry.libkd.spherematch import match_radec
 
     H,W = targetwcs.shape
     H,W = int(H),int(W)
@@ -50,7 +51,6 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     # Add Gaia stars
     gaia = None
     if gaia_stars:
-        from astrometry.libkd.spherematch import match_radec
         gaia = read_gaia(marginwcs, bands)
     if gaia is not None:
         # Handle sources that appear in both Gaia and Tycho-2 by

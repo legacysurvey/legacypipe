@@ -91,6 +91,8 @@ def get_parser():
 
     parser.add_argument('--outlier-mask', nargs='?', const='default',
                         help='Write the reassembled outlier mask?  Optionally include output filename; default use --out-dir')
+    parser.add_argument('-v', '--verbose', dest='verbose', action='count',
+                        default=0, help='Make more verbose')
     return parser
 
 def main(survey=None, opt=None, args=None):
@@ -104,6 +106,15 @@ def main(survey=None, opt=None, args=None):
     if opt is None:
         parser = get_parser()
         opt = parser.parse_args(args)
+
+    import logging
+    if opt.verbose == 0:
+        lvl = logging.INFO
+    else:
+        lvl = logging.DEBUG
+    logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+    # tractor logging is *soooo* chatty
+    logging.getLogger('tractor.engine').setLevel(lvl + 10)
 
     t0 = Time()
     if survey is None:
@@ -379,7 +390,7 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     keeprad = np.ceil(sga.keep_radius * 3600. / chipwcs.pixel_scale()).astype(int)
     _,xx,yy = chipwcs.radec2pixelxy(sga.ra, sga.dec)
     H,W = chipwcs.shape
-    # cut ones whose position + radius are outside the brick bounds.
+    # cut to those touching the chip
     sga.cut((xx > -keeprad) * (xx < W+keeprad) *
             (yy > -keeprad) * (yy < H+keeprad))
     #print('Read', len(sga), 'SGA galaxies touching the chip.')
@@ -453,11 +464,33 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                                hybridPsf=opt.hybrid_psf,
                                normalizePsf=opt.normalize_psf,
                                old_calibs_ok=True)
-    print('Got tim:', tim, 'x0,y0', tim.x0, tim.y0)
+    print('Got tim:', tim)#, 'x0,y0', tim.x0, tim.y0)
+    chipwcs = tim.subwcs
+    H,W = tim.shape
 
     tnow = Time()
     print('Read image:', tnow-tlast)
     tlast = tnow
+
+    if ccd.camera == 'decam':
+        # Halo subtraction
+        from legacypipe.halos import subtract_one
+        from legacypipe.reference import mask_radius_for_mag, read_gaia
+        ref_margin = mask_radius_for_mag(0.)
+        mpix = int(np.ceil(ref_margin * 3600. / chipwcs.pixel_scale()))
+        marginwcs = chipwcs.get_subimage(-mpix, -mpix, W+2*mpix, H+2*mpix)
+        gaia = read_gaia(marginwcs, None)
+        keeprad = np.ceil(gaia.keep_radius * 3600. / chipwcs.pixel_scale()).astype(int)
+        _,xx,yy = chipwcs.radec2pixelxy(gaia.ra, gaia.dec)
+        # cut to those touching the chip
+        gaia.cut((xx > -keeprad) * (xx < W+keeprad) *
+                 (yy > -keeprad) * (yy < H+keeprad))
+        Igaia, = np.nonzero(gaia.isgaia * gaia.pointsource)
+        halostars = gaia[Igaia]
+        print('Got', len(gaia), 'Gaia stars,', len(halostars), 'for halo subtraction')
+        moffat = True
+        halos = subtract_one((tim, halostars, moffat))
+        tim.data -= halos
 
     # The "north" and "south" directories often don't have
     # 'survey-bricks" files of their own -- use the 'survey' one
@@ -485,7 +518,6 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     catsurvey = catsurvey_north
     if not north_ccd and catsurvey_south is not None:
         catsurvey = catsurvey_south
-    chipwcs = tim.subwcs
     bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
     for b in bricks:
         print('Reading outlier mask for brick', b.brickname)
@@ -495,7 +527,6 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
             print('WARNING: failed to read outliers mask file for brick', b.brickname)
 
     if opt.outlier_mask is not None:
-        H,W = tim.shape
         outlier_mask = np.zeros((ccd.height, ccd.width), np.uint8)
         outlier_mask[tim.y0:tim.y0+H, tim.x0:tim.x0+W] = posneg_mask
         del posneg_mask
