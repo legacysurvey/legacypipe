@@ -608,8 +608,7 @@ def bricks_touching_wcs(targetwcs, survey=None, B=None, margin=20):
     ra,dec = targetwcs.radec_center()
     radius = targetwcs.radius()
 
-    # MAGIC 0.4 degree search radius =
-    # DECam hypot(1024,2048)*0.27/3600 + Brick hypot(0.25, 0.25) ~= 0.35 + margin
+    # MAGIC 0.25 brick size
     I,_,_ = match_radec(B.ra, B.dec, ra, dec,
                         radius + np.hypot(0.25,0.25)/2. + 0.05)
     debug(len(I), 'bricks nearby')

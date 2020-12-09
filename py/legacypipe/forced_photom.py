@@ -358,6 +358,58 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
     T._header = TT[0]._header
     del TT
     print('Total of', len(T), 'catalog sources')
+
+    # Look up SGA large galaxies touching this chip.
+    # The ones inside this chip(+margin) will already exist in the catalog;
+    # we'll find the ones we're missing and read those extra brick catalogs.
+    from legacypipe.reference import read_large_galaxies
+    sga = read_large_galaxies(catsurvey, chipwcs, bands=None)
+    print('Read', len(sga), 'SGA galaxies touching chip.')
+    Tsga = T[T.ref_cat == 'L3']
+    print(np.len(Tsga), 'already exist in catalog')
+    # sga_ids = set(sga.ref_id)
+    # t_ids = set(Tsga.ref_id)
+    # missing_ids = sga_ids - t_ids
+    # print(len(missing_ids), 'need to be found')
+    Isga = np.array([i for i,sga_id in enumerate(sga.ref_id) if not sga_id in set(Tsga.ref_id)])
+    print(len(Isga), 'need to be found')
+    assert(len(Isga) + len(Tsga) == len(sga))
+    sga.cut(Isga)
+    sgabricks = []
+    for ra,dec in zip(sga.ra, sga.dec):
+        # MAGIC 0.2 ~ brick radius
+        bricks = survey.get_bricks_near(ra, dec, 0.2)
+        brick = bricks[(ra  >= bricks.ra1 ) * (ra  < bricks.ra2) *
+                       (dec >= bricks.dec1) * (dec < bricks.dec2)]
+        sgabricks.append(brick)
+    sgabricks = merge_tables(sgabricks)
+    _,I = np.unique(sgabricks.brickname, return_index=True)
+    sgabricks.cut(I)
+    print('Need to read', len(sgabricks), 'bricks to pick up SGA sources')
+    SGA = []
+    for brick in sgabricks.brickname:
+        # For picking up these SGA bricks, resolve doesn't matter (they're fixed
+        # in both).
+        for catsurvey,north in surveys:
+            fn = catsurvey.find_file('tractor', brick=brick)
+            if os.path.exists(fn):
+                T = fits_table(fn, columns=['ref_cat', 'ref_id'])
+                I = np.flatnonzero(T.ref_cat == 'L3')
+                print('Read', len(I), 'SGA entries from', brick)
+                SGA.append(fits_table(fn, rows=I))
+                break
+    SGA = merge_table(SGA)
+    print('Total of', len(SGA), 'sources')
+    I = np.array([i for i,ref_id in enumerate(SGA.ref_id) if ref_id in set(sga.ref_id)])
+    SGA.cut(I)
+    print('Cut to', len(SGA), 'desired REF_IDs')
+    print('Want:', sga.ref_id)
+    print('Got:', SGA.ref_id)
+    assert(len(sga) == len(SGA))
+
+    ## Add 'em in!
+    T = merge_tables([T, SGA])
+
     return T
 
 def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
