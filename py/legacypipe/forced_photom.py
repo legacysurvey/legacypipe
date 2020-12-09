@@ -351,16 +351,15 @@ def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None, r
                     print('Cut to', len(T), 'south of the resolve line')
             _,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
             W,H = chipwcs.get_width(), chipwcs.get_height()
-            I, = np.nonzero((xx >= -margin) * (xx <= (W+margin)) *
-                            (yy >= -margin) * (yy <= (H+margin)))
-            T.cut(I)
-            print('Cut to', len(T), 'sources within image + margin')
+            # Cut to sources that are inside the image+margin
+            T.cut((xx >= -margin) * (xx <= (W+margin)) *
+                  (yy >= -margin) * (yy <= (H+margin)))
             T.cut(T.brick_primary)
-            print('Cut to', len(T), 'on brick_primary')
+            #print('Cut to', len(T), 'on brick_primary')
             # drop DUP sources
             I, = np.nonzero([t.strip() != 'DUP' for t in T.type])
             T.cut(I)
-            print('Cut to', len(T), 'after removing DUP')
+            #print('Cut to', len(T), 'after removing DUP')
             if len(T):
                 TT.append(T)
     if len(TT) == 0:
@@ -368,12 +367,12 @@ def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None, r
     T = merge_tables(TT, columns='fillzero')
     T._header = TT[0]._header
     del TT
-    print('Total of', len(T), 'catalog sources')
 
     SGA = find_missing_sga(T, chipwcs, survey, surveys, columns)
     if SGA is not None:
         ## Add 'em in!
         T = merge_tables([T, SGA], columns='fillzero')
+    print('Total of', len(T), 'catalog sources')
     return T
 
 def find_missing_sga(T, chipwcs, survey, surveys, columns):
@@ -381,10 +380,14 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     # The ones inside this chip(+margin) will already exist in the catalog;
     # we'll find the ones we're missing and read those extra brick catalogs.
     from legacypipe.reference import read_large_galaxies
-
+    # Find all the SGA sources we need
     sga = read_large_galaxies(survey, chipwcs, bands=None, extra_columns=['brickname'])
     if sga is None:
         print('No SGA galaxies found')
+        return None
+    sga.cut(sga.islargegalaxy * sga.freezeparams)
+    if len(sga) == 0:
+        print('No frozen SGA galaxies found')
         return None
     # keep_radius to pix
     keeprad = np.ceil(sga.keep_radius * 3600. / chipwcs.pixel_scale()).astype(int)
@@ -395,12 +398,14 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
             (yy > -keeprad) * (yy < H+keeprad))
     #print('Read', len(sga), 'SGA galaxies touching the chip.')
     if len(sga) == 0:
+        print('No SGA galaxies touch this chip')
         return None
     Tsga = T[T.ref_cat == 'L3']
     #print(len(Tsga), 'SGA entries already exist in catalog')
     Isga = np.array([i for i,sga_id in enumerate(sga.ref_id) if not sga_id in set(Tsga.ref_id)])
     assert(len(Isga) + len(Tsga) == len(sga))
     if len(Isga) == 0:
+        print('All SGA galaxies already in catalogs')
         return None
     print(len(Isga), 'SGA entries need to be found')
     sga.cut(Isga)
