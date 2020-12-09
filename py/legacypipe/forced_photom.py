@@ -748,20 +748,19 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         for i,src in enumerate(cat):
             from tractor import PointSource
             realsrcs.append(src)
-
             if not isinstance(src, PointSource):
                 continue
+            realmod = realsrc.getUnitFluxModelPatch(tim)
+            if realmod is None:
+                continue
             Iderivs.append(i)
-
             brightness_dra  = src.getBrightness().copy()
             brightness_ddec = src.getBrightness().copy()
             brightness_dra .setParams(np.zeros(brightness_dra .numberOfParams()))
             brightness_ddec.setParams(np.zeros(brightness_ddec.numberOfParams()))
             brightness_dra .freezeAllBut(tim.band)
             brightness_ddec.freezeAllBut(tim.band)
-
-            dsrc = SourceDerivatives(src, [brightness_dra, brightness_ddec],
-                                     tim, ps)
+            dsrc = SourceDerivatives(src, [brightness_dra, brightness_ddec], tim, ps)
             derivsrcs.append(dsrc)
         Iderivs = np.array(Iderivs)
 
