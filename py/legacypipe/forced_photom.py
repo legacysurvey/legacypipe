@@ -467,7 +467,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                                constant_invvar=opt.constant_invvar,
                                hybridPsf=opt.hybrid_psf,
                                normalizePsf=opt.normalize_psf,
-                               old_calibs_ok=True)
+                               old_calibs_ok=True, trim_edges=False)
     print('Got tim:', tim)#, 'x0,y0', tim.x0, tim.y0)
     chipwcs = tim.subwcs
     H,W = tim.shape
