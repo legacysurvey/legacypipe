@@ -314,7 +314,7 @@ def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None, r
         surveys.append((catsurvey_south, False))
 
     columns = ['ra', 'dec', 'brick_primary', 'type', 'release',
-               'brickid', 'brickname', 'objid', 'flux_r',
+               'brickid', 'brickname', 'objid', 'flux_g', 'flux_r', 'flux_z',
                'sersic', 'shape_r', 'shape_e1', 'shape_e2',
                'ref_epoch', 'pmra', 'pmdec', 'parallax', 'ref_cat', 'ref_id',]
 
@@ -575,6 +575,21 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     print('Read catalog:', tnow-tlast)
     tlast = tnow
 
+    # Find SGA galaxies outside this chip and subtract them before we begin.
+    chipwcs = tim.subwcs
+    _,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
+    W,H = chipwcs.get_width(), chipwcs.get_height()
+    sga_out = (T.ref_cat=='L3') * np.logical_not((xx >= 1) * (xx <= W) * (yy >= 1) * (yy <= H))
+    I = np.flatnonzero(sga_out)
+    if len(I):
+        print(len(I), 'SGA galaxies are outside the image.  Subtracting...')
+        cat = read_fits_catalog(T[I], bands=[tim.band])
+        tr = Tractor([tim], cat)
+        mod = tr.getModelImage(0)
+        tim.data -= mod
+        I = np.flatnonzero(np.logical_not(sga_out))
+        T.cut(I)
+
     cat = read_fits_catalog(T, bands='r')
     # Replace the brightness (which will be a NanoMaggies with g,r,z)
     # with a NanoMaggies with this image's band only.
@@ -750,7 +765,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             realsrcs.append(src)
             if not isinstance(src, PointSource):
                 continue
-            realmod = realsrc.getUnitFluxModelPatch(tim)
+            realmod = src.getUnitFluxModelPatch(tim)
             if realmod is None:
                 continue
             Iderivs.append(i)
