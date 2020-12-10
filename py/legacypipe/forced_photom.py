@@ -407,7 +407,7 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     if len(Isga) == 0:
         print('All SGA galaxies already in catalogs')
         return None
-    print(len(Isga), 'SGA entries need to be found')
+    print('Finding', len(Isga), 'additional SGA entries in nearby bricks')
     sga.cut(Isga)
     #print('Finding bricks to read...')
     sgabricks = []
@@ -429,8 +429,7 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     sgabricks = merge_tables(sgabricks)
     _,I = np.unique(sgabricks.brickname, return_index=True)
     sgabricks.cut(I)
-    print('Need to read', len(sgabricks), 'bricks to pick up SGA sources')
-    #print('Reading bricks...')
+    #print('Need to read', len(sgabricks), 'bricks to pick up SGA sources')
     SGA = []
     for brick in sgabricks.brickname:
         # For picking up these SGA bricks, resolve doesn't matter (they're fixed
@@ -444,13 +443,13 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
                 SGA.append(fits_table(fn, columns=columns, rows=I))
                 break
     SGA = merge_tables(SGA)
+    SGA.cut(SGA.brick_primary)
     #print('Total of', len(SGA), 'sources')
     I = np.array([i for i,ref_id in enumerate(SGA.ref_id) if ref_id in set(sga.ref_id)])
     SGA.cut(I)
-    print('Got', len(SGA), 'desired SGA sources')
-    #print('Want:', sga.ref_id)
-    #print('Got:', SGA.ref_id)
+    #print('Found', len(SGA), 'desired SGA sources')
     assert(len(sga) == len(SGA))
+    assert(set(sga.ref_id) == set(SGA.ref_id))
     return SGA
 
 def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
