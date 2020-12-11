@@ -896,7 +896,7 @@ class LegacySurveyData(object):
 
         elif filetype == 'tractor-intermediate':
             return swap(os.path.join(basedir, 'tractor-i', brickpre,
-                                     'tractor-%s.fits' % brick))
+                                     'tractor-i-%s.fits' % brick))
 
         elif filetype == 'galaxy-sims':
             return swap(os.path.join(basedir, 'tractor', brickpre,
