@@ -1737,6 +1737,8 @@ def _get_both_mods(X):
 
     srcs_blobs = list(zip(srcs, srcblobs))
 
+    mod_kwargs = dict(max_halfsize=16384)
+    
     fro_rd = set()
     if frozen_galaxies is not None:
         from tractor.patch import ModelMask
@@ -1749,7 +1751,7 @@ def _get_both_mods(X):
             touchedblobs = timblobs.intersection(bb)
             if len(touchedblobs) == 0:
                 continue
-            patch = fro.getModelPatch(tim, modelMask=mm)
+            patch = fro.getModelPatch(tim, modelMask=mm, **mod_kwargs)
             if patch is None:
                 continue
             patch.addTo(mod)
@@ -1787,7 +1789,7 @@ def _get_both_mods(X):
             # Skip frozen galaxy source (here we choose not to compute NEA)
             NEA.append(no_nea)
             continue
-        patch = src.getModelPatch(tim)
+        patch = src.getModelPatch(tim, **mod_kwargs)
         if patch is None:
             NEA.append(no_nea)
             continue
@@ -1924,6 +1926,10 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
     Ireg = np.flatnonzero(T.regular)
     Nreg = len(Ireg)
+    print('Getting models for', len(Ireg), 'regular catalog sources')
+    from collections import Counter
+    print('Types:', Counter([type(cat[i]) for i in Ireg]).most_common())
+
     bothmods = mp.map(_get_both_mods, [(tim, [cat[i] for i in Ireg], T.blob[Ireg], blobmap,
                                         targetwcs, frozen_galaxies, ps, plots)
                                        for tim in tims])

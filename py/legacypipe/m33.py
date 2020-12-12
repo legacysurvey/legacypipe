@@ -258,6 +258,7 @@ def stage_m33_c(pixscale=None, targetwcs=None,
                saddle_fraction=None,
                saddle_min=None,
                survey=None, brick=None,
+                brickid=-1,
                refcat=None, refstars=None,
                T_clusters=None,
                ccds=None,
@@ -279,13 +280,130 @@ def stage_m33_c(pixscale=None, targetwcs=None,
 
     print('Fit M33:', galsrc)
 
+    J = np.flatnonzero(refstars.ref_id == 1390591)
+    print('Found third galaxy:', J)
+    extras = refstars[J]
+    extragalmap = (get_reference_map(targetwcs, extras) != 0)
+    extraslc = find_objects(extragalmap.astype(int))[0]
+    print('extra gal slice:', extraslc)
+    subtims = []
+    slc = extraslc
+    for band,tim in zip(bands, tims):
+        simg = tim.data[slc]
+        sie = tim.inverr[slc].copy()
+        # Zero out inverr outside the galaxy ellipse!!
+        sie[np.logical_not(extragalmap[slc])] = 0.
+        subdq = tim.dq[slc]
+        sy,sx = slc
+        y0,y1 = sy.start,sy.stop
+        x0,x1 = sx.start,sx.stop
+        subwcs = tim.subwcs.get_subimage(x0, y0, x1-x0, y1-y0)
+        twcs = LegacySurveyWcs(subwcs, tim.wcs.tai)
+        subtim = Image(simg, inverr=sie, psf=tim.psf, wcs=twcs, photocal=tim.photocal)
+        subtim.subwcs = subwcs
+        subtim.psf_sigma = tim.psf_sigma
+        subtim.sig1 = tim.sig1
+        subtim.imobj = tim.imobj
+        subtim.time = tim.time
+        subtim.dq = subdq
+        subtim.dq_saturation_bits = tim.dq_saturation_bits
+        subtim.band = tim.band
+        subtims.append(subtim)
+    tr = Tractor(subtims, [refcat[j] for j in J])
+    tr.freezeParam('images')
+    print('Extra galaxy:', refcat[J[0]])
+    tr.optimize_loop(dchisq=0.1, shared_params=False, priors=True, alphas=[0.1, 0.3, 1.0])
+    print('Fit extra galaxy:', refcat[J[0]])
+
+    refgalslc = find_objects(galmap.astype(int))[0]
+    print('M33 slice:', refgalslc)
+    print('extra slice:', extraslc)
+
+    # union
+    sy,sx = refgalslc
+    ry0,ry1 = sy.start,sy.stop
+    rx0,rx1 = sx.start,sx.stop
+    sy,sx = extraslc
+    y0,y1 = sy.start,sy.stop
+    x0,x1 = sx.start,sx.stop
+
+    ry0 = min(ry0, y0)
+    rx0 = min(rx0, x0)
+    ry1 = max(ry1, y1)
+    rx1 = max(rx1, x1)
+    refgalslc = slice(ry0, ry1), slice(rx0, rx1)
+    print('Union ref gal slice:', refgalslc)
+
+    Iothers = np.append(Iothers, J)
+    print('Now Iothers:', len(Iothers))
+
+    galmap |= extragalmap
+    
     for src in [galsrc]+[refcat[i] for i in Iothers]:
         src.shape = src.shape.toEllipseE()
-    
+
     cat = Catalog(galsrc, *[refcat[i] for i in np.append(Iothers, Istars)])
     T = refstars[np.hstack((np.array([igal]), Iothers, Istars))]
 
-    refgalslc = find_objects(galmap.astype(int))[0]
+    #print('T types:', T.get('type')[:5])
+    print('T refcat:', T.ref_cat[:5])
+    from collections import Counter
+    print('Catalog types:', Counter([type(src) for src in cat]).most_common())
+
+    print('T:')
+    T.about()
+    
+    from scipy.ndimage.measurements import label
+
+    blobmap,_ = label(galmap)
+    print('Blob map:', Counter(blobmap.ravel()))
+    blobmap += 1
+
+    T.ra  = np.array([src.getPosition().ra  for src in cat])
+    T.dec = np.array([src.getPosition().dec for src in cat])
+
+    T.regular = np.ones(len(T), bool)
+    T.dup = np.zeros(len(T), bool)
+    _,bx,by = targetwcs.radec2pixelxy(T.ra, T.dec)
+    T.bx = (bx - 1.).astype(np.float32)
+    T.by = (by - 1.).astype(np.float32)
+    T.ibx = np.round(T.bx).astype(np.int32)
+    T.iby = np.round(T.by).astype(np.int32)
+    T.in_bounds = ((T.ibx >= 0) * (T.iby >= 0) * (T.ibx < W) * (T.iby < H))
+    T.objid = np.arange(len(T)).astype(np.int32)
+    T.brickid = np.zeros(len(T), np.int32) + brickid
+    T.brickname = np.array([brickname] * len(T))
+    T.bx0 = T.bx
+    T.by0 = T.by
+    T.blob = np.empty(len(T), np.int32)
+    T.blob[:] = -1
+    T.blob[T.in_bounds] = blobmap[T.iby[T.in_bounds], T.ibx[T.in_bounds]]
+    T.dchisq = np.zeros((len(T),5), np.float32)
+
+    cols = T.get_columns()
+    # N x 3 floats
+    for c in ['rchisq', 'fracflux', 'fracmasked', 'fracin',]:
+        if not c in cols:
+            print('Adding zero column', c)
+            T.set(c, np.zeros((len(T),3), np.float32))
+    # N bools
+    for c in ['force_keep_source', 'dup', 'forced_pointsource',
+              'fit_background', 'hit_r_limit', 'hit_ser_limit', 'iterative']:
+        if not c in cols:
+            print('Adding zero column', c)
+            T.set(c, np.zeros(len(T), bool))
+
+    # otherwise fluxes and flux_ivars get zeroed out!
+    T.fracin = np.ones((len(T),len(bands)), np.float32)
+
+    # # Copy ivars from Gaia (probably have to 
+    # T.ra_ivar = np.zeros(len(T), np.float32)
+    # T.dec_ivar = np.zeros(len(T), np.float32)
+    # # T: M33, Iothers, Istars
+    # T.ra_ivar[1+len(Iothers):] = refstars.ra_ivar[Istars]
+    # T.dec_ivar[1+len(Iothers):] = refstars.dec_ivar[Istars]
+    
+    #refgalslc = find_objects(galmap.astype(int))[0]
     print('ref gal slice:', refgalslc)
     slc = refgalslc
 
@@ -334,32 +452,48 @@ def stage_m33_c(pixscale=None, targetwcs=None,
     cat.thawAllRecursive()
     invvars = np.hstack(invvars)
 
-    T = prepare_fits_catalog(cat, invvars, T, bands) #, save_invvars=False)
-    # Set Sersic indices for all galaxy types.
-    # sigh, bytes vs strings.  In py3, T.type (dtype '|S3') are bytes.
-    T.sersic[np.array([t in ['DEV',b'DEV'] for t in T.type])] = 4.0
-    T.sersic[np.array([t in ['EXP',b'EXP'] for t in T.type])] = 1.0
-    T.sersic[np.array([t in ['REX',b'REX'] for t in T.type])] = 1.0
-    T.writeto('cat-m33.fits')
+    print('T:', len(T))
+    print('T.ref_cat:', T.ref_cat[:5])
+    print('cat:', cat[:5])
+    
+    from tractor.psf import GaussianMixturePSF
+    for tim in tims:
+        print('tim psf:', tim.psf)
+        psfim = tim.psf.img
+        gpsf = GaussianMixturePSF.fromStamp(psfim, N=1, v3=True)
+        print('Gauss psf:', gpsf)
+        hybridpsf = HybridPixelizedPSF(tim.psf, gauss=gpsf)
+        tim.psf = hybridpsf
 
-    T.dchisq = np.zeros((len(T),5), np.float32)
-    for c in ['rchisq', 'fracflux', 'fracmasked', 'fracin',
-              'nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth',
-              'fiberflux', 'fibertotflux',]:
-        T.set(c, np.zeros((len(T),3), np.float32))
-
-    for c in ['mjd_min', 'mjd_max', 'nea_g', 'nea_r', 'nea_z',
-              'blob_nea_g', 'blob_nea_r', 'blob_nea_z',
-    ]:
-        T.set(c, np.zeros(len(T), np.float32))
-    # The "format_catalog" code expects all lower-case column names...
-    for c in T.columns():
-        if c != c.lower():
-            T.rename(c, c.lower())
-    from legacypipe.format_catalog import format_catalog
-    outfn = 'tractor-m33-ser.fits'
-    release = 9999
-    format_catalog(T, None, None, bands, 'grz', outfn, release)
+    return dict(T=T, invvars=invvars, galmap=galmap, Iothers=Iothers,
+                cat=cat, refgalslc=refgalslc, blobmap=blobmap, tims=tims)
+    
+    # T = prepare_fits_catalog(cat, invvars, T, bands) #, save_invvars=False)
+    # # Set Sersic indices for all galaxy types.
+    # # sigh, bytes vs strings.  In py3, T.type (dtype '|S3') are bytes.
+    # T.sersic[np.array([t in ['DEV',b'DEV'] for t in T.type])] = 4.0
+    # T.sersic[np.array([t in ['EXP',b'EXP'] for t in T.type])] = 1.0
+    # T.sersic[np.array([t in ['REX',b'REX'] for t in T.type])] = 1.0
+    # T.writeto('cat-m33.fits')
+    # 
+    # T.dchisq = np.zeros((len(T),5), np.float32)
+    # for c in ['rchisq', 'fracflux', 'fracmasked', 'fracin',
+    #           'nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth',
+    #           'fiberflux', 'fibertotflux',]:
+    #     T.set(c, np.zeros((len(T),3), np.float32))
+    # 
+    # for c in ['mjd_min', 'mjd_max', 'nea_g', 'nea_r', 'nea_z',
+    #           'blob_nea_g', 'blob_nea_r', 'blob_nea_z',
+    # ]:
+    #     T.set(c, np.zeros(len(T), np.float32))
+    # # The "format_catalog" code expects all lower-case column names...
+    # for c in T.columns():
+    #     if c != c.lower():
+    #         T.rename(c, c.lower())
+    # from legacypipe.format_catalog import format_catalog
+    # outfn = 'tractor-m33-ser.fits'
+    # release = 9999
+    # format_catalog(T, None, None, bands, 'grz', outfn, release)
 
 
 def stage_m33_d(pixscale=None, targetwcs=None,
@@ -388,11 +522,45 @@ def stage_m33_d(pixscale=None, targetwcs=None,
                 Iothers=None,
                 Istars=None,
                 igal=None,
-                
+
+                T=None,
+                cat=None,
+
                 **kwargs):
 
-    # Set up for stage_coadds
-    
+
+    return dict(tims=tims)
+
+
+
+def stage_m33_XX_d(pixscale=None, targetwcs=None,
+               W=None,H=None,
+               bands=None, ps=None, tims=None,
+               plots=False, plots2=False,
+               brickname=None,
+               version_header=None,
+               mp=None, nsigma=None,
+               saddle_fraction=None,
+               saddle_min=None,
+               survey=None, brick=None,
+               refcat=None, refstars=None,
+               T_clusters=None,
+               ccds=None,
+               record_event=None,
+               large_galaxies=True,
+                gaia_stars=True,
+                blobmap=None, blobslices=None,
+
+                galsrc=None,
+                galmap=None,
+                refgalslc=None,
+                subtims=None,
+                Im33=None,
+                Iothers=None,
+                Istars=None,
+                igal=None,
+                
+                **kwargs):
     print('Fit M33:', galsrc)
     #for src in [galsrc]+[refcat[i] for i in Iothers]:
     #    src.shape = src.shape.toEllipseE()
@@ -489,8 +657,6 @@ def stage_m33_e(pixscale=None, targetwcs=None,
         src.shape = src.shape.toEllipseE()
     
     cat = Catalog(galsrc, *[refcat[i] for i in np.append(Iothers, Istars)])
-    # (we already did this in m33_d, and we've added things to T in stage_coadds)
-    #T = refstars[np.hstack((np.array([igal]), Iothers, Istars))]
 
     refgalslc = find_objects(galmap.astype(int))[0]
     print('ref gal slice:', refgalslc)
@@ -1204,7 +1370,8 @@ def main():
             'm33_b': 'm33_a',
             'm33_c': 'm33_b',
             'm33_d': 'm33_c',
-            'coadds': 'm33_d',
+            'coadds': 'm33_c',
+            #'coadds': 'm33_d',
             'm33_e': 'coadds',
             'writecat': 'm33_e',
             #'m33_f': 'm33_e',
@@ -1225,7 +1392,117 @@ def main():
     run_brick(opt.brick, survey, **kwargs)
     return 0
 
+
+def tst():
+    ra,dec = 23.4665742220318,30.6572382234101
+    rad,e1,e2 = 556.858, 0.190383, 0.132359
+    g,r,z = 1.13341E+06, 2.08108E+06, 3.52648E+06
+    ser = 1.41647
+
+    from tractor.ellipses import EllipseE
+    from tractor import NanoMaggies, RaDecPos, GaussianMixturePSF
+    from tractor.sersic import SersicGalaxy, SersicIndex
+    from astrometry.util.file import unpickle_from_file, pickle_to_file
+    
+    ell = EllipseE(rad, e1, e2)
+    flux = NanoMaggies(g=g, r=r, z=z)
+    pos = RaDecPos(ra, dec)
+    gal = SersicGalaxy(pos, flux, ell, SersicIndex(ser))
+
+    print('Galaxy:', gal)
+    
+    from tractor.sersic import SersicMixture
+    sermix = SersicMixture.getProfile(ser)
+    print('Sersic Gaussian mixture:', sermix)
+
+    I = np.arange(len(sermix.amp))
+    #sigs = np.sqrt(sermix.var[I,I])
+    sigs = np.sqrt(sermix.var[:,0,0])
+    for ic,(a,s) in enumerate(zip(sermix.amp, sigs)):
+        print('Component', ic, 'amp', a, 'sigma', s)
+        #og = OneComponentGalaxy([a], [s], PixPos(0.,0.), Flux(100.), egal)
+
+    
+    from tractor.galaxy import HoggGalaxy, ExpGalaxy
+    from tractor.mixture_profiles import MixtureOfGaussians
+    class OneComponentGalaxy(HoggGalaxy):
+        def __init__(self, amps, sigmas, *args, **kwargs):
+            self.nre = ExpGalaxy.nre
+            n = len(amps)
+            amps = np.array(amps)
+            sigmas = np.array(sigmas)
+            self.profile = MixtureOfGaussians(amps, np.zeros((n,2)), np.diag(sigmas**2))
+            super(OneComponentGalaxy, self).__init__(*args, **kwargs)
+        def getName(self):
+            return 'OneComponentGalaxy'
+        def getProfile(self):
+            return self.profile
+    
+    # X = unpickle_from_file('/global/cscratch1/sd/dstn/NGC0598_GROUP-3/NGC0598_GROUP-largegalaxy-m33_c.p')
+    # tim_r = X['tims'][1]
+    # targetwcs = X['targetwcs']
+    # pickle_to_file(dict(tim=tim_r, targetwcs=targetwcs), '/global/cscratch1/sd/dstn/NGC0598_GROUP-3/x.p')
+    print('Reading inputs')
+    X = unpickle_from_file('/global/cscratch1/sd/dstn/NGC0598_GROUP-3/x.p')
+    tim = X['tim']
+    targetwcs = X['targetwcs']
+
+    print('PSF:', tim.psf)
+
+    import fitsio
+    
+    psfim = tim.psf.img
+    gpsf = GaussianMixturePSF.fromStamp(psfim, N=1, v3=True)
+    print('Gauss psf:', gpsf)
+    hybridpsf = HybridPixelizedPSF(tim.psf, gauss=gpsf)
+    tim.psf = hybridpsf
+
+    print('Pixel pos:', tim.wcs.positionToPixel(pos))
+    print('Counts:', tim.photocal.brightnessToCounts(flux))
+    
+    H,W = tim.shape
+    from tractor.patch import ModelMask
+    mm = ModelMask(0, 0, W, H)
+    # print('Model mask', mm)
+    # for ic,(a,s) in enumerate(zip(sermix.amp, sigs)):
+    #     print('Component', ic, 'amp', a, 'sigma', s)
+    #     og = OneComponentGalaxy([a], [s], pos, flux, ell)
+    #     tr = Tractor([tim], [og])
+    #     tr.freezeParam('images')
+    #     tr.setModelMasks([{og:mm}])
+    #     print('Rendering component...')
+    #     mod = tr.getModelImage(0)
+    #     print('Range', mod.min(), mod.max())
+    #     #print('Saving FITS')
+    #     #fitsio.write('/global/cscratch1/sd/dstn/NGC0598_GROUP-3/mod-comp%i.fits' % ic, mod,
+    #     #             clobber=True)
+    #     print('Plotting')
+    #     plt.clf()
+    #     plt.imshow(mod, interpolation='nearest', origin='lower', cmap='gray')
+    #     plt.colorbar()
+    #     plt.savefig('mod-comp%i.png' % ic)
+    # 
+    #     del mod
+    
+    tr = Tractor([tim], [gal])
+    tr.freezeParam('images')
+    tr.setModelMasks([{gal:mm}])
+    print('Rendering model image...')
+    mod = tr.getModelImage(0)
+    mn,mx = mod.min(), mod.max()
+    print('Range', mn,mx)
+    #print('Saving FITS')
+    #fitsio.write('/global/cscratch1/sd/dstn/NGC0598_GROUP-3/mod.fits', mod, clobber=True)
+    print('Plotting')
+    plt.clf()
+    plt.imshow(mod, interpolation='nearest', origin='lower', cmap='gray', vmin=mn, vmax=mx/100.)
+    plt.colorbar()
+    plt.savefig('mod.png')
+
 if __name__ == '__main__':
+    import sys
+    #tst()
+    #sys.exit(0)
     # from astrometry.util.file import unpickle_from_file
     # for fn in [
     #         '/global/cscratch1/sd/dstn/NGC0598_GROUP-3/NGC0598_GROUP-largegalaxy-fit_on_coadds.p',
@@ -1240,7 +1517,6 @@ if __name__ == '__main__':
     #     print(fn)
     #     for k in X.keys():
     #         print('  ', k, ('= None' if X[k] is None else ''))
-    import sys
     sys.exit(main())
 
 
