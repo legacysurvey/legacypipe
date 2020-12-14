@@ -91,6 +91,8 @@ def get_parser():
 
     parser.add_argument('--outlier-mask', nargs='?', const='default',
                         help='Write the reassembled outlier mask?  Optionally include output filename; default use --out-dir')
+    parser.add_argument('-v', '--verbose', dest='verbose', action='count',
+                        default=0, help='Make more verbose')
     return parser
 
 def main(survey=None, opt=None, args=None):
@@ -104,6 +106,15 @@ def main(survey=None, opt=None, args=None):
     if opt is None:
         parser = get_parser()
         opt = parser.parse_args(args)
+
+    import logging
+    if opt.verbose == 0:
+        lvl = logging.INFO
+    else:
+        lvl = logging.DEBUG
+    logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+    # tractor logging is *soooo* chatty
+    logging.getLogger('tractor.engine').setLevel(lvl + 10)
 
     t0 = Time()
     if survey is None:
@@ -295,12 +306,17 @@ def bounce_one_ccd(X):
     # for multiprocessing
     return run_one_ccd(*X)
 
-def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_dec=None,
+def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None, resolve_dec=None,
                        margin=20):
     TT = []
     surveys = [(catsurvey_north, True)]
     if catsurvey_south is not None:
         surveys.append((catsurvey_south, False))
+
+    columns = ['ra', 'dec', 'brick_primary', 'type', 'release',
+               'brickid', 'brickname', 'objid', 'flux_g', 'flux_r', 'flux_z',
+               'sersic', 'shape_r', 'shape_e1', 'shape_e2',
+               'ref_epoch', 'pmra', 'pmdec', 'parallax', 'ref_cat', 'ref_id',]
 
     for catsurvey,north in surveys:
         bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
@@ -324,12 +340,7 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
                 print('WARNING: catalog', fn, 'does not exist.  Skipping!')
                 continue
             print('Reading', fn)
-            T = fits_table(fn, columns=[
-                'ra', 'dec', 'brick_primary', 'type', 'release',
-                'brickid', 'brickname', 'objid', 'flux_r',
-                'sersic', 'shape_r', 'shape_e1', 'shape_e2',
-                'ref_epoch', 'pmra', 'pmdec', 'parallax'
-                ])
+            T = fits_table(fn, columns=columns)
             if resolve_dec is not None:
                 if north:
                     T.cut(T.dec >= resolve_dec)
@@ -340,16 +351,15 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
                     print('Cut to', len(T), 'south of the resolve line')
             _,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
             W,H = chipwcs.get_width(), chipwcs.get_height()
-            I, = np.nonzero((xx >= -margin) * (xx <= (W+margin)) *
-                            (yy >= -margin) * (yy <= (H+margin)))
-            T.cut(I)
-            print('Cut to', len(T), 'sources within image + margin')
+            # Cut to sources that are inside the image+margin
+            T.cut((xx >= -margin) * (xx <= (W+margin)) *
+                  (yy >= -margin) * (yy <= (H+margin)))
             T.cut(T.brick_primary)
-            print('Cut to', len(T), 'on brick_primary')
+            #print('Cut to', len(T), 'on brick_primary')
             # drop DUP sources
             I, = np.nonzero([t.strip() != 'DUP' for t in T.type])
             T.cut(I)
-            print('Cut to', len(T), 'after removing DUP')
+            #print('Cut to', len(T), 'after removing DUP')
             if len(T):
                 TT.append(T)
     if len(TT) == 0:
@@ -357,8 +367,90 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
     T = merge_tables(TT, columns='fillzero')
     T._header = TT[0]._header
     del TT
+
+    SGA = find_missing_sga(T, chipwcs, survey, surveys, columns)
+    if SGA is not None:
+        ## Add 'em in!
+        T = merge_tables([T, SGA], columns='fillzero')
     print('Total of', len(T), 'catalog sources')
     return T
+
+def find_missing_sga(T, chipwcs, survey, surveys, columns):
+    # Look up SGA large galaxies touching this chip.
+    # The ones inside this chip(+margin) will already exist in the catalog;
+    # we'll find the ones we're missing and read those extra brick catalogs.
+    from legacypipe.reference import read_large_galaxies
+    # Find all the SGA sources we need
+    sga = read_large_galaxies(survey, chipwcs, bands=None, extra_columns=['brickname'])
+    if sga is None:
+        print('No SGA galaxies found')
+        return None
+    sga.cut(sga.islargegalaxy * sga.freezeparams)
+    if len(sga) == 0:
+        print('No frozen SGA galaxies found')
+        return None
+    # keep_radius to pix
+    keeprad = np.ceil(sga.keep_radius * 3600. / chipwcs.pixel_scale()).astype(int)
+    _,xx,yy = chipwcs.radec2pixelxy(sga.ra, sga.dec)
+    H,W = chipwcs.shape
+    # cut to those touching the chip
+    sga.cut((xx > -keeprad) * (xx < W+keeprad) *
+            (yy > -keeprad) * (yy < H+keeprad))
+    #print('Read', len(sga), 'SGA galaxies touching the chip.')
+    if len(sga) == 0:
+        print('No SGA galaxies touch this chip')
+        return None
+    Tsga = T[T.ref_cat == 'L3']
+    #print(len(Tsga), 'SGA entries already exist in catalog')
+    Isga = np.array([i for i,sga_id in enumerate(sga.ref_id) if not sga_id in set(Tsga.ref_id)])
+    assert(len(Isga) + len(Tsga) == len(sga))
+    if len(Isga) == 0:
+        print('All SGA galaxies already in catalogs')
+        return None
+    print('Finding', len(Isga), 'additional SGA entries in nearby bricks')
+    sga.cut(Isga)
+    #print('Finding bricks to read...')
+    sgabricks = []
+
+    todo = []
+    for ra,dec,brick in zip(sga.ra, sga.dec, sga.brickname):
+        bricks = survey.get_bricks_by_name(brick)
+        brick = bricks[0]
+        # The SGA catalog has a "brickname", but it unfortunately is not always exactly correct
+        if ra >= brick.ra1 and ra < brick.ra2 and dec >= brick.dec1 and dec < brick.dec2:
+            sgabricks.append(bricks)
+        else:
+            # MAGIC 0.2 ~ brick radius
+            bricks = survey.get_bricks_near(ra, dec, 0.2)
+            bricks = bricks[(ra  >= bricks.ra1 ) * (ra  < bricks.ra2) *
+                            (dec >= bricks.dec1) * (dec < bricks.dec2)]
+            if len(bricks):
+                sgabricks.append(bricks)
+    sgabricks = merge_tables(sgabricks)
+    _,I = np.unique(sgabricks.brickname, return_index=True)
+    sgabricks.cut(I)
+    #print('Need to read', len(sgabricks), 'bricks to pick up SGA sources')
+    SGA = []
+    for brick in sgabricks.brickname:
+        # For picking up these SGA bricks, resolve doesn't matter (they're fixed
+        # in both).
+        for catsurvey,north in surveys:
+            fn = catsurvey.find_file('tractor', brick=brick)
+            if os.path.exists(fn):
+                t = fits_table(fn, columns=['ref_cat', 'ref_id'])
+                I = np.flatnonzero(t.ref_cat == 'L3')
+                #print('Read', len(I), 'SGA entries from', brick)
+                SGA.append(fits_table(fn, columns=columns, rows=I))
+                break
+    SGA = merge_tables(SGA)
+    SGA.cut(SGA.brick_primary)
+    #print('Total of', len(SGA), 'sources')
+    I = np.array([i for i,ref_id in enumerate(SGA.ref_id) if ref_id in set(sga.ref_id)])
+    SGA.cut(I)
+    #print('Found', len(SGA), 'desired SGA sources')
+    assert(len(sga) == len(SGA))
+    assert(set(sga.ref_id) == set(SGA.ref_id))
+    return SGA
 
 def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                 ccd, opt, zoomslice, ps):
@@ -375,12 +467,34 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                                constant_invvar=opt.constant_invvar,
                                hybridPsf=opt.hybrid_psf,
                                normalizePsf=opt.normalize_psf,
-                               old_calibs_ok=True)
-    print('Got tim:', tim, 'x0,y0', tim.x0, tim.y0)
+                               old_calibs_ok=True, trim_edges=False)
+    print('Got tim:', tim)#, 'x0,y0', tim.x0, tim.y0)
+    chipwcs = tim.subwcs
+    H,W = tim.shape
 
     tnow = Time()
     print('Read image:', tnow-tlast)
     tlast = tnow
+
+    if ccd.camera == 'decam':
+        # Halo subtraction
+        from legacypipe.halos import subtract_one
+        from legacypipe.reference import mask_radius_for_mag, read_gaia
+        ref_margin = mask_radius_for_mag(0.)
+        mpix = int(np.ceil(ref_margin * 3600. / chipwcs.pixel_scale()))
+        marginwcs = chipwcs.get_subimage(-mpix, -mpix, W+2*mpix, H+2*mpix)
+        gaia = read_gaia(marginwcs, None)
+        keeprad = np.ceil(gaia.keep_radius * 3600. / chipwcs.pixel_scale()).astype(int)
+        _,xx,yy = chipwcs.radec2pixelxy(gaia.ra, gaia.dec)
+        # cut to those touching the chip
+        gaia.cut((xx > -keeprad) * (xx < W+keeprad) *
+                 (yy > -keeprad) * (yy < H+keeprad))
+        Igaia, = np.nonzero(gaia.isgaia * gaia.pointsource)
+        halostars = gaia[Igaia]
+        print('Got', len(gaia), 'Gaia stars,', len(halostars), 'for halo subtraction')
+        moffat = True
+        halos = subtract_one((tim, halostars, moffat))
+        tim.data -= halos
 
     # The "north" and "south" directories often don't have
     # 'survey-bricks" files of their own -- use the 'survey' one
@@ -408,7 +522,6 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     catsurvey = catsurvey_north
     if not north_ccd and catsurvey_south is not None:
         catsurvey = catsurvey_south
-    chipwcs = tim.subwcs
     bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
     for b in bricks:
         print('Reading outlier mask for brick', b.brickname)
@@ -418,7 +531,6 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
             print('WARNING: failed to read outliers mask file for brick', b.brickname)
 
     if opt.outlier_mask is not None:
-        H,W = tim.shape
         outlier_mask = np.zeros((ccd.height, ccd.width), np.uint8)
         outlier_mask[tim.y0:tim.y0+H, tim.x0:tim.x0+W] = posneg_mask
         del posneg_mask
@@ -435,7 +547,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         T = fits_table(opt.catalog)
     else:
         chipwcs = tim.subwcs
-        T = get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=catsurvey_south,
+        T = get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=catsurvey_south,
                                resolve_dec=resolve_dec)
         if T is None:
             print('No sources to photometer.')
@@ -461,6 +573,21 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     tnow = Time()
     print('Read catalog:', tnow-tlast)
     tlast = tnow
+
+    # Find SGA galaxies outside this chip and subtract them before we begin.
+    chipwcs = tim.subwcs
+    _,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
+    W,H = chipwcs.get_width(), chipwcs.get_height()
+    sga_out = (T.ref_cat=='L3') * np.logical_not((xx >= 1) * (xx <= W) * (yy >= 1) * (yy <= H))
+    I = np.flatnonzero(sga_out)
+    if len(I):
+        print(len(I), 'SGA galaxies are outside the image.  Subtracting...')
+        cat = read_fits_catalog(T[I], bands=[tim.band])
+        tr = Tractor([tim], cat)
+        mod = tr.getModelImage(0)
+        tim.data -= mod
+        I = np.flatnonzero(np.logical_not(sga_out))
+        T.cut(I)
 
     cat = read_fits_catalog(T, bands='r')
     # Replace the brightness (which will be a NanoMaggies with g,r,z)
@@ -635,20 +762,19 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         for i,src in enumerate(cat):
             from tractor import PointSource
             realsrcs.append(src)
-
             if not isinstance(src, PointSource):
                 continue
+            realmod = src.getUnitFluxModelPatch(tim)
+            if realmod is None:
+                continue
             Iderivs.append(i)
-
             brightness_dra  = src.getBrightness().copy()
             brightness_ddec = src.getBrightness().copy()
             brightness_dra .setParams(np.zeros(brightness_dra .numberOfParams()))
             brightness_ddec.setParams(np.zeros(brightness_ddec.numberOfParams()))
             brightness_dra .freezeAllBut(tim.band)
             brightness_ddec.freezeAllBut(tim.band)
-
-            dsrc = SourceDerivatives(src, [brightness_dra, brightness_ddec],
-                                     tim, ps)
+            dsrc = SourceDerivatives(src, [brightness_dra, brightness_ddec], tim, ps)
             derivsrcs.append(dsrc)
         Iderivs = np.array(Iderivs)
 

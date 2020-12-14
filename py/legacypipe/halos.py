@@ -16,14 +16,6 @@ def subtract_halos(tims, refs, bands, mp, plots, ps, moffat=True):
         tim.data -= h
 
 def subtract_one(X):
-    try:
-        return subtract_one_real(X)
-    except:
-        import traceback
-        traceback.print_exc()
-        raise
-
-def subtract_one_real(X):
     tim, refs, moffat = X
     if tim.imobj.camera != 'decam':
         print('Warning: Stellar halo subtraction is only implemented for DECam')
