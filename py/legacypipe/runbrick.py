@@ -2978,7 +2978,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               outliers=True,
               cache_outliers=False,
               lanczos=True,
-              early_coadds=False,
               blob_image=False,
               do_calibs=True,
               old_calibs_ok=False,
@@ -3094,8 +3093,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     - *nsigma*: float; detection threshold in sigmas.
 
     - *wise*: boolean; run WISE forced photometry?
-
-    - *early_coadds*: boolean; generate the early coadds?
 
     - *do_calibs*: boolean; run the calibration preprocessing steps?
 
@@ -3327,9 +3324,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         }
 
     if 'image_coadds' in stages:
-        early_coadds = True
-
-    if early_coadds:
         if blob_image:
             prereqs.update({
                 'image_coadds':'srcs',
