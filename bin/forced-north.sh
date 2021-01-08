@@ -3,6 +3,12 @@
 DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr9m
 outdir=$CSCRATCH/dr9-forced
 
+# SGA galaxy and Gaia star halo subtraction
+export LARGEGALAXIES_CAT=/global/cfs/cdirs/cosmo/staging/largegalaxies/v3.2/SGA-ellipse-v3.2.kd.fits
+export GAIA_CAT_DIR=/global/cfs/cdirs/cosmo/work/gaia/chunks-gaia-dr2-astrom-2
+export GAIA_CAT_VER=2
+unset SKY_TEMPLATE_DIR
+
 # Don't add ~/.local/ to Python's sys.path
 export PYTHONNOUSERSITE=1
 
@@ -44,4 +50,4 @@ python -O $LEGACYPIPE_DIR/legacypipe/forced_photom.py \
        --expnum $expnum \
        --out-dir $outdir \
        --threads $ncores \
-       > $logfile 2>&1
+       >> $logfile 2>&1
