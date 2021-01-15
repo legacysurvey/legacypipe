@@ -950,7 +950,7 @@ def _apphot_one(args):
 
     return result
 
-def get_coadd_headers(hdr, tims, band):
+def get_coadd_headers(hdr, tims, band, coadd_headers={}):
     # Grab these keywords from all input files for this band...
     keys = ['OBSERVAT', 'TELESCOP','OBS-LAT','OBS-LONG','OBS-ELEV',
             'INSTRUME','FILTER']
@@ -998,9 +998,15 @@ def get_coadd_headers(hdr, tims, band):
         name='DATEOBS', value=tt[2],
         comment='Mean DATE-OBS for the stack (UTC)'))
 
+    # add more info from fit_on_coadds
+    if bool(coadd_headers):
+        for key in sorted(coadd_headers.keys()):
+            hdr.add_record(dict(name=key, value=coadd_headers[key][0], comment=coadd_headers[key][1]))
+
 def write_coadd_images(band,
                        survey, brickname, version_header, tims, targetwcs,
                        co_sky,
+                       coadd_headers=None,
                        cowimg=None, cow=None, cowmod=None, cochi2=None,
                        cowblobmod=None,
                        psfdetiv=None, galdetiv=None, congood=None,
@@ -1008,7 +1014,7 @@ def write_coadd_images(band,
 
     hdr = copy_header_with_wcs(version_header, targetwcs)
     # Grab headers from input images...
-    get_coadd_headers(hdr, tims, band)
+    get_coadd_headers(hdr, tims, band, coadd_headers)
     imgs = [
         ('image',  'image', cowimg),
         ('invvar', 'wtmap', cow   ),
