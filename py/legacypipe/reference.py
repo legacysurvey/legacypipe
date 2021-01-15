@@ -22,6 +22,7 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                           gaia_margin=None,
                           galaxy_margin=None):
     # If bands = None, does not create sources.
+    from astrometry.libkd.spherematch import match_radec
 
     H,W = targetwcs.shape
     H,W = int(H),int(W)
@@ -50,7 +51,6 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     # Add Gaia stars
     gaia = None
     if gaia_stars:
-        from astrometry.libkd.spherematch import match_radec
         gaia = read_gaia(marginwcs, bands)
     if gaia is not None:
         # Handle sources that appear in both Gaia and Tycho-2 by
@@ -438,6 +438,7 @@ def get_large_galaxy_version(fn):
     return 'LG', preburn
 
 def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
+                        extra_columns=None,
                         max_radius=2.):
     # Note, max_radius must include the brick radius!
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
@@ -498,6 +499,8 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
     if clean_columns:
         keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
                         'sources', 'islargegalaxy', 'freezeparams', 'keep_radius']
+        if extra_columns is not None:
+            keep_columns.extend(extra_columns)
         for c in galaxies.get_columns():
             if not c in keep_columns:
                 galaxies.delete_column(c)

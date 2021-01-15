@@ -541,6 +541,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        plots=False, ps=None, coadd_bw=False, W=None, H=None,
                        brick=None, blobmap=None, lanczos=True, ccds=None,
                        write_metrics=True,
+                       minimal_coadds=False,
                        mp=None, record_event=None,
                        co_sky=None,
                        custom_brick=False,
@@ -556,63 +557,65 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     be created (in `stage_coadds`).  But it's handy to have the coadds
     early on, to diagnose problems or just to look at the data.
     '''
-    with survey.write_output('ccds-table', brick=brickname) as out:
-        ccds.writeto(None, fits_object=out.fits, primheader=version_header)
+    kw = dict(ngood=True)
+    if not minimal_coadds:
+        kw.update(detmaps=True)
 
-    C = make_coadds(tims, bands, targetwcs,
-                    detmaps=True, ngood=True, lanczos=lanczos,
+    C = make_coadds(tims, bands, targetwcs, lanczos=lanczos,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims,
                                    targetwcs, co_sky),
-                    mp=mp, plots=plots, ps=ps)
+                    mp=mp, plots=plots, ps=ps, **kw)
 
-    # interim maskbits
-    from legacypipe.utils import copy_header_with_wcs
-    from legacypipe.bits import IN_BLOB
-    refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
-    # Construct a mask bits map
-    maskbits = np.zeros((H,W), np.int16)
-    # !PRIMARY
-    if not custom_brick:
-        U = find_unique_pixels(targetwcs, W, H, None,
-                               brick.ra1, brick.ra2, brick.dec1, brick.dec2)
-        maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int16)
-        del U
-    # BRIGHT
-    if refmap is not None:
-        maskbits |= MASKBITS['BRIGHT']  * ((refmap & IN_BLOB['BRIGHT'] ) > 0)
-        maskbits |= MASKBITS['MEDIUM']  * ((refmap & IN_BLOB['MEDIUM'] ) > 0)
-        maskbits |= MASKBITS['GALAXY']  * ((refmap & IN_BLOB['GALAXY'] ) > 0)
-        maskbits |= MASKBITS['CLUSTER'] * ((refmap & IN_BLOB['CLUSTER']) > 0)
-        del refmap
-    # SATUR
-    if saturated_pix is not None:
-        for b, sat in zip(bands, saturated_pix):
-            maskbits |= (MASKBITS['SATUR_' + b.upper()] * sat).astype(np.int16)
-    # ALLMASK_{g,r,z}
-    for b,allmask in zip(bands, C.allmasks):
-        maskbits |= (MASKBITS['ALLMASK_' + b.upper()] * (allmask > 0))
-    # omitting maskbits header cards, bailout, & WISE
-    hdr = copy_header_with_wcs(version_header, targetwcs)
-    with survey.write_output('maskbits', brick=brickname, shape=maskbits.shape) as out:
-        out.fits.write(maskbits, header=hdr, extname='MASKBITS')
+    if not minimal_coadds:
+        # interim maskbits
+        from legacypipe.utils import copy_header_with_wcs
+        from legacypipe.bits import IN_BLOB
+        refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
+        # Construct a mask bits map
+        maskbits = np.zeros((H,W), np.int16)
+        # !PRIMARY
+        if not custom_brick:
+            U = find_unique_pixels(targetwcs, W, H, None,
+                                   brick.ra1, brick.ra2, brick.dec1, brick.dec2)
+            maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int16)
+            del U
+        # BRIGHT
+        if refmap is not None:
+            maskbits |= MASKBITS['BRIGHT']  * ((refmap & IN_BLOB['BRIGHT'] ) > 0)
+            maskbits |= MASKBITS['MEDIUM']  * ((refmap & IN_BLOB['MEDIUM'] ) > 0)
+            maskbits |= MASKBITS['GALAXY']  * ((refmap & IN_BLOB['GALAXY'] ) > 0)
+            maskbits |= MASKBITS['CLUSTER'] * ((refmap & IN_BLOB['CLUSTER']) > 0)
+            del refmap
+        # SATUR
+        if saturated_pix is not None:
+            for b, sat in zip(bands, saturated_pix):
+                maskbits |= (MASKBITS['SATUR_' + b.upper()] * sat).astype(np.int16)
+        # ALLMASK_{g,r,z}
+        for b,allmask in zip(bands, C.allmasks):
+            maskbits |= (MASKBITS['ALLMASK_' + b.upper()] * (allmask > 0))
+        # omitting maskbits header cards, bailout, & WISE
+        hdr = copy_header_with_wcs(version_header, targetwcs)
+        with survey.write_output('maskbits', brick=brickname, shape=maskbits.shape) as out:
+            out.fits.write(maskbits, header=hdr, extname='MASKBITS')
 
     # Sims: coadds of galaxy sims only, image only
     if hasattr(tims[0], 'sims_image'):
         sims_coadd,_ = quick_coadds(
             tims, bands, targetwcs, images=[tim.sims_image for tim in tims])
 
-    D = _depth_histogram(brick, targetwcs, bands, C.psfdetivs, C.galdetivs)
-    with survey.write_output('depth-table', brick=brickname) as out:
-        D.writeto(None, fits_object=out.fits)
-    del D
+    if not minimal_coadds:
+        D = _depth_histogram(brick, targetwcs, bands, C.psfdetivs, C.galdetivs)
+        with survey.write_output('depth-table', brick=brickname) as out:
+            D.writeto(None, fits_object=out.fits)
+        del D
 
-    # Write per-brick CCDs table
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
         primhdr.add_record(r)
     primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
                             comment='NOAO data product type'))
+    # Write per-brick CCDs table
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
@@ -2698,7 +2701,7 @@ def stage_writecat(
     catalog.
     '''
     from legacypipe.catalog import prepare_fits_catalog
-    from legacypipe.utils import copy_header_with_wcs
+    from legacypipe.utils import copy_header_with_wcs, add_bits
 
     record_event and record_event('stage_writecat: starting')
     _add_stage_version(version_header, 'WCAT', 'writecat')
@@ -2729,24 +2732,7 @@ def stage_writecat(
             name='WBIT_%i' % bit, value=name, comment='WISE: %s' % comm))
 
     # Record the meaning of ALLMASK/ANYMASK bits
-    version_header.add_record(dict(name='COMMENT', value='allmask/anymask bits:'))
-    bits = list(DQ_BITS.values())
-    bits.sort()
-    bitmap = dict((v,k) for k,v in DQ_BITS.items())
-    for i in range(16):
-        bit = 1<<i
-        if not bit in bitmap:
-            continue
-        version_header.add_record(
-            dict(name='AM_%s' % bitmap[bit].upper()[:5], value=bit,
-                 comment='ALLMASK/ANYMASK bit 2**%i' % i))
-    for i in range(16):
-        bit = 1<<i
-        if not bit in bitmap:
-            continue
-        version_header.add_record(
-            dict(name='ABIT_%i' % i, value=bitmap[bit],
-                 comment='ALLMASK/ANYMASK bit 2**%i=%i meaning' % (i, bit)))
+    add_bits(version_header, DQ_BITS, 'allmask/anymask', 'AM', 'A')
 
     # create maskbits header
     hdr = copy_header_with_wcs(version_header, targetwcs)
@@ -3000,8 +2986,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               outliers=True,
               cache_outliers=False,
               lanczos=True,
-              early_coadds=False,
               blob_image=False,
+              minimal_coadds=False,
               do_calibs=True,
               old_calibs_ok=False,
               write_metrics=True,
@@ -3116,8 +3102,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     - *nsigma*: float; detection threshold in sigmas.
 
     - *wise*: boolean; run WISE forced photometry?
-
-    - *early_coadds*: boolean; generate the early coadds?
 
     - *do_calibs*: boolean; run the calibration preprocessing steps?
 
@@ -3275,6 +3259,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   wise_ceres=wise_ceres,
                   unwise_coadds=unwise_coadds,
                   bailout=bail_out,
+                  minimal_coadds=minimal_coadds,
                   do_calibs=do_calibs,
                   old_calibs_ok=old_calibs_ok,
                   write_metrics=write_metrics,
@@ -3349,9 +3334,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         }
 
     if 'image_coadds' in stages:
-        early_coadds = True
-
-    if early_coadds:
         if blob_image:
             prereqs.update({
                 'image_coadds':'srcs',
@@ -3622,10 +3604,10 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
         '--galex-dir', default=None,
         help='Base directory for GALEX coadds')
 
-    parser.add_argument('--early-coadds', action='store_true', default=False,
-                        help='Make early coadds?')
     parser.add_argument('--blob-image', action='store_true', default=False,
                         help='Create "imageblob" image?')
+    parser.add_argument('--minimal-coadds', action='store_true', default=False,
+                        help='Only create image and invvar coadds in image_coadds stage')
 
     parser.add_argument(
         '--no-lanczos', dest='lanczos', action='store_false', default=True,

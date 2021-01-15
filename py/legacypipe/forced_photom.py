@@ -17,8 +17,9 @@ from astrometry.util.ttime import Time
 from tractor import Tractor, Catalog, NanoMaggies
 from tractor.galaxy import disable_galaxy_cache
 
-from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version_header, apertures_arcsec
+from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version_header, apertures_arcsec, radec_at_mjd
 from legacypipe.catalog import read_fits_catalog
+from legacypipe.outliers import read_outlier_mask_file
 
 def get_parser():
     '''
@@ -83,36 +84,63 @@ def get_parser():
 
     parser.add_argument('--camera', help='Cut to only CCD with given camera name?')
 
-    parser.add_argument('expnum', help='Exposure number')
-    parser.add_argument('ccdname', help='Image HDU OR CCD name OR "all".')
-    parser.add_argument('outfn', help='Output catalog filename.')
+    parser.add_argument('--expnum', type=int, help='Exposure number')
+    parser.add_argument('--ccdname', default=None, help='CCD name to cut to (default: all)')
+    parser.add_argument('--out', help='Output catalog filename (default: use --out-dir)')
+    parser.add_argument('--out-dir', help='Output base directory')
 
+    parser.add_argument('--outlier-mask', nargs='?', const='default',
+                        help='Write the reassembled outlier mask?  Optionally include output filename; default use --out-dir')
+    parser.add_argument('-v', '--verbose', dest='verbose', action='count',
+                        default=0, help='Make more verbose')
     return parser
 
 def main(survey=None, opt=None, args=None):
-
+    '''Driver function for forced photometry of individual Legacy
+    Survey images.
+    '''
     if args is None:
         args = sys.argv[1:]
     print('forced_photom.py', ' '.join(args))
 
-    '''Driver function for forced photometry of individual Legacy
-    Survey images.
-    '''
     if opt is None:
         parser = get_parser()
         opt = parser.parse_args(args)
 
-    print('Opt:', opt)
-    print('Opt:', vars(opt))
+    import logging
+    if opt.verbose == 0:
+        lvl = logging.INFO
+    else:
+        lvl = logging.DEBUG
+    logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+    # tractor logging is *soooo* chatty
+    logging.getLogger('tractor.engine').setLevel(lvl + 10)
 
     t0 = Time()
-    if opt.skip and os.path.exists(opt.outfn):
-        print('Ouput file exists:', opt.outfn)
-        sys.exit(0)
+    if survey is None:
+        survey = LegacySurveyData(survey_dir=opt.survey_dir,
+                                  output_dir=opt.out_dir)
+    if opt.skip:
+        if opt.out is not None:
+            outfn = opt.out
+        else:
+            outfn = survey.find_file('forced', output=True,
+                                     camera=opt.camera, expnum=opt.expnum)
+        if os.path.exists(outfn):
+            print('Ouput file exists:', outfn)
+            return 0
 
     if opt.derivs and opt.agn:
         print('Sorry, can\'t do --derivs AND --agn')
-        sys.exit(0)
+        return -1
+
+    if opt.out is None and opt.out_dir is None:
+        print('Must supply either --out or --out-dir')
+        return -1
+
+    if opt.expnum is None and opt.out is None:
+        print('If no --expnum is given, must supply --out filename')
+        return -1
 
     if not opt.forced:
         opt.apphot = True
@@ -127,27 +155,12 @@ def main(survey=None, opt=None, args=None):
         from astrometry.util.plotutils import PlotSequence
         ps = PlotSequence(opt.plots)
 
-    # Try parsing first arg as exposure number (otherwise, it's a filename)
-    try:
-        expnum = int(opt.expnum)
-        filename = None
-    except ValueError:
-        # make this 'None' for survey.find_ccds()
-        expnum = None
-        filename = opt.expnum
-
-    # Try parsing HDU: "all" or HDU name or HDU number.
-    all_hdus = (opt.ccdname == 'all')
-    hdu = -1
-    ccdname = None
-    if not all_hdus:
-        try:
-            hdu = int(opt.ccdname)
-        except:
-            ccdname = opt.ccdname
-
-    if survey is None:
-        survey = LegacySurveyData(survey_dir=opt.survey_dir)
+    # Read metadata from survey-ccds.fits table
+    ccds = survey.find_ccds(camera=opt.camera, expnum=opt.expnum,
+                         ccdname=opt.ccdname)
+    print(len(ccds), 'with camera', opt.camera, 'and expnum', opt.expnum, 'and ccdname', opt.ccdname)
+    # sort CCDs
+    ccds.cut(np.lexsort((ccds.ccdname, ccds.expnum, ccds.camera)))
 
     # If there is only one catalog survey_dir, we pass it to get_catalog_in_wcs
     # as the northern survey.
@@ -162,40 +175,8 @@ def main(survey=None, opt=None, args=None):
     elif opt.catalog_dir is not None:
         catsurvey_north = LegacySurveyData(survey_dir = opt.catalog_dir)
 
-    if filename is not None and hdu >= 0:
-        # FIXME -- try looking up in CCDs file?
-        # Read metadata from file
-        print('Warning: faking metadata from file contents')
-        T = exposure_metadata([filename], hdus=[hdu])
-        print('Metadata:')
-        T.about()
-
-        if not 'ccdzpt' in T.columns():
-            phdr = fitsio.read_header(filename)
-            T.ccdzpt = np.array([phdr['MAGZERO']])
-            print('WARNING: using header MAGZERO')
-            T.ccdraoff = np.array([0.])
-            T.ccddecoff = np.array([0.])
-            print('WARNING: setting CCDRAOFF, CCDDECOFF to zero.')
-
-    else:
-        # Read metadata from survey-ccds.fits table
-        T = survey.find_ccds(expnum=expnum, ccdname=ccdname)
-        print(len(T), 'with expnum', expnum, 'and ccdname', ccdname)
-        if hdu >= 0:
-            T.cut(T.image_hdu == hdu)
-            print(len(T), 'with HDU', hdu)
-        if filename is not None:
-            T.cut(np.array([f.strip() == filename for f in T.image_filename]))
-            print(len(T), 'with filename', filename)
-        if opt.camera is not None:
-            T.cut(T.camera == opt.camera)
-            print(len(T), 'with camera', opt.camera)
-        if not all_hdus:
-            assert(len(T) == 1)
-
     args = []
-    for ccd in T:
+    for ccd in ccds:
         args.append((survey,
                      catsurvey_north, catsurvey_south, opt.catalog_resolve_dec_ngc,
                      ccd, opt, zoomslice, ps))
@@ -224,45 +205,98 @@ def main(survey=None, opt=None, args=None):
         print('No photometry results to write.')
         return 0
     # Keep only the first header
-    _,version_hdr = FF[0]
-    FF = [F for F,hdr in FF]
+    _,version_hdr,_,_ = FF[0]
+    # unpack results
+    outlier_masks = [m for _,_,m,_ in FF]
+    outlier_hdrs  = [h for _,_,_,h in FF]
+    FF            = [F for F,_,_,_ in FF]
     F = merge_tables(FF)
 
-    if all_hdus:
+    if len(ccds):
         version_hdr.delete('CPHDU')
         version_hdr.delete('CCDNAME')
 
-    units = {'exptime':'sec',
-             'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2',
-             'apflux':'nanomaggy', 'apflux_ivar':'1/nanomaggy^2',
-             'psfdepth':'1/nanomaggy^2', 'galdepth':'1/nanomaggy^2',
-             'sky':'nanomaggy/arcsec^2', 'psfsize':'arcsec' }
-    if opt.derivs:
-        units.update({'dra':'arcsec', 'ddec':'arcsec',
-                      'dra_ivar':'1/arcsec^2', 'ddec_ivar':'1/arcsec^2'})
+    from legacypipe.utils import add_bits
+    from legacypipe.bits import DQ_BITS
+    add_bits(version_hdr, DQ_BITS, 'DQMASK', 'DQ', 'D')
+    from legacyzpts.psfzpt_cuts import CCD_CUT_BITS
+    add_bits(version_hdr, CCD_CUT_BITS, 'CCD_CUTS', 'CC', 'C')
+    for i,ap in enumerate(apertures_arcsec):
+        version_hdr.add_record(dict(name='APRAD%i' % i, value=ap,
+                                    comment='(optical) Aperture radius, in arcsec'))
+
+    unitmap = {'exptime':'sec',
+               'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2',
+               'apflux':'nanomaggy', 'apflux_ivar':'1/nanomaggy^2',
+               'psfdepth':'1/nanomaggy^2', 'galdepth':'1/nanomaggy^2',
+               'sky':'nanomaggy/arcsec^2', 'psfsize':'arcsec',
+               'fwhm':'pixels', 'ccdrarms':'arcsec', 'ccddecrms':'arcsec',
+               'ra':'deg', 'dec':'deg', 'skyrms':'counts/sec',
+               'dra':'arcsec', 'ddec':'arcsec',
+               'dra_ivar':'1/arcsec^2', 'ddec_ivar':'1/arcsec^2'}
 
     columns = F.get_columns()
-    order = ['release', 'brickid', 'brickname', 'objid', 'camera', 'expnum', 'ccdname',
-             'filter', 'mjd', 'exptime', 'psfsize', 'ccd_cuts', 'airmass', 'sky',
-             'psfdepth', 'galdepth',
-             'ra', 'dec', 'flux', 'flux_ivar', 'fracflux', 'rchisq', 'fracmasked',
-             'apflux', 'apflux_ivar', 'x', 'y', 'dqmask', 'dra', 'ddec', 'dra_ivar', 'ddec_ivar']
+    order = ['release', 'brickid', 'brickname', 'objid', 'camera', 'expnum',
+             'ccdname', 'filter', 'mjd', 'exptime', 'psfsize', 'fwhm', 'ccd_cuts',
+             'airmass', 'sky', 'skyrms', 'psfdepth', 'galdepth', 'ccdzpt',
+             'ccdrarms', 'ccddecrms', 'ccdphrms', 'ra', 'dec', 'flux',
+             'flux_ivar', 'fracflux', 'rchisq', 'fracmasked', 'fracin',
+             'apflux', 'apflux_ivar', 'x', 'y', 'dqmask', 'dra', 'ddec',
+             'dra_ivar', 'ddec_ivar']
     columns = [c for c in order if c in columns]
+    units = [unitmap.get(c,'') for c in columns]
 
-    # Set units headers (must happen after column ordering is set!)
-    hdr = fitsio.FITSHDR()
-    for i,col in enumerate(columns):
-        if col in units:
-            hdr.add_record(dict(name='TUNIT%i' % (i+1), value=units[col]))
+    if opt.out is not None:
+        outdir = os.path.dirname(opt.out)
+        if len(outdir):
+            trymakedirs(outdir)
+        tmpfn = os.path.join(outdir, 'tmp-' + os.path.basename(opt.out))
+        fitsio.write(tmpfn, None, header=version_hdr, clobber=True)
+        F.writeto(tmpfn, units=units, append=True, columns=columns)
+        os.rename(tmpfn, opt.out)
+        print('Wrote', opt.out)
+    else:
+        with survey.write_output('forced', camera=opt.camera, expnum=opt.expnum) as out:
+            F.writeto(None, fits_object=out.fits, primheader=version_hdr,
+                      units=units, columns=columns)
+            print('Wrote', out.real_fn)
 
-    outdir = os.path.dirname(opt.outfn)
-    if len(outdir):
-        trymakedirs(outdir)
-    tmpfn = os.path.join(outdir, 'tmp-' + os.path.basename(opt.outfn))
-    fitsio.write(tmpfn, None, header=version_hdr, clobber=True)
-    F.writeto(tmpfn, header=hdr, append=True, columns=columns)
-    os.rename(tmpfn, opt.outfn)
-    print('Wrote', opt.outfn)
+    if opt.outlier_mask is not None:
+        # Add outlier bit meanings to the primary header
+        version_hdr.add_record(dict(name='COMMENT', value='Outlier mask bit meanings'))
+        version_hdr.add_record(dict(name='OUTL_POS', value=1,
+                                    comment='Outlier mask bit for Positive outlier'))
+        version_hdr.add_record(dict(name='OUTL_NEG', value=2,
+                                    comment='Outlier mask bit for Negative outlier'))
+
+    if opt.outlier_mask == 'default':
+        outdir = os.path.join(opt.out_dir, 'outlier-masks')
+        camexp = set(zip(ccds.camera, ccds.expnum))
+        for c,e in camexp:
+            I = np.flatnonzero((ccds.camera == c) * (ccds.expnum == e))
+            ccd = ccds[I[0]]
+            imfn = ccd.image_filename.strip()
+            outfn = os.path.join(outdir, imfn.replace('.fits', '-outlier.fits'))
+            from astrometry.util.file import trymakedirs
+            trymakedirs(outfn, dir=True)
+            tempfn = outfn.replace('.fits', '-tmp.fits')
+            with fitsio.FITS(tempfn, 'rw', clobber=True) as fits:
+                fits.write(None, header=version_hdr)
+                for i in I:
+                    mask = outlier_masks[i]
+                    _,_,_,meth,tile = survey.get_compression_args('outliers_mask', shape=mask.shape)
+                    fits.write(mask, header=outlier_hdrs[i], extname=ccds.ccdname[i],
+                               compress=meth, tile_dims=tile)
+            os.rename(tempfn, outfn)
+            print('Wrote', outfn)
+    elif opt.outlier_mask is not None:
+        with fitsio.FITS(opt.outlier_mask, 'rw', clobber=True) as F:
+            F.write(None, header=version_hdr)
+            for i,(hdr,mask) in enumerate(zip(outlier_hdrs,outlier_masks)):
+                _,_,_,meth,tile = survey.get_compression_args('outliers_mask', shape=mask.shape)
+                F.write(mask, header=hdr, extname=ccds.ccdname[i],
+                        compress=meth, tile_dims=tile)
+        print('Wrote', opt.outlier_mask)
 
     tnow = Time()
     print('Total:', tnow-t0)
@@ -272,12 +306,17 @@ def bounce_one_ccd(X):
     # for multiprocessing
     return run_one_ccd(*X)
 
-def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_dec=None,
+def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None, resolve_dec=None,
                        margin=20):
     TT = []
     surveys = [(catsurvey_north, True)]
     if catsurvey_south is not None:
         surveys.append((catsurvey_south, False))
+
+    columns = ['ra', 'dec', 'brick_primary', 'type', 'release',
+               'brickid', 'brickname', 'objid', 'flux_g', 'flux_r', 'flux_z',
+               'sersic', 'shape_r', 'shape_e1', 'shape_e2',
+               'ref_epoch', 'pmra', 'pmdec', 'parallax', 'ref_cat', 'ref_id',]
 
     for catsurvey,north in surveys:
         bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
@@ -301,12 +340,7 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
                 print('WARNING: catalog', fn, 'does not exist.  Skipping!')
                 continue
             print('Reading', fn)
-            T = fits_table(fn, columns=[
-                'ra', 'dec', 'brick_primary', 'type', 'release',
-                'brickid', 'brickname', 'objid', 'flux_r',
-                'sersic', 'shape_r', 'shape_e1', 'shape_e2',
-                'ref_epoch', 'pmra', 'pmdec', 'parallax'
-                ])
+            T = fits_table(fn, columns=columns)
             if resolve_dec is not None:
                 if north:
                     T.cut(T.dec >= resolve_dec)
@@ -317,16 +351,15 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
                     print('Cut to', len(T), 'south of the resolve line')
             _,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
             W,H = chipwcs.get_width(), chipwcs.get_height()
-            I, = np.nonzero((xx >= -margin) * (xx <= (W+margin)) *
-                            (yy >= -margin) * (yy <= (H+margin)))
-            T.cut(I)
-            print('Cut to', len(T), 'sources within image + margin')
+            # Cut to sources that are inside the image+margin
+            T.cut((xx >= -margin) * (xx <= (W+margin)) *
+                  (yy >= -margin) * (yy <= (H+margin)))
             T.cut(T.brick_primary)
-            print('Cut to', len(T), 'on brick_primary')
+            #print('Cut to', len(T), 'on brick_primary')
             # drop DUP sources
             I, = np.nonzero([t.strip() != 'DUP' for t in T.type])
             T.cut(I)
-            print('Cut to', len(T), 'after removing DUP')
+            #print('Cut to', len(T), 'after removing DUP')
             if len(T):
                 TT.append(T)
     if len(TT) == 0:
@@ -334,17 +367,99 @@ def get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=None, resolve_d
     T = merge_tables(TT, columns='fillzero')
     T._header = TT[0]._header
     del TT
+
+    SGA = find_missing_sga(T, chipwcs, survey, surveys, columns)
+    if SGA is not None:
+        ## Add 'em in!
+        T = merge_tables([T, SGA], columns='fillzero')
     print('Total of', len(T), 'catalog sources')
     return T
 
+def find_missing_sga(T, chipwcs, survey, surveys, columns):
+    # Look up SGA large galaxies touching this chip.
+    # The ones inside this chip(+margin) will already exist in the catalog;
+    # we'll find the ones we're missing and read those extra brick catalogs.
+    from legacypipe.reference import read_large_galaxies
+    # Find all the SGA sources we need
+    sga = read_large_galaxies(survey, chipwcs, bands=None, extra_columns=['brickname'])
+    if sga is None:
+        print('No SGA galaxies found')
+        return None
+    sga.cut(sga.islargegalaxy * sga.freezeparams)
+    if len(sga) == 0:
+        print('No frozen SGA galaxies found')
+        return None
+    # keep_radius to pix
+    keeprad = np.ceil(sga.keep_radius * 3600. / chipwcs.pixel_scale()).astype(int)
+    _,xx,yy = chipwcs.radec2pixelxy(sga.ra, sga.dec)
+    H,W = chipwcs.shape
+    # cut to those touching the chip
+    sga.cut((xx > -keeprad) * (xx < W+keeprad) *
+            (yy > -keeprad) * (yy < H+keeprad))
+    #print('Read', len(sga), 'SGA galaxies touching the chip.')
+    if len(sga) == 0:
+        print('No SGA galaxies touch this chip')
+        return None
+    Tsga = T[T.ref_cat == 'L3']
+    #print(len(Tsga), 'SGA entries already exist in catalog')
+    Isga = np.array([i for i,sga_id in enumerate(sga.ref_id) if not sga_id in set(Tsga.ref_id)])
+    assert(len(Isga) + len(Tsga) == len(sga))
+    if len(Isga) == 0:
+        print('All SGA galaxies already in catalogs')
+        return None
+    print('Finding', len(Isga), 'additional SGA entries in nearby bricks')
+    sga.cut(Isga)
+    #print('Finding bricks to read...')
+    sgabricks = []
+
+    todo = []
+    for ra,dec,brick in zip(sga.ra, sga.dec, sga.brickname):
+        bricks = survey.get_bricks_by_name(brick)
+        brick = bricks[0]
+        # The SGA catalog has a "brickname", but it unfortunately is not always exactly correct
+        if ra >= brick.ra1 and ra < brick.ra2 and dec >= brick.dec1 and dec < brick.dec2:
+            sgabricks.append(bricks)
+        else:
+            # MAGIC 0.2 ~ brick radius
+            bricks = survey.get_bricks_near(ra, dec, 0.2)
+            bricks = bricks[(ra  >= bricks.ra1 ) * (ra  < bricks.ra2) *
+                            (dec >= bricks.dec1) * (dec < bricks.dec2)]
+            if len(bricks):
+                sgabricks.append(bricks)
+    sgabricks = merge_tables(sgabricks)
+    _,I = np.unique(sgabricks.brickname, return_index=True)
+    sgabricks.cut(I)
+    #print('Need to read', len(sgabricks), 'bricks to pick up SGA sources')
+    SGA = []
+    for brick in sgabricks.brickname:
+        # For picking up these SGA bricks, resolve doesn't matter (they're fixed
+        # in both).
+        for catsurvey,north in surveys:
+            fn = catsurvey.find_file('tractor', brick=brick)
+            if os.path.exists(fn):
+                t = fits_table(fn, columns=['ref_cat', 'ref_id'])
+                I = np.flatnonzero(t.ref_cat == 'L3')
+                #print('Read', len(I), 'SGA entries from', brick)
+                SGA.append(fits_table(fn, columns=columns, rows=I))
+                break
+    SGA = merge_tables(SGA)
+    SGA.cut(SGA.brick_primary)
+    #print('Total of', len(SGA), 'sources')
+    I = np.array([i for i,ref_id in enumerate(SGA.ref_id) if ref_id in set(sga.ref_id)])
+    SGA.cut(I)
+    #print('Found', len(SGA), 'desired SGA sources')
+    assert(len(sga) == len(SGA))
+    assert(set(sga.ref_id) == set(SGA.ref_id))
+    return SGA
+
 def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                 ccd, opt, zoomslice, ps):
+    from functools import reduce
+    from legacypipe.bits import DQ_BITS
+
     tlast = Time()
-
-    print('Opt:', opt)
-
+    #print('Opt:', opt)
     im = survey.get_image_object(ccd)
-
     if opt.do_calib:
         im.run_calibs(splinesky=True)
 
@@ -352,12 +467,34 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                                constant_invvar=opt.constant_invvar,
                                hybridPsf=opt.hybrid_psf,
                                normalizePsf=opt.normalize_psf,
-                               old_calibs_ok=True)
-    print('Got tim:', tim, 'x0,y0', tim.x0, tim.y0)
+                               old_calibs_ok=True, trim_edges=False)
+    print('Got tim:', tim)#, 'x0,y0', tim.x0, tim.y0)
+    chipwcs = tim.subwcs
+    H,W = tim.shape
 
     tnow = Time()
     print('Read image:', tnow-tlast)
     tlast = tnow
+
+    if ccd.camera == 'decam':
+        # Halo subtraction
+        from legacypipe.halos import subtract_one
+        from legacypipe.reference import mask_radius_for_mag, read_gaia
+        ref_margin = mask_radius_for_mag(0.)
+        mpix = int(np.ceil(ref_margin * 3600. / chipwcs.pixel_scale()))
+        marginwcs = chipwcs.get_subimage(-mpix, -mpix, W+2*mpix, H+2*mpix)
+        gaia = read_gaia(marginwcs, None)
+        keeprad = np.ceil(gaia.keep_radius * 3600. / chipwcs.pixel_scale()).astype(int)
+        _,xx,yy = chipwcs.radec2pixelxy(gaia.ra, gaia.dec)
+        # cut to those touching the chip
+        gaia.cut((xx > -keeprad) * (xx < W+keeprad) *
+                 (yy > -keeprad) * (yy < H+keeprad))
+        Igaia, = np.nonzero(gaia.isgaia * gaia.pointsource)
+        halostars = gaia[Igaia]
+        print('Got', len(gaia), 'Gaia stars,', len(halostars), 'for halo subtraction')
+        moffat = True
+        halos = subtract_one((tim, halostars, moffat))
+        tim.data -= halos
 
     # The "north" and "south" directories often don't have
     # 'survey-bricks" files of their own -- use the 'survey' one
@@ -374,28 +511,43 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
             catsurvey_north.bricks = survey.get_bricks_readonly()
 
     # Apply outlier masks
-    if True:
-        # Outliers masks are computed within a survey (north/south for dr8), and are stored
-        # in a brick-oriented way, in the results directories.
-        north_ccd = (ccd.camera.strip() != 'decam')
-        catsurvey = catsurvey_north
-        if not north_ccd and catsurvey_south is not None:
-            catsurvey = catsurvey_south
-        chipwcs = tim.subwcs
-        bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
-        for b in bricks:
-            from legacypipe.outliers import read_outlier_mask_file
-            print('Reading outlier mask for brick', b.brickname)
-            ok = read_outlier_mask_file(catsurvey, [tim], b.brickname, subimage=False, output=False,
-                                        ps=ps)
-            if not ok:
-                print('WARNING: failed to read outliers mask file for brick', b.brickname)
+    outlier_header = None
+    outlier_mask = None
+    posneg_mask = None
+    if opt.outlier_mask is not None:
+        posneg_mask = np.zeros(tim.shape, np.uint8)
+    # Outliers masks are computed within a survey (north/south for dr9), and are stored
+    # in a brick-oriented way, in the results directories.
+    north_ccd = (ccd.camera.strip() != 'decam')
+    catsurvey = catsurvey_north
+    if not north_ccd and catsurvey_south is not None:
+        catsurvey = catsurvey_south
+    bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
+    for b in bricks:
+        print('Reading outlier mask for brick', b.brickname)
+        ok = read_outlier_mask_file(catsurvey, [tim], b.brickname, pos_neg_mask=posneg_mask,
+                                    subimage=False, output=False, ps=ps)
+        if not ok:
+            print('WARNING: failed to read outliers mask file for brick', b.brickname)
+
+    if opt.outlier_mask is not None:
+        outlier_mask = np.zeros((ccd.height, ccd.width), np.uint8)
+        outlier_mask[tim.y0:tim.y0+H, tim.x0:tim.x0+W] = posneg_mask
+        del posneg_mask
+        # Grab original image headers (including WCS)
+        im = survey.get_image_object(ccd)
+        imhdr = im.read_image_header()
+        imhdr['CAMERA'] = ccd.camera
+        imhdr['EXPNUM'] = ccd.expnum
+        imhdr['CCDNAME'] = ccd.ccdname
+        imhdr['IMGFILE'] = ccd.image_filename.strip()
+        outlier_header = imhdr
 
     if opt.catalog:
         T = fits_table(opt.catalog)
     else:
         chipwcs = tim.subwcs
-        T = get_catalog_in_wcs(chipwcs, catsurvey_north, catsurvey_south=catsurvey_south,
+        T = get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=catsurvey_south,
                                resolve_dec=resolve_dec)
         if T is None:
             print('No sources to photometer.')
@@ -411,7 +563,6 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         # Gaia stars: move RA,Dec to the epoch of this image.
         I = np.flatnonzero(T.ref_epoch > 0)
         if len(I):
-            from legacypipe.survey import radec_at_mjd
             print('Moving', len(I), 'Gaia stars to MJD', tim.time.toMjd())
             ra,dec = radec_at_mjd(T.ra[I], T.dec[I], T.ref_epoch[I].astype(float),
                                   T.pmra[I], T.pmdec[I], T.parallax[I],
@@ -422,6 +573,21 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     tnow = Time()
     print('Read catalog:', tnow-tlast)
     tlast = tnow
+
+    # Find SGA galaxies outside this chip and subtract them before we begin.
+    chipwcs = tim.subwcs
+    _,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
+    W,H = chipwcs.get_width(), chipwcs.get_height()
+    sga_out = (T.ref_cat=='L3') * np.logical_not((xx >= 1) * (xx <= W) * (yy >= 1) * (yy <= H))
+    I = np.flatnonzero(sga_out)
+    if len(I):
+        print(len(I), 'SGA galaxies are outside the image.  Subtracting...')
+        cat = read_fits_catalog(T[I], bands=[tim.band])
+        tr = Tractor([tim], cat)
+        mod = tr.getModelImage(0)
+        tim.data -= mod
+        I = np.flatnonzero(np.logical_not(sga_out))
+        T.cut(I)
 
     cat = read_fits_catalog(T, bands='r')
     # Replace the brightness (which will be a NanoMaggies with g,r,z)
@@ -455,31 +621,35 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     F.objid     = T.objid
 
     F.camera  = np.array([ccd.camera] * len(F))
-    F.expnum  = np.array([im.expnum]  * len(F)).astype(np.int64)
+    F.expnum  = np.array([im.expnum]  * len(F), dtype=np.int64)
     F.ccdname = np.array([im.ccdname] * len(F))
 
     # "Denormalizing"
     F.filter  = np.array([tim.band]               * len(F))
     F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(F))
-    F.exptime = np.array([tim.primhdr['EXPTIME']] * len(F)).astype(np.float32)
-    F.psfsize = np.array([tim.psf_fwhm * tim.imobj.pixscale] * len(F)).astype(np.float32)
+    F.exptime = np.array([tim.primhdr['EXPTIME']] * len(F), dtype=np.float32)
+    F.psfsize = np.array([tim.psf_fwhm * tim.imobj.pixscale] * len(F), dtype=np.float32)
     F.ccd_cuts = np.array([ccd.ccd_cuts] * len(F))
-    F.airmass  = np.array([ccd.airmass ] * len(F))
+    F.airmass  = np.array([ccd.airmass ] * len(F), dtype=np.float32)
     ### --> also add units to the dict below so the FITS headers have units
-    F.sky     = np.array([tim.midsky / tim.zpscale / tim.imobj.pixscale**2] * len(F)).astype(np.float32)
+    F.sky     = np.array([tim.midsky / tim.zpscale / tim.imobj.pixscale**2] * len(F), dtype=np.float32)
     # in the same units as the depth maps -- flux inverse-variance.
-    F.psfdepth = np.array([(1. / (tim.sig1 / tim.psfnorm)**2)] * len(F)).astype(np.float32)
-    F.galdepth = np.array([(1. / (tim.sig1 / tim.galnorm)**2)] * len(F)).astype(np.float32)
-    # F.psfdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.psfnorm) - 9)] * len(F)).astype(np.float32)
-    # F.galdepth = np.array([-2.5 * (np.log10(5. * tim.sig1 / tim.galnorm) - 9)] * len(F)).astype(np.float32)
+    F.psfdepth = np.array([(1. / (tim.sig1 / tim.psfnorm)**2)] * len(F), dtype=np.float32)
+    F.galdepth = np.array([(1. / (tim.sig1 / tim.galnorm)**2)] * len(F), dtype=np.float32)
+    F.fwhm     = np.array([tim.psf_fwhm] * len(F), dtype=np.float32)
+    F.skyrms   = np.array([ccd.skyrms]   * len(F), dtype=np.float32)
+    F.ccdzpt   = np.array([ccd.ccdzpt]   * len(F), dtype=np.float32)
+    F.ccdrarms = np.array([ccd.ccdrarms] * len(F), dtype=np.float32)
+    F.ccddecrms= np.array([ccd.ccddecrms]* len(F), dtype=np.float32)
+    F.ccdphrms = np.array([ccd.ccdphrms] * len(F), dtype=np.float32)
 
-    print('opt.derivs:', opt.derivs)
-
-    # super units questions here
     if opt.derivs:
         cosdec = np.cos(np.deg2rad(T.dec))
-        F.dra  = (F.flux_dra  / F.flux) * 3600. / cosdec
-        F.ddec = (F.flux_ddec / F.flux) * 3600.
+        with np.errstate(divide='ignore', invalid='ignore'):
+            F.dra  = (F.flux_dra  / F.flux) * 3600. / cosdec
+            F.ddec = (F.flux_ddec / F.flux) * 3600.
+        F.dra [F.flux == 0] = 0.
+        F.ddec[F.flux == 0] = 0.
         F.dra_ivar  = F.flux_dra_ivar  * (F.flux / 3600. * cosdec)**2
         F.ddec_ivar = F.flux_ddec_ivar * (F.flux / 3600.)**2
         F.delete_column('flux_dra')
@@ -502,12 +672,15 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     F.y = (y-1).astype(np.float32)
 
     h,w = tim.shape
-    F.dqmask = tim.dq[np.clip(np.round(F.y).astype(int), 0, h-1),
-                      np.clip(np.round(F.x).astype(int), 0, w-1)]
+    ix = np.round(F.x).astype(int)
+    iy = np.round(F.y).astype(int)
+    F.dqmask = tim.dq[np.clip(iy, 0, h-1), np.clip(ix, 0, w-1)]
+    # Set an OUT-OF-BOUNDS bit.
+    F.dqmask[reduce(np.logical_or, [ix < 0, ix >= w, iy < 0, iy >= h])] |= DQ_BITS['edge2']
 
     program_name = sys.argv[0]
     ## FIXME -- from catalog?
-    release = 8002
+    release = 9999
     version_hdr = get_version_header(program_name, surveydir, release)
     filename = getattr(ccd, 'image_filename')
     if filename is None:
@@ -547,7 +720,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
 
     tnow = Time()
     print('Forced phot:', tnow-tlast)
-    return F,version_hdr
+    return F,version_hdr,outlier_mask,outlier_header
 
 def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                     do_forced=True, do_apphot=True, get_model=False, ps=None,
@@ -589,20 +762,19 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         for i,src in enumerate(cat):
             from tractor import PointSource
             realsrcs.append(src)
-
             if not isinstance(src, PointSource):
                 continue
+            realmod = src.getUnitFluxModelPatch(tim)
+            if realmod is None:
+                continue
             Iderivs.append(i)
-
             brightness_dra  = src.getBrightness().copy()
             brightness_ddec = src.getBrightness().copy()
             brightness_dra .setParams(np.zeros(brightness_dra .numberOfParams()))
             brightness_ddec.setParams(np.zeros(brightness_ddec.numberOfParams()))
             brightness_dra .freezeAllBut(tim.band)
             brightness_ddec.freezeAllBut(tim.band)
-
-            dsrc = SourceDerivatives(src, [brightness_dra, brightness_ddec],
-                                     tim, ps)
+            dsrc = SourceDerivatives(src, [brightness_dra, brightness_ddec], tim, ps)
             derivsrcs.append(dsrc)
         Iderivs = np.array(Iderivs)
 
@@ -730,11 +902,9 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         F.flux_ivar = R.IV[:N].astype(np.float32)
 
         F.fracflux = R.fitstats.profracflux[:N].astype(np.float32)
+        F.fracin   = R.fitstats.fracin     [:N].astype(np.float32)
         F.rchisq   = R.fitstats.prochi2    [:N].astype(np.float32)
-        try:
-            F.fracmasked = R.fitstats.promasked[:N].astype(np.float32)
-        except:
-            print('No "fracmasked" available (only in recent Tractor versions)')
+        F.fracmasked = R.fitstats.promasked[:N].astype(np.float32)
 
         if derivs:
             F.flux_dra  = np.zeros(len(F), np.float32)

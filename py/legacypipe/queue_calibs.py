@@ -488,9 +488,10 @@ def main(args):
         camexp = set([(c,e) for c,e in zip(T.camera, T.expnum)])
         print(len(camexp), 'unique camera/exposure pairs')
         for cam,exp in camexp:
-            expstr = '%08i' % exp
-            outfn = os.path.join('forced', cam, expstr[:5], 'forced-%s-%s.fits' % (cam, exp))
-            f.write('%s %s all %s\n' % (cam, exp, outfn))
+            #expstr = '%08i' % exp
+            #outfn = os.path.join('forced', cam, expstr[:5], 'forced-%s-%s.fits' % (cam, exp))
+            #f.write('%s %s all %s\n' % (cam, exp, outfn))
+            f.write('%s %s\n' % (cam, exp))
         f.close()
         log('Wrote', opt.out)
         return 0

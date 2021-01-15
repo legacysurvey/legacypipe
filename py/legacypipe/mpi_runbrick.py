@@ -35,6 +35,7 @@ from concurrent.futures import wait as cfwait, FIRST_COMPLETED
 class result_iter(object):
     def __init__(self, futures):
         self.futures = futures
+        self.n = len(futures)
     def next(self, timeout=None):
         if len(self.futures) == 0:
             raise StopIteration()
@@ -51,6 +52,14 @@ class result_iter(object):
             self.futures.remove(f)
             return f.result()
         raise TimeoutError()
+    # implement iterator interface
+    def __iter__(self):
+        return self
+    def __next__(self):
+        return self.next()
+    # support len()
+    def __len__(self):
+        return self.n
 
 # Wrapper over MPIPoolExecutor to make it look like a multiprocessing.Pool
 # (actually, an astrometry.util.timingpool!)

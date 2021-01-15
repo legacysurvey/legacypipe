@@ -119,7 +119,7 @@ RUN for x in \
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && git checkout dr9.4 \
+    && git checkout dr9.5 \
     && python3 setup-cython.py --with-ceres install --home /usr/local \
     && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so") \
@@ -239,6 +239,8 @@ RUN python -O -m compileall \
 RUN cd /src/legacypipe && git pull && git describe && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
+
+ENV LEGACYPIPE_DIR /src/legacypipe/py
 
 # # QDO
 # RUN cd qdo && git remote add dstn https://bitbucket.org/dstn/qdo.git \

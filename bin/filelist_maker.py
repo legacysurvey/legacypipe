@@ -30,33 +30,40 @@ def match(tfile, calib, flavor):
     return res
 
 
-def check(flist, calibdir, prefix, mask=True):
+def check(flist, calibdir, mask=True, ccds=False):
     if mask:
-        flist = flist[flist['qkeep'] != 0]
+        if ccds:
+            flist = flist[flist['ccd_cuts'] == 0]
+        else:
+            flist = flist[flist['qkeep'] != 0]
+    if ccds:
+        _, ind = numpy.unique(flist['image_filename'], return_index=True)
+        flist = flist[ind]
     # at the moment, check merged skies and merged psf match David's file.
     res = numpy.zeros(len(flist),
-                      dtype=[('splinesky', '3i4'), ('psfex', '3i4')])
+                      dtype=[('image_filename', 'U120'),
+                             ('splinesky', '3i4'), ('psfex', '3i4')])
     for i, tfile in enumerate(flist):
         if (i % 1000) == 0:
             print('Progress %d/%d' % (i, len(flist)))
-        expnum = tfile['expnum']
         # procdate = tfile['procdate']
         # plver = tfile['plver']
         # filt = tfile['filter']
         # just read merged, for the moment.
-        expnumstr = '%08d' % expnum
+        res['image_filename'][i] = tfile['image_filename'].strip()
         try:
             psfex = fits.getdata(os.path.join(
-                calibdir, 'psfex-merged', expnumstr[:5],
-                '%s-%s.fits' % (prefix, expnumstr)))
+                calibdir, 'psfex',
+                tfile['image_filename'].replace('.fits.fz', '-psfex.fits')))
             res['psfex'][i, :] = match(tfile, psfex, 'psfex')
         except FileNotFoundError:
             # print('Missing psfex file', tfile['expnum'])
             res['psfex'][i, :] |= 2**2
         try:
             splinesky = fits.getdata(os.path.join(
-                calibdir, 'splinesky-merged', expnumstr[:5],
-                '%s-%s.fits' % (prefix, expnumstr)))
+                calibdir, 'sky',
+                tfile['image_filename'].replace('.fits.fz',
+                                                '-splinesky.fits')))
             res['splinesky'][i, :] = match(tfile, splinesky, 'splinesky')
         except FileNotFoundError:
             # print('Missing splinesky file', tfile['expnum'])

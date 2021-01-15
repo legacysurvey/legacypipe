@@ -317,7 +317,8 @@ class LegacySurveyImage(object):
                           dq=True, invvar=True, pixels=True,
                           no_remap_invvar=False,
                           constant_invvar=False,
-                          old_calibs_ok=False):
+                          old_calibs_ok=False,
+                          trim_edges=True):
         '''
         Returns a tractor.Image ("tim") object for this image.
 
@@ -326,6 +327,8 @@ class LegacySurveyImage(object):
         - *slc*: y,x slice objects
         - *radecpoly*: numpy array, shape (N,2), RA,Dec polygon describing
             bounding box to select.
+        - *trim_edges*: if True, drop fully masked rows and columns at the
+            edge of the image.
 
         Options determining the PSF model to use:
 
@@ -438,35 +441,35 @@ class LegacySurveyImage(object):
                     debug('Setting', n, 'edge SATUR|BLEED pixels to EDGE')
                     dq[blobmap == bad] = DQ_BITS['edge']
 
-        # Drop rows and columns at the image edges that are all masked.
-        for y0_new in range(y0, y1):
-            if not np.all(invvar[y0_new-y0,:] == 0):
-                break
-        for y1_new in reversed(range(y0, y1)):
-            if not np.all(invvar[y1_new-y0,:] == 0):
-                break
-        for x0_new in range(x0, x1):
-            if not np.all(invvar[:,x0_new-x0] == 0):
-                break
-        for x1_new in reversed(range(x0, x1)):
-            if not np.all(invvar[:,x1_new-x0] == 0):
-                break
-        y1_new += 1
-        x1_new += 1
-        if x0_new != x0 or x1_new != x1 or y0_new != y0 or y1_new != y1:
-            #debug('Old x0,x1', x0,x1, 'y0,y1', y0,y1)
-            #debug('New x0,x1', x0_new,x1_new, 'y0,y1', y0_new,y1_new)
+        if trim_edges:
+            # Drop rows and columns at the image edges that are all masked.
+            for y0_new in range(y0, y1):
+                if not np.all(invvar[y0_new-y0,:] == 0):
+                    break
+            for y1_new in reversed(range(y0, y1)):
+                if not np.all(invvar[y1_new-y0,:] == 0):
+                    break
+            for x0_new in range(x0, x1):
+                if not np.all(invvar[:,x0_new-x0] == 0):
+                    break
+            for x1_new in reversed(range(x0, x1)):
+                if not np.all(invvar[:,x1_new-x0] == 0):
+                    break
+            y1_new += 1
+            x1_new += 1
+            if x0_new != x0 or x1_new != x1 or y0_new != y0 or y1_new != y1:
+                #debug('Old x0,x1', x0,x1, 'y0,y1', y0,y1)
+                #debug('New x0,x1', x0_new,x1_new, 'y0,y1', y0_new,y1_new)
+                if y1_new - y0_new < tiny or x1_new - x0_new < tiny:
+                    debug('Skipping tiny subimage (after clipping masked edges)')
+                    return None
 
-            if y1_new - y0_new < tiny or x1_new - x0_new < tiny:
-                debug('Skipping tiny subimage (after clipping masked edges)')
-                return None
-
-            img    = img   [y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
-            invvar = invvar[y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
-            if get_dq:
-                dq = dq[y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
-            x0,x1,y0,y1 = x0_new,x1_new,y0_new,y1_new
-            slc = slice(y0,y1), slice(x0,x1)
+                img    = img   [y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
+                invvar = invvar[y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
+                if get_dq:
+                    dq = dq[y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
+                x0,x1,y0,y1 = x0_new,x1_new,y0_new,y1_new
+                slc = slice(y0,y1), slice(x0,x1)
 
         if readsky:
             sky = self.read_sky_model(slc=slc, primhdr=primhdr, imghdr=imghdr,
