@@ -2,12 +2,12 @@ import os
 from legacypipe.ps1cat import HealpixedCatalog
 
 class GaiaCatalog(HealpixedCatalog):
-    def __init__(self, file_prefix='chunk'):
+    def __init__(self, file_prefix='chunk', **kwargs):
         self.gaiadir = os.getenv('GAIA_CAT_DIR')
         if self.gaiadir is None:
             raise ValueError('You must have the GAIA_CAT_DIR environment variable set to point to healpixed Gaia catalogs')
         fnpattern = os.path.join(self.gaiadir, file_prefix + '-%(hp)05d.fits')
-        super(GaiaCatalog, self).__init__(fnpattern)
+        super(GaiaCatalog, self).__init__(fnpattern, **kwargs)
 
     def get_catalog_radec_box(self, ralo, rahi, declo, dechi):
         import numpy as np
@@ -26,6 +26,8 @@ class GaiaCatalog(HealpixedCatalog):
             healpixes.add(self.healpix_for_radec(r, d))
         # Read catalog in those healpixes
         cat = self.get_healpix_catalogs(healpixes)
+        #print('Read', len(cat), 'Gaia catalog entries.  RA range', cat.ra.min(), cat.ra.max(),
+        #      'Dec range', cat.dec.min(), cat.dec.max())
         cat.cut((cat.dec >= declo) * (cat.dec <= dechi))
         if wrap:
             cat.cut(np.logical_or(cat.ra <= ralo, cat.ra >= (rahi - 360.)))

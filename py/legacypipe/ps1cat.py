@@ -8,22 +8,29 @@ import os
 import numpy as np
 
 class HealpixedCatalog(object):
-    def __init__(self, fnpattern, nside=32):
+    def __init__(self, fnpattern, nside=32, indexing='ring'):
         '''
         fnpattern: string formatter with key "hp", eg
         'dir/fn-%(hp)05i.fits'
         '''
         self.fnpattern = fnpattern
         self.nside = nside
+        self.indexing = indexing
 
     def healpix_for_radec(self, ra, dec):
         '''
         Returns the healpix number for a given single (scalar) RA,Dec.
         '''
-        from astrometry.util.util import radecdegtohealpix, healpix_xy_to_ring
+        from astrometry.util.util import radecdegtohealpix, healpix_xy_to_ring, healpix_xy_to_nested
         hpxy = radecdegtohealpix(ra, dec, self.nside)
-        ipring = healpix_xy_to_ring(hpxy, self.nside)
-        return ipring
+        if self.indexing == 'ring':
+            hp = healpix_xy_to_ring(hpxy, self.nside)
+        elif self.indexing == 'nested':
+            hp = healpix_xy_to_nested(hpxy, self.nside)
+        else:
+            # assume XY!
+            hp = hpxy
+        return hp
 
     def get_healpix_catalog(self, healpix):
         from astrometry.util.fits import fits_table
