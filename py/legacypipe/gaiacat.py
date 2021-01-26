@@ -2,11 +2,11 @@ import os
 from legacypipe.ps1cat import HealpixedCatalog
 
 class GaiaCatalog(HealpixedCatalog):
-    def __init__(self):
+    def __init__(self, file_prefix='chunk'):
         self.gaiadir = os.getenv('GAIA_CAT_DIR')
         if self.gaiadir is None:
             raise ValueError('You must have the GAIA_CAT_DIR environment variable set to point to healpixed Gaia catalogs')
-        fnpattern = os.path.join(self.gaiadir, 'chunk-%(hp)05d.fits')
+        fnpattern = os.path.join(self.gaiadir, file_prefix + '-%(hp)05d.fits')
         super(GaiaCatalog, self).__init__(fnpattern)
 
     def get_catalog_radec_box(self, ralo, rahi, declo, dechi):
