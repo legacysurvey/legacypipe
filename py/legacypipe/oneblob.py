@@ -235,7 +235,6 @@ class OneBlob(object):
 
         from tractor.dense_optimizer import ConstrainedDenseOptimizer
         self.trargs.update(optimizer=ConstrainedDenseOptimizer())
-
         self.optargs.update(dchisq = 0.1)
 
     def run(self, B, reoptimize=False, iterative_detection=True,
@@ -263,6 +262,11 @@ class OneBlob(object):
         for src in self.srcs:
             src.initial_brightness = src.brightness.copy()
 
+        # Set the freezeparams field for each source.  (This is set for
+        # large galaxies with the 'freeze' column set.)
+        for src in self.srcs:
+            src.freezeparams = getattr(src, 'freezeparams', False)
+
         if self.plots:
             import pylab as plt
             self._initial_plots()
@@ -280,10 +284,15 @@ class OneBlob(object):
             plt.title('Reference-source Masks')
             self.ps.savefig()
 
-        if not self.bigblob:
-            debug('Fitting just fluxes using initial models...')
-            self._fit_fluxes(cat, self.tims, self.bands)
         tr = self.tractor(self.tims, cat)
+
+        # Fit any sources marked with 'needs_initial_flux' -- saturated, and SGA
+        fitflux = [src for src in cat if getattr(src, 'needs_initial_flux', False)]
+        if len(fitflux):
+            self._fit_fluxes(cat, self.tims, self.bands, fitcat=fitflux)
+            if self.plots:
+                self._plots(tr, 'Fitting initial fluxes')
+        del fitflux
 
         if self.plots:
             self._plots(tr, 'Initial models')
@@ -300,15 +309,6 @@ class OneBlob(object):
                 cat, Ibright, B.cpu_source)
         else:
             self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source)
-
-        # Optimize all at once?
-        if len(cat) > 1 and len(cat) <= 10:
-            cat.thawAllParams()
-            for i,src in enumerate(cat):
-                if getattr(src, 'freezeparams', False):
-                    debug('Frozen source', src, '-- keeping as-is!')
-                cat.freezeParam(i)
-            tr.optimize_loop(**self.optargs)
 
         if self.plots:
             self._plots(tr, 'After source fitting')
@@ -446,12 +446,10 @@ class OneBlob(object):
         return B
 
     def compute_segmentation_map(self):
-        # Use ~ saddle criterion to segment the blob / mask other sources
         from functools import reduce
         from legacypipe.detection import detection_maps
         from astrometry.util.multiproc import multiproc
-        from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
-        from scipy.ndimage.measurements import label
+        from scipy.ndimage.morphology import binary_dilation
 
         # Compute per-band detection maps
         mp = multiproc()
@@ -500,124 +498,63 @@ class OneBlob(object):
             plt.title('max s/n for segmentation')
             self.ps.savefig()
 
-        segmap = np.empty((self.blobh, self.blobw), int)
-        segmap[:,:] = -1
-
-        _,ix,iy = self.blobwcs.radec2pixelxy(
+        ok,ix,iy = self.blobwcs.radec2pixelxy(
             np.array([src.getPosition().ra  for src in self.srcs]),
             np.array([src.getPosition().dec for src in self.srcs]))
-        ix = np.clip(np.round(ix)-1, 0, self.blobw-1).astype(int)
-        iy = np.clip(np.round(iy)-1, 0, self.blobh-1).astype(int)
+        ix = np.clip(np.round(ix)-1, 0, self.blobw-1).astype(np.int32)
+        iy = np.clip(np.round(iy)-1, 0, self.blobh-1).astype(np.int32)
 
         # Do not compute segmentation map for sources in the CLUSTER mask
-        Iseg, = np.nonzero((self.refmap[iy, ix] & IN_BLOB['CLUSTER']) == 0)
+        # (or with very bad coords)
+        Iseg, = np.nonzero(ok * ((self.refmap[iy, ix] & IN_BLOB['CLUSTER']) == 0))
+        del ok
         # Zero out the S/N in CLUSTER mask
         maxsn[(self.refmap & IN_BLOB['CLUSTER']) > 0] = 0.
         # (also zero out the satmap in the CLUSTER mask)
         saturated_pix[(self.refmap & IN_BLOB['CLUSTER']) > 0] = False
 
-        Irank = Iseg
-        # Start by setting the segmentation map for reference sources
-        # that are forced to be point sources, to the size of the
-        # point source model.
-        ref_radius = 25
-        refpsf = np.array([getattr(self.srcs[i], 'forced_point_source', False)
-                           for i in Iseg], dtype=bool)
-        Irefpsf = Iseg[refpsf]
-        refclaimed = None
-        if len(Irefpsf):
-            debug('Setting segmentation map for', len(Irefpsf), 'forced-point-source refs')
-            Ibr = _argsort_by_brightness([self.srcs[i] for i in Irefpsf], self.bands)
-            _set_kingdoms(segmap, ref_radius, Irefpsf[Ibr], ix, iy)
-            del Ibr
-            refclaimed = (segmap != -1)
-            # Now we remove these sources from the list of sources that we need
-            # to find segmentations for.  They remain in 'Irank', which are the ones
-            # that compete for rank.
-            Iseg = Iseg[np.logical_not(refpsf)]
-        del refpsf
-
+        import heapq
+        H,W = self.blobh, self.blobw
+        segmap = np.empty((H,W), np.int32)
+        segmap[:,:] = -1
         # Iseg are the indices in self.srcs of sources to segment
-        Ibright = _argsort_by_brightness([self.srcs[i] for i in Irank], self.bands)
-        rank = np.empty(len(Irank), int)
-        rank[Ibright] = np.arange(len(Irank), dtype=int)
-        del Ibright
-        # rankmap goes from source index to rank
-        # (unlike 'rank', which is for sources in Iranks)
-        rankmap = dict(zip(Irank, rank))
-
-        todo = set(Iseg)
-        mx = int(np.ceil(maxsn.max()))
-        thresholds = list(range(3, min(mx, 100)))
-        if mx > 100:
-            thresholds.extend(list(range(100, min(mx, 500)+4, 5)))
-            if mx > 500:
-                thresholds.extend(list(range(500, min(mx, 2500)+24, 25)))
-                if mx > 2500:
-                    thresholds.extend(list(range(2500, mx+99, 100)))
-                    if mx > 10000:
-                        thresholds.extend(list(range(10000, mx+499, 500)))
-        debug('thresholds:', thresholds)
-        hot = None
-        for thresh in thresholds:
-            debug('S/N', thresh, ':', len(todo), 'sources to find still')
-            if len(todo) == 0:
-                break
-            hot = (maxsn >= thresh)
-            hot = binary_fill_holes(hot)
-            blobs,_ = label(hot)
-            srcblobs = blobs[iy[Irank], ix[Irank]]
-            done = set()
-            # We build up a map of blob -> (ranks of sources in blob)
-            blobranks = {}
-            blobsrcs = {}
-            for i,(b,r) in enumerate(zip(srcblobs, rank)):
-                if not b in blobranks:
-                    blobranks[b] = []
-                    blobsrcs[b] = []
-                blobranks[b].append(r)
-                blobsrcs[b].append(i)
-
-            for t in todo:
-                bl = blobs[iy[t], ix[t]]
-                if bl == 0:
-                    # source not in a blob...
-                    done.add(t)
+        sy = iy[Iseg]
+        sx = ix[Iseg]
+        segmap[sy, sx] = Iseg
+        maxr2 = np.zeros(len(Iseg), np.int32)
+        # Reference sources forced to be point sources get a max radius:
+        ref_radius = 25
+        for j,i in enumerate(Iseg):
+            if getattr(self.srcs[i], 'forced_point_source', False):
+                maxr2[j] = ref_radius**2
+        mask = self.blobmask
+        # Watershed by priority-fill.
+        # values are (-sn, key, x, y, center_x, center_y, maxr2)
+        q = [(-maxsn[y,x], segmap[y,x],x,y,x,y,r2)
+             for x,y,r2 in zip(sx,sy,maxr2)]
+        heapq.heapify(q)
+        while len(q):
+            _,key,x,y,cx,cy,r2 = heapq.heappop(q)
+            segmap[y,x] = key
+            # 4-connected neighbours
+            for x,y in [(x, y-1), (x, y+1), (x-1, y), (x+1, y),]:
+                # out of bounds?
+                if x<0 or y<0 or x==W or y==H:
                     continue
-                # Is this source the brightest in this blob?
-                myrank = rankmap[t]
-                if myrank == min(blobranks[bl]):
-                    # Claim all the territory in my thresholded blob.
-                    # Other (fainter) sources may still claim sub-regions at higher
-                    # threshold levels.
-                    segmap[blobs == bl] = t
-                    done.add(t)
-                # Is this source outside the regions claimed by brighter (ref) sources?
-                else:
-                    ok = True
-                    for r,isrc in zip(blobranks[bl], blobsrcs[bl]):
-                        # skip fainter sources (including myself!)
-                        if r >= myrank:
-                            continue
-                        if not isrc in Irefpsf:
-                            # regular (non-ref-PSF) source; its claim holds
-                            ok = False
-                            break
-                        r2 = (ix[t] - ix[isrc])**2 + (iy[t] - iy[isrc])**2
-                        if r2 <= ref_radius**2:
-                            # within ref source's claimed region; its claim holds
-                            ok = False
-                            break
-                    if ok:
-                        # If we got here, we share a blob with a
-                        # brighter ref source, but are far enough away
-                        # from it.  We claim the blob, except for what
-                        # the ref source has already claimed.
-                        segmap[(blobs == bl) * (refclaimed == False)] = t
-                        done.add(t)
-
-            todo.difference_update(done)
-            del hot
+                # not in blobmask?
+                if not mask[y,x]:
+                    continue
+                # already queued or segmented?
+                if segmap[y,x] != -1:
+                    continue
+                # outside the ref source radius?
+                if r2 > 0 and (x-cx)**2 + (y-cy)**2 > r2:
+                    continue
+                # mark as queued
+                segmap[y,x] = -2
+                # enqueue!
+                heapq.heappush(q, (-maxsn[y,x], key, x, y, cx, cy, r2))
+        del q, maxr2
         del maxsn, saturated_pix
 
         # ensure that each source owns a tiny radius around its center
@@ -688,7 +625,7 @@ class OneBlob(object):
                   (numi+1, len(Ibright), self.name, srci))
             cpu0 = time.process_time()
 
-            if getattr(src, 'freezeparams', False):
+            if src.freezeparams:
                 info('Frozen source', src, '-- keeping as-is!')
                 B.sources[srci] = src
                 continue
@@ -711,9 +648,9 @@ class OneBlob(object):
 
             # Definitely keep ref stars (Gaia & Tycho)
             if keepsrc is None and getattr(src, 'reference_star', False):
-                print('Dropped reference star:', src)
+                info('Dropped reference star:', src)
                 src.brightness = src.initial_brightness
-                print('Reset brightness to', src.brightness)
+                info('Reset brightness to', src.brightness)
                 src.force_keep_source = True
                 keepsrc = src
 
@@ -787,6 +724,7 @@ class OneBlob(object):
 
     def iterative_detection(self, Bold, models):
         # Compute per-band detection maps
+        from scipy.ndimage.morphology import binary_dilation
         from legacypipe.detection import sed_matched_filters, detection_maps, run_sed_matched_filters
         from astrometry.util.multiproc import multiproc
 
@@ -804,7 +742,6 @@ class OneBlob(object):
             self.tims, self.blobwcs, self.bands, mp)
 
         # from runbrick.py
-        from scipy.ndimage.morphology import binary_dilation
         satmaps = [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps]
 
         # Also compute detection maps on the (first-round) model images!
@@ -1699,7 +1636,7 @@ class OneBlob(object):
             cpu0 = time.process_time()
             cat.freezeAllBut(i)
             src = cat[i]
-            if getattr(src, 'freezeparams', False):
+            if src.freezeparams:
                 debug('Frozen source', src, '-- keeping as-is!')
                 continue
             modelMasks = models.model_masks(0, cat[i])
@@ -1737,7 +1674,7 @@ class OneBlob(object):
         for numi,srci in enumerate(Ibright):
             cpu0 = time.process_time()
             src = cat[srci]
-            if getattr(src, 'freezeparams', False):
+            if src.freezeparams:
                 debug('Frozen source', src, '-- keeping as-is!')
                 continue
             debug('Fitting source', srci, '(%i of %i in blob %s)' %
@@ -1748,10 +1685,16 @@ class OneBlob(object):
             from tractor import Galaxy
             is_galaxy = isinstance(src, Galaxy)
             if is_galaxy:
-                # During SGA pre-burns, freeze initial positions (fit other parameters),
-                # to avoid problems like NGC0943, where one galaxy in a pair moves a large distance
-                # to fit the overall light profile.
-                src.freezeParam('pos')
+                # During SGA pre-burns, limit initial positions (fit
+                # other parameters), to avoid problems like NGC0943,
+                # where one galaxy in a pair moves a large distance to
+                # fit the overall light profile.
+                ra,dec = src.pos.getParams()
+                cosdec = np.cos(np.deg2rad(dec))
+                # max allowed motion in deg
+                maxmove = 5. / 3600.
+                src.pos.lowers = [ra - maxmove/cosdec, dec - maxmove]
+                src.pos.uppers = [ra + maxmove/cosdec, dec + maxmove]
 
             if self.bigblob:
                 # Create super-local sub-sub-tims around this source
@@ -1788,7 +1731,6 @@ class OneBlob(object):
                 srctims = self.tims
                 modelMasks = models.model_masks(srci, src)
 
-
             srctractor = self.tractor(srctims, [src])
             srctractor.setModelMasks(modelMasks)
 
@@ -1798,7 +1740,9 @@ class OneBlob(object):
             #print('First-round final log-prob:', srctractor.getLogProb())
 
             if is_galaxy:
-                src.thawParam('pos')
+                # Drop limits on SGA positions
+                src.pos.lowers = [None, None]
+                src.pos.uppers = [None, None]
 
             # Re-remove the final fit model for this source
             models.update_and_subtract(srci, src, self.tims)
@@ -1806,7 +1750,6 @@ class OneBlob(object):
             srctractor.setModelMasks(None)
             disable_galaxy_cache()
 
-            #print('Fitting source took', Time()-tsrc)
             debug('Finished fitting:', src)
             cpu1 = time.process_time()
             cputime[srci] += (cpu1 - cpu0)
@@ -1814,18 +1757,31 @@ class OneBlob(object):
         models.restore_images(self.tims)
         del models
 
-    def _fit_fluxes(self, cat, tims, bands):
-        cat.thawAllRecursive()
-        for src in cat:
+    def _fit_fluxes(self, cat, tims, bands, fitcat=None):
+        if fitcat is None:
+            fitcat = [src for src in cat if not src.freezeparams]
+        if len(fitcat) == 0:
+            return
+        for src in fitcat:
             src.freezeAllBut('brightness')
+        debug('Fitting fluxes for %i of %i sources' % (len(fitcat), len(cat)))
         for b in bands:
-            for src in cat:
+            for src in fitcat:
                 src.getBrightness().freezeAllBut(b)
             # Images for this band
             btims = [tim for tim in tims if tim.band == b]
-            btr = self.tractor(btims, cat)
+            btr = self.tractor(btims, fitcat)
+            try:
+                from tractor import ceres
+                ceres_block = 8
+                from tractor.ceres_optimizer import CeresOptimizer
+                btr.optimizer = CeresOptimizer(BW=ceres_block, BH=ceres_block)
+            except ImportError:
+                from tractor.lsqr_optimizer import LsqrOptimizer
+                btr.optimizer = LsqrOptimizer()
             btr.optimize_forced_photometry(shared_params=False, wantims=False)
-        cat.thawAllRecursive()
+        for src in fitcat:
+            src.thawAllParams()
 
     def _plots(self, tr, title):
         plotmods = []

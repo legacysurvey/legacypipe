@@ -5,7 +5,7 @@ from __future__ import print_function, division
 import numpy as np
 
 from legacypipe.internal import sharedmem
-from legacypipe.internal.io import iter_tractor, parse_filename
+from legacypipe.internal.io import iter_tractor, parse_filename, get_units, git_version
 
 import argparse
 import os, sys
@@ -13,9 +13,14 @@ from time import time
 
 import fitsio
 
+# ADM these are the directory names for the sweep directory,
+# ADM the "light-curves only" directory,
+# ADM and the "extra Tractor columns not in the sweeps directory".
+# ADM (these apply BELOW the level of the /sweep directory.
+outdirnames = ["X.X", "X.X-lightcurves", "X.X-extra"]
+
 def main():
     ns = parse_args()
-
     if ns.ignore_errors:
         print("Warning: *** Will ignore broken tractor catalogue files ***")
         print("         *** Disable -I for final data product.         ***")
@@ -28,12 +33,21 @@ def main():
     # bricks = [(name, filepath, region), ...]
     bricks = list_bricks(ns)
 
+    # ADM get a {FIELD: unit} dictionary from one of the Tractor files.
+    fn = bricks[0][1]
+    unitdict = get_units(fn)
+    # ADM read in a small amount of information from one of the Tractor
+    # ADM files to establish the full dtype.
+    testdata = fitsio.read(fn, rows=[0], upper=True)
+    ALL_DTYPE = testdata.dtype
+
     t0 = time()
 
-    try:
-        os.makedirs(ns.dest)
-    except OSError:
-        pass
+    for odn in outdirnames:
+        try:
+            os.makedirs(os.path.join(ns.dest, odn))
+        except OSError:
+            pass
 
     # blocks or ra stripes?
     schemas = {
@@ -50,7 +64,7 @@ def main():
     nobj_tot = np.zeros((), 'i8')
 
     def work(sweep):
-        data, header, nbricks = make_sweep(sweep, bricks, ns)
+        data, header, nbricks = make_sweep(sweep, bricks, ns, ALL_DTYPE=ALL_DTYPE)
 
         header.update({
             'RAMIN'  : sweep[0],
@@ -75,8 +89,26 @@ def main():
                      format=format)
 
             if len(data) > 0:
-                save_sweep_file(os.path.join(ns.dest, filename),
-                    data, header, format)
+                # ADM the columns to always include to form a unique ID.
+                uniqid = [dt for dt in SWEEP_DTYPE.descr if
+                          dt[0]=="RELEASE" or dt[0]=="BRICKID" or dt[0]=="OBJID"]
+                # ADM write out separate sweeps for:
+                # ADM    the SWEEP_DTYPE columns (without light-curves).
+                sweepdt = [dt for dt in SWEEP_DTYPE.descr if 'LC' not in dt[0]]
+                # ADM    the SWEEP_DTYPE columns (just light-curves).
+                lcdt = uniqid + [dt for dt in SWEEP_DTYPE.descr if 'LC' in dt[0]]
+                # ADM    the remaining "extra" columns.
+                alldt = uniqid + [dt for dt in ALL_DTYPE.descr if dt[0] not in SWEEP_DTYPE.names]
+                ender = [".fits", "-lc.fits", "-ex.fits"]
+                for dt, odn, end in zip([sweepdt, lcdt, alldt], outdirnames, ender):
+                    fn = filename.replace(".fits", end)
+                    dest = os.path.join(ns.dest, odn, fn)
+                    if len(dt) > 0:
+                        newdata = np.empty(len(data), dtype=dt)
+                        for col in newdata.dtype.names:
+                            newdata[col] = data[col]
+                        save_sweep_file(dest, newdata,
+                                        header, format, unitdict=unitdict)
 
         return filename, nbricks, len(data)
 
@@ -161,8 +193,8 @@ def sweep_schema_blocks(nra, ndec):
 
 class NA: pass
 
-def make_sweep(sweep, bricks, ns):
-    data = [np.empty(0, dtype=SWEEP_DTYPE)]
+def make_sweep(sweep, bricks, ns, ALL_DTYPE=None):
+    data = [np.empty(0, dtype=ALL_DTYPE)]
     header = {}
     ra1, dec1, ra2, dec2 = sweep
     def merge_header(header, header2):
@@ -182,7 +214,7 @@ def make_sweep(sweep, bricks, ns):
                 return None, None
             try:
                 objects = fitsio.read(filename, 1, upper=True)
-                chunkheader = fitsio.read_header(filename, 0, upper=True)
+                chunkheader = fitsio.read_header(filename, 0)
             except:
                 if ns.ignore_errors:
                     print('IO error on %s' % filename)
@@ -212,7 +244,7 @@ def make_sweep(sweep, bricks, ns):
             mask &= objects['DEC'] < dec2
             objects = objects[mask]
 
-            chunk = np.empty(len(objects), dtype=SWEEP_DTYPE)
+            chunk = np.empty(len(objects), dtype=ALL_DTYPE)
 
             for colname in chunk.dtype.names:
                 if colname not in objects.dtype.names:
@@ -239,20 +271,37 @@ def make_sweep(sweep, bricks, ns):
     return data, header, neff
 
 
-def save_sweep_file(filename, data, header, format):
+def save_sweep_file(filename, data, header, format, unitdict=None):
+    # ADM leave the root header unchanged.
+    hdr = header.copy()
     if format == 'fits':
-        header = [dict(name=key, value=header[key]) for key in sorted(header.keys())]
+        units = None
+        # ADM derive the units from the data columns if possible.
+        if unitdict is not None:
+            units = [unitdict[col] for col in data.dtype.names]
+
+        # ADM add the sweep code version header dependency.
+        dep = [int(key.split("DEPNAM")[-1]) for key in hdr.keys()
+               if 'DEPNAM' in key]
+        if len(dep) == 0:
+            nextdep = 0
+        else:
+            nextdep = np.max(dep) + 1
+        hdr["DEPNAM{:02d}".format(nextdep)] = 'gen_sweep'
+        hdr["DEPVER{:02d}".format(nextdep)] = git_version()
+
+        hdr = [dict(name=key, value=hdr[key]) for key in sorted(hdr.keys())]
         with fitsio.FITS(filename, mode='rw', clobber=True) as ff:
             ff.create_image_hdu()
-            ff[0].write_keys(header)
-            ff.write_table(data, extname='SWEEP', header=header)
+            ff[0].write_keys(hdr)
+            ff.write_table(data, extname='SWEEP', units=units)
 
     elif format == 'hdf5':
         import h5py
         with h5py.File(filename, 'w') as ff:
             dset = ff.create_dataset('SWEEP', data=data)
-            for key in header:
-                dset.attrs[key] = header[key]
+            for key in hdr:
+                dset.attrs[key] = hdr[key]
     else:
         raise ValueError("Unknown format")
 
@@ -282,6 +331,9 @@ def read_region(brickname, filename, bricksdesc):
     return r
 
 SWEEP_DTYPE = np.dtype([
+# ADM everything IN this list will be written to sweep files
+# ADM with the light-curve columns spun off to their own files.
+# ADM anything NOT in this list will be written to an "extra" file set.
 #   ('BRICK_PRIMARY', '?'),
     ('RELEASE', '>i2'),
     ('BRICKID', '>i4'),
@@ -430,6 +482,12 @@ SWEEP_DTYPE = np.dtype([
     ('LC_NOBS_W2', '>i2', (15,)),
     ('LC_MJD_W1', '>f8', (15,)),
     ('LC_MJD_W2', '>f8', (15,)),
+    ('LC_FRACFLUX_W1', '>f4', (15,)),
+    ('LC_FRACFLUX_W2', '>f4', (15,)),
+    ('LC_RCHISQ_W1', '>f4', (15,)),
+    ('LC_RCHISQ_W2', '>f4', (15,)),
+    ('LC_EPOCH_INDEX_W1', '>i2', (15,)),
+    ('LC_EPOCH_INDEX_W2', '>i2', (15,)),
 #    ('FRACDEV', '>f4'),
 #    ('FRACDEV_IVAR', '>f4'),
     ('SHAPE_R', '>f4'),
@@ -483,6 +541,7 @@ SWEEP_DTYPE = np.dtype([
     ('PMDEC', '>f4'),
     ('PMDEC_IVAR', '>f4'),
     ('MASKBITS', '>i2'),
+    ('FITBITS', '>i2'),
     ('SERSIC', '>f4'),
     ('SERSIC_IVAR', '>f4')]
 )
@@ -491,8 +550,8 @@ def parse_args():
     ap = argparse.ArgumentParser(
     description="""Create Sweep files for DECALS.
         This tool ensures each sweep file contains roughly '-n' objects. HDF5 and FITS formats are supported.
-        Columns contained in a sweep file are:
-        [%(columns)s].
+        Columns contained in the main sets of sweep file are:
+        [%(columns)s]. Light-curve columns in this list are spun off to their own files, as are all remaining columns.
     """ % dict(columns=str(SWEEP_DTYPE.names)),
         )
 

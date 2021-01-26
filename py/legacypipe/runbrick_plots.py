@@ -164,7 +164,7 @@ def detection_plots(detmaps, detivs, bands, saturated_pix, tims,
         if large_galaxies:
             galaxies = refstars[refstars.islargegalaxy]
         if large_galaxies and len(galaxies):
-            ok,ix,iy = targetwcs.radec2pixelxy(galaxies.ra, galaxies.dec)
+            _,ix,iy = targetwcs.radec2pixelxy(galaxies.ra, galaxies.dec)
             p = plt.plot(ix-1, iy-1, 'o', mew=3, ms=14, mec=(0,1,0), mfc='none')
             lp.append(p)
             lt.append('Galaxies')
@@ -277,9 +277,9 @@ def tim_plots(tims, bands, ps):
         dimshow(tim.getInvError(), vmin=0, vmax=1.1/tim.sig1)
         plt.title('inverr')
         if tim.dq is not None:
-            plt.subplot(2,2,3)
-            dimshow(tim.dq, vmin=0, vmax=tim.dq.max())
-            plt.title('DQ')
+            # plt.subplot(2,2,3)
+            # dimshow(tim.dq, vmin=0, vmax=tim.dq.max())
+            # plt.title('DQ')
             plt.subplot(2,2,3)
             dimshow(((tim.dq & tim.dq_saturation_bits) > 0),
                     vmin=0, vmax=1.5, cmap='hot')

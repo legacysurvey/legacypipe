@@ -413,7 +413,7 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, gale
     import matplotlib
     try:
         import mkl_fft
-    except:
+    except ImportError:
         mkl_fft = None
     import photutils
     import tractor
@@ -608,8 +608,7 @@ def bricks_touching_wcs(targetwcs, survey=None, B=None, margin=20):
     ra,dec = targetwcs.radec_center()
     radius = targetwcs.radius()
 
-    # MAGIC 0.4 degree search radius =
-    # DECam hypot(1024,2048)*0.27/3600 + Brick hypot(0.25, 0.25) ~= 0.35 + margin
+    # MAGIC 0.25 brick size
     I,_,_ = match_radec(B.ra, B.dec, ra, dec,
                         radius + np.hypot(0.25,0.25)/2. + 0.05)
     debug(len(I), 'bricks nearby')
@@ -695,13 +694,13 @@ def imsave_jpeg(jpegfn, img, **kwargs):
     *jpegfn*: JPEG filename
     *img*: image, in the typical matplotlib formats (see plt.imsave)
     '''
-    import pylab as plt
+    from matplotlib.pyplot import imsave
     if True:
         kwargs.update(format='jpg')
-        plt.imsave(jpegfn, img, **kwargs)
+        imsave(jpegfn, img, **kwargs)
     else:
         tmpfn = create_temp(suffix='.png')
-        plt.imsave(tmpfn, img, **kwargs)
+        imsave(tmpfn, img, **kwargs)
         cmd = ('pngtopnm %s | pnmtojpeg -quality 90 > %s' % (tmpfn, jpegfn))
         rtn = os.system(cmd)
         print(cmd, '->', rtn)
@@ -770,6 +769,8 @@ class LegacySurveyData(object):
         self.bricktree = None
         ### HACK! Hard-coded brick edge size, in degrees!
         self.bricksize = 0.25
+
+        self.psfex_conf = None
 
         # Cached CCD kd-tree --
         # - initially None, then a list of (fn, kd)
@@ -894,7 +895,7 @@ class LegacySurveyData(object):
 
         elif filetype == 'tractor-intermediate':
             return swap(os.path.join(basedir, 'tractor-i', brickpre,
-                                     'tractor-%s.fits' % brick))
+                                     'tractor-i-%s.fits' % brick))
 
         elif filetype == 'galaxy-sims':
             return swap(os.path.join(basedir, 'tractor', brickpre,
@@ -950,6 +951,14 @@ class LegacySurveyData(object):
             return swap(os.path.join(basedir, 'metrics', brickpre,
                                      'outlier-mask-%s.fits.fz' % (brick)))
 
+        elif filetype == 'forced':
+            estr = '%08i' % expnum
+            return swap(os.path.join(basedir, 'forced', camera, estr[:5],
+                                     'forced-%s-%i.fits' % (camera, expnum)))
+
+        elif filetype == 'forced-brick':
+            return swap(os.path.join(basedir, 'forced-brick', brickpre,
+                                     'forced-%s.fits' % brick))
         print('Unknown filetype "%s"' % filetype)
         assert(False)
 
@@ -964,25 +973,31 @@ class LegacySurveyData(object):
         debug('Cached file miss:', fn, '-/->', cfn)
         return fn
 
-    def get_compression_string(self, filetype, shape=None, **kwargs):
-        pat = dict(# g: sigma ~ 0.002.  qz -1e-3: 6 MB, -1e-4: 10 MB
-            image = '[compress R %(tilew)i,%(tileh)i; qz -1e-4]',
-            # g: qz -1e-3: 2 MB, -1e-4: 2.75 MB
-            model = '[compress R %(tilew)i,%(tileh)i; qz -1e-4]',
-            chi2  = '[compress R %(tilew)i,%(tileh)i; qz -0.1]',
-            # qz +8: 9 MB, qz +16: 10.5 MB
-            invvar = '[compress R %(tilew)i,%(tileh)i; q0 16]',
-            nexp   = '[compress H %(tilew)i,%(tileh)i]',
-            maskbits = '[compress H %(tilew)i,%(tileh)i]',
-            depth  = '[compress G %(tilew)i,%(tileh)i; qz 0]',
-            galdepth = '[compress G %(tilew)i,%(tileh)i; qz 0]',
-            psfsize = '[compress G %(tilew)i,%(tileh)i; qz 0]',
-            outliers_mask = '[compress G]',
-        ).get(filetype)
-        #outliers_mask = '[compress H %i,%i]',
-        if pat is None:
-            return pat
-        # Tile compression size
+    def get_compression_args(self, filetype, shape=None):
+        comp = dict(# g: sigma ~ 0.002.  qz -1e-3: 6 MB, -1e-4: 10 MB
+            image         = ('R', 'qz -1e-4'),
+            model         = ('R', 'qz -1e-4'),
+            chi2          = ('R', 'qz -0.1'),
+            invvar        = ('R', 'q0 16'),
+            nexp          = ('H', None),
+            outliers_mask = ('R', None),
+            maskbits      = ('H', None),
+            depth         = ('G', 'qz 0'),
+            galdepth      = ('G', 'qz 0'),
+            psfsize       = ('G', 'qz 0'),
+            ).get(filetype)
+        if comp is None:
+            return None
+        method, args = comp
+        mname = dict(R='RICE',
+                     H='HCOMPRESS',
+                     G='GZIP',
+                     ).get(method)
+        if args is None:
+            pat = '[compress %s %%(tilew)i,%%(tileh)i]' % method
+        else:
+            pat = '[compress %s %%(tilew)i,%%(tileh)i; %s]' % (method, args)
+        # Default tile compression size:
         tilew,tileh = 100,100
         if shape is not None:
             H,W = shape
@@ -1001,7 +1016,31 @@ class LegacySurveyData(object):
                 if remain == 0 or remain >= 4:
                     break
                 tileh += 1
-        return pat % dict(tilew=tilew,tileh=tileh)
+        s = pat % dict(tilew=tilew, tileh=tileh)
+        return s, method, args, mname, (tilew,tileh)
+
+    def get_compression_string(self, filetype, shape=None, **kwargs):
+        A = self.get_compression_args(filetype, shape=shape)
+        if A is None:
+            return None
+        return A[0]
+
+    def get_psfex_conf(self, camera, expnum, ccdname):
+        '''
+        Return additional psfex configuration flags for a given expnum and
+        ccdname.
+
+        Extra config flags are in the file $PSFEX_CONF_FILE.
+        '''
+        if self.psfex_conf is None:
+            self.psfex_conf = {}
+        if self.psfex_conf.get(camera, None) is None:
+            self.psfex_conf[camera] = read_psfex_conf(camera)
+        camconf = self.psfex_conf[camera]
+        res = camconf.get((expnum, ccdname.strip().upper()), '')
+        if res == '':
+            res = camconf.get((expnum, None), '')
+        return res
 
     def write_output(self, filetype, hashsum=True, filename=None, **kwargs):
         '''
@@ -1237,6 +1276,16 @@ class LegacySurveyData(object):
             return None
         return B[I[0]]
 
+    def get_bricks_by_name(self, brickname):
+        '''
+        Returns a brick (as a table with one row) by name (string).
+        '''
+        B = self.get_bricks_readonly()
+        I, = np.nonzero(np.array([n == brickname for n in B.brickname]))
+        if len(I) == 0:
+            return None
+        return B[I]
+
     def get_bricks_near(self, ra, dec, radius):
         '''
         Returns a set of bricks near the given RA,Dec and radius (all in degrees).
@@ -1348,11 +1397,19 @@ class LegacySurveyData(object):
         T = self.cleanup_ccds_table(T)
         return T
 
+    def filter_annotated_ccds_files(self, fns):
+        '''
+        When reading the list of annotated CCDs,
+        filter file list using this function.
+        '''
+        return fns
+
     def get_annotated_ccds(self):
         '''
         Returns the annotated table of CCDs.
         '''
         fns = self.find_file('annotated-ccds')
+        fns = self.filter_annotated_ccds_files(fns)
         TT = []
         for fn in fns:
             debug('Reading annotated CCDs from', fn)
@@ -1579,8 +1636,51 @@ def run_calibs(X):
             raise
 
 def read_one_tim(X):
+    from astrometry.util.ttime import Time
     (im, targetrd, kwargs) = X
-    #print('Reading', im)
+    t0 = Time()
     tim = im.get_tractor_image(radecpoly=targetrd, **kwargs)
+    if tim is not None:
+        th,tw = tim.shape
+        print('Time to read %i x %i image, hdu %i:' % (tw,th, im.hdu), Time()-t0)
     return tim
 
+
+def read_psfex_conf(camera):
+    psfex_conf = {}
+    from pkg_resources import resource_filename
+    dirname = resource_filename('legacypipe', 'data')
+    fn = os.path.join(dirname, camera + '-special-psfex-conf.dat')
+    if not os.path.exists(fn):
+        info('could not find special psfex configuration file for ' +
+             camera + ' not using per-image psfex configurations.')
+        return psfex_conf
+    f = open(fn)
+    for line in f.readlines():
+        line = line.strip()
+        if len(line) == 0:
+            continue
+        if line[0] == '#':
+            continue
+        parts = line.split(None, maxsplit=1)
+        if len(parts) != 2:
+            print('Skipping line ', line)
+            continue
+        expname, flags = parts
+        if '-' in expname:
+            idparts = expname.split('-')
+            if len(idparts) != 2:
+                print('Skipping line ', line)
+                continue
+            expidstr = idparts[0].strip()
+            ccd = idparts[1].strip().upper()
+        else:
+            expidstr = expname.strip()
+            ccd = None
+        try:
+            expnum = int(expidstr, 10)
+        except ValueError:
+            print('Skipping line', line)
+            continue
+        psfex_conf[(expnum, ccd)] = flags
+    return psfex_conf

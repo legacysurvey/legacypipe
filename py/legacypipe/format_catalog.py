@@ -21,7 +21,7 @@ def _expand_flux_columns(T, bands, allbands, keys):
         # Handle array columns (eg, apflux)
         sh = X.shape
         if len(sh) == 3:
-            nt,_,N = sh
+            _,_,N = sh
             A = np.zeros((len(T), len(allbands), N), X.dtype)
             A[:,B,:] = X
         else:
@@ -37,7 +37,7 @@ def _expand_flux_columns(T, bands, allbands, keys):
         for i,b in enumerate(allbands):
             T.set('%s_%s' % (key, b), A[:,i])
 
-def get_units_for_columns(cols, bands, extras={}):
+def get_units_for_columns(cols, bands, extras=None):
     # Units
     deg = 'deg'
     degiv = '1/deg^2'
@@ -68,7 +68,8 @@ def get_units_for_columns(cols, bands, extras={}):
         units.update([('%s_%s' % (k, b), v)
                       for k,v in funits.items()])
 
-    units.update(extras)
+    if extras is not None:
+        units.update(extras)
 
     # Create a list of units aligned with 'cols'
     units = [units.get(c, '') for c in cols]
@@ -217,16 +218,12 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
                   'apflux_ivar', 'apflux_masked']:
             add_fluxlike(c)
 
-    wise_apflux = False
     if has_wise and has_ap and 'apflux_w1' in T.get_columns():
-        wise_apflux = True
         add_wiselike('apflux')
         add_wiselike('apflux_resid')
         add_wiselike('apflux_ivar')
 
-    galex_apflux = False
     if has_galex and has_ap and 'apflux_nuv' in T.get_columns():
-        galex_apflux = True
         add_galexlike('apflux')
         add_galexlike('apflux_resid')
         add_galexlike('apflux_ivar')
@@ -245,7 +242,7 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
             col = 'wisemask_%s' % (b)
             T.set(col, T.wise_mask[:,i])
             cols.append(col)
-    for c in ['psfsize', 'psfdepth', 'galdepth']:
+    for c in ['psfsize', 'psfdepth', 'galdepth', 'nea', 'blob_nea']:
         add_fluxlike(c)
     if has_wise:
         add_wiselike('psfdepth')

@@ -236,6 +236,8 @@ class LegacySurveyImage(object):
         # not used by this code -- here for the sake of legacyzpts/merge_calibs.py
         self.old_single_psffn = os.path.join(calibdir, imgdir, basename, calname + '-psfex.fits')
         self.old_single_skyfn = os.path.join(calibdir, imgdir, basename, calname + '-splinesky.fits')
+        # for debugging purposes
+        self.print_imgpath = '/'.join(self.imgfn.split('/')[-5:])
 
     def compute_filenames(self):
         # Compute data quality and weight-map filenames
@@ -315,7 +317,8 @@ class LegacySurveyImage(object):
                           dq=True, invvar=True, pixels=True,
                           no_remap_invvar=False,
                           constant_invvar=False,
-                          old_calibs_ok=False):
+                          old_calibs_ok=False,
+                          trim_edges=True):
         '''
         Returns a tractor.Image ("tim") object for this image.
 
@@ -324,6 +327,8 @@ class LegacySurveyImage(object):
         - *slc*: y,x slice objects
         - *radecpoly*: numpy array, shape (N,2), RA,Dec polygon describing
             bounding box to select.
+        - *trim_edges*: if True, drop fully masked rows and columns at the
+            edge of the image.
 
         Options determining the PSF model to use:
 
@@ -349,21 +354,11 @@ class LegacySurveyImage(object):
         get_invvar = invvar
         primhdr = self.read_image_primary_header()
 
-        assert(validate_procdate_plver(self.imgfn, 'primaryheader',
-                                       self.expnum, self.plver, self.procdate,
-                                       self.plprocid,
-                                       data=primhdr, cpheader=True,
-                                       old_calibs_ok=old_calibs_ok))
-        assert(validate_procdate_plver(self.wtfn, 'primaryheader',
-                                       self.expnum, self.plver, self.procdate,
-                                       self.plprocid,
-                                       cpheader=True,
-                                       old_calibs_ok=old_calibs_ok))
-        assert(validate_procdate_plver(self.dqfn, 'primaryheader',
-                                       self.expnum, self.plver, self.procdate,
-                                       self.plprocid,
-                                       cpheader=True,
-                                       old_calibs_ok=old_calibs_ok))
+        for fn,kw in [(self.imgfn, dict(data=primhdr)), (self.wtfn, {}), (self.dqfn, {})]:
+            if not validate_version(fn, 'primaryheader',
+                                           self.expnum, self.plver, self.plprocid,
+                                           cpheader=True, old_calibs_ok=old_calibs_ok, **kw):
+                raise RuntimeError('Version validation failed for filename %s (PLVER/PLPROCID)' % fn)
         band = self.band
         wcs = self.get_wcs()
 
@@ -384,16 +379,8 @@ class LegacySurveyImage(object):
             imghdr = self.read_image_header()
         assert(np.all(np.isfinite(img)))
 
-        template_meta = None
-        if pixels:
-            template = self.get_sky_template(slc=slc)
-            if template is not None:
-                debug('Subtracting sky template')
-                # unpack
-                template,template_meta = template
-                img -= template
-
         # Read data-quality (flags) map and zero out the invvars of masked pixels
+        dq = None
         if get_invvar:
             get_dq = True
         if get_dq:
@@ -408,6 +395,17 @@ class LegacySurveyImage(object):
         if np.all(invvar == 0.):
             debug('Skipping zero-invvar image')
             return None
+
+        self.fix_saturation(img, dq, invvar, primhdr, imghdr, slc)
+
+        template_meta = None
+        if pixels:
+            template = self.get_sky_template(slc=slc, old_calibs_ok=old_calibs_ok)
+            if template is not None:
+                debug('Subtracting sky template')
+                # unpack
+                template,template_meta = template
+                img -= template
 
         # for create_testcase: omit remappings.
         if not no_remap_invvar:
@@ -443,35 +441,35 @@ class LegacySurveyImage(object):
                     debug('Setting', n, 'edge SATUR|BLEED pixels to EDGE')
                     dq[blobmap == bad] = DQ_BITS['edge']
 
-        # Drop rows and columns at the image edges that are all masked.
-        for y0_new in range(y0, y1):
-            if not np.all(invvar[y0_new-y0,:] == 0):
-                break
-        for y1_new in reversed(range(y0, y1)):
-            if not np.all(invvar[y1_new-y0,:] == 0):
-                break
-        for x0_new in range(x0, x1):
-            if not np.all(invvar[:,x0_new-x0] == 0):
-                break
-        for x1_new in reversed(range(x0, x1)):
-            if not np.all(invvar[:,x1_new-x0] == 0):
-                break
-        y1_new += 1
-        x1_new += 1
-        if x0_new != x0 or x1_new != x1 or y0_new != y0 or y1_new != y1:
-            #debug('Old x0,x1', x0,x1, 'y0,y1', y0,y1)
-            #debug('New x0,x1', x0_new,x1_new, 'y0,y1', y0_new,y1_new)
+        if trim_edges:
+            # Drop rows and columns at the image edges that are all masked.
+            for y0_new in range(y0, y1):
+                if not np.all(invvar[y0_new-y0,:] == 0):
+                    break
+            for y1_new in reversed(range(y0, y1)):
+                if not np.all(invvar[y1_new-y0,:] == 0):
+                    break
+            for x0_new in range(x0, x1):
+                if not np.all(invvar[:,x0_new-x0] == 0):
+                    break
+            for x1_new in reversed(range(x0, x1)):
+                if not np.all(invvar[:,x1_new-x0] == 0):
+                    break
+            y1_new += 1
+            x1_new += 1
+            if x0_new != x0 or x1_new != x1 or y0_new != y0 or y1_new != y1:
+                #debug('Old x0,x1', x0,x1, 'y0,y1', y0,y1)
+                #debug('New x0,x1', x0_new,x1_new, 'y0,y1', y0_new,y1_new)
+                if y1_new - y0_new < tiny or x1_new - x0_new < tiny:
+                    debug('Skipping tiny subimage (after clipping masked edges)')
+                    return None
 
-            if y1_new - y0_new < tiny or x1_new - x0_new < tiny:
-                debug('Skipping tiny subimage (after clipping masked edges)')
-                return None
-
-            img    = img   [y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
-            invvar = invvar[y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
-            if get_dq:
-                dq = dq[y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
-            x0,x1,y0,y1 = x0_new,x1_new,y0_new,y1_new
-            slc = slice(y0,y1), slice(x0,x1)
+                img    = img   [y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
+                invvar = invvar[y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
+                if get_dq:
+                    dq = dq[y0_new-y0 : y1_new-y0, x0_new-x0 : x1_new-x0]
+                x0,x1,y0,y1 = x0_new,x1_new,y0_new,y1_new
+                slc = slice(y0,y1), slice(x0,x1)
 
         if readsky:
             sky = self.read_sky_model(slc=slc, primhdr=primhdr, imghdr=imghdr,
@@ -608,7 +606,10 @@ class LegacySurveyImage(object):
         tim.subwcs = tim.sip_wcs.get_subimage(tim.x0, tim.y0, subw, subh)
         return tim
 
-    def get_sky_template(self, slc=None):
+    def fix_saturation(self, img, dq, invvar, primhdr, imghdr, slc):
+        pass
+
+    def get_sky_template(self, slc=None, old_calibs_ok=False):
         return None
 
     def get_fwhm(self, primhdr, imghdr):
@@ -813,9 +814,6 @@ class LegacySurveyImage(object):
         Called by get_tractor_image() to map the results from read_dq
         into a bitmask.
         '''
-        return self.remap_dq_cp_codes(dq, header)
-
-    def remap_dq_cp_codes(self, dq, header):
         return remap_dq_cp_codes(dq)
 
     def read_invvar(self, clip=True, clipThresh=0.1, dq=None, slice=None,
@@ -916,10 +914,10 @@ class LegacySurveyImage(object):
             debug('Found', len(I), 'matching CCDs in merged sky file')
             if len(I) != 1:
                 continue
-            if not validate_procdate_plver(fn, 'table',
-                                           self.expnum, self.plver, self.procdate,
-                                           self.plprocid, data=T, old_calibs_ok=old_calibs_ok):
-                raise RuntimeError('Sky file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' % fn)
+            if not validate_version(
+                    fn, 'table', self.expnum, self.plver, self.plprocid,
+                    data=T, old_calibs_ok=old_calibs_ok):
+                raise RuntimeError('Sky file %s did not pass consistency validation (PLVER, PLPROCID, EXPNUM)' % fn)
             Ti = T[I[0]]
         if Ti is None:
             raise RuntimeError('Failed to find sky model in files: %s' % ', '.join(tryfns))
@@ -940,7 +938,8 @@ class LegacySurveyImage(object):
                 elif sver == -2 and srun == -2 and sscale == -2:
                     print('Warning: splinesky does not have sky-template version/run/scale values')
                 else:
-                    raise RuntimeError('Splinesky template version/run/scale %s/%s/%s does not match sky template %s/%s/%s' % (sver, srun, sscale, tver, trun, tscale))
+                    raise RuntimeError('Splinesky template version/run/scale %s/%s/%s does not match sky template %s/%s/%s, CCD %s' %
+                                       (sver, srun, sscale, tver, trun, tscale, self.name))
 
         # Remove any padding
         h,w = Ti.gridh, Ti.gridw
@@ -996,10 +995,10 @@ class LegacySurveyImage(object):
             debug('Found', len(I), 'matching CCDs')
             if len(I) != 1:
                 continue
-            if not validate_procdate_plver(fn, 'table',
-                                           self.expnum, self.plver, self.procdate,
-                                           self.plprocid, data=T, old_calibs_ok=old_calibs_ok):
-                raise RuntimeError('Merged PSFEx file %s did not pass consistency validation (PLVER, PROCDATE/PLPROCID, EXPNUM)' % fn)
+            if not validate_version(
+                    fn, 'table', self.expnum, self.plver, self.plprocid,
+                    data=T, old_calibs_ok=old_calibs_ok):
+                raise RuntimeError('Merged PSFEx file %s did not pass consistency validation (PLVER, PLPROCID, EXPNUM)' % fn)
             Ti = T[I[0]]
             break
         if Ti is None:
@@ -1131,7 +1130,9 @@ class LegacySurveyImage(object):
         psfdir = os.path.dirname(self.psffn)
         # psfex decides for itself what it's going to name the output file....
         psftmpfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.psf.tmp')
-        cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .psf.tmp -VERBOSE_TYPE QUIET %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, self.sefn)
+        psfexflags = self.survey.get_psfex_conf(self.camera,
+                                                self.expnum, self.ccdname)
+        cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .psf.tmp -VERBOSE_TYPE QUIET %s %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, psfexflags, self.sefn)
         debug(cmd)
         rtn = os.system(cmd)
         if rtn:
@@ -1167,6 +1168,10 @@ class LegacySurveyImage(object):
         img = self.read_image(slice=slc)
         dq = self.read_dq(slice=slc)
         wt = self.read_invvar(slice=slc, dq=dq)
+        primhdr = self.read_image_primary_header()
+        imghdr = self.read_image_header()
+
+        self.fix_saturation(img, dq, wt, primhdr, imghdr, slc)
 
         template_meta = {}
         template = self.get_sky_template(slc=slc)
@@ -1176,10 +1181,8 @@ class LegacySurveyImage(object):
             template,template_meta = template
             img -= template
 
-        primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', 'V0.0').strip()
         plprocid = str(primhdr['PLPROCID']).strip()
-        imghdr = self.read_image_header()
         datasum = imghdr.get('DATASUM', '0')
         procdate = primhdr['DATE']
         if git_version is None:
@@ -1796,13 +1799,12 @@ def fix_weight_quantization(wt, weightfn, ext, slc):
     wt[wt <= zscale[:,np.newaxis]*0.5] = 0.
     return True
 
-def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
-                            plprocid,
-                            data=None, ext=1, cpheader=False,
-                            old_calibs_ok=False, quiet=False):
+def validate_version(fn, filetype, expnum, plver, plprocid,
+                     data=None, ext=1, cpheader=False,
+                     old_calibs_ok=False, quiet=False):
     if not os.path.exists(fn):
         if not quiet:
-            print('File not found {}'.format(fn))
+            info('File not found {}'.format(fn))
         return False
     # Check the data model
     if filetype == 'table':
@@ -1811,27 +1813,29 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
         else:
             T = data
         cols = T.get_columns()
-        ### FIXME -- once we don't need procdate, clean up special-casing below!!
-        for key,targetval,strip in (#('procdate', procdate, True),
-                                    ('plver', plver, True),
+        for key,targetval,strip in (('plver', plver, True),
                                     ('plprocid', plprocid, True),
                                     ('expnum', expnum, False)):
+            if targetval is None:
+                # Skip this check
+                debug('Skipping check of', key, 'for', fn)
+                continue
             if key not in cols:
                 if old_calibs_ok:
-                    print('WARNING: {} table missing {} but old_calibs_ok=True'.format(fn, key))
+                    info('WARNING: {} table missing {} but old_calibs_ok=True'.format(fn, key))
                     continue
                 else:
-                    #print('WARNING: {} missing {}'.format(fn, key))
+                    debug('WARNING: {} missing {}'.format(fn, key))
                     return False
             val = T.get(key)
             if strip:
                 val = np.array([str(v).strip() for v in val])
             if not np.all(val == targetval):
                 if old_calibs_ok:
-                    print('WARNING: {} {}!={} in {} table but old_calibs_ok=True'.format(key, val, targetval, fn))
+                    info('WARNING: {} {}!={} in {} table but old_calibs_ok=True'.format(key, val, targetval, fn))
                     continue
                 else:
-                    print('WARNING: {} {}!={} in {} table'.format(key, val, targetval, fn))
+                    debug('WARNING: {} {}!={} in {} table'.format(key, val, targetval, fn))
                     return False
         return True
     elif filetype in ['primaryheader', 'header']:
@@ -1861,22 +1865,19 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                     obsid = int(obsid[2:], 10)
                     cpexpnum = obsid
                     if not quiet:
-                        print('Faked up EXPNUM', cpexpnum)
+                        debug('Faked up EXPNUM', cpexpnum)
                 elif obsid.startswith('ksb'):
                     import re
-                    # obsid = obsid[3:]
-                    # obsid = int(obsid[2:], 10)
-                    # cpexpnum = obsid
-                    # DTACQNAM= '/descache/bass/20160504/d7513.0033.fits'
+                    # DTACQNAM are like /descache/bass/20160504/d7513.0033.fits
                     base= (os.path.basename(hdr['DTACQNAM'])
                            .replace('.fits','')
                            .replace('.fz',''))
                     cpexpnum = int(re.sub(r'([a-z]+|\.+)','',base), 10)
                     if not quiet:
-                        print('Faked up EXPNUM', cpexpnum)
+                        debug('Faked up EXPNUM', cpexpnum)
             else:
                 if not quiet:
-                    print('Missing EXPNUM and OBSID in header')
+                    info('Missing EXPNUM and OBSID in header')
 
         for key,spval,targetval,strip in (('PLVER', None, plver, True),
                                           ('PLPROCID', None, plprocid, True),
@@ -1886,10 +1887,10 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
             else:
                 if key not in hdr:
                     if old_calibs_ok:
-                        print('WARNING: {} header missing {} but old_calibs_ok=True'.format(fn, key))
+                        info('WARNING: {} header missing {} but old_calibs_ok=True'.format(fn, key))
                         continue
                     else:
-                        #print('WARNING: {} header missing {}'.format(fn, key))
+                        debug('WARNING: {} header missing {}'.format(fn, key))
                         return False
                 val = hdr[key]
 
@@ -1899,10 +1900,10 @@ def validate_procdate_plver(fn, filetype, expnum, plver, procdate,
                 val = val.strip()
             if val != targetval:
                 if old_calibs_ok:
-                    print('WARNING: {} {}!={} in {} header but old_calibs_ok=True'.format(key, val, targetval, fn))
+                    info('WARNING: {} {}!={} in {} header but old_calibs_ok=True'.format(key, val, targetval, fn))
                     continue
                 else:
-                    print('WARNING: {} {}!={} in {} header'.format(key, val, targetval, fn))
+                    debug('WARNING: {} {}!={} in {} header'.format(key, val, targetval, fn))
                     return False
         return True
 

@@ -5,7 +5,7 @@ legacypipe.galex
 Code to generate GALEX custom coadds / mosaics.
 
 """
-import os, pdb
+import os
 import numpy as np
 
 import fitsio
@@ -33,7 +33,7 @@ def galex_psf(band, galex_dir):
     psfimg = psfimg[:psfimg.shape[0] -1, :psfimg.shape[0] -1] # make odd
     psfimg /= psfimg.sum()
     return psfimg
-    
+
 def stage_galex_forced(
     survey=None,
     cat=None,
@@ -206,8 +206,7 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
     and a list of GALEX tiles *tiles* (a fits_table with RA,Dec,tilename)
     runs forced photometry, returning a FITS table the same length as *cat*.
     '''
-    from tractor import NanoMaggies, PointSource, Tractor, ExpGalaxy, DevGalaxy
-    from tractor.sersic import SersicGalaxy
+    from tractor import Tractor
     from astrometry.util.ttime import Time
 
     if False:
@@ -220,29 +219,9 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
     use_ceres = True
     wantims = True
     get_models = True
-    
     gband = 'galex'
-    #fskeys = ['prochi2', 'pronpix', 'profracflux', 'proflux', 'npix',
-    #          'pronexp']
-
-    Nsrcs = len(cat)
     phot = fits_table()
-    # Filled in based on unique tile overlap
-    # phot.galex_tile = np.array([''] * Nsrcs)
-    # phot.galex_x = np.zeros(Nsrcs, np.float32)
-    # phot.galex_y = np.zeros(Nsrcs, np.float32)
-    # phot.set(wband + '_psfdepth', np.zeros(len(phot), np.float32))
-
-    ra  = np.array([src.getPosition().ra  for src in cat])
-    dec = np.array([src.getPosition().dec for src in cat])
-
-    # nexp = np.zeros(Nsrcs, np.int16)
-    # mjd  = np.zeros(Nsrcs, np.float64)
-    # central_flux = np.zeros(Nsrcs, np.float32)
-
-    # fitstats = {}
     tims = []
-
     for tile in tiles:
         info('Reading GALEX tile', tile.visitname.strip(), 'band', band)
 
@@ -264,15 +243,8 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
         if pixelized_psf:
             psfimg = galex_psf(band, galex_dir)
             tim.psf = PixelizedPSF(psfimg)
-
-        # nexp[I] = tim.nuims[y[I], x[I]]
         # if hasattr(tim, 'mjdmin') and hasattr(tim, 'mjdmax'):
         #     mjd[I] = (tim.mjdmin + tim.mjdmax) / 2.
-        # phot.galex_tilename[I] = tile.tilename
-        # phot.galex_x[I] = fx[I] - 1.
-        # phot.galex_y[I] = fy[I] - 1.
-        # central_flux[I] = tim.getImage()[y[I], x[I]]
-
         # # PSF norm for depth
         # psf = tim.getPsf()
         # h,w = tim.shape
@@ -300,7 +272,7 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
         wantims=wantims)
     info('GALEX forced photometry took', Time() - t0)
     #info('Result:', R)
-    
+
     if use_ceres:
         term = R.ceres_status['termination']
         # Running out of memory can cause failure to converge and term
@@ -312,10 +284,6 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
     if wantims:
         ims1 = R.ims1
     flux_invvars = R.IV
-    # if R.fitstats is not None:
-    #     for k in fskeys:
-    #         x = getattr(R.fitstats, k)
-    #         fitstats[k] = np.array(x).astype(np.float32)
 
     # if plots:
     #     # Create models for just the brightest sources
@@ -346,7 +314,7 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
         for i,tim in enumerate(tims):
             tile = tim.tile
             tag = '%s %s' % (tile.tilename, band)
-            (dat, mod, ie, chi, roi) = ims1[i]
+            (dat, mod, _, chi, _) = ims1[i]
             sig1 = tim.sig1
             plt.clf()
             plt.imshow(dat, interpolation='nearest', origin='lower',
@@ -377,9 +345,6 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
     niceband = band + 'uv'
     phot.set('flux_' + niceband, nm.astype(np.float32))
     phot.set('flux_ivar_' + niceband, nm_ivar.astype(np.float32))
-    #for k in fskeys:
-    #    phot.set(band + '_' + k, fitstats[k])
-    #phot.set(band + '_nexp', nexp)
     #phot.set(band + '_mjd', mjd)
 
     rtn = gphotduck()
@@ -433,7 +398,6 @@ class GalexCoadd(SimpleCoadd):
             info('Wrote', out.fn)
 
 def _ra_ranges_overlap(ralo, rahi, ra1, ra2):
-    import numpy as np
     x1 = np.cos(np.deg2rad(ralo))
     y1 = np.sin(np.deg2rad(ralo))
     x2 = np.cos(np.deg2rad(rahi))
@@ -458,12 +422,10 @@ def _galex_rgb_dstn(imgs, **kwargs):
     return myrgb
 
 def _galex_rgb_official(imgs, **kwargs):
-    from scipy.ndimage.filters import uniform_filter, gaussian_filter
+    from scipy.ndimage.filters import gaussian_filter
     nuv,fuv = imgs
-    h,w = nuv.shape
     red = nuv * 0.206 * 2297
     blue = fuv * 1.4 * 1525
-    #blue = uniform_filter(blue, 3)
     blue = gaussian_filter(blue, 1.)
     green = (0.2*blue + 0.8*red)
 
@@ -488,7 +450,6 @@ def _galex_rgb_official(imgs, **kwargs):
 def _galex_rgb_moustakas(imgs, **kwargs):
     #from scipy.ndimage.filters import uniform_filter, gaussian_filter
     nuv,fuv = imgs
-    h,w = nuv.shape
     red = nuv * 0.206 * 2297
     blue = fuv * 1.4 * 1525
     #blue = uniform_filter(blue, 3)
@@ -562,7 +523,7 @@ def galex_tiles_touching_wcs(targetwcs, galex_dir):
 
 def galex_tractor_image(tile, band, galex_dir, radecbox, bandname):
     from tractor import (NanoMaggies, Image, LinearPhotoCal,
-                         NCircularGaussianPSF, ConstantFitsWcs, ConstantSky)
+                         ConstantFitsWcs, ConstantSky)
 
     assert(band in ['n','f'])
 
@@ -609,13 +570,6 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname):
 
     name = 'GALEX ' + hdr['OBJECT'] + ' ' + band
 
-    ## HACK -- circular Gaussian PSF of fixed size...
-    ## in arcsec
-    #fwhms = dict(n=6.0, f=6.0)
-    ## -> sigma in pixels
-    #sig = fwhms[band] / 2.35 / twcs.pixel_scale()
-    #tpsf = NCircularGaussianPSF([sig], [1.])
-
     psfimg = galex_psf(band, galex_dir)
     tpsf = PixelizedPSF(psfimg)
 
@@ -634,14 +588,11 @@ def galex_coadds(onegal, galaxy=None, radius_mosaic=30, radius_mask=None,
     pixscale: GALEX pixel scale in arcsec/pixel.
 
     '''
-    import fitsio
-    import matplotlib.pyplot as plt
-
+    #import matplotlib.pyplot as plt
     from astrometry.libkd.spherematch import match_radec
     from astrometry.util.resample import resample_with_wcs, OverlapError
     from tractor import (Tractor, NanoMaggies, Image, LinearPhotoCal,
-                         NCircularGaussianPSF, ConstantFitsWcs, ConstantSky)
-
+                         ConstantFitsWcs, ConstantSky)
     from legacypipe.survey import imsave_jpeg
     from legacypipe.catalog import read_fits_catalog
 
@@ -680,8 +631,8 @@ def galex_coadds(onegal, galaxy=None, radius_mosaic=30, radius_mask=None,
 
         # This algorithm will have to change for mosaics not centered on large
         # galaxies, e.g., in galaxy groups.
-        m1, m2, d12 = match_radec(cat.ra, cat.dec, onegal['RA'], onegal['DEC'],
-                                  radius_search/3600.0, nearest=False)
+        m1,_,_ = match_radec(cat.ra, cat.dec, onegal['RA'], onegal['DEC'],
+                             radius_search/3600.0, nearest=False)
         if len(m1) == 0:
             print('No central galaxies found at the central coordinates!', flush=True, file=log)
         else:
@@ -754,7 +705,7 @@ def galex_coadds(onegal, galaxy=None, radius_mosaic=30, radius_mask=None,
             #print('Read', img.shape)
 
             try:
-                Yo, Xo, Yi, Xi, nil = resample_with_wcs(targetwcs, gwcs, [], 3)
+                Yo, Xo, Yi, Xi, _ = resample_with_wcs(targetwcs, gwcs, [], 3)
             except OverlapError:
                 continue
 
@@ -779,14 +730,6 @@ def galex_coadds(onegal, galaxy=None, radius_mosaic=30, radius_mask=None,
             photocal = LinearPhotoCal( NanoMaggies.zeropointToScale(zp), band=band)
             tsky = ConstantSky(0.0)
             
-            # HACK -- circular Gaussian PSF of fixed size...
-            # in arcsec
-            #fwhms = dict(NUV=6.0, FUV=6.0)
-            # -> sigma in pixels
-            #sig = fwhms[band] / 2.35 / twcs.pixel_scale()
-            #sig = 6.0 / np.sqrt(8 * np.log(2)) / twcs.pixel_scale()
-            #tpsf = NCircularGaussianPSF([sig], [1.])
-
             psfimg = galex_psf(band, galex_dir)
             tpsf = PixelizedPSF(psfimg)
 

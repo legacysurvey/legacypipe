@@ -55,7 +55,7 @@ blobs" -- chunks of work that we expect to take a long time to
 complete, so we handle them separately.  There's a "big" version of
 the network_thread that reads from this queue.
 
-  
+
 The overall data flow is:
 
 - one of the input_threads queries the QDO database for the next brick
@@ -376,7 +376,7 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
                     print('Finished bricks:')
                 for br,nb in all_finished_bricks.items():
                     print('  %s: %i blobs' % (br, nb))
-                    
+
             print()
             print('Work queue:', inqueue.qsize(), 'out queue:', outqueue.qsize(), 'work sent:', worksent, ', received:', resultsreceived, 'outstanding:', worksent-resultsreceived)
             #print('Outstanding work:')
@@ -403,7 +403,7 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
             cputimes = {}
 
             ## outstanding_work[(br,iblob)] = (worker, tnow)
-            for i,(k,v) in enumerate(outstanding_work.items()):
+            for k,v in outstanding_work.items():
                 (worker,tstart) = v
                 (br,ib) = k
                 # if i < 10:

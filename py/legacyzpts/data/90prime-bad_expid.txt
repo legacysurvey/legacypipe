@@ -111,3 +111,215 @@
 77890078 blobby/donutty PSF triggers CRs
 79650061 blobby/donutty PSF triggers CRs
 75140200 weird duplicate image
+
+80670065-CCD1 weird rectangular sky offsets
+80670098-CCD1 weird rectangular sky offsets
+80670139-CCD1 weird rectangular sky offsets
+
+78090134 double image
+
+75430191 double image / trailing
+75430161 double image / trailing
+75430213 double image / trailing
+
+74520066-CCD4 terrible donut PSF model from PSFex
+
+# more bad PSF images from Rongpu's PSF analysis; [decam-chatter 14061]
+75130058 double image
+77890140 double image
+70680068 double image
+74020085 double image
+74240186 donutty PSF
+74240187 donutty PSF
+74330051 trailed PSF
+74340055 donutty PSF
+74340056 donutty PSF
+74340057 donutty PSF
+74340058 donutty PSF
+74340059 donutty PSF
+74340060 donutty PSF
+74340061 donutty PSF
+74340062 donutty PSF
+74560051 trailed PSF
+76990075 double image
+78090081 double image
+78190088 double image
+78610033 trailed PSF
+81900037 double image
+82490067 double image
+
+74250031 trailed PSF
+74310119 donutty PSF
+74330049 trailed PSF
+74340045 donutty PSF
+74350184 donutty PSF
+74350185 donutty PSF
+74350186 donutty PSF
+74350187 donutty PSF
+74350188 donutty PSF
+74350189 donutty PSF
+75060066 donutty PSF
+75390242 weird/elliptical PSF
+75390243 weird/elliptical PSF
+75420069 weird/elliptical PSF
+75440129 asymmetric PSF
+75480152 trailed PSF
+75480164 donutty PSF
+75480165 donutty PSF
+75480166 donutty PSF
+75480167 donutty PSF
+75480168 donutty PSF
+75790088 trailed PSF
+75810055 trailed PSF
+77860107 trailed/donutty PSF
+77870176 trailed/donutty PSF
+77870177 trailed/donutty PSF
+77870178 trailed/donutty PSF
+77870179 trailed/donutty PSF
+77870180 trailed/donutty PSF
+77870181 trailed/donutty PSF
+77870182 trailed/donutty PSF
+77870183 trailed/donutty PSF
+77870184 trailed/donutty PSF
+77870185 trailed/donutty PSF
+77870186 trailed/donutty PSF
+77870187 trailed/donutty PSF
+77870188 trailed/donutty PSF
+77870189 trailed/donutty PSF
+77870190 trailed/donutty PSF
+77870191 trailed/donutty PSF
+77870192 trailed/donutty PSF
+77870193 trailed/donutty PSF
+77870194 trailed/donutty PSF
+77870195 trailed/donutty PSF
+77880131 trailed/donutty PSF
+77880132 trailed/donutty PSF
+78090021 trailed/donutty PSF
+78090022 trailed/donutty PSF
+78130035 trailed/donutty PSF
+78130051 trailed/donutty PSF
+78170031 trailed/donutty PSF
+78190077 trailed/donutty PSF
+78190078 trailed/donutty PSF
+78190079 trailed/donutty PSF
+78190080 trailed/donutty PSF
+78300044 trailed/donutty PSF
+78300045 trailed/donutty PSF
+78300046 trailed/donutty PSF
+78390268 trailed/donutty PSF
+78880034 trailed/donutty PSF
+78880047 trailed/donutty PSF
+78880048 trailed/donutty PSF
+78890088 trailed/donutty PSF
+78910031 trailed/donutty PSF
+78920041 trailed/donutty PSF
+78950031 trailed/donutty PSF
+78970022 trailed/donutty PSF
+79000135 trailed PSF
+79050044 donutty PSF
+79050045 donutty PSF
+79050046 donutty PSF
+79050047 donutty PSF
+79050048 donutty PSF
+79050049 donutty PSF
+79050050 donutty PSF
+79050051 donutty PSF
+79050052 donutty PSF
+79050053 donutty PSF
+79050054 donutty PSF
+79050055 donutty PSF
+79050059 donutty PSF
+79200157 donutty PSF
+79200158 donutty PSF
+79200159 donutty PSF
+79260037 donutty PSF
+79260038 donutty PSF
+79260039 donutty PSF
+79260040 donutty PSF
+79260041 donutty PSF
+79260042 donutty PSF
+81350156 donutty PSF
+81360024 donutty PSF
+81920031 donutty PSF
+82530042 trailed PSF
+83050004 trailed/donutty PSF
+83050005 trailed/donutty PSF
+83050006 trailed/donutty PSF
+83050007 trailed/donutty PSF
+83050008 trailed/donutty PSF
+83050009 trailed/donutty PSF
+83050010 trailed/donutty PSF
+83050011 trailed/donutty PSF
+83050012 trailed/donutty PSF
+83050013 trailed/donutty PSF
+83050014 trailed/donutty PSF
+84980034 trailed/donutty PSF
+85270037 trailed/donutty PSF
+85270071 trailed/asymmetric PSF
+85270137 donutty PSF
+85270138 donutty PSF
+85270139 donutty PSF
+85270141 donutty PSF
+85270142 donutty PSF
+85270143 donutty PSF
+85270144 donutty PSF
+85420043 donutty PSF
+
+# bad / weird focus; weird astrometric & photometric residuals
+74520057
+74520058
+74520059
+74520060
+74520061
+74520062
+74520063
+74520064
+74520065
+74520066
+74520067
+
+# cometary PSF on CCD2
+74520040-CCD2
+74520041-CCD2
+74520043-CCD2
+74520046-CCD2
+74520055-CCD2
+
+
+# more bad focus exposures from Aaron Meisner
+74230034  # donutty
+74230035
+74230036
+74230037
+74230038
+74230043  # donutty
+
+77890068  # cometary
+77890069
+77890070
+77890071
+77890072
+77890073
+77890074
+77890075
+77890076
+77890077
+77890078
+77890079
+77890080
+77890081
+77890082  # cometary
+
+77890192  # donutty
+77890193
+77890194
+77890195
+77890197
+77890198  # donutty
+
+78320260  # donutty
+78320261
+78320262
+78320263
+78320264
+78320265  # donutty

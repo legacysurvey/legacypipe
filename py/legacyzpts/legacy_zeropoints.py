@@ -30,7 +30,7 @@ import legacypipe
 from legacypipe.ps1cat import ps1cat
 from legacypipe.gaiacat import GaiaCatalog
 from legacypipe.survey import radec_at_mjd, get_git_version
-from legacypipe.image import validate_procdate_plver
+from legacypipe.image import validate_version
 
 CAMERAS=['decam','mosaic','90prime','megaprime']
 MAGLIM=dict(g=[16, 20], r=[16, 19.5], z=[16.5, 19])
@@ -310,10 +310,8 @@ class Measurer(object):
 
         self.expnum = self.get_expnum(self.primhdr)
         if not quiet:
-            print('CP Header: EXPNUM = ',self.expnum)
-            print('CP Header: PROCDATE = ',self.procdate)
-            print('CP Header: PLVER = ',self.plver)
-            print('CP Header: PLPROCID = ',self.plprocid)
+            print('CP Header: EXPNUM', self.expnum, 'PLVER', self.plver,
+                  'PLPROCID', self.plprocid)
         self.obj = self.primhdr['OBJECT']
 
     def get_extension_list(self, fn, debug=False):
@@ -1147,9 +1145,8 @@ class Measurer(object):
         fn = self.get_splinesky_merged_filename()
         if os.path.exists(fn):
             T = fits_table(fn)
-            if validate_procdate_plver(fn, 'table', self.expnum, self.plver,
-                                       self.procdate, self.plprocid, data=T,
-                                       quiet=self.quiet):
+            if validate_version(fn, 'table', self.expnum, self.plver,
+                                       self.plprocid, data=T, quiet=self.quiet):
                 I, = np.nonzero((T.expnum == self.expnum) *
                                 np.array([c.strip() == self.ext for c in T.ccdname]))
                 if len(I) == 1:
@@ -1170,9 +1167,8 @@ class Measurer(object):
         if not os.path.exists(fn):
             return None
         hdr = read_primary_header(fn)
-        if not validate_procdate_plver(fn, 'primaryheader', self.expnum, self.plver,
-                                       self.procdate, self.plprocid, data=hdr,
-                                       quiet=self.quiet):
+        if not validate_version(fn, 'primaryheader', self.expnum, self.plver,
+                                       self.plprocid, data=hdr, quiet=self.quiet):
             return None
         try:
             skyclass = hdr['SKY']
@@ -1375,9 +1371,8 @@ class Measurer(object):
         if os.path.exists(fn):
             #print('Reading psfex-merged {}'.format(fn))
             T = fits_table(fn)
-            if validate_procdate_plver(fn, 'table', self.expnum, self.plver,
-                                       self.procdate, self.plprocid, data=T,
-                                       quiet=self.quiet):
+            if validate_version(fn, 'table', self.expnum, self.plver,
+                                       self.plprocid, data=T, quiet=self.quiet):
                 I, = np.nonzero((T.expnum == self.expnum) *
                                 np.array([c.strip() == self.ext for c in T.ccdname]))
                 if len(I) == 1:
@@ -1398,9 +1393,8 @@ class Measurer(object):
         if not os.path.exists(fn):
             return None
         hdr = read_primary_header(fn)
-        if not validate_procdate_plver(fn, 'primaryheader', self.expnum, self.plver,
-                                       self.procdate, self.plprocid, data=hdr,
-                                       quiet=self.quiet):
+        if not validate_version(fn, 'primaryheader', self.expnum, self.plver,
+                                       self.plprocid, data=hdr, quiet=self.quiet):
             return None
 
         hdr = fitsio.read_header(fn, ext=1)
@@ -1525,14 +1519,22 @@ class Measurer(object):
         # passed to image.run_calibs().
         have_zpt = False
         if survey_zeropoints is not None:
-            ccds = survey_zeropoints.find_ccds(expnum=self.expnum, ccdname=self.ccdname,
-                                               camera=self.camera)
-            assert(len(ccds) == 1)
-            #print('Plugging in ccdzpt', ccds[0].ccdzpt)
-            ccd.ccdzpt = ccds[0].ccdzpt
-            ccd.ccdraoff = ccds[0].ccdraoff
-            ccd.ccddecoff = ccds[0].ccddecoff
-            have_zpt = True
+            ccds = survey_zeropoints.find_ccds(
+                expnum=self.expnum, ccdname=self.ccdname, camera=self.camera)
+            if len(ccds) != 1:
+                print('WARNING, did not find a zeropoint for', self.fn_base,
+                      'by camera', self.camera, 'expnum', self.expnum,
+                      'ccdname', self.ccdname)
+            else:
+                ccd.ccdzpt = ccds[0].ccdzpt
+                ccd.ccdraoff = ccds[0].ccdraoff
+                ccd.ccddecoff = ccds[0].ccddecoff
+                if ccd.ccdzpt == 0.:
+                    print('WARNING, found zeropoint=0 for', self.fn_base,
+                          'by camera', self.camera, 'expnum', self.expnum,
+                          'ccdname', self.ccdname)
+                else:
+                    have_zpt = True
 
         # Set sig1 after (possibly) updating zeropoint!
         from tractor.brightness import NanoMaggies
@@ -1985,14 +1987,14 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     # Validate the splinesky and psfex merged files, and (re)make them if
     # they're missing.
     if splinesky:
-        if validate_procdate_plver(measure.get_splinesky_merged_filename(),
+        if validate_version(measure.get_splinesky_merged_filename(),
                                    'table', measure.expnum, measure.plver,
-                                   measure.procdate, measure.plprocid, quiet=quiet):
+                                   measure.plprocid, quiet=quiet):
             do_splinesky = False
     if psfex:
-        if validate_procdate_plver(measure.get_psfex_merged_filename(),
+        if validate_version(measure.get_psfex_merged_filename(),
                                    'table', measure.expnum, measure.plver,
-                                   measure.procdate, measure.plprocid, quiet=quiet):
+                                   measure.plprocid, quiet=quiet):
             do_psfex = False
 
     if do_splinesky or do_psfex:
@@ -2032,9 +2034,9 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
         if not os.path.exists(fn):
             print('Merged splinesky file not found {}'.format(fn))
             return []
-        if not validate_procdate_plver(measure.get_splinesky_merged_filename(),
+        if not validate_version(measure.get_splinesky_merged_filename(),
                                        'table', measure.expnum, measure.plver,
-                                       measure.procdate, measure.plprocid):
+                                       measure.plprocid):
             raise RuntimeError('Merged splinesky file did not validate!')
         # At this point the merged file exists and has been validated, so remove
         # the individual splinesky files.
@@ -2049,9 +2051,9 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
         if not os.path.exists(fn):
             print('Merged psfex file not found {}'.format(fn))
             return []
-        if not validate_procdate_plver(measure.get_psfex_merged_filename(),
+        if not validate_version(measure.get_psfex_merged_filename(),
                                    'table', measure.expnum, measure.plver,
-                                   measure.procdate, measure.plprocid):
+                                   measure.plprocid):
             raise RuntimeError('Merged psfex file did not validate!')
         # At this point the merged file exists and has been validated, so remove
         # the individual PSFEx and SE files.
@@ -2372,8 +2374,8 @@ def main(image_list=None,args=None):
         psffn = measure.get_psfex_merged_filename()
         skyfn = measure.get_splinesky_merged_filename()
 
-        ann_ok, psf_ok, sky_ok = [validate_procdate_plver(
-            fn, 'table', measure.expnum, measure.plver, measure.procdate,
+        ann_ok, psf_ok, sky_ok = [validate_version(
+            fn, 'table', measure.expnum, measure.plver,
             measure.plprocid, quiet=quiet)
             for fn in [F.annfn, psffn, skyfn]]
 
@@ -2382,9 +2384,9 @@ def main(image_list=None,args=None):
             print('Already finished {}'.format(skyfn))
             continue
 
-        phot_ok = validate_procdate_plver(F.photomfn, 'header', measure.expnum,
-                                         measure.plver, measure.procdate,
-                                         measure.plprocid, ext=1, quiet=quiet)
+        phot_ok = validate_version(F.photomfn, 'header', measure.expnum,
+                                   measure.plver, measure.plprocid,
+                                   ext=1, quiet=quiet)
 
         if ann_ok and phot_ok and psf_ok and sky_ok:
             print('Already finished: {}'.format(F.annfn))

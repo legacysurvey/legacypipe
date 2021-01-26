@@ -2,81 +2,189 @@
 After running forced_photom.py on a set of CCDs, this script merges
 the results back into a catalog.
 '''
-from astrometry.util.fits import *
+import sys
+import logging
 import numpy as np
 from glob import glob
 from collections import Counter
 
-from legacypipe.survey import LegacySurveyData
+from astrometry.util.fits import fits_table, merge_tables
 
-fns = glob('forced/*/*/forced-*.fits')
-F = merge_tables([fits_table(fn) for fn in fns])
+from legacypipe.survey import LegacySurveyData, get_version_header, apertures_arcsec
 
-dr6 = LegacySurveyData('/project/projectdirs/cosmo/data/legacysurvey/dr6')
-B = dr6.get_bricks_readonly()
+def merge_forced(survey, brickname, cat, bands='grz'):
+    ccdfn = survey.find_file('ccds-table', brick=brickname)
+    CCDs = fits_table(ccdfn)
+    print('Read', len(CCDs), 'CCDs')
 
-I = np.flatnonzero((B.ra1 < F.ra.max()) * (B.ra2 > F.ra.min()) * (B.dec1 < F.dec.max()) * (B.dec2 > F.dec.min()))
-print(len(I), 'bricks')
-T = merge_tables([fits_table(dr6.find_file('tractor', brick=B.brickname[i])) for i in I])
-print(len(T), 'sources')
-T.cut(T.brick_primary)
-print(len(T), 'primary')
+    # objects in the catalog: (release,brickid,objid)
+    catobjs = set([(r,b,o) for r,b,o in
+                   zip(cat.release, cat.brickid, cat.objid)])
 
-# map from F to T index
-imap = dict([((b,o),i) for i,(b,o) in enumerate(zip(T.brickid, T.objid))])
-F.tindex = np.array([imap[(b,o)] for b,o in zip(F.brickid, F.objid)])
-assert(np.all(T.brickid[F.tindex] == F.brickid))
-assert(np.all(T.objid[F.tindex] == F.objid))
+    # (release, brickid, objid, band) -> [ index in forced-phot table ]
+    phot_index = {}
 
-fcols = 'apflux apflux_ivar camera expnum ccdname exptime flux flux_ivar fracflux mask mjd rchi2 x y brickid objid'.split()
+    camexp = set()
+    FF = []
+    for ccd in CCDs:
+        cam = ccd.camera.strip()
+        key = (cam, ccd.expnum)
+        if key in camexp:
+            # already read this camera-expnum
+            continue
+        camexp.add(key)
+        ffn = survey.find_file('forced', camera=cam, expnum=ccd.expnum)
+        print('Forced phot filename:', ffn)
+        F = fits_table(ffn)
+        print('Read', len(F), 'forced-phot entries for CCD')
+        ikeep = []
+        for i,(r,b,o) in enumerate(zip(F.release, F.brickid, F.objid)):
+            if (r,b,o) in catobjs:
+                ikeep.append(i)
+        if len(ikeep) == 0:
+            print('No catalog objects found in this forced-phot table.')
+            continue
+        F.cut(np.array(ikeep))
+        print('Cut to', len(F), 'phot entries matching catalog')
+        FF.append(F)
+    F = merge_tables(FF)
+    F._header = FF[0]._header
+    del FF
 
-bands = np.unique(F.filter)
-for band in bands:
-    Fb = F[F.filter == band]
-    print(len(Fb), 'in band', band)
-    c = Counter(zip(Fb.brickid, Fb.objid))
-    NB = c.most_common()[0][1]
-    print('Maximum of', NB, 'exposures per object')
+    I = np.lexsort((F.expnum, F.camera, F.filter, F.objid, F.brickid, F.release))
+    F.cut(I)
 
-    # we use uint8 below...
-    assert(NB < 256)
-    
-    sourcearrays = []
-    sourcearrays2 = []
-    destarrays = []
-    destarrays2 = []
-    for c in fcols:
-        src = Fb.get(c)
-        if len(src.shape) == 2:
-            narray = src.shape[1]
-            dest = np.zeros((len(T), Nb, narray), src.dtype)
-            T.set('forced_%s_%s' % (band, c), dest)
-            sourcearrays2.append(src)
-            destarrays2.append(dest)
+    for i,(r,brick,o,band) in enumerate(
+            zip(F.release, F.brickid, F.objid, F.filter)):
+        key = (r,brick,o,band)
+        if not key in phot_index:
+            phot_index[key] = []
+        phot_index[key].append(i)
+
+    # find largest number of photometry measurements!
+    Nmax = max([len(inds) for inds in phot_index.values()])
+    print('Maximum number of photometry entries:', Nmax)
+
+    for band in bands:
+        nobs = np.zeros(len(cat), np.int32)
+        indx = np.empty(len(cat), np.int32)
+        indx[:] = -1
+        cat.set('nobs_%s' % band, nobs)
+        cat.set('index_%s' % band, indx)
+
+        for i,(r,brick,o) in enumerate(zip(cat.release, cat.brickid, cat.objid)):
+            key = (r,brick,o,band)
+            try:
+                inds = phot_index[key]
+            except KeyError:
+                continue
+            nobs[i] = len(inds)
+            # Indices are all contiguous (so we only need store the first one)
+            assert(np.all(np.array(inds) == (np.arange(len(inds)) + inds[0])))
+            indx[i] = inds[0]
+    return cat, F
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-b', '--brick',
+        help='Brick name to run; required unless --radec is given')
+    parser.add_argument('--survey-dir', type=str, default=None,
+                        help='Override the $LEGACY_SURVEY_DIR environment variable')
+    parser.add_argument('-d', '--outdir', dest='output_dir',
+                        help='Set output base directory, default "."')
+    parser.add_argument('--out', help='Output filename -- if not set, defaults to path within --outdir.')
+    parser.add_argument('-r', '--run', default=None,
+                        help='Set the run type to execute (for images)')
+
+    parser.add_argument('--catalog', help='Use the given FITS catalog file, rather than reading from a data release directory')
+    parser.add_argument('--catalog-dir', help='Set LEGACY_SURVEY_DIR to use to read catalogs')
+    parser.add_argument('--catalog-dir-north', help='Set LEGACY_SURVEY_DIR to use to read Northern catalogs')
+    parser.add_argument('--catalog-dir-south', help='Set LEGACY_SURVEY_DIR to use to read Southern catalogs')
+    parser.add_argument('--catalog-resolve-dec-ngc', type=float, help='Dec at which to switch from Northern to Southern catalogs (NGC only)', default=32.375)
+    parser.add_argument('-v', '--verbose', dest='verbose', action='count',
+                        default=0, help='Make more verbose')
+
+    opt = parser.parse_args()
+    if opt.brick is None:
+        parser.print_help()
+        return -1
+    verbose = opt.verbose
+    if verbose == 0:
+        lvl = logging.INFO
+    else:
+        lvl = logging.DEBUG
+    logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+    # tractor logging is *soooo* chatty
+    logging.getLogger('tractor.engine').setLevel(lvl + 10)
+
+    from legacypipe.runs import get_survey
+    survey = get_survey(opt.run,
+                        survey_dir=opt.survey_dir,
+                        output_dir=opt.output_dir)
+
+    columns = ['release', 'brickid', 'objid',]
+
+    cat = None
+    catsurvey = survey
+    if opt.catalog is not None:
+        cat = fits_table(opt.catalog, columns=columns)
+        print('Read', len(cat), 'sources from', opt.catalog)
+    else:
+        from astrometry.util.starutil_numpy import radectolb
+        # The "north" and "south" directories often don't have
+        # 'survey-bricks" files of their own -- use the 'survey' one
+        # instead.
+        brick = None
+        for s in [survey, catsurvey]:
+            try:
+                brick = s.get_brick_by_name(opt.brick)
+                break
+            except:
+                import traceback
+                traceback.print_exc()
+                pass
+
+        l,b = radectolb(brick.ra, brick.dec)
+        # NGC and above resolve line? -> north
+        if b > 0 and brick.dec >= opt.catalog_resolve_dec_ngc:
+            if opt.catalog_dir_north:
+                catsurvey = LegacySurveyData(survey_dir=opt.catalog_dir_north)
         else:
-            dest = np.zeros((len(T), Nb), src.dtype)
-            T.set('forced_%s_%s' % (band, c), dest)
-            sourcearrays.append(src)
-            destarrays.append(dest)
-    nf = np.zeros(len(T), np.uint8)
-    T.set('forced_%s_n' % band, nf)
-    for i,ti in enumerate(Fb.tindex):
-        k = nf[ti]
-        for src,dest in zip(sourcearrays, destarrays):
-            dest[ti,k] = src[i]
-        for src,dest in zip(sourcearrays2, destarrays2):
-            dest[ti,k,:] = src[i,:]
-        nf[ti] += 1
+            if opt.catalog_dir_south:
+                catsurvey = LegacySurveyData(survey_dir=opt.catalog_dir_south)
 
-for band in bands:
-    flux = T.get('forced_%s_flux' % band)
-    ivar = T.get('forced_%s_flux_ivar' % band)
-    miv = np.sum(ivar, axis=1)
-    T.set('forced_%s_mean_flux' % band, np.sum(flux * ivar, axis=1) / np.maximum(1e-16, miv))
-    T.set('forced_%s_mean_flux_ivar' % band, miv)
+        fn = catsurvey.find_file('tractor', brick=opt.brick)
+        cat = fits_table(fn, columns=columns)
+        print('Read', len(cat), 'sources from', fn)
 
-#K = np.flatnonzero(np.logical_or(T.forced_mean_u_flux_ivar > 0, T.forced_mean_r_flux_ivar > 0))
-#T[K].writeto('forced/forced-cfis-deep2f2.fits')
+    program_name = sys.argv[0]
+    ## FIXME -- from catalog?
+    release = 9999
+    version_hdr = get_version_header(program_name, opt.survey_dir, release)
 
-T.writeto('forced-merged.fits')
+    from legacypipe.utils import add_bits
+    from legacypipe.bits import DQ_BITS
+    add_bits(version_hdr, DQ_BITS, 'DQMASK', 'DQ', 'D')
+    from legacyzpts.psfzpt_cuts import CCD_CUT_BITS
+    add_bits(version_hdr, CCD_CUT_BITS, 'CCD_CUTS', 'CC', 'C')
+    for i,ap in enumerate(apertures_arcsec):
+        version_hdr.add_record(dict(name='APRAD%i' % i, value=ap,
+                                    comment='(optical) Aperture radius, in arcsec'))
 
+    cat,forced = merge_forced(survey, opt.brick, cat)
+    units = []
+    for i,col in enumerate(forced.get_columns()):
+        units.append(forced._header.get('TUNIT%i' % (i+1), ''))
+    cols = forced.get_columns()
+
+    if opt.out:
+        cat.writeto(opt.out, primheader=version_hdr)
+        forced.writeto(opt.out, append=True, units=units, columns=cols)
+    else:
+        with survey.write_output('forced-brick', brick=opt.brick) as out:
+            cat.writeto(None, fits_object=out.fits, primheader=version_hdr)
+            forced.writeto(None, fits_object=out.fits, append=True, units=units, columns=cols)
+
+if __name__ == '__main__':
+    main()

@@ -465,7 +465,7 @@ def main(args):
     # plt.savefig('bricks.png')
 
     if opt.touching:
-        I,J,d = match_radec(T.ra, T.dec, B.ra, B.dec, search_radius,
+        I,J,_ = match_radec(T.ra, T.dec, B.ra, B.dec, search_radius,
                             nearest=True)
         # list the ones that will be cut
         # drop = np.ones(len(T))
@@ -488,9 +488,10 @@ def main(args):
         camexp = set([(c,e) for c,e in zip(T.camera, T.expnum)])
         print(len(camexp), 'unique camera/exposure pairs')
         for cam,exp in camexp:
-            expstr = '%08i' % exp
-            outfn = os.path.join('forced', cam, expstr[:5], 'forced-%s-%s.fits' % (cam, exp))
-            f.write('%s %s all %s\n' % (cam, exp, outfn))
+            #expstr = '%08i' % exp
+            #outfn = os.path.join('forced', cam, expstr[:5], 'forced-%s-%s.fits' % (cam, exp))
+            #f.write('%s %s all %s\n' % (cam, exp, outfn))
+            f.write('%s %s\n' % (cam, exp))
         f.close()
         log('Wrote', opt.out)
         return 0

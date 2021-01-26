@@ -72,7 +72,6 @@ def rbmain():
         I = np.flatnonzero(T.ref_cat == 'T2')
         assert(len(I) == 1)
         assert(T.ref_id[I][0] == 1909016711)
-        del os.environ['TYCHO2_KD_DIR']
 
         cat = read_fits_catalog(T)
         assert(len(cat) == 2)
@@ -84,6 +83,26 @@ def rbmain():
         assert(isinstance(cat[1], PointSource))
         cat2 = Catalog(*cat)
         assert(len(ivs) == len(cat2.getParams()))
+
+        # test --fit-on-coadds
+        outdir = 'out-testcase6-coadds'
+        main(args=['--brick', '1102p240', '--zoom', '500', '600', '650', '750',
+                   '--force-all', '--no-write', '--no-wise', '--no-gaia',
+                   '--survey-dir', surveydir, '--fit-on-coadds',
+                   '--outdir', outdir])
+
+        fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
+        assert(os.path.exists(fn))
+        T = fits_table(fn)
+        assert(len(T) == 2)
+        # Since there is a Tycho-2 star in the blob, forced to be PSF.
+        assert(T.type[0].strip() == 'PSF')
+        assert(T.type[1].strip() == 'PSF')
+        # There is a Tycho-2 star in the blob.
+        I = np.flatnonzero(T.ref_cat == 'T2')
+        assert(len(I) == 1)
+        assert(T.ref_id[I][0] == 1909016711)
+        del os.environ['TYCHO2_KD_DIR']
 
         # test --skip-coadds
         r = main(args=['--brick', '1102p240',
@@ -219,7 +238,7 @@ def rbmain():
     forced_main(args=['--survey-dir', surveydir,
                       '--no-ceres',
                       '--catalog-dir', 'out-testcase9b',
-                      '372546', 'N26', 'forced1.fits'])
+                      '--expnum', '372546', '--ccdname', 'N26', '--out', 'forced1.fits'])
     assert(os.path.exists('forced1.fits'))
     _ = fits_table('forced1.fits')
     # ... more tests...!
@@ -229,26 +248,26 @@ def rbmain():
                       '--catalog-dir', 'out-testcase9b',
                       '--derivs', '--threads', '2',
                       '--apphot',
-                      '372547', 'N26', 'forced2.fits'])
+                      '--expnum', '372547', '--ccdname', 'N26', '--out', 'forced2.fits'])
     assert(os.path.exists('forced2.fits'))
-    F = fits_table('forced2.fits')
+    _ = fits_table('forced2.fits')
 
     forced_main(args=['--survey-dir', surveydir,
                       '--no-ceres',
                       '--catalog-dir', 'out-testcase9b',
                       '--agn',
-                      '257266', 'S21', 'forced3.fits'])
+                      '--expnum', '257266', '--ccdname', 'S21', '--out', 'forced3.fits'])
     assert(os.path.exists('forced3.fits'))
-    F = fits_table('forced3.fits')
+    _ = fits_table('forced3.fits')
 
     if ceres:
         forced_main(args=['--survey-dir', surveydir,
                           '--catalog-dir', 'out-testcase9b',
                           '--derivs', '--threads', '2',
                           '--apphot',
-                          '372546', 'N26', 'forced4.fits'])
+                          '--expnum', '372546', '--ccdname', 'N26', '--out', 'forced4.fits'])
         assert(os.path.exists('forced4.fits'))
-        F = fits_table('forced4.fits')
+        _ = fits_table('forced4.fits')
 
     # Test cache_dir
     with tempfile.TemporaryDirectory() as cachedir, \

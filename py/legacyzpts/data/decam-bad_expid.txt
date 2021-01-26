@@ -433,10 +433,10 @@
 510928 expfactor=0.265  seeing=0.970
 510945 expfactor=0.255  seeing=1.457
 
-520012  3       Vsub not working 
+520012  3       Vsub not working
 520189 expfactor=0.268  seeing=1.924
 522012 expfactor=0.278  seeing=1.443
-522055  3       pointing moved 
+522055  3       pointing moved
 522060 expfactor=0.279  seeing=1.497
 522078 expfactor=0.049  seeing=2.104
 522084 expfactor=0.039  seeing=1.669
@@ -511,9 +511,9 @@
 536351  3       transparency < 0.3 and depth factor < 0.3
 536354  3       transparency < 0.3 and depth factor < 0.3
 536355  3       transparency < 0.3 and depth factor < 0.3
-536356  3      clouds; depth factor = 0.00 
-536357  3      clouds; depth factor = 0.00 
-536358  3      clouds; depth factor = 0.00 
+536356  3      clouds; depth factor = 0.00
+536357  3      clouds; depth factor = 0.00
+536358  3      clouds; depth factor = 0.00
 536359 expfactor=0.000  seeing=1.350
 536360 expfactor=0.002  seeing=1.146
 536361 expfactor=0.017  seeing=1.208
@@ -791,26 +791,26 @@
 582868 expfactor=0.170  seeing=0.975
 582869 expfactor=0.162  seeing=0.976
 582870 expfactor=0.166  seeing=1.158
-582871  2 	depth factor < 0.2	
-582872  2 	depth factor < 0.2	
-582873  2 	depth factor < 0.2	
-582874  2 	depth factor < 0.2	
-582875  2 	depth factor < 0.2	
-582876  2 	depth factor < 0.2	
-582877  2 	depth factor < 0.2	
-583110  2 	depth factor < 0.2	
-583111  2 	depth factor < 0.2	
+582871  2 	depth factor < 0.2
+582872  2 	depth factor < 0.2
+582873  2 	depth factor < 0.2
+582874  2 	depth factor < 0.2
+582875  2 	depth factor < 0.2
+582876  2 	depth factor < 0.2
+582877  2 	depth factor < 0.2
+583110  2 	depth factor < 0.2
+583111  2 	depth factor < 0.2
 583112 expfactor=0.100  seeing=1.318
 583113 expfactor=0.045  seeing=1.346
-583114  2 	depth factor < 0.2	
-583115  2 	depth factor < 0.2	
+583114  2 	depth factor < 0.2
+583115  2 	depth factor < 0.2
 583118 expfactor=0.152  seeing=1.278
 583119 expfactor=0.213  seeing=1.212
 583120  2  expfactor < 0.3
 583125 expfactor=0.226  seeing=1.090
-583194  1 	between 10.7 and 12 twilight end of night	
-583195  1 	between 10.7 and 12 twilight end of night	
-583196  1 	between 10.7 and 12 twilight end of night	
+583194  1 	between 10.7 and 12 twilight end of night
+583195  1 	between 10.7 and 12 twilight end of night
+583196  1 	between 10.7 and 12 twilight end of night
 592619  2       lots of clouds, depth factor <<0.3
 592620  2	lots of clouds, depth factor <<0.3
 592621  2	lots of clouds, depth factor <<0.3
@@ -830,7 +830,7 @@
 592882  3  expfactor < 0.3
 592883  3	telescope brakes activated, dome got in front of camera
 592884  3	telescope brakes activated, dome got in front of camera
-604729  3       taken as pass2 but should have been pass3, bad seeing       
+604729  3       taken as pass2 but should have been pass3, bad seeing
 604730  3       taken as pass2 but should have been pass3, bad seeing
 604734  3       taken as pass2 but should have been pass3, bad seeing
 604735  3       taken as pass2 but should have been pass3, bad seeing
@@ -888,9 +888,9 @@
 630869  3       4MAPS down; telescope slewing - junk
 631097  3 expfactor < 0.3
 634312  3       pointing is -91, -20 off
-634313  3       trailed. 
+634313  3       trailed.
 634314  3       pointing off -104, -13.
-634315  3       pointing off 50, -99. 
+634315  3       pointing off 50, -99.
 634783 expfactor=0.362  seeing=2.584
 635114 expfactor=0.231  seeing=1.613
 635115 expfactor=0.246  seeing=1.669
@@ -1216,23 +1216,23 @@
 661203 expfactor=0.441  seeing=2.887
 661206 expfactor=0.488  seeing=2.524
 661207    3   exp factor = 0.33
-661208    3   exp factor < 0.3 
-661209    3   exp factor < 0.3 
-661210    3   exp factor < 0.3 
-661211    3   exp factor < 0.3 
-661212    3   exp factor < 0.3 
-661213    3   exp factor < 0.3 
-661214    3   exp factor < 0.3 
+661208    3   exp factor < 0.3
+661209    3   exp factor < 0.3
+661210    3   exp factor < 0.3
+661211    3   exp factor < 0.3
+661212    3   exp factor < 0.3
+661213    3   exp factor < 0.3
+661214    3   exp factor < 0.3
 661216 expfactor=0.439  seeing=2.836
 661217 expfactor=0.388  seeing=3.024
 661218 expfactor=0.485  seeing=2.581
 661219 expfactor=0.356  seeing=2.604
 661220 expfactor=0.463  seeing=2.841
 661221 expfactor=0.351  seeing=3.272
-661222    3   exp factor < 0.3 
-661226    3   exp factor < 0.3 
-661227    3   exp factor < 0.3 
-661228    3   exp factor < 0.3 
+661222    3   exp factor < 0.3
+661226    3   exp factor < 0.3
+661227    3   exp factor < 0.3
+661228    3   exp factor < 0.3
 661229 expfactor=0.337  seeing=2.589
 661230 expfactor=0.364  seeing=2.709
 661231 expfactor=0.376  seeing=2.674
@@ -1241,17 +1241,17 @@
 661234 expfactor=0.391  seeing=2.968
 661235 expfactor=0.426  seeing=2.539
 661245 expfactor=0.374  seeing=2.747
-661249    3   exp factor < 0.3 
+661249    3   exp factor < 0.3
 661251 expfactor=0.343  seeing=2.627
-661252    3   exp factor < 0.3 
-661253    3   exp factor < 0.3 
+661252    3   exp factor < 0.3
+661253    3   exp factor < 0.3
 661254 expfactor=0.524  seeing=2.528
 661256 expfactor=0.498  seeing=2.674
 661257 expfactor=0.421  seeing=2.845
 661258 expfactor=0.345  seeing=2.636
 661259 expfactor=0.448  seeing=2.782
 661268 expfactor=0.491  seeing=2.806
-661269    3   exp factor < 0.3 
+661269    3   exp factor < 0.3
 661270 expfactor=0.367  seeing=3.054
 661289 expfactor=0.392  seeing=3.105
 661290    3   abort
@@ -1613,9 +1613,9 @@
 663262   2  expfactor<0.3  DECaLS_45656
 663263   2  expfactor<0.3  DECaLS_39672
 663264   2  expfactor<0.3  DECaLS_39684
-663339   3  pass1 taken with transparency<1 DECaLS_13908_g  
-663340   3  pass1 taken with transparency<1 DECaLS_13888_g  
-663341   3  pass1 taken with transparency<1 DECaLS_13838_g  
+663339   3  pass1 taken with transparency<1 DECaLS_13908_g
+663340   3  pass1 taken with transparency<1 DECaLS_13888_g
+663341   3  pass1 taken with transparency<1 DECaLS_13838_g
 663362   2  expfactor<0.3  DECaLS_39592
 663366   2  expfactor<0.3  DECaLS_45578
 663367   2  expfactor<0.3  DECaLS_45562
@@ -1631,11 +1631,11 @@
 663381   2  expfactor<0.3  DECaLS_34014
 663382   2  expfactor<0.3  DECaLS_34016
 663383   2  expfactor<0.3  DECaLS_34037
-663497   2  expfactor<0.3  
-663498   2  expfactor<0.3  
-663499   2  expfactor<0.3  
-663500   2  expfactor<0.3  
-663501   2  expfactor<0.3  
+663497   2  expfactor<0.3
+663498   2  expfactor<0.3
+663499   2  expfactor<0.3
+663500   2  expfactor<0.3
+663501   2  expfactor<0.3
 663612   2  expfactor<0.3
 663613   2  expfactor<0.3
 663762 expfactor=0.551  seeing=2.679
@@ -1874,45 +1874,45 @@
 680229 expfactor=0.469  seeing=2.001
 680250 expfactor=0.278  seeing=1.541
 
-689982   2 underexposed, clouds. 
-689983   2 underexposed, clouds. 
-689984   2 underexposed, clouds. 
-689985   2 underexposed, clouds. 
-689989   2 underexposed, clouds. 
-689990   2 underexposed, clouds. 
-689991   2 underexposed, clouds. 
-689992   2 underexposed, clouds. 
-689993   2 underexposed, clouds. 
-689994   2 underexposed, clouds. 
-689995   2 underexposed, clouds. 
+689982   2 underexposed, clouds.
+689983   2 underexposed, clouds.
+689984   2 underexposed, clouds.
+689985   2 underexposed, clouds.
+689989   2 underexposed, clouds.
+689990   2 underexposed, clouds.
+689991   2 underexposed, clouds.
+689992   2 underexposed, clouds.
+689993   2 underexposed, clouds.
+689994   2 underexposed, clouds.
+689995   2 underexposed, clouds.
 
 690022 expfactor=0.207  seeing=0.997
 690034 expfactor=0.261  seeing=0.955
 690039 expfactor=0.203  seeing=0.881
 690040 expfactor=0.204  seeing=0.827
 
-690215   2 underexposed, clouds. 
-690216   2 underexposed, clouds. 
+690215   2 underexposed, clouds.
+690216   2 underexposed, clouds.
 690219   3 made offest while exposing
-690220   2 underexposed, clouds. 
+690220   2 underexposed, clouds.
 690226 expfactor=0.299  seeing=1.229
-690227   2 underexposed, clouds. 
-690228   2 underexposed, clouds. 
-690229   2 underexposed, clouds. 
-690236   2 underexposed, clouds. 
-690237   2 underexposed, clouds. 
-690239   2 underexposed, clouds. 
-690254   2 underexposed, clouds. 
-690255   2 underexposed, clouds. 
-690256   2 underexposed, clouds. 
+690227   2 underexposed, clouds.
+690228   2 underexposed, clouds.
+690229   2 underexposed, clouds.
+690236   2 underexposed, clouds.
+690237   2 underexposed, clouds.
+690239   2 underexposed, clouds.
+690254   2 underexposed, clouds.
+690255   2 underexposed, clouds.
+690256   2 underexposed, clouds.
 690259 expfactor=0.212  seeing=1.178
 690260 expfactor=0.139  seeing=1.181
-690265   2 underexposed, clouds. 
+690265   2 underexposed, clouds.
 690266 expfactor=0.047  seeing=1.104
-690276   2 underexposed, clouds. 
-690277   2 underexposed, clouds. 
-690278   2 underexposed, clouds. 
-690282   2 underexposed, clouds. 
+690276   2 underexposed, clouds.
+690277   2 underexposed, clouds.
+690278   2 underexposed, clouds.
+690282   2 underexposed, clouds.
 695042 expfactor=0.219  seeing=1.026
 695155 expfactor=0.299  seeing=0.949
 695694 expfactor=0.293  seeing=1.148
@@ -2352,7 +2352,7 @@
 770222 expfactor=0.421  seeing=0.834  morning twi
 
 #2018-09-09
-771377  expfactor=0.35 
+771377  expfactor=0.35
 
 # 2018-09-10
 771779   twilight low expfactor observation
@@ -3241,3 +3241,134 @@
 635994 3 weird scattered light
 
 747320 double image
+548195 double image
+
+547766 double image
+547846 double image
+624442 double image
+624855 double image
+
+587384 trailed image
+396407 trailed image
+768990 trailed image
+
+# More trailed images or asymetric PSFs; see [decam-chatter 13635]
+246862 trailed image / asymetric PSFs
+625795 trailed image / asymetric PSFs
+625821 trailed image / asymetric PSFs
+661341 trailed image / asymetric PSFs
+661345 trailed image / asymetric PSFs
+661352 trailed image / asymetric PSFs
+764255 trailed image / asymetric PSFs
+
+# high ccdphrms; see [decam-chatter 13853]
+754142-S29 very noisy, slight amp jump, high ccdphrms
+630734-N18 some unmasked register overflow
+630995-N25 very high ccdphrms, not clear why (image looks fine)
+768370-N10 bad N10 amp and very bright star on good amp
+
+640712 double image
+
+
+# more bad PSF images from Rongpu's PSF analysis; [decam-chatter 14061]
+230886 trailing / bad image
+245911 double image
+255518 trailing / bad image
+352842 double image
+352939 double image
+352965 double image
+352980 double image
+477366 double image / bad image
+483137 trailing / bad image
+583769 double image
+672029 double image
+231980 trailed PSF
+245906 trailed PSF
+246839 trailed PSF
+246875 trailed PSF
+345429 out of focus
+357317 out of focus
+357318 out of focus
+357356 out of focus
+357358 out of focus
+357545 out of focus
+357570 out of focus
+357572 out of focus
+357614 out of focus
+357616 out of focus
+357628 out of focus
+357639 out of focus
+357655 out of focus
+357656 out of focus
+375780 out of focus
+375796 out of focus
+376263 out of focus
+376288 out of focus
+390629 bad PSF (bad tracking?)
+390630 bad PSF (bad tracking?)
+468197 out of focus
+468199 out of focus
+468200 out of focus
+468205 out of focus
+468206 out of focus
+468242 out of focus
+468243 out of focus
+468252 out of focus
+468256 out of focus
+468299 out of focus
+468302 out of focus
+468304 out of focus
+468335 out of focus
+468338 out of focus
+468350 out of focus
+468351 out of focus
+487709 out of focus
+487895 out of focus
+583769 bad PSF (bad tracking?)
+583770 bad PSF (bad tracking?)
+583774 bad PSF (bad tracking?)
+583775 bad PSF (bad tracking?)
+584069 bad PSF (bad tracking?)
+584071 bad PSF (bad tracking?)
+601285 out of focus
+601286 out of focus
+601287 out of focus
+603682 bad PSF (bad tracking?)
+876730 bad PSF (bad tracking?)
+876731 bad PSF
+
+246064 trailed PSF
+246077 trailed PSF
+246833 trailed PSF
+246834 trailed PSF
+246835 trailed PSF
+246836 trailed PSF
+246837 trailed PSF
+246838 trailed PSF
+246840 trailed PSF
+246860 trailed PSF
+246861 trailed PSF
+246863 trailed PSF
+246864 trailed PSF
+246865 trailed PSF
+246866 trailed PSF
+246867 trailed PSF
+246868 trailed PSF
+246869 trailed PSF
+246870 trailed PSF
+246871 trailed PSF
+246872 trailed PSF
+246897 trailed PSF
+347938 trailed PSF
+481504 trailed PSF
+481505 trailed PSF
+494473 trailed PSF
+554185 trailed PSF
+583824 trailed PSF
+661307 trailed PSF
+763218 double vision/trailed PSF
+
+# bad astrometry [decam-chatter 14536]
+784312-S30
+784312-S31
+

@@ -90,12 +90,12 @@ def depthcut_90prime_alternative(ccds, annotated, n=6):
             return sentinel
         return y
 
-    tileid = numpy.array([int_noexception(o, -1) for o in ccds.object], 
+    tileid = numpy.array([int_noexception(o, -1) for o in ccds.object],
                          dtype='i4')
 
     m = (ccds.ccd_cuts == 0) & (tileid >= 0)
     keep[s[m]] = keep_deepest_ccds(
-        ccds.image_filename[m], tileid[m], ccds.filter[m], 
+        ccds.image_filename[m], tileid[m], ccds.filter[m],
         annotated.psfdepth[m], n=n)
     return keep
 
@@ -159,6 +159,8 @@ def keep_deepest_images(tileid, filt, depth, n=2):
 
 
 def keep_deepest_ccds(filename, tileid, filt, depth, n=2):
+    if len(filename) == 0:
+        return numpy.ones(0, dtype='bool')
     s = numpy.argsort(filename)
     meddepth = {}
     for f, l in subslices(filename[s]):
@@ -374,7 +376,7 @@ if __name__ == "__main__":
         description='Update ccd_cuts, add depth & CCD-fraction cuts.',
         epilog='EXAMPLE: %(prog)s survey survey-ccds ccds-annotated survey-ccds-out')
     parser.add_argument('camera', type=str, help='decam, 90prime, or mosaic')
-    parser.add_argument('survey-ccds', type=str, 
+    parser.add_argument('survey-ccds', type=str,
                         help='survey-ccds file name')
     parser.add_argument('ccds-annotated', type=str,
                         help='ccds-annotated file name')

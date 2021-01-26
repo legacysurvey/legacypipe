@@ -175,6 +175,26 @@ def copy_header_with_wcs(source_header, wcs):
     hdr.delete('IMAGEH')
     return hdr
 
+def add_bits(hdr, bitmap, description, desc, bitpre):
+    hdr.add_record(dict(name='COMMENT', value='%s bits:' % description))
+    bits = list(bitmap.values())
+    bits.sort()
+    revmap = dict((v,k) for k,v in bitmap.items())
+    for i in range(16):
+        bit = 1<<i
+        if not bit in revmap:
+            continue
+        hdr.add_record(
+            dict(name='%s_%s' % (desc, revmap[bit].upper()[:5]), value=bit,
+                 comment='%s bit 2**%i' % (description, i)))
+    for i in range(16):
+        bit = 1<<i
+        if not bit in revmap:
+            continue
+        hdr.add_record(
+            dict(name='%sBIT_%i' % (bitpre, i), value=revmap[bit],
+                 comment='%s bit 2**%i=%i meaning' % (description, i, bit)))
+
 def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
     from astrometry.util.run_command import run_command
     from astrometry.util.fits import fits_table, merge_tables

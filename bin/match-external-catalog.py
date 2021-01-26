@@ -5,7 +5,7 @@ from __future__ import print_function, division
 import numpy as np
 
 from legacypipe.internal import sharedmem
-from legacypipe.internal.io import iter_tractor, parse_filename
+from legacypipe.internal.io import iter_tractor, parse_filename, get_units, git_version
 
 import argparse
 import os, sys
@@ -26,7 +26,13 @@ def main():
 
     bricks = list_bricks(ns)
 
-    tree, nobj, morecols = read_external(ns.external, ns)
+    # ADM grab a {FIELD: unit} dict from the first Tractor file.
+    unitdict = get_units(bricks[0][1])
+
+    # convert to radian
+    tol = ns.tolerance / (60. * 60.)  * (np.pi / 180)
+
+    tree, nobj, morecols, maxdups = read_external(ns.external, tol, ns)
 
     # get the data type of the match
     brickname, path = bricks[0]
@@ -35,9 +41,6 @@ def main():
     matched_catalog['OBJID'] = -1
 
     matched_distance = sharedmem.empty(nobj, dtype='f4')
-
-    # convert to radian
-    tol = ns.tolerance / (60. * 60.)  * (np.pi / 180)
 
     matched_distance[:] = tol
     nprocessed = np.zeros((), dtype='i8')
@@ -55,15 +58,46 @@ def main():
                     return None, None, None
                 else:
                     raise
-        
+
+            # ADM limit to just PRIMARY objects from imaging.
+            bp = objects["BRICK_PRIMARY"]
+            objects = objects[bp]
             pos = radec2pos(objects['RA'], objects['DEC'])
-            d, i = tree.query(pos, 1)
+
+            # ADM query tree allowing duplicates.
+            dd, ii = tree.query(pos, maxdups, distance_upper_bound=tol)
+
+            # ADM collect relevant information (retaining duplicates).
+            _s = ii[dd < tol]           # ADM the spec object indices.
+            _p = np.where(dd < tol)[0]  # ADM the imaging object indices.
+            _d = dd[dd < tol]           # ADM the matching distances.
+
+            # ADM bail if there are no matches.
+            if len(_s) == 0:
+                return brickname, 0, len(objects)
+
+            # ADM look-up dictionaries of the relevant distances and
+            # ADM imaging object indices for each spec object index.
+            ddict, pdict = {s: [] for s in _s}, {s: [] for s in _s}
+            _ = [ddict[s].append(d) for s, d in zip(_s, _d)]
+            _ = [pdict[s].append(p) for s, p in zip(_s, _p)]
+
+            # ADM collapse the lookup dict based on minimum distances.
+            sdp = [[s, d[np.argmin(d)], p[np.argmin(d)]] for s, d, p in
+                   zip(ddict.keys(), ddict.values(), pdict.values())]
+
+            # ADM we're left with the spectroscopic and photometric indexes
+            # ADM distances and indexes contingent on the minimum distances.
+            i = np.array(sdp, dtype='i4')[:,0]
+            d = np.array(sdp, dtype='f4')[:,1]
+            iphot = np.array(sdp, dtype='i4')[:,2]
+
             assert (objects['OBJID'] != -1).all()
             with pool.critical:
                 mask = d < matched_distance[i]
-                mask &= objects['BRICK_PRIMARY'] 
                 i = i[mask]
-                matched_catalog[i] = objects[mask][list(matched_catalog.dtype.names)]
+                iphot = iphot[mask]
+                matched_catalog[i] = objects[iphot][list(matched_catalog.dtype.names)]
                 matched_distance[i] = d[mask]
             matched = mask.sum()
 
@@ -77,7 +111,7 @@ def main():
             ntotal[...] += total
             if ns.verbose:
                 if nprocessed % 1000 == 0:
-                    print("Processed %d files, %g / second, matched %d / %d objects."
+                    print("Processed %d files, %g / second, matched %d / %d brick primary objects."
                         % (nprocessed, nprocessed / (time() - t0), nmatched, ntotal)
                         )
 
@@ -140,13 +174,32 @@ def main():
             del _matched_catalog
 
         for format in ns.format:
-            save_file(ns.dest, matched_catalog, hdr, format)
+            save_file(ns.dest, matched_catalog, hdr, format, unitdict=unitdict)
 
-def save_file(filename, data, header, format):
+def save_file(filename, data, header, format, unitdict=None):
     basename = os.path.splitext(filename)[0]
     if format == 'fits':
+        units = None
+	# ADM derive the units from the data columns if possible.
+        if unitdict is not None:
+            # ADM some columns from external-match files might not have
+            # ADM units, so pass an empty string for external columns.
+            units = [unitdict[col] if col in unitdict.keys() else ""
+                     for col in data.dtype.names]
+
+        # ADM add the external match code version header dependency.
+        dep = [int(key.split("DEPNAM")[-1]) for key in header.keys()
+               if 'DEPNAM' in key]
+        if len(dep) == 0:
+            nextdep = 0
+        else:
+            nextdep = np.max(dep) + 1
+        header["DEPNAM{:02d}".format(nextdep)] = 'match_external'
+        header["DEPVER{:02d}".format(nextdep)] = git_version()
+
         filename = basename + '.fits'
-        fitsio.write(filename, data, extname='MATCHED', header=header, clobber=True)
+        fitsio.write(filename, data, extname='MATCHED', header=header,
+                     clobber=True, units=units)
     elif format == 'hdf5':
         filename = basename + '.hdf5'
         import h5py
@@ -167,11 +220,18 @@ def radec2pos(ra, dec):
     pos[:, 1] *= np.cos(ra / 180. * np.pi)
     return pos
 
-def read_external(filename, ns):
+def read_external(filename, tol, ns=None):
     t0 = time()
     cat = fitsio.FITS(filename, upper=True)[1][:]
 
-    if ns.verbose:
+    # ADM some defaults to make it easier to import this function.
+    _verbose = True
+    _copycols = None
+    if ns is not None:
+        _verbose = ns.verbose
+        _copycols = ns.copycols
+
+    if _verbose:
         print("reading external catalog took %g seconds." % (time() - t0))
         print("%d objects." % len(cat))
 
@@ -184,7 +244,7 @@ def read_external(filename, ns):
         and decname in cat.dtype.names: 
             ra = cat[raname]
             dec = cat[decname]
-            if ns.verbose:
+            if _verbose:
                 print('using %s/%s for positions.' % (raname, decname))
             break
     else:
@@ -196,18 +256,30 @@ def read_external(filename, ns):
 
     tree = KDTree(pos)
 
-    if ns.verbose:
+    # ADM determine the maximum possible number of duplicated objects.
+    ndups = 0
+    maxdups = 1000
+    if _verbose:
+        print("Determing max number of duplicates in external catalog")
+    while ndups < maxdups:
+        ndups += 100
+        d, _ = tree.query(pos, ndups, distance_upper_bound=2*tol)
+        maxdups = np.max(np.sum(d != np.inf, axis=1))
+        if _verbose:
+            print("maximum number of duplicates is {}".format(maxdups))
+
+    if _verbose:
         print("Building KD-Tree took %g seconds." % (time() - t0))
 
     morecols = []
-    if ns.copycols is not None:
+    if _copycols is not None:
         for col in np.atleast_1d(ns.copycols):
             if col not in cat.dtype.names:
                 print('Column {} does not exist in external catalog!'.format(col))
                 raise IOError
             morecols.append(cat[col])
 
-    return tree, len(cat), morecols
+    return tree, len(cat), morecols, maxdups
 
 def list_bricks(ns):
     t0 = time()

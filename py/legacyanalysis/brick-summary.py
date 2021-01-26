@@ -8,8 +8,8 @@ from collections import Counter
 
 import matplotlib
 matplotlib.use('Agg')
-matplotlib.rc('text', usetex=True)
-matplotlib.rc('font', family='serif')
+#matplotlib.rc('text', usetex=True)
+#matplotlib.rc('font', family='serif')
 import pylab as plt
 
 from astrometry.util.fits import fits_table
@@ -60,6 +60,106 @@ def colorbar_axes(parent, frac=0.12, pad=0.03, aspect=20):
     cax.set_aspect(aspect, anchor=((0.0, 0.5)), adjustable='box')
     parent.get_figure().sca(parent)
     return cax
+
+def add_brick_data(T, north):
+    B = fits_table('survey-bricks.fits.gz')
+    print('Looking up brick bounds')
+    ibrick = dict([(n,i) for i,n in enumerate(B.brickname)])
+    bi = np.array([ibrick[n] for n in T.brickname])
+    T.brickid = B.brickid[bi]
+    T.ra1  = B.ra1[bi]
+    T.ra2  = B.ra2[bi]
+    T.dec1 = B.dec1[bi]
+    T.dec2 = B.dec2[bi]
+    assert(np.all(T.ra2 > T.ra1))
+    T.area = ((T.ra2 - T.ra1) * (T.dec2 - T.dec1) *
+              np.cos(np.deg2rad((T.dec1 + T.dec2) / 2.)))
+
+    print('Resolving north/south split')
+    from astrometry.util.starutil_numpy import radectolb
+    ll,bb = radectolb(T.ra, T.dec)
+    from desitarget.io import desitarget_resolve_dec
+    decsplit = desitarget_resolve_dec()
+    if north:
+        T.survey_primary = (bb > 0) * (T.dec >= decsplit)
+    else:
+        T.survey_primary = np.logical_not((bb > 0) * (T.dec >= decsplit))
+
+    print('Looking up in_desi')
+    from desimodel.io import load_tiles
+    from desimodel.footprint import is_point_in_desi
+    desitiles = load_tiles()
+    T.in_desi = is_point_in_desi(desitiles, T.ra, T.dec)
+
+def depth_hist(opt):
+    filename = opt.files[0]
+    T = fits_table(filename)
+    north = 'north' in filename
+
+    if north:
+        surveys = dict(g='BASS', r='BASS', z='MzLS')
+        hemi='north'
+    else:
+        surveys = dict(g='DECaLS', r='DECaLS', z='DECaLS')
+        hemi='south'
+    dr = 'DR9'
+
+    print('Read', len(T), 'bricks summarized in', opt.files[0])
+    import pylab as plt
+    import matplotlib
+
+    B = fits_table('survey-bricks.fits.gz')
+    print('Looking up brick bounds')
+    ibrick = dict([(n,i) for i,n in enumerate(B.brickname)])
+    bi = np.array([ibrick[n] for n in T.brickname])
+    T.ra1 = B.ra1[bi]
+    T.ra2 = B.ra2[bi]
+    T.dec1 = B.dec1[bi]
+    T.dec2 = B.dec2[bi]
+    assert(np.all(T.ra2 > T.ra1))
+    T.area = ((T.ra2 - T.ra1) * (T.dec2 - T.dec1) *
+              np.cos(np.deg2rad((T.dec1 + T.dec2) / 2.)))
+    del B
+    del bi
+    del ibrick
+
+    print('Total sources:', sum(T.nobjs))
+    print('Approx area:', len(T)/16., 'sq deg')
+    print('Area:', np.sum(T.area))
+    print('g,r,z coverage:', sum((T.nexp_g > 0) * (T.nexp_r > 0) * (T.nexp_z > 0)) / 16.)
+
+    depthlo,depthhi = 21.5, 25.5
+    for band in 'grz':
+        depth = T.get('psfdepth_%s' % band)
+        nexp = T.get('nexp_%s' % band)
+        lo,hi = depthlo-0.05, depthhi+0.05
+        nbins = 1 + int((depthhi - depthlo) / 0.1)
+        ha = dict(histtype='step',  bins=nbins, range=(lo,hi))
+        ccmap = dict(g='g', r='r', z='m')
+        plt.clf()
+        I = np.flatnonzero((depth > 0) * (nexp == 1))
+        plt.hist(depth[I], label='%s band, 1 exposure' % band,
+                 color=ccmap[band], lw=1,
+                 weights=T.area[I],
+                 **ha)
+        I = np.flatnonzero((depth > 0) * (nexp == 2))
+        plt.hist(depth[I], label='%s band, 2 exposures' % band,
+                 color=ccmap[band], lw=2, alpha=0.5,
+                 weights=T.area[I],
+                 **ha)
+        I = np.flatnonzero((depth > 0) * (nexp >= 3))
+        plt.hist(depth[I], label='%s band, 3+ exposures' % band,
+                 color=ccmap[band], lw=3, alpha=0.3,
+                 weights=T.area[I],
+                 **ha)
+
+        plt.title('%s, %s PSF depths, %s band' % (surveys[band], dr, band))
+        plt.xlabel('5-sigma PSF depth (mag)')
+        plt.ylabel('Square degrees')
+        plt.xlim(lo, hi)
+        plt.xticks(np.arange(depthlo, depthhi+0.01, 0.4))
+        plt.legend(loc='upper left')
+        plt.savefig('depth-hist-%s-%s-%s.png' % (band, dr.lower(), hemi))
 
 def plots(opt):
     from astrometry.util.plotutils import antigray
@@ -512,7 +612,9 @@ def main():
     parser.add_argument('-o', '--out', dest='outfn', help='Output filename',
                       default='TMP/nexp.fits')
     parser.add_argument('--merge', action='store_true', help='Merge sub-tables')
+    parser.add_argument('--north', action='store_true', default=False, help='Northern survey?')
     parser.add_argument('--plot', action='store_true', help='Plot results')
+    parser.add_argument('--depth-hist', action='store_true', help='Depth histograms')
     parser.add_argument('files', metavar='nexp-file.fits.gz', nargs='+',
                         help='List of nexp files to process')
 
@@ -527,12 +629,19 @@ def main():
             print(fn, '->', len(T))
             TT.append(T)
         T = merge_tables(TT)
+
+        add_brick_data(T, opt.north)
+
         T.writeto(opt.outfn)
         print('Wrote', opt.outfn)
         return
 
     if opt.plot:
         plots(opt)
+        depth_hist(opt)
+        return
+    if opt.depth_hist:
+        depth_hist(opt)
         return
 
     fns.sort()

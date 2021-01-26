@@ -71,12 +71,11 @@ RUN wget -nv https://www.mpich.org/static/downloads/3.3/mpich-3.3.tar.gz \
 
 # mpi4py / mpicc can't handle -ax=knl
 ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread
-RUN wget -nv https://bitbucket.org/mpi4py/mpi4py/downloads/mpi4py-3.0.3.tar.gz \
-         && tar xvzf mpi4py-3.0.3.tar.gz \
-         && cd mpi4py-3.0.3 \
+RUN git clone https://github.com/mpi4py/mpi4py.git \
+         && (cd mpi4py \
          && python setup.py build \
-         && python setup.py install \
-         && cd .. && rm -Rf mpi4py-3.0.3 mpi4py-3.0.3.tar.gz
+         && python setup.py install) \
+         && rm -Rf mpi4py
 ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell -ax=knl
 
 RUN git clone https://github.com/astromatic/sextractor.git sourceextractor \
@@ -103,7 +102,8 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && make extra \
     && make install INSTALL_DIR=/usr/local \
     && make clean \
-    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import astrometry; print(astrometry.__version__)")
+    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import astrometry; print(astrometry.__version__)") \
+    && git describe && echo 0.84
 
 # Pip installs -- binary.  We need cython for the tractor.
 RUN for x in \
@@ -119,11 +119,11 @@ RUN for x in \
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
+    && git checkout dr9.5 \
     && python3 setup-cython.py --with-ceres install --home /usr/local \
     && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so") \
-    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)") \
-    && echo 2
+    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
 
 # Pip installs -- built from source
 RUN pip --no-cache-dir install photutils
@@ -171,7 +171,8 @@ RUN apt -y update && apt install -y apt-utils \
 COPY --from=builder /usr/local /usr/local
 COPY --from=builder /opt/conda /opt/conda
 
-RUN pip --no-cache-dir install ipython Pillow healpy seaborn
+RUN conda update --no-deps certifi
+RUN pip --no-cache-dir install ipython Pillow healpy seaborn ipykernel
 
 WORKDIR /src
 
@@ -199,6 +200,8 @@ ENV HOME /homedir
 
 # set prompt and default shell
 SHELL ["/bin/bash", "-c"]
+ENTRYPOINT ["/bin/bash", "-c"]
+CMD ["/bin/bash"]
 
 RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
   # Create config files in $HOME
@@ -210,15 +213,14 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
   && python -c "from astropy.coordinates import EarthLocation; EarthLocation._get_site_registry(force_download=True)" \
   && python -c "from astropy.coordinates import EarthLocation, SkyCoord, AltAz; from astropy.time import Time; print(EarthLocation.of_site('ctio')); print(SkyCoord(180.,-45.,unit='deg').transform_to(AltAz(obstime=Time(56806.0, format='mjd'), location=EarthLocation.of_site('ctio'))))" \
   # Download astropy IERS leap-second list
-  && python -c "from astropy.time import Time; Time.now()"
+  && python -c "from astropy.time import Time; Time.now()" \
+  # Make astropy cache files readable!?!!
+  && chmod -R a+rwX $HOME/.astropy
   
 # Curses upon you, astropy
 RUN wget -O /opt/conda/lib/python3.7/site-packages/astropy/utils/iers/data/Leap_Second.dat \
     https://raw.githubusercontent.com/astropy/astropy/master/astropy/utils/iers/data/Leap_Second.dat \
     && rm $HOME/.wget-hsts
-
-ENTRYPOINT ["/bin/bash", "-c"]
-CMD ["/bin/bash"]
 
 RUN python -O -m compileall \
     -x lib2to3 \
@@ -234,6 +236,13 @@ RUN python -O -m compileall \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-RUN cd /src/legacypipe && git pull && git describe && echo 34 && \
+RUN cd /src/legacypipe && git pull && git describe && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
+
+ENV LEGACYPIPE_DIR /src/legacypipe/py
+
+# # QDO
+# RUN cd qdo && git remote add dstn https://bitbucket.org/dstn/qdo.git \
+#     && git fetch dstn && git checkout handle-oom \
+#     && pip install . && echo 3 #python3 setup.py install

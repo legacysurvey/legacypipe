@@ -351,7 +351,9 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         patch = psf.getPointSourcePatch(h//2, w//2).patch
         psfnorm = np.sqrt(np.sum(patch**2))
         # To handle zero-depth, we return 1/nanomaggies^2 units rather than mags.
-        phot.get('psfdepth_%s' % wband)[I] = 1. / (tim.sig1 / psfnorm)**2
+        # In the small empty patches of the sky (eg W4 in 0922p702), we get sig1 = NaN
+        if np.isfinite(tim.sig1):
+            phot.get('psfdepth_%s' % wband)[I] = 1. / (tim.sig1 / psfnorm)**2
 
         tim.tile = tile
         tims.append(tim)
@@ -431,7 +433,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     if save_fits:
         for i,tim in enumerate(tims):
             tile = tim.tile
-            (dat, mod, ie, chi, _) = ims1[i]
+            (dat, mod, _, chi, _) = ims1[i]
             wcshdr = fitsio.FITSHDR()
             tim.wcs.wcs.add_to_header(wcshdr)
             tag = 'fit-%s-w%i' % (tile.coadd_id, band)
@@ -471,7 +473,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         for i,tim in enumerate(tims):
             tile = tim.tile
             tag = '%s W%i' % (tile.coadd_id, band)
-            (dat, mod, ie, chi, _) = ims1[i]
+            (dat, mod, _, chi, _) = ims1[i]
             sig1 = tim.sig1
             plt.clf()
             plt.imshow(dat, interpolation='nearest', origin='lower',
@@ -535,8 +537,8 @@ def unwise_phot(X):
     '''
     This is the entry-point from runbrick.py, called via mp.map()
     '''
-    (wcat, tiles, band, roiradec, wise_ceres, pixelized_psf, get_mods, get_masks, ps,
-     move_crpix, modelsky_dir) = X
+    (key, (wcat, tiles, band, roiradec, wise_ceres, pixelized_psf, get_mods, get_masks, ps,
+           move_crpix, modelsky_dir)) = X
     kwargs = dict(roiradecbox=roiradec, band=band, pixelized_psf=pixelized_psf,
                   get_masks=get_masks, ps=ps, move_crpix=move_crpix,
                   modelsky_dir=modelsky_dir)
@@ -562,7 +564,7 @@ def unwise_phot(X):
             except:
                 print('unwise_forcedphot failed (2):')
                 traceback.print_exc()
-    return W
+    return key,W
 
 def collapse_unwise_bitmask(bitmask, band):
     '''

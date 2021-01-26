@@ -22,17 +22,15 @@ Some notable contents:
 The Docker containers we use in production are available on Docker Hub:
 <https://cloud.docker.com/u/legacysurvey/repository/docker/legacysurvey/legacypipe>
 
-### Requirements include:
+### Requirements include
 
-- Python 3
-- numpy
-- scipy
-- matplotlib
-- fitsio
-- astropy
-- photutils
-- astrometry.net
-- tractor
-- cython
-
-
+-   Python 3
+-   numpy
+-   scipy
+-   matplotlib
+-   fitsio
+-   astropy
+-   photutils
+-   astrometry.net
+-   tractor
+-   cython

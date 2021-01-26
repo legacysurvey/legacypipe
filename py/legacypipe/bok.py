@@ -59,5 +59,6 @@ class BokImage(LegacySurveyImage):
 
     def remap_dq(self, dq, header):
         from legacypipe.image import remap_dq_cp_codes
-        dq = remap_dq_cp_codes(dq, ignore_codes=[7]) # 8 also?
+        # code 8: see https://github.com/legacysurvey/legacypipe/issues/645
+        dq = remap_dq_cp_codes(dq, ignore_codes=[7, 8])
         return dq
