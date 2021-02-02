@@ -27,9 +27,8 @@ class DecamImage(LegacySurveyImage):
         # Adjust zeropoint for exposure time
         self.ccdzpt += 2.5 * np.log10(self.exptime)
 
-    def get_sky_template(self, slc=None, old_calibs_ok=False):
+    def get_sky_template_filename(self, old_calibs_ok=False):
         import os
-        import fitsio
         from astrometry.util.fits import fits_table
         dirnm = os.environ.get('SKY_TEMPLATE_DIR', None)
         if dirnm is None:
@@ -77,6 +76,18 @@ class DecamImage(LegacySurveyImage):
         if not os.path.exists(tfn):
             info('WARNING: Sky template file %s does not exist' % tfn)
             return None
+        return dict(template_filename=tfn, sky_template_dir=dirnm, sky_obj=sky, skyscales_fn=fn)
+
+    def get_sky_template(self, slc=None, old_calibs_ok=False):
+        import os
+        import fitsio
+        d = self.get_sky_template_filename(old_calibs_ok=old_calibs_ok)
+        if d is None:
+            return None
+        skyscales_fn = d['skyscales_fn']
+        sky_template_dir = d['sky_template_dir']
+        tfn = d['template_filename']
+        sky = d['sky_obj']
         F = fitsio.FITS(tfn)
         f = F[self.ccdname]
         if slc is None:
@@ -85,7 +96,7 @@ class DecamImage(LegacySurveyImage):
             template = f[slc]
         hdr = F[0].read_header()
         ver = hdr.get('SKYTMPL', -1)
-        meta = dict(sky_scales_fn=fn, template_fn=tfn, sky_template_dir=dirnm,
+        meta = dict(sky_scales_fn=skyscales_fn, template_fn=tfn, sky_template_dir=sky_template_dir,
                     run=sky.run, scale=sky.skyscale, version=ver)
         return template * sky.skyscale, meta
 
