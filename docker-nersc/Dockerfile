@@ -215,12 +215,38 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
   # Download astropy IERS leap-second list
   && python -c "from astropy.time import Time; Time.now()" \
   # Make astropy cache files readable!?!!
-  && chmod -R a+rwX $HOME/.astropy
-  
+  && chmod -R a+rwX $HOME/.astropy \
+  # Make ipython config files readable!?!!
+  && chmod -R a+rwX $HOME/.ipython \
+  && echo 1
+
 # Curses upon you, astropy
 RUN wget -O /opt/conda/lib/python3.7/site-packages/astropy/utils/iers/data/Leap_Second.dat \
     https://raw.githubusercontent.com/astropy/astropy/master/astropy/utils/iers/data/Leap_Second.dat \
     && rm $HOME/.wget-hsts
+
+# NOTE, for Shifter (where the whole container filesystem is read-only)
+# you probably want to add something like this to your scripts to set up
+# config and cache directories:
+#  # Config directory nonsense
+#  export TMPCACHE=$(mktemp -d)
+#  mkdir $TMPCACHE/cache
+#  mkdir $TMPCACHE/config
+#  # astropy
+#  export XDG_CACHE_HOME=$TMPCACHE/cache
+#  export XDG_CONFIG_HOME=$TMPCACHE/config
+#  mkdir $XDG_CACHE_HOME/astropy
+#  cp -r $HOME/.astropy/cache $XDG_CACHE_HOME/astropy
+#  mkdir $XDG_CONFIG_HOME/astropy
+#  cp -r $HOME/.astropy/config $XDG_CONFIG_HOME/astropy
+#  # matplotlib
+#  export MPLCONFIGDIR=$TMPCACHE/matplotlib
+#  mkdir $MPLCONFIGDIR
+#  cp -r $HOME/.config/matplotlib $MPLCONFIGDIR
+#  # ipython
+#  export IPYTHONDIR=$TMPCACHE/ipython
+#  mkdir $IPYTHONDIR
+#  cp -r $HOME/.ipython $IPYTHONDIR  
 
 RUN python -O -m compileall \
     -x lib2to3 \
@@ -236,13 +262,14 @@ RUN python -O -m compileall \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
 # update legacypipe
-RUN cd /src/legacypipe && git pull && git describe && \
+RUN cd /src/legacypipe && git pull \   
+    && git describe && echo DR9.7.0 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
 ENV LEGACYPIPE_DIR /src/legacypipe/py
 
-# # QDO
-# RUN cd qdo && git remote add dstn https://bitbucket.org/dstn/qdo.git \
-#     && git fetch dstn && git checkout handle-oom \
-#     && pip install . && echo 3 #python3 setup.py install
+# QDO
+RUN cd qdo && git remote add dstn https://bitbucket.org/dstn/qdo.git \
+        && git fetch dstn && git checkout handle-oom \
+	&& pip install .
