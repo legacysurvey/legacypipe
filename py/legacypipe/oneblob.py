@@ -296,6 +296,10 @@ class OneBlob(object):
 
         if self.plots:
             self._plots(tr, 'Initial models')
+            plt.clf()
+            self._plot_coadd(self.tims, self.blobwcs, model=tr)
+            plt.title('Initial models')
+            self.ps.savefig()
 
         # Optimize individual sources, in order of flux.
         # First, choose the ordering...
@@ -336,7 +340,7 @@ class OneBlob(object):
 
         self.compute_segmentation_map()
 
-        # Next, model selections: point source vs dev/exp vs composite.
+        # Next, model selections: point source vs dev/exp vs ser.
         B = self.run_model_selection(cat, Ibright, B,
                                      iterative_detection=iterative_detection)
 
@@ -352,6 +356,10 @@ class OneBlob(object):
 
         if self.plots:
             self._plots(tr, 'After model selection')
+            plt.clf()
+            self._plot_coadd(self.tims, self.blobwcs, model=tr)
+            plt.title('After model selection')
+            self.ps.savefig()
 
         if self.plots_single:
             plt.figure(2)
