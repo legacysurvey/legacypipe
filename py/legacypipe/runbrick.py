@@ -676,6 +676,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
                refcat=None, refstars=None,
                T_clusters=None,
                ccds=None,
+               ubercal_sky=False,
                record_event=None,
                large_galaxies=True,
                gaia_stars=True,
@@ -887,7 +888,10 @@ def stage_srcs(pixscale=None, targetwcs=None,
     tlast = tnow
 
     ccds.co_sky = np.zeros(len(ccds), np.float32)
-    sky_overlap = True
+    if ubercal_sky:
+        sky_overlap = False
+    else:
+        sky_overlap = True
     if sky_overlap:
         '''
         A note about units here: we're passing 'sbscale=False' to the
@@ -1796,6 +1800,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  refmap=None,
                  frozen_galaxies=None,
                  bailout_mask=None,
+                 coadd_headers={},
                  mp=None,
                  record_event=None,
                  **kwargs):
@@ -1906,7 +1911,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     apertures=apertures, apxy=apxy,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims,
-                                   targetwcs, co_sky),
+                                   targetwcs, co_sky, coadd_headers),
                     plots=plots, ps=ps, mp=mp)
     record_event and record_event('stage_coadds: extras')
 
@@ -3672,8 +3677,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--ubercal-sky', dest='ubercal_sky', default=False,
                         action='store_true', help='Use the ubercal sky-subtraction (only used with --fit-on-coadds and --no-subsky).')
-    parser.add_argument('--subsky-radii', type=float, nargs=3, default=None,
-                        help="""Sky-subtraction radii: rmask, rin, rout [arcsec] (only used with --fit-on-coadds and --no-subsky).
+    parser.add_argument('--subsky-radii', type=float, nargs='*', default=None,
+                        help="""Sky-subtraction radii: rin, rout [arcsec] (only used with --fit-on-coadds and --no-subsky).
                         Image pixels r<rmask are fully masked and the pedestal sky background is estimated from an annulus
                         rin<r<rout on each CCD centered on the targetwcs.crval coordinates.""")
     parser.add_argument('--read-serial', dest='read_parallel', default=True,
