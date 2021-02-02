@@ -19,7 +19,7 @@ export MPICH_GNI_FORK_MODE=FULLCOPY
 camera=$1
 expnum=$2
 
-exppre=$(printf %08d $expnum | cut -c 1-3)
+exppre=$(printf %08d $expnum | cut -c 1-5)
 
 logdir=$outdir/logs/$camera/$exppre
 mkdir -p $logdir

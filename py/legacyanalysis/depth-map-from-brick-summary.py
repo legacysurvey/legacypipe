@@ -16,10 +16,12 @@ ra_center = 265.
 wcs = anwcs_create_hammer_aitoff(ra_center, 0., zoom, W, H, False)
 
 #Bs = fits_table('~/legacypipe/py/survey-bricks-dr5.fits.gz')
-#Bs = fits_table('~/legacypipe/py/survey-bricks-dr7.fits.gz')
 #Bn = fits_table('~/legacypipe/py/survey-bricks-dr6.fits.gz')
-Bs = fits_table('/global/project/projectdirs/cosmo/data/legacysurvey/dr8/south/survey-bricks-dr8-south.fits.gz')
-Bn = fits_table('/global/project/projectdirs/cosmo/data/legacysurvey/dr8/north/survey-bricks-dr8-north.fits.gz')
+#Bs = fits_table('~/legacypipe/py/survey-bricks-dr7.fits.gz')
+#Bs = fits_table('/global/project/projectdirs/cosmo/data/legacysurvey/dr8/south/survey-bricks-dr8-south.fits.gz')
+#Bn = fits_table('/global/project/projectdirs/cosmo/data/legacysurvey/dr8/north/survey-bricks-dr8-north.fits.gz')
+Bs = fits_table('/global/project/projectdirs/cosmo/data/legacysurvey/dr9/south/survey-bricks-dr9-south.fits.gz')
+Bn = fits_table('/global/project/projectdirs/cosmo/data/legacysurvey/dr9/north/survey-bricks-dr9-north.fits.gz')
 
 
 Bs.l,Bs.b = radectolb(Bs.ra, Bs.dec)
@@ -35,7 +37,7 @@ Bn.cut((Bn.b > 0) * (Bn.dec > decsplit))
 Bs.cut(np.logical_or(Bs.b <= 0, (Bs.b > 0) * (Bs.dec <= decsplit)))
 
 # Daniel
-Bn.cut(Bn.dec >= -10)
+#Bn.cut(Bn.dec >= -10)
 #Bs.cut(Bs.dec >= -20)
 
 ### subsample
@@ -135,4 +137,5 @@ for band in 'zrg':
     plt.savefig('depth-%s.png' % band)
     print('Wrote', band, 'png')
     plt.savefig('depth-%s.pdf' % band)
+    print('Wrote', band, 'pdf')
 

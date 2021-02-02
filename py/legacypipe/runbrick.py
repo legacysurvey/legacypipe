@@ -3373,6 +3373,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         prereqs.update({
             'fit_on_coadds': 'halos',
             'srcs': 'fit_on_coadds',
+            'image_coadds': 'fit_on_coadds',
         })
 
     # HACK -- set the prereq to the stage after which you'd like to write out checksums.

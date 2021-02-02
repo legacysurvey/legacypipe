@@ -4,6 +4,7 @@ DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr9m
 outdir=$CSCRATCH/dr9-forced
 
 # SGA galaxy and Gaia star halo subtraction
+# (star halos are only for the south though)
 export LARGEGALAXIES_CAT=/global/cfs/cdirs/cosmo/staging/largegalaxies/v3.2/SGA-ellipse-v3.2.kd.fits
 export GAIA_CAT_DIR=/global/cfs/cdirs/cosmo/work/gaia/chunks-gaia-dr2-astrom-2
 export GAIA_CAT_VER=2
@@ -20,7 +21,7 @@ export MPICH_GNI_FORK_MODE=FULLCOPY
 camera=$1
 expnum=$2
 
-exppre=$(printf %08d $expnum | cut -c 1-3)
+exppre=$(printf %08d $expnum | cut -c 1-5)
 
 logdir=$outdir/logs/$camera/$exppre
 mkdir -p $logdir
