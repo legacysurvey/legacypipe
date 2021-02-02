@@ -6,6 +6,7 @@ images given a data release catalog.
 from __future__ import print_function
 import os
 import sys
+import shutil
 
 import numpy as np
 import fitsio
@@ -31,6 +32,9 @@ def get_parser():
     parser.add_argument('--threads', type=int, help='Run multi-threaded', default=None)
 
     parser.add_argument('--survey-dir', help='Override LEGACY_SURVEY_DIR')
+    parser.add_argument('--cache-dir', help='Set cache dir to go with --survey-dir')
+    parser.add_argument('--pre-cache', default=False, action='store_true',
+                        help='Pre-copy image and calib files into the cache; requires --cache-dir')
 
     parser.add_argument('--catalog', help='Use the given FITS catalog file, rather than reading from a data release directory')
 
@@ -119,6 +123,7 @@ def main(survey=None, opt=None, args=None):
     t0 = Time()
     if survey is None:
         survey = LegacySurveyData(survey_dir=opt.survey_dir,
+                                  cache_dir=opt.cache_dir,
                                   output_dir=opt.out_dir)
     if opt.skip:
         if opt.out is not None:
@@ -155,6 +160,28 @@ def main(survey=None, opt=None, args=None):
         from astrometry.util.plotutils import PlotSequence
         ps = PlotSequence(opt.plots)
 
+    # Cache CCDs files before the find_ccds call...
+    # Copy required files into the cache?
+    if opt.pre_cache:
+        def copy_files_to_cache(fns):
+            for fn in fns:
+                cachefn = fn.replace(survey.survey_dir, survey.cache_dir)
+                if not cachefn.startswith(survey.cache_dir):
+                    print('Skipping', fn)
+                    continue
+                outdir = os.path.dirname(cachefn)
+                trymakedirs(outdir)
+                print('Copy', fn)
+                print('  to', cachefn)
+                shutil.copyfile(fn, cachefn)
+        assert(survey.cache_dir is not None)
+        fnset = set()
+        fn = survey.find_file('bricks')
+        fnset.add(fn)
+        fns = survey.find_file('ccd-kds')
+        fnset.update(fns)
+        copy_files_to_cache(fnset)
+
     # Read metadata from survey-ccds.fits table
     ccds = survey.find_ccds(camera=opt.camera, expnum=opt.expnum,
                          ccdname=opt.ccdname)
@@ -174,6 +201,19 @@ def main(survey=None, opt=None, args=None):
         catsurvey_south = LegacySurveyData(survey_dir = opt.catalog_dir_south)
     elif opt.catalog_dir is not None:
         catsurvey_north = LegacySurveyData(survey_dir = opt.catalog_dir)
+
+    # Copy required CCD & calib files into the cache?
+    if opt.pre_cache:
+        assert(survey.cache_dir is not None)
+        fnset = set()
+        for ccd in ccds:
+            im = survey.get_image_object(ccd)
+            for key in im.get_cacheable_filename_variables():
+                fn = getattr(im, key)
+                if fn is None or not(os.path.exists(fn)):
+                    continue
+                fnset.add(fn)
+        copy_files_to_cache(fnset)
 
     args = []
     for ccd in ccds:
@@ -277,7 +317,6 @@ def main(survey=None, opt=None, args=None):
             ccd = ccds[I[0]]
             imfn = ccd.image_filename.strip()
             outfn = os.path.join(outdir, imfn.replace('.fits', '-outlier.fits'))
-            from astrometry.util.file import trymakedirs
             trymakedirs(outfn, dir=True)
             tempfn = outfn.replace('.fits', '-tmp.fits')
             with fitsio.FITS(tempfn, 'rw', clobber=True) as fits:
@@ -460,6 +499,9 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     tlast = Time()
     #print('Opt:', opt)
     im = survey.get_image_object(ccd)
+    print('Run_one_ccd: checking cache', survey.cache_dir)
+    if survey.cache_dir is not None:
+        im.check_for_cached_files(survey)
     if opt.do_calib:
         im.run_calibs(splinesky=True)
 
@@ -524,7 +566,8 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         catsurvey = catsurvey_south
     bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
     for b in bricks:
-        print('Reading outlier mask for brick', b.brickname)
+        print('Reading outlier mask for brick', b.brickname,
+              ':', catsurvey.find_file('outliers_mask', brick=b.brickname, output=False))
         ok = read_outlier_mask_file(catsurvey, [tim], b.brickname, pos_neg_mask=posneg_mask,
                                     subimage=False, output=False, ps=ps)
         if not ok:

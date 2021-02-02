@@ -255,11 +255,13 @@ class LegacySurveyImage(object):
     def check_for_cached_files(self, survey):
         for key in self.get_cacheable_filename_variables():
             fn = getattr(self, key, None)
+            #debug('Image: checking cache for variable', key, '->', fn)
             if fn is None:
                 continue
             cfn = survey.check_cache(fn)
             #debug('Checking for cached', key, ':', fn, '->', cfn)
             if cfn != fn:
+                print('Using cached', cfn)
                 setattr(self, key, cfn)
 
     def get_cacheable_filename_variables(self):
