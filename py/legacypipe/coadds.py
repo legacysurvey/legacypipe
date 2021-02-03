@@ -1068,8 +1068,8 @@ def write_coadd_images(band,
 # Pretty much only used for plots; the real deal is make_coadds()
 def quick_coadds(tims, bands, targetwcs, images=None,
                  get_cow=False, get_n2=False, fill_holes=True, get_max=False,
-                 get_saturated=False):
-
+                 get_saturated=False,
+                 addnoise=False):
     W = int(targetwcs.get_width())
     H = int(targetwcs.get_height())
 
@@ -1085,6 +1085,8 @@ def quick_coadds(tims, bands, targetwcs, images=None,
         maximgs = []
     if get_saturated:
         satur = np.zeros((H,W), np.bool)
+    if addnoise:
+        noise = np.zeros((H,W), np.float32)
 
     for band in bands:
         coimg  = np.zeros((H,W), np.float32)
@@ -1115,6 +1117,10 @@ def quick_coadds(tims, bands, targetwcs, images=None,
                 coimg2[Yo,Xo] += images[itim][Yi,Xi]
                 if get_max:
                     maximg[Yo,Xo] = np.maximum(maximg[Yo,Xo], images[itim][Yi,Xi] * nn)
+                if addnoise:
+                    noise[:,:] = 0.
+                    noise[Yo[nn],Xo[nn]] = 1./(tim.getInvError()[Yi,Xi][nn])
+                    coimg += noise * np.random.normal(size=noise.shape)
             con   [Yo,Xo] += nn
             if get_cow:
                 cowimg[Yo,Xo] += tim.getInvvar()[Yi,Xi] * tim.getImage()[Yi,Xi]

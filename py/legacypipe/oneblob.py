@@ -360,6 +360,10 @@ class OneBlob(object):
             self._plot_coadd(self.tims, self.blobwcs, model=tr)
             plt.title('After model selection')
             self.ps.savefig()
+            plt.clf()
+            self._plot_coadd(self.tims, self.blobwcs, model=tr, addnoise=True)
+            plt.title('After model selection (+noise)')
+            self.ps.savefig()
 
         if self.plots_single:
             plt.figure(2)
@@ -1806,7 +1810,7 @@ class OneBlob(object):
             if hasattr(tim, 'resamp'):
                 del tim.resamp
 
-    def _plot_coadd(self, tims, wcs, model=None, resid=None):
+    def _plot_coadd(self, tims, wcs, model=None, resid=None, addnoise=False):
         if resid is not None:
             mods = list(resid.getChiImages())
             coimgs,_ = quick_coadds(tims, self.bands, wcs, images=mods,
@@ -1818,7 +1822,7 @@ class OneBlob(object):
         if model is not None:
             mods = list(model.getModelImages())
         coimgs,_ = quick_coadds(tims, self.bands, wcs, images=mods,
-                                fill_holes=False)
+                                fill_holes=False, addnoise=addnoise)
         dimshow(get_rgb(coimgs,self.bands))
 
     def _initial_plots(self):
