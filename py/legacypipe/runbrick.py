@@ -3666,6 +3666,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--fit-on-coadds', default=False, action='store_true',
                         help='Fit to coadds rather than individual CCDs (e.g., large galaxies).')
+    parser.add_argument('--coadd-tiers', default=None, type=int,
+                        help='Split images into this many tiers of coadds (per band) by FWHW')
     parser.add_argument('--no-ivar-reweighting', dest='fitoncoadds_reweight_ivar',
                         default=True, action='store_false',
                         help='Reweight the inverse variance when fitting on coadds.')

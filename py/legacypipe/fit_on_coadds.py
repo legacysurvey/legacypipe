@@ -334,6 +334,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
                 ps.savefig()
 
     if plots:
+        import pylab as plt
         import matplotlib.patches as patches
 
         # skysub QA
@@ -414,6 +415,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
 def stage_fit_on_coadds(
         survey=None, targetwcs=None, pixscale=None, bands=None, tims=None,
         brickname=None, version_header=None,
+        coadd_tiers=None,
         apodize=True,
         subsky=True,
         ubercal_sky=False,
@@ -456,197 +458,236 @@ def stage_fit_on_coadds(
         if np.any(ie < 0):
             print('Negative inverse error in image {}'.format(tim.name))
 
-    C = make_coadds(tims, bands, targetwcs,
+    CC = []
+    if coadd_tiers:
+        # Sort by band and sort them into tiers.
+        tiers = [[] for i in range(coadd_tiers)]
+        for b in bands:
+            btims = []
+            seeing = []
+            for tim in tims:
+                if tim.filter != b:
+                    continue
+                btims.append(tim)
+                seeing.append(tim.psf_fwhm * tim.pixscale)
+            I = np.argsort(seeing)
+            btims = [btims[i] for i in I]
+            N = min(coadd_tiers, len(btims))
+            splits = np.round(np.arange(N+1) * float(len(btims)) / N).astype(int)
+            print('Splitting', len(btims), 'images into', N, 'tiers: splits:', splits)
+            for s0,s1,tt in zip(splits, splits[1:], tiers):
+                tt.append(btims[s0:s1])
+
+        for itier,tier in enumerate(tiers):
+            C = make_coadds(tier, bands, targetwcs,
                     detmaps=True, ngood=True, lanczos=lanczos,
                     allmasks=True, anymasks=True, psf_images=True,
                     mp=mp, plots=plots2, ps=ps, # note plots2 here!
                     callback=None)
+            if plots:
+                plt.clf()
+                for iband,(band,psf) in enumerate(zip(bands, C.psf_imgs)):
+                    plt.subplots(1,len(bands),iband+1)
+                    plt.imshow(psf, interpolation='nearest', origin='lower')
+                    plt.title('Coadd PSF image: band %s' % band)
+                plt.suptitle('Tier %i' % (itier+1))
+                ps.savefig()
+                
+                # for band,img in zip(bands, C.coimgs):
+                #     plt.clf()
+                #     plt.imshow(img, 
+                plt.clf()
+                plt.imshow(get_rgb(C.coimgs, bands), origin='lower')
+                plt.title('Tier %i' % (itier+1))
+                ps.savefig()
+            CC.append(C)
 
-    if plots2:
-        import pylab as plt
-        for band,iv in zip(bands, C.cowimgs):
-            plt.clf()
-            plt.imshow(np.sqrt(iv), interpolation='nearest', origin='lower')
-            plt.title('Coadd Inverr: band %s' % band)
-            ps.savefig()
+    else:
+        C = make_coadds(tims, bands, targetwcs,
+                        detmaps=True, ngood=True, lanczos=lanczos,
+                        allmasks=True, anymasks=True, psf_images=True,
+                        mp=mp, plots=plots2, ps=ps, # note plots2 here!
+                        callback=None)
+        CC.append(C)
 
-        for band,psf in zip(bands, C.psf_imgs):
-            plt.clf()
-            plt.imshow(psf, interpolation='nearest', origin='lower')
-            plt.title('Coadd PSF image: band %s' % band)
-            ps.savefig()
-
-        for band,img,iv in zip(bands, C.coimgs, C.cowimgs):
-            from scipy.ndimage.filters import gaussian_filter
-            plt.clf()
-            plt.hist((img * np.sqrt(iv))[iv>0], bins=50, range=(-5,8), log=True)
-            plt.title('Coadd pixel values (sigmas): band %s' % band)
-            ps.savefig()
-
-            psf_sigma = np.mean([(tim.psf_sigma * tim.imobj.pixscale / pixscale)
-                                 for tim in tims if tim.band == band])
-            gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
-            psfnorm = gnorm #np.sqrt(np.sum(psfimg**2))
-            detim = gaussian_filter(img, psf_sigma) / psfnorm**2
-            cosig1 = 1./np.sqrt(np.median(iv[iv>0]))
-            detsig1 = cosig1 / psfnorm
-            plt.clf()
-            plt.subplot(2,1,1)
-            plt.hist(detim.ravel() / detsig1, bins=50, range=(-5,8), log=True)
-            plt.title('Coadd detection map values / sig1 (sigmas): band %s' % band)
-            plt.subplot(2,1,2)
-            plt.hist(detim.ravel() / detsig1, bins=50, range=(-5,8))
-            ps.savefig()
-
-            # # as in detection.py
-            # detiv = np.zeros_like(detim) + (1. / detsig1**2)
-            # detiv[iv == 0] = 0.
-            # detiv = gaussian_filter(detiv, psf_sigma)
-            #
-            # plt.clf()
-            # plt.hist((detim * np.sqrt(detiv)).ravel(), bins=50, range=(-5,8), log=True)
-            # plt.title('Coadd detection map values / detie (sigmas): band %s' % band)
-            # ps.savefig()
 
     cotims = []
-    for band,img,iv,allmask,anymask,psfimg in zip(
-            bands, C.coimgs, C.cowimgs, C.allmasks, C.anymasks, C.psf_imgs):
-        mjd = np.mean([tim.imobj.mjdobs for tim in tims if tim.band == band])
-        mjd_tai = astropy.time.Time(mjd, format='mjd', scale='utc').tai.mjd
-        tai = TAITime(None, mjd=mjd_tai)
-
-        twcs = LegacySurveyWcs(targetwcs, tai)
-
-        #print('PSF sigmas (in pixels) for band', band, ':',
-        #      ['%.2f' % tim.psf_sigma for tim in tims if tim.band == band])
-        print('PSF sigmas in coadd pixels:',
-              ['%.2f' % (tim.psf_sigma * tim.imobj.pixscale / pixscale)
-               for tim in tims if tim.band == band])
-        psf_sigma = np.mean([(tim.psf_sigma * tim.imobj.pixscale / pixscale)
-                             for tim in tims if tim.band == band])
-        print('Using average PSF sigma', psf_sigma)
-
-        psf = PixelizedPSF(psfimg)
-        gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
-
-        psfnorm = np.sqrt(np.sum(psfimg**2))
-        print('Gaussian PSF norm', gnorm, 'vs pixelized', psfnorm)
-
-        # if plots:
-        #     from collections import Counter
-        #     plt.clf()
-        #     plt.imshow(mask, interpolation='nearest', origin='lower')
-        #     plt.colorbar()
-        #     plt.title('allmask')
-        #     ps.savefig()
-        #     print('allmask for band', band, ': values:', Counter(mask.ravel()))
-
-        # Scale invvar to take into account that we have resampled (~double-counted) pixels
-        tim_pixscale = np.mean([tim.imobj.pixscale for tim in tims
-                                if tim.band == band])
-        cscale = tim_pixscale / pixscale
-        print('average tim pixel scale / coadd scale:', cscale)
-        iv /= cscale**2
-
-        if fitoncoadds_reweight_ivar:
-            # We first tried setting the invvars constant per tim -- this
-            # makes things worse, since we *remove* the lowered invvars at
-            # the cores of galaxies.
-            #
-            # Here we're hacking the relative weights -- squaring the
-            # weights but then making the median the same, ie, squaring
-            # the dynamic range or relative weights -- ie, downweighting
-            # the cores even more than they already are from source
-            # Poisson terms.
-            median_iv = np.median(iv[iv>0])
-            assert(median_iv > 0)
-            iv = iv * np.sqrt(iv) / np.sqrt(median_iv)
-            assert(np.all(np.isfinite(iv)))
-            assert(np.all(iv >= 0))
-
-        cotim = Image(img, invvar=iv, wcs=twcs, psf=psf,
-                      photocal=LinearPhotoCal(1., band=band),
-                      sky=ConstantSky(0.), name='coadd-'+band)
-        cotim.band = band
-        cotim.subwcs = targetwcs
-        cotim.psf_sigma = psf_sigma
-        cotim.sig1 = 1./np.sqrt(np.median(iv[iv>0]))
-
-        # Often, SATUR masks on galaxies / stars are surrounded by BLEED pixels.  Soak these into
-        # the SATUR mask.
-
-        if plots:
+    for C in CC:
+        if plots2:
             import pylab as plt
+            for band,iv in zip(bands, C.cowimgs):
+                plt.clf()
+                plt.imshow(np.sqrt(iv), interpolation='nearest', origin='lower')
+                plt.title('Coadd Inverr: band %s' % band)
+                ps.savefig()
 
-        from scipy.ndimage.morphology import binary_dilation
-        anymask |= np.logical_and(((anymask & DQ_BITS['bleed']) > 0),
-                                  binary_dilation(((anymask & DQ_BITS['satur']) > 0), iterations=10)) * DQ_BITS['satur']
+            for band,psf in zip(bands, C.psf_imgs):
+                plt.clf()
+                plt.imshow(psf, interpolation='nearest', origin='lower')
+                plt.title('Coadd PSF image: band %s' % band)
+                ps.savefig()
 
-        # Saturated in any image -> treat as saturated in coadd
-        # (otherwise you get weird systematics in the weighted coadds, and weird source detection!)
-        mask = allmask
-        mask[(anymask & DQ_BITS['satur'] > 0)] |= DQ_BITS['satur']
+            for band,img,iv in zip(bands, C.coimgs, C.cowimgs):
+                from scipy.ndimage.filters import gaussian_filter
+                plt.clf()
+                plt.hist((img * np.sqrt(iv))[iv>0], bins=50, range=(-5,8), log=True)
+                plt.title('Coadd pixel values (sigmas): band %s' % band)
+                ps.savefig()
 
-        cotim.dq = mask
-        cotim.dq_saturation_bits = DQ_BITS['satur']
-        cotim.psfnorm = gnorm
-        cotim.galnorm = 1.0 # bogus!
-        cotim.imobj = Duck()
-        cotim.imobj.fwhm = 2.35 * psf_sigma
-        cotim.imobj.pixscale = pixscale
-        cotim.time = tai
-        cotim.primhdr = fitsio.FITSHDR()
-        get_coadd_headers(cotim.primhdr, tims, band, coadd_headers=skydict)
-        cotims.append(cotim)
+                psf_sigma = np.mean([(tim.psf_sigma * tim.imobj.pixscale / pixscale)
+                                     for tim in tims if tim.band == band])
+                gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
+                psfnorm = gnorm #np.sqrt(np.sum(psfimg**2))
+                detim = gaussian_filter(img, psf_sigma) / psfnorm**2
+                cosig1 = 1./np.sqrt(np.median(iv[iv>0]))
+                detsig1 = cosig1 / psfnorm
+                plt.clf()
+                plt.subplot(2,1,1)
+                plt.hist(detim.ravel() / detsig1, bins=50, range=(-5,8), log=True)
+                plt.title('Coadd detection map values / sig1 (sigmas): band %s' % band)
+                plt.subplot(2,1,2)
+                plt.hist(detim.ravel() / detsig1, bins=50, range=(-5,8))
+                ps.savefig()
 
-        if plots:
-            plt.clf()
-            bitmap = dict([(v,k) for k,v in DQ_BITS.items()])
-            k = 1
-            for i in range(12):
-                bitval = 1 << i
-                if not bitval in bitmap:
-                    continue
-                # only 9 bits are actually used
-                plt.subplot(3,3,k)
-                k+=1
-                plt.imshow((cotim.dq & bitval) > 0,
-                           vmin=0, vmax=1.5, cmap='hot', origin='lower')
-                plt.title(bitmap[bitval])
-            plt.suptitle('Coadd mask planes %s band' % band)
-            ps.savefig()
+                # # as in detection.py
+                # detiv = np.zeros_like(detim) + (1. / detsig1**2)
+                # detiv[iv == 0] = 0.
+                # detiv = gaussian_filter(detiv, psf_sigma)
+                #
+                # plt.clf()
+                # plt.hist((detim * np.sqrt(detiv)).ravel(), bins=50, range=(-5,8), log=True)
+                # plt.title('Coadd detection map values / detie (sigmas): band %s' % band)
+                # ps.savefig()
 
-            plt.clf()
-            h,w = cotim.shape
-            rgb = np.zeros((h,w,3), np.uint8)
-            rgb[:,:,0] = (cotim.dq & DQ_BITS['satur'] > 0) * 255
-            rgb[:,:,1] = (cotim.dq & DQ_BITS['bleed'] > 0) * 255
-            plt.imshow(rgb, origin='lower')
-            plt.suptitle('Coadd DQ band %s: red = SATUR, green = BLEED' % band)
-            ps.savefig()
+        for band,img,iv,allmask,anymask,psfimg in zip(
+                bands, C.coimgs, C.cowimgs, C.allmasks, C.anymasks, C.psf_imgs):
+            mjd = np.mean([tim.imobj.mjdobs for tim in tims if tim.band == band])
+            mjd_tai = astropy.time.Time(mjd, format='mjd', scale='utc').tai.mjd
+            tai = TAITime(None, mjd=mjd_tai)
+            twcs = LegacySurveyWcs(targetwcs, tai)
+            #print('PSF sigmas (in pixels) for band', band, ':',
+            #      ['%.2f' % tim.psf_sigma for tim in tims if tim.band == band])
+            print('PSF sigmas in coadd pixels:',
+                  ['%.2f' % (tim.psf_sigma * tim.imobj.pixscale / pixscale)
+                   for tim in tims if tim.band == band])
+            psf_sigma = np.mean([(tim.psf_sigma * tim.imobj.pixscale / pixscale)
+                                 for tim in tims if tim.band == band])
+            print('Using average PSF sigma', psf_sigma)
 
-        # Save an image of the coadd PSF
+            psf = PixelizedPSF(psfimg)
+            gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
 
-        # copy version_header before modifying it.
-        hdr = fitsio.FITSHDR()
-        for r in version_header.records():
-            hdr.add_record(r)
-        hdr.add_record(dict(name='IMTYPE', value='coaddpsf',
-                            comment='LegacySurveys image type'))
-        hdr.add_record(dict(name='BAND', value=band,
-                            comment='Band of this coadd/PSF'))
-        hdr.add_record(dict(name='PSF_SIG', value=psf_sigma,
-                            comment='Average PSF sigma (coadd pixels)'))
-        hdr.add_record(dict(name='PIXSCAL', value=pixscale,
-                            comment='Pixel scale of this PSF (arcsec)'))
-        hdr.add_record(dict(name='INPIXSC', value=tim_pixscale,
-                            comment='Native image pixscale scale (average, arcsec)'))
-        hdr.add_record(dict(name='MJD', value=mjd,
-                            comment='Average MJD for coadd'))
-        hdr.add_record(dict(name='MJD_TAI', value=mjd_tai,
-                            comment='Average MJD (in TAI) for coadd'))
-        with survey.write_output('copsf', brick=brickname, band=band) as out:
-            out.fits.write(psfimg, header=hdr)
+            psfnorm = np.sqrt(np.sum(psfimg**2))
+            print('Gaussian PSF norm', gnorm, 'vs pixelized', psfnorm)
+
+            # if plots:
+            #     from collections import Counter
+            #     plt.clf()
+            #     plt.imshow(mask, interpolation='nearest', origin='lower')
+            #     plt.colorbar()
+            #     plt.title('allmask')
+            #     ps.savefig()
+            #     print('allmask for band', band, ': values:', Counter(mask.ravel()))
+            # Scale invvar to take into account that we have resampled (~double-counted) pixels
+            tim_pixscale = np.mean([tim.imobj.pixscale for tim in tims
+                                    if tim.band == band])
+            cscale = tim_pixscale / pixscale
+            print('average tim pixel scale / coadd scale:', cscale)
+            iv /= cscale**2
+
+            if fitoncoadds_reweight_ivar:
+                # We first tried setting the invvars constant per tim -- this
+                # makes things worse, since we *remove* the lowered invvars at
+                # the cores of galaxies.
+                #
+                # Here we're hacking the relative weights -- squaring the
+                # weights but then making the median the same, ie, squaring
+                # the dynamic range or relative weights -- ie, downweighting
+                # the cores even more than they already are from source
+                # Poisson terms.
+                median_iv = np.median(iv[iv>0])
+                assert(median_iv > 0)
+                iv = iv * np.sqrt(iv) / np.sqrt(median_iv)
+                assert(np.all(np.isfinite(iv)))
+                assert(np.all(iv >= 0))
+
+            cotim = Image(img, invvar=iv, wcs=twcs, psf=psf,
+                          photocal=LinearPhotoCal(1., band=band),
+                          sky=ConstantSky(0.), name='coadd-'+band)
+            cotim.band = band
+            cotim.subwcs = targetwcs
+            cotim.psf_sigma = psf_sigma
+            cotim.sig1 = 1./np.sqrt(np.median(iv[iv>0]))
+
+            # Often, SATUR masks on galaxies / stars are surrounded by BLEED pixels.  Soak these into
+            # the SATUR mask.
+            from scipy.ndimage.morphology import binary_dilation
+            anymask |= np.logical_and(((anymask & DQ_BITS['bleed']) > 0),
+                                      binary_dilation(((anymask & DQ_BITS['satur']) > 0), iterations=10)) * DQ_BITS['satur']
+
+            # Saturated in any image -> treat as saturated in coadd
+            # (otherwise you get weird systematics in the weighted coadds, and weird source detection!)
+            mask = allmask
+            mask[(anymask & DQ_BITS['satur'] > 0)] |= DQ_BITS['satur']
+            cotim.dq = mask
+            cotim.dq_saturation_bits = DQ_BITS['satur']
+            cotim.psfnorm = gnorm
+            cotim.galnorm = 1.0 # bogus!
+            cotim.imobj = Duck()
+            cotim.imobj.fwhm = 2.35 * psf_sigma
+            cotim.imobj.pixscale = pixscale
+            cotim.time = tai
+            cotim.primhdr = fitsio.FITSHDR()
+            get_coadd_headers(cotim.primhdr, tims, band, coadd_headers=skydict)
+            cotims.append(cotim)
+
+            if plots:
+                plt.clf()
+                bitmap = dict([(v,k) for k,v in DQ_BITS.items()])
+                k = 1
+                for i in range(12):
+                    bitval = 1 << i
+                    if not bitval in bitmap:
+                        continue
+                    # only 9 bits are actually used
+                    plt.subplot(3,3,k)
+                    k+=1
+                    plt.imshow((cotim.dq & bitval) > 0,
+                               vmin=0, vmax=1.5, cmap='hot', origin='lower')
+                    plt.title(bitmap[bitval])
+                plt.suptitle('Coadd mask planes %s band' % band)
+                ps.savefig()
+
+                plt.clf()
+                h,w = cotim.shape
+                rgb = np.zeros((h,w,3), np.uint8)
+                rgb[:,:,0] = (cotim.dq & DQ_BITS['satur'] > 0) * 255
+                rgb[:,:,1] = (cotim.dq & DQ_BITS['bleed'] > 0) * 255
+                plt.imshow(rgb, origin='lower')
+                plt.suptitle('Coadd DQ band %s: red = SATUR, green = BLEED' % band)
+                ps.savefig()
+
+            # Save an image of the coadd PSF
+            # copy version_header before modifying it.
+            hdr = fitsio.FITSHDR()
+            for r in version_header.records():
+                hdr.add_record(r)
+            hdr.add_record(dict(name='IMTYPE', value='coaddpsf',
+                                comment='LegacySurveys image type'))
+            hdr.add_record(dict(name='BAND', value=band,
+                                comment='Band of this coadd/PSF'))
+            hdr.add_record(dict(name='PSF_SIG', value=psf_sigma,
+                                comment='Average PSF sigma (coadd pixels)'))
+            hdr.add_record(dict(name='PIXSCAL', value=pixscale,
+                                comment='Pixel scale of this PSF (arcsec)'))
+            hdr.add_record(dict(name='INPIXSC', value=tim_pixscale,
+                                comment='Native image pixscale scale (average, arcsec)'))
+            hdr.add_record(dict(name='MJD', value=mjd,
+                                comment='Average MJD for coadd'))
+            hdr.add_record(dict(name='MJD_TAI', value=mjd_tai,
+                                comment='Average MJD (in TAI) for coadd'))
+            with survey.write_output('copsf', brick=brickname, band=band) as out:
+                out.fits.write(psfimg, header=hdr)
 
     # EVIL
     return dict(tims=cotims, coadd_headers=skydict)
