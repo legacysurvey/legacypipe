@@ -83,11 +83,14 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
             if nsatur is None:
                 satmaps[ib][Yo,Xo] |= sat
             else:
-                satmaps[ib][Yo,Xo] += 1
-    for i,(detmap,detiv,satmap) in zip(detmaps, detivs):
+                satmaps[ib][Yo,Xo] += (1*sat)
+    for i,(detmap,detiv,satmap) in enumerate(zip(detmaps, detivs, satmaps)):
         detmap /= np.maximum(1e-16, detiv)
         if nsatur is not None:
+            print('Saturmap for band', bands[i], ': range', satmap.min(), satmap.max(),
+                  'mean', np.mean(satmap), 'nsatur', nsatur)
             satmaps[i] = (satmap >= nsatur)
+            print('Satmap:', np.sum(satmaps[i]), 'pixels set')
     return detmaps, detivs, satmaps
 
 def sed_matched_filters(bands):

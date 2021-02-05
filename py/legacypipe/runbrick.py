@@ -758,6 +758,17 @@ def stage_srcs(pixscale=None, targetwcs=None,
     tlast = tnow
     record_event and record_event('stage_srcs: sources')
 
+    if plots:
+        import pylab as plt
+        for band,detmap,satmap in zip(bands, detmaps, satmaps):
+            plt.clf()
+            plt.subplot(1,2,1)
+            plt.imshow(detmap, origin='lower', interpolation='nearest')
+            plt.subplot(1,2,2)
+            plt.imshow(satmap, origin='lower', interpolation='nearest', vmin=0, vmax=1, cmap='hot')
+            plt.suptitle('%s detmap/satmap' % band)
+            ps.savefig()
+            
     # Expand the mask around saturated pixels to avoid generating
     # peaks at the edge of the mask.
     saturated_pix = [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps]
@@ -861,7 +872,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
         hot |= merging
 
         if plots:
-            import pylab as plt
+            #import pylab as plt
             from astrometry.util.plotutils import dimshow
             plt.clf()
             plt.subplot(1,2,1)

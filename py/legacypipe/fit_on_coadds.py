@@ -420,6 +420,7 @@ def stage_fit_on_coadds(
         subsky=True,
         ubercal_sky=False,
         subsky_radii=None,
+        nsatur=None,
         fitoncoadds_reweight_ivar=True,
         plots=False, plots2=False, ps=None, coadd_bw=False, W=None, H=None,
         brick=None, blobs=None, lanczos=True, ccds=None,
@@ -488,6 +489,7 @@ def stage_fit_on_coadds(
             C = make_coadds(tier, bands, targetwcs,
                     detmaps=True, ngood=True, lanczos=lanczos,
                     allmasks=True, anymasks=True, psf_images=True,
+                    nsatur=2,
                     mp=mp, plots=plots2, ps=ps, # note plots2 here!
                     callback=None)
             if plots:
@@ -520,10 +522,11 @@ def stage_fit_on_coadds(
     for C in CC:
         if plots2:
             for band,iv in zip(bands, C.cowimgs):
-                plt.clf()
-                plt.imshow(np.sqrt(iv), interpolation='nearest', origin='lower')
-                plt.title('Coadd Inverr: band %s' % band)
-                ps.savefig()
+                pass
+                # plt.clf()
+                # plt.imshow(np.sqrt(iv), interpolation='nearest', origin='lower')
+                # plt.title('Coadd Inverr: band %s' % band)
+                # ps.savefig()
 
             for band,psf in zip(bands, C.psf_imgs):
                 plt.clf()
@@ -533,10 +536,10 @@ def stage_fit_on_coadds(
 
             for band,img,iv in zip(bands, C.coimgs, C.cowimgs):
                 from scipy.ndimage.filters import gaussian_filter
-                plt.clf()
-                plt.hist((img * np.sqrt(iv))[iv>0], bins=50, range=(-5,8), log=True)
-                plt.title('Coadd pixel values (sigmas): band %s' % band)
-                ps.savefig()
+                # plt.clf()
+                # plt.hist((img * np.sqrt(iv))[iv>0], bins=50, range=(-5,8), log=True)
+                # plt.title('Coadd pixel values (sigmas): band %s' % band)
+                # ps.savefig()
 
                 psf_sigma = np.mean([(tim.psf_sigma * tim.imobj.pixscale / pixscale)
                                      for tim in tims if tim.band == band])
@@ -545,13 +548,13 @@ def stage_fit_on_coadds(
                 detim = gaussian_filter(img, psf_sigma) / psfnorm**2
                 cosig1 = 1./np.sqrt(np.median(iv[iv>0]))
                 detsig1 = cosig1 / psfnorm
-                plt.clf()
-                plt.subplot(2,1,1)
-                plt.hist(detim.ravel() / detsig1, bins=50, range=(-5,8), log=True)
-                plt.title('Coadd detection map values / sig1 (sigmas): band %s' % band)
-                plt.subplot(2,1,2)
-                plt.hist(detim.ravel() / detsig1, bins=50, range=(-5,8))
-                ps.savefig()
+                # plt.clf()
+                # plt.subplot(2,1,1)
+                # plt.hist(detim.ravel() / detsig1, bins=50, range=(-5,8), log=True)
+                # plt.title('Coadd detection map values / sig1 (sigmas): band %s' % band)
+                # plt.subplot(2,1,2)
+                # plt.hist(detim.ravel() / detsig1, bins=50, range=(-5,8))
+                # ps.savefig()
 
                 # # as in detection.py
                 # detiv = np.zeros_like(detim) + (1. / detsig1**2)
@@ -563,8 +566,8 @@ def stage_fit_on_coadds(
                 # plt.title('Coadd detection map values / detie (sigmas): band %s' % band)
                 # ps.savefig()
 
-        for band,img,iv,allmask,anymask,psfimg in zip(
-                bands, C.coimgs, C.cowimgs, C.allmasks, C.anymasks, C.psf_imgs):
+        for iband,(band,img,iv,allmask,anymask,psfimg) in enumerate(zip(
+                bands, C.coimgs, C.cowimgs, C.allmasks, C.anymasks, C.psf_imgs)):
             mjd = np.mean([tim.imobj.mjdobs for tim in tims if tim.band == band])
             mjd_tai = astropy.time.Time(mjd, format='mjd', scale='utc').tai.mjd
             tai = TAITime(None, mjd=mjd_tai)
@@ -572,8 +575,8 @@ def stage_fit_on_coadds(
             #print('PSF sigmas (in pixels) for band', band, ':',
             #      ['%.2f' % tim.psf_sigma for tim in tims if tim.band == band])
             print('PSF sigmas in coadd pixels:',
-                  ['%.2f' % (tim.psf_sigma * tim.imobj.pixscale / pixscale)
-                   for tim in tims if tim.band == band])
+                  ', '.join(['%.2f' % (tim.psf_sigma * tim.imobj.pixscale / pixscale)
+                             for tim in tims if tim.band == band]))
             psf_sigma = np.mean([(tim.psf_sigma * tim.imobj.pixscale / pixscale)
                                  for tim in tims if tim.band == band])
             print('Using average PSF sigma', psf_sigma)
@@ -633,6 +636,12 @@ def stage_fit_on_coadds(
             # (otherwise you get weird systematics in the weighted coadds, and weird source detection!)
             mask = allmask
             mask[(anymask & DQ_BITS['satur'] > 0)] |= DQ_BITS['satur']
+
+            if coadd_tiers:
+                # nsatur -- reset SATUR bit
+                mask &= ~DQ_BITS['satur']
+                mask |=  DQ_BITS['satur'] * C.satmaps[iband]
+
             cotim.dq = mask
             cotim.dq_saturation_bits = DQ_BITS['satur']
             cotim.psfnorm = gnorm

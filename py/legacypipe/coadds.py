@@ -205,7 +205,7 @@ def make_coadds(tims, bands, targetwcs,
                 ngood=False, detmaps=False, psfsize=False,
                 allmasks=True, anymasks=False,
                 get_max=False, sbscale=True,
-                psf_images=False,
+                psf_images=False, nsatur=None,
                 callback=None, callback_args=None,
                 plots=False, ps=None,
                 lanczos=True, mp=None,
@@ -248,6 +248,8 @@ def make_coadds(tims, bands, targetwcs,
         C.maximgs = []
     if psf_images:
         C.psf_imgs = []
+    if nsatur:
+        C.satmaps = []
 
     if xy:
         ix,iy = xy
@@ -377,10 +379,13 @@ def make_coadds(tims, bands, targetwcs,
             allbits = reduce(np.bitwise_or, DQ_BITS.values())
             andmask[:,:] = allbits
             kwargs.update(ormask=ormask, andmask=andmask)
-        if xy:
+        if xy or allmasks:
             # number of observations
             nobs = np.zeros((H,W), np.int16)
             kwargs.update(nobs=nobs)
+
+        if nsatur:
+            satmap = np.zeros((H,W), np.int16)
 
         if psfsize:
             psfsizemap = np.zeros((H,W), np.float32)
@@ -450,6 +455,9 @@ def make_coadds(tims, bands, targetwcs,
                                        (mjds[itim] > mjds[mjd_argmaxs[Yo,Xo]]))
                 mjd_argmaxs[Yo[update],Xo[update]] = itim
                 del update
+
+            if nsatur and dq is not None:
+                satmap[Yo,Xo] += (1*((dq & DQ_BITS['satur'])>0))
 
             if psfsize:
                 # psfnorm is in units of 1/pixels.
@@ -550,11 +558,15 @@ def make_coadds(tims, bands, targetwcs,
             coblobresid[cow == 0] = 0.
             C.coblobresids.append(coblobresid)
 
+        if xy or anymasks:
+            # If these was no coverage, don't set ALLMASK
+            andmask[nobs == 0] = 0
         if allmasks:
             C.allmasks.append(andmask)
         if anymasks:
             C.anymasks.append(ormask)
-
+        if nsatur:
+            C.satmaps.append(satmap >= nsatur)
         if psf_images:
             C.psf_imgs.append(psf_img / np.sum(psf_img))
 
@@ -576,7 +588,7 @@ def make_coadds(tims, bands, targetwcs,
             C.T.anymask[:,iband] = ormask [iy,ix]
             C.T.allmask[:,iband] = andmask[iy,ix]
             # unless there were no images there...
-            C.T.allmask[nobs[iy,ix] == 0, iband] = 0
+            #C.T.allmask[nobs[iy,ix] == 0, iband] = 0
             if detmaps:
                 C.T.psfdepth[:,iband] = psfdetiv[iy, ix]
                 C.T.galdepth[:,iband] = galdetiv[iy, ix]
