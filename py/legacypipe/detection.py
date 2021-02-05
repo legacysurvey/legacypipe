@@ -59,7 +59,7 @@ def _detmap(X):
 
     return Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
 
-def detection_maps(tims, targetwcs, bands, mp, apodize=None):
+def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
     # Render the detection maps
     H,W = targetwcs.shape
     H,W = np.int(H), np.int(W)
@@ -67,7 +67,11 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None):
 
     detmaps = [np.zeros((H,W), np.float32) for b in bands]
     detivs  = [np.zeros((H,W), np.float32) for b in bands]
-    satmaps = [np.zeros((H,W), bool)       for b in bands]
+    if nsatur is None:
+        satmaps = [np.zeros((H,W), bool)       for b in bands]
+    else:
+        satmaps = [np.zeros((H,W), np.int16)       for b in bands]
+
     for tim, (Yo,Xo,incmap,inciv,sat) in zip(
         tims, mp.map(_detmap, [(tim, targetwcs, apodize) for tim in tims])):
         if Yo is None:
@@ -76,9 +80,14 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None):
         detmaps[ib][Yo,Xo] += incmap * inciv
         detivs [ib][Yo,Xo] += inciv
         if sat is not None:
-            satmaps[ib][Yo,Xo] |= sat
-    for detmap,detiv in zip(detmaps, detivs):
+            if nsatur is None:
+                satmaps[ib][Yo,Xo] |= sat
+            else:
+                satmaps[ib][Yo,Xo] += 1
+    for i,(detmap,detiv,satmap) in zip(detmaps, detivs):
         detmap /= np.maximum(1e-16, detiv)
+        if nsatur is not None:
+            satmaps[i] = (satmap >= nsatur)
     return detmaps, detivs, satmaps
 
 def sed_matched_filters(bands):

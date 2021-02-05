@@ -677,6 +677,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
                T_clusters=None,
                ccds=None,
                ubercal_sky=False,
+               nsatur=None,
                record_event=None,
                large_galaxies=True,
                gaia_stars=True,
@@ -751,7 +752,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
     tnow = Time()
     debug('Rendering detection maps...')
     detmaps, detivs, satmaps = detection_maps(tims, targetwcs, bands, mp,
-                                              apodize=10)
+                                              apodize=10, nsatur=nsatur)
     tnow = Time()
     debug('Detmaps:', tnow-tlast)
     tlast = tnow
@@ -3006,6 +3007,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               large_galaxies_force_pointsource=True,
               fitoncoadds_reweight_ivar=True,
               less_masking=False,
+              nsatur=None,
               fit_on_coadds=False,
               coadd_tiers=None,
               min_mjd=None, max_mjd=None,
@@ -3253,6 +3255,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   less_masking=less_masking,
                   min_mjd=min_mjd, max_mjd=max_mjd,
                   coadd_tiers=coadd_tiers,
+                  nsatur=nsatur,
                   reoptimize=reoptimize,
                   iterative=iterative,
                   outliers=outliers,
@@ -3672,6 +3675,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='Fit to coadds rather than individual CCDs (e.g., large galaxies).')
     parser.add_argument('--coadd-tiers', default=None, type=int,
                         help='Split images into this many tiers of coadds (per band) by FWHW')
+
+    parser.add_argument('--nsatur', default=None, type=int,
+                        help='Demand that >= nsatur images per band are saturated before using saturated logic (eg, 2).')
     parser.add_argument('--no-ivar-reweighting', dest='fitoncoadds_reweight_ivar',
                         default=True, action='store_false',
                         help='Reweight the inverse variance when fitting on coadds.')
