@@ -439,6 +439,9 @@ def stage_fit_on_coadds(
     from tractor.tractortime import TAITime
     import astropy.time
     import fitsio
+    if plots or plots2:
+        import pylab as plt
+        from legacypipe.survey import get_rgb
 
     # Custom sky-subtraction for large galaxies.
     skydict = {}
@@ -466,19 +469,22 @@ def stage_fit_on_coadds(
             btims = []
             seeing = []
             for tim in tims:
-                if tim.filter != b:
+                if tim.band != b:
                     continue
                 btims.append(tim)
-                seeing.append(tim.psf_fwhm * tim.pixscale)
+                seeing.append(tim.psf_fwhm * tim.imobj.pixscale)
             I = np.argsort(seeing)
             btims = [btims[i] for i in I]
+            seeing = [seeing[i] for i in I]
             N = min(coadd_tiers, len(btims))
             splits = np.round(np.arange(N+1) * float(len(btims)) / N).astype(int)
             print('Splitting', len(btims), 'images into', N, 'tiers: splits:', splits)
+            print('Seeing limits:', [seeing[min(s,len(seeing)-1)] for s in splits])
             for s0,s1,tt in zip(splits, splits[1:], tiers):
-                tt.append(btims[s0:s1])
+                tt.extend(btims[s0:s1])
 
         for itier,tier in enumerate(tiers):
+            print('Producing coadds for tier', (itier+1))
             C = make_coadds(tier, bands, targetwcs,
                     detmaps=True, ngood=True, lanczos=lanczos,
                     allmasks=True, anymasks=True, psf_images=True,
@@ -487,7 +493,7 @@ def stage_fit_on_coadds(
             if plots:
                 plt.clf()
                 for iband,(band,psf) in enumerate(zip(bands, C.psf_imgs)):
-                    plt.subplots(1,len(bands),iband+1)
+                    plt.subplot(1,len(bands),iband+1)
                     plt.imshow(psf, interpolation='nearest', origin='lower')
                     plt.title('Coadd PSF image: band %s' % band)
                 plt.suptitle('Tier %i' % (itier+1))
@@ -510,11 +516,9 @@ def stage_fit_on_coadds(
                         callback=None)
         CC.append(C)
 
-
     cotims = []
     for C in CC:
         if plots2:
-            import pylab as plt
             for band,iv in zip(bands, C.cowimgs):
                 plt.clf()
                 plt.imshow(np.sqrt(iv), interpolation='nearest', origin='lower')

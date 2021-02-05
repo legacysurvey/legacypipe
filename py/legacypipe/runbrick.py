@@ -3007,6 +3007,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               fitoncoadds_reweight_ivar=True,
               less_masking=False,
               fit_on_coadds=False,
+              coadd_tiers=None,
               min_mjd=None, max_mjd=None,
               unwise_coadds=True,
               bail_out=False,
@@ -3251,6 +3252,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   fitoncoadds_reweight_ivar=fitoncoadds_reweight_ivar,
                   less_masking=less_masking,
                   min_mjd=min_mjd, max_mjd=max_mjd,
+                  coadd_tiers=coadd_tiers,
                   reoptimize=reoptimize,
                   iterative=iterative,
                   outliers=outliers,
@@ -3380,6 +3382,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             'srcs': 'fit_on_coadds',
             'image_coadds': 'fit_on_coadds',
         })
+        if blob_image:
+            prereqs.update({'image_coadds':'srcs'})
 
     # HACK -- set the prereq to the stage after which you'd like to write out checksums.
     prereqs.update({'checksum': 'outliers'})
