@@ -681,6 +681,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
                record_event=None,
                large_galaxies=True,
                gaia_stars=True,
+               blob_dilate=None,
                **kwargs):
     '''
     In this stage we run SED-matched detection to find objects in the
@@ -795,7 +796,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
         nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
-        saturated_pix=saturated_pix, veto_map=avoid_map,
+        saturated_pix=saturated_pix, veto_map=avoid_map, blob_dilate=blob_dilate,
         plots=plots, ps=ps, mp=mp, **kwa)
 
     if Tnew is not None:
@@ -898,6 +899,19 @@ def stage_srcs(pixscale=None, targetwcs=None,
     tnow = Time()
     debug('Blobs:', tnow-tlast)
     tlast = tnow
+
+    # DEBUG
+    if False:
+        BT = fits_table()
+        BT.blob_pix = []
+        BT.blob_srcs = []
+        for blobid, (srcs, slc) in enumerate(zip(blobsrcs, blobslices)):
+            BT.blob_pix.append(np.sum(blobmap[slc] == blobid))
+            BT.blob_srcs.append(len(srcs))
+        BT.to_np_arrays()
+        BT.writeto('blob-stats-dilate%i.fits' % blob_dilate)
+        print('Done!')
+        sys.exit(0)
 
     ccds.co_sky = np.zeros(len(ccds), np.float32)
     if ubercal_sky:
@@ -2991,6 +3005,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               nsigma=6,
               saddle_fraction=0.1,
               saddle_min=2.,
+              blob_dilate=None,
               subsky_radii=None,
               reoptimize=False,
               iterative=False,
@@ -3248,6 +3263,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     kwargs.update(ps=ps, nsigma=nsigma, saddle_fraction=saddle_fraction,
                   saddle_min=saddle_min,
+                  blob_dilate=blob_dilate,
                   subsky_radii=subsky_radii,
                   survey_blob_mask=survey_blob_mask,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
@@ -3596,6 +3612,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--saddle-min', type=float, default=2.0,
                         help='Saddle-point depth from existing sources down to new sources (sigma).')
+    parser.add_argument('--blob-dilate', type=int, default=None,
+                        help='How many pixels to dilate detection pixels (default: 8)')
 
     parser.add_argument(
         '--reoptimize', action='store_true', default=False,

@@ -127,6 +127,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
                             saddle_min=2.,
                             saturated_pix=None,
                             exclusion_radius=4.,
+                            blob_dilate=None,
                             veto_map=None,
                             mp=None,
                             plots=False, ps=None, rgbimg=None):
@@ -204,7 +205,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
         sedhot,px,py,peakval,apval = sed_matched_detection(
             sedname, sed, detmaps, detivs, bands, xx, yy, rr,
             nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
-            saturated_pix=saturated_pix, veto_map=veto_map,
+            blob_dilate=blob_dilate, saturated_pix=saturated_pix, veto_map=veto_map,
             ps=pps, rgbimg=rgbimg)
         if sedhot is None:
             continue
@@ -270,6 +271,7 @@ def plot_boundary_map(X, rgb=(0,255,0), extent=None, iterations=1):
 
 def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                           xomit, yomit, romit,
+                          blob_dilate=None,
                           nsigma=5.,
                           saddle_fraction=0.1,
                           saddle_min=2.,
@@ -391,9 +393,10 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # "sedhot", which in turn is used to define the blobs that we will
     # optimize simultaneously.  This also determines which pixels go
     # into the fitting!
-    dilate = 8
+    if blob_dilate is None:
+        blob_dilate = 8
     hotblobs,nhot = label(binary_fill_holes(
-            binary_dilation(peaks, iterations=dilate)))
+            binary_dilation(peaks, iterations=blob_dilate)))
 
     # find pixels that are larger than their 8 neighbors
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[0:-2,1:-1])
