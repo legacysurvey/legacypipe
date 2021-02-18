@@ -557,6 +557,15 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     be created (in `stage_coadds`).  But it's handy to have the coadds
     early on, to diagnose problems or just to look at the data.
     '''
+    primhdr = fitsio.FITSHDR()
+    for r in version_header.records():
+        primhdr.add_record(r)
+    primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
+                            comment='NOAO data product type'))
+    # Write per-brick CCDs table
+    with survey.write_output('ccds-table', brick=brickname) as out:
+        ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
+
     kw = dict(ngood=True)
     if not minimal_coadds:
         kw.update(detmaps=True)
@@ -609,15 +618,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         with survey.write_output('depth-table', brick=brickname) as out:
             D.writeto(None, fits_object=out.fits)
         del D
-
-    primhdr = fitsio.FITSHDR()
-    for r in version_header.records():
-        primhdr.add_record(r)
-    primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
-                            comment='NOAO data product type'))
-    # Write per-brick CCDs table
-    with survey.write_output('ccds-table', brick=brickname) as out:
-        ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
     coadd_list= [('image', C.coimgs)]
     if hasattr(tims[0], 'sims_image'):
