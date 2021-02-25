@@ -1,4 +1,5 @@
 #! /usr/bin/env python
+from __future__ import print_function
 
 """
 Find all the PS1 stars in a given DECaLS CCD.
@@ -70,7 +71,10 @@ class HealpixedCatalog(object):
         return cat
 
 class ps1cat(HealpixedCatalog):
-    ps1band = dict(g=0,r=1,i=2,z=3,Y=4)
+    ps1band = dict(g=0,r=1,i=2,z=3,Y=4,
+                   N501=0,
+                   N673=1,
+    )
     def __init__(self,expnum=None,ccdname=None,ccdwcs=None):
         """Read PS1 or gaia sources for an exposure number + CCD name or CCD WCS
 
@@ -141,7 +145,12 @@ def ps1_to_decam(psmags, band):
         r = [ 0.00495, -0.08435, 0.03222, -0.01140 ],
         i = [ 0.00904, -0.04171, 0.00566, -0.00829 ],
         z = [ 0.02583, -0.07690, 0.02824, -0.00898 ],
-        Y = [ 0.02332, -0.05992, 0.02840, -0.00572 ],)[band]
+        Y = [ 0.02332, -0.05992, 0.02840, -0.00572 ],
+
+        # FIXME!
+        N501 = [ 0.00062,  0.03604, 0.01028, -0.00613 ],
+        N673 = [ 0.00495, -0.08435, 0.03222, -0.01140 ],
+    )[band]
 
     # Previously, we used: (with an overall negative)
     # g = [0.0, -0.04709, -0.00084, 0.00340],
