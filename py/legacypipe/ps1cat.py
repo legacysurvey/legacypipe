@@ -147,18 +147,14 @@ def ps1_to_decam(psmags, band):
         z = [ 0.02583, -0.07690, 0.02824, -0.00898 ],
         Y = [ 0.02332, -0.05992, 0.02840, -0.00572 ],
 
-        # FIXME!
-        N501 = [ 0.00062,  0.03604, 0.01028, -0.00613 ],
-        N673 = [ 0.00495, -0.08435, 0.03222, -0.01140 ],
+        # From Arjun 2021-02-26
+        # c0: 0.0059
+        N501 = [ 0., -0.2584, 0.2915, -0.0686 ],
+        # c0: 0.2324
+        N673 = [ 0., -0.3456, 0.1334, -0.0146 ],
+
     )[band]
-
-    # Previously, we used: (with an overall negative)
-    # g = [0.0, -0.04709, -0.00084, 0.00340],
-    # r = [0.0,  0.09939, -0.04509, 0.01488],
-    # z = [0.0,  0.13404, -0.06591, 0.01695])[band]
-
     colorterm = coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3
-    #print('Using DECam ColorTerm')
     return colorterm
 
 def ps1_to_90prime(psmags, band):
