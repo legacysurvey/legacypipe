@@ -101,9 +101,13 @@ def sed_matched_filters(bands):
 
     if len(bands) > 1:
         flat = dict(g=1., r=1., i=1., z=1.)
-        SEDs.append(('Flat', [flat[b] for b in bands]))
+        sed = [flat.get(b,0.,) for b in bands]
+        if np.sum(sed) > 0:
+            SEDs.append(('Flat', sed))
         red = dict(g=2.5, r=1., i=0.4, z=0.4)
-        SEDs.append(('Red', [red[b] for b in bands]))
+        sed = [red.get(b,0.) for b in bands]
+        if np.sum(sed) > 0:
+            SEDs.append(('Red', sed))
 
     info('SED-matched filters:', SEDs)
 

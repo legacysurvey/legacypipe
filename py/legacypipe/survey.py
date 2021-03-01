@@ -509,7 +509,9 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None):
     rgbscales=dict(g=(2, 6.0),
                    r=(1, 3.4),
                    i=(0, 3.0),
-                   z=(0, 2.2))
+                   z=(0, 2.2),
+                   N501=(2, 6.0),
+                   N673=(1, 3.4))
     # rgbscales = {'u': 1.5, #1.0,
     #              'g': 2.5,
     #              'r': 1.5,
@@ -555,12 +557,50 @@ def get_rgb(imgs, bands,
 
     Returns a (H,W,3) numpy array with values between 0 and 1.
     '''
+
+    if len(bands) == 2 and bands[0] == 'N501' and bands[1] == 'N673':
+        return narrowband_rgb(imgs, bands) #, m=0., Q=None, mnmx=mnmx)
+
+    if len(bands) == 5:
+        return get_rgb(imgs[:3], bands[:3], resids=resids, mnmx=mnmx, arcsinh=arcsinh)
+
+    if len(bands) == 3 and bands[0] == 'N501' and bands[1] == 'r' and bands[2] == 'N673':
+        return sdss_rgb(imgs, bands, scales=dict(N673=(0,3.4)))
+    
     # (ignore arcsinh...)
     if resids:
         mnmx = (-0.1, 0.1)
     if mnmx is not None:
         return sdss_rgb(imgs, bands, m=0., Q=None, mnmx=mnmx)
     return sdss_rgb(imgs, bands)
+
+def narrowband_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None):
+    assert(bands[0] == 'N501')
+    assert(bands[1] == 'N673')
+    rgbscales=dict(N501=(2, 6.0),
+                   N673=(0, 3.4))
+    I = 0
+    for img,band in zip(imgs, bands):
+        plane,scale = rgbscales[band]
+        img = np.maximum(0, img * scale + m)
+        I = I + img
+    I /= len(bands)
+    if Q is not None:
+        fI = np.arcsinh(Q * I) / np.sqrt(Q)
+        I += (I == 0.) * 1e-6
+        I = fI / I
+    H,W = I.shape
+    rgb = np.zeros((H,W,3), np.float32)
+    for img,band in zip(imgs, bands):
+        plane,scale = rgbscales[band]
+        if mnmx is None:
+            rgb[:,:,plane] = (img * scale + m) * I
+        else:
+            mn,mx = mnmx
+            rgb[:,:,plane] = ((img * scale + m) - mn) / (mx - mn)
+    rgb[:,:,1] = rgb[:,:,0]/2 + rgb[:,:,2]/2
+    rgb = np.clip(rgb, 0, 1)
+    return rgb
 
 def wcs_for_brick(b, W=3600, H=3600, pixscale=0.262):
     '''

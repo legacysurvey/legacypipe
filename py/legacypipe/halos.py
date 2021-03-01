@@ -31,7 +31,11 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat):
     assert(np.all(refs.ref_epoch > 0))
     rr,dd = radec_at_mjd(refs.ra, refs.dec, refs.ref_epoch.astype(float),
                          refs.pmra, refs.pmdec, refs.parallax, mjd)
-    mag = refs.get('decam_mag_%s' % band)
+    col = 'decam_mag_%s' % band
+    if not col in refs.get_columns():
+        print('No halo subtraction for band', band)
+        return 0.
+    mag = refs.get(col)
     fluxes = 10.**((mag - 22.5) / -2.5)
 
     have_inner_moffat = False
