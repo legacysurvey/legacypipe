@@ -60,6 +60,13 @@ def run(server):
 
         (brickname, iblob, args) = rep
 
+        # DEBUG
+        (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
+         srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap,
+         large_galaxies_force_pointsource, less_masking, frozen_galaxies) = args
+        print('Work: brick', brickname, 'blob', iblob, 'size', blobw, 'x', blobh, 'with',
+              len(timargs), 'images and', len(Isrcs), 'sources')
+        
         print('Calling one_blob...')
         t0_wall = time.time()
         t0_cpu  = time.process_time()

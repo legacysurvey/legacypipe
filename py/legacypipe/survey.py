@@ -558,6 +558,19 @@ def get_rgb(imgs, bands,
     Returns a (H,W,3) numpy array with values between 0 and 1.
     '''
 
+    #print('get_rgb: bands', bands)
+    if len(bands) < 2:
+        H,W = imgs[0].shape
+        bmap = dict([(b,i) for b,i in zip(bands, imgs)])
+        ii = []
+        twobands = ['N501', 'N673']
+        for b in twobands:
+            if b in bmap:
+                ii.append(bmap[b])
+            else:
+                ii.append(np.zeros((H,W),np.float32))
+        bands = twobands
+        imgs = ii
     if len(bands) == 2 and bands[0] == 'N501' and bands[1] == 'N673':
         return narrowband_rgb(imgs, bands) #, m=0., Q=None, mnmx=mnmx)
 
