@@ -1248,7 +1248,7 @@ class LegacySurveyImage(object):
         # Sigma of boxcar-smoothed image
         bsig1 = sig1 / boxcar
         masked = np.abs(uniform_filter(img - sky_clipped_median, size=boxcar,
-                                       mode='constant') > (3.*bsig1))
+                                       mode='constant')) > (3.*bsig1)
         masked = binary_dilation(masked, iterations=3)
         if np.sum(good * (masked==False)) > 100:
             cimage, _, _ = sigmaclip(img[good * (masked==False)],
