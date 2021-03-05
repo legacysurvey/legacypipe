@@ -123,7 +123,7 @@ def main():
                         survey_dir=opt.survey_dir,
                         output_dir=opt.output_dir)
 
-    columns = ['release', 'brickid', 'objid',]
+    columns = ['release', 'brickid', 'objid', 'brick_primary', 'type']
 
     cat = None
     catsurvey = survey
@@ -156,7 +156,13 @@ def main():
 
         fn = catsurvey.find_file('tractor', brick=opt.brick)
         cat = fits_table(fn, columns=columns)
-        print('Read', len(cat), 'sources from', fn)
+        print('Read', len(cat), 'sources from', fn, 'with', np.sum(cat.brick_primary),
+              'primary and', np.sum(cat.type == 'DUP'), 'DUP sources')
+        cat.cut((cat.brick_primary) * (cat.type != 'DUP'))
+
+    if len(cat) == 0:
+        print('No catalog entries!')
+        return 0
 
     program_name = sys.argv[0]
     ## FIXME -- from catalog?
