@@ -353,7 +353,7 @@ def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None, r
         surveys.append((catsurvey_south, False))
 
     columns = ['ra', 'dec', 'brick_primary', 'type', 'release',
-               'brickid', 'brickname', 'objid', 'flux_g', 'flux_r', 'flux_z',
+               'brickid', 'brickname', 'objid'
                'sersic', 'shape_r', 'shape_e1', 'shape_e2',
                'ref_epoch', 'pmra', 'pmdec', 'parallax', 'ref_cat', 'ref_id',]
 
@@ -632,11 +632,9 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         I = np.flatnonzero(np.logical_not(sga_out))
         T.cut(I)
 
-    cat = read_fits_catalog(T, bands='r')
-    # Replace the brightness (which will be a NanoMaggies with g,r,z)
-    # with a NanoMaggies with this image's band only.
-    for src in cat:
-        src.brightness = NanoMaggies(**{tim.band: 1.})
+    # Add in a fake flux_{BAND} column, with flux 1.0 nanomaggies
+    T.set('flux_'+tim.band, np.ones(len(T), np.float32))
+    cat = read_fits_catalog(T, bands=[tim.band])
 
     tnow = Time()
     print('Parse catalog:', tnow-tlast)
