@@ -3,6 +3,7 @@ After running forced_photom.py on a set of CCDs, this script merges
 the results back into a catalog.
 '''
 import sys
+import os
 import logging
 import numpy as np
 from glob import glob
@@ -35,6 +36,9 @@ def merge_forced(survey, brickname, cat, bands='grz'):
         camexp.add(key)
         ffn = survey.find_file('forced', camera=cam, expnum=ccd.expnum)
         print('Forced phot filename:', ffn)
+        if not os.path.exists(ffn):
+            print('WARNING: does not exist:', ffn)
+            continue
         F = fits_table(ffn)
         print('Read', len(F), 'forced-phot entries for CCD')
         ikeep = []

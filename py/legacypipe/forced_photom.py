@@ -353,7 +353,7 @@ def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None, r
         surveys.append((catsurvey_south, False))
 
     columns = ['ra', 'dec', 'brick_primary', 'type', 'release',
-               'brickid', 'brickname', 'objid'
+               'brickid', 'brickname', 'objid',
                'sersic', 'shape_r', 'shape_e1', 'shape_e2',
                'ref_epoch', 'pmra', 'pmdec', 'parallax', 'ref_cat', 'ref_id',]
 
