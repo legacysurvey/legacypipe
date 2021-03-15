@@ -10,12 +10,17 @@ from collections import Counter
 
 from astrometry.util.fits import fits_table, merge_tables
 
-from legacypipe.survey import LegacySurveyData, get_version_header, apertures_arcsec
+from legacypipe.survey import LegacySurveyData, get_version_header, apertures_arcsec, wcs_for_brick
 
 def merge_forced(survey, brickname, cat, bands='grz'):
-    ccdfn = survey.find_file('ccds-table', brick=brickname)
-    CCDs = fits_table(ccdfn)
-    print('Read', len(CCDs), 'CCDs')
+    # Get list of CCDs -- from pipeline run results, or straight from CCDs table?
+    # ccdfn = survey.find_file('ccds-table', brick=brickname)
+    # CCDs = fits_table(ccdfn)
+    # print('Read', len(CCDs), 'CCDs')
+    brick = survey.get_brick_by_name(brickname)
+    brickwcs = wcs_for_brick(brick)
+    CCDs = survey.ccds_touching_wcs(brickwcs)
+    print('Read', len(CCDs), 'CCDs touching brick', brickname)
 
     # objects in the catalog: (release,brickid,objid)
     catobjs = set([(r,b,o) for r,b,o in
@@ -126,10 +131,14 @@ def main():
     columns = ['release', 'brickid', 'objid',]
 
     cat = None
-    catsurvey = survey
     if opt.catalog is not None:
         cat = fits_table(opt.catalog, columns=columns)
         print('Read', len(cat), 'sources from', opt.catalog)
+    elif opt.catalog_dir is not None:
+        catsurvey = LegacySurveyData(survey_dir=opt.catalog_dir)
+        fn = catsurvey.find_file('tractor', brick=opt.brick)
+        cat = fits_table(fn, columns=columns)
+        print('Read', len(cat), 'sources from', fn)
     else:
         from astrometry.util.starutil_numpy import radectolb
         # The "north" and "south" directories often don't have
