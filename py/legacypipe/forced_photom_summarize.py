@@ -15,7 +15,6 @@ def main():
     TT = []
     for fn in fns:
         T = fits_table(fn)
-        T.cut(T.brick_primary)
         T.forced_mean_flux_g = np.zeros(len(T), np.float32)
         T.forced_mean_flux_r = np.zeros(len(T), np.float32)
         T.forced_mean_flux_z = np.zeros(len(T), np.float32)
@@ -37,7 +36,10 @@ def main():
         FF = fits_table(ffn, hdu=2)
         print(fn, 'read', len(T), len(F), len(FF))
         assert(len(F) == len(T))
-    
+        I = np.flatnonzero(T.brick_primary)
+        T.cut(I)
+        F.cut(I)
+
         for i,f in enumerate(F):
             for band in 'grz':
                 i0 = f.get('index_'+band)
