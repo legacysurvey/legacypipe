@@ -606,7 +606,7 @@ class LegacySurveyImage(object):
         tim.skyver = (getattr(sky, 'version', ''), getattr(sky, 'plver', ''))
         tim.psfver = (getattr(psf, 'version', ''), getattr(psf, 'plver', ''))
         tim.datasum = imghdr.get('DATASUM')
-        tim.procdate = primhdr['DATE']
+        tim.procdate = primhdr.get('DATE', '')
         if get_dq:
             tim.dq = dq
         tim.dq_saturation_bits = self.dq_saturation_bits
@@ -922,7 +922,7 @@ class LegacySurveyImage(object):
             debug('Found', len(I), 'matching CCDs in merged sky file')
             if len(I) != 1:
                 continue
-            if not validate_version(
+            if not self.validate_version(
                     fn, 'table', self.expnum, self.plver, self.plprocid,
                     data=T, old_calibs_ok=old_calibs_ok):
                 raise RuntimeError('Sky file %s did not pass consistency validation (PLVER, PLPROCID, EXPNUM)' % fn)
@@ -1003,7 +1003,7 @@ class LegacySurveyImage(object):
             debug('Found', len(I), 'matching CCDs')
             if len(I) != 1:
                 continue
-            if not validate_version(
+            if not self.validate_version(
                     fn, 'table', self.expnum, self.plver, self.plprocid,
                     data=T, old_calibs_ok=old_calibs_ok):
                 raise RuntimeError('Merged PSFEx file %s did not pass consistency validation (PLVER, PLPROCID, EXPNUM)' % fn)

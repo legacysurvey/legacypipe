@@ -25,27 +25,7 @@ class HscImage(LegacySurveyImage):
     #     return dq
 
     def remap_dq(self, dq, header):
-        new_dq = np.zeros(dq.shape, np.int16)
-        # MP_BAD  =                    0
-        # MP_SUSPECT =        7
-        # MP_NO_DATA =        8
-        # MP_CROSSTALK =      9
-        # MP_UNMASKEDNAN =   11
-        new_dq |= (DQ_BITS['badpix'] * ((dq & ((1<<0) | (1<<7) | (1<<8) | (1<<9) | (1<<11))) != 0))
-        # MP_SAT  =                    1
-        new_dq |= (DQ_BITS['satur' ] * ((dq & (1<<1)) != 0))
-        # MP_INTRP=                    2
-        new_dq |= (DQ_BITS['interp'] * ((dq & (1<<2)) != 0))
-        # MP_CR   =                    3
-        new_dq |= (DQ_BITS['cr'] * ((dq & (1<<3)) != 0))
-        #MP_EDGE =                    4
-        new_dq |= (DQ_BITS['edge'] * ((dq & (1<<4)) != 0))
-        '''
-        MP_DETECTED =       5
-        MP_DETECTED_NEGATIVE = 6
-        MP_NOT_DEBLENDED = 10
-        '''
-        return new_dq
+        return remap_hsc_bitmask(dq, header)
 
     def read_invvar(self, dq=None, **kwargs):
         print('Read iv')
@@ -69,3 +49,26 @@ class HscImage(LegacySurveyImage):
 
     def validate_version(self, *args, **kwargs):
         return True
+
+def remap_hsc_bitmask(dq, header):
+    new_dq = np.zeros(dq.shape, np.int16)
+    # MP_BAD  =                    0
+    # MP_SUSPECT =        7
+    # MP_NO_DATA =        8
+    # MP_CROSSTALK =      9
+    # MP_UNMASKEDNAN =   11
+    new_dq |= (DQ_BITS['badpix'] * ((dq & ((1<<0) | (1<<7) | (1<<8) | (1<<9) | (1<<11))) != 0))
+    # MP_SAT  =                    1
+    new_dq |= (DQ_BITS['satur' ] * ((dq & (1<<1)) != 0))
+    # MP_INTRP=                    2
+    new_dq |= (DQ_BITS['interp'] * ((dq & (1<<2)) != 0))
+    # MP_CR   =                    3
+    new_dq |= (DQ_BITS['cr'] * ((dq & (1<<3)) != 0))
+    #MP_EDGE =                    4
+    new_dq |= (DQ_BITS['edge'] * ((dq & (1<<4)) != 0))
+    '''
+    MP_DETECTED =       5
+    MP_DETECTED_NEGATIVE = 6
+    MP_NOT_DEBLENDED = 10
+    '''
+    return new_dq
