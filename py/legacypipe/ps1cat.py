@@ -113,6 +113,70 @@ class ps1cat(HealpixedCatalog):
                   format(len(cat),band,magrange[0],magrange[1]))
         return cat
 
+class sdsscat(HealpixedCatalog):
+    sdssband = dict(u=0,
+                    g=1,
+                    r=2,
+                    i=3,
+                    z=4,
+    )
+    def __init__(self,expnum=None,ccdname=None,ccdwcs=None):
+        """Read SDSS sources for an exposure number + CCD name or CCD WCS
+
+        Args:
+            expnum, ccdname: select catalogue with these
+            ccdwcs: or select catalogue with this
+
+        """
+        self.sdsscatdir = os.getenv('SDSSCAT_DIR')
+        if self.sdsscatdir is None:
+            raise ValueError('You must have the SDSSCAT_DIR environment variable set to point to healpixed SDSS catalogs')
+        fnpattern = os.path.join(self.sdsscatdir, 'sdss-hp%(hp)05d.fits')
+        super(sdsscat, self).__init__(fnpattern)
+
+        if ccdwcs is None:
+            from legacypipe.survey import LegacySurveyData
+            survey = LegacySurveyData()
+            ccd = survey.find_ccds(expnum=expnum,ccdname=ccdname)[0]
+            im = survey.get_image_object(ccd)
+            self.ccdwcs = im.get_wcs()
+        else:
+            self.ccdwcs = ccdwcs
+
+    def get_catalog_in_wcs(self, wcs, **kwargs):
+        cat = super().get_catalog_in_wcs(wcs, **kwargs)
+        cat.psfmag = -2.5 * (np.log10(cat.psfflux) - 9.)
+        return cat
+
+    def get_stars(self,magrange=None,band='r'):
+        """Return the set of SDSS matched stars on a given CCD.  Optionally
+        trim the stars to a desired chosen-band magnitude range.
+        """
+        cat = self.get_catalog_in_wcs(self.ccdwcs)
+        print('Found {} good SDSS stars'.format(len(cat)))
+        if magrange is not None:
+            band = sdsscat.sdssband[band]
+            keep = np.where((self.psfmag[:,band] > magrange[0])*
+                            (self.psfmag[:,band] < magrange[1]))[0]
+            cat = cat[keep]
+            print('Trimming to {} stars with {}=[{},{}]'.
+                  format(len(cat),band,magrange[0],magrange[1]))
+        return cat
+
+def sdss_to_decam(psfmags, band):
+    '''
+    mags: 2-d array (Nstars, Nbands)
+    '''
+    g_index = sdsscat.sdssband['g']
+    i_index = sdsscat.sdssband['i']
+    gmag = psfmags[:,g_index]
+    imag = psfmags[:,i_index]
+    gi = gmag - imag
+    coeffs = dict(
+    ).get(band, [0.,0.,0.,0.])
+    colorterm = coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3
+    return colorterm
+
 def ps1_to_decam(psmags, band):
     '''
     psmags: 2-d array (Nstars, Nbands)

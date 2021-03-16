@@ -27,13 +27,14 @@ from astrometry.libkd.spherematch import match_radec
 from tractor.splinesky import SplineSky
 
 import legacypipe
-from legacypipe.ps1cat import ps1cat
+from legacypipe.ps1cat import ps1cat, sdsscat
 from legacypipe.gaiacat import GaiaCatalog
 from legacypipe.survey import radec_at_mjd, get_git_version
 from legacypipe.image import validate_version
 
 CAMERAS=['decam','mosaic','90prime','megaprime']
 MAGLIM=dict(
+    u=[16, 20],
     g=[16, 20],
     r=[16, 19.5],
     i=[16, 19.5],
@@ -647,7 +648,8 @@ class Measurer(object):
         # Formerly we grabbed the PsfEx FWHM; instead just use the CP value!
         ccds['fwhm'] = ccds['fwhm_cp']
 
-    def run(self, ext=None, save_xy=False, splinesky=False, survey=None):
+    def run(self, ext=None, save_xy=False, splinesky=False, survey=None,
+            sdss_photom=False):
 
         """Computes statistics for 1 CCD
 
@@ -749,23 +751,39 @@ class Measurer(object):
         # So cut to this super set immediately
 
         ps1 = None
-        try:
-            ps1 = ps1cat(ccdwcs=self.wcs).get_stars(magrange=None)
-        except OSError as e:
-            print('No PS1 stars found for this image -- outside the PS1 footprint, or in the Galactic plane?', e)
+        if sdss_photom:
+            try:
+                ps1 = sdsscat(ccdwcs=self.wcs).get_stars(magrange=None)
+            except OSError as e:
+                print('No SDSS stars found for this image -- outside the SDSS footprint?', e)
+        else:
+            try:
+                ps1 = ps1cat(ccdwcs=self.wcs).get_stars(magrange=None)
+            except OSError as e:
+                print('No PS1 stars found for this image -- outside the PS1 footprint, or in the Galactic plane?', e)
 
         if ps1 is not None and len(ps1) == 0:
             ps1 = None
 
-        # PS1 cuts
-        if ps1 is not None and len(ps1):
-            ps1.cut( self.get_ps1_cuts(ps1) )
-            if len(ps1) == 0:
-                ps1 = None
-            else:
-                # Convert to Legacy Survey mags
-                ps1.legacy_survey_mag = self.ps1_to_observed(ps1)
-                print(len(ps1), 'PS1 stars')
+        if sdss_photom:
+            if ps1 is not None and len(ps1):
+                ps1.cut( self.get_sdss_cuts(ps1) )
+                if len(ps1) == 0:
+                    ps1 = None
+                else:
+                    # Convert to Legacy Survey mags
+                    ps1.legacy_survey_mag = self.sdss_to_observed(ps1)
+                    print(len(ps1), 'SDSS stars')
+        else:
+            # PS1 cuts
+            if ps1 is not None and len(ps1):
+                ps1.cut( self.get_ps1_cuts(ps1) )
+                if len(ps1) == 0:
+                    ps1 = None
+                else:
+                    # Convert to Legacy Survey mags
+                    ps1.legacy_survey_mag = self.ps1_to_observed(ps1)
+                    print(len(ps1), 'PS1 stars')
 
         gaia = GaiaCatalog().get_catalog_in_wcs(self.wcs)
         assert(gaia is not None)
@@ -780,9 +798,11 @@ class Measurer(object):
             gaia.cut(I[:10000])
             print('Cut to', len(gaia), 'Gaia stars')
 
-        return self.run_psfphot(ccds, ps1, gaia, zp0, sky_img, splinesky, survey)
+        return self.run_psfphot(ccds, ps1, gaia, zp0, sky_img, splinesky, survey,
+                                sdss_photom=sdss_photom)
 
-    def run_psfphot(self, ccds, ps1, gaia, zp0, sky_img, splinesky, survey):
+    def run_psfphot(self, ccds, ps1, gaia, zp0, sky_img, splinesky, survey,
+                    sdss_photom=False):
         t0= Time()
 
         # Now put Gaia stars into the image and re-fit their centroids
@@ -837,25 +857,62 @@ class Measurer(object):
             # Initial flux estimate, from nominal zeropoint
             ps1.flux0 = (10.**((zp0 - ps1.legacy_survey_mag) / 2.5) * self.exptime
                          ).astype(np.float32)
-            # we don't have/use proper motions for PS1 stars
-            ps1.rename('ra_ok',  'ra_now')
-            ps1.rename('dec_ok', 'dec_now')
 
-            ps1.ra_ps1  = ps1.ra_now.copy()
-            ps1.dec_ps1 = ps1.dec_now.copy()
-            ps1.ps1_objid  = ps1.obj_id
-            for band in 'grizY':
-                i = ps1cat.ps1band.get(band, None)
-                if i is None:
-                    print('No band', band, 'in PS1 catalog')
-                    continue
-                ps1.set('ps1_'+band.lower(), ps1.median[:,i].astype(np.float32))
+            if sdss_photom:
+                ps1.ra_sdss  = ps1.ra.copy()
+                ps1.dec_sdss = ps1.dec.copy()
+                ps1.ra_phot = ps1.ra_sdss
+                ps1.dec_phot = ps1.dec_sdss
+                bands = 'ugriz'
+                for band in bands:
+                    i = sdsscat.sdssband.get(band, None)
+                    if i is None:
+                        print('No band', band, 'in SDSS catalog')
+                        continue
+                    ps1.set('sdss_'+band.lower(), ps1.psfmag[:,i].astype(np.float32))
+                phot_cols = [
+                    #('ps1_objid', np.int64),
+                    ('ra_sdss', np.double),
+                    ('dec_sdss', np.double),
+                    ('sdss_u', np.float32),
+                    ('sdss_g', np.float32),
+                    ('sdss_r', np.float32),
+                    ('sdss_i', np.float32),
+                    ('sdss_z', np.float32),
+                ]
+            else:
+                # we don't have/use proper motions for PS1 stars
+                ps1.rename('ra_ok',  'ra_now')
+                ps1.rename('dec_ok', 'dec_now')
+                ps1.ra_ps1  = ps1.ra_now.copy()
+                ps1.dec_ps1 = ps1.dec_now.copy()
+                ps1.ra_phot = ps1.ra_ps1
+                ps1.dec_phot = ps1.dec_ps1
+                ps1.ps1_objid  = ps1.obj_id
+                bands = 'grizY'
+                for band in bands:
+                    i = ps1cat.ps1band.get(band, None)
+                    if i is None:
+                        print('No band', band, 'in PS1/SDSS catalog')
+                        continue
+                    ps1.set('ps1_'+band.lower(), ps1.median[:,i].astype(np.float32))
+                phot_cols = [
+                    ('ps1_objid', np.int64),
+                    ('ra_ps1', np.double),
+                    ('dec_ps1', np.double),
+                    ('ps1_g', np.float32),
+                    ('ps1_r', np.float32),
+                    ('ps1_i', np.float32),
+                    ('ps1_z', np.float32),
+                    ('ps1_y', np.float32),
+                ]
+
             # we set 'photom' and omit 'astrom'; it will get filled in with zeros.
             ps1.photom = np.ones (len(ps1), bool)
 
             # Match PS1 to Gaia stars within 1".
             I,J,_ = match_radec(gaia.ra_gaia, gaia.dec_gaia,
-                                ps1.ra_ps1, ps1.dec_ps1, 1./3600.,
+                                ps1.ra_phot, ps1.dec_phot, 1./3600.,
                                 nearest=True)
             print(len(I), 'of', len(gaia), 'Gaia and', len(ps1), 'PS1 stars matched')
 
@@ -885,32 +942,25 @@ class Measurer(object):
         else:
             refs = merge_tables(refs, columns='fillzero')
 
-        cols = [('ra_gaia', np.double),
-                ('dec_gaia', np.double),
-                ('gaia_sourceid', np.int64),
-                ('phot_g_mean_mag', np.float32),
-                ('phot_g_mean_mag_error', np.float32),
-                ('phot_bp_mean_mag', np.float32),
-                ('phot_bp_mean_mag_error', np.float32),
-                ('phot_rp_mean_mag', np.float32),
-                ('phot_rp_mean_mag_error', np.float32),
-
-                ('ra_ps1', np.double),
-                ('dec_ps1', np.double),
-                ('ps1_objid', np.int64),
-                ('ps1_g', np.float32),
-                ('ps1_r', np.float32),
-                ('ps1_i', np.float32),
-                ('ps1_z', np.float32),
-                ('ps1_y', np.float32),
-
-                ('ra_now', np.double),
-                ('dec_now', np.double),
-                ('flux0', np.float32),
-                ('legacy_survey_mag', np.float32),
-                ('astrom', bool),
-                ('photom', bool),
-                ]
+        cols = ([('ra_gaia', np.double),
+                 ('dec_gaia', np.double),
+                 ('gaia_sourceid', np.int64),
+                 ('phot_g_mean_mag', np.float32),
+                 ('phot_g_mean_mag_error', np.float32),
+                 ('phot_bp_mean_mag', np.float32),
+                 ('phot_bp_mean_mag_error', np.float32),
+                 ('phot_rp_mean_mag', np.float32),
+                 ('phot_rp_mean_mag_error', np.float32),
+                 ('ra_phot', np.double),
+                 ('dec_phot', np.double),]
+                + phot_cols + [
+                 ('ra_now', np.double),
+                 ('dec_now', np.double),
+                 ('flux0', np.float32),
+                 ('legacy_survey_mag', np.float32),
+                 ('astrom', bool),
+                 ('photom', bool),
+                ])
 
         refcols = refs.get_columns()
         for c,dt in cols:
@@ -1079,23 +1129,24 @@ class Measurer(object):
         phot.ra  = phot.ra_gaia
         phot.dec = phot.dec_gaia
         I, = np.nonzero(phot.ra == 0)
-        phot.ra [I] = phot.ra_ps1 [I]
-        phot.dec[I] = phot.dec_ps1[I]
+        phot.ra [I] = phot.ra_phot [I]
+        phot.dec[I] = phot.dec_phot[I]
 
         # Create subset table for Eddie's ubercal
-        cols = ['ra', 'dec', 'flux', 'dflux', 'chi2', 'fracmasked', 'instpsfmag',
-                'dpsfmag',
-                'bitmask', 'x_fit', 'y_fit', 'gaia_sourceid', 'ra_gaia', 'dec_gaia',
-                'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag',
-                'phot_g_mean_mag_error', 'phot_bp_mean_mag_error',
-                'phot_rp_mean_mag_error',
-                'ps1_objid', 'ra_ps1', 'dec_ps1',
-                'ps1_g', 'ps1_r', 'ps1_i', 'ps1_z', 'ps1_y', 'legacy_survey_mag',
-                'expnum', 'ccdname', 'exptime', 'gain', 'airmass', 'filter',
-                'apflux_6', 'apflux_7', 'apflux_8',
-                'apflux_6_err', 'apflux_7_err', 'apflux_8_err',
-                'ra_now', 'dec_now', 'ra_fit', 'dec_fit', 'x_ref', 'y_ref'
-            ]
+        cols = ([
+            'ra', 'dec', 'flux', 'dflux', 'chi2', 'fracmasked', 'instpsfmag',
+            'dpsfmag',
+            'bitmask', 'x_fit', 'y_fit', 'gaia_sourceid', 'ra_gaia', 'dec_gaia',
+            'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag',
+            'phot_g_mean_mag_error', 'phot_bp_mean_mag_error',
+            'phot_rp_mean_mag_error',
+        ] + [c for c,t in phot_cols] + [
+            'legacy_survey_mag',
+            'expnum', 'ccdname', 'exptime', 'gain', 'airmass', 'filter',
+            'apflux_6', 'apflux_7', 'apflux_8',
+            'apflux_6_err', 'apflux_7_err', 'apflux_8_err',
+            'ra_now', 'dec_now', 'ra_fit', 'dec_fit', 'x_ref', 'y_ref'
+        ])
         for c in phot.get_columns():
             if not c in cols:
                 phot.delete_column(c)
@@ -1125,6 +1176,22 @@ class Measurer(object):
         colorterm = self.colorterm_ps1_to_observed(ps1.median, self.band)
         ps1band = ps1cat.ps1band[self.band]
         return ps1.median[:, ps1band] + np.clip(colorterm, -1., +1.)
+
+    def get_sdss_cuts(self, sdss):
+        """Returns bool of SDSS sources to keep
+        sdss: catalogue with SDSS data
+        """
+        return np.ones(len(sdss), bool)
+
+    def sdss_to_observed(self, sdss):
+        colorterm = self.colorterm_sdss_to_observed(sdss.psfmag, self.band)
+        band = sdsscat.sdssband[self.band]
+        return sdss.psfmag[:, band] + np.clip(colorterm, -1., +1.)
+
+    def colorterm_sdss_to_observed(self, sdssstars, band):
+        """sdssstars: sdss.psfmag 2D array of mag for each band"""
+        from legacypipe.ps1cat import sdss_to_decam
+        return sdss_to_decam(sdssstars, band)
 
     def get_splinesky_merged_filename(self):
         basefn = os.path.basename(self.fn_base)
@@ -1577,9 +1644,12 @@ class DecamMeasurer(Measurer):
 
         # /global/homes/a/arjundey/idl/pro/observing/decstat.pro
         self.zp0 =  dict(g = 26.610,r = 26.818,z = 26.484,
+                         # u from g :)
+                         u = 26.610,
                          # i,Y from DESY1_Stripe82 95th percentiles
                          i=26.758, Y=25.321) # e/sec
         self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06,
+                          u = 0.17,
                           #i, Y totally made up
                           i=0.08, Y=0.06)
 
@@ -2085,7 +2155,8 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     if run_calibs_only:
         return
 
-    rtns = mp.map(run_one_ext, [(measure, ext, survey, splinesky, measureargs['debug'])
+    rtns = mp.map(run_one_ext, [(measure, ext, survey, splinesky, measureargs['debug'],
+                                 measureargs['sdss_photom'])
                                 for ext in extlist])
 
     for ext,(ccds,photom) in zip(extlist,rtns):
@@ -2123,8 +2194,9 @@ def run_one_calib(X):
                               survey_zeropoints=survey_zeropoints)
 
 def run_one_ext(X):
-    measure, ext, survey, splinesky, debug = X
-    rtns = measure.run(ext, splinesky=splinesky, survey=survey, save_xy=debug)
+    measure, ext, survey, splinesky, debug, sdss_photom = X
+    rtns = measure.run(ext, splinesky=splinesky, survey=survey, save_xy=debug,
+                       sdss_photom=sdss_photom)
     return rtns
 
 class outputFns(object):
@@ -2275,6 +2347,8 @@ def get_parser():
     parser.add_argument('--image_list',action='store',default=None,help='text file listing multiples images in same was as --image',required=False)
     parser.add_argument('--image_dir', type=str, default='images', help='Directory containing the imaging data (analogous to legacypipe.LegacySurveyData.image_dir).')
     parser.add_argument('--outdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
+    parser.add_argument('--sdss-photom', default=False, action='store_true',
+                        help='Use SDSS rather than PS-1 for photometric cal.')
     parser.add_argument('--debug', action='store_true', default=False, help='Write additional files and plots for debugging')
     parser.add_argument('--choose_ccd', action='store', default=None, help='forced to use only the specified ccd')
     parser.add_argument('--logdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
