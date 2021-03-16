@@ -33,7 +33,12 @@ from legacypipe.survey import radec_at_mjd, get_git_version
 from legacypipe.image import validate_version
 
 CAMERAS=['decam','mosaic','90prime','megaprime']
-MAGLIM=dict(g=[16, 20], r=[16, 19.5], z=[16.5, 19])
+MAGLIM=dict(
+    g=[16, 20],
+    r=[16, 19.5],
+    i=[16, 19.5],
+    z=[16.5, 19],
+    Y=[16.5, 19])
 
 def ptime(text,t0):
     tnow=Time()
@@ -1406,12 +1411,13 @@ class Measurer(object):
     def make_plots(self,stars,dmag,zpt,transp):
         '''stars -- stars table'''
         import pylab as plt
-        suffix='_qa_%s.png' % stars['expid'][0][-4:]
+        stars.radiff  = 3600. * (stars.ra_fit  - stars.ra) * np.cos(np.deg2rad(stars.dec))
+        stars.decdiff = 3600. * (stars.dec_fit - stars.dec)
         _,ax=plt.subplots(1,2,figsize=(10,4))
         plt.subplots_adjust(wspace=0.2,bottom=0.2,right=0.8)
         for key in ['astrom_gaia','photom']:
             if key == 'astrom_gaia':
-                ax[0].scatter(stars['radiff'],stars['decdiff'])
+                ax[0].scatter(stars.radiff, stars.decdiff)
                 xlab=ax[0].set_xlabel(r'$\Delta Ra$ (Gaia - CCD)')
                 ylab=ax[0].set_ylabel(r'$\Delta Dec$ (Gaia - CCD)')
             elif key == 'astrom_ps1':
@@ -1424,10 +1430,10 @@ class Measurer(object):
         ax[1].text(1.02, 1.,r'$\Delta$ Ra,Dec',\
                 va='center',ha='left',transform=ax[1].transAxes,fontsize=12)
         ax[1].text(1.02, 0.9,r'  Median: %.4f,%.4f' % \
-                  (np.median(stars['radiff']),np.median(stars['decdiff'])),\
+                  (np.median(stars.radiff),np.median(stars.decdiff)),\
                 va='center',ha='left',transform=ax[1].transAxes,fontsize=10)
         ax[1].text(1.02, 0.80,'  RMS: %.4f,%.4f' % \
-                  (getrms(stars['radiff']),getrms(stars['decdiff'])),\
+                  (getrms(stars.radiff),getrms(stars.decdiff)),\
                 va='center',ha='left',transform=ax[1].transAxes,fontsize=10)
         ax[1].text(1.02, 0.7,'PS1-CCD Mag',\
                 va='center',ha='left',transform=ax[1].transAxes,fontsize=12)
@@ -1441,7 +1447,7 @@ class Measurer(object):
         ax[1].text(1.02, 0.3,'  Transp=%.4f' % transp,\
                 va='center',ha='left',transform=ax[1].transAxes,fontsize=10)
         # Save
-        fn= self.zptsfile.replace('.fits',suffix)
+        fn = 'qa_%i_%s.png' % (stars.expnum[0], str(stars.ccdname[0]).strip())
         plt.savefig(fn,bbox_extra_artists=[xlab,ylab])
         plt.close()
         print('Wrote %s' % fn)
