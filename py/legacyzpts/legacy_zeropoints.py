@@ -32,7 +32,7 @@ from legacypipe.gaiacat import GaiaCatalog
 from legacypipe.survey import radec_at_mjd, get_git_version
 from legacypipe.image import validate_version
 
-CAMERAS=['decam','mosaic','90prime','megaprime']
+CAMERAS=['decam','mosaic','90prime','megaprime', 'hsc']
 MAGLIM=dict(g=[16, 20], r=[16, 19.5], z=[16.5, 19],
             N501=[16,20], N673=[16,19.5])
 
@@ -154,7 +154,8 @@ def get_pixscale(camera):
   return {'decam':0.262,
           'mosaic':0.262,
           '90prime':0.455,
-          'megaprime':0.185}[camera]
+          'megaprime':0.185,
+          'hsc':0.168,}[camera]
 
 def cols_for_survey_table(which='all'):
     """Return list of -survey.fits table colums
@@ -380,16 +381,24 @@ class Measurer(object):
     def read_header(self, ext):
         return fitsio.read_header(self.fn, ext=ext)
 
+    def set_ccdname(self, ext, hdr):
+        self.ccdname = ext.strip()
+        # consistency check
+        assert(self.ccdname.upper() == self.hdr['EXTNAME'].strip().upper())
+
     def set_hdu(self,ext):
-        self.ext = ext.strip()
-        self.ccdname= ext.strip()
-        self.expid = '{:08d}-{}'.format(self.expnum, self.ccdname)
+        if isinstance(ext, str):
+            self.ext = ext.strip()
+        else:
+            self.ext = ext
+
         hdulist= fitsio.FITS(self.fn)
         self.image_hdu= hdulist[ext].get_extnum() #NOT ccdnum in header!
         # use header
         self.hdr = self.read_header(ext)
-        # Sanity check
-        assert(self.ccdname.upper() == self.hdr['EXTNAME'].strip().upper())
+
+        self.set_ccdname(ext, self.hdr)
+        self.expid = '{:08d}-{}'.format(self.expnum, self.ccdname)
         self.ccdnum = np.int(self.hdr.get('CCDNUM', 0))
         self.gain= self.get_gain(self.hdr)
         # WCS
@@ -1556,6 +1565,98 @@ class Measurer(object):
 class FakeCCD(object):
     pass
 
+class HscMeasurer(Measurer):
+    def __init__(self, *args, **kwargs):
+        self.camera = 'hsc'
+        super(HscMeasurer, self).__init__(*args, **kwargs)
+        self.pixscale = get_pixscale(self.camera)
+        # FIXME -- these are just from DECam
+        self.zp0 = dict(
+            g = 26.610,
+            r = 26.818,
+            i = 26.758,
+            z = 26.484,
+        )
+        self.k_ext = dict(g = 0.17,
+                          r = 0.10,
+                          i = 0.08,
+                          z = 0.06,
+                          )
+    def get_band(self):
+        band = self.primhdr['FILTER']
+        band = band.split()[0]
+        return band
+    def get_ut(self, primhdr):
+        return primhdr['DATE-OBS'].split('T')[1]
+    def get_expnum(self, primhdr):
+        return primhdr['EXPID']
+    def get_extension_list(self, fn, debug=False):
+        return [1,]
+        #return ['IMAGE']
+        #hdu = fitsio.FITS(fn)
+        #extlist = [hdu[i].get_extname() for i in range(1,len(hdu))]
+        #return extlist
+    def set_ccdname(self, ext, hdr):
+        self.ccdname = self.primhdr['DETNAME'].strip()
+    def get_gain(self,hdr):
+        return 3.8
+    def get_wcs(self):
+        from astrometry.util.util import Sip
+        return Sip(self.hdr)
+    def get_fwhm(self, hdr, hdu):
+        return self.primhdr['SEEING']
+    def good_wcs(self, primhdr):
+        return True
+    def get_psfex_unmerged_filename(self):
+        basefn = os.path.basename(self.fn_base)
+        basedir = os.path.dirname(self.fn_base)
+        base = basefn.split('.')[0]
+        fn = base + '-psfex.fits'
+        fn = os.path.join(self.calibdir, 'psfex-single', basedir, base, fn)
+        return fn
+    def get_splinesky_unmerged_filename(self):
+        basefn = os.path.basename(self.fn_base)
+        basedir = os.path.dirname(self.fn_base)
+        base = basefn.split('.')[0]
+        fn = base + '-splinesky.fits'
+        fn = os.path.join(self.calibdir, 'sky-single', basedir, base, fn)
+        return fn
+    def get_weight_fn(self, imgfn):
+        return imgfn
+    def get_bitmask_fn(self, imgfn):
+        return imgfn
+    def read_bitmask(self):
+        # FIXME
+        ext = 2
+        dqfn = self.get_bitmask_fn(self.fn)
+        if self.slc is not None:
+            mask = fitsio.FITS(dqfn)[ext][self.slc]
+        else:
+            mask = fitsio.read(dqfn, ext=ext)
+        mask = self.remap_bitmask(mask)
+        return mask
+    def read_weight(self, clip=True, clipThresh=0.1, scale=True, bitmask=None):
+        # FIXME
+        ext = 3
+        fn = self.get_weight_fn(self.fn)
+        if self.slc is not None:
+            wt = fitsio.FITS(fn)[ext][self.slc]
+        else:
+            wt = fitsio.read(fn, ext=ext)
+        # HSC -- it's a VARIANCE map, not WEIGHT.
+        iv = 1./wt
+        iv[wt == 0] = 0.
+        wt = iv
+        if bitmask is not None:
+            # Set all masked pixels to have weight zero.
+            # bitmask value 1 = bad
+            wt[bitmask > 0] = 0.
+        if scale:
+            wt = self.scale_weight(wt)
+        wt[np.where(wt<0.0)] = 0.0
+        assert(np.all(np.isfinite(wt)))
+        return wt
+
 class DecamMeasurer(Measurer):
     '''DECam CP units: ADU
 
@@ -1947,6 +2048,8 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
 
     camera = measureargs['camera']
     camera_check = primhdr.get('INSTRUME','').strip().lower()
+    # transform...
+    camera_check = {'hyper suprime-cam':'hsc'}.get(camera_check, camera_check)
     # mosaic listed as mosaic3 in header, other combos maybe
     assert(camera in camera_check or camera_check in camera)
 
@@ -1955,7 +2058,9 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
         measureclass = { 'decam': DecamMeasurer,
                          'mosaic': Mosaic3Measurer,
                          '90prime': NinetyPrimeMeasurer,
-                         'megaprime': MegaPrimeMeasurer }[camera]
+                         'megaprime': MegaPrimeMeasurer,
+                         'hsc': HscMeasurer,
+        }[camera]
     measure = measureclass(img_fn, image_dir=image_dir, **measureargs)
 
     if just_measure:
@@ -2271,7 +2376,7 @@ def get_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,\
                                      description='Generate a legacypipe-compatible (survey) CCDs file \
                                                   from a set of reduced imaging.')
-    parser.add_argument('--camera',choices=['decam','mosaic','90prime','megaprime'],action='store',required=True)
+    parser.add_argument('--camera',choices=CAMERAS, action='store',required=True)
     parser.add_argument('--image',action='store',default=None,help='relative path to image starting from decam,bok,mosaicz dir',required=False)
     parser.add_argument('--image_list',action='store',default=None,help='text file listing multiples images in same was as --image',required=False)
     parser.add_argument('--image_dir', type=str, default='images', help='Directory containing the imaging data (analogous to legacypipe.LegacySurveyData.image_dir).')
@@ -2347,7 +2452,7 @@ def main(image_list=None,args=None):
     survey.calibdir = measureargs.get('calibdir')
     measureargs.update(survey=survey)
 
-    if camera in ['mosaic', 'decam', 'megaprime', '90prime']:
+    if camera in ['mosaic', 'decam', 'megaprime', '90prime', 'hsc']:
         if camera in ['mosaic', 'decam', '90prime']:
             from legacyzpts.psfzpt_cuts import read_bad_expid
 
@@ -2362,12 +2467,13 @@ def main(image_list=None,args=None):
         if cal is not None:
             survey.calibdir = cal
 
-        try:
+        if camera == 'megaprime':
             from legacypipe.cfht import MegaPrimeImage
             survey.image_typemap['megaprime'] = MegaPrimeImage
-        except:
-            print('MegaPrimeImage class not found')
-            raise IOError
+
+        if camera == 'hsc':
+            from legacypipe.hsc import HscImage
+            survey.image_typemap['hsc'] = HscImage
 
     outdir = measureargs.pop('outdir')
     for ii, imgfn in enumerate(image_list):
