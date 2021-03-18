@@ -36,6 +36,12 @@ CAMERAS=['decam','mosaic','90prime','megaprime', 'hsc']
 MAGLIM=dict(g=[16, 20], r=[16, 19.5], z=[16.5, 19],
             N501=[16,20], N673=[16,19.5])
 
+import logging
+logger = logging.getLogger('legacyzpts.legacy_zeropoints')
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
+
 def ptime(text,t0):
     tnow=Time()
     print('TIMING:%s ' % text,tnow-t0)
@@ -2430,6 +2436,7 @@ def get_parser():
                         help='Multiprocessing threads (parallel by HDU)')
     parser.add_argument('--quiet', default=False, action='store_true', help='quiet down')
     parser.add_argument('--overhead', type=str, default=None, help='Print python startup time since the given date.')
+    parser.add_argument('--verbose', '-v', action='store_true', default=False, help='More logging')
     return parser
 
 
@@ -2458,10 +2465,10 @@ def main(image_list=None,args=None):
     mp = multiproc(nthreads=(threads or 1))
 
     import logging
-    #if quiet:
-    lvl = logging.INFO
-    #else:
-    #    lvl = logging.DEBUG
+    if args.verbose:
+        lvl = logging.DEBUG
+    else:
+        lvl = logging.INFO
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
 
     if measureargs['calibdir'] is None:
