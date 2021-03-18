@@ -209,3 +209,24 @@ def ps1_to_mosaic(psmags, band):
     colorterm = -(coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
     print('Using Mosaic3 ColorTerm')
     return colorterm
+
+def ps1_to_hsc(psmags, band):
+    '''
+    psmags: 2-d array (Nstars, Nbands)
+    band: [grz]
+    '''
+    # https://desi.lbl.gov/trac/wiki/DecamLegacy/Reductions/Photometric
+    g_index = ps1cat.ps1band['g']
+    i_index = ps1cat.ps1band['i']
+    gmag = psmags[:,g_index]
+    imag = psmags[:,i_index]
+    gi = gmag - imag
+    coeffs = dict(
+        g = [ 0., 0., 0., 0.],
+        r = [ 0., 0., 0., 0.],
+        i = [ 0., 0., 0., 0.],
+        z = [ 0., 0., 0., 0.],
+        Y = [ 0., 0., 0., 0.],
+    )[band]
+    colorterm = coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3
+    return colorterm

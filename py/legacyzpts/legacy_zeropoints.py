@@ -1672,6 +1672,11 @@ class HscMeasurer(Measurer):
         wt[np.where(wt<0.0)] = 0.0
         assert(np.all(np.isfinite(wt)))
         return wt
+    def colorterm_ps1_to_observed(self, ps1stars, band):
+        """ps1stars: ps1.median 2D array of median mag for each band"""
+        from legacypipe.ps1cat import ps1_to_hsc
+        return ps1_to_hsc(ps1stars, band)
+
 
 class DecamMeasurer(Measurer):
     '''DECam CP units: ADU
