@@ -283,9 +283,10 @@ class Measurer(object):
         self.date_obs = self.primhdr['DATE-OBS']
         self.mjd_obs = self.primhdr['MJD-OBS']
         self.ut = self.get_ut(self.primhdr)
+        self.airmass = self.get_airmass(self.primhdr)
         # Add more attributes.
         namechange = dict(date='procdate')
-        for key in ['AIRMASS','HA', 'DATE', 'PLVER', 'PLPROCID']:
+        for key in ['HA', 'DATE', 'PLVER', 'PLPROCID']:
             val = self.primhdr.get(key)
             if type(val) == str:
                 val = val.strip()
@@ -296,7 +297,7 @@ class Measurer(object):
 
         self.ra_bore,self.dec_bore = self.get_radec_bore(self.primhdr)
 
-        if self.airmass is None or self.camera == 'mosaic':
+        if self.airmass is None:
             # Recompute it
             site = self.get_site()
             if site is None:
@@ -371,6 +372,9 @@ class Measurer(object):
 
     def get_ut(self, primhdr):
         return primhdr['TIME-OBS']
+
+    def get_airmass(self, primhdr):
+        return primhdr['AIRMASS']
 
     def zeropoint(self, band):
         return self.zp0[band]
@@ -599,6 +603,8 @@ class Measurer(object):
                 slc=[slice(1500,2500),slice(500,1500)]
             elif self.camera in ['mosaic','90prime']:
                 slc=[slice(500,1500),slice(500,1500)]
+            elif self.camera in ['hsc']:
+                slc=[slice(500,3500),slice(500,1500)]
             else:
                 raise RuntimeError('unknown camera %s' % self.camera)
             clip_vals,_,_ = sigmaclip(img[tuple(slc)],low=nsigma,high=nsigma)
@@ -715,6 +721,7 @@ class Measurer(object):
 
         # Quick check for PsfEx file
         psf = self.get_psfex_model()
+        print('PSF is', psf)
         if psf.psfex.sampling == 0.:
             print('PsfEx model has SAMPLING=0')
             nacc = psf.header.get('ACCEPTED')
@@ -1158,7 +1165,7 @@ class Measurer(object):
             if validate_version(fn, 'table', self.expnum, self.plver,
                                        self.plprocid, data=T, quiet=self.quiet):
                 I, = np.nonzero((T.expnum == self.expnum) *
-                                np.array([c.strip() == self.ext for c in T.ccdname]))
+                                np.array([c.strip() == self.ccdname for c in T.ccdname]))
                 if len(I) == 1:
                     Ti = T[I[0]]
                     # Remove any padding
@@ -1377,14 +1384,14 @@ class Measurer(object):
 
         # Look for merged PsfEx file
         fn = self.get_psfex_merged_filename()
-        #print('Looking for PsfEx file', fn)
+        print('Looking for PsfEx file', fn)
         if os.path.exists(fn):
-            #print('Reading psfex-merged {}'.format(fn))
+            print('Reading psfex-merged {}'.format(fn))
             T = fits_table(fn)
             if validate_version(fn, 'table', self.expnum, self.plver,
                                        self.plprocid, data=T, quiet=self.quiet):
                 I, = np.nonzero((T.expnum == self.expnum) *
-                                np.array([c.strip() == self.ext for c in T.ccdname]))
+                                np.array([c.strip() == self.ccdname for c in T.ccdname]))
                 if len(I) == 1:
                     Ti = T[I[0]]
                     # Remove any padding
@@ -1397,6 +1404,10 @@ class Measurer(object):
                     psf.fwhm = Ti.psf_fwhm
                     psf.header = {}
                     return psf
+                else:
+                    debug('Failed to find expnum=', self.expnum, 'and ccdname=', self.ccdname, 'in PSFEx file.')
+            else:
+                debug('Validation failed for PSFEx file')
 
         # Look for single-CCD PsfEx file
         fn = self.get_psfex_unmerged_filename()
@@ -1570,6 +1581,11 @@ class HscMeasurer(Measurer):
         self.camera = 'hsc'
         super(HscMeasurer, self).__init__(*args, **kwargs)
         self.pixscale = get_pixscale(self.camera)
+
+        self.image_hdu = 1
+        self.dq_hdu = 2
+        self.wt_hdu = 3
+
         # FIXME -- these are just from DECam
         self.zp0 = dict(
             g = 26.610,
@@ -1590,8 +1606,10 @@ class HscMeasurer(Measurer):
         return primhdr['DATE-OBS'].split('T')[1]
     def get_expnum(self, primhdr):
         return primhdr['EXPID']
+    def get_airmass(self, primhdr):
+        return primhdr['BORE-AIRMASS']
     def get_extension_list(self, fn, debug=False):
-        return [1,]
+        return [self.image_hdu,]
         #return ['IMAGE']
         #hdu = fitsio.FITS(fn)
         #extlist = [hdu[i].get_extname() for i in range(1,len(hdu))]
@@ -1626,8 +1644,7 @@ class HscMeasurer(Measurer):
     def get_bitmask_fn(self, imgfn):
         return imgfn
     def read_bitmask(self):
-        # FIXME
-        ext = 2
+        ext = self.dq_hdu
         dqfn = self.get_bitmask_fn(self.fn)
         if self.slc is not None:
             mask = fitsio.FITS(dqfn)[ext][self.slc]
@@ -1636,8 +1653,7 @@ class HscMeasurer(Measurer):
         mask = self.remap_bitmask(mask)
         return mask
     def read_weight(self, clip=True, clipThresh=0.1, scale=True, bitmask=None):
-        # FIXME
-        ext = 3
+        ext = self.wt_hdu
         fn = self.get_weight_fn(self.fn)
         if self.slc is not None:
             wt = fitsio.FITS(fn)[ext][self.slc]
@@ -1873,6 +1889,10 @@ class Mosaic3Measurer(Measurer):
         self.k_ext = dict(z = 0.06,
                           D51 = 0.211, # from obsbot
         )
+
+    def get_airmass(self, primhdr):
+        # always recompute (no I do not remember why)
+        return None
 
     def apply_amp_correction(self, img, invvar):
         self.apply_amp_correction_northern(img, invvar)

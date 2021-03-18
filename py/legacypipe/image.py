@@ -242,6 +242,9 @@ class LegacySurveyImage(object):
         # for debugging purposes
         self.print_imgpath = '/'.join(self.imgfn.split('/')[-5:])
 
+    def validate_version(self, *args, **kwargs):
+        return validate_version(*args, **kwargs)
+
     def compute_filenames(self):
         # Compute data quality and weight-map filenames
         self.dqfn = self.imgfn.replace('_ooi_', '_ood_').replace('_oki_','_ood_')
@@ -360,9 +363,9 @@ class LegacySurveyImage(object):
         primhdr = self.read_image_primary_header()
 
         for fn,kw in [(self.imgfn, dict(data=primhdr)), (self.wtfn, {}), (self.dqfn, {})]:
-            if not validate_version(fn, 'primaryheader',
-                                           self.expnum, self.plver, self.plprocid,
-                                           cpheader=True, old_calibs_ok=old_calibs_ok, **kw):
+            if not self.validate_version(fn, 'primaryheader',
+                                         self.expnum, self.plver, self.plprocid,
+                                         cpheader=True, old_calibs_ok=old_calibs_ok, **kw):
                 raise RuntimeError('Version validation failed for filename %s (PLVER/PLPROCID)' % fn)
         band = self.band
         wcs = self.get_wcs()
@@ -1187,9 +1190,9 @@ class LegacySurveyImage(object):
             img -= template
 
         plver = primhdr.get('PLVER', 'V0.0').strip()
-        plprocid = str(primhdr['PLPROCID']).strip()
+        plprocid = str(primhdr.get('PLPROCID', '0')).strip()
         datasum = imghdr.get('DATASUM', '0')
-        procdate = primhdr['DATE']
+        procdate = primhdr.get('DATE', '0')
         if git_version is None:
             from legacypipe.survey import get_git_version
             git_version = get_git_version()
