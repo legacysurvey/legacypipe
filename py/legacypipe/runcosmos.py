@@ -32,8 +32,6 @@ class DecamImagePlusNoise(DecamImage):
         sig1 = 1. / np.median(ie[ie > 0])
         print('New sig1 is', sig1)
         tim.sig1 = sig1
-        #tim.zr = [-3. * sig1, 10. * sig1]
-        #tim.ima.update(vmin=tim.zr[0], vmax=tim.zr[1])
         return tim
 
 class CosmosSurvey(LegacySurveyData):

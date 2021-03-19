@@ -59,7 +59,7 @@ def _detmap(X):
 
     return Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
 
-def detection_maps(tims, targetwcs, bands, mp, apodize=None):
+def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
     # Render the detection maps
     H,W = targetwcs.shape
     H,W = np.int(H), np.int(W)
@@ -67,7 +67,11 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None):
 
     detmaps = [np.zeros((H,W), np.float32) for b in bands]
     detivs  = [np.zeros((H,W), np.float32) for b in bands]
-    satmaps = [np.zeros((H,W), bool)       for b in bands]
+    if nsatur is None:
+        satmaps = [np.zeros((H,W), bool)       for b in bands]
+    else:
+        satmaps = [np.zeros((H,W), np.int16)       for b in bands]
+
     for tim, (Yo,Xo,incmap,inciv,sat) in zip(
         tims, mp.map(_detmap, [(tim, targetwcs, apodize) for tim in tims])):
         if Yo is None:
@@ -76,9 +80,17 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None):
         detmaps[ib][Yo,Xo] += incmap * inciv
         detivs [ib][Yo,Xo] += inciv
         if sat is not None:
-            satmaps[ib][Yo,Xo] |= sat
-    for detmap,detiv in zip(detmaps, detivs):
+            if nsatur is None:
+                satmaps[ib][Yo,Xo] |= sat
+            else:
+                satmaps[ib][Yo,Xo] += (1*sat)
+    for i,(detmap,detiv,satmap) in enumerate(zip(detmaps, detivs, satmaps)):
         detmap /= np.maximum(1e-16, detiv)
+        if nsatur is not None:
+            print('Saturmap for band', bands[i], ': range', satmap.min(), satmap.max(),
+                  'mean', np.mean(satmap), 'nsatur', nsatur)
+            satmaps[i] = (satmap >= nsatur)
+            print('Satmap:', np.sum(satmaps[i]), 'pixels set')
     return detmaps, detivs, satmaps
 
 def sed_matched_filters(bands):
@@ -119,6 +131,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
                             saddle_min=2.,
                             saturated_pix=None,
                             exclusion_radius=4.,
+                            blob_dilate=None,
                             veto_map=None,
                             mp=None,
                             plots=False, ps=None, rgbimg=None):
@@ -196,7 +209,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
         sedhot,px,py,peakval,apval = sed_matched_detection(
             sedname, sed, detmaps, detivs, bands, xx, yy, rr,
             nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
-            saturated_pix=saturated_pix, veto_map=veto_map,
+            blob_dilate=blob_dilate, saturated_pix=saturated_pix, veto_map=veto_map,
             ps=pps, rgbimg=rgbimg)
         if sedhot is None:
             continue
@@ -262,6 +275,7 @@ def plot_boundary_map(X, rgb=(0,255,0), extent=None, iterations=1):
 
 def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                           xomit, yomit, romit,
+                          blob_dilate=None,
                           nsigma=5.,
                           saddle_fraction=0.1,
                           saddle_min=2.,
@@ -383,9 +397,10 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # "sedhot", which in turn is used to define the blobs that we will
     # optimize simultaneously.  This also determines which pixels go
     # into the fitting!
-    dilate = 8
+    if blob_dilate is None:
+        blob_dilate = 8
     hotblobs,nhot = label(binary_fill_holes(
-            binary_dilation(peaks, iterations=dilate)))
+            binary_dilation(peaks, iterations=blob_dilate)))
 
     # find pixels that are larger than their 8 neighbors
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[0:-2,1:-1])

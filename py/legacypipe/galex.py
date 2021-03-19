@@ -58,8 +58,6 @@ def stage_galex_forced(
     '''
     from legacypipe.runbrick import _add_stage_version
     from legacypipe.bits import MASKBITS
-    #from legacypipe.galex import galex_phot, galex_tiles_touching_wcs
-    #from legacypipe.unwise import unwise_phot, collapse_unwise_bitmask, unwise_tiles_touching_wcs
     from legacypipe.survey import wise_apertures_arcsec
     from tractor import NanoMaggies
 
@@ -125,6 +123,17 @@ def stage_galex_forced(
     phots = mp.map(galex_phot, args)
     record_event and record_event('stage_galex_forced: results')
 
+    # Initialize coadds even if we don't have any overlapping tiles -- we'll write zero images.
+    # Create the WCS into which we'll resample the tiles.
+    # Same center as "targetwcs" but bigger pixel scale.
+    gpixscale = 1.5
+    gra  = np.array([src.getPosition().ra  for src in cat])
+    gdec = np.array([src.getPosition().dec for src in cat])
+    rc,dc = targetwcs.radec_center()
+    ww = int(W * pixscale / gpixscale)
+    hh = int(H * pixscale / gpixscale)
+    gcoadds = GalexCoadd(rc, dc, ww, hh, gpixscale)
+
     # Unpack results...
     GALEX = None
     if len(phots):
@@ -141,39 +150,34 @@ def stage_galex_forced(
                 GALEX = p.phot
             else:
                 GALEX.add_columns_from(p.phot)
-
-        # Create the WCS into which we'll resample the tiles.
-        # Same center as "targetwcs" but bigger pixel scale.
-        gpixscale = 1.5
-        gra  = np.array([src.getPosition().ra  for src in cat])
-        gdec = np.array([src.getPosition().dec for src in cat])
-        rc,dc = targetwcs.radec_center()
-        ww = int(W * pixscale / gpixscale)
-        hh = int(H * pixscale / gpixscale)
-        gcoadds = GalexCoadd(rc, dc, ww, hh, gpixscale)
         gcoadds.add(galex_models)
-        apphot = gcoadds.finish(survey, brickname, version_header,
-                                apradec=(gra,gdec),
-                                apertures=galex_apertures_arcsec/gpixscale)
-        api,apd,apr = apphot
-        for iband,band in enumerate(['n','f']):
-            niceband = band + 'uv'
-            GALEX.set('apflux_%s' % niceband, api[iband])
-            GALEX.set('apflux_resid_%s' % niceband, apr[iband])
-            d = apd[iband]
-            iv = np.zeros_like(d)
-            iv[d != 0.] = 1./(d[d != 0]**2)
-            GALEX.set('apflux_ivar_%s' % niceband, iv)
-            fluxcol = 'flux_'+niceband
-            if not fluxcol in GALEX.get_columns():
-                GALEX.set(fluxcol, np.zeros(len(GALEX), np.float32))
-                GALEX.set('flux_ivar_'+niceband, np.zeros(len(GALEX), np.float32))
 
         if Nskipped > 0:
             assert(len(GALEX) == len(wcat))
             GALEX = _fill_skipped_values(GALEX, Nskipped, do_phot)
             assert(len(GALEX) == len(cat))
             assert(len(GALEX) == len(T))
+
+    # Coadds and aperture photometry even if no coverage...
+    apphot = gcoadds.finish(survey, brickname, version_header,
+                            apradec=(gra,gdec),
+                            apertures=galex_apertures_arcsec/gpixscale)
+    # No coverage? initialize result table
+    if GALEX is None:
+        GALEX = fits_table()
+    api,apd,apr = apphot
+    for iband,band in enumerate(['n','f']):
+        niceband = band + 'uv'
+        GALEX.set('apflux_%s' % niceband, api[iband])
+        GALEX.set('apflux_resid_%s' % niceband, apr[iband])
+        d = apd[iband]
+        iv = np.zeros_like(d)
+        iv[d != 0.] = 1./(d[d != 0]**2)
+        GALEX.set('apflux_ivar_%s' % niceband, iv)
+        fluxcol = 'flux_'+niceband
+        if not fluxcol in GALEX.get_columns():
+            GALEX.set(fluxcol, np.zeros(len(GALEX), np.float32))
+            GALEX.set('flux_ivar_'+niceband, np.zeros(len(GALEX), np.float32))
 
     debug('Returning: GALEX', GALEX)
     if logger.isEnabledFor(logging.DEBUG):

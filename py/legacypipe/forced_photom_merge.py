@@ -3,6 +3,7 @@ After running forced_photom.py on a set of CCDs, this script merges
 the results back into a catalog.
 '''
 import sys
+import os
 import logging
 import numpy as np
 from glob import glob
@@ -40,6 +41,9 @@ def merge_forced(survey, brickname, cat, bands='grz'):
         camexp.add(key)
         ffn = survey.find_file('forced', camera=cam, expnum=ccd.expnum)
         print('Forced phot filename:', ffn)
+        if not os.path.exists(ffn):
+            print('WARNING: does not exist:', ffn)
+            continue
         F = fits_table(ffn)
         print('Read', len(F), 'forced-phot entries for CCD')
         ikeep = []
@@ -128,7 +132,7 @@ def main():
                         survey_dir=opt.survey_dir,
                         output_dir=opt.output_dir)
 
-    columns = ['release', 'brickid', 'objid',]
+    columns = ['release', 'brickid', 'objid', 'brick_primary', 'type']
 
     cat = None
     if opt.catalog is not None:
@@ -165,7 +169,13 @@ def main():
 
         fn = catsurvey.find_file('tractor', brick=opt.brick)
         cat = fits_table(fn, columns=columns)
-        print('Read', len(cat), 'sources from', fn)
+        print('Read', len(cat), 'sources from', fn, 'with', np.sum(cat.brick_primary),
+              'primary and', np.sum(cat.type == 'DUP'), 'DUP sources')
+        cat.cut((cat.brick_primary) * (cat.type != 'DUP'))
+
+    if len(cat) == 0:
+        print('No catalog entries!')
+        return 0
 
     program_name = sys.argv[0]
     ## FIXME -- from catalog?

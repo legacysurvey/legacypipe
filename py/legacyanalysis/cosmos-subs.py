@@ -28,6 +28,7 @@ target = dict(g=24.0, r=23.4, z=22.5)
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--region', default='cosmos', help='Region: "cosmos", "s82qso"')
+parser.add_argument('--run', default=None, help='Subset of CCDs files to use: eg "south"')
 parser.add_argument('-v', '--verbose', dest='verbose', action='count',
                     default=0, help='Make more verbose')
 opt = parser.parse_args()
@@ -42,7 +43,7 @@ logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
 
 region = opt.region
 
-run = 'south'
+run = opt.run
 
 # We cache the table of good CCDs in the region of interest in this file...
 cfn = '%s-all-ccds.fits' % region
@@ -58,7 +59,8 @@ if not os.path.exists(cfn):
     print(len(C), 'annotated CCDs')
 
     if region == 'cosmos':
-        C.cut(np.hypot(C.ra_bore - 150, C.dec_bore - 2.2) < 1.)
+        #C.cut(np.hypot(C.ra_bore - 150.1, C.dec_bore - 2.2) < 1.)
+        C.cut(np.hypot(C.ra_bore - 150.1, C.dec_bore - 2.2) < 0.3)
     elif region == 's82qso':
         #C.cut((C.ra > 35.75) * (C.ra < 42.25) * (C.dec > -1.5) * (C.dec < 1.5))
         C.cut((C.ra > 36) * (C.ra < 36.5) * (C.dec > 0) * (C.dec < 0.5))
@@ -328,6 +330,74 @@ if region == 'cosmos':
     # BAD exposures (nasty background gradient)
     # 179971 through 179975
 
+
+    # DR9
+    subset_offset = 80
+    exposures = [
+        # g, pass 1, seeing ~1.15
+        615183, 615180, 615174,
+        # g, pass 1, seeing ~1.2
+        615177, 615171, 421590,
+        # g, pass 1/2, seeing ~1.2
+        621609, 614492, 614501,
+        # g, pass 2, seeing ~1.2
+        614495, 621607, 621973,
+        # g, pass 2, seeing ~1.3
+        621977, 621605, 621975,
+        # g, pass 2, seeing ~1.3
+        622361, 622359, 413680,
+        # g, pass 2, seeing ~1.3
+        622360, 412604, 431106,
+        # g, pass 2, seeing ~1.4
+        431103, 524717, 524718,
+        # g, pass 2, seeing ~1.44
+        524703, 524705, 524719,
+        # g, pass 2, seeing 1.5
+        524704, 412554, 743018,
+
+        # r, pass 1, seeing 1.05
+        615172, 615178, 615181,
+        # r, pass 1, seeing 1.1
+        431105, 615184, 615554,
+        # r, pass 1, seeing 1.12
+        421552, 405264, 615175,
+        # r, pass 1, seeing 1.14
+        405263, 405291, 405262,
+        # r, pass 1, seeing 1.14
+        615553, 397551, 397552,
+        # r, pass 1, seeing 1.2
+        397524, 410865, 420721,
+        # r, pass 2, seeing 1.3
+        177362, 177363, 177345,
+        # r, pass 2, seeing 1.35
+        177344, 177346, 177343,
+        # r, pass 2, seeing 1.46-1.66
+        177367, 413973, 413971,
+        # r, pass 3, seeing 1.33-1.51
+        177365, 177366, 743323,
+
+        # z, pass 1, seeing 0.9
+        500317, 500316, 514594,
+        # z, pass 1, seeing 0.97
+        514292, 514605, 514604,
+        # z, pass 1, seeing 1.03
+        514886, 431104, 514892,
+        # z, pass 1, seeing 1.07
+        617212, 617198, 707220,
+        # z, pass 1, seeing 1.13
+        707617, 395319, 514277,
+        # z, pass 1, seeing 1.20
+        397558, 395347, 515440,
+        # z, pass 1, seeing 1.25
+        514276, 413981, 707771,
+        # z, pass 2, seeing 1.33
+        514275, 176844, 525433,
+        # z, pass 2, seeing ~1.5
+        413978, 176853, 453883,
+        # z, pass 2, seeing ~1.55-1.8
+        176846, 525634, 525633,
+    ]
+    
     # Select only our exposures from table E.
     I = []
     for e in exposures:
