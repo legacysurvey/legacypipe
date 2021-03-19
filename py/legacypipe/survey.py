@@ -795,6 +795,7 @@ class LegacySurveyData(object):
         from legacypipe.bok    import BokImage
         from legacypipe.ptf    import PtfImage
         from legacypipe.cfht   import MegaPrimeImage
+        from legacypipe.hsc    import HscImage
         from collections import OrderedDict
 
         if survey_dir is None:
@@ -837,6 +838,7 @@ class LegacySurveyData(object):
             '90prime': BokImage,
             'ptf'    : PtfImage,
             'megaprime': MegaPrimeImage,
+            'hsc'    : HscImage,
             }
 
         self.allbands = allbands

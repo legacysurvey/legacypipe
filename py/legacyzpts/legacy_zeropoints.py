@@ -2533,13 +2533,13 @@ def main(image_list=None,args=None):
         if cal is not None:
             survey.calibdir = cal
 
-        if camera == 'megaprime':
-            from legacypipe.cfht import MegaPrimeImage
-            survey.image_typemap['megaprime'] = MegaPrimeImage
-
-        if camera == 'hsc':
-            from legacypipe.hsc import HscImage
-            survey.image_typemap['hsc'] = HscImage
+        # if camera == 'megaprime':
+        #     from legacypipe.cfht import MegaPrimeImage
+        #     survey.image_typemap['megaprime'] = MegaPrimeImage
+        # 
+        # if camera == 'hsc':
+        #     from legacypipe.hsc import HscImage
+        #     survey.image_typemap['hsc'] = HscImage
 
     outdir = measureargs.pop('outdir')
     for ii, imgfn in enumerate(image_list):

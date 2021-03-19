@@ -14,32 +14,55 @@ class HscImage(LegacySurveyImage):
         super().__init__(survey, ccd)
         self.dq_hdu = 2
         self.wt_hdu = 3
+        # Adjust zeropoint for exposure time
+        self.ccdzpt += 2.5 * np.log10(self.exptime)
         
     def compute_filenames(self):
         self.dqfn = self.imgfn
         self.wtfn = self.imgfn
 
-    # def read_dq(self, **kwargs):
-    #     print('Read dq')
-    #     dq = self._read_fits(self.dqfn, self.dq_hdu, **kwargs)
-    #     return dq
+    def get_wcs(self, hdr=None):
+        from astrometry.util.util import Sip
+        if hdr is None:
+            hdr = self.read_image_header()
+        wcs = Sip(hdr)
+        # Correction: ccd ra,dec offsets from zeropoints/CCDs file
+        dra,ddec = self.dradec
+        # debug('Applying astrometric zeropoint:', (dra,ddec))
+        r,d = wcs.get_crval()
+        wcs.set_crval((r + dra / np.cos(np.deg2rad(d)), d + ddec))
+        wcs.version = ''
+        wcs.plver = ''
+        #phdr = self.read_image_primary_header()
+        #wcs.plver = phdr.get('PLVER', '').strip()
+        return wcs
 
+    def read_image(self, header=False, **kwargs):
+        img = super().read_image(header=header, **kwargs)
+        if header:
+            img,hdr = img
+        img[np.logical_not(np.isfinite(img))] = 0.
+        if header:
+            img = img,hdr
+        return img
+    
     def remap_dq(self, dq, header):
         return remap_hsc_bitmask(dq, header)
 
     def read_invvar(self, dq=None, **kwargs):
-        print('Read iv')
         v = self._read_fits(self.wtfn, self.wt_hdu, **kwargs)
         iv = 1./v
         iv[v==0] = 0.
         iv[np.logical_not(np.isfinite(iv))] = 0.
+        #! this can happen
+        iv[np.logical_not(np.isfinite(np.sqrt(iv)))] = 0.
         return iv
 
     def funpack_files(self, imgfn, maskfn, imghdu, maskhdu, todelete):
         # Before passing files to SourceExtractor / PsfEx, filter our mask image
         # because it marks DETECTED pixels with a mask bit.
         tmpimgfn,tmpmaskfn = super().funpack_files(imgfn, maskfn, imghdu, maskhdu, todelete)
-        print('Dropping mask bit 5 before running SE')
+        #print('Dropping mask bit 5 before running SE')
         m = fitsio.read(tmpmaskfn)
         m &= ~(1 << 5)
         tmpmaskfn = create_temp(suffix='.fits')
@@ -49,7 +72,8 @@ class HscImage(LegacySurveyImage):
 
     def validate_version(self, *args, **kwargs):
         return True
-
+    def check_image_header(self, imghdr):
+        pass
 def remap_hsc_bitmask(dq, header):
     new_dq = np.zeros(dq.shape, np.int16)
     # MP_BAD  =                    0
