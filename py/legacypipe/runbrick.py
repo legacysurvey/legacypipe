@@ -3698,6 +3698,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         rin<r<rout on each CCD centered on the targetwcs.crval coordinates.""")
     parser.add_argument('--read-serial', dest='read_parallel', default=True,
                         action='store_false', help='Read images in series, not in parallel?')
+    parser.add_argument('--rgb-stretch', type=float, help='Stretch RGB jpeg plots by this factor.')
     return parser
 
 def get_runbrick_kwargs(survey=None,
@@ -3841,6 +3842,7 @@ def main(args=None):
     ps_file = optdict.pop('ps', None)
     ps_t0   = optdict.pop('ps_t0', 0)
     verbose = optdict.pop('verbose')
+    rgb_stretch = optdict.pop('rgb_stretch', None)
 
     survey, kwargs = get_runbrick_kwargs(**optdict)
     if kwargs in [-1, 0]:
@@ -3883,6 +3885,10 @@ def main(args=None):
         ps_thread.daemon = True
         print('Starting thread to run "ps"')
         ps_thread.start()
+
+    if rgb_stretch is not None:
+        import legacypipe.survey
+        legacypipe.survey.rgb_stretch_factor = rgb_stretch
 
     debug('kwargs:', kwargs)
 
