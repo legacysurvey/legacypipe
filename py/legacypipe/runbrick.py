@@ -557,6 +557,15 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     be created (in `stage_coadds`).  But it's handy to have the coadds
     early on, to diagnose problems or just to look at the data.
     '''
+    primhdr = fitsio.FITSHDR()
+    for r in version_header.records():
+        primhdr.add_record(r)
+    primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
+                            comment='NOAO data product type'))
+    # Write per-brick CCDs table
+    with survey.write_output('ccds-table', brick=brickname) as out:
+        ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
+
     kw = dict(ngood=True)
     if not minimal_coadds:
         kw.update(detmaps=True)
@@ -609,15 +618,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         with survey.write_output('depth-table', brick=brickname) as out:
             D.writeto(None, fits_object=out.fits)
         del D
-
-    primhdr = fitsio.FITSHDR()
-    for r in version_header.records():
-        primhdr.add_record(r)
-    primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
-                            comment='NOAO data product type'))
-    # Write per-brick CCDs table
-    with survey.write_output('ccds-table', brick=brickname) as out:
-        ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
     coadd_list= [('image', C.coimgs)]
     if hasattr(tims[0], 'sims_image'):
@@ -677,9 +677,11 @@ def stage_srcs(pixscale=None, targetwcs=None,
                T_clusters=None,
                ccds=None,
                ubercal_sky=False,
+               nsatur=None,
                record_event=None,
                large_galaxies=True,
                gaia_stars=True,
+               blob_dilate=None,
                **kwargs):
     '''
     In this stage we run SED-matched detection to find objects in the
@@ -751,12 +753,23 @@ def stage_srcs(pixscale=None, targetwcs=None,
     tnow = Time()
     debug('Rendering detection maps...')
     detmaps, detivs, satmaps = detection_maps(tims, targetwcs, bands, mp,
-                                              apodize=10)
+                                              apodize=10, nsatur=nsatur)
     tnow = Time()
     debug('Detmaps:', tnow-tlast)
     tlast = tnow
     record_event and record_event('stage_srcs: sources')
 
+    if plots:
+        import pylab as plt
+        for band,detmap,satmap in zip(bands, detmaps, satmaps):
+            plt.clf()
+            plt.subplot(1,2,1)
+            plt.imshow(detmap, origin='lower', interpolation='nearest')
+            plt.subplot(1,2,2)
+            plt.imshow(satmap, origin='lower', interpolation='nearest', vmin=0, vmax=1, cmap='hot')
+            plt.suptitle('%s detmap/satmap' % band)
+            ps.savefig()
+            
     # Expand the mask around saturated pixels to avoid generating
     # peaks at the edge of the mask.
     saturated_pix = [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps]
@@ -783,7 +796,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
         nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
-        saturated_pix=saturated_pix, veto_map=avoid_map,
+        saturated_pix=saturated_pix, veto_map=avoid_map, blob_dilate=blob_dilate,
         plots=plots, ps=ps, mp=mp, **kwa)
 
     if Tnew is not None:
@@ -860,7 +873,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
         hot |= merging
 
         if plots:
-            import pylab as plt
+            #import pylab as plt
             from astrometry.util.plotutils import dimshow
             plt.clf()
             plt.subplot(1,2,1)
@@ -886,6 +899,19 @@ def stage_srcs(pixscale=None, targetwcs=None,
     tnow = Time()
     debug('Blobs:', tnow-tlast)
     tlast = tnow
+
+    # DEBUG
+    if False:
+        BT = fits_table()
+        BT.blob_pix = []
+        BT.blob_srcs = []
+        for blobid, (srcs, slc) in enumerate(zip(blobsrcs, blobslices)):
+            BT.blob_pix.append(np.sum(blobmap[slc] == blobid))
+            BT.blob_srcs.append(len(srcs))
+        BT.to_np_arrays()
+        BT.writeto('blob-stats-dilate%i.fits' % blob_dilate)
+        print('Done!')
+        sys.exit(0)
 
     ccds.co_sky = np.zeros(len(ccds), np.float32)
     if ubercal_sky:
@@ -2979,6 +3005,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               nsigma=6,
               saddle_fraction=0.1,
               saddle_min=2.,
+              blob_dilate=None,
               subsky_radii=None,
               reoptimize=False,
               iterative=False,
@@ -3006,7 +3033,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               large_galaxies_force_pointsource=True,
               fitoncoadds_reweight_ivar=True,
               less_masking=False,
+              nsatur=None,
               fit_on_coadds=False,
+              coadd_tiers=None,
               min_mjd=None, max_mjd=None,
               unwise_coadds=True,
               bail_out=False,
@@ -3234,6 +3263,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     kwargs.update(ps=ps, nsigma=nsigma, saddle_fraction=saddle_fraction,
                   saddle_min=saddle_min,
+                  blob_dilate=blob_dilate,
                   subsky_radii=subsky_radii,
                   survey_blob_mask=survey_blob_mask,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
@@ -3251,6 +3281,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   fitoncoadds_reweight_ivar=fitoncoadds_reweight_ivar,
                   less_masking=less_masking,
                   min_mjd=min_mjd, max_mjd=max_mjd,
+                  coadd_tiers=coadd_tiers,
+                  nsatur=nsatur,
                   reoptimize=reoptimize,
                   iterative=iterative,
                   outliers=outliers,
@@ -3380,6 +3412,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             'srcs': 'fit_on_coadds',
             'image_coadds': 'fit_on_coadds',
         })
+        if blob_image:
+            prereqs.update({'image_coadds':'srcs'})
 
     # HACK -- set the prereq to the stage after which you'd like to write out checksums.
     prereqs.update({'checksum': 'outliers'})
@@ -3578,6 +3612,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--saddle-min', type=float, default=2.0,
                         help='Saddle-point depth from existing sources down to new sources (sigma).')
+    parser.add_argument('--blob-dilate', type=int, default=None,
+                        help='How many pixels to dilate detection pixels (default: 8)')
 
     parser.add_argument(
         '--reoptimize', action='store_true', default=False,
@@ -3666,6 +3702,11 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--fit-on-coadds', default=False, action='store_true',
                         help='Fit to coadds rather than individual CCDs (e.g., large galaxies).')
+    parser.add_argument('--coadd-tiers', default=None, type=int,
+                        help='Split images into this many tiers of coadds (per band) by FWHW')
+
+    parser.add_argument('--nsatur', default=None, type=int,
+                        help='Demand that >= nsatur images per band are saturated before using saturated logic (eg, 2).')
     parser.add_argument('--no-ivar-reweighting', dest='fitoncoadds_reweight_ivar',
                         default=True, action='store_false',
                         help='Reweight the inverse variance when fitting on coadds.')
