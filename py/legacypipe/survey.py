@@ -859,7 +859,13 @@ class LegacySurveyData(object):
         sname = self.file_prefix
 
         if filetype == 'bricks':
-            return swap(os.path.join(basedir, 'survey-bricks.fits.gz'))
+            fn = os.path.join(basedir, 'survey-bricks.fits.gz')
+            if os.path.exists(fn):
+                return swap(fn)
+            fns = glob(os.path.join(basedir, 'survey-bricks-*.fits.gz'))
+            if len(fns) > 0:
+                return swap(fns[0])
+            return None
 
         elif filetype == 'ccds':
             return swaplist(
