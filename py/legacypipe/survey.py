@@ -812,7 +812,7 @@ class LegacySurveyData(object):
         return sed_matched_filters(bands)
 
     def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s',
-                  camera=None, expnum=None, ccdname=None,
+                  camera=None, expnum=None, ccdname=None, tier=None,
                   output=False, **kwargs):
         '''
         Returns the filename of a Legacy Survey file.
@@ -931,8 +931,12 @@ class LegacySurveyData(object):
         elif filetype in ['invvar', 'chi2', 'image', 'model', 'blobmodel',
                           'depth', 'galdepth', 'nexp', 'psfsize',
                           'copsf']:
-            return swap(os.path.join(codir, '%s-%s-%s-%s.fits.fz' %
-                                     (sname, brick, filetype, band)))
+            tstr = ''
+            # coadd psf tier
+            if tier is not None:
+                tstr = '-tier%s' % tier
+            return swap(os.path.join(codir, '%s-%s-%s-%s%s.fits.fz' %
+                                     (sname, brick, filetype, band, tstr)))
 
         elif filetype in ['blobmap']:
             return swap(os.path.join(basedir, 'metrics', brickpre,
