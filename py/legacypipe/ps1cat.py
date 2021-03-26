@@ -173,6 +173,8 @@ def sdss_to_decam(psfmags, band):
     imag = psfmags[:,i_index]
     gi = gmag - imag
     coeffs = dict(
+        # from Arjun 2021-03-17 based on DECosmos runs (2013-02-11,12,13)
+        u = [-0.0643, 0.1787,-0.1552, 0.0259],
     ).get(band, [0.,0.,0.,0.])
     colorterm = coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3
     return colorterm
