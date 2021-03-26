@@ -1802,15 +1802,17 @@ class DecamMeasurer(Measurer):
 
         # /global/homes/a/arjundey/idl/pro/observing/decstat.pro
         self.zp0 =  dict(g = 26.610,r = 26.818,z = 26.484,
-                         # u from g :)
+                         # u from g :)    (-23.3205)
                          u = 26.610,
                          # i,Y from DESY1_Stripe82 95th percentiles
                          i=26.758, Y=25.321,
                          N501=23.812,
                          N673=24.151,
         ) # e/sec
+        # extinction per airmass
         self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06,
-                          u = 0.17,
+                          # From Arjun 2021-03-17 based on DECosmos (calib against SDSS)
+                          u = 0.63,
                           #i, Y totally made up
                           i=0.08, Y=0.06,
                           # these also totally made up
