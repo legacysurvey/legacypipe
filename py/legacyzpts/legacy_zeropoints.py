@@ -1643,9 +1643,11 @@ class DecamMeasurer(Measurer):
         self.pixscale = get_pixscale(self.camera)
 
         # /global/homes/a/arjundey/idl/pro/observing/decstat.pro
-        self.zp0 =  dict(g = 26.610,r = 26.818,z = 26.484,
-                         # u from g :)    (-23.3205)
-                         u = 26.610,
+        self.zp0 =  dict(g = 26.610,
+                         r = 26.818,
+                         z = 26.484,
+                         # u from Arjun 2021-03-17, based on DECosmos-to-SDSS
+                         u = 23.3205,
                          # i,Y from DESY1_Stripe82 95th percentiles
                          i=26.758,
                          Y=25.321,
