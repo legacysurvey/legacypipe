@@ -254,6 +254,13 @@ def psf_zeropoint_cuts(P, pixscale,
             print('Removing all early DECam data')
             cuts.append(('early_decam', P.mjd_obs < MJD_EARLY_DECAM))
 
+    if camera == 'hsc':
+        # Excise chips in the outer ring.
+        # FIXME - these are the bad DET-IDs, but we only have DETNAME = ccdname!
+        # 4, 9, 22, 29, 70, 77, 90, 101, 102, 103, 104
+        # 95 -> 0_42
+        cuts.append(('flagged_in_des', np.array([n.strip() in set(['0_42']) for n in P.ccdname])))
+
     for name,cut in cuts:
         P.ccd_cuts += CCD_CUT_BITS[name] * cut
         print(np.count_nonzero(cut), 'CCDs cut by', name)
