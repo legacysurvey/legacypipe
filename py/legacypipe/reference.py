@@ -56,54 +56,8 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         # Handle sources that appear in both Gaia and Tycho-2 by
         # dropping the entry from Tycho-2.
         if len(gaia) and len(tycho):
-            # Before matching, apply proper motions to bring them to
-            # the same epoch.  We want to use the more-accurate Gaia
-            # proper motions, so rewind Gaia positions to the Tycho
-            # epoch.  (Note that in read_tycho2, we massaged the
-            # epochs)
-            cosdec = np.cos(np.deg2rad(gaia.dec))
-            # First do a coarse matching with the approximate epoch:
-            dt = 1991.5 - gaia.ref_epoch
-            gra  = gaia.ra  + dt * gaia.pmra  / (3600.*1000.) / cosdec
-            gdec = gaia.dec + dt * gaia.pmdec / (3600.*1000.)
-            # Max Tycho-2 PM is 10"/yr, max |epoch_ra,epoch_dec - mean| = 0.5
-            I,J,_ = match_radec(tycho.ra, tycho.dec, gra, gdec, 10./3600.,
-                                nearest=True)
-            debug('Initially matched', len(I), 'Tycho-2 stars to Gaia stars (10").')
-
-            if plots:
-                import pylab as plt
-                plt.clf()
-                plt.plot(gra, gdec, 'bo', label='Gaia (1991.5)')
-                plt.plot(gaia.ra, gaia.dec, 'gx', label='Gaia (2015.5)')
-                plt.plot([gaia.ra, gra], [gaia.dec, gdec], 'k-')
-                plt.plot([tycho.ra[I], gra[J]], [tycho.dec[I], gdec[J]], 'r-')
-                plt.plot(tycho.ra, tycho.dec, 'rx', label='Tycho-2')
-                plt.plot(tycho.ra[I], tycho.dec[I], 'o', mec='r', ms=8, mfc='none',
-                         label='Tycho-2 matched')
-                plt.legend()
-                r0,r1,d0,d1 = targetwcs.radec_bounds()
-                plt.axis([r0,r1,d0,d1])
-                plt.title('Initial (10") matching')
-                ps.savefig()
-
-            dt = tycho.ref_epoch[I] - gaia.ref_epoch[J]
-            cosdec = np.cos(np.deg2rad(gaia.dec[J]))
-            gra  = gaia.ra[J]  + dt * gaia.pmra[J]  / (3600.*1000.) / cosdec
-            gdec = gaia.dec[J] + dt * gaia.pmdec[J] / (3600.*1000.)
-            dists = np.hypot((gra - tycho.ra[I]) * cosdec, gdec - tycho.dec[I])
-            K = np.flatnonzero(dists <= 1./3600.)
-            if len(K)<len(I):
-                debug('Unmatched Tycho-2 - Gaia stars: dists', dists[dists > 1./3600.]*3600.)
-            I = I[K]
-            J = J[K]
-            debug('Matched', len(I), 'Tycho-2 stars to Gaia stars.')
-            if len(I):
-                keep = np.ones(len(tycho), bool)
-                keep[I] = False
-                tycho.cut(keep)
-                gaia.isbright[J] = True
-                gaia.istycho[J] = True
+            merge_gaia_tycho(gaia, tycho, plots=plots, ps=ps,
+                             targetwcs=targetwcs)
         if gaia is not None and len(gaia) > 0:
             refs.append(gaia)
 
@@ -192,6 +146,57 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
 
     return refs,sources
 
+def merge_gaia_tycho(gaia, tycho, plots=False, ps=None, targetwcs=None):
+    from astrometry.libkd.spherematch import match_radec
+    # Before matching, apply proper motions to bring them to
+    # the same epoch.  We want to use the more-accurate Gaia
+    # proper motions, so rewind Gaia positions to the Tycho
+    # epoch.  (Note that in read_tycho2, we massaged the
+    # epochs)
+    cosdec = np.cos(np.deg2rad(gaia.dec))
+    # First do a coarse matching with the approximate epoch:
+    dt = 1991.5 - gaia.ref_epoch
+    gra  = gaia.ra  + dt * gaia.pmra  / (3600.*1000.) / cosdec
+    gdec = gaia.dec + dt * gaia.pmdec / (3600.*1000.)
+    # Max Tycho-2 PM is 10"/yr, max |epoch_ra,epoch_dec - mean| = 0.5
+    I,J,_ = match_radec(tycho.ra, tycho.dec, gra, gdec, 10./3600.,
+                        nearest=True)
+    debug('Initially matched', len(I), 'Tycho-2 stars to Gaia stars (10").')
+
+    if plots:
+        import pylab as plt
+        plt.clf()
+        plt.plot(gra, gdec, 'bo', label='Gaia (1991.5)')
+        plt.plot(gaia.ra, gaia.dec, 'gx', label='Gaia (2015.5)')
+        plt.plot([gaia.ra, gra], [gaia.dec, gdec], 'k-')
+        plt.plot([tycho.ra[I], gra[J]], [tycho.dec[I], gdec[J]], 'r-')
+        plt.plot(tycho.ra, tycho.dec, 'rx', label='Tycho-2')
+        plt.plot(tycho.ra[I], tycho.dec[I], 'o', mec='r', ms=8, mfc='none',
+                 label='Tycho-2 matched')
+        plt.legend()
+        r0,r1,d0,d1 = targetwcs.radec_bounds()
+        plt.axis([r0,r1,d0,d1])
+        plt.title('Initial (10") matching')
+        ps.savefig()
+
+    dt = tycho.ref_epoch[I] - gaia.ref_epoch[J]
+    cosdec = np.cos(np.deg2rad(gaia.dec[J]))
+    gra  = gaia.ra[J]  + dt * gaia.pmra[J]  / (3600.*1000.) / cosdec
+    gdec = gaia.dec[J] + dt * gaia.pmdec[J] / (3600.*1000.)
+    dists = np.hypot((gra - tycho.ra[I]) * cosdec, gdec - tycho.dec[I])
+    K = np.flatnonzero(dists <= 1./3600.)
+    if len(K)<len(I):
+        debug('Unmatched Tycho-2 - Gaia stars: dists', dists[dists > 1./3600.]*3600.)
+    I = I[K]
+    J = J[K]
+    debug('Matched', len(I), 'Tycho-2 stars to Gaia stars.')
+    if len(I):
+        keep = np.ones(len(tycho), bool)
+        keep[I] = False
+        tycho.cut(keep)
+        gaia.isbright[J] = True
+        gaia.istycho[J] = True
+
 def read_gaia(wcs, bands):
     '''
     *wcs* here should include margin
@@ -202,6 +207,17 @@ def read_gaia(wcs, bands):
     gaia = GaiaCatalog().get_catalog_in_wcs(wcs)
     debug('Got', len(gaia), 'Gaia stars nearby')
 
+    fix_gaia(gaia)
+    # NOTE, must initialize gaia.sources array this way, or else numpy
+    # will try to be clever and create a 2-d array, because GaiaSource is
+    # iterable.
+    gaia.sources = np.empty(len(gaia), object)
+    if bands is not None:
+        for i,g in enumerate(gaia):
+            gaia.sources[i] = GaiaSource.from_catalog(g, bands)
+    return gaia
+
+def fix_gaia(gaia):
     gaia.G = gaia.phot_g_mean_mag
     # Sort by brightness (for reference-*.fits output table)
     gaia.cut(np.argsort(gaia.G))
@@ -295,15 +311,6 @@ def read_gaia(wcs, bands):
     gaia.ismedium = (gaia.mask_mag < 16.)
     gaia.donotfit = np.zeros(len(gaia), bool)
 
-    # NOTE, must initialize gaia.sources array this way, or else numpy
-    # will try to be clever and create a 2-d array, because GaiaSource is
-    # iterable.
-    gaia.sources = np.empty(len(gaia), object)
-    if bands is not None:
-        for i,g in enumerate(gaia):
-            gaia.sources[i] = GaiaSource.from_catalog(g, bands)
-    return gaia
-
 def mask_radius_for_mag(mag):
     # Returns a masking radius in degrees for a star of the given magnitude.
     # Used for Tycho-2 and Gaia stars.
@@ -340,6 +347,14 @@ def read_tycho2(survey, targetwcs, bands):
     # Read only the rows within range.
     tycho = fits_table(tycho2fn, rows=I)
     del kd
+    fix_tycho(tycho)
+    tycho.sources = np.empty(len(tycho), object)
+    if bands is not None:
+        for i,t in enumerate(tycho):
+            tycho.sources[i] = GaiaSource.from_catalog(t, bands)
+    return tycho
+
+def fix_tycho(tycho):
     if 'isgalaxy' in tycho.get_columns():
         tycho.cut(tycho.isgalaxy == 0)
         debug('Cut to', len(tycho), 'Tycho-2 stars on isgalaxy==0')
@@ -410,11 +425,6 @@ def read_tycho2(survey, targetwcs, bands):
     tycho.isbright = np.ones(len(tycho), bool)
     tycho.ismedium = np.ones(len(tycho), bool)
     tycho.donotfit = np.zeros(len(tycho), bool)
-    tycho.sources = np.empty(len(tycho), object)
-    if bands is not None:
-        for i,t in enumerate(tycho):
-            tycho.sources[i] = GaiaSource.from_catalog(t, bands)
-    return tycho
 
 def get_large_galaxy_version(fn):
     preburn = False
