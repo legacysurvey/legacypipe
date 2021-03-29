@@ -21,6 +21,8 @@ def merge_forced(survey, brickname, cat, bands='grz'):
     brick = survey.get_brick_by_name(brickname)
     brickwcs = wcs_for_brick(brick)
     CCDs = survey.ccds_touching_wcs(brickwcs)
+    if CCDs is None:
+        return None,None
     print('Read', len(CCDs), 'CCDs touching brick', brickname)
 
     # objects in the catalog: (release,brickid,objid)
@@ -105,6 +107,7 @@ def main():
     parser.add_argument('--out', help='Output filename -- if not set, defaults to path within --outdir.')
     parser.add_argument('-r', '--run', default=None,
                         help='Set the run type to execute (for images)')
+    parser.add_argument('--bands', default='g,r,z', help='Bands to add to catalog')
 
     parser.add_argument('--catalog', help='Use the given FITS catalog file, rather than reading from a data release directory')
     parser.add_argument('--catalog-dir', help='Set LEGACY_SURVEY_DIR to use to read catalogs')
@@ -191,7 +194,11 @@ def main():
         version_hdr.add_record(dict(name='APRAD%i' % i, value=ap,
                                     comment='(optical) Aperture radius, in arcsec'))
 
-    cat,forced = merge_forced(survey, opt.brick, cat)
+    bands = opt.bands.split(',')
+    cat,forced = merge_forced(survey, opt.brick, cat, bands=bands)
+    if forced is None:
+        print('No overlapping CCDs')
+        return
     units = []
     for i,col in enumerate(forced.get_columns()):
         units.append(forced._header.get('TUNIT%i' % (i+1), ''))
