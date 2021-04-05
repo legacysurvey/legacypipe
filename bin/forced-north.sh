@@ -1,6 +1,6 @@
 #! /bin/bash
 
-DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr9m
+DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr9
 outdir=$CSCRATCH/dr9-forced
 
 # SGA galaxy and Gaia star halo subtraction

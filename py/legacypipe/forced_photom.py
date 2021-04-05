@@ -353,7 +353,7 @@ def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None, r
         surveys.append((catsurvey_south, False))
 
     columns = ['ra', 'dec', 'brick_primary', 'type', 'release',
-               'brickid', 'brickname', 'objid', 'flux_g', 'flux_r', 'flux_z',
+               'brickid', 'brickname', 'objid',
                'sersic', 'shape_r', 'shape_e1', 'shape_e2',
                'ref_epoch', 'pmra', 'pmdec', 'parallax', 'ref_cat', 'ref_id',]
 
@@ -558,17 +558,16 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     posneg_mask = None
     if opt.outlier_mask is not None:
         posneg_mask = np.zeros(tim.shape, np.uint8)
-    # Outliers masks are computed within a survey (north/south for dr9), and are stored
-    # in a brick-oriented way, in the results directories.
-    north_ccd = (ccd.camera.strip() != 'decam')
-    catsurvey = catsurvey_north
-    if not north_ccd and catsurvey_south is not None:
-        catsurvey = catsurvey_south
-    bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
+
+    # # Outliers masks are computed within a survey (eg north/south
+    # # for dr9), and are stored in a brick-oriented way, in the
+    # # results directories.
+    bricks = bricks_touching_wcs(chipwcs, survey=survey)
+
     for b in bricks:
         print('Reading outlier mask for brick', b.brickname,
-              ':', catsurvey.find_file('outliers_mask', brick=b.brickname, output=False))
-        ok = read_outlier_mask_file(catsurvey, [tim], b.brickname, pos_neg_mask=posneg_mask,
+              ':', survey.find_file('outliers_mask', brick=b.brickname, output=False))
+        ok = read_outlier_mask_file(survey, [tim], b.brickname, pos_neg_mask=posneg_mask,
                                     subimage=False, output=False, ps=ps)
         if not ok:
             print('WARNING: failed to read outliers mask file for brick', b.brickname)
@@ -632,11 +631,9 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         I = np.flatnonzero(np.logical_not(sga_out))
         T.cut(I)
 
-    cat = read_fits_catalog(T, bands='r')
-    # Replace the brightness (which will be a NanoMaggies with g,r,z)
-    # with a NanoMaggies with this image's band only.
-    for src in cat:
-        src.brightness = NanoMaggies(**{tim.band: 1.})
+    # Add in a fake flux_{BAND} column, with flux 1.0 nanomaggies
+    T.set('flux_'+tim.band, np.ones(len(T), np.float32))
+    cat = read_fits_catalog(T, bands=[tim.band])
 
     tnow = Time()
     print('Parse catalog:', tnow-tlast)

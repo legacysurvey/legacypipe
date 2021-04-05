@@ -504,7 +504,9 @@ def tim_get_resamp(tim, targetwcs):
         return None
     return Yo,Xo,Yi,Xi
 
+rgb_stretch_factor = 1.0
 
+<<<<<<< HEAD
 def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
     rgbscales=dict(g=(2, 6.0),
                    r=(1, 3.4),
@@ -512,6 +514,15 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                    z=(0, 2.2),
                    N501=(2, 6.0),
                    N673=(1, 3.4))
+=======
+def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None):
+    rgbscales=dict(g =    (2, 6.0 * rgb_stretch_factor),
+                   r =    (1, 3.4 * rgb_stretch_factor),
+                   i =    (0, 3.0 * rgb_stretch_factor),
+                   z =    (0, 2.2 * rgb_stretch_factor),
+                   N501 = (2, 6.0 * rgb_stretch_factor),
+                   N673 = (1, 3.4 * rgb_stretch_factor))
+>>>>>>> 9ce28b5196427ebd3834caf20dd9cf54e947874f
     # rgbscales = {'u': 1.5, #1.0,
     #              'g': 2.5,
     #              'r': 1.5,
@@ -780,6 +791,7 @@ class LegacySurveyData(object):
         from legacypipe.bok    import BokImage
         from legacypipe.ptf    import PtfImage
         from legacypipe.cfht   import MegaPrimeImage
+        from legacypipe.hsc    import HscImage
         from collections import OrderedDict
 
         if survey_dir is None:
@@ -822,6 +834,7 @@ class LegacySurveyData(object):
             '90prime': BokImage,
             'ptf'    : PtfImage,
             'megaprime': MegaPrimeImage,
+            'hsc'    : HscImage,
             }
 
         self.allbands = allbands
@@ -850,7 +863,7 @@ class LegacySurveyData(object):
         return sed_matched_filters(bands)
 
     def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s',
-                  camera=None, expnum=None, ccdname=None,
+                  camera=None, expnum=None, ccdname=None, tier=None,
                   output=False, **kwargs):
         '''
         Returns the filename of a Legacy Survey file.
@@ -963,8 +976,12 @@ class LegacySurveyData(object):
         elif filetype in ['invvar', 'chi2', 'image', 'model', 'blobmodel',
                           'depth', 'galdepth', 'nexp', 'psfsize',
                           'copsf']:
-            return swap(os.path.join(codir, '%s-%s-%s-%s.fits.fz' %
-                                     (sname, brick, filetype, band)))
+            tstr = ''
+            # coadd psf tier
+            if tier is not None:
+                tstr = '-tier%s' % tier
+            return swap(os.path.join(codir, '%s-%s-%s-%s%s.fits.fz' %
+                                     (sname, brick, filetype, band, tstr)))
 
         elif filetype in ['blobmap']:
             return swap(os.path.join(basedir, 'metrics', brickpre,
