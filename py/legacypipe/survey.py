@@ -505,7 +505,7 @@ def tim_get_resamp(tim, targetwcs):
     return Yo,Xo,Yi,Xi
 
 
-def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None):
+def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
     rgbscales=dict(g=(2, 6.0),
                    r=(1, 3.4),
                    i=(0, 3.0),
@@ -536,13 +536,38 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None):
     for img,band in zip(imgs, bands):
         plane,scale = rgbscales[band]
         if mnmx is None:
-            rgb[:,:,plane] = np.clip((img * scale + m) * I, 0, 1)
+            imgplane = (img * scale + m) * I
         else:
             mn,mx = mnmx
-            rgb[:,:,plane] = np.clip(((img * scale + m) - mn) / (mx - mn), 0, 1)
+            imgplane = ((img * scale + m) - mn) / (mx - mn)
+        if clip:
+            imgplane = np.clip(imgplane, 0, 1)
+        rgb[:,:,plane] = imgplane
     return rgb
 
-def get_rgb(imgs, bands,
+def narrowband_rgb(imgs, bands, allbands, scales=None, m=0.03, Q=20, mnmx=None):
+    n501scale = 6.0
+    n673scale = 3.4
+
+    rgbscales=dict(N501=(2, n501scale),
+                   N673=(0, n673scale))
+
+    if allbands == ['N501', 'N673']:
+        rgb = sdss_rgb(imgs, bands, scales=rgbscales, clip=False)
+        rgb[:,:,1] = rgb[:,:,0]/2 + rgb[:,:,2]/2
+    elif allbands == ['N501']:
+        rgb = sdss_rgb(imgs, bands, scales=rgbscales, clip=False)
+        rgb[:,:,0] = rgb[:,:,2]
+        rgb[:,:,1] = rgb[:,:,2]
+    elif allbands == ['N673']:
+        rgb = sdss_rgb(imgs, bands, scales=rgbscales, clip=False)
+        rgb[:,:,1] = rgb[:,:,0]
+        rgb[:,:,2] = rgb[:,:,0]
+
+    rgb = np.clip(rgb, 0, 1)
+    return rgb
+
+def get_rgb(imgs, bands, allbands=['g','r','z'],
             resids=False, mnmx=None, arcsinh=None):
     '''
     Given a list of images in the given bands, returns a scaled RGB
@@ -557,9 +582,10 @@ def get_rgb(imgs, bands,
 
     Returns a (H,W,3) numpy array with values between 0 and 1.
     '''
+    allbands = list(allbands)
 
-    if len(bands) == 2 and bands[0] == 'N501' and bands[1] == 'N673':
-        return narrowband_rgb(imgs, bands) #, m=0., Q=None, mnmx=mnmx)
+    if (allbands == ['N501', 'N673']) or (allbands == ['N501']) or (allbands == ['N673']):
+        return narrowband_rgb(imgs, bands, allbands)
 
     if len(bands) == 5:
         return get_rgb(imgs[:3], bands[:3], resids=resids, mnmx=mnmx, arcsinh=arcsinh)
@@ -573,34 +599,6 @@ def get_rgb(imgs, bands,
     if mnmx is not None:
         return sdss_rgb(imgs, bands, m=0., Q=None, mnmx=mnmx)
     return sdss_rgb(imgs, bands)
-
-def narrowband_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None):
-    assert(bands[0] == 'N501')
-    assert(bands[1] == 'N673')
-    rgbscales=dict(N501=(2, 6.0),
-                   N673=(0, 3.4))
-    I = 0
-    for img,band in zip(imgs, bands):
-        plane,scale = rgbscales[band]
-        img = np.maximum(0, img * scale + m)
-        I = I + img
-    I /= len(bands)
-    if Q is not None:
-        fI = np.arcsinh(Q * I) / np.sqrt(Q)
-        I += (I == 0.) * 1e-6
-        I = fI / I
-    H,W = I.shape
-    rgb = np.zeros((H,W,3), np.float32)
-    for img,band in zip(imgs, bands):
-        plane,scale = rgbscales[band]
-        if mnmx is None:
-            rgb[:,:,plane] = (img * scale + m) * I
-        else:
-            mn,mx = mnmx
-            rgb[:,:,plane] = ((img * scale + m) - mn) / (mx - mn)
-    rgb[:,:,1] = rgb[:,:,0]/2 + rgb[:,:,2]/2
-    rgb = np.clip(rgb, 0, 1)
-    return rgb
 
 def wcs_for_brick(b, W=3600, H=3600, pixscale=0.262):
     '''
