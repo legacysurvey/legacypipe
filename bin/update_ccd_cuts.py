@@ -398,6 +398,8 @@ if __name__ == "__main__":
                         help='Omit the not-grz cut')
     parser.add_argument('--early-decam', default=False, action='store_true',
                         help='Omit the cut on early DECam data')
+    parser.add_argument('--depth-cut', default=True, action='store_false',
+                        help='Omit the depth cut')
     numpy.seterr(invalid='raise')
     args = parser.parse_args()
     ccds = fits_table(getattr(args, 'survey-ccds'))
@@ -450,9 +452,10 @@ if __name__ == "__main__":
     ccds.ccd_cuts = ccds.ccd_cuts & ~depthbit
     mbad = good_ccd_fraction(args.camera, ccds) < 0.7
     ccds.ccd_cuts = ccds.ccd_cuts | (manybadbit * mbad)
-    dcut = depthcut(args.camera, ccds, annotated, tilefile=args.tilefile,
-                    imlist=args.imlist)
-    ccds.ccd_cuts = ccds.ccd_cuts | (depthbit * ~dcut)
+    if args.depth_cut:
+        dcut = depthcut(args.camera, ccds, annotated, tilefile=args.tilefile,
+                        imlist=args.imlist)
+        ccds.ccd_cuts = ccds.ccd_cuts | (depthbit * ~dcut)
     annotated.ccd_cuts = ccds.ccd_cuts
     ccds.write_to(getattr(args, 'survey-ccds-out'))
     annotated.writeto(getattr(args, 'ccds-annotated-out'))
