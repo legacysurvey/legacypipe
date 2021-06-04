@@ -394,6 +394,10 @@ if __name__ == "__main__":
                         help='ucal zero points for declination < -29.25')
     parser.add_argument('--newccdphrms', type=str, default=None,
                         help='filename for replacement ccdphrms file')
+    parser.add_argument('--not-grz', default=False, action='store_true',
+                        help='Omit the not-grz cut')
+    parser.add_argument('--early-decam', default=False, action='store_true',
+                        help='Omit the cut on early DECam data')
     numpy.seterr(invalid='raise')
     args = parser.parse_args()
     ccds = fits_table(getattr(args, 'survey-ccds'))
@@ -435,6 +439,10 @@ if __name__ == "__main__":
     psfzpt_cuts.add_psfzpt_cuts(ccds, args.camera, bad_expid,
                                 image2coadd=args.image2coadd)
 
+    if args.not_grz:
+        ccds.ccd_cuts &= ~psfzpt_cuts.CCD_CUT_BITS['not_grz']
+    if args.early_decam:
+        ccds.ccd_cuts &= ~psfzpt_cuts.CCD_CUT_BITS['early_decam']
     depthbit = psfzpt_cuts.CCD_CUT_BITS['depth_cut']
     manybadbit = psfzpt_cuts.CCD_CUT_BITS['too_many_bad_ccds']
     if not numpy.all((ccds.ccd_cuts & depthbit) == 0):
