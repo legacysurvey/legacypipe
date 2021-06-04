@@ -118,6 +118,8 @@ def coadds_ubercal(fulltims, coaddtims=None, plots=False, plots2=False,
 
     # Plot to assess the sign of the correction.
     if plots2:
+        import matplotlib
+        matplotlib.use('Agg')
         import matplotlib.pyplot as plt
         plt.clf()
         for j, (correction, fulltim) in enumerate(zip(x, fulltims)):
@@ -156,6 +158,8 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
     if plots or plots2:
         import os
         import matplotlib.pyplot as plt
+        import matplotlib
+        matplotlib.use('Agg')
 
     if plots:
         plt.figure(figsize=(8,6))
@@ -247,6 +251,10 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
 
         for coimg, coiv, band in zip(C.coimgs, C.cowimgs, bands):
             skypix = _build_objmask(coimg, coiv, refmask * (coiv>0))
+            # can happen if the object is near a bright star
+            if np.sum(skypix) == 0:
+                print('No pixels in sky, most likely due to bright stars!')
+                skypix = _build_objmask(coimg, coiv, coiv > 0)
 
             for irad, (rin, rout) in enumerate(zip(allrin, allrout)):
                 inmask = (xmask**2 + ymask**2) <= (rin / pixscale)**2
@@ -259,8 +267,12 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
                 #import pdb ; pdb.set_trace()
                 
                 if np.sum(skypix_annulus) == 0:
-                    raise ValueError('No pixels in sky!')
-                _skymean, _skymedian, _skysig = sigma_clipped_stats(coimg, mask=np.logical_not(skypix_annulus), sigma=3.0)
+                    print('No pixels in sky!')
+                    #import pdb ; pdb.set_trace()
+                    #raise ValueError('No pixels in sky!')
+                    _skymean, _skymedian, _skysig = 0.0, 0.0, 0.0
+                else:
+                    _skymean, _skymedian, _skysig = sigma_clipped_stats(coimg, mask=np.logical_not(skypix_annulus), sigma=3.0)
 
                 skydict.update({'{}SKYMN{:02d}'.format(band.upper(), irad): (np.float32(_skymean), 'mean {} sky in annulus {}'.format(band, irad))})
                 skydict.update({'{}SKYMD{:02d}'.format(band.upper(), irad): (np.float32(_skymedian), 'median {} sky in annulus {}'.format(band, irad))})
