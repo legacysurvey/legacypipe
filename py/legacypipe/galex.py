@@ -391,13 +391,18 @@ class GalexCoadd(SimpleCoadd):
     def write_color_image(self, survey, brickname, coimgs, comods):
         from legacypipe.survey import imsave_jpeg
         rgbfunc = _galex_rgb_moustakas
-        # W1/W2 color jpeg
+        # FUV/NUV color jpeg
         rgb = rgbfunc(coimgs)
         with survey.write_output('galex-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower')
             info('Wrote', out.fn)
         rgb = rgbfunc(comods)
         with survey.write_output('galexmodel-jpeg', brick=brickname) as out:
+            imsave_jpeg(out.fn, rgb, origin='lower')
+            info('Wrote', out.fn)
+        coresids = [coimg - comod for coimg, comod in zip(coimgs, comods)]
+        rgb = rgbfunc(coresids)
+        with survey.write_output('galexresid-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower')
             info('Wrote', out.fn)
 
