@@ -320,6 +320,10 @@ def make_coadds(tims, bands, targetwcs,
         kwargs = dict(cowimg=cowimg, cow=cow)
 
         if detmaps:
+
+            lsbdetiv = np.zeros((H,W), np.float32)
+            kwargs.update(lsbdetiv=lsbdetiv)
+
             # detection map inverse-variance (depth map)
             psfdetiv = np.zeros((H,W), np.float32)
             C.psfdetivs.append(psfdetiv)
@@ -508,6 +512,9 @@ def make_coadds(tims, bands, targetwcs,
                 psf_img += copsf / tim.sig1**2
 
             if detmaps:
+                # LSB depth when detected with a (mismatched) PSF filter
+                lsbsig1 = tim.sig1 * tim.psfnorm
+                lsbdetiv[Yo,Xo] += (iv > 0) * (1. / lsbsig1**2)
                 # point-source depth
                 detsig1 = tim.sig1 / tim.psfnorm
                 psfdetiv[Yo,Xo] += (iv > 0) * (1. / detsig1**2)
@@ -1021,7 +1028,7 @@ def write_coadd_images(band,
                        coadd_headers=None,
                        cowimg=None, cow=None, cowmod=None, cochi2=None,
                        cowblobmod=None,
-                       psfdetiv=None, galdetiv=None, congood=None,
+                       psfdetiv=None, galdetiv=None, lsbdetiv=None, congood=None,
                        psfsize=None, **kwargs):
 
     hdr = copy_header_with_wcs(version_header, targetwcs)
@@ -1037,6 +1044,8 @@ def write_coadd_images(band,
         imgs.append(('depth', 'psfdepth', psfdetiv))
     if galdetiv is not None:
         imgs.append(('galdepth', 'galdepth', galdetiv))
+    if lsbdetiv is not None:
+        imgs.append(('lsbdepth', 'lsbdepth', lsbdetiv))
     if psfsize is not None:
         imgs.append(('psfsize', 'psfsize', psfsize))
     if cowmod is not None:

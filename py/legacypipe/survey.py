@@ -929,7 +929,7 @@ class LegacySurveyData(object):
                              '%s-%s.jpg' % (filetype, brick)))
 
         elif filetype in ['invvar', 'chi2', 'image', 'model', 'blobmodel',
-                          'depth', 'galdepth', 'nexp', 'psfsize',
+                          'depth', 'galdepth', 'lsbdepth', 'nexp', 'psfsize',
                           'copsf']:
             tstr = ''
             # coadd psf tier

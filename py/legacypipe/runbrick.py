@@ -2212,7 +2212,7 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
     from tractor.basics import LinearPhotoCal
     import photutils
 
-    # Create a fake tim for each band to construct the models in 1" seeing
+    # Create a fake tim for each band to construct the models in 1" seeing.
     # For Gaia stars, we need to give a time for evaluating the models.
     mjd_tai = astropy.time.Time(year, format='jyear').tai.mjd
     tai = TAITime(None, mjd=mjd_tai)
