@@ -22,8 +22,8 @@ class DecamImage(LegacySurveyImage):
     A LegacySurveyImage subclass to handle images from the Dark Energy
     Camera, DECam, on the Blanco telescope.
     '''
-    def __init__(self, survey, t):
-        super(DecamImage, self).__init__(survey, t)
+    def __init__(self, survey, t, image_fn=None, image_hdu=0):
+        super(DecamImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu)
         # Adjust zeropoint for exposure time
         self.ccdzpt += 2.5 * np.log10(self.exptime)
 

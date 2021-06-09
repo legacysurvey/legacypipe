@@ -2001,7 +2001,7 @@ class NinetyPrimeMeasurer(Measurer):
 
 def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
                   just_measure=False,
-                  survey=None, psfex=True, **measureargs):
+                  survey=None, psfex=True, camera=None, **measureargs):
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
     the FITS extensions for a given set of images.
     '''
@@ -2010,6 +2010,79 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     quiet = measureargs.get('quiet', False)
 
     img_fn_full = os.path.join(image_dir, img_fn)
+
+    print('measure_image', img_fn)
+    print('survey', survey)
+    print('camera', camera)
+
+    imgclass = survey.image_class_for_camera(camera)
+    print('Image class:', imgclass)
+
+    image_hdu = measureargs.get('image_hdu', None)
+    
+    if just_measure:
+        #print('measureargs:', measureargs)
+        return survey.get_image_object(None, camera=camera, image_fn=img_fn_full,
+                                       image_hdu=image_hdu)
+    
+
+    ma = measureargs.copy()
+    ma.pop('bad_expids', None)
+    print('measureargs:')
+    for k,v in ma.items():
+        print('  ', k, '=', v)
+    
+    img = survey.get_image_object(None, camera=camera,
+                                  image_fn=img_fn_full, image_hdu=image_hdu)
+    print('Got image object', img)
+    assert(img.camera == camera)
+
+    if measureargs['choose_ccd']:
+        extlist = [measureargs['choose_ccd']]
+    else:
+        extlist = img.get_extension_list(debug=measureargs['debug'])
+
+    print('Extensions to process:', extlist)
+
+    all_ccds = []
+    all_photom = []
+    splinesky = measureargs['splinesky']
+
+    survey_blob_mask = None
+    blobdir = measureargs.pop('blob_mask_dir', None)
+    if blobdir is not None:
+        survey_blob_mask = LegacySurveyData(survey_dir=blobdir)
+
+    survey_zeropoints = None
+    zptdir = measureargs.pop('zeropoints_dir', None)
+    if zptdir is not None:
+        survey_zeropoints = LegacySurveyData(survey_dir=zptdir)
+
+    do_splinesky = splinesky
+    do_psfex = psfex
+
+    plots = measureargs.get('plots', False)
+
+    # Validate the splinesky and psfex merged files, and (re)make them if
+    # they're missing.
+    if splinesky:
+        if validate_version(img.get_splinesky_merged_filename(),
+                            'table', img.expnum, img.plver, img.plprocid, quiet=quiet):
+            do_splinesky = False
+    if psfex:
+        if validate_version(img.get_psfex_merged_filename(),
+                            'table', img.expnum, img.plver, img.plprocid, quiet=quiet):
+            do_psfex = False
+
+    if do_splinesky or do_psfex:
+        ccds = mp.map(run_one_calib, [(img_fn, camera, survey, ext, do_psfex, do_splinesky,
+                                       plots, survey_blob_mask, survey_zeropoints)
+                                      for ext in extlist])
+
+
+    
+    sys.exit(0)
+    
 
     # Fitsio can throw error: ValueError: CONTINUE not supported
     try:
@@ -2022,7 +2095,6 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
         tmp.close()
         del tmp
 
-    camera = measureargs['camera']
     camera_check = primhdr.get('INSTRUME','').strip().lower()
     # mosaic listed as mosaic3 in header, other combos maybe
     assert(camera in camera_check or camera_check in camera)
@@ -2033,7 +2105,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
                          'mosaic': Mosaic3Measurer,
                          '90prime': NinetyPrimeMeasurer,
                          'megaprime': MegaPrimeMeasurer }[camera]
-    measure = measureclass(img_fn, image_dir=image_dir, **measureargs)
+    measure = measureclass(img_fn, image_dir=image_dir, camera=camera, **measureargs)
 
     if just_measure:
         return measure
@@ -2194,12 +2266,83 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     return all_ccds, all_photom, extra_info, measure
 
 def run_one_calib(X):
-    (measure, survey, ext, psfex, splinesky, plots, survey_blob_mask,
+    (img_fn, camera, survey, ext, psfex, splinesky, plots, survey_blob_mask,
      survey_zeropoints) = X
-    return measure.run_calibs(survey, ext, psfex=psfex, splinesky=splinesky,
-                              plots=plots,
-                              survey_blob_mask=survey_blob_mask,
-                              survey_zeropoints=survey_zeropoints)
+    img = survey.get_image_object(None, camera=camera,
+                                  image_fn=img_fn, image_hdu=ext)
+
+    # FIXME
+    # - !goodWcs
+    # - exptime==0
+    # - all-zero weight map
+
+    do_psf = False
+    do_sky = False
+    #if psfex and img.get_psfex_model() is None:
+    if psfex:
+        try:
+            psf = img.read_psf_model(0., 0., pixPsf=True)
+        except:
+            import traceback
+            print('Failed trying to read existing PSF model:')
+            traceback.print_exc()
+        do_psf = True
+    #if splinesky and img.get_splinesky() is None:
+    if splinesky and img.read_sky_model() is None:
+        do_sky = True
+
+    if (not do_psf) and (not do_sky):
+        # Nothing to do!
+        return img
+
+    # Only do stellar halo subtraction if we have a zeropoint (via --zeropoint-dir)
+    # Note that this is the only place we use survey_zeropoints; it does not get
+    # passed to image.run_calibs().
+    have_zpt = False
+    if survey_zeropoints is not None:
+        ccds = survey_zeropoints.find_ccds(
+            expnum=img.expnum, ccdname=img.ccdname, camera=img.camera)
+        if len(ccds) != 1:
+            print('WARNING, did not find a zeropoint for', img_fn,
+                  'by camera', camera, 'expnum', img.expnum,
+                  'ext', ext)
+        else:
+            img.ccdzpt = ccds[0].ccdzpt
+            img.ccdraoff = ccds[0].ccdraoff
+            img.ccddecoff = ccds[0].ccddecoff
+            if img.ccdzpt == 0.:
+                print('WARNING, found zeropoint=0 for', img_fn,
+                      'by camera', camera, 'expnum', img.expnum,
+                      'ext', ext)
+            else:
+                have_zpt = True
+
+    bitmask,dqhdr = img.read_dq(header=True) #read_bitmask()
+    if bitmask is not None:
+        bitmask = img.remap_dq(bitmask, dqhdr)
+    #wt = img.read_weight(bitmask=bitmask)
+    wt = img.read_invvar(dq=bitmask)
+    # Set sig1 after (possibly) updating zeropoint!
+    from tractor.brightness import NanoMaggies
+    zpscale = NanoMaggies.zeropointToScale(img.ccdzpt)
+    medweight = np.median(wt[(wt > 0) * (bitmask == 0)])
+    # note, read_weight() for Mosaic and 90prime scales by 1/exptime**2
+    img.sig1 = (1. / np.sqrt(medweight)) / img.exptime / zpscale
+
+    git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
+    ps = None
+    
+    img.run_calibs(psfex=do_psf, sky=do_sky, splinesky=True,
+                   git_version=git_version, survey=survey, ps=ps,
+                   survey_blob_mask=survey_blob_mask,
+                   halos=have_zpt,
+                   subtract_largegalaxies=have_zpt)
+    return img
+    # return img.run
+    # return measure.run_calibs(survey, ext, psfex=psfex, splinesky=splinesky,
+    #                           plots=plots,
+    #                           survey_blob_mask=survey_blob_mask,
+    #                           survey_zeropoints=survey_zeropoints)
 
 def run_one_ext(X):
     measure, ext, survey, splinesky, debug, sdss_photom = X
@@ -2458,7 +2601,8 @@ def main(image_list=None,args=None):
         F = outputFns(imgfn, outdir, camera, image_dir=image_dir,
                       debug=measureargs['debug'])
 
-        measure = measure_image(F.imgfn, None, just_measure=True, **measureargs)
+        measure = measure_image(F.imgfn, None, just_measure=True, image_hdu=None,
+                                **measureargs)
         psffn = measure.get_psfex_merged_filename()
         skyfn = measure.get_splinesky_merged_filename()
 

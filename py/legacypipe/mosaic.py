@@ -7,13 +7,8 @@ class MosaicImage(LegacySurveyImage):
     Class for handling images from the Mosaic3 camera processed by the
     NOAO Community Pipeline.
     '''
-    def __init__(self, survey, t):
-        super(MosaicImage, self).__init__(survey, t)
-
-        for attr in ['imgfn', 'dqfn', 'wtfn']:
-            fn = getattr(self, attr)
-            if os.path.exists(fn):
-                continue
+    def __init__(self, survey, t, image_fn=None, image_hdu=0):
+        super(MosaicImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_Hdu)
 
     def apply_amp_correction(self, img, invvar, x0, y0):
         self.apply_amp_correction_northern(img, invvar, x0, y0)

@@ -144,7 +144,7 @@ class LegacySurveyImage(object):
     # images used in unit tests): box size for SplineSky model
     splinesky_boxsize = 1024
 
-    def __init__(self, survey, ccd):
+    def __init__(self, survey, ccd, image_fn=None, image_hdu=0):
         '''
         Create a new LegacySurveyImage object, from a LegacySurveyData object,
         and one row of a CCDs fits_table object.
@@ -174,47 +174,97 @@ class LegacySurveyImage(object):
         super(LegacySurveyImage, self).__init__()
         self.survey = survey
 
-        imgfn = ccd.image_filename.strip()
+        if ccd is None and image_fn is None:
+            raise RuntimeError('Either "ccd" or "image_fn" must be set')
 
-        self.imgfn = os.path.join(self.survey.get_image_dir(), imgfn)
+        if image_fn is not None:
+            # Read metadata from image header.
+            self.image_filename = image_fn
+            self.imgfn = os.path.join(self.survey.get_image_dir(), image_fn)
+            print('Survey image dir:', self.survey.get_image_dir())
+            primhdr = read_primary_header(self.imgfn)
+            self.band = self.get_band(primhdr)
+            self.propid = self.get_propid(primhdr)
+            self.airmass = self.get_airmass(primhdr)
+            self.expnum = self.get_expnum(primhdr)
+            #self.date_obs = self.primhdr['DATE-OBS']
+            #self.ut = self.get_ut(self.primhdr)
+            #self.obj = self.primhdr['OBJECT']
+            namechange = dict(date='procdate', instrume='camera')
+            for key in ['EXPTIME', 'MJD-OBS', 'HA', 'DATE', 'PLVER', 'PLPROCID',
+                        'INSTRUME']:
+                val = primhdr.get(key)
+                if type(val) == str:
+                    val = val.strip()
+                    if len(val) == 0:
+                        raise ValueError('Empty header card: %s' % key)
+                key = namechange.get(key.lower(), key.lower())
+                key = key.replace('-', '_')
+                setattr(self, key, val)
+            self.camera = self.camera.lower()
+
+            # hdu, ccdname, width, height, pixscale
+            self.hdu = image_hdu
+            if image_hdu is not None:
+                hdr = self.read_image_header(ext=image_hdu)
+                # Parse ZNAXIS[12] / NAXIS[12] ?
+                info = fitsio.FITS(self.imgfn)[image_hdu].get_info()
+                print('Image info:', info)
+                self.height,self.width = info['dims']
+                self.ccdname = hdr['EXTNAME'].strip().upper()
+                self.pixscale = 3600. * np.sqrt(np.abs(hdr['CD1_1'] * hdr['CD2_2'] -
+                                                       hdr['CD1_2'] * hdr['CD2_1']))
+                self.fwhm = hdr['FWHM']
+            else:
+                self.ccdname = ''
+            # fwhm, sig1
+            self.sig1 = 0.
+
+            self.ccdzpt = 0.
+            self.dradec = (0., 0.)
+            
+        else:
+            # Get metadata from ccd table entry.
+            imgfn = ccd.image_filename.strip()
+            self.image_filename = imgfn
+            self.imgfn = os.path.join(self.survey.get_image_dir(), imgfn)
+            self.hdu     = ccd.image_hdu
+            self.expnum  = ccd.expnum
+            self.ccdname = ccd.ccdname.strip()
+            self.band    = ccd.filter.strip()
+            self.exptime = ccd.exptime
+            self.camera  = ccd.camera.strip()
+            self.fwhm    = ccd.fwhm
+            self.propid  = ccd.propid
+            self.mjdobs  = ccd.mjd_obs
+            self.width   = ccd.width
+            self.height  = ccd.height
+            # In nanomaggies.
+            self.sig1    = ccd.sig1
+            # Use dummy values to accommodate old calibs (which will fail later
+            # unless old-calibs-ok=True)
+            try:
+                self.plver = getattr(ccd, 'plver', 'xxx').strip()
+            except:
+                print('Failed to read PLVER header card as a string.  This probably means your python fitsio package is too old.')
+                print('Try upgrading to version 1.0.5 or later.')
+                raise
+            self.procdate = getattr(ccd, 'procdate', 'xxxxxxx').strip()
+            self.plprocid = getattr(ccd, 'plprocid', 'xxxxxxx').strip()
+
+            # Photometric and astrometric zeropoints
+            self.ccdzpt = ccd.ccdzpt
+            self.dradec = (ccd.ccdraoff / 3600., ccd.ccddecoff / 3600.)
+
+            # in arcsec/pixel
+            self.pixscale = 3600. * np.sqrt(np.abs(ccd.cd1_1 * ccd.cd2_2 -
+                                                   ccd.cd1_2 * ccd.cd2_1))
+
         self.compute_filenames()
-
-        self.hdu     = ccd.image_hdu
-        self.expnum  = ccd.expnum
-        self.image_filename = ccd.image_filename.strip()
-        self.ccdname = ccd.ccdname.strip()
-        self.band    = ccd.filter.strip()
-        self.exptime = ccd.exptime
-        self.camera  = ccd.camera.strip()
-        self.fwhm    = ccd.fwhm
-        self.propid  = ccd.propid
-        self.mjdobs  = ccd.mjd_obs
-        self.width   = ccd.width
-        self.height  = ccd.height
-        # In nanomaggies.
-        # (in DR7, CCDs-table sig1 values were in ADU-ish units)
-        self.sig1    = ccd.sig1
-        # Use dummy values to accommodate old calibs (which will fail later
-        # unless old-calibs-ok=True)
-        try:
-            self.plver = getattr(ccd, 'plver', 'xxx').strip()
-        except:
-            print('Failed to read PLVER header card as a string.  This probably means your python fitsio package is too old.')
-            print('Try upgrading to version 1.0.5 or later.')
-            raise
-        self.procdate = getattr(ccd, 'procdate', 'xxxxxxx').strip()
-        self.plprocid = getattr(ccd, 'plprocid', 'xxxxxxx').strip()
 
         # Which Data Quality bits mark saturation?
         self.dq_saturation_bits = DQ_BITS['satur'] # | DQ_BITS['bleed']
 
-        # Photometric and astrometric zeropoints
-        self.ccdzpt = ccd.ccdzpt
-        self.dradec = (ccd.ccdraoff / 3600., ccd.ccddecoff / 3600.)
-
-        # in arcsec/pixel
-        self.pixscale = 3600. * np.sqrt(np.abs(ccd.cd1_1 * ccd.cd2_2 -
-                                               ccd.cd1_2 * ccd.cd2_1))
         # Calib filenames
         basename = os.path.basename(self.image_filename)
         ### HACK -- keep only the first dotted component of the base filename.
@@ -245,6 +295,34 @@ class LegacySurveyImage(object):
         self.wtfn = self.imgfn.replace('_ooi_', '_oow_').replace('_oki_','_oow_')
         assert(self.dqfn != self.imgfn)
         assert(self.wtfn != self.imgfn)
+
+    def get_extension_list(self, debug=False):
+        F = fitsio.FITS(self.imgfn)
+        exts = []
+        for f in F[1:]:
+            exts.append(f.get_extname())
+            if debug:
+                break
+        return exts
+
+    def get_psfex_merged_filename(self):
+        return self.merged_psffn
+    def get_splinesky_merged_filename(self):
+        return self.merged_skyfn
+
+    def get_band(self, primhdr):
+        band = primhdr['FILTER']
+        band = band.split()[0]
+        return band
+
+    def get_propid(self, primhdr):
+        return primhdr['PROPID']
+
+    def get_airmass(self, primhdr):
+        return primhdr['AIRMASS']
+
+    def get_expnum(self, primhdr):
+        return primhdr['EXPNUM']
 
     def __str__(self):
         return self.name

@@ -10,8 +10,8 @@ class BokImage(LegacySurveyImage):
     Class for handling images from the 90prime camera processed by the
     NOAO Community Pipeline.
     '''
-    def __init__(self, survey, t):
-        super(BokImage, self).__init__(survey, t)
+    def __init__(self, survey, t, image_fn=None, image_hdu=0):
+        super(BokImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu)
 
     def apply_amp_correction(self, img, invvar, x0, y0):
         self.apply_amp_correction_northern(img, invvar, x0, y0)
