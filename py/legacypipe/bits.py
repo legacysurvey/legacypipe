@@ -59,6 +59,8 @@ MASKBITS = dict(
     MEDIUM     = 0x800, # medium-bright star
     GALAXY     = 0x1000, # SGA large galaxy
     CLUSTER    = 0x2000, # Cluster catalog source
+    SATUR_I    = 0x4000,
+    ALLMASK_I  = 0x8000,
 )
 
 # Bits in the "brightblob" bitmask
