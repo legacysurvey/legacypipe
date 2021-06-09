@@ -40,13 +40,15 @@ def pad_arrays(A):
         padded.append(p)
     return padded
 
-def merge_psfex(survey, expnum, C, psfoutfn, opt):
-    psfex = []
-    imobjs = []
-    Cgood = []
+def merge_psfex(survey, expnum, ccds, psfoutfn, opt, imgs=None):
+    if imgs is None:
+        imgs = []
+        for ccd in ccds:
+            im = survey.get_image_object(ccd)
+            imgs.append(im)
     fns = []
-    for ccd in C:
-        im = survey.get_image_object(ccd)
+    goodimgs = []
+    for im in imgs:
         for fn in [im.psffn, im.old_single_psffn]:
             if os.path.exists(fn):
                 break
@@ -55,18 +57,17 @@ def merge_psfex(survey, expnum, C, psfoutfn, opt):
             if opt.all_found:
                 return 0
             continue
-        imobjs.append(im)
-        Cgood.append(ccd)
+        goodimgs.append(im)
         fns.append(fn)
-
-    for fn, ccd,im in zip(fns, Cgood, imobjs):
+    psfex = []
+    for fn, im in zip(fns, goodimgs):
         print('Reading', fn)
         T = fits_table(fn)
-
         cols = T.get_columns()
+        # old format
         if not 'plver' in cols:
             from legacypipe.image import psfex_single_to_merged
-            T = psfex_single_to_merged(fn, ccd.expnum, ccd.ccdname)
+            T = psfex_single_to_merged(fn, im.expnum, im.ccdname)
             for k in ['plver', 'procdate', 'plprocid']:
                 T.set(k, np.array([getattr(ccd, k)]))
         psfex.append(T)
@@ -86,22 +87,25 @@ def merge_psfex(survey, expnum, C, psfoutfn, opt):
     print('Wrote', fn)
     return 1
 
-def merge_splinesky(survey, expnum, C, skyoutfn, opt):
+def merge_splinesky(survey, expnum, ccds, skyoutfn, opt, imgs=None):
+    if imgs is None:
+        imgs = []
+        for ccd in ccds:
+            im = survey.get_image_object(ccd)
+            imgs.append(im)
+    fns = []
+    goodimgs = []
     skies = []
-    imobjs = []
-    Cgood = []
-    for ccd in C:
-        im = survey.get_image_object(ccd)
+    for im in imgs:
         fn = im.skyfn
         if not os.path.exists(fn):
             print('File not found:', fn)
             if opt.all_found:
                 return 0
             continue
-        imobjs.append(im)
-        Cgood.append(ccd)
+        goodimgs.append(im)
 
-    for ccd,im in zip(Cgood, imobjs):
+    for im in goodimgs:
         fn = im.skyfn
         print('Reading', fn)
         T = None
@@ -113,7 +117,6 @@ def merge_splinesky(survey, expnum, C, skyoutfn, opt):
             print('Failed to read file', fn, ':', sys.exc_info()[1])
         if T is not None:
             skies.append(T)
-
     if len(skies) == 0:
         return
     T = fits_table()

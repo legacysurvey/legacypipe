@@ -27,6 +27,48 @@ class DecamImage(LegacySurveyImage):
         # Adjust zeropoint for exposure time
         self.ccdzpt += 2.5 * np.log10(self.exptime)
 
+        # Nominal zeropoints
+        self.zp0 =  dict(g = 26.610,
+                         r = 26.818,
+                         z = 26.484,
+                         # u from Arjun 2021-03-17, based on DECosmos-to-SDSS
+                         u = 23.3205,
+                         # i,Y from DESY1_Stripe82 95th percentiles
+                         i=26.758,
+                         Y=25.321,
+                         N501=23.812,
+                         N673=24.151,
+        ) # e/sec
+        # extinction per airmass
+        self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06,
+                          # From Arjun 2021-03-17 based on DECosmos (calib against SDSS)
+                          u = 0.63,
+                          #i, Y totally made up
+                          i=0.08, Y=0.06)
+        
+    def photometric_calibrator_to_observed(self, name, cat):
+        if name == 'ps1':
+            from legacypipe.ps1cat import ps1cat
+            colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
+            ps1band = ps1cat.ps1band[self.band]
+            return cat.median[:, ps1band] + np.clip(colorterm, -1., +1.)
+        elif name == 'sdss':
+            from legacypipe.ps1cat import sdsscat
+            colorterm = self.colorterm_sdss_to_observed(cat.psfmag, self.band)
+            band = sdsscat.sdssband[self.band]
+            return cat.psfmag[:, band] + np.clip(colorterm, -1., +1.)
+        else:
+            raise RuntimeError('No photometric conversion from %s to DECam' % name)
+    def colorterm_sdss_to_observed(self, sdssstars, band):
+        from legacypipe.ps1cat import sdss_to_decam
+        return sdss_to_decam(sdssstars, band)
+    def colorterm_ps1_to_observed(self, ps1stars, band):
+        from legacypipe.ps1cat import ps1_to_decam
+        return ps1_to_decam(ps1stars, band)
+
+    def get_gain(self, primhdr, hdr):
+        return np.average((hdr['GAINA'],hdr['GAINB']))
+
     def get_sky_template_filename(self, old_calibs_ok=False):
         import os
         from astrometry.util.fits import fits_table

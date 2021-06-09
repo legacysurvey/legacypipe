@@ -211,6 +211,7 @@ class LegacySurveyImage(object):
                 info = fitsio.FITS(self.imgfn)[image_hdu].get_info()
                 print('Image info:', info)
                 self.height,self.width = info['dims']
+                self.hdu = info['hdunum']
                 self.ccdname = hdr['EXTNAME'].strip().upper()
                 self.pixscale = 3600. * np.sqrt(np.abs(hdr['CD1_1'] * hdr['CD2_2'] -
                                                        hdr['CD1_2'] * hdr['CD2_1']))
@@ -305,11 +306,60 @@ class LegacySurveyImage(object):
                 break
         return exts
 
+    def nominal_zeropoint(self, band):
+        return self.zp0[band]
+
+    def extinction(self, band):
+        return self.k_ext[band]
+
+    def get_photometric_calibrator_cuts(self, name, cat):
+        '''Returns whether to keep sources in the *cat* of photometric calibration
+        stars from, eg, Pan-STARRS1 or SDSS.
+        '''
+        if name == 'ps1':
+            gicolor= cat.median[:,0] - cat.median[:,2]
+            return ((cat.nmag_ok[:, 0] > 0) &
+                    (cat.nmag_ok[:, 1] > 0) &
+                    (cat.nmag_ok[:, 2] > 0) &
+                    (gicolor > 0.4) &
+                    (gicolor < 2.7))
+        if name == 'sdss':
+            return np.ones(len(cat), bool)
+        raise RuntimeError('Unknown photometric calibration set: %s' % name)
+    def photometric_calibrator_to_observed(self, name, cat):
+        raise RuntimeError('Not implemented: generic photometric_calibrator_to_observed')
+    
     def get_psfex_merged_filename(self):
         return self.merged_psffn
     def get_splinesky_merged_filename(self):
         return self.merged_skyfn
+    def get_psfex_unmerged_filename(self):
+        return self.psffn
+    def get_splinesky_unmerged_filename(self):
+        return self.skyfn
 
+    def get_radec_bore(self, primhdr):
+        from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
+        # In some DECam exposures, RA,DEC are floating-point, but RA is in *decimal hours*.
+        # In others, RA does not exist (eg CP/V4.8.2a/CP20160824/c4d_160825_062109_ooi_g_ls9.fits.fz)
+        # Fall back to TELRA in that case.
+        ra_bore = dec_bore = None
+        if 'RA' in primhdr.keys():
+            try:
+                ra_bore = hmsstring2ra(primhdr['RA'])
+                dec_bore = dmsstring2dec(primhdr['DEC'])
+            except:
+                pass
+        if dec_bore is None and 'TELRA' in primhdr.keys():
+            ra_bore = hmsstring2ra(primhdr['TELRA'])
+            dec_bore = dmsstring2dec(primhdr['TELDEC'])
+        if dec_bore is None:
+            raise ValueError('Failed to parse RA or TELRA in primary header to get telescope boresight')
+        return ra_bore, dec_bore
+
+    def get_gain(self, primhdr, hdr):
+        return primhdr['GAIN']
+        
     def get_band(self, primhdr):
         band = primhdr['FILTER']
         band = band.split()[0]
@@ -1759,6 +1809,9 @@ class LegacySurveyImage(object):
         if sky:
             self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia, survey_blob_mask=survey_blob_mask, halos=halos, subtract_largegalaxies=subtract_largegalaxies)
 
+
+
+            
 def psfex_single_to_merged(infn, expnum, ccdname):
     # returns table T
     T = fits_table(infn)
