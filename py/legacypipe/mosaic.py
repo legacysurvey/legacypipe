@@ -68,6 +68,13 @@ class MosaicImage(LegacySurveyImage):
     def get_gain(self, primhdr, hdr):
         return hdr['GAIN']
 
+    # Used during zeropointing only.
+    def scale_image(self, img):
+        '''Convert image from electrons/sec to electrons.'''
+        return img * self.exptime
+    def scale_weight(self, img):
+        return img / (self.exptime**2)
+
     def remap_invvar(self, invvar, primhdr, img, dq):
         return self.remap_invvar_shotnoise(invvar, primhdr, img, dq)
 

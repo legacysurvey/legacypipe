@@ -2706,6 +2706,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     ccds['sig1'] = imobj.sig1
 
     img = imobj.read_image()
+    img = imobj.scale_image(img)
 
     # # Per-pixel error
     # medweight = np.median(weight[(weight > 0) * (imobj.bitmask == 0)])
@@ -2714,7 +2715,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     # ccds['sig1'] = (1. / np.sqrt(medweight)) / imobj.exptime
     
     invvar = imobj.remap_invvar(wt, primhdr, img, bitmask)
-
+    invvar = imobj.scale_weight(invvar)
+    
     t0= ptime('read image',t0)
 
     # Measure the sky brightness and (sky) noise level.
@@ -2930,6 +2932,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
              ('dec_now', np.double),
              ('flux0', np.float32),
              ('legacy_survey_mag', np.float32),
+             ('psfmag', np.float32),
              ('astrom', bool),
              ('photom', bool),
             ])
@@ -3113,7 +3116,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         'phot_g_mean_mag_error', 'phot_bp_mean_mag_error',
         'phot_rp_mean_mag_error',
     ] + [c for c,t in phot_cols] + [
-        'legacy_survey_mag',
+        'legacy_survey_mag', 'psfmag',
         'expnum', 'ccdname', 'exptime', 'gain', 'airmass', 'filter',
         'apflux_6', 'apflux_7', 'apflux_8',
         'apflux_6_err', 'apflux_7_err', 'apflux_8_err',

@@ -398,6 +398,16 @@ class LegacySurveyImage(object):
     def get_expnum(self, primhdr):
         return primhdr['EXPNUM']
 
+    def get_fwhm(self, primhdr, imghdr):
+        return imghdr.get('FWHM', np.nan)
+
+    # Used during zeropointing
+    def scale_image(self, img):
+        return img
+
+    def scale_weight(self, img):
+        return img
+
     def __str__(self):
         return self.name
 
@@ -765,9 +775,6 @@ class LegacySurveyImage(object):
 
     def get_sky_template(self, slc=None, old_calibs_ok=False):
         return None
-
-    def get_fwhm(self, primhdr, imghdr):
-        return imghdr.get('FWHM', np.nan)
 
     def get_image_extent(self, wcs=None, slc=None, radecpoly=None):
         '''

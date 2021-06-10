@@ -45,7 +45,7 @@ class DecamImage(LegacySurveyImage):
                           u = 0.63,
                           #i, Y totally made up
                           i=0.08, Y=0.06)
-        
+
     def colorterm_sdss_to_observed(self, sdssstars, band):
         from legacypipe.ps1cat import sdss_to_decam
         return sdss_to_decam(sdssstars, band)
