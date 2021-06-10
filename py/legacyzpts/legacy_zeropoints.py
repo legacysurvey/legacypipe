@@ -2173,14 +2173,13 @@ def run_one_calib(X):
     # - exptime==0
     # - all-zero weight map
 
-    bitmask,dqhdr = img.read_dq(header=True) #read_bitmask()
-    if bitmask is not None:
-        bitmask = img.remap_dq(bitmask, dqhdr)
-    #wt = img.read_weight(bitmask=bitmask)
-    wt = img.read_invvar(dq=bitmask)
-    zpscale = NanoMaggies.zeropointToScale(img.ccdzpt)
-    medweight = np.median(wt[(wt > 0) * (bitmask == 0)])
-    img.sig1 = (1. / np.sqrt(medweight)) / img.exptime / zpscale
+    # bitmask,dqhdr = img.read_dq(header=True) #read_bitmask()
+    # if bitmask is not None:
+    #     bitmask = img.remap_dq(bitmask, dqhdr)
+    # wt = img.read_invvar(dq=bitmask)
+    # zpscale = NanoMaggies.zeropointToScale(img.ccdzpt)
+    # medweight = np.median(wt[(wt > 0) * (bitmask == 0)])
+    # img.sig1 = (1. / np.sqrt(medweight)) / img.exptime / zpscale
     
     do_psf = False
     do_sky = False
@@ -2230,11 +2229,11 @@ def run_one_calib(X):
                 have_zpt = True
 
     # Set sig1 after (possibly) updating zeropoint!
-    from tractor.brightness import NanoMaggies
-    zpscale = NanoMaggies.zeropointToScale(img.ccdzpt)
-    medweight = np.median(wt[(wt > 0) * (bitmask == 0)])
-    # note, read_weight() for Mosaic and 90prime scales by 1/exptime**2
-    img.sig1 = (1. / np.sqrt(medweight)) / img.exptime / zpscale
+    # from tractor.brightness import NanoMaggies
+    # zpscale = NanoMaggies.zeropointToScale(img.ccdzpt)
+    # medweight = np.median(wt[(wt > 0) * (bitmask == 0)])
+    # # note, read_weight() for Mosaic and 90prime scales by 1/exptime**2
+    # img.sig1 = (1. / np.sqrt(medweight)) / img.exptime / zpscale
 
     git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
     ps = None
@@ -2700,12 +2699,16 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     bitmask,dqhdr = imobj.read_dq(header=True) #read_bitmask()
     if bitmask is not None:
         bitmask = imobj.remap_dq(bitmask, dqhdr)
-    wt = imobj.read_invvar(dq=bitmask)
-    medweight = np.median(wt[(wt > 0) * (bitmask == 0)])
-    imobj.sig1 = (1. / np.sqrt(medweight)) / imobj.exptime
+    invvar = imobj.read_invvar(dq=bitmask)
+    # Compute sig1 before rescaling!
+    medweight = np.median(invvar[(invvar > 0) * (bitmask == 0)])
+    imobj.sig1 = (1. / np.sqrt(medweight))
     ccds['sig1'] = imobj.sig1
 
     img = imobj.read_image()
+    invvar = imobj.remap_invvar(invvar, primhdr, img, bitmask)
+
+    invvar = imobj.scale_weight(invvar)
     img = imobj.scale_image(img)
 
     # # Per-pixel error
@@ -2714,8 +2717,6 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     # # sig1 in nanomaggie-ish units, ie, in per-second units.
     # ccds['sig1'] = (1. / np.sqrt(medweight)) / imobj.exptime
     
-    invvar = imobj.remap_invvar(wt, primhdr, img, bitmask)
-    invvar = imobj.scale_weight(invvar)
     
     t0= ptime('read image',t0)
 
