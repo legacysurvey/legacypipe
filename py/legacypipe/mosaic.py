@@ -8,19 +8,65 @@ class MosaicImage(LegacySurveyImage):
     NOAO Community Pipeline.
     '''
     def __init__(self, survey, t, image_fn=None, image_hdu=0):
-        super(MosaicImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_Hdu)
+        super(MosaicImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu)
+
+        self.zp0 = dict(z = 26.552,
+                        D51 = 24.351, # from obsbot
+        )
+        self.k_ext = dict(z = 0.06,
+                          D51 = 0.211, # from obsbot
+        )
+
+    def colorterm_sdss_to_observed(self, sdssstars, band):
+        from legacypipe.ps1cat import sdss_to_decam
+        print('Warning: using DECam color term for SDSS to Mosaic transformation')
+        return sdss_to_decam(sdssstars, band)
+    def colorterm_ps1_to_observed(self, ps1stars, band):
+        from legacypipe.ps1cat import ps1_to_mosaic
+        return ps1_to_mosaic(ps1stars, band)
 
     def apply_amp_correction(self, img, invvar, x0, y0):
         self.apply_amp_correction_northern(img, invvar, x0, y0)
+
+    def get_camera(self, primhdr):
+        cam = super().get_camera(primhdr)
+        if cam == 'mosaic3':
+            cam = 'mosaic'
+        return cam
 
     def get_fwhm(self, primhdr, imghdr):
         # exposure 88865 has SEEINGP1 in the primary header, nothing anywhere else,
         # so FWHM in the CCDs file is NaN.
         import numpy as np
-        print('mosaic get_fwhm: self.fwhm =', self.fwhm)
-        if not np.isfinite(self.fwhm):
-            self.fwhm = primhdr.get('SEEINGP1', 0.0)
-        return self.fwhm
+        fwhm = super().get_fwhm(primhdr, imghdr)
+        print('mosaic get_fwhm: header FWHM =', fwhm)
+        if not np.isfinite(fwhm):
+            fwhm = imghdr.get('SEEINGP1', 0.0)
+            print('Updated with SEEINGP1 =', fwhm)
+        return fwhm
+
+    def get_expnum(self, primhdr):
+        if 'EXPNUM' in primhdr and primhdr['EXPNUM'] is not None:
+            return primhdr['EXPNUM']
+        # At the beginning of the survey, eg 2016-01-24, the EXPNUM
+        # cards are blank.  Fake up an expnum like 160125082555
+        # (yymmddhhmmss), same as the CP filename.
+        # OBSID   = 'kp4m.20160125T082555' / Observation ID
+        obsid = primhdr['OBSID']
+        obsid = obsid.strip().split('.')[1]
+        obsid = obsid.replace('T', '')
+        obsid = int(obsid[2:], 10)
+        print('Faked up EXPNUM', obsid)
+        return obsid
+
+    def get_band(self, primhdr):
+        band = primhdr['FILTER']
+        band = band.split()[0]
+        band = {'zd':'z'}.get(band, band) # zd --> z
+        return band
+
+    def get_gain(self, primhdr, hdr):
+        return hdr['GAIN']
 
     def remap_invvar(self, invvar, primhdr, img, dq):
         return self.remap_invvar_shotnoise(invvar, primhdr, img, dq)

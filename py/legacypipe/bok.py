@@ -12,6 +12,11 @@ class BokImage(LegacySurveyImage):
     '''
     def __init__(self, survey, t, image_fn=None, image_hdu=0):
         super(BokImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu)
+        # Nominal zeropoints, sky brightness, and extinction values (taken from
+        # rapala.ninetyprime.boketc.py)
+        # /global/homes/a/arjundey/idl/pro/observing/bokstat.pro
+        self.zp0 =  dict(g = 26.93,r = 27.01,z = 26.552) # ADU/sec
+        self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06)
 
     def apply_amp_correction(self, img, invvar, x0, y0):
         self.apply_amp_correction_northern(img, invvar, x0, y0)
@@ -21,10 +26,35 @@ class BokImage(LegacySurveyImage):
         # has SEEINGP1 in the primary header, nothing anywhere else,
         # so FWHM in the CCDs file is NaN.
         import numpy as np
-        print('90prime get_fwhm: self.fwhm =', self.fwhm)
-        if not np.isfinite(self.fwhm):
-            self.fwhm = primhdr.get('SEEINGP1', 0.0)
-        return self.fwhm
+        fwhm = super().get_fwhm(primhdr, imghdr)
+        print('90prime get_fwhm:', fwhm)
+        if not np.isfinite(fwhm):
+            fwhm = imghdr.get('SEEINGP1', 0.0)
+            print('Updated with SEEINGP1 =', fwhm)
+        return fwhm
+
+    def get_expnum(self, primhdr):
+        """converts 90prime header key DTACQNAM into the unique exposure number"""
+        # /descache/bass/20160710/d7580.0144.fits --> 75800144
+        import re
+        import os
+        base= (os.path.basename(primhdr['DTACQNAM'])
+               .replace('.fits','')
+               .replace('.fz',''))
+        return int( re.sub(r'([a-z]+|\.+)','',base) )
+
+    def get_gain(self, primhdr, hdr):
+        return 1.4
+
+    def get_band(self, primhdr):
+        band = primhdr['FILTER']
+        band = band.split()[0]
+        return band.replace('bokr', 'r')
+
+    def colorterm_ps1_to_observed(self, ps1stars, band):
+        """ps1stars: ps1.median 2D array of median mag for each band"""
+        from legacypipe.ps1cat import ps1_to_90prime
+        return ps1_to_90prime(ps1stars, band)
 
     def read_dq(self, slice=None, header=False, **kwargs):
         # Add supplemental static mask.

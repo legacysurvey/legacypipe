@@ -2017,7 +2017,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     
     if just_measure:
         #print('measureargs:', measureargs)
-        return survey.get_image_object(None, camera=camera, image_fn=img_fn_full,
+        return survey.get_image_object(None, camera=camera, image_fn=img_fn,
                                        image_hdu=image_hdu)
     
 
@@ -2028,8 +2028,10 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
         print('  ', k, '=', v)
     
     img = survey.get_image_object(None, camera=camera,
-                                  image_fn=img_fn_full, image_hdu=image_hdu)
+                                  image_fn=img_fn, image_hdu=image_hdu)
     print('Got image object', img)
+    # Confirm camera field.
+    cammap = {'mosaic3':'mosaic'}
     assert(img.camera == camera)
 
     if measureargs['choose_ccd']:
@@ -2067,7 +2069,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
             psfex = False
 
     if splinesky or psfex:
-        imgs = mp.map(run_one_calib, [(img_fn, camera, survey, ext, do_psfex, do_splinesky,
+        imgs = mp.map(run_one_calib, [(img_fn, camera, survey, ext, psfex, splinesky,
                                        plots, survey_blob_mask, survey_zeropoints)
                                       for ext in extlist])
         from legacyzpts.merge_calibs import merge_splinesky, merge_psfex
@@ -2476,9 +2478,12 @@ def main(image_list=None,args=None):
     camera = measureargs['camera']
     image_dir = measureargs['image_dir']
 
-    survey = FakeLegacySurveyData()
+    # survey = FakeLegacySurveyData()
+    survey = LegacySurveyData()
     survey.imagedir = image_dir
     survey.calibdir = measureargs.get('calibdir')
+    print('Survey image dir:', survey.imagedir)
+    print('Survey calib dir:', survey.calibdir)
     measureargs.update(survey=survey)
 
     if camera in ['mosaic', 'decam', 'megaprime', '90prime']:
@@ -2622,6 +2627,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     namemap = { 'object': 'obj',
                 'filter': 'band',
                 'image_hdu': 'hdu',
+                'mjd_obs': 'mjdobs',
     }
     #ccds['yshift'] = 'YSHIFT' in self.primhdr
     # 'date_obs',
@@ -2783,7 +2789,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     if splinesky:
         sky = imobj.read_sky_model()
         print('Instantiating and subtracting sky model')
-        skymod = np.zeros_like(imobj.img)
+        skymod = np.zeros_like(img)
         sky.addTo(skymod)
         # Apply the same transformation that was applied to the image...
         skymod = imobj.scale_image(skymod)
@@ -2805,7 +2811,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     gaia.rename('source_id', 'gaia_sourceid')
     ra,dec = radec_at_mjd(gaia.ra_gaia, gaia.dec_gaia,
                           gaia.ref_epoch.astype(float),
-                          gaia.pmra, gaia.pmdec, gaia.parallax, imobj.mjd_obs)
+                          gaia.pmra, gaia.pmdec, gaia.parallax, imobj.mjdobs)
     gaia.ra_now = ra
     gaia.dec_now = dec
     for b in ['g', 'bp', 'rp']:

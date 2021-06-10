@@ -187,12 +187,13 @@ class LegacySurveyImage(object):
             self.propid = self.get_propid(primhdr)
             self.airmass = self.get_airmass(primhdr)
             self.expnum = self.get_expnum(primhdr)
+            self.camera = self.get_camera(primhdr)
             #self.date_obs = self.primhdr['DATE-OBS']
             #self.ut = self.get_ut(self.primhdr)
             #self.obj = self.primhdr['OBJECT']
-            namechange = dict(date='procdate', instrume='camera')
-            for key in ['EXPTIME', 'MJD-OBS', 'HA', 'DATE', 'PLVER', 'PLPROCID',
-                        'INSTRUME']:
+            namechange = {'date': 'procdate',
+                          'mjd-obs': 'mjdobs'}
+            for key in ['EXPTIME', 'MJD-OBS', 'HA', 'DATE', 'PLVER', 'PLPROCID']:
                 val = primhdr.get(key)
                 if type(val) == str:
                     val = val.strip()
@@ -201,7 +202,6 @@ class LegacySurveyImage(object):
                 key = namechange.get(key.lower(), key.lower())
                 key = key.replace('-', '_')
                 setattr(self, key, val)
-            self.camera = self.camera.lower()
 
             # hdu, ccdname, width, height, pixscale
             self.hdu = image_hdu
@@ -209,13 +209,13 @@ class LegacySurveyImage(object):
                 hdr = self.read_image_header(ext=image_hdu)
                 # Parse ZNAXIS[12] / NAXIS[12] ?
                 info = fitsio.FITS(self.imgfn)[image_hdu].get_info()
-                print('Image info:', info)
+                #print('Image info:', info)
                 self.height,self.width = info['dims']
-                self.hdu = info['hdunum']
+                self.hdu = info['hdunum'] - 1
                 self.ccdname = hdr['EXTNAME'].strip().upper()
                 self.pixscale = 3600. * np.sqrt(np.abs(hdr['CD1_1'] * hdr['CD2_2'] -
                                                        hdr['CD1_2'] * hdr['CD2_1']))
-                self.fwhm = hdr['FWHM']
+                self.fwhm = self.get_fwhm(primhdr, hdr)
             else:
                 self.ccdname = ''
             # fwhm, sig1
@@ -263,6 +263,9 @@ class LegacySurveyImage(object):
 
         self.compute_filenames()
 
+        print('image_filename', self.image_filename)
+        print('imgfn:', self.imgfn)
+        
         # Which Data Quality bits mark saturation?
         self.dq_saturation_bits = DQ_BITS['satur'] # | DQ_BITS['bleed']
 
@@ -327,7 +330,23 @@ class LegacySurveyImage(object):
             return np.ones(len(cat), bool)
         raise RuntimeError('Unknown photometric calibration set: %s' % name)
     def photometric_calibrator_to_observed(self, name, cat):
-        raise RuntimeError('Not implemented: generic photometric_calibrator_to_observed')
+        if name == 'ps1':
+            from legacypipe.ps1cat import ps1cat
+            colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
+            ps1band = ps1cat.ps1band[self.band]
+            return cat.median[:, ps1band] + np.clip(colorterm, -1., +1.)
+        elif name == 'sdss':
+            from legacypipe.ps1cat import sdsscat
+            colorterm = self.colorterm_sdss_to_observed(cat.psfmag, self.band)
+            band = sdsscat.sdssband[self.band]
+            return cat.psfmag[:, band] + np.clip(colorterm, -1., +1.)
+        else:
+            raise RuntimeError('No photometric conversion from %s to DECam' % name)
+
+    def colorterm_ps1_to_observed(self, cat, band):
+        raise RuntimeError('Not implemented: generic colorterm_ps1_to_observed')
+    def colorterm_sdss_to_observed(self, cat, band):
+        raise RuntimeError('Not implemented: generic colorterm_sdss_to_observed')
     
     def get_psfex_merged_filename(self):
         return self.merged_psffn
@@ -357,6 +376,11 @@ class LegacySurveyImage(object):
             raise ValueError('Failed to parse RA or TELRA in primary header to get telescope boresight')
         return ra_bore, dec_bore
 
+    def get_camera(self, primhdr):
+        cam = primhdr['INSTRUME']
+        cam = cam.lower()
+        return cam
+    
     def get_gain(self, primhdr, hdr):
         return primhdr['GAIN']
         
@@ -743,7 +767,7 @@ class LegacySurveyImage(object):
         return None
 
     def get_fwhm(self, primhdr, imghdr):
-        return self.fwhm
+        return imghdr.get('FWHM', np.nan)
 
     def get_image_extent(self, wcs=None, slc=None, radecpoly=None):
         '''
@@ -981,17 +1005,17 @@ class LegacySurveyImage(object):
         #   mean value    = 0.0235224
         #   minimum value = -14.2634
         #   maximum value = 1628.22
-
-        from tractor.basics import NanoMaggies
-        zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
-        fixedwt = 1. / (self.sig1 * zpscale)**2
-        #medwt = np.median(invvar[invvar > 0])
-        #debug('Median wt %.4g vs sig1-based wt %.4g factor %.4g' % (medwt, fixedwt, medwt/fixedwt))
-        thresh = 1.3 * fixedwt
-        n = np.sum(invvar > thresh)
-        if n > 0:
-            info('Clipping %i pixels with anomalously large oow values: max %g vs median %g' % (n, np.max(invvar), fixedwt))
-            invvar[invvar > thresh] = fixedwt
+        if self.sig1 > 0:
+            from tractor.basics import NanoMaggies
+            zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
+            fixedwt = 1. / (self.sig1 * zpscale)**2
+            #medwt = np.median(invvar[invvar > 0])
+            #debug('Median wt %.4g vs sig1-based wt %.4g factor %.4g' % (medwt, fixedwt, medwt/fixedwt))
+            thresh = 1.3 * fixedwt
+            n = np.sum(invvar > thresh)
+            if n > 0:
+                info('Clipping %i pixels with anomalously large oow values: max %g vs median %g' % (n, np.max(invvar), fixedwt))
+                invvar[invvar > thresh] = fixedwt
         invvar[invvar < 0.] = 0.
         assert(np.all(np.isfinite(invvar)))
         return invvar
