@@ -2700,9 +2700,10 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     if bitmask is not None:
         bitmask = imobj.remap_dq(bitmask, dqhdr)
     invvar = imobj.read_invvar(dq=bitmask)
-    # Compute sig1 before rescaling!
-    medweight = np.median(invvar[(invvar > 0) * (bitmask == 0)])
-    imobj.sig1 = (1. / np.sqrt(medweight))
+    # Compute sig1 before rescaling... well, not quite
+    mediv = np.median(invvar[(invvar > 0) * (bitmask == 0)])
+    mediv = imobj.scale_weight(mediv)
+    imobj.sig1 = (1. / np.sqrt(mediv)) / imobj.exptime
     ccds['sig1'] = imobj.sig1
 
     img = imobj.read_image()
