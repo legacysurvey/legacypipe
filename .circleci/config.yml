@@ -19,6 +19,13 @@ jobs:
               #coverage run -a test/runbrick_test.py
               python3.6 test/unit_tests.py
               python3.6 test/runbrick_test.py
+              git clone https://github.com/legacysurvey/legacypipe-test-data.git
+              export LPT=$(pwd)/legacypipe-test-data
+              export LEGACYPIPE_TEST_DATA=$LPT
+              export GAIA_CAT_DIR=$LPT/gaia-dr2
+              export GAIA_CAT_VER=2
+              export PS1CAT_DIR=$LPT/ps1-qz-star-v3
+              export TYCHO2_KD_DIR=$LPT
               python3.6 test/legacyzpts_test.py
 
   build-from-docker-py3.7:
@@ -71,6 +78,13 @@ jobs:
               #coverage run -a test/runbrick_test.py
               python3.8 test/unit_tests.py
               python3.8 test/runbrick_test.py
+              git clone https://github.com/legacysurvey/legacypipe-test-data.git
+              export LPT=$(pwd)/legacypipe-test-data
+              export LEGACYPIPE_TEST_DATA=$LPT
+              export GAIA_CAT_DIR=$LPT/gaia-dr2
+              export GAIA_CAT_VER=2
+              export PS1CAT_DIR=$LPT/ps1-qz-star-v3
+              export TYCHO2_KD_DIR=$LPT
               python3.8 test/legacyzpts_test.py
 
   build-from-docker-u2004-py3.8:
@@ -92,6 +106,13 @@ jobs:
               #coverage run -a test/runbrick_test.py
               python3.8 test/unit_tests.py
               python3.8 test/runbrick_test.py
+              git clone https://github.com/legacysurvey/legacypipe-test-data.git
+              export LPT=$(pwd)/legacypipe-test-data
+              export LEGACYPIPE_TEST_DATA=$LPT
+              export GAIA_CAT_DIR=$LPT/gaia-dr2
+              export GAIA_CAT_VER=2
+              export PS1CAT_DIR=$LPT/ps1-qz-star-v3
+              export TYCHO2_KD_DIR=$LPT
               python3.8 test/legacyzpts_test.py
 
   build-from-docker-u2004-py3.9:
@@ -113,6 +134,13 @@ jobs:
               #coverage run -a test/runbrick_test.py
               python3.9 test/unit_tests.py
               python3.9 test/runbrick_test.py
+              git clone https://github.com/legacysurvey/legacypipe-test-data.git
+              export LPT=$(pwd)/legacypipe-test-data
+              export LEGACYPIPE_TEST_DATA=$LPT
+              export GAIA_CAT_DIR=$LPT/gaia-dr2
+              export GAIA_CAT_VER=2
+              export PS1CAT_DIR=$LPT/ps1-qz-star-v3
+              export TYCHO2_KD_DIR=$LPT
               python3.9 test/legacyzpts_test.py
 
 workflows:

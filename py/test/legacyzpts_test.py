@@ -11,6 +11,9 @@ from legacyzpts.merge_annotated import main as mamain
 from legacyzpts.update_ccd_cuts import main as upmain
 from legacypipe.runbrick import main as rbmain
 
+import astropy.utils.iers
+astropy.utils.iers.conf.auto_download = False
+
 def main():
     survey_dir = os.environ['LEGACYPIPE_TEST_DATA']
     lzmain(args=['--survey-dir', survey_dir, '--camera', 'decam', '--image',

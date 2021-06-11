@@ -455,3 +455,6 @@ def main(args=None):
     ccds.write_to(getattr(args, 'survey-ccds-out'))
     annotated.writeto(getattr(args, 'ccds-annotated-out'))
     
+if __name__ == '__main__':
+    main()
+
