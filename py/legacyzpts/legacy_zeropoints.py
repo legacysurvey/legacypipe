@@ -612,7 +612,22 @@ def get_parser():
     return parser
 
 
-def main(image_list=None,args=None):
+def main(args=None):
+    parser= get_parser()
+    args = parser.parse_args(args=args)
+    if args.overhead is not None:
+        t0 = args.overhead
+        if t0.endswith('.N'):
+            t0 = t0[:-2]
+        t0 = float(t0)
+        import time
+        print('Startup time:', time.time()-t0, 'seconds')
+
+    if args.image_list:
+        image_list = read_lines(args.image_list)
+    elif args.image:
+        image_list = [args.image]
+
     ''' Produce zeropoints for all CP images in image_list
     image_list -- iterable list of image filenames
     args -- parsed argparser objection from get_parser()
@@ -1375,20 +1390,4 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
     return cal
 
 if __name__ == "__main__":
-    parser= get_parser()
-    args = parser.parse_args()
-
-    if args.overhead is not None:
-        t0 = args.overhead
-        if t0.endswith('.N'):
-            t0 = t0[:-2]
-        t0 = float(t0)
-        import time
-        print('Startup time:', time.time()-t0, 'seconds')
-
-    if args.image_list:
-        images= read_lines(args.image_list)
-    elif args.image:
-        images= [args.image]
-
-    main(image_list=images,args=args)
+    main()
