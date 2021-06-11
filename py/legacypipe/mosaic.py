@@ -17,6 +17,10 @@ class MosaicImage(LegacySurveyImage):
                           D51 = 0.211, # from obsbot
         )
 
+    @classmethod
+    def get_nominal_pixscale(cls):
+        return 0.262
+
     def colorterm_sdss_to_observed(self, sdssstars, band):
         from legacypipe.ps1cat import sdss_to_decam
         print('Warning: using DECam color term for SDSS to Mosaic transformation')
@@ -50,10 +54,8 @@ class MosaicImage(LegacySurveyImage):
         # so FWHM in the CCDs file is NaN.
         import numpy as np
         fwhm = super().get_fwhm(primhdr, imghdr)
-        print('mosaic get_fwhm: header FWHM =', fwhm)
         if not np.isfinite(fwhm):
             fwhm = imghdr.get('SEEINGP1', 0.0)
-            print('Updated with SEEINGP1 =', fwhm)
         return fwhm
 
     def get_expnum(self, primhdr):

@@ -18,6 +18,10 @@ class BokImage(LegacySurveyImage):
         self.zp0 =  dict(g = 26.93,r = 27.01,z = 26.552) # ADU/sec
         self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06)
 
+    @classmethod
+    def get_nominal_pixscale(cls):
+        return 0.454
+
     def apply_amp_correction(self, img, invvar, x0, y0):
         self.apply_amp_correction_northern(img, invvar, x0, y0)
 
@@ -35,10 +39,8 @@ class BokImage(LegacySurveyImage):
         # so FWHM in the CCDs file is NaN.
         import numpy as np
         fwhm = super().get_fwhm(primhdr, imghdr)
-        print('90prime get_fwhm:', fwhm)
         if not np.isfinite(fwhm):
             fwhm = imghdr.get('SEEINGP1', 0.0)
-            print('Updated with SEEINGP1 =', fwhm)
         return fwhm
 
     def get_expnum(self, primhdr):

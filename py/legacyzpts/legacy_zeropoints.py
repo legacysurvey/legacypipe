@@ -31,6 +31,7 @@ from legacypipe.ps1cat import ps1cat, sdsscat
 from legacypipe.gaiacat import GaiaCatalog
 from legacypipe.survey import radec_at_mjd, get_git_version
 from legacypipe.image import validate_version
+from legacypipe.survey import LegacySurveyData
 
 CAMERAS=['decam','mosaic','90prime','megaprime']
 MAGLIM=dict(
@@ -100,6 +101,8 @@ def _ccds_table(camera='decam'):
         ('cd1_2', 'f4'),
         ('cd2_1', 'f4'),
         ('cd2_2', 'f4'),
+        ('pixscale', 'f4'),
+        ('zptavg', 'f4'),
         ('yshift', 'bool'),
         # -- CCD-level quantities --
         ('ra', 'f8'),
@@ -159,7 +162,7 @@ def cols_for_survey_table():
 
 def prep_survey_table(T, camera=None, bad_expid=None):
     assert(camera in CAMERAS)
-    need_keys = cols_for_survey_table(which='all')
+    need_keys = cols_for_survey_table()
     # Rename
     rename_keys= [('zpt','ccdzpt'),
                   ('zptavg','zpt'),
@@ -205,110 +208,10 @@ def create_annotated_table(T, ann_fn, camera, survey, mp):
     print('Wrote %s' % ann_fn)
 
 def getrms(x):
-    return np.sqrt( np.mean( np.power(x,2) ) )
-
-
-class MegaPrimeMeasurer(Measurer):
-    def __init__(self, *args, **kwargs):
-        self.camera = 'megaprime'
-        super(MegaPrimeMeasurer, self).__init__(*args, **kwargs)
-        self.pixscale = get_pixscale(self.camera)
-
-        # # /global/homes/a/arjundey/idl/pro/observing/decstat.pro
-        ### HACK!!!
-        self.zp0 =  dict(g = 26.610,
-                         r = 26.818,
-                         z = 26.484,
-                         # Totally made up
-                         u = 26.610,
-                         )
-                         #                  # i,Y from DESY1_Stripe82 95th percentiles
-                         #                  i=26.758, Y=25.321) # e/sec
-        self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06,
-                          # Totally made up
-                          u = 0.24)
-        #                   #i, Y totally made up
-        #                   i=0.08, Y=0.06)
-        # --> e/sec
-
-        self.primhdr['WCSCAL'] = 'success'
-        self.goodWcs = True
-
-    def get_extension_list(self, fn, debug=False):
-        if debug:
-            return ['ccd03']
-        hdu = fitsio.FITS(fn)
-        return [hdu[i].get_extname() for i in range(1,len(hdu))]
-
-    def get_ut(self, primhdr):
-        return primhdr['UTC-OBS']
-
-    def get_radec_bore(self, primhdr):
-        return primhdr['RA_DEG'], primhdr['DEC_DEG']
-
-    def ps1_to_observed(self, ps1):
-        # u->g
-        ps1band = dict(u='g').get(self.band, self.band)
-        ps1band_index = ps1cat.ps1band[ps1band]
-        colorterm = self.colorterm_ps1_to_observed(ps1.median, self.band)
-        return ps1.median[:, ps1band_index] + np.clip(colorterm, -1., +1.)
-
-    def get_band(self):
-        band = self.primhdr['FILTER'][0]
-        return band
-
-    def get_gain(self,hdr):
-        return hdr['GAIN']
-
-    def colorterm_ps1_to_observed(self, ps1stars, band):
-        from legacypipe.ps1cat import ps1_to_decam
-        print('HACK -- using DECam color term for CFHT!!')
-        if band == 'u':
-            print('HACK -- using g-band color term for u band!')
-            band = 'g'
-        return ps1_to_decam(ps1stars, band)
-
-    def scale_image(self, img):
-        return img.astype(np.float32)
-
-    def scale_weight(self, img):
-        return img
-
-    def get_wcs(self):
-        ### FIXME -- no distortion solution in here
-        # from astrometry.util.util import Tan
-        # return Tan(self.hdr)
-
-        # "pitcairn" reductions have PV header cards (CTYPE is still RA---TAN)
-        return wcs_pv2sip_hdr(self.hdr)
-
-    def read_weight(self, clip=True, clipThresh=0.01, **kwargs):
-        # Just estimate from image...
-        img,_ = self.read_image()
-        print('Image:', img.shape, img.dtype)
-
-        # Estimate per-pixel noise via Blanton's 5-pixel MAD
-        slice1 = (slice(0,-5,10),slice(0,-5,10))
-        slice2 = (slice(5,None,10),slice(5,None,10))
-        mad = np.median(np.abs(img[slice1] - img[slice2]).ravel())
-        sig1 = 1.4826 * mad / np.sqrt(2.)
-        invvar = (1. / sig1**2)
-        return np.zeros_like(img) + invvar
-
-    def read_bitmask(self):
-        # from legacypipe/cfht.py
-        dqfn = 'cfis/test.mask.0.40.01.fits'
-        if self.slc is not None:
-            mask = fitsio.FITS(dqfn)[self.ext][self.slc]
-        else:
-            mask = fitsio.read(dqfn, ext=self.ext)
-        # This mask is a 16-bit image but has values 0=bad, 1=good.  Flip.
-        return (1 - mask).astype(np.int16)
-
-
+    return np.sqrt(np.mean(x**2))
 
 def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
-                  just_measure=False,
+                  just_imobj=False,
                   survey=None, psfex=True, camera=None, **measureargs):
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
     the FITS extensions for a given set of images.
@@ -321,8 +224,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
 
     img = survey.get_image_object(None, camera=camera,
                                   image_fn=img_fn, image_hdu=image_hdu)
-    if just_measure:
-        # ("just_measure" means "just get the Image object")
+    if just_imobj:
         return img
 
     print('Got image object', img)
@@ -678,7 +580,9 @@ def get_parser():
     parser.add_argument('--camera',choices=['decam','mosaic','90prime','megaprime'],action='store',required=True)
     parser.add_argument('--image',action='store',default=None,help='relative path to image starting from decam,bok,mosaicz dir',required=False)
     parser.add_argument('--image_list',action='store',default=None,help='text file listing multiples images in same was as --image',required=False)
-    parser.add_argument('--outdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
+    parser.add_argument('--outdir', type=str, default=None, help='Where to write zpts/,images/,logs/; default is within $LEGACY_SURVEY_DIR/--survey-dir')
+    parser.add_argument('--survey-dir', type=str, default=None,
+                        help='Override the $LEGACY_SURVEY_DIR environment variable')
     parser.add_argument('--sdss-photom', default=False, action='store_true',
                         help='Use SDSS rather than PS-1 for photometric cal.')
     parser.add_argument('--debug', action='store_true', default=False, help='Write additional files and plots for debugging')
@@ -699,7 +603,7 @@ def get_parser():
                         help='The base directory to search for blob masks during sky model construction')
     parser.add_argument('--zeropoints-dir', type=str, default=None,
                         help='The base directory to search for survey-ccds files for subtracting star halos before doing sky calibration.')
-    parser.add_argument('--calibdir', default=None, action='store',
+    parser.add_argument('--calibdir', default=None,
                         help='if None will use LEGACY_SURVEY_DIR/calib, e.g. /global/cscratch1/sd/desiproc/dr5-new/calib')
     parser.add_argument('--threads', default=None, type=int,
                         help='Multiprocessing threads (parallel by HDU)')
@@ -754,50 +658,41 @@ def main(args=None):
     #    lvl = logging.DEBUG
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
 
-    if measureargs['calibdir'] is None:
-        cal = os.getenv('LEGACY_SURVEY_DIR',None)
-        if cal is not None:
-            measureargs['calibdir'] = os.path.join(cal, 'calib')
-
     camera = measureargs['camera']
 
-    survey = LegacySurveyData()
-    survey.calibdir = measureargs.get('calibdir')
-    print('Survey image dir:', survey.imagedir)
-    print('Survey calib dir:', survey.calibdir)
+    survey = LegacySurveyData(survey_dir=measureargs['survey_dir'])
+    if measureargs.get('calibdir'):
+        survey.calib_dir = measureargs['calibdir']
     measureargs.update(survey=survey)
 
-    if camera in ['mosaic', 'decam', 'megaprime', '90prime']:
-        if camera in ['mosaic', 'decam', '90prime']:
-            from legacyzpts.psfzpt_cuts import read_bad_expid
-
-            fn = resource_filename('legacyzpts', 'data/{}-bad_expid.txt'.format(camera))
-            if os.path.isfile(fn):
-                print('Reading {}'.format(fn))
-                measureargs.update(bad_expid=read_bad_expid(fn))
-            else:
-                print('No bad exposure file found for camera {}'.format(camera))
-
-        cal = measureargs.get('calibdir')
-        if cal is not None:
-            survey.calibdir = cal
-
-        try:
-            from legacypipe.cfht import MegaPrimeImage
-            survey.image_typemap['megaprime'] = MegaPrimeImage
-        except:
-            print('MegaPrimeImage class not found')
-            raise IOError
-
     outdir = measureargs.pop('outdir')
+    if outdir is None:
+        outdir = os.path.join(survey.survey_dir, 'zpt')
+
+    if camera in ['mosaic', 'decam', '90prime']:
+        from legacyzpts.psfzpt_cuts import read_bad_expid
+        fn = resource_filename('legacyzpts', 'data/{}-bad_expid.txt'.format(camera))
+        if os.path.isfile(fn):
+            print('Reading {}'.format(fn))
+            measureargs.update(bad_expid=read_bad_expid(fn))
+        else:
+            print('No bad exposure file found for camera {}'.format(camera))
+
+    # try:
+    #     from legacypipe.cfht import MegaPrimeImage
+    #     survey.image_typemap['megaprime'] = MegaPrimeImage
+    # except:
+    #     print('MegaPrimeImage class not found')
+    #     raise IOError
+
     for ii, imgfn in enumerate(image_list):
         print('Working on image {}/{}: {}'.format(ii+1, nimage, imgfn))
 
         # Check if the outputs are done and have the correct data model.
-        F = outputFns(imgfn, outdir, camera, image_dir=survey.imagedir,
+        F = outputFns(imgfn, outdir, camera, image_dir=survey.get_image_dir(),
                       debug=measureargs['debug'])
 
-        measure = measure_image(F.imgfn, None, just_measure=True, image_hdu=None,
+        measure = measure_image(F.imgfn, None, just_imobj=True, image_hdu=None,
                                 **measureargs)
         psffn = measure.get_psfex_merged_filename()
         skyfn = measure.get_splinesky_merged_filename()
