@@ -396,6 +396,10 @@ def main(args=None):
                         help='Omit the not-grz cut')
     parser.add_argument('--early-decam', default=False, action='store_true',
                         help='Omit the cut on early DECam data')
+    parser.add_argument('--depth-cut', default=True, action='store_false',
+                        help='Omit the depth cut')
+    parser.add_argument('--good-ccd-fraction', default=0.7, type=float,
+                        help='Fraction of CCDs in an exposure that must be good to keep any chips')
     numpy.seterr(invalid='raise')
     args = parser.parse_args(args=args)
     ccds = fits_table(getattr(args, 'survey-ccds'))
@@ -446,11 +450,12 @@ def main(args=None):
     if not numpy.all((ccds.ccd_cuts & depthbit) == 0):
         print('Warning: some depth_cut bits already set; zeroing...')
     ccds.ccd_cuts = ccds.ccd_cuts & ~depthbit
-    mbad = good_ccd_fraction(args.camera, ccds) < 0.7
+    mbad = good_ccd_fraction(args.camera, ccds) < args.good_ccd_fraction
     ccds.ccd_cuts = ccds.ccd_cuts | (manybadbit * mbad)
-    dcut = depthcut(args.camera, ccds, annotated, tilefile=args.tilefile,
-                    imlist=args.imlist)
-    ccds.ccd_cuts = ccds.ccd_cuts | (depthbit * ~dcut)
+    if args.depth_cut:
+        dcut = depthcut(args.camera, ccds, annotated, tilefile=args.tilefile,
+                        imlist=args.imlist)
+        ccds.ccd_cuts = ccds.ccd_cuts | (depthbit * ~dcut)
     annotated.ccd_cuts = ccds.ccd_cuts
     ccds.write_to(getattr(args, 'survey-ccds-out'))
     annotated.writeto(getattr(args, 'ccds-annotated-out'))
