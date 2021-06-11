@@ -531,13 +531,37 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None):
         I = fI / I
     H,W = I.shape
     rgb = np.zeros((H,W,3), np.float32)
-    for img,band in zip(imgs, bands):
-        plane,scale = rgbscales[band]
-        if mnmx is None:
-            rgb[:,:,plane] = np.clip((img * scale + m) * I, 0, 1)
-        else:
-            mn,mx = mnmx
-            rgb[:,:,plane] = np.clip(((img * scale + m) - mn) / (mx - mn), 0, 1)
+
+    if bands == 'griz':
+
+        rgbvec = dict(
+            g = (0.,   0.,  0.75),
+            r = (0.,   0.5, 0.25),
+            i = (0.25, 0.5, 0.),
+            z = (0.75, 0.,  0.))
+        
+        for img,band in zip(imgs, bands):
+            rf,gf,bf = rgbvec[band]
+            if mnmx is None:
+                v = np.clip((img * scale + m) * I, 0, 1)
+            else:
+                mn,mx = mnmx
+                v = np.clip(((img * scale + m) - mn) / (mx - mn), 0, 1)
+            if rf != 0.:
+                rgb[:,:,0] += rf*v
+            if gf != 0.:
+                rgb[:,:,1] += gf*v
+            if bf != 0.:
+                rgb[:,:,2] += bf*v
+
+    else:
+        for img,band in zip(imgs, bands):
+            plane,scale = rgbscales[band]
+            if mnmx is None:
+                rgb[:,:,plane] = np.clip((img * scale + m) * I, 0, 1)
+            else:
+                mn,mx = mnmx
+                rgb[:,:,plane] = np.clip(((img * scale + m) - mn) / (mx - mn), 0, 1)
     return rgb
 
 def get_rgb(imgs, bands,
@@ -718,7 +742,7 @@ class LegacySurveyData(object):
     '''
 
     def __init__(self, survey_dir=None, cache_dir=None, output_dir=None,
-                 allbands='grz'):
+                 allbands=['g','r','z']):
         '''Create a LegacySurveyData object using data from the given
         *survey_dir* directory, or from the $LEGACY_SURVEY_DIR environment
         variable.
