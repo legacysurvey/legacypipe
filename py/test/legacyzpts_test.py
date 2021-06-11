@@ -19,13 +19,13 @@ def main():
             'mosaic/CP/V4.4/CP20161016/k4m_161017_115416_CCD3_ooi_zd_ls9.fits.fz'])
     lzmain(args=['--survey-dir', survey_dir, '--camera', '90prime', '--image',
             '90prime/CP/V2.3/CP20170202/ksb_170203_044105_CCD2_ooi_r_ls9.fits.fz'])
-    cmd = 'find %s/zpt/decam/ -name "*-ann*" > decam.txt'
+    cmd = 'find %s/zpt/decam/ -name "*-ann*" > decam.txt' % survey_dir
     rtn = os.system(cmd)
     assert(rtn == 0)
-    cmd = 'find %s/zpt/mosaic/ -name "*-ann*" > mosaic.txt'
+    cmd = 'find %s/zpt/mosaic/ -name "*-ann*" > mosaic.txt' % survey_dir
     rtn = os.system(cmd)
     assert(rtn == 0)
-    cmd = 'find %s/zpt/90prime/ -name "*-ann*" > 90prime.txt'
+    cmd = 'find %s/zpt/90prime/ -name "*-ann*" > 90prime.txt' % survey_dir
     rtn = os.system(cmd)
     assert(rtn == 0)
 
