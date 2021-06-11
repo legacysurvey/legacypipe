@@ -238,8 +238,11 @@ def create_annotated_table(T, ann_fn, camera, survey, mp):
     from legacyzpts.annotate_ccds import annotate, init_annotations
     T = survey.cleanup_ccds_table(T)
     init_annotations(T)
-    annotate(T, survey, mp=mp, mzls=(camera == 'mosaic'), bass=(camera == '90prime'),
-             normalizePsf=True, carryOn=True)
+
+    I, = np.nonzero(T.ccdzpt)
+    if len(I):
+        annotate(T, survey, mp=mp, mzls=(camera == 'mosaic'), bass=(camera == '90prime'),
+                 normalizePsf=True, carryOn=True)
     writeto_via_temp(ann_fn, T)
     print('Wrote %s' % ann_fn)
 
@@ -2001,38 +2004,33 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     the FITS extensions for a given set of images.
     '''
     t0 = Time()
-
     quiet = measureargs.get('quiet', False)
-
     img_fn_full = os.path.join(image_dir, img_fn)
-
-    print('measure_image', img_fn)
-    print('survey', survey)
-    print('camera', camera)
-
     imgclass = survey.image_class_for_camera(camera)
-    print('Image class:', imgclass)
-
     image_hdu = measureargs.get('image_hdu', None)
-    
-    if just_measure:
-        #print('measureargs:', measureargs)
-        return survey.get_image_object(None, camera=camera, image_fn=img_fn,
-                                       image_hdu=image_hdu)
-    
 
-    ma = measureargs.copy()
-    ma.pop('bad_expids', None)
-    print('measureargs:')
-    for k,v in ma.items():
-        print('  ', k, '=', v)
-    
     img = survey.get_image_object(None, camera=camera,
                                   image_fn=img_fn, image_hdu=image_hdu)
+    if just_measure:
+        # ("just_measure" means "just get the Image object")
+        return img
+
     print('Got image object', img)
     # Confirm camera field.
     cammap = {'mosaic3':'mosaic'}
     assert(img.camera == camera)
+
+    primhdr = img.read_image_primary_header()
+    if (not img.calibration_good(primhdr)) or (img.exptime == 0):
+        # FIXME
+        # - all-zero weight map
+        if run_calibs_only:
+            return
+        ccds = _ccds_table(camera)
+        ccds['image_filename'] = img_fn
+        ccds['err_message'] = 'Failed CP calib, or Exptime=0'
+        ccds['zpt'] = 0.
+        return ccds, None, img
 
     if measureargs['choose_ccd']:
         extlist = [measureargs['choose_ccd']]
@@ -2168,19 +2166,6 @@ def run_one_calib(X):
     img = survey.get_image_object(None, camera=camera,
                                   image_fn=img_fn, image_hdu=ext)
 
-    # FIXME
-    # - !goodWcs
-    # - exptime==0
-    # - all-zero weight map
-
-    # bitmask,dqhdr = img.read_dq(header=True) #read_bitmask()
-    # if bitmask is not None:
-    #     bitmask = img.remap_dq(bitmask, dqhdr)
-    # wt = img.read_invvar(dq=bitmask)
-    # zpscale = NanoMaggies.zeropointToScale(img.ccdzpt)
-    # medweight = np.median(wt[(wt > 0) * (bitmask == 0)])
-    # img.sig1 = (1. / np.sqrt(medweight)) / img.exptime / zpscale
-    
     do_psf = False
     do_sky = False
     #if psfex and img.get_psfex_model() is None:
@@ -2189,8 +2174,8 @@ def run_one_calib(X):
             psf = img.read_psf_model(0., 0., pixPsf=True)
         except:
             import traceback
-            print('Failed trying to read existing PSF model:')
-            traceback.print_exc()
+            #print('Failed trying to read existing PSF model:')
+            #traceback.print_exc()
         do_psf = True
     #if splinesky and img.get_splinesky() is None:
     if splinesky:
@@ -2198,8 +2183,8 @@ def run_one_calib(X):
             sky = img.read_sky_model()
         except:
             import traceback
-            print('Failed trying to read existing sky model:')
-            traceback.print_exc()
+            #print('Failed trying to read existing sky model:')
+            #traceback.print_exc()
         do_sky = True
 
     if (not do_psf) and (not do_sky):
@@ -2228,27 +2213,14 @@ def run_one_calib(X):
             else:
                 have_zpt = True
 
-    # Set sig1 after (possibly) updating zeropoint!
-    # from tractor.brightness import NanoMaggies
-    # zpscale = NanoMaggies.zeropointToScale(img.ccdzpt)
-    # medweight = np.median(wt[(wt > 0) * (bitmask == 0)])
-    # # note, read_weight() for Mosaic and 90prime scales by 1/exptime**2
-    # img.sig1 = (1. / np.sqrt(medweight)) / img.exptime / zpscale
-
     git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
     ps = None
-    
     img.run_calibs(psfex=do_psf, sky=do_sky, splinesky=True,
                    git_version=git_version, survey=survey, ps=ps,
                    survey_blob_mask=survey_blob_mask,
                    halos=have_zpt,
                    subtract_largegalaxies=have_zpt)
     return img
-    # return img.run
-    # return measure.run_calibs(survey, ext, psfex=psfex, splinesky=splinesky,
-    #                           plots=plots,
-    #                           survey_blob_mask=survey_blob_mask,
-    #                           survey_zeropoints=survey_zeropoints)
 
 def run_one_ext(X):
     img, ext, survey, splinesky, debug, sdss_photom = X
@@ -2257,8 +2229,6 @@ def run_one_ext(X):
                                   image_fn=img.image_filename, image_hdu=ext)
 
     rtns = run_zeropoints(img, splinesky=splinesky, sdss_photom=sdss_photom)
-    #rtns = measure.run(ext, splinesky=splinesky, survey=survey, save_xy=debug,
-    #                   sdss_photom=sdss_photom)
     return rtns
 
 class outputFns(object):

@@ -55,6 +55,15 @@ class DecamImage(LegacySurveyImage):
         iers.conf.auto_download = False
         return EarthLocation(1814304. * m, -5214366. * m, -3187341. * m)
 
+    def calibration_good(self, primhdr):
+        '''Did the CP processing succeed for this image?  If not, no need to process further.
+        '''
+        wcscal = primhdr.get('WCSCAL', '').strip().lower()
+        if wcscal.startswith('success'):  # success / successful
+            return True
+        # Frank's work-around for some with incorrect WCSCAL=Failed (DR9 re-reductions)
+        return primhdr.get('SCAMPFLG') == 0
+
     def colorterm_sdss_to_observed(self, sdssstars, band):
         from legacypipe.ps1cat import sdss_to_decam
         return sdss_to_decam(sdssstars, band)

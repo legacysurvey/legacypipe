@@ -225,6 +225,8 @@ class LegacySurveyImage(object):
             
         else:
             # Get metadata from ccd table entry.
+            # Note here that "image_filename" is the *relative* path (from image_dir),
+            # while "imgfn" is the full path.
             imgfn = ccd.image_filename.strip()
             self.image_filename = imgfn
             self.imgfn = os.path.join(self.survey.get_image_dir(), imgfn)
@@ -262,9 +264,6 @@ class LegacySurveyImage(object):
 
         self.compute_filenames()
 
-        print('image_filename', self.image_filename)
-        print('imgfn:', self.imgfn)
-        
         # Which Data Quality bits mark saturation?
         self.dq_saturation_bits = DQ_BITS['satur'] # | DQ_BITS['bleed']
 
@@ -313,6 +312,11 @@ class LegacySurveyImage(object):
 
     def extinction(self, band):
         return self.k_ext[band]
+
+    def calibration_good(self, primhdr):
+        '''Did the CP processing succeed for this image?  If not, no need to process further.
+        '''
+        return primhdr.get('WCSCAL', '').strip().lower().startswith('success')
 
     def get_photometric_calibrator_cuts(self, name, cat):
         '''Returns whether to keep sources in the *cat* of photometric calibration
