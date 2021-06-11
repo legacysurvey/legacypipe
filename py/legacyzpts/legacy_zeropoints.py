@@ -85,14 +85,9 @@ def _ccds_table(camera='decam'):
         ('propid', 'S10'),
         ('filter', 'S1'),
         ('exptime', 'f4'),
-        ('date_obs', 'S26'),
         ('mjd_obs', 'f8'),
-        ('ut', 'S15'),
-        ('ha', 'S13'),
         ('airmass', 'f4'),
         ('fwhm', 'f4'),
-        ('fwhm_cp', 'f4'),
-        ('gain', 'f4'),
         ('width', 'i2'),
         ('height', 'i2'),
         ('ra_bore', 'f8'),
@@ -105,8 +100,6 @@ def _ccds_table(camera='decam'):
         ('cd1_2', 'f4'),
         ('cd2_1', 'f4'),
         ('cd2_2', 'f4'),
-        ('pixscale', 'f4'),
-        ('zptavg', 'f4'),
         ('yshift', 'bool'),
         # -- CCD-level quantities --
         ('ra', 'f8'),
@@ -117,13 +110,10 @@ def _ccds_table(camera='decam'):
         ('sig1', 'f4'),
         ('nstars_photom', 'i2'),
         ('nstars_astrom', 'i2'),
-        ('goodps1', 'i2'),
-        ('goodps1_wbadpix5', 'i2'),
         ('phoff', 'f4'),
         ('phrms', 'f4'),
         ('phrmsavg', 'f4'),
         ('zpt', 'f4'),
-        ('zpt_wbadpix5', 'f4'),
         ('transp', 'f4'),
         ('raoff',  'f4'),
         ('decoff', 'f4'),
@@ -155,13 +145,7 @@ def _stars_table(nstars=1):
     stars = Table(np.zeros(nstars, dtype=cols))
     return stars
 
-def get_pixscale(camera):
-  return {'decam':0.262,
-          'mosaic':0.262,
-          '90prime':0.455,
-          'megaprime':0.185}[camera]
-
-def cols_for_survey_table(which='all'):
+def cols_for_survey_table():
     """Return list of -survey.fits table colums
 
     Args:
@@ -169,33 +153,13 @@ def cols_for_survey_table(which='all'):
         nonzero_diff (numeric and expect non-zero diff with reference
         when compute it)
     """
-    assert(which in ['all','numeric','nonzero_diff'])
-    martins_keys = ['airmass', 'ccdskysb']
-    gods_keys = ['plver', 'procdate', 'plprocid', 'ccdnastrom', 'ccdnphotom']
-    if which == 'all':
-        need_arjuns_keys= ['ra','dec','ra_bore','dec_bore',
-                           'image_filename','image_hdu','expnum','ccdname','object',
-                           'filter','exptime','camera','width','height','propid',
-                           'mjd_obs',
-                           'fwhm','zpt','ccdzpt','ccdraoff','ccddecoff',
-                           'ccdrarms', 'ccddecrms', 'ccdskycounts',
-                           'phrms', 'ccdphrms',
-                           'cd1_1','cd2_2','cd1_2','cd2_1',
-                           'crval1','crval2','crpix1','crpix2']
+    ['airmass', 'ccdskysb', 'plver', 'procdate', 'plprocid', 'ccdnastrom', 'ccdnphotom',
+     'ra','dec','ra_bore','dec_bore', 'image_filename','image_hdu','expnum','ccdname','object',
+     'filter','exptime','camera','width','height','propid', 'mjd_obs',
+     'fwhm','zpt','ccdzpt','ccdraoff','ccddecoff', ccdrarms', 'ccddecrms', 'ccdskycounts',
+     'phrms', 'ccdphrms', 'cd1_1','cd2_2','cd1_2','cd2_1',
+                     'crval1','crval2','crpix1','crpix2']
         dustins_keys= ['skyrms', 'sig1', 'yshift']
-    elif which == 'numeric':
-        need_arjuns_keys= ['ra','dec','ra_bore','dec_bore',
-                           'expnum',
-                           'exptime','width','height',
-                           'mjd_obs',
-                           'fwhm','zpt','ccdzpt','ccdraoff','ccddecoff',
-                           'cd1_1','cd2_2','cd1_2','cd2_1',
-                           'crval1','crval2','crpix1','crpix2']
-        dustins_keys= ['skyrms']
-    elif which == 'nonzero_diff':
-        need_arjuns_keys= ['ra','dec',
-                           'fwhm','zpt','ccdzpt','ccdraoff','ccddecoff']
-        dustins_keys= ['skyrms']
     return need_arjuns_keys + dustins_keys + martins_keys + gods_keys
 
 def prep_survey_table(T, camera=None, bad_expid=None):
