@@ -114,7 +114,8 @@ def sed_matched_filters(bands):
     if len(bands) > 1:
         flat = dict(g=1., r=1., i=1., z=1.)
         SEDs.append(('Flat', [flat[b] for b in bands]))
-        red = dict(g=2.5, r=1., i=0.4, z=0.4)
+        # Assume colors g-r = 1, r-i = 0.5, i-z = 0.5
+        red = dict(g=2.5, r=1., i=0.632, z=0.4)
         SEDs.append(('Red', [red[b] for b in bands]))
 
     info('SED-matched filters:', SEDs)
