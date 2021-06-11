@@ -42,9 +42,10 @@ jobs:
               export GAIA_CAT_DIR=$LPT/gaia-dr2
               export GAIA_CAT_VER=2
               export PS1CAT_DIR=$LPT/ps1-qz-star-v3
+              export TYCHO2_KD_DIR=$LPT
+              coverage run --concurrency=multiprocessing -a test/legacyzpts_test.py
               coverage run --concurrency=multiprocessing test/runbrick_test.py psfex ceres
               coverage run --concurrency=multiprocessing -a test/unit_tests.py
-              coverage run --concurrency=multiprocessing -a test/legacyzpts_test.py
               coverage combine
               coveralls
               ./codecov-upload.sh
