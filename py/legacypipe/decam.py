@@ -46,6 +46,15 @@ class DecamImage(LegacySurveyImage):
                           #i, Y totally made up
                           i=0.08, Y=0.06)
 
+    def get_site(self):
+        from astropy.coordinates import EarthLocation
+        # zomg astropy's caching mechanism is horrific
+        # return EarthLocation.of_site('ctio')
+        from astropy.units import m
+        from astropy.utils import iers
+        iers.conf.auto_download = False
+        return EarthLocation(1814304. * m, -5214366. * m, -3187341. * m)
+
     def colorterm_sdss_to_observed(self, sdssstars, band):
         from legacypipe.ps1cat import sdss_to_decam
         return sdss_to_decam(sdssstars, band)

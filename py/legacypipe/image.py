@@ -185,7 +185,6 @@ class LegacySurveyImage(object):
             primhdr = read_primary_header(self.imgfn)
             self.band = self.get_band(primhdr)
             self.propid = self.get_propid(primhdr)
-            self.airmass = self.get_airmass(primhdr)
             self.expnum = self.get_expnum(primhdr)
             self.camera = self.get_camera(primhdr)
             #self.date_obs = self.primhdr['DATE-OBS']
@@ -392,8 +391,28 @@ class LegacySurveyImage(object):
     def get_propid(self, primhdr):
         return primhdr['PROPID']
 
-    def get_airmass(self, primhdr):
-        return primhdr['AIRMASS']
+    def get_airmass(self, primhdr, imghdr, ra, dec):
+        airmass = primhdr['AIRMASS']
+        if airmass is None:
+            airmass = self.recompute_airmass(primhdr, ra, dec)
+        return airmass
+
+    def recompute_airmass(self, primhdr, ra, dec):
+        site = self.get_site()
+        if site is None:
+            print('AIRMASS missing and site not defined.')
+            return None
+        print('Recomputing AIRMASS')
+        from astropy.time import Time as apyTime
+        from astropy.coordinates import SkyCoord, AltAz
+        time = apyTime(self.mjd_obs + 0.5*self.exptime/3600./24., format='mjd')
+        coords = SkyCoord(ra, dec, unit='deg')
+        altaz = coords.transform_to(AltAz(obstime=time, location=site))
+        airmass = altaz.secz
+        return airmass
+
+    def get_site(self):
+        return None
 
     def get_expnum(self, primhdr):
         return primhdr['EXPNUM']

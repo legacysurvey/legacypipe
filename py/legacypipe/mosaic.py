@@ -28,6 +28,17 @@ class MosaicImage(LegacySurveyImage):
     def apply_amp_correction(self, img, invvar, x0, y0):
         self.apply_amp_correction_northern(img, invvar, x0, y0)
 
+    # always recompute airmass with boresight RA,Dec
+    def get_airmass(self, primhdr, imghdr, ra, dec):
+        return self.recompute_airmass(primhdr, ra, dec)
+
+    def get_site(self):
+        from astropy.coordinates import EarthLocation
+        from astropy.units import m
+        from astropy.utils import iers
+        iers.conf.auto_download = False
+        return EarthLocation(-1994503. * m, -5037539. * m, 3358105. * m)
+
     def get_camera(self, primhdr):
         cam = super().get_camera(primhdr)
         if cam == 'mosaic3':
