@@ -754,6 +754,8 @@ class LegacySurveyData(object):
         self.survey_dir = survey_dir
         self.cache_dir = cache_dir
 
+        self.calib_dir = os.path.join(self.survey_dir, 'calib')
+
         if output_dir is None:
             self.output_dir = '.'
         else:
@@ -1220,10 +1222,7 @@ class LegacySurveyData(object):
         self.bricktree = None
 
     def get_calib_dir(self):
-        '''
-        Returns the directory containing calibration data.
-        '''
-        return os.path.join(self.survey_dir, 'calib')
+        return self.calib_dir
 
     def get_image_dir(self):
         '''
