@@ -35,10 +35,8 @@ class BokImage(LegacySurveyImage):
         # so FWHM in the CCDs file is NaN.
         import numpy as np
         fwhm = super().get_fwhm(primhdr, imghdr)
-        print('90prime get_fwhm:', fwhm)
         if not np.isfinite(fwhm):
             fwhm = imghdr.get('SEEINGP1', 0.0)
-            print('Updated with SEEINGP1 =', fwhm)
         return fwhm
 
     def get_expnum(self, primhdr):

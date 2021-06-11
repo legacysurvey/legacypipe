@@ -50,10 +50,8 @@ class MosaicImage(LegacySurveyImage):
         # so FWHM in the CCDs file is NaN.
         import numpy as np
         fwhm = super().get_fwhm(primhdr, imghdr)
-        print('mosaic get_fwhm: header FWHM =', fwhm)
         if not np.isfinite(fwhm):
             fwhm = imghdr.get('SEEINGP1', 0.0)
-            print('Updated with SEEINGP1 =', fwhm)
         return fwhm
 
     def get_expnum(self, primhdr):

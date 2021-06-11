@@ -101,6 +101,8 @@ def _ccds_table(camera='decam'):
         ('cd1_2', 'f4'),
         ('cd2_1', 'f4'),
         ('cd2_2', 'f4'),
+        ('pixscale', 'f4'),
+        ('zptavg', 'f4'),
         ('yshift', 'bool'),
         # -- CCD-level quantities --
         ('ra', 'f8'),
@@ -160,7 +162,7 @@ def cols_for_survey_table():
 
 def prep_survey_table(T, camera=None, bad_expid=None):
     assert(camera in CAMERAS)
-    need_keys = cols_for_survey_table(which='all')
+    need_keys = cols_for_survey_table()
     # Rename
     rename_keys= [('zpt','ccdzpt'),
                   ('zptavg','zpt'),
@@ -747,6 +749,10 @@ def main(image_list=None,args=None):
         survey.calib_dir = measureargs['calibdir']
     measureargs.update(survey=survey)
 
+    outdir = measureargs.pop('outdir')
+    if outdir is None:
+        outdir = os.path.join(survey.survey_dir, 'zpt')
+
     if camera in ['mosaic', 'decam', '90prime']:
         from legacyzpts.psfzpt_cuts import read_bad_expid
         fn = resource_filename('legacyzpts', 'data/{}-bad_expid.txt'.format(camera))
@@ -763,7 +769,6 @@ def main(image_list=None,args=None):
     #     print('MegaPrimeImage class not found')
     #     raise IOError
 
-    outdir = measureargs.pop('outdir')
     for ii, imgfn in enumerate(image_list):
         print('Working on image {}/{}: {}'.format(ii+1, nimage, imgfn))
 
