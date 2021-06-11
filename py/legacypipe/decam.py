@@ -46,6 +46,10 @@ class DecamImage(LegacySurveyImage):
                           #i, Y totally made up
                           i=0.08, Y=0.06)
 
+    @classmethod
+    def get_nominal_pixscale(cls):
+        return 0.262
+
     def get_site(self):
         from astropy.coordinates import EarthLocation
         # zomg astropy's caching mechanism is horrific

@@ -18,6 +18,10 @@ class BokImage(LegacySurveyImage):
         self.zp0 =  dict(g = 26.93,r = 27.01,z = 26.552) # ADU/sec
         self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06)
 
+    @classmethod
+    def get_nominal_pixscale(cls):
+        return 0.454
+
     def apply_amp_correction(self, img, invvar, x0, y0):
         self.apply_amp_correction_northern(img, invvar, x0, y0)
 

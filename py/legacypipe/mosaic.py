@@ -17,6 +17,10 @@ class MosaicImage(LegacySurveyImage):
                           D51 = 0.211, # from obsbot
         )
 
+    @classmethod
+    def get_nominal_pixscale(cls):
+        return 0.262
+
     def colorterm_sdss_to_observed(self, sdssstars, band):
         from legacypipe.ps1cat import sdss_to_decam
         print('Warning: using DECam color term for SDSS to Mosaic transformation')

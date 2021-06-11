@@ -69,6 +69,10 @@ class MegaPrimeImage(LegacySurveyImage):
         #                   i=0.08, Y=0.06)
         # --> e/sec
 
+    @classmethod
+    def get_nominal_pixscale(cls):
+        return 0.185
+
     def get_radec_bore(self, primhdr):
         return primhdr['RA_DEG'], primhdr['DEC_DEG']
 
