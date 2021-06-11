@@ -53,6 +53,56 @@ class MegaPrimeImage(LegacySurveyImage):
         #     if x.startswith('_'):
         #         continue
         #     print('  ', x, ':', getattr(t,x))
+        ### HACK!!!
+        self.zp0 =  dict(g = 26.610,
+                         r = 26.818,
+                         z = 26.484,
+                         # Totally made up
+                         u = 26.610,
+                         )
+                         #                  # i,Y from DESY1_Stripe82 95th percentiles
+                         #                  i=26.758, Y=25.321) # e/sec
+        self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06,
+                          # Totally made up
+                          u = 0.24)
+        #                   #i, Y totally made up
+        #                   i=0.08, Y=0.06)
+        # --> e/sec
+
+    def get_radec_bore(self, primhdr):
+        return primhdr['RA_DEG'], primhdr['DEC_DEG']
+
+    def photometric_calibrator_to_observed(self, name, cat):
+        if name != 'ps1':
+            raise RuntimeError('No photometric conversion from %s to CFHT' % name)
+        # u->g
+        ps1band = dict(u='g').get(self.band, self.band)
+        ps1band_index = ps1cat.ps1band[ps1band]
+        colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
+        return cat.median[:, ps1band_index] + np.clip(colorterm, -1., +1.)
+
+    def colorterm_ps1_to_observed(self, ps1stars, band):
+        from legacypipe.ps1cat import ps1_to_decam
+        print('HACK -- using DECam color term for CFHT!!')
+        if band == 'u':
+            print('HACK -- using g-band color term for u band!')
+            band = 'g'
+        return ps1_to_decam(ps1stars, band)
+
+    def get_band(self):
+        band = self.primhdr['FILTER'][0]
+        return band
+
+    def scale_image(self, img):
+        return img.astype(np.float32)
+
+    def get_wcs(self):
+        ### FIXME -- no distortion solution in here
+        # from astrometry.util.util import Tan
+        # return Tan(self.hdr)
+
+        # "pitcairn" reductions have PV header cards (CTYPE is still RA---TAN)
+        return wcs_pv2sip_hdr(self.hdr)
 
     def compute_filenames(self):
         self.dqfn = 'cfis/test.mask.0.40.01.fits'
