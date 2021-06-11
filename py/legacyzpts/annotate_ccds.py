@@ -130,7 +130,9 @@ def annotate_one_ccd(X):
 
     kwargs = dict(pixPsf=True, subsky=False,
                   pixels=False, dq=False, invvar=False,
-                  normalizePsf=normalizePsf)
+                  normalizePsf=normalizePsf,
+                  no_remap_invvar=True,
+                  trim_edges=False)
     psf = None
     wcs = None
     sky = None
