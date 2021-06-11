@@ -2635,7 +2635,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     # 'expid', 
     for key in ['image_filename', 'image_hdu', 'camera', 'expnum', 'plver', 'procdate',
                 'plprocid', 'ccdname', 'propid', 'exptime',
-                'mjd_obs', 'ha', 'airmass',
+                'mjd_obs', 'ha',
                 'pixscale', 'width', 'height', 'fwhm', 'filter']:
         val = getattr(imobj, namemap.get(key, key))
         print('Setting', key, '=', val)
@@ -2644,7 +2644,10 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     primhdr = imobj.read_image_primary_header()
     hdr = imobj.read_image_header(ext=imobj.hdu)
 
-    ccds['ra_bore'],ccds['dec_bore'] = imobj.get_radec_bore(primhdr)
+    ra_bore, dec_bore = imobj.get_radec_bore(primhdr)
+    ccds['ra_bore'],ccds['dec_bore'] = ra_bore, dec_bore
+    airmass = imobj.get_airmass(primhdr, hdr, ra_bore, dec_bore)
+    ccds['airmass'] = airmass
     ccds['gain'] = imobj.get_gain(primhdr, hdr)
     ccds['object'] = primhdr.get('OBJECT')
     
@@ -3024,7 +3027,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         zptmed = np.median(dmag)
         dzpt = zptmed - zp0
         kext = imobj.extinction(imobj.band)
-        transp = 10.**(-0.4 * (-dzpt - kext * (imobj.airmass - 1.0)))
+        transp = 10.**(-0.4 * (-dzpt - kext * (airmass - 1.0)))
 
         print('Number of stars used for zeropoint median %d' % nphotom)
         print('Zeropoint %.4f' % zptmed)
@@ -3072,7 +3075,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
 
     phot.exptime = np.zeros(len(phot), np.float32) + imobj.exptime
     phot.gain    = np.zeros(len(phot), np.float32) + ccds['gain']
-    phot.airmass = np.zeros(len(phot), np.float32) + imobj.airmass
+    phot.airmass = np.zeros(len(phot), np.float32) + airmass
 
     import photutils
     apertures_arcsec_diam = [6, 7, 8]

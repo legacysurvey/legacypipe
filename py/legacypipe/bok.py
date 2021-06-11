@@ -21,6 +21,14 @@ class BokImage(LegacySurveyImage):
     def apply_amp_correction(self, img, invvar, x0, y0):
         self.apply_amp_correction_northern(img, invvar, x0, y0)
 
+    def get_site(self):
+        # FIXME -- this is for the Mayall, not the Bok!
+        from astropy.coordinates import EarthLocation
+        from astropy.units import m
+        from astropy.utils import iers
+        iers.conf.auto_download = False
+        return EarthLocation(-1994503. * m, -5037539. * m, 3358105. * m)
+
     def get_fwhm(self, primhdr, imghdr):
         # exposure BOK_CP/CP20160405/ksb_160406_104543_ooi_r_v1.fits.f
         # has SEEINGP1 in the primary header, nothing anywhere else,

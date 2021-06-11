@@ -405,7 +405,7 @@ class LegacySurveyImage(object):
         print('Recomputing AIRMASS')
         from astropy.time import Time as apyTime
         from astropy.coordinates import SkyCoord, AltAz
-        time = apyTime(self.mjd_obs + 0.5*self.exptime/3600./24., format='mjd')
+        time = apyTime(self.mjdobs + 0.5*self.exptime/3600./24., format='mjd')
         coords = SkyCoord(ra, dec, unit='deg')
         altaz = coords.transform_to(AltAz(obstime=time, location=site))
         airmass = altaz.secz
