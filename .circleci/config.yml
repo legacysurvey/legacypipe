@@ -19,6 +19,7 @@ jobs:
               #coverage run -a test/runbrick_test.py
               python3.6 test/unit_tests.py
               python3.6 test/runbrick_test.py
+              python3.6 test/legacyzpts_test.py
 
   build-from-docker-py3.7:
     docker:
@@ -35,8 +36,11 @@ jobs:
               export PYTHONPATH=${PYTHONPATH}:$(pwd)
               python3.7 -c "import sys; print(sys.path)"
               python3.7 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
+              git clone https://github.com/legacysurvey/legacypipe-test-data.git
+              export LEGACYPIPE_TEST_DIR=$(pwd)/legacypipe-test-data
               coverage run --concurrency=multiprocessing test/runbrick_test.py psfex ceres
               coverage run --concurrency=multiprocessing -a test/unit_tests.py
+              coverage run --concurrency=multiprocessing -a test/legacyzpts_test.py
               coverage combine
               coveralls
               ./codecov-upload.sh
@@ -62,6 +66,7 @@ jobs:
               #coverage run -a test/runbrick_test.py
               python3.8 test/unit_tests.py
               python3.8 test/runbrick_test.py
+              python3.8 test/legacyzpts_test.py
 
   build-from-docker-u2004-py3.8:
     docker:
@@ -82,6 +87,7 @@ jobs:
               #coverage run -a test/runbrick_test.py
               python3.8 test/unit_tests.py
               python3.8 test/runbrick_test.py
+              python3.8 test/legacyzpts_test.py
 
   build-from-docker-u2004-py3.9:
     docker:
@@ -102,6 +108,7 @@ jobs:
               #coverage run -a test/runbrick_test.py
               python3.9 test/unit_tests.py
               python3.9 test/runbrick_test.py
+              python3.9 test/legacyzpts_test.py
 
 workflows:
   version: 2
