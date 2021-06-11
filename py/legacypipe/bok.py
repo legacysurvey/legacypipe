@@ -92,3 +92,10 @@ class BokImage(LegacySurveyImage):
         # code 8: see https://github.com/legacysurvey/legacypipe/issues/645
         dq = remap_dq_cp_codes(dq, ignore_codes=[7, 8])
         return dq
+
+    # These are only used during zeropointing.
+    def scale_image(self, img):
+        '''Convert image from electrons/sec to electrons.'''
+        return img * self.exptime
+    def scale_weight(self, img):
+        return img / (self.exptime**2)
