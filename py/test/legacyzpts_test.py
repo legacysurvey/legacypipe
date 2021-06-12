@@ -86,8 +86,8 @@ def main():
 
     # Looks like the z-band in particular is pretty bad on the highly saturated stars.
 
-    assert(np.abs(dmags)[:, :2] < 0.5)
-    assert(np.abs(dmags)[3:, :] < 0.5)
+    assert(np.all(np.abs(dmags)[:, :2] < 0.5))
+    assert(np.all(np.abs(dmags)[3:, :] < 0.5))
 
     # Cross-match to Pan-STARRS1 too
     P = fits_table('legacypipe-test-data/ps1-qz-star-v3/ps1-02791.fits')
@@ -109,8 +109,8 @@ def main():
     # array([[ 0.002,  0.393,  2.266],
     #        [ 0.027,  0.196,  1.640],
     #        [ 0.115, -0.187, -0.124]], dtype='<U6')
-    assert(np.abs(dmags[:, :2]) < 0.4)
-    assert(np.abs(dmags[2, :])  < 0.2)
+    assert(np.all(np.abs(dmags[:, :2]) < 0.4))
+    assert(np.all(np.abs(dmags[2, :])  < 0.2))
 
 if __name__ == '__main__':
     main()
