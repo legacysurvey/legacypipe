@@ -15,7 +15,9 @@ branch = True
 # include = 
 # omit =
 #source = legacypipe
-include = legacypipe/* legacyzpts/*
+include =
+    legacypipe/*
+    legacyzpts/*
 omit = /usr/local/pipped/lib/python/*
 
 [report]
