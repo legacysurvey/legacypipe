@@ -35,7 +35,12 @@ RUN apt -y update && apt install -y apt-utils && \
     python3.8-dev \
     python3.9 \
     python3.9-dev \
+    source-extractor \
+    psfex \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# ubuntu renames the (awfully named) executable
+RUN ln -s /usr/bin/sextractor /usr/bin/sex
 
 # photutils at 1.0.0 because of
 # https://github.com/astropy/photutils/issues/1095

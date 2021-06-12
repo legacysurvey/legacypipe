@@ -261,11 +261,11 @@ RUN python -O -m compileall \
     /src/unwise_psf/py \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
-# # update legacypipe
-# RUN cd /src/legacypipe && git pull \   
-#     && git describe && echo DR9.7.1 && \
-#   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
-#   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
+# update legacypipe
+RUN cd /src/legacypipe && git pull \   
+    && git describe && echo DR9.7.2b && \
+  python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
+  python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
 ENV LEGACYPIPE_DIR /src/legacypipe/py
 
