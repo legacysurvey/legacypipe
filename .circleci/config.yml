@@ -19,6 +19,14 @@ jobs:
               #coverage run -a test/runbrick_test.py
               python3.6 test/unit_tests.py
               python3.6 test/runbrick_test.py
+              git clone https://github.com/legacysurvey/legacypipe-test-data.git
+              export LPT=$(pwd)/legacypipe-test-data
+              export LEGACYPIPE_TEST_DATA=$LPT
+              export GAIA_CAT_DIR=$LPT/gaia-dr2
+              export GAIA_CAT_VER=2
+              export PS1CAT_DIR=$LPT/ps1-qz-star-v3
+              export TYCHO2_KD_DIR=$LPT
+              python3.6 test/legacyzpts_test.py
 
   build-from-docker-py3.7:
     docker:
@@ -35,6 +43,14 @@ jobs:
               export PYTHONPATH=${PYTHONPATH}:$(pwd)
               python3.7 -c "import sys; print(sys.path)"
               python3.7 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
+              git clone https://github.com/legacysurvey/legacypipe-test-data.git
+              export LPT=$(pwd)/legacypipe-test-data
+              export LEGACYPIPE_TEST_DATA=$LPT
+              export GAIA_CAT_DIR=$LPT/gaia-dr2
+              export GAIA_CAT_VER=2
+              export PS1CAT_DIR=$LPT/ps1-qz-star-v3
+              export TYCHO2_KD_DIR=$LPT
+              coverage run --concurrency=multiprocessing -a test/legacyzpts_test.py
               coverage run --concurrency=multiprocessing test/runbrick_test.py psfex ceres
               coverage run --concurrency=multiprocessing -a test/unit_tests.py
               coverage combine
@@ -62,6 +78,14 @@ jobs:
               #coverage run -a test/runbrick_test.py
               python3.8 test/unit_tests.py
               python3.8 test/runbrick_test.py
+              git clone https://github.com/legacysurvey/legacypipe-test-data.git
+              export LPT=$(pwd)/legacypipe-test-data
+              export LEGACYPIPE_TEST_DATA=$LPT
+              export GAIA_CAT_DIR=$LPT/gaia-dr2
+              export GAIA_CAT_VER=2
+              export PS1CAT_DIR=$LPT/ps1-qz-star-v3
+              export TYCHO2_KD_DIR=$LPT
+              python3.8 test/legacyzpts_test.py
 
   build-from-docker-u2004-py3.8:
     docker:
@@ -82,6 +106,14 @@ jobs:
               #coverage run -a test/runbrick_test.py
               python3.8 test/unit_tests.py
               python3.8 test/runbrick_test.py
+              git clone https://github.com/legacysurvey/legacypipe-test-data.git
+              export LPT=$(pwd)/legacypipe-test-data
+              export LEGACYPIPE_TEST_DATA=$LPT
+              export GAIA_CAT_DIR=$LPT/gaia-dr2
+              export GAIA_CAT_VER=2
+              export PS1CAT_DIR=$LPT/ps1-qz-star-v3
+              export TYCHO2_KD_DIR=$LPT
+              python3.8 test/legacyzpts_test.py
 
   build-from-docker-u2004-py3.9:
     docker:
@@ -102,6 +134,14 @@ jobs:
               #coverage run -a test/runbrick_test.py
               python3.9 test/unit_tests.py
               python3.9 test/runbrick_test.py
+              git clone https://github.com/legacysurvey/legacypipe-test-data.git
+              export LPT=$(pwd)/legacypipe-test-data
+              export LEGACYPIPE_TEST_DATA=$LPT
+              export GAIA_CAT_DIR=$LPT/gaia-dr2
+              export GAIA_CAT_VER=2
+              export PS1CAT_DIR=$LPT/ps1-qz-star-v3
+              export TYCHO2_KD_DIR=$LPT
+              python3.9 test/legacyzpts_test.py
 
 workflows:
   version: 2

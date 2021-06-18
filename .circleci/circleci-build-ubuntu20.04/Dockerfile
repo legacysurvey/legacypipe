@@ -35,7 +35,14 @@ RUN apt -y update && apt install -y apt-utils && \
     python3.8-dev \
     python3.9 \
     python3.9-dev \
+    source-extractor \
+    psfex \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# ubuntu renames the (awfully named) executable
+RUN ln -s /usr/bin/sextractor /usr/bin/sex
+# FIXME - should be
+# RUN ln -s /usr/bin/source-extractor /usr/bin/sex
 
 # photutils at 1.0.0 because of
 # https://github.com/astropy/photutils/issues/1095
@@ -96,5 +103,8 @@ ENV DUST_DIR=/src/dust
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \
     && cd unwise_psf \
     && git checkout dr9.3
+
+# ubuntu renames the (awfully named) executable
+RUN rm /usr/bin/sex; ln -s /usr/bin/source-extractor /usr/bin/sex
 
 ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py

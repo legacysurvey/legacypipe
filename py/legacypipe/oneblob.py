@@ -2090,17 +2090,21 @@ def _compute_source_metrics(srcs, tims, bands, tr):
                 # sum(patch.patch) == counts[isrc].
                 rchi2_den[isrc,iband] += np.sum(patch.patch) / counts[isrc]
 
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        fracflux   = fracflux_num   / fracflux_den
-        rchi2      = rchi2_num      / rchi2_den
-        fracmasked = fracmasked_num / fracmasked_den
+    assert(np.all(np.isfinite(fracflux_den)))
+    assert(np.all(np.isfinite(rchi2_den)))
+    assert(np.all(np.isfinite(fracmasked_den)))
 
-    # Eliminate NaNs (these happen when, eg, we have no coverage in one band but
+    fracflux   = np.zeros_like(fracflux_num)
+    rchi2      = np.zeros_like(rchi2_num)
+    fracmasked = np.zeros_like(fracmasked_num)
+    # Avoid divide-by-zeros (these happen when, eg, we have no coverage in one band but
     # sources detected in another band, hence denominator is zero)
-    fracflux  [  fracflux_den == 0] = 0.
-    rchi2     [     rchi2_den == 0] = 0.
-    fracmasked[fracmasked_den == 0] = 0.
+    I = np.flatnonzero(fracflux_den != 0)
+    fracflux.flat[I] = fracflux_num.flat[I] / fracflux_den.flat[I]
+    I = np.flatnonzero(rchi2_den != 0)
+    rchi2.flat[I] = rchi2_num.flat[I] / rchi2_den.flat[I]
+    I = np.flatnonzero(fracmasked_den != 0)
+    fracmasked.flat[I] = fracmasked_num.flat[I] / fracmasked_den.flat[I]
 
     # fracin_{num,den} are in flux * nimages units
     tinyflux = 1e-9

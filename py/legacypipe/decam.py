@@ -22,10 +22,61 @@ class DecamImage(LegacySurveyImage):
     A LegacySurveyImage subclass to handle images from the Dark Energy
     Camera, DECam, on the Blanco telescope.
     '''
-    def __init__(self, survey, t):
-        super(DecamImage, self).__init__(survey, t)
+    def __init__(self, survey, t, image_fn=None, image_hdu=0):
+        super(DecamImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu)
         # Adjust zeropoint for exposure time
         self.ccdzpt += 2.5 * np.log10(self.exptime)
+
+        # Nominal zeropoints
+        self.zp0 =  dict(g = 26.610,
+                         r = 26.818,
+                         z = 26.484,
+                         # u from Arjun 2021-03-17, based on DECosmos-to-SDSS
+                         u = 23.3205,
+                         # i,Y from DESY1_Stripe82 95th percentiles
+                         i=26.758,
+                         Y=25.321,
+                         N501=23.812,
+                         N673=24.151,
+        ) # e/sec
+        # extinction per airmass
+        self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06,
+                          # From Arjun 2021-03-17 based on DECosmos (calib against SDSS)
+                          u = 0.63,
+                          #i, Y totally made up
+                          i=0.08, Y=0.06)
+
+    @classmethod
+    def get_nominal_pixscale(cls):
+        return 0.262
+
+    def get_site(self):
+        from astropy.coordinates import EarthLocation
+        # zomg astropy's caching mechanism is horrific
+        # return EarthLocation.of_site('ctio')
+        from astropy.units import m
+        from astropy.utils import iers
+        iers.conf.auto_download = False
+        return EarthLocation(1814304. * m, -5214366. * m, -3187341. * m)
+
+    def calibration_good(self, primhdr):
+        '''Did the CP processing succeed for this image?  If not, no need to process further.
+        '''
+        wcscal = primhdr.get('WCSCAL', '').strip().lower()
+        if wcscal.startswith('success'):  # success / successful
+            return True
+        # Frank's work-around for some with incorrect WCSCAL=Failed (DR9 re-reductions)
+        return primhdr.get('SCAMPFLG') == 0
+
+    def colorterm_sdss_to_observed(self, sdssstars, band):
+        from legacypipe.ps1cat import sdss_to_decam
+        return sdss_to_decam(sdssstars, band)
+    def colorterm_ps1_to_observed(self, ps1stars, band):
+        from legacypipe.ps1cat import ps1_to_decam
+        return ps1_to_decam(ps1stars, band)
+
+    def get_gain(self, primhdr, hdr):
+        return np.average((hdr['GAINA'],hdr['GAINB']))
 
     def get_sky_template_filename(self, old_calibs_ok=False):
         import os

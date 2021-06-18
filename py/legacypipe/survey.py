@@ -778,6 +778,8 @@ class LegacySurveyData(object):
         self.survey_dir = survey_dir
         self.cache_dir = cache_dir
 
+        self.calib_dir = os.path.join(self.survey_dir, 'calib')
+
         if output_dir is None:
             self.output_dir = '.'
         else:
@@ -1244,10 +1246,7 @@ class LegacySurveyData(object):
         self.bricktree = None
 
     def get_calib_dir(self):
-        '''
-        Returns the directory containing calibration data.
-        '''
-        return os.path.join(self.survey_dir, 'calib')
+        return self.calib_dir
 
     def get_image_dir(self):
         '''
@@ -1518,12 +1517,14 @@ class LegacySurveyData(object):
             self.ccd_kdtrees.append((fn, kd))
         return self.ccd_kdtrees
 
-    def get_image_object(self, t, **kwargs):
+    def get_image_object(self, t, camera=None, **kwargs):
         '''
         Returns a DecamImage or similar object for one row of the CCDs table.
         '''
         # get Image subclass
-        imageType = self.image_class_for_camera(t.camera)
+        if camera is None:
+            camera = t.camera
+        imageType = self.image_class_for_camera(camera)
         # call Image subclass constructor
         return imageType(self, t, **kwargs)
 
