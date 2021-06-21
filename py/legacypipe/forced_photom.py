@@ -346,7 +346,7 @@ def bounce_one_ccd(X):
     return run_one_ccd(*X)
 
 def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None, resolve_dec=None,
-                       margin=20):
+                       margin=20, extra_columns=[]):
     TT = []
     surveys = [(catsurvey_north, True)]
     if catsurvey_south is not None:
@@ -356,6 +356,7 @@ def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None, r
                'brickid', 'brickname', 'objid',
                'sersic', 'shape_r', 'shape_e1', 'shape_e2',
                'ref_epoch', 'pmra', 'pmdec', 'parallax', 'ref_cat', 'ref_id',]
+    columns = columns + extra_columns
 
     for catsurvey,north in surveys:
         bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)

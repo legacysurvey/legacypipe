@@ -839,6 +839,7 @@ class LegacySurveyData(object):
 
     def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s',
                   camera=None, expnum=None, ccdname=None, tier=None,
+                  hemi=None,
                   output=False, **kwargs):
         '''
         Returns the filename of a Legacy Survey file.
@@ -922,6 +923,8 @@ class LegacySurveyData(object):
                 glob(os.path.join(basedir, 'ccds-annotated-*.fits.gz')))
 
         elif filetype == 'tractor':
+            if hemi is not None:
+                basedir = os.path.join(basedir, hemi)
             return swap(os.path.join(basedir, 'tractor', brickpre,
                                      'tractor-%s.fits' % brick))
 
