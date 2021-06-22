@@ -69,7 +69,7 @@ def depthcut(survey, ccds, annotated, tilefile=None, imlist=None):
         return depthcut_90prime_alternative(ccds, annotated)
     elif survey == 'mosaic':
         return depthcut_mosaic(ccds, annotated, tilefile)
-   elif survey == 'hsc':
+    elif survey == 'hsc':
         return numpy.ones(len(ccds), dtype='bool')
     raise ValueError('No such survey?')
 
