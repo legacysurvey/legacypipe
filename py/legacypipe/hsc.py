@@ -16,10 +16,51 @@ class HscImage(LegacySurveyImage):
         self.wt_hdu = 3
         # Adjust zeropoint for exposure time
         self.ccdzpt += 2.5 * np.log10(self.exptime)
-        
+
+        # FIXME -- these are just from DECam
+        self.zp0 = dict(
+            g = 26.610,
+            r = 26.818,
+            i = 26.758,
+            z = 26.484,
+        )
+        self.k_ext = dict(g = 0.17,
+                          r = 0.10,
+                          i = 0.08,
+                          z = 0.06,
+                          )
+
+    def get_extension_list(self, fn, debug=False):
+        return [self.image_hdu,]
+
+    def calibration_good(self, primhdr):
+        return True
+
+    '''
+    def get_psfex_unmerged_filename(self):
+        basefn = os.path.basename(self.fn_base)
+        basedir = os.path.dirname(self.fn_base)
+        base = basefn.split('.')[0]
+        fn = base + '-psfex.fits'
+        fn = os.path.join(self.calibdir, 'psfex-single', basedir, base, fn)
+        return fn
+    def get_splinesky_unmerged_filename(self):
+        basefn = os.path.basename(self.fn_base)
+        basedir = os.path.dirname(self.fn_base)
+        base = basefn.split('.')[0]
+        fn = base + '-splinesky.fits'
+        fn = os.path.join(self.calibdir, 'sky-single', basedir, base, fn)
+        return fn
+    '''
     def compute_filenames(self):
         self.dqfn = self.imgfn
         self.wtfn = self.imgfn
+
+    def get_expnum(self, primhdr):
+        return primhdr['EXPID']
+
+    def get_fwhm(self, hdr, hdu):
+        return self.primhdr['SEEING']
 
     def get_wcs(self, hdr=None):
         from astrometry.util.util import Sip
@@ -37,6 +78,11 @@ class HscImage(LegacySurveyImage):
         #wcs.plver = phdr.get('PLVER', '').strip()
         return wcs
 
+    def colorterm_ps1_to_observed(self, ps1stars, band):
+        """ps1stars: ps1.median 2D array of median mag for each band"""
+        from legacypipe.ps1cat import ps1_to_hsc
+        return ps1_to_hsc(ps1stars, band)
+
     def read_image(self, header=False, **kwargs):
         img = super().read_image(header=header, **kwargs)
         if header:
@@ -50,6 +96,7 @@ class HscImage(LegacySurveyImage):
         return remap_hsc_bitmask(dq, header)
 
     def read_invvar(self, dq=None, **kwargs):
+        # HSC has a VARIANCE map (not a weight map)
         v = self._read_fits(self.wtfn, self.wt_hdu, **kwargs)
         iv = 1./v
         iv[v==0] = 0.
@@ -74,6 +121,7 @@ class HscImage(LegacySurveyImage):
         return True
     def check_image_header(self, imghdr):
         pass
+
 def remap_hsc_bitmask(dq, header):
     new_dq = np.zeros(dq.shape, np.int16)
     # MP_BAD  =                    0

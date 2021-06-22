@@ -204,8 +204,8 @@ class LegacySurveyImage(object):
 
             # hdu, ccdname, width, height, pixscale
             self.hdu = image_hdu
-            self.dq_hdu = image.image_hdu
-            self.wt_hdu = image.image_hdu
+            self.dq_hdu = image_hdu
+            self.wt_hdu = image_hdu
             if image_hdu is not None:
                 hdr = self.read_image_header(ext=image_hdu)
                 # Parse ZNAXIS[12] / NAXIS[12] ?
