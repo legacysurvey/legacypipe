@@ -158,7 +158,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             with np.errstate(divide='ignore'):
                 new_ie = 1. / np.sqrt(
                     (1./tim.inverr)**2 +
-                    floor_sigma[band] +
+                    floor_sigma[band]**2 +
                     poissons[band]**2 * np.maximum(0., tim.data))
             new_ie[tim.inverr == 0] = 0.
 

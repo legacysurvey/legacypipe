@@ -144,7 +144,7 @@ class LegacySurveyImage(object):
     # images used in unit tests): box size for SplineSky model
     splinesky_boxsize = 1024
 
-    def __init__(self, survey, ccd):
+    def __init__(self, survey, ccd, image_fn=None, image_hdu=0):
         '''
         Create a new LegacySurveyImage object, from a LegacySurveyData object,
         and one row of a CCDs fits_table object.
@@ -174,50 +174,103 @@ class LegacySurveyImage(object):
         super(LegacySurveyImage, self).__init__()
         self.survey = survey
 
-        imgfn = ccd.image_filename.strip()
+        if ccd is None and image_fn is None:
+            raise RuntimeError('Either "ccd" or "image_fn" must be set')
 
-        self.imgfn = os.path.join(self.survey.get_image_dir(), imgfn)
+        if image_fn is not None:
+            # Read metadata from image header.
+            self.image_filename = image_fn
+            self.imgfn = os.path.join(self.survey.get_image_dir(), image_fn)
+            print('Survey image dir:', self.survey.get_image_dir())
+            primhdr = read_primary_header(self.imgfn)
+            self.band = self.get_band(primhdr)
+            self.propid = self.get_propid(primhdr)
+            self.expnum = self.get_expnum(primhdr)
+            self.camera = self.get_camera(primhdr)
+            #self.date_obs = self.primhdr['DATE-OBS']
+            #self.ut = self.get_ut(self.primhdr)
+            #self.obj = self.primhdr['OBJECT']
+            namechange = {'date': 'procdate',
+                          'mjd-obs': 'mjdobs'}
+            for key in ['EXPTIME', 'MJD-OBS', 'HA', 'DATE', 'PLVER', 'PLPROCID']:
+                val = primhdr.get(key)
+                if type(val) == str:
+                    val = val.strip()
+                    if len(val) == 0:
+                        raise ValueError('Empty header card: %s' % key)
+                key = namechange.get(key.lower(), key.lower())
+                key = key.replace('-', '_')
+                setattr(self, key, val)
+
+            # hdu, ccdname, width, height, pixscale
+            self.hdu = image_hdu
+            self.dq_hdu = image.image_hdu
+            self.wt_hdu = image.image_hdu
+            if image_hdu is not None:
+                hdr = self.read_image_header(ext=image_hdu)
+                # Parse ZNAXIS[12] / NAXIS[12] ?
+                info = fitsio.FITS(self.imgfn)[image_hdu].get_info()
+                #print('Image info:', info)
+                self.height,self.width = info['dims']
+                self.hdu = info['hdunum'] - 1
+                self.ccdname = hdr['EXTNAME'].strip().upper()
+                self.pixscale = 3600. * np.sqrt(np.abs(hdr['CD1_1'] * hdr['CD2_2'] -
+                                                       hdr['CD1_2'] * hdr['CD2_1']))
+                self.fwhm = self.get_fwhm(primhdr, hdr)
+            else:
+                self.ccdname = ''
+            # fwhm, sig1
+            self.sig1 = 0.
+
+            self.ccdzpt = 0.
+            self.dradec = (0., 0.)
+            
+        else:
+            # Get metadata from ccd table entry.
+            # Note here that "image_filename" is the *relative* path (from image_dir),
+            # while "imgfn" is the full path.
+            imgfn = ccd.image_filename.strip()
+            self.image_filename = imgfn
+            self.imgfn = os.path.join(self.survey.get_image_dir(), imgfn)
+            self.hdu     = ccd.image_hdu
+            self.dq_hdu  = ccd.image_hdu
+            self.wt_hdu  = ccd.image_hdu
+            self.expnum  = ccd.expnum
+            self.ccdname = ccd.ccdname.strip()
+            self.band    = ccd.filter.strip()
+            self.exptime = ccd.exptime
+            self.camera  = ccd.camera.strip()
+            self.fwhm    = ccd.fwhm
+            self.propid  = ccd.propid
+            self.mjdobs  = ccd.mjd_obs
+            self.width   = ccd.width
+            self.height  = ccd.height
+            # In nanomaggies.
+            self.sig1    = ccd.sig1
+            # Use dummy values to accommodate old calibs (which will fail later
+            # unless old-calibs-ok=True)
+            try:
+                self.plver = getattr(ccd, 'plver', 'xxx').strip()
+            except:
+                print('Failed to read PLVER header card as a string.  This probably means your python fitsio package is too old.')
+                print('Try upgrading to version 1.0.5 or later.')
+                raise
+            self.procdate = getattr(ccd, 'procdate', 'xxxxxxx').strip()
+            self.plprocid = getattr(ccd, 'plprocid', 'xxxxxxx').strip()
+
+            # Photometric and astrometric zeropoints
+            self.ccdzpt = ccd.ccdzpt
+            self.dradec = (ccd.ccdraoff / 3600., ccd.ccddecoff / 3600.)
+
+            # in arcsec/pixel
+            self.pixscale = 3600. * np.sqrt(np.abs(ccd.cd1_1 * ccd.cd2_2 -
+                                                   ccd.cd1_2 * ccd.cd2_1))
+
         self.compute_filenames()
-
-        self.hdu     = ccd.image_hdu
-        self.dq_hdu  = ccd.image_hdu
-        self.wt_hdu  = ccd.image_hdu
-
-        self.expnum  = ccd.expnum
-        self.image_filename = ccd.image_filename.strip()
-        self.ccdname = ccd.ccdname.strip()
-        self.band    = ccd.filter.strip()
-        self.exptime = ccd.exptime
-        self.camera  = ccd.camera.strip()
-        self.fwhm    = ccd.fwhm
-        self.propid  = ccd.propid
-        self.mjdobs  = ccd.mjd_obs
-        self.width   = ccd.width
-        self.height  = ccd.height
-        # In nanomaggies.
-        # (in DR7, CCDs-table sig1 values were in ADU-ish units)
-        self.sig1    = ccd.sig1
-        # Use dummy values to accommodate old calibs (which will fail later
-        # unless old-calibs-ok=True)
-        try:
-            self.plver = getattr(ccd, 'plver', 'xxx').strip()
-        except:
-            print('Failed to read PLVER header card as a string.  This probably means your python fitsio package is too old.')
-            print('Try upgrading to version 1.0.5 or later.')
-            raise
-        self.procdate = getattr(ccd, 'procdate', 'xxxxxxx').strip()
-        self.plprocid = getattr(ccd, 'plprocid', 'xxxxxxx').strip()
 
         # Which Data Quality bits mark saturation?
         self.dq_saturation_bits = DQ_BITS['satur'] # | DQ_BITS['bleed']
 
-        # Photometric and astrometric zeropoints
-        self.ccdzpt = ccd.ccdzpt
-        self.dradec = (ccd.ccdraoff / 3600., ccd.ccddecoff / 3600.)
-
-        # in arcsec/pixel
-        self.pixscale = 3600. * np.sqrt(np.abs(ccd.cd1_1 * ccd.cd2_2 -
-                                               ccd.cd1_2 * ccd.cd2_1))
         # Calib filenames
         basename = os.path.basename(self.image_filename)
         ### HACK -- keep only the first dotted component of the base filename.
@@ -251,6 +304,139 @@ class LegacySurveyImage(object):
         self.wtfn = self.imgfn.replace('_ooi_', '_oow_').replace('_oki_','_oow_')
         assert(self.dqfn != self.imgfn)
         assert(self.wtfn != self.imgfn)
+
+    def get_extension_list(self, debug=False):
+        F = fitsio.FITS(self.imgfn)
+        exts = []
+        for f in F[1:]:
+            exts.append(f.get_extname())
+            if debug:
+                break
+        return exts
+
+    def nominal_zeropoint(self, band):
+        return self.zp0[band]
+
+    def extinction(self, band):
+        return self.k_ext[band]
+
+    def calibration_good(self, primhdr):
+        '''Did the CP processing succeed for this image?  If not, no need to process further.
+        '''
+        return primhdr.get('WCSCAL', '').strip().lower().startswith('success')
+
+    def get_photometric_calibrator_cuts(self, name, cat):
+        '''Returns whether to keep sources in the *cat* of photometric calibration
+        stars from, eg, Pan-STARRS1 or SDSS.
+        '''
+        if name == 'ps1':
+            gicolor= cat.median[:,0] - cat.median[:,2]
+            return ((cat.nmag_ok[:, 0] > 0) &
+                    (cat.nmag_ok[:, 1] > 0) &
+                    (cat.nmag_ok[:, 2] > 0) &
+                    (gicolor > 0.4) &
+                    (gicolor < 2.7))
+        if name == 'sdss':
+            return np.ones(len(cat), bool)
+        raise RuntimeError('Unknown photometric calibration set: %s' % name)
+    def photometric_calibrator_to_observed(self, name, cat):
+        if name == 'ps1':
+            from legacypipe.ps1cat import ps1cat
+            colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
+            ps1band = ps1cat.ps1band[self.band]
+            return cat.median[:, ps1band] + np.clip(colorterm, -1., +1.)
+        elif name == 'sdss':
+            from legacypipe.ps1cat import sdsscat
+            colorterm = self.colorterm_sdss_to_observed(cat.psfmag, self.band)
+            band = sdsscat.sdssband[self.band]
+            return cat.psfmag[:, band] + np.clip(colorterm, -1., +1.)
+        else:
+            raise RuntimeError('No photometric conversion from %s to DECam' % name)
+
+    def colorterm_ps1_to_observed(self, cat, band):
+        raise RuntimeError('Not implemented: generic colorterm_ps1_to_observed')
+    def colorterm_sdss_to_observed(self, cat, band):
+        raise RuntimeError('Not implemented: generic colorterm_sdss_to_observed')
+    
+    def get_psfex_merged_filename(self):
+        return self.merged_psffn
+    def get_splinesky_merged_filename(self):
+        return self.merged_skyfn
+    def get_psfex_unmerged_filename(self):
+        return self.psffn
+    def get_splinesky_unmerged_filename(self):
+        return self.skyfn
+
+    def get_radec_bore(self, primhdr):
+        from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
+        # In some DECam exposures, RA,DEC are floating-point, but RA is in *decimal hours*.
+        # In others, RA does not exist (eg CP/V4.8.2a/CP20160824/c4d_160825_062109_ooi_g_ls9.fits.fz)
+        # Fall back to TELRA in that case.
+        ra_bore = dec_bore = None
+        if 'RA' in primhdr.keys():
+            try:
+                ra_bore = hmsstring2ra(primhdr['RA'])
+                dec_bore = dmsstring2dec(primhdr['DEC'])
+            except:
+                pass
+        if dec_bore is None and 'TELRA' in primhdr.keys():
+            ra_bore = hmsstring2ra(primhdr['TELRA'])
+            dec_bore = dmsstring2dec(primhdr['TELDEC'])
+        if dec_bore is None:
+            raise ValueError('Failed to parse RA or TELRA in primary header to get telescope boresight')
+        return ra_bore, dec_bore
+
+    def get_camera(self, primhdr):
+        cam = primhdr['INSTRUME']
+        cam = cam.lower()
+        return cam
+    
+    def get_gain(self, primhdr, hdr):
+        return primhdr['GAIN']
+        
+    def get_band(self, primhdr):
+        band = primhdr['FILTER']
+        band = band.split()[0]
+        return band
+
+    def get_propid(self, primhdr):
+        return primhdr['PROPID']
+
+    def get_airmass(self, primhdr, imghdr, ra, dec):
+        airmass = primhdr['AIRMASS']
+        if airmass is None:
+            airmass = self.recompute_airmass(primhdr, ra, dec)
+        return airmass
+
+    def recompute_airmass(self, primhdr, ra, dec):
+        site = self.get_site()
+        if site is None:
+            print('AIRMASS missing and site not defined.')
+            return None
+        print('Recomputing AIRMASS')
+        from astropy.time import Time as apyTime
+        from astropy.coordinates import SkyCoord, AltAz
+        time = apyTime(self.mjdobs + 0.5*self.exptime/3600./24., format='mjd')
+        coords = SkyCoord(ra, dec, unit='deg')
+        altaz = coords.transform_to(AltAz(obstime=time, location=site))
+        airmass = altaz.secz
+        return airmass
+
+    def get_site(self):
+        return None
+
+    def get_expnum(self, primhdr):
+        return primhdr['EXPNUM']
+
+    def get_fwhm(self, primhdr, imghdr):
+        return imghdr.get('FWHM', np.nan)
+
+    # Used during zeropointing
+    def scale_image(self, img):
+        return img
+
+    def scale_weight(self, img):
+        return img
 
     def __str__(self):
         return self.name
@@ -620,9 +806,6 @@ class LegacySurveyImage(object):
     def get_sky_template(self, slc=None, old_calibs_ok=False):
         return None
 
-    def get_fwhm(self, primhdr, imghdr):
-        return self.fwhm
-
     def get_image_extent(self, wcs=None, slc=None, radecpoly=None):
         '''
         Returns x0,x1,y0,y1,slc
@@ -859,17 +1042,17 @@ class LegacySurveyImage(object):
         #   mean value    = 0.0235224
         #   minimum value = -14.2634
         #   maximum value = 1628.22
-
-        from tractor.basics import NanoMaggies
-        zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
-        fixedwt = 1. / (self.sig1 * zpscale)**2
-        #medwt = np.median(invvar[invvar > 0])
-        #debug('Median wt %.4g vs sig1-based wt %.4g factor %.4g' % (medwt, fixedwt, medwt/fixedwt))
-        thresh = 1.3 * fixedwt
-        n = np.sum(invvar > thresh)
-        if n > 0:
-            info('Clipping %i pixels with anomalously large oow values: max %g vs median %g' % (n, np.max(invvar), fixedwt))
-            invvar[invvar > thresh] = fixedwt
+        if self.sig1 > 0:
+            from tractor.basics import NanoMaggies
+            zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
+            fixedwt = 1. / (self.sig1 * zpscale)**2
+            #medwt = np.median(invvar[invvar > 0])
+            #debug('Median wt %.4g vs sig1-based wt %.4g factor %.4g' % (medwt, fixedwt, medwt/fixedwt))
+            thresh = 1.3 * fixedwt
+            n = np.sum(invvar > thresh)
+            if n > 0:
+                info('Clipping %i pixels with anomalously large oow values: max %g vs median %g' % (n, np.max(invvar), fixedwt))
+                invvar[invvar > thresh] = fixedwt
         invvar[invvar < 0.] = 0.
         assert(np.all(np.isfinite(invvar)))
         return invvar
@@ -1687,6 +1870,9 @@ class LegacySurveyImage(object):
         if sky:
             self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia, survey_blob_mask=survey_blob_mask, halos=halos, subtract_largegalaxies=subtract_largegalaxies)
 
+
+
+            
 def psfex_single_to_merged(infn, expnum, ccdname):
     # returns table T
     T = fits_table(infn)

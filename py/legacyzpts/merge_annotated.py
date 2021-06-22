@@ -13,12 +13,12 @@ Note that there are no checks on whether the input file list consists of annotat
 M. Landriau, September 2019
 """
 
-if __name__ == "__main__":
+def main(args=None):
     parser0 = argparse.ArgumentParser(description='Generates an annotated CCDs file and a legacypipe-compatible CCDs file from a set of reduced imaging.')
     parser0.add_argument('--file_list',help='List of zeropoint fits files to concatenate')
     parser0.add_argument('--camera', type=str, help='decam, mosaic or 90prime')
     parser0.add_argument('--data_release', type=int, help='Number of LS DR')
-    opt = parser0.parse_args()
+    opt = parser0.parse_args(args=args)
 
     fna = "ccds-annotated-"+opt.camera+"-dr"+str(opt.data_release)+".fits"
     fns = fna.replace("ccds-annotated", "survey-ccds")
@@ -78,3 +78,5 @@ if __name__ == "__main__":
     t = fits_table(fna)
     t.writeto(fns, columns=keys)
 
+if __name__ == "__main__":
+    main()

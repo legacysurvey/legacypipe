@@ -120,9 +120,6 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     assert(survey is not None)
 
-    if bands is None:
-        bands = ['g','r','z']
-
     # Get brick object
     custom_brick = (ra is not None)
     if custom_brick:
@@ -3013,7 +3010,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               release=None,
               zoom=None,
               bands=None,
-              allbands='grz',
               nblobs=None, blob=None, blobxy=None, blobradec=None, blobid=None,
               max_blobsize=None,
               nsigma=6,
@@ -3228,8 +3224,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     if forceall:
         kwargs.update(forceall=True)
 
-    if allbands is not None:
-        survey.allbands = allbands
+    if bands is None:
+        bands = ['g','r','z']
 
     if radec is not None:
         assert(len(radec) == 2)
@@ -3761,6 +3757,7 @@ def get_runbrick_kwargs(survey=None,
                         write=True,
                         gpsf=False,
                         bands=None,
+                        allbands=None,
                         **opt):
     if stage is None:
         stage = []
@@ -3769,12 +3766,27 @@ def get_runbrick_kwargs(survey=None,
         return None, -1
     opt.update(radec=radec)
 
+    if bands is None:
+        bands = ['g','r','z']
+    else:
+        bands = bands.split(',')
+    opt.update(bands=bands)
+
+    if allbands is None:
+        allbands = bands
+        # # Make sure at least 'bands' are in allbands.
+        # allbands = ['g','r','z']
+        # for b in bands:
+        #     if not b in allbands:
+        #         allbands.append(b)
+
     if survey is None:
         from legacypipe.runs import get_survey
         survey = get_survey(run,
                             survey_dir=survey_dir,
                             output_dir=output_dir,
-                            cache_dir=cache_dir)
+                            cache_dir=cache_dir,
+                            allbands=allbands)
         info(survey)
 
     blobdir = opt.pop('blob_mask_dir', None)
@@ -3845,9 +3857,6 @@ def get_runbrick_kwargs(survey=None,
     opt.update(gaussPsf=gpsf,
                pixPsf=not gpsf)
 
-    if bands is not None:
-        bands = bands.split(',')
-    opt.update(bands=bands)
     return survey, opt
 
 def main(args=None):

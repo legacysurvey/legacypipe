@@ -116,7 +116,8 @@ def sed_matched_filters(bands):
         sed = [flat.get(b,0.,) for b in bands]
         if np.sum(sed) > 0:
             SEDs.append(('Flat', sed))
-        red = dict(g=2.5, r=1., i=0.4, z=0.4)
+        # Assume colors g-r = 1, r-i = 0.5, i-z = 0.5
+        red = dict(g=2.5, r=1., i=0.632, z=0.4)
         sed = [red.get(b,0.) for b in bands]
         if np.sum(sed) > 0:
             SEDs.append(('Red', sed))

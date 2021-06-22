@@ -506,23 +506,13 @@ def tim_get_resamp(tim, targetwcs):
 
 rgb_stretch_factor = 1.0
 
-<<<<<<< HEAD
 def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
-    rgbscales=dict(g=(2, 6.0),
-                   r=(1, 3.4),
-                   i=(0, 3.0),
-                   z=(0, 2.2),
-                   N501=(2, 6.0),
-                   N673=(1, 3.4))
-=======
-def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None):
     rgbscales=dict(g =    (2, 6.0 * rgb_stretch_factor),
                    r =    (1, 3.4 * rgb_stretch_factor),
                    i =    (0, 3.0 * rgb_stretch_factor),
                    z =    (0, 2.2 * rgb_stretch_factor),
                    N501 = (2, 6.0 * rgb_stretch_factor),
                    N673 = (1, 3.4 * rgb_stretch_factor))
->>>>>>> 9ce28b5196427ebd3834caf20dd9cf54e947874f
     # rgbscales = {'u': 1.5, #1.0,
     #              'g': 2.5,
     #              'r': 1.5,
@@ -544,15 +534,39 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None):
         I = fI / I
     H,W = I.shape
     rgb = np.zeros((H,W,3), np.float32)
-    for img,band in zip(imgs, bands):
-        plane,scale = rgbscales[band]
-        if mnmx is None:
-            imgplane = (img * scale + m) * I
-        else:
-            mn,mx = mnmx
-            imgplane = ((img * scale + m) - mn) / (mx - mn)
-        if clip:
-            imgplane = np.clip(imgplane, 0, 1)
+
+    if bands == 'griz':
+
+        rgbvec = dict(
+            g = (0.,   0.,  0.75),
+            r = (0.,   0.5, 0.25),
+            i = (0.25, 0.5, 0.),
+            z = (0.75, 0.,  0.))
+        
+        for img,band in zip(imgs, bands):
+            rf,gf,bf = rgbvec[band]
+            if mnmx is None:
+                v = np.clip((img * scale + m) * I, 0, 1)
+            else:
+                mn,mx = mnmx
+                v = np.clip(((img * scale + m) - mn) / (mx - mn), 0, 1)
+            if rf != 0.:
+                rgb[:,:,0] += rf*v
+            if gf != 0.:
+                rgb[:,:,1] += gf*v
+            if bf != 0.:
+                rgb[:,:,2] += bf*v
+
+    else:
+        for img,band in zip(imgs, bands):
+            plane,scale = rgbscales[band]
+            if mnmx is None:
+                imgplane = (img * scale + m) * I
+            else:
+                mn,mx = mnmx
+                imgplane = ((img * scale + m) - mn) / (mx - mn)
+            if clip:
+                imgplane = np.clip(imgplane, 0, 1)
         rgb[:,:,plane] = imgplane
     return rgb
 
@@ -595,6 +609,7 @@ def get_rgb(imgs, bands, allbands=['g','r','z'],
     '''
     allbands = list(allbands)
 
+    # Yuck, special-cased ODIN narrow-band rgb schemes.
     if (allbands == ['N501', 'N673']) or (allbands == ['N501']) or (allbands == ['N673']):
         return narrowband_rgb(imgs, bands, allbands)
 
@@ -767,7 +782,7 @@ class LegacySurveyData(object):
     '''
 
     def __init__(self, survey_dir=None, cache_dir=None, output_dir=None,
-                 allbands='grz'):
+                 allbands=['g','r','z']):
         '''Create a LegacySurveyData object using data from the given
         *survey_dir* directory, or from the $LEGACY_SURVEY_DIR environment
         variable.
@@ -803,6 +818,8 @@ class LegacySurveyData(object):
 
         self.survey_dir = survey_dir
         self.cache_dir = cache_dir
+
+        self.calib_dir = os.path.join(self.survey_dir, 'calib')
 
         if output_dir is None:
             self.output_dir = '.'
@@ -910,7 +927,13 @@ class LegacySurveyData(object):
         sname = self.file_prefix
 
         if filetype == 'bricks':
-            return swap(os.path.join(basedir, 'survey-bricks.fits.gz'))
+            fn = os.path.join(basedir, 'survey-bricks.fits.gz')
+            if os.path.exists(fn):
+                return swap(fn)
+            fns = glob(os.path.join(basedir, 'survey-bricks-*.fits.gz'))
+            if len(fns) > 0:
+                return swap(fns[0])
+            return None
 
         elif filetype == 'ccds':
             return swaplist(
@@ -960,8 +983,8 @@ class LegacySurveyData(object):
         elif filetype in ['image-jpeg', 'model-jpeg', 'resid-jpeg',
                           'blobmodel-jpeg',
                           'imageblob-jpeg', 'simscoadd-jpeg','imagecoadd-jpeg',
-                          'wise-jpeg', 'wisemodel-jpeg',
-                          'galex-jpeg', 'galexmodel-jpeg',
+                          'wise-jpeg', 'wisemodel-jpeg', 'wiseresid-jpeg',
+                          'galex-jpeg', 'galexmodel-jpeg', 'galexresid-jpeg',
                           ]:
             ty = filetype.split('-')[0]
             return swap(
@@ -1265,10 +1288,7 @@ class LegacySurveyData(object):
         self.bricktree = None
 
     def get_calib_dir(self):
-        '''
-        Returns the directory containing calibration data.
-        '''
-        return os.path.join(self.survey_dir, 'calib')
+        return self.calib_dir
 
     def get_image_dir(self):
         '''
@@ -1539,12 +1559,14 @@ class LegacySurveyData(object):
             self.ccd_kdtrees.append((fn, kd))
         return self.ccd_kdtrees
 
-    def get_image_object(self, t, **kwargs):
+    def get_image_object(self, t, camera=None, **kwargs):
         '''
         Returns a DecamImage or similar object for one row of the CCDs table.
         '''
         # get Image subclass
-        imageType = self.image_class_for_camera(t.camera)
+        if camera is None:
+            camera = t.camera
+        imageType = self.image_class_for_camera(camera)
         # call Image subclass constructor
         return imageType(self, t, **kwargs)
 

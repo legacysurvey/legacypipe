@@ -11,4 +11,4 @@ else
     LOCAL_IP=$(ip route ls | tail -n 1 | awk '{print $NF}')
 fi
 
-docker build  --add-host intel.licenses.nersc.gov:${LOCAL_IP} -t legacysurvey/legacypipe:nersc .
+docker build --add-host intel.licenses.nersc.gov:${LOCAL_IP} -t legacysurvey/legacypipe:nersc .

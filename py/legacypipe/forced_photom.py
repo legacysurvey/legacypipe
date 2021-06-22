@@ -623,13 +623,17 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     sga_out = (T.ref_cat=='L3') * np.logical_not((xx >= 1) * (xx <= W) * (yy >= 1) * (yy <= H))
     I = np.flatnonzero(sga_out)
     if len(I):
-        print(len(I), 'SGA galaxies are outside the image.  Subtracting...')
-        cat = read_fits_catalog(T[I], bands=[tim.band])
-        tr = Tractor([tim], cat)
-        mod = tr.getModelImage(0)
-        tim.data -= mod
-        I = np.flatnonzero(np.logical_not(sga_out))
-        T.cut(I)
+        if not 'flux_%s' % tim.band in T.get_columns():
+            print('SGA galaxies outside but touching the image exist, but no flux measurements for'
+                  ' band', tim.band, 'so no subtraction.')
+        else:
+            print(len(I), 'SGA galaxies are outside the image.  Subtracting...')
+            cat = read_fits_catalog(T[I], bands=[tim.band])
+            tr = Tractor([tim], cat)
+            mod = tr.getModelImage(0)
+            tim.data -= mod
+            I = np.flatnonzero(np.logical_not(sga_out))
+            T.cut(I)
 
     # Add in a fake flux_{BAND} column, with flux 1.0 nanomaggies
     T.set('flux_'+tim.band, np.ones(len(T), np.float32))

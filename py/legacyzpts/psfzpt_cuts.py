@@ -2,6 +2,8 @@ from __future__ import print_function
 import numpy as np
 from astrometry.util.fits import fits_table
 
+from legacypipe.bits import CCD_CUTS as CCD_CUT_BITS
+
 def psf_cuts_to_string(ccd_cuts, join=', '):
     s = []
     for k,v in CCD_CUT_BITS.items():
@@ -9,50 +11,8 @@ def psf_cuts_to_string(ccd_cuts, join=', '):
             s.append(k)
     return join.join(s)
 
-# Bit codes for why a CCD got cut, used in cut_ccds().
-CCD_CUT_BITS= dict(
-    err_legacyzpts = 0x1,
-    not_grz = 0x2,
-    not_third_pix = 0x4, # Mosaic3 one-third-pixel interpolation problem
-    exptime = 0x8,
-    ccdnmatch = 0x10,
-    zpt_diff_avg = 0x20,
-    zpt_small = 0x40,
-    zpt_large = 0x80,
-    sky_is_bright = 0x100,
-    badexp_file = 0x200,
-    phrms = 0x400,
-    radecrms = 0x800,
-    seeing_bad = 0x1000,
-    early_decam = 0x2000,
-    depth_cut = 0x4000,
-    too_many_bad_ccds = 0x8000,
-    flagged_in_des = 0x10000,
-    phrms_s7 = 0x20000,
-)
-
 MJD_EARLY_DECAM = 56730.
 
-# DECam CCD name to number mapping.
-ccdnamenumdict = {'S1': 25, 'S2': 26, 'S3': 27, 'S4':28,
-                  'S5': 29, 'S6': 30, 'S7': 31,
-                  'S8': 19, 'S9': 20, 'S10': 21, 'S11': 22, 'S12': 23,
-                  'S13': 24,
-                  'S14': 13, 'S15': 14, 'S16': 15, 'S17': 16, 'S18': 17,
-                  'S19': 18,
-                  'S20': 8, 'S21': 9, 'S22': 10, 'S23': 11, 'S24': 12,
-                  'S25': 4, 'S26': 5, 'S27': 6, 'S28': 7,
-                  'S29': 1, 'S30': 2, 'S31': 3,
-                  'N1': 32, 'N2': 33, 'N3': 34, 'N4': 35,
-                  'N5': 36, 'N6': 37, 'N7': 38,
-                  'N8': 39, 'N9': 40, 'N10': 41, 'N11': 42, 'N12': 43,
-                  'N13': 44,
-                  'N14': 45, 'N15': 46, 'N16': 47, 'N17': 48, 'N18': 49,
-                  'N19': 50,
-                  'N20': 51, 'N21': 52, 'N22': 53, 'N23': 54, 'N24': 55,
-                  'N25': 56, 'N26': 57, 'N27': 58, 'N28': 59,
-                  'N29': 60, 'N30': 61, 'N31': 62,
-                  }
 
 def detrend_zeropoints(P, airmass_terms, mjd_terms):
     '''
@@ -228,7 +188,7 @@ def psf_zeropoint_cuts(P, pixscale,
         ('not_grz',   np.array([f.strip() not in 'grz' for f in P.filter])),
         ('ccdnmatch', P.ccdnphotom < 20),
         ('zpt_small', np.array([zpt < zpt_cut_lo.get(f.strip(),0) for f,zpt in zip(P.filter, ccdzpt)])),
-        ('zpt_large', np.array([zpt > zpt_cut_hi.get(f.strip(),0) for f,zpt in zip(P.filter, ccdzpt)])),
+        ('zpt_large', np.array([zpt > zpt_cut_hi.get(f.strip(),100) for f,zpt in zip(P.filter, ccdzpt)])),
         ('phrms',     P.phrms > 0.1),
         ('exptime', P.exptime < 30),
         ('seeing_bad', np.logical_not(np.logical_and(seeing > 0, seeing < 3.0))),
@@ -266,6 +226,27 @@ def psf_zeropoint_cuts(P, pixscale,
         print(np.count_nonzero(cut), 'CCDs cut by', name)
 
 def not_in_image2coadd(P, image2coadd):
+    # DECam CCD name to number mapping.
+    ccdnamenumdict = {'S1': 25, 'S2': 26, 'S3': 27, 'S4':28,
+                      'S5': 29, 'S6': 30, 'S7': 31,
+                      'S8': 19, 'S9': 20, 'S10': 21, 'S11': 22, 'S12': 23,
+                      'S13': 24,
+                      'S14': 13, 'S15': 14, 'S16': 15, 'S17': 16, 'S18': 17,
+                      'S19': 18,
+                      'S20': 8, 'S21': 9, 'S22': 10, 'S23': 11, 'S24': 12,
+                      'S25': 4, 'S26': 5, 'S27': 6, 'S28': 7,
+                      'S29': 1, 'S30': 2, 'S31': 3,
+                      'N1': 32, 'N2': 33, 'N3': 34, 'N4': 35,
+                      'N5': 36, 'N6': 37, 'N7': 38,
+                      'N8': 39, 'N9': 40, 'N10': 41, 'N11': 42, 'N12': 43,
+                      'N13': 44,
+                      'N14': 45, 'N15': 46, 'N16': 47, 'N17': 48, 'N18': 49,
+                      'N19': 50,
+                      'N20': 51, 'N21': 52, 'N22': 53, 'N23': 54, 'N24': 55,
+                      'N25': 56, 'N26': 57, 'N27': 58, 'N28': 59,
+                      'N29': 60, 'N30': 61, 'N31': 62,
+    }
+
     image2coadd = fits_table(image2coadd)
     ccdid = (P.expnum * 100 +
              np.array([ccdnamenumdict[c.strip()] for c in P.ccdname]))
@@ -283,8 +264,10 @@ def not_in_image2coadd(P, image2coadd):
 
 
 def add_psfzpt_cuts(T, camera, bad_expid, image2coadd=''):
-    from legacyzpts.legacy_zeropoints import get_pixscale
-    pixscale = get_pixscale(camera)
+    from legacypipe.survey import LegacySurveyData
+    survey = LegacySurveyData()
+    imageType = survey.image_class_for_camera(camera)
+    pixscale = imageType.get_nominal_pixscale()
 
     if camera == 'mosaic':
         # Arjun: 2019-03-15
@@ -314,11 +297,13 @@ def add_psfzpt_cuts(T, camera, bad_expid, image2coadd=''):
     elif camera == 'decam':
         # These are from DR5; eg
         # https://github.com/legacysurvey/legacypipe/blob/dr5.0/py/legacypipe/decam.py#L50
+        u0 = 23.20
         g0 = 25.08
         r0 = 25.29
         i0 = 25.26
         z0 = 24.92
         Y0 = 23.87
+        du = (-0.5, 0.25)
         dg = (-0.5, 0.25)
         di = (-0.5, 0.25)
         dr = (-0.5, 0.25)
@@ -328,9 +313,9 @@ def add_psfzpt_cuts(T, camera, bad_expid, image2coadd=''):
         skybright = dict(g=90., r=150., z=180.)
         zpt_diff_avg = 0.25
         zpt_lo = dict(g=g0+dg[0], r=r0+dr[0], z=z0+dz[0], i=i0+di[0],
-                      Y=Y0+dY[0])
+                      Y=Y0+dY[0], u=u0+du[0])
         zpt_hi = dict(g=g0+dg[1], r=r0+dr[1], z=z0+dz[1], i=i0+di[1],
-                      Y=Y0+dY[1])
+                      Y=Y0+dY[1], u=u0+du[1])
         psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
                            skybright, zpt_diff_avg, image2coadd=image2coadd)
     elif camera == 'hsc':
