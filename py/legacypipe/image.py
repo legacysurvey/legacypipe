@@ -728,8 +728,8 @@ class LegacySurveyImage(object):
             #  the data)
             imgmed = np.median(img[invvar>0])
             if np.abs(imgmed) > self.sig1:
-                print('WARNING: image median', imgmed, 'is more than 1 sigma',
-                      'away from zero!')
+                import warnings
+                warnings.warn('image median is %.2f sigma away from zero!' % (imgmed / self.sig1))
 
         if subsky:
             self.apply_amp_correction(img, invvar, x0, y0)
