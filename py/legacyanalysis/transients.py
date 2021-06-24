@@ -52,6 +52,7 @@ def one_ccd(X):
     results.chisqperpix = []
     results.fluxsn = []
     results.flux = []
+    results.flux_err = []
     results.fracin = []
 
     #img = fitsio.read(imgfn, ext=ccd.ccdname)
@@ -114,8 +115,10 @@ def one_ccd(X):
         results.chisqperpix.append(cpp)
         flux = src.brightness.getParams()[0]
         fluxvar = var[-1]
-        results.fluxsn.append(flux / np.sqrt(fluxvar))
+        fluxsig = np.sqrt(fluxvar)
         results.flux.append(flux)
+        results.flux_err.append(fluxsig)
+        results.fluxsn.append(flux / fluxsig)
         results.fracin.append(np.sum(mod) / flux)
 
         if False:
