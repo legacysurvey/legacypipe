@@ -542,6 +542,10 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname):
     
     imfn = os.path.join(galex_dir, tile.tilename.strip(),
                         '%s-%sd-intbgsub.fits.gz' % (tile.visitname.strip(), band))
+    bgfn = os.path.join(galex_dir, tile.tilename.strip(),
+                        '%s-%sd-skybg.fits.gz' % (tile.visitname.strip(), band))
+    wtfn = os.path.join(galex_dir, tile.tilename.strip(),
+                        '%s-%sd-rrhr.fits.gz' % (tile.visitname.strip(), band))
     gwcs = Tan(*[float(f) for f in
                  [tile.crval1, tile.crval2, tile.crpix1, tile.crpix2,
                   tile.cdelt1, 0., 0., tile.cdelt2, 3840., 3840.]])
@@ -567,6 +571,15 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname):
     fitsimg = fitsio.FITS(imfn)[0]
     hdr = fitsimg.read_header()
     img = fitsimg[roislice]
+
+    fitsbgimg = fitsio.FITS(bgfn)[0]
+    bgimg = fitsbgimg[roislice]
+
+    fitswtimg = fitsio.FITS(wtfn)[0]
+    wtimg = fitswtimg[roislice]
+    wtimg[wtimg == 0] = 0.
+
+    varimg = wtimg * bgimg / np.sum(wtimg)
 
     inverr = np.ones_like(img)
     inverr[img == 0.] = 0.
