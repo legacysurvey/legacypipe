@@ -1,5 +1,6 @@
 from __future__ import print_function
-import os, warnings
+import os
+import warnings
 import numpy as np
 import fitsio
 from tractor.splinesky import SplineSky
@@ -768,6 +769,11 @@ class LegacySurveyImage(object):
         tim.psfnorm = self.psf_norm(tim)
         # Galaxy-detection norm
         tim.galnorm = self.galaxy_norm(tim)
+        #print('Galnorm:', tim.galnorm)
+        if not (np.isfinite(tim.psfnorm) and np.isfinite(tim.galnorm)):
+            # This can happen if there is something very wrong with the PSF model (NaNs, etc)
+            warnings.warn('Bad (nan) psfnorm or galnorm for %s' % self)
+            return None
         tim.psf = fullpsf
 
         tim.time = tai
@@ -1198,6 +1204,9 @@ class LegacySurveyImage(object):
         # number of terms in polynomial
         ne = (degree + 1) * (degree + 2) // 2
         Ti.psf_mask = Ti.psf_mask[:ne, :Ti.psfaxis1, :Ti.psfaxis2]
+
+        assert(np.all(np.isfinite(Ti.psf_mask)))
+
         # If degree 0, set polname* to avoid assertion error in tractor
         if degree == 0:
             Ti.polname1 = 'X_IMAGE'

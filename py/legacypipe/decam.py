@@ -1,4 +1,5 @@
 from __future__ import print_function
+import warnings
 import numpy as np
 
 from legacypipe.image import LegacySurveyImage, validate_version
@@ -83,7 +84,7 @@ class DecamImage(LegacySurveyImage):
         from astrometry.util.fits import fits_table
         dirnm = os.environ.get('SKY_TEMPLATE_DIR', None)
         if dirnm is None:
-            info('decam: no SKY_TEMPLATE_DIR environment variable set.')
+            warnings.warn('decam: no SKY_TEMPLATE_DIR environment variable set.')
             return None
         '''
         # Create this sky-scales.kd.fits file via:
@@ -92,19 +93,19 @@ class DecamImage(LegacySurveyImage):
         '''
         fn = os.path.join(dirnm, 'sky-scales.kd.fits')
         if not os.path.exists(fn):
-            info('decam: no $SKY_TEMPLATE_DIR/sky-scales.kd.fits file.')
+            warnings.warn('decam: no $SKY_TEMPLATE_DIR/sky-scales.kd.fits file.')
             return None
         from astrometry.libkd.spherematch import tree_open
         kd = tree_open(fn, 'expnum')
         I = kd.search(np.array([self.expnum]), 0.5, 0, 0)
         if len(I) == 0:
-            info('decam: expnum %i not found in file %s' % (self.expnum, fn))
+            warning.warn('decam: expnum %i not found in file %s' % (self.expnum, fn))
             return None
         # Read only the CCD-table rows within range.
         S = fits_table(fn, rows=I)
         S.cut(np.array([c.strip() == self.ccdname for c in S.ccdname]))
         if len(S) == 0:
-            info('decam: ccdname %s, expnum %i not found in file %s' %
+            warning.warn('decam: ccdname %s, expnum %i not found in file %s' %
                   (self.ccdname, self.expnum, fn))
             return None
         assert(len(S) == 1)
@@ -125,7 +126,7 @@ class DecamImage(LegacySurveyImage):
         tfn = os.path.join(dirnm, 'sky_templates',
                            'sky_template_%s_%i.fits.fz' % (self.band, sky.run))
         if not os.path.exists(tfn):
-            info('WARNING: Sky template file %s does not exist' % tfn)
+            warning.warn('WARNING: Sky template file %s does not exist' % tfn)
             return None
         return dict(template_filename=tfn, sky_template_dir=dirnm, sky_obj=sky, skyscales_fn=fn)
 
