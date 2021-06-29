@@ -219,7 +219,7 @@ def main(survey=None, opt=None, args=None):
     for ccd in ccds:
         args.append((survey,
                      catsurvey_north, catsurvey_south, opt.catalog_resolve_dec_ngc,
-                     ccd, opt, zoomslice, ps))
+                     ccd, opt, zoomslice, None, ps))
 
     if opt.threads:
         from astrometry.util.multiproc import multiproc
@@ -335,10 +335,10 @@ def main(survey=None, opt=None, args=None):
 
 def bounce_one_ccd(X):
     # for multiprocessing
-    return run_one_ccd(*X)
+    return forced_photom_one_ccd(*X)
 
-def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None, resolve_dec=None,
-                       margin=20):
+def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None,
+                       resolve_dec=None, margin=20):
     TT = []
     surveys = [(catsurvey_north, True)]
     if catsurvey_south is not None:
@@ -483,15 +483,15 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     assert(set(sga.ref_id) == set(SGA.ref_id))
     return SGA
 
-def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
-                ccd, opt, zoomslice, ps):
+def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
+                          ccd, opt, zoomslice, radecpoly, ps):
     from functools import reduce
     from legacypipe.bits import DQ_BITS
 
     tlast = Time()
     #print('Opt:', opt)
     im = survey.get_image_object(ccd)
-    print('Run_one_ccd: checking cache', survey.cache_dir)
+    print('Forced_photom_one_ccd: checking cache', survey.cache_dir)
     if survey.cache_dir is not None:
         im.check_for_cached_files(survey)
     if opt.do_calib:
