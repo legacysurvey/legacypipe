@@ -497,12 +497,17 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     if opt.do_calib:
         im.run_calibs(splinesky=True)
 
-    tim = im.get_tractor_image(slc=zoomslice, pixPsf=True,
-                               constant_invvar=opt.constant_invvar,
+    tim = im.get_tractor_image(slc=zoomslice,
+                               radecpoly=radecpoly,
+                               pixPsf=True,
                                hybridPsf=opt.hybrid_psf,
                                normalizePsf=opt.normalize_psf,
-                               old_calibs_ok=True, trim_edges=False)
-    print('Got tim:', tim)#, 'x0,y0', tim.x0, tim.y0)
+                               constant_invvar=opt.constant_invvar,
+                               old_calibs_ok=True,
+                               trim_edges=False)
+    print('Got tim:', tim)
+    if tim is None:
+        return None
     chipwcs = tim.subwcs
     H,W = tim.shape
 
@@ -635,7 +640,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     print('Parse catalog:', tnow-tlast)
     tlast = tnow
 
-    print('Forced photom...')
+    print('Forced photom for', im, '...')
     F = run_forced_phot(cat, tim,
                         ceres=opt.ceres,
                         derivs=opt.derivs,
