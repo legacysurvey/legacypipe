@@ -12,7 +12,7 @@ def get_units_for_columns(cols, bands=[], extras=None):
         ra=deg, dec=deg, ra_ivar=degiv, dec_ivar=degiv,
         ebv='mag',
         shape_r=arcsec,
-        shape_r_ivar=arcsec_iv)
+        shape_r_ivar=arcseciv)
     unitmap.update(pmra=pm, pmdec=pm, pmra_ivar=pmiv, pmdec_ivar=pmiv,
                  parallax='mas', parallax_ivar='1/mas^2')
     unitmap.update(gaia_phot_g_mean_mag='mag',
@@ -29,7 +29,7 @@ def get_units_for_columns(cols, bands=[], extras=None):
                    ccdrarms=arcsec, ccddecrms=arcsec,
                    skyrms='counts/sec',
                    dra=arcsec, ddec=arcec,
-                   dra_ivar=arcsec_iv, ddec_ivar=arcsec_iv)
+                   dra_ivar=arcseciv, ddec_ivar=arcseciv)
     # Fields that have band suffixes
     funits = dict(
         flux=flux, flux_ivar=fluxiv,
