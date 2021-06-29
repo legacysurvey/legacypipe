@@ -28,7 +28,7 @@ def get_units_for_columns(cols, bands=[], extras=None):
                    fwhm='pixels',
                    ccdrarms=arcsec, ccddecrms=arcsec,
                    skyrms='counts/sec',
-                   dra=arcsec, ddec=arcec,
+                   dra=arcsec, ddec=arcsec,
                    dra_ivar=arcseciv, ddec_ivar=arcseciv)
     # Fields that have band suffixes
     funits = dict(
