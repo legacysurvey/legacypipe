@@ -388,7 +388,7 @@ def stage_refs(survey=None,
     # "refcat" is a list of tractor Sources
     # They are aligned
     if refstars:
-        from legacypipe.format_catalog import get_units_for_columns
+        from legacypipe.units import get_units_for_columns
         assert(len(refstars) == len(refcat))
         cols = ['ra', 'dec', 'ref_cat', 'ref_id', 'mag',
                 'istycho', 'isgaia', 'islargegalaxy', 'iscluster',
@@ -410,7 +410,7 @@ def stage_refs(survey=None,
         refcols = refstars.get_columns()
         cols = [c for c in cols if c in refcols]
         extra_units = dict(zguess='mag', pa='deg', radius='deg', keep_radius='deg')
-        units = get_units_for_columns(cols, [], extra_units)
+        units = get_units_for_columns(cols, extras=extra_units)
         with survey.write_output('ref-sources', brick=brickname) as out:
             refstars.writeto(None, fits_object=out.fits, primheader=version_header,
                              columns=cols, units=units)

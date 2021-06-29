@@ -265,15 +265,7 @@ def main(survey=None, opt=None, args=None):
         version_hdr.add_record(dict(name='APRAD%i' % i, value=ap,
                                     comment='(optical) Aperture radius, in arcsec'))
 
-    unitmap = {'exptime':'sec',
-               'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2',
-               'apflux':'nanomaggy', 'apflux_ivar':'1/nanomaggy^2',
-               'psfdepth':'1/nanomaggy^2', 'galdepth':'1/nanomaggy^2',
-               'sky':'nanomaggy/arcsec^2', 'psfsize':'arcsec',
-               'fwhm':'pixels', 'ccdrarms':'arcsec', 'ccddecrms':'arcsec',
-               'ra':'deg', 'dec':'deg', 'skyrms':'counts/sec',
-               'dra':'arcsec', 'ddec':'arcsec',
-               'dra_ivar':'1/arcsec^2', 'ddec_ivar':'1/arcsec^2'}
+    from legacypipe.units import get_units_for_columns
 
     columns = F.get_columns()
     order = ['release', 'brickid', 'brickname', 'objid', 'camera', 'expnum',
@@ -284,7 +276,7 @@ def main(survey=None, opt=None, args=None):
              'apflux', 'apflux_ivar', 'x', 'y', 'dqmask', 'dra', 'ddec',
              'dra_ivar', 'ddec_ivar']
     columns = [c for c in order if c in columns]
-    units = [unitmap.get(c,'') for c in columns]
+    units = get_units_for_columns(columns)
 
     if opt.out is not None:
         outdir = os.path.dirname(opt.out)
