@@ -9,6 +9,8 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('-b', '--brick', help='Brick name to run', required=True)
+    parser.add_argument('--zoom', type=int, nargs=4,
+                        help='Set target image extent (default "0 3600 0 3600")')
     parser.add_argument('--threads', type=int, help='Run multi-threaded', default=None)
 
     parser.add_argument('--catalog-dir', help='Set LEGACY_SURVEY_DIR to use to read catalogs')
@@ -51,8 +53,17 @@ def main():
     tprimhdr = fitsio.read_header(tfn)
 
     brick = catsurvey.get_brick_by_name(opt.brick)
-    ra1,ra2,dec1,dec2 = brick.ra1, brick.ra2, brick.dec1, brick.dec2
-    radecpoly = np.array([[ra2,dec1], [ra1,dec1], [ra1,dec2], [ra2,dec2], [ra2,dec1]])
+    #ra1,ra2,dec1,dec2 = brick.ra1, brick.ra2, brick.dec1, brick.dec2
+    #radecpoly = np.array([[ra2,dec1], [ra1,dec1], [ra1,dec2], [ra2,dec2], [ra2,dec1]])
+
+    targetwcs = wcs_for_brick(brick)
+    if opt.zoom is not None:
+        (x0,x1,y0,y1) = target_extent
+        W = x1-x0
+        H = y1-y0
+        targetwcs = targetwcs.get_subimage(x0, y0, W, H)
+    radecpoly = np.array([targetwcs.pixelxy2radec(x,y) for x,y in
+                          [(1,1),(W,1),(W,H),(1,H),(1,1)]])
 
     ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
     if ccds is None:
