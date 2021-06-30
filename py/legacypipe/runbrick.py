@@ -2249,7 +2249,7 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
     fiberrad = (fibersize / pixscale) / 2.
 
     # For each source, compute and measure its model, and accumulate
-    for isrc,(src,sx,sy) in enumerate(zip(cat, T.bx, T.by)):
+    for isrc,src in enumerate(cat):
         if src is None:
             continue
         # This works even if bands[0] has zero flux (or no overlapping
@@ -2269,6 +2269,7 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
             patch.addTo(modimg, scale=flux)
             # Add to blank image & photometer
             patch.addTo(onemod, scale=flux)
+            sx,sy = faketim.getWcs().positionToPixel(src.getPosition())
             aper = photutils.CircularAperture((sx, sy), fiberrad)
             p = photutils.aperture_photometry(onemod, aper)
             f = p.field('aperture_sum')[0]
