@@ -504,12 +504,15 @@ def tim_get_resamp(tim, targetwcs):
         return None
     return Yo,Xo,Yi,Xi
 
+rgb_stretch_factor = 1.0
 
-def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None):
-    rgbscales=dict(g=(2, 6.0),
-                   r=(1, 3.4),
-                   i=(0, 3.0),
-                   z=(0, 2.2))
+def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
+    rgbscales=dict(g =    (2, 6.0 * rgb_stretch_factor),
+                   r =    (1, 3.4 * rgb_stretch_factor),
+                   i =    (0, 3.0 * rgb_stretch_factor),
+                   z =    (0, 2.2 * rgb_stretch_factor),
+                   N501 = (2, 6.0 * rgb_stretch_factor),
+                   N673 = (1, 3.4 * rgb_stretch_factor))
     # rgbscales = {'u': 1.5, #1.0,
     #              'g': 2.5,
     #              'r': 1.5,
@@ -558,13 +561,38 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None):
         for img,band in zip(imgs, bands):
             plane,scale = rgbscales[band]
             if mnmx is None:
-                rgb[:,:,plane] = np.clip((img * scale + m) * I, 0, 1)
+                imgplane = (img * scale + m) * I
             else:
                 mn,mx = mnmx
-                rgb[:,:,plane] = np.clip(((img * scale + m) - mn) / (mx - mn), 0, 1)
+                imgplane = ((img * scale + m) - mn) / (mx - mn)
+            if clip:
+                imgplane = np.clip(imgplane, 0, 1)
+        rgb[:,:,plane] = imgplane
     return rgb
 
-def get_rgb(imgs, bands,
+def narrowband_rgb(imgs, bands, allbands, scales=None, m=0.03, Q=20, mnmx=None):
+    n501scale = 6.0
+    n673scale = 3.4
+
+    rgbscales=dict(N501=(2, n501scale),
+                   N673=(0, n673scale))
+
+    if allbands == ['N501', 'N673']:
+        rgb = sdss_rgb(imgs, bands, scales=rgbscales, clip=False)
+        rgb[:,:,1] = rgb[:,:,0]/2 + rgb[:,:,2]/2
+    elif allbands == ['N501']:
+        rgb = sdss_rgb(imgs, bands, scales=rgbscales, clip=False)
+        rgb[:,:,0] = rgb[:,:,2]
+        rgb[:,:,1] = rgb[:,:,2]
+    elif allbands == ['N673']:
+        rgb = sdss_rgb(imgs, bands, scales=rgbscales, clip=False)
+        rgb[:,:,1] = rgb[:,:,0]
+        rgb[:,:,2] = rgb[:,:,0]
+
+    rgb = np.clip(rgb, 0, 1)
+    return rgb
+
+def get_rgb(imgs, bands, allbands=['g','r','z'],
             resids=False, mnmx=None, arcsinh=None):
     '''
     Given a list of images in the given bands, returns a scaled RGB
@@ -579,6 +607,18 @@ def get_rgb(imgs, bands,
 
     Returns a (H,W,3) numpy array with values between 0 and 1.
     '''
+    allbands = list(allbands)
+
+    # Yuck, special-cased ODIN narrow-band rgb schemes.
+    if (allbands == ['N501', 'N673']) or (allbands == ['N501']) or (allbands == ['N673']):
+        return narrowband_rgb(imgs, bands, allbands)
+
+    if len(bands) == 5:
+        return get_rgb(imgs[:3], bands[:3], resids=resids, mnmx=mnmx, arcsinh=arcsinh)
+
+    if len(bands) == 3 and bands[0] == 'N501' and bands[1] == 'r' and bands[2] == 'N673':
+        return sdss_rgb(imgs, bands, scales=dict(N673=(0,3.4)))
+    
     # (ignore arcsinh...)
     if resids:
         mnmx = (-0.1, 0.1)
@@ -766,6 +806,7 @@ class LegacySurveyData(object):
         from legacypipe.bok    import BokImage
         from legacypipe.ptf    import PtfImage
         from legacypipe.cfht   import MegaPrimeImage
+        from legacypipe.hsc    import HscImage
         from collections import OrderedDict
 
         if survey_dir is None:
@@ -810,6 +851,7 @@ class LegacySurveyData(object):
             '90prime': BokImage,
             'ptf'    : PtfImage,
             'megaprime': MegaPrimeImage,
+            'hsc'    : HscImage,
             }
 
         self.allbands = allbands

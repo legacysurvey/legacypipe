@@ -69,8 +69,9 @@ def depthcut(survey, ccds, annotated, tilefile=None, imlist=None):
         return depthcut_90prime_alternative(ccds, annotated)
     elif survey == 'mosaic':
         return depthcut_mosaic(ccds, annotated, tilefile)
+    elif survey == 'hsc':
+        return numpy.ones(len(ccds), dtype='bool')
     raise ValueError('No such survey?')
-
 
 def depthcut_90prime_alternative(ccds, annotated, n=6):
     s = numpy.lexsort([ccds.image_hdu, ccds.image_filename])
@@ -290,6 +291,8 @@ def make_plots(ccds, camera, nside=512,
 
 
 def good_ccd_fraction(survey, ccds):
+    if survey == 'hsc':
+        return 1.0
     if survey not in ['decam', '90prime', 'mosaic']:
         raise ValueError('survey not recognized!')
     nccds = 62 if survey == 'decam' else 4

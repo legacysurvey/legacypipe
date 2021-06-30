@@ -388,7 +388,7 @@ def stage_refs(survey=None,
     # "refcat" is a list of tractor Sources
     # They are aligned
     if refstars:
-        from legacypipe.format_catalog import get_units_for_columns
+        from legacypipe.units import get_units_for_columns
         assert(len(refstars) == len(refcat))
         cols = ['ra', 'dec', 'ref_cat', 'ref_id', 'mag',
                 'istycho', 'isgaia', 'islargegalaxy', 'iscluster',
@@ -410,7 +410,7 @@ def stage_refs(survey=None,
         refcols = refstars.get_columns()
         cols = [c for c in cols if c in refcols]
         extra_units = dict(zguess='mag', pa='deg', radius='deg', keep_radius='deg')
-        units = get_units_for_columns(cols, [], extra_units)
+        units = get_units_for_columns(cols, extras=extra_units)
         with survey.write_output('ref-sources', brick=brickname) as out:
             refstars.writeto(None, fits_object=out.fits, primheader=version_header,
                              columns=cols, units=units)
@@ -599,7 +599,11 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                 maskbits |= (MASKBITS['SATUR_' + b.upper()] * sat).astype(np.int16)
         # ALLMASK_{g,r,z}
         for b,allmask in zip(bands, C.allmasks):
-            maskbits |= (MASKBITS['ALLMASK_' + b.upper()] * (allmask > 0))
+            bitname = 'ALLMASK_' + b.upper()
+            if not bitname in MASKBITS:
+                print('Skipping ALLMASK for band', b)
+                continue
+            maskbits |= (MASKBITS[bitname] * (allmask > 0))
         # omitting maskbits header cards, bailout, & WISE
         hdr = copy_header_with_wcs(version_header, targetwcs)
         with survey.write_output('maskbits', brick=brickname, shape=maskbits.shape) as out:
@@ -698,6 +702,10 @@ def stage_srcs(pixscale=None, targetwcs=None,
     _add_stage_version(version_header, 'SRCS', 'srcs')
     tlast = Time()
 
+    debug('Running source detection at', nsigma, 'sigma')
+    SEDs = survey.sed_matched_filters(bands)
+    print('SEDs:', SEDs)
+    
     avoid_map = None
     avoid_xyr = []
     if refstars:
@@ -1839,6 +1847,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     _add_stage_version(version_header, 'COAD', 'coadds')
     tlast = Time()
 
+    print('stage_coadds: survey.allbands:', survey.allbands)
+    
     # Write per-brick CCDs table
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
@@ -2051,11 +2061,15 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # SATUR
     if saturated_pix is not None:
         for b, sat in zip(bands, saturated_pix):
-            maskbits |= (MASKBITS['SATUR_' + b.upper()] * sat).astype(np.int16)
+            key = 'SATUR_' + b.upper()
+            if key in MASKBITS:
+                maskbits |= (MASKBITS[key] * sat).astype(np.int16)
 
     # ALLMASK_{g,r,z}
     for b,allmask in zip(bands, C.allmasks):
-        maskbits |= (MASKBITS['ALLMASK_' + b.upper()] * (allmask > 0))
+        key = 'ALLMASK_' + b.upper()
+        if key in MASKBITS:
+            maskbits |= (MASKBITS[key] * (allmask > 0))
 
     # BAILOUT_MASK
     if bailout_mask is not None:
@@ -3428,6 +3442,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         picsurvey = kwargs.get('survey',None)
         if picsurvey is not None:
             picsurvey.output_dir = survey.output_dir
+            picsurvey.allbands = survey.allbands
 
         flush()
         if mp is not None and threads is not None and threads > 1:
@@ -3720,6 +3735,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         rin<r<rout on each CCD centered on the targetwcs.crval coordinates.""")
     parser.add_argument('--read-serial', dest='read_parallel', default=True,
                         action='store_false', help='Read images in series, not in parallel?')
+    parser.add_argument('--rgb-stretch', type=float, help='Stretch RGB jpeg plots by this factor.')
     return parser
 
 def get_runbrick_kwargs(survey=None,
@@ -3876,6 +3892,7 @@ def main(args=None):
     ps_file = optdict.pop('ps', None)
     ps_t0   = optdict.pop('ps_t0', 0)
     verbose = optdict.pop('verbose')
+    rgb_stretch = optdict.pop('rgb_stretch', None)
 
     survey, kwargs = get_runbrick_kwargs(**optdict)
     if kwargs in [-1, 0]:
@@ -3918,6 +3935,10 @@ def main(args=None):
         ps_thread.daemon = True
         print('Starting thread to run "ps"')
         ps_thread.start()
+
+    if rgb_stretch is not None:
+        import legacypipe.survey
+        legacypipe.survey.rgb_stretch_factor = rgb_stretch
 
     debug('kwargs:', kwargs)
 

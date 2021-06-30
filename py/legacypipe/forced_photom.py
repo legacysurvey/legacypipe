@@ -219,7 +219,7 @@ def main(survey=None, opt=None, args=None):
     for ccd in ccds:
         args.append((survey,
                      catsurvey_north, catsurvey_south, opt.catalog_resolve_dec_ngc,
-                     ccd, opt, zoomslice, ps))
+                     ccd, opt, zoomslice, None, ps))
 
     if opt.threads:
         from astrometry.util.multiproc import multiproc
@@ -265,15 +265,7 @@ def main(survey=None, opt=None, args=None):
         version_hdr.add_record(dict(name='APRAD%i' % i, value=ap,
                                     comment='(optical) Aperture radius, in arcsec'))
 
-    unitmap = {'exptime':'sec',
-               'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2',
-               'apflux':'nanomaggy', 'apflux_ivar':'1/nanomaggy^2',
-               'psfdepth':'1/nanomaggy^2', 'galdepth':'1/nanomaggy^2',
-               'sky':'nanomaggy/arcsec^2', 'psfsize':'arcsec',
-               'fwhm':'pixels', 'ccdrarms':'arcsec', 'ccddecrms':'arcsec',
-               'ra':'deg', 'dec':'deg', 'skyrms':'counts/sec',
-               'dra':'arcsec', 'ddec':'arcsec',
-               'dra_ivar':'1/arcsec^2', 'ddec_ivar':'1/arcsec^2'}
+    from legacypipe.units import get_units_for_columns
 
     columns = F.get_columns()
     order = ['release', 'brickid', 'brickname', 'objid', 'camera', 'expnum',
@@ -284,7 +276,7 @@ def main(survey=None, opt=None, args=None):
              'apflux', 'apflux_ivar', 'x', 'y', 'dqmask', 'dra', 'ddec',
              'dra_ivar', 'ddec_ivar']
     columns = [c for c in order if c in columns]
-    units = [unitmap.get(c,'') for c in columns]
+    units = get_units_for_columns(columns)
 
     if opt.out is not None:
         outdir = os.path.dirname(opt.out)
@@ -343,10 +335,10 @@ def main(survey=None, opt=None, args=None):
 
 def bounce_one_ccd(X):
     # for multiprocessing
-    return run_one_ccd(*X)
+    return forced_photom_one_ccd(*X)
 
-def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None, resolve_dec=None,
-                       margin=20):
+def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None,
+                       resolve_dec=None, margin=20):
     TT = []
     surveys = [(catsurvey_north, True)]
     if catsurvey_south is not None:
@@ -491,26 +483,31 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     assert(set(sga.ref_id) == set(SGA.ref_id))
     return SGA
 
-def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
-                ccd, opt, zoomslice, ps):
+def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
+                          ccd, opt, zoomslice, radecpoly, ps):
     from functools import reduce
     from legacypipe.bits import DQ_BITS
 
     tlast = Time()
     #print('Opt:', opt)
     im = survey.get_image_object(ccd)
-    print('Run_one_ccd: checking cache', survey.cache_dir)
+    print('Forced_photom_one_ccd: checking cache', survey.cache_dir)
     if survey.cache_dir is not None:
         im.check_for_cached_files(survey)
     if opt.do_calib:
         im.run_calibs(splinesky=True)
 
-    tim = im.get_tractor_image(slc=zoomslice, pixPsf=True,
-                               constant_invvar=opt.constant_invvar,
+    tim = im.get_tractor_image(slc=zoomslice,
+                               radecpoly=radecpoly,
+                               pixPsf=True,
                                hybridPsf=opt.hybrid_psf,
                                normalizePsf=opt.normalize_psf,
-                               old_calibs_ok=True, trim_edges=False)
-    print('Got tim:', tim)#, 'x0,y0', tim.x0, tim.y0)
+                               constant_invvar=opt.constant_invvar,
+                               old_calibs_ok=True,
+                               trim_edges=False)
+    print('Got tim:', tim)
+    if tim is None:
+        return None
     chipwcs = tim.subwcs
     H,W = tim.shape
 
@@ -558,17 +555,16 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     posneg_mask = None
     if opt.outlier_mask is not None:
         posneg_mask = np.zeros(tim.shape, np.uint8)
-    # Outliers masks are computed within a survey (north/south for dr9), and are stored
-    # in a brick-oriented way, in the results directories.
-    north_ccd = (ccd.camera.strip() != 'decam')
-    catsurvey = catsurvey_north
-    if not north_ccd and catsurvey_south is not None:
-        catsurvey = catsurvey_south
-    bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
+
+    # # Outliers masks are computed within a survey (eg north/south
+    # # for dr9), and are stored in a brick-oriented way, in the
+    # # results directories.
+    bricks = bricks_touching_wcs(chipwcs, survey=survey)
+
     for b in bricks:
         print('Reading outlier mask for brick', b.brickname,
-              ':', catsurvey.find_file('outliers_mask', brick=b.brickname, output=False))
-        ok = read_outlier_mask_file(catsurvey, [tim], b.brickname, pos_neg_mask=posneg_mask,
+              ':', survey.find_file('outliers_mask', brick=b.brickname, output=False))
+        ok = read_outlier_mask_file(survey, [tim], b.brickname, pos_neg_mask=posneg_mask,
                                     subimage=False, output=False, ps=ps)
         if not ok:
             print('WARNING: failed to read outliers mask file for brick', b.brickname)
@@ -644,7 +640,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     print('Parse catalog:', tnow-tlast)
     tlast = tnow
 
-    print('Forced photom...')
+    print('Forced photom for', im, '...')
     F = run_forced_phot(cat, tim,
                         ceres=opt.ceres,
                         derivs=opt.derivs,
