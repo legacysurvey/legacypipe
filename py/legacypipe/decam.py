@@ -29,23 +29,28 @@ class DecamImage(LegacySurveyImage):
         self.ccdzpt += 2.5 * np.log10(self.exptime)
 
         # Nominal zeropoints
-        self.zp0 =  dict(g = 26.610,
-                         r = 26.818,
-                         z = 26.484,
+        # These are used only for "ccdskybr", so are not critical.
+        self.zp0 =  dict(g = 25.001,
+                         r = 25.209,
+                         z = 24.875,
                          # u from Arjun 2021-03-17, based on DECosmos-to-SDSS
                          u = 23.3205,
                          # i,Y from DESY1_Stripe82 95th percentiles
-                         i=26.758,
-                         Y=25.321,
-                         N501=23.812,
-                         N673=24.151,
-        ) # e/sec
-        # extinction per airmass
-        self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06,
+                         i = 25.149,
+                         Y = 23.712,
+                         N501 = 23.812,
+                         N673 = 24.151,
+        )
+        # extinction per airmass, from Arjun's 2019-02-27
+        # "Zeropoint variations with MJD for DECam data".
+        self.k_ext = dict(g = 0.173,
+                          r = 0.090,
+                          i = 0.054,
+                          z = 0.060,
+                          Y = 0.058,
                           # From Arjun 2021-03-17 based on DECosmos (calib against SDSS)
                           u = 0.63,
-                          #i, Y totally made up
-                          i=0.08, Y=0.06)
+            )
 
     @classmethod
     def get_nominal_pixscale(cls):
