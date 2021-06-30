@@ -127,7 +127,6 @@ def _ccds_table(camera='decam'):
         ('phrms', 'f4'),
         ('phrmsavg', 'f4'),
         ('zpt', 'f4'),
-        ('transp', 'f4'),
         ('raoff',  'f4'),
         ('decoff', 'f4'),
         ('rarms',  'f4'),
@@ -1193,7 +1192,6 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     ccds['phoff'] = dzpt
     ccds['phrms'] = zptstd
     ccds['zpt'] = zptmed
-    ccds['transp'] = transp
     ccds['nstars_photom'] = nphotom
     ccds['nstars_astrom'] = nastrom
 
@@ -1227,7 +1225,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     # Plots for comparing to Arjuns zeropoints*.ps
     verboseplots = False
     if verboseplots:
-        imobj.make_plots(phot,dmag,ccds['zpt'],ccds['transp'])
+        imobj.make_plots(phot,dmag,ccds['zpt'],transp)
         t0= ptime('made-plots',t0)
     return ccds, phot
 
