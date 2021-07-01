@@ -425,8 +425,7 @@ def make_coadds(tims, bands, targetwcs,
                 if dq is None:
                     goodpix = 1
                 else:
-                    # include SATUR pixels if no other
-                    # pixels exists
+                    # include SATUR pixels if no other pixels exists
                     okbits = 0
                     for bitname in ['satur']:
                         okbits |= DQ_BITS[bitname]
@@ -435,7 +434,7 @@ def make_coadds(tims, bands, targetwcs,
                         # HACK -- force SATUR pix to be bright
                         im[brightpix] = satur_val
                     # Include these pixels if none other exist??
-                    for bitname in ['interp']: #, 'bleed']:
+                    for bitname in ['interp']:
                         okbits |= DQ_BITS[bitname]
                     goodpix = ((dq & ~okbits) == 0)
 
@@ -582,6 +581,7 @@ def make_coadds(tims, bands, targetwcs,
             if plots:
                 _make_coadds_plots_3(cowimg, cow, coimg, band, ps)
 
+            # Patch pixels with no data in the weighted coadd.
             cowimg[cow == 0] = coimg[cow == 0]
             if mods is not None:
                 cowmod[cow == 0] = comod[cow == 0]
