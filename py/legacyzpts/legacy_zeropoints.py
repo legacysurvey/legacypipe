@@ -33,14 +33,24 @@ from legacypipe.survey import radec_at_mjd, get_git_version
 from legacypipe.image import validate_version
 from legacypipe.survey import LegacySurveyData
 
-CAMERAS=['decam','mosaic','90prime','megaprime']
+import logging
+logger = logging.getLogger('legacyzpts.legacy_zeropoints')
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
+
+CAMERAS=['decam','mosaic','90prime','megaprime', 'hsc']
+
 MAGLIM=dict(
     u=[16, 20],
     g=[16, 20],
     r=[16, 19.5],
     i=[16, 19.5],
     z=[16.5, 19],
-    Y=[16.5, 19])
+    Y=[16.5, 19],
+    N501=[16,20],
+    N673=[16,19.5],
+    )
 
 def ptime(text,t0):
     tnow=Time()
@@ -84,7 +94,7 @@ def _ccds_table(camera='decam'):
         ('expid', 'S17'),
         ('object', 'S35'),
         ('propid', 'S10'),
-        ('filter', 'S1'),
+        ('filter', 'S4'),
         ('exptime', 'f4'),
         ('mjd_obs', 'f8'),
         ('airmass', 'f4'),
@@ -117,7 +127,6 @@ def _ccds_table(camera='decam'):
         ('phrms', 'f4'),
         ('phrmsavg', 'f4'),
         ('zpt', 'f4'),
-        ('transp', 'f4'),
         ('raoff',  'f4'),
         ('decoff', 'f4'),
         ('rarms',  'f4'),
@@ -229,7 +238,8 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
 
     print('Got image object', img)
     # Confirm camera field.
-    cammap = {'mosaic3':'mosaic'}
+    cammap = {'mosaic3':'mosaic',
+              'hyper suprime-cam':'hsc'}
     assert(img.camera == camera)
 
     primhdr = img.read_image_primary_header()
@@ -577,7 +587,7 @@ def get_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,\
                                      description='Generate a legacypipe-compatible (survey) CCDs file \
                                                   from a set of reduced imaging.')
-    parser.add_argument('--camera',choices=['decam','mosaic','90prime','megaprime'],action='store',required=True)
+    parser.add_argument('--camera',choices=CAMERAS, action='store',required=True)
     parser.add_argument('--image',action='store',default=None,help='relative path to image starting from decam,bok,mosaicz dir',required=False)
     parser.add_argument('--image_list',action='store',default=None,help='text file listing multiples images in same was as --image',required=False)
     parser.add_argument('--outdir', type=str, default=None, help='Where to write zpts/,images/,logs/; default is within $LEGACY_SURVEY_DIR/--survey-dir')
@@ -609,6 +619,7 @@ def get_parser():
                         help='Multiprocessing threads (parallel by HDU)')
     parser.add_argument('--quiet', default=False, action='store_true', help='quiet down')
     parser.add_argument('--overhead', type=str, default=None, help='Print python startup time since the given date.')
+    parser.add_argument('--verbose', '-v', action='store_true', default=False, help='More logging')
     return parser
 
 
@@ -652,10 +663,10 @@ def main(args=None):
     mp = multiproc(nthreads=(threads or 1))
 
     import logging
-    #if quiet:
-    lvl = logging.INFO
-    #else:
-    #    lvl = logging.DEBUG
+    if args.verbose:
+        lvl = logging.DEBUG
+    else:
+        lvl = logging.INFO
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
 
     camera = measureargs['camera']
@@ -677,13 +688,6 @@ def main(args=None):
             measureargs.update(bad_expid=read_bad_expid(fn))
         else:
             print('No bad exposure file found for camera {}'.format(camera))
-
-    # try:
-    #     from legacypipe.cfht import MegaPrimeImage
-    #     survey.image_typemap['megaprime'] = MegaPrimeImage
-    # except:
-    #     print('MegaPrimeImage class not found')
-    #     raise IOError
 
     for ii, imgfn in enumerate(image_list):
         print('Working on image {}/{}: {}'.format(ii+1, nimage, imgfn))
@@ -1188,7 +1192,6 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     ccds['phoff'] = dzpt
     ccds['phrms'] = zptstd
     ccds['zpt'] = zptmed
-    ccds['transp'] = transp
     ccds['nstars_photom'] = nphotom
     ccds['nstars_astrom'] = nastrom
 
@@ -1222,7 +1225,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     # Plots for comparing to Arjuns zeropoints*.ps
     verboseplots = False
     if verboseplots:
-        imobj.make_plots(phot,dmag,ccds['zpt'],ccds['transp'])
+        imobj.make_plots(phot,dmag,ccds['zpt'],transp)
         t0= ptime('made-plots',t0)
     return ccds, phot
 

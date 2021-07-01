@@ -1,5 +1,6 @@
 from __future__ import print_function
-import os, warnings
+import os
+import warnings
 import numpy as np
 import fitsio
 from tractor.splinesky import SplineSky
@@ -217,9 +218,10 @@ class LegacySurveyImage(object):
                 self.fwhm = self.get_fwhm(primhdr, hdr)
             else:
                 self.ccdname = ''
-            # fwhm, sig1
-            self.sig1 = 0.
+            self.dq_hdu = self.hdu
+            self.wt_hdu = self.hdu
 
+            self.sig1 = 0.
             self.ccdzpt = 0.
             self.dradec = (0., 0.)
             
@@ -231,6 +233,8 @@ class LegacySurveyImage(object):
             self.image_filename = imgfn
             self.imgfn = os.path.join(self.survey.get_image_dir(), imgfn)
             self.hdu     = ccd.image_hdu
+            self.dq_hdu  = ccd.image_hdu
+            self.wt_hdu  = ccd.image_hdu
             self.expnum  = ccd.expnum
             self.ccdname = ccd.ccdname.strip()
             self.band    = ccd.filter.strip()
@@ -290,6 +294,9 @@ class LegacySurveyImage(object):
         self.old_single_skyfn = os.path.join(calibdir, imgdir, basename, calname + '-splinesky.fits')
         # for debugging purposes
         self.print_imgpath = '/'.join(self.imgfn.split('/')[-5:])
+
+    def validate_version(self, *args, **kwargs):
+        return validate_version(*args, **kwargs)
 
     def compute_filenames(self):
         # Compute data quality and weight-map filenames
@@ -542,9 +549,9 @@ class LegacySurveyImage(object):
         primhdr = self.read_image_primary_header()
 
         for fn,kw in [(self.imgfn, dict(data=primhdr)), (self.wtfn, {}), (self.dqfn, {})]:
-            if not validate_version(fn, 'primaryheader',
-                                           self.expnum, self.plver, self.plprocid,
-                                           cpheader=True, old_calibs_ok=old_calibs_ok, **kw):
+            if not self.validate_version(fn, 'primaryheader',
+                                         self.expnum, self.plver, self.plprocid,
+                                         cpheader=True, old_calibs_ok=old_calibs_ok, **kw):
                 raise RuntimeError('Version validation failed for filename %s (PLVER/PLPROCID)' % fn)
         band = self.band
         wcs = self.get_wcs()
@@ -728,8 +735,8 @@ class LegacySurveyImage(object):
             #  the data)
             imgmed = np.median(img[invvar>0])
             if np.abs(imgmed) > self.sig1:
-                print('WARNING: image median', imgmed, 'is more than 1 sigma',
-                      'away from zero!')
+                import warnings
+                warnings.warn('image median is %.2f sigma away from zero!' % (imgmed / self.sig1))
 
         if subsky:
             self.apply_amp_correction(img, invvar, x0, y0)
@@ -762,6 +769,11 @@ class LegacySurveyImage(object):
         tim.psfnorm = self.psf_norm(tim)
         # Galaxy-detection norm
         tim.galnorm = self.galaxy_norm(tim)
+        #print('Galnorm:', tim.galnorm)
+        if not (np.isfinite(tim.psfnorm) and np.isfinite(tim.galnorm)):
+            # This can happen if there is something very wrong with the PSF model (NaNs, etc)
+            warnings.warn('Bad (nan) psfnorm or galnorm for %s' % self)
+            return None
         tim.psf = fullpsf
 
         tim.time = tai
@@ -785,7 +797,7 @@ class LegacySurveyImage(object):
         tim.skyver = (getattr(sky, 'version', ''), getattr(sky, 'plver', ''))
         tim.psfver = (getattr(psf, 'version', ''), getattr(psf, 'plver', ''))
         tim.datasum = imghdr.get('DATASUM')
-        tim.procdate = primhdr['DATE']
+        tim.procdate = primhdr.get('DATE', '')
         if get_dq:
             tim.dq = dq
         tim.dq_saturation_bits = self.dq_saturation_bits
@@ -987,8 +999,8 @@ class LegacySurveyImage(object):
         '''
         Reads the Data Quality (DQ) mask image.
         '''
-        debug('Reading data quality image', self.dqfn, 'ext', self.hdu)
-        dq = self._read_fits(self.dqfn, self.hdu, **kwargs)
+        debug('Reading data quality image', self.dqfn, 'ext', self.dq_hdu)
+        dq = self._read_fits(self.dqfn, self.dq_hdu, **kwargs)
 
         # FIXME - Turn SATUR on edges to EDGE
         return dq
@@ -1005,8 +1017,8 @@ class LegacySurveyImage(object):
         '''
         Reads the inverse-variance (weight) map image.
         '''
-        debug('Reading weight map image', self.wtfn, 'ext', self.hdu)
-        invvar = self._read_fits(self.wtfn, self.hdu, slice=slice, **kwargs)
+        debug('Reading weight map image', self.wtfn, 'ext', self.wt_hdu)
+        invvar = self._read_fits(self.wtfn, self.wt_hdu, slice=slice, **kwargs)
         if dq is not None:
             invvar[dq != 0] = 0.
 
@@ -1098,7 +1110,7 @@ class LegacySurveyImage(object):
             debug('Found', len(I), 'matching CCDs in merged sky file')
             if len(I) != 1:
                 continue
-            if not validate_version(
+            if not self.validate_version(
                     fn, 'table', self.expnum, self.plver, self.plprocid,
                     data=T, old_calibs_ok=old_calibs_ok):
                 raise RuntimeError('Sky file %s did not pass consistency validation (PLVER, PLPROCID, EXPNUM)' % fn)
@@ -1179,7 +1191,7 @@ class LegacySurveyImage(object):
             debug('Found', len(I), 'matching CCDs')
             if len(I) != 1:
                 continue
-            if not validate_version(
+            if not self.validate_version(
                     fn, 'table', self.expnum, self.plver, self.plprocid,
                     data=T, old_calibs_ok=old_calibs_ok):
                 raise RuntimeError('Merged PSFEx file %s did not pass consistency validation (PLVER, PLPROCID, EXPNUM)' % fn)
@@ -1192,6 +1204,9 @@ class LegacySurveyImage(object):
         # number of terms in polynomial
         ne = (degree + 1) * (degree + 2) // 2
         Ti.psf_mask = Ti.psf_mask[:ne, :Ti.psfaxis1, :Ti.psfaxis2]
+
+        assert(np.all(np.isfinite(Ti.psf_mask)))
+
         # If degree 0, set polname* to avoid assertion error in tractor
         if degree == 0:
             Ti.polname1 = 'X_IMAGE'
@@ -1230,7 +1245,7 @@ class LegacySurveyImage(object):
     ######## Calibration tasks ###########
 
 
-    def funpack_files(self, imgfn, maskfn, hdu, todelete):
+    def funpack_files(self, imgfn, maskfn, imghdu, maskhdu, todelete):
         ''' Source Extractor can't handle .fz files, so unpack them.'''
         from legacypipe.survey import create_temp
         tmpimgfn = None
@@ -1238,10 +1253,10 @@ class LegacySurveyImage(object):
         # For FITS files that are not actually fpack'ed, funpack -E
         # fails.  Check whether actually fpacked.
         fcopy = False
-        hdr = fitsio.read_header(imgfn, ext=hdu)
+        hdr = fitsio.read_header(imgfn, ext=imghdu)
         if not ((hdr['XTENSION'] == 'BINTABLE') and hdr.get('ZIMAGE', False)):
             debug('Image %s, HDU %i is not fpacked; just imcopying.' %
-                  (imgfn,  hdu))
+                  (imgfn,  imghdu))
             fcopy = True
 
         tmpimgfn  = create_temp(suffix='.fits')
@@ -1250,21 +1265,21 @@ class LegacySurveyImage(object):
         todelete.append(tmpmaskfn)
 
         if fcopy:
-            cmd = 'imcopy %s"+%i" %s' % (imgfn, hdu, tmpimgfn)
+            cmd = 'imcopy %s"+%i" %s' % (imgfn, imghdu, tmpimgfn)
         else:
-            cmd = 'funpack -E %i -O %s %s' % (hdu, tmpimgfn, imgfn)
+            cmd = 'funpack -E %i -O %s %s' % (imghdu, tmpimgfn, imgfn)
         debug(cmd)
         if os.system(cmd):
             raise RuntimeError('Command failed: ' + cmd)
 
         if fcopy:
-            cmd = 'imcopy %s"+%i" %s' % (maskfn, hdu, tmpmaskfn)
+            cmd = 'imcopy %s"+%i" %s' % (maskfn, maskhdu, tmpmaskfn)
         else:
-            cmd = 'funpack -E %i -O %s %s' % (hdu, tmpmaskfn, maskfn)
+            cmd = 'funpack -E %i -O %s %s' % (maskhdu, tmpmaskfn, maskfn)
         debug(cmd)
         if os.system(cmd):
             print('Command failed: ' + cmd)
-            M,hdr = self._read_fits(maskfn, hdu, header=True)
+            M,hdr = self._read_fits(maskfn, maskhdu, header=True)
             print('Read', M.dtype, M.shape)
             fitsio.write(tmpmaskfn, M, header=hdr, clobber=True)
             print('Wrote', tmpmaskfn, 'with fitsio')
@@ -1307,7 +1322,7 @@ class LegacySurveyImage(object):
             plprocid = 'xxx'
         imghdr = self.read_image_header()
         datasum = imghdr.get('DATASUM', '0')
-        procdate = primhdr['DATE']
+        procdate = primhdr.get('DATE', 'xxx')
         if git_version is None:
             git_version = get_git_version()
         # We write the PSF model to a .fits.tmp file, then rename to .fits
@@ -1366,9 +1381,9 @@ class LegacySurveyImage(object):
             img -= template
 
         plver = primhdr.get('PLVER', 'V0.0').strip()
-        plprocid = str(primhdr['PLPROCID']).strip()
+        plprocid = str(primhdr.get('PLPROCID', '0')).strip()
         datasum = imghdr.get('DATASUM', '0')
-        procdate = primhdr['DATE']
+        procdate = primhdr.get('DATE', '0')
         if git_version is None:
             from legacypipe.survey import get_git_version
             git_version = get_git_version()
@@ -1854,7 +1869,7 @@ class LegacySurveyImage(object):
             # The image & mask files to process (funpacked if necessary)
             todelete = []
             imgfn,maskfn = self.funpack_files(self.imgfn, self.dqfn,
-                                              self.hdu, todelete)
+                                              self.hdu, self.dq_hdu, todelete)
             self.run_se(imgfn, maskfn)
             for fn in todelete:
                 os.unlink(fn)

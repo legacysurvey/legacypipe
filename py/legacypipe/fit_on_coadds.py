@@ -204,10 +204,12 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
 
         # Apply the correction and return the tims
         for jj, (correction, ii) in enumerate(zip(x, I)):
-            tims[ii].data += correction
+            goodpix = (tims[ii].inverr > 0)
+            tims[ii].data[goodpix] += correction
             tims[ii].sky = ConstantSky(0.0)
             # Also correct the full-field mosaics
-            bandtims[jj].data += correction
+            goodpix = (bandtims[jj].inverr > 0)
+            bandtims[jj].data[goodpix] += correction
             bandtims[jj].sky = ConstantSky(0.0)        
 
         ## Check--
@@ -286,7 +288,8 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
                     
             I = np.where(allbands == band)[0]
             for ii in I:
-                tims[ii].data -= skymedian
+                goodpix = (tims[ii].inverr > 0)
+                tims[ii].data[goodpix] -= skymedian
                 #print('Tim', tims[ii], 'after subtracting skymedian: median', np.median(tims[ii].data))
 
     else:
@@ -310,8 +313,9 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
 
            I = np.where(allbands == band)[0]
            for ii in I:
-               tims[ii].data -= skymedian
-              # print('Tim', tims[ii], 'after subtracting skymedian: median', np.median(tims[ii].data))
+               goodpix = (tims[ii].inverr > 0)
+               tims[ii].data[goodpix] -= skymedian
+               # print('Tim', tims[ii], 'after subtracting skymedian: median', np.median(tims[ii].data))
 
            #print('Band', band, 'Coadd sky:', skymedian)
            if plots2:
