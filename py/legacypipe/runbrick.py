@@ -946,7 +946,8 @@ def stage_srcs(pixscale=None, targetwcs=None,
             for itim,tim in enumerate(tims):
                 if tim.band != band:
                     continue
-                tim.data -= cosky
+                goodpix = (tim.inverr > 0)
+                tim.data[goodpix] -= cosky
                 ccds.co_sky[itim] = cosky
     else:
         co_sky = None
