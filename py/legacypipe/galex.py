@@ -215,7 +215,7 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
 
     if False:
         from astrometry.util.plotutils import PlotSequence
-        ps = PlotSequence('wise-forced-w%i' % band)
+        ps = PlotSequence('galex-forced-w%i' % band)
     plots = (ps is not None)
     if plots:
         import pylab as plt
@@ -539,12 +539,19 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname):
     #nicegbands = ['NUV', 'FUV']
     #zps = dict(n=20.08, f=18.82)
     #zp = zps[band]
-    
+
+    # Background subtracted intensity map (J2000).
     imfn = os.path.join(galex_dir, tile.tilename.strip(),
                         '%s-%sd-intbgsub.fits.gz' % (tile.visitname.strip(), band))
+
+    # Sky background image (J2000); photons per pixel per second estimate of the
+    # background.
     bgfn = os.path.join(galex_dir, tile.tilename.strip(),
                         '%s-%sd-skybg.fits.gz' % (tile.visitname.strip(), band))
-    wtfn = os.path.join(galex_dir, tile.tilename.strip(),
+
+    # High resolution relative response (J2000); effective exposure time per
+    # pixel, upsampled from the -rr.fits image.
+    rrhrfn = os.path.join(galex_dir, tile.tilename.strip(),
                         '%s-%sd-rrhr.fits.gz' % (tile.visitname.strip(), band))
     gwcs = Tan(*[float(f) for f in
                  [tile.crval1, tile.crval2, tile.crpix1, tile.crpix2,
@@ -568,21 +575,34 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname):
     twcs = ConstantFitsWcs(gwcs)
     roislice = (slice(y0, y1), slice(x0, x1))
     
-    fitsimg = fitsio.FITS(imfn)[0]
+    # http://galex.stsci.edu/doc/fileDescriptions.html#91
+    fitsimg = fitsio.FITS(imfn)[0] # [photons/pixel/second]
     hdr = fitsimg.read_header()
     img = fitsimg[roislice]
 
-    fitsbgimg = fitsio.FITS(bgfn)[0]
+    fitsbgimg = fitsio.FITS(bgfn)[0] # [photons/pixel/second]
     bgimg = fitsbgimg[roislice]
 
-    fitswtimg = fitsio.FITS(wtfn)[0]
-    wtimg = fitswtimg[roislice]
-    wtimg[wtimg == 0] = 0.
+    fitsrrhrimg = fitsio.FITS(rrhrfn)[0] # [second/pixel]
+    rrhrimg = fitsrrhrimg[roislice]
+    flag = rrhrimg <= 0 # can be -1e32
+    if np.sum(flag) > 0: 
+        rrhrimg[flag] = 1.0
 
-    varimg = wtimg * bgimg / np.sum(wtimg)
+    # build the variance map
+    varimg = np.zeros_like(img)
+    I = img > 0
+    J = img <= 0
+    if np.sum(I) > 0:
+        varimg[I] = img[I] * rrhrimg[I]
+    if np.sum(J) > 0:
+        varimg[J] = bgimg[J] * rrhrimg[J]
+    varimg /= rrhrimg**2
 
-    inverr = np.ones_like(img)
-    inverr[img == 0.] = 0.
+    inverr = np.zeros_like(img)
+    K = varimg > 0
+    if np.sum(K) > 0:
+        inverr[K] = 1.0 / np.sqrt(varimg[K])
 
     zp = tile.get('%s_zpmag' % band)
     
