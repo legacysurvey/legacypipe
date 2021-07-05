@@ -6,23 +6,23 @@
 # Config directory nonsense
 export TMPCACHE=$(mktemp -d)
 echo "TMPCACHE $TMPCACHE"
-mkdir $TMPCACHE/cache
-mkdir $TMPCACHE/config
+mkdir "$TMPCACHE/cache"
+mkdir "$TMPCACHE/config"
 # astropy
 export XDG_CACHE_HOME=$TMPCACHE/cache
 export XDG_CONFIG_HOME=$TMPCACHE/config
-mkdir $XDG_CACHE_HOME/astropy
-cp -r $HOME/.astropy/cache $XDG_CACHE_HOME/astropy
-mkdir $XDG_CONFIG_HOME/astropy
-cp -r $HOME/.astropy/config $XDG_CONFIG_HOME/astropy
+mkdir "$XDG_CACHE_HOME/astropy"
+cp -r "$HOME/.astropy/cache" "$XDG_CACHE_HOME/astropy"
+mkdir "$XDG_CONFIG_HOME/astropy"
+cp -r "$HOME/.astropy/config" "$XDG_CONFIG_HOME/astropy"
 # matplotlib
 export MPLCONFIGDIR=$TMPCACHE/matplotlib
-mkdir $MPLCONFIGDIR
-cp -r $HOME/.config/matplotlib $MPLCONFIGDIR
+mkdir "$MPLCONFIGDIR"
+cp -r "$HOME/.config/matplotlib" "$MPLCONFIGDIR"
 # ipython
 export IPYTHONDIR=$TMPCACHE/ipython
-mkdir $IPYTHONDIR
-cp -r $HOME/.ipython $IPYTHONDIR  
+mkdir "$IPYTHONDIR"
+cp -r "$HOME/.ipython" "$IPYTHONDIR"
 
 # (after config dir nonsense, reset HOME because $HOME in the container is /homedir...)
 export HOME=$REALHOME
@@ -39,8 +39,8 @@ if __name__ == '__main__':
     from ipykernel import kernelapp as app
     app.launch_new_instance()
 EOF
-/opt/conda/bin/python $TMPSCRIPT --ignore-cwd -f $1
-rm $TMPSCRIPT
+/opt/conda/bin/python "$TMPSCRIPT" --ignore-cwd -f $1
+rm "$TMPSCRIPT"
 
 # Clean up config directory nonsens.
-rm -R $TMPCACHE
+rm -R "$TMPCACHE"

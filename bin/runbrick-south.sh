@@ -4,7 +4,7 @@
 # with burst buffer!
 
 # Burst-buffer!
-if [ x$DW_PERSISTENT_STRIPED_DR9 == x ]; then
+if [ "x$DW_PERSISTENT_STRIPED_DR9" == x ]; then
   # No burst buffer -- use scratch
   outdir=/global/cscratch1/sd/desiproc/dr9c/south
 else
@@ -52,46 +52,46 @@ let usemem=${maxmem}*${ncores}/32
 # Can detect Cori KNL node (96 GB) via:
 # grep -q "Xeon Phi" /proc/cpuinfo && echo Yes
 
-ulimit -Sv $usemem
+ulimit -Sv "$usemem"
 
 cd /src/legacypipe/py
 
 brick="$1"
 
 bri=$(echo $brick | head -c 3)
-mkdir -p $outdir/logs/$bri
+mkdir -p "$outdir/logs/$bri"
 log="$outdir/logs/$bri/$brick.log"
 
 mkdir -p $outdir/metrics/$bri
 
-echo Logging to: $log
+echo Logging to: "$log"
 echo Running on $(hostname)
 
-echo -e "\n\n\n" >> $log
-echo "-----------------------------------------------------------------------------------------" >> $log
-echo "PWD: $(pwd)" >> $log
-echo >> $log
-echo "Environment:" >> $log
-set | grep -v PASS >> $log
-echo >> $log
-ulimit -a >> $log
-echo >> $log
+echo -e "\n\n\n" >> "$log"
+echo "-----------------------------------------------------------------------------------------" >> "$log"
+echo "PWD: $(pwd)" >> "$log"
+echo >> "$log"
+echo "Environment:" >> "$log"
+set | grep -v PASS >> "$log"
+echo >> "$log"
+ulimit -a >> "$log"
+echo >> "$log"
 
-echo -e "\nStarting on $(hostname)\n" >> $log
-echo "-----------------------------------------------------------------------------------------" >> $log
+echo -e "\nStarting on $(hostname)\n" >> "$log"
+echo "-----------------------------------------------------------------------------------------" >> "$log"
 
 python -O legacypipe/runbrick.py \
      --run south \
-     --brick $brick \
+     --brick "$brick" \
      --skip \
      --skip-calibs \
-     --threads ${ncores} \
-     --blob-mask-dir ${BLOB_MASK_DIR} \
+     --threads "${ncores}" \
+     --blob-mask-dir "${BLOB_MASK_DIR}" \
      --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
-     --outdir $outdir \
+     --outdir "$outdir" \
      --write-stage srcs \
-     >> $log 2>&1
+     >> "$log" 2>&1
 
 #     --ps "${outdir}/metrics/${bri}/ps-${brick}-${SLURM_JOB_ID}.fits" \
 #     --ps-t0 $(date "+%s") \
