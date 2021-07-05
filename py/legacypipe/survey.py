@@ -567,7 +567,7 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                 imgplane = ((img * scale + m) - mn) / (mx - mn)
             if clip:
                 imgplane = np.clip(imgplane, 0, 1)
-        rgb[:,:,plane] = imgplane
+            rgb[:,:,plane] = imgplane
     return rgb
 
 def narrowband_rgb(imgs, bands, allbands, scales=None, m=0.03, Q=20, mnmx=None):
