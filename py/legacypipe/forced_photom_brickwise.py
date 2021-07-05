@@ -74,6 +74,7 @@ def main():
 
     ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
     if ccds is None:
+        from legacypipe.utils import NothingToDoError
         raise NothingToDoError('No CCDs touching brick')
     if 'ccd_cuts' in ccds.get_columns():
         ccds.cut(ccds.ccd_cuts == 0)
@@ -122,7 +123,7 @@ def main():
 
     # unpack results
     #outlier_masks = [m for _,_,m,_ in FF]
-    outlier_hdrs  = [h for _,_,_,h in FF]
+    #outlier_hdrs  = [h for _,_,_,h in FF]
     FF            = [F for F,_,_,_ in FF]
     F = merge_tables(FF)
 

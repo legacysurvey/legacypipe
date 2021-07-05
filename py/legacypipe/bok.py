@@ -62,10 +62,10 @@ class BokImage(LegacySurveyImage):
         band = band.split()[0]
         return band.replace('bokr', 'r')
 
-    def colorterm_ps1_to_observed(self, ps1stars, band):
-        """ps1stars: ps1.median 2D array of median mag for each band"""
+    def colorterm_ps1_to_observed(self, cat, band):
+        """cat: ps1.median 2D array of median mag for each band"""
         from legacypipe.ps1cat import ps1_to_90prime
-        return ps1_to_90prime(ps1stars, band)
+        return ps1_to_90prime(cat, band)
 
     def read_dq(self, slc=None, header=False, **kwargs):
         # Add supplemental static mask.

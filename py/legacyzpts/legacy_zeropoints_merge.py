@@ -8,11 +8,7 @@ from __future__ import division, print_function
 import os
 import argparse
 import numpy as np
-from collections import defaultdict
-try:
-    from astrometry.util.fits import fits_table, merge_tables
-except ImportError:
-    pass
+from astrometry.util.fits import fits_table, merge_tables
 
 def read_lines(fn):
     fin=open(fn,'r')

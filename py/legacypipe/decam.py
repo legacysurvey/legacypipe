@@ -136,7 +136,6 @@ class DecamImage(LegacySurveyImage):
         return dict(template_filename=tfn, sky_template_dir=dirnm, sky_obj=sky, skyscales_fn=fn)
 
     def get_sky_template(self, slc=None, old_calibs_ok=False):
-        import os
         import fitsio
         d = self.get_sky_template_filename(old_calibs_ok=old_calibs_ok)
         if d is None:

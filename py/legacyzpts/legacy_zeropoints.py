@@ -24,8 +24,6 @@ from astrometry.util.ttime import Time
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.libkd.spherematch import match_radec
 
-from tractor.splinesky import SplineSky
-
 import legacypipe
 from legacypipe.ps1cat import ps1cat, sdsscat
 from legacypipe.gaiacat import GaiaCatalog
@@ -227,8 +225,6 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     '''
     t0 = Time()
     quiet = measureargs.get('quiet', False)
-    img_fn_full = os.path.join(image_dir, img_fn)
-    imgclass = survey.image_class_for_camera(camera)
     image_hdu = measureargs.get('image_hdu', None)
 
     img = survey.get_image_object(None, camera=camera,
@@ -381,8 +377,6 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     return all_ccds, all_photom, img
 
 def run_one_calib(X):
-    from tractor.brightness import NanoMaggies
-
     (img_fn, camera, survey, ext, psfex, splinesky, plots, survey_blob_mask,
      survey_zeropoints) = X
     img = survey.get_image_object(None, camera=camera,
@@ -407,9 +401,7 @@ def run_one_calib(X):
             if sky is not None:
                 do_sky = False
         except:
-            import traceback
-            #print('Failed trying to read existing sky model:')
-            #traceback.print_exc()
+            pass
 
     if (not do_psf) and (not do_sky):
         # Nothing to do!

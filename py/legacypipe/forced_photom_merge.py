@@ -6,7 +6,6 @@ import sys
 import os
 import logging
 import numpy as np
-from glob import glob
 from collections import Counter
 
 from astrometry.util.fits import fits_table, merge_tables
@@ -161,7 +160,7 @@ def main():
                 traceback.print_exc()
                 pass
 
-        l,b = radectolb(brick.ra, brick.dec)
+        _,b = radectolb(brick.ra, brick.dec)
         # NGC and above resolve line? -> north
         if b > 0 and brick.dec >= opt.catalog_resolve_dec_ngc:
             if opt.catalog_dir_north:

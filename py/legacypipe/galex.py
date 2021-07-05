@@ -153,7 +153,6 @@ def stage_galex_forced(
         gcoadds.add(galex_models)
 
         if Nskipped > 0:
-            assert(len(GALEX) == len(wcat))
             GALEX = _fill_skipped_values(GALEX, Nskipped, do_phot)
             assert(len(GALEX) == len(cat))
             assert(len(GALEX) == len(T))

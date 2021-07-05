@@ -1,10 +1,6 @@
 from __future__ import print_function
 import os
-import sys
-import time
-import tempfile
 import numpy as np
-import fitsio
 from astrometry.util.fits import fits_table
 from astrometry.libkd.spherematch import match_radec
 from legacyzpts.legacy_zeropoints import main as lzmain
