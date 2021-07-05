@@ -18,12 +18,12 @@ export OMP_NUM_THREADS=1
 # To avoid problems with MPI and Python multiprocessing
 export MPICH_GNI_FORK_MODE=FULLCOPY
 
-bri=$(echo $brick | head -c 3)
+bri=$(echo "$brick" | head -c 3)
 mkdir -p "$outdir/logs/$bri"
 log="$outdir/logs/$bri/$brick.log"
 
 echo "Logging to: $log"
-echo Running on ${NERSC_HOST} $(hostname)
+echo Running on "${NERSC_HOST}" "$(hostname)"
 
 echo -e "\n\n\n" > "$log"
 echo "-----------------------------------------------------------------------------------------" >> "$log"

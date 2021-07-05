@@ -104,13 +104,13 @@ class DecamImage(LegacySurveyImage):
         kd = tree_open(fn, 'expnum')
         I = kd.search(np.array([self.expnum]), 0.5, 0, 0)
         if len(I) == 0:
-            warning.warn('decam: expnum %i not found in file %s' % (self.expnum, fn))
+            warnings.warn('decam: expnum %i not found in file %s' % (self.expnum, fn))
             return None
         # Read only the CCD-table rows within range.
         S = fits_table(fn, rows=I)
         S.cut(np.array([c.strip() == self.ccdname for c in S.ccdname]))
         if len(S) == 0:
-            warning.warn('decam: ccdname %s, expnum %i not found in file %s' %
+            warnings.warn('decam: ccdname %s, expnum %i not found in file %s' %
                   (self.ccdname, self.expnum, fn))
             return None
         assert(len(S) == 1)
@@ -131,7 +131,7 @@ class DecamImage(LegacySurveyImage):
         tfn = os.path.join(dirnm, 'sky_templates',
                            'sky_template_%s_%i.fits.fz' % (self.band, sky.run))
         if not os.path.exists(tfn):
-            warning.warn('WARNING: Sky template file %s does not exist' % tfn)
+            warnings.warn('WARNING: Sky template file %s does not exist' % tfn)
             return None
         return dict(template_filename=tfn, sky_template_dir=dirnm, sky_obj=sky, skyscales_fn=fn)
 

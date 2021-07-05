@@ -5,8 +5,7 @@ import time
 
 import zmq
 
-from legacypipe.oneblob import *
-
+from legacypipe.oneblob import one_blob
 
 def run(server):
 

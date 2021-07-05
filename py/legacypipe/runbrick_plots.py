@@ -1,5 +1,6 @@
 from __future__ import print_function
 import pylab as plt
+import numpy as np
 from astrometry.util.plotutils import dimshow
 from legacypipe.survey import *
 from legacypipe.coadds import quick_coadds

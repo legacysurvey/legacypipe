@@ -80,5 +80,5 @@ cmd="python -u /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
     --quiet \
     --blob-mask-dir ${blob_dir}"
 
-echo $cmd > "$log"
+echo "$cmd" > "$log"
 $cmd >> "$log" 2>&1

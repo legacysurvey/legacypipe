@@ -2,6 +2,7 @@
 
 This uses the Intel compilers, which introduces two complications:
 -   you need to access the license server at NERSC to build
+
 -   the intel compilers cannot be distributed, therefore can't be posted to Docker Hub,
     so NERSC provides a "two-stage build" recipe where you build in a full container, and
     then copy your results into a container with just the freely-distributable runtime
@@ -9,8 +10,8 @@ This uses the Intel compilers, which introduces two complications:
 
 Preliminaries:
 
--   create an account at <https://hub.docker.com>
--   ask someone to add you to the `legacysurvey` organization on Docker Hub.
+- create an account at <https://hub.docker.com>
+- ask someone to add you to the `legacysurvey` organization on Docker Hub.
 
 First, set up your `~/.ssh/config` file, adding a stanza called `intel-license`:
 
@@ -67,7 +68,7 @@ For DR8, we have a series of tags of the `legacypipe` repo and the Docker contai
 
 These were done by, eg:
 
-```
+```shell
 cd legacypipe/docker-nersc
 git tag -a DR8.0.2
 git push --tags

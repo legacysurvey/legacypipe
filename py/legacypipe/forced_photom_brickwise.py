@@ -121,7 +121,7 @@ def main():
     version_hdr.delete('CCDNAME')
 
     # unpack results
-    outlier_masks = [m for _,_,m,_ in FF]
+    #outlier_masks = [m for _,_,m,_ in FF]
     outlier_hdrs  = [h for _,_,_,h in FF]
     FF            = [F for F,_,_,_ in FF]
     F = merge_tables(FF)

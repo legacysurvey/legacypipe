@@ -34,12 +34,12 @@ export HOME=$REALHOME
 # instead, the temp dir gets added to PYTHONPATH, but that's okay.
 # /opt/conda/bin/python -m ipykernel_launcher --ignore-cwd -f $1
 TMPSCRIPT=$(mktemp -d)/script.py
-cat <<EOF > $TMPSCRIPT
+cat <<EOF > "$TMPSCRIPT"
 if __name__ == '__main__':
     from ipykernel import kernelapp as app
     app.launch_new_instance()
 EOF
-/opt/conda/bin/python "$TMPSCRIPT" --ignore-cwd -f $1
+/opt/conda/bin/python "$TMPSCRIPT" --ignore-cwd -f "$1"
 rm "$TMPSCRIPT"
 
 # Clean up config directory nonsens.

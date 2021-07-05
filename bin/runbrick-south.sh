@@ -58,11 +58,11 @@ cd /src/legacypipe/py
 
 brick="$1"
 
-bri=$(echo $brick | head -c 3)
+bri=$(echo "$brick" | head -c 3)
 mkdir -p "$outdir/logs/$bri"
 log="$outdir/logs/$bri/$brick.log"
 
-mkdir -p $outdir/metrics/$bri
+mkdir -p "$outdir/metrics/$bri"
 
 echo Logging to: "$log"
 echo Running on $(hostname)
@@ -87,7 +87,7 @@ python -O legacypipe/runbrick.py \
      --skip-calibs \
      --threads "${ncores}" \
      --blob-mask-dir "${BLOB_MASK_DIR}" \
-     --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle \
+     --checkpoint "${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle" \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
      --outdir "$outdir" \
      --write-stage srcs \

@@ -11,6 +11,7 @@ from astrometry.util.file import trymakedirs
 from astrometry.util.fits import fits_table
 from astrometry.util.util import Tan, Sip, anwcs_t
 from tractor.tractortime import TAITime
+from tractor.brightness import NanoMaggies
 
 #for SFDMap() including for PTF filters
 #from astrometry.util.starutil_numpy import *
@@ -25,8 +26,8 @@ Code specific to images from the (intermediate) Palomar Transient Factory (iPTF/
 def zeropoint_for_ptf(hdr):
     magzp= hdr['IMAGEZPT'] + 2.5 * np.log10(hdr['EXPTIME'])
     if isinstance(magzp,str):
-        print('WARNING: no ZeroPoint in header for image: ',tractor_image.imgfn)
-        raise ValueError #magzp= 23.
+        print('WARNING: no ZeroPoint in header:', hdr)
+        raise ValueError
     return magzp
 
 ##key functions##

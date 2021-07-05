@@ -455,7 +455,8 @@ def run_one_ext(X):
 
 class outputFns(object):
     def __init__(self, imgfn, outdir, camera, image_dir='images', debug=False):
-        """Assigns filename, makes needed dirs
+        """
+        Assigns filename, makes needed dirs.
 
         Args:
             imgfn: abs path to image, should be a ooi or oki file

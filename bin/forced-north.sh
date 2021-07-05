@@ -37,18 +37,18 @@ ncores=4
 
 echo "Logging to $logfile"
 
-python -O $LEGACYPIPE_DIR/legacypipe/forced_photom.py \
-       --survey-dir $DIR \
-       --catalog-dir-north $DIR/north \
-       --catalog-dir-south $DIR/south \
+python -O "$LEGACYPIPE_DIR/legacypipe/forced_photom.py" \
+       --survey-dir "$DIR" \
+       --catalog-dir-north "$DIR/north" \
+       --catalog-dir-south "$DIR/south" \
        --catalog-resolve-dec-ngc 32.375 \
        --skip \
        --skip-calibs \
        --apphot \
        --derivs \
        --outlier-mask \
-       --camera $camera \
-       --expnum $expnum \
-       --out-dir $outdir \
-       --threads $ncores \
-       >> $logfile 2>&1
+       --camera "$camera" \
+       --expnum "$expnum" \
+       --out-dir "$outdir" \
+       --threads "$ncores" \
+       >> "$logfile" 2>&1
