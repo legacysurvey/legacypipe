@@ -620,7 +620,7 @@ def get_rgb(imgs, bands, allbands=['g','r','z'],
 
     if len(bands) == 3 and bands[0] == 'N501' and bands[1] == 'r' and bands[2] == 'N673':
         return sdss_rgb(imgs, bands, scales=dict(N673=(0,3.4)))
-    
+
     # (ignore arcsinh...)
     if resids:
         mnmx = (-0.1, 0.1)
@@ -787,7 +787,7 @@ class LegacySurveyData(object):
     '''
 
     def __init__(self, survey_dir=None, cache_dir=None, output_dir=None,
-                 allbands=['g','r','z']):
+                 allbands=None):
         '''
         Create a LegacySurveyData object.
 
@@ -817,6 +817,8 @@ class LegacySurveyData(object):
         from legacypipe.hsc    import HscImage
         from collections import OrderedDict
 
+        if allbands is None:
+            allbands = ['g','r','z']
         if survey_dir is None:
             survey_dir = os.environ.get('LEGACY_SURVEY_DIR')
             if survey_dir is None:

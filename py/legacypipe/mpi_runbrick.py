@@ -202,7 +202,7 @@ def main(args=None):
     print('Shutting down MPI pool...')
     pool.shutdown()
     print('Shut down MPI pool')
-        
+
     return rtn
 
 if __name__ == '__main__':

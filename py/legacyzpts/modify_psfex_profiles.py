@@ -1,5 +1,5 @@
 from __future__ import division, print_function
-import os, time, warnings, gc
+import os, warnings, gc
 #import matplotlib.pyplot as plt
 import numpy as np
 from astropy.table import Table
@@ -166,7 +166,7 @@ for exp_index in exp_index_list:
                 print("Error: fit failed to converge.")
                 alpha, beta = 0.8, 2.2 # using default values
                 data['failure'][ccd_index] = True
-                
+
         #print('{} {} alpha, beta = {:.3f}, {:.3f}'.format(ccdname, band, alpha, beta))
 
         # save the Moffat parameters

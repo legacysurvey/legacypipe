@@ -55,7 +55,7 @@ image_fn="$1"
 camera=decam
 
 # Redirect logs to a nested directory.
-cpdir=$(basename $(dirname ${image_fn}))
+cpdir=$(basename $(dirname "${image_fn}"))
 logdir=$outdir/logs-calibs/$camera/$cpdir
 mkdir -p "$logdir"
 log=$(echo $(basename "${image_fn}" | sed s#.fits.fz#.log#g))

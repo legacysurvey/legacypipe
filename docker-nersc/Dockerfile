@@ -182,7 +182,7 @@ RUN git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
     && python3 setup.py install
 
 # python = python3
-RUN ln -s $(which python3) /usr/bin/python
+RUN ln -s "$(which python3)" /usr/bin/python
 
 # unwise_psf
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \

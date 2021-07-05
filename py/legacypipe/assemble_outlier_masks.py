@@ -160,7 +160,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     imhdr['CCDNAME'] = ccd.ccdname
     imhdr['IMGFILE'] = ccd.image_filename.strip()
     outlier_header = imhdr
-            
+
     return outlier_mask, outlier_header
 
 if __name__ == '__main__':

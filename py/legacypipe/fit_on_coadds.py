@@ -271,7 +271,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
                 skypix_annulus = np.logical_and(skypix, skymask)
                 #import matplotlib.pyplot as plt ; plt.imshow(skypix_annulus, origin='lower') ; plt.savefig('junk3.png')
                 #import pdb ; pdb.set_trace()
-                
+
                 if np.sum(skypix_annulus) == 0:
                     print('No pixels in sky!')
                     #import pdb ; pdb.set_trace()
@@ -287,7 +287,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
 
                 # the reference annulus is the first one
                 if irad == 0:
-                    _, skymedian, skysig = _skymean, _skymedian, _skysig
+                    skymedian = _skymedian
                     skypix_mask = skypix_annulus
                     
             I = np.where(allbands == band)[0]
@@ -308,7 +308,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
         for coimg, coiv, band in zip(C.coimgs, C.cowimgs, bands):
            skypix = refmask * (coiv>0)
            skypix_mask = _build_objmask(coimg, coiv, skypix)
-           skymean, skymedian, skysig = sigma_clipped_stats(coimg, mask=np.logical_not(skypix_mask), sigma=3.0)
+           _, skymedian, skysig = sigma_clipped_stats(coimg, mask=np.logical_not(skypix_mask), sigma=3.0)
            
            skydict.update({'{}SKYMN00'.format(band.upper()): (np.float32(_skymean), 'mean {} sky'.format(band))})
            skydict.update({'{}SKYMD00'.format(band.upper()): (np.float32(_skymedian), 'median {} sky'.format(band))})

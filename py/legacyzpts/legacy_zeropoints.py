@@ -836,7 +836,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         name = 'sdss'
     else:
         name = 'ps1'
-        
+
     if phot is not None:
         phot.cut(imobj.get_photometric_calibrator_cuts(name, phot))
         if len(phot) == 0:

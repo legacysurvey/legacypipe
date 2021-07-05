@@ -196,7 +196,7 @@ class LegacySurveyImage(object):
                           'mjd-obs': 'mjdobs'}
             for key in ['EXPTIME', 'MJD-OBS', 'HA', 'DATE', 'PLVER', 'PLPROCID']:
                 val = primhdr.get(key)
-                if type(val) == str:
+                if isinstance(val, str):
                     val = val.strip()
                     if len(val) == 0:
                         raise ValueError('Empty header card: %s' % key)
@@ -225,7 +225,7 @@ class LegacySurveyImage(object):
             self.sig1 = 0.
             self.ccdzpt = 0.
             self.dradec = (0., 0.)
-            
+
         else:
             # Get metadata from ccd table entry.
             # Note here that "image_filename" is the *relative* path (from image_dir),
@@ -1125,7 +1125,7 @@ class LegacySurveyImage(object):
             tscale = template_meta.get('scale', -3)
             if sver != tver or srun != trun or sscale != tscale:
                 if old_calibs_ok:
-                    warnings.warn('For image %s, Splinesky template version/run/scale %s/%s/%s',
+                    warnings.warn('For image %s, Splinesky template version/run/scale %s/%s/%s'
                                   'does not match sky template %s/%s/%s, but old_calibs_ok is set' %
                                   (self, sver, srun, sscale, tver, trun, tscale))
                 elif sver == -2 and srun == -2 and sscale == -2:
