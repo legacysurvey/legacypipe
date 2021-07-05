@@ -2,7 +2,7 @@ from __future__ import print_function
 import pylab as plt
 import numpy as np
 from astrometry.util.plotutils import dimshow
-from legacypipe.survey import *
+from legacypipe.survey import get_rgb, tim_get_resamp
 from legacypipe.coadds import quick_coadds
 
 def fitblobs_plots_2(blobs, refstars, ps):

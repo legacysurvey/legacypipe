@@ -119,9 +119,9 @@ def main(args):
             t = fits_table(fn)
             cats.append(t)
         cats= merge_tables(cats, columns='fillzero')
-        if opt.fix_hdu:
-            print('fixing hdu')
-            cats= fix_hdu(cats)
+        #if opt.fix_hdu:
+        #    print('fixing hdu')
+        #    cats= fix_hdu(cats)
         if opt.cut:
             print(len(cats), 'CCDs')
             cats.cut(cats.ccd_cuts == 0)

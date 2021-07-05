@@ -2,7 +2,7 @@ from __future__ import division, print_function
 import os, glob, time, warnings, gc
 #import matplotlib.pyplot as plt
 import numpy as np
-from astropy.table import Table, hstack
+from astropy.table import Table
 import fitsio
 from astropy.io import fits
 

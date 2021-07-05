@@ -15,7 +15,7 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
 from astrometry.util.ttime import Time
 
-from tractor import Tractor, Catalog, NanoMaggies
+from tractor import Tractor, Catalog
 from tractor.galaxy import disable_galaxy_cache
 
 from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version_header, apertures_arcsec, radec_at_mjd

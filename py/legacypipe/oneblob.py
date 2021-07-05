@@ -1784,9 +1784,8 @@ class OneBlob(object):
             btims = [tim for tim in tims if tim.band == b]
             btr = self.tractor(btims, fitcat)
             try:
-                from tractor import ceres
-                ceres_block = 8
                 from tractor.ceres_optimizer import CeresOptimizer
+                ceres_block = 8
                 btr.optimizer = CeresOptimizer(BW=ceres_block, BH=ceres_block)
             except ImportError:
                 from tractor.lsqr_optimizer import LsqrOptimizer
@@ -1976,7 +1975,6 @@ def is_reference_source(src):
     return getattr(src, 'is_reference_source', False)
 
 def _compute_source_metrics(srcs, tims, bands, tr):
-    import warnings
     # rchi2 quality-of-fit metric
     rchi2_num    = np.zeros((len(srcs),len(bands)), np.float32)
     rchi2_den    = np.zeros((len(srcs),len(bands)), np.float32)

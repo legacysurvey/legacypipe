@@ -6,7 +6,6 @@ import sys
 import os
 import logging
 import numpy as np
-from collections import Counter
 
 from astrometry.util.fits import fits_table, merge_tables
 

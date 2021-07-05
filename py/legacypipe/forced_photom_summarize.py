@@ -1,4 +1,3 @@
-import pylab as plt
 import numpy as np
 import os
 from glob import glob
@@ -27,7 +26,7 @@ def main():
         T.forced_nobs_g = np.zeros(len(T), np.float32)
         T.forced_nobs_r = np.zeros(len(T), np.float32)
         T.forced_nobs_z = np.zeros(len(T), np.float32)
-    
+
         ffn = fn.replace('/tractor/', '/forced-deep/forced-brick/').replace('tractor', 'forced')
         if not os.path.exists(ffn):
             print('Skipping:', ffn)

@@ -14,12 +14,9 @@ import numpy as np
 from scipy.stats import sigmaclip
 
 import fitsio
-from astropy.io import fits as fits_astropy
 from astropy.table import Table, vstack
 
 from astrometry.util.file import trymakedirs
-from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
-from astrometry.util.util import wcs_pv2sip_hdr
 from astrometry.util.ttime import Time
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.libkd.spherematch import match_radec
@@ -234,8 +231,6 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
 
     print('Got image object', img)
     # Confirm camera field.
-    cammap = {'mosaic3':'mosaic',
-              'hyper suprime-cam':'hsc'}
     assert(img.camera == camera)
 
     primhdr = img.read_image_primary_header()
@@ -346,7 +341,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     if run_calibs_only:
         return
 
-    rtns = mp.map(run_one_ext, [(img, ext, survey, splinesky, measureargs['debug'],
+    rtns = mp.map(run_one_ext, [(img, ext, survey, splinesky,
                                  measureargs['sdss_photom'])
                                 for ext in extlist])
     
@@ -391,9 +386,7 @@ def run_one_calib(X):
             if psf is not None:
                 do_psf = False
         except:
-            import traceback
-            #print('Failed trying to read existing PSF model:')
-            #traceback.print_exc()
+            pass
     if splinesky:
         do_sky = True
         try:
@@ -439,7 +432,7 @@ def run_one_calib(X):
     return img
 
 def run_one_ext(X):
-    img, ext, survey, splinesky, debug, sdss_photom = X
+    img, ext, survey, splinesky, sdss_photom = X
 
     img = survey.get_image_object(None, camera=img.camera,
                                   image_fn=img.image_filename, image_hdu=ext)
@@ -525,7 +518,7 @@ def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
         if not key in primhdr:
             continue
         v = primhdr[key]
-        if type(v) == str:
+        if isinstance(v, str):
             v = v.strip()
         hdr.add_record(dict(name=key, value=v,
                             comment=primhdr.get_comment(key)))
@@ -749,7 +742,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
                 'mjd_obs': 'mjdobs',
     }
     for key in ['image_filename', 'image_hdu', 'camera', 'expnum', 'plver', 'procdate',
-                'plprocid', 'ccdname', 'propid', 'exptime', 'mjd_obs', 
+                'plprocid', 'ccdname', 'propid', 'exptime', 'mjd_obs',
                 'pixscale', 'width', 'height', 'fwhm', 'filter']:
         val = getattr(imobj, namemap.get(key, key))
         print('Setting', key, '=', val)
@@ -764,7 +757,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     ccds['airmass'] = airmass
     ccds['gain'] = imobj.get_gain(primhdr, hdr)
     ccds['object'] = primhdr.get('OBJECT')
-    
+
     optional = ['avsky']
     for ccd_col in ['avsky', 'crpix1', 'crpix2', 'crval1', 'crval2',
                     'cd1_1','cd1_2', 'cd2_1', 'cd2_2']:
@@ -1331,7 +1324,7 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
             ps.savefig()
 
         # Now the position and flux fit
-        for step in range(50):
+        for _ in range(50):
             dlnp,_,_ = tr.optimize(**optargs)
             if dlnp == 0:
                 break

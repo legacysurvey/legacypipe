@@ -565,9 +565,9 @@ def stage_fit_on_coadds(
                                      for tim in tims if tim.band == band])
                 gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
                 psfnorm = gnorm #np.sqrt(np.sum(psfimg**2))
-                detim = gaussian_filter(img, psf_sigma) / psfnorm**2
                 cosig1 = 1./np.sqrt(np.median(iv[iv>0]))
-                detsig1 = cosig1 / psfnorm
+                # detim = gaussian_filter(img, psf_sigma) / psfnorm**2
+                # detsig1 = cosig1 / psfnorm
                 # plt.clf()
                 # plt.subplot(2,1,1)
                 # plt.hist(detim.ravel() / detsig1, bins=50, range=(-5,8), log=True)

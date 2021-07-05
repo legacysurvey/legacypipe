@@ -4,7 +4,7 @@ from tractor import PixelizedPSF, HybridPixelizedPSF, PointSource, Tractor, Mode
 from legacypipe.survey import RexGalaxy, LogRadius
 import pylab as plt
 import numpy as np
-from astrometry.util.plotutils import dimshow
+from astrometry.util.plotutils import dimshow, PlotSequence
 
 ps = PlotSequence('rex')
 #h,w = 100,100

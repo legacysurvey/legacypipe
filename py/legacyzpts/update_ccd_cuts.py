@@ -1,5 +1,4 @@
 import numpy
-from astropy.io import fits
 import pdb
 from astrometry.util.fits import fits_table
 from legacyzpts import psfzpt_cuts

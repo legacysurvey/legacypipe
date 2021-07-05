@@ -967,7 +967,9 @@ def _apphot_one(args):
 
     return result
 
-def get_coadd_headers(hdr, tims, band, coadd_headers={}):
+def get_coadd_headers(hdr, tims, band, coadd_headers=None):
+    if coadd_headers is None:
+        coadd_headers = {}
     # Grab these keywords from all input files for this band...
     keys = ['OBSERVAT', 'TELESCOP','OBS-LAT','OBS-LONG','OBS-ELEV',
             'INSTRUME','FILTER']

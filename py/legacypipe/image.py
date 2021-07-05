@@ -130,7 +130,8 @@ def apply_amp_correction_northern(camera, band, expnum, ccdname, mjdobs,
         fitsio.write('amp-corr-map-%s-%s-%s.fits' % (camera, expnum, ccdname), corr_map, clobber=True)
 
 class LegacySurveyImage(object):
-    '''A base class containing common code for the images we handle.
+    '''
+    A base class containing common code for the images we handle.
 
     You probably shouldn't need to directly instantiate this class,
     but rather use the recipe described in the __init__ method.
@@ -1243,7 +1244,7 @@ class LegacySurveyImage(object):
 
 
     def funpack_files(self, imgfn, maskfn, imghdu, maskhdu, todelete):
-        ''' Source Extractor can't handle .fz files, so unpack them.'''
+        '''Source Extractor can't handle .fz files, so unpack them.'''
         from legacypipe.survey import create_temp
         tmpimgfn = None
         tmpmaskfn = None

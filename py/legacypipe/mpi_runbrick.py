@@ -96,7 +96,6 @@ def main(args=None):
     import os
     import datetime
     import logging
-    import numpy as np
     from legacypipe.survey import get_git_version
     from legacypipe.runbrick import (get_parser, get_runbrick_kwargs, run_brick,
                                      NothingToDoError, RunbrickError)
@@ -178,8 +177,6 @@ def main(args=None):
     print('Booted up MPI pool.')
     pool._processes = u
     kwargs.update(pool=pool)
-
-    #pool.map(hello, np.arange(128))
 
     rtn = -1
     try:
