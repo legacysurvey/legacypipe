@@ -87,7 +87,7 @@ def main():
 
     # Cross-match to Pan-STARRS1 too
     P = fits_table('legacypipe-test-data/ps1-qz-star-v3/ps1-02791.fits')
-    I,J,d = match_radec(P.ra, P.dec, T.ra, T.dec, 1.0/3600., nearest=True)
+    I,J,_ = match_radec(P.ra, P.dec, T.ra, T.dec, 1.0/3600., nearest=True)
     assert(len(I) == 3)
     K = np.argsort(P.median[I,1])
     I = I[K]

@@ -289,7 +289,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
                 if irad == 0:
                     skymedian = _skymedian
                     skypix_mask = skypix_annulus
-                    
+
             I = np.where(allbands == band)[0]
             for ii in I:
                 goodpix = (tims[ii].inverr > 0)
@@ -308,7 +308,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
         for coimg, coiv, band in zip(C.coimgs, C.cowimgs, bands):
            skypix = refmask * (coiv>0)
            skypix_mask = _build_objmask(coimg, coiv, skypix)
-           _, skymedian, skysig = sigma_clipped_stats(coimg, mask=np.logical_not(skypix_mask), sigma=3.0)
+           _, skymedian, _ = sigma_clipped_stats(coimg, mask=np.logical_not(skypix_mask), sigma=3.0)
            
            skydict.update({'{}SKYMN00'.format(band.upper()): (np.float32(_skymean), 'mean {} sky'.format(band))})
            skydict.update({'{}SKYMD00'.format(band.upper()): (np.float32(_skymedian), 'median {} sky'.format(band))})

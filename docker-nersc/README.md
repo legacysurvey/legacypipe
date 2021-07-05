@@ -51,7 +51,6 @@ Run it via:
 
     shifter --image docker:legacysurvey/legacypipe:nersc bash
 
-
 ## Notes about DR8
 
 For DR8, we have a series of tags of the `legacypipe` repo and the Docker containers.

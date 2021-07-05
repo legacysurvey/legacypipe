@@ -372,7 +372,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     return all_ccds, all_photom, img
 
 def run_one_calib(X):
-    (img_fn, camera, survey, ext, psfex, splinesky, plots, survey_blob_mask,
+    (img_fn, camera, survey, ext, psfex, splinesky, _, survey_blob_mask,
      survey_zeropoints) = X
     img = survey.get_image_object(None, camera=camera,
                                   image_fn=img_fn, image_hdu=ext)

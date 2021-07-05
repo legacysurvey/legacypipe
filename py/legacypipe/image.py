@@ -358,7 +358,7 @@ class LegacySurveyImage(object):
         raise RuntimeError('Not implemented: generic colorterm_ps1_to_observed')
     def colorterm_sdss_to_observed(self, cat, band):
         raise RuntimeError('Not implemented: generic colorterm_sdss_to_observed')
-    
+
     def get_psfex_merged_filename(self):
         return self.merged_psffn
     def get_splinesky_merged_filename(self):
