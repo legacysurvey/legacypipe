@@ -310,10 +310,10 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
            skypix_mask = _build_objmask(coimg, coiv, skypix)
            skymean, skymedian, skysig = sigma_clipped_stats(coimg, mask=np.logical_not(skypix_mask), sigma=3.0)
            
-           skydict.update({'{}SKYMN00'.format(band.upper(), irad): (np.float32(_skymean), 'mean {} sky'.format(band))})
-           skydict.update({'{}SKYMD00'.format(band.upper(), irad): (np.float32(_skymedian), 'median {} sky'.format(band))})
-           skydict.update({'{}SKYSG00'.format(band.upper(), irad): (np.float32(_skysig), 'sigma {} sky'.format(band))})
-           skydict.update({'{}SKYNP00'.format(band.upper(), irad): (np.sum(skypix_mask), 'npix {} sky'.format(band))})
+           skydict.update({'{}SKYMN00'.format(band.upper()): (np.float32(_skymean), 'mean {} sky'.format(band))})
+           skydict.update({'{}SKYMD00'.format(band.upper()): (np.float32(_skymedian), 'median {} sky'.format(band))})
+           skydict.update({'{}SKYSG00'.format(band.upper()): (np.float32(_skysig), 'sigma {} sky'.format(band))})
+           skydict.update({'{}SKYNP00'.format(band.upper()): (np.sum(skypix_mask), 'npix {} sky'.format(band))})
 
            I = np.where(allbands == band)[0]
            for ii in I:
