@@ -1,5 +1,5 @@
 from __future__ import division, print_function
-import os, warnings, gc
+import os, warnings
 #import matplotlib.pyplot as plt
 import numpy as np
 from astropy.table import Table
