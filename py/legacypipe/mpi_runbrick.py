@@ -91,7 +91,7 @@ class MyMPIPool(object):
         return None
     def get_pickle_traffic_string(self):
         return 'nope'
-    
+
 def main(args=None):
     import os
     import datetime
@@ -219,11 +219,11 @@ if __name__ == '__main__':
 
 # cray-mpich version:
 # srun -n 64 --distribution cyclic:cyclic python -m mpi4py.futures legacypipe/mpi-runbrick.py --no-wise-ceres --brick 0715m657 --zoom 100 300 100 300 --run south --outdir $CSCRATCH/mpi --stage wise_forced
-# 
-#     
+#
+#
 # mpi4py setup:
 # cray-mpich module, PrgEnv-intel/6.0.5
-# 
+#
 # mpi.cfg:
 # [mpi]
 # # $CRAY_MPICH2_DIR

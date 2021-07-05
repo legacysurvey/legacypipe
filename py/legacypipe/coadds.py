@@ -172,7 +172,7 @@ class UnwiseCoadd(SimpleCoadd):
         with survey.write_output('wiseresid-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower')
             info('Wrote', out.fn)
-        
+
 def _unwise_to_rgb(imgs):
     img = imgs[0]
     H,W = img.shape

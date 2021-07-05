@@ -736,7 +736,6 @@ class LegacySurveyImage(object):
             #  the data)
             imgmed = np.median(img[invvar>0])
             if np.abs(imgmed) > self.sig1:
-                import warnings
                 warnings.warn('image median is %.2f sigma away from zero!' % (imgmed / self.sig1))
 
         if subsky:
@@ -892,7 +891,7 @@ class LegacySurveyImage(object):
         # check consistency between the CCDs table and the image header
         e = imghdr['EXTNAME'].upper()
         if e.strip() != self.ccdname.strip():
-            print('WARNING: Expected header EXTNAME="%s" to match self.ccdname="%s", self.imgfn=%s' % (e.strip(), self.ccdname,self.imgfn))
+            warnings.warn('Expected header EXTNAME="%s" to match self.ccdname="%s", self.imgfn=%s' % (e.strip(), self.ccdname,self.imgfn))
 
     def psf_norm(self, tim, x=None, y=None):
         # PSF norm
@@ -1126,11 +1125,11 @@ class LegacySurveyImage(object):
             tscale = template_meta.get('scale', -3)
             if sver != tver or srun != trun or sscale != tscale:
                 if old_calibs_ok:
-                    print('Warning: splinesky template version/run/scale',
-                          sver, srun, sscale, 'does not match sky template',
-                          tver, trun, tscale, '(but old_calibs_ok)')
+                    warnings.warn('For image %s, Splinesky template version/run/scale %s/%s/%s',
+                                  'does not match sky template %s/%s/%s, but old_calibs_ok is set' %
+                                  (self, sver, srun, sscale, tver, trun, tscale))
                 elif sver == -2 and srun == -2 and sscale == -2:
-                    print('Warning: splinesky does not have sky-template version/run/scale values')
+                    warnings.warn('For image %s, splinesky does not have sky-template version/run/scale values' % (self))
                 else:
                     raise RuntimeError('Splinesky template version/run/scale %s/%s/%s does not match sky template %s/%s/%s, CCD %s' %
                                        (sver, srun, sscale, tver, trun, tscale, self.name))
@@ -2022,7 +2021,7 @@ def validate_version(fn, filetype, expnum, plver, plprocid,
                 continue
             if key not in cols:
                 if old_calibs_ok:
-                    info('WARNING: {} table missing {} but old_calibs_ok=True'.format(fn, key))
+                    warnings.warn('Validation: table {} is missing {} but old_calibs_ok=True'.format(fn, key))
                     continue
                 else:
                     debug('WARNING: {} missing {}'.format(fn, key))
@@ -2032,7 +2031,7 @@ def validate_version(fn, filetype, expnum, plver, plprocid,
                 val = np.array([str(v).strip() for v in val])
             if not np.all(val == targetval):
                 if old_calibs_ok:
-                    info('WARNING: {} {}!={} in {} table but old_calibs_ok=True'.format(key, val, targetval, fn))
+                    warnings.warn('Validation: {} {}!={} in {} table but old_calibs_ok=True'.format(key, val, targetval, fn))
                     continue
                 else:
                     debug('WARNING: {} {}!={} in {} table'.format(key, val, targetval, fn))
@@ -2087,7 +2086,7 @@ def validate_version(fn, filetype, expnum, plver, plprocid,
             else:
                 if key not in hdr:
                     if old_calibs_ok:
-                        info('WARNING: {} header missing {} but old_calibs_ok=True'.format(fn, key))
+                        warnings.warn('Validation: {} header missing {} but old_calibs_ok=True'.format(fn, key))
                         continue
                     else:
                         debug('WARNING: {} header missing {}'.format(fn, key))
@@ -2100,7 +2099,7 @@ def validate_version(fn, filetype, expnum, plver, plprocid,
                 val = val.strip()
             if val != targetval:
                 if old_calibs_ok:
-                    info('WARNING: {} {}!={} in {} header but old_calibs_ok=True'.format(key, val, targetval, fn))
+                    warnings.warn('Validation: {} {}!={} in {} header but old_calibs_ok=True'.format(key, val, targetval, fn))
                     continue
                 else:
                     debug('WARNING: {} {}!={} in {} header'.format(key, val, targetval, fn))

@@ -1,5 +1,5 @@
 from __future__ import division, print_function
-import os, glob, time, warnings, gc
+import os, time, warnings, gc
 #import matplotlib.pyplot as plt
 import numpy as np
 from astropy.table import Table
@@ -121,7 +121,7 @@ for exp_index in exp_index_list:
             params_to_use = params_outlier
         else:
             params_to_use = params
-            
+
         if band!='z':
             plexp2, weight2 = params_to_use[band+'_plexp2'], params_to_use[band+'_weight2']
         else:

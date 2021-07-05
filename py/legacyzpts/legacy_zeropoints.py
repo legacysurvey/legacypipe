@@ -344,8 +344,8 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     rtns = mp.map(run_one_ext, [(img, ext, survey, splinesky,
                                  measureargs['sdss_photom'])
                                 for ext in extlist])
-    
-    for ext,(ccd,photom) in zip(extlist,rtns):
+
+    for ccd,photom in rtns:
         if ccd is not None:
             all_ccds.append(ccd)
         if photom is not None:
@@ -648,7 +648,6 @@ def main(args=None):
     threads = measureargs.pop('threads')
     mp = multiproc(nthreads=(threads or 1))
 
-    import logging
     if args.verbose:
         lvl = logging.DEBUG
     else:

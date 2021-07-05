@@ -464,7 +464,7 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     for brick in sgabricks.brickname:
         # For picking up these SGA bricks, resolve doesn't matter (they're fixed
         # in both).
-        for catsurvey,north in surveys:
+        for catsurvey,_ in surveys:
             fn = catsurvey.find_file('tractor', brick=brick)
             if os.path.exists(fn):
                 t = fits_table(fn, columns=['ref_cat', 'ref_id'])

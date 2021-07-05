@@ -90,7 +90,7 @@ class HscImage(LegacySurveyImage):
         if header:
             img = img,hdr
         return img
-    
+
     def remap_dq(self, dq, header):
         return remap_hsc_bitmask(dq, header)
 

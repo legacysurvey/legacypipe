@@ -157,7 +157,6 @@ def main():
             except:
                 import traceback
                 traceback.print_exc()
-                pass
 
         _,b = radectolb(brick.ra, brick.dec)
         # NGC and above resolve line? -> north
@@ -198,7 +197,7 @@ def main():
         print('No overlapping CCDs')
         return
     units = []
-    for i,col in enumerate(forced.get_columns()):
+    for i,_ in enumerate(forced.get_columns()):
         units.append(forced._header.get('TUNIT%i' % (i+1), ''))
     cols = forced.get_columns()
 

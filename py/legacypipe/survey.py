@@ -544,7 +544,7 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
             r = (0.,   0.5, 0.25),
             i = (0.25, 0.5, 0.),
             z = (0.75, 0.,  0.))
-        
+
         for img,band in zip(imgs, bands):
             rf,gf,bf = rgbvec[band]
             if mnmx is None:
