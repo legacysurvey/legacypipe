@@ -137,7 +137,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     tim.shape = (im.height,im.width)
     tim.x0 = 0
     tim.y0 = 0
-    
+
     north_ccd = (ccd.camera.strip() != 'decam')
     catsurvey = catsurvey_north
     if not north_ccd and catsurvey_south is not None:
@@ -165,4 +165,3 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
 
 if __name__ == '__main__':
     main()
-    

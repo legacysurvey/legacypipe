@@ -1,4 +1,5 @@
 from __future__ import print_function
+import warnings
 
 from legacypipe.image import LegacySurveyImage
 
@@ -88,7 +89,7 @@ class BokImage(LegacySurveyImage):
         if mask.shape == dq.shape:
             dq[(mask == 1) * (dq == 0)] = 1
         else:
-            print('WARNING: static mask shape', mask.shape, 'does not equal DQ shape', dq.shape, '-- not applying static mask!')
+            warnings.warn('90prime static mask shape %s does not equal DQ shape %s -- not applying static mask!' % (mask.shape, dq.shape))
 
         if header:
             return dq,hdr
