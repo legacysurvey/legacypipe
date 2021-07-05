@@ -566,7 +566,7 @@ class LegacySurveyImage(object):
         # Read image pixels
         if pixels:
             debug('Reading image slice:', slc)
-            img,imghdr = self.read_image(header=True, slice=slc)
+            img,imghdr = self.read_image(header=True, slc=slc)
             self.check_image_header(imghdr)
         else:
             img = np.zeros((y1-y0, x1-x0), np.float32)
@@ -578,12 +578,12 @@ class LegacySurveyImage(object):
         if get_invvar:
             get_dq = True
         if get_dq:
-            dq,dqhdr = self.read_dq(slice=slc, header=True)
+            dq,dqhdr = self.read_dq(slc=slc, header=True)
             if dq is not None:
                 dq = self.remap_dq(dq, dqhdr)
         # Read inverse-variance (weight) map
         if get_invvar:
-            invvar = self.read_invvar(slice=slc, dq=dq)
+            invvar = self.read_invvar(slc=slc, dq=dq)
         else:
             invvar = np.ones_like(img) * 1./self.sig1**2
         if np.all(invvar == 0.):
@@ -927,10 +927,10 @@ class LegacySurveyImage(object):
         galnorm = np.sqrt(np.sum(galmod**2))
         return galnorm
 
-    def _read_fits(self, fn, hdu, slice=None, header=None, **kwargs):
-        if slice is not None:
+    def _read_fits(self, fn, hdu, slc=None, header=None, **kwargs):
+        if slc is not None:
             f = fitsio.FITS(fn)[hdu]
-            img = f[slice]
+            img = f[slc]
             if header:
                 hdr = f.read_header()
                 return (img,hdr)
@@ -945,7 +945,7 @@ class LegacySurveyImage(object):
 
         Parameters
         ----------
-        slice : slice, optional
+        slc : slice, optional
             2-dimensional slice of the subimage to read.
         header : boolean, optional
             Return the image header also, as tuple (image, header) ?
@@ -1012,21 +1012,20 @@ class LegacySurveyImage(object):
         '''
         return remap_dq_cp_codes(dq)
 
-    def read_invvar(self, clip=True, clipThresh=0.1, dq=None, slice=None,
+    def read_invvar(self, clip=True, clipThresh=0.1, dq=None, slc=None,
                     **kwargs):
         '''
         Reads the inverse-variance (weight) map image.
         '''
         debug('Reading weight map image', self.wtfn, 'ext', self.wt_hdu)
-        invvar = self._read_fits(self.wtfn, self.wt_hdu, slice=slice, **kwargs)
+        invvar = self._read_fits(self.wtfn, self.wt_hdu, slc=slc, **kwargs)
         if dq is not None:
             invvar[dq != 0] = 0.
 
         if clip:
-
             fixed = False
             try:
-                fixed = fix_weight_quantization(invvar, self.wtfn, self.hdu, slice)
+                fixed = fix_weight_quantization(invvar, self.wtfn, self.hdu, slc)
             except Exception as e:
                 print('Fix_weight_quantization bailed out on', self.wtfn,
                       'hdu', self.hdu, ':', e)
@@ -1364,9 +1363,9 @@ class LegacySurveyImage(object):
         plots = (ps is not None)
 
         slc = self.get_good_image_slice(None)
-        img = self.read_image(slice=slc)
-        dq = self.read_dq(slice=slc)
-        wt = self.read_invvar(slice=slc, dq=dq)
+        img = self.read_image(slc=slc)
+        dq = self.read_dq(slc=slc)
+        wt = self.read_invvar(slc=slc, dq=dq)
         primhdr = self.read_image_primary_header()
         imghdr = self.read_image_header()
 
@@ -1707,7 +1706,7 @@ class LegacySurveyImage(object):
             plt.hist(wt.ravel(), bins=100)
             plt.xlabel('Invvar weights')
             plt.subplot(2,1,2)
-            origwt = self._read_fits(self.wtfn, self.hdu, slice=slc)
+            origwt = self._read_fits(self.wtfn, self.hdu, slc=slc)
             mwt = np.median(origwt[origwt>0])
             plt.hist(origwt.ravel(), bins=100, range=(-0.03 * mwt, 0.03 * mwt),
                      histtype='step', label='oow file', lw=3, alpha=0.3,

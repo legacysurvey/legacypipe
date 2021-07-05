@@ -317,7 +317,7 @@ def tim_plots(tims, bands, ps):
                 print(tim.name, ': plver "%s"' % im.plver, 'has DQ codes:', decam_has_dq_codes(im.plver))
             if im.camera == 'decam' and decam_has_dq_codes(im.plver):
                 # Integer codes, not bitmask.  Re-read and plot.
-                dq = im.read_dq(slice=tim.slice)
+                dq = im.read_dq(slc=tim.slice)
                 plt.clf()
                 plt.subplot(1,3,1)
                 dimshow(tim.getImage(), vmin=-3.*tim.sig1, vmax=30.*tim.sig1)

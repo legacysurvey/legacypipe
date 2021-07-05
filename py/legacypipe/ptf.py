@@ -357,7 +357,7 @@ class PtfImage(LegacySurveyImage):
         #    slc = slice(y0,y1), slice(x0,x1)
         if pixels:
             print('Reading image slice:', slc)
-            img,imghdr = self.read_image(header=True, slice=slc)
+            img,imghdr = self.read_image(header=True, slc=slc)
             #print('SATURATE is', imghdr.get('SATURATE', None))
             #print('Max value in image is', img.max())
             # check consistency... something of a DR1 hangover
@@ -370,12 +370,12 @@ class PtfImage(LegacySurveyImage):
                 img = img[slc]
 
         if get_invvar:
-            invvar = self.read_invvar(slice=slc, clipThresh=0.)
+            invvar = self.read_invvar(slc=slc, clipThresh=0.)
         else:
             invvar = np.ones_like(img)
 
         if get_dq:
-            dq = self.read_dq(slice=slc)
+            dq = self.read_dq(slc=slc)
             invvar[dq != 0] = 0.
         if np.all(invvar == 0.):
             print('Skipping zero-invvar image')

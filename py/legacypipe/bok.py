@@ -66,20 +66,20 @@ class BokImage(LegacySurveyImage):
         from legacypipe.ps1cat import ps1_to_90prime
         return ps1_to_90prime(ps1stars, band)
 
-    def read_dq(self, slice=None, header=False, **kwargs):
+    def read_dq(self, slc=None, header=False, **kwargs):
         # Add supplemental static mask.
         import os
         import fitsio
         from pkg_resources import resource_filename
-        dq = super(BokImage, self).read_dq(slice=slice, header=header, **kwargs)
+        dq = super(BokImage, self).read_dq(slc=slc, header=header, **kwargs)
         if header:
             # unpack tuple
             dq,hdr = dq
         dirname = resource_filename('legacypipe', 'config')
         fn = os.path.join(dirname, 'ksb_staticmask_ood_v1.fits.fz')
         F = fitsio.FITS(fn)[self.hdu]
-        if slice is not None:
-            mask = F[slice]
+        if slc is not None:
+            mask = F[slc]
         else:
             mask = F.read()
 
