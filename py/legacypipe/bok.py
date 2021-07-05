@@ -1,4 +1,5 @@
 from __future__ import print_function
+import warnings
 
 from legacypipe.image import LegacySurveyImage
 
@@ -61,25 +62,25 @@ class BokImage(LegacySurveyImage):
         band = band.split()[0]
         return band.replace('bokr', 'r')
 
-    def colorterm_ps1_to_observed(self, ps1stars, band):
-        """ps1stars: ps1.median 2D array of median mag for each band"""
+    def colorterm_ps1_to_observed(self, cat, band):
+        """cat: ps1.median 2D array of median mag for each band"""
         from legacypipe.ps1cat import ps1_to_90prime
-        return ps1_to_90prime(ps1stars, band)
+        return ps1_to_90prime(cat, band)
 
-    def read_dq(self, slice=None, header=False, **kwargs):
+    def read_dq(self, slc=None, header=False, **kwargs):
         # Add supplemental static mask.
         import os
         import fitsio
         from pkg_resources import resource_filename
-        dq = super(BokImage, self).read_dq(slice=slice, header=header, **kwargs)
+        dq = super(BokImage, self).read_dq(slc=slc, header=header, **kwargs)
         if header:
             # unpack tuple
             dq,hdr = dq
         dirname = resource_filename('legacypipe', 'config')
         fn = os.path.join(dirname, 'ksb_staticmask_ood_v1.fits.fz')
         F = fitsio.FITS(fn)[self.hdu]
-        if slice is not None:
-            mask = F[slice]
+        if slc is not None:
+            mask = F[slc]
         else:
             mask = F.read()
 
@@ -88,7 +89,7 @@ class BokImage(LegacySurveyImage):
         if mask.shape == dq.shape:
             dq[(mask == 1) * (dq == 0)] = 1
         else:
-            print('WARNING: static mask shape', mask.shape, 'does not equal DQ shape', dq.shape, '-- not applying static mask!')
+            warnings.warn('90prime static mask shape %s does not equal DQ shape %s -- not applying static mask!' % (mask.shape, dq.shape))
 
         if header:
             return dq,hdr

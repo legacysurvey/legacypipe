@@ -443,7 +443,6 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     #print('Finding bricks to read...')
     sgabricks = []
 
-    todo = []
     for ra,dec,brick in zip(sga.ra, sga.dec, sga.brickname):
         bricks = survey.get_bricks_by_name(brick)
         brick = bricks[0]

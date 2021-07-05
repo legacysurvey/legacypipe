@@ -1,4 +1,5 @@
-"""Module to generate tims from coadds, to allow Tractor fitting to the coadds
+"""
+Module to generate tims from coadds, to allow Tractor fitting to the coadds
 rather than to the individual CCDs.
 
 """
@@ -8,7 +9,8 @@ class Duck(object):
     pass
 
 def _build_objmask(img, ivar, skypix, boxcar=5, boxsize=1024):
-    """Build an object mask by doing a quick estimate of the sky background on a
+    """
+    Build an object mask by doing a quick estimate of the sky background on a
     given image.
 
     skypix - True is unmasked pixels
@@ -44,7 +46,8 @@ def _build_objmask(img, ivar, skypix, boxcar=5, boxsize=1024):
 
 def coadds_ubercal(fulltims, coaddtims=None, plots=False, plots2=False,
                    ps=None, verbose=False):
-    """Bring individual CCDs onto a common flux scale based on overlapping pixels.
+    """
+    Bring individual CCDs onto a common flux scale based on overlapping pixels.
 
     fulltims - full-CCD tims, used to derive the corrections
     coaddtims - tims sliced to just the pixels contributing to the output coadd
@@ -142,7 +145,8 @@ def coadds_ubercal(fulltims, coaddtims=None, plots=False, plots2=False,
 def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
                    subsky_radii=None,
                    plots=False, plots2=False, ps=None, verbose=False):
-    """With the ubercal option, we (1) read the full-field mosaics ('bandtims') for
+    """
+    With the ubercal option, we (1) read the full-field mosaics ('bandtims') for
     a given bandpass and put them all on the same 'system' using the overlapping
     pixels; (2) apply the derived corrections to the in-field 'tims'; (3) build
     the coadds (per bandpass) from the 'tims'; and (4) subtract the median sky

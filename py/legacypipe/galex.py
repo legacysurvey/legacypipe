@@ -153,7 +153,6 @@ def stage_galex_forced(
         gcoadds.add(galex_models)
 
         if Nskipped > 0:
-            assert(len(GALEX) == len(wcat))
             GALEX = _fill_skipped_values(GALEX, Nskipped, do_phot)
             assert(len(GALEX) == len(cat))
             assert(len(GALEX) == len(T))
@@ -623,7 +622,8 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname):
 def galex_coadds(onegal, galaxy=None, radius_mosaic=30, radius_mask=None,
                  pixscale=1.5, ref_pixscale=0.262, output_dir=None, galex_dir=None,
                  log=None, centrals=True, verbose=False):
-    '''Generate custom GALEX cutouts.
+    '''
+    Generate custom GALEX cutouts.
     
     radius_mosaic and radius_mask in arcsec
     

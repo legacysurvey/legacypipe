@@ -1,7 +1,7 @@
 import numpy
 from astropy.io import fits
 import pdb
-from astrometry.util.fits import fits_table, merge_tables
+from astrometry.util.fits import fits_table
 from legacyzpts import psfzpt_cuts
 
 ccdnamenumdict = {'S1': 25, 'S2': 26, 'S3': 27, 'S4':28,
@@ -266,7 +266,6 @@ def make_plots(ccds, camera, nside=512,
     else:
         raise ValueError('unrecognized camera!')
     depthbit = psfzpt_cuts.CCD_CUT_BITS['depth_cut']
-    manybadbit = psfzpt_cuts.CCD_CUT_BITS['too_many_bad_ccds']
     ccdcut = ccds.ccd_cuts & ~depthbit
     depthcut = (ccds.ccd_cuts & depthbit) == 0  # passes depth cut
     filts = numpy.unique(ccds.filter[ccdcut == 0])
@@ -462,7 +461,6 @@ def main(args=None):
     annotated.ccd_cuts = ccds.ccd_cuts
     ccds.write_to(getattr(args, 'survey-ccds-out'))
     annotated.writeto(getattr(args, 'ccds-annotated-out'))
-    
+
 if __name__ == '__main__':
     main()
-
