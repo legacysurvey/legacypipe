@@ -10,27 +10,23 @@ This uses the Intel compilers, which introduces two complications:
 
 Preliminaries:
 
-- create an account at <https://hub.docker.com>
-- ask someone to add you to the `legacysurvey` organization on Docker Hub.
+-   create an account at <https://hub.docker.com>
+-   ask someone to add you to the `legacysurvey` organization on Docker Hub.
 
 First, set up your `~/.ssh/config` file, adding a stanza called `intel-license`:
 
-```
-Host intel-license
-Hostname cori.nersc.gov
-GatewayPorts yes
-LocalForward 28519 intel.licenses.nersc.gov:28519
-IdentityFile ~/.ssh/nersc
-IdentitiesOnly yes
-```
+    Host intel-license
+    Hostname cori.nersc.gov
+    GatewayPorts yes
+    LocalForward 28519 intel.licenses.nersc.gov:28519
+    IdentityFile ~/.ssh/nersc
+    IdentitiesOnly yes
 
 Second, run `sshproxy` if you haven't already done so today.
 
 Third, run the `build.sh` script:
 
-```
-(cd docker-nersc && ./build.sh)
-```
+    (cd docker-nersc && ./build.sh)
 
 Note that the `build.sh` script tags the build as
 `legacysurvey/legacypipe:nersc`.  This is a Docker Hub name;
@@ -39,28 +35,21 @@ tagged builds there.
 
 Fourth, push the built container to Docker Hub:
 
-```
-docker push legacysurvey/legacypipe:nersc
-```
+    docker push legacysurvey/legacypipe:nersc
 
-You may need to do a
+You may need to log in to Docker hub first:
 
-```
-docker login
-```
+    docker login
 
 first.
 
 Fifth, back at NERSC, pull the new container down from Docker Hub:
 
-```
-shifterimg pull docker:legacysurvey/legacypipe:nersc
-```
+    shifterimg pull docker:legacysurvey/legacypipe:nersc
 
 Run it via:
-```
-shifter --image docker:legacysurvey/legacypipe:nersc bash
-```
+
+    shifter --image docker:legacysurvey/legacypipe:nersc bash
 
 ## Notes about DR8
 
@@ -68,12 +57,10 @@ For DR8, we have a series of tags of the `legacypipe` repo and the Docker contai
 
 These were done by, eg:
 
-```shell
-cd legacypipe/docker-nersc
-git tag -a DR8.0.2
-git push --tags
-./build.sh
-# Copy the tag
-docker tag legacysurvey/legacypipe:nersc legacysurvey/legacypipe:nersc-dr8.0.2
-docker push legacysurvey/legacypipe:nersc-dr8.0.2
-```
+    cd legacypipe/docker-nersc
+    git tag -a DR8.0.2
+    git push --tags
+    ./build.sh
+    # Copy the tag
+    docker tag legacysurvey/legacypipe:nersc legacysurvey/legacypipe:nersc-dr8.0.2
+    docker push legacysurvey/legacypipe:nersc-dr8.0.2

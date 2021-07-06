@@ -208,6 +208,6 @@ def main():
     T.writeto(outfn, units=get_units_for_columns(columns, bands=tbands, extras=eunits),
               primhdr=tprimhdr)
     print('Wrote', outfn)
-        
+
 if __name__ == '__main__':
     main()

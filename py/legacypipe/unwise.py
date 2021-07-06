@@ -501,6 +501,13 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     # fluxes.  Zero them out instead.
     nm[nm_ivar == 0] = 0.
 
+    if band == 4:
+        # WISE binned the W4 images 2x2 on-board.  The unWISE coadds,
+        # however, are produced on the same pixel grid for each band.
+        # This means the W4 pixels are strongly correlated, and this
+        # imprints on the photometry as well.
+        nm_ivar *= 0.25
+
     phot.set('flux_%s' % wband, nm.astype(np.float32))
     phot.set('flux_ivar_%s' % wband, nm_ivar.astype(np.float32))
     for k in fskeys:
@@ -522,7 +529,9 @@ class wphotduck(object):
     pass
 
 def radec_in_unique_area(rr, dd, ra1, ra2, dec1, dec2):
-    ''' Returns a boolean array. '''
+    '''Are the given points within the given RA,Dec rectangle?
+
+    Returns a boolean array.'''
     unique = (dd >= dec1) * (dd < dec2)
     if ra1 < ra2:
         # normal RA

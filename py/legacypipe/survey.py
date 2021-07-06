@@ -504,6 +504,8 @@ def tim_get_resamp(tim, targetwcs):
         return None
     return Yo,Xo,Yi,Xi
 
+# Increasing this hacky factor causes the RGB images to be stretched
+# harder, eg for deep imaging such as HSC.
 rgb_stretch_factor = 1.0
 
 def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
@@ -542,7 +544,7 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
             r = (0.,   0.5, 0.25),
             i = (0.25, 0.5, 0.),
             z = (0.75, 0.,  0.))
-        
+
         for img,band in zip(imgs, bands):
             rf,gf,bf = rgbvec[band]
             if mnmx is None:
@@ -618,7 +620,7 @@ def get_rgb(imgs, bands, allbands=['g','r','z'],
 
     if len(bands) == 3 and bands[0] == 'N501' and bands[1] == 'r' and bands[2] == 'N673':
         return sdss_rgb(imgs, bands, scales=dict(N673=(0,3.4)))
-    
+
     # (ignore arcsinh...)
     if resids:
         mnmx = (-0.1, 0.1)
@@ -751,7 +753,10 @@ def create_temp(**kwargs):
     return fn
 
 def imsave_jpeg(jpegfn, img, **kwargs):
-    '''Saves a image in JPEG format.  Some matplotlib installations
+    '''
+    Saves a image in JPEG format.
+
+    Some matplotlib installations
     don't support jpeg, so we optionally write to PNG and then convert
     to JPEG using the venerable netpbm tools.
 
@@ -782,10 +787,13 @@ class LegacySurveyData(object):
     '''
 
     def __init__(self, survey_dir=None, cache_dir=None, output_dir=None,
-                 allbands=['g','r','z']):
-        '''Create a LegacySurveyData object using data from the given
-        *survey_dir* directory, or from the $LEGACY_SURVEY_DIR environment
-        variable.
+                 allbands=None):
+        '''
+        Create a LegacySurveyData object.
+
+        The LegacySurveyData object will look for data in the given
+        *survey_dir* directory, or from the $LEGACY_SURVEY_DIR
+        environment variable.
 
         Parameters
         ----------
@@ -809,6 +817,8 @@ class LegacySurveyData(object):
         from legacypipe.hsc    import HscImage
         from collections import OrderedDict
 
+        if allbands is None:
+            allbands = ['g','r','z']
         if survey_dir is None:
             survey_dir = os.environ.get('LEGACY_SURVEY_DIR')
             if survey_dir is None:
@@ -1580,7 +1590,8 @@ class LegacySurveyData(object):
 
     def tims_touching_wcs(self, targetwcs, mp, bands=None,
                           **kwargs):
-        '''Creates tractor.Image objects for CCDs touching the given
+        '''
+        Creates tractor.Image objects for CCDs touching the given
         *targetwcs* region.
 
         mp: multiprocessing object

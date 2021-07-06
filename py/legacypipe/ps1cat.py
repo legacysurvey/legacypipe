@@ -121,7 +121,8 @@ class sdsscat(HealpixedCatalog):
                     z=4,
     )
     def __init__(self,expnum=None,ccdname=None,ccdwcs=None):
-        """Read SDSS sources for an exposure number + CCD name or CCD WCS
+        """
+        Read SDSS sources for an exposure number + CCD name or CCD WCS.
 
         Args:
             expnum, ccdname: select catalogue with these

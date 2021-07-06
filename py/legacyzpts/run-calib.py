@@ -79,7 +79,7 @@ def main():
 
             T = survey.find_ccds(expnum=expnum, ccdname=ccdname)
             if len(T) != 1:
-                print('Found', len(C), 'CCDs for expnum', expnum, 'CCDname', ccdname)
+                print('Found', len(T), 'CCDs for expnum', expnum, 'CCDname', ccdname)
                 print('WARNING: skipping this expnum,ccdname')
                 continue
             t = T[0]

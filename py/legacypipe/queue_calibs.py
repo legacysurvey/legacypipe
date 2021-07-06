@@ -1,6 +1,7 @@
 '''
-This script is used to produce lists of CCDs or bricks, for production
-purposes (building qdo queue, eg).
+This script is used to produce lists of CCDs or bricks.
+
+This is useful for production purposes (building qdo queue, eg).
 
 python legacypipe/queue-calibs.py  | qdo load cal -
 

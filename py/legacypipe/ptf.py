@@ -8,8 +8,8 @@ from legacypipe.survey import *
 from astropy.io import fits as astro_fits
 import fitsio
 from astrometry.util.file import trymakedirs
-from astrometry.util.fits import fits_table
 from astrometry.util.util import Tan, Sip, anwcs_t
+from tractor import ConstantSky, LinearPhotoCal
 from tractor.tractortime import TAITime
 from tractor.brightness import NanoMaggies
 
@@ -317,7 +317,6 @@ class PtfImage(LegacySurveyImage):
           leaving a constant zero sky model?
 
         '''
-        from astrometry.util.miscutils import clip_polygon
         get_dq = dq
         get_invvar = invvar
 

@@ -460,8 +460,6 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
             pct = 100. * total_cpu / max(1, total_wall + total_overhead)
             print(qname, 'Total %i blobs, overhead %.1f s/blob, wall %.1f s/blob, cpu %.1f s/blob --> %.1f %%' %
                   (total_blobs, total_overhead/tb, total_wall/tb, total_cpu/tb, pct))
-                   
-
 
             print(qname, 'Time spent in:')
             print('  input: %.1f' % t_in)

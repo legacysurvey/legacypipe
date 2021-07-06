@@ -2,7 +2,7 @@ from __future__ import print_function
 import pylab as plt
 import numpy as np
 from astrometry.util.plotutils import dimshow
-from legacypipe.survey import *
+from legacypipe.survey import get_rgb, tim_get_resamp
 from legacypipe.coadds import quick_coadds
 
 def fitblobs_plots_2(blobs, refstars, ps):
@@ -337,8 +337,6 @@ def _plot_mods(tims, mods, blobwcs, titles, bands, coimgs, cons, bslc,
                blobw, blobh, ps,
                chi_plots=True, rgb_plots=False, main_plot=True,
                rgb_format='%s'):
-    import numpy as np
-
     subims = [[] for m in mods]
     chis = dict([(b,[]) for b in bands])
 

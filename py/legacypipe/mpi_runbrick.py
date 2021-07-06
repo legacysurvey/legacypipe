@@ -91,12 +91,11 @@ class MyMPIPool(object):
         return None
     def get_pickle_traffic_string(self):
         return 'nope'
-    
+
 def main(args=None):
     import os
     import datetime
     import logging
-    import numpy as np
     from legacypipe.survey import get_git_version
     from legacypipe.runbrick import (get_parser, get_runbrick_kwargs, run_brick,
                                      NothingToDoError, RunbrickError)
@@ -179,8 +178,6 @@ def main(args=None):
     pool._processes = u
     kwargs.update(pool=pool)
 
-    #pool.map(hello, np.arange(128))
-
     rtn = -1
     try:
         run_brick(opt.brick, survey, **kwargs)
@@ -205,7 +202,7 @@ def main(args=None):
     print('Shutting down MPI pool...')
     pool.shutdown()
     print('Shut down MPI pool')
-        
+
     return rtn
 
 if __name__ == '__main__':
@@ -222,11 +219,11 @@ if __name__ == '__main__':
 
 # cray-mpich version:
 # srun -n 64 --distribution cyclic:cyclic python -m mpi4py.futures legacypipe/mpi-runbrick.py --no-wise-ceres --brick 0715m657 --zoom 100 300 100 300 --run south --outdir $CSCRATCH/mpi --stage wise_forced
-# 
-#     
+#
+#
 # mpi4py setup:
 # cray-mpich module, PrgEnv-intel/6.0.5
-# 
+#
 # mpi.cfg:
 # [mpi]
 # # $CRAY_MPICH2_DIR

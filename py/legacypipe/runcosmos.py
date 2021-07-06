@@ -2,7 +2,7 @@ from __future__ import print_function
 import numpy as np
 
 from legacypipe.decam import DecamImage
-from legacypipe.survey import *
+from legacypipe.survey import LegacySurveyData
 
 '''
 Testing code for adding noise to deeper images to simulate DECaLS depth data.
