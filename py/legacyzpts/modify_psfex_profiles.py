@@ -1,8 +1,8 @@
 from __future__ import division, print_function
-import sys, os, glob, time, warnings, gc
-import matplotlib.pyplot as plt
+import os, warnings
+#import matplotlib.pyplot as plt
 import numpy as np
-from astropy.table import Table, vstack, hstack
+from astropy.table import Table
 import fitsio
 from astropy.io import fits
 
@@ -121,7 +121,7 @@ for exp_index in exp_index_list:
             params_to_use = params_outlier
         else:
             params_to_use = params
-            
+
         if band!='z':
             plexp2, weight2 = params_to_use[band+'_plexp2'], params_to_use[band+'_weight2']
         else:
@@ -166,7 +166,7 @@ for exp_index in exp_index_list:
                 print("Error: fit failed to converge.")
                 alpha, beta = 0.8, 2.2 # using default values
                 data['failure'][ccd_index] = True
-                
+
         #print('{} {} alpha, beta = {:.3f}, {:.3f}'.format(ccdname, band, alpha, beta))
 
         # save the Moffat parameters

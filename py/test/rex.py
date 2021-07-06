@@ -1,10 +1,10 @@
 from __future__ import print_function
 from __future__ import division
-from tractor import *
+from tractor import PixelizedPSF, HybridPixelizedPSF, PointSource, Tractor, ModelMask, Image, PixPos, Flux
 from legacypipe.survey import RexGalaxy, LogRadius
 import pylab as plt
 import numpy as np
-from astrometry.util.plotutils import *
+from astrometry.util.plotutils import dimshow, PlotSequence
 
 ps = PlotSequence('rex')
 #h,w = 100,100

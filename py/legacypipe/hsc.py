@@ -1,5 +1,4 @@
 from __future__ import print_function
-import os
 import numpy as np
 import fitsio
 from legacypipe.image import LegacySurveyImage
@@ -91,7 +90,7 @@ class HscImage(LegacySurveyImage):
         if header:
             img = img,hdr
         return img
-    
+
     def remap_dq(self, dq, header):
         return remap_hsc_bitmask(dq, header)
 

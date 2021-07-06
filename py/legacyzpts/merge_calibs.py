@@ -93,7 +93,6 @@ def merge_splinesky(survey, expnum, ccds, skyoutfn, opt, imgs=None):
         for ccd in ccds:
             im = survey.get_image_object(ccd)
             imgs.append(im)
-    fns = []
     goodimgs = []
     skies = []
     for im in imgs:

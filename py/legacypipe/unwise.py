@@ -522,7 +522,9 @@ class wphotduck(object):
     pass
 
 def radec_in_unique_area(rr, dd, ra1, ra2, dec1, dec2):
-    ''' Returns a boolean array. '''
+    '''Are the given points within the given RA,Dec rectangle?
+
+    Returns a boolean array.'''
     unique = (dd >= dec1) * (dd < dec2)
     if ra1 < ra2:
         # normal RA

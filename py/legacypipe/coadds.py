@@ -172,7 +172,7 @@ class UnwiseCoadd(SimpleCoadd):
         with survey.write_output('wiseresid-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower')
             info('Wrote', out.fn)
-        
+
 def _unwise_to_rgb(imgs):
     img = imgs[0]
     H,W = img.shape
@@ -967,7 +967,9 @@ def _apphot_one(args):
 
     return result
 
-def get_coadd_headers(hdr, tims, band, coadd_headers={}):
+def get_coadd_headers(hdr, tims, band, coadd_headers=None):
+    if coadd_headers is None:
+        coadd_headers = {}
     # Grab these keywords from all input files for this band...
     keys = ['OBSERVAT', 'TELESCOP','OBS-LAT','OBS-LONG','OBS-ELEV',
             'INSTRUME','FILTER']

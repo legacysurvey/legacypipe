@@ -55,10 +55,10 @@ image_fn="$1"
 camera=decam
 
 # Redirect logs to a nested directory.
-cpdir=$(basename $(dirname ${image_fn}))
+cpdir=$(basename $(dirname "${image_fn}"))
 logdir=$outdir/logs-calibs/$camera/$cpdir
-mkdir -p $logdir
-log=$(echo $(basename ${image_fn} | sed s#.fits.fz#.log#g))
+mkdir -p "$logdir"
+log=$(echo $(basename "${image_fn}" | sed s#.fits.fz#.log#g))
 log=$logdir/$log
 
 cmd="python -u /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
@@ -74,5 +74,5 @@ cmd="python -u /src/legacypipe/py/legacyzpts/legacy_zeropoints.py \
     --blob-mask-dir ${blob_dir} \
     --zeropoints-dir ${zeropoints_dir}"
 
-echo $cmd > $log
-$cmd >> $log 2>&1
+echo "$cmd" > "$log"
+$cmd >> "$log" 2>&1

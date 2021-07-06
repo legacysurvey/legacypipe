@@ -77,9 +77,9 @@ class DecamImage(LegacySurveyImage):
     def colorterm_sdss_to_observed(self, sdssstars, band):
         from legacypipe.ps1cat import sdss_to_decam
         return sdss_to_decam(sdssstars, band)
-    def colorterm_ps1_to_observed(self, ps1stars, band):
+    def colorterm_ps1_to_observed(self, cat, band):
         from legacypipe.ps1cat import ps1_to_decam
-        return ps1_to_decam(ps1stars, band)
+        return ps1_to_decam(cat, band)
 
     def get_gain(self, primhdr, hdr):
         return np.average((hdr['GAINA'],hdr['GAINB']))
@@ -104,13 +104,13 @@ class DecamImage(LegacySurveyImage):
         kd = tree_open(fn, 'expnum')
         I = kd.search(np.array([self.expnum]), 0.5, 0, 0)
         if len(I) == 0:
-            warning.warn('decam: expnum %i not found in file %s' % (self.expnum, fn))
+            warnings.warn('decam: expnum %i not found in file %s' % (self.expnum, fn))
             return None
         # Read only the CCD-table rows within range.
         S = fits_table(fn, rows=I)
         S.cut(np.array([c.strip() == self.ccdname for c in S.ccdname]))
         if len(S) == 0:
-            warning.warn('decam: ccdname %s, expnum %i not found in file %s' %
+            warnings.warn('decam: ccdname %s, expnum %i not found in file %s' %
                   (self.ccdname, self.expnum, fn))
             return None
         assert(len(S) == 1)
@@ -131,12 +131,11 @@ class DecamImage(LegacySurveyImage):
         tfn = os.path.join(dirnm, 'sky_templates',
                            'sky_template_%s_%i.fits.fz' % (self.band, sky.run))
         if not os.path.exists(tfn):
-            warning.warn('WARNING: Sky template file %s does not exist' % tfn)
+            warnings.warn('WARNING: Sky template file %s does not exist' % tfn)
             return None
         return dict(template_filename=tfn, sky_template_dir=dirnm, sky_obj=sky, skyscales_fn=fn)
 
     def get_sky_template(self, slc=None, old_calibs_ok=False):
-        import os
         import fitsio
         d = self.get_sky_template_filename(old_calibs_ok=old_calibs_ok)
         if d is None:
@@ -181,7 +180,7 @@ class DecamImage(LegacySurveyImage):
 
         return x0,x1,y0,y1
 
-    def remap_dq(self, dq, hdr):
+    def remap_dq(self, dq, header):
         '''
         Called by get_tractor_image() to map the results from read_dq
         into a bitmask.

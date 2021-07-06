@@ -201,7 +201,6 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                                      for tim,sig in zip(btims,addsigs)])
             del coimg, cow, veto
 
-            masks = []
             badcoadd_pos = None
             badcoadd_neg = None
             if make_badcoadds:
@@ -455,7 +454,6 @@ def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
         img = tim.getImage()
         if np.any(ie == 0):
             # Patch from the coadd
-            co = coimgs[ibands[tim.band]]
             # resample from coadd to img -- nearest-neighbour
             iy,ix = np.nonzero(ie == 0)
             if len(iy) == 0:
@@ -468,4 +466,3 @@ def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
             if not np.any(keep):
                 continue
             img[iy[keep],ix[keep]] = coimgs[ibands[tim.band]][yy[keep],xx[keep]]
-            del co

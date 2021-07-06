@@ -130,7 +130,8 @@ def apply_amp_correction_northern(camera, band, expnum, ccdname, mjdobs,
         fitsio.write('amp-corr-map-%s-%s-%s.fits' % (camera, expnum, ccdname), corr_map, clobber=True)
 
 class LegacySurveyImage(object):
-    '''A base class containing common code for the images we handle.
+    '''
+    A base class containing common code for the images we handle.
 
     You probably shouldn't need to directly instantiate this class,
     but rather use the recipe described in the __init__ method.
@@ -195,7 +196,7 @@ class LegacySurveyImage(object):
                           'mjd-obs': 'mjdobs'}
             for key in ['EXPTIME', 'MJD-OBS', 'HA', 'DATE', 'PLVER', 'PLPROCID']:
                 val = primhdr.get(key)
-                if type(val) == str:
+                if isinstance(val, str):
                     val = val.strip()
                     if len(val) == 0:
                         raise ValueError('Empty header card: %s' % key)
@@ -224,7 +225,7 @@ class LegacySurveyImage(object):
             self.sig1 = 0.
             self.ccdzpt = 0.
             self.dradec = (0., 0.)
-            
+
         else:
             # Get metadata from ccd table entry.
             # Note here that "image_filename" is the *relative* path (from image_dir),
@@ -357,7 +358,7 @@ class LegacySurveyImage(object):
         raise RuntimeError('Not implemented: generic colorterm_ps1_to_observed')
     def colorterm_sdss_to_observed(self, cat, band):
         raise RuntimeError('Not implemented: generic colorterm_sdss_to_observed')
-    
+
     def get_psfex_merged_filename(self):
         return self.merged_psffn
     def get_splinesky_merged_filename(self):
@@ -390,10 +391,10 @@ class LegacySurveyImage(object):
         cam = primhdr['INSTRUME']
         cam = cam.lower()
         return cam
-    
+
     def get_gain(self, primhdr, hdr):
         return primhdr['GAIN']
-        
+
     def get_band(self, primhdr):
         band = primhdr['FILTER']
         band = band.split()[0]
@@ -566,7 +567,7 @@ class LegacySurveyImage(object):
         # Read image pixels
         if pixels:
             debug('Reading image slice:', slc)
-            img,imghdr = self.read_image(header=True, slice=slc)
+            img,imghdr = self.read_image(header=True, slc=slc)
             self.check_image_header(imghdr)
         else:
             img = np.zeros((y1-y0, x1-x0), np.float32)
@@ -578,12 +579,12 @@ class LegacySurveyImage(object):
         if get_invvar:
             get_dq = True
         if get_dq:
-            dq,dqhdr = self.read_dq(slice=slc, header=True)
+            dq,dqhdr = self.read_dq(slc=slc, header=True)
             if dq is not None:
                 dq = self.remap_dq(dq, dqhdr)
         # Read inverse-variance (weight) map
         if get_invvar:
-            invvar = self.read_invvar(slice=slc, dq=dq)
+            invvar = self.read_invvar(slc=slc, dq=dq)
         else:
             invvar = np.ones_like(img) * 1./self.sig1**2
         if np.all(invvar == 0.):
@@ -735,7 +736,6 @@ class LegacySurveyImage(object):
             #  the data)
             imgmed = np.median(img[invvar>0])
             if np.abs(imgmed) > self.sig1:
-                import warnings
                 warnings.warn('image median is %.2f sigma away from zero!' % (imgmed / self.sig1))
 
         if subsky:
@@ -891,7 +891,7 @@ class LegacySurveyImage(object):
         # check consistency between the CCDs table and the image header
         e = imghdr['EXTNAME'].upper()
         if e.strip() != self.ccdname.strip():
-            print('WARNING: Expected header EXTNAME="%s" to match self.ccdname="%s", self.imgfn=%s' % (e.strip(), self.ccdname,self.imgfn))
+            warnings.warn('Expected header EXTNAME="%s" to match self.ccdname="%s", self.imgfn=%s' % (e.strip(), self.ccdname,self.imgfn))
 
     def psf_norm(self, tim, x=None, y=None):
         # PSF norm
@@ -927,10 +927,10 @@ class LegacySurveyImage(object):
         galnorm = np.sqrt(np.sum(galmod**2))
         return galnorm
 
-    def _read_fits(self, fn, hdu, slice=None, header=None, **kwargs):
-        if slice is not None:
+    def _read_fits(self, fn, hdu, slc=None, header=None, **kwargs):
+        if slc is not None:
             f = fitsio.FITS(fn)[hdu]
-            img = f[slice]
+            img = f[slc]
             if header:
                 hdr = f.read_header()
                 return (img,hdr)
@@ -945,7 +945,7 @@ class LegacySurveyImage(object):
 
         Parameters
         ----------
-        slice : slice, optional
+        slc : slice, optional
             2-dimensional slice of the subimage to read.
         header : boolean, optional
             Return the image header also, as tuple (image, header) ?
@@ -1012,21 +1012,20 @@ class LegacySurveyImage(object):
         '''
         return remap_dq_cp_codes(dq)
 
-    def read_invvar(self, clip=True, clipThresh=0.1, dq=None, slice=None,
+    def read_invvar(self, clip=True, clipThresh=0.1, dq=None, slc=None,
                     **kwargs):
         '''
         Reads the inverse-variance (weight) map image.
         '''
         debug('Reading weight map image', self.wtfn, 'ext', self.wt_hdu)
-        invvar = self._read_fits(self.wtfn, self.wt_hdu, slice=slice, **kwargs)
+        invvar = self._read_fits(self.wtfn, self.wt_hdu, slc=slc, **kwargs)
         if dq is not None:
             invvar[dq != 0] = 0.
 
         if clip:
-
             fixed = False
             try:
-                fixed = fix_weight_quantization(invvar, self.wtfn, self.hdu, slice)
+                fixed = fix_weight_quantization(invvar, self.wtfn, self.hdu, slc)
             except Exception as e:
                 print('Fix_weight_quantization bailed out on', self.wtfn,
                       'hdu', self.hdu, ':', e)
@@ -1051,8 +1050,6 @@ class LegacySurveyImage(object):
             from tractor.basics import NanoMaggies
             zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
             fixedwt = 1. / (self.sig1 * zpscale)**2
-            #medwt = np.median(invvar[invvar > 0])
-            #debug('Median wt %.4g vs sig1-based wt %.4g factor %.4g' % (medwt, fixedwt, medwt/fixedwt))
             thresh = 1.3 * fixedwt
             n = np.sum(invvar > thresh)
             if n > 0:
@@ -1128,11 +1125,11 @@ class LegacySurveyImage(object):
             tscale = template_meta.get('scale', -3)
             if sver != tver or srun != trun or sscale != tscale:
                 if old_calibs_ok:
-                    print('Warning: splinesky template version/run/scale',
-                          sver, srun, sscale, 'does not match sky template',
-                          tver, trun, tscale, '(but old_calibs_ok)')
+                    warnings.warn('For image %s, Splinesky template version/run/scale %s/%s/%s'
+                                  'does not match sky template %s/%s/%s, but old_calibs_ok is set' %
+                                  (self, sver, srun, sscale, tver, trun, tscale))
                 elif sver == -2 and srun == -2 and sscale == -2:
-                    print('Warning: splinesky does not have sky-template version/run/scale values')
+                    warnings.warn('For image %s, splinesky does not have sky-template version/run/scale values' % (self))
                 else:
                     raise RuntimeError('Splinesky template version/run/scale %s/%s/%s does not match sky template %s/%s/%s, CCD %s' %
                                        (sver, srun, sscale, tver, trun, tscale, self.name))
@@ -1246,7 +1243,7 @@ class LegacySurveyImage(object):
 
 
     def funpack_files(self, imgfn, maskfn, imghdu, maskhdu, todelete):
-        ''' Source Extractor can't handle .fz files, so unpack them.'''
+        '''Source Extractor can't handle .fz files, so unpack them.'''
         from legacypipe.survey import create_temp
         tmpimgfn = None
         tmpmaskfn = None
@@ -1364,9 +1361,9 @@ class LegacySurveyImage(object):
         plots = (ps is not None)
 
         slc = self.get_good_image_slice(None)
-        img = self.read_image(slice=slc)
-        dq = self.read_dq(slice=slc)
-        wt = self.read_invvar(slice=slc, dq=dq)
+        img = self.read_image(slc=slc)
+        dq = self.read_dq(slc=slc)
+        wt = self.read_invvar(slc=slc, dq=dq)
         primhdr = self.read_image_primary_header()
         imghdr = self.read_image_header()
 
@@ -1707,7 +1704,7 @@ class LegacySurveyImage(object):
             plt.hist(wt.ravel(), bins=100)
             plt.xlabel('Invvar weights')
             plt.subplot(2,1,2)
-            origwt = self._read_fits(self.wtfn, self.hdu, slice=slc)
+            origwt = self._read_fits(self.wtfn, self.hdu, slc=slc)
             mwt = np.median(origwt[origwt>0])
             plt.hist(origwt.ravel(), bins=100, range=(-0.03 * mwt, 0.03 * mwt),
                      histtype='step', label='oow file', lw=3, alpha=0.3,
@@ -1878,9 +1875,6 @@ class LegacySurveyImage(object):
         if sky:
             self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia, survey_blob_mask=survey_blob_mask, halos=halos, subtract_largegalaxies=subtract_largegalaxies)
 
-
-
-            
 def psfex_single_to_merged(infn, expnum, ccdname):
     # returns table T
     T = fits_table(infn)
@@ -2024,7 +2018,7 @@ def validate_version(fn, filetype, expnum, plver, plprocid,
                 continue
             if key not in cols:
                 if old_calibs_ok:
-                    info('WARNING: {} table missing {} but old_calibs_ok=True'.format(fn, key))
+                    warnings.warn('Validation: table {} is missing {} but old_calibs_ok=True'.format(fn, key))
                     continue
                 else:
                     debug('WARNING: {} missing {}'.format(fn, key))
@@ -2034,7 +2028,7 @@ def validate_version(fn, filetype, expnum, plver, plprocid,
                 val = np.array([str(v).strip() for v in val])
             if not np.all(val == targetval):
                 if old_calibs_ok:
-                    info('WARNING: {} {}!={} in {} table but old_calibs_ok=True'.format(key, val, targetval, fn))
+                    warnings.warn('Validation: {} {}!={} in {} table but old_calibs_ok=True'.format(key, val, targetval, fn))
                     continue
                 else:
                     debug('WARNING: {} {}!={} in {} table'.format(key, val, targetval, fn))
@@ -2089,7 +2083,7 @@ def validate_version(fn, filetype, expnum, plver, plprocid,
             else:
                 if key not in hdr:
                     if old_calibs_ok:
-                        info('WARNING: {} header missing {} but old_calibs_ok=True'.format(fn, key))
+                        warnings.warn('Validation: {} header missing {} but old_calibs_ok=True'.format(fn, key))
                         continue
                     else:
                         debug('WARNING: {} header missing {}'.format(fn, key))
@@ -2102,7 +2096,7 @@ def validate_version(fn, filetype, expnum, plver, plprocid,
                 val = val.strip()
             if val != targetval:
                 if old_calibs_ok:
-                    info('WARNING: {} {}!={} in {} header but old_calibs_ok=True'.format(key, val, targetval, fn))
+                    warnings.warn('Validation: {} {}!={} in {} header but old_calibs_ok=True'.format(key, val, targetval, fn))
                     continue
                 else:
                     debug('WARNING: {} {}!={} in {} header'.format(key, val, targetval, fn))

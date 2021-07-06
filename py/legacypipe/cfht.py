@@ -4,6 +4,7 @@ import os
 from legacypipe.image import LegacySurveyImage
 from legacypipe.bits import DQ_BITS
 
+
 '''
 This is for the "pitcairn" reductions for CFIS-r data.
 
@@ -77,11 +78,12 @@ class MegaPrimeImage(LegacySurveyImage):
         return primhdr['RA_DEG'], primhdr['DEC_DEG']
 
     def photometric_calibrator_to_observed(self, name, cat):
+        from legacypipe.ps1cat import ps1band as ps1band_map
         if name != 'ps1':
             raise RuntimeError('No photometric conversion from %s to CFHT' % name)
         # u->g
         ps1band = dict(u='g').get(self.band, self.band)
-        ps1band_index = ps1cat.ps1band[ps1band]
+        ps1band_index = ps1band_map[ps1band]
         colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
         return cat.median[:, ps1band_index] + np.clip(colorterm, -1., +1.)
 
@@ -110,6 +112,7 @@ class MegaPrimeImage(LegacySurveyImage):
         # return Tan(self.hdr)
 
         # "pitcairn" reductions have PV header cards (CTYPE is still RA---TAN)
+        from astrometry.util.util import wcs_pv2sip_hdr
         return wcs_pv2sip_hdr(self.hdr)
 
     def compute_filenames(self):
@@ -193,44 +196,4 @@ class MegaPrimeImage(LegacySurveyImage):
         if rtn:
             raise RuntimeError('Command failed: ' + cmd)
         os.rename(tmpfn, self.sefn)
-
         os.unlink(tmpmaskfn)
-
-    # def funpack_files(self, imgfn, dqfn, hdu, todelete):
-    #     ''' Source Extractor can't handle .fz files, so unpack them.'''
-    #     from legacypipe.survey import create_temp
-    #     tmpimgfn = None
-    #     # For FITS files that are not actually fpack'ed, funpack -E
-    #     # fails.  Check whether actually fpacked.
-    #     fcopy = False
-    #     hdr = fitsio.read_header(imgfn, ext=hdu)
-    #     if not ((hdr['XTENSION'] == 'BINTABLE') and hdr.get('ZIMAGE', False)):
-    #         print('Image %s, HDU %i is not fpacked; just imcopying.' %
-    #               (imgfn,  hdu))
-    #         fcopy = True
-    # 
-    #     tmpimgfn  = create_temp(suffix='.fits')
-    #     todelete.append(tmpimgfn)
-    #     
-    #     if fcopy:
-    #         cmd = 'imcopy %s"+%i" %s' % (imgfn, hdu, tmpimgfn)
-    #     else:
-    #         cmd = 'funpack -E %i -O %s %s' % (hdu, tmpimgfn, imgfn)
-    #     print(cmd)
-    #     if os.system(cmd):
-    #         raise RuntimeError('Command failed: ' + cmd)
-    #     
-    #     if fcopy:
-    #         cmd = 'imcopy %s"+%i" %s' % (maskfn, hdu, tmpmaskfn)
-    #     else:
-    #         cmd = 'funpack -E %i -O %s %s' % (hdu, tmpmaskfn, maskfn)
-    #     print(cmd)
-    #     if os.system(cmd):
-    #         print('Command failed: ' + cmd)
-    #         M,hdr = self._read_fits(maskfn, hdu, header=True)
-    #         print('Read', M.dtype, M.shape)
-    #         fitsio.write(tmpmaskfn, M, header=hdr, clobber=True)
-    #         print('Wrote', tmpmaskfn, 'with fitsio')
-    # 
-    #     return tmpimgfn,tmpmaskfn
-    #     #imgfn,maskfn = self.

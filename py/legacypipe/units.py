@@ -1,5 +1,6 @@
-
-def get_units_for_columns(cols, bands=[], extras=None):
+def get_units_for_columns(cols, bands=None, extras=None):
+    if bands is None:
+        bands = []
     deg = 'deg'
     degiv = '1/deg^2'
     arcsec = 'arcsec'

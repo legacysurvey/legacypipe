@@ -1,10 +1,6 @@
 from __future__ import print_function
 import os
-import sys
-import time
-import tempfile
 import numpy as np
-import fitsio
 from astrometry.util.fits import fits_table
 from astrometry.libkd.spherematch import match_radec
 from legacyzpts.legacy_zeropoints import main as lzmain
@@ -57,7 +53,7 @@ def main():
     # Cross-match to Gaia and check mags -- this is an end-to-end check on the calibs.
     T = fits_table('tractor/111/tractor-1110p322.fits')
     G = fits_table(os.path.join(os.environ['GAIA_CAT_DIR'], 'chunk-02791.fits'))
-    I,J,d = match_radec(G.ra, G.dec, T.ra, T.dec, 1./3600., nearest=True)
+    I,J,_ = match_radec(G.ra, G.dec, T.ra, T.dec, 1./3600., nearest=True)
     assert(len(I) == 5)
     K = np.argsort(G.phot_g_mean_mag[I])
     I = I[K]
@@ -91,7 +87,7 @@ def main():
 
     # Cross-match to Pan-STARRS1 too
     P = fits_table('legacypipe-test-data/ps1-qz-star-v3/ps1-02791.fits')
-    I,J,d = match_radec(P.ra, P.dec, T.ra, T.dec, 1.0/3600., nearest=True)
+    I,J,_ = match_radec(P.ra, P.dec, T.ra, T.dec, 1.0/3600., nearest=True)
     assert(len(I) == 3)
     K = np.argsort(P.median[I,1])
     I = I[K]

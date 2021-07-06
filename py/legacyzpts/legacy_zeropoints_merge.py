@@ -8,11 +8,7 @@ from __future__ import division, print_function
 import os
 import argparse
 import numpy as np
-from collections import defaultdict
-try:
-    from astrometry.util.fits import fits_table, merge_tables
-except ImportError:
-    pass
+from astrometry.util.fits import fits_table, merge_tables
 
 def read_lines(fn):
     fin=open(fn,'r')
@@ -123,9 +119,9 @@ def main(args):
             t = fits_table(fn)
             cats.append(t)
         cats= merge_tables(cats, columns='fillzero')
-        if opt.fix_hdu:
-            print('fixing hdu')
-            cats= fix_hdu(cats)
+        #if opt.fix_hdu:
+        #    print('fixing hdu')
+        #    cats= fix_hdu(cats)
         if opt.cut:
             print(len(cats), 'CCDs')
             cats.cut(cats.ccd_cuts == 0)

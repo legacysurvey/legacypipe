@@ -199,7 +199,12 @@ def merge_gaia_tycho(gaia, tycho, plots=False, ps=None, targetwcs=None):
 
 def read_gaia(wcs, bands):
     '''
-    *wcs* here should include margin
+    Reads Gaia stars within the given *wcs* object.
+
+    *wcs* should include any margin you want (eg with *wcs.get_subimage()*).
+
+    If *bands* is not *None*, the returned *GaiaSource* objects will
+    be created with slots for fluxes in the given *bands*.
     '''
     from legacypipe.gaiacat import GaiaCatalog
     from legacypipe.survey import GaiaSource

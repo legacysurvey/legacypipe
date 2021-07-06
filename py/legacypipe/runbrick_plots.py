@@ -1,7 +1,8 @@
 from __future__ import print_function
 import pylab as plt
+import numpy as np
 from astrometry.util.plotutils import dimshow
-from legacypipe.survey import *
+from legacypipe.survey import get_rgb, tim_get_resamp
 from legacypipe.coadds import quick_coadds
 
 def fitblobs_plots_2(blobs, refstars, ps):
@@ -316,7 +317,7 @@ def tim_plots(tims, bands, ps):
                 print(tim.name, ': plver "%s"' % im.plver, 'has DQ codes:', decam_has_dq_codes(im.plver))
             if im.camera == 'decam' and decam_has_dq_codes(im.plver):
                 # Integer codes, not bitmask.  Re-read and plot.
-                dq = im.read_dq(slice=tim.slice)
+                dq = im.read_dq(slc=tim.slice)
                 plt.clf()
                 plt.subplot(1,3,1)
                 dimshow(tim.getImage(), vmin=-3.*tim.sig1, vmax=30.*tim.sig1)
@@ -336,8 +337,6 @@ def _plot_mods(tims, mods, blobwcs, titles, bands, coimgs, cons, bslc,
                blobw, blobh, ps,
                chi_plots=True, rgb_plots=False, main_plot=True,
                rgb_format='%s'):
-    import numpy as np
-
     subims = [[] for m in mods]
     chis = dict([(b,[]) for b in bands])
 

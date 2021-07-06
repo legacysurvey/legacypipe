@@ -15,7 +15,7 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
 from astrometry.util.ttime import Time
 
-from tractor import Tractor, Catalog, NanoMaggies
+from tractor import Tractor, Catalog
 from tractor.galaxy import disable_galaxy_cache
 
 from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version_header, apertures_arcsec, radec_at_mjd
@@ -443,7 +443,6 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     #print('Finding bricks to read...')
     sgabricks = []
 
-    todo = []
     for ra,dec,brick in zip(sga.ra, sga.dec, sga.brickname):
         bricks = survey.get_bricks_by_name(brick)
         brick = bricks[0]
@@ -465,7 +464,7 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     for brick in sgabricks.brickname:
         # For picking up these SGA bricks, resolve doesn't matter (they're fixed
         # in both).
-        for catsurvey,north in surveys:
+        for catsurvey,_ in surveys:
             fn = catsurvey.find_file('tractor', brick=brick)
             if os.path.exists(fn):
                 t = fits_table(fn, columns=['ref_cat', 'ref_id'])
