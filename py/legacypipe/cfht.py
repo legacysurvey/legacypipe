@@ -44,8 +44,8 @@ class MegaPrimeImage(LegacySurveyImage):
     A LegacySurveyImage subclass to handle images from the MegaPrime
     camera on CFHT.
     '''
-    def __init__(self, survey, t):
-        super(MegaPrimeImage, self).__init__(survey, t)
+    def __init__(self, survey, t, image_fn=None, image_hdu=0):
+        super(MegaPrimeImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu)
         # Adjust zeropoint for exposure time
         self.ccdzpt += 2.5 * np.log10(self.exptime)
         # print('MegaPrimeImage: CCDs table entry', t)
@@ -93,9 +93,13 @@ class MegaPrimeImage(LegacySurveyImage):
             band = 'g'
         return ps1_to_decam(ps1stars, band)
 
-    def get_band(self):
-        band = self.primhdr['FILTER'][0]
+    def get_band(self, primhdr):
+        # u.MP9302
+        band = primhdr['FILTER'][0]
         return band
+
+    def get_propid(self, primhdr):
+        return primhdr['RUNID']
 
     def scale_image(self, img):
         return img.astype(np.float32)
