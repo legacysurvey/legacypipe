@@ -529,7 +529,8 @@ def galex_tiles_touching_wcs(targetwcs, galex_dir):
 
     return galex_tiles
 
-def galex_tractor_image(tile, band, galex_dir, radecbox, bandname):
+def galex_tractor_image(tile, band, galex_dir, radecbox, bandname,
+                        nanomaggies=True):
     from tractor import (NanoMaggies, Image, LinearPhotoCal,
                          ConstantFitsWcs, ConstantSky)
 
@@ -604,8 +605,15 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname):
         inverr[K] = 1.0 / np.sqrt(varimg[K])
 
     zp = tile.get('%s_zpmag' % band)
-    
-    photocal = LinearPhotoCal(NanoMaggies.zeropointToScale(zp), band=bandname)
+    zpscale = NanoMaggies.zeropointToScale(zp)
+
+    if nanomaggies:
+        # scale the image pixels to be in nanomaggies.
+        img /= zpscale
+        inverr *= zpscale
+        photocal = LinearPhotoCal(1., band=bandname)
+    else:
+        photocal = LinearPhotoCal(zpscale, band=bandname)
 
     tsky = ConstantSky(0.)
 
