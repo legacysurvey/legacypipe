@@ -363,8 +363,9 @@ class gphotduck(object):
 
 from legacypipe.coadds import SimpleCoadd
 class GalexCoadd(SimpleCoadd):
-    def __init__(self, ra, dec, W, H, pixscale):
+    def __init__(self, ra, dec, W, H, pixscale, nanomaggies=True):
         super().__init__(ra, dec, W, H, pixscale, ['n', 'f'])
+        self.nanomaggies = nanomaggies
 
     def add_to_header(self, hdr, band):
         hdr.add_record(dict(name='TELESCOP', value='GALEX'))
@@ -390,16 +391,24 @@ class GalexCoadd(SimpleCoadd):
     def write_color_image(self, survey, brickname, coimgs, comods):
         from legacypipe.survey import imsave_jpeg
         rgbfunc = _galex_rgb_moustakas
+        if self.nanomaggies:
+            # Scale from nanomaggies back to the expected zeropoints:
+            zps = dict(n=20.08, f=18.82)
+            scales = [NanoMaggies.zeropointToScale(zps[band])
+                      for band in self.bands]
+        else:
+            scales = [1. for band in self.bands]
         # FUV/NUV color jpeg
-        rgb = rgbfunc(coimgs)
+        rgb = rgbfunc([im * s for im,s in zip(coimgs, scales)])
         with survey.write_output('galex-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower')
             info('Wrote', out.fn)
-        rgb = rgbfunc(comods)
+        rgb = rgbfunc([im * s for im,s in zip(comods, scales)])
         with survey.write_output('galexmodel-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower')
             info('Wrote', out.fn)
-        coresids = [coimg - comod for coimg, comod in zip(coimgs, comods)]
+        coresids = [(coimg - comod)*s for coimg, comod, s
+                    in zip(coimgs, comods, scales)]
         rgb = rgbfunc(coresids)
         with survey.write_output('galexresid-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower')
