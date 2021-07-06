@@ -389,6 +389,7 @@ class GalexCoadd(SimpleCoadd):
             out.fits.write(coiv, header=hdr)
 
     def write_color_image(self, survey, brickname, coimgs, comods):
+        from tractor import NanoMaggies
         from legacypipe.survey import imsave_jpeg
         rgbfunc = _galex_rgb_moustakas
         if self.nanomaggies:
