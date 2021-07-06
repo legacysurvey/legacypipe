@@ -304,12 +304,12 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
                                         tycho_stars=True, gaia_stars=True,
                                         large_galaxies=True, star_clusters=True)
         refmask = get_reference_map(targetwcs, refs) == 0 # True=skypix
-        
+
         for coimg, coiv, band in zip(C.coimgs, C.cowimgs, bands):
            skypix = refmask * (coiv>0)
            skypix_mask = _build_objmask(coimg, coiv, skypix)
            _, skymedian, _ = sigma_clipped_stats(coimg, mask=np.logical_not(skypix_mask), sigma=3.0)
-           
+
            skydict.update({'{}SKYMN00'.format(band.upper()): (np.float32(_skymean), 'mean {} sky'.format(band))})
            skydict.update({'{}SKYMD00'.format(band.upper()): (np.float32(_skymedian), 'median {} sky'.format(band))})
            skydict.update({'{}SKYSG00'.format(band.upper()): (np.float32(_skysig), 'sigma {} sky'.format(band))})

@@ -391,10 +391,10 @@ class LegacySurveyImage(object):
         cam = primhdr['INSTRUME']
         cam = cam.lower()
         return cam
-    
+
     def get_gain(self, primhdr, hdr):
         return primhdr['GAIN']
-        
+
     def get_band(self, primhdr):
         band = primhdr['FILTER']
         band = band.split()[0]
@@ -1875,9 +1875,6 @@ class LegacySurveyImage(object):
         if sky:
             self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia, survey_blob_mask=survey_blob_mask, halos=halos, subtract_largegalaxies=subtract_largegalaxies)
 
-
-
-            
 def psfex_single_to_merged(infn, expnum, ccdname):
     # returns table T
     T = fits_table(infn)
