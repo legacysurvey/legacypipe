@@ -601,10 +601,10 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname,
 
     # build the variance map
     varimg = np.zeros_like(img)
-    I = img > 0
-    J = img <= 0
+    I = ((img + bgimg) * rrhrimg) > 0.1
+    J = ((img + bgimg) * rrhrimg) <= 0.1
     if np.sum(I) > 0:
-        varimg[I] = img[I] * rrhrimg[I]
+        varimg[I] = (img[I] + bgimg[I]) * rrhrimg[I]
     if np.sum(J) > 0:
         varimg[J] = bgimg[J] * rrhrimg[J]
     varimg /= rrhrimg**2
