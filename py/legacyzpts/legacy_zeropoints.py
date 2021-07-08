@@ -65,7 +65,7 @@ def astropy_to_astrometry_table(t):
         T.set(c, t[c])
     return T
 
-def _ccds_table(camera='decam'):
+def _ccds_table(camera='decam', overrides=None):
     '''Initialize the CCDs table.
 
     Description and Units at:
@@ -129,6 +129,13 @@ def _ccds_table(camera='decam'):
         ('rastddev',  'f4'),
         ('decstddev', 'f4'),
         ]
+
+    if overrides is not None:
+        ovr = []
+        for k,v in cols:
+            ovr.append((k, overrides.get(k, v)))
+        cols = ovr
+
     ccds = Table(np.zeros(1, dtype=cols))
     return ccds
 
@@ -239,6 +246,8 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
         # - all-zero weight map
         if run_calibs_only:
             return
+        debug('%s: Zero exposure time or low-level calibration flagged as bad; skipping image.'
+              % str(img))
         ccds = _ccds_table(camera)
         ccds['image_filename'] = img_fn
         ccds['err_message'] = 'Failed CP calib, or Exptime=0'
@@ -731,8 +740,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     t0= Time()
     t0= ptime('Measuring CCD=%s from image=%s' % (imobj.ccdname, imobj.image_filename),t0)
 
-    # Initialize
-    ccds = _ccds_table(imobj.camera)
+    # Initialize CCDs (annotated) table data structure.
+    ccds = _ccds_table(imobj.camera, overrides=imobj.override_ccd_table_types())
 
     # init_ccd():
     namemap = { 'object': 'obj',
@@ -783,18 +792,19 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         print('PsfEx model number of stars accepted:', nacc)
         return imobj.return_on_error(err_message='Bad PSF model', ccds=ccds)
 
-    bitmask,dqhdr = imobj.read_dq(header=True) #read_bitmask()
-    if bitmask is not None:
-        bitmask = imobj.remap_dq(bitmask, dqhdr)
-    invvar = imobj.read_invvar(dq=bitmask)
+    dq,dqhdr = imobj.read_dq(header=True)
+    invvar = imobj.read_invvar(dq=dq)
+    img = imobj.read_image()
+    imobj.fix_saturation(img, dq, invvar, primhdr, hdr, None)
+    if dq is not None:
+        dq = imobj.remap_dq(dq, dqhdr)
     # Compute sig1 before rescaling... well, not quite
-    mediv = np.median(invvar[(invvar > 0) * (bitmask == 0)])
+    mediv = np.median(invvar[(invvar > 0) * (dq == 0)])
     mediv = imobj.scale_weight(mediv)
     imobj.sig1 = (1. / np.sqrt(mediv)) / imobj.exptime
     ccds['sig1'] = imobj.sig1
 
-    img = imobj.read_image()
-    invvar = imobj.remap_invvar(invvar, primhdr, img, bitmask)
+    invvar = imobj.remap_invvar(invvar, primhdr, img, dq)
 
     invvar = imobj.scale_weight(invvar)
     img = imobj.scale_image(img)
@@ -1076,9 +1086,9 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     phot.dpsfmag = np.zeros(len(phot), np.float32)
     phot.dpsfmag[ok] = np.abs((-2.5 / np.log(10.)) * phot.dflux[ok] / phot.flux[ok])
 
-    H,W = bitmask.shape
-    phot.bitmask = bitmask[np.clip(phot.y1, 0, H-1).astype(int),
-                           np.clip(phot.x1, 0, W-1).astype(int)]
+    H,W = dq.shape
+    phot.bitmask = dq[np.clip(phot.y1, 0, H-1).astype(int),
+                      np.clip(phot.x1, 0, W-1).astype(int)]
 
     phot.psfmag = np.zeros(len(phot), np.float32)
 
