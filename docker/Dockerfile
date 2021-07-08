@@ -33,17 +33,10 @@ RUN DEBIAN_FRONTEND=noninteractive \
     python3.8-dev \
     python3.8-tk \
     python3-pip \
+    source-extractor \
+    psfex \
     # Remove APT files
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-# # multiprocessing.pool from official python 3.6.8 release
-# # The python 3.6.7 version shipped in current Ubuntu 18.04 breaks the
-# # Astrometry.net "timingpool" class.  This changed from 3.6.6 to 3.6.7 and
-# # then was reverted in 3.6.8.
-# COPY pool.py /usr/lib/python3.6/multiprocessing/pool.py
-
-# Python related stuff
-#RUN echo "../site-packages" > /usr/local/lib/python3.6/dist-packages/site-packages.pth
 
 # Pip installs
 RUN for x in \
@@ -66,11 +59,12 @@ RUN ln -s /usr/bin/python3.8-config /usr/local/bin/python3-config
 # python = python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
+RUN mkdir -p /src
+WORKDIR /src
+ENV PYTHON=python3
+
 # Astrometry.net
-RUN mkdir -p /src \
-    && export PYTHON=python3 \
-    && export PYTHON_SCRIPT="/usr/bin/env python3" \
-    && cd /src \
+RUN export PYTHON_SCRIPT="/usr/bin/env python3" \
     && git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
     && make \
@@ -80,21 +74,53 @@ RUN mkdir -p /src \
     && make clean
 
 # The Tractor
-RUN cd /src \
-    && git clone http://github.com/dstndstn/tractor.git tractor \
+RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && export PYTHON=python3 \
     && export PYTHON_CONFIG=python3-config \
     && python3 setup-cython.py --with-ceres install --home /usr/local \
     && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so")
 
+# unwise_psf
+RUN git clone https://github.com/legacysurvey/unwise_psf.git \
+    && cd unwise_psf && git checkout dr9.3
+
 # QDO
-RUN cd /src/ \
-    && git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
+RUN git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
     && cd qdo \
     && python3 setup.py install
 
 # Legacypipe
-RUN cd /src \
-    && git clone http://github.com/legacysurvey/legacypipe.git legacypipe
+RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe
+
+ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
+
+# ?
+# RUN mkdir /homedir && chmod 777 /homedir
+# ENV HOME /homedir
+
+RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
+  # Create config files in $HOME
+  && mkdir $HOME/.qdo && echo "[qdo]" > $HOME/.qdo/qdorc \
+  && python -c "import astropy" \
+  && python -c "import matplotlib.font_manager as fm; f = fm.FontManager()" \
+  # Download astropy site locations and USNO sky model
+  && python -c "from astropy.coordinates import EarthLocation; EarthLocation._get_site_registry(force_download=True)" \
+  && python -c "from astropy.coordinates import EarthLocation, SkyCoord, AltAz; from astropy.time import Time; print(EarthLocation.of_site('ctio')); print(SkyCoord(180.,-45.,unit='deg').transform_to(AltAz(obstime=Time(56806.0, format='mjd'), location=EarthLocation.of_site('ctio'))))" \
+  # Download astropy IERS leap-second list
+  && python -c "from astropy.time import Time; Time.now()" \
+  # Make astropy cache files readable!?!!
+  && chmod -R a+rwX $HOME/.astropy
+
+RUN python -O -m compileall \
+    -x lib2to3 \
+    /usr/local/lib/python \
+    /usr/lib/python3.8 \
+    /src/unwise_psf/py \
+    /src/legacypipe/py/{legacypipe,legacyzpts} && \
+    python    -m compileall \
+    -x lib2to3 \
+    /usr/local/lib/python \
+    /usr/lib/python3.8 \
+    /src/unwise_psf/py \
+    /src/legacypipe/py/{legacypipe,legacyzpts}
