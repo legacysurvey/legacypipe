@@ -213,8 +213,7 @@ def create_annotated_table(T, ann_fn, camera, survey, mp):
     init_annotations(T)
     I, = np.nonzero(T.ccdzpt)
     if len(I):
-        annotate(T, survey, mp=mp, mzls=(camera == 'mosaic'), bass=(camera == '90prime'),
-                 normalizePsf=True, carryOn=True)
+        annotate(T, survey, camera, mp=mp, normalizePsf=True, carryOn=True)
     writeto_via_temp(ann_fn, T)
     print('Wrote %s' % ann_fn)
 
