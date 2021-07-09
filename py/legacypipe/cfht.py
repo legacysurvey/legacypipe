@@ -79,7 +79,11 @@ class MegaPrimeImage(LegacySurveyImage):
 
         # Try grabbing fwhm from PSFEx file, if it exists.
         if hasattr(self, 'fwhm') and not np.isfinite(self.fwhm):
-            self.fwhm = self.get_fwhm(None, None)
+            try:
+                # PSF model file may not have been created yet...
+                self.fwhm = self.get_fwhm(None, None)
+            except:
+                pass
 
     @classmethod
     def get_nominal_pixscale(cls):

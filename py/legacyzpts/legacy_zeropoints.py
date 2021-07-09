@@ -584,14 +584,13 @@ def get_parser():
     parser.add_argument('--camera',choices=CAMERAS, action='store',required=True)
     parser.add_argument('--image',action='store',default=None,help='relative path to image starting from decam,bok,mosaicz dir',required=False)
     parser.add_argument('--image_list',action='store',default=None,help='text file listing multiples images in same was as --image',required=False)
-    parser.add_argument('--outdir', type=str, default=None, help='Where to write zpts/,images/,logs/; default is within $LEGACY_SURVEY_DIR/--survey-dir')
     parser.add_argument('--survey-dir', type=str, default=None,
                         help='Override the $LEGACY_SURVEY_DIR environment variable')
+    parser.add_argument('--outdir', type=str, default=None, help='Where to write photom and annotated files; default [survey_dir]/zpt')
     parser.add_argument('--sdss-photom', default=False, action='store_true',
                         help='Use SDSS rather than PS-1 for photometric cal.')
     parser.add_argument('--debug', action='store_true', default=False, help='Write additional files and plots for debugging')
     parser.add_argument('--choose_ccd', action='store', default=None, help='forced to use only the specified ccd')
-    parser.add_argument('--logdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
     parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
     parser.add_argument('--verboseplots', action='store_true', default=False, help='use to plot FWHM Moffat PSF fits to the 20 brightest stars')
     parser.add_argument('--calibrate', action='store_true',
