@@ -371,7 +371,7 @@ def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
     TT.delete_column('rex_shape_e2_ivar')
     return TT,hdr
 
-def one_lightcurve_bitmask(lc_nobs, lc_mjd, n_final=13):
+def one_lightcurve_bitmask(lc_nobs, lc_mjd, n_final=17):
     # row is a single tractor-i catalog row
     # the only columns used from within this row are:
     #     LC_NOBS_W[1-2]
