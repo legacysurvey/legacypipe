@@ -8,8 +8,7 @@ from astrometry.util.util import Tan
 from astrometry.util.miscutils import polygon_area
 import tractor.sfd
 
-def annotate(ccds, survey, mp=None, mzls=False, bass=False, normalizePsf=True,
-             carryOn=True):
+def annotate(ccds, survey, camera, mp=None, normalizePsf=True, carryOn=True):
     if mp is None:
         from astrometry.util.multiproc import multiproc
         mp = multiproc()
@@ -17,12 +16,14 @@ def annotate(ccds, survey, mp=None, mzls=False, bass=False, normalizePsf=True,
     # File from the "observing" svn repo:
     from pkg_resources import resource_filename
 
-    if mzls:
+    if camera == 'mosaic':
         tilefile = resource_filename('legacyzpts', 'data/mosaic-tiles_obstatus.fits')
-    elif bass:
+    elif camera == '90prime':
         tilefile = None
-    else:
+    elif camera == 'decam':
         tilefile = resource_filename('legacyzpts', 'data/decam-tiles_obstatus.fits')
+    else:
+        tilefile = None
 
     if tilefile is not None:
         if os.path.isfile(tilefile):

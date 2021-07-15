@@ -296,6 +296,9 @@ class LegacySurveyImage(object):
         # for debugging purposes
         self.print_imgpath = '/'.join(self.imgfn.split('/')[-5:])
 
+    def override_ccd_table_types(self):
+        return {}
+
     def validate_version(self, *args, **kwargs):
         return validate_version(*args, **kwargs)
 
@@ -993,6 +996,7 @@ class LegacySurveyImage(object):
         header : fitsio header
             The FITS header
         '''
+        print('Reading', self.imgfn, 'ext', self.hdu)
         return fitsio.read_header(self.imgfn, ext=self.hdu)
 
     def read_dq(self, **kwargs):
@@ -1001,8 +1005,6 @@ class LegacySurveyImage(object):
         '''
         debug('Reading data quality image', self.dqfn, 'ext', self.dq_hdu)
         dq = self._read_fits(self.dqfn, self.dq_hdu, **kwargs)
-
-        # FIXME - Turn SATUR on edges to EDGE
         return dq
 
     def remap_dq(self, dq, header):
@@ -1453,6 +1455,7 @@ class LegacySurveyImage(object):
                 sky_john = 0.0
             del cimage
         else:
+            debug('Too few good pixels to estimate sky_john')
             sky_john = 0.0
 
         boxsize = self.splinesky_boxsize

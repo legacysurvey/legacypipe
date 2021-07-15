@@ -1,6 +1,7 @@
 from __future__ import print_function
-import numpy as np
 import os
+import numpy as np
+import fitsio
 from legacypipe.image import LegacySurveyImage
 from legacypipe.bits import DQ_BITS
 
@@ -70,15 +71,71 @@ class MegaPrimeImage(LegacySurveyImage):
         #                   i=0.08, Y=0.06)
         # --> e/sec
 
+        ##### UGH they contain duplicate EXTNAME header cards.
+        # if image_hdu is not None:
+        #     print('image_hdu', image_hdu, 'hdu', self.hdu)
+        #     self.ccdname = 'ccd%i' % (self.hdu - 1)
+        #     print('Reset CCDNAME to', self.ccdname)
+
+        # Try grabbing fwhm from PSFEx file, if it exists.
+        if hasattr(self, 'fwhm') and not np.isfinite(self.fwhm):
+            try:
+                # PSF model file may not have been created yet...
+                self.fwhm = self.get_fwhm(None, None)
+            except:
+                pass
+
     @classmethod
     def get_nominal_pixscale(cls):
         return 0.185
+
+    def override_ccd_table_types(self):
+        # "ccd00"
+        return {'ccdname':'S5'}
+
+    def validate_version(self, *args, **kwargs):
+        # Just gonna pass on all this stuff
+        return True
+
+    def calibration_good(self, primhdr):
+        '''Did the low-level processing succeed for this image?'''
+        return True
+
+    def get_extension_list(self, debug=False):
+        # duplicate EXTNAME cards in the headers?! trips up fitsio;
+        # https://github.com/esheldon/fitsio/issues/324
+        F = fitsio.FITS(self.imgfn)
+        exts = []
+        for i,f in enumerate(F[1:]):
+            #exts.append(f.get_extname())
+            exts.append(i+1)
+            if debug:
+                break
+        return exts
+
+    def compute_filenames(self):
+        # Compute data quality and weight-map filenames
+        self.dqfn = self.imgfn.replace('p.fits.fz', 'p.flag.fits.fz')
+        self.wtfn = self.imgfn.replace('p.fits.fz', 'p.weight.fits.fz')
+        assert(self.dqfn != self.imgfn)
+        assert(self.wtfn != self.imgfn)
+
+    #def compute_filenames(self):
+    #    self.dqfn = 'cfis/test.mask.0.40.01.fits'
+
+    def read_image_header(self, **kwargs):
+        hdr = super().read_image_header(**kwargs)
+        ##### UGH they contain duplicate EXTNAME header cards.
+        hdr['EXTNAME'] = 'ccd%02i' % (self.hdu - 1)
+        print('Reset EXTNAME to', hdr['EXTNAME'])
+        return hdr
 
     def get_radec_bore(self, primhdr):
         return primhdr['RA_DEG'], primhdr['DEC_DEG']
 
     def photometric_calibrator_to_observed(self, name, cat):
-        from legacypipe.ps1cat import ps1band as ps1band_map
+        from legacypipe.ps1cat import ps1cat
+        ps1band_map = ps1cat.ps1band
         if name != 'ps1':
             raise RuntimeError('No photometric conversion from %s to CFHT' % name)
         # u->g
@@ -103,29 +160,41 @@ class MegaPrimeImage(LegacySurveyImage):
     def get_propid(self, primhdr):
         return primhdr['RUNID']
 
+    def get_gain(self, primhdr, hdr):
+        return hdr['GAIN']
+
+    def get_fwhm(self, primhdr, imghdr):
+        # Nothing in the image headers...
+        # There's a get_fwhm() call early in the constructor... this will return NaN.
+        if not hasattr(self, 'merged_psffn'):
+            return super().get_fwhm(primhdr, imghdr)
+        psf = self.read_psf_model(0, 0, pixPsf=True)
+        fwhm = psf.fwhm
+        print('Got FWHM from PSF model:', fwhm)
+        return fwhm
+
     def scale_image(self, img):
         return img.astype(np.float32)
 
-    def get_wcs(self):
-        ### FIXME -- no distortion solution in here
-        # from astrometry.util.util import Tan
-        # return Tan(self.hdr)
+    # def get_wcs(self, hdr=None):
+    #     ### FIXME -- no distortion solution in here
+    #     # from astrometry.util.util import Tan
+    #     # return Tan(self.hdr)
+    # 
+    #     # "pitcairn" reductions have PV header cards (CTYPE is still RA---TAN)
+    #     from astrometry.util.util import wcs_pv2sip_hdr
+    #     if hdr is None:
+    #         hdr = self.read_image_header()
+    #     return wcs_pv2sip_hdr(self.hdr)
 
-        # "pitcairn" reductions have PV header cards (CTYPE is still RA---TAN)
-        from astrometry.util.util import wcs_pv2sip_hdr
-        return wcs_pv2sip_hdr(self.hdr)
-
-    def compute_filenames(self):
-        self.dqfn = 'cfis/test.mask.0.40.01.fits'
-
-    def remap_dq(self, dq, header):
-        '''
-        Called by get_tractor_image() to map the results from read_dq
-        into a bitmask.  We only have a 0/1 bad pixel mask.
-        '''
-        dqbits = np.zeros(dq.shape, np.int16)
-        dqbits[dq == 0] = DQ_BITS['badpix']
-        return dqbits
+    # def remap_dq(self, dq, header):
+    #     '''
+    #     Called by get_tractor_image() to map the results from read_dq
+    #     into a bitmask.  We only have a 0/1 bad pixel mask.
+    #     '''
+    #     dqbits = np.zeros(dq.shape, np.int16)
+    #     dqbits[dq == 0] = DQ_BITS['badpix']
+    #     return dqbits
 
     def read_image(self, header=False, **kwargs):
         img = super(MegaPrimeImage, self).read_image(header=header, **kwargs)
@@ -137,10 +206,11 @@ class MegaPrimeImage(LegacySurveyImage):
         return img
 
     def read_invvar(self, **kwargs):
-        ## FIXME -- at the very least, apply mask
+        # The "weight" maps given are 0/1, apparently == flags.
         print('MegaPrimeImage.read_invvar')
         img = self.read_image(**kwargs)
-        if self.sig1 is None:
+        dq = self.read_dq(**kwargs)
+        if self.sig1 is None or self.sig1 == 0.:
             # Estimate per-pixel noise via Blanton's 5-pixel MAD
             slice1 = (slice(0,-5,10),slice(0,-5,10))
             slice2 = (slice(5,None,10),slice(5,None,10))
@@ -150,50 +220,73 @@ class MegaPrimeImage(LegacySurveyImage):
             print('Computed sig1 by Blanton method:', self.sig1)
         else:
             print('sig1 from CCDs file:', self.sig1)
-
         iv = np.zeros_like(img) + (1./self.sig1**2)
+        iv[dq != 0] = 0.
         return iv
 
-
+    def fix_saturation(self, img, dq, invvar, primhdr, imghdr, slc):
+        # SATURATE header keyword is ~65536, but actual saturation in the images is
+        # 32760.
+        I,J = np.nonzero(img > 32700)
+        from legacypipe.bits import DQ_BITS
+        if len(I):
+            dq[I,J] |= DQ_BITS['satur']
+            invvar[I,J] = 0
+    
+    # def read_invvar(self, **kwargs):
+    #     ## FIXME -- at the very least, apply mask
+    #     print('MegaPrimeImage.read_invvar')
+    #     img = self.read_image(**kwargs)
+    #     if self.sig1 is None:
+    #         # Estimate per-pixel noise via Blanton's 5-pixel MAD
+    #         slice1 = (slice(0,-5,10),slice(0,-5,10))
+    #         slice2 = (slice(5,None,10),slice(5,None,10))
+    #         mad = np.median(np.abs(img[slice1] - img[slice2]).ravel())
+    #         sig1 = 1.4826 * mad / np.sqrt(2.)
+    #         self.sig1 = sig1
+    #         print('Computed sig1 by Blanton method:', self.sig1)
+    #     else:
+    #         print('sig1 from CCDs file:', self.sig1)
+    # 
+    #     iv = np.zeros_like(img) + (1./self.sig1**2)
+    #     return iv
 
     # calibs
 
-
-
-    def run_se(self, imgfn, maskfn):
-        from astrometry.util.file import trymakedirs
-        sedir = self.survey.get_se_dir()
-        trymakedirs(self.sefn, dir=True)
-        # We write the SE catalog to a temp file then rename, to avoid
-        # partially-written outputs.
-
-        from legacypipe.survey import create_temp
-        import fitsio
-
-        tmpmaskfn = create_temp(suffix='.fits')
-        # # The test.mask file has 1 for good pix, 0 for bad... invert for SE
-        goodpix = fitsio.read(maskfn)
-        fitsio.write(tmpmaskfn, (1-goodpix).astype(np.uint8), clobber=True)
-        #tmpmaskfn = maskfn
-
-        tmpfn = os.path.join(os.path.dirname(self.sefn),
-                             'tmp-' + os.path.basename(self.sefn))
-        cmd = ' '.join([
-            'sex',
-            '-c', os.path.join(sedir, self.camera + '.se'),
-            '-PARAMETERS_NAME', os.path.join(sedir, self.camera + '.param'),
-            '-FILTER_NAME %s' % os.path.join(sedir, self.camera + '.conv'),
-            '-FLAG_IMAGE %s' % tmpmaskfn,
-            '-CATALOG_NAME %s' % tmpfn,
-            '-SEEING_FWHM %f' % 0.8,
-            '-FITS_UNSIGNED N',
-            #'-VERBOSE_TYPE FULL',
-            #'-PIXEL_SCALE 0.185',
-            #'-SATUR_LEVEL 100000',
-            imgfn])
-        print(cmd)
-        rtn = os.system(cmd)
-        if rtn:
-            raise RuntimeError('Command failed: ' + cmd)
-        os.rename(tmpfn, self.sefn)
-        os.unlink(tmpmaskfn)
+    # def run_se(self, imgfn, maskfn):
+    #     from astrometry.util.file import trymakedirs
+    #     sedir = self.survey.get_se_dir()
+    #     trymakedirs(self.sefn, dir=True)
+    #     # We write the SE catalog to a temp file then rename, to avoid
+    #     # partially-written outputs.
+    # 
+    #     from legacypipe.survey import create_temp
+    #     import fitsio
+    # 
+    #     tmpmaskfn = create_temp(suffix='.fits')
+    #     # # The test.mask file has 1 for good pix, 0 for bad... invert for SE
+    #     goodpix = fitsio.read(maskfn)
+    #     fitsio.write(tmpmaskfn, (1-goodpix).astype(np.uint8), clobber=True)
+    #     #tmpmaskfn = maskfn
+    # 
+    #     tmpfn = os.path.join(os.path.dirname(self.sefn),
+    #                          'tmp-' + os.path.basename(self.sefn))
+    #     cmd = ' '.join([
+    #         'sex',
+    #         '-c', os.path.join(sedir, self.camera + '.se'),
+    #         '-PARAMETERS_NAME', os.path.join(sedir, self.camera + '.param'),
+    #         '-FILTER_NAME %s' % os.path.join(sedir, self.camera + '.conv'),
+    #         '-FLAG_IMAGE %s' % tmpmaskfn,
+    #         '-CATALOG_NAME %s' % tmpfn,
+    #         '-SEEING_FWHM %f' % 0.8,
+    #         '-FITS_UNSIGNED N',
+    #         #'-VERBOSE_TYPE FULL',
+    #         #'-PIXEL_SCALE 0.185',
+    #         #'-SATUR_LEVEL 100000',
+    #         imgfn])
+    #     print(cmd)
+    #     rtn = os.system(cmd)
+    #     if rtn:
+    #         raise RuntimeError('Command failed: ' + cmd)
+    #     os.rename(tmpfn, self.sefn)
+    #     os.unlink(tmpmaskfn)

@@ -184,22 +184,26 @@ def psf_zeropoint_cuts(P, pixscale,
         ccdzpt = detrend_mzlsbass_zeropoints(P)
     ccdname = np.array([n.strip() for n in P.ccdname])
 
+    skybr = np.zeros(len(P), bool)
+    for i,(f, sky, exptime) in enumerate(zip(P.filter, P.ccdskycounts, P.exptime)):
+        if not np.isfinite(sky):
+            skybr[i] = True
+            continue
+        skybr[i] = (sky > skybright.get(f.strip(), 1e6)) or (sky*exptime > 35000)
+
     cuts = [
         ('not_grz',   np.array([f.strip() not in 'grz' for f in P.filter])),
         ('ccdnmatch', P.ccdnphotom < 20),
         ('zpt_small', np.array([zpt < zpt_cut_lo.get(f.strip(),0) for f,zpt in zip(P.filter, ccdzpt)])),
         ('zpt_large', np.array([zpt > zpt_cut_hi.get(f.strip(),100) for f,zpt in zip(P.filter, ccdzpt)])),
         ('phrms',     P.phrms > 0.1),
-        ('exptime', P.exptime < 30),
+        ('exptime',   P.exptime < 30),
         ('seeing_bad', np.logical_not(np.logical_and(seeing > 0, seeing < 3.0))),
         ('badexp_file', np.array([((expnum, None) in bad_expid or
                                    (expnum, ccdname0) in bad_expid)
                                   for expnum, ccdname0 in zip(P.expnum, ccdname)])),
         ('radecrms',  np.hypot(P.ccdrarms, P.ccddecrms) > radec_rms),
-        ('sky_is_bright', np.array([
-            ((sky > skybright.get(f.strip(), 1e6)) |
-             (sky*exptime > 35000))
-            for (f, sky, exptime) in zip(P.filter, P.ccdskycounts, P.exptime)])),
+        ('sky_is_bright', skybr),
         ('zpt_diff_avg', np.abs(P.ccdzpt - P.zpt) > zpt_diff_avg),
         ('phrms_s7', (P.ccdphrms > 0.1) & (ccdname == 'S7')),
     ]
@@ -310,7 +314,7 @@ def add_psfzpt_cuts(T, camera, bad_expid, image2coadd=''):
         dz = (-0.5, 0.25)
         dY = (-0.5, 0.25)
         radec_rms = 0.4
-        skybright = dict(g=90., r=150., z=180.)
+        skybright = dict(g=90., r=150., i=165., z=180.)
         zpt_diff_avg = 0.25
         zpt_lo = dict(g=g0+dg[0], r=r0+dr[0], z=z0+dz[0], i=i0+di[0],
                       Y=Y0+dY[0], u=u0+du[0])
