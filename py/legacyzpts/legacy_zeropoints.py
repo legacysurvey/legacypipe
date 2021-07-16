@@ -600,6 +600,8 @@ def get_parser():
                         help='set to > 1 if using legacy-zeropoints-mpiwrapper.py')
     parser.add_argument('--run-calibs-only', default=False, action='store_true',
                         help='Only ensure calib files exist, do not compute zeropoints.')
+    parser.add_argument('--run-psf-only', default=False, action='store_true',
+                        help='Only create / ensure PSF calib files exist, do not compute zeropoints.')
     parser.add_argument('--no-splinesky', dest='splinesky', default=True, action='store_false',
                         help='Do not use spline sky model for sky subtraction?')
     parser.add_argument('--blob-mask-dir', type=str, default=None,
@@ -701,6 +703,10 @@ def main(args=None):
         if measureargs['run_calibs_only'] and psf_ok and sky_ok:
             print('Already finished {}'.format(psffn))
             print('Already finished {}'.format(skyfn))
+            continue
+
+        if measureargs['run_psf_only'] and psf_ok:
+            print('Already finished {}'.format(psffn))
             continue
 
         phot_ok = validate_version(F.photomfn, 'header', measure.expnum,
