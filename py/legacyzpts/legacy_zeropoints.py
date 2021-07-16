@@ -220,7 +220,9 @@ def create_annotated_table(T, ann_fn, camera, survey, mp):
 def getrms(x):
     return np.sqrt(np.mean(x**2))
 
-def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
+def measure_image(img_fn, mp, image_dir='images',
+                  run_calibs_only=False,
+                  run_psf_only=False,
                   just_imobj=False,
                   survey=None, psfex=True, camera=None, **measureargs):
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
@@ -275,6 +277,9 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
         survey_zeropoints = LegacySurveyData(survey_dir=zptdir)
 
     plots = measureargs.get('plots', False)
+
+    if run_psf_only:
+        splinesky = False
 
     # Validate the splinesky and psfex merged files, and (re)make them if
     # they're missing.
@@ -346,7 +351,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
 
     # FIXME -- remove temporary individual files directory
 
-    if run_calibs_only:
+    if run_calibs_only or run_psf_only:
         return
 
     rtns = mp.map(run_one_ext, [(img, ext, survey, splinesky,
@@ -500,14 +505,16 @@ def writeto_via_temp(outfn, obj, func_write=False, **kwargs):
     os.rename(tempfn, outfn)
 
 def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
-          survey=None, run_calibs_only=False, **measureargs):
+          survey=None, run_calibs_only=False, run_psf_only=False, **measureargs):
     '''Generate a legacypipe-compatible (survey) CCDs file for a given image.
     '''
     t0 = Time()
 
-    results = measure_image(imgfn, mp, survey=survey, run_calibs_only=run_calibs_only,
+    results = measure_image(imgfn, mp, survey=survey,
+                            run_calibs_only=run_calibs_only,
+                            run_psf_only=run_psf_only,
                             **measureargs)
-    if run_calibs_only:
+    if run_calibs_only or run_psf_only:
         return
 
     if len(results) == 0:
