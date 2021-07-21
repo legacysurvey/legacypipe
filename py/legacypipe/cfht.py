@@ -220,11 +220,13 @@ class MegaPrimeImage(LegacySurveyImage):
             self.sig1 = sig1
             print('Computed sig1 by Blanton method:', self.sig1)
         else:
+            from tractor import NanoMaggies
             print('sig1 from CCDs file:', self.sig1)
             # sig1 in the CCDs file is in nanomaggy units --
             # but here we need to return in image units.
             zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
-            sig1 = self.sig1 / zpscale**2
+            sig1 = self.sig1 * zpscale
+            print('scaled to image units:', sig1)
 
         iv = np.empty_like(img)
         iv[:,:] = 1./sig1**2

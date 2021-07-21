@@ -337,6 +337,21 @@ def add_psfzpt_cuts(T, camera, bad_expid, image2coadd=''):
         psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
                            skybright, zpt_diff_avg)
 
+    elif camera == 'megaprime':
+        g0 = 25.0
+        r0 = 26.1
+        z0 = 25.0
+        dg = (-5, +5)
+        dr = (-0.5, +0.25)
+        dz = (-5, +5)
+        radec_rms = 0.2
+        skybright = {}
+        zpt_diff_avg = 0.1
+        zpt_lo = dict(g=g0+dg[0], r=r0+dr[0], z=z0+dz[0])
+        zpt_hi = dict(g=g0+dg[1], r=r0+dr[1], z=z0+dz[1])
+        psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
+                           skybright, zpt_diff_avg)
+        
     else:
         assert(False)
 
