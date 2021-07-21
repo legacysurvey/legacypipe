@@ -368,7 +368,7 @@ def measure_image(img_fn, mp, image_dir='images',
     all_ccds = vstack(all_ccds)
 
     if len(all_photom):
-        all_photom = merge_tables(all_photom)
+        all_photom = merge_tables(all_photom, columns='fillzero')
     else:
         all_photom = None
 
@@ -1012,6 +1012,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
             del unmatched
 
         refs.append(phot)
+    else:
+        phot_cols = []
 
     if len(refs) == 1:
         refs = refs[0]

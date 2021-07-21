@@ -237,6 +237,9 @@ def decam_cp_version_after(plver, after):
     #'4.8.2a'
     if plver.endswith('2a'):
         plver = plver.replace('.2a', '.2a1')
+    # 5.2.2LS
+    if plver.endswith('LS'):
+        plver = plver.replace('LS', '')
     return StrictVersion(plver) >= StrictVersion(after)
 
 def decam_s19_satur_ok(plver):
