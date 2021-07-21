@@ -220,7 +220,9 @@ def create_annotated_table(T, ann_fn, camera, survey, mp):
 def getrms(x):
     return np.sqrt(np.mean(x**2))
 
-def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
+def measure_image(img_fn, mp, image_dir='images',
+                  run_calibs_only=False,
+                  run_psf_only=False,
                   just_imobj=False,
                   survey=None, psfex=True, camera=None, **measureargs):
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
@@ -275,6 +277,9 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
         survey_zeropoints = LegacySurveyData(survey_dir=zptdir)
 
     plots = measureargs.get('plots', False)
+
+    if run_psf_only:
+        splinesky = False
 
     # Validate the splinesky and psfex merged files, and (re)make them if
     # they're missing.
@@ -346,7 +351,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
 
     # FIXME -- remove temporary individual files directory
 
-    if run_calibs_only:
+    if run_calibs_only or run_psf_only:
         return
 
     rtns = mp.map(run_one_ext, [(img, ext, survey, splinesky,
@@ -500,14 +505,16 @@ def writeto_via_temp(outfn, obj, func_write=False, **kwargs):
     os.rename(tempfn, outfn)
 
 def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
-          survey=None, run_calibs_only=False, **measureargs):
+          survey=None, run_calibs_only=False, run_psf_only=False, **measureargs):
     '''Generate a legacypipe-compatible (survey) CCDs file for a given image.
     '''
     t0 = Time()
 
-    results = measure_image(imgfn, mp, survey=survey, run_calibs_only=run_calibs_only,
+    results = measure_image(imgfn, mp, survey=survey,
+                            run_calibs_only=run_calibs_only,
+                            run_psf_only=run_psf_only,
                             **measureargs)
-    if run_calibs_only:
+    if run_calibs_only or run_psf_only:
         return
 
     if len(results) == 0:
@@ -600,6 +607,8 @@ def get_parser():
                         help='set to > 1 if using legacy-zeropoints-mpiwrapper.py')
     parser.add_argument('--run-calibs-only', default=False, action='store_true',
                         help='Only ensure calib files exist, do not compute zeropoints.')
+    parser.add_argument('--run-psf-only', default=False, action='store_true',
+                        help='Only create / ensure PSF calib files exist, do not compute zeropoints.')
     parser.add_argument('--no-splinesky', dest='splinesky', default=True, action='store_false',
                         help='Do not use spline sky model for sky subtraction?')
     parser.add_argument('--blob-mask-dir', type=str, default=None,
@@ -701,6 +710,10 @@ def main(args=None):
         if measureargs['run_calibs_only'] and psf_ok and sky_ok:
             print('Already finished {}'.format(psffn))
             print('Already finished {}'.format(skyfn))
+            continue
+
+        if measureargs['run_psf_only'] and psf_ok:
+            print('Already finished {}'.format(psffn))
             continue
 
         phot_ok = validate_version(F.photomfn, 'header', measure.expnum,
