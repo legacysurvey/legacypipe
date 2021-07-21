@@ -3270,7 +3270,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         # Implied options!
         #subsky = False
         large_galaxies = True
-        fitoncoadds_reweight_ivar = True
         large_galaxies_force_pointsource = False
 
     kwargs.update(ps=ps, nsigma=nsigma, saddle_fraction=saddle_fraction,

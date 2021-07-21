@@ -1,3 +1,4 @@
+import os
 import numpy
 import pdb
 from astrometry.util.fits import fits_table
@@ -291,9 +292,14 @@ def make_plots(ccds, camera, nside=512,
 def good_ccd_fraction(survey, ccds):
     if survey == 'hsc':
         return 1.0
-    if survey not in ['decam', '90prime', 'mosaic']:
-        raise ValueError('survey not recognized!')
-    nccds = 62 if survey == 'decam' else 4
+
+    nccdmap = {'decam': 62,
+               '90prime': 4,
+               'mosaic': 4,
+               'megaprime': 40,
+    }
+
+    nccds = nccdmap[survey]
     ngooddict = {}
     for expnum, cut in zip(ccds.expnum, ccds.ccd_cuts):
         if cut == 0:
@@ -438,7 +444,10 @@ def main(args=None):
     from pkg_resources import resource_filename
     fn = resource_filename('legacyzpts',
                            'data/{}-bad_expid.txt'.format(args.camera))
-    bad_expid = psfzpt_cuts.read_bad_expid(fn)
+    if os.path.exists(fn):
+        bad_expid = psfzpt_cuts.read_bad_expid(fn)
+    else:
+        bad_expid = {}
     psfzpt_cuts.add_psfzpt_cuts(ccds, args.camera, bad_expid,
                                 image2coadd=args.image2coadd)
 
