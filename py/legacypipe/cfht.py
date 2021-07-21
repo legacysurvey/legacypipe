@@ -173,6 +173,7 @@ class MegaPrimeImage(LegacySurveyImage):
         print('Got FWHM from PSF model:', fwhm)
         return fwhm
 
+    # Used during zeropointing
     def scale_image(self, img):
         return img.astype(np.float32)
 
@@ -220,7 +221,13 @@ class MegaPrimeImage(LegacySurveyImage):
             print('Computed sig1 by Blanton method:', self.sig1)
         else:
             print('sig1 from CCDs file:', self.sig1)
-        iv = np.zeros_like(img) + (1./self.sig1**2)
+            # sig1 in the CCDs file is in nanomaggy units --
+            # but here we need to return in image units.
+            zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
+            sig1 = self.sig1 / zpscale**2
+
+        iv = np.empty_like(img)
+        iv[:,:] = 1./sig1**2
         iv[dq != 0] = 0.
         return iv
 
