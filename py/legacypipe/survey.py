@@ -510,7 +510,8 @@ def tim_get_resamp(tim, targetwcs):
 rgb_stretch_factor = 1.0
 
 def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
-    rgbscales=dict(g =    (2, 6.0 * rgb_stretch_factor),
+    rgbscales=dict(u =    (2, 6.0 * rgb_stretch_factor),
+                   g =    (2, 6.0 * rgb_stretch_factor),
                    r =    (1, 3.4 * rgb_stretch_factor),
                    i =    (0, 3.0 * rgb_stretch_factor),
                    z =    (0, 2.2 * rgb_stretch_factor),

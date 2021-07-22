@@ -673,6 +673,8 @@ def main(args=None):
     else:
         lvl = logging.INFO
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+    # tractor logging is *soooo* chatty
+    logging.getLogger('tractor.engine').setLevel(lvl + 10)
 
     camera = measureargs['camera']
 
@@ -816,9 +818,10 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     psf = imobj.read_psf_model(0., 0., pixPsf=True)
     if psf.psfex.sampling == 0.:
         print('PsfEx model has SAMPLING=0')
+        print('psf:', dir(psf))
         nacc = psf.header.get('ACCEPTED')
         print('PsfEx model number of stars accepted:', nacc)
-        return imobj.return_on_error(err_message='Bad PSF model', ccds=ccds)
+        return None, None
 
     dq,dqhdr = imobj.read_dq(header=True)
     invvar = imobj.read_invvar(dq=dq)
@@ -1074,7 +1077,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
                                fit_img, ierr, psf)
     print('Got photometry results for', len(phot), 'reference stars')
     if len(phot) == 0:
-        return imobj.return_on_error('No photometry available',ccds=ccds)
+        return None, None
 
     # Cut to ref stars that were photometered
     refs.cut(phot.iref)

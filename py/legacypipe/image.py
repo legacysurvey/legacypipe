@@ -1180,10 +1180,12 @@ class LegacySurveyImage(object):
         from tractor import PsfExModel
         tryfns = [self.merged_psffn, self.psffn] + self.old_merged_psffns
         Ti = None
+        header = None
         for fn in tryfns:
             if not os.path.exists(fn):
                 continue
             T = fits_table(fn)
+            header = T.get_header()
             I, = np.nonzero((T.expnum == self.expnum) *
                             np.array([c.strip() == self.ccdname
                                       for c in T.ccdname]))
@@ -1227,6 +1229,7 @@ class LegacySurveyImage(object):
         psf.plprocid = getattr(Ti, 'plprocid', '')
         psf.datasum  = getattr(Ti, 'imgdsum', '')
         psf.fwhm = Ti.psf_fwhm
+        psf.header = header
 
         psf.shift(x0, y0)
         if hybridPsf:

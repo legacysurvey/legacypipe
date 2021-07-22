@@ -136,13 +136,19 @@ class MegaPrimeImage(LegacySurveyImage):
     def photometric_calibrator_to_observed(self, name, cat):
         from legacypipe.ps1cat import ps1cat
         ps1band_map = ps1cat.ps1band
-        if name != 'ps1':
+        if name == 'ps1':
+            # u->g
+            ps1band = dict(u='g').get(self.band, self.band)
+            ps1band_index = ps1band_map[ps1band]
+            colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
+            return cat.median[:, ps1band_index] + np.clip(colorterm, -1., +1.)
+        elif name == 'sdss':
+            from legacypipe.ps1cat import sdsscat
+            colorterm = self.colorterm_sdss_to_observed(cat.psfmag, self.band)
+            band = sdsscat.sdssband[self.band]
+            return cat.psfmag[:, band] + np.clip(colorterm, -1., +1.)
+        else:
             raise RuntimeError('No photometric conversion from %s to CFHT' % name)
-        # u->g
-        ps1band = dict(u='g').get(self.band, self.band)
-        ps1band_index = ps1band_map[ps1band]
-        colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
-        return cat.median[:, ps1band_index] + np.clip(colorterm, -1., +1.)
 
     def colorterm_ps1_to_observed(self, ps1stars, band):
         from legacypipe.ps1cat import ps1_to_decam
@@ -151,6 +157,10 @@ class MegaPrimeImage(LegacySurveyImage):
             print('HACK -- using g-band color term for u band!')
             band = 'g'
         return ps1_to_decam(ps1stars, band)
+
+    def colorterm_sdss_to_observed(self, sdssstars, band):
+        from legacypipe.ps1cat import sdss_to_decam
+        return sdss_to_decam(sdssstars, band)
 
     def get_band(self, primhdr):
         # u.MP9302
