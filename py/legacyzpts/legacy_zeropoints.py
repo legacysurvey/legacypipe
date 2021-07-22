@@ -207,14 +207,14 @@ def prep_survey_table(T, camera=None, bad_expid=None):
     T.ccd_cuts = np.zeros(len(T), np.int16) + psfzpt_cuts.CCD_CUT_BITS['err_legacyzpts']
     return T
 
-def create_annotated_table(T, ann_fn, camera, survey, mp):
+def create_annotated_table(T, ann_fn, camera, survey, mp, header=None):
     from legacyzpts.annotate_ccds import annotate, init_annotations
     T = survey.cleanup_ccds_table(T)
     init_annotations(T)
     I, = np.nonzero(T.ccdzpt)
     if len(I):
         annotate(T, survey, camera, mp=mp, normalizePsf=True, carryOn=True)
-    writeto_via_temp(ann_fn, T)
+    writeto_via_temp(ann_fn, T, header=header)
     print('Wrote %s' % ann_fn)
 
 def getrms(x):
@@ -505,7 +505,8 @@ def writeto_via_temp(outfn, obj, func_write=False, **kwargs):
     os.rename(tempfn, outfn)
 
 def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
-          survey=None, run_calibs_only=False, run_psf_only=False, **measureargs):
+          survey=None, run_calibs_only=False, run_psf_only=False,
+          version_header=None, **measureargs):
     '''Generate a legacypipe-compatible (survey) CCDs file for a given image.
     '''
     t0 = Time()
@@ -527,6 +528,9 @@ def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
     primhdr = img.read_image_primary_header()
 
     hdr = fitsio.FITSHDR()
+    if version_header is not None:
+        for r in version_header.records():
+            hdr.add_record(r)
     for key in ['AIRMASS', 'OBJECT', 'TELESCOP', 'INSTRUME', 'EXPTIME', 'DATE-OBS',
                 'MJD-OBS', 'PROGRAM', 'OBSERVER', 'PROPID', 'FILTER', 'HA', 'ZD',
                 'AZ', 'DOMEAZ', 'HUMIDITY', 'PLVER', ]:
@@ -578,7 +582,7 @@ def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
     # survey table
     T = prep_survey_table(accds, camera=measureargs['camera'], bad_expid=bad_expid)
     # survey --> annotated
-    create_annotated_table(T, annfn, measureargs['camera'], survey, mp)
+    create_annotated_table(T, annfn, measureargs['camera'], survey, mp, header=hdr)
 
     t0 = ptime('write-results-to-fits',t0)
 
@@ -690,6 +694,19 @@ def main(args=None):
         else:
             print('No bad exposure file found for camera {}'.format(camera))
 
+    from legacypipe.survey import get_version_header, get_git_version, get_dependency_versions
+    release = 10000
+    gitver = get_git_version()
+    version_header = get_version_header('legacy_zeropoints.py', survey.survey_dir, release,
+                                        git_version=gitver, proctype='InstCal')
+    deps = get_dependency_versions(None, None, None, None)
+    for name,value,comment in deps:
+        version_header.add_record(dict(name=name, value=value, comment=comment))
+    command_line=' '.join(sys.argv)
+    version_header.add_record(dict(name='CMDLINE', value=command_line,
+                                   comment='runbrick command-line'))
+    measureargs['version_header'] = version_header
+    
     for ii, imgfn in enumerate(image_list):
         print('Working on image {}/{}: {}'.format(ii+1, nimage, imgfn))
 

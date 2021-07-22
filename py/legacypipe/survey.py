@@ -356,7 +356,8 @@ def get_git_version(dirnm=None):
     version = version.strip()
     return version
 
-def get_version_header(program_name, survey_dir, release, git_version=None):
+def get_version_header(program_name, survey_dir, release, git_version=None,
+                       proctype='tile'):
 
     '''
     Creates a fitsio header describing a DECaLS data product.
@@ -394,7 +395,7 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
                         comment='LegacySurveys Data Release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
                         comment='Observation type'))
-    hdr.add_record(dict(name='PROCTYPE', value='tile',
+    hdr.add_record(dict(name='PROCTYPE', value=proctype,
                         comment='Processing type'))
 
     hdr.add_record(dict(name='NODENAME', value=socket.gethostname(),
