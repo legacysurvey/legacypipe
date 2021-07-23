@@ -553,6 +553,8 @@ class LegacySurveyImage(object):
         primhdr = self.read_image_primary_header()
 
         for fn,kw in [(self.imgfn, dict(data=primhdr)), (self.wtfn, {}), (self.dqfn, {})]:
+            if fn is None:
+                continue
             if not self.validate_version(fn, 'primaryheader',
                                          self.expnum, self.plver, self.plprocid,
                                          cpheader=True, old_calibs_ok=old_calibs_ok, **kw):
