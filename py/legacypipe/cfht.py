@@ -116,9 +116,10 @@ class MegaPrimeImage(LegacySurveyImage):
     def compute_filenames(self):
         # Compute data quality and weight-map filenames
         self.dqfn = self.imgfn.replace('p.fits.fz', 'p.flag.fits.fz')
-        self.wtfn = self.imgfn.replace('p.fits.fz', 'p.weight.fits.fz')
         assert(self.dqfn != self.imgfn)
-        assert(self.wtfn != self.imgfn)
+        self.wtfn = None
+        #self.wtfn = self.imgfn.replace('p.fits.fz', 'p.weight.fits.fz')
+        #assert(self.wtfn != self.imgfn)
 
     #def compute_filenames(self):
     #    self.dqfn = 'cfis/test.mask.0.40.01.fits'
