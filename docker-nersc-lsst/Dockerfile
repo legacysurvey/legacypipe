@@ -55,46 +55,28 @@ WORKDIR lsst_stack
 # This already seems to be the default.
 ENV BASH_ENV=/etc/bash.bashrc
 
-COPY myenv.sh /etc/profile.d
-RUN chmod 755 /etc/profile.d/myenv.sh
-
-RUN echo $PATH && which sed
+RUN echo "source /opt/conda/etc/profile.d/conda.sh; conda activate myenv" > /etc/profile.d/myenv.sh \
+    && chmod 755 /etc/profile.d/myenv.sh
 
 RUN conda config --add channels conda-forge && \
-    conda install rubin-env=0.6.0
+    conda install rubin-env=0.4.3
 
-RUN conda install eups
+#conda install rubin-env=0.6.0
+
+# RUN conda install eups
 
 # ENV EUPS_PATH=/opt/conda/share/eups
-# ENV PATH=${PATH}:/opt/conda/eups/bin
 # ENV EUPS_SHELL=/bin/bash
 # ENV EUPS_PKGROOT=https://eups.lsst.codes/stack/src
-# ENV PYTHONPATH=${PYTHONPATH}:/opt/conda/eups/python
-# RUN mkdir /opt/lsst
 # ENV EUPS_DIR=/opt/lsst
-# RUN mkdir $EUPS_DIR/bin && cp /opt/conda/eups/bin/setups.sh $EUPS_DIR/bin
-# 
-# RUN eups distrib install -t v22_0_1 afw
-
-#ENV LSST_CONDA_ENV_NAME=base
+# ENV LSST_CONDA_ENV_NAME=base
 
 ENV LSST_CONDA_ENV_NAME=myenv
 ENV LSST_CONDA_CHANNELS="intel conda-forge"
-
-RUN conda list && \
-    curl -OL https://raw.githubusercontent.com/lsst/lsst/tickets/DM-31235/scripts/newinstall.sh && \
-    chmod 755 newinstall.sh && \
-    bash newinstall.sh -b -T -P /opt/conda
-
-#curl -OL https://raw.githubusercontent.com/lsst/lsst/master/scripts/newinstall.sh && \
-
-#RUN mv /etc/profile.d/myenv.sh /etc/profile.d/10_myenv.sh
-
-# RUN rm /etc/profile.d/myenv.sh /etc/profile.d/conda.sh && \
-#     echo "source /root/lsst_stack/loadLSST.bash" > /etc/profile.d/20_lsst.sh && \
-#     chmod 755 /etc/profile.d/20_lsst.sh
-
 ENV EUPS_SHELL=bash
+
+RUN curl -OL https://raw.githubusercontent.com/lsst/lsst/tickets/DM-31235/scripts/newinstall.sh && \
+    bash newinstall.sh -b -T -P /opt/conda
 
 RUN rm /etc/profile.d/myenv.sh /etc/profile.d/conda.sh
 
@@ -105,7 +87,7 @@ RUN source /root/lsst_stack/loadLSST.bash && eups distrib install -t v22_0_1 sph
 RUN source /root/lsst_stack/loadLSST.bash && eups distrib install -t v22_0_1 pex_exceptions
 RUN source /root/lsst_stack/loadLSST.bash && eups distrib install -t v22_0_1 utils
 
-#RUN source /root/lsst_stack/loadLSST.bash && eups distrib install -t v22_0_1 afw
+RUN source /root/lsst_stack/loadLSST.bash && eups distrib install -t v22_0_1 afw
 
 
 #ENV LSST_CONDA_CHANNELS=
