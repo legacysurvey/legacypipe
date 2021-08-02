@@ -249,27 +249,28 @@ RUN wget -O /opt/conda/lib/python3.7/site-packages/astropy/utils/iers/data/Leap_
 #  cp -r $HOME/.ipython $IPYTHONDIR  
 
 RUN python -O -m compileall \
-    -x lib2to3 \
+    -x lib2to3\|debugpy \
     /usr/local/lib/python \
     /opt/conda/lib/python3.7 \
     /src/unwise_psf/py \
     /src/legacypipe/py/{legacypipe,legacyzpts} && \
     python    -m compileall \
-    -x lib2to3 \
+    -x lib2to3\|debugpy \
     /usr/local/lib/python \
     /opt/conda/lib/python3.7 \
     /src/unwise_psf/py \
     /src/legacypipe/py/{legacypipe,legacyzpts}
 
+# QDO
+RUN cd qdo && git remote add dstn https://bitbucket.org/dstn/qdo.git \
+        && git fetch dstn && git checkout handle-oom \
+	&& pip install .
+
 # update legacypipe
 RUN cd /src/legacypipe && git pull \   
-    && git describe && echo DR9.7.2b && \
+    && git describe && echo DR9.8.3 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
 ENV LEGACYPIPE_DIR /src/legacypipe/py
 
-# QDO
-RUN cd qdo && git remote add dstn https://bitbucket.org/dstn/qdo.git \
-        && git fetch dstn && git checkout handle-oom \
-	&& pip install .
