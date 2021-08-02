@@ -1342,7 +1342,7 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
         src.freezeParam('pos')
         pc = tim.photocal
         tim.photocal = LinearPhotoCal(1.)
-        tr.optimize_forced_photometry()
+        tr.optimize_forced_photometry(**optargs)
         tim.photocal = pc
         src.thawParam('pos')
 
