@@ -817,10 +817,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     # Quick check for PsfEx file
     psf = imobj.read_psf_model(0., 0., pixPsf=True)
     if psf.psfex.sampling == 0.:
-        print('PsfEx model has SAMPLING=0')
-        print('psf:', dir(psf))
-        nacc = psf.header.get('ACCEPTED')
-        print('PsfEx model number of stars accepted:', nacc)
+        print('PsfEx model has SAMPLING=0 (PsfEx failed)')
         return None, None
 
     dq,dqhdr = imobj.read_dq(header=True)
