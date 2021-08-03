@@ -1335,7 +1335,7 @@ class LegacySurveyImage(object):
         psftmpfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.psf.tmp')
         psfexflags = self.survey.get_psfex_conf(self.camera,
                                                 self.expnum, self.ccdname)
-        cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .psf.tmp -VERBOSE_TYPE QUIET %s %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, psfexflags, self.sefn)
+        cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .psf.tmp %s %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, psfexflags, self.sefn)
         debug(cmd)
         rtn = os.system(cmd)
         if rtn:
