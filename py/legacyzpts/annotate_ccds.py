@@ -138,8 +138,8 @@ def annotate_one_ccd(X):
     wcs = None
     sky = None
 
-    if ccd.ccdnastrom == 0: # something went terribly wrong
-        print('ccdnastrom == 0; bailing on annotation')
+    if not im.has_astrometric_calibration(ccd):
+        print('CCD has no astrometric calibration; bailing on annotation')
         return result
 
     try:

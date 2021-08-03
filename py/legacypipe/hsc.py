@@ -55,6 +55,9 @@ class HscImage(LegacySurveyImage):
     def calibration_good(self, primhdr):
         return True
 
+    def has_astrometric_calibration(self, ccd):
+        return True
+
     '''
     def get_psfex_unmerged_filename(self):
         basefn = os.path.basename(self.fn_base)

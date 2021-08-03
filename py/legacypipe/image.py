@@ -336,6 +336,9 @@ class LegacySurveyImage(object):
         '''
         return primhdr.get('WCSCAL', '').strip().lower().startswith('success')
 
+    def has_astrometric_calibration(self, ccd):
+        return ccd.ccdnastrom > 0
+
     def get_photometric_calibrator_cuts(self, name, cat):
         '''Returns whether to keep sources in the *cat* of photometric calibration
         stars from, eg, Pan-STARRS1 or SDSS.
