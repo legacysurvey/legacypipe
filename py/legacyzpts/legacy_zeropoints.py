@@ -284,12 +284,14 @@ def measure_image(img_fn, mp, image_dir='images',
     # Validate the splinesky and psfex merged files, and (re)make them if
     # they're missing.
     if splinesky:
-        if validate_version(img.get_splinesky_merged_filename(),
-                            'table', img.expnum, img.plver, img.plprocid, quiet=quiet):
+        fn = img.get_splinesky_merged_filename()
+        if (fn is None or
+            validate_version(fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
             splinesky = False
     if psfex:
-        if validate_version(img.get_psfex_merged_filename(),
-                            'table', img.expnum, img.plver, img.plprocid, quiet=quiet):
+        fn = img.get_psfex_merged_filename()
+        if (fn is None or
+            validate_version(fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
             psfex = False
 
     if splinesky or psfex:
@@ -721,7 +723,7 @@ def main(args=None):
         psffn = measure.get_psfex_merged_filename()
         skyfn = measure.get_splinesky_merged_filename()
 
-        ann_ok, psf_ok, sky_ok = [validate_version(
+        ann_ok, psf_ok, sky_ok = [(fn is None) or validate_version(
             fn, 'table', measure.expnum, measure.plver,
             measure.plprocid, quiet=quiet)
             for fn in [F.annfn, psffn, skyfn]]
