@@ -442,6 +442,11 @@ class LegacySurveyImage(object):
     def scale_weight(self, img):
         return img
 
+    def estimate_sig1(self, img, invvar, dq, primhdr, imghdr):
+        mediv = np.median(invvar[(invvar > 0) * (dq == 0)])
+        mediv = self.scale_weight(mediv)
+        return (1. / np.sqrt(mediv)) / self.exptime
+
     def __str__(self):
         return self.name
 
