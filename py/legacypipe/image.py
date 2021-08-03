@@ -447,6 +447,15 @@ class LegacySurveyImage(object):
         mediv = self.scale_weight(mediv)
         return (1. / np.sqrt(mediv)) / self.exptime
 
+    def get_zeropoint(self, primhdr, hdr):
+        '''
+        If a LegacySurveyImage subclass already has a photometric
+        zeropoint available, return it here to avoid having to fetch
+        reference stars and fit them.  This also prevents astrometric
+        offsets from being computed.
+        '''
+        return None
+
     def __str__(self):
         return self.name
 

@@ -215,6 +215,11 @@ class HscImage(LegacySurveyImage):
     def remap_dq(self, dq, header):
         return remap_hsc_bitmask(dq, header)
 
+    def get_zeropoint(self, primhdr, hdr):
+        flux = primhdr['FLUXMAG0']
+        zpt = 2.5 * np.log10(flux / self.exptime)
+        return zpt
+
     def read_invvar(self, dq=None, **kwargs):
         # HSC has a VARIANCE map (not a weight map)
         v = self._read_fits(self.wtfn, self.wt_hdu, **kwargs)

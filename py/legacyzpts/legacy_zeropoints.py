@@ -766,7 +766,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     Returns:
         ccds, stars_photom, stars_astrom
     """
-    #
+    from tractor.brightness import NanoMaggies
     t0= Time()
     t0= ptime('Measuring CCD=%s from image=%s' % (imobj.ccdname, imobj.image_filename),t0)
 
@@ -851,6 +851,15 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     ccds['skycounts'] = skymed / imobj.exptime # [electron/pix]
     ccds['skysb'] = skybr   # [mag/arcsec^2]
     t0= ptime('measure-sky',t0)
+
+    # Does this image already have (photometry and astrometric) zeropoints computed?
+    zpt = imobj.get_zeropoint(primhdr, hdr)
+    if zpt is not None:
+        print('Image', imobj, ': using zeropoint %.3f' % zpt)
+        zpscale = NanoMaggies.zeropointToScale(zpt)
+        ccds['sig1'] /= zpscale
+        ccds['zpt'] = zpt
+        return ccds, None
 
     # Load PS1 & Gaia catalogues
 
@@ -1153,7 +1162,6 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         ok = (phot.instpsfmag != 0)
         phot.psfmag[ok] = phot.instpsfmag[ok] + zptmed
 
-        from tractor.brightness import NanoMaggies
         zpscale = NanoMaggies.zeropointToScale(zptmed)
         ccds['sig1'] /= zpscale
 
