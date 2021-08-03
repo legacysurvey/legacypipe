@@ -129,6 +129,13 @@ def apply_amp_correction_northern(camera, band, expnum, ccdname, mjdobs,
         fitsio.write('amp-corr-image-after-%s-%s-%s.fits' % (camera, expnum, ccdname), img, clobber=True)
         fitsio.write('amp-corr-map-%s-%s-%s.fits' % (camera, expnum, ccdname), corr_map, clobber=True)
 
+def estimate_sky_from_pixels(img):
+    nsigma = 3.
+    clip_vals,_,_ = sigmaclip(img, low=nsigma, high=nsigma)
+    skymed= np.median(clip_vals)
+    skystd= np.std(clip_vals)
+    return skymed, skystd
+
 class LegacySurveyImage(object):
     '''
     A base class containing common code for the images we handle.
@@ -446,6 +453,14 @@ class LegacySurveyImage(object):
         mediv = np.median(invvar[(invvar > 0) * (dq == 0)])
         mediv = self.scale_weight(mediv)
         return (1. / np.sqrt(mediv)) / self.exptime
+
+    def estimate_sky(self, img, invvar, dq, primhdr, imghdr):
+        '''
+        Returns a pixelized (or scalar) estimate of the sky background,
+        plus the median sky and the 'skyrms' scatter around that.
+        '''
+        skymed, skyrms = estimate_sky_from_pixels(img)
+        return skymed, skymed, skyrms
 
     def get_zeropoint(self, primhdr, hdr):
         '''

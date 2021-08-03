@@ -750,14 +750,6 @@ def main(args=None):
     tnow = Time()
     print("TIMING:total %s" % (tnow-tbegin,))
 
-def estimate_sky_from_pixels(img):
-    nsigma = 3.
-    clip_vals,_,_ = sigmaclip(img, low=nsigma, high=nsigma)
-    skymed= np.median(clip_vals)
-    skystd= np.std(clip_vals)
-    skyimg= np.zeros(img.shape) + skymed
-    return skyimg, skymed, skystd
-
 def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     """Computes photometric and astrometric zeropoints for one CCD.
 
@@ -839,16 +831,13 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     t0= ptime('read image',t0)
 
     # Measure the sky brightness and (sky) noise level.
+    sky_img, skymed, skyrms = imobj.estimate_sky(img, invvar, dq, primhdr, hdr)
     zp0 = imobj.nominal_zeropoint(imobj.band)
-
-    # Bunch of sky estimates
-    #print('Computing the sky background.')
-    sky_img, skymed, skyrms = estimate_sky_from_pixels(img)
-    print('sky from median of image = %.2f' % skymed)
     skybr = zp0 - 2.5*np.log10(skymed / imobj.pixscale / imobj.pixscale / imobj.exptime)
-    print('Sky brightness: {:.3f} mag/arcsec^2 (assuming nominal zeropoint)'.format(skybr))
-    ccds['skyrms'] = skyrms / imobj.exptime # e/sec
-    ccds['skycounts'] = skymed / imobj.exptime # [electron/pix]
+    print('Sky level: %.2f count/pix' % skymed)
+    print('Sky brightness: %.3f mag/arcsec^2 (assuming nominal zeropoint)' % skybr)
+    ccds['skyrms'] = skyrms / imobj.exptime
+    ccds['skycounts'] = skymed / imobj.exptime
     ccds['skysb'] = skybr   # [mag/arcsec^2]
     t0= ptime('measure-sky',t0)
 
