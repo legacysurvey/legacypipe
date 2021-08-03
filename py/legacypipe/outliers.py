@@ -69,6 +69,9 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
             th,tw = tim.shape
             my,ty = get_overlapping_region(tim.y0, tim.y0 + th - 1, y0, y0 + mh - 1)
             mx,tx = get_overlapping_region(tim.x0, tim.x0 + tw - 1, x0, x0 + mw - 1)
+            if my == [] or mx == []:
+                # no overlap
+                continue
             # have to shift the "m" slices down by x0,y0
             my = slice(my.start - y0, my.stop - y0)
             mx = slice(mx.start - x0, mx.stop - x0)
