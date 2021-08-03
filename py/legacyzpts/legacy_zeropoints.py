@@ -815,9 +815,10 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     t0= ptime('header-info',t0)
 
     # Quick check for PsfEx file
-    psf = imobj.read_psf_model(0., 0., pixPsf=True)
-    if psf.psfex.sampling == 0.:
-        print('PsfEx model has SAMPLING=0 (PsfEx failed)')
+    try:
+        psf = imobj.read_psf_model(0., 0., pixPsf=True)
+    except RuntimeError as e:
+        print('Failed to read PSF model: %s' % e)
         return None, None
 
     dq,dqhdr = imobj.read_dq(header=True)
