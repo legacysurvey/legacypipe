@@ -220,6 +220,9 @@ class HscImage(LegacySurveyImage):
         zpt = 2.5 * np.log10(flux / self.exptime)
         return zpt
 
+    def estimate_sky(self, img, invvar, dq, primhdr, imghdr):
+        return 0., primhdr['SKYLEVEL'], primhdr['SKYSIGMA']
+
     def read_invvar(self, dq=None, **kwargs):
         # HSC has a VARIANCE map (not a weight map)
         v = self._read_fits(self.wtfn, self.wt_hdu, **kwargs)
