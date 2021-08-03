@@ -25,17 +25,22 @@ class HscImage(LegacySurveyImage):
         # Adjust zeropoint for exposure time
         self.ccdzpt += 2.5 * np.log10(self.exptime)
 
-        # FIXME -- these are just from DECam
+        # Nominal zeropoints
+        # These are used only for "ccdskybr", so are not critical.
+        # These are just from DECam!!
         self.zp0 = dict(
-            g = 26.610,
-            r = 26.818,
-            i = 26.758,
-            z = 26.484,
+            g = 25.001,
+            r = 25.209,
+            # i,Y from DESY1_Stripe82 95th percentiles
+            i = 25.149,
+            z = 24.875,
+            y = 23.712,
         )
         self.k_ext = dict(g = 0.17,
                           r = 0.10,
                           i = 0.08,
                           z = 0.06,
+                          y = 0.058,
                           )
 
         # Sky has already been calibrated out, and Psf is included in the CALEXP file,
