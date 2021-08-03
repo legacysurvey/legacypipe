@@ -14,11 +14,12 @@ These are one file per CCD, with variance maps, flags, WCS, and PsfEx
 models included in BINTABLE HDUs.
 '''
 class HscImage(LegacySurveyImage):
-    def __init__(self, survey, ccd):
-        ccd.plver = 'xxx'
-        ccd.procdate = 'xxx'
-        ccd.plprocid = 'xxx'
-        super().__init__(survey, ccd)
+    def __init__(self, survey, ccd, image_fn=None, image_hdu=0):
+        if ccd is not None:
+            ccd.plver = 'xxx'
+            ccd.procdate = 'xxx'
+            ccd.plprocid = 'xxx'
+        super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu)
         self.dq_hdu = 2
         self.wt_hdu = 3
         # Adjust zeropoint for exposure time
@@ -49,8 +50,8 @@ class HscImage(LegacySurveyImage):
         self.old_single_psffn = None
         self.old_single_skyfn = None
 
-    def get_extension_list(self, fn, debug=False):
-        return [self.image_hdu,]
+    def get_extension_list(self, debug=False):
+        return [1,]
 
     def calibration_good(self, primhdr):
         return True
@@ -84,6 +85,30 @@ class HscImage(LegacySurveyImage):
     def get_ccdname(self, primhdr, hdr):
         return primhdr['DETSER'].strip().upper()
 
+    def get_airmass(self, primhdr, imghdr, ra, dec):
+        return primhdr['BORE-AIRMASS']
+
+    def get_gain(self, primhdr, hdr):
+        return np.mean([primhdr['T_GAIN%i' % i] for i in [1,2,3,4]])
+
+    def get_fwhm(self, primhdr, imghdr):
+        fwhm = primhdr['SEEING']
+        if fwhm == 0.0:
+            psf = self.read_psf_model(0., 0., pixPsf=True)
+            fwhm = psf.fwhm
+            return fwhm
+        # convert from arcsec to pixels (hard-coded pixscale here)
+        fwhm /= 0.168
+
+    def get_propid(self, primhdr):
+        return primhdr['PROP-ID']
+
+    def get_camera(self, primhdr):
+        cam = super().get_camera(primhdr)
+        if cam == 'hyper suprime-cam':
+            cam = 'hsc'
+        return cam
+
     def get_wcs(self, hdr=None):
         from astrometry.util.util import Sip
         if hdr is None:
@@ -100,6 +125,11 @@ class HscImage(LegacySurveyImage):
         #wcs.plver = phdr.get('PLVER', '').strip()
         return wcs
 
+    def read_sky_model(self, **kwargs):
+        from tractor import ConstantSky
+        sky = ConstantSky(0.)
+        return sky
+
     def read_psf_model(self, x0, y0,
                        gaussPsf=False, pixPsf=False, hybridPsf=False,
                        normalizePsf=False, old_calibs_ok=False,
@@ -109,13 +139,15 @@ class HscImage(LegacySurveyImage):
             from tractor import GaussianMixturePSF
             v = psf_sigma**2
             psf = GaussianMixturePSF(1., 0., 0., v, v, 0.)
-            debug('WARNING: using mock PSF:', psf)
             psf.version = '0'
             psf.plver = ''
             return psf
 
         # spatially varying pixelized PsfEx
         from tractor import PsfExModel
+        from astrometry.util.fits import fits_table
+        from tractor import PixelizedPsfEx
+        from legacypipe.image import NormalizedPixelizedPsfEx
 
         fn = self.imgfn
         # PsfEx model information is spread across two BINTABLE hdus,
@@ -159,12 +191,6 @@ class HscImage(LegacySurveyImage):
         bh, bw = psfex.psfbases[0].shape
         psfex.radius = (bh + 1) / 2.
 
-        if normalizePsf:
-            debug('Normalizing PSF')
-            psf = NormalizedPixelizedPsfEx(None, psfex=psfex)
-        else:
-            psf = PixelizedPsfEx(None, psfex=psfex)
-
         # We don't have a FWHM measurement, so hack up a measurement on the first
         # PSF basis image.
         import photutils
@@ -184,6 +210,13 @@ class HscImage(LegacySurveyImage):
         mx = psf0.max()
         hwhm = f(psf0.max() / 2.)
         fwhm = hwhm * 2. * psfex.sampling
+        psfex.fwhm = fwhm
+        print('Measured PsfEx FWHM', fwhm)
+
+        if normalizePsf:
+            psf = NormalizedPixelizedPsfEx(None, psfex=psfex)
+        else:
+            psf = PixelizedPsfEx(None, psfex=psfex)
 
         psf.version = ''
         psf.plver = ''
@@ -198,7 +231,6 @@ class HscImage(LegacySurveyImage):
             from tractor.psf import HybridPixelizedPSF, NCircularGaussianPSF
             psf = HybridPixelizedPSF(psf, cx=w/2., cy=h/2.,
                                      gauss=NCircularGaussianPSF([psf.fwhm / 2.35], [1.]))
-        debug('Using PSF model', psf)
         return psf
 
     def colorterm_ps1_to_observed(self, ps1stars, band):
