@@ -81,8 +81,8 @@ class HscImage(LegacySurveyImage):
     def get_expnum(self, primhdr):
         return primhdr['EXPID']
 
-    def get_fwhm(self, hdr, hdu):
-        return self.primhdr['SEEING']
+    def get_ccdname(self, primhdr, hdr):
+        return primhdr['DETSER'].strip().upper()
 
     def get_wcs(self, hdr=None):
         from astrometry.util.util import Sip

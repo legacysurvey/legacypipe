@@ -220,7 +220,7 @@ class LegacySurveyImage(object):
                 #print('Image info:', info)
                 self.height,self.width = info['dims']
                 self.hdu = info['hdunum'] - 1
-                self.ccdname = hdr['EXTNAME'].strip().upper()
+                self.ccdname = self.get_ccdname(primhdr, hdr)
                 self.pixscale = 3600. * np.sqrt(np.abs(hdr['CD1_1'] * hdr['CD2_2'] -
                                                        hdr['CD1_2'] * hdr['CD2_1']))
                 self.fwhm = self.get_fwhm(primhdr, hdr)
@@ -404,6 +404,9 @@ class LegacySurveyImage(object):
         cam = primhdr['INSTRUME']
         cam = cam.lower()
         return cam
+
+    def get_ccdname(self, primhdr, hdr):
+        return hdr['EXTNAME'].strip().upper()
 
     def get_gain(self, primhdr, hdr):
         return primhdr['GAIN']
