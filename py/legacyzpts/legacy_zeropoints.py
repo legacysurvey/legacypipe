@@ -57,7 +57,7 @@ def read_lines(fn):
     lines=fin.readlines()
     fin.close()
     if len(lines) < 1: raise ValueError('lines not read properly from %s' % fn)
-    return np.array( list(np.char.strip(lines)) )
+    return list(np.char.strip(lines))
 
 def astropy_to_astrometry_table(t):
     T = fits_table()
@@ -594,9 +594,13 @@ def get_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,\
                                      description='Generate a legacypipe-compatible (survey) CCDs file \
                                                   from a set of reduced imaging.')
+
+    parser.add_argument('images', metavar='image-filename', nargs='*',
+                        help='Image filenames to process (prepend "@" for a text file containing a list of filenames)')
+
     parser.add_argument('--camera',choices=CAMERAS, action='store',required=True)
-    parser.add_argument('--image',action='store',default=None,help='relative path to image starting from decam,bok,mosaicz dir',required=False)
-    parser.add_argument('--image_list',action='store',default=None,help='text file listing multiples images in same was as --image',required=False)
+    parser.add_argument('--image',action='append',default=[],help='relative path to image starting from [survey_dir]/images/',required=False)
+    parser.add_argument('--image_list',action='append',default=[],help='text file listing multiples images like --image',required=False)
     parser.add_argument('--survey-dir', type=str, default=None,
                         help='Override the $LEGACY_SURVEY_DIR environment variable')
     parser.add_argument('--outdir', type=str, default=None, help='Where to write photom and annotated files; default [survey_dir]/zpt')
@@ -642,10 +646,19 @@ def main(args=None):
         import time
         print('Startup time:', time.time()-t0, 'seconds')
 
-    if args.image_list:
-        image_list = read_lines(args.image_list)
-    elif args.image:
-        image_list = [args.image]
+    image_list = []
+    # add image specified with --image
+    args.images.extend(args.image)
+    # add image lists specified with --image_list
+    args.images.extend(['@'+fn for fn in args.image_list])
+    for fn in args.images:
+        if fn.startswith('@') and os.path.exists(fn[1:]):
+            ims = read_lines(fn)
+            # drop empty lines
+            ims = [fn for fn in ims if len(fn)]
+            image_list.extend(ims)
+            continue
+        image_list.append(fn)
 
     ''' Produce zeropoints for all CP images in image_list
     image_list -- iterable list of image filenames
