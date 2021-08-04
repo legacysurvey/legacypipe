@@ -627,6 +627,8 @@ def get_parser():
                         help='The base directory to search for survey-ccds files for subtracting star halos before doing sky calibration.')
     parser.add_argument('--calibdir', default=None,
                         help='if None will use LEGACY_SURVEY_DIR/calib, e.g. /global/cscratch1/sd/desiproc/dr5-new/calib')
+    parser.add_argument('--no-check-photom', dest='check_photom', action='store_false',
+                        help='Do not check for photom file when deciding if this file is done or not.')
     parser.add_argument('--threads', default=None, type=int,
                         help='Multiprocessing threads (parallel by HDU)')
     parser.add_argument('--quiet', default=False, action='store_true', help='quiet down')
@@ -723,7 +725,8 @@ def main(args=None):
     version_header.add_record(dict(name='CMDLINE', value=command_line,
                                    comment='runbrick command-line'))
     measureargs['version_header'] = version_header
-    
+    check_photom = measureargs.pop('check_photom')
+
     for ii, imgfn in enumerate(image_list):
         print('Working on image {}/{}: {}'.format(ii+1, nimage, imgfn))
 
@@ -754,7 +757,7 @@ def main(args=None):
                                    measure.plver, measure.plprocid,
                                    ext=1, quiet=quiet)
 
-        if ann_ok and phot_ok and psf_ok and sky_ok:
+        if ann_ok and (phot_ok or not(check_photom)) and psf_ok and sky_ok:
             print('Already finished: {}'.format(F.annfn))
             continue
 

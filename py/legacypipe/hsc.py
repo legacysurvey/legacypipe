@@ -31,14 +31,18 @@ class HscImage(LegacySurveyImage):
         self.zp0 = dict(
             g = 25.001,
             r = 25.209,
+            r2 = 25.209,
             # i,Y from DESY1_Stripe82 95th percentiles
             i = 25.149,
+            i2 = 25.149,
             z = 24.875,
             y = 23.712,
         )
         self.k_ext = dict(g = 0.17,
                           r = 0.10,
+                          r2 = 0.10,
                           i = 0.08,
+                          i2 = 0.08,
                           z = 0.06,
                           y = 0.058,
                           )
@@ -54,6 +58,10 @@ class HscImage(LegacySurveyImage):
         self.old_merged_psffns = []
         self.old_single_psffn = None
         self.old_single_skyfn = None
+
+    @classmethod
+    def get_nominal_pixscale(cls):
+        return 0.168
 
     def get_extension_list(self, debug=False):
         return [1,]
@@ -103,7 +111,7 @@ class HscImage(LegacySurveyImage):
             fwhm = psf.fwhm
             return fwhm
         # convert from arcsec to pixels (hard-coded pixscale here)
-        fwhm /= 0.168
+        fwhm /= HscImage.get_nominal_pixscale()
 
     def get_propid(self, primhdr):
         return primhdr['PROP-ID']
