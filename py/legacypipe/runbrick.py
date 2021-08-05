@@ -703,10 +703,6 @@ def stage_srcs(pixscale=None, targetwcs=None,
     _add_stage_version(version_header, 'SRCS', 'srcs')
     tlast = Time()
 
-    debug('Running source detection at', nsigma, 'sigma')
-    SEDs = survey.sed_matched_filters(bands)
-    info('SEDs:', SEDs)
-    
     avoid_map = None
     avoid_xyr = []
     if refstars:
@@ -790,7 +786,6 @@ def stage_srcs(pixscale=None, targetwcs=None,
 
     # SED-matched detections
     record_event and record_event('stage_srcs: SED-matched')
-
     debug('Running source detection at', nsigma, 'sigma')
     SEDs = survey.sed_matched_filters(bands)
 
