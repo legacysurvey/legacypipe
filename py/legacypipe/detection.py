@@ -378,6 +378,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     sedsn   = sedmap * np.sqrt(sediv)
     del sedmap
 
+    peaks = (sedsn > nsigma)
+
     # Label the N-sigma blobs at this point... we'll use this to build
     # "sedhot", which in turn is used to define the blobs that we will
     # optimize simultaneously.  This also determines which pixels go
@@ -389,8 +391,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 
     if hotmap_only:
         return hotblobs
-
-    peaks = (sedsn > nsigma)
 
     # zero out the edges -- larger margin here?
     peaks[0 ,:] = 0
