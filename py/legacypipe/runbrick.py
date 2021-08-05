@@ -29,6 +29,7 @@ To see the code we run on each "blob" of pixels, see "oneblob.py".
 from __future__ import print_function
 import sys
 import os
+import warnings
 
 import numpy as np
 
@@ -199,7 +200,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         ccds.cut(ccds.ccd_cuts == 0)
         debug(len(ccds), 'CCDs survive cuts')
     else:
-        print('WARNING: not applying CCD cuts')
+        warnings.warn('Not applying CCD cuts')
 
     # Cut on bands to be used
     ccds.cut(np.array([b in bands for b in ccds.filter]))
@@ -286,7 +287,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     for tim in tims:
         for cal,ver in [('sky', tim.skyver), ('psf', tim.psfver)]:
             if tim.plver.strip() != ver[1].strip():
-                print(('Warning: image "%s" PLVER is "%s" but %s calib was run'
+                warnings.warn(('Image "%s" PLVER is "%s" but %s calib was run'
                       +' on PLVER "%s"') % (str(tim), tim.plver, cal, ver[1]))
 
     # Add additional columns to the CCDs table.
@@ -601,7 +602,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         for b,allmask in zip(bands, C.allmasks):
             bitname = 'ALLMASK_' + b.upper()
             if not bitname in MASKBITS:
-                print('Skipping ALLMASK for band', b)
+                warnings.warn('Skipping ALLMASK for band', b)
                 continue
             maskbits |= (MASKBITS[bitname] * (allmask > 0))
         # omitting maskbits header cards, bailout, & WISE
@@ -704,7 +705,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
 
     debug('Running source detection at', nsigma, 'sigma')
     SEDs = survey.sed_matched_filters(bands)
-    print('SEDs:', SEDs)
+    info('SEDs:', SEDs)
     
     avoid_map = None
     avoid_xyr = []
@@ -915,7 +916,6 @@ def stage_srcs(pixscale=None, targetwcs=None,
             BT.blob_srcs.append(len(srcs))
         BT.to_np_arrays()
         BT.writeto('blob-stats-dilate%i.fits' % blob_dilate)
-        print('Done!')
         sys.exit(0)
 
     ccds.co_sky = np.zeros(len(ccds), np.float32)
@@ -1038,14 +1038,14 @@ def stage_fitblobs(T=None,
         for x,y in blobxy:
             x,y = int(x), int(y)
             if x < 0 or x >= W or y < 0 or y >= H:
-                print('Warning: clipping blob x,y to brick bounds', x,y)
+                warnings.warn('Clipping blob x,y to brick bounds', x,y)
                 x = np.clip(x, 0, W-1)
                 y = np.clip(y, 0, H-1)
             blob = blobmap[y,x]
             if blob >= 0:
                 keepblobs.append(blob)
             else:
-                print('WARNING: blobxy', x,y, 'is not in a blob!')
+                warnings.warn('Blobxy', x,y, 'is not in a blob!')
         keepblobs = np.unique(keepblobs)
 
     if blobid is not None:
@@ -1297,8 +1297,6 @@ def stage_fitblobs(T=None,
             src.brightness.setParams([0] * src.brightness.numberOfParams())
             dup_cat.append(src)
     if T_refbail:
-        print('T_refbail:')
-        T_refbail.about()
         Tall.append(T_refbail)
         dup_cat.extend([None] * len(T_refbail))
     if len(Tall) > 1:
@@ -1848,8 +1846,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     _add_stage_version(version_header, 'COAD', 'coadds')
     tlast = Time()
 
-    print('stage_coadds: survey.allbands:', survey.allbands)
-    
     # Write per-brick CCDs table
     primhdr = fitsio.FITSHDR()
     for r in version_header.records():
@@ -1864,7 +1860,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         from astrometry.util.plotutils import dimshow
         cat_init = [src for it,src in zip(T.iterative, cat) if not(it)]
         cat_iter = [src for it,src in zip(T.iterative, cat) if it]
-        print(len(cat_init), 'initial sources and', len(cat_iter), 'iterative')
+        info(len(cat_init), 'initial sources and', len(cat_iter), 'iterative')
         mods_init = mp.map(_get_mod, [(tim, cat_init) for tim in tims])
         mods_iter = mp.map(_get_mod, [(tim, cat_iter) for tim in tims])
         coimgs_init,_ = quick_coadds(tims, bands, targetwcs, images=mods_init)
@@ -2409,7 +2405,7 @@ def stage_wise_forced(
     if maskbits is not None:
         incluster = (maskbits & MASKBITS['CLUSTER'] > 0)
         if np.any(incluster):
-            print('Checking for sources inside CLUSTER mask')
+            info('Checking for sources inside CLUSTER mask')
             ra  = np.array([src.getPosition().ra  for src in cat])
             dec = np.array([src.getPosition().dec for src in cat])
             ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
@@ -2418,7 +2414,7 @@ def stage_wise_forced(
             I = np.flatnonzero(ok * (xx >= 0)*(xx < W) * (yy >= 0)*(yy < H))
             if len(I):
                 Icluster = I[incluster[yy[I], xx[I]]]
-                print('Found', len(Icluster), 'of', len(cat), 'sources inside CLUSTER mask')
+                info('Found', len(Icluster), 'of', len(cat), 'sources inside CLUSTER mask')
                 do_phot[Icluster] = False
     Nskipped = len(T) - np.sum(do_phot)
 
@@ -2515,7 +2511,7 @@ def stage_wise_forced(
             print('Failed to read checkpoint file', wise_checkpoint_filename)
             traceback.print_exc()
         keepargs = [(key,a) for (key,a) in runargs if not key in photresults]
-        print('Running', len(keepargs), 'of', len(runargs), 'images not in checkpoint')
+        info('Running', len(keepargs), 'of', len(runargs), 'images not in checkpoint')
         runargs = keepargs
 
     # Run the forced photometry!
@@ -2598,7 +2594,7 @@ def stage_wise_forced(
         for i,p in enumerate(phots[:len(args)]):
             if p is None:
                 (wcat,tiles,band) = args[i][:3]
-                print('"None" result from WISE forced phot:', tiles, band)
+                info('"None" result from WISE forced phot:', tiles, band)
                 continue
             if unwise_coadds:
                 wise_models.extend(p.models)
@@ -3934,7 +3930,7 @@ def main(args=None):
             args=(os.getpid(), os.getppid(), ps_file, ps_shutdown, ps_queue),
             name='run_ps')
         ps_thread.daemon = True
-        print('Starting thread to run "ps"')
+        info('Starting thread to run "ps"')
         ps_thread.start()
 
     if rgb_stretch is not None:
@@ -3967,10 +3963,10 @@ def main(args=None):
     if ps_file is not None:
         # Try to shut down ps thread gracefully
         ps_shutdown.set()
-        print('Attempting to join the ps thread...')
+        info('Attempting to join the ps thread...')
         ps_thread.join(1.0)
         if ps_thread.is_alive():
-            print('ps thread is still alive.')
+            info('ps thread is still alive.')
 
     return rtn
 
