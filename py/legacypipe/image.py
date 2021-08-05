@@ -1237,8 +1237,8 @@ class LegacySurveyImage(object):
             break
         if Ti is None:
             raise RuntimeError('Failed to find PsfEx model in files: %s' % ', '.join(tryfns))
-        if Ti.sampling == 0.0:
-            raise RuntimeError('PsfEx failed: sampling=0 in file %s' % fn)
+        if Ti.psf_samp == 0.0:
+            raise RuntimeError('PsfEx failed: sampling (psf_samp) = 0 in file %s' % fn)
         # Remove any padding
         degree = Ti.poldeg1
         # number of terms in polynomial
