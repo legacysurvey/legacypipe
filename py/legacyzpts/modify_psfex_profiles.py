@@ -1,12 +1,15 @@
+# srun -N 1 -C haswell -t 04:00:00 -q interactive python modify_psfex_profiles.py
+
 from __future__ import division, print_function
 import os, warnings
-#import matplotlib.pyplot as plt
 import numpy as np
 from astropy.table import Table
 import fitsio
 from astropy.io import fits
+from multiprocessing import Pool
 
 from scipy.optimize import curve_fit
+
 
 def get_frac_moffat(r, alpha, beta):
     """
@@ -14,6 +17,7 @@ def get_frac_moffat(r, alpha, beta):
     """
     frac = 1 - alpha**(2*(beta-1))*(alpha**2 + r**2)**(1-beta)
     return(frac)
+
 
 def get_sb_moffat(r, alpha, beta):
     """
@@ -23,6 +27,7 @@ def get_sb_moffat(r, alpha, beta):
     i = (beta-1)/(np.pi * alpha**2)*(1 + (r/alpha)**2)**(-beta)
     return i
 
+
 def get_sb_moffat_plus_power_law(r, alpha1, beta1, plexp2, weight2):
     """
     Calculate the surface brightness of light at radius r of the sum of two Moffat profiles.
@@ -31,6 +36,7 @@ def get_sb_moffat_plus_power_law(r, alpha1, beta1, plexp2, weight2):
     i = (beta1-1)/(np.pi * alpha1**2)*(1 + (r/alpha1)**2)**(-beta1) \
         + weight2 *r**(plexp2)
     return i
+
 
 def get_sb_double_moffat(r, alpha1, beta1, alpha2, beta2, weight2):
     """
@@ -42,6 +48,7 @@ def get_sb_double_moffat(r, alpha1, beta1, alpha2, beta2, weight2):
     return i
 
 
+n_processes = 32
 test_q = False  # only process a small number of exposures
 
 output_dir = '/global/cfs/projectdirs/cosmo/work/legacysurvey/dr9/calib/patched-psfex'
@@ -53,6 +60,7 @@ radius_lim3, radius_lim4 = 7., 8.
 params = {
 'g_weight2': 0.00045, 'g_plexp2': -2.,
 'r_weight2': 0.00033, 'r_plexp2': -2.,
+'i_weight2': 0.00033, 'i_plexp2': -2.,
 'z_alpha2': 17.650, 'z_beta2': 1.7, 'z_weight2': 0.0145,
 }
 
@@ -79,9 +87,8 @@ if test_q:
 else:
     exp_index_list = np.arange(len(unique_expnum))
 
-# loop over the unique exposures
-# for exp_index in [0]:
-for exp_index in exp_index_list:
+
+def modify_psfex(exp_index):
 
     mask = ccd['expnum']==unique_expnum[exp_index]
     band = ccd['filter'][mask][0]
@@ -94,8 +101,7 @@ for exp_index in exp_index_list:
 
     output_path = os.path.join(output_dir, psfex_filename_new)
     if os.path.isfile(output_path):
-        #raise ValueError
-        continue
+        return None
 
     hdu = fits.open(psfex_path)
     data = Table(hdu[1].data)
@@ -121,7 +127,7 @@ for exp_index in exp_index_list:
             params_to_use = params_outlier
         else:
             params_to_use = params
-
+            
         if band!='z':
             plexp2, weight2 = params_to_use[band+'_plexp2'], params_to_use[band+'_weight2']
         else:
@@ -161,10 +167,10 @@ for exp_index in exp_index_list:
             try:
                 popt, pcov = curve_fit(get_sb_moffat, radius[mask], psfi_flat[mask]/(pixscale**2), bounds=((0, 1.8), np.inf))
                 alpha, beta = popt
-            except:
+            except RuntimeError:
                 print("Error: "+image_filename+", "+ccdname+".")
                 print("Error: fit failed to converge.")
-                alpha, beta = 0.8, 2.2 # using default values
+                alpha, beta = 0.8, 2.2  # using default values
                 data['failure'][ccd_index] = True
 
         #print('{} {} alpha, beta = {:.3f}, {:.3f}'.format(ccdname, band, alpha, beta))
@@ -243,3 +249,15 @@ for exp_index in exp_index_list:
     if not os.path.exists(os.path.dirname(output_path)):
         os.makedirs(os.path.dirname(output_path))
     data.write(output_path)
+
+    return None
+
+
+def main():
+    
+    with Pool(processes=n_processes) as pool:
+        res = pool.map(modify_psfex, exp_index_list)
+
+if __name__=="__main__":
+    main()
+
