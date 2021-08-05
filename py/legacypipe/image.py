@@ -130,6 +130,7 @@ def apply_amp_correction_northern(camera, band, expnum, ccdname, mjdobs,
         fitsio.write('amp-corr-map-%s-%s-%s.fits' % (camera, expnum, ccdname), corr_map, clobber=True)
 
 def estimate_sky_from_pixels(img):
+    from scipy.stats import sigmaclip
     nsigma = 3.
     clip_vals,_,_ = sigmaclip(img, low=nsigma, high=nsigma)
     skymed= np.median(clip_vals)
