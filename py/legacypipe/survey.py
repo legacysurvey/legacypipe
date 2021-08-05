@@ -1022,6 +1022,10 @@ class LegacySurveyData(object):
             return swap(os.path.join(basedir, 'metrics', brickpre,
                                      'blobs-%s.fits.gz' % (brick)))
 
+        elif filetype in ['blobmask']:
+            return swap(os.path.join(basedir, 'metrics', brickpre,
+                                     'blobmask-%s.fits.gz' % (brick)))
+
         elif filetype in ['maskbits']:
             return swap(os.path.join(codir,
                                      '%s-%s-%s.fits.fz' % (sname, brick, filetype)))

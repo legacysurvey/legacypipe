@@ -44,6 +44,7 @@ from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper, find_
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 
 from legacypipe.fit_on_coadds import stage_fit_on_coadds
+from legacypipe.blobmask import stage_blobmask
 from legacypipe.galex import stage_galex_forced
 
 import logging
@@ -3364,6 +3365,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         'srcs': 'halos',
 
         # fitblobs: see below
+        'blobmask': 'halos',
 
         'coadds': 'fitblobs',
 
