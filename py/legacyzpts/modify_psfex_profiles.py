@@ -53,6 +53,7 @@ radius_lim3, radius_lim4 = 7., 8.
 params = {
 'g_weight2': 0.00045, 'g_plexp2': -2.,
 'r_weight2': 0.00033, 'r_plexp2': -2.,
+'i_weight2': 0.00033, 'i_plexp2': -2.,
 'z_alpha2': 17.650, 'z_beta2': 1.7, 'z_weight2': 0.0145,
 }
 
