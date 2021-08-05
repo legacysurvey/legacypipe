@@ -693,12 +693,10 @@ def stage_srcs(pixscale=None, targetwcs=None,
     sources are also split into "blobs" of overlapping pixels.  Each
     of these blobs will be processed independently.
     '''
-    from functools import reduce
     from tractor import Catalog
     from legacypipe.detection import (detection_maps,
                         run_sed_matched_filters, segment_and_group_sources)
     from scipy.ndimage.morphology import binary_dilation
-    from scipy.ndimage.measurements import label
 
     record_event and record_event('stage_srcs: starting')
     _add_stage_version(version_header, 'SRCS', 'srcs')
@@ -1428,7 +1426,9 @@ def merge_hot_satur(hot, saturated_pix):
     blobs across, eg, bleed trails and saturated cores.
     Updates *hot* in-place.
     '''
+    from functools import reduce
     from scipy.ndimage.measurements import find_objects
+    from scipy.ndimage.measurements import label
     any_saturated = reduce(np.logical_or, saturated_pix)
     #merging = np.zeros_like(any_saturated)
     _,w = any_saturated.shape
@@ -1477,7 +1477,7 @@ def merge_hot_satur(hot, saturated_pix):
     #     plt.title('merged')
     #     ps.savefig()
 
-    hot |= merging
+    #hot |= merging
     return hot
 
 def _get_bailout_mask(blobmap, skipblobs, targetwcs, W, H, brick, blobslices):
