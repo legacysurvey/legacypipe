@@ -283,6 +283,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                           saturated_pix=None,
                           veto_map=None,
                           cutonaper=True,
+                          hotmap_only=False,
                           ps=None, rgbimg=None):
     '''
     Runs a single SED-matched detection filter.
@@ -376,23 +377,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     sedmap /= np.maximum(1e-16, sediv)
     sedsn   = sedmap * np.sqrt(sediv)
     del sedmap
-    peaks = (sedsn > nsigma)
-
-    def saddle_level(Y):
-        # Require a saddle that drops by (the larger of) "saddle"
-        # sigma, or 10% of the peak height.
-        # ("saddle" is passed in as an argument to the
-        #  sed_matched_detection function)
-        drop = max(saddle_min, Y * saddle_fraction)
-        return Y - drop
-
-    lowest_saddle = nsigma - saddle_min
-
-    # zero out the edges -- larger margin here?
-    peaks[0 ,:] = 0
-    peaks[:, 0] = 0
-    peaks[-1,:] = 0
-    peaks[:,-1] = 0
 
     # Label the N-sigma blobs at this point... we'll use this to build
     # "sedhot", which in turn is used to define the blobs that we will
@@ -402,6 +386,17 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         blob_dilate = 8
     hotblobs,nhot = label(binary_fill_holes(
             binary_dilation(peaks, iterations=blob_dilate)))
+
+    if hotmap_only:
+        return hotblobs
+
+    peaks = (sedsn > nsigma)
+
+    # zero out the edges -- larger margin here?
+    peaks[0 ,:] = 0
+    peaks[:, 0] = 0
+    peaks[-1,:] = 0
+    peaks[:,-1] = 0
 
     # find pixels that are larger than their 8 neighbors
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[0:-2,1:-1])
@@ -448,6 +443,16 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # We dilate the blobs a bit too, to
     # catch slight differences in centroid positions.
     dilate = 1
+
+    def saddle_level(Y):
+        # Require a saddle that drops by (the larger of) "saddle"
+        # sigma, or 10% of the peak height.
+        # ("saddle" is passed in as an argument to the
+        #  sed_matched_detection function)
+        drop = max(saddle_min, Y * saddle_fraction)
+        return Y - drop
+
+    lowest_saddle = nsigma - saddle_min
 
     # For efficiency, segment at the minimum saddle level to compute
     # slices; the operations described above need only happen within
