@@ -1,3 +1,14 @@
+import numpy as np
+
+import logging
+logger = logging.getLogger('legacypipe.blobmask')
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
+
 def stage_blobmask(targetwcs=None,
                    W=None,H=None,
                    bands=None, ps=None, tims=None,
@@ -11,8 +22,10 @@ def stage_blobmask(targetwcs=None,
                    blob_dilate=None,
                    **kwargs):
     from functools import reduce
-    from legacypipe.detection import detection_maps, sed_matched_detection
     from scipy.ndimage.morphology import binary_dilation
+    from legacypipe.detection import detection_maps, sed_matched_detection, merge_hot_satur
+    from legacypipe.runbrick import _add_stage_version
+    from legacypipe.utils import copy_header_with_wcs
 
     record_event and record_event('stage_blobmask: starting')
     _add_stage_version(version_header, 'BLOBMASK', 'blobmask')
@@ -52,7 +65,7 @@ def stage_blobmask(targetwcs=None,
                         comment='LegacySurveys image type'))
     with survey.write_output('blobmask', brick=brickname,
                              shape=hot.shape) as out:
-        out.fits.write(hot, header=hdr)
+        out.fits.write(hot.astype(np.uint8), header=hdr)
     # del blob
 
     keys = ['hot', 'saturated_pix', 'version_header', ]

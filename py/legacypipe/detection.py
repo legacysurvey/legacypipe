@@ -386,11 +386,10 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # into the fitting!
     if blob_dilate is None:
         blob_dilate = 8
-    hotblobs,nhot = label(binary_fill_holes(
-            binary_dilation(peaks, iterations=blob_dilate)))
-
+    hotblobs = binary_fill_holes(binary_dilation(peaks, iterations=blob_dilate))
     if hotmap_only:
         return hotblobs
+    hotblobs,nhot = label(hotblobs)
 
     # zero out the edges -- larger margin here?
     peaks[0 ,:] = 0
@@ -918,3 +917,63 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
 
     assert(len(blobsrcs) == len(blobslices))
     return blobmap, blobsrcs, blobslices
+
+def merge_hot_satur(hot, saturated_pix):
+    '''
+    Finds "hot" pixels that are separated by masked pixels, to connect
+    blobs across, eg, bleed trails and saturated cores.
+    Updates *hot* in-place.
+    '''
+    from functools import reduce
+    from scipy.ndimage.measurements import find_objects
+    from scipy.ndimage.measurements import label
+    any_saturated = reduce(np.logical_or, saturated_pix)
+    #merging = np.zeros_like(any_saturated)
+    _,w = any_saturated.shape
+    # All our cameras have bleed trails that go along image rows.
+    # We go column by column, checking whether blobs of "hot" pixels
+    # get joined up when merged with SATUR pixels.
+    for i in range(w):
+        col = hot[:,i]
+        cblobs,nc = label(col)
+        col = np.logical_or(col, any_saturated[:,i])
+        cblobs2,nc2 = label(col)
+        if nc2 < nc:
+            # at least one pair of blobs merged together
+            # Find merged blobs:
+            # "cblobs2" is a map from pixels to merged blob number.
+            # look up which merged blob each un-merged blob belongs to.
+            slcs = find_objects(cblobs)
+            from collections import Counter
+            counts = Counter()
+            for slc in slcs:
+                (slc,) = slc
+                mergedblob = cblobs2[slc.start]
+                counts[mergedblob] += 1
+            slcs2 = find_objects(cblobs2)
+            for blob,n in counts.most_common():
+                if n == 1:
+                    break
+                (slc,) = slcs2[blob-1]
+                #merging[slc, i] = True
+                hot[slc, i] = True
+
+    # if plots:
+    #     #import pylab as plt
+    #     from astrometry.util.plotutils import dimshow
+    #     plt.clf()
+    #     plt.subplot(1,2,1)
+    #     dimshow((hot*1) + (any_saturated*1), vmin=0, vmax=2, cmap='hot')
+    #     plt.title('hot + saturated')
+    #     ps.savefig()
+    #     plt.clf()
+    #     plt.subplot(1,2,1)
+    #     dimshow(merging, vmin=0, vmax=1, cmap='hot')
+    #     plt.title('merging')
+    #     plt.subplot(1,2,2)
+    #     dimshow(np.logical_or(hot, merging), vmin=0, vmax=1, cmap='hot')
+    #     plt.title('merged')
+    #     ps.savefig()
+
+    #hot |= merging
+    return hot

@@ -819,7 +819,7 @@ def _make_coadds_plots_1(im, band, mods, mo, iv, unweighted,
     thisimg = np.zeros((H,W), np.float32)
     thisimg[Yo,Xo] = im
     rgb = get_rgb([thisimg], [band])
-    iplane = dict(g=2, r=1, z=0)[band]
+    iplane = dict(g=2, r=1, i=0, z=0)[band]
     rgbimg = rgb[:,:,iplane]
     plt.imshow(rgbimg, interpolation='nearest', origin='lower', cmap='gray')
     plt.xticks([]); plt.yticks([])
