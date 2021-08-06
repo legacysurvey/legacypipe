@@ -502,8 +502,7 @@ def make_coadds(tims, bands, targetwcs,
                 dx = (fx - ix).astype(np.float32)
                 dy = (fy - iy).astype(np.float32)
                 copsf = np.zeros(coph*copw, np.float32)
-                rtn = lanczos3_interpolate(ix, iy, dx, dy, [copsf], [patch])
-                assert(rtn == 0)
+                lanczos3_interpolate(ix, iy, dx, dy, [copsf], [patch])
                 copsf = copsf.reshape((coph,copw))
                 copsf /= copsf.sum()
                 if plots:
