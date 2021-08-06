@@ -51,8 +51,13 @@ def get_sb_double_moffat(r, alpha1, beta1, alpha2, beta2, weight2):
 n_processes = 32
 test_q = False  # only process a small number of exposures
 
-output_dir = '/global/cfs/projectdirs/cosmo/work/legacysurvey/dr9/calib/patched-psfex'
-surveyccd_path = '/global/cfs/projectdirs/cosmo/work/legacysurvey/dr9/survey-ccds-decam-dr9-cut.fits.gz'
+base_dir = '/global/cfs/cdirs/cosmo/work/legacysurvey/dr10/'
+input_dir = os.path.join(base_dir, 'calib/psfex')
+output_dir = os.path.join(base_dir, 'calib/patched-psfex')
+surveyccd_path = os.path.join(base_dir, 'survey-ccds-decam-dr10-g-v1.fits')
+
+from legacypipe.survey import get_git_version
+version = get_git_version()
 
 radius_lim1, radius_lim2 = 5.0, 6.0
 radius_lim3, radius_lim4 = 7., 8.
@@ -87,7 +92,6 @@ if test_q:
 else:
     exp_index_list = np.arange(len(unique_expnum))
 
-
 def modify_psfex(exp_index):
 
     mask = ccd['expnum']==unique_expnum[exp_index]
@@ -97,7 +101,7 @@ def modify_psfex(exp_index):
     image_filename = ccd['image_filename'][mask][0]
     psfex_filename = image_filename[:image_filename.find('.fits.fz')]+'-psfex.fits'
     psfex_filename_new = image_filename[:image_filename.find('.fits.fz')]+'-psfex.fits'
-    psfex_path = os.path.join('/global/cfs/projectdirs/cosmo/work/legacysurvey/dr9/calib/psfex', psfex_filename)
+    psfex_path = os.path.join(input_dir, psfex_filename)
 
     output_path = os.path.join(output_dir, psfex_filename_new)
     if os.path.isfile(output_path):
@@ -107,7 +111,7 @@ def modify_psfex(exp_index):
     data = Table(hdu[1].data)
     #print(len(data))
 
-    data['psf_patch_ver'] = 'd683d99'
+    data['psf_patch_ver'] = version
     data['moffat_alpha'] = 0.
     data['moffat_beta'] = 0.
     # sum of the difference between the original and new PSF model (first eigen-image)
@@ -254,7 +258,6 @@ def modify_psfex(exp_index):
 
 
 def main():
-    
     with Pool(processes=n_processes) as pool:
         res = pool.map(modify_psfex, exp_index_list)
 
