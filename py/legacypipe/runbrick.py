@@ -603,7 +603,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         for b,allmask in zip(bands, C.allmasks):
             bitname = 'ALLMASK_' + b.upper()
             if not bitname in MASKBITS:
-                warnings.warn('Skipping ALLMASK for band', b)
+                warnings.warn('Skipping ALLMASK for band %s' % b)
                 continue
             maskbits |= (MASKBITS[bitname] * (allmask > 0))
         # omitting maskbits header cards, bailout, & WISE
@@ -982,14 +982,14 @@ def stage_fitblobs(T=None,
         for x,y in blobxy:
             x,y = int(x), int(y)
             if x < 0 or x >= W or y < 0 or y >= H:
-                warnings.warn('Clipping blob x,y to brick bounds', x,y)
+                warnings.warn('Clipping blob x,y to brick bounds %i,%i' % (x,y))
                 x = np.clip(x, 0, W-1)
                 y = np.clip(y, 0, H-1)
             blob = blobmap[y,x]
             if blob >= 0:
                 keepblobs.append(blob)
             else:
-                warnings.warn('Blobxy', x,y, 'is not in a blob!')
+                warnings.warn('Blobxy %i,%i is not in a blob!' % (x,y))
         keepblobs = np.unique(keepblobs)
 
     if blobid is not None:
