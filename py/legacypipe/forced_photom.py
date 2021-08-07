@@ -219,7 +219,7 @@ def main(survey=None, opt=None, args=None):
     for ccd in ccds:
         args.append((survey,
                      catsurvey_north, catsurvey_south, opt.catalog_resolve_dec_ngc,
-                     ccd, opt, zoomslice, None, ps))
+                     ccd, opt, zoomslice, None, None, ps))
 
     if opt.threads:
         from astrometry.util.multiproc import multiproc
@@ -483,7 +483,7 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     return SGA
 
 def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
-                          ccd, opt, zoomslice, radecpoly, ps):
+                          ccd, opt, zoomslice, radecpoly, outlier_bricks, ps):
     from functools import reduce
     from legacypipe.bits import DQ_BITS
 
@@ -558,9 +558,10 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     # # Outliers masks are computed within a survey (eg north/south
     # # for dr9), and are stored in a brick-oriented way, in the
     # # results directories.
-    bricks = bricks_touching_wcs(chipwcs, survey=survey)
+    if outlier_bricks is None:
+        outlier_bricks = bricks_touching_wcs(chipwcs, survey=survey)
 
-    for b in bricks:
+    for b in outlier_bricks:
         print('Reading outlier mask for brick', b.brickname,
               ':', survey.find_file('outliers_mask', brick=b.brickname, output=False))
         ok = read_outlier_mask_file(survey, [tim], b.brickname, pos_neg_mask=posneg_mask,

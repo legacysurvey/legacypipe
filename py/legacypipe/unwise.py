@@ -288,7 +288,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 dx = (xx - ix).astype(np.float32)
                 dy = (yy - iy).astype(np.float32)
                 psfimg = psfimg.astype(np.float32)
-                rtn = lanczos3_interpolate(ix, iy, dx, dy, [subpsf.flat], [psfimg])
+                lanczos3_interpolate(ix, iy, dx, dy, [subpsf.flat], [psfimg])
 
                 if plots:
                     plt.clf()

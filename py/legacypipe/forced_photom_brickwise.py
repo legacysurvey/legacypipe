@@ -101,7 +101,8 @@ def main():
 
     args = []
     for ccd in ccds:
-        args.append((survey, catsurvey, None, None, ccd, opt, None, radecpoly, None))
+        args.append((survey, catsurvey, None, None, ccd, opt, None, radecpoly,
+                     [brick], None))
 
     from legacypipe.forced_photom import bounce_one_ccd
     if opt.threads:
