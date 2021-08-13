@@ -319,8 +319,9 @@ def measure_image(img_fn, mp, image_dir='images',
             psfex = False
 
     if splinesky or psfex:
+        git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
         imgs = mp.map(run_one_calib, [(img_fn, camera, survey, ext, psfex, splinesky,
-                                       plots, survey_blob_mask, survey_zeropoints)
+                                       plots, survey_blob_mask, survey_zeropoints, git_version)
                                       for ext in extlist])
         from legacyzpts.merge_calibs import merge_splinesky, merge_psfex
         class FakeOpts(object):
@@ -412,7 +413,7 @@ def measure_image(img_fn, mp, image_dir='images',
 
 def run_one_calib(X):
     (img_fn, camera, survey, ext, psfex, splinesky, _, survey_blob_mask,
-     survey_zeropoints) = X
+     survey_zeropoints, git_version) = X
     img = survey.get_image_object(None, camera=camera,
                                   image_fn=img_fn, image_hdu=ext)
 
@@ -461,7 +462,6 @@ def run_one_calib(X):
             else:
                 have_zpt = True
 
-    git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
     ps = None
     img.run_calibs(psfex=do_psf, sky=do_sky, splinesky=True,
                    git_version=git_version, survey=survey, ps=ps,
@@ -742,7 +742,7 @@ def main(args=None):
         else:
             print('No bad exposure file found for camera {}'.format(camera))
 
-    from legacypipe.survey import get_version_header, get_git_version, get_dependency_versions
+    from legacypipe.survey import get_version_header, get_dependency_versions
     release = 10000
     gitver = get_git_version()
     version_header = get_version_header('legacy_zeropoints.py', survey.survey_dir, release,
