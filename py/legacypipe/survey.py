@@ -516,7 +516,12 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                    i =    (0, 3.0 * rgb_stretch_factor),
                    z =    (0, 2.2 * rgb_stretch_factor),
                    N501 = (2, 6.0 * rgb_stretch_factor),
-                   N673 = (1, 3.4 * rgb_stretch_factor))
+                   N673 = (1, 3.4 * rgb_stretch_factor),
+                   # HSC
+                   r2 =    (1, 3.4 * rgb_stretch_factor),
+                   i2 =    (0, 3.0 * rgb_stretch_factor),
+                   y  =    (0, 2.2 * rgb_stretch_factor),
+                   )
     # rgbscales = {'u': 1.5, #1.0,
     #              'g': 2.5,
     #              'r': 1.5,
