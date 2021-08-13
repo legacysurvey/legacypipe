@@ -224,7 +224,9 @@ def measure_image(img_fn, mp, image_dir='images',
                   run_calibs_only=False,
                   run_psf_only=False,
                   just_imobj=False,
-                  survey=None, psfex=True, camera=None, **measureargs):
+                  survey=None, psfex=True, camera=None,
+                  prime_cache=False,
+                  **measureargs):
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
     the FITS extensions for a given set of images.
     '''
@@ -234,6 +236,28 @@ def measure_image(img_fn, mp, image_dir='images',
 
     img = survey.get_image_object(None, camera=camera,
                                   image_fn=img_fn, image_hdu=image_hdu)
+    if prime_cache:
+        import shutil
+        from astrometry.util.file import trymakedirs
+        cacheable = img.get_cacheable_filename_variables()
+        for varname in cacheable:
+            fn = getattr(img, varname, None)
+            if fn is None:
+                continue
+            if not os.path.exists(fn):
+                # source does not exist
+                continue
+            cfn = fn.replace(survey.survey_dir, survey.cache_dir)
+            if os.path.exists(cfn):
+                # destination already exists
+                continue
+            cdir = os.path.dirname(cfn)
+            print('Priming the cache: copying', fn, 'to', cfn)
+            trymakedirs(cdir)
+            shutil.copyfile(fn, cfn)
+
+    img.check_for_cached_files(survey)
+
     if just_imobj:
         return img
 
@@ -603,6 +627,9 @@ def get_parser():
     parser.add_argument('--image_list',action='append',default=[],help='text file listing multiples images like --image',required=False)
     parser.add_argument('--survey-dir', type=str, default=None,
                         help='Override the $LEGACY_SURVEY_DIR environment variable')
+    parser.add_argument('--cache-dir', dest='cache_dir',
+                        help='Directory to check for cached files (for files found in --survey-dir)')
+    parser.add_argument('--prime-cache', default=False, action='store_true', help='Copy image (ooi, ood, oow) files to --cache-dir before starting.')
     parser.add_argument('--outdir', type=str, default=None, help='Where to write photom and annotated files; default [survey_dir]/zpt')
     parser.add_argument('--sdss-photom', default=False, action='store_true',
                         help='Use SDSS rather than PS-1 for photometric cal.')
@@ -695,7 +722,9 @@ def main(args=None):
 
     camera = measureargs['camera']
 
-    survey = LegacySurveyData(survey_dir=measureargs['survey_dir'])
+    cache_dir = measureargs.pop('cache_dir', None)
+    survey = LegacySurveyData(survey_dir=measureargs['survey_dir'],
+                              cache_dir=cache_dir)
     if measureargs.get('calibdir'):
         survey.calib_dir = measureargs['calibdir']
     measureargs.update(survey=survey)

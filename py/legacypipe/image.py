@@ -191,8 +191,18 @@ class LegacySurveyImage(object):
             # Read metadata from image header.
             self.image_filename = image_fn
             self.imgfn = os.path.join(self.survey.get_image_dir(), image_fn)
-            print('Survey image dir:', self.survey.get_image_dir())
-            primhdr = read_primary_header(self.imgfn)
+            # before opening the file, check for a cached copy-- but
+            # we're not going to change self.imgfn because that is
+            # used, eg, in compute_filenames() to get the DQ and
+            # weight filenames, which might not be cached.
+            # The assumption is that check_for_cached_files() will be
+            # called after this constructor, setting all relevant file
+            # variables to any available cached versions.
+            #readfn = survey.check_cache(self.imgfn)
+
+            self.imgfn = survey.check_cache(self.imgfn)
+
+            primhdr = self.read_image_primary_header()
             self.band = self.get_band(primhdr)
             self.propid = self.get_propid(primhdr)
             self.expnum = self.get_expnum(primhdr)
