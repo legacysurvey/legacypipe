@@ -225,7 +225,6 @@ def measure_image(img_fn, mp, image_dir='images',
                   run_psf_only=False,
                   just_imobj=False,
                   survey=None, psfex=True, camera=None,
-                  prime_cache=False,
                   **measureargs):
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
     the FITS extensions for a given set of images.
@@ -236,28 +235,6 @@ def measure_image(img_fn, mp, image_dir='images',
 
     img = survey.get_image_object(None, camera=camera,
                                   image_fn=img_fn, image_hdu=image_hdu)
-    if prime_cache:
-        import shutil
-        from astrometry.util.file import trymakedirs
-        cacheable = img.get_cacheable_filename_variables()
-        for varname in cacheable:
-            fn = getattr(img, varname, None)
-            if fn is None:
-                continue
-            if not os.path.exists(fn):
-                # source does not exist
-                continue
-            cfn = fn.replace(survey.survey_dir, survey.cache_dir)
-            if os.path.exists(cfn):
-                # destination already exists
-                continue
-            cdir = os.path.dirname(cfn)
-            print('Priming the cache: copying', fn, 'to', cfn)
-            trymakedirs(cdir)
-            shutil.copyfile(fn, cfn)
-
-    img.check_for_cached_files(survey)
-
     if just_imobj:
         return img
 
@@ -721,8 +698,9 @@ def main(args=None):
     camera = measureargs['camera']
 
     cache_dir = measureargs.pop('cache_dir', None)
+    prime_cache = measureargs.pop('prime_cache', False)
     survey = LegacySurveyData(survey_dir=measureargs['survey_dir'],
-                              cache_dir=cache_dir)
+                              cache_dir=cache_dir, prime_cache=prime_cache)
     if measureargs.get('calibdir'):
         survey.calib_dir = measureargs['calibdir']
     measureargs.update(survey=survey)
