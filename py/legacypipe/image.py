@@ -183,6 +183,9 @@ class LegacySurveyImage(object):
         '''
         super(LegacySurveyImage, self).__init__()
         self.survey = survey
+        self._fits = None
+        self._primary_header = None
+        self._image_header = None
 
         if ccd is None and image_fn is None:
             raise RuntimeError('Either "ccd" or "image_fn" must be set')
@@ -192,14 +195,10 @@ class LegacySurveyImage(object):
             self.image_filename = image_fn
             self.imgfn = os.path.join(self.survey.get_image_dir(), image_fn)
             # before opening the file, check for a cached copy-- but
-            # we're not going to change self.imgfn because that is
-            # used, eg, in compute_filenames() to get the DQ and
-            # weight filenames, which might not be cached.
-            # The assumption is that check_for_cached_files() will be
-            # called after this constructor, setting all relevant file
-            # variables to any available cached versions.
-            #readfn = survey.check_cache(self.imgfn)
-
+            # note that we reset self.imgfn below, so that compute_filenames()
+            # can do its thing on the original filename.  We assume
+            # check_for_cached_files() will be called after the constructor to pick
+            # up all available cached files.
             self.imgfn = survey.check_cache(self.imgfn)
 
             primhdr = self.read_image_primary_header()
@@ -207,9 +206,6 @@ class LegacySurveyImage(object):
             self.propid = self.get_propid(primhdr)
             self.expnum = self.get_expnum(primhdr)
             self.camera = self.get_camera(primhdr)
-            #self.date_obs = self.primhdr['DATE-OBS']
-            #self.ut = self.get_ut(self.primhdr)
-            #self.obj = self.primhdr['OBJECT']
             namechange = {'date': 'procdate',
                           'mjd-obs': 'mjdobs'}
             for key in ['EXPTIME', 'MJD-OBS', 'HA', 'DATE', 'PLVER', 'PLPROCID']:
@@ -227,7 +223,7 @@ class LegacySurveyImage(object):
             if image_hdu is not None:
                 hdr = self.read_image_header(ext=image_hdu)
                 # Parse ZNAXIS[12] / NAXIS[12] ?
-                info = fitsio.FITS(self.imgfn)[image_hdu].get_info()
+                info = self.read_image_fits()[image_hdu].get_info()
                 #print('Image info:', info)
                 self.height,self.width = info['dims']
                 self.hdu = info['hdunum'] - 1
@@ -243,6 +239,8 @@ class LegacySurveyImage(object):
             self.sig1 = 0.
             self.ccdzpt = 0.
             self.dradec = (0., 0.)
+            # Reset!
+            self.imgfn = os.path.join(self.survey.get_image_dir(), image_fn)
 
         else:
             # Get metadata from ccd table entry.
@@ -328,13 +326,22 @@ class LegacySurveyImage(object):
         assert(self.wtfn != self.imgfn)
 
     def get_extension_list(self, debug=False):
-        F = fitsio.FITS(self.imgfn)
+        F = self.read_image_fits()
         exts = []
         for f in F[1:]:
             exts.append(f.get_extname())
             if debug:
                 break
         return exts
+
+    def read_image_fits(self):
+        '''
+        Returns a fitsio.FITS object for this image file.
+        '''
+        if self._fits is not None:
+            return self._fits
+        self._fits = fitsio.FITS(self.imgfn)
+        return self._fits
 
     def nominal_zeropoint(self, band):
         return self.zp0[band]
@@ -976,14 +983,18 @@ class LegacySurveyImage(object):
         galnorm = np.sqrt(np.sum(galmod**2))
         return galnorm
 
-    def _read_fits(self, fn, hdu, slc=None, header=None, **kwargs):
+    def _read_fits(self, fn, hdu, slc=None, header=None, fitsobj=None, **kwargs):
         if slc is not None:
-            f = fitsio.FITS(fn)[hdu]
+            if fitsobj is None:
+                fitsobj = fitsio.FITS(fn)
+            f = fitsobj[hdu]
             img = f[slc]
             if header:
                 hdr = f.read_header()
                 return (img,hdr)
             return img
+        if fitsobj is not None:
+            return fitsobj[hdu].read(header=header, **kwargs)
         return fitsio.read(fn, ext=hdu, header=header, **kwargs)
 
     def read_image(self, **kwargs):
@@ -1007,7 +1018,8 @@ class LegacySurveyImage(object):
             If `header = True`.
         '''
         debug('Reading image from', self.imgfn, 'hdu', self.hdu)
-        return self._read_fits(self.imgfn, self.hdu, **kwargs)
+        fitsobj = self.read_image_fits()
+        return self._read_fits(self.imgfn, self.hdu, fitsobj=fitsobj, **kwargs)
 
     def get_image_shape(self):
         '''
@@ -1031,7 +1043,10 @@ class LegacySurveyImage(object):
         primary_header : fitsio header
             The FITS header
         '''
-        return read_primary_header(self.imgfn)
+        if self._primary_header is not None:
+            return self._primary_header
+        self._primary_header = self.read_image_fits().read_header()
+        return self._primary_header
 
     def read_image_header(self, **kwargs):
         '''
@@ -1043,7 +1058,10 @@ class LegacySurveyImage(object):
             The FITS header
         '''
         print('Reading', self.imgfn, 'ext', self.hdu)
-        return fitsio.read_header(self.imgfn, ext=self.hdu)
+        if self._image_header is not None:
+            return self._image_header
+        self._image_header = self.read_image_fits()[self.hdu].read_header()
+        return self._image_header
 
     def read_dq(self, **kwargs):
         '''
@@ -1304,7 +1322,7 @@ class LegacySurveyImage(object):
         # For FITS files that are not actually fpack'ed, funpack -E
         # fails.  Check whether actually fpacked.
         fcopy = False
-        hdr = fitsio.read_header(imgfn, ext=imghdu)
+        hdr = self.read_image_header()
         if not ((hdr['XTENSION'] == 'BINTABLE') and hdr.get('ZIMAGE', False)):
             debug('Image %s, HDU %i is not fpacked; just imcopying.' %
                   (imgfn,  imghdu))
