@@ -311,6 +311,13 @@ class LegacySurveyImage(object):
         # for debugging purposes
         self.print_imgpath = '/'.join(self.imgfn.split('/')[-5:])
 
+    # For pickling
+    def __getstate__(self):
+        # Can't pickle our cached _fits item.
+        d = self.__dict__.copy()
+        d['_fits'] = None
+        return d
+
     def override_ccd_table_types(self):
         return {}
 

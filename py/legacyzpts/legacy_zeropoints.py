@@ -735,7 +735,8 @@ def main(args=None):
         F = outputFns(imgfn, outdir, camera, image_dir=survey.get_image_dir(),
                       debug=measureargs['debug'])
 
-        img = survey.get_image_object(None, camera=measureargs['camera'], image_fn=F.imgfn)
+        img = survey.get_image_object(None, camera=measureargs['camera'],
+                                      image_fn=F.imgfn, image_hdu=None)
         psffn = survey.find_file('psf', img=img, use_cache=False)
         skyfn = survey.find_file('sky', img=img, use_cache=False)
 
