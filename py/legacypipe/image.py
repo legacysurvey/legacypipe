@@ -6,7 +6,6 @@ import fitsio
 from tractor.splinesky import SplineSky
 from tractor import PixelizedPsfEx, PixelizedPSF
 from astrometry.util.fits import fits_table
-from legacypipe.utils import read_primary_header
 from legacypipe.bits import DQ_BITS
 
 import logging
@@ -1045,7 +1044,7 @@ class LegacySurveyImage(object):
         '''
         if self._primary_header is not None:
             return self._primary_header
-        self._primary_header = self.read_image_fits().read_header()
+        self._primary_header = self.read_image_fits()[0].read_header()
         return self._primary_header
 
     def read_image_header(self, **kwargs):
@@ -2110,7 +2109,7 @@ def validate_version(fn, filetype, expnum, plver, plprocid,
     elif filetype in ['primaryheader', 'header']:
         if data is None:
             if filetype == 'primaryheader':
-                hdr = read_primary_header(fn)
+                hdr = fitsio.read_header(fn)
             else:
                 hdr = fitsio.FITS(fn)[ext].read_header()
         else:

@@ -3,7 +3,6 @@ import warnings
 import numpy as np
 
 from legacypipe.image import LegacySurveyImage, validate_version
-from legacypipe.utils import read_primary_header
 
 import logging
 logger = logging.getLogger('legacypipe.decam')
@@ -185,7 +184,8 @@ class DecamImage(LegacySurveyImage):
         Called by get_tractor_image() to map the results from read_dq
         into a bitmask.
         '''
-        primhdr = read_primary_header(self.dqfn)
+        import fitsio
+        primhdr = fitsio.read_header(self.dqfn)
         plver = primhdr['PLVER']
         if decam_has_dq_codes(plver):
             from legacypipe.image import remap_dq_cp_codes

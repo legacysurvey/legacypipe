@@ -157,11 +157,6 @@ def find_unique_pixels(wcs, W, H, unique, ra1,ra2,dec1,dec2):
             break
     return unique
 
-def read_primary_header(fn):
-    # fitsio 1.0.1 sped up header-reading, so we don't need to do it ourselves any more.
-    import fitsio
-    return fitsio.read_header(fn)
-
 def copy_header_with_wcs(source_header, wcs):
     import fitsio
     hdr = fitsio.FITSHDR()
