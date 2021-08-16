@@ -72,22 +72,6 @@ class HscImage(LegacySurveyImage):
     def has_astrometric_calibration(self, ccd):
         return True
 
-    '''
-    def get_psfex_unmerged_filename(self):
-        basefn = os.path.basename(self.fn_base)
-        basedir = os.path.dirname(self.fn_base)
-        base = basefn.split('.')[0]
-        fn = base + '-psfex.fits'
-        fn = os.path.join(self.calibdir, 'psfex-single', basedir, base, fn)
-        return fn
-    def get_splinesky_unmerged_filename(self):
-        basefn = os.path.basename(self.fn_base)
-        basedir = os.path.dirname(self.fn_base)
-        base = basefn.split('.')[0]
-        fn = base + '-splinesky.fits'
-        fn = os.path.join(self.calibdir, 'sky-single', basedir, base, fn)
-        return fn
-    '''
     def compute_filenames(self):
         self.dqfn = self.imgfn
         self.wtfn = self.imgfn

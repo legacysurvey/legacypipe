@@ -897,8 +897,8 @@ class LegacySurveyData(object):
         return sed_matched_filters(bands)
 
     def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s',
-                  camera=None, expnum=None, ccdname=None, tier=None,
-                  output=False, **kwargs):
+                  camera=None, expnum=None, ccdname=None, tier=None, img=None,
+                  output=False, use_cache=True, **kwargs):
         '''
         Returns the filename of a Legacy Survey file.
 
@@ -935,9 +935,11 @@ class LegacySurveyData(object):
         def swap(fn):
             if output:
                 return fn
+            if not use_cache:
+                return fn
             return self.check_cache(fn)
         def swaplist(fns):
-            if output or self.cache_dir is None:
+            if output or (self.cache_dir is None) or not use_cache:
                 return fns
             return [self.check_cache(fn) for fn in fns]
 
@@ -979,6 +981,15 @@ class LegacySurveyData(object):
         elif filetype == 'annotated-ccds':
             return swaplist(
                 glob(os.path.join(basedir, 'ccds-annotated-*.fits.gz')))
+
+        elif filetype == 'psf':
+            return swap(img.merged_psffn)
+        elif filetype == 'sky':
+            return swap(img.merged_skyfn)
+        elif filetype == 'psf-single':
+            return swap(img.psffn)
+        elif filetype == 'sky-single':
+            return swap(img.skyfn)
 
         elif filetype == 'tractor':
             return swap(os.path.join(basedir, 'tractor', brickpre,
@@ -1063,6 +1074,8 @@ class LegacySurveyData(object):
 
     def check_cache(self, fn):
         if self.cache_dir is None:
+            return fn
+        if fn is None:
             return fn
         cfn = fn.replace(self.survey_dir, self.cache_dir)
         #debug('checking for cache fn', cfn)

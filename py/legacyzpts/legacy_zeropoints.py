@@ -308,12 +308,12 @@ def measure_image(img_fn, mp, image_dir='images',
     # Validate the splinesky and psfex merged files, and (re)make them if
     # they're missing.
     if splinesky:
-        fn = img.get_splinesky_merged_filename()
+        fn = survey.find_file('sky', img=img)
         if (fn is None or
             validate_version(fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
             splinesky = False
     if psfex:
-        fn = img.get_psfex_merged_filename()
+        fn = survey.find_file('psf', img=img)
         if (fn is None or
             validate_version(fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
             psfex = False
@@ -330,13 +330,13 @@ def measure_image(img_fn, mp, image_dir='images',
         # Allow some CCDs to be missing, e.g., if the weight map is all zero.
         opts.all_found = False
         if splinesky:
-            skyoutfn = img.get_splinesky_merged_filename()
+            skyoutfn = survey.find_file('sky', img=img, use_cache=False)
             ccds = None
             err_splinesky = merge_splinesky(survey, img.expnum, ccds, skyoutfn, opts, imgs=imgs)
             if err_splinesky != 1:
                 print('Problem writing {}'.format(skyoutfn))
         if psfex:
-            psfoutfn = img.get_psfex_merged_filename()
+            psfoutfn = survey.find_file('psf', img=img, use_cache=False)
             ccds = None
             err_psfex = merge_psfex(survey, img.expnum, ccds, psfoutfn, opts, imgs=imgs)
             if err_psfex != 1:
@@ -345,31 +345,29 @@ def measure_image(img_fn, mp, image_dir='images',
     # Now, if they're still missing it's because the entire exposure is borked
     # (WCS failed, weight maps are all zero, etc.), so exit gracefully.
     if splinesky:
-        fn = img.get_splinesky_merged_filename()
+        fn = survey.find_file('sky', img=img)
         if not os.path.exists(fn):
             print('Merged splinesky file not found {}'.format(fn))
             return []
-        if not validate_version(img.get_splinesky_merged_filename(),
-                                'table', img.expnum, img.plver, img.plprocid):
+        if not validate_version(fn, 'table', img.expnum, img.plver, img.plprocid):
             raise RuntimeError('Merged splinesky file did not validate!')
         # At this point the merged file exists and has been validated, so remove
         # the individual splinesky files.
         for img in imgs:
-            fn = img.get_splinesky_unmerged_filename()
+            fn = survey.find_file('sky-single', img=img, use_cache=False)
             if os.path.isfile(fn):
                 os.remove(fn)
     if psfex:
-        fn = img.get_psfex_merged_filename()
+        fn = survey.find_file('psf', img=img)
         if not os.path.exists(fn):
             print('Merged psfex file not found {}'.format(fn))
             return []
-        if not validate_version(img.get_psfex_merged_filename(),
-                                'table', img.expnum, img.plver, img.plprocid):
+        if not validate_version(fn, 'table', img.expnum, img.plver, img.plprocid):
             raise RuntimeError('Merged psfex file did not validate!')
         # At this point the merged file exists and has been validated, so remove
         # the individual PSFEx and SE files.
         for img in imgs:
-            fn = img.get_psfex_unmerged_filename()
+            fn = survey.find_file('psf-single', img=img, use_cache=False)
             if os.path.isfile(fn):
                 os.remove(fn)
             sefn = img.sefn
@@ -765,8 +763,8 @@ def main(args=None):
 
         measure = measure_image(F.imgfn, None, just_imobj=True, image_hdu=None,
                                 **measureargs)
-        psffn = measure.get_psfex_merged_filename()
-        skyfn = measure.get_splinesky_merged_filename()
+        psffn = survey.find_file('psf', img=measure, use_cache=False)
+        skyfn = survey.find_file('sky', img=measure, use_cache=False)
 
         ann_ok, psf_ok, sky_ok = [(fn is None) or validate_version(
             fn, 'table', measure.expnum, measure.plver,

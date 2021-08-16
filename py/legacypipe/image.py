@@ -383,15 +383,6 @@ class LegacySurveyImage(object):
     def colorterm_sdss_to_observed(self, cat, band):
         raise RuntimeError('Not implemented: generic colorterm_sdss_to_observed')
 
-    def get_psfex_merged_filename(self):
-        return self.merged_psffn
-    def get_splinesky_merged_filename(self):
-        return self.merged_skyfn
-    def get_psfex_unmerged_filename(self):
-        return self.psffn
-    def get_splinesky_unmerged_filename(self):
-        return self.skyfn
-
     def get_radec_bore(self, primhdr):
         from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
         # In some DECam exposures, RA,DEC are floating-point, but RA is in *decimal hours*.
@@ -511,8 +502,7 @@ class LegacySurveyImage(object):
         These are names of self.X variables that are filenames that
         could be cached.
         '''
-        return ['imgfn', 'dqfn', 'wtfn', 'psffn', 'merged_psffn',
-                'merged_skyfn', 'skyfn']
+        return ['imgfn', 'dqfn', 'wtfn']
 
     def get_good_image_slice(self, extent, get_extent=False):
         '''
@@ -1143,9 +1133,9 @@ class LegacySurveyImage(object):
         Reads the sky model, returning a Tractor Sky object.
         '''
         from tractor.utils import get_class_from_name
-
-        tryfns = []
-        tryfns = [self.merged_skyfn, self.skyfn] + self.old_merged_skyfns
+        tryfns = [self.survey.find_file('sky', img=self),
+                  self.survey.find_file('sky-single', img=self),
+                  ] + self.old_merged_skyfns
         Ti = None
         for fn in tryfns:
             if not os.path.exists(fn):
@@ -1226,7 +1216,8 @@ class LegacySurveyImage(object):
 
         # spatially varying pixelized PsfEx
         from tractor import PsfExModel
-        tryfns = [self.merged_psffn, self.psffn] + self.old_merged_psffns
+        tryfns = [self.survey.find_file('psf', img=self),
+                  self.survey.find_file('psf-single', img=self)] + self.old_merged_psffns
         Ti = None
         header = None
         for fn in tryfns:
@@ -1379,7 +1370,7 @@ class LegacySurveyImage(object):
             git_version = get_git_version()
         # We write the PSF model to a .fits.tmp file, then rename to .fits
         psfdir = os.path.dirname(self.psffn)
-        # psfex decides for itself what it's going to name the output file....
+        # This is the output filename that psfex will choose (since we tell it the PSF_SUFFIX)
         psftmpfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.psf.tmp')
         psfexflags = self.survey.get_psfex_conf(self.camera,
                                                 self.expnum, self.ccdname)
