@@ -223,7 +223,6 @@ def getrms(x):
 def measure_image(img_fn, mp, image_dir='images',
                   run_calibs_only=False,
                   run_psf_only=False,
-                  just_imobj=False,
                   survey=None, psfex=True, camera=None,
                   **measureargs):
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
@@ -235,9 +234,6 @@ def measure_image(img_fn, mp, image_dir='images',
 
     img = survey.get_image_object(None, camera=camera,
                                   image_fn=img_fn, image_hdu=image_hdu)
-    if just_imobj:
-        return img
-
     print('Got image object', img)
     # Confirm camera field.
     assert(img.camera == camera)
@@ -739,14 +735,12 @@ def main(args=None):
         F = outputFns(imgfn, outdir, camera, image_dir=survey.get_image_dir(),
                       debug=measureargs['debug'])
 
-        measure = measure_image(F.imgfn, None, just_imobj=True, image_hdu=None,
-                                **measureargs)
-        psffn = survey.find_file('psf', img=measure, use_cache=False)
-        skyfn = survey.find_file('sky', img=measure, use_cache=False)
+        img = survey.get_image_object(None, camera=measureargs['camera'], image_fn=F.imgfn)
+        psffn = survey.find_file('psf', img=img, use_cache=False)
+        skyfn = survey.find_file('sky', img=img, use_cache=False)
 
         ann_ok, psf_ok, sky_ok = [(fn is None) or validate_version(
-            fn, 'table', measure.expnum, measure.plver,
-            measure.plprocid, quiet=quiet)
+            fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)
             for fn in [F.annfn, psffn, skyfn]]
 
         if measureargs['run_calibs_only'] and psf_ok and sky_ok:
@@ -758,8 +752,7 @@ def main(args=None):
             print('Already finished {}'.format(psffn))
             continue
 
-        phot_ok = validate_version(F.photomfn, 'header', measure.expnum,
-                                   measure.plver, measure.plprocid,
+        phot_ok = validate_version(F.photomfn, 'header', img.expnum, img.plver, img.plprocid,
                                    ext=1, quiet=quiet)
 
         if ann_ok and (phot_ok or not(check_photom)) and psf_ok and sky_ok:
