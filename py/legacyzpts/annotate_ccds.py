@@ -13,6 +13,9 @@ def annotate(ccds, survey, camera, mp=None, normalizePsf=True, carryOn=True):
         from astrometry.util.multiproc import multiproc
         mp = multiproc()
 
+    anns = mp.map(annotate_one_ccd, [
+        (ccd, survey, normalizePsf, carryOn) for ccd in ccds])
+
     # File from the "observing" svn repo:
     from pkg_resources import resource_filename
 
@@ -40,9 +43,6 @@ def annotate(ccds, survey, camera, mp=None, normalizePsf=True, carryOn=True):
         tileid_to_index = np.empty(max(tiles.tileid)+1, int)
         tileid_to_index[:] = -1
         tileid_to_index[tiles.tileid] = np.arange(len(tiles))
-
-    anns = mp.map(annotate_one_ccd, [
-        (ccd, survey, normalizePsf, carryOn) for ccd in ccds])
 
     gaussgalnorm = np.zeros(len(ccds), np.float32)
     for iccd,ann in enumerate(anns):

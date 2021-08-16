@@ -54,7 +54,7 @@ test_q = False  # only process a small number of exposures
 base_dir = '/global/cfs/cdirs/cosmo/work/legacysurvey/dr10/'
 input_dir = os.path.join(base_dir, 'calib/psfex')
 output_dir = os.path.join(base_dir, 'calib/patched-psfex')
-surveyccd_path = os.path.join(base_dir, 'survey-ccds-decam-dr10-g-v1.fits')
+surveyccd_path = os.path.join(base_dir, 'survey-ccds-decam-dr10-z-v1.kd.fits')
 
 from legacypipe.survey import get_git_version
 version = get_git_version()
@@ -100,13 +100,15 @@ def modify_psfex(exp_index):
 
     image_filename = ccd['image_filename'][mask][0]
     psfex_filename = image_filename[:image_filename.find('.fits.fz')]+'-psfex.fits'
-    psfex_filename_new = image_filename[:image_filename.find('.fits.fz')]+'-psfex.fits'
+    psfex_filename_new = psfex_filename
     psfex_path = os.path.join(input_dir, psfex_filename)
-
     output_path = os.path.join(output_dir, psfex_filename_new)
+
     if os.path.isfile(output_path):
+        print('Output exists:', output_path)
         return None
 
+    #print('Reading', psfex_path)
     hdu = fits.open(psfex_path)
     data = Table(hdu[1].data)
     #print(len(data))
@@ -124,7 +126,7 @@ def modify_psfex(exp_index):
     for ccd_index in range(len(data)):
 
         # expnum_str = data['expnum'][ccd_index]
-        ccdname = data['ccdname'][ccd_index]
+        ccdname = data['ccdname'][ccd_index].strip()
 
         ########## Outer PSF parameters ###########
         if band=='z' and (ccdname in outlier_ccd_list):
@@ -176,6 +178,8 @@ def modify_psfex(exp_index):
                 print("Error: fit failed to converge.")
                 alpha, beta = 0.8, 2.2  # using default values
                 data['failure'][ccd_index] = True
+                import traceback
+                traceback.print_exc()
 
         #print('{} {} alpha, beta = {:.3f}, {:.3f}'.format(ccdname, band, alpha, beta))
 
@@ -253,7 +257,7 @@ def modify_psfex(exp_index):
     if not os.path.exists(os.path.dirname(output_path)):
         os.makedirs(os.path.dirname(output_path))
     data.write(output_path)
-
+    print('Wrote', output_path)
     return None
 
 
