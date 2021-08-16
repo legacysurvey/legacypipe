@@ -500,9 +500,17 @@ class LegacySurveyImage(object):
     def get_cacheable_filename_variables(self):
         '''
         These are names of self.X variables that are filenames that
-        could be cached.
+        could be cached.  These variable may be *overwritten* by the
+        cache-checking function, hence this should only be used for
+        read-only files (eg not calib files).
         '''
         return ['imgfn', 'dqfn', 'wtfn']
+
+    def get_cacheable_filenames(self):
+        '''
+        These are additional filenames (eg, calib files) that could be cached.
+        '''
+        return [self.psffn, self.skyfn, self.merged_psffn, self.merged_skyfn]
 
     def get_good_image_slice(self, extent, get_extent=False):
         '''

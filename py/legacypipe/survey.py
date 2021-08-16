@@ -1609,23 +1609,26 @@ class LegacySurveyData(object):
         img = imageType(self, t, **kwargs)
         if self.prime_cache:
             self.prime_cache_for_image(img)
-            img.check_for_cached_files(survey)
+            img.check_for_cached_files(self)
         return img
 
     def prime_cache_for_image(self, img):
         import shutil
         from astrometry.util.file import trymakedirs
+        fns = img.get_cacheable_filenames()
         cacheable = img.get_cacheable_filename_variables()
         for varname in cacheable:
             fn = getattr(img, varname, None)
+            fns.append(fn)
+        for fn in fns:
             if fn is None:
                 continue
             if not os.path.exists(fn):
                 # source does not exist
                 continue
-            cfn = fn.replace(survey.survey_dir, survey.cache_dir)
+            cfn = fn.replace(self.survey_dir, self.cache_dir)
             if os.path.exists(cfn):
-                # destination already exists
+                # destination already exists (check timestamps???)
                 continue
             cdir = os.path.dirname(cfn)
             print('Priming the cache: copying', fn, 'to', cfn)
