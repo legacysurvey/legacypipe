@@ -179,6 +179,32 @@ class DecamImage(LegacySurveyImage):
 
         return x0,x1,y0,y1
 
+    def read_invvar(self, slc=None, header=False, **kwargs):
+        # See email of 2021-08-18 "Unexpected different-sized ooi
+        # and oow images" These OOW images have one extra pixel on
+        # each side (they are supposed to be trimmed off of the
+        # ooi, ood, and oow images at the end, but in this range
+        # of plprocids, the oow images missed out on this processing.
+        if not self.plprocid >= '98bf8a6' and self.plprocid <= '98ed7fa':
+            return super().read_invvar(slc=slc, header=header, **kwargs)
+
+        # We could try to be clever and adjust the limits of the "slc"
+        # arg if given...  or we could keep it simple: read without "slc",
+        # trim one pixel around the edges, and then apply slc.
+        iv = super().read_invvar(slc=None, header=header, **kwargs)
+        if header:
+            iv,hdr = iv
+
+        # Trim one pixel off each side!
+        iv = iv[1:-1, 1:-1]
+        # Apply slice if present
+        if slc:
+            iv = iv[slc]
+
+        if header:
+            return iv,hdr
+        return iv
+
     def remap_dq(self, dq, header):
         '''
         Called by get_tractor_image() to map the results from read_dq
