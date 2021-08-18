@@ -736,7 +736,8 @@ def main(args=None):
                       debug=measureargs['debug'])
 
         img = survey.get_image_object(None, camera=measureargs['camera'],
-                                      image_fn=F.imgfn, image_hdu=None)
+                                      image_fn=F.imgfn, image_hdu=None,
+                                      prime_cache=False)
         psffn = survey.find_file('psf', img=img, use_cache=False)
         skyfn = survey.find_file('sky', img=img, use_cache=False)
 
@@ -762,7 +763,14 @@ def main(args=None):
 
         # Create the file
         t0 = ptime('before-run',t0)
+        if prime_cache:
+            survey.prime_cache_for_image(img)
+            img.check_for_cached_files(survey)
+
         runit(F.imgfn, F.photomfn, F.annfn, mp, **measureargs)
+
+        if prime_cache:
+            survey.delete_primed_cache_files()
         t0 = ptime('after-run',t0)
     tnow = Time()
     print("TIMING:total %s" % (tnow-tbegin,))

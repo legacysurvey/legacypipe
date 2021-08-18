@@ -839,6 +839,7 @@ class LegacySurveyData(object):
         self.survey_dir = survey_dir
         self.cache_dir = cache_dir
         self.prime_cache = prime_cache
+        self.primed_files = []
 
         self.calib_dir = os.path.join(self.survey_dir, 'calib')
 
@@ -1597,7 +1598,7 @@ class LegacySurveyData(object):
             self.ccd_kdtrees.append((fn, kd))
         return self.ccd_kdtrees
 
-    def get_image_object(self, t, camera=None, **kwargs):
+    def get_image_object(self, t, camera=None, prime_cache=True, **kwargs):
         '''
         Returns a DecamImage or similar object for one row of the CCDs table.
         '''
@@ -1607,7 +1608,7 @@ class LegacySurveyData(object):
         imageType = self.image_class_for_camera(camera)
         # call Image subclass constructor
         img = imageType(self, t, **kwargs)
-        if self.prime_cache:
+        if self.prime_cache and prime_cache:
             self.prime_cache_for_image(img)
             img.check_for_cached_files(self)
         return img
@@ -1631,9 +1632,17 @@ class LegacySurveyData(object):
                 # destination already exists (check timestamps???)
                 continue
             cdir = os.path.dirname(cfn)
-            print('Priming the cache: copying', fn, 'to', cfn)
+            info('Priming the cache: copying', fn, 'to', cfn)
             trymakedirs(cdir)
             shutil.copyfile(fn, cfn)
+            self.primed_files.append(cfn)
+
+    def delete_primed_cache_files(self):
+        for fn in self.primed_files:
+            try:
+                os.remove(fn)
+            except:
+                pass
 
     def get_approx_wcs(self, ccd):
         from astrometry.util.util import Tan
