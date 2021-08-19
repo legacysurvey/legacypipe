@@ -1634,7 +1634,10 @@ class LegacySurveyData(object):
             cdir = os.path.dirname(cfn)
             info('Priming the cache: copying', fn, 'to', cfn)
             trymakedirs(cdir)
-            shutil.copyfile(fn, cfn)
+            ctmp = cfn + '.tmp'
+            shutil.copyfile(fn, ctmp)
+            os.rename(ctmp, cfn)
+            shutil.copystat(fn, cfn)
             self.primed_files.append(cfn)
 
     def delete_primed_cache_files(self):
