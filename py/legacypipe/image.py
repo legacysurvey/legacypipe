@@ -1973,10 +1973,10 @@ def psfex_single_to_merged(infn, expnum, ccdname):
         T.polgrp2 = np.array([0])
         T.polname1 = np.array(['fake'])
         T.polname2 = np.array(['fake'])
-        T.polzero1 = np.array([0])
-        T.polzero2 = np.array([0])
-        T.polscal1 = np.array([1])
-        T.polscal2 = np.array([1])
+        T.polzero1 = np.array([0.])
+        T.polzero2 = np.array([0.])
+        T.polscal1 = np.array([1.])
+        T.polscal2 = np.array([1.])
         T.poldeg1 = np.array([0])
     else:
         keys.extend([
@@ -1985,6 +1985,9 @@ def psfex_single_to_merged(infn, expnum, ccdname):
                 'POLDEG1'])
     for k in keys:
         T.set(k.lower(), np.array([hdr[k]]))
+    # In case of failures, these may be "-nan", "INF", etc.  Force to float64.
+    for k in ['chi2', 'polzero1', 'polzero2', 'polscal1', 'polscal2']:
+        T.set(k, T.get(k).astype(np.float64))
     return T
 
 class LegacySplineSky(SplineSky):
