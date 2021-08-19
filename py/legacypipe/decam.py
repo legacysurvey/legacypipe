@@ -270,6 +270,9 @@ def decam_cp_version_after(plver, after):
     # 5.2.2LS
     if plver.endswith('LS'):
         plver = plver.replace('LS', '')
+    # 5.0beta
+    if plver.endswith('beta'):
+        plver = plver.replace('beta', 'b1')
     return StrictVersion(plver) >= StrictVersion(after)
 
 def decam_s19_satur_ok(plver):
