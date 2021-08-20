@@ -1470,6 +1470,7 @@ class LegacySurveyImage(object):
 
         good = (wt > 0)
         if np.sum(good) == 0:
+            from legacypipe.utils import ZeroWeightError
             raise ZeroWeightError('No pixels with weight > 0 in: ' + str(self))
 
         # Do a few different scalar sky estimates
