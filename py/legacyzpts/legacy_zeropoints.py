@@ -867,6 +867,11 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
 
     invvar = imobj.remap_invvar(invvar, primhdr, img, dq)
 
+    # Blank out masked pixels (which can occasionally have very extreme values,
+    # eg DECam_CP-DR10c/CP20210225/c4d_210226_002707_ooi_r_v1.fits.fz ext N8
+    # has pixel values -1e37.
+    img[invvar == 0] = 0.
+
     invvar = imobj.scale_weight(invvar)
     img = imobj.scale_image(img)
 
