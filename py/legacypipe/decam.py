@@ -83,6 +83,11 @@ class DecamImage(LegacySurveyImage):
     def get_gain(self, primhdr, hdr):
         return np.average((hdr['GAINA'],hdr['GAINB']))
 
+    def get_expnum(self, primhdr):
+        # Some images (eg decam/DECam_CP-DR10c/CP20200224/c4d_200225_063620_ooi_i_v1.fits.fz)
+        # have it as a string!
+        return int(primhdr['EXPNUM'])
+
     def get_sky_template_filename(self, old_calibs_ok=False):
         import os
         from astrometry.util.fits import fits_table

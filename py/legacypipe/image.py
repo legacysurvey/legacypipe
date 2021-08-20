@@ -1000,7 +1000,12 @@ class LegacySurveyImage(object):
                 return (img,hdr)
             return img
         if fitsobj is not None:
-            return fitsobj[hdu].read(header=header, **kwargs)
+            f = fitsobj[hdu]
+            img = f.read(**kwargs)
+            if header:
+                hdr = f.read_header()
+                return (img,hdr)
+            return img
         return fitsio.read(fn, ext=hdu, header=header, **kwargs)
 
     def read_image(self, **kwargs):
