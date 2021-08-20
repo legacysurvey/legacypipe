@@ -112,7 +112,7 @@ def annotate_one_ccd(X):
           'CCD', ccd.ccdname)
     result = {}
     try:
-        im = survey.get_image_object(ccd)
+        im = survey.get_image_object(ccd, prime_cache=False)
     except:
         print('Failed to get_image_object()')
         import traceback

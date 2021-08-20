@@ -445,7 +445,8 @@ def run_one_ext(X):
     img, ext, survey, splinesky, sdss_photom = X
 
     img = survey.get_image_object(None, camera=img.camera,
-                                  image_fn=img.image_filename, image_hdu=ext)
+                                  image_fn=img.image_filename, image_hdu=ext,
+                                  prime_cache=False)
     return run_zeropoints(img, splinesky=splinesky, sdss_photom=sdss_photom)
 
 class outputFns(object):

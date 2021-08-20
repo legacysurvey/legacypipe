@@ -188,15 +188,18 @@ class DecamImage(LegacySurveyImage):
         if not self.plprocid >= '98bf8a6' and self.plprocid <= '98ed7fa':
             return super().read_invvar(slc=slc, header=header, dq=dq, **kwargs)
 
-        debug('DECam image', self, 'with PLPROCID', self.plprocid, 'has weird-shaped OOW')
+        info('DECam image', self, 'with PLPROCID', self.plprocid, 'may have weird-shaped OOW')
         # We could try to be clever and adjust the limits of the "slc"
         # arg if given...  or we could keep it simple: read without "slc",
         # trim one pixel around the edges, and then apply slc.
         iv = super().read_invvar(slc=None, dq=None, header=header, **kwargs)
         if header:
             iv,hdr = iv
-        # Trim one pixel off each side!
-        iv = iv[1:-1, 1:-1]
+        # If image is unexpectedly 2 pixels too big on each side,
+        # Trim one pixel off each edge!
+        info('DECam image', self, 'with PLPROCID', self.plprocid, 'OOW shape:', iv.shape)
+        if iv.shape == (4096, 2048):
+            iv = iv[1:-1, 1:-1]
         # Apply slice if present
         if slc:
             iv = iv[slc]
