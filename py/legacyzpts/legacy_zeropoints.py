@@ -439,12 +439,17 @@ def run_one_calib(X):
             else:
                 have_zpt = True
 
-    ps = None
-    img.run_calibs(psfex=do_psf, sky=do_sky, splinesky=True,
-                   git_version=git_version, survey=survey, ps=ps,
-                   survey_blob_mask=survey_blob_mask,
-                   halos=have_zpt,
-                   subtract_largegalaxies=have_zpt)
+    from legacypipe.utils import ZeroWeightError
+    try:
+        ps = None
+        img.run_calibs(psfex=do_psf, sky=do_sky, splinesky=True,
+                       git_version=git_version, survey=survey, ps=ps,
+                       survey_blob_mask=survey_blob_mask,
+                       halos=have_zpt,
+                       subtract_largegalaxies=have_zpt)
+    except ZeroWeightError as zw:
+        print('Got ZeroWeightError running calibs for', img, 'but continuing')
+    # Otherwise, let the exception propagate.
     return img
 
 def run_one_ext(X):

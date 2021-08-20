@@ -75,6 +75,9 @@ class RunbrickError(RuntimeError):
 class NothingToDoError(RunbrickError):
     pass
 
+class ZeroWeightError(RunbrickError):
+    pass
+
 class iterwrapper(object):
     def __init__(self, y, n):
         self.n = n

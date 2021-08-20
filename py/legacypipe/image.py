@@ -1470,7 +1470,7 @@ class LegacySurveyImage(object):
 
         good = (wt > 0)
         if np.sum(good) == 0:
-            raise RuntimeError('No pixels with weight > 0 in: ' + str(self))
+            raise ZeroWeightError('No pixels with weight > 0 in: ' + str(self))
 
         # Do a few different scalar sky estimates
         if np.sum(good) > 100:
@@ -1954,10 +1954,23 @@ class LegacySurveyImage(object):
             self.run_se(imgfn, maskfn)
             for fn in todelete:
                 os.unlink(fn)
+
+        psfexc = None
+        skyexc = None
         if psfex:
-            self.run_psfex(git_version=git_version, ps=ps)
+            try:
+                self.run_psfex(git_version=git_version, ps=ps)
+            except Exception as ex:
+                psfexc = ex
         if sky:
-            self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia, survey_blob_mask=survey_blob_mask, halos=halos, subtract_largegalaxies=subtract_largegalaxies)
+            try:
+                self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia, survey_blob_mask=survey_blob_mask, halos=halos, subtract_largegalaxies=subtract_largegalaxies)
+            except Exception as ex:
+                skyexc = ex
+        if psfexc is not None:
+            raise psfexc
+        if skyexc is not None:
+            raise skyexc
 
 def psfex_single_to_merged(infn, expnum, ccdname):
     # returns table T
