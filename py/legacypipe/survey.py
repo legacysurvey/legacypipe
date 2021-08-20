@@ -1610,7 +1610,7 @@ class LegacySurveyData(object):
         img = imageType(self, t, **kwargs)
         if self.prime_cache and prime_cache:
             self.prime_cache_for_image(img)
-            img.check_for_cached_files(self)
+        img.check_for_cached_files(self)
         return img
 
     def prime_cache_for_image(self, img):
@@ -1643,6 +1643,7 @@ class LegacySurveyData(object):
     def delete_primed_cache_files(self):
         for fn in self.primed_files:
             try:
+                info('Removing primed-cache file', fn)
                 os.remove(fn)
             except:
                 pass

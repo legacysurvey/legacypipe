@@ -224,6 +224,7 @@ def measure_image(img_fn, mp, image_dir='images',
                   run_calibs_only=False,
                   run_psf_only=False,
                   survey=None, psfex=True, camera=None,
+                  prime_cache=False,
                   **measureargs):
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
     the FITS extensions for a given set of images.
@@ -348,6 +349,11 @@ def measure_image(img_fn, mp, image_dir='images',
                 os.remove(sefn)
 
     # FIXME -- remove temporary individual files directory
+
+    if prime_cache:
+        # Copy the newly-created psfex/splinesky calib files into the cache
+        survey.prime_cache_for_image(img)
+        img.check_for_cached_files(survey)
 
     if run_calibs_only or run_psf_only:
         return
@@ -695,7 +701,8 @@ def main(args=None):
     camera = measureargs['camera']
 
     cache_dir = measureargs.pop('cache_dir', None)
-    prime_cache = measureargs.pop('prime_cache', False)
+    #prime_cache = measureargs.pop('prime_cache', False)
+    prime_cache = measureargs.get('prime_cache', False)
     survey = LegacySurveyData(survey_dir=measureargs['survey_dir'],
                               cache_dir=cache_dir, prime_cache=prime_cache)
     if measureargs.get('calibdir'):
@@ -767,11 +774,15 @@ def main(args=None):
         if prime_cache:
             survey.prime_cache_for_image(img)
             img.check_for_cached_files(survey)
+            # don't prime_cache during this call, since we've already done that!
+            survey.prime_cache = False
 
         runit(F.imgfn, F.photomfn, F.annfn, mp, **measureargs)
 
         if prime_cache:
             survey.delete_primed_cache_files()
+            survey.prime_cache = True
+
         t0 = ptime('after-run',t0)
     tnow = Time()
     print("TIMING:total %s" % (tnow-tbegin,))
