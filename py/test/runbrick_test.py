@@ -11,6 +11,13 @@ import fitsio
 from legacypipe.runbrick import main
 from astrometry.util.fits import fits_table
 
+def set_env():
+    for v in ['UNWISE_COADDS_TIMERESOLVED_DIR', 'SKY_TEMPLATE_DIR',
+              'LARGEGALAXIES_CAT', 'GAIA_CAT_DIR', 'TYCHO2_KD_DIR']:
+        if v in os.environ:
+            del os.environ[v]
+
+
 def rbmain():
     from legacypipe.catalog import read_fits_catalog
     from legacypipe.survey import LegacySurveyData, wcs_for_brick
@@ -25,10 +32,7 @@ def rbmain():
     ceres  = 'ceres'  in sys.argv
     psfex  = 'psfex'  in sys.argv
 
-    for v in ['UNWISE_COADDS_TIMERESOLVED_DIR', 'SKY_TEMPLATE_DIR',
-              'LARGEGALAXIES_CAT', 'GAIA_CAT_DIR', 'TYCHO2_KD_DIR']:
-        if v in os.environ:
-            del os.environ[v]
+    set_env()
 
     oldargs = sys.argv
     sys.argv = [sys.argv[0]]
