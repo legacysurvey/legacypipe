@@ -945,7 +945,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     assert(gaia is not None)
     print(len(gaia), 'Gaia stars')
 
-    maxgaia = 10000
+    maxgaia = 1000
     if len(gaia) > maxgaia:
         I = np.argsort(gaia.phot_g_mean_mag)
         print('Min mag:', gaia.phot_g_mean_mag[I[0]])
