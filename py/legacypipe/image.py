@@ -349,6 +349,27 @@ class LegacySurveyImage(object):
         self._fits = fitsio.FITS(self.imgfn)
         return self._fits
 
+    def validate_image_data(self, mp=None):
+        '''
+        This checks for a relatively common type of corruption we see in
+        the CP files, where the overall structure of the FITS files
+        looks okay, but the data are corrupt so attempts to funpack
+        uncompress them fail.  Test for this by just finding the list
+        of expected extensions in the image file, and reading each of
+        those exts in the image, weight, and dq maps.
+        '''
+        exts = self.get_extension_list()
+        args = []
+        for fn in [self.imgfn, self.wtfn, self.dqfn]:
+            if fn is None:
+                continue
+            args.extend([(fn,ext) for ext in exts])
+        if mp is None:
+            for a in args:
+                _read_one_ext(a)
+        else:
+            mp.map(_read_one_ext, args)
+
     def nominal_zeropoint(self, band):
         return self.zp0[band]
 
@@ -1972,6 +1993,10 @@ class LegacySurveyImage(object):
             raise psfexc
         if skyexc is not None:
             raise skyexc
+
+def _read_one_ext(args):
+    fn,ext = args
+    fitsio.read(fn, ext=ext)
 
 def psfex_single_to_merged(infn, expnum, ccdname):
     # returns table T

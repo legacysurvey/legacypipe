@@ -21,7 +21,8 @@ outdir=$LEGACY_SURVEY_DIR/zpt
 CACHE_DIR=/tmp/dr10pre-cache
 mkdir -p "${CACHE_DIR}"
 
-ncores=32
+#ncores=32
+ncores=8
 
 export DUST_DIR=/global/cfs/cdirs/cosmo/data/dust/v0_1
 export GAIA_CAT_DIR=/global/cfs/cdirs/cosmo/work/gaia/chunks-gaia-dr2-astrom-2
@@ -90,16 +91,21 @@ python -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
     --survey-dir ${LEGACY_SURVEY_DIR} \
     --cache-dir ${CACHE_DIR} \
     --prime-cache \
+    --fitsverify \
     --image ${image_fn} \
     --outdir ${outdir} \
     --threads ${ncores} \
     >> "$log" 2>&1
 
 #    --verbose \
-
 #    --blob-mask-dir ${blob_dir} \
 #    --zeropoints-dir ${zeropoints_dir}"
 
+# Save the return value from the python command -- otherwise we
+# exit 0 because the rm succeeds!
+status=$?
 
 # /Config directory nonsense
 rm -R $TMPCACHE
+
+exit $status
