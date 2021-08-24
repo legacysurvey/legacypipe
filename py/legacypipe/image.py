@@ -205,9 +205,9 @@ class LegacySurveyImage(object):
             self.propid = self.get_propid(primhdr)
             self.expnum = self.get_expnum(primhdr)
             self.camera = self.get_camera(primhdr)
-            namechange = {'date': 'procdate',
-                          'mjd-obs': 'mjdobs'}
-            for key in ['EXPTIME', 'MJD-OBS', 'HA', 'DATE', 'PLVER', 'PLPROCID']:
+            self.mjdobs = self.get_mjd(primhdr)
+            namechange = {'date': 'procdate',}
+            for key in ['EXPTIME', 'HA', 'DATE', 'PLVER', 'PLPROCID']:
                 val = primhdr.get(key)
                 if isinstance(val, str):
                     val = val.strip()
@@ -483,6 +483,9 @@ class LegacySurveyImage(object):
 
     def get_fwhm(self, primhdr, imghdr):
         return imghdr.get('FWHM', np.nan)
+
+    def get_mjd(self, primhdr):
+        return primhdr.get('MJD-OBS')
 
     # Used during zeropointing
     def scale_image(self, img):

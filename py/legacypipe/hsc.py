@@ -106,6 +106,17 @@ class HscImage(LegacySurveyImage):
             cam = 'hsc'
         return cam
 
+    def get_mjd(self, primhdr):
+        '''HSC CALEXP images have a MJD-OBS header that is incorrectly set to
+        the constant value 51543.99925713.  They also have MJD and
+        MJD-END that are correct.  MJD is for the start of the exposure.
+
+        MJD     =      56743.311664789 / [d] Mod. Julian Date at typical time
+        MJD-END =     56743.3151609958 / [d] Mod.Julian Date at the end of exposure
+        MJD-OBS =     51544.4992571308 / Modified Julian Date of observation
+        '''
+        return primhdr.get('MJD')
+
     def get_wcs(self, hdr=None):
         from astrometry.util.util import Sip
         if hdr is None:
