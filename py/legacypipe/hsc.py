@@ -98,7 +98,11 @@ class HscImage(LegacySurveyImage):
         fwhm /= HscImage.get_nominal_pixscale()
 
     def get_propid(self, primhdr):
-        return primhdr['PROP-ID']
+        pid = primhdr.get('PROP-ID')
+        if pid is not None:
+            return pid
+        # CORR files
+        return primhdr['OB-ID']
 
     def get_camera(self, primhdr):
         cam = super().get_camera(primhdr)
@@ -114,8 +118,17 @@ class HscImage(LegacySurveyImage):
         MJD     =      56743.311664789 / [d] Mod. Julian Date at typical time
         MJD-END =     56743.3151609958 / [d] Mod.Julian Date at the end of exposure
         MJD-OBS =     51544.4992571308 / Modified Julian Date of observation
+
+        On the other hand, HSC CORR images have MJD-STR for the start MJD:
+
+        MJD-STR =       58850.23208995 / [d] Mod.Julian Date at the start of exposure
+        MJD-END =        58850.2326893 / [d] Mod.Julian Date at the end of exposure
+        MJD-OBS =     51544.4992571308 / Modified Julian Date of observation
         '''
-        return primhdr.get('MJD')
+        mjd = primhdr.get('MJD')
+        if mjd is not None:
+            return mjd
+        return primhdr.get('MJD-STR')
 
     def get_wcs(self, hdr=None):
         from astrometry.util.util import Sip
@@ -161,7 +174,7 @@ class HscImage(LegacySurveyImage):
         # PsfEx model information is spread across two BINTABLE hdus,
         # each with AR_NAME='PsfexPsf' and no other easily recognized
         # headers.
-        F = fitsio.FITS(fn)
+        F = self.read_image_fits()
         TT = []
         for i in range(1, len(F)):
             hdr = F[i].read_header()
@@ -259,9 +272,38 @@ class HscImage(LegacySurveyImage):
         return remap_hsc_bitmask(dq, header)
 
     def get_zeropoint(self, primhdr, hdr):
-        flux = primhdr['FLUXMAG0']
-        zpt = 2.5 * np.log10(flux / self.exptime)
-        return zpt
+        # CALEXP data products have FLUXMAG0.
+        flux = primhdr.get('FLUXMAG0')
+        if flux is not None:
+            zpt = 2.5 * np.log10(flux / self.exptime)
+            return zpt
+        # CORR data products don't... depending on versions, there
+        # will be an HDU with AR_NAME = 'PhotoCalib', scaling the image to nanoJanskies.
+        F = self.read_image_fits()
+        photocal = None
+        for i in range(1, len(F)):
+            from astrometry.util.fits import fits_table
+            hdr = F[i].read_header()
+            if hdr.get('AR_NAME') != 'PhotoCalib':
+                continue
+            #print('Found PhotoCalib AR_NAME')
+            #dat = F[i].read(lower=True)
+            #print('data:', dat)
+            #print('dtype:', dat.dtype)
+            photocal = fits_table(F[i].read(lower=True))
+            #print('Found PhotoCalib table:', photocal)
+            #photocal.about()
+            break
+        if photocal is not None:
+            # flux [nJy] = "counts" * calibration factor.
+            # mag 0 = 3.631 e12 nJy.
+            scale = photocal.calibrationmean[0]
+            flux = 3.631e12 / scale
+            zpt = 2.5 * np.log10(flux / self.exptime)
+            print('Returning zeropoint:', zpt)
+            return zpt
+        # Have to measure from photometering reference catalog!
+        return None
 
     def estimate_sky(self, img, invvar, dq, primhdr, imghdr):
         return 0., primhdr['SKYLEVEL'], primhdr['SKYSIGMA']
