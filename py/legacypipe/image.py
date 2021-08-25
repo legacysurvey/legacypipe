@@ -205,9 +205,9 @@ class LegacySurveyImage(object):
             self.propid = self.get_propid(primhdr)
             self.expnum = self.get_expnum(primhdr)
             self.camera = self.get_camera(primhdr)
-            namechange = {'date': 'procdate',
-                          'mjd-obs': 'mjdobs'}
-            for key in ['EXPTIME', 'MJD-OBS', 'HA', 'DATE', 'PLVER', 'PLPROCID']:
+            self.mjdobs = self.get_mjd(primhdr)
+            namechange = {'date': 'procdate',}
+            for key in ['EXPTIME', 'HA', 'DATE', 'PLVER', 'PLPROCID']:
                 val = primhdr.get(key)
                 if isinstance(val, str):
                     val = val.strip()
@@ -349,6 +349,27 @@ class LegacySurveyImage(object):
         self._fits = fitsio.FITS(self.imgfn)
         return self._fits
 
+    def validate_image_data(self, mp=None):
+        '''
+        This checks for a relatively common type of corruption we see in
+        the CP files, where the overall structure of the FITS files
+        looks okay, but the data are corrupt so attempts to funpack
+        uncompress them fail.  Test for this by just finding the list
+        of expected extensions in the image file, and reading each of
+        those exts in the image, weight, and dq maps.
+        '''
+        exts = self.get_extension_list()
+        args = []
+        for fn in [self.imgfn, self.wtfn, self.dqfn]:
+            if fn is None:
+                continue
+            args.extend([(fn,ext) for ext in exts])
+        if mp is None:
+            for a in args:
+                _read_one_ext(a)
+        else:
+            mp.map(_read_one_ext, args)
+
     def nominal_zeropoint(self, band):
         return self.zp0[band]
 
@@ -462,6 +483,9 @@ class LegacySurveyImage(object):
 
     def get_fwhm(self, primhdr, imghdr):
         return imghdr.get('FWHM', np.nan)
+
+    def get_mjd(self, primhdr):
+        return primhdr.get('MJD-OBS')
 
     # Used during zeropointing
     def scale_image(self, img):
@@ -798,7 +822,7 @@ class LegacySurveyImage(object):
             #  the data)
             imgmed = np.median(img[invvar>0])
             if np.abs(imgmed) > self.sig1:
-                warnings.warn('image median is %.2f sigma away from zero!' % (imgmed / self.sig1))
+                warnings.warn('image median is %.2f sigma away from zero for image %s!' % (imgmed / self.sig1, str(self)))
 
         if subsky:
             self.apply_amp_correction(img, invvar, x0, y0)
@@ -1470,6 +1494,7 @@ class LegacySurveyImage(object):
 
         good = (wt > 0)
         if np.sum(good) == 0:
+            from legacypipe.utils import ZeroWeightError
             raise ZeroWeightError('No pixels with weight > 0 in: ' + str(self))
 
         # Do a few different scalar sky estimates
@@ -1971,6 +1996,10 @@ class LegacySurveyImage(object):
             raise psfexc
         if skyexc is not None:
             raise skyexc
+
+def _read_one_ext(args):
+    fn,ext = args
+    fitsio.read(fn, ext=ext)
 
 def psfex_single_to_merged(infn, expnum, ccdname):
     # returns table T

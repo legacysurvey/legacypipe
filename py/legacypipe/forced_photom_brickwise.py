@@ -133,9 +133,12 @@ def main():
     #               units=units, columns=columns)
     #     print('Wrote', out.real_fn)
     from legacypipe.units import get_units_for_columns
+    from astrometry.util.file import trymakedirs
     columns = F.get_columns()
     units = get_units_for_columns(columns)
     outfn = os.path.join(survey.output_dir, 'forced-brickwise-%s.fits' % opt.brick)
+    dirnm = os.path.dirname(outfn)
+    trymakedirs(dirnm)
     F.writeto(outfn, primheader=version_hdr, units=units, columns=columns)
     print('Wrote', outfn)
 

@@ -613,6 +613,7 @@ def get_parser():
     parser.add_argument('--cache-dir', dest='cache_dir',
                         help='Directory to check for cached files (for files found in --survey-dir)')
     parser.add_argument('--prime-cache', default=False, action='store_true', help='Copy image (ooi, ood, oow) files to --cache-dir before starting.')
+    parser.add_argument('--fitsverify', default=False, action='store_true', help='Run fitsverify to check ooi, ood, oow files at start.')
     parser.add_argument('--outdir', type=str, default=None, help='Where to write photom and annotated files; default [survey_dir]/zpt')
     parser.add_argument('--sdss-photom', default=False, action='store_true',
                         help='Use SDSS rather than PS-1 for photometric cal.')
@@ -705,11 +706,13 @@ def main(args=None):
 
     camera = measureargs['camera']
 
+    fitsverify = measureargs.pop('fitsverify', False)
     cache_dir = measureargs.pop('cache_dir', None)
-    #prime_cache = measureargs.pop('prime_cache', False)
     prime_cache = measureargs.get('prime_cache', False)
+    # (we manually prime the cache; setting prime_cache in the LSD constructor runs
+    #  it automatically for every image)
     survey = LegacySurveyData(survey_dir=measureargs['survey_dir'],
-                              cache_dir=cache_dir, prime_cache=prime_cache)
+                              cache_dir=cache_dir, prime_cache=False)
     if measureargs.get('calibdir'):
         survey.calib_dir = measureargs['calibdir']
     measureargs.update(survey=survey)
@@ -774,19 +777,26 @@ def main(args=None):
             print('Already finished: {}'.format(F.annfn))
             continue
 
-        # Create the file
+        # Run calibs / zeropoints / annotation for this image
         t0 = ptime('before-run',t0)
         if prime_cache:
             survey.prime_cache_for_image(img)
             img.check_for_cached_files(survey)
-            # don't prime_cache during this call, since we've already done that!
-            survey.prime_cache = False
+
+        if fitsverify:
+            # I originally planned to just use 'fitsverify', but it is
+            # fussy about the missing LONGSTRN header card, which gets
+            # reported as a warning the same way as the checksum
+            # errors we really care about.  I could update the headers
+            # before running fitsverify, but that seems not ideal.  I
+            # could parse the fitsverify output, but ugh!  Instead,
+            # use fitsio to try to read the data:
+            img.validate_image_data(mp=mp)
 
         runit(F.imgfn, F.photomfn, F.annfn, mp, **measureargs)
 
         if prime_cache:
             survey.delete_primed_cache_files()
-            survey.prime_cache = True
 
         t0 = ptime('after-run',t0)
     tnow = Time()
@@ -935,7 +945,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     assert(gaia is not None)
     print(len(gaia), 'Gaia stars')
 
-    maxgaia = 10000
+    maxgaia = 1000
     if len(gaia) > maxgaia:
         I = np.argsort(gaia.phot_g_mean_mag)
         print('Min mag:', gaia.phot_g_mean_mag[I[0]])
