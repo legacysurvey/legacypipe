@@ -269,11 +269,13 @@ class HscImage(LegacySurveyImage):
     def read_invvar(self, dq=None, **kwargs):
         # HSC has a VARIANCE map (not a weight map)
         v = self._read_fits(self.wtfn, self.wt_hdu, **kwargs)
-        iv = 1./v
-        iv[v==0] = 0.
-        iv[np.logical_not(np.isfinite(iv))] = 0.
+        iv = np.zeros(v.shape, np.float32)
+        ok = np.isfinite(iv) * (v > 0)
+        iv[ok] = 1./v[ok]
         #! this can happen
         iv[np.logical_not(np.isfinite(np.sqrt(iv)))] = 0.
+        if dq is not None:
+            iv[dq != 0] = 0.
         return iv
 
     def funpack_files(self, imgfn, maskfn, imghdu, maskhdu, todelete):

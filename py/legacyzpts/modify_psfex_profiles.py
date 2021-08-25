@@ -108,6 +108,10 @@ def modify_psfex(exp_index):
         print('Output exists:', output_path)
         return None
 
+    if not os.path.exists(psfex_path):
+        print('Input PsfEx file does not exist:', psfex_path)
+        return None
+
     #print('Reading', psfex_path)
     hdu = fits.open(psfex_path)
     data = Table(hdu[1].data)
