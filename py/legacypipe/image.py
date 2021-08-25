@@ -399,7 +399,7 @@ class LegacySurveyImage(object):
             return np.ones(len(cat), bool)
         raise RuntimeError('Unknown photometric calibration set: %s' % name)
     def photometric_calibrator_to_observed(self, name, cat):
-        if name == 'ps12':
+        if name == 'ps1':
             from legacypipe.ps1cat import ps1cat
             colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
             ps1band = ps1cat.ps1band[self.band]
