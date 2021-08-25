@@ -85,8 +85,9 @@ def main():
     assert(np.all(np.abs(dmags)[:, :2] < 0.5))
     assert(np.all(np.abs(dmags)[3:, :] < 0.5))
 
+    lptdir = os.environ.get('LEGACYPIPE_TEST_DATA', 'legacypipe-test-data')
     # Cross-match to Pan-STARRS1 too
-    P = fits_table('legacypipe-test-data/ps1-qz-star-v3/ps1-02791.fits')
+    P = fits_table(os.path.join(lptdir, 'ps1-qz-star-v3/ps1-02791.fits'))
     I,J,_ = match_radec(P.ra, P.dec, T.ra, T.dec, 1.0/3600., nearest=True)
     assert(len(I) == 3)
     K = np.argsort(P.median[I,1])
