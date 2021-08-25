@@ -12,6 +12,9 @@ produced by the LSST software stack.
 
 These are one file per CCD, with variance maps, flags, WCS, and PsfEx
 models included in BINTABLE HDUs.
+
+The sky background is also estimated and subtracted, so no external
+calib files required.
 '''
 class HscImage(LegacySurveyImage):
     def __init__(self, survey, ccd, image_fn=None, image_hdu=0):
@@ -96,6 +99,7 @@ class HscImage(LegacySurveyImage):
             return fwhm
         # convert from arcsec to pixels (hard-coded pixscale here)
         fwhm /= HscImage.get_nominal_pixscale()
+        return fwhm
 
     def get_propid(self, primhdr):
         return primhdr['PROP-ID']
