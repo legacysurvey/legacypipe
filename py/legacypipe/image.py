@@ -494,6 +494,10 @@ class LegacySurveyImage(object):
         return 3600. * np.sqrt(np.abs(hdr['CD1_1'] * hdr['CD2_2'] -
                                       hdr['CD1_2'] * hdr['CD2_1']))
 
+    # Used during zeropointing / annotation
+    def get_cd_matrix(self, primhdr, hdr):
+        return hdr['CD1_1'], hdr['CD1_2'], hdr['CD2_1'], hdr['CD2_2']
+
     # Used during zeropointing
     def scale_image(self, img):
         return img
@@ -1099,9 +1103,9 @@ class LegacySurveyImage(object):
         header : fitsio header
             The FITS header
         '''
-        print('Reading', self.imgfn, 'ext', self.hdu)
         if self._image_header is not None:
             return self._image_header
+        print('Reading', self.imgfn, 'ext', self.hdu)
         self._image_header = self.read_image_fits()[self.hdu].read_header()
         return self._image_header
 

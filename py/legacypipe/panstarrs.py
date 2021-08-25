@@ -107,6 +107,13 @@ class PanStarrsImage(LegacySurveyImage):
         self.dqfn = self.imgfn.replace('.fits', '.mask.fits')
         self.wtfn = self.imgfn.replace('.fits', '.wt.fits')
 
+    def get_cd_matrix(self, primhdr, hdr):
+        return hdr['CDELT1'], 0., 0., hdr['CDELT2']
+
+    def get_radec_bore(self, primhdr):
+        hdr = self.read_image_header()
+        return hdr['CRVAL1'], hdr['CRVAL2']
+
     def get_band(self, primhdr):
         self.hdu = 1
         hdr = self.read_image_header()
@@ -160,7 +167,7 @@ class PanStarrsImage(LegacySurveyImage):
         return cam
 
     def get_wcs(self, hdr=None):
-        from astrometry.util.util import Sip
+        from astrometry.util.util import Tan
         if hdr is None:
             hdr = self.read_image_header()
         copyhdr = fitsio.FITSHDR()
@@ -225,7 +232,17 @@ class PanStarrsImage(LegacySurveyImage):
         return new_dq
 
     def get_zeropoint(self, primhdr, hdr):
-        return primhdr['FPA.ZP']
+        return hdr['FPA.ZP']
+
+    def get_airmass(self, primhdr, imghdr, ra, dec):
+        airmass = imghdr.get('AIRMASS', None)
+        if airmass is None:
+            airmass = self.recompute_airmass(primhdr, ra, dec)
+        return airmass
+
+    def get_mjd(self, primhdr):
+        hdr = self.read_image_header()
+        return hdr.get('MJD-OBS')
 
     def estimate_sky(self, img, invvar, dq, primhdr, imghdr):
         from legacypipe.image import estimate_sky_from_pixels

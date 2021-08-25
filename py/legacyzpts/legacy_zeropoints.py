@@ -841,14 +841,17 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     ccds['object'] = primhdr.get('OBJECT')
 
     optional = ['avsky']
-    for ccd_col in ['avsky', 'crpix1', 'crpix2', 'crval1', 'crval2',
-                    'cd1_1','cd1_2', 'cd2_1', 'cd2_2']:
+    for ccd_col in ['avsky', 'crpix1', 'crpix2', 'crval1', 'crval2']:
         if ccd_col.upper() in hdr:
             ccds[ccd_col] = hdr[ccd_col]
         elif ccd_col in optional:
             ccds[ccd_col] = np.nan
         else:
             raise KeyError('Could not find %s key in header:' % ccd_col)
+
+    for ccd_col,val in zip(['cd1_1', 'cd1_2', 'cd2_1', 'cd2_2'],
+                           imobj.get_cd_matrix(primhdr, hdr)):
+        ccds[ccd_col] = val
 
     wcs = imobj.get_wcs(hdr=hdr)
     H = imobj.height
