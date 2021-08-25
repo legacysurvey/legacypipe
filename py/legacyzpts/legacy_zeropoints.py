@@ -34,7 +34,7 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
-CAMERAS=['decam','mosaic','90prime','megaprime', 'hsc']
+CAMERAS=['decam','mosaic','90prime','megaprime', 'hsc', 'panstarrs']
 
 MAGLIM=dict(
     u=[16, 20],

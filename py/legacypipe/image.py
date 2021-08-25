@@ -206,8 +206,9 @@ class LegacySurveyImage(object):
             self.expnum = self.get_expnum(primhdr)
             self.camera = self.get_camera(primhdr)
             self.mjdobs = self.get_mjd(primhdr)
+            self.exptime = self.get_exptime(primhdr)
             namechange = {'date': 'procdate',}
-            for key in ['EXPTIME', 'HA', 'DATE', 'PLVER', 'PLPROCID']:
+            for key in ['HA', 'DATE', 'PLVER', 'PLPROCID']:
                 val = primhdr.get(key)
                 if isinstance(val, str):
                     val = val.strip()
@@ -227,8 +228,7 @@ class LegacySurveyImage(object):
                 self.height,self.width = info['dims']
                 self.hdu = info['hdunum'] - 1
                 self.ccdname = self.get_ccdname(primhdr, hdr)
-                self.pixscale = 3600. * np.sqrt(np.abs(hdr['CD1_1'] * hdr['CD2_2'] -
-                                                       hdr['CD1_2'] * hdr['CD2_1']))
+                self.pixscale = self.get_pixscale(primhdr, hdr)
                 self.fwhm = self.get_fwhm(primhdr, hdr)
             else:
                 self.ccdname = ''
@@ -399,7 +399,7 @@ class LegacySurveyImage(object):
             return np.ones(len(cat), bool)
         raise RuntimeError('Unknown photometric calibration set: %s' % name)
     def photometric_calibrator_to_observed(self, name, cat):
-        if name == 'ps1':
+        if name == 'ps12':
             from legacypipe.ps1cat import ps1cat
             colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
             ps1band = ps1cat.ps1band[self.band]
@@ -486,6 +486,13 @@ class LegacySurveyImage(object):
 
     def get_mjd(self, primhdr):
         return primhdr.get('MJD-OBS')
+
+    def get_exptime(self, primhdr):
+        return primhdr.get('EXPTIME')
+
+    def get_pixscale(self, primhdr, hdr):
+        return 3600. * np.sqrt(np.abs(hdr['CD1_1'] * hdr['CD2_2'] -
+                                      hdr['CD1_2'] * hdr['CD2_1']))
 
     # Used during zeropointing
     def scale_image(self, img):

@@ -825,6 +825,7 @@ class LegacySurveyData(object):
         from legacypipe.ptf    import PtfImage
         from legacypipe.cfht   import MegaPrimeImage
         from legacypipe.hsc    import HscImage
+        from legacypipe.panstarrs import PanStarrsImage
         from collections import OrderedDict
 
         if allbands is None:
@@ -874,6 +875,7 @@ class LegacySurveyData(object):
             'ptf'    : PtfImage,
             'megaprime': MegaPrimeImage,
             'hsc'    : HscImage,
+            'panstarrs' : PanStarrsImage,
             }
 
         self.allbands = allbands
