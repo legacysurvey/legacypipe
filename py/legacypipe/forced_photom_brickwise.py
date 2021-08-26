@@ -26,6 +26,9 @@ def main():
     #parser.add_argument('--derivs', action='store_true',
     #                    help='Include RA,Dec derivatives in forced photometry?')
 
+    parser.add_argument('--bands', default=None,
+                        help='Comma-separated list of bands to forced-photometer.')
+
     parser.add_argument('--no-ceres', action='store_false', dest='ceres',
                         help='Do not use Ceres optimization engine (use scipy)')
     parser.add_argument('--ceres-threads', type=int, default=1,
@@ -79,9 +82,15 @@ def main():
     if 'ccd_cuts' in ccds.get_columns():
         ccds.cut(ccds.ccd_cuts == 0)
         print(len(ccds), 'CCDs survive cuts')
-    # # Cut on bands to be used
-    # ccds.cut(np.array([b in bands for b in ccds.filter]))
-    # print('Cut to', len(ccds), 'CCDs in bands', ','.join(bands))
+    if opt.bands:
+        # Cut on bands to be used
+        bands = opt.bands.split(',')
+        ccds.cut(np.array([b in bands for b in ccds.filter]))
+        print('Cut to', len(ccds), 'CCDs in bands', ','.join(bands))
+
+    print('Forced-photometering CCDs:')
+    for ccd in ccds:
+        print('  ', ccd.image_filename)
 
     # args for forced_photom_one_ccd:
     opt.apphot = True
