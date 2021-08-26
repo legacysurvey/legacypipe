@@ -217,7 +217,7 @@ class PanStarrsImage(LegacySurveyImage):
         v = boff + bsoft * 2. * np.sinh(v / alpha)
 
         iv = 1./v
-        iv[v==0] = 0.
+        iv[v<=0] = 0.
         iv[np.logical_not(np.isfinite(iv))] = 0.
         #! this can happen
         #iv[np.logical_not(np.isfinite(np.sqrt(iv)))] = 0.
