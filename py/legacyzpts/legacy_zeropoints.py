@@ -951,9 +951,16 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     maxgaia = 1000
     if len(gaia) > maxgaia:
         I = np.argsort(gaia.phot_g_mean_mag)
-        print('Min mag:', gaia.phot_g_mean_mag[I[0]])
         gaia.cut(I[:maxgaia])
-        print('Cut to', len(gaia), 'Gaia stars')
+        print('Cut to', len(gaia), 'Gaia stars with G mag in range %.2f to %.2f' %
+              (gaia.phot_g_mean_mag[0], gaia.phot_g_mean_mag[-1]))
+
+    maxphot = 1000
+    if phot is not None and len(phot) > maxphot:
+        I = np.argsort(phot.legacy_survey_mag)
+        phot.cut(I[:maxphot])
+        print('Cut to', len(phot), 'photometric calibrator stars with mag in range %.2f to %.2f' %
+              (phot.legacy_survey_mag[0], phot.legacy_survey_mag[-1]))
 
     t0= Time()
 

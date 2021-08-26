@@ -106,7 +106,10 @@ def main():
     # array([[ 0.002,  0.393,  2.266],
     #        [ 0.027,  0.196,  1.640],
     #        [ 0.115, -0.187, -0.124]], dtype='<U6')
+    print('dmags:', dmags)
+    # g,r mags
     assert(np.all(np.abs(dmags[:, :2]) < 0.4))
+    # final star
     assert(np.all(np.abs(dmags[2, :])  < 0.2))
 
 if __name__ == '__main__':
