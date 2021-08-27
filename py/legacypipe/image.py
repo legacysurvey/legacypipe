@@ -1480,7 +1480,9 @@ class LegacySurveyImage(object):
 
         slc = self.get_good_image_slice(None)
         img = self.read_image(slc=slc)
-        dq = self.read_dq(slc=slc)
+        dq,dqhdr = self.read_dq(slc=slc, header=True)
+        if dq is not None:
+            dq = self.remap_dq(dq, dqhdr)
         wt = self.read_invvar(slc=slc, dq=dq)
         primhdr = self.read_image_primary_header()
         imghdr = self.read_image_header()

@@ -869,11 +869,11 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         return None, None
 
     dq,dqhdr = imobj.read_dq(header=True)
+    if dq is not None:
+        dq = imobj.remap_dq(dq, dqhdr)
     invvar = imobj.read_invvar(dq=dq)
     img = imobj.read_image()
     imobj.fix_saturation(img, dq, invvar, primhdr, hdr, None)
-    if dq is not None:
-        dq = imobj.remap_dq(dq, dqhdr)
     # Compute sig1 before rescaling (later it gets scaled by zpscale)
     imobj.sig1 = imobj.estimate_sig1(img, invvar, dq, primhdr, hdr)
     ccds['sig1'] = imobj.sig1

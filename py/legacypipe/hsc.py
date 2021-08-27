@@ -343,23 +343,40 @@ class HscImage(LegacySurveyImage):
 
 def remap_hsc_bitmask(dq, header):
     new_dq = np.zeros(dq.shape, np.int16)
-    # MP_BAD  =                    0
-    # MP_SUSPECT =        7
-    # MP_NO_DATA =        8
-    # MP_CROSSTALK =      9
-    # MP_UNMASKEDNAN =   11
-    new_dq |= (DQ_BITS['badpix'] * ((dq & ((1<<0) | (1<<7) | (1<<8) | (1<<9) | (1<<11))) != 0))
-    # MP_SAT  =                    1
-    new_dq |= (DQ_BITS['satur' ] * ((dq & (1<<1)) != 0))
-    # MP_INTRP=                    2
-    new_dq |= (DQ_BITS['interp'] * ((dq & (1<<2)) != 0))
-    # MP_CR   =                    3
-    new_dq |= (DQ_BITS['cr'] * ((dq & (1<<3)) != 0))
-    #MP_EDGE =                    4
-    new_dq |= (DQ_BITS['edge'] * ((dq & (1<<4)) != 0))
-    '''
-    MP_DETECTED =       5
-    MP_DETECTED_NEGATIVE = 6
-    MP_NOT_DEBLENDED = 10
-    '''
+    #### The bits don't seem to be constant / the same between CORR and CALEXP.
+    #### Use the header names!!
+    masks = {}
+    for k in header:
+        if not k.startswith('MP_'):
+            continue
+        k = k[3:]
+        masks[k] = 1 << int(header[k])
+    def val(name):
+        return masks.get(name, 0)
+    # MP_BAD
+    # MP_SAT
+    # MP_INTRP
+    # MP_CR
+    #MP_EDGE
+    # MP_DETECTED
+    # MP_DETECTED_NEGATIVE
+    # MP_SUSPECT
+    # MP_NO_DATA
+    # MP_CROSSTALK
+    # MP_NOT_DEBLENDED
+    # MP_UNMASKEDNAN
+    bits = (val('BAD') |
+            val('SUSPECT') |
+            val('NO_DATA') |
+            val('CROSSTALK') |
+            val('UNMASKEDNAN'))
+    new_dq |= DQ_BITS['badpix'] * ((dq & bits) != 0)
+    bits = val('SAT')
+    new_dq |= DQ_BITS['satur' ] * ((dq & bits) != 0)
+    bits = val('INTRP')
+    new_dq |= DQ_BITS['interp'] * ((dq & bits) != 0)
+    bits = val('CR')
+    new_dq |= DQ_BITS['cr'] * ((dq & bits) != 0)
+    bits = val('EDGE')
+    new_dq |= DQ_BITS['edge'] * ((dq & bits) != 0)
     return new_dq
