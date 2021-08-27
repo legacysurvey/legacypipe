@@ -288,15 +288,13 @@ class LegacySurveyImage(object):
         self.dq_saturation_bits = DQ_BITS['satur'] # | DQ_BITS['bleed']
 
         # Calib filenames
-        basename = os.path.basename(self.image_filename)
-        ### HACK -- keep only the first dotted component of the base filename.
-        # This allows, eg, create-testcase.py to use image filenames like BASE.N3.fits
-        # with only a single HDU.
-        basename = basename.split('.')[0]
-
-        imgdir = os.path.dirname(self.image_filename)
         calibdir = self.survey.get_calib_dir()
-        calname = basename+"-"+self.ccdname
+        imgdir = os.path.dirname(self.image_filename)
+        basename = self.get_base_name()
+        if len(self.ccdname):
+            calname = basename + '-' + self.ccdname
+        else:
+            calname = basename
         self.name = calname
         self.sefn         = os.path.join(calibdir, 'se',           imgdir, basename, calname + '-se.fits')
         self.psffn        = os.path.join(calibdir, 'psfex-single', imgdir, basename, calname + '-psfex.fits')
@@ -317,6 +315,17 @@ class LegacySurveyImage(object):
         d = self.__dict__.copy()
         d['_fits'] = None
         return d
+
+    def get_base_name(self):
+        # Returns the base name to use for this Image object.  This is
+        # used for calib paths, and is joined with the CCD name to
+        # form the name of this Image object and for calib filenames.
+        basename = os.path.basename(self.image_filename)
+        ### HACK -- keep only the first dotted component of the base filename.
+        # This allows, eg, create-testcase.py to use image filenames like BASE.N3.fits
+        # with only a single HDU.
+        basename = basename.split('.')[0]
+        return basename
 
     def override_ccd_table_types(self):
         return {}

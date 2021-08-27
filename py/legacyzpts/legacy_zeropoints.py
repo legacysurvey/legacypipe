@@ -319,29 +319,33 @@ def measure_image(img_fn, mp, image_dir='images',
     # Now, if they're still missing it's because the entire exposure is borked
     # (WCS failed, weight maps are all zero, etc.), so exit gracefully.
     if splinesky:
-        fn = survey.find_file('sky', img=img)
-        if not os.path.exists(fn):
-            print('Merged splinesky file not found {}'.format(fn))
+        skyfn = survey.find_file('sky', img=img)
+        if not os.path.exists(skyfn):
+            print('Merged splinesky file not found {}'.format(skyfn))
             return []
-        if not validate_version(fn, 'table', img.expnum, img.plver, img.plprocid):
+        if not validate_version(skyfn, 'table', img.expnum, img.plver, img.plprocid):
             raise RuntimeError('Merged splinesky file did not validate!')
         # At this point the merged file exists and has been validated, so remove
         # the individual splinesky files.
         for img in imgs:
             fn = survey.find_file('sky-single', img=img, use_cache=False)
+            if fn == skyfn:
+                continue
             if os.path.isfile(fn):
                 os.remove(fn)
     if psfex:
-        fn = survey.find_file('psf', img=img)
-        if not os.path.exists(fn):
-            print('Merged psfex file not found {}'.format(fn))
+        psffn = survey.find_file('psf', img=img)
+        if not os.path.exists(psffn):
+            print('Merged psfex file not found {}'.format(psffn))
             return []
-        if not validate_version(fn, 'table', img.expnum, img.plver, img.plprocid):
+        if not validate_version(psffn, 'table', img.expnum, img.plver, img.plprocid):
             raise RuntimeError('Merged psfex file did not validate!')
         # At this point the merged file exists and has been validated, so remove
         # the individual PSFEx and SE files.
         for img in imgs:
             fn = survey.find_file('psf-single', img=img, use_cache=False)
+            if fn == psffn:
+                continue
             if os.path.isfile(fn):
                 os.remove(fn)
             sefn = img.sefn
@@ -868,6 +872,12 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         print('Failed to read PSF model: %s' % e)
         return None, None
 
+    # for cases (eg HSC, Pan-STARRS) that lack a SEEING/FWHM header and we have to fetch
+    # from the PsfEx file.
+    if not np.isfinite(imobj.fwhm):
+        imobj.fwhm = imobj.get_fwhm(primhdr, hdr)
+        print('Re-fetched FWHM for', imobj, ': got', imobj.fwhm)
+        ccds['fwhm'] = imobj.fwhm
     dq,dqhdr = imobj.read_dq(header=True)
     if dq is not None:
         dq = imobj.remap_dq(dq, dqhdr)
@@ -951,9 +961,16 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     maxgaia = 1000
     if len(gaia) > maxgaia:
         I = np.argsort(gaia.phot_g_mean_mag)
-        print('Min mag:', gaia.phot_g_mean_mag[I[0]])
         gaia.cut(I[:maxgaia])
-        print('Cut to', len(gaia), 'Gaia stars')
+        print('Cut to', len(gaia), 'Gaia stars with G mag in range %.2f to %.2f' %
+              (gaia.phot_g_mean_mag[0], gaia.phot_g_mean_mag[-1]))
+
+    maxphot = 1000
+    if phot is not None and len(phot) > maxphot:
+        I = np.argsort(phot.legacy_survey_mag)
+        phot.cut(I[:maxphot])
+        print('Cut to', len(phot), 'photometric calibrator stars with mag in range %.2f to %.2f' %
+              (phot.legacy_survey_mag[0], phot.legacy_survey_mag[-1]))
 
     t0= Time()
 

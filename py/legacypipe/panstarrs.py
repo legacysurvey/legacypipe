@@ -2,6 +2,7 @@ import numpy as np
 import fitsio
 from legacypipe.image import LegacySurveyImage
 from legacypipe.bits import DQ_BITS
+from legacypipe.survey import create_temp
 
 '''
 This class handles Pan-STARRS STACKed image products (DR1/DR2).
@@ -84,15 +85,19 @@ class PanStarrsImage(LegacySurveyImage):
         self.merged_skyfn = None
         self.old_merged_skyfns = []
         self.old_single_skyfn = None
-        # self.sefn = None
-        # self.psffn = None
-        # self.merged_psffn = None
-        # self.old_merged_psffns = []
-        # self.old_single_psffn = None
 
+        # One image per file -- no separate merged / single PsfEx files
+        self.psffn = self.merged_psffn
+        
     @classmethod
     def get_nominal_pixscale(cls):
         return 0.186
+
+    def get_base_name(self):
+        import os
+        basename = os.path.basename(self.image_filename)
+        basename = basename.replace('.fits','')
+        return basename
 
     def get_extension_list(self, debug=False):
         return [1,]
@@ -201,8 +206,28 @@ class PanStarrsImage(LegacySurveyImage):
             img = img,hdr
         return img
 
-    def remap_dq(self, dq, hdr):
-        new_dq = np.zeros(dq.shape, np.int16)
+    def read_invvar(self, dq=None, header=False, **kwargs):
+        # VARIANCE map (not a weight map)
+        v,hdr = self._read_fits(self.wtfn, self.wt_hdu, header=True, **kwargs)
+
+        # Arcsinh scaled values!
+        alpha = 2.5 * np.log10(np.e)
+        boff  = hdr['BOFFSET']
+        bsoft = hdr['BSOFTEN']
+        v = boff + bsoft * 2. * np.sinh(v / alpha)
+
+        iv = 1./v
+        iv[v<=0] = 0.
+        iv[np.logical_not(np.isfinite(iv))] = 0.
+        #! this can happen
+        #iv[np.logical_not(np.isfinite(np.sqrt(iv)))] = 0.
+        if dq is not None:
+            iv[dq != 0] = 0.
+        if header:
+            iv = iv,hdr
+        return iv
+
+    def get_mask_names(self, hdr):
         maskvals = dict()
         # number of bits
         nmasks = hdr['MSKNUM']
@@ -210,9 +235,12 @@ class PanStarrsImage(LegacySurveyImage):
             name = hdr['MSKNAM%02i' % i].strip()
             val  = hdr['MSKVAL%02i' % i]
             maskvals[name] = val
+        return maskvals
 
+    def remap_dq(self, dq, hdr):
+        new_dq = np.zeros(dq.shape, np.int16)
+        maskvals = self.get_mask_names(hdr)
         # Ignore STARCORE
-
         new_dq |= DQ_BITS['badpix'] * ((dq & (maskvals['DETECTOR'] |
                                               maskvals['FLAT'] |
                                               maskvals['DARK'] |
@@ -249,19 +277,27 @@ class PanStarrsImage(LegacySurveyImage):
         skymed, skyrms = estimate_sky_from_pixels(img)
         return 0., skymed, skyrms
     
-    def read_invvar(self, dq=None, **kwargs):
-        # VARIANCE map (not a weight map)
-        v = self._read_fits(self.wtfn, self.wt_hdu, **kwargs)
-        iv = 1./v
-        iv[v==0] = 0.
-        iv[np.logical_not(np.isfinite(iv))] = 0.
-        #! this can happen
-        #iv[np.logical_not(np.isfinite(np.sqrt(iv)))] = 0.
-        if dq is not None:
-            iv[dq != 0] = 0.
-        return iv
-
     def validate_version(self, *args, **kwargs):
         return True
     def check_image_header(self, imghdr):
         pass
+
+    def funpack_files(self, imgfn, maskfn, imghdu, maskhdu, todelete):
+        # Before passing files to SourceExtractor / PsfEx, filter our mask image
+        # because we want to ignore the STARCORE mask bit
+        tmpimgfn,tmpmaskfn = super().funpack_files(imgfn, maskfn, imghdu, maskhdu, todelete)
+        #print('Dropping mask bit 5 before running SE')
+        m,mhdr = fitsio.read(tmpmaskfn, header=True)
+        maskvals = self.get_mask_names(mhdr)
+        # Ignore STARCORE
+        val = maskvals['STARCORE']
+        val = np.uint16(val)
+        nset = np.sum(m & val > 0)
+        #print('Mask:', m.shape, m.dtype)
+        #print('STARCORE bit value:', val, type(val))
+        m &= ~val
+        print('Ignoring STARCORE mask bit on', nset, 'pixels')
+        tmpmaskfn = create_temp(suffix='.fits')
+        todelete.append(tmpmaskfn)
+        fitsio.write(tmpmaskfn, m, clobber=True, header=mhdr)
+        return tmpimgfn, tmpmaskfn
