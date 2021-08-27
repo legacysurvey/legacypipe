@@ -183,7 +183,7 @@ class PanStarrsImage(LegacySurveyImage):
             copyhdr['CD1_2'] = 0.
             copyhdr['CD2_1'] = 0.
             copyhdr['CD2_2'] = hdr['CDELT2']
-        wcs = Tan(hdr)
+        wcs = Tan(copyhdr)
         wcs.version = ''
         wcs.plver = ''
         return wcs

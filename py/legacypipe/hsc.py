@@ -349,8 +349,8 @@ def remap_hsc_bitmask(dq, header):
     for k in header:
         if not k.startswith('MP_'):
             continue
-        k = k[3:]
-        masks[k] = 1 << int(header[k])
+        name = k[3:]
+        masks[name] = 1 << int(header[k])
     def val(name):
         return masks.get(name, 0)
     # MP_BAD
