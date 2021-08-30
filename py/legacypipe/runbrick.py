@@ -3848,7 +3848,8 @@ def main(args=None):
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
     # tractor logging is *soooo* chatty
     logging.getLogger('tractor.engine').setLevel(lvl + 10)
-
+    # silence "findfont: score(<Font 'DejaVu Sans Mono' ...)" messages
+    logging.getLogger('matplotlib.font_manager').disabled = True
     if opt.plots:
         import matplotlib
         matplotlib.use('Agg')
