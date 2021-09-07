@@ -297,6 +297,7 @@ def good_ccd_fraction(survey, ccds):
                '90prime': 4,
                'mosaic': 4,
                'megaprime': 40,
+               'panstarrs': 1,
     }
 
     nccds = nccdmap[survey]
@@ -411,6 +412,8 @@ def main(args=None):
                         help='Omit the "ccdnmatch" cut')
     parser.add_argument('--good-ccd-fraction', default=0.7, type=float,
                         help='Fraction of CCDs in an exposure that must be good to keep any chips')
+    parser.add_argument('--max-seeing', default=None, type=float,
+                        help='Seeing cut (default 3 arcsec)')
     numpy.seterr(invalid='raise')
     args = parser.parse_args(args=args)
     ccds = fits_table(getattr(args, 'survey-ccds'))
@@ -453,7 +456,8 @@ def main(args=None):
     else:
         bad_expid = {}
     psfzpt_cuts.add_psfzpt_cuts(ccds, args.camera, bad_expid,
-                                image2coadd=args.image2coadd)
+                                image2coadd=args.image2coadd,
+                                max_seeing=args.max_seeing)
 
     if args.not_grz:
         ccds.ccd_cuts &= ~psfzpt_cuts.CCD_CUT_BITS['not_grz']

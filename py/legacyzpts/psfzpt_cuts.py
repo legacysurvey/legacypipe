@@ -203,7 +203,8 @@ def detrend_mzlsbass_zeropoints(P):
 
 def psf_zeropoint_cuts(P, pixscale,
                        zpt_cut_lo, zpt_cut_hi, bad_expid, camera,
-                       radec_rms, skybright, zpt_diff_avg, image2coadd=''):
+                       radec_rms, skybright, zpt_diff_avg, image2coadd='',
+                       max_seeing=3.0):
     '''
     zpt_cut_lo, zpt_cut_hi: dict from band to zeropoint.
     '''
@@ -239,7 +240,7 @@ def psf_zeropoint_cuts(P, pixscale,
         ('zpt_large', np.array([zpt > zpt_cut_hi.get(f.strip(),100) for f,zpt in zip(P.filter, ccdzpt)])),
         ('phrms',     P.phrms > 0.1),
         ('exptime',   P.exptime < 30),
-        ('seeing_bad', np.logical_not(np.logical_and(seeing > 0, seeing < 3.0))),
+        ('seeing_bad', np.logical_not(np.logical_and(seeing > 0, seeing < max_seeing))),
         ('badexp_file', np.array([((expnum, None) in bad_expid or
                                    (expnum, ccdname0) in bad_expid)
                                   for expnum, ccdname0 in zip(P.expnum, ccdname)])),
@@ -308,11 +309,15 @@ def not_in_image2coadd(P, image2coadd):
     return mindesy1 & ~match
 
 
-def add_psfzpt_cuts(T, camera, bad_expid, image2coadd=''):
+def add_psfzpt_cuts(T, camera, bad_expid, image2coadd='', max_seeing=None):
     from legacypipe.survey import LegacySurveyData
     survey = LegacySurveyData()
     imageType = survey.image_class_for_camera(camera)
     pixscale = imageType.get_nominal_pixscale()
+
+    kw = {}
+    if max_seeing is not None:
+        kw.update(dict(max_seeing=max_seeing))
 
     if camera == 'mosaic':
         # Arjun: 2019-03-15
@@ -324,7 +329,7 @@ def add_psfzpt_cuts(T, camera, bad_expid, image2coadd=''):
         zpt_lo = dict(z=z0+dz[0])
         zpt_hi = dict(z=z0+dz[1])
         psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
-                           skybright, zpt_diff_avg)
+                           skybright, zpt_diff_avg, **kw)
 
     elif camera == '90prime':
         g0 = 25.74
@@ -337,7 +342,7 @@ def add_psfzpt_cuts(T, camera, bad_expid, image2coadd=''):
         zpt_lo = dict(g=g0+dg[0], r=r0+dr[0])
         zpt_hi = dict(g=g0+dg[1], r=r0+dr[1])
         psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
-                           skybright, zpt_diff_avg)
+                           skybright, zpt_diff_avg, **kw)
 
     elif camera == 'decam':
         # These are from DR5; eg
@@ -362,7 +367,7 @@ def add_psfzpt_cuts(T, camera, bad_expid, image2coadd=''):
         zpt_hi = dict(g=g0+dg[1], r=r0+dr[1], z=z0+dz[1], i=i0+di[1],
                       Y=Y0+dY[1], u=u0+du[1])
         psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
-                           skybright, zpt_diff_avg, image2coadd=image2coadd)
+                           skybright, zpt_diff_avg, image2coadd=image2coadd, **kw)
     elif camera == 'hsc':
         g0 = 25.0
         r0 = 25.0
@@ -376,7 +381,7 @@ def add_psfzpt_cuts(T, camera, bad_expid, image2coadd=''):
         zpt_lo = dict(g=g0+dg[0], r=r0+dr[0], z=z0+dz[0])
         zpt_hi = dict(g=g0+dg[1], r=r0+dr[1], z=z0+dz[1])
         psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
-                           skybright, zpt_diff_avg)
+                           skybright, zpt_diff_avg, **kw)
 
     elif camera == 'megaprime':
         g0 = 25.0
@@ -391,8 +396,22 @@ def add_psfzpt_cuts(T, camera, bad_expid, image2coadd=''):
         zpt_lo = dict(g=g0+dg[0], r=r0+dr[0], z=z0+dz[0])
         zpt_hi = dict(g=g0+dg[1], r=r0+dr[1], z=z0+dz[1])
         psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
-                           skybright, zpt_diff_avg)
-        
+                           skybright, zpt_diff_avg, **kw)
+
+    elif camera == 'panstarrs':
+        g0 = 25.0
+        r0 = 25.0
+        z0 = 25.0
+        dg = (-0.5, +0.5)
+        dr = (-0.5, +0.5)
+        dz = (-0.5, +0.5)
+        radec_rms = 0.2
+        skybright = {}
+        zpt_diff_avg = 0.1
+        zpt_lo = dict(g=g0+dg[0], r=r0+dr[0], z=z0+dz[0])
+        zpt_hi = dict(g=g0+dg[1], r=r0+dr[1], z=z0+dz[1])
+        psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
+                           skybright, zpt_diff_avg, **kw)
     else:
         assert(False)
 

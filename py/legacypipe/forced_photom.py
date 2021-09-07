@@ -666,9 +666,9 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     F.ccdname = np.array([im.ccdname] * len(F))
 
     # "Denormalizing"
-    F.filter  = np.array([tim.band]               * len(F))
-    F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(F))
-    F.exptime = np.array([tim.primhdr['EXPTIME']] * len(F), dtype=np.float32)
+    F.filter  = np.array([tim.band]      * len(F))
+    F.mjd     = np.array([im.mjdobs]     * len(F))
+    F.exptime = np.array([im.exptime]    * len(F), dtype=np.float32)
     F.psfsize = np.array([tim.psf_fwhm * tim.imobj.pixscale] * len(F), dtype=np.float32)
     F.ccd_cuts = np.array([ccd.ccd_cuts] * len(F))
     F.airmass  = np.array([ccd.airmass ] * len(F), dtype=np.float32)

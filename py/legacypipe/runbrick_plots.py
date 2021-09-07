@@ -237,17 +237,33 @@ def tim_plots(tims, bands, ps):
     for b in bands:
         sig1 = np.median([tim.sig1 for tim in tims if tim.band == b])
         plt.clf()
+        # First select the histogram range...
+        blo,bhi = 0., 0.
         for tim in tims:
             if tim.band != b:
                 continue
             # broaden range to encompass most pixels... only req'd
             # when sky is bad
-            lo,hi = -5.*sig1, 5.*sig1
             pix = tim.getImage()[tim.getInvError() > 0]
-            lo = min(lo, np.percentile(pix, 5))
-            hi = max(hi, np.percentile(pix, 95))
-            plt.hist(pix, range=(lo, hi), bins=50, histtype='step',
+            blo = min(blo, -5.*tim.sig1)
+            bhi = max(bhi, +5.*tim.sig1)
+            blo = min(blo, np.percentile(pix, 5))
+            bhi = max(bhi, np.percentile(pix, 95))
+        # Now plot histograms
+        for tim in tims:
+            if tim.band != b:
+                continue
+            # clip to limits to show pixels outside range
+            pix = tim.getImage()[tim.getInvError() > 0]
+            plt.hist(np.clip(pix, blo, bhi), range=(blo, bhi), bins=50, histtype='step',
                      alpha=0.5, label=tim.name)
+            # Print argmin unmasked pixel.
+            pix = tim.getImage() * (tim.getInvError() > 0)
+            i = np.argmin(pix)
+            iy,ix = np.unravel_index(i, pix.shape)
+            print('Image', tim, 'lowest pixel: %i,%i (with tim x0,y0 = %i,%i  -->  %i,%i) value %.3g' %
+                  (ix, iy, tim.x0, tim.y0, ix+tim.x0, iy+tim.y0, pix[iy,ix]))
+        plt.xlim(blo, bhi)
         plt.legend()
         plt.xlabel('Pixel values')
         plt.title('Pixel distributions: %s band' % b)
@@ -260,11 +276,11 @@ def tim_plots(tims, bands, ps):
                 continue
             ie = tim.getInvError()
             pix = (tim.getImage() * ie)[ie > 0]
-            plt.hist(pix, range=(lo, hi), bins=50, histtype='step',
+            plt.hist(np.clip(pix, lo, hi), range=(lo, hi), bins=50, histtype='step',
                      alpha=0.5, label=tim.name)
         plt.legend()
-        plt.xlabel('Pixel values (sigma)')
         plt.xlim(lo,hi)
+        plt.xlabel('Pixel values (sigma)')
         plt.title('Pixel distributions: %s band' % b)
         ps.savefig()
 

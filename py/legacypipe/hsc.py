@@ -12,6 +12,9 @@ produced by the LSST software stack.
 
 These are one file per CCD, with variance maps, flags, WCS, and PsfEx
 models included in BINTABLE HDUs.
+
+The sky background is also estimated and subtracted, so no external
+calib files required.
 '''
 class HscImage(LegacySurveyImage):
     def __init__(self, survey, ccd, image_fn=None, image_hdu=0):
@@ -96,9 +99,14 @@ class HscImage(LegacySurveyImage):
             return fwhm
         # convert from arcsec to pixels (hard-coded pixscale here)
         fwhm /= HscImage.get_nominal_pixscale()
+        return fwhm
 
     def get_propid(self, primhdr):
-        return primhdr['PROP-ID']
+        pid = primhdr.get('PROP-ID')
+        if pid is not None:
+            return pid
+        # CORR files
+        return primhdr['OB-ID']
 
     def get_camera(self, primhdr):
         cam = super().get_camera(primhdr)
@@ -114,8 +122,17 @@ class HscImage(LegacySurveyImage):
         MJD     =      56743.311664789 / [d] Mod. Julian Date at typical time
         MJD-END =     56743.3151609958 / [d] Mod.Julian Date at the end of exposure
         MJD-OBS =     51544.4992571308 / Modified Julian Date of observation
+
+        On the other hand, HSC CORR images have MJD-STR for the start MJD:
+
+        MJD-STR =       58850.23208995 / [d] Mod.Julian Date at the start of exposure
+        MJD-END =        58850.2326893 / [d] Mod.Julian Date at the end of exposure
+        MJD-OBS =     51544.4992571308 / Modified Julian Date of observation
         '''
-        return primhdr.get('MJD')
+        mjd = primhdr.get('MJD')
+        if mjd is not None:
+            return mjd
+        return primhdr.get('MJD-STR')
 
     def get_wcs(self, hdr=None):
         from astrometry.util.util import Sip
@@ -161,7 +178,7 @@ class HscImage(LegacySurveyImage):
         # PsfEx model information is spread across two BINTABLE hdus,
         # each with AR_NAME='PsfexPsf' and no other easily recognized
         # headers.
-        F = fitsio.FITS(fn)
+        F = self.read_image_fits()
         TT = []
         for i in range(1, len(F)):
             hdr = F[i].read_header()
@@ -259,9 +276,38 @@ class HscImage(LegacySurveyImage):
         return remap_hsc_bitmask(dq, header)
 
     def get_zeropoint(self, primhdr, hdr):
-        flux = primhdr['FLUXMAG0']
-        zpt = 2.5 * np.log10(flux / self.exptime)
-        return zpt
+        # CALEXP data products have FLUXMAG0.
+        flux = primhdr.get('FLUXMAG0')
+        if flux is not None:
+            zpt = 2.5 * np.log10(flux / self.exptime)
+            return zpt
+        # CORR data products don't... depending on versions, there
+        # will be an HDU with AR_NAME = 'PhotoCalib', scaling the image to nanoJanskies.
+        F = self.read_image_fits()
+        photocal = None
+        for i in range(1, len(F)):
+            from astrometry.util.fits import fits_table
+            hdr = F[i].read_header()
+            if hdr.get('AR_NAME') != 'PhotoCalib':
+                continue
+            #print('Found PhotoCalib AR_NAME')
+            #dat = F[i].read(lower=True)
+            #print('data:', dat)
+            #print('dtype:', dat.dtype)
+            photocal = fits_table(F[i].read(lower=True))
+            #print('Found PhotoCalib table:', photocal)
+            #photocal.about()
+            break
+        if photocal is not None:
+            # flux [nJy] = "counts" * calibration factor.
+            # mag 0 = 3.631 e12 nJy.
+            scale = photocal.calibrationmean[0]
+            flux = 3.631e12 / scale
+            zpt = 2.5 * np.log10(flux / self.exptime)
+            print('Returning zeropoint:', zpt)
+            return zpt
+        # Have to measure from photometering reference catalog!
+        return None
 
     def estimate_sky(self, img, invvar, dq, primhdr, imghdr):
         return 0., primhdr['SKYLEVEL'], primhdr['SKYSIGMA']
@@ -297,23 +343,40 @@ class HscImage(LegacySurveyImage):
 
 def remap_hsc_bitmask(dq, header):
     new_dq = np.zeros(dq.shape, np.int16)
-    # MP_BAD  =                    0
-    # MP_SUSPECT =        7
-    # MP_NO_DATA =        8
-    # MP_CROSSTALK =      9
-    # MP_UNMASKEDNAN =   11
-    new_dq |= (DQ_BITS['badpix'] * ((dq & ((1<<0) | (1<<7) | (1<<8) | (1<<9) | (1<<11))) != 0))
-    # MP_SAT  =                    1
-    new_dq |= (DQ_BITS['satur' ] * ((dq & (1<<1)) != 0))
-    # MP_INTRP=                    2
-    new_dq |= (DQ_BITS['interp'] * ((dq & (1<<2)) != 0))
-    # MP_CR   =                    3
-    new_dq |= (DQ_BITS['cr'] * ((dq & (1<<3)) != 0))
-    #MP_EDGE =                    4
-    new_dq |= (DQ_BITS['edge'] * ((dq & (1<<4)) != 0))
-    '''
-    MP_DETECTED =       5
-    MP_DETECTED_NEGATIVE = 6
-    MP_NOT_DEBLENDED = 10
-    '''
+    #### The bits don't seem to be constant / the same between CORR and CALEXP.
+    #### Use the header names!!
+    masks = {}
+    for k in header:
+        if not k.startswith('MP_'):
+            continue
+        name = k[3:]
+        masks[name] = 1 << int(header[k])
+    def val(name):
+        return masks.get(name, 0)
+    # MP_BAD
+    # MP_SAT
+    # MP_INTRP
+    # MP_CR
+    #MP_EDGE
+    # MP_DETECTED
+    # MP_DETECTED_NEGATIVE
+    # MP_SUSPECT
+    # MP_NO_DATA
+    # MP_CROSSTALK
+    # MP_NOT_DEBLENDED
+    # MP_UNMASKEDNAN
+    bits = (val('BAD') |
+            val('SUSPECT') |
+            val('NO_DATA') |
+            val('CROSSTALK') |
+            val('UNMASKEDNAN'))
+    new_dq |= DQ_BITS['badpix'] * ((dq & bits) != 0)
+    bits = val('SAT')
+    new_dq |= DQ_BITS['satur' ] * ((dq & bits) != 0)
+    bits = val('INTRP')
+    new_dq |= DQ_BITS['interp'] * ((dq & bits) != 0)
+    bits = val('CR')
+    new_dq |= DQ_BITS['cr'] * ((dq & bits) != 0)
+    bits = val('EDGE')
+    new_dq |= DQ_BITS['edge'] * ((dq & bits) != 0)
     return new_dq

@@ -206,8 +206,9 @@ class LegacySurveyImage(object):
             self.expnum = self.get_expnum(primhdr)
             self.camera = self.get_camera(primhdr)
             self.mjdobs = self.get_mjd(primhdr)
+            self.exptime = self.get_exptime(primhdr)
             namechange = {'date': 'procdate',}
-            for key in ['EXPTIME', 'HA', 'DATE', 'PLVER', 'PLPROCID']:
+            for key in ['HA', 'DATE', 'PLVER', 'PLPROCID']:
                 val = primhdr.get(key)
                 if isinstance(val, str):
                     val = val.strip()
@@ -227,8 +228,7 @@ class LegacySurveyImage(object):
                 self.height,self.width = info['dims']
                 self.hdu = info['hdunum'] - 1
                 self.ccdname = self.get_ccdname(primhdr, hdr)
-                self.pixscale = 3600. * np.sqrt(np.abs(hdr['CD1_1'] * hdr['CD2_2'] -
-                                                       hdr['CD1_2'] * hdr['CD2_1']))
+                self.pixscale = self.get_pixscale(primhdr, hdr)
                 self.fwhm = self.get_fwhm(primhdr, hdr)
             else:
                 self.ccdname = ''
@@ -288,15 +288,13 @@ class LegacySurveyImage(object):
         self.dq_saturation_bits = DQ_BITS['satur'] # | DQ_BITS['bleed']
 
         # Calib filenames
-        basename = os.path.basename(self.image_filename)
-        ### HACK -- keep only the first dotted component of the base filename.
-        # This allows, eg, create-testcase.py to use image filenames like BASE.N3.fits
-        # with only a single HDU.
-        basename = basename.split('.')[0]
-
-        imgdir = os.path.dirname(self.image_filename)
         calibdir = self.survey.get_calib_dir()
-        calname = basename+"-"+self.ccdname
+        imgdir = os.path.dirname(self.image_filename)
+        basename = self.get_base_name()
+        if len(self.ccdname):
+            calname = basename + '-' + self.ccdname
+        else:
+            calname = basename
         self.name = calname
         self.sefn         = os.path.join(calibdir, 'se',           imgdir, basename, calname + '-se.fits')
         self.psffn        = os.path.join(calibdir, 'psfex-single', imgdir, basename, calname + '-psfex.fits')
@@ -317,6 +315,17 @@ class LegacySurveyImage(object):
         d = self.__dict__.copy()
         d['_fits'] = None
         return d
+
+    def get_base_name(self):
+        # Returns the base name to use for this Image object.  This is
+        # used for calib paths, and is joined with the CCD name to
+        # form the name of this Image object and for calib filenames.
+        basename = os.path.basename(self.image_filename)
+        ### HACK -- keep only the first dotted component of the base filename.
+        # This allows, eg, create-testcase.py to use image filenames like BASE.N3.fits
+        # with only a single HDU.
+        basename = basename.split('.')[0]
+        return basename
 
     def override_ccd_table_types(self):
         return {}
@@ -486,6 +495,17 @@ class LegacySurveyImage(object):
 
     def get_mjd(self, primhdr):
         return primhdr.get('MJD-OBS')
+
+    def get_exptime(self, primhdr):
+        return primhdr.get('EXPTIME')
+
+    def get_pixscale(self, primhdr, hdr):
+        return 3600. * np.sqrt(np.abs(hdr['CD1_1'] * hdr['CD2_2'] -
+                                      hdr['CD1_2'] * hdr['CD2_1']))
+
+    # Used during zeropointing / annotation
+    def get_cd_matrix(self, primhdr, hdr):
+        return hdr['CD1_1'], hdr['CD1_2'], hdr['CD2_1'], hdr['CD2_2']
 
     # Used during zeropointing
     def scale_image(self, img):
@@ -1092,9 +1112,9 @@ class LegacySurveyImage(object):
         header : fitsio header
             The FITS header
         '''
-        print('Reading', self.imgfn, 'ext', self.hdu)
         if self._image_header is not None:
             return self._image_header
+        print('Reading', self.imgfn, 'ext', self.hdu)
         self._image_header = self.read_image_fits()[self.hdu].read_header()
         return self._image_header
 
@@ -1469,7 +1489,9 @@ class LegacySurveyImage(object):
 
         slc = self.get_good_image_slice(None)
         img = self.read_image(slc=slc)
-        dq = self.read_dq(slc=slc)
+        dq,dqhdr = self.read_dq(slc=slc, header=True)
+        if dq is not None:
+            dq = self.remap_dq(dq, dqhdr)
         wt = self.read_invvar(slc=slc, dq=dq)
         primhdr = self.read_image_primary_header()
         imghdr = self.read_image_header()
