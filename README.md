@@ -7,7 +7,7 @@ CircleCI: [![Build Status](https://img.shields.io/circleci/project/github/legacy
 [![Docs](https://readthedocs.org/projects/legacypipe/badge/?version=latest)](http://legacypipe.readthedocs.org/en/latest/)
 Coveralls: [![Coverage](https://coveralls.io/repos/github/legacysurvey/legacypipe/badge.svg?branch=master)](https://coveralls.io/github/legacysurvey/legacypipe)
 Codecov: [![codecov](https://codecov.io/gh/legacysurvey/legacypipe/branch/master/graph/badge.svg)](https://codecov.io/gh/legacysurvey/legacypipe)
-Codacy: [![Codacy Badge](https://api.codacy.com/project/badge/Grade/6bfbaebbe95c4d6d8b4fbf580ea3f520)](https://www.codacy.com/manual/dstndstn/legacypipe?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=legacysurvey/legacypipe&amp;utm_campaign=Badge_Grade)
+Codacy: [![Codacy Badge](https://app.codacy.com/project/badge/Grade/730586099fd4462d9c5827d58d166f9f)](https://www.codacy.com/gh/legacysurvey/legacypipe/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=legacysurvey/legacypipe&amp;utm_campaign=Badge_Grade)
 
 ## Code for the analysis of the Legacy Surveys (DECam/DECaLS, MzLS+BASS)
 
