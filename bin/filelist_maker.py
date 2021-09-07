@@ -364,12 +364,17 @@ def filelist(flist, survey, report=True,
             cut = newpath.find('_ooi_')
             newpath = newpath[:cut]+'_ori.fits.fz'
             flist['object'][i] = fits.getheader(newpath)['OBJECT']
-
     imagesind = numpy.flatnonzero([f == 'images'
                                    for f in flist['filename'][0].split('/')])
-    imagesind = imagesind[0]
-    flist['filename'] = ['/'.join(f.split('/')[imagesind+1:])
-                         for f in flist['filename']]
+    if len(imagesind) == 0:
+        imagesind = numpy.flatnonzero([f == 'staging'
+                                       for f in flist['filename'][0].split('/')])
+    if len(imagesind) == 0:
+        print('Failed to find "images" or "staging" in filename paths; not trimming image filenames')
+    else:
+        imagesind = imagesind[0]
+        flist['filename'] = ['/'.join(f.split('/')[imagesind+1:])
+                             for f in flist['filename']]
     return flist
 
 
@@ -387,12 +392,23 @@ if __name__ == "__main__":
                         help='allsumary file name (.fits)')
     parser.add_argument('--skip', type=int, default=0,
                         help='number of exposures to skip (testing only)')
+    parser.add_argument('--resume', default=False, action='store_true',
+                        help='Resume processing after allsummary file has been produced.')
     args = parser.parse_args()
-    flist = open(args.filelist, 'r').readlines()
-    flist = [f.strip() for f in flist if '.fits' in f]
-    flist = flist[args.skip:]
-    summary = flistsummary(flist)
-    if len(args.allsummaryfn) > 0:
-        fits.writeto(args.allsummaryfn, summary)
+    if args.resume and os.path.exists(args.allsummaryfn):
+        # astropy.io.fits does not round-trip correctly...
+        # (later, rec_append_fields causes string columns to turn into bytes, releasing havoc)
+        import fitsio
+        summary = fitsio.read(args.allsummaryfn, ext=1)
+        #from astropy.table import
+        #summary = Table.read(args.allsummaryfn)
+        #summary = fits.open(args.allsummaryfn)[1].data
+    else:
+        flist = open(args.filelist, 'r').readlines()
+        flist = [f.strip() for f in flist if '.fits' in f]
+        flist = flist[args.skip:]
+        summary = flistsummary(flist)
+        if len(args.allsummaryfn) > 0:
+            fits.writeto(args.allsummaryfn, summary)
     out = filelist(summary, args.survey)
     fits.writeto(args.outfn, out)
