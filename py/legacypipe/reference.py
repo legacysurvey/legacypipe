@@ -1,4 +1,5 @@
 import os
+import warnings
 import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table, merge_tables
@@ -333,20 +334,15 @@ def read_tycho2(survey, targetwcs, bands):
     tycho2fn = survey.find_file('tycho2')
     radius = 1.
     ra,dec = targetwcs.radec_center()
-    # John added the "isgalaxy" flag 2018-05-10, from the Metz &
+    # Tycho-2 catalog:
+    # - John added the "isgalaxy" flag 2018-05-10, from the Metz &
     # Geffert (04) catalog.
-
-    # Eddie added the "zguess" column 2019-03-06, by matching with
+    # - Eddie added the "zguess" column 2019-03-06, by matching with
     # 2MASS and estimating z based on APASS.
+    # - Rongpu added the "ggguess" column (Gaia-G guess) 2021-09-13, by matching with 2MASS.
 
     # The "tycho2.kd.fits" file read here was produced by:
-    #
-    # fitscopy ~schlafly/legacysurvey/tycho-isgalaxyflag-2mass.fits"[col \
-    #   tyc1;tyc2;tyc3;ra;dec;sigma_ra;sigma_dec;mean_ra;mean_dec;pm_ra;pm_dec; \
-    #   sigma_pm_ra;sigma_pm_dec;epoch_ra;epoch_dec;mag_bt;mag_vt;mag_hp; \
-    #   isgalaxy;Jmag;Hmag;Kmag,zguess]" /tmp/tycho2-astrom.fits
-    # startree -P -k -n stars -T -i /tmp/tycho2-astrom.fits \
-    #  -o /global/project/projectdirs/cosmo/staging/tycho2/tycho2.kd.fits
+    # startree -P -k -n stars -T -i /global/cfs/cdirs/desi/users/rongpu/useful/tycho2-reference.fits -o tycho2.kd.fits
 
     kd = tree_open(tycho2fn, 'stars')
     I = tree_search_radec(kd, ra, dec, radius)
@@ -368,7 +364,7 @@ def fix_tycho(tycho):
         tycho.cut(tycho.isgalaxy == 0)
         debug('Cut to', len(tycho), 'Tycho-2 stars on isgalaxy==0')
     else:
-        print('Warning: no "isgalaxy" column in Tycho-2 catalog')
+        warnings.warn('No "isgalaxy" column in Tycho-2 catalog')
 
     tycho.ref_cat = np.array(['T2'] * len(tycho))
     # tyc1: [1,9537], tyc2: [1,12121], tyc3: [1,3]
@@ -386,12 +382,21 @@ def fix_tycho(tycho):
     for c in ['pmra', 'pmdec', 'pmra_ivar', 'pmdec_ivar']:
         X = tycho.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
-    tycho.mag = tycho.mag_vt
-    # Patch missing mag values...
+    # Use Rongpu's Gaia-G guesses mag, when available and non-NaN
+    if not 'ggguess' in tycho.get_columns():
+        warnings.warn('No "ggguess" column in Tycho-2 catalog')
+        tycho.mag = tycho.mag_vt
+    else:
+        tycho.mag = tycho.ggguess
+        # Fall back to V_T
+        I = np.flatnonzero(np.logical_not(np.isfinite(tycho.mag)))
+        tycho.mag[I] = tycho.mag_vt[I]
+    # Fall back further to MAG_HP, MAG_BT.
     tycho.mag[tycho.mag == 0] = tycho.mag_hp[tycho.mag == 0]
     tycho.mag[tycho.mag == 0] = tycho.mag_bt[tycho.mag == 0]
 
-    # Use zguess
+    # For very red stars, use the brighter of zguess+1 and the optical mag
+    # for the masking radius.
     tycho.mask_mag = tycho.mag
     with np.errstate(invalid='ignore'):
         I = np.flatnonzero(np.isfinite(tycho.zguess) *
