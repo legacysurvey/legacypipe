@@ -349,6 +349,26 @@ def tim_plots(tims, bands, ps):
                 plt.suptitle('%s (%s %s) PLVER %s' % (tim.name, im.image_filename, im.ccdname, im.plver))
                 ps.savefig()
 
+    # Plot PSF model
+    for tim in tims:
+        plt.clf()
+        nx,ny = 5,5
+        psfs = []
+        h,w = tim.shape
+        for y in np.linspace(0, h-1, ny):
+            psfrow = []
+            for x in np.linspace(0, w-1, nx):
+                psf = tim.getPsf().getPointSourcePatch(x, y).patch
+                if x == 0 and y == 0:
+                    print('tim', tim.name, 'PSF shape', psf.shape)
+                psfrow.append(psf)
+            psfrow = np.hstack(psfrow)
+            psfs.append(psfrow)
+        psfs = np.vstack(psfs)
+        plt.imshow(psfs, interpolation='nearest', origin='lower')
+        plt.title('PSF models for %s' % tim.name)
+        ps.savefig()
+
 def _plot_mods(tims, mods, blobwcs, titles, bands, coimgs, cons, bslc,
                blobw, blobh, ps,
                chi_plots=True, rgb_plots=False, main_plot=True,

@@ -212,7 +212,15 @@ class HscImage(LegacySurveyImage):
         ims = ims.astype(np.float32)
         assert(len(ims.shape) == 3)
         assert(ims.shape[0] == ne)
+
+        # Extra polynomial coefficients that (apparently) aren't folded into the ims (?)
+        print('Coefficients:', t2.coeff)
+        assert(len(t2.coeff) == ne)
+        for i,c in enumerate(t2.coeff):
+            ims[:,:,i] *= c
+
         psfex.psfbases = ims
+
         bh, bw = psfex.psfbases[0].shape
         psfex.radius = (bh + 1) / 2.
 
@@ -340,6 +348,18 @@ class HscImage(LegacySurveyImage):
         return True
     def check_image_header(self, imghdr):
         pass
+
+    # def fix_saturation(self, img, dq, invvar, primhdr, imghdr, slc):
+    #     ## Mask very negative pixels
+    #     from tractor.brightness import NanoMaggies
+    #     zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
+    #     sig = zpscale * self.sig1
+    #     print('Sig1 =', self.sig1, 'nanomaggies ->', sig, 'image counts')
+    #     Ineg,Jneg = np.nonzero(img < -5. * sig)
+    #     print('Found', len(Ineg), 'pixels < -5 sigma -- masking')
+    #     img[Ineg,Jneg] = 0.
+    #     dq[Ineg,Jneg] |= DQ_BITS['badpix']
+    #     invvar[Ineg,Jneg] = 0.
 
 def remap_hsc_bitmask(dq, header):
     new_dq = np.zeros(dq.shape, np.int16)
