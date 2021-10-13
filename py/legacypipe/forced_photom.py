@@ -487,6 +487,8 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     from functools import reduce
     from legacypipe.bits import DQ_BITS
 
+    plots = (ps is not None)
+
     tlast = Time()
     #print('Opt:', opt)
     im = survey.get_image_object(ccd)
@@ -640,6 +642,11 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     print('Parse catalog:', tnow-tlast)
     tlast = tnow
 
+    if plots:
+        #opt.save_data = True
+        opt.save_model = True
+        opt.plot_wcs = getattr(opt, 'plot_wcs', None)
+
     print('Forced photom for', im, '...')
     F = run_forced_phot(cat, tim,
                         ceres=opt.ceres,
@@ -655,6 +662,50 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     if opt.save_model:
         # unpack results
         F,model_img = F
+
+    if plots:
+        import pylab as plt
+
+        if opt.plot_wcs:
+            sh = opt.plot_wcs.shape
+            img = np.zeros(sh, np.float32)
+            mod = np.zeros(sh, np.float32)
+            chi = np.zeros(sh, np.float32)
+            from astrometry.util.resample import resample_with_wcs
+            tchi = (tim.getImage() - model_img) * tim.getInvError()
+            Yo,Xo,Yi,Xi,rims = resample_with_wcs(opt.plot_wcs, tim.subwcs,
+                                                 [tim.getImage(), model_img, tchi])
+            img[Yo,Xo] = rims[0]
+            mod[Yo,Xo] = rims[1]
+            chi[Yo,Xo] = rims[2]
+        else:
+            img = tim.getImage()
+            mod = model_img
+            chi = (tim.getImage() - model_img) * tim.getInvError()
+
+        #ima = dict(interpolation='nearest', origin='lower', vmin=-3.*tim.sig1, vmax=10.*tim.sig1,
+        #           cmap='gray')
+        ima = dict(origin='lower', vmin=-3.*tim.sig1, vmax=10.*tim.sig1,
+                   cmap='gray')
+        fn = ps.getnext()
+        plt.imsave(fn, img, **ima)
+        fn = ps.getnext()
+        plt.imsave(fn, mod, **ima)
+        fn = ps.getnext()
+        plt.imsave(fn, chi, origin='lower', vmin=-5, vmax=+5, cmap='gray')
+
+        # plt.clf()
+        # plt.imshow(img, **ima)
+        # plt.title('data: %s' % tim.name)
+        # ps.savefig()
+        # plt.clf()
+        # plt.imshow(mod, **ima)
+        # plt.title('model: %s' % tim.name)
+        # ps.savefig()
+        # plt.clf()
+        # plt.imshow(chi, origin='lower', interpolation='nearest', vmin=-5., vmax=+5., cmap='gray')
+        # plt.title('chi: %s' % tim.name)
+        # ps.savefig()
 
     F.release   = T.release
     F.brickid   = T.brickid

@@ -329,7 +329,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         tim_plots(tims, bands, ps)
 
     # Add header cards about which bands and cameras are involved.
-    for band in 'grz':
+    for band in survey.allbands:
         hasit = band in bands
         version_header.add_record(dict(
             name='BRICK_%s' % band.upper(), value=hasit,
@@ -375,6 +375,7 @@ def stage_refs(survey=None,
                star_clusters=True,
                plots=False, ps=None,
                record_event=None,
+               tims=None,
                **kwargs):
     from legacypipe.reference import get_reference_sources
 
@@ -439,6 +440,62 @@ def stage_refs(survey=None,
             refcat = [refcat[i] for i in I]
             assert(len(refstars) == len(refcat))
         del I,drop
+
+    if plots and refstars:
+        import pylab as plt
+        from tractor import Tractor
+        for tim in tims:
+            I = np.flatnonzero(refstars.istycho | refstars.isgaia)
+            stars = refstars[I]
+            info(len(stars), 'ref stars')
+            stars.index = I
+            ok,xx,yy = tim.subwcs.radec2pixelxy(stars.ra, stars.dec)
+            xx -= 1.
+            yy -= 1.
+            #xy = np.array([tim.wcs.position
+            stars.xx = xx
+            stars.yy = yy
+            h,w = tim.shape
+            edge = 5
+            stars.cut((xx > edge) * (yy > edge) * (xx < w-1-edge) * (yy < h-1-edge))
+            info(len(stars), 'are within tim', tim.name)
+            K = np.argsort(stars.mag)
+            stars.cut(K)
+            plt.clf()
+            for i in range(len(stars)):
+                if i >= 5:
+                    break
+                src = refcat[stars.index[i]]
+                tr = Tractor([tim], [src])
+                tr.freezeParam('images')
+                src.freezeAllBut('brightness')
+                src.getBrightness().freezeAllBut(tim.band)
+                try:
+                    from tractor.ceres_optimizer import CeresOptimizer
+                    ceres_block = 8
+                    tr.optimizer = CeresOptimizer(BW=ceres_block, BH=ceres_block)
+                except ImportError:
+                    from tractor.lsqr_optimizer import LsqrOptimizer
+                    tr.optimizer = LsqrOptimizer()
+                R = tr.optimize_forced_photometry(shared_params=False, wantims=True)
+                src.thawAllParams()
+                y = int(stars.yy[i])
+                x = int(stars.xx[i])
+                sz = 25
+                sl = slice(y-sz, y+sz+1), slice(x-sz, x+sz+1)
+                for data,mod,ie,chi,roi in R.ims1:
+                    subimg = data[sl]
+                    mn,mx = np.percentile(subimg.ravel(), [25,99])
+                    mx = subimg.max()
+                    ima = dict(origin='lower', interpolation='nearest', vmin=mn, vmax=mx)
+                    plt.subplot(3,5, 1 + i)
+                    plt.imshow(data[sl], **ima)
+                    plt.subplot(3,5, 1 + 5 + i)
+                    plt.imshow(mod[sl], **ima)
+                    plt.subplot(3,5, 1 + 2*5 + i)
+                    plt.imshow(chi[sl], origin='lower', interpolation='nearest', vmin=-5, vmax=+5)
+            plt.suptitle('Ref stars: %s' % tim.name)
+            ps.savefig()
 
     keys = ['refstars', 'gaia_stars', 'T_dup', 'T_clusters', 'version_header',
             'refcat']

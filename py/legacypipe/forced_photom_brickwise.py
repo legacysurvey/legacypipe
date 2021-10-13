@@ -36,6 +36,7 @@ def main():
     parser.add_argument('-v', '--verbose', dest='verbose', action='count',
                         default=0, help='Make more verbose')
 
+    parser.add_argument('--plots', default=None, help='Create plots; specify a base filename for the plots')
     opt = parser.parse_args()
 
     import logging
@@ -46,6 +47,11 @@ def main():
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
     # tractor logging is *soooo* chatty
     logging.getLogger('tractor.engine').setLevel(lvl + 10)
+
+    ps = None
+    if opt.plots is not None:
+        from astrometry.util.plotutils import PlotSequence
+        ps = PlotSequence(opt.plots)
 
     #if not opt.forced:
     #    opt.apphot = True
@@ -107,11 +113,14 @@ def main():
     opt.move_gaia = True
     opt.save_model = False
     opt.save_data = False
+    opt.plot_wcs = None
+    if ps is not None:
+        opt.plot_wcs = targetwcs
 
     args = []
     for ccd in ccds:
         args.append((survey, catsurvey, None, None, ccd, opt, None, radecpoly,
-                     [brick], None))
+                     [brick], ps))
 
     from legacypipe.forced_photom import bounce_one_ccd
     if opt.threads:
