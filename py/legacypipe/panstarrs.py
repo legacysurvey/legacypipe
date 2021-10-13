@@ -300,4 +300,15 @@ class PanStarrsImage(LegacySurveyImage):
         tmpmaskfn = create_temp(suffix='.fits')
         todelete.append(tmpmaskfn)
         fitsio.write(tmpmaskfn, m, clobber=True, header=mhdr)
+
+        # Also need to open the image file and unapply the arcsinh scaling!
+        img,imhdr = fitsio.read(tmpimgfn, header=True)
+        alpha = 2.5 * np.log10(np.e)
+        boff  = imhdr['BOFFSET']
+        bsoft = imhdr['BSOFTEN']
+        img = boff + bsoft * 2. * np.sinh(img / alpha)
+        tmpimgfn = create_temp(suffix='.fits')
+        todelete.append(tmpimgfn)
+        fitsio.write(tmpimgfn, img, clobber=True, header=imhdr)
+
         return tmpimgfn, tmpmaskfn
