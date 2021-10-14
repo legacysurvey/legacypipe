@@ -2078,7 +2078,7 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
         return 'NormalizedPixelizedPsfEx'
 
     def getFourierTransform(self, px, py, radius):
-        fft, (cx,cy), shape, (v,w) = super(NormalizedPixelizedPsfEx, self).getFourierTransform(px, py, radius)
+        fft, (cx,cy), shape, (v,w) = super().getFourierTransform(px, py, radius)
         fft /= np.abs(fft[0][0])
         return fft, (cx,cy), shape, (v,w)
 
@@ -2091,6 +2091,11 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
         pix = self.psfex.at(x, y)
         pix /= pix.sum()
         return PixelizedPSF(pix)
+
+    def _sampleImage(self, img, dx, dy):
+        xl,yl,img = super()._sampleImage(img, dx, dy)
+        img /= img.sum()
+        return xl,yl,img
 
 def fix_weight_quantization(wt, weightfn, ext, slc):
     '''
