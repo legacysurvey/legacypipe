@@ -694,6 +694,19 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         fn = ps.getnext()
         plt.imsave(fn, chi, origin='lower', vmin=-5, vmax=+5, cmap='gray')
 
+        from legacypipe.survey import get_rgb
+        fn = ps.getnext()
+        rgb = get_rgb([img], [tim.band])
+        # coadd_bw
+        rgb = rgb.sum(axis=2)
+        ima = dict(origin='lower', cmap='gray')
+        plt.imsave(fn, rgb, **ima)
+        fn = ps.getnext()
+        rgb = get_rgb([mod], [tim.band])
+        rgb = rgb.sum(axis=2)
+        plt.imsave(fn, rgb, **ima)
+        print('Saved', fn)
+
         # plt.clf()
         # plt.imshow(img, **ima)
         # plt.title('data: %s' % tim.name)
