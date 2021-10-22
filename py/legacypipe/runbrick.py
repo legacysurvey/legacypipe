@@ -3556,6 +3556,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--cache-dir', type=str, default=None,
                         help='Directory to search for cached files')
+    parser.add_argument('--prime-cache', default=False, action='store_true',
+                        help='Copy image (ooi, ood, oow) files to --cache-dir before starting.')
 
     parser.add_argument('--threads', type=int, help='Run multi-threaded')
     parser.add_argument('-p', '--plots', dest='plots', action='store_true',
@@ -3745,6 +3747,7 @@ def get_runbrick_kwargs(survey=None,
                         survey_dir=None,
                         output_dir=None,
                         cache_dir=None,
+                        prime_cache=False,
                         check_done=False,
                         skip=False,
                         skip_coadd=False,
@@ -3786,6 +3789,7 @@ def get_runbrick_kwargs(survey=None,
                             survey_dir=survey_dir,
                             output_dir=output_dir,
                             cache_dir=cache_dir,
+                            prime_cache=prime_cache,
                             allbands=allbands)
         info(survey)
 
