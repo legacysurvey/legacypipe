@@ -452,11 +452,10 @@ def stage_refs(survey=None,
             ok,xx,yy = tim.subwcs.radec2pixelxy(stars.ra, stars.dec)
             xx -= 1.
             yy -= 1.
-            #xy = np.array([tim.wcs.position
             stars.xx = xx
             stars.yy = yy
             h,w = tim.shape
-            edge = 5
+            edge = 25
             stars.cut((xx > edge) * (yy > edge) * (xx < w-1-edge) * (yy < h-1-edge))
             info(len(stars), 'are within tim', tim.name)
             K = np.argsort(stars.mag)
@@ -481,7 +480,7 @@ def stage_refs(survey=None,
                 src.thawAllParams()
                 y = int(stars.yy[i])
                 x = int(stars.xx[i])
-                sz = 25
+                sz = edge
                 sl = slice(y-sz, y+sz+1), slice(x-sz, x+sz+1)
                 for data,mod,ie,chi,roi in R.ims1:
                     subimg = data[sl]
