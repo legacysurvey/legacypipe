@@ -497,6 +497,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         im.check_for_cached_files(survey)
     if opt.do_calib:
         im.run_calibs(splinesky=True)
+    old_calibs_ok=True
 
     tim = im.get_tractor_image(slc=zoomslice,
                                radecpoly=radecpoly,
@@ -504,7 +505,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                                hybridPsf=opt.hybrid_psf,
                                normalizePsf=opt.normalize_psf,
                                constant_invvar=opt.constant_invvar,
-                               old_calibs_ok=True,
+                               old_calibs_ok=old_calibs_ok,
                                trim_edges=False)
     print('Got tim:', tim)
     if tim is None:
