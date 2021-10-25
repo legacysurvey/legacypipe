@@ -9,14 +9,15 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
-def subtract_halos(tims, refs, bands, mp, plots, ps, moffat=True):
-    args = [(tim, refs, moffat) for tim in tims]
+def subtract_halos(tims, refs, bands, mp, plots, ps, moffat=True,
+                   old_calibs_ok=False):
+    args = [(tim, refs, moffat, old_calibs_ok) for tim in tims]
     haloimgs = mp.map(subtract_one, args)
     for tim,h in zip(tims, haloimgs):
         tim.data -= h
 
 def subtract_one(X):
-    tim, refs, moffat = X
+    tim, refs, moffat, old_calibs_ok = X
     if tim.imobj.camera != 'decam':
         print('Warning: Stellar halo subtraction is only implemented for DECam')
         return 0.
@@ -25,12 +26,14 @@ def subtract_one(X):
         print('Warning: no support for halo subtraction in band %s' % tim.band)
         return 0.
     return decam_halo_model(refs, tim.time.toMjd(), tim.subwcs,
-                            tim.imobj.pixscale, tim.band, tim.imobj, moffat)
+                            tim.imobj.pixscale, tim.band, tim.imobj, moffat,
+                            old_calibs_ok=old_calibs_ok)
 
 def moffat(rr, alpha, beta):
     return (beta-1.)/(np.pi * alpha**2)*(1. + (rr/alpha)**2)**(-beta)
 
-def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat):
+def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
+                     old_calibs_ok=False):
     from legacypipe.survey import radec_at_mjd
     assert(np.all(refs.ref_epoch > 0))
     rr,dd = radec_at_mjd(refs.ra, refs.dec, refs.ref_epoch.astype(float),
@@ -44,7 +47,8 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat):
 
     have_inner_moffat = False
     if include_moffat:
-        psf = imobj.read_psf_model(0,0, pixPsf=True)
+        psf = imobj.read_psf_model(0,0, pixPsf=True,
+                                   old_calibs_ok=old_calibs_ok)
         if hasattr(psf, 'moffat'):
             have_inner_moffat = True
             inner_alpha, inner_beta = psf.moffat

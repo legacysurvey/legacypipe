@@ -566,6 +566,7 @@ def stage_halos(pixscale=None, targetwcs=None,
                 survey=None, brick=None,
                 refstars=None,
                 star_halos=True,
+                old_calibs_ok=True,
                 record_event=None,
                 **kwargs):
     record_event and record_event('stage_halos: starting')
@@ -585,7 +586,7 @@ def stage_halos(pixscale=None, targetwcs=None,
                 from legacypipe.runbrick_plots import halo_plots_before, halo_plots_after
                 coimgs = halo_plots_before(tims, bands, targetwcs, halostars, ps)
 
-            subtract_halos(tims, halostars, bands, mp, plots, ps)
+            subtract_halos(tims, halostars, bands, mp, plots, ps, old_calibs_ok=old_calibs_ok)
 
             if plots:
                 halo_plots_after(tims, bands, targetwcs, halostars, coimgs, ps)
@@ -606,6 +607,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        saturated_pix=None,
                        less_masking=False,
                        **kwargs):
+    from legacypipe.utils import copy_header_with_wcs
     record_event and record_event('stage_image_coadds: starting')
     '''
     Immediately after reading the images, we can create coadds of just
@@ -634,7 +636,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
 
     if not minimal_coadds:
         # interim maskbits
-        from legacypipe.utils import copy_header_with_wcs
         from legacypipe.bits import IN_BLOB
         refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
         # Construct a mask bits map
@@ -3555,6 +3556,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--cache-dir', type=str, default=None,
                         help='Directory to search for cached files')
+    parser.add_argument('--prime-cache', default=False, action='store_true',
+                        help='Copy image (ooi, ood, oow) files to --cache-dir before starting.')
 
     parser.add_argument('--threads', type=int, help='Run multi-threaded')
     parser.add_argument('-p', '--plots', dest='plots', action='store_true',
@@ -3744,6 +3747,7 @@ def get_runbrick_kwargs(survey=None,
                         survey_dir=None,
                         output_dir=None,
                         cache_dir=None,
+                        prime_cache=False,
                         check_done=False,
                         skip=False,
                         skip_coadd=False,
@@ -3785,6 +3789,7 @@ def get_runbrick_kwargs(survey=None,
                             survey_dir=survey_dir,
                             output_dir=output_dir,
                             cache_dir=cache_dir,
+                            prime_cache=prime_cache,
                             allbands=allbands)
         info(survey)
 
