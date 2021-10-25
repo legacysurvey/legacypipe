@@ -533,7 +533,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         halostars = gaia[Igaia]
         print('Got', len(gaia), 'Gaia stars,', len(halostars), 'for halo subtraction')
         moffat = True
-        halos = subtract_one((tim, halostars, moffat))
+        halos = subtract_one((tim, halostars, moffat, old_calibs_ok))
         tim.data -= halos
 
     # The "north" and "south" directories often don't have
