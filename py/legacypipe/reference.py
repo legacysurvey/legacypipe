@@ -284,8 +284,8 @@ def fix_gaia(gaia):
     gaia.astrometric_params_solved = gaia.astrometric_params_solved.astype(np.uint8)
 
     # Gaia version?
-    gaiaver = int(os.getenv('GAIA_CAT_VER', '1'))
-    gaia_release = 'G%i' % gaiaver
+    gaiaver = os.getenv('GAIA_CAT_VER', '1')
+    gaia_release = 'G%s' % gaiaver
     gaia.ref_cat = np.array([gaia_release] * len(gaia))
     gaia.ref_id  = gaia.source_id
     gaia.pmra_ivar  = 1./gaia.pmra_error **2
