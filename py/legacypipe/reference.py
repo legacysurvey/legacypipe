@@ -548,12 +548,47 @@ def get_galaxy_sources(galaxies, bands):
 
     srcs = [None for g in galaxies]
 
+    # DR10 -- estimated i band flux from r,z
+    cols = galaxies.get_columns()
+    if ('i' in bands and (not 'flux_i' in cols)
+        and 'flux_r' in cols and 'flux_z' in cols):
+        with np.errstate(divide='ignore'):
+            mag_r = -2.5 * (np.log10(galaxies.flux_r) - 9)
+            mag_z = -2.5 * (np.log10(galaxies.flux_z) - 9)
+        mag_r[np.logical_not(np.isfinite(mag_r))] = 30.
+        mag_z[np.logical_not(np.isfinite(mag_z))] = 30.
+        color = np.clip(mag_r - mag_z, -0.5, 2.0)
+        cc = [-0.13689305,
+              0.80606322,
+              -0.24921022,
+              -0.15773003,
+              0.10645930,
+              -0.0050743524]
+        iz = 0.
+        for i,c in enumerate(cc):
+            iz += c * color**i
+        mag_i = mag_z + iz
+        galaxies.flux_i = 10.**((22.5 - mag_i) / -2.5)
+        debug('Estimated i mags for SGA galaxies:')
+        debug('r:', mag_r[:10])
+        debug('z:', mag_z[:10])
+        debug('i:', mag_i[:10])
+
+    # Does the SGA catalog has flux_ columns for all the bands we're working with?
+    missing_band = False
+    has_band = {}
+    for band in bands:
+        has_band[band] = True
+        if not 'flux_%s' % band in cols:
+            has_band[band] = False
+            warnings.warn('No "flux_%s" column in SGA catalog; will have to fit for fluxes' % band)
+
     # If we have pre-burned galaxies, re-create the Tractor sources for them.
     I, = np.nonzero(galaxies.preburned)
     for ii,g in zip(I, galaxies[I]):
         typ = fits_reverse_typemap[g.type.strip()]
         pos = RaDecPos(g.ra, g.dec)
-        fluxes = dict([(band, g.get('flux_%s' % band)) for band in bands])
+        fluxes = dict([(band, g.get('flux_%s' % band) if has_band[band] else 1.) for band in bands])
         bright = NanoMaggies(order=bands, **fluxes)
         shape = None
         # put the Rex branch first, because Rex is a subclass of ExpGalaxy!
@@ -589,6 +624,8 @@ def get_galaxy_sources(galaxies, bands):
         else:
             raise RuntimeError('Unknown preburned SGA source type "%s"' % typ)
         debug('Created', src)
+        if missing_band:
+            src.needs_initial_flux = True
         assert(np.isfinite(src.getLogPrior()))
         srcs[ii] = src
 
