@@ -103,7 +103,7 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && make install INSTALL_DIR=/usr/local \
     && make clean \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import astrometry; print(astrometry.__version__)") \
-    && git describe && echo 0.85
+    && git describe && echo 0.87
 
 # Pip installs -- binary.  We need cython for the tractor.
 RUN for x in \
@@ -119,7 +119,7 @@ RUN for x in \
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && git checkout dr9.6 \
+    && git checkout dr10.0 \
     && python3 setup-cython.py --with-ceres install --home /usr/local \
     && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so") \
@@ -127,7 +127,7 @@ RUN git clone http://github.com/dstndstn/tractor.git tractor \
 
 # Pip installs -- built from source
 RUN pip --no-cache-dir install photutils
-RUN pip --no-cache-dir install fitsio==1.1.4
+RUN pip --no-cache-dir install fitsio==1.1.5
 
 RUN /sbin/ldconfig
 
@@ -266,11 +266,11 @@ RUN cd qdo && git remote add dstn https://bitbucket.org/dstn/qdo.git \
         && git fetch dstn && git checkout handle-oom \
 	&& pip install .
 
+ENV LEGACYPIPE_DIR /src/legacypipe/py
+
 # update legacypipe
 RUN cd /src/legacypipe && git pull \   
-    && git describe && echo DR9.8.3 && \
+    && git describe && echo DR9.9.0 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
-
-ENV LEGACYPIPE_DIR /src/legacypipe/py
 
