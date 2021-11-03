@@ -21,8 +21,8 @@ outdir=$LEGACY_SURVEY_DIR/zpt
 CACHE_DIR=/tmp/dr10pre-cache
 mkdir -p "${CACHE_DIR}"
 
-#ncores=32
-ncores=8
+ncores=32
+#ncores=8
 
 export DUST_DIR=/global/cfs/cdirs/cosmo/data/dust/v0_1
 export GAIA_CAT_DIR=/global/cfs/cdirs/cosmo/work/gaia/chunks-gaia-dr2-astrom-2
@@ -75,7 +75,10 @@ image_fn="$1"
 camera=decam
 
 # Redirect logs to a nested directory.
-log=$outdir/logs/$(echo "${image_fn}" | sed s#.fits.fz#.log#g)
+
+#log=$outdir/logs/$(echo "${image_fn}" | sed s#.fits.fz#.log#g)
+log=$outdir/logs2/$(echo "${image_fn}" | sed s#.fits.fz#.log#g)
+
 logdir=$(dirname $log)
 mkdir -p $logdir
 echo "Logging to $log"
@@ -91,12 +94,12 @@ python -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
     --survey-dir ${LEGACY_SURVEY_DIR} \
     --cache-dir ${CACHE_DIR} \
     --prime-cache \
-    --fitsverify \
     --image ${image_fn} \
     --outdir ${outdir} \
     --threads ${ncores} \
     >> "$log" 2>&1
 
+#    --fitsverify \
 #    --verbose \
 #    --blob-mask-dir ${blob_dir} \
 #    --zeropoints-dir ${zeropoints_dir}"

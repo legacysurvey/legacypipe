@@ -52,9 +52,15 @@ n_processes = 32
 test_q = False  # only process a small number of exposures
 
 base_dir = '/global/cfs/cdirs/cosmo/work/legacysurvey/dr10/'
-input_dir = os.path.join(base_dir, 'calib/psfex')
-output_dir = os.path.join(base_dir, 'calib/patched-psfex')
-surveyccd_path = os.path.join(base_dir, 'survey-ccds-decam-dr10-z-v1.kd.fits')
+#input_dir = os.path.join(base_dir, 'calib/psfex')
+#output_dir = os.path.join(base_dir, 'calib/patched-psfex')
+input_dir = os.path.join(base_dir, 'calib/unpatched-psfex')
+output_dir = os.path.join(base_dir, 'calib/psfex')
+#surveyccd_path = os.path.join(base_dir, 'survey-ccds-decam-dr10-z-v1.fits')
+#surveyccd_path = os.path.join(base_dir, 'survey-ccds-decam-dr10f-i-v1.fits')
+# (new ones)
+#surveyccd_path = 'survey-ccds-decam-dr100.fits'
+surveyccd_path = '/tmp/todo.fits'
 
 from legacypipe.survey import get_git_version
 version = get_git_version()

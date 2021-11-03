@@ -33,17 +33,19 @@ mkdir -p $outdir/metrics/$bri
 
 echo Logging to: $log
 
-python -u legacypipe/runbrick.py \
+python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --brick $brick \
        --bands g,r,i,z \
        --survey-dir $LEGACY_SURVEY_DIR \
        --outdir $outdir \
        --stage image_coadds \
-       --blob-image --minimal-coadds \
-       --no-write \
-       --force-all \
+       --blob-image \
+       --minimal-coadds \
        --skip-calibs \
        --nsatur 2 \
-       --threads 8 \
-       --old-calibs-ok \
+       --threads 4 \
+       --force-all \
+       --no-write \
        > $log 2>&1
+
+#--old-calibs-ok \
