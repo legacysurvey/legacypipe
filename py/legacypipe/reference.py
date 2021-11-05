@@ -573,6 +573,7 @@ def get_galaxy_sources(galaxies, bands):
         debug('r:', mag_r[:10])
         debug('z:', mag_z[:10])
         debug('i:', mag_i[:10])
+        cols = galaxies.get_columns()
 
     # Does the SGA catalog has flux_ columns for all the bands we're working with?
     missing_band = False
