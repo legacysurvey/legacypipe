@@ -25,6 +25,23 @@ export OMP_NUM_THREADS=1
 export MPICH_GNI_FORK_MODE=FULLCOPY
 export KMP_AFFINITY=disabled
 
+# # Config directory nonsense
+export TMPCACHE=$(mktemp -d)
+mkdir $TMPCACHE/cache
+mkdir $TMPCACHE/config
+# astropy
+export XDG_CACHE_HOME=$TMPCACHE/cache
+export XDG_CONFIG_HOME=$TMPCACHE/config
+mkdir $XDG_CACHE_HOME/astropy
+cp -r $HOME/.astropy/cache $XDG_CACHE_HOME/astropy
+mkdir $XDG_CONFIG_HOME/astropy
+cp -r $HOME/.astropy/config $XDG_CONFIG_HOME/astropy
+# matplotlib
+export MPLCONFIGDIR=$TMPCACHE/matplotlib
+mkdir $MPLCONFIGDIR
+cp -r $HOME/.config/matplotlib $MPLCONFIGDIR
+
+
 bri=$(echo $brick | head -c 3)
 mkdir -p $outdir/logs/$bri
 log="$outdir/logs/$bri/$brick.log"
@@ -39,13 +56,26 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --survey-dir $LEGACY_SURVEY_DIR \
        --outdir $outdir \
        --stage image_coadds \
-       --blob-image \
+       --blob-mask \
        --minimal-coadds \
        --skip-calibs \
        --nsatur 2 \
-       --threads 4 \
        --force-all \
-       --no-write \
+       --cache-outliers \
+       --threads 4 \
        > $log 2>&1
 
-#--old-calibs-ok \
+#       --no-write \
+
+
+# Save the return value from the python command -- otherwise we
+# exit 0 because the rm succeeds!
+status=$?
+
+echo "Max memory use:" >> $log
+cat /sys/fs/cgroup/memory/slurm/uid_$SLURM_JOB_UID/job_$SLURM_JOB_ID/memory.max_usage_in_bytes >> $log
+
+# /Config directory nonsense
+rm -R $TMPCACHE
+
+exit $status

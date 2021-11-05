@@ -3023,6 +3023,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               cache_outliers=False,
               lanczos=True,
               blob_image=False,
+              blob_mask=False,
               minimal_coadds=False,
               do_calibs=True,
               old_calibs_ok=False,
@@ -3375,7 +3376,13 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         }
 
     if 'image_coadds' in stages:
-        if blob_image:
+        if blob_mask:
+            prereqs.update({
+                'image_coadds':'blobmask',
+                'srcs': 'image_coadds',
+                'fitblobs':'srcs',
+            })
+        elif blob_image:
             prereqs.update({
                 'image_coadds':'srcs',
                 'fitblobs':'image_coadds',
@@ -3655,6 +3662,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--blob-image', action='store_true', default=False,
                         help='Create "imageblob" image?')
+    parser.add_argument('--blob-mask', action='store_true', default=False,
+                        help='With --stage image_coadds, also run the "blobmask" stage?')
     parser.add_argument('--minimal-coadds', action='store_true', default=False,
                         help='Only create image and invvar coadds in image_coadds stage')
 
