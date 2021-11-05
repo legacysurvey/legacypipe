@@ -396,7 +396,7 @@ def stage_refs(survey=None,
         cols = ['ra', 'dec', 'ref_cat', 'ref_id', 'mag',
                 'istycho', 'isgaia', 'islargegalaxy', 'iscluster',
                 'isbright', 'ismedium', 'freezeparams', 'pointsource', 'donotfit', 'in_bounds',
-                'ba', 'pa', 'decam_mag_g', 'decam_mag_r', 'decam_mag_z',
+                'ba', 'pa', 'decam_mag_g', 'decam_mag_r', 'decam_mag_i', 'decam_mag_z',
                 'zguess', 'mask_mag', 'radius', 'keep_radius', 'radius_pix', 'ibx', 'iby',
                 'ref_epoch', 'pmra', 'pmdec', 'parallax',
                 'ra_ivar', 'dec_ivar', 'pmra_ivar', 'pmdec_ivar', 'parallax_ivar',
@@ -464,7 +464,7 @@ def stage_refs(survey=None,
             for i in range(len(stars)):
                 if i >= 5:
                     break
-                src = refcat[stars.index[i]]
+                src = refcat[stars.index[i]].copy()
                 tr = Tractor([tim], [src])
                 tr.freezeParam('images')
                 src.freezeAllBut('brightness')

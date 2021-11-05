@@ -180,7 +180,7 @@ class GaiaSource(PointSource):
                            nantozero(g.pmdec),
                            nantozero(g.parallax))
 
-        # initialize from decam_mag_B if available, otherwise Gaia G.
+        # initialize from decam_mag_{band} if available, otherwise Gaia G.
         fluxes = {}
         for band in bands:
             try:

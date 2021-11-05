@@ -128,9 +128,11 @@ class DecamImage(LegacySurveyImage):
             txt = ('Sky template for expnum=%i, ccdname=%s did not pass consistency validation (EXPNUM, PLPROCID) -- image %i,%s vs template table %i,%s' %
                    (self.expnum, self.ccdname, self.expnum, self.plprocid, sky.expnum, sky.plprocid))
             if old_calibs_ok:
-                info('Warning:', txt, '-- but old_calibs_ok')
+                warnings.warn(txt + '-- but old_calibs_ok, so using sky template anyway')
             else:
-                raise RuntimeError(txt)
+                warnings.warn(txt + '-- not subtracting sky template for this CCD')
+                #raise RuntimeError(txt)
+
         assert(self.band == sky.filter)
         tfn = os.path.join(dirnm, 'sky_templates',
                            'sky_template_%s_%i.fits.fz' % (self.band, sky.run))
