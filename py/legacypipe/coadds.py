@@ -863,7 +863,7 @@ def _make_coadds_plots_1(im, band, mods, mo, iv, unweighted,
             thisim = np.zeros((H,W), np.float32)
             thisim[Yo,Xo] = goodpix * myim
             rgb = get_rgb([thisim], [band])
-            iplane = dict(g=2, r=1, z=0)[band]
+            iplane = dict(g=2, r=1, i=1, z=0)[band]
             rgbimg = rgb[:,:,iplane]
             plt.subplot(2,2,3)
             plt.imshow(rgbimg, interpolation='nearest', origin='lower', cmap='gray')

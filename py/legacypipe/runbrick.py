@@ -396,7 +396,7 @@ def stage_refs(survey=None,
         cols = ['ra', 'dec', 'ref_cat', 'ref_id', 'mag',
                 'istycho', 'isgaia', 'islargegalaxy', 'iscluster',
                 'isbright', 'ismedium', 'freezeparams', 'pointsource', 'donotfit', 'in_bounds',
-                'ba', 'pa', 'decam_mag_g', 'decam_mag_r', 'decam_mag_z',
+                'ba', 'pa', 'decam_mag_g', 'decam_mag_r', 'decam_mag_i', 'decam_mag_z',
                 'zguess', 'mask_mag', 'radius', 'keep_radius', 'radius_pix', 'ibx', 'iby',
                 'ref_epoch', 'pmra', 'pmdec', 'parallax',
                 'ra_ivar', 'dec_ivar', 'pmra_ivar', 'pmdec_ivar', 'parallax_ivar',
@@ -464,7 +464,7 @@ def stage_refs(survey=None,
             for i in range(len(stars)):
                 if i >= 5:
                     break
-                src = refcat[stars.index[i]]
+                src = refcat[stars.index[i]].copy()
                 tr = Tractor([tim], [src])
                 tr.freezeParam('images')
                 src.freezeAllBut('brightness')
@@ -3025,6 +3025,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               cache_outliers=False,
               lanczos=True,
               blob_image=False,
+              blob_mask=False,
               minimal_coadds=False,
               do_calibs=True,
               old_calibs_ok=False,
@@ -3377,7 +3378,13 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         }
 
     if 'image_coadds' in stages:
-        if blob_image:
+        if blob_mask:
+            prereqs.update({
+                'image_coadds':'blobmask',
+                'srcs': 'image_coadds',
+                'fitblobs':'srcs',
+            })
+        elif blob_image:
             prereqs.update({
                 'image_coadds':'srcs',
                 'fitblobs':'image_coadds',
@@ -3657,6 +3664,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--blob-image', action='store_true', default=False,
                         help='Create "imageblob" image?')
+    parser.add_argument('--blob-mask', action='store_true', default=False,
+                        help='With --stage image_coadds, also run the "blobmask" stage?')
     parser.add_argument('--minimal-coadds', action='store_true', default=False,
                         help='Only create image and invvar coadds in image_coadds stage')
 

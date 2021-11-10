@@ -224,15 +224,30 @@ def read_gaia(wcs, bands):
     return gaia
 
 def fix_gaia(gaia):
+    from functools import reduce
+
+    gaia.phot_g_mean_mag = gaia.phot_g_mean_mag.astype(np.float32)
+
     gaia.G = gaia.phot_g_mean_mag
     # Sort by brightness (for reference-*.fits output table)
-    gaia.cut(np.argsort(gaia.G))
+    sortmag = gaia.G.copy()
+    sortmag[sortmag == 0] = gaia.phot_rp_mean_mag[sortmag == 0]
+    gaia.cut(np.argsort(sortmag))
 
     # Gaia to DECam color transformations for stars
     color = gaia.phot_bp_mean_mag - gaia.phot_rp_mean_mag
+
+    # Only compute the decam_mag* terms if we have phot_g_mean_mag
+    # (some stars in EDR3 have G=0(nan), BP=0(nan) but RP~20)
+    nomags = (gaia.phot_g_mean_mag == 0.)
+
     # From Rongpu, 2020-04-12
     # no BP-RP color: use average color
-    color[np.logical_not(np.isfinite(color))] = 1.4
+    badcolor = reduce(np.logical_or,
+                      [np.logical_not(np.isfinite(color)),
+                       gaia.phot_bp_mean_mag == 0,
+                       gaia.phot_rp_mean_mag == 0,])
+    color[badcolor] = 1.4
     # clip to reasonable range for the polynomial fit
     color = np.clip(color, -0.6, 4.1)
     for b,coeffs in [
@@ -253,6 +268,7 @@ def fix_gaia(gaia):
         mag = gaia.G.copy()
         for order,c in enumerate(coeffs):
             mag += c * color**order
+        mag[nomags] = 0.
         gaia.set('decam_mag_%s' % b, mag)
     del color
 
@@ -288,12 +304,13 @@ def fix_gaia(gaia):
     gaia_release = 'G%s' % gaiaver
     gaia.ref_cat = np.array([gaia_release] * len(gaia))
     gaia.ref_id  = gaia.source_id
-    gaia.pmra_ivar  = 1./gaia.pmra_error **2
-    gaia.pmdec_ivar = 1./gaia.pmdec_error**2
-    gaia.parallax_ivar = 1./gaia.parallax_error**2
+    with np.errstate(divide='ignore'):
+        gaia.pmra_ivar  = 1./gaia.pmra_error **2
+        gaia.pmdec_ivar = 1./gaia.pmdec_error**2
+        gaia.parallax_ivar = 1./gaia.parallax_error**2
     # mas -> deg
-    gaia.ra_ivar  = 1./(gaia.ra_error  / 1000. / 3600.)**2
-    gaia.dec_ivar = 1./(gaia.dec_error / 1000. / 3600.)**2
+    gaia.ra_ivar  = (1./(gaia.ra_error  / 1000. / 3600.)**2).astype(np.float32)
+    gaia.dec_ivar = (1./(gaia.dec_error / 1000. / 3600.)**2).astype(np.float32)
 
     for c in ['ra_error', 'dec_error', 'parallax_error',
               'pmra_error', 'pmdec_error']:
@@ -303,9 +320,11 @@ def fix_gaia(gaia):
         X = gaia.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
 
-    # uniform name w/ Tycho-2
-    gaia.zguess = gaia.decam_mag_z
     gaia.mag = gaia.G
+    gaia.mag[gaia.mag == 0] = gaia.phot_rp_mean_mag[gaia.mag == 0]
+    # uniform name w/ Tycho-2
+    gaia.zguess = gaia.decam_mag_z.copy()
+    gaia.zguess[gaia.zguess == 0] = gaia.mag[gaia.zguess == 0]
     # Take the brighter of G, z to expand masks around red stars.
     gaia.mask_mag = np.minimum(gaia.G, gaia.zguess + 1.)
 
@@ -387,7 +406,7 @@ def fix_tycho(tycho):
         warnings.warn('No "ggguess" column in Tycho-2 catalog')
         tycho.mag = tycho.mag_vt
     else:
-        tycho.mag = tycho.ggguess
+        tycho.mag = tycho.ggguess.astype(np.float32)
         # Fall back to V_T
         I = np.flatnonzero(np.logical_not(np.isfinite(tycho.mag)))
         tycho.mag[I] = tycho.mag_vt[I]
@@ -552,7 +571,7 @@ def get_galaxy_sources(galaxies, bands):
     cols = galaxies.get_columns()
     if ('i' in bands and (not 'flux_i' in cols)
         and 'flux_r' in cols and 'flux_z' in cols):
-        with np.errstate(divide='ignore'):
+        with np.errstate(divide='ignore', invalid='ignore'):
             mag_r = -2.5 * (np.log10(galaxies.flux_r) - 9)
             mag_z = -2.5 * (np.log10(galaxies.flux_z) - 9)
         mag_r[np.logical_not(np.isfinite(mag_r))] = 30.
@@ -582,6 +601,7 @@ def get_galaxy_sources(galaxies, bands):
         has_band[band] = True
         if not 'flux_%s' % band in cols:
             has_band[band] = False
+            missing_band = True
             warnings.warn('No "flux_%s" column in SGA catalog; will have to fit for fluxes' % band)
 
     # If we have pre-burned galaxies, re-create the Tractor sources for them.

@@ -43,6 +43,7 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
         print('No halo subtraction for band', band)
         return 0.
     mag = refs.get(col)
+    good = np.flatnonzero(mag != 0.)
     fluxes = 10.**((mag - 22.5) / -2.5)
 
     have_inner_moffat = False
@@ -59,7 +60,7 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
     H = int(H)
     W = int(W)
     halo = np.zeros((H,W), np.float32)
-    for ref,flux,ra,dec in zip(refs, fluxes, rr, dd):
+    for ref,flux,ra,dec in zip(refs[good], fluxes[good], rr[good], dd[good]):
         _,x,y = wcs.radec2pixelxy(ra, dec)
         x -= 1.
         y -= 1.
