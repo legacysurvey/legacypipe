@@ -38,7 +38,7 @@ import fitsio
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.ttime import Time
 
-from legacypipe.survey import get_rgb, imsave_jpeg
+from legacypipe.survey import imsave_jpeg
 from legacypipe.bits import DQ_BITS, MASKBITS, FITBITS
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
@@ -533,7 +533,8 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
         # Make before-n-after plots (before)
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
         with survey.write_output('outliers-pre', brick=brickname) as out:
-            imsave_jpeg(out.fn, get_rgb(C.coimgs, bands), origin='lower')
+            rgb,kwa = survey.get_rgb(C.coimgs, bands)
+            imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
 
         # Patch individual-CCD masked pixels from a coadd
         patch_from_coadd(C.coimgs, targetwcs, bands, tims, mp=mp)
@@ -547,11 +548,14 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
         # Make before-n-after plots (after)
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
         with survey.write_output('outliers-post', brick=brickname) as out:
-            imsave_jpeg(out.fn, get_rgb(C.coimgs, bands), origin='lower')
+            rgb,kwa = survey.get_rgb(C.coimgs, bands)
+            imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
         with survey.write_output('outliers-masked-pos', brick=brickname) as out:
-            imsave_jpeg(out.fn, get_rgb(badcoaddspos, bands), origin='lower')
+            rgb,kwa = survey.get_rgb(badcoaddspos, bands)
+            imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
         with survey.write_output('outliers-masked-neg', brick=brickname) as out:
-            imsave_jpeg(out.fn, get_rgb(badcoaddsneg, bands), origin='lower')
+            rgb,kwa = survey.get_rgb(badcoaddsneg, bands)
+            imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
 
     return dict(tims=tims, version_header=version_header)
 
@@ -684,12 +688,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         coadd_list.append(('simscoadd', sims_coadd))
 
     for name,ims in coadd_list:
-        rgb = get_rgb(ims, bands)
-        kwa = {}
-        if coadd_bw and len(bands) == 1:
-            rgb = rgb.sum(axis=2)
-            kwa = dict(cmap='gray')
-
+        rgb,kwa = survey.get_rgb(ims, bands)
         with survey.write_output(name + '-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
             debug('Wrote', out.fn)
@@ -848,7 +847,8 @@ def stage_srcs(pixscale=None, targetwcs=None,
     kwa = {}
     if plots:
         coims,_ = quick_coadds(tims, bands, targetwcs)
-        kwa.update(rgbimg=get_rgb(coims, bands))
+        rgb,_ = survey.get_rgb(coims, bands)
+        kwa.update(rgbimg=rgb)
 
     Tnew,newcat,hot = run_sed_matched_filters(
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
@@ -1868,27 +1868,33 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         coimgs_iter,_ = quick_coadds(tims, bands, targetwcs, images=mods_iter)
         coimgs,_ = quick_coadds(tims, bands, targetwcs)
         plt.clf()
-        dimshow(get_rgb(coimgs, bands))
+        rgb,kw = survey.get_rgb(coimgs, bands)
+        dimshow(rgb, **kw)
         plt.title('First-round data')
         ps.savefig()
         plt.clf()
-        dimshow(get_rgb(coimgs_init, bands))
+        rgb,kw = survey.get_rgb(coimgs_init, bands)
+        dimshow(rgb, **kw)
         plt.title('First-round model fits')
         ps.savefig()
         plt.clf()
-        dimshow(get_rgb([img-mod for img,mod in zip(coimgs,coimgs_init)], bands))
+        rgb,kw = survey.get_rgb([img-mod for img,mod in zip(coimgs,coimgs_init)], bands)
+        dimshow(rgb, **kw)
         plt.title('First-round residuals')
         ps.savefig()
         plt.clf()
-        dimshow(get_rgb(coimgs_iter, bands))
+        rgb,kw = survey.get_rgb(coimgs_iter, bands)
+        dimshow(rgb, **kw)
         plt.title('Iterative model fits')
         ps.savefig()
         plt.clf()
-        dimshow(get_rgb([mod+mod2 for mod,mod2 in zip(coimgs_init, coimgs_iter)], bands))
+        rgb,kw = survey.get_rgb([mod+mod2 for mod,mod2 in zip(coimgs_init, coimgs_iter)], bands)
+        dimshow(rgb, **kw)
         plt.title('Initial + Iterative model fits')
         ps.savefig()
         plt.clf()
-        dimshow(get_rgb([img-mod-mod2 for img,mod,mod2 in zip(coimgs,coimgs_init,coimgs_iter)], bands))
+        rgb,kw = survey.get_rgb([img-mod-mod2 for img,mod,mod2 in zip(coimgs,coimgs_init,coimgs_iter)], bands)
+        dimshow(rgb, **kw)
         plt.title('Iterative model residuals')
         ps.savefig()
 
@@ -2029,11 +2035,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         coadd_list.append(('simscoadd', sims_coadd, {}))
 
     for name,ims,rgbkw in coadd_list:
-        rgb = get_rgb(ims, bands, **rgbkw)
-        kwa = {}
-        if coadd_bw and len(bands) == 1:
-            rgb = rgb.sum(axis=2)
-            kwa = dict(cmap='gray')
+        rgb,kwa = survey.get_rgb(ims, bands, **rgbkw)
         with survey.write_output(name + '-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
             info('Wrote', out.fn)
@@ -2124,7 +2126,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ok,x1,y1 = targetwcs.radec2pixelxy(ra, dec)
         x1 -= 1.
         y1 -= 1.
-        dimshow(get_rgb(C.coimgs, bands))
+        rgb,kw = survey.get_rgb(C.coimgs, bands)
+        dimshow(rgb, **kw)
         ax = plt.axis()
         for xx0,yy0,xx1,yy1 in zip(x0,y0,x1,y1):
             plt.plot([xx0,xx1], [yy0,yy1], 'r-')
@@ -2134,7 +2137,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ps.savefig()
 
         plt.clf()
-        dimshow(get_rgb(C.coimgs, bands))
+        rgb,kw = survey.get_rgb(C.coimgs, bands)
+        dimshow(rgb, **kw)
         ax = plt.axis()
         ps.savefig()
 
@@ -3449,6 +3453,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         if picsurvey is not None:
             picsurvey.output_dir = survey.output_dir
             picsurvey.allbands = survey.allbands
+            picsurvey.coadd_bw = survey.coadd_bw
 
         flush()
         if mp is not None and threads is not None and threads > 1:
@@ -3769,6 +3774,7 @@ def get_runbrick_kwargs(survey=None,
                         gpsf=False,
                         bands=None,
                         allbands=None,
+                        coadd_bw=None,
                         **opt):
     if stage is None:
         stage = []
@@ -3781,7 +3787,7 @@ def get_runbrick_kwargs(survey=None,
         bands = ['g','r','z']
     else:
         bands = bands.split(',')
-    opt.update(bands=bands)
+    opt.update(bands=bands, coadd_bw=coadd_bw)
 
     if allbands is None:
         allbands = bands
@@ -3798,7 +3804,8 @@ def get_runbrick_kwargs(survey=None,
                             output_dir=output_dir,
                             cache_dir=cache_dir,
                             prime_cache=prime_cache,
-                            allbands=allbands)
+                            allbands=allbands,
+                            coadd_bw=coadd_bw)
         info(survey)
 
     blobdir = opt.pop('blob_mask_dir', None)

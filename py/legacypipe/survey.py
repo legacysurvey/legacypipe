@@ -544,7 +544,7 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
     H,W = I.shape
     rgb = np.zeros((H,W,3), np.float32)
 
-    if bands == 'griz':
+    if bands == ['g','r','i','z']:
 
         rgbvec = dict(
             g = (0.,   0.,  0.75),
@@ -553,12 +553,15 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
             z = (0.75, 0.,  0.))
 
         for img,band in zip(imgs, bands):
+            _,scale = rgbscales[band]
             rf,gf,bf = rgbvec[band]
             if mnmx is None:
-                v = np.clip((img * scale + m) * I, 0, 1)
+                v = (img * scale + m) * I
             else:
                 mn,mx = mnmx
-                v = np.clip(((img * scale + m) - mn) / (mx - mn), 0, 1)
+                v = ((img * scale + m) - mn) / (mx - mn)
+            if clip:
+                v = np.clip(v, 0, 1)
             if rf != 0.:
                 rgb[:,:,0] += rf*v
             if gf != 0.:
@@ -794,7 +797,7 @@ class LegacySurveyData(object):
     '''
 
     def __init__(self, survey_dir=None, cache_dir=None, output_dir=None,
-                 allbands=None, prime_cache=False):
+                 allbands=None, coadd_bw=False, prime_cache=False):
         '''
         Create a LegacySurveyData object.
 
@@ -879,6 +882,7 @@ class LegacySurveyData(object):
             }
 
         self.allbands = allbands
+        self.coadd_bw = coadd_bw
 
         # Filename prefix for coadd files
         self.file_prefix = 'legacysurvey'
@@ -1778,6 +1782,14 @@ class LegacySurveyData(object):
         ccds = self.cleanup_ccds_table(ccds)
         return ccds
 
+    def get_rgb(self, imgs, bands, coadd_bw=None):
+        rgb = get_rgb(imgs, bands, self.allbands)
+        kwa = {}
+        bw = self.coadd_bw if coadd_bw is None else coadd_bw
+        if bw and len(bands) == 1:
+            rgb = rgb.sum(axis=2)
+            kwa = dict(cmap='gray')
+        return rgb,kwa
 
 def run_calibs(X):
     im = X[0]
