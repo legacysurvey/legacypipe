@@ -1,3 +1,3 @@
 #! /bin/bash
 
-docker build . -t legacysurvey/circleci-build-ubuntu20.04
+docker build . -t legacysurvey/circleci-build-ubuntu21.10

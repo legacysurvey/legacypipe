@@ -1782,8 +1782,8 @@ class LegacySurveyData(object):
         ccds = self.cleanup_ccds_table(ccds)
         return ccds
 
-    def get_rgb(self, imgs, bands, coadd_bw=None):
-        rgb = get_rgb(imgs, bands, self.allbands)
+    def get_rgb(self, imgs, bands, coadd_bw=None, **kwargs):
+        rgb = get_rgb(imgs, bands, self.allbands, **kwargs)
         kwa = {}
         bw = self.coadd_bw if coadd_bw is None else coadd_bw
         if bw and len(bands) == 1:
