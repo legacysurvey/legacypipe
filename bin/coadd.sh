@@ -53,6 +53,7 @@ echo Logging to: $log
 python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --brick $brick \
        --bands g,r,i,z \
+       --rgb-stretch 1.5 \
        --survey-dir $LEGACY_SURVEY_DIR \
        --outdir $outdir \
        --stage image_coadds \
@@ -61,6 +62,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --skip-calibs \
        --nsatur 2 \
        --force-all \
+       --no-write \
        --cache-outliers \
        --threads 4 \
        > $log 2>&1
