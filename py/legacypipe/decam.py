@@ -256,6 +256,8 @@ class DecamImage(LegacySurveyImage):
             H,W = outbleed.shape
             # ALSO add in any pixels that are BLEED at the image edge, because they
             # might have been connected to a SAT pixel that is not in our subimage.
+            # (this does mean that we'll keep any circular BLEED masks that happen to hit
+            # the edge of the CCD subimage we're looking at)
             Xtop = np.flatnonzero(bleed[-1,:])
             Xbot = np.flatnonzero(bleed[0,:])
             if len(Xtop)+len(Xbot):
@@ -263,6 +265,7 @@ class DecamImage(LegacySurveyImage):
                 Y = np.hstack((Y, np.zeros(len(Xtop), int)+(H-1), np.zeros(len(Xbot), int)))
             for x,y in zip(X,Y):
                 # keep the region we dilated the SAT mask into
+                # (this also catches the top/bottom BLEED pixels)
                 if not sat[y,x] and bleed[y,x]:
                     outbleed[y,x] = True
                 for yy in range(y+1, H):
