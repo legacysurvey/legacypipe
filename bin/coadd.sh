@@ -74,8 +74,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
 # exit 0 because the rm succeeds!
 status=$?
 
-echo "Max memory use:" >> $log
-cat /sys/fs/cgroup/memory/slurm/uid_$SLURM_JOB_UID/job_$SLURM_JOB_ID/memory.max_usage_in_bytes >> $log
+echo "max_memory $(cat /sys/fs/cgroup/memory/slurm/uid_$SLURM_JOB_UID/job_$SLURM_JOB_ID/memory.max_usage_in_bytes)" >> $log
 
 # /Config directory nonsense
 rm -R $TMPCACHE

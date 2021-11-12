@@ -55,6 +55,19 @@ def stage_blobmask(targetwcs=None,
 
     hot = merge_hot_satur(hot, saturated_pix)
 
+    if True:
+        # For estimating compute time
+        from scipy.ndimage.measurements import label, find_objects
+        blobmap,_ = label(hot)
+        #print('Blobmap: min', blobmap.min(), 'max', blobmap.max())
+        blobslices = find_objects(blobmap)
+        maxnpix = 0
+        for blobid_m1,slc in enumerate(blobslices):
+            npix = np.sum(blobmap[slc] == (blobid_m1 + 1))
+            maxnpix = max(maxnpix, npix)
+        print('max_blob_size', maxnpix)
+        print('num_blobs', len(blobslices))
+        print('total_pixels', np.sum([h*w for h,w in [tim.shape for tim in tims]]))
     # # Remap to -1 / 0
     # blob = np.empty(hot.shape, np.int16)
     # blob[:,:] = -1
