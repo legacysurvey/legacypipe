@@ -3332,17 +3332,19 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             kwargs.update(wise_checkpoint_period=wise_checkpoint_period)
 
     if pool or (threads and threads > 1):
-        from astrometry.util.timingpool import TimingPool, TimingPoolMeas
+        from astrometry.util.timingpool import TimingPool, TimingPoolMeas, MemMeas
         if pool is None:
             pool = TimingPool(threads, initializer=runbrick_global_init,
                               initargs=[])
         poolmeas = TimingPoolMeas(pool, pickleTraffic=False)
         StageTime.add_measurement(poolmeas)
+        StageTime.add_measurement(MemMeas)
         mp = multiproc(None, pool=pool)
     else:
-        from astrometry.util.ttime import CpuMeas
+        from astrometry.util.ttime import CpuMeas, MemMeas
         mp = multiproc(init=runbrick_global_init, initargs=[])
         StageTime.add_measurement(CpuMeas)
+        StageTime.add_measurement(MemMeas)
         pool = None
     kwargs.update(mp=mp)
 
