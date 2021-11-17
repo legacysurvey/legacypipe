@@ -55,7 +55,9 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --bands g,r,i,z \
        --rgb-stretch 1.5 \
        --survey-dir $LEGACY_SURVEY_DIR \
+       --cache-dir $CACHE_DIR \
        --outdir $outdir \
+       --skip-coadd \
        --stage image_coadds \
        --blob-mask \
        --minimal-coadds \

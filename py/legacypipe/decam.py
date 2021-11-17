@@ -131,7 +131,7 @@ class DecamImage(LegacySurveyImage):
                 warnings.warn(txt + '-- but old_calibs_ok, so using sky template anyway')
             else:
                 warnings.warn(txt + '-- not subtracting sky template for this CCD')
-                #raise RuntimeError(txt)
+                return None
 
         assert(self.band == sky.filter)
         tfn = os.path.join(dirnm, 'sky_templates',
