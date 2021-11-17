@@ -53,14 +53,18 @@ echo Logging to: $log
 python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --brick $brick \
        --bands g,r,i,z \
+       --rgb-stretch 1.5 \
        --survey-dir $LEGACY_SURVEY_DIR \
+       --cache-dir $CACHE_DIR \
        --outdir $outdir \
+       --skip-coadd \
        --stage image_coadds \
        --blob-mask \
        --minimal-coadds \
        --skip-calibs \
        --nsatur 2 \
        --force-all \
+       --no-write \
        --cache-outliers \
        --threads 4 \
        > $log 2>&1
@@ -72,8 +76,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
 # exit 0 because the rm succeeds!
 status=$?
 
-echo "Max memory use:" >> $log
-cat /sys/fs/cgroup/memory/slurm/uid_$SLURM_JOB_UID/job_$SLURM_JOB_ID/memory.max_usage_in_bytes >> $log
+echo "max_memory $(cat /sys/fs/cgroup/memory/slurm/uid_$SLURM_JOB_UID/job_$SLURM_JOB_ID/memory.max_usage_in_bytes)" >> $log
 
 # /Config directory nonsense
 rm -R $TMPCACHE

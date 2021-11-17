@@ -108,7 +108,7 @@ def main():
     #        [ 0.115, -0.187, -0.124]], dtype='<U6')
     print('dmags:', dmags)
     # g,r mags
-    assert(np.all(np.abs(dmags[:, :2]) < 0.4))
+    assert(np.all(np.abs(dmags[:, :2]) < 0.5))
     # final star
     assert(np.all(np.abs(dmags[2, :])  < 0.2))
 
