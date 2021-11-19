@@ -517,10 +517,17 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
         # 'islargegalaxy' set.  This includes both pre-burned
         # galaxies, and ones where the preburning failed and we want
         # to fall back to the SGA-parent ellipse for masking.
-        galaxies.islargegalaxy = ((galaxies.ref_cat == refcat) *
-                                  (galaxies.sga_id > -1))
+        galaxies.islargegalaxy = np.logical_or(
+            np.logical_not(galaxies.in_footprint_grz),
+            (galaxies.ref_cat == refcat) * (galaxies.sga_id > -1))
         # The pre-fit galaxies whose parameters will stay fixed
         galaxies.freezeparams = (galaxies.preburned * galaxies.freeze)
+
+        # set ref_cat and ref_id for galaxies outside the footprint
+        I = np.flatnonzero(np.logical_not(galaxies.in_footprint_grz))
+        galaxies.ref_id[I] = galaxies.sga_id[I]
+        galaxies.ref_cat[I] = np.array([refcat] * len(I))
+
     else:
         # SGA parent catalog
         galaxies.ref_cat = np.array([refcat] * len(galaxies))
