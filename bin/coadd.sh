@@ -6,7 +6,10 @@ outdir=/global/cscratch1/sd/dstn/dr10-early-coadds
 
 export LEGACY_SURVEY_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr10
 
-export GAIA_CAT_DIR=/global/cfs/cdirs/desi/target/gaia_edr3/healpix
+export CACHE_DIR=/global/cscratch1/sd/dstn/dr10-cache
+
+#export GAIA_CAT_DIR=/global/cfs/cdirs/desi/target/gaia_edr3/healpix
+export GAIA_CAT_DIR=/global/cscratch1/sd/adamyers/gaia_edr3/healpix
 export GAIA_CAT_PREFIX=healpix
 export GAIA_CAT_SCHEME=nested
 export GAIA_CAT_VER=E
