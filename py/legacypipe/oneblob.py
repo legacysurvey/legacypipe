@@ -1278,30 +1278,40 @@ class OneBlob(object):
         srctractor.setModelMasks(modelMasks)
         srccat = srctractor.getCatalog()
 
+        from tractor import Galaxy
+        is_galaxy = isinstance(src, Galaxy)
+
         _,ix,iy = srcwcs.radec2pixelxy(src.getPosition().ra,
                                        src.getPosition().dec)
         ix = int(ix-1)
         iy = int(iy-1)
+        x0,y0 = srcwcs_x0y0
         # Start in blob
         sh,sw = srcwcs.shape
-        if ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
+        if is_galaxy:
+            # allow it to start outside the blob
+            xclip = int(np.clip(ix, 0, sw-1))
+            yclip = int(np.clip(iy, 0, sh-1))
+            xs = x0 + xclip
+            ys = y0 + yclip
+        elif ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
             debug('Source is starting outside blob -- skipping.')
             if mask_others:
                 for ie,tim in zip(saved_srctim_ies, srctims):
                     tim.inverr = ie
             return None
+        else:
+            xs = x0 + ix
+            ys = y0 + iy
 
-        from tractor import Galaxy
-        is_galaxy = isinstance(src, Galaxy)
-        x0,y0 = srcwcs_x0y0
+        refs = self.refmap[ys, xs]
 
         # Fitting behaviors based on geometric masks.
         force_pointsource_mask = (IN_BLOB['BRIGHT'] | IN_BLOB['CLUSTER'])
         # large_galaxies_force_pointsource is True by default.
         if self.large_galaxies_force_pointsource:
             force_pointsource_mask |= IN_BLOB['GALAXY']
-        force_pointsource = ((self.refmap[y0+iy,x0+ix] &
-                              force_pointsource_mask) > 0)
+        force_pointsource = ((refs & force_pointsource_mask) > 0)
 
         fit_background_mask = IN_BLOB['BRIGHT']
         if not self.less_masking:
@@ -1309,8 +1319,7 @@ class OneBlob(object):
         ### HACK -- re-use this variable
         if self.large_galaxies_force_pointsource:
             fit_background_mask |= IN_BLOB['GALAXY']
-        fit_background = ((self.refmap[y0+iy,x0+ix] &
-                           fit_background_mask) > 0)
+        fit_background = ((refs & fit_background_mask) > 0)
         if is_galaxy:
             fit_background = False
 
@@ -1482,7 +1491,10 @@ class OneBlob(object):
             ix = int(ix-1)
             iy = int(iy-1)
             sh,sw = srcblobmask.shape
-            if ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
+            if is_galaxy:
+                # Allow (SGA) galaxies to exit the blob
+                pass
+            elif ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
                 # Exited blob!
                 debug('Source exited sub-blob!')
                 if mask_others:
