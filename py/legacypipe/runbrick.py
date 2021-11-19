@@ -644,12 +644,12 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         from legacypipe.bits import IN_BLOB
         refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
         # Construct a mask bits map
-        maskbits = np.zeros((H,W), np.int16)
+        maskbits = np.zeros((H,W), np.int32)
         # !PRIMARY
         if not custom_brick:
             U = find_unique_pixels(targetwcs, W, H, None,
                                    brick.ra1, brick.ra2, brick.dec1, brick.dec2)
-            maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int16)
+            maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int32)
             del U
         # BRIGHT
         if refmap is not None:
@@ -661,7 +661,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         # SATUR
         if saturated_pix is not None:
             for b, sat in zip(bands, saturated_pix):
-                maskbits |= (MASKBITS['SATUR_' + b.upper()] * sat).astype(np.int16)
+                maskbits |= (MASKBITS['SATUR_' + b.upper()] * sat).astype(np.int32)
         # ALLMASK_{g,r,z}
         for b,allmask in zip(bands, C.allmasks):
             bitname = 'ALLMASK_' + b.upper()
@@ -2044,12 +2044,12 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         del rgb
 
     # Construct the maskbits map
-    maskbits = np.zeros((H,W), np.int16)
+    maskbits = np.zeros((H,W), np.int32)
     # !PRIMARY
     if not custom_brick:
         U = find_unique_pixels(targetwcs, W, H, None,
                                brick.ra1, brick.ra2, brick.dec1, brick.dec2)
-        maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int16)
+        maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int32)
         del U
 
     # BRIGHT
@@ -2065,7 +2065,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         for b, sat in zip(bands, saturated_pix):
             key = 'SATUR_' + b.upper()
             if key in MASKBITS:
-                maskbits |= (MASKBITS[key] * sat).astype(np.int16)
+                maskbits |= (MASKBITS[key] * sat).astype(np.int32)
 
     # ALLMASK_{g,r,z}
     for b,allmask in zip(bands, C.allmasks):
