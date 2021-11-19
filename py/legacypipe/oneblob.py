@@ -320,6 +320,20 @@ class OneBlob(object):
             self._plot_coadd(self.tims, self.blobwcs, model=tr)
             plt.title('After source fitting')
             self.ps.savefig()
+            # Plot source locations
+            ax = plt.axis()
+            _,xf,yf = self.blobwcs.radec2pixelxy(
+                np.array([src.getPosition().ra  for src in self.srcs]),
+                np.array([src.getPosition().dec for src in self.srcs]))
+            plt.plot(xf-1, yf-1, 'r.', label='Sources')
+            Ir = np.flatnonzero([is_reference_source(src) for src in self.srcs])
+            if len(Ir):
+                plt.plot(xf[Ir]-1, yf[Ir]-1, 'o', mec='g', mfc='none', ms=8, mew=2,
+                         label='Ref source')
+            plt.legend()
+            plt.axis(ax)
+            plt.title('After source fitting')
+            self.ps.savefig()
             if self.plots_single:
                 plt.figure(2)
                 mods = list(tr.getModelImages())
@@ -1008,7 +1022,7 @@ class OneBlob(object):
             mp = multiproc()
             detmaps,detivs,_ = detection_maps(
                 srctims, srcwcs, self.bands, mp)
-            # Compute the symmetric area that fits in this 'tim'
+            # Compute the symmetric area that fits in this 'srcblobmask' region
             pos = src.getPosition()
             _,xx,yy = srcwcs.radec2pixelxy(pos.ra, pos.dec)
             bh,bw = srcblobmask.shape
@@ -1023,12 +1037,18 @@ class OneBlob(object):
             # Go through the per-band detection maps, marking significant pixels
             for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
                 sn = detmap * np.sqrt(detiv)
-                flipsn = np.zeros_like(sn)
+                # flipsn = np.zeros_like(sn)
+                # # Symmetrize
+                # flipsn[slc] = np.minimum(sn[slc],
+                #                          np.flipud(np.fliplr(sn[slc])))
+                # # just OR the detection maps per-band...
+                # flipblobs |= (flipsn > 5.)
+
                 # Symmetrize
-                flipsn[slc] = np.minimum(sn[slc],
-                                         np.flipud(np.fliplr(sn[slc])))
+                sn[slc] = np.minimum(sn[slc],
+                                     np.flipud(np.fliplr(sn[slc])))
                 # just OR the detection maps per-band...
-                flipblobs |= (flipsn > 5.)
+                flipblobs |= (sn > 5.)
 
             flipblobs = binary_fill_holes(flipblobs)
             blobs,_ = label(flipblobs)
