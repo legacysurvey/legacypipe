@@ -8,7 +8,7 @@ from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.util.fits import fits_table
 from astrometry.util.plotutils import dimshow
 
-from tractor import Tractor, PointSource, Image, Catalog, Patch
+from tractor import Tractor, PointSource, Image, Catalog, Patch, Galaxy
 from tractor.galaxy import (DevGalaxy, ExpGalaxy,
                             disable_galaxy_cache, enable_galaxy_cache)
 from tractor.patch import ModelMask
@@ -352,6 +352,37 @@ class OneBlob(object):
         debug('Blob', self.name, 'finished initial fitting:', Time()-tlast)
         tlast = Time()
 
+        # Set any fitting behaviors based on geometric masks.
+
+        # Fitting behaviors: force point-source
+        force_pointsource_mask = (IN_BLOB['BRIGHT'] | IN_BLOB['CLUSTER'])
+        # large_galaxies_force_pointsource is True by default.
+        if self.large_galaxies_force_pointsource:
+            force_pointsource_mask |= IN_BLOB['GALAXY']
+        # Fit background?
+        fit_background_mask = IN_BLOB['BRIGHT']
+        if not self.less_masking:
+            fit_background_mask |= IN_BLOB['MEDIUM']
+        ### this variable *also* forces fitting the background.
+        if self.large_galaxies_force_pointsource:
+            fit_background_mask |= IN_BLOB['GALAXY']
+        for srci,src in enumerate(cat):
+            _,ix,iy = self.blobwcs.radec2pixelxy(src.getPosition().ra,
+                                                 src.getPosition().dec)
+            ix = int(np.clip(ix-1, 0, self.blobw-1))
+            iy = int(np.clip(iy-1, 0, self.blobh-1))
+            bits = self.refmap[iy, ix]
+            force_pointsource = ((bits & force_pointsource_mask) > 0)
+            fit_background = ((bits & fit_background_mask) > 0)
+            is_galaxy = isinstance(src, Galaxy)
+            if is_galaxy:
+                fit_background = False
+                force_pointsource = False
+            B.forced_pointsource[srci] = force_pointsource
+            B.fit_background[srci] = fit_background
+            # Also set a parameter on 'src' for use in compute_segmentation_map()
+            src.maskbits_forced_point_source = force_pointsource
+
         self.compute_segmentation_map()
 
         # Next, model selections: point source vs dev/exp vs ser.
@@ -553,6 +584,12 @@ class OneBlob(object):
         for j,i in enumerate(Iseg):
             if getattr(self.srcs[i], 'forced_point_source', False):
                 maxr2[j] = ref_radius**2
+        # Sources inside maskbits masks that are forced to be point sources
+        # also get a max radius.
+        for j,i in enumerate(Iseg):
+            if getattr(self.srcs[i], 'maskbits_forced_point_source', False):
+                maxr2[j] = ref_radius**2
+
         mask = self.blobmask
         # Watershed by priority-fill.
         # values are (-sn, key, x, y, center_x, center_y, maxr2)
@@ -1278,51 +1315,27 @@ class OneBlob(object):
         srctractor.setModelMasks(modelMasks)
         srccat = srctractor.getCatalog()
 
-        from tractor import Galaxy
         is_galaxy = isinstance(src, Galaxy)
+        force_pointsource = B.forced_pointsource[srci]
+        fit_background = B.fit_background[srci]
 
         _,ix,iy = srcwcs.radec2pixelxy(src.getPosition().ra,
                                        src.getPosition().dec)
         ix = int(ix-1)
         iy = int(iy-1)
-        x0,y0 = srcwcs_x0y0
         # Start in blob
         sh,sw = srcwcs.shape
         if is_galaxy:
-            # allow it to start outside the blob
-            xclip = int(np.clip(ix, 0, sw-1))
-            yclip = int(np.clip(iy, 0, sh-1))
-            xs = x0 + xclip
-            ys = y0 + yclip
+            # allow SGA galaxy sources to start outside the blob
+            pass
         elif ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
             debug('Source is starting outside blob -- skipping.')
             if mask_others:
                 for ie,tim in zip(saved_srctim_ies, srctims):
                     tim.inverr = ie
             return None
-        else:
-            xs = x0 + ix
-            ys = y0 + iy
 
-        refs = self.refmap[ys, xs]
-
-        # Fitting behaviors based on geometric masks.
-        force_pointsource_mask = (IN_BLOB['BRIGHT'] | IN_BLOB['CLUSTER'])
-        # large_galaxies_force_pointsource is True by default.
-        if self.large_galaxies_force_pointsource:
-            force_pointsource_mask |= IN_BLOB['GALAXY']
-        force_pointsource = ((refs & force_pointsource_mask) > 0)
-
-        fit_background_mask = IN_BLOB['BRIGHT']
-        if not self.less_masking:
-            fit_background_mask |= IN_BLOB['MEDIUM']
-        ### HACK -- re-use this variable
-        if self.large_galaxies_force_pointsource:
-            fit_background_mask |= IN_BLOB['GALAXY']
-        fit_background = ((refs & fit_background_mask) > 0)
         if is_galaxy:
-            fit_background = False
-
             # SGA galaxy: set the maximum allowed r_e.
             known_galaxy_logrmax = 0.
             if isinstance(src, (DevGalaxy,ExpGalaxy, SersicGalaxy)):
@@ -1332,10 +1345,9 @@ class OneBlob(object):
             else:
                 print('WARNING: unknown galaxy type:', src)
 
+        x0,y0 = srcwcs_x0y0
         debug('Source at blob coordinates', x0+ix, y0+iy, '- forcing pointsource?', force_pointsource, ', is large galaxy?', is_galaxy, ', fitting sky background:', fit_background)
 
-        B.forced_pointsource[srci] = force_pointsource
-        B.fit_background[srci] = fit_background
 
         if fit_background:
             for tim in srctims:
@@ -1387,7 +1399,7 @@ class OneBlob(object):
                 debug('Gaia source is forced to be a point source -- not trying other models')
             elif force_pointsource:
                 # Geometric mask
-                debug('Not computing galaxy models due to objects in blob')
+                debug('Not computing galaxy models due to being in a mask')
             else:
                 trymodels.append(('rex', rex))
                 # Try galaxy models if rex > psf, or if bright.
