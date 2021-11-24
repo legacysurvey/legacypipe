@@ -3,6 +3,7 @@
 # Run legacy_zeropoints on a single image within a Shifter container at NERSC.
 
 export LEGACY_SURVEY_DIR=$CSCRATCH/dr10pre
+export CACHE_DIR=/global/cscratch1/sd/dstn/dr10-cache
 
 outdir=$LEGACY_SURVEY_DIR/zpt
 
@@ -18,22 +19,26 @@ outdir=$LEGACY_SURVEY_DIR/zpt
 #   metrics -> /global/cfs/cdirs/cosmo/data/legacysurvey/dr8/south/metrics/
 #   survey-bricks.fits.gz -> /global/cfs/cdirs/cosmo/data/legacysurvey/dr8/survey-bricks.fits.gz
 
-CACHE_DIR=/tmp/dr10pre-cache
-mkdir -p "${CACHE_DIR}"
+#CACHE_DIR=/tmp/dr10pre-cache
+#mkdir -p "${CACHE_DIR}"
 
 ncores=32
 #ncores=8
 
-export DUST_DIR=/global/cfs/cdirs/cosmo/data/dust/v0_1
+#export DUST_DIR=/global/cfs/cdirs/cosmo/data/dust/v0_1
+#export TYCHO2_KD_DIR=/global/cfs/cdirs/cosmo/staging/tycho2
+#export LARGEGALAXIES_CAT=/global/cfs/cdirs/cosmo/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
+export DUST_DIR=$CSCRATCH/dr10-cache/dust-v0_1
 export GAIA_CAT_DIR=/global/cfs/cdirs/cosmo/work/gaia/chunks-gaia-dr2-astrom-2
 export GAIA_CAT_VER=2
-export TYCHO2_KD_DIR=/global/cfs/cdirs/cosmo/staging/tycho2
-export LARGEGALAXIES_CAT=/global/cfs/cdirs/cosmo/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
-#export LARGEGALAXIES_CAT=$LEGACY_SURVEY_DIR/SGA-2020.kd.fits
-export PS1CAT_DIR=/global/cfs/cdirs/cosmo/work/ps1/cats/chunks-qz-star-v3
-# DECam
-#export SKY_TEMPLATE_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr9k/calib/sky_pattern
+unset GAIA_CAT_PREFIX
+unset GAIA_CAT_SCHEME
 
+export TYCHO2_KD_DIR=/global/cscratch1/sd/dstn/dr10-cache/tycho2
+export LARGEGALAXIES_CAT=/global/cscratch1/sd/dstn/dr10-cache/SGA-ellipse-v3.0.kd.fits
+export PS1CAT_DIR=/global/cfs/cdirs/cosmo/work/ps1/cats/chunks-qz-star-v3
+
+#export SKY_TEMPLATE_DIR=/global/cfs/cdirs/cosmo/data/legacysurvey/dr9/calib/sky_pattern
 unset SKY_TEMPLATE_DIR
 unset BLOB_MASK_DIR
 

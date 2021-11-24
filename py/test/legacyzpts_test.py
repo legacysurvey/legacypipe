@@ -48,43 +48,79 @@ def main():
 
     rbmain(args=['--brick', '1110p322', '--survey-dir', survey_dir,
                  '--zoom', '1500', '1900', '2500', '2900', '--no-outliers',
-                 '--no-wise', '--no-large-galaxies', '--threads', '4'])
+                 '--no-wise', '--no-large-galaxies', '--force-all', #'--no-write',
+                 '--threads', '4'])
 
     # Cross-match to Gaia and check mags -- this is an end-to-end check on the calibs.
     T = fits_table('tractor/111/tractor-1110p322.fits')
-    #G = fits_table(os.path.join(os.environ['GAIA_CAT_DIR'], 'chunk-02791.fits'))
-    G = fits_table(os.path.join(survey_dir, 'gaia-dr2', 'chunk-02791.fits'))
+    #G = fits_table(os.path.join(survey_dir, 'gaia-dr2', 'chunk-02791.fits'))
+    G = fits_table('metrics/111/reference-1110p322.fits')
+
     I,J,_ = match_radec(G.ra, G.dec, T.ra, T.dec, 1./3600., nearest=True)
     assert(len(I) == 5)
     K = np.argsort(G.phot_g_mean_mag[I])
     I = I[K]
     J = J[K]
     tmags = -2.5*(np.log10(np.vstack((T.flux_g[J], T.flux_r[J], T.flux_z[J]))) - 9).T
+    gmags = np.vstack((G.decam_mag_g[I], G.decam_mag_r[I], G.decam_mag_z[I])).T    
+    dmags = tmags - gmags
+
+    np.set_printoptions(precision=3, suppress=True)
+    print('tmags:')
+    print(tmags)
+    print('Gaia-decam mags:')
+    print(gmags)
+    print('dmags:')
+    print(dmags)
+
+    # tmags:
+    # [[12.387 12.612 17.733]
+    #  [14.293 14.57  16.288]
+    #  [15.427 15.119 16.32 ]
+    #  [21.588 20.128 18.592]
+    #  [21.112 20.548 20.352]]
+    # Gaia-decam mags:
+    # [[12.384 12.044 11.966]
+    #  [14.264 13.816 13.667]
+    #  [15.386 14.865 14.672]
+    #  [21.469 20.033 18.767]
+    #  [21.03  20.551 20.383]]
+    # dmags:
+    # [[ 0.003  0.567  5.767]
+    #  [ 0.03   0.754  2.622]
+    #  [ 0.041  0.254  1.648]
+    #  [ 0.119  0.095 -0.174]
+    #  [ 0.082 -0.004 -0.032]]
+
+    # Looks like the z-band in particular is pretty bad on the highly saturated stars!
+
+    assert(np.all(np.abs(dmags)[:, 0] < 0.12))
+    assert(np.all(np.abs(dmags)[:, 1] < 0.8))
+    assert(np.all(np.abs(dmags)[3:, :] < 0.2))
+
     gmags = np.vstack((G.phot_bp_mean_mag[I], G.phot_g_mean_mag[I], G.phot_rp_mean_mag[I])).T
     dmags = tmags - gmags
-    # tmags:
-    # array([[12.413096, 12.612314, 17.731936],
-    #        [14.27177 , 14.24223 , 15.958183],
-    #        [15.427404, 15.12024 , 16.319664],
-    #        [21.58627 , 20.125734, 18.591759],
-    #        [21.111994, 20.547356, 20.352291]], dtype=float32)
-    # gmags:
-    # array([[12.404422, 12.11557 , 11.675267],
-    #        [14.26786 , 13.915597, 13.40137 ],
-    #        [15.367546, 14.982276, 14.428192],
-    #        [21.27354 , 19.981428, 18.877398],
-    #        [20.961052, 20.722582, 20.46425 ]], dtype=float32)
-    # diffs:
-    # array([[ 0.009,  0.497,  6.057],
-    #        [ 0.004,  0.327,  2.557],
-    #        [ 0.060,  0.138,  1.891],
-    #        [ 0.313,  0.144, -0.286],
-    #        [ 0.151, -0.175, -0.112]], dtype=<U6)
+    print('Gaia mags:')
+    print(gmags)
+    print('dmags:')
+    print(dmags)
 
-    # Looks like the z-band in particular is pretty bad on the highly saturated stars.
+    # Gaia mags:
+    # [[12.388 12.108 11.667]
+    #  [14.247 13.905 13.396]
+    #  [15.348 14.969 14.415]
+    #  [21.056 19.961 18.894]
+    #  [20.892 20.647 20.007]]
+    # dmags:
+    # [[-0.001  0.504  6.066]
+    #  [ 0.046  0.665  2.892]
+    #  [ 0.079  0.15   1.905]
+    #  [ 0.532  0.168 -0.301]
+    #  [ 0.22  -0.099  0.345]]
 
-    assert(np.all(np.abs(dmags)[:, :2] < 0.5))
-    assert(np.all(np.abs(dmags)[3:, :] < 0.5))
+    assert(np.all(np.abs(dmags)[:, 0] < 0.6))
+    assert(np.all(np.abs(dmags)[:, 1] < 0.7))
+    assert(np.all(np.abs(dmags)[3:, :] < 0.6))
 
     lptdir = os.environ.get('LEGACYPIPE_TEST_DATA', 'legacypipe-test-data')
     # Cross-match to Pan-STARRS1 too

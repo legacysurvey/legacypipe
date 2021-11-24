@@ -48,19 +48,19 @@ def get_sb_double_moffat(r, alpha1, beta1, alpha2, beta2, weight2):
     return i
 
 
-n_processes = 32
+n_processes = 8
 test_q = False  # only process a small number of exposures
 
 base_dir = '/global/cfs/cdirs/cosmo/work/legacysurvey/dr10/'
 #input_dir = os.path.join(base_dir, 'calib/psfex')
 #output_dir = os.path.join(base_dir, 'calib/patched-psfex')
 input_dir = os.path.join(base_dir, 'calib/unpatched-psfex')
-output_dir = os.path.join(base_dir, 'calib/psfex')
+output_dir = os.path.join(base_dir, 'calib/patched-psfex')
 #surveyccd_path = os.path.join(base_dir, 'survey-ccds-decam-dr10-z-v1.fits')
 #surveyccd_path = os.path.join(base_dir, 'survey-ccds-decam-dr10f-i-v1.fits')
 # (new ones)
 #surveyccd_path = 'survey-ccds-decam-dr100.fits'
-surveyccd_path = '/tmp/todo.fits'
+surveyccd_path = 'todo.fits'
 
 from legacypipe.survey import get_git_version
 version = get_git_version()

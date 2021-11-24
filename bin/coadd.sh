@@ -1,5 +1,15 @@
 #! /bin/bash
 
+# echo "Cgroups:"
+# find /sys/fs/cgroup
+# echo
+# echo "CPUs:"
+# lscpu
+# echo
+# echo "Mem:"
+# free
+# echo
+
 brick=$1
 
 outdir=/global/cscratch1/sd/dstn/dr10-early-coadds
@@ -50,6 +60,7 @@ mkdir -p $outdir/logs/$bri
 log="$outdir/logs/$bri/$brick.log"
 
 mkdir -p $outdir/metrics/$bri
+#mkdir -p $outdir/pickles/$bri
 
 echo Logging to: $log
 
@@ -72,14 +83,26 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --threads 4 \
        > $log 2>&1
 
-#       --no-write \
+#       --write-stage halos \
+#       --pickle "$outdir/pickles/$bri/runbrick-%(brick)s-%%(stage)s.pickle" \
+#--no-write \
+#       --force-all \
+#       --stage tims --plots \
+#       --zoom 1000 2500 2000 3000 \
 
+#       --no-write \
+    ##--threads 4 \
+    #       --no-write \
+
+#       --cache-dir /tmp/cache \
+#       --min-mjd 56858.2232735 \
+#       --max-mjd 56858.2232737 \
 
 # Save the return value from the python command -- otherwise we
 # exit 0 because the rm succeeds!
 status=$?
 
-echo "max_memory $(cat /sys/fs/cgroup/memory/slurm/uid_$SLURM_JOB_UID/job_$SLURM_JOB_ID/memory.max_usage_in_bytes)" >> $log
+#echo "max_memory $(cat /sys/fs/cgroup/memory/slurm/uid_$SLURM_JOB_UID/job_$SLURM_JOB_ID/memory.max_usage_in_bytes)" >> $log
 
 # /Config directory nonsense
 rm -R $TMPCACHE
