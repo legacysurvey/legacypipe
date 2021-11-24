@@ -52,7 +52,8 @@ def main():
 
     # Cross-match to Gaia and check mags -- this is an end-to-end check on the calibs.
     T = fits_table('tractor/111/tractor-1110p322.fits')
-    G = fits_table(os.path.join(os.environ['GAIA_CAT_DIR'], 'chunk-02791.fits'))
+    #G = fits_table(os.path.join(os.environ['GAIA_CAT_DIR'], 'chunk-02791.fits'))
+    G = fits_table(os.path.join(survey_dir, 'gaia-dr2', 'chunk-02791.fits'))
     I,J,_ = match_radec(G.ra, G.dec, T.ra, T.dec, 1./3600., nearest=True)
     assert(len(I) == 5)
     K = np.argsort(G.phot_g_mean_mag[I])
