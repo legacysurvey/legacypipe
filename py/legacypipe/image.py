@@ -607,6 +607,24 @@ class LegacySurveyImage(object):
         '''
         return None,None,None,None
 
+    def estimate_memory_required(self, radecpoly=None, mywcs=None):
+        '''
+        Returns an estimate in bytes of the memory required to store
+        this image's get_tractor_image tim.
+        '''
+        if mywcs is None:
+            wcs = self.get_wcs()
+        else:
+            wcs = mywcs
+        x0,x1,y0,y1,slc = self.get_image_extent(wcs=wcs, radecpoly=radecpoly)
+        H = y1-y0
+        W = x1-x0
+        npix = H*W
+        # 4 for float image
+        # 4 for float invvar
+        # 2 for int16 dq
+        return npix * (4 + 4 + 2)
+
     def get_tractor_image(self, slc=None, radecpoly=None,
                           gaussPsf=False, pixPsf=True, hybridPsf=True,
                           normalizePsf=True,

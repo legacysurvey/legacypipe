@@ -88,6 +88,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                galex_dir=None,
                command_line=None,
                read_parallel=True,
+               max_memory_gb=None,
                **kwargs):
     '''
     This is the first stage in the pipeline.  It
@@ -235,6 +236,14 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     tnow = Time()
     debug('Finding images touching brick:', tnow-tlast)
     tlast = tnow
+
+    if max_memory_gb:
+        # Estimate total memory required for tim pixels
+        mem = sum([im.estimate_memory_required(radecpoly=targetrd,
+                                               mywcs=survey.approx_wcs(ccd))
+                                               for im,ccd in zip(ims,ccds)])
+        if mem / 1e9 > max_memory_gb:
+            raise RuntimeError('Too much memory required: %.1f > %.1f GB' % (mem/1e9, max_memory_gb))
 
     if do_calibs:
         from legacypipe.survey import run_calibs
@@ -3067,6 +3076,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               plot_base=None, plot_number=0,
               command_line=None,
               read_parallel=True,
+              max_memory_gb=None,
               record_event=None,
     # These are for the 'stages' infrastructure
               pickle_pat='pickles/runbrick-%(brick)s-%%(stage)s.pickle',
@@ -3318,6 +3328,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   galex_dir=galex_dir,
                   command_line=command_line,
                   read_parallel=read_parallel,
+                  max_memory_gb=max_memory_gb,
                   plots=plots, plots2=plots2, coadd_bw=coadd_bw,
                   force=forceStages, write=write_pickles,
                   record_event=record_event)
@@ -3756,6 +3767,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         rin<r<rout on each CCD centered on the targetwcs.crval coordinates.""")
     parser.add_argument('--read-serial', dest='read_parallel', default=True,
                         action='store_false', help='Read images in series, not in parallel?')
+    parser.add_argument('--max-memory-gb', type=float, default=None,
+                        help='Maximum (estimated) memory to allow for tim pixels, in GB')
     parser.add_argument('--rgb-stretch', type=float, help='Stretch RGB jpeg plots by this factor.')
     return parser
 
