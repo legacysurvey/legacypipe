@@ -2153,7 +2153,12 @@ def fix_weight_quantization(wt, weightfn, ext, slc):
 
 def validate_version(fn, filetype, expnum, plver, plprocid,
                      data=None, ext=1, cpheader=False,
-                     old_calibs_ok=False, quiet=False):
+                     old_calibs_ok=False, truncated_ok=True, quiet=False):
+    '''
+    truncated_ok: the target *plver* or *plprocid* may be truncated, so only
+    demand a match up to the length of those variables.  This can happen if, eg,
+    the survey-ccds table has the PLVER or PLPROCID columns too short.
+    '''
     if not os.path.exists(fn):
         if not quiet:
             info('File not found {}'.format(fn))
@@ -2182,6 +2187,9 @@ def validate_version(fn, filetype, expnum, plver, plprocid,
             val = T.get(key)
             if strip:
                 val = np.array([str(v).strip() for v in val])
+            if truncated_ok:
+                N = len(targetval)
+                val = np.array([v[:min(len(v),N)] for v in val])
             if not np.all(val == targetval):
                 if old_calibs_ok:
                     warnings.warn('Validation: {} {}!={} in {} table but old_calibs_ok=True'.format(key, val, targetval, fn))
