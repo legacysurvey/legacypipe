@@ -240,7 +240,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     if max_memory_gb:
         # Estimate total memory required for tim pixels
         mem = sum([im.estimate_memory_required(radecpoly=targetrd,
-                                               mywcs=survey.approx_wcs(ccd))
+                                               mywcs=survey.get_approx_wcs(ccd))
                                                for im,ccd in zip(ims,ccds)])
         if mem / 1e9 > max_memory_gb:
             raise RuntimeError('Too much memory required: %.1f > %.1f GB' % (mem/1e9, max_memory_gb))

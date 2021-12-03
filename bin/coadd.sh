@@ -75,6 +75,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --no-write \
        --cache-outliers \
        --threads 4 \
+       --max-memory-gb 14 \
        > $log 2>&1
 
 #       --write-stage halos \
