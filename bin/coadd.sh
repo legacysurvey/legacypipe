@@ -1,15 +1,5 @@
 #! /bin/bash
 
-# echo "Cgroups:"
-# find /sys/fs/cgroup
-# echo
-# echo "CPUs:"
-# lscpu
-# echo
-# echo "Mem:"
-# free
-# echo
-
 brick=$1
 
 outdir=/global/cscratch1/sd/dstn/dr10-early-coadds
@@ -24,9 +14,13 @@ export GAIA_CAT_PREFIX=healpix
 export GAIA_CAT_SCHEME=nested
 export GAIA_CAT_VER=E
 
-export TYCHO2_KD_DIR=/global/cfs/cdirs/cosmo/staging/tycho2
-export LARGEGALAXIES_CAT=/global/cfs/cdirs/cosmo/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
-export SKY_TEMPLATE_DIR=/global/cfs/cdirs/cosmo/data/legacysurvey/dr9/calib/sky_pattern
+#export TYCHO2_KD_DIR=/global/cfs/cdirs/cosmo/staging/tycho2
+#export LARGEGALAXIES_CAT=/global/cfs/cdirs/cosmo/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
+#export SKY_TEMPLATE_DIR=/global/cfs/cdirs/cosmo/data/legacysurvey/dr9/calib/sky_pattern
+export TYCHO2_KD_DIR=$CACHE_DIR/tycho2
+export LARGEGALAXIES_CAT=$CACHE_DIR/SGA-ellipse-v3.0.kd.fits
+export SKY_TEMPLATE_DIR=$CACHE_DIR/dr9-sky-pattern
+
 
 # Don't add ~/.local/ to Python's sys.path
 export PYTHONNOUSERSITE=1
