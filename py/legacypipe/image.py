@@ -2262,6 +2262,11 @@ def validate_version(fn, filetype, expnum, plver, plprocid,
                 # PLPROCID can get parsed as an int by fitsio, ugh
                 val = str(val)
                 val = val.strip()
+            if val != targetval and truncated_ok:
+                origval = val
+                val = val[:len(targetval)]
+                if val == targetval:
+                    warnings.warn('Validation: {} validated only after truncating {} to {} for {}'.format(key, origval, val, fn))
             if val != targetval:
                 if old_calibs_ok:
                     warnings.warn('Validation: {} {}!={} in {} header but old_calibs_ok=True'.format(key, val, targetval, fn))
