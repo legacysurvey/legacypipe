@@ -2187,10 +2187,14 @@ def validate_version(fn, filetype, expnum, plver, plprocid,
             val = T.get(key)
             if strip:
                 val = np.array([str(v).strip() for v in val])
-            if truncated_ok:
+            ok = np.all(val == targetval)
+            if (not ok) and truncated_ok:
                 N = len(targetval)
                 val = np.array([v[:min(len(v),N)] for v in val])
-            if not np.all(val == targetval):
+                ok = np.all(val == targetval)
+                if ok:
+                    warnings.warn('Validation: {}={} validated only after truncating for {}'.format(key, targetval, fn))
+            if not ok:
                 if old_calibs_ok:
                     warnings.warn('Validation: {} {}!={} in {} table but old_calibs_ok=True'.format(key, val, targetval, fn))
                     continue
