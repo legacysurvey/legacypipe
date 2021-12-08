@@ -16,7 +16,7 @@ def _detmap(X):
     (tim, targetwcs, apodize) = X
     R = tim_get_resamp(tim, targetwcs)
     if R is None:
-        return None,None,None,None,None
+        return None,None,None,None,None,None
     assert(tim.psf_sigma > 0)
     psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
     ie = tim.getInvError()
@@ -57,7 +57,7 @@ def _detmap(X):
         detiv[-len(ramp):,:] *= ramp[::-1][:,np.newaxis]
         detiv[:,-len(ramp):] *= ramp[::-1][np.newaxis,:]
 
-    return Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
+    return tim.band, Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
 
 def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
     # Render the detection maps
@@ -68,22 +68,29 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
     detmaps = [np.zeros((H,W), np.float32) for b in bands]
     detivs  = [np.zeros((H,W), np.float32) for b in bands]
     if nsatur is None:
-        satmaps = [np.zeros((H,W), bool)       for b in bands]
+        satmaps = [np.zeros((H,W), bool)   for b in bands]
     else:
-        satmaps = [np.zeros((H,W), np.int16)       for b in bands]
+        if nsatur < 255:
+            sattype = np.uint8
+            satmax = 254
+        else:
+            sattype = np.uint16
+            satmax = 65534
+        satmaps = [np.zeros((H,W), sattype) for b in bands]
 
-    for tim, (Yo,Xo,incmap,inciv,sat) in zip(
-        tims, mp.map(_detmap, [(tim, targetwcs, apodize) for tim in tims])):
+    for band,Yo,Xo,incmap,inciv,sat in mp.imap_unordered(
+            _detmap, [(tim, targetwcs, apodize) for tim in tims]):
         if Yo is None:
             continue
-        ib = ibands[tim.band]
+        ib = ibands[band]
         detmaps[ib][Yo,Xo] += incmap * inciv
         detivs [ib][Yo,Xo] += inciv
         if sat is not None:
             if nsatur is None:
                 satmaps[ib][Yo,Xo] |= sat
             else:
-                satmaps[ib][Yo,Xo] += (1*sat)
+                satmaps[ib][Yo,Xo] = np.minimum(satmax, satmaps[ib][Yo,Xo] + (1*sat))
+        del Yo,Xo,incmap,inciv,sat
     for i,(detmap,detiv,satmap) in enumerate(zip(detmaps, detivs, satmaps)):
         detmap /= np.maximum(1e-16, detiv)
         if nsatur is not None:

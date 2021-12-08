@@ -203,6 +203,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     if ccds is None:
         raise NothingToDoError('No CCDs touching brick')
     debug(len(ccds), 'CCDs touching target WCS')
+    survey.drop_cache()
 
     if 'ccd_cuts' in ccds.get_columns():
         ccds.cut(ccds.ccd_cuts == 0)
@@ -548,10 +549,12 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
         not (cache_outliers and
              read_outlier_mask_file(survey, tims, brickname, outlier_mask_file=outlier_mask_file))):
         # Make before-n-after plots (before)
-        C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
+        C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False,
+                        allmasks=False, coweights=False)
         with survey.write_output('outliers-pre', brick=brickname) as out:
             rgb,kwa = survey.get_rgb(C.coimgs, bands)
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
+            del rgb
 
         # Patch individual-CCD masked pixels from a coadd
         patch_from_coadd(C.coimgs, targetwcs, bands, tims, mp=mp)
@@ -563,16 +566,23 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
                                                          refstars=refstars)
 
         # Make before-n-after plots (after)
-        C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False)
+        C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False,
+                        allmasks=False, coweights=False)
         with survey.write_output('outliers-post', brick=brickname) as out:
             rgb,kwa = survey.get_rgb(C.coimgs, bands)
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
+            del rgb
+        del C
         with survey.write_output('outliers-masked-pos', brick=brickname) as out:
             rgb,kwa = survey.get_rgb(badcoaddspos, bands)
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
+            del rgb
+        del badcoaddspos
         with survey.write_output('outliers-masked-neg', brick=brickname) as out:
             rgb,kwa = survey.get_rgb(badcoaddsneg, bands)
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
+            del rgb
+        del badcoaddsneg
 
     return dict(tims=tims, version_header=version_header)
 
@@ -644,8 +654,10 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
-    kw = dict(ngood=True)
-    if not minimal_coadds:
+    kw = dict(ngood=True, coweights=False)
+    if minimal_coadds:
+        kw.update(allmasks=False)
+    else:
         kw.update(detmaps=True)
 
     C = make_coadds(tims, bands, targetwcs, lanczos=lanczos,
@@ -706,6 +718,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
 
     for name,ims in coadd_list:
         rgb,kwa = survey.get_rgb(ims, bands)
+        del ims
         with survey.write_output(name + '-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
             debug('Wrote', out.fn)
@@ -737,6 +750,8 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                                          shape=blobmap.shape) as out:
                     out.fits.write(blobmap, header=hdr)
         del rgb
+    del coadd_list
+    del C
     return None
 
 def stage_srcs(pixscale=None, targetwcs=None,

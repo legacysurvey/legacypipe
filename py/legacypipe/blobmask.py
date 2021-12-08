@@ -36,7 +36,7 @@ def stage_blobmask(targetwcs=None,
     # Expand the mask around saturated pixels to avoid generating
     # peaks at the edge of the mask.
     saturated_pix = [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps]
-
+    del satmaps
     # SED-matched detections
     record_event and record_event('stage_blobmask: SED-matched')
     debug('Running source detection at', nsigma, 'sigma')
@@ -52,6 +52,9 @@ def stage_blobmask(targetwcs=None,
         if sedhot is None:
             continue
         hot |= sedhot
+        del sedhot
+    del detmaps
+    del detivs
 
     hot = merge_hot_satur(hot, saturated_pix)
 
@@ -68,10 +71,7 @@ def stage_blobmask(targetwcs=None,
         print('max_blob_size', maxnpix)
         print('num_blobs', len(blobslices))
         print('total_pixels', np.sum([h*w for h,w in [tim.shape for tim in tims]]))
-    # # Remap to -1 / 0
-    # blob = np.empty(hot.shape, np.int16)
-    # blob[:,:] = -1
-    # blob[hot] = 0
+        del blobmap
 
     hdr = copy_header_with_wcs(version_header, targetwcs)
     hdr.add_record(dict(name='IMTYPE', value='blobmask',
@@ -79,7 +79,6 @@ def stage_blobmask(targetwcs=None,
     with survey.write_output('blobmask', brick=brickname,
                              shape=hot.shape) as out:
         out.fits.write(hot.astype(np.uint8), header=hdr)
-    # del blob
 
     keys = ['hot', 'saturated_pix', 'version_header', ]
     L = locals()

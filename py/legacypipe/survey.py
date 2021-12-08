@@ -1318,6 +1318,7 @@ class LegacySurveyData(object):
         d['bricks'] = None
         d['bricktree'] = None
         d['ccd_kdtrees'] = None
+        d['ccds_index'] = None
         return d
 
     def drop_cache(self):
@@ -1331,6 +1332,7 @@ class LegacySurveyData(object):
             from astrometry.libkd.spherematch import tree_free
             tree_free(self.bricktree)
         self.bricktree = None
+        self.ccds_index = None
 
     def get_calib_dir(self):
         return self.calib_dir
