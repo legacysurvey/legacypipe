@@ -23,7 +23,7 @@ processed by variants of the NOAO Community Pipeline (CP), so this
 base class is pretty specific.
 '''
 
-def remap_dq_cp_codes(dq, ignore_codes=None):
+def remap_dq_cp_codes(dq, ignore_codes=None, dtype=np.uint16):
     '''
     Some versions of the CP use integer codes, not bit masks.
     This converts them.
@@ -39,7 +39,7 @@ def remap_dq_cp_codes(dq, ignore_codes=None):
     '''
     if ignore_codes is None:
         ignore_codes = []
-    dqbits = np.zeros(dq.shape, np.int16)
+    dqbits = np.zeros(dq.shape, dtype)
 
     # Some images (eg, 90prime//CP20160403/ksb_160404_103333_ood_g_v1-CCD1.fits)
     # around saturated stars have the core with value 3 (satur), surrounded by one
@@ -284,8 +284,10 @@ class LegacySurveyImage(object):
 
         self.compute_filenames()
 
+        # What is the desired data type of dq?
+        self.dq_type = np.uint16
         # Which Data Quality bits mark saturation?
-        self.dq_saturation_bits = DQ_BITS['satur'] # | DQ_BITS['bleed']
+        self.dq_saturation_bits = self.dq_type(DQ_BITS['satur'])
 
         # Calib filenames
         calibdir = self.survey.get_calib_dir()
@@ -925,6 +927,7 @@ class LegacySurveyImage(object):
         if get_dq:
             tim.dq = dq
         tim.dq_saturation_bits = self.dq_saturation_bits
+        tim.dq_type = self.dq_type
         subh,subw = tim.shape
         tim.subwcs = tim.sip_wcs.get_subimage(tim.x0, tim.y0, subw, subh)
         return tim
@@ -1149,7 +1152,7 @@ class LegacySurveyImage(object):
         Called by get_tractor_image() to map the results from read_dq
         into a bitmask.
         '''
-        return remap_dq_cp_codes(dq)
+        return remap_dq_cp_codes(dq, dtype=self.dq_type)
 
     def read_invvar(self, clip=True, clipThresh=0.1, dq=None, slc=None,
                     **kwargs):

@@ -220,6 +220,19 @@ class DecamImage(LegacySurveyImage):
             return iv,hdr
         return iv
 
+    def read_dq(self, header=None, **kwargs):
+        # Reduce DQ size
+        dq = super().read_dq(header=header, **kwargs)
+        if header:
+            # unpack
+            dq,hdr = dq
+        # Downsize type
+        dq = dq.astype(self.dq_type)
+        if header:
+            # repack
+            dq = dq,hdr
+        return dq
+
     def remap_dq(self, dq, header):
         '''
         Called by get_tractor_image() to map the results from read_dq
@@ -284,19 +297,21 @@ class DecamImage(LegacySurveyImage):
                     outbleed[yy,x] = True
 
             # Update BLEED bit
-            dq = (dq & ~DQ_BITS['bleed']) | (DQ_BITS['bleed']*outbleed)
+            dq &= ~(self.dq_type(DQ_BITS['bleed']))
+            dq |= self.dq_type(DQ_BITS['bleed']*outbleed)
 
         else:
             from legacypipe.bits import DQ_BITS
-            dq = dq.astype(np.int16)
             # Un-set the SATUR flag for pixels that also have BADPIX set.
             bothbits = DQ_BITS['badpix'] | DQ_BITS['satur']
             I = np.flatnonzero((dq & bothbits) == bothbits)
             if len(I):
                 debug('Warning: un-setting SATUR for', len(I),
                       'pixels with SATUR and BADPIX set.')
-                dq.flat[I] &= ~DQ_BITS['satur']
+                dq.flat[I] &= ~(self.dq_type(DQ_BITS['satur']))
                 assert(np.all((dq & bothbits) != bothbits))
+        # should already be this type...
+        dq = dq.astype(self.dq_type)
         return dq
 
     def fix_saturation(self, img, dq, invvar, primhdr, imghdr, slc):

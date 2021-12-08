@@ -59,7 +59,7 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
                 return False
             if apply_masks:
                 # Apply this mask!
-                tim.dq |= ((mask & maskbits) > 0) * DQ_BITS['outlier']
+                tim.dq |= tim.dq_type(((mask & maskbits) > 0) * DQ_BITS['outlier'])
                 tim.inverr[(mask & maskbits) > 0] = 0.
             if pos_neg_mask is not None:
                 pos_neg_mask |= mask
@@ -77,7 +77,7 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
             mx = slice(mx.start - x0, mx.stop - x0)
             if apply_masks:
                 # Apply this mask!
-                tim.dq[ty, tx] |= ((mask[my, mx] & maskbits) > 0) * DQ_BITS['outlier']
+                tim.dq[ty, tx] |= tim.dq_type(((mask[my, mx] & maskbits) > 0) * DQ_BITS['outlier'])
                 tim.inverr[ty, tx][(mask[my, mx] & maskbits) > 0] = 0.
             if pos_neg_mask is not None:
                 pos_neg_mask[ty,tx] |= mask[my, mx]
@@ -232,7 +232,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 # Apply the mask!
                 maskbits = get_bits_to_mask()
                 tim.inverr[(mask & maskbits) > 0] = 0.
-                tim.dq[(mask & maskbits) > 0] |= DQ_BITS['outlier']
+                tim.dq[(mask & maskbits) > 0] |= tim.dq_type(DQ_BITS['outlier'])
 
                 # Write output!
                 from legacypipe.utils import copy_header_with_wcs
