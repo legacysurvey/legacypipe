@@ -56,6 +56,12 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
+def formatwarning(message, category, filename, lineno, line=None):
+    #return 'Warning: %s (%s:%i)' % (message, filename, lineno)
+    return 'Warning: %s' % (message)
+
+warnings.formatwarning = formatwarning
+
 def runbrick_global_init():
     from tractor.galaxy import disable_galaxy_cache
     info('Starting process', os.getpid(), Time()-Time())
@@ -3946,6 +3952,8 @@ def main(args=None):
     logging.getLogger('tractor.engine').setLevel(lvl + 10)
     # silence "findfont: score(<Font 'DejaVu Sans Mono' ...)" messages
     logging.getLogger('matplotlib.font_manager').disabled = True
+    # route warnings through the logging system
+    logging.captureWarnings(True)
     if opt.plots:
         import matplotlib
         matplotlib.use('Agg')
