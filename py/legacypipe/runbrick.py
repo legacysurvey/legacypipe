@@ -249,6 +249,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         mem = sum([im.estimate_memory_required(radecpoly=targetrd,
                                                mywcs=survey.get_approx_wcs(ccd))
                                                for im,ccd in zip(ims,ccds)])
+        info('Estimated memory required: %.1f GB' % (mem/1e9))
         if mem / 1e9 > max_memory_gb:
             raise RuntimeError('Too much memory required: %.1f > %.1f GB' % (mem/1e9, max_memory_gb))
 
@@ -549,23 +550,28 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
         not (cache_outliers and
              read_outlier_mask_file(survey, tims, brickname, outlier_mask_file=outlier_mask_file))):
         # Make before-n-after plots (before)
+        t0 = Time()
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False,
                         allmasks=False, coweights=False)
         with survey.write_output('outliers-pre', brick=brickname) as out:
             rgb,kwa = survey.get_rgb(C.coimgs, bands)
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
             del rgb
+        info('"Before" coadds:', Time()-t0)
 
         # Patch individual-CCD masked pixels from a coadd
         patch_from_coadd(C.coimgs, targetwcs, bands, tims, mp=mp)
         del C
 
+        t0 = Time()
         make_badcoadds = True
         badcoaddspos, badcoaddsneg = mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
                                                          mp=mp, plots=plots, ps=ps, make_badcoadds=make_badcoadds,
                                                          refstars=refstars)
+        info('Masking outliers:', Time()-t0)
 
         # Make before-n-after plots (after)
+        t0 = Time()
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False,
                         allmasks=False, coweights=False)
         with survey.write_output('outliers-post', brick=brickname) as out:
@@ -583,6 +589,7 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
             del rgb
         del badcoaddsneg
+        info('"After" coadds:', Time()-t0)
 
     return dict(tims=tims, version_header=version_header)
 
