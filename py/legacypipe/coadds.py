@@ -205,6 +205,7 @@ def _unwise_to_rgb(imgs):
     return rgb
 
 def make_coadds(tims, bands, targetwcs,
+                coweights=True,
                 mods=None, blobmods=None,
                 xy=None, apertures=None, apxy=None,
                 ngood=False, detmaps=False, psfsize=False,
@@ -232,8 +233,9 @@ def make_coadds(tims, bands, targetwcs,
     unweighted=True
 
     C.coimgs = []
-    # the pixelwise inverse-variances (weights) of the "coimgs".
-    C.cowimgs = []
+    if coweights:
+        # the pixelwise inverse-variances (weights) of the "coimgs".
+        C.cowimgs = []
     if detmaps:
         C.galdetivs = []
         C.psfdetivs = []
@@ -356,9 +358,7 @@ def make_coadds(tims, bands, targetwcs,
                 coblobmod  = np.zeros((H,W), np.float32)
             # number of exposures
             con    = np.zeros((H,W), np.int16)
-            # inverse-variance
-            coiv   = np.zeros((H,W), np.float32)
-            kwargs.update(coimg=coimg, coiv=coiv)
+            kwargs.update(coimg=coimg)
 
         # Note that we have 'congood' as well as 'nobs':
         # * 'congood' is used for the 'nexp' *image*.
@@ -440,7 +440,6 @@ def make_coadds(tims, bands, targetwcs,
 
                 coimg[Yo,Xo] += goodpix * im
                 con  [Yo,Xo] += goodpix
-                coiv [Yo,Xo] += goodpix * 1./(tim.sig1 * tim.sbscale)**2  # ...ish
 
             if xy or allmasks or anymasks:
                 if dq is not None:
@@ -546,7 +545,8 @@ def make_coadds(tims, bands, targetwcs,
         # Per-band:
         cowimg /= np.maximum(cow, tinyw)
         C.coimgs.append(cowimg)
-        C.cowimgs.append(cow)
+        if coweights:
+            C.cowimgs.append(cow)
         if mods is not None:
             cowmod  /= np.maximum(cow, tinyw)
             C.comods.append(cowmod)
@@ -582,11 +582,13 @@ def make_coadds(tims, bands, targetwcs,
 
             # Patch pixels with no data in the weighted coadd.
             cowimg[cow == 0] = coimg[cow == 0]
+            del coimg
             if mods is not None:
                 cowmod[cow == 0] = comod[cow == 0]
+                del comod
             if blobmods is not None:
                 cowblobmod[cow == 0] = coblobmod[cow == 0]
-
+                del coblobmod
         if xy:
             C.T.nobs   [:,iband] = nobs   [iy,ix]
             C.T.anymask[:,iband] = ormask [iy,ix]
@@ -629,6 +631,9 @@ def make_coadds(tims, bands, targetwcs,
                 if blobmods is not None:
                     apargs.append((irad, band, rad, coblobresid, None, None,
                                    False, apxy))
+
+        if not coweights:
+            del cow
 
         if callback is not None:
             callback(band, *callback_args, **kwargs)
