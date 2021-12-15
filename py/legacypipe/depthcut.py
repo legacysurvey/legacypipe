@@ -1,15 +1,25 @@
 import numpy as np
 from legacypipe.utils import find_unique_pixels
 
+import logging
+logger = logging.getLogger('legacypipe.depthcut')
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
+
+
 def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                    plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf, do_calibs,
                    gitver, targetwcs, old_calibs_ok, get_depth_maps=False, margin=0.5,
-                   use_approx_wcs=False):
+                   use_approx_wcs=False, decals_first=False):
     if plots:
         import pylab as plt
 
     # Add some margin to our DESI depth requirements
-    target_depth_map = dict(g=24.0 + margin, r=23.4 + margin, z=22.5 + margin)
+    target_depth_map = dict(g=24.0 + margin, r=23.4 + margin, i=23.0 + margin, z=22.5 + margin)
 
     # List extra (redundant) target percentiles so that increasing the depth at
     # any of these percentiles causes the image to be kept.
@@ -22,6 +32,9 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
     #print('Target percentiles:', target_percentiles)
     #print('Target ddepths:', target_ddepths)
 
+    target_nexp = 3
+    target_nexp_pct = 95
+
     cH,cW = H//10, W//10
     coarsewcs = targetwcs.scale(0.1)
     coarsewcs.imagew = cW
@@ -32,6 +45,8 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                            brick.ra1, brick.ra2, brick.dec1, brick.dec2)
     pixscale = 3600. * np.sqrt(np.abs(ccds.cd1_1*ccds.cd2_2 - ccds.cd1_2*ccds.cd2_1))
     seeing = ccds.fwhm * pixscale
+
+    target_nexp_npix = int(np.sum(U) * float(target_nexp_pct) / 100.)
 
     # Compute the rectangle in *coarsewcs* covered by each CCD
     slices = []
@@ -65,6 +80,9 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
         # vector
         target_depths = target_depth + target_ddepths
 
+        nexp = np.zeros((cH,cW), np.int16)
+        last_nexp = np.zeros_like(nexp)
+
         depthiv = np.zeros((cH,cW), np.float32)
         depthmap = np.zeros_like(depthiv)
         depthvalue = np.zeros_like(depthiv)
@@ -83,11 +101,12 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
         # take.
         try_ccds = set()
 
-        # Try DECaLS data first!
-        Idecals = np.where(ccds.propid[b_inds] == '2014B-0404')[0]
-        if len(Idecals):
-            try_ccds.update(b_inds[Idecals])
-        debug('Added', len(try_ccds), 'DECaLS CCDs to try-list')
+        if decals_first:
+            # Try DECaLS data first!
+            Idecals = np.where(ccds.propid[b_inds] == '2014B-0404')[0]
+            if len(Idecals):
+                try_ccds.update(b_inds[Idecals])
+            debug('Added', len(try_ccds), 'DECaLS CCDs to try-list')
 
         plot_vals = []
 
@@ -113,6 +132,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             ps.savefig()
             #continue
 
+        # b_inds: indices of CCDs in this band, still to check
         while len(b_inds):
             if len(try_ccds) == 0:
                 # Choose the next CCD to look at in this band.
@@ -223,6 +243,8 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 continue
             depthiv[Yo,Xo] += detiv
 
+            nexp[Yo,Xo] += 1
+
             # compute the new depth map & percentiles (including the proposed new CCD)
             depthmap[:,:] = 0.
             depthmap[depthiv > 0] = 22.5 - 2.5*np.log10(5./np.sqrt(depthiv[depthiv > 0]))
@@ -231,10 +253,23 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             for i,(p,d,t) in enumerate(zip(target_percentiles, depthpcts, target_depths)):
                 info('  pct % 3i, prev %5.2f -> %5.2f vs target %5.2f %s' % (p, last_pcts[i], d, t, ('ok' if d >= t else '')))
 
+            info('%i of %i required N_exp coarse pixels satisfied' % (np.sum(nexp[U] >= target_nexp), target_nexp_npix))
+            from collections import Counter
+            cn = Counter(nexp[U])
+            print('Nexp histogram:')
+            for i in range(20):
+                n = cn.get(i, 0)
+                print(' % 3i: % 9i' % (i, n))
+
             keep = False
             # Did we increase the depth of any target percentile that did not already exceed its target depth?
             if np.any((depthpcts > last_pcts) * (last_pcts < target_depths)):
                 keep = True
+
+            if not keep:
+                if np.any((nexp[U] > last_nexp[U]) * (last_nexp[U] < target_nexp)):
+                    info('Keeping CCD to satisfy N_exp')
+                    keep = True
 
             # Add any other CCDs from this same expnum to the try_ccds list.
             # (before making the plot)
@@ -299,14 +334,20 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
             else:
                 info('Not keeping this exposure')
                 depthiv[Yo,Xo] -= detiv
+                nexp[Yo,Xo] -= 1
                 continue
 
             keep_ccds[iccd] = True
             last_pcts = depthpcts
+            last_nexp[:,:] = nexp
 
             if np.all(depthpcts >= target_depths):
                 info('Reached all target depth percentiles for band', band)
-                break
+                if np.sum(nexp[U] >= target_nexp) >= target_nexp_npix:
+                    info('Reached all target n_exp for band', band)
+                    break
+                else:
+                    info('Have not reached all target n_exp for band', band)
 
         if get_depth_maps:
             if np.any(depthiv > 0):
