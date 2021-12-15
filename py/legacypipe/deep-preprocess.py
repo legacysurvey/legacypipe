@@ -290,6 +290,36 @@ def stage_deep_preprocess_2(
     deepC = make_coadds(deeptims, bands, targetwcs, mp=mp, sbscale=False,
                         allmasks=False, coweights=False)
 
+
+    star_veto = np.zeros(targetwcs.shape, np.bool)
+    if refstars:
+        gaia = refstars[refstars.isgaia]
+        # Not moving Gaia stars to epoch of individual images...
+        _,bx,by = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
+        bx -= 1.
+        by -= 1.
+        # Radius to mask around Gaia stars, in arcsec
+        radius = 1.0
+        pixrad = radius / targetwcs.pixel_scale()
+        for x,y in zip(bx,by):
+            xlo = int(np.clip(np.floor(x - pixrad), 0, W-1))
+            xhi = int(np.clip(np.ceil (x + pixrad), 0, W-1))
+            ylo = int(np.clip(np.floor(y - pixrad), 0, H-1))
+            yhi = int(np.clip(np.ceil (y + pixrad), 0, H-1))
+            if xlo == xhi or ylo == yhi:
+                continue
+            r2 = (((np.arange(ylo,yhi+1) - y)**2)[:,np.newaxis] +
+                  ((np.arange(xlo,xhi+1) - x)**2)[np.newaxis,:])
+            star_veto[ylo:yhi+1, xlo:xhi+1] |= (r2 < pixrad)
+
+    badcoadds_pos = []
+    badcoadds_neg = []
+    detmaps = []
+    detivs  = []
+    satmaps = []
+    coadds = []
+    coivs  = []
+
     with survey.write_output('outliers_mask', brick=brickname) as out:
         # empty Primary HDU
         out.fits.write(None, header=version_header)
@@ -326,15 +356,19 @@ def stage_deep_preprocess_2(
                 del Yo,Xo,iacc,wacc,macc
                 del r
             del results
-
-            deep_sig = targetsig
-
             #
             veto = np.logical_or(star_veto,
                                  np.logical_or(
                 binary_dilation(masks & DQ_BITS['bleed'], iterations=3),
                 binary_dilation(masks & DQ_BITS['satur'], iterations=10)))
             del masks
+
+            coimg /= np.maximum(1e-16, cow)
+            refimg = coimg
+            refiv  = cowt
+            del coimg,cowt
+
+            deep_sig = targetsig
 
             bims = [im for im in ims if im.band == band and not im in deepims]
             info('Running on', len(bims), 'individual images (not in deep set)...')
@@ -349,82 +383,131 @@ def stage_deep_preprocess_2(
                               apodize=apodize,
                               constant_invvar=constant_invvar,
                               old_calibs_ok=old_calibs_ok)
+
+            coimg = np.zeros((H,W), np.float32)
+            coiv  = np.zeros((H,W), np.float32)
+            detmap = np.zeros((H,W), np.float32)
+            detiv  = np.zeros((H,W), np.float32)
+            sattype = np.uint8
+            satmax = 254
+            satmap = np.zeros((H,W), sattype)
+            BIG = 1e6
+            badcoadd_pos = np.empty((H,W), np.float32)
+            badcoadd_neg = np.empty((H,W), np.float32)
+            badcoadd_pos[:,:] = -BIG
+            badcoadd_neg[:,:] = +BIG
             
             make_badcoadds=True
             R = mp.imap_unordered(
-                mask_and_coadd_one, [(i_bim, survey, targetrd, tim_kwargs, im, targetwcs,
-                                      patch_img, coimg, cow, veto, deep_sig, plots,ps)
-                                     for i_bim,im in enumerate(bims)])
-            del coimg, cow, veto
+                mask_and_coadd_one,
+                [(i_bim, survey, targetrd, tim_kwargs, im, targetwcs,
+                  patch_img, refimg, refiv, veto, deep_sig, plots,ps)
+                  for i_bim,im in enumerate(bims)])
+            del refimg, refiv, veto, patch_img
 
-
-            #####
-
-
-            
-            badcoadd_pos = None
-            badcoadd_neg = None
-            if make_badcoadds:
-                badcoadd_pos = np.zeros((H,W), np.float32)
-                badcon_pos   = np.zeros((H,W), np.int16)
-                badcoadd_neg = np.zeros((H,W), np.float32)
-                badcon_neg   = np.zeros((H,W), np.int16)
-
-            for i_btim,r in R:
-                tim = btims[i_btim]
-                if r is None:
+            for i_bim,res in R:
+                im = bims[i_bim]
+                if res is None:
                     # none masked
-                    mask = np.zeros(tim.shape, np.uint8)
+                    outl_mask = np.zeros((im.height,im.width), np.uint8)
+                    x0,y0 = 0,0
+                    wcs = im.get_wcs()
+                    from legacypipe.utils import copy_header_with_wcs
+                    hdr = copy_header_with_wcs(None, wcs)
                 else:
-                    mask,badco = r
-                    if make_badcoadds:
-                        badhot, badcold = badco
-                        yo,xo,bimg = badhot
-                        badcoadd_pos[yo, xo] += bimg
-                        badcon_pos  [yo, xo] += 1
-                        yo,xo,bimg = badcold
-                        badcoadd_neg[yo, xo] += bimg
-                        badcon_neg  [yo, xo] += 1
-                        del yo,xo,bimg, badhot,badcold
-                    del badco
-                del r
+                    (Yo,Xo, rimg, riv, detim, detiv, sat, badco,
+                     outl_mask, x0, y0, hdr) = res
 
-                # Apply the mask!
-                maskbits = get_bits_to_mask()
-                tim.inverr[(mask & maskbits) > 0] = 0.
-                tim.dq[(mask & maskbits) > 0] |= tim.dq_type(DQ_BITS['outlier'])
+                    badhot, badcold = badco
+                    yo,xo,bimg = badhot
+                    badcoadd_pos[yo, xo] = np.maximum(badcoadd_pos[yo, xo], bimg)
+                    yo,xo,bimg = badcold
+                    badcoadd_neg[yo, xo] = np.minimum(badcoadd_neg[yo, xo], bimg)
+                    del yo,xo,bimg, badhot,badcold
+                    del badco
+
+                    coimg[Yo,Xo] += rimg * riv
+                    coiv [Yo,Xo] += riv
+                    del rimg,riv
+
+                    detmaps[Yo,Xo] += detim * detiv
+                    detivs [Yo,Xo] += detiv
+                    del detim,detiv
+
+                    if sat is not None:
+                        satmap[Yo,Xo] = np.minimum(satmax, satmap[Yo,Xo] + (1*sat))
+                    del sat,Yo,Xo
+                del res
 
                 # Write output!
-                from legacypipe.utils import copy_header_with_wcs
-                hdr = copy_header_with_wcs(None, tim.subwcs)
                 hdr.add_record(dict(name='IMTYPE', value='outlier_mask',
                                     comment='LegacySurvey image type'))
-                hdr.add_record(dict(name='CAMERA',  value=tim.imobj.camera))
-                hdr.add_record(dict(name='EXPNUM',  value=tim.imobj.expnum))
-                hdr.add_record(dict(name='CCDNAME', value=tim.imobj.ccdname))
-                hdr.add_record(dict(name='X0', value=tim.x0))
-                hdr.add_record(dict(name='Y0', value=tim.y0))
+                hdr.add_record(dict(name='CAMERA',  value=im.camera))
+                hdr.add_record(dict(name='EXPNUM',  value=im.expnum))
+                hdr.add_record(dict(name='CCDNAME', value=im.ccdname))
+                hdr.add_record(dict(name='X0', value=x0))
+                hdr.add_record(dict(name='Y0', value=y0))
 
-                # HCOMPRESS;: 943k
-                # GZIP_1: 4.4M
-                # GZIP: 4.4M
-                # RICE: 2.8M
-                extname = '%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
-                out.fits.write(mask, header=hdr, extname=extname, compress='HCOMPRESS')
+                extname = '%s-%s-%s' % (im.camera, im.expnum, im.ccdname)
+                out.fits.write(mask, header=hdr, extname=extname,
+                               compress='HCOMPRESS')
             del R
 
-            if make_badcoadds:
-                badcoadd_pos /= np.maximum(badcon_pos, 1)
-                badcoadd_neg /= np.maximum(badcon_neg, 1)
-                badcoadds_pos.append(badcoadd_pos)
-                badcoadds_neg.append(badcoadd_neg)
+            # Un-touched pixels -> 0
+            badcoadd_pos[badcoadd_pos == -BIG] = 0.
+            badcoadd_neg[badcoadd_pos == +BIG] = 0.
 
+            badcoadds_pos.append(badcoadd_pos)
+            badcoadds_neg.append(badcoadd_neg)
+            detmaps.append(detmap)
+            detmap /= np.maximum(detiv, 1e-16)
+            detivs.append(detiv)
+            satmaps = (satmap >= nsatur)
+            satmaps.append(satmap)
+            tinyw = 1e-30
+            coimg /= np.maximum(coiv, tinyw)
+            coadds.append(coimg)
+            coivs.append(coiv)
 
-        
+            del badcoadd_pos, badcoadd_neg, detmap, detiv, satmap, coimg, coiv
+
+    with survey.write_output('outliers-masked-pos', brick=brickname) as out:
+        rgb,kwa = survey.get_rgb(badcoadds_pos, bands)
+        imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
+        del rgb
+    del badcoadds_pos
+    with survey.write_output('outliers-masked-neg', brick=brickname) as out:
+        rgb,kwa = survey.get_rgb(badcoadds_neg, bands)
+        imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
+        del rgb
+    del badcoadds_neg
+
+    primhdr = fitsio.FITSHDR()
+    for r in version_header.records():
+        primhdr.add_record(r)
+    primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
+                            comment='NOAO data product type'))
     
-    
-    
-    return None
+    # Write per-brick CCDs table
+    with survey.write_output('ccds-table', brick=brickname) as out:
+        ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
+
+    from legacypipe.coadds import write_coadd_images
+    for band,coimg,coiv in zip(bands, coadds, coivs):
+        write_coadd_images(band, survey, brickname, version_header,
+                           deeptims, targetwcs, co_sky,
+                           cowimg=coimg, cow=coiv)
+
+    with survey.write_output('image-jpeg', brick=brickname) as out:
+        rgb,kwa = survey.get_rgb(coadds, bands)
+        imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
+        debug('Wrote', out.fn)
+        del coadds
+
+    keys = ['detmaps', 'detivs', 'satmaps']
+    L = locals()
+    rtn = dict([(k,L[k]) for k in keys])
+    return rtn
 
 def mask_and_coadd_one(X):
     from legacypipe.survey import read_one_tim
@@ -447,49 +530,61 @@ def mask_and_coadd_one(X):
     
     # - blur & resample for masking coadd
     blurimg = gaussian_filter(tim.getImage(), tim_blursig)
-    try:
-        Yo,Xo,Yi,Xi,[rimg] = resample_with_wcs(
-            targetwcs, tim.subwcs, [blurimg], intType=np.int16)
-    except OverlapError:
-        return i_bim, None
+    # try:
+    #     Yo,Xo,Yi,Xi,[rimg] = resample_with_wcs(
+    #         targetwcs, tim.subwcs, [blurimg], intType=np.int16)
+    # except OverlapError:
+    #     return i_bim, None
     del blurimg
     blurnorm = 1./(2. * np.sqrt(np.pi) * tim_blursig)
-    wt = tim.getInvvar()[Yi,Xi] / (blurnorm**2)
-    this_sig1 = 1./np.sqrt(np.median(wt[wt>0]))
+    #wt = tim.getInvvar()[Yi,Xi] / (blurnorm**2)
+    #this_sig1 = 1./np.sqrt(np.median(wt[wt>0]))
 
-    #return i_tim, (Yo, Xo, rimg*wt, wt, tim.dq[Yi,Xi])
-
-    refimg = gaussian_filter(coimg, deep_blursig)[Yo,Xo]
+    # Resample reference image to tim space.
+    refimg = gaussian_filter(coimg, deep_blursig)
     refblurnorm = 1./(2. * np.sqrt(np.pi) * deep_blursig)
-    refwt = cow[Yo,Xo] / (refblurnorm**2)
+    try:
+        Yo,Xo,Yi,Xi,[rref] = resample_with_wcs(
+            tim.subwcs, targetwcs, [refimg], intType=np.int16)
+    except OverlapError:
+        return i_bim,None
+    del refimg
+    refimg = rref
+    refwt = cow[Yi,Xi] / (refblurnorm**2)
+    vetopix = veto[Yi,Xi]
+    del veto
 
-    # Compare against reference image...
-    maskedpix = np.zeros(tim.shape, np.uint8)
+    blurimg = blurimg[Yo,Xo]
+    blurwt = tim.getInvvar()[Yo,Xo] / (blurnorm**2)
+    blur_sig1 = tim.sig1 * blurnorm
 
-    # Compute the error on our estimate of (thisimg - co) =
+    # refimg = gaussian_filter(coimg, deep_blursig)[Yo,Xo]
+    # refblurnorm = 1./(2. * np.sqrt(np.pi) * deep_blursig)
+    # refwt = cow[Yo,Xo] / (refblurnorm**2)
+
+    # Compute the error on our estimate of (blurimg - refimg) =
     # sum in quadrature of the errors on thisimg and co.
     with np.errstate(divide='ignore'):
-        diffvar = 1./wt + 1./refwt
-        sndiff = (rimg - refimg) / np.sqrt(diffvar)
+        diffvar = 1./blurwt + 1./refwt
+        sndiff = (blurimg - refimg) / np.sqrt(diffvar)
     with np.errstate(divide='ignore'):
-        reldiff = ((rimg - refimg) / np.maximum(refimg, this_sig1))
+        reldiff = ((blurimg - refimg) / np.maximum(refimg, blur_sig1))
 
     # Significant pixels
     hotpix = ((sndiff > 5.) * (reldiff > 2.) *
-              (refwt > 1e-16) * (wt > 0.) *
-              (veto[Yo,Xo] == False))
+              (refwt > 1e-16) * (blurwt > 0.) * (vetopix == False))
     coldpix = ((sndiff < -5.) * (reldiff < -2.) *
-               (refwt > 1e-16) * (wt > 0.) *
-               (veto[Yo,Xo] == False))
+               (refwt > 1e-16) * (blurwt > 0.) * (vetopix == False))
     del reldiff, refwt
 
     if np.any(hotpix) or np.any(coldpix):
-        hot = np.zeros((H,W), bool)
+        # Resample hotpix,coldpix,snmap back to tim-shaped images.
+        hot = np.zeros(tim.shape, bool)
         hot[Yo,Xo] = hotpix
-        cold = np.zeros((H,W), bool)
+        cold = np.zeros(tim.shape, bool)
         cold[Yo,Xo] = coldpix
         del hotpix, coldpix
-        snmap = np.zeros((H,W), np.float32)
+        snmap = np.zeros(tim.shape, np.float32)
         snmap[Yo,Xo] = sndiff
         hot = binary_dilation(hot, iterations=1)
         cold = binary_dilation(cold, iterations=1)
@@ -509,28 +604,37 @@ def mask_and_coadd_one(X):
         cold = binary_dilation(cold, iterations=3)
         del snmap
 
+        # Set outlier mask
+        outl_mask = (hot | cold)
+        if tim.dq is not None:
+            tim.dq |= tim.dq_type(outl_mask * DQ_BITS['outlier'])
+        tim.inverr[outl_mask] = 0.
+
         bad, = np.nonzero(hot[Yo,Xo])
-        badhot = (Yo[bad], Xo[bad], tim.getImage()[Yi[bad],Xi[bad]])
+        badhot = (Yi[bad], Xi[bad], tim.getImage()[Yo[bad],Xo[bad]])
         bad, = np.nonzero(cold[Yo,Xo])
-        badcold = (Yo[bad], Xo[bad], tim.getImage()[Yi[bad],Xi[bad]])
+        badcold = (Yi[bad], Xi[bad], tim.getImage()[Yo[bad],Xo[bad]])
         badco = badhot,badcold
 
-        # Actually do the masking!
-        # Resample "hot" (in brick coords) back to tim coords.
-        try:
-            mYo,mXo,mYi,mXi,_ = resample_with_wcs(
-                tim.subwcs, targetwcs, intType=np.int16)
-        except OverlapError:
-            pass
-        Ibad, = np.nonzero(hot[mYi,mXi])
-        Ibad2, = np.nonzero(cold[mYi,mXi])
-        info(tim, ': masking', len(Ibad), 'positive outlier pixels and', len(Ibad2), 'negative outlier pixels')
-        maskedpix[mYo[Ibad],  mXo[Ibad]]  = OUTLIER_POS
-        maskedpix[mYo[Ibad2], mXo[Ibad2]] = OUTLIER_NEG
+        # - patch again
+        patch_from_coadd([patchimg], targetwcs, ['x'], [tim])
 
-    # - (patch again?)
-    # - resample for regular coadd
-    # - return: outlier mask, Yo,Xo,im,wts for coadd, Yo,Xo,im for badcoadd
+    # - resample for regular coadd and detection map
+    from legacypipe.detection import _detmap
+    try:
+        Yo,Xo,Yi,Xi,[rimg] = resample_with_wcs(
+            targetwcs, tim.subwcs, [tim.getImage()], intType=np.int16)
+    except OverlapError:
+        return i_bim,None
+    tim.resamp = (Yo,Xo,Yi,Xi)
+    apodize = 10
+    timband,_,_,detim,detiv,sat = _detmap((tim, targetwcs, apodize))
+
+    from legacypipe.utils import copy_header_with_wcs
+    hdr = copy_header_with_wcs(None, tim.subwcs)
+
+    return i_bim, (Yo,Xo, rimg, tim.getInvErr()[Yi,Xi]**2, detim, detiv, sat, badco,
+                   outl_mask, tim.x0, tim.y0, hdr)
 
 
 def main(args=None):

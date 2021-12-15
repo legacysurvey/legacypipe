@@ -262,6 +262,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             if make_badcoadds:
                 badcoadd_pos /= np.maximum(badcon_pos, 1)
                 badcoadd_neg /= np.maximum(badcon_neg, 1)
+                del badcon_pos, badcon_neg
                 badcoadds_pos.append(badcoadd_pos)
                 badcoadds_neg.append(badcoadd_neg)
 
