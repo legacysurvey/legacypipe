@@ -611,13 +611,11 @@ def stage_halos(pixscale=None, targetwcs=None,
 
     # Subtract star halos?
     if star_halos and refstars:
-        Igaia = []
-        gaia = refstars
         Igaia, = np.nonzero(refstars.isgaia * refstars.pointsource)
         debug(len(Igaia), 'stars for halo subtraction')
         if len(Igaia):
             from legacypipe.halos import subtract_halos
-            halostars = gaia[Igaia]
+            halostars = refstars[Igaia]
 
             if plots:
                 from legacypipe.runbrick_plots import halo_plots_before, halo_plots_after

@@ -10,6 +10,7 @@ import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.ttime import Time
+from astrometry.util.multiproc import multiproc
 
 from legacypipe.runbrick import get_parser, get_runbrick_kwargs, run_brick
 from legacypipe.survey import imsave_jpeg
@@ -18,6 +19,7 @@ from legacypipe.outliers import patch_from_coadd, mask_outlier_pixels, read_outl
 from legacypipe.outliers import blur_resample_one
 from legacypipe.bits import DQ_BITS
 from legacypipe.utils import NothingToDoError, RunbrickError
+from legacypipe.runbrick import stage_refs
 
 import logging
 logger = logging.getLogger('legacypipe.deep-preprocess')
@@ -29,7 +31,8 @@ def debug(*args):
     log_debug(logger, args)
 
 def formatwarning(message, category, filename, lineno, line=None):
-    return 'Warning: %s' % (message)
+    return 'Warning: %s (%s:%i)' % (message, filename, lineno)
+    #return 'Warning: %s' % (message)
 warnings.formatwarning = formatwarning
 
 def stage_deep_preprocess(
@@ -286,6 +289,7 @@ def stage_deep_preprocess_2(
         deepims=None,
         deeptims=None,
         nsatur=None,
+        star_halos=True,
 
         **kwargs):
 
@@ -295,7 +299,6 @@ def stage_deep_preprocess_2(
     info('Making coadds for patching images...')
     deepC = make_coadds(deeptims, bands, targetwcs, mp=mp, sbscale=False,
                         allmasks=False, coweights=False)
-
 
     star_veto = np.zeros(targetwcs.shape, bool)
     if refstars:
@@ -331,6 +334,7 @@ def stage_deep_preprocess_2(
         out.fits.write(None, header=version_header)
 
         for iband,band in enumerate(bands):
+            # Build blurred reference image (from 'deeptims') for outlier rejection
             btims = [tim for tim in deeptims if tim.band == band]
             if len(btims) == 0:
                 continue
@@ -338,7 +342,6 @@ def stage_deep_preprocess_2(
 
             info('Making blurred reference image...')
             H,W = targetwcs.shape
-            # Build blurred reference image
             sigs = np.array([tim.psf_sigma for tim in btims])
             debug('PSF sigmas:', sigs)
             targetsig = max(sigs) + 0.5
@@ -376,9 +379,14 @@ def stage_deep_preprocess_2(
 
             deep_sig = targetsig
 
-            info('Total of', len([im for im in ims if im.band == band]), 'images in', band, 'band')
-            bims = [im for im in ims if im.band == band and not im in deepims]
-            info('Running on', len(bims), 'individual images (not in deep set)...')
+            #info('Total of', len([im for im in ims if im.band == band]), 'images in', band, 'band')
+            #bims = [im for im in ims if im.band == band and not im in deepims]
+            #info('Running on', len(bims), 'individual images (not in deep set)...')
+
+            # We actually still want to run all the processing steps
+            # on the images in the deep set too!
+            bims = [im for im in ims if im.band == band]
+            info('Total of', len(bims), 'images in', band, 'band')
             if len(bims) == 0:
                 continue
 
@@ -393,6 +401,8 @@ def stage_deep_preprocess_2(
 
             coimg = np.zeros((H,W), np.float32)
             coiv  = np.zeros((H,W), np.float32)
+            coflat = np.zeros((H,W), np.float32)
+            con    = np.zeros((H,W), np.uint16)
             detmap = np.zeros((H,W), np.float32)
             detiv  = np.zeros((H,W), np.float32)
             sattype = np.uint8
@@ -403,12 +413,20 @@ def stage_deep_preprocess_2(
             badcoadd_neg = np.empty((H,W), np.float32)
             badcoadd_pos[:,:] = -BIG
             badcoadd_neg[:,:] = +BIG
+
+            # Prep halo subtraction
+            halostars = None
+            if star_halos and refstars:
+                Igaia, = np.nonzero(refstars.isgaia * refstars.pointsource)
+                info(len(Igaia), 'stars for halo subtraction')
+                if len(Igaia):
+                    halostars = refstars[Igaia]
             
             make_badcoadds=True
             R = mp.imap_unordered(
                 mask_and_coadd_one,
                 [(i_bim, survey, targetrd, tim_kwargs, im, targetwcs,
-                  patch_img, refimg, refiv, veto, deep_sig, plots,ps)
+                  patch_img, refimg, refiv, veto, deep_sig, halostars, plots,ps)
                   for i_bim,im in enumerate(bims)])
             del refimg, refiv, veto, patch_img
 
@@ -422,7 +440,7 @@ def stage_deep_preprocess_2(
                     from legacypipe.utils import copy_header_with_wcs
                     hdr = copy_header_with_wcs(None, wcs)
                 else:
-                    (Yo,Xo, rimg, riv, det, div, sat, badco,
+                    (Yo,Xo, rimg, riv, dq, det, div, sat, badco,
                      outl_mask, x0, y0, hdr) = res
 
                     if badco is not None:
@@ -434,8 +452,26 @@ def stage_deep_preprocess_2(
                         del yo,xo,bimg, badhot,badcold
                         del badco
 
-                    coimg[Yo,Xo] += rimg * riv
-                    coiv [Yo,Xo] += riv
+                    if dq is None:
+                        goodpix = 1
+                    else:
+                        # include SATUR pixels if no other pixels exists
+                        okbits = 0
+                        for bitname in ['satur']:
+                            okbits |= DQ_BITS[bitname]
+                        brightpix = ((dq & okbits) != 0)
+                        satur_val=10.
+                        # force SATUR pix to be bright
+                        rimg[brightpix] = satur_val
+                        # Include these pixels if none other exist??
+                        for bitname in ['interp']:
+                            okbits |= DQ_BITS[bitname]
+                        goodpix = ((dq & ~okbits) == 0)
+
+                    coimg [Yo,Xo] += rimg * riv
+                    coiv  [Yo,Xo] += riv
+                    coflat[Yo,Xo] += goodpix * rimg
+                    con   [Yo,Xo] += goodpix
                     del rimg,riv
 
                     detmap[Yo,Xo] += det * div
@@ -470,14 +506,19 @@ def stage_deep_preprocess_2(
             detmaps.append(detmap)
             detmap /= np.maximum(detiv, 1e-16)
             detivs.append(detiv)
+            if nsatur is None:
+                nsatur = 1
             satmap = (satmap >= nsatur)
             satmaps.append(satmap)
             tinyw = 1e-30
             coimg /= np.maximum(coiv, tinyw)
+            coflat /= np.maximum(con,1)
+            # patch
+            coimg[coiv == 0] = coflat[coiv == 0]
             coadds.append(coimg)
             coivs.append(coiv)
 
-            del badcoadd_pos, badcoadd_neg, detmap, detiv, satmap, coimg, coiv
+            del badcoadd_pos, badcoadd_neg, detmap, detiv, satmap, coimg, coiv, con, coflat
 
     with survey.write_output('outliers-masked-pos', brick=brickname) as out:
         rgb,kwa = survey.get_rgb(badcoadds_pos, bands)
@@ -511,9 +552,9 @@ def stage_deep_preprocess_2(
         rgb,kwa = survey.get_rgb(coadds, bands)
         imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
         debug('Wrote', out.fn)
-        del coadds
+    #del coadds,coivs
 
-    keys = ['detmaps', 'detivs', 'satmaps']
+    keys = ['detmaps', 'detivs', 'satmaps', 'coadds', 'coivs']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
@@ -524,7 +565,7 @@ def mask_and_coadd_one(X):
     from astrometry.util.resample import resample_with_wcs,OverlapError
 
     (i_bim, survey, targetrd, tim_kwargs, im, targetwcs, patchimg, coimg, cow, veto,
-     deep_sig, plots, ps) = X
+     deep_sig, halostars, plots, ps) = X
 
     # - read tim
     tim = read_one_tim((im, targetrd, tim_kwargs))
@@ -538,20 +579,19 @@ def mask_and_coadd_one(X):
     deep_blursig = np.sqrt(targetsig**2 - deep_sig**2)
     tim_blursig  = np.sqrt(targetsig**2 - tim.psf_sigma**2)
     
-    # - blur & resample for masking coadd
+    # Blur tim
+    assert(tim_blursig > 0)
     blurimg = gaussian_filter(tim.getImage(), tim_blursig)
-    # try:
-    #     Yo,Xo,Yi,Xi,[rimg] = resample_with_wcs(
-    #         targetwcs, tim.subwcs, [blurimg], intType=np.int16)
-    # except OverlapError:
-    #     return i_bim, None
     blurnorm = 1./(2. * np.sqrt(np.pi) * tim_blursig)
-    #wt = tim.getInvvar()[Yi,Xi] / (blurnorm**2)
-    #this_sig1 = 1./np.sqrt(np.median(wt[wt>0]))
 
+    # Blur ref image
+    if deep_blursig > 0:
+        refimg = gaussian_filter(coimg, deep_blursig)
+        refblurnorm = 1./(2. * np.sqrt(np.pi) * deep_blursig)
+    else:
+        refimg = coimg
+        refblurnorm = 1.
     # Resample reference image to tim space.
-    refimg = gaussian_filter(coimg, deep_blursig)
-    refblurnorm = 1./(2. * np.sqrt(np.pi) * deep_blursig)
     try:
         Yo,Xo,Yi,Xi,[rref] = resample_with_wcs(
             tim.subwcs, targetwcs, [refimg], intType=np.int16)
@@ -566,10 +606,6 @@ def mask_and_coadd_one(X):
     blurimg = blurimg[Yo,Xo]
     blurwt = tim.getInvvar()[Yo,Xo] / (blurnorm**2)
     blur_sig1 = tim.sig1 * blurnorm
-
-    # refimg = gaussian_filter(coimg, deep_blursig)[Yo,Xo]
-    # refblurnorm = 1./(2. * np.sqrt(np.pi) * deep_blursig)
-    # refwt = cow[Yo,Xo] / (refblurnorm**2)
 
     # Compute the error on our estimate of (blurimg - refimg) =
     # sum in quadrature of the errors on thisimg and co.
@@ -587,7 +623,7 @@ def mask_and_coadd_one(X):
     del reldiff, refwt
 
     if np.any(hotpix) or np.any(coldpix):
-        # Resample hotpix,coldpix,snmap back to tim-shaped images.
+        # Plug hotpix,coldpix,snmap (which are vectors of pixels) back to tim-shaped images.
         hot = np.zeros(tim.shape, bool)
         hot[Yo,Xo] = hotpix
         cold = np.zeros(tim.shape, bool)
@@ -595,6 +631,7 @@ def mask_and_coadd_one(X):
         del hotpix, coldpix
         snmap = np.zeros(tim.shape, np.float32)
         snmap[Yo,Xo] = sndiff
+        del sndiff
         hot = binary_dilation(hot, iterations=1)
         cold = binary_dilation(cold, iterations=1)
         # "warm"
@@ -630,6 +667,14 @@ def mask_and_coadd_one(X):
     else:
         badco = None
         outl_mask = np.zeros(tim.shape, bool)
+
+    # Do halo subtraction
+    if halostars:
+        from legacypipe.halos import subtract_halos
+        mp = multiproc()
+        subtract_halos([tim], halostars, [band], mp, plots, ps, old_calibs_ok=old_calibs_ok)
+
+
     # - resample for regular coadd and detection map
     from legacypipe.detection import _detmap
     try:
@@ -644,7 +689,12 @@ def mask_and_coadd_one(X):
     from legacypipe.utils import copy_header_with_wcs
     hdr = copy_header_with_wcs(None, tim.subwcs)
 
-    return i_bim, (Yo,Xo, rimg, tim.getInvError()[Yi,Xi]**2, detim, detiv, sat, badco,
+    if tim.dq is None:
+        dq = None
+    else:
+        dq = tim.dq[Yi,Xi]
+
+    return i_bim, (Yo,Xo, rimg, tim.getInvError()[Yi,Xi]**2, dq, detim, detiv, sat, badco,
                    outl_mask, tim.x0, tim.y0, hdr)
 
 
@@ -707,7 +757,9 @@ def main(args=None):
         legacypipe.survey.rgb_stretch_factor = rgb_stretch
 
     kwargs.update(prereqs_update={ 'deep_preprocess': None,
-                                   'deep_preprocess_2': 'deep_preprocess' })
+                                   'refs': 'deep_preprocess',
+                                   'deep_preprocess_2': 'refs',
+                                   })
     from astrometry.util.stages import CallGlobalTime
     stagefunc = CallGlobalTime('stage_%s', globals())
     kwargs.update(stagefunc=stagefunc)
