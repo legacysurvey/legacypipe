@@ -31,6 +31,8 @@ import sys
 import os
 import warnings
 
+from memory_profiler import profile
+
 import numpy as np
 
 import fitsio
@@ -67,6 +69,7 @@ def runbrick_global_init():
     info('Starting process', os.getpid(), Time()-Time())
     disable_galaxy_cache()
 
+@profile
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                survey=None,
                survey_blob_mask=None,
@@ -371,6 +374,22 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
             'target_extent', 'ccds', 'bands', 'survey']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
+
+    # for k,v in rtn.items():
+    #     import pickle
+    #     L = len(pickle.dumps(v))
+    #     print('stage tims:', k, 'takes', L, 'bytes to pickle')
+    # for tim in tims:
+    #     import pickle
+    #     L = len(pickle.dumps(tim))
+    #     print('tim', tim, 'with shape', tim.shape, 'takes', L, 'bytes to pickle')
+    #     print('tim', tim, 'with shape', tim.shape, ':')
+    #     for k in dir(tim):
+    #         print('  ', k)
+    #         v = getattr(tim, k)
+    #         L = len(pickle.dumps(v))
+    #         print('  ', k, 'takes', L, 'bytes')
+
     return rtn
 
 def _add_stage_version(version_header, short, stagename):
@@ -378,6 +397,7 @@ def _add_stage_version(version_header, short, stagename):
     version_header.add_record(dict(name='VER_%s'%short, value=get_git_version(),
                                    help='legacypipe version for stage_%s'%stagename))
 
+@profile
 def stage_refs(survey=None,
                brick=None,
                brickname=None,
@@ -521,6 +541,7 @@ def stage_refs(survey=None,
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
 
+@profile
 def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
                    mp=None, nsigma=None, plots=None, ps=None, record_event=None,
                    survey=None, brickname=None, version_header=None,
@@ -544,6 +565,9 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
     version_header.add_record(dict(name='OUTLIER',
                                    value=outliers,
                                    help='Are we applying outlier rejection?'))
+
+    t=Time()
+    info('Starting outliers:', t-t)
 
     # Check for existing MEF containing masks for all the chips we need.
     if (outliers and
@@ -593,6 +617,7 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
 
     return dict(tims=tims, version_header=version_header)
 
+@profile
 def stage_halos(pixscale=None, targetwcs=None,
                 W=None,H=None,
                 bands=None, ps=None, tims=None,
@@ -630,6 +655,7 @@ def stage_halos(pixscale=None, targetwcs=None,
 
     return dict(tims=tims, version_header=version_header)
 
+@profile
 def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        brickname=None, version_header=None,
                        plots=False, ps=None, coadd_bw=False, W=None, H=None,
@@ -3510,6 +3536,20 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         if mp is not None and threads is not None and threads > 1:
             mp.map(flush, [[]] * threads)
         info('Resources for stage', stage, ':', StageTime()-staget0)
+
+        import gc
+        gc.collect()
+        info('gc.collect Resources for stage', stage, ':', StageTime()-staget0)
+
+        # print('Global variables:')
+        # for k,v in globals().items():
+        #     import pickle
+        #     try:
+        #         L = len(pickle.dumps(v))
+        #     except:
+        #         L = -1
+        #     print('  ', k, 'takes', L, 'bytes to pickle')
+
         return R
 
     t0 = StageTime()

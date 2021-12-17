@@ -413,10 +413,12 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     from legacypipe.reference import read_large_galaxies
     # Find all the SGA sources we need
     sga = read_large_galaxies(survey, chipwcs, bands=None, extra_columns=['brickname'])
+    print('Found', len(sga), 'SGA entries touching chip')
     if sga is None:
         print('No SGA galaxies found')
         return None
     sga.cut(sga.islargegalaxy * sga.freezeparams)
+    print(len(sga), 'SGA entries are frozen SGA galaxies')
     if len(sga) == 0:
         print('No frozen SGA galaxies found')
         return None
@@ -427,60 +429,93 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     # cut to those touching the chip
     sga.cut((xx > -keeprad) * (xx < W+keeprad) *
             (yy > -keeprad) * (yy < H+keeprad))
-    #print('Read', len(sga), 'SGA galaxies touching the chip.')
+    print(len(sga), 'SGA galaxies touch the chip.')
     if len(sga) == 0:
         print('No SGA galaxies touch this chip')
         return None
+
+    sga.cut(sga.ref_id > -1)
+    print(len(sga), 'SGA entries with positive ref ids')
+    if len(sga) == 0:
+        print('No frozen SGA galaxies found')
+        return None
+    
     Tsga = T[T.ref_cat == 'L3']
-    #print(len(Tsga), 'SGA entries already exist in catalog')
+    print(len(Tsga), 'SGA entries already exist in catalog')
     Isga = np.array([i for i,sga_id in enumerate(sga.ref_id) if not sga_id in set(Tsga.ref_id)])
     assert(len(Isga) + len(Tsga) == len(sga))
     if len(Isga) == 0:
         print('All SGA galaxies already in catalogs')
         return None
-    print('Finding', len(Isga), 'additional SGA entries in nearby bricks')
     sga.cut(Isga)
-    #print('Finding bricks to read...')
-    sgabricks = []
 
-    for ra,dec,brick in zip(sga.ra, sga.dec, sga.brickname):
-        bricks = survey.get_bricks_by_name(brick)
-        brick = bricks[0]
-        # The SGA catalog has a "brickname", but it unfortunately is not always exactly correct
-        if ra >= brick.ra1 and ra < brick.ra2 and dec >= brick.dec1 and dec < brick.dec2:
-            sgabricks.append(bricks)
-        else:
-            # MAGIC 0.2 ~ brick radius
-            bricks = survey.get_bricks_near(ra, dec, 0.2)
-            bricks = bricks[(ra  >= bricks.ra1 ) * (ra  < bricks.ra2) *
-                            (dec >= bricks.dec1) * (dec < bricks.dec2)]
-            if len(bricks):
-                sgabricks.append(bricks)
-    sgabricks = merge_tables(sgabricks)
-    _,I = np.unique(sgabricks.brickname, return_index=True)
-    sgabricks.cut(I)
-    #print('Need to read', len(sgabricks), 'bricks to pick up SGA sources')
-    SGA = []
-    for brick in sgabricks.brickname:
-        # For picking up these SGA bricks, resolve doesn't matter (they're fixed
-        # in both).
-        for catsurvey,_ in surveys:
-            fn = catsurvey.find_file('tractor', brick=brick)
-            if os.path.exists(fn):
-                t = fits_table(fn, columns=['ref_cat', 'ref_id'])
-                I = np.flatnonzero(t.ref_cat == 'L3')
-                #print('Read', len(I), 'SGA entries from', brick)
-                SGA.append(fits_table(fn, columns=columns, rows=I))
-                break
-    SGA = merge_tables(SGA)
-    SGA.cut(SGA.brick_primary)
-    #print('Total of', len(SGA), 'sources')
-    I = np.array([i for i,ref_id in enumerate(SGA.ref_id) if ref_id in set(sga.ref_id)])
-    SGA.cut(I)
-    #print('Found', len(SGA), 'desired SGA sources')
-    assert(len(sga) == len(SGA))
-    assert(set(sga.ref_id) == set(SGA.ref_id))
-    return SGA
+    print('HACK -- not returning any SGA galaxies')
+    return None
+    
+    # cat = sga.sources
+    # for src in cat:
+    #     print('Source:', src)
+    # sga.delete_column('sources')
+    # for i in range(100):
+    #     fn = '/tmp/sga-%03i.fits' % i
+    #     if not os.path.exists(fn):
+    #         sga.writeto(fn)
+    #         print('Wrote', fn)
+    #         break
+    # 
+    # # Can't just return 'sga' at this point because the SGA catalog format != tractor catalog
+    # return sga
+
+    # print('Finding', len(Isga), 'additional SGA entries in nearby bricks')
+    # #print('Finding bricks to read...')
+    # sgabricks = []
+    # 
+    # print('Unique SGA bricks:', set(sga.brickname))
+    # 
+    # for ra,dec,brick in zip(sga.ra, sga.dec, sga.brickname):
+    #     #if len(brick) == 0:
+    #     #    # Skip SGA entries with blank brickname?
+    #     #    continue
+    #     bricks = survey.get_bricks_by_name(brick)
+    #     if bricks:
+    #         brick = bricks[0]
+    #     # The SGA catalog has a "brickname", but it unfortunately is not always exactly correct
+    #     if bricks and ra >= brick.ra1 and ra < brick.ra2 and dec >= brick.dec1 and dec < brick.dec2:
+    #         print('Confirmed brick', bricks.brickname)
+    #         sgabricks.append(bricks)
+    #     else:
+    #         # MAGIC 0.2 ~ brick radius
+    #         bricks = survey.get_bricks_near(ra, dec, 0.2)
+    #         bricks = bricks[(ra  >= bricks.ra1 ) * (ra  < bricks.ra2) *
+    #                         (dec >= bricks.dec1) * (dec < bricks.dec2)]
+    #         print('Looked up brick', bricks.brickname)
+    #         if len(bricks):
+    #             sgabricks.append(bricks)
+    # sgabricks = merge_tables(sgabricks)
+    # _,I = np.unique(sgabricks.brickname, return_index=True)
+    # sgabricks.cut(I)
+    # print('Need to read', len(sgabricks), 'bricks to pick up SGA sources')
+    # SGA = []
+    # for brick in sgabricks.brickname:
+    #     # For picking up these SGA bricks, resolve doesn't matter (they're fixed
+    #     # in both).
+    #     for catsurvey,_ in surveys:
+    #         fn = catsurvey.find_file('tractor', brick=brick)
+    #         if os.path.exists(fn):
+    #             t = fits_table(fn, columns=['ref_cat', 'ref_id'])
+    #             I = np.flatnonzero(t.ref_cat == 'L3')
+    #             #print('Read', len(I), 'SGA entries from', brick)
+    #             SGA.append(fits_table(fn, columns=columns, rows=I))
+    #             break
+    # SGA = merge_tables(SGA)
+    # SGA.cut(SGA.brick_primary)
+    # print('Total of', len(SGA), 'sources')
+    # I = np.array([i for i,ref_id in enumerate(SGA.ref_id) if ref_id in set(sga.ref_id)])
+    # SGA.cut(I)
+    # print('Found', len(SGA), 'desired SGA sources')
+    # assert(len(sga) == len(SGA))
+    # assert(set(sga.ref_id) == set(SGA.ref_id))
+    # return SGA
 
 def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                           ccd, opt, zoomslice, radecpoly, outlier_bricks, ps):

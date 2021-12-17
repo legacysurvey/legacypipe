@@ -26,17 +26,24 @@ def stage_blobmask(targetwcs=None,
     from legacypipe.detection import detection_maps, sed_matched_detection, merge_hot_satur
     from legacypipe.runbrick import _add_stage_version
     from legacypipe.utils import copy_header_with_wcs
+    from astrometry.util.ttime import Time
 
     record_event and record_event('stage_blobmask: starting')
     _add_stage_version(version_header, 'BLOBMASK', 'blobmask')
 
     record_event and record_event('stage_blobmask: detection maps')
+    t0 = Time()
     detmaps, detivs, satmaps = detection_maps(tims, targetwcs, bands, mp,
                                               apodize=10, nsatur=nsatur)
+    info('Blobmask: detection maps:', Time()-t0)
     # Expand the mask around saturated pixels to avoid generating
     # peaks at the edge of the mask.
+    t0 = Time()
     saturated_pix = [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps]
     del satmaps
+    info('Blobmask: saturated pix:', Time()-t0)
+    t0 = Time()
+    
     # SED-matched detections
     record_event and record_event('stage_blobmask: SED-matched')
     debug('Running source detection at', nsigma, 'sigma')
@@ -55,10 +62,14 @@ def stage_blobmask(targetwcs=None,
         del sedhot
     del detmaps
     del detivs
+    info('Blobmask: SED-matched detection:', Time()-t0)
 
+    t0 = Time()
     hot = merge_hot_satur(hot, saturated_pix)
+    info('Blobmask: merge hot/sat:', Time()-t0)
 
     if True:
+        t0 = Time()
         # For estimating compute time
         from scipy.ndimage.measurements import label, find_objects
         blobmap,_ = label(hot)
@@ -72,6 +83,7 @@ def stage_blobmask(targetwcs=None,
         print('num_blobs', len(blobslices))
         print('total_pixels', np.sum([h*w for h,w in [tim.shape for tim in tims]]))
         del blobmap
+        print('Blobmask: estimating compute time:', Time()-t0)
 
     hdr = copy_header_with_wcs(version_header, targetwcs)
     hdr.add_record(dict(name='IMTYPE', value='blobmask',
