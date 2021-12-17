@@ -17,6 +17,7 @@ from legacypipe.survey import imsave_jpeg
 from legacypipe.coadds import make_coadds
 from legacypipe.outliers import patch_from_coadd, mask_outlier_pixels, read_outlier_mask_file
 from legacypipe.outliers import blur_resample_one
+from legacypipe.outliers import OUTLIER_POS, OUTLIER_NEG
 from legacypipe.bits import DQ_BITS
 from legacypipe.utils import NothingToDoError, RunbrickError
 from legacypipe.runbrick import stage_refs
@@ -426,19 +427,16 @@ def stage_deep_preprocess_2(
             R = mp.imap_unordered(
                 mask_and_coadd_one,
                 [(i_bim, survey, targetrd, tim_kwargs, im, targetwcs,
-                  patch_img, refimg, refiv, veto, deep_sig, halostars, plots,ps)
+                  patch_img, refimg, refiv, veto, deep_sig, halostars, old_calibs_ok,
+                  plots,ps)
                   for i_bim,im in enumerate(bims)])
             del refimg, refiv, veto, patch_img
 
             for i_bim,res in R:
                 im = bims[i_bim]
                 if res is None:
-                    # none masked
-                    outl_mask = np.zeros((im.height,im.width), np.uint8)
-                    x0,y0 = 0,0
-                    wcs = im.get_wcs()
-                    from legacypipe.utils import copy_header_with_wcs
-                    hdr = copy_header_with_wcs(None, wcs)
+                    # no overlap
+                    continue
                 else:
                     (Yo,Xo, rimg, riv, dq, det, div, sat, badco,
                      outl_mask, x0, y0, hdr) = res
@@ -565,7 +563,7 @@ def mask_and_coadd_one(X):
     from astrometry.util.resample import resample_with_wcs,OverlapError
 
     (i_bim, survey, targetrd, tim_kwargs, im, targetwcs, patchimg, coimg, cow, veto,
-     deep_sig, halostars, plots, ps) = X
+     deep_sig, halostars, old_calibs_ok, plots, ps) = X
 
     # - read tim
     tim = read_one_tim((im, targetrd, tim_kwargs))
@@ -620,7 +618,7 @@ def mask_and_coadd_one(X):
               (refwt > 1e-16) * (blurwt > 0.) * (vetopix == False))
     coldpix = ((sndiff < -5.) * (reldiff < -2.) *
                (refwt > 1e-16) * (blurwt > 0.) * (vetopix == False))
-    del reldiff, refwt
+    del reldiff, refwt, vetopix
 
     if np.any(hotpix) or np.any(coldpix):
         # Plug hotpix,coldpix,snmap (which are vectors of pixels) back to tim-shaped images.
@@ -650,17 +648,23 @@ def mask_and_coadd_one(X):
         cold = binary_dilation(cold, iterations=3)
         del snmap
 
-        # Set outlier mask
-        outl_mask = (hot | cold)
+        print('Exposure', im.expnum, im.ccdname, 'image', im.name, ': masking %i hot and %i cold pixels' % (np.sum(hot), np.sum(cold)))
+        # Set outlier mask bits (kind of irrelevant) and zero ivar.
         if tim.dq is not None:
-            tim.dq |= tim.dq_type(outl_mask * DQ_BITS['outlier'])
-        tim.inverr[outl_mask] = 0.
+            tim.dq |= tim.dq_type((hot | cold) * DQ_BITS['outlier'])
+        tim.inverr[(hot | cold)] = 0.
 
+        # For the bad coadds
         bad, = np.nonzero(hot[Yo,Xo])
         badhot = (Yi[bad], Xi[bad], tim.getImage()[Yo[bad],Xo[bad]])
         bad, = np.nonzero(cold[Yo,Xo])
         badcold = (Yi[bad], Xi[bad], tim.getImage()[Yo[bad],Xo[bad]])
         badco = badhot,badcold
+
+        # returned outlier mask:
+        outl_mask = np.zeros(tim.shape, np.uint8)
+        outl_mask[hot]  |= OUTLIER_POS
+        outl_mask[cold] |= OUTLIER_NEG
 
         # - patch again
         patch_from_coadd([patchimg], targetwcs, [tim.band], [tim])
@@ -672,7 +676,7 @@ def mask_and_coadd_one(X):
     if halostars:
         from legacypipe.halos import subtract_halos
         mp = multiproc()
-        subtract_halos([tim], halostars, [band], mp, plots, ps, old_calibs_ok=old_calibs_ok)
+        subtract_halos([tim], halostars, [tim.band], mp, plots, ps, old_calibs_ok=old_calibs_ok)
 
 
     # - resample for regular coadd and detection map

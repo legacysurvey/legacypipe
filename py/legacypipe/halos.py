@@ -14,8 +14,7 @@ def subtract_halos(tims, refs, bands, mp, plots, ps, moffat=True,
     args = [(itim, tim, refs, moffat, old_calibs_ok) for itim,tim in enumerate(tims)]
     haloimgs = mp.imap_unordered(subtract_one, args)
     for itim,h in haloimgs:
-        if h != 0.:
-            tims[itim].data -= h
+        tims[itim].data -= h
 
 def subtract_one(X):
     itim, tim, refs, moffat, old_calibs_ok = X
