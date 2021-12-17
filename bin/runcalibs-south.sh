@@ -5,7 +5,7 @@
 export LEGACY_SURVEY_DIR=$CSCRATCH/dr10pre
 export CACHE_DIR=/global/cscratch1/sd/dstn/dr10-cache
 
-outdir=$LEGACY_SURVEY_DIR/zpt2
+outdir=$LEGACY_SURVEY_DIR/zpt
 
 # NOTE: if you only want to regenerate sky calibs, MUST create a symlink
 # in $LSD/calib/psfex, eg to

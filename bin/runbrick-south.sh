@@ -6,10 +6,9 @@
 #if [ "x$DW_PERSISTENT_STRIPED_DR9" == x ]; then
 # No burst buffer -- use scratch
 
-outdir=/global/cscratch1/sd/dstn/dr10-test-2
+outdir=/global/cscratch1/sd/dstn/dr10-test
 
-#BLOB_MASK_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr8/south
-BLOB_MASK_DIR=/global/cscratch1/sd/dstn/dr10-early-coadds
+BLOB_MASK_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr8/south
 
 export LEGACY_SURVEY_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr10
 export CACHE_DIR=/global/cscratch1/sd/dstn/dr10-cache
@@ -28,9 +27,9 @@ export UNWISE_MODEL_SKY_DIR=/global/cfs/cdirs/cosmo/work/wise/unwise_catalog/dr3
 
 #export TYCHO2_KD_DIR=/global/cfs/cdirs/cosmo/staging/tycho2
 #export LARGEGALAXIES_CAT=/global/cfs/cdirs/cosmo/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
-export TYCHO2_KD_DIR=$CACHE_DIR/tycho2
-export LARGEGALAXIES_CAT=$CACHE_DIR/SGA-ellipse-v3.0.kd.fits
-export SKY_TEMPLATE_DIR=$CACHE_DIR/dr9-sky-pattern
+export TYCHO2_KD_DIR=/global/cscratch1/sd/dstn/dr10-cache/tycho2
+export LARGEGALAXIES_CAT=/global/cscratch1/sd/dstn/dr10-cache/SGA-ellipse-v3.0.kd.fits
+export SKY_TEMPLATE_DIR=/global/cfs/cdirs/cosmo/data/legacysurvey/dr9/calib/sky_pattern
 
 # Don't add ~/.local/ to Python's sys.path
 export PYTHONNOUSERSITE=1
@@ -42,10 +41,7 @@ export OMP_NUM_THREADS=1
 export MPICH_GNI_FORK_MODE=FULLCOPY
 export KMP_AFFINITY=disabled
 
-#ncores=8
-#maxmem=14
-ncores=4
-maxmem=28
+ncores=8
 
 brick="$1"
 
@@ -94,7 +90,6 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --checkpoint "${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle" \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
      --threads "${ncores}" \
-     --max-memory-gb "${maxmem}" \
      >> "$log" 2>&1
 
 #     --write-stage srcs \

@@ -8,7 +8,8 @@ export LEGACY_SURVEY_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr10
 
 export CACHE_DIR=/global/cscratch1/sd/dstn/dr10-cache
 
-export GAIA_CAT_DIR=/global/cfs/cdirs/desi/target/gaia_edr3/healpix
+#export GAIA_CAT_DIR=/global/cfs/cdirs/desi/target/gaia_edr3/healpix
+export GAIA_CAT_DIR=/global/cscratch1/sd/adamyers/gaia_edr3/healpix
 export GAIA_CAT_PREFIX=healpix
 export GAIA_CAT_SCHEME=nested
 export GAIA_CAT_VER=E
@@ -53,7 +54,7 @@ mkdir -p $outdir/logs/$bri
 log="$outdir/logs/$bri/$brick.log"
 
 mkdir -p $outdir/metrics/$bri
-#i
+#mkdir -p $outdir/pickles/$bri
 
 echo Logging to: $log
 
@@ -74,8 +75,8 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --no-write \
        --cache-outliers \
        --threads 4 \
-       --max-memory-gb 7 \
-       >> $log 2>&1
+       --max-memory-gb 14 \
+       > $log 2>&1
 
 #       --write-stage halos \
 #       --pickle "$outdir/pickles/$bri/runbrick-%(brick)s-%%(stage)s.pickle" \
