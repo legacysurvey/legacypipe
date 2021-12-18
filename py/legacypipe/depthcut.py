@@ -55,7 +55,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
         wcs = survey.get_approx_wcs(ccd)
         hh,ww = wcs.shape
         rr,dd = wcs.pixelxy2radec([1,ww,ww,1], [1,1,hh,hh])
-        ok,xx,yy = coarsewcs.radec2pixelxy(rr, dd)
+        _,xx,yy = coarsewcs.radec2pixelxy(rr, dd)
         y0 = int(np.round(np.clip(yy.min(), 0, cH-1)))
         y1 = int(np.round(np.clip(yy.max(), 0, cH-1)))
         x0 = int(np.round(np.clip(xx.min(), 0, cW-1)))
@@ -203,7 +203,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                 debug('Reading WCS from', im.imgfn, 'HDU', im.hdu)
                 wcs = im.get_wcs()
 
-            x0,x1,y0,y1,slc = im.get_image_extent(wcs=wcs, radecpoly=targetrd)
+            x0,x1,y0,y1,_ = im.get_image_extent(wcs=wcs, radecpoly=targetrd)
             if x0==x1 or y0==y1:
                 debug('No actual overlap')
                 continue

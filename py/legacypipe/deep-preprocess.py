@@ -1,5 +1,4 @@
 import sys
-import os
 import warnings
 
 import numpy as np
@@ -8,14 +7,13 @@ from scipy.ndimage.morphology import binary_dilation
 
 import fitsio
 
-from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.ttime import Time
 from astrometry.util.multiproc import multiproc
 
 from legacypipe.runbrick import get_parser, get_runbrick_kwargs, run_brick
 from legacypipe.survey import imsave_jpeg
 from legacypipe.coadds import make_coadds
-from legacypipe.outliers import patch_from_coadd, mask_outlier_pixels, read_outlier_mask_file
+from legacypipe.outliers import patch_from_coadd, mask_outlier_pixels
 from legacypipe.outliers import blur_resample_one
 from legacypipe.outliers import OUTLIER_POS, OUTLIER_NEG
 from legacypipe.bits import DQ_BITS
@@ -219,7 +217,7 @@ def stage_deep_preprocess(
                                 old_calibs_ok=old_calibs_ok))
                                 for im in deepims]
     deeptims = list(mp.map(read_one_tim, args))
-    
+
     # Start outlier masking...
     deepC = make_coadds(deeptims, bands, targetwcs, mp=mp, sbscale=False,
                         allmasks=False, coweights=False)
@@ -233,10 +231,10 @@ def stage_deep_preprocess(
     del deepC
 
     # Find outliers in deep set...
-    make_badcoadds = True
-    badcoaddspos, badcoaddsneg = mask_outlier_pixels(survey, deeptims, bands, targetwcs, brickname, version_header,
-                                                     mp=mp, plots=plots, ps=ps, make_badcoadds=make_badcoadds,
-                                                     refstars=refstars)
+    make_badcoadds = False
+    mask_outlier_pixels(survey, deeptims, bands, targetwcs, brickname, version_header,
+                        mp=mp, plots=plots, ps=ps, make_badcoadds=make_badcoadds,
+                        refstars=refstars)
     deepC = make_coadds(deeptims, bands, targetwcs, mp=mp, sbscale=False,
                         allmasks=False, coweights=False)
     with survey.write_output('outliers-post', brick=brickname) as out:
@@ -356,7 +354,7 @@ def stage_deep_preprocess_2(
             results = mp.imap_unordered(
                 blur_resample_one, [(i_btim,tim,sig,targetwcs)
                                     for i_btim,(tim,sig) in enumerate(zip(btims,addsigs))])
-            for i_btim,r in results:
+            for _,r in results:
                 if r is None:
                     continue
                 Yo,Xo,iacc,wacc,macc = r
@@ -423,10 +421,9 @@ def stage_deep_preprocess_2(
                 if len(Igaia):
                     halostars = refstars[Igaia]
             
-            make_badcoadds=True
             R = mp.imap_unordered(
                 mask_and_coadd_one,
-                [(i_bim, survey, targetrd, tim_kwargs, im, targetwcs,
+                [(i_bim, targetrd, tim_kwargs, im, targetwcs,
                   patch_img, refimg, refiv, veto, deep_sig, halostars, old_calibs_ok,
                   plots,ps)
                   for i_bim,im in enumerate(bims)])
@@ -562,7 +559,7 @@ def mask_and_coadd_one(X):
     from scipy.ndimage.filters import gaussian_filter
     from astrometry.util.resample import resample_with_wcs,OverlapError
 
-    (i_bim, survey, targetrd, tim_kwargs, im, targetwcs, patchimg, coimg, cow, veto,
+    (i_bim, targetrd, tim_kwargs, im, targetwcs, patchimg, coimg, cow, veto,
      deep_sig, halostars, old_calibs_ok, plots, ps) = X
 
     # - read tim
@@ -688,7 +685,7 @@ def mask_and_coadd_one(X):
         return i_bim,None
     tim.resamp = (Yo,Xo,Yi,Xi)
     apodize = 10
-    timband,_,_,detim,detiv,sat = _detmap((tim, targetwcs, apodize))
+    _,_,_,detim,detiv,sat = _detmap((tim, targetwcs, apodize))
 
     from legacypipe.utils import copy_header_with_wcs
     hdr = copy_header_with_wcs(None, tim.subwcs)
