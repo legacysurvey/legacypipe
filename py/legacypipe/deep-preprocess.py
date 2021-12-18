@@ -420,7 +420,7 @@ def stage_deep_preprocess_2(
                 info(len(Igaia), 'stars for halo subtraction')
                 if len(Igaia):
                     halostars = refstars[Igaia]
-            
+
             R = mp.imap_unordered(
                 mask_and_coadd_one,
                 [(i_bim, targetrd, tim_kwargs, im, targetwcs,

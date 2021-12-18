@@ -374,4 +374,3 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
     if get_depth_maps:
         return (keep_ccds, overlapping_ccds, depthmaps)
     return keep_ccds, overlapping_ccds
-
