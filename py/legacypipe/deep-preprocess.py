@@ -531,7 +531,7 @@ def stage_deep_preprocess_2(
         primhdr.add_record(r)
     primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
                             comment='NOAO data product type'))
-    
+
     # Write per-brick CCDs table
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
@@ -573,7 +573,7 @@ def mask_and_coadd_one(X):
     targetsig = max(deep_sig, tim.psf_sigma + 0.5)
     deep_blursig = np.sqrt(targetsig**2 - deep_sig**2)
     tim_blursig  = np.sqrt(targetsig**2 - tim.psf_sigma**2)
-    
+
     # Blur tim
     assert(tim_blursig > 0)
     blurimg = gaussian_filter(tim.getImage(), tim_blursig)
@@ -794,6 +794,3 @@ if __name__ == '__main__':
     from astrometry.util.ttime import MemMeas
     Time.add_measurement(MemMeas)
     sys.exit(main())
-
-
-# 0436m002
