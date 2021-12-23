@@ -21,11 +21,8 @@ def stage_blobmask(targetwcs=None,
                    record_event=None,
                    blob_dilate=None,
                    **kwargs):
-    from functools import reduce
-    from scipy.ndimage.morphology import binary_dilation
-    from legacypipe.detection import detection_maps, sed_matched_detection, merge_hot_satur
+    from legacypipe.detection import detection_maps
     from legacypipe.runbrick import _add_stage_version
-    from legacypipe.utils import copy_header_with_wcs
 
     record_event and record_event('stage_blobmask: starting')
     _add_stage_version(version_header, 'BLOBMASK', 'blobmask')
@@ -33,6 +30,23 @@ def stage_blobmask(targetwcs=None,
     record_event and record_event('stage_blobmask: detection maps')
     detmaps, detivs, satmaps = detection_maps(tims, targetwcs, bands, mp,
                                               apodize=10, nsatur=nsatur)
+
+    hot, saturated_pix = generate_blobmask(
+        survey, bands, nsigma, detmaps, detivs, satmaps, blob_dilate,
+        version_header, targetwcs, brickname, record_event)
+    del detmaps, detivs, satmaps
+    print('total_pixels', np.sum([h*w for h,w in [tim.shape for tim in tims]]))
+
+    keys = ['hot', 'saturated_pix', 'version_header', ]
+    L = locals()
+    rtn = dict([(k,L[k]) for k in keys])
+    return rtn
+
+def generate_blobmask(survey, bands, nsigma, detmaps, detivs, satmaps, blob_dilate,
+                      version_header, targetwcs, brickname, record_event):
+    from scipy.ndimage.morphology import binary_dilation
+    from legacypipe.utils import copy_header_with_wcs
+    from legacypipe.detection import sed_matched_detection, merge_hot_satur
     # Expand the mask around saturated pixels to avoid generating
     # peaks at the edge of the mask.
     saturated_pix = [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps]
@@ -70,7 +84,6 @@ def stage_blobmask(targetwcs=None,
             maxnpix = max(maxnpix, npix)
         print('max_blob_size', maxnpix)
         print('num_blobs', len(blobslices))
-        print('total_pixels', np.sum([h*w for h,w in [tim.shape for tim in tims]]))
         del blobmap
 
     hdr = copy_header_with_wcs(version_header, targetwcs)
@@ -80,7 +93,4 @@ def stage_blobmask(targetwcs=None,
                              shape=hot.shape) as out:
         out.fits.write(hot.astype(np.uint8), header=hdr)
 
-    keys = ['hot', 'saturated_pix', 'version_header', ]
-    L = locals()
-    rtn = dict([(k,L[k]) for k in keys])
-    return rtn
+    return hot, saturated_pix

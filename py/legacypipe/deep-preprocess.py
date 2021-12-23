@@ -698,6 +698,65 @@ def mask_and_coadd_one(X):
     return i_bim, (Yo,Xo, rimg, tim.getInvError()[Yi,Xi]**2, dq, detim, detiv, sat, badco,
                    outl_mask, tim.x0, tim.y0, hdr)
 
+def stage_deep_preprocess_3(
+        W=3600, H=3600, pixscale=0.262, brickname=None,
+        survey=None,
+        ra=None, dec=None,
+        release=None,
+        plots=False, ps=None,
+        target_extent=None, program_name='runbrick.py',
+        bands=None,
+        do_calibs=True,
+        old_calibs_ok=True,
+        splinesky=True,
+        subsky=True,
+        gaussPsf=False, pixPsf=True, hybridPsf=True,
+        normalizePsf=True,
+        apodize=False,
+        constant_invvar=False,
+        read_image_pixels = True,
+        min_mjd=None, max_mjd=None,
+        gaia_stars=True,
+        mp=None,
+        record_event=None,
+        unwise_dir=None,
+        unwise_tr_dir=None,
+        unwise_modelsky_dir=None,
+        galex_dir=None,
+        command_line=None,
+        read_parallel=True,
+        max_memory_gb=None,
+        refstars=None,
+
+        targetrd=None, targetwcs=None, brick=None, version_header=None,
+        ccds=None,
+        ims=None,
+        deepims=None,
+        deeptims=None,
+        nsatur=None,
+        star_halos=True,
+
+        blob_dilate=None,
+        nsigma=None,
+
+        detmaps=None,
+        detivs=None,
+        satmaps=None,
+        coadds=None,
+        coivs=None,
+
+        **kwargs):
+
+    from legacypipe.blobmask import generate_blobmask
+    hot, saturated_pix = generate_blobmask(
+        survey, bands, nsigma, detmaps, detivs, satmaps, blob_dilate,
+        version_header, targetwcs, brickname, record_event)
+    del detmaps, detivs, satmaps
+
+    keys = ['hot', 'saturated_pix', 'version_header', ]
+    L = locals()
+    rtn = dict([(k,L[k]) for k in keys])
+    return rtn
 
 def main(args=None):
     import datetime
@@ -718,7 +777,7 @@ def main(args=None):
 
     parser = get_parser()
 
-    parser.set_defaults(stage=['deep_preprocess_2'])
+    parser.set_defaults(stage=['deep_preprocess_3'])
 
     opt = parser.parse_args(args=args)
     if opt.brick is None and opt.radec is None:
@@ -760,6 +819,7 @@ def main(args=None):
     kwargs.update(prereqs_update={ 'deep_preprocess': None,
                                    'refs': 'deep_preprocess',
                                    'deep_preprocess_2': 'refs',
+                                   'deep_preprocess_3': 'deep_preprocess_2',
                                    })
     from astrometry.util.stages import CallGlobalTime
     stagefunc = CallGlobalTime('stage_%s', globals())
