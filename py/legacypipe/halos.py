@@ -11,23 +11,23 @@ def debug(*args):
 
 def subtract_halos(tims, refs, bands, mp, plots, ps, moffat=True,
                    old_calibs_ok=False):
-    args = [(tim, refs, moffat, old_calibs_ok) for tim in tims]
-    haloimgs = mp.map(subtract_one, args)
-    for tim,h in zip(tims, haloimgs):
-        tim.data -= h
+    args = [(itim, tim, refs, moffat, old_calibs_ok) for itim,tim in enumerate(tims)]
+    haloimgs = mp.imap_unordered(subtract_one, args)
+    for itim,h in haloimgs:
+        tims[itim].data -= h
 
 def subtract_one(X):
-    tim, refs, moffat, old_calibs_ok = X
+    itim, tim, refs, moffat, old_calibs_ok = X
     if tim.imobj.camera != 'decam':
         print('Warning: Stellar halo subtraction is only implemented for DECam')
-        return 0.
+        return itim, 0.
     col = 'decam_mag_%s' % tim.band
     if not col in refs.get_columns():
         print('Warning: no support for halo subtraction in band %s' % tim.band)
-        return 0.
-    return decam_halo_model(refs, tim.time.toMjd(), tim.subwcs,
-                            tim.imobj.pixscale, tim.band, tim.imobj, moffat,
-                            old_calibs_ok=old_calibs_ok)
+        return itim, 0.
+    return itim, decam_halo_model(refs, tim.time.toMjd(), tim.subwcs,
+                                  tim.imobj.pixscale, tim.band, tim.imobj, moffat,
+                                  old_calibs_ok=old_calibs_ok)
 
 def moffat(rr, alpha, beta):
     return (beta-1.)/(np.pi * alpha**2)*(1. + (rr/alpha)**2)**(-beta)

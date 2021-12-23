@@ -176,8 +176,10 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             cow   = np.zeros((H,W), np.float32)
             masks = np.zeros((H,W), np.int16)
 
-            R = mp.map(blur_resample_one, [(tim,sig,targetwcs) for tim,sig in zip(btims,addsigs)])
-            for tim,r in zip(btims, R):
+            results = mp.imap_unordered(
+                blur_resample_one, [(i_btim,tim,sig,targetwcs)
+                                    for i_btim,(tim,sig) in enumerate(zip(btims,addsigs))])
+            for i_btim,r in results:
                 if r is None:
                     continue
                 Yo,Xo,iacc,wacc,macc = r
@@ -185,7 +187,8 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 cow  [Yo,Xo] += wacc
                 masks[Yo,Xo] |= macc
                 del Yo,Xo,iacc,wacc,macc
-            del r,R
+                del r
+            del results
 
             #
             veto = np.logical_or(star_veto,
@@ -200,8 +203,9 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             #     plt.title('SATUR, BLEED veto (%s band)' % band)
             #     ps.savefig()
 
-            R = mp.map(compare_one, [(tim, sig, targetwcs, coimg,cow, veto, make_badcoadds, plots,ps)
-                                     for tim,sig in zip(btims,addsigs)])
+            R = mp.imap_unordered(
+                compare_one, [(i_btim, tim, sig, targetwcs, coimg, cow, veto, make_badcoadds, plots,ps)
+                              for i_btim,(tim,sig) in enumerate(zip(btims,addsigs))])
             del coimg, cow, veto
 
             badcoadd_pos = None
@@ -212,7 +216,8 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 badcoadd_neg = np.zeros((H,W), np.float32)
                 badcon_neg   = np.zeros((H,W), np.int16)
 
-            for r,tim in zip(R, btims):
+            for i_btim,r in R:
+                tim = btims[i_btim]
                 if r is None:
                     # none masked
                     mask = np.zeros(tim.shape, np.uint8)
@@ -228,6 +233,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                         badcon_neg  [yo, xo] += 1
                         del yo,xo,bimg, badhot,badcold
                     del badco
+                del r
 
                 # Apply the mask!
                 maskbits = get_bits_to_mask()
@@ -251,12 +257,12 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 # RICE: 2.8M
                 extname = '%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
                 out.fits.write(mask, header=hdr, extname=extname, compress='HCOMPRESS')
-
-            del r,R
+            del R
 
             if make_badcoadds:
                 badcoadd_pos /= np.maximum(badcon_pos, 1)
                 badcoadd_neg /= np.maximum(badcon_neg, 1)
+                del badcon_pos, badcon_neg
                 badcoadds_pos.append(badcoadd_pos)
                 badcoadds_neg.append(badcoadd_neg)
 
@@ -267,7 +273,7 @@ def compare_one(X):
     from scipy.ndimage.morphology import binary_dilation
     from astrometry.util.resample import resample_with_wcs,OverlapError
 
-    (tim,sig,targetwcs, coimg,cow, veto, make_badcoadds, plots,ps) = X
+    (i_tim,tim,sig,targetwcs, coimg,cow, veto, make_badcoadds, plots,ps) = X
 
     if plots:
         import pylab as plt
@@ -279,7 +285,7 @@ def compare_one(X):
         Yo,Xo,Yi,Xi,[rimg] = resample_with_wcs(
             targetwcs, tim.subwcs, [img], intType=np.int16)
     except OverlapError:
-        return None
+        return i_tim,None
     del img
     blurnorm = 1./(2. * np.sqrt(np.pi) * sig)
     wt = tim.getInvvar()[Yi,Xi] / np.float32(blurnorm**2)
@@ -361,7 +367,7 @@ def compare_one(X):
     del reldiff, otherwt
 
     if (not np.any(hotpix)) and (not np.any(coldpix)):
-        return None
+        return i_tim,None
 
     hot = np.zeros((H,W), bool)
     hot[Yo,Xo] = hotpix
@@ -422,32 +428,32 @@ def compare_one(X):
         mYo,mXo,mYi,mXi,_ = resample_with_wcs(
             tim.subwcs, targetwcs, intType=np.int16)
     except OverlapError:
-        return None
+        return i_tim,None
     Ibad, = np.nonzero(hot[mYi,mXi])
     Ibad2, = np.nonzero(cold[mYi,mXi])
     info(tim, ': masking', len(Ibad), 'positive outlier pixels and', len(Ibad2), 'negative outlier pixels')
     maskedpix[mYo[Ibad],  mXo[Ibad]]  = OUTLIER_POS
     maskedpix[mYo[Ibad2], mXo[Ibad2]] = OUTLIER_NEG
 
-    return maskedpix,badco
+    return i_tim, (maskedpix,badco)
 
 
 def blur_resample_one(X):
     from scipy.ndimage.filters import gaussian_filter
     from astrometry.util.resample import resample_with_wcs,OverlapError
 
-    tim,sig,targetwcs = X
+    i_tim,tim,sig,targetwcs = X
 
     img = gaussian_filter(tim.getImage(), sig)
     try:
         Yo,Xo,Yi,Xi,[rimg] = resample_with_wcs(
             targetwcs, tim.subwcs, [img], intType=np.int16)
     except OverlapError:
-        return None
+        return i_tim, None
     del img
     blurnorm = 1./(2. * np.sqrt(np.pi) * sig)
     wt = tim.getInvvar()[Yi,Xi] / (blurnorm**2)
-    return (Yo, Xo, rimg*wt, wt, tim.dq[Yi,Xi])
+    return i_tim, (Yo, Xo, rimg*wt, wt, tim.dq[Yi,Xi])
 
 def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
     H,W = targetwcs.shape
