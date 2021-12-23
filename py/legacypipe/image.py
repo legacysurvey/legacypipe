@@ -676,6 +676,8 @@ class LegacySurveyImage(object):
         for fn,kw in [(self.imgfn, dict(data=primhdr)), (self.wtfn, {}), (self.dqfn, {})]:
             if fn is None:
                 continue
+            debug('PLVER', self.plver, type(self.plver),
+                  'PLPROCID', self.plprocid, type(self.plprocid), '; checking', fn)
             if not self.validate_version(fn, 'primaryheader',
                                          self.expnum, self.plver, self.plprocid,
                                          cpheader=True, old_calibs_ok=old_calibs_ok, **kw):
@@ -2264,7 +2266,7 @@ def validate_version(fn, filetype, expnum, plver, plprocid,
                 if not quiet:
                     info('Missing EXPNUM and OBSID in header')
 
-        for key,spval,targetval,strip in (('PLVER', None, plver, True),
+        for key,spval,targetval,stringtype in (('PLVER', None, plver, True),
                                           ('PLPROCID', None, plprocid, True),
                                           ('EXPNUM', cpexpnum, expnum, False)):
             if spval is not None:
@@ -2279,11 +2281,18 @@ def validate_version(fn, filetype, expnum, plver, plprocid,
                         return False
                 val = hdr[key]
 
-            if strip:
+            if stringtype:
                 # PLPROCID can get parsed as an int by fitsio, ugh
                 val = str(val)
                 val = val.strip()
+            else:
+                # EXPNUM is stored as a string in some DECam exposures -- eg
+                # decam/CP/V4.8.2a/CP20200224/c4d_200225_072059_ooi_i_v1.fits.fz
+                val = int(val)
+
+            # For cases where the CCDs table was truncated...
             if val != targetval and truncated_ok:
+                info(key, 'value', val, type(val), 'vs target', targetval, type(targetval))
                 origval = val
                 val = val[:len(targetval)]
                 if val == targetval:
