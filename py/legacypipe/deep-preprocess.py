@@ -429,53 +429,59 @@ def stage_deep_preprocess_2(
                   for i_bim,im in enumerate(bims)])
             del refimg, refiv, veto, patch_img
 
+            t0 = Time()
+
+            nb = len(bims)
+            n = 0
+
             for i_bim,res in R:
                 im = bims[i_bim]
+                n += 1
                 if res is None:
                     # no overlap
                     continue
+                (Yo,Xo, rimg, riv, dq, det, div, sat, badco,
+                 outl_mask, x0, y0, hdr) = res
+                info('Accumulating', n, 'of', nb, im, ':', Time()-t0)
+
+                if badco is not None:
+                    badhot, badcold = badco
+                    yo,xo,bimg = badhot
+                    badcoadd_pos[yo, xo] = np.maximum(badcoadd_pos[yo, xo], bimg)
+                    yo,xo,bimg = badcold
+                    badcoadd_neg[yo, xo] = np.minimum(badcoadd_neg[yo, xo], bimg)
+                    del yo,xo,bimg, badhot,badcold
+                    del badco
+
+                if dq is None:
+                    goodpix = 1
                 else:
-                    (Yo,Xo, rimg, riv, dq, det, div, sat, badco,
-                     outl_mask, x0, y0, hdr) = res
+                    # include SATUR pixels if no other pixels exists
+                    okbits = 0
+                    for bitname in ['satur']:
+                        okbits |= DQ_BITS[bitname]
+                    brightpix = ((dq & okbits) != 0)
+                    satur_val=10.
+                    # force SATUR pix to be bright
+                    rimg[brightpix] = satur_val
+                    # Include these pixels if none other exist??
+                    for bitname in ['interp']:
+                        okbits |= DQ_BITS[bitname]
+                    goodpix = ((dq & ~okbits) == 0)
 
-                    if badco is not None:
-                        badhot, badcold = badco
-                        yo,xo,bimg = badhot
-                        badcoadd_pos[yo, xo] = np.maximum(badcoadd_pos[yo, xo], bimg)
-                        yo,xo,bimg = badcold
-                        badcoadd_neg[yo, xo] = np.minimum(badcoadd_neg[yo, xo], bimg)
-                        del yo,xo,bimg, badhot,badcold
-                        del badco
+                coimg [Yo,Xo] += rimg * riv
+                coiv  [Yo,Xo] += riv
+                coflat[Yo,Xo] += goodpix * rimg
+                con   [Yo,Xo] += goodpix
+                del rimg,riv
 
-                    if dq is None:
-                        goodpix = 1
-                    else:
-                        # include SATUR pixels if no other pixels exists
-                        okbits = 0
-                        for bitname in ['satur']:
-                            okbits |= DQ_BITS[bitname]
-                        brightpix = ((dq & okbits) != 0)
-                        satur_val=10.
-                        # force SATUR pix to be bright
-                        rimg[brightpix] = satur_val
-                        # Include these pixels if none other exist??
-                        for bitname in ['interp']:
-                            okbits |= DQ_BITS[bitname]
-                        goodpix = ((dq & ~okbits) == 0)
+                detmap[Yo,Xo] += det * div
+                detiv [Yo,Xo] += div
+                del det,div
 
-                    coimg [Yo,Xo] += rimg * riv
-                    coiv  [Yo,Xo] += riv
-                    coflat[Yo,Xo] += goodpix * rimg
-                    con   [Yo,Xo] += goodpix
-                    del rimg,riv
-
-                    detmap[Yo,Xo] += det * div
-                    detiv [Yo,Xo] += div
-                    del det,div
-
-                    if sat is not None:
-                        satmap[Yo,Xo] = np.minimum(satmax, satmap[Yo,Xo] + (1*sat))
-                    del sat,Yo,Xo
+                if sat is not None:
+                    satmap[Yo,Xo] = np.minimum(satmax, satmap[Yo,Xo] + (1*sat))
+                del sat,Yo,Xo
                 del res
 
                 # Write output!
@@ -694,9 +700,12 @@ def mask_and_coadd_one(X):
         dq = None
     else:
         dq = tim.dq[Yi,Xi]
+    iv = tim.getInvError()[Yi,Xi]**2
+    x0,y0 = tim.x0, tim.y0
+    del tim, Yi, Xi
 
-    return i_bim, (Yo,Xo, rimg, tim.getInvError()[Yi,Xi]**2, dq, detim, detiv, sat, badco,
-                   outl_mask, tim.x0, tim.y0, hdr)
+    return i_bim, (Yo, Xo, rimg, iv, dq, detim, detiv, sat, badco,
+                   outl_mask, x0, y0, hdr)
 
 def stage_deep_preprocess_3(
         W=3600, H=3600, pixscale=0.262, brickname=None,
@@ -783,7 +792,7 @@ def main(args=None):
         return -1
 
     # default stage
-    if opt.stage == ['writecat']:
+    if len(opt.stage) == 0:
         opt.stage = ['deep_preprocess_3']
 
     optdict = vars(opt)
