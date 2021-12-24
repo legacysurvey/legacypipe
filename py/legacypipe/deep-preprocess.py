@@ -777,12 +777,14 @@ def main(args=None):
 
     parser = get_parser()
 
-    parser.set_defaults(stage=['deep_preprocess_3'])
-
     opt = parser.parse_args(args=args)
     if opt.brick is None and opt.radec is None:
         parser.print_help()
         return -1
+
+    # default stage
+    if opt.stage == ['writecat']:
+        opt.stage = ['deep_preprocess_3']
 
     optdict = vars(opt)
     verbose = optdict.pop('verbose')
