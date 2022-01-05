@@ -408,10 +408,12 @@ def get_version_header(program_name, survey_dir, release, git_version=None,
                         comment='SLURM job array id'))
     return hdr
 
-def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir):
+def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir,
+                            mpl=True):
     import astrometry
     import astropy
-    import matplotlib
+    if mpl:
+        import matplotlib
     try:
         import mkl_fft
     except ImportError:
@@ -424,17 +426,22 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, gale
     depvers = []
     headers = []
     default_ver = 'UNAVAILABLE'
-    for name,pkg in [('astrometry', astrometry),
-                     ('astropy', astropy),
-                     ('fitsio', fitsio),
-                     ('matplotlib', matplotlib),
-                     ('mkl_fft', mkl_fft),
-                     ('numpy', np),
-                     ('photutils', photutils),
-                     ('scipy', scipy),
-                     ('tractor', tractor),
-                     ('unwise_psf', unwise_psf),
-                     ]:
+    pkgs = [
+        ('astrometry', astrometry),
+        ('astropy', astropy),
+        ('fitsio', fitsio),
+    ]
+    if mpl:
+        pkgs.append(('matplotlib', matplotlib))
+    pkgs.extend([
+        ('mkl_fft', mkl_fft),
+        ('numpy', np),
+        ('photutils', photutils),
+        ('scipy', scipy),
+        ('tractor', tractor),
+        ('unwise_psf', unwise_psf),
+    ])
+    for name,pkg in pkgs:
         if pkg is None:
             depvers.append((name, 'none'))
             continue

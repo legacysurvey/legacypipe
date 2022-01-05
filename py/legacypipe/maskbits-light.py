@@ -3,11 +3,7 @@ import os
 
 import numpy as np
 
-from astrometry.util.ttime import Time
-from astrometry.util.fits import fits_table
-
-from legacypipe.bits import DQ_BITS, MASKBITS, FITBITS
-from legacypipe.utils import find_unique_pixels
+#from astrometry.util.ttime import Time
 
 import logging
 logger = logging.getLogger('legacypipe.maskbits-light')
@@ -20,6 +16,17 @@ def debug(*args):
 
 
 def main():
+    from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
+    from astrometry.util.fits import fits_table
+
+    from legacypipe.runs import get_survey
+    from legacypipe.bits import MASKBITS, IN_BLOB
+    from legacypipe.utils import find_unique_pixels, copy_header_with_wcs
+    from legacypipe.survey import (
+        get_git_version, get_version_header, get_dependency_versions,
+        wcs_for_brick)
+    from legacypipe.reference import get_reference_map
+
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('-b', '--brick',
@@ -34,7 +41,6 @@ def main():
         print('Must specify --brick')
         return -1
     
-    from legacypipe.runs import get_survey
     run=None
     survey = get_survey(run,
                         survey_dir=opt.survey_dir,
@@ -42,14 +48,7 @@ def main():
 
     lvl = logging.INFO
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
-    # silence "findfont: score(<Font 'DejaVu Sans Mono' ...)" messages
-    logging.getLogger('matplotlib.font_manager').disabled = True
 
-    from legacypipe.survey import (
-        get_git_version, get_version_header, get_dependency_versions,
-        wcs_for_brick)
-    from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
-    
     brick = survey.get_brick_by_name(opt.brick)
     brickname = brick.brickname
 
@@ -68,10 +67,9 @@ def main():
 
     # Create FITS header with version strings
     gitver = get_git_version()
-
     version_header = get_version_header(program_name, survey.survey_dir, release,
                                         git_version=gitver)
-    deps = get_dependency_versions(None, None, None, None)
+    deps = get_dependency_versions(None, None, None, None, mpl=False)
     for name,value,comment in deps:
         version_header.add_record(dict(name=name, value=value, comment=comment))
     if command_line is not None:
@@ -104,7 +102,6 @@ def main():
         version_header.add_record(dict(
             name='CORN%iDEC'%(i+1), value=d, comment='Brick corner Dec (deg)'))
 
-
     # Construct a mask bits map
     maskbits = np.zeros((H,W), np.int32)
     # !PRIMARY
@@ -117,21 +114,8 @@ def main():
     refstars = fits_table(refs)
     less_masking=False
 
-    I, = np.nonzero(refstars.iscluster)
-    if len(I):
-        T_clusters = refstars[I]
-    else:
-        T_clusters = None
-
-    drop = np.logical_or(refstars.donotfit, refstars.iscluster)
-    if np.any(drop):
-        I, = np.nonzero(np.logical_not(drop))
-        refstars.cut(I)
-
-    from legacypipe.runbrick import get_blobiter_ref_map
-    from legacypipe.bits import IN_BLOB
-    from legacypipe.utils import copy_header_with_wcs
-    refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
+    I = np.flatnonzero((refstars.donotfit==False) * (refstars.ref_id >= 0))
+    refmap = get_reference_map(targetwcs, refstars[I])
 
     # BRIGHT
     if refmap is not None:
@@ -145,8 +129,7 @@ def main():
     with survey.write_output('maskbits-light', brick=brickname, shape=maskbits.shape) as out:
         out.fits.write(maskbits, header=hdr, extname='MASKBITS-LIGHT')
 
-
 if __name__ == '__main__':
-    from astrometry.util.ttime import MemMeas
-    Time.add_measurement(MemMeas)
+    #from astrometry.util.ttime import MemMeas
+    #Time.add_measurement(MemMeas)
     sys.exit(main())
