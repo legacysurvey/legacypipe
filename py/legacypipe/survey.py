@@ -1053,7 +1053,7 @@ class LegacySurveyData(object):
             return swap(os.path.join(basedir, 'metrics', brickpre,
                                      'blobmask-%s.fits.gz' % (brick)))
 
-        elif filetype in ['maskbits']:
+        elif filetype in ['maskbits', 'maskbits-light']:
             return swap(os.path.join(codir,
                                      '%s-%s-%s.fits.fz' % (sname, brick, filetype)))
 
@@ -1105,10 +1105,11 @@ class LegacySurveyData(object):
             nexp          = ('H', None),
             outliers_mask = ('R', None),
             maskbits      = ('H', None),
+            maskbits_light = ('H', None),
             depth         = ('G', 'qz 0'),
             galdepth      = ('G', 'qz 0'),
             psfsize       = ('G', 'qz 0'),
-            ).get(filetype)
+            ).get(filetype.replace('-','_'))
         if comp is None:
             return None
         method, args = comp
