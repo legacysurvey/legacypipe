@@ -1494,7 +1494,7 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
     if noffim > 0:
         print('Off image for %d stars' % noffim)
     cal.to_np_arrays()
-    cal.ra_fit,cal.dec_fit = wcs.pixelxy2radec(cal.x1 + 1, cal.y1 + 1)
+    cal.ra_fit,cal.dec_fit = wcs.pixelxy2radec(cal.x_fit + 1, cal.y_fit + 1)
     return cal
 
 if __name__ == "__main__":
