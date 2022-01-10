@@ -321,15 +321,24 @@ def fix_gaia(gaia):
         X[np.logical_not(np.isfinite(X))] = 0.
 
     gaia.mag = gaia.G
+    # Use Gaia RP (then BP) if G is not measured
     gaia.mag[gaia.mag == 0] = gaia.phot_rp_mean_mag[gaia.mag == 0]
+    gaia.mag[gaia.mag == 0] = gaia.phot_bp_mean_mag[gaia.mag == 0]
     # uniform name w/ Tycho-2
     gaia.zguess = gaia.decam_mag_z.copy()
+    # no zguess -- fill with optical mag.
     gaia.zguess[gaia.zguess == 0] = gaia.mag[gaia.zguess == 0]
-    # Take the brighter of G, z to expand masks around red stars.
-    gaia.mask_mag = np.minimum(gaia.G, gaia.zguess + 1.)
+    # Take the brighter of optical, z to expand masks around red stars.
+    gaia.mask_mag = np.minimum(gaia.mag, gaia.zguess + 1.)
+
+    # Plug in a tiny mag for stars with no Gaia-EDR3 mag measurements
+    # (eg, sourceid 3638309166294796544 has Gaia G = BP = RP = none)
+    Ibad = np.flatnonzero(gaia.mag == 0.)
+    gaia.mask_mag[Ibad] = 99.
 
     # radius to consider affected by this star, for MASKBITS
     gaia.radius = mask_radius_for_mag(gaia.mask_mag)
+    gaia.radius[Ibad] = 0.
     # radius for keeping this source in the ref catalog
     # (eg, for halo subtraction)
     gaia.keep_radius = 4. * gaia.radius
