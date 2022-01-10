@@ -1202,8 +1202,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     phot.dpsfmag[ok] = np.abs((-2.5 / np.log(10.)) * phot.dflux[ok] / phot.flux[ok])
 
     H,W = dq.shape
-    phot.bitmask = dq[np.clip(phot.y1, 0, H-1).astype(int),
-                      np.clip(phot.x1, 0, W-1).astype(int)]
+    phot.bitmask = dq[np.clip(np.round(phot.y_fit), 0, H-1).astype(int),
+                      np.clip(np.round(phot.x_fit), 0, W-1).astype(int)]
 
     phot.psfmag = np.zeros(len(phot), np.float32)
 
