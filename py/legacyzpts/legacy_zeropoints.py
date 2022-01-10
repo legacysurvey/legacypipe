@@ -865,9 +865,18 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     ccds['dec'] = ccddec
     t0= ptime('header-info',t0)
 
+    # Select the good region in this image
+    slc = imobj.get_good_image_slice(None)
+    x0 = y0 = 0
+    if slc is not None:
+        sy,sx = slc
+        y0,y1 = sy.start, sy.stop
+        x0,x1 = sx.start, sx.stop
+        wcs = wcs.get_subimage(x0, y0, int(x1-x0), int(y1-y0))
+
     # Quick check for PsfEx file
     try:
-        psf = imobj.read_psf_model(0., 0., pixPsf=True)
+        psf = imobj.read_psf_model(x0, y0, pixPsf=True)
     except RuntimeError as e:
         print('Failed to read PSF model: %s' % e)
         return None, None
@@ -878,12 +887,14 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         imobj.fwhm = imobj.get_fwhm(primhdr, hdr)
         print('Re-fetched FWHM for', imobj, ': got', imobj.fwhm)
         ccds['fwhm'] = imobj.fwhm
-    dq,dqhdr = imobj.read_dq(header=True)
+
+    # Read image data
+    dq,dqhdr = imobj.read_dq(header=True, slc=slc)
     if dq is not None:
         dq = imobj.remap_dq(dq, dqhdr)
-    invvar = imobj.read_invvar(dq=dq)
-    img = imobj.read_image()
-    imobj.fix_saturation(img, dq, invvar, primhdr, hdr, None)
+    invvar = imobj.read_invvar(dq=dq, slc=slc)
+    img = imobj.read_image(slc=slc)
+    imobj.fix_saturation(img, dq, invvar, primhdr, hdr, slc)
     # Compute sig1 before rescaling (later it gets scaled by zpscale)
     imobj.sig1 = imobj.estimate_sig1(img, invvar, dq, primhdr, hdr)
     ccds['sig1'] = imobj.sig1
@@ -911,7 +922,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     ccds['skysb'] = skybr   # [mag/arcsec^2]
     t0= ptime('measure-sky',t0)
 
-    # Does this image already have (photometry and astrometric) zeropoints computed?
+    # Does this image already have (photometric and astrometric) zeropoints computed?
     zpt = imobj.get_zeropoint(primhdr, hdr)
     if zpt is not None:
         print('Image', imobj, ': using zeropoint %.3f' % zpt)
@@ -983,7 +994,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     # move.
 
     if splinesky:
-        sky = imobj.read_sky_model()
+        sky = imobj.read_sky_model(slc=slc)
         print('Instantiating and subtracting sky model')
         skymod = np.zeros_like(img)
         sky.addTo(skymod)
@@ -994,7 +1005,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         fit_img = img - sky_img
 
     # after sky subtraction, apply optional per-amp relative zeropoints.
-    imobj.apply_amp_correction(fit_img, invvar, 0, 0)
+    imobj.apply_amp_correction(fit_img, invvar, x0, y0)
 
     with np.errstate(invalid='ignore'):
         # sqrt(0.) can trigger complaints;
@@ -1145,7 +1156,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
 
     # Run tractor fitting on the ref stars, using the PsfEx model.
     phot = tractor_fit_sources(imobj, wcs, refs.ra_now, refs.dec_now, refs.flux0,
-                               fit_img, ierr, psf)
+                               fit_img, ierr, psf, x0, y0)
     print('Got photometry results for', len(phot), 'reference stars')
     if len(phot) == 0:
         return None, None
@@ -1328,7 +1339,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     return ccds, phot
 
 def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
-                        psf, normalize_psf=True):
+                        psf, ccd_x0, ccd_y0, normalize_psf=True):
     import tractor
     from tractor import PixelizedPSF
     from tractor.brightness import LinearPhotoCal
@@ -1402,9 +1413,9 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
 
         tim = tractor.Image(data=subimg, inverr=subie, psf=subpsf)
         flux0 = ref_flux[istar]
-        x0 = x - xlo
-        y0 = y - ylo
-        src = tractor.PointSource(tractor.PixPos(x0, y0), tractor.Flux(flux0))
+        x_init = x - xlo
+        y_init = y - ylo
+        src = tractor.PointSource(tractor.PixPos(x_init, y_init), tractor.Flux(flux0))
         tr = tractor.Tractor([tim], [src])
 
         tr.freezeParam('images')
@@ -1455,10 +1466,10 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
         cal.fracmasked.append(np.sum(psfimg * (subie == 0)))
 
         cal.psfsum.append(psfsum)
-        cal.x0.append(x0 + xlo)
-        cal.y0.append(y0 + ylo)
-        cal.x1.append(src.pos.x + xlo)
-        cal.y1.append(src.pos.y + ylo)
+        cal.x0.append(ccd_x0 + x_init + xlo)
+        cal.y0.append(ccd_y0 + y_init + ylo)
+        cal.x1.append(ccd_x0 + src.pos.x + xlo)
+        cal.y1.append(ccd_y0 + src.pos.y + ylo)
         cal.flux.append(src.brightness.getValue())
         cal.iref.append(istar)
 
