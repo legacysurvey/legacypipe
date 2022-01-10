@@ -35,6 +35,8 @@ def main():
                         help='Set output base directory, default "."')
     parser.add_argument('--survey-dir', type=str, default=None,
                         help='Override the $LEGACY_SURVEY_DIR environment variable')
+    parser.add_argument('--fix-bad-mags', default=False, action='store_true',
+                        help='Only run on bricks that contain a ref star with Gaia EDR3 G=BP=RP=0; otherwise, skip')
     opt = parser.parse_args()
 
     if opt.brick is None:
@@ -52,10 +54,23 @@ def main():
     brick = survey.get_brick_by_name(opt.brick)
     brickname = brick.brickname
 
-    W = H = 3600
-    pixscale = 0.262
+    refs = survey.find_file('ref-sources', brick=brickname)
+    refstars = fits_table(refs)
+    I = np.flatnonzero((refstars.donotfit==False) * (refstars.ref_id >= 0))
+    # Drop Gaia stars with G = BP = RP = 0
+    bad = ((refstars.ref_cat[I] == 'GE') * (refstars.phot_g_mean_mag[I] == 0) *
+           (refstars.phot_bp_mean_mag[I] == 0) * (refstars.phot_rp_mean_mag[I] == 0))
+    if opt.fix_bad_mags:
+        nbad = sum(bad)
+        if nbad == 0:
+            print('Quitting because brick does not contain any stars with bad Gaia mags')
+            return 0
+    print('Dropping', sum(bad), 'Gaia-EDR3 stars with G=BP=RP=0')
+    refstars = refstars[I[~bad]]
 
     # Get WCS object describing brick
+    W = H = 3600
+    pixscale = 0.262
     targetwcs = wcs_for_brick(brick, W=W, H=H, pixscale=pixscale)
     pixscale = targetwcs.pixel_scale()
     targetrd = np.array([targetwcs.pixelxy2radec(x,y) for x,y in
@@ -110,17 +125,7 @@ def main():
     maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int32)
     del U
 
-    refs = survey.find_file('ref-sources', brick=brickname)
-    refstars = fits_table(refs)
-    less_masking=False
-
-    I = np.flatnonzero((refstars.donotfit==False) * (refstars.ref_id >= 0))
-    # Drop Gaia stars with G = BP = RP = 0
-    bad = ((refstars.ref_cat[I] == 'GE') * (refstars.phot_g_mean_mag[I] == 0) *
-           (refstars.phot_bp_mean_mag[I] == 0) * (refstars.phot_rp_mean_mag[I] == 0))
-    print('Dropping', sum(bad), 'Gaia-EDR3 stars with G=BP=RP=0')
-    I = I[~bad]
-    refmap = get_reference_map(targetwcs, refstars[I])
+    refmap = get_reference_map(targetwcs, refstars)
 
     # BRIGHT
     if refmap is not None:
@@ -133,6 +138,7 @@ def main():
     hdr = copy_header_with_wcs(version_header, targetwcs)
     with survey.write_output('maskbits-light', brick=brickname, shape=maskbits.shape) as out:
         out.fits.write(maskbits, header=hdr, extname='MASKBITS-LIGHT')
+    return 0
 
 if __name__ == '__main__':
     #from astrometry.util.ttime import MemMeas
