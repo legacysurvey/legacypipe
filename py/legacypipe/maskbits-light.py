@@ -115,6 +115,11 @@ def main():
     less_masking=False
 
     I = np.flatnonzero((refstars.donotfit==False) * (refstars.ref_id >= 0))
+    # Drop Gaia stars with G = BP = RP = 0
+    bad = ((refstars.ref_cat[I] == 'GE') * (refstars.phot_g_mean_mag[I] == 0) *
+           (refstars.phot_bp_mean_mag[I] == 0) * (refstars.phot_rp_mean_mag[I] == 0))
+    print('Dropping', sum(bad), 'Gaia-EDR3 stars with G=BP=RP=0')
+    I = I[~bad]
     refmap = get_reference_map(targetwcs, refstars[I])
 
     # BRIGHT
