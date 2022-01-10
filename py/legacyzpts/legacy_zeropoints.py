@@ -1248,13 +1248,9 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         zptstd = 0.
         transp = 0.
 
-    for c in ['x0','y0','x1','y1','flux','raoff','decoff', 'psfmag',
+    for c in ['x_ref','y_ref','x_fit','y_fit','flux','raoff','decoff', 'psfmag',
               'dflux','dx','dy']:
         phot.set(c, phot.get(c).astype(np.float32))
-    phot.rename('x0', 'x_ref')
-    phot.rename('y0', 'y_ref')
-    phot.rename('x1', 'x_fit')
-    phot.rename('y1', 'y_fit')
 
     phot.add_columns_from(refs)
 
@@ -1353,11 +1349,11 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
     print('Fitting positions & fluxes of %i stars' % len(ref_ra))
 
     cal = fits_table()
-    # These x0,y0,x1,y1 are zero-indexed coords.
-    cal.x0 = []
-    cal.y0 = []
-    cal.x1 = []
-    cal.y1 = []
+    # These x_ref,y_ref,x_fit,y_fit are zero-indexed coords.
+    cal.x_ref = []
+    cal.y_ref = []
+    cal.x_fit = []
+    cal.y_fit = []
     cal.flux = []
     cal.dx = []
     cal.dy = []
@@ -1466,10 +1462,10 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
         cal.fracmasked.append(np.sum(psfimg * (subie == 0)))
 
         cal.psfsum.append(psfsum)
-        cal.x0.append(ccd_x0 + x_init + xlo)
-        cal.y0.append(ccd_y0 + y_init + ylo)
-        cal.x1.append(ccd_x0 + src.pos.x + xlo)
-        cal.y1.append(ccd_y0 + src.pos.y + ylo)
+        cal.x_ref.append(ccd_x0 + x_init + xlo)
+        cal.y_ref.append(ccd_y0 + y_init + ylo)
+        cal.x_fit.append(ccd_x0 + src.pos.x + xlo)
+        cal.y_fit.append(ccd_y0 + src.pos.y + ylo)
         cal.flux.append(src.brightness.getValue())
         cal.iref.append(istar)
 
