@@ -329,52 +329,23 @@ def patch_zeropoints(zps, ccds, ccdsa, decboundary=-29.25):
     if not numpy.all((ccds.image_hdu == ccdsa.image_hdu) &
                      (ccdsa.image_filename == ccdsa.image_filename)):
         raise ValueError('ccds and ccdsa must be row matched!')
-
-    # UGH, dr10-v2 CCDs table contains some ccdname='' entries!
-    ok = numpy.array([len(name.strip())>0 for name in ccds.ccdname])
-    if not numpy.all(ok):
-        print('Cutting to', numpy.sum(ok), 'of', len(ccds), 'CCDs with valid CCDNAME')
-        ccds.cut(ok)
-        ccdsa.cut(ok)
-        if not 'mjd_obs' in zps.get_columns():
-            # assume row-aligned ubercal file
-            zps.cut(ok)
-
     mreplace = ccds.dec < decboundary
     oldccdzpt = ccds.ccdzpt.copy()
     ccds.zpt[mreplace] = 0
     ccds.ccdzpt[mreplace] = 0
     ccds.ccdphrms[mreplace] = 0
-
     olderr = numpy.seterr(invalid='ignore')
-
-    zps.index = numpy.arange(len(zps))
-
-    mokim = ((zps.photrms > 0) & (zps.photrms < 0.02) &
+    mokim = ((zps.scatter > 0) & (zps.scatter < 0.02) &
              (numpy.abs(zps.resid) < 0.2))
     numpy.seterr(**olderr)
     zps = zps[mokim]
-    if 'mjd_obs' in zps.get_columns():
-        mz, mc = match(zps.mjd_obs, ccds.mjd_obs)
-    else:
-        # assume zps was originally row-aligned
-        print('Assuming row-aligned zeropoints (ubercal) file')
-        mz = numpy.arange(len(zps))
-        mc = zps.index
-
+    mz, mc = match(zps.mjd_obs, ccds.mjd_obs)
     ccdnum = numpy.array([ccdnamenumdict[name.strip()]
                           for name in ccds.ccdname])
-    # newzpt = zps.zpt[mz] - zps.resid[mz]
-    # newccdzpt = zps.zpt[mz] - zps.resid[mz] - zps.mnchip[mz, ccdnum[mc]]
-    # newccdphrms = zps.sdchip[mz, ccdnum[mc]]
-    # newccdnphotom = zps.nstarchip[mz, ccdnum[mc]]
-
-    # .resid ??
-    newzpt = zps.zpt[mz] - zps.resid[mz]
-    newccdzpt = zps.ccdzpt[mz] - zps.resid[mz]
-    newccdphrms = zps.ccdphotrms[mz]
-    newccdnphotom = zps.nstarchip[mz].astype(int)
-
+    newzpt = zps.zp[mz] - zps.resid[mz]
+    newccdzpt = zps.zp[mz] - zps.resid[mz] - zps.mnchip[mz, ccdnum[mc]]
+    newccdphrms = zps.sdchip[mz, ccdnum[mc]]
+    newccdnphotom = zps.nstarchip[mz, ccdnum[mc]]
     m = (ccds.dec[mc] < decboundary)
     # S7 == ccdnum 31; removes worst-performing 5% of S7 CCDs.
     ms7 = (ccdnum[mc] != 31) | ((newccdnphotom > 3) & (newccdphrms < 0.02))
@@ -384,11 +355,11 @@ def patch_zeropoints(zps, ccds, ccdsa, decboundary=-29.25):
     ccds.zpt[mc] = newzpt[m]
     ccds.ccdzpt[mc] = newccdzpt[m]
     ccds.ccdphrms[mc] = newccdphrms[m]
-    ccds.phrms[mc] = zps.photrms[mz]
+    ccds.phrms[mc] = zps.scatter[mz]
     ccdsa.zpt[mc] = newzpt[m]
     ccdsa.ccdzpt[mc] = newccdzpt[m]
     ccdsa.ccdphrms[mc] = newccdphrms[m]
-    ccdsa.phrms[mc] = zps.photrms[mz]
+    ccdsa.phrms[mc] = zps.scatter[mz]
     oldzp = numpy.where(oldccdzpt != 0, oldccdzpt, 22.5)
     newzp = numpy.where(ccds.ccdzpt != 0, ccds.ccdzpt, 22.5)
     oldzpscale = 10.**((oldzp-22.5)/2.5)
