@@ -531,7 +531,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # separated by a low enough saddle from other sources.  Need only
     # search within its "allblob", which is defined by the lowest
     # saddle.
-    info('Found', len(px), 'potential peaks')
+    info('SED', sedname, ': found', len(px), 'potential peaks')
     nveto = 0
     nsaddle = 0
     naper = 0

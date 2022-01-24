@@ -329,6 +329,14 @@ def patch_zeropoints(zps, ccds, ccdsa, decboundary=-29.25):
     if not numpy.all((ccds.image_hdu == ccdsa.image_hdu) &
                      (ccdsa.image_filename == ccdsa.image_filename)):
         raise ValueError('ccds and ccdsa must be row matched!')
+
+    # UGH, dr10-v2 CCDs table contains some ccdname='' entries!
+    ok = numpy.array([len(name.strip())>0 for name in ccds.ccdname])
+    if not numpy.all(ok):
+        print('Cutting to', numpy.sum(ok), 'of', len(ccds), 'CCDs with valid CCDNAME')
+        ccds.cut(ok)
+        ccdsa.cut(ok)
+
     mreplace = ccds.dec < decboundary
     oldccdzpt = ccds.ccdzpt.copy()
     ccds.zpt[mreplace] = 0

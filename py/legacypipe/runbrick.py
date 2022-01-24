@@ -990,6 +990,8 @@ def stage_srcs(pixscale=None, targetwcs=None,
     else:
         co_sky = None
 
+    info('Sources detected:', len(T), 'in', len(blobslices), 'blobs')
+
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobmap', 'cat',
             'ps', 'saturated_pix', 'version_header', 'co_sky', 'ccds']
     L = locals()
