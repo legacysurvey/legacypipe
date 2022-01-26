@@ -3374,3 +3374,10 @@
 
 # corrupted file [decam-chatter 16349]
 802880
+
+# early engineering exposures [decam-chatter 16340]
+182295
+182296
+182297
+182298
+182299
