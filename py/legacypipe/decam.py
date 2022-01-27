@@ -112,21 +112,26 @@ class DecamImage(LegacySurveyImage):
             return None
         # Read only the CCD-table rows within range.
         S = fits_table(fn, rows=I)
-        S.cut(np.array([c.strip() == self.ccdname for c in S.ccdname]))
-        if len(S) == 0:
-            warnings.warn('decam: ccdname %s, expnum %i not found in file %s' %
-                  (self.ccdname, self.expnum, fn))
-            return None
+        if 'ccdname' in S.get_columns():
+            # DR9: table was per-CCD.
+            S.cut(np.array([c.strip() == self.ccdname for c in S.ccdname]))
+            imgid = 'expnum %i, ccdname %s' % (self.expnum, self.ccdname)
+            if len(S) == 0:
+                warnings.warn('decam: %s not found in file %s' % (imgid, fn))
+                return None
+        else:
+            # DR10: table is per-exposure.
+            imgid = 'expnum %i' % (self.expnum)
         assert(len(S) == 1)
         sky = S[0]
         if sky.run == -1:
-            debug('sky template: run=-1 for expnum %i, ccdname %s' % (self.expnum, self.ccdname))
+            debug('sky template: run=-1 for %s' % (imgid))
             return None
         # Check PLPROCID only
         if not validate_version(
                 fn, 'table', self.expnum, None, self.plprocid, data=S):
-            txt = ('Sky template for expnum=%i, ccdname=%s did not pass consistency validation (EXPNUM, PLPROCID) -- image %i,%s vs template table %i,%s' %
-                   (self.expnum, self.ccdname, self.expnum, self.plprocid, sky.expnum, sky.plprocid))
+            txt = ('Sky template for %s did not pass consistency validation (EXPNUM, PLPROCID) -- image %i,%s vs template table %i,%s' %
+                   (imgid, self.expnum, self.plprocid, sky.expnum, sky.plprocid))
             if old_calibs_ok:
                 warnings.warn(txt + '-- but old_calibs_ok, so using sky template anyway')
             else:
