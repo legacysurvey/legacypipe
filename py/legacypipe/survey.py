@@ -1106,6 +1106,7 @@ class LegacySurveyData(object):
     def get_compression_args(self, filetype, shape=None):
         comp = dict(# g: sigma ~ 0.002.  qz -1e-3: 6 MB, -1e-4: 10 MB
             image         = ('R', 'qz -1e-4'),
+            blobmodel     = ('R', 'qz -1e-4'),
             model         = ('R', 'qz -1e-4'),
             chi2          = ('R', 'qz -0.1'),
             invvar        = ('R', 'q0 16'),
