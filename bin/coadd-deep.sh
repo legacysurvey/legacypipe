@@ -5,7 +5,7 @@ brick=$1
 # Avoid those annoying "X11 connection rejected because of wrong authentication." messages
 unset DISPLAY
 
-outdir=/global/cscratch1/sd/dstn/dr10-early-coadds-south
+outdir=/global/cscratch1/sd/dstn/dr10-early-coadds-south-deep
 
 export LEGACY_SURVEY_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr10
 
@@ -22,7 +22,6 @@ export GAIA_CAT_VER=E
 export TYCHO2_KD_DIR=$CACHE_DIR/tycho2
 export LARGEGALAXIES_CAT=$CACHE_DIR/SGA-ellipse-v3.0.kd.fits
 export SKY_TEMPLATE_DIR=$CACHE_DIR/dr9-sky-pattern
-
 
 # Don't add ~/.local/ to Python's sys.path
 export PYTHONNOUSERSITE=1
@@ -56,11 +55,13 @@ mkdir -p $outdir/logs/$bri
 log="$outdir/logs/$bri/$brick.log"
 
 mkdir -p $outdir/metrics/$bri
-#mkdir -p $outdir/pickles/$bri
 
 echo Logging to: $log
 
-python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
+##### LOCAL VERSION
+#export LEGACYPIPE_DIR=/global/homes/d/dstn/legacypipe/py
+
+python -O $LEGACYPIPE_DIR/legacypipe/deep-preprocess.py \
        --brick $brick \
        --bands g,r,i,z \
        --rgb-stretch 1.5 \
@@ -68,26 +69,19 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --cache-dir $CACHE_DIR \
        --outdir $outdir \
        --skip-coadd \
-       --stage image_coadds \
+       --stage deep_preprocess \
+       --force-all \
+       --no-write \
        --blob-mask \
        --minimal-coadds \
        --skip-calibs \
        --nsatur 2 \
-       --force-all \
-       --no-write \
        --cache-outliers \
        --threads 8 \
-       --max-memory-gb 14 \
        >> $log 2>&1
 
-# phase 1:
-#       --threads 4 \
-#       --max-memory-gb 7 \
-
-#       --write-stage halos
-#       --pickle "$outdir/pickles/$bri/runbrick-%(brick)s-%%(stage)s.pickle"
-#       --no-write \
-#       --force-all \
+#      --pickle "$outdir/pickles/$bri/runbrick-%(brick)s-%%(stage)s.pickle" \
+#       --write-stage halos \
 #       --stage tims --plots \
 #       --zoom 1000 2500 2000 3000 \
 
