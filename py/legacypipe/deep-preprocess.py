@@ -218,6 +218,10 @@ def stage_deep_preprocess(
                                 for im in deepims]
     deeptims = list(mp.map(read_one_tim, args))
 
+    # Drop any deepims and tims where the deeptim is None.
+    deepims =  [di for di,dt in zip(deepims,deeptims) if dt is not None]
+    deeptims = [dt for dt in deeptims if dt is not None]
+
     # Start outlier masking...
     deepC = make_coadds(deeptims, bands, targetwcs, mp=mp, sbscale=False,
                         allmasks=False, coweights=False)
