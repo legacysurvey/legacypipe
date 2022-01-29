@@ -24,6 +24,17 @@ ccdnamenumdict = {'S1': 25, 'S2': 26, 'S3': 27, 'S4':28,
                   'N29': 60, 'N30': 61, 'N31': 62,
                   }
 
+pidlist_byobject = [
+    '2013A-0741', '2013B-0440',
+    '2014A-0035', '2014A-0412', '2014A-0624', '2016A-0618',
+    '2015A-0397', '2015B-0314',
+    '2016A-0366', '2016B-0301', '2016B-0905', '2016B-0909',
+    '2017A-0388', '2017A-0916', '2017B-0110', '2017B-0906',
+    '2018A-0242', '2018A-0273', '2018A-0913', '2018A-0914',
+    '2018A-0386', '2019A-0272', '2019A-0305', '2019A-0910',
+    '2019B-0323', '2020A-0399', '2020A-0909', '2020B-0241',
+    '2019B-0371', '2019B-1014', '2020A-0908',
+    '2021A-0149', '2021A-0922', '2022A-597406']
 
 class subslices:
     "Iterator for looping over subsets of an array"
@@ -197,7 +208,22 @@ def keep_deepest_tiles(ccds, annotated, tilefile, n=2):
 def keep_deepest_des(ccds, annotated):
     tileid = ccds.object
     return keep_deepest_ccds(ccds.image_filename, tileid, ccds.filter,
-                             annotated.psfdepth, n=2)
+                             annotated.psfdepth, n=3)
+
+def keep_deepest_delve(ccds, annotated):
+    tileid = ccds.object.copy()
+    for i, tname in enumerate(tileid):
+        try:
+            contents = tname.split()
+            field, pnum, filt = contents[-1].split('-')
+            pnum = min([pnum, '05'])
+            newend = '-'.join([field, pnum, filt])
+            newtname = ' '.join([*contents[:-1], newend])
+            tileid[i] = newtname
+        except:
+            pass
+    return keep_deepest_ccds(
+        ccds.image_filename, tileid, ccds.filter, annotated.psfdepth, n=2)
 
 
 def depthcut_decam(ccds, annotated, tilefile):
@@ -214,10 +240,22 @@ def depthcut_decam(ccds, annotated, tilefile):
     # - match a tile
     # - are among the top two deepest exposures satisfying the above.
     keep = depthcut_propid_decam(ccds) & (ccds.ccd_cuts == 0)
-    m = ccds.propid != '2012B-0001'
+    mdelve = numpy.array([(('DELVE' in s) or ('PALS' in s))
+                          for s in ccds.object])
+    mbyobject = numpy.ones(len(ccds), dtype='bool')
+
+    for pp in pidlist_byobject:
+        mbyobject |= (ccds.propid == pp) & ~mdelve
+    m = ~(mdelve | mbyobject)
+    # for LS-like surveys
     keep[m & keep] = keep_deepest_tiles(
-        ccds[m & keep], annotated[m & keep], tilefile)
-    keep[~m & keep] = keep_deepest_des(ccds[~m & keep], annotated[~m & keep])
+        ccds[m & keep], annotated[m & keep], tilefile, n=2)
+    # for surveys where we just do object name selection
+    keep[mbyobject & keep] = keep_deepest_des(
+        ccds[mbyobject & keep], annotated[mbyobject & keep])
+    # for delve-like surveys with too many passes
+    keep[mdelve & keep] = keep_deepest_delve(ccds[mdelve & keep],
+                                             annotated[mdelve & keep])
     return keep
 
 def depthcut_propid_decam(ccds):
@@ -227,16 +265,29 @@ def depthcut_propid_decam(ccds):
     # explicitly tries to limit the number of epochs on each tile center.
     mpropid = numpy.zeros(len(ccds), dtype='bool')
     # DECaLS, DECaLS+, DES, Bonaca, BLISS, DeROSITA
-    for pid in ['2014B-0404', '2016A-0190', '2012B-0001', '2015A-0620',
-                '2017A-0260', '2017A-0388']:
+    pidlist = ['2014B-0404', '2016A-0190', '2012B-0001', '2015A-0616',
+               '2015A-0620',
+               '2017A-0260', '2017A-0388', ]
+    # new DR10 propids: DeROSITA, DELVE, MAGLITES, some others
+    pidlist += pidlist_byobject
+    for pid in pidlist:
         mpropid = mpropid | (ccds.propid  == pid)
     # within these surveys, limit to 'normal' program, as identified
     # by object name.  This excludes, e.g., special DECaLS observations on the
     # COSMOS field, DES SN fields, ...
-    mobject = numpy.array([('DECaLS_' in o) or ('DES survey' in o) or
-                           ('DES wide' in o) or
-                           ('BLISS field' in o) or ('DeCaLS' == o.strip()) or
-                           ('Tile ' in o) for o in ccds.object])
+    lobject = numpy.array([o.lower() for o in ccds.object])
+    keepstrings = [
+        'DECaLS_', 'DES survey', 'DES wide', 'BLISS field',
+        'DeCaLS', 'Tile ', 'DELVE field', '.0', 'BF_', 'bf',
+        'CenA_', 'Scl_', 'n1f', 'n2f', 'n3f', 'n4f',
+        'MAGLITES field', 'MAGLITES-II field', 'Field',
+        'dark siren', 'event', 'field', 'ch', 'kp',
+        'Carina', 'c1A', 'c1B', 'c2A', 'c2B', 'c3A', 'c3B',
+        'c4A', 'c4B', 'Sculptor']
+    mobject = numpy.zeros(len(ccds), dtype='bool')
+    for x in keepstrings:
+        mobject |= numpy.array([x.lower() in o
+                                for o in lobject])
     def isint(x):
         try:
             _ = int(x)
@@ -250,7 +301,7 @@ def depthcut_propid_decam(ccds):
 
 def make_plots(ccds, camera, nside=512,
                xrange=[360, 0], yrange=[-90, 90],
-               filename=None, vmin=0, vmax=10):
+               filename=None, vmin=0, vmax=12):
     import util_efs
     from matplotlib import pyplot as p
     ccdname = numpy.array([name.strip() for name in ccds.ccdname])
@@ -270,6 +321,9 @@ def make_plots(ccds, camera, nside=512,
     depthcut = (ccds.ccd_cuts & depthbit) == 0  # passes depth cut
     filts = numpy.unique(ccds.filter[ccdcut == 0])
     _, u = numpy.unique(ccds.expnum, return_index=True)
+    if filename is not None:
+        from matplotlib.backends.backend_pdf import PdfPages
+        pdf = PdfPages(filename)
     for f in filts:
         mf = (ccds.filter[u] == f)
         maps = {'original': (mf & (ccdcut[u] == 0)),
@@ -279,14 +333,16 @@ def make_plots(ccds, camera, nside=512,
             _, ncov = util_efs.paint_map(
                 ccds.ra_bore[u[m]], ccds.dec_bore[u[m]],
                 numpy.ones(numpy.sum(m)), rad, nside=nside)
-            p.figure(label)
+            p.figure(label + ' ' + f)
             p.clf()
             util_efs.imshow(ncov, xrange=xrange, yrange=yrange,
                             vmin=vmin, vmax=vmax)
             p.colorbar().set_label('n_exp')
-            p.title(label)
+            p.title(label + ' ' + f)
             if filename is not None:
-                p.savefig(filename % (label, f))
+                pdf.savefig()
+    if filename is not None:
+        pdf.close()
 
 
 def good_ccd_fraction(survey, ccds):
