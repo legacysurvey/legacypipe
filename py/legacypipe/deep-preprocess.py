@@ -549,8 +549,11 @@ def stage_deep_preprocess_2(
     from legacypipe.coadds import write_coadd_images
     co_sky = None
     for band,coimg,coiv in zip(bands, coadds, coivs):
+        bandtims = [tim for tim in deeptims if tim.band == band]
+        if len(bandtims) == 0:
+            continue
         write_coadd_images(band, survey, brickname, version_header,
-                           deeptims, targetwcs, co_sky,
+                           bandims, targetwcs, co_sky,
                            cowimg=coimg, cow=coiv)
 
     with survey.write_output('image-jpeg', brick=brickname) as out:
