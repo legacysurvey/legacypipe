@@ -553,7 +553,7 @@ def stage_deep_preprocess_2(
         if len(bandtims) == 0:
             continue
         write_coadd_images(band, survey, brickname, version_header,
-                           bandims, targetwcs, co_sky,
+                           bandtims, targetwcs, co_sky,
                            cowimg=coimg, cow=coiv)
 
     with survey.write_output('image-jpeg', brick=brickname) as out:
