@@ -59,7 +59,7 @@ mkdir -p $outdir/metrics/$bri
 echo Logging to: $log
 
 ##### LOCAL VERSION
-#export LEGACYPIPE_DIR=/global/homes/d/dstn/legacypipe/py
+export LEGACYPIPE_DIR=/global/homes/d/dstn/legacypipe/py
 
 python -O $LEGACYPIPE_DIR/legacypipe/deep-preprocess.py \
        --brick $brick \
@@ -68,19 +68,22 @@ python -O $LEGACYPIPE_DIR/legacypipe/deep-preprocess.py \
        --survey-dir $LEGACY_SURVEY_DIR \
        --cache-dir $CACHE_DIR \
        --outdir $outdir \
-       --skip-coadd \
-       --stage deep_preprocess \
-       --force-all \
-       --no-write \
+       --stage deep_preprocess_3 \
+       --pickle "$outdir/pickles/$bri/runbrick-%(brick)s-%%(stage)s.pickle" \
        --blob-mask \
        --minimal-coadds \
        --skip-calibs \
        --nsatur 2 \
        --cache-outliers \
-       --threads 8 \
+       --threads 4  \
        >> $log 2>&1
 
-#      --pickle "$outdir/pickles/$bri/runbrick-%(brick)s-%%(stage)s.pickle" \
+#       --threads 8 \
+#       --skip-coadd \
+
+#       --force-all \
+#--no-write \
+    #
 #       --write-stage halos \
 #       --stage tims --plots \
 #       --zoom 1000 2500 2000 3000 \

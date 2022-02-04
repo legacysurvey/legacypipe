@@ -22,8 +22,8 @@ outdir=$LEGACY_SURVEY_DIR/zpt
 #CACHE_DIR=/tmp/dr10pre-cache
 #mkdir -p "${CACHE_DIR}"
 
-ncores=32
-#ncores=8
+#ncores=32
+ncores=8
 
 #export DUST_DIR=/global/cfs/cdirs/cosmo/data/dust/v0_1
 #export TYCHO2_KD_DIR=/global/cfs/cdirs/cosmo/staging/tycho2

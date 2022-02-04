@@ -18,12 +18,14 @@ def write_maskbits_light(survey, brick, brickname, version_header,
                          targetwcs, W, H, refstars,
                          only_if_bad_mags=False):
     from legacypipe.utils import find_unique_pixels, copy_header_with_wcs
+    from legacypipe.bits import MASKBITS, IN_BLOB
+    from legacypipe.reference import get_reference_map
 
     I = np.flatnonzero((refstars.donotfit==False) * (refstars.ref_id >= 0))
     # Drop Gaia stars with G = BP = RP = 0
     bad = ((refstars.ref_cat[I] == 'GE') * (refstars.phot_g_mean_mag[I] == 0) *
            (refstars.phot_bp_mean_mag[I] == 0) * (refstars.phot_rp_mean_mag[I] == 0))
-    if only_if_bag_mags:
+    if only_if_bad_mags:
         nbad = sum(bad)
         if nbad == 0:
             info('Quitting because brick does not contain any stars with bad Gaia mags')
@@ -59,11 +61,9 @@ def main():
     from astrometry.util.fits import fits_table
 
     from legacypipe.runs import get_survey
-    from legacypipe.bits import MASKBITS, IN_BLOB
     from legacypipe.survey import (
         get_git_version, get_version_header, get_dependency_versions,
         wcs_for_brick)
-    from legacypipe.reference import get_reference_map
 
     import argparse
     parser = argparse.ArgumentParser()
