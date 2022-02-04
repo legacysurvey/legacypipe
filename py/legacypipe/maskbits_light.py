@@ -14,6 +14,45 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
+def write_maskbits_light(survey, brick, brickname, version_header,
+                         targetwcs, W, H, refstars,
+                         only_if_bad_mags=False):
+    from legacypipe.utils import find_unique_pixels, copy_header_with_wcs
+
+    I = np.flatnonzero((refstars.donotfit==False) * (refstars.ref_id >= 0))
+    # Drop Gaia stars with G = BP = RP = 0
+    bad = ((refstars.ref_cat[I] == 'GE') * (refstars.phot_g_mean_mag[I] == 0) *
+           (refstars.phot_bp_mean_mag[I] == 0) * (refstars.phot_rp_mean_mag[I] == 0))
+    if only_if_bag_mags:
+        nbad = sum(bad)
+        if nbad == 0:
+            info('Quitting because brick does not contain any stars with bad Gaia mags')
+            return 0
+    info('Dropping', sum(bad), 'Gaia-EDR3 stars with G=BP=RP=0')
+    refstars = refstars[I[~bad]]
+
+    # Construct a mask bits map
+    maskbits = np.zeros((H,W), np.int32)
+    # !PRIMARY
+    U = find_unique_pixels(targetwcs, W, H, None,
+                           brick.ra1, brick.ra2, brick.dec1, brick.dec2)
+    maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int32)
+    del U
+
+    refmap = get_reference_map(targetwcs, refstars)
+
+    # BRIGHT
+    if refmap is not None:
+        maskbits |= MASKBITS['BRIGHT']  * ((refmap & IN_BLOB['BRIGHT'] ) > 0)
+        maskbits |= MASKBITS['MEDIUM']  * ((refmap & IN_BLOB['MEDIUM'] ) > 0)
+        maskbits |= MASKBITS['GALAXY']  * ((refmap & IN_BLOB['GALAXY'] ) > 0)
+        maskbits |= MASKBITS['CLUSTER'] * ((refmap & IN_BLOB['CLUSTER']) > 0)
+    del refmap
+
+    hdr = copy_header_with_wcs(version_header, targetwcs)
+    with survey.write_output('maskbits-light', brick=brickname, shape=maskbits.shape) as out:
+        out.fits.write(maskbits, header=hdr, extname='MASKBITS-LIGHT')
+
 
 def main():
     from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
@@ -21,7 +60,6 @@ def main():
 
     from legacypipe.runs import get_survey
     from legacypipe.bits import MASKBITS, IN_BLOB
-    from legacypipe.utils import find_unique_pixels, copy_header_with_wcs
     from legacypipe.survey import (
         get_git_version, get_version_header, get_dependency_versions,
         wcs_for_brick)
@@ -56,17 +94,6 @@ def main():
 
     refs = survey.find_file('ref-sources', brick=brickname)
     refstars = fits_table(refs)
-    I = np.flatnonzero((refstars.donotfit==False) * (refstars.ref_id >= 0))
-    # Drop Gaia stars with G = BP = RP = 0
-    bad = ((refstars.ref_cat[I] == 'GE') * (refstars.phot_g_mean_mag[I] == 0) *
-           (refstars.phot_bp_mean_mag[I] == 0) * (refstars.phot_rp_mean_mag[I] == 0))
-    if opt.fix_bad_mags:
-        nbad = sum(bad)
-        if nbad == 0:
-            print('Quitting because brick does not contain any stars with bad Gaia mags')
-            return 0
-    print('Dropping', sum(bad), 'Gaia-EDR3 stars with G=BP=RP=0')
-    refstars = refstars[I[~bad]]
 
     # Get WCS object describing brick
     W = H = 3600
@@ -117,27 +144,8 @@ def main():
         version_header.add_record(dict(
             name='CORN%iDEC'%(i+1), value=d, comment='Brick corner Dec (deg)'))
 
-    # Construct a mask bits map
-    maskbits = np.zeros((H,W), np.int32)
-    # !PRIMARY
-    U = find_unique_pixels(targetwcs, W, H, None,
-                           brick.ra1, brick.ra2, brick.dec1, brick.dec2)
-    maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int32)
-    del U
-
-    refmap = get_reference_map(targetwcs, refstars)
-
-    # BRIGHT
-    if refmap is not None:
-        maskbits |= MASKBITS['BRIGHT']  * ((refmap & IN_BLOB['BRIGHT'] ) > 0)
-        maskbits |= MASKBITS['MEDIUM']  * ((refmap & IN_BLOB['MEDIUM'] ) > 0)
-        maskbits |= MASKBITS['GALAXY']  * ((refmap & IN_BLOB['GALAXY'] ) > 0)
-        maskbits |= MASKBITS['CLUSTER'] * ((refmap & IN_BLOB['CLUSTER']) > 0)
-    del refmap
-
-    hdr = copy_header_with_wcs(version_header, targetwcs)
-    with survey.write_output('maskbits-light', brick=brickname, shape=maskbits.shape) as out:
-        out.fits.write(maskbits, header=hdr, extname='MASKBITS-LIGHT')
+    write_maskbits_light(survey, brick, brickname, version_header, targetwcs,
+                         W, H, refstars, **kw)
     return 0
 
 if __name__ == '__main__':

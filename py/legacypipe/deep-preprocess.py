@@ -769,6 +769,10 @@ def stage_deep_preprocess_3(
         version_header, targetwcs, brickname, record_event)
     del detmaps, detivs, satmaps
 
+    from legacypipe.maskbits_light import write_maskbits_light
+    write_maskbits_light(survey, brick, brickname, version_header,
+                         targetwcs, W, H, refstars)
+
     keys = ['hot', 'saturated_pix', 'version_header', ]
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
