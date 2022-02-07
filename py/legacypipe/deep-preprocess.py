@@ -331,6 +331,7 @@ def stage_deep_preprocess_2(
     satmaps = []
     coadds = []
     coivs  = []
+    have_bands = []
 
     with survey.write_output('outliers_mask', brick=brickname) as out:
         # empty Primary HDU
@@ -342,6 +343,7 @@ def stage_deep_preprocess_2(
             if len(btims) == 0:
                 continue
             info(len(btims), 'deep images for band', band)
+            have_bands.append(band)
 
             info('Making blurred reference image...')
             H,W = targetwcs.shape
@@ -553,7 +555,7 @@ def stage_deep_preprocess_2(
         if len(bandtims) == 0:
             continue
         write_coadd_images(band, survey, brickname, version_header,
-                           bandims, targetwcs, co_sky,
+                           bandtims, targetwcs, co_sky,
                            cowimg=coimg, cow=coiv)
 
     with survey.write_output('image-jpeg', brick=brickname) as out:
@@ -562,7 +564,8 @@ def stage_deep_preprocess_2(
         debug('Wrote', out.fn)
     #del coadds,coivs
 
-    keys = ['detmaps', 'detivs', 'satmaps', 'coadds', 'coivs']
+    bands = have_bands
+    keys = ['detmaps', 'detivs', 'satmaps', 'coadds', 'coivs', 'bands']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
@@ -762,8 +765,22 @@ def stage_deep_preprocess_3(
         coivs=None,
 
         **kwargs):
-
     from legacypipe.blobmask import generate_blobmask
+
+    info('Bands:', bands)
+    info('Detivs:', len(detivs))
+    if len(detivs) < len(bands):
+        have_bands = []
+        for iband,band in enumerate(bands):
+            btims = [tim for tim in deeptims if tim.band == band]
+            if len(btims) == 0:
+                continue
+            have_bands.append(band)
+        bands = have_bands
+        info('Actual bands:', bands)
+
+    assert(len(bands) == len(detivs))
+
     hot, saturated_pix = generate_blobmask(
         survey, bands, nsigma, detmaps, detivs, satmaps, blob_dilate,
         version_header, targetwcs, brickname, record_event)
