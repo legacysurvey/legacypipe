@@ -80,7 +80,11 @@ def main():
     if opt.brick is None:
         print('Must specify --brick')
         return -1
-    
+
+    kw = {}
+    if opt.fix_bad_mags:
+        kw.update(only_if_bag_mags=True)
+
     run=None
     survey = get_survey(run,
                         survey_dir=opt.survey_dir,
