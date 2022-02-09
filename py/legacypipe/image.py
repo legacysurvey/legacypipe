@@ -1609,22 +1609,15 @@ class LegacySurveyImage(object):
             debug('Too few good pixels to estimate sky_john')
             sky_john = 0.0
 
-        boxsize = self.splinesky_boxsize
-
         # Initial scalar sky estimate; also the fallback value if
         # everything is masked in one of the splinesky grid cells.
         initsky = sky_john
         if initsky == 0.0:
             initsky = sky_clipped_median
 
-        # For DECam chips where we drop half the chip, spline becomes
-        # underconstrained
-        if min(img.shape) / boxsize < 4:
-            boxsize /= 2
-
         # Compute initial model...
-        skyobj = SplineSky.BlantonMethod(img - initsky, good, boxsize,
-                                         min_fraction=0.25)
+        skyobj = self.get_tractor_sky_model(img - initsky, goodpix)
+
         skymod = np.zeros_like(img)
         skyobj.addTo(skymod)
 
@@ -1774,8 +1767,8 @@ class LegacySurveyImage(object):
             blobmasked = True
 
         # Now find the final sky model using that more extensive mask
-        skyobj = SplineSky.BlantonMethod(img - initsky, good*refgood, boxsize,
-                                         min_fraction=0.25)
+        skyobj = self.get_tractor_sky_model(img - initsky, good*refgood)
+
         # add the initial sky estimate back in
         skyobj.offset(initsky)
 
@@ -1796,12 +1789,12 @@ class LegacySurveyImage(object):
         fmasked = float(np.sum((good * refgood) == 0)) / (H*W)
 
         # DEBUG -- compute a splinesky on a finer grid and compare it.
-        fineskyobj = SplineSky.BlantonMethod(img - initsky, good * refgood,
-                                             boxsize//2,
-                                             min_fraction=0.25)
-        fineskyobj.offset(initsky)
-        fineskyobj.addTo(skypix, -1.)
-        fine_rms = np.sqrt(np.mean(skypix**2))
+        # fineskyobj = SplineSky.BlantonMethod(img - initsky, good * refgood,
+        #                                      boxsize//2,
+        #                                      min_fraction=0.25)
+        # fineskyobj.offset(initsky)
+        # fineskyobj.addTo(skypix, -1.)
+        # fine_rms = np.sqrt(np.mean(skypix**2))
 
         if plots:
             import pylab as plt
@@ -1938,12 +1931,12 @@ class LegacySurveyImage(object):
             plt.title('Sky model')
             ps.savefig()
 
-            skypix2 = np.zeros_like(img)
-            fineskyobj.addTo(skypix2)
-            plt.clf()
-            plt.imshow(skypix2, **ima2)
-            plt.title('Fine sky model')
-            ps.savefig()
+            # skypix2 = np.zeros_like(img)
+            # fineskyobj.addTo(skypix2)
+            # plt.clf()
+            # plt.imshow(skypix2, **ima2)
+            # plt.title('Fine sky model')
+            # ps.savefig()
 
         if slc is not None:
             sy,sx = slc
@@ -1970,7 +1963,7 @@ class LegacySurveyImage(object):
                     ('sky_med', sky_median),
                     ('sky_cmed', sky_clipped_median),
                     ('sky_john', sky_john),
-                    ('sky_fine', fine_rms),
+                    #('sky_fine', fine_rms),
                     ('sky_fmasked', fmasked),
                     ] + [('sky_p%i' % p, v) for p,v in zip(pcts, pctvals)]:
             T.set(k, np.array([v]))
@@ -1981,6 +1974,16 @@ class LegacySurveyImage(object):
         T.writeto(tmpfn)
         os.rename(tmpfn, self.skyfn)
         debug('Wrote sky model', self.skyfn)
+
+    def get_tractor_sky_model(img, goodpix):
+        boxsize = self.splinesky_boxsize
+        # For DECam chips where we drop half the chip, spline becomes
+        # underconstrained
+        if min(img.shape) / boxsize < 4:
+            boxsize /= 2
+        skyobj = SplineSky.BlantonMethod(img - initsky, good, boxsize,
+                                         min_fraction=0.25)
+        return skyobj
 
     def run_calibs(self, psfex=True, sky=True, se=False,
                    fcopy=False, use_mask=True,
