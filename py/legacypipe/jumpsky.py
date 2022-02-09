@@ -1,3 +1,5 @@
+import numpy as np
+from tractor.splinesky import SplineSky
 '''
 This class implements a version of SplineSky where there is a discrete jump
 in sky level at the center of the chip.  It was created to handle DECam chip S30,
