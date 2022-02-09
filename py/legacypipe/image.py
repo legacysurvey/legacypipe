@@ -1616,7 +1616,7 @@ class LegacySurveyImage(object):
             initsky = sky_clipped_median
 
         # Compute initial model...
-        skyobj = self.get_tractor_sky_model(img - initsky, goodpix)
+        skyobj = self.get_tractor_sky_model(img - initsky, good)
 
         skymod = np.zeros_like(img)
         skyobj.addTo(skymod)
