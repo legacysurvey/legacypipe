@@ -1975,13 +1975,13 @@ class LegacySurveyImage(object):
         os.rename(tmpfn, self.skyfn)
         debug('Wrote sky model', self.skyfn)
 
-    def get_tractor_sky_model(img, goodpix):
+    def get_tractor_sky_model(self, img, goodpix):
         boxsize = self.splinesky_boxsize
         # For DECam chips where we drop half the chip, spline becomes
         # underconstrained
         if min(img.shape) / boxsize < 4:
             boxsize /= 2
-        skyobj = SplineSky.BlantonMethod(img - initsky, good, boxsize,
+        skyobj = SplineSky.BlantonMethod(img, good, boxsize,
                                          min_fraction=0.25)
         return skyobj
 
