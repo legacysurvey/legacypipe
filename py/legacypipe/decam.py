@@ -335,6 +335,26 @@ class DecamImage(LegacySurveyImage):
             dq[I,J] |= DQ_BITS['satur']
         invvar[I,J] = 0.
 
+    # S30, N14, S19, S16, S10
+    def get_tractor_sky_model(self, img, goodpix):
+        from legacypipe.jumpsky import JumpSky
+
+        boxsize = self.splinesky_boxsize
+        # For DECam chips where we drop half the chip, spline becomes
+        # underconstrained
+        if min(img.shape) / boxsize < 4:
+            boxsize /= 2
+
+        if (self.band in ['g','r'] and
+            self.ccdname.strip() in ['S30', 'N14', 'S19', 'S16', 'S10']):
+            H,W = img.shape
+            xbreak = W//2
+            skyobj = JumpSky.BlantonMethod(img, goodpix, boxsize, xbreak)
+        else:
+            skyobj = SplineSky.BlantonMethod(img, goodpix, boxsize, min_fraction=0.25)
+
+        return skyobj
+
 def decam_cp_version_after(plver, after):
     from distutils.version import StrictVersion
     # The format of the DQ maps changed as of version 3.5.0 of the
