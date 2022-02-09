@@ -337,8 +337,8 @@ class DecamImage(LegacySurveyImage):
 
     # S30, N14, S19, S16, S10
     def get_tractor_sky_model(self, img, goodpix):
+        from tractor.splinesky import SplineSky
         from legacypipe.jumpsky import JumpSky
-
         boxsize = self.splinesky_boxsize
         # For DECam chips where we drop half the chip, spline becomes
         # underconstrained
