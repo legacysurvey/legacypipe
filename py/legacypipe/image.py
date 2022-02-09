@@ -1981,7 +1981,7 @@ class LegacySurveyImage(object):
         # underconstrained
         if min(img.shape) / boxsize < 4:
             boxsize /= 2
-        skyobj = SplineSky.BlantonMethod(img, good, boxsize,
+        skyobj = SplineSky.BlantonMethod(img, goodpix, boxsize,
                                          min_fraction=0.25)
         return skyobj
 
