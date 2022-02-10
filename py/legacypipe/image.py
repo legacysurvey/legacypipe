@@ -1952,28 +1952,32 @@ class LegacySurveyImage(object):
             skyobj.shift(-x0, -y0)
 
         T = skyobj.to_fits_table()
-        for k,v in [('expnum', self.expnum),
-                    ('ccdname', self.ccdname),
-                    ('legpipev', git_version),
-                    ('plver',    plver),
-                    ('plprocid', plprocid),
-                    ('procdate', procdate),
-                    ('imgdsum',  datasum),
-                    ('sig1', sig1),
-                    ('templ_ver', template_meta.get('version', -1)),
-                    ('templ_run', template_meta.get('run', -1)),
-                    ('templ_scale', template_meta.get('scale', 0.)),
-                    ('halo_zpt', halozpt),
-                    ('blob_masked', blobmasked),
-                    ('sub_sga_ver', sub_sga_version),
-                    ('sky_mode', sky_mode),
-                    ('sky_med', sky_median),
-                    ('sky_cmed', sky_clipped_median),
-                    ('sky_john', sky_john),
-                    #('sky_fine', fine_rms),
-                    ('sky_fmasked', fmasked),
-                    ] + [('sky_p%i' % p, v) for p,v in zip(pcts, pctvals)]:
-            T.set(k, np.array([v]))
+        for k,v,tofloat in ([
+                ('expnum', self.expnum, False),
+                ('ccdname', self.ccdname, False),
+                ('legpipev', git_version, False),
+                ('plver',    plver, False),
+                ('plprocid', plprocid, False),
+                ('procdate', procdate, False),
+                ('imgdsum',  datasum, False),
+                ('sig1', sig1, True),
+                ('templ_ver', template_meta.get('version', -1), False),
+                ('templ_run', template_meta.get('run', -1), False),
+                ('templ_scale', template_meta.get('scale', 0.), True),
+                ('halo_zpt', halozpt, False),
+                ('blob_masked', blobmasked, False),
+                ('sub_sga_ver', sub_sga_version, False),
+                ('sky_mode', sky_mode, True),
+                ('sky_med', sky_median, False),
+                ('sky_cmed', sky_clipped_median, False),
+                ('sky_john', sky_john, False),
+                #('sky_fine', fine_rms),
+                ('sky_fmasked', fmasked, True),
+        ] + [('sky_p%i' % p, v, True) for p,v in zip(pcts, pctvals)]):
+            arr = np.array([v])
+            if tofloat:
+                arr = arr.astype(np.float32)
+            T.set(k, arr)
 
         trymakedirs(self.skyfn, dir=True)
         tmpfn = os.path.join(os.path.dirname(self.skyfn),

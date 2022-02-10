@@ -750,10 +750,10 @@ def get_reference_map(wcs, refs):
                             ('iscluster', 'CLUSTER', True),
                             ('islargegalaxy', 'GALAXY', True),]:
         isit = refs.get(col)
-        if not np.any(isit):
+        if not np.any(isit & (refs.radius > 0)):
             debug('None marked', col)
             continue
-        I, = np.nonzero(isit)
+        I, = np.nonzero(isit & (refs.radius > 0))
         debug(len(I), 'with', col, 'set')
         if len(I) == 0:
             continue

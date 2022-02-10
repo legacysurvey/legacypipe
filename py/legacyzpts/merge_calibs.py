@@ -128,11 +128,11 @@ def merge_splinesky(survey, expnum, ccds, skyoutfn, opt, imgs=None):
     padded = pad_arrays([t.ygrid[0] for t in skies])
     T.ygrid = np.concatenate([[p] for p in padded])
 
-    cols = skies[0].columns()
-    for c in ['gridvals', 'xgrid', 'ygrid', 'gridw', 'gridh']:
-        cols.remove(c)
+    for sky in skies:
+        for c in ['gridvals', 'xgrid', 'ygrid', 'gridw', 'gridh']:
+            sky.delete_column(c)
 
-    T.add_columns_from(merge_tables(skies, columns=cols))
+    T.add_columns_from(merge_tables(skies, columns='fillzero'))
     fn = skyoutfn
     trymakedirs(fn, dir=True)
     tmpfn = os.path.join(os.path.dirname(fn), 'tmp-' + os.path.basename(fn))
