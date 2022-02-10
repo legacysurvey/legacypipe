@@ -1736,8 +1736,8 @@ class LegacySurveyImage(object):
 
         blobmasked = False
         if survey_blob_mask is not None:
-            # Read DR8 blob maps for all overlapping bricks and project them
-            # into this CCD's pixel space.
+            # Read blob maps for all overlapping bricks and project
+            # them into this CCD's pixel space.
             from legacypipe.survey import bricks_touching_wcs, wcs_for_brick
             from astrometry.util.resample import resample_with_wcs, OverlapError
 
@@ -1745,13 +1745,20 @@ class LegacySurveyImage(object):
             H,W = wcs.shape
             allblobs = np.zeros((int(H),int(W)), bool)
             for brick in bricks:
-                fn = survey_blob_mask.find_file('blobmap',brick=brick.brickname)
-                if not os.path.exists(fn):
-                    print('Warning: blob map for brick', brick.brickname,
-                          'does not exist:', fn)
-                    continue
-                blobs = fitsio.read(fn)
-                blobs = (blobs >= 0)
+                fn = survey_blob_mask.find_file('blobmap', brick=brick.brickname)
+                if os.path.exists(fn):
+                    blobs = fitsio.read(fn)
+                    blobs = (blobs >= 0)
+                else:
+                    fn2 = survey_blob_mask.find_file('blobmask', brick=brick.brickname)
+                    if not os.path.exists(fn2):
+                        print('Warning: blobmap for brick', brick.brickname,
+                              'does not exist:', fn, 'nor does blobmask', fn2)
+                        continue
+                    blobs = fitsio.read(fn2)
+                    # Blobmasks are 0/1
+                    blobs = (blobs > 0)
+
                 brickwcs = wcs_for_brick(brick)
                 try:
                     Yo,Xo,Yi,Xi,_ = resample_with_wcs(wcs, brickwcs)
