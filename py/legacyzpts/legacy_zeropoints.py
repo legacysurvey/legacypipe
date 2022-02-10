@@ -223,6 +223,7 @@ def getrms(x):
 def measure_image(img_fn, mp, image_dir='images',
                   run_calibs_only=False,
                   run_psf_only=False,
+                  run_sky_only=False,
                   survey=None, psfex=True, camera=None,
                   prime_cache=False,
                   **measureargs):
@@ -278,6 +279,8 @@ def measure_image(img_fn, mp, image_dir='images',
 
     if run_psf_only:
         splinesky = False
+    if run_sky_only:
+        psfex = False
 
     # Validate the splinesky and psfex merged files, and (re)make them if
     # they're missing.
@@ -359,7 +362,7 @@ def measure_image(img_fn, mp, image_dir='images',
         survey.prime_cache_for_image(img)
         img.check_for_cached_files(survey)
 
-    if run_calibs_only or run_psf_only:
+    if run_calibs_only or run_psf_only or run_sky_only:
         return
 
     rtns = mp.map(run_one_ext, [(img, ext, survey, splinesky,
@@ -518,7 +521,7 @@ def writeto_via_temp(outfn, obj, func_write=False, **kwargs):
     os.rename(tempfn, outfn)
 
 def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
-          survey=None, run_calibs_only=False, run_psf_only=False,
+          survey=None, run_calibs_only=False, run_psf_only=False, run_sky_only=False,
           version_header=None, **measureargs):
     '''Generate a legacypipe-compatible (survey) CCDs file for a given image.
     '''
@@ -527,8 +530,9 @@ def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
     results = measure_image(imgfn, mp, survey=survey,
                             run_calibs_only=run_calibs_only,
                             run_psf_only=run_psf_only,
+                            run_sky_only=run_sky_only,
                             **measureargs)
-    if run_calibs_only or run_psf_only:
+    if run_calibs_only or run_psf_only or run_sky_only:
         return
 
     if len(results) == 0:
