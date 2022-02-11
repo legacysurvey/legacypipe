@@ -3094,6 +3094,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               bail_out=False,
               ceres=True,
               wise_ceres=True,
+              galex_ceres=True,
               unwise_dir=None,
               unwise_tr_dir=None,
               unwise_modelsky_dir=None,
@@ -3207,6 +3208,8 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     - *ceres*: boolean; use Ceres Solver when possible?
 
     - *wise_ceres*: boolean; use Ceres Solver for unWISE forced photometry?
+
+    - *galex_ceres*: boolean; use Ceres Solver for GALEX forced photometry?
 
     - *unwise_dir*: string; where to look for unWISE coadd files.
       This may be a colon-separated list of directories to search in
@@ -3342,6 +3345,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   cache_outliers=cache_outliers,
                   use_ceres=ceres,
                   wise_ceres=wise_ceres,
+                  galex_ceres=galex_ceres,
                   unwise_coadds=unwise_coadds,
                   bailout=bail_out,
                   minimal_coadds=minimal_coadds,
@@ -3637,6 +3641,10 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--no-wise-ceres', dest='wise_ceres', default=True,
                         action='store_false',
                         help='Do not use Ceres Solver for unWISE forced phot')
+
+    parser.add_argument('--no-galex-ceres', dest='galex_ceres', default=True,
+                        action='store_false',
+                        help='Do not use Ceres Solver for GALEX forced phot')
 
     parser.add_argument('--nblobs', type=int,help='Debugging: only fit N blobs')
     parser.add_argument('--blob', type=int, help='Debugging: start with blob #')
