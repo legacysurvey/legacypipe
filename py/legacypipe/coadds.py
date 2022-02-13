@@ -360,11 +360,20 @@ def make_coadds(tims, bands, targetwcs,
             con    = np.zeros((H,W), np.int16)
             kwargs.update(coimg=coimg)
 
-        # Note that we have 'congood' as well as 'nobs':
-        # * 'congood' is used for the 'nexp' *image*.
-        #   It counts the number of "good" (unmasked) exposures
-        # * 'nobs' is used for the per-source measurements
-        #   It counts the total number of exposures, including masked pixels
+        # We have *three* counters for the number of pixels
+        # overlapping each coadd brick pixel:
+        #
+        # - "con" counts the pixels included in the unweighted coadds.
+        #   This map is not passed outside this function or used
+        #   anywhere else.
+        #
+        # - "congood" counts pixels with (iv > 0).  This gets passed
+        #   to the *write_coadd_images* function, where it gets
+        #   written to the *nexp* maps.
+        #
+        # - "nobs" counts all pixels, regardless of masks.  This gets
+        #   sampled at *xy* positions, and ends up in the tractor
+        #   catalog "nobs" column.
         #
         # (you want to know the number of observations within the
         # source footprint, not just the peak pixel which may be
@@ -387,7 +396,6 @@ def make_coadds(tims, bands, targetwcs,
         if xy or allmasks:
             # number of observations
             nobs = np.zeros((H,W), np.int16)
-            kwargs.update(nobs=nobs)
 
         if nsatur:
             satmap = np.zeros((H,W), np.int16)
