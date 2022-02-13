@@ -445,9 +445,10 @@ def make_coadds(tims, bands, targetwcs,
                 if dq is not None:
                     ormask [Yo,Xo] |= dq
                     andmask[Yo,Xo] &= dq
-            if xy:
+            if xy or anymasks:
                 # raw exposure count
                 nobs[Yo,Xo] += 1
+            if xy:
                 # mjd_min/max
                 update = np.logical_or(mjd_argmins[Yo,Xo] == -1,
                                        (mjd_argmins[Yo,Xo] > -1) *
