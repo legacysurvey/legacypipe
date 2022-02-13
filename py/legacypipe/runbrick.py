@@ -2932,8 +2932,7 @@ def stage_writecat(
                 T.set(t, WISE.get(c) / fluxfactor**2)
 
         # Rename more columns
-        for cin,cout in [('nobs_w%i',        'nobs_w%i'    ),
-                         ('profracflux_w%i', 'fracflux_w%i'),
+        for cin,cout in [('profracflux_w%i', 'fracflux_w%i'),
                          ('prochi2_w%i',     'rchisq_w%i'  )]:
             for band in [1,2,3,4]:
                 T.set(cout % band, WISE.get(cin % band))

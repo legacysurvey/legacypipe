@@ -594,8 +594,6 @@ def make_coadds(tims, bands, targetwcs,
             C.T.nobs   [:,iband] = nobs   [iy,ix]
             C.T.anymask[:,iband] = ormask [iy,ix]
             C.T.allmask[:,iband] = andmask[iy,ix]
-            # unless there were no images there...
-            #C.T.allmask[nobs[iy,ix] == 0, iband] = 0
             if detmaps:
                 C.T.psfdepth[:,iband] = psfdetiv[iy, ix]
                 C.T.galdepth[:,iband] = galdetiv[iy, ix]
