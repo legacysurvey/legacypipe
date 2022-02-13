@@ -45,6 +45,7 @@ def stage_galex_forced(
     brickname=None,
     galex_dir=None,
     brick=None,
+    galex_ceres=True,
     version_header=None,
     maskbits=None,
     mp=None,
@@ -117,7 +118,7 @@ def stage_galex_forced(
         btiles = tiles[tiles.get('has_%s' % band)]
         if len(btiles) == 0:
             continue
-        args.append((galex_dir, gcat, btiles, band, roiradec, pixpsf, ps))
+        args.append((galex_dir, gcat, btiles, band, roiradec, pixpsf, ps, galex_ceres))
     # Run the forced photometry!
     record_event and record_event('stage_galex_forced: photometry')
     phots = mp.map(galex_phot, args)
@@ -190,8 +191,8 @@ def galex_phot(X):
     '''
     one band x multiple GALEX tiles/images
     '''
-    (galex_dir, cat, tiles, band, roiradec, pixelized_psf, ps) = X
-    kwargs = dict(pixelized_psf=pixelized_psf, ps=ps)
+    (galex_dir, cat, tiles, band, roiradec, pixelized_psf, ps, galex_ceres) = X
+    kwargs = dict(pixelized_psf=pixelized_psf, ps=ps, galex_ceres=galex_ceres)
 
     G = None
     try:
@@ -203,7 +204,7 @@ def galex_phot(X):
     return G
 
 def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
-                     pixelized_psf=False, ps=None):
+                     pixelized_psf=False, ps=None, galex_ceres=False):
     '''
     Given a list of tractor sources *cat*
     and a list of GALEX tiles *tiles* (a fits_table with RA,Dec,tilename)
@@ -219,7 +220,6 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
     if plots:
         import pylab as plt
 
-    use_ceres = True
     wantims = True
     get_models = True
     gband = 'galex'
@@ -261,7 +261,7 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
         tims.append(tim)
 
     tractor = Tractor(tims, cat)
-    if use_ceres:
+    if galex_ceres:
         from tractor.ceres_optimizer import CeresOptimizer
         ceres_block = 8
         tractor.optimizer = CeresOptimizer(BW=ceres_block, BH=ceres_block)
@@ -276,7 +276,7 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
     info('GALEX forced photometry took', Time() - t0)
     #info('Result:', R)
 
-    if use_ceres:
+    if galex_ceres:
         term = R.ceres_status['termination']
         # Running out of memory can cause failure to converge and term
         # status = 2.  Fail completely in this case.
