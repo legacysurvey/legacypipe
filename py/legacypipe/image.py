@@ -1267,6 +1267,14 @@ class LegacySurveyImage(object):
             trun = template_meta.get('run', -3)
             sscale = getattr(Ti, 'templ_scale', -2)
             tscale = template_meta.get('scale', -3)
+
+            # float32 vs float64
+            st = type(sscale)
+            tt = type(tscale)
+            if st != tt:
+                sscale = st(tt(sscale))
+                tscale = st(tt(tscale))
+
             if sver != tver or srun != trun or sscale != tscale:
                 if old_calibs_ok:
                     warnings.warn('For image %s, Splinesky template version/run/scale %s/%s/%s'

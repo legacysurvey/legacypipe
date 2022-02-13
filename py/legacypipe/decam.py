@@ -138,11 +138,11 @@ class DecamImage(LegacySurveyImage):
                 warnings.warn(txt + '-- not subtracting sky template for this CCD')
                 return None
 
-        assert(self.band == sky.filter)
+        #assert(self.band == sky.filter)
         tfn = os.path.join(dirnm, 'sky_templates',
-                           'sky_template_%s_%i.fits.fz' % (self.band, sky.run))
+                           'sky_template_%s_%i.fits' % (self.band, sky.run))
         if not os.path.exists(tfn):
-            warnings.warn('WARNING: Sky template file %s does not exist' % tfn)
+            warnings.warn('Sky template file %s does not exist' % tfn)
             return None
         return dict(template_filename=tfn, sky_template_dir=dirnm, sky_obj=sky, skyscales_fn=fn)
 
@@ -155,7 +155,11 @@ class DecamImage(LegacySurveyImage):
         sky_template_dir = d['sky_template_dir']
         tfn = d['template_filename']
         sky = d['sky_obj']
+        #info('Reading', tfn, 'ext', self.ccdname)
         F = fitsio.FITS(tfn)
+        if not self.ccdname in F:
+            warnings.warn('Sky template file %s does not contain extension %s' % (tfn, self.ccdname))
+            return None
         f = F[self.ccdname]
         if slc is None:
             template = f.read()
