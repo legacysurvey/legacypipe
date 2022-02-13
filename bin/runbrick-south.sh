@@ -8,13 +8,12 @@
 
 outdir=/global/cscratch1/sd/dstn/dr10-test
 
-BLOB_MASK_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr8/south
-
-export LEGACY_SURVEY_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr10
+#export LEGACY_SURVEY_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr10
+export LEGACY_SURVEY_DIR=/global/cscratch1/sd/dstn/dr10pre
 export CACHE_DIR=/global/cscratch1/sd/dstn/dr10-cache
 
 #export GAIA_CAT_DIR=/global/cfs/cdirs/desi/target/gaia_edr3/healpix
-export GAIA_CAT_DIR=/global/cscratch1/sd/adamyers/gaia_edr3/healpix
+export GAIA_CAT_DIR=$CSCRATCH/gaia-edr3-healpix/healpix
 export GAIA_CAT_PREFIX=healpix
 export GAIA_CAT_SCHEME=nested
 export GAIA_CAT_VER=E
@@ -29,7 +28,8 @@ export UNWISE_MODEL_SKY_DIR=/global/cfs/cdirs/cosmo/work/wise/unwise_catalog/dr3
 #export LARGEGALAXIES_CAT=/global/cfs/cdirs/cosmo/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
 export TYCHO2_KD_DIR=/global/cscratch1/sd/dstn/dr10-cache/tycho2
 export LARGEGALAXIES_CAT=/global/cscratch1/sd/dstn/dr10-cache/SGA-ellipse-v3.0.kd.fits
-export SKY_TEMPLATE_DIR=/global/cfs/cdirs/cosmo/data/legacysurvey/dr9/calib/sky_pattern
+export SKY_TEMPLATE_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr10/calib/sky_pattern
+export BLOB_MASK_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr10/early-coadds
 
 # Don't add ~/.local/ to Python's sys.path
 export PYTHONNOUSERSITE=1
