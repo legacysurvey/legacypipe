@@ -41,7 +41,7 @@ export OMP_NUM_THREADS=1
 export MPICH_GNI_FORK_MODE=FULLCOPY
 export KMP_AFFINITY=disabled
 
-ncores=8
+ncores=32
 
 brick="$1"
 
@@ -90,6 +90,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --checkpoint "${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle" \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
      --threads "${ncores}" \
+     --no-wise \
      >> "$log" 2>&1
 
 #     --write-stage srcs \
