@@ -553,7 +553,7 @@ class LegacySurveyImage(object):
             cfn = survey.check_cache(fn)
             #debug('Checking for cached', key, ':', fn, '->', cfn)
             if cfn != fn:
-                print('Using cached', cfn)
+                debug('Using cached', cfn)
                 setattr(self, key, cfn)
 
     def get_cacheable_filename_variables(self):
