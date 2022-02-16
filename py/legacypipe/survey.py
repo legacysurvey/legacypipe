@@ -1615,7 +1615,7 @@ class LegacySurveyData(object):
             self.ccd_kdtrees.append((fn, kd))
         return self.ccd_kdtrees
 
-    def get_image_object(self, t, camera=None, prime_cache=True, **kwargs):
+    def get_image_object(self, t, camera=None, prime_cache=True, check_cache=True, **kwargs):
         '''
         Returns a DecamImage or similar object for one row of the CCDs table.
         '''
@@ -1627,7 +1627,8 @@ class LegacySurveyData(object):
         img = imageType(self, t, **kwargs)
         if self.prime_cache and prime_cache:
             self.prime_cache_for_image(img)
-        img.check_for_cached_files(self)
+        if check_cache:
+            img.check_for_cached_files(self)
         return img
 
     def prime_cache_for_image(self, img):

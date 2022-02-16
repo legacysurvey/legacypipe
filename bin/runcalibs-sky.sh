@@ -77,6 +77,7 @@ python -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
     --threads ${ncores} \
 	--camera ${camera} \
     --survey-dir ${LEGACY_SURVEY_DIR} \
+    --cache-dir ${CACHE_DIR} \
     --image ${image_fn} \
     --outdir ${outdir} \
     --run-sky-only \

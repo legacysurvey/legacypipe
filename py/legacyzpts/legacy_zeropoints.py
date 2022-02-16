@@ -239,6 +239,7 @@ def measure_image(img_fn, mp, image_dir='images',
     print('Got image object', img)
     # Confirm camera field.
     assert(img.camera == camera)
+    img.check_for_cached_files(survey)
 
     primhdr = img.read_image_primary_header()
     if (not img.calibration_good(primhdr)) or (img.exptime == 0):
@@ -400,6 +401,7 @@ def run_one_calib(X):
      survey_zeropoints, git_version) = X
     img = survey.get_image_object(None, camera=camera,
                                   image_fn=img_fn, image_hdu=ext)
+    img.check_for_cached_files(survey)
 
     do_psf = False
     do_sky = False
@@ -659,7 +661,16 @@ def get_parser():
 
 
 def main(args=None):
-    parser= get_parser()
+    import datetime
+    print()
+    print('legacy_zeropoints.py starting at', datetime.datetime.now().isoformat())
+    if args is None:
+        print('Command-line args:', sys.argv)
+    else:
+        print('Args:', args)
+    print()
+
+    parser = get_parser()
     args = parser.parse_args(args=args)
     if args.overhead is not None:
         t0 = args.overhead
@@ -731,27 +742,10 @@ def main(args=None):
     if outdir is None:
         outdir = os.path.join(survey.survey_dir, 'zpt')
 
-    if camera in ['mosaic', 'decam', '90prime']:
-        from legacyzpts.psfzpt_cuts import read_bad_expid
-        fn = resource_filename('legacyzpts', 'data/{}-bad_expid.txt'.format(camera))
-        if os.path.isfile(fn):
-            print('Reading {}'.format(fn))
-            measureargs.update(bad_expid=read_bad_expid(fn))
-        else:
-            print('No bad exposure file found for camera {}'.format(camera))
-
     from legacypipe.survey import get_version_header, get_dependency_versions
     release = 10000
     gitver = get_git_version()
-    version_header = get_version_header('legacy_zeropoints.py', survey.survey_dir, release,
-                                        git_version=gitver, proctype='InstCal')
-    deps = get_dependency_versions(None, None, None, None)
-    for name,value,comment in deps:
-        version_header.add_record(dict(name=name, value=value, comment=comment))
-    command_line=' '.join(sys.argv)
-    version_header.add_record(dict(name='CMDLINE', value=command_line,
-                                   comment='runbrick command-line'))
-    measureargs['version_header'] = version_header
+    version_header = None
     check_photom = measureargs.pop('check_photom')
 
     for ii, imgfn in enumerate(image_list):
@@ -763,13 +757,25 @@ def main(args=None):
 
         img = survey.get_image_object(None, camera=measureargs['camera'],
                                       image_fn=F.imgfn, image_hdu=None,
-                                      prime_cache=False)
-        psffn = survey.find_file('psf', img=img, use_cache=False)
-        skyfn = survey.find_file('sky', img=img, use_cache=False)
+                                      prime_cache=False, check_cache=False)
+        if measureargs['run_psf_only']:
+            skyfn = None
+        else:
+            skyfn = survey.find_file('sky', img=img, use_cache=False)
+
+        if measureargs['run_sky_only']:
+            psffn  = None
+        else:
+            psffn = survey.find_file('psf', img=img, use_cache=False)
+
+        if measureargs['run_calibs_only']:
+            afn = None
+        else:
+            afn = F.annfn
 
         ann_ok, psf_ok, sky_ok = [(fn is None) or validate_version(
             fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)
-            for fn in [F.annfn, psffn, skyfn]]
+            for fn in [afn, psffn, skyfn]]
 
         if measureargs['run_calibs_only'] and psf_ok and sky_ok:
             print('Already finished {}'.format(psffn))
@@ -795,7 +801,6 @@ def main(args=None):
         t0 = ptime('before-run',t0)
         if prime_cache:
             survey.prime_cache_for_image(img)
-            img.check_for_cached_files(survey)
 
         if fitsverify:
             # I originally planned to just use 'fitsverify', but it is
@@ -805,11 +810,34 @@ def main(args=None):
             # before running fitsverify, but that seems not ideal.  I
             # could parse the fitsverify output, but ugh!  Instead,
             # use fitsio to try to read the data:
+            img.check_for_cached_files(survey)
             img.validate_image_data(mp=mp)
+
+        if version_header is None:
+            # One-time initializations (only do if we actually have to process some images!)
+            version_header = get_version_header('legacy_zeropoints.py', survey.survey_dir, release,
+                                                git_version=gitver, proctype='InstCal')
+            deps = get_dependency_versions(None, None, None, None)
+            for name,value,comment in deps:
+                version_header.add_record(dict(name=name, value=value, comment=comment))
+            command_line=' '.join(sys.argv)
+            version_header.add_record(dict(name='CMDLINE', value=command_line,
+                                           comment='runbrick command-line'))
+            measureargs['version_header'] = version_header
+
+            if camera in ['mosaic', 'decam', '90prime']:
+                from legacyzpts.psfzpt_cuts import read_bad_expid
+                fn = resource_filename('legacyzpts', 'data/{}-bad_expid.txt'.format(camera))
+                if os.path.isfile(fn):
+                    print('Reading {}'.format(fn))
+                    measureargs.update(bad_expid=read_bad_expid(fn))
+                else:
+                    print('No bad exposure file found for camera {}'.format(camera))
 
         runit(F.imgfn, F.photomfn, F.annfn, mp, **measureargs)
 
         if prime_cache:
+            ## ? are we sure we want this?
             survey.delete_primed_cache_files()
 
         t0 = ptime('after-run',t0)
