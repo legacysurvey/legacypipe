@@ -742,9 +742,6 @@ def main(args=None):
     if outdir is None:
         outdir = os.path.join(survey.survey_dir, 'zpt')
 
-    from legacypipe.survey import get_version_header, get_dependency_versions
-    release = 10000
-    gitver = get_git_version()
     version_header = None
     check_photom = measureargs.pop('check_photom')
 
@@ -813,8 +810,11 @@ def main(args=None):
             img.check_for_cached_files(survey)
             img.validate_image_data(mp=mp)
 
-        if version_header is None:
+        if version_header is None and not measureargs['run_calibs_only']:
             # One-time initializations (only do if we actually have to process some images!)
+            from legacypipe.survey import get_version_header, get_dependency_versions
+            release = 10000
+            gitver = get_git_version()
             version_header = get_version_header('legacy_zeropoints.py', survey.survey_dir, release,
                                                 git_version=gitver, proctype='InstCal')
             deps = get_dependency_versions(None, None, None, None)
