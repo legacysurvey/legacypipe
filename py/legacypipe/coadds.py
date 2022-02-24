@@ -260,6 +260,8 @@ def make_coadds(tims, bands, targetwcs,
     if xy:
         ix,iy = xy
         C.T = fits_table()
+        if ngood:
+            C.T.ngood   = np.zeros((len(ix), len(bands)), np.int16)
         C.T.nobs    = np.zeros((len(ix), len(bands)), np.int16)
         C.T.anymask = np.zeros((len(ix), len(bands)), np.int16)
         C.T.allmask = np.zeros((len(ix), len(bands)), np.int16)
@@ -598,6 +600,8 @@ def make_coadds(tims, bands, targetwcs,
                 cowblobmod[cow == 0] = coblobmod[cow == 0]
                 del coblobmod
         if xy:
+            if ngood:
+                C.T.ngood  [:,iband] = congood[iy,ix]
             C.T.nobs   [:,iband] = nobs   [iy,ix]
             C.T.anymask[:,iband] = ormask [iy,ix]
             C.T.allmask[:,iband] = andmask[iy,ix]

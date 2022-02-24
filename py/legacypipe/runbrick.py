@@ -2002,7 +2002,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     ###
 
     # Save per-source measurements of the maps produced during coadding
-    cols = ['nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth',
+    cols = ['nobs', 'ngood', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth',
             'mjd_min', 'mjd_max']
     # store galaxy sim bounding box in Tractor cat
     if 'sims_xy' in C.T.get_columns():
