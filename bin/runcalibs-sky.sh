@@ -21,10 +21,12 @@ export GAIA_CAT_VER=E
 export DUST_DIR=$CSCRATCH/dr10-cache/dust-v0_1
 export TYCHO2_KD_DIR=$CSCRATCH/dr10-cache/tycho2
 export LARGEGALAXIES_CAT=$CSCRATCH/dr10-cache/SGA-ellipse-v3.0.kd.fits
-export SKY_TEMPLATE_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr10/calib/sky_pattern
-export PS1CAT_DIR=/global/cfs/cdirs/cosmo/work/ps1/cats/chunks-qz-star-v3
-export BLOB_MASK_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr10/early-coadds
-
+#export SKY_TEMPLATE_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr10/calib/sky_pattern
+export SKY_TEMPLATE_DIR=$CSCRATCH/dr10-cache/calib/sky_pattern
+#export BLOB_MASK_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr10/early-coadds
+export BLOB_MASK_DIR=$CSCRATCH/dr10-cache/dr10-early-blobmasks
+#export PS1CAT_DIR=/global/cfs/cdirs/cosmo/work/ps1/cats/chunks-qz-star-v3
+unset PS1CAT_DIR
 
 # Don't add ~/.local/ to Python's sys.path
 export PYTHONNOUSERSITE=1
