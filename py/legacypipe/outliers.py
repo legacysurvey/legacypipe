@@ -30,7 +30,13 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
     from legacypipe.bits import DQ_BITS
     headers = []
     if outlier_mask_file is None:
-        fn = survey.find_file('outliers_mask', brick=brickname, output=output)
+        if output == 'both':
+            # Try both output=True and then output=False.
+            fn = survey.find_file('outliers_mask', brick=brickname, output=True)
+            if not os.path.exists(fn):
+                fn = survey.find_file('outliers_mask', brick=brickname, output=False)
+        else:
+            fn = survey.find_file('outliers_mask', brick=brickname, output=output)
     else:
         fn = outlier_mask_file
     if not os.path.exists(fn):

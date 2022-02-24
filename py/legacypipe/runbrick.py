@@ -546,7 +546,8 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
     # Check for existing MEF containing masks for all the chips we need.
     if (outliers and
         not (cache_outliers and
-             read_outlier_mask_file(survey, tims, brickname, outlier_mask_file=outlier_mask_file))):
+             read_outlier_mask_file(survey, tims, brickname, outlier_mask_file=outlier_mask_file,
+                                    output='both'))):
         # Make before-n-after plots (before)
         t0 = Time()
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False,
