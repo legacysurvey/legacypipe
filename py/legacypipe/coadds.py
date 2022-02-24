@@ -453,7 +453,7 @@ def make_coadds(tims, bands, targetwcs,
                 if dq is not None:
                     ormask [Yo,Xo] |= dq
                     andmask[Yo,Xo] &= dq
-            if xy or anymasks:
+            if xy or allmasks:
                 # raw exposure count
                 nobs[Yo,Xo] += 1
             if xy:
@@ -570,7 +570,7 @@ def make_coadds(tims, bands, targetwcs,
             coblobresid[cow == 0] = 0.
             C.coblobresids.append(coblobresid)
 
-        if xy or anymasks:
+        if xy or allmasks:
             # If these was no coverage, don't set ALLMASK
             andmask[nobs == 0] = 0
         if allmasks:
