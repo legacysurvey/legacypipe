@@ -1,8 +1,6 @@
 #! /usr/bin/env python
 """This script runs calibration pre-processing steps including sky and PSF models.
 """
-from __future__ import print_function
-
 from astrometry.util.fits import merge_tables
 
 from legacypipe.survey import run_calibs, LegacySurveyData

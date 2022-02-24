@@ -3,8 +3,6 @@
 """
 mpi gather all ccd fits files together and write single ccd table
 """
-from __future__ import division, print_function
-
 import os
 import argparse
 import numpy as np

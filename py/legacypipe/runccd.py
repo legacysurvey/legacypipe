@@ -3,7 +3,6 @@
 This script runs the legacypipe code on a single CCD.
 
 '''
-from __future__ import print_function
 import numpy as np
 from legacypipe.survey import LegacySurveyData
 from legacypipe.runbrick import get_parser, get_runbrick_kwargs, run_brick

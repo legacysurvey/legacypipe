@@ -1,15 +1,11 @@
 # srun -N 1 -C haswell -t 04:00:00 -q interactive python modify_psfex_profiles.py
-
-from __future__ import division, print_function
 import os, warnings
 import numpy as np
 from astropy.table import Table
 import fitsio
 from astropy.io import fits
 from multiprocessing import Pool
-
 from scipy.optimize import curve_fit
-
 
 def get_frac_moffat(r, alpha, beta):
     """

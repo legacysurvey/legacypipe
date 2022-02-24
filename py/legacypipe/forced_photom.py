@@ -2,8 +2,6 @@
 This script performs forced photometry of individual Legacy Survey
 images given a data release catalog.
 '''
-
-from __future__ import print_function
 import os
 import sys
 import shutil

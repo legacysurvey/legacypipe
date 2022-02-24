@@ -1,5 +1,3 @@
-from __future__ import division, print_function
-
 # Turn off plotting imports for production
 if False:
     if __name__ == '__main__':

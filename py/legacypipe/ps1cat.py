@@ -1,6 +1,4 @@
 #! /usr/bin/env python
-from __future__ import print_function
-
 """
 Find all the PS1 stars in a given DECaLS CCD.
 """

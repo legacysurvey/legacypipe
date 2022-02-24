@@ -1,4 +1,3 @@
-from __future__ import print_function
 from legacypipe.image import LegacySurveyImage
 
 class MosaicImage(LegacySurveyImage):

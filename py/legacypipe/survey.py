@@ -1,10 +1,7 @@
-from __future__ import print_function
-
 import os
 import tempfile
 
 import numpy as np
-
 import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables

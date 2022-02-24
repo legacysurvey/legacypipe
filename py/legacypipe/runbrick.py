@@ -26,7 +26,6 @@ To see the code we run on each "blob" of pixels, see "oneblob.py".
 - :py:func:`one_blob`
 
 '''
-from __future__ import print_function
 import sys
 import os
 import warnings
@@ -42,7 +41,6 @@ from legacypipe.survey import imsave_jpeg
 from legacypipe.bits import DQ_BITS, MASKBITS, FITBITS
 from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
-
 from legacypipe.fit_on_coadds import stage_fit_on_coadds
 from legacypipe.blobmask import stage_blobmask
 from legacypipe.galex import stage_galex_forced

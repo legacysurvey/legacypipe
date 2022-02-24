@@ -1,4 +1,3 @@
-from __future__ import print_function
 import warnings
 
 from legacypipe.image import LegacySurveyImage

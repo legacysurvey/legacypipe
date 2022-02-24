@@ -1,12 +1,11 @@
-from __future__ import print_function
 import os
 import numpy as np
+import fitsio
 
 from legacypipe.image import LegacySurveyImage
 from legacypipe.survey import *
 
 from astropy.io import fits as astro_fits
-import fitsio
 from astrometry.util.file import trymakedirs
 from astrometry.util.util import Tan, Sip, anwcs_t
 from tractor import ConstantSky, LinearPhotoCal

@@ -1,5 +1,3 @@
-from __future__ import print_function
-from __future__ import division
 from tractor import PixelizedPSF, HybridPixelizedPSF, PointSource, Tractor, ModelMask, Image, PixPos, Flux
 from legacypipe.survey import RexGalaxy, LogRadius
 import pylab as plt

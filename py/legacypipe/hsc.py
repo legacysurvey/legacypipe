@@ -1,4 +1,3 @@
-from __future__ import print_function
 import numpy as np
 import fitsio
 from legacypipe.image import LegacySurveyImage

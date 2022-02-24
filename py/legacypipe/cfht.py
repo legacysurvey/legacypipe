@@ -1,10 +1,8 @@
-from __future__ import print_function
 import os
 import numpy as np
 import fitsio
 from legacypipe.image import LegacySurveyImage
 from legacypipe.bits import DQ_BITS
-
 
 '''
 This is for the "pitcairn" reductions for CFIS-r data.

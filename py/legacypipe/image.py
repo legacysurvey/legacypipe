@@ -1,11 +1,10 @@
-from __future__ import print_function
 import os
 import warnings
 import numpy as np
 import fitsio
+from astrometry.util.fits import fits_table
 from tractor.splinesky import SplineSky
 from tractor import PixelizedPsfEx, PixelizedPSF
-from astrometry.util.fits import fits_table
 from legacypipe.bits import DQ_BITS
 
 import logging
