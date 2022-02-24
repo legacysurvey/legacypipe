@@ -6,11 +6,9 @@
 #if [ "x$DW_PERSISTENT_STRIPED_DR9" == x ]; then
 # No burst buffer -- use scratch
 
-outdir=/global/cscratch1/sd/dstn/dr10-test
-
-#export LEGACY_SURVEY_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr10
-export LEGACY_SURVEY_DIR=/global/cscratch1/sd/dstn/dr10pre
-export CACHE_DIR=/global/cscratch1/sd/dstn/dr10-cache
+export LEGACY_SURVEY_DIR=$CSCRATCH/dr10a
+export CACHE_DIR=$CSCRATCH/dr10-cache
+outdir=$LEGACY_SURVEY_DIR/out
 
 #export GAIA_CAT_DIR=/global/cfs/cdirs/desi/target/gaia_edr3/healpix
 export GAIA_CAT_DIR=$CSCRATCH/gaia-edr3-healpix/healpix
@@ -26,10 +24,12 @@ export UNWISE_MODEL_SKY_DIR=/global/cfs/cdirs/cosmo/work/wise/unwise_catalog/dr3
 
 #export TYCHO2_KD_DIR=/global/cfs/cdirs/cosmo/staging/tycho2
 #export LARGEGALAXIES_CAT=/global/cfs/cdirs/cosmo/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
-export TYCHO2_KD_DIR=/global/cscratch1/sd/dstn/dr10-cache/tycho2
-export LARGEGALAXIES_CAT=/global/cscratch1/sd/dstn/dr10-cache/SGA-ellipse-v3.0.kd.fits
-export SKY_TEMPLATE_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr10/calib/sky_pattern
-export BLOB_MASK_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr10/early-coadds
+export TYCHO2_KD_DIR=$CSCRATCH/dr10-cache/tycho2
+export LARGEGALAXIES_CAT=$CSCRATCH/dr10-cache/SGA-ellipse-v3.0.kd.fits
+export SKY_TEMPLATE_DIR=$CSCRATCH/dr10-cache/calib/sky_pattern
+unset BLOB_MASK_DIR
+unset PS1CAT_DIR
+unset GALEX_DIR
 
 # Don't add ~/.local/ to Python's sys.path
 export PYTHONNOUSERSITE=1
@@ -44,16 +44,18 @@ export KMP_AFFINITY=disabled
 ncores=32
 
 brick="$1"
+echo "Brick: $brick"
+# strip whitespace from front and back
+#brick="${brick#"${brick%%[![:space:]]*}"}"
+#brick="${brick%"${brick##*[![:space:]]}"}"
+bri=${brick:0:3}
 
-bri=$(echo "$brick" | head -c 3)
 mkdir -p "$outdir/logs/$bri"
-log="$outdir/logs/$bri/$brick.log"
-
 mkdir -p "$outdir/metrics/$bri"
 mkdir -p "$outdir/pickles/$bri"
-
+log="$outdir/logs/$bri/$brick.log"
 echo Logging to: "$log"
-echo Running on $(hostname)
+#echo Running on $(hostname)
 
 # # Config directory nonsense
 export TMPCACHE=$(mktemp -d)
@@ -86,16 +88,17 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --survey-dir "$LEGACY_SURVEY_DIR" \
      --cache-dir "$CACHE_DIR" \
      --outdir "$outdir" \
-     --blob-mask-dir "${BLOB_MASK_DIR}" \
      --checkpoint "${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle" \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
+     --release 10100 \
+     --cache-outliers \
+     --max-memory-gb 14 \
+     --write-stage srcs \
      --threads "${ncores}" \
-     --no-wise \
      >> "$log" 2>&1
 
-#     --write-stage srcs \
-
-
+#     --zoom 1000 2000 1000 2000 \
+# 8 threads -> 14 gb
 
 #--run south \
 #     --ps "${outdir}/metrics/${bri}/ps-${brick}-${SLURM_JOB_ID}.fits" \
