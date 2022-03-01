@@ -5,6 +5,9 @@ data reduction.  In particular, it performs the work of the most
 time-consuming phase, "blob-fitting", where we fit forward models of
 stars and galaxies to overlapping images.
 
+There is a drawing of the structure of the farm.py app in ../doc/farm.jpg
+(https://github.com/legacysurvey/legacypipe/blob/main/doc/farm.jpg).
+
 Farm.py uses QDO to read the list of "bricks" it is going to process
 and to keep track of their status (ready / running / finished).
 
@@ -55,6 +58,13 @@ blobs" -- chunks of work that we expect to take a long time to
 complete, so we handle them separately.  There's a "big" version of
 the network_thread that reads from this queue.
 
+Finally, there are a couple of book-keeping queues:
+- the "blobsizes" queue goes from the input_thread to the output_thread
+  and tells the output_thread how many blobs exist in each brick (so it
+  knows when a brick is complete).
+- the "finished_bricks" queue goes from the output_thread to the
+  network_thread to report when a brick has been completed, just for
+  logging purposes (network_thread is responsible for printing the status).
 
 The overall data flow is:
 
@@ -63,9 +73,13 @@ The overall data flow is:
 
 - it reads the srcs pickle for that brick, and reads an existing
   checkpoint file, if it exists.  (This happens in the "queue_work"
-  function.)  It calls the "get_blob_iter" function to produce a
-  series of work packets (one for each blob, containing subimages and
-  sources to be fit).  Each work packet gets put on the "input_queue".
+  function.)  It sends checkpointed results over the checkpoint queue
+  straight to the output_thread.  It then calls the "get_blob_iter"
+  function to produce a series of work packets (one for each blob,
+  containing subimages and sources to be fit).  Each work packet gets
+  put on the "input_queue".  (Once all work packets are produced for a
+  brick, it puts the number of blobs found on the "blobsizes" queue to
+  the output_thread.
 
 - a worker.py client sends a message to the farm.py socket.  The first
   time it calls, it sends an empty message.
@@ -84,8 +98,8 @@ The overall data flow is:
 - the output_thread pops a result off the output_queue, and if it
   determines that this is the final result for this brick, then it
   will write the output checkpoint file and mark the brick as finished
-  in QDO.
-
+  in QDO.  (And notify the network_thread over the finished_bricks
+  queue.)
 
 
 At present, we run this by starting the farm.py script on an
