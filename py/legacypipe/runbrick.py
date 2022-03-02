@@ -543,6 +543,8 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
                                    value=outliers,
                                    help='Are we applying outlier rejection?'))
 
+    info('outlier_mask_file:', outlier_mask_file)
+
     # Check for existing MEF containing masks for all the chips we need.
     if (outliers and
         not (cache_outliers and

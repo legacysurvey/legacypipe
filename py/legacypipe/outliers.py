@@ -34,7 +34,10 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
             # Try both output=True and then output=False.
             fn = survey.find_file('outliers_mask', brick=brickname, output=True)
             if not os.path.exists(fn):
-                fn = survey.find_file('outliers_mask', brick=brickname, output=False)
+                fn2 = survey.find_file('outliers_mask', brick=brickname, output=False)
+                print('Outlier mask does not exist:', fn)
+                print('Trying outlier mask:', fn2)
+                fn = fn2
         else:
             fn = survey.find_file('outliers_mask', brick=brickname, output=output)
     else:

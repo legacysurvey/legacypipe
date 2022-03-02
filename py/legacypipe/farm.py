@@ -284,7 +284,7 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
     sock = ctx.socket(zmq.REP)
     addr = 'tcp://*:' + str(port)
     sock.bind(addr)
-    print('Listening on tcp://%s:%i for work (queue: %s)' % (me, port, qname))
+    info('Listening on tcp://%s:%i for work (queue: %s)' % (me, port, qname))
 
     # Set up ZeroMQ socket for accepting control messages.
     command_sock = None
@@ -292,7 +292,7 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
         command_sock = ctx.socket(zmq.REP)
         caddr = 'tcp://*:' + str(command_port)
         command_sock.bind(caddr)
-        print('Listening on tcp://%s:%i for commands (queue: %s)' % (me, command_port, qname))
+        info('Listening on tcp://%s:%i for commands (queue: %s)' % (me, command_port, qname))
 
     nowork = pickle.dumps(None, -1)
     havework = False
@@ -330,18 +330,18 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
                 try:
                     msg = command_sock.recv(flags=zmq.NOBLOCK)
                     pymsg = pickle.loads(msg)
-                    print('Message on command socket:', pymsg)
+                    info('Message on command socket:', pymsg)
                     if pymsg[0] == 'reset':
                         ncan = 0
                         for (br,ib) in outstanding_work.keys():
                             worksent -= 1
-                            print('Network thread: cancelling', br,ib)
+                            info('Network thread: cancelling', br,ib)
                             outqueue.put((br, ib, 'cancel'))
                             ncan += 1
                         outstanding_work = {}
                         reply = (True, 'cancelled %i blobs' % ncan)
                     else:
-                        print('Unrecognized message on command socket:', pymsg)
+                        info('Unrecognized message on command socket:', pymsg)
                         reply = (False, 'unrecognized command')
                     msg = pickle.dumps(reply, -1)
                     command_sock.send(msg)
@@ -363,7 +363,7 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
             except queue.Empty:
                 work = nowork
                 havework = False
-                print('Work queue is empty.')
+                info('Work queue is empty.')
 
         t1a = time.time()
 
@@ -388,12 +388,12 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
                     pass
 
                 if len(all_finished_bricks):
-                    print('Finished bricks:')
+                    info('Finished bricks:')
                 for br,nb in all_finished_bricks.items():
-                    print('  %s: %i blobs' % (br, nb))
+                    info('  %s: %i blobs' % (br, nb))
 
-            print()
-            print(qname, 'Work queue:', inqueue.qsize(), 'out queue:', outqueue.qsize(), 'work sent:', worksent, ', received:', resultsreceived, 'outstanding:', worksent-resultsreceived)
+            info()
+            info(qname, 'Work queue:', inqueue.qsize(), 'out queue:', outqueue.qsize(), 'work sent:', worksent, ', received:', resultsreceived, 'outstanding:', worksent-resultsreceived)
             #print('Outstanding work:')
             c = Counter()
             ct = Counter()
@@ -433,15 +433,15 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
                 workers_telapsed[worker].append(tnow-tstart)
             # if len(outstanding_work) > 10:
             #     print('  ....')
-            print('Outstanding bricks:')
+            info('Outstanding bricks:')
             for b,n in c.most_common():
-                print('  ', b, 'waiting for', n, 'blobs')
-            print('Outstanding bricks: total wall time:')
+                info('  ', b, 'waiting for', n, 'blobs')
+            info('Outstanding bricks: total wall time:')
             for b,t in ct.most_common():
-                print('  ', b, ': %.1f s' % t)
-            print('Oldest blob per brick:')
+                info('  ', b, ': %.1f s' % t)
+            info('Oldest blob per brick:')
             for b,t in oldest.items():
-                print('  ', b, ': %.1f s' % t)
+                info('  ', b, ': %.1f s' % t)
             kk = list(workers_telapsed.keys())
             kk.sort()
             #print('Workers:')
@@ -450,11 +450,11 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
                 t = workers_telapsed[k]
                 ntotal += len(t)
                 #print('  ', k.decode(), ':', len(t), 'tasks, started %.1f to %.1f s ago' % (min(t), max(t)))
-            print(qname, 'Workers:', len(kk), 'Total tasks:', ntotal, 'average %.1f' % (ntotal/max(1,len(kk))))
+            info(qname, 'Workers:', len(kk), 'Total tasks:', ntotal, 'average %.1f' % (ntotal/max(1,len(kk))))
 
             kk = list(worker_wall.keys())
             kk.sort()
-            print(qname, 'Completed work since last printout:')
+            info(qname, 'Completed work since last printout:')
             total_wall = 0
             total_cpu = 0
             total_overhead = 0
@@ -472,16 +472,16 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
                 total_blobs += worker_nblobs[k]
             tb = max(total_blobs, 1)
             pct = 100. * total_cpu / max(1, total_wall + total_overhead)
-            print(qname, 'Total %i blobs, overhead %.1f s/blob, wall %.1f s/blob, cpu %.1f s/blob --> %.1f %%' %
+            info(qname, 'Total %i blobs, overhead %.1f s/blob, wall %.1f s/blob, cpu %.1f s/blob --> %.1f %%' %
                   (total_blobs, total_overhead/tb, total_wall/tb, total_cpu/tb, pct))
 
-            print(qname, 'Time spent in:')
-            print('  input: %.1f' % t_in)
-            print('  polling: %.1f' % t_poll)
-            print('  receiving: %.1f' % t_recv)
-            print('  sending: %.1f' % t_send)
-            print('  decoding: %.1f' % t_decode)
-            print('  output: %.1f' % t_out)
+            info(qname, 'Time spent in:')
+            info('  input: %.1f' % t_in)
+            info('  polling: %.1f' % t_poll)
+            info('  receiving: %.1f' % t_recv)
+            info('  sending: %.1f' % t_send)
+            info('  decoding: %.1f' % t_decode)
+            info('  output: %.1f' % t_out)
 
             t_in = t_poll = t_recv = t_send = t_decode = t_out = 0
 
@@ -527,7 +527,7 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
                 havework = False
                 outstanding_work[(br,iblob)] = (worker, tnow)
         except:
-            print('Network thread: sock.send(work) failed:')
+            info('Network thread: sock.send(work) failed:')
             import traceback
             traceback.print_exc()
 
@@ -594,7 +594,7 @@ def output_thread(queuename, outqueue, checkpointqueue, blobsizes,
         if not brick in last_brick_status:
             last_brick_status[brick] = tnow
         if tnow - last_brick_status[brick] > brick_status_period:
-            print('Brick', brick, ':', ncancelled, 'cancelled,', ndone, 'done, total',
+            info('Brick', brick, ':', ncancelled, 'cancelled,', ndone, 'done, total',
                   (nblobs if nblobs is not None else '(unknown)'))
             last_brick_status[brick] = tnow
 
@@ -603,12 +603,12 @@ def output_thread(queuename, outqueue, checkpointqueue, blobsizes,
         if ndone + ncancelled < nblobs:
             return
         # Done this brick!  Set qdo state=Succeeded
-        checkpoint_fn = opt.checkpoint % dict(brick=brick)
+        checkpoint_fn = opt.checkpoint % dict(brick=brick, brickpre=brickname[:3])
         R = [dict(brickname=brick, iblob=iblob, result=res) for
              iblob,res in allresults[brick].items()]
-        print('Writing final checkpoint', checkpoint_fn)
+        info('Writing final checkpoint', checkpoint_fn)
         _write_checkpoint(R, checkpoint_fn)
-        print('Setting QDO task to Succeeded:', brick)
+        info('Setting QDO task to Succeeded:', brick)
         q.set_task_state(taskid, qdo.Task.SUCCEEDED)
         del allresults[brick]
         finished_bricks.put((brick, len(R)))
@@ -620,19 +620,19 @@ def output_thread(queuename, outqueue, checkpointqueue, blobsizes,
         tnow = time.time()
         dt = tnow - last_checkpoint
         if dt > opt.checkpoint_period:
-            print('Output thread: checkpoint q:', checkpointqueue.qsize(),
+            info('Output thread: checkpoint q:', checkpointqueue.qsize(),
                   ', outputq:', outqueue.qsize())
             for brick,brickresults in allresults.items():
                 if brick in last_checkpoint_size:
                     if len(brickresults) == last_checkpoint_size[brick]:
                         #print('Brick', brick, 'has not changed since last checkpoint was written')
                         continue
-                checkpoint_fn = opt.checkpoint % dict(brick=brick)
+                checkpoint_fn = opt.checkpoint % dict(brick=brick, brickpre=brickname[:3])
                 R = [dict(brickname=brick, iblob=iblob, result=res) for
                      iblob,res in brickresults.items()]
                 last_checkpoint_size[brick] = len(brickresults)
                 nblobs,_ = get_brick_nblobs(brick, '(unknown)')
-                print('Writing interim checkpoint', checkpoint_fn, ':', len(brickresults), 'of',
+                info('Writing interim checkpoint', checkpoint_fn, ':', len(brickresults), 'of',
                       nblobs, 'results')
                 _write_checkpoint(R, checkpoint_fn)
             last_checkpoint = tnow
@@ -640,7 +640,7 @@ def output_thread(queuename, outqueue, checkpointqueue, blobsizes,
         # Read any checkpointed results sent by the input thread
         #print('checkpointqueue approx size:', checkpointqueue.qsize())
         if not checkpointqueue.empty():
-            print('Checkpoint q:', checkpointqueue.qsize())
+            info('Checkpoint q:', checkpointqueue.qsize())
             c = Counter()
             nchk = 0
             while True:
@@ -659,10 +659,10 @@ def output_thread(queuename, outqueue, checkpointqueue, blobsizes,
                 nchk += 1
             #print('Read', nchk, 'from checkpointqueue')
             if len(c):
-                print('Read checkpointed results:', c)
+                info('Read checkpointed results:', c)
             for brick,_ in c.most_common():
                 nblobs,_ = get_brick_nblobs(brick, '(unknown)')
-                print('Brick', brick, ': now', len(allresults[brick]), 'of', nblobs, 'done')
+                info('Brick', brick, ': now', len(allresults[brick]), 'of', nblobs, 'done')
                 check_brick_done(brick)
 
         try:
@@ -777,7 +777,7 @@ def queue_work(brickname, inqueue, bigqueue, checkpointqueue, opt):
     from astrometry.util.file import unpickle_from_file
 
     pickle_fn = opt.pickle % dict(brick=brickname, brickpre=brickname[:3])
-    print('Looking for', pickle_fn)
+    info('Looking for', pickle_fn)
     if not os.path.exists(pickle_fn):
         raise RuntimeError('Input pickle does not exist: ' + pickle_fn)
     kwargs = unpickle_from_file(pickle_fn)
@@ -791,7 +791,7 @@ def queue_work(brickname, inqueue, bigqueue, checkpointqueue, opt):
     if os.path.exists(checkpoint_fn):
         debug('Reading checkpoint file', checkpoint_fn)
         R = unpickle_from_file(checkpoint_fn)
-        print('Read', len(R), 'from checkpoint file')
+        info('Read', len(R), 'from checkpoint file')
 
         skipblobs = []
         for r in R:
@@ -830,13 +830,13 @@ def queue_work(brickname, inqueue, bigqueue, checkpointqueue, opt):
         priority = -(blobw*blobh)
 
         if opt.big == 'drop' and blobw*blobh > big_npix:
-            print('Dropping a blob of size', blobw, 'x', blobh)
+            info('Dropping a blob of size', blobw, 'x', blobh)
             continue
 
         dest_queue = inqueue
 
         if opt.big == 'queue' and blobw*blobh > big_npix:
-            print('Blob of size', blobw, 'x', blobh, 'goes on big queue')
+            info('Blob of size', blobw, 'x', blobh, 'goes on big queue')
             dest_queue = bigqueue
 
         picl = pickle.dumps(arg, -1)
@@ -860,7 +860,7 @@ def input_thread(queuename, inqueue, bigqueue, checkpointqueue, blobsizes, opt, 
     except:
         pass
 
-    print('Input process', os.getpid(), 'starting')
+    info('Input process', os.getpid(), 'starting')
     import qdo
     q = qdo.connect(queuename)
 
@@ -878,7 +878,7 @@ def input_thread(queuename, inqueue, bigqueue, checkpointqueue, blobsizes, opt, 
             #
             debug('Finished', brickname, 'with', nblobs, 'blobs')
         except:
-            print('Oops')
+            info('Oops')
             import traceback
             traceback.print_exc()
             task.set_state(qdo.Task.FAILED, err=1)

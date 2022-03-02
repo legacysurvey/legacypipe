@@ -8,7 +8,7 @@
 
 export LEGACY_SURVEY_DIR=$CSCRATCH/dr10a
 export CACHE_DIR=$CSCRATCH/dr10-cache
-outdir=$LEGACY_SURVEY_DIR/out
+outdir=$LEGACY_SURVEY_DIR/out-v3-cut
 
 #export GAIA_CAT_DIR=/global/cfs/cdirs/desi/target/gaia_edr3/healpix
 export GAIA_CAT_DIR=$CSCRATCH/gaia-edr3-healpix/healpix
@@ -44,7 +44,6 @@ export KMP_AFFINITY=disabled
 ncores=32
 
 brick="$1"
-echo "Brick: $brick"
 # strip whitespace from front and back
 #brick="${brick#"${brick%%[![:space:]]*}"}"
 #brick="${brick%"${brick##*[![:space:]]}"}"
@@ -89,14 +88,16 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --cache-dir "$CACHE_DIR" \
      --outdir "$outdir" \
      --checkpoint "${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle" \
+     --checkpoint-period 120 \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
      --release 10100 \
      --cache-outliers \
-     --max-memory-gb 14 \
      --write-stage srcs \
      --threads "${ncores}" \
+     --max-memory-gb 56 \
      >> "$log" 2>&1
 
+     #--max-memory-gb 14 \
 #     --zoom 1000 2000 1000 2000 \
 # 8 threads -> 14 gb
 
