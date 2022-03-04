@@ -175,7 +175,7 @@ def main():
                         help='Time between writing checkpoints')
     parser.add_argument('--inthreads', type=int, default=1,
                         help='Number of brick-processing processes to start')
-    parser.add_argument('--queuesize', type=int, default=10000, help='Number of blobs of work to queue')
+    parser.add_argument('--queuesize', type=int, default=1000, help='Number of blobs of work to queue')
     parser.add_argument('--port', default=5555, type=int,
                         help='Network port (TCP)')
     parser.add_argument('--command-port', default=5565, type=int,
@@ -206,7 +206,8 @@ def main():
     # inqueue: for holding blob-work-packets
     #inqueue = queue.PriorityQueue(maxsize=10000)
     # Effectively, run a brick at a time, prioritizing as usual...
-    inqueue = mp.Queue(maxsize=opt.queuesize)
+    #inqueue = mp.Queue(maxsize=opt.queuesize)
+    # We instead are going to use one queue per input thread, below
 
     # bigqueue: like inqueue, but for big blobs.
     if opt.big == 'queue':
@@ -231,7 +232,10 @@ def main():
     finished_bricks = mp.Queue()
 
     inthreads = []
+    inqueues = []
     for i in range(opt.inthreads):
+        inqueue = mp.Queue(maxsize=opt.queuesize)
+        inqueues.append(inqueue)
         inthread = mp.Process(target=input_thread,
                               args=(queuename, inqueue, bigqueue, checkpointqueue,
                                     blobsizes, opt, i),
@@ -247,7 +251,7 @@ def main():
 
     ctx = None
     networkthread = mp.Process(target=network_thread,
-                               args=(ctx, opt.port, opt.command_port, inqueue, outqueue,
+                               args=(ctx, opt.port, opt.command_port, inqueues, outqueue,
                                      finished_bricks, 'main'),
                                daemon=True)
     networkthread.start()
@@ -255,7 +259,7 @@ def main():
     if opt.big == 'queue':
         bignetworkthread = mp.Process(target=network_thread,
                                             args=(ctx, opt.big_port, opt.big_command_port,
-                                                  bigqueue, outqueue, None, 'big'),
+                                                  [bigqueue], outqueue, None, 'big'),
                                       daemon=True)
         bignetworkthread.start()
     else:
@@ -268,7 +272,7 @@ def main():
         bignetworkthread.join()
 
 
-def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, qname):
+def network_thread(ctx, port, command_port, inqueues, outqueue, finished_bricks, qname):
     # Set my process name
     try:
         import setproctitle
@@ -303,6 +307,8 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
     all_finished_bricks = {}
 
     outstanding_work = {}
+
+    next_inqueue = 0
 
     # Worker-reported cpu time in oneblob(), wall time in oneblob(), and overhead.
     # [brick] -> float time
@@ -374,43 +380,68 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
                     break
             last_check_command = tnow
 
-        debug(qname, 'Network thread: work queue:', inqueue.qsize(), 'out queue:', outqueue.qsize(), 'work sent:', worksent, ', received:', resultsreceived, 'outstanding:', worksent-resultsreceived)
+        #debug(qname, 'Network thread: work queues:', inqueue.qsize(), 'out queue:', outqueue.qsize(), 'work sent:', worksent, ', received:', resultsreceived, 'outstanding:', worksent-resultsreceived)
 
         # Retrieve the next work assignment from my input_threads.
         if not havework:
-            try:
-                t_x = time.time()
-                arg = inqueue.get(block=False)
-                t_y = time.time()
-                n_noblock += 1
-                t_noblock += (t_y - t_x)
-            except queue.Empty:
+
+            arg = None
+            # Round robin, non-blocking
+            for i in range(len(inqueues)):
                 try:
                     t_x = time.time()
-                    arg = inqueue.get(block=True, timeout=1)
+                    inq = inqueues[(i + next_inqueue) % len(inqueues)]
+                    arg = inq.get(block=False)
+                    next_inqueue += (i+1)
                     t_y = time.time()
-                    (work_brick,work_iblob,work) = arg.item
-                    havework = True
+                    n_noblock += 1
+                    t_noblock += (t_y - t_x)
+                    break
+                except queue.Empty:
+                    pass
+
+            if arg is None:
+                # Round robin, blocking
+                try:
+                    t_x = time.time()
+                    inq = inqueues[next_inqueue % len(inqueues)]
+                    next_inqueue += 1
+                    arg = inq.get(block=True, timeout=1)
+                    t_y = time.time()
                     n_block += 1
                     t_block += (t_y - t_x)
-                    #debug('Next work packet:', len(work), 'bytes')
                 except queue.Empty:
                     n_nowork += 1
                     work = nowork
                     havework = False
-                    info('Network thread: Work queue is empty (or timed out).  qsize=', inqueue.qsize())
+
+            if arg is not None:
+                (work_brick,work_iblob,work) = arg.item
+                havework = True
 
             # try:
-            #     #arg = inqueue.get(block=False)
-            #     #arg = inqueue.get(block=True, timeout=0.1)
-            #     arg = inqueue.get(block=True, timeout=1)
+            #     t_x = time.time()
+            #     arg = inqueue.get(block=False)
             #     (work_brick,work_iblob,work) = arg.item
             #     havework = True
-            #     debug('Next work packet:', len(work), 'bytes')
+            #     t_y = time.time()
+            #     n_noblock += 1
+            #     t_noblock += (t_y - t_x)
             # except queue.Empty:
-            #     work = nowork
-            #     havework = False
-            #     info('Network thread: Work queue is empty (or timed out).  qsize=', inqueue.qsize())
+            #     try:
+            #         t_x = time.time()
+            #         arg = inqueue.get(block=True, timeout=1)
+            #         t_y = time.time()
+            #         (work_brick,work_iblob,work) = arg.item
+            #         havework = True
+            #         n_block += 1
+            #         t_block += (t_y - t_x)
+            #         #debug('Next work packet:', len(work), 'bytes')
+            #     except queue.Empty:
+            #         n_nowork += 1
+            #         work = nowork
+            #         havework = False
+            #         info('Network thread: Work queue is empty (or timed out).  qsize=', inqueue.qsize())
 
         t1a = time.time()
 
@@ -450,14 +481,9 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
                 except queue.Empty:
                     pass
 
-                if len(all_finished_bricks):
-                    info('Finished bricks:')
-                for br,nb in all_finished_bricks.items():
-                    info('  %s: %i blobs' % (br, nb))
-
             info()
-            info(qname, 'Work queue: %i, Output queue: %i.  Work packets sent: %i, Results received: %i, Outstanding work packets: %i' %
-                 (inqueue.qsize(), outqueue.qsize(), worksent, resultsreceived, worksent-resultsreceived))
+            info(qname, 'Work queues:', ', '.join(['%i'%q.qsize() for q in inqueues]), ', Output queue: %i.  Work packets sent: %i, Results received: %i, Outstanding work packets: %i' %
+                 (outqueue.qsize(), worksent, resultsreceived, worksent-resultsreceived))
 
             # Outstanding work tallies
             brick_out_n = Counter()
@@ -515,7 +541,7 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
 
             t_in = t_poll = t_recv = t_send = t_decode = t_out = 0
 
-            info('Reading from inqueue work queue:')
+            info('Reading from inqueue work queues:')
             info('  %5i non-blocking reads, taking %5.1f sec' % (n_noblock, t_noblock))
             info('  %5i     blocking reads, taking %5.1f sec' % (n_block, t_block))
             info('  %5i times the blocking read timed out' % (n_nowork))

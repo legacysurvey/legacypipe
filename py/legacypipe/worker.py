@@ -15,9 +15,12 @@ def worker(workq, resultq):
     meta = None
     tprev_wall = time.time()
     while True:
+        qsize = workq.qsize()
         ta_wall = time.time()
         work = workq.get()
         tb_wall = time.time()
+        work = pickle.loads(work)
+        tc_wall = time.time()
         (brickname, iblob, args) = work
 
         # DEBUG -- unpack "args" to print the following...
@@ -49,11 +52,12 @@ def worker(workq, resultq):
         resultq.put((msg, meta_msg, brickname, iblob))
         t4_wall = time.time()
 
+        tunpickle = tc_wall - tb_wall
         tget = tb_wall - ta_wall
         tpickle = t3_wall - t2_wall
         tput = t4_wall - t3_wall
-        if max([tget, tpickle, tput]) > 1:
-            print('Worker', myid, ': work %5.2f, get work %5.2f, pickle %5.2f, put results %5.2f' % (t1_wall-t0_wall, tget, tpickle, tput))
+        if max([tget, tpickle, tput, tunpickle]) > 1:
+            print('Worker', myid, ': work %5.2f, unpickle %5.2f, get work %5.2f (queue size %i), pickle %5.2f, put results %5.2f' % (t1_wall-t0_wall, tunpickle, tget, qsize, tpickle, tput))
 
 def queue_feeder(server, workq, resultq):
     from queue import Empty
@@ -125,22 +129,19 @@ def queue_feeder(server, workq, resultq):
         t_b = time.time()
         work = sock.recv()
         t_c = time.time()
-        work = pickle.loads(work)
-        t_d = time.time()
-        if work is None:
-            print('No work assigned!')
-            time.sleep(1)
-            continue
+        # only unpickle very short work packets to check for None.
+        if len(work) < 10:
+            realwork = pickle.loads(work)
+            if realwork is None:
+                print('No work assigned!')
+                time.sleep(1)
+                continue
         nassigned += 1
-        # DEBUG -- peek into work packet
-        # (brickname, iblob, args) = work
-        # if (nassigned % 100 == 0):
-        #     print('Assigned  %i-th work item: brick' % nassigned, brickname, 'blob', iblob)
+        # We don't unpickle the work packet, we let the worker process do that
         workq.put(work)
         t_e = time.time()
-
-        print('Queue feeder: read result: %5.2f, send: %5.2f, recv: %5.2f, unpickle %5.2f, queue %5.2f' %
-              (t_a - t_0, t_b - t_a, t_c - t_b, t_d - t_c, t_e - t_d))
+        #print('Queue feeder: read result: %5.2f, send: %5.2f, recv: %5.2f, queue %5.2f, queue size %i' %
+        #      (t_a - t_0, t_b - t_a, t_c - t_b, t_e - t_c, workq.qsize()))
 
 def main():
     parser = argparse.ArgumentParser()
