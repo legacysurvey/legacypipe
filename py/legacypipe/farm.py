@@ -338,6 +338,12 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
     t_decode = 0
     t_out = 0
 
+    n_noblock = 0
+    t_noblock = 0.
+    n_block = 0
+    t_block = 0.
+    n_nowork = 0
+    
     while True:
         tnow = time.time()
         t1 = tnow
@@ -373,28 +379,50 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
         # Retrieve the next work assignment from my input_threads.
         if not havework:
             try:
-                #arg = inqueue.get(block=False)
-                #arg = inqueue.get(block=True, timeout=0.1)
-                arg = inqueue.get(block=True, timeout=1)
-                (work_brick,work_iblob,work) = arg.item
-                havework = True
-                debug('Next work packet:', len(work), 'bytes')
+                t_x = time.time()
+                arg = inqueue.get(block=False)
+                t_y = time.time()
+                n_noblock += 1
+                t_noblock += (t_y - t_x)
             except queue.Empty:
-                work = nowork
-                havework = False
-                info('Network thread: Work queue is empty (or timed out).  qsize=', inqueue.qsize())
+                try:
+                    t_x = time.time()
+                    arg = inqueue.get(block=True, timeout=1)
+                    t_y = time.time()
+                    (work_brick,work_iblob,work) = arg.item
+                    havework = True
+                    n_block += 1
+                    t_block += (t_y - t_x)
+                    #debug('Next work packet:', len(work), 'bytes')
+                except queue.Empty:
+                    n_nowork += 1
+                    work = nowork
+                    havework = False
+                    info('Network thread: Work queue is empty (or timed out).  qsize=', inqueue.qsize())
+
+            # try:
+            #     #arg = inqueue.get(block=False)
+            #     #arg = inqueue.get(block=True, timeout=0.1)
+            #     arg = inqueue.get(block=True, timeout=1)
+            #     (work_brick,work_iblob,work) = arg.item
+            #     havework = True
+            #     debug('Next work packet:', len(work), 'bytes')
+            # except queue.Empty:
+            #     work = nowork
+            #     havework = False
+            #     info('Network thread: Work queue is empty (or timed out).  qsize=', inqueue.qsize())
 
         t1a = time.time()
 
         if tnow - last_print_workqueue > 2:
             #print(qname, 'Work queue:', inqueue.qsize(), 'Work packets sent:', nworkpackets, 'bytes:', nworkbytes)
-            # nw = list(nwaitingCounter.keys())
-            # nw.sort()
-            # print(qname, 'Histogram of number of packets waiting in socket:')
-            # for n in nw:
-            #     print('  ', n, ':', nwaitingCounter[n])
+            nw = list(nwaitingCounter.keys())
+            nw.sort()
+            print(qname, 'Histogram of number of packets waiting in socket:')
+            for n in nw:
+                print('  ', n, ':', nwaitingCounter[n])
             nwaitingCounter.clear()
-            nworkpackets = nworkbytes = 0
+            #nworkpackets = nworkbytes = 0
             last_print_workqueue = tnow
 
         if tnow - last_printout > 15:
@@ -486,6 +514,13 @@ def network_thread(ctx, port, command_port, inqueue, outqueue, finished_bricks, 
             info('  output:    %.1f' % t_out)
 
             t_in = t_poll = t_recv = t_send = t_decode = t_out = 0
+
+            info('Reading from inqueue work queue:')
+            info('  %5i non-blocking reads, taking %5.1f sec' % (n_noblock, t_noblock))
+            info('  %5i     blocking reads, taking %5.1f sec' % (n_block, t_block))
+            info('  %5i times the blocking read timed out' % (n_nowork))
+            n_noblock = n_block = n_nowork = 0
+            t_noblock = t_block = 0.
 
             last_printout = tnow
 
@@ -633,6 +668,7 @@ def output_thread(queuename, outqueue, checkpointqueue, blobsizes,
         del allresults[brick]
         finished_bricks.put((brick, len(R)))
         status_bricks_finished.append((brick, len(R)))
+        nonlocal n_bricks_finished
         n_bricks_finished += 1
 
     last_checkpoint = time.time()

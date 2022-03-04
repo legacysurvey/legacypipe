@@ -8,15 +8,16 @@ import zmq
 from legacypipe.oneblob import one_blob
 
 def worker(workq, resultq):
-    myid = os.getpid()
+    import socket
+    myid = '%s-pid%05i' % (socket.gethostname(), os.getpid())
 
     req = None
     meta = None
     tprev_wall = time.time()
     while True:
-        #ta_wall = time.time()
+        ta_wall = time.time()
         work = workq.get()
-        #tb_wall = time.time()
+        tb_wall = time.time()
         (brickname, iblob, args) = work
 
         # DEBUG -- unpack "args" to print the following...
@@ -41,14 +42,18 @@ def worker(workq, resultq):
         # metadata about this blob
         meta = (brickname, iblob, t1_cpu-t0_cpu, t1_wall-t0_wall, overhead)
         # pickle
-        #t2_wall = time.time()
+        t2_wall = time.time()
         msg = pickle.dumps(result, -1)
         meta_msg = pickle.dumps(meta, -1)
-        #t3_wall = time.time()
+        t3_wall = time.time()
         resultq.put((msg, meta_msg, brickname, iblob))
-        #t4_wall = time.time()
+        t4_wall = time.time()
 
-        #print('Worker', myid, ': get work %5.2f, work %5.2f, pickle %5.2f, put results %5.2f' % (tb_wall-ta_wall, t1_wall-t0_wall, t3_wall-t2_wall, t4_wall-t2_wall))
+        tget = tb_wall - ta_wall
+        tpickle = t3_wall - t2_wall
+        tput = t4_wall - t3_wall
+        if max([tget, tpickle, tput]) > 1:
+            print('Worker', myid, ': work %5.2f, get work %5.2f, pickle %5.2f, put results %5.2f' % (t1_wall-t0_wall, tget, tpickle, tput))
 
 def queue_feeder(server, workq, resultq):
     from queue import Empty
@@ -115,13 +120,13 @@ def queue_feeder(server, workq, resultq):
         #      (workq.qsize(), resultq.qsize()))
 
         # Send result (if any) to server (and get back work item)
-        #t_a = time.time()
+        t_a = time.time()
         sock.send_multipart([jobid, rmeta, result])
-        #t_b = time.time()
+        t_b = time.time()
         work = sock.recv()
-        #t_c = time.time()
+        t_c = time.time()
         work = pickle.loads(work)
-        #t_d = time.time()
+        t_d = time.time()
         if work is None:
             print('No work assigned!')
             time.sleep(1)
@@ -132,10 +137,10 @@ def queue_feeder(server, workq, resultq):
         # if (nassigned % 100 == 0):
         #     print('Assigned  %i-th work item: brick' % nassigned, brickname, 'blob', iblob)
         workq.put(work)
-        #t_e = time.time()
+        t_e = time.time()
 
-        #print('Queue feeder: read result: %5.2f, send: %5.2f, recv: %5.2f, unpickle %5.2f, queue %5.2f' %
-        #     (t_a - t_0, t_b - t_a, t_c - t_b, t_d - t_c, t_e - t_d))
+        print('Queue feeder: read result: %5.2f, send: %5.2f, recv: %5.2f, unpickle %5.2f, queue %5.2f' %
+              (t_a - t_0, t_b - t_a, t_c - t_b, t_d - t_c, t_e - t_d))
 
 def main():
     parser = argparse.ArgumentParser()
