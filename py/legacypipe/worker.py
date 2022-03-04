@@ -8,22 +8,26 @@ import zmq
 from legacypipe.oneblob import one_blob
 
 def worker(workq, resultq):
+    myid = os.getpid()
+
     req = None
     meta = None
     tprev_wall = time.time()
     while True:
+        #ta_wall = time.time()
         work = workq.get()
+        #tb_wall = time.time()
         (brickname, iblob, args) = work
 
         # DEBUG -- unpack "args" to print the following...
         # (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
         #  srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap,
         #  large_galaxies_force_pointsource, less_masking, frozen_galaxies) = args
-        (_, iblob, Isrcs, _, _, _, blobw, blobh, _, timargs,
-         _, _, _, _, _, _, _, _,
-         _, _, _) = args
-        print('Work: brick', brickname, 'blob', iblob, 'size', blobw, 'x', blobh, 'with',
-              len(timargs), 'images and', len(Isrcs), 'sources')
+        # (_, iblob, Isrcs, _, _, _, blobw, blobh, _, timargs,
+        #  _, _, _, _, _, _, _, _,
+        #  _, _, _) = args
+        #print('Work: brick', brickname, 'blob', iblob, 'size', blobw, 'x', blobh, 'with',
+        #      len(timargs), 'images and', len(Isrcs), 'sources')
         #print('Calling one_blob...')
         t0_wall = time.time()
         t0_cpu  = time.process_time()
@@ -37,10 +41,15 @@ def worker(workq, resultq):
         # metadata about this blob
         meta = (brickname, iblob, t1_cpu-t0_cpu, t1_wall-t0_wall, overhead)
         # pickle
+        #t2_wall = time.time()
         msg = pickle.dumps(result, -1)
         meta_msg = pickle.dumps(meta, -1)
+        #t3_wall = time.time()
         resultq.put((msg, meta_msg, brickname, iblob))
-        
+        #t4_wall = time.time()
+
+        #print('Worker', myid, ': get work %5.2f, work %5.2f, pickle %5.2f, put results %5.2f' % (tb_wall-ta_wall, t1_wall-t0_wall, t3_wall-t2_wall, t4_wall-t2_wall))
+
 def queue_feeder(server, workq, resultq):
     from queue import Empty
 
@@ -50,14 +59,14 @@ def queue_feeder(server, workq, resultq):
     aid = os.environ.get('SLURM_ARRAY_TASK_ID', '')
     ajid = os.environ.get('SLURM_ARRAY_JOB_ID', '')
     nid = os.environ.get('SLURM_NODEID', '')
-    print('SLURM_CLUSTER_NAME', cluster)
-    print('SLURM_JOB_ID', jid)
-    print('SLURM_ARRAY_TASK_ID', aid)
-    print('SLURM_ARRAY_JOB_ID', ajid)
-    print('SLURM_NODEID', nid)
+    # print('SLURM_CLUSTER_NAME', cluster)
+    # print('SLURM_JOB_ID', jid)
+    # print('SLURM_ARRAY_TASK_ID', aid)
+    # print('SLURM_ARRAY_JOB_ID', ajid)
+    # print('SLURM_NODEID', nid)
     import socket
     me = socket.gethostname()
-    print('Hostname', me)
+    #print('Hostname', me)
     if len(cluster + jid + aid) == 0:
         jobid = me + '_' + 'pid' + str(os.getpid())
     else:
@@ -65,8 +74,8 @@ def queue_feeder(server, workq, resultq):
             jobid = '%s_%s_%s_%s_%s' % (cluster, ajid, aid, nid, me)
         else:
             jobid = '%s_%s_%s_%s' % (cluster, jid, nid, me)
+    print('Setting jobid "%s"' % jobid)
     jobid = jobid.encode()
-    print('Setting jobid', jobid)
 
     print('Connecting to', server)
     ctx = zmq.Context()
@@ -75,34 +84,58 @@ def queue_feeder(server, workq, resultq):
 
     nonemsg = pickle.dumps(None, -1)
 
+    was_full = False
+
+    nassigned = 0
     while True:
-        print('Work queue contains ~%i items.  Results queue contains ~%i items.' %
-              (workq.qsize(), resultq.qsize()))
+
         if workq.full():
-            print('Work queue is full.')
-            time.sleep(5)
+            #print('Work queue is full.  Waiting.')
+            was_full = True
+            #s_0 = workq.qsize()
+            # FIXME -- dynamic sleep time?
+            time.sleep(0.1)
+            # s_1 = workq.qsize()
+            # if s_1 < s_0:
+            #     print('Work queue dropped in size by %i items while I slept' % (s_0-s_1))
             continue
 
-        # Read any results produced by worker processes
+        # if was_full:
+        #     print('Work queue is newly not-full.  Work queue size:', workq.qsize())
+        # was_full = False
+
+        t_0 = time.time()
+        # Check for a result produced by worker processes
         try:
             result,rmeta,brick,iblob = resultq.get_nowait()
-            print('Received a result: brick', brick, 'blob', iblob)
+            #print('Completed work: brick', brick, 'blob', iblob)
         except Empty:
             result,rmeta = nonemsg,nonemsg
+        #print('Work queue contains ~%i items.  Results queue contains ~%i items.' %
+        #      (workq.qsize(), resultq.qsize()))
 
         # Send result (if any) to server (and get back work item)
+        #t_a = time.time()
         sock.send_multipart([jobid, rmeta, result])
+        #t_b = time.time()
         work = sock.recv()
+        #t_c = time.time()
         work = pickle.loads(work)
+        #t_d = time.time()
         if work is None:
             print('No work assigned!')
-            time.sleep(5)
+            time.sleep(1)
             continue
+        nassigned += 1
         # DEBUG -- peek into work packet
-        (brickname, iblob, args) = work
-        print('Got work: brick', brickname, 'blob', iblob)
-
+        # (brickname, iblob, args) = work
+        # if (nassigned % 100 == 0):
+        #     print('Assigned  %i-th work item: brick' % nassigned, brickname, 'blob', iblob)
         workq.put(work)
+        #t_e = time.time()
+
+        #print('Queue feeder: read result: %5.2f, send: %5.2f, recv: %5.2f, unpickle %5.2f, queue %5.2f' %
+        #     (t_a - t_0, t_b - t_a, t_c - t_b, t_d - t_c, t_e - t_d))
 
 def main():
     parser = argparse.ArgumentParser()
@@ -122,7 +155,7 @@ def main():
     # server and to provide a short local buffer of work to reduce
     # overheads.  There is also a "results" queue where the
     # workers place their finished results.
-    nqueued = 4
+    nqueued = 8
     workq = Queue(nqueued)
     resultq = Queue()
 
