@@ -603,7 +603,7 @@ def get_galaxy_sources(galaxies, bands):
         for i,c in enumerate(cc):
             iz += c * color**i
         mag_i = mag_z + iz
-        galaxies.flux_i = 10.**((22.5 - mag_i) / -2.5)
+        galaxies.flux_i = NanoMaggies.magToNanomaggies(mag_i)
         debug('Estimated i mags for SGA galaxies:')
         debug('r:', mag_r[:10])
         debug('z:', mag_z[:10])
