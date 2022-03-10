@@ -370,6 +370,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         plt.axvline(np.log10(1000), color='k')
         ps.savefig()
 
+    info('WISE band', band, ': brightest central fluxes:',
+         ', '.join(['%.4g' % f for f in list(reversed(sorted(central_flux)))[:10]]))
     # Eddie's non-secret recipe:
     #- central pixel <= 1000: 19x19 pix box size
     #- central pixel in 1000 - 20000: 59x59 box size
@@ -377,10 +379,17 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     #- object near "bright star": 299x299 box size
     nbig = nmedium = nsmall = 0
     for src,cflux in zip(cat, central_flux):
-        if cflux > 20000:
+        if band in [1,2] and cflux > 20000:
             R = 100
             nbig += 1
-        elif cflux > 1000:
+        elif band in [1,2] and cflux > 1000:
+            R = 30
+            nmedium += 1
+        # W3, W4 flux levels for large PSFs are considerably larger.
+        elif band in [3,4] and cflux > 1000000:
+            R = 100
+            nbig += 1
+        elif band in [3,4] and cflux > 10000:
             R = 30
             nmedium += 1
         else:
@@ -396,7 +405,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 galrad = src.shape.re
             pixscale = 2.75
             src.halfsize = int(np.hypot(R, galrad * 5 / pixscale))
-    debug('Set WISE source sizes:', nbig, 'big', nmedium, 'medium', nsmall, 'small')
+    info('Band', band, ': WISE PSF sizes:', nbig, 'big', nmedium, 'medium', nsmall, 'small')
 
     tractor = Tractor(tims, cat)
     if use_ceres:
