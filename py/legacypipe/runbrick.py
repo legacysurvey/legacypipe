@@ -3119,6 +3119,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               prereqs_update=None,
               stagefunc = None,
               pool = None,
+              **bonus_kwargs,
               ):
     '''Run the full Legacy Survey data reduction pipeline.
 
@@ -3406,6 +3407,10 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         kwargs.update(blobid=blobid)
     if max_blobsize is not None:
         kwargs.update(max_blobsize=max_blobsize)
+
+    # This exists for folks extending the code (eg, adding new stages that take
+    # additional args)
+    kwargs.update(bonus_kwargs)
 
     pickle_pat = pickle_pat % dict(brick=brick)
 

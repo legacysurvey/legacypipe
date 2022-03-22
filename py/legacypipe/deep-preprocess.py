@@ -63,6 +63,7 @@ def stage_deep_preprocess(
         read_parallel=True,
         max_memory_gb=None,
         refstars=None,
+        depth_margin=0.5,
         **kwargs):
     from legacypipe.survey import (
         get_git_version, get_version_header, get_dependency_versions,
@@ -74,6 +75,8 @@ def stage_deep_preprocess(
     tlast = Time()
     record_event and record_event('stage_deep: starting')
     assert(survey is not None)
+
+    info('Depth margin:', depth_margin)
 
     # Get brick object
     custom_brick = (ra is not None)
@@ -201,7 +204,8 @@ def stage_deep_preprocess(
 
     keep,_ = make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                             plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf,
-                            do_calibs, gitver, targetwcs, old_calibs_ok)
+                            do_calibs, gitver, targetwcs, old_calibs_ok,
+                            margin=depth_margin)
     Ikeep = np.flatnonzero(keep)
     deepccds = ccds[Ikeep]
     deepims = [ims[i] for i in Ikeep]
@@ -813,7 +817,8 @@ def main(args=None):
     print()
 
     parser = get_parser()
-
+    parser.add_argument('--depth-margin', type=float, default=0.5,
+                        help='Set margin for the depth-cut code, beyond the DESI targets of g=24.0, r=23.4, i=23.0, z=22.5.  Default %(default)s')
     opt = parser.parse_args(args=args)
     if opt.brick is None and opt.radec is None:
         parser.print_help()
