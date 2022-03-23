@@ -443,11 +443,17 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
 
     for ra,dec,brick in zip(sga.ra, sga.dec, sga.brickname):
         bricks = survey.get_bricks_by_name(brick)
-        brick = bricks[0]
-        # The SGA catalog has a "brickname", but it unfortunately is not always exactly correct
-        if ra >= brick.ra1 and ra < brick.ra2 and dec >= brick.dec1 and dec < brick.dec2:
-            sgabricks.append(bricks)
+        # The SGA catalog has a "brickname", but it unfortunately is not always exactly correct...
+        search_for_brick = False
+        if bricks is None or len(bricks) == 0:
+            search_for_brick = True
         else:
+            brick = bricks[0]
+            if ra >= brick.ra1 and ra < brick.ra2 and dec >= brick.dec1 and dec < brick.dec2:
+                sgabricks.append(bricks)
+            else:
+                search_for_brick = True
+        if search_for_brick:
             # MAGIC 0.2 ~ brick radius
             bricks = survey.get_bricks_near(ra, dec, 0.2)
             bricks = bricks[(ra  >= bricks.ra1 ) * (ra  < bricks.ra2) *
