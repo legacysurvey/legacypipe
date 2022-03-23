@@ -96,7 +96,6 @@ out['ba'] = np.ones(len(out), dtype='f4')
 # Read the supplemental catalog of globular clusters and (compact) open clusters
 # from Arjun Dey (Mar 2020). Note that the NGC open clusters were culled above,
 # but we put them back here because the diameters have been vetted.
-names = ('name', 'alt_name', 'ra', 'dec', 'type', 'radius', 'pa', 'ba')
 suppfile = resource_filename('legacypipe', 'data/star-clusters-supplemental.csv')
 supp = Table.read(suppfile, delimiter=',')
 supp['alt_name'] = supp['alt_name'].astype('U4')
