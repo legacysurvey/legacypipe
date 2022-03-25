@@ -203,7 +203,7 @@ def detrend_mzlsbass_zeropoints(P):
 def psf_zeropoint_cuts(P, pixscale,
                        zpt_cut_lo, zpt_cut_hi, bad_expid, camera,
                        radec_rms, skybright, zpt_diff_avg, image2coadd='',
-                       max_seeing=3.0):
+                       max_seeing=3.0, phrms_cut=0.1, exptime_cut=30):
     '''
     zpt_cut_lo, zpt_cut_hi: dict from band to zeropoint.
     '''
@@ -237,8 +237,8 @@ def psf_zeropoint_cuts(P, pixscale,
         ('ccdnmatch', P.ccdnphotom < 20),
         ('zpt_small', np.array([zpt < zpt_cut_lo.get(f.strip(),0) for f,zpt in zip(P.filter, ccdzpt)])),
         ('zpt_large', np.array([zpt > zpt_cut_hi.get(f.strip(),100) for f,zpt in zip(P.filter, ccdzpt)])),
-        ('phrms',     P.phrms > 0.1),
-        ('exptime',   P.exptime < 30),
+        ('phrms',     P.phrms > phrms_cut),
+        ('exptime',   P.exptime < exptime_cut),
         ('seeing_bad', np.logical_not(np.logical_and(seeing > 0, seeing < max_seeing))),
         ('badexp_file', np.array([((expnum, None) in bad_expid or
                                    (expnum, ccdname0) in bad_expid)
@@ -308,15 +308,14 @@ def not_in_image2coadd(P, image2coadd):
     return mindesy1 & ~match
 
 
-def add_psfzpt_cuts(T, camera, bad_expid, image2coadd='', max_seeing=None):
+def add_psfzpt_cuts(T, camera, bad_expid, image2coadd='', **kw):
+    '''
+    **kw are keyword arguments for psf_zeropoint_cuts.
+    '''
     from legacypipe.survey import LegacySurveyData
     survey = LegacySurveyData()
     imageType = survey.image_class_for_camera(camera)
     pixscale = imageType.get_nominal_pixscale()
-
-    kw = {}
-    if max_seeing is not None:
-        kw.update(dict(max_seeing=max_seeing))
 
     if camera == 'mosaic':
         # Arjun: 2019-03-15

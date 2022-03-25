@@ -478,6 +478,10 @@ def main(args=None):
                         help='Fraction of CCDs in an exposure that must be good to keep any chips')
     parser.add_argument('--max-seeing', default=None, type=float,
                         help='Seeing cut (default 3 arcsec)')
+    parser.add_argument('--phrms-cut', default=None, type=float,
+                        help='Cut on phrms (photometric scatter), default 0.1 mag')
+    parser.add_argument('--exptime-cut', default=None, type=float,
+                        help='Cut on exptime, default 30 sec')
     numpy.seterr(invalid='raise')
     args = parser.parse_args(args=args)
     ccds = fits_table(getattr(args, 'survey-ccds'))
@@ -519,9 +523,18 @@ def main(args=None):
         bad_expid = psfzpt_cuts.read_bad_expid(fn)
     else:
         bad_expid = {}
+
+    kwargs = {}
+    if args.max_seeing:
+        kwargs.update(max_seeing=args.max_seeing)
+    if args.phrms_cut:
+        kwargs.update(phrms_cut=args.phrms_cut)
+    if args.exptime_cut:
+        kwargs.update(exptime_cut=args.exptime_cut)
+
     psfzpt_cuts.add_psfzpt_cuts(ccds, args.camera, bad_expid,
                                 image2coadd=args.image2coadd,
-                                max_seeing=args.max_seeing)
+                                **kwargs)
 
     if args.not_grz:
         ccds.ccd_cuts &= ~psfzpt_cuts.CCD_CUT_BITS['not_grz']
