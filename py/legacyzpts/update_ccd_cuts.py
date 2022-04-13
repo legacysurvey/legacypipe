@@ -466,8 +466,8 @@ def main(args=None):
                         help='ucal zero points for declination < -29.25')
     parser.add_argument('--newccdphrms', type=str, default=None,
                         help='filename for replacement ccdphrms file')
-    parser.add_argument('--not-grz', default=False, action='store_true',
-                        help='Omit the not-grz cut')
+    parser.add_argument('--not-griz', default=False, action='store_true',
+                        help='Omit the not-griz cut')
     parser.add_argument('--early-decam', default=False, action='store_true',
                         help='Omit the cut on early DECam data')
     parser.add_argument('--depth-cut', default=True, action='store_false',
@@ -536,8 +536,8 @@ def main(args=None):
                                 image2coadd=args.image2coadd,
                                 **kwargs)
 
-    if args.not_grz:
-        ccds.ccd_cuts &= ~psfzpt_cuts.CCD_CUT_BITS['not_grz']
+    if args.not_griz:
+        ccds.ccd_cuts &= ~psfzpt_cuts.CCD_CUT_BITS['not_griz']
     if args.early_decam:
         ccds.ccd_cuts &= ~psfzpt_cuts.CCD_CUT_BITS['early_decam']
     if args.nmatch:

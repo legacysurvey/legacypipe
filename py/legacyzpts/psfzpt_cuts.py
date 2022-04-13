@@ -233,7 +233,7 @@ def psf_zeropoint_cuts(P, pixscale,
         skybr[i] = (sky > skybright.get(f.strip(), 1e6)) or (sky*exptime > 35000)
 
     cuts = [
-        ('not_grz',   np.array([f.strip() not in 'grz' for f in P.filter])),
+        ('not_griz',   np.array([f.strip() not in 'griz' for f in P.filter])),
         ('ccdnmatch', P.ccdnphotom < 20),
         ('zpt_small', np.array([zpt < zpt_cut_lo.get(f.strip(),0) for f,zpt in zip(P.filter, ccdzpt)])),
         ('zpt_large', np.array([zpt > zpt_cut_hi.get(f.strip(),100) for f,zpt in zip(P.filter, ccdzpt)])),

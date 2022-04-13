@@ -26,6 +26,8 @@ DQ_BITS = dict(badpix  =    1,
 CCD_CUTS = dict(
     err_legacyzpts = 0x1,
     not_grz = 0x2,
+    # DR10 alias
+    not_griz = 0x2,
     not_third_pix = 0x4, # Mosaic3 one-third-pixel interpolation problem
     exptime = 0x8,
     ccdnmatch = 0x10,
