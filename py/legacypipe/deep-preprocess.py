@@ -202,7 +202,7 @@ def stage_deep_preprocess(
         if mem / 1e9 > max_memory_gb:
             raise RuntimeError('Too much memory required: %.1f > %.1f GB' % (mem/1e9, max_memory_gb))
 
-    keep,_ = make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
+    keep,_,_ = make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
                             plots, ps, splinesky, gaussPsf, pixPsf, normalizePsf,
                             do_calibs, gitver, targetwcs, old_calibs_ok,
                             margin=depth_margin)
