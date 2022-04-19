@@ -711,7 +711,7 @@ class OneBlob(object):
             if keepsrc is None and getattr(src, 'reference_star', False):
                 info('Dropped reference star:', src)
                 src.brightness = src.initial_brightness
-                info('Reset brightness to', src.brightness)
+                info('  Reset brightness to', src.brightness)
                 src.force_keep_source = True
                 keepsrc = src
 
@@ -955,7 +955,7 @@ class OneBlob(object):
         if len(Tnew) == 0:
             return None
 
-        info('Measuring', len(Tnew), 'iterative sources')
+        info('Blob %s:'%self.name, 'Measuring', len(Tnew), 'iterative sources')
 
         from tractor import NanoMaggies, RaDecPos
         newsrcs = [PointSource(RaDecPos(t.ra, t.dec),
