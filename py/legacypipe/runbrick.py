@@ -2484,7 +2484,7 @@ def stage_wise_forced(
             args.append(((-1,band),
                          (wcat, wtiles, band, roiradec, wise_ceres, wpixpsf,
                           unwise_coadds, get_masks, ps, True,
-                          unwise_modelsky_dir)))
+                          unwise_modelsky_dir, 'Full-depth W%i' % (band))))
 
     # Add time-resolved WISE coadds
     # Skip if $UNWISE_COADDS_TIMERESOLVED_DIR or --unwise-tr-dir not set.
@@ -2539,7 +2539,8 @@ def stage_wise_forced(
                                               for ep in epochs[I,ie]])
                 eargs.append(((ie,band),
                               (wcat, eptiles, band, roiradec,
-                               wise_ceres, wpixpsf, False, None, ps, False, unwise_modelsky_dir)))
+                               wise_ceres, wpixpsf, False, None, ps, False,
+                               unwise_modelsky_dir, 'Epoch %i W%i' % (ie+1, band))))
 
     runargs = args + eargs
     info('unWISE forced phot: total of', len(runargs), 'images to photometer')
@@ -2555,9 +2556,9 @@ def stage_wise_forced(
             import traceback
             print('Failed to read checkpoint file', wise_checkpoint_filename)
             traceback.print_exc()
-        keepargs = [(key,a) for (key,a) in runargs if not key in photresults]
-        info('Running', len(keepargs), 'of', len(runargs), 'images not in checkpoint')
-        runargs = keepargs
+        n_a = len(runargs)
+        runargs = [(key,a) for (key,a) in runargs if not key in photresults]
+        print('Running', len(runargs), 'of', n_a, 'images not in checkpoint')
 
     # Run the forced photometry!
     record_event and record_event('stage_wise_forced: photometry')
