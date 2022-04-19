@@ -28,7 +28,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                       pixelized_psf=False,
                       get_masks=None,
                       move_crpix=False,
-                      modelsky_dir=None):
+                      modelsky_dir=None,
+                      tag=None):
     '''
     Given a list of tractor sources *cat*
     and a list of unWISE tiles *tiles* (a fits_table with RA,Dec,coadd_id)
@@ -39,6 +40,10 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     from tractor import PointSource, Tractor, ExpGalaxy, DevGalaxy
     from tractor.sersic import SersicGalaxy
 
+    if tag is None:
+        tag = ''
+    else:
+        tag = tag + ': '
     if not pixelized_psf and psf_broadening is None:
         # PSF broadening in post-reactivation data, by band.
         # Newer version from Aaron's email to decam-chatter, 2018-06-14.
@@ -82,7 +87,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
     tims = []
     for tile in tiles:
-        info('Reading WISE tile', tile.coadd_id, 'band', band)
+        info(tag + 'Reading WISE tile', tile.coadd_id, 'band', band)
         tim = get_unwise_tractor_image(tile.unwise_dir, tile.coadd_id, band,
                                        bandname=wanyband, roiradecbox=roiradecbox)
         if tim is None:
@@ -408,14 +413,14 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     t0 = Time()
     R = tractor.optimize_forced_photometry(
         fitstats=True, variance=True, shared_params=False, wantims=wantims)
-    info('unWISE forced photometry took', Time() - t0)
+    info(tag + 'unWISE forced photometry took', Time() - t0)
 
     if use_ceres:
         term = R.ceres_status['termination']
         # Running out of memory can cause failure to converge and term
         # status = 2.  Fail completely in this case.
         if term != 0:
-            info('Ceres termination status:', term)
+            info(tag + 'Ceres termination status:', term)
             raise RuntimeError('Ceres terminated with status %i' % term)
 
     if wantims:
@@ -537,11 +542,11 @@ def unwise_phot(X):
     '''
     This is the entry-point from runbrick.py, called via mp.map()
     '''
-    (key, (wcat, tiles, band, roiradec, wise_ceres, pixelized_psf, get_mods, get_masks, ps,
-           move_crpix, modelsky_dir)) = X
+    (key, (wcat, tiles, band, roiradec, wise_ceres, pixelized_psf, get_mods,
+           get_masks, ps, move_crpix, modelsky_dir, tag)) = X
     kwargs = dict(roiradecbox=roiradec, band=band, pixelized_psf=pixelized_psf,
                   get_masks=get_masks, ps=ps, move_crpix=move_crpix,
-                  modelsky_dir=modelsky_dir)
+                  modelsky_dir=modelsky_dir, tag=tag)
     if get_mods:
         kwargs.update(get_models=get_mods)
 
