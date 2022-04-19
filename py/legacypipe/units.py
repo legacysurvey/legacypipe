@@ -38,6 +38,7 @@ def get_units_for_columns(cols, bands=None, extras=None):
         apflux_blobresid=flux,
         psfdepth=fluxiv, galdepth=fluxiv, psfsize=arcsec,
         fiberflux=flux, fibertotflux=flux,
+        fibermaxflux=flux,
         lc_flux=flux, lc_flux_ivar=fluxiv,
     )
     for b in bands:

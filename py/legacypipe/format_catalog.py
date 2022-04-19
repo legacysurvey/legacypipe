@@ -66,7 +66,7 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
     # (eg, ugrizY) arrays.
     keys = ['flux', 'flux_ivar', 'rchisq', 'fracflux', 'fracmasked', 'fracin',
             'nobs', 'ngood', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth',
-            'fiberflux', 'fibertotflux']
+            'fiberflux', 'fibertotflux', 'fibermaxflux']
     if has_ap:
         keys.extend(['apflux', 'apflux_resid', 'apflux_blobresid',
                      'apflux_ivar', 'apflux_masked'])
@@ -175,6 +175,7 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
         add_galexlike('flux_ivar')
     add_fluxlike('fiberflux')
     add_fluxlike('fibertotflux')
+    add_fluxlike('fibermaxflux')
     if has_ap:
         for c in ['apflux', 'apflux_resid', 'apflux_blobresid',
                   'apflux_ivar', 'apflux_masked']:

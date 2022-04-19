@@ -2286,6 +2286,7 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
     # Results go here!
     fiberflux    = np.zeros((len(cat),len(bands)), np.float32)
     fibertotflux = np.zeros((len(cat),len(bands)), np.float32)
+    fibermaxflux = np.zeros((len(cat),len(bands)), np.float32)
 
     # Fiber diameter in arcsec -> radius in pix
     fiberrad = (fibersize / pixscale) / 2.
@@ -2319,8 +2320,10 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
                 # If the source is off the brick (eg, ref sources), can be NaN
                 continue
             fiberflux[isrc,iband] = f
-            # Blank out the image again
             x0,x1,y0,y1 = patch.getExtent()
+            # Grab the max flux (surface brightness)
+            fibermaxflux[isrc,iband] = np.max(onemod[y0:y1, x0:x1])
+            # Blank out the image again
             onemod[y0:y1, x0:x1] = 0.
 
     # Now photometer the accumulated images
@@ -2358,7 +2361,7 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
             plt.yscale('symlog')
             ps.savefig()
 
-    return fiberflux, fibertotflux
+    return fiberflux, fibertotflux, fibermaxflux
 
 def _depth_histogram(brick, targetwcs, bands, detivs, galdetivs):
     # Compute the brick's unique pixels.
@@ -2839,7 +2842,7 @@ def stage_writecat(
     T.ra_ivar /= np.cos(np.deg2rad(T.dec))**2
 
     # Compute fiber fluxes
-    T.fiberflux, T.fibertotflux = get_fiber_fluxes(
+    T.fiberflux, T.fibertotflux, T.fibermaxflux = get_fiber_fluxes(
         cat, T, targetwcs, H, W, pixscale, bands, plots=plots, ps=ps)
 
     # For reference *stars* only, plug in the reference-catalog inverse-variances.
