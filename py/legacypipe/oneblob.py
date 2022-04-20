@@ -672,12 +672,13 @@ class OneBlob(object):
 
         N = len(cat)
         B.dchisq = np.zeros((N, 5), np.float32)
+        B.fit_background_level = np.array([{} for i in range(N)])
         B.all_models    = np.array([{} for i in range(N)])
         B.all_model_ivs = np.array([{} for i in range(N)])
         B.all_model_cpu = np.array([{} for i in range(N)])
-        B.all_model_hit_limit     = np.array([{} for i in range(N)])
-        B.all_model_hit_r_limit   = np.array([{} for i in range(N)])
-        B.all_model_opt_steps     = np.array([{} for i in range(N)])
+        B.all_model_hit_limit   = np.array([{} for i in range(N)])
+        B.all_model_hit_r_limit = np.array([{} for i in range(N)])
+        B.all_model_opt_steps   = np.array([{} for i in range(N)])
 
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
@@ -1408,6 +1409,7 @@ class OneBlob(object):
             trymodels.extend([('rex', rex), ('dev', dev), ('exp', exp),
                               ('ser', None)])
 
+        fit_backgrounds = {}
         cputimes = {}
         for name,newsrc in trymodels:
             cpum0 = time.process_time()
@@ -1534,6 +1536,28 @@ class OneBlob(object):
                 oldshape = newsrc.shape
 
             if fit_background:
+                # Save some per-band stats about the fit-background levels!
+                fit_bg = srctractor.images.getParams()
+                debug('fit-background: sky params', fit_bg)
+                for band in self.bands:
+                    bmax = -1e6
+                    bmin = +1e6
+                    bmean = 0.
+                    biv = 0.
+                    for tim,bg in zip(srctractor.images, fit_bg):
+                        if tim.band != band:
+                            continue
+                        bmax = max(bmax, bg)
+                        bmin = min(bmin, bg)
+                        bmean += (1./tim.sig1**2) * bg
+                        biv   += (1./tim.sig1**2)
+                    bmean /= np.maximum(1e-12, biv)
+                    debug('model', name, 'band', band, ': max', bmax, ', min', bmin, ', mean', bmean)
+                    fit_backgrounds[(name, band, 'max')] = bmax
+                    fit_backgrounds[(name, band, 'min')] = bmin
+                    fit_backgrounds[(name, band, 'mean')] = bmean
+
+            if fit_background:
                 # We have to freeze the sky here before computing
                 # uncertainties
                 srctractor.freezeParam('images')
@@ -1600,10 +1624,11 @@ class OneBlob(object):
             B.all_model_opt_steps  [srci][name] = opt_steps
             if name == 'ser':
                 B.hit_ser_limit[srci] = hit_ser_limit
+        # (end of model selection loop)
 
         if mask_others:
             for tim,ie in zip(srctims, saved_srctim_ies):
-                # revert tim to original (unmasked-by-others)
+                # revert inverr to original (unmasked-by-others)
                 tim.inverr = ie
 
         # After model selection, revert the sky
@@ -1628,10 +1653,15 @@ class OneBlob(object):
             debug('Best dchisq is 0 -- dropping source')
             keepsrc = None
 
-        B.hit_limit    [srci] = B.all_model_hit_limit    [srci].get(keepmod, False)
-        B.hit_r_limit  [srci] = B.all_model_hit_r_limit  [srci].get(keepmod, False)
+        B.hit_limit  [srci] = B.all_model_hit_limit  [srci].get(keepmod, False)
+        B.hit_r_limit[srci] = B.all_model_hit_r_limit[srci].get(keepmod, False)
         if keepmod != 'ser':
             B.hit_ser_limit[srci] = False
+
+        if fit_background:
+            for band in self.bands:
+                for k in ['max', 'min','mean']:
+                    B.fit_background_level[srci][(band,k)] = fit_backgrounds[(keepmod, band, k)]
 
         # This is the model-selection plot
         if self.plots_per_source:

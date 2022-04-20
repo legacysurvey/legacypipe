@@ -1320,8 +1320,16 @@ def stage_fitblobs(T=None,
               'blob_symm_nimages', 'bx0', 'by0',
               'hit_limit', 'hit_ser_limit', 'hit_r_limit',
               'dchisq',
-              'force_keep_source', 'fit_background', 'forced_pointsource']:
+              'force_keep_source', 'fit_background', 'forced_pointsource',]:
         T.set(k, BB.get(k))
+
+    for k in ['min','max','mean']:
+        b = np.zeros((len(T),len(bands)), np.float32)
+        for i in range(len(T)):
+            d = BB.fit_background_level[i]
+            for band in bands:
+                b[i] = d.get((band, k), 0.)
+        T.set('fit_background_%s' % k, b)
 
     T.regular = np.ones(len(T), bool)
     T.dup = np.zeros(len(T), bool)
