@@ -1544,9 +1544,11 @@ class OneBlob(object):
                     bmin = +1e6
                     bmean = 0.
                     biv = 0.
+                    debug('band', band)
                     for tim,bg in zip(srctractor.images, fit_bg):
                         if tim.band != band:
                             continue
+                        debug('tim', tim.name, ': fit bg', bg)
                         bmax = max(bmax, bg)
                         bmin = min(bmin, bg)
                         bmean += (1./tim.sig1**2) * bg

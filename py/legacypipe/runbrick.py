@@ -1327,8 +1327,8 @@ def stage_fitblobs(T=None,
         b = np.zeros((len(T),len(bands)), np.float32)
         for i in range(len(T)):
             d = BB.fit_background_level[i]
-            for band in bands:
-                b[i] = d.get((band, k), 0.)
+            for iband,band in enumerate(bands):
+                b[i,iband] = d.get((band, k), 0.)
         T.set('fit_background_%s' % k, b)
 
     T.regular = np.ones(len(T), bool)
