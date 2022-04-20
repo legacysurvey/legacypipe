@@ -58,6 +58,12 @@ def main():
 
     survey = LegacySurveyData(survey_dir=opt.survey_dir,
                               output_dir=opt.output_dir)
+
+    outfn = os.path.join(survey.output_dir, 'tractor-forced-%s.fits' % opt.brick)
+    if os.path.exists(outfn):
+        print('Output file exists:', outfn)
+        return 0
+
     if opt.catalog_dir is None:
         catsurvey = survey
     else:
@@ -219,7 +225,6 @@ def main():
                        'forced_galdepth_%s'%b: fluxiv,
                        })
 
-    outfn = os.path.join(survey.output_dir, 'tractor-forced-%s.fits' % opt.brick)
     columns = T.get_columns()
     tbands = []
     for col in columns:
@@ -227,6 +232,7 @@ def main():
         if len(words) != 2 or words[0] != 'flux':
             continue
         tbands.append(words[1])
+    outfn = os.path.join(survey.output_dir, 'tractor-forced-%s.fits' % opt.brick)
     T.writeto(outfn, units=get_units_for_columns(columns, bands=tbands, extras=eunits),
               primhdr=tprimhdr)
     print('Wrote', outfn)
