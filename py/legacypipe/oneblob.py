@@ -1661,7 +1661,7 @@ class OneBlob(object):
         if fit_background:
             for band in self.bands:
                 for k in ['max', 'min','mean']:
-                    B.fit_background_level[srci][(band,k)] = fit_backgrounds[(keepmod, band, k)]
+                    B.fit_background_level[srci][(band,k)] = fit_backgrounds.get((keepmod, band, k), 0.)
 
         # This is the model-selection plot
         if self.plots_per_source:
