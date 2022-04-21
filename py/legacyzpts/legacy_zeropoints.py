@@ -437,7 +437,7 @@ def run_one_calib(X):
                   'by camera', camera, 'expnum', img.expnum,
                   'ext', ext)
         else:
-            img.ccdzpt = ccds[0].ccdzpt
+            img.set_ccdzpt(ccds[0].ccdzpt)
             img.ccdraoff = ccds[0].ccdraoff
             img.ccddecoff = ccds[0].ccddecoff
             if img.ccdzpt == 0.:

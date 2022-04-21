@@ -64,9 +64,6 @@ class PanStarrsImage(LegacySurveyImage):
             ccd.plprocid = 'xxx'
         super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu)
 
-        # Adjust zeropoint for exposure time
-        self.ccdzpt += 2.5 * np.log10(self.exptime)
-
         # Nominal zeropoints
         # These are used only for "ccdskybr", so are not critical.
         self.zp0 = dict(
@@ -89,6 +86,10 @@ class PanStarrsImage(LegacySurveyImage):
         # One image per file -- no separate merged / single PsfEx files
         self.psffn = self.merged_psffn
         
+    def set_ccdzpt(self, ccdzpt):
+        # Adjust zeropoint for exposure time
+        self.ccdzpt = ccdzpt + 2.5 * np.log10(self.exptime)
+
     @classmethod
     def get_nominal_pixscale(cls):
         return 0.186

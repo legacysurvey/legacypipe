@@ -274,7 +274,7 @@ class LegacySurveyImage(object):
             self.plprocid = getattr(ccd, 'plprocid', 'xxxxxxx').strip()
 
             # Photometric and astrometric zeropoints
-            self.ccdzpt = ccd.ccdzpt
+            self.set_ccdzpt(ccd.ccdzpt)
             self.dradec = (ccd.ccdraoff / 3600., ccd.ccddecoff / 3600.)
 
             # in arcsec/pixel
@@ -309,6 +309,9 @@ class LegacySurveyImage(object):
         self.old_single_skyfn = os.path.join(calibdir, imgdir, basename, calname + '-splinesky.fits')
         # for debugging purposes
         self.print_imgpath = '/'.join(self.imgfn.split('/')[-5:])
+
+    def set_ccdzpt(self, ccdzpt):
+        self.ccdzpt = ccdzpt
 
     # For pickling
     def __getstate__(self):
