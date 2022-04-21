@@ -119,7 +119,7 @@ RUN for x in \
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && git checkout dr10.0 \
+    && git checkout dr10.1 \
     && python3 setup-cython.py --with-ceres install --home /usr/local \
     && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so") \
@@ -127,7 +127,7 @@ RUN git clone http://github.com/dstndstn/tractor.git tractor \
 
 # Pip installs -- built from source
 RUN pip --no-cache-dir install photutils
-RUN pip --no-cache-dir install fitsio==1.1.5
+RUN pip --no-cache-dir install fitsio==1.1.6
 
 RUN /sbin/ldconfig
 
@@ -186,7 +186,7 @@ RUN ln -s "$(which python3)" /usr/bin/python
 
 # unwise_psf
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \
-    && cd unwise_psf && git checkout dr9.3
+    && cd unwise_psf && git describe && echo dr10.0 #git checkout dr9.3
 
 # Legacypipe
 RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
@@ -270,7 +270,7 @@ ENV LEGACYPIPE_DIR /src/legacypipe/py
 
 # update legacypipe
 RUN cd /src/legacypipe && git pull \   
-    && git describe && echo DR9.9.0 && \
+    && git describe && echo DR9.10.0 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
