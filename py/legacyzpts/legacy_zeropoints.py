@@ -396,7 +396,7 @@ def measure_image(img_fn, mp, image_dir='images',
     return all_ccds, all_photom, img
 
 def run_one_calib(X):
-    (img_fn, camera, survey, ext, psfex, splinesky, _, survey_blob_mask,
+    (img_fn, camera, survey, ext, psfex, splinesky, plots, survey_blob_mask,
      survey_zeropoints, git_version) = X
     img = survey.get_image_object(None, camera=camera,
                                   image_fn=img_fn, image_hdu=ext)
@@ -437,7 +437,7 @@ def run_one_calib(X):
                   'by camera', camera, 'expnum', img.expnum,
                   'ext', ext)
         else:
-            img.ccdzpt = ccds[0].ccdzpt
+            img.set_ccdzpt(ccds[0].ccdzpt)
             img.ccdraoff = ccds[0].ccdraoff
             img.ccddecoff = ccds[0].ccddecoff
             if img.ccdzpt == 0.:
@@ -450,6 +450,9 @@ def run_one_calib(X):
     from legacypipe.utils import ZeroWeightError
     try:
         ps = None
+        if plots:
+            from astrometry.util.plotutils import PlotSequence
+            ps = PlotSequence('plots-%s-%i-%s' % (camera, img.expnum, ext))
         img.run_calibs(psfex=do_psf, sky=do_sky, splinesky=True,
                        git_version=git_version, survey=survey, ps=ps,
                        survey_blob_mask=survey_blob_mask,

@@ -110,7 +110,7 @@ class PtfImage(LegacySurveyImage):
                                  'ptf', os.path.basename(self.imgfn))
 
         hdr= self.read_image_primary_header()
-        self.ccdzpt = hdr['IMAGEZPT'] + 2.5 * np.log10(self.exptime)
+        self.set_ccdzpt(hdr['IMAGEZPT'])
 
         self.pixscale= 1.01
         #print("--------pixscale= ",self.pixscale)
@@ -160,6 +160,10 @@ class PtfImage(LegacySurveyImage):
     #def get_tractor_image(self, **kwargs):
     #    tim = super(PtfImage, self).get_tractor_image(**kwargs)
     #    return tim
+
+    def set_ccdzpt(self, ccdzpt):
+        # Adjust zeropoint for exposure time
+        self.ccdzpt = ccdzpt + 2.5 * np.log10(self.exptime)
 
     def __str__(self):
         return 'PTF ' + self.name

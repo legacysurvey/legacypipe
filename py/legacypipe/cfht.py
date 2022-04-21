@@ -46,8 +46,6 @@ class MegaPrimeImage(LegacySurveyImage):
     '''
     def __init__(self, survey, t, image_fn=None, image_hdu=0):
         super(MegaPrimeImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu)
-        # Adjust zeropoint for exposure time
-        self.ccdzpt += 2.5 * np.log10(self.exptime)
         # print('MegaPrimeImage: CCDs table entry', t)
         # for x in dir(t):
         #     if x.startswith('_'):
@@ -82,6 +80,10 @@ class MegaPrimeImage(LegacySurveyImage):
                 self.fwhm = self.get_fwhm(None, None)
             except:
                 pass
+
+    def set_ccdzpt(self, ccdzpt):
+        # Adjust zeropoint for exposure time
+        self.ccdzpt = ccdzpt + 2.5 * np.log10(self.exptime)
 
     @classmethod
     def get_nominal_pixscale(cls):

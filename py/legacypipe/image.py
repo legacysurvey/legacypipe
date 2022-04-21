@@ -274,7 +274,7 @@ class LegacySurveyImage(object):
             self.plprocid = getattr(ccd, 'plprocid', 'xxxxxxx').strip()
 
             # Photometric and astrometric zeropoints
-            self.ccdzpt = ccd.ccdzpt
+            self.set_ccdzpt(ccd.ccdzpt)
             self.dradec = (ccd.ccdraoff / 3600., ccd.ccddecoff / 3600.)
 
             # in arcsec/pixel
@@ -309,6 +309,9 @@ class LegacySurveyImage(object):
         self.old_single_skyfn = os.path.join(calibdir, imgdir, basename, calname + '-splinesky.fits')
         # for debugging purposes
         self.print_imgpath = '/'.join(self.imgfn.split('/')[-5:])
+
+    def set_ccdzpt(self, ccdzpt):
+        self.ccdzpt = ccdzpt
 
     # For pickling
     def __getstate__(self):
@@ -1508,6 +1511,30 @@ class LegacySurveyImage(object):
         os.remove(psftmpfn)
         os.rename(psftmpfn2, self.psffn)
 
+    def imshow(self, img, **kwargs):
+        import pylab as plt
+        kw = dict(interpolation='nearest', origin='lower', cmap='gray')
+        kw.update(kwargs)
+        plt.imshow(self.maybe_transposed(img), **kw)
+        if self.show_transposed():
+            plt.xlabel('Y (pixels)')
+            plt.ylabel('X (pixels)')
+        else:
+            plt.xlabel('X (pixels)')
+            plt.ylabel('Y (pixels)')
+
+    def plot_mask(self, mask):
+        from legacypipe.detection import plot_mask
+        plot_mask(self.maybe_transposed(mask))
+
+    def show_transposed(self):
+        return self.height > self.width
+
+    def maybe_transposed(self, img):
+        if self.show_transposed:
+            return img.T
+        return img
+
     def run_sky(self, splinesky=True, git_version=None, ps=None, survey=None,
                 gaia=True, release=0, survey_blob_mask=None,
                 halos=True, subtract_largegalaxies=True):
@@ -1536,6 +1563,9 @@ class LegacySurveyImage(object):
             template,template_meta = template
             img -= template
 
+            if not plots:
+                del template
+
         plver = primhdr.get('PLVER', 'V0.0').strip()
         plprocid = str(primhdr.get('PLPROCID', '0')).strip()
         datasum = imghdr.get('DATASUM', '0')
@@ -1563,7 +1593,7 @@ class LegacySurveyImage(object):
         sky_median = np.median(img[good])
 
         if not splinesky:
-            #### This code branch has not been tested recently...
+            #### Constant sky -- This code branch has not been tested recently...
             from tractor.sky import ConstantSky
             if sky_mode != 0.:
                 skyval = sky_mode
@@ -1622,6 +1652,47 @@ class LegacySurveyImage(object):
         if initsky == 0.0:
             initsky = sky_clipped_median
 
+        # Wait until after we have 'initsky' to make the first plots...
+        if plots:
+            if template is None:
+                timg = 0.
+            else:
+                timg = template
+
+            import pylab as plt
+            ima = dict(interpolation='nearest', origin='lower',
+                       vmin=-2.*sig1, vmax=+5.*sig1, cmap='gray')
+            ima2 = dict(interpolation='nearest', origin='lower',
+                        vmin=-0.5*sig1,vmax=+0.5*sig1,cmap='gray')
+
+            plt.clf()
+            self.imshow(img - initsky + timg, **ima)
+            plt.colorbar()
+            plt.title('Image %s-%i-%s %s' % (self.camera, self.expnum,
+                                             self.ccdname, self.band))
+            ps.savefig()
+            plt.clf()
+            self.imshow(img - initsky + timg, **ima2)
+            plt.colorbar()
+            plt.title('Image %s-%i-%s %s' % (self.camera, self.expnum,
+                                             self.ccdname, self.band))
+            ps.savefig()
+
+            if template is not None:
+                plt.clf()
+                self.imshow(timg, **ima2)
+                plt.colorbar()
+                plt.title('Sky template for %s-%i-%s %s' % (self.camera, self.expnum,
+                                                            self.ccdname, self.band))
+                ps.savefig()
+                plt.clf()
+                self.imshow(img - initsky, **ima2)
+                plt.colorbar()
+                plt.title('Image minus sky template for %s-%i-%s %s' % (self.camera, self.expnum,
+                                                                        self.ccdname, self.band))
+                ps.savefig()
+
+            del template
         # Compute initial model...
         skyobj = self.get_tractor_sky_model(img - initsky, good)
 
@@ -1639,6 +1710,12 @@ class LegacySurveyImage(object):
                         > (3.*bsig1))
         masked = binary_dilation(masked, iterations=3)
         good[masked] = False
+        del masked
+        del skymod
+
+        if plots:
+            # save for later plots
+            boxcargood = good.copy()
 
         # Also mask based on reference stars and galaxies.
         from legacypipe.reference import get_reference_sources
@@ -1678,7 +1755,6 @@ class LegacySurveyImage(object):
             info('Found', len(I), 'SGA galaxies to subtract before sky')
             if len(I):
                 sub_galaxies = get_galaxy_sources(refs[I], [self.band])
-        galmod = None
         if sub_galaxies is not None:
             from tractor import (ConstantSky, ConstantFitsWcs, NanoMaggies,
                                  LinearPhotoCal, Image, Tractor)
@@ -1700,11 +1776,24 @@ class LegacySurveyImage(object):
                         photocal=LinearPhotoCal(zpscale, band=self.band))
             tr = Tractor([tim], sub_galaxies)
             galmod = tr.getModelImage(0)
+
+            if plots:
+                plt.clf()
+                self.imshow(galmod, **ima2)
+                plt.colorbar()
+                plt.title('SGA galaxies to subtract')
+                ps.savefig()
+
+                plt.clf()
+                self.imshow(img - galmod - initsky, **ima2)
+                plt.colorbar()
+                plt.title('Image with SGA galaxies subtracted')
+                ps.savefig()
+
             # we set zpscale, so model image is in ADU.
             debug('Using zeropoint:', self.ccdzpt, 'to scale galaxy model by', zpscale)
             img -= galmod
-            if not plots:
-                del galmod
+            del galmod
 
         haloimg = None
         halozpt = 0.
@@ -1723,23 +1812,35 @@ class LegacySurveyImage(object):
                 # "haloimg" is in nanomaggies.  Convert to ADU via zeropoint...
                 from tractor.basics import NanoMaggies
                 assert(self.ccdzpt > 0)
-                zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
-                haloimg *= zpscale
-                print('Using zeropoint:', self.ccdzpt, 'to scale halo image by', zpscale)
                 halozpt = self.ccdzpt
-                img -= haloimg
-                if plots:
-                    # Also compute halo image without Moffat component
-                    nomoffhalo = decam_halo_model(refs[Igaia], self.mjdobs, wcs,
-                        self.pixscale, self.band, self, False)
-                    nomoffhalo *= zpscale
-                    moffhalo = haloimg - nomoffhalo
-                    del nomoffhalo
-                if not plots:
-                    del haloimg
+                zpscale = NanoMaggies.zeropointToScale(halozpt)
+                info('Using zeropoint:', halozpt, 'to scale halo image by', zpscale)
+                haloimg *= zpscale
 
-        if plots:
-            boxcargood = good.copy()
+                if plots:
+                    plt.clf()
+                    self.imshow(haloimg, **ima2)
+                    plt.colorbar()
+                    plt.title('Star halos to subtract')
+                    ps.savefig()
+                    plt.clf()
+                    self.imshow(img - haloimg - initsky, **ima2)
+                    plt.colorbar()
+                    plt.title('Star halos subtracted')
+                    ps.savefig()
+
+                img -= haloimg
+                del haloimg
+
+                # if plots:
+                #     # Also compute halo image without Moffat component
+                #     nomoffhalo = decam_halo_model(refs[Igaia], self.mjdobs, wcs,
+                #         self.pixscale, self.band, self, False)
+                #     nomoffhalo *= zpscale
+                #     moffhalo = haloimg - nomoffhalo
+                #     del nomoffhalo
+                # if not plots:
+                #     del haloimg
 
         blobmasked = False
         if survey_blob_mask is not None:
@@ -1801,6 +1902,7 @@ class LegacySurveyImage(object):
             pctvals = [0] * len(pcts)
         H,W = img.shape
         fmasked = float(np.sum((good * refgood) == 0)) / (H*W)
+        del skypix
 
         # DEBUG -- compute a splinesky on a finer grid and compare it.
         # fineskyobj = SplineSky.BlantonMethod(img - initsky, good * refgood,
@@ -1811,96 +1913,55 @@ class LegacySurveyImage(object):
         # fine_rms = np.sqrt(np.mean(skypix**2))
 
         if plots:
-            import pylab as plt
-            ima = dict(interpolation='nearest', origin='lower',
-                       vmin=initsky-2.*sig1, vmax=initsky+5.*sig1, cmap='gray')
-            ima2 = dict(interpolation='nearest', origin='lower',
-                        vmin=initsky-0.5*sig1,vmax=initsky+0.5*sig1,cmap='gray')
+            # plt.clf()
+            # plt.imshow(wt, interpolation='nearest', origin='lower',
+            #            cmap='gray')
+            # plt.title('Weight')
+            # ps.savefig()
+            #
+            # plt.clf()
+            # plt.subplot(2,1,1)
+            # plt.hist(wt.ravel(), bins=100)
+            # plt.xlabel('Invvar weights')
+            # plt.subplot(2,1,2)
+            # origwt = self._read_fits(self.wtfn, self.hdu, slc=slc)
+            # mwt = np.median(origwt[origwt>0])
+            # plt.hist(origwt.ravel(), bins=100, range=(-0.03 * mwt, 0.03 * mwt),
+            #          histtype='step', label='oow file', lw=3, alpha=0.3,
+            #          log=True)
+            # plt.hist(wt.ravel(), bins=100, range=(-0.03 * mwt, 0.03 * mwt),
+            #          histtype='step', label='clipped', log=True)
+            # plt.axvline(0.01 * mwt)
+            # plt.xlabel('Invvar weights')
+            # plt.legend()
+            # ps.savefig()
 
             plt.clf()
-            plt.imshow(img, **ima)
-            plt.title('Image %s-%i-%s %s' % (self.camera, self.expnum,
-                                             self.ccdname, self.band))
-            ps.savefig()
-
-            if galmod is not None:
-                plt.clf()
-                plt.imshow(img.T + galmod.T, **ima)
-                plt.title('Image with SGA galaxies')
-                ps.savefig()
-
-                plt.clf()
-                plt.imshow(initsky + galmod.T, **ima)
-                plt.title('SGA galaxies subtracted')
-                ps.savefig()
-
-            if haloimg is not None:
-                plt.clf()
-                plt.imshow(img + haloimg, **ima)
-                plt.title('Image with star halos')
-                ps.savefig()
-
-                plt.clf()
-                imx = dict(interpolation='nearest', origin='lower',
-                           vmin=-2*sig1,vmax=+2*sig1,cmap='gray')
-                plt.imshow(haloimg, **imx)
-                plt.title('Star halos')
-                ps.savefig()
-
-                plt.clf()
-                imx = dict(interpolation='nearest', origin='lower',
-                           vmin=-2*sig1,vmax=+2*sig1,cmap='gray')
-                plt.imshow(moffhalo, **imx)
-                plt.title('Moffat component of star halos')
-                ps.savefig()
-
-            plt.clf()
-            plt.imshow(wt, interpolation='nearest', origin='lower',
-                       cmap='gray')
-            plt.title('Weight')
-            ps.savefig()
-
-            plt.clf()
-            plt.subplot(2,1,1)
-            plt.hist(wt.ravel(), bins=100)
-            plt.xlabel('Invvar weights')
-            plt.subplot(2,1,2)
-            origwt = self._read_fits(self.wtfn, self.hdu, slc=slc)
-            mwt = np.median(origwt[origwt>0])
-            plt.hist(origwt.ravel(), bins=100, range=(-0.03 * mwt, 0.03 * mwt),
-                     histtype='step', label='oow file', lw=3, alpha=0.3,
-                     log=True)
-            plt.hist(wt.ravel(), bins=100, range=(-0.03 * mwt, 0.03 * mwt),
-                     histtype='step', label='clipped', log=True)
-            plt.axvline(0.01 * mwt)
-            plt.xlabel('Invvar weights')
-            plt.legend()
-            ps.savefig()
-
-            from legacypipe.detection import plot_mask
-
-            plt.clf()
-            plt.imshow((img - initsky)*boxcargood + initsky, **ima)
-            plot_mask(np.logical_not(boxcargood))
+            self.imshow((img - initsky)*boxcargood, **ima2)
+            plt.colorbar()
+            self.plot_mask(np.logical_not(boxcargood))
             plt.title('Image (boxcar masked)')
             ps.savefig()
 
             if survey_blob_mask is not None:
                 plt.clf()
-                plt.imshow((img - initsky)*blobgood + initsky, **ima)
-                plot_mask(np.logical_not(blobgood))
+                self.imshow((img - initsky)*blobgood, **ima2)
+                plt.colorbar()
+                self.plot_mask(np.logical_not(blobgood))
                 plt.title('Image (blob masked)')
                 ps.savefig()
 
             plt.clf()
-            plt.imshow((img - initsky)*refgood + initsky, **ima)
-            plot_mask(np.logical_not(refgood))
+            self.imshow((img - initsky)*refgood, **ima2)
+            plt.colorbar()
+            self.plot_mask(np.logical_not(refgood))
             plt.title('Image (reference masked)')
             ps.savefig()
 
             plt.clf()
-            plt.imshow((img - initsky)*(refgood * good) + initsky, **ima)
-            plot_mask(np.logical_not(refgood * good))
+            self.imshow((img - initsky)*(refgood * good), **ima2)
+            plt.colorbar()
+            self.plot_mask(np.logical_not((refgood * good)))
             plt.title('Image (all masked)')
             ps.savefig()
 
@@ -1915,33 +1976,30 @@ class LegacySurveyImage(object):
             plt.axis(ax)
             ps.savefig()
 
-            plt.clf()
-            plt.hist((img[good * refgood] - initsky).ravel(), bins=50)
-            plt.title('Unmasked pixels')
-            ps.savefig()
+            info('Image shape:', img.shape)
+            info('Sky xgrid:', skyobj.xgrid, 'ygrid', skyobj.ygrid)
 
             gridvals = skyobj.spl(skyobj.xgrid, skyobj.ygrid) - initsky
             plt.clf()
-            plt.imshow(gridvals,
-                       interpolation='nearest', origin='lower',
-                       vmin=-2.*sig1, vmax=+5.*sig1, cmap='gray')
+            self.imshow(gridvals.T, **ima2)
             plt.colorbar()
-            plot_mask(gridvals == 0)
+            self.plot_mask((gridvals.T == 0))
             plt.title('Splinesky grid values')
             ps.savefig()
 
-            plt.clf()
-            plt.imshow(gridvals,
-                       interpolation='nearest', origin='lower',
-                       vmin=-0.5*sig1, vmax=+0.5*sig1, cmap='gray')
-            plt.colorbar()
-            plt.title('Splinesky grid values')
-            ps.savefig()
+            # plt.clf()
+            # plt.imshow(gridvals,
+            #            interpolation='nearest', origin='lower',
+            #            vmin=-0.5*sig1, vmax=+0.5*sig1, cmap='gray')
+            # plt.colorbar()
+            # plt.title('Splinesky grid values')
+            # ps.savefig()
 
             skypix = np.zeros_like(img)
             skyobj.addTo(skypix)
             plt.clf()
-            plt.imshow(skypix, **ima2)
+            self.imshow(skypix - initsky, **ima2)
+            plt.colorbar()
             plt.title('Sky model')
             ps.savefig()
 
@@ -1951,6 +2009,11 @@ class LegacySurveyImage(object):
             # plt.imshow(skypix2, **ima2)
             # plt.title('Fine sky model')
             # ps.savefig()
+
+            plt.clf()
+            plt.hist((img[good * refgood] - initsky).ravel(), bins=50)
+            plt.title('Unmasked pixels')
+            ps.savefig()
 
         if slc is not None:
             sy,sx = slc

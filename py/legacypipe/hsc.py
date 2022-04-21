@@ -24,8 +24,6 @@ class HscImage(LegacySurveyImage):
         super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu)
         self.dq_hdu = 2
         self.wt_hdu = 3
-        # Adjust zeropoint for exposure time
-        self.ccdzpt += 2.5 * np.log10(self.exptime)
 
         # Nominal zeropoints
         # These are used only for "ccdskybr", so are not critical.
@@ -60,6 +58,10 @@ class HscImage(LegacySurveyImage):
         self.old_merged_psffns = []
         self.old_single_psffn = None
         self.old_single_skyfn = None
+
+    def set_ccdzpt(self, ccdzpt):
+        # Adjust zeropoint for exposure time
+        self.ccdzpt = ccdzpt + 2.5 * np.log10(self.exptime)
 
     @classmethod
     def get_nominal_pixscale(cls):

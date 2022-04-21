@@ -74,8 +74,8 @@ def one_blob(X):
      srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap,
      large_galaxies_force_pointsource, less_masking, frozen_galaxies) = X
 
-    debug('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
-          (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
+    debug('Fitting blob %i: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
+          (nblob+1, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
 
     if len(timargs) == 0:
         return None

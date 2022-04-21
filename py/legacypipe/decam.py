@@ -23,8 +23,6 @@ class DecamImage(LegacySurveyImage):
     '''
     def __init__(self, survey, t, image_fn=None, image_hdu=0):
         super(DecamImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu)
-        # Adjust zeropoint for exposure time
-        self.ccdzpt += 2.5 * np.log10(self.exptime)
 
         # Nominal zeropoints
         # These are used only for "ccdskybr", so are not critical.
@@ -55,6 +53,10 @@ class DecamImage(LegacySurveyImage):
                           N501 = 0.173,
                           N673 = 0.090,
             )
+
+    def set_ccdzpt(self, ccdzpt):
+        # Adjust zeropoint for exposure time
+        self.ccdzpt = ccdzpt + 2.5 * np.log10(self.exptime)
 
     @classmethod
     def get_nominal_pixscale(cls):
