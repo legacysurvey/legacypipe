@@ -2066,27 +2066,39 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         D.writeto(None, fits_object=out.fits)
     del D
 
-    # Create JPEG coadds
-    coadd_list= [('image', C.coimgs, {}),
-                 ('model', C.comods, {}),
-                 ('blobmodel', C.coblobmods, {}),
-                 ('resid', C.coresids, dict(resids=True))]
-    if hasattr(tims[0], 'sims_image'):
-        coadd_list.append(('simscoadd', sims_coadd, {}))
+    U = None
+    # BRICK_PRIMARY pixel mask
+    if not custom_brick:
+        U = find_unique_pixels(targetwcs, W, H, None,
+                               brick.ra1, brick.ra2, brick.dec1, brick.dec2)
 
-    for name,ims,rgbkw in coadd_list:
+    # Create JPEG coadds
+    coadd_list= [('image', C.coimgs, {}, None),
+                 ('model', C.comods, {}, None),
+                 ('blobmodel', C.coblobmods, {}, None,),
+                 ('resid', C.coresids, dict(resids=True), U)]
+    if hasattr(tims[0], 'sims_image'):
+        coadd_list.append(('simscoadd', sims_coadd, {}, None))
+
+    for name,ims,rgbkw,mask in coadd_list:
+        if mask is not None:
+            # Update in-place!
+            ims = [im * mask for im in ims]
+            del mask
         rgb,kwa = survey.get_rgb(ims, bands, **rgbkw)
         with survey.write_output(name + '-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
             info('Wrote', out.fn)
         del rgb
+        del ims
+    del C.comods
+    del C.coblobmods
+    del C.coresids
 
     # Construct the maskbits map
     maskbits = np.zeros((H,W), np.int32)
-    # !PRIMARY
     if not custom_brick:
-        U = find_unique_pixels(targetwcs, W, H, None,
-                               brick.ra1, brick.ra2, brick.dec1, brick.dec2)
+        # not BRICK_PRIMARY
         maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int32)
         del U
 
