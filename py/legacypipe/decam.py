@@ -356,7 +356,7 @@ class DecamImage(LegacySurveyImage):
         if min(img.shape) / boxsize < 4:
             boxsize /= 2
 
-        if (self.band in ['g','r'] and
+        if (self.band in ['g','r','i'] and
             self.ccdname.strip() in ['S30', 'N14', 'S19', 'S16', 'S10']):
             H,W = img.shape
             xbreak = W//2
