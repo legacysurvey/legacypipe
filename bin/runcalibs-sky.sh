@@ -4,7 +4,7 @@
 
 # Second-round sky calibs.
 
-export LEGACY_SURVEY_DIR=$CSCRATCH/dr10pre
+export LEGACY_SURVEY_DIR=$CSCRATCH/dr10-sky-v3
 export CACHE_DIR=$CSCRATCH/dr10-cache
 
 outdir=$LEGACY_SURVEY_DIR/

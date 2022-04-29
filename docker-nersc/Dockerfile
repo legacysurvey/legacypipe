@@ -1,6 +1,6 @@
 FROM registry.services.nersc.gov/nersc/intel_cxx_fort_mpi_mkl_devel as builder
 
-RUN apt -y update && apt install -y apt-utils && echo 3
+RUN apt -y update && apt install -y apt-utils
 
 RUN DEBIAN_FRONTEND=noninteractive \
     apt install -y --no-install-recommends \
@@ -35,7 +35,7 @@ RUN wget -nv https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.
     conda config --add channels intel && \
     conda config --set always_yes yes && \
     conda update conda && \
-    conda install python=3.7 pip numpy scipy && \
+    conda install python=3.9 pip numpy scipy && \
     conda clean -a -y
 
 # ugly: Tractor's mp_fourier module detects the $CC='icc' exactly
@@ -45,8 +45,10 @@ ENV CXX icpc
 ENV LDSHARED icc -shared
 # Edison & Cori
 #ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=ivybridge -ax=haswell,knl
-# Just Cori
+# Just Cori (KNL & Haswell)
 ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell -ax=knl
+# Just Cori Haswell
+ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell
 ENV ARCH_FLAGS ""
 
 ENV PYTHON python3
@@ -60,7 +62,7 @@ ENV BLAS -L${MKLROOT}/lib/intel64 -lmkl_rt -fopenmp -lpthread -limf -lsvml -ldl
 ENV CPPFLAGS -I${MKLROOT}/include
 
 RUN wget -nv https://www.mpich.org/static/downloads/3.3/mpich-3.3.tar.gz \
-    && tar xvzf mpich-3.3.tar.gz \
+    && tar xzf mpich-3.3.tar.gz \
     && cd mpich-3.3 \
     && ./configure \
     && make -j4 \
@@ -69,14 +71,16 @@ RUN wget -nv https://www.mpich.org/static/downloads/3.3/mpich-3.3.tar.gz \
     && cd .. && rm -Rf mpich-3.3
 # defaults to installing in /usr/local
 
-# mpi4py / mpicc can't handle -ax=knl
+RUN pip --no-cache-dir install cython
+
+# mpi4py / mpicc can't handle -ax=knl or -x=haswell (it compiles using gcc?)
 ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread
 RUN git clone https://github.com/mpi4py/mpi4py.git \
          && (cd mpi4py \
          && python setup.py build \
          && python setup.py install) \
          && rm -Rf mpi4py
-ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell -ax=knl
+ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell
 
 RUN git clone https://github.com/astromatic/sextractor.git sourceextractor \
     && cd sourceextractor \
@@ -103,7 +107,7 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && make install INSTALL_DIR=/usr/local \
     && make clean \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import astrometry; print(astrometry.__version__)") \
-    && git describe && echo 0.87
+    && git describe && echo 0.90
 
 # Pip installs -- binary.  We need cython for the tractor.
 RUN for x in \
@@ -119,7 +123,7 @@ RUN for x in \
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && git checkout dr10.0 \
+    && git checkout dr10.1 \
     && python3 setup-cython.py --with-ceres install --home /usr/local \
     && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so") \
@@ -127,7 +131,7 @@ RUN git clone http://github.com/dstndstn/tractor.git tractor \
 
 # Pip installs -- built from source
 RUN pip --no-cache-dir install photutils
-RUN pip --no-cache-dir install fitsio==1.1.5
+RUN pip --no-cache-dir install fitsio==1.1.6
 
 RUN /sbin/ldconfig
 
@@ -186,7 +190,7 @@ RUN ln -s "$(which python3)" /usr/bin/python
 
 # unwise_psf
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \
-    && cd unwise_psf && git checkout dr9.3
+    && cd unwise_psf && git describe && echo dr10.0 #git checkout dr9.3
 
 # Legacypipe
 RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
@@ -221,7 +225,7 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
   && echo 1
 
 # Curses upon you, astropy
-RUN wget -O /opt/conda/lib/python3.7/site-packages/astropy/utils/iers/data/Leap_Second.dat \
+RUN wget -O /opt/conda/lib/python3.9/site-packages/astropy/utils/iers/data/Leap_Second.dat \
     https://raw.githubusercontent.com/astropy/astropy/master/astropy/utils/iers/data/Leap_Second.dat \
     && rm $HOME/.wget-hsts
 
@@ -270,7 +274,7 @@ ENV LEGACYPIPE_DIR /src/legacypipe/py
 
 # update legacypipe
 RUN cd /src/legacypipe && git pull \   
-    && git describe && echo DR9.9.0 && \
+    && git describe && echo DR9.10.1 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
