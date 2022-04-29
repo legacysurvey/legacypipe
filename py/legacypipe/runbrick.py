@@ -3933,7 +3933,7 @@ def get_runbrick_kwargs(survey=None,
     if unwise_modelsky_dir is None:
         unwise_modelsky_dir = os.environ.get('UNWISE_MODEL_SKY_DIR', None)
         if unwise_modelsky_dir is not None and not os.path.exists(unwise_modelsky_dir):
-            raise RuntimeError('The directory specified in $UNWISE_MODEL_SKY_DIR does not exist!')
+            raise RuntimeError('The directory specified in $UNWISE_MODEL_SKY_DIR (%s) does not exist!' % unwise_modelsky_dir)
     if galex_dir is None:
         galex_dir = os.environ.get('GALEX_DIR', None)
     opt.update(unwise_dir=unwise_dir, unwise_tr_dir=unwise_tr_dir,

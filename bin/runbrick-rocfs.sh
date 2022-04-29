@@ -1,35 +1,49 @@
 #! /bin/bash
 
 # Script for running the legacypipe code within a Shifter container at NERSC
+# and using the read-only mount of the CFS filesystem.
 
-# we're not using the burst-buffer, but here's how one would use it, where "DR9" is the name of your BB:
-#if [ "x$DW_PERSISTENT_STRIPED_DR9" == x ]; then
+# This read-only CFS mount is on available on the compute nodes (not the login nodes).
 
-export SCR=/global/cscratch1/sd/dstn
+# On the compute nodes, it is mounted on
+#    /dvs_ro/cfs/
 
-# Using depth-cut v4 CCDs file, and v3 skies
-export LEGACY_SURVEY_DIR=$SCR/dr10c
-outdir=$LEGACY_SURVEY_DIR
+# But within a shifter container (start with shifter --module=ro-cfs), the variable
+# $RO_CFS_PATH = /ro-cfs
+# and ~= /global/cfs/cdirs/, ie, $RO_CFS_PATH/cosmo exists.
 
-export CACHE_DIR=$SCR/dr10-cache
+if [ ${RO_CFS_PATH}x == x ]; then
+    echo The environment variable RO_CFS_PATH is not set.
+    echo This script only works inside a Shifter container, on a compute node,
+    echo   using the \"shifter --module=ro-cfs\" command-line argument.
+    exit -1
+fi
 
-#export GAIA_CAT_DIR=/global/cfs/cdirs/desi/target/gaia_edr3/healpix
-export GAIA_CAT_DIR=$SCR/gaia-edr3-healpix/healpix
+#export COSMO=/dvs_ro/cfs/cdirs/cosmo
+#export DESI=/dvs_ro/cfs/cdirs/desi
+
+#$RO_CFS_PATH = /ro-cfs/
+export COSMO=$RO_CFS_PATH/cosmo
+export DESI=$RO_CFS_PATH/desi
+
+export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr10-rocfs
+
+export outdir=/global/cscratch1/sd/dstn/dr10-outputs
+
+export GAIA_CAT_DIR=$DESI/target/gaia_edr3/healpix
 export GAIA_CAT_PREFIX=healpix
 export GAIA_CAT_SCHEME=nested
 export GAIA_CAT_VER=E
 
-#export DUST_DIR=/global/cfs/cdirs/cosmo/data/dust/v0_1
-export DUST_DIR=$CACHE_DIR/dust-v0_1
-export UNWISE_COADDS_DIR=/global/cfs/cdirs/cosmo/data/unwise/neo7/unwise-coadds/fulldepth:/global/cfs/cdirs/cosmo/data/unwise/allwise/unwise-coadds/fulldepth
-export UNWISE_COADDS_TIMERESOLVED_DIR=/global/cfs/cdirs/cosmo/work/wise/outputs/merge/neo7
-export UNWISE_MODEL_SKY_DIR=/global/cfs/cdirs/cosmo/data/unwise/neo7/unwise-catalog/mod
+export DUST_DIR=$COSMO/data/dust/v0_1
+export UNWISE_COADDS_DIR=$COSMO/data/unwise/neo7/unwise-coadds/fulldepth:$COSMO/data/unwise/allwise/unwise-coadds/fulldepth
+export UNWISE_COADDS_TIMERESOLVED_DIR=$COSMO/work/wise/outputs/merge/neo7
+export UNWISE_MODEL_SKY_DIR=$COSMO/data/unwise/neo7/unwise-catalog/mod
 
-#export TYCHO2_KD_DIR=/global/cfs/cdirs/cosmo/staging/tycho2
-#export LARGEGALAXIES_CAT=/global/cfs/cdirs/cosmo/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
-export TYCHO2_KD_DIR=$CACHE_DIR/tycho2
-export LARGEGALAXIES_CAT=$CACHE_DIR/SGA-ellipse-v3.0.kd.fits
-export SKY_TEMPLATE_DIR=$CACHE_DIR/calib/sky_pattern
+export TYCHO2_KD_DIR=$COSMO/staging/tycho2
+export LARGEGALAXIES_CAT=$COSMO/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
+export SKY_TEMPLATE_DIR=$COSMO/work/legacysurvey/dr10/calib/sky_pattern
+
 unset BLOB_MASK_DIR
 unset PS1CAT_DIR
 unset GALEX_DIR
@@ -44,7 +58,7 @@ export OMP_NUM_THREADS=1
 export MPICH_GNI_FORK_MODE=FULLCOPY
 export KMP_AFFINITY=disabled
 
-ncores=16
+ncores=8
 
 brick="$1"
 # strip whitespace from front and back
@@ -88,7 +102,6 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --rgb-stretch 1.5 \
      --nsatur 2 \
      --survey-dir "$LEGACY_SURVEY_DIR" \
-     --cache-dir "$CACHE_DIR" \
      --outdir "$outdir" \
      --checkpoint "${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle" \
      --checkpoint-period 120 \
@@ -98,16 +111,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --cache-outliers \
      --max-memory-gb 20 \
      --threads "${ncores}" \
-      >> "$log" 2>&1
-
-# --no-wise-ceres helps for very dense fields.
-#     --no-wise-ceres \
-#     --write-stage coadds \
-#     --write-stage wise_forced \
-# 8 threads -> 14 gb
-#     --run south \
-#     --ps "${outdir}/metrics/${bri}/ps-${brick}-${SLURM_JOB_ID}.fits" \
-#     --ps-t0
+     >> "$log" 2>&1
 
 # Save the return value from the python command -- otherwise we
 # exit 0 because the rm succeeds!
