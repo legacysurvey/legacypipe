@@ -143,10 +143,39 @@ jobs:
               export TYCHO2_KD_DIR=$LPT
               python3.9 test/legacyzpts_test.py
 
+  build-from-docker-u2204-py3.10:
+    docker:
+      - image: legacysurvey/circleci-build-ubuntu22.04
+    steps:
+      - run:
+          name: CPU info
+          command: cat /proc/cpuinfo
+      - checkout
+      - run:
+          name: Unit tests
+          command: |
+              cd py
+              export PYTHONPATH=${PYTHONPATH}:$(pwd)
+              python3.10 -c "import sys; print(sys.path)"
+              python3.10 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
+              #coverage run test/unit_tests.py
+              #coverage run -a test/runbrick_test.py
+              python3.10 test/unit_tests.py
+              python3.10 test/runbrick_test.py
+              git clone https://github.com/legacysurvey/legacypipe-test-data.git
+              export LPT=$(pwd)/legacypipe-test-data
+              export LEGACYPIPE_TEST_DATA=$LPT
+              export GAIA_CAT_DIR=$LPT/gaia-dr2
+              export GAIA_CAT_VER=2
+              export PS1CAT_DIR=$LPT/ps1-qz-star-v3
+              export TYCHO2_KD_DIR=$LPT
+              python3.10 test/legacyzpts_test.py
+
 workflows:
   version: 2
   build:
     jobs:
+      - "build-from-docker-u2204-py3.10"
       - "build-from-docker-u2004-py3.8"
       - "build-from-docker-u2004-py3.9"
       - "build-from-docker-py3.6"
