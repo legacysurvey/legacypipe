@@ -44,7 +44,7 @@ export OMP_NUM_THREADS=1
 export MPICH_GNI_FORK_MODE=FULLCOPY
 export KMP_AFFINITY=disabled
 
-ncores=16
+ncores=8
 
 brick="$1"
 # strip whitespace from front and back
