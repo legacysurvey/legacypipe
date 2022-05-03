@@ -40,26 +40,29 @@ RUN wget -nv https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.
 
 # ugly: Tractor's mp_fourier module detects the $CC='icc' exactly
 # These are in /opt/intel/bin, which is on the PATH.
-ENV CC icc
-ENV CXX icpc
-ENV LDSHARED icc -shared
-# Edison & Cori
-#ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=ivybridge -ax=haswell,knl
-# Just Cori (KNL & Haswell)
-ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell -ax=knl
-# Just Cori Haswell
-ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell
-ENV ARCH_FLAGS ""
+ENV CC=icc \
+    CXX=icpc \
+    LDSHARED="icc -shared"
 
-ENV PYTHON python3
-ENV PYTHON_CONFIG python3-config
-ENV PYTHON_SCRIPT "/usr/bin/env python3"
+# Edison & Cori
+# ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=ivybridge -ax=haswell,knl
+# Just Cori (KNL & Haswell)
+# ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell -ax=knl
+# Just Cori Haswell
+ENV BASE_CFLAGS="-O3 -g -fPIC -std=gnu99 -pthread" \
+    REAL_CFLAGS="$BASE_CFLAGS -x=haswell" \
+    CFLAGS="$REAL_CFLAGS" \
+    ARCH_FLAGS=""
+
+ENV PYTHON="python3" \
+    PYTHON_CONFIG="python3-config" \
+    PYTHON_SCRIPT="/usr/bin/env python3"
 
 RUN mkdir -p /src
 WORKDIR /src
 
-ENV BLAS -L${MKLROOT}/lib/intel64 -lmkl_rt -fopenmp -lpthread -limf -lsvml -ldl
-ENV CPPFLAGS -I${MKLROOT}/include
+ENV BLAS="-L${MKLROOT}/lib/intel64 -lmkl_rt -fopenmp -lpthread -limf -lsvml -ldl" \
+    CPPFLAGS="-I${MKLROOT}/include"
 
 RUN wget -nv https://www.mpich.org/static/downloads/3.3/mpich-3.3.tar.gz \
     && tar xzf mpich-3.3.tar.gz \
@@ -74,13 +77,13 @@ RUN wget -nv https://www.mpich.org/static/downloads/3.3/mpich-3.3.tar.gz \
 RUN pip --no-cache-dir install cython
 
 # mpi4py / mpicc can't handle -ax=knl or -x=haswell (it compiles using gcc?)
-ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread
+ENV CFLAGS $BASE_CFLAGS
 RUN git clone https://github.com/mpi4py/mpi4py.git \
          && (cd mpi4py \
          && python setup.py build \
          && python setup.py install) \
          && rm -Rf mpi4py
-ENV CFLAGS -O3 -g -fPIC -std=gnu99 -pthread -x=haswell
+ENV CFLAGS $REAL_CFLAGS
 
 RUN git clone https://github.com/astromatic/sextractor.git sourceextractor \
     && cd sourceextractor \
@@ -138,9 +141,9 @@ RUN /sbin/ldconfig
 ######## Stage 2 ########
 FROM registry.services.nersc.gov/nersc/intel_cxx_fort_mpi_mkl_runtime
 
-ENV PYTHON python3
-ENV PYTHON_CONFIG python3-config
-ENV PYTHON_SCRIPT "/usr/bin/env python3"
+ENV PYTHON=python3 \
+    PYTHON_CONFIG=python3-config \
+    PYTHON_SCRIPT="/usr/bin/env python3"
 RUN echo 'PATH=/opt/conda/bin:$PATH' > /etc/profile.d/conda.sh
 
 RUN rm /root/.profile
@@ -196,8 +199,8 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
 RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe \
     && cd legacypipe && git describe
 
-ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
-ENV PATH /opt/conda/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py \
+    PATH=/opt/conda/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 RUN mkdir /homedir && chmod 777 /homedir
 ENV HOME /homedir
@@ -274,7 +277,7 @@ ENV LEGACYPIPE_DIR /src/legacypipe/py
 
 # update legacypipe
 RUN cd /src/legacypipe && git pull \   
-    && git describe && echo DR9.10.1 && \
+    && git describe && echo DR9.10.2 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
