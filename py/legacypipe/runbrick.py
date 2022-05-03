@@ -2142,7 +2142,9 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ('BAILOUT',   'BAIL',  'Bailed out processing'),
         ('MEDIUM',    'MED',   'medium-bright star'),
         ('GALAXY',    'GAL',   'SGA large galaxy'),
-        ('CLUSTER',   'CLUST', 'Globular cluster')]
+        ('CLUSTER',   'CLUST', 'Globular cluster'),
+        ('SATUR_I',   'SAT_I', 'i band saturated'),
+        ('ALLMASK_I', 'ALL_I', 'any ALLMASK_I bit set')]
     version_header.add_record(dict(name='COMMENT', value='maskbits bits:'))
     _add_bit_description(version_header, MASKBITS, mbits,
                          'MB_%s', 'MBIT_%i', 'maskbits')
