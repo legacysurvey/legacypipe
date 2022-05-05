@@ -94,7 +94,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --checkpoint-period 120 \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
      --write-stage srcs \
-     --release 10300 \
+     --release 10000 \
      --cache-outliers \
      --max-memory-gb 20 \
      --threads "${ncores}" \
