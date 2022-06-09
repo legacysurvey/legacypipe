@@ -277,7 +277,7 @@ ENV LEGACYPIPE_DIR /src/legacypipe/py
 
 # update legacypipe
 RUN cd /src/legacypipe && git pull \   
-    && git describe && echo DR9.10.2 && \
+    && git describe && echo DR10.0.0 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
