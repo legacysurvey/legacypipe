@@ -140,22 +140,18 @@ def main():
     from legacypipe.runbrick import copy_wise_into_catalog
     copy_wise_into_catalog(T, WISE, None, version_header)
 
-    # primhdr = version_header
-    # release = 9009
-    # 
-    # # The "format_catalog" code expects all lower-case column names...
-    # for c in T.columns():
-    #     if c != c.lower():
-    #         T.rename(c, c.lower())
-    # from legacypipe.format_catalog import format_catalog
-    # with survey.write_output('tractor', brick=brickname) as out:
-    #     format_catalog(T[np.argsort(T.objid)], None, primhdr, bands,
-    #                    survey.allbands, None, release,
-    #                    write_kwargs=dict(fits_object=out.fits),
-    #                    N_wise_epochs=17, motions=gaia_stars, gaia_tagalong=True)
-    
+    for col in ['regular', 'ibx', 'iby', 'in_bounds', 'wise_mask']:
+        T.delete_column(col)
 
-    T.writeto(os.path.join(opt.output_dir, 'tractor.fits'), primheader=version_header)
+    from legacypipe.units import get_units_for_columns
+    from astrometry.util.file import trymakedirs
+    columns = T.get_columns()
+    wbands = ['w1','w2','w3','w4']
+    gbands = ['nuv','fuv']
+    units = get_units_for_columns(columns, bands=bands + wbands + gbands)
+
+    T.writeto(os.path.join(opt.output_dir, 'tractor.fits'), primheader=version_header,
+              units=units, columns=columns)
 
 if __name__ == '__main__':
     sys.exit(main())
