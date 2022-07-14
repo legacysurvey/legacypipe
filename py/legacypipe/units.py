@@ -5,8 +5,8 @@ def get_units_for_columns(cols, bands=None, extras=None):
     degiv = 'deg^(-2)'
     arcsec = 'arcsec'
     arcseciv = 'arcsec^(-2)'
-    flux = 'nanomaggy'
-    fluxiv = 'nanomaggy^(-2)'
+    flux = 'nanomaggies'
+    fluxiv = 'nanomaggies^(-2)'
     pm = 'mas/yr'
     pmiv = '(mas/yr)^(-2)'
     unitmap = dict(
@@ -24,7 +24,7 @@ def get_units_for_columns(cols, bands=None, extras=None):
                    flux=flux, flux_ivar=fluxiv,
                    apflux=flux, apflux_ivar=fluxiv,
                    psfdepth=fluxiv, galdepth=fluxiv,
-                   sky='nanomaggy/arcsec^2',
+                   sky='nanomaggies/arcsec^2',
                    psfsize=arcsec,
                    fwhm='pixels',
                    ccdrarms=arcsec, ccddecrms=arcsec,
