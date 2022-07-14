@@ -343,6 +343,18 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         from legacypipe.runbrick_plots import tim_plots
         tim_plots(tims, bands, ps)
 
+    # Add header cards about the survey-ccds files that were used.
+    fns = survey.find_file('ccd-kds')
+    fns = survey.filter_ccd_kd_files(fns)
+    if len(fns) == 0:
+        fns = survey.find_file('ccds')
+        fns.sort()
+        fns = survey.filter_ccds_files(fns)
+    for i,fn in enumerate(fns):
+        version_header.add_record(dict(
+            name='CCDFN_%i' % (i+1), value=fn,
+            comment='survey-ccds file used'))
+
     # Add header cards about which bands and cameras are involved.
     for band in survey.allbands:
         hasit = band in bands
