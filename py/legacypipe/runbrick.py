@@ -2445,7 +2445,8 @@ def stage_wise_forced(
 
     record_event and record_event('stage_wise_forced: starting')
     _add_stage_version(version_header, 'WISE', 'wise_forced')
-
+    version_header.add_record(dict(name='W_CERES', value=wise_ceres,
+                                   comment='WISE forced phot: use Ceres optimizer?'))
     if not plots:
         ps = None
 
