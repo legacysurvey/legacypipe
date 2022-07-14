@@ -283,6 +283,40 @@ def tim_plots(tims, bands, ps):
         plt.title('Pixel distributions: %s band' % b)
         ps.savefig()
 
+    # Plot row-wise and column-wise medians
+    for v in [1,2]:
+        for b in bands:
+            plt.clf()
+            for tim in tims:
+                if tim.band != b:
+                    continue
+                pix = tim.getImage().copy()
+                pix[tim.getInvError() == 0] = 0.
+                medc = np.median(pix, axis=0)
+                medr = np.median(pix, axis=1)
+                H,W = pix.shape
+                if v == 1:
+                    sty = dict(linestyle='-', alpha=0.2)
+                else:
+                    sty = dict(marker='.', linestyle='', alpha=0.2)
+                plt.subplot(2,1,1)
+                plt.plot(np.arange(W) + tim.x0, medc / tim.sig1, **sty)
+                plt.subplot(2,1,2)
+                plt.plot(np.arange(H) + tim.y0, medr / tim.sig1, **sty)
+            plt.subplot(2,1,1)
+            plt.title('Column-wise median')
+            plt.ylabel('Median (sigmas)')
+            plt.subplot(2,1,2)
+            plt.title('Row-wise median')
+            plt.suptitle('%s band' % b)
+            ps.savefig()
+
+            plt.subplot(2,1,1)
+            plt.ylim(-1, 1)
+            plt.subplot(2,1,2)
+            plt.ylim(-1, 1)
+            ps.savefig()
+
     # Plot image pixels, invvars, masks
     for tim in tims:
         plt.clf()
