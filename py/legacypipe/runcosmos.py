@@ -72,8 +72,14 @@ def main():
         lvl = logging.DEBUG
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
 
+    bands = opt.bands
+    if bands is None:
+        bands = ['g','r','z']
+    else:
+        bands = bands.split(',')
     survey = CosmosSurvey(survey_dir=opt.survey_dir, subset=subset,
-                          output_dir=opt.output_dir)
+                          output_dir=opt.output_dir,
+                          allbands=bands)
     print('Using survey:', survey)
     #print('with output', survey.output_dir)
 

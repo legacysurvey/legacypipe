@@ -17,6 +17,34 @@ Code specific to images from the Dark Energy Camera (DECam).
 '''
 
 class DecamImage(LegacySurveyImage):
+
+    ZP0 =  dict(g = 25.001,
+                r = 25.209,
+                z = 24.875,
+                # u from Arjun 2021-03-17, based on DECosmos-to-SDSS
+                u = 23.3205,
+                # i,Y from DESY1_Stripe82 95th percentiles
+                i = 25.149,
+                Y = 23.712,
+                # N419 is hacked to just = N501
+                N419 = 23.812,
+                N501 = 23.812,
+                N673 = 24.151,
+    )
+
+    K_EXT = dict(g = 0.173,
+                 r = 0.090,
+                 i = 0.054,
+                 z = 0.060,
+                 Y = 0.058,
+                 # From Arjun 2021-03-17 based on DECosmos (calib against SDSS)
+                 u = 0.63,
+                 # HACK - == broadband
+                 N419 = 0.173,
+                 N501 = 0.173,
+                 N673 = 0.090,
+    )
+
     '''
     A LegacySurveyImage subclass to handle images from the Dark Energy
     Camera, DECam, on the Blanco telescope.
@@ -26,33 +54,11 @@ class DecamImage(LegacySurveyImage):
 
         # Nominal zeropoints
         # These are used only for "ccdskybr", so are not critical.
-        self.zp0 =  dict(g = 25.001,
-                         r = 25.209,
-                         z = 24.875,
-                         # u from Arjun 2021-03-17, based on DECosmos-to-SDSS
-                         u = 23.3205,
-                         # i,Y from DESY1_Stripe82 95th percentiles
-                         i = 25.149,
-                         Y = 23.712,
-                         # N419 is hacked to just = N501
-                         N419 = 23.812,
-                         N501 = 23.812,
-                         N673 = 24.151,
-        )
+        self.zp0 = DecamImage.ZP0.copy()
+
         # extinction per airmass, from Arjun's 2019-02-27
         # "Zeropoint variations with MJD for DECam data".
-        self.k_ext = dict(g = 0.173,
-                          r = 0.090,
-                          i = 0.054,
-                          z = 0.060,
-                          Y = 0.058,
-                          # From Arjun 2021-03-17 based on DECosmos (calib against SDSS)
-                          u = 0.63,
-                          # HACK - == broadband
-                          N419 = 0.173,
-                          N501 = 0.173,
-                          N673 = 0.090,
-            )
+        self.k_ext = DecamImage.K_EXT.copy()
 
     def set_ccdzpt(self, ccdzpt):
         # Adjust zeropoint for exposure time
