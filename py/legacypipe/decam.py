@@ -362,8 +362,9 @@ class DecamImage(LegacySurveyImage):
         if min(img.shape) / boxsize < 4:
             boxsize /= 2
 
-        if (self.band in ['g','r','i'] and
-            self.ccdname.strip() in ['S30', 'N14', 'S19', 'S16', 'S10']):
+        if ((self.band in ['g','r','i'] and
+             self.ccdname.strip() in ['S30', 'N14', 'S19', 'S16', 'S10']) or
+            (self.band == 'z' and self.ccdname.strip() == 'S30')):
             H,W = img.shape
             xbreak = W//2
             skyobj = JumpSky.BlantonMethod(img, goodpix, boxsize, xbreak)
