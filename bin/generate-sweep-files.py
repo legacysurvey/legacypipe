@@ -56,7 +56,7 @@ def main():
     schemas = {
         'ra' : sweep_schema_ra(360),
         'blocks' : sweep_schema_blocks(36, 36),
-        'blocksdr10' : sweep_schema_blocks(36, 36),
+        'blocksdr10' : sweep_schema_blocks(72, 36),
         'dec' : sweep_schema_dec(180),
         }
 
@@ -585,7 +585,7 @@ def parse_args():
     ap.add_argument("src", help="Path to the root directory contains all tractor files")
     ap.add_argument("dest", help="Path to the Output sweep file")
 
-    ap.add_argument('-f', "--format", choices=['fits', 'hdf5'], nargs='+', default=["fits"],
+    ap.add_argument('-f', "--format", choices=['fits'], nargs='+', default=["fits"],
         help="Format of the output sweep files")
 
     ap.add_argument('-F', "--filelist", default=None,
@@ -599,7 +599,7 @@ def parse_args():
         help="if set, don't overwrite existing files (as a speed-up)")
     ap.add_argument('-I', "--ignore-errors", action='store_true')
 
-    ap.add_argument('-S', "--schema", choices=['blocks', 'dec', 'ra'],
+    ap.add_argument('-S', "--schema", choices=['blocks', 'blocksdr10', 'dec', 'ra'],
             default='blocks',
             help="""Decomposition schema. Still being tuned. """)
 
