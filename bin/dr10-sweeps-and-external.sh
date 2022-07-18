@@ -15,10 +15,12 @@
 #   srun [args] shifter --image=docker:legacysurvey/legacypipe:DR10.0.1 ./this-script.sh
 
 # ADM if this is true, make the list of bricks. If that was already
-# ADM done, set this to False as a speed-up.
+# ADM done, set this to false as a speed-up.
 makelist=false
+
 # ADM if this is true, don't overwrite any existing files. This
-# ADM is useful for recovering faster if there's a failure.
+# ADM is useful for recovering faster if there's a failure. It should
+# ADM be safe to leave this as true and never overwrite existing files.
 mopup=true
 
 # ADM you may need to change the top-level environment variables from
@@ -51,7 +53,7 @@ export SDSSDIR=/global/cfs/cdirs/sdss/data/sdss/
 # ADM a sensible number of processors on which to run.
 export NUMPROC=$(($SLURM_CPUS_ON_NODE / 2))
 # ADM the sweeps need more memory since we started to write three files.
-export SWEEPS_NUMPROC=$(($SLURM_CPUS_ON_NODE / 10))
+export SWEEPS_NUMPROC=$(($SLURM_CPUS_ON_NODE / 5))
 
 # ADM if the bricks and matching files are common to all surveys then
 # ADM uncomment the next line and comment the subsequent for line.

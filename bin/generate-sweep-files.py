@@ -316,10 +316,12 @@ def save_sweep_file(filename, data, header, format, unitdict=None):
         hdr["DEPVER{:02d}".format(nextdep)] = git_version()
 
         hdr = [dict(name=key, value=hdr[key]) for key in sorted(hdr.keys())]
-        with fitsio.FITS(filename, mode='rw', clobber=True) as ff:
+        # ADM write atomically, to a .tmp file, for extra safety.
+        with fitsio.FITS(filename+".tmp", mode='rw', clobber=True) as ff:
             ff.create_image_hdu()
             ff[0].write_keys(hdr)
             ff.write_table(data, extname='SWEEP', units=units)
+        os.rename(filename+'.tmp', filename)
 
     elif format == 'hdf5':
         import h5py
