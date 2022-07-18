@@ -24,6 +24,9 @@ def main():
     if ns.ignore_errors:
         print("Warning: *** Will ignore broken tractor catalogue files ***")
         print("         *** Disable -I for final data product.         ***")
+    if ns.mopup:
+        print("Warning: *** The mopup flag was passed. Existing ***")
+        print("         *** sweep files will NOT be overwritten ***")
     # avoid each subprocess importing h5py again and again.
     if 'hdf5' in ns.format:
         import h5py
@@ -53,6 +56,7 @@ def main():
     schemas = {
         'ra' : sweep_schema_ra(360),
         'blocks' : sweep_schema_blocks(36, 36),
+        'blocksdr10' : sweep_schema_blocks(36, 36),
         'dec' : sweep_schema_dec(180),
         }
 
@@ -64,6 +68,35 @@ def main():
     nobj_tot = np.zeros((), 'i8')
 
     def work(sweep):
+        # ADM the general format for a sweeps file.
+        template = "sweep-%(ramin)s%(decmin)s-%(ramax)s%(decmax)s.%(format)s"
+        def formatdec(dec):
+            return ("%+04g" % dec).replace('-', 'm').replace('+', 'p')
+        def formatra(ra):
+            return ("%03g" % ra)
+
+        # ADM the various flavors of sweeps file.
+        ender = [".fits", "-lc.fits", "-ex.fits"]
+
+        # ADM if we're mopping up, move on if all requisite files exist.
+        # ADM strictly, this only checks for existence of the fits files.
+        if ns.mopup:
+            filename = template %  \
+                       dict(ramin=formatra(sweep[0]),
+                            decmin=formatdec(sweep[1]),
+                            ramax=formatra(sweep[2]),
+                            decmax=formatdec(sweep[3]),
+                            format="fits")
+            allexist = True
+            for odn, end in zip(outdirnames, ender):
+                fn = filename.replace(".fits", end)
+                dest = os.path.join(ns.dest, odn, fn)
+                allexist &= os.path.exists(dest)
+            # ADM if allexist remains True, all requisite files exist.
+            if allexist:
+                print("won't overwrite files related to {}".format(filename))
+                return filename, 0, 0
+
         data, header, nbricks = make_sweep(sweep, bricks, ns, ALL_DTYPE=ALL_DTYPE)
 
         header.update({
@@ -72,13 +105,6 @@ def main():
             'RAMAX'  : sweep[2],
             'DECMAX' : sweep[3],
             })
-
-        template = "sweep-%(ramin)s%(decmin)s-%(ramax)s%(decmax)s.%(format)s"
-
-        def formatdec(dec):
-            return ("%+04g" % dec).replace('-', 'm').replace('+', 'p')
-        def formatra(ra):
-            return ("%03g" % ra)
 
         for format in ns.format:
             filename = template %  \
@@ -99,7 +125,6 @@ def main():
                 lcdt = uniqid + [dt for dt in SWEEP_DTYPE.descr if 'LC' in dt[0]]
                 # ADM    the remaining "extra" columns.
                 alldt = uniqid + [dt for dt in ALL_DTYPE.descr if dt[0] not in SWEEP_DTYPE.names]
-                ender = [".fits", "-lc.fits", "-ex.fits"]
                 for dt, odn, end in zip([sweepdt, lcdt, alldt], outdirnames, ender):
                     fn = filename.replace(".fits", end)
                     dest = os.path.join(ns.dest, odn, fn)
@@ -570,6 +595,8 @@ def parse_args():
         help="location of decals-bricks.fits, speeds up the scanning")
 
     ap.add_argument('-v', "--verbose", action='store_true')
+    ap.add_argument('-m', "--mopup", action='store_true',
+        help="if set, don't overwrite existing files (as a speed-up)")
     ap.add_argument('-I', "--ignore-errors", action='store_true')
 
     ap.add_argument('-S', "--schema", choices=['blocks', 'dec', 'ra'],

@@ -12,7 +12,14 @@
 
 # ADM the easiest way to run this is using a docker container. This can
 # ADM be achieved by grabbing an interactive node and then executing, e.g.:
-#   srun shifter --image=docker:legacysurvey/legacypipe:DR10.0.1 ./this-script.sh
+#   srun [args] shifter --image=docker:legacysurvey/legacypipe:DR10.0.1 ./this-script.sh
+
+# ADM if this is true, make the list of bricks. If that was already
+# ADM done, set this to False as a speed-up.
+makelist=false
+# ADM if this is true, don't overwrite any existing files. This
+# ADM is useful for recovering faster if there's a failure.
+mopup=true
 
 # ADM you may need to change the top-level environment variables from
 # -------------------------------here--------------------------------
@@ -44,13 +51,13 @@ export SDSSDIR=/global/cfs/cdirs/sdss/data/sdss/
 # ADM a sensible number of processors on which to run.
 export NUMPROC=$(($SLURM_CPUS_ON_NODE / 2))
 # ADM the sweeps need more memory since we started to write three files.
-export SWEEPS_NUMPROC=$(($SLURM_CPUS_ON_NODE / 5))
+export SWEEPS_NUMPROC=$(($SLURM_CPUS_ON_NODE / 10))
 
 # ADM if the bricks and matching files are common to all surveys then
 # ADM uncomment the next line and comment the subsequent for line.
 for survey in ""
 # ADM run once for each of the DECaLS and MzLS/BASS surveys.
-#for survey in north south
+#for survey in south north
 do
 
     # ADM the file that holds general information about LS bricks.
@@ -71,15 +78,27 @@ do
     mkdir -p $EXTERNAL_OUTDIR
 
     # ADM write the bricks of interest to the output directory.
-    find $TRACTOR_INDIR -name 'tractor-*.fits' > $TRACTOR_FILELIST
-    echo wrote list of tractor files to $TRACTOR_FILELIST
+    if "$makelist"; then
+        echo making new list of bricks to process
+        find $TRACTOR_INDIR -name 'tractor-*.fits' > $TRACTOR_FILELIST
+        echo wrote list of tractor files to $TRACTOR_FILELIST
+    else
+        echo makelist is $makelist: Refusing to make new list of bricks to process.
+    fi
 
     # ADM run the sweeps. Should never have to use the --ignore option here,
     # ADM which usually means there are some discrepancies in the data model!
-    echo running sweeps for the $survey
-    time python $LEGACYPIPE_DIR/bin/generate-sweep-files.py \
-         -v --numproc $SWEEPS_NUMPROC -f fits -F $TRACTOR_FILELIST --schema blocks \
-         -d $BRICKSFILE $TRACTOR_INDIR $SWEEP_OUTDIR
+    echo running sweeps for the $survey on $SWEEPS_NUMPROC nodes
+    if "$mopup"; then
+        echo "Mopping up (won't overwrite existing sweep files)"
+        time python $LEGACYPIPE_DIR/bin/generate-sweep-files.py \
+             -v --numproc $SWEEPS_NUMPROC -f fits -F $TRACTOR_FILELIST --schema blocks$dr \
+             --mopup -d $BRICKSFILE $TRACTOR_INDIR $SWEEP_OUTDIR
+    else
+        time python $LEGACYPIPE_DIR/bin/generate-sweep-files.py \
+             -v --numproc $SWEEPS_NUMPROC -f fits -F $TRACTOR_FILELIST --schema blocks$dr \
+             -d $BRICKSFILE $TRACTOR_INDIR $SWEEP_OUTDIR
+    fi
     echo done running sweeps for the $survey
 
     # ADM run each of the external matches.
