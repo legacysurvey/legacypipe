@@ -10,6 +10,10 @@
 # ADM completion within 4 hours on an interactive node, e.g.
 #   salloc -N 1 -C haswell -t 04:00:00 --qos interactive -L SCRATCH,project
 
+# ADM the easiest way to run this is using a docker container. This can
+# ADM be achieved by grabbing an interactive node and then executing, e.g.:
+#   srun shifter --image=docker:legacysurvey/legacypipe:DR10.0.1 ./this-script.sh
+
 # ADM you may need to change the top-level environment variables from
 # -------------------------------here--------------------------------
 
@@ -21,11 +25,12 @@ drdir=/global/cfs/cdirs/cosmo/work/legacysurvey/$dr
 droutdir=$CSCRATCH/$dr
 
 # ADM uncomment these to pull and enter the docker/shifter environment.
+# ADM this is useful if NOT parallelizing across multiple nodes using srun.
 # shifterimg pull docker:legacysurvey/legacypipe:latest
 # shifter --image docker:legacysurvey/legacypipe:latest bash
 
 # ADM example set-ups for using custom code are commented out!
-# ADM the UN-commented code is for the docker/shifter environment.
+# ADM the UN-commented code is for the docker container.
 export LEGACYPIPE_DIR=/src/legacypipe
 # ADM this next line can be uncommented for, e.g., developing code.
 export LEGACYPIPE_DIR=$HOME/git/legacypipe/
@@ -72,14 +77,14 @@ do
     # ADM run the sweeps. Should never have to use the --ignore option here,
     # ADM which usually means there are some discrepancies in the data model!
     echo running sweeps for the $survey
-    time srun -N 1 python $LEGACYPIPE_DIR/bin/generate-sweep-files.py \
+    time python $LEGACYPIPE_DIR/bin/generate-sweep-files.py \
          -v --numproc $SWEEPS_NUMPROC -f fits -F $TRACTOR_FILELIST --schema blocks \
          -d $BRICKSFILE $TRACTOR_INDIR $SWEEP_OUTDIR
     echo done running sweeps for the $survey
 
     # ADM run each of the external matches.
     echo making $EXTERNAL_OUTDIR/survey-$dr-$survey-dr7Q.fits
-    time srun -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
+    time python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
          -v --numproc $NUMPROC -f fits -F $TRACTOR_FILELIST \
          $SDSSDIR/dr7/dr7qso.fit.gz \
          $TRACTOR_INDIR \
@@ -87,7 +92,7 @@ do
     echo done making $EXTERNAL_OUTDIR/survey-$dr-$survey-dr7Q.fits
 
     echo making $EXTERNAL_OUTDIR/survey-$dr-$survey-dr12Q.fits
-    time srun -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
+    time python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
          -v --numproc $NUMPROC -f fits -F $TRACTOR_FILELIST \
          $SDSSDIR/dr12/boss/qso/DR12Q/DR12Q.fits \
          $TRACTOR_INDIR \
@@ -95,7 +100,7 @@ do
     echo done making $EXTERNAL_OUTDIR/survey-$dr-$survey-dr12Q.fits
 
     echo making $EXTERNAL_OUTDIR/survey-$dr-$survey-superset-dr12Q.fits
-    time srun -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
+    time python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
          -v --numproc $NUMPROC -f fits -F $TRACTOR_FILELIST \
          $SDSSDIR/dr12/boss/qso/DR12Q/Superset_DR12Q.fits \
          $TRACTOR_INDIR \
@@ -103,7 +108,7 @@ do
     echo done making $EXTERNAL_OUTDIR/survey-$dr-$survey-superset-dr12Q.fits
 
     echo making $EXTERNAL_OUTDIR/survey-$dr-$survey-specObj-dr16.fits
-    time srun -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
+    time python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
          -v --numproc $NUMPROC -f fits -F $TRACTOR_FILELIST \
          $SDSSDIR/dr16/sdss/spectro/redux/specObj-dr16.fits \
          $TRACTOR_INDIR \
@@ -111,7 +116,7 @@ do
     echo done making $EXTERNAL_OUTDIR/survey-$dr-$survey-specObj-dr16.fits
 
     echo making $EXTERNAL_OUTDIR/survey-$dr-$survey-dr16Q-v4.fits
-    time srun -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
+    time python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
          -v --numproc $NUMPROC -f fits -F $TRACTOR_FILELIST \
          $SDSSDIR/dr16/eboss/qso/DR16Q/DR16Q_v4.fits \
          $TRACTOR_INDIR \
@@ -119,7 +124,7 @@ do
     echo done making $EXTERNAL_OUTDIR/survey-$dr-$survey-dr16Q-v4.fits
 
     echo making $EXTERNAL_OUTDIR/survey-$dr-$survey-superset-dr16Q-v3.fits
-    time srun -N 1 python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
+    time python $LEGACYPIPE_DIR/bin/match-external-catalog.py \
          -v --numproc $NUMPROC -f fits -F $TRACTOR_FILELIST \
 	 $SDSSDIR/dr16/eboss/qso/DR16Q/DR16Q_Superset_v3.fits \
          $TRACTOR_INDIR \
