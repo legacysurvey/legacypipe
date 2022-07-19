@@ -33,16 +33,21 @@ drdir=/global/cfs/cdirs/cosmo/work/legacysurvey/$dr
 # ADM write to scratch.
 droutdir=$CSCRATCH/$dr
 
-# ADM uncomment these to pull and enter the docker/shifter environment.
+# ADM uncomment these to pull and enter the docker container.
 # ADM this is useful if NOT parallelizing across multiple nodes using srun.
-# shifterimg pull docker:legacysurvey/legacypipe:latest
-# shifter --image docker:legacysurvey/legacypipe:latest bash
+# shifterimg pull docker:legacysurvey/legacypipe:DR10.0.1
+# shifter --image docker:legacysurvey/legacypipe:DR10.0.1 bash
 
 # ADM example set-ups for using custom code are commented out!
 # ADM the UN-commented code is for the docker container.
 export LEGACYPIPE_DIR=/src/legacypipe
-# ADM this next line can be uncommented for, e.g., developing code.
-export LEGACYPIPE_DIR=$HOME/git/legacypipe/
+
+# ADM an abstruse way of getting my home directory as $HOME
+# ADM can be redefined in docker containers.
+HOM=`eval echo "~$USER"`
+# ADM the next line can be uncommented for, e.g., developing code.
+export LEGACYPIPE_DIR=$HOM/git/legacypipe/
+
 export PYTHONPATH=/usr/local/lib/python:/usr/local/lib/python3.6/dist-packages:$LEGACYPIPE_DIR/py
 
 # ADM location of external-match files.
@@ -53,7 +58,7 @@ export SDSSDIR=/global/cfs/cdirs/sdss/data/sdss/
 # ADM a sensible number of processors on which to run.
 export NUMPROC=$(($SLURM_CPUS_ON_NODE / 2))
 # ADM the sweeps need more memory since we started to write three files.
-export SWEEPS_NUMPROC=$(($SLURM_CPUS_ON_NODE / 5))
+export SWEEPS_NUMPROC=$(($SLURM_CPUS_ON_NODE / 6))
 
 # ADM if the bricks and matching files are common to all surveys then
 # ADM uncomment the next line and comment the subsequent for line.
