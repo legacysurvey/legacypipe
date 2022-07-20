@@ -1194,10 +1194,10 @@ class LegacySurveyData(object):
         Does the following on entry:
         - calls self.find_file() to determine which filename to write to
         - ensures the output directory exists
-        - appends a ".tmp" to the filename
+        - prepends a "tmp-" to the filename
 
         Does the following on exit:
-        - moves the ".tmp" to the final filename (to make it atomic)
+        - moves the "tmp-" to the final filename (to make it atomic)
         - computes the sha256sum
         '''
         class OutputFileContext(object):
@@ -1270,10 +1270,12 @@ class LegacySurveyData(object):
                     debug('Wrote', self.tmpfn)
                     del rawdata
                 else:
-                    f = open(self.tmpfn, 'rb')
+                    # Non-FITS file -- read the temp file and compute the checksum (hash)
                     if self.hashsum:
+                        f = open(self.tmpfn, 'rb')
                         sha.update(f.read())
-                    f.close()
+                        f.close()
+                        del f
                 if self.hashsum:
                     hashcode = sha.hexdigest()
                     del sha
