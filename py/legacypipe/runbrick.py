@@ -672,6 +672,23 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
+    if plots:
+        import pylab as plt
+        assert(len(ccds) == len(tims))
+        # Make per-exposure coadd jpeg
+        expnums = np.unique(ccds.expnum)
+        for e in expnums:
+            I = np.flatnonzero(ccds.expnum == e)
+            info('Coadding', len(I), 'exposures with expnum =', e)
+            bb = [tims[I[0]].band]
+            C = make_coadds([tims[i] for i in I], bb, targetwcs, lanczos=lanczos,
+                            mp=mp, plots=False, ps=None, allmasks=False)
+            rgb,kwa = survey.get_rgb(C.coimgs, bb, coadd_bw=True)
+            plt.clf()
+            plt.imshow(rgb, origin='lower', interpolation='nearest')
+            plt.title('Expnum %s %s' % (e, ''.join(bb)))
+            ps.savefig()
+
     kw = dict(ngood=True, coweights=False)
     if minimal_coadds:
         kw.update(allmasks=False)
