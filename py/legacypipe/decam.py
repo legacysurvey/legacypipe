@@ -154,8 +154,15 @@ class DecamImage(LegacySurveyImage):
         #assert(self.band == sky.filter)
         tfn = os.path.join(dirnm, 'sky_templates',
                            'sky_template_%s_%i.fits' % (self.band, sky.run))
-        if not os.path.exists(tfn):
-            warnings.warn('Sky template file %s does not exist' % tfn)
+        suffixes = ['', '.fz']
+        found = False
+        for suff in suffixes:
+            if os.path.exists(tfn + suff):
+                found = True
+                tfn = tfn + suff
+                break
+        if not found:
+            warnings.warn('Sky template file %s{%s} does not exist' % (tfn, ','.join(suffixes)))
             return None
         return dict(template_filename=tfn, sky_template_dir=dirnm, sky_obj=sky, skyscales_fn=fn)
 
