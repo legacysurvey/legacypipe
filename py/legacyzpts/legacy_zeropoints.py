@@ -458,7 +458,7 @@ def run_one_calib(X):
                        survey_blob_mask=survey_blob_mask,
                        halos=have_zpt,
                        subtract_largegalaxies=have_zpt)
-    except ZeroWeightError as zw:
+    except ZeroWeightError:
         print('Got ZeroWeightError running calibs for', img, 'but continuing')
     # Otherwise, let the exception propagate.
     return img

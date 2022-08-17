@@ -3039,7 +3039,7 @@ def copy_wise_into_catalog(T, WISE, WISE_T, primhdr):
         # Copy columns:
         for c in ['wise_coadd_id', 'wise_x', 'wise_y', 'wise_mask']:
             T.set(c, WISE.get(c))
-    
+
         for band in [1,2,3,4]:
             # Apply the Vega-to-AB shift *while* copying columns from
             # WISE to T.

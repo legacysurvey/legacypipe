@@ -620,7 +620,7 @@ class LegacySurveyImage(object):
             wcs = self.get_wcs()
         else:
             wcs = mywcs
-        x0,x1,y0,y1,slc = self.get_image_extent(wcs=wcs, radecpoly=radecpoly)
+        x0,x1,y0,y1,_ = self.get_image_extent(wcs=wcs, radecpoly=radecpoly)
         H = y1-y0
         W = x1-x0
         npix = H*W

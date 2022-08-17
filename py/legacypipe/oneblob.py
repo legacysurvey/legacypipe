@@ -1735,7 +1735,6 @@ class OneBlob(object):
             # Add this source's initial model back in.
             models.add(srci, self.tims)
 
-            from tractor import Galaxy
             is_galaxy = isinstance(src, Galaxy)
             if is_galaxy:
                 # During SGA pre-burns, limit initial positions (fit
