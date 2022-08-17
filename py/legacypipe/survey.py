@@ -1633,7 +1633,6 @@ class LegacySurveyData(object):
 
     def prime_cache_for_image(self, img):
         import shutil
-        from astrometry.util.file import trymakedirs
         fns = img.get_cacheable_filenames()
         cacheable = img.get_cacheable_filename_variables()
         for varname in cacheable:
