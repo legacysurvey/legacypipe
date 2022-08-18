@@ -864,10 +864,11 @@ class OneBlob(object):
         avoid_y = Bold.safe_y0
         avoid_r = np.zeros(len(avoid_x), np.float32) + 2.
         nsigma = 6.
+        avoid_map = (self.refmap != 0)
 
         Tnew,_,_ = run_sed_matched_filters(
             SEDs, self.bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r),
-            self.blobwcs, nsigma=nsigma, saturated_pix=satmaps, veto_map=None,
+            self.blobwcs, nsigma=nsigma, saturated_pix=satmaps, veto_map=avoid_map,
             plots=False, ps=None, mp=mp)
 
         detlogger.setLevel(detloglvl)
@@ -877,8 +878,6 @@ class OneBlob(object):
             return None
 
         debug('Found', len(Tnew), 'new sources')
-        Tnew.cut(self.refmap[Tnew.iby, Tnew.ibx] == 0)
-        debug('Cut to', len(Tnew), 'on refmap')
         if len(Tnew) == 0:
             return None
 
@@ -1736,7 +1735,6 @@ class OneBlob(object):
             # Add this source's initial model back in.
             models.add(srci, self.tims)
 
-            from tractor import Galaxy
             is_galaxy = isinstance(src, Galaxy)
             if is_galaxy:
                 # During SGA pre-burns, limit initial positions (fit

@@ -620,7 +620,7 @@ class LegacySurveyImage(object):
             wcs = self.get_wcs()
         else:
             wcs = mywcs
-        x0,x1,y0,y1,slc = self.get_image_extent(wcs=wcs, radecpoly=radecpoly)
+        x0,x1,y0,y1,_ = self.get_image_extent(wcs=wcs, radecpoly=radecpoly)
         H = y1-y0
         W = x1-x0
         npix = H*W
@@ -1239,18 +1239,18 @@ class LegacySurveyImage(object):
         Reads the sky model, returning a Tractor Sky object.
         '''
         from tractor.utils import get_class_from_name
-        tryfns = [self.survey.find_file('sky', img=self),
-                  self.survey.find_file('sky-single', img=self),
-                  ] + self.old_merged_skyfns
+        tryfns = [(self.survey.find_file('sky-single', img=self), 'single'),
+                  (self.survey.find_file('sky', img=self), 'merged'),
+                  ] + [(fn,'old') for fn in self.old_merged_skyfns]
         Ti = None
-        for fn in tryfns:
+        for fn,skytype in tryfns:
             if not os.path.exists(fn):
                 continue
             T = fits_table(fn)
             I, = np.nonzero((T.expnum == self.expnum) *
                             np.array([c.strip() == self.ccdname
                                       for c in T.ccdname]))
-            debug('Found', len(I), 'matching CCDs in merged sky file')
+            debug('Found', len(I), 'matching CCDs (expnum %i, ccdname %s) in sky file (%s) %s' % (self.expnum, self.ccdname, skytype, fn))
             if len(I) != 1:
                 continue
             if not self.validate_version(
@@ -1258,6 +1258,7 @@ class LegacySurveyImage(object):
                     data=T, old_calibs_ok=old_calibs_ok):
                 raise RuntimeError('Sky file %s did not pass consistency validation (PLVER, PLPROCID, EXPNUM)' % fn)
             Ti = T[I[0]]
+            break
         if Ti is None:
             raise RuntimeError('Failed to find sky model in files: %s' % ', '.join(tryfns))
 

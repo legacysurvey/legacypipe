@@ -711,19 +711,17 @@ def read_star_clusters(targetwcs):
     clusters = fits_table(clusterfile, columns=['ra', 'dec', 'radius', 'type', 'ba', 'pa'])
     clusters.ref_id = np.arange(len(clusters))
 
-    radius = 1.
+    assert(np.all(np.isfinite(clusters.radius)))
+
     rc,dc = targetwcs.radec_center()
+    wcs_rad = targetwcs.radius()
     d = degrees_between(rc, dc, clusters.ra, clusters.dec)
-    clusters.cut(d < radius)
+    clusters.cut(d < wcs_rad + clusters.radius)
     if len(clusters) == 0:
         return None
 
-    debug('Cut to {} star cluster(s) within the brick'.format(len(clusters)))
+    debug('Cut to {} star cluster(s) possibly touching the brick'.format(len(clusters)))
     clusters.ref_cat = np.array(['CL'] * len(clusters))
-
-    # Radius in degrees
-    clusters.radius = clusters.radius
-    clusters.radius[np.logical_not(np.isfinite(clusters.radius))] = 1./60.
 
     # Set isbright=True
     clusters.isbright = np.zeros(len(clusters), bool)

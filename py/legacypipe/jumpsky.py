@@ -53,7 +53,7 @@ class JumpSky(SplineSky):
     def scale(self, s):
         super().scale(s)
         self.xjump *= s
-              
+
     def evaluateGrid(self, xvals, yvals):
         g = super().evaluateGrid(xvals, yvals)
         I = np.flatnonzero(xvals + self.x0 >= self.xbreak)

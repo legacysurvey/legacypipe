@@ -672,6 +672,23 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
+    if plots:
+        import pylab as plt
+        assert(len(ccds) == len(tims))
+        # Make per-exposure coadd jpeg
+        expnums = np.unique(ccds.expnum)
+        for e in expnums:
+            I = np.flatnonzero(ccds.expnum == e)
+            info('Coadding', len(I), 'exposures with expnum =', e)
+            bb = [tims[I[0]].band]
+            C = make_coadds([tims[i] for i in I], bb, targetwcs, lanczos=lanczos,
+                            mp=mp, plots=False, ps=None, allmasks=False)
+            rgb,kwa = survey.get_rgb(C.coimgs, bb, coadd_bw=True)
+            plt.clf()
+            plt.imshow(rgb, origin='lower', interpolation='nearest')
+            plt.title('Expnum %s %s' % (e, ''.join(bb)))
+            ps.savefig()
+
     kw = dict(ngood=True, coweights=False)
     if minimal_coadds:
         kw.update(allmasks=False)
@@ -2926,8 +2943,13 @@ def stage_writecat(
             T.set(c, GALEX.get(c))
         GALEX = None
 
-    T.brick_primary = ((T.ra  >= brick.ra1 ) * (T.ra  < brick.ra2) *
-                        (T.dec >= brick.dec1) * (T.dec < brick.dec2))
+    if brick.ra1 > brick.ra2: # wrap-around case
+        T.brick_primary = (np.logical_or(T.ra >= brick.ra1, T.ra < brick.ra2) *
+                           (T.dec >= brick.dec1) * (T.dec < brick.dec2))
+    else:
+        T.brick_primary = ((T.ra  >= brick.ra1 ) * (T.ra  < brick.ra2) *
+                           (T.dec >= brick.dec1) * (T.dec < brick.dec2))
+
     H,W = maskbits.shape
     T.maskbits = maskbits[np.clip(T.iby, 0, H-1).astype(int),
                           np.clip(T.ibx, 0, W-1).astype(int)]
@@ -3017,7 +3039,7 @@ def copy_wise_into_catalog(T, WISE, WISE_T, primhdr):
         # Copy columns:
         for c in ['wise_coadd_id', 'wise_x', 'wise_y', 'wise_mask']:
             T.set(c, WISE.get(c))
-    
+
         for band in [1,2,3,4]:
             # Apply the Vega-to-AB shift *while* copying columns from
             # WISE to T.
