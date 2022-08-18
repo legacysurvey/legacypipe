@@ -1980,6 +1980,10 @@ class LegacySurveyImage(object):
             info('Image shape:', img.shape)
             info('Sky xgrid:', skyobj.xgrid, 'ygrid', skyobj.ygrid)
 
+            self.imshow((img - initsky) * boxcargood * blobgood * refgood, **ima2)
+            plt.title('Unmasked pixels')
+            ps.savefig()
+
             gridvals = skyobj.spl(skyobj.xgrid, skyobj.ygrid) - initsky
             plt.clf()
             self.imshow(gridvals.T, **ima2)
@@ -2010,6 +2014,65 @@ class LegacySurveyImage(object):
             # plt.imshow(skypix2, **ima2)
             # plt.title('Fine sky model')
             # ps.savefig()
+
+            plt.clf()
+            self.imshow((img - skypix), **ima2)
+            plt.colorbar()
+            plt.title('Image - Sky model')
+            ps.savefig()
+
+            plt.clf()
+            self.imshow((img - skypix), **ima)
+            plt.colorbar()
+            plt.title('Image - Sky model')
+            ps.savefig()
+
+            allgood = boxcargood * blobgood * refgood
+            h,w = img.shape
+            skyresid = img - skypix
+            rowmed = np.zeros(h)
+            for i in range(h):
+                rowmed[i] = np.median(skyresid[i,:][allgood[i,:]])
+            colmed = np.zeros(w)
+            for i in range(w):
+                colmed[i] = np.median(skyresid[:,i][allgood[:,i]])
+            plt.clf()
+            plt.subplot(2,1,1)
+            plt.plot(rowmed, 'k-')
+            plt.title('Row-wise median')
+            plt.subplot(2,1,2)
+            plt.plot(colmed, 'k-')
+            plt.title('Column-wise median')
+            plt.suptitle('masked image - sky model')
+            ps.savefig()
+
+            #(wt > 0)
+            isgoodrows = np.any(wt>0, axis=1)
+            isgoodcols = np.any(wt>0, axis=0)
+            goodrows = np.flatnonzero(isgoodrows)
+            goodcols = np.flatnonzero(isgoodcols)
+
+            plt.clf()
+            plt.subplot(2,1,1)
+            plt.plot(goodrows, np.median(img, axis=1)[isgoodrows], 'b-')
+            plt.plot(np.median(skypix, axis=1), 'r-')
+            plt.title('Row-wise median')
+            plt.subplot(2,1,2)
+            plt.plot(goodcols, np.median(img, axis=0)[isgoodcols], 'b-')
+            plt.plot(np.median(skypix, axis=0), 'r-')
+            plt.title('Column-wise median')
+            plt.suptitle('Unmasked image (blue) and sky (red) model')
+            ps.savefig()
+
+            plt.clf()
+            plt.subplot(2,1,1)
+            plt.plot(goodrows, (1. - np.sum(allgood, axis=1) / len(goodcols))[isgoodrows], 'k-')
+            plt.title('Row-wise')
+            plt.subplot(2,1,2)
+            plt.plot(goodcols, (1. - np.sum(allgood, axis=0) / len(goodrows))[isgoodcols], 'k-')
+            plt.title('Column-wise')
+            plt.suptitle('Fraction of masked pixels')
+            ps.savefig()
 
             plt.clf()
             plt.hist((img[good * refgood] - initsky).ravel(), bins=50)
