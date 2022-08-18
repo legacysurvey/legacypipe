@@ -1,9 +1,9 @@
 #! /bin/bash
 
-
 # JumpSky for z-band S30 chips, on Perlmutter
 
 export LEGACY_SURVEY_DIR=$SCRATCH/sky-zjump
+export LEGACY_SURVEY_DIR=$SCRATCH/sky-zjump-test
 
 outdir=$LEGACY_SURVEY_DIR/
 
@@ -102,6 +102,7 @@ python -O $LEGACYPIPE_DIR/legacyzpts/run-calib.py \
     --ccdname S30 \
     --no-psf \
     --blob-mask-dir $BLOB_MASK_DIR \
+    --plot-base sky \
     >> "$log" 2>&1
 
 status=$?

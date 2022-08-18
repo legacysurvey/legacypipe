@@ -870,8 +870,8 @@ def stage_srcs(pixscale=None, targetwcs=None,
 
     if T_clusters is not None and len(T_clusters) > 0:
         from legacypipe.reference import get_reference_map
-        info('Avoiding source detection in', len(T_clusters), 'CLUSTER masks')
-        avoid_map = (get_reference_map(targetwcs, T_clusters) != 0)
+        #info('Avoiding source detection in', len(T_clusters), 'CLUSTER masks')
+        #avoid_map = (get_reference_map(targetwcs, T_clusters) != 0)
 
     record_event and record_event('stage_srcs: detection maps')
     tnow = Time()
@@ -2105,7 +2105,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     coadd_list= [('image', C.coimgs, {}, None),
                  ('model', C.comods, {}, None),
                  ('blobmodel', C.coblobmods, {}, None,),
-                 ('resid', C.coresids, dict(resids=True), U)]
+                 ('resid', C.coresids, dict(resids=True), U),
+                 ('resid2', C.coresids, {}, U)]
     if hasattr(tims[0], 'sims_image'):
         coadd_list.append(('simscoadd', sims_coadd, {}, None))
 
@@ -4035,7 +4036,7 @@ def main(args=None):
         lvl = logging.INFO
     else:
         lvl = logging.DEBUG
-    logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+    logging.basicConfig(level=lvl, format='[%(relativeCreated)d ms] %(message)s', stream=sys.stdout)
     # tractor logging is *soooo* chatty
     logging.getLogger('tractor.engine').setLevel(lvl + 10)
     # silence "findfont: score(<Font 'DejaVu Sans Mono' ...)" messages

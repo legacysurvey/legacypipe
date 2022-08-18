@@ -318,6 +318,7 @@ class OneBlob(object):
             self._plot_coadd(self.tims, self.blobwcs, model=tr)
             plt.title('After source fitting')
             self.ps.savefig()
+
             # Plot source locations
             ax = plt.axis()
             _,xf,yf = self.blobwcs.radec2pixelxy(
@@ -346,6 +347,17 @@ class OneBlob(object):
                 dimshow(get_rgb(coresids, self.bands), ticks=False)
                 plt.savefig('blob-%s-initsub.png' % (self.name))
                 plt.figure(1)
+
+            T = fits_table()
+            T.ra  = np.array([src.getPosition().ra  for src in self.srcs])
+            T.dec = np.array([src.getPosition().dec for src in self.srcs])
+            T.x = xf
+            T.y = yf
+            for band in self.bands:
+                T.set('flux_%s' % band, np.array([src.getBrightness().getFlux(band)]))
+            fn = 'fit-sources.fits'
+            T.writeto(fn)
+            print('Wrote', fn)
 
         debug('Blob', self.name, 'finished initial fitting:', Time()-tlast)
         tlast = Time()
@@ -864,7 +876,8 @@ class OneBlob(object):
         avoid_y = Bold.safe_y0
         avoid_r = np.zeros(len(avoid_x), np.float32) + 2.
         nsigma = 6.
-        avoid_map = (self.refmap != 0)
+        #avoid_map = (self.refmap != 0)
+        avoid_map = None
 
         Tnew,_,_ = run_sed_matched_filters(
             SEDs, self.bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r),
@@ -1721,8 +1734,34 @@ class OneBlob(object):
         # Remember original tim images
         models.save_images(self.tims)
         # Create & subtract initial models for each tim x each source
-        models.create(self.tims, cat, subtract=True)
+        source_bounds = models.create(self.tims, cat, subtract=True,
+                                      blobwcs=self.blobwcs)
+        if self.plots:
+            import pylab as plt
+            plt.clf()
+            # Recompute coadds because of the subtract-all-and-readd shuffle
+            coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, fill_holes=False)
+            rgb = get_rgb(coimgs, self.bands)
+            dimshow(rgb)
+            ax = plt.axis()
+            plt.axis(ax)
 
+            busy = np.zeros(self.blobwcs.shape, bool)
+            for srci in Ibright[:20]:
+                sb = source_bounds[srci]
+                if sb is None:
+                    print('Source', srci, 'bounds are None')
+                    continue
+                x0,x1,y0,y1 = sb
+                slc = slice(y0,y1+1), slice(x0, x1+1)
+                if np.any(busy[slc]):
+                    plt.plot([x0,x0,x1,x1,x0],[y0,y1,y1,y0,y0], 'r-')
+                else:
+                    plt.plot([x0,x0,x1,x1,x0],[y0,y1,y1,y0,y0], 'b-')
+                    busy[slc] = True
+            plt.title('Source bounds (first 20)')
+            self.ps.savefig()
+        
         # For sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
             cpu0 = time.process_time()
@@ -1904,6 +1943,15 @@ class OneBlob(object):
         plt.title('initial sources')
         plt.legend()
         self.ps.savefig()
+
+        T = fits_table()
+        T.ra  = np.array([src.getPosition().ra  for src in self.srcs])
+        T.dec = np.array([src.getPosition().dec for src in self.srcs])
+        T.x = x0
+        T.y = y0
+        fn = 'initial-sources.fits'
+        T.writeto(fn)
+        print('Wrote', fn)
 
     def create_tims(self, timargs):
         from legacypipe.bits import DQ_BITS
@@ -2250,17 +2298,23 @@ class SourceModels(object):
         for tim,img in zip(tims, self.orig_images):
             tim.data = img
 
-    def create(self, tims, srcs, subtract=False, modelmasks=None):
+    def create(self, tims, srcs, subtract=False, modelmasks=None,
+               blobwcs=None):
         '''
         Note that this modifies the *tims* if subtract=True.
+
+        If *blobwcs* is not None, compute and return the bounds in blob pixels
+        for each source.
         '''
         self.models = []
+        if blobwcs is not None:
+            source_blob_bounds = [None for s in srcs]
         for itim,tim in enumerate(tims):
             mods = []
             sh = tim.shape
             ie = tim.getInvError()
-            for src in srcs:
-
+            for isrc,src in enumerate(srcs):
+                # fetch model mask, if any
                 mm = None
                 if modelmasks is not None:
                     mm = modelmasks[itim].get(src, None)
@@ -2276,8 +2330,30 @@ class SourceModels(object):
                     mod = _clip_model_to_blob(mod, sh, ie)
                     if subtract and mod is not None:
                         mod.addTo(tim.getImage(), scale=-1)
+
+                    if blobwcs is not None and mod is not None:
+                        xx = [mod.x0+0.5, mod.x0+0.5, mod.x1+0.5, mod.x1+0.5]
+                        yy = [mod.y0+0.5, mod.y1+0.5, mod.y1+0.5, mod.y0+0.5]
+                        rr,dd = tim.subwcs.pixelxy2radec(xx, yy)
+                        ok,xx,yy = blobwcs.radec2pixelxy(rr, dd)
+                        x0 = int(np.floor(min(xx) - 1))
+                        y0 = int(np.floor(min(yy) - 1))
+                        x1 = int(np.ceil (max(xx) - 1))
+                        y1 = int(np.ceil (max(yy) - 1))
+                        sb = source_blob_bounds[isrc]
+                        if sb is not None:
+                            xa,xb,ya,yb = sb
+                            x0 = min(x0, xa)
+                            x1 = max(x1, xb)
+                            y0 = min(y0, ya)
+                            y1 = max(y1, yb)
+                        source_blob_bounds[isrc] = (x0,x1,y0,y1)
+
                 mods.append(mod)
             self.models.append(mods)
+        if blobwcs is not None:
+            return source_blob_bounds
+        return None
 
     def add(self, i, tims):
         '''
