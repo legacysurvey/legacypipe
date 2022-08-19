@@ -81,11 +81,14 @@ class iterwrapper(object):
     def __init__(self, y, n):
         self.n = n
         self.y = y
+        self.peeked = []
     def __str__(self):
         return 'iterwrapper: n=%i; ' % self.n + str(self.y)
     def __iter__(self):
         return self
     def next(self):
+        if len(self.peeked):
+            return self.peeked.pop(0)
         try:
             return self.y.next()
         except StopIteration:
@@ -97,6 +100,8 @@ class iterwrapper(object):
             raise
     # py3
     def __next__(self):
+        if len(self.peeked):
+            return self.peeked.pop(0)
         try:
             return self.y.__next__()
         except StopIteration:
@@ -108,6 +113,23 @@ class iterwrapper(object):
             raise
     def __len__(self):
         return self.n
+
+    def peek(self):
+        try:
+            x = next(self.y)
+        except StopIteration:
+            raise
+        except:
+            import traceback
+            print(str(self), 'peek()')
+            traceback.print_exc()
+            raise
+        self.peeked.append(x)
+        return x
+    def pop(self, x):
+        self.peeked.remove(x)
+    def push(self, x):
+        self.peeked.append(x)
 
 def _ring_unique(wcs, W, H, i, unique, ra1,ra2,dec1,dec2):
     lo, hix, hiy = i, W-i-1, H-i-1
