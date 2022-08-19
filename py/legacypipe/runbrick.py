@@ -1709,10 +1709,10 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, b
             # (sx0,sx1), 'y', (sy0,sy1), 'tim shape', (h,w))
             if sx1 < 0 or sy1 < 0 or sx0 > w or sy0 > h:
                 continue
-            sx0 = int(np.clip(int(np.floor(sx0)), 0, w-1))
-            sx1 = int(np.clip(int(np.ceil (sx1)), 0, w-1)) + 1
-            sy0 = int(np.clip(int(np.floor(sy0)), 0, h-1))
-            sy1 = int(np.clip(int(np.ceil (sy1)), 0, h-1)) + 1
+            sx0 = int(np.clip(int(np.floor(sx0 - 1)), 0, w-1))
+            sx1 = int(np.clip(int(np.ceil (sx1 - 1)), 0, w-1)) + 1
+            sy0 = int(np.clip(int(np.floor(sy0 - 1)), 0, h-1))
+            sy1 = int(np.clip(int(np.ceil (sy1 - 1)), 0, h-1)) + 1
             subslc = slice(sy0,sy1),slice(sx0,sx1)
             subimg = tim.getImage   ()[subslc]
             subie  = tim.getInvError()[subslc]
