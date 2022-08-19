@@ -922,7 +922,9 @@ def queue_work(brickname, inqueue, bigqueue, checkpointqueue, opt):
         if arg is None:
             continue
 
-        (br, iblob, args) = arg
+        (br, iblob, unique_area, args) = arg
+        if unique_area is not None:
+            print('WARNING, ignoring unique_area argument in farm.py!')
         assert(br == brickname)
         if args is None:
             continue

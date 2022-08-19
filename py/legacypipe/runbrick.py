@@ -1743,7 +1743,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                                tim.getPhotoCal(),
                                subsky, subpsf, tim.name, tim.band, tim.sig1, tim.imobj))
 
-        yield (brickname, iblob,
+        yield (brickname, iblob, None,
                (nblob+1, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                 blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
                 reoptimize, iterative, use_ceres, refmap[bslc],
@@ -1755,7 +1755,7 @@ def _bounce_one_blob(X):
     multiprocessing purposes.
     '''
     from legacypipe.oneblob import one_blob
-    (brickname, iblob, X) = X
+    (brickname, iblob, blob_unique, X) = X
     try:
         result = one_blob(X)
         ### This defines the format of the results in the checkpoints files
