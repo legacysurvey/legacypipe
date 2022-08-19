@@ -1633,7 +1633,51 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
         this blob.
     *T*: a fits table parallel to *cat* with some extra info (very little used)
     '''
+    from legacypipe.bits import IN_BLOB
     from collections import Counter
+
+    def get_subtim_args(tims, targetwcs, bx0,bx1, by0,by1, single_thread):
+        rr,dd = targetwcs.pixelxy2radec([bx0,bx0,bx1,bx1],[by0,by1,by1,by0])
+        subtimargs = []
+        for tim in tims:
+            h,w = tim.shape
+            _,x,y = tim.subwcs.radec2pixelxy(rr,dd)
+            sx0,sx1 = x.min(), x.max()
+            sy0,sy1 = y.min(), y.max()
+            #print('blob extent in pixel space of', tim.name, ': x',
+            # (sx0,sx1), 'y', (sy0,sy1), 'tim shape', (h,w))
+            if sx1 < 0 or sy1 < 0 or sx0 > w or sy0 > h:
+                continue
+            sx0 = int(np.clip(int(np.floor(sx0 - 1)), 0, w-1))
+            sx1 = int(np.clip(int(np.ceil (sx1 - 1)), 0, w-1)) + 1
+            sy0 = int(np.clip(int(np.floor(sy0 - 1)), 0, h-1))
+            sy1 = int(np.clip(int(np.ceil (sy1 - 1)), 0, h-1)) + 1
+            subslc = slice(sy0,sy1),slice(sx0,sx1)
+            subimg = tim.getImage   ()[subslc]
+            subie  = tim.getInvError()[subslc]
+            if tim.dq is None:
+                subdq = None
+            else:
+                subdq  = tim.dq[subslc]
+            subwcs = tim.getWcs().shifted(sx0, sy0)
+            subsky = tim.getSky().shifted(sx0, sy0)
+            subpsf = tim.getPsf().getShifted(sx0, sy0)
+            subwcsobj = tim.subwcs.get_subimage(sx0, sy0, sx1-sx0, sy1-sy0)
+            tim.imobj.psfnorm = tim.psfnorm
+            tim.imobj.galnorm = tim.galnorm
+            # FIXME -- maybe the cache is worth sending?
+            if hasattr(tim.psf, 'clear_cache'):
+                tim.psf.clear_cache()
+            # Yuck!  If we're not running with --threads AND oneblob.py modifies the data,
+            # bad things happen!
+            if single_thread:
+                subimg = subimg.copy()
+                subie = subie.copy()
+                subdq = subdq.copy()
+            subtimargs.append((subimg, subie, subdq, subwcs, subwcsobj,
+                               tim.getPhotoCal(),
+                               subsky, subpsf, tim.name, tim.band, tim.sig1, tim.imobj))
+        return subtimargs
 
     if skipblobs is None:
         skipblobs = []
@@ -1702,46 +1746,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
             continue
 
         # Here we cut out subimages for the blob...
-        rr,dd = targetwcs.pixelxy2radec([bx0,bx0,bx1,bx1],[by0,by1,by1,by0])
-        subtimargs = []
-        for tim in tims:
-            h,w = tim.shape
-            _,x,y = tim.subwcs.radec2pixelxy(rr,dd)
-            sx0,sx1 = x.min(), x.max()
-            sy0,sy1 = y.min(), y.max()
-            #print('blob extent in pixel space of', tim.name, ': x',
-            # (sx0,sx1), 'y', (sy0,sy1), 'tim shape', (h,w))
-            if sx1 < 0 or sy1 < 0 or sx0 > w or sy0 > h:
-                continue
-            sx0 = int(np.clip(int(np.floor(sx0 - 1)), 0, w-1))
-            sx1 = int(np.clip(int(np.ceil (sx1 - 1)), 0, w-1)) + 1
-            sy0 = int(np.clip(int(np.floor(sy0 - 1)), 0, h-1))
-            sy1 = int(np.clip(int(np.ceil (sy1 - 1)), 0, h-1)) + 1
-            subslc = slice(sy0,sy1),slice(sx0,sx1)
-            subimg = tim.getImage   ()[subslc]
-            subie  = tim.getInvError()[subslc]
-            if tim.dq is None:
-                subdq = None
-            else:
-                subdq  = tim.dq[subslc]
-            subwcs = tim.getWcs().shifted(sx0, sy0)
-            subsky = tim.getSky().shifted(sx0, sy0)
-            subpsf = tim.getPsf().getShifted(sx0, sy0)
-            subwcsobj = tim.subwcs.get_subimage(sx0, sy0, sx1-sx0, sy1-sy0)
-            tim.imobj.psfnorm = tim.psfnorm
-            tim.imobj.galnorm = tim.galnorm
-            # FIXME -- maybe the cache is worth sending?
-            if hasattr(tim.psf, 'clear_cache'):
-                tim.psf.clear_cache()
-            # Yuck!  If we not running with --threads AND oneblob.py modifies the data,
-            # bad things happen!
-            if single_thread:
-                subimg = subimg.copy()
-                subie = subie.copy()
-                subdq = subdq.copy()
-            subtimargs.append((subimg, subie, subdq, subwcs, subwcsobj,
-                               tim.getPhotoCal(),
-                               subsky, subpsf, tim.name, tim.band, tim.sig1, tim.imobj))
+        subtimargs = get_subtim_args(tims, targetwcs, bx0,bx1, by0,by1, single_thread)
 
         yield (brickname, iblob, None,
                (nblob+1, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
