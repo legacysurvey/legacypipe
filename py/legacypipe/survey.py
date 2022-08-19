@@ -1490,7 +1490,7 @@ class LegacySurveyData(object):
     def filter_ccds_files(self, fns):
         '''
         When reading the list of CCDs, we find all files named
-        survey-ccds-\*.fits.gz, then filter that list using this function.
+        survey-ccds-*.fits.gz, then filter that list using this function.
         '''
         return fns
 

@@ -15,7 +15,7 @@ class TestIterWrapper(unittest.TestCase):
         #     print('Iterating:')
         #     x = next(it)
         #     print('Got', x)
-        # 
+        #
         # print()
         # print('Reset')
         N = 5
