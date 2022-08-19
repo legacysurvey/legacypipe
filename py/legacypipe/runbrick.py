@@ -1209,7 +1209,7 @@ def stage_fitblobs(T=None,
     refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
     # Create the iterator over blobs to process
     blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims,
-                          cat, bands, plots, ps, reoptimize, iterative, use_ceres,
+                          cat, T, bands, plots, ps, reoptimize, iterative, use_ceres,
                           refmap, large_galaxies_force_pointsource, less_masking, brick,
                           frozen_galaxies,
                           skipblobs=skipblobs,
@@ -1621,13 +1621,17 @@ def _check_checkpoints(R, blobslices, brickname):
         keepR.append(ri)
     return keepR
 
-def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, bands,
+def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T, bands,
                plots, ps, reoptimize, iterative, use_ceres, refmap,
                large_galaxies_force_pointsource, less_masking,
                brick, frozen_galaxies, single_thread=False,
                skipblobs=None, max_blobsize=None, custom_brick=False):
     '''
-    *blobmap*: map, with -1 indicating no-blob, other values indexing *blobslices*,*blobsrcs*.
+    *blobmap*: integer image map, with -1 indicating no-blob, other values indexing
+        into *blobslices*,*blobsrcs*.
+    *blobsrcs*: a list of numpy arrays of integers -- indices into *cat* -- of the sources in
+        this blob.
+    *T*: a fits table parallel to *cat* with some extra info (very little used)
     '''
     from collections import Counter
 
