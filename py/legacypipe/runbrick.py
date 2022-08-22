@@ -1765,72 +1765,74 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
             yield (brickname, iblob, None)
             continue
 
-        ## Check for a large blob that is fully contained in the CLUSTER mask.
-        ## Split into overlapping sub-blobs; compute and return the resolve()
-        ## function for each one.
+        # Check for a large blob that is fully contained in the CLUSTER mask.
+        # Split into overlapping sub-blobs.
+        # We include the "blob-unique" bounding-box in the tokens we yield from this function.
+        # Then, in bounce_one_blob, after the sub-blob finishes processing, that unique-area
+        # cut is applied.
+        # To identify these sub-blobs, we return iblob = a tuple of the original iblob plus
+        # a sub-blob identifier.  Sub-blobs can get saved to the checkpoints files, and by
+        # checking "skipblobs" below, we don't re-run them.
 
-
-        #if (blobw > 1000 and blobh > 1000 and
-        if (blobw >= 500 and blobh >= 500 and
+        if (blobw >= 710 or blobh >= 710 and
             np.all((refmap[bslc][blobmask] & IN_BLOB['CLUSTER']) != 0)):
             info('Entire large blob is in CLUSTER mask')
-            # split into 4x4 sub-blobs (regardless of size?)
-            # or < 1000 x 1000 pixels?
-            #nsub = 4
-            nsub = 2
+            # split into ~500-pixel sub-blobs.
+            # "overlap" is the duplicated / overlapping region between sub-blobs.
             overlap = 50
+            # target sub-blob size for selecting number of sub-blobs
+            # this yields  710 pixels -> 2 sub-blobs
+            #             3600 pixels -> 8 sub-blobs (good for multi-processing!)
+            target = 490
+            nsubx = int(np.round((blobw - overlap) / (target - overlap)))
+            nsuby = int(np.round((blobh - overlap) / (target - overlap)))
+            del target
             # subimage size, including overlaps
-            subw = (blobw + (nsub-1)*overlap + nsub-1) // nsub
-            subh = (blobh + (nsub-1)*overlap + nsub-1) // nsub
+            subw = (blobw + (nsubx-1)*overlap + nsubx-1) // nsubx
+            subh = (blobh + (nsuby-1)*overlap + nsuby-1) // nsuby
             info('Will split into', subw, 'x', subh, 'sub-blobs')
 
-            uniqx = [0] + [n * (subw - overlap) + overlap//2 for n in range(1,nsub)] + [blobw]
-            uniqy = [0] + [n * (subh - overlap) + overlap//2 for n in range(1,nsub)] + [blobh]
-            print('Unique x regions:', uniqx)
-            print('Unique y regions:', uniqy)
+            uniqx = [0] + [n * (subw - overlap) + overlap//2 for n in range(1,nsubx)] + [blobw]
+            uniqy = [0] + [n * (subh - overlap) + overlap//2 for n in range(1,nsuby)] + [blobh]
+            info('Unique x regions:', uniqx)
+            info('Unique y regions:', uniqy)
 
             fro_gals = frozen_galaxies.get(iblob, [])
 
             assert(len(cat) == len(T))
 
-            for i in range(nsub):
+            for i in range(nsuby):
                 suby0 = i*(subh - overlap)
                 suby1 = min(suby0 + subh, blobh)
-                info('Y range', i, ':', suby0, suby1)
-                for j in range(nsub):
-                    sub_blob = i*nsub+j
-                    print('Skipblobs:', skipblobs)
-                    print('checking sub-blob:', (iblob,sub_blob))
+                debug('Y range', i, ':', suby0, suby1)
+                for j in range(nsubx):
+                    sub_blob = i*nsubx+j
+                    #print('Skipblobs:', skipblobs)
+                    #print('checking sub-blob:', (iblob,sub_blob))
                     if (iblob,sub_blob) in skipblobs:
-                        info('Skipping sub-blob (from checkpoint)', (iblob,sub_blob))
+                        debug('Skipping sub-blob (from checkpoint)', (iblob,sub_blob))
                         continue
-
                     subx0 = j*(subw - overlap)
                     subx1 = min(subx0 + subw, blobw)
                     if i == 0:
-                        info('X range', j, ':', subx0, subx1)
+                        debug('X range', j, ':', subx0, subx1)
 
                     sub_bx0 = bx0 + subx0
                     sub_bx1 = bx0 + subx1
                     sub_by0 = by0 + suby0
                     sub_by1 = by0 + suby1
-
                     sub_slc = slice(sub_by0, sub_by1), slice(sub_bx0, sub_bx1)
 
                     # Here we cut out subimages for the blob...
                     subtimargs = get_subtim_args(tims, targetwcs, sub_bx0,sub_bx1,
                                                  sub_by0,sub_by1, single_thread)
-                    # fake_iblob_map[fake_iblob] = iblob
-                    # iblob = fake_iblob
-                    # fake_iblob += 1
-
                     H,W = blobmap.shape
                     clipx = np.clip(T.ibx[Isrcs], 0, W-1)
                     clipy = np.clip(T.iby[Isrcs], 0, H-1)
                     Isubsrcs = Isrcs[(clipx >= sub_bx0) * (clipx < sub_bx1) *
                                      (clipy >= sub_by0) * (clipy < sub_by1)]
                     info(len(Isubsrcs), 'of', len(Isrcs), 'sources are within this sub-brick')
-                    info('Unique area:', (uniqx[j], uniqx[j+1], uniqy[i], uniqy[i+1]))
+                    #info('Unique area:', (uniqx[j], uniqx[j+1], uniqy[i], uniqy[i+1]))
                     yield (brickname, (iblob,sub_blob),
                            (uniqx[j], uniqx[j+1], uniqy[i], uniqy[i+1]),
                            ('%i-%i' % (nblob+1, 1+sub_blob), iblob,
@@ -1841,7 +1843,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                             reoptimize, iterative, use_ceres, refmap[bslc][sub_slc],
                             large_galaxies_force_pointsource, less_masking, fro_gals))
 
-            return
+            continue
 
         # Here we cut out subimages for the blob...
         subtimargs = get_subtim_args(tims, targetwcs, bx0,bx1, by0,by1, single_thread)
