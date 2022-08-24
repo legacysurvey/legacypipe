@@ -497,14 +497,16 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     else:
         this_veto_map = veto_map.copy()
 
-    for x,y,r in zip(xomit, yomit, romit):
-        xlo = int(np.clip(np.floor(x - r), 0, W-1))
-        xhi = int(np.clip(np.ceil (x + r), 0, W-1))
-        ylo = int(np.clip(np.floor(y - r), 0, H-1))
-        yhi = int(np.clip(np.ceil (y + r), 0, H-1))
+    Xlo = np.clip(np.floor(xomit - romit), 0, W-1).astype(int)
+    Xhi = np.clip(np.ceil (xomit + romit), 0, W-1).astype(int)
+    Ylo = np.clip(np.floor(yomit - romit), 0, H-1).astype(int)
+    Yhi = np.clip(np.ceil (yomit + romit), 0, H-1).astype(int)
+    for x,y,r,xlo,xhi,ylo,yhi in zip(xomit, yomit, romit,
+                                     Xlo, Xhi, Ylo, Yhi):
         this_veto_map[ylo:yhi+1, xlo:xhi+1] |= (np.hypot(
             (x - np.arange(xlo, xhi+1))[np.newaxis, :],
             (y - np.arange(ylo, yhi+1))[:, np.newaxis]) < r)
+    del Xlo,Xhi,Ylo,Yhi
 
     if ps is not None:
         plt.clf()
@@ -542,17 +544,23 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         ablob = allblobs[y,x]
         index = int(ablob - 1)
         slc = allslices[index]
+        x0,y0 = allx0[index], ally0[index]
+        del index
+
         saddlemap = (sedsn[slc] > level)
         saddlemap = binary_dilation(saddlemap, iterations=dilate)
         if saturated_pix is not None:
             saddlemap |= satur[slc]
         saddlemap *= (allblobs[slc] == ablob)
-        saddlemap = binary_fill_holes(saddlemap)
         blobs,_ = label(saddlemap)
-        x0,y0 = allx0[index], ally0[index]
         thisblob = blobs[y-y0, x-x0]
         saddlemap *= (blobs == thisblob)
 
+        oslcs = find_objects(saddlemap)
+        assert(len(oslcs) == 1)
+        oslc = oslcs[0]
+        saddlemap[oslc] = binary_fill_holes(saddlemap[oslc])
+        del oslc,oslcs
         # previously found sources:
         ox = np.append(xomit, px[:i][keep[:i]]) - x0
         oy = np.append(yomit, py[:i][keep[:i]]) - y0
@@ -574,6 +582,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         if False and (not cut) and ps is not None:
             _peak_plot_3(sedsn, nsigma, x, y, x0, y0, slc, saddlemap,
                          xomit, yomit, px, py, keep, i, cut, ps)
+
+        del blobs
 
         if cut:
             # in same blob as previously found source.
