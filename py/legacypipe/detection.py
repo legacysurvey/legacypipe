@@ -346,7 +346,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     run_sed_matched_filters : calls this method
     '''
     from scipy.ndimage.measurements import label, find_objects
-    from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
+    from scipy.ndimage.morphology import binary_dilation, binary_fill_holes, grey_dilation
 
     H,W = detmaps[0].shape
     allzero = True
@@ -462,7 +462,14 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # For efficiency, segment at the minimum saddle level to compute
     # slices; the operations described above need only happen within
     # the slice.
-    saddlemap = (sedsn > lowest_saddle)
+
+    # 4-connected footprint
+    F = np.array([[False,True,False],[True,True,True],[False,True,False]])
+    dilatedmap = grey_dilation(sedsn, footprint=F)
+    if saturated_pix is not None:
+        dilatedmap[satur] = 1e9
+
+    saddlemap = (dilatedmap > lowest_saddle)
     saddlemap = binary_dilation(saddlemap, iterations=dilate)
     if saturated_pix is not None:
         saddlemap |= satur
@@ -547,10 +554,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         x0,y0 = allx0[index], ally0[index]
         del index
 
-        saddlemap = (sedsn[slc] > level)
-        saddlemap = binary_dilation(saddlemap, iterations=dilate)
-        if saturated_pix is not None:
-            saddlemap |= satur[slc]
+        saddlemap = (dilatedmap[slc] > level)
         saddlemap *= (allblobs[slc] == ablob)
         blobs,_ = label(saddlemap)
         thisblob = blobs[y-y0, x-x0]
