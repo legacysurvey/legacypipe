@@ -37,7 +37,7 @@ def _detmap(X):
         # Replace saturated pixels by the brightest (non-masked) pixel in the image
         if np.any(sat):
             I, = np.nonzero(sat)
-            debug('Filling', len(I), 'saturated detmap pixels with max')
+            #debug('Filling', len(I), 'saturated detmap pixels with max')
             detim[Yi[I],Xi[I]] = np.max(detim)
             # detection is based on S/N, so plug in values > 0 for iv
             detiv[Yi[I],Xi[I]] = 1./detsig1**2

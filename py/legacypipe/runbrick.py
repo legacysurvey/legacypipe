@@ -1714,7 +1714,9 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                                brick.ra1, brick.ra2, brick.dec1, brick.dec2)
 
     for nblob,iblob in enumerate(blob_order):
-        # (convert iblob to int because np.int32 tries to vector-compare with [sub-blob] tuples in iblob)
+        # (convert iblob to int, because (with sub-blobs) skipblob
+        # entries can be tuples, and np.int32 tries to do
+        # vector-comparison)
         if int(iblob) in skipblobs:
             info('Skipping blob', iblob)
             continue
@@ -1723,7 +1725,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
         Isrcs = blobsrcs  [iblob]
         assert(len(Isrcs) > 0)
 
-        # blob bbox in target coords
+        # blob bbox in targetwcs coords
         sy,sx = bslc
         by0,by1 = sy.start, sy.stop
         bx0,bx1 = sx.start, sx.stop
@@ -1740,7 +1742,8 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
             # If the blob is solely outside the unique region of this brick,
             # skip it!
             if np.all(U[bslc][blobmask] == False):
-                info('Blob', nblob+1, 'is completely outside the unique region of this brick -- skipping')
+                info('Blob %i is completely outside the unique region of this brick -- skipping' %
+                     (nblob+1))
                 yield (brickname, iblob, None)
                 continue
 
@@ -1878,7 +1881,7 @@ def _bounce_one_blob(X):
         return dict(brickname=brickname, iblob=iblob, result=result)
     except:
         import traceback
-        print('Exception in one_blob: brick %s, iblob %i' % (brickname, iblob))
+        print('Exception in one_blob: brick %s, iblob %s' % (brickname, iblob))
         traceback.print_exc()
         raise
 
