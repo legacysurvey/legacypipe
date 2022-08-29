@@ -554,6 +554,23 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         x0,y0 = allx0[index], ally0[index]
         del index
 
+        # Only reject sources if there is another source within 50 pixels and not separated by
+        # a deep enough saddle.
+        R = 50
+        sy,sx = slc
+        sy0,sy1 = sy.start, sy.stop
+        sx0,sx1 = sx.start, sx.stop
+        xlo = max(x - R, sx0)
+        ylo = max(y - R, sy0)
+        xhi = min(x + R + 1, sx1)
+        yhi = min(y + R + 1, sy1)
+        subslc = slice(ylo,yhi), slice(xlo,xhi)
+        subx0 = xlo
+        suby0 = ylo
+        # swap in the +-50 pixel slice
+        slc = subslc
+        x0,y0 = subx0,suby0
+
         saddlemap = (dilatedmap[slc] > level)
         saddlemap *= (allblobs[slc] == ablob)
         blobs,_ = label(saddlemap)
