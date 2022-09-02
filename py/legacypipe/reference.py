@@ -1,4 +1,5 @@
 import os
+import warnings
 import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table, merge_tables
@@ -56,54 +57,8 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
         # Handle sources that appear in both Gaia and Tycho-2 by
         # dropping the entry from Tycho-2.
         if len(gaia) and len(tycho):
-            # Before matching, apply proper motions to bring them to
-            # the same epoch.  We want to use the more-accurate Gaia
-            # proper motions, so rewind Gaia positions to the Tycho
-            # epoch.  (Note that in read_tycho2, we massaged the
-            # epochs)
-            cosdec = np.cos(np.deg2rad(gaia.dec))
-            # First do a coarse matching with the approximate epoch:
-            dt = 1991.5 - gaia.ref_epoch
-            gra  = gaia.ra  + dt * gaia.pmra  / (3600.*1000.) / cosdec
-            gdec = gaia.dec + dt * gaia.pmdec / (3600.*1000.)
-            # Max Tycho-2 PM is 10"/yr, max |epoch_ra,epoch_dec - mean| = 0.5
-            I,J,_ = match_radec(tycho.ra, tycho.dec, gra, gdec, 10./3600.,
-                                nearest=True)
-            debug('Initially matched', len(I), 'Tycho-2 stars to Gaia stars (10").')
-
-            if plots:
-                import pylab as plt
-                plt.clf()
-                plt.plot(gra, gdec, 'bo', label='Gaia (1991.5)')
-                plt.plot(gaia.ra, gaia.dec, 'gx', label='Gaia (2015.5)')
-                plt.plot([gaia.ra, gra], [gaia.dec, gdec], 'k-')
-                plt.plot([tycho.ra[I], gra[J]], [tycho.dec[I], gdec[J]], 'r-')
-                plt.plot(tycho.ra, tycho.dec, 'rx', label='Tycho-2')
-                plt.plot(tycho.ra[I], tycho.dec[I], 'o', mec='r', ms=8, mfc='none',
-                         label='Tycho-2 matched')
-                plt.legend()
-                r0,r1,d0,d1 = targetwcs.radec_bounds()
-                plt.axis([r0,r1,d0,d1])
-                plt.title('Initial (10") matching')
-                ps.savefig()
-
-            dt = tycho.ref_epoch[I] - gaia.ref_epoch[J]
-            cosdec = np.cos(np.deg2rad(gaia.dec[J]))
-            gra  = gaia.ra[J]  + dt * gaia.pmra[J]  / (3600.*1000.) / cosdec
-            gdec = gaia.dec[J] + dt * gaia.pmdec[J] / (3600.*1000.)
-            dists = np.hypot((gra - tycho.ra[I]) * cosdec, gdec - tycho.dec[I])
-            K = np.flatnonzero(dists <= 1./3600.)
-            if len(K)<len(I):
-                debug('Unmatched Tycho-2 - Gaia stars: dists', dists[dists > 1./3600.]*3600.)
-            I = I[K]
-            J = J[K]
-            debug('Matched', len(I), 'Tycho-2 stars to Gaia stars.')
-            if len(I):
-                keep = np.ones(len(tycho), bool)
-                keep[I] = False
-                tycho.cut(keep)
-                gaia.isbright[J] = True
-                gaia.istycho[J] = True
+            merge_gaia_tycho(gaia, tycho, plots=plots, ps=ps,
+                             targetwcs=targetwcs)
         if gaia is not None and len(gaia) > 0:
             refs.append(gaia)
 
@@ -192,9 +147,65 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
 
     return refs,sources
 
+def merge_gaia_tycho(gaia, tycho, plots=False, ps=None, targetwcs=None):
+    from astrometry.libkd.spherematch import match_radec
+    # Before matching, apply proper motions to bring them to
+    # the same epoch.  We want to use the more-accurate Gaia
+    # proper motions, so rewind Gaia positions to the Tycho
+    # epoch.  (Note that in read_tycho2, we massaged the
+    # epochs)
+    cosdec = np.cos(np.deg2rad(gaia.dec))
+    # First do a coarse matching with the approximate epoch:
+    dt = 1991.5 - gaia.ref_epoch
+    gra  = gaia.ra  + dt * gaia.pmra  / (3600.*1000.) / cosdec
+    gdec = gaia.dec + dt * gaia.pmdec / (3600.*1000.)
+    # Max Tycho-2 PM is 10"/yr, max |epoch_ra,epoch_dec - mean| = 0.5
+    I,J,_ = match_radec(tycho.ra, tycho.dec, gra, gdec, 10./3600.,
+                        nearest=True)
+    debug('Initially matched', len(I), 'Tycho-2 stars to Gaia stars (10").')
+
+    if plots:
+        import pylab as plt
+        plt.clf()
+        plt.plot(gra, gdec, 'bo', label='Gaia (1991.5)')
+        plt.plot(gaia.ra, gaia.dec, 'gx', label='Gaia (2015.5)')
+        plt.plot([gaia.ra, gra], [gaia.dec, gdec], 'k-')
+        plt.plot([tycho.ra[I], gra[J]], [tycho.dec[I], gdec[J]], 'r-')
+        plt.plot(tycho.ra, tycho.dec, 'rx', label='Tycho-2')
+        plt.plot(tycho.ra[I], tycho.dec[I], 'o', mec='r', ms=8, mfc='none',
+                 label='Tycho-2 matched')
+        plt.legend()
+        r0,r1,d0,d1 = targetwcs.radec_bounds()
+        plt.axis([r0,r1,d0,d1])
+        plt.title('Initial (10") matching')
+        ps.savefig()
+
+    dt = tycho.ref_epoch[I] - gaia.ref_epoch[J]
+    cosdec = np.cos(np.deg2rad(gaia.dec[J]))
+    gra  = gaia.ra[J]  + dt * gaia.pmra[J]  / (3600.*1000.) / cosdec
+    gdec = gaia.dec[J] + dt * gaia.pmdec[J] / (3600.*1000.)
+    dists = np.hypot((gra - tycho.ra[I]) * cosdec, gdec - tycho.dec[I])
+    K = np.flatnonzero(dists <= 1./3600.)
+    if len(K)<len(I):
+        debug('Unmatched Tycho-2 - Gaia stars: dists', dists[dists > 1./3600.]*3600.)
+    I = I[K]
+    J = J[K]
+    debug('Matched', len(I), 'Tycho-2 stars to Gaia stars.')
+    if len(I):
+        keep = np.ones(len(tycho), bool)
+        keep[I] = False
+        tycho.cut(keep)
+        gaia.isbright[J] = True
+        gaia.istycho[J] = True
+
 def read_gaia(wcs, bands):
     '''
-    *wcs* here should include margin
+    Reads Gaia stars within the given *wcs* object.
+
+    *wcs* should include any margin you want (eg with *wcs.get_subimage()*).
+
+    If *bands* is not *None*, the returned *GaiaSource* objects will
+    be created with slots for fluxes in the given *bands*.
     '''
     from legacypipe.gaiacat import GaiaCatalog
     from legacypipe.survey import GaiaSource
@@ -202,15 +213,41 @@ def read_gaia(wcs, bands):
     gaia = GaiaCatalog().get_catalog_in_wcs(wcs)
     debug('Got', len(gaia), 'Gaia stars nearby')
 
+    fix_gaia(gaia)
+    # NOTE, must initialize gaia.sources array this way, or else numpy
+    # will try to be clever and create a 2-d array, because GaiaSource is
+    # iterable.
+    gaia.sources = np.empty(len(gaia), object)
+    if bands is not None:
+        for i,g in enumerate(gaia):
+            gaia.sources[i] = GaiaSource.from_catalog(g, bands)
+    return gaia
+
+def fix_gaia(gaia):
+    from functools import reduce
+
+    gaia.phot_g_mean_mag = gaia.phot_g_mean_mag.astype(np.float32)
+
     gaia.G = gaia.phot_g_mean_mag
     # Sort by brightness (for reference-*.fits output table)
-    gaia.cut(np.argsort(gaia.G))
+    sortmag = gaia.G.copy()
+    sortmag[sortmag == 0] = gaia.phot_rp_mean_mag[sortmag == 0]
+    gaia.cut(np.argsort(sortmag))
 
     # Gaia to DECam color transformations for stars
     color = gaia.phot_bp_mean_mag - gaia.phot_rp_mean_mag
+
+    # Only compute the decam_mag* terms if we have phot_g_mean_mag
+    # (some stars in EDR3 have G=0(nan), BP=0(nan) but RP~20)
+    nomags = (gaia.phot_g_mean_mag == 0.)
+
     # From Rongpu, 2020-04-12
     # no BP-RP color: use average color
-    color[np.logical_not(np.isfinite(color))] = 1.4
+    badcolor = reduce(np.logical_or,
+                      [np.logical_not(np.isfinite(color)),
+                       gaia.phot_bp_mean_mag == 0,
+                       gaia.phot_rp_mean_mag == 0,])
+    color[badcolor] = 1.4
     # clip to reasonable range for the polynomial fit
     color = np.clip(color, -0.6, 4.1)
     for b,coeffs in [
@@ -222,11 +259,16 @@ def read_gaia(wcs, bands):
                    0.1196710702, -0.3729031390, 0.1859874242, 0.1370162451,
                    -0.1808580848, 0.0803219195, -0.0180218196, 0.0020584707,
                    -0.0000953486]),
+            ('i', [0.3396481660, -0.6491867119, -0.3330769819, 0.4381097294,
+                   0.5752125977, -1.4746570523, 1.2979140762, -0.6371018151,
+                   0.1948940062, -0.0382055596, 0.0046907449, -0.0003296841,
+                   0.0000101480]),
             ('z', [0.4811198057, -0.9990015041, 0.1403990019, 0.2150988888,
                    -0.2917655866, 0.1326831887, -0.0259205004, 0.0018548776])]:
         mag = gaia.G.copy()
         for order,c in enumerate(coeffs):
             mag += c * color**order
+        mag[nomags] = 0.
         gaia.set('decam_mag_%s' % b, mag)
     del color
 
@@ -250,24 +292,25 @@ def read_gaia(wcs, bands):
     # Updated for Gaia DR2 by Eisenstein,
     # [decam-data 2770] Re: [desi-milkyway 639] GAIA in DECaLS DR7
     # And made far more restrictive following BGS feedback.
-    gaia.pointsource = np.logical_or((gaia.G <= 18.) * (gaia.astrometric_excess_noise < 10.**0.5),
-                                     (gaia.G <= 13.))
+    # Then, for Gaia-EDR3, Rongpu found we no longer need to look at astrometric_excess_noise.
+    gaia.pointsource = (gaia.G <= 18.)
 
     # in our catalog files, this is in float32; in the Gaia data model it's
     # a byte, with only values 3 and 31 in DR2.
     gaia.astrometric_params_solved = gaia.astrometric_params_solved.astype(np.uint8)
 
     # Gaia version?
-    gaiaver = int(os.getenv('GAIA_CAT_VER', '1'))
-    gaia_release = 'G%i' % gaiaver
+    gaiaver = os.getenv('GAIA_CAT_VER', '1')
+    gaia_release = 'G%s' % gaiaver
     gaia.ref_cat = np.array([gaia_release] * len(gaia))
     gaia.ref_id  = gaia.source_id
-    gaia.pmra_ivar  = 1./gaia.pmra_error **2
-    gaia.pmdec_ivar = 1./gaia.pmdec_error**2
-    gaia.parallax_ivar = 1./gaia.parallax_error**2
+    with np.errstate(divide='ignore'):
+        gaia.pmra_ivar  = 1./gaia.pmra_error **2
+        gaia.pmdec_ivar = 1./gaia.pmdec_error**2
+        gaia.parallax_ivar = 1./gaia.parallax_error**2
     # mas -> deg
-    gaia.ra_ivar  = 1./(gaia.ra_error  / 1000. / 3600.)**2
-    gaia.dec_ivar = 1./(gaia.dec_error / 1000. / 3600.)**2
+    gaia.ra_ivar  = (1./(gaia.ra_error  / 1000. / 3600.)**2).astype(np.float32)
+    gaia.dec_ivar = (1./(gaia.dec_error / 1000. / 3600.)**2).astype(np.float32)
 
     for c in ['ra_error', 'dec_error', 'parallax_error',
               'pmra_error', 'pmdec_error']:
@@ -277,14 +320,25 @@ def read_gaia(wcs, bands):
         X = gaia.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
 
-    # uniform name w/ Tycho-2
-    gaia.zguess = gaia.decam_mag_z
     gaia.mag = gaia.G
-    # Take the brighter of G, z to expand masks around red stars.
-    gaia.mask_mag = np.minimum(gaia.G, gaia.zguess + 1.)
+    # Use Gaia RP (then BP) if G is not measured
+    gaia.mag[gaia.mag == 0] = gaia.phot_rp_mean_mag[gaia.mag == 0]
+    gaia.mag[gaia.mag == 0] = gaia.phot_bp_mean_mag[gaia.mag == 0]
+    # uniform name w/ Tycho-2
+    gaia.zguess = gaia.decam_mag_z.copy()
+    # no zguess -- fill with optical mag.
+    gaia.zguess[gaia.zguess == 0] = gaia.mag[gaia.zguess == 0]
+    # Take the brighter of optical, z to expand masks around red stars.
+    gaia.mask_mag = np.minimum(gaia.mag, gaia.zguess + 1.)
+
+    # Plug in a tiny mag for stars with no Gaia-EDR3 mag measurements
+    # (eg, sourceid 3638309166294796544 has Gaia G = BP = RP = none)
+    Ibad = np.flatnonzero(gaia.mag == 0.)
+    gaia.mask_mag[Ibad] = 99.
 
     # radius to consider affected by this star, for MASKBITS
     gaia.radius = mask_radius_for_mag(gaia.mask_mag)
+    gaia.radius[Ibad] = 0.
     # radius for keeping this source in the ref catalog
     # (eg, for halo subtraction)
     gaia.keep_radius = 4. * gaia.radius
@@ -294,15 +348,6 @@ def read_gaia(wcs, bands):
     gaia.isbright = (gaia.mask_mag < 13.)
     gaia.ismedium = (gaia.mask_mag < 16.)
     gaia.donotfit = np.zeros(len(gaia), bool)
-
-    # NOTE, must initialize gaia.sources array this way, or else numpy
-    # will try to be clever and create a 2-d array, because GaiaSource is
-    # iterable.
-    gaia.sources = np.empty(len(gaia), object)
-    if bands is not None:
-        for i,g in enumerate(gaia):
-            gaia.sources[i] = GaiaSource.from_catalog(g, bands)
-    return gaia
 
 def mask_radius_for_mag(mag):
     # Returns a masking radius in degrees for a star of the given magnitude.
@@ -317,20 +362,15 @@ def read_tycho2(survey, targetwcs, bands):
     tycho2fn = survey.find_file('tycho2')
     radius = 1.
     ra,dec = targetwcs.radec_center()
-    # John added the "isgalaxy" flag 2018-05-10, from the Metz &
+    # Tycho-2 catalog:
+    # - John added the "isgalaxy" flag 2018-05-10, from the Metz &
     # Geffert (04) catalog.
-
-    # Eddie added the "zguess" column 2019-03-06, by matching with
+    # - Eddie added the "zguess" column 2019-03-06, by matching with
     # 2MASS and estimating z based on APASS.
+    # - Rongpu added the "ggguess" column (Gaia-G guess) 2021-09-13, by matching with 2MASS.
 
     # The "tycho2.kd.fits" file read here was produced by:
-    #
-    # fitscopy ~schlafly/legacysurvey/tycho-isgalaxyflag-2mass.fits"[col \
-    #   tyc1;tyc2;tyc3;ra;dec;sigma_ra;sigma_dec;mean_ra;mean_dec;pm_ra;pm_dec; \
-    #   sigma_pm_ra;sigma_pm_dec;epoch_ra;epoch_dec;mag_bt;mag_vt;mag_hp; \
-    #   isgalaxy;Jmag;Hmag;Kmag,zguess]" /tmp/tycho2-astrom.fits
-    # startree -P -k -n stars -T -i /tmp/tycho2-astrom.fits \
-    #  -o /global/project/projectdirs/cosmo/staging/tycho2/tycho2.kd.fits
+    # startree -P -k -n stars -T -i /global/cfs/cdirs/desi/users/rongpu/useful/tycho2-reference.fits -o tycho2.kd.fits
 
     kd = tree_open(tycho2fn, 'stars')
     I = tree_search_radec(kd, ra, dec, radius)
@@ -340,11 +380,19 @@ def read_tycho2(survey, targetwcs, bands):
     # Read only the rows within range.
     tycho = fits_table(tycho2fn, rows=I)
     del kd
+    fix_tycho(tycho)
+    tycho.sources = np.empty(len(tycho), object)
+    if bands is not None:
+        for i,t in enumerate(tycho):
+            tycho.sources[i] = GaiaSource.from_catalog(t, bands)
+    return tycho
+
+def fix_tycho(tycho):
     if 'isgalaxy' in tycho.get_columns():
         tycho.cut(tycho.isgalaxy == 0)
         debug('Cut to', len(tycho), 'Tycho-2 stars on isgalaxy==0')
     else:
-        print('Warning: no "isgalaxy" column in Tycho-2 catalog')
+        warnings.warn('No "isgalaxy" column in Tycho-2 catalog')
 
     tycho.ref_cat = np.array(['T2'] * len(tycho))
     # tyc1: [1,9537], tyc2: [1,12121], tyc3: [1,3]
@@ -362,18 +410,27 @@ def read_tycho2(survey, targetwcs, bands):
     for c in ['pmra', 'pmdec', 'pmra_ivar', 'pmdec_ivar']:
         X = tycho.get(c)
         X[np.logical_not(np.isfinite(X))] = 0.
-    tycho.mag = tycho.mag_vt
-    # Patch missing mag values...
+    # Use Rongpu's Gaia-G guesses mag, when available and non-NaN
+    if not 'ggguess' in tycho.get_columns():
+        warnings.warn('No "ggguess" column in Tycho-2 catalog')
+        tycho.mag = tycho.mag_vt
+    else:
+        tycho.mag = tycho.ggguess.astype(np.float32)
+        # Fall back to V_T
+        I = np.flatnonzero(np.logical_not(np.isfinite(tycho.mag)))
+        tycho.mag[I] = tycho.mag_vt[I]
+    # Fall back further to MAG_HP, MAG_BT.
     tycho.mag[tycho.mag == 0] = tycho.mag_hp[tycho.mag == 0]
     tycho.mag[tycho.mag == 0] = tycho.mag_bt[tycho.mag == 0]
 
-    # Use zguess
+    # For very red stars, use the brighter of zguess+1 and the optical mag
+    # for the masking radius.
     tycho.mask_mag = tycho.mag
     with np.errstate(invalid='ignore'):
         I = np.flatnonzero(np.isfinite(tycho.zguess) *
                            (tycho.zguess + 1. < tycho.mag))
-    tycho.mask_mag[I] = tycho.zguess[I]
-    # Per discussion in issue #306 -- cut on mag < 13.
+    tycho.mask_mag[I] = tycho.zguess[I] + 1.
+    # Per discussion in issue #306 -- cut to mag < 13.
     # This drops only 13k/2.5M stars.
     tycho.cut(tycho.mask_mag < 13.)
 
@@ -410,11 +467,6 @@ def read_tycho2(survey, targetwcs, bands):
     tycho.isbright = np.ones(len(tycho), bool)
     tycho.ismedium = np.ones(len(tycho), bool)
     tycho.donotfit = np.zeros(len(tycho), bool)
-    tycho.sources = np.empty(len(tycho), object)
-    if bands is not None:
-        for i,t in enumerate(tycho):
-            tycho.sources[i] = GaiaSource.from_catalog(t, bands)
-    return tycho
 
 def get_large_galaxy_version(fn):
     preburn = False
@@ -474,10 +526,17 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
         # 'islargegalaxy' set.  This includes both pre-burned
         # galaxies, and ones where the preburning failed and we want
         # to fall back to the SGA-parent ellipse for masking.
-        galaxies.islargegalaxy = ((galaxies.ref_cat == refcat) *
-                                  (galaxies.sga_id > -1))
+        galaxies.islargegalaxy = np.logical_or(
+            np.logical_not(galaxies.in_footprint_grz),
+            (galaxies.ref_cat == refcat) * (galaxies.sga_id > -1))
         # The pre-fit galaxies whose parameters will stay fixed
         galaxies.freezeparams = (galaxies.preburned * galaxies.freeze)
+
+        # set ref_cat and ref_id for galaxies outside the footprint
+        I = np.flatnonzero(np.logical_not(galaxies.in_footprint_grz))
+        galaxies.ref_id[I] = galaxies.sga_id[I]
+        galaxies.ref_cat[I] = np.array([refcat] * len(I))
+
     else:
         # SGA parent catalog
         galaxies.ref_cat = np.array([refcat] * len(galaxies))
@@ -488,7 +547,11 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
 
     galaxies.rename('mag_leda', 'mag')
     # Pre-burned, frozen but non-SGA sources have diam=-1.
-    galaxies.radius = np.maximum(0., galaxies.diam / 2. / 60.) # [degree]
+    if 'diam' in galaxies.get_columns():
+        galaxies.radius = np.maximum(0., galaxies.diam / 2. / 60.) # [degree]
+    else:
+        # SGA-2020
+        galaxies.radius = np.maximum(0., galaxies.d26 / 2. / 60.) # [degree]
     galaxies.keep_radius = 2. * galaxies.radius
     galaxies.sources = np.empty(len(galaxies), object)
     galaxies.sources[:] = None
@@ -520,12 +583,49 @@ def get_galaxy_sources(galaxies, bands):
 
     srcs = [None for g in galaxies]
 
+    # DR10 -- estimated i band flux from r,z
+    cols = galaxies.get_columns()
+    if ('i' in bands and (not 'flux_i' in cols)
+        and 'flux_r' in cols and 'flux_z' in cols):
+        with np.errstate(divide='ignore', invalid='ignore'):
+            mag_r = -2.5 * (np.log10(galaxies.flux_r) - 9)
+            mag_z = -2.5 * (np.log10(galaxies.flux_z) - 9)
+        mag_r[np.logical_not(np.isfinite(mag_r))] = 30.
+        mag_z[np.logical_not(np.isfinite(mag_z))] = 30.
+        color = np.clip(mag_r - mag_z, -0.5, 2.0)
+        cc = [-0.13689305,
+              0.80606322,
+              -0.24921022,
+              -0.15773003,
+              0.10645930,
+              -0.0050743524]
+        iz = 0.
+        for i,c in enumerate(cc):
+            iz += c * color**i
+        mag_i = mag_z + iz
+        galaxies.flux_i = NanoMaggies.magToNanomaggies(mag_i)
+        debug('Estimated i mags for SGA galaxies:')
+        debug('r:', mag_r[:10])
+        debug('z:', mag_z[:10])
+        debug('i:', mag_i[:10])
+        cols = galaxies.get_columns()
+
+    # Does the SGA catalog has flux_ columns for all the bands we're working with?
+    missing_band = False
+    has_band = {}
+    for band in bands:
+        has_band[band] = True
+        if not 'flux_%s' % band in cols:
+            has_band[band] = False
+            missing_band = True
+            warnings.warn('No "flux_%s" column in SGA catalog; will have to fit for fluxes' % band)
+
     # If we have pre-burned galaxies, re-create the Tractor sources for them.
     I, = np.nonzero(galaxies.preburned)
     for ii,g in zip(I, galaxies[I]):
         typ = fits_reverse_typemap[g.type.strip()]
         pos = RaDecPos(g.ra, g.dec)
-        fluxes = dict([(band, g.get('flux_%s' % band)) for band in bands])
+        fluxes = dict([(band, g.get('flux_%s' % band) if has_band[band] else 1.) for band in bands])
         bright = NanoMaggies(order=bands, **fluxes)
         shape = None
         # put the Rex branch first, because Rex is a subclass of ExpGalaxy!
@@ -561,6 +661,8 @@ def get_galaxy_sources(galaxies, bands):
         else:
             raise RuntimeError('Unknown preburned SGA source type "%s"' % typ)
         debug('Created', src)
+        if missing_band:
+            src.needs_initial_flux = True
         assert(np.isfinite(src.getLogPrior()))
         srcs[ii] = src
 
@@ -609,19 +711,17 @@ def read_star_clusters(targetwcs):
     clusters = fits_table(clusterfile, columns=['ra', 'dec', 'radius', 'type', 'ba', 'pa'])
     clusters.ref_id = np.arange(len(clusters))
 
-    radius = 1.
+    assert(np.all(np.isfinite(clusters.radius)))
+
     rc,dc = targetwcs.radec_center()
+    wcs_rad = targetwcs.radius()
     d = degrees_between(rc, dc, clusters.ra, clusters.dec)
-    clusters.cut(d < radius)
+    clusters.cut(d < wcs_rad + clusters.radius)
     if len(clusters) == 0:
         return None
 
-    debug('Cut to {} star cluster(s) within the brick'.format(len(clusters)))
+    debug('Cut to {} star cluster(s) possibly touching the brick'.format(len(clusters)))
     clusters.ref_cat = np.array(['CL'] * len(clusters))
-
-    # Radius in degrees
-    clusters.radius = clusters.radius
-    clusters.radius[np.logical_not(np.isfinite(clusters.radius))] = 1./60.
 
     # Set isbright=True
     clusters.isbright = np.zeros(len(clusters), bool)
@@ -648,10 +748,10 @@ def get_reference_map(wcs, refs):
                             ('iscluster', 'CLUSTER', True),
                             ('islargegalaxy', 'GALAXY', True),]:
         isit = refs.get(col)
-        if not np.any(isit):
+        if not np.any(isit & (refs.radius > 0)):
             debug('None marked', col)
             continue
-        I, = np.nonzero(isit)
+        I, = np.nonzero(isit & (refs.radius > 0))
         debug(len(I), 'with', col, 'set')
         if len(I) == 0:
             continue

@@ -1,4 +1,3 @@
-from __future__ import print_function
 import os
 import numpy as np
 
@@ -73,6 +72,9 @@ class RunbrickError(RuntimeError):
     pass
 
 class NothingToDoError(RunbrickError):
+    pass
+
+class ZeroWeightError(RunbrickError):
     pass
 
 class iterwrapper(object):
@@ -156,11 +158,6 @@ def find_unique_pixels(wcs, W, H, unique, ra1,ra2,dec1,dec2):
         if nu == ntot:
             break
     return unique
-
-def read_primary_header(fn):
-    # fitsio 1.0.1 sped up header-reading, so we don't need to do it ourselves any more.
-    import fitsio
-    return fitsio.read_header(fn)
 
 def copy_header_with_wcs(source_header, wcs):
     import fitsio

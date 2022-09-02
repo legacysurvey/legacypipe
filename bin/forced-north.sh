@@ -21,10 +21,10 @@ export MPICH_GNI_FORK_MODE=FULLCOPY
 camera=$1
 expnum=$2
 
-exppre=$(printf %08d $expnum | cut -c 1-5)
+exppre=$(printf %08d "$expnum" | cut -c 1-5)
 
 logdir=$outdir/logs/$camera/$exppre
-mkdir -p $logdir
+mkdir -p "$logdir"
 logfile=$logdir/$expnum.log
 
 ncores=4
@@ -37,18 +37,18 @@ ncores=4
 
 echo "Logging to $logfile"
 
-python -O $LEGACYPIPE_DIR/legacypipe/forced_photom.py \
-       --survey-dir $DIR \
-       --catalog-dir-north $DIR/north \
-       --catalog-dir-south $DIR/south \
+python -O "$LEGACYPIPE_DIR/legacypipe/forced_photom.py" \
+       --survey-dir "$DIR" \
+       --catalog-dir-north "$DIR/north" \
+       --catalog-dir-south "$DIR/south" \
        --catalog-resolve-dec-ngc 32.375 \
        --skip \
        --skip-calibs \
        --apphot \
        --derivs \
        --outlier-mask \
-       --camera $camera \
-       --expnum $expnum \
-       --out-dir $outdir \
-       --threads $ncores \
-       >> $logfile 2>&1
+       --camera "$camera" \
+       --expnum "$expnum" \
+       --out-dir "$outdir" \
+       --threads "$ncores" \
+       >> "$logfile" 2>&1

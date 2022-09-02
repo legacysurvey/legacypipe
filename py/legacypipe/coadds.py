@@ -1,4 +1,3 @@
-from __future__ import print_function
 import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
@@ -167,7 +166,12 @@ class UnwiseCoadd(SimpleCoadd):
         with survey.write_output('wisemodel-jpeg', brick=brickname) as out:
             imsave_jpeg(out.fn, rgb, origin='lower')
             info('Wrote', out.fn)
-        
+        coresids = [coimg - comod for coimg, comod in zip(coimgs[:2], comods[:2])]
+        rgb = _unwise_to_rgb(coresids)
+        with survey.write_output('wiseresid-jpeg', brick=brickname) as out:
+            imsave_jpeg(out.fn, rgb, origin='lower')
+            info('Wrote', out.fn)
+
 def _unwise_to_rgb(imgs):
     img = imgs[0]
     H,W = img.shape
@@ -200,6 +204,7 @@ def _unwise_to_rgb(imgs):
     return rgb
 
 def make_coadds(tims, bands, targetwcs,
+                coweights=True,
                 mods=None, blobmods=None,
                 xy=None, apertures=None, apxy=None,
                 ngood=False, detmaps=False, psfsize=False,
@@ -227,8 +232,9 @@ def make_coadds(tims, bands, targetwcs,
     unweighted=True
 
     C.coimgs = []
-    # the pixelwise inverse-variances (weights) of the "coimgs".
-    C.cowimgs = []
+    if coweights:
+        # the pixelwise inverse-variances (weights) of the "coimgs".
+        C.cowimgs = []
     if detmaps:
         C.galdetivs = []
         C.psfdetivs = []
@@ -254,6 +260,8 @@ def make_coadds(tims, bands, targetwcs,
     if xy:
         ix,iy = xy
         C.T = fits_table()
+        if ngood:
+            C.T.ngood   = np.zeros((len(ix), len(bands)), np.int16)
         C.T.nobs    = np.zeros((len(ix), len(bands)), np.int16)
         C.T.anymask = np.zeros((len(ix), len(bands)), np.int16)
         C.T.allmask = np.zeros((len(ix), len(bands)), np.int16)
@@ -351,15 +359,22 @@ def make_coadds(tims, bands, targetwcs,
                 coblobmod  = np.zeros((H,W), np.float32)
             # number of exposures
             con    = np.zeros((H,W), np.int16)
-            # inverse-variance
-            coiv   = np.zeros((H,W), np.float32)
-            kwargs.update(coimg=coimg, coiv=coiv)
+            kwargs.update(coimg=coimg)
 
-        # Note that we have 'congood' as well as 'nobs':
-        # * 'congood' is used for the 'nexp' *image*.
-        #   It counts the number of "good" (unmasked) exposures
-        # * 'nobs' is used for the per-source measurements
-        #   It counts the total number of exposures, including masked pixels
+        # We have *three* counters for the number of pixels
+        # overlapping each coadd brick pixel:
+        #
+        # - "con" counts the pixels included in the unweighted coadds.
+        #   This map is not passed outside this function or used
+        #   anywhere else.
+        #
+        # - "congood" counts pixels with (iv > 0).  This gets passed
+        #   to the *write_coadd_images* function, where it gets
+        #   written to the *nexp* maps.
+        #
+        # - "nobs" counts all pixels, regardless of masks.  This gets
+        #   sampled at *xy* positions, and ends up in the tractor
+        #   catalog "nobs" column.
         #
         # (you want to know the number of observations within the
         # source footprint, not just the peak pixel which may be
@@ -382,7 +397,6 @@ def make_coadds(tims, bands, targetwcs,
         if xy or allmasks:
             # number of observations
             nobs = np.zeros((H,W), np.int16)
-            kwargs.update(nobs=nobs)
 
         if nsatur:
             satmap = np.zeros((H,W), np.int16)
@@ -420,8 +434,7 @@ def make_coadds(tims, bands, targetwcs,
                 if dq is None:
                     goodpix = 1
                 else:
-                    # include SATUR pixels if no other
-                    # pixels exists
+                    # include SATUR pixels if no other pixels exists
                     okbits = 0
                     for bitname in ['satur']:
                         okbits |= DQ_BITS[bitname]
@@ -430,21 +443,21 @@ def make_coadds(tims, bands, targetwcs,
                         # HACK -- force SATUR pix to be bright
                         im[brightpix] = satur_val
                     # Include these pixels if none other exist??
-                    for bitname in ['interp']: #, 'bleed']:
+                    for bitname in ['interp']:
                         okbits |= DQ_BITS[bitname]
                     goodpix = ((dq & ~okbits) == 0)
 
                 coimg[Yo,Xo] += goodpix * im
                 con  [Yo,Xo] += goodpix
-                coiv [Yo,Xo] += goodpix * 1./(tim.sig1 * tim.sbscale)**2  # ...ish
 
             if xy or allmasks or anymasks:
                 if dq is not None:
                     ormask [Yo,Xo] |= dq
                     andmask[Yo,Xo] &= dq
-            if xy:
+            if xy or allmasks:
                 # raw exposure count
                 nobs[Yo,Xo] += 1
+            if xy:
                 # mjd_min/max
                 update = np.logical_or(mjd_argmins[Yo,Xo] == -1,
                                        (mjd_argmins[Yo,Xo] > -1) *
@@ -498,8 +511,7 @@ def make_coadds(tims, bands, targetwcs,
                 dx = (fx - ix).astype(np.float32)
                 dy = (fy - iy).astype(np.float32)
                 copsf = np.zeros(coph*copw, np.float32)
-                rtn = lanczos3_interpolate(ix, iy, dx, dy, [copsf], [patch])
-                assert(rtn == 0)
+                lanczos3_interpolate(ix, iy, dx, dy, [copsf], [patch])
                 copsf = copsf.reshape((coph,copw))
                 copsf /= copsf.sum()
                 if plots:
@@ -543,7 +555,8 @@ def make_coadds(tims, bands, targetwcs,
         # Per-band:
         cowimg /= np.maximum(cow, tinyw)
         C.coimgs.append(cowimg)
-        C.cowimgs.append(cow)
+        if coweights:
+            C.cowimgs.append(cow)
         if mods is not None:
             cowmod  /= np.maximum(cow, tinyw)
             C.comods.append(cowmod)
@@ -558,7 +571,7 @@ def make_coadds(tims, bands, targetwcs,
             coblobresid[cow == 0] = 0.
             C.coblobresids.append(coblobresid)
 
-        if xy or anymasks:
+        if xy or allmasks:
             # If these was no coverage, don't set ALLMASK
             andmask[nobs == 0] = 0
         if allmasks:
@@ -577,18 +590,21 @@ def make_coadds(tims, bands, targetwcs,
             if plots:
                 _make_coadds_plots_3(cowimg, cow, coimg, band, ps)
 
+            # Patch pixels with no data in the weighted coadd.
             cowimg[cow == 0] = coimg[cow == 0]
+            del coimg
             if mods is not None:
                 cowmod[cow == 0] = comod[cow == 0]
+                del comod
             if blobmods is not None:
                 cowblobmod[cow == 0] = coblobmod[cow == 0]
-
+                del coblobmod
         if xy:
+            if ngood:
+                C.T.ngood  [:,iband] = congood[iy,ix]
             C.T.nobs   [:,iband] = nobs   [iy,ix]
             C.T.anymask[:,iband] = ormask [iy,ix]
             C.T.allmask[:,iband] = andmask[iy,ix]
-            # unless there were no images there...
-            #C.T.allmask[nobs[iy,ix] == 0, iband] = 0
             if detmaps:
                 C.T.psfdepth[:,iband] = psfdetiv[iy, ix]
                 C.T.galdepth[:,iband] = galdetiv[iy, ix]
@@ -625,6 +641,9 @@ def make_coadds(tims, bands, targetwcs,
                 if blobmods is not None:
                     apargs.append((irad, band, rad, coblobresid, None, None,
                                    False, apxy))
+
+        if not coweights:
+            del cow
 
         if callback is not None:
             callback(band, *callback_args, **kwargs)
@@ -814,7 +833,7 @@ def _make_coadds_plots_1(im, band, mods, mo, iv, unweighted,
     thisimg = np.zeros((H,W), np.float32)
     thisimg[Yo,Xo] = im
     rgb = get_rgb([thisimg], [band])
-    iplane = dict(g=2, r=1, z=0)[band]
+    iplane = dict(g=2, r=1, i=0, z=0)[band]
     rgbimg = rgb[:,:,iplane]
     plt.imshow(rgbimg, interpolation='nearest', origin='lower', cmap='gray')
     plt.xticks([]); plt.yticks([])
@@ -859,7 +878,7 @@ def _make_coadds_plots_1(im, band, mods, mo, iv, unweighted,
             thisim = np.zeros((H,W), np.float32)
             thisim[Yo,Xo] = goodpix * myim
             rgb = get_rgb([thisim], [band])
-            iplane = dict(g=2, r=1, z=0)[band]
+            iplane = dict(g=2, r=1, i=1, z=0)[band]
             rgbimg = rgb[:,:,iplane]
             plt.subplot(2,2,3)
             plt.imshow(rgbimg, interpolation='nearest', origin='lower', cmap='gray')
@@ -962,7 +981,9 @@ def _apphot_one(args):
 
     return result
 
-def get_coadd_headers(hdr, tims, band, coadd_headers={}):
+def get_coadd_headers(hdr, tims, band, coadd_headers=None):
+    if coadd_headers is None:
+        coadd_headers = {}
     # Grab these keywords from all input files for this band...
     keys = ['OBSERVAT', 'TELESCOP','OBS-LAT','OBS-LONG','OBS-ELEV',
             'INSTRUME','FILTER']

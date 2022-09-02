@@ -1,11 +1,10 @@
-from __future__ import division, print_function
-import sys, os, glob, time, warnings, gc
-import matplotlib.pyplot as plt
+# srun -N 1 -C haswell -t 04:00:00 -q interactive python modify_psfex_profiles.py
+import os, warnings
 import numpy as np
-from astropy.table import Table, vstack, hstack
+from astropy.table import Table
 import fitsio
 from astropy.io import fits
-
+from multiprocessing import Pool
 from scipy.optimize import curve_fit
 
 def get_frac_moffat(r, alpha, beta):
@@ -15,6 +14,7 @@ def get_frac_moffat(r, alpha, beta):
     frac = 1 - alpha**(2*(beta-1))*(alpha**2 + r**2)**(1-beta)
     return(frac)
 
+
 def get_sb_moffat(r, alpha, beta):
     """
     Calculate the surface brightness of light at radius r of a Moffat profile.
@@ -22,6 +22,7 @@ def get_sb_moffat(r, alpha, beta):
     """
     i = (beta-1)/(np.pi * alpha**2)*(1 + (r/alpha)**2)**(-beta)
     return i
+
 
 def get_sb_moffat_plus_power_law(r, alpha1, beta1, plexp2, weight2):
     """
@@ -31,6 +32,7 @@ def get_sb_moffat_plus_power_law(r, alpha1, beta1, plexp2, weight2):
     i = (beta1-1)/(np.pi * alpha1**2)*(1 + (r/alpha1)**2)**(-beta1) \
         + weight2 *r**(plexp2)
     return i
+
 
 def get_sb_double_moffat(r, alpha1, beta1, alpha2, beta2, weight2):
     """
@@ -42,10 +44,22 @@ def get_sb_double_moffat(r, alpha1, beta1, alpha2, beta2, weight2):
     return i
 
 
+n_processes = 8
 test_q = False  # only process a small number of exposures
 
-output_dir = '/global/cfs/projectdirs/cosmo/work/legacysurvey/dr9/calib/patched-psfex'
-surveyccd_path = '/global/cfs/projectdirs/cosmo/work/legacysurvey/dr9/survey-ccds-decam-dr9-cut.fits.gz'
+base_dir = '/global/cfs/cdirs/cosmo/work/legacysurvey/dr10/'
+#input_dir = os.path.join(base_dir, 'calib/psfex')
+#output_dir = os.path.join(base_dir, 'calib/patched-psfex')
+input_dir = os.path.join(base_dir, 'calib/unpatched-psfex')
+output_dir = os.path.join(base_dir, 'calib/patched-psfex')
+#surveyccd_path = os.path.join(base_dir, 'survey-ccds-decam-dr10-z-v1.fits')
+#surveyccd_path = os.path.join(base_dir, 'survey-ccds-decam-dr10f-i-v1.fits')
+# (new ones)
+#surveyccd_path = 'survey-ccds-decam-dr100.fits'
+surveyccd_path = 'todo.fits'
+
+from legacypipe.survey import get_git_version
+version = get_git_version()
 
 radius_lim1, radius_lim2 = 5.0, 6.0
 radius_lim3, radius_lim4 = 7., 8.
@@ -53,6 +67,7 @@ radius_lim3, radius_lim4 = 7., 8.
 params = {
 'g_weight2': 0.00045, 'g_plexp2': -2.,
 'r_weight2': 0.00033, 'r_plexp2': -2.,
+'i_weight2': 0.00033, 'i_plexp2': -2.,
 'z_alpha2': 17.650, 'z_beta2': 1.7, 'z_weight2': 0.0145,
 }
 
@@ -79,9 +94,7 @@ if test_q:
 else:
     exp_index_list = np.arange(len(unique_expnum))
 
-# loop over the unique exposures
-# for exp_index in [0]:
-for exp_index in exp_index_list:
+def modify_psfex(exp_index):
 
     mask = ccd['expnum']==unique_expnum[exp_index]
     band = ccd['filter'][mask][0]
@@ -89,19 +102,24 @@ for exp_index in exp_index_list:
 
     image_filename = ccd['image_filename'][mask][0]
     psfex_filename = image_filename[:image_filename.find('.fits.fz')]+'-psfex.fits'
-    psfex_filename_new = image_filename[:image_filename.find('.fits.fz')]+'-psfex.fits'
-    psfex_path = os.path.join('/global/cfs/projectdirs/cosmo/work/legacysurvey/dr9/calib/psfex', psfex_filename)
-
+    psfex_filename_new = psfex_filename
+    psfex_path = os.path.join(input_dir, psfex_filename)
     output_path = os.path.join(output_dir, psfex_filename_new)
-    if os.path.isfile(output_path):
-        #raise ValueError
-        continue
 
+    if os.path.isfile(output_path):
+        print('Output exists:', output_path)
+        return None
+
+    if not os.path.exists(psfex_path):
+        print('Input PsfEx file does not exist:', psfex_path)
+        return None
+
+    #print('Reading', psfex_path)
     hdu = fits.open(psfex_path)
     data = Table(hdu[1].data)
     #print(len(data))
 
-    data['psf_patch_ver'] = 'd683d99'
+    data['psf_patch_ver'] = version
     data['moffat_alpha'] = 0.
     data['moffat_beta'] = 0.
     # sum of the difference between the original and new PSF model (first eigen-image)
@@ -114,7 +132,7 @@ for exp_index in exp_index_list:
     for ccd_index in range(len(data)):
 
         # expnum_str = data['expnum'][ccd_index]
-        ccdname = data['ccdname'][ccd_index]
+        ccdname = data['ccdname'][ccd_index].strip()
 
         ########## Outer PSF parameters ###########
         if band=='z' and (ccdname in outlier_ccd_list):
@@ -161,12 +179,14 @@ for exp_index in exp_index_list:
             try:
                 popt, pcov = curve_fit(get_sb_moffat, radius[mask], psfi_flat[mask]/(pixscale**2), bounds=((0, 1.8), np.inf))
                 alpha, beta = popt
-            except:
+            except RuntimeError:
                 print("Error: "+image_filename+", "+ccdname+".")
                 print("Error: fit failed to converge.")
-                alpha, beta = 0.8, 2.2 # using default values
+                alpha, beta = 0.8, 2.2  # using default values
                 data['failure'][ccd_index] = True
-                
+                import traceback
+                traceback.print_exc()
+
         #print('{} {} alpha, beta = {:.3f}, {:.3f}'.format(ccdname, band, alpha, beta))
 
         # save the Moffat parameters
@@ -243,3 +263,14 @@ for exp_index in exp_index_list:
     if not os.path.exists(os.path.dirname(output_path)):
         os.makedirs(os.path.dirname(output_path))
     data.write(output_path)
+    print('Wrote', output_path)
+    return None
+
+
+def main():
+    with Pool(processes=n_processes) as pool:
+        res = pool.map(modify_psfex, exp_index_list)
+
+if __name__=="__main__":
+    main()
+

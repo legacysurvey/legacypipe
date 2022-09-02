@@ -1,4 +1,3 @@
-from __future__ import print_function
 import numpy as np
 import os
 
@@ -8,21 +7,25 @@ from astrometry.util.util import Tan
 from astrometry.util.miscutils import polygon_area
 import tractor.sfd
 
-def annotate(ccds, survey, mp=None, mzls=False, bass=False, normalizePsf=True,
-             carryOn=True):
+def annotate(ccds, survey, camera, mp=None, normalizePsf=True, carryOn=True):
     if mp is None:
         from astrometry.util.multiproc import multiproc
         mp = multiproc()
 
+    anns = mp.map(annotate_one_ccd, [
+        (ccd, survey, normalizePsf, carryOn) for ccd in ccds])
+
     # File from the "observing" svn repo:
     from pkg_resources import resource_filename
 
-    if mzls:
+    if camera == 'mosaic':
         tilefile = resource_filename('legacyzpts', 'data/mosaic-tiles_obstatus.fits')
-    elif bass:
+    elif camera == '90prime':
         tilefile = None
-    else:
+    elif camera == 'decam':
         tilefile = resource_filename('legacyzpts', 'data/decam-tiles_obstatus.fits')
+    else:
+        tilefile = None
 
     if tilefile is not None:
         if os.path.isfile(tilefile):
@@ -39,9 +42,6 @@ def annotate(ccds, survey, mp=None, mzls=False, bass=False, normalizePsf=True,
         tileid_to_index = np.empty(max(tiles.tileid)+1, int)
         tileid_to_index[:] = -1
         tileid_to_index[tiles.tileid] = np.arange(len(tiles))
-
-    anns = mp.map(annotate_one_ccd, [
-        (ccd, survey, normalizePsf, carryOn) for ccd in ccds])
 
     gaussgalnorm = np.zeros(len(ccds), np.float32)
     for iccd,ann in enumerate(anns):
@@ -111,7 +111,7 @@ def annotate_one_ccd(X):
           'CCD', ccd.ccdname)
     result = {}
     try:
-        im = survey.get_image_object(ccd)
+        im = survey.get_image_object(ccd, prime_cache=False)
     except:
         print('Failed to get_image_object()')
         import traceback
@@ -130,13 +130,15 @@ def annotate_one_ccd(X):
 
     kwargs = dict(pixPsf=True, subsky=False,
                   pixels=False, dq=False, invvar=False,
-                  normalizePsf=normalizePsf)
+                  normalizePsf=normalizePsf,
+                  no_remap_invvar=True,
+                  trim_edges=False)
     psf = None
     wcs = None
     sky = None
 
-    if ccd.ccdnastrom == 0: # something went terribly wrong
-        print('ccdnastrom == 0; bailing on annotation')
+    if not im.has_astrometric_calibration(ccd):
+        print('CCD has no astrometric calibration; bailing on annotation')
         return result
 
     try:

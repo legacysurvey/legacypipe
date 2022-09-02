@@ -1,4 +1,3 @@
-from __future__ import print_function
 import numpy as np
 
 from legacypipe.forced_photom_decam import main as forced_photom_main

@@ -163,7 +163,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             with np.errstate(divide='ignore'):
                 new_ie = 1. / np.sqrt(
                     (1./tim.inverr)**2 +
-                    floor_sigma[band] +
+                    floor_sigma[band]**2 +
                     poissons[band]**2 * np.maximum(0., tim.data))
             new_ie[tim.inverr == 0] = 0.
 
@@ -293,7 +293,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 dx = (xx - ix).astype(np.float32)
                 dy = (yy - iy).astype(np.float32)
                 psfimg = psfimg.astype(np.float32)
-                rtn = lanczos3_interpolate(ix, iy, dx, dy, [subpsf.flat], [psfimg])
+                lanczos3_interpolate(ix, iy, dx, dy, [subpsf.flat], [psfimg])
 
                 if plots:
                     plt.clf()
@@ -375,6 +375,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         plt.axvline(np.log10(1000), color='k')
         ps.savefig()
 
+    info('WISE band', band, ': brightest central fluxes:',
+         ', '.join(['%.4g' % f for f in list(reversed(sorted(central_flux)))[:10]]))
     # Eddie's non-secret recipe:
     #- central pixel <= 1000: 19x19 pix box size
     #- central pixel in 1000 - 20000: 59x59 box size
@@ -382,10 +384,17 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     #- object near "bright star": 299x299 box size
     nbig = nmedium = nsmall = 0
     for src,cflux in zip(cat, central_flux):
-        if cflux > 20000:
+        if band in [1,2] and cflux > 20000:
             R = 100
             nbig += 1
-        elif cflux > 1000:
+        elif band in [1,2] and cflux > 1000:
+            R = 30
+            nmedium += 1
+        # W3, W4 flux levels for large PSFs are considerably larger.
+        elif band in [3,4] and cflux > 1000000:
+            R = 100
+            nbig += 1
+        elif band in [3,4] and cflux > 10000:
             R = 30
             nmedium += 1
         else:
@@ -401,7 +410,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 galrad = src.shape.re
             pixscale = 2.75
             src.halfsize = int(np.hypot(R, galrad * 5 / pixscale))
-    debug('Set WISE source sizes:', nbig, 'big', nmedium, 'medium', nsmall, 'small')
+    info('Band', band, ': WISE PSF sizes:', nbig, 'big', nmedium, 'medium', nsmall, 'small')
 
     tractor = Tractor(tims, cat)
     if use_ceres:
@@ -480,17 +489,51 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             tag = '%s W%i' % (tile.coadd_id, band)
             (dat, mod, _, chi, _) = ims1[i]
             sig1 = tim.sig1
+            bandmax = { 1: 25, 2: 25, 3: 5, 4: 5 }
+            mx = bandmax[band]
             plt.clf()
             plt.imshow(dat, interpolation='nearest', origin='lower',
-                       cmap='gray', vmin=-3 * sig1, vmax=25 * sig1)
+                       cmap='gray', vmin=-3 * sig1, vmax=mx * sig1)
             plt.colorbar()
             plt.title('%s: data' % tag)
             ps.savefig()
             plt.clf()
             plt.imshow(mod, interpolation='nearest', origin='lower',
-                       cmap='gray', vmin=-3 * sig1, vmax=25 * sig1)
+                       cmap='gray', vmin=-3 * sig1, vmax=mx * sig1)
             plt.colorbar()
             plt.title('%s: model' % tag)
+            ps.savefig()
+
+            srcs = [src for src in cat if src.getBrightness().getBand(wanyband) > 0]
+            tr = Tractor([tim], srcs)
+            mod_p = tr.getModelImage(tim)
+            srcs = [src for src in cat if src.getBrightness().getBand(wanyband) < 0]
+            tr = Tractor([tim], srcs)
+            mod_n = tr.getModelImage(tim)
+            mx = max(np.abs(mod_p).max(), np.abs(mod_n).max())
+            plt.clf()
+            plt.subplot(2,2,1)
+            plt.imshow(mod_p, interpolation='nearest', origin='lower',
+                       cmap='gray', vmin=-mx, vmax=mx)
+            plt.colorbar()
+            plt.title('%s: model - positive fluxes' % tag)
+            #ps.savefig()
+            #plt.clf()
+            plt.subplot(2,2,2)
+            plt.imshow(mod_n, interpolation='nearest', origin='lower',
+                       cmap='gray', vmin=-mx, vmax=mx)
+            plt.colorbar()
+            plt.title('%s: model - negative fluxes' % tag)
+            plt.subplot(2,2,3)
+            plt.imshow(mod, interpolation='nearest', origin='lower',
+                       cmap='gray', vmin=-mx, vmax=mx)
+            plt.colorbar()
+            plt.title('%s: model - sum' % tag)
+            plt.subplot(2,2,4)
+            plt.imshow(dat, interpolation='nearest', origin='lower',
+                       cmap='gray', vmin=-mx, vmax=mx)
+            plt.colorbar()
+            plt.title('%s: image' % tag)
             ps.savefig()
 
             plt.clf()
@@ -505,6 +548,13 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     # Sources out of bounds, eg, never change from their initial
     # fluxes.  Zero them out instead.
     nm[nm_ivar == 0] = 0.
+
+    if band == 4:
+        # WISE binned the W4 images 2x2 on-board.  The unWISE coadds,
+        # however, are produced on the same pixel grid for each band.
+        # This means the W4 pixels are strongly correlated, and this
+        # imprints on the photometry as well.
+        nm_ivar *= 0.25
 
     phot.set('flux_%s' % wband, nm.astype(np.float32))
     phot.set('flux_ivar_%s' % wband, nm_ivar.astype(np.float32))
@@ -527,7 +577,9 @@ class wphotduck(object):
     pass
 
 def radec_in_unique_area(rr, dd, ra1, ra2, dec1, dec2):
-    ''' Returns a boolean array. '''
+    '''Are the given points within the given RA,Dec rectangle?
+
+    Returns a boolean array.'''
     unique = (dd >= dec1) * (dd < dec2)
     if ra1 < ra2:
         # normal RA

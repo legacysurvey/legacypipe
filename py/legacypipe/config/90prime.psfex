@@ -53,8 +53,8 @@ CHECKIMAGE_NAME chi.fits,proto.fits,samp.fits,resi.fits,snap.fits
 #----------------------------- Miscellaneous ---------------------------------
  
 PSF_DIR                         # Where to write PSFs (empty=same as input)
-PSF_SUFFIX      .fits            # Filename extension for output PSF filename
-VERBOSE_TYPE    FULL           # can be QUIET,NORMAL,LOG or FULL
+PSF_SUFFIX      .fits           # Filename extension for output PSF filename
+VERBOSE_TYPE    QUIET           # can be QUIET,NORMAL,LOG or FULL
 WRITE_XML       N               # Write XML file (Y/N)?
 NTHREADS        1               # Number of simultaneous threads for
                                 # the SMP version of PSFEx

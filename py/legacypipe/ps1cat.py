@@ -1,6 +1,4 @@
 #! /usr/bin/env python
-from __future__ import print_function
-
 """
 Find all the PS1 stars in a given DECaLS CCD.
 """
@@ -36,7 +34,7 @@ class HealpixedCatalog(object):
     def get_healpix_catalog(self, healpix):
         from astrometry.util.fits import fits_table
         fname = self.fnpattern % dict(hp=healpix)
-        print('Reading', fname)
+        #print('Reading', fname)
         return fits_table(fname)
 
     def get_healpix_catalogs(self, healpixes):
@@ -72,6 +70,7 @@ class HealpixedCatalog(object):
 
 class ps1cat(HealpixedCatalog):
     ps1band = dict(g=0,r=1,i=2,z=3,Y=4,
+                   N419=0,
                    N501=0,
                    N673=1,
     )
@@ -121,7 +120,8 @@ class sdsscat(HealpixedCatalog):
                     z=4,
     )
     def __init__(self,expnum=None,ccdname=None,ccdwcs=None):
-        """Read SDSS sources for an exposure number + CCD name or CCD WCS
+        """
+        Read SDSS sources for an exposure number + CCD name or CCD WCS.
 
         Args:
             expnum, ccdname: select catalogue with these
@@ -173,6 +173,8 @@ def sdss_to_decam(psfmags, band):
     imag = psfmags[:,i_index]
     gi = gmag - imag
     coeffs = dict(
+        # from Arjun 2021-03-17 based on DECosmos runs (2013-02-11,12,13)
+        u = [-0.0643, 0.1787,-0.1552, 0.0259],
     ).get(band, [0.,0.,0.,0.])
     colorterm = coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3
     return colorterm
@@ -210,19 +212,16 @@ def ps1_to_decam(psmags, band):
         i = [ 0.00904, -0.04171, 0.00566, -0.00829 ],
         z = [ 0.02583, -0.07690, 0.02824, -0.00898 ],
         Y = [ 0.02332, -0.05992, 0.02840, -0.00572 ],
-
-        # FIXME!
-        N501 = [ 0.00062,  0.03604, 0.01028, -0.00613 ],
-        N673 = [ 0.00495, -0.08435, 0.03222, -0.01140 ],
+        # From Arjun 2022-03-10
+        # c0: -1.2723
+        N419 = [ 0., 1.1467,-0.1623,-0.0064 ],
+        # From Arjun 2021-02-26
+        # c0: 0.0059
+        N501 = [ 0., -0.2784, 0.2915, -0.0686 ],
+        # c0: 0.2324
+        N673 = [ 0., -0.3456, 0.1334, -0.0146 ],
     )[band]
-
-    # Previously, we used: (with an overall negative)
-    # g = [0.0, -0.04709, -0.00084, 0.00340],
-    # r = [0.0,  0.09939, -0.04509, 0.01488],
-    # z = [0.0,  0.13404, -0.06591, 0.01695])[band]
-
     colorterm = coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3
-    #print('Using DECam ColorTerm')
     return colorterm
 
 def ps1_to_90prime(psmags, band):
@@ -276,4 +275,25 @@ def ps1_to_mosaic(psmags, band):
 
     colorterm = -(coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3)
     print('Using Mosaic3 ColorTerm')
+    return colorterm
+
+def ps1_to_hsc(psmags, band):
+    '''
+    psmags: 2-d array (Nstars, Nbands)
+    band: [grz]
+    '''
+    # https://desi.lbl.gov/trac/wiki/DecamLegacy/Reductions/Photometric
+    g_index = ps1cat.ps1band['g']
+    i_index = ps1cat.ps1band['i']
+    gmag = psmags[:,g_index]
+    imag = psmags[:,i_index]
+    gi = gmag - imag
+    coeffs = dict(
+        g = [ 0., 0., 0., 0.],
+        r = [ 0., 0., 0., 0.],
+        i = [ 0., 0., 0., 0.],
+        z = [ 0., 0., 0., 0.],
+        Y = [ 0., 0., 0., 0.],
+    )[band]
+    colorterm = coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3
     return colorterm

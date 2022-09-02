@@ -6,17 +6,22 @@ import sys
 import os
 import logging
 import numpy as np
-from glob import glob
-from collections import Counter
 
 from astrometry.util.fits import fits_table, merge_tables
 
-from legacypipe.survey import LegacySurveyData, get_version_header, apertures_arcsec
+from legacypipe.survey import LegacySurveyData, get_version_header, apertures_arcsec, wcs_for_brick
 
 def merge_forced(survey, brickname, cat, bands='grz'):
-    ccdfn = survey.find_file('ccds-table', brick=brickname)
-    CCDs = fits_table(ccdfn)
-    print('Read', len(CCDs), 'CCDs')
+    # Get list of CCDs -- from pipeline run results, or straight from CCDs table?
+    # ccdfn = survey.find_file('ccds-table', brick=brickname)
+    # CCDs = fits_table(ccdfn)
+    # print('Read', len(CCDs), 'CCDs')
+    brick = survey.get_brick_by_name(brickname)
+    brickwcs = wcs_for_brick(brick)
+    CCDs = survey.ccds_touching_wcs(brickwcs)
+    if CCDs is None:
+        return None,None
+    print('Read', len(CCDs), 'CCDs touching brick', brickname)
 
     # objects in the catalog: (release,brickid,objid)
     catobjs = set([(r,b,o) for r,b,o in
@@ -100,6 +105,7 @@ def main():
     parser.add_argument('--out', help='Output filename -- if not set, defaults to path within --outdir.')
     parser.add_argument('-r', '--run', default=None,
                         help='Set the run type to execute (for images)')
+    parser.add_argument('--bands', default='g,r,z', help='Bands to add to catalog')
 
     parser.add_argument('--catalog', help='Use the given FITS catalog file, rather than reading from a data release directory')
     parser.add_argument('--catalog-dir', help='Set LEGACY_SURVEY_DIR to use to read catalogs')
@@ -130,10 +136,14 @@ def main():
     columns = ['release', 'brickid', 'objid', 'brick_primary', 'type']
 
     cat = None
-    catsurvey = survey
     if opt.catalog is not None:
         cat = fits_table(opt.catalog, columns=columns)
         print('Read', len(cat), 'sources from', opt.catalog)
+    elif opt.catalog_dir is not None:
+        catsurvey = LegacySurveyData(survey_dir=opt.catalog_dir)
+        fn = catsurvey.find_file('tractor', brick=opt.brick)
+        cat = fits_table(fn, columns=columns)
+        print('Read', len(cat), 'sources from', fn)
     else:
         from astrometry.util.starutil_numpy import radectolb
         # The "north" and "south" directories often don't have
@@ -147,9 +157,8 @@ def main():
             except:
                 import traceback
                 traceback.print_exc()
-                pass
 
-        l,b = radectolb(brick.ra, brick.dec)
+        _,b = radectolb(brick.ra, brick.dec)
         # NGC and above resolve line? -> north
         if b > 0 and brick.dec >= opt.catalog_resolve_dec_ngc:
             if opt.catalog_dir_north:
@@ -182,9 +191,13 @@ def main():
         version_hdr.add_record(dict(name='APRAD%i' % i, value=ap,
                                     comment='(optical) Aperture radius, in arcsec'))
 
-    cat,forced = merge_forced(survey, opt.brick, cat)
+    bands = opt.bands.split(',')
+    cat,forced = merge_forced(survey, opt.brick, cat, bands=bands)
+    if forced is None:
+        print('No overlapping CCDs')
+        return
     units = []
-    for i,col in enumerate(forced.get_columns()):
+    for i,_ in enumerate(forced.get_columns()):
         units.append(forced._header.get('TUNIT%i' % (i+1), ''))
     cols = forced.get_columns()
 

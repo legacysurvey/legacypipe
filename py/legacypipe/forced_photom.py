@@ -2,8 +2,6 @@
 This script performs forced photometry of individual Legacy Survey
 images given a data release catalog.
 '''
-
-from __future__ import print_function
 import os
 import sys
 import shutil
@@ -15,7 +13,7 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
 from astrometry.util.ttime import Time
 
-from tractor import Tractor, Catalog, NanoMaggies
+from tractor import Tractor, Catalog
 from tractor.galaxy import disable_galaxy_cache
 
 from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version_header, apertures_arcsec, radec_at_mjd
@@ -219,7 +217,7 @@ def main(survey=None, opt=None, args=None):
     for ccd in ccds:
         args.append((survey,
                      catsurvey_north, catsurvey_south, opt.catalog_resolve_dec_ngc,
-                     ccd, opt, zoomslice, ps))
+                     ccd, opt, zoomslice, None, None, ps))
 
     if opt.threads:
         from astrometry.util.multiproc import multiproc
@@ -265,15 +263,7 @@ def main(survey=None, opt=None, args=None):
         version_hdr.add_record(dict(name='APRAD%i' % i, value=ap,
                                     comment='(optical) Aperture radius, in arcsec'))
 
-    unitmap = {'exptime':'sec',
-               'flux':'nanomaggy', 'flux_ivar':'1/nanomaggy^2',
-               'apflux':'nanomaggy', 'apflux_ivar':'1/nanomaggy^2',
-               'psfdepth':'1/nanomaggy^2', 'galdepth':'1/nanomaggy^2',
-               'sky':'nanomaggy/arcsec^2', 'psfsize':'arcsec',
-               'fwhm':'pixels', 'ccdrarms':'arcsec', 'ccddecrms':'arcsec',
-               'ra':'deg', 'dec':'deg', 'skyrms':'counts/sec',
-               'dra':'arcsec', 'ddec':'arcsec',
-               'dra_ivar':'1/arcsec^2', 'ddec_ivar':'1/arcsec^2'}
+    from legacypipe.units import get_units_for_columns
 
     columns = F.get_columns()
     order = ['release', 'brickid', 'brickname', 'objid', 'camera', 'expnum',
@@ -284,7 +274,7 @@ def main(survey=None, opt=None, args=None):
              'apflux', 'apflux_ivar', 'x', 'y', 'dqmask', 'dra', 'ddec',
              'dra_ivar', 'ddec_ivar']
     columns = [c for c in order if c in columns]
-    units = [unitmap.get(c,'') for c in columns]
+    units = get_units_for_columns(columns)
 
     if opt.out is not None:
         outdir = os.path.dirname(opt.out)
@@ -343,10 +333,10 @@ def main(survey=None, opt=None, args=None):
 
 def bounce_one_ccd(X):
     # for multiprocessing
-    return run_one_ccd(*X)
+    return forced_photom_one_ccd(*X)
 
-def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None, resolve_dec=None,
-                       margin=20):
+def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None,
+                       resolve_dec=None, margin=20):
     TT = []
     surveys = [(catsurvey_north, True)]
     if catsurvey_south is not None:
@@ -451,14 +441,19 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     #print('Finding bricks to read...')
     sgabricks = []
 
-    todo = []
     for ra,dec,brick in zip(sga.ra, sga.dec, sga.brickname):
         bricks = survey.get_bricks_by_name(brick)
-        brick = bricks[0]
-        # The SGA catalog has a "brickname", but it unfortunately is not always exactly correct
-        if ra >= brick.ra1 and ra < brick.ra2 and dec >= brick.dec1 and dec < brick.dec2:
-            sgabricks.append(bricks)
+        # The SGA catalog has a "brickname", but it unfortunately is not always exactly correct...
+        search_for_brick = False
+        if bricks is None or len(bricks) == 0:
+            search_for_brick = True
         else:
+            brick = bricks[0]
+            if ra >= brick.ra1 and ra < brick.ra2 and dec >= brick.dec1 and dec < brick.dec2:
+                sgabricks.append(bricks)
+            else:
+                search_for_brick = True
+        if search_for_brick:
             # MAGIC 0.2 ~ brick radius
             bricks = survey.get_bricks_near(ra, dec, 0.2)
             bricks = bricks[(ra  >= bricks.ra1 ) * (ra  < bricks.ra2) *
@@ -473,7 +468,7 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     for brick in sgabricks.brickname:
         # For picking up these SGA bricks, resolve doesn't matter (they're fixed
         # in both).
-        for catsurvey,north in surveys:
+        for catsurvey,_ in surveys:
             fn = catsurvey.find_file('tractor', brick=brick)
             if os.path.exists(fn):
                 t = fits_table(fn, columns=['ref_cat', 'ref_id'])
@@ -491,26 +486,34 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     assert(set(sga.ref_id) == set(SGA.ref_id))
     return SGA
 
-def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
-                ccd, opt, zoomslice, ps):
+def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
+                          ccd, opt, zoomslice, radecpoly, outlier_bricks, ps):
     from functools import reduce
     from legacypipe.bits import DQ_BITS
+
+    plots = (ps is not None)
 
     tlast = Time()
     #print('Opt:', opt)
     im = survey.get_image_object(ccd)
-    print('Run_one_ccd: checking cache', survey.cache_dir)
+    print('Forced_photom_one_ccd: checking cache', survey.cache_dir)
     if survey.cache_dir is not None:
         im.check_for_cached_files(survey)
     if opt.do_calib:
         im.run_calibs(splinesky=True)
+    old_calibs_ok=True
 
-    tim = im.get_tractor_image(slc=zoomslice, pixPsf=True,
-                               constant_invvar=opt.constant_invvar,
+    tim = im.get_tractor_image(slc=zoomslice,
+                               radecpoly=radecpoly,
+                               pixPsf=True,
                                hybridPsf=opt.hybrid_psf,
                                normalizePsf=opt.normalize_psf,
-                               old_calibs_ok=True, trim_edges=False)
-    print('Got tim:', tim)#, 'x0,y0', tim.x0, tim.y0)
+                               constant_invvar=opt.constant_invvar,
+                               old_calibs_ok=old_calibs_ok,
+                               trim_edges=False)
+    print('Got tim:', tim)
+    if tim is None:
+        return None
     chipwcs = tim.subwcs
     H,W = tim.shape
 
@@ -535,7 +538,7 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         halostars = gaia[Igaia]
         print('Got', len(gaia), 'Gaia stars,', len(halostars), 'for halo subtraction')
         moffat = True
-        halos = subtract_one((tim, halostars, moffat))
+        _,halos = subtract_one((0, tim, halostars, moffat, old_calibs_ok))
         tim.data -= halos
 
     # The "north" and "south" directories often don't have
@@ -558,17 +561,17 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     posneg_mask = None
     if opt.outlier_mask is not None:
         posneg_mask = np.zeros(tim.shape, np.uint8)
-    # Outliers masks are computed within a survey (north/south for dr9), and are stored
-    # in a brick-oriented way, in the results directories.
-    north_ccd = (ccd.camera.strip() != 'decam')
-    catsurvey = catsurvey_north
-    if not north_ccd and catsurvey_south is not None:
-        catsurvey = catsurvey_south
-    bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
-    for b in bricks:
+
+    # # Outliers masks are computed within a survey (eg north/south
+    # # for dr9), and are stored in a brick-oriented way, in the
+    # # results directories.
+    if outlier_bricks is None:
+        outlier_bricks = bricks_touching_wcs(chipwcs, survey=survey)
+
+    for b in outlier_bricks:
         print('Reading outlier mask for brick', b.brickname,
-              ':', catsurvey.find_file('outliers_mask', brick=b.brickname, output=False))
-        ok = read_outlier_mask_file(catsurvey, [tim], b.brickname, pos_neg_mask=posneg_mask,
+              ':', survey.find_file('outliers_mask', brick=b.brickname, output=False))
+        ok = read_outlier_mask_file(survey, [tim], b.brickname, pos_neg_mask=posneg_mask,
                                     subimage=False, output=False, ps=ps)
         if not ok:
             print('WARNING: failed to read outliers mask file for brick', b.brickname)
@@ -624,13 +627,17 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     sga_out = (T.ref_cat=='L3') * np.logical_not((xx >= 1) * (xx <= W) * (yy >= 1) * (yy <= H))
     I = np.flatnonzero(sga_out)
     if len(I):
-        print(len(I), 'SGA galaxies are outside the image.  Subtracting...')
-        cat = read_fits_catalog(T[I], bands=[tim.band])
-        tr = Tractor([tim], cat)
-        mod = tr.getModelImage(0)
-        tim.data -= mod
-        I = np.flatnonzero(np.logical_not(sga_out))
-        T.cut(I)
+        if not 'flux_%s' % tim.band in T.get_columns():
+            print('SGA galaxies outside but touching the image exist, but no flux measurements for'
+                  ' band', tim.band, 'so no subtraction.')
+        else:
+            print(len(I), 'SGA galaxies are outside the image.  Subtracting...')
+            cat = read_fits_catalog(T[I], bands=[tim.band])
+            tr = Tractor([tim], cat)
+            mod = tr.getModelImage(0)
+            tim.data -= mod
+            I = np.flatnonzero(np.logical_not(sga_out))
+            T.cut(I)
 
     # Add in a fake flux_{BAND} column, with flux 1.0 nanomaggies
     T.set('flux_'+tim.band, np.ones(len(T), np.float32))
@@ -640,7 +647,12 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     print('Parse catalog:', tnow-tlast)
     tlast = tnow
 
-    print('Forced photom...')
+    if plots:
+        #opt.save_data = True
+        opt.save_model = True
+        opt.plot_wcs = getattr(opt, 'plot_wcs', None)
+
+    print('Forced photom for', im, '...')
     F = run_forced_phot(cat, tim,
                         ceres=opt.ceres,
                         derivs=opt.derivs,
@@ -656,6 +668,63 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         # unpack results
         F,model_img = F
 
+    if plots:
+        import pylab as plt
+
+        if opt.plot_wcs:
+            sh = opt.plot_wcs.shape
+            img = np.zeros(sh, np.float32)
+            mod = np.zeros(sh, np.float32)
+            chi = np.zeros(sh, np.float32)
+            from astrometry.util.resample import resample_with_wcs
+            tchi = (tim.getImage() - model_img) * tim.getInvError()
+            Yo,Xo,Yi,Xi,rims = resample_with_wcs(opt.plot_wcs, tim.subwcs,
+                                                 [tim.getImage(), model_img, tchi])
+            img[Yo,Xo] = rims[0]
+            mod[Yo,Xo] = rims[1]
+            chi[Yo,Xo] = rims[2]
+        else:
+            img = tim.getImage()
+            mod = model_img
+            chi = (tim.getImage() - model_img) * tim.getInvError()
+
+        #ima = dict(interpolation='nearest', origin='lower', vmin=-3.*tim.sig1, vmax=10.*tim.sig1,
+        #           cmap='gray')
+        ima = dict(origin='lower', vmin=-3.*tim.sig1, vmax=10.*tim.sig1,
+                   cmap='gray')
+        fn = ps.getnext()
+        plt.imsave(fn, img, **ima)
+        fn = ps.getnext()
+        plt.imsave(fn, mod, **ima)
+        fn = ps.getnext()
+        plt.imsave(fn, chi, origin='lower', vmin=-5, vmax=+5, cmap='gray')
+
+        from legacypipe.survey import get_rgb
+        fn = ps.getnext()
+        rgb = get_rgb([img], [tim.band])
+        # coadd_bw
+        rgb = rgb.sum(axis=2)
+        ima = dict(origin='lower', cmap='gray')
+        plt.imsave(fn, rgb, **ima)
+        fn = ps.getnext()
+        rgb = get_rgb([mod], [tim.band])
+        rgb = rgb.sum(axis=2)
+        plt.imsave(fn, rgb, **ima)
+        print('Saved', fn)
+
+        # plt.clf()
+        # plt.imshow(img, **ima)
+        # plt.title('data: %s' % tim.name)
+        # ps.savefig()
+        # plt.clf()
+        # plt.imshow(mod, **ima)
+        # plt.title('model: %s' % tim.name)
+        # ps.savefig()
+        # plt.clf()
+        # plt.imshow(chi, origin='lower', interpolation='nearest', vmin=-5., vmax=+5., cmap='gray')
+        # plt.title('chi: %s' % tim.name)
+        # ps.savefig()
+
     F.release   = T.release
     F.brickid   = T.brickid
     F.brickname = T.brickname
@@ -666,9 +735,9 @@ def run_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     F.ccdname = np.array([im.ccdname] * len(F))
 
     # "Denormalizing"
-    F.filter  = np.array([tim.band]               * len(F))
-    F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(F))
-    F.exptime = np.array([tim.primhdr['EXPTIME']] * len(F), dtype=np.float32)
+    F.filter  = np.array([tim.band]      * len(F))
+    F.mjd     = np.array([im.mjdobs]     * len(F))
+    F.exptime = np.array([im.exptime]    * len(F), dtype=np.float32)
     F.psfsize = np.array([tim.psf_fwhm * tim.imobj.pixscale] * len(F), dtype=np.float32)
     F.ccd_cuts = np.array([ccd.ccd_cuts] * len(F))
     F.airmass  = np.array([ccd.airmass ] * len(F), dtype=np.float32)

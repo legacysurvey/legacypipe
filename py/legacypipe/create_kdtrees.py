@@ -1,5 +1,5 @@
 import os
-from astrometry.libkd.spherematch import *
+from astrometry.libkd.spherematch import tree_build
 from astrometry.util.fits import fits_table
 import numpy as np
 import tempfile
