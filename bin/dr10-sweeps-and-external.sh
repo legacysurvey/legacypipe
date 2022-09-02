@@ -16,7 +16,7 @@
 
 # ADM if this is true, make the list of bricks. If that was already
 # ADM done, set this to false as a speed-up.
-makelist=false
+makelist=true
 
 # ADM if this is true, don't overwrite any existing files. This
 # ADM is useful for recovering faster if there's a failure. It should
