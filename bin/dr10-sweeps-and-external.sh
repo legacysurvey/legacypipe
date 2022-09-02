@@ -48,7 +48,7 @@ HOM=`eval echo "~$USER"`
 # ADM the next line can be uncommented for, e.g., developing code.
 export LEGACYPIPE_DIR=$HOM/git/legacypipe/
 
-export PYTHONPATH=/usr/local/lib/python:/usr/local/lib/python3.6/dist-packages:$LEGACYPIPE_DIR/py
+export PYTHONPATH=/usr/local/lib/python:$LEGACYPIPE_DIR/py
 
 # ADM location of external-match files.
 export SDSSDIR=/global/cfs/cdirs/sdss/data/sdss/
@@ -58,6 +58,7 @@ export SDSSDIR=/global/cfs/cdirs/sdss/data/sdss/
 # ADM a sensible number of processors on which to run.
 export NUMPROC=$(($SLURM_CPUS_ON_NODE / 2))
 # ADM the sweeps need more memory since we started to write three files.
+# ADM $SLURM_CPUS_ON_NODE / 6 works well for dr10.
 export SWEEPS_NUMPROC=$(($SLURM_CPUS_ON_NODE / 6))
 
 # ADM if the bricks and matching files are common to all surveys then
@@ -95,7 +96,7 @@ do
 
     # ADM run the sweeps. Should never have to use the --ignore option here,
     # ADM which usually means there are some discrepancies in the data model!
-    echo running sweeps for the $survey on $SWEEPS_NUMPROC nodes
+    echo running sweeps on $SWEEPS_NUMPROC nodes
     if "$mopup"; then
         echo "Mopping up (won't overwrite existing sweep files)"
         time python $LEGACYPIPE_DIR/bin/generate-sweep-files.py \
