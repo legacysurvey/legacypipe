@@ -1,5 +1,3 @@
-from __future__ import print_function
-
 import numpy as np
 
 from tractor import PointSource
@@ -127,7 +125,7 @@ def _get_tractor_fits_values(T, cat, pat):
 def read_fits_catalog(T, hdr=None, invvars=False, bands='grz',
                       ellipseClass=EllipseE, sersicIndexClass=SersicIndex):
     '''
-    Return list of tractor Sources.
+    Return a list of tractor Sources.
 
     If invvars=True, return sources,invvars
     where invvars is a list matching sources.getParams()

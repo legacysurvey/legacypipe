@@ -1,5 +1,6 @@
-"""This script does something.
-"""
+'''
+This script prints out the list of CCDs touching a given brick.
+'''
 from __future__ import print_function
 from survey import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 from sys import exit
@@ -22,7 +23,7 @@ def main():
         wcs = wcs_for_brick(brick)
         I = ccds_touching_wcs(wcs, CCDs)
         for i in I:
-            print(i, CCDs.filter[i], CCDs.expnum[i], CCDs.extname[i], CCDs.cpimage[i], CCDs.cpimage_hdu[i], CCDs.calname[i])
+            print(i, CCDs.filter[i], CCDs.expnum[i], CCDs.ccdname[i], CCDs.image_filename[i], CCDs.image_hdu[i])
     return 0
 #
 #

@@ -1,6 +1,7 @@
 '''
-This script is used to produce lists of CCDs or bricks, for production
-purposes (building qdo queue, eg).
+This script is used to produce lists of CCDs or bricks.
+
+This is useful for production purposes (building qdo queue, eg).
 
 python legacypipe/queue-calibs.py  | qdo load cal -
 
@@ -48,20 +49,15 @@ python legacypipe/queue-calibs.py --region northwest --write-ccds ccds-nw.fits -
 for x in $(tablist ccds-nw.fits"[col image_filename]" | awk '{print $2}' | sort | uniq); do   rsync -LRarv /project/projectdirs/desiproc/dr3/images/./$(echo $x | sed s/o.i/o??/g) /global/cscratch1/sd/desiproc/dr3/images/; done
 
 qdo load --priority -10 jobs jobs
-
-
 '''
-from __future__ import print_function
 import sys
 import os
 import numpy as np
 
 from astrometry.util.fits import fits_table
-
-from legacypipe.survey import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
-
 from astrometry.libkd.spherematch import match_radec
 
+from legacypipe.survey import LegacySurveyData, wcs_for_brick, ccds_touching_wcs
 
 def log(*s):
     print(' '.join([str(ss) for ss in s]), file=sys.stderr)

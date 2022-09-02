@@ -1,0 +1,11 @@
+{
+    "language": "python",
+    "display_name": "Legacypipe DR9.7.2",
+    "env": { "REALHOME": "${HOME}" },
+    "argv": [
+        "shifter",
+        "--image=docker:legacysurvey/legacypipe:DR9.7.2",
+        "/src/legacypipe/bin/jupyter-kernel.sh",
+        "{connection_file}"
+    ]
+}

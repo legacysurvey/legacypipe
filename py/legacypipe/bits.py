@@ -22,6 +22,31 @@ DQ_BITS = dict(badpix  =    1,
                outlier = 2048,   # 0x800
     )
 
+# Bit codes for why a CCD got cut (survey-ccds file, ccd_cuts column)
+CCD_CUTS = dict(
+    err_legacyzpts = 0x1,
+    not_grz = 0x2,
+    # DR10 alias
+    not_griz = 0x2,
+    not_third_pix = 0x4, # Mosaic3 one-third-pixel interpolation problem
+    exptime = 0x8,
+    ccdnmatch = 0x10,
+    zpt_diff_avg = 0x20,
+    zpt_small = 0x40,
+    zpt_large = 0x80,
+    sky_is_bright = 0x100,
+    badexp_file = 0x200,
+    phrms = 0x400,
+    radecrms = 0x800,
+    seeing_bad = 0x1000,
+    early_decam = 0x2000,
+    depth_cut = 0x4000,
+    too_many_bad_ccds = 0x8000,
+    flagged_in_des = 0x10000,
+    phrms_s7 = 0x20000,
+)
+
+
 FITBITS = dict(
     FORCED_POINTSOURCE = 0x1,
     FIT_BACKGROUND     = 0x2,
@@ -59,6 +84,8 @@ MASKBITS = dict(
     MEDIUM     = 0x800, # medium-bright star
     GALAXY     = 0x1000, # SGA large galaxy
     CLUSTER    = 0x2000, # Cluster catalog source
+    SATUR_I    = 0x4000,
+    ALLMASK_I  = 0x8000,
 )
 
 # Bits in the "brightblob" bitmask

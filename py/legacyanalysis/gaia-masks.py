@@ -14,9 +14,9 @@ from astrometry.util.multiproc import multiproc
 
 def main():
 
-    B = fits_table('/global/cfs/cdirs/cosmo/data/legacysurvey/dr8/survey-bricks.fits.gz')
+    B = fits_table('/global/cfs/cdirs/cosmo/work/legacysurvey/dr10/survey-bricks.fits.gz')
     B.ll,B.bb = radectolb(B.ra, B.dec)
-    I = np.flatnonzero((B.dec > -70) * (np.abs(B.bb) > 10))
+    I = np.flatnonzero(np.abs(B.bb) > 10)
     B[I].writeto('bricks-for-gaia.fits')
     BG = B[I]
     BG = BG[np.argsort(-BG.dec)]
@@ -35,22 +35,22 @@ def main():
 #     hd.append(d)
 # plt.plot(hr, hd, 'b.', alpha=0.1);
 
-    survey = LegacySurveyData('/global/cfs/cdirs/cosmo/work/legacysurvey/dr9')
+    survey = LegacySurveyData('/global/cfs/cdirs/cosmo/work/legacysurvey/dr10')
 
     #BG = BG[:100]
-    
     # GG = []
     # for i,brick in enumerate(BG):
     #     G = one_brick(brick, survey)
     #     GG.append(G)
 
-    mp = multiproc(32)
+    mp = multiproc(16)
 
     GG = []
     iset = 0
     while len(BG):
+        print('Set', iset)
         N = 10000
-        outfn = '/global/cscratch1/sd/dstn/gaia-mask-dr9-set%i.fits' % iset
+        outfn = '/global/cscratch1/sd/dstn/gaia-mask-dr10-set%03i.fits' % iset
         if os.path.exists(outfn):
             Gset = fits_table(outfn)
             print('Read', outfn)
@@ -67,7 +67,7 @@ def main():
         BG = BG[N:]
 
     G = merge_tables(GG, columns='fillzero')
-    G.writeto('/global/cscratch1/sd/dstn/gaia-mask-dr9.fits')
+    G.writeto('/global/cscratch1/sd/dstn/gaia-mask-dr10.fits')
 
 def bounce_one_brick(X):
     return one_brick(*X)
@@ -84,7 +84,7 @@ def one_brick(brick, survey):
           (G.dec >= brick.dec1) * (G.dec < brick.dec2))
     I = np.flatnonzero(np.logical_or(G.isbright, G.ismedium))
     #print('%i of %i: Brick' % (i+1, len(BG)), brick.brickname, len(G), len(I))
-    print('Brick', brick.brickname, len(G), len(I))
+    #print('Brick', brick.brickname, len(G), len(I))
     if len(I) == 0:
         return None
     G.cut(I)

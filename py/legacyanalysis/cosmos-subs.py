@@ -20,10 +20,10 @@ FITS table that can be used as the "CCDs" table for the runcosmos.py
 script.
 '''
 
-bands = 'grz'
+bands = 'griz'
 
 # Target depths (90th percentile = 3-pass coverage), for 5-sigma galaxy profile.
-target = dict(g=24.0, r=23.4, z=22.5)
+target = dict(g=24.0, r=23.4, i=23.0, z=22.5)
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -55,7 +55,13 @@ if not os.path.exists(cfn):
     #survey = LegacySurveyData()
     survey = get_survey(run)
 
-    C = survey.get_annotated_ccds()
+    #C = survey.get_annotated_ccds()
+    ## HACK -- fitsio fails to read the .fits.gz file
+    # (https://github.com/esheldon/fitsio/issues/255)
+    # but can read the uncompressed one.
+    print('HACK -- reading ccds-annotated-dr10-v5.fits directly')
+    C = fits_table(os.path.join(survey.survey_dir, 'ccds-annotated-dr10-v5.fits'))
+    survey.cleanup_ccds_table(C)
     print(len(C), 'annotated CCDs')
 
     if region == 'cosmos':
@@ -110,10 +116,13 @@ E.seeing = E.pixscale_mean * E.fwhm
 #zp0 = DecamImage.nominal_zeropoints()
 
 # From eyeballing histograms of DR7 zeropoints
-zp0 = dict(g=25.15, r=25.35, z=25.0)
-
+#zp0 = dict(g=25.15, r=25.35, z=25.0)
 # HACK -- this is copied from obsbot
-kx = dict(g = 0.178, r = 0.094, z = 0.060,)
+#kx = dict(g = 0.178, r = 0.094, z = 0.060,)
+from legacypipe.decam import DecamImage
+zp0 = DecamImage.ZP0.copy()
+kx = DecamImage.K_EXT.copy()
+
 for band in bands:
     B = E[E.filter == band]
     B.cut(np.argsort(B.seeing))
@@ -124,8 +133,11 @@ for band in bands:
 
     for exp in B:
         thisdetiv = 1. / (exp.sig1 / exp.galnorm)**2
+        # the zps listed in DECamImage are about this much larger than the by-hand
+        # values we had in before...
+        zp = zp0[band] - 0.15
         # Which pass number would this image be assigned?
-        trans = 10.**(-0.4 * (zp0[band] - exp.ccdzpt
+        trans = 10.**(-0.4 * (zp - exp.ccdzpt
                               - kx[band]*(max(exp.airmass, 1.) - 1.)))
         seeing_good = exp.seeing < 1.3
         seeing_fair = exp.seeing < 2.0
@@ -138,6 +150,7 @@ for band in bands:
         else:
             E.passnum[exp.index] = 3
         E.depthfraction[exp.index] = (thisdetiv / targetiv)
+        #print('Band', exp.filter, 'Transparency', trans)
 
 for band in bands:
     B = E[E.filter == band]
@@ -375,6 +388,27 @@ if region == 'cosmos':
         177367, 413973, 413971,
         # r, pass 3, seeing 1.33-1.51
         177365, 177366, 743323,
+
+        # i, pass 1, seeing  < 1.04
+        615173, 614494, 421500,
+        # i, pass 1, seeing  < 1.1
+        614500, 615185, 177750,
+        # i, pass 1, seeing  < 1.13
+        397530, 395315, 397528,
+        # i, pass 1, seeing  < 1.17
+        621254, 621612, 405294,
+        # i, pass 1, seeing  < 1.21
+        397556, 395317, 621615,
+        # i, pass 1, seeing  < 1.26
+        524711, 420727, 621253,
+        # i, pass 1, seeing  < 1.3
+        621251, 177072, 177732,
+        # i, pass 2, seeing  < 1.36
+        177073, 177734, 621250,
+        # i, pass 2, seeing  < 1.49
+        177122, 177729, 743324,
+        # i, pass 2, seeing  < 1.79
+        177121, 453887, 413976,
 
         # z, pass 1, seeing 0.9
         500317, 500316, 514594,

@@ -1,4 +1,3 @@
-from __future__ import print_function
 import numpy as np
 
 import logging
@@ -16,7 +15,7 @@ def _detmap(X):
     (tim, targetwcs, apodize) = X
     R = tim_get_resamp(tim, targetwcs)
     if R is None:
-        return None,None,None,None,None
+        return None,None,None,None,None,None
     assert(tim.psf_sigma > 0)
     psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
     ie = tim.getInvError()
@@ -57,7 +56,7 @@ def _detmap(X):
         detiv[-len(ramp):,:] *= ramp[::-1][:,np.newaxis]
         detiv[:,-len(ramp):] *= ramp[::-1][np.newaxis,:]
 
-    return Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
+    return tim.band, Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
 
 def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
     # Render the detection maps
@@ -68,22 +67,29 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
     detmaps = [np.zeros((H,W), np.float32) for b in bands]
     detivs  = [np.zeros((H,W), np.float32) for b in bands]
     if nsatur is None:
-        satmaps = [np.zeros((H,W), bool)       for b in bands]
+        satmaps = [np.zeros((H,W), bool)   for b in bands]
     else:
-        satmaps = [np.zeros((H,W), np.int16)       for b in bands]
+        if nsatur < 255:
+            sattype = np.uint8
+            satmax = 254
+        else:
+            sattype = np.uint16
+            satmax = 65534
+        satmaps = [np.zeros((H,W), sattype) for b in bands]
 
-    for tim, (Yo,Xo,incmap,inciv,sat) in zip(
-        tims, mp.map(_detmap, [(tim, targetwcs, apodize) for tim in tims])):
+    for band,Yo,Xo,incmap,inciv,sat in mp.imap_unordered(
+            _detmap, [(tim, targetwcs, apodize) for tim in tims]):
         if Yo is None:
             continue
-        ib = ibands[tim.band]
+        ib = ibands[band]
         detmaps[ib][Yo,Xo] += incmap * inciv
         detivs [ib][Yo,Xo] += inciv
         if sat is not None:
             if nsatur is None:
                 satmaps[ib][Yo,Xo] |= sat
             else:
-                satmaps[ib][Yo,Xo] += (1*sat)
+                satmaps[ib][Yo,Xo] = np.minimum(satmax, satmaps[ib][Yo,Xo] + (1*sat))
+        del Yo,Xo,incmap,inciv,sat
     for i,(detmap,detiv,satmap) in enumerate(zip(detmaps, detivs, satmaps)):
         detmap /= np.maximum(1e-16, detiv)
         if nsatur is not None:
@@ -113,9 +119,14 @@ def sed_matched_filters(bands):
 
     if len(bands) > 1:
         flat = dict(g=1., r=1., i=1., z=1.)
-        SEDs.append(('Flat', [flat[b] for b in bands]))
-        red = dict(g=2.5, r=1., i=0.4, z=0.4)
-        SEDs.append(('Red', [red[b] for b in bands]))
+        sed = [flat.get(b,0.,) for b in bands]
+        if np.sum(sed) > 0:
+            SEDs.append(('Flat', sed))
+        # Assume colors g-r = 1, r-i = 0.5, i-z = 0.5
+        red = dict(g=2.5, r=1., i=0.632, z=0.4)
+        sed = [red.get(b,0.) for b in bands]
+        if np.sum(sed) > 0:
+            SEDs.append(('Red', sed))
 
     info('SED-matched filters:', SEDs)
 
@@ -278,6 +289,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                           saturated_pix=None,
                           veto_map=None,
                           cutonaper=True,
+                          hotmap_only=False,
                           ps=None, rgbimg=None):
     '''
     Runs a single SED-matched detection filter.
@@ -371,23 +383,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     sedmap /= np.maximum(1e-16, sediv)
     sedsn   = sedmap * np.sqrt(sediv)
     del sedmap
+
     peaks = (sedsn > nsigma)
-
-    def saddle_level(Y):
-        # Require a saddle that drops by (the larger of) "saddle"
-        # sigma, or 10% of the peak height.
-        # ("saddle" is passed in as an argument to the
-        #  sed_matched_detection function)
-        drop = max(saddle_min, Y * saddle_fraction)
-        return Y - drop
-
-    lowest_saddle = nsigma - saddle_min
-
-    # zero out the edges -- larger margin here?
-    peaks[0 ,:] = 0
-    peaks[:, 0] = 0
-    peaks[-1,:] = 0
-    peaks[:,-1] = 0
 
     # Label the N-sigma blobs at this point... we'll use this to build
     # "sedhot", which in turn is used to define the blobs that we will
@@ -395,8 +392,16 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # into the fitting!
     if blob_dilate is None:
         blob_dilate = 8
-    hotblobs,nhot = label(binary_fill_holes(
-            binary_dilation(peaks, iterations=blob_dilate)))
+    hotblobs = binary_fill_holes(binary_dilation(peaks, iterations=blob_dilate))
+    if hotmap_only:
+        return hotblobs
+    hotblobs,nhot = label(hotblobs)
+
+    # zero out the edges -- larger margin here?
+    peaks[0 ,:] = 0
+    peaks[:, 0] = 0
+    peaks[-1,:] = 0
+    peaks[:,-1] = 0
 
     # find pixels that are larger than their 8 neighbors
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[0:-2,1:-1])
@@ -443,6 +448,16 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # We dilate the blobs a bit too, to
     # catch slight differences in centroid positions.
     dilate = 1
+
+    def saddle_level(Y):
+        # Require a saddle that drops by (the larger of) "saddle"
+        # sigma, or 10% of the peak height.
+        # ("saddle" is passed in as an argument to the
+        #  sed_matched_detection function)
+        drop = max(saddle_min, Y * saddle_fraction)
+        return Y - drop
+
+    lowest_saddle = nsigma - saddle_min
 
     # For efficiency, segment at the minimum saddle level to compute
     # slices; the operations described above need only happen within
@@ -515,7 +530,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # separated by a low enough saddle from other sources.  Need only
     # search within its "allblob", which is defined by the lowest
     # saddle.
-    info('Found', len(px), 'potential peaks')
+    info('SED', sedname, ': found', len(px), 'potential peaks')
     nveto = 0
     nsaddle = 0
     naper = 0
@@ -908,3 +923,63 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
 
     assert(len(blobsrcs) == len(blobslices))
     return blobmap, blobsrcs, blobslices
+
+def merge_hot_satur(hot, saturated_pix):
+    '''
+    Finds "hot" pixels that are separated by masked pixels, to connect
+    blobs across, eg, bleed trails and saturated cores.
+    Updates *hot* in-place.
+    '''
+    from functools import reduce
+    from scipy.ndimage.measurements import find_objects
+    from scipy.ndimage.measurements import label
+    any_saturated = reduce(np.logical_or, saturated_pix)
+    #merging = np.zeros_like(any_saturated)
+    _,w = any_saturated.shape
+    # All our cameras have bleed trails that go along image rows.
+    # We go column by column, checking whether blobs of "hot" pixels
+    # get joined up when merged with SATUR pixels.
+    for i in range(w):
+        col = hot[:,i]
+        cblobs,nc = label(col)
+        col = np.logical_or(col, any_saturated[:,i])
+        cblobs2,nc2 = label(col)
+        if nc2 < nc:
+            # at least one pair of blobs merged together
+            # Find merged blobs:
+            # "cblobs2" is a map from pixels to merged blob number.
+            # look up which merged blob each un-merged blob belongs to.
+            slcs = find_objects(cblobs)
+            from collections import Counter
+            counts = Counter()
+            for slc in slcs:
+                (slc,) = slc
+                mergedblob = cblobs2[slc.start]
+                counts[mergedblob] += 1
+            slcs2 = find_objects(cblobs2)
+            for blob,n in counts.most_common():
+                if n == 1:
+                    break
+                (slc,) = slcs2[blob-1]
+                #merging[slc, i] = True
+                hot[slc, i] = True
+
+    # if plots:
+    #     #import pylab as plt
+    #     from astrometry.util.plotutils import dimshow
+    #     plt.clf()
+    #     plt.subplot(1,2,1)
+    #     dimshow((hot*1) + (any_saturated*1), vmin=0, vmax=2, cmap='hot')
+    #     plt.title('hot + saturated')
+    #     ps.savefig()
+    #     plt.clf()
+    #     plt.subplot(1,2,1)
+    #     dimshow(merging, vmin=0, vmax=1, cmap='hot')
+    #     plt.title('merging')
+    #     plt.subplot(1,2,2)
+    #     dimshow(np.logical_or(hot, merging), vmin=0, vmax=1, cmap='hot')
+    #     plt.title('merged')
+    #     ps.savefig()
+
+    #hot |= merging
+    return hot

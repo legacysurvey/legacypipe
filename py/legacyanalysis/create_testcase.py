@@ -250,7 +250,7 @@ def main():
         # Since we remap DQ codes (always with Mosaic and Bok, sometimes with DECam),
         # re-read from the FITS file rather than using tim.dq.
         print('Reading data quality from', im.dqfn, 'hdu', im.hdu)
-        dqdata = im._read_fits(im.dqfn, im.hdu, slice=tim.slice)
+        dqdata = im._read_fits(im.dqfn, im.hdu, slc=tim.slice)
 
         print('Tim shape:', tim.shape, 'Slice', tim.slice)
         print('image shape:', imgdata.shape, 'iv', ivdata.shape, 'DQ', dqdata.shape)

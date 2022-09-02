@@ -1,7 +1,7 @@
-from __future__ import print_function
 import pylab as plt
+import numpy as np
 from astrometry.util.plotutils import dimshow
-from legacypipe.survey import *
+from legacypipe.survey import get_rgb, tim_get_resamp
 from legacypipe.coadds import quick_coadds
 
 def fitblobs_plots_2(blobs, refstars, ps):
@@ -236,17 +236,33 @@ def tim_plots(tims, bands, ps):
     for b in bands:
         sig1 = np.median([tim.sig1 for tim in tims if tim.band == b])
         plt.clf()
+        # First select the histogram range...
+        blo,bhi = 0., 0.
         for tim in tims:
             if tim.band != b:
                 continue
             # broaden range to encompass most pixels... only req'd
             # when sky is bad
-            lo,hi = -5.*sig1, 5.*sig1
             pix = tim.getImage()[tim.getInvError() > 0]
-            lo = min(lo, np.percentile(pix, 5))
-            hi = max(hi, np.percentile(pix, 95))
-            plt.hist(pix, range=(lo, hi), bins=50, histtype='step',
+            blo = min(blo, -5.*tim.sig1)
+            bhi = max(bhi, +5.*tim.sig1)
+            blo = min(blo, np.percentile(pix, 5))
+            bhi = max(bhi, np.percentile(pix, 95))
+        # Now plot histograms
+        for tim in tims:
+            if tim.band != b:
+                continue
+            # clip to limits to show pixels outside range
+            pix = tim.getImage()[tim.getInvError() > 0]
+            plt.hist(np.clip(pix, blo, bhi), range=(blo, bhi), bins=50, histtype='step',
                      alpha=0.5, label=tim.name)
+            # Print argmin unmasked pixel.
+            pix = tim.getImage() * (tim.getInvError() > 0)
+            i = np.argmin(pix)
+            iy,ix = np.unravel_index(i, pix.shape)
+            print('Image', tim, 'lowest pixel: %i,%i (with tim x0,y0 = %i,%i  -->  %i,%i) value %.3g' %
+                  (ix, iy, tim.x0, tim.y0, ix+tim.x0, iy+tim.y0, pix[iy,ix]))
+        plt.xlim(blo, bhi)
         plt.legend()
         plt.xlabel('Pixel values')
         plt.title('Pixel distributions: %s band' % b)
@@ -259,13 +275,47 @@ def tim_plots(tims, bands, ps):
                 continue
             ie = tim.getInvError()
             pix = (tim.getImage() * ie)[ie > 0]
-            plt.hist(pix, range=(lo, hi), bins=50, histtype='step',
+            plt.hist(np.clip(pix, lo, hi), range=(lo, hi), bins=50, histtype='step',
                      alpha=0.5, label=tim.name)
         plt.legend()
-        plt.xlabel('Pixel values (sigma)')
         plt.xlim(lo,hi)
+        plt.xlabel('Pixel values (sigma)')
         plt.title('Pixel distributions: %s band' % b)
         ps.savefig()
+
+    # Plot row-wise and column-wise medians
+    for v in [1,2]:
+        for b in bands:
+            plt.clf()
+            for tim in tims:
+                if tim.band != b:
+                    continue
+                pix = tim.getImage().copy()
+                pix[tim.getInvError() == 0] = 0.
+                medc = np.median(pix, axis=0)
+                medr = np.median(pix, axis=1)
+                H,W = pix.shape
+                if v == 1:
+                    sty = dict(linestyle='-', alpha=0.2)
+                else:
+                    sty = dict(marker='.', linestyle='', alpha=0.2)
+                plt.subplot(2,1,1)
+                plt.plot(np.arange(W) + tim.x0, medc / tim.sig1, **sty)
+                plt.subplot(2,1,2)
+                plt.plot(np.arange(H) + tim.y0, medr / tim.sig1, **sty)
+            plt.subplot(2,1,1)
+            plt.title('Column-wise median')
+            plt.ylabel('Median (sigmas)')
+            plt.subplot(2,1,2)
+            plt.title('Row-wise median')
+            plt.suptitle('%s band' % b)
+            ps.savefig()
+
+            plt.subplot(2,1,1)
+            plt.ylim(-1, 1)
+            plt.subplot(2,1,2)
+            plt.ylim(-1, 1)
+            ps.savefig()
 
     # Plot image pixels, invvars, masks
     for tim in tims:
@@ -316,7 +366,7 @@ def tim_plots(tims, bands, ps):
                 print(tim.name, ': plver "%s"' % im.plver, 'has DQ codes:', decam_has_dq_codes(im.plver))
             if im.camera == 'decam' and decam_has_dq_codes(im.plver):
                 # Integer codes, not bitmask.  Re-read and plot.
-                dq = im.read_dq(slice=tim.slice)
+                dq = im.read_dq(slc=tim.slice)
                 plt.clf()
                 plt.subplot(1,3,1)
                 dimshow(tim.getImage(), vmin=-3.*tim.sig1, vmax=30.*tim.sig1)
@@ -332,12 +382,30 @@ def tim_plots(tims, bands, ps):
                 plt.suptitle('%s (%s %s) PLVER %s' % (tim.name, im.image_filename, im.ccdname, im.plver))
                 ps.savefig()
 
+    # Plot PSF model
+    for tim in tims:
+        plt.clf()
+        nx,ny = 5,5
+        psfs = []
+        h,w = tim.shape
+        for y in np.linspace(0, h-1, ny):
+            psfrow = []
+            for x in np.linspace(0, w-1, nx):
+                psf = tim.getPsf().getPointSourcePatch(x, y).patch
+                if x == 0 and y == 0:
+                    print('tim', tim.name, 'PSF shape', psf.shape)
+                psfrow.append(psf)
+            psfrow = np.hstack(psfrow)
+            psfs.append(psfrow)
+        psfs = np.vstack(psfs)
+        plt.imshow(psfs, interpolation='nearest', origin='lower')
+        plt.title('PSF models for %s' % tim.name)
+        ps.savefig()
+
 def _plot_mods(tims, mods, blobwcs, titles, bands, coimgs, cons, bslc,
                blobw, blobh, ps,
                chi_plots=True, rgb_plots=False, main_plot=True,
                rgb_format='%s'):
-    import numpy as np
-
     subims = [[] for m in mods]
     chis = dict([(b,[]) for b in bands])
 

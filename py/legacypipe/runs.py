@@ -1,5 +1,3 @@
-from __future__ import print_function
-
 from legacypipe.survey import LegacySurveyData
 
 class DecamSurvey(LegacySurveyData):
@@ -31,12 +29,34 @@ class M33SurveyData(DecamSurvey):
         #I = np.delete(I, np.where((ccds.filter[I] == 'z') * (ccds.expnum[I] != 790242))[0])
         return I
 
+class OdinData(LegacySurveyData):
+    #def filter_ccd_kd_files(self, fns):
+    #    return [fn for fn in fns if ('90prime' in fn) or ('mosaic' in fn)]
+    def filter_ccds_files(self, fns):
+        return [fn for fn in fns if ('odin' in fn)]
+    def filter_annotated_ccds_files(self, fns):
+        return [fn for fn in fns if ('odin' in fn)]
+    def get_default_release(self):
+        return 200
+
+class HscData(LegacySurveyData):
+    #def filter_ccd_kd_files(self, fns):
+    #    return [fn for fn in fns if ('90prime' in fn) or ('mosaic' in fn)]
+    def filter_ccds_files(self, fns):
+        return [fn for fn in fns if ('hsc' in fn)]
+    def filter_annotated_ccds_files(self, fns):
+        return [fn for fn in fns if ('hsc' in fn)]
+    def get_default_release(self):
+        return 200
+
 runs = {
     'decam': DecamSurvey,
     '90prime-mosaic': NinetyPrimeMosaic,
     'south': DecamSurvey,
     'north': NinetyPrimeMosaic,
     'm33': M33SurveyData,
+    'odin': OdinData,
+    'hsc': HscData,
     None: LegacySurveyData,
 }
 

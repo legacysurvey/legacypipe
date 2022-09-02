@@ -19,10 +19,10 @@ export MPICH_GNI_FORK_MODE=FULLCOPY
 camera=$1
 expnum=$2
 
-exppre=$(printf %08d $expnum | cut -c 1-5)
+exppre=$(printf %08d "$expnum" | cut -c 1-5)
 
 logdir=$outdir/logs/$camera/$exppre
-mkdir -p $logdir
+mkdir -p "$logdir"
 logfile=$logdir/$expnum.log
 
 ncores=32
@@ -36,21 +36,21 @@ ncores=32
 
 echo "Logging to $logfile"
 
-python -O $LEGACYPIPE_DIR/legacypipe/forced_photom.py \
-       --survey-dir $DIR \
-       --catalog-dir-north $DIR/north \
-       --catalog-dir-south $DIR/south \
+python -O "$LEGACYPIPE_DIR/legacypipe/forced_photom.py" \
+       --survey-dir "$DIR" \
+       --catalog-dir-north "$DIR/north" \
+       --catalog-dir-south "$DIR/south" \
        --catalog-resolve-dec-ngc 32.375 \
        --skip \
        --skip-calibs \
        --apphot \
        --derivs \
        --outlier-mask \
-       --camera $camera \
-       --expnum $expnum \
-       --out-dir $outdir \
-       --threads $ncores \
-       >> $logfile 2>&1
+       --camera "$camera" \
+       --expnum "$expnum" \
+       --out-dir "$outdir" \
+       --threads "$ncores" \
+       >> "$logfile" 2>&1
 
 # eg:
 # QDO_BATCH_PROFILE=cori-shifter qdo launch forced-south 1 --cores_per_worker 32 --walltime=30:00 --batchqueue=debug --batchopts "--image=docker:legacysurvey/legacypipe:nersc-dr9.0.1 --license=SCRATCH,project" --script "../bin/forced-south.sh" --keep_env
