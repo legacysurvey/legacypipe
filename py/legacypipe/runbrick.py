@@ -1777,7 +1777,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
         # a sub-blob identifier.  Sub-blobs can get saved to the checkpoints files, and by
         # checking "skipblobs" below, we don't re-run them.
 
-        if (blobw >= 710 or blobh >= 710 and
+        if ((blobw >= 710 or blobh >= 710) and
             np.all((refmap[bslc][blobmask] & IN_BLOB['CLUSTER']) != 0)):
             info('Entire large blob is in CLUSTER mask')
             # split into ~500-pixel sub-blobs.
