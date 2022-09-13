@@ -74,8 +74,8 @@ def one_blob(X):
      srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap,
      large_galaxies_force_pointsource, less_masking, frozen_galaxies) = X
 
-    debug('Fitting blob %i: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
-          (nblob+1, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
+    debug('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
+          (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
 
     if len(timargs) == 0:
         return None
@@ -101,7 +101,6 @@ def one_blob(X):
     B = fits_table()
     B.sources = srcs
     B.Isrcs = Isrcs
-    B.iblob = iblob
     # Did sources start within the blob?
     _,x0,y0 = blobwcs.radec2pixelxy(
         np.array([src.getPosition().ra  for src in srcs]),
@@ -115,7 +114,7 @@ def one_blob(X):
     # This uses 'initial' pixel positions, because that's what determines
     # the fitting behaviors.
 
-    ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
+    ob = OneBlob(nblob, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
                  less_masking, frozen_galaxies)
@@ -152,6 +151,7 @@ def one_blob(X):
 
     t1 = time.process_time()
     B.cpu_blob[:] = t1 - t0
+    B.iblob = iblob
     return B
 
 class OneBlob(object):
@@ -770,14 +770,10 @@ class OneBlob(object):
                 newsrcs = Bnew.sources
                 B.delete_column('sources')
                 Bnew.delete_column('sources')
-                # also scalars don't work well
-                iblob = B.iblob
-                B.delete_column('iblob')
                 B = merge_tables([B, Bnew], columns='fillzero')
                 # columns not in Bnew:
                 # {'safe_x0', 'safe_y0', 'started_in_blob'}
                 B.sources = srcs + newsrcs
-                B.iblob = iblob
 
         models.restore_images(self.tims)
         del models
