@@ -1744,7 +1744,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
             if np.all(U[bslc][blobmask] == False):
                 info('Blob %i is completely outside the unique region of this brick -- skipping' %
                      (nblob+1))
-                yield (brickname, iblob, None)
+                yield (brickname, iblob, None, None)
                 continue
 
         # find one pixel within the blob, for debugging purposes
@@ -1765,7 +1765,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
 
         if max_blobsize is not None and npix > max_blobsize:
             info('Number of pixels in blob,', npix, ', exceeds max blobsize', max_blobsize)
-            yield (brickname, iblob, None)
+            yield (brickname, iblob, None, None)
             continue
 
         # Check for a large blob that is fully contained in the CLUSTER mask.
