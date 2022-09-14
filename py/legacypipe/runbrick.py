@@ -39,7 +39,7 @@ from astrometry.util.ttime import Time
 
 from legacypipe.survey import imsave_jpeg
 from legacypipe.bits import DQ_BITS, MASKBITS, FITBITS
-from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels
+from legacypipe.utils import RunbrickError, NothingToDoError, find_unique_pixels
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 from legacypipe.fit_on_coadds import stage_fit_on_coadds
 from legacypipe.blobmask import stage_blobmask
@@ -1215,8 +1215,6 @@ def stage_fitblobs(T=None,
                           skipblobs=skipblobs,
                           single_thread=(mp is None or mp.pool is None),
                           max_blobsize=max_blobsize, custom_brick=custom_brick)
-    # to allow timingpool to queue tasks one at a time
-    blobiter = iterwrapper(blobiter, len(blobsrcs))
 
     if checkpoint_filename is None:
         R.extend(mp.map(_bounce_one_blob, blobiter))
