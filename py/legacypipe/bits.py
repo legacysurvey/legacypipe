@@ -44,6 +44,8 @@ CCD_CUTS = dict(
     too_many_bad_ccds = 0x8000,
     flagged_in_des = 0x10000,
     phrms_s7 = 0x20000,
+    # DR10 late depth-cut
+    depth_cut_2 = 0x40000,
 )
 
 
