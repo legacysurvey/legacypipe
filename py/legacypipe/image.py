@@ -1260,7 +1260,8 @@ class LegacySurveyImage(object):
             Ti = T[I[0]]
             break
         if Ti is None:
-            raise RuntimeError('Failed to find sky model in files: %s' % ', '.join(tryfns))
+            raise RuntimeError('Failed to find sky model in files: %s'
+                               % ', '.join([fn for fn,kind in tryfns]))
 
         if template_meta is not None:
             # Check sky-template subtraction metadata!
