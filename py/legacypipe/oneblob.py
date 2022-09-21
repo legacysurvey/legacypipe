@@ -60,6 +60,9 @@ def get_cpu_arch():
         # NERSC Cori machines
         (6, 63): 'has',
         (6, 87): 'knl',
+        # NERSC Perlmutter CPU partition (AMD EPYC 7763 64-Core Processor)
+        # (7713 on the head nodes)
+        (25, 1): 'prl',
     }
     cpu_arch = codenames.get((family, model), '')
     return cpu_arch
