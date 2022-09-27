@@ -1049,6 +1049,7 @@ def stage_fitblobs(T=None,
                    iterative=False,
                    large_galaxies_force_pointsource=True,
                    less_masking=False,
+                   sub_blobs=False,
                    use_ceres=True, mp=None,
                    checkpoint_filename=None,
                    checkpoint_period=600,
@@ -1214,7 +1215,8 @@ def stage_fitblobs(T=None,
                           frozen_galaxies,
                           skipblobs=skipblobs,
                           single_thread=(mp is None or mp.pool is None),
-                          max_blobsize=max_blobsize, custom_brick=custom_brick)
+                          max_blobsize=max_blobsize, custom_brick=custom_brick,
+                          enable_sub_blobs=sub_blobs)
 
     if checkpoint_filename is None:
         R.extend(mp.map(_bounce_one_blob, blobiter))
@@ -1642,7 +1644,8 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                plots, ps, reoptimize, iterative, use_ceres, refmap,
                large_galaxies_force_pointsource, less_masking,
                brick, frozen_galaxies, single_thread=False,
-               skipblobs=None, max_blobsize=None, custom_brick=False):
+               skipblobs=None, max_blobsize=None, custom_brick=False,
+               enable_sub_blobs=False):
     '''
     *blobmap*: integer image map, with -1 indicating no-blob, other values indexing
         into *blobslices*,*blobsrcs*.
@@ -1775,9 +1778,15 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
         # a sub-blob identifier.  Sub-blobs can get saved to the checkpoints files, and by
         # checking "skipblobs" below, we don't re-run them.
 
-        if ((blobw >= 710 or blobh >= 710) and
-            np.all((refmap[bslc][blobmask] & IN_BLOB['CLUSTER']) != 0)):
+        do_sub_blobs = False
+        if np.all((refmap[bslc][blobmask] & IN_BLOB['CLUSTER']) != 0):
             info('Entire large blob is in CLUSTER mask')
+            do_sub_blobs = True
+        if enable_sub_blobs:
+            do_sub_blobs = True
+
+        threshsize = None
+        if do_sub_blobs:
             # split into ~500-pixel sub-blobs.
             # "overlap" is the duplicated / overlapping region between sub-blobs.
             overlap = 50
@@ -1785,6 +1794,10 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
             # this yields  710 pixels -> 2 sub-blobs
             #             3600 pixels -> 8 sub-blobs (good for multi-processing!)
             target = 490
+            # Minimum size to get split into 2 or more sub-blobs
+            threshsize = 1.5 * (target - overlap) + overlap
+
+        if do_sub_blobs and (blobw >= threshsize or blobh >= threshsize):
             nsubx = int(np.round((blobw - overlap) / (target - overlap)))
             nsuby = int(np.round((blobh - overlap) / (target - overlap)))
             del target
@@ -3260,6 +3273,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               large_galaxies_force_pointsource=True,
               fitoncoadds_reweight_ivar=True,
               less_masking=False,
+              sub_blobs=False,
               nsatur=None,
               fit_on_coadds=False,
               coadd_tiers=None,
@@ -3511,6 +3525,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   large_galaxies_force_pointsource=large_galaxies_force_pointsource,
                   fitoncoadds_reweight_ivar=fitoncoadds_reweight_ivar,
                   less_masking=less_masking,
+                  sub_blobs=sub_blobs,
                   min_mjd=min_mjd, max_mjd=max_mjd,
                   coadd_tiers=coadd_tiers,
                   nsatur=nsatur,
@@ -3957,6 +3972,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--bail-out', default=False, action='store_true',
                         help='Bail out of "fitblobs" processing, writing all blobs from the checkpoint and skipping any remaining ones.')
+
+    parser.add_argument('--sub-blobs', default=False, action='store_true',
+                        help='Split large blobs into sub-blobs that can be processed in parallel.')
 
     parser.add_argument('--fit-on-coadds', default=False, action='store_true',
                         help='Fit to coadds rather than individual CCDs (e.g., large galaxies).')
