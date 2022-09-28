@@ -85,6 +85,9 @@ def one_blob(X):
     if len(Isrcs) == 0:
         return None
 
+    assert(blobmask.shape == (blobh,blobw))
+    assert(refmap.shape == (blobh,blobw))
+
     for g in frozen_galaxies:
         debug('Frozen galaxy:', g)
 

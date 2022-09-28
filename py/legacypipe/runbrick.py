@@ -1871,9 +1871,11 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                            ('%i-%i' % (nblob+1, 1+sub_blob), iblob,
                             Isubsrcs, targetwcs, sub_bx0, sub_by0,
                             sub_bx1 - sub_bx0, sub_by1 - sub_by0,
-                            blobmask[sub_slc], subtimargs, [cat[i] for i in Isubsrcs], bands,
+                            # "blobmask" has already been cut to this blob, so don't use sub_slc
+                            blobmask[suby0:suby1, subx0:subx1],
+                            subtimargs, [cat[i] for i in Isubsrcs], bands,
                             plots, ps,
-                            reoptimize, iterative, use_ceres, refmap[bslc][sub_slc],
+                            reoptimize, iterative, use_ceres, refmap[sub_slc],
                             large_galaxies_force_pointsource, less_masking, fro_gals))
 
             continue
