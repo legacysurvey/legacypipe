@@ -88,6 +88,7 @@ MASKBITS = dict(
     CLUSTER    = 0x2000, # Cluster catalog source
     SATUR_I    = 0x4000,
     ALLMASK_I  = 0x8000,
+    SUB_BLOB   = 0x10000,
 )
 
 # Bits in the "brightblob" bitmask

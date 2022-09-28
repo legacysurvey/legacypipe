@@ -1208,6 +1208,12 @@ def stage_fitblobs(T=None,
 
     frozen_galaxies = get_frozen_galaxies(T, blobsrcs, blobmap, targetwcs, cat)
     refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
+    # We pass this list in to _blob_iter; it appends any blob numbers
+    # that were processed as sub-blobs.
+    ran_sub_blobs = None
+    if sub_blobs:
+        ran_sub_blobs = []
+
     # Create the iterator over blobs to process
     blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims,
                           cat, T, bands, plots, ps, reoptimize, iterative, use_ceres,
@@ -1216,7 +1222,8 @@ def stage_fitblobs(T=None,
                           skipblobs=skipblobs,
                           single_thread=(mp is None or mp.pool is None),
                           max_blobsize=max_blobsize, custom_brick=custom_brick,
-                          enable_sub_blobs=sub_blobs)
+                          enable_sub_blobs=sub_blobs,
+                          ran_sub_blobs=ran_sub_blobs)
 
     if checkpoint_filename is None:
         R.extend(mp.map(_bounce_one_blob, blobiter))
@@ -1266,9 +1273,19 @@ def stage_fitblobs(T=None,
 
     # Repackage the results from one_blob...
 
+    # check for any blobs that were processed as sub-blobs; mark them in the sub_blob_mask.
+    sub_blob_mask = None
+    if len(ran_sub_blobs):
+        # Create a 1-d array that will map from blob number (ie in "blobmap")
+        # to the boolean mask value
+        maxblob = blobmap.max()
+        sbmap = np.zeros(maxblob+2, bool)
+        sbmap[np.array(ran_sub_blobs)+1] = True
+        sub_blob_mask = sbmap[blobmap+1]
+
     # one_blob can change the number and types of sources.
     # Reorder the sources:
-    # sub-blobs breaks this: NxN results R for one blob
+    # sub-blobs breaks this: MxN results R for one blob
     #assert(len(R) == len(blobsrcs))
     # drop brickname,iblob from the results
     R = [r['result'] for r in R]
@@ -1478,7 +1495,9 @@ def stage_fitblobs(T=None,
     if get_all_models:
         keys.append('all_models')
     if bailout:
-        keys.extend(['bailout_mask'])
+        keys.append('bailout_mask')
+    if sub_blob_mask is not None:
+        keys.append('sub_blob_mask')
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
@@ -1548,6 +1567,7 @@ def get_frozen_galaxies(T, blobsrcs, blobmap, targetwcs, cat):
     return frozen_galaxies
 
 def _get_bailout_mask(blobmap, skipblobs, targetwcs, W, H, brick, blobslices):
+    # Create a 1-d array that will map from blob number (ie in "blobmap") to the boolean mask value
     maxblob = blobmap.max()
     # mark all as bailed out...
     bmap = np.ones(maxblob+2, bool)
@@ -1645,7 +1665,8 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                large_galaxies_force_pointsource, less_masking,
                brick, frozen_galaxies, single_thread=False,
                skipblobs=None, max_blobsize=None, custom_brick=False,
-               enable_sub_blobs=False):
+               enable_sub_blobs=False,
+               ran_sub_blobs=None):
     '''
     *blobmap*: integer image map, with -1 indicating no-blob, other values indexing
         into *blobslices*,*blobsrcs*.
@@ -1804,7 +1825,10 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
             # subimage size, including overlaps
             subw = (blobw + (nsubx-1)*overlap + nsubx-1) // nsubx
             subh = (blobh + (nsuby-1)*overlap + nsuby-1) // nsuby
-            info('Will split into', subw, 'x', subh, 'sub-blobs')
+            info('Will split into', nsubx, 'x', nsuby, 'sub-blobs of', subw, 'x', subh, 'pixels')
+            # save this blob id
+            if ran_sub_blobs is not None:
+                ran_sub_blobs.append(int(iblob))
 
             uniqx = [0] + [n * (subw - overlap) + overlap//2 for n in range(1,nsubx)] + [blobw]
             uniqy = [0] + [n * (subh - overlap) + overlap//2 for n in range(1,nsuby)] + [blobh]
@@ -2034,6 +2058,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  refmap=None,
                  frozen_galaxies=None,
                  bailout_mask=None,
+                 sub_blob_mask=None,
                  coadd_headers={},
                  mp=None,
                  record_event=None,
@@ -2286,9 +2311,13 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         if key in MASKBITS:
             maskbits |= (MASKBITS[key] * (allmask > 0))
 
-    # BAILOUT_MASK
+    # BAILOUT
     if bailout_mask is not None:
         maskbits |= MASKBITS['BAILOUT'] * bailout_mask.astype(bool)
+
+    # SUB_BLOB
+    if sub_blob_mask is not None:
+        maskbits |= MASKBITS['SUB_BLOB'] * sub_blob_mask.astype(bool)
 
     # Add the maskbits header cards to version_header
     mbits = [
@@ -2307,7 +2336,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ('GALAXY',    'GAL',   'SGA large galaxy'),
         ('CLUSTER',   'CLUST', 'Globular cluster'),
         ('SATUR_I',   'SAT_I', 'i band saturated'),
-        ('ALLMASK_I', 'ALL_I', 'any ALLMASK_I bit set')]
+        ('ALLMASK_I', 'ALL_I', 'any ALLMASK_I bit set'),
+        ('SUB_BLOB',  'SUBBL', 'large blobs broken up'),]
     version_header.add_record(dict(name='COMMENT', value='maskbits bits:'))
     _add_bit_description(version_header, MASKBITS, mbits,
                          'MB_%s', 'MBIT_%i', 'maskbits')
