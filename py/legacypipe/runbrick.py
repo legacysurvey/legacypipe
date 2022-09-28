@@ -1800,10 +1800,11 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
         # checking "skipblobs" below, we don't re-run them.
 
         do_sub_blobs = False
-        if np.all((refmap[bslc][blobmask] & IN_BLOB['CLUSTER']) != 0):
-            info('Entire large blob is in CLUSTER mask')
-            do_sub_blobs = True
         if enable_sub_blobs:
+            do_sub_blobs = True
+        # (only check this if necessary)
+        if (not do_sub_blobs) and np.all((refmap[bslc][blobmask] & IN_BLOB['CLUSTER']) != 0):
+            info('Entire large blob is in CLUSTER mask')
             do_sub_blobs = True
 
         threshsize = None
@@ -1815,13 +1816,12 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
             # this yields  710 pixels -> 2 sub-blobs
             #             3600 pixels -> 8 sub-blobs (good for multi-processing!)
             target = 490
-            # Minimum size to get split into 2 or more sub-blobs
+            # Minimum size that will get split into 2 or more sub-blobs
             threshsize = 1.5 * (target - overlap) + overlap
 
         if do_sub_blobs and (blobw >= threshsize or blobh >= threshsize):
-            nsubx = int(np.round((blobw - overlap) / (target - overlap)))
-            nsuby = int(np.round((blobh - overlap) / (target - overlap)))
-            del target
+            nsubx = int(max(1, np.round((blobw - overlap) / (target - overlap))))
+            nsuby = int(max(1, np.round((blobh - overlap) / (target - overlap))))
             # subimage size, including overlaps
             subw = (blobw + (nsubx-1)*overlap + nsubx-1) // nsubx
             subh = (blobh + (nsuby-1)*overlap + nsuby-1) // nsuby
@@ -1832,29 +1832,25 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
 
             uniqx = [0] + [n * (subw - overlap) + overlap//2 for n in range(1,nsubx)] + [blobw]
             uniqy = [0] + [n * (subh - overlap) + overlap//2 for n in range(1,nsuby)] + [blobh]
-            info('Unique x regions:', uniqx)
-            info('Unique y regions:', uniqy)
+            info('Unique x boundaries:', uniqx)
+            info('Unique y boundaries:', uniqy)
 
             fro_gals = frozen_galaxies.get(iblob, [])
 
             assert(len(cat) == len(T))
 
+            skipblobset = set(skipblobs)
+
             for i in range(nsuby):
                 suby0 = i*(subh - overlap)
                 suby1 = min(suby0 + subh, blobh)
-                debug('Y range', i, ':', suby0, suby1)
                 for j in range(nsubx):
                     sub_blob = i*nsubx+j
-                    #print('Skipblobs:', skipblobs)
-                    #print('checking sub-blob:', (iblob,sub_blob))
-                    if (iblob,sub_blob) in skipblobs:
+                    if (int(iblob),sub_blob) in skipblobset:
                         debug('Skipping sub-blob (from checkpoint)', (iblob,sub_blob))
                         continue
                     subx0 = j*(subw - overlap)
                     subx1 = min(subx0 + subw, blobw)
-                    if i == 0:
-                        debug('X range', j, ':', subx0, subx1)
-
                     sub_bx0 = bx0 + subx0
                     sub_bx1 = bx0 + subx1
                     sub_by0 = by0 + suby0
@@ -1869,8 +1865,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                     clipy = np.clip(T.iby[Isrcs], 0, H-1)
                     Isubsrcs = Isrcs[(clipx >= sub_bx0) * (clipx < sub_bx1) *
                                      (clipy >= sub_by0) * (clipy < sub_by1)]
-                    info(len(Isubsrcs), 'of', len(Isrcs), 'sources are within this sub-brick')
-                    #info('Unique area:', (uniqx[j], uniqx[j+1], uniqy[i], uniqy[i+1]))
+                    info(len(Isubsrcs), 'of', len(Isrcs), 'sources are within this sub-blob')
                     yield (brickname, (iblob,sub_blob),
                            (uniqx[j], uniqx[j+1], uniqy[i], uniqy[i+1]),
                            ('%i-%i' % (nblob+1, 1+sub_blob), iblob,
@@ -1894,15 +1889,15 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                 frozen_galaxies.get(iblob, [])))
 
 def _bounce_one_blob(X):
-    ''' This just wraps the one_blob function, for debugging &
-    multiprocessing purposes.
+    '''This wraps the one_blob function for multiprocessing purposes (and
+    now also does some post-processing).
     '''
     from legacypipe.oneblob import one_blob
     (brickname, iblob, blob_unique, X) = X
     try:
         result = one_blob(X)
         if result is not None:
-            # # Any CLUSTER sub-blobs to de-duplicate?
+            # Was this a sub-blobs?  If so, de-duplicate the catalog
             if blob_unique is not None:
                 x0,x1,y0,y1 = blob_unique
                 debug('Got blob_unique:', blob_unique)
