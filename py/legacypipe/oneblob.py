@@ -240,6 +240,13 @@ class OneBlob(object):
 
     def run(self, B, reoptimize=False, iterative_detection=True,
             compute_metrics=True):
+        # The overall steps here are:
+        # - fit initial fluxes for small number of sources that may need it
+        # - optimize individual sources
+        # - compute segmentation map
+        # - model selection (including iterative detection)
+        # - metrics
+
         trun = tlast = Time()
         # Not quite so many plots...
         self.plots1 = self.plots
@@ -671,6 +678,7 @@ class OneBlob(object):
         models.save_images(self.tims)
 
         # Create initial models for each tim x each source
+        # (model sizes are determined at this point)
         models.create(self.tims, cat, subtract=True)
 
         N = len(cat)
@@ -1720,6 +1728,7 @@ class OneBlob(object):
         # Remember original tim images
         models.save_images(self.tims)
         # Create & subtract initial models for each tim x each source
+        # (modelMasks sizes are determined at this point)
         models.create(self.tims, cat, subtract=True)
 
         # For sources, in decreasing order of brightness
