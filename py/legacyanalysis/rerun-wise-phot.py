@@ -28,6 +28,8 @@ def get_parser():
                         help='RA,Dec center for a custom location (not a brick)')
     parser.add_argument('--pixscale', type=float, default=0.262,
                         help='Pixel scale of the output coadds (arcsec/pixel)')
+    parser.add_argument('--threads', type=int, default=1,
+                        help='Number of multiprocessing threads.')
     parser.add_argument('-W', '--width', type=int, default=3600,
                         help='Target image width, default %(default)i')
     parser.add_argument('-H', '--height', type=int, default=3600,
@@ -115,7 +117,7 @@ def main():
     #version_header = fitsio.FITSHDR()
 
     from astrometry.util.multiproc import multiproc
-    mp = multiproc()
+    mp = multiproc(opt.threads)
 
     T.ibx = np.round(T.bx).astype(np.int32)
     T.iby = np.round(T.by).astype(np.int32)
