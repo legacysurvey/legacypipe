@@ -203,7 +203,7 @@ def prep_survey_table(T, camera=None, bad_expid=None):
     # Set placeholder that masks everything until update_ccd_cuts is
     # run.
     from legacyzpts import psfzpt_cuts
-    T.ccd_cuts = np.zeros(len(T), np.int16) + psfzpt_cuts.CCD_CUT_BITS['err_legacyzpts']
+    T.ccd_cuts = np.zeros(len(T), np.int32) + psfzpt_cuts.CCD_CUT_BITS['err_legacyzpts']
     return T
 
 def create_annotated_table(T, ann_fn, camera, survey, mp, header=None):
@@ -458,7 +458,7 @@ def run_one_calib(X):
                        survey_blob_mask=survey_blob_mask,
                        halos=have_zpt,
                        subtract_largegalaxies=have_zpt)
-    except ZeroWeightError as zw:
+    except ZeroWeightError:
         print('Got ZeroWeightError running calibs for', img, 'but continuing')
     # Otherwise, let the exception propagate.
     return img

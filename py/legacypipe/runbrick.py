@@ -39,7 +39,7 @@ from astrometry.util.ttime import Time
 
 from legacypipe.survey import imsave_jpeg
 from legacypipe.bits import DQ_BITS, MASKBITS, FITBITS
-from legacypipe.utils import RunbrickError, NothingToDoError, iterwrapper, find_unique_pixels
+from legacypipe.utils import RunbrickError, NothingToDoError, find_unique_pixels
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 from legacypipe.fit_on_coadds import stage_fit_on_coadds
 from legacypipe.blobmask import stage_blobmask
@@ -672,6 +672,23 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
+    if plots:
+        import pylab as plt
+        assert(len(ccds) == len(tims))
+        # Make per-exposure coadd jpeg
+        expnums = np.unique(ccds.expnum)
+        for e in expnums:
+            I = np.flatnonzero(ccds.expnum == e)
+            info('Coadding', len(I), 'exposures with expnum =', e)
+            bb = [tims[I[0]].band]
+            C = make_coadds([tims[i] for i in I], bb, targetwcs, lanczos=lanczos,
+                            mp=mp, plots=False, ps=None, allmasks=False)
+            rgb,kwa = survey.get_rgb(C.coimgs, bb, coadd_bw=True)
+            plt.clf()
+            plt.imshow(rgb, origin='lower', interpolation='nearest')
+            plt.title('Expnum %s %s' % (e, ''.join(bb)))
+            ps.savefig()
+
     kw = dict(ngood=True, coweights=False)
     if minimal_coadds:
         kw.update(allmasks=False)
@@ -1032,6 +1049,7 @@ def stage_fitblobs(T=None,
                    iterative=False,
                    large_galaxies_force_pointsource=True,
                    less_masking=False,
+                   sub_blobs=False,
                    use_ceres=True, mp=None,
                    checkpoint_filename=None,
                    checkpoint_period=600,
@@ -1190,16 +1208,22 @@ def stage_fitblobs(T=None,
 
     frozen_galaxies = get_frozen_galaxies(T, blobsrcs, blobmap, targetwcs, cat)
     refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
+    # We pass this list in to _blob_iter; it appends any blob numbers
+    # that were processed as sub-blobs.
+    ran_sub_blobs = None
+    if sub_blobs:
+        ran_sub_blobs = []
+
     # Create the iterator over blobs to process
     blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims,
-                          cat, bands, plots, ps, reoptimize, iterative, use_ceres,
+                          cat, T, bands, plots, ps, reoptimize, iterative, use_ceres,
                           refmap, large_galaxies_force_pointsource, less_masking, brick,
                           frozen_galaxies,
                           skipblobs=skipblobs,
                           single_thread=(mp is None or mp.pool is None),
-                          max_blobsize=max_blobsize, custom_brick=custom_brick)
-    # to allow timingpool to queue tasks one at a time
-    blobiter = iterwrapper(blobiter, len(blobsrcs))
+                          max_blobsize=max_blobsize, custom_brick=custom_brick,
+                          enable_sub_blobs=sub_blobs,
+                          ran_sub_blobs=ran_sub_blobs)
 
     if checkpoint_filename is None:
         R.extend(mp.map(_bounce_one_blob, blobiter))
@@ -1249,10 +1273,21 @@ def stage_fitblobs(T=None,
 
     # Repackage the results from one_blob...
 
+    # check for any blobs that were processed as sub-blobs; mark them in the sub_blob_mask.
+    sub_blob_mask = None
+    if len(ran_sub_blobs):
+        # Create a 1-d array that will map from blob number (ie in "blobmap")
+        # to the boolean mask value
+        maxblob = blobmap.max()
+        sbmap = np.zeros(maxblob+2, bool)
+        sbmap[np.array(ran_sub_blobs)+1] = True
+        sub_blob_mask = sbmap[blobmap+1]
+
     # one_blob can change the number and types of sources.
     # Reorder the sources:
-    assert(len(R) == len(blobsrcs))
-    # drop brickname,iblob
+    # sub-blobs breaks this: MxN results R for one blob
+    #assert(len(R) == len(blobsrcs))
+    # drop brickname,iblob from the results
     R = [r['result'] for r in R]
     # Drop now-empty blobs.
     R = [r for r in R if r is not None and len(r)]
@@ -1460,7 +1495,9 @@ def stage_fitblobs(T=None,
     if get_all_models:
         keys.append('all_models')
     if bailout:
-        keys.extend(['bailout_mask'])
+        keys.append('bailout_mask')
+    if sub_blob_mask is not None:
+        keys.append('sub_blob_mask')
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
@@ -1530,6 +1567,7 @@ def get_frozen_galaxies(T, blobsrcs, blobmap, targetwcs, cat):
     return frozen_galaxies
 
 def _get_bailout_mask(blobmap, skipblobs, targetwcs, W, H, brick, blobslices):
+    # Create a 1-d array that will map from blob number (ie in "blobmap") to the boolean mask value
     maxblob = blobmap.max()
     # mark all as bailed out...
     bmap = np.ones(maxblob+2, bool)
@@ -1537,6 +1575,11 @@ def _get_bailout_mask(blobmap, skipblobs, targetwcs, W, H, brick, blobslices):
     bmap[0] = False
     # and blobs from the checkpoint file
     for i in skipblobs:
+        try:
+            i = int(i)
+        except:
+            # eg, sub-blobs with blobs like (1,1)
+            pass
         bmap[i+1] = False
     # and blobs that are completely outside the primary region of this brick.
     U = find_unique_pixels(targetwcs, W, H, None,
@@ -1582,9 +1625,15 @@ def _check_checkpoints(R, blobslices, brickname):
         if r is None:
             pass
         else:
-            if r.iblob != iblob:
-                print('Checkpoint iblob mismatch:', r.iblob, iblob)
-                continue
+            # sub-blobs break this!
+            sub_blob = (type(iblob) is tuple)
+            if sub_blob:
+                iblob = r.iblob
+            else:
+                if r.iblob != iblob:
+                    print('Checkpoint iblob mismatch:', r.iblob, iblob)
+                    continue
+
             if iblob >= len(blobslices):
                 print('Checkpointed iblob', iblob, 'is too large! (>= %i)' % len(blobslices))
                 continue
@@ -1597,22 +1646,79 @@ def _check_checkpoints(R, blobslices, brickname):
                 # check bbox
                 rx0,ry0 = r.blob_x0[0], r.blob_y0[0]
                 rx1,ry1 = rx0 + r.blob_width[0], ry0 + r.blob_height[0]
-                if rx0 != bx0 or ry0 != by0 or rx1 != bx1 or ry1 != by1:
-                    print('Checkpointed blob bbox', [rx0,rx1,ry0,ry1],
-                          'does not match expected', [bx0,bx1,by0,by1], 'for iblob', iblob)
-                    continue
+                if sub_blob:
+                    # check that it's a subset?
+                    if rx0 < bx0 or ry0 < by0 or rx1 > bx1 or ry1 > by1:
+                        print('Checkpointed sub-blob bbox', [rx0,rx1,ry0,ry1],
+                              'is not inside expected', [bx0,bx1,by0,by1], 'for iblob', iblob)
+                        continue
+                else:
+                    if rx0 != bx0 or ry0 != by0 or rx1 != bx1 or ry1 != by1:
+                        print('Checkpointed blob bbox', [rx0,rx1,ry0,ry1],
+                              'does not match expected', [bx0,bx1,by0,by1], 'for iblob', iblob)
+                        continue
         keepR.append(ri)
     return keepR
 
-def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, bands,
+def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T, bands,
                plots, ps, reoptimize, iterative, use_ceres, refmap,
                large_galaxies_force_pointsource, less_masking,
                brick, frozen_galaxies, single_thread=False,
-               skipblobs=None, max_blobsize=None, custom_brick=False):
+               skipblobs=None, max_blobsize=None, custom_brick=False,
+               enable_sub_blobs=False,
+               ran_sub_blobs=None):
     '''
-    *blobmap*: map, with -1 indicating no-blob, other values indexing *blobslices*,*blobsrcs*.
+    *blobmap*: integer image map, with -1 indicating no-blob, other values indexing
+        into *blobslices*,*blobsrcs*.
+    *blobsrcs*: a list of numpy arrays of integers -- indices into *cat* -- of the sources in
+        this blob.
+    *T*: a fits table parallel to *cat* with some extra info (very little used)
     '''
+    from legacypipe.bits import IN_BLOB
     from collections import Counter
+
+    def get_subtim_args(tims, targetwcs, bx0,bx1, by0,by1, single_thread):
+        rr,dd = targetwcs.pixelxy2radec([bx0,bx0,bx1,bx1],[by0,by1,by1,by0])
+        subtimargs = []
+        for tim in tims:
+            h,w = tim.shape
+            _,x,y = tim.subwcs.radec2pixelxy(rr,dd)
+            sx0,sx1 = x.min(), x.max()
+            sy0,sy1 = y.min(), y.max()
+            #print('blob extent in pixel space of', tim.name, ': x',
+            # (sx0,sx1), 'y', (sy0,sy1), 'tim shape', (h,w))
+            if sx1 < 0 or sy1 < 0 or sx0 > w or sy0 > h:
+                continue
+            sx0 = int(np.clip(int(np.floor(sx0 - 1)), 0, w-1))
+            sx1 = int(np.clip(int(np.ceil (sx1 - 1)), 0, w-1)) + 1
+            sy0 = int(np.clip(int(np.floor(sy0 - 1)), 0, h-1))
+            sy1 = int(np.clip(int(np.ceil (sy1 - 1)), 0, h-1)) + 1
+            subslc = slice(sy0,sy1),slice(sx0,sx1)
+            subimg = tim.getImage   ()[subslc]
+            subie  = tim.getInvError()[subslc]
+            if tim.dq is None:
+                subdq = None
+            else:
+                subdq  = tim.dq[subslc]
+            subwcs = tim.getWcs().shifted(sx0, sy0)
+            subsky = tim.getSky().shifted(sx0, sy0)
+            subpsf = tim.getPsf().getShifted(sx0, sy0)
+            subwcsobj = tim.subwcs.get_subimage(sx0, sy0, sx1-sx0, sy1-sy0)
+            tim.imobj.psfnorm = tim.psfnorm
+            tim.imobj.galnorm = tim.galnorm
+            # FIXME -- maybe the cache is worth sending?
+            if hasattr(tim.psf, 'clear_cache'):
+                tim.psf.clear_cache()
+            # Yuck!  If we're not running with --threads AND oneblob.py modifies the data,
+            # bad things happen!
+            if single_thread:
+                subimg = subimg.copy()
+                subie = subie.copy()
+                subdq = subdq.copy()
+            subtimargs.append((subimg, subie, subdq, subwcs, subwcsobj,
+                               tim.getPhotoCal(),
+                               subsky, subpsf, tim.name, tim.band, tim.sig1, tim.imobj))
+        return subtimargs
 
     if skipblobs is None:
         skipblobs = []
@@ -1630,7 +1736,10 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, b
                                brick.ra1, brick.ra2, brick.dec1, brick.dec2)
 
     for nblob,iblob in enumerate(blob_order):
-        if iblob in skipblobs:
+        # (convert iblob to int, because (with sub-blobs) skipblob
+        # entries can be tuples, and np.int32 tries to do
+        # vector-comparison)
+        if int(iblob) in skipblobs:
             info('Skipping blob', iblob)
             continue
 
@@ -1638,7 +1747,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, b
         Isrcs = blobsrcs  [iblob]
         assert(len(Isrcs) > 0)
 
-        # blob bbox in target coords
+        # blob bbox in targetwcs coords
         sy,sx = bslc
         by0,by1 = sy.start, sy.stop
         bx0,bx1 = sx.start, sx.stop
@@ -1655,8 +1764,9 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, b
             # If the blob is solely outside the unique region of this brick,
             # skip it!
             if np.all(U[bslc][blobmask] == False):
-                info('Blob', nblob+1, 'is completely outside the unique region of this brick -- skipping')
-                yield (brickname, iblob, None)
+                info('Blob %i is completely outside the unique region of this brick -- skipping' %
+                     (nblob+1))
+                yield (brickname, iblob, None, None)
                 continue
 
         # find one pixel within the blob, for debugging purposes
@@ -1677,71 +1787,133 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, b
 
         if max_blobsize is not None and npix > max_blobsize:
             info('Number of pixels in blob,', npix, ', exceeds max blobsize', max_blobsize)
-            yield (brickname, iblob, None)
+            yield (brickname, iblob, None, None)
+            continue
+
+        # Check for a large blob that is fully contained in the CLUSTER mask.
+        # Split into overlapping sub-blobs.
+        # We include the "blob-unique" bounding-box in the tokens we yield from this function.
+        # Then, in bounce_one_blob, after the sub-blob finishes processing, that unique-area
+        # cut is applied.
+        # To identify these sub-blobs, we return iblob = a tuple of the original iblob plus
+        # a sub-blob identifier.  Sub-blobs can get saved to the checkpoints files, and by
+        # checking "skipblobs" below, we don't re-run them.
+
+        do_sub_blobs = False
+        if enable_sub_blobs:
+            do_sub_blobs = True
+        # (only check this if necessary)
+        if (not do_sub_blobs) and np.all((refmap[bslc][blobmask] & IN_BLOB['CLUSTER']) != 0):
+            info('Entire large blob is in CLUSTER mask')
+            do_sub_blobs = True
+
+        threshsize = None
+        if do_sub_blobs:
+            # split into ~500-pixel sub-blobs.
+            # "overlap" is the duplicated / overlapping region between sub-blobs.
+            overlap = 50
+            # target sub-blob size for selecting number of sub-blobs
+            # this yields  710 pixels -> 2 sub-blobs
+            #             3600 pixels -> 8 sub-blobs (good for multi-processing!)
+            target = 490
+            # Minimum size that will get split into 2 or more sub-blobs
+            threshsize = 1.5 * (target - overlap) + overlap
+
+        if do_sub_blobs and (blobw >= threshsize or blobh >= threshsize):
+            nsubx = int(max(1, np.round((blobw - overlap) / (target - overlap))))
+            nsuby = int(max(1, np.round((blobh - overlap) / (target - overlap))))
+            # subimage size, including overlaps
+            subw = (blobw + (nsubx-1)*overlap + nsubx-1) // nsubx
+            subh = (blobh + (nsuby-1)*overlap + nsuby-1) // nsuby
+            info('Will split into', nsubx, 'x', nsuby, 'sub-blobs of', subw, 'x', subh, 'pixels')
+            # save this blob id
+            if ran_sub_blobs is not None:
+                ran_sub_blobs.append(int(iblob))
+
+            uniqx = [0] + [n * (subw - overlap) + overlap//2 for n in range(1,nsubx)] + [blobw]
+            uniqy = [0] + [n * (subh - overlap) + overlap//2 for n in range(1,nsuby)] + [blobh]
+            info('Unique x boundaries:', uniqx)
+            info('Unique y boundaries:', uniqy)
+
+            fro_gals = frozen_galaxies.get(iblob, [])
+
+            assert(len(cat) == len(T))
+
+            skipblobset = set(skipblobs)
+
+            for i in range(nsuby):
+                suby0 = i*(subh - overlap)
+                suby1 = min(suby0 + subh, blobh)
+                for j in range(nsubx):
+                    sub_blob = i*nsubx+j
+                    if (int(iblob),sub_blob) in skipblobset:
+                        debug('Skipping sub-blob (from checkpoint)', (iblob,sub_blob))
+                        continue
+                    subx0 = j*(subw - overlap)
+                    subx1 = min(subx0 + subw, blobw)
+                    sub_bx0 = bx0 + subx0
+                    sub_bx1 = bx0 + subx1
+                    sub_by0 = by0 + suby0
+                    sub_by1 = by0 + suby1
+                    sub_slc = slice(sub_by0, sub_by1), slice(sub_bx0, sub_bx1)
+
+                    # Here we cut out subimages for the blob...
+                    subtimargs = get_subtim_args(tims, targetwcs, sub_bx0,sub_bx1,
+                                                 sub_by0,sub_by1, single_thread)
+                    H,W = blobmap.shape
+                    clipx = np.clip(T.ibx[Isrcs], 0, W-1)
+                    clipy = np.clip(T.iby[Isrcs], 0, H-1)
+                    Isubsrcs = Isrcs[(clipx >= sub_bx0) * (clipx < sub_bx1) *
+                                     (clipy >= sub_by0) * (clipy < sub_by1)]
+                    info(len(Isubsrcs), 'of', len(Isrcs), 'sources are within this sub-blob')
+                    yield (brickname, (iblob,sub_blob),
+                           (uniqx[j], uniqx[j+1], uniqy[i], uniqy[i+1]),
+                           ('%i-%i' % (nblob+1, 1+sub_blob), iblob,
+                            Isubsrcs, targetwcs, sub_bx0, sub_by0,
+                            sub_bx1 - sub_bx0, sub_by1 - sub_by0,
+                            # "blobmask" has already been cut to this blob, so don't use sub_slc
+                            blobmask[suby0:suby1, subx0:subx1],
+                            subtimargs, [cat[i] for i in Isubsrcs], bands,
+                            plots, ps,
+                            reoptimize, iterative, use_ceres, refmap[sub_slc],
+                            large_galaxies_force_pointsource, less_masking, fro_gals))
+
             continue
 
         # Here we cut out subimages for the blob...
-        rr,dd = targetwcs.pixelxy2radec([bx0,bx0,bx1,bx1],[by0,by1,by1,by0])
-        subtimargs = []
-        for tim in tims:
-            h,w = tim.shape
-            _,x,y = tim.subwcs.radec2pixelxy(rr,dd)
-            sx0,sx1 = x.min(), x.max()
-            sy0,sy1 = y.min(), y.max()
-            #print('blob extent in pixel space of', tim.name, ': x',
-            # (sx0,sx1), 'y', (sy0,sy1), 'tim shape', (h,w))
-            if sx1 < 0 or sy1 < 0 or sx0 > w or sy0 > h:
-                continue
-            sx0 = int(np.clip(int(np.floor(sx0)), 0, w-1))
-            sx1 = int(np.clip(int(np.ceil (sx1)), 0, w-1)) + 1
-            sy0 = int(np.clip(int(np.floor(sy0)), 0, h-1))
-            sy1 = int(np.clip(int(np.ceil (sy1)), 0, h-1)) + 1
-            subslc = slice(sy0,sy1),slice(sx0,sx1)
-            subimg = tim.getImage   ()[subslc]
-            subie  = tim.getInvError()[subslc]
-            if tim.dq is None:
-                subdq = None
-            else:
-                subdq  = tim.dq[subslc]
-            subwcs = tim.getWcs().shifted(sx0, sy0)
-            subsky = tim.getSky().shifted(sx0, sy0)
-            subpsf = tim.getPsf().getShifted(sx0, sy0)
-            subwcsobj = tim.subwcs.get_subimage(sx0, sy0, sx1-sx0, sy1-sy0)
-            tim.imobj.psfnorm = tim.psfnorm
-            tim.imobj.galnorm = tim.galnorm
-            # FIXME -- maybe the cache is worth sending?
-            if hasattr(tim.psf, 'clear_cache'):
-                tim.psf.clear_cache()
-            # Yuck!  If we not running with --threads AND oneblob.py modifies the data,
-            # bad things happen!
-            if single_thread:
-                subimg = subimg.copy()
-                subie = subie.copy()
-                subdq = subdq.copy()
-            subtimargs.append((subimg, subie, subdq, subwcs, subwcsobj,
-                               tim.getPhotoCal(),
-                               subsky, subpsf, tim.name, tim.band, tim.sig1, tim.imobj))
+        subtimargs = get_subtim_args(tims, targetwcs, bx0,bx1, by0,by1, single_thread)
 
-        yield (brickname, iblob,
-               (nblob, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
+        yield (brickname, iblob, None,
+               (nblob+1, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                 blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
                 reoptimize, iterative, use_ceres, refmap[bslc],
                 large_galaxies_force_pointsource, less_masking,
                 frozen_galaxies.get(iblob, [])))
 
 def _bounce_one_blob(X):
-    ''' This just wraps the one_blob function, for debugging &
-    multiprocessing purposes.
+    '''This wraps the one_blob function for multiprocessing purposes (and
+    now also does some post-processing).
     '''
     from legacypipe.oneblob import one_blob
-    (brickname, iblob, X) = X
+    (brickname, iblob, blob_unique, X) = X
     try:
         result = one_blob(X)
+        if result is not None:
+            # Was this a sub-blobs?  If so, de-duplicate the catalog
+            if blob_unique is not None:
+                x0,x1,y0,y1 = blob_unique
+                debug('Got blob_unique:', blob_unique)
+                debug('Range of result bx0:', result.bx0.min(), result.bx0.max())
+                debug('Range of result by0:', result.by0.min(), result.by0.max())
+                ntot = len(result)
+                result.cut((result.bx0 >= x0) * (result.bx0 < x1) *
+                           (result.by0 >= y0) * (result.by0 < y1))
+                debug('Blob_unique cut kept', len(result), 'of', ntot, 'sources')
         ### This defines the format of the results in the checkpoints files
         return dict(brickname=brickname, iblob=iblob, result=result)
     except:
         import traceback
-        print('Exception in one_blob: brick %s, iblob %i' % (brickname, iblob))
+        print('Exception in one_blob: brick %s, iblob %s' % (brickname, iblob))
         traceback.print_exc()
         raise
 
@@ -1883,6 +2055,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  refmap=None,
                  frozen_galaxies=None,
                  bailout_mask=None,
+                 sub_blob_mask=None,
                  coadd_headers={},
                  mp=None,
                  record_event=None,
@@ -2135,9 +2308,13 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         if key in MASKBITS:
             maskbits |= (MASKBITS[key] * (allmask > 0))
 
-    # BAILOUT_MASK
+    # BAILOUT
     if bailout_mask is not None:
         maskbits |= MASKBITS['BAILOUT'] * bailout_mask.astype(bool)
+
+    # SUB_BLOB
+    if sub_blob_mask is not None:
+        maskbits |= MASKBITS['SUB_BLOB'] * sub_blob_mask.astype(bool)
 
     # Add the maskbits header cards to version_header
     mbits = [
@@ -2156,7 +2333,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         ('GALAXY',    'GAL',   'SGA large galaxy'),
         ('CLUSTER',   'CLUST', 'Globular cluster'),
         ('SATUR_I',   'SAT_I', 'i band saturated'),
-        ('ALLMASK_I', 'ALL_I', 'any ALLMASK_I bit set')]
+        ('ALLMASK_I', 'ALL_I', 'any ALLMASK_I bit set'),
+        ('SUB_BLOB',  'SUBBL', 'large blobs broken up'),]
     version_header.add_record(dict(name='COMMENT', value='maskbits bits:'))
     _add_bit_description(version_header, MASKBITS, mbits,
                          'MB_%s', 'MBIT_%i', 'maskbits')
@@ -3022,7 +3200,7 @@ def copy_wise_into_catalog(T, WISE, WISE_T, primhdr):
         # Copy columns:
         for c in ['wise_coadd_id', 'wise_x', 'wise_y', 'wise_mask']:
             T.set(c, WISE.get(c))
-    
+
         for band in [1,2,3,4]:
             # Apply the Vega-to-AB shift *while* copying columns from
             # WISE to T.
@@ -3122,6 +3300,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               large_galaxies_force_pointsource=True,
               fitoncoadds_reweight_ivar=True,
               less_masking=False,
+              sub_blobs=False,
               nsatur=None,
               fit_on_coadds=False,
               coadd_tiers=None,
@@ -3373,6 +3552,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   large_galaxies_force_pointsource=large_galaxies_force_pointsource,
                   fitoncoadds_reweight_ivar=fitoncoadds_reweight_ivar,
                   less_masking=less_masking,
+                  sub_blobs=sub_blobs,
                   min_mjd=min_mjd, max_mjd=max_mjd,
                   coadd_tiers=coadd_tiers,
                   nsatur=nsatur,
@@ -3819,6 +3999,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--bail-out', default=False, action='store_true',
                         help='Bail out of "fitblobs" processing, writing all blobs from the checkpoint and skipping any remaining ones.')
+
+    parser.add_argument('--sub-blobs', default=False, action='store_true',
+                        help='Split large blobs into sub-blobs that can be processed in parallel.')
 
     parser.add_argument('--fit-on-coadds', default=False, action='store_true',
                         help='Fit to coadds rather than individual CCDs (e.g., large galaxies).')

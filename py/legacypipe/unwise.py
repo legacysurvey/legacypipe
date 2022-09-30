@@ -489,17 +489,51 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             tag = '%s W%i' % (tile.coadd_id, band)
             (dat, mod, _, chi, _) = ims1[i]
             sig1 = tim.sig1
+            bandmax = { 1: 25, 2: 25, 3: 5, 4: 5 }
+            mx = bandmax[band]
             plt.clf()
             plt.imshow(dat, interpolation='nearest', origin='lower',
-                       cmap='gray', vmin=-3 * sig1, vmax=25 * sig1)
+                       cmap='gray', vmin=-3 * sig1, vmax=mx * sig1)
             plt.colorbar()
             plt.title('%s: data' % tag)
             ps.savefig()
             plt.clf()
             plt.imshow(mod, interpolation='nearest', origin='lower',
-                       cmap='gray', vmin=-3 * sig1, vmax=25 * sig1)
+                       cmap='gray', vmin=-3 * sig1, vmax=mx * sig1)
             plt.colorbar()
             plt.title('%s: model' % tag)
+            ps.savefig()
+
+            srcs = [src for src in cat if src.getBrightness().getBand(wanyband) > 0]
+            tr = Tractor([tim], srcs)
+            mod_p = tr.getModelImage(tim)
+            srcs = [src for src in cat if src.getBrightness().getBand(wanyband) < 0]
+            tr = Tractor([tim], srcs)
+            mod_n = tr.getModelImage(tim)
+            mx = max(np.abs(mod_p).max(), np.abs(mod_n).max())
+            plt.clf()
+            plt.subplot(2,2,1)
+            plt.imshow(mod_p, interpolation='nearest', origin='lower',
+                       cmap='gray', vmin=-mx, vmax=mx)
+            plt.colorbar()
+            plt.title('%s: model - positive fluxes' % tag)
+            #ps.savefig()
+            #plt.clf()
+            plt.subplot(2,2,2)
+            plt.imshow(mod_n, interpolation='nearest', origin='lower',
+                       cmap='gray', vmin=-mx, vmax=mx)
+            plt.colorbar()
+            plt.title('%s: model - negative fluxes' % tag)
+            plt.subplot(2,2,3)
+            plt.imshow(mod, interpolation='nearest', origin='lower',
+                       cmap='gray', vmin=-mx, vmax=mx)
+            plt.colorbar()
+            plt.title('%s: model - sum' % tag)
+            plt.subplot(2,2,4)
+            plt.imshow(dat, interpolation='nearest', origin='lower',
+                       cmap='gray', vmin=-mx, vmax=mx)
+            plt.colorbar()
+            plt.title('%s: image' % tag)
             ps.savefig()
 
             plt.clf()

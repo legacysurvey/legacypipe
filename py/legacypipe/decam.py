@@ -154,8 +154,15 @@ class DecamImage(LegacySurveyImage):
         #assert(self.band == sky.filter)
         tfn = os.path.join(dirnm, 'sky_templates',
                            'sky_template_%s_%i.fits' % (self.band, sky.run))
-        if not os.path.exists(tfn):
-            warnings.warn('Sky template file %s does not exist' % tfn)
+        suffixes = ['', '.fz']
+        found = False
+        for suff in suffixes:
+            if os.path.exists(tfn + suff):
+                found = True
+                tfn = tfn + suff
+                break
+        if not found:
+            warnings.warn('Sky template file %s{%s} does not exist' % (tfn, ','.join(suffixes)))
             return None
         return dict(template_filename=tfn, sky_template_dir=dirnm, sky_obj=sky, skyscales_fn=fn)
 
@@ -170,7 +177,7 @@ class DecamImage(LegacySurveyImage):
         sky = d['sky_obj']
         #info('Reading', tfn, 'ext', self.ccdname)
         F = fitsio.FITS(tfn)
-        if not self.ccdname in F:
+        if self.ccdname not in F:
             warnings.warn('Sky template file %s does not contain extension %s' % (tfn, self.ccdname))
             return None
         f = F[self.ccdname]
@@ -362,9 +369,11 @@ class DecamImage(LegacySurveyImage):
         if min(img.shape) / boxsize < 4:
             boxsize /= 2
 
-        if (self.band in ['g','r','i'] and
-            self.ccdname.strip() in ['S30', 'N14', 'S19', 'S16', 'S10']):
-            H,W = img.shape
+        if ((self.band in ['g','r','i'] and
+             self.ccdname.strip() in ['S30', 'N14', 'S19', 'S16', 'S10']) or
+            (self.band == 'z' and
+             self.ccdname.strip() in ['S30'])):
+            _,W = img.shape
             xbreak = W//2
             skyobj = JumpSky.BlantonMethod(img, goodpix, boxsize, xbreak)
         else:

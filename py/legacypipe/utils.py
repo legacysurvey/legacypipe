@@ -77,38 +77,6 @@ class NothingToDoError(RunbrickError):
 class ZeroWeightError(RunbrickError):
     pass
 
-class iterwrapper(object):
-    def __init__(self, y, n):
-        self.n = n
-        self.y = y
-    def __str__(self):
-        return 'iterwrapper: n=%i; ' % self.n + str(self.y)
-    def __iter__(self):
-        return self
-    def next(self):
-        try:
-            return self.y.next()
-        except StopIteration:
-            raise
-        except:
-            import traceback
-            print(str(self), 'next()')
-            traceback.print_exc()
-            raise
-    # py3
-    def __next__(self):
-        try:
-            return self.y.__next__()
-        except StopIteration:
-            raise
-        except:
-            import traceback
-            print(str(self), '__next__()')
-            traceback.print_exc()
-            raise
-    def __len__(self):
-        return self.n
-
 def _ring_unique(wcs, W, H, i, unique, ra1,ra2,dec1,dec2):
     lo, hix, hiy = i, W-i-1, H-i-1
     # one slice per side; we double-count the last pix of each side.

@@ -620,7 +620,7 @@ class LegacySurveyImage(object):
             wcs = self.get_wcs()
         else:
             wcs = mywcs
-        x0,x1,y0,y1,slc = self.get_image_extent(wcs=wcs, radecpoly=radecpoly)
+        x0,x1,y0,y1,_ = self.get_image_extent(wcs=wcs, radecpoly=radecpoly)
         H = y1-y0
         W = x1-x0
         npix = H*W
@@ -1239,18 +1239,18 @@ class LegacySurveyImage(object):
         Reads the sky model, returning a Tractor Sky object.
         '''
         from tractor.utils import get_class_from_name
-        tryfns = [self.survey.find_file('sky', img=self),
-                  self.survey.find_file('sky-single', img=self),
-                  ] + self.old_merged_skyfns
+        tryfns = [(self.survey.find_file('sky-single', img=self), 'single'),
+                  (self.survey.find_file('sky', img=self), 'merged'),
+                  ] + [(fn,'old') for fn in self.old_merged_skyfns]
         Ti = None
-        for fn in tryfns:
+        for fn,skytype in tryfns:
             if not os.path.exists(fn):
                 continue
             T = fits_table(fn)
             I, = np.nonzero((T.expnum == self.expnum) *
                             np.array([c.strip() == self.ccdname
                                       for c in T.ccdname]))
-            debug('Found', len(I), 'matching CCDs in merged sky file')
+            debug('Found', len(I), 'matching CCDs (expnum %i, ccdname %s) in sky file (%s) %s' % (self.expnum, self.ccdname, skytype, fn))
             if len(I) != 1:
                 continue
             if not self.validate_version(
@@ -1258,8 +1258,10 @@ class LegacySurveyImage(object):
                     data=T, old_calibs_ok=old_calibs_ok):
                 raise RuntimeError('Sky file %s did not pass consistency validation (PLVER, PLPROCID, EXPNUM)' % fn)
             Ti = T[I[0]]
+            break
         if Ti is None:
-            raise RuntimeError('Failed to find sky model in files: %s' % ', '.join(tryfns))
+            raise RuntimeError('Failed to find sky model in files: %s'
+                               % ', '.join([fn for fn,kind in tryfns]))
 
         if template_meta is not None:
             # Check sky-template subtraction metadata!
@@ -1979,6 +1981,10 @@ class LegacySurveyImage(object):
             info('Image shape:', img.shape)
             info('Sky xgrid:', skyobj.xgrid, 'ygrid', skyobj.ygrid)
 
+            self.imshow((img - initsky) * boxcargood * blobgood * refgood, **ima2)
+            plt.title('Unmasked pixels')
+            ps.savefig()
+
             gridvals = skyobj.spl(skyobj.xgrid, skyobj.ygrid) - initsky
             plt.clf()
             self.imshow(gridvals.T, **ima2)
@@ -2009,6 +2015,65 @@ class LegacySurveyImage(object):
             # plt.imshow(skypix2, **ima2)
             # plt.title('Fine sky model')
             # ps.savefig()
+
+            plt.clf()
+            self.imshow((img - skypix), **ima2)
+            plt.colorbar()
+            plt.title('Image - Sky model')
+            ps.savefig()
+
+            plt.clf()
+            self.imshow((img - skypix), **ima)
+            plt.colorbar()
+            plt.title('Image - Sky model')
+            ps.savefig()
+
+            allgood = boxcargood * blobgood * refgood
+            h,w = img.shape
+            skyresid = img - skypix
+            rowmed = np.zeros(h)
+            for i in range(h):
+                rowmed[i] = np.median(skyresid[i,:][allgood[i,:]])
+            colmed = np.zeros(w)
+            for i in range(w):
+                colmed[i] = np.median(skyresid[:,i][allgood[:,i]])
+            plt.clf()
+            plt.subplot(2,1,1)
+            plt.plot(rowmed, 'k-')
+            plt.title('Row-wise median')
+            plt.subplot(2,1,2)
+            plt.plot(colmed, 'k-')
+            plt.title('Column-wise median')
+            plt.suptitle('masked image - sky model')
+            ps.savefig()
+
+            #(wt > 0)
+            isgoodrows = np.any(wt>0, axis=1)
+            isgoodcols = np.any(wt>0, axis=0)
+            goodrows = np.flatnonzero(isgoodrows)
+            goodcols = np.flatnonzero(isgoodcols)
+
+            plt.clf()
+            plt.subplot(2,1,1)
+            plt.plot(goodrows, np.median(img, axis=1)[isgoodrows], 'b-')
+            plt.plot(np.median(skypix, axis=1), 'r-')
+            plt.title('Row-wise median')
+            plt.subplot(2,1,2)
+            plt.plot(goodcols, np.median(img, axis=0)[isgoodcols], 'b-')
+            plt.plot(np.median(skypix, axis=0), 'r-')
+            plt.title('Column-wise median')
+            plt.suptitle('Unmasked image (blue) and sky (red) model')
+            ps.savefig()
+
+            plt.clf()
+            plt.subplot(2,1,1)
+            plt.plot(goodrows, (1. - np.sum(allgood, axis=1) / len(goodcols))[isgoodrows], 'k-')
+            plt.title('Row-wise')
+            plt.subplot(2,1,2)
+            plt.plot(goodcols, (1. - np.sum(allgood, axis=0) / len(goodrows))[isgoodcols], 'k-')
+            plt.title('Column-wise')
+            plt.suptitle('Fraction of masked pixels')
+            ps.savefig()
 
             plt.clf()
             plt.hist((img[good * refgood] - initsky).ravel(), bins=50)

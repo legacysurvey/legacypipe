@@ -75,14 +75,19 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
     from tractor.sfd import SFDMap
     info('Reading SFD maps...')
     sfd = SFDMap()
-    filts = ['%s %s' % ('DES', f) for f in allbands]
+    # Hack -- subset to the bands that the tractor's SFD code knows about.
+    dust_bands = []
+    for b in allbands:
+        if b in ['u','g','r','i','z','Y']:
+            dust_bands.append(b)
+    filts = ['%s %s' % ('DES', f) for f in dust_bands]
     wisebands = ['WISE W1', 'WISE W2', 'WISE W3', 'WISE W4']
     ebv,ext = sfd.extinction(filts + wisebands, T.ra, T.dec, get_ebv=True)
     T.ebv = ebv.astype(np.float32)
     ext = ext.astype(np.float32)
-    decam_ext = ext[:,:len(allbands)]
+    decam_ext = ext[:,:len(dust_bands)]
     if has_wise:
-        wise_ext  = ext[:,len(allbands):]
+        wise_ext  = ext[:,len(dust_bands):]
 
     wbands = ['w1','w2','w3','w4']
     gbands = ['nuv','fuv']
@@ -90,7 +95,7 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
     trans_cols_opt  = []
     trans_cols_wise = []
 
-    for i,b in enumerate(allbands):
+    for i,b in enumerate(dust_bands):
         col = 'mw_transmission_%s' % b
         T.set(col, 10.**(-decam_ext[:,i] / 2.5))
         trans_cols_opt.append(col)

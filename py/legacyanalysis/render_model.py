@@ -14,10 +14,10 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--catalog', help='Catalog to render')
-    parser.add_argument('--brick-coadd', help='Produce a coadd of the images overlapping the given brickname.')
+    parser.add_argument('--brickname', help='Optional, read CCDs from $LEGACY_SURVEY_DIR for the given brick name')
     parser.add_argument('--ccds', help='Use this table of CCDs')
-    parser.add_argument('--brick-wcs', help='File containing a WCS header describing the coadd WCS to render.')
-    parser.add_argument('--brick-wcs-ext', type=int, help='FITS file extension containing a WCS header describing the coadd WCS to render.')
+    parser.add_argument('--wcs', help='File containing a WCS header describing the coadd WCS to render.')
+    parser.add_argument('--wcs-ext', type=int, help='FITS file extension containing a WCS header describing the coadd WCS to render.', default=0)
     parser.add_argument('--outlier-mask-brick', help='Comma-separated list of bricknames from which outlier masks should be read.')
     parser.add_argument('--out', help='Filename pattern ("BAND" will be replaced by band name) of output images.')
     parser.add_argument('--resid', help='Filename pattern ("BAND" will be replaced by band name) of residual images.')
@@ -30,28 +30,27 @@ def main():
         return -1
     cat = fits_table(opt.catalog)
     
-    if opt.ccds is None:
-        if opt.brick_coadd is None:
-            print('Need brick catalog!')
-            return -1
-        brickname = opt.brick_coadd
 
     survey = LegacySurveyData()
 
-    if opt.brick_wcs is None:
+    if opt.wcs is None:
         print('FIXME')
         return -1
     else:
-        wcs = Tan(opt.brick_wcs, opt.brick_wcs_ext)
+        wcs = Tan(opt.wcs, opt.wcs_ext)
         
     tcat = read_fits_catalog(cat)
 
+    ccds = None
     if opt.ccds:
         ccdfn = opt.ccds
+    elif opt.brickname is not None:
+        ccdfn = survey.find_file('ccds-table', brick=opt.brickname)
     else:
-        ccdfn = survey.find_file('ccds-table', brick=brickname)
-    print('Reading', ccdfn)
-    ccds = fits_table(ccdfn)
+        ccds = survey.ccds_touching_wcs(wcs)
+    if ccds is None:
+        print('Reading', ccdfn)
+        ccds = fits_table(ccdfn)
 
     H,W = wcs.shape
     targetrd = np.array([wcs.pixelxy2radec(x,y) for x,y in

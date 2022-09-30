@@ -1490,7 +1490,7 @@ class LegacySurveyData(object):
     def filter_ccds_files(self, fns):
         '''
         When reading the list of CCDs, we find all files named
-        survey-ccds-\*.fits.gz, then filter that list using this function.
+        survey-ccds-*.fits.gz, then filter that list using this function.
         '''
         return fns
 
@@ -1633,7 +1633,6 @@ class LegacySurveyData(object):
 
     def prime_cache_for_image(self, img):
         import shutil
-        from astrometry.util.file import trymakedirs
         fns = img.get_cacheable_filenames()
         cacheable = img.get_cacheable_filename_variables()
         for varname in cacheable:

@@ -44,6 +44,8 @@ CCD_CUTS = dict(
     too_many_bad_ccds = 0x8000,
     flagged_in_des = 0x10000,
     phrms_s7 = 0x20000,
+    # DR10 late depth-cut
+    depth_cut_2 = 0x40000,
 )
 
 
@@ -86,6 +88,7 @@ MASKBITS = dict(
     CLUSTER    = 0x2000, # Cluster catalog source
     SATUR_I    = 0x4000,
     ALLMASK_I  = 0x8000,
+    SUB_BLOB   = 0x10000,
 )
 
 # Bits in the "brightblob" bitmask

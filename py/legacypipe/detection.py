@@ -37,7 +37,7 @@ def _detmap(X):
         # Replace saturated pixels by the brightest (non-masked) pixel in the image
         if np.any(sat):
             I, = np.nonzero(sat)
-            debug('Filling', len(I), 'saturated detmap pixels with max')
+            #debug('Filling', len(I), 'saturated detmap pixels with max')
             detim[Yi[I],Xi[I]] = np.max(detim)
             # detection is based on S/N, so plug in values > 0 for iv
             detiv[Yi[I],Xi[I]] = 1./detsig1**2
@@ -346,7 +346,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     run_sed_matched_filters : calls this method
     '''
     from scipy.ndimage.measurements import label, find_objects
-    from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
+    from scipy.ndimage.morphology import binary_dilation, binary_fill_holes, grey_dilation
 
     H,W = detmaps[0].shape
     allzero = True
@@ -462,7 +462,14 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # For efficiency, segment at the minimum saddle level to compute
     # slices; the operations described above need only happen within
     # the slice.
-    saddlemap = (sedsn > lowest_saddle)
+
+    # 4-connected footprint
+    F = np.array([[False,True,False],[True,True,True],[False,True,False]])
+    dilatedmap = grey_dilation(sedsn, footprint=F)
+    if saturated_pix is not None:
+        dilatedmap[satur] = 1e9
+
+    saddlemap = (dilatedmap > lowest_saddle)
     saddlemap = binary_dilation(saddlemap, iterations=dilate)
     if saturated_pix is not None:
         saddlemap |= satur
@@ -497,14 +504,16 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     else:
         this_veto_map = veto_map.copy()
 
-    for x,y,r in zip(xomit, yomit, romit):
-        xlo = int(np.clip(np.floor(x - r), 0, W-1))
-        xhi = int(np.clip(np.ceil (x + r), 0, W-1))
-        ylo = int(np.clip(np.floor(y - r), 0, H-1))
-        yhi = int(np.clip(np.ceil (y + r), 0, H-1))
+    Xlo = np.clip(np.floor(xomit - romit), 0, W-1).astype(int)
+    Xhi = np.clip(np.ceil (xomit + romit), 0, W-1).astype(int)
+    Ylo = np.clip(np.floor(yomit - romit), 0, H-1).astype(int)
+    Yhi = np.clip(np.ceil (yomit + romit), 0, H-1).astype(int)
+    for x,y,r,xlo,xhi,ylo,yhi in zip(xomit, yomit, romit,
+                                     Xlo, Xhi, Ylo, Yhi):
         this_veto_map[ylo:yhi+1, xlo:xhi+1] |= (np.hypot(
             (x - np.arange(xlo, xhi+1))[np.newaxis, :],
             (y - np.arange(ylo, yhi+1))[:, np.newaxis]) < r)
+    del Xlo,Xhi,Ylo,Yhi
 
     if ps is not None:
         plt.clf()
@@ -542,17 +551,37 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         ablob = allblobs[y,x]
         index = int(ablob - 1)
         slc = allslices[index]
-        saddlemap = (sedsn[slc] > level)
-        saddlemap = binary_dilation(saddlemap, iterations=dilate)
-        if saturated_pix is not None:
-            saddlemap |= satur[slc]
-        saddlemap *= (allblobs[slc] == ablob)
-        saddlemap = binary_fill_holes(saddlemap)
-        blobs,_ = label(saddlemap)
         x0,y0 = allx0[index], ally0[index]
+        del index
+
+        # Only reject sources if there is another source within 50 pixels and not separated by
+        # a deep enough saddle.
+        R = 50
+        sy,sx = slc
+        sy0,sy1 = sy.start, sy.stop
+        sx0,sx1 = sx.start, sx.stop
+        xlo = max(x - R, sx0)
+        ylo = max(y - R, sy0)
+        xhi = min(x + R + 1, sx1)
+        yhi = min(y + R + 1, sy1)
+        subslc = slice(ylo,yhi), slice(xlo,xhi)
+        subx0 = xlo
+        suby0 = ylo
+        # swap in the +-50 pixel slice
+        slc = subslc
+        x0,y0 = subx0,suby0
+
+        saddlemap = (dilatedmap[slc] > level)
+        saddlemap *= (allblobs[slc] == ablob)
+        blobs,_ = label(saddlemap)
         thisblob = blobs[y-y0, x-x0]
         saddlemap *= (blobs == thisblob)
 
+        oslcs = find_objects(saddlemap)
+        assert(len(oslcs) == 1)
+        oslc = oslcs[0]
+        saddlemap[oslc] = binary_fill_holes(saddlemap[oslc])
+        del oslc,oslcs
         # previously found sources:
         ox = np.append(xomit, px[:i][keep[:i]]) - x0
         oy = np.append(yomit, py[:i][keep[:i]]) - y0
@@ -574,6 +603,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         if False and (not cut) and ps is not None:
             _peak_plot_3(sedsn, nsigma, x, y, x0, y0, slc, saddlemap,
                          xomit, yomit, px, py, keep, i, cut, ps)
+
+        del blobs
 
         if cut:
             # in same blob as previously found source.

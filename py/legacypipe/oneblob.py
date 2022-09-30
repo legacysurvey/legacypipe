@@ -60,6 +60,9 @@ def get_cpu_arch():
         # NERSC Cori machines
         (6, 63): 'has',
         (6, 87): 'knl',
+        # NERSC Perlmutter CPU partition (AMD EPYC 7763 64-Core Processor)
+        # (7713 on the head nodes)
+        (25, 1): 'prl',
     }
     cpu_arch = codenames.get((family, model), '')
     return cpu_arch
@@ -74,13 +77,16 @@ def one_blob(X):
      srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap,
      large_galaxies_force_pointsource, less_masking, frozen_galaxies) = X
 
-    debug('Fitting blob %i: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
-          (nblob+1, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
+    debug('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
+          (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
 
     if len(timargs) == 0:
         return None
     if len(Isrcs) == 0:
         return None
+
+    assert(blobmask.shape == (blobh,blobw))
+    assert(refmap.shape == (blobh,blobw))
 
     for g in frozen_galaxies:
         debug('Frozen galaxy:', g)
@@ -101,7 +107,6 @@ def one_blob(X):
     B = fits_table()
     B.sources = srcs
     B.Isrcs = Isrcs
-    B.iblob = iblob
     # Did sources start within the blob?
     _,x0,y0 = blobwcs.radec2pixelxy(
         np.array([src.getPosition().ra  for src in srcs]),
@@ -115,7 +120,7 @@ def one_blob(X):
     # This uses 'initial' pixel positions, because that's what determines
     # the fitting behaviors.
 
-    ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
+    ob = OneBlob(nblob, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
                  less_masking, frozen_galaxies)
@@ -152,6 +157,7 @@ def one_blob(X):
 
     t1 = time.process_time()
     B.cpu_blob[:] = t1 - t0
+    B.iblob = iblob
     return B
 
 class OneBlob(object):
@@ -237,6 +243,13 @@ class OneBlob(object):
 
     def run(self, B, reoptimize=False, iterative_detection=True,
             compute_metrics=True):
+        # The overall steps here are:
+        # - fit initial fluxes for small number of sources that may need it
+        # - optimize individual sources
+        # - compute segmentation map
+        # - model selection (including iterative detection)
+        # - metrics
+
         trun = tlast = Time()
         # Not quite so many plots...
         self.plots1 = self.plots
@@ -668,6 +681,7 @@ class OneBlob(object):
         models.save_images(self.tims)
 
         # Create initial models for each tim x each source
+        # (model sizes are determined at this point)
         models.create(self.tims, cat, subtract=True)
 
         N = len(cat)
@@ -770,14 +784,10 @@ class OneBlob(object):
                 newsrcs = Bnew.sources
                 B.delete_column('sources')
                 Bnew.delete_column('sources')
-                # also scalars don't work well
-                iblob = B.iblob
-                B.delete_column('iblob')
                 B = merge_tables([B, Bnew], columns='fillzero')
                 # columns not in Bnew:
                 # {'safe_x0', 'safe_y0', 'started_in_blob'}
                 B.sources = srcs + newsrcs
-                B.iblob = iblob
 
         models.restore_images(self.tims)
         del models
@@ -864,10 +874,11 @@ class OneBlob(object):
         avoid_y = Bold.safe_y0
         avoid_r = np.zeros(len(avoid_x), np.float32) + 2.
         nsigma = 6.
+        avoid_map = (self.refmap != 0)
 
         Tnew,_,_ = run_sed_matched_filters(
             SEDs, self.bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r),
-            self.blobwcs, nsigma=nsigma, saturated_pix=satmaps, veto_map=None,
+            self.blobwcs, nsigma=nsigma, saturated_pix=satmaps, veto_map=avoid_map,
             plots=False, ps=None, mp=mp)
 
         detlogger.setLevel(detloglvl)
@@ -877,8 +888,6 @@ class OneBlob(object):
             return None
 
         debug('Found', len(Tnew), 'new sources')
-        Tnew.cut(self.refmap[Tnew.iby, Tnew.ibx] == 0)
-        debug('Cut to', len(Tnew), 'on refmap')
         if len(Tnew) == 0:
             return None
 
@@ -1722,6 +1731,7 @@ class OneBlob(object):
         # Remember original tim images
         models.save_images(self.tims)
         # Create & subtract initial models for each tim x each source
+        # (modelMasks sizes are determined at this point)
         models.create(self.tims, cat, subtract=True)
 
         # For sources, in decreasing order of brightness
@@ -1736,7 +1746,6 @@ class OneBlob(object):
             # Add this source's initial model back in.
             models.add(srci, self.tims)
 
-            from tractor import Galaxy
             is_galaxy = isinstance(src, Galaxy)
             if is_galaxy:
                 # During SGA pre-burns, limit initial positions (fit
