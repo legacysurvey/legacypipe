@@ -3192,65 +3192,65 @@ def stage_writecat(
     return dict(T=T, version_header=version_header)
 
 def copy_wise_into_catalog(T, WISE, WISE_T, primhdr):
-        # Convert WISE fluxes from Vega to AB.
-        # http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec4_4h.html#conv2ab
-        vega_to_ab = dict(w1=2.699,
-                          w2=3.339,
-                          w3=5.174,
-                          w4=6.620)
+    # Convert WISE fluxes from Vega to AB.
+    # http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec4_4h.html#conv2ab
+    vega_to_ab = dict(w1=2.699,
+                      w2=3.339,
+                      w3=5.174,
+                      w4=6.620)
 
-        for band in [1,2,3,4]:
-            primhdr.add_record(dict(
-                name='WISEAB%i' % band, value=vega_to_ab['w%i' % band],
-                comment='WISE Vega to AB conv for band %i' % band))
+    for band in [1,2,3,4]:
+        primhdr.add_record(dict(
+            name='WISEAB%i' % band, value=vega_to_ab['w%i' % band],
+            comment='WISE Vega to AB conv for band %i' % band))
 
-        # Copy columns:
-        for c in ['wise_coadd_id', 'wise_x', 'wise_y', 'wise_mask']:
-            T.set(c, WISE.get(c))
+    # Copy columns:
+    for c in ['wise_coadd_id', 'wise_x', 'wise_y', 'wise_mask']:
+        T.set(c, WISE.get(c))
 
-        for band in [1,2,3,4]:
-            # Apply the Vega-to-AB shift *while* copying columns from
-            # WISE to T.
-            dm = vega_to_ab['w%i' % band]
-            fluxfactor = 10.** (dm / -2.5)
-            # fluxes
-            c = t = 'flux_w%i' % band
+    for band in [1,2,3,4]:
+        # Apply the Vega-to-AB shift *while* copying columns from
+        # WISE to T.
+        dm = vega_to_ab['w%i' % band]
+        fluxfactor = 10.** (dm / -2.5)
+        # fluxes
+        c = t = 'flux_w%i' % band
+        T.set(t, WISE.get(c) * fluxfactor)
+        if WISE_T is not None and band <= 2:
+            t = 'lc_flux_w%i' % band
+            T.set(t, WISE_T.get(c) * fluxfactor)
+        # ivars
+        c = t = 'flux_ivar_w%i' % band
+        T.set(t, WISE.get(c) / fluxfactor**2)
+        if WISE_T is not None and band <= 2:
+            t = 'lc_flux_ivar_w%i' % band
+            T.set(t, WISE_T.get(c) / fluxfactor**2)
+        # This is in 1/nanomaggies**2 units also
+        c = t = 'psfdepth_w%i' % band
+        T.set(t, WISE.get(c) / fluxfactor**2)
+
+        if 'apflux_w%i'%band in WISE.get_columns():
+            t = c = 'apflux_w%i' % band
             T.set(t, WISE.get(c) * fluxfactor)
-            if WISE_T is not None and band <= 2:
-                t = 'lc_flux_w%i' % band
-                T.set(t, WISE_T.get(c) * fluxfactor)
-            # ivars
-            c = t = 'flux_ivar_w%i' % band
-            T.set(t, WISE.get(c) / fluxfactor**2)
-            if WISE_T is not None and band <= 2:
-                t = 'lc_flux_ivar_w%i' % band
-                T.set(t, WISE_T.get(c) / fluxfactor**2)
-            # This is in 1/nanomaggies**2 units also
-            c = t = 'psfdepth_w%i' % band
+            t = c = 'apflux_resid_w%i' % band
+            T.set(t, WISE.get(c) * fluxfactor)
+            t = c = 'apflux_ivar_w%i' % band
             T.set(t, WISE.get(c) / fluxfactor**2)
 
-            if 'apflux_w%i'%band in WISE.get_columns():
-                t = c = 'apflux_w%i' % band
-                T.set(t, WISE.get(c) * fluxfactor)
-                t = c = 'apflux_resid_w%i' % band
-                T.set(t, WISE.get(c) * fluxfactor)
-                t = c = 'apflux_ivar_w%i' % band
-                T.set(t, WISE.get(c) / fluxfactor**2)
+    # Copy/rename more columns
+    for cin,cout in [('nobs_w%i',        'nobs_w%i'    ),
+                     ('profracflux_w%i', 'fracflux_w%i'),
+                     ('prochi2_w%i',     'rchisq_w%i'  )]:
+        for band in [1,2,3,4]:
+            T.set(cout % band, WISE.get(cin % band))
 
-        # Copy/rename more columns
-        for cin,cout in [('nobs_w%i',        'nobs_w%i'    ),
-                         ('profracflux_w%i', 'fracflux_w%i'),
-                         ('prochi2_w%i',     'rchisq_w%i'  )]:
-            for band in [1,2,3,4]:
-                T.set(cout % band, WISE.get(cin % band))
-
-        if WISE_T is not None:
-            for cin,cout in [('nobs_w%i',        'lc_nobs_w%i'),
-                             ('profracflux_w%i', 'lc_fracflux_w%i'),
-                             ('prochi2_w%i',     'lc_rchisq_w%i'),
-                             ('mjd_w%i',         'lc_mjd_w%i'),]:
-                for band in [1,2]:
-                    T.set(cout % band, WISE_T.get(cin % band))
+    if WISE_T is not None:
+        for cin,cout in [('nobs_w%i',        'lc_nobs_w%i'),
+                         ('profracflux_w%i', 'lc_fracflux_w%i'),
+                         ('prochi2_w%i',     'lc_rchisq_w%i'),
+                         ('mjd_w%i',         'lc_mjd_w%i'),]:
+            for band in [1,2]:
+                T.set(cout % band, WISE_T.get(cin % band))
 
 def stage_checksum(
         survey=None,
