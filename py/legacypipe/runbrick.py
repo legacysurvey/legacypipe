@@ -3208,6 +3208,12 @@ def copy_wise_into_catalog(T, WISE, WISE_T, primhdr):
     for c in ['wise_coadd_id', 'wise_x', 'wise_y', 'wise_mask']:
         T.set(c, WISE.get(c))
 
+    def get_or_zero(table, col, dt=np.float32):
+        if col in table.get_columns():
+            return table.get(col)
+        else:
+            return np.zeros(len(table), dtype=dt)
+
     for band in [1,2,3,4]:
         # Apply the Vega-to-AB shift *while* copying columns from
         # WISE to T.
@@ -3215,42 +3221,42 @@ def copy_wise_into_catalog(T, WISE, WISE_T, primhdr):
         fluxfactor = 10.** (dm / -2.5)
         # fluxes
         c = t = 'flux_w%i' % band
-        T.set(t, WISE.get(c) * fluxfactor)
+        T.set(t, get_or_zero(WISE, c) * fluxfactor)
         if WISE_T is not None and band <= 2:
             t = 'lc_flux_w%i' % band
-            T.set(t, WISE_T.get(c) * fluxfactor)
+            T.set(t, get_or_zero(WISE_T, c) * fluxfactor)
         # ivars
         c = t = 'flux_ivar_w%i' % band
-        T.set(t, WISE.get(c) / fluxfactor**2)
+        T.set(t, get_or_zero(WISE, c) / fluxfactor**2)
         if WISE_T is not None and band <= 2:
             t = 'lc_flux_ivar_w%i' % band
-            T.set(t, WISE_T.get(c) / fluxfactor**2)
+            T.set(t, get_or_zero(WISE_T, c) / fluxfactor**2)
         # This is in 1/nanomaggies**2 units also
         c = t = 'psfdepth_w%i' % band
-        T.set(t, WISE.get(c) / fluxfactor**2)
+        T.set(t, get_or_zero(WISE, c) / fluxfactor**2)
 
         if 'apflux_w%i'%band in WISE.get_columns():
             t = c = 'apflux_w%i' % band
-            T.set(t, WISE.get(c) * fluxfactor)
+            T.set(t, get_or_zero(WISE, c) * fluxfactor)
             t = c = 'apflux_resid_w%i' % band
-            T.set(t, WISE.get(c) * fluxfactor)
+            T.set(t, get_or_zero(WISE, c) * fluxfactor)
             t = c = 'apflux_ivar_w%i' % band
-            T.set(t, WISE.get(c) / fluxfactor**2)
+            T.set(t, get_or_zero(WISE, c) / fluxfactor**2)
 
     # Copy/rename more columns
-    for cin,cout in [('nobs_w%i',        'nobs_w%i'    ),
-                     ('profracflux_w%i', 'fracflux_w%i'),
-                     ('prochi2_w%i',     'rchisq_w%i'  )]:
+    for cin,cout,dt in [('nobs_w%i',        'nobs_w%i'    , np.int16),
+                        ('profracflux_w%i', 'fracflux_w%i', np.float32),
+                        ('prochi2_w%i',     'rchisq_w%i'  , np.float32)]:
         for band in [1,2,3,4]:
-            T.set(cout % band, WISE.get(cin % band))
+            T.set(cout % band, get_or_zero(WISE, cin % band, dt=dt))
 
     if WISE_T is not None:
-        for cin,cout in [('nobs_w%i',        'lc_nobs_w%i'),
-                         ('profracflux_w%i', 'lc_fracflux_w%i'),
-                         ('prochi2_w%i',     'lc_rchisq_w%i'),
-                         ('mjd_w%i',         'lc_mjd_w%i'),]:
+        for cin,cout,dt in [('nobs_w%i',        'lc_nobs_w%i'    , np.int16),
+                            ('profracflux_w%i', 'lc_fracflux_w%i', np.float32),
+                            ('prochi2_w%i',     'lc_rchisq_w%i'  , np.float32),
+                            ('mjd_w%i',         'lc_mjd_w%i'     , np.float64),]:
             for band in [1,2]:
-                T.set(cout % band, WISE_T.get(cin % band))
+                T.set(cout % band, get_or_zero(WISE_T, cin % band, dt=dt))
 
 def stage_checksum(
         survey=None,
