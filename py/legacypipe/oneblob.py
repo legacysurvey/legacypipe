@@ -723,9 +723,9 @@ class OneBlob(object):
 
             # Definitely keep ref stars (Gaia & Tycho)
             if keepsrc is None and getattr(src, 'reference_star', False):
-                info('Dropped reference star:', src)
+                debug('Dropped reference star:', src)
                 src.brightness = src.initial_brightness
-                info('  Reset brightness to', src.brightness)
+                debug('  Reset brightness to', src.brightness)
                 src.force_keep_source = True
                 keepsrc = src
 

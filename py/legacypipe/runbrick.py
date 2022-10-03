@@ -1857,15 +1857,19 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                     sub_by1 = by0 + suby1
                     sub_slc = slice(sub_by0, sub_by1), slice(sub_bx0, sub_bx1)
 
-                    # Here we cut out subimages for the blob...
-                    subtimargs = get_subtim_args(tims, targetwcs, sub_bx0,sub_bx1,
-                                                 sub_by0,sub_by1, single_thread)
                     H,W = blobmap.shape
                     clipx = np.clip(T.ibx[Isrcs], 0, W-1)
                     clipy = np.clip(T.iby[Isrcs], 0, H-1)
                     Isubsrcs = Isrcs[(clipx >= sub_bx0) * (clipx < sub_bx1) *
                                      (clipy >= sub_by0) * (clipy < sub_by1)]
-                    info(len(Isubsrcs), 'of', len(Isrcs), 'sources are within this sub-blob')
+                    info(len(Isubsrcs), 'of', len(Isrcs), 'sources are within sub-blob',
+                         (iblob,sub_blob))
+                    if len(Isubsrcs) == 0:
+                        continue
+                    # Here we cut out subimages for the blob...
+                    subtimargs = get_subtim_args(tims, targetwcs, sub_bx0,sub_bx1,
+                                                 sub_by0,sub_by1, single_thread)
+
                     yield (brickname, (iblob,sub_blob),
                            (uniqx[j], uniqx[j+1], uniqy[i], uniqy[i+1]),
                            ('%i-%i' % (nblob+1, 1+sub_blob), iblob,
@@ -1903,11 +1907,12 @@ def _bounce_one_blob(X):
             if blob_unique is not None:
                 x0,x1,y0,y1 = blob_unique
                 debug('Got blob_unique:', blob_unique)
-                debug('Range of result bx0:', result.bx0.min(), result.bx0.max())
-                debug('Range of result by0:', result.by0.min(), result.by0.max())
                 ntot = len(result)
-                result.cut((result.bx0 >= x0) * (result.bx0 < x1) *
-                           (result.by0 >= y0) * (result.by0 < y1))
+                if ntot > 0:
+                    debug('Range of result bx0:', result.bx0.min(), result.bx0.max())
+                    debug('Range of result by0:', result.by0.min(), result.by0.max())
+                    result.cut((result.bx0 >= x0) * (result.bx0 < x1) *
+                               (result.by0 >= y0) * (result.by0 < y1))
                 debug('Blob_unique cut kept', len(result), 'of', ntot, 'sources')
         ### This defines the format of the results in the checkpoints files
         return dict(brickname=brickname, iblob=iblob, result=result)
