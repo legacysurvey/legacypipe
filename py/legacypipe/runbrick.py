@@ -2848,8 +2848,10 @@ def stage_wise_forced(
         wise_models = []
         for i,p in enumerate(phots[:len(args)]):
             if p is None:
-                (wcat,tiles,band) = args[i][:3]
-                info('"None" result from WISE forced phot:', tiles, band)
+                key,theargs = args[i]
+                (wcat,tiles) = theargs[:2]
+                epoch,band = key
+                info('"None" result from WISE forced phot:', tiles, band, 'epoch', epoch)
                 continue
             if unwise_coadds:
                 wise_models.extend(p.models)
