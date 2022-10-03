@@ -1275,7 +1275,7 @@ def stage_fitblobs(T=None,
 
     # check for any blobs that were processed as sub-blobs; mark them in the sub_blob_mask.
     sub_blob_mask = None
-    if len(ran_sub_blobs):
+    if ran_sub_blobs is not None and len(ran_sub_blobs):
         # Create a 1-d array that will map from blob number (ie in "blobmap")
         # to the boolean mask value
         maxblob = blobmap.max()
