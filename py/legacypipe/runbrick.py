@@ -1573,14 +1573,19 @@ def _get_bailout_mask(blobmap, skipblobs, targetwcs, W, H, brick, blobslices):
     bmap = np.ones(maxblob+2, bool)
     # except no-blob
     bmap[0] = False
+
+    # Only normal blobs (not sub-blobs) are allowed
+    keep_skipblobs = []
     # and blobs from the checkpoint file
     for i in skipblobs:
         try:
             i = int(i)
         except:
             # eg, sub-blobs with blobs like (1,1)
-            pass
+            continue
         bmap[i+1] = False
+        keep_skipblobs.append(i)
+    skipblobs = keep_skipblobs
     # and blobs that are completely outside the primary region of this brick.
     U = find_unique_pixels(targetwcs, W, H, None,
                            brick.ra1, brick.ra2, brick.dec1, brick.dec2)
