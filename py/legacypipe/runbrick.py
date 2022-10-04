@@ -1862,8 +1862,9 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                     clipy = np.clip(T.iby[Isrcs], 0, H-1)
                     Isubsrcs = Isrcs[(clipx >= sub_bx0) * (clipx < sub_bx1) *
                                      (clipy >= sub_by0) * (clipy < sub_by1)]
+                    sub_blob_name = '%i-%i' % (nblob+1, 1+sub_blob)
                     info(len(Isubsrcs), 'of', len(Isrcs), 'sources are within sub-blob',
-                         (iblob,sub_blob))
+                         sub_blob_name)
                     if len(Isubsrcs) == 0:
                         continue
                     # Here we cut out subimages for the blob...
@@ -1872,7 +1873,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
 
                     yield (brickname, (iblob,sub_blob),
                            (uniqx[j], uniqx[j+1], uniqy[i], uniqy[i+1]),
-                           ('%i-%i' % (nblob+1, 1+sub_blob), iblob,
+                           (sub_blob_name, iblob,
                             Isubsrcs, targetwcs, sub_bx0, sub_by0,
                             sub_bx1 - sub_bx0, sub_by1 - sub_by0,
                             # "blobmask" has already been cut to this blob, so don't use sub_slc
