@@ -1199,6 +1199,18 @@ def stage_fitblobs(T=None,
                     _convert_ellipses(src)
                 # Sets TYPE, etc for T_refbail table.
                 _get_tractor_fits_values(T_refbail, cat_refbail, '%s')
+                for c,t in [('iterative', bool),
+                            ('force_keep_source', bool),
+                            ('forced_pointsource', bool),
+                            ('fit_background', bool),
+                            ('hit_r_limit', bool),
+                            ('hit_ser_limit', bool),]:
+                    T_refbail.set(c, np.zeros(len(T_refbail), dtype=t))
+                T_refbail.dchisq     = np.zeros((len(T_refbail), 5),          np.float32)
+                T_refbail.rchisq     = np.zeros((len(T_refbail), len(bands)), np.float32)
+                T_refbail.fracflux   = np.zeros((len(T_refbail), len(bands)), np.float32)
+                T_refbail.fracmasked = np.zeros((len(T_refbail), len(bands)), np.float32)
+                T_refbail.fracin     = np.ones ((len(T_refbail), len(bands)), np.float32)
             if T_refbail is not None:
                 info('Found', len(T_refbail), 'reference sources in bail-out blobs')
         skipblobs = new_skipblobs
@@ -1292,83 +1304,92 @@ def stage_fitblobs(T=None,
     # Drop now-empty blobs.
     R = [r for r in R if r is not None and len(r)]
     if len(R) == 0:
-        raise NothingToDoError('No sources passed significance tests.')
+        if bailout:
+            info('No sources, but continuing because of --bail-out')
+        else:
+            raise NothingToDoError('No sources passed significance tests.')
     # Merge results R into one big table
     BB = merge_tables(R)
     del R
-    # Pull out the source indices...
-    II = BB.Isrcs
-    newcat = BB.sources
-    # ... and make the table T parallel with BB.
-    # For iterative sources:
-    n_iter = np.sum(II < 0)
-    if n_iter:
-        n_old = len(T)
-        # first have to pad T with some new entries...
-        Tnew = fits_table()
-        Tnew.iterative = np.ones(n_iter, bool)
-        Tnew.ref_cat = np.array(['  '] * len(Tnew))
-        T = merge_tables([T, Tnew], columns='fillzero')
-        # ... and then point II at them.
-        II[II < 0] = n_old + np.arange(n_iter)
-    else:
-        T.iterative = np.zeros(len(T), bool)
-    assert(np.all(II >= 0))
-    assert(np.all(II < len(T)))
-    assert(len(np.unique(II)) == len(II))
-    T.cut(II)
-    assert(len(T) == len(BB))
-    del BB.Isrcs
-
-    # Drop sources that exited the blob as a result of fitting.
-    left_blob = np.logical_and(BB.started_in_blob,
-                               np.logical_not(BB.finished_in_blob))
-    I, = np.nonzero(np.logical_not(left_blob))
-    if len(I) < len(BB):
-        debug('Dropping', len(BB)-len(I), 'sources that exited their blobs during fitting')
-        BB.cut(I)
-        T.cut(I)
-        newcat = [newcat[i] for i in I]
+    if len(BB):
+        # Pull out the source indices...
+        II = BB.Isrcs
+        newcat = BB.sources
+        # ... and make the table T parallel with BB.
+        # For iterative sources:
+        n_iter = np.sum(II < 0)
+        if n_iter:
+            n_old = len(T)
+            # first have to pad T with some new entries...
+            Tnew = fits_table()
+            Tnew.iterative = np.ones(n_iter, bool)
+            Tnew.ref_cat = np.array(['  '] * len(Tnew))
+            T = merge_tables([T, Tnew], columns='fillzero')
+            # ... and then point II at them.
+            II[II < 0] = n_old + np.arange(n_iter)
+        else:
+            T.iterative = np.zeros(len(T), bool)
+        assert(np.all(II >= 0))
+        assert(np.all(II < len(T)))
+        assert(len(np.unique(II)) == len(II))
+        T.cut(II)
+        del BB.Isrcs, II
         assert(len(T) == len(BB))
+
+        # Drop sources that exited the blob as a result of fitting.
+        left_blob = np.logical_and(BB.started_in_blob,
+                                   np.logical_not(BB.finished_in_blob))
+        I, = np.nonzero(np.logical_not(left_blob))
+        if len(I) < len(BB):
+            debug('Dropping', len(BB)-len(I), 'sources that exited their blobs during fitting')
+            BB.cut(I)
+            T.cut(I)
+            newcat = [newcat[i] for i in I]
+
+    else:
+        T.cut([])
+        newcat = []
+    assert(len(T) == len(BB))
 
     assert(len(T) == len(newcat))
     info('Old catalog:', len(cat))
     info('New catalog:', len(newcat))
-    assert(len(newcat) > 0)
-    ns,nb = BB.fracflux.shape
-    assert(ns == len(newcat))
-    assert(nb == len(bands))
-    ns,nb = BB.fracmasked.shape
-    assert(ns == len(newcat))
-    assert(nb == len(bands))
-    ns,nb = BB.fracin.shape
-    assert(ns == len(newcat))
-    assert(nb == len(bands))
-    ns,nb = BB.rchisq.shape
-    assert(ns == len(newcat))
-    assert(nb == len(bands))
-    ns,nb = BB.dchisq.shape
-    assert(ns == len(newcat))
-    assert(nb == 5) # psf, rex, dev, exp, ser
+    if len(newcat) > 0:
+        ns,nb = BB.fracflux.shape
+        assert(ns == len(newcat))
+        assert(nb == len(bands))
+        ns,nb = BB.fracmasked.shape
+        assert(ns == len(newcat))
+        assert(nb == len(bands))
+        ns,nb = BB.fracin.shape
+        assert(ns == len(newcat))
+        assert(nb == len(bands))
+        ns,nb = BB.rchisq.shape
+        assert(ns == len(newcat))
+        assert(nb == len(bands))
+        ns,nb = BB.dchisq.shape
+        assert(ns == len(newcat))
+        assert(nb == 5) # psf, rex, dev, exp, ser
 
     # We want to order sources (and assign objids) so that sources outside the brick
     # are at the end, and T_dup sources are included.
 
     # Grab source positions
-    T.ra  = np.array([src.getPosition().ra  for src in newcat])
-    T.dec = np.array([src.getPosition().dec for src in newcat])
+    T.ra  = np.array([src.getPosition().ra  for src in newcat], dtype=np.float64)
+    T.dec = np.array([src.getPosition().dec for src in newcat], dtype=np.float64)
 
-    # Copy blob results to table T
-    for k in ['fracflux', 'fracin', 'fracmasked', 'rchisq',
-              'cpu_arch', 'cpu_source', 'cpu_blob',
-              'blob_width', 'blob_height', 'blob_npix',
-              'blob_nimages', 'blob_totalpix',
-              'blob_symm_width', 'blob_symm_height', 'blob_symm_npix',
-              'blob_symm_nimages', 'bx0', 'by0',
-              'hit_limit', 'hit_ser_limit', 'hit_r_limit',
-              'dchisq',
-              'force_keep_source', 'fit_background', 'forced_pointsource']:
-        T.set(k, BB.get(k))
+    if len(T):
+        # Copy blob results to table T
+        for k in ['fracflux', 'fracin', 'fracmasked', 'rchisq',
+                  'cpu_arch', 'cpu_source', 'cpu_blob',
+                  'blob_width', 'blob_height', 'blob_npix',
+                  'blob_nimages', 'blob_totalpix',
+                  'blob_symm_width', 'blob_symm_height', 'blob_symm_npix',
+                  'blob_symm_nimages', 'bx0', 'by0',
+                  'hit_limit', 'hit_ser_limit', 'hit_r_limit',
+                  'dchisq',
+                  'force_keep_source', 'fit_background', 'forced_pointsource']:
+            T.set(k, BB.get(k))
 
     T.regular = np.ones(len(T), bool)
     T.dup = np.zeros(len(T), bool)
@@ -1386,7 +1407,7 @@ def stage_fitblobs(T=None,
             dup_cat.append(src)
     if T_refbail:
         Tall.append(T_refbail)
-        dup_cat.extend([None] * len(T_refbail))
+        dup_cat.extend(cat_refbail)
     if len(Tall) > 1:
         T = merge_tables(Tall, columns='fillzero')
     T_dup = None
@@ -1398,6 +1419,10 @@ def stage_fitblobs(T=None,
     T.ibx = np.round(T.bx).astype(np.int32)
     T.iby = np.round(T.by).astype(np.int32)
     T.in_bounds = ((T.ibx >= 0) * (T.iby >= 0) * (T.ibx < W) * (T.iby < H))
+    # For --bail-out:
+    if not 'bx0' in T.get_columns():
+        T.bx0 = T.bx.copy()
+        T.by0 = T.by.copy()
     # DUP sources are Gaia/Tycho-2 stars, so fill in bx0=bx.
     T.bx0[T.dup] = T.bx[T.dup]
     T.by0[T.dup] = T.by[T.dup]
@@ -1417,8 +1442,11 @@ def stage_fitblobs(T=None,
     del newcat
     del dup_cat
     assert(len(cat) == len(T))
-    invvars = np.hstack(BB.srcinvvars)
-    assert(cat.numberOfParams() == len(invvars))
+    if len(BB) == 0:
+        invvars = None
+    else:
+        invvars = np.hstack(BB.srcinvvars)
+        assert(cat.numberOfParams() == len(invvars))
     # NOTE that "BB" can now be shorter than cat and T.
     assert(np.sum(T.regular) == len(BB))
     # We assume below (when unpacking BB for all-models) that the
@@ -1474,7 +1502,7 @@ def stage_fitblobs(T=None,
     T.brickid = np.zeros(len(T), np.int32) + brickid
     T.brickname = np.array([brickname] * len(T))
 
-    if write_metrics or get_all_models:
+    if (write_metrics or get_all_models) and len(BB):
         from legacypipe.format_catalog import format_all_models
         TT,hdr = format_all_models(T, cat, BB, bands, survey.allbands,
                                    force_keep=T.force_keep_source)
@@ -2161,9 +2189,13 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     NEA      = [r[2] for r in bothmods]
     NEA = np.array(NEA)
     # NEA shape (tims, srcs, 3:[nea, blobnea, weight])
-    neas        = NEA[:,:,0]
-    blobneas    = NEA[:,:,1]
-    nea_wts     = NEA[:,:,2]
+    if len(NEA.shape) == 2:
+        # no regular sources
+        neas = blobneas = nea_wts = []
+    else:
+        neas        = NEA[:,:,0]
+        blobneas    = NEA[:,:,1]
+        nea_wts     = NEA[:,:,2]
     del bothmods, NEA
     tnow = Time()
     debug('Model images:', tnow-tlast)
@@ -3154,7 +3186,7 @@ def stage_writecat(
     T.fitbits[moved > run_radius ] |= FITBITS['RUNNER']
     # do we have Gaia?
     if 'pointsource' in T.get_columns():
-        T.fitbits[T.pointsource]       |= FITBITS['GAIA_POINTSOURCE']
+        T.fitbits[T.pointsource]   |= FITBITS['GAIA_POINTSOURCE']
     T.fitbits[T.iterative]         |= FITBITS['ITERATIVE']
 
     for col,bit in [('freezeparams',  'FROZEN'),
