@@ -1413,7 +1413,7 @@ class LegacySurveyImage(object):
         # fails.  Check whether actually fpacked.
         fcopy = False
         hdr = self.read_image_header()
-        if not ((hdr['XTENSION'] == 'BINTABLE') and hdr.get('ZIMAGE', False)):
+        if not ((hdr.get('XTENSION') == 'BINTABLE') and hdr.get('ZIMAGE', False)):
             debug('Image %s, HDU %i is not fpacked; just imcopying.' %
                   (imgfn,  imghdu))
             fcopy = True
@@ -1424,7 +1424,8 @@ class LegacySurveyImage(object):
         todelete.append(tmpmaskfn)
 
         if fcopy:
-            cmd = 'imcopy %s"+%i" %s' % (imgfn, imghdu, tmpimgfn)
+            #cmd = 'imcopy %s"+%i" %s' % (imgfn, imghdu, tmpimgfn)
+            cmd = 'imcopy %s"[%i]" %s' % (imgfn, imghdu, tmpimgfn)
         else:
             cmd = 'funpack -E %i -O %s %s' % (imghdu, tmpimgfn, imgfn)
         debug(cmd)
@@ -1432,7 +1433,8 @@ class LegacySurveyImage(object):
             raise RuntimeError('Command failed: ' + cmd)
 
         if fcopy:
-            cmd = 'imcopy %s"+%i" %s' % (maskfn, maskhdu, tmpmaskfn)
+            #cmd = 'imcopy %s"+%i" %s' % (maskfn, maskhdu, tmpmaskfn)
+            cmd = 'imcopy %s"[%i]" %s' % (maskfn, maskhdu, tmpmaskfn)
         else:
             cmd = 'funpack -E %i -O %s %s' % (maskhdu, tmpmaskfn, maskfn)
         debug(cmd)
