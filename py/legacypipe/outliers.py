@@ -212,7 +212,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             #     plt.title('SATUR, BLEED veto (%s band)' % band)
             #     ps.savefig()
 
-            R = mp.imap_unordered(
+            R = mp.imap(
                 compare_one, [(i_btim, tim, sig, targetwcs, coimg, cow, veto, make_badcoadds, plots,ps)
                               for i_btim,(tim,sig) in enumerate(zip(btims,addsigs))])
             del coimg, cow, veto
