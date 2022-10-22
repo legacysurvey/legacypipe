@@ -212,7 +212,10 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             #     plt.title('SATUR, BLEED veto (%s band)' % band)
             #     ps.savefig()
 
-            R = mp.imap(
+            # HACK -- mp.imap was added to astrometry.net somewhat recently, hasn't make it into
+            # our docker container yet... hack... will only work with --threads
+            #R = mp.imap(
+            R = mp.pool.imap(
                 compare_one, [(i_btim, tim, sig, targetwcs, coimg, cow, veto, make_badcoadds, plots,ps)
                               for i_btim,(tim,sig) in enumerate(zip(btims,addsigs))])
             del coimg, cow, veto
