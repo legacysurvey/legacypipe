@@ -535,7 +535,7 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
                    mp=None, nsigma=None, plots=None, ps=None, record_event=None,
                    survey=None, brickname=None, version_header=None,
                    refstars=None, outlier_mask_file=None,
-                   outliers=True, cache_outliers=False,
+                   outliers=True, cache_outliers=False, remake_outlier_jpegs=False,
                    **kwargs):
     '''This pipeline stage tries to detect artifacts in the individual
     exposures, by blurring all images in the same band to the same PSF size,
@@ -555,13 +555,12 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
                                    value=outliers,
                                    help='Are we applying outlier rejection?'))
 
-    info('outlier_mask_file:', outlier_mask_file)
-
     # Check for existing MEF containing masks for all the chips we need.
     if (outliers and
-        not (cache_outliers and
-             read_outlier_mask_file(survey, tims, brickname, outlier_mask_file=outlier_mask_file,
-                                    output='both'))):
+        (remake_outlier_jpegs or
+         (not (cache_outliers and
+               read_outlier_mask_file(survey, tims, brickname, outlier_mask_file=outlier_mask_file,
+                                      output='both'))))):
         # Make before-n-after plots (before)
         t0 = Time()
         C = make_coadds(tims, bands, targetwcs, mp=mp, sbscale=False,
@@ -576,12 +575,20 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
         patch_from_coadd(C.coimgs, targetwcs, bands, tims, mp=mp)
         del C
 
-        t0 = Time()
-        make_badcoadds = True
-        badcoaddspos, badcoaddsneg = mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
-                                                         mp=mp, plots=plots, ps=ps, make_badcoadds=make_badcoadds,
-                                                         refstars=refstars)
-        info('Masking outliers:', Time()-t0)
+        run_outliers = not(remake_outlier_jpegs)
+
+        if remake_outlier_jpegs:
+            from legacypipe.outliers import recreate_outlier_jpegs
+            ok = recreate_outlier_jpegs(survey, tims, bands, targetwcs, brickname)
+            if not ok:
+                run_outliers = True
+        if run_outliers:
+            t0 = Time()
+            make_badcoadds = True
+            badcoaddspos, badcoaddsneg = mask_outlier_pixels(
+                survey, tims, bands, targetwcs, brickname, version_header,
+                mp=mp, plots=plots, ps=ps, make_badcoadds=make_badcoadds, refstars=refstars)
+            info('Masking outliers:', Time()-t0)
 
         # Make before-n-after plots (after)
         t0 = Time()
@@ -592,16 +599,17 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
             imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
             del rgb
         del C
-        with survey.write_output('outliers-masked-pos', brick=brickname) as out:
-            rgb,kwa = survey.get_rgb(badcoaddspos, bands)
-            imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
-            del rgb
-        del badcoaddspos
-        with survey.write_output('outliers-masked-neg', brick=brickname) as out:
-            rgb,kwa = survey.get_rgb(badcoaddsneg, bands)
-            imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
-            del rgb
-        del badcoaddsneg
+        if run_outliers:
+            with survey.write_output('outliers-masked-pos', brick=brickname) as out:
+                rgb,kwa = survey.get_rgb(badcoaddspos, bands)
+                imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
+                del rgb
+            del badcoaddspos
+            with survey.write_output('outliers-masked-neg', brick=brickname) as out:
+                rgb,kwa = survey.get_rgb(badcoaddsneg, bands)
+                imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
+                del rgb
+            del badcoaddsneg
         info('"After" coadds:', Time()-t0)
 
     return dict(tims=tims, version_header=version_header)
@@ -3334,6 +3342,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               wise=True,
               outliers=True,
               cache_outliers=False,
+              remake_outlier_jpegs=False,
               lanczos=True,
               blob_image=False,
               blob_mask=False,
@@ -3589,6 +3598,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         large_galaxies = True
         large_galaxies_force_pointsource = False
 
+    if remake_outlier_jpegs:
+        cache_outliers = True
+
     kwargs.update(ps=ps, nsigma=nsigma, saddle_fraction=saddle_fraction,
                   saddle_min=saddle_min,
                   blob_dilate=blob_dilate,
@@ -3616,6 +3628,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   iterative=iterative,
                   outliers=outliers,
                   cache_outliers=cache_outliers,
+                  remake_outlier_jpegs=remake_outlier_jpegs,
                   use_ceres=ceres,
                   wise_ceres=wise_ceres,
                   galex_ceres=galex_ceres,
@@ -4052,7 +4065,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         action='store_false', help='Do not compute or apply outlier masks')
     parser.add_argument('--cache-outliers', default=False,
                         action='store_true', help='Use outlier-mask file if it exists?')
-
+    parser.add_argument('--remake-outlier-jpegs', default=False,
+                        action='store_true', help='Re-create outlier jpeg files (implies --cache-outliers)')
     parser.add_argument('--bail-out', default=False, action='store_true',
                         help='Bail out of "fitblobs" processing, writing all blobs from the checkpoint and skipping any remaining ones.')
 
