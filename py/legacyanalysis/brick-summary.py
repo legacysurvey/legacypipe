@@ -664,7 +664,7 @@ def main():
     inhist = []
     znhist = []
 
-    nnhist = 10
+    nnhist = 11
 
     ibricks = []
     nsrcs = []
@@ -832,7 +832,7 @@ def main():
         filepart = filepart.replace('.fits.fz', '')
         print('File:', filepart)
         band = filepart[-1]
-        assert(band in 'grz')
+        assert(band in 'griz')
 
         nlist,nhist = dict(g=(gn,gnhist), r=(rn,rnhist),
                            i=(iin,inhist), z=(zn,znhist))[band]
