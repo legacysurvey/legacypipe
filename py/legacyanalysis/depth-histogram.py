@@ -25,7 +25,7 @@ def summarize_depths(basedir, outfn, summaryfn, allfn):
     fn = fns.pop(0)
     print('Reading', fn)
 
-    bands = 'grz'
+    bands = 'griz'
     # We'll keep all files for merging...
     TT = []
 
@@ -99,7 +99,7 @@ def summary_plots(summaryfn, ps, drname):
     dd = dlo[2] - dlo[1]
     dlo[0] = dlo[1] - dd
 
-    for band in 'grz':
+    for band in 'griz':
 
         I = np.flatnonzero((dlo >= 21.5) * (dlo < 24.8))
         #I = np.flatnonzero((dlo >= 21.5))
@@ -126,7 +126,7 @@ def summary_plots(summaryfn, ps, drname):
         #plt.xlim(21.5, 25.)
         ps.savefig()
 
-    for band in 'grz':
+    for band in 'griz':
         c = list(reversed(np.cumsum(list(reversed(T.get('counts_gal_%s' % band))))))
         #N = np.sum(T.get('counts_gal_%s' % band))
         # Skip bin with no observations?
@@ -135,7 +135,7 @@ def summary_plots(summaryfn, ps, drname):
         plt.clf()
         plt.bar(dlo, c, width=dd)
 
-        target = dict(g=24.0, r=23.4, z=22.5)[band]
+        target = dict(g=24.0, r=23.4, i=23.0, z=22.5)[band]
         plt.axvline(target)
         plt.axvline(target - 0.3)
         plt.axvline(target - 0.6)
@@ -161,13 +161,13 @@ if __name__ == '__main__':
         ps = PlotSequence('depth')
         summary_plots(summaryfn, ps, 'BASS+MzLS DR8')
     else:
-        outfn = 'dr8-south-depth-concat.fits'
-        summaryfn = 'dr8-south-depth-summary.fits'
-        allfn = 'dr8-south-depth.fits'
-        basedir = '/global/project/projectdirs/cosmo/work/legacysurvey/dr8/south'
+        outfn = 'dr10-south-depth-concat.fits'
+        summaryfn = 'dr10-south-depth-summary.fits'
+        allfn = 'dr10-south-depth.fits'
+        basedir = '/global/cfs/cdirs/cosmo/work/legacysurvey/dr10'
         summarize_depths(basedir, outfn, summaryfn, allfn)
 
         ps = PlotSequence('depth')
-        summary_plots(summaryfn, ps, 'DECaLS DR8')
+        summary_plots(summaryfn, ps, 'DECaLS DR10')
     import sys
     sys.exit(0)

@@ -100,9 +100,9 @@ def depth_hist(opt):
         surveys = dict(g='BASS', r='BASS', z='MzLS')
         hemi='north'
     else:
-        surveys = dict(g='DECaLS', r='DECaLS', z='DECaLS')
+        surveys = dict(g='DECaLS', r='DECaLS', i='DECaLS', z='DECaLS')
         hemi='south'
-    dr = 'DR9'
+    dr = 'DR10'
 
     print('Read', len(T), 'bricks summarized in', opt.files[0])
     import pylab as plt
@@ -350,7 +350,7 @@ def plots(opt):
     for band in 'griz':
         depth = T.get('galdepth_%s' % band)
         ha = dict(histtype='step',  bins=50, range=(depthlo,depthhi))
-        ccmap = dict(g='g', r='r', z='m')
+        ccmap = dict(g='g', r='r', i='k', z='m')
         plt.hist(depth[depth>0], label='%s band' % band,
                  color=ccmap[band], **ha)
     plt.xlim(depthlo, depthhi)
@@ -491,9 +491,10 @@ def plots(opt):
         plt.savefig('ext-%s.png' % band)
 
 
-    T.ngal = T.nsimp + T.nrex + T.nexp + T.ndev + T.ncomp
+    #T.ngal = T.nsimp + T.nrex + T.nexp + T.ndev + T.ncomp + T.nser
+    T.ngal = T.nrex + T.nexp + T.ndev + T.nser
 
-    for col in ['nobjs', 'npsf', 'nsimp', 'nrex', 'nexp', 'ndev', 'ncomp', 'ngal']:
+    for col in ['nobjs', 'npsf', 'nrex', 'nexp', 'ndev', 'nser', 'ngal']:
         if not col in T.get_columns():
             continue
         plt.clf()
@@ -556,7 +557,7 @@ def plots(opt):
         plt.figure(1)
 
     Ntot = T.nobjs
-    for col in ['npsf', 'nsimp', 'nrex', 'nexp', 'ndev', 'ncomp', 'ngal']:
+    for col in ['npsf', 'nrex', 'nexp', 'ndev', 'nser', 'ngal']:
         if not col in T.get_columns():
             continue
         plt.clf()
