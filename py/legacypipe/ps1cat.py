@@ -212,16 +212,18 @@ def ps1_to_decam(psmags, band):
         i = [ 0.00904, -0.04171, 0.00566, -0.00829 ],
         z = [ 0.02583, -0.07690, 0.02824, -0.00898 ],
         Y = [ 0.02332, -0.05992, 0.02840, -0.00572 ],
-        # From Arjun 2022-03-10
-        # c0: -1.2723
-        N419 = [ 0., 1.1467,-0.1623,-0.0064 ],
+        # From Arjun 2022-11-08
+        # c0: -0.8934
+        N419 = [0., 0.2727, 0.9945,-0.6272, 0.1118],
         # From Arjun 2021-02-26
         # c0: 0.0059
         N501 = [ 0., -0.2784, 0.2915, -0.0686 ],
         # c0: 0.2324
         N673 = [ 0., -0.3456, 0.1334, -0.0146 ],
     )[band]
-    colorterm = coeffs[0] + coeffs[1]*gi + coeffs[2]*gi**2 + coeffs[3]*gi**3
+    colorterm = np.zeros(len(gi))
+    for power,coeff in enumerate(coeffs):
+        colorterm += coeff * gi**power
     return colorterm
 
 def ps1_to_90prime(psmags, band):
