@@ -116,6 +116,7 @@ def _ccds_table(camera='decam', overrides=None):
         ('skyrms', 'f4'),
         ('sig1', 'f4'),
         ('nstars_photom', 'i2'),
+        ('nstars_photom_used', 'i2'),
         ('nstars_astrom', 'i2'),
         ('phoff', 'f4'),
         ('phrms', 'f4'),
@@ -162,7 +163,7 @@ def cols_for_survey_table():
     """Return list of -survey.fits table colums
     """
     return ['airmass', 'ccdskysb', 'plver', 'procdate', 'plprocid',
-     'ccdnastrom', 'ccdnphotom', 'ra', 'dec', 'ra_bore', 'dec_bore',
+     'ccdnastrom', 'ccdnphotom', 'ccdnphotom_used', 'ra', 'dec', 'ra_bore', 'dec_bore',
      'image_filename', 'image_hdu', 'expnum', 'ccdname', 'object',
      'filter', 'exptime', 'camera', 'width', 'height', 'propid',
      'mjd_obs', 'fwhm', 'zpt', 'ccdzpt', 'ccdraoff', 'ccddecoff',
@@ -185,7 +186,8 @@ def prep_survey_table(T, camera=None, bad_expid=None):
                   ('phrms', 'ccdphrms'),
                   ('phrmsavg', 'phrms'),
                   ('nstars_astrom','ccdnastrom'),
-                  ('nstars_photom','ccdnphotom')]
+                  ('nstars_photom','ccdnphotom'),
+                  ('nstars_photom_used','ccdnphotom_used')]
     for old,new in rename_keys:
         T.rename(old,new)
     # Delete
@@ -1255,13 +1257,17 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
 
     dmag = refs.legacy_survey_mag - phot.instpsfmag
     maglo, maghi = MAGLIM[imobj.band]
-    dmag = dmag[refs.photom &
-                (refs.legacy_survey_mag > maglo) &
-                (refs.legacy_survey_mag < maghi) &
-                np.isfinite(dmag)]
+    kept = (refs.photom &
+            (refs.legacy_survey_mag > maglo) &
+            (refs.legacy_survey_mag < maghi) &
+            np.isfinite(dmag))
+    dmag = dmag[kept]
     if len(dmag):
         print('Zeropoint: using', len(dmag), 'good stars')
-        dmag, _, _ = sigmaclip(dmag, low=2.5, high=2.5)
+        clipped, lo, hi = sigmaclip(dmag, low=2.5, high=2.5)
+        Ikept = np.flatnonzero(kept)
+        kept[Ikept[np.logical_or(dmag < lo, dmag > hi)]] = False
+        dmag = clipped
         print('Zeropoint: using', len(dmag), 'stars after sigma-clipping')
 
         zptstd = np.std(dmag)
@@ -1269,6 +1275,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         dzpt = zptmed - zp0
         kext = imobj.extinction(imobj.band)
         transp = 10.**(-0.4 * (-dzpt - kext * (airmass - 1.0)))
+        nphotom_used = len(dmag)
 
         print('Number of stars used for zeropoint median %d' % nphotom)
         print('Zeropoint %.4f' % zptmed)
@@ -1287,11 +1294,13 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         zptmed = 0.
         zptstd = 0.
         transp = 0.
+        kept[:] = False
+        nphotom_used = 0
 
     for c in ['x_ref','y_ref','x_fit','y_fit','flux','raoff','decoff', 'psfmag',
               'dflux','dx','dy']:
         phot.set(c, phot.get(c).astype(np.float32))
-
+    phot.used_for_photzpt = kept
     phot.add_columns_from(refs)
 
     # Save CCD-level information in the per-star table.
@@ -1339,7 +1348,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     ccds['zpt'] = zptmed
     ccds['nstars_photom'] = nphotom
     ccds['nstars_astrom'] = nastrom
-
+    ccds['nstars_photom_used'] = nphotom_used
     # .ra,.dec = Gaia else PS1
     phot.ra  = phot.ra_gaia
     phot.dec = phot.dec_gaia
@@ -1350,7 +1359,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     # Create subset table for Eddie's ubercal
     cols = ([
         'ra', 'dec', 'flux', 'dflux', 'chi2', 'fracmasked', 'instpsfmag',
-        'dpsfmag',
+        'dpsfmag', 'used_for_photzpt',
         'bitmask', 'x_fit', 'y_fit', 'gaia_sourceid', 'ra_gaia', 'dec_gaia',
         'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag',
         'phot_g_mean_mag_error', 'phot_bp_mean_mag_error',
