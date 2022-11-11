@@ -4,7 +4,7 @@ Adding a new telescope/camera
 Outline
 -------
 
-The `legacypipe` data processing takes as inputs images that have been
+The ``legacypipe`` data processing takes as inputs images that have been
 flat-fielded and had any other special instrument signatures removed.
 It expects image pixels, a mask image (hot pixels, bad columns,
 saturation, etc), and also an uncertainty image (including noise from
@@ -45,9 +45,9 @@ Calibrations
 ------------
 
 Calibrations and zeropoints are performed by the script
-`legacyzpts/legacy_zeropoints.py`.  Each camera has a special class
+``legacyzpts/legacy_zeropoints.py``.  Each camera has a special class
 that handles all the specific details about how images from that
-camera get treated.  The base class is `legacypipe/image.py`.  This
+camera get treated.  The base class is ``legacypipe/image.py``.  This
 includes functions that are used by the calibration & zeropoints
 stage, as well as the legacypipe stage.
 
@@ -57,35 +57,35 @@ look something like::
 
     python -u legacyzpts/legacy_zeropoints.py --camera wiro --survey-dir wiro-dir --image wiro/20221003/a100_zbf.fit
 
-Before we start, we'll need to set up a directory (`survey-dir`).
-This directory will contain a subdirectory called `images` where all
+Before we start, we'll need to set up a directory (``survey-dir``).
+This directory will contain a subdirectory called ``images`` where all
 your (reduced) images will be placed.  In the case of WIRO, there's
 already a directory structure in place, so we'll instead use symlinks
-to create the structure that `legacypipe` wants::
+to create the structure that ``legacypipe`` wants::
 
     mkdir -p wiro-dir/images
     ln -s /global/cfs/cdirs/desi/users/adamyers/wiro/reduced/ wiro-dir/images/wiro
 
-so that, eg, the file `wiro-dir/images/wiro/20221003/a100_zbf.fit` exists.
+so that, eg, the file ``wiro-dir/images/wiro/20221003/a100_zbf.fit`` exists.  (That is: the full file path is constructed as
+the ``--survey-dir`` argument, plus ``images``, plus the path name you give.
 
-Now we can try running it and see what fails::
+There is a script that is meant to help you set up a new camera, called ``legacypipe/new-camera-setup.py``.  It takes the same
+arguments as ``legacy_zeropoints.py``.  Let's call it and start following its instructions::
 
-    > python -u legacyzpts/legacy_zeropoints.py --camera wiro --survey-dir wiro-dir --image wiro/20221003/a100_zbf.fit
+    > python legacypipe/new-camera-setup.py wiro/20221031/a144_zbf.fit  --camera wiro --survey-dir wiro-dir
+    You must add your new camera to the list of known cameras at the top of the legacy_zeropoints.py script -- the CAMERAS variable.
 
-If we run that, we'll get a complaint that the `wiro` camera isn't in the list of known cameras.  There is a list of known cameras at the top of `legacy_zeropoints.py`.  Add `"wiro"` there.  We then get a complaint::
+There is a list of known cameras at the top of ``legacy_zeropoints.py``.  Add ``"wiro"`` there.
 
-    Traceback (most recent call last):
-    File "legacyzpts/legacy_zeropoints.py", line 1541, in <module>
-      main()
-    File "legacyzpts/legacy_zeropoints.py", line 757, in main
-      img = survey.get_image_object(None, camera=measureargs['camera'],
-    File "/global/homes/d/dstn/legacypipe/py/legacypipe/survey.py", line 1625, in get_image_object
-      imageType = self.image_class_for_camera(camera)
-    File "/global/homes/d/dstn/legacypipe/py/legacypipe/survey.py", line 909, in image_class_for_camera
-      return self.image_typemap[camera]
-    KeyError: 'wiro'
+We then get::
 
-Have a look in `legacypipe/survey.py`, where in the `LegacySurveyData`
+    > python legacypipe/new-camera-setup.py wiro/20221031/a144_zbf.fit  --camera wiro --survey-dir wiro-dir
+    You must:
+     - create a new legacypipe.image.LegacySurveyImage subclass for your new camera
+     - add it to the dict in legacypipe/survey.py : LegacySurveyData : self.image_typemap
+     - import your new class in LegacySurveyData.__init__().
+
+Have a look in ``legacypipe/survey.py``.  In the ``LegacySurveyData``
 class there is a dictionary from camera names to their special classes
 that handle data from that camera.  Let's add WIRO, pointing to a new
 class that we will create.  Note also that earlier in that function we
@@ -94,55 +94,208 @@ import each of those special classes::
     from legacypipe.decam  import DecamImage
     from legacypipe.hsc    import HscImage
     from legacypipe.panstarrs import PanStarrsImage
-    # ...
+    # Import our new class!
     from legacypipe.wiro import WiroImage
-    
+
     self.image_typemap = {
       'decam'  : DecamImage,
       #...
       'hsc'    : HscImage,
       'panstarrs' : PanStarrsImage,
+      # Add our new class to the dict!
       'wiro': WiroImage,
     }
 
-We now need to create the new file `legacypipe/wiro.py` and create the
+We now need to create the new file ``legacypipe/wiro.py`` and create the
 new class::
 
     from legacypipe.image import LegacySurveyImage
-  
+
     class WiroImage(LegacySurveyImage):
         pass
 
-Now the real work begins!  The `legacy_zeropoints.py` code will start
+Now the real work begins!  The ``legacy_zeropoints.py`` code will start
 trying to read a bunch of headers out of your images.  The defaults
 are based on what the CP does, so depending on exactly what headers
 your instrument control system produces, you'll have to override a
-number of functions from the `LegacySurveyImage` class.  For example,
-for WIRO, the first error we get is::
+number of functions from the ``LegacySurveyImage`` class.  For example,
+for WIRO, the first error we get is
 
-    > python -u legacyzpts/legacy_zeropoints.py --camera wiro --survey-dir wiro-dir --image wiro/20221003/a100_zbf.fit
+.. code-block:: bash
 
-    ...
+    > python legacypipe/new-camera-setup.py wiro/20221031/a144_zbf.fit --camera wiro --survey-dir wiro-dir
+    For camera "wiro", found LegacySurveyImage subclass: <class 'legacypipe.wiro.WiroImage'>
+    Reading wiro/20221031/a144_zbf.fit and trying to create new image object...
+    Got image of type <class 'legacypipe.wiro.WiroImage'>
+    Relative path to image file -- will be stored in the survey-ccds file --:  wiro/20221031/a144_zbf.fit
+    Filesystem path to image file: wiro-dir/images/wiro/20221031/a144_zbf.fit
+    Reading primary FITS header from image file...
+    Reading a bunch of metadata from image primary header:
+    get_band():
+      -> "Filter"
+    get_propid():
+      -> ""
+    get_expnum():
     Traceback (most recent call last):
+      File "legacypipe/new-camera-setup.py", line 102, in <module>
+        main()
+      File "legacypipe/new-camera-setup.py", line 85, in main
+        setattr(img, k, getattr(img, 'get_'+k)(primhdr))
+      File "/global/homes/d/dstn/legacypipe/py/legacypipe/image.py", line 500, in get_expnum
+        return primhdr['EXPNUM']
+      File "/global/homes/d/dstn/fitsio2/fitsio/header.py", line 354, in __getitem__
+        raise KeyError("unknown record: %s" % item)
+    KeyError: 'unknown record: EXPNUM'
+
+Have a look at the line following ``get_band():``: it's trying to read
+the name of the filter from the header.  The WIRO images have a header
+card like ``"FILTER = 'Filter 4: E 41102'"``, while the base-class
+``image.py`` code returns only the first word.  We instead want to
+return ``"NB_E"`` (narrow-band filter E) for this case, so we'll
+override the ``get_band()`` function in our ``wiro.py`` class::
+
+    def get_band(self, primhdr):
+        f = primhdr['FILTER']
+        filtmap = {
+            'Filter 1: g 1736'  : 'g',
+            'Filter 2: C 14859' : 'NB_C',
+            'Filter 3: D 27981' : 'NB_D',
+            'Filter 4: E 41102' : 'NB_E',
+            'Filter 5: A 54195' : 'NB_A',
+        }
+        # ASSUME that the filter is one of the above!
+        return filtmap[f]
+
+The next thing is ``get_propid()``: the name of the proposal.  WIRO
+doesn't have this, and it's not essential, so we'll just leave it
+blank.
+
+Next is ``get_expnum()``.  This is an integer exposure number that is
+used to uniquely identify the exposure.  WIRO doesn't have an exposure
+number counter, so instead we'll cook one up out of the DATE header.
+Add to the ``wiro.py`` code::
+
+    def get_expnum(self, primhdr):
+        date = primhdr['DATE-OBS']
+        # DATE-OBS= '2022-10-04T05:20:19.335'
+        d = datetime.strptime(date[:19], "%Y-%m-%dT%H:%M:%S")
+        expnum = d.second + 100*(d.minute + 100*(d.hour + 100*(d.day + 100*(d.month + 100*d.year))))
+        return expnum
+
+
+Now, running it again and we get::
+
+    get_band():
+      -> "NB_E"
+    get_propid():
+      -> ""
+    get_expnum():
+      -> "20221101024745"
+    get_camera():
+      -> "wiroprime"
+    get_exptime():
+      -> "10.0"
+    get_mjd():
+      -> "None"
+    get "HA" from primary header.
+      -> "-59.80114"
+    get "DATE" from primary header.
+      -> "None"
+    get "PLVER" from primary header.
+      -> "None"
+    get "PLPROCID" from primary header.
+      -> "None"
+    Will read image header from HDU 0
+    Reading wiro-dir/images/wiro/20221031/a144_zbf.fit ext 0
+    Reading image metadata...
+    Got image size 4096 x 4096 pixels
+    get_ccdname():
+    Traceback (most recent call last):
+      File "legacypipe/new-camera-setup.py", line 128, in <module>
+        main()
+      File "legacypipe/new-camera-setup.py", line 121, in main
+        v = getattr(img, 'get_'+key)(primhdr, hdr)
+      File "/global/homes/d/dstn/legacypipe/py/legacypipe/image.py", line 463, in get_ccdname
+        return hdr['EXTNAME'].strip().upper()
+      File "/global/homes/d/dstn/fitsio2/fitsio/header.py", line 354, in __getitem__
+        raise KeyError("unknown record: %s" % item)
+    KeyError: 'unknown record: EXTNAME'
+
+The ``get_band()`` results looks good now, as does the
+``get_expnum()``.  We have a few things to fix, though.  First,
+``get_camera()`` should match the canonical camera name you've chosen,
+ie, ``"wiro"`` in our case.  So we need to override the
+``get_camera()`` function.  We probably want to have the correct MJD
+for images (so we can correct for moving stars, etc), so we'll need to
+parse the ``DATE-OBS`` header.  Finally, the error at the end: it's
+trying to fetch the ``EXTNAME`` of our image extension, which for WIRO
+doesn't exist because the WIRO image pixels are in the primary HDU.
+So we'll fake that up too.  Adding to our ``WiroImage`` class::
+
+    def get_mjd(self, primhdr):
+        from astrometry.util.starutil_numpy import datetomjd
+        d = self.get_date(primhdr)
+        return datetomjd(d)
+
+    def get_date(self, primhdr):
+        date = primhdr['DATE-OBS']
+        # DATE-OBS= '2022-10-04T05:20:19.335'
+        d = datetime.strptime(date[:19], "%Y-%m-%dT%H:%M:%S")
+
+    def get_camera(self, primhdr):
+        cam = super().get_camera(primhdr)
+        cam = {'wiroprime':'wiro'}.get(cam, cam)
+        return cam
+
+    def get_ccdname(self, primhdr, hdr):
+        return 'CCD'
+
+And now we get::
+
     ...
-    File "/global/homes/d/dstn/legacypipe/py/legacypipe/image.py", line 204, in __init__
-      self.propid = self.get_propid(primhdr)
-    File "/global/homes/d/dstn/legacypipe/py/legacypipe/image.py", line 469, in get_propid
-      return primhdr['PROPID']
-    File "/global/homes/d/dstn/fitsio2/fitsio/header.py", line 354, in __getitem__
-      raise KeyError("unknown record: %s" % item)
-    KeyError: 'unknown record: PROPID'
+    get_camera():
+      -> "wiro"
+    get_exptime():
+      -> "10.0"
+    get_mjd():
+      -> "59884.11649305555"
+    get "HA" from primary header.
+      -> "-59.80114"
+    get "DATE" from primary header.
+      -> "None"
+    get "PLVER" from primary header.
+      -> "None"
+    get "PLPROCID" from primary header.
+      -> "None"
+    Will read image header from HDU 0
+    Reading wiro-dir/images/wiro/20221031/a144_zbf.fit ext 0
+    Reading image metadata...
+    Got image size 4096 x 4096 pixels
+    get_ccdname():
+      -> "CCD"
+    get_pixscale():
+    Traceback (most recent call last):
+      File "legacypipe/new-camera-setup.py", line 128, in <module>
+        main()
+      File "legacypipe/new-camera-setup.py", line 121, in main
+        v = getattr(img, 'get_'+key)(primhdr, hdr)
+      File "/global/homes/d/dstn/legacypipe/py/legacypipe/image.py", line 512, in get_pixscale
+        return 3600. * np.sqrt(np.abs(hdr['CD1_1'] * hdr['CD2_2'] -
+      File "/global/homes/d/dstn/fitsio2/fitsio/header.py", line 354, in __getitem__
+        raise KeyError("unknown record: %s" % item)
+    KeyError: 'unknown record: CD1_1'
 
-It's trying to get the proposal ID out of the header, but WIRO images
-don't have this.  So we'll just return an empty string, by overriding
-the relevant function in `legacypipe/image.py`::
+By default, the code tries to figure out the pixel scale by reading
+WCS header cards, but for WIRO these don't exist; we'll just return a
+constant pixel scale::
 
-    class WiroImage(LegacySurveyImage):
-        def get_propid(self, primhdr):
-            return ''
+    def get_pixscale(self, primhdr, hdr):
+        return 0.58
 
-Depending on your camear, you'll have to do this for a few different
+Depending on your camera, you'll have to do this for a few different
 header cards.
+
+.......
 
 Next, you are likely to get this complaint::
 
@@ -156,15 +309,15 @@ Next, you are likely to get this complaint::
       assert(self.dqfn != self.imgfn)
     AssertionError
 
-Here, `legacy_zeropoints.py` is trying to read the data-quality (mask
+Here, ``legacy_zeropoints.py`` is trying to read the data-quality (mask
 bits) image.  And after that, it will try to read the inverse-variance
 map image.  By default, it assumes these files are named the way the
 CP names them.  You can change this by overriding the
-`compute_filenames` function from `image.py`.  In the case of WIRO,
+``compute_filenames`` function from ``image.py``.  In the case of WIRO,
 the masks and uncertainty maps are in HDUs following the image.  So we
 can set the "dq" and "iv" filenames to be equal to the "image"
 filename, but we're also going to have to set the HDU numbers, which
-we have to do by overriding the `__init__` constructor for our class::
+we have to do by overriding the ``__init__`` constructor for our class::
 
     class WiroImage(LegacySurveyImage):
     
