@@ -283,9 +283,7 @@ class LegacySurveyImage(object):
         return self.k_ext[band]
 
     def calibration_good(self, primhdr):
-        '''Did the CP processing succeed for this image?  If not, no need to process further.
-        '''
-        return primhdr.get('WCSCAL', '').strip().lower().startswith('success')
+        return True
 
     def has_astrometric_calibration(self, ccd):
         return ccd.ccdnastrom > 0

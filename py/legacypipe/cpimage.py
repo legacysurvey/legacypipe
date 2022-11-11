@@ -2,6 +2,11 @@ from legacypipe.image import LegacySurveyImage
 
 class CPImage(LegacySurveyImage):
 
+    def calibration_good(self, primhdr):
+        '''Did the CP processing succeed for this image?  If not, no need to process further.
+        '''
+        return primhdr.get('WCSCAL', '').strip().lower().startswith('success')
+
     def validate_version(self, *args, **kwargs):
         return validate_version(*args, **kwargs)
 

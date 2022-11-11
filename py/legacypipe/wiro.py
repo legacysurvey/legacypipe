@@ -68,8 +68,6 @@ class WiroImage(LegacySurveyImage):
         self.dqfn = self.imgfn
         self.wtfn = self.imgfn
 
-#     def calibration_good(self, primhdr):
-#         return True
 #     def get_extension_list(self, debug=False):
 #         return [0]
 
