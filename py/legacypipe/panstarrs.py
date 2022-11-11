@@ -278,8 +278,6 @@ class PanStarrsImage(LegacySurveyImage):
         skymed, skyrms = estimate_sky_from_pixels(img)
         return 0., skymed, skyrms
     
-    def validate_version(self, *args, **kwargs):
-        return True
     def check_image_header(self, imghdr):
         pass
 

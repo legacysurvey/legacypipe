@@ -94,10 +94,6 @@ class MegaPrimeImage(LegacySurveyImage):
         # "ccd00"
         return {'ccdname':'S5'}
 
-    def validate_version(self, *args, **kwargs):
-        # Just gonna pass on all this stuff
-        return True
-
     def calibration_good(self, primhdr):
         '''Did the low-level processing succeed for this image?'''
         return True

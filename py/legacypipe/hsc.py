@@ -345,8 +345,6 @@ class HscImage(LegacySurveyImage):
         fitsio.write(tmpmaskfn, m, clobber=True)
         return tmpimgfn, tmpmaskfn
 
-    def validate_version(self, *args, **kwargs):
-        return True
     def check_image_header(self, imghdr):
         pass
 

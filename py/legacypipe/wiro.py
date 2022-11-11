@@ -14,8 +14,8 @@ def debug(*args):
 class WiroImage(LegacySurveyImage):
     def __init__(self, survey, ccd, image_fn=None, image_hdu=0, **kwargs):
         super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu, **kwargs)
-#         self.dq_hdu = 1
-#         self.wt_hdu = 2
+        self.dq_hdu = 1
+        self.wt_hdu = 2
 
     def get_band(self, primhdr):
         f = primhdr['FILTER']
@@ -55,10 +55,19 @@ class WiroImage(LegacySurveyImage):
     def get_pixscale(self, primhdr, hdr):
         return 0.58
 
-#     def compute_filenames(self):
-#         # Masks and weight-maps are in HDUs following the image
-#         self.dqfn = self.imgfn
-#         self.wtfn = self.imgfn
+    def get_fwhm(self, primhdr, imghdr):
+        # If PsfEx file exists, read FWHM from there
+        if not hasattr(self, 'merged_psffn'):
+            return super().get_fwhm(primhdr, imghdr)
+        psf = self.read_psf_model(0, 0, pixPsf=True)
+        fwhm = psf.fwhm
+        return fwhm
+
+    def compute_filenames(self):
+        # Masks and weight-maps are in HDUs following the image
+        self.dqfn = self.imgfn
+        self.wtfn = self.imgfn
+
 #     def calibration_good(self, primhdr):
 #         return True
 #     def get_extension_list(self, debug=False):

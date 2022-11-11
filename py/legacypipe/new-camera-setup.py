@@ -122,6 +122,16 @@ def main():
         info('  -> "%s"' % v)
         setattr(img, key, v)
 
+    for k,d in [('dq_hdu',img.hdu), ('wt_hdu',img.hdu), ('sig1',0.), ('ccdzpt',0.),
+                ('dradec',(0.,0.))]:
+        v = getattr(img, k, d)
+        setattr(img, k, v)
+
+    img.compute_filenames()
+    info('Will read image pixels from file        ', img.imgfn, 'HDU', img.hdu)
+    info('Will read inverse-variance map from file', img.wtfn,  'HDU', img.wt_hdu)
+    info('Will read data-quality map from file    ', img.dqfn,  'HDU', img.dq_hdu)
+
 
 
 if __name__ == '__main__':

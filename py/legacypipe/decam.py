@@ -1,7 +1,7 @@
 import warnings
 import numpy as np
 
-from legacypipe.image import LegacySurveyImage, validate_version
+from legacypipe.cpimage import CPImage, validate_version
 
 import logging
 logger = logging.getLogger('legacypipe.decam')
@@ -16,7 +16,7 @@ def debug(*args):
 Code specific to images from the Dark Energy Camera (DECam).
 '''
 
-class DecamImage(LegacySurveyImage):
+class DecamImage(CPImage):
 
     ZP0 =  dict(g = 25.001,
                 r = 25.209,
@@ -45,9 +45,9 @@ class DecamImage(LegacySurveyImage):
                  N673 = 0.090,
     )
 
-    '''
-    A LegacySurveyImage subclass to handle images from the Dark Energy
-    Camera, DECam, on the Blanco telescope.
+    '''A LegacySurveyImage (via CPImage) subclass to handle images from
+    the Dark Energy Camera, DECam, on the Blanco telescope.
+
     '''
     def __init__(self, survey, t, image_fn=None, image_hdu=0, **kwargs):
         super(DecamImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu,
@@ -272,7 +272,7 @@ class DecamImage(LegacySurveyImage):
         primhdr = fitsio.read_header(self.dqfn)
         plver = primhdr['PLVER']
         if decam_has_dq_codes(plver):
-            from legacypipe.image import remap_dq_cp_codes
+            from legacypipe.cpimage import remap_dq_cp_codes
             # Always ignore the satellite masker code.
             ignore = [8]
             if not decam_use_dq_cr(plver):
