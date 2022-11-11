@@ -10,8 +10,8 @@ class BokImage(LegacySurveyImage):
     Class for handling images from the 90prime camera processed by the
     NOAO Community Pipeline.
     '''
-    def __init__(self, survey, t, image_fn=None, image_hdu=0):
-        super(BokImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu)
+    def __init__(self, survey, t, image_fn=None, image_hdu=0, **kwargs):
+        super(BokImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu, **kwargs)
         # Nominal zeropoints, sky brightness, and extinction values (taken from
         # rapala.ninetyprime.boketc.py)
         # /global/homes/a/arjundey/idl/pro/observing/bokstat.pro

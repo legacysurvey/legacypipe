@@ -102,8 +102,8 @@ class PtfImage(LegacySurveyImage):
     Camera, DECam, on the Blanco telescope.
 
     '''
-    def __init__(self, survey, t):
-        super(PtfImage, self).__init__(survey, t)
+    def __init__(self, survey, t, **kwargs):
+        super(PtfImage, self).__init__(survey, t, **kwargs)
 
         # FIXME -- this should happen in the CCD table creation step.
         self.imgfn= os.path.join(os.path.dirname(self.imgfn),

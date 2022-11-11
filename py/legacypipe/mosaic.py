@@ -5,8 +5,9 @@ class MosaicImage(LegacySurveyImage):
     Class for handling images from the Mosaic3 camera processed by the
     NOAO Community Pipeline.
     '''
-    def __init__(self, survey, t, image_fn=None, image_hdu=0):
-        super(MosaicImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu)
+    def __init__(self, survey, t, image_fn=None, image_hdu=0, **kwargs):
+        super(MosaicImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu,
+                                          **kwargs)
 
         self.zp0 = dict(z = 26.552,
                         D51 = 24.351, # from obsbot

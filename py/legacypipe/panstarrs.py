@@ -57,12 +57,12 @@ The "STARCORE" bit masks quite aggressively.
 '''
 
 class PanStarrsImage(LegacySurveyImage):
-    def __init__(self, survey, ccd, image_fn=None, image_hdu=0):
+    def __init__(self, survey, ccd, image_fn=None, image_hdu=0, **kwargs):
         if ccd is not None:
             ccd.plver = 'xxx'
             ccd.procdate = 'xxx'
             ccd.plprocid = 'xxx'
-        super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu)
+        super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu, **kwargs)
 
         # Nominal zeropoints
         # These are used only for "ccdskybr", so are not critical.

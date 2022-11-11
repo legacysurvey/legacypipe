@@ -152,7 +152,8 @@ class LegacySurveyImage(object):
     # images used in unit tests): box size for SplineSky model
     splinesky_boxsize = 1024
 
-    def __init__(self, survey, ccd, image_fn=None, image_hdu=0):
+    def __init__(self, survey, ccd, image_fn=None, image_hdu=0,
+                 camera_setup=False):
         '''
         Create a new LegacySurveyImage object, from a LegacySurveyData object,
         and one row of a CCDs fits_table object.
@@ -184,6 +185,10 @@ class LegacySurveyImage(object):
         self._fits = None
         self._primary_header = None
         self._image_header = None
+
+        if camera_setup:
+            # new-camera-setup.py script -- don't read stuff yet!
+            return
 
         if ccd is None and image_fn is None:
             raise RuntimeError('Either "ccd" or "image_fn" must be set')
@@ -466,7 +471,7 @@ class LegacySurveyImage(object):
         return band
 
     def get_propid(self, primhdr):
-        return primhdr['PROPID']
+        return primhdr.get('PROPID', '')
 
     def get_airmass(self, primhdr, imghdr, ra, dec):
         airmass = primhdr.get('AIRMASS', None)
