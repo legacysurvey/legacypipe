@@ -292,6 +292,12 @@ constant pixel scale::
     def get_pixscale(self, primhdr, hdr):
         return 0.58
 
+For now, we'll ignore the ``get_fwhm()`` result, but we will need to fix it later.
+
+
+
+
+        
 Depending on your camera, you'll have to do this for a few different
 header cards.
 

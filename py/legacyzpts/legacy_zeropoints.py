@@ -887,7 +887,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     optional = ['avsky']
     for ccd_col in ['avsky', 'crpix1', 'crpix2', 'crval1', 'crval2']:
         if ccd_col.upper() in hdr:
-            ccds[ccd_col] = hdr[ccd_col]
+            ccds[ccd_col] = hdr[ccd_col.upper()]
         elif ccd_col in optional:
             ccds[ccd_col] = np.nan
         else:

@@ -95,7 +95,7 @@ def main():
     info('  -> "%s"' % img.mjdobs)
 
     namechange = {'date': 'procdate',}
-    for key in ['HA', 'DATE', 'PLVER', 'PLPROCID']:
+    for key in ['HA', 'DATE', 'OBJECT', 'PLVER', 'PLPROCID']:
         info('get "%s" from primary header.' % key)
         val = primhdr.get(key)
         if isinstance(val, str):
@@ -132,7 +132,115 @@ def main():
     info('Will read inverse-variance map from file', img.wtfn,  'HDU', img.wt_hdu)
     info('Will read data-quality map from file    ', img.dqfn,  'HDU', img.dq_hdu)
 
+    info('Will read images from these FITS HDUs:', img.get_extension_list())
 
+    # test funpack_files?
+
+    info('Source Extractor & PsfEx will read the following config files:')
+    sedir = survey.get_se_dir()
+    for (type, suff) in [('SE config', '.se'),
+                         ('SE params', '.param'),
+                         ('SE convolution filter', '.conv'),
+                         ('PsfEx config', '.psfex'),
+                         ]:
+        fn = os.path.join(sedir, img.camera + suff)
+        ex = os.path.exists(fn)
+        info('  %s: %s (%s)' % (type, fn, 'exists' if ex else 'does not exist'))
+
+    info('Special PsfEx flags for this CCD:', survey.get_psfex_conf(img.camera, img.expnum, img.ccdname))
+
+    # Once legacy_zeropoints.py starts...
+    ra_bore, dec_bore = img.get_radec_bore(primhdr)
+    info('RA,Dec boresight:', ra_bore, dec_bore)
+    info('Airmass:', img.get_airmass(primhdr, hdr, ra_bore, dec_bore))
+    info('Gain:', img.get_gain(primhdr, hdr))
+    info('WCS Reference pixel CRPIX[12]:', hdr['CRPIX1'], hdr['CRPIX2'])
+    info('WCS Reference pos CRVAL[12]:', hdr['CRVAL1'], hdr['CRVAL2'])
+    info('WCS CD matrix:', img.get_cd_matrix(primhdr, hdr))
+
+    wcs = img.get_wcs(hdr=hdr)
+    info('Got WCS object:', wcs)
+
+    H = img.height
+    W = img.width
+    ccdra, ccddec = wcs.pixelxy2radec((W+1) / 2.0, (H+1) / 2.0)
+    info('With image size %i x %i, central RA,Dec is (%.4f, %.4f)' %
+         (W, H, ccdra, ccddec))
+
+    slc = img.get_good_image_slice(None)
+    info('Good region in this image (slice):', slc)
+
+    # PsfEx file?  FWHM?
+
+    # Reading data...
+    info('Reading data quality / mask file...')
+    dq,dqhdr = img.read_dq(header=True, slc=slc)
+    info('DQ file:', dq.shape, dq.dtype, 'min:', dq.min(), 'max', dq.max(),
+         'number of pixels == 0:', np.sum(dq == 0))
+    if dq is not None:
+        info('Remapping data quality / mask file...')
+        dq = img.remap_dq(dq, dqhdr)
+    if dq is None:
+        info('No DQ file')
+    else:
+        info('DQ file:', dq.shape, dq.dtype, 'min:', dq.min(), 'max', dq.max(),
+             'number of pixels == 0:', np.sum(dq == 0))
+
+    info('Reading inverse-variance / weight file...')
+    invvar = img.read_invvar(dq=dq, slc=slc)
+    info('Invvar map:', invvar.shape, invvar.dtype, 'min:', invvar.min(),
+         'max', invvar.max(), 'median', invvar.median(),
+         'number of pixels == 0:', np.sum(invvar == 0), ', number >0:', np.sum(invvar>0))
+    info('Reading image file...')
+    impix = img.read_image(slc=slc)
+    info('Image pixels:', impix.shape, impix.dtype, 'min:', impix.min(),
+         'max', impix.max(), 'median', np.median(impix.ravel()))
+    info('Running fix_saturation...')
+    img.fix_saturation(impix, dq, invvar, primhdr, hdr, slc)
+    info('Image pixels:', impix.shape, impix.dtype, 'min:', impix.min(),
+         'max', impix.max(), 'median', np.median(impix.ravel()))
+    info('Invvar map:', invvar.shape, invvar.dtype, 'min:', invvar.min(),
+         'max', invvar.max(), 'median', invvar.median(),
+         'number of pixels == 0:', np.sum(invvar == 0), ', number >0:', np.sum(invvar>0))
+    info('DQ file:', dq.shape, dq.dtype, 'min:', dq.min(), 'max', dq.max(),
+         'number of pixels == 0:', np.sum(dq == 0))
+
+    info('Calling estimate_sig1()...')
+    img.sig1 = img.estimate_sig1(impix, invvar, dq, primhdr, hdr)
+    info('Got sig1 =', img.sig1)
+
+    info('Calling remap_invvar...')
+    invvar = img.remap_invvar(invvar, primhdr, impix, dq)
+    info('Blanking out', np.sum((invvar == 0) * (impix != 0)), 'image pixels with invvar=0')
+    impix[invvar == 0] = 0.
+
+    info('Image pixels:', impix.shape, impix.dtype, 'min:', impix.min(),
+         'max', impix.max(), 'median', np.median(impix.ravel()))
+    info('Invvar map:', invvar.shape, invvar.dtype, 'min:', invvar.min(),
+         'max', invvar.max(), 'median', invvar.median(),
+         'number of pixels == 0:', np.sum(invvar == 0), ', number >0:', np.sum(invvar>0))
+    info('DQ file:', dq.shape, dq.dtype, 'min:', dq.min(), 'max', dq.max(),
+         'number of pixels == 0:', np.sum(dq == 0))
+
+    info('Scaling weight(invvar) and image pixels...')
+    invvar = img.scale_weight(invvar)
+    impix = img.scale_image(impix)
+    info('Image pixels:', impix.shape, impix.dtype, 'min:', impix.min(),
+         'max', impix.max(), 'median', np.median(impix.ravel()))
+    info('Invvar map:', invvar.shape, invvar.dtype, 'min:', invvar.min(),
+         'max', invvar.max(), 'median', invvar.median(),
+         'number of pixels == 0:', np.sum(invvar == 0), ', number >0:', np.sum(invvar>0))
+
+    info('Estimating sky level...')
+    sky_img, skymed, skyrms = img.estimate_sky(impix, invvar, dq, primhdr, hdr)
+    zp0 = img.nominal_zeropoint(img.band)
+    info('Got nominal zeropoint for band', img.band, ':', zp0)
+    skybr = zp0 - 2.5*np.log10(skymed / img.pixscale / img.pixscale / img.exptime)
+    info('Sky level: %.2f count/pix' % skymed)
+    info('Sky brightness: %.3f mag/arcsec^2 (assuming nominal zeropoint)' % skybr)
+
+    zpt = img.get_zeropoint(primhdr, hdr)
+    info('Does a zeropoint already exist in the image headers?  zpt=', zpt)
 
 if __name__ == '__main__':
     main()
