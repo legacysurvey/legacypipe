@@ -248,7 +248,7 @@ So we'll fake that up too.  Adding to our ``WiroImage`` class::
         return cam
 
     def get_ccdname(self, primhdr, hdr):
-        return 'CCD'
+        return ''
 
 And now we get::
 
@@ -272,7 +272,7 @@ And now we get::
     Reading image metadata...
     Got image size 4096 x 4096 pixels
     get_ccdname():
-      -> "CCD"
+      -> ""
     get_pixscale():
     Traceback (most recent call last):
       File "legacypipe/new-camera-setup.py", line 128, in <module>
@@ -292,38 +292,36 @@ constant pixel scale::
     def get_pixscale(self, primhdr, hdr):
         return 0.58
 
+Depending on your camera, you'll have to override various other metadata-fetching functions.
+
 For now, we'll ignore the ``get_fwhm()`` result, but we will need to fix it later.
 
+Re-running, we get::
 
-
-
-        
-Depending on your camera, you'll have to do this for a few different
-header cards.
-
-.......
-
-Next, you are likely to get this complaint::
-
+    ....
+    get_pixscale():
+      -> "0.58"
+    get_fwhm():
+      -> "nan"
     Traceback (most recent call last):
-    File "legacyzpts/legacy_zeropoints.py", line 1541, in <module>
-      main()
-    ...
-    File "/global/homes/d/dstn/legacypipe/py/legacypipe/image.py", line 284, in __init__
-      self.compute_filenames()
-    File "/global/homes/d/dstn/legacypipe/py/legacypipe/image.py", line 344, in compute_filenames
-      assert(self.dqfn != self.imgfn)
+      File "legacypipe/new-camera-setup.py", line 246, in <module>
+        main()
+      File "legacypipe/new-camera-setup.py", line 130, in main
+        img.compute_filenames()
+      File "/global/homes/d/dstn/legacypipe/py/legacypipe/image.py", line 237, in compute_filenames
+        assert(self.dqfn != self.imgfn)
     AssertionError
 
-Here, ``legacy_zeropoints.py`` is trying to read the data-quality (mask
-bits) image.  And after that, it will try to read the inverse-variance
-map image.  By default, it assumes these files are named the way the
-CP names them.  You can change this by overriding the
-``compute_filenames`` function from ``image.py``.  In the case of WIRO,
-the masks and uncertainty maps are in HDUs following the image.  So we
-can set the "dq" and "iv" filenames to be equal to the "image"
+Here, the code is trying to read the data-quality (mask bitmask)
+image.  And after that, it will try to read the inverse-variance map
+image.  By default, it assumes these files are named the way the CP
+names them.  You can change this by overriding the
+``compute_filenames`` function from ``image.py``.  In the case of
+WIRO, the masks and uncertainty maps are in HDUs following the image.
+So we can set the "dq" and "iv" filenames to be equal to the "image"
 filename, but we're also going to have to set the HDU numbers, which
-we have to do by overriding the ``__init__`` constructor for our class::
+we have to do by overriding the ``__init__`` constructor for our
+class::
 
     class WiroImage(LegacySurveyImage):
     
@@ -338,6 +336,320 @@ we have to do by overriding the ``__init__`` constructor for our class::
             self.wtfn = self.imgfn
 
 Okay, so now it should be reading from the correct file & HDUs.
+
+Now we get::
+
+    ...
+    get_fwhm():
+    -> "nan"
+    Will read image pixels from file         wiro-dir/images/wiro/20221031/a144_zbf.fit HDU 0
+    Will read inverse-variance map from file wiro-dir/images/wiro/20221031/a144_zbf.fit HDU 2
+    Will read data-quality map from file     wiro-dir/images/wiro/20221031/a144_zbf.fit HDU 1
+    Will read images from these FITS HDUs: ['MASK', 'UNCERT']
+    Source Extractor & PsfEx will read the following config files:
+      SE config: /global/homes/d/dstn/legacypipe/py/legacypipe/config/wiro.se (does not exist)
+      SE params: /global/homes/d/dstn/legacypipe/py/legacypipe/config/wiro.param (does not exist)
+      SE convolution filter: /global/homes/d/dstn/legacypipe/py/legacypipe/config/wiro.conv (does not exist)
+      PsfEx config: /global/homes/d/dstn/legacypipe/py/legacypipe/config/wiro.psfex (does not exist)
+    could not find special psfex configuration file for wiro not using per-image psfex configurations.
+    Special PsfEx flags for this CCD: 
+    RA,Dec boresight: 35.97804166666666 40.68613888888889
+    Airmass: 1.4
+    Traceback (most recent call last):
+      File "legacypipe/new-camera-setup.py", line 246, in <module>
+        main()
+      File "legacypipe/new-camera-setup.py", line 156, in main
+        info('Gain:', img.get_gain(primhdr, hdr))
+      File "/global/homes/d/dstn/legacypipe/py/legacypipe/image.py", line 352, in get_gain
+        return primhdr['GAIN']
+      File "/global/homes/d/dstn/fitsio2/fitsio/header.py", line 354, in __getitem__
+        raise KeyError("unknown record: %s" % item)
+    KeyError: 'unknown record: GAIN'
+
+We have a couple of issues to fix.  First, the list of HDUs.  By
+default, ``image.py`` will try to read all HDUs in the file as CCD
+images, assuming a multi-CCD camera with images stored as multi-HDU
+FITS files.  For WIRO, there is only a single CCD, so we must override
+the ``get_extension_list`` function.  Later, we also see that a
+``GAIN`` header card is expected::
+
+    class WiroImage(LegacySurveyImage):
+        # ...
+        def get_gain(self, primhdr, hdr):
+            # from https://iopscience.iop.org/article/10.1088/1538-3873/128/969/115003/ampdf
+            return 2.6
+    
+        def get_extension_list(self, debug=False):
+            return [0]
+  
+In addition, we see that the expected Source Extractor and PsfEx
+configuration file do not exist.  Config files are expected to be found in, eg,
+``legacypipe/py/legacypipe/config/wiro.param``, but for most of the
+cameras we handle, a common config files is used, so this can usually
+be handled with a symlink of ``wiro.param`` to ``common.param``,
+``wiro.psfex`` to ``common.psfex``, ``wiro.se`` to ``common.se``, and
+``gauss_5.0_9x9.conv`` to ``wiro.conv``.
+
+Doing all this, we get::
+
+    > python legacypipe/new-camera-setup.py wiro/20221031/a144_zbf.fit --camera wiro --survey-dir wiro-dir
+    ...
+    Gain: 2.6
+    Traceback (most recent call last):
+      File "legacypipe/new-camera-setup.py", line 246, in <module>
+        main()
+      File "legacypipe/new-camera-setup.py", line 157, in main
+        info('WCS Reference pixel CRPIX[12]:', hdr['CRPIX1'], hdr['CRPIX2'])
+      File "/global/homes/d/dstn/fitsio2/fitsio/header.py", line 354, in __getitem__
+        raise KeyError("unknown record: %s" % item)
+    KeyError: 'unknown record: CRPIX1'
+
+Here, the code is looking for an astrometric header in the image.
+WIRO lacks astrometric headers entirely, so at this point we're going
+to have to do some real work!
+
+It turns out that we can use Astrometry.net to generate WCS headers
+for the WIRO images, so when asked to return the WCS for an image, we
+will have to read the WCS header from an external file, which we'll
+link to in the ``calib/`` directory.
+
+We add the following to the ``WiroImage`` class::
+
+    class WiroImage(LegacySurveyImage):
+        # ...
+        def get_wcs(self, hdr=None):
+            calibdir = self.survey.get_calib_dir()
+            imgdir = os.path.dirname(self.image_filename)
+            fn = os.path.join(calibdir, 'wcs', imgdir, self.name + '.wcs')
+            from astrometry.util.util import Sip
+            return Sip(fn)
+    
+        def get_crpixcrval(self, primhdr, hdr):
+            wcs = self.get_wcs()
+            p1,p2 = wcs.get_crpix()
+            v1,v2 = wcs.get_crval()
+            return p1,p2,v1,v2
+    
+        def get_cd_matrix(self, primhdr, hdr):
+            wcs = self.get_wcs()
+            return wcs.get_cd()
+    
+With this, the code gets much further::
+
+    > python -u legacypipe/new-camera-setup.py --camera wiro --survey-dir wiro-dir wiro/20221031/a144_zbf.fit
+    ...
+    Gain: 2.6
+    WCS filename: wiro-dir/calib/wcs/wiro/20221031/a144_zbf.wcs
+    WCS Reference pixel: 2048.5 2048.5
+    WCS Reference pos: 35.0501564555 40.0328664229
+    WCS filename: wiro-dir/calib/wcs/wiro/20221031/a144_zbf.wcs
+    WCS CD matrix: (-1.44356992147e-06, -0.000159826959704, -0.000159689121508, 1.35262350325e-06)
+    WCS filename: wiro-dir/calib/wcs/wiro/20221031/a144_zbf.wcs
+    Got WCS object: SIP(TAN): crpix (2048.5, 2048.5), crval (35.0502, 40.0329), cd (-1.44357e-06, -0.000159827, -0.000159689, 1.35262e-06), image 4096 x 4096; SIP orders A=2, B=2, AP=2, BP=2
+    With image size 4096 x 4096, central RA,Dec is (35.0502, 40.0329)
+    Good region in this image (slice): None
+    Reading data quality / mask file...
+    DQ file: (4096, 4096) uint8 min: 0 max 0 number of pixels == 0: 16777216
+    Remapping data quality / mask file...
+    DQ file: (4096, 4096) uint8 min: 0 max 0 number of pixels == 0: 16777216
+    Reading inverse-variance / weight file...
+    Invvar map: (4096, 4096) float64 min: 0.14326538430832528 max 3384.7038778866395 median 0.3371938087998787 number of pixels == 0: 0 , number >0: 16777216
+    Reading image file...
+    Image pixels: (4096, 4096) float64 min: 0.0 max 75933.77972738532 median 36.92694015056645
+    Running fix_saturation...
+    Image pixels: (4096, 4096) float64 min: 0.0 max 75933.77972738532 median 36.92694015056645
+    Invvar map: (4096, 4096) float64 min: 0.14326538430832528 max 3384.7038778866395 median 0.3371938087998787 number of pixels == 0: 0 , number >0: 16777216
+    DQ file: (4096, 4096) uint8 min: 0 max 0 number of pixels == 0: 16777216
+    Calling estimate_sig1()...
+    Got sig1 = 0.17221072853446207
+    Calling remap_invvar...
+    Blanking out 0 image pixels with invvar=0
+    Image pixels: (4096, 4096) float64 min: 0.0 max 75933.77972738532 median 36.92694015056645
+    Invvar map: (4096, 4096) float64 min: 0.14326538430832528 max 3384.7038778866395 median 0.3371938087998787 number of pixels == 0: 0 , number >0: 16777216
+    DQ file: (4096, 4096) uint8 min: 0 max 0 number of pixels == 0: 16777216
+    Scaling weight(invvar) and image pixels...
+    Image pixels: (4096, 4096) float64 min: 0.0 max 75933.77972738532 median 36.92694015056645
+    Invvar map: (4096, 4096) float64 min: 0.14326538430832528 max 3384.7038778866395 median 0.3371938087998787 number of pixels == 0: 0 , number >0: 16777216
+    Estimating sky level...
+    Getting nominal zeropoint for band "NB_E"
+    Traceback (most recent call last):
+      File "legacypipe/new-camera-setup.py", line 254, in <module>
+        main()
+      File "legacypipe/new-camera-setup.py", line 244, in main
+        zp0 = img.nominal_zeropoint(img.band)
+      File "/global/homes/d/dstn/legacypipe/py/legacypipe/image.py", line 280, in nominal_zeropoint
+        return self.zp0[band]
+    AttributeError: 'WiroImage' object has no attribute 'zp0'
+
+where we can see that the WCS header is getting read, and then the
+image, data quality / flags / masks, and invvar / weight map files.  A
+number of remapping steps are applied (for example, to take out an
+exposure-time scaling), followed by estimation of the per-pixel noise
+level ("sig1"), and the average background (sky) level.  This fails on
+fetching the nominal zeropoint for the image.  We must add a dict.
+For now, we'll plug in a fake value, but for production, we would
+typically select the zeropoint from a clear, photometric night, with
+exposures near zenith.  We add to the ``WiroImage`` class a new class
+variable ``zp0``::
+
+    class WiroImage(LegacySurveyImage):
+        zp0 = dict(
+            NB_E = 25.0,
+        )
+
+Of course we'll have to add the other bands eventually, but for now, onward!  Next, we get::
+
+    > python -u legacypipe/new-camera-setup.py --camera wiro --survey-dir wiro-dir wiro/20221031/a144_zbf.fit
+    ...
+    Estimating sky level...
+    Getting nominal zeropoint for band "NB_E"
+    Got nominal zeropoint for band NB_E : 25.0
+    Sky level: 36.85 count/pix
+    Sky brightness: 22.401 mag/arcsec^2 (assuming nominal zeropoint)
+    Does a zeropoint already exist in the image headers?  zpt= None
+    Fetching Pan-STARRS stars inside this image...
+    Found 5151 good PS1 stars
+    Found 5151 PS1 stars in this image
+    Cutting PS1 stars...
+    4254 PS1 stars passed cut to be used for calibration
+    Converting PS1 mags to the new camera...
+    Traceback (most recent call last):
+      File "legacypipe/new-camera-setup.py", line 280, in <module>
+        main()
+      File "legacypipe/new-camera-setup.py", line 274, in main
+        phot.legacy_survey_mag = img.photometric_calibrator_to_observed(name, phot)
+      File "/global/homes/d/dstn/legacypipe/py/legacypipe/image.py", line 311, in photometric_calibrator_to_observed
+        colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
+      File "/global/homes/d/dstn/legacypipe/py/legacypipe/image.py", line 323, in colorterm_ps1_to_observed
+        raise RuntimeError('Not implemented: generic colorterm_ps1_to_observed')
+    RuntimeError: Not implemented: generic colorterm_ps1_to_observed
+
+The standard photometric calibration proceeds by fetching Pan-STARRS
+PS1 stars, which get cut down to a sample used for photometric
+calibration, and then transformed via a color term into the filter of
+this image.  We will override the ``colorterm_ps1_to_observed()``
+function, but, because WIRO is using narrow-band filters, we'll also
+need to tell the code which PS-1 band should be used as the primary
+band (to which the color term would get applied) for the calibration.
+Let's assume we will eventually use polynomial color terms as we do
+for DECam and other cameras.
+
+::
+
+    class WiroImage(LegacySurveyImage):
+        # ...
+        def get_ps1_band(self):
+            from legacypipe.ps1cat import ps1cat
+            # Returns the integer index of the band in Pan-STARRS1 to use for an
+            # image in filter self.band.
+            # eg, g=0, r=1, i=2, z=3, Y=4
+            # A known filter?
+            if self.band in ps1cat.ps1band:
+                return ps1cat.ps1band[self.band]
+            # Narrow-band filters -- calibrate againts PS1 g band
+            return dict(
+                NB_A = 0,
+                NB_B = 0,
+                NB_C = 0,
+                NB_D = 0,
+                NB_E = 0,
+                NB_F = 0,
+                )[self.band]
+    
+        def colorterm_ps1_to_observed(self, cat, band):
+            from legacypipe.ps1cat import ps1cat
+            # See, eg, ps1cat.py's ps1_to_decam.
+            # "cat" is a table of PS1 stars;
+            # Grab the g-i color:
+            g_index = ps1cat.ps1band['g']
+            i_index = ps1cat.ps1band['i']
+            gmag = cat[:,g_index]
+            imag = cat[:,i_index]
+            gi = gmag - imag
+    
+            coeffs = dict(
+                g = [ 0. ],
+                NB_A = [ 0. ],
+                NB_B = [ 0. ],
+                NB_C = [ 0. ],
+                NB_D = [ 0. ],
+                NB_E = [ 0. ],
+                NB_F = [ 0. ],
+                )[band]
+            colorterm = np.zeros(len(gi))
+            for power,coeff in enumerate(coeffs):
+                colorterm += coeff * gi**power
+            return colorterm
+
+
+            
+At this point, the ``new-camera-setup.py`` script runs to completion.
+
+It's time to move to the ``legacy_zeropoints.py`` script itself!
+Running the command below, you'll see it first run Source Extractor
+and then PsfEx to generate the PSF model file.  It will also generate
+a sky background model file.  It will then proceed to look up
+Pan-STARRS1 and Gaia stars for astrometric and photometric
+calibration, placing these stars into the image and then fitting their
+positions and brightnesses.  Eventually, it will crash with::
+
+    > python -u legacyzpts/legacy_zeropoints.py --camera wiro --survey-dir wiro-dir --image wiro/20221031/a144_zbf.fit -v
+    ...
+    Fitting positions & fluxes of 1262 stars
+    Off image for 25 stars
+    Got photometry results for 1237 reference stars
+    RA, Dec offsets (arcsec): -0.0536, -0.1868
+    RA, Dec stddev  (arcsec): 2.4081, 2.0804
+    RA, Dec RMS     (arcsec): 1.9789, 1.8536
+    Flux S/N min/median/max: -338.1 / 138.3 / 10235409.5
+    Zeropoint: using 746 good stars
+    Zeropoint: using 608 stars after sigma-clipping
+    Traceback (most recent call last):
+      File "legacyzpts/legacy_zeropoints.py", line 1525, in <module>
+        main()
+      File "legacyzpts/legacy_zeropoints.py", line 827, in main
+        runit(F.imgfn, F.photomfn, F.annfn, mp, **measureargs)
+      File "legacyzpts/legacy_zeropoints.py", line 522, in runit
+        results = measure_image(imgfn, mp, survey=survey,
+      File "legacyzpts/legacy_zeropoints.py", line 356, in measure_image
+        rtns = mp.map(run_one_ext, [(img, ext, survey, splinesky,
+      File "/global/homes/d/dstn/astrometry/astrometry/util/multiproc.py", line 90, in map
+        return list(map(f, args))
+      File "legacyzpts/legacy_zeropoints.py", line 460, in run_one_ext
+        return run_zeropoints(img, splinesky=splinesky, sdss_photom=sdss_photom)
+      File "legacyzpts/legacy_zeropoints.py", line 1254, in run_zeropoints
+        kext = imobj.extinction(imobj.band)
+      File "/global/homes/d/dstn/legacypipe/py/legacypipe/image.py", line 283, in extinction
+        return self.k_ext[band]
+    AttributeError: 'WiroImage' object has no attribute 'k_ext'
+
+The ``k_ext`` here is an atmospheric extinction coefficient, used to
+estimate the sky transparency for our image, given its zeropoint and
+airmass.  We can add to the ``WiroImage`` class::
+
+    class WiroImage(LegacySurveyImage):
+        # ...
+        k_ext = dict(
+            NB_A = 0.173,
+        )
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+
+    
+
 
 Next, we get::
 
