@@ -1,8 +1,10 @@
 import os
 import sys
 import logging
-
+import numpy as np
 from legacypipe.survey import LegacySurveyData
+from legacypipe.ps1cat import ps1cat
+from legacypipe.gaiacat import GaiaCatalog
 
 logger = logging.getLogger('legacypipe.new-camera-setup')
 def info(*args):
@@ -138,24 +140,32 @@ def main():
 
     info('Source Extractor & PsfEx will read the following config files:')
     sedir = survey.get_se_dir()
-    for (type, suff) in [('SE config', '.se'),
+    for (typ, suff) in [('SE config', '.se'),
                          ('SE params', '.param'),
                          ('SE convolution filter', '.conv'),
                          ('PsfEx config', '.psfex'),
                          ]:
         fn = os.path.join(sedir, img.camera + suff)
         ex = os.path.exists(fn)
-        info('  %s: %s (%s)' % (type, fn, 'exists' if ex else 'does not exist'))
+        info('  %s: %s (%s)' % (typ, fn, 'exists' if ex else 'does not exist'))
 
     info('Special PsfEx flags for this CCD:', survey.get_psfex_conf(img.camera, img.expnum, img.ccdname))
+
+    basename = img.get_base_name()
+    if len(img.ccdname):
+        calname = basename + '-' + img.ccdname
+    else:
+        calname = basename
+    img.name = calname
 
     # Once legacy_zeropoints.py starts...
     ra_bore, dec_bore = img.get_radec_bore(primhdr)
     info('RA,Dec boresight:', ra_bore, dec_bore)
     info('Airmass:', img.get_airmass(primhdr, hdr, ra_bore, dec_bore))
     info('Gain:', img.get_gain(primhdr, hdr))
-    info('WCS Reference pixel CRPIX[12]:', hdr['CRPIX1'], hdr['CRPIX2'])
-    info('WCS Reference pos CRVAL[12]:', hdr['CRVAL1'], hdr['CRVAL2'])
+    p1,p2,v1,v2 = img.get_crpixcrval(primhdr, hdr)
+    info('WCS Reference pixel:', p1, p2)
+    info('WCS Reference pos:', v1, v2)
     info('WCS CD matrix:', img.get_cd_matrix(primhdr, hdr))
 
     wcs = img.get_wcs(hdr=hdr)
@@ -189,7 +199,7 @@ def main():
     info('Reading inverse-variance / weight file...')
     invvar = img.read_invvar(dq=dq, slc=slc)
     info('Invvar map:', invvar.shape, invvar.dtype, 'min:', invvar.min(),
-         'max', invvar.max(), 'median', invvar.median(),
+         'max', invvar.max(), 'median', np.median(invvar),
          'number of pixels == 0:', np.sum(invvar == 0), ', number >0:', np.sum(invvar>0))
     info('Reading image file...')
     impix = img.read_image(slc=slc)
@@ -200,7 +210,7 @@ def main():
     info('Image pixels:', impix.shape, impix.dtype, 'min:', impix.min(),
          'max', impix.max(), 'median', np.median(impix.ravel()))
     info('Invvar map:', invvar.shape, invvar.dtype, 'min:', invvar.min(),
-         'max', invvar.max(), 'median', invvar.median(),
+         'max', invvar.max(), 'median', np.median(invvar),
          'number of pixels == 0:', np.sum(invvar == 0), ', number >0:', np.sum(invvar>0))
     info('DQ file:', dq.shape, dq.dtype, 'min:', dq.min(), 'max', dq.max(),
          'number of pixels == 0:', np.sum(dq == 0))
@@ -217,7 +227,7 @@ def main():
     info('Image pixels:', impix.shape, impix.dtype, 'min:', impix.min(),
          'max', impix.max(), 'median', np.median(impix.ravel()))
     info('Invvar map:', invvar.shape, invvar.dtype, 'min:', invvar.min(),
-         'max', invvar.max(), 'median', invvar.median(),
+         'max', invvar.max(), 'median', np.median(invvar),
          'number of pixels == 0:', np.sum(invvar == 0), ', number >0:', np.sum(invvar>0))
     info('DQ file:', dq.shape, dq.dtype, 'min:', dq.min(), 'max', dq.max(),
          'number of pixels == 0:', np.sum(dq == 0))
@@ -228,11 +238,12 @@ def main():
     info('Image pixels:', impix.shape, impix.dtype, 'min:', impix.min(),
          'max', impix.max(), 'median', np.median(impix.ravel()))
     info('Invvar map:', invvar.shape, invvar.dtype, 'min:', invvar.min(),
-         'max', invvar.max(), 'median', invvar.median(),
+         'max', invvar.max(), 'median', np.median(invvar),
          'number of pixels == 0:', np.sum(invvar == 0), ', number >0:', np.sum(invvar>0))
 
     info('Estimating sky level...')
     sky_img, skymed, skyrms = img.estimate_sky(impix, invvar, dq, primhdr, hdr)
+    info('Getting nominal zeropoint for band "%s"' % img.band)
     zp0 = img.nominal_zeropoint(img.band)
     info('Got nominal zeropoint for band', img.band, ':', zp0)
     skybr = zp0 - 2.5*np.log10(skymed / img.pixscale / img.pixscale / img.exptime)
@@ -241,6 +252,28 @@ def main():
 
     zpt = img.get_zeropoint(primhdr, hdr)
     info('Does a zeropoint already exist in the image headers?  zpt=', zpt)
+
+    phot = None
+    if zpt is None:
+        info('Fetching Pan-STARRS stars inside this image...')
+        try:
+            phot = ps1cat(ccdwcs=wcs).get_stars(magrange=None)
+            info('Found', len(phot), 'PS1 stars in this image')
+        except OSError as e:
+            print('No PS1 stars found for this image -- outside the PS1 footprint, or in the Galactic plane?', e)
+    if phot is not None:
+        name = 'ps1'
+        info('Cutting PS1 stars...')
+        phot.cut(img.get_photometric_calibrator_cuts(name, phot))
+        info(len(phot), 'PS1 stars passed cut to be used for calibration')
+        if len(phot) == 0:
+            phot = None
+        else:
+            # Convert to Legacy Survey mags
+            info('Converting PS1 mags to the new camera...')
+            phot.legacy_survey_mag = img.photometric_calibrator_to_observed(name, phot)
+
+    #gaia = GaiaCatalog().get_catalog_in_wcs(wcs)
 
 if __name__ == '__main__':
     main()

@@ -1,4 +1,6 @@
+import os
 from datetime import datetime
+import numpy as np
 
 from legacypipe.image import LegacySurveyImage
 
@@ -12,6 +14,25 @@ def debug(*args):
     log_debug(logger, args)
 
 class WiroImage(LegacySurveyImage):
+
+    zp0 = dict(
+        NB_A = 25.0,
+        NB_B = 25.0,
+        NB_C = 25.0,
+        NB_D = 25.0,
+        NB_E = 25.0,
+        NB_F = 25.0,
+        )
+
+    k_ext = dict(
+        NB_A = 0.173,
+        NB_B = 0.173,
+        NB_C = 0.173,
+        NB_D = 0.173,
+        NB_E = 0.173,
+        NB_F = 0.173,
+    )
+
     def __init__(self, survey, ccd, image_fn=None, image_hdu=0, **kwargs):
         super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu, **kwargs)
         self.dq_hdu = 1
@@ -50,7 +71,8 @@ class WiroImage(LegacySurveyImage):
         return cam
 
     def get_ccdname(self, primhdr, hdr):
-        return 'CCD'
+        # return 'CCD'
+        return ''
 
     def get_pixscale(self, primhdr, hdr):
         return 0.58
@@ -63,13 +85,75 @@ class WiroImage(LegacySurveyImage):
         fwhm = psf.fwhm
         return fwhm
 
+    def get_gain(self, primhdr, hdr):
+        # from https://iopscience.iop.org/article/10.1088/1538-3873/128/969/115003/ampdf
+        return 2.6
+
     def compute_filenames(self):
         # Masks and weight-maps are in HDUs following the image
         self.dqfn = self.imgfn
         self.wtfn = self.imgfn
 
-#     def get_extension_list(self, debug=False):
-#         return [0]
+    def get_extension_list(self, debug=False):
+        return [0]
 
-    #def funpack_files(self, imgfn, maskfn, imghdu, maskhdu, todelete):
-    
+    def get_wcs(self, hdr=None):
+        calibdir = self.survey.get_calib_dir()
+        imgdir = os.path.dirname(self.image_filename)
+        fn = os.path.join(calibdir, 'wcs', imgdir, self.name + '.wcs')
+        print('WCS filename:', fn)
+        from astrometry.util.util import Sip
+        return Sip(fn)
+
+    def get_crpixcrval(self, primhdr, hdr):
+        wcs = self.get_wcs()
+        p1,p2 = wcs.get_crpix()
+        v1,v2 = wcs.get_crval()
+        return p1,p2,v1,v2
+
+    def get_cd_matrix(self, primhdr, hdr):
+        wcs = self.get_wcs()
+        return wcs.get_cd()
+
+    def get_ps1_band(self):
+        # Returns the integer index of the band in Pan-STARRS1 to use for an image in filter
+        # self.band.
+        # eg, g=0, r=1, i=2, z=3, Y=4
+        # A known filter?
+        from legacypipe.ps1cat import ps1cat
+        if self.band in ps1cat.ps1band:
+            return ps1cat.ps1band[self.band]
+        # Narrow-band filters -- calibrate to PS1 g band.
+        return dict(
+            NB_A = 0,
+            NB_B = 0,
+            NB_C = 0,
+            NB_D = 0,
+            NB_E = 0,
+            NB_F = 0,
+            )[self.band]
+
+    def colorterm_ps1_to_observed(self, cat, band):
+        from legacypipe.ps1cat import ps1cat
+        # See, eg, ps1cat.py's ps1_to_decam.
+        # "cat" is a table of PS1 stars;
+        # Grab the g-i color:
+        g_index = ps1cat.ps1band['g']
+        i_index = ps1cat.ps1band['i']
+        gmag = cat[:,g_index]
+        imag = cat[:,i_index]
+        gi = gmag - imag
+
+        coeffs = dict(
+            g = [ 0. ],
+            NB_A = [ 0. ],
+            NB_B = [ 0. ],
+            NB_C = [ 0. ],
+            NB_D = [ 0. ],
+            NB_E = [ 0. ],
+            NB_F = [ 0. ],
+            )[band]
+        colorterm = np.zeros(len(gi))
+        for power,coeff in enumerate(coeffs):
+            colorterm += coeff * gi**power
+        return colorterm

@@ -23,7 +23,7 @@ import legacypipe
 from legacypipe.ps1cat import ps1cat, sdsscat
 from legacypipe.gaiacat import GaiaCatalog
 from legacypipe.survey import radec_at_mjd, get_git_version
-from legacypipe.image import validate_version
+from legacypipe.cpimage import validate_version
 from legacypipe.survey import LegacySurveyData
 
 import logging
@@ -33,18 +33,6 @@ def debug(*args):
     log_debug(logger, args)
 
 CAMERAS=['decam','mosaic','90prime','megaprime', 'hsc', 'panstarrs', 'wiro']
-
-MAGLIM=dict(
-    u=[16, 20],
-    g=[16, 20],
-    r=[16, 19.5],
-    i=[16, 19.5],
-    z=[16.5, 19],
-    Y=[16.5, 19],
-    N419=[16,20],
-    N501=[16,20],
-    N673=[16,19.5],
-    )
 
 def ptime(text,t0):
     tnow=Time()
@@ -884,17 +872,13 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     ccds['gain'] = imobj.get_gain(primhdr, hdr)
     ccds['object'] = primhdr.get('OBJECT')
 
-    optional = ['avsky']
-    for ccd_col in ['avsky', 'crpix1', 'crpix2', 'crval1', 'crval2']:
-        if ccd_col.upper() in hdr:
-            ccds[ccd_col] = hdr[ccd_col.upper()]
-        elif ccd_col in optional:
-            ccds[ccd_col] = np.nan
-        else:
-            raise KeyError('Could not find %s key in header:' % ccd_col)
+    ccds['AVSKY'] = hdr.get('AVSKY', np.nan)
 
     for ccd_col,val in zip(['cd1_1', 'cd1_2', 'cd2_1', 'cd2_2'],
                            imobj.get_cd_matrix(primhdr, hdr)):
+        ccds[ccd_col] = val
+    for ccd_col,val in zip(['crpix1', 'crpix2', 'crval1', 'crval2'],
+                           imobj.get_crpixcrval(primhdr, hdr)):
         ccds[ccd_col] = val
 
     wcs = imobj.get_wcs(hdr=hdr)
@@ -1254,7 +1238,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     nphotom = np.sum(phot.flux_sn > 5.)
 
     dmag = refs.legacy_survey_mag - phot.instpsfmag
-    maglo, maghi = MAGLIM[imobj.band]
+    maglo, maghi = imobj.get_photocal_mag_limits()
     dmag = dmag[refs.photom &
                 (refs.legacy_survey_mag > maglo) &
                 (refs.legacy_survey_mag < maghi) &

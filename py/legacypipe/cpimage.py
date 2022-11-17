@@ -1,4 +1,16 @@
+import os
+import numpy as np
 from legacypipe.image import LegacySurveyImage
+from astrometry.util.fits import fits_table
+
+import logging
+logger = logging.getLogger('legacypipe.cpimage')
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
 
 class CPImage(LegacySurveyImage):
 
@@ -17,6 +29,12 @@ class CPImage(LegacySurveyImage):
                                       self.ccdname, self.mjdobs,
                                       img, invvar, x0, y0)
 
+    def remap_dq(self, dq, header):
+        '''
+        Called by get_tractor_image() to map the results from read_dq
+        into a bitmask.
+        '''
+        return remap_dq_cp_codes(dq, dtype=self.dq_type)
 
 def remap_dq_cp_codes(dq, ignore_codes=None, dtype=np.uint16):
     '''

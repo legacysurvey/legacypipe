@@ -283,6 +283,9 @@ class LegacySurveyImage(object):
         return self.k_ext[band]
 
     def calibration_good(self, primhdr):
+        '''Did the low-level processing succeed for this image?  If not, no
+        need to process further.
+        '''
         return True
 
     def has_astrometric_calibration(self, ccd):
@@ -306,20 +309,46 @@ class LegacySurveyImage(object):
         if name == 'ps1':
             from legacypipe.ps1cat import ps1cat
             colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
-            ps1band = ps1cat.ps1band[self.band]
-            return cat.median[:, ps1band] + np.clip(colorterm, -1., +1.)
+            band = self.get_ps1_band()
+            return cat.median[:, band] + np.clip(colorterm, -1., +1.)
         elif name == 'sdss':
             from legacypipe.ps1cat import sdsscat
             colorterm = self.colorterm_sdss_to_observed(cat.psfmag, self.band)
-            band = sdsscat.sdssband[self.band]
+            band = self.get_sdss_band()
             return cat.psfmag[:, band] + np.clip(colorterm, -1., +1.)
         else:
-            raise RuntimeError('No photometric conversion from %s to DECam' % name)
+            raise RuntimeError('No photometric conversion from %s to camera' % name)
+
+    def get_ps1_band(self):
+        # Returns the integer index of the band in Pan-STARRS1 to use for an image in filter
+        # self.band.
+        # eg, g=0, r=1, i=2, z=3, Y=4
+        return ps1cat.ps1band[self.band]
+
+    def get_sdss_band(self):
+        # Returns the integer index of the band in the Sloan Digital
+        # Sky Survey imaging for an image taken through filter
+        # self.band.  eg, u=0, g=1, r=2, i=3, z=4
+        return sdsscat.sdssband[self.band]
 
     def colorterm_ps1_to_observed(self, cat, band):
         raise RuntimeError('Not implemented: generic colorterm_ps1_to_observed')
     def colorterm_sdss_to_observed(self, cat, band):
         raise RuntimeError('Not implemented: generic colorterm_sdss_to_observed')
+
+    def get_photocal_mag_limits(self):
+        MAGLIM=dict(
+            u=[16, 20],
+            g=[16, 20],
+            r=[16, 19.5],
+            i=[16, 19.5],
+            z=[16.5, 19],
+            Y=[16.5, 19],
+            N419=[16,20],
+            N501=[16,20],
+            N673=[16,19.5],
+        )
+        return MAGLIM.get(self.band, (16.,20.))
 
     def get_radec_bore(self, primhdr):
         from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
@@ -401,6 +430,9 @@ class LegacySurveyImage(object):
     # Used during zeropointing / annotation
     def get_cd_matrix(self, primhdr, hdr):
         return hdr['CD1_1'], hdr['CD1_2'], hdr['CD2_1'], hdr['CD2_2']
+
+    def get_crpixcrval(self, primhdr, hdr):
+        return hdr['CRPIX1'], hdr['CRPIX2'], hdr['CRVAL1'], hdr['CRVAL2']
 
     # Used during zeropointing
     def scale_image(self, img):
@@ -1040,7 +1072,7 @@ class LegacySurveyImage(object):
         Called by get_tractor_image() to map the results from read_dq
         into a bitmask.
         '''
-        return remap_dq_cp_codes(dq, dtype=self.dq_type)
+        return dq
 
     def read_invvar(self, clip=True, clipThresh=0.1, dq=None, slc=None,
                     **kwargs):

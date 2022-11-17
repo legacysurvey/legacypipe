@@ -70,9 +70,6 @@ class HscImage(LegacySurveyImage):
     def get_extension_list(self, debug=False):
         return [1,]
 
-    def calibration_good(self, primhdr):
-        return True
-
     def has_astrometric_calibration(self, ccd):
         return True
 

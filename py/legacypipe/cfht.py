@@ -94,10 +94,6 @@ class MegaPrimeImage(LegacySurveyImage):
         # "ccd00"
         return {'ccdname':'S5'}
 
-    def calibration_good(self, primhdr):
-        '''Did the low-level processing succeed for this image?'''
-        return True
-
     def get_extension_list(self, debug=False):
         # duplicate EXTNAME cards in the headers?! trips up fitsio;
         # https://github.com/esheldon/fitsio/issues/324
