@@ -110,6 +110,43 @@ class WiroImage(LegacySurveyImage):
     def get_extension_list(self, debug=False):
         return [0]
 
+    # def read_invvar(self, **kwargs):
+    #     ie = super().read_invvar(**kwargs)
+    #     return ie**2
+
+    def read_invvar(self, **kwargs):
+        # The reduced WIRO images have an Uncertainty HDU, but this only counts dark current
+        # and readout noise only.
+        img = self.read_image(**kwargs)
+        if self.sig1 is None or self.sig1 == 0.:
+            # Estimate per-pixel noise via Blanton's 5-pixel MAD
+            slice1 = (slice(0,-5,10),slice(0,-5,10))
+            slice2 = (slice(5,None,10),slice(5,None,10))
+            mad = np.median(np.abs(img[slice1] - img[slice2]).ravel())
+            sig1 = 1.4826 * mad / np.sqrt(2.)
+            self.sig1 = sig1
+            print('Computed sig1 by Blanton method:', self.sig1)
+        # else:
+        #     from tractor import NanoMaggies
+        #     print('sig1 from CCDs file:', self.sig1)
+        #     # sig1 in the CCDs file is in nanomaggy units --
+        #     # but here we need to return in image units.
+        #     zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
+        #     sig1 = self.sig1 * zpscale
+        #     print('scaled to image units:', sig1)
+        iv = np.empty_like(img)
+        iv[:,:] = 1./self.sig1**2
+        return iv
+
+    def fix_saturation(self, img, dq, invvar, primhdr, imghdr, slc):
+        # SATURATE header keyword is ~65536, but actual saturation in the images is
+        # 32760.
+        I,J = np.nonzero(img > 32700)
+        from legacypipe.bits import DQ_BITS
+        if len(I):
+            dq[I,J] |= DQ_BITS['satur']
+            invvar[I,J] = 0
+
     def get_wcs(self, hdr=None):
         calibdir = self.survey.get_calib_dir()
         imgdir = os.path.dirname(self.image_filename)
