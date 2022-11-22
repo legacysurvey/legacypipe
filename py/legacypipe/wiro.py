@@ -16,6 +16,7 @@ def debug(*args):
 class WiroImage(LegacySurveyImage):
 
     zp0 = dict(
+        g = 25.0,
         NB_A = 25.0,
         NB_B = 25.0,
         NB_C = 25.0,
@@ -25,6 +26,7 @@ class WiroImage(LegacySurveyImage):
         )
 
     k_ext = dict(
+        g = 0.173,
         NB_A = 0.173,
         NB_B = 0.173,
         NB_C = 0.173,
@@ -49,6 +51,14 @@ class WiroImage(LegacySurveyImage):
         }
         # ASSUME that the filter is one of the above!
         return filtmap[f]
+
+    def get_radec_bore(self, primhdr):
+        # Some TELDEC header cards (eg 20221030/a276) have a bug:
+        # TELDEC  = '-4:-50:-23.-9'
+        try:
+            return super.get_radec_bore(primhdr)
+        except:
+            return None,None
 
     def get_expnum(self, primhdr):
         d = self.get_date(primhdr)
@@ -88,6 +98,9 @@ class WiroImage(LegacySurveyImage):
     def get_gain(self, primhdr, hdr):
         # from https://iopscience.iop.org/article/10.1088/1538-3873/128/969/115003/ampdf
         return 2.6
+
+    def get_object(self, primhdr):
+        return primhdr.get('OBJNAME', '')
 
     def compute_filenames(self):
         # Masks and weight-maps are in HDUs following the image

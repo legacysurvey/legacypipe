@@ -17,8 +17,6 @@ def debug(*args):
 
 def main():
     from legacyzpts.legacy_zeropoints import CAMERAS
-
-    
     import argparse
     parser = argparse.ArgumentParser()
 
@@ -59,13 +57,13 @@ def main():
         return
 
     info('For camera "%s", found LegacySurveyImage subclass: %s' % (opt.camera, str(clazz)))
-    
+
     info('Reading', opt.image, 'and trying to create new image object...')
 
     img = survey.get_image_object(None, camera=opt.camera,
                                   image_fn=opt.image, image_hdu=opt.image_hdu,
                                   camera_setup=True)
-                                  
+
     info('Got image of type', type(img))
 
     # Here we're copying some code out of image.py...
@@ -86,7 +84,7 @@ def main():
 
     info('Reading a bunch of metadata from image primary header:')
 
-    for k in ['band', 'propid', 'expnum', 'camera', 'exptime']:
+    for k in ['band', 'propid', 'expnum', 'camera', 'exptime', 'object']:
         info('get_%s():' % k)
         v = getattr(img, 'get_'+k)(primhdr)
         info('  -> "%s"' % v)
@@ -97,7 +95,7 @@ def main():
     info('  -> "%s"' % img.mjdobs)
 
     namechange = {'date': 'procdate',}
-    for key in ['HA', 'DATE', 'OBJECT', 'PLVER', 'PLPROCID']:
+    for key in ['HA', 'DATE', 'PLVER', 'PLPROCID']:
         info('get "%s" from primary header.' % key)
         val = primhdr.get(key)
         if isinstance(val, str):
@@ -217,7 +215,7 @@ def main():
 
     info('Calling estimate_sig1()...')
     img.sig1 = img.estimate_sig1(impix, invvar, dq, primhdr, hdr)
-    info('Got sig1 =', img.sig1)
+    info('Got sig1 / exptime =', img.sig1)
 
     info('Calling remap_invvar...')
     invvar = img.remap_invvar(invvar, primhdr, impix, dq)

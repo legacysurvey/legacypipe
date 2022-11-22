@@ -553,12 +553,18 @@ def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
 
     hdr.add_record(dict(name='EXPNUM', value=img.expnum,
                         comment='Exposure number'))
-    hdr.add_record(dict(name='PROCDATE', value=img.procdate,
-                        comment='CP processing date'))
-    hdr.add_record(dict(name='PLPROCID', value=img.plprocid,
-                        comment='CP processing batch'))
-    hdr.add_record(dict(name='RA_BORE',  value=ccds['ra_bore'][0],  comment='Boresight RA (deg)'))
-    hdr.add_record(dict(name='DEC_BORE', value=ccds['dec_bore'][0], comment='Boresight Dec (deg)'))
+    if img.procdate is not None:
+        hdr.add_record(dict(name='PROCDATE', value=img.procdate,
+                            comment='CP processing date'))
+    if img.plprocid is not None:
+        hdr.add_record(dict(name='PLPROCID', value=img.plprocid,
+                            comment='CP processing batch'))
+    v = ccds['ra_bore'][0]
+    if np.isfinite(v):
+        hdr.add_record(dict(name='RA_BORE',  value=v,  comment='Boresight RA (deg)'))
+    v = ccds['dec_bore'][0]
+    if np.isfinite(v):
+        hdr.add_record(dict(name='DEC_BORE', value=v, comment='Boresight Dec (deg)'))
 
     zptgood = np.isfinite(ccds['zpt'])
     if np.sum(zptgood) > 0:
@@ -584,8 +590,13 @@ def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
     hdr.add_record(dict(name='FILENAME', value=os.path.join(firstdir, base)))
 
     if photom is not None:
-        writeto_via_temp(photomfn, photom, overwrite=True, header=hdr)
-
+        try:
+            writeto_via_temp(photomfn, photom, overwrite=True, header=hdr)
+        except:
+            print('Failed to write photom file:', photomfn)
+            print('Header:')
+            print(hdr)
+            raise
     accds = astropy_to_astrometry_table(ccds)
 
     # survey table
@@ -870,7 +881,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     airmass = imobj.get_airmass(primhdr, hdr, ra_bore, dec_bore)
     ccds['airmass'] = airmass
     ccds['gain'] = imobj.get_gain(primhdr, hdr)
-    ccds['object'] = primhdr.get('OBJECT')
+    ccds['object'] = imobj.get_object(primhdr)
 
     ccds['AVSKY'] = hdr.get('AVSKY', np.nan)
 

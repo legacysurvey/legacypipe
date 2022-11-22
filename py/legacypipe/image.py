@@ -380,6 +380,9 @@ class LegacySurveyImage(object):
     def get_gain(self, primhdr, hdr):
         return primhdr['GAIN']
 
+    def get_object(self, primhdr):
+        return primhdr.get('OBJECT', '')
+
     def get_band(self, primhdr):
         band = primhdr['FILTER']
         band = band.split()[0]
