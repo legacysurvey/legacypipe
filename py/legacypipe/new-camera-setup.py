@@ -28,6 +28,8 @@ def main():
                         help='Override the $LEGACY_SURVEY_DIR environment variable')
     parser.add_argument('--verbose', '-v', action='store_true', default=False, help='More logging')
 
+    parser.add_argument('--plots', action='store_true', default=False,
+                        help='Make plots?')
     parser.add_argument('image', metavar='image-filename', help='Image filename to read')
 
     opt = parser.parse_args()
@@ -39,6 +41,12 @@ def main():
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
     # tractor logging is *soooo* chatty
     logging.getLogger('tractor.engine').setLevel(lvl + 10)
+`
+    ps = None
+    if opt.plots:
+        from astrometry.util.plotutils import PlotSequence
+        import pylab as plt
+        ps = PlotSequence(opt.camera)
 
     if not opt.camera in CAMERAS:
         print('You must add your new camera to the list of known cameras at the top of the legacy_zeropoints.py script -- the CAMERAS variable.')
@@ -247,6 +255,108 @@ def main():
     skybr = zp0 - 2.5*np.log10(skymed / img.pixscale / img.pixscale / img.exptime)
     info('Sky level: %.2f count/pix' % skymed)
     info('Sky brightness: %.3f mag/arcsec^2 (assuming nominal zeropoint)' % skybr)
+
+    # Estimate per-pixel noise via Blanton's 5-pixel MAD
+    slice1 = (slice(0,-5,10),slice(0,-5,10))
+    slice2 = (slice(5,None,10),slice(5,None,10))
+    mad = np.median(np.abs(impix[slice1] - impix[slice2]).ravel())
+    sig1 = 1.4826 * mad / np.sqrt(2.)
+    info('Sky sig1 estimate by Blanton method:', sig1)
+    info('Pipeline sig1:', img.sig1 * img.exptime)
+
+    if ps is not None:
+
+        img.set_calib_filenames()
+
+        goodpix = np.flatnonzero(invvar > 0)
+        lo,hi = np.percentile(impix.flat[goodpix], [25,98])
+        plt.clf()
+        plt.imshow(impix, interpolation='nearest', origin='lower', vmin=lo, vmax=hi)
+        plt.title('Image pix')
+        plt.colorbar()
+        ps.savefig()
+
+        skymod = img.read_sky_model()
+        skyimg = np.zeros_like(impix)
+        skymod.addTo(skyimg)
+
+        plt.clf()
+        plt.imshow(skyimg, interpolation='nearest', origin='lower', vmin=lo, vmax=hi)
+        plt.title('Sky model')
+        plt.colorbar()
+        ps.savefig()
+
+        pix = impix - skyimg
+
+        lo,hi = np.percentile(pix.flat[goodpix], [25,98])
+        plt.clf()
+        plt.imshow(pix, interpolation='nearest', origin='lower', vmin=lo, vmax=hi)
+        plt.title('Image pix - sky model')
+        plt.colorbar()
+        ps.savefig()
+
+        lo,hi = np.percentile(impix.flat[goodpix], [5,95])
+        p16,p84 = np.percentile(impix.flat[goodpix], [16,84])
+        s1 = img.sig1 * img.exptime
+
+        plt.clf()
+        plt.hist(impix.flat[goodpix], bins=50, range=(lo,hi))
+        plt.axvline(skymed - s1, color='k', label='Pipeline +- 1 sigma')
+        plt.axvline(skymed, color='k')
+        plt.axvline(skymed + s1, color='k')
+        plt.axvline(p16, color='r', label='16/84th percentiles')
+        plt.axvline(p84, color='r')
+        plt.legend()
+        plt.xlabel('Image pixels, median +- pipeline sig1 (ADU)')
+        plt.title('Image pix')
+        ps.savefig()
+
+        plt.clf()
+        plt.hist(impix.flat[goodpix], bins=50, range=(lo,hi), log=True)
+        plt.axvline(skymed - s1, color='k', label='Pipeline +- 1 sigma')
+        plt.axvline(skymed, color='k')
+        plt.axvline(skymed + s1, color='k')
+        plt.axvline(p16, color='r', label='16/84th percentiles')
+        plt.axvline(p84, color='r')
+        plt.legend()
+        plt.xlabel('Image pixels, median +- pipeline sig1 (ADU)')
+        plt.title('Image pix')
+        ps.savefig()
+
+        lo,hi = np.percentile(pix.flat[goodpix], [5,95])
+        p1,p2 = np.percentile(pix.flat[goodpix], [16,84])
+
+        plt.clf()
+        plt.hist(pix.flat[goodpix], bins=50, log=True, range=(lo,hi))
+        plt.axvline(-s1, color='k')
+        plt.axvline(0, color='k')
+        plt.axvline(+s1, color='k')
+        plt.axvline(p1, color='r')
+        plt.axvline(p2, color='r')
+        plt.xlabel('Image pix - sky model (ADU)')
+        plt.title('Image pixels - sky model, w/pipeline sig1')
+        ps.savefig()
+
+        plt.clf()
+        n,b,p = plt.hist(pix.flat[goodpix] * np.sqrt(invvar.flat[goodpix]), bins=50,
+                         range=(-5,+5))
+        xx = np.linspace(-5, +5, 200)
+        yy = np.exp(-0.5 * xx**2)
+        mx = max(n)
+        plt.plot(xx, mx * yy/max(yy), 'b-')
+        plt.xlim(-5,+5)
+        plt.xlabel('(Image pixels - sky model)* sqrt(invvar)  (sigma)')
+        plt.title('Is uncertainty map correct?')
+        ps.savefig()
+
+        plt.clf()
+        n,b,p = plt.hist((impix.flat[goodpix] - skymed) * np.sqrt(invvar.flat[goodpix]), bins=50,
+                         range=(-5,+5), log=True)
+        plt.plot(xx, mx * yy/max(yy), 'b-')
+        plt.xlim(-5,+5)
+        plt.xlabel('Image pixels * sqrt(invvar)  (sigma)')
+        plt.title('Is uncertainty map correct?')
+        ps.savefig()
 
     zpt = img.get_zeropoint(primhdr, hdr)
     info('Does a zeropoint already exist in the image headers?  zpt=', zpt)
