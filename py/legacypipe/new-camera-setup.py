@@ -41,7 +41,7 @@ def main():
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
     # tractor logging is *soooo* chatty
     logging.getLogger('tractor.engine').setLevel(lvl + 10)
-`
+
     ps = None
     if opt.plots:
         from astrometry.util.plotutils import PlotSequence
