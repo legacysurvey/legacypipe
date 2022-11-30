@@ -39,6 +39,7 @@ class WiroImage(LegacySurveyImage):
         super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu, **kwargs)
         self.dq_hdu = 1
         self.wt_hdu = 2
+        self.SATUR = 32700
 
     def get_band(self, primhdr):
         f = primhdr['FILTER']
@@ -141,7 +142,7 @@ class WiroImage(LegacySurveyImage):
     def fix_saturation(self, img, dq, invvar, primhdr, imghdr, slc):
         # SATURATE header keyword is ~65536, but actual saturation in the images is
         # 32760.
-        I,J = np.nonzero(img > 32700)
+        I,J = np.nonzero(img > self.SATUR)
         from legacypipe.bits import DQ_BITS
         if len(I):
             dq[I,J] |= DQ_BITS['satur']
@@ -183,27 +184,68 @@ class WiroImage(LegacySurveyImage):
             NB_F = 0,
             )[self.band]
 
+    def get_photometric_calibrator_cuts(self, name, cat):
+        good = super().get_photometric_calibrator_cuts(name, cat)
+        if self.band == 'NB_C' and name == 'ps1':
+            grcolor= cat.median[:,0] - cat.median[:,1]
+            good *= (grcolor > 0.2) * (grcolor < 1.0)
+        return good
+
     def colorterm_ps1_to_observed(self, cat, band):
         from legacypipe.ps1cat import ps1cat
         # See, eg, ps1cat.py's ps1_to_decam.
         # "cat" is a table of PS1 stars;
         # Grab the g-i color:
-        g_index = ps1cat.ps1band['g']
-        i_index = ps1cat.ps1band['i']
-        gmag = cat[:,g_index]
-        imag = cat[:,i_index]
-        gi = gmag - imag
 
+        # Arjun's color terms are polynomial (well, linear!) in g-r.
+        g_index = ps1cat.ps1band['g']
+        r_index = ps1cat.ps1band['r']
+        #i_index = ps1cat.ps1band['i']
+        gmag = cat[:,g_index]
+        rmag = cat[:,r_index]
+        #imag = cat[:,i_index]
+        #gi = gmag - imag
+        gr = gmag - rmag
+
+        # NB_A : -23.5806,  0.9274
+        # NB_C : -22.7565,  1.0497
+        # NB_D : -23.1234,  0.8103
+        # NG_E : -23.1617,  1.0552
+        # WIRO_g :-25.0186,  0.1758
+        
         coeffs = dict(
-            g = [ 0. ],
-            NB_A = [ 0. ],
-            NB_B = [ 0. ],
-            NB_C = [ 0. ],
-            NB_D = [ 0. ],
-            NB_E = [ 0. ],
-            NB_F = [ 0. ],
+            g = [ 0.,  0.1758],
+            NB_A = [ 0., 0.9274 ],
+            NB_B = [ 0., ],
+            NB_C = [ 0., 1.0497 ],
+            NB_D = [ 0., 0.8103 ],
+            NB_E = [ 0., 1.0552 ],
+            NB_F = [ 0., ],
             )[band]
-        colorterm = np.zeros(len(gi))
+        colorterm = np.zeros(len(gmag))
         for power,coeff in enumerate(coeffs):
-            colorterm += coeff * gi**power
+            #colorterm += coeff * gi**power
+            colorterm += coeff * gr**power
         return colorterm
+
+    def run_se(self, imgfn, maskfn):
+        import fitsio
+        from collections import Counter
+        # Add SATUR to the mask before running SE
+        from legacypipe.survey import create_temp
+        tmpmaskfn  = create_temp(suffix='.fits')
+        img = fitsio.read(imgfn)
+        mask,hdr = fitsio.read(maskfn, header=True)
+        print('Mask values:', Counter(mask.ravel()))
+        mask[img > self.SATUR] |= 1
+        fitsio.write(tmpmaskfn, mask, header=hdr)
+        R = super().run_se(imgfn, tmpmaskfn)
+        os.unlink(tmpmaskfn)
+        return R
+
+    def run_sky(self, **kwargs):
+        # Sky variations are large enough that we don't want to do simple
+        # brightness masking of pixels in this image!  Be sure to set
+        # --blob-mask-dir -- eg to the DR10 results.
+        kwargs.update(boxcar_mask=False)
+        return super().run_sky(**kwargs)

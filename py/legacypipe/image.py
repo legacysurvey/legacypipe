@@ -1460,7 +1460,7 @@ class LegacySurveyImage(object):
 
     def run_sky(self, splinesky=True, git_version=None, ps=None, survey=None,
                 gaia=True, release=0, survey_blob_mask=None,
-                halos=True, subtract_largegalaxies=True):
+                halos=True, subtract_largegalaxies=True, boxcar_mask=True):
         from scipy.ndimage.morphology import binary_dilation
         from astrometry.util.file import trymakedirs
         from astrometry.util.miscutils import estimate_mode
@@ -1616,29 +1616,29 @@ class LegacySurveyImage(object):
                 ps.savefig()
 
             del template
-        # Compute initial model...
-        skyobj = self.get_tractor_sky_model(img - initsky, good)
 
-        skymod = np.zeros_like(img)
-        skyobj.addTo(skymod)
+        if boxcar_mask:
+            # Compute initial model...
+            skyobj = self.get_tractor_sky_model(img - initsky, good)
+            skymod = np.zeros_like(img)
+            skyobj.addTo(skymod)
+            # Now mask bright objects in a boxcar-smoothed (image -
+            # initial sky model) Smooth by a boxcar filter before cutting
+            # pixels above threshold --
+            boxcar = 5
+            # Sigma of boxcar-smoothed image
+            bsig1 = sig1 / boxcar
+            masked = np.abs(uniform_filter(img - initsky - skymod,
+                                           size=boxcar, mode='constant')
+                            > (3.*bsig1))
+            masked = binary_dilation(masked, iterations=3)
+            good[masked] = False
+            del masked
+            del skymod
 
-        # Now mask bright objects in a boxcar-smoothed (image -
-        # initial sky model) Smooth by a boxcar filter before cutting
-        # pixels above threshold --
-        boxcar = 5
-        # Sigma of boxcar-smoothed image
-        bsig1 = sig1 / boxcar
-        masked = np.abs(uniform_filter(img - initsky - skymod,
-                                       size=boxcar, mode='constant')
-                        > (3.*bsig1))
-        masked = binary_dilation(masked, iterations=3)
-        good[masked] = False
-        del masked
-        del skymod
-
-        if plots:
-            # save for later plots
-            boxcargood = good.copy()
+            if plots:
+                # save for later plots
+                boxcargood = good.copy()
 
         # Also mask based on reference stars and galaxies.
         from legacypipe.reference import get_reference_sources
@@ -1859,12 +1859,16 @@ class LegacySurveyImage(object):
             # plt.legend()
             # ps.savefig()
 
-            plt.clf()
-            self.imshow((img - initsky)*boxcargood, **ima2)
-            plt.colorbar()
-            self.plot_mask(np.logical_not(boxcargood))
-            plt.title('Image (boxcar masked)')
-            ps.savefig()
+            if boxcar_mask:
+                plt.clf()
+                self.imshow((img - initsky)*boxcargood, **ima2)
+                plt.colorbar()
+                self.plot_mask(np.logical_not(boxcargood))
+                plt.title('Image (boxcar masked)')
+                ps.savefig()
+            else:
+                # fake
+                boxcargood = True
 
             if survey_blob_mask is not None:
                 plt.clf()
