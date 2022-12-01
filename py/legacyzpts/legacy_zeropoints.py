@@ -606,6 +606,8 @@ def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
 
     t0 = ptime('write-results-to-fits',t0)
 
+    img.zeropointing_completed(annfn, photomfn, T, photom, hdr)
+
 def get_parser():
     '''return parser object, tells it what options to look for
     options can come from a list of strings or command line'''

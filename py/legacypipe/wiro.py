@@ -148,13 +148,28 @@ class WiroImage(LegacySurveyImage):
             dq[I,J] |= DQ_BITS['satur']
             invvar[I,J] = 0
 
-    def get_wcs(self, hdr=None):
+    def set_calib_filenames(self):
+        super().set_calib_filenames()
         calibdir = self.survey.get_calib_dir()
         imgdir = os.path.dirname(self.image_filename)
-        fn = os.path.join(calibdir, 'wcs', imgdir, self.name + '.wcs')
-        print('WCS filename:', fn)
+        basename = self.get_base_name()
+        calname = self.name
+        self.wcs_initial_fn = os.path.join(calibdir, 'wcs-initial', imgdir, basename,
+                                           calname + '.wcs')
+        self.wcs_final_fn = os.path.join(calibdir, 'wcs-final', imgdir, basename,
+                                         calname + '.wcs')
+
+    def get_wcs(self, hdr=None):
         from astrometry.util.util import Sip
-        return Sip(fn)
+        calibdir = self.survey.get_calib_dir()
+        imgdir = os.path.dirname(self.image_filename)
+        fn = self.wcs_initial_fn
+        print('Initial WCS filename:', fn, 'exists?', os.path.exists(fn))
+        fn = self.wcs_final_fn
+        print('Final WCS filename:', fn, 'exists?', os.path.exists(fn))
+        if os.path.exists(fn):
+            return Sip(fn)
+        return Sip(self.wcs_initial_fn)
 
     def get_crpixcrval(self, primhdr, hdr):
         wcs = self.get_wcs()
@@ -228,6 +243,86 @@ class WiroImage(LegacySurveyImage):
             colorterm += coeff * gr**power
         return colorterm
 
+    def zeropointing_completed(self, annfn, photomfn, ann, photom, hdr):
+        if not os.path.exists(self.wcs_final_fn):
+            from pkg_resources import resource_filename
+            from astrometry.util.file import trymakedirs
+            from astrometry.util.fits import fits_table
+            from legacypipe.survey import create_temp
+            # Final astrometry -- using solve-field on the "photom" results!
+            dirname = resource_filename('legacypipe', 'data')
+            configfn = os.path.join(dirname, 'an-wiro.cfg')
+            primhdr = self.read_image_primary_header()
+            r,d = self.get_radec_bore(primhdr)
+            pixscale = self.get_pixscale(None,None)
+            args = ['--config', configfn,
+                    '--tweak-order', 3,
+                    '--scale-low', pixscale * 0.8,
+                    '--scale-high', pixscale * 1.2,
+                    '--scale-units', 'app',
+                    '--width', 4096, '--height', 4096,
+                    '--no-plots',
+                    '--no-remove-lines',
+                    '--continue',
+                    '--crpix-center',
+                    '--new-fits', 'none',
+                    '--temp-axy',
+                    '--solved', 'none',
+                    '--match', 'none',
+                    '--corr', 'none',
+                    '--wcs', self.wcs_final_fn]
+            if r is not None and d is not None:
+                args.extend(['--ra', r, '--dec', d, '--radius', 5])
+            print('Creating final WCS using solve-field...')
+            trymakedirs(self.wcs_final_fn, dir=True)
+            tmpxy = create_temp(suffix='.fits')
+            xy = fits_table()
+            xy.x = 1. + photom.x_fit
+            xy.y = 1. + photom.y_fit
+            xy.mag = photom.psfmag
+            xy.cut(np.argsort(xy.mag))
+            xy.cut(xy.mag != 0)
+            xy.writeto(tmpxy)
+
+            cmd = ' '.join([str(x) for x in ['solve-field'] + args + [tmpxy]])
+            print('Running:', cmd)
+            os.system(cmd)
+            os.unlink(tmpxy)
+
+    def run_calibs(self, **kwargs):
+        if not os.path.exists(self.wcs_initial_fn):
+            from pkg_resources import resource_filename
+            from astrometry.util.file import trymakedirs
+            # Initial astrometry -- using solve-field on the image??
+            dirname = resource_filename('legacypipe', 'data')
+            configfn = os.path.join(dirname, 'an-wiro.cfg')
+            primhdr = self.read_image_primary_header()
+            r,d = self.get_radec_bore(primhdr)
+            args = ['--config', configfn,
+                    '--tweak-order', 3,
+                    '--scale-low', self.pixscale * 0.8,
+                    '--scale-high', self.pixscale * 1.2,
+                    '--scale-units', 'app',
+                    '--width', 4096, '--height', 4096,
+                    '--no-plots',
+                    '--no-remove-lines',
+                    '--continue',
+                    '--crpix-center',
+                    '--new-fits', 'none',
+                    '--temp-axy',
+                    '--solved', 'none',
+                    '--match', 'none',
+                    '--corr', 'none',
+                    '--wcs', self.wcs_initial_fn]
+            if r is not None and d is not None:
+                args.extend(['--ra', r, '--dec', d, '--radius', 5])
+            print('Creating initial WCS using solve-field...')
+            trymakedirs(self.wcs_initial_fn, dir=True)
+            cmd = ' '.join([str(x) for x in ['solve-field'] + args + [self.imgfn]])
+            print('Running:', cmd)
+            os.system(cmd)
+        super().run_calibs(**kwargs)
+
     def run_se(self, imgfn, maskfn):
         import fitsio
         from collections import Counter
@@ -249,3 +344,15 @@ class WiroImage(LegacySurveyImage):
         # --blob-mask-dir -- eg to the DR10 results.
         kwargs.update(boxcar_mask=False)
         return super().run_sky(**kwargs)
+
+if __name__ == '__main__':
+    from legacypipe.survey import LegacySurveyData
+    from astrometry.util.fits import fits_table
+    survey = LegacySurveyData(survey_dir='wiro-dir')
+    wiro = WiroImage(survey, None, 'wiro/20221031/a114_zbf.fit')
+    annfn = 'wiro-dir/zpt/wiro/20221031/a114_zbf.fit-annotated.fits'
+    photomfn = 'wiro-dir/zpt/wiro/20221031/a114_zbf.fit-photom.fits'
+    ann = fits_table(annfn)
+    photom = fits_table(photomfn)
+    hdr = ann.get_header()
+    wiro.zeropointing_completed(annfn, photomfn, ann, photom, hdr)

@@ -466,6 +466,14 @@ class LegacySurveyImage(object):
         '''
         return None
 
+    def zeropointing_completed(self, annfn, photomfn, ann, photom, hdr):
+        '''
+        Called after legacy_zeropoints has just written the "photom" and
+        "annotated" files.  (The objects are passed as *ann* and *photom*,
+        along with the annotated header *hdr*.)
+        '''
+        pass
+
     def __str__(self):
         return self.name
 
@@ -485,6 +493,7 @@ class LegacySurveyImage(object):
                 setattr(self, key, cfn)
 
     def get_cacheable_filename_variables(self):
+
         '''
         These are names of self.X variables that are filenames that
         could be cached.  These variable may be *overwritten* by the
