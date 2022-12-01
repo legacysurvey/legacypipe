@@ -41,6 +41,10 @@ class WiroImage(LegacySurveyImage):
         self.wt_hdu = 2
         self.SATUR = 32700
 
+    def set_ccdzpt(self, ccdzpt):
+        # Adjust zeropoint for exposure time
+        self.ccdzpt = ccdzpt + 2.5 * np.log10(self.exptime)
+
     def get_band(self, primhdr):
         f = primhdr['FILTER']
         filtmap = {
@@ -86,6 +90,10 @@ class WiroImage(LegacySurveyImage):
         return ''
 
     def get_pixscale(self, primhdr, hdr):
+        return 0.58
+
+    @classmethod
+    def get_nominal_pixscale(cls):
         return 0.58
 
     def get_fwhm(self, primhdr, imghdr):
@@ -270,6 +278,8 @@ class WiroImage(LegacySurveyImage):
                     '--solved', 'none',
                     '--match', 'none',
                     '--corr', 'none',
+                    '--index-xyls', 'none',
+                    '--rdls', 'none',
                     '--wcs', self.wcs_final_fn]
             if r is not None and d is not None:
                 args.extend(['--ra', r, '--dec', d, '--radius', 5])
@@ -313,6 +323,8 @@ class WiroImage(LegacySurveyImage):
                     '--solved', 'none',
                     '--match', 'none',
                     '--corr', 'none',
+                    '--index-xyls', 'none',
+                    '--rdls', 'none',
                     '--wcs', self.wcs_initial_fn]
             if r is not None and d is not None:
                 args.extend(['--ra', r, '--dec', d, '--radius', 5])
@@ -344,6 +356,9 @@ class WiroImage(LegacySurveyImage):
         # --blob-mask-dir -- eg to the DR10 results.
         kwargs.update(boxcar_mask=False)
         return super().run_sky(**kwargs)
+
+    def check_image_header(self, imghdr):
+        pass
 
 if __name__ == '__main__':
     from legacypipe.survey import LegacySurveyData
