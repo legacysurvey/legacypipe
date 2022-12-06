@@ -35,6 +35,8 @@ class WiroImage(LegacySurveyImage):
         NB_F = 0.173,
     )
 
+    splinesky_boxsize = 256
+
     def __init__(self, survey, ccd, image_fn=None, image_hdu=0, **kwargs):
         super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu, **kwargs)
         self.dq_hdu = 1
