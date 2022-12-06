@@ -1378,7 +1378,8 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
     from tractor.brightness import LinearPhotoCal
 
     plots = False
-    plot_this = False
+    plot_this = plots
+    nplots = 0
     if plots:
         from astrometry.util.plotutils import PlotSequence
         ps = PlotSequence('astromfit')
@@ -1463,6 +1464,11 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
         tim.photocal = pc
         src.thawParam('pos')
 
+        if plots:
+            # Don't plot saturated stars
+            h,w = subie.shape
+            plot_this = (subie[h//2, w//2] > 0)
+
         if plots and plot_this:
             import pylab as plt
             plt.clf()
@@ -1476,7 +1482,7 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
             plt.subplot(2,2,3)
             plt.imshow((subimg - mod) * subie, interpolation='nearest', origin='lower')
             plt.colorbar()
-            plt.suptitle('Before')
+            plt.suptitle('Before fitting: star #%i' % istar)
             ps.savefig()
 
         # Now the position and flux fit
@@ -1525,6 +1531,9 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
             plt.colorbar()
             plt.suptitle('After')
             ps.savefig()
+            nplots += 1
+            if nplots == 10:
+                plots = False
 
     if nzeroivar > 0:
         print('Zero ivar for %d stars' % nzeroivar)
