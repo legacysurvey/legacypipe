@@ -119,10 +119,6 @@ class WiroImage(LegacySurveyImage):
     def get_extension_list(self, debug=False):
         return [0]
 
-    # def read_invvar(self, **kwargs):
-    #     ie = super().read_invvar(**kwargs)
-    #     return ie**2
-
     def read_invvar(self, **kwargs):
         # The reduced WIRO images have an Uncertainty HDU, but this only counts dark current
         # and readout noise only.
@@ -135,16 +131,16 @@ class WiroImage(LegacySurveyImage):
             sig1 = 1.4826 * mad / np.sqrt(2.)
             self.sig1 = sig1
             print('Computed sig1 by Blanton method:', self.sig1)
-        # else:
-        #     from tractor import NanoMaggies
-        #     print('sig1 from CCDs file:', self.sig1)
-        #     # sig1 in the CCDs file is in nanomaggy units --
-        #     # but here we need to return in image units.
-        #     zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
-        #     sig1 = self.sig1 * zpscale
-        #     print('scaled to image units:', sig1)
+        else:
+            from tractor import NanoMaggies
+            print('WIRO read_invvar: sig1 from CCDs file:', self.sig1)
+            # sig1 in the CCDs file is in nanomaggy units --
+            # but here we need to return in image units.
+            zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
+            sig1 = self.sig1 * zpscale
+            print('scaled to image units:', sig1)
         iv = np.empty_like(img)
-        iv[:,:] = 1./self.sig1**2
+        iv[:,:] = 1./sig1**2
         return iv
 
     def fix_saturation(self, img, dq, invvar, primhdr, imghdr, slc):
