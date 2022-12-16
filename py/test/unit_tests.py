@@ -1,52 +1,5 @@
 import unittest
 
-class TestIterWrapper(unittest.TestCase):
-    def test_peek(self):
-        from legacypipe.utils import iterwrapper
-
-        def my_iterator(n):
-            for i in range(n):
-                print('Yielding', i)
-                yield i
-
-        # N = 3
-        # it = iterwrapper(my_iterator(N), N)
-        # for j in range(N):
-        #     print('Iterating:')
-        #     x = next(it)
-        #     print('Got', x)
-        #
-        # print()
-        # print('Reset')
-        N = 5
-        it = iterwrapper(my_iterator(N), N)
-
-        print('Peeking')
-        x0 = it.peek()
-        print('Got', x0)
-        print('Peeking again')
-        x1 = it.peek()
-        print('Got', x1)
-        print('Peeking again')
-        x2 = it.peek()
-        print('Got', x2)
-
-        print('Popping', x1)
-        it.pop(x1)
-
-        xp = 7
-        print('Pushing', xp)
-        it.push(xp)
-
-        print('Iterating...')
-        X = list(it)
-        print('Got:', X)
-        # for j in range(N):
-        #     print('Iterating:')
-        #     x = next(it)
-        #     print('Got', x)
-        self.assertTrue(X == [0, 2, 7, 3, 4])
-
 class TestOneblob(unittest.TestCase):
 
     def test_modelsel(self):
