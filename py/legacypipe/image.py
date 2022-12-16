@@ -311,12 +311,10 @@ class LegacySurveyImage(object):
         return 0.4, 2.7
     def photometric_calibrator_to_observed(self, name, cat):
         if name == 'ps1':
-            from legacypipe.ps1cat import ps1cat
             colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
             band = self.get_ps1_band()
             return cat.median[:, band] + np.clip(colorterm, -1., +1.)
         elif name == 'sdss':
-            from legacypipe.ps1cat import sdsscat
             colorterm = self.colorterm_sdss_to_observed(cat.psfmag, self.band)
             band = self.get_sdss_band()
             return cat.psfmag[:, band] + np.clip(colorterm, -1., +1.)

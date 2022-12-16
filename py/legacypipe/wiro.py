@@ -356,6 +356,7 @@ class WiroImage(LegacySurveyImage):
     def check_image_header(self, imghdr):
         pass
 
+
 if __name__ == '__main__':
     from legacypipe.survey import LegacySurveyData
     from astrometry.util.fits import fits_table

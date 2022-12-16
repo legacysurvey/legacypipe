@@ -48,7 +48,7 @@ def main():
         import pylab as plt
         ps = PlotSequence(opt.camera)
 
-    if not opt.camera in CAMERAS:
+    if opt.camera not in CAMERAS:
         print('You must add your new camera to the list of known cameras at the top of the legacy_zeropoints.py script -- the CAMERAS variable.')
         return
 
@@ -248,7 +248,7 @@ def main():
          'number of pixels == 0:', np.sum(invvar == 0), ', number >0:', np.sum(invvar>0))
 
     info('Estimating sky level...')
-    _, skymed, skyrms = img.estimate_sky(impix, invvar, dq, primhdr, hdr)
+    _, skymed, _ = img.estimate_sky(impix, invvar, dq, primhdr, hdr)
     info('Getting nominal zeropoint for band "%s"' % img.band)
     zp0 = img.nominal_zeropoint(img.band)
     info('Got nominal zeropoint for band', img.band, ':', zp0)
@@ -338,7 +338,7 @@ def main():
         ps.savefig()
 
         plt.clf()
-        n,b,p = plt.hist(pix.flat[goodpix] * np.sqrt(invvar.flat[goodpix]), bins=50,
+        n,_,_ = plt.hist(pix.flat[goodpix] * np.sqrt(invvar.flat[goodpix]), bins=50,
                          range=(-5,+5))
         xx = np.linspace(-5, +5, 200)
         yy = np.exp(-0.5 * xx**2)
@@ -382,6 +382,7 @@ def main():
             phot.legacy_survey_mag = img.photometric_calibrator_to_observed(name, phot)
 
     #gaia = GaiaCatalog().get_catalog_in_wcs(wcs)
+
 
 if __name__ == '__main__':
     main()
