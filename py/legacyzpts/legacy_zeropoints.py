@@ -1254,10 +1254,11 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
 
     dmag = refs.legacy_survey_mag - phot.instpsfmag
     maglo, maghi = imobj.get_photocal_mag_limits()
-    dmag = dmag[refs.photom &
-                (refs.legacy_survey_mag > maglo) &
-                (refs.legacy_survey_mag < maghi) &
-                np.isfinite(dmag)]
+    kept = (refs.photom &
+            (refs.legacy_survey_mag > maglo) &
+            (refs.legacy_survey_mag < maghi) &
+            np.isfinite(dmag))
+    dmag = dmag[kept]
 
     if len(dmag):
         print('Zeropoint: using', len(dmag), 'good stars')

@@ -4,7 +4,7 @@ import logging
 import numpy as np
 from legacypipe.survey import LegacySurveyData
 from legacypipe.ps1cat import ps1cat
-from legacypipe.gaiacat import GaiaCatalog
+#from legacypipe.gaiacat import GaiaCatalog
 
 logger = logging.getLogger('legacypipe.new-camera-setup')
 def info(*args):
@@ -248,7 +248,7 @@ def main():
          'number of pixels == 0:', np.sum(invvar == 0), ', number >0:', np.sum(invvar>0))
 
     info('Estimating sky level...')
-    sky_img, skymed, skyrms = img.estimate_sky(impix, invvar, dq, primhdr, hdr)
+    _, skymed, skyrms = img.estimate_sky(impix, invvar, dq, primhdr, hdr)
     info('Getting nominal zeropoint for band "%s"' % img.band)
     zp0 = img.nominal_zeropoint(img.band)
     info('Got nominal zeropoint for band', img.band, ':', zp0)

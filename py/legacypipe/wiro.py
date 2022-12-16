@@ -167,8 +167,6 @@ class WiroImage(LegacySurveyImage):
 
     def get_wcs(self, hdr=None):
         from astrometry.util.util import Sip
-        calibdir = self.survey.get_calib_dir()
-        imgdir = os.path.dirname(self.image_filename)
         fn = self.wcs_initial_fn
         print('Initial WCS filename:', fn, 'exists?', os.path.exists(fn))
         fn = self.wcs_final_fn
@@ -233,7 +231,7 @@ class WiroImage(LegacySurveyImage):
         # NB_D : -23.1234,  0.8103
         # NG_E : -23.1617,  1.0552
         # WIRO_g :-25.0186,  0.1758
-        
+
         coeffs = dict(
             g = [ 0.,  0.1758],
             NB_A = [ 0., 0.9274 ],

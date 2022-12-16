@@ -1,7 +1,3 @@
-import os
-from datetime import datetime
-import numpy as np
-
 from legacypipe.image import LegacySurveyImage
 
 import logging

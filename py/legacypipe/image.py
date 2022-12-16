@@ -324,12 +324,14 @@ class LegacySurveyImage(object):
             raise RuntimeError('No photometric conversion from %s to camera' % name)
 
     def get_ps1_band(self):
+        from legacypipe.ps1cat import ps1cat
         # Returns the integer index of the band in Pan-STARRS1 to use for an image in filter
         # self.band.
         # eg, g=0, r=1, i=2, z=3, Y=4
         return ps1cat.ps1band[self.band]
 
     def get_sdss_band(self):
+        from legacypipe.ps1cat import sdsscat
         # Returns the integer index of the band in the Sloan Digital
         # Sky Survey imaging for an image taken through filter
         # self.band.  eg, u=0, g=1, r=2, i=3, z=4

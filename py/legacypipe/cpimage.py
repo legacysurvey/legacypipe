@@ -1,4 +1,5 @@
 import os
+import warnings
 import numpy as np
 import fitsio
 from legacypipe.image import LegacySurveyImage
