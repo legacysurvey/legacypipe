@@ -297,14 +297,18 @@ class LegacySurveyImage(object):
         '''
         if name == 'ps1':
             gicolor= cat.median[:,0] - cat.median[:,2]
+            color_lo, color_hi = self.get_ps1_calibrator_color_range()
             return ((cat.nmag_ok[:, 0] > 0) &
                     (cat.nmag_ok[:, 1] > 0) &
                     (cat.nmag_ok[:, 2] > 0) &
-                    (gicolor > 0.4) &
-                    (gicolor < 2.7))
+                    (gicolor > color_lo) &
+                    (gicolor < color_hi))
         if name == 'sdss':
             return np.ones(len(cat), bool)
         raise RuntimeError('Unknown photometric calibration set: %s' % name)
+    def get_ps1_calibrator_color_range(self):
+        # g-i color range to keep
+        return 0.4, 2.7
     def photometric_calibrator_to_observed(self, name, cat):
         if name == 'ps1':
             from legacypipe.ps1cat import ps1cat

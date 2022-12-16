@@ -87,6 +87,12 @@ class DecamImage(CPImage):
         # Frank's work-around for some with incorrect WCSCAL=Failed (DR9 re-reductions)
         return primhdr.get('SCAMPFLG') == 0
 
+    def get_ps1_calibrator_color_range(self):
+        # g-i color range to keep
+        if self.band == 'N419':
+            return 0.4, 1.5
+        return super().get_ps1_calibrator_color_range()
+
     def colorterm_sdss_to_observed(self, sdssstars, band):
         from legacypipe.ps1cat import sdss_to_decam
         return sdss_to_decam(sdssstars, band)

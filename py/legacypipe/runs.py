@@ -49,6 +49,23 @@ class HscData(LegacySurveyData):
     def get_default_release(self):
         return 200
 
+class RerunWithCcds(LegacySurveyData):
+    def get_brick_by_name(self, brickname):
+        # BRUTAL HACK -- runbrick.py's stage_tims first calls
+        # get_brick_by_name, then ccds_touching_wcs... save the
+        # brickname here for later use when reading the CCDs file!
+        self.thebrick = brickname
+        return super().get_brick_by_name(brickname)
+    def get_ccds(self, **kwargs):
+        from astrometry.util.fits import fits_table
+        fn = self.find_file('ccds-table', brick=self.thebrick)
+        T = fits_table(fn, **kwargs)
+        T = self.cleanup_ccds_table(T)
+        print('Read', len(T), 'CCDs from', fn)
+        return T
+    def get_ccd_kdtrees(self):
+        return []
+
 runs = {
     'decam': DecamSurvey,
     '90prime-mosaic': NinetyPrimeMosaic,
@@ -57,6 +74,7 @@ runs = {
     'm33': M33SurveyData,
     'odin': OdinData,
     'hsc': HscData,
+    'rerun-ccds': RerunWithCcds,
     None: LegacySurveyData,
 }
 
