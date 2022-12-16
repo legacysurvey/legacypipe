@@ -62,6 +62,7 @@ def remap_dq_cp_codes(dq, ignore_codes=None, dtype=np.uint16):
     from scipy.ndimage.morphology import binary_dilation
     dq[np.logical_and(dq == 1, binary_dilation(dq == 3))] = 3
 
+    from legacypipe.bits import DQ_BITS
     for code,bitname in [(1, 'badpix'),
                          (2, 'badpix'),
                          (3, 'satur'),
