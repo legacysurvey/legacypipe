@@ -57,12 +57,12 @@ The "STARCORE" bit masks quite aggressively.
 '''
 
 class PanStarrsImage(LegacySurveyImage):
-    def __init__(self, survey, ccd, image_fn=None, image_hdu=0):
+    def __init__(self, survey, ccd, image_fn=None, image_hdu=0, **kwargs):
         if ccd is not None:
             ccd.plver = 'xxx'
             ccd.procdate = 'xxx'
             ccd.plprocid = 'xxx'
-        super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu)
+        super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu, **kwargs)
 
         # Nominal zeropoints
         # These are used only for "ccdskybr", so are not critical.
@@ -102,9 +102,6 @@ class PanStarrsImage(LegacySurveyImage):
 
     def get_extension_list(self, debug=False):
         return [1,]
-
-    def calibration_good(self, primhdr):
-        return True
 
     def has_astrometric_calibration(self, ccd):
         return True
@@ -278,8 +275,6 @@ class PanStarrsImage(LegacySurveyImage):
         skymed, skyrms = estimate_sky_from_pixels(img)
         return 0., skymed, skyrms
     
-    def validate_version(self, *args, **kwargs):
-        return True
     def check_image_header(self, imghdr):
         pass
 

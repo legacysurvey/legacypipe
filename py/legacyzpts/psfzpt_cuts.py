@@ -221,8 +221,10 @@ def psf_zeropoint_cuts(P, pixscale,
 
     if camera == 'decam':
         ccdzpt = detrend_decam_zeropoints(P)
-    else:
+    elif camera in ['90prime', 'mosaic']:
         ccdzpt = detrend_mzlsbass_zeropoints(P)
+    else:
+        ccdzpt = P.ccdzpt.copy()
     ccdname = np.array([n.strip() for n in P.ccdname])
 
     skybr = np.zeros(len(P), bool)
@@ -410,6 +412,26 @@ def add_psfzpt_cuts(T, camera, bad_expid, image2coadd='', **kw):
         zpt_hi = dict(g=g0+dg[1], r=r0+dr[1], z=z0+dz[1])
         psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
                            skybright, zpt_diff_avg, **kw)
+
+    elif camera == 'wiro':
+        zpt_lo = {}
+        zpt_hi = {}
+        skybright = {}
+        for band,zpt,dzlo,dzhi in [
+                ('NB_A', 23.7,  -0.5, 0.25),
+                ('NB_C', 22.75, -0.5, 0.25),
+                ('NB_D', 23.15, -0.5, 0.25),
+                ('NB_E', 23.25, -0.5, 0.25),
+                ('g',    25.0,  -0.5, 0.25),
+                ]:
+            zpt_lo[band] = zpt + dzlo
+            zpt_hi[band] = zpt + dzhi
+            skybright[band] = 90.
+        radec_rms = 1.2
+        zpt_diff_avg = 0.25
+        psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
+                           skybright, zpt_diff_avg, image2coadd=image2coadd, **kw)
+
     else:
         assert(False)
 

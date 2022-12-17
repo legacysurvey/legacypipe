@@ -526,6 +526,12 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                    r2 =    (1, 3.4 * rgb_stretch_factor),
                    i2 =    (0, 3.0 * rgb_stretch_factor),
                    y  =    (0, 2.2 * rgb_stretch_factor),
+                   # WIRO
+                   NB_A = (0, 6. * rgb_stretch_factor),
+                   NB_B = (0, 6. * rgb_stretch_factor),
+                   NB_C = (0, 6. * rgb_stretch_factor),
+                   NB_D = (0, 6. * rgb_stretch_factor),
+                   NB_E = (0, 6. * rgb_stretch_factor),
                    )
     # rgbscales = {'u': 1.5, #1.0,
     #              'g': 2.5,
@@ -834,6 +840,8 @@ class LegacySurveyData(object):
         from legacypipe.cfht   import MegaPrimeImage
         from legacypipe.hsc    import HscImage
         from legacypipe.panstarrs import PanStarrsImage
+        from legacypipe.wiro   import WiroImage
+        from legacypipe.suprime import SuprimeImage
         from collections import OrderedDict
 
         if allbands is None:
@@ -884,6 +892,8 @@ class LegacySurveyData(object):
             'megaprime': MegaPrimeImage,
             'hsc'    : HscImage,
             'panstarrs' : PanStarrsImage,
+            'wiro'   : WiroImage,
+            'suprimecam': SuprimeImage,
             }
 
         self.allbands = allbands
@@ -1833,8 +1843,8 @@ def read_psfex_conf(camera):
     dirname = resource_filename('legacypipe', 'data')
     fn = os.path.join(dirname, camera + '-special-psfex-conf.dat')
     if not os.path.exists(fn):
-        info('could not find special psfex configuration file for ' +
-             camera + ' not using per-image psfex configurations.')
+        debug('could not find special psfex configuration file for camera "' +
+             camera + '" - not using per-image psfex configurations.')
         return psfex_conf
     f = open(fn)
     for line in f.readlines():

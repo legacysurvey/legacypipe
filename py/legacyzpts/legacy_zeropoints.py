@@ -23,7 +23,7 @@ import legacypipe
 from legacypipe.ps1cat import ps1cat, sdsscat
 from legacypipe.gaiacat import GaiaCatalog
 from legacypipe.survey import radec_at_mjd, get_git_version
-from legacypipe.image import validate_version
+from legacypipe.cpimage import validate_version
 from legacypipe.survey import LegacySurveyData
 
 import logging
@@ -32,19 +32,8 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
-CAMERAS=['decam','mosaic','90prime','megaprime', 'hsc', 'panstarrs']
 
-MAGLIM=dict(
-    u=[16, 20],
-    g=[16, 20],
-    r=[16, 19.5],
-    i=[16, 19.5],
-    z=[16.5, 19],
-    Y=[16.5, 19],
-    N419=[16,21],
-    N501=[16,20],
-    N673=[16,19.5],
-    )
+CAMERAS=['decam','mosaic','90prime','megaprime', 'hsc', 'panstarrs', 'wiro', 'suprimecam']
 
 def ptime(text,t0):
     tnow=Time()
@@ -567,12 +556,18 @@ def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
 
     hdr.add_record(dict(name='EXPNUM', value=img.expnum,
                         comment='Exposure number'))
-    hdr.add_record(dict(name='PROCDATE', value=img.procdate,
-                        comment='CP processing date'))
-    hdr.add_record(dict(name='PLPROCID', value=img.plprocid,
-                        comment='CP processing batch'))
-    hdr.add_record(dict(name='RA_BORE',  value=ccds['ra_bore'][0],  comment='Boresight RA (deg)'))
-    hdr.add_record(dict(name='DEC_BORE', value=ccds['dec_bore'][0], comment='Boresight Dec (deg)'))
+    if img.procdate is not None:
+        hdr.add_record(dict(name='PROCDATE', value=img.procdate,
+                            comment='CP processing date'))
+    if img.plprocid is not None:
+        hdr.add_record(dict(name='PLPROCID', value=img.plprocid,
+                            comment='CP processing batch'))
+    v = ccds['ra_bore'][0]
+    if np.isfinite(v):
+        hdr.add_record(dict(name='RA_BORE',  value=v,  comment='Boresight RA (deg)'))
+    v = ccds['dec_bore'][0]
+    if np.isfinite(v):
+        hdr.add_record(dict(name='DEC_BORE', value=v, comment='Boresight Dec (deg)'))
 
     zptgood = np.isfinite(ccds['zpt'])
     if np.sum(zptgood) > 0:
@@ -598,8 +593,13 @@ def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
     hdr.add_record(dict(name='FILENAME', value=os.path.join(firstdir, base)))
 
     if photom is not None:
-        writeto_via_temp(photomfn, photom, overwrite=True, header=hdr)
-
+        try:
+            writeto_via_temp(photomfn, photom, overwrite=True, header=hdr)
+        except:
+            print('Failed to write photom file:', photomfn)
+            print('Header:')
+            print(hdr)
+            raise
     accds = astropy_to_astrometry_table(ccds)
 
     # survey table
@@ -608,6 +608,8 @@ def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
     create_annotated_table(T, annfn, measureargs['camera'], survey, mp, header=hdr)
 
     t0 = ptime('write-results-to-fits',t0)
+
+    img.zeropointing_completed(annfn, photomfn, T, photom, hdr)
 
 def get_parser():
     '''return parser object, tells it what options to look for
@@ -884,19 +886,15 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     airmass = imobj.get_airmass(primhdr, hdr, ra_bore, dec_bore)
     ccds['airmass'] = airmass
     ccds['gain'] = imobj.get_gain(primhdr, hdr)
-    ccds['object'] = primhdr.get('OBJECT')
+    ccds['object'] = imobj.get_object(primhdr)
 
-    optional = ['avsky']
-    for ccd_col in ['avsky', 'crpix1', 'crpix2', 'crval1', 'crval2']:
-        if ccd_col.upper() in hdr:
-            ccds[ccd_col] = hdr[ccd_col]
-        elif ccd_col in optional:
-            ccds[ccd_col] = np.nan
-        else:
-            raise KeyError('Could not find %s key in header:' % ccd_col)
+    ccds['AVSKY'] = hdr.get('AVSKY', np.nan)
 
     for ccd_col,val in zip(['cd1_1', 'cd1_2', 'cd2_1', 'cd2_2'],
                            imobj.get_cd_matrix(primhdr, hdr)):
+        ccds[ccd_col] = val
+    for ccd_col,val in zip(['crpix1', 'crpix2', 'crval1', 'crval2'],
+                           imobj.get_crpixcrval(primhdr, hdr)):
         ccds[ccd_col] = val
 
     wcs = imobj.get_wcs(hdr=hdr)
@@ -1256,12 +1254,13 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     nphotom = np.sum(phot.flux_sn > 5.)
 
     dmag = refs.legacy_survey_mag - phot.instpsfmag
-    maglo, maghi = MAGLIM[imobj.band]
+    maglo, maghi = imobj.get_photocal_mag_limits()
     kept = (refs.photom &
             (refs.legacy_survey_mag > maglo) &
             (refs.legacy_survey_mag < maghi) &
             np.isfinite(dmag))
     dmag = dmag[kept]
+
     if len(dmag):
         print('Zeropoint: using', len(dmag), 'good stars')
         clipped, lo, hi = sigmaclip(dmag, low=2.5, high=2.5)
@@ -1390,7 +1389,8 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
     from tractor.brightness import LinearPhotoCal
 
     plots = False
-    plot_this = False
+    plot_this = plots
+    nplots = 0
     if plots:
         from astrometry.util.plotutils import PlotSequence
         ps = PlotSequence('astromfit')
@@ -1475,6 +1475,11 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
         tim.photocal = pc
         src.thawParam('pos')
 
+        if plots:
+            # Don't plot saturated stars
+            h,w = subie.shape
+            plot_this = (subie[h//2, w//2] > 0)
+
         if plots and plot_this:
             import pylab as plt
             plt.clf()
@@ -1488,7 +1493,7 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
             plt.subplot(2,2,3)
             plt.imshow((subimg - mod) * subie, interpolation='nearest', origin='lower')
             plt.colorbar()
-            plt.suptitle('Before')
+            plt.suptitle('Before fitting: star #%i' % istar)
             ps.savefig()
 
         # Now the position and flux fit
@@ -1537,6 +1542,9 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
             plt.colorbar()
             plt.suptitle('After')
             ps.savefig()
+            nplots += 1
+            if nplots == 10:
+                plots = False
 
     if nzeroivar > 0:
         print('Zero ivar for %d stars' % nzeroivar)

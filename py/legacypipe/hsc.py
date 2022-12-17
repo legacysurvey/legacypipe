@@ -16,12 +16,12 @@ The sky background is also estimated and subtracted, so no external
 calib files required.
 '''
 class HscImage(LegacySurveyImage):
-    def __init__(self, survey, ccd, image_fn=None, image_hdu=0):
+    def __init__(self, survey, ccd, image_fn=None, image_hdu=0, **kwargs):
         if ccd is not None:
             ccd.plver = 'xxx'
             ccd.procdate = 'xxx'
             ccd.plprocid = 'xxx'
-        super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu)
+        super().__init__(survey, ccd, image_fn=image_fn, image_hdu=image_hdu, **kwargs)
         self.dq_hdu = 2
         self.wt_hdu = 3
 
@@ -69,9 +69,6 @@ class HscImage(LegacySurveyImage):
 
     def get_extension_list(self, debug=False):
         return [1,]
-
-    def calibration_good(self, primhdr):
-        return True
 
     def has_astrometric_calibration(self, ccd):
         return True
@@ -345,8 +342,6 @@ class HscImage(LegacySurveyImage):
         fitsio.write(tmpmaskfn, m, clobber=True)
         return tmpimgfn, tmpmaskfn
 
-    def validate_version(self, *args, **kwargs):
-        return True
     def check_image_header(self, imghdr):
         pass
 

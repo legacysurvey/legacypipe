@@ -297,8 +297,12 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
 
             # HACK -- mp.imap was added to astrometry.net somewhat recently, hasn't make it into
             # our docker container yet... hack... will only work with --threads
-            #R = mp.imap(
-            R = mp.pool.imap(
+            try:
+                # mp.imap
+                imap = mp.pool.imap
+            except:
+                imap = map
+            R = imap(
                 compare_one, [(i_btim, tim, sig, targetwcs, coimg, cow, veto, make_badcoadds, plots,ps)
                               for i_btim,(tim,sig) in enumerate(zip(btims,addsigs))])
             del coimg, cow, veto

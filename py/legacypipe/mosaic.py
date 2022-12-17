@@ -1,12 +1,13 @@
-from legacypipe.image import LegacySurveyImage
+from legacypipe.cpimage import CPImage
 
-class MosaicImage(LegacySurveyImage):
+class MosaicImage(CPImage):
     '''
     Class for handling images from the Mosaic3 camera processed by the
     NOAO Community Pipeline.
     '''
-    def __init__(self, survey, t, image_fn=None, image_hdu=0):
-        super(MosaicImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu)
+    def __init__(self, survey, t, image_fn=None, image_hdu=0, **kwargs):
+        super(MosaicImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu,
+                                          **kwargs)
 
         self.zp0 = dict(z = 26.552,
                         D51 = 24.351, # from obsbot
@@ -94,7 +95,7 @@ class MosaicImage(LegacySurveyImage):
         Called by get_tractor_image() to map the results from read_dq
         into a bitmask.
         '''
-        from legacypipe.image import remap_dq_cp_codes
+        from legacypipe.cpimage import remap_dq_cp_codes
         # code 8: https://github.com/legacysurvey/legacypipe/issues/644
         dq = remap_dq_cp_codes(dq, ignore_codes=[7, 8])
         return dq

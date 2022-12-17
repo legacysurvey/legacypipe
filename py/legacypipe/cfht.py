@@ -44,8 +44,9 @@ class MegaPrimeImage(LegacySurveyImage):
     A LegacySurveyImage subclass to handle images from the MegaPrime
     camera on CFHT.
     '''
-    def __init__(self, survey, t, image_fn=None, image_hdu=0):
-        super(MegaPrimeImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu)
+    def __init__(self, survey, t, image_fn=None, image_hdu=0, **kwargs):
+        super(MegaPrimeImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu,
+                                             **kwargs)
         # print('MegaPrimeImage: CCDs table entry', t)
         # for x in dir(t):
         #     if x.startswith('_'):
@@ -92,14 +93,6 @@ class MegaPrimeImage(LegacySurveyImage):
     def override_ccd_table_types(self):
         # "ccd00"
         return {'ccdname':'S5'}
-
-    def validate_version(self, *args, **kwargs):
-        # Just gonna pass on all this stuff
-        return True
-
-    def calibration_good(self, primhdr):
-        '''Did the low-level processing succeed for this image?'''
-        return True
 
     def get_extension_list(self, debug=False):
         # duplicate EXTNAME cards in the headers?! trips up fitsio;

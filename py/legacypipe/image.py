@@ -17,123 +17,8 @@ def debug(*args):
     log_debug(logger, args)
 
 '''
-Base class for handling the images we process.  These are all
-processed by variants of the NOAO Community Pipeline (CP), so this
-base class is pretty specific.
+Base class for handling the details of images from the different cameras we process.
 '''
-
-def remap_dq_cp_codes(dq, ignore_codes=None, dtype=np.uint16):
-    '''
-    Some versions of the CP use integer codes, not bit masks.
-    This converts them.
-
-    1 = bad
-    2 = no value (for remapped and stacked data)
-    3 = saturated
-    4 = bleed mask
-    5 = cosmic ray
-    6 = low weight
-    7 = diff detect (multi-exposure difference detection from median)
-    8 = long streak (e.g. satellite trail)
-    '''
-    if ignore_codes is None:
-        ignore_codes = []
-    dqbits = np.zeros(dq.shape, dtype)
-
-    # Some images (eg, 90prime//CP20160403/ksb_160404_103333_ood_g_v1-CCD1.fits)
-    # around saturated stars have the core with value 3 (satur), surrounded by one
-    # pixel of value 1 (bad), and then more pixels with value 4 (bleed).
-    # Set the BAD ones to SATUR.
-    from scipy.ndimage.morphology import binary_dilation
-    dq[np.logical_and(dq == 1, binary_dilation(dq == 3))] = 3
-
-    for code,bitname in [(1, 'badpix'),
-                         (2, 'badpix'),
-                         (3, 'satur'),
-                         (4, 'bleed'),
-                         (5, 'cr'),
-                         (6, 'badpix'),
-                         (7, 'trans'),
-                         (8, 'trans'),
-                         ]:
-        if code in ignore_codes:
-            continue
-        dqbits[dq == code] |= DQ_BITS[bitname]
-    return dqbits
-
-def apply_amp_correction_northern(camera, band, expnum, ccdname, mjdobs,
-                                  img, invvar, x0, y0):
-    from pkg_resources import resource_filename
-    dirname = resource_filename('legacypipe', 'data')
-    fn = os.path.join(dirname, 'ampcorrections.fits')
-    A = fits_table(fn)
-    # Find relevant row -- camera, filter, ccdname, mjd_start, mjd_end,
-    # And then multiple rows of:
-    #   xlo, xhi, ylo, yhi -> dzp
-    # that might overlap this image.
-    I = np.flatnonzero([(cam.strip() == camera) and
-                        (f.strip() == band) and
-                        (ccd.strip() == ccdname) and
-                        (not(np.isfinite(mjdstart)) or (mjdobs >= mjdstart)) and
-                        (not(np.isfinite(mjdend  )) or (mjdobs <= mjdend))
-                        for cam,f,ccd,mjdstart,mjdend
-                        in zip(A.camera, A.filter, A.ccdname,
-                               A.mjd_start, A.mjd_end)])
-    info('Found', len(I), 'relevant rows in amp-corrections file.')
-    if len(I) == 0:
-        return
-    if img is not None:
-        H,W = img.shape
-    else:
-        H,W = invvar.shape
-    # x0,y0 are integer pixel coords
-    # x1,y1 are INCLUSIVE integer pixel coords
-    x1 = x0 + W - 1
-    y1 = y0 + H - 1
-
-    debug_corr = False
-    if debug_corr:
-        count_corr = np.zeros((H,W), np.uint8)
-        corr_map = np.zeros((H,W), np.float32)
-        fitsio.write('amp-corr-image-before-%s-%s-%s.fits' % (camera, expnum, ccdname), img, clobber=True)
-
-    for a in A[I]:
-        # In the file, xhi,yhi are NON-inclusive.
-        if a.xlo > x1 or a.xhi <= x0:
-            continue
-        if a.ylo > y1 or a.yhi <= y0:
-            continue
-        # Overlap!
-        info('Found overlap: image x', x0, x1, 'and amp range', a.xlo, a.xhi-1,
-              'and image y', y0, y1, 'and amp range', a.ylo, a.yhi-1)
-        xstart = max(0, a.xlo - x0)
-        xend   = min(W, a.xhi - x0)
-        ystart = max(0, a.ylo - y0)
-        yend   = min(H, a.yhi - y0)
-        info('Range in image: x', xstart, xend, ', y', ystart, yend, '(with image size %i x %i)' % (W,H))
-        scale = 10.**(0.4 * a.dzp)
-        info('dzp', a.dzp, '-> scaling image by', scale)
-        if img is not None:
-            img   [ystart:yend, xstart:xend] *= scale
-        if invvar is not None:
-            invvar[ystart:yend, xstart:xend] /= scale**2
-
-        if debug_corr:
-            count_corr[ystart:yend, xstart:xend] += 1
-            corr_map[ystart:yend, xstart:xend] = scale
-
-    if debug_corr:
-        assert(np.all(count_corr == 1))
-        fitsio.write('amp-corr-image-after-%s-%s-%s.fits' % (camera, expnum, ccdname), img, clobber=True)
-        fitsio.write('amp-corr-map-%s-%s-%s.fits' % (camera, expnum, ccdname), corr_map, clobber=True)
-
-def estimate_sky_from_pixels(img):
-    from scipy.stats import sigmaclip
-    nsigma = 3.
-    clip_vals,_,_ = sigmaclip(img, low=nsigma, high=nsigma)
-    skymed= np.median(clip_vals)
-    skystd= np.std(clip_vals)
-    return skymed, skystd
 
 class LegacySurveyImage(object):
     '''
@@ -152,7 +37,8 @@ class LegacySurveyImage(object):
     # images used in unit tests): box size for SplineSky model
     splinesky_boxsize = 1024
 
-    def __init__(self, survey, ccd, image_fn=None, image_hdu=0):
+    def __init__(self, survey, ccd, image_fn=None, image_hdu=0,
+                 camera_setup=False):
         '''
         Create a new LegacySurveyImage object, from a LegacySurveyData object,
         and one row of a CCDs fits_table object.
@@ -184,6 +70,10 @@ class LegacySurveyImage(object):
         self._fits = None
         self._primary_header = None
         self._image_header = None
+
+        if camera_setup:
+            # new-camera-setup.py script -- don't read stuff yet!
+            return
 
         if ccd is None and image_fn is None:
             raise RuntimeError('Either "ccd" or "image_fn" must be set')
@@ -288,6 +178,11 @@ class LegacySurveyImage(object):
         # Which Data Quality bits mark saturation?
         self.dq_saturation_bits = self.dq_type(DQ_BITS['satur'])
 
+        self.set_calib_filenames()
+        # for debugging purposes
+        self.print_imgpath = '/'.join(self.imgfn.split('/')[-5:])
+
+    def set_calib_filenames(self):
         # Calib filenames
         calibdir = self.survey.get_calib_dir()
         imgdir = os.path.dirname(self.image_filename)
@@ -307,8 +202,6 @@ class LegacySurveyImage(object):
         # not used by this code -- here for the sake of legacyzpts/merge_calibs.py
         self.old_single_psffn = os.path.join(calibdir, imgdir, basename, calname + '-psfex.fits')
         self.old_single_skyfn = os.path.join(calibdir, imgdir, basename, calname + '-splinesky.fits')
-        # for debugging purposes
-        self.print_imgpath = '/'.join(self.imgfn.split('/')[-5:])
 
     def set_ccdzpt(self, ccdzpt):
         self.ccdzpt = ccdzpt
@@ -335,7 +228,7 @@ class LegacySurveyImage(object):
         return {}
 
     def validate_version(self, *args, **kwargs):
-        return validate_version(*args, **kwargs)
+        return True
 
     def compute_filenames(self):
         # Compute data quality and weight-map filenames
@@ -390,9 +283,10 @@ class LegacySurveyImage(object):
         return self.k_ext[band]
 
     def calibration_good(self, primhdr):
-        '''Did the CP processing succeed for this image?  If not, no need to process further.
+        '''Did the low-level processing succeed for this image?  If not, no
+        need to process further.
         '''
-        return primhdr.get('WCSCAL', '').strip().lower().startswith('success')
+        return True
 
     def has_astrometric_calibration(self, ccd):
         return ccd.ccdnastrom > 0
@@ -417,22 +311,48 @@ class LegacySurveyImage(object):
         return 0.4, 2.7
     def photometric_calibrator_to_observed(self, name, cat):
         if name == 'ps1':
-            from legacypipe.ps1cat import ps1cat
             colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
-            ps1band = ps1cat.ps1band[self.band]
-            return cat.median[:, ps1band] + np.clip(colorterm, -1., +1.)
+            band = self.get_ps1_band()
+            return cat.median[:, band] + np.clip(colorterm, -1., +1.)
         elif name == 'sdss':
-            from legacypipe.ps1cat import sdsscat
             colorterm = self.colorterm_sdss_to_observed(cat.psfmag, self.band)
-            band = sdsscat.sdssband[self.band]
+            band = self.get_sdss_band()
             return cat.psfmag[:, band] + np.clip(colorterm, -1., +1.)
         else:
-            raise RuntimeError('No photometric conversion from %s to DECam' % name)
+            raise RuntimeError('No photometric conversion from %s to camera' % name)
+
+    def get_ps1_band(self):
+        from legacypipe.ps1cat import ps1cat
+        # Returns the integer index of the band in Pan-STARRS1 to use for an image in filter
+        # self.band.
+        # eg, g=0, r=1, i=2, z=3, Y=4
+        return ps1cat.ps1band[self.band]
+
+    def get_sdss_band(self):
+        from legacypipe.ps1cat import sdsscat
+        # Returns the integer index of the band in the Sloan Digital
+        # Sky Survey imaging for an image taken through filter
+        # self.band.  eg, u=0, g=1, r=2, i=3, z=4
+        return sdsscat.sdssband[self.band]
 
     def colorterm_ps1_to_observed(self, cat, band):
         raise RuntimeError('Not implemented: generic colorterm_ps1_to_observed')
     def colorterm_sdss_to_observed(self, cat, band):
         raise RuntimeError('Not implemented: generic colorterm_sdss_to_observed')
+
+    def get_photocal_mag_limits(self):
+        MAGLIM=dict(
+            u=[16, 20],
+            g=[16, 20],
+            r=[16, 19.5],
+            i=[16, 19.5],
+            z=[16.5, 19],
+            Y=[16.5, 19],
+            N419=[16,20],
+            N501=[16,20],
+            N673=[16,19.5],
+        )
+        return MAGLIM.get(self.band, (16.,20.))
 
     def get_radec_bore(self, primhdr):
         from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
@@ -464,13 +384,16 @@ class LegacySurveyImage(object):
     def get_gain(self, primhdr, hdr):
         return primhdr['GAIN']
 
+    def get_object(self, primhdr):
+        return primhdr.get('OBJECT', '')
+
     def get_band(self, primhdr):
         band = primhdr['FILTER']
         band = band.split()[0]
         return band
 
     def get_propid(self, primhdr):
-        return primhdr['PROPID']
+        return primhdr.get('PROPID', '')
 
     def get_airmass(self, primhdr, imghdr, ra, dec):
         airmass = primhdr.get('AIRMASS', None)
@@ -515,6 +438,9 @@ class LegacySurveyImage(object):
     def get_cd_matrix(self, primhdr, hdr):
         return hdr['CD1_1'], hdr['CD1_2'], hdr['CD2_1'], hdr['CD2_2']
 
+    def get_crpixcrval(self, primhdr, hdr):
+        return hdr['CRPIX1'], hdr['CRPIX2'], hdr['CRVAL1'], hdr['CRVAL2']
+
     # Used during zeropointing
     def scale_image(self, img):
         return img
@@ -544,6 +470,14 @@ class LegacySurveyImage(object):
         '''
         return None
 
+    def zeropointing_completed(self, annfn, photomfn, ann, photom, hdr):
+        '''
+        Called after legacy_zeropoints has just written the "photom" and
+        "annotated" files.  (The objects are passed as *ann* and *photom*,
+        along with the annotated header *hdr*.)
+        '''
+        pass
+
     def __str__(self):
         return self.name
 
@@ -563,6 +497,7 @@ class LegacySurveyImage(object):
                 setattr(self, key, cfn)
 
     def get_cacheable_filename_variables(self):
+
         '''
         These are names of self.X variables that are filenames that
         could be cached.  These variable may be *overwritten* by the
@@ -1015,13 +950,6 @@ class LegacySurveyImage(object):
     def apply_amp_correction(self, img, invvar, x0, y0):
         pass
 
-    # A function that can be called by subclassers to apply a per-amp
-    # zeropoint correction.
-    def apply_amp_correction_northern(self, img, invvar, x0, y0):
-        apply_amp_correction_northern(self.camera, self.band, self.expnum,
-                                      self.ccdname, self.mjdobs,
-                                      img, invvar, x0, y0)
-
     def check_image_header(self, imghdr):
         # check consistency between the CCDs table and the image header
         e = imghdr['EXTNAME'].upper()
@@ -1160,7 +1088,7 @@ class LegacySurveyImage(object):
         Called by get_tractor_image() to map the results from read_dq
         into a bitmask.
         '''
-        return remap_dq_cp_codes(dq, dtype=self.dq_type)
+        return dq
 
     def read_invvar(self, clip=True, clipThresh=0.1, dq=None, slc=None,
                     **kwargs):
@@ -1417,7 +1345,7 @@ class LegacySurveyImage(object):
         # fails.  Check whether actually fpacked.
         fcopy = False
         hdr = self.read_image_header()
-        if not ((hdr['XTENSION'] == 'BINTABLE') and hdr.get('ZIMAGE', False)):
+        if not ((hdr.get('XTENSION') == 'BINTABLE') and hdr.get('ZIMAGE', False)):
             debug('Image %s, HDU %i is not fpacked; just imcopying.' %
                   (imgfn,  imghdu))
             fcopy = True
@@ -1428,7 +1356,8 @@ class LegacySurveyImage(object):
         todelete.append(tmpmaskfn)
 
         if fcopy:
-            cmd = 'imcopy %s"+%i" %s' % (imgfn, imghdu, tmpimgfn)
+            #cmd = 'imcopy %s"+%i" %s' % (imgfn, imghdu, tmpimgfn)
+            cmd = 'imcopy %s"[%i]" %s' % (imgfn, imghdu, tmpimgfn)
         else:
             cmd = 'funpack -E %i -O %s %s' % (imghdu, tmpimgfn, imgfn)
         debug(cmd)
@@ -1436,7 +1365,8 @@ class LegacySurveyImage(object):
             raise RuntimeError('Command failed: ' + cmd)
 
         if fcopy:
-            cmd = 'imcopy %s"+%i" %s' % (maskfn, maskhdu, tmpmaskfn)
+            #cmd = 'imcopy %s"+%i" %s' % (maskfn, maskhdu, tmpmaskfn)
+            cmd = 'imcopy %s"[%i]" %s' % (maskfn, maskhdu, tmpmaskfn)
         else:
             cmd = 'funpack -E %i -O %s %s' % (maskhdu, tmpmaskfn, maskfn)
         debug(cmd)
@@ -1543,7 +1473,7 @@ class LegacySurveyImage(object):
 
     def run_sky(self, splinesky=True, git_version=None, ps=None, survey=None,
                 gaia=True, release=0, survey_blob_mask=None,
-                halos=True, subtract_largegalaxies=True):
+                halos=True, subtract_largegalaxies=True, boxcar_mask=True):
         from scipy.ndimage.morphology import binary_dilation
         from astrometry.util.file import trymakedirs
         from astrometry.util.miscutils import estimate_mode
@@ -1699,29 +1629,29 @@ class LegacySurveyImage(object):
                 ps.savefig()
 
             del template
-        # Compute initial model...
-        skyobj = self.get_tractor_sky_model(img - initsky, good)
 
-        skymod = np.zeros_like(img)
-        skyobj.addTo(skymod)
+        if boxcar_mask:
+            # Compute initial model...
+            skyobj = self.get_tractor_sky_model(img - initsky, good)
+            skymod = np.zeros_like(img)
+            skyobj.addTo(skymod)
+            # Now mask bright objects in a boxcar-smoothed (image -
+            # initial sky model) Smooth by a boxcar filter before cutting
+            # pixels above threshold --
+            boxcar = 5
+            # Sigma of boxcar-smoothed image
+            bsig1 = sig1 / boxcar
+            masked = np.abs(uniform_filter(img - initsky - skymod,
+                                           size=boxcar, mode='constant')
+                            > (3.*bsig1))
+            masked = binary_dilation(masked, iterations=3)
+            good[masked] = False
+            del masked
+            del skymod
 
-        # Now mask bright objects in a boxcar-smoothed (image -
-        # initial sky model) Smooth by a boxcar filter before cutting
-        # pixels above threshold --
-        boxcar = 5
-        # Sigma of boxcar-smoothed image
-        bsig1 = sig1 / boxcar
-        masked = np.abs(uniform_filter(img - initsky - skymod,
-                                       size=boxcar, mode='constant')
-                        > (3.*bsig1))
-        masked = binary_dilation(masked, iterations=3)
-        good[masked] = False
-        del masked
-        del skymod
-
-        if plots:
-            # save for later plots
-            boxcargood = good.copy()
+            if plots:
+                # save for later plots
+                boxcargood = good.copy()
 
         # Also mask based on reference stars and galaxies.
         from legacypipe.reference import get_reference_sources
@@ -1942,12 +1872,16 @@ class LegacySurveyImage(object):
             # plt.legend()
             # ps.savefig()
 
-            plt.clf()
-            self.imshow((img - initsky)*boxcargood, **ima2)
-            plt.colorbar()
-            self.plot_mask(np.logical_not(boxcargood))
-            plt.title('Image (boxcar masked)')
-            ps.savefig()
+            if boxcar_mask:
+                plt.clf()
+                self.imshow((img - initsky)*boxcargood, **ima2)
+                plt.colorbar()
+                self.plot_mask(np.logical_not(boxcargood))
+                plt.title('Image (boxcar masked)')
+                ps.savefig()
+            else:
+                # fake
+                boxcargood = True
 
             if survey_blob_mask is not None:
                 plt.clf()
@@ -2327,137 +2261,10 @@ def fix_weight_quantization(wt, weightfn, ext, slc):
     wt[wt <= zscale[:,np.newaxis]*0.5] = 0.
     return True
 
-def validate_version(fn, filetype, expnum, plver, plprocid,
-                     data=None, ext=1, cpheader=False,
-                     old_calibs_ok=False, truncated_ok=True, quiet=False):
-    '''
-    truncated_ok: the target *plver* or *plprocid* may be truncated, so only
-    demand a match up to the length of those variables.  This can happen if, eg,
-    the survey-ccds table has the PLVER or PLPROCID columns too short.
-    '''
-    if not os.path.exists(fn):
-        if not quiet:
-            info('File not found {}'.format(fn))
-        return False
-    # Check the data model
-    if filetype == 'table':
-        if data is None:
-            T = fits_table(fn)
-        else:
-            T = data
-        cols = T.get_columns()
-        for key,targetval,strip in (('plver', plver, True),
-                                    ('plprocid', plprocid, True),
-                                    ('expnum', expnum, False)):
-            if targetval is None:
-                # Skip this check
-                debug('Skipping check of', key, 'for', fn)
-                continue
-            if key not in cols:
-                if old_calibs_ok:
-                    warnings.warn('Validation: table {} is missing {} but old_calibs_ok=True'.format(fn, key))
-                    continue
-                else:
-                    debug('WARNING: {} missing {}'.format(fn, key))
-                    return False
-            val = T.get(key)
-            if strip:
-                val = np.array([str(v).strip() for v in val])
-            ok = np.all(val == targetval)
-            if (not ok) and truncated_ok:
-                N = len(targetval)
-                val = np.array([v[:min(len(v),N)] for v in val])
-                ok = np.all(val == targetval)
-                if ok:
-                    warnings.warn('Validation: {}={} validated only after truncating for {}'.format(key, targetval, fn))
-            if not ok:
-                if old_calibs_ok:
-                    warnings.warn('Validation: {} {}!={} in {} table but old_calibs_ok=True'.format(key, val, targetval, fn))
-                    continue
-                else:
-                    debug('WARNING: {} {}!={} in {} table'.format(key, val, targetval, fn))
-                    return False
-        return True
-    elif filetype in ['primaryheader', 'header']:
-        if data is None:
-            if filetype == 'primaryheader':
-                hdr = fitsio.read_header(fn)
-            else:
-                hdr = fitsio.FITS(fn)[ext].read_header()
-        else:
-            hdr = data
-
-        cpexpnum = None
-        if cpheader:
-            # Special handling for EXPNUM in some cases
-            if 'EXPNUM' in hdr and hdr['EXPNUM'] is not None:
-                cpexpnum = hdr['EXPNUM']
-            elif 'OBSID' in hdr:
-                # At the beginning of the MzLS survey, eg 2016-01-24, the EXPNUM
-                # cards are blank.  Fake up an expnum like 160125082555
-                # (yymmddhhmmss), same as the CP filename.
-                # OBSID   = 'kp4m.20160125T082555' / Observation ID
-                # MzLS:
-                obsid = hdr['OBSID']
-                if obsid.startswith('kp4m.'):
-                    obsid = obsid.strip().split('.')[1]
-                    obsid = obsid.replace('T', '')
-                    obsid = int(obsid[2:], 10)
-                    cpexpnum = obsid
-                    if not quiet:
-                        debug('Faked up EXPNUM', cpexpnum)
-                elif obsid.startswith('ksb'):
-                    import re
-                    # DTACQNAM are like /descache/bass/20160504/d7513.0033.fits
-                    base= (os.path.basename(hdr['DTACQNAM'])
-                           .replace('.fits','')
-                           .replace('.fz',''))
-                    cpexpnum = int(re.sub(r'([a-z]+|\.+)','',base), 10)
-                    if not quiet:
-                        debug('Faked up EXPNUM', cpexpnum)
-            else:
-                if not quiet:
-                    info('Missing EXPNUM and OBSID in header')
-
-        for key,spval,targetval,stringtype in (('PLVER', None, plver, True),
-                                          ('PLPROCID', None, plprocid, True),
-                                          ('EXPNUM', cpexpnum, expnum, False)):
-            if spval is not None:
-                val = spval
-            else:
-                if key not in hdr:
-                    if old_calibs_ok:
-                        warnings.warn('Validation: {} header missing {} but old_calibs_ok=True'.format(fn, key))
-                        continue
-                    else:
-                        debug('WARNING: {} header missing {}'.format(fn, key))
-                        return False
-                val = hdr[key]
-
-            if stringtype:
-                # PLPROCID can get parsed as an int by fitsio, ugh
-                val = str(val)
-                val = val.strip()
-            else:
-                # EXPNUM is stored as a string in some DECam exposures -- eg
-                # decam/CP/V4.8.2a/CP20200224/c4d_200225_072059_ooi_i_v1.fits.fz
-                val = int(val)
-
-            # For cases where the CCDs table was truncated...
-            if val != targetval and truncated_ok:
-                info(key, 'value', val, type(val), 'vs target', targetval, type(targetval))
-                origval = val
-                val = val[:len(targetval)]
-                if val == targetval:
-                    warnings.warn('Validation: {} validated only after truncating {} to {} for {}'.format(key, origval, val, fn))
-            if val != targetval:
-                if old_calibs_ok:
-                    warnings.warn('Validation: {} {}!={} in {} header but old_calibs_ok=True'.format(key, val, targetval, fn))
-                    continue
-                else:
-                    debug('WARNING: {} {}!={} in {} header'.format(key, val, targetval, fn))
-                    return False
-        return True
-
-    else:
-        raise ValueError('incorrect filetype')
+def estimate_sky_from_pixels(img):
+    from scipy.stats import sigmaclip
+    nsigma = 3.
+    clip_vals,_,_ = sigmaclip(img, low=nsigma, high=nsigma)
+    skymed= np.median(clip_vals)
+    skystd= np.std(clip_vals)
+    return skymed, skystd

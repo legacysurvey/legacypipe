@@ -463,7 +463,7 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     sgabricks = merge_tables(sgabricks)
     _,I = np.unique(sgabricks.brickname, return_index=True)
     sgabricks.cut(I)
-    #print('Need to read', len(sgabricks), 'bricks to pick up SGA sources')
+    print('Need to read', len(sgabricks), 'bricks to pick up SGA sources')
     SGA = []
     for brick in sgabricks.brickname:
         # For picking up these SGA bricks, resolve doesn't matter (they're fixed
@@ -473,15 +473,16 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
             if os.path.exists(fn):
                 t = fits_table(fn, columns=['ref_cat', 'ref_id'])
                 I = np.flatnonzero(t.ref_cat == 'L3')
-                #print('Read', len(I), 'SGA entries from', brick)
+                print('Read', len(I), 'SGA entries from', brick)
                 SGA.append(fits_table(fn, columns=columns, rows=I))
                 break
     SGA = merge_tables(SGA)
+    print('Total of', len(SGA), 'sources before BRICK_PRIMARY cut')
     SGA.cut(SGA.brick_primary)
-    #print('Total of', len(SGA), 'sources')
+    print('Total of', len(SGA), 'sources after BRICK_PRIMARY cut')
     I = np.array([i for i,ref_id in enumerate(SGA.ref_id) if ref_id in set(sga.ref_id)])
     SGA.cut(I)
-    #print('Found', len(SGA), 'desired SGA sources')
+    print('Found', len(SGA), 'desired SGA sources')
     assert(len(sga) == len(SGA))
     assert(set(sga.ref_id) == set(SGA.ref_id))
     return SGA
@@ -1011,10 +1012,16 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                            for src in cat]).astype(np.float32)
         F.flux_ivar = R.IV[:N].astype(np.float32)
 
-        F.fracflux = R.fitstats.profracflux[:N].astype(np.float32)
-        F.fracin   = R.fitstats.fracin     [:N].astype(np.float32)
-        F.rchisq   = R.fitstats.prochi2    [:N].astype(np.float32)
-        F.fracmasked = R.fitstats.promasked[:N].astype(np.float32)
+        if R.fitstats is not None:
+            F.fracflux   = R.fitstats.profracflux[:N].astype(np.float32)
+            F.fracin     = R.fitstats.fracin     [:N].astype(np.float32)
+            F.rchisq     = R.fitstats.prochi2    [:N].astype(np.float32)
+            F.fracmasked = R.fitstats.promasked  [:N].astype(np.float32)
+        else:
+            F.fracflux   = np.zeros(N, np.float32)
+            F.fracin     = np.zeros(N, np.float32)
+            F.rchisq     = np.zeros(N, np.float32)
+            F.fracmasked = np.zeros(N, np.float32)
 
         if derivs:
             F.flux_dra  = np.zeros(len(F), np.float32)

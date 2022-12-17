@@ -731,7 +731,11 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         # SATUR
         if saturated_pix is not None:
             for b, sat in zip(bands, saturated_pix):
-                maskbits |= (MASKBITS['SATUR_' + b.upper()] * sat).astype(np.int32)
+                bitname = 'SATUR_' + b.upper()
+                if not bitname in MASKBITS:
+                    warnings.warn('Skipping SATUR mask for band %s' % b)
+                    continue
+                maskbits |= (MASKBITS[bitname] * sat).astype(np.int32)
         # ALLMASK_{g,r,z}
         for b,allmask in zip(bands, C.allmasks):
             bitname = 'ALLMASK_' + b.upper()

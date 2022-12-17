@@ -346,7 +346,8 @@ def make_plots(ccds, camera, nside=512,
 
 
 def good_ccd_fraction(survey, ccds):
-    if survey == 'hsc':
+    # skip this cut for some cameras (with a single chip per file)...
+    if survey in ['hsc', 'wiro']:
         return 1.0
 
     nccdmap = {'decam': 62,
