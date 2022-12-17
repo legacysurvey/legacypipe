@@ -15,6 +15,7 @@ RUN apt -y update && apt install -y apt-utils && \
     wget \
     curl \
     swig \
+    pybind11-dev \
     netpbm \
     wcslib-dev \
     wcslib-tools \
@@ -34,6 +35,7 @@ RUN apt -y update && apt install -y apt-utils && \
     python3-dev \
     python3-pip \
     python3-pil \
+    python3-pybind11 \
     python3-tk \
     python3-setuptools \
     python3-wheel \
@@ -100,7 +102,7 @@ RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so") \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)") \
-    && echo 2
+    && echo 3
 
 # python = python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
