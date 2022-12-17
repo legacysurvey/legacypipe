@@ -82,18 +82,22 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
             dust_bands.append(b)
     filts = ['%s %s' % ('DES', f) for f in dust_bands]
     wisebands = ['WISE W1', 'WISE W2', 'WISE W3', 'WISE W4']
-    ebv,ext = sfd.extinction(filts + wisebands, T.ra, T.dec, get_ebv=True)
+    galexbands = ['FUV', 'NUV']
+    ebv,ext = sfd.extinction(filts + wisebands + galexbands, T.ra, T.dec, get_ebv=True)
     T.ebv = ebv.astype(np.float32)
     ext = ext.astype(np.float32)
     decam_ext = ext[:,:len(dust_bands)]
     if has_wise:
-        wise_ext  = ext[:,len(dust_bands):]
+        wise_ext = ext[:,len(dust_bands):len(dust_bands)+len(wisebands)]
+    if has_galex:
+        galex_ext = ext[:,len(dust_bands)+len(wisebands):]
 
     wbands = ['w1','w2','w3','w4']
     gbands = ['nuv','fuv']
 
     trans_cols_opt  = []
     trans_cols_wise = []
+    trans_cols_galex = []
 
     for i,b in enumerate(dust_bands):
         col = 'mw_transmission_%s' % b
@@ -104,6 +108,11 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
             col = 'mw_transmission_%s' % b
             T.set(col, 10.**(-wise_ext[:,i] / 2.5))
             trans_cols_wise.append(col)
+    if has_galex:
+        for i,b in enumerate(gbands):
+            col = 'mw_transmission_%s' % b
+            T.set(col, 10.**(-galex_ext[:,i] / 2.5))
+            trans_cols_galex.append(col)
 
     T.release = np.zeros(len(T), np.int16) + release
 
