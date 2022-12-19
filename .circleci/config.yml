@@ -1,8 +1,8 @@
 version: 2
 jobs:
-  build-from-docker-py3.6:
+  build-from-docker-u1804-py3.6:
     docker:
-      - image: legacysurvey/circleci-build
+      - image: legacysurvey/circleci-build-ubuntu18.04-py36
     steps:
       - run:
           name: CPU info
@@ -28,7 +28,7 @@ jobs:
               export TYCHO2_KD_DIR=$LPT
               python3.6 test/legacyzpts_test.py
 
-  build-from-docker-py3.7:
+  build-from-docker-u1804-py3.7:
     docker:
       - image: legacysurvey/circleci-build-ubuntu18.04-py378
     steps:
@@ -59,7 +59,7 @@ jobs:
               #python3.7 test/unit_tests.py
               #python3.7 test/runbrick_test.py
 
-  build-from-docker-py3.8:
+  build-from-docker-u1804-py3.8:
     docker:
       - image: legacysurvey/circleci-build-ubuntu18.04-py378
     steps:
@@ -207,6 +207,6 @@ workflows:
       - "build-from-docker-u2204-py3.10"
       - "build-from-docker-u2004-py3.8"
       - "build-from-docker-u2004-py3.9"
-      - "build-from-docker-py3.6"
-      - "build-from-docker-py3.7"
-      - "build-from-docker-py3.8"
+      - "build-from-docker-u1804-py3.6"
+      - "build-from-docker-u1804-py3.7"
+      - "build-from-docker-u1804-py3.8"

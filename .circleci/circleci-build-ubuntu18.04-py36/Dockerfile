@@ -39,10 +39,11 @@ RUN apt -y update && apt install -y apt-utils && \
     python3-tk \
     python3-setuptools \
     python3-wheel \
-    python3.7 \
-    python3.7-dev \
-    python3.8 \
-    python3.8-dev \
+    python3-numpy \
+    python3-scipy \
+    python3-matplotlib \
+    sextractor \
+    psfex \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # multiprocessing.pool from official python 3.6.8 release
@@ -54,33 +55,17 @@ COPY pool.py /usr/lib/python3.6/multiprocessing/pool.py
 # Python related stuff
 RUN echo "../site-packages" > /usr/local/lib/python3.6/dist-packages/site-packages.pth
 
-# photutils at 1.0.0 because of
-# https://github.com/astropy/photutils/issues/1095
-# new in 1.0.1, maybe fixed in next release?
-
 # Pip installs
 RUN for x in \
     cython \
-    numpy \
-    pythran \
     fitsio \
-    matplotlib \
     astropy \
-    photutils==1.0.0 \
+    photutils \
     zmq \
     ; do \
     python3.6 -m pip install $x; \
-    python3.7 -m pip install $x; \
-    python3.8 -m pip install $x; \
     done; \
     rm -R /root/.cache/pip
-#scipy (python3-scipy instead -- building failed on 3.7 and 3.8 for not-obvious reason)
-
-RUN apt update && apt install -y python3-scipy \
-    && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-# somehow the apt-installed numpy doesn't work for 3.8??
-#RUN python3.8 -m pip install -I numpy && rm -R /root/.cache/pip
 
 RUN mkdir /src
 WORKDIR /src
@@ -91,11 +76,7 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && make \
     && make extra \
     && make py PYTHON=python3.6 \
-    && make py PYTHON=python3.7 \
-    && make py PYTHON=python3.8 \
     && make install INSTALL_DIR=/usr/local PYTHON=python3.6 \
-    && make install INSTALL_DIR=/usr/local PYTHON=python3.7 \
-    && make install INSTALL_DIR=/usr/local PYTHON=python3.8 \
     && make clean
 
 ENV PYTHON=python3
@@ -104,12 +85,9 @@ ENV PYTHON=python3
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
     && python3.6 setup-cython.py --with-ceres install --home /usr/local \
-    && python3.7 setup-cython.py --with-ceres install --home /usr/local \
-    && python3.8 setup-cython.py --with-ceres install --home /usr/local \
     && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so") \
-    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)") \
-    && echo 3
+    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
 
 # python = python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
@@ -128,14 +106,6 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
 
 ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 
-RUN python3.7 -m pip install --no-cache-dir coverage coveralls
-
 # ubuntu renames the (awfully named) executable
-RUN apt update && \
-    apt install -y --no-install-recommends \
-    sextractor psfex && \
-    apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 RUN ln -s /usr/bin/sextractor /usr/bin/sex
 
-#RUN apt update && apt install -y python3-matplotlib && \
-#    apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
