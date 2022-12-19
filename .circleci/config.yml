@@ -30,7 +30,7 @@ jobs:
 
   build-from-docker-py3.7:
     docker:
-      - image: legacysurvey/circleci-build
+      - image: legacysurvey/circleci-build-ubuntu18.04-py378
     steps:
       - run:
           name: CPU info
@@ -61,7 +61,7 @@ jobs:
 
   build-from-docker-py3.8:
     docker:
-      - image: legacysurvey/circleci-build
+      - image: legacysurvey/circleci-build-ubuntu18.04-py378
     steps:
       - run:
           name: CPU info

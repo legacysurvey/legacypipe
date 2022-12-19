@@ -62,7 +62,7 @@ RUN echo "../site-packages" > /usr/local/lib/python3.6/dist-packages/site-packag
 RUN for x in \
     cython \
     numpy \
-    scipy \
+    pythran \
     fitsio \
     matplotlib \
     astropy \
@@ -74,6 +74,13 @@ RUN for x in \
     python3.8 -m pip install $x; \
     done; \
     rm -R /root/.cache/pip
+#scipy (python3-scipy instead -- building failed on 3.7 and 3.8 for not-obvious reason)
+
+RUN apt update && apt install -y python3-scipy \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# somehow the apt-installed numpy doesn't work for 3.8??
+#RUN python3.8 -m pip install -I numpy && rm -R /root/.cache/pip
 
 RUN mkdir /src
 WORKDIR /src
@@ -129,3 +136,6 @@ RUN apt update && \
     sextractor psfex && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 RUN ln -s /usr/bin/sextractor /usr/bin/sex
+
+#RUN apt update && apt install -y python3-matplotlib && \
+#    apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
