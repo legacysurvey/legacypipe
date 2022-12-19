@@ -1117,7 +1117,7 @@ def quick_coadds(tims, bands, targetwcs, images=None,
     if get_max:
         maximgs = []
     if get_saturated:
-        satur = np.zeros((H,W), np.bool)
+        satur = np.zeros((H,W), bool)
     if addnoise:
         noise = np.zeros((H,W), np.float32)
 
