@@ -214,7 +214,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
         badcoadds_pos = None
         badcoadds_neg = None
 
-    star_veto = np.zeros(targetwcs.shape, np.bool)
+    star_veto = np.zeros(targetwcs.shape, bool)
     if refstars:
         gaia = refstars[refstars.isgaia]
         # Not moving Gaia stars to epoch of individual images...
