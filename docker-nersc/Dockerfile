@@ -53,6 +53,7 @@ ENV BASE_CFLAGS="-O3 -g -fPIC -std=gnu99 -pthread" \
     REAL_CFLAGS="$BASE_CFLAGS -x=haswell" \
     CFLAGS="$REAL_CFLAGS" \
     ARCH_FLAGS=""
+# SEE ALSO the tractor's setup-cython.py script -- sets icc/gcc flags.
 
 ENV PYTHON="python3" \
     PYTHON_CONFIG="python3-config" \
@@ -110,7 +111,7 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && make install INSTALL_DIR=/usr/local \
     && make clean \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import astrometry; print(astrometry.__version__)") \
-    && git describe && echo 0.90
+    && git describe && echo 0.93
 
 # Pip installs -- binary.  We need cython for the tractor.
 RUN for x in \
@@ -126,7 +127,7 @@ RUN for x in \
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && git checkout dr10.1 \
+    && git checkout dr10.2 \
     && python3 setup-cython.py --with-ceres install --home /usr/local \
     && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so") \
@@ -275,9 +276,10 @@ RUN cd qdo && git remote add dstn https://bitbucket.org/dstn/qdo.git \
 
 ENV LEGACYPIPE_DIR /src/legacypipe/py
 
+    #&& git describe && echo DR10.1.0 && \
+
 # update legacypipe
 RUN cd /src/legacypipe && git pull \   
-    && git describe && echo DR10.0.12 && \
+    && git checkout DR10.1.0 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
-

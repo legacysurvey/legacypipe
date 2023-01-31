@@ -1,7 +1,9 @@
-FROM ubuntu:18.04
+FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt -y update && apt install -y apt-utils && \
+
+RUN apt install -y gpgv && \
+    apt -y update && apt install -y apt-utils gpgv && \
     apt install -y --no-install-recommends \
     build-essential \
     make \
@@ -15,7 +17,6 @@ RUN apt -y update && apt install -y apt-utils && \
     wget \
     curl \
     swig \
-    pybind11-dev \
     netpbm \
     wcslib-dev \
     wcslib-tools \
@@ -31,43 +32,31 @@ RUN apt -y update && apt install -y apt-utils && \
     libeigen3-dev \
     libgoogle-glog-dev \
     libceres-dev \
-    python3 \
-    python3-dev \
     python3-pip \
-    python3-pil \
-    python3-pybind11 \
-    python3-tk \
-    python3-setuptools \
-    python3-wheel \
-    sextractor \
+    python3.10 \
+    python3.10-dev \
+    python3.11 \
+    python3.11-dev \
+    source-extractor \
     psfex \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-#    python3-numpy \
-#    python3-scipy \
-#    python3-matplotlib \
-
-# multiprocessing.pool from official python 3.6.8 release
-# The python 3.6.7 version shipped in current Ubuntu 18.04 breaks the
-# Astrometry.net "timingpool" class.  This changed from 3.6.6 to 3.6.7 and
-# then was reverted in 3.6.8.
-COPY pool.py /usr/lib/python3.6/multiprocessing/pool.py
-
-# Python related stuff
-RUN echo "../site-packages" > /usr/local/lib/python3.6/dist-packages/site-packages.pth
+# ubuntu renames the (awfully named) executable
+RUN ln -s /usr/bin/source-extractor /usr/bin/sex
 
 # Pip installs
 RUN for x in \
     cython \
     numpy \
     scipy \
-    matplotlib \
     fitsio \
+    matplotlib \
     astropy \
     photutils \
     zmq \
     ; do \
-    python3.6 -m pip install $x; \
+    python3.10 -m pip install $x; \
+    python3.11 -m pip install $x; \
     done; \
     rm -R /root/.cache/pip
 
@@ -79,22 +68,25 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
     && make \
     && make extra \
-    && make py PYTHON=python3.6 \
-    && make install INSTALL_DIR=/usr/local PYTHON=python3.6 \
+    && make py PYTHON=python3.10 \
+    && make py PYTHON=python3.11 \
+    && make install INSTALL_DIR=/usr/local PYTHON=python3.10 \
+    && make install INSTALL_DIR=/usr/local PYTHON=python3.11 \
     && make clean
 
 ENV PYTHON=python3
+# python = python3
+RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && python3.6 setup-cython.py --with-ceres install --home /usr/local \
+    && python3.10 setup-cython.py --with-ceres install --home /usr/local \
+    && python3.11 setup-cython.py --with-ceres install --home /usr/local \
     && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so") \
-    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
-
-# python = python3
-RUN ln -s /usr/bin/python3 /usr/bin/python
+    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)") \
+    && echo 2
 
 # DUST maps
 RUN mkdir -p dust/maps \
@@ -104,12 +96,8 @@ RUN mkdir -p dust/maps \
 ENV DUST_DIR=/src/dust
 
 # Unwise PSF
-RUN git clone https://github.com/legacysurvey/unwise_psf.git \
-    && cd unwise_psf \
-    && git checkout dr9.3
+RUN git clone https://github.com/legacysurvey/unwise_psf.git
+#    && cd unwise_psf \
+#    && git checkout dr9.3
 
 ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
-
-# ubuntu renames the (awfully named) executable
-RUN ln -s /usr/bin/sextractor /usr/bin/sex
-
