@@ -55,18 +55,18 @@ def recreate_outlier_jpegs(survey, tims, bands, targetwcs, brickname):
             # Get the mask
             extname = '%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
             if not extname in F:
-                info('WARNING: Did not find extension', extname, 'in outlier-mask file', fn)
+                info('WARNING: Did not find extension', extname, 'in outlier-mask file', maskfn)
                 return False
             mask = F[extname].read()
             hdr = F[extname].read_header()
             if mask.shape != tim.shape:
-                info('Warning: Outlier mask', fn, 'does not match shape of tim', tim)
+                info('Warning: Outlier mask', maskfn, 'does not match shape of tim', tim)
                 return False
             x0 = hdr['X0']
             y0 = hdr['Y0']
             maskbits = get_bits_to_mask()
             if x0 != tim.x0 or y0 != tim.y0:
-                info('Warning: Outlier mask', fn, 'x0,y0 does not match that of tim', tim)
+                info('Warning: Outlier mask', maskfn, 'x0,y0 does not match that of tim', tim)
                 return False
             if apply_masks:
                 # Apply this mask!
