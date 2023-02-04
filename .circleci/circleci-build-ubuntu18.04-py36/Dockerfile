@@ -39,12 +39,13 @@ RUN apt -y update && apt install -y apt-utils && \
     python3-tk \
     python3-setuptools \
     python3-wheel \
-    python3-numpy \
-    python3-scipy \
-    python3-matplotlib \
     sextractor \
     psfex \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+#    python3-numpy \
+#    python3-scipy \
+#    python3-matplotlib \
 
 # multiprocessing.pool from official python 3.6.8 release
 # The python 3.6.7 version shipped in current Ubuntu 18.04 breaks the
@@ -58,6 +59,9 @@ RUN echo "../site-packages" > /usr/local/lib/python3.6/dist-packages/site-packag
 # Pip installs
 RUN for x in \
     cython \
+    numpy \
+    scipy \
+    matplotlib \
     fitsio \
     astropy \
     photutils \

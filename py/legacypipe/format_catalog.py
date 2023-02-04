@@ -206,6 +206,7 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
 
     cols.extend(trans_cols_opt)
     cols.extend(trans_cols_wise)
+    cols.extend(trans_cols_galex)
 
     for c in ['nobs', 'rchisq', 'fracflux']:
         add_fluxlike(c)

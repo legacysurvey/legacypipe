@@ -1,16 +1,9 @@
-FROM ubuntu:21.10
+FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# # https://medium.com/nttlabs/ubuntu-21-10-and-fedora-35-do-not-work-on-docker-20-10-9-1cd439d9921
-# #ADD https://github.com/AkihiroSuda/clone3-workaround/releases/download/v1.0.0/clone3-workaround.x86_64 /clone3-workaround
-# COPY clone3-workaround.x86_64 /clone3-workaround
-# RUN chmod 755 /clone3-workaround
-# SHELL ["/clone3-workaround", "/bin/sh", "-c"]
-
-RUN apt install -y gpgv
-
-RUN apt -y update && apt install -y apt-utils gpgv && \
+RUN apt install -y gpgv && \
+    apt -y update && apt install -y apt-utils gpgv && \
     apt install -y --no-install-recommends \
     build-essential \
     make \
@@ -40,18 +33,16 @@ RUN apt -y update && apt install -y apt-utils gpgv && \
     libgoogle-glog-dev \
     libceres-dev \
     python3-pip \
-    python3.9 \
-    python3.9-dev \
     python3.10 \
     python3.10-dev \
+    python3.11 \
+    python3.11-dev \
     source-extractor \
     psfex \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # ubuntu renames the (awfully named) executable
-RUN ln -s /usr/bin/sextractor /usr/bin/sex
-# FIXME - should be
-# RUN ln -s /usr/bin/source-extractor /usr/bin/sex
+RUN ln -s /usr/bin/source-extractor /usr/bin/sex
 
 # Pip installs
 RUN for x in \
@@ -61,11 +52,11 @@ RUN for x in \
     fitsio \
     matplotlib \
     astropy \
-    photutils==1.2.0 \
+    photutils \
     zmq \
     ; do \
-    python3.9 -m pip install $x; \
     python3.10 -m pip install $x; \
+    python3.11 -m pip install $x; \
     done; \
     rm -R /root/.cache/pip
 
@@ -77,25 +68,25 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
     && make \
     && make extra \
-    && make py PYTHON=python3.9 \
     && make py PYTHON=python3.10 \
-    && make install INSTALL_DIR=/usr/local PYTHON=python3.9 \
+    && make py PYTHON=python3.11 \
     && make install INSTALL_DIR=/usr/local PYTHON=python3.10 \
+    && make install INSTALL_DIR=/usr/local PYTHON=python3.11 \
     && make clean
 
 ENV PYTHON=python3
+# python = python3
+RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && python3.9 setup-cython.py --with-ceres install --home /usr/local \
     && python3.10 setup-cython.py --with-ceres install --home /usr/local \
+    && python3.11 setup-cython.py --with-ceres install --home /usr/local \
     && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so") \
-    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
-
-# python = python3
-RUN ln -s /usr/bin/python3 /usr/bin/python
+    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)") \
+    && echo 2
 
 # DUST maps
 RUN mkdir -p dust/maps \
@@ -105,11 +96,8 @@ RUN mkdir -p dust/maps \
 ENV DUST_DIR=/src/dust
 
 # Unwise PSF
-RUN git clone https://github.com/legacysurvey/unwise_psf.git \
-    && cd unwise_psf \
-    && git checkout dr9.3
-
-# ubuntu renames the (awfully named) executable
-RUN rm /usr/bin/sex; ln -s /usr/bin/source-extractor /usr/bin/sex
+RUN git clone https://github.com/legacysurvey/unwise_psf.git
+#    && cd unwise_psf \
+#    && git checkout dr9.3
 
 ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
