@@ -16,6 +16,10 @@ class SuprimeImage(LegacySurveyImage):
         'I-A-L464': 25,
     }
 
+    k_ext = {
+        'I-A-L464': 0.173,   # made up!
+    }
+
     def get_ps1_band(self):
         from legacypipe.ps1cat import ps1cat
         # Returns the integer index of the band in Pan-STARRS1 to use for an image in filter
@@ -82,6 +86,16 @@ class SuprimeImage(LegacySurveyImage):
         iv[:,:] = 1./sig1**2
         return iv
 
+    def read_dq(self, header=None, **kwargs):
+        dq = super().read_dq(header=header, **kwargs)
+        if header:
+            dq,hdr = dq
+        # .weight.fits.fz files: 1 = good
+        dq = 1 - dq
+        if header:
+            dq = dq,hdr
+        return dq
+
     def colorterm_ps1_to_observed(self, cat, band):
         from legacypipe.ps1cat import ps1cat
         g_index = ps1cat.ps1band['g']
@@ -92,3 +106,44 @@ class SuprimeImage(LegacySurveyImage):
         #imag = cat[:,i_index]
         colorterm = np.zeros(len(gmag))
         return colorterm
+
+    def get_extension_list(self, debug=False):
+        if debug:
+            return [1]
+        return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+    def override_ccd_table_types(self):
+        return {'camera':'S10',
+                'filter': 'S8',}
+
+    # Flip the weight map (1=good) to a flag map (1=bad)
+    def run_se(self, imgfn, maskfn):
+        import fitsio
+        import os
+        from collections import Counter
+        from legacypipe.survey import create_temp
+        tmpmaskfn  = create_temp(suffix='.fits')
+        print('run_se: maskfn', maskfn)
+        #mask,hdr = self.read_dq(maskfn, header=True)
+        mask,hdr = self.read_dq(header=True)
+        print('Mask values:', Counter(mask.ravel()))
+        fitsio.write(tmpmaskfn, mask, header=hdr)
+        R = super().run_se(imgfn, tmpmaskfn)
+        os.unlink(tmpmaskfn)
+        return R
+
+    def get_fwhm(self, primhdr, imghdr):
+        # If PsfEx file exists, read FWHM from there
+        if not hasattr(self, 'merged_psffn'):
+            return super().get_fwhm(primhdr, imghdr)
+        psf = self.read_psf_model(0, 0, pixPsf=True)
+        fwhm = psf.fwhm
+        return fwhm
+
+    @classmethod
+    def get_nominal_pixscale(cls):
+        return 0.2
+
+    def set_ccdzpt(self, ccdzpt):
+        # Adjust zeropoint for exposure time
+        self.ccdzpt = ccdzpt + 2.5 * np.log10(self.exptime)

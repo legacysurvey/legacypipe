@@ -432,6 +432,21 @@ def add_psfzpt_cuts(T, camera, bad_expid, image2coadd='', **kw):
         psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
                            skybright, zpt_diff_avg, image2coadd=image2coadd, **kw)
 
+    elif camera == 'suprimecam':
+        zpt_lo = {}
+        zpt_hi = {}
+        skybright = {}
+        for band,zpt,dzlo,dzhi in [
+                ('I-A-L464', 25.3,  -0.5, 0.25),
+                ]:
+            zpt_lo[band] = zpt + dzlo
+            zpt_hi[band] = zpt + dzhi
+            skybright[band] = 90.
+        radec_rms = 0.2
+        zpt_diff_avg = 0.1
+        psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
+                           skybright, zpt_diff_avg, image2coadd=image2coadd, **kw)
+
     else:
         assert(False)
 

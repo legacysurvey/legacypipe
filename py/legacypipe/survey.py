@@ -534,6 +534,9 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                    NB_D = (0, 6. * rgb_stretch_factor),
                    NB_E = (0, 6. * rgb_stretch_factor),
                    )
+    # SUPRIME
+    rgbscales.update({'I-A-L464': (0, 6. * rgb_stretch_factor),
+                      })
     # rgbscales = {'u': 1.5, #1.0,
     #              'g': 2.5,
     #              'r': 1.5,

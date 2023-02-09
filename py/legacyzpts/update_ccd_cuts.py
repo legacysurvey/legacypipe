@@ -355,6 +355,7 @@ def good_ccd_fraction(survey, ccds):
                'mosaic': 4,
                'megaprime': 40,
                'panstarrs': 1,
+               'suprimecam': 10,
     }
 
     nccds = nccdmap[survey]
