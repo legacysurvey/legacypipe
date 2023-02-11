@@ -437,15 +437,24 @@ def add_psfzpt_cuts(T, camera, bad_expid, image2coadd='', **kw):
         zpt_hi = {}
         skybright = {}
         for band,zpt,dzlo,dzhi in [
-                ('I-A-L464', 25.3,  -0.5, 0.25),
+                # These are median values from the COSMOS set
+                ('I-A-L427', 24.49,  -0.5, 0.5),
+                ('I-A-L464', 25.33,  -0.5, 0.25),
+                ('I-A-L484', 25.67,  -0.5, 0.25),
+                ('I-A-L505', 25.41,  -0.5, 0.25),
+                ('I-A-L527', 25.99,  -0.5, 0.25),
                 ]:
             zpt_lo[band] = zpt + dzlo
             zpt_hi[band] = zpt + dzhi
             skybright[band] = 90.
         radec_rms = 0.2
-        zpt_diff_avg = 0.1
+        # L427 and L527 want 0.2; others would be okay with 0.1
+        zpt_diff_avg = 0.25
+        # L427 and L527 want 0.4 (!); others would work with 0.1
+        phrms = 0.4
+        
         psf_zeropoint_cuts(T, pixscale, zpt_lo, zpt_hi, bad_expid, camera, radec_rms,
-                           skybright, zpt_diff_avg, image2coadd=image2coadd, **kw)
+                           skybright, zpt_diff_avg, image2coadd=image2coadd, phrms_cut=phrms, **kw)
 
     else:
         assert(False)

@@ -1567,6 +1567,9 @@ class LegacySurveyImage(object):
         boxcar = 5
         # Sigma of boxcar-smoothed image
         bsig1 = sig1 / boxcar
+
+        print('Sky_john: sky median', sky_clipped_median, 'sig1 from invvar:', sig1)
+
         masked = np.abs(uniform_filter(img - sky_clipped_median, size=boxcar,
                                        mode='constant')) > (3.*bsig1)
         masked = binary_dilation(masked, iterations=3)
