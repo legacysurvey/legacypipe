@@ -132,7 +132,8 @@ class SuprimeImage(LegacySurveyImage):
         return iv
 
     def fix_saturation(self, img, dq, invvar, primhdr, imghdr, slc):
-        invvar[dq > 0] = 0.
+        if dq is not None:
+            invvar[dq > 0] = 0.
 
     def colorterm_ps1_to_observed(self, cat, band):
         from legacypipe.ps1cat import ps1cat
