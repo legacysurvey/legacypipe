@@ -1321,15 +1321,15 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     phot.gain    = np.zeros(len(phot), np.float32) + ccds['gain']
     phot.airmass = np.zeros(len(phot), np.float32) + airmass
 
-    import photutils
+    import photutils.aperture
     apertures_arcsec_diam = [6, 7, 8]
     for arcsec_diam in apertures_arcsec_diam:
-        ap = photutils.CircularAperture(np.vstack((phot.x_fit, phot.y_fit)).T,
-                                        arcsec_diam / 2. / imobj.pixscale)
+        ap = photutils.aperture.CircularAperture(np.vstack((phot.x_fit, phot.y_fit)).T,
+                                                 arcsec_diam / 2. / imobj.pixscale)
         with np.errstate(divide='ignore'):
             err = 1./ierr
-        apphot = photutils.aperture_photometry(fit_img, ap,
-                                               error=err, mask=(ierr==0))
+        apphot = photutils.aperture.aperture_photometry(fit_img, ap,
+                                                        error=err, mask=(ierr==0))
         phot.set('apflux_%i' % arcsec_diam,
                  apphot.field('aperture_sum').data.astype(np.float32))
         phot.set('apflux_%i_err' % arcsec_diam,
