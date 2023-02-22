@@ -912,6 +912,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         sy,sx = slc
         y0,y1 = sy.start, sy.stop
         x0,x1 = sx.start, sx.stop
+        print('good image slice:', slc, '-- shifting WCS by', x0, y0)
         wcs = wcs.get_subimage(x0, y0, int(x1-x0), int(y1-y0))
 
     # Quick check for PsfEx file
@@ -930,10 +931,13 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
 
     # Read image data
     dq,dqhdr = imobj.read_dq(header=True, slc=slc)
+    print('DQ:', dq.shape)
     if dq is not None:
         dq = imobj.remap_dq(dq, dqhdr)
     invvar = imobj.read_invvar(dq=dq, slc=slc)
+    print('Invvar:', invvar.shape)
     img = imobj.read_image(slc=slc)
+    print('Image:', img.shape)
     imobj.fix_saturation(img, dq, invvar, primhdr, hdr, slc)
     # Compute sig1 before rescaling (later it gets scaled by zpscale)
     imobj.sig1 = imobj.estimate_sig1(img, invvar, dq, primhdr, hdr)
