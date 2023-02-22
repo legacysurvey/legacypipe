@@ -216,6 +216,16 @@ class SuprimeImage(LegacySurveyImage):
             return [1]
         return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
+    def get_good_image_subregion(self):
+        x0,x1,y0,y1 = None,None,None,None
+        # Clip 50 pixels off the left/right sides of images to avoid biases near the ragged edges
+        info('get_good_image_subregion: ccdname', self.ccdname)
+        if self.ccdname in ['det0', 'det5', 'det6', 'det7', 'det8']:
+            x0 = 50
+        elif self.ccdname in ['det1', 'det2', 'det3', 'det4', 'det9']:
+            x1 = 2048-50
+        return x0,x1,y0,y1
+
     def override_ccd_table_types(self):
         return {'camera':'S10',
                 'filter': 'S8',
