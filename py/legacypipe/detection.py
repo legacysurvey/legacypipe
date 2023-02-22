@@ -118,16 +118,27 @@ def sed_matched_filters(bands):
     SEDs = list(reversed(SEDs))
 
     if len(bands) > 1:
+        # Flat SED for griz -- note that this only gets appended if >1 of griz exist in bands.
         flat = dict(g=1., r=1., i=1., z=1.)
-        sed = [flat.get(b,0.,) for b in bands]
-        if np.sum(sed) > 0:
+        sed = np.array([flat.get(b,0.,) for b in bands])
+        if np.sum(sed > 0) > 1:
             SEDs.append(('Flat', sed))
-        # Assume colors g-r = 1, r-i = 0.5, i-z = 0.5
+        # Red SED for griz -- assume colors g-r = 1, r-i = 0.5, i-z = 0.5
         red = dict(g=2.5, r=1., i=0.632, z=0.4)
-        sed = [red.get(b,0.) for b in bands]
-        if np.sum(sed) > 0:
+        sed = np.array([red.get(b,0.) for b in bands])
+        if np.sum(sed > 0) > 1:
             SEDs.append(('Red', sed))
-
+        # Flat SED for Suprime intermediate-band filters.  (We could move this to a special --run in runs.py)
+        iaflat = {
+            'I-A-L427': 1.,
+            'I-A-L464': 1.,
+            'I-A-L484': 1.,
+            'I-A-L505': 1.,
+            'I-A-L527': 1.,
+            }
+        sed = np.array([iaflat.get(b,0.) for b in bands])
+        if np.sum(sed > 0) > 1:
+            SEDs.append(('IAFlat', sed))
     info('SED-matched filters:', SEDs)
 
     return SEDs
