@@ -553,7 +553,7 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
 
     I = 0
     for img,band in zip(imgs, bands):
-        plane,scale = rgbscales[band]
+        _,scale = rgbscales[band]
         img = np.maximum(0, img * scale + m)
         I = I + img
     I /= len(bands)
@@ -572,6 +572,33 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
             i = (0.25, 0.5, 0.),
             z = (0.75, 0.,  0.))
 
+        for img,band in zip(imgs, bands):
+            _,scale = rgbscales[band]
+            rf,gf,bf = rgbvec[band]
+            if mnmx is None:
+                v = (img * scale + m) * I
+            else:
+                mn,mx = mnmx
+                v = ((img * scale + m) - mn) / (mx - mn)
+            if clip:
+                v = np.clip(v, 0, 1)
+            if rf != 0.:
+                rgb[:,:,0] += rf*v
+            if gf != 0.:
+                rgb[:,:,1] += gf*v
+            if bf != 0.:
+                rgb[:,:,2] += bf*v
+
+    elif bands == ['I-A-L427','I-A-L464','I-A-L484','I-A-L505','I-A-L527']:
+        print('sdss_rgb: Suprime IA color scheme')
+
+        rgbvec = {
+            'I-A-L427': (0.0, 0.0, 0.6),
+            'I-A-L464': (0.0, 0.2, 0.4),
+            'I-A-L484': (0.0, 0.6, 0.0),
+            'I-A-L505': (0.4, 0.2, 0.0),
+            'I-A-L527': (0.6, 0.0, 0.0),
+        }
         for img,band in zip(imgs, bands):
             _,scale = rgbscales[band]
             rf,gf,bf = rgbvec[band]
@@ -644,6 +671,14 @@ def get_rgb(imgs, bands, allbands=['g','r','z'],
     # Yuck, special-cased ODIN narrow-band rgb schemes.
     if (allbands == ['N501', 'N673']) or (allbands == ['N501']) or (allbands == ['N673']):
         return narrowband_rgb(imgs, bands, allbands)
+
+    if (len(bands) == 5 and
+        bands[0] == 'I-A-L427' and
+        bands[1] == 'I-A-L464' and
+        bands[2] == 'I-A-L484' and
+        bands[3] == 'I-A-L505' and
+        bands[4] == 'I-A-L527'):
+        return sdss_rgb(imgs, bands)
 
     if len(bands) == 5:
         return get_rgb(imgs[:3], bands[:3], resids=resids, mnmx=mnmx, arcsinh=arcsinh)
