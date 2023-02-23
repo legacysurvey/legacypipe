@@ -104,18 +104,17 @@ class SimpleCoadd(object):
             self.write_coadds(survey, brickname, hdr, band, coimg, comod, coiv, con)
 
             if apradec is not None:
-                import photutils
+                from photutils.aperture import CircularAperture, aperture_photometry
                 mask = (coiv == 0)
                 with np.errstate(divide='ignore'):
                     imsigma = 1.0/np.sqrt(coiv)
                 imsigma[mask] = 0.
                 for irad,rad in enumerate(apertures):
-                    aper = photutils.CircularAperture(apxy, rad)
-                    p = photutils.aperture_photometry(coimg, aper, error=imsigma,
-                                                      mask=mask)
+                    aper = CircularAperture(apxy, rad)
+                    p = aperture_photometry(coimg, aper, error=imsigma, mask=mask)
                     ap_iphots[iband][:,irad] = p.field('aperture_sum')
                     ap_dphots[iband][:,irad] = p.field('aperture_sum_err')
-                    p = photutils.aperture_photometry(coimg - comod, aper, mask=mask)
+                    p = aperture_photometry(coimg - comod, aper, mask=mask)
                     ap_rphots[iband][:,irad] = p.field('aperture_sum')
 
         self.write_color_image(survey, brickname, coimgs, comods)
@@ -959,10 +958,10 @@ def _resample_one(args):
 
 def _apphot_one(args):
     (irad, band, rad, img, sigma, mask, isimage, apxy) = args
-    import photutils
+    from photutils.aperture import CircularAperture, aperture_photometry
     result = [irad, band, isimage]
-    aper = photutils.CircularAperture(apxy, rad)
-    p = photutils.aperture_photometry(img, aper, error=sigma, mask=mask)
+    aper = CircularAperture(apxy, rad)
+    p = aperture_photometry(img, aper, error=sigma, mask=mask)
     result.append(p.field('aperture_sum'))
     if sigma is not None:
         result.append(p.field('aperture_sum_err'))
@@ -971,7 +970,7 @@ def _apphot_one(args):
 
     # If a mask is passed, also photometer it!
     if mask is not None:
-        p = photutils.aperture_photometry(mask, aper)
+        p = aperture_photometry(mask, aper)
         maskedpix = p.field('aperture_sum')
         # normalize by number of pixels (pi * rad**2)
         maskedpix /= (np.pi * rad**2)

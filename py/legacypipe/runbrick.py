@@ -2522,7 +2522,7 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
     from tractor.tractortime import TAITime
     from tractor.image import Image
     from tractor.basics import LinearPhotoCal
-    import photutils
+    from photutils.aperture import CircularAperture, aperture_photometry
 
     # Create a fake tim for each band to construct the models in 1" seeing
     # For Gaia stars, we need to give a time for evaluating the models.
@@ -2571,8 +2571,8 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
             # Add to blank image & photometer
             patch.addTo(onemod, scale=flux)
             sx,sy = faketim.getWcs().positionToPixel(src.getPosition())
-            aper = photutils.CircularAperture((sx, sy), fiberrad)
-            p = photutils.aperture_photometry(onemod, aper)
+            aper = CircularAperture((sx, sy), fiberrad)
+            p = aperture_photometry(onemod, aper)
             f = p.field('aperture_sum')[0]
             if not np.isfinite(f):
                 # If the source is off the brick (eg, ref sources), can be NaN
@@ -2585,9 +2585,9 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
     # Now photometer the accumulated images
     # Aperture photometry locations
     apxy = np.vstack((T.bx, T.by)).T
-    aper = photutils.CircularAperture(apxy, fiberrad)
+    aper = CircularAperture(apxy, fiberrad)
     for iband,modimg in enumerate(modimgs):
-        p = photutils.aperture_photometry(modimg, aper)
+        p = aperture_photometry(modimg, aper)
         f = p.field('aperture_sum')
         # If the source is off the brick (eg, ref sources), can be NaN
         I = np.isfinite(f)

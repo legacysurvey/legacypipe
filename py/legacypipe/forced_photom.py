@@ -1048,7 +1048,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             tlast = t
 
     if do_apphot:
-        import photutils
+        from photutils.aperture import CircularAperture, aperture_photometry
 
         img = tim.getImage()
         ie = tim.getInvError()
@@ -1072,8 +1072,8 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         print('Aperture photometry for', len(Iap), 'of', len(apxy[:,0]), 'sources within image bounds')
 
         for rad in apertures:
-            aper = photutils.CircularAperture(apxy[Iap,:], rad)
-            p = photutils.aperture_photometry(img, aper, error=imsigma)
+            aper = CircularAperture(apxy[Iap,:], rad)
+            p = aperture_photometry(img, aper, error=imsigma)
             apimg.append(p.field('aperture_sum'))
             apimgerr.append(p.field('aperture_sum_err'))
         ap = np.vstack(apimg).T
