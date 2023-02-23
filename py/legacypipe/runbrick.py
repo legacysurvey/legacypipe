@@ -772,7 +772,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
 
         # Blob-outlined version
         if blobmap is not None:
-            from scipy.ndimage.morphology import binary_dilation
+            from scipy.ndimage import binary_dilation
             outline = np.logical_xor(
                 binary_dilation(blobmap >= 0, structure=np.ones((3,3))),
                 (blobmap >= 0))
@@ -831,7 +831,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
     from tractor import Catalog
     from legacypipe.detection import (detection_maps, merge_hot_satur,
                         run_sed_matched_filters, segment_and_group_sources)
-    from scipy.ndimage.morphology import binary_dilation
+    from scipy.ndimage import binary_dilation
 
     record_event and record_event('stage_srcs: starting')
     _add_stage_version(version_header, 'SRCS', 'srcs')

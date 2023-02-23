@@ -187,7 +187,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             ## FIXME -- W3/W4 ??
             satlimit = 85000
             msat = ((tim.data > satlimit) | ((tim.nims == 0) & (tim.nuims > 1)))
-            from scipy.ndimage.morphology import binary_dilation
+            from scipy.ndimage import binary_dilation
             xx, yy = np.mgrid[-3:3+1, -3:3+1]
             dilate = xx**2+yy**2 <= 3**2
             msat = binary_dilation(msat, dilate)
@@ -252,7 +252,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         if get_models:
             # Save the inverr before blanking out non-unique pixels, for making coadds with no gaps!
             # (actually, slightly more subtly, expand unique area by 1 pixel)
-            from scipy.ndimage.morphology import binary_dilation
+            from scipy.ndimage import binary_dilation
             du = binary_dilation(unique)
             tim.coadd_inverr = tim.inverr * du
         tim.inverr[unique == False] = 0.

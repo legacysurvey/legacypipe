@@ -60,7 +60,7 @@ def remap_dq_cp_codes(dq, ignore_codes=None, dtype=np.uint16):
     # around saturated stars have the core with value 3 (satur), surrounded by one
     # pixel of value 1 (bad), and then more pixels with value 4 (bleed).
     # Set the BAD ones to SATUR.
-    from scipy.ndimage.morphology import binary_dilation
+    from scipy.ndimage import binary_dilation
     dq[np.logical_and(dq == 1, binary_dilation(dq == 3))] = 3
 
     from legacypipe.bits import DQ_BITS

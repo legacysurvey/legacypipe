@@ -16,7 +16,7 @@ def _build_objmask(img, ivar, skypix, boxcar=5, boxsize=1024):
     skypix - True is unmasked pixels
 
     """
-    from scipy.ndimage.morphology import binary_dilation
+    from scipy.ndimage import binary_dilation
     from scipy.ndimage.filters import uniform_filter
     from tractor.splinesky import SplineSky
 
@@ -644,7 +644,7 @@ def stage_fit_on_coadds(
 
             # Often, SATUR masks on galaxies / stars are surrounded by BLEED pixels.  Soak these into
             # the SATUR mask.
-            from scipy.ndimage.morphology import binary_dilation
+            from scipy.ndimage import binary_dilation
             anymask |= np.logical_and(((anymask & DQ_BITS['bleed']) > 0),
                                       binary_dilation(((anymask & DQ_BITS['satur']) > 0), iterations=10)) * DQ_BITS['satur']
 

@@ -1474,7 +1474,7 @@ class LegacySurveyImage(object):
     def run_sky(self, splinesky=True, git_version=None, ps=None, survey=None,
                 gaia=True, release=0, survey_blob_mask=None,
                 halos=True, subtract_largegalaxies=True, boxcar_mask=True):
-        from scipy.ndimage.morphology import binary_dilation
+        from scipy.ndimage import binary_dilation
         from astrometry.util.file import trymakedirs
         from astrometry.util.miscutils import estimate_mode
 

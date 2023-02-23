@@ -278,7 +278,7 @@ def plot_mask(X, rgb=(0,255,0), extent=None):
     plt.imshow(rgba, interpolation='nearest', origin='lower', extent=extent)
 
 def plot_boundary_map(X, rgb=(0,255,0), extent=None, iterations=1):
-    from scipy.ndimage.morphology import binary_dilation
+    from scipy.ndimage import binary_dilation
     H,W = X.shape
     it = iterations
     padded = np.zeros((H+2*it, W+2*it), bool)
@@ -357,7 +357,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     run_sed_matched_filters : calls this method
     '''
     from scipy.ndimage.measurements import label, find_objects
-    from scipy.ndimage.morphology import binary_dilation, binary_fill_holes, grey_dilation
+    from scipy.ndimage import binary_dilation, binary_fill_holes, grey_dilation
 
     H,W = detmaps[0].shape
     allzero = True
@@ -703,7 +703,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 
 def _peak_plot_1(vetomap, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
                  level, dilate, saturated_pix, satur, ps, rgbimg, cut):
-    from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
+    from scipy.ndimage import binary_dilation, binary_fill_holes
     from scipy.ndimage.measurements import label
     import pylab as plt
     plt.clf()
@@ -868,7 +868,7 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     *blobsrcs*: list of np arrays of integers, elements in T within each blob
     *blobslices*: list of slice objects for blob bounding-boxes.
     '''
-    from scipy.ndimage.morphology import binary_fill_holes
+    from scipy.ndimage import binary_fill_holes
     from scipy.ndimage.measurements import label, find_objects
 
     image = binary_fill_holes(image)

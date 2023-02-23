@@ -44,7 +44,7 @@ def stage_blobmask(targetwcs=None,
 
 def generate_blobmask(survey, bands, nsigma, detmaps, detivs, satmaps, blob_dilate,
                       version_header, targetwcs, brickname, record_event):
-    from scipy.ndimage.morphology import binary_dilation
+    from scipy.ndimage import binary_dilation
     from legacypipe.utils import copy_header_with_wcs
     from legacypipe.detection import sed_matched_detection, merge_hot_satur
     # Expand the mask around saturated pixels to avoid generating

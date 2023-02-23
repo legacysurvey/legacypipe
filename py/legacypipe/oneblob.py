@@ -517,7 +517,7 @@ class OneBlob(object):
         from functools import reduce
         from legacypipe.detection import detection_maps
         from astrometry.util.multiproc import multiproc
-        from scipy.ndimage.morphology import binary_dilation
+        from scipy.ndimage import binary_dilation
 
         # Compute per-band detection maps
         mp = multiproc()
@@ -795,7 +795,7 @@ class OneBlob(object):
 
     def iterative_detection(self, Bold, models):
         # Compute per-band detection maps
-        from scipy.ndimage.morphology import binary_dilation
+        from scipy.ndimage import binary_dilation
         from legacypipe.detection import sed_matched_filters, detection_maps, run_sed_matched_filters
         from astrometry.util.multiproc import multiproc
 
@@ -1060,7 +1060,7 @@ class OneBlob(object):
         if mask_others:
             from legacypipe.detection import detection_maps
             from astrometry.util.multiproc import multiproc
-            from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
+            from scipy.ndimage import binary_dilation, binary_fill_holes
             from scipy.ndimage.measurements import label
             # Compute per-band detection maps
             mp = multiproc()

@@ -293,7 +293,7 @@ class DecamImage(CPImage):
             # copied into the BLEED mask.
             # Try to undo this by demanding that BLEED pixels be vertically
             # connected to SATUR pixels.
-            from scipy.ndimage.morphology import binary_dilation
+            from scipy.ndimage import binary_dilation
             from legacypipe.bits import DQ_BITS
             sat = ((dq & DQ_BITS['satur']) > 0)
             # dilated saturated

@@ -203,7 +203,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                         mp=None, plots=False, ps=None, make_badcoadds=True,
                         refstars=None):
     from legacypipe.bits import DQ_BITS
-    from scipy.ndimage.morphology import binary_dilation
+    from scipy.ndimage import binary_dilation
 
     H,W = targetwcs.shape
 
@@ -369,7 +369,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
 
 def compare_one(X):
     from scipy.ndimage.filters import gaussian_filter
-    from scipy.ndimage.morphology import binary_dilation
+    from scipy.ndimage import binary_dilation
     from astrometry.util.resample import resample_with_wcs,OverlapError
 
     (i_tim,tim,sig,targetwcs, coimg,cow, veto, make_badcoadds, plots,ps) = X

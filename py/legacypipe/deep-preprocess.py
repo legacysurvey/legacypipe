@@ -3,7 +3,7 @@ import warnings
 
 import numpy as np
 
-from scipy.ndimage.morphology import binary_dilation
+from scipy.ndimage import binary_dilation
 
 import fitsio
 
