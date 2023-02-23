@@ -81,6 +81,12 @@ class SuprimeImage(LegacySurveyImage):
         # DET-ID  =                    0 / ID of the detector used for this data
         return 'det%i' % hdr['DET-ID']
 
+    def check_image_header(self, imghdr):
+        # check consistency between the CCDs table and the image header
+        e = 'det%i' % imghdr['DET-ID']
+        if e.strip() != self.ccdname.strip():
+            warnings.warn('Expected "det" + header DET-ID="%s" to match self.ccdname="%s", self.imgfn=%s' % (e.strip(), self.ccdname, self.imgfn))
+
     def compute_filenames(self):
         # Compute data quality and weight-map filenames... we have the
         # "p.weight.fits.fz" files that have partial DQ information,
@@ -219,7 +225,6 @@ class SuprimeImage(LegacySurveyImage):
     def get_good_image_subregion(self):
         x0,x1,y0,y1 = None,None,None,None
         # Clip 50 pixels off the left/right sides of images to avoid biases near the ragged edges
-        info('get_good_image_subregion: ccdname', self.ccdname)
         if self.ccdname in ['det0', 'det5', 'det6', 'det7', 'det8']:
             x0 = 50
         elif self.ccdname in ['det1', 'det2', 'det3', 'det4', 'det9']:
