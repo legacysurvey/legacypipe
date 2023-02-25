@@ -881,7 +881,8 @@ class LegacySurveyData(object):
         from legacypipe.mosaic import MosaicImage
         from legacypipe.bok    import BokImage
         from legacypipe.ptf    import PtfImage
-        from legacypipe.cfht   import MegaPrimeImage
+        #from legacypipe.cfht   import MegaPrimeImage
+        from legacypipe.cfht   import MegaPrimeElixirImage
         from legacypipe.hsc    import HscImage
         from legacypipe.panstarrs import PanStarrsImage
         from legacypipe.wiro   import WiroImage
@@ -933,7 +934,8 @@ class LegacySurveyData(object):
             'mosaic3': MosaicImage,
             '90prime': BokImage,
             'ptf'    : PtfImage,
-            'megaprime': MegaPrimeImage,
+            #'megaprime': MegaPrimeImage,
+            'megaprime': MegaPrimeElixirImage,
             'hsc'    : HscImage,
             'panstarrs' : PanStarrsImage,
             'wiro'   : WiroImage,

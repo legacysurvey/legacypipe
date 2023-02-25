@@ -1351,9 +1351,7 @@ class LegacySurveyImage(object):
             fcopy = True
 
         tmpimgfn  = create_temp(suffix='.fits')
-        tmpmaskfn = create_temp(suffix='.fits')
         todelete.append(tmpimgfn)
-        todelete.append(tmpmaskfn)
 
         if fcopy:
             #cmd = 'imcopy %s"+%i" %s' % (imgfn, imghdu, tmpimgfn)
@@ -1364,18 +1362,23 @@ class LegacySurveyImage(object):
         if os.system(cmd):
             raise RuntimeError('Command failed: ' + cmd)
 
-        if fcopy:
-            #cmd = 'imcopy %s"+%i" %s' % (maskfn, maskhdu, tmpmaskfn)
-            cmd = 'imcopy %s"[%i]" %s' % (maskfn, maskhdu, tmpmaskfn)
+        if maskfn is None:
+            tmpmaskfn = None
         else:
-            cmd = 'funpack -E %i -O %s %s' % (maskhdu, tmpmaskfn, maskfn)
-        debug(cmd)
-        if os.system(cmd):
-            print('Command failed: ' + cmd)
-            M,hdr = self._read_fits(maskfn, maskhdu, header=True)
-            print('Read', M.dtype, M.shape)
-            fitsio.write(tmpmaskfn, M, header=hdr, clobber=True)
-            print('Wrote', tmpmaskfn, 'with fitsio')
+            tmpmaskfn = create_temp(suffix='.fits')
+            todelete.append(tmpmaskfn)
+            if fcopy:
+                #cmd = 'imcopy %s"+%i" %s' % (maskfn, maskhdu, tmpmaskfn)
+                cmd = 'imcopy %s"[%i]" %s' % (maskfn, maskhdu, tmpmaskfn)
+            else:
+                cmd = 'funpack -E %i -O %s %s' % (maskhdu, tmpmaskfn, maskfn)
+            debug(cmd)
+            if os.system(cmd):
+                print('Command failed: ' + cmd)
+                M,hdr = self._read_fits(maskfn, maskhdu, header=True)
+                print('Read', M.dtype, M.shape)
+                fitsio.write(tmpmaskfn, M, header=hdr, clobber=True)
+                print('Wrote', tmpmaskfn, 'with fitsio')
 
         return tmpimgfn,tmpmaskfn
 
@@ -1387,15 +1390,17 @@ class LegacySurveyImage(object):
         # partially-written outputs.
         tmpfn = os.path.join(os.path.dirname(self.sefn),
                              'tmp-' + os.path.basename(self.sefn))
-        cmd = ' '.join([
+        args = [
             'sex',
             '-c', os.path.join(sedir, self.camera + '.se'),
             '-PARAMETERS_NAME', os.path.join(sedir, self.camera + '.param'),
             '-FILTER_NAME %s' % os.path.join(sedir, self.camera + '.conv'),
-            '-FLAG_IMAGE %s' % maskfn,
             '-CATALOG_NAME %s' % tmpfn,
-            '-VERBOSE_TYPE QUIET',
-            imgfn])
+            '-VERBOSE_TYPE QUIET',]
+        if maskfn is not None:
+            args.append('-FLAG_IMAGE %s' % maskfn)
+        args.append(imgfn)
+        cmd = ' '.join(args)
         debug(cmd)
         rtn = os.system(cmd)
         if rtn:

@@ -221,8 +221,9 @@ class MegaPrimeImage(LegacySurveyImage):
             slice2 = (slice(5,None,10),slice(5,None,10))
             mad = np.median(np.abs(img[slice1] - img[slice2]).ravel())
             sig1 = 1.4826 * mad / np.sqrt(2.)
-            self.sig1 = sig1
-            print('Computed sig1 by Blanton method:', self.sig1)
+            # self.sig1 must be in calibrated units
+            #self.sig1 = sig1
+            print('Computed sig1 by Blanton method:', sig1)
         else:
             from tractor import NanoMaggies
             print('sig1 from CCDs file:', self.sig1)
@@ -303,3 +304,36 @@ class MegaPrimeImage(LegacySurveyImage):
     #         raise RuntimeError('Command failed: ' + cmd)
     #     os.rename(tmpfn, self.sefn)
     #     os.unlink(tmpmaskfn)
+
+
+
+# For CFIS images processed with Elixir
+class MegaPrimeElixirImage(MegaPrimeImage):
+    def compute_filenames(self):
+        self.dqfn = None
+        self.wtfn = None
+    # don't need overridden read_image_header
+    def read_dq(self, header=False, **kwargs):
+        from legacypipe.bits import DQ_BITS
+        # Image pixels to be ignored have value 0.0
+        img = self._read_fits(self.imgfn, self.hdu, header=header, **kwargs)
+        if header:
+            img,hdr = img
+        dq = np.zeros(img.shape, np.int16)
+        dq[img == 0] = DQ_BITS['badpix']
+        if header:
+            dq = dq,hdr
+        return dq
+    def funpack_files(self, imgfn, maskfn, imghdu, maskhdu, todelete):
+        from legacypipe.survey import create_temp
+        tmpimgfn,_ = super().funpack_files(imgfn, maskfn, imghdu, maskhdu, todelete)
+        img = fitsio.read(tmpimgfn)
+        print('Funpack_files: image minimum value %g, max %g' % (img.min(), img.max()), 'type', img.dtype)
+        mask = (img < 0.5).astype(np.int16)
+        tmpmaskfn = create_temp(suffix='.fits')
+        todelete.append(tmpmaskfn)
+        fitsio.write(tmpmaskfn, mask, clobber=True)
+
+        #
+        fitsio.write(tmpimgfn, img.astype(np.float32), clobber=True)
+        return tmpimgfn, tmpmaskfn
