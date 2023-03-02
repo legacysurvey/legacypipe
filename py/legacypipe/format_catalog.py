@@ -11,6 +11,10 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
+def _clean_column_name(col):
+    # suprime "I-A-L427", etc
+    return col.replace('-', '_')
+
 def _expand_flux_columns(T, bands, allbands, keys):
     # Expand out FLUX and related fields from grz arrays to 'allbands'
     # # (eg, ugrizY) arrays.
@@ -35,7 +39,8 @@ def _expand_flux_columns(T, bands, allbands, keys):
 
         # FLUX_b for each band, rather than array columns.
         for i,b in enumerate(allbands):
-            T.set('%s_%s' % (key, b), A[:,i])
+            col = _clean_column_name('%s_%s' % (key, b))
+            T.set(col, A[:,i])
 
 def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
                    write_kwargs=None, N_wise_epochs=None,
@@ -167,7 +172,8 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
 
     def add_fluxlike(c):
         for b in allbands:
-            cols.append('%s_%s' % (c, b))
+            col = _clean_column_name('%s_%s' % (c, b))
+            cols.append(col)
     def add_wiselike(c, bands=None):
         if bands is None:
             bands = wbands
@@ -299,7 +305,7 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
             j = cclower.index(c)
             cols[i] = cc[j]
 
-    units = get_units_for_columns(cols, bands=list(allbands) + wbands + gbands)
+    units = get_units_for_columns(cols, bands=[_clean_column_name(b) for b in allbands] + wbands + gbands)
 
     T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units,
               **write_kwargs)
