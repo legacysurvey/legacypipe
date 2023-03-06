@@ -294,6 +294,11 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
         'shape_e1', 'shape_e1_ivar',
         'shape_e2', 'shape_e2_ivar'])
 
+    # nea, blob_nea rename
+    for b in allbands:
+        T.rename('nea_%s' % b.lower(), 'nea_%s' % _clean_column_name(b))
+        T.rename('blob_nea_%s' % b.lower(), 'blob_nea_%s' % _clean_column_name(b))
+
     debug('Columns:', cols)
     debug('T columns:', T.columns())
 
