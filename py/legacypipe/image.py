@@ -1787,6 +1787,7 @@ class LegacySurveyImage(object):
                 #     del haloimg
 
         blobmasked = False
+        blobgood = True
         if survey_blob_mask is not None:
             # Read blob maps for all overlapping bricks and project
             # them into this CCD's pixel space.

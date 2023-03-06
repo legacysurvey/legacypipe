@@ -246,7 +246,13 @@ def measure_image(img_fn, mp, image_dir='images',
         return ccds, None, img
 
     if measureargs['choose_ccd']:
-        extlist = [measureargs['choose_ccd']]
+        ccd = measureargs['choose_ccd']
+        # Try parsing as integer
+        try:
+            ccd = int(ccd, 10)
+        except:
+            pass
+        extlist = [ccd]
     else:
         extlist = img.get_extension_list(debug=measureargs['debug'])
 
