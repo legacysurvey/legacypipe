@@ -1892,8 +1892,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
 
         uniqx = [0] + [n * (subw - overlap) + overlap//2 for n in range(1,nsubx)] + [blobw]
         uniqy = [0] + [n * (subh - overlap) + overlap//2 for n in range(1,nsuby)] + [blobh]
-        info('Unique x boundaries:', uniqx)
-        info('Unique y boundaries:', uniqy)
+        debug('Unique x boundaries:', uniqx, 'y boundaries', uniqy)
 
         fro_gals = frozen_galaxies.get(iblob, [])
 
@@ -1902,6 +1901,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
         skipblobset = set(skipblobs)
 
         for i in range(nsuby):
+            # These are in *blob* coordinates
             suby0 = i*(subh - overlap)
             suby1 = min(suby0 + subh, blobh)
             for j in range(nsubx):
@@ -1909,8 +1909,10 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                 if (int(iblob),sub_blob) in skipblobset:
                     debug('Skipping sub-blob (from checkpoint)', (iblob,sub_blob))
                     continue
+                # These are in *blob* coordinates
                 subx0 = j*(subw - overlap)
                 subx1 = min(subx0 + subw, blobw)
+                # These are in *brick* coordinates thanks to adding bx0,by0.
                 sub_bx0 = bx0 + subx0
                 sub_bx1 = bx0 + subx1
                 sub_by0 = by0 + suby0
@@ -1931,15 +1933,8 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                 subtimargs = get_subtim_args(tims, targetwcs, sub_bx0,sub_bx1,
                                              sub_by0,sub_by1, single_thread)
 
-                debug('subx0,subx1', subx0, subx1)
-                debug('sub_bx[0,1]', sub_bx0, sub_bx1)
-                debug('uniqx range', uniqx[j], uniqx[j+1])
-                debug('suby0,suby1', suby0, suby1)
-                debug('sub_by[0,1]', sub_by0, sub_by1)
-                debug('uniqy range', uniqy[i], uniqy[i+1])
-
                 yield (brickname, (iblob,sub_blob),
-                       (uniqx[j], uniqx[j+1], uniqy[i], uniqy[i+1]),
+                       (bx0 + uniqx[j], bx0 + uniqx[j+1], by0 + uniqy[i], by0 + uniqy[i+1]),
                        (sub_blob_name, iblob,
                         Isubsrcs, targetwcs, sub_bx0, sub_by0,
                         sub_bx1 - sub_bx0, sub_by1 - sub_by0,
