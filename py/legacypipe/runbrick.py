@@ -1306,6 +1306,7 @@ def stage_fitblobs(T=None,
         sbmap = np.zeros(maxblob+2, bool)
         sbmap[np.array(ran_sub_blobs)+1] = True
         sub_blob_mask = sbmap[blobmap+1]
+        del sbmap
 
     # one_blob can change the number and types of sources.
     # Reorder the sources:
@@ -1782,8 +1783,8 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
 
     for nblob,iblob in enumerate(blob_order):
         # (convert iblob to int, because (with sub-blobs) skipblob
-        # entries can be tuples, and np.int32 tries to do
-        # vector-comparison)
+        # entries can be tuples, and if iblob is type np.int32 it
+        # tries to do vector-comparison)
         if int(iblob) in skipblobs:
             info('Skipping blob', iblob)
             continue
@@ -1835,8 +1836,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
             yield (brickname, iblob, None, None)
             continue
 
-        # Check for a large blob that is fully contained in the CLUSTER mask.
-        # Split into overlapping sub-blobs.
+        # Split into overlapping sub-blobs?
         # We include the "blob-unique" bounding-box in the tokens we yield from this function.
         # Then, in bounce_one_blob, after the sub-blob finishes processing, that unique-area
         # cut is applied.
@@ -1847,7 +1847,8 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
         do_sub_blobs = False
         if enable_sub_blobs:
             do_sub_blobs = True
-        # (only check this if necessary)
+        # Check for a large blob that is fully contained in the
+        # CLUSTER mask -- enable sub-blob processing if so.
         if (not do_sub_blobs) and np.all((refmap[bslc][blobmask] & IN_BLOB['CLUSTER']) != 0):
             info('Entire large blob is in CLUSTER mask')
             do_sub_blobs = True
@@ -1864,81 +1865,90 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
             # Minimum size that will get split into 2 or more sub-blobs
             threshsize = 1.5 * (target - overlap) + overlap
 
-        if do_sub_blobs and (blobw >= threshsize or blobh >= threshsize):
-            nsubx = int(max(1, np.round((blobw - overlap) / (target - overlap))))
-            nsuby = int(max(1, np.round((blobh - overlap) / (target - overlap))))
-            # subimage size, including overlaps
-            subw = (blobw + (nsubx-1)*overlap + nsubx-1) // nsubx
-            subh = (blobh + (nsuby-1)*overlap + nsuby-1) // nsuby
-            info('Will split into', nsubx, 'x', nsuby, 'sub-blobs of', subw, 'x', subh, 'pixels')
-            # save this blob id
-            if ran_sub_blobs is not None:
-                ran_sub_blobs.append(int(iblob))
+        do_sub_blobs = do_sub_blobs and (blobw >= threshsize or blobh >= threshsize)
 
-            uniqx = [0] + [n * (subw - overlap) + overlap//2 for n in range(1,nsubx)] + [blobw]
-            uniqy = [0] + [n * (subh - overlap) + overlap//2 for n in range(1,nsuby)] + [blobh]
-            info('Unique x boundaries:', uniqx)
-            info('Unique y boundaries:', uniqy)
-
-            fro_gals = frozen_galaxies.get(iblob, [])
-
-            assert(len(cat) == len(T))
-
-            skipblobset = set(skipblobs)
-
-            for i in range(nsuby):
-                suby0 = i*(subh - overlap)
-                suby1 = min(suby0 + subh, blobh)
-                for j in range(nsubx):
-                    sub_blob = i*nsubx+j
-                    if (int(iblob),sub_blob) in skipblobset:
-                        debug('Skipping sub-blob (from checkpoint)', (iblob,sub_blob))
-                        continue
-                    subx0 = j*(subw - overlap)
-                    subx1 = min(subx0 + subw, blobw)
-                    sub_bx0 = bx0 + subx0
-                    sub_bx1 = bx0 + subx1
-                    sub_by0 = by0 + suby0
-                    sub_by1 = by0 + suby1
-                    sub_slc = slice(sub_by0, sub_by1), slice(sub_bx0, sub_bx1)
-
-                    H,W = blobmap.shape
-                    clipx = np.clip(T.ibx[Isrcs], 0, W-1)
-                    clipy = np.clip(T.iby[Isrcs], 0, H-1)
-                    Isubsrcs = Isrcs[(clipx >= sub_bx0) * (clipx < sub_bx1) *
-                                     (clipy >= sub_by0) * (clipy < sub_by1)]
-                    sub_blob_name = '%i-%i' % (nblob+1, 1+sub_blob)
-                    info(len(Isubsrcs), 'of', len(Isrcs), 'sources are within sub-blob',
-                         sub_blob_name)
-                    if len(Isubsrcs) == 0:
-                        continue
-                    # Here we cut out subimages for the blob...
-                    subtimargs = get_subtim_args(tims, targetwcs, sub_bx0,sub_bx1,
-                                                 sub_by0,sub_by1, single_thread)
-
-                    yield (brickname, (iblob,sub_blob),
-                           (uniqx[j], uniqx[j+1], uniqy[i], uniqy[i+1]),
-                           (sub_blob_name, iblob,
-                            Isubsrcs, targetwcs, sub_bx0, sub_by0,
-                            sub_bx1 - sub_bx0, sub_by1 - sub_by0,
-                            # "blobmask" has already been cut to this blob, so don't use sub_slc
-                            blobmask[suby0:suby1, subx0:subx1],
-                            subtimargs, [cat[i] for i in Isubsrcs], bands,
-                            plots, ps,
-                            reoptimize, iterative, use_ceres, refmap[sub_slc],
-                            large_galaxies_force_pointsource, less_masking, fro_gals))
-
+        if not do_sub_blobs:
+            # Regular blob.
+            # Here we cut out subimages for the blob...
+            subtimargs = get_subtim_args(tims, targetwcs, bx0,bx1, by0,by1, single_thread)
+            yield (brickname, iblob, None,
+                   (nblob+1, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
+                    blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
+                    reoptimize, iterative, use_ceres, refmap[bslc],
+                    large_galaxies_force_pointsource, less_masking,
+                    frozen_galaxies.get(iblob, [])))
             continue
 
-        # Here we cut out subimages for the blob...
-        subtimargs = get_subtim_args(tims, targetwcs, bx0,bx1, by0,by1, single_thread)
+        # Sub-blob.
+        nsubx = int(max(1, np.round((blobw - overlap) / (target - overlap))))
+        nsuby = int(max(1, np.round((blobh - overlap) / (target - overlap))))
+        # subimage size, including overlaps
+        subw = (blobw + (nsubx-1)*overlap + nsubx-1) // nsubx
+        subh = (blobh + (nsuby-1)*overlap + nsuby-1) // nsuby
+        info('Will split into', nsubx, 'x', nsuby, 'sub-blobs of', subw, 'x', subh, 'pixels')
+        # save this blob id
+        if ran_sub_blobs is not None:
+            ran_sub_blobs.append(int(iblob))
 
-        yield (brickname, iblob, None,
-               (nblob+1, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
-                blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-                reoptimize, iterative, use_ceres, refmap[bslc],
-                large_galaxies_force_pointsource, less_masking,
-                frozen_galaxies.get(iblob, [])))
+        uniqx = [0] + [n * (subw - overlap) + overlap//2 for n in range(1,nsubx)] + [blobw]
+        uniqy = [0] + [n * (subh - overlap) + overlap//2 for n in range(1,nsuby)] + [blobh]
+        info('Unique x boundaries:', uniqx)
+        info('Unique y boundaries:', uniqy)
+
+        fro_gals = frozen_galaxies.get(iblob, [])
+
+        assert(len(cat) == len(T))
+
+        skipblobset = set(skipblobs)
+
+        for i in range(nsuby):
+            suby0 = i*(subh - overlap)
+            suby1 = min(suby0 + subh, blobh)
+            for j in range(nsubx):
+                sub_blob = i*nsubx+j
+                if (int(iblob),sub_blob) in skipblobset:
+                    debug('Skipping sub-blob (from checkpoint)', (iblob,sub_blob))
+                    continue
+                subx0 = j*(subw - overlap)
+                subx1 = min(subx0 + subw, blobw)
+                sub_bx0 = bx0 + subx0
+                sub_bx1 = bx0 + subx1
+                sub_by0 = by0 + suby0
+                sub_by1 = by0 + suby1
+                sub_slc = slice(sub_by0, sub_by1), slice(sub_bx0, sub_bx1)
+
+                H,W = blobmap.shape
+                clipx = np.clip(T.ibx[Isrcs], 0, W-1)
+                clipy = np.clip(T.iby[Isrcs], 0, H-1)
+                Isubsrcs = Isrcs[(clipx >= sub_bx0) * (clipx < sub_bx1) *
+                                 (clipy >= sub_by0) * (clipy < sub_by1)]
+                sub_blob_name = '%i-%i' % (nblob+1, 1+sub_blob)
+                info(len(Isubsrcs), 'of', len(Isrcs), 'sources are within sub-blob',
+                     sub_blob_name)
+                if len(Isubsrcs) == 0:
+                    continue
+                # Here we cut out subimages for the blob...
+                subtimargs = get_subtim_args(tims, targetwcs, sub_bx0,sub_bx1,
+                                             sub_by0,sub_by1, single_thread)
+
+                debug('subx0,subx1', subx0, subx1)
+                debug('sub_bx[0,1]', sub_bx0, sub_bx1)
+                debug('uniqx range', uniqx[j], uniqx[j+1])
+                debug('suby0,suby1', suby0, suby1)
+                debug('sub_by[0,1]', sub_by0, sub_by1)
+                debug('uniqy range', uniqy[i], uniqy[i+1])
+
+                yield (brickname, (iblob,sub_blob),
+                       (uniqx[j], uniqx[j+1], uniqy[i], uniqy[i+1]),
+                       (sub_blob_name, iblob,
+                        Isubsrcs, targetwcs, sub_bx0, sub_by0,
+                        sub_bx1 - sub_bx0, sub_by1 - sub_by0,
+                        # "blobmask" has already been cut to this blob, so don't use sub_slc
+                        blobmask[suby0:suby1, subx0:subx1],
+                        subtimargs, [cat[i] for i in Isubsrcs], bands,
+                        plots, ps,
+                        reoptimize, iterative, use_ceres, refmap[sub_slc],
+                        large_galaxies_force_pointsource, less_masking, fro_gals))
 
 def _bounce_one_blob(X):
     '''This wraps the one_blob function for multiprocessing purposes (and
@@ -1952,7 +1962,7 @@ def _bounce_one_blob(X):
             # Was this a sub-blobs?  If so, de-duplicate the catalog
             if blob_unique is not None:
                 x0,x1,y0,y1 = blob_unique
-                debug('Got blob_unique:', blob_unique)
+                debug('Got blob_unique (x0,x1,y0,y1) =', blob_unique)
                 ntot = len(result)
                 if ntot > 0:
                     debug('Range of result bx0:', result.bx0.min(), result.bx0.max())

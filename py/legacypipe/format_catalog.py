@@ -317,9 +317,6 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
             cols[i] = cc[j]
 
     units = get_units_for_columns(cols, bands=[_clean_column_name(b) for b in allbands] + wbands + gbands)
-
-    print('Columns:', cols)
-    print('T:', T.get_columns())
     T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units,
               **write_kwargs)
 
