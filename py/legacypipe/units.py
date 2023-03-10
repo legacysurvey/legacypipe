@@ -1,20 +1,21 @@
-
-def get_units_for_columns(cols, bands=[], extras=None):
+def get_units_for_columns(cols, bands=None, extras=None):
+    if bands is None:
+        bands = []
     deg = 'deg'
-    degiv = '1/deg^2'
+    degiv = 'deg^(-2)'
     arcsec = 'arcsec'
-    arcseciv = '1/arcsec^2'
-    flux = 'nanomaggy'
-    fluxiv = '1/nanomaggy^2'
+    arcseciv = 'arcsec^(-2)'
+    flux = 'nanomaggies'
+    fluxiv = 'nanomaggies^(-2)'
     pm = 'mas/yr'
-    pmiv = '1/(mas/yr)^2'
+    pmiv = '(mas/yr)^(-2)'
     unitmap = dict(
         ra=deg, dec=deg, ra_ivar=degiv, dec_ivar=degiv,
         ebv='mag',
         shape_r=arcsec,
         shape_r_ivar=arcseciv)
     unitmap.update(pmra=pm, pmdec=pm, pmra_ivar=pmiv, pmdec_ivar=pmiv,
-                 parallax='mas', parallax_ivar='1/mas^2')
+                 parallax='mas', parallax_ivar='mas^(-2)')
     unitmap.update(gaia_phot_g_mean_mag='mag',
                  gaia_phot_bp_mean_mag='mag',
                  gaia_phot_rp_mean_mag='mag')
@@ -23,7 +24,7 @@ def get_units_for_columns(cols, bands=[], extras=None):
                    flux=flux, flux_ivar=fluxiv,
                    apflux=flux, apflux_ivar=fluxiv,
                    psfdepth=fluxiv, galdepth=fluxiv,
-                   sky='nanomaggy/arcsec^2',
+                   sky='nanomaggies/arcsec^2',
                    psfsize=arcsec,
                    fwhm='pixels',
                    ccdrarms=arcsec, ccddecrms=arcsec,

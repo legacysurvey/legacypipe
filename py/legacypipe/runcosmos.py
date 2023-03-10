@@ -1,8 +1,7 @@
-from __future__ import print_function
 import numpy as np
 
 from legacypipe.decam import DecamImage
-from legacypipe.survey import *
+from legacypipe.survey import LegacySurveyData
 
 '''
 Testing code for adding noise to deeper images to simulate DECaLS depth data.
@@ -73,8 +72,14 @@ def main():
         lvl = logging.DEBUG
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
 
+    bands = opt.bands
+    if bands is None:
+        bands = ['g','r','z']
+    else:
+        bands = bands.split(',')
     survey = CosmosSurvey(survey_dir=opt.survey_dir, subset=subset,
-                          output_dir=opt.output_dir)
+                          output_dir=opt.output_dir,
+                          allbands=bands)
     print('Using survey:', survey)
     #print('with output', survey.output_dir)
 

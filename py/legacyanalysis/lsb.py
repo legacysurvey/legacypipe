@@ -142,7 +142,7 @@ def stage_1(expnum=431202, extname='S19', plotprefix='lsb', plots=False,
     H,W = mask.shape
     bright.modelmag = 22.5 - 2.5*np.log10(bright.modelflux)
     mag = bright.modelmag[:,2]
-    radius = (10. ** (3.5 - 0.15 * mag) / pixscale).astype(np.int)
+    radius = (10. ** (3.5 - 0.15 * mag) / pixscale).astype(np.int_)
 
     I = np.flatnonzero(
         ok *

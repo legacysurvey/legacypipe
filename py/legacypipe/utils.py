@@ -1,4 +1,3 @@
-from __future__ import print_function
 import os
 import numpy as np
 
@@ -75,37 +74,8 @@ class RunbrickError(RuntimeError):
 class NothingToDoError(RunbrickError):
     pass
 
-class iterwrapper(object):
-    def __init__(self, y, n):
-        self.n = n
-        self.y = y
-    def __str__(self):
-        return 'iterwrapper: n=%i; ' % self.n + str(self.y)
-    def __iter__(self):
-        return self
-    def next(self):
-        try:
-            return self.y.next()
-        except StopIteration:
-            raise
-        except:
-            import traceback
-            print(str(self), 'next()')
-            traceback.print_exc()
-            raise
-    # py3
-    def __next__(self):
-        try:
-            return self.y.__next__()
-        except StopIteration:
-            raise
-        except:
-            import traceback
-            print(str(self), '__next__()')
-            traceback.print_exc()
-            raise
-    def __len__(self):
-        return self.n
+class ZeroWeightError(RunbrickError):
+    pass
 
 def _ring_unique(wcs, W, H, i, unique, ra1,ra2,dec1,dec2):
     lo, hix, hiy = i, W-i-1, H-i-1
@@ -156,11 +126,6 @@ def find_unique_pixels(wcs, W, H, unique, ra1,ra2,dec1,dec2):
         if nu == ntot:
             break
     return unique
-
-def read_primary_header(fn):
-    # fitsio 1.0.1 sped up header-reading, so we don't need to do it ourselves any more.
-    import fitsio
-    return fitsio.read_header(fn)
 
 def copy_header_with_wcs(source_header, wcs):
     import fitsio

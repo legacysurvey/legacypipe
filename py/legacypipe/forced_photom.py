@@ -2,8 +2,6 @@
 This script performs forced photometry of individual Legacy Survey
 images given a data release catalog.
 '''
-
-from __future__ import print_function
 import os
 import sys
 import shutil
@@ -15,7 +13,7 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
 from astrometry.util.ttime import Time
 
-from tractor import Tractor, Catalog, NanoMaggies
+from tractor import Tractor, Catalog
 from tractor.galaxy import disable_galaxy_cache
 
 from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version_header, apertures_arcsec, radec_at_mjd
@@ -219,7 +217,7 @@ def main(survey=None, opt=None, args=None):
     for ccd in ccds:
         args.append((survey,
                      catsurvey_north, catsurvey_south, opt.catalog_resolve_dec_ngc,
-                     ccd, opt, zoomslice, None, ps))
+                     ccd, opt, zoomslice, None, None, ps))
 
     if opt.threads:
         from astrometry.util.multiproc import multiproc
@@ -443,14 +441,19 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     #print('Finding bricks to read...')
     sgabricks = []
 
-    todo = []
     for ra,dec,brick in zip(sga.ra, sga.dec, sga.brickname):
         bricks = survey.get_bricks_by_name(brick)
-        brick = bricks[0]
-        # The SGA catalog has a "brickname", but it unfortunately is not always exactly correct
-        if ra >= brick.ra1 and ra < brick.ra2 and dec >= brick.dec1 and dec < brick.dec2:
-            sgabricks.append(bricks)
+        # The SGA catalog has a "brickname", but it unfortunately is not always exactly correct...
+        search_for_brick = False
+        if bricks is None or len(bricks) == 0:
+            search_for_brick = True
         else:
+            brick = bricks[0]
+            if ra >= brick.ra1 and ra < brick.ra2 and dec >= brick.dec1 and dec < brick.dec2:
+                sgabricks.append(bricks)
+            else:
+                search_for_brick = True
+        if search_for_brick:
             # MAGIC 0.2 ~ brick radius
             bricks = survey.get_bricks_near(ra, dec, 0.2)
             bricks = bricks[(ra  >= bricks.ra1 ) * (ra  < bricks.ra2) *
@@ -460,33 +463,36 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     sgabricks = merge_tables(sgabricks)
     _,I = np.unique(sgabricks.brickname, return_index=True)
     sgabricks.cut(I)
-    #print('Need to read', len(sgabricks), 'bricks to pick up SGA sources')
+    print('Need to read', len(sgabricks), 'bricks to pick up SGA sources')
     SGA = []
     for brick in sgabricks.brickname:
         # For picking up these SGA bricks, resolve doesn't matter (they're fixed
         # in both).
-        for catsurvey,north in surveys:
+        for catsurvey,_ in surveys:
             fn = catsurvey.find_file('tractor', brick=brick)
             if os.path.exists(fn):
                 t = fits_table(fn, columns=['ref_cat', 'ref_id'])
                 I = np.flatnonzero(t.ref_cat == 'L3')
-                #print('Read', len(I), 'SGA entries from', brick)
+                print('Read', len(I), 'SGA entries from', brick)
                 SGA.append(fits_table(fn, columns=columns, rows=I))
                 break
     SGA = merge_tables(SGA)
+    print('Total of', len(SGA), 'sources before BRICK_PRIMARY cut')
     SGA.cut(SGA.brick_primary)
-    #print('Total of', len(SGA), 'sources')
+    print('Total of', len(SGA), 'sources after BRICK_PRIMARY cut')
     I = np.array([i for i,ref_id in enumerate(SGA.ref_id) if ref_id in set(sga.ref_id)])
     SGA.cut(I)
-    #print('Found', len(SGA), 'desired SGA sources')
+    print('Found', len(SGA), 'desired SGA sources')
     assert(len(sga) == len(SGA))
     assert(set(sga.ref_id) == set(SGA.ref_id))
     return SGA
 
 def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
-                          ccd, opt, zoomslice, radecpoly, ps):
+                          ccd, opt, zoomslice, radecpoly, outlier_bricks, ps):
     from functools import reduce
     from legacypipe.bits import DQ_BITS
+
+    plots = (ps is not None)
 
     tlast = Time()
     #print('Opt:', opt)
@@ -496,6 +502,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         im.check_for_cached_files(survey)
     if opt.do_calib:
         im.run_calibs(splinesky=True)
+    old_calibs_ok=True
 
     tim = im.get_tractor_image(slc=zoomslice,
                                radecpoly=radecpoly,
@@ -503,7 +510,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                                hybridPsf=opt.hybrid_psf,
                                normalizePsf=opt.normalize_psf,
                                constant_invvar=opt.constant_invvar,
-                               old_calibs_ok=True,
+                               old_calibs_ok=old_calibs_ok,
                                trim_edges=False)
     print('Got tim:', tim)
     if tim is None:
@@ -532,7 +539,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         halostars = gaia[Igaia]
         print('Got', len(gaia), 'Gaia stars,', len(halostars), 'for halo subtraction')
         moffat = True
-        halos = subtract_one((tim, halostars, moffat))
+        _,halos = subtract_one((0, tim, halostars, moffat, old_calibs_ok))
         tim.data -= halos
 
     # The "north" and "south" directories often don't have
@@ -559,9 +566,10 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     # # Outliers masks are computed within a survey (eg north/south
     # # for dr9), and are stored in a brick-oriented way, in the
     # # results directories.
-    bricks = bricks_touching_wcs(chipwcs, survey=survey)
+    if outlier_bricks is None:
+        outlier_bricks = bricks_touching_wcs(chipwcs, survey=survey)
 
-    for b in bricks:
+    for b in outlier_bricks:
         print('Reading outlier mask for brick', b.brickname,
               ':', survey.find_file('outliers_mask', brick=b.brickname, output=False))
         ok = read_outlier_mask_file(survey, [tim], b.brickname, pos_neg_mask=posneg_mask,
@@ -640,6 +648,11 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     print('Parse catalog:', tnow-tlast)
     tlast = tnow
 
+    if plots:
+        #opt.save_data = True
+        opt.save_model = True
+        opt.plot_wcs = getattr(opt, 'plot_wcs', None)
+
     print('Forced photom for', im, '...')
     F = run_forced_phot(cat, tim,
                         ceres=opt.ceres,
@@ -656,6 +669,63 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         # unpack results
         F,model_img = F
 
+    if plots:
+        import pylab as plt
+
+        if opt.plot_wcs:
+            sh = opt.plot_wcs.shape
+            img = np.zeros(sh, np.float32)
+            mod = np.zeros(sh, np.float32)
+            chi = np.zeros(sh, np.float32)
+            from astrometry.util.resample import resample_with_wcs
+            tchi = (tim.getImage() - model_img) * tim.getInvError()
+            Yo,Xo,Yi,Xi,rims = resample_with_wcs(opt.plot_wcs, tim.subwcs,
+                                                 [tim.getImage(), model_img, tchi])
+            img[Yo,Xo] = rims[0]
+            mod[Yo,Xo] = rims[1]
+            chi[Yo,Xo] = rims[2]
+        else:
+            img = tim.getImage()
+            mod = model_img
+            chi = (tim.getImage() - model_img) * tim.getInvError()
+
+        #ima = dict(interpolation='nearest', origin='lower', vmin=-3.*tim.sig1, vmax=10.*tim.sig1,
+        #           cmap='gray')
+        ima = dict(origin='lower', vmin=-3.*tim.sig1, vmax=10.*tim.sig1,
+                   cmap='gray')
+        fn = ps.getnext()
+        plt.imsave(fn, img, **ima)
+        fn = ps.getnext()
+        plt.imsave(fn, mod, **ima)
+        fn = ps.getnext()
+        plt.imsave(fn, chi, origin='lower', vmin=-5, vmax=+5, cmap='gray')
+
+        from legacypipe.survey import get_rgb
+        fn = ps.getnext()
+        rgb = get_rgb([img], [tim.band])
+        # coadd_bw
+        rgb = rgb.sum(axis=2)
+        ima = dict(origin='lower', cmap='gray')
+        plt.imsave(fn, rgb, **ima)
+        fn = ps.getnext()
+        rgb = get_rgb([mod], [tim.band])
+        rgb = rgb.sum(axis=2)
+        plt.imsave(fn, rgb, **ima)
+        print('Saved', fn)
+
+        # plt.clf()
+        # plt.imshow(img, **ima)
+        # plt.title('data: %s' % tim.name)
+        # ps.savefig()
+        # plt.clf()
+        # plt.imshow(mod, **ima)
+        # plt.title('model: %s' % tim.name)
+        # ps.savefig()
+        # plt.clf()
+        # plt.imshow(chi, origin='lower', interpolation='nearest', vmin=-5., vmax=+5., cmap='gray')
+        # plt.title('chi: %s' % tim.name)
+        # ps.savefig()
+
     F.release   = T.release
     F.brickid   = T.brickid
     F.brickname = T.brickname
@@ -666,9 +736,9 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     F.ccdname = np.array([im.ccdname] * len(F))
 
     # "Denormalizing"
-    F.filter  = np.array([tim.band]               * len(F))
-    F.mjd     = np.array([tim.primhdr['MJD-OBS']] * len(F))
-    F.exptime = np.array([tim.primhdr['EXPTIME']] * len(F), dtype=np.float32)
+    F.filter  = np.array([tim.band]      * len(F))
+    F.mjd     = np.array([im.mjdobs]     * len(F))
+    F.exptime = np.array([im.exptime]    * len(F), dtype=np.float32)
     F.psfsize = np.array([tim.psf_fwhm * tim.imobj.pixscale] * len(F), dtype=np.float32)
     F.ccd_cuts = np.array([ccd.ccd_cuts] * len(F))
     F.airmass  = np.array([ccd.airmass ] * len(F), dtype=np.float32)
@@ -942,10 +1012,16 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                            for src in cat]).astype(np.float32)
         F.flux_ivar = R.IV[:N].astype(np.float32)
 
-        F.fracflux = R.fitstats.profracflux[:N].astype(np.float32)
-        F.fracin   = R.fitstats.fracin     [:N].astype(np.float32)
-        F.rchisq   = R.fitstats.prochi2    [:N].astype(np.float32)
-        F.fracmasked = R.fitstats.promasked[:N].astype(np.float32)
+        if R.fitstats is not None:
+            F.fracflux   = R.fitstats.profracflux[:N].astype(np.float32)
+            F.fracin     = R.fitstats.fracin     [:N].astype(np.float32)
+            F.rchisq     = R.fitstats.prochi2    [:N].astype(np.float32)
+            F.fracmasked = R.fitstats.promasked  [:N].astype(np.float32)
+        else:
+            F.fracflux   = np.zeros(N, np.float32)
+            F.fracin     = np.zeros(N, np.float32)
+            F.rchisq     = np.zeros(N, np.float32)
+            F.fracmasked = np.zeros(N, np.float32)
 
         if derivs:
             F.flux_dra  = np.zeros(len(F), np.float32)
@@ -972,7 +1048,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             tlast = t
 
     if do_apphot:
-        import photutils
+        from photutils.aperture import CircularAperture, aperture_photometry
 
         img = tim.getImage()
         ie = tim.getInvError()
@@ -996,8 +1072,8 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         print('Aperture photometry for', len(Iap), 'of', len(apxy[:,0]), 'sources within image bounds')
 
         for rad in apertures:
-            aper = photutils.CircularAperture(apxy[Iap,:], rad)
-            p = photutils.aperture_photometry(img, aper, error=imsigma)
+            aper = CircularAperture(apxy[Iap,:], rad)
+            p = aperture_photometry(img, aper, error=imsigma)
             apimg.append(p.field('aperture_sum'))
             apimgerr.append(p.field('aperture_sum_err'))
         ap = np.vstack(apimg).T

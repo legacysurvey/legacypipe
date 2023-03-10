@@ -59,3 +59,5 @@ class TestOneblob(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+    #t = TestIterWrapper()
+    #t.test_peek()

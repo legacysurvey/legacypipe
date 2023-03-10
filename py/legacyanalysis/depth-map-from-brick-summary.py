@@ -20,9 +20,11 @@ wcs = anwcs_create_hammer_aitoff(ra_center, 0., zoom, W, H, False)
 #Bs = fits_table('~/legacypipe/py/survey-bricks-dr7.fits.gz')
 #Bs = fits_table('/global/project/projectdirs/cosmo/data/legacysurvey/dr8/south/survey-bricks-dr8-south.fits.gz')
 #Bn = fits_table('/global/project/projectdirs/cosmo/data/legacysurvey/dr8/north/survey-bricks-dr8-north.fits.gz')
-Bs = fits_table('/global/project/projectdirs/cosmo/data/legacysurvey/dr9/south/survey-bricks-dr9-south.fits.gz')
-Bn = fits_table('/global/project/projectdirs/cosmo/data/legacysurvey/dr9/north/survey-bricks-dr9-north.fits.gz')
+# Bs = fits_table('/global/project/projectdirs/cosmo/data/legacysurvey/dr9/south/survey-bricks-dr9-south.fits.gz')
+# Bn = fits_table('/global/project/projectdirs/cosmo/data/legacysurvey/dr9/north/survey-bricks-dr9-north.fits.gz')
 
+Bs = fits_table('/global/cfs/cdirs/cosmo/work/legacysurvey/dr10/survey-bricks-dr10-south.fits.gz')
+Bn = fits_table('/global/cfs/cdirs/cosmo/data/legacysurvey/dr9/north/survey-bricks-dr9-north.fits.gz')
 
 Bs.l,Bs.b = radectolb(Bs.ra, Bs.dec)
 Bn.l,Bn.b = radectolb(Bn.ra, Bn.dec)
@@ -44,19 +46,31 @@ Bs.cut(np.logical_or(Bs.b <= 0, (Bs.b > 0) * (Bs.dec <= decsplit)))
 #Bs.cut(np.random.permutation(len(Bs))[:int(0.1*len(Bs))])
 #Bn.cut(np.random.permutation(len(Bn))[:int(0.1*len(Bn))])
 
-for band in 'zrg':
+for band in 'izrg':
     plt.clf()
     plt.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95)
 
-    lo,hi = { 'g':(23.0,25.0), 'r':(22.4,24.4), 'z':(21.5,23.5) }[band]
+    lo,hi = { 'g':(23.0,25.0), 'r':(22.4,24.4), 'i': (22.0,24.0), 'z':(21.5,23.5) }[band]
 
     if False:
         plt.plot(Bn.x, Bn.y, 'o', ms=1, color='0.5')
         plt.plot(Bs.x, Bs.y, 'o', ms=1, color='0.5')
     else:
-        kw = dict(s=1, vmin=lo, vmax=hi, cmap='RdYlBu')
-        plt.scatter(Bn.x, Bn.y, c=Bn.get('galdepth_'+band) - Bn.get('ext_'+band), **kw)
-        plt.scatter(Bs.x, Bs.y, c=Bs.get('galdepth_'+band) - Bs.get('ext_'+band), **kw)
+        import matplotlib
+        cm = matplotlib.colormaps['RdYlBu']
+        class mycmap(matplotlib.colors.Colormap):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+            def __call__(self, x, alpha=None, bytes=None):
+                return cm(np.clip(x, 0, 1) * 0.9)
+        kw = dict(s=1, vmin=lo, vmax=hi, cmap=mycmap('mycm',)) #'RdYlBu')
+        # use only a portion of the colormap...
+        #kw = dict(s=1, vmin=lo, vmax=hi + (hi-lo)*0.2, cmap='RdYlBu')
+        col = 'galdepth_'+band
+        if col in Bn.get_columns():
+            plt.scatter(Bn.x, Bn.y, c=np.minimum(hi, Bn.get('galdepth_'+band) - Bn.get('ext_'+band)), **kw)
+        if col in Bs.get_columns():
+            plt.scatter(Bs.x, Bs.y, c=np.minimum(hi, Bs.get('galdepth_'+band) - Bs.get('ext_'+band)), **kw)
         c = plt.colorbar(orientation='horizontal')
         c.set_label('%s-band depth (mag)' % band)
 
@@ -117,11 +131,20 @@ for band in 'zrg':
             plt.plot(xx[istart:iend], yy[istart:iend], '-', color='0.6', lw=2)
         istart = iend
 
+    regs = [(30, 0, 'DES')]
+    if band == 'i':
+        regs.extend([
+            (180, 0, 'DELVE+DeROSITAS'),
+            (330,-10, 'DELVE'),
+            ])
+    else:
+        regs.extend([
+            (0, 20, 'DECaLS'),
+            (180, 10, 'DECaLS'),
+            (180, 50, 'MzLS+BASS'),
+        ])
     # Label regions
-    for r,d,n in [(30, 0, 'DES'),
-                  (0, 20, 'DECaLS'),
-                  (180, 10, 'DECaLS'),
-                  (180, 50, 'MzLS+BASS')]:
+    for r,d,n in regs:
         ok,x,y = wcs.radec2pixelxy(r, d)
         plt.text(x, y, n, fontsize=16, ha='center', va='center')
     

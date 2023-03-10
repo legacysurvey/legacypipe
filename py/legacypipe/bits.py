@@ -26,6 +26,8 @@ DQ_BITS = dict(badpix  =    1,
 CCD_CUTS = dict(
     err_legacyzpts = 0x1,
     not_grz = 0x2,
+    # DR10 alias
+    not_griz = 0x2,
     not_third_pix = 0x4, # Mosaic3 one-third-pixel interpolation problem
     exptime = 0x8,
     ccdnmatch = 0x10,
@@ -42,6 +44,8 @@ CCD_CUTS = dict(
     too_many_bad_ccds = 0x8000,
     flagged_in_des = 0x10000,
     phrms_s7 = 0x20000,
+    # DR10 late depth-cut
+    depth_cut_2 = 0x40000,
 )
 
 
@@ -84,6 +88,7 @@ MASKBITS = dict(
     CLUSTER    = 0x2000, # Cluster catalog source
     SATUR_I    = 0x4000,
     ALLMASK_I  = 0x8000,
+    SUB_BLOB   = 0x10000,
 )
 
 # Bits in the "brightblob" bitmask

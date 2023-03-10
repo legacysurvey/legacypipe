@@ -1,5 +1,3 @@
-from __future__ import print_function
-
 import numpy as np
 import time
 
@@ -8,7 +6,7 @@ from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.util.fits import fits_table
 from astrometry.util.plotutils import dimshow
 
-from tractor import Tractor, PointSource, Image, Catalog, Patch
+from tractor import Tractor, PointSource, Image, Catalog, Patch, Galaxy
 from tractor.galaxy import (DevGalaxy, ExpGalaxy,
                             disable_galaxy_cache, enable_galaxy_cache)
 from tractor.patch import ModelMask
@@ -62,6 +60,9 @@ def get_cpu_arch():
         # NERSC Cori machines
         (6, 63): 'has',
         (6, 87): 'knl',
+        # NERSC Perlmutter CPU partition (AMD EPYC 7763 64-Core Processor)
+        # (7713 on the head nodes)
+        (25, 1): 'prl',
     }
     cpu_arch = codenames.get((family, model), '')
     return cpu_arch
@@ -76,13 +77,16 @@ def one_blob(X):
      srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap,
      large_galaxies_force_pointsource, less_masking, frozen_galaxies) = X
 
-    debug('Fitting blob number %i: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
+    debug('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
           (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
 
     if len(timargs) == 0:
         return None
     if len(Isrcs) == 0:
         return None
+
+    assert(blobmask.shape == (blobh,blobw))
+    assert(refmap.shape == (blobh,blobw))
 
     for g in frozen_galaxies:
         debug('Frozen galaxy:', g)
@@ -103,7 +107,6 @@ def one_blob(X):
     B = fits_table()
     B.sources = srcs
     B.Isrcs = Isrcs
-    B.iblob = iblob
     # Did sources start within the blob?
     _,x0,y0 = blobwcs.radec2pixelxy(
         np.array([src.getPosition().ra  for src in srcs]),
@@ -117,7 +120,7 @@ def one_blob(X):
     # This uses 'initial' pixel positions, because that's what determines
     # the fitting behaviors.
 
-    ob = OneBlob('%i'%(nblob+1), blobwcs, blobmask, timargs, srcs, bands,
+    ob = OneBlob(nblob, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
                  less_masking, frozen_galaxies)
@@ -154,6 +157,7 @@ def one_blob(X):
 
     t1 = time.process_time()
     B.cpu_blob[:] = t1 - t0
+    B.iblob = iblob
     return B
 
 class OneBlob(object):
@@ -239,6 +243,13 @@ class OneBlob(object):
 
     def run(self, B, reoptimize=False, iterative_detection=True,
             compute_metrics=True):
+        # The overall steps here are:
+        # - fit initial fluxes for small number of sources that may need it
+        # - optimize individual sources
+        # - compute segmentation map
+        # - model selection (including iterative detection)
+        # - metrics
+
         trun = tlast = Time()
         # Not quite so many plots...
         self.plots1 = self.plots
@@ -320,6 +331,20 @@ class OneBlob(object):
             self._plot_coadd(self.tims, self.blobwcs, model=tr)
             plt.title('After source fitting')
             self.ps.savefig()
+            # Plot source locations
+            ax = plt.axis()
+            _,xf,yf = self.blobwcs.radec2pixelxy(
+                np.array([src.getPosition().ra  for src in self.srcs]),
+                np.array([src.getPosition().dec for src in self.srcs]))
+            plt.plot(xf-1, yf-1, 'r.', label='Sources')
+            Ir = np.flatnonzero([is_reference_source(src) for src in self.srcs])
+            if len(Ir):
+                plt.plot(xf[Ir]-1, yf[Ir]-1, 'o', mec='g', mfc='none', ms=8, mew=2,
+                         label='Ref source')
+            plt.legend()
+            plt.axis(ax)
+            plt.title('After source fitting')
+            self.ps.savefig()
             if self.plots_single:
                 plt.figure(2)
                 mods = list(tr.getModelImages())
@@ -337,6 +362,37 @@ class OneBlob(object):
 
         debug('Blob', self.name, 'finished initial fitting:', Time()-tlast)
         tlast = Time()
+
+        # Set any fitting behaviors based on geometric masks.
+
+        # Fitting behaviors: force point-source
+        force_pointsource_mask = (IN_BLOB['BRIGHT'] | IN_BLOB['CLUSTER'])
+        # large_galaxies_force_pointsource is True by default.
+        if self.large_galaxies_force_pointsource:
+            force_pointsource_mask |= IN_BLOB['GALAXY']
+        # Fit background?
+        fit_background_mask = IN_BLOB['BRIGHT']
+        if not self.less_masking:
+            fit_background_mask |= IN_BLOB['MEDIUM']
+        ### this variable *also* forces fitting the background.
+        if self.large_galaxies_force_pointsource:
+            fit_background_mask |= IN_BLOB['GALAXY']
+        for srci,src in enumerate(cat):
+            _,ix,iy = self.blobwcs.radec2pixelxy(src.getPosition().ra,
+                                                 src.getPosition().dec)
+            ix = int(np.clip(ix-1, 0, self.blobw-1))
+            iy = int(np.clip(iy-1, 0, self.blobh-1))
+            bits = self.refmap[iy, ix]
+            force_pointsource = ((bits & force_pointsource_mask) > 0)
+            fit_background = ((bits & fit_background_mask) > 0)
+            is_galaxy = isinstance(src, Galaxy)
+            if is_galaxy:
+                fit_background = False
+                force_pointsource = False
+            B.forced_pointsource[srci] = force_pointsource
+            B.fit_background[srci] = fit_background
+            # Also set a parameter on 'src' for use in compute_segmentation_map()
+            src.maskbits_forced_point_source = force_pointsource
 
         self.compute_segmentation_map()
 
@@ -461,7 +517,7 @@ class OneBlob(object):
         from functools import reduce
         from legacypipe.detection import detection_maps
         from astrometry.util.multiproc import multiproc
-        from scipy.ndimage.morphology import binary_dilation
+        from scipy.ndimage import binary_dilation
 
         # Compute per-band detection maps
         mp = multiproc()
@@ -539,6 +595,12 @@ class OneBlob(object):
         for j,i in enumerate(Iseg):
             if getattr(self.srcs[i], 'forced_point_source', False):
                 maxr2[j] = ref_radius**2
+        # Sources inside maskbits masks that are forced to be point sources
+        # also get a max radius.
+        for j,i in enumerate(Iseg):
+            if getattr(self.srcs[i], 'maskbits_forced_point_source', False):
+                maxr2[j] = ref_radius**2
+
         mask = self.blobmask
         # Watershed by priority-fill.
         # values are (-sn, key, x, y, center_x, center_y, maxr2)
@@ -619,6 +681,7 @@ class OneBlob(object):
         models.save_images(self.tims)
 
         # Create initial models for each tim x each source
+        # (model sizes are determined at this point)
         models.create(self.tims, cat, subtract=True)
 
         N = len(cat)
@@ -660,9 +723,9 @@ class OneBlob(object):
 
             # Definitely keep ref stars (Gaia & Tycho)
             if keepsrc is None and getattr(src, 'reference_star', False):
-                info('Dropped reference star:', src)
+                debug('Dropped reference star:', src)
                 src.brightness = src.initial_brightness
-                info('Reset brightness to', src.brightness)
+                debug('  Reset brightness to', src.brightness)
                 src.force_keep_source = True
                 keepsrc = src
 
@@ -721,14 +784,10 @@ class OneBlob(object):
                 newsrcs = Bnew.sources
                 B.delete_column('sources')
                 Bnew.delete_column('sources')
-                # also scalars don't work well
-                iblob = B.iblob
-                B.delete_column('iblob')
                 B = merge_tables([B, Bnew], columns='fillzero')
                 # columns not in Bnew:
                 # {'safe_x0', 'safe_y0', 'started_in_blob'}
                 B.sources = srcs + newsrcs
-                B.iblob = iblob
 
         models.restore_images(self.tims)
         del models
@@ -736,7 +795,7 @@ class OneBlob(object):
 
     def iterative_detection(self, Bold, models):
         # Compute per-band detection maps
-        from scipy.ndimage.morphology import binary_dilation
+        from scipy.ndimage import binary_dilation
         from legacypipe.detection import sed_matched_filters, detection_maps, run_sed_matched_filters
         from astrometry.util.multiproc import multiproc
 
@@ -815,10 +874,11 @@ class OneBlob(object):
         avoid_y = Bold.safe_y0
         avoid_r = np.zeros(len(avoid_x), np.float32) + 2.
         nsigma = 6.
+        avoid_map = (self.refmap != 0)
 
         Tnew,_,_ = run_sed_matched_filters(
             SEDs, self.bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r),
-            self.blobwcs, nsigma=nsigma, saturated_pix=satmaps, veto_map=None,
+            self.blobwcs, nsigma=nsigma, saturated_pix=satmaps, veto_map=avoid_map,
             plots=False, ps=None, mp=mp)
 
         detlogger.setLevel(detloglvl)
@@ -828,8 +888,6 @@ class OneBlob(object):
             return None
 
         debug('Found', len(Tnew), 'new sources')
-        Tnew.cut(self.refmap[Tnew.iby, Tnew.ibx] == 0)
-        debug('Cut to', len(Tnew), 'on refmap')
         if len(Tnew) == 0:
             return None
 
@@ -906,7 +964,7 @@ class OneBlob(object):
         if len(Tnew) == 0:
             return None
 
-        info('Measuring', len(Tnew), 'iterative sources')
+        info('Blob %s:'%self.name, 'Measuring', len(Tnew), 'iterative sources')
 
         from tractor import NanoMaggies, RaDecPos
         newsrcs = [PointSource(RaDecPos(t.ra, t.dec),
@@ -1002,13 +1060,13 @@ class OneBlob(object):
         if mask_others:
             from legacypipe.detection import detection_maps
             from astrometry.util.multiproc import multiproc
-            from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
+            from scipy.ndimage import binary_dilation, binary_fill_holes
             from scipy.ndimage.measurements import label
             # Compute per-band detection maps
             mp = multiproc()
             detmaps,detivs,_ = detection_maps(
                 srctims, srcwcs, self.bands, mp)
-            # Compute the symmetric area that fits in this 'tim'
+            # Compute the symmetric area that fits in this 'srcblobmask' region
             pos = src.getPosition()
             _,xx,yy = srcwcs.radec2pixelxy(pos.ra, pos.dec)
             bh,bw = srcblobmask.shape
@@ -1023,12 +1081,18 @@ class OneBlob(object):
             # Go through the per-band detection maps, marking significant pixels
             for i,(detmap,detiv) in enumerate(zip(detmaps,detivs)):
                 sn = detmap * np.sqrt(detiv)
-                flipsn = np.zeros_like(sn)
+                # flipsn = np.zeros_like(sn)
+                # # Symmetrize
+                # flipsn[slc] = np.minimum(sn[slc],
+                #                          np.flipud(np.fliplr(sn[slc])))
+                # # just OR the detection maps per-band...
+                # flipblobs |= (flipsn > 5.)
+
                 # Symmetrize
-                flipsn[slc] = np.minimum(sn[slc],
-                                         np.flipud(np.fliplr(sn[slc])))
+                sn[slc] = np.minimum(sn[slc],
+                                     np.flipud(np.fliplr(sn[slc])))
                 # just OR the detection maps per-band...
-                flipblobs |= (flipsn > 5.)
+                flipblobs |= (sn > 5.)
 
             flipblobs = binary_fill_holes(flipblobs)
             blobs,_ = label(flipblobs)
@@ -1258,42 +1322,27 @@ class OneBlob(object):
         srctractor.setModelMasks(modelMasks)
         srccat = srctractor.getCatalog()
 
+        is_galaxy = isinstance(src, Galaxy)
+        force_pointsource = B.forced_pointsource[srci]
+        fit_background = B.fit_background[srci]
+
         _,ix,iy = srcwcs.radec2pixelxy(src.getPosition().ra,
                                        src.getPosition().dec)
         ix = int(ix-1)
         iy = int(iy-1)
         # Start in blob
         sh,sw = srcwcs.shape
-        if ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
+        if is_galaxy:
+            # allow SGA galaxy sources to start outside the blob
+            pass
+        elif ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
             debug('Source is starting outside blob -- skipping.')
             if mask_others:
                 for ie,tim in zip(saved_srctim_ies, srctims):
                     tim.inverr = ie
             return None
 
-        from tractor import Galaxy
-        is_galaxy = isinstance(src, Galaxy)
-        x0,y0 = srcwcs_x0y0
-
-        # Fitting behaviors based on geometric masks.
-        force_pointsource_mask = (IN_BLOB['BRIGHT'] | IN_BLOB['CLUSTER'])
-        # large_galaxies_force_pointsource is True by default.
-        if self.large_galaxies_force_pointsource:
-            force_pointsource_mask |= IN_BLOB['GALAXY']
-        force_pointsource = ((self.refmap[y0+iy,x0+ix] &
-                              force_pointsource_mask) > 0)
-
-        fit_background_mask = IN_BLOB['BRIGHT']
-        if not self.less_masking:
-            fit_background_mask |= IN_BLOB['MEDIUM']
-        ### HACK -- re-use this variable
-        if self.large_galaxies_force_pointsource:
-            fit_background_mask |= IN_BLOB['GALAXY']
-        fit_background = ((self.refmap[y0+iy,x0+ix] &
-                           fit_background_mask) > 0)
         if is_galaxy:
-            fit_background = False
-
             # SGA galaxy: set the maximum allowed r_e.
             known_galaxy_logrmax = 0.
             if isinstance(src, (DevGalaxy,ExpGalaxy, SersicGalaxy)):
@@ -1303,10 +1352,9 @@ class OneBlob(object):
             else:
                 print('WARNING: unknown galaxy type:', src)
 
+        x0,y0 = srcwcs_x0y0
         debug('Source at blob coordinates', x0+ix, y0+iy, '- forcing pointsource?', force_pointsource, ', is large galaxy?', is_galaxy, ', fitting sky background:', fit_background)
 
-        B.forced_pointsource[srci] = force_pointsource
-        B.fit_background[srci] = fit_background
 
         if fit_background:
             for tim in srctims:
@@ -1358,7 +1406,7 @@ class OneBlob(object):
                 debug('Gaia source is forced to be a point source -- not trying other models')
             elif force_pointsource:
                 # Geometric mask
-                debug('Not computing galaxy models due to objects in blob')
+                debug('Not computing galaxy models due to being in a mask')
             else:
                 trymodels.append(('rex', rex))
                 # Try galaxy models if rex > psf, or if bright.
@@ -1462,7 +1510,10 @@ class OneBlob(object):
             ix = int(ix-1)
             iy = int(iy-1)
             sh,sw = srcblobmask.shape
-            if ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
+            if is_galaxy:
+                # Allow (SGA) galaxies to exit the blob
+                pass
+            elif ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
                 # Exited blob!
                 debug('Source exited sub-blob!')
                 if mask_others:
@@ -1680,6 +1731,7 @@ class OneBlob(object):
         # Remember original tim images
         models.save_images(self.tims)
         # Create & subtract initial models for each tim x each source
+        # (modelMasks sizes are determined at this point)
         models.create(self.tims, cat, subtract=True)
 
         # For sources, in decreasing order of brightness
@@ -1694,7 +1746,6 @@ class OneBlob(object):
             # Add this source's initial model back in.
             models.add(srci, self.tims)
 
-            from tractor import Galaxy
             is_galaxy = isinstance(src, Galaxy)
             if is_galaxy:
                 # During SGA pre-burns, limit initial positions (fit
@@ -1784,9 +1835,8 @@ class OneBlob(object):
             btims = [tim for tim in tims if tim.band == b]
             btr = self.tractor(btims, fitcat)
             try:
-                from tractor import ceres
-                ceres_block = 8
                 from tractor.ceres_optimizer import CeresOptimizer
+                ceres_block = 8
                 btr.optimizer = CeresOptimizer(BW=ceres_block, BH=ceres_block)
             except ImportError:
                 from tractor.lsqr_optimizer import LsqrOptimizer
@@ -1976,7 +2026,6 @@ def is_reference_source(src):
     return getattr(src, 'is_reference_source', False)
 
 def _compute_source_metrics(srcs, tims, bands, tr):
-    import warnings
     # rchi2 quality-of-fit metric
     rchi2_num    = np.zeros((len(srcs),len(bands)), np.float32)
     rchi2_den    = np.zeros((len(srcs),len(bands)), np.float32)

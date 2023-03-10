@@ -1,8 +1,6 @@
 #! /usr/bin/env python
 """This script runs calibration pre-processing steps including sky and PSF models.
 """
-from __future__ import print_function
-
 from astrometry.util.fits import merge_tables
 
 from legacypipe.survey import run_calibs, LegacySurveyData
@@ -79,7 +77,7 @@ def main():
 
             T = survey.find_ccds(expnum=expnum, ccdname=ccdname)
             if len(T) != 1:
-                print('Found', len(I), 'CCDs for expnum', expnum, 'CCDname', ccdname, ':', I)
+                print('Found', len(T), 'CCDs for expnum', expnum, 'CCDname', ccdname)
                 print('WARNING: skipping this expnum,ccdname')
                 continue
             t = T[0]

@@ -24,6 +24,9 @@ def main():
     if ns.ignore_errors:
         print("Warning: *** Will ignore broken tractor catalogue files ***")
         print("         *** Disable -I for final data product.         ***")
+    if ns.mopup:
+        print("Warning: *** The mopup flag was passed. Existing ***")
+        print("         *** sweep files will NOT be overwritten ***")
     # avoid each subprocess importing h5py again and again.
     if 'hdf5' in ns.format:
         import h5py
@@ -53,6 +56,7 @@ def main():
     schemas = {
         'ra' : sweep_schema_ra(360),
         'blocks' : sweep_schema_blocks(36, 36),
+        'blocksdr10' : sweep_schema_blocks(72, 36),
         'dec' : sweep_schema_dec(180),
         }
 
@@ -64,6 +68,35 @@ def main():
     nobj_tot = np.zeros((), 'i8')
 
     def work(sweep):
+        # ADM the general format for a sweeps file.
+        template = "sweep-%(ramin)s%(decmin)s-%(ramax)s%(decmax)s.%(format)s"
+        def formatdec(dec):
+            return ("%+04g" % dec).replace('-', 'm').replace('+', 'p')
+        def formatra(ra):
+            return ("%03g" % ra)
+
+        # ADM the various flavors of sweeps file.
+        ender = [".fits", "-lc.fits", "-ex.fits"]
+
+        # ADM if we're mopping up, move on if all requisite files exist.
+        # ADM strictly, this only checks for existence of the fits files.
+        if ns.mopup:
+            filename = template %  \
+                       dict(ramin=formatra(sweep[0]),
+                            decmin=formatdec(sweep[1]),
+                            ramax=formatra(sweep[2]),
+                            decmax=formatdec(sweep[3]),
+                            format="fits")
+            allexist = True
+            for odn, end in zip(outdirnames, ender):
+                fn = filename.replace(".fits", end)
+                dest = os.path.join(ns.dest, odn, fn)
+                allexist &= os.path.exists(dest)
+            # ADM if allexist remains True, all requisite files exist.
+            if allexist:
+                print("won't overwrite files related to {}".format(filename))
+                return filename, 0, 0
+
         data, header, nbricks = make_sweep(sweep, bricks, ns, ALL_DTYPE=ALL_DTYPE)
 
         header.update({
@@ -72,13 +105,6 @@ def main():
             'RAMAX'  : sweep[2],
             'DECMAX' : sweep[3],
             })
-
-        template = "sweep-%(ramin)s%(decmin)s-%(ramax)s%(decmax)s.%(format)s"
-
-        def formatdec(dec):
-            return ("%+04g" % dec).replace('-', 'm').replace('+', 'p')
-        def formatra(ra):
-            return ("%03g" % ra)
 
         for format in ns.format:
             filename = template %  \
@@ -99,7 +125,6 @@ def main():
                 lcdt = uniqid + [dt for dt in SWEEP_DTYPE.descr if 'LC' in dt[0]]
                 # ADM    the remaining "extra" columns.
                 alldt = uniqid + [dt for dt in ALL_DTYPE.descr if dt[0] not in SWEEP_DTYPE.names]
-                ender = [".fits", "-lc.fits", "-ex.fits"]
                 for dt, odn, end in zip([sweepdt, lcdt, alldt], outdirnames, ender):
                     fn = filename.replace(".fits", end)
                     dest = os.path.join(ns.dest, odn, fn)
@@ -291,10 +316,12 @@ def save_sweep_file(filename, data, header, format, unitdict=None):
         hdr["DEPVER{:02d}".format(nextdep)] = git_version()
 
         hdr = [dict(name=key, value=hdr[key]) for key in sorted(hdr.keys())]
-        with fitsio.FITS(filename, mode='rw', clobber=True) as ff:
+        # ADM write atomically, to a .tmp file, for extra safety.
+        with fitsio.FITS(filename+".tmp", mode='rw', clobber=True) as ff:
             ff.create_image_hdu()
             ff[0].write_keys(hdr)
             ff.write_table(data, extname='SWEEP', units=units)
+        os.rename(filename+'.tmp', filename)
 
     elif format == 'hdf5':
         import h5py
@@ -353,7 +380,7 @@ SWEEP_DTYPE = np.dtype([
 #    ('FLUX_U', '>f4'),
     ('FLUX_G', '>f4'),
     ('FLUX_R', '>f4'),
-#    ('FLUX_I', '>f4'),
+    ('FLUX_I', '>f4'),
     ('FLUX_Z', '>f4'),
 #    ('FLUX_Y', '>f4'),
     ('FLUX_W1', '>f4'),
@@ -365,7 +392,7 @@ SWEEP_DTYPE = np.dtype([
 #    ('FLUX_IVAR_U', '>f4'),
     ('FLUX_IVAR_G', '>f4'),
     ('FLUX_IVAR_R', '>f4'),
-#    ('FLUX_IVAR_I', '>f4'),
+    ('FLUX_IVAR_I', '>f4'),
     ('FLUX_IVAR_Z', '>f4'),
 #    ('FLUX_IVAR_Y', '>f4'),
     ('FLUX_IVAR_W1', '>f4'),
@@ -377,7 +404,7 @@ SWEEP_DTYPE = np.dtype([
 #    ('MW_TRANSMISSION_U', '>f4'),
     ('MW_TRANSMISSION_G', '>f4'),
     ('MW_TRANSMISSION_R', '>f4'),
-#    ('MW_TRANSMISSION_I', '>f4'),
+    ('MW_TRANSMISSION_I', '>f4'),
     ('MW_TRANSMISSION_Z', '>f4'),
 #    ('MW_TRANSMISSION_Y', '>f4'),
     ('MW_TRANSMISSION_W1', '>f4'),
@@ -389,7 +416,7 @@ SWEEP_DTYPE = np.dtype([
 #    ('NOBS_U', '>i2'),
     ('NOBS_G', '>i2'),
     ('NOBS_R', '>i2'),
-#    ('NOBS_I', '>i2'),
+    ('NOBS_I', '>i2'),
     ('NOBS_Z', '>i2'),
 #    ('NOBS_Y', '>i2'),
     ('NOBS_W1', '>i2'),
@@ -401,7 +428,7 @@ SWEEP_DTYPE = np.dtype([
 #    ('RCHISQ_U', '>f4'),
     ('RCHISQ_G', '>f4'),
     ('RCHISQ_R', '>f4'),
-#    ('RCHISQ_I', '>f4'),
+    ('RCHISQ_I', '>f4'),
     ('RCHISQ_Z', '>f4'),
 #    ('RCHISQ_Y', '>f4'),
     ('RCHISQ_W1', '>f4'),
@@ -413,7 +440,7 @@ SWEEP_DTYPE = np.dtype([
 #    ('FRACFLUX_U', '>f4'),
     ('FRACFLUX_G', '>f4'),
     ('FRACFLUX_R', '>f4'),
-#    ('FRACFLUX_I', '>f4'),
+    ('FRACFLUX_I', '>f4'),
     ('FRACFLUX_Z', '>f4'),
 #    ('FRACFLUX_Y', '>f4'),
     ('FRACFLUX_W1', '>f4'),
@@ -424,28 +451,28 @@ SWEEP_DTYPE = np.dtype([
 #    ('FRACMASKED_U', '>f4'),
     ('FRACMASKED_G', '>f4'),
     ('FRACMASKED_R', '>f4'),
-#    ('FRACMASKED_I', '>f4'),
+    ('FRACMASKED_I', '>f4'),
     ('FRACMASKED_Z', '>f4'),
 #    ('FRACMASKED_Y', '>f4'),
 #   ('DECAM_FRACIN', '>f4', (6,)),
 #    ('FRACIN_U', '>f4'),
     ('FRACIN_G', '>f4'),
     ('FRACIN_R', '>f4'),
-#    ('FRACIN_I', '>f4'),
+    ('FRACIN_I', '>f4'),
     ('FRACIN_Z', '>f4'),
 #    ('FRACIN_Y', '>f4'),
 #   ('DECAM_ANYMASK', '>i2', (6,)),
 #    ('ANYMASK_U', '>i2'),
     ('ANYMASK_G', '>i2'),
     ('ANYMASK_R', '>i2'),
-#    ('ANYMASK_I', '>i2'),
+    ('ANYMASK_I', '>i2'),
     ('ANYMASK_Z', '>i2'),
 #    ('ANYMASK_Y', '>i2'),
 #   ('DECAM_ALLMASK', '>i2', (6,)),
 #    ('ALLMASK_U', '>i2'),
     ('ALLMASK_G', '>i2'),
     ('ALLMASK_R', '>i2'),
-#    ('ALLMASK_I', '>i2'),
+    ('ALLMASK_I', '>i2'),
     ('ALLMASK_Z', '>i2'),
 #    ('ALLMASK_Y', '>i2'),
     ('WISEMASK_W1', 'u1'),
@@ -454,40 +481,40 @@ SWEEP_DTYPE = np.dtype([
 #    ('PSFSIZE_U', '>f4'),
     ('PSFSIZE_G', '>f4'),
     ('PSFSIZE_R', '>f4'),
-#    ('PSFSIZE_I', '>f4'),
+    ('PSFSIZE_I', '>f4'),
     ('PSFSIZE_Z', '>f4'),
 #    ('PSFSIZE_Y', '>f4'),
 #   ('DECAM_DEPTH', '>f4', (6,)),
 #    ('PSFDEPTH_U', '>f4'),
     ('PSFDEPTH_G', '>f4'),
     ('PSFDEPTH_R', '>f4'),
-#    ('PSFDEPTH_I', '>f4'),
+    ('PSFDEPTH_I', '>f4'),
     ('PSFDEPTH_Z', '>f4'),
 #    ('PSFDEPTH_Y', '>f4'),
 #   ('DECAM_GALDEPTH', '>f4', (6,)),
 #    ('GALDEPTH_U', '>f4'),
     ('GALDEPTH_G', '>f4'),
     ('GALDEPTH_R', '>f4'),
-#    ('GALDEPTH_I', '>f4'),
+    ('GALDEPTH_I', '>f4'),
     ('GALDEPTH_Z', '>f4'),
 #    ('GALDEPTH_Y', '>f4'),
     ('PSFDEPTH_W1', '>f4'),
     ('PSFDEPTH_W2', '>f4'),
     ('WISE_COADD_ID', 'S8'),
-    ('LC_FLUX_W1', '>f4', (15,)),
-    ('LC_FLUX_W2', '>f4', (15,)),
-    ('LC_FLUX_IVAR_W1', '>f4', (15,)),
-    ('LC_FLUX_IVAR_W2', '>f4', (15,)),
-    ('LC_NOBS_W1', '>i2', (15,)),
-    ('LC_NOBS_W2', '>i2', (15,)),
-    ('LC_MJD_W1', '>f8', (15,)),
-    ('LC_MJD_W2', '>f8', (15,)),
-    ('LC_FRACFLUX_W1', '>f4', (15,)),
-    ('LC_FRACFLUX_W2', '>f4', (15,)),
-    ('LC_RCHISQ_W1', '>f4', (15,)),
-    ('LC_RCHISQ_W2', '>f4', (15,)),
-    ('LC_EPOCH_INDEX_W1', '>i2', (15,)),
-    ('LC_EPOCH_INDEX_W2', '>i2', (15,)),
+    ('LC_FLUX_W1', '>f4', (17,)),
+    ('LC_FLUX_W2', '>f4', (17,)),
+    ('LC_FLUX_IVAR_W1', '>f4', (17,)),
+    ('LC_FLUX_IVAR_W2', '>f4', (17,)),
+    ('LC_NOBS_W1', '>i2', (17,)),
+    ('LC_NOBS_W2', '>i2', (17,)),
+    ('LC_MJD_W1', '>f8', (17,)),
+    ('LC_MJD_W2', '>f8', (17,)),
+    ('LC_FRACFLUX_W1', '>f4', (17,)),
+    ('LC_FRACFLUX_W2', '>f4', (17,)),
+    ('LC_RCHISQ_W1', '>f4', (17,)),
+    ('LC_RCHISQ_W2', '>f4', (17,)),
+    ('LC_EPOCH_INDEX_W1', '>i2', (17,)),
+    ('LC_EPOCH_INDEX_W2', '>i2', (17,)),
 #    ('FRACDEV', '>f4'),
 #    ('FRACDEV_IVAR', '>f4'),
     ('SHAPE_R', '>f4'),
@@ -511,13 +538,13 @@ SWEEP_DTYPE = np.dtype([
 #    ('FIBERFLUX_U', '>f4'),
     ('FIBERFLUX_G', '>f4'),
     ('FIBERFLUX_R', '>f4'),
-#    ('FIBERFLUX_I', '>f4'),
+    ('FIBERFLUX_I', '>f4'),
     ('FIBERFLUX_Z', '>f4'),
 #    ('FIBERFLUX_Y', '>f4'),
 #    ('FIBERTOTFLUX_U', '>f4'),
     ('FIBERTOTFLUX_G', '>f4'),
     ('FIBERTOTFLUX_R', '>f4'),
-#    ('FIBERTOTFLUX_I', '>f4'),
+    ('FIBERTOTFLUX_I', '>f4'),
     ('FIBERTOTFLUX_Z', '>f4'),
 #    ('FIBERTOTFLUX_Y', '>f4'),
     ('REF_CAT', '|S2'),
@@ -540,7 +567,7 @@ SWEEP_DTYPE = np.dtype([
     ('PMRA_IVAR', '>f4'),
     ('PMDEC', '>f4'),
     ('PMDEC_IVAR', '>f4'),
-    ('MASKBITS', '>i2'),
+    ('MASKBITS', '>i4'),
     ('FITBITS', '>i2'),
     ('SERSIC', '>f4'),
     ('SERSIC_IVAR', '>f4')]
@@ -560,7 +587,7 @@ def parse_args():
     ap.add_argument("src", help="Path to the root directory contains all tractor files")
     ap.add_argument("dest", help="Path to the Output sweep file")
 
-    ap.add_argument('-f', "--format", choices=['fits', 'hdf5'], nargs='+', default=["fits"],
+    ap.add_argument('-f', "--format", choices=['fits'], nargs='+', default=["fits"],
         help="Format of the output sweep files")
 
     ap.add_argument('-F', "--filelist", default=None,
@@ -570,9 +597,11 @@ def parse_args():
         help="location of decals-bricks.fits, speeds up the scanning")
 
     ap.add_argument('-v', "--verbose", action='store_true')
+    ap.add_argument('-m', "--mopup", action='store_true',
+        help="if set, don't overwrite existing files (as a speed-up)")
     ap.add_argument('-I', "--ignore-errors", action='store_true')
 
-    ap.add_argument('-S', "--schema", choices=['blocks', 'dec', 'ra'],
+    ap.add_argument('-S', "--schema", choices=['blocks', 'blocksdr10', 'dec', 'ra'],
             default='blocks',
             help="""Decomposition schema. Still being tuned. """)
 

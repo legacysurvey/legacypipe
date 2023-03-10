@@ -1,4 +1,3 @@
-from __future__ import print_function
 import numpy as np
 
 import logging
@@ -16,7 +15,7 @@ def _detmap(X):
     (tim, targetwcs, apodize) = X
     R = tim_get_resamp(tim, targetwcs)
     if R is None:
-        return None,None,None,None,None
+        return None,None,None,None,None,None
     assert(tim.psf_sigma > 0)
     psfnorm = 1./(2. * np.sqrt(np.pi) * tim.psf_sigma)
     ie = tim.getInvError()
@@ -38,7 +37,7 @@ def _detmap(X):
         # Replace saturated pixels by the brightest (non-masked) pixel in the image
         if np.any(sat):
             I, = np.nonzero(sat)
-            debug('Filling', len(I), 'saturated detmap pixels with max')
+            #debug('Filling', len(I), 'saturated detmap pixels with max')
             detim[Yi[I],Xi[I]] = np.max(detim)
             # detection is based on S/N, so plug in values > 0 for iv
             detiv[Yi[I],Xi[I]] = 1./detsig1**2
@@ -57,33 +56,40 @@ def _detmap(X):
         detiv[-len(ramp):,:] *= ramp[::-1][:,np.newaxis]
         detiv[:,-len(ramp):] *= ramp[::-1][np.newaxis,:]
 
-    return Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
+    return tim.band, Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
 
 def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
     # Render the detection maps
     H,W = targetwcs.shape
-    H,W = np.int(H), np.int(W)
+    H,W = np.int_(H), np.int_(W)
     ibands = dict([(b,i) for i,b in enumerate(bands)])
 
     detmaps = [np.zeros((H,W), np.float32) for b in bands]
     detivs  = [np.zeros((H,W), np.float32) for b in bands]
     if nsatur is None:
-        satmaps = [np.zeros((H,W), bool)       for b in bands]
+        satmaps = [np.zeros((H,W), bool)   for b in bands]
     else:
-        satmaps = [np.zeros((H,W), np.int16)       for b in bands]
+        if nsatur < 255:
+            sattype = np.uint8
+            satmax = 254
+        else:
+            sattype = np.uint16
+            satmax = 65534
+        satmaps = [np.zeros((H,W), sattype) for b in bands]
 
-    for tim, (Yo,Xo,incmap,inciv,sat) in zip(
-        tims, mp.map(_detmap, [(tim, targetwcs, apodize) for tim in tims])):
+    for band,Yo,Xo,incmap,inciv,sat in mp.imap_unordered(
+            _detmap, [(tim, targetwcs, apodize) for tim in tims]):
         if Yo is None:
             continue
-        ib = ibands[tim.band]
+        ib = ibands[band]
         detmaps[ib][Yo,Xo] += incmap * inciv
         detivs [ib][Yo,Xo] += inciv
         if sat is not None:
             if nsatur is None:
                 satmaps[ib][Yo,Xo] |= sat
             else:
-                satmaps[ib][Yo,Xo] += (1*sat)
+                satmaps[ib][Yo,Xo] = np.minimum(satmax, satmaps[ib][Yo,Xo] + (1*sat))
+        del Yo,Xo,incmap,inciv,sat
     for i,(detmap,detiv,satmap) in enumerate(zip(detmaps, detivs, satmaps)):
         detmap /= np.maximum(1e-16, detiv)
         if nsatur is not None:
@@ -112,16 +118,27 @@ def sed_matched_filters(bands):
     SEDs = list(reversed(SEDs))
 
     if len(bands) > 1:
+        # Flat SED for griz -- note that this only gets appended if >1 of griz exist in bands.
         flat = dict(g=1., r=1., i=1., z=1.)
-        sed = [flat.get(b,0.,) for b in bands]
-        if np.sum(sed) > 0:
+        sed = np.array([flat.get(b,0.,) for b in bands])
+        if np.sum(sed > 0) > 1:
             SEDs.append(('Flat', sed))
-        # Assume colors g-r = 1, r-i = 0.5, i-z = 0.5
+        # Red SED for griz -- assume colors g-r = 1, r-i = 0.5, i-z = 0.5
         red = dict(g=2.5, r=1., i=0.632, z=0.4)
-        sed = [red.get(b,0.) for b in bands]
-        if np.sum(sed) > 0:
+        sed = np.array([red.get(b,0.) for b in bands])
+        if np.sum(sed > 0) > 1:
             SEDs.append(('Red', sed))
-
+        # Flat SED for Suprime intermediate-band filters.  (We could move this to a special --run in runs.py)
+        iaflat = {
+            'I-A-L427': 1.,
+            'I-A-L464': 1.,
+            'I-A-L484': 1.,
+            'I-A-L505': 1.,
+            'I-A-L527': 1.,
+            }
+        sed = np.array([iaflat.get(b,0.) for b in bands])
+        if np.sum(sed > 0) > 1:
+            SEDs.append(('IAFlat', sed))
     info('SED-matched filters:', SEDs)
 
     return SEDs
@@ -261,7 +278,7 @@ def plot_mask(X, rgb=(0,255,0), extent=None):
     plt.imshow(rgba, interpolation='nearest', origin='lower', extent=extent)
 
 def plot_boundary_map(X, rgb=(0,255,0), extent=None, iterations=1):
-    from scipy.ndimage.morphology import binary_dilation
+    from scipy.ndimage import binary_dilation
     H,W = X.shape
     it = iterations
     padded = np.zeros((H+2*it, W+2*it), bool)
@@ -283,6 +300,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                           saturated_pix=None,
                           veto_map=None,
                           cutonaper=True,
+                          hotmap_only=False,
                           ps=None, rgbimg=None):
     '''
     Runs a single SED-matched detection filter.
@@ -339,7 +357,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     run_sed_matched_filters : calls this method
     '''
     from scipy.ndimage.measurements import label, find_objects
-    from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
+    from scipy.ndimage import binary_dilation, binary_fill_holes, grey_dilation
 
     H,W = detmaps[0].shape
     allzero = True
@@ -376,23 +394,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     sedmap /= np.maximum(1e-16, sediv)
     sedsn   = sedmap * np.sqrt(sediv)
     del sedmap
+
     peaks = (sedsn > nsigma)
-
-    def saddle_level(Y):
-        # Require a saddle that drops by (the larger of) "saddle"
-        # sigma, or 10% of the peak height.
-        # ("saddle" is passed in as an argument to the
-        #  sed_matched_detection function)
-        drop = max(saddle_min, Y * saddle_fraction)
-        return Y - drop
-
-    lowest_saddle = nsigma - saddle_min
-
-    # zero out the edges -- larger margin here?
-    peaks[0 ,:] = 0
-    peaks[:, 0] = 0
-    peaks[-1,:] = 0
-    peaks[:,-1] = 0
 
     # Label the N-sigma blobs at this point... we'll use this to build
     # "sedhot", which in turn is used to define the blobs that we will
@@ -400,8 +403,16 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # into the fitting!
     if blob_dilate is None:
         blob_dilate = 8
-    hotblobs,nhot = label(binary_fill_holes(
-            binary_dilation(peaks, iterations=blob_dilate)))
+    hotblobs = binary_fill_holes(binary_dilation(peaks, iterations=blob_dilate))
+    if hotmap_only:
+        return hotblobs
+    hotblobs,nhot = label(hotblobs)
+
+    # zero out the edges -- larger margin here?
+    peaks[0 ,:] = 0
+    peaks[:, 0] = 0
+    peaks[-1,:] = 0
+    peaks[:,-1] = 0
 
     # find pixels that are larger than their 8 neighbors
     peaks[1:-1, 1:-1] &= (sedsn[1:-1,1:-1] >= sedsn[0:-2,1:-1])
@@ -449,10 +460,27 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # catch slight differences in centroid positions.
     dilate = 1
 
+    def saddle_level(Y):
+        # Require a saddle that drops by (the larger of) "saddle"
+        # sigma, or 10% of the peak height.
+        # ("saddle" is passed in as an argument to the
+        #  sed_matched_detection function)
+        drop = max(saddle_min, Y * saddle_fraction)
+        return Y - drop
+
+    lowest_saddle = nsigma - saddle_min
+
     # For efficiency, segment at the minimum saddle level to compute
     # slices; the operations described above need only happen within
     # the slice.
-    saddlemap = (sedsn > lowest_saddle)
+
+    # 4-connected footprint
+    F = np.array([[False,True,False],[True,True,True],[False,True,False]])
+    dilatedmap = grey_dilation(sedsn, footprint=F)
+    if saturated_pix is not None:
+        dilatedmap[satur] = 1e9
+
+    saddlemap = (dilatedmap > lowest_saddle)
     saddlemap = binary_dilation(saddlemap, iterations=dilate)
     if saturated_pix is not None:
         saddlemap |= satur
@@ -487,14 +515,16 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     else:
         this_veto_map = veto_map.copy()
 
-    for x,y,r in zip(xomit, yomit, romit):
-        xlo = int(np.clip(np.floor(x - r), 0, W-1))
-        xhi = int(np.clip(np.ceil (x + r), 0, W-1))
-        ylo = int(np.clip(np.floor(y - r), 0, H-1))
-        yhi = int(np.clip(np.ceil (y + r), 0, H-1))
+    Xlo = np.clip(np.floor(xomit - romit), 0, W-1).astype(int)
+    Xhi = np.clip(np.ceil (xomit + romit), 0, W-1).astype(int)
+    Ylo = np.clip(np.floor(yomit - romit), 0, H-1).astype(int)
+    Yhi = np.clip(np.ceil (yomit + romit), 0, H-1).astype(int)
+    for x,y,r,xlo,xhi,ylo,yhi in zip(xomit, yomit, romit,
+                                     Xlo, Xhi, Ylo, Yhi):
         this_veto_map[ylo:yhi+1, xlo:xhi+1] |= (np.hypot(
             (x - np.arange(xlo, xhi+1))[np.newaxis, :],
             (y - np.arange(ylo, yhi+1))[:, np.newaxis]) < r)
+    del Xlo,Xhi,Ylo,Yhi
 
     if ps is not None:
         plt.clf()
@@ -520,7 +550,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     # separated by a low enough saddle from other sources.  Need only
     # search within its "allblob", which is defined by the lowest
     # saddle.
-    info('Found', len(px), 'potential peaks')
+    info('SED', sedname, ': found', len(px), 'potential peaks')
     nveto = 0
     nsaddle = 0
     naper = 0
@@ -532,17 +562,37 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         ablob = allblobs[y,x]
         index = int(ablob - 1)
         slc = allslices[index]
-        saddlemap = (sedsn[slc] > level)
-        saddlemap = binary_dilation(saddlemap, iterations=dilate)
-        if saturated_pix is not None:
-            saddlemap |= satur[slc]
-        saddlemap *= (allblobs[slc] == ablob)
-        saddlemap = binary_fill_holes(saddlemap)
-        blobs,_ = label(saddlemap)
         x0,y0 = allx0[index], ally0[index]
+        del index
+
+        # Only reject sources if there is another source within 50 pixels and not separated by
+        # a deep enough saddle.
+        R = 50
+        sy,sx = slc
+        sy0,sy1 = sy.start, sy.stop
+        sx0,sx1 = sx.start, sx.stop
+        xlo = max(x - R, sx0)
+        ylo = max(y - R, sy0)
+        xhi = min(x + R + 1, sx1)
+        yhi = min(y + R + 1, sy1)
+        subslc = slice(ylo,yhi), slice(xlo,xhi)
+        subx0 = xlo
+        suby0 = ylo
+        # swap in the +-50 pixel slice
+        slc = subslc
+        x0,y0 = subx0,suby0
+
+        saddlemap = (dilatedmap[slc] > level)
+        saddlemap *= (allblobs[slc] == ablob)
+        blobs,_ = label(saddlemap)
         thisblob = blobs[y-y0, x-x0]
         saddlemap *= (blobs == thisblob)
 
+        oslcs = find_objects(saddlemap)
+        assert(len(oslcs) == 1)
+        oslc = oslcs[0]
+        saddlemap[oslc] = binary_fill_holes(saddlemap[oslc])
+        del oslc,oslcs
         # previously found sources:
         ox = np.append(xomit, px[:i][keep[:i]]) - x0
         oy = np.append(yomit, py[:i][keep[:i]]) - y0
@@ -564,6 +614,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         if False and (not cut) and ps is not None:
             _peak_plot_3(sedsn, nsigma, x, y, x0, y0, slc, saddlemap,
                          xomit, yomit, px, py, keep, i, cut, ps)
+
+        del blobs
 
         if cut:
             # in same blob as previously found source.
@@ -651,7 +703,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 
 def _peak_plot_1(vetomap, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
                  level, dilate, saturated_pix, satur, ps, rgbimg, cut):
-    from scipy.ndimage.morphology import binary_dilation, binary_fill_holes
+    from scipy.ndimage import binary_dilation, binary_fill_holes
     from scipy.ndimage.measurements import label
     import pylab as plt
     plt.clf()
@@ -816,7 +868,7 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
     *blobsrcs*: list of np arrays of integers, elements in T within each blob
     *blobslices*: list of slice objects for blob bounding-boxes.
     '''
-    from scipy.ndimage.morphology import binary_fill_holes
+    from scipy.ndimage import binary_fill_holes
     from scipy.ndimage.measurements import label, find_objects
 
     image = binary_fill_holes(image)
@@ -913,3 +965,63 @@ def segment_and_group_sources(image, T, name=None, ps=None, plots=False):
 
     assert(len(blobsrcs) == len(blobslices))
     return blobmap, blobsrcs, blobslices
+
+def merge_hot_satur(hot, saturated_pix):
+    '''
+    Finds "hot" pixels that are separated by masked pixels, to connect
+    blobs across, eg, bleed trails and saturated cores.
+    Updates *hot* in-place.
+    '''
+    from functools import reduce
+    from scipy.ndimage.measurements import find_objects
+    from scipy.ndimage.measurements import label
+    any_saturated = reduce(np.logical_or, saturated_pix)
+    #merging = np.zeros_like(any_saturated)
+    _,w = any_saturated.shape
+    # All our cameras have bleed trails that go along image rows.
+    # We go column by column, checking whether blobs of "hot" pixels
+    # get joined up when merged with SATUR pixels.
+    for i in range(w):
+        col = hot[:,i]
+        cblobs,nc = label(col)
+        col = np.logical_or(col, any_saturated[:,i])
+        cblobs2,nc2 = label(col)
+        if nc2 < nc:
+            # at least one pair of blobs merged together
+            # Find merged blobs:
+            # "cblobs2" is a map from pixels to merged blob number.
+            # look up which merged blob each un-merged blob belongs to.
+            slcs = find_objects(cblobs)
+            from collections import Counter
+            counts = Counter()
+            for slc in slcs:
+                (slc,) = slc
+                mergedblob = cblobs2[slc.start]
+                counts[mergedblob] += 1
+            slcs2 = find_objects(cblobs2)
+            for blob,n in counts.most_common():
+                if n == 1:
+                    break
+                (slc,) = slcs2[blob-1]
+                #merging[slc, i] = True
+                hot[slc, i] = True
+
+    # if plots:
+    #     #import pylab as plt
+    #     from astrometry.util.plotutils import dimshow
+    #     plt.clf()
+    #     plt.subplot(1,2,1)
+    #     dimshow((hot*1) + (any_saturated*1), vmin=0, vmax=2, cmap='hot')
+    #     plt.title('hot + saturated')
+    #     ps.savefig()
+    #     plt.clf()
+    #     plt.subplot(1,2,1)
+    #     dimshow(merging, vmin=0, vmax=1, cmap='hot')
+    #     plt.title('merging')
+    #     plt.subplot(1,2,2)
+    #     dimshow(np.logical_or(hot, merging), vmin=0, vmax=1, cmap='hot')
+    #     plt.title('merged')
+    #     ps.savefig()
+
+    #hot |= merging
+    return hot

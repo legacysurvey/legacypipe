@@ -26,6 +26,9 @@ def main():
     #parser.add_argument('--derivs', action='store_true',
     #                    help='Include RA,Dec derivatives in forced photometry?')
 
+    parser.add_argument('--bands', default=None,
+                        help='Comma-separated list of bands to forced-photometer.')
+
     parser.add_argument('--no-ceres', action='store_false', dest='ceres',
                         help='Do not use Ceres optimization engine (use scipy)')
     parser.add_argument('--ceres-threads', type=int, default=1,
@@ -33,6 +36,7 @@ def main():
     parser.add_argument('-v', '--verbose', dest='verbose', action='count',
                         default=0, help='Make more verbose')
 
+    parser.add_argument('--plots', default=None, help='Create plots; specify a base filename for the plots')
     opt = parser.parse_args()
 
     import logging
@@ -44,11 +48,22 @@ def main():
     # tractor logging is *soooo* chatty
     logging.getLogger('tractor.engine').setLevel(lvl + 10)
 
+    ps = None
+    if opt.plots is not None:
+        from astrometry.util.plotutils import PlotSequence
+        ps = PlotSequence(opt.plots)
+
     #if not opt.forced:
     #    opt.apphot = True
 
     survey = LegacySurveyData(survey_dir=opt.survey_dir,
                               output_dir=opt.output_dir)
+
+    outfn = os.path.join(survey.output_dir, 'tractor-forced-%s.fits' % opt.brick)
+    if os.path.exists(outfn):
+        print('Output file exists:', outfn)
+        return 0
+
     if opt.catalog_dir is None:
         catsurvey = survey
     else:
@@ -74,13 +89,20 @@ def main():
 
     ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
     if ccds is None:
+        from legacypipe.utils import NothingToDoError
         raise NothingToDoError('No CCDs touching brick')
     if 'ccd_cuts' in ccds.get_columns():
         ccds.cut(ccds.ccd_cuts == 0)
         print(len(ccds), 'CCDs survive cuts')
-    # # Cut on bands to be used
-    # ccds.cut(np.array([b in bands for b in ccds.filter]))
-    # print('Cut to', len(ccds), 'CCDs in bands', ','.join(bands))
+    if opt.bands:
+        # Cut on bands to be used
+        bands = opt.bands.split(',')
+        ccds.cut(np.array([b in bands for b in ccds.filter]))
+        print('Cut to', len(ccds), 'CCDs in bands', ','.join(bands))
+
+    print('Forced-photometering CCDs:')
+    for ccd in ccds:
+        print('  ', ccd.image_filename)
 
     # args for forced_photom_one_ccd:
     opt.apphot = True
@@ -97,10 +119,14 @@ def main():
     opt.move_gaia = True
     opt.save_model = False
     opt.save_data = False
+    opt.plot_wcs = None
+    if ps is not None:
+        opt.plot_wcs = targetwcs
 
     args = []
     for ccd in ccds:
-        args.append((survey, catsurvey, None, None, ccd, opt, None, radecpoly, None))
+        args.append((survey, catsurvey, None, None, ccd, opt, None, radecpoly,
+                     [brick], ps))
 
     from legacypipe.forced_photom import bounce_one_ccd
     if opt.threads:
@@ -121,8 +147,8 @@ def main():
     version_hdr.delete('CCDNAME')
 
     # unpack results
-    outlier_masks = [m for _,_,m,_ in FF]
-    outlier_hdrs  = [h for _,_,_,h in FF]
+    #outlier_masks = [m for _,_,m,_ in FF]
+    #outlier_hdrs  = [h for _,_,_,h in FF]
     FF            = [F for F,_,_,_ in FF]
     F = merge_tables(FF)
 
@@ -131,9 +157,12 @@ def main():
     #               units=units, columns=columns)
     #     print('Wrote', out.real_fn)
     from legacypipe.units import get_units_for_columns
+    from astrometry.util.file import trymakedirs
     columns = F.get_columns()
     units = get_units_for_columns(columns)
     outfn = os.path.join(survey.output_dir, 'forced-brickwise-%s.fits' % opt.brick)
+    dirnm = os.path.dirname(outfn)
+    trymakedirs(dirnm)
     F.writeto(outfn, primheader=version_hdr, units=units, columns=columns)
     print('Wrote', outfn)
 
@@ -196,7 +225,6 @@ def main():
                        'forced_galdepth_%s'%b: fluxiv,
                        })
 
-    outfn = os.path.join(survey.output_dir, 'tractor-forced-%s.fits' % opt.brick)
     columns = T.get_columns()
     tbands = []
     for col in columns:
@@ -204,9 +232,10 @@ def main():
         if len(words) != 2 or words[0] != 'flux':
             continue
         tbands.append(words[1])
+    outfn = os.path.join(survey.output_dir, 'tractor-forced-%s.fits' % opt.brick)
     T.writeto(outfn, units=get_units_for_columns(columns, bands=tbands, extras=eunits),
               primhdr=tprimhdr)
     print('Wrote', outfn)
-        
+
 if __name__ == '__main__':
     main()

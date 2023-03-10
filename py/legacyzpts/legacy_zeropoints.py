@@ -1,5 +1,3 @@
-from __future__ import division, print_function
-
 # Turn off plotting imports for production
 if False:
     if __name__ == '__main__':
@@ -14,23 +12,18 @@ import numpy as np
 from scipy.stats import sigmaclip
 
 import fitsio
-from astropy.io import fits as fits_astropy
 from astropy.table import Table, vstack
 
 from astrometry.util.file import trymakedirs
-from astrometry.util.starutil_numpy import hmsstring2ra, dmsstring2dec
-from astrometry.util.util import wcs_pv2sip_hdr
 from astrometry.util.ttime import Time
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.libkd.spherematch import match_radec
-
-from tractor.splinesky import SplineSky
 
 import legacypipe
 from legacypipe.ps1cat import ps1cat, sdsscat
 from legacypipe.gaiacat import GaiaCatalog
 from legacypipe.survey import radec_at_mjd, get_git_version
-from legacypipe.image import validate_version
+from legacypipe.cpimage import validate_version
 from legacypipe.survey import LegacySurveyData
 
 import logging
@@ -39,18 +32,8 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
-CAMERAS=['decam','mosaic','90prime','megaprime', 'hsc']
 
-MAGLIM=dict(
-    u=[16, 20],
-    g=[16, 20],
-    r=[16, 19.5],
-    i=[16, 19.5],
-    z=[16.5, 19],
-    Y=[16.5, 19],
-    N501=[16,20],
-    N673=[16,19.5],
-    )
+CAMERAS=['decam','mosaic','90prime','megaprime', 'hsc', 'panstarrs', 'wiro', 'suprimecam']
 
 def ptime(text,t0):
     tnow=Time()
@@ -62,7 +45,7 @@ def read_lines(fn):
     lines=fin.readlines()
     fin.close()
     if len(lines) < 1: raise ValueError('lines not read properly from %s' % fn)
-    return np.array( list(np.char.strip(lines)) )
+    return list(np.char.strip(lines))
 
 def astropy_to_astrometry_table(t):
     T = fits_table()
@@ -70,7 +53,7 @@ def astropy_to_astrometry_table(t):
         T.set(c, t[c])
     return T
 
-def _ccds_table(camera='decam'):
+def _ccds_table(camera='decam', overrides=None):
     '''Initialize the CCDs table.
 
     Description and Units at:
@@ -122,12 +105,12 @@ def _ccds_table(camera='decam'):
         ('skyrms', 'f4'),
         ('sig1', 'f4'),
         ('nstars_photom', 'i2'),
+        ('nstars_photom_used', 'i2'),
         ('nstars_astrom', 'i2'),
         ('phoff', 'f4'),
         ('phrms', 'f4'),
         ('phrmsavg', 'f4'),
         ('zpt', 'f4'),
-        ('transp', 'f4'),
         ('raoff',  'f4'),
         ('decoff', 'f4'),
         ('rarms',  'f4'),
@@ -135,6 +118,13 @@ def _ccds_table(camera='decam'):
         ('rastddev',  'f4'),
         ('decstddev', 'f4'),
         ]
+
+    if overrides is not None:
+        ovr = []
+        for k,v in cols:
+            ovr.append((k, overrides.get(k, v)))
+        cols = ovr
+
     ccds = Table(np.zeros(1, dtype=cols))
     return ccds
 
@@ -162,7 +152,7 @@ def cols_for_survey_table():
     """Return list of -survey.fits table colums
     """
     return ['airmass', 'ccdskysb', 'plver', 'procdate', 'plprocid',
-     'ccdnastrom', 'ccdnphotom', 'ra', 'dec', 'ra_bore', 'dec_bore',
+     'ccdnastrom', 'ccdnphotom', 'ccdnphotom_used', 'ra', 'dec', 'ra_bore', 'dec_bore',
      'image_filename', 'image_hdu', 'expnum', 'ccdname', 'object',
      'filter', 'exptime', 'camera', 'width', 'height', 'propid',
      'mjd_obs', 'fwhm', 'zpt', 'ccdzpt', 'ccdraoff', 'ccddecoff',
@@ -185,7 +175,8 @@ def prep_survey_table(T, camera=None, bad_expid=None):
                   ('phrms', 'ccdphrms'),
                   ('phrmsavg', 'phrms'),
                   ('nstars_astrom','ccdnastrom'),
-                  ('nstars_photom','ccdnphotom')]
+                  ('nstars_photom','ccdnphotom'),
+                  ('nstars_photom_used','ccdnphotom_used')]
     for old,new in rename_keys:
         T.rename(old,new)
     # Delete
@@ -203,45 +194,42 @@ def prep_survey_table(T, camera=None, bad_expid=None):
     # Set placeholder that masks everything until update_ccd_cuts is
     # run.
     from legacyzpts import psfzpt_cuts
-    T.ccd_cuts = np.zeros(len(T), np.int16) + psfzpt_cuts.CCD_CUT_BITS['err_legacyzpts']
+    T.ccd_cuts = np.zeros(len(T), np.int32) + psfzpt_cuts.CCD_CUT_BITS['err_legacyzpts']
     return T
 
-def create_annotated_table(T, ann_fn, camera, survey, mp):
+def create_annotated_table(T, ann_fn, camera, survey, mp, header=None):
     from legacyzpts.annotate_ccds import annotate, init_annotations
     T = survey.cleanup_ccds_table(T)
     init_annotations(T)
     I, = np.nonzero(T.ccdzpt)
     if len(I):
-        annotate(T, survey, mp=mp, mzls=(camera == 'mosaic'), bass=(camera == '90prime'),
-                 normalizePsf=True, carryOn=True)
-    writeto_via_temp(ann_fn, T)
+        annotate(T, survey, camera, mp=mp, normalizePsf=True, carryOn=True)
+    writeto_via_temp(ann_fn, T, header=header)
     print('Wrote %s' % ann_fn)
 
 def getrms(x):
     return np.sqrt(np.mean(x**2))
 
-def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
-                  just_imobj=False,
-                  survey=None, psfex=True, camera=None, **measureargs):
+def measure_image(img_fn, mp, image_dir='images',
+                  run_calibs_only=False,
+                  run_psf_only=False,
+                  run_sky_only=False,
+                  survey=None, psfex=True, camera=None,
+                  prime_cache=False,
+                  **measureargs):
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
     the FITS extensions for a given set of images.
     '''
     t0 = Time()
     quiet = measureargs.get('quiet', False)
-    img_fn_full = os.path.join(image_dir, img_fn)
-    imgclass = survey.image_class_for_camera(camera)
     image_hdu = measureargs.get('image_hdu', None)
 
     img = survey.get_image_object(None, camera=camera,
                                   image_fn=img_fn, image_hdu=image_hdu)
-    if just_imobj:
-        return img
-
     print('Got image object', img)
     # Confirm camera field.
-    cammap = {'mosaic3':'mosaic',
-              'hyper suprime-cam':'hsc'}
     assert(img.camera == camera)
+    img.check_for_cached_files(survey)
 
     primhdr = img.read_image_primary_header()
     if (not img.calibration_good(primhdr)) or (img.exptime == 0):
@@ -249,6 +237,8 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
         # - all-zero weight map
         if run_calibs_only:
             return
+        debug('%s: Zero exposure time or low-level calibration flagged as bad; skipping image.'
+              % str(img))
         ccds = _ccds_table(camera)
         ccds['image_filename'] = img_fn
         ccds['err_message'] = 'Failed CP calib, or Exptime=0'
@@ -256,7 +246,13 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
         return ccds, None, img
 
     if measureargs['choose_ccd']:
-        extlist = [measureargs['choose_ccd']]
+        ccd = measureargs['choose_ccd']
+        # Try parsing as integer
+        try:
+            ccd = int(ccd, 10)
+        except:
+            pass
+        extlist = [ccd]
     else:
         extlist = img.get_extension_list(debug=measureargs['debug'])
 
@@ -278,20 +274,28 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
 
     plots = measureargs.get('plots', False)
 
+    if run_psf_only:
+        splinesky = False
+    if run_sky_only:
+        psfex = False
+
     # Validate the splinesky and psfex merged files, and (re)make them if
     # they're missing.
     if splinesky:
-        if validate_version(img.get_splinesky_merged_filename(),
-                            'table', img.expnum, img.plver, img.plprocid, quiet=quiet):
+        fn = survey.find_file('sky', img=img)
+        if (fn is None or
+            validate_version(fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
             splinesky = False
     if psfex:
-        if validate_version(img.get_psfex_merged_filename(),
-                            'table', img.expnum, img.plver, img.plprocid, quiet=quiet):
+        fn = survey.find_file('psf', img=img)
+        if (fn is None or
+            validate_version(fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
             psfex = False
 
     if splinesky or psfex:
+        git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
         imgs = mp.map(run_one_calib, [(img_fn, camera, survey, ext, psfex, splinesky,
-                                       plots, survey_blob_mask, survey_zeropoints)
+                                       plots, survey_blob_mask, survey_zeropoints, git_version)
                                       for ext in extlist])
         from legacyzpts.merge_calibs import merge_splinesky, merge_psfex
         class FakeOpts(object):
@@ -300,13 +304,13 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
         # Allow some CCDs to be missing, e.g., if the weight map is all zero.
         opts.all_found = False
         if splinesky:
-            skyoutfn = img.get_splinesky_merged_filename()
+            skyoutfn = survey.find_file('sky', img=img, use_cache=False)
             ccds = None
             err_splinesky = merge_splinesky(survey, img.expnum, ccds, skyoutfn, opts, imgs=imgs)
             if err_splinesky != 1:
                 print('Problem writing {}'.format(skyoutfn))
         if psfex:
-            psfoutfn = img.get_psfex_merged_filename()
+            psfoutfn = survey.find_file('psf', img=img, use_cache=False)
             ccds = None
             err_psfex = merge_psfex(survey, img.expnum, ccds, psfoutfn, opts, imgs=imgs)
             if err_psfex != 1:
@@ -315,31 +319,33 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     # Now, if they're still missing it's because the entire exposure is borked
     # (WCS failed, weight maps are all zero, etc.), so exit gracefully.
     if splinesky:
-        fn = img.get_splinesky_merged_filename()
-        if not os.path.exists(fn):
-            print('Merged splinesky file not found {}'.format(fn))
+        skyfn = survey.find_file('sky', img=img)
+        if not os.path.exists(skyfn):
+            print('Merged splinesky file not found {}'.format(skyfn))
             return []
-        if not validate_version(img.get_splinesky_merged_filename(),
-                                'table', img.expnum, img.plver, img.plprocid):
+        if not validate_version(skyfn, 'table', img.expnum, img.plver, img.plprocid):
             raise RuntimeError('Merged splinesky file did not validate!')
         # At this point the merged file exists and has been validated, so remove
         # the individual splinesky files.
         for img in imgs:
-            fn = img.get_splinesky_unmerged_filename()
+            fn = survey.find_file('sky-single', img=img, use_cache=False)
+            if fn == skyfn:
+                continue
             if os.path.isfile(fn):
                 os.remove(fn)
     if psfex:
-        fn = img.get_psfex_merged_filename()
-        if not os.path.exists(fn):
-            print('Merged psfex file not found {}'.format(fn))
+        psffn = survey.find_file('psf', img=img)
+        if not os.path.exists(psffn):
+            print('Merged psfex file not found {}'.format(psffn))
             return []
-        if not validate_version(img.get_psfex_merged_filename(),
-                                'table', img.expnum, img.plver, img.plprocid):
+        if not validate_version(psffn, 'table', img.expnum, img.plver, img.plprocid):
             raise RuntimeError('Merged psfex file did not validate!')
         # At this point the merged file exists and has been validated, so remove
         # the individual PSFEx and SE files.
         for img in imgs:
-            fn = img.get_psfex_unmerged_filename()
+            fn = survey.find_file('psf-single', img=img, use_cache=False)
+            if fn == psffn:
+                continue
             if os.path.isfile(fn):
                 os.remove(fn)
             sefn = img.sefn
@@ -348,14 +354,19 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
 
     # FIXME -- remove temporary individual files directory
 
-    if run_calibs_only:
+    if prime_cache:
+        # Copy the newly-created psfex/splinesky calib files into the cache
+        survey.prime_cache_for_image(img)
+        img.check_for_cached_files(survey)
+
+    if run_calibs_only or run_psf_only or run_sky_only:
         return
 
-    rtns = mp.map(run_one_ext, [(img, ext, survey, splinesky, measureargs['debug'],
+    rtns = mp.map(run_one_ext, [(img, ext, survey, splinesky,
                                  measureargs['sdss_photom'])
                                 for ext in extlist])
-    
-    for ext,(ccd,photom) in zip(extlist,rtns):
+
+    for ccd,photom in rtns:
         if ccd is not None:
             all_ccds.append(ccd)
         if photom is not None:
@@ -365,7 +376,7 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     all_ccds = vstack(all_ccds)
 
     if len(all_photom):
-        all_photom = merge_tables(all_photom)
+        all_photom = merge_tables(all_photom, columns='fillzero')
     else:
         all_photom = None
 
@@ -382,12 +393,11 @@ def measure_image(img_fn, mp, image_dir='images', run_calibs_only=False,
     return all_ccds, all_photom, img
 
 def run_one_calib(X):
-    from tractor.brightness import NanoMaggies
-
     (img_fn, camera, survey, ext, psfex, splinesky, plots, survey_blob_mask,
-     survey_zeropoints) = X
+     survey_zeropoints, git_version) = X
     img = survey.get_image_object(None, camera=camera,
                                   image_fn=img_fn, image_hdu=ext)
+    img.check_for_cached_files(survey)
 
     do_psf = False
     do_sky = False
@@ -398,9 +408,7 @@ def run_one_calib(X):
             if psf is not None:
                 do_psf = False
         except:
-            import traceback
-            #print('Failed trying to read existing PSF model:')
-            #traceback.print_exc()
+            pass
     if splinesky:
         do_sky = True
         try:
@@ -408,9 +416,7 @@ def run_one_calib(X):
             if sky is not None:
                 do_sky = False
         except:
-            import traceback
-            #print('Failed trying to read existing sky model:')
-            #traceback.print_exc()
+            pass
 
     if (not do_psf) and (not do_sky):
         # Nothing to do!
@@ -428,7 +434,7 @@ def run_one_calib(X):
                   'by camera', camera, 'expnum', img.expnum,
                   'ext', ext)
         else:
-            img.ccdzpt = ccds[0].ccdzpt
+            img.set_ccdzpt(ccds[0].ccdzpt)
             img.ccdraoff = ccds[0].ccdraoff
             img.ccddecoff = ccds[0].ccddecoff
             if img.ccdzpt == 0.:
@@ -438,25 +444,34 @@ def run_one_calib(X):
             else:
                 have_zpt = True
 
-    git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
-    ps = None
-    img.run_calibs(psfex=do_psf, sky=do_sky, splinesky=True,
-                   git_version=git_version, survey=survey, ps=ps,
-                   survey_blob_mask=survey_blob_mask,
-                   halos=have_zpt,
-                   subtract_largegalaxies=have_zpt)
+    from legacypipe.utils import ZeroWeightError
+    try:
+        ps = None
+        if plots:
+            from astrometry.util.plotutils import PlotSequence
+            ps = PlotSequence('plots-%s-%i-%s' % (camera, img.expnum, ext))
+        img.run_calibs(psfex=do_psf, sky=do_sky, splinesky=True,
+                       git_version=git_version, survey=survey, ps=ps,
+                       survey_blob_mask=survey_blob_mask,
+                       halos=have_zpt,
+                       subtract_largegalaxies=have_zpt)
+    except ZeroWeightError:
+        print('Got ZeroWeightError running calibs for', img, 'but continuing')
+    # Otherwise, let the exception propagate.
     return img
 
 def run_one_ext(X):
-    img, ext, survey, splinesky, debug, sdss_photom = X
+    img, ext, survey, splinesky, sdss_photom = X
 
     img = survey.get_image_object(None, camera=img.camera,
-                                  image_fn=img.image_filename, image_hdu=ext)
+                                  image_fn=img.image_filename, image_hdu=ext,
+                                  prime_cache=False)
     return run_zeropoints(img, splinesky=splinesky, sdss_photom=sdss_photom)
 
 class outputFns(object):
     def __init__(self, imgfn, outdir, camera, image_dir='images', debug=False):
-        """Assigns filename, makes needed dirs
+        """
+        Assigns filename, makes needed dirs.
 
         Args:
             imgfn: abs path to image, should be a ooi or oki file
@@ -507,14 +522,18 @@ def writeto_via_temp(outfn, obj, func_write=False, **kwargs):
     os.rename(tempfn, outfn)
 
 def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
-          survey=None, run_calibs_only=False, **measureargs):
+          survey=None, run_calibs_only=False, run_psf_only=False, run_sky_only=False,
+          version_header=None, **measureargs):
     '''Generate a legacypipe-compatible (survey) CCDs file for a given image.
     '''
     t0 = Time()
 
-    results = measure_image(imgfn, mp, survey=survey, run_calibs_only=run_calibs_only,
+    results = measure_image(imgfn, mp, survey=survey,
+                            run_calibs_only=run_calibs_only,
+                            run_psf_only=run_psf_only,
+                            run_sky_only=run_sky_only,
                             **measureargs)
-    if run_calibs_only:
+    if run_calibs_only or run_psf_only or run_sky_only:
         return
 
     if len(results) == 0:
@@ -527,25 +546,34 @@ def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
     primhdr = img.read_image_primary_header()
 
     hdr = fitsio.FITSHDR()
+    if version_header is not None:
+        for r in version_header.records():
+            hdr.add_record(r)
     for key in ['AIRMASS', 'OBJECT', 'TELESCOP', 'INSTRUME', 'EXPTIME', 'DATE-OBS',
                 'MJD-OBS', 'PROGRAM', 'OBSERVER', 'PROPID', 'FILTER', 'HA', 'ZD',
                 'AZ', 'DOMEAZ', 'HUMIDITY', 'PLVER', ]:
         if not key in primhdr:
             continue
         v = primhdr[key]
-        if type(v) == str:
+        if isinstance(v, str):
             v = v.strip()
         hdr.add_record(dict(name=key, value=v,
                             comment=primhdr.get_comment(key)))
 
     hdr.add_record(dict(name='EXPNUM', value=img.expnum,
                         comment='Exposure number'))
-    hdr.add_record(dict(name='PROCDATE', value=img.procdate,
-                        comment='CP processing date'))
-    hdr.add_record(dict(name='PLPROCID', value=img.plprocid,
-                        comment='CP processing batch'))
-    hdr.add_record(dict(name='RA_BORE',  value=ccds['ra_bore'][0],  comment='Boresight RA (deg)'))
-    hdr.add_record(dict(name='DEC_BORE', value=ccds['dec_bore'][0], comment='Boresight Dec (deg)'))
+    if img.procdate is not None:
+        hdr.add_record(dict(name='PROCDATE', value=img.procdate,
+                            comment='CP processing date'))
+    if img.plprocid is not None:
+        hdr.add_record(dict(name='PLPROCID', value=img.plprocid,
+                            comment='CP processing batch'))
+    v = ccds['ra_bore'][0]
+    if np.isfinite(v):
+        hdr.add_record(dict(name='RA_BORE',  value=v,  comment='Boresight RA (deg)'))
+    v = ccds['dec_bore'][0]
+    if np.isfinite(v):
+        hdr.add_record(dict(name='DEC_BORE', value=v, comment='Boresight Dec (deg)'))
 
     zptgood = np.isfinite(ccds['zpt'])
     if np.sum(zptgood) > 0:
@@ -571,16 +599,23 @@ def runit(imgfn, photomfn, annfn, mp, bad_expid=None,
     hdr.add_record(dict(name='FILENAME', value=os.path.join(firstdir, base)))
 
     if photom is not None:
-        writeto_via_temp(photomfn, photom, overwrite=True, header=hdr)
-
+        try:
+            writeto_via_temp(photomfn, photom, overwrite=True, header=hdr)
+        except:
+            print('Failed to write photom file:', photomfn)
+            print('Header:')
+            print(hdr)
+            raise
     accds = astropy_to_astrometry_table(ccds)
 
     # survey table
     T = prep_survey_table(accds, camera=measureargs['camera'], bad_expid=bad_expid)
     # survey --> annotated
-    create_annotated_table(T, annfn, measureargs['camera'], survey, mp)
+    create_annotated_table(T, annfn, measureargs['camera'], survey, mp, header=hdr)
 
     t0 = ptime('write-results-to-fits',t0)
+
+    img.zeropointing_completed(annfn, photomfn, T, photom, hdr)
 
 def get_parser():
     '''return parser object, tells it what options to look for
@@ -588,17 +623,24 @@ def get_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter,\
                                      description='Generate a legacypipe-compatible (survey) CCDs file \
                                                   from a set of reduced imaging.')
+
+    parser.add_argument('images', metavar='image-filename', nargs='*',
+                        help='Image filenames to process (prepend "@" for a text file containing a list of filenames)')
+
     parser.add_argument('--camera',choices=CAMERAS, action='store',required=True)
-    parser.add_argument('--image',action='store',default=None,help='relative path to image starting from decam,bok,mosaicz dir',required=False)
-    parser.add_argument('--image_list',action='store',default=None,help='text file listing multiples images in same was as --image',required=False)
-    parser.add_argument('--outdir', type=str, default=None, help='Where to write zpts/,images/,logs/; default is within $LEGACY_SURVEY_DIR/--survey-dir')
+    parser.add_argument('--image',action='append',default=[],help='relative path to image starting from [survey_dir]/images/',required=False)
+    parser.add_argument('--image_list',action='append',default=[],help='text file listing multiples images like --image',required=False)
     parser.add_argument('--survey-dir', type=str, default=None,
                         help='Override the $LEGACY_SURVEY_DIR environment variable')
+    parser.add_argument('--cache-dir', dest='cache_dir',
+                        help='Directory to check for cached files (for files found in --survey-dir)')
+    parser.add_argument('--prime-cache', default=False, action='store_true', help='Copy image (ooi, ood, oow) files to --cache-dir before starting.')
+    parser.add_argument('--fitsverify', default=False, action='store_true', help='Run fitsverify to check ooi, ood, oow files at start.')
+    parser.add_argument('--outdir', type=str, default=None, help='Where to write photom and annotated files; default [survey_dir]/zpt')
     parser.add_argument('--sdss-photom', default=False, action='store_true',
                         help='Use SDSS rather than PS-1 for photometric cal.')
     parser.add_argument('--debug', action='store_true', default=False, help='Write additional files and plots for debugging')
     parser.add_argument('--choose_ccd', action='store', default=None, help='forced to use only the specified ccd')
-    parser.add_argument('--logdir', type=str, default='.', help='Where to write zpts/,images/,logs/')
     parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
     parser.add_argument('--verboseplots', action='store_true', default=False, help='use to plot FWHM Moffat PSF fits to the 20 brightest stars')
     parser.add_argument('--calibrate', action='store_true',
@@ -608,6 +650,10 @@ def get_parser():
                         help='set to > 1 if using legacy-zeropoints-mpiwrapper.py')
     parser.add_argument('--run-calibs-only', default=False, action='store_true',
                         help='Only ensure calib files exist, do not compute zeropoints.')
+    parser.add_argument('--run-psf-only', default=False, action='store_true',
+                        help='Only create / ensure PSF calib files exist, do not compute zeropoints.')
+    parser.add_argument('--run-sky-only', default=False, action='store_true',
+                        help='Only create / ensure Sky calib files exist, do not compute zeropoints.')
     parser.add_argument('--no-splinesky', dest='splinesky', default=True, action='store_false',
                         help='Do not use spline sky model for sky subtraction?')
     parser.add_argument('--blob-mask-dir', type=str, default=None,
@@ -616,6 +662,8 @@ def get_parser():
                         help='The base directory to search for survey-ccds files for subtracting star halos before doing sky calibration.')
     parser.add_argument('--calibdir', default=None,
                         help='if None will use LEGACY_SURVEY_DIR/calib, e.g. /global/cscratch1/sd/desiproc/dr5-new/calib')
+    parser.add_argument('--no-check-photom', dest='check_photom', action='store_false',
+                        help='Do not check for photom file when deciding if this file is done or not.')
     parser.add_argument('--threads', default=None, type=int,
                         help='Multiprocessing threads (parallel by HDU)')
     parser.add_argument('--quiet', default=False, action='store_true', help='quiet down')
@@ -625,7 +673,16 @@ def get_parser():
 
 
 def main(args=None):
-    parser= get_parser()
+    import datetime
+    print()
+    print('legacy_zeropoints.py starting at', datetime.datetime.now().isoformat())
+    if args is None:
+        print('Command-line args:', sys.argv)
+    else:
+        print('Args:', args)
+    print()
+
+    parser = get_parser()
     args = parser.parse_args(args=args)
     if args.overhead is not None:
         t0 = args.overhead
@@ -635,10 +692,19 @@ def main(args=None):
         import time
         print('Startup time:', time.time()-t0, 'seconds')
 
-    if args.image_list:
-        image_list = read_lines(args.image_list)
-    elif args.image:
-        image_list = [args.image]
+    image_list = []
+    # add image specified with --image
+    args.images.extend(args.image)
+    # add image lists specified with --image_list
+    args.images.extend(['@'+fn for fn in args.image_list])
+    for fn in args.images:
+        if fn.startswith('@') and os.path.exists(fn[1:]):
+            ims = read_lines(fn)
+            # drop empty lines
+            ims = [fn for fn in ims if len(fn)]
+            image_list.extend(ims)
+            continue
+        image_list.append(fn)
 
     ''' Produce zeropoints for all CP images in image_list
     image_list -- iterable list of image filenames
@@ -663,16 +729,23 @@ def main(args=None):
     threads = measureargs.pop('threads')
     mp = multiproc(nthreads=(threads or 1))
 
-    import logging
     if args.verbose:
         lvl = logging.DEBUG
     else:
         lvl = logging.INFO
     logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+    # tractor logging is *soooo* chatty
+    logging.getLogger('tractor.engine').setLevel(lvl + 10)
 
     camera = measureargs['camera']
 
-    survey = LegacySurveyData(survey_dir=measureargs['survey_dir'])
+    fitsverify = measureargs.pop('fitsverify', False)
+    cache_dir = measureargs.pop('cache_dir', None)
+    prime_cache = measureargs.get('prime_cache', False)
+    # (we manually prime the cache; setting prime_cache in the LSD constructor runs
+    #  it automatically for every image)
+    survey = LegacySurveyData(survey_dir=measureargs['survey_dir'],
+                              cache_dir=cache_dir, prime_cache=False)
     if measureargs.get('calibdir'):
         survey.calib_dir = measureargs['calibdir']
     measureargs.update(survey=survey)
@@ -681,14 +754,8 @@ def main(args=None):
     if outdir is None:
         outdir = os.path.join(survey.survey_dir, 'zpt')
 
-    if camera in ['mosaic', 'decam', '90prime']:
-        from legacyzpts.psfzpt_cuts import read_bad_expid
-        fn = resource_filename('legacyzpts', 'data/{}-bad_expid.txt'.format(camera))
-        if os.path.isfile(fn):
-            print('Reading {}'.format(fn))
-            measureargs.update(bad_expid=read_bad_expid(fn))
-        else:
-            print('No bad exposure file found for camera {}'.format(camera))
+    version_header = None
+    check_photom = measureargs.pop('check_photom')
 
     for ii, imgfn in enumerate(image_list):
         print('Working on image {}/{}: {}'.format(ii+1, nimage, imgfn))
@@ -697,43 +764,97 @@ def main(args=None):
         F = outputFns(imgfn, outdir, camera, image_dir=survey.get_image_dir(),
                       debug=measureargs['debug'])
 
-        measure = measure_image(F.imgfn, None, just_imobj=True, image_hdu=None,
-                                **measureargs)
-        psffn = measure.get_psfex_merged_filename()
-        skyfn = measure.get_splinesky_merged_filename()
+        img = survey.get_image_object(None, camera=measureargs['camera'],
+                                      image_fn=F.imgfn, image_hdu=None,
+                                      prime_cache=False, check_cache=False)
+        if measureargs['run_psf_only']:
+            skyfn = None
+        else:
+            skyfn = survey.find_file('sky', img=img, use_cache=False)
 
-        ann_ok, psf_ok, sky_ok = [validate_version(
-            fn, 'table', measure.expnum, measure.plver,
-            measure.plprocid, quiet=quiet)
-            for fn in [F.annfn, psffn, skyfn]]
+        if measureargs['run_sky_only']:
+            psffn  = None
+        else:
+            psffn = survey.find_file('psf', img=img, use_cache=False)
+
+        if measureargs['run_calibs_only']:
+            afn = None
+        else:
+            afn = F.annfn
+
+        ann_ok, psf_ok, sky_ok = [(fn is None) or validate_version(
+            fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)
+            for fn in [afn, psffn, skyfn]]
 
         if measureargs['run_calibs_only'] and psf_ok and sky_ok:
             print('Already finished {}'.format(psffn))
             print('Already finished {}'.format(skyfn))
             continue
 
-        phot_ok = validate_version(F.photomfn, 'header', measure.expnum,
-                                   measure.plver, measure.plprocid,
+        if measureargs['run_psf_only'] and psf_ok:
+            print('Already finished {}'.format(psffn))
+            continue
+
+        if measureargs['run_sky_only'] and sky_ok:
+            print('Already finished {}'.format(skyfn))
+            continue
+
+        phot_ok = validate_version(F.photomfn, 'header', img.expnum, img.plver, img.plprocid,
                                    ext=1, quiet=quiet)
 
-        if ann_ok and phot_ok and psf_ok and sky_ok:
+        if ann_ok and (phot_ok or not(check_photom)) and psf_ok and sky_ok:
             print('Already finished: {}'.format(F.annfn))
             continue
 
-        # Create the file
+        # Run calibs / zeropoints / annotation for this image
         t0 = ptime('before-run',t0)
+        if prime_cache:
+            survey.prime_cache_for_image(img)
+
+        if fitsverify:
+            # I originally planned to just use 'fitsverify', but it is
+            # fussy about the missing LONGSTRN header card, which gets
+            # reported as a warning the same way as the checksum
+            # errors we really care about.  I could update the headers
+            # before running fitsverify, but that seems not ideal.  I
+            # could parse the fitsverify output, but ugh!  Instead,
+            # use fitsio to try to read the data:
+            img.check_for_cached_files(survey)
+            img.validate_image_data(mp=mp)
+
+        if version_header is None and not measureargs['run_calibs_only']:
+            # One-time initializations (only do if we actually have to process some images!)
+            from legacypipe.survey import get_version_header, get_dependency_versions
+            release = 10000
+            gitver = get_git_version()
+            version_header = get_version_header('legacy_zeropoints.py', survey.survey_dir, release,
+                                                git_version=gitver, proctype='InstCal')
+            deps = get_dependency_versions(None, None, None, None)
+            for name,value,comment in deps:
+                version_header.add_record(dict(name=name, value=value, comment=comment))
+            command_line=' '.join(sys.argv)
+            version_header.add_record(dict(name='CMDLINE', value=command_line,
+                                           comment='runbrick command-line'))
+            measureargs['version_header'] = version_header
+
+            if camera in ['mosaic', 'decam', '90prime']:
+                from legacyzpts.psfzpt_cuts import read_bad_expid
+                fn = resource_filename('legacyzpts', 'data/{}-bad_expid.txt'.format(camera))
+                if os.path.isfile(fn):
+                    print('Reading {}'.format(fn))
+                    measureargs.update(bad_expid=read_bad_expid(fn))
+                else:
+                    print('No bad exposure file found for camera {}'.format(camera))
+
         runit(F.imgfn, F.photomfn, F.annfn, mp, **measureargs)
+
+        if prime_cache:
+            ## ? are we sure we want this?
+            survey.delete_primed_cache_files()
+
         t0 = ptime('after-run',t0)
     tnow = Time()
     print("TIMING:total %s" % (tnow-tbegin,))
-
-def estimate_sky_from_pixels(img):
-    nsigma = 3.
-    clip_vals,_,_ = sigmaclip(img, low=nsigma, high=nsigma)
-    skymed= np.median(clip_vals)
-    skystd= np.std(clip_vals)
-    skyimg= np.zeros(img.shape) + skymed
-    return skyimg, skymed, skystd
 
 def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     """Computes photometric and astrometric zeropoints for one CCD.
@@ -743,12 +864,12 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     Returns:
         ccds, stars_photom, stars_astrom
     """
-    #
+    from tractor.brightness import NanoMaggies
     t0= Time()
     t0= ptime('Measuring CCD=%s from image=%s' % (imobj.ccdname, imobj.image_filename),t0)
 
-    # Initialize
-    ccds = _ccds_table(imobj.camera)
+    # Initialize CCDs (annotated) table data structure.
+    ccds = _ccds_table(imobj.camera, overrides=imobj.override_ccd_table_types())
 
     # init_ccd():
     namemap = { 'object': 'obj',
@@ -757,7 +878,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
                 'mjd_obs': 'mjdobs',
     }
     for key in ['image_filename', 'image_hdu', 'camera', 'expnum', 'plver', 'procdate',
-                'plprocid', 'ccdname', 'propid', 'exptime', 'mjd_obs', 
+                'plprocid', 'ccdname', 'propid', 'exptime', 'mjd_obs',
                 'pixscale', 'width', 'height', 'fwhm', 'filter']:
         val = getattr(imobj, namemap.get(key, key))
         print('Setting', key, '=', val)
@@ -771,17 +892,16 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     airmass = imobj.get_airmass(primhdr, hdr, ra_bore, dec_bore)
     ccds['airmass'] = airmass
     ccds['gain'] = imobj.get_gain(primhdr, hdr)
-    ccds['object'] = primhdr.get('OBJECT')
-    
-    optional = ['avsky']
-    for ccd_col in ['avsky', 'crpix1', 'crpix2', 'crval1', 'crval2',
-                    'cd1_1','cd1_2', 'cd2_1', 'cd2_2']:
-        if ccd_col.upper() in hdr:
-            ccds[ccd_col] = hdr[ccd_col]
-        elif ccd_col in optional:
-            ccds[ccd_col] = np.nan
-        else:
-            raise KeyError('Could not find %s key in header:' % ccd_col)
+    ccds['object'] = imobj.get_object(primhdr)
+
+    ccds['AVSKY'] = hdr.get('AVSKY', np.nan)
+
+    for ccd_col,val in zip(['cd1_1', 'cd1_2', 'cd2_1', 'cd2_2'],
+                           imobj.get_cd_matrix(primhdr, hdr)):
+        ccds[ccd_col] = val
+    for ccd_col,val in zip(['crpix1', 'crpix2', 'crval1', 'crval2'],
+                           imobj.get_crpixcrval(primhdr, hdr)):
+        ccds[ccd_col] = val
 
     wcs = imobj.get_wcs(hdr=hdr)
     H = imobj.height
@@ -791,26 +911,50 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     ccds['dec'] = ccddec
     t0= ptime('header-info',t0)
 
-    # Quick check for PsfEx file
-    psf = imobj.read_psf_model(0., 0., pixPsf=True)
-    if psf.psfex.sampling == 0.:
-        print('PsfEx model has SAMPLING=0')
-        nacc = psf.header.get('ACCEPTED')
-        print('PsfEx model number of stars accepted:', nacc)
-        return imobj.return_on_error(err_message='Bad PSF model', ccds=ccds)
+    # Select the good region in this image
+    slc = imobj.get_good_image_slice(None)
+    x0 = y0 = 0
+    if slc is not None:
+        sy,sx = slc
+        y0,y1 = sy.start, sy.stop
+        x0,x1 = sx.start, sx.stop
+        print('good image slice:', slc, '-- shifting WCS by', x0, y0)
+        wcs = wcs.get_subimage(x0, y0, int(x1-x0), int(y1-y0))
 
-    bitmask,dqhdr = imobj.read_dq(header=True) #read_bitmask()
-    if bitmask is not None:
-        bitmask = imobj.remap_dq(bitmask, dqhdr)
-    invvar = imobj.read_invvar(dq=bitmask)
-    # Compute sig1 before rescaling... well, not quite
-    mediv = np.median(invvar[(invvar > 0) * (bitmask == 0)])
-    mediv = imobj.scale_weight(mediv)
-    imobj.sig1 = (1. / np.sqrt(mediv)) / imobj.exptime
+    # Quick check for PsfEx file
+    try:
+        psf = imobj.read_psf_model(x0, y0, pixPsf=True)
+    except RuntimeError as e:
+        print('Failed to read PSF model: %s' % e)
+        return None, None
+
+    # for cases (eg HSC, Pan-STARRS) that lack a SEEING/FWHM header and we have to fetch
+    # from the PsfEx file.
+    if not np.isfinite(imobj.fwhm):
+        imobj.fwhm = imobj.get_fwhm(primhdr, hdr)
+        print('Re-fetched FWHM for', imobj, ': got', imobj.fwhm)
+        ccds['fwhm'] = imobj.fwhm
+
+    # Read image data
+    dq,dqhdr = imobj.read_dq(header=True, slc=slc)
+    print('DQ:', dq.shape)
+    if dq is not None:
+        dq = imobj.remap_dq(dq, dqhdr)
+    invvar = imobj.read_invvar(dq=dq, slc=slc)
+    print('Invvar:', invvar.shape)
+    img = imobj.read_image(slc=slc)
+    print('Image:', img.shape)
+    imobj.fix_saturation(img, dq, invvar, primhdr, hdr, slc)
+    # Compute sig1 before rescaling (later it gets scaled by zpscale)
+    imobj.sig1 = imobj.estimate_sig1(img, invvar, dq, primhdr, hdr)
     ccds['sig1'] = imobj.sig1
 
-    img = imobj.read_image()
-    invvar = imobj.remap_invvar(invvar, primhdr, img, bitmask)
+    invvar = imobj.remap_invvar(invvar, primhdr, img, dq)
+
+    # Blank out masked pixels (which can occasionally have very extreme values,
+    # eg DECam_CP-DR10c/CP20210225/c4d_210226_002707_ooi_r_v1.fits.fz ext N8
+    # has pixel values -1e37.
+    img[invvar == 0] = 0.
 
     invvar = imobj.scale_weight(invvar)
     img = imobj.scale_image(img)
@@ -818,18 +962,24 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     t0= ptime('read image',t0)
 
     # Measure the sky brightness and (sky) noise level.
+    sky_img, skymed, skyrms = imobj.estimate_sky(img, invvar, dq, primhdr, hdr)
     zp0 = imobj.nominal_zeropoint(imobj.band)
-
-    # Bunch of sky estimates
-    #print('Computing the sky background.')
-    sky_img, skymed, skyrms = estimate_sky_from_pixels(img)
-    print('sky from median of image = %.2f' % skymed)
     skybr = zp0 - 2.5*np.log10(skymed / imobj.pixscale / imobj.pixscale / imobj.exptime)
-    print('Sky brightness: {:.3f} mag/arcsec^2 (assuming nominal zeropoint)'.format(skybr))
-    ccds['skyrms'] = skyrms / imobj.exptime # e/sec
-    ccds['skycounts'] = skymed / imobj.exptime # [electron/pix]
+    print('Sky level: %.2f count/pix' % skymed)
+    print('Sky brightness: %.3f mag/arcsec^2 (assuming nominal zeropoint)' % skybr)
+    ccds['skyrms'] = skyrms / imobj.exptime
+    ccds['skycounts'] = skymed / imobj.exptime
     ccds['skysb'] = skybr   # [mag/arcsec^2]
     t0= ptime('measure-sky',t0)
+
+    # Does this image already have (photometric and astrometric) zeropoints computed?
+    zpt = imobj.get_zeropoint(primhdr, hdr)
+    if zpt is not None:
+        print('Image', imobj, ': using zeropoint %.3f' % zpt)
+        zpscale = NanoMaggies.zeropointToScale(zpt)
+        ccds['sig1'] /= zpscale
+        ccds['zpt'] = zpt
+        return ccds, None
 
     # Load PS1 & Gaia catalogues
 
@@ -852,7 +1002,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         name = 'sdss'
     else:
         name = 'ps1'
-        
+
     if phot is not None:
         phot.cut(imobj.get_photometric_calibrator_cuts(name, phot))
         if len(phot) == 0:
@@ -869,12 +1019,19 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     assert(gaia is not None)
     print(len(gaia), 'Gaia stars')
 
-    maxgaia = 10000
+    maxgaia = 1000
     if len(gaia) > maxgaia:
         I = np.argsort(gaia.phot_g_mean_mag)
-        print('Min mag:', gaia.phot_g_mean_mag[I[0]])
         gaia.cut(I[:maxgaia])
-        print('Cut to', len(gaia), 'Gaia stars')
+        print('Cut to', len(gaia), 'Gaia stars with G mag in range %.2f to %.2f' %
+              (gaia.phot_g_mean_mag[0], gaia.phot_g_mean_mag[-1]))
+
+    maxphot = 1000
+    if phot is not None and len(phot) > maxphot:
+        I = np.argsort(phot.legacy_survey_mag)
+        phot.cut(I[:maxphot])
+        print('Cut to', len(phot), 'photometric calibrator stars with mag in range %.2f to %.2f' %
+              (phot.legacy_survey_mag[0], phot.legacy_survey_mag[-1]))
 
     t0= Time()
 
@@ -887,7 +1044,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     # move.
 
     if splinesky:
-        sky = imobj.read_sky_model()
+        sky = imobj.read_sky_model(slc=slc)
         print('Instantiating and subtracting sky model')
         skymod = np.zeros_like(img)
         sky.addTo(skymod)
@@ -898,7 +1055,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         fit_img = img - sky_img
 
     # after sky subtraction, apply optional per-amp relative zeropoints.
-    imobj.apply_amp_correction(fit_img, invvar, 0, 0)
+    imobj.apply_amp_correction(fit_img, invvar, x0, y0)
 
     with np.errstate(invalid='ignore'):
         # sqrt(0.) can trigger complaints;
@@ -1007,6 +1164,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
             del unmatched
 
         refs.append(phot)
+    else:
+        phot_cols = []
 
     if len(refs) == 1:
         refs = refs[0]
@@ -1047,10 +1206,10 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
 
     # Run tractor fitting on the ref stars, using the PsfEx model.
     phot = tractor_fit_sources(imobj, wcs, refs.ra_now, refs.dec_now, refs.flux0,
-                               fit_img, ierr, psf)
+                               fit_img, ierr, psf, x0, y0)
     print('Got photometry results for', len(phot), 'reference stars')
     if len(phot) == 0:
-        return imobj.return_on_error('No photometry available',ccds=ccds)
+        return None, None
 
     # Cut to ref stars that were photometered
     refs.cut(phot.iref)
@@ -1092,9 +1251,9 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     phot.dpsfmag = np.zeros(len(phot), np.float32)
     phot.dpsfmag[ok] = np.abs((-2.5 / np.log(10.)) * phot.dflux[ok] / phot.flux[ok])
 
-    H,W = bitmask.shape
-    phot.bitmask = bitmask[np.clip(phot.y1, 0, H-1).astype(int),
-                           np.clip(phot.x1, 0, W-1).astype(int)]
+    H,W = dq.shape
+    phot.bitmask = dq[np.clip(np.round(phot.y_fit), 0, H-1).astype(int),
+                      np.clip(np.round(phot.x_fit), 0, W-1).astype(int)]
 
     phot.psfmag = np.zeros(len(phot), np.float32)
 
@@ -1105,14 +1264,19 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     nphotom = np.sum(phot.flux_sn > 5.)
 
     dmag = refs.legacy_survey_mag - phot.instpsfmag
-    maglo, maghi = MAGLIM[imobj.band]
-    dmag = dmag[refs.photom &
-                (refs.legacy_survey_mag > maglo) &
-                (refs.legacy_survey_mag < maghi) &
-                np.isfinite(dmag)]
+    maglo, maghi = imobj.get_photocal_mag_limits()
+    kept = (refs.photom &
+            (refs.legacy_survey_mag > maglo) &
+            (refs.legacy_survey_mag < maghi) &
+            np.isfinite(dmag))
+    dmag = dmag[kept]
+
     if len(dmag):
         print('Zeropoint: using', len(dmag), 'good stars')
-        dmag, _, _ = sigmaclip(dmag, low=2.5, high=2.5)
+        clipped, lo, hi = sigmaclip(dmag, low=2.5, high=2.5)
+        Ikept = np.flatnonzero(kept)
+        kept[Ikept[np.logical_or(dmag < lo, dmag > hi)]] = False
+        dmag = clipped
         print('Zeropoint: using', len(dmag), 'stars after sigma-clipping')
 
         zptstd = np.std(dmag)
@@ -1120,6 +1284,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         dzpt = zptmed - zp0
         kext = imobj.extinction(imobj.band)
         transp = 10.**(-0.4 * (-dzpt - kext * (airmass - 1.0)))
+        nphotom_used = len(dmag)
 
         print('Number of stars used for zeropoint median %d' % nphotom)
         print('Zeropoint %.4f' % zptmed)
@@ -1130,7 +1295,6 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         ok = (phot.instpsfmag != 0)
         phot.psfmag[ok] = phot.instpsfmag[ok] + zptmed
 
-        from tractor.brightness import NanoMaggies
         zpscale = NanoMaggies.zeropointToScale(zptmed)
         ccds['sig1'] /= zpscale
 
@@ -1139,15 +1303,13 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         zptmed = 0.
         zptstd = 0.
         transp = 0.
+        kept[:] = False
+        nphotom_used = 0
 
-    for c in ['x0','y0','x1','y1','flux','raoff','decoff', 'psfmag',
+    for c in ['x_ref','y_ref','x_fit','y_fit','flux','raoff','decoff', 'psfmag',
               'dflux','dx','dy']:
         phot.set(c, phot.get(c).astype(np.float32))
-    phot.rename('x0', 'x_ref')
-    phot.rename('y0', 'y_ref')
-    phot.rename('x1', 'x_fit')
-    phot.rename('y1', 'y_fit')
-
+    phot.used_for_photzpt = kept
     phot.add_columns_from(refs)
 
     # Save CCD-level information in the per-star table.
@@ -1169,15 +1331,15 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     phot.gain    = np.zeros(len(phot), np.float32) + ccds['gain']
     phot.airmass = np.zeros(len(phot), np.float32) + airmass
 
-    import photutils
+    import photutils.aperture
     apertures_arcsec_diam = [6, 7, 8]
     for arcsec_diam in apertures_arcsec_diam:
-        ap = photutils.CircularAperture(np.vstack((phot.x_fit, phot.y_fit)).T,
-                                        arcsec_diam / 2. / imobj.pixscale)
+        ap = photutils.aperture.CircularAperture(np.vstack((phot.x_fit, phot.y_fit)).T,
+                                                 arcsec_diam / 2. / imobj.pixscale)
         with np.errstate(divide='ignore'):
             err = 1./ierr
-        apphot = photutils.aperture_photometry(fit_img, ap,
-                                               error=err, mask=(ierr==0))
+        apphot = photutils.aperture.aperture_photometry(fit_img, ap,
+                                                        error=err, mask=(ierr==0))
         phot.set('apflux_%i' % arcsec_diam,
                  apphot.field('aperture_sum').data.astype(np.float32))
         phot.set('apflux_%i_err' % arcsec_diam,
@@ -1193,10 +1355,9 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     ccds['phoff'] = dzpt
     ccds['phrms'] = zptstd
     ccds['zpt'] = zptmed
-    ccds['transp'] = transp
     ccds['nstars_photom'] = nphotom
     ccds['nstars_astrom'] = nastrom
-
+    ccds['nstars_photom_used'] = nphotom_used
     # .ra,.dec = Gaia else PS1
     phot.ra  = phot.ra_gaia
     phot.dec = phot.dec_gaia
@@ -1207,7 +1368,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     # Create subset table for Eddie's ubercal
     cols = ([
         'ra', 'dec', 'flux', 'dflux', 'chi2', 'fracmasked', 'instpsfmag',
-        'dpsfmag',
+        'dpsfmag', 'used_for_photzpt',
         'bitmask', 'x_fit', 'y_fit', 'gaia_sourceid', 'ra_gaia', 'dec_gaia',
         'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag',
         'phot_g_mean_mag_error', 'phot_bp_mean_mag_error',
@@ -1227,18 +1388,19 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
     # Plots for comparing to Arjuns zeropoints*.ps
     verboseplots = False
     if verboseplots:
-        imobj.make_plots(phot,dmag,ccds['zpt'],ccds['transp'])
+        imobj.make_plots(phot,dmag,ccds['zpt'],transp)
         t0= ptime('made-plots',t0)
     return ccds, phot
 
 def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
-                        psf, normalize_psf=True):
+                        psf, ccd_x0, ccd_y0, normalize_psf=True):
     import tractor
     from tractor import PixelizedPSF
     from tractor.brightness import LinearPhotoCal
 
     plots = False
-    plot_this = False
+    plot_this = plots
+    nplots = 0
     if plots:
         from astrometry.util.plotutils import PlotSequence
         ps = PlotSequence('astromfit')
@@ -1246,11 +1408,11 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
     print('Fitting positions & fluxes of %i stars' % len(ref_ra))
 
     cal = fits_table()
-    # These x0,y0,x1,y1 are zero-indexed coords.
-    cal.x0 = []
-    cal.y0 = []
-    cal.x1 = []
-    cal.y1 = []
+    # These x_ref,y_ref,x_fit,y_fit are zero-indexed coords.
+    cal.x_ref = []
+    cal.y_ref = []
+    cal.x_fit = []
+    cal.y_fit = []
     cal.flux = []
     cal.dx = []
     cal.dy = []
@@ -1306,9 +1468,9 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
 
         tim = tractor.Image(data=subimg, inverr=subie, psf=subpsf)
         flux0 = ref_flux[istar]
-        x0 = x - xlo
-        y0 = y - ylo
-        src = tractor.PointSource(tractor.PixPos(x0, y0), tractor.Flux(flux0))
+        x_init = x - xlo
+        y_init = y - ylo
+        src = tractor.PointSource(tractor.PixPos(x_init, y_init), tractor.Flux(flux0))
         tr = tractor.Tractor([tim], [src])
 
         tr.freezeParam('images')
@@ -1319,9 +1481,14 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
         src.freezeParam('pos')
         pc = tim.photocal
         tim.photocal = LinearPhotoCal(1.)
-        tr.optimize_forced_photometry()
+        tr.optimize_forced_photometry(**optargs)
         tim.photocal = pc
         src.thawParam('pos')
+
+        if plots:
+            # Don't plot saturated stars
+            h,w = subie.shape
+            plot_this = (subie[h//2, w//2] > 0)
 
         if plots and plot_this:
             import pylab as plt
@@ -1336,11 +1503,11 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
             plt.subplot(2,2,3)
             plt.imshow((subimg - mod) * subie, interpolation='nearest', origin='lower')
             plt.colorbar()
-            plt.suptitle('Before')
+            plt.suptitle('Before fitting: star #%i' % istar)
             ps.savefig()
 
         # Now the position and flux fit
-        for step in range(50):
+        for _ in range(50):
             dlnp,_,_ = tr.optimize(**optargs)
             if dlnp == 0:
                 break
@@ -1359,10 +1526,10 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
         cal.fracmasked.append(np.sum(psfimg * (subie == 0)))
 
         cal.psfsum.append(psfsum)
-        cal.x0.append(x0 + xlo)
-        cal.y0.append(y0 + ylo)
-        cal.x1.append(src.pos.x + xlo)
-        cal.y1.append(src.pos.y + ylo)
+        cal.x_ref.append(ccd_x0 + x_init + xlo)
+        cal.y_ref.append(ccd_y0 + y_init + ylo)
+        cal.x_fit.append(ccd_x0 + src.pos.x + xlo)
+        cal.y_fit.append(ccd_y0 + src.pos.y + ylo)
         cal.flux.append(src.brightness.getValue())
         cal.iref.append(istar)
 
@@ -1385,13 +1552,16 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
             plt.colorbar()
             plt.suptitle('After')
             ps.savefig()
+            nplots += 1
+            if nplots == 10:
+                plots = False
 
     if nzeroivar > 0:
         print('Zero ivar for %d stars' % nzeroivar)
     if noffim > 0:
         print('Off image for %d stars' % noffim)
     cal.to_np_arrays()
-    cal.ra_fit,cal.dec_fit = wcs.pixelxy2radec(cal.x1 + 1, cal.y1 + 1)
+    cal.ra_fit,cal.dec_fit = wcs.pixelxy2radec(cal.x_fit - ccd_x0 + 1, cal.y_fit - ccd_y0 + 1)
     return cal
 
 if __name__ == "__main__":

@@ -1,5 +1,3 @@
-from __future__ import print_function
-
 import numpy as np
 
 from legacypipe.units import get_units_for_columns
@@ -12,6 +10,10 @@ def info(*args):
 def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
+
+def _clean_column_name(col):
+    # suprime "I-A-L427", etc
+    return col.replace('-', '_')
 
 def _expand_flux_columns(T, bands, allbands, keys):
     # Expand out FLUX and related fields from grz arrays to 'allbands'
@@ -37,7 +39,8 @@ def _expand_flux_columns(T, bands, allbands, keys):
 
         # FLUX_b for each band, rather than array columns.
         for i,b in enumerate(allbands):
-            T.set('%s_%s' % (key, b), A[:,i])
+            col = _clean_column_name('%s_%s' % (key, b))
+            T.set(col, A[:,i])
 
 def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
                    write_kwargs=None, N_wise_epochs=None,
@@ -67,7 +70,7 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
     # Expand out FLUX and related fields from grz arrays to 'allbands'
     # (eg, ugrizY) arrays.
     keys = ['flux', 'flux_ivar', 'rchisq', 'fracflux', 'fracmasked', 'fracin',
-            'nobs', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth',
+            'nobs', 'ngood', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth',
             'fiberflux', 'fibertotflux']
     if has_ap:
         keys.extend(['apflux', 'apflux_resid', 'apflux_blobresid',
@@ -77,22 +80,31 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
     from tractor.sfd import SFDMap
     info('Reading SFD maps...')
     sfd = SFDMap()
-    filts = ['%s %s' % ('DES', f) for f in allbands]
+    # Hack -- subset to the bands that the tractor's SFD code knows about.
+    dust_bands = []
+    for b in allbands:
+        if b in ['u','g','r','i','z','Y']:
+            dust_bands.append(b)
+    filts = ['%s %s' % ('DES', f) for f in dust_bands]
     wisebands = ['WISE W1', 'WISE W2', 'WISE W3', 'WISE W4']
-    ebv,ext = sfd.extinction(filts + wisebands, T.ra, T.dec, get_ebv=True)
+    galexbands = ['FUV', 'NUV']
+    ebv,ext = sfd.extinction(filts + wisebands + galexbands, T.ra, T.dec, get_ebv=True)
     T.ebv = ebv.astype(np.float32)
     ext = ext.astype(np.float32)
-    decam_ext = ext[:,:len(allbands)]
+    decam_ext = ext[:,:len(dust_bands)]
     if has_wise:
-        wise_ext  = ext[:,len(allbands):]
+        wise_ext = ext[:,len(dust_bands):len(dust_bands)+len(wisebands)]
+    if has_galex:
+        galex_ext = ext[:,len(dust_bands)+len(wisebands):]
 
     wbands = ['w1','w2','w3','w4']
     gbands = ['nuv','fuv']
 
     trans_cols_opt  = []
     trans_cols_wise = []
+    trans_cols_galex = []
 
-    for i,b in enumerate(allbands):
+    for i,b in enumerate(dust_bands):
         col = 'mw_transmission_%s' % b
         T.set(col, 10.**(-decam_ext[:,i] / 2.5))
         trans_cols_opt.append(col)
@@ -101,6 +113,11 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
             col = 'mw_transmission_%s' % b
             T.set(col, 10.**(-wise_ext[:,i] / 2.5))
             trans_cols_wise.append(col)
+    if has_galex:
+        for i,b in enumerate(gbands):
+            col = 'mw_transmission_%s' % b
+            T.set(col, 10.**(-galex_ext[:,i] / 2.5))
+            trans_cols_galex.append(col)
 
     T.release = np.zeros(len(T), np.int16) + release
 
@@ -155,7 +172,8 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
 
     def add_fluxlike(c):
         for b in allbands:
-            cols.append('%s_%s' % (c, b))
+            col = _clean_column_name('%s_%s' % (c, b))
+            cols.append(col)
     def add_wiselike(c, bands=None):
         if bands is None:
             bands = wbands
@@ -194,12 +212,13 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
 
     cols.extend(trans_cols_opt)
     cols.extend(trans_cols_wise)
+    cols.extend(trans_cols_galex)
 
     for c in ['nobs', 'rchisq', 'fracflux']:
         add_fluxlike(c)
         if has_wise:
             add_wiselike(c)
-    for c in ['fracmasked', 'fracin', 'anymask', 'allmask']:
+    for c in ['fracmasked', 'fracin', 'ngood', 'anymask', 'allmask']:
         add_fluxlike(c)
     if has_wise:
         for i,b in enumerate(wbands[:2]):
@@ -275,6 +294,17 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
         'shape_e1', 'shape_e1_ivar',
         'shape_e2', 'shape_e2_ivar'])
 
+    # nea, blob_nea rename
+    for b in allbands:
+        oldcol = 'nea_%s' % b.lower()
+        newcol = 'nea_%s' % _clean_column_name(b)
+        if newcol != oldcol:
+            T.rename(oldcol, newcol)
+        oldcol = 'blob_nea_%s' % b.lower()
+        newcol = 'blob_nea_%s' % _clean_column_name(b)
+        if newcol != oldcol:
+            T.rename(oldcol, newcol)
+
     debug('Columns:', cols)
     debug('T columns:', T.columns())
 
@@ -286,8 +316,7 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
             j = cclower.index(c)
             cols[i] = cc[j]
 
-    units = get_units_for_columns(cols, bands=list(allbands) + wbands + gbands)
-
+    units = get_units_for_columns(cols, bands=[_clean_column_name(b) for b in allbands] + wbands + gbands)
     T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units,
               **write_kwargs)
 
@@ -371,7 +400,7 @@ def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
     TT.delete_column('rex_shape_e2_ivar')
     return TT,hdr
 
-def one_lightcurve_bitmask(lc_nobs, lc_mjd, n_final=13):
+def one_lightcurve_bitmask(lc_nobs, lc_mjd, n_final=17):
     # row is a single tractor-i catalog row
     # the only columns used from within this row are:
     #     LC_NOBS_W[1-2]

@@ -87,7 +87,8 @@ RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && python3.9 setup-cython.py --with-ceres install --home /usr/local \
     && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
     && rm -R $(find . -name "*.o" -o -name "*.so") \
-    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
+    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)") \
+    && echo 2
 
 # python = python3
 RUN ln -s /usr/bin/python3 /usr/bin/python

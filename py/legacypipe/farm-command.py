@@ -1,8 +1,5 @@
-import os
 import argparse
 import pickle
-import time
-
 import zmq
 
 def main():

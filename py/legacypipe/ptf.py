@@ -1,16 +1,16 @@
-from __future__ import print_function
 import os
 import numpy as np
+import fitsio
 
 from legacypipe.image import LegacySurveyImage
 from legacypipe.survey import *
 
 from astropy.io import fits as astro_fits
-import fitsio
 from astrometry.util.file import trymakedirs
-from astrometry.util.fits import fits_table
 from astrometry.util.util import Tan, Sip, anwcs_t
+from tractor import ConstantSky, LinearPhotoCal
 from tractor.tractortime import TAITime
+from tractor.brightness import NanoMaggies
 
 #for SFDMap() including for PTF filters
 #from astrometry.util.starutil_numpy import *
@@ -25,8 +25,8 @@ Code specific to images from the (intermediate) Palomar Transient Factory (iPTF/
 def zeropoint_for_ptf(hdr):
     magzp= hdr['IMAGEZPT'] + 2.5 * np.log10(hdr['EXPTIME'])
     if isinstance(magzp,str):
-        print('WARNING: no ZeroPoint in header for image: ',tractor_image.imgfn)
-        raise ValueError #magzp= 23.
+        print('WARNING: no ZeroPoint in header:', hdr)
+        raise ValueError
     return magzp
 
 ##key functions##
@@ -102,15 +102,15 @@ class PtfImage(LegacySurveyImage):
     Camera, DECam, on the Blanco telescope.
 
     '''
-    def __init__(self, survey, t):
-        super(PtfImage, self).__init__(survey, t)
+    def __init__(self, survey, t, **kwargs):
+        super(PtfImage, self).__init__(survey, t, **kwargs)
 
         # FIXME -- this should happen in the CCD table creation step.
         self.imgfn= os.path.join(os.path.dirname(self.imgfn),
                                  'ptf', os.path.basename(self.imgfn))
 
         hdr= self.read_image_primary_header()
-        self.ccdzpt = hdr['IMAGEZPT'] + 2.5 * np.log10(self.exptime)
+        self.set_ccdzpt(hdr['IMAGEZPT'])
 
         self.pixscale= 1.01
         #print("--------pixscale= ",self.pixscale)
@@ -160,6 +160,10 @@ class PtfImage(LegacySurveyImage):
     #def get_tractor_image(self, **kwargs):
     #    tim = super(PtfImage, self).get_tractor_image(**kwargs)
     #    return tim
+
+    def set_ccdzpt(self, ccdzpt):
+        # Adjust zeropoint for exposure time
+        self.ccdzpt = ccdzpt + 2.5 * np.log10(self.exptime)
 
     def __str__(self):
         return 'PTF ' + self.name
@@ -316,7 +320,6 @@ class PtfImage(LegacySurveyImage):
           leaving a constant zero sky model?
 
         '''
-        from astrometry.util.miscutils import clip_polygon
         get_dq = dq
         get_invvar = invvar
 
@@ -356,7 +359,7 @@ class PtfImage(LegacySurveyImage):
         #    slc = slice(y0,y1), slice(x0,x1)
         if pixels:
             print('Reading image slice:', slc)
-            img,imghdr = self.read_image(header=True, slice=slc)
+            img,imghdr = self.read_image(header=True, slc=slc)
             #print('SATURATE is', imghdr.get('SATURATE', None))
             #print('Max value in image is', img.max())
             # check consistency... something of a DR1 hangover
@@ -369,12 +372,12 @@ class PtfImage(LegacySurveyImage):
                 img = img[slc]
 
         if get_invvar:
-            invvar = self.read_invvar(slice=slc, clipThresh=0.)
+            invvar = self.read_invvar(slc=slc, clipThresh=0.)
         else:
             invvar = np.ones_like(img)
 
         if get_dq:
-            dq = self.read_dq(slice=slc)
+            dq = self.read_dq(slc=slc)
             invvar[dq != 0] = 0.
         if np.all(invvar == 0.):
             print('Skipping zero-invvar image')

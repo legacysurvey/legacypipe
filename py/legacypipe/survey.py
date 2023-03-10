@@ -1,10 +1,7 @@
-from __future__ import print_function
-
 import os
 import tempfile
 
 import numpy as np
-
 import fitsio
 
 from astrometry.util.fits import fits_table, merge_tables
@@ -180,7 +177,7 @@ class GaiaSource(PointSource):
                            nantozero(g.pmdec),
                            nantozero(g.parallax))
 
-        # initialize from decam_mag_B if available, otherwise Gaia G.
+        # initialize from decam_mag_{band} if available, otherwise Gaia G.
         fluxes = {}
         for band in bands:
             try:
@@ -356,7 +353,8 @@ def get_git_version(dirnm=None):
     version = version.strip()
     return version
 
-def get_version_header(program_name, survey_dir, release, git_version=None):
+def get_version_header(program_name, survey_dir, release, git_version=None,
+                       proctype='tile'):
 
     '''
     Creates a fitsio header describing a DECaLS data product.
@@ -381,7 +379,7 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
                         comment='legacypipe git version'))
     hdr.add_record(dict(name='LSDIR', value=survey_dir,
                         comment='$LEGACY_SURVEY_DIR directory'))
-    hdr.add_record(dict(name='LSDR', value='DR9',
+    hdr.add_record(dict(name='LSDR', value='DR10',
                         comment='Data release number'))
     hdr.add_record(dict(name='RUNDATE', value=datetime.datetime.now().isoformat(),
                         comment='%s run time' % program_name))
@@ -394,7 +392,7 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
                         comment='LegacySurveys Data Release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
                         comment='Observation type'))
-    hdr.add_record(dict(name='PROCTYPE', value='tile',
+    hdr.add_record(dict(name='PROCTYPE', value=proctype,
                         comment='Processing type'))
 
     hdr.add_record(dict(name='NODENAME', value=socket.gethostname(),
@@ -407,10 +405,12 @@ def get_version_header(program_name, survey_dir, release, git_version=None):
                         comment='SLURM job array id'))
     return hdr
 
-def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir):
+def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir,
+                            mpl=True):
     import astrometry
     import astropy
-    import matplotlib
+    if mpl:
+        import matplotlib
     try:
         import mkl_fft
     except ImportError:
@@ -423,17 +423,22 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, gale
     depvers = []
     headers = []
     default_ver = 'UNAVAILABLE'
-    for name,pkg in [('astrometry', astrometry),
-                     ('astropy', astropy),
-                     ('fitsio', fitsio),
-                     ('matplotlib', matplotlib),
-                     ('mkl_fft', mkl_fft),
-                     ('numpy', np),
-                     ('photutils', photutils),
-                     ('scipy', scipy),
-                     ('tractor', tractor),
-                     ('unwise_psf', unwise_psf),
-                     ]:
+    pkgs = [
+        ('astrometry', astrometry),
+        ('astropy', astropy),
+        ('fitsio', fitsio),
+    ]
+    if mpl:
+        pkgs.append(('matplotlib', matplotlib))
+    pkgs.extend([
+        ('mkl_fft', mkl_fft),
+        ('numpy', np),
+        ('photutils', photutils),
+        ('scipy', scipy),
+        ('tractor', tractor),
+        ('unwise_psf', unwise_psf),
+    ])
+    for name,pkg in pkgs:
         if pkg is None:
             depvers.append((name, 'none'))
             continue
@@ -504,15 +509,39 @@ def tim_get_resamp(tim, targetwcs):
         return None
     return Yo,Xo,Yi,Xi
 
+# Increasing this hacky factor causes the RGB images to be stretched
+# harder, eg for deep imaging such as HSC.
 rgb_stretch_factor = 1.0
 
 def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
-    rgbscales=dict(g =    (2, 6.0 * rgb_stretch_factor),
+    rgbscales=dict(u =    (2, 6.0 * rgb_stretch_factor),
+                   g =    (2, 6.0 * rgb_stretch_factor),
                    r =    (1, 3.4 * rgb_stretch_factor),
                    i =    (0, 3.0 * rgb_stretch_factor),
                    z =    (0, 2.2 * rgb_stretch_factor),
+                   Y =    (0, 2.2 * rgb_stretch_factor),
+                   N419 = (2, 6.0 * rgb_stretch_factor),
                    N501 = (2, 6.0 * rgb_stretch_factor),
-                   N673 = (1, 3.4 * rgb_stretch_factor))
+                   N673 = (1, 3.4 * rgb_stretch_factor),
+                   # HSC
+                   r2 =    (1, 3.4 * rgb_stretch_factor),
+                   i2 =    (0, 3.0 * rgb_stretch_factor),
+                   y  =    (0, 2.2 * rgb_stretch_factor),
+                   # WIRO
+                   NB_A = (0, 6. * rgb_stretch_factor),
+                   NB_B = (0, 6. * rgb_stretch_factor),
+                   NB_C = (0, 6. * rgb_stretch_factor),
+                   NB_D = (0, 6. * rgb_stretch_factor),
+                   NB_E = (0, 6. * rgb_stretch_factor),
+                   )
+    # SUPRIME
+    rgbscales.update({
+        'I-A-L427': (0, 6. * rgb_stretch_factor),
+        'I-A-L464': (0, 6. * rgb_stretch_factor),
+        'I-A-L484': (0, 6. * rgb_stretch_factor),
+        'I-A-L505': (0, 6. * rgb_stretch_factor),
+        'I-A-L527': (0, 6. * rgb_stretch_factor),
+    })
 
     # rgbscales = {'u': 1.5, #1.0,
     #              'g': 2.5,
@@ -525,7 +554,7 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
 
     I = 0
     for img,band in zip(imgs, bands):
-        plane,scale = rgbscales[band]
+        _,scale = rgbscales[band]
         img = np.maximum(0, img * scale + m)
         I = I + img
     I /= len(bands)
@@ -536,21 +565,51 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
     H,W = I.shape
     rgb = np.zeros((H,W,3), np.float32)
 
-    if bands == 'griz':
+    if bands == ['g','r','i','z']:
 
         rgbvec = dict(
             g = (0.,   0.,  0.75),
             r = (0.,   0.5, 0.25),
             i = (0.25, 0.5, 0.),
             z = (0.75, 0.,  0.))
-        
+
         for img,band in zip(imgs, bands):
+            _,scale = rgbscales[band]
             rf,gf,bf = rgbvec[band]
             if mnmx is None:
-                v = np.clip((img * scale + m) * I, 0, 1)
+                v = (img * scale + m) * I
             else:
                 mn,mx = mnmx
-                v = np.clip(((img * scale + m) - mn) / (mx - mn), 0, 1)
+                v = ((img * scale + m) - mn) / (mx - mn)
+            if clip:
+                v = np.clip(v, 0, 1)
+            if rf != 0.:
+                rgb[:,:,0] += rf*v
+            if gf != 0.:
+                rgb[:,:,1] += gf*v
+            if bf != 0.:
+                rgb[:,:,2] += bf*v
+
+    elif bands == ['I-A-L427','I-A-L464','I-A-L484','I-A-L505','I-A-L527']:
+        print('sdss_rgb: Suprime IA color scheme')
+
+        rgbvec = {
+            'I-A-L427': (0.0, 0.0, 0.6),
+            'I-A-L464': (0.0, 0.2, 0.4),
+            'I-A-L484': (0.0, 0.6, 0.0),
+            'I-A-L505': (0.4, 0.2, 0.0),
+            'I-A-L527': (0.6, 0.0, 0.0),
+        }
+        for img,band in zip(imgs, bands):
+            _,scale = rgbscales[band]
+            rf,gf,bf = rgbvec[band]
+            if mnmx is None:
+                v = (img * scale + m) * I
+            else:
+                mn,mx = mnmx
+                v = ((img * scale + m) - mn) / (mx - mn)
+            if clip:
+                v = np.clip(v, 0, 1)
             if rf != 0.:
                 rgb[:,:,0] += rf*v
             if gf != 0.:
@@ -568,7 +627,7 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                 imgplane = ((img * scale + m) - mn) / (mx - mn)
             if clip:
                 imgplane = np.clip(imgplane, 0, 1)
-        rgb[:,:,plane] = imgplane
+            rgb[:,:,plane] = imgplane
     return rgb
 
 def narrowband_rgb(imgs, bands, allbands, scales=None, m=0.03, Q=20, mnmx=None):
@@ -627,12 +686,20 @@ def get_rgb(imgs, bands, allbands=['g','r','z'],
         (allbands == ['N673'])):
         return narrowband_rgb(imgs, bands, allbands)
 
+    if (len(bands) == 5 and
+        bands[0] == 'I-A-L427' and
+        bands[1] == 'I-A-L464' and
+        bands[2] == 'I-A-L484' and
+        bands[3] == 'I-A-L505' and
+        bands[4] == 'I-A-L527'):
+        return sdss_rgb(imgs, bands)
+
     if len(bands) == 5:
         return get_rgb(imgs[:3], bands[:3], resids=resids, mnmx=mnmx, arcsinh=arcsinh)
 
     if len(bands) == 3 and bands[0] == 'N501' and bands[1] == 'r' and bands[2] == 'N673':
         return sdss_rgb(imgs, bands, scales=dict(N673=(0,3.4)))
-    
+
     # (ignore arcsinh...)
     if resids:
         mnmx = (-0.1, 0.1)
@@ -765,7 +832,10 @@ def create_temp(**kwargs):
     return fn
 
 def imsave_jpeg(jpegfn, img, **kwargs):
-    '''Saves a image in JPEG format.  Some matplotlib installations
+    '''
+    Saves a image in JPEG format.
+
+    Some matplotlib installations
     don't support jpeg, so we optionally write to PNG and then convert
     to JPEG using the venerable netpbm tools.
 
@@ -796,10 +866,13 @@ class LegacySurveyData(object):
     '''
 
     def __init__(self, survey_dir=None, cache_dir=None, output_dir=None,
-                 allbands=['g','r','z']):
-        '''Create a LegacySurveyData object using data from the given
-        *survey_dir* directory, or from the $LEGACY_SURVEY_DIR environment
-        variable.
+                 allbands=None, coadd_bw=False, prime_cache=False):
+        '''
+        Create a LegacySurveyData object.
+
+        The LegacySurveyData object will look for data in the given
+        *survey_dir* directory, or from the $LEGACY_SURVEY_DIR
+        environment variable.
 
         Parameters
         ----------
@@ -814,15 +887,24 @@ class LegacySurveyData(object):
 
         output_dir : string
             Base directory for output files; default ".".
+
+        prime_cache: when creating a LegacySurveyImage object with get_image_object(), copy
+            any available files into cache_dir.
         '''
         from legacypipe.decam  import DecamImage
         from legacypipe.mosaic import MosaicImage
         from legacypipe.bok    import BokImage
         from legacypipe.ptf    import PtfImage
-        from legacypipe.cfht   import MegaPrimeImage
+        #from legacypipe.cfht   import MegaPrimeImage
+        from legacypipe.cfht   import MegaPrimeElixirImage
         from legacypipe.hsc    import HscImage
+        from legacypipe.panstarrs import PanStarrsImage
+        from legacypipe.wiro   import WiroImage
+        from legacypipe.suprime import SuprimeImage
         from collections import OrderedDict
 
+        if allbands is None:
+            allbands = ['g','r','z']
         if survey_dir is None:
             survey_dir = os.environ.get('LEGACY_SURVEY_DIR')
             if survey_dir is None:
@@ -832,6 +914,8 @@ class LegacySurveyData(object):
 
         self.survey_dir = survey_dir
         self.cache_dir = cache_dir
+        self.prime_cache = prime_cache
+        self.primed_files = []
 
         self.calib_dir = os.path.join(self.survey_dir, 'calib')
 
@@ -864,11 +948,16 @@ class LegacySurveyData(object):
             'mosaic3': MosaicImage,
             '90prime': BokImage,
             'ptf'    : PtfImage,
-            'megaprime': MegaPrimeImage,
+            #'megaprime': MegaPrimeImage,
+            'megaprime': MegaPrimeElixirImage,
             'hsc'    : HscImage,
+            'panstarrs' : PanStarrsImage,
+            'wiro'   : WiroImage,
+            'suprimecam': SuprimeImage,
             }
 
         self.allbands = allbands
+        self.coadd_bw = coadd_bw
 
         # Filename prefix for coadd files
         self.file_prefix = 'legacysurvey'
@@ -894,8 +983,8 @@ class LegacySurveyData(object):
         return sed_matched_filters(bands)
 
     def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s',
-                  camera=None, expnum=None, ccdname=None, tier=None,
-                  output=False, **kwargs):
+                  camera=None, expnum=None, ccdname=None, tier=None, img=None,
+                  output=False, use_cache=True, **kwargs):
         '''
         Returns the filename of a Legacy Survey file.
 
@@ -932,9 +1021,11 @@ class LegacySurveyData(object):
         def swap(fn):
             if output:
                 return fn
+            if not use_cache:
+                return fn
             return self.check_cache(fn)
         def swaplist(fns):
-            if output or self.cache_dir is None:
+            if output or (self.cache_dir is None) or not use_cache:
                 return fns
             return [self.check_cache(fn) for fn in fns]
 
@@ -976,6 +1067,15 @@ class LegacySurveyData(object):
         elif filetype == 'annotated-ccds':
             return swaplist(
                 glob(os.path.join(basedir, 'ccds-annotated-*.fits.gz')))
+
+        elif filetype == 'psf':
+            return swap(img.merged_psffn)
+        elif filetype == 'sky':
+            return swap(img.merged_skyfn)
+        elif filetype == 'psf-single':
+            return swap(img.psffn)
+        elif filetype == 'sky-single':
+            return swap(img.skyfn)
 
         elif filetype == 'tractor':
             return swap(os.path.join(basedir, 'tractor', brickpre,
@@ -1024,7 +1124,11 @@ class LegacySurveyData(object):
             return swap(os.path.join(basedir, 'metrics', brickpre,
                                      'blobs-%s.fits.gz' % (brick)))
 
-        elif filetype in ['maskbits']:
+        elif filetype in ['blobmask']:
+            return swap(os.path.join(basedir, 'metrics', brickpre,
+                                     'blobmask-%s.fits.gz' % (brick)))
+
+        elif filetype in ['maskbits', 'maskbits-light']:
             return swap(os.path.join(codir,
                                      '%s-%s-%s.fits.fz' % (sname, brick, filetype)))
 
@@ -1057,6 +1161,8 @@ class LegacySurveyData(object):
     def check_cache(self, fn):
         if self.cache_dir is None:
             return fn
+        if fn is None:
+            return fn
         cfn = fn.replace(self.survey_dir, self.cache_dir)
         #debug('checking for cache fn', cfn)
         if os.path.exists(cfn):
@@ -1068,16 +1174,18 @@ class LegacySurveyData(object):
     def get_compression_args(self, filetype, shape=None):
         comp = dict(# g: sigma ~ 0.002.  qz -1e-3: 6 MB, -1e-4: 10 MB
             image         = ('R', 'qz -1e-4'),
+            blobmodel     = ('R', 'qz -1e-4'),
             model         = ('R', 'qz -1e-4'),
             chi2          = ('R', 'qz -0.1'),
             invvar        = ('R', 'q0 16'),
             nexp          = ('H', None),
             outliers_mask = ('R', None),
             maskbits      = ('H', None),
+            maskbits_light = ('H', None),
             depth         = ('G', 'qz 0'),
             galdepth      = ('G', 'qz 0'),
             psfsize       = ('G', 'qz 0'),
-            ).get(filetype)
+            ).get(filetype.replace('-','_'))
         if comp is None:
             return None
         method, args = comp
@@ -1156,10 +1264,10 @@ class LegacySurveyData(object):
         Does the following on entry:
         - calls self.find_file() to determine which filename to write to
         - ensures the output directory exists
-        - appends a ".tmp" to the filename
+        - prepends a "tmp-" to the filename
 
         Does the following on exit:
-        - moves the ".tmp" to the final filename (to make it atomic)
+        - moves the "tmp-" to the final filename (to make it atomic)
         - computes the sha256sum
         '''
         class OutputFileContext(object):
@@ -1232,10 +1340,12 @@ class LegacySurveyData(object):
                     debug('Wrote', self.tmpfn)
                     del rawdata
                 else:
-                    f = open(self.tmpfn, 'rb')
+                    # Non-FITS file -- read the temp file and compute the checksum (hash)
                     if self.hashsum:
+                        f = open(self.tmpfn, 'rb')
                         sha.update(f.read())
-                    f.close()
+                        f.close()
+                        del f
                 if self.hashsum:
                     hashcode = sha.hexdigest()
                     del sha
@@ -1287,6 +1397,7 @@ class LegacySurveyData(object):
         d['bricks'] = None
         d['bricktree'] = None
         d['ccd_kdtrees'] = None
+        d['ccds_index'] = None
         return d
 
     def drop_cache(self):
@@ -1300,6 +1411,7 @@ class LegacySurveyData(object):
             from astrometry.libkd.spherematch import tree_free
             tree_free(self.bricktree)
         self.bricktree = None
+        self.ccds_index = None
 
     def get_calib_dir(self):
         return self.calib_dir
@@ -1448,7 +1560,7 @@ class LegacySurveyData(object):
     def filter_ccds_files(self, fns):
         '''
         When reading the list of CCDs, we find all files named
-        survey-ccds-\*.fits.gz, then filter that list using this function.
+        survey-ccds-*.fits.gz, then filter that list using this function.
         '''
         return fns
 
@@ -1573,7 +1685,7 @@ class LegacySurveyData(object):
             self.ccd_kdtrees.append((fn, kd))
         return self.ccd_kdtrees
 
-    def get_image_object(self, t, camera=None, **kwargs):
+    def get_image_object(self, t, camera=None, prime_cache=True, check_cache=True, **kwargs):
         '''
         Returns a DecamImage or similar object for one row of the CCDs table.
         '''
@@ -1582,7 +1694,46 @@ class LegacySurveyData(object):
             camera = t.camera
         imageType = self.image_class_for_camera(camera)
         # call Image subclass constructor
-        return imageType(self, t, **kwargs)
+        img = imageType(self, t, **kwargs)
+        if self.prime_cache and prime_cache:
+            self.prime_cache_for_image(img)
+        if check_cache:
+            img.check_for_cached_files(self)
+        return img
+
+    def prime_cache_for_image(self, img):
+        import shutil
+        fns = img.get_cacheable_filenames()
+        cacheable = img.get_cacheable_filename_variables()
+        for varname in cacheable:
+            fn = getattr(img, varname, None)
+            fns.append(fn)
+        for fn in fns:
+            if fn is None:
+                continue
+            if not os.path.exists(fn):
+                # source does not exist
+                continue
+            cfn = fn.replace(self.survey_dir, self.cache_dir)
+            if os.path.exists(cfn):
+                # destination already exists (check timestamps???)
+                continue
+            cdir = os.path.dirname(cfn)
+            info('Priming the cache: copying', fn, 'to', cfn)
+            trymakedirs(cdir)
+            ctmp = cfn + '.tmp'
+            shutil.copyfile(fn, ctmp)
+            os.rename(ctmp, cfn)
+            shutil.copystat(fn, cfn)
+            self.primed_files.append(cfn)
+
+    def delete_primed_cache_files(self):
+        for fn in self.primed_files:
+            try:
+                info('Removing primed-cache file', fn)
+                os.remove(fn)
+            except:
+                pass
 
     def get_approx_wcs(self, ccd):
         from astrometry.util.util import Tan
@@ -1594,7 +1745,8 @@ class LegacySurveyData(object):
 
     def tims_touching_wcs(self, targetwcs, mp, bands=None,
                           **kwargs):
-        '''Creates tractor.Image objects for CCDs touching the given
+        '''
+        Creates tractor.Image objects for CCDs touching the given
         *targetwcs* region.
 
         mp: multiprocessing object
@@ -1711,6 +1863,14 @@ class LegacySurveyData(object):
         ccds = self.cleanup_ccds_table(ccds)
         return ccds
 
+    def get_rgb(self, imgs, bands, coadd_bw=None, **kwargs):
+        rgb = get_rgb(imgs, bands, allbands=self.allbands, **kwargs)
+        kwa = {}
+        bw = self.coadd_bw if coadd_bw is None else coadd_bw
+        if bw and len(bands) == 1:
+            rgb = rgb.sum(axis=2)
+            kwa = dict(cmap='gray')
+        return rgb,kwa
 
 def run_calibs(X):
     im = X[0]
@@ -1743,8 +1903,8 @@ def read_psfex_conf(camera):
     dirname = resource_filename('legacypipe', 'data')
     fn = os.path.join(dirname, camera + '-special-psfex-conf.dat')
     if not os.path.exists(fn):
-        info('could not find special psfex configuration file for ' +
-             camera + ' not using per-image psfex configurations.')
+        debug('could not find special psfex configuration file for camera "' +
+             camera + '" - not using per-image psfex configurations.')
         return psfex_conf
     f = open(fn)
     for line in f.readlines():
