@@ -219,7 +219,8 @@ class MegaPrimeImage(LegacySurveyImage):
             # Estimate per-pixel noise via Blanton's 5-pixel MAD
             slice1 = (slice(0,-5,10),slice(0,-5,10))
             slice2 = (slice(5,None,10),slice(5,None,10))
-            mad = np.median(np.abs(img[slice1] - img[slice2]).ravel())
+            ok = (dq[slice1] == 0) * (dq[slice2] == 0)
+            mad = np.median(np.abs(img[slice1][ok] - img[slice2][ok]).ravel())
             sig1 = 1.4826 * mad / np.sqrt(2.)
             # self.sig1 must be in calibrated units
             #self.sig1 = sig1
@@ -321,6 +322,15 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             img,hdr = img
         dq = np.zeros(img.shape, np.int16)
         dq[img == 0] = DQ_BITS['badpix']
+        # There are also (small) values in the u-band images (-7e-12 eg)...
+        n = np.sum(img < 0)
+        print('Flagged', n, 'pixels in the DQ map with negative image values')
+        dq[img < 0] = DQ_BITS['badpix']
+        # Ugh there are ALSO small POSITIVE values around the u-band image edges (+7e-12)
+        n = np.sum((img > 0) * (img < 0.5))
+        print('Flagged', n, 'additional pixels in the DQ map with small positive image values')
+        dq[img < 0.5] = DQ_BITS['badpix']
+
         if header:
             dq = dq,hdr
         return dq

@@ -662,6 +662,11 @@ class LegacySurveyImage(object):
 
         self.fix_saturation(img, dq, invvar, primhdr, imghdr, slc)
 
+        # Zero out the inverse-variance (weight) where dq is flagged
+        n = np.sum(dq != 0)
+        info('Zeroing out', n, 'invvar pixels where dq != 0')
+        invvar[dq != 0] = 0.
+
         template_meta = None
         if pixels:
             template = self.get_sky_template(slc=slc, old_calibs_ok=old_calibs_ok)

@@ -2,6 +2,7 @@ import os
 import sys
 import numpy as np
 import fitsio
+from collections import Counter
 
 def main():
     from astrometry.util.fits import fits_table, merge_tables
@@ -93,7 +94,8 @@ def main():
         raise NothingToDoError('No CCDs touching brick')
     if 'ccd_cuts' in ccds.get_columns():
         ccds.cut(ccds.ccd_cuts == 0)
-        print(len(ccds), 'CCDs survive cuts')
+        print(len(ccds), 'CCDs survive cuts.')
+        print('CCD filters:', Counter(ccds.filter).most_common())
     if opt.bands:
         # Cut on bands to be used
         bands = opt.bands.split(',')
