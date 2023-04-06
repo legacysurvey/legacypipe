@@ -542,6 +542,7 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
         'I-A-L505': (0, 6. * rgb_stretch_factor),
         'I-A-L527': (0, 6. * rgb_stretch_factor),
     })
+
     # rgbscales = {'u': 1.5, #1.0,
     #              'g': 2.5,
     #              'r': 1.5,
@@ -630,7 +631,7 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
     return rgb
 
 def narrowband_rgb(imgs, bands, allbands, scales=None, m=0.03, Q=20, mnmx=None):
-    n419scale = 6.0
+    n419scale = 10.0
     n501scale = 6.0
     n673scale = 3.4
 
@@ -644,6 +645,13 @@ def narrowband_rgb(imgs, bands, allbands, scales=None, m=0.03, Q=20, mnmx=None):
         rgb = sdss_rgb(imgs, bands, scales=rgbscales, clip=False)
         rgb[:,:,2] = rgb[:,:,1]
         rgb[:,:,1] = rgb[:,:,0]/2 + rgb[:,:,2]/2
+    elif allbands == ['N419', 'N673']:
+        rgb = sdss_rgb(imgs, bands, scales=rgbscales, clip=False)
+        rgb[:,:,1] = rgb[:,:,0]/2 + rgb[:,:,2]/2
+    elif allbands == ['N419']:
+        rgb = sdss_rgb(imgs, bands, scales=rgbscales, clip=False)
+        rgb[:,:,0] = rgb[:,:,2]
+        rgb[:,:,1] = rgb[:,:,2]
     elif allbands == ['N501']:
         rgb = sdss_rgb(imgs, bands, scales=rgbscales, clip=False)
         rgb[:,:,0] = rgb[:,:,1]
@@ -674,8 +682,13 @@ def get_rgb(imgs, bands, allbands=['g','r','z'],
     allbands = list(allbands)
 
     # Yuck, special-cased ODIN narrow-band rgb schemes.
-    if ((allbands == ['N419', 'N501', 'N673']) or (allbands == ['N501', 'N673']) or
-        (allbands == ['N501']) or (allbands == ['N673'])):
+    if ((allbands == ['N419', 'N501', 'N673']) or
+        (allbands == ['N419', 'N501']) or
+        (allbands == ['N419', 'N673']) or
+        (allbands == ['N501', 'N673']) or
+        (allbands == ['N419']) or
+        (allbands == ['N501']) or
+        (allbands == ['N673'])):
         return narrowband_rgb(imgs, bands, allbands)
 
     if (len(bands) == 5 and
