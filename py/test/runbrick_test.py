@@ -150,8 +150,9 @@ def rbmain():
     assert(np.all(tim2.getImage() == 0.))
     tim4 = im.get_tractor_image(radecpoly=targetrd, invvar=False)
     u = np.unique(tim4.inverr)
-    assert(len(u) == 1)
-    u = u[0]
+    # inverr pixels can be zeroed out
+    assert((len(u) == 1) or (len(u) == 2))
+    u = u[-1]
     target = tim4.zpscale / tim4.sig1
     assert(np.abs(u / target - 1.) < 0.001)
     tim3 = im.get_tractor_image(radecpoly=targetrd, invvar=False, dq=False)
