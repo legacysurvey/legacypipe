@@ -481,6 +481,8 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
         print('Total of', len(SGA), 'sources before BRICK_PRIMARY cut')
         SGA.cut(SGA.brick_primary)
     print('Total of', len(SGA), 'sources')
+    if len(SGA) == 0:
+        return None
     I = np.array([i for i,ref_id in enumerate(SGA.ref_id) if ref_id in set(sga.ref_id)])
     SGA.cut(I)
     print('Found', len(SGA), 'desired SGA sources')

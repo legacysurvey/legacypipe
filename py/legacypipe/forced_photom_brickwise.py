@@ -256,7 +256,7 @@ def main():
 def calib_one_ccd(X):
     (i, N, survey,ccd) = X
     im = survey.get_image_object(ccd)
-    print('Checking calibs for CCD', i, 'of', N, ':', im)
+    print('Checking calibs for CCD', (i+1), 'of', N, ':', im)
     if survey.cache_dir is not None:
         im.check_for_cached_files(survey)
     im.run_calibs(splinesky=True, survey=survey,
@@ -265,7 +265,7 @@ def calib_one_ccd(X):
 def photom_one_ccd(X):
     i = X[0]
     N = X[1]
-    print('Forced photometry for CCD', i, 'of', N)
+    print('Forced photometry for CCD', (i+1), 'of', N)
     X = X[2:]
     return forced_photom_one_ccd(*X)
 
