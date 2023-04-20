@@ -477,9 +477,12 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
                 SGA.append(fits_table(fn, columns=columns, rows=I))
                 break
     SGA = merge_tables(SGA)
-    print('Total of', len(SGA), 'sources before BRICK_PRIMARY cut')
-    SGA.cut(SGA.brick_primary)
-    print('Total of', len(SGA), 'sources after BRICK_PRIMARY cut')
+    if 'brick_primary' in SGA.get_columns():
+        print('Total of', len(SGA), 'sources before BRICK_PRIMARY cut')
+        SGA.cut(SGA.brick_primary)
+    print('Total of', len(SGA), 'sources')
+    if len(SGA) == 0:
+        return None
     I = np.array([i for i,ref_id in enumerate(SGA.ref_id) if ref_id in set(sga.ref_id)])
     SGA.cut(I)
     print('Found', len(SGA), 'desired SGA sources')
@@ -501,7 +504,8 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     if survey.cache_dir is not None:
         im.check_for_cached_files(survey)
     if opt.do_calib:
-        im.run_calibs(splinesky=True)
+        im.run_calibs(splinesky=True, survey=survey,
+                      halos=True, subtract_largegalaxies=True)
     old_calibs_ok=True
 
     tim = im.get_tractor_image(slc=zoomslice,

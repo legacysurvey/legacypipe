@@ -4,6 +4,8 @@ import numpy as np
 import fitsio
 from collections import Counter
 
+from legacypipe.forced_photom import forced_photom_one_ccd
+
 def main():
     from astrometry.util.fits import fits_table, merge_tables
     from legacypipe.survey import LegacySurveyData, wcs_for_brick
@@ -24,8 +26,10 @@ def main():
     #                  help='Do aperture photometry?')
     #parser.add_argument('--no-forced', dest='forced', action='store_false',
     #                  help='Do NOT do regular forced photometry?  Implies --apphot')
-    #parser.add_argument('--derivs', action='store_true',
-    #                    help='Include RA,Dec derivatives in forced photometry?')
+    parser.add_argument('--derivs', action='store_true',
+                        help='Include RA,Dec derivatives in forced photometry?')
+    parser.add_argument('--do-calib', default=False, action='store_true',
+                        help='Run calibs if necessary?')
 
     parser.add_argument('--bands', default=None,
                         help='Comma-separated list of bands to forced-photometer.')
@@ -109,9 +113,7 @@ def main():
     # args for forced_photom_one_ccd:
     opt.apphot = True
     opt.forced = True
-    opt.derivs = False
     opt.agn = False
-    opt.do_calib = False
     opt.constant_invvar = False
     opt.hybrid_psf = True
     opt.normalize_psf = True
@@ -125,19 +127,31 @@ def main():
     if ps is not None:
         opt.plot_wcs = targetwcs
 
-    args = []
-    for ccd in ccds:
-        args.append((survey, catsurvey, None, None, ccd, opt, None, radecpoly,
-                     [brick], ps))
-
-    from legacypipe.forced_photom import bounce_one_ccd
     if opt.threads:
         from astrometry.util.multiproc import multiproc
         mp = multiproc(opt.threads)
-        FF = mp.map(bounce_one_ccd, args)
+
+    N = len(ccds)
+    if opt.do_calib:
+        args = []
+        for i,ccd in enumerate(ccds):
+            args.append((i, N, survey, ccd))
+        if opt.threads:
+            mp.map(calib_one_ccd, args)
+        else:
+            map(calib_one_ccd, args)
+    opt.do_calib = False
+
+    args = []
+    for i,ccd in enumerate(ccds):
+        args.append((i, N, survey, catsurvey, None, None, ccd, opt, None, radecpoly,
+                     [brick], ps))
+
+    if opt.threads:
+        FF = mp.map(photom_one_ccd, args)
         del mp
     else:
-        FF = map(bounce_one_ccd, args)
+        FF = map(photom_one_ccd, args)
 
     FF = [F for F in FF if F is not None]
     if len(FF) == 0:
@@ -238,6 +252,22 @@ def main():
     T.writeto(outfn, units=get_units_for_columns(columns, bands=tbands, extras=eunits),
               primhdr=tprimhdr)
     print('Wrote', outfn)
+
+def calib_one_ccd(X):
+    (i, N, survey,ccd) = X
+    im = survey.get_image_object(ccd)
+    print('Checking calibs for CCD', (i+1), 'of', N, ':', im)
+    if survey.cache_dir is not None:
+        im.check_for_cached_files(survey)
+    im.run_calibs(splinesky=True, survey=survey,
+                  halos=True, subtract_largegalaxies=True)
+
+def photom_one_ccd(X):
+    i = X[0]
+    N = X[1]
+    print('Forced photometry for CCD', (i+1), 'of', N)
+    X = X[2:]
+    return forced_photom_one_ccd(*X)
 
 if __name__ == '__main__':
     main()
