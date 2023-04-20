@@ -913,7 +913,7 @@ class LegacySurveyData(object):
         from legacypipe.wiro   import WiroImage
         from legacypipe.suprime import SuprimeImage
         from collections import OrderedDict
-        from legcaypipe.bits import MASKBITS, MASKBITS_DESCRIPTIONS
+        from legacypipe.bits import MASKBITS, MASKBITS_DESCRIPTIONS
 
         if allbands is None:
             allbands = ['g','r','z']
@@ -975,7 +975,7 @@ class LegacySurveyData(object):
         self.file_prefix = 'legacysurvey'
 
         self.maskbits = MASKBITS.copy()
-        self.maskbits = MASKBITS_DESCRIPTIONS.copy()
+        self.maskbits_descriptions = MASKBITS_DESCRIPTIONS.copy()
 
     def __str__(self):
         return ('%s: dir %s, out %s' %

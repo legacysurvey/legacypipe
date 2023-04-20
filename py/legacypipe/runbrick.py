@@ -2705,6 +2705,7 @@ def stage_wise_forced(
     # Drop sources within the CLUSTER mask from forced photometry.
     Icluster = None
     if maskbits is not None:
+        MASKBITS = survey.get_maskbits()
         incluster = (maskbits & MASKBITS['CLUSTER'] > 0)
         if np.any(incluster):
             info('Checking for sources inside CLUSTER mask')
@@ -3055,6 +3056,7 @@ def stage_writecat(
 
     if wise_mask_maps is not None:
         # Add the WISE masks in!
+        MASKBITS = survey.get_maskbits()
         maskbits |= MASKBITS['WISEM1'] * (wise_mask_maps[0] != 0)
         maskbits |= MASKBITS['WISEM2'] * (wise_mask_maps[1] != 0)
 
