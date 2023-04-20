@@ -38,7 +38,7 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.ttime import Time
 
 from legacypipe.survey import imsave_jpeg
-from legacypipe.bits import DQ_BITS, MASKBITS, FITBITS
+from legacypipe.bits import DQ_BITS, FITBITS
 from legacypipe.utils import RunbrickError, NothingToDoError, find_unique_pixels
 from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 from legacypipe.fit_on_coadds import stage_fit_on_coadds
@@ -712,6 +712,10 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     if not minimal_coadds:
         # interim maskbits
         from legacypipe.bits import IN_BLOB
+        from legacypipe.survey import clean_band_name
+
+        MASKBITS = survey.get_maskbits()
+
         refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
         # Construct a mask bits map
         maskbits = np.zeros((H,W), np.int32)
@@ -728,17 +732,19 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
             maskbits |= MASKBITS['GALAXY']  * ((refmap & IN_BLOB['GALAXY'] ) > 0)
             maskbits |= MASKBITS['CLUSTER'] * ((refmap & IN_BLOB['CLUSTER']) > 0)
             del refmap
+
+        cleanbands = [clean_band_name(b) for b in bands]
         # SATUR
         if saturated_pix is not None:
-            for b, sat in zip(bands, saturated_pix):
-                bitname = 'SATUR_' + b.upper()
+            for b, sat in zip(cleanbands, saturated_pix):
+                bitname = 'SATUR_' + b
                 if not bitname in MASKBITS:
                     warnings.warn('Skipping SATUR mask for band %s' % b)
                     continue
                 maskbits |= (MASKBITS[bitname] * sat).astype(np.int32)
         # ALLMASK_{g,r,z}
-        for b,allmask in zip(bands, C.allmasks):
-            bitname = 'ALLMASK_' + b.upper()
+        for b,allmask in zip(cleanbands, C.allmasks):
+            bitname = 'ALLMASK_' + b
             if not bitname in MASKBITS:
                 warnings.warn('Skipping ALLMASK for band %s' % b)
                 continue
@@ -2124,6 +2130,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     from functools import reduce
     from legacypipe.survey import apertures_arcsec
     from legacypipe.bits import IN_BLOB
+    from legacypipe.survey import clean_band_name
+
     record_event and record_event('stage_coadds: starting')
     _add_stage_version(version_header, 'COAD', 'coadds')
     tlast = Time()
@@ -2341,6 +2349,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     del C.coresids
 
     # Construct the maskbits map
+    MASKBITS = survey.get_maskbits()
     maskbits = np.zeros((H,W), np.int32)
     if not custom_brick:
         # not BRICK_PRIMARY
@@ -2355,16 +2364,17 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         maskbits |= MASKBITS['CLUSTER'] * ((refmap & IN_BLOB['CLUSTER']) > 0)
         del refmap
 
+    cleanbands = [clean_band_name(b) for b in bands]
     # SATUR
     if saturated_pix is not None:
-        for b, sat in zip(bands, saturated_pix):
-            key = 'SATUR_' + b.upper()
+        for b, sat in zip(cleanbands, saturated_pix):
+            key = 'SATUR_' + b
             if key in MASKBITS:
                 maskbits |= (MASKBITS[key] * sat).astype(np.int32)
 
     # ALLMASK_{g,r,z}
-    for b,allmask in zip(bands, C.allmasks):
-        key = 'ALLMASK_' + b.upper()
+    for b,allmask in zip(cleanbands, C.allmasks):
+        key = 'ALLMASK_' + b
         if key in MASKBITS:
             maskbits |= (MASKBITS[key] * (allmask > 0))
 
@@ -2377,24 +2387,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         maskbits |= MASKBITS['SUB_BLOB'] * sub_blob_mask.astype(bool)
 
     # Add the maskbits header cards to version_header
-    mbits = [
-        ('NPRIMARY',  'NPRIM', 'not primary brick area'),
-        ('BRIGHT',    'BRIGH', 'bright star nearby'),
-        ('SATUR_G',   'SAT_G', 'g band saturated'),
-        ('SATUR_R',   'SAT_R', 'r band saturated'),
-        ('SATUR_Z',   'SAT_Z', 'z band saturated'),
-        ('ALLMASK_G', 'ALL_G', 'any ALLMASK_G bit set'),
-        ('ALLMASK_R', 'ALL_R', 'any ALLMASK_R bit set'),
-        ('ALLMASK_Z', 'ALL_Z', 'any ALLMASK_Z bit set'),
-        ('WISEM1',    'WISE1', 'WISE W1 (all masks)'),
-        ('WISEM2',    'WISE2', 'WISE W2 (all masks)'),
-        ('BAILOUT',   'BAIL',  'Bailed out processing'),
-        ('MEDIUM',    'MED',   'medium-bright star'),
-        ('GALAXY',    'GAL',   'SGA large galaxy'),
-        ('CLUSTER',   'CLUST', 'Globular cluster'),
-        ('SATUR_I',   'SAT_I', 'i band saturated'),
-        ('ALLMASK_I', 'ALL_I', 'any ALLMASK_I bit set'),
-        ('SUB_BLOB',  'SUBBL', 'large blobs broken up'),]
+    mbits = survey.get_maskbits_descriptions()
     version_header.add_record(dict(name='COMMENT', value='maskbits bits:'))
     _add_bit_description(version_header, MASKBITS, mbits,
                          'MB_%s', 'MBIT_%i', 'maskbits')

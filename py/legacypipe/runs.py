@@ -31,7 +31,14 @@ class M33SurveyData(DecamSurvey):
 
 class OdinData(LegacySurveyData):
     #def filter_ccd_kd_files(self, fns):
-    #    return [fn for fn in fns if ('90prime' in fn) or ('mosaic' in fn)]
+    #    return [fn for fn in fns if ('odin' in fn)]
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        print('OdinData: kwargs', kwargs)
+        self.update_maskbits_bands(['N419', 'N501', 'N673'])
+        print('Maskbits:', self.get_maskbits())
+        print('Maskbits descriptions:', self.get_maskbits_descriptions())
+
     def filter_ccds_files(self, fns):
         return [fn for fn in fns if ('odin' in fn)]
     def filter_annotated_ccds_files(self, fns):

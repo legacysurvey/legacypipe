@@ -70,7 +70,12 @@ FITBITS = dict(
 OUTLIER_POS = 1
 OUTLIER_NEG = 2
 
-# Bits in the "maskbits" data product
+# Bits in the "maskbits" data product.
+# NOTE, however, that a LegacySurveyData may override this
+# (eg, to add more bands for ALLMASK_); the most reliable approach
+# is to read the FITS headers to find the bit values -- eg
+# MB_SAT_G=                    4 / maskbits: g band saturated
+# MBIT_2  = 'SATUR_G '           / maskbits bit 2 (0x4): g band saturated
 MASKBITS = dict(
     NPRIMARY   = 0x1,   # not PRIMARY
     BRIGHT     = 0x2,
@@ -99,3 +104,22 @@ IN_BLOB = dict(
     GALAXY  = 0x8,   # large SGA galaxy
 )
 
+MASKBITS_DESCRIPTIONS = [
+        ('NPRIMARY',  'NPRIM', 'not primary brick area'),
+        ('BRIGHT',    'BRIGH', 'bright star nearby'),
+        ('SATUR_G',   'SAT_G', 'g band saturated'),
+        ('SATUR_R',   'SAT_R', 'r band saturated'),
+        ('SATUR_Z',   'SAT_Z', 'z band saturated'),
+        ('ALLMASK_G', 'ALL_G', 'any ALLMASK_G bit set'),
+        ('ALLMASK_R', 'ALL_R', 'any ALLMASK_R bit set'),
+        ('ALLMASK_Z', 'ALL_Z', 'any ALLMASK_Z bit set'),
+        ('WISEM1',    'WISE1', 'WISE W1 (all masks)'),
+        ('WISEM2',    'WISE2', 'WISE W2 (all masks)'),
+        ('BAILOUT',   'BAIL',  'Bailed out processing'),
+        ('MEDIUM',    'MED',   'medium-bright star'),
+        ('GALAXY',    'GAL',   'SGA large galaxy'),
+        ('CLUSTER',   'CLUST', 'Globular cluster'),
+        ('SATUR_I',   'SAT_I', 'i band saturated'),
+        ('ALLMASK_I', 'ALL_I', 'any ALLMASK_I bit set'),
+        ('SUB_BLOB',  'SUBBL', 'large blobs broken up'),
+]

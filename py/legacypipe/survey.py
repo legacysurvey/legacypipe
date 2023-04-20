@@ -859,6 +859,12 @@ def imsave_jpeg(jpegfn, img, **kwargs):
         print(cmd, '->', rtn)
         os.unlink(tmpfn)
 
+def clean_band_name(band):
+    '''
+    Converts a band name into upper case that is clean to use in a FITS header.
+    '''
+    return band.upper().replace('-','_')
+
 class LegacySurveyData(object):
     '''
     A class describing the contents of a LEGACY_SURVEY_DIR directory --
@@ -907,6 +913,7 @@ class LegacySurveyData(object):
         from legacypipe.wiro   import WiroImage
         from legacypipe.suprime import SuprimeImage
         from collections import OrderedDict
+        from legcaypipe.bits import MASKBITS, MASKBITS_DESCRIPTIONS
 
         if allbands is None:
             allbands = ['g','r','z']
@@ -967,9 +974,77 @@ class LegacySurveyData(object):
         # Filename prefix for coadd files
         self.file_prefix = 'legacysurvey'
 
+        self.maskbits = MASKBITS.copy()
+        self.maskbits = MASKBITS_DESCRIPTIONS.copy()
+
     def __str__(self):
         return ('%s: dir %s, out %s' %
                 (type(self).__name__, self.survey_dir, self.output_dir))
+
+    def get_maskbits(self):
+        return self.maskbits
+
+    def get_maskbits_descriptions(self):
+        return self.maskbits_descriptions
+
+    def update_maskbits_bands(self, bands):
+        '''
+        Go through self.maskbits and self.maskbits_descriptions,
+        updating the current bands (default GRZI) that have SATUR_ and
+        ALLMASK_ entries.  Reuse these same bits in order.
+
+        This method exists for the convenience of subclassers, eg in
+        runs.py.
+        '''
+        oldbits_satur = []
+        oldbits_allmask = []
+        # I want to keep the bit ordering, so search by bit rather
+        # than by string!
+        inv_maskbits = dict([(bit,name) for name,bit in self.maskbits.items()])
+        maxbit = 0
+        for bit in range(32):
+            bitval = 1 << bit
+            name = inv_maskbits.get(bitval)
+            if name is None:
+                continue
+            maxbit = bitval
+            if name.startswith('SATUR_'):
+                oldbits_satur.append(bitval)
+                del self.maskbits[name]
+            elif name.startswith('ALLMASK_'):
+                oldbits_allmask.append(bitval)
+                del self.maskbits[name]
+
+        self.maskbits_descriptions = [(a,b,c) for a,b,c in self.maskbits_descriptions
+                                      if not (a.startswith('SATUR_') or a.startswith('ALLMASK_'))]
+        # Plug in new bands!
+        nextbit = maxbit << 1
+        for band in bands:
+            bandname = clean_band_name(band)
+            # SATUR_
+            if len(oldbits_satur):
+                bitval = oldbits_satur.pop(index=0)
+            else:
+                bitval = nextbit
+                nextbit <<= 1
+            self.maskbits['SATUR_' + bandname] = bitval
+            # ALLMASK_
+            if len(oldbits_allmask):
+                bitval = oldbits_allmask.pop(index=0)
+            else:
+                bitval = nextbit
+                nextbit <<= 1
+            self.maskbits['ALLMASK_' + bandname] = bitval
+            # Descriptions
+            self.maskbits_descriptions.extend([
+                ('SATUR_'   + bandname, 'SAT_' + bandname, band + ' band saturated'),
+                ('ALLMASK_' + bandname, 'ALL_' + bandname, 'any ALLMASK_' + bandname + ' bit set'),
+                ])
+
+        # Remove any old bands that weren't over-ridden
+        for bit in oldbits_satur + oldbits_allmask:
+            name = inv_maskbits.get(bit)
+            del self.maskbits[name]
 
     def get_default_release(self):
         return None
