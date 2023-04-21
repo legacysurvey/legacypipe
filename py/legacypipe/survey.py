@@ -1023,14 +1023,14 @@ class LegacySurveyData(object):
             bandname = clean_band_name(band)
             # SATUR_
             if len(oldbits_satur):
-                bitval = oldbits_satur.pop(index=0)
+                bitval = oldbits_satur.pop(0)
             else:
                 bitval = nextbit
                 nextbit <<= 1
             self.maskbits['SATUR_' + bandname] = bitval
             # ALLMASK_
             if len(oldbits_allmask):
-                bitval = oldbits_allmask.pop(index=0)
+                bitval = oldbits_allmask.pop(0)
             else:
                 bitval = nextbit
                 nextbit <<= 1
@@ -1040,11 +1040,6 @@ class LegacySurveyData(object):
                 ('SATUR_'   + bandname, 'SAT_' + bandname, band + ' band saturated'),
                 ('ALLMASK_' + bandname, 'ALL_' + bandname, 'any ALLMASK_' + bandname + ' bit set'),
                 ])
-
-        # Remove any old bands that weren't over-ridden
-        for bit in oldbits_satur + oldbits_allmask:
-            name = inv_maskbits.get(bit)
-            del self.maskbits[name]
 
     def get_default_release(self):
         return None
