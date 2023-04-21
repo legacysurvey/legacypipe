@@ -749,8 +749,15 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                 warnings.warn('Skipping ALLMASK for band %s' % b)
                 continue
             maskbits |= (MASKBITS[bitname] * (allmask > 0))
-        # omitting maskbits header cards, bailout, & WISE
+
+        # omitting WISE, BAILOUT, SUB_BLOB
+
+        # Add the maskbits header cards to version_header
         hdr = copy_header_with_wcs(version_header, targetwcs)
+        mbits = survey.get_maskbits_descriptions()
+        hdr.add_record(dict(name='COMMENT', value='maskbits bits:'))
+        _add_bit_description(hdr, MASKBITS, mbits,
+                             'MB_%s', 'MBIT_%i', 'maskbits')
         with survey.write_output('maskbits', brick=brickname, shape=maskbits.shape) as out:
             out.fits.write(maskbits, header=hdr, extname='MASKBITS')
 
