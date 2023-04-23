@@ -23,6 +23,8 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
+galex_pixscale = 1.5
+
 def galex_psf(band, galex_dir):
     band2file = {
         'f': os.path.join(galex_dir, 'PSFfuv.fits'),
@@ -127,10 +129,10 @@ def stage_galex_forced(
     # Initialize coadds even if we don't have any overlapping tiles -- we'll write zero images.
     # Create the WCS into which we'll resample the tiles.
     # Same center as "targetwcs" but bigger pixel scale.
-    gpixscale = 1.5
     gra  = np.array([src.getPosition().ra  for src in cat])
     gdec = np.array([src.getPosition().dec for src in cat])
     rc,dc = targetwcs.radec_center()
+    gpixscale = galex_pixscale
     ww = int(W * pixscale / gpixscale)
     hh = int(H * pixscale / gpixscale)
     gcoadds = GalexCoadd(rc, dc, ww, hh, gpixscale)
@@ -226,40 +228,78 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
     gband = 'galex'
     phot = fits_table()
     tims = []
+    # Find the flux in the pixel nearest to the center of each source,
+    # weighted-averaging over tiles.
+    central_flux_acc = np.zeros(len(cat), np.float32)
+    central_flux_wt  = np.zeros(len(cat), np.float32)
+    ra  = np.array([src.getPosition().ra  for src in cat])
+    dec = np.array([src.getPosition().dec for src in cat])
+
     for tile in tiles:
         info('Reading GALEX tile', tile.visitname.strip(), 'band', band)
-
         tim = galex_tractor_image(tile, band, galex_dir, roiradecbox, gband)
         if tim is None:
             debug('Actually, no overlap with tile', tile.tilename)
             continue
 
-        # if plots:
-        #     sig1 = tim.sig1
-        #     plt.clf()
-        #     plt.imshow(tim.getImage(), interpolation='nearest', origin='lower',
-        #                cmap='gray', vmin=-3 * sig1, vmax=10 * sig1)
-        #     plt.colorbar()
-        #     tag = '%s W%i' % (tile.tilename, band)
-        #     plt.title('%s: tim data' % tag)
-        #     ps.savefig()
-
         if pixelized_psf:
             psfimg = galex_psf(band, galex_dir)
             tim.psf = PixelizedPSF(psfimg)
-        # if hasattr(tim, 'mjdmin') and hasattr(tim, 'mjdmax'):
-        #     mjd[I] = (tim.mjdmin + tim.mjdmax) / 2.
-        # # PSF norm for depth
-        # psf = tim.getPsf()
-        # h,w = tim.shape
-        # patch = psf.getPointSourcePatch(h//2, w//2).patch
-        # psfnorm = np.sqrt(np.sum(patch**2))
-        # # To handle zero-depth, we return 1/nanomaggies^2 units rather than mags.
-        # psfdepth = 1. / (tim.sig1 / psfnorm)**2
-        # phot.get(wband + '_psfdepth')[I] = psfdepth
 
         tim.tile = tile
         tims.append(tim)
+
+        # Copied from unwise.py...
+        th,tw = tim.shape
+        wcs = tim.wcs.wcs
+        _,x,y = wcs.radec2pixelxy(ra, dec)
+        x = np.round(x - 1.).astype(int)
+        y = np.round(y - 1.).astype(int)
+        good = (x >= 0) * (x < tw) * (y >= 0) * (y < th)
+        I, = np.nonzero(good)
+        iv = tim.getInvvar()[y[I], x[I]]
+        central_flux_acc[I] += tim.getImage()[y[I], x[I]] * iv
+        central_flux_wt [I] += iv
+        del x,y,good,I
+
+    central_flux = central_flux_acc / np.maximum(central_flux_wt, 1e-16)
+    del central_flux_acc, central_flux_wt
+    info('Central fluxes:', np.sum(central_flux != 0), 'of', len(cat), 'are non-zero')
+    info('50, 75, 90, 95, 97, 98, 99, 100th percentile central fluxes for band', band, ':',
+         np.percentile(central_flux, [50, 75, 90, 95, 97, 98, 99, 100]))
+
+    # Set pixelized PSF sizes depending on central fluxes.
+    radius_small = 15
+    radius_medium = 30
+    radius_large = 100
+    # Central fluxes to use medium/large PSF sizes, for n=NUV and f=FUV.
+    flux_medium = dict(n=0.1,  f=0.1)  [band]
+    flux_large  = dict(n=1.0,  f=1.0) [band]
+
+    nlarge = nmedium = nsmall = 0
+    for src,cflux in zip(cat, central_flux):
+        from tractor import PointSource, Tractor, ExpGalaxy, DevGalaxy
+        from tractor.sersic import SersicGalaxy
+
+        R = radius_small
+        if cflux > flux_large:
+            R = radius_large
+            nlarge += 1
+        elif cflux > flux_medium:
+            R = radius_medium
+            nmedium += 1
+        else:
+            nsmall += 1
+
+        if isinstance(src, PointSource):
+            src.fixedRadius = R
+        else:
+            # Yuck!
+            galrad = 0
+            if isinstance(src, (ExpGalaxy, DevGalaxy, SersicGalaxy)):
+                galrad = src.shape.re
+            src.halfsize = int(np.hypot(R, galrad * 5 / galex_pixscale))
+    info('Set GALEX pixelized PSF sizes: %i small, %i medium, %i large' % (nsmall, nmedium, nlarge))
 
     tractor = Tractor(tims, cat)
     if galex_ceres:
