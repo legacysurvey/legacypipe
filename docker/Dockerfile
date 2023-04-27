@@ -1,4 +1,4 @@
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 RUN apt -y update && apt install -y apt-utils
 
@@ -29,9 +29,8 @@ RUN DEBIAN_FRONTEND=noninteractive \
     libceres-dev \
     postgresql-common \
     libpq-dev \
-    python3.8 \
-    python3.8-dev \
-    python3.8-tk \
+    python3.10 \
+    python3.10-dev \
     python3-pip \
     source-extractor \
     psfex \
@@ -55,31 +54,25 @@ RUN for x in \
     ; do pip3 install $x; done \
     && rm -Rf /root/.cache/pip
 
-RUN ln -s /usr/bin/python3.8-config /usr/local/bin/python3-config
+RUN ln -s /usr/bin/python3.10-config /usr/local/bin/python3-config
 # python = python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
+ENV PYTHON=python3
+ENV PYTHON_CONFIG=python3-config
+ENV PYTHON_SCRIPT="/usr/bin/env python3"
 
 RUN mkdir -p /src
 WORKDIR /src
-ENV PYTHON=python3
 
 # Astrometry.net
-RUN export PYTHON_SCRIPT="/usr/bin/env python3" \
-    && git clone http://github.com/dstndstn/astrometry.net.git astrometry \
+RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
-    && make \
-    && make py \
-    && make extra \
-    && make install INSTALL_DIR=/usr/local \
-    && make clean
+    && pip install -v . && echo 3
 
 # The Tractor
-RUN git clone http://github.com/dstndstn/tractor.git tractor \
+RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && export PYTHON_CONFIG=python3-config \
-    && python3 setup-cython.py --with-ceres install --home /usr/local \
-    && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
-    && rm -R $(find . -name "*.o" -o -name "*.so")
+    && pip install --install-option="--with-ceres" --install-option="--with-cython" -v .
 
 # unwise_psf
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \
@@ -91,9 +84,9 @@ RUN git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
     && python3 setup.py install
 
 # Legacypipe
-RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe
+RUN git clone https://github.com/legacysurvey/legacypipe.git legacypipe
 
-ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
+ENV PYTHONPATH /src/unwise_psf/py:/src/legacypipe/py
 
 # ?
 # RUN mkdir /homedir && chmod 777 /homedir
@@ -114,13 +107,15 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
 
 RUN python -O -m compileall \
     -x lib2to3 \
-    /usr/local/lib/python \
-    /usr/lib/python3.8 \
+    /usr/local/lib/python3.10/dist-packages \
+    /usr/lib/python3.10 \
     /src/unwise_psf/py \
-    /src/legacypipe/py/{legacypipe,legacyzpts} && \
+    /src/legacypipe/py/legacypipe \
+    /src/legacypipe/py/legacyzpts && \
     python    -m compileall \
     -x lib2to3 \
-    /usr/local/lib/python \
-    /usr/lib/python3.8 \
+    /usr/local/lib/python3.10/dist-packages \
+    /usr/lib/python3.10 \
     /src/unwise_psf/py \
-    /src/legacypipe/py/{legacypipe,legacyzpts}
+    /src/legacypipe/py/legacypipe \
+    /src/legacypipe/py/legacyzpts
