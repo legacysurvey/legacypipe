@@ -71,15 +71,14 @@ RUN ln -s /usr/include /usr/local/include/netpbm
 RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
     && git checkout 0.94 \
-    && make install
-    #    && pip install -v .
+    && make install INSTALL_DIR=/usr/local
 
 #FROM working
 
 # The Tractor
 RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && git checkout dr10.3 \
+    && git checkout dr10.4 \
     && pip install --install-option="--with-ceres" --install-option="--with-cython" -v .
 
 # unwise_psf
@@ -94,10 +93,10 @@ RUN git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
 
 # Legacypipe
 RUN git clone https://github.com/legacysurvey/legacypipe.git legacypipe \
-    && echo 1
+    && echo 2
 
-ENV PYTHONPATH /src/unwise_psf/py:/src/legacypipe/py:/usr/local/astrometry/lib/python
-ENV PATH ${PATH}:/usr/local/astrometry/bin
+ENV PYTHONPATH /src/unwise_psf/py:/src/legacypipe/py:/usr/local/lib/python
+#ENV PATH ${PATH}:/usr/local/astrometry/bin
 
 # ?
 # RUN mkdir /homedir && chmod 777 /homedir
@@ -120,7 +119,7 @@ RUN python -O -m compileall \
     -x lib2to3 \
     /usr/local/lib/python3.10/dist-packages \
     /usr/lib/python3.10 \
-    /usr/local/astrometry/lib/python \
+    /usr/local/lib/python \
     /src/unwise_psf/py \
     /src/legacypipe/py/legacypipe \
     /src/legacypipe/py/legacyzpts && \
@@ -128,7 +127,7 @@ RUN python -O -m compileall \
     -x lib2to3 \
     /usr/local/lib/python3.10/dist-packages \
     /usr/lib/python3.10 \
-    /usr/local/astrometry/lib/python \
+    /usr/local/lib/python \
     /src/unwise_psf/py \
     /src/legacypipe/py/legacypipe \
     /src/legacypipe/py/legacyzpts

@@ -43,13 +43,7 @@ if 'Mock' in str(type(EllipseWithPriors)):
 def mjd_to_year(mjd):
     # mjd_to_year(57205.875) -> 2015.5
     from tractor.tractortime import TAITime
-    ## NOTE, TAITime.mjd2k changed from a class variable to a class
-    ## method in a recent Tractor version.  Temporarily try both.
-    try:
-        mjd2k = TAITime.mjd2k()
-    except:
-        mjd2k = float(TAITime.mjd2k)
-    return (mjd - mjd2k) / TAITime.daysperyear + 2000.
+    return (mjd - TAITime.mjd2k) / TAITime.daysperyear + 2000.
 
 def tai_to_mjd(tai):
     return tai / (24. * 3600.)
