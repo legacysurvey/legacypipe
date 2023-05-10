@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:22.04 as working
 
 RUN apt -y update && apt install -y apt-utils
 
@@ -7,6 +7,7 @@ RUN DEBIAN_FRONTEND=noninteractive \
     gcc \
     g++ \
     make \
+    patch \
     git \
     file \
     pkg-config \
@@ -64,19 +65,27 @@ ENV PYTHON_SCRIPT="/usr/bin/env python3"
 RUN mkdir -p /src
 WORKDIR /src
 
+RUN ln -s /usr/include /usr/local/include/netpbm
+
 # Astrometry.net
 RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
-    && pip install -v . && echo 3
+    && git checkout 0.94 \
+    && make install
+    #    && pip install -v .
+
+#FROM working
 
 # The Tractor
 RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
+    && git checkout dr10.3 \
     && pip install --install-option="--with-ceres" --install-option="--with-cython" -v .
 
 # unwise_psf
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \
-    && cd unwise_psf && git checkout dr9.3
+    && cd unwise_psf \
+    && git checkout dr10.0
 
 # QDO
 RUN git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
@@ -84,9 +93,11 @@ RUN git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
     && python3 setup.py install
 
 # Legacypipe
-RUN git clone https://github.com/legacysurvey/legacypipe.git legacypipe
+RUN git clone https://github.com/legacysurvey/legacypipe.git legacypipe \
+    && echo 1
 
-ENV PYTHONPATH /src/unwise_psf/py:/src/legacypipe/py
+ENV PYTHONPATH /src/unwise_psf/py:/src/legacypipe/py:/usr/local/astrometry/lib/python
+ENV PATH ${PATH}:/usr/local/astrometry/bin
 
 # ?
 # RUN mkdir /homedir && chmod 777 /homedir
@@ -109,6 +120,7 @@ RUN python -O -m compileall \
     -x lib2to3 \
     /usr/local/lib/python3.10/dist-packages \
     /usr/lib/python3.10 \
+    /usr/local/astrometry/lib/python \
     /src/unwise_psf/py \
     /src/legacypipe/py/legacypipe \
     /src/legacypipe/py/legacyzpts && \
@@ -116,6 +128,7 @@ RUN python -O -m compileall \
     -x lib2to3 \
     /usr/local/lib/python3.10/dist-packages \
     /usr/lib/python3.10 \
+    /usr/local/astrometry/lib/python \
     /src/unwise_psf/py \
     /src/legacypipe/py/legacypipe \
     /src/legacypipe/py/legacyzpts
