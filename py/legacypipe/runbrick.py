@@ -2508,7 +2508,7 @@ def _add_bit_description(header, BITS, bits, bnpat, bitpat, bitmapname):
                  comment='%s: %s' % (bitmapname, comm)))
     revmap = dict([(bit,name) for name,bit in BITS.items()])
     nicemap = dict([(k,c) for k,short,c in bits])
-    for bit in range(16):
+    for bit in range(32):
         bitval = 1<<bit
         if not bitval in revmap:
             continue
