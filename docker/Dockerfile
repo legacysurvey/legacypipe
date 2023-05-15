@@ -1,9 +1,9 @@
 FROM ubuntu:22.04 as working
 
-RUN apt -y update && apt install -y apt-utils
+ENV DEBIAN_FRONTEND noninteractive
 
-RUN DEBIAN_FRONTEND=noninteractive \
-    apt install -y --no-install-recommends \
+RUN apt -y update && apt install -y apt-utils \
+ && apt install -y --no-install-recommends \
     gcc \
     g++ \
     make \
@@ -11,6 +11,15 @@ RUN DEBIAN_FRONTEND=noninteractive \
     git \
     file \
     pkg-config \
+    less \
+    procps \
+    htop \
+    gdb \
+    strace \
+    vim \
+    less \
+    nano \
+    imagemagick \
     wget \
     swig \
     netpbm \
@@ -56,7 +65,6 @@ RUN for x in \
     && rm -Rf /root/.cache/pip
 
 RUN ln -s /usr/bin/python3.10-config /usr/local/bin/python3-config
-# python = python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
 ENV PYTHON=python3
 ENV PYTHON_CONFIG=python3-config
@@ -92,15 +100,21 @@ RUN git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
     && python3 setup.py install
 
 # Legacypipe
-RUN git clone https://github.com/legacysurvey/legacypipe.git legacypipe \
-    && echo 2
+RUN git clone https://github.com/legacysurvey/legacypipe.git legacypipe
 
 ENV PYTHONPATH /src/unwise_psf/py:/src/legacypipe/py:/usr/local/lib/python
-#ENV PATH ${PATH}:/usr/local/astrometry/bin
+
+SHELL ["/bin/bash", "-c"]
+ENTRYPOINT ["/bin/bash", "-c"]
+CMD ["/bin/bash"]
 
 # ?
-# RUN mkdir /homedir && chmod 777 /homedir
-# ENV HOME /homedir
+RUN mkdir /homedir && chmod 777 /homedir
+ENV HOME /homedir
+
+# otherwise "fatal: detected dubious ownership in repository" upon 'git describe'
+RUN git config --global --add safe.directory /src/legacypipe \
+ && git config --global --add safe.directory /src/unwise_psf
 
 RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
   # Create config files in $HOME
@@ -131,3 +145,9 @@ RUN python -O -m compileall \
     /src/unwise_psf/py \
     /src/legacypipe/py/legacypipe \
     /src/legacypipe/py/legacyzpts
+
+# update legacypipe
+RUN cd /src/legacypipe && git pull \
+    && git checkout DR10.1.3 && \
+  python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
+  python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
