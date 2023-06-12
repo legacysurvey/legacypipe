@@ -1185,6 +1185,10 @@ class LegacySurveyData(object):
                 os.path.join(basedir, 'metrics', brickpre,
                              '%s-%s.jpg' % (filetype, brick)))
 
+        elif filetype == 'outliers_mask':
+            return swap(os.path.join(basedir, 'metrics', brickpre,
+                                     'outlier-mask-%s.fits.fz' % (brick)))
+
         elif filetype in ['invvar', 'chi2', 'image', 'model', 'blobmodel',
                           'depth', 'galdepth', 'nexp', 'psfsize',
                           'copsf']:
@@ -1215,12 +1219,13 @@ class LegacySurveyData(object):
             return swap(os.path.join(basedir, 'metrics', brickpre,
                                      'reference-%s.fits' % (brick)))
 
+        elif filetype == 'detected-sources':
+            return swap(os.path.join(basedir, 'metrics', brickpre,
+                                     'sources-%s.fits' % (brick)))
+
         elif filetype == 'checksums':
             return swap(os.path.join(basedir, 'tractor', brickpre,
                                      'brick-%s.sha256sum' % brick))
-        elif filetype == 'outliers_mask':
-            return swap(os.path.join(basedir, 'metrics', brickpre,
-                                     'outlier-mask-%s.fits.fz' % (brick)))
 
         elif filetype == 'forced':
             estr = '%08i' % expnum

@@ -224,7 +224,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
             pps = ps
         else:
             pps = None
-        sedhot,px,py,peakval,apval = sed_matched_detection(
+        sedhot,px,py,apval,peakval = sed_matched_detection(
             sedname, sed, detmaps, detivs, bands, xx, yy, rr,
             nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
             blob_dilate=blob_dilate, saturated_pix=saturated_pix, veto_map=veto_map,
