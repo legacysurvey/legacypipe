@@ -950,7 +950,6 @@ def stage_srcs(pixscale=None, targetwcs=None,
 
     if Tnew is not None:
         assert(len(Tnew) == len(newcat))
-        Tnew.delete_column('peaksn')
         Tnew.delete_column('apsn')
         Tnew.ref_cat = np.array(['  '] * len(Tnew))
         Tnew.ref_id  = np.zeros(len(Tnew), np.int64)
@@ -1046,6 +1045,21 @@ def stage_srcs(pixscale=None, targetwcs=None,
         co_sky = None
 
     info('Sources detected:', len(T), 'in', len(blobslices), 'blobs')
+
+    detstars = T.copy()
+    detstars.blob = blobmap[np.clip(T.iby, 0, H-1), np.clip(T.ibx, 0, W-1)]
+    bb = np.array([[b[0].start, b[0].stop, b[1].start, b[1].stop] for b in blobslices])
+    detstars.blob_x0 = bb[detstars.blob, 2]
+    detstars.blob_x1 = bb[detstars.blob, 3]
+    detstars.blob_y0 = bb[detstars.blob, 0]
+    detstars.blob_y1 = bb[detstars.blob, 1]
+    for band in bands:
+        detstars.set('flux_' + band, np.array([src.getBrightness().getFlux(band)
+                                               for src in cat]))
+    with survey.write_output('detected-sources', brick=brickname) as out:
+        detstars.writeto(None, fits_object=out.fits, primheader=version_header)
+    del detstars
+    T.delete_column('peaksn')
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobmap', 'cat',
             'ps', 'saturated_pix', 'version_header', 'co_sky', 'ccds']
@@ -2508,7 +2522,7 @@ def _add_bit_description(header, BITS, bits, bnpat, bitpat, bitmapname):
                  comment='%s: %s' % (bitmapname, comm)))
     revmap = dict([(bit,name) for name,bit in BITS.items()])
     nicemap = dict([(k,c) for k,short,c in bits])
-    for bit in range(16):
+    for bit in range(32):
         bitval = 1<<bit
         if not bitval in revmap:
             continue

@@ -1,15 +1,25 @@
-FROM ubuntu:20.04
+FROM ubuntu:22.04 as working
 
-RUN apt -y update && apt install -y apt-utils
+ENV DEBIAN_FRONTEND noninteractive
 
-RUN DEBIAN_FRONTEND=noninteractive \
-    apt install -y --no-install-recommends \
+RUN apt -y update && apt install -y apt-utils \
+ && apt install -y --no-install-recommends \
     gcc \
     g++ \
     make \
+    patch \
     git \
     file \
     pkg-config \
+    less \
+    procps \
+    htop \
+    gdb \
+    strace \
+    vim \
+    less \
+    nano \
+    imagemagick \
     wget \
     swig \
     netpbm \
@@ -29,9 +39,8 @@ RUN DEBIAN_FRONTEND=noninteractive \
     libceres-dev \
     postgresql-common \
     libpq-dev \
-    python3.8 \
-    python3.8-dev \
-    python3.8-tk \
+    python3.10 \
+    python3.10-dev \
     python3-pip \
     source-extractor \
     psfex \
@@ -55,35 +64,35 @@ RUN for x in \
     ; do pip3 install $x; done \
     && rm -Rf /root/.cache/pip
 
-RUN ln -s /usr/bin/python3.8-config /usr/local/bin/python3-config
-# python = python3
+RUN ln -s /usr/bin/python3.10-config /usr/local/bin/python3-config
 RUN ln -s /usr/bin/python3 /usr/bin/python
+ENV PYTHON=python3
+ENV PYTHON_CONFIG=python3-config
+ENV PYTHON_SCRIPT="/usr/bin/env python3"
 
 RUN mkdir -p /src
 WORKDIR /src
-ENV PYTHON=python3
+
+RUN ln -s /usr/include /usr/local/include/netpbm
 
 # Astrometry.net
-RUN export PYTHON_SCRIPT="/usr/bin/env python3" \
-    && git clone http://github.com/dstndstn/astrometry.net.git astrometry \
+RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
-    && make \
-    && make py \
-    && make extra \
-    && make install INSTALL_DIR=/usr/local \
-    && make clean
+    && git checkout 0.94 \
+    && make install INSTALL_DIR=/usr/local
+
+#FROM working
 
 # The Tractor
-RUN git clone http://github.com/dstndstn/tractor.git tractor \
+RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && export PYTHON_CONFIG=python3-config \
-    && python3 setup-cython.py --with-ceres install --home /usr/local \
-    && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
-    && rm -R $(find . -name "*.o" -o -name "*.so")
+    && git checkout dr10.4 \
+    && pip install --install-option="--with-ceres" --install-option="--with-cython" -v .
 
 # unwise_psf
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \
-    && cd unwise_psf && git checkout dr9.3
+    && cd unwise_psf \
+    && git checkout dr10.0
 
 # QDO
 RUN git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
@@ -91,13 +100,21 @@ RUN git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
     && python3 setup.py install
 
 # Legacypipe
-RUN git clone http://github.com/legacysurvey/legacypipe.git legacypipe
+RUN git clone https://github.com/legacysurvey/legacypipe.git legacypipe
 
-ENV PYTHONPATH /usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
+ENV PYTHONPATH /src/unwise_psf/py:/src/legacypipe/py:/usr/local/lib/python
+
+SHELL ["/bin/bash", "-c"]
+ENTRYPOINT ["/bin/bash", "-c"]
+CMD ["/bin/bash"]
 
 # ?
-# RUN mkdir /homedir && chmod 777 /homedir
-# ENV HOME /homedir
+RUN mkdir /homedir && chmod 777 /homedir
+ENV HOME /homedir
+
+# otherwise "fatal: detected dubious ownership in repository" upon 'git describe'
+RUN git config --global --add safe.directory /src/legacypipe \
+ && git config --global --add safe.directory /src/unwise_psf
 
 RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
   # Create config files in $HOME
@@ -114,13 +131,23 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
 
 RUN python -O -m compileall \
     -x lib2to3 \
+    /usr/local/lib/python3.10/dist-packages \
+    /usr/lib/python3.10 \
     /usr/local/lib/python \
-    /usr/lib/python3.8 \
     /src/unwise_psf/py \
-    /src/legacypipe/py/{legacypipe,legacyzpts} && \
+    /src/legacypipe/py/legacypipe \
+    /src/legacypipe/py/legacyzpts && \
     python    -m compileall \
     -x lib2to3 \
+    /usr/local/lib/python3.10/dist-packages \
+    /usr/lib/python3.10 \
     /usr/local/lib/python \
-    /usr/lib/python3.8 \
     /src/unwise_psf/py \
-    /src/legacypipe/py/{legacypipe,legacyzpts}
+    /src/legacypipe/py/legacypipe \
+    /src/legacypipe/py/legacyzpts
+
+# update legacypipe
+RUN cd /src/legacypipe && git pull \
+    && git checkout DR10.1.3 && \
+  python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
+  python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}

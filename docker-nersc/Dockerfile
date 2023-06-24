@@ -128,10 +128,12 @@ RUN for x in \
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
     && git checkout dr10.2 \
-    && python3 setup-cython.py --with-ceres install --home /usr/local \
-    && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
-    && rm -R $(find . -name "*.o" -o -name "*.so") \
-    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
+    && cp setup-cython.py setup.py \
+    && pip install --install-option="--with-ceres" . -v \
+    && rm -R $(find . -name "*.o" -o -name "*.so")
+
+#&& make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
+#    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
 
 # Pip installs -- built from source
 RUN pip --no-cache-dir install photutils
@@ -278,8 +280,11 @@ ENV LEGACYPIPE_DIR /src/legacypipe/py
 
     #&& git describe && echo DR10.1.0 && \
 
+# gd eggs go away we don't want you
+#RUN mv /usr/local/lib/python/tractor-git-py3.9-linux-x86_64.egg/{tractor,wise} /usr/local/lib/python/ && rm -R /usr/local/lib/python/tractor-git-py3.9-linux-x86_64.egg
+
 # update legacypipe
 RUN cd /src/legacypipe && git pull \   
-    && git checkout DR10.1.0 && \
+    && git checkout DR10.1.2 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
