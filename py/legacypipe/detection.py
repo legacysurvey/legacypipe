@@ -218,13 +218,14 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
 
     peaksn = []
     apsn = []
+    fwhm = []
 
     for sedname,sed in SEDs:
         if plots:
             pps = ps
         else:
             pps = None
-        sedhot,px,py,apval,peakval = sed_matched_detection(
+        sedhot,px,py,apval,peakval,fwhmval = sed_matched_detection(
             sedname, sed, detmaps, detivs, bands, xx, yy, rr,
             nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
             blob_dilate=blob_dilate, saturated_pix=saturated_pix, veto_map=veto_map,
@@ -239,6 +240,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
         rr = np.append(rr, np.zeros_like(px) + exclusion_radius).astype(int)
         peaksn.extend(peakval)
         apsn.extend(apval)
+        fwhm.extend(fwhmval)
 
     # New peaks:
     peakx = xx[n0:]
@@ -260,6 +262,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
         assert(len(apsn) == len(Tnew))
         Tnew.peaksn = np.array(peaksn)
         Tnew.apsn = np.array(apsn)
+        Tnew.fwhm = np.array(fwhm)
         for r,d,x,y in zip(pr,pd,peakx,peaky):
             fluxes = dict([(band, detmap[y, x])
                            for band,detmap in zip(bands,detmaps)])
@@ -499,6 +502,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
 
     peakval = []
     aper = []
+    fwhm = []
     apin = 10
     apout = 20
 
@@ -645,8 +649,99 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                 naper += 1
                 continue
 
+        maxfwhm = 50 // 2
+        xx = np.arange(max(x - maxfwhm, 0), min(x + maxfwhm, W-1) + 1)
+        yy = np.arange(max(y - maxfwhm, 0), min(y + maxfwhm, H-1) + 1)
+
+        rr,ss,ok = [],[],[]
+
+        rr.append(np.abs(xx - x))
+        ok.append((sediv[y, xx] > 0))
+        ss.append(sedsn[y, xx])
+
+        rr.append(np.abs(yy - y))
+        ok.append((sediv[yy, x] > 0))
+        ss.append(sedsn[yy, x])
+
+        dxlo = x - max(x - maxfwhm, 0)
+        dylo = y - max(y - maxfwhm, 0)
+        dxhi = min(x + maxfwhm, W-1) - x
+        dyhi = min(y + maxfwhm, H-1) - y
+
+        # diag from lower-left to upper-right
+        dlo = min(dxlo, dylo)
+        dhi = min(dxhi, dyhi)
+        dd = np.arange(-dlo, dhi+1)
+        rr.append(np.sqrt(2)*np.abs(dd))
+        ss.append(sedsn[y+dd, x+dd])
+        ok.append((sediv[y+dd, x+dd] > 0))
+
+        # diag from upper-left to lower-right
+        dlo = min(dxlo, dyhi)
+        dhi = min(dxhi, dylo)
+        dd = np.arange(-dlo, dhi+1)
+        rr.append(np.sqrt(2)*np.abs(dd))
+        ss.append(sedsn[y-dd, x+dd])
+        ok.append((sediv[y-dd, x+dd] > 0))
+
+        rr = np.hstack(rr)
+        ss = np.hstack(ss)
+        ok = np.hstack(ok)
+        rr = rr[ok]
+        ss = ss[ok]
+        k = np.argsort(rr)
+        rr = rr[k]
+        ss = ss[k]
+        nz = np.flatnonzero(ss <= sedsn[y,x]/2.)
+        if len(nz):
+            hwhm = rr[nz[0]]
+        else:
+            hwhm = maxfwhm//2
+
+        if ps is not None:
+
+            dxlo = x - max(x - maxfwhm, 0)
+            dylo = y - max(y - maxfwhm, 0)
+            dxhi = min(x + maxfwhm, W-1) - x
+            dyhi = min(y + maxfwhm, H-1) - y
+
+            # diag from lower-left to upper-right
+            dlo = min(dxlo, dylo)
+            dhi = min(dxhi, dyhi)
+            dd = np.arange(-dlo, dhi+1)
+
+            # diag from upper-left to lower-right
+            dlo = min(dxlo, dyhi)
+            dhi = min(dxhi, dylo)
+            dd2 = np.arange(-dlo, dhi+1)
+
+            plt.clf()
+            plt.subplot(2,2,1)
+            dimshow(sedsn[y-dylo:y+dyhi+1, x-dxlo:x+dxhi+1], vmin=-2, vmax=sedsn[y,x])
+            ax = plt.axis()
+            th = np.linspace(0., 2.*np.pi, 100)
+            plt.plot(dxlo + hwhm*np.sin(th), dylo + hwhm*np.cos(th), 'r-')
+            plt.axis(ax)
+
+            plt.subplot(2,2,2)
+            plt.plot(xx - x, sedsn[y, xx], label='Slice in x')
+            plt.plot(yy - y, sedsn[yy, x], label='Slice in y')
+            plt.plot(dd, sedsn[y+dd, x+dd], label='Slice diag /')
+            plt.plot(dd2, sedsn[y-dd2, x+dd2], label='Slice diag \\')
+            plt.suptitle('Cheap FWHM')
+            plt.ylabel('SED S/N')
+
+            plt.subplot(2,2,3)
+            plt.plot(rr, ss, 'b.')
+            plt.axvline(hwhm)
+            plt.ylim(-0.1, sedsn[y,x]*1.1)
+            plt.xlabel('radius')
+            plt.ylabel('s/n')
+            ps.savefig()
+
         aper.append(m)
         peakval.append(sedsn[y,x])
+        fwhm.append(hwhm*2)
         keep[i] = True
         this_veto_map[slc] |= saddlemap
 
@@ -699,7 +794,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                       'upper left')
         ps.savefig()
 
-    return hotblobs, px, py, aper, peakval
+    return hotblobs, px, py, aper, peakval, fwhm
 
 def _peak_plot_1(vetomap, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
                  level, dilate, saturated_pix, satur, ps, rgbimg, cut):
