@@ -12,9 +12,17 @@ def main():
 
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('-b', '--brick', help='Brick name to run', required=True)
+    parser.add_argument('-b', '--brick', help='Brick name to run') #, required=True)
     parser.add_argument('--zoom', type=int, nargs=4,
                         help='Set target image extent (default "0 3600 0 3600")')
+
+    parser.add_argument('--radec', nargs=2,
+        help='RA,Dec center for a custom location (not a brick)')
+    parser.add_argument('-W', '--width', type=int, default=3600,
+                        help='Target image width, default %(default)i')
+    parser.add_argument('-H', '--height', type=int, default=3600,
+                        help='Target image height, default %(default)i')
+
     parser.add_argument('--threads', type=int, help='Run multi-threaded', default=None)
 
     parser.add_argument('--catalog-dir', help='Set LEGACY_SURVEY_DIR to use to read catalogs')
@@ -64,25 +72,38 @@ def main():
     survey = LegacySurveyData(survey_dir=opt.survey_dir,
                               output_dir=opt.output_dir)
 
-    outfn = os.path.join(survey.output_dir, 'tractor-forced-%s.fits' % opt.brick)
-    if os.path.exists(outfn):
-        print('Output file exists:', outfn)
-        return 0
-
     if opt.catalog_dir is None:
         catsurvey = survey
     else:
         catsurvey = LegacySurveyData(survey_dir=opt.catalog_dir)
-    tfn = catsurvey.find_file('tractor', brick=opt.brick)
-    print('Reading catalog from', tfn)
-    T = fits_table(tfn)
-    tprimhdr = fitsio.read_header(tfn)
 
-    brick = catsurvey.get_brick_by_name(opt.brick)
+    custom_brick = (opt.radec is not None)
+    if custom_brick:
+        # Custom brick...
+        from legacypipe.survey import BrickDuck
+        # Custom brick; create a fake 'brick' object
+        ra,dec = opt.radec
+        ra,dec = float(ra), float(dec)
+        print('RA,Dec', ra, dec)
+        rdstring = '%06i%s%05i' % (int(1000*ra), 'm' if dec < 0 else 'p',
+                                   int(1000*np.abs(dec)))
+        brickname = 'custom-%s' % rdstring
+        brick = BrickDuck(ra, dec, brickname)
+        outfn = os.path.join(survey.output_dir, 'tractor-forced-%s.fits' % rdstring)
+    else:
+        brick = catsurvey.get_brick_by_name(opt.brick)
+        if brick is None:
+            raise RunbrickError('No such brick: "%s"' % brickname)
+        outfn = os.path.join(survey.output_dir, 'tractor-forced-%s.fits' % opt.brick)
     #ra1,ra2,dec1,dec2 = brick.ra1, brick.ra2, brick.dec1, brick.dec2
     #radecpoly = np.array([[ra2,dec1], [ra1,dec1], [ra1,dec2], [ra2,dec2], [ra2,dec1]])
 
-    targetwcs = wcs_for_brick(brick)
+    print('Brick', brick)
+    if os.path.exists(outfn):
+        print('Output file exists:', outfn)
+        return 0
+
+    targetwcs = wcs_for_brick(brick, W=opt.width, H=opt.height)
     H,W = targetwcs.shape
     if opt.zoom is not None:
         (x0,x1,y0,y1) = opt.zoom
@@ -91,6 +112,18 @@ def main():
         targetwcs = targetwcs.get_subimage(x0, y0, W, H)
     radecpoly = np.array([targetwcs.pixelxy2radec(x,y) for x,y in
                           [(1,1),(W,1),(W,H),(1,H),(1,1)]])
+    # custom brick -- set RA,Dec bounds
+    if custom_brick:
+        brick.ra1,_  = targetwcs.pixelxy2radec(W, H/2)
+        brick.ra2,_  = targetwcs.pixelxy2radec(1, H/2)
+        _, brick.dec1 = targetwcs.pixelxy2radec(W/2, 1)
+        _, brick.dec2 = targetwcs.pixelxy2radec(W/2, H)
+
+    #tfn = catsurvey.find_file('tractor', brick=opt.brick)
+    tfn = catsurvey.find_file('tractor', brick=brick.brickname)
+    print('Reading catalog from', tfn)
+    T = fits_table(tfn)
+    tprimhdr = fitsio.read_header(tfn)
 
     ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
     if ccds is None:
@@ -118,7 +151,10 @@ def main():
     opt.hybrid_psf = True
     opt.normalize_psf = True
     opt.outlier_mask = None
-    opt.catalog = False
+    if custom_brick:
+        opt.catalog = tfn
+    else:
+        opt.catalog = False
     opt.write_cat = False
     opt.move_gaia = True
     opt.save_model = False
@@ -176,11 +212,12 @@ def main():
     from astrometry.util.file import trymakedirs
     columns = F.get_columns()
     units = get_units_for_columns(columns)
-    outfn = os.path.join(survey.output_dir, 'forced-brickwise-%s.fits' % opt.brick)
-    dirnm = os.path.dirname(outfn)
+    #outfn = os.path.join(survey.output_dir, 'forced-brickwise-%s.fits' % opt.brick)
+    boutfn = outfn.replace('tractor-forced-', 'forced-brickwise-')
+    dirnm = os.path.dirname(boutfn)
     trymakedirs(dirnm)
-    F.writeto(outfn, primheader=version_hdr, units=units, columns=columns)
-    print('Wrote', outfn)
+    F.writeto(boutfn, primheader=version_hdr, units=units, columns=columns)
+    print('Wrote', boutfn)
 
     # Also average the flux measurements by band for each source and
     # add them to a new tractor file!
@@ -248,7 +285,7 @@ def main():
         if len(words) != 2 or words[0] != 'flux':
             continue
         tbands.append(words[1])
-    outfn = os.path.join(survey.output_dir, 'tractor-forced-%s.fits' % opt.brick)
+    #outfn = os.path.join(survey.output_dir, 'tractor-forced-%s.fits' % opt.brick)
     T.writeto(outfn, units=get_units_for_columns(columns, bands=tbands, extras=eunits),
               primhdr=tprimhdr)
     print('Wrote', outfn)

@@ -652,9 +652,11 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     print('Parse catalog:', tnow-tlast)
     tlast = tnow
 
+    get_model = (opt.save_model is not None)
     if plots:
         #opt.save_data = True
-        opt.save_model = True
+        #opt.save_model = True
+        get_model = True
         opt.plot_wcs = getattr(opt, 'plot_wcs', None)
 
     print('Forced photom for', im, '...')
@@ -665,23 +667,25 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                         agn=opt.agn,
                         do_forced=opt.forced,
                         do_apphot=opt.apphot,
-                        get_model=opt.save_model,
+                        get_model=get_model,
                         ps=ps, timing=True,
                         ceres_threads=opt.ceres_threads)
 
-    if opt.save_model:
+    if get_model:
         # unpack results
         F,model_img = F
+    if F is None:
+        return None
 
-    if plots:
+    if False and plots and model_img is not None:
         import pylab as plt
 
         if opt.plot_wcs:
+            from astrometry.util.resample import resample_with_wcs
             sh = opt.plot_wcs.shape
             img = np.zeros(sh, np.float32)
             mod = np.zeros(sh, np.float32)
             chi = np.zeros(sh, np.float32)
-            from astrometry.util.resample import resample_with_wcs
             tchi = (tim.getImage() - model_img) * tim.getInvError()
             Yo,Xo,Yi,Xi,rims = resample_with_wcs(opt.plot_wcs, tim.subwcs,
                                                  [tim.getImage(), model_img, tchi])
@@ -759,18 +763,28 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     F.ccdphrms = np.array([ccd.ccdphrms] * len(F), dtype=np.float32)
 
     if opt.derivs:
-        cosdec = np.cos(np.deg2rad(T.dec))
+        # We don't need to apply a cos(Dec) correction --
+        # the fitting happens on pixel-space models multiplied by CD-inverse, so they're
+        # in Intermediate World Coordinates in degrees in the *directions* of RA,Dec, but isotropic.
+        # Multiplying by 3600 here, we take them to arcseconds,
+        # Isotropic in the sense that 1 arcsecond of motion in RA is the same distance
+        # as 1 arcsecond of motion in Dec.
         with np.errstate(divide='ignore', invalid='ignore'):
-            F.dra  = (F.flux_dra  / F.flux) * 3600. / cosdec
+            F.dra  = (F.flux_dra  / F.flux) * 3600.
             F.ddec = (F.flux_ddec / F.flux) * 3600.
         F.dra [F.flux == 0] = 0.
         F.ddec[F.flux == 0] = 0.
-        F.dra_ivar  = F.flux_dra_ivar  * (F.flux / 3600. * cosdec)**2
+        F.dra_ivar  = F.flux_dra_ivar  * (F.flux / 3600.)**2
         F.ddec_ivar = F.flux_ddec_ivar * (F.flux / 3600.)**2
-        F.delete_column('flux_dra')
-        F.delete_column('flux_ddec')
-        F.delete_column('flux_dra_ivar')
-        F.delete_column('flux_ddec_ivar')
+
+        # DEBUG -- are the dra/ddec ivars correct??
+        # F.delete_column('flux_dra')
+        # F.delete_column('flux_ddec')
+        # F.delete_column('flux_dra_ivar')
+        # F.delete_column('flux_ddec_ivar')
+        F.flux_motion = F.flux
+        F.flux_motion_ivar = F.flux_ivar
+
         F.flux = F.flux_fixed
         F.flux_ivar = F.flux_fixed_ivar
         F.delete_column('flux_fixed')
@@ -785,7 +799,8 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     _,x,y = tim.sip_wcs.radec2pixelxy(T.ra, T.dec)
     F.x = (x-1).astype(np.float32)
     F.y = (y-1).astype(np.float32)
-
+    F.edgedist = np.minimum(np.minimum(F.x, ccd.width -1 - F.x),
+                            np.minimum(F.y, ccd.height-1 - F.y)).astype(np.float32)
     h,w = tim.shape
     ix = np.round(F.x).astype(int)
     iy = np.round(F.y).astype(int)
@@ -950,6 +965,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                                          for src in cat]).astype(np.float32)
                 N = len(cat)
                 F.flux_fixed_ivar = R.IV[:N].astype(np.float32)
+                assert(len(R.IV) == N)
 
                 if timing:
                     t = Time()
@@ -966,47 +982,6 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         R = tr.optimize_forced_photometry(variance=True, fitstats=True,
                                           shared_params=False, priors=False,
                                           **forced_kwargs)
-
-        if ps is not None or get_model:
-            (data,mod,ie,chi,_) = R.ims1[0]
-
-        if ps is not None:
-            ima = dict(vmin=-2.*tim.sig1, vmax=5.*tim.sig1,
-                       interpolation='nearest', origin='lower',
-                       cmap='gray')
-            imchi = dict(interpolation='nearest', origin='lower',
-                         vmin=-5, vmax=5, cmap='RdBu')
-            plt.clf()
-            plt.imshow(data, **ima)
-            plt.title('Data: %s' % tim.name)
-            ps.savefig()
-
-            plt.clf()
-            plt.imshow(mod, **ima)
-            plt.title('Model: %s' % tim.name)
-            ps.savefig()
-
-            plt.clf()
-            plt.imshow(chi, **imchi)
-            plt.title('Chi: %s' % tim.name)
-            ps.savefig()
-
-            if derivs:
-                trx = Tractor([tim], realsrcs)
-                trx.freezeParam('images')
-
-                modx = trx.getModelImage(0)
-                chix = (data - modx) * tim.getInvError()
-
-                plt.clf()
-                plt.imshow(modx, **ima)
-                plt.title('Model without derivatives: %s' % tim.name)
-                ps.savefig()
-
-                plt.clf()
-                plt.imshow(chix, **imchi)
-                plt.title('Chi without derivatives: %s' % tim.name)
-                ps.savefig()
 
         if derivs or agn:
             cat = realsrcs
@@ -1050,6 +1025,162 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             t = Time()
             print('Forced photom:', t-tlast)
             tlast = t
+
+        if ps is not None or get_model:
+            (data,mod,ie,chi,_) = R.ims1[0]
+
+        if ps is not None:
+            mx = max(5.*tim.sig1, np.percentile(data.ravel(), 99))
+            ima = dict(vmin=-2.*tim.sig1, vmax=mx,
+                       interpolation='nearest', origin='lower',
+                       cmap='gray')
+            imd = dict(vmin=-5.*tim.sig1, vmax=+5.*tim.sig1,
+                       interpolation='nearest', origin='lower',
+                       cmap='gray')
+            imchi = dict(interpolation='nearest', origin='lower',
+                         vmin=-5, vmax=5, cmap='RdBu')
+            imdq = dict(vmin=0, vmax=1,
+                       interpolation='nearest', origin='lower',
+                       cmap='gray')
+
+            xy = np.array([tim.getWcs().positionToPixel(src.getPosition())
+                           for src in cat])
+
+            plt.clf()
+            if derivs:
+                r,c = 2,4
+            else:
+                r,c = 2,2
+            plt.suptitle(tim.name)
+            plt.subplot(r,c, 1)
+            plt.imshow(data, **ima)
+            plt.title('Data')#: %s' % tim.name)
+            #ps.savefig()
+            #plt.clf()
+            plt.subplot(r,c, 2)
+            plt.imshow(mod, **ima)
+            plt.title('Model')#: %s' % tim.name)
+            #ps.savefig()
+            #plt.clf()
+            plt.subplot(r,c, 3)
+            plt.imshow(chi, **imchi)
+            plt.title('Chi')#: %s' % tim.name)
+            #ps.savefig()
+
+            plt.subplot(r,c, 4)
+            plt.imshow(tim.dq == 0, **imdq)
+            plt.title('DQ (white=good)')
+
+            if derivs:
+                trx = Tractor([tim], realsrcs)
+                trx.freezeParam('images')
+
+                modx = trx.getModelImage(0)
+                chix = (data - modx) * tim.getInvError()
+
+                trx = Tractor([tim], derivsrcs)
+                modd = trx.getModelImage(0)
+
+                plt.subplot(r,c, 5)
+                plt.imshow(modd, **imd)
+                plt.title('fit Derivatives')
+
+                #plt.clf()
+                plt.subplot(r,c, 6)
+                plt.imshow(modx, **ima)
+                plt.title('Model (fixed)')#without derivatives')#: %s' % tim.name)
+                #ps.savefig()
+                #plt.clf()
+                plt.subplot(r,c, 7)
+                plt.imshow(chix, **imchi)
+                plt.title('Chi (fixed)')#without derivatives')#: %s' % tim.name)
+                #ps.savefig()
+
+                print('Abs derivatives / model:', np.sum(np.abs(modd)) / np.sum(np.abs(mod)))
+
+            ps.savefig()
+
+
+            if derivs and ps is not None:
+                # ASSUME single source -- set the model params to a grid of flux_dra,flux_ddec
+                # values, and plot the chi surface.
+
+                nsteps = 2
+                stepsize = 0.1
+
+                src = realsrcs[0]
+                flux = F.flux[i]
+                flux_dra_fit = F.flux_dra[i]
+                flux_ddec_fit = F.flux_ddec[i]
+
+                #dra_sigma = 1./np.sqrt(F.dra_ivar[i])
+                #ddec_sigma = 1./np.sqrt(F.ddec_ivar[i])
+                flux_dra_sigma = 1./np.sqrt(F.flux_dra_ivar[i])
+                flux_ddec_sigma = 1./np.sqrt(F.flux_ddec_ivar[i])
+                pixscale = tim.imobj.pixscale
+                dra_pix = F.dra[i] / pixscale
+                ddec_pix = F.ddec[i] / pixscale
+                cstep_r = int(np.round(dra_pix / stepsize))
+                cstep_d = int(np.round(ddec_pix / stepsize))
+
+                trx = Tractor([tim], [realsrcs[0], derivsrcs[0]])
+
+                plt.clf()
+                k = 1
+                for i in range(nsteps*2+1):
+                    for j in range(nsteps*2+1):
+                        flux_ddec = flux * (cstep_d + (i-nsteps)) * stepsize * pixscale / 3600.
+                        flux_dra = flux * (cstep_r + (j-nsteps)) * stepsize * pixscale / 3600.
+                        derivsrcs[0].setParams([flux_dra, flux_ddec])
+
+                        chi = trx.getChiImage(0)
+                        plt.subplot(nsteps*2+1, nsteps*2+1, k)
+                        k += 1
+                        plt.imshow(chi, interpolation='nearest', origin='lower', vmin=-5., vmax=+5.)
+                        plt.xticks([]); plt.yticks([])
+                ps.savefig()
+
+                nsteps = 10
+                stepsize = 0.01
+                chisq_dra = []
+                chisq_ddec = []
+                dpix = []
+                for i in range(nsteps*2+1):
+                    dpix.append((i-nsteps)*stepsize)
+                    flux_dra = flux_dra_fit + flux * (i-nsteps) * stepsize * pixscale / 3600.
+                    derivsrcs[0].setParams([flux_dra, flux_ddec_fit])
+                    chisq_dra.append(trx.getLogLikelihood())
+                for i in range(nsteps*2+1):
+                    flux_ddec = flux_ddec_fit + flux * (i-nsteps) * stepsize * pixscale / 3600.
+                    derivsrcs[0].setParams([flux_dra_fit, flux_ddec])
+                    chisq_ddec.append(trx.getLogLikelihood())
+                plt.clf()
+                plt.plot(dpix, chisq_dra, '-', label='Log-likelihood (dRA)')
+                plt.plot(dpix, chisq_ddec, '-', label='Log-likelihood (dDec)')
+                plt.xlabel('delta-pixels')
+                ps.savefig()
+
+                nsteps = 10
+                stepsize = 0.5
+                chisq_dra = []
+                chisq_ddec = []
+                dsigma = []
+                for i in range(nsteps*2+1):
+                    nsig = (i-nsteps)*stepsize
+                    dsigma.append(nsig)
+                    flux_dra = flux_dra_fit + nsig * flux_dra_sigma
+                    derivsrcs[0].setParams([flux_dra, flux_ddec_fit])
+                    chisq_dra.append(trx.getLogLikelihood())
+                for i in range(nsteps*2+1):
+                    nsig = (i-nsteps)*stepsize
+                    flux_ddec = flux_ddec_fit + nsig * flux_ddec_sigma
+                    derivsrcs[0].setParams([flux_dra_fit, flux_ddec])
+                    chisq_ddec.append(trx.getLogLikelihood())
+                plt.clf()
+                plt.plot(dsigma, chisq_dra, '-', label='Log-likelihood (dRA)')
+                plt.plot(dsigma, chisq_ddec, '-', label='Log-likelihood (dDec)')
+                plt.xlabel('sigmas')
+                ps.savefig()
 
     if do_apphot:
         from photutils.aperture import CircularAperture, aperture_photometry
