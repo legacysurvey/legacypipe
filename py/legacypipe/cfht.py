@@ -224,7 +224,7 @@ class MegaPrimeImage(LegacySurveyImage):
             sig1 = 1.4826 * mad / np.sqrt(2.)
             # self.sig1 must be in calibrated units
             #self.sig1 = sig1
-            print('Computed sig1 by Blanton method:', sig1)
+            print('Computed sig1 by Blanton method:', sig1, '(MAD:', mad, ')')
         else:
             from tractor import NanoMaggies
             print('sig1 from CCDs file:', self.sig1)
@@ -247,7 +247,7 @@ class MegaPrimeImage(LegacySurveyImage):
         if len(I):
             dq[I,J] |= DQ_BITS['satur']
             invvar[I,J] = 0
-    
+
     # def read_invvar(self, **kwargs):
     #     ## FIXME -- at the very least, apply mask
     #     print('MegaPrimeImage.read_invvar')
@@ -347,3 +347,33 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         #
         fitsio.write(tmpimgfn, img.astype(np.float32), clobber=True)
         return tmpimgfn, tmpmaskfn
+
+    def get_good_image_subregion(self):
+        '''
+        Returns x0,x1,y0,y1 of the good region of this chip,
+
+        DATASEC = '[33:2080,1:4612]'
+        '''
+        hdr = self.read_image_header()
+        datasec = hdr.get('DATASEC')
+        nil = None,None,None,None
+        if datasec is None:
+            return nil
+        datasec = datasec.strip()
+        if not (datasec.startswith('[') and datasec.endswith(']')):
+                return nil
+        words = datasec[1:-1].split(',')
+        if len(words) != 2:
+            return nil
+        xx,yy = words
+        xx = xx.split(':')
+        yy = yy.split(':')
+        if len(xx) != 2 or len(yy) != 2:
+            return nil
+        try:
+            rtn = int(xx[0]), int(xx[1]), int(yy[0]), int(yy[1])
+            print('Returning good image subregion', rtn)
+            return rtn
+        except:
+            pass
+        return nil
