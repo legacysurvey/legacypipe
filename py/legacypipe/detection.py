@@ -370,7 +370,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         break
     if allzero:
         info('SED', sedname, 'has all zero weight')
-        return None,None,None,None,None
+        return None,None,None,None,None,None
 
     sedmap = np.zeros((H,W), np.float32)
     sediv  = np.zeros((H,W), np.float32)
