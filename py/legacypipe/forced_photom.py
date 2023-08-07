@@ -1396,11 +1396,12 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 xnext = xwin + 2. * np.sum(rin * wi * pix * (xx - xwin)) / denom
                 ynext = ywin + 2. * np.sum(rin * wi * pix * (yy - ywin)) / denom
                 #print('Moved by', np.hypot(xwin - xnext, ywin - ynext), 'pix')
-                if np.hypot(xwin - xnext, ywin - ynext) < 1e-4:
-                    F.win_converged[i] = True
-                    break
+                moved = np.hypot(xnext - xwin, ynext - ywin)
                 xwin = xnext
                 ywin = ynext
+                if moved < 1e-4:
+                    F.win_converged[i] = True
+                    break
 
             if F.win_converged[i]:
                 r,d = tim.subwcs.pixelxy2radec(xwin + 1., ywin + 1.)
