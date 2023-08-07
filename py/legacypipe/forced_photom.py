@@ -271,8 +271,12 @@ def main(survey=None, opt=None, args=None):
              'airmass', 'sky', 'skyrms', 'psfdepth', 'galdepth', 'ccdzpt',
              'ccdrarms', 'ccddecrms', 'ccdphrms', 'ra', 'dec', 'flux',
              'flux_ivar', 'fracflux', 'rchisq', 'fracmasked', 'fracin',
-             'apflux', 'apflux_ivar', 'x', 'y', 'dqmask', 'dra', 'ddec',
-             'dra_ivar', 'ddec_ivar']
+             'apflux', 'apflux_ivar', 'x', 'y', 'dqmask',
+             'dra', 'ddec', 'dra_ivar', 'ddec_ivar',
+             'flux_motion', 'flux_motion_ivar',
+             'full_fit_dra', 'full_fit_ddec', 'full_fit_flux',
+             'win_dra', 'win_ddec', 'win_converged', 'win_edge',]
+
     columns = [c for c in order if c in columns]
     units = get_units_for_columns(columns)
 
@@ -795,12 +799,11 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
 
     F.ra  = T.ra
     F.dec = T.dec
-
-    _,x,y = tim.sip_wcs.radec2pixelxy(T.ra, T.dec)
+    _,x,y = tim.subwcs.radec2pixelxy(T.ra, T.dec)
     F.x = (x-1).astype(np.float32)
     F.y = (y-1).astype(np.float32)
-    F.edgedist = np.minimum(np.minimum(F.x, ccd.width -1 - F.x),
-                            np.minimum(F.y, ccd.height-1 - F.y)).astype(np.float32)
+    #F.edgedist = np.minimum(np.minimum(F.x, ccd.width -1 - F.x),
+    #                        np.minimum(F.y, ccd.height-1 - F.y)).astype(np.float32)
     h,w = tim.shape
     ix = np.round(F.x).astype(int)
     iy = np.round(F.y).astype(int)
@@ -889,6 +892,8 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         realsrcs = []
         derivsrcs = []
         Iderivs = []
+        first = True
+        fluxes = []
         for i,src in enumerate(cat):
             from tractor import PointSource
             realsrcs.append(src)
@@ -898,13 +903,16 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             if realmod is None:
                 continue
             Iderivs.append(i)
+            fluxes.append(src.getBrightness().getFlux(tim.band))
             brightness_dra  = src.getBrightness().copy()
             brightness_ddec = src.getBrightness().copy()
             brightness_dra .setParams(np.zeros(brightness_dra .numberOfParams()))
             brightness_ddec.setParams(np.zeros(brightness_ddec.numberOfParams()))
             brightness_dra .freezeAllBut(tim.band)
             brightness_ddec.freezeAllBut(tim.band)
-            dsrc = SourceDerivatives(src, [brightness_dra, brightness_ddec], tim, ps)
+            dsrc = SourceDerivatives(src, [brightness_dra, brightness_ddec], tim,
+                                     ps if first else None)
+            first = False
             derivsrcs.append(dsrc)
         Iderivs = np.array(Iderivs)
 
@@ -956,6 +964,12 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             tlast = t
 
         if derivs:
+
+            full_position_fit = True
+
+            if full_position_fit:
+                forced_kwargs.update(wantims=True)
+
             if fixed_also:
                 print('Forced photom with fixed positions:')
                 R = tr.optimize_forced_photometry(variance=True, fitstats=False,
@@ -972,6 +986,131 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                     print('Forced photom with fixed positions finished:', t-tlast)
                     tlast = t
 
+            if full_position_fit:
+                (_,mod,_,chi,_) = R.ims1[0]
+
+                if ps is not None:
+                    data = tim.getImage()
+                    mx = max(5.*tim.sig1, np.percentile(data.ravel(), 99))
+                    ima = dict(vmin=-2.*tim.sig1, vmax=mx,
+                               interpolation='nearest', origin='lower',
+                               cmap='gray')
+                    imd = dict(vmin=-5.*tim.sig1, vmax=+5.*tim.sig1,
+                               interpolation='nearest', origin='lower',
+                               cmap='gray')
+                    imchi = dict(interpolation='nearest', origin='lower',
+                                 vmin=-5, vmax=5, cmap='RdBu')
+                    plt.clf()
+                    plt.subplot(2,2,1)
+                    plt.imshow(data, **ima)
+                    plt.title('Data')
+                    plt.subplot(2,2,2)
+                    plt.imshow(mod, **ima)
+                    plt.title('Fixed-position model')
+                    plt.subplot(2,2,3)
+                    plt.imshow(chi, **imchi)
+                    plt.title('Fixed-position chi')
+                    ps.savefig()
+
+                # Fit in order of brightness
+                Ibright = Iderivs[np.argsort(-np.array(fluxes))]
+
+                # MODIFY tim data to be residual image!  (it gets restored below)
+                timdata = tim.data
+                # Fit on residual image
+                tim.data = timdata - mod
+
+                #refitsrcs = []
+                from tractor.dense_optimizer import ConstrainedDenseOptimizer
+                from tractor.patch import ModelMask
+                trxargs = dict(optimizer=ConstrainedDenseOptimizer())
+                xoptargs = dict(dchisq = 0.1,
+                                shared_params=False)
+
+                F.full_fit_dra  = np.zeros(len(F), np.float32)
+                F.full_fit_ddec = np.zeros(len(F), np.float32)
+                F.full_fit_flux = np.zeros(len(F), np.float32)
+
+                for i in Ibright:
+                    src = cat[i]
+                    src2 = src.copy()
+                    src2.thawAllParams()
+
+                    mm = None
+                    mod = src2.getModelPatch(tim, modelMask=mm)
+                    dh,dw = tim.data.shape
+                    mod.clipTo(dw,dh)
+                    # Add initial model back into residual image
+                    mod.addTo(tim.data, scale=+1)
+                    slicex = mod.getSlice(parent=tim.data)
+
+                    mh,mw = mod.shape
+                    #mm = [{ src2: ModelMask(mod.x0, mod.y0, mw, mh) }]
+                    mm = ModelMask(mod.x0, mod.y0, mw, mh)
+                    ext = [mod.x0-0.5, mod.x0 + mw - 0.5, mod.y0 - 0.5, mod.y0 + mh - 0.5]
+
+                    #mod0 = trx.getModelImage(0)
+                    #tim.data += mod0
+                    trx = Tractor([tim], [src2], **trxargs)
+                    trx.freezeParam('images')
+                    print('Source', i, 'fitting params:')
+                    trx.printThawedParams()
+                    print(src2)
+                    trx.optimize_loop(**xoptargs)
+                    print('Source', i, 'fitted params:')
+                    trx.printThawedParams()
+                    print(src2)
+                    mod2 = src2.getModelPatch(tim, modelMask=mm)
+                    #mod2.clipTo(dw,dh)
+
+                    if ps is not None:
+                        plt.clf()
+                        plt.subplot(2,4,1)
+                        x,y = tim.getWcs().positionToPixel(src2.getPosition())
+                        plt.imshow(tim.data[slicex], extent=ext, **ima)
+                        ax = plt.axis()
+                        plt.plot([x],[y], 'o', mec='r', mfc='none', ms=20)
+                        plt.axis(ax)
+                        plt.title('data (resid)')
+                        plt.subplot(2,4,2)
+                        plt.imshow(mod.patch, extent=ext, **ima)
+                        plt.title('before model')
+                        plt.subplot(2,4,4)
+                        plt.imshow((tim.data[slicex] - mod.patch) * tim.getInvError()[slicex], extent=ext, **imchi)
+                        plt.title('before chi')
+
+                        plt.subplot(2,4,5)
+                        plt.imshow(timdata[slicex], extent=ext, **ima)
+                        plt.title('data (orig)')
+
+                        plt.subplot(2,4,6)
+                        plt.imshow(mod2.patch, extent=ext, **ima)
+                        plt.title('after model')
+                        plt.subplot(2,4,7)
+                        plt.imshow((mod2.patch - mod.patch) * tim.getInvError()[slicex], extent=ext, **imchi)
+                        plt.title('after model - before (in chi)')
+                        plt.subplot(2,4,8)
+                        plt.imshow((tim.data[slicex] - mod2.patch) * tim.getInvError()[slicex], extent=ext, **imchi)
+                        plt.title('after chi')
+                        ps.savefig()
+
+                    # Subtract off final model to yield best residual image again.
+                    mod2.addTo(tim.data, scale=-1)
+
+                    #refitsrcs.append(src2)
+                    dec = src.getPosition().dec
+                    F.full_fit_dra [i] = 3600. * (src2.getPosition().ra  - src.getPosition().ra) * np.cos(np.deg2rad(dec))
+                    F.full_fit_ddec[i] = 3600. * (src2.getPosition().dec - dec)
+                    F.full_fit_flux[i] = src2.getBrightness().getFlux(tim.band)
+
+                # RESTORE tim data!
+                tim.data = timdata
+
+                # F.full_fit_dra [Ibright] = 3600. * (T.ra [Ibright] - np.array([src.getPosition().ra  for src in refitsrcs])) * np.cos(np.deg2rad(T.dec))
+                # F.full_fit_ddec[Ibright] = 3600. * (T.dec[Ibright] - np.array([src.getPosition().dec for src in refitsrcs]))
+                # F.full_fit_flux[Ibright] = np.array([src.getBrightness().getFlux(tim.band) for src in refitsrcs])
+
+            if fixed_also:
                 cat = realsrcs + derivsrcs
                 tr.setCatalog(Catalog(*cat))
             print('Forced photom with position derivatives:')
@@ -1101,13 +1240,14 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             ps.savefig()
 
 
-            if derivs and ps is not None:
+            if False and derivs and ps is not None:
                 # ASSUME single source -- set the model params to a grid of flux_dra,flux_ddec
                 # values, and plot the chi surface.
 
+                ### where does 'i' come from??  just left over from the enumerate() above?
+
                 nsteps = 2
                 stepsize = 0.1
-
                 src = realsrcs[0]
                 flux = F.flux[i]
                 flux_dra_fit = F.flux_dra[i]
@@ -1118,8 +1258,16 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 flux_dra_sigma = 1./np.sqrt(F.flux_dra_ivar[i])
                 flux_ddec_sigma = 1./np.sqrt(F.flux_ddec_ivar[i])
                 pixscale = tim.imobj.pixscale
+
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    F.dra  = (F.flux_dra  / F.flux) * 3600.
+                    F.ddec = (F.flux_ddec / F.flux) * 3600.
+                F.dra [F.flux == 0] = 0.
+                F.ddec[F.flux == 0] = 0.
+                # 
                 dra_pix = F.dra[i] / pixscale
                 ddec_pix = F.ddec[i] / pixscale
+                dra_pix = ddec_pix = 0
                 cstep_r = int(np.round(dra_pix / stepsize))
                 cstep_d = int(np.round(ddec_pix / stepsize))
 
@@ -1181,6 +1329,83 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 plt.plot(dsigma, chisq_ddec, '-', label='Log-likelihood (dDec)')
                 plt.xlabel('sigmas')
                 ps.savefig()
+
+    windowed_peak = True
+    if windowed_peak:
+        # Compute ~XWIN_IMAGE like source extractor
+        F.win_dra  = np.zeros(len(F), np.float32)
+        F.win_ddec = np.zeros(len(F), np.float32)
+        F.win_converged = np.zeros(len(F), bool)
+        F.win_edge = np.zeros(len(F), bool)
+
+        # in pixels
+        fwhm = tim.psf_fwhm
+        sigma = fwhm / 2.35
+        h,w = tim.shape
+
+        for i,src in enumerate(cat):
+            from tractor import PointSource
+            if not isinstance(src, PointSource):
+                continue
+            realmod = src.getUnitFluxModelPatch(tim)
+            if realmod is None:
+                continue
+
+            rd = src.getPosition()
+            _,x0,y0 = tim.subwcs.radec2pixelxy(rd.ra, rd.dec)
+            x0 -= 1.
+            y0 -= 1.
+
+            xwin = x0
+            ywin = y0
+
+            # Pre-compute x,y grid (5 sigma plus a margin of 1 pix)
+            radius = 5. * sigma
+            xlo,xhi = np.clip(np.round(np.array([x0 - radius - 1, x0 + radius + 2])), 0, w).astype(int)
+            ylo,yhi = np.clip(np.round(np.array([y0 - radius - 1, y0 + radius + 2])), 0, h).astype(int)
+            if xlo == 0 or xhi == w or ylo == 0 or yhi == h:
+                F.win_edge[i] = True
+            xx,yy = np.meshgrid(np.arange(xlo, xhi), np.arange(ylo, yhi))
+            xx = xx.ravel()
+            if len(xx) == 0:
+                continue
+            yy = yy.ravel()
+            pix = tim.data[ylo:yhi, xlo:xhi].ravel()
+            #assert(np.all(tim.data[yy, xx] == pix))
+
+            # print('fwhm', fwhm)
+            # print('x0, y0', x0, y0)
+            # print('xlo,xhi, ylo,yhi', xlo,xhi,ylo,yhi)
+            # print('xx', xx)
+            # print('yy', yy)
+            # print('pix', pix)
+            #from collections import Counter
+
+            for step in range(5):
+                ri2 = (xwin - xx)**2 + (ywin - yy)**2
+                # r_i < r_max
+                rin = (ri2 < radius**2)
+                wi = np.exp(-0.5 * ri2 / sigma**2)
+                #print('wi range', wi.min(), wi.max())
+                #print('pix range', pix.min(), pix.max())
+                #print('rin:', Counter(rin))
+                #print('denom:', np.sum(rin * wi * pix))
+                denom = np.sum(rin * wi * pix)
+                if denom == 0:
+                    break
+                xnext = xwin + 2. * np.sum(rin * wi * pix * (xx - xwin)) / denom
+                ynext = ywin + 2. * np.sum(rin * wi * pix * (yy - ywin)) / denom
+                #print('Moved by', np.hypot(xwin - xnext, ywin - ynext), 'pix')
+                if np.hypot(xwin - xnext, ywin - ynext) < 1e-4:
+                    F.win_converged[i] = True
+                    break
+                xwin = xnext
+                ywin = ynext
+
+            if F.win_converged[i]:
+                r,d = tim.subwcs.pixelxy2radec(xwin + 1., ywin + 1.)
+                F.win_dra [i] = 3600. * (r - rd.ra) * np.cos(np.deg2rad(rd.dec))
+                F.win_ddec[i] = 3600. * (d - rd.dec)
 
     if do_apphot:
         from photutils.aperture import CircularAperture, aperture_photometry
@@ -1262,9 +1487,11 @@ class SourceDerivatives(MultiParams, BasicSource):
             import pylab as plt
             mx = p.max()
             plt.clf()
+            plt.suptitle('Point-source spatial derivatives')
             plt.subplot(2,3,1)
             plt.imshow(p, interpolation='nearest', origin='lower',
                        vmin=0, vmax=mx)
+            plt.title('model')
             mx *= 0.25
             plt.subplot(2,3,2)
             plt.imshow(dx, interpolation='nearest', origin='lower',

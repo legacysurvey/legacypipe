@@ -141,7 +141,7 @@ def main():
 
     print('Forced-photometering CCDs:')
     for ccd in ccds:
-        print('  ', ccd.image_filename)
+        print('  ', ccd.image_filename, 'expnum', ccd.expnum, 'ccdname', ccd.ccdname)
 
     # args for forced_photom_one_ccd:
     opt.apphot = True
