@@ -277,6 +277,7 @@ def main(survey=None, opt=None, args=None):
              'flux_motion', 'flux_motion_ivar',
              'full_fit_dra', 'full_fit_ddec', 'full_fit_flux',
              'full_fit_dra_ivar', 'full_fit_ddec_ivar', 'full_fit_flux_ivar',
+             'full_fit_x', 'full_fit_y',
              'win_dra', 'win_ddec', 'win_converged', 'win_edge', 'win_fracmasked', 'win_satur',
              'winpsf_dra' ,'winpsf_ddec', 'winpsf_converged']
 
@@ -813,16 +814,17 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     F.ra  = T.ra
     F.dec = T.dec
     _,x,y = tim.subwcs.radec2pixelxy(T.ra, T.dec)
-    F.x = (x-1).astype(np.float32)
-    F.y = (y-1).astype(np.float32)
-    #F.edgedist = np.minimum(np.minimum(F.x, ccd.width -1 - F.x),
-    #                        np.minimum(F.y, ccd.height-1 - F.y)).astype(np.float32)
+    x = (x-1).astype(np.float32)
+    y = (y-1).astype(np.float32)
     h,w = tim.shape
-    ix = np.round(F.x).astype(int)
-    iy = np.round(F.y).astype(int)
+    ix = np.round(x).astype(int)
+    iy = np.round(y).astype(int)
     F.dqmask = tim.dq[np.clip(iy, 0, h-1), np.clip(ix, 0, w-1)]
     # Set an OUT-OF-BOUNDS bit.
     F.dqmask[reduce(np.logical_or, [ix < 0, ix >= w, iy < 0, iy >= h])] |= DQ_BITS['edge2']
+
+    F.x = x + tim.x0
+    F.y = y + tim.y0
 
     program_name = sys.argv[0]
     ## FIXME -- from catalog?
@@ -1274,6 +1276,9 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             F.full_fit_ddec_ivar = np.zeros(len(F), np.float32)
             F.full_fit_flux_ivar = np.zeros(len(F), np.float32)
 
+            full_fit_ra  = []
+            full_fit_dec = []
+
             #t0 = None
             for i in Ibright:
                 # if t0 is None:
@@ -1403,21 +1408,30 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 else:
                     mod2.addTo(tim.data, scale=-1)
 
-                dec = src.getPosition().dec
-                cosdec = np.cos(np.deg2rad(dec))
-                F.full_fit_dra [i] = 3600. * (src2.getPosition().ra  - src.getPosition().ra) * cosdec
-                F.full_fit_ddec[i] = 3600. * (src2.getPosition().dec - dec)
+                dec0 = src.getPosition().dec
+                cosdec = np.cos(np.deg2rad(dec0))
+                pos2 = src2.getPosition()
+                F.full_fit_dra [i] = 3600. * (pos2.ra  - src.getPosition().ra) * cosdec
+                F.full_fit_ddec[i] = 3600. * (pos2.dec - dec0)
                 F.full_fit_flux[i] = src2.getBrightness().getFlux(tim.band)
 
                 F.full_fit_dra_ivar [i] = 1./3600.**2 * (ivs[0] / cosdec**2)
                 F.full_fit_ddec_ivar[i] = 1./3600.**2 * (ivs[1] / cosdec**2)
                 F.full_fit_flux_ivar[i] = ivs[2]
 
+                full_fit_ra.append(pos2.ra)
+                full_fit_dec.append(pos2.dec)
                 #print('dRA,dDec (%.3f, %.3f) milli-arcsec' % (1000. * F.full_fit_dra[i], 1000. * F.full_fit_ddec[i]))
 
             # RESTORE tim data!
             tim.data = timdata
             tim.psf  = timpsf
+
+            F.full_fit_x = np.zeros(len(F), np.float32)
+            F.full_fit_y = np.zeros(len(F), np.float32)
+            _,x,y = tim.subwcs.radec2pixelxy(full_fit_ra, full_fit_dec)
+            F.full_fit_x[Ibright] = tim.x0 + x-1.
+            F.full_fit_y[Ibright] = tim.y0 + y-1.
 
             if timing:
                 t = Time()
