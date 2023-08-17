@@ -119,11 +119,21 @@ def main():
         _, brick.dec1 = targetwcs.pixelxy2radec(W/2, 1)
         _, brick.dec2 = targetwcs.pixelxy2radec(W/2, H)
 
-    #tfn = catsurvey.find_file('tractor', brick=opt.brick)
+    opt.catalog = False
     tfn = catsurvey.find_file('tractor', brick=brick.brickname)
-    print('Reading catalog from', tfn)
-    T = fits_table(tfn)
-    tprimhdr = fitsio.read_header(tfn)
+    if os.path.exists(tfn):
+        print('Reading catalog from', tfn)
+        T = fits_table(tfn)
+        tprimhdr = fitsio.read_header(tfn)
+        if custom_brick:
+            opt.catalog = tfn
+    else:
+        # This is repeated code from forced_photom.py....
+        from legacypipe.forced_photom import get_catalog_in_wcs
+        T = get_catalog_in_wcs(targetwcs, survey, catsurvey)
+        tprimhdr = None
+        print('Got catalog in WCS:')
+        T.about()
 
     ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
     if ccds is None:
@@ -151,10 +161,6 @@ def main():
     opt.hybrid_psf = True
     opt.normalize_psf = True
     opt.outlier_mask = None
-    if custom_brick:
-        opt.catalog = tfn
-    else:
-        opt.catalog = False
     opt.write_cat = False
     opt.move_gaia = True
     opt.save_model = False
@@ -236,14 +242,15 @@ def main():
         T.set('forced_galdepth_%s' % b, np.zeros(len(T), np.float32))
         T.set('forced_nexp_%s' % b, np.zeros(len(T), np.int32))
 
-    objidmap = dict([(o,i) for i,o in enumerate(T.objid)])
-    brickid = brick.brickid
+    objidmap = dict([((b,o),i) for i,(b,o) in enumerate(zip(T.brickid, T.objid))])
+    #brickid = brick.brickid
 
     for bid,objid,band,flux,fluxiv,psfdepth,galdepth,apflux,apfluxiv in zip(
             F.brickid, F.objid, F.filter, F.flux, F.flux_ivar, F.psfdepth, F.galdepth,
             F.apflux, F.apflux_ivar):
-        if bid != brickid:
-            continue
+        key = (bid, objid)
+        #if bid != brickid:
+        #    continue
         try:
             i = objidmap[objid]
         except KeyError:

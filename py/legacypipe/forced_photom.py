@@ -1062,14 +1062,15 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         if derivs:
             F.flux_dra  = np.zeros(len(F), np.float32)
             F.flux_ddec = np.zeros(len(F), np.float32)
-            F.flux_dra [Iderivs] = np.array([src.getParams()[0]
-                                             for src in derivsrcs]).astype(np.float32)
-            F.flux_ddec[Iderivs] = np.array([src.getParams()[1]
-                                             for src in derivsrcs]).astype(np.float32)
             F.flux_dra_ivar  = np.zeros(len(F), np.float32)
             F.flux_ddec_ivar = np.zeros(len(F), np.float32)
-            F.flux_dra_ivar [Iderivs] = R.IV[N  ::2].astype(np.float32)
-            F.flux_ddec_ivar[Iderivs] = R.IV[N+1::2].astype(np.float32)
+            if len(Iderivs):
+                F.flux_dra [Iderivs] = np.array([src.getParams()[0]
+                                                 for src in derivsrcs]).astype(np.float32)
+                F.flux_ddec[Iderivs] = np.array([src.getParams()[1]
+                                                 for src in derivsrcs]).astype(np.float32)
+                F.flux_dra_ivar [Iderivs] = R.IV[N  ::2].astype(np.float32)
+                F.flux_ddec_ivar[Iderivs] = R.IV[N+1::2].astype(np.float32)
 
         if agn:
             F.flux_agn = np.zeros(len(F), np.float32)
@@ -1275,9 +1276,8 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             F.full_fit_dra_ivar  = np.zeros(len(F), np.float32)
             F.full_fit_ddec_ivar = np.zeros(len(F), np.float32)
             F.full_fit_flux_ivar = np.zeros(len(F), np.float32)
-
-            full_fit_ra  = []
-            full_fit_dec = []
+            F.full_fit_x = np.zeros(len(F), np.float32)
+            F.full_fit_y = np.zeros(len(F), np.float32)
 
             #t0 = None
             for i in Ibright:
@@ -1296,6 +1296,10 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
                 mm = None
                 mod = src2.getModelPatch(tim, modelMask=mm)
+                if mod is None:
+                    # Weirdly, this can happen -- forced phot fitting has made the flux negative,
+                    # or something like that?
+                    continue
                 dh,dw = tim.data.shape
                 mod.clipTo(dw,dh)
                 # Add initial model back into residual image
@@ -1419,19 +1423,14 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 F.full_fit_ddec_ivar[i] = 1./3600.**2 * (ivs[1] / cosdec**2)
                 F.full_fit_flux_ivar[i] = ivs[2]
 
-                full_fit_ra.append(pos2.ra)
-                full_fit_dec.append(pos2.dec)
+                _,x,y = tim.subwcs.radec2pixelxy(pos2.ra, pos2.dec)
+                F.full_fit_x[i] = tim.x0 + x-1.
+                F.full_fit_y[i] = tim.y0 + y-1.
                 #print('dRA,dDec (%.3f, %.3f) milli-arcsec' % (1000. * F.full_fit_dra[i], 1000. * F.full_fit_ddec[i]))
 
             # RESTORE tim data!
             tim.data = timdata
             tim.psf  = timpsf
-
-            F.full_fit_x = np.zeros(len(F), np.float32)
-            F.full_fit_y = np.zeros(len(F), np.float32)
-            _,x,y = tim.subwcs.radec2pixelxy(full_fit_ra, full_fit_dec)
-            F.full_fit_x[Ibright] = tim.x0 + x-1.
-            F.full_fit_y[Ibright] = tim.y0 + y-1.
 
             if timing:
                 t = Time()
