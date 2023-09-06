@@ -44,8 +44,29 @@ RUN apt -y update && apt install -y apt-utils \
     python3-pip \
     source-extractor \
     psfex \
+    build-essential \ 
+    gfortran \
+    libcurl4 \
+    wget \
     # Remove APT files
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Build MPICH for NERSC/Perlmutter
+ARG mpich=4.0.2
+ARG mpich_prefix=mpich-$mpich
+
+RUN \
+    wget https://www.mpich.org/static/downloads/$mpich/$mpich_prefix.tar.gz \
+    && tar xvzf $mpich_prefix.tar.gz                                        \
+    && cd $mpich_prefix                                                     \
+    && FFLAGS=-fallow-argument-mismatch FCFLAGS=-fallow-argument-mismatch ./configure \
+    && make -j 16                                                           \
+    && make install                                                         \
+    && make clean                                                           \
+    && cd ..                                                                \
+    && rm -rf $mpich_prefix
+
+RUN /sbin/ldconfig
 
 # Pip installs
 RUN for x in \
@@ -61,6 +82,7 @@ RUN for x in \
     astropy \
     photutils \
     zmq \
+    mpi4py \
     ; do pip3 install $x; done \
     && rm -Rf /root/.cache/pip
 
