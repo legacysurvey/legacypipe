@@ -90,6 +90,29 @@ class LegacySurveyImage(object):
             self.imgfn = survey.check_cache(self.imgfn)
 
             primhdr = self.read_image_primary_header()
+
+            # hdu, ccdname, width, height, pixscale
+            self.hdu = image_hdu
+            if image_hdu is not None:
+                hdr = self.read_image_header(ext=image_hdu)
+                # Parse ZNAXIS[12] / NAXIS[12] ?
+                info = self.read_image_fits()[image_hdu].get_info()
+                #print('Image info:', info)
+                self.height,self.width = info['dims']
+                self.hdu = info['hdunum'] - 1
+                self.ccdname = self.get_ccdname(primhdr, hdr)
+                self.pixscale = self.get_pixscale(primhdr, hdr)
+                self.fwhm = self.get_fwhm(primhdr, hdr)
+            else:
+                self.ccdname = ''
+                hdus = self.get_extension_list()
+                print('ext list:', hdus)
+                if len(hdus) == 1:
+                    self.hdu = hdus[0]
+
+            self.dq_hdu = self.hdu
+            self.wt_hdu = self.hdu
+
             self.band = self.get_band(primhdr)
             self.propid = self.get_propid(primhdr)
             self.expnum = self.get_expnum(primhdr)
@@ -106,23 +129,6 @@ class LegacySurveyImage(object):
                 key = namechange.get(key.lower(), key.lower())
                 key = key.replace('-', '_')
                 setattr(self, key, val)
-
-            # hdu, ccdname, width, height, pixscale
-            self.hdu = image_hdu
-            if image_hdu is not None:
-                hdr = self.read_image_header(ext=image_hdu)
-                # Parse ZNAXIS[12] / NAXIS[12] ?
-                info = self.read_image_fits()[image_hdu].get_info()
-                #print('Image info:', info)
-                self.height,self.width = info['dims']
-                self.hdu = info['hdunum'] - 1
-                self.ccdname = self.get_ccdname(primhdr, hdr)
-                self.pixscale = self.get_pixscale(primhdr, hdr)
-                self.fwhm = self.get_fwhm(primhdr, hdr)
-            else:
-                self.ccdname = ''
-            self.dq_hdu = self.hdu
-            self.wt_hdu = self.hdu
 
             self.sig1 = 0.
             self.ccdzpt = 0.
@@ -240,10 +246,18 @@ class LegacySurveyImage(object):
     def get_extension_list(self, debug=False):
         F = self.read_image_fits()
         exts = []
-        for f in F[1:]:
-            exts.append(f.get_extname())
+        for hdu in range(1, len(F)):
+            f = F[hdu]
+            extname = f.get_extname()
+            if len(extname):
+                exts.append(extname)
+            else:
+                exts.append(hdu)
             if debug:
                 break
+        if len(exts) == 0:
+            # image in primary HDU?
+            return [0]
         return exts
 
     def read_image_fits(self):

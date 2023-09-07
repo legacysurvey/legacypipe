@@ -2,10 +2,14 @@
 
 # Run legacy_zeropoints on a single image within a Shifter container at NERSC.
 
-export LEGACY_SURVEY_DIR=$CSCRATCH/dr10pre
-export CACHE_DIR=/global/cscratch1/sd/dstn/dr10-cache
+export COSMO=/global/cfs/cdirs/cosmo
+export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
+#export CACHE_DIR=/global/cscratch1/sd/dstn/dr10-cache
+#outdir=$LEGACY_SURVEY_DIR/zpt
+outdir=$SCRATCH/zpt
 
-outdir=$LEGACY_SURVEY_DIR/zpt
+export COSMO_RO=/dvs_ro/cfs/cdirs/cosmo
+
 
 # NOTE: if you only want to regenerate sky calibs, MUST create a symlink
 # in $LSD/calib/psfex, eg to
@@ -28,15 +32,15 @@ ncores=8
 #export DUST_DIR=/global/cfs/cdirs/cosmo/data/dust/v0_1
 #export TYCHO2_KD_DIR=/global/cfs/cdirs/cosmo/staging/tycho2
 #export LARGEGALAXIES_CAT=/global/cfs/cdirs/cosmo/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
-export DUST_DIR=$CSCRATCH/dr10-cache/dust-v0_1
-export GAIA_CAT_DIR=/global/cfs/cdirs/cosmo/work/gaia/chunks-gaia-dr2-astrom-2
+export DUST_DIR=$COSMO_RO/data/dust/v0_1
+export GAIA_CAT_DIR=$COSMO_RO/work/gaia/chunks-gaia-dr2-astrom-2
 export GAIA_CAT_VER=2
 unset GAIA_CAT_PREFIX
 unset GAIA_CAT_SCHEME
 
-export TYCHO2_KD_DIR=/global/cscratch1/sd/dstn/dr10-cache/tycho2
-export LARGEGALAXIES_CAT=/global/cscratch1/sd/dstn/dr10-cache/SGA-ellipse-v3.0.kd.fits
-export PS1CAT_DIR=/global/cfs/cdirs/cosmo/work/ps1/cats/chunks-qz-star-v3
+export TYCHO2_KD_DIR=$COSMO_RO/staging/tycho2
+export LARGEGALAXIES_CAT=$COSMO_RO/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
+export PS1CAT_DIR=$COSMO_RO/work/ps1/cats/chunks-qz-star-v3
 
 #export SKY_TEMPLATE_DIR=/global/cfs/cdirs/cosmo/data/legacysurvey/dr9/calib/sky_pattern
 unset SKY_TEMPLATE_DIR
@@ -94,11 +98,12 @@ echo "Logging to $log"
 #python -u -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
 
 
+#    --cache-dir ${CACHE_DIR} \
+#    --prime-cache \
+
 python -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
 	--camera ${camera} \
     --survey-dir ${LEGACY_SURVEY_DIR} \
-    --cache-dir ${CACHE_DIR} \
-    --prime-cache \
     --image ${image_fn} \
     --outdir ${outdir} \
     --threads ${ncores} \

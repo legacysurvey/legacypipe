@@ -212,7 +212,7 @@ class HscImage(LegacySurveyImage):
         assert(ims.shape[0] == ne)
 
         # Extra polynomial coefficients that (apparently) aren't folded into the ims (?)
-        print('Coefficients:', t2.coeff)
+        #print('Coefficients:', t2.coeff)
         assert(len(t2.coeff) == ne)
         for i,c in enumerate(t2.coeff):
             ims[:,:,i] *= c
