@@ -8,7 +8,7 @@ from legacypipe.survey import LegacySurveyData
 
 This script was used (after creating a symlink farm as described
 below) to merge in an updated set of bricks in *sourcedir* into the
-symlink farm in *destdir*, specifically the *sourcedir* was re-run
+symlink farm in *destdir*.  Specifically, the *sourcedir* was re-run
 bricks that fixed a sub-blobs issue in DR10; the *destdir* was the new
 DR10.1 directory (symlink farm).
 
@@ -59,30 +59,33 @@ def main():
     sourcedir = '/pscratch/sd/d/dstn/sub-blobs'
     destdir = '/global/cfs/cdirs/cosmo/work/legacysurvey/dr10.1/south'
 
-    bands = ['g','r','i','z']
-    wbands = ['W1', 'W2', 'W3', 'W4']
+    # Get list of checksum files (one per brick), from which we will get
+    # the list of bricks to update.
     fns = glob(os.path.join(sourcedir, 'tractor/*/brick-*.sha256sum'))
     fns.sort()
-    surveys = {}
+    survey = LegacySurveyData(survey_dir=sourcedir)
+
+    # Optical and infrared bands to include
+    bands = ['g', 'r', 'i', 'z']
+    wbands = ['W1', 'W2', 'W3', 'W4']
+
     for fn in fns:
         print()
-        #print(fn)
+        # Assume 8-character brick names
         brick = fn.replace('.sha256sum', '')[-8:]
         print('Brick', brick)
+        # Pull off the base directory (which will be the same as sourcedir)
         basedir = '/'.join(fn.split('/')[:-3])
-        #print('basedir', basedir)
+        # Check the source-directory checksum
         cmd = 'cd %s && sha256sum --quiet -c %s' % (basedir, fn)
         print(cmd)
         rtn = os.system(cmd)
-        #print(rtn)
         assert(rtn == 0)
+        # Collect the filenames listed in the source checksum file
         shas = open(fn).readlines()
         shas = set([s.strip().split()[1].replace('*','') for s in shas])
 
-        if not basedir in surveys:
-            surveys[basedir] = LegacySurveyData(survey_dir=basedir)
-        survey = surveys[basedir]
-
+        # Check that all expected filetypes (that aren't per-band) exist for this brick
         allfns = []
         for filetype in ['tractor', 'tractor-intermediate', 'ccds-table', 'depth-table',
                          'image-jpeg', 'model-jpeg', 'resid-jpeg',
@@ -94,15 +97,16 @@ def main():
                          'blobmap', 'maskbits', 'all-models', 'ref-sources',
                          ]:
             fn = survey.find_file(filetype, brick=brick)
-            #print(fn)
             assert(os.path.exists(fn))
+            # Record the relative path
             allfns.append(fn.replace(basedir+'/', ''))
 
+        # Check that, for each optical band, either all the expected files exist,
+        # or none do.
         for band in bands:
             for i,filetype in enumerate(['invvar', 'chi2', 'image', 'model', 'blobmodel',
                                          'depth', 'galdepth', 'nexp', 'psfsize',]):
                 fn = survey.find_file(filetype, brick=brick, band=band)
-                #print(fn)
                 exists = os.path.exists(fn)
                 # Either all products exist for a band, or none!
                 if i == 0:
@@ -110,23 +114,22 @@ def main():
                 else:
                     assert(has_band == exists)
                 if has_band:
+                    # Record the relative path
                     allfns.append(fn.replace(basedir+'/', ''))
             print('Band', band, 'exists:', has_band)
 
+        # Check that all expected WISE files exist
         for band in wbands:
             for i,filetype in enumerate(['invvar', 'image', 'model']):
                 fn = survey.find_file(filetype, brick=brick, band=band)
-                #print(fn)
                 assert(os.path.exists(fn))
+                # Record the relative path
                 allfns.append(fn.replace(basedir+'/', ''))
 
-        print('sha:', len(shas))
-        print('files:', len(allfns))
-        #print(shas)
-        #print(set(allfns))
+        # Check that the set of files found equals the set listed in the checksum file.
         assert(set(shas) == set(allfns))
 
-        # New checksums:
+        # Collect the source checksums (filename -> checksum map)
         new_checksums = {}
         fn = survey.find_file('checksums', brick=brick)
         for line in open(fn).readlines():
@@ -134,33 +137,31 @@ def main():
             fn = words[1]
             if fn.startswith('*'):
                 fn = fn[1:]
-            assert(not(fn.startswith('*')))
             assert(fn in allfns)
             new_checksums[fn] = words[0]
-        #print('New checksums:', list(new_checksums.items())[:3])
 
+        # Create updated (merged) checksum files
         new_checksum_files = []
-
+        # Find the set of directories that source files will go into
         alldirs = set([os.path.dirname(x) for x in allfns])
         for dirnm in alldirs:
-            #print(dirnm)
+            # Find the existing checksum file in the destination directory
             pat = os.path.join(destdir, dirnm, '*.sha256sum')
-            #print(pat)
             sha = glob(pat)
-            checksums = {}
-
             assert(len(sha) == 1)
             sha = sha[0]
+
             print('Updating existing checksum file:', sha)
+            # Read destination checksum file (map filename -> checksum)
+            checksums = {}
             for line in open(sha).readlines():
                 words = line.split()
                 fn = words[1]
                 if fn.startswith('*'):
                     fn = fn[1:]
-                #assert(not(fn.startswith('*')))
                 checksums[fn] = words[0]
-            #print('Old checksums:', list(checksums.items())[:3])
 
+            # Update destination checksums with source checksums
             nup = 0
             for fn in allfns:
                 if not fn.startswith(dirnm):
@@ -169,22 +170,23 @@ def main():
                 base = os.path.basename(fn)
                 assert(base in checksums)
                 checksums[base] = new_checksums[fn]
-                #print('Updated checksum for', base)
                 nup += 1
             print('Updated checksum for', nup, 'files')
 
+            # Record the updated checksum contents and filename, for later writing.
             chk_txt = ''.join(['%s *%s\n' % (v,k) for k,v in checksums.items()])
             new_checksum_files.append((sha, chk_txt))
 
-        # Delete existing destination directories
-        # (useful when updating some bricks into a symlink farm...)
+        # Delete existing destination directories (for the coadd dir only),
+        # but only if they are symlinks
+        # (useful when updating some bricks into a symlink farm)
         for dirnm in ['coadd/%s/%s' % (brick[:3], brick)]:
             path = os.path.join(destdir, dirnm)
             if os.path.islink(path):
                 print('Deleting symlink', path)
                 os.remove(path)
 
-        # Delete existing destination files
+        # Delete existing destination files, but only if they are symlinks
         for fn in allfns:
             path = os.path.join(destdir, fn)
             if os.path.islink(path):
@@ -193,7 +195,6 @@ def main():
 
         # Copy files into place.
         cmd = 'rsync -Rarv %s/./{%s} %s' % (basedir, ','.join(allfns), destdir)
-        #print(cmd)
         print('Rsyncing: rsync -Rarv %s/./{[files]} %s' % (basedir, destdir))
         rtn = os.system(cmd)
         assert(rtn == 0)
@@ -213,7 +214,6 @@ def main():
             # print(cmd)
             # rtn = os.system(cmd)
             # assert(rtn == 0)
-        #break
 
 if __name__ == '__main__':
     main()
