@@ -356,7 +356,7 @@ def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None,
                'brickid', 'brickname', 'objid',
                'sersic', 'shape_r', 'shape_e1', 'shape_e2',
                'ref_epoch', 'pmra', 'pmdec', 'parallax', 'ref_cat', 'ref_id',]
-    columns.extend(['flux_%s' % b for b in bands])
+    fluxcolumns = ['flux_%s' % b for b in bands]
 
     for catsurvey,north in surveys:
         bricks = bricks_touching_wcs(chipwcs, survey=catsurvey)
@@ -380,7 +380,11 @@ def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None,
                 print('WARNING: catalog', fn, 'does not exist.  Skipping!')
                 continue
             print('Reading', fn)
-            T = fits_table(fn, columns=columns)
+            # Read first row to see what columns are available, add flux columns if exist
+            t0 = fits_table(fn, rows=[0])
+            cols = t0.get_columns()
+            fc = [c for c in fluxcolumns if c in cols]
+            T = fits_table(fn, columns=columns + fc)
             if resolve_dec is not None:
                 if north:
                     T.cut(T.dec >= resolve_dec)

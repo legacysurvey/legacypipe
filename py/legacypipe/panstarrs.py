@@ -100,8 +100,9 @@ class PanStarrsImage(LegacySurveyImage):
         basename = basename.replace('.fits','')
         return basename
 
-    def get_extension_list(self, debug=False):
-        return [1,]
+    # def get_extension_list(self, debug=False):
+    #     #return [1,]
+    #     return [0,]
 
     def has_astrometric_calibration(self, ccd):
         return True
@@ -111,14 +112,20 @@ class PanStarrsImage(LegacySurveyImage):
         self.wtfn = self.imgfn.replace('.fits', '.wt.fits')
 
     def get_cd_matrix(self, primhdr, hdr):
-        return hdr['CDELT1'], 0., 0., hdr['CDELT2']
+        #### Really we should read PC001001, PC001002, PC002001, PC002002...
+        return -hdr['CDELT1'], 0., 0., hdr['CDELT2']
 
     def get_radec_bore(self, primhdr):
         hdr = self.read_image_header()
         return hdr['CRVAL1'], hdr['CRVAL2']
 
     def get_band(self, primhdr):
-        self.hdu = 1
+        key = 'FPA.FILTER'
+        if key in primhdr:
+            band = primhdr[key]
+            band = band.split('.')[0]
+            return band
+        #self.hdu = 1        
         hdr = self.read_image_header()
         #print('Primary header:')
         #print(primhdr)
@@ -127,12 +134,43 @@ class PanStarrsImage(LegacySurveyImage):
         return band
 
     def get_expnum(self, primhdr):
+        key = 'IMAGEID'
+        if key in primhdr:
+            return primhdr[key]
         hdr = self.read_image_header()
-        return hdr['IMAGEID']
+        if key in hdr:
+            return hdr[key]
+        # WTF some images don't have this??!  eg rings.v3.skycell.0960.017.stk.r.unconv.fits lacks it
+        # Fake it from:
+        # TESS_ID = 'RINGS.V3'           / type of stack
+        # SKYCELL = 'skycell.2594.011'   / type of stack
+        tessid = None
+        skycell = None
+        for h in [primhdr, hdr]:
+            if 'TESS_ID' in h:
+                tessid = h['TESS_ID']
+            if 'SKYCELL' in h:
+                skycell = h['SKYCELL']
+        if tessid is None or skycell is None:
+            raise RuntimeError('No IMAGEID or TESS_ID & SKYCELL in header for Pan-STARRS image %s' % self.image_filename)
+        words = tessid.strip().split('.')
+        if len(words) != 2 or words[0] != 'RINGS' or words[1][0] != 'V':
+            raise RuntimeError('Failed to parse TESS_ID for Pan-STARRS image %s' % self.image_filename)
+        tid = int(words[1][1:])
+        words = skycell.strip().split('.')
+        if len(words) != 3 or words[0] != 'skycell':
+            raise RuntimeError('Failed to parse SKYCELL for Pan-STARRS image %s' % self.image_filename)
+        sk1 = int(words[1], 10)
+        sk2 = int(words[2], 10)
+        fakeid = tid * 10_000_000 + sk1 * 1_000 + sk2
+        return fakeid
 
     def get_exptime(self, primhdr):
+        key = 'EXPTIME'
+        if key in primhdr:
+            return primhdr[key]
         hdr = self.read_image_header()
-        return hdr.get('EXPTIME')
+        return hdr.get(key)
 
     def get_pixscale(self, primhdr, hdr):
         return 3600. * np.sqrt(np.abs(hdr['CDELT1'] * hdr['CDELT2']))
@@ -162,9 +200,13 @@ class PanStarrsImage(LegacySurveyImage):
         return ''
 
     def get_camera(self, primhdr):
-        hdr = self.read_image_header()
-        # PSCAMERA= 'GPC1    '           / Camera name
-        cam = hdr['PSCAMERA']
+        key = 'PSCAMERA'
+        if key in primhdr:
+            cam = primhdr[key]
+        else:
+            hdr = self.read_image_header()
+            # PSCAMERA= 'GPC1    '           / Camera name
+            cam = hdr[key]
         if cam == 'GPC1':
             return 'panstarrs'
         return cam
@@ -177,6 +219,7 @@ class PanStarrsImage(LegacySurveyImage):
         for r in hdr.records():
             copyhdr.add_record(r)
         if not 'CD1_1' in copyhdr:
+            #### Really we should read PC001001, PC001002, PC002001, PC002002...
             copyhdr['CD1_1'] = -hdr['CDELT1']
             copyhdr['CD1_2'] = 0.
             copyhdr['CD2_1'] = 0.
@@ -267,8 +310,11 @@ class PanStarrsImage(LegacySurveyImage):
         return airmass
 
     def get_mjd(self, primhdr):
+        key = 'MJD-OBS'
+        if key in primhdr:
+            return primhdr[key]
         hdr = self.read_image_header()
-        return hdr.get('MJD-OBS')
+        return hdr.get(key)
 
     def estimate_sky(self, img, invvar, dq, primhdr, imghdr):
         from legacypipe.image import estimate_sky_from_pixels

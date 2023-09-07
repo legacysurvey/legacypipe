@@ -98,7 +98,7 @@ def main():
     #ra1,ra2,dec1,dec2 = brick.ra1, brick.ra2, brick.dec1, brick.dec2
     #radecpoly = np.array([[ra2,dec1], [ra1,dec1], [ra1,dec2], [ra2,dec2], [ra2,dec1]])
 
-    print('Brick', brick)
+    print('Brick', brick.brickname)
     if os.path.exists(outfn):
         print('Output file exists:', outfn)
         return 0
@@ -252,7 +252,7 @@ def main():
         #if bid != brickid:
         #    continue
         try:
-            i = objidmap[objid]
+            i = objidmap[key]
         except KeyError:
             continue
         band = band.strip()
