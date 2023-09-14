@@ -878,6 +878,8 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                     do_forced=True, do_apphot=True, get_model=False, ps=None,
                     timing=False,
                     fixed_also=False,
+                    full_position_fit=True,
+                    windowed_peak=True,
                     ceres_threads=1):
     '''
     fixed_also: if derivs=True, also run without derivatives and report
@@ -981,8 +983,6 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             tlast = t
 
         if derivs:
-
-            full_position_fit = True
 
             if full_position_fit:
                 forced_kwargs.update(wantims=True)
@@ -1441,7 +1441,6 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 print('Full position fitting:', t-tlast)
                 tlast = t
 
-    windowed_peak = True
     if windowed_peak:
         # Compute ~XWIN_IMAGE like source extractor
         F.win_dra  = np.zeros(len(F), np.float32)
