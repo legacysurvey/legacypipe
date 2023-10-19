@@ -56,6 +56,17 @@ class HscData(LegacySurveyData):
     def get_default_release(self):
         return 200
 
+class SuprimeData(LegacySurveyData):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.update_maskbits_bands(['I-A-L427',
+                                    'I-A-L464',
+                                    'I-A-L484',
+                                    'I-A-L505',
+                                    'I-A-L527',])
+        print('Maskbits:', self.get_maskbits())
+        print('Maskbits descriptions:', self.get_maskbits_descriptions())
+
 class RerunWithCcds(LegacySurveyData):
     def get_brick_by_name(self, brickname):
         # BRUTAL HACK -- runbrick.py's stage_tims first calls
@@ -82,6 +93,7 @@ runs = {
     'odin': OdinData,
     'hsc': HscData,
     'rerun-ccds': RerunWithCcds,
+    'suprime': SuprimeData,
     None: LegacySurveyData,
 }
 
