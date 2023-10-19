@@ -367,7 +367,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         version_header.add_record(dict(
             name='CAMS_%s' % band.upper(), value=' '.join(cams),
             comment='Cameras contributing band %s' % band))
-    version_header.add_record(dict(name='BANDS', value=''.join(bands),
+    version_header.add_record(dict(name='BANDS', value=','.join(bands),
                                    comment='Bands touching this brick'))
     version_header.add_record(dict(name='NBANDS', value=len(bands),
                                    comment='Number of bands in this catalog'))
