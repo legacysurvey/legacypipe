@@ -476,6 +476,8 @@ def main(args=None):
                         help='Omit the depth cut')
     parser.add_argument('--nmatch', default=False, action='store_true',
                         help='Omit the "ccdnmatch" cut')
+    parser.add_argument('--no-zpt-diff', default=False, action='store_true',
+                        help='Omit the zpt_diff_avg bit (ie variation among chips in an exposure)')
     parser.add_argument('--good-ccd-fraction', default=0.7, type=float,
                         help='Fraction of CCDs in an exposure that must be good to keep any chips')
     parser.add_argument('--max-seeing', default=None, type=float,
@@ -544,6 +546,8 @@ def main(args=None):
         ccds.ccd_cuts &= ~psfzpt_cuts.CCD_CUT_BITS['early_decam']
     if args.nmatch:
         ccds.ccd_cuts &= ~psfzpt_cuts.CCD_CUT_BITS['ccdnmatch']
+    if args.no_zpt_diff:
+        ccds.ccd_cuts &= ~psfzpt_cuts.CCD_CUT_BITS['zpt_diff_avg']
     depthbit = psfzpt_cuts.CCD_CUT_BITS['depth_cut']
     manybadbit = psfzpt_cuts.CCD_CUT_BITS['too_many_bad_ccds']
     if not numpy.all((ccds.ccd_cuts & depthbit) == 0):
