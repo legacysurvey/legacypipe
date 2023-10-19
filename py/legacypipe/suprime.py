@@ -153,6 +153,15 @@ class SuprimeImage(LegacySurveyImage):
         colorterm = np.zeros(len(gmag))
 
         coeffs = {
+            'I-A-L427': [-0.7496, 0.8574,-0.1317],
+            'I-A-L464': [-0.2358, 1.0048,-1.4035, 0.7257,-0.1200],
+            'I-A-L484': [ 0.2545,-0.6517, 0.4007,-0.0664],
+            'I-A-L505': [ 0.2422,-1.1041, 1.4401,-0.6947, 0.1103],
+            'I-A-L527': [ 0.2007,-0.1745,-0.0020],
+        }[band]
+
+        '''
+        coeffs = {
             ('I-A-L427', 'det0'): [-0.28424705, 0.82685339, -0.11524449],
             ('I-A-L427', 'det1'): [-0.75325532, 0.85490214, -0.12558040],
             ('I-A-L427', 'det2'): [-0.75637723, 0.79008085, -0.10552436],
@@ -209,7 +218,7 @@ class SuprimeImage(LegacySurveyImage):
             ('I-A-L527', 'det9'): [ 0.18526426, -0.15797659, -0.003059741],
 
         }[band, self.ccdname]
-
+        '''
         colorterm = np.zeros(len(gmag))
         for power,coeff in enumerate(coeffs):
             colorterm += coeff * gi**power
