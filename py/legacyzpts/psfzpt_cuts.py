@@ -450,12 +450,12 @@ def add_psfzpt_cuts(T, camera, bad_expid, image2coadd='', **kw):
         skybright = {}
         for band,zpt,dzlo,dzhi in [
                 # These are median values from the COSMOS set
-                ('I-A-L427', 24.49,  -0.5, 0.5),
+                ('I-A-L427', 25.22,  -0.5, 0.5),
                 ('I-A-L464', 25.33,  -0.5, 0.25),
-                ('I-A-L484', 25.67,  -0.5, 0.25),
-                ('I-A-L505', 25.41,  -0.5, 0.25),
-                ('I-A-L527', 25.99,  -0.5, 0.25),
-                ]:
+                ('I-A-L484', 25.60,  -0.5, 0.25),
+                ('I-A-L505', 25.33,  -0.5, 0.25),
+                ('I-A-L527', 25.74,  -0.5, 0.25),
+        ]:
             zpt_lo[band] = zpt + dzlo
             zpt_hi[band] = zpt + dzhi
             skybright[band] = 90.
