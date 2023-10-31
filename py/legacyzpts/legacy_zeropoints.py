@@ -1378,7 +1378,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         'expnum', 'ccdname', 'exptime', 'gain', 'airmass', 'filter',
         'apflux_6', 'apflux_7', 'apflux_8',
         'apflux_6_err', 'apflux_7_err', 'apflux_8_err',
-        'ra_now', 'dec_now', 'ra_fit', 'dec_fit', 'x_ref', 'y_ref'
+        'ra_now', 'dec_now', 'ra_fit', 'dec_fit', 'x_ref', 'y_ref',
+        'dx', 'dy',
     ])
     for c in phot.get_columns():
         if not c in cols:
