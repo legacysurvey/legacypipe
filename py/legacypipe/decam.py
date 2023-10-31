@@ -26,10 +26,13 @@ class DecamImage(CPImage):
                 # i,Y from DESY1_Stripe82 95th percentiles
                 i = 25.149,
                 Y = 23.712,
+                # ODIN
                 # N419 is hacked to just = N501
                 N419 = 23.812,
                 N501 = 23.812,
                 N673 = 24.151,
+                # Merian
+                N540 = 24.000,
     )
 
     K_EXT = dict(g = 0.173,
@@ -39,10 +42,13 @@ class DecamImage(CPImage):
                  Y = 0.058,
                  # From Arjun 2021-03-17 based on DECosmos (calib against SDSS)
                  u = 0.63,
+                 # ODIN
                  # HACK - == broadband
                  N419 = 0.173,
                  N501 = 0.173,
                  N673 = 0.090,
+                 # Merian
+                 N540 = 0.173,
     )
 
     '''A LegacySurveyImage (via CPImage) subclass to handle images from

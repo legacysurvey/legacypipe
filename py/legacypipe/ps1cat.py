@@ -70,9 +70,12 @@ class HealpixedCatalog(object):
 
 class ps1cat(HealpixedCatalog):
     ps1band = dict(g=0,r=1,i=2,z=3,Y=4,
+                   # ODIN
                    N419=0,
                    N501=0,
                    N673=1,
+                   # Merian
+                   N540=0,
     )
     def __init__(self,expnum=None,ccdname=None,ccdwcs=None):
         """Read PS1 or gaia sources for an exposure number + CCD name or CCD WCS
@@ -220,6 +223,8 @@ def ps1_to_decam(psmags, band):
         N501 = [ 0., -0.2784, 0.2915, -0.0686 ],
         # c0: 0.2324
         N673 = [ 0., -0.3456, 0.1334, -0.0146 ],
+        # Merian
+        N540 = [ 0.36270593, -0.40238762,  0.0551082 ],
     )[band]
     colorterm = np.zeros(len(gi))
     for power,coeff in enumerate(coeffs):
