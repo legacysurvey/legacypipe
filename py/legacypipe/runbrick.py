@@ -3818,6 +3818,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             picsurvey.output_dir = survey.output_dir
             picsurvey.allbands = survey.allbands
             picsurvey.coadd_bw = survey.coadd_bw
+            # Also pick up maskbits updates, eg from --run
+            picsurvey.maskbits_descriptions = survey.maskbits_descriptions
+            picsurvey.maskbits = survey.maskbits
 
         flush()
         if mp is not None and threads is not None and threads > 1:
