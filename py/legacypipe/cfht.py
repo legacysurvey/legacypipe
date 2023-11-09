@@ -212,7 +212,7 @@ class MegaPrimeImage(LegacySurveyImage):
 
     def read_invvar(self, **kwargs):
         # The "weight" maps given are 0/1, apparently == flags.
-        print('MegaPrimeImage.read_invvar')
+        #print('MegaPrimeImage.read_invvar')
         img = self.read_image(**kwargs)
         dq = self.read_dq(**kwargs)
         if self.sig1 is None or self.sig1 == 0.:
@@ -224,15 +224,15 @@ class MegaPrimeImage(LegacySurveyImage):
             sig1 = 1.4826 * mad / np.sqrt(2.)
             # self.sig1 must be in calibrated units
             #self.sig1 = sig1
-            print('Computed sig1 by Blanton method:', sig1, '(MAD:', mad, ')')
+            #print('Computed sig1 by Blanton method:', sig1, '(MAD:', mad, ')')
         else:
             from tractor import NanoMaggies
-            print('sig1 from CCDs file:', self.sig1)
+            #print('sig1 from CCDs file:', self.sig1)
             # sig1 in the CCDs file is in nanomaggy units --
             # but here we need to return in image units.
             zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
             sig1 = self.sig1 * zpscale
-            print('scaled to image units:', sig1)
+            #print('scaled to image units:', sig1)
 
         iv = np.empty_like(img)
         iv[:,:] = 1./sig1**2
@@ -310,9 +310,162 @@ class MegaPrimeImage(LegacySurveyImage):
 
 # For CFIS images processed with Elixir
 class MegaPrimeElixirImage(MegaPrimeImage):
+    # def __init__(self, *args, **kwargs):
+    #     super().__init__(*args, **kwargs)
+    #     self.use_solve_field = False
+
     def compute_filenames(self):
         self.dqfn = None
         self.wtfn = None
+
+    def set_calib_filenames(self):
+        super().set_calib_filenames()
+        calibdir = self.survey.get_calib_dir()
+        imgdir = os.path.dirname(self.image_filename)
+        basename = self.get_base_name()
+        calname = self.name
+        self.wcs_initial_fn = os.path.join(calibdir, 'wcs-initial', imgdir, basename,
+                                           calname + '.wcs')
+        self.scamp_fn = os.path.join(calibdir, 'wcs-scamp', imgdir, basename + '-src.head')
+
+    def get_wcs(self, hdr=None):
+        # Look for SCamp "head" file
+        if os.path.exists(self.scamp_fn):
+            from astrometry.util.util import wcs_pv2sip_hdr
+            import tempfile
+
+            print('Reading Scamp file', self.scamp_fn)
+            lines = open(self.scamp_fn,'rb').readlines()
+            lines = [line.strip() for line in lines]
+            iline = 0
+            header = []
+            # find my HDU in the header
+            for i in range(1, self.hdu+1):
+                header = []
+                while True:
+                    if iline >= len(lines):
+                        raise RuntimeError('Failed to find HDU %i in Scamp header file %s' %
+                                           (self.hdu, self.scamp_fn))
+                    line = lines[iline]
+                    header.append(line)
+                    iline += 1
+                    if line == b'END':
+                        break
+
+            # print('Keeping Scamp header:')
+            # for line in header:
+            #     print(line)
+
+            # Write to a temp file and then read w/ fitsio!
+            tmp = tempfile.NamedTemporaryFile(delete=False)
+            preamble = [b'SIMPLE  =                    T / file does conform to FITS standard',
+                        b'BITPIX  =                   16 / number of bits per data pixel',
+                        b'NAXIS   =                    0 / number of data axes',
+                        b'EXTEND  =                    T / FITS dataset may contain extensions'
+                        ]
+            hdrstr = b''.join([s + b' '*(80-len(s)) for s in preamble + header])
+            tmp.write(hdrstr + b' '*(2880-(len(hdrstr)%2880)))
+            tmp.close()
+            scamp_hdr = fitsio.read_header(tmp.name)
+            del tmp
+            #print('Parsed scamp header:', scamp_hdr)
+
+            # Read original WCS header
+            if hdr is None:
+                hdr = self.read_image_header()
+
+            # Copy Scamp header cards in...
+            for key in ['EQUINOX', 'RADESYS', 'CTYPE1', 'CTYPE2', 'CUNIT1', 'CUNIT2',
+                        'CRVAL1', 'CRVAL2', 'CRPIX1', 'CRPIX2',
+                        'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
+                        'PV1_0', 'PV1_1', 'PV1_2', 'PV1_4', 'PV1_5', 'PV1_6',
+                        'PV1_7', 'PV1_8', 'PV1_9', 'PV1_10',
+                        'PV2_0', 'PV2_1', 'PV2_2', 'PV2_4', 'PV2_5', 'PV2_6',
+                        'PV2_7', 'PV2_8', 'PV2_9', 'PV2_10']:
+                hdr[key] = scamp_hdr[key]
+
+            wcs = wcs_pv2sip_hdr(hdr)
+            return wcs
+
+        # if not self.use_solve_field:
+        #     return super().get_wcs(hdr=hdr)
+        # if not os.path.exists(self.wcs_initial_fn):
+        #     self.run_solve_field()
+        # from astrometry.util.util import Sip
+        # fn = self.wcs_initial_fn
+        # print('Initial WCS filename:', fn, 'exists?', os.path.exists(fn))
+        # fn = self.wcs_final_fn
+        # print('Final WCS filename:', fn, 'exists?', os.path.exists(fn))
+        # if os.path.exists(fn):
+        #     return Sip(fn)
+        # return Sip(self.wcs_initial_fn)
+        return super().get_wcs(hdr=hdr)
+
+    def get_crpixcrval(self, primhdr, hdr):
+        wcs = self.get_wcs()
+        p1,p2 = wcs.get_crpix()
+        v1,v2 = wcs.get_crval()
+        return p1,p2,v1,v2
+
+    def get_cd_matrix(self, primhdr, hdr):
+        wcs = self.get_wcs()
+        return wcs.get_cd()
+
+    # def set_calib_args(self, args):
+    #     # Passes parsed command-line arguments through from legacy_zeropoints.py.
+    #     if args is None:
+    #         return
+    #     if args.use_solve_field:
+    #         self.use_solve_field = True
+
+    # def run_solve_field(self):
+    #     from pkg_resources import resource_filename
+    #     from astrometry.util.file import trymakedirs
+    #     # Initial astrometry -- using solve-field on the image
+    #     dirname = resource_filename('legacypipe', 'data')
+    #     configfn = os.path.join(dirname, 'an-cfht.cfg')
+    #     primhdr = self.read_image_primary_header()
+    #     hdr = self.read_image_header()
+    #     r,d = self.get_radec_bore(primhdr)
+    #     for ds in [2, 4]:
+    #         args = ['--config', configfn,
+    #                 '--downsample', ds,
+    #                 '--objs', 130,
+    #                 '--tweak-order', 1,
+    #                 '--scale-low', self.pixscale * 0.8,
+    #                 '--scale-high', self.pixscale * 1.2,
+    #                 '--scale-units', 'app',
+    #                 '--width', 2112, '--height', 4644,
+    #                 '--no-plots',
+    #                 '--no-remove-lines',
+    #                 '--continue',
+    #                 #'--crpix-center',
+    #                 '--crpix-x', hdr['CRPIX1'],
+    #                 '--crpix-y', hdr['CRPIX2'],
+    #                 '--new-fits', 'none',
+    #                 '--temp-axy',
+    #                 '--solved', 'none',
+    #                 '--match', 'none',
+    #                 '--corr', 'none',
+    #                 '--index-xyls', 'none',
+    #                 '--rdls', 'none',
+    #                 '--wcs', self.wcs_initial_fn,
+    #                 '--extension', self.hdu]
+    #         if r is not None and d is not None:
+    #             args.extend(['--ra', r, '--dec', d, '--radius', 5])
+    #         print('Creating initial WCS using solve-field...')
+    #         trymakedirs(self.wcs_initial_fn, dir=True)
+    #         cmd = ' '.join([str(x) for x in ['solve-field'] + args + [self.imgfn]])
+    #         print('Running:', cmd)
+    #         os.system(cmd)
+    #         if os.path.exists(self.wcs_initial_fn):
+    #             break
+    #     
+    # def run_calibs(self, **kwargs):
+    #     if self.use_solve_field and not os.path.exists(self.wcs_initial_fn):
+    #         self.run_solve_field()
+    #     super().run_calibs(**kwargs)
+    
     # don't need overridden read_image_header
     def read_dq(self, header=False, **kwargs):
         from legacypipe.bits import DQ_BITS

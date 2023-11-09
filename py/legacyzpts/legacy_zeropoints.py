@@ -363,7 +363,7 @@ def measure_image(img_fn, mp, image_dir='images',
         return
 
     rtns = mp.map(run_one_ext, [(img, ext, survey, splinesky,
-                                 measureargs['sdss_photom'])
+                                 measureargs['sdss_photom'], plots)
                                 for ext in extlist])
 
     for ccd,photom in rtns:
@@ -461,12 +461,17 @@ def run_one_calib(X):
     return img
 
 def run_one_ext(X):
-    img, ext, survey, splinesky, sdss_photom = X
+    img, ext, survey, splinesky, sdss_photom, plots = X
+
+    ps = None
+    if plots:
+        from astrometry.util.plotutils import PlotSequence
+        ps = PlotSequence('plots-zpt-%s-%i-%s' % (img.camera, img.expnum, ext))
 
     img = survey.get_image_object(None, camera=img.camera,
                                   image_fn=img.image_filename, image_hdu=ext,
                                   prime_cache=False)
-    return run_zeropoints(img, splinesky=splinesky, sdss_photom=sdss_photom)
+    return run_zeropoints(img, splinesky=splinesky, sdss_photom=sdss_photom, ps=ps)
 
 class outputFns(object):
     def __init__(self, imgfn, outdir, camera, image_dir='images', debug=False):
@@ -856,7 +861,7 @@ def main(args=None):
     tnow = Time()
     print("TIMING:total %s" % (tnow-tbegin,))
 
-def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
+def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
     """Computes photometric and astrometric zeropoints for one CCD.
 
     Args:
@@ -937,13 +942,13 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
 
     # Read image data
     dq,dqhdr = imobj.read_dq(header=True, slc=slc)
-    print('DQ:', dq.shape)
+    #print('DQ:', dq.shape)
     if dq is not None:
         dq = imobj.remap_dq(dq, dqhdr)
     invvar = imobj.read_invvar(dq=dq, slc=slc)
-    print('Invvar:', invvar.shape)
+    #print('Invvar:', invvar.shape)
     img = imobj.read_image(slc=slc)
-    print('Image:', img.shape)
+    #print('Image:', img.shape)
     imobj.fix_saturation(img, dq, invvar, primhdr, hdr, slc)
     # Compute sig1 before rescaling (later it gets scaled by zpscale)
     imobj.sig1 = imobj.estimate_sig1(img, invvar, dq, primhdr, hdr)
@@ -1203,6 +1208,29 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False):
         if not c in wantcols:
             refs.delete_column(c)
             continue
+
+    if ps is not None:
+        print('sig1:', imobj.sig1)
+        s1 = imobj.sig1 * imobj.exptime
+        import pylab as plt
+        plt.figure(figsize=(10,10))
+        plt.clf()
+        plt.hist(fit_img.ravel(), range=(-5.*s1, +10.*s1), bins=20)
+        plt.title('Image pixels in sigmas')
+        ps.savefig()
+        plt.clf()
+        plt.hist(fit_img.ravel(), range=np.percentile(fit_img.ravel(), [5,98]), bins=20)
+        plt.title('Image pixels in counts')
+        ps.savefig()
+        plt.clf()
+        plt.imshow(fit_img, interpolation='nearest', origin='lower',
+                   vmin=-2.*s1, vmax=10.*s1, cmap='gray')
+        ax = plt.axis()
+        ok,x,y = wcs.radec2pixelxy(gaia.ra_now, gaia.dec_now)
+        plt.plot(x-1., y-1., 'o', mec='r', mfc='none')
+        plt.axis(ax)
+        plt.title('Before fitting Gaia sources')
+        ps.savefig()
 
     # Run tractor fitting on the ref stars, using the PsfEx model.
     phot = tractor_fit_sources(imobj, wcs, refs.ra_now, refs.dec_now, refs.flux0,
