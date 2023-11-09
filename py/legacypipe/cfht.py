@@ -312,17 +312,13 @@ class MegaPrimeImage(LegacySurveyImage):
 class MegaPrimeElixirImage(MegaPrimeImage):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Load Scamp WCS
         self.scamp_wcs = None
-        # Look for SCamp "head" file
-        if os.path.exists(self.scamp_fn):
-            self.scamp_wcs = self.read_scamp_wcs()
 
-    def read_scamp_wcs(self):
+    def read_scamp_wcs(self, hdr=None):
         from astrometry.util.util import wcs_pv2sip_hdr
         import tempfile
 
-        print('Reading Scamp file', self.scamp_fn)
+        print('Reading Scamp file', self.scamp_fn, 'HDU', self.hdu)
         lines = open(self.scamp_fn,'rb').readlines()
         lines = [line.strip() for line in lines]
         iline = 0
@@ -385,8 +381,16 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         basename = self.get_base_name()
         calname = self.name
         self.scamp_fn = os.path.join(calibdir, 'wcs-scamp', imgdir, basename + '-scamp.head')
+        #if not os.path.exists(self.scamp_fn):
+        #    print('Warning: Scamp header', self.scamp_fn, 'does not exist, using default WCS')
 
     def get_wcs(self, hdr=None):
+        if self.scamp_wcs is not None:
+            return self.scamp_wcs
+        # Look for Scamp "head" file
+        if os.path.exists(self.scamp_fn):
+            # Load Scamp WCS
+            self.scamp_wcs = self.read_scamp_wcs(hdr=hdr)
         if self.scamp_wcs is not None:
             return self.scamp_wcs
         return super().get_wcs(hdr=hdr)
