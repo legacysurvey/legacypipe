@@ -384,7 +384,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         imgdir = os.path.dirname(self.image_filename)
         basename = self.get_base_name()
         calname = self.name
-        self.scamp_fn = os.path.join(calibdir, 'wcs-scamp', imgdir, basename + '-src.head')
+        self.scamp_fn = os.path.join(calibdir, 'wcs-scamp', imgdir, basename + '-scamp.head')
 
     def get_wcs(self, hdr=None):
         if self.scamp_wcs is not None:
