@@ -3,13 +3,15 @@
 # Run legacy_zeropoints on a single image within a Shifter container at NERSC.
 
 export COSMO=/global/cfs/cdirs/cosmo
-export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
+
+#export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
+export LEGACY_SURVEY_DIR=$SCRATCH/survey-dir-dr11
+
 #export CACHE_DIR=/global/cscratch1/sd/dstn/dr10-cache
 #outdir=$LEGACY_SURVEY_DIR/zpt
-outdir=$SCRATCH/zpt
+outdir=$SCRATCH/zpt-dr11
 
 export COSMO_RO=/dvs_ro/cfs/cdirs/cosmo
-
 
 # NOTE: if you only want to regenerate sky calibs, MUST create a symlink
 # in $LSD/calib/psfex, eg to
@@ -26,8 +28,8 @@ export COSMO_RO=/dvs_ro/cfs/cdirs/cosmo
 #CACHE_DIR=/tmp/dr10pre-cache
 #mkdir -p "${CACHE_DIR}"
 
-#ncores=32
-ncores=8
+ncores=32
+#ncores=8
 
 #export DUST_DIR=/global/cfs/cdirs/cosmo/data/dust/v0_1
 #export TYCHO2_KD_DIR=/global/cfs/cdirs/cosmo/staging/tycho2
@@ -85,8 +87,7 @@ camera=decam
 
 # Redirect logs to a nested directory.
 
-#log=$outdir/logs/$(echo "${image_fn}" | sed s#.fits.fz#.log#g)
-log=$outdir/logs2/$(echo "${image_fn}" | sed s#.fits.fz#.log#g)
+log=$outdir/logs/$(echo "${image_fn}" | sed s#.fits.fz#.log#g)
 
 logdir=$(dirname $log)
 mkdir -p $logdir

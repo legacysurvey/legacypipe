@@ -1,6 +1,7 @@
 import matplotlib
 matplotlib.use('Agg')
-matplotlib.rc('text', usetex=True)
+# latex not working on Perlmutter login node
+##matplotlib.rc('text', usetex=True)
 matplotlib.rc('font', family='serif')
 import pylab as plt
 from astrometry.util.fits import *
@@ -19,7 +20,8 @@ np.errstate(all='ignore')
 # Read DR5 LegacySurvey catalogs
 #L = fits_table('/global/homes/d/dstn/cosmo/data/legacysurvey/dr5/sweep/5.0/sweep-240p005-250p010.fits')
 #fns = ['/global/homes/d/dstn/cosmo/data/legacysurvey/dr5/sweep/5.0/sweep-240p005-250p010.fits']
-fns = glob('/global/project/projectdirs/cosmo/data/legacysurvey/dr5/sweep/5.0/sweep-[12]*p005-*p010.fits')
+#fns = glob('/global/project/projectdirs/cosmo/data/legacysurvey/dr5/sweep/5.0/sweep-[12]*p005-*p010.fits')
+fns = glob('/global/cfs/cdirs/cosmo/data/legacysurvey/dr5/sweep/5.0/sweep-[12]*p005-*p010.fits')
 L = []
 for fn in fns:
     print('Reading', fn)
@@ -39,7 +41,9 @@ print(len(L), 'LegacySurvey sources')
 L.cut((L.ra > 120) * (L.ra < 250))
 print('Cut to', len(L), 'in RA 120-250')
 
-L.writeto('/global/cscratch1/sd/dstn/ls.fits')
+#L.writeto('/global/cscratch1/sd/dstn/ls.fits')
+L.writeto('/pscratch/sd/d/dstn/ls.fits')
+
 
 dlo=L.dec.min()
 dhi=L.dec.max()
@@ -52,7 +56,7 @@ W = []
 for i,(d1,d2) in enumerate(allwise_catalog_dec_range):
     if d1 < dhi and d2 > dlo:
         print('Overlaps part', i+1)
-        catfn = '/global/homes/d/dstn/cosmo/data/wise/allwise-catalog/wise-allwise-cat-part%02i-radecmpro.fits' % (i+1)
+        catfn = '/global/cfs/cdirs/cosmo/data/wise/allwise-catalog/wise-allwise-cat-part%02i-radecmpro.fits' % (i+1)
         C = fits_table(catfn)
         print(len(C), 'sources')
         C.cut((C.ra >= rlo) * (C.ra <= rhi) * (C.dec >= dlo) * (C.dec <= dhi))
@@ -61,7 +65,7 @@ for i,(d1,d2) in enumerate(allwise_catalog_dec_range):
 W = merge_tables(W)
 print(len(W), 'AllWISE catalog sources')
 
-W.writeto('/global/cscratch1/sd/dstn/wise.fits')
+W.writeto('/pscratch/sd/d/dstn/wise.fits')
 
 from astrometry.libkd.spherematch import match_radec
 print('Matching...')
