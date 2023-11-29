@@ -64,8 +64,16 @@ def write_scamp_catalogs(scamp_dir, photom_fns, survey_dir):
             #print(len(I), 'good stars for CCD', ccd)
             ngood.append(len(I))
 
-            imghdr = fitsio.read_header(imgfn, ext=ccd)
-        
+            try:
+                imghdr = fitsio.read_header(imgfn, ext=ccd)
+            except:
+                # Older images, eg cfht-s82-u/931347p.fits.fz, suffer from
+                # https://github.com/esheldon/fitsio/issues/324
+                # Try reading with astropy.
+                from astropy.io import fits as afits
+                F = afits.open(imgfn)
+                imghdr = F[ccd].header
+
             newhdr['EXTNAME'] = ccd
             for c in ['EQUINOX', 'CRPIX1', 'CRPIX2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
                       'CRVAL1', 'CRVAL2', 'QRUNID', 'CTYPE1', 'CTYPE2', 'RADECSYS']:
