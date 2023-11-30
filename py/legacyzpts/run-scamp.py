@@ -72,10 +72,10 @@ def write_scamp_catalogs(scamp_dir, photom_fns, survey_dir):
                 # https://github.com/esheldon/fitsio/issues/324
                 # Try reading with astropy.
                 from astropy.io import fits as afits
-                F = afits.open(imgfn)
-                hdu = F[ccd]
+                f = afits.open(imgfn)
+                hdu = f[ccd]
                 h,w = hdu.shape
-                imghdr = F[ccd].header
+                imghdr = hdu.header
 
             newhdr['EXTNAME'] = ccd
             for c in ['EQUINOX', 'CRPIX1', 'CRPIX2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
