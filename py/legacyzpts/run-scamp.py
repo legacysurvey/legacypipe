@@ -66,12 +66,15 @@ def write_scamp_catalogs(scamp_dir, photom_fns, survey_dir):
 
             try:
                 imghdr = fitsio.read_header(imgfn, ext=ccd)
+                w,h = imghdr['ZNAXIS1'], imghdr['ZNAXIS2']
             except:
                 # Older images, eg cfht-s82-u/931347p.fits.fz, suffer from
                 # https://github.com/esheldon/fitsio/issues/324
                 # Try reading with astropy.
                 from astropy.io import fits as afits
                 F = afits.open(imgfn)
+                hdu = F[ccd]
+                h,w = hdu.shape
                 imghdr = F[ccd].header
 
             newhdr['EXTNAME'] = ccd
@@ -82,7 +85,6 @@ def write_scamp_catalogs(scamp_dir, photom_fns, survey_dir):
             fitsio.write(tmpfn, None, header=newhdr, extname=ccd, clobber=True)
             hdrtxt = open(tmpfn, 'rb').read()
             # Ugh, it is so awkward to write out simple FITS headers!
-            w,h = imghdr['ZNAXIS1'], imghdr['ZNAXIS2']
             hdrtxt = hdrtxt.replace(
                 b'NAXIS   =                    0 / number of data axes                            ',
                 b'NAXIS   =                    2 / number of data axes                            '+
