@@ -58,12 +58,14 @@ class MegaPrimeImage(LegacySurveyImage):
                          z = 26.484,
                          # Totally made up
                          u = 26.610,
+                         CaHK = 26.610,
                          )
                          #                  # i,Y from DESY1_Stripe82 95th percentiles
                          #                  i=26.758, Y=25.321) # e/sec
         self.k_ext = dict(g = 0.17,r = 0.10,z = 0.06,
                           # Totally made up
-                          u = 0.24)
+                          u = 0.24,
+                          CaHK = 0.24)
         #                   #i, Y totally made up
         #                   i=0.08, Y=0.06)
         # --> e/sec
@@ -139,7 +141,9 @@ class MegaPrimeImage(LegacySurveyImage):
         elif name == 'sdss':
             from legacypipe.ps1cat import sdsscat
             colorterm = self.colorterm_sdss_to_observed(cat.psfmag, self.band)
-            band = sdsscat.sdssband[self.band]
+            sdssbands = sdsscat.sdssband.copy()
+            sdssbands.update(CaHK=0)
+            band = sdssbands[self.band]
             return cat.psfmag[:, band] + np.clip(colorterm, -1., +1.)
         else:
             raise RuntimeError('No photometric conversion from %s to CFHT' % name)
@@ -158,7 +162,7 @@ class MegaPrimeImage(LegacySurveyImage):
 
     def get_band(self, primhdr):
         # u.MP9302
-        band = primhdr['FILTER'][0]
+        band = primhdr['FILTER'].split('.')[0]
         return band
 
     def get_propid(self, primhdr):
