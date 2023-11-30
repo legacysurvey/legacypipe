@@ -134,8 +134,8 @@ def main():
     scamp_cmd = ('cd %s && %s -c %s %s' %
                  (scamp_dir, scamp_exe, scamp_config, ' '.join(scampfiles)))
     print(scamp_cmd)
-    #r = os.system(scamp_cmd)
-    #assert(r == 0)
+    r = os.system(scamp_cmd)
+    assert(r == 0)
 
     survey_dir = args.survey_dir
     if survey_dir is None:
