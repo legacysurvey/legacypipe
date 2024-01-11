@@ -16,7 +16,7 @@ def brickname_from_filename(fn):
 
 def summarize_depths(basedir, outfn, summaryfn, allfn):
     pat = os.path.join(basedir, 'coadd', '*', '*', '*-depth.fits')
-    #pat = os.path.join(basedir, 'coadd', '000', '*', '*-depth.fits')
+    #pat = os.path.join(basedir, 'coadd', '001', '001*m8*', '*-depth.fits')
     print('Pattern', pat)
     fns = glob(pat)
     fns.sort()
@@ -63,7 +63,7 @@ def summarize_depths(basedir, outfn, summaryfn, allfn):
     T.delete_column('brickname')
     T.writeto(summaryfn)
     print('Wrote', summaryfn)
-    
+
     T = merge_tables(TT, columns='fillzero')
     T.writeto(outfn)
     print('Wrote', outfn)
@@ -164,7 +164,8 @@ if __name__ == '__main__':
         outfn = 'dr10-south-depth-concat.fits'
         summaryfn = 'dr10-south-depth-summary.fits'
         allfn = 'dr10-south-depth.fits'
-        basedir = '/global/cfs/cdirs/cosmo/work/legacysurvey/dr10'
+        #basedir = '/global/cfs/cdirs/cosmo/data/legacysurvey/dr10'
+        basedir = '/dvs_ro/cfs/cdirs/cosmo/data/legacysurvey/dr10/south'
         summarize_depths(basedir, outfn, summaryfn, allfn)
 
         ps = PlotSequence('depth')

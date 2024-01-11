@@ -291,11 +291,24 @@ def plots(opt):
         binary_dilation(desimap).astype(np.float32), 2),
         [0.5], extent=[ax[1],ax[0],ax[2],ax[3]])
     plt.clf()
+    print('DESI map contour obj:', C)
     desi_map_boundaries = C.collections[0]
+    print('boundaries:', desi_map_boundaries)
+    paths = desi_map_boundaries.get_paths()
+    print('paths:', paths)
+    
     def desi_map_outline():
-        segs = desi_map_boundaries.get_segments()
-        for seg in segs:
-            plt.plot(seg[:,0], seg[:,1], 'b-')
+        # segs = desi_map_boundaries.get_segments()
+        # for seg in segs:
+        #     plt.plot(seg[:,0], seg[:,1], 'b-')
+        for p in paths:
+            vv = []
+            for verts,code in p.iter_segments(curves=False):
+                #print('Vertices', verts, 'code', code)
+                vv.append(verts)
+            vv = np.array(vv)
+            print('vertices shape:', vv.shape)
+            plt.plot(vv[:,0], vv[:,1], 'b-')
 
     def desi_map():
         # Show the DESI tile map in the background.
@@ -346,7 +359,7 @@ def plots(opt):
 
     #sys.exit(0)
     plt.clf()
-    depthlo,depthhi = 21.5, 25.5
+    depthlo,depthhi = 22.0, 26.0
     for band in 'griz':
         depth = T.get('galdepth_%s' % band)
         ha = dict(histtype='step',  bins=50, range=(depthlo,depthhi))
@@ -617,11 +630,18 @@ def main():
     parser.add_argument('--north', action='store_true', default=False, help='Northern survey?')
     parser.add_argument('--plot', action='store_true', help='Plot results')
     parser.add_argument('--depth-hist', action='store_true', help='Depth histograms')
-    parser.add_argument('files', metavar='nexp-file.fits.gz', nargs='+',
+    parser.add_argument('--file-list', type=str, help='List of input files to read')
+    parser.add_argument('files', metavar='nexp-file.fits.gz', nargs='*',
                         help='List of nexp files to process')
 
     opt = parser.parse_args()
     fns = opt.files
+
+    if opt.file_list:
+        lines = open(opt.file_list, 'r').readlines()
+        lines = [x.strip() for x in lines]
+        lines = [x for x in lines if len(x)]
+        fns += lines
 
     if opt.merge:
         from astrometry.util.fits import merge_tables
@@ -831,8 +851,8 @@ def main():
         filepart = words[-1]
         filepart = filepart.replace('.fits.gz', '')
         filepart = filepart.replace('.fits.fz', '')
-        print('File:', filepart)
         band = filepart[-1]
+        print('File:', filepart, 'band', band)
         assert(band in 'griz')
 
         nlist,nhist = dict(g=(gn,gnhist), r=(rn,rnhist),
