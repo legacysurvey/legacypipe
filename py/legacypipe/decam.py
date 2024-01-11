@@ -294,53 +294,54 @@ class DecamImage(CPImage):
                 ignore.append(5)
             dq = remap_dq_cp_codes(dq, ignore_codes=ignore)
 
-            # In some runs (not captured by plver), the DES
-            # star mask (circular mask around saturated stars) got
-            # copied into the BLEED mask.
-            # Try to undo this by demanding that BLEED pixels be vertically
-            # connected to SATUR pixels.
-            from scipy.ndimage import binary_dilation
-            from legacypipe.bits import DQ_BITS
-            sat = ((dq & DQ_BITS['satur']) > 0)
-            # dilated saturated
-            disat = binary_dilation(sat, iterations=2)
-            bleed = (dq & DQ_BITS['bleed']) > 0
-            outbleed = np.zeros_like(bleed)
-            # We're going to start from the dilated-SAT pixels and keep vertical runs
-            # of BLEED pixels.
-            Y,X = np.nonzero(disat)
-            H,W = outbleed.shape
-            # ALSO add in any pixels that are BLEED at the image edge, because they
-            # might have been connected to a SAT pixel that is not in our subimage.
-            # (this does mean that we'll keep any circular BLEED masks that happen to hit
-            # the edge of the CCD subimage we're looking at)
-            Xtop = np.flatnonzero(bleed[-1,:])
-            Xbot = np.flatnonzero(bleed[0,:])
-            if len(Xtop)+len(Xbot):
-                X = np.hstack((X, Xtop, Xbot))
-                Y = np.hstack((Y, np.zeros(len(Xtop), int)+(H-1), np.zeros(len(Xbot), int)))
-            for x,y in zip(X,Y):
-                # keep the region we dilated the SAT mask into
-                # (this also catches the top/bottom BLEED pixels)
-                if not sat[y,x] and bleed[y,x]:
-                    outbleed[y,x] = True
-                for yy in range(y+1, H):
-                    # hit a neighbor -- we'll process this column in the neighbor
-                    if disat[yy,x]:
-                        break
-                    if not bleed[yy,x]:
-                        break
-                    outbleed[yy,x] = True
-                for yy in range(y-1, -1, -1):
-                    if disat[yy,x]:
-                        break
-                    if not bleed[yy,x]:
-                        break
-                    outbleed[yy,x] = True
-
-            # Update BLEED bit
-            dq &= ~(self.dq_type(DQ_BITS['bleed']))
-            dq |= self.dq_type(DQ_BITS['bleed']*outbleed)
+            if False:
+                # In some runs (not captured by plver), the DES
+                # star mask (circular mask around saturated stars) got
+                # copied into the BLEED mask.
+                # Try to undo this by demanding that BLEED pixels be vertically
+                # connected to SATUR pixels.
+                from scipy.ndimage import binary_dilation
+                from legacypipe.bits import DQ_BITS
+                sat = ((dq & DQ_BITS['satur']) > 0)
+                # dilated saturated
+                disat = binary_dilation(sat, iterations=2)
+                bleed = (dq & DQ_BITS['bleed']) > 0
+                outbleed = np.zeros_like(bleed)
+                # We're going to start from the dilated-SAT pixels and keep vertical runs
+                # of BLEED pixels.
+                Y,X = np.nonzero(disat)
+                H,W = outbleed.shape
+                # ALSO add in any pixels that are BLEED at the image edge, because they
+                # might have been connected to a SAT pixel that is not in our subimage.
+                # (this does mean that we'll keep any circular BLEED masks that happen to hit
+                # the edge of the CCD subimage we're looking at)
+                Xtop = np.flatnonzero(bleed[-1,:])
+                Xbot = np.flatnonzero(bleed[0,:])
+                if len(Xtop)+len(Xbot):
+                    X = np.hstack((X, Xtop, Xbot))
+                    Y = np.hstack((Y, np.zeros(len(Xtop), int)+(H-1), np.zeros(len(Xbot), int)))
+                for x,y in zip(X,Y):
+                    # keep the region we dilated the SAT mask into
+                    # (this also catches the top/bottom BLEED pixels)
+                    if not sat[y,x] and bleed[y,x]:
+                        outbleed[y,x] = True
+                    for yy in range(y+1, H):
+                        # hit a neighbor -- we'll process this column in the neighbor
+                        if disat[yy,x]:
+                            break
+                        if not bleed[yy,x]:
+                            break
+                        outbleed[yy,x] = True
+                    for yy in range(y-1, -1, -1):
+                        if disat[yy,x]:
+                            break
+                        if not bleed[yy,x]:
+                            break
+                        outbleed[yy,x] = True
+    
+                # Update BLEED bit
+                dq &= ~(self.dq_type(DQ_BITS['bleed']))
+                dq |= self.dq_type(DQ_BITS['bleed']*outbleed)
 
         else:
             from legacypipe.bits import DQ_BITS

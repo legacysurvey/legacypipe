@@ -225,6 +225,8 @@ def ps1_to_decam(psmags, band):
         N673 = [ 0., -0.3456, 0.1334, -0.0146 ],
         # Merian
         N540 = [ 0.36270593, -0.40238762,  0.0551082 ],
+        # CFHT
+        CaHK = [0.],
     )[band]
     colorterm = np.zeros(len(gi))
     for power,coeff in enumerate(coeffs):

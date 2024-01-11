@@ -21,8 +21,12 @@ export COSMO=/dvs_ro/cfs/cdirs/cosmo
 # cat_dir=$COSMO/data/legacysurvey/dr9/north
 # survey_dir=/global/cfs/cdirs/desi/users/dstn/cfis-dir
 
-out_dir=$SCRATCH/cfis-s82-u/forced-dr9
-cat_dir=$COSMO/data/legacysurvey/dr9/north
+# out_dir=$SCRATCH/cfis-s82-u/forced-dr9
+# cat_dir=$COSMO/data/legacysurvey/dr9/north
+# survey_dir=/global/cfs/cdirs/desi/users/dstn/cfis-dir
+
+out_dir=$SCRATCH/cfht-cosmos-cahk/forced
+cat_dir=$COSMO/data/legacysurvey/dr9/south
 survey_dir=/global/cfs/cdirs/desi/users/dstn/cfis-dir
 
 mkdir -p ${out_dir}/logs-forced
@@ -48,10 +52,11 @@ python -u -O legacypipe/forced_photom_brickwise.py \
        --survey-dir ${survey_dir} \
        --catalog-dir ${cat_dir} \
        --outdir ${out_dir} \
-       --threads 8 \
-       --bands u \
+       --threads 16 \
+       --bands CaHK \
        >> ${out_dir}/logs-forced/${brick}.log 2>&1
 
+#       --bands u \
 #       --bands u,g,i,z \
 #       --bands g,r,z \
 #       --bands u \

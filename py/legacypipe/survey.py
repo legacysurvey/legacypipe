@@ -536,6 +536,8 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                    NB_C = (0, 6. * rgb_stretch_factor),
                    NB_D = (0, 6. * rgb_stretch_factor),
                    NB_E = (0, 6. * rgb_stretch_factor),
+                   # CFHT
+                   CaHK = (2, 6.0 * rgb_stretch_factor),
                    )
     # SUPRIME
     rgbscales.update({

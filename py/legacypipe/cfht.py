@@ -133,8 +133,8 @@ class MegaPrimeImage(LegacySurveyImage):
         from legacypipe.ps1cat import ps1cat
         ps1band_map = ps1cat.ps1band
         if name == 'ps1':
-            # u->g
-            ps1band = dict(u='g').get(self.band, self.band)
+            # u->g, CaHK->g
+            ps1band = dict(u='g', CaHK='g').get(self.band, self.band)
             ps1band_index = ps1band_map[ps1band]
             colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
             return cat.median[:, ps1band_index] + np.clip(colorterm, -1., +1.)
