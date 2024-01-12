@@ -58,10 +58,11 @@ def write_scamp_catalogs(scamp_dir, photom_fns, survey_dir):
         ccds = np.unique(P.ccdname)
         ngood = []
         for ccd in ccds:
-            I = np.flatnonzero((P.ccdname == ccd) * (P.ra_gaia != 0.0))
+            I1 = np.flatnonzero((P.ccdname == ccd))
+            I2 = np.flatnonzero((P.ccdname == ccd) * (P.ra_gaia != 0.0))
             #print('  CCD', ccd, ':', len(I), 'stars, 10/50/90th pct S/N:', ', '.join(['%.1f' % p for p in np.percentile(P.sn[I], [10,50,90])]))
             I = np.flatnonzero((P.ccdname == ccd) * (P.ra_gaia != 0.0) * (P.sn > 5.))
-            #print(len(I), 'good stars for CCD', ccd)
+            print('CCD', ccd, ':', len(I1), 'in CCD,', len(I2), 'with Gaia RA,', len(I), 'with S/N > 5.  Median S/N %.1f' % np.median(P.sn[I2]))
             ngood.append(len(I))
 
             try:
@@ -102,7 +103,7 @@ def write_scamp_catalogs(scamp_dir, photom_fns, survey_dir):
                     names=[c.upper() for c in ['x_image', 'y_image', 'err_a', 'err_b',
                                                'err_theta', 'flux', 'flux_err', 'flags']],
                     extname='LDAC_OBJECTS')
-        print('Good stars per CCD for', fn, ': min %i, mean %.1f' % (np.min(ngood), np.mean(ngood)))
+        print('Good stars per CCD for', fn, ': min %i, mean %.1f, median %.1f, max %.1f' % (np.min(ngood), np.mean(ngood), np.median(ngood), np.max(ngood)))
         #'[' + ', '.join([str(n) for n in ngood]) + ']')
         F.close()
         os.rename(tmpoutfn, realoutfn)

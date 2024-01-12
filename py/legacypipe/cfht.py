@@ -216,7 +216,9 @@ class MegaPrimeImage(LegacySurveyImage):
 
     def read_invvar(self, **kwargs):
         # The "weight" maps given are 0/1, apparently == flags.
-        #print('MegaPrimeImage.read_invvar')
+
+        print('MegaPrimeImage.read_invvar')
+
         img = self.read_image(**kwargs)
         dq = self.read_dq(**kwargs)
         if self.sig1 is None or self.sig1 == 0.:
@@ -228,7 +230,7 @@ class MegaPrimeImage(LegacySurveyImage):
             sig1 = 1.4826 * mad / np.sqrt(2.)
             # self.sig1 must be in calibrated units
             #self.sig1 = sig1
-            #print('Computed sig1 by Blanton method:', sig1, '(MAD:', mad, ')')
+            print('Computed sig1 by Blanton method:', sig1, '(MAD:', mad, ')')
         else:
             from tractor import NanoMaggies
             #print('sig1 from CCDs file:', self.sig1)
@@ -236,7 +238,7 @@ class MegaPrimeImage(LegacySurveyImage):
             # but here we need to return in image units.
             zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
             sig1 = self.sig1 * zpscale
-            #print('scaled to image units:', sig1)
+            print('sig1 from CCDs file:', self.sig1, 'scaled by ccdzpt', self.ccdzpt, 'to image units: sig1=', sig1)
 
         iv = np.empty_like(img)
         iv[:,:] = 1./sig1**2

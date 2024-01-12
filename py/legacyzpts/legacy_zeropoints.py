@@ -954,6 +954,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
     imobj.sig1 = imobj.estimate_sig1(img, invvar, dq, primhdr, hdr)
     ccds['sig1'] = imobj.sig1
 
+    print('Estimated sig1:', imobj.sig1)
+    
     invvar = imobj.remap_invvar(invvar, primhdr, img, dq)
 
     # Blank out masked pixels (which can occasionally have very extreme values,
@@ -1212,24 +1214,115 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
     if ps is not None:
         print('sig1:', imobj.sig1)
         s1 = imobj.sig1 * imobj.exptime
+        print('s1:', s1)
         import pylab as plt
         plt.figure(figsize=(10,10))
         plt.clf()
-        plt.hist(fit_img.ravel(), range=(-5.*s1, +10.*s1), bins=20)
-        plt.title('Image pixels in sigmas')
+        plt.hist(fit_img.ravel() / s1, range=(-5., +10), bins=20)
+        plt.title('Sky-subtracted image pixels, in sigmas')
         ps.savefig()
         plt.clf()
         plt.hist(fit_img.ravel(), range=np.percentile(fit_img.ravel(), [5,98]), bins=20)
-        plt.title('Image pixels in counts')
+        plt.title('Sky-subtracted image pixels, in counts')
+        plt.axvline(-s1, color='r')
+        plt.axvline(+s1, color='r')
+        plt.axvline(-2.*s1, color='r')
+        plt.axvline(+2.*s1, color='r')
         ps.savefig()
         plt.clf()
         plt.imshow(fit_img, interpolation='nearest', origin='lower',
                    vmin=-2.*s1, vmax=10.*s1, cmap='gray')
         ax = plt.axis()
         ok,x,y = wcs.radec2pixelxy(gaia.ra_now, gaia.dec_now)
+        Ibright = np.argsort(gaia.phot_g_mean_mag)[:5]
         plt.plot(x-1., y-1., 'o', mec='r', mfc='none')
+        plt.plot(x[Ibright]-1., y[Ibright]-1., 'o', mec='orange', ms=20, mfc='none')
         plt.axis(ax)
         plt.title('Before fitting Gaia sources')
+        ps.savefig()
+
+        # Run a source detection on the image and cross-match with Gaia star positions.
+        from scipy.ndimage import gaussian_filter
+        from scipy.ndimage import binary_dilation, binary_fill_holes
+        from scipy.ndimage.measurements import label, find_objects
+        print('FWHM', imobj.fwhm)
+        psf_sigma = imobj.fwhm / 2.35
+        psfnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
+        detim = fit_img.copy()
+        detim[ierr == 0] = 0.
+        detsig1 = s1 / psfnorm
+        dh,dw = fit_img.shape
+        detiv = np.zeros((dh,dw), np.float32) + (1. / detsig1**2)
+        detiv[ierr == 0] = 0.
+        detim = gaussian_filter(detim, psf_sigma) / psfnorm**2
+        detiv = gaussian_filter(detiv, psf_sigma)
+
+        detsn = detim * np.sqrt(detiv)
+        nsigma = 10.
+        peaks = (detsn > nsigma)
+
+        blob_dilate = 8
+        hotblobs = binary_fill_holes(binary_dilation(peaks, iterations=blob_dilate))
+        hotblobs,nhot = label(hotblobs)
+
+        # zero out the edges -- larger margin here?
+        peaks[0 ,:] = 0
+        peaks[:, 0] = 0
+        peaks[-1,:] = 0
+        peaks[:,-1] = 0
+
+        # find pixels that are larger than their 8 neighbors
+        peaks[1:-1, 1:-1] &= (detsn[1:-1,1:-1] >= detsn[0:-2,1:-1])
+        peaks[1:-1, 1:-1] &= (detsn[1:-1,1:-1] >= detsn[2:  ,1:-1])
+        peaks[1:-1, 1:-1] &= (detsn[1:-1,1:-1] >= detsn[1:-1,0:-2])
+        peaks[1:-1, 1:-1] &= (detsn[1:-1,1:-1] >= detsn[1:-1,2:  ])
+        peaks[1:-1, 1:-1] &= (detsn[1:-1,1:-1] >= detsn[0:-2,0:-2])
+        peaks[1:-1, 1:-1] &= (detsn[1:-1,1:-1] >= detsn[0:-2,2:  ])
+        peaks[1:-1, 1:-1] &= (detsn[1:-1,1:-1] >= detsn[2:  ,0:-2])
+        peaks[1:-1, 1:-1] &= (detsn[1:-1,1:-1] >= detsn[2:  ,2:  ])
+        py,px = np.nonzero(peaks)
+        I = np.argsort(-detsn[py,px])
+        py = py[I]
+        px = px[I]
+
+        # Keep only the brightest source per blob!
+        keep = []
+        seen_blobs = set()
+        for i,(x,y) in enumerate(zip(px,py)):
+            b = hotblobs[y,x]
+            if b in seen_blobs:
+                continue
+            seen_blobs.add(b)
+            keep.append(i)
+        I = np.array(keep)
+        py = py[I]
+        px = px[I]
+
+        px = px[:1000]
+        py = py[:1000]
+        
+        plt.clf()
+        plt.imshow(fit_img, interpolation='nearest', origin='lower',
+                   vmin=-2.*s1, vmax=10.*s1, cmap='gray')
+        ax = plt.axis()
+        plt.plot(px, py, 'o', mec='r', mfc='none')
+        plt.plot(px[:10], py[:10], 'o', mec='orange', ms=20, mfc='none')
+        plt.axis(ax)
+        plt.title('Sources detected in image')
+        ps.savefig()
+
+        # Cross-correlation (matching) between detected sources and Gaia sources
+        ok,gx,gy = wcs.radec2pixelxy(gaia.ra_now, gaia.dec_now)
+        I = np.argsort(gaia.phot_g_mean_mag)
+        gx = gx[I[:1000]] - 1.
+        gy = gy[I[:1000]] - 1.
+
+        from astrometry.libkd.spherematch import match_xy
+        I,J,d = match_xy(px, py, gx, gy, 500)
+        dx,dy = px[I] - gx[J], py[I] - gy[J]
+        from astrometry.util.plotutils import plothist
+        plothist(dx, dy, dohot=False)
+        plt.title('Gaia to detected source offsets')
         ps.savefig()
 
     # Run tractor fitting on the ref stars, using the PsfEx model.
