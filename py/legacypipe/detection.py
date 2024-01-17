@@ -10,7 +10,7 @@ def debug(*args):
     log_debug(logger, args)
 
 def _detmap(X):
-    from scipy.ndimage.filters import gaussian_filter
+    from scipy.ndimage import gaussian_filter
     from legacypipe.survey import tim_get_resamp
     (tim, targetwcs, apodize) = X
     R = tim_get_resamp(tim, targetwcs)
@@ -151,6 +151,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
                             exclusion_radius=4.,
                             blob_dilate=None,
                             veto_map=None,
+                            detection_kernels=None,
                             mp=None,
                             plots=False, ps=None, rgbimg=None):
     '''
@@ -219,26 +220,67 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     peaksn = []
     apsn = []
 
-    for sedname,sed in SEDs:
-        if plots:
-            pps = ps
+    if detection_kernels is None:
+        detection_kernels = [None]
+
+    for kernel in detection_kernels:
+
+        if kernel is None:
+            kdetmaps = detmaps
+            kdetivs = detivs
+            kernel_name = 'psf'
+            kernel_title = kernel_name
         else:
-            pps = None
-        sedhot,px,py,apval,peakval = sed_matched_detection(
-            sedname, sed, detmaps, detivs, bands, xx, yy, rr,
-            nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
-            blob_dilate=blob_dilate, saturated_pix=saturated_pix, veto_map=veto_map,
-            ps=pps, rgbimg=rgbimg)
-        if sedhot is None:
-            continue
-        info('SED', sedname, ':', len(px), 'new peaks')
-        hot |= sedhot
-        # With an empty xx, np.append turns it into a double!
-        xx = np.append(xx, px).astype(int)
-        yy = np.append(yy, py).astype(int)
-        rr = np.append(rr, np.zeros_like(px) + exclusion_radius).astype(int)
-        peaksn.extend(peakval)
-        apsn.extend(apval)
+            kernel_name, kernel_fwhm = kernel
+            assert(kernel_name == 'gaussian')
+            from scipy.ndimage import gaussian_filter
+            kernel_title = '%s: fwhm %.2f' % (kernel_name, kernel_fwhm)
+
+            if plots:
+                plt.clf()
+
+            kdetmaps = []
+            kdetivs = []
+            for di,(detim,detiv,band) in enumerate(zip(detmaps, detivs, bands)):
+                kernel_sigma = kernel_fwhm / 2.355
+                knorm = 1./(2. * np.sqrt(np.pi) * kernel_sigma)
+
+                detim = gaussian_filter(detim, kernel_sigma, mode='constant') / knorm**2
+                detiv = gaussian_filter(detiv, kernel_sigma, mode='constant')
+                kdetmaps.append(detim)
+                kdetivs.append(detiv)
+
+                if plots:
+                    plt.subplot(2,2,1+di)
+                    plt.hist((detiv * np.sqrt(detiv)).ravel(), range=(-10, +10),
+                             log=True, bins=50)
+                    plt.xlabel('S/N in %s band' % band)
+
+            if plots:
+                plt.suptitle('Detection: ' + kernel_title)
+                ps.savefig()
+
+        for sedname,sed in SEDs:
+            if plots:
+                pps = ps
+            else:
+                pps = None
+
+            sedhot,px,py,apval,peakval = sed_matched_detection(
+                sedname, sed, kdetmaps, kdetivs, bands, xx, yy, rr,
+                nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
+                blob_dilate=blob_dilate, saturated_pix=saturated_pix, veto_map=veto_map,
+                ps=pps, rgbimg=rgbimg)
+            if sedhot is None:
+                continue
+            info('SED', sedname, ':', len(px), 'new peaks')
+            hot |= sedhot
+            # With an empty xx, np.append turns it into a double!
+            xx = np.append(xx, px).astype(int)
+            yy = np.append(yy, py).astype(int)
+            rr = np.append(rr, np.zeros_like(px) + exclusion_radius).astype(int)
+            peaksn.extend(peakval)
+            apsn.extend(apval)
 
     # New peaks:
     peakx = xx[n0:]

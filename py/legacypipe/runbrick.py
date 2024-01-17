@@ -833,6 +833,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
                large_galaxies=True,
                gaia_stars=True,
                blob_dilate=None,
+               detection_kernels=None,
                **kwargs):
     '''
     In this stage we run SED-matched detection to find objects in the
@@ -946,7 +947,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
         nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
         saturated_pix=saturated_pix, veto_map=avoid_map, blob_dilate=blob_dilate,
-        plots=plots, ps=ps, mp=mp, **kwa)
+        detection_kernel=detection_kernels, plots=plots, ps=ps, mp=mp, **kwa)
 
     if Tnew is not None:
         assert(len(Tnew) == len(newcat))
@@ -3394,6 +3395,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               nsatur=None,
               fit_on_coadds=False,
               coadd_tiers=None,
+              detection_kernels=None,
               min_mjd=None, max_mjd=None,
               unwise_coadds=True,
               bail_out=False,
@@ -3648,6 +3650,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   sub_blobs=sub_blobs,
                   min_mjd=min_mjd, max_mjd=max_mjd,
                   coadd_tiers=coadd_tiers,
+                  detection_kernels=detection_kernels,
                   nsatur=nsatur,
                   reoptimize=reoptimize,
                   iterative=iterative,
@@ -4105,7 +4108,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='Fit to coadds rather than individual CCDs (e.g., large galaxies).')
     parser.add_argument('--coadd-tiers', default=None, type=int,
                         help='Split images into this many tiers of coadds (per band) by FWHW')
-
+    parser.add_argument('--detection-kernels', default=None, type=str,
+                        help='Comma-separated list of Gaussian detection FWHMs (in pixels)')
     parser.add_argument('--nsatur', default=None, type=int,
                         help='Demand that >= nsatur images per band are saturated before using saturated logic (eg, 2).')
     parser.add_argument('--no-ivar-reweighting', dest='fitoncoadds_reweight_ivar',
@@ -4289,6 +4293,10 @@ def main(args=None):
     ps_t0   = optdict.pop('ps_t0', 0)
     verbose = optdict.pop('verbose')
     rgb_stretch = optdict.pop('rgb_stretch', None)
+    detection_kernels = optdict.pop('detection_kernels', None)
+    if detection_kernels is not None:
+        detection_kernels = [('gaussian', float(s)) for s in detection_kernels.split(',')]
+        optdict['detection_kernels'] = detection_kernels
 
     survey, kwargs = get_runbrick_kwargs(**optdict)
     if kwargs in [-1, 0]:
