@@ -409,6 +409,9 @@ class LegacySurveyImage(object):
     def get_propid(self, primhdr):
         return primhdr.get('PROPID', '')
 
+    def get_ha(self, primhdr, imghdr):
+        return primhdr.get('PROPID', '')
+
     def get_airmass(self, primhdr, imghdr, ra, dec):
         airmass = primhdr.get('AIRMASS', None)
         if airmass is None:

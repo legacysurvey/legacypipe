@@ -18,6 +18,7 @@ from astrometry.util.file import trymakedirs
 from astrometry.util.ttime import Time
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.libkd.spherematch import match_radec
+from astrometry.util.starutil_numpy import hmsstring2ra
 
 import legacypipe
 from legacypipe.ps1cat import ps1cat, sdsscat
@@ -81,6 +82,7 @@ def _ccds_table(camera='decam', overrides=None):
         ('exptime', 'f4'),
         ('mjd_obs', 'f8'),
         ('airmass', 'f4'),
+        ('ha', 'f4'),
         ('fwhm', 'f4'),
         ('width', 'i2'),
         ('height', 'i2'),
@@ -115,8 +117,11 @@ def _ccds_table(camera='decam', overrides=None):
         ('decoff', 'f4'),
         ('rarms',  'f4'),
         ('decrms', 'f4'),
+        ('rarmeds',  'f4'),
+        ('decrmeds', 'f4'),
         ('rastddev',  'f4'),
         ('decstddev', 'f4'),
+        ('bprp', 'f4'),
         ]
 
     if overrides is not None:
@@ -151,12 +156,13 @@ def _stars_table(nstars=1):
 def cols_for_survey_table():
     """Return list of -survey.fits table colums
     """
-    return ['airmass', 'ccdskysb', 'plver', 'procdate', 'plprocid',
+    return ['airmass', 'ha', 'ccdskysb', 'plver', 'procdate', 'plprocid',
      'ccdnastrom', 'ccdnphotom', 'ccdnphotom_used', 'ra', 'dec', 'ra_bore', 'dec_bore',
      'image_filename', 'image_hdu', 'expnum', 'ccdname', 'object',
      'filter', 'exptime', 'camera', 'width', 'height', 'propid',
      'mjd_obs', 'fwhm', 'zpt', 'ccdzpt', 'ccdraoff', 'ccddecoff',
-     'ccdrarms', 'ccddecrms', 'ccdskycounts', 'phrms', 'ccdphrms',
+     'ccdrarms', 'ccddecrms', 'ccdrarmeds', 'ccddecrmeds', 'ccdbprp',
+     'ccdskycounts', 'phrms', 'ccdphrms',
      'cd1_1', 'cd2_2', 'cd1_2', 'cd2_1', 'crval1', 'crval2', 'crpix1',
      'crpix2', 'skyrms', 'sig1', 'yshift']
 
@@ -172,6 +178,9 @@ def prep_survey_table(T, camera=None, bad_expid=None):
                   ('skysb', 'ccdskysb'),
                   ('rarms',  'ccdrarms'),
                   ('decrms', 'ccddecrms'),
+                  ('rarmeds',  'ccdrarmeds'),
+                  ('decrmeds', 'ccddecrmeds'),
+                  ('bprp', 'ccdbprp'),
                   ('phrms', 'ccdphrms'),
                   ('phrmsavg', 'phrms'),
                   ('nstars_astrom','ccdnastrom'),
@@ -896,6 +905,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
     ccds['ra_bore'],ccds['dec_bore'] = ra_bore, dec_bore
     airmass = imobj.get_airmass(primhdr, hdr, ra_bore, dec_bore)
     ccds['airmass'] = airmass
+    ha_str = primhdr['HA']
+    ccds['ha'] = hmsstring2ra(ha_str)
     ccds['gain'] = imobj.get_gain(primhdr, hdr)
     ccds['object'] = imobj.get_object(primhdr)
 
@@ -1356,6 +1367,17 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
     dec_clip, _, _ = sigmaclip(ddec, low=3., high=3.)
     decrms = getrms(dec_clip)
 
+    bp = refs.phot_bp_mean_mag[refs.astrom]
+    rp = refs.phot_rp_mean_mag[refs.astrom]
+    ok = (bp != 0) * (rp != 0) * np.isfinite(bp) * np.isfinite(rp)
+    bprp = (bp - rp)[ok]
+    avg_color = np.median(bprp)
+    print('Median Gaia BP-RP mag of astrometric calibrators (%i/%i good): %.3f' %
+          (len(bprp), len(ok), avg_color))
+
+    rarmeds = np.sqrt(np.median(dra**2))
+    decrmeds = np.sqrt(np.median(ddec**2))
+
     # For astrom, since we have Gaia everywhere, count the number
     # that pass the sigma-clip, ie, the number of stars that
     # corresponds to the reported offset and scatter (in RA).
@@ -1364,6 +1386,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
     print('RA, Dec offsets (arcsec): %.4f, %.4f' % (raoff, decoff))
     print('RA, Dec stddev  (arcsec): %.4f, %.4f' % (rastd, decstd))
     print('RA, Dec RMS     (arcsec): %.4f, %.4f' % (rarms, decrms))
+    print('RA, Dec RMedS   (arcsec): %.4f, %.4f' % (rarmeds, decrmeds))
 
     ok, = np.nonzero(phot.flux > 0)
     phot.instpsfmag = np.zeros(len(phot), np.float32)
@@ -1473,6 +1496,9 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
     ccds['decstddev'] = decstd
     ccds['rarms']  = rarms
     ccds['decrms'] = decrms
+    ccds['rarmeds'] = rarmeds
+    ccds['decrmeds'] = decrmeds
+    ccds['bprp'] = avg_color
     ccds['phoff'] = dzpt
     ccds['phrms'] = zptstd
     ccds['zpt'] = zptmed

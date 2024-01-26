@@ -5,11 +5,15 @@
 export COSMO=/global/cfs/cdirs/cosmo
 
 #export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
-export LEGACY_SURVEY_DIR=$SCRATCH/survey-dir-dr11
+#export LEGACY_SURVEY_DIR=$SCRATCH/survey-dir-dr11
+export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr10
+
+export LEGACYPIPE_DIR=/global/homes/d/dstn/legacypipe/py
 
 #export CACHE_DIR=/global/cscratch1/sd/dstn/dr10-cache
 #outdir=$LEGACY_SURVEY_DIR/zpt
-outdir=$SCRATCH/zpt-dr11
+#outdir=$SCRATCH/zpt-dr11
+outdir=$SCRATCH/zpt-dr10-new-2
 
 export COSMO_RO=/dvs_ro/cfs/cdirs/cosmo
 
