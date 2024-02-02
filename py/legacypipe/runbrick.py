@@ -947,7 +947,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
         nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
         saturated_pix=saturated_pix, veto_map=avoid_map, blob_dilate=blob_dilate,
-        detection_kernel=detection_kernels, plots=plots, ps=ps, mp=mp, **kwa)
+        detection_kernels=detection_kernels, plots=plots, ps=ps, mp=mp, **kwa)
 
     if Tnew is not None:
         assert(len(Tnew) == len(newcat))
