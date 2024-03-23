@@ -137,7 +137,8 @@ class MegaPrimeImage(LegacySurveyImage):
             ps1band = dict(u='g', CaHK='g').get(self.band, self.band)
             ps1band_index = ps1band_map[ps1band]
             colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
-            return cat.median[:, ps1band_index] + np.clip(colorterm, -1., +1.)
+            # Note larger range of color term than usual!
+            return cat.median[:, ps1band_index] + np.clip(colorterm, -1., +4.)
         elif name == 'sdss':
             from legacypipe.ps1cat import sdsscat
             colorterm = self.colorterm_sdss_to_observed(cat.psfmag, self.band)
@@ -151,9 +152,9 @@ class MegaPrimeImage(LegacySurveyImage):
     def colorterm_ps1_to_observed(self, ps1stars, band):
         from legacypipe.ps1cat import ps1_to_decam
         print('HACK -- using DECam color term for CFHT!!')
-        if band == 'u':
-            print('HACK -- using g-band color term for u band!')
-            band = 'g'
+        #if band == 'u':
+        #    print('HACK -- using g-band color term for u band!')
+        #    band = 'g'
         return ps1_to_decam(ps1stars, band)
 
     def colorterm_sdss_to_observed(self, sdssstars, band):
@@ -319,6 +320,96 @@ class MegaPrimeElixirImage(MegaPrimeImage):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.scamp_wcs = None
+        # Run sky calib first (for patching...)
+        self.sky_before_psfex = True
+
+    def run_se(self, imgfn, maskfn):
+        # For some images (whyyyyy), interpolation just doesn't seem to be happening, so we
+        # end up with zero-valued pixels in the image, that get sky-subtracted and turn into
+        # highly-negative pixels in the vignets.
+        # Try instantiating the sky model and explicitly patching the image before calling SE.
+        from legacypipe.survey import create_temp
+        tmpimgfn = create_temp(suffix='.fits')
+        print('Patching image before running SE: image', imgfn, '--> patched file', tmpimgfn)
+        sky = self.read_sky_model()
+        mask = fitsio.read(maskfn)
+        img = fitsio.read(imgfn)
+        hdr = fitsio.read_header(imgfn)
+        skyimg = np.zeros(img.shape, np.float32)
+        sky.addTo(skyimg)
+        from collections import Counter
+        img[mask != 0] = skyimg[mask != 0]
+
+        print('Image type:', img.dtype, 'min, median, max', img.min(), np.median(img.ravel()), img.max())
+        
+        # FIXME -- Replace the header with the WCS from our initial
+        # WCS solution, so that the SE catalog's alpha_j2000,
+        # delta_j2000 columns are correct??
+
+        fitsio.write(tmpimgfn, img, header=hdr, clobber=True)
+        print('Running SE on temp image and mask files', tmpimgfn, maskfn)
+
+        tmpsefn = create_temp(suffix='.fits')
+        filt_sefn = self.sefn
+        self.sefn = tmpsefn
+        print('Writing SE results to temp file', tmpsefn)
+        super().run_se(tmpimgfn, maskfn)
+        self.sefn = filt_sefn
+
+        print('cfht.py not removing patched image file', tmpimgfn)
+        #os.remove(tmpimgfn)
+
+        # Filter SE detections to Gaia stars
+
+        from astrometry.util.fits import fits_table
+        from astrometry.util.util import Sip
+        print('Filtering SE detections...')
+        print('Reading temp SE catalog', tmpsefn)
+        S = fits_table(tmpsefn, hdu=2, lower=False)
+        print('Got', len(S), 'detections')
+        wcs = Sip(self.wcs_initial_fn)
+
+        from legacypipe.gaiacat import GaiaCatalog
+        gaiacat = GaiaCatalog()
+        gaia = gaiacat.get_catalog_in_wcs(wcs)
+        print('Got', len(gaia), 'Gaia stars within WCS')
+
+        S.ra, S.dec = wcs.pixelxy2radec(S.X_IMAGE, S.Y_IMAGE)
+
+        from astrometry.libkd.spherematch import match_radec
+        I,J,d = match_radec(S.ra, S.dec, gaia.ra, gaia.dec, 2.5/3600., nearest=True)
+        print('Matched', len(I), 'Gaia stars')
+
+        Fin = fitsio.FITS(tmpsefn, 'r')
+        print('Temp SE file:', len(Fin))
+
+        Fout = fitsio.FITS(self.sefn, 'rw', clobber=True)
+        data = Fin[0].read()
+        hdr  = Fin[0].read_header()
+        #print('HDU 0: data', data, 'header', hdr)
+        Fout.write(data, header=hdr)
+        #data,hdr = Fin[1].read(header=True)
+        data = Fin[1].read()
+        hdr  = Fin[1].read_header()
+        #print('HDU 1: data', data, 'header', hdr)
+        Fout.write(data, header=hdr, extname='LDAC_IMHEAD')
+        #data,hdr = Fin[1].read(header=True)
+        data = Fin[2].read()
+        hdr  = Fin[2].read_header()
+        #print('HDU 2: data', data, 'header', hdr)
+        Fin.close()
+        Fout.close()
+        S.cut(I)
+        S.rename('ra',  'ALPHA_J2000')
+        S.rename('dec', 'DELTA_J2000')
+        S.writeto(self.sefn, append=True, header=hdr, extname='LDAC_OBJECTS')
+        print('Wrote', len(I), 'filtered stars to', self.sefn)
+
+    def get_psfex_conf(self):
+        print('get_psfex_conf: band', self.band)
+        if self.band == 'CaHK':
+            return '-PSFVAR_DEGREES 0 -VERBOSE_TYPE FULL'
+        return super().get_psfex_conf()
 
     def read_scamp_wcs(self, hdr=None):
         from astrometry.util.util import wcs_pv2sip_hdr
@@ -387,6 +478,8 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         basename = self.get_base_name()
         calname = self.name
         self.scamp_fn = os.path.join(calibdir, 'wcs-scamp', imgdir, basename + '-scamp.head')
+        self.wcs_initial_fn = os.path.join(calibdir, 'wcs-initial', imgdir, basename,
+                                           calname + '.wcs')
         #if not os.path.exists(self.scamp_fn):
         #    print('Warning: Scamp header', self.scamp_fn, 'does not exist, using default WCS')
 
@@ -399,7 +492,79 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             self.scamp_wcs = self.read_scamp_wcs(hdr=hdr)
         if self.scamp_wcs is not None:
             return self.scamp_wcs
-        return super().get_wcs(hdr=hdr)
+
+        if not os.path.exists(self.wcs_initial_fn):
+            self.run_solve_field()
+        from astrometry.util.util import Sip
+        return Sip(self.wcs_initial_fn)
+        
+        # wcs = super().get_wcs(hdr=hdr)
+        # print('CFHT get_wcs: img header:', wcs)
+        # if self.expnum == 1657134:
+        #     #print('Resetting CRVAL to median Astrometry.net value!')
+        #     #wcs.set_crval([20.125816819516082, 3.523921365540108])
+        #     #print('Offsetting CRVAL to median Astrometry.net offset!')
+        #     #cv = wcs.crval
+        #     #wcs.set_crval([cv[0] + -0.0015377391247888283, cv[1] + 0.008975408212121838])
+        #     fn = 'scamp-cfht-s82-chunk2/fp-%i-%02i.wcs' % (self.expnum, self.hdu)
+        #     print('Reading focal-plane WCS for expnum', self.expnum, 'hdu', self.hdu, 'from', fn)
+        #     from astrometry.util.util import Tan,Sip
+        #     wcs = Sip(fn)
+        #     #h,w = self.shape
+        #     #wcs.imagew = w
+        #     #wcs.imageh = h
+        #     print('After:                       ', wcs)
+        # return wcs
+
+    def run_solve_field(self):
+        from pkg_resources import resource_filename
+        from astrometry.util.file import trymakedirs
+        # Initial astrometry -- using solve-field on the image
+        dirname = resource_filename('legacypipe', 'data')
+        configfn = os.path.join(dirname, 'an-cfht.cfg')
+        primhdr = self.read_image_primary_header()
+        hdr = self.read_image_header()
+        r,d = self.get_radec_bore(primhdr)
+        for ds in [2, 4]:
+            args = ['--config', configfn,
+                    '--downsample', ds,
+                    '--objs', 130,
+                    '--tweak-order', 1,
+                    '--scale-low', self.pixscale * 0.8,
+                    '--scale-high', self.pixscale * 1.2,
+                    '--scale-units', 'app',
+                    '--width', 2112, '--height', 4644,
+                    '--no-plots',
+                    '--no-remove-lines',
+                    '--continue',
+                    #'--crpix-center',
+                    '--crpix-x', hdr['CRPIX1'],
+                    '--crpix-y', hdr['CRPIX2'],
+                    '--new-fits', 'none',
+                    '--temp-axy',
+                    '--solved', 'none',
+                    '--match', 'none',
+                    '--corr', 'none',
+                    '--index-xyls', 'none',
+                    '--rdls', 'none',
+                    '--wcs', self.wcs_initial_fn,
+                    '--extension', self.hdu]
+            if r is not None and d is not None:
+                args.extend(['--ra', r, '--dec', d, '--radius', 5])
+            print('Creating initial WCS using solve-field...')
+            trymakedirs(self.wcs_initial_fn, dir=True)
+            cmd = ' '.join([str(x) for x in ['solve-field'] + args + [self.imgfn]])
+            print('Running:', cmd)
+            rtn = os.system(cmd)
+            print('solve-field return value:', rtn)
+            if os.path.exists(self.wcs_initial_fn):
+                break
+
+    def run_calibs(self, **kwargs):
+        #if self.use_solve_field and not os.path.exists(self.wcs_initial_fn):
+        if not os.path.exists(self.wcs_initial_fn):
+            self.run_solve_field()
+        super().run_calibs(**kwargs)
 
     def get_crpixcrval(self, primhdr, hdr):
         wcs = self.get_wcs()
@@ -436,14 +601,23 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         from legacypipe.survey import create_temp
         tmpimgfn,_ = super().funpack_files(imgfn, maskfn, imghdu, maskhdu, todelete)
         img = fitsio.read(tmpimgfn)
+        hdr = fitsio.read_header(tmpimgfn)
         print('Funpack_files: image minimum value %g, max %g' % (img.min(), img.max()), 'type', img.dtype)
         mask = (img < 0.5).astype(np.int16)
         tmpmaskfn = create_temp(suffix='.fits')
         todelete.append(tmpmaskfn)
         fitsio.write(tmpmaskfn, mask, clobber=True)
 
+        img = img.astype(np.float32)
+        if 'BZERO' in hdr:
+            print('Removing BZERO =', hdr['BZERO'])
+            hdr.delete('BZERO')
+        if 'BSCALE' in hdr:
+            print('Removing BSCALE =', hdr['BSCALE'])
+            hdr.delete('BSCALE')
+        print('SATUR is', hdr['SATURATE'], 'max val in image is', img.max())
         #
-        fitsio.write(tmpimgfn, img.astype(np.float32), clobber=True)
+        fitsio.write(tmpimgfn, img, clobber=True, header=hdr)
         return tmpimgfn, tmpmaskfn
 
     def get_good_image_subregion(self):
@@ -470,8 +644,16 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             return nil
         try:
             rtn = int(xx[0]), int(xx[1]), int(yy[0]), int(yy[1])
-            print('Returning good image subregion', rtn)
+            #print('Returning good image subregion', rtn)
             return rtn
         except:
             pass
         return nil
+
+    def get_tractor_sky_model(self, img, goodpix):
+        from legacypipe.jumpsky import JumpSky
+        boxsize = self.splinesky_boxsize
+        _,W = img.shape
+        xbreak = W//2
+        skyobj = JumpSky.BlantonMethod(img, goodpix, boxsize, xbreak)
+        return skyobj

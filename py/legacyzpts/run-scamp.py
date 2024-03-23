@@ -36,8 +36,10 @@ def write_scamp_catalogs(scamp_dir, photom_fns, survey_dir):
             continue
 
         # Compute image filename
+        print('Relative path', relpath)
         imgfn = os.path.join(survey_dir, 'images', relpath).replace('-photom.fits',
                                                                     '.fits')
+        print('Img filename', imgfn)
         if not os.path.exists(imgfn) and os.path.exists(imgfn + '.fz'):
             imgfn += '.fz'
             

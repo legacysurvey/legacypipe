@@ -66,6 +66,7 @@ class LegacySurveyImage(object):
 
         '''
         super(LegacySurveyImage, self).__init__()
+        self.sky_before_psfex = False
         self.survey = survey
         self._fits = None
         self._primary_header = None
@@ -407,9 +408,6 @@ class LegacySurveyImage(object):
         return band
 
     def get_propid(self, primhdr):
-        return primhdr.get('PROPID', '')
-
-    def get_ha(self, primhdr, imghdr):
         return primhdr.get('PROPID', '')
 
     def get_airmass(self, primhdr, imghdr, ra, dec):
@@ -1423,11 +1421,16 @@ class LegacySurveyImage(object):
             args.append('-FLAG_IMAGE %s' % maskfn)
         args.append(imgfn)
         cmd = ' '.join(args)
-        debug(cmd)
+        print(cmd)
         rtn = os.system(cmd)
         if rtn:
             raise RuntimeError('Command failed: ' + cmd)
         os.rename(tmpfn, self.sefn)
+
+    def get_psfex_conf(self):
+        # Return any additional PsfEx command-line flags desired.
+        psfexflags = self.survey.get_psfex_conf(self.camera, self.expnum, self.ccdname)
+        return psfexflags
 
     def run_psfex(self, git_version=None, ps=None):
         from astrometry.util.file import trymakedirs
@@ -1449,10 +1452,9 @@ class LegacySurveyImage(object):
         psfdir = os.path.dirname(self.psffn)
         # This is the output filename that psfex will choose (since we tell it the PSF_SUFFIX)
         psftmpfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.psf.tmp')
-        psfexflags = self.survey.get_psfex_conf(self.camera,
-                                                self.expnum, self.ccdname)
+        psfexflags = self.get_psfex_conf()
         cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .psf.tmp %s %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, psfexflags, self.sefn)
-        debug(cmd)
+        print(cmd)
         rtn = os.system(cmd)
         if rtn:
             raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
@@ -2134,27 +2136,43 @@ class LegacySurveyImage(object):
             except Exception as e:
                 debug('Did not find existing sky model for', self, ':', e)
 
+        psfexc = None
+        skyexc = None
+
+        psfex_kwargs = dict(git_version=git_version, ps=ps)
+        sky_kwargs = dict(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia, survey_blob_mask=survey_blob_mask, halos=halos, subtract_largegalaxies=subtract_largegalaxies)
+
+        if sky and self.sky_before_psfex:
+            try:
+                self.run_sky(**sky_kwargs)
+            except Exception as ex:
+                print('Exception running sky:', ex)
+                import traceback
+                traceback.print_exc()
+                skyexc = ex
+
         if se:
             # The image & mask files to process (funpacked if necessary)
             todelete = []
             imgfn,maskfn = self.funpack_files(self.imgfn, self.dqfn,
                                               self.hdu, self.dq_hdu, todelete)
             self.run_se(imgfn, maskfn)
-            for fn in todelete:
-                os.unlink(fn)
-
-        psfexc = None
-        skyexc = None
+            print('Not deleting temp files for SE!')
+            #for fn in todelete:
+            #    os.unlink(fn)
+        
         if psfex:
             try:
-                self.run_psfex(git_version=git_version, ps=ps)
+                self.run_psfex(**psfex_kwargs)
             except Exception as ex:
                 psfexc = ex
-        if sky:
+
+        if sky and not self.sky_before_psfex:
             try:
-                self.run_sky(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia, survey_blob_mask=survey_blob_mask, halos=halos, subtract_largegalaxies=subtract_largegalaxies)
+                self.run_sky(**sky_kwargs)
             except Exception as ex:
                 skyexc = ex
+
         if psfexc is not None:
             raise psfexc
         if skyexc is not None:
