@@ -246,10 +246,13 @@ class MegaPrimeImage(LegacySurveyImage):
         iv[dq != 0] = 0.
         return iv
 
-    def fix_saturation(self, img, dq, invvar, primhdr, imghdr, slc):
+    def get_satur(self):
         # SATURATE header keyword is ~65536, but actual saturation in the images is
-        # 32760.
-        I,J = np.nonzero(img > 32700)
+        # 32760. [ref needed]
+        return 32700
+
+    def fix_saturation(self, img, dq, invvar, primhdr, imghdr, slc):
+        I,J = np.nonzero(img > self.get_satur())
         from legacypipe.bits import DQ_BITS
         if len(I):
             dq[I,J] |= DQ_BITS['satur']
@@ -356,13 +359,16 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         super().run_se(tmpimgfn, maskfn)
         self.sefn = filt_sefn
 
-        print('cfht.py not removing patched image file', tmpimgfn)
-        #os.remove(tmpimgfn)
+        #print('cfht.py not removing patched image file', tmpimgfn)
+        os.remove(tmpimgfn)
 
         # Filter SE detections to Gaia stars
 
         from astrometry.util.fits import fits_table
         from astrometry.util.util import Sip
+        from astrometry.libkd.spherematch import match_radec
+        from astrometry.util.file import trymakedirs
+
         print('Filtering SE detections...')
         print('Reading temp SE catalog', tmpsefn)
         S = fits_table(tmpsefn, hdu=2, lower=False)
@@ -376,27 +382,21 @@ class MegaPrimeElixirImage(MegaPrimeImage):
 
         S.ra, S.dec = wcs.pixelxy2radec(S.X_IMAGE, S.Y_IMAGE)
 
-        from astrometry.libkd.spherematch import match_radec
         I,J,d = match_radec(S.ra, S.dec, gaia.ra, gaia.dec, 2.5/3600., nearest=True)
         print('Matched', len(I), 'Gaia stars')
 
         Fin = fitsio.FITS(tmpsefn, 'r')
-        print('Temp SE file:', len(Fin))
-
+        # Copy the first two HDUs unchanged...
+        trymakedirs(self.sefn, dir=True)
         Fout = fitsio.FITS(self.sefn, 'rw', clobber=True)
         data = Fin[0].read()
         hdr  = Fin[0].read_header()
-        #print('HDU 0: data', data, 'header', hdr)
         Fout.write(data, header=hdr)
-        #data,hdr = Fin[1].read(header=True)
         data = Fin[1].read()
         hdr  = Fin[1].read_header()
-        #print('HDU 1: data', data, 'header', hdr)
         Fout.write(data, header=hdr, extname='LDAC_IMHEAD')
-        #data,hdr = Fin[1].read(header=True)
-        data = Fin[2].read()
+        #data = Fin[2].read()
         hdr  = Fin[2].read_header()
-        #print('HDU 2: data', data, 'header', hdr)
         Fin.close()
         Fout.close()
         S.cut(I)
@@ -404,10 +404,12 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         S.rename('dec', 'DELTA_J2000')
         S.writeto(self.sefn, append=True, header=hdr, extname='LDAC_OBJECTS')
         print('Wrote', len(I), 'filtered stars to', self.sefn)
+        os.remove(tmpsefn)
 
     def get_psfex_conf(self):
-        print('get_psfex_conf: band', self.band)
+        #print('get_psfex_conf: band', self.band)
         if self.band == 'CaHK':
+            # Just create a constant PSF model, not a polynomially-varying one!
             return '-PSFVAR_DEGREES 0 -VERBOSE_TYPE FULL'
         return super().get_psfex_conf()
 
@@ -480,6 +482,8 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         self.scamp_fn = os.path.join(calibdir, 'wcs-scamp', imgdir, basename + '-scamp.head')
         self.wcs_initial_fn = os.path.join(calibdir, 'wcs-initial', imgdir, basename,
                                            calname + '.wcs')
+        self.lacosmic_fn = os.path.join(calibdir, 'lacosmic', imgdir, basename,
+                                        calname + '-cr.fits')
         #if not os.path.exists(self.scamp_fn):
         #    print('Warning: Scamp header', self.scamp_fn, 'does not exist, using default WCS')
 
@@ -560,10 +564,56 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             if os.path.exists(self.wcs_initial_fn):
                 break
 
+    def run_lacosmic(self):
+        from legacypipe.bits import DQ_BITS
+        print('run_lacosmic')
+        img = self.read_image()
+        print('run_lacosmic: got img')
+        dq = self.read_dq(use_lacosmic=False)
+        print('run_lacosmic: got dq')
+        # SATUR
+        dq[img > self.get_satur()] |= DQ_BITS['satur']
+        #iv = self.read_invvar()
+        print('run_lacosmic: got iv')
+        mask = (dq != 0)
+        #err = 1./np.sqrt(iv)
+        #err[iv == 0] = 0.
+        #mask[iv == 0] = True
+        #del iv
+
+        # Estimate per-pixel noise via Blanton's 5-pixel MAD
+        slice1 = (slice(0,-5,10),slice(0,-5,10))
+        slice2 = (slice(5,None,10),slice(5,None,10))
+        ok = (dq[slice1] == 0) * (dq[slice2] == 0)
+        mad = np.median(np.abs(img[slice1][ok] - img[slice2][ok]).ravel())
+        sig1 = 1.4826 * mad / np.sqrt(2.)
+
+        del dq
+
+        err = np.empty(img.shape, np.float32)
+        err[:,:] = sig1
+
+        import lacosmic
+        contrast = 2.
+        threshold = 6.
+        neighbor_threshold = 1.
+        print('run_lacosmic: running lacosmic')
+        _,crmask = lacosmic.lacosmic(img, contrast, threshold, neighbor_threshold,
+                                     error=err, mask=mask)
+        print('run_lacosmic: masked', np.sum(crmask), 'pixels')
+        tmpfn = self.lacosmic_fn.replace('-cr.fits', '-cr-temp.fits')
+        fits = fitsio.FITS(tmpfn, 'rw', clobber=True)
+        fits.write(crmask, compress='rice')
+        fits.close()
+        os.rename(tmpfn, self.lacosmic_fn)
+        print('Wrote', self.lacosmic_fn)
+
     def run_calibs(self, **kwargs):
         #if self.use_solve_field and not os.path.exists(self.wcs_initial_fn):
         if not os.path.exists(self.wcs_initial_fn):
             self.run_solve_field()
+        if not os.path.exists(self.lacosmic_fn):
+            self.run_lacosmic()
         super().run_calibs(**kwargs)
 
     def get_crpixcrval(self, primhdr, hdr):
@@ -577,7 +627,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         return wcs.get_cd()
 
     # don't need overridden read_image_header
-    def read_dq(self, header=False, **kwargs):
+    def read_dq(self, header=False, use_lacosmic=True, **kwargs):
         from legacypipe.bits import DQ_BITS
         # Image pixels to be ignored have value 0.0
         img = self._read_fits(self.imgfn, self.hdu, header=header, **kwargs)
@@ -593,6 +643,17 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         n = np.sum((img > 0) * (img < 0.5))
         print('Flagged', n, 'additional pixels in the DQ map with small positive image values')
         dq[img < 0.5] = DQ_BITS['badpix']
+
+        if use_lacosmic:
+            if not os.path.exists(self.lacosmic_fn):
+                self.run_lacosmic()
+            slc = kwargs.pop('slc', None)
+            if slc is not None:
+                crmask = fitsio.FITS(self.lacosmic_fn)[1][slc]
+            else:
+                crmask=  fitsio.read(self.lacosmic_fn, ext=1)
+            dq[crmask] |= DQ_BITS['cr']
+
         if header:
             dq = dq,hdr
         return dq

@@ -116,6 +116,8 @@ ENV HOME /homedir
 RUN git config --global --add safe.directory /src/legacypipe \
  && git config --global --add safe.directory /src/unwise_psf
 
+RUN pip3 install --no-cache lacosmic
+
 RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
   # Create config files in $HOME
   && mkdir $HOME/.qdo && echo "[qdo]" > $HOME/.qdo/qdorc \

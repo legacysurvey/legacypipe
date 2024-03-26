@@ -5,6 +5,7 @@ import fitsio
 import numpy as np
 from astrometry.util.fits import fits_table
 from astrometry.util.file import trymakedirs
+from astrometry.util.util import Tan
 
 def write_scamp_catalogs(scamp_dir, photom_fns, survey_dir):
     relpaths = []
@@ -39,9 +40,9 @@ def write_scamp_catalogs(scamp_dir, photom_fns, survey_dir):
         print('Relative path', relpath)
         imgfn = os.path.join(survey_dir, 'images', relpath).replace('-photom.fits',
                                                                     '.fits')
-        print('Img filename', imgfn)
         if not os.path.exists(imgfn) and os.path.exists(imgfn + '.fz'):
             imgfn += '.fz'
+        print('Img filename', imgfn)
             
         P = fits_table(fn)
         P.sn = P.flux/P.dflux
@@ -81,9 +82,40 @@ def write_scamp_catalogs(scamp_dir, photom_fns, survey_dir):
                 imghdr = hdu.header
 
             newhdr['EXTNAME'] = ccd
-            for c in ['EQUINOX', 'CRPIX1', 'CRPIX2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
-                      'CRVAL1', 'CRVAL2', 'QRUNID', 'CTYPE1', 'CTYPE2', 'RADECSYS']:
+            for c in ['QRUNID']:
                 newhdr[c] = imghdr[c]
+
+            # Read Astrometry.net initial WCS header!
+            imgid = os.path.basename(imgfn).replace('.fits','').replace('.fz', '')
+            wcsfn = imgfn.replace('images', 'calib/wcs-initial').replace('.fits', '').replace('.fz','') + '/%s-%s.wcs' % (imgid, ccd)
+            print('WCS', wcsfn)
+
+            # Reproject to a shared CRVAL (with large CRPIX values)
+            # Primary header has target RA,Dec as CRVAL; later HDUs all have the same CRVAL, somewhat off.
+            primhdr = fitsio.read_header(imgfn)
+            cra,cdec = primhdr['CRVAL1'], primhdr['CRVAL2']
+            wcs = Tan(wcsfn)
+            ok,cx,cy = wcs.radec2pixelxy(cra, cdec)
+            wcs.set_crval(cra, cdec)
+            wcs.set_crpix(cx, cy)
+
+            cd = wcs.get_cd()
+            newhdr['EQUINOX'] = 2000.
+            newhdr['CRPIX1'] = wcs.crpix[0]
+            newhdr['CRPIX2'] = wcs.crpix[1]
+            newhdr['CRVAL1'] = wcs.crval[0]
+            newhdr['CRVAL2'] = wcs.crval[1]
+            newhdr['CD1_1'] = cd[0]
+            newhdr['CD1_2'] = cd[1]
+            newhdr['CD2_1'] = cd[2]
+            newhdr['CD2_2'] = cd[3]
+            # wcshdr = fitsio.read_header(wcsfn)
+            # for c in ['EQUINOX', 'CRPIX1', 'CRPIX2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
+            #           'CRVAL1', 'CRVAL2']:
+            #     newhdr[c] = wcshdr[c]
+            newhdr['CTYPE1'] = 'RA---TAN' # ... trim off the SIP
+            newhdr['CTYPE2'] = 'DEC--TAN'
+            newhdr['RADECSYS'] = 'FK5' # ... not really but it's what's in the CFHT headers, so scamp understands that, if it pays any attention
 
             fitsio.write(tmpfn, None, header=newhdr, extname=ccd, clobber=True)
             hdrtxt = open(tmpfn, 'rb').read()
