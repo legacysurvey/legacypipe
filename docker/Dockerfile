@@ -42,10 +42,28 @@ RUN apt -y update && apt install -y apt-utils \
     python3.10 \
     python3.10-dev \
     python3-pip \
+    plplot-driver-cairo \
     source-extractor \
     psfex \
+    scamp \
     # Remove APT files
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+RUN apt -y update \
+  && apt install -y --no-install-recommends \
+      gfortran
+ENV FFLAGS=-fallow-argument-mismatch
+ENV FCFLAGS=-fallow-argument-mismatch
+
+RUN wget -nv https://www.mpich.org/static/downloads/4.0.2/mpich-4.0.2.tar.gz \
+  && tar xzf mpich-4.0.2.tar.gz \
+  && cd mpich-4.0.2 \
+  && ./configure \
+  && make -j \
+  && make install \
+  && make clean \
+  && cd .. && rm -Rf mpich-4.0.2
+# defaults to installing in /usr/local
 
 # Pip installs
 RUN for x in \
@@ -61,6 +79,7 @@ RUN for x in \
     astropy \
     photutils \
     zmq \
+    mpi4py \
     ; do pip3 install $x; done \
     && rm -Rf /root/.cache/pip
 
