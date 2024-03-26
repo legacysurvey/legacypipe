@@ -1222,6 +1222,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
             refs.delete_column(c)
             continue
 
+    Rfit = 30
+
     if ps is not None:
         print('sig1:', imobj.sig1)
         s1 = imobj.sig1 * imobj.exptime
@@ -1252,10 +1254,40 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
         plt.title('Before fitting Gaia sources')
         ps.savefig()
 
+        Ibright = np.argsort(gaia.phot_g_mean_mag)
+        print('Brightest Gaia G:', gaia.phot_g_mean_mag[Ibright[:10]])
+        #bright_gaia_sourceid = gaia.gaia_sourceid
+        plot_gaia_sourceid = []
+        plt.clf()
+        plt.subplots_adjust(hspace=0, wspace=0)
+        R,C = 4,5
+        s = 50
+        k = 1
+        for i in Ibright:
+            xc,yc = int(x[i])-1, int(y[i])-1
+            h,w = fit_img.shape
+            if xc < s or yc < s or xc+s >= w or yc+s >= h:
+                # too close to edge
+                continue
+            plot_gaia_sourceid.append(gaia.gaia_sourceid[i])
+            plt.subplot(R,C,k)
+            k+=1
+            plt.imshow(fit_img[yc-s:yc+s+1, xc-s:xc+s+1], interpolation='nearest', origin='lower',
+                       vmin=-2.*s1, vmax=10.*s1, cmap='gray', extent=[xc-s, xc+s, yc-s, yc+s])
+            ax = plt.axis()
+            #plt.plot(xc, yc, 'o', mec='r', mfc='none', ms=20)
+            plt.plot([xc-Rfit, xc-Rfit, xc+Rfit, xc+Rfit, xc-Rfit],
+                     [yc-Rfit, yc+Rfit, yc+Rfit, yc-Rfit, yc-Rfit], 'r-')
+            plt.axis(ax)
+            if k >= R*C:
+                break
+        plt.suptitle('Initial Gaia source positions')
+        ps.savefig()
+
         # Run a source detection on the image and cross-match with Gaia star positions.
         from scipy.ndimage import gaussian_filter
         from scipy.ndimage import binary_dilation, binary_fill_holes
-        from scipy.ndimage.measurements import label, find_objects
+        from scipy.ndimage import label, find_objects
         print('FWHM', imobj.fwhm)
         psf_sigma = imobj.fwhm / 2.35
         psfnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
@@ -1337,8 +1369,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
         ps.savefig()
 
     # Run tractor fitting on the ref stars, using the PsfEx model.
-    phot = tractor_fit_sources(imobj, wcs, refs.ra_now, refs.dec_now, refs.flux0,
-                               fit_img, ierr, psf, x0, y0)
+    phot,mods = tractor_fit_sources(imobj, wcs, refs.ra_now, refs.dec_now, refs.flux0,
+                                    fit_img, ierr, psf, x0, y0, Rfit=Rfit, ps=ps)
     print('Got photometry results for', len(phot), 'reference stars')
     if len(phot) == 0:
         return None, None
@@ -1352,6 +1384,57 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
         phot.flux_sn = (phot.flux / phot.dflux)
     phot.flux_sn[phot.dflux == 0] = 0.
 
+    # print('Refs:')
+    # refs.about()
+    # print('Phot:')
+    # phot.about()
+
+    if ps is not None:
+        sourceid_to_index = dict([(s,i) for i,s in enumerate(refs.gaia_sourceid)])
+        plt.clf()
+        plt.subplots_adjust(hspace=0, wspace=0)
+        R,C = 4,5
+        for k,sourceid in enumerate(plot_gaia_sourceid):
+            i = sourceid_to_index.get(sourceid, -1)
+            if i == -1:
+                continue
+            ok,xc,yc = wcs.radec2pixelxy(phot.ra_fit[i], phot.dec_fit[i])
+            xc = int(xc)
+            yc = int(yc)
+            h,w = fit_img.shape
+            if xc < s or yc < s or xc+s >= w or yc+s >= h:
+                # too close to edge
+                continue
+            plt.subplot(R,C,k+1)
+            plt.imshow(fit_img[yc-s:yc+s+1, xc-s:xc+s+1], interpolation='nearest', origin='lower',
+                       vmin=-2.*s1, vmax=10.*s1, cmap='gray', extent=[xc-s, xc+s, yc-s, yc+s])
+            ax = plt.axis()
+            #plt.plot(xc, yc, 'o', mec='r', mfc='none', ms=20)
+            plt.plot([xc-Rfit, xc-Rfit, xc+Rfit, xc+Rfit, xc-Rfit],
+                     [yc-Rfit, yc+Rfit, yc+Rfit, yc-Rfit, yc-Rfit], 'r-')
+            plt.axis(ax)
+        plt.suptitle('Fitted Gaia source positions')
+        ps.savefig()
+
+        plt.clf()
+        plt.subplots_adjust(hspace=0, wspace=0)
+        R,C = 4,5
+        for k,sourceid in enumerate(plot_gaia_sourceid):
+            i = sourceid_to_index.get(sourceid, -1)
+            if i == -1:
+                continue
+            plt.subplot(R,C,k+1)
+            plt.imshow(mods[i], interpolation='nearest', origin='lower',
+                       vmin=-2.*s1, vmax=10.*s1, cmap='gray', extent=[xc-s, xc+s, yc-s, yc+s])
+            ax = plt.axis()
+            #plt.plot(xc, yc, 'o', mec='r', mfc='none', ms=20)
+            plt.plot([xc-Rfit, xc-Rfit, xc+Rfit, xc+Rfit, xc-Rfit],
+                     [yc-Rfit, yc+Rfit, yc+Rfit, yc-Rfit, yc-Rfit], 'r-')
+            plt.axis(ax)
+        plt.suptitle('Fitted models')
+        ps.savefig()
+
+        
     phot.raoff  = (refs.ra_now  - phot.ra_fit ) * 3600. * np.cos(np.deg2rad(refs.dec_now))
     phot.decoff = (refs.dec_now - phot.dec_fit) * 3600.
 
@@ -1541,17 +1624,20 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
     return ccds, phot
 
 def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
-                        psf, ccd_x0, ccd_y0, normalize_psf=True):
+                        psf, ccd_x0, ccd_y0, normalize_psf=True, Rfit=10, ps=None):
     import tractor
     from tractor import PixelizedPSF
     from tractor.brightness import LinearPhotoCal
 
-    plots = False
+    fitmods = []
+    
+    plots = (ps is not None)
     plot_this = plots
     nplots = 0
     if plots:
-        from astrometry.util.plotutils import PlotSequence
-        ps = PlotSequence('astromfit')
+        if ps is None:
+            from astrometry.util.plotutils import PlotSequence
+            ps = PlotSequence('astromfit')
 
     print('Fitting positions & fluxes of %i stars' % len(ref_ra))
 
@@ -1577,7 +1663,7 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
         x -= 1
         y -= 1
         # Fitting radius
-        R = 10
+        R = Rfit
         H,W = img.shape
         xlo = int(x - R)
         ylo = int(y - R)
@@ -1606,7 +1692,13 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
         if normalize_psf:
             psfimg /= psfsum
         sz = R + 5
-        psfimg = psfimg[ph//2-sz:ph//2+sz+1, pw//2-sz:pw//2+sz+1]
+        #print('Before cutting PSF: psfimg shape', psfimg.shape, 'sz', sz)
+        if ph//2 - sz >= 0 and pw//2-sz >= 0:
+            psfimg = psfimg[ph//2-sz:ph//2+sz+1, pw//2-sz:pw//2+sz+1]
+            #print('psfimg shape', psfimg.shape)
+            ph,pw = psfimg.shape
+            if ph%2 == 1 or pw%2 == 1:
+                continue
         subpsf = PixelizedPSF(psfimg)
 
         if np.all(subie == 0):
@@ -1643,13 +1735,16 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
             plt.clf()
             plt.subplot(2,2,1)
             plt.imshow(subimg, interpolation='nearest', origin='lower')
+            plt.title('image')
             plt.colorbar()
             plt.subplot(2,2,2)
             mod = tr.getModelImage(0)
             plt.imshow(mod, interpolation='nearest', origin='lower')
+            plt.title('model')
             plt.colorbar()
             plt.subplot(2,2,3)
             plt.imshow((subimg - mod) * subie, interpolation='nearest', origin='lower')
+            plt.title('chi')
             plt.colorbar()
             plt.suptitle('Before fitting: star #%i' % istar)
             ps.savefig()
@@ -1673,6 +1768,8 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
         # profile-weighted fraction of masked pixels
         cal.fracmasked.append(np.sum(psfimg * (subie == 0)))
 
+        fitmods.append(mod)
+
         cal.psfsum.append(psfsum)
         cal.x_ref.append(ccd_x0 + x_init + xlo)
         cal.y_ref.append(ccd_y0 + y_init + ylo)
@@ -1690,13 +1787,16 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
             plt.clf()
             plt.subplot(2,2,1)
             plt.imshow(subimg, interpolation='nearest', origin='lower')
+            plt.title('image')
             plt.colorbar()
             plt.subplot(2,2,2)
             mod = tr.getModelImage(0)
             plt.imshow(mod, interpolation='nearest', origin='lower')
+            plt.title('model')
             plt.colorbar()
             plt.subplot(2,2,3)
             plt.imshow((subimg - mod) * subie, interpolation='nearest', origin='lower')
+            plt.title('chi')
             plt.colorbar()
             plt.suptitle('After')
             ps.savefig()
@@ -1710,7 +1810,7 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
         print('Off image for %d stars' % noffim)
     cal.to_np_arrays()
     cal.ra_fit,cal.dec_fit = wcs.pixelxy2radec(cal.x_fit - ccd_x0 + 1, cal.y_fit - ccd_y0 + 1)
-    return cal
+    return cal, fitmods
 
 if __name__ == "__main__":
     main()

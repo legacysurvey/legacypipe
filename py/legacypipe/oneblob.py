@@ -3,7 +3,7 @@ import time
 
 from astrometry.util.ttime import Time
 from astrometry.util.resample import resample_with_wcs, OverlapError
-from astrometry.util.fits import fits_table
+from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import dimshow
 
 from tractor import Tractor, PointSource, Image, Catalog, Patch, Galaxy
