@@ -2251,8 +2251,8 @@ class NormalizedPixelizedPsfEx(PixelizedPsfEx):
         pix /= pix.sum()
         return PixelizedPSF(pix)
 
-    def _sampleImage(self, img, dx, dy):
-        xl,yl,img = super()._sampleImage(img, dx, dy)
+    def _sampleImage(self, img, dx, dy, **kwargs):
+        xl,yl,img = super()._sampleImage(img, dx, dy, **kwargs)
         img /= img.sum()
         return xl,yl,img
 
