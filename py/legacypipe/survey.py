@@ -1675,7 +1675,15 @@ class LegacySurveyData(object):
         debug('Total of', len(T), 'CCDs')
         del TT
         T = self.cleanup_ccds_table(T)
+        T = self.filter_ccds(T)
         return T
+
+    def filter_ccds(self, ccds):
+        '''
+        Provides the opportunity for subclassers (eg in runs.py) to drop some CCDs from the given
+        fits_table of CCDs.
+        '''
+        return ccds
 
     def filter_annotated_ccds_files(self, fns):
         '''
@@ -1700,6 +1708,7 @@ class LegacySurveyData(object):
         debug('Total of', len(T), 'CCDs')
         del TT
         T = self.cleanup_ccds_table(T)
+        T = self.filter_ccds(T)
         return T
 
     def cleanup_ccds_table(self, ccds):
@@ -1741,6 +1750,7 @@ class LegacySurveyData(object):
                 return None
             ccds = merge_tables(TT, columns='fillzero')
             ccds = self.cleanup_ccds_table(ccds)
+            ccds = self.filter_ccds(ccds)
         else:
             ccds = self.get_ccds_readonly()
         I = ccds_touching_wcs(wcs, ccds, **kwargs)
@@ -1940,6 +1950,7 @@ class LegacySurveyData(object):
             return fits_table()
         ccds = merge_tables(TT, columns='fillzero')
         ccds = self.cleanup_ccds_table(ccds)
+        ccds = self.filter_ccds(ccds)
         return ccds
 
     def get_rgb(self, imgs, bands, coadd_bw=None, **kwargs):
