@@ -447,6 +447,7 @@ class LegacySurveyImage(object):
         return primhdr.get('EXPTIME')
 
     def get_ha_deg(self, primhdr):
+        from astrometry.util.starutil_numpy import hmsstring2ra
         return hmsstring2ra(primhdr.get('HA'))
 
     def get_pixscale(self, primhdr, hdr):
