@@ -407,6 +407,7 @@ class OneBlob(object):
         cat = B.sources
         I = np.array([i for i,s in enumerate(cat) if s is not None])
         B.cut(I)
+        del I
         cat = Catalog(*B.sources)
         tr.catalog = cat
 
@@ -490,10 +491,12 @@ class OneBlob(object):
                 # Compute inverse-variances
                 allderivs = tr.getDerivs()
                 ivars = _compute_invvars(allderivs)
+                del allderivs
                 assert(len(ivars) == nsrcparams)
                 B.srcinvvars[isub] = ivars
                 assert(len(B.srcinvvars[isub]) == cat[isub].numberOfParams())
                 cat.freezeParam(isub)
+                del ivars
 
             # Check for sources with zero inverse-variance -- I think these
             # can be generated during the "Simultaneous re-opt" stage above --
@@ -505,10 +508,12 @@ class OneBlob(object):
                 B.cut(I)
                 cat = Catalog(*B.sources)
                 tr.catalog = cat
+            del I
 
             M = _compute_source_metrics(B.sources, self.tims, self.bands, tr)
             for k,v in M.items():
                 B.set(k, v)
+            del M
 
         info('Blob', self.name, 'finished, total:', Time()-trun)
         return B
