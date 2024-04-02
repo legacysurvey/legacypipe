@@ -937,8 +937,9 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
         wcs = wcs.get_subimage(x0, y0, int(x1-x0), int(y1-y0))
 
     # Quick check for PsfEx file
+    normalizePsf = True
     try:
-        psf = imobj.read_psf_model(x0, y0, pixPsf=True)
+        psf = imobj.read_psf_model(x0, y0, pixPsf=True, normalizePsf=normalizePsf)
     except RuntimeError as e:
         print('Failed to read PSF model: %s' % e)
         return None, None
@@ -1623,7 +1624,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
     return ccds, phot
 
 def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
-                        psf, ccd_x0, ccd_y0, normalize_psf=True, Rfit=10, ps=None):
+                        psf, ccd_x0, ccd_y0, Rfit=10, ps=None):
     import tractor
     from tractor import PixelizedPSF
     from tractor.brightness import LinearPhotoCal
@@ -1650,7 +1651,6 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
     cal.dx = []
     cal.dy = []
     cal.dflux = []
-    cal.psfsum = []
     cal.iref = []
     cal.chi2 = []
     cal.fracmasked = []
@@ -1675,35 +1675,13 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
             noffim += 1
             continue
         subimg = img[ylo:yhi+1, xlo:xhi+1]
-        # FIXME -- check that ierr is correct
         subie = ierr[ylo:yhi+1, xlo:xhi+1]
-
-        if False:
-            subpsf = psf.constantPsfAt(x, y)
-            psfsum = np.sum(subpsf.img)
-            if normalize_psf:
-                # print('Normalizing PsfEx model with sum:', s)
-                subpsf.img /= psfsum
-
-        psfimg = psf.getImage(x, y)
-        ph,pw = psf.img.shape
-        psfsum = np.sum(psfimg)
-        if normalize_psf:
-            psfimg /= psfsum
-        sz = R + 5
-        #print('Before cutting PSF: psfimg shape', psfimg.shape, 'sz', sz)
-        if ph//2 - sz >= 0 and pw//2-sz >= 0:
-            psfimg = psfimg[ph//2-sz:ph//2+sz+1, pw//2-sz:pw//2+sz+1]
-            #print('psfimg shape', psfimg.shape)
-            ph,pw = psfimg.shape
-            if ph%2 == 1 or pw%2 == 1:
-                continue
-        subpsf = PixelizedPSF(psfimg)
-
         if np.all(subie == 0):
             nzeroivar += 1
             # print('Inverse-variance map is all zero')
             continue
+
+        subpsf = psf.constantPsfAt(x, y)
 
         tim = tractor.Image(data=subimg, inverr=subie, psf=subpsf)
         flux0 = ref_flux[istar]
@@ -1761,15 +1739,15 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
 
         mod = tr.getModelImage(0)
         chi = (subimg - mod) * subie
-        psfimg = mod / mod.sum()
+        proimg = mod / mod.sum()
         # profile-weighted chi-squared
-        cal.chi2.append(np.sum(chi**2 * psfimg))
+        cal.chi2.append(np.sum(chi**2 * proimg))
         # profile-weighted fraction of masked pixels
-        cal.fracmasked.append(np.sum(psfimg * (subie == 0)))
+        cal.fracmasked.append(np.sum(proimg * (subie == 0)))
+        del proimg
 
         fitmods.append(mod)
 
-        cal.psfsum.append(psfsum)
         cal.x_ref.append(ccd_x0 + x_init + xlo)
         cal.y_ref.append(ccd_y0 + y_init + ylo)
         cal.x_fit.append(ccd_x0 + src.pos.x + xlo)

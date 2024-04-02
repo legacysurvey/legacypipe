@@ -2236,29 +2236,35 @@ class LegacySplineSky(SplineSky):
         sky.shift(Ti.x0, Ti.y0)
         return sky
 
-class NormalizedPixelizedPsfEx(PixelizedPsfEx):
-    def __str__(self):
-        return 'NormalizedPixelizedPsfEx'
-
+# mixin
+class NormalizedPsf(object):
     def getFourierTransform(self, px, py, radius):
         fft, (cx,cy), shape, (v,w) = super().getFourierTransform(px, py, radius)
         fft /= np.abs(fft[0][0])
         return fft, (cx,cy), shape, (v,w)
 
     def getImage(self, px, py):
-        img = super(NormalizedPixelizedPsfEx, self).getImage(px, py)
+        img = super().getImage(px, py)
         img /= np.sum(img)
         return img
-
-    def constantPsfAt(self, x, y):
-        pix = self.psfex.at(x, y)
-        pix /= pix.sum()
-        return PixelizedPSF(pix)
 
     def _sampleImage(self, img, dx, dy, **kwargs):
         xl,yl,img = super()._sampleImage(img, dx, dy, **kwargs)
         img /= img.sum()
         return xl,yl,img
+
+class NormalizedPixelizedPsf(NormalizedPsf, PixelizedPSF):
+    def __str__(self):
+        return 'NormalizedPixelizedPSF'
+
+class NormalizedPixelizedPsfEx(NormalizedPsf, PixelizedPsfEx):
+    def __str__(self):
+        return 'NormalizedPixelizedPsfEx'
+
+    def constantPsfAt(self, x, y):
+        pix = self.psfex.at(x, y)
+        pix /= pix.sum()
+        return NormalizedPixelizedPsf(pix, sampling=self.sampling)
 
 def fix_weight_quantization(wt, weightfn, ext, slc):
     '''
