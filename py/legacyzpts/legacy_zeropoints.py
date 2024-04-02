@@ -1242,6 +1242,41 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
         plt.axvline(-2.*s1, color='r')
         plt.axvline(+2.*s1, color='r')
         ps.savefig()
+        # Show PSF model across the image
+        plt.clf()
+        h,w = imobj.shape
+        clip = 5
+        subpsf = psf.constantPsfAt(w/2, h/2)
+        cpsf = subpsf.getPointSourcePatch(np.round(w/2), np.round(h/2))
+        cpsf = cpsf.patch[clip:-clip, clip:-clip]
+        xgrid = np.linspace(0, w, 7)
+        ygrid = np.linspace(0, h, 7)
+        ystack = []
+        dystack = []
+        for y in ygrid:
+            xstack = []
+            dxstack = []
+            for x in xgrid:
+                subpsf = psf.constantPsfAt(x, y)
+                patch = subpsf.getPointSourcePatch(np.round(x), np.round(y))
+                patch = patch.patch
+                patch = patch[clip:-clip, clip:-clip]
+                xstack.append(patch)
+                dxstack.append(patch - cpsf)
+            ystack.append(np.hstack(xstack))
+            dystack.append(np.hstack(dxstack))
+        ystack = np.vstack(ystack)
+        dystack = np.vstack(dystack)
+        plt.imshow(ystack)
+        plt.title('PSF model across image')
+        plt.xticks([]); plt.yticks([])
+        ps.savefig()
+        plt.clf()
+        plt.imshow(dystack)
+        plt.title('Delta-PSF model across image (vs center)')
+        plt.xticks([]); plt.yticks([])
+        ps.savefig()
+
         plt.clf()
         plt.imshow(fit_img, interpolation='nearest', origin='lower',
                    vmin=-2.*s1, vmax=10.*s1, cmap='gray')
@@ -1406,7 +1441,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
                 # too close to edge
                 continue
             plt.subplot(R,C,k+1)
-            plt.imshow(fit_img[yc-s:yc+s+1, xc-s:xc+s+1], interpolation='nearest', origin='lower',
+            plotimg = fit_img[yc-s:yc+s+1, xc-s:xc+s+1]
+            plt.imshow(plotimg, interpolation='nearest', origin='lower',
                        vmin=-2.*s1, vmax=10.*s1, cmap='gray', extent=[xc-s, xc+s, yc-s, yc+s])
             ax = plt.axis()
             #plt.plot(xc, yc, 'o', mec='r', mfc='none', ms=20)
@@ -1424,13 +1460,15 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
             if i == -1:
                 continue
             plt.subplot(R,C,k+1)
+            ok,xc,yc = wcs.radec2pixelxy(phot.ra_fit[i], phot.dec_fit[i])
+            xc = int(xc)
+            yc = int(yc)
+            mh,mw = mods[i].shape
             plt.imshow(mods[i], interpolation='nearest', origin='lower',
-                       vmin=-2.*s1, vmax=10.*s1, cmap='gray', extent=[xc-s, xc+s, yc-s, yc+s])
-            ax = plt.axis()
-            #plt.plot(xc, yc, 'o', mec='r', mfc='none', ms=20)
+                       vmin=-2.*s1, vmax=10.*s1, cmap='gray', extent=[xc-mw/2, xc+mw/2, yc-mh/2, yc+mh/2])
             plt.plot([xc-Rfit, xc-Rfit, xc+Rfit, xc+Rfit, xc-Rfit],
                      [yc-Rfit, yc+Rfit, yc+Rfit, yc-Rfit, yc-Rfit], 'r-')
-            plt.axis(ax)
+            plt.axis([xc-s, xc+s, yc-s, yc+s])
         plt.suptitle('Fitted models')
         ps.savefig()
 
@@ -1657,6 +1695,8 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
     nzeroivar = 0
     noffim = 0
 
+    plotstar = plots
+
     for istar,(ra,dec) in enumerate(zip(ref_ra, ref_dec)):
         _,x,y = wcs.radec2pixelxy(ra, dec)
         x -= 1
@@ -1702,21 +1742,25 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
         tim.photocal = pc
         src.thawParam('pos')
 
-        if plots:
+        if plotstar:
             # Don't plot saturated stars
             h,w = subie.shape
             plot_this = (subie[h//2, w//2] > 0)
+            if not plot_this:
+                print('Not plotting star', istar, ': saturated center')
 
-        if plots and plot_this:
+        if plotstar and plot_this:
             import pylab as plt
             plt.clf()
             plt.subplot(2,2,1)
-            plt.imshow(subimg, interpolation='nearest', origin='lower')
+            mn,mx = np.percentile(subimg.ravel(), [5,99])
+            ima = dict(interpolation='nearest', origin='lower', vmin=mn, vmax=mx)
+            plt.imshow(subimg, **ima)
             plt.title('image')
             plt.colorbar()
             plt.subplot(2,2,2)
             mod = tr.getModelImage(0)
-            plt.imshow(mod, interpolation='nearest', origin='lower')
+            plt.imshow(mod, **ima)
             plt.title('model')
             plt.colorbar()
             plt.subplot(2,2,3)
@@ -1760,15 +1804,15 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
         cal.dy.append(std[1])
         cal.dflux.append(std[2])
 
-        if plots and plot_this:
+        if plotstar and plot_this:
             plt.clf()
             plt.subplot(2,2,1)
-            plt.imshow(subimg, interpolation='nearest', origin='lower')
+            plt.imshow(subimg, **ima)
             plt.title('image')
             plt.colorbar()
             plt.subplot(2,2,2)
             mod = tr.getModelImage(0)
-            plt.imshow(mod, interpolation='nearest', origin='lower')
+            plt.imshow(mod, **ima)
             plt.title('model')
             plt.colorbar()
             plt.subplot(2,2,3)
@@ -1777,9 +1821,10 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
             plt.colorbar()
             plt.suptitle('After')
             ps.savefig()
+
             nplots += 1
-            if nplots == 10:
-                plots = False
+            if nplots >= 10:
+                plotstar = False
 
     if nzeroivar > 0:
         print('Zero ivar for %d stars' % nzeroivar)
@@ -1787,6 +1832,18 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
         print('Off image for %d stars' % noffim)
     cal.to_np_arrays()
     cal.ra_fit,cal.dec_fit = wcs.pixelxy2radec(cal.x_fit - ccd_x0 + 1, cal.y_fit - ccd_y0 + 1)
+
+    if plots:
+        # Show vector field of x,y shifts
+        plt.clf()
+        Q = plt.quiver(cal.x_ref, cal.y_ref, cal.x_fit - cal.x_ref, cal.y_fit - cal.y_ref,
+                       angles='xy', pivot='middle')#, scale=0.1, scale_units='xy')
+        plt.quiverkey(Q, 0.8, 0.95, 0.1, '0.1 pixels', labelpos='E', coordinates='axes')
+        plt.xlabel('Image X (pix)')
+        plt.ylabel('Image Y (pix)')
+        plt.title('Fit positional offset')
+        ps.savefig()
+
     return cal, fitmods
 
 if __name__ == "__main__":
