@@ -565,21 +565,16 @@ class MegaPrimeElixirImage(MegaPrimeImage):
                 break
 
     def run_lacosmic(self):
+        import lacosmic
+        from astrometry.util.file import trymakedirs
         from legacypipe.bits import DQ_BITS
-        print('run_lacosmic')
+
         img = self.read_image()
-        print('run_lacosmic: got img')
+        print('run_lacosmic: got img, range', img.min(), img.max())
         dq = self.read_dq(use_lacosmic=False)
-        print('run_lacosmic: got dq')
         # SATUR
         dq[img > self.get_satur()] |= DQ_BITS['satur']
-        #iv = self.read_invvar()
-        print('run_lacosmic: got iv')
         mask = (dq != 0)
-        #err = 1./np.sqrt(iv)
-        #err[iv == 0] = 0.
-        #mask[iv == 0] = True
-        #del iv
 
         # Estimate per-pixel noise via Blanton's 5-pixel MAD
         slice1 = (slice(0,-5,10),slice(0,-5,10))
@@ -593,7 +588,6 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         err = np.empty(img.shape, np.float32)
         err[:,:] = sig1
 
-        import lacosmic
         contrast = 2.
         threshold = 6.
         neighbor_threshold = 1.
@@ -602,8 +596,9 @@ class MegaPrimeElixirImage(MegaPrimeImage):
                                      error=err, mask=mask)
         print('run_lacosmic: masked', np.sum(crmask), 'pixels')
         tmpfn = self.lacosmic_fn.replace('-cr.fits', '-cr-temp.fits')
+        trymakedirs(self.lacosmic_fn, dir=True)
         fits = fitsio.FITS(tmpfn, 'rw', clobber=True)
-        fits.write(crmask, compress='rice')
+        fits.write(crmask.astype(np.uint8), compress='rice')
         fits.close()
         os.rename(tmpfn, self.lacosmic_fn)
         print('Wrote', self.lacosmic_fn)
@@ -652,7 +647,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
                 crmask = fitsio.FITS(self.lacosmic_fn)[1][slc]
             else:
                 crmask=  fitsio.read(self.lacosmic_fn, ext=1)
-            dq[crmask] |= DQ_BITS['cr']
+            dq[(crmask != 0)] |= DQ_BITS['cr']
 
         if header:
             dq = dq,hdr
