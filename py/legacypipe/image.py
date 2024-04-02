@@ -120,8 +120,9 @@ class LegacySurveyImage(object):
             self.camera = self.get_camera(primhdr)
             self.mjdobs = self.get_mjd(primhdr)
             self.exptime = self.get_exptime(primhdr)
+            self.ha = self.get_ha_deg(primhdr)
             namechange = {'date': 'procdate',}
-            for key in ['HA', 'DATE', 'PLVER', 'PLPROCID']:
+            for key in ['DATE', 'PLVER', 'PLPROCID']:
                 val = primhdr.get(key)
                 if isinstance(val, str):
                     val = val.strip()
@@ -444,6 +445,9 @@ class LegacySurveyImage(object):
 
     def get_exptime(self, primhdr):
         return primhdr.get('EXPTIME')
+
+    def get_ha_deg(self, primhdr):
+        return hmsstring2ra(primhdr.get('HA'))
 
     def get_pixscale(self, primhdr, hdr):
         return 3600. * np.sqrt(np.abs(hdr['CD1_1'] * hdr['CD2_2'] -

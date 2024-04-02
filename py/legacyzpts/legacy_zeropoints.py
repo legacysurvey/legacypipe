@@ -905,8 +905,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
     ccds['ra_bore'],ccds['dec_bore'] = ra_bore, dec_bore
     airmass = imobj.get_airmass(primhdr, hdr, ra_bore, dec_bore)
     ccds['airmass'] = airmass
-    ha_str = primhdr['HA']
-    ccds['ha'] = hmsstring2ra(ha_str)
+    ccds['ha'] = imobj.get_ha_deg(primhdr)
     ccds['gain'] = imobj.get_gain(primhdr, hdr)
     ccds['object'] = imobj.get_object(primhdr)
 
