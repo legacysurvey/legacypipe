@@ -235,13 +235,15 @@ def main():
 
     print('Forced-phot bands:', bands)
     for b in bands:
-        T.set('forced_flux_%s' % b, np.zeros(len(T), np.float32))
-        T.set('forced_flux_ivar_%s' % b, np.zeros(len(T), np.float32))
-        T.set('forced_apflux_%s' % b, np.zeros((len(T), Nap), np.float32))
+        from legacypipe.format_catalog import clean_column_name
+        b = clean_column_name(b)
+        T.set('forced_flux_%s'        % b, np.zeros(len(T), np.float32))
+        T.set('forced_flux_ivar_%s'   % b, np.zeros(len(T), np.float32))
+        T.set('forced_apflux_%s'      % b, np.zeros((len(T), Nap), np.float32))
         T.set('forced_apflux_ivar_%s' % b, np.zeros((len(T), Nap), np.float32))
-        T.set('forced_psfdepth_%s' % b, np.zeros(len(T), np.float32))
-        T.set('forced_galdepth_%s' % b, np.zeros(len(T), np.float32))
-        T.set('forced_nexp_%s' % b, np.zeros(len(T), np.int32))
+        T.set('forced_psfdepth_%s'    % b, np.zeros(len(T), np.float32))
+        T.set('forced_galdepth_%s'    % b, np.zeros(len(T), np.float32))
+        T.set('forced_nexp_%s'        % b, np.zeros(len(T), np.int32))
 
     objidmap = dict([((b,o),i) for i,(b,o) in enumerate(zip(T.brickid, T.objid))])
     #brickid = brick.brickid
@@ -257,16 +259,18 @@ def main():
         except KeyError:
             continue
         band = band.strip()
-        T.get('forced_flux_%s' % band)[i] += flux * fluxiv
-        T.get('forced_flux_ivar_%s' % band)[i] += fluxiv
-        T.get('forced_apflux_%s' % band)[i] += apflux * apfluxiv
+        band = clean_column_name(band)
+        T.get('forced_flux_%s'        % band)[i] += flux * fluxiv
+        T.get('forced_flux_ivar_%s'   % band)[i] += fluxiv
+        T.get('forced_apflux_%s'      % band)[i] += apflux * apfluxiv
         T.get('forced_apflux_ivar_%s' % band)[i] += apfluxiv
-        T.get('forced_psfdepth_%s' % band)[i] += psfdepth
-        T.get('forced_galdepth_%s' % band)[i] += galdepth
-        T.get('forced_nexp_%s' % band)[i] += 1
+        T.get('forced_psfdepth_%s'    % band)[i] += psfdepth
+        T.get('forced_galdepth_%s'    % band)[i] += galdepth
+        T.get('forced_nexp_%s'        % band)[i] += 1
 
     eunits = {}
     for b in bands:
+        b = clean_column_name(b)
         iv = T.get('forced_flux_ivar_%s' % b)
         f = T.get('forced_flux_%s' % b)
         T.get('forced_flux_%s' % b)[iv > 0] = f[iv > 0] / iv[iv > 0]

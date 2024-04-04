@@ -11,7 +11,7 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
-def _clean_column_name(col):
+def clean_column_name(col):
     # suprime "I-A-L427", etc
     return col.replace('-', '_')
 
@@ -39,7 +39,7 @@ def _expand_flux_columns(T, bands, allbands, keys):
 
         # FLUX_b for each band, rather than array columns.
         for i,b in enumerate(allbands):
-            col = _clean_column_name('%s_%s' % (key, b))
+            col = clean_column_name('%s_%s' % (key, b))
             T.set(col, A[:,i])
 
 def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
@@ -172,7 +172,7 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
 
     def add_fluxlike(c):
         for b in allbands:
-            col = _clean_column_name('%s_%s' % (c, b))
+            col = clean_column_name('%s_%s' % (c, b))
             cols.append(col)
     def add_wiselike(c, bands=None):
         if bands is None:
@@ -297,11 +297,11 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
     # nea, blob_nea rename
     for b in allbands:
         oldcol = 'nea_%s' % b.lower()
-        newcol = 'nea_%s' % _clean_column_name(b)
+        newcol = 'nea_%s' % clean_column_name(b)
         if newcol != oldcol:
             T.rename(oldcol, newcol)
         oldcol = 'blob_nea_%s' % b.lower()
-        newcol = 'blob_nea_%s' % _clean_column_name(b)
+        newcol = 'blob_nea_%s' % clean_column_name(b)
         if newcol != oldcol:
             T.rename(oldcol, newcol)
 
@@ -316,7 +316,7 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
             j = cclower.index(c)
             cols[i] = cc[j]
 
-    units = get_units_for_columns(cols, bands=[_clean_column_name(b) for b in allbands] + wbands + gbands)
+    units = get_units_for_columns(cols, bands=[clean_column_name(b) for b in allbands] + wbands + gbands)
     T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units,
               **write_kwargs)
 

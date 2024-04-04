@@ -2241,17 +2241,23 @@ class LegacySplineSky(SplineSky):
 class NormalizedPsf(object):
     def getFourierTransform(self, px, py, radius):
         fft, (cx,cy), shape, (v,w) = super().getFourierTransform(px, py, radius)
-        fft /= np.abs(fft[0][0])
+        n = np.abs(fft[0][0])
+        if n != 0:
+            fft /= n
         return fft, (cx,cy), shape, (v,w)
 
     def getImage(self, px, py):
         img = super().getImage(px, py)
-        img /= np.sum(img)
+        n = np.sum(img)
+        if n != 0:
+            img /= n
         return img
 
     def _sampleImage(self, img, dx, dy, **kwargs):
         xl,yl,img = super()._sampleImage(img, dx, dy, **kwargs)
-        img /= img.sum()
+        n = img.sum()
+        if n != 0:
+            img /= n
         return xl,yl,img
 
 class NormalizedPixelizedPsf(NormalizedPsf, PixelizedPSF):
@@ -2264,7 +2270,9 @@ class NormalizedPixelizedPsfEx(NormalizedPsf, PixelizedPsfEx):
 
     def constantPsfAt(self, x, y):
         pix = self.psfex.at(x, y)
-        pix /= pix.sum()
+        n = pix.sum()
+        if n != 0:
+            pix /= n
         return NormalizedPixelizedPsf(pix, sampling=self.sampling)
 
 def fix_weight_quantization(wt, weightfn, ext, slc):
