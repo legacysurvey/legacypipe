@@ -3,19 +3,15 @@
 # Run legacy_zeropoints on a single image within a Shifter container at NERSC.
 
 export COSMO=/global/cfs/cdirs/cosmo
+export COSMO_RO=/dvs_ro/cfs/cdirs/cosmo
 
-#export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
-#export LEGACY_SURVEY_DIR=$SCRATCH/survey-dir-dr11
-export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr10
+export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
 
-export LEGACYPIPE_DIR=/global/homes/d/dstn/legacypipe/py
+#export LEGACYPIPE_DIR=/global/homes/d/dstn/legacypipe/py
 
 #export CACHE_DIR=/global/cscratch1/sd/dstn/dr10-cache
 #outdir=$LEGACY_SURVEY_DIR/zpt
-#outdir=$SCRATCH/zpt-dr11
-outdir=$SCRATCH/zpt-dr10-new-2
-
-export COSMO_RO=/dvs_ro/cfs/cdirs/cosmo
+outdir=$SCRATCH/zpt-dr11
 
 # NOTE: if you only want to regenerate sky calibs, MUST create a symlink
 # in $LSD/calib/psfex, eg to
@@ -33,7 +29,6 @@ export COSMO_RO=/dvs_ro/cfs/cdirs/cosmo
 #mkdir -p "${CACHE_DIR}"
 
 ncores=32
-#ncores=8
 
 #export DUST_DIR=/global/cfs/cdirs/cosmo/data/dust/v0_1
 #export TYCHO2_KD_DIR=/global/cfs/cdirs/cosmo/staging/tycho2
@@ -97,15 +92,6 @@ logdir=$(dirname $log)
 mkdir -p $logdir
 echo "Logging to $log"
 
-#-o strace-$(echo ${image_fn} | sed s+/+-+g).log \
-#strace -f -e trace=open,openat \
-#
-#python -u -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
-
-
-#    --cache-dir ${CACHE_DIR} \
-#    --prime-cache \
-
 python -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
 	--camera ${camera} \
     --survey-dir ${LEGACY_SURVEY_DIR} \
@@ -114,6 +100,8 @@ python -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
     --threads ${ncores} \
     >> "$log" 2>&1
 
+#    --cache-dir ${CACHE_DIR} \
+#    --prime-cache \
 #    --fitsverify \
 #    --verbose \
 #    --blob-mask-dir ${blob_dir} \
