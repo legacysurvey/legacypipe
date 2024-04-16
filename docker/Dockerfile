@@ -169,6 +169,6 @@ RUN python -O -m compileall \
 
 # update legacypipe
 RUN cd /src/legacypipe && git pull \
-    && git checkout DR10.1.3 && \
+    && git checkout DR10.3 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
