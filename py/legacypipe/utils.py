@@ -173,29 +173,6 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
 
     events = []
 
-    trex = re.compile('(((?P<days>\d*)-)?(?P<hours>\d*):)?(?P<minutes>\d*):(?P<seconds>[\d\.]*)')
-    def parse_time_strings(ss):
-        etime = []
-        any_failed = None
-        for s in ss:
-            m = trex.match(s)
-            if m is None:
-                any_failed = s
-                break
-            days,hours,mins,secs = m.group('days', 'hours', 'minutes',
-                                           'seconds')
-            #print('Elapsed time', s, 'parsed to', days,hours,mins,secs)
-            days = int(days, 10) if days is not None else 0
-            hours = int(hours, 10) if hours is not None else 0
-            mins = int(mins, 10)
-            if secs.startswith('0'):
-                secs = secs[1:]
-            secs = float(secs)
-            tt = days * 24 * 3600 + hours * 3600 + mins * 60 + secs
-            #print('->', tt, 'seconds')
-            etime.append(tt)
-        return any_failed, etime
-
     def write_results(fn, T, events, hdr):
         T.mine = np.logical_or(T.pid == parent_pid, T.ppid == parent_pid)
         T.main = (T.pid == parent_pid)
@@ -239,74 +216,12 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
                     break
 
         step += 1
-        #cmd = ('ps ax -o "user pcpu pmem state cputime etime pgid pid ppid ' +
-        #       'psr rss session vsize args"')
-        # OSX-compatible
-        cmd = ('ps ax -o "user pcpu pmem state cputime etime pgid pid ppid ' +
-               'rss vsize wchan command"')
-        #print('Command:', cmd)
-        rtn,out,err = run_command(cmd)
-        if rtn:
-            print('FAILED to run ps:', rtn, out, err)
+
+        try:
+            T = run_ps(keep_pids=[parent_pid], keep_ppids=[parent_ppid])
+        except:
             time.sleep(1)
             break
-        # print('Got PS output')
-        # print(out)
-        # print('Err')
-        # print(err)
-        if len(err):
-            print('Error string from ps:', err)
-        lines = out.split('\n')
-        hdr = lines.pop(0)
-        cols = hdr.split()
-        cols = [c.replace('%','P') for c in cols]
-        cols = [c.lower() for c in cols]
-        #print('Columns:', cols)
-        vals = [[] for c in cols]
-
-        # maximum length for 'command', command-line args field
-        maxlen = 128
-        for line in lines:
-            words = line.split()
-            # "command" column can contain spaces; it is last
-            if len(words) == 0:
-                continue
-            words = (words[:len(cols)-1] +
-                     [' '.join(words[len(cols)-1:])[:maxlen]])
-            assert(len(words) == len(cols))
-
-            for v,w in zip(vals, words):
-                v.append(w)
-
-        parsetypes = dict(pcpu = np.float32,
-                          pmem = np.float32,
-                          pgid = np.int32,
-                          pid = np.int32,
-                          ppid = np.int32,
-                          rs = np.float32,
-                          vsz = np.float32,
-                          )
-        T = fits_table()
-        for c,v in zip(cols, vals):
-            # print('Col', c, 'Values:', v[:3], '...')
-            v = np.array(v)
-            tt = parsetypes.get(c, None)
-            if tt is not None:
-                v = v.astype(tt)
-            T.set(c, v)
-
-        any_failed,etime = parse_time_strings(T.elapsed)
-        if any_failed is not None:
-            print('Failed to parse elapsed time string:', any_failed)
-        else:
-            T.elapsed = np.array(etime)
-
-        any_failed,ctime = parse_time_strings(T.time)
-        if any_failed is not None:
-            print('Failed to parse elapsed time string:', any_failed)
-        else:
-            T.time = np.array(ctime)
-        T.rename('time', 'cputime')
 
         # Compute 'instantaneous' (5-sec averaged) %cpu
         # BUT this only counts whole seconds in the 'ps' output.
@@ -337,9 +252,8 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
             T.pcpu > 5,
             T.pmem > 5,
             T.icpu > 5,
-            T.pid == parent_pid,
-            (T.ppid == parent_pid) * np.array([not c.startswith('ps ax') for c in T.command])]))
-        #print('Cut to', len(T), 'with significant CPU/MEM use or my PPID')
+            ]))
+        #print('Cut to', len(T), 'with significant CPU/MEM use')
 
         # print('Kept:')
         # J = np.argsort(-T.icpu)
@@ -407,3 +321,109 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
         print('ps -- writing', fn)
         T = merge_tables(TT, columns='fillzero')
         write_results(fn, T, events, fitshdr)
+
+def run_ps(keep_pids=None, keep_ppids=None):
+    import re
+    from astrometry.util.fits import fits_table
+    from astrometry.util.run_command import run_command
+    trex = re.compile('(((?P<days>\d*)-)?(?P<hours>\d*):)?(?P<minutes>\d*):(?P<seconds>[\d\.]*)')
+    def parse_time_strings(ss):
+        etime = []
+        any_failed = None
+        for s in ss:
+            m = trex.match(s)
+            if m is None:
+                any_failed = s
+                break
+            days,hours,mins,secs = m.group('days', 'hours', 'minutes',
+                                           'seconds')
+            #print('Elapsed time', s, 'parsed to', days,hours,mins,secs)
+            days = int(days, 10) if days is not None else 0
+            hours = int(hours, 10) if hours is not None else 0
+            mins = int(mins, 10)
+            if secs.startswith('0'):
+                secs = secs[1:]
+            secs = float(secs)
+            tt = days * 24 * 3600 + hours * 3600 + mins * 60 + secs
+            #print('->', tt, 'seconds')
+            etime.append(tt)
+        return any_failed, etime
+
+    #cmd = ('ps ax -o "user pcpu pmem state cputime etime pgid pid ppid ' +
+    #       'psr rss session vsize args"')
+    # OSX-compatible
+    cmd = ('ps ax -o "user pcpu pmem state cputime etime pgid pid ppid ' +
+           'rss vsize wchan command"')
+    #print('Command:', cmd)
+    rtn,out,err = run_command(cmd)
+    if rtn:
+        raise RuntimeError('FAILED to run ps: return %i, out %s, err %s' % (rtn, out, err))
+    # print('Got PS output')
+    # print(out)
+    # print('Err')
+    # print(err)
+    if len(err):
+        print('Error string from ps:', err)
+    lines = out.split('\n')
+    hdr = lines.pop(0)
+    cols = hdr.split()
+    cols = [c.replace('%','P') for c in cols]
+    cols = [c.lower() for c in cols]
+    #print('Columns:', cols)
+    vals = [[] for c in cols]
+
+    # maximum length for 'command', command-line args field
+    maxlen = 128
+    for line in lines:
+        words = line.split()
+        # "command" column can contain spaces; it is last
+        if len(words) == 0:
+            continue
+        words = (words[:len(cols)-1] +
+                 [' '.join(words[len(cols)-1:])[:maxlen]])
+        assert(len(words) == len(cols))
+
+        for v,w in zip(vals, words):
+            v.append(w)
+
+    parsetypes = dict(pcpu = np.float32,
+                      pmem = np.float32,
+                      pgid = np.int32,
+                      pid = np.int32,
+                      ppid = np.int32,
+                      rs = np.float32,
+                      vsz = np.float32,
+                      )
+    T = fits_table()
+    for c,v in zip(cols, vals):
+        # print('Col', c, 'Values:', v[:3], '...')
+        v = np.array(v)
+        tt = parsetypes.get(c, None)
+        if tt is not None:
+            v = v.astype(tt)
+        T.set(c, v)
+
+    any_failed,etime = parse_time_strings(T.elapsed)
+    if any_failed is not None:
+        print('Failed to parse elapsed time string:', any_failed)
+    else:
+        T.elapsed = np.array(etime)
+
+    any_failed,ctime = parse_time_strings(T.time)
+    if any_failed is not None:
+        print('Failed to parse elapsed time string:', any_failed)
+    else:
+        T.time = np.array(ctime)
+    T.rename('time', 'cputime')
+
+    if keep_pids is not None:
+        n0 = len(T)
+        T.cut(np.isin(T.pid, keep_pids))
+        print('Cut from %i to %i based on PID' % (n0, len(T)))
+    if keep_ppids is not None:
+        n0 = len(T)
+        T.cut(np.isin(T.ppid, keep_ppids))
+        print('Cut from %i to %i based on PPID' % (n0, len(T)))
+    T.cut(np.array([not c.startswith('ps ax') for c in T.command]))
+    return T
+    

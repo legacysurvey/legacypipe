@@ -67,6 +67,18 @@ def get_cpu_arch():
     cpu_arch = codenames.get((family, model), '')
     return cpu_arch
 
+RUN_PS = False
+def ps_save_event(PS, txt):
+    if not RUN_PS:
+        return
+    from legacypipe.utils import run_ps
+    import os
+    mypid = os.getpid()
+    ps = run_ps(keep_pids=[mypid])
+    assert(len(ps) == 1)
+    ps.event = np.array([txt])
+    PS.append(ps)
+
 def one_blob(X):
     '''
     Fits sources contained within a "blob" of pixels.
@@ -77,6 +89,14 @@ def one_blob(X):
      srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap,
      large_galaxies_force_pointsource, less_masking, frozen_galaxies) = X
 
+    #ps0 = run_ps(keep_pids=[mypid])
+    #ps0.event = np.array(['start blob %i' % iblob])
+    #PS = [] #ps0]
+    #ps_save_event(PS, 'start blob %i' % iblob)
+    #merge_tables(PS).writeto('/tmp/ps-%i.fits' % iblob)
+    #ps0.writeto('/tmp/p0.fits')
+    #print('wrote ps')
+    
     debug('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
           (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
 
@@ -250,6 +270,13 @@ class OneBlob(object):
         # - model selection (including iterative detection)
         # - metrics
 
+        PS = []
+        ps_save_event(PS, 'start blob %s' % self.name)
+        # DEBUG
+        # outfn = '/tmp/ps-%s.fits' % self.name
+        # merge_tables(PS).writeto(outfn)
+        # print('Wrote', outfn)
+
         trun = tlast = Time()
         # Not quite so many plots...
         self.plots1 = self.plots
@@ -316,6 +343,8 @@ class OneBlob(object):
         # First, choose the ordering...
         Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
 
+        ps_save_event(PS, 'before opt indiv sources')
+
         # The sizes of the model patches fit here are determined by the
         # sources themselves, ie by the size of the mod patch returned by
         #  src.getModelPatch(tim)
@@ -324,6 +353,8 @@ class OneBlob(object):
                 cat, Ibright, B.cpu_source)
         else:
             self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source)
+
+        ps_save_event(PS, 'after opt indiv sources')
 
         if self.plots:
             self._plots(tr, 'After source fitting')
@@ -396,9 +427,14 @@ class OneBlob(object):
 
         self.compute_segmentation_map()
 
+        ps_save_event(PS, 'after seg map')
+        self.PS = PS
+        
         # Next, model selections: point source vs dev/exp vs ser.
         B = self.run_model_selection(cat, Ibright, B,
                                      iterative_detection=iterative_detection)
+
+        ps_save_event(PS, 'after model selection')
 
         debug('Blob', self.name, 'finished model selection:', Time()-tlast)
         tlast = Time()
@@ -470,6 +506,10 @@ class OneBlob(object):
                 self.ps.savefig()
 
         if compute_metrics:
+
+            print('Local vars:', locals().keys())
+
+            
             # Compute variances on all parameters for the kept model
             B.srcinvvars = [None for i in range(len(B))]
             cat.thawAllRecursive()
@@ -515,7 +555,16 @@ class OneBlob(object):
                 B.set(k, v)
             del M
 
+            ps_save_event(PS, 'after metrics')
+                
         info('Blob', self.name, 'finished, total:', Time()-trun)
+
+        # DEBUG
+        if RUN_PS:
+            outfn = '/tmp/ps-%s.fits' % self.name
+            merge_tables(PS).writeto(outfn)
+            print('Wrote', outfn)
+
         return B
 
     def compute_segmentation_map(self):
@@ -685,9 +734,13 @@ class OneBlob(object):
         # Remember original tim images
         models.save_images(self.tims)
 
+        ps_save_event(self.PS, 'model sel: save images')
+
         # Create initial models for each tim x each source
         # (model sizes are determined at this point)
         models.create(self.tims, cat, subtract=True)
+
+        ps_save_event(self.PS, 'model sel: create models')
 
         N = len(cat)
         B.dchisq = np.zeros((N, 5), np.float32)
@@ -700,6 +753,7 @@ class OneBlob(object):
 
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
+            ps_save_event(self.PS, 'model sel: fitting %i' % numi)
             src = cat[srci]
             debug('Model selection for source %i of %i in blob %s; sourcei %i' %
                   (numi+1, len(Ibright), self.name, srci))
@@ -796,6 +850,9 @@ class OneBlob(object):
 
         models.restore_images(self.tims)
         del models
+
+        ps_save_event(self.PS, 'model sel: done')
+
         return B
 
     def iterative_detection(self, Bold, models):
