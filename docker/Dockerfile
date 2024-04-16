@@ -172,3 +172,6 @@ RUN cd /src/legacypipe && git pull \
     && git checkout DR10.3 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
+
+# ugh
+RUN ln -s /usr/bin/source-extractor /usr/bin/sex
