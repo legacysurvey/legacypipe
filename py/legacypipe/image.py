@@ -2162,9 +2162,9 @@ class LegacySurveyImage(object):
             imgfn,maskfn = self.funpack_files(self.imgfn, self.dqfn,
                                               self.hdu, self.dq_hdu, todelete)
             self.run_se(imgfn, maskfn)
-            print('Not deleting temp files for SE!')
-            #for fn in todelete:
-            #    os.unlink(fn)
+            #print('Not deleting temp files for SE!')
+            for fn in todelete:
+                os.unlink(fn)
         
         if psfex:
             try:
