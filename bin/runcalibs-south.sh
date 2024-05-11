@@ -92,13 +92,16 @@ logdir=$(dirname $log)
 mkdir -p $logdir
 echo "Logging to $log"
 
-python -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
+# TURN OFF -u for production!
+
+python -u -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
 	--camera ${camera} \
     --survey-dir ${LEGACY_SURVEY_DIR} \
     --image ${image_fn} \
     --outdir ${outdir} \
-    --threads 32 \
+    --threads 8 \
     >> "$log" 2>&1
+
 
 #    --cache-dir ${CACHE_DIR} \
 #    --prime-cache \

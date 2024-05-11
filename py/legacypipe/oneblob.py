@@ -207,7 +207,15 @@ class OneBlob(object):
             if self.plots:
                 mods = []
             for tim in self.tims:
-                mod = tr.getModelImage(tim)
+                try:
+                    mod = tr.getModelImage(tim)
+                except:
+                    print('Exception getting frozen-galaxies model.')
+                    print('galaxies:', frozen_galaxies)
+                    print('tim:', tim)
+                    import traceback
+                    traceback.print_exc()
+                    continue
                 self.frozen_galaxy_mods.append(mod)
                 tim.data -= mod
                 if self.plots:
@@ -1481,7 +1489,13 @@ class OneBlob(object):
                 srctractor.thawParam('images')
 
             # First-round optimization (during model selection)
-            R = srctractor.optimize_loop(**self.optargs)
+            try:
+                R = srctractor.optimize_loop(**self.optargs)
+            except:
+                print('Exception fitting source in model selection.  src:', newsrc)
+                import traceback
+                traceback.print_exc()
+                continue
             #print('Fit result:', newsrc)
             #print('Steps:', R['steps'])
             hit_limit = R.get('hit_limit', False)
