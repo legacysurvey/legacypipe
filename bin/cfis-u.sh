@@ -44,7 +44,8 @@ python -u legacyzpts/legacy_zeropoints.py \
        --outdir ${out_dir} \
        --image $img \
        --sdss-photom \
-       --plots --verboseplots \
-       --choose_ccd 1 \
+       --threads 40 \
        >> $log 2>&1
-       #--threads 40 \
+
+#       --plots --verboseplots \
+#       --choose_ccd 1 \
