@@ -499,7 +499,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         if self.scamp_wcs is not None:
             return self.scamp_wcs
 
-        if self.band == 'CaHK':
+        if self.band in ['CaHK', 'u']:
             if not os.path.exists(self.wcs_initial_fn):
                 self.run_solve_field()
             from astrometry.util.util import Sip
@@ -593,9 +593,10 @@ class MegaPrimeElixirImage(MegaPrimeImage):
     def run_calibs(self, **kwargs):
         #if self.use_solve_field and not os.path.exists(self.wcs_initial_fn):
 
-        if self.band == 'CaHK':
+        if self.band in ['CaHK', 'u']:
             if not os.path.exists(self.wcs_initial_fn):
                 self.run_solve_field()
+        if self.band == 'CaHK':
             if not os.path.exists(self.lacosmic_fn):
                 self.run_lacosmic()
 
