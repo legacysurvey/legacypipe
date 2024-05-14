@@ -354,7 +354,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
 
         # Should we cut the SE detections to only Gaia stars?
         # Helps on images with lots of cosmic rays and few sources (eg, CaHK)
-        cut_to_gaia = (self.band == 'CaHK')
+        cut_to_gaia = (self.band in ['CaHK', 'u'])
 
         if cut_to_gaia:
             tmpsefn = create_temp(suffix='.fits')
@@ -596,7 +596,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         if self.band in ['CaHK', 'u']:
             if not os.path.exists(self.wcs_initial_fn):
                 self.run_solve_field()
-        if self.band == 'CaHK':
+        if self.band in ['CaHK', 'u']:
             if not os.path.exists(self.lacosmic_fn):
                 self.run_lacosmic()
 
@@ -630,7 +630,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         print('Flagged', n, 'additional pixels in the DQ map with small positive image values')
         dq[img < 0.5] = DQ_BITS['badpix']
 
-        if use_lacosmic and self.band == 'CaHK':
+        if use_lacosmic and self.band in ['CaHK', 'u']:
             if not os.path.exists(self.lacosmic_fn):
                 self.run_lacosmic()
             slc = kwargs.pop('slc', None)
