@@ -3,14 +3,15 @@
 # Script for running the legacypipe code within a Shifter container at NERSC
 
 # Using HSC g-band data on COSMOS
+#outdir=$SCRATCH/hsc-g-cosmos
 
-outdir=$SCRATCH/hsc-g-cosmos
-#outdir=$SCRATCH/hsc-g-cosmos-corr
-#outdir=$SCRATCH/hsc-g-cosmos-calexp
+# HSC/WIDE COSMOS
+outdir=$SCRATCH/hsc-co-4
 
 export COSMO=/dvs_ro/cfs/cdirs/cosmo
 
-export LEGACY_SURVEY_DIR=$COSMO/work/users/dstn/ODIN/
+#export LEGACY_SURVEY_DIR=$COSMO/work/users/dstn/ODIN/
+export LEGACY_SURVEY_DIR=$outdir
 
 #export LARGEGALAXIES_CAT=$COSMO/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
 unset LARGEGALAXIES_CAT
@@ -78,19 +79,20 @@ echo "--------------------------------------------------------------------------
 echo -e "\nStarting on $(hostname)\n" >> $log
 echo "-----------------------------------------------------------------------------------------" >> $log
 
-ncores=32
-
 #export LEGACYPIPE_DIR=/src/legacypipe/py
 
 #export PYTHONPATH=.:/global/homes/d/dstn/tractor:${PYTHONPATH}
 #export LEGACYPIPE_DIR=$(pwd)
 
+# hsc-g-cosmos:
+#       --bands g \
+#       --coadd-bw \
+
 python -u -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --brick $brick \
-       --bands g \
+       --bands g,r2,i2,z,y \
        --pixscale 0.168 \
        --width 5600 --height 5600 \
-       --coadd-bw \
        --rgb-stretch 1.5 \
        --sub-blobs \
        --no-wise \
@@ -99,7 +101,8 @@ python -u -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --checkpoint-period 300 \
        --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
        --outdir $outdir \
-       --threads ${ncores} \
+       --threads 32 \
+       --stage image_coadds --minimal-coadds \
        >> $log 2>&1
 
 #       --plots \
