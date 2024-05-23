@@ -26,15 +26,17 @@ def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir):
     # Check for existing output file & skip
     tmpoutfn  = relpath.replace('-photom.fits', '-scamp.tmp.fits')
     realoutfn = relpath.replace('-photom.fits', '-scamp.fits')
+
+    rtn = realoutfn
     
     tmpoutfn  = os.path.join(scamp_dir, tmpoutfn)
     realoutfn = os.path.join(scamp_dir, realoutfn)
     if os.path.exists(realoutfn):
         #print('Exists:', realoutfn)
-        return realoutfn
+        return rtn
 
     # Compute image filename
-    #print('Relative path', relpath)
+    print('Relative path', relpath)
     imgfn = os.path.join(survey_dir, 'images', relpath).replace('-photom.fits',
                                                                 '.fits')
     if not os.path.exists(imgfn) and os.path.exists(imgfn + '.fz'):
@@ -142,7 +144,7 @@ def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir):
     F.close()
     os.rename(tmpoutfn, realoutfn)
     #print('Wrote', realoutfn)
-    return realoutfn
+    return rtn
 
 def _bounce_write_one(X):
     return write_one_scamp_catalog(*X)
@@ -172,6 +174,9 @@ def main():
                         help='Directory to trim from the *-photom.fits files to make relative paths')
     parser.add_argument('--threads', type=int, default=None,
                         help='Write scamp files in parallel')
+    parser.add_argument('--scamp-command', type=str,
+                        default='shifter --image docker:legacysurvey/legacypipe:DR10.3.1 scamp',
+                        help='Set scamp command to run')
     args = parser.parse_args()
 
     if args.scamp_dir is None:
@@ -189,10 +194,8 @@ def main():
     scampfiles = write_scamp_catalogs(scamp_dir, args.photom, args.survey_dir,
                                       args.photom_base_dir, mp=mp)
 
-    scamp_exe = 'shifter --image docker:legacysurvey/legacypipe:DR10.2b scamp'
-    
     scamp_cmd = ('cd %s && %s -c %s %s' %
-                 (scamp_dir, scamp_exe, scamp_config, ' '.join(scampfiles)))
+                 (scamp_dir, args.scamp_command, scamp_config, ' '.join(scampfiles)))
     print(scamp_cmd)
     r = os.system(scamp_cmd)
     assert(r == 0)
@@ -202,10 +205,12 @@ def main():
         survey_dir = '.'
 
     for fn in scampfiles:
+        origfn = fn
         fn = fn.replace('-scamp.fits', '-scamp.head')
         infn = os.path.join(scamp_dir, fn)
         outfn = os.path.join(survey_dir, 'calib', 'wcs-scamp', fn)
         trymakedirs(outfn, dir=True)
+        print('Scamp file:', origfn, 'copy header', infn, 'to', outfn)
         shutil.copyfile(infn, outfn)
         #os.rename(infn, outfn)
         print('Copied', outfn)
