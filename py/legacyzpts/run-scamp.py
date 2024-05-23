@@ -47,10 +47,18 @@ def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir):
     hdr = P.get_header()
     #print('Stars:', len(P), 'for', fn)
     newhdr = fitsio.FITSHDR()
+
     for k in ['AIRMASS', 'OBJECT', 'TELESCOP', 'INSTRUME', 'EXPTIME', 'DATE-OBS',
-              'MJD-OBS', 'FILTER', 'HA', 'EXPNUM',
+              'MJD-OBS', 'FILTER', 'EXPNUM',
               'RA_BORE', 'DEC_BORE', 'CCD_ZPT', 'FWHM', 'SEEING', 'FILENAME']:
+        print('  ', k, '=', hdr[k])
         newhdr[k] = hdr[k]
+    # HA doesn't exist in some CFHT image headers
+    for k in ['HA']:
+        v = hdr.get(k)
+        if v is not None:
+            print('  ', k, '=', hdr[k])
+            newhdr[k] = v
 
     trymakedirs(tmpoutfn, dir=True)
     F = fitsio.FITS(tmpoutfn, 'rw', clobber=True)
@@ -176,7 +184,7 @@ def main():
                         help='Write scamp files in parallel')
     parser.add_argument('--scamp-command', type=str,
                         default='shifter --image docker:legacysurvey/legacypipe:DR10.3.1 scamp',
-                        help='Set scamp command to run')
+                        help='Set scamp command to run, default %(default)s')
     args = parser.parse_args()
 
     if args.scamp_dir is None:

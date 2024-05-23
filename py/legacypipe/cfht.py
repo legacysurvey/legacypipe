@@ -97,11 +97,37 @@ class MegaPrimeImage(LegacySurveyImage):
         return {'ccdname':'S5'}
 
     def get_extension_list(self, debug=False):
+        # The old filter set - now called "uS", "gS" etc, where the new ones are just called
+        # "u", "g", etc - vignet the "ears" of the camera.
+        # The naming scheme decoder ring is:
+        # Old set:
+        #   U.MP9301
+        #   G.MP9401
+        #   R.MP9601
+        #   I.MP9701
+        #   Z.MP9801
+        # Second generation:
+        #   I.MP9702
+        # Third generation / new set:
+        #   U.MP9302
+        #   G.MP9402
+        #   R.MP9602
+        #   I.MP9703
+        #   Z.MP9901
+        F = fitsio.FITS(self.imgfn)
+
+        primhdr = F[0].read_header()
+        filt = primhdr['FILTER']
+        old_filter = (filt in ['u.MP9301', 'g.MP9401', 'r.MP9601', 'i.MP9701', 'z.MP9801'])
+
         # duplicate EXTNAME cards in the headers?! trips up fitsio;
         # https://github.com/esheldon/fitsio/issues/324
-        F = fitsio.FITS(self.imgfn)
         exts = []
         for i,f in enumerate(F[1:]):
+            # Drop vignetted CCDs!
+            if old_filter and i > 36:
+                print('Image uses an old filter (%s) - dropping vignetted "ears" CCDs' % filt)
+                break
             #exts.append(f.get_extname())
             exts.append(i+1)
             if debug:
@@ -631,7 +657,14 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             from legacypipe.utils import ZeroWeightError
             raise ZeroWeightError('All image pixels are zero in CFHT expnum %i ext %s' %
                                   (self.expnum, self.ccdname))
-
+        mn = img.min()
+        mx = img.max()
+        print('Image range:', mn, mx)
+        if mn == mx:
+            print('All image pixels have the same value: %f!' % mn)
+            from legacypipe.utils import ZeroWeightError
+            raise ZeroWeightError('All image pixels have the same value in CFHT expnum %i ext %s' %
+                                  (self.expnum, self.ccdname))
         if self.do_lacosmic:
             if not os.path.exists(self.lacosmic_fn):
                 self.run_lacosmic()
