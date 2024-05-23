@@ -172,6 +172,14 @@ class MegaPrimeImage(LegacySurveyImage):
     def get_gain(self, primhdr, hdr):
         return hdr['GAIN']
 
+    def get_ha_deg(self, primhdr):
+        from astrometry.util.starutil_numpy import hmsstring2ra
+        # HA header is missing from some images (eg, XMM u-band cfht-xmm-u/776654p.fits.fz)
+        hastr = primhdr.get('HA')
+        if hastr is None:
+            return np.nan
+        return hmsstring2ra(hastr)
+
     def get_fwhm(self, primhdr, imghdr):
         # Nothing in the image headers...
         # There's a get_fwhm() call early in the constructor... this will return NaN.
