@@ -509,7 +509,7 @@ def stage_refs(survey=None,
                 x = int(stars.xx[i])
                 sz = edge
                 sl = slice(y-sz, y+sz+1), slice(x-sz, x+sz+1)
-                for data,mod,ie,chi,roi in R.ims1:
+                for data,mod,ie,chi,roi in getattr(R, 'ims1', []):
                     print('x,y', x, y, 'tim shape', tim.shape, 'slice', sl,
                           'roi', roi, 'data size', data.shape)
                     subimg = data[sl]

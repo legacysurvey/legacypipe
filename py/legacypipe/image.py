@@ -679,8 +679,10 @@ class LegacySurveyImage(object):
         if np.all(invvar == 0.):
             debug('Skipping zero-invvar image')
             return None
+        assert(np.all(np.isfinite(invvar)))
 
         self.fix_saturation(img, dq, invvar, primhdr, imghdr, slc)
+        assert(np.all(np.isfinite(img)))
 
         # Zero out the inverse-variance (weight) where dq is flagged
         n = np.sum(dq != 0)
@@ -695,10 +697,12 @@ class LegacySurveyImage(object):
                 # unpack
                 template,template_meta = template
                 img -= template
+                assert(np.all(np.isfinite(img)))
 
         # for create_testcase: omit remappings.
         if not no_remap_invvar:
             invvar = self.remap_invvar(invvar, primhdr, img, dq)
+            assert(np.all(np.isfinite(img)))
 
         # header 'FWHM' is in pixels
         psf_fwhm = self.get_fwhm(primhdr, imghdr)
@@ -774,6 +778,8 @@ class LegacySurveyImage(object):
         if subsky:
             from tractor.sky import ConstantSky
             debug('Instantiating and subtracting sky model')
+            print('Median sky value & range', np.median(skymod), skymod.min(), skymod.max(), 'all finite', np.all(np.isfinite(skymod)))
+            assert(np.all(np.isfinite(skymod)))
             if pixels:
                 img -= skymod
             zsky = ConstantSky(0.)
@@ -782,6 +788,7 @@ class LegacySurveyImage(object):
             del skymod
             sky = zsky
             del zsky
+            assert(np.all(np.isfinite(img)))
 
         orig_zpscale = zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
         if nanomaggies:
@@ -791,6 +798,7 @@ class LegacySurveyImage(object):
             if not subsky:
                 sky.scale(1./zpscale)
             zpscale = 1.
+            assert(np.all(np.isfinite(img)))
 
         if constant_invvar:
             assert(nanomaggies)
@@ -834,6 +842,7 @@ class LegacySurveyImage(object):
 
         if subsky:
             self.apply_amp_correction(img, invvar, x0, y0)
+            assert(np.all(np.isfinite(img)))
 
         # Convert MJD-OBS, in UTC, into TAI
         mjd_tai = astropy.time.Time(self.mjdobs, format='mjd', scale='utc').tai.mjd
@@ -853,6 +862,10 @@ class LegacySurveyImage(object):
                     photocal=LinearPhotoCal(zpscale, band=band),
                     sky=sky, name=self.name + ' ' + band)
         assert(np.all(np.isfinite(tim.getInvError())))
+        assert(np.all(np.isfinite(img)))
+        assert(np.isfinite(self.sig1))
+        print('All finite?', np.all(np.isfinite(img)))
+        print('Returning tim with image pixel range', img.min(), img.max())
         tim.band = band
 
         # HACK -- create a local PSF model to instantiate the PsfEx
@@ -1313,7 +1326,9 @@ class LegacySurveyImage(object):
         if Ti is None:
             raise RuntimeError('Failed to find PsfEx model in files: %s' % ', '.join(tryfns))
         if Ti.psf_samp == 0.0:
-            raise RuntimeError('PsfEx failed: sampling (psf_samp) = 0 in file %s' % fn)
+            warnings.warn('PsfEx: sampling (psf_samp) = 0 in file %s; HACKING to 1.0' % fn)
+            Ti.psf_samp = 1.0
+            #raise RuntimeError('PsfEx failed: sampling (psf_samp) = 0 in file %s' % fn)
         # Remove any padding
         degree = Ti.poldeg1
         # number of terms in polynomial
@@ -2162,9 +2177,9 @@ class LegacySurveyImage(object):
             imgfn,maskfn = self.funpack_files(self.imgfn, self.dqfn,
                                               self.hdu, self.dq_hdu, todelete)
             self.run_se(imgfn, maskfn)
-            print('Not deleting temp files for SE!')
-            #for fn in todelete:
-            #    os.unlink(fn)
+            #print('Not deleting temp files for SE!')
+            for fn in todelete:
+                os.unlink(fn)
         
         if psfex:
             try:
