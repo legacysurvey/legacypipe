@@ -3,7 +3,8 @@
 img=$1
 
 survey_dir=cfis-dir
-out_dir=$SCRATCH/cfht-cosmos-u
+#out_dir=$SCRATCH/cfht-cosmos-u
+out_dir=$SCRATCH/cfht-xmm-u
 
 export COSMO=/dvs_ro/cfs/cdirs/cosmo
 

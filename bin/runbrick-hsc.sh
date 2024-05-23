@@ -88,9 +88,13 @@ echo "--------------------------------------------------------------------------
 #       --bands g \
 #       --coadd-bw \
 
-python -u -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
+# HSC COSMOS WIDE
+#       --bands g,r2,i2,z,y \
+
+
+python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --brick $brick \
-       --bands g,r2,i2,z,y \
+       --bands g,r,i,i2,z,y \
        --pixscale 0.168 \
        --width 5600 --height 5600 \
        --rgb-stretch 1.5 \
@@ -103,6 +107,7 @@ python -u -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --outdir $outdir \
        --threads 32 \
        --stage image_coadds --minimal-coadds \
+       --write-stage outliers \
        >> $log 2>&1
 
 #       --plots \
