@@ -914,7 +914,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
     # Quick check for PsfEx file -- moved before WCS, for CFHT's benefit
     normalizePsf = True
     try:
-        psf = imobj.read_psf_model(x0, y0, pixPsf=True, normalizePsf=normalizePsf)
+        px0 = py0 = 0
+        psf = imobj.read_psf_model(px0, py0, pixPsf=True, normalizePsf=normalizePsf)
     except RuntimeError as e:
         print('Failed to read PSF model: %s' % e)
         return None, None
