@@ -76,6 +76,9 @@ class ps1cat(HealpixedCatalog):
                    N673=1,
                    # Merian
                    N540=0,
+                   # IBIS
+                   M411=0,
+                   M464=0,
     )
     def __init__(self,expnum=None,ccdname=None,ccdwcs=None):
         """Read PS1 or gaia sources for an exposure number + CCD name or CCD WCS
@@ -215,11 +218,14 @@ def ps1_to_decam(psmags, band):
         N540 = [ 0.36270593, -0.40238762,  0.0551082 ],
         # CFHT
         CaHK = [0., 2.3],
+        # IBIS
+        M411 = [0.],
+        M464 = [0.],
     )[band]
 
     # Most are with respect to g-i, some are g-r...
     color = gi
-    if band in ['CaHK']:
+    if band in ['CaHK', 'M411', 'M464']:
         color = gr
     
     colorterm = np.zeros(len(color))
