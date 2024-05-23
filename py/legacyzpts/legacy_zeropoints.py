@@ -911,6 +911,14 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
 
     ccds['AVSKY'] = hdr.get('AVSKY', np.nan)
 
+    # Quick check for PsfEx file -- moved before WCS, for CFHT's benefit
+    normalizePsf = True
+    try:
+        psf = imobj.read_psf_model(x0, y0, pixPsf=True, normalizePsf=normalizePsf)
+    except RuntimeError as e:
+        print('Failed to read PSF model: %s' % e)
+        return None, None
+
     for ccd_col,val in zip(['cd1_1', 'cd1_2', 'cd2_1', 'cd2_2'],
                            imobj.get_cd_matrix(primhdr, hdr)):
         ccds[ccd_col] = val
@@ -935,14 +943,6 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
         x0,x1 = sx.start, sx.stop
         print('good image slice:', slc, '-- shifting WCS by', x0, y0)
         wcs = wcs.get_subimage(x0, y0, int(x1-x0), int(y1-y0))
-
-    # Quick check for PsfEx file
-    normalizePsf = True
-    try:
-        psf = imobj.read_psf_model(x0, y0, pixPsf=True, normalizePsf=normalizePsf)
-    except RuntimeError as e:
-        print('Failed to read PSF model: %s' % e)
-        return None, None
 
     # for cases (eg HSC, Pan-STARRS) that lack a SEEING/FWHM header and we have to fetch
     # from the PsfEx file.

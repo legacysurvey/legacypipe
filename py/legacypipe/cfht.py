@@ -623,6 +623,15 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         print('Wrote', self.lacosmic_fn)
 
     def run_calibs(self, **kwargs):
+        # Check for all zero image pixel values (eg 730710p.fits (XMM-u) [4] [CCD03])
+        # and bail out early.
+        img = self.read_image()
+        if np.all(img == 0):
+            print('All image pixel values are zero!')
+            from legacypipe.utils import ZeroWeightError
+            raise ZeroWeightError('All image pixels are zero in CFHT expnum %i ext %s' %
+                                  (self.expnum, self.ccdname))
+
         if self.do_lacosmic:
             if not os.path.exists(self.lacosmic_fn):
                 self.run_lacosmic()

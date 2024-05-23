@@ -2162,9 +2162,14 @@ class LegacySurveyImage(object):
         psfex_kwargs = dict(git_version=git_version, ps=ps)
         sky_kwargs = dict(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia, survey_blob_mask=survey_blob_mask, halos=halos, subtract_largegalaxies=subtract_largegalaxies)
 
+        from legacypipe.utils import ZeroWeightError
         if sky and self.sky_before_psfex:
             try:
                 self.run_sky(**sky_kwargs)
+            except ZeroWeightError as zwe:
+                # PsfEx isn't going to succeed either, so bail out now
+                print('ZeroWeightError running sky:', zwe)
+                raise zwe
             except Exception as ex:
                 print('Exception running sky:', ex)
                 import traceback
