@@ -76,6 +76,9 @@ class ps1cat(HealpixedCatalog):
                    N673=1,
                    # Merian
                    N540=0,
+                   # IBIS
+                   M411=0,
+                   M464=0,
     )
     def __init__(self,expnum=None,ccdname=None,ccdwcs=None):
         """Read PS1 or gaia sources for an exposure number + CCD name or CCD WCS
@@ -189,26 +192,14 @@ def ps1_to_decam(psmags, band):
     '''
     # https://desi.lbl.gov/trac/wiki/DecamLegacy/Reductions/Photometric
     g_index = ps1cat.ps1band['g']
+    r_index = ps1cat.ps1band['r']
     i_index = ps1cat.ps1band['i']
     gmag = psmags[:,g_index]
+    rmag = psmags[:,r_index]
     imag = psmags[:,i_index]
     gi = gmag - imag
+    gr = gmag - rmag
 
-    # Eddie says (2017-Feb-14), in
-    # [decam-chatter 4783] DECam grizY color transformations,
-    # if ind EQ 0 then coeff = [ 0.00613, -0.01028, -0.03604, -0.00062] ; g
-    # if ind EQ 1 then coeff = [ 0.01140, -0.03222,  0.08435, -0.00495] ; r
-    # if ind EQ 2 then coeff = [ 0.00829, -0.00566,  0.04171, -0.00904] ; i
-    # if ind EQ 3 then coeff = [ 0.00898, -0.02824,  0.07690, -0.02583] ; z
-    # if ind EQ 4 then coeff = [ 0.00572, -0.02840,  0.05992, -0.02332] ; Y
-    # coeffs = dict(
-    #     g = [ 0.00613, -0.01028, -0.03604, -0.00062],
-    #     r = [ 0.01140, -0.03222,  0.08435, -0.00495],
-    #     i = [ 0.00829, -0.00566,  0.04171, -0.00904],
-    #     z = [ 0.00898, -0.02824,  0.07690, -0.02583],
-    #     Y = [ 0.00572, -0.02840,  0.05992, -0.02332],)[band]
-
-    # But turns out the coeffs are in the opposite order!
     coeffs = dict(
         g = [ 0.00062,  0.03604, 0.01028, -0.00613 ],
         r = [ 0.00495, -0.08435, 0.03222, -0.01140 ],
@@ -226,11 +217,20 @@ def ps1_to_decam(psmags, band):
         # Merian
         N540 = [ 0.36270593, -0.40238762,  0.0551082 ],
         # CFHT
-        CaHK = [0.],
+        CaHK = [0., 2.3],
+        # IBIS
+        M411 = [0.],
+        M464 = [0.],
     )[band]
-    colorterm = np.zeros(len(gi))
+
+    # Most are with respect to g-i, some are g-r...
+    color = gi
+    if band in ['CaHK', 'M411', 'M464']:
+        color = gr
+    
+    colorterm = np.zeros(len(color))
     for power,coeff in enumerate(coeffs):
-        colorterm += coeff * gi**power
+        colorterm += coeff * color**power
     return colorterm
 
 def ps1_to_90prime(psmags, band):

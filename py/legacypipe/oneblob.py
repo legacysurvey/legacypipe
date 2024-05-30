@@ -3,7 +3,7 @@ import time
 
 from astrometry.util.ttime import Time
 from astrometry.util.resample import resample_with_wcs, OverlapError
-from astrometry.util.fits import fits_table
+from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import dimshow
 
 from tractor import Tractor, PointSource, Image, Catalog, Patch, Galaxy
@@ -207,7 +207,15 @@ class OneBlob(object):
             if self.plots:
                 mods = []
             for tim in self.tims:
-                mod = tr.getModelImage(tim)
+                try:
+                    mod = tr.getModelImage(tim)
+                except:
+                    print('Exception getting frozen-galaxies model.')
+                    print('galaxies:', frozen_galaxies)
+                    print('tim:', tim)
+                    import traceback
+                    traceback.print_exc()
+                    continue
                 self.frozen_galaxy_mods.append(mod)
                 tim.data -= mod
                 if self.plots:
@@ -407,6 +415,7 @@ class OneBlob(object):
         cat = B.sources
         I = np.array([i for i,s in enumerate(cat) if s is not None])
         B.cut(I)
+        del I
         cat = Catalog(*B.sources)
         tr.catalog = cat
 
@@ -490,10 +499,12 @@ class OneBlob(object):
                 # Compute inverse-variances
                 allderivs = tr.getDerivs()
                 ivars = _compute_invvars(allderivs)
+                del allderivs
                 assert(len(ivars) == nsrcparams)
                 B.srcinvvars[isub] = ivars
                 assert(len(B.srcinvvars[isub]) == cat[isub].numberOfParams())
                 cat.freezeParam(isub)
+                del ivars
 
             # Check for sources with zero inverse-variance -- I think these
             # can be generated during the "Simultaneous re-opt" stage above --
@@ -505,10 +516,12 @@ class OneBlob(object):
                 B.cut(I)
                 cat = Catalog(*B.sources)
                 tr.catalog = cat
+            del I
 
             M = _compute_source_metrics(B.sources, self.tims, self.bands, tr)
             for k,v in M.items():
                 B.set(k, v)
+            del M
 
         info('Blob', self.name, 'finished, total:', Time()-trun)
         return B
@@ -1476,7 +1489,13 @@ class OneBlob(object):
                 srctractor.thawParam('images')
 
             # First-round optimization (during model selection)
-            R = srctractor.optimize_loop(**self.optargs)
+            try:
+                R = srctractor.optimize_loop(**self.optargs)
+            except:
+                print('Exception fitting source in model selection.  src:', newsrc)
+                import traceback
+                traceback.print_exc()
+                continue
             #print('Fit result:', newsrc)
             #print('Steps:', R['steps'])
             hit_limit = R.get('hit_limit', False)

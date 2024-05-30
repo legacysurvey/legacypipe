@@ -106,6 +106,10 @@ class HscImage(LegacySurveyImage):
         # CORR files
         return primhdr['OB-ID']
 
+    def get_ha_deg(self, primhdr):
+        print('Returning fake HA for HSC')
+        return 0.
+
     def get_camera(self, primhdr):
         cam = super().get_camera(primhdr)
         if cam == 'hyper suprime-cam':

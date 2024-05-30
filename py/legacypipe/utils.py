@@ -161,10 +161,8 @@ def add_bits(hdr, bitmap, description, desc, bitpre):
                  comment='%s bit 2**%i=%i meaning' % (description, i, bit)))
 
 def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
-    from astrometry.util.run_command import run_command
     from astrometry.util.fits import fits_table, merge_tables
     import time
-    import re
     import fitsio
     from functools import reduce
 
@@ -175,7 +173,7 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
 
     events = []
 
-    trex = re.compile('(((?P<days>\d*)-)?(?P<hours>\d*):)?(?P<minutes>\d*):(?P<seconds>[\d\.]*)')
+    trex = re.compile(r'(((?P<days>\d*)-)?(?P<hours>\d*):)?(?P<minutes>\d*):(?P<seconds>[\d\.]*)')
     def parse_time_strings(ss):
         etime = []
         any_failed = None

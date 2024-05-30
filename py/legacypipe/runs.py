@@ -56,6 +56,20 @@ class HscData(LegacySurveyData):
     def get_default_release(self):
         return 200
 
+class HscCorrData(HscData):
+    def filter_ccds(self, ccds):
+        import numpy as np
+        I = np.flatnonzero([('CORR' in fn) for fn in ccds.image_filename])
+        print('HscCorrData: cutting to', len(I), 'of', len(ccds), 'CCDs with CORR in the filename')
+        return ccds[I]
+
+class HscCalexpData(HscData):
+    def filter_ccds(self, ccds):
+        import numpy as np
+        I = np.flatnonzero([('CALEXP' in fn) for fn in ccds.image_filename])
+        print('HscCalexpData: cutting to', len(I), 'of', len(ccds), 'CCDs with CALEXP in the filename')
+        return ccds[I]
+
 class SuprimeData(LegacySurveyData):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -92,6 +106,8 @@ runs = {
     'm33': M33SurveyData,
     'odin': OdinData,
     'hsc': HscData,
+    'hsc-corr': HscCorrData,
+    'hsc-calexp': HscCalexpData,
     'rerun-ccds': RerunWithCcds,
     'suprime': SuprimeData,
     None: LegacySurveyData,

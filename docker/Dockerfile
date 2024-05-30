@@ -42,10 +42,28 @@ RUN apt -y update && apt install -y apt-utils \
     python3.10 \
     python3.10-dev \
     python3-pip \
+    plplot-driver-cairo \
     source-extractor \
     psfex \
+    scamp \
     # Remove APT files
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+RUN apt -y update \
+  && apt install -y --no-install-recommends \
+      gfortran
+ENV FFLAGS=-fallow-argument-mismatch
+ENV FCFLAGS=-fallow-argument-mismatch
+
+RUN wget -nv https://www.mpich.org/static/downloads/4.0.2/mpich-4.0.2.tar.gz \
+  && tar xzf mpich-4.0.2.tar.gz \
+  && cd mpich-4.0.2 \
+  && ./configure \
+  && make -j \
+  && make install \
+  && make clean \
+  && cd .. && rm -Rf mpich-4.0.2
+# defaults to installing in /usr/local
 
 # Pip installs
 RUN for x in \
@@ -61,6 +79,7 @@ RUN for x in \
     astropy \
     photutils \
     zmq \
+    mpi4py \
     ; do pip3 install $x; done \
     && rm -Rf /root/.cache/pip
 
@@ -116,6 +135,8 @@ ENV HOME /homedir
 RUN git config --global --add safe.directory /src/legacypipe \
  && git config --global --add safe.directory /src/unwise_psf
 
+RUN pip3 install --no-cache lacosmic
+
 RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
   # Create config files in $HOME
   && mkdir $HOME/.qdo && echo "[qdo]" > $HOME/.qdo/qdorc \
@@ -148,6 +169,9 @@ RUN python -O -m compileall \
 
 # update legacypipe
 RUN cd /src/legacypipe && git pull \
-    && git checkout DR10.1.3 && \
+    && git checkout DR10.3 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
+
+# ugh
+RUN ln -s /usr/bin/source-extractor /usr/bin/sex
