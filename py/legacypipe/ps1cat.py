@@ -218,14 +218,14 @@ def ps1_to_decam(psmags, band):
         N540 = [ 0.36270593, -0.40238762,  0.0551082 ],
         # CFHT
         CaHK = [0., 2.3],
-        # IBIS
-        M411 = [0.],
-        M464 = [0.],
+        # IBIS -- from Arjun 2024-05-30
+        M411 = [-0.5170, 0.1164,  1.1036, -0.5814,  0.0817],
+        M464 = [-0.1788, 0.6712, -0.9042,  0.4621, -0.0737],
     )[band]
 
     # Most are with respect to g-i, some are g-r...
     color = gi
-    if band in ['CaHK', 'M411', 'M464']:
+    if band in ['CaHK']: # g-i for now...  'M411', 'M464']:
         color = gr
     
     colorterm = np.zeros(len(color))
