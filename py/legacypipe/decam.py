@@ -33,6 +33,9 @@ class DecamImage(CPImage):
                 N673 = 24.151,
                 # Merian
                 N540 = 24.000,
+                # IBIS - from Arjun, 2024-05-25
+                M411 = 24.503,
+                M464 = 24.957,
     )
 
     K_EXT = dict(g = 0.173,
@@ -49,6 +52,9 @@ class DecamImage(CPImage):
                  N673 = 0.090,
                  # Merian
                  N540 = 0.173,
+                 # IBIS -- some controversy here :)
+                 M411 = 0.173,
+                 M464 = 0.173,
     )
 
     '''A LegacySurveyImage (via CPImage) subclass to handle images from
