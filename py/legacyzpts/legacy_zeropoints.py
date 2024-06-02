@@ -77,7 +77,7 @@ def _ccds_table(camera='decam', overrides=None):
         ('ccdnum', 'i2'),
         ('expid', 'S17'),
         ('object', 'S35'),
-        ('propid', 'S10'),
+        ('propid', 'S12'),
         ('filter', 'S4'),
         ('exptime', 'f4'),
         ('mjd_obs', 'f8'),
