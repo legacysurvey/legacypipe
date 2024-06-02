@@ -103,6 +103,8 @@ class DecamImage(CPImage):
         # g-i color range to keep
         if self.band == 'N419':
             return 0.4, 1.5
+        if self.band in ['M411', 'M464']:
+            return 0.2, 2.7
         return super().get_ps1_calibrator_color_range()
 
     def colorterm_sdss_to_observed(self, sdssstars, band):
