@@ -155,7 +155,7 @@ class MegaPrimeImage(LegacySurveyImage):
     def get_radec_bore(self, primhdr):
         return primhdr['RA_DEG'], primhdr['DEC_DEG']
 
-    def clip_colorterm(c):
+    def clip_colorterm(self, c):
         # Note larger range than usual!
         return np.clip(c, -1., +4.)
 

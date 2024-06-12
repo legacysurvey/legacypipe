@@ -327,7 +327,7 @@ class LegacySurveyImage(object):
         # g-i color range to keep
         return 0.4, 2.7
 
-    def clip_colorterm(c):
+    def clip_colorterm(self, c):
         return np.clip(c, -1., +1.)
 
     def photometric_calibrator_to_observed(self, name, cat):
