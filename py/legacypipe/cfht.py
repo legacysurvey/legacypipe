@@ -155,6 +155,10 @@ class MegaPrimeImage(LegacySurveyImage):
     def get_radec_bore(self, primhdr):
         return primhdr['RA_DEG'], primhdr['DEC_DEG']
 
+    def clip_colorterm(c):
+        # Note larger range than usual!
+        return np.clip(c, -1., +4.)
+
     def photometric_calibrator_to_observed(self, name, cat):
         from legacypipe.ps1cat import ps1cat
         ps1band_map = ps1cat.ps1band
@@ -163,15 +167,17 @@ class MegaPrimeImage(LegacySurveyImage):
             ps1band = dict(u='g', CaHK='g').get(self.band, self.band)
             ps1band_index = ps1band_map[ps1band]
             colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
+            colorterm = self.clip_colorterm(colorterm)
             # Note larger range of color term than usual!
-            return cat.median[:, ps1band_index] + np.clip(colorterm, -1., +4.)
+            return cat.median[:, ps1band_index] + colorterm
         elif name == 'sdss':
             from legacypipe.ps1cat import sdsscat
             colorterm = self.colorterm_sdss_to_observed(cat.psfmag, self.band)
+            colorterm = self.clip_colorterm(colorterm)
             sdssbands = sdsscat.sdssband.copy()
             sdssbands.update(CaHK=0)
             band = sdssbands[self.band]
-            return cat.psfmag[:, band] + np.clip(colorterm, -1., +1.)
+            return cat.psfmag[:, band] + colorterm
         else:
             raise RuntimeError('No photometric conversion from %s to CFHT' % name)
 

@@ -322,18 +322,25 @@ class LegacySurveyImage(object):
         if name == 'sdss':
             return np.ones(len(cat), bool)
         raise RuntimeError('Unknown photometric calibration set: %s' % name)
+
     def get_ps1_calibrator_color_range(self):
         # g-i color range to keep
         return 0.4, 2.7
+
+    def clip_colorterm(c):
+        return np.clip(c, -1., +1.)
+
     def photometric_calibrator_to_observed(self, name, cat):
         if name == 'ps1':
             colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
+            colorterm = self.clip_colorterm(colorterm)
             band = self.get_ps1_band()
-            return cat.median[:, band] + np.clip(colorterm, -1., +1.)
+            return cat.median[:, band] + colorterm
         elif name == 'sdss':
             colorterm = self.colorterm_sdss_to_observed(cat.psfmag, self.band)
+            colorterm = self.clip_colorterm(colorterm)
             band = self.get_sdss_band()
-            return cat.psfmag[:, band] + np.clip(colorterm, -1., +1.)
+            return cat.psfmag[:, band] + colorterm
         else:
             raise RuntimeError('No photometric conversion from %s to camera' % name)
 

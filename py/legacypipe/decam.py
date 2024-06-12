@@ -33,9 +33,9 @@ class DecamImage(CPImage):
                 N673 = 24.151,
                 # Merian
                 N540 = 24.000,
-                # IBIS - from Arjun, 2024-05-25
-                M411 = 24.503,
-                M464 = 24.957,
+                # IBIS - from Arjun, 2024-06-07, LTT6248
+                M411 = 23.00,
+                M464 = 23.43,
     )
 
     K_EXT = dict(g = 0.173,
@@ -52,9 +52,9 @@ class DecamImage(CPImage):
                  N673 = 0.090,
                  # Merian
                  N540 = 0.173,
-                 # IBIS -- some controversy here :)
-                 M411 = 0.173,
-                 M464 = 0.173,
+                 # IBIS
+                 M411 = 0.333,
+                 M464 = 0.230,
     )
 
     '''A LegacySurveyImage (via CPImage) subclass to handle images from
@@ -104,12 +104,19 @@ class DecamImage(CPImage):
         if self.band == 'N419':
             return 0.4, 1.5
         if self.band in ['M411', 'M464']:
-            return 0.2, 2.7
+            return 0.3, 1.5
         return super().get_ps1_calibrator_color_range()
+
+    def clip_colorterm(c):
+        lo,hi = -1., +1.
+        if self.band == 'M411':
+            lo, hi = -0.5, 1.5
+        return np.clip(c, lo, hi)
 
     def colorterm_sdss_to_observed(self, sdssstars, band):
         from legacypipe.ps1cat import sdss_to_decam
         return sdss_to_decam(sdssstars, band)
+
     def colorterm_ps1_to_observed(self, cat, band):
         from legacypipe.ps1cat import ps1_to_decam
         return ps1_to_decam(cat, band)
