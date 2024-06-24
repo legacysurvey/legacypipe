@@ -505,6 +505,26 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         if hdr is None:
             hdr = self.read_image_header()
 
+        # Verify that we're looking at the right HDU (because the Scamp output format SUCKS)
+        # by looking at how much the image center has moved in RA,Dec.
+        from astrometry.util.starutil_numpy import arcsec_between
+        if os.path.exists(self.wcs_initial_fn):
+            print('Comparing Scamp solution to Astrometry.net')
+            from astrometry.util.util import Sip
+            oldwcs = Sip(self.wcs_initial_fn)
+        else:
+            print('Comparing Scamp solution against original image header')
+            oldwcs = wcs_pv2sip_hdr(hdr)
+
+        # print('Reading Scamp header: values of   original  -->  scamp:')
+        # dist1 = np.hypot(hdr['CRPIX1'] - scamp_hdr['CRPIX1'], hdr['CRPIX2'] - scamp_hdr['CRPIX2'])
+        # print('   CRPIX (%.1f, %.1f)  -->   (%.1f, %.1f)    dist %.1f pix' %
+        #       (hdr['CRPIX1'], hdr['CRPIX2'], scamp_hdr['CRPIX1'], scamp_hdr['CRPIX2'], dist1))
+        # dist2 = arcsec_between(hdr['CRVAL1'], hdr['CRVAL2'],
+        #                        scamp_hdr['CRVAL1'], scamp_hdr['CRVAL2']) / 0.186
+        # print('   CRVAL (%.4f, %.4f)  -->   (%.4f, %.4f)    dist %.1f pix' %
+        #       (hdr['CRVAL1'], hdr['CRVAL2'], scamp_hdr['CRVAL1'], scamp_hdr['CRVAL2'], dist2))
+
         # Copy Scamp header cards in...
         for key in ['EQUINOX', 'RADESYS', 'CTYPE1', 'CTYPE2', 'CUNIT1', 'CUNIT2',
                     'CRVAL1', 'CRVAL2', 'CRPIX1', 'CRPIX2',
@@ -515,6 +535,17 @@ class MegaPrimeElixirImage(MegaPrimeImage):
                     'PV2_7', 'PV2_8', 'PV2_9', 'PV2_10']:
             hdr[key] = scamp_hdr[key]
         wcs = wcs_pv2sip_hdr(hdr)
+
+        #print('Old WCS:', oldwcs)
+        #print('New (scamp) WCS:', wcs)
+        xx,yy = 2112/2., 4644/2.
+        r1,d1 = oldwcs.pixelxy2radec(xx, yy)
+        r2,d2 =    wcs.pixelxy2radec(xx, yy)
+        dist3 = arcsec_between(r1, d1, r2, d2)
+        print('Image center distance: %.1f arcsec  (~ %.1f pixels)' % (dist3, dist3/0.186))
+        if dist3 > 200.:
+            raise RuntimeError('Scamp WCS is more than 200 arcsec away from initial astrometry')
+
         return wcs
 
     def compute_filenames(self):
