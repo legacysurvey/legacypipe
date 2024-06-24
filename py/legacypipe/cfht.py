@@ -125,7 +125,7 @@ class MegaPrimeImage(LegacySurveyImage):
         exts = []
         for i,f in enumerate(F[1:]):
             # Drop vignetted CCDs!
-            if old_filter and i > 36:
+            if old_filter and i >= 36:
                 print('Image uses an old filter (%s) - dropping vignetted "ears" CCDs' % filt)
                 break
             #exts.append(f.get_extname())

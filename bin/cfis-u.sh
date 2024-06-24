@@ -46,6 +46,7 @@ python -u legacyzpts/legacy_zeropoints.py \
        --image $img \
        --sdss-photom \
        --threads 40 \
+       --force-cfht-ccds \
        >> $log 2>&1
 
 #       --plots --verboseplots \

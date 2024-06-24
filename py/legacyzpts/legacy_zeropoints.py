@@ -262,6 +262,13 @@ def measure_image(img_fn, mp, image_dir='images',
         except:
             pass
         extlist = [ccd]
+    elif measureargs['force_cfht_ccds']:
+        old_extlist = img.get_extension_list(debug=measureargs['debug'])
+        extlist = list(range(1, 36+1))
+        #print('Available extension list:', old_extlist)
+        #print('Forced CFHT extension list:', extlist)
+        if old_extlist != extlist:
+            print('Updating extension list based on --force-cfht-ccds')
     else:
         extlist = img.get_extension_list(debug=measureargs['debug'])
 
@@ -655,6 +662,8 @@ def get_parser():
                         help='Use SDSS rather than PS-1 for photometric cal.')
     parser.add_argument('--debug', action='store_true', default=False, help='Write additional files and plots for debugging')
     parser.add_argument('--choose_ccd', action='store', default=None, help='forced to use only the specified ccd')
+    parser.add_argument('--force-cfht-ccds', action='store_true', default=False,
+                        help='CFHT: force using the 36 non-"ears" CCDs')
     parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
     parser.add_argument('--verboseplots', action='store_true', default=False, help='use to plot FWHM Moffat PSF fits to the 20 brightest stars')
     parser.add_argument('--calibrate', action='store_true',
