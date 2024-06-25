@@ -845,6 +845,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
     from tractor import Catalog
     from legacypipe.detection import (detection_maps, merge_hot_satur,
                         run_sed_matched_filters, segment_and_group_sources)
+    from legacypipe.detection import galaxy_detection_maps
     from scipy.ndimage import binary_dilation
 
     record_event and record_event('stage_srcs: starting')
@@ -909,6 +910,17 @@ def stage_srcs(pixscale=None, targetwcs=None,
     tlast = tnow
     record_event and record_event('stage_srcs: sources')
 
+    if detection_kernels is None:
+        detection_kernels = [None]
+
+    gal_sigmas = [s[1]/2.35 for s in detection_kernels if s is not None]
+    galdetmaps,galdetivs = [],[]
+    if len(gal_sigmas):
+        debug('Rending galaxy detection maps...')
+        ## FIXME - median smoothing should be a command-line argument!
+        galdetmaps,galdetivs = galaxy_detection_maps(tims, gal_sigmas, True,
+                                                     targetwcs, bands, mp)
+
     if plots:
         import pylab as plt
         for band,detmap,satmap in zip(bands, detmaps, satmaps):
@@ -919,6 +931,19 @@ def stage_srcs(pixscale=None, targetwcs=None,
             plt.imshow(satmap, origin='lower', interpolation='nearest', vmin=0, vmax=1, cmap='hot')
             plt.suptitle('%s detmap/satmap' % band)
             ps.savefig()
+
+        # for band,detmap,detiv in zip(bands, galdetmaps, galdetivs):
+        #     plt.clf()
+        #     plt.subplot(1,2,1)
+        #     plt.imshow(detmap, origin='lower', interpolation='nearest')
+        #     plt.subplot(1,2,2)
+        #     plt.imshow(np.log10(np.maximum(0.1, detmap * np.sqrt(detiv))),
+        #                origin='lower', interpolation='nearest', cmap='hot')
+        #                #vmin=-5, vmax=+20, cmap='hot')
+        #     cb = plt.colorbar()
+        #     cb.set_label('log10(S/N)')
+        #     plt.suptitle('%s detmap S/N' % band)
+        #     ps.savefig()
             
     # Expand the mask around saturated pixels to avoid generating
     # peaks at the edge of the mask.
@@ -947,7 +972,8 @@ def stage_srcs(pixscale=None, targetwcs=None,
         SEDs, bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r), targetwcs,
         nsigma=nsigma, saddle_fraction=saddle_fraction, saddle_min=saddle_min,
         saturated_pix=saturated_pix, veto_map=avoid_map, blob_dilate=blob_dilate,
-        detection_kernels=detection_kernels, plots=plots, ps=ps, mp=mp, **kwa)
+        detection_kernels=detection_kernels, plots=plots, ps=ps, mp=mp,
+        galdetmaps=galdetmaps, galdetivs=galdetivs, **kwa)
 
     if Tnew is not None:
         assert(len(Tnew) == len(newcat))
@@ -4295,7 +4321,8 @@ def main(args=None):
     rgb_stretch = optdict.pop('rgb_stretch', None)
     detection_kernels = optdict.pop('detection_kernels', None)
     if detection_kernels is not None:
-        detection_kernels = [('gaussian', float(s)) for s in detection_kernels.split(',')]
+        detection_kernels = [(('gaussian', float(s)) if s != '0' else None)
+                             for s in detection_kernels.split(',')]
         optdict['detection_kernels'] = detection_kernels
 
     survey, kwargs = get_runbrick_kwargs(**optdict)

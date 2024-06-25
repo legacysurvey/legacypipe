@@ -9,6 +9,94 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
+def galaxy_detection_maps(tims, galsigmas, gaussian, targetwcs, bands, mp):
+    # Render the detection maps
+    # * gaussian: scalar, boolean, gaussian profile or exponential?
+    # * galsigmas: convolution sizes, in sigmas, in units of arcseconds
+    # Returns in order of galsigmas then bands
+    # eg s1b1, s1b2, s1b3, s2b1, s2b2, ...
+    H,W = targetwcs.shape
+    ibands = dict([(b,i) for i,b in enumerate(bands)])
+
+    N = len(bands) * len(galsigmas)
+    detmaps = [np.zeros((H,W), np.float32) for i in range(N)]
+    detivs  = [np.zeros((H,W), np.float32) for i in range(N)]
+
+    args = []
+    # 'imaps' are the indices to put the results (ie, sigma, and band (per tim))
+    imaps = []
+    for isig,s in enumerate(galsigmas):
+        for tim in tims:
+            args.append((tim, s, gaussian, targetwcs, H, W))
+            imaps.append(isig * len(bands) + ibands[tim.band])
+    R = mp.map(_galdetmap, args)
+
+    for imap,res in zip(imaps, R):
+        Yo,Xo,incmap,inciv = res
+        if Yo is None:
+            continue
+        detmaps[imap][Yo,Xo] += incmap * inciv
+        detivs [imap][Yo,Xo] += inciv
+    for detmap,detiv in zip(detmaps, detivs):
+        detmap /= np.maximum(1e-16, detiv)
+    return detmaps, detivs
+
+def _galdetmap(X):
+    # Convolve a single tim by a single galaxy detection kernel.
+    from scipy.ndimage.filters import gaussian_filter, median_filter
+    from legacypipe.survey import tim_get_resamp
+    (tim, galsize, gaussian, targetwcs, H, W) = X
+    R = tim_get_resamp(tim, targetwcs)
+    if R is None:
+        return None,None,None,None
+    ie = tim.getInvvar()
+    assert(tim.psf_sigma > 0)
+    pixscale = tim.subwcs.pixel_scale()
+
+    if gaussian:
+        # convert galsize (in sigmas in arcsec) to pixels
+        galsigma = galsize / pixscale
+        sigma = np.hypot(tim.psf_sigma, galsigma)
+        gnorm = 1./(2. * np.sqrt(np.pi) * sigma)
+        detim = tim.getImage().copy()
+
+        # FIXME -- argument
+        print('Median filtering', tim.name, ': size', int(galsigma * 2))
+        detim = median_filter(detim, int(galsigma * 2), mode='nearest')
+        
+        detim[ie == 0] = 0.
+        print('Gaussian filtering', tim.name, ': size', sigma)
+        detim = gaussian_filter(detim, sigma) / gnorm**2
+
+    else:
+        galsigs = np.sqrt(ExpGalaxy.profile.var[:,0,0]) * galsize / pixscale
+        galamps = ExpGalaxy.profile.amp
+        #print('Galaxy sigma: %.2f, PSF sigma: %.2f' % (galsigma, tim.psf_sigma))
+        print('Galaxy amps', galamps, 'sigmas', galsigs)
+
+        sz = 20
+        xx,yy = np.meshgrid(np.arange(-sz, sz+1), np.arange(-sz, sz+1))
+        rr = xx**2 + yy**2
+        normim = 0
+        detim = 0
+        img = tim.getImage().copy()
+        img[ie ==  0] = 0.
+        for amp,sig in zip(galamps, galsigs):
+            sig = np.hypot(tim.psf_sigma, sig)
+            detim  += amp * gaussian_filter(img, sig)
+            normim += amp * 1./(2.*np.pi*sig**2) * np.exp(-0.5 * rr / sig**2)
+        #print('Normimg:', normim.sum())
+        gnorm = np.sqrt(np.sum(normim**2))
+        print('Galnorm', gnorm, 'vs psfnorm', 1./(2. * np.sqrt(np.pi) * tim.psf_sigma), 'seeing', tim.psf_fwhm/pixscale)
+        detim /= gnorm**2
+
+    detsig1 = tim.sig1 / gnorm
+    subh,subw = tim.shape
+    detiv = np.zeros((subh,subw), np.float32) + (1. / detsig1**2)
+    detiv[ie == 0] = 0.
+    (Yo,Xo,Yi,Xi) = R
+    return Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi]
+
 def _detmap(X):
     from scipy.ndimage import gaussian_filter
     from legacypipe.survey import tim_get_resamp
@@ -152,6 +240,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
                             blob_dilate=None,
                             veto_map=None,
                             detection_kernels=None,
+                            galdetmaps=None, galdetivs=None,
                             mp=None,
                             plots=False, ps=None, rgbimg=None):
     '''
@@ -220,8 +309,10 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
     peaksn = []
     apsn = []
 
-    if detection_kernels is None:
-        detection_kernels = [None]
+    if plots:
+        import pylab as plt
+
+    galk = 0
 
     for kernel in detection_kernels:
 
@@ -236,30 +327,46 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
             from scipy.ndimage import gaussian_filter
             kernel_title = '%s: fwhm %.2f' % (kernel_name, kernel_fwhm)
 
-            if plots:
-                plt.clf()
+            #if plots:
+            #    plt.clf()
 
-            kdetmaps = []
-            kdetivs = []
-            for di,(detim,detiv,band) in enumerate(zip(detmaps, detivs, bands)):
-                kernel_sigma = kernel_fwhm / 2.355
-                knorm = 1./(2. * np.sqrt(np.pi) * kernel_sigma)
+            kernel_sigma = kernel_fwhm / 2.355
+            knorm = 1./(2. * np.sqrt(np.pi) * kernel_sigma)
+            print('kernel norm:', knorm)
+            kdetmaps = galdetmaps[galk: galk+len(bands)]
+            kdetivs  = galdetivs [galk: galk+len(bands)]
+            galk += len(bands)
 
-                detim = gaussian_filter(detim, kernel_sigma, mode='constant') / knorm**2
-                detiv = gaussian_filter(detiv, kernel_sigma, mode='constant')
-                kdetmaps.append(detim)
-                kdetivs.append(detiv)
+            # for bi,band in enumerate(bands):
+            #     #detim = gaussian_filter(detim, kernel_sigma, mode='constant') / knorm**2
+            #     #detiv = gaussian_filter(detiv, kernel_sigma, mode='constant')
+            #     #kdetmaps.append(detim)
+            #     #kdetivs.append(detiv)
+            #     detim = kdetmaps[bi]
+            #     detiv = kdetivs[bi]
+            #     # if plots:
+            #     #     plt.subplot(2,2,1+bi)
+            #     #     #range=(-10, +10),
+            #     #     plt.hist((detim * np.sqrt(detiv)).ravel(), log=True, bins=50)
+            #     #     plt.xlabel('S/N in %s band' % band)
 
-                if plots:
-                    plt.subplot(2,2,1+di)
-                    plt.hist((detiv * np.sqrt(detiv)).ravel(), range=(-10, +10),
-                             log=True, bins=50)
-                    plt.xlabel('S/N in %s band' % band)
+            # if plots:
+            #     plt.suptitle('Detection: ' + kernel_title)
+            #     ps.savefig()
 
-            if plots:
-                plt.suptitle('Detection: ' + kernel_title)
-                ps.savefig()
-
+        if plots:
+            plt.clf()
+            for bi,band in enumerate(bands):
+                plt.subplot(2,2,1+bi)
+                plt.imshow(np.log10(np.maximum(0.1, kdetmaps[bi] * np.sqrt(kdetivs[bi]))),
+                           origin='lower', interpolation='nearest', cmap='hot')
+                #, vmin=-5, vmax=100)
+                cb = plt.colorbar()
+                cb.set_label('log10(S/N)')
+                plt.title('S/N: %s' % band)
+            plt.suptitle(kernel_title)
+            ps.savefig()
+            
         for sedname,sed in SEDs:
             if plots:
                 pps = ps
@@ -568,7 +675,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             (y - np.arange(ylo, yhi+1))[:, np.newaxis]) < r)
     del Xlo,Xhi,Ylo,Yhi
 
-    if ps is not None:
+    if False and ps is not None:
         plt.clf()
         plt.imshow(this_veto_map, interpolation='nearest', origin='lower', vmin=0, vmax=1, cmap='hot')
         plt.title('Veto map')
@@ -647,7 +754,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                       (blobs[np.clip(oy,0,h-1), np.clip(ox,0,w-1)] == thisblob))
 
         # one plot per peak is a little excessive!
-        if ps is not None and i<10:
+        if False and ps is not None and i<10:
             _peak_plot_1(this_veto_map, x, y, px, py, keep, i, xomit, yomit, sedsn, allblobs,
                          level, dilate, saturated_pix, satur, ps, rgbimg, cut)
         if False and cut and ps is not None:
@@ -723,7 +830,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     hbmap[0] = False
     hotblobs = hbmap[hotblobs]
 
-    if ps is not None:
+    if False and ps is not None:
         plt.clf()
         dimshow(this_veto_map, vmin=0, vmax=1, cmap='hot')
         plt.title('SED %s: veto map' % sedname)
@@ -738,7 +845,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         plt.axis(ax)
         plt.title('SED %s: hot blobs' % sedname)
         plt.figlegend((p3[0],p1[0],p2[0]), ('Existing', 'Keep', 'Drop'),
-                      'upper left')
+                      loc='upper left')
         ps.savefig()
 
     return hotblobs, px, py, aper, peakval
