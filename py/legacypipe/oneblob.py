@@ -103,59 +103,16 @@ def one_blob(X):
     # A local WCS for this blob
     blobwcs = brickwcs.get_subimage(bx0, by0, blobw, blobh)
 
-    # Per-source measurements for this blob
-    B = fits_table()
-    B.sources = srcs
-    B.Isrcs = Isrcs
-    # Did sources start within the blob?
-    _,x0,y0 = blobwcs.radec2pixelxy(
-        np.array([src.getPosition().ra  for src in srcs]),
-        np.array([src.getPosition().dec for src in srcs]))
-    # blob-relative initial positions (zero-indexed)
-    B.x0 = (x0 - 1.).astype(np.float32)
-    B.y0 = (y0 - 1.).astype(np.float32)
-    B.safe_x0 = np.clip(np.round(x0-1).astype(int), 0,blobw-1)
-    B.safe_y0 = np.clip(np.round(y0-1).astype(int), 0,blobh-1)
-    B.started_in_blob = blobmask[B.safe_y0, B.safe_x0]
-    # This uses 'initial' pixel positions, because that's what determines
-    # the fitting behaviors.
-
     ob = OneBlob(nblob, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
                  less_masking, frozen_galaxies)
+    B = ob.init_table(Isrcs)
     B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
-
-    _,x1,y1 = blobwcs.radec2pixelxy(
-        np.array([src.getPosition().ra  for src in B.sources]),
-        np.array([src.getPosition().dec for src in B.sources]))
-    B.finished_in_blob = blobmask[
-        np.clip(np.round(y1-1).astype(int), 0, blobh-1),
-        np.clip(np.round(x1-1).astype(int), 0, blobw-1)]
-    assert(len(B.finished_in_blob) == len(B))
-    assert(len(B.finished_in_blob) == len(B.started_in_blob))
-
-    # Setting values here (after .run() has completed) means that iterative sources
-    # (which get merged with the original table B) get values also.
-    B.blob_x0     = np.zeros(len(B), np.int16) + bx0
-    B.blob_y0     = np.zeros(len(B), np.int16) + by0
-    B.blob_width  = np.zeros(len(B), np.int16) + blobw
-    B.blob_height = np.zeros(len(B), np.int16) + blobh
-    B.blob_npix   = np.zeros(len(B), np.int32) + np.sum(blobmask)
-    B.blob_nimages= np.zeros(len(B), np.int16) + len(timargs)
-    B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
-    B.cpu_arch = np.zeros(len(B), dtype='U3')
-    B.cpu_arch[:] = get_cpu_arch()
-    B.cpu_blob = np.empty(len(B), np.float32)
-    # Convert to whole-brick (zero-indexed) pixel positions.
-    # (do this here rather than above to ease handling iterative detections)
-    B.x0 += bx0
-    B.y0 += by0
-    # these are now in brick coords... rename for consistency in runbrick.py
-    B.rename('x0', 'bx0')
-    B.rename('y0', 'by0')
+    ob.finalize_table(B, bx0, by0)
 
     t1 = time.process_time()
+    B.cpu_blob = np.empty(len(B), np.float32)
     B.cpu_blob[:] = t1 - t0
     B.iblob = iblob
     return B
@@ -240,6 +197,54 @@ class OneBlob(object):
         from tractor.dense_optimizer import ConstrainedDenseOptimizer
         self.trargs.update(optimizer=ConstrainedDenseOptimizer())
         self.optargs.update(dchisq = 0.1)
+
+    def init_table(self, Isrcs):
+        # Per-source measurements for this blob
+        B = fits_table()
+        B.sources = self.srcs
+        B.Isrcs = Isrcs
+        # Did sources start within the blob?
+        _,x0,y0 = self.blobwcs.radec2pixelxy(
+            np.array([src.getPosition().ra  for src in self.srcs]),
+            np.array([src.getPosition().dec for src in self.srcs]))
+        # blob-relative initial positions (zero-indexed)
+        B.x0 = (x0 - 1.).astype(np.float32)
+        B.y0 = (y0 - 1.).astype(np.float32)
+        B.safe_x0 = np.clip(np.round(x0-1).astype(int), 0, self.blobw-1)
+        B.safe_y0 = np.clip(np.round(y0-1).astype(int), 0, self.blobh-1)
+        B.started_in_blob = self.blobmask[B.safe_y0, B.safe_x0]
+        # This uses 'initial' pixel positions, because that's what determines
+        # the fitting behaviors.
+        return B
+
+    def finalize_table(self, B, bx0, by0):
+        _,x1,y1 = self.blobwcs.radec2pixelxy(
+            np.array([src.getPosition().ra  for src in B.sources]),
+            np.array([src.getPosition().dec for src in B.sources]))
+        B.finished_in_blob = self.blobmask[
+            np.clip(np.round(y1-1).astype(int), 0, self.blobh-1),
+            np.clip(np.round(x1-1).astype(int), 0, self.blobw-1)]
+        assert(len(B.finished_in_blob) == len(B))
+        assert(len(B.finished_in_blob) == len(B.started_in_blob))
+
+        # Setting values here (after .run() has completed) means that iterative sources
+        # (which get merged with the original table B) get values also.
+        B.blob_x0     = np.zeros(len(B), np.int16) + bx0
+        B.blob_y0     = np.zeros(len(B), np.int16) + by0
+        B.blob_width  = np.zeros(len(B), np.int16) + self.blobw
+        B.blob_height = np.zeros(len(B), np.int16) + self.blobh
+        B.blob_npix   = np.zeros(len(B), np.int32) + np.sum(self.blobmask)
+        B.blob_nimages= np.zeros(len(B), np.int16) + len(self.tims)
+        B.blob_totalpix = np.zeros(len(B), np.int32) + self.total_pix
+        B.cpu_arch = np.zeros(len(B), dtype='U3')
+        B.cpu_arch[:] = get_cpu_arch()
+        # Convert to whole-brick (zero-indexed) pixel positions.
+        # (do this here rather than above to ease handling iterative detections)
+        B.x0 += bx0
+        B.y0 += by0
+        # these are now in brick coords... rename for consistency in runbrick.py
+        B.rename('x0', 'bx0')
+        B.rename('y0', 'by0')
 
     def run(self, B, reoptimize=False, iterative_detection=True,
             compute_metrics=True):
@@ -396,7 +401,7 @@ class OneBlob(object):
 
         self.compute_segmentation_map()
 
-        # Next, model selections: point source vs dev/exp vs ser.
+        # Next, model selections: point source vs rex vs dev/exp vs ser.
         B = self.run_model_selection(cat, Ibright, B,
                                      iterative_detection=iterative_detection)
 
@@ -2169,6 +2174,7 @@ def _compute_source_metrics(srcs, tims, bands, tr):
 
 def _initialize_models(src):
     from legacypipe.survey import LogRadius
+    psf = None
     if isinstance(src, PointSource):
         psf = src.copy()
         rex = RexGalaxy(src.getPosition(), src.getBrightness(),
