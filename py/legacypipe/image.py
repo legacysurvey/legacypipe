@@ -322,18 +322,25 @@ class LegacySurveyImage(object):
         if name == 'sdss':
             return np.ones(len(cat), bool)
         raise RuntimeError('Unknown photometric calibration set: %s' % name)
+
     def get_ps1_calibrator_color_range(self):
         # g-i color range to keep
         return 0.4, 2.7
+
+    def clip_colorterm(self, c):
+        return np.clip(c, -1., +1.)
+
     def photometric_calibrator_to_observed(self, name, cat):
         if name == 'ps1':
             colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
+            colorterm = self.clip_colorterm(colorterm)
             band = self.get_ps1_band()
-            return cat.median[:, band] + np.clip(colorterm, -1., +1.)
+            return cat.median[:, band] + colorterm
         elif name == 'sdss':
             colorterm = self.colorterm_sdss_to_observed(cat.psfmag, self.band)
+            colorterm = self.clip_colorterm(colorterm)
             band = self.get_sdss_band()
-            return cat.psfmag[:, band] + np.clip(colorterm, -1., +1.)
+            return cat.psfmag[:, band] + colorterm
         else:
             raise RuntimeError('No photometric conversion from %s to camera' % name)
 
@@ -679,8 +686,10 @@ class LegacySurveyImage(object):
         if np.all(invvar == 0.):
             debug('Skipping zero-invvar image')
             return None
+        assert(np.all(np.isfinite(invvar)))
 
         self.fix_saturation(img, dq, invvar, primhdr, imghdr, slc)
+        assert(np.all(np.isfinite(img)))
 
         # Zero out the inverse-variance (weight) where dq is flagged
         n = np.sum(dq != 0)
@@ -695,10 +704,12 @@ class LegacySurveyImage(object):
                 # unpack
                 template,template_meta = template
                 img -= template
+                assert(np.all(np.isfinite(img)))
 
         # for create_testcase: omit remappings.
         if not no_remap_invvar:
             invvar = self.remap_invvar(invvar, primhdr, img, dq)
+            assert(np.all(np.isfinite(img)))
 
         # header 'FWHM' is in pixels
         psf_fwhm = self.get_fwhm(primhdr, imghdr)
@@ -774,6 +785,8 @@ class LegacySurveyImage(object):
         if subsky:
             from tractor.sky import ConstantSky
             debug('Instantiating and subtracting sky model')
+            print('Median sky value & range', np.median(skymod), skymod.min(), skymod.max(), 'all finite', np.all(np.isfinite(skymod)))
+            assert(np.all(np.isfinite(skymod)))
             if pixels:
                 img -= skymod
             zsky = ConstantSky(0.)
@@ -782,6 +795,7 @@ class LegacySurveyImage(object):
             del skymod
             sky = zsky
             del zsky
+            assert(np.all(np.isfinite(img)))
 
         orig_zpscale = zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
         if nanomaggies:
@@ -791,6 +805,7 @@ class LegacySurveyImage(object):
             if not subsky:
                 sky.scale(1./zpscale)
             zpscale = 1.
+            assert(np.all(np.isfinite(img)))
 
         if constant_invvar:
             assert(nanomaggies)
@@ -834,6 +849,7 @@ class LegacySurveyImage(object):
 
         if subsky:
             self.apply_amp_correction(img, invvar, x0, y0)
+            assert(np.all(np.isfinite(img)))
 
         # Convert MJD-OBS, in UTC, into TAI
         mjd_tai = astropy.time.Time(self.mjdobs, format='mjd', scale='utc').tai.mjd
@@ -853,6 +869,10 @@ class LegacySurveyImage(object):
                     photocal=LinearPhotoCal(zpscale, band=band),
                     sky=sky, name=self.name + ' ' + band)
         assert(np.all(np.isfinite(tim.getInvError())))
+        assert(np.all(np.isfinite(img)))
+        assert(np.isfinite(self.sig1))
+        print('All finite?', np.all(np.isfinite(img)))
+        print('Returning tim with image pixel range', img.min(), img.max())
         tim.band = band
 
         # HACK -- create a local PSF model to instantiate the PsfEx
@@ -1313,7 +1333,9 @@ class LegacySurveyImage(object):
         if Ti is None:
             raise RuntimeError('Failed to find PsfEx model in files: %s' % ', '.join(tryfns))
         if Ti.psf_samp == 0.0:
-            raise RuntimeError('PsfEx failed: sampling (psf_samp) = 0 in file %s' % fn)
+            warnings.warn('PsfEx: sampling (psf_samp) = 0 in file %s; HACKING to 1.0' % fn)
+            Ti.psf_samp = 1.0
+            #raise RuntimeError('PsfEx failed: sampling (psf_samp) = 0 in file %s' % fn)
         # Remove any padding
         degree = Ti.poldeg1
         # number of terms in polynomial
@@ -2147,9 +2169,14 @@ class LegacySurveyImage(object):
         psfex_kwargs = dict(git_version=git_version, ps=ps)
         sky_kwargs = dict(splinesky=splinesky, git_version=git_version, ps=ps, survey=survey, gaia=gaia, survey_blob_mask=survey_blob_mask, halos=halos, subtract_largegalaxies=subtract_largegalaxies)
 
+        from legacypipe.utils import ZeroWeightError
         if sky and self.sky_before_psfex:
             try:
                 self.run_sky(**sky_kwargs)
+            except ZeroWeightError as zwe:
+                # PsfEx isn't going to succeed either, so bail out now
+                print('ZeroWeightError running sky:', zwe)
+                raise zwe
             except Exception as ex:
                 print('Exception running sky:', ex)
                 import traceback
@@ -2162,9 +2189,9 @@ class LegacySurveyImage(object):
             imgfn,maskfn = self.funpack_files(self.imgfn, self.dqfn,
                                               self.hdu, self.dq_hdu, todelete)
             self.run_se(imgfn, maskfn)
-            print('Not deleting temp files for SE!')
-            #for fn in todelete:
-            #    os.unlink(fn)
+            #print('Not deleting temp files for SE!')
+            for fn in todelete:
+                os.unlink(fn)
         
         if psfex:
             try:
@@ -2241,17 +2268,23 @@ class LegacySplineSky(SplineSky):
 class NormalizedPsf(object):
     def getFourierTransform(self, px, py, radius):
         fft, (cx,cy), shape, (v,w) = super().getFourierTransform(px, py, radius)
-        fft /= np.abs(fft[0][0])
+        n = np.abs(fft[0][0])
+        if n != 0:
+            fft /= n
         return fft, (cx,cy), shape, (v,w)
 
     def getImage(self, px, py):
         img = super().getImage(px, py)
-        img /= np.sum(img)
+        n = np.sum(img)
+        if n != 0:
+            img /= n
         return img
 
     def _sampleImage(self, img, dx, dy, **kwargs):
         xl,yl,img = super()._sampleImage(img, dx, dy, **kwargs)
-        img /= img.sum()
+        n = img.sum()
+        if n != 0:
+            img /= n
         return xl,yl,img
 
 class NormalizedPixelizedPsf(NormalizedPsf, PixelizedPSF):
@@ -2264,7 +2297,9 @@ class NormalizedPixelizedPsfEx(NormalizedPsf, PixelizedPsfEx):
 
     def constantPsfAt(self, x, y):
         pix = self.psfex.at(x, y)
-        pix /= pix.sum()
+        n = pix.sum()
+        if n != 0:
+            pix /= n
         return NormalizedPixelizedPsf(pix, sampling=self.sampling)
 
 def fix_weight_quantization(wt, weightfn, ext, slc):

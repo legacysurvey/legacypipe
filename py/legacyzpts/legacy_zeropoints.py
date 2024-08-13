@@ -77,7 +77,7 @@ def _ccds_table(camera='decam', overrides=None):
         ('ccdnum', 'i2'),
         ('expid', 'S17'),
         ('object', 'S35'),
-        ('propid', 'S10'),
+        ('propid', 'S12'),
         ('filter', 'S4'),
         ('exptime', 'f4'),
         ('mjd_obs', 'f8'),
@@ -262,6 +262,13 @@ def measure_image(img_fn, mp, image_dir='images',
         except:
             pass
         extlist = [ccd]
+    elif measureargs['force_cfht_ccds']:
+        old_extlist = img.get_extension_list(debug=measureargs['debug'])
+        extlist = list(range(1, 36+1))
+        #print('Available extension list:', old_extlist)
+        #print('Forced CFHT extension list:', extlist)
+        if old_extlist != extlist:
+            print('Updating extension list based on --force-cfht-ccds')
     else:
         extlist = img.get_extension_list(debug=measureargs['debug'])
 
@@ -655,6 +662,8 @@ def get_parser():
                         help='Use SDSS rather than PS-1 for photometric cal.')
     parser.add_argument('--debug', action='store_true', default=False, help='Write additional files and plots for debugging')
     parser.add_argument('--choose_ccd', action='store', default=None, help='forced to use only the specified ccd')
+    parser.add_argument('--force-cfht-ccds', action='store_true', default=False,
+                        help='CFHT: force using the 36 non-"ears" CCDs')
     parser.add_argument('--prefix', type=str, default='', help='Prefix to prepend to the output files.')
     parser.add_argument('--verboseplots', action='store_true', default=False, help='use to plot FWHM Moffat PSF fits to the 20 brightest stars')
     parser.add_argument('--calibrate', action='store_true',
@@ -911,6 +920,15 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
 
     ccds['AVSKY'] = hdr.get('AVSKY', np.nan)
 
+    # Quick check for PsfEx file -- moved before WCS, for CFHT's benefit
+    normalizePsf = True
+    try:
+        px0 = py0 = 0
+        psf = imobj.read_psf_model(px0, py0, pixPsf=True, normalizePsf=normalizePsf)
+    except RuntimeError as e:
+        print('Failed to read PSF model: %s' % e)
+        return None, None
+
     for ccd_col,val in zip(['cd1_1', 'cd1_2', 'cd2_1', 'cd2_2'],
                            imobj.get_cd_matrix(primhdr, hdr)):
         ccds[ccd_col] = val
@@ -935,14 +953,6 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
         x0,x1 = sx.start, sx.stop
         print('good image slice:', slc, '-- shifting WCS by', x0, y0)
         wcs = wcs.get_subimage(x0, y0, int(x1-x0), int(y1-y0))
-
-    # Quick check for PsfEx file
-    normalizePsf = True
-    try:
-        psf = imobj.read_psf_model(x0, y0, pixPsf=True, normalizePsf=normalizePsf)
-    except RuntimeError as e:
-        print('Failed to read PSF model: %s' % e)
-        return None, None
 
     # for cases (eg HSC, Pan-STARRS) that lack a SEEING/FWHM header and we have to fetch
     # from the PsfEx file.

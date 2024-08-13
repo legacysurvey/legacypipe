@@ -97,11 +97,37 @@ class MegaPrimeImage(LegacySurveyImage):
         return {'ccdname':'S5'}
 
     def get_extension_list(self, debug=False):
+        # The old filter set - now called "uS", "gS" etc, where the new ones are just called
+        # "u", "g", etc - vignet the "ears" of the camera.
+        # The naming scheme decoder ring is:
+        # Old set:
+        #   U.MP9301
+        #   G.MP9401
+        #   R.MP9601
+        #   I.MP9701
+        #   Z.MP9801
+        # Second generation:
+        #   I.MP9702
+        # Third generation / new set:
+        #   U.MP9302
+        #   G.MP9402
+        #   R.MP9602
+        #   I.MP9703
+        #   Z.MP9901
+        F = fitsio.FITS(self.imgfn)
+
+        primhdr = F[0].read_header()
+        filt = primhdr['FILTER']
+        old_filter = (filt in ['u.MP9301', 'g.MP9401', 'r.MP9601', 'i.MP9701', 'z.MP9801'])
+
         # duplicate EXTNAME cards in the headers?! trips up fitsio;
         # https://github.com/esheldon/fitsio/issues/324
-        F = fitsio.FITS(self.imgfn)
         exts = []
         for i,f in enumerate(F[1:]):
+            # Drop vignetted CCDs!
+            if old_filter and i >= 36:
+                print('Image uses an old filter (%s) - dropping vignetted "ears" CCDs' % filt)
+                break
             #exts.append(f.get_extname())
             exts.append(i+1)
             if debug:
@@ -129,6 +155,10 @@ class MegaPrimeImage(LegacySurveyImage):
     def get_radec_bore(self, primhdr):
         return primhdr['RA_DEG'], primhdr['DEC_DEG']
 
+    def clip_colorterm(self, c):
+        # Note larger range than usual!
+        return np.clip(c, -1., +4.)
+
     def photometric_calibrator_to_observed(self, name, cat):
         from legacypipe.ps1cat import ps1cat
         ps1band_map = ps1cat.ps1band
@@ -137,15 +167,17 @@ class MegaPrimeImage(LegacySurveyImage):
             ps1band = dict(u='g', CaHK='g').get(self.band, self.band)
             ps1band_index = ps1band_map[ps1band]
             colorterm = self.colorterm_ps1_to_observed(cat.median, self.band)
+            colorterm = self.clip_colorterm(colorterm)
             # Note larger range of color term than usual!
-            return cat.median[:, ps1band_index] + np.clip(colorterm, -1., +4.)
+            return cat.median[:, ps1band_index] + colorterm
         elif name == 'sdss':
             from legacypipe.ps1cat import sdsscat
             colorterm = self.colorterm_sdss_to_observed(cat.psfmag, self.band)
+            colorterm = self.clip_colorterm(colorterm)
             sdssbands = sdsscat.sdssband.copy()
             sdssbands.update(CaHK=0)
             band = sdssbands[self.band]
-            return cat.psfmag[:, band] + np.clip(colorterm, -1., +1.)
+            return cat.psfmag[:, band] + colorterm
         else:
             raise RuntimeError('No photometric conversion from %s to CFHT' % name)
 
@@ -171,6 +203,14 @@ class MegaPrimeImage(LegacySurveyImage):
 
     def get_gain(self, primhdr, hdr):
         return hdr['GAIN']
+
+    def get_ha_deg(self, primhdr):
+        from astrometry.util.starutil_numpy import hmsstring2ra
+        # HA header is missing from some images (eg, XMM u-band cfht-xmm-u/776654p.fits.fz)
+        hastr = primhdr.get('HA')
+        if hastr is None:
+            return np.nan
+        return hmsstring2ra(hastr)
 
     def get_fwhm(self, primhdr, imghdr):
         # Nothing in the image headers...
@@ -326,6 +366,18 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         # Run sky calib first (for patching...)
         self.sky_before_psfex = True
 
+        self.do_solve_field = (self.band in ['CaHK', 'u'])
+
+        self.do_lacosmic = (self.band in ['CaHK', 'u'])
+
+        # Should we cut the SE detections to only Gaia stars?
+        # Helps on images with lots of cosmic rays and few sources (eg, CaHK)
+        self.cut_to_gaia = (self.band in ['CaHK', 'u'])
+
+        # Just create a constant PSF model, not a polynomially-varying one!
+        self.constant_psfex = (self.band == 'CaHK')
+
+
     def run_se(self, imgfn, maskfn):
         # For some images (whyyyyy), interpolation just doesn't seem to be happening, so we
         # end up with zero-valued pixels in the image, that get sky-subtracted and turn into
@@ -352,64 +404,60 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         fitsio.write(tmpimgfn, img, header=hdr, clobber=True)
         print('Running SE on temp image and mask files', tmpimgfn, maskfn)
 
-        tmpsefn = create_temp(suffix='.fits')
-        filt_sefn = self.sefn
-        self.sefn = tmpsefn
-        print('Writing SE results to temp file', tmpsefn)
+        if self.cut_to_gaia:
+            tmpsefn = create_temp(suffix='.fits')
+            filt_sefn = self.sefn
+            self.sefn = tmpsefn
+            print('Writing SE results to temp file', tmpsefn)
         super().run_se(tmpimgfn, maskfn)
-        self.sefn = filt_sefn
-
         #print('cfht.py not removing patched image file', tmpimgfn)
         os.remove(tmpimgfn)
 
-        # Filter SE detections to Gaia stars
+        if self.cut_to_gaia:
+            # Filter SE detections to Gaia stars
+            from astrometry.util.fits import fits_table
+            from astrometry.util.util import Sip
+            from astrometry.libkd.spherematch import match_radec
+            from astrometry.util.file import trymakedirs
+            from legacypipe.gaiacat import GaiaCatalog
 
-        from astrometry.util.fits import fits_table
-        from astrometry.util.util import Sip
-        from astrometry.libkd.spherematch import match_radec
-        from astrometry.util.file import trymakedirs
+            self.sefn = filt_sefn
+            print('Filtering SE detections...')
+            print('Reading temp SE catalog', tmpsefn)
+            S = fits_table(tmpsefn, hdu=2, lower=False)
+            print('Got', len(S), 'detections')
+            wcs = Sip(self.wcs_initial_fn)
 
-        print('Filtering SE detections...')
-        print('Reading temp SE catalog', tmpsefn)
-        S = fits_table(tmpsefn, hdu=2, lower=False)
-        print('Got', len(S), 'detections')
-        wcs = Sip(self.wcs_initial_fn)
+            gaiacat = GaiaCatalog()
+            gaia = gaiacat.get_catalog_in_wcs(wcs)
+            print('Got', len(gaia), 'Gaia stars within WCS')
+            S.ra, S.dec = wcs.pixelxy2radec(S.X_IMAGE, S.Y_IMAGE)
+            I,J,d = match_radec(S.ra, S.dec, gaia.ra, gaia.dec, 2.5/3600., nearest=True)
+            print('Matched', len(I), 'Gaia stars')
 
-        from legacypipe.gaiacat import GaiaCatalog
-        gaiacat = GaiaCatalog()
-        gaia = gaiacat.get_catalog_in_wcs(wcs)
-        print('Got', len(gaia), 'Gaia stars within WCS')
-
-        S.ra, S.dec = wcs.pixelxy2radec(S.X_IMAGE, S.Y_IMAGE)
-
-        I,J,d = match_radec(S.ra, S.dec, gaia.ra, gaia.dec, 2.5/3600., nearest=True)
-        print('Matched', len(I), 'Gaia stars')
-
-        Fin = fitsio.FITS(tmpsefn, 'r')
-        # Copy the first two HDUs unchanged...
-        trymakedirs(self.sefn, dir=True)
-        Fout = fitsio.FITS(self.sefn, 'rw', clobber=True)
-        data = Fin[0].read()
-        hdr  = Fin[0].read_header()
-        Fout.write(data, header=hdr)
-        data = Fin[1].read()
-        hdr  = Fin[1].read_header()
-        Fout.write(data, header=hdr, extname='LDAC_IMHEAD')
-        #data = Fin[2].read()
-        hdr  = Fin[2].read_header()
-        Fin.close()
-        Fout.close()
-        S.cut(I)
-        S.rename('ra',  'ALPHA_J2000')
-        S.rename('dec', 'DELTA_J2000')
-        S.writeto(self.sefn, append=True, header=hdr, extname='LDAC_OBJECTS')
-        print('Wrote', len(I), 'filtered stars to', self.sefn)
-        os.remove(tmpsefn)
+            Fin = fitsio.FITS(tmpsefn, 'r')
+            # Copy the first two HDUs unchanged...
+            trymakedirs(self.sefn, dir=True)
+            Fout = fitsio.FITS(self.sefn, 'rw', clobber=True)
+            data = Fin[0].read()
+            hdr  = Fin[0].read_header()
+            Fout.write(data, header=hdr)
+            data = Fin[1].read()
+            hdr  = Fin[1].read_header()
+            Fout.write(data, header=hdr, extname='LDAC_IMHEAD')
+            #data = Fin[2].read()
+            hdr  = Fin[2].read_header()
+            Fin.close()
+            Fout.close()
+            S.cut(I)
+            S.rename('ra',  'ALPHA_J2000')
+            S.rename('dec', 'DELTA_J2000')
+            S.writeto(self.sefn, append=True, header=hdr, extname='LDAC_OBJECTS')
+            print('Wrote', len(I), 'filtered stars to', self.sefn)
+            os.remove(tmpsefn)
 
     def get_psfex_conf(self):
-        #print('get_psfex_conf: band', self.band)
-        if self.band == 'CaHK':
-            # Just create a constant PSF model, not a polynomially-varying one!
+        if self.constant_psfex:
             return '-PSFVAR_DEGREES 0 -VERBOSE_TYPE FULL'
         return super().get_psfex_conf()
 
@@ -457,6 +505,26 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         if hdr is None:
             hdr = self.read_image_header()
 
+        # Verify that we're looking at the right HDU (because the Scamp output format SUCKS)
+        # by looking at how much the image center has moved in RA,Dec.
+        from astrometry.util.starutil_numpy import arcsec_between
+        if os.path.exists(self.wcs_initial_fn):
+            print('Comparing Scamp solution to Astrometry.net')
+            from astrometry.util.util import Sip
+            oldwcs = Sip(self.wcs_initial_fn)
+        else:
+            print('Comparing Scamp solution against original image header')
+            oldwcs = wcs_pv2sip_hdr(hdr)
+
+        # print('Reading Scamp header: values of   original  -->  scamp:')
+        # dist1 = np.hypot(hdr['CRPIX1'] - scamp_hdr['CRPIX1'], hdr['CRPIX2'] - scamp_hdr['CRPIX2'])
+        # print('   CRPIX (%.1f, %.1f)  -->   (%.1f, %.1f)    dist %.1f pix' %
+        #       (hdr['CRPIX1'], hdr['CRPIX2'], scamp_hdr['CRPIX1'], scamp_hdr['CRPIX2'], dist1))
+        # dist2 = arcsec_between(hdr['CRVAL1'], hdr['CRVAL2'],
+        #                        scamp_hdr['CRVAL1'], scamp_hdr['CRVAL2']) / 0.186
+        # print('   CRVAL (%.4f, %.4f)  -->   (%.4f, %.4f)    dist %.1f pix' %
+        #       (hdr['CRVAL1'], hdr['CRVAL2'], scamp_hdr['CRVAL1'], scamp_hdr['CRVAL2'], dist2))
+
         # Copy Scamp header cards in...
         for key in ['EQUINOX', 'RADESYS', 'CTYPE1', 'CTYPE2', 'CUNIT1', 'CUNIT2',
                     'CRVAL1', 'CRVAL2', 'CRPIX1', 'CRPIX2',
@@ -467,6 +535,17 @@ class MegaPrimeElixirImage(MegaPrimeImage):
                     'PV2_7', 'PV2_8', 'PV2_9', 'PV2_10']:
             hdr[key] = scamp_hdr[key]
         wcs = wcs_pv2sip_hdr(hdr)
+
+        #print('Old WCS:', oldwcs)
+        #print('New (scamp) WCS:', wcs)
+        xx,yy = 2112/2., 4644/2.
+        r1,d1 = oldwcs.pixelxy2radec(xx, yy)
+        r2,d2 =    wcs.pixelxy2radec(xx, yy)
+        dist3 = arcsec_between(r1, d1, r2, d2)
+        print('Image center distance: %.1f arcsec  (~ %.1f pixels)' % (dist3, dist3/0.186))
+        if dist3 > 200.:
+            raise RuntimeError('Scamp WCS is more than 200 arcsec away from initial astrometry')
+
         return wcs
 
     def compute_filenames(self):
@@ -497,38 +576,39 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         if self.scamp_wcs is not None:
             return self.scamp_wcs
 
-        if not os.path.exists(self.wcs_initial_fn):
-            self.run_solve_field()
-        from astrometry.util.util import Sip
-        return Sip(self.wcs_initial_fn)
-        
-        # wcs = super().get_wcs(hdr=hdr)
-        # print('CFHT get_wcs: img header:', wcs)
-        # if self.expnum == 1657134:
-        #     #print('Resetting CRVAL to median Astrometry.net value!')
-        #     #wcs.set_crval([20.125816819516082, 3.523921365540108])
-        #     #print('Offsetting CRVAL to median Astrometry.net offset!')
-        #     #cv = wcs.crval
-        #     #wcs.set_crval([cv[0] + -0.0015377391247888283, cv[1] + 0.008975408212121838])
-        #     fn = 'scamp-cfht-s82-chunk2/fp-%i-%02i.wcs' % (self.expnum, self.hdu)
-        #     print('Reading focal-plane WCS for expnum', self.expnum, 'hdu', self.hdu, 'from', fn)
-        #     from astrometry.util.util import Tan,Sip
-        #     wcs = Sip(fn)
-        #     #h,w = self.shape
-        #     #wcs.imagew = w
-        #     #wcs.imageh = h
-        #     print('After:                       ', wcs)
-        # return wcs
+        if self.do_solve_field:
+            if not os.path.exists(self.wcs_initial_fn):
+                self.run_solve_field()
+            from astrometry.util.util import Sip
+            return Sip(self.wcs_initial_fn)
+
+        return super().get_wcs(hdr=hdr)
 
     def run_solve_field(self):
         from pkg_resources import resource_filename
         from astrometry.util.file import trymakedirs
+        from legacypipe.survey import create_temp
         # Initial astrometry -- using solve-field on the image
         dirname = resource_filename('legacypipe', 'data')
         configfn = os.path.join(dirname, 'an-cfht.cfg')
         primhdr = self.read_image_primary_header()
         hdr = self.read_image_header()
         r,d = self.get_radec_bore(primhdr)
+
+        imgfn = self.imgfn
+        ext = self.hdu
+        tmpimgfn = None
+        if self.do_lacosmic:
+            print('Masking out CRs using Lacosmic map')
+            tmpimgfn = create_temp(suffix='.fits')
+            dq = self.read_dq()
+            img = self.read_image()
+            med = np.median(img[dq == 0])
+            img[dq != 0] = med
+            fitsio.write(tmpimgfn, img, clobber=True)
+            imgfn = tmpimgfn
+            ext = 0
+
         for ds in [2, 4]:
             args = ['--config', configfn,
                     '--downsample', ds,
@@ -541,7 +621,6 @@ class MegaPrimeElixirImage(MegaPrimeImage):
                     '--no-plots',
                     '--no-remove-lines',
                     '--continue',
-                    #'--crpix-center',
                     '--crpix-x', hdr['CRPIX1'],
                     '--crpix-y', hdr['CRPIX2'],
                     '--new-fits', 'none',
@@ -552,17 +631,20 @@ class MegaPrimeElixirImage(MegaPrimeImage):
                     '--index-xyls', 'none',
                     '--rdls', 'none',
                     '--wcs', self.wcs_initial_fn,
-                    '--extension', self.hdu]
+                    '--extension', ext]
             if r is not None and d is not None:
                 args.extend(['--ra', r, '--dec', d, '--radius', 5])
             print('Creating initial WCS using solve-field...')
             trymakedirs(self.wcs_initial_fn, dir=True)
-            cmd = ' '.join([str(x) for x in ['solve-field'] + args + [self.imgfn]])
+            cmd = ' '.join([str(x) for x in ['solve-field'] + args + [imgfn]])
             print('Running:', cmd)
             rtn = os.system(cmd)
             print('solve-field return value:', rtn)
             if os.path.exists(self.wcs_initial_fn):
                 break
+
+        if tmpimgfn is not None:
+            os.remove(tmpimgfn)
 
     def run_lacosmic(self):
         import lacosmic
@@ -604,11 +686,29 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         print('Wrote', self.lacosmic_fn)
 
     def run_calibs(self, **kwargs):
-        #if self.use_solve_field and not os.path.exists(self.wcs_initial_fn):
-        if not os.path.exists(self.wcs_initial_fn):
-            self.run_solve_field()
-        if not os.path.exists(self.lacosmic_fn):
-            self.run_lacosmic()
+        # Check for all zero image pixel values (eg 730710p.fits (XMM-u) [4] [CCD03])
+        # and bail out early.
+        img = self.read_image()
+        if np.all(img == 0):
+            print('All image pixel values are zero!')
+            from legacypipe.utils import ZeroWeightError
+            raise ZeroWeightError('All image pixels are zero in CFHT expnum %i ext %s' %
+                                  (self.expnum, self.ccdname))
+        mn = img.min()
+        mx = img.max()
+        print('Image range:', mn, mx)
+        if mn == mx:
+            print('All image pixels have the same value: %f!' % mn)
+            from legacypipe.utils import ZeroWeightError
+            raise ZeroWeightError('All image pixels have the same value in CFHT expnum %i ext %s' %
+                                  (self.expnum, self.ccdname))
+        if self.do_lacosmic:
+            if not os.path.exists(self.lacosmic_fn):
+                self.run_lacosmic()
+        if self.do_solve_field:
+            if not os.path.exists(self.wcs_initial_fn):
+                self.run_solve_field()
+
         super().run_calibs(**kwargs)
 
     def get_crpixcrval(self, primhdr, hdr):
@@ -622,7 +722,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         return wcs.get_cd()
 
     # don't need overridden read_image_header
-    def read_dq(self, header=False, use_lacosmic=True, **kwargs):
+    def read_dq(self, header=False, use_lacosmic=None, **kwargs):
         from legacypipe.bits import DQ_BITS
         # Image pixels to be ignored have value 0.0
         img = self._read_fits(self.imgfn, self.hdu, header=header, **kwargs)
@@ -639,6 +739,8 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         print('Flagged', n, 'additional pixels in the DQ map with small positive image values')
         dq[img < 0.5] = DQ_BITS['badpix']
 
+        if use_lacosmic is None:
+            use_lacosmic = self.do_lacosmic
         if use_lacosmic:
             if not os.path.exists(self.lacosmic_fn):
                 self.run_lacosmic()

@@ -76,6 +76,9 @@ class ps1cat(HealpixedCatalog):
                    N673=1,
                    # Merian
                    N540=0,
+                   # IBIS
+                   M411=0,
+                   M464=0,
     )
     def __init__(self,expnum=None,ccdname=None,ccdwcs=None):
         """Read PS1 or gaia sources for an exposure number + CCD name or CCD WCS
@@ -215,13 +218,27 @@ def ps1_to_decam(psmags, band):
         N540 = [ 0.36270593, -0.40238762,  0.0551082 ],
         # CFHT
         CaHK = [0., 2.3],
+        # IBIS -- from Arjun 2024-05-30
+        # M411 = [0, 0.1164,  1.1036, -0.5814,  0.0817],
+        # M464 = [0, 0.6712, -0.9042,  0.4621, -0.0737],
+        # 2024-06-02
+        # M411 = [0., -0.1761, 1.5862,-0.8962, 0.1526],
+        # M464 = [0.,  0.3244,-0.5258, 0.3082,-0.0524],
+        # 2024-06-04
+        # g-r
+        # M411 = [ 0.05546,-0.07920, 2.50180,-1.44430],
+        # M464 = [ 0.12144,-0.53290, 1.25790,-0.93900],
+        # 2024-06-05
+        # g-i:
+        M411 = [0.,  0.1416,  0.9785, -0.3954],
+        M464 = [0.,  0.3244, -0.5258,  0.3082, -0.0524],
     )[band]
 
     # Most are with respect to g-i, some are g-r...
     color = gi
-    if band in ['CaHK']:
+    if band in ['CaHK']: #, 'M411', 'M464']:
         color = gr
-    
+
     colorterm = np.zeros(len(color))
     for power,coeff in enumerate(coeffs):
         colorterm += coeff * color**power

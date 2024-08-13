@@ -173,7 +173,7 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
 
     events = []
 
-    trex = re.compile('(((?P<days>\d*)-)?(?P<hours>\d*):)?(?P<minutes>\d*):(?P<seconds>[\d\.]*)')
+    trex = re.compile(r'(((?P<days>\d*)-)?(?P<hours>\d*):)?(?P<minutes>\d*):(?P<seconds>[\d\.]*)')
     def parse_time_strings(ss):
         etime = []
         any_failed = None

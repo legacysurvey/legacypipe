@@ -128,6 +128,7 @@ def sed_matched_filters(bands):
         sed = np.array([red.get(b,0.) for b in bands])
         if np.sum(sed > 0) > 1:
             SEDs.append(('Red', sed))
+
         # Flat SED for Suprime intermediate-band filters.  (We could move this to a special --run in runs.py)
         iaflat = {
             'I-A-L427': 1.,
@@ -139,8 +140,17 @@ def sed_matched_filters(bands):
         sed = np.array([iaflat.get(b,0.) for b in bands])
         if np.sum(sed > 0) > 1:
             SEDs.append(('IAFlat', sed))
-    info('SED-matched filters:', SEDs)
 
+        # Flat SED for IBIS
+        iaflat = {
+            'M411': 1.,
+            'M464': 1.,
+            }
+        sed = np.array([iaflat.get(b,0.) for b in bands])
+        if np.sum(sed > 0) > 1:
+            SEDs.append(('IBISFlat', sed))
+
+    info('SED-matched filters:', SEDs)
     return SEDs
 
 def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
