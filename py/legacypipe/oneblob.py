@@ -140,7 +140,7 @@ class OneBlob(object):
         self.deblend = False
         self.large_galaxies_force_pointsource = large_galaxies_force_pointsource
         self.less_masking = less_masking
-        self.tims = self.create_tims(timargs)
+        self.tims = create_tims(self.blobwcs, self.blobmask, timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
         self.plots2 = False
         alphas = [0.1, 0.3, 1.0]
@@ -262,6 +262,10 @@ class OneBlob(object):
         # - compute segmentation map
         # - model selection (including iterative detection)
         # - metrics
+
+        print('OneBlob run starting: srcs', self.srcs)
+        for src in self.srcs:
+            print('OneBlob  ', src.getParams())
 
         trun = tlast = Time()
         # Not quite so many plots...
@@ -1494,19 +1498,24 @@ class OneBlob(object):
                 srctractor.thawParam('images')
 
             # First-round optimization (during model selection)
+            print('OneBlob before model selection:', newsrc)
             try:
                 R = srctractor.optimize_loop(**self.optargs)
-            except:
+            except Exception as e:
                 print('Exception fitting source in model selection.  src:', newsrc)
                 import traceback
                 traceback.print_exc()
+                raise(e)
                 continue
+            print('OneBlob after model selection:', newsrc)
             #print('Fit result:', newsrc)
             #print('Steps:', R['steps'])
             hit_limit = R.get('hit_limit', False)
             opt_steps = R.get('steps', -1)
             hit_ser_limit = False
             hit_r_limit = False
+            print('OneBlob steps:', opt_steps)
+            print('OneBlob hit limit:', hit_limit)
             if hit_limit:
                 debug('Source', newsrc, 'hit limit:')
                 if is_debug():
@@ -1940,45 +1949,45 @@ class OneBlob(object):
         plt.legend()
         self.ps.savefig()
 
-    def create_tims(self, timargs):
-        from legacypipe.bits import DQ_BITS
-        # In order to make multiprocessing easier, the one_blob method
-        # is passed all the ingredients to make local tractor Images
-        # rather than the Images themselves.  Here we build the
-        # 'tims'.
-        tims = []
-        for (img, inverr, dq, twcs, wcsobj, pcal, sky, subpsf, name,
-             band, sig1, imobj) in timargs:
-            # Mask out inverr for pixels that are not within the blob.
-            try:
-                Yo,Xo,Yi,Xi,_ = resample_with_wcs(wcsobj, self.blobwcs,
-                                                  intType=np.int16)
-            except OverlapError:
-                continue
-            if len(Yo) == 0:
-                continue
-            inverr2 = np.zeros_like(inverr)
-            I = np.flatnonzero(self.blobmask[Yi,Xi])
-            inverr2[Yo[I],Xo[I]] = inverr[Yo[I],Xo[I]]
-            inverr = inverr2
+def create_tims(blobwcs, blobmask, timargs):
+    from legacypipe.bits import DQ_BITS
+    # In order to make multiprocessing easier, the one_blob method
+    # is passed all the ingredients to make local tractor Images
+    # rather than the Images themselves.  Here we build the
+    # 'tims'.
+    tims = []
+    for (img, inverr, dq, twcs, wcsobj, pcal, sky, subpsf, name,
+         band, sig1, imobj) in timargs:
+        # Mask out inverr for pixels that are not within the blob.
+        try:
+            Yo,Xo,Yi,Xi,_ = resample_with_wcs(wcsobj, blobwcs,
+                                              intType=np.int16)
+        except OverlapError:
+            continue
+        if len(Yo) == 0:
+            continue
+        inverr2 = np.zeros_like(inverr)
+        I = np.flatnonzero(blobmask[Yi,Xi])
+        inverr2[Yo[I],Xo[I]] = inverr[Yo[I],Xo[I]]
+        inverr = inverr2
 
-            # If the subimage (blob) is small enough, instantiate a
-            # constant PSF model in the center.
-            h,w = img.shape
-            if h < 400 and w < 400:
-                subpsf = subpsf.constantPsfAt(w/2., h/2.)
+        # If the subimage (blob) is small enough, instantiate a
+        # constant PSF model in the center.
+        h,w = img.shape
+        if h < 400 and w < 400:
+            subpsf = subpsf.constantPsfAt(w/2., h/2.)
 
-            tim = Image(data=img, inverr=inverr, wcs=twcs,
-                        psf=subpsf, photocal=pcal, sky=sky, name=name)
-            tim.band = band
-            tim.sig1 = sig1
-            tim.subwcs = wcsobj
-            tim.meta = imobj
-            tim.psf_sigma = imobj.fwhm / 2.35
-            tim.dq = dq
-            tim.dq_saturation_bits = DQ_BITS['satur']
-            tims.append(tim)
-        return tims
+        tim = Image(data=img, inverr=inverr, wcs=twcs,
+                    psf=subpsf, photocal=pcal, sky=sky, name=name)
+        tim.band = band
+        tim.sig1 = sig1
+        tim.subwcs = wcsobj
+        tim.meta = imobj
+        tim.psf_sigma = imobj.fwhm / 2.35
+        tim.dq = dq
+        tim.dq_saturation_bits = DQ_BITS['satur']
+        tims.append(tim)
+    return tims
 
 def _set_kingdoms(segmap, radius, I, ix, iy):
     '''
