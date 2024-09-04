@@ -2,20 +2,19 @@
 
 # Script for running the legacypipe code within a Shifter container at NERSC
 
+export COSMO=/dvs_ro/cfs/cdirs/cosmo
+
+export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
+outdir=$SCRATCH/dr11
+
 # Using depth-cut v5 CCDs file, and v3 skies
-export COSMO=/global/cfs/cdirs/cosmo
-export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr10
-outdir=$PSCRATCH/dr10
+#export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr10
+#outdir=$PSCRATCH/dr10
 
-if [ ${PSCRATCH}x == x ]; then
-    echo "This script is intended to be run from Perlmutter only."
-    exit -1
-fi
-
-export GAIA_CAT_DIR=$COSMO/data/gaia/edr3/healpix
+export GAIA_CAT_DIR=$COSMO/data/gaia/dr3/healpix
 export GAIA_CAT_PREFIX=healpix
 export GAIA_CAT_SCHEME=nested
-export GAIA_CAT_VER=E
+export GAIA_CAT_VER=3
 
 export DUST_DIR=$COSMO/data/dust/v0_1
 export UNWISE_COADDS_DIR=$COSMO/data/unwise/neo7/unwise-coadds/fulldepth:$COSMO/data/unwise/allwise/unwise-coadds/fulldepth
@@ -39,8 +38,6 @@ export OMP_NUM_THREADS=1
 # To avoid problems with MPI and Python multiprocessing
 export MPICH_GNI_FORK_MODE=FULLCOPY
 export KMP_AFFINITY=disabled
-
-ncores=64
 
 brick="$1"
 # strip whitespace from front and back
@@ -80,21 +77,24 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --brick "$brick" \
      --skip \
      --skip-calibs \
-     --bands g,r,i,z \
+     --bands g,r,z \
      --rgb-stretch 1.5 \
      --nsatur 2 \
      --survey-dir "$LEGACY_SURVEY_DIR" \
-     --cache-dir "$CACHE_DIR" \
-     --outdir "$outdir" \
+      --outdir "$outdir" \
      --checkpoint "${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle" \
      --checkpoint-period 120 \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
      --write-stage srcs \
-     --release 10000 \
-     --cache-outliers \
-     --threads "${ncores}" \
+     --stage image_coadds \
+     --release 10011 \
+     --threads 32 \
       >> "$log" 2>&1
 
+#     --bands g,r,i,z \
+#    --cache-dir "$CACHE_DIR" \
+
+#     --cache-outliers \
 #     --max-memory-gb 20 \
 # --no-wise-ceres helps for very dense fields.
 #     --no-wise-ceres \

@@ -1048,7 +1048,9 @@ def stage_srcs(pixscale=None, targetwcs=None,
 
     detstars = T.copy()
     detstars.blob = blobmap[np.clip(T.iby, 0, H-1), np.clip(T.ibx, 0, W-1)]
-    bb = np.array([[b[0].start, b[0].stop, b[1].start, b[1].stop] for b in blobslices])
+    # Append -1,-1,-1,-1 to fill in a value for (reference) sources with no blob.
+    bb = np.array([[b[0].start, b[0].stop, b[1].start, b[1].stop] for b in blobslices] +
+                  [[-1,-1,-1,-1]])
     detstars.blob_x0 = bb[detstars.blob, 2]
     detstars.blob_x1 = bb[detstars.blob, 3]
     detstars.blob_y0 = bb[detstars.blob, 0]
@@ -1059,7 +1061,9 @@ def stage_srcs(pixscale=None, targetwcs=None,
     with survey.write_output('detected-sources', brick=brickname) as out:
         detstars.writeto(None, fits_object=out.fits, primheader=version_header)
     del detstars
-    T.delete_column('peaksn')
+    if 'peaksn' in T.get_columns():
+        # (can be missing if no sources are detected - only reference sources)
+        T.delete_column('peaksn')
 
     keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobmap', 'cat',
             'ps', 'saturated_pix', 'version_header', 'co_sky', 'ccds']
