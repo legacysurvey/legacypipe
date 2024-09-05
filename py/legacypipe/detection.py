@@ -706,7 +706,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         plt.axis(ax)
         plt.title('SED %s: hot blobs' % sedname)
         plt.figlegend((p3[0],p1[0],p2[0]), ('Existing', 'Keep', 'Drop'),
-                      'upper left')
+                      loc='upper left')
         ps.savefig()
 
     return hotblobs, px, py, aper, peakval
