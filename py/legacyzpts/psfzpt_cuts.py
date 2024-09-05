@@ -234,6 +234,11 @@ def psf_zeropoint_cuts(P, pixscale,
             continue
         skybr[i] = (sky > skybright.get(f.strip(), 1e6)) or (sky*exptime > 35000)
 
+    plver_ok = np.array([(v.startswith('V4.8') or
+                          v.startswith('V4.9') or
+                          v.startswith('V5'))
+                          for v in P.plver])
+
     cuts = [
         ('not_griz',   np.array([f.strip() not in 'griz' for f in P.filter])),
         ('ccdnmatch', P.ccdnphotom < 20),
@@ -249,6 +254,7 @@ def psf_zeropoint_cuts(P, pixscale,
         ('sky_is_bright', skybr),
         ('zpt_diff_avg', np.abs(P.ccdzpt - P.zpt) > zpt_diff_avg),
         ('phrms_s7', (P.ccdphrms > 0.1) & (ccdname == 'S7')),
+        ('plver', ~plver),
     ]
 
     if camera == 'mosaic':

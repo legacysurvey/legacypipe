@@ -46,6 +46,7 @@ CCD_CUTS = dict(
     phrms_s7 = 0x20000,
     # DR10 late depth-cut
     depth_cut_2 = 0x40000,
+    plver = 0x80000,
 )
 
 
