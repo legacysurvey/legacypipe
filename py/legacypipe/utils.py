@@ -165,6 +165,7 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
     import time
     import fitsio
     from functools import reduce
+    import re
 
     # my pid = parent pid -- this is a thread.
     print('run_ps_thread starting: parent PID', parent_pid, ', my PID', os.getpid(), fn)

@@ -822,8 +822,8 @@ def ccds_touching_wcs(targetwcs, ccds, ccdrad=None, polygons=True):
 
     rad = trad + ccdrad
     r,d = targetwcs.radec_center()
-    I, = np.where(np.abs(ccds.dec - d) < rad)
-    I = I[np.where(degrees_between(r, d, ccds.ra[I], ccds.dec[I]) < rad)[0]]
+    I = np.flatnonzero(np.abs(ccds.dec - d) < rad)
+    I = I[np.flatnonzero(np.atleast_1d(degrees_between(r, d, ccds.ra[I], ccds.dec[I])) < rad)]
     if not polygons:
         return I
     # now check actual polygon intersection

@@ -434,7 +434,7 @@ def make_coadds(tims, bands, targetwcs,
                     goodpix = 1
                 else:
                     # include SATUR pixels if no other pixels exists
-                    okbits = 0
+                    okbits = np.uint16(0)
                     for bitname in ['satur']:
                         okbits |= DQ_BITS[bitname]
                     brightpix = ((dq & okbits) != 0)
@@ -854,7 +854,7 @@ def _make_coadds_plots_1(im, band, mods, mo, iv, unweighted,
         if unweighted and (dq is not None):
 
             # HACK -- copy-n-pasted code from below.
-            okbits = 0
+            okbits = np.uint16(0)
             #for bitname in ['satur', 'bleed']:
             for bitname in ['satur']:
                 okbits |= DQ_BITS[bitname]

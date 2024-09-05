@@ -2260,7 +2260,7 @@ class LegacySplineSky(SplineSky):
             if nswap:
                 info('Swapping in SKY_JOHN values for', nswap, 'splinesky cells;', Ti.sky_med, '->', Ti.sky_john)
             gridvals[gridvals == Ti.sky_med] = Ti.sky_john
-        sky = cls(Ti.xgrid, Ti.ygrid, gridvals, order=Ti.order)
+        sky = cls(Ti.xgrid, Ti.ygrid, gridvals, order=int(Ti.order))
         sky.shift(Ti.x0, Ti.y0)
         return sky
 
