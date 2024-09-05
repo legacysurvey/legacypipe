@@ -40,15 +40,15 @@ def main():
     upmain(args=['--imlist', 'decam.txt', 'decam',
                  'survey-ccds-decam-dr100.fits', 'ccds-annotated-decam-dr100.fits',
                  os.path.join(survey_dir, 'survey-ccds-decam-test.fits.gz'), 'ccds-annotated-decam-test.fits',
-                 '--tilefile', 'legacyzpts/data/decam-tiles_obstatus.fits', '--depth-cut', '--good-ccd-fraction', '0'])
+                 '--tilefile', 'legacyzpts/data/decam-tiles_obstatus.fits', '--depth-cut', '--good-ccd-fraction', '0', '--plver'])
     upmain(args=['--imlist', 'mosaic.txt', 'mosaic',
                  'survey-ccds-mosaic-dr100.fits', 'ccds-annotated-mosaic-dr100.fits',
                  os.path.join(survey_dir, 'survey-ccds-mosaic-test.fits.gz'), 'ccds-annotated-mosaic-test.fits',
-                 '--tilefile', 'legacyzpts/data/mosaic-tiles_obstatus.fits', '--depth-cut', '--good-ccd-fraction', '0'])
+                 '--tilefile', 'legacyzpts/data/mosaic-tiles_obstatus.fits', '--depth-cut', '--good-ccd-fraction', '0', '--plver'])
     upmain(args=['--imlist', '90prime.txt', '90prime',
                  'survey-ccds-90prime-dr100.fits', 'ccds-annotated-90prime-dr100.fits',
                  os.path.join(survey_dir, 'survey-ccds-90prime-test.fits.gz'), 'ccds-annotated-90prime-test.fits',
-                 '--depth-cut', '--good-ccd-fraction', '0'])
+                 '--depth-cut', '--good-ccd-fraction', '0', '--plver'])
 
     rbmain(args=['--brick', '1110p322', '--survey-dir', survey_dir,
                  '--zoom', '1500', '1900', '2500', '2900', '--no-outliers',

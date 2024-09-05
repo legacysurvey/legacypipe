@@ -474,6 +474,8 @@ def main(args=None):
                         help='Omit the cut on early DECam data')
     parser.add_argument('--depth-cut', default=True, action='store_false',
                         help='Omit the depth cut')
+    parser.add_argument('--plver', default=True, action='store_false',
+                        help='Omit the PLVER cut')
     parser.add_argument('--nmatch', default=False, action='store_true',
                         help='Omit the "ccdnmatch" cut')
     parser.add_argument('--no-zpt-diff', default=False, action='store_true',
@@ -548,6 +550,9 @@ def main(args=None):
         ccds.ccd_cuts &= ~psfzpt_cuts.CCD_CUT_BITS['ccdnmatch']
     if args.no_zpt_diff:
         ccds.ccd_cuts &= ~psfzpt_cuts.CCD_CUT_BITS['zpt_diff_avg']
+    if not args.plver:
+        ccds.ccd_cuts &= ~psfzpt_cuts.CCD_CUT_BITS['plver']
+
     depthbit = psfzpt_cuts.CCD_CUT_BITS['depth_cut']
     manybadbit = psfzpt_cuts.CCD_CUT_BITS['too_many_bad_ccds']
     if not numpy.all((ccds.ccd_cuts & depthbit) == 0):
