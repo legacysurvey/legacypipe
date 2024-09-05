@@ -1,5 +1,6 @@
 import os
 import tempfile
+import time
 import shutil
 import fitsio
 import numpy as np
@@ -7,21 +8,21 @@ from astrometry.util.fits import fits_table
 from astrometry.util.file import trymakedirs
 from astrometry.util.util import Tan
 
-def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir):
-    fn = photom_fn
-    
+def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir,
+                            force_ccds=None):
     if photom_base_dir is None:
         # Assume photom filenames are like SURVEY_DIR/zpt/DIRS/filename
-        parts = fn.split('/')
+        # and pull out the DIRS/filename relative path part.
+        parts = photom_fn.split('/')
         try:
             izpt = parts.index('zpt')
             relpath = '/'.join(parts[izpt+1:])
             if survey_dir is None:
                 survey_dir = '/'.join(parts[:izpt])
         except:
-            relpath = fn
+            relpath = photom_fn
     else:
-        relpath = fn.replace(photom_base_dir, '')
+        relpath = photom_fn.replace(photom_base_dir, '')
 
     # Check for existing output file & skip
     tmpoutfn  = relpath.replace('-photom.fits', '-scamp.tmp.fits')
@@ -32,7 +33,7 @@ def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir):
     tmpoutfn  = os.path.join(scamp_dir, tmpoutfn)
     realoutfn = os.path.join(scamp_dir, realoutfn)
     if os.path.exists(realoutfn):
-        #print('Exists:', realoutfn)
+        print('Scamp catalogs exists: ' + realoutfn)
         return rtn
 
     # Compute image filename
@@ -42,28 +43,36 @@ def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir):
     if not os.path.exists(imgfn) and os.path.exists(imgfn + '.fz'):
         imgfn += '.fz'
     #print('Img filename', imgfn)
-    P = fits_table(fn)
+    P = fits_table(photom_fn)
     P.sn = P.flux/P.dflux
     hdr = P.get_header()
-    #print('Stars:', len(P), 'for', fn)
+    #print('Stars:', len(P), 'for', photom_fn)
     newhdr = fitsio.FITSHDR()
 
     for k in ['AIRMASS', 'OBJECT', 'TELESCOP', 'INSTRUME', 'EXPTIME', 'DATE-OBS',
               'MJD-OBS', 'FILTER', 'EXPNUM',
               'RA_BORE', 'DEC_BORE', 'CCD_ZPT', 'FWHM', 'SEEING', 'FILENAME']:
-        print('  ', k, '=', hdr[k])
+        #print('  ', k, '=', hdr[k])
         newhdr[k] = hdr[k]
     # HA doesn't exist in some CFHT image headers
     for k in ['HA']:
         v = hdr.get(k)
         if v is not None:
-            print('  ', k, '=', hdr[k])
+            #print('  ', k, '=', hdr[k])
             newhdr[k] = v
 
     trymakedirs(tmpoutfn, dir=True)
     F = fitsio.FITS(tmpoutfn, 'rw', clobber=True)
-    ccds = np.unique(P.ccdname)
+    if force_ccds is not None:
+        ccds = force_ccds
+    else:
+        ccds = np.unique(P.ccdname)
+        #print('CCDs in photometry file:', len(ccds), ccds)
+
     ngood = []
+    # cache this
+    astropy_img_fits = None
+    primhdr = None
     for ccd in ccds:
         I1 = np.flatnonzero((P.ccdname == ccd))
         I2 = np.flatnonzero((P.ccdname == ccd) * (P.ra_gaia != 0.0))
@@ -72,44 +81,56 @@ def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir):
         #print('CCD', ccd, ':', len(I1), 'in CCD,', len(I2), 'with Gaia RA,', len(I), 'with S/N > 5.  Median S/N %.1f' % np.median(P.sn[I2]))
         ngood.append(len(I))
         try:
+            t0 = time.time()
             imghdr = fitsio.read_header(imgfn, ext=ccd)
+            #print('Reading image header with fitsio:', time.time()-t0)
             w,h = imghdr['ZNAXIS1'], imghdr['ZNAXIS2']
         except:
             # Older images, eg cfht-s82-u/931347p.fits.fz, suffer from
             # https://github.com/esheldon/fitsio/issues/324
             # Try reading with astropy.
             from astropy.io import fits as afits
-            f = afits.open(imgfn)
-            hdu = f[ccd]
+            t0 = time.time()
+            if astropy_img_fits is None:
+                astropy_img_fits = afits.open(imgfn)
+            hdu = astropy_img_fits[ccd]
             h,w = hdu.shape
             imghdr = hdu.header
+            #print('Reading image header with astropy:', time.time()-t0)
         newhdr['EXTNAME'] = ccd
         for c in ['QRUNID']:
             newhdr[c] = imghdr[c]
+
         # Read Astrometry.net initial WCS header!
         imgid = os.path.basename(imgfn).replace('.fits','').replace('.fz', '')
         wcsfn = imgfn.replace('images', 'calib/wcs-initial').replace('.fits', '').replace('.fz','') + '/%s-%s.wcs' % (imgid, ccd)
-        #print('WCS', wcsfn)
-
-        # Reproject to a shared CRVAL (with large CRPIX values)
-        # Primary header has target RA,Dec as CRVAL; later HDUs all have the same CRVAL, somewhat off.
-        primhdr = fitsio.read_header(imgfn)
-        cra,cdec = primhdr['CRVAL1'], primhdr['CRVAL2']
-        wcs = Tan(wcsfn)
-        ok,cx,cy = wcs.radec2pixelxy(cra, cdec)
-        wcs.set_crval(cra, cdec)
-        wcs.set_crpix(cx, cy)
-
-        cd = wcs.get_cd()
-        newhdr['EQUINOX'] = 2000.
-        newhdr['CRPIX1'] = wcs.crpix[0]
-        newhdr['CRPIX2'] = wcs.crpix[1]
-        newhdr['CRVAL1'] = wcs.crval[0]
-        newhdr['CRVAL2'] = wcs.crval[1]
-        newhdr['CD1_1'] = cd[0]
-        newhdr['CD1_2'] = cd[1]
-        newhdr['CD2_1'] = cd[2]
-        newhdr['CD2_2'] = cd[3]
+        if not os.path.exists(wcsfn):
+            print('WARNING: Initial (Astrometry.net) WCS file not found:', wcsfn)
+            # Copy from input image header.  HOPEFULLY this doesn't matter because if
+            # A.net failed there's probably something wrong with this chip!
+            for k in ['EQUINOX', 'CRPIX1', 'CRPIX2', 'CRVAL1', 'CRVAL2',
+                      'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2']:
+                newhdr[k] = imghdr[k]
+        else:
+            # Reproject to a shared CRVAL (with large CRPIX values)
+            # Primary header has target RA,Dec as CRVAL; later HDUs all have the same CRVAL, somewhat off.
+            if primhdr is None:
+                primhdr = fitsio.read_header(imgfn)
+            cra,cdec = primhdr['CRVAL1'], primhdr['CRVAL2']
+            wcs = Tan(wcsfn)
+            ok,cx,cy = wcs.radec2pixelxy(cra, cdec)
+            wcs.set_crval(cra, cdec)
+            wcs.set_crpix(cx, cy)
+            cd = wcs.get_cd()
+            newhdr['EQUINOX'] = 2000.
+            newhdr['CRPIX1'] = wcs.crpix[0]
+            newhdr['CRPIX2'] = wcs.crpix[1]
+            newhdr['CRVAL1'] = wcs.crval[0]
+            newhdr['CRVAL2'] = wcs.crval[1]
+            newhdr['CD1_1'] = cd[0]
+            newhdr['CD1_2'] = cd[1]
+            newhdr['CD2_1'] = cd[2]
+            newhdr['CD2_2'] = cd[3]
         # wcshdr = fitsio.read_header(wcsfn)
         # for c in ['EQUINOX', 'CRPIX1', 'CRPIX2', 'CD1_1', 'CD1_2', 'CD2_1', 'CD2_2',
         #           'CRVAL1', 'CRVAL2']:
@@ -155,16 +176,18 @@ def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir):
     return rtn
 
 def _bounce_write_one(X):
-    return write_one_scamp_catalog(*X)
+    kwargs = X[-1]
+    X = X[:-1]
+    return write_one_scamp_catalog(*X, **kwargs)
 
-def write_scamp_catalogs(scamp_dir, photom_fns, survey_dir, photom_base_dir, mp=None):
+def write_scamp_catalogs(scamp_dir, photom_fns, survey_dir, photom_base_dir, mp=None, **kwargs):
     if mp is None:
         relpaths = []
         for fn in photom_fns:
-            outfn = write_one_scamp_catalog(fn, scamp_dir, survey_dir, photom_base_dir)
+            outfn = write_one_scamp_catalog(fn, scamp_dir, survey_dir, photom_base_dir, **kwargs)
             relpaths.append(outfn)
         return relpaths
-    return mp.map(_bounce_write_one, [(fn, scamp_dir, survey_dir, photom_base_dir)
+    return mp.map(_bounce_write_one, [(fn, scamp_dir, survey_dir, photom_base_dir, kwargs)
                                       for fn in photom_fns])
 
 def main():
@@ -185,6 +208,8 @@ def main():
     parser.add_argument('--scamp-command', type=str,
                         default='shifter --image docker:legacysurvey/legacypipe:DR10.3.1 scamp',
                         help='Set scamp command to run, default %(default)s')
+    parser.add_argument('--force-ccds', default=False, action='store_true',
+                        help='Force scamp files to contain the first 36 CCDs of CFHT images')
     args = parser.parse_args()
 
     if args.scamp_dir is None:
@@ -199,8 +224,14 @@ def main():
         from astrometry.util.multiproc import multiproc
         mp = multiproc(nthreads=args.threads)
 
+    kw = {}
+    if args.force_ccds:
+        print('Forcing the Scamp output files to contain 36 CFHT CCDs')
+        ccds = ['CCD%02i' % i for i in range(36)]
+        kw.update(force_ccds=ccds)
+
     scampfiles = write_scamp_catalogs(scamp_dir, args.photom, args.survey_dir,
-                                      args.photom_base_dir, mp=mp)
+                                      args.photom_base_dir, mp=mp, **kw)
 
     scamp_cmd = ('cd %s && %s -c %s %s' %
                  (scamp_dir, args.scamp_command, scamp_config, ' '.join(scampfiles)))

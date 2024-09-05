@@ -103,59 +103,16 @@ def one_blob(X):
     # A local WCS for this blob
     blobwcs = brickwcs.get_subimage(bx0, by0, blobw, blobh)
 
-    # Per-source measurements for this blob
-    B = fits_table()
-    B.sources = srcs
-    B.Isrcs = Isrcs
-    # Did sources start within the blob?
-    _,x0,y0 = blobwcs.radec2pixelxy(
-        np.array([src.getPosition().ra  for src in srcs]),
-        np.array([src.getPosition().dec for src in srcs]))
-    # blob-relative initial positions (zero-indexed)
-    B.x0 = (x0 - 1.).astype(np.float32)
-    B.y0 = (y0 - 1.).astype(np.float32)
-    B.safe_x0 = np.clip(np.round(x0-1).astype(int), 0,blobw-1)
-    B.safe_y0 = np.clip(np.round(y0-1).astype(int), 0,blobh-1)
-    B.started_in_blob = blobmask[B.safe_y0, B.safe_x0]
-    # This uses 'initial' pixel positions, because that's what determines
-    # the fitting behaviors.
-
     ob = OneBlob(nblob, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
                  less_masking, frozen_galaxies)
+    B = ob.init_table(Isrcs)
     B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
-
-    _,x1,y1 = blobwcs.radec2pixelxy(
-        np.array([src.getPosition().ra  for src in B.sources]),
-        np.array([src.getPosition().dec for src in B.sources]))
-    B.finished_in_blob = blobmask[
-        np.clip(np.round(y1-1).astype(int), 0, blobh-1),
-        np.clip(np.round(x1-1).astype(int), 0, blobw-1)]
-    assert(len(B.finished_in_blob) == len(B))
-    assert(len(B.finished_in_blob) == len(B.started_in_blob))
-
-    # Setting values here (after .run() has completed) means that iterative sources
-    # (which get merged with the original table B) get values also.
-    B.blob_x0     = np.zeros(len(B), np.int16) + bx0
-    B.blob_y0     = np.zeros(len(B), np.int16) + by0
-    B.blob_width  = np.zeros(len(B), np.int16) + blobw
-    B.blob_height = np.zeros(len(B), np.int16) + blobh
-    B.blob_npix   = np.zeros(len(B), np.int32) + np.sum(blobmask)
-    B.blob_nimages= np.zeros(len(B), np.int16) + len(timargs)
-    B.blob_totalpix = np.zeros(len(B), np.int32) + ob.total_pix
-    B.cpu_arch = np.zeros(len(B), dtype='U3')
-    B.cpu_arch[:] = get_cpu_arch()
-    B.cpu_blob = np.empty(len(B), np.float32)
-    # Convert to whole-brick (zero-indexed) pixel positions.
-    # (do this here rather than above to ease handling iterative detections)
-    B.x0 += bx0
-    B.y0 += by0
-    # these are now in brick coords... rename for consistency in runbrick.py
-    B.rename('x0', 'bx0')
-    B.rename('y0', 'by0')
+    ob.finalize_table(B, bx0, by0)
 
     t1 = time.process_time()
+    B.cpu_blob = np.empty(len(B), np.float32)
     B.cpu_blob[:] = t1 - t0
     B.iblob = iblob
     return B
@@ -183,7 +140,7 @@ class OneBlob(object):
         self.deblend = False
         self.large_galaxies_force_pointsource = large_galaxies_force_pointsource
         self.less_masking = less_masking
-        self.tims = self.create_tims(timargs)
+        self.tims = create_tims(self.blobwcs, self.blobmask, timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
         self.plots2 = False
         alphas = [0.1, 0.3, 1.0]
@@ -249,6 +206,54 @@ class OneBlob(object):
         self.trargs.update(optimizer=ConstrainedDenseOptimizer())
         self.optargs.update(dchisq = 0.1)
 
+    def init_table(self, Isrcs):
+        # Per-source measurements for this blob
+        B = fits_table()
+        B.sources = self.srcs
+        B.Isrcs = Isrcs
+        # Did sources start within the blob?
+        _,x0,y0 = self.blobwcs.radec2pixelxy(
+            np.array([src.getPosition().ra  for src in self.srcs]),
+            np.array([src.getPosition().dec for src in self.srcs]))
+        # blob-relative initial positions (zero-indexed)
+        B.x0 = (x0 - 1.).astype(np.float32)
+        B.y0 = (y0 - 1.).astype(np.float32)
+        B.safe_x0 = np.clip(np.round(x0-1).astype(int), 0, self.blobw-1)
+        B.safe_y0 = np.clip(np.round(y0-1).astype(int), 0, self.blobh-1)
+        B.started_in_blob = self.blobmask[B.safe_y0, B.safe_x0]
+        # This uses 'initial' pixel positions, because that's what determines
+        # the fitting behaviors.
+        return B
+
+    def finalize_table(self, B, bx0, by0):
+        _,x1,y1 = self.blobwcs.radec2pixelxy(
+            np.array([src.getPosition().ra  for src in B.sources]),
+            np.array([src.getPosition().dec for src in B.sources]))
+        B.finished_in_blob = self.blobmask[
+            np.clip(np.round(y1-1).astype(int), 0, self.blobh-1),
+            np.clip(np.round(x1-1).astype(int), 0, self.blobw-1)]
+        assert(len(B.finished_in_blob) == len(B))
+        assert(len(B.finished_in_blob) == len(B.started_in_blob))
+
+        # Setting values here (after .run() has completed) means that iterative sources
+        # (which get merged with the original table B) get values also.
+        B.blob_x0     = np.zeros(len(B), np.int16) + bx0
+        B.blob_y0     = np.zeros(len(B), np.int16) + by0
+        B.blob_width  = np.zeros(len(B), np.int16) + self.blobw
+        B.blob_height = np.zeros(len(B), np.int16) + self.blobh
+        B.blob_npix   = np.zeros(len(B), np.int32) + np.sum(self.blobmask)
+        B.blob_nimages= np.zeros(len(B), np.int16) + len(self.tims)
+        B.blob_totalpix = np.zeros(len(B), np.int32) + self.total_pix
+        B.cpu_arch = np.zeros(len(B), dtype='U3')
+        B.cpu_arch[:] = get_cpu_arch()
+        # Convert to whole-brick (zero-indexed) pixel positions.
+        # (do this here rather than above to ease handling iterative detections)
+        B.x0 += bx0
+        B.y0 += by0
+        # these are now in brick coords... rename for consistency in runbrick.py
+        B.rename('x0', 'bx0')
+        B.rename('y0', 'by0')
+
     def run(self, B, reoptimize=False, iterative_detection=True,
             compute_metrics=True):
         # The overall steps here are:
@@ -257,6 +262,10 @@ class OneBlob(object):
         # - compute segmentation map
         # - model selection (including iterative detection)
         # - metrics
+
+        print('OneBlob run starting: srcs', self.srcs)
+        for src in self.srcs:
+            print('OneBlob  ', src.getParams())
 
         trun = tlast = Time()
         # Not quite so many plots...
@@ -404,7 +413,7 @@ class OneBlob(object):
 
         self.compute_segmentation_map()
 
-        # Next, model selections: point source vs dev/exp vs ser.
+        # Next, model selections: point source vs rex vs dev/exp vs ser.
         B = self.run_model_selection(cat, Ibright, B,
                                      iterative_detection=iterative_detection)
 
@@ -1489,19 +1498,24 @@ class OneBlob(object):
                 srctractor.thawParam('images')
 
             # First-round optimization (during model selection)
+            print('OneBlob before model selection:', newsrc)
             try:
                 R = srctractor.optimize_loop(**self.optargs)
-            except:
+            except Exception as e:
                 print('Exception fitting source in model selection.  src:', newsrc)
                 import traceback
                 traceback.print_exc()
+                raise(e)
                 continue
+            print('OneBlob after model selection:', newsrc)
             #print('Fit result:', newsrc)
             #print('Steps:', R['steps'])
             hit_limit = R.get('hit_limit', False)
             opt_steps = R.get('steps', -1)
             hit_ser_limit = False
             hit_r_limit = False
+            print('OneBlob steps:', opt_steps)
+            print('OneBlob hit limit:', hit_limit)
             if hit_limit:
                 debug('Source', newsrc, 'hit limit:')
                 if is_debug():
@@ -1935,45 +1949,45 @@ class OneBlob(object):
         plt.legend()
         self.ps.savefig()
 
-    def create_tims(self, timargs):
-        from legacypipe.bits import DQ_BITS
-        # In order to make multiprocessing easier, the one_blob method
-        # is passed all the ingredients to make local tractor Images
-        # rather than the Images themselves.  Here we build the
-        # 'tims'.
-        tims = []
-        for (img, inverr, dq, twcs, wcsobj, pcal, sky, subpsf, name,
-             band, sig1, imobj) in timargs:
-            # Mask out inverr for pixels that are not within the blob.
-            try:
-                Yo,Xo,Yi,Xi,_ = resample_with_wcs(wcsobj, self.blobwcs,
-                                                  intType=np.int16)
-            except OverlapError:
-                continue
-            if len(Yo) == 0:
-                continue
-            inverr2 = np.zeros_like(inverr)
-            I = np.flatnonzero(self.blobmask[Yi,Xi])
-            inverr2[Yo[I],Xo[I]] = inverr[Yo[I],Xo[I]]
-            inverr = inverr2
+def create_tims(blobwcs, blobmask, timargs):
+    from legacypipe.bits import DQ_BITS
+    # In order to make multiprocessing easier, the one_blob method
+    # is passed all the ingredients to make local tractor Images
+    # rather than the Images themselves.  Here we build the
+    # 'tims'.
+    tims = []
+    for (img, inverr, dq, twcs, wcsobj, pcal, sky, subpsf, name,
+         band, sig1, imobj) in timargs:
+        # Mask out inverr for pixels that are not within the blob.
+        try:
+            Yo,Xo,Yi,Xi,_ = resample_with_wcs(wcsobj, blobwcs,
+                                              intType=np.int16)
+        except OverlapError:
+            continue
+        if len(Yo) == 0:
+            continue
+        inverr2 = np.zeros_like(inverr)
+        I = np.flatnonzero(blobmask[Yi,Xi])
+        inverr2[Yo[I],Xo[I]] = inverr[Yo[I],Xo[I]]
+        inverr = inverr2
 
-            # If the subimage (blob) is small enough, instantiate a
-            # constant PSF model in the center.
-            h,w = img.shape
-            if h < 400 and w < 400:
-                subpsf = subpsf.constantPsfAt(w/2., h/2.)
+        # If the subimage (blob) is small enough, instantiate a
+        # constant PSF model in the center.
+        h,w = img.shape
+        if h < 400 and w < 400:
+            subpsf = subpsf.constantPsfAt(w/2., h/2.)
 
-            tim = Image(data=img, inverr=inverr, wcs=twcs,
-                        psf=subpsf, photocal=pcal, sky=sky, name=name)
-            tim.band = band
-            tim.sig1 = sig1
-            tim.subwcs = wcsobj
-            tim.meta = imobj
-            tim.psf_sigma = imobj.fwhm / 2.35
-            tim.dq = dq
-            tim.dq_saturation_bits = DQ_BITS['satur']
-            tims.append(tim)
-        return tims
+        tim = Image(data=img, inverr=inverr, wcs=twcs,
+                    psf=subpsf, photocal=pcal, sky=sky, name=name)
+        tim.band = band
+        tim.sig1 = sig1
+        tim.subwcs = wcsobj
+        tim.meta = imobj
+        tim.psf_sigma = imobj.fwhm / 2.35
+        tim.dq = dq
+        tim.dq_saturation_bits = DQ_BITS['satur']
+        tims.append(tim)
+    return tims
 
 def _set_kingdoms(segmap, radius, I, ix, iy):
     '''
@@ -2183,6 +2197,7 @@ def _compute_source_metrics(srcs, tims, bands, tr):
 
 def _initialize_models(src):
     from legacypipe.survey import LogRadius
+    psf = None
     if isinstance(src, PointSource):
         psf = src.copy()
         rex = RexGalaxy(src.getPosition(), src.getBrightness(),
