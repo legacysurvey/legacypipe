@@ -254,7 +254,7 @@ def psf_zeropoint_cuts(P, pixscale,
         ('sky_is_bright', skybr),
         ('zpt_diff_avg', np.abs(P.ccdzpt - P.zpt) > zpt_diff_avg),
         ('phrms_s7', (P.ccdphrms > 0.1) & (ccdname == 'S7')),
-        ('plver', ~plver),
+        ('plver', ~plver_ok),
     ]
 
     if camera == 'mosaic':
