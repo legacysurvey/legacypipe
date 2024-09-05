@@ -24,6 +24,8 @@ jobs:
               export LEGACYPIPE_TEST_DATA=$LPT
               export GAIA_CAT_DIR=$LPT/gaia-dr2
               export GAIA_CAT_VER=2
+              export GAIA_CAT_SCHEME=ring
+              export GAIA_CAT_PREFIX=chunk
               export PS1CAT_DIR=$LPT/ps1-qz-star-v3
               export TYCHO2_KD_DIR=$LPT
               python3.6 test/legacyzpts_test.py
@@ -48,6 +50,8 @@ jobs:
               export LEGACYPIPE_TEST_DATA=$LPT
               export GAIA_CAT_DIR=$LPT/gaia-dr2
               export GAIA_CAT_VER=2
+              export GAIA_CAT_SCHEME=ring
+              export GAIA_CAT_PREFIX=chunk
               export PS1CAT_DIR=$LPT/ps1-qz-star-v3
               export TYCHO2_KD_DIR=$LPT
               coverage run --concurrency=multiprocessing -a test/legacyzpts_test.py
@@ -83,6 +87,8 @@ jobs:
               export LEGACYPIPE_TEST_DATA=$LPT
               export GAIA_CAT_DIR=$LPT/gaia-dr2
               export GAIA_CAT_VER=2
+              export GAIA_CAT_SCHEME=ring
+              export GAIA_CAT_PREFIX=chunk
               export PS1CAT_DIR=$LPT/ps1-qz-star-v3
               export TYCHO2_KD_DIR=$LPT
               python3.8 test/legacyzpts_test.py
@@ -111,6 +117,8 @@ jobs:
               export LEGACYPIPE_TEST_DATA=$LPT
               export GAIA_CAT_DIR=$LPT/gaia-dr2
               export GAIA_CAT_VER=2
+              export GAIA_CAT_SCHEME=ring
+              export GAIA_CAT_PREFIX=chunk
               export PS1CAT_DIR=$LPT/ps1-qz-star-v3
               export TYCHO2_KD_DIR=$LPT
               python3.8 test/legacyzpts_test.py
@@ -139,6 +147,8 @@ jobs:
               export LEGACYPIPE_TEST_DATA=$LPT
               export GAIA_CAT_DIR=$LPT/gaia-dr2
               export GAIA_CAT_VER=2
+              export GAIA_CAT_SCHEME=ring
+              export GAIA_CAT_PREFIX=chunk
               export PS1CAT_DIR=$LPT/ps1-qz-star-v3
               export TYCHO2_KD_DIR=$LPT
               python3.9 test/legacyzpts_test.py
@@ -167,6 +177,8 @@ jobs:
               export LEGACYPIPE_TEST_DATA=$LPT
               export GAIA_CAT_DIR=$LPT/gaia-dr2
               export GAIA_CAT_VER=2
+              export GAIA_CAT_SCHEME=ring
+              export GAIA_CAT_PREFIX=chunk
               export PS1CAT_DIR=$LPT/ps1-qz-star-v3
               export TYCHO2_KD_DIR=$LPT
               python3.10 test/legacyzpts_test.py
@@ -195,6 +207,8 @@ jobs:
               export LEGACYPIPE_TEST_DATA=$LPT
               export GAIA_CAT_DIR=$LPT/gaia-dr2
               export GAIA_CAT_VER=2
+              export GAIA_CAT_SCHEME=ring
+              export GAIA_CAT_PREFIX=chunk
               export PS1CAT_DIR=$LPT/ps1-qz-star-v3
               export TYCHO2_KD_DIR=$LPT
               python3.11 test/legacyzpts_test.py

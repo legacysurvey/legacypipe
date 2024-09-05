@@ -165,6 +165,8 @@ def rbmain():
     os.environ['TYCHO2_KD_DIR'] = surveydir
     os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
     os.environ['GAIA_CAT_VER'] = '2'
+    os.environ['GAIA_CAT_PREFIX'] = 'chunk'
+    os.environ['GAIA_CAT_SCHEME'] = 'ring'
     os.environ['UNWISE_MODEL_SKY_DIR'] = os.path.join(surveydir, 'images', 'unwise-mod')
     #python legacypipe/runbrick.py --radec  --width 100 --height 100 --outdir dup5b --survey-dir test/testcase12 --force-all --no-wise
     unwdir = os.path.join(surveydir, 'images', 'unwise')
