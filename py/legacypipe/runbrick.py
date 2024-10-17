@@ -1103,6 +1103,7 @@ def stage_fitblobs(T=None,
                    bailout=False,
                    record_event=None,
                    custom_brick=False,
+                   use_gpu=False,
                    **kwargs):
     '''
     This is where the actual source fitting happens.
@@ -1278,7 +1279,8 @@ def stage_fitblobs(T=None,
                           single_thread=(mp is None or mp.pool is None),
                           max_blobsize=max_blobsize, custom_brick=custom_brick,
                           enable_sub_blobs=sub_blobs,
-                          ran_sub_blobs=ran_sub_blobs)
+                          ran_sub_blobs=ran_sub_blobs,
+                          use_gpu=use_gpu)
 
     if checkpoint_filename is None:
         R.extend(mp.map(_bounce_one_blob, blobiter))
@@ -1743,7 +1745,8 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                brick, frozen_galaxies, single_thread=False,
                skipblobs=None, max_blobsize=None, custom_brick=False,
                enable_sub_blobs=False,
-               ran_sub_blobs=None):
+               ran_sub_blobs=None,
+               use_gpu=False):
     '''
     *blobmap*: integer image map, with -1 indicating no-blob, other values indexing
         into *blobslices*,*blobsrcs*.
@@ -1907,7 +1910,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                     blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
                     reoptimize, iterative, use_ceres, refmap[bslc],
                     large_galaxies_force_pointsource, less_masking,
-                    frozen_galaxies.get(iblob, [])))
+                    frozen_galaxies.get(iblob, []), use_gpu))
             continue
 
         # Sub-blob.
@@ -1974,7 +1977,8 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                         subtimargs, [cat[i] for i in Isubsrcs], bands,
                         plots, ps,
                         reoptimize, iterative, use_ceres, refmap[sub_slc],
-                        large_galaxies_force_pointsource, less_masking, fro_gals))
+                        large_galaxies_force_pointsource, less_masking, fro_gals,
+                        use_gpu))
 
 def _bounce_one_blob(X):
     '''This wraps the one_blob function for multiprocessing purposes (and
@@ -3402,6 +3406,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               min_mjd=None, max_mjd=None,
               unwise_coadds=True,
               bail_out=False,
+              use_gpu=False,
               ceres=True,
               wise_ceres=True,
               galex_ceres=True,
@@ -3662,6 +3667,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   use_ceres=ceres,
                   wise_ceres=wise_ceres,
                   galex_ceres=galex_ceres,
+                  use_gpu=use_gpu,
                   unwise_coadds=unwise_coadds,
                   bailout=bail_out,
                   minimal_coadds=minimal_coadds,
@@ -3957,6 +3963,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='Base filename for plots, default brick-BRICK')
     parser.add_argument('--plot-number', type=int, default=0,
                         help='Set PlotSequence starting number')
+
+    parser.add_argument('--use-gpu', default=False, action='store_true')
 
     parser.add_argument('--ceres', default=False, action='store_true',
                         help='Use Ceres Solver for all optimization?')

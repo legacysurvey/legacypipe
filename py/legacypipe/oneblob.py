@@ -43,7 +43,7 @@ def one_blob(X):
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
      srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap,
-     large_galaxies_force_pointsource, less_masking, frozen_galaxies) = X
+     large_galaxies_force_pointsource, less_masking, frozen_galaxies, use_gpu) = X
 
     debug('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
           (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
