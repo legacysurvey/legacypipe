@@ -49,7 +49,6 @@ CCD_CUTS = dict(
     plver = 0x80000,
 )
 
-
 FITBITS = dict(
     FORCED_POINTSOURCE = 0x1,
     FIT_BACKGROUND     = 0x2,

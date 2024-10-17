@@ -115,9 +115,6 @@ class OneBlob(object):
         self.optargs = dict(priors=True, shared_params=False, alphas=alphas,
                             print_progress=True)
         self.blobh,self.blobw = blobmask.shape
-        self.bigblob = (self.blobw * self.blobh) > 100*100
-        if self.bigblob:
-            debug('Big blob:', name)
         self.trargs = dict()
         self.frozen_galaxy_mods = []
 
@@ -989,43 +986,12 @@ class OneBlob(object):
 
     def model_selection_one_source(self, src, srci, models, B):
 
-        if self.bigblob:
-            mods = [mod[srci] for mod in models.models]
-            srctims,modelMasks = _get_subimages(self.tims, mods, src)
-
-            # Create a little local WCS subregion for this source, by
-            # resampling non-zero inverrs from the srctims into blobwcs
-            insrc = np.zeros((self.blobh,self.blobw), bool)
-            for tim in srctims:
-                try:
-                    Yo,Xo,Yi,Xi,_ = resample_with_wcs(
-                        self.blobwcs, tim.subwcs, intType=np.int16)
-                except OverlapError:
-                    continue
-                insrc[Yo,Xo] |= (tim.inverr[Yi,Xi] > 0)
-
-            if np.sum(insrc) == 0:
-                # No source pixels touching blob... this can
-                # happen when a source scatters outside the blob
-                # in the fitting stage.  Drop the source here.
-                return None
-
-            yin = np.max(insrc, axis=1)
-            xin = np.max(insrc, axis=0)
-            yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
-            xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
-            del insrc
-
-            srcwcs = self.blobwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
-            srcwcs_x0y0 = (xl, yl)
-            # A mask for which pixels in the 'srcwcs' square are occupied.
-            srcblobmask = self.blobmask[yl:yh+1, xl:xh+1]
-        else:
-            modelMasks = models.model_masks(srci, src)
-            srctims = self.tims
-            srcwcs = self.blobwcs
-            srcwcs_x0y0 = (0, 0)
-            srcblobmask = self.blobmask
+        # FIXME -- don't need these aliased variable names any more
+        modelMasks = models.model_masks(srci, src)
+        srctims = self.tims
+        srcwcs = self.blobwcs
+        srcwcs_x0y0 = (0, 0)
+        srcblobmask = self.blobmask
 
         if self.plots_per_source:
             # This is a handy blob-coordinates plot of the data
@@ -1298,15 +1264,6 @@ class OneBlob(object):
             #     plt.title(tim.name)
             # plt.suptitle('Model Masks')
             # self.ps.savefig()
-
-        if self.bigblob and self.plots_per_source:
-            # This is a local source-WCS plot of the data going into the
-            # fit.
-            plt.clf()
-            coimgs,_ = quick_coadds(srctims, self.bands, srcwcs, fill_holes=False)
-            dimshow(get_rgb(coimgs, self.bands))
-            plt.title('Model selection: stage1 data (srcwcs)')
-            self.ps.savefig()
 
         srctractor = self.tractor(srctims, [src])
         srctractor.setModelMasks(modelMasks)
@@ -1617,7 +1574,6 @@ class OneBlob(object):
                 tim.inverr = ie
 
         # After model selection, revert the sky
-        # (srctims=tims when not bigblob)
         if fit_background:
             srctractor.images.setParams(skyparams)
 
@@ -1760,41 +1716,9 @@ class OneBlob(object):
                 src.pos.lowers = [ra - maxmove/cosdec, dec - maxmove]
                 src.pos.uppers = [ra + maxmove/cosdec, dec + maxmove]
 
-            if self.bigblob:
-                # Create super-local sub-sub-tims around this source
-                # Make the subimages the same size as the modelMasks.
-                mods = [mod[srci] for mod in models.models]
-                srctims,modelMasks = _get_subimages(self.tims, mods, src)
-                # We plots only the first & last three sources
-                if self.plots_per_source and (numi < 3 or numi >= len(Ibright)-3):
-                    import pylab as plt
-                    plt.clf()
-                    # Recompute coadds because of the subtract-all-and-readd shuffle
-                    coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
-                                                 fill_holes=False)
-                    rgb = get_rgb(coimgs, self.bands)
-                    dimshow(rgb)
-                    ax = plt.axis()
-                    for tim in srctims:
-                        h,w = tim.shape
-                        tx,ty = [0,0,w,w,0], [0,h,h,0,0]
-                        rd = [tim.getWcs().pixelToPosition(xi,yi)
-                              for xi,yi in zip(tx,ty)]
-                        ra  = [p.ra  for p in rd]
-                        dec = [p.dec for p in rd]
-                        _,x,y = self.blobwcs.radec2pixelxy(ra, dec)
-                        plt.plot(x, y, 'b-')
-                        ra,dec = tim.subwcs.pixelxy2radec(tx, ty)
-                        _,x,y = self.blobwcs.radec2pixelxy(ra, dec)
-                        plt.plot(x, y, 'c-')
-                    plt.title('source %i of %i' % (numi, len(Ibright)))
-                    plt.axis(ax)
-                    self.ps.savefig()
-
-            else:
-                srctims = self.tims
-                modelMasks = models.model_masks(srci, src)
-
+            # FIXME -- do we need to create this local 'srctrcator' any more?
+            srctims = self.tims
+            modelMasks = models.model_masks(srci, src)
             srctractor = self.tractor(srctims, [src])
             srctractor.setModelMasks(modelMasks)
 
@@ -2195,7 +2119,6 @@ def _initialize_models(src):
 def _get_subimages(tims, mods, src):
     subtims = []
     modelMasks = []
-    #print('Big blob: trimming:')
     for tim,mod in zip(tims, mods):
         if mod is None:
             continue
