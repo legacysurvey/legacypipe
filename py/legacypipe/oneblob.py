@@ -17,6 +17,7 @@ from legacypipe.survey import (RexGalaxy,
 from legacypipe.bits import IN_BLOB
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
+from legacypipe.utils import get_cpu_arch
 
 rgbkwargs_resid = dict(resids=True)
 
@@ -33,39 +34,6 @@ def is_debug():
 
 # Determines the order of elements in the DCHISQ array.
 MODEL_NAMES = ['psf', 'rex', 'dev', 'exp', 'ser']
-
-# singleton
-cpu_arch = None
-def get_cpu_arch():
-    global cpu_arch
-    import os
-    if cpu_arch is not None:
-        return cpu_arch
-    family = None
-    model = None
-    modelname = None
-    if os.path.exists('/proc/cpuinfo'):
-        for line in open('/proc/cpuinfo').readlines():
-            words = [w.strip() for w in line.strip().split(':')]
-            if words[0] == 'cpu family' and family is None:
-                family = int(words[1])
-                #print('Set CPU family', family)
-            if words[0] == 'model' and model is None:
-                model = int(words[1])
-                #print('Set CPU model', model)
-            if words[0] == 'model name' and modelname is None:
-                modelname = words[1]
-                #print('CPU model', modelname)
-    codenames = {
-        # NERSC Cori machines
-        (6, 63): 'has',
-        (6, 87): 'knl',
-        # NERSC Perlmutter CPU partition (AMD EPYC 7763 64-Core Processor)
-        # (7713 on the head nodes)
-        (25, 1): 'prl',
-    }
-    cpu_arch = codenames.get((family, model), '')
-    return cpu_arch
 
 def one_blob(X):
     '''
