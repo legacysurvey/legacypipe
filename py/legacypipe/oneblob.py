@@ -76,6 +76,11 @@ def one_blob(X):
                  large_galaxies_force_pointsource,
                  less_masking, frozen_galaxies)
     B = ob.init_table(Isrcs)
+    if use_gpu:
+        # need a branch of the tractor code that supports this!
+        from tractor.factored_optimizer import GPUFriendlyOptimizer
+        opt = GPUFriendlyOptimizer()
+        ob.trargs.update(optimizer=opt)
     B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
     ob.finalize_table(B, bx0, by0)
 
