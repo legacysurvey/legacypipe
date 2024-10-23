@@ -233,9 +233,9 @@ class OneBlob(object):
         # - model selection (including iterative detection)
         # - metrics
 
-        print('OneBlob run starting: srcs', self.srcs)
-        for src in self.srcs:
-            print('OneBlob  ', src.getParams())
+        # print('OneBlob run starting: srcs', self.srcs)
+        # for src in self.srcs:
+        #     print('OneBlob  ', src.getParams())
 
         trun = tlast = Time()
         # Not quite so many plots...
@@ -1674,6 +1674,7 @@ class OneBlob(object):
         disable_galaxy_cache()
 
     def tractor(self, tims, cat):
+        print('Creating Tractor: args', self.trargs)
         tr = Tractor(tims, cat, **self.trargs)
         tr.freezeParams('images')
         return tr
@@ -1764,13 +1765,14 @@ class OneBlob(object):
             # Images for this band
             btims = [tim for tim in tims if tim.band == b]
             btr = self.tractor(btims, fitcat)
-            try:
-                from tractor.ceres_optimizer import CeresOptimizer
-                ceres_block = 8
-                btr.optimizer = CeresOptimizer(BW=ceres_block, BH=ceres_block)
-            except ImportError:
-                from tractor.lsqr_optimizer import LsqrOptimizer
-                btr.optimizer = LsqrOptimizer()
+            if self.use_ceres:
+                try:
+                    from tractor.ceres_optimizer import CeresOptimizer
+                    ceres_block = 8
+                    btr.optimizer = CeresOptimizer(BW=ceres_block, BH=ceres_block)
+                except ImportError:
+                    from tractor.lsqr_optimizer import LsqrOptimizer
+                    btr.optimizer = LsqrOptimizer()
             btr.optimize_forced_photometry(shared_params=False, wantims=False)
         for src in fitcat:
             src.thawAllParams()

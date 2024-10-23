@@ -82,11 +82,11 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --checkpoint "${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle" \
      --checkpoint-period 120 \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
-     --write-stage srcs \
      --release 10099 \
-     --threads 32 \
       >> "$log" 2>&1
 
+#     --threads 32 \
+#     --write-stage srcs \
 #     --no-wise-ceres helps for very dense fields.
 
 # Save the return value from the python command -- otherwise we
