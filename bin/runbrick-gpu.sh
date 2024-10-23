@@ -69,7 +69,7 @@ echo "--------------------------------------------------------------------------
 echo -e "\nStarting on $(hostname)\n" >> "$log"
 echo "-----------------------------------------------------------------------------------------" >> "$log"
 
-python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
+python -u legacypipe/runbrick.py \
      --brick "$brick" \
      --use-gpu \
      --skip \
