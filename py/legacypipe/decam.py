@@ -38,8 +38,10 @@ class DecamImage(CPImage):
                 M464 = 23.43,
                 # IBIS - MADE UP
                 M437 = 23.21,
+                M438 = 23.21,
                 M490 = 23.43,
                 M516 = 23.43,
+                M517 = 23.43,
     )
 
     K_EXT = dict(g = 0.173,
@@ -60,9 +62,11 @@ class DecamImage(CPImage):
                  M411 = 0.333,
                  M464 = 0.230,
                  # IBIS - MADE UP
-                 M437 = 0.281
+                 M437 = 0.281,
+                 M438 = 0.281,
                  M490 = 0.230,
                  M516 = 0.230,
+                 M517 = 0.230,
     )
 
     '''A LegacySurveyImage (via CPImage) subclass to handle images from
