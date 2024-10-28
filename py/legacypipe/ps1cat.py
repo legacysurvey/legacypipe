@@ -78,7 +78,10 @@ class ps1cat(HealpixedCatalog):
                    N540=0,
                    # IBIS
                    M411=0,
+                   M437=0,
                    M464=0,
+                   M490=0,
+                   M516=0,
     )
     def __init__(self,expnum=None,ccdname=None,ccdwcs=None):
         """Read PS1 or gaia sources for an exposure number + CCD name or CCD WCS
@@ -232,7 +235,11 @@ def ps1_to_decam(psmags, band):
         # g-i:
         M411 = [0.,  0.1416,  0.9785, -0.3954],
         M464 = [0.,  0.3244, -0.5258,  0.3082, -0.0524],
-    )[band]
+        # FAKE - equal to M464
+        M437 = [0.,  0.3244, -0.5258,  0.3082, -0.0524],
+        M490 = [0.,  0.3244, -0.5258,  0.3082, -0.0524],
+        M516 = [0.,  0.3244, -0.5258,  0.3082, -0.0524],
+        )[band]
 
     # Most are with respect to g-i, some are g-r...
     color = gi

@@ -36,6 +36,10 @@ class DecamImage(CPImage):
                 # IBIS - from Arjun, 2024-06-07, LTT6248
                 M411 = 23.00,
                 M464 = 23.43,
+                # IBIS - MADE UP
+                M437 = 23.21,
+                M490 = 23.43,
+                M516 = 23.43,
     )
 
     K_EXT = dict(g = 0.173,
@@ -55,6 +59,10 @@ class DecamImage(CPImage):
                  # IBIS
                  M411 = 0.333,
                  M464 = 0.230,
+                 # IBIS - MADE UP
+                 M437 = 0.281
+                 M490 = 0.230,
+                 M516 = 0.230,
     )
 
     '''A LegacySurveyImage (via CPImage) subclass to handle images from
@@ -103,7 +111,7 @@ class DecamImage(CPImage):
         # g-i color range to keep
         if self.band == 'N419':
             return 0.4, 1.5
-        if self.band in ['M411', 'M464']:
+        if self.band in ['M411', 'M437', 'M464', 'M490', 'M516']:
             return 0.3, 1.5
         return super().get_ps1_calibrator_color_range()
 
