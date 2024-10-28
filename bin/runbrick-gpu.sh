@@ -83,6 +83,7 @@ python -u legacypipe/runbrick.py \
      --checkpoint-period 120 \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
      --release 10099 \
+     --no-wise \
       >> "$log" 2>&1
 
 #     --threads 32 \
