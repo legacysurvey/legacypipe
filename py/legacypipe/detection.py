@@ -144,11 +144,9 @@ def sed_matched_filters(bands):
         # Flat SED for IBIS
         iaflat = {
             'M411': 1.,
-            'M437': 1.,
             'M438': 1.,
             'M464': 1.,
             'M490': 1.,
-            'M516': 1.,
             'M517': 1.,
             }
         sed = np.array([iaflat.get(b,0.) for b in bands])

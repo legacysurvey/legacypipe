@@ -37,10 +37,8 @@ class DecamImage(CPImage):
                 M411 = 23.00,
                 M464 = 23.43,
                 # IBIS - MADE UP
-                M437 = 23.21,
                 M438 = 23.21,
                 M490 = 23.43,
-                M516 = 23.43,
                 M517 = 23.43,
     )
 
@@ -115,7 +113,7 @@ class DecamImage(CPImage):
         # g-i color range to keep
         if self.band == 'N419':
             return 0.4, 1.5
-        if self.band in ['M411', 'M437', 'M438', 'M464', 'M490', 'M516', 'M517']:
+        if self.band in ['M411', 'M438', 'M464', 'M490', 'M517']:
             return 0.3, 1.5
         return super().get_ps1_calibrator_color_range()
 
