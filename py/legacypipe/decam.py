@@ -56,15 +56,12 @@ class DecamImage(CPImage):
                  N673 = 0.090,
                  # Merian
                  N540 = 0.173,
-                 # IBIS
+                 # IBIS - from Arjun 2024-10-29
                  M411 = 0.333,
-                 M464 = 0.230,
-                 # IBIS - MADE UP
-                 M437 = 0.281,
-                 M438 = 0.281,
-                 M490 = 0.230,
-                 M516 = 0.230,
-                 M517 = 0.230,
+                 M438 = 0.273,
+                 M464 = 0.223,
+                 M490 = 0.197,
+                 M517 = 0.174,
     )
 
     '''A LegacySurveyImage (via CPImage) subclass to handle images from
