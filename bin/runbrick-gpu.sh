@@ -86,6 +86,7 @@ python -u legacypipe/runbrick.py \
      --no-wise \
       >> "$log" 2>&1
 
+#     --plots \
 #     --threads 32 \
 #     --write-stage srcs \
 #     --no-wise-ceres helps for very dense fields.
