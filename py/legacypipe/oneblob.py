@@ -1674,7 +1674,7 @@ class OneBlob(object):
         disable_galaxy_cache()
 
     def tractor(self, tims, cat):
-        print('Creating Tractor: args', self.trargs)
+        #print('Creating Tractor: args', self.trargs)
         tr = Tractor(tims, cat, **self.trargs)
         tr.freezeParams('images')
         return tr

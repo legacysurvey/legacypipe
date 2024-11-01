@@ -418,7 +418,6 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, gale
     import photutils
     import tractor
     import scipy
-    import unwise_psf
 
     depvers = []
     headers = []
@@ -436,8 +435,14 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, gale
         ('photutils', photutils),
         ('scipy', scipy),
         ('tractor', tractor),
-        ('unwise_psf', unwise_psf),
     ])
+    try:
+        import unwise_psf
+        pkgs.append(
+            ('unwise_psf', unwise_psf))
+    except ImportError:
+        print('Warning: failed to load package unwise_psf to get version string')
+
     for name,pkg in pkgs:
         if pkg is None:
             depvers.append((name, 'none'))

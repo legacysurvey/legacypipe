@@ -69,10 +69,13 @@ echo "--------------------------------------------------------------------------
 echo -e "\nStarting on $(hostname)\n" >> "$log"
 echo "-----------------------------------------------------------------------------------------" >> "$log"
 
+echo "Running:"
+echo "python -u legacypipe/runbrick.py --brick "$brick" --zoom 0 200 0 200 --use-gpu --skip --skip-calibs --bands g,r,i,z --rgb-stretch 1.5 --nsatur 2 --survey-dir $LEGACY_SURVEY_DIR --outdir $outdir --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle --checkpoint-period 120 --pickle \'${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle\' --release 10099 --no-wise"
+
 python -u legacypipe/runbrick.py \
      --brick "$brick" \
+     --zoom 100 300 100 300 \
      --use-gpu \
-     --skip \
      --skip-calibs \
      --bands g,r,i,z \
      --rgb-stretch 1.5 \
