@@ -5,8 +5,8 @@
 export COSMO=/global/cfs/cdirs/cosmo
 export COSMO_RO=/dvs_ro/cfs/cdirs/cosmo
 
-#export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
-export LEGACY_SURVEY_DIR=$SCRATCH/dr11
+export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
+#export LEGACY_SURVEY_DIR=$SCRATCH/dr11
 
 #export LEGACYPIPE_DIR=/global/homes/d/dstn/legacypipe/py
 
@@ -94,12 +94,12 @@ echo "Logging to $log"
 
 # TURN OFF -u for production!
 
-python -u -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
+python -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
 	--camera ${camera} \
     --survey-dir ${LEGACY_SURVEY_DIR} \
     --image ${image_fn} \
     --outdir ${outdir} \
-    --threads 8 \
+    --threads 32 \
     >> "$log" 2>&1
 
 
