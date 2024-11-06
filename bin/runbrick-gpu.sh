@@ -72,6 +72,8 @@ echo "--------------------------------------------------------------------------
 echo "Running:"
 echo "python -u legacypipe/runbrick.py --brick "$brick" --zoom 0 200 0 200 --use-gpu --skip --skip-calibs --bands g,r,i,z --rgb-stretch 1.5 --nsatur 2 --survey-dir $LEGACY_SURVEY_DIR --outdir $outdir --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle --checkpoint-period 120 --pickle \'${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle\' --release 10099 --no-wise"
 
+python -c "from photutils.aperture import CircularAperture, aperture_photometry"
+
 python -u legacypipe/runbrick.py \
      --brick "$brick" \
      --zoom 100 300 100 300 \
@@ -82,12 +84,14 @@ python -u legacypipe/runbrick.py \
      --nsatur 2 \
      --survey-dir "$LEGACY_SURVEY_DIR" \
      --outdir "$outdir" \
-     --checkpoint "${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle" \
-     --checkpoint-period 120 \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
+     --write-stage srcs \
      --release 10099 \
      --no-wise \
       >> "$log" 2>&1
+
+#     --checkpoint "${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle" \
+#     --checkpoint-period 120 \
 
 #     --plots \
 #     --threads 32 \

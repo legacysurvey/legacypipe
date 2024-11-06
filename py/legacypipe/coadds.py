@@ -6,6 +6,10 @@ from legacypipe.bits import DQ_BITS
 from legacypipe.survey import tim_get_resamp
 from legacypipe.utils import copy_header_with_wcs
 
+# was seeing super weird import errors (parsing the CITATION string, non-ascii characters),
+# try importing earlier...???
+from photutils.aperture import CircularAperture, aperture_photometry
+
 import logging
 logger = logging.getLogger('legacypipe.coadds')
 def info(*args):
