@@ -1032,8 +1032,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
         name = 'ps1'
 
     if phot is not None:
-        phot.cut(imobj.get_photometric_calibrator_cuts(name, phot))
-        if len(phot) == 0:
+        phot.use_for_photometry = imobj.get_photometric_calibrator_cuts(name, phot)
+        if len(phot) == 0 or np.sum(phot.use_for_photometry) == 0:
             phot = None
         else:
             # Convert to Legacy Survey mags
@@ -1056,7 +1056,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
 
     maxphot = 1000
     if phot is not None and len(phot) > maxphot:
-        I = np.argsort(phot.legacy_survey_mag)
+        # (use_for_photometry first; brightest to faintest)
+        I = np.argsort(phot.legacy_survey_mag + 100 * ~phot.use_for_photometry)
         phot.cut(I[:maxphot])
         print('Cut to', len(phot), 'photometric calibrator stars with mag in range %.2f to %.2f' %
               (phot.legacy_survey_mag[0], phot.legacy_survey_mag[-1]))
@@ -1104,7 +1105,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
         magerr = np.abs(2.5/np.log(10.) * 1./np.fmax(1., sn))
         gaia.set('phot_%s_mean_mag_error' % b, magerr)
     gaia.flux0 = np.ones(len(gaia), np.float32)
-    # we set 'astrom' and omit 'photom'; it will get filled in with zeros.
+    # we set 'astrom' and omit 'use_for_photometry'; it will get filled in with zeros.
     gaia.astrom = np.ones(len(gaia), bool)
 
     refs = [gaia]
@@ -1163,9 +1164,6 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
                 ('ps1_y', np.float32),
             ]
 
-        # we set 'photom' and omit 'astrom'; it will get filled in with zeros.
-        phot.photom = np.ones (len(phot), bool)
-
         # Match photometric stars to Gaia stars within 1".
         I,J,_ = match_radec(gaia.ra_gaia, gaia.dec_gaia,
                             phot.ra_phot, phot.dec_phot, 1./3600.,
@@ -1178,7 +1176,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
             for c in gaia.get_columns():
                 G = gaia.get(c)
                 # If column exists in both (eg, ra_now, dec_now), override
-                # the PHOT value with the Gaia value; except for "photom".
+                # the PHOT value with the Gaia value
                 if c in phot.get_columns():
                     X = phot.get(c)
                 else:
@@ -1218,7 +1216,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
              ('legacy_survey_mag', np.float32),
              ('psfmag', np.float32),
              ('astrom', bool),
-             ('photom', bool),
+             ('use_for_photometry', bool),
             ])
 
     refcols = refs.get_columns()
@@ -1540,7 +1538,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
 
     dmag = refs.legacy_survey_mag - phot.instpsfmag
     maglo, maghi = imobj.get_photocal_mag_limits()
-    kept = (refs.photom &
+    kept = (refs.use_for_photometry &
             (refs.legacy_survey_mag > maglo) &
             (refs.legacy_survey_mag < maghi) &
             np.isfinite(dmag))
