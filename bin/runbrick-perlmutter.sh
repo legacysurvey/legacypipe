@@ -74,10 +74,11 @@ echo -e "\nStarting on $(hostname)\n" >> "$log"
 echo "-----------------------------------------------------------------------------------------" >> "$log"
 
 python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
+       --zoom 100 300 100 300 \
      --brick "$brick" \
      --skip \
      --skip-calibs \
-     --bands g,r,z \
+     --bands g,r,i,z \
      --rgb-stretch 1.5 \
      --nsatur 2 \
      --survey-dir "$LEGACY_SURVEY_DIR" \
@@ -86,11 +87,11 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --checkpoint-period 120 \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
      --write-stage srcs \
-     --stage image_coadds \
      --release 10011 \
      --threads 32 \
       >> "$log" 2>&1
 
+#     --stage image_coadds \
 #     --bands g,r,i,z \
 #    --cache-dir "$CACHE_DIR" \
 
