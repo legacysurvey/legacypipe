@@ -1146,6 +1146,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
             phot.ra_phot = phot.ra_ps1
             phot.dec_phot = phot.dec_ps1
             phot.ps1_objid  = phot.obj_id
+            phot.ps1_mags_ok = ((phot.nmag_ok[:,0] > 0) * (phot.nmag_ok[:,1] > 0) * (phot.nmag_ok[:,2] > 0))
             bands = 'grizY'
             for band in bands:
                 i = ps1cat.ps1band.get(band, None)
@@ -1162,6 +1163,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
                 ('ps1_i', np.float32),
                 ('ps1_z', np.float32),
                 ('ps1_y', np.float32),
+                ('ps1_mags_ok', bool),
             ]
 
         # Match photometric stars to Gaia stars within 1".
