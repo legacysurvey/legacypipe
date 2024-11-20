@@ -18,6 +18,8 @@ def main():
     parser.add_argument('--ccds', help='Use this table of CCDs')
     parser.add_argument('--wcs', help='File containing a WCS header describing the coadd WCS to render.')
     parser.add_argument('--wcs-ext', type=int, help='FITS file extension containing a WCS header describing the coadd WCS to render.', default=0)
+    parser.add_argument('--zoom', type=int, nargs=4,
+                        help='Set target image extent (X0, Y0, Width, Height)')
     parser.add_argument('--outlier-mask-brick', help='Comma-separated list of bricknames from which outlier masks should be read.')
     parser.add_argument('--out', help='Filename pattern ("BAND" will be replaced by band name) of output images.')
     parser.add_argument('--resid', help='Filename pattern ("BAND" will be replaced by band name) of residual images.')
@@ -25,20 +27,29 @@ def main():
     parser.add_argument('--resid-jpeg', help='Write RGB residual image to this filename')
     opt = parser.parse_args()
 
-    if opt.catalog is None:
-        print('Need catalog!')
-        return -1
-    cat = fits_table(opt.catalog)
-    
-
     survey = LegacySurveyData()
 
     if opt.wcs is None:
-        print('FIXME')
-        return -1
+        if opt.brickname is None:
+            print('FIXME')
+            return -1
+        brick = survey.get_brick_by_name(opt.brickname)
+        wcs = wcs_for_brick(brick)
     else:
         wcs = Tan(opt.wcs, opt.wcs_ext)
+
+    if opt.zoom is not None:
+        (x0,y0,w,h) = opt.zoom
+         wcs = wcs.get_subimage(x0, y0, w, h)
         
+    if opt.catalog is None:
+        if opt.brickname is None:
+            print('Need catalog!')
+            return -1
+        else:
+            opt.catalog = survey.find_file('tractor', brick=opt.brickname)
+    cat = fits_table(opt.catalog)
+
     tcat = read_fits_catalog(cat)
 
     ccds = None
@@ -73,7 +84,6 @@ def main():
             ok = read_outlier_mask_file(survey, tims, b,
                                         subimage=True, output=False)
 
-        
     tr = Tractor(tims, tcat)
     mods = list(tr.getModelImages())
 
@@ -104,7 +114,6 @@ def main():
                    get_rgb([im-mod for im,mod in zip(C.coimgs, C.comods)], bands),
                    origin='lower')
 
-        
 if __name__ == '__main__':
     main()
-    
+
