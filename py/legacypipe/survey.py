@@ -646,6 +646,33 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
             if bf != 0.:
                 rgb[:,:,2] += bf*v
 
+    elif bands == ['M411', 'M438', 'M464', 'M490', 'M517']:
+        print('sdss_rgb: IBIS 5-band color scheme')
+
+        rgbvec = {
+            'M411': (0.0, 0.0, 0.6),
+            'M438': (0.0, 0.2, 0.4),
+            'M464': (0.0, 0.6, 0.0),
+            'M490': (0.4, 0.2, 0.0),
+            'M517': (0.6, 0.0, 0.0),
+        }
+        for img,band in zip(imgs, bands):
+            _,scale = rgbscales[band]
+            rf,gf,bf = rgbvec[band]
+            if mnmx is None:
+                v = (img * scale + m) * I
+            else:
+                mn,mx = mnmx
+                v = ((img * scale + m) - mn) / (mx - mn)
+            if clip:
+                v = np.clip(v, 0, 1)
+            if rf != 0.:
+                rgb[:,:,0] += rf*v
+            if gf != 0.:
+                rgb[:,:,1] += gf*v
+            if bf != 0.:
+                rgb[:,:,2] += bf*v
+
     else:
         for img,band in zip(imgs, bands):
             plane,scale = rgbscales[band]
@@ -726,6 +753,9 @@ def get_rgb(imgs, bands, allbands=['g','r','z'],
         bands[2] == 'I-A-L484' and
         bands[3] == 'I-A-L505' and
         bands[4] == 'I-A-L527'):
+        return sdss_rgb(imgs, bands)
+
+    if len(bands) == 5 and bands == ['M411', 'M438', 'M464', 'M490', 'M517']:
         return sdss_rgb(imgs, bands)
 
     if len(bands) == 5:
