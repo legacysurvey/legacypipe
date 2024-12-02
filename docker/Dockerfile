@@ -105,8 +105,8 @@ RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
 # The Tractor
 RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && git checkout dr10.4 \
     && pip install --install-option="--with-ceres" --install-option="--with-cython" -v .
+#    && git checkout dr10.4 \
 
 # unwise_psf
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \
@@ -167,11 +167,30 @@ RUN python -O -m compileall \
     /src/legacypipe/py/legacypipe \
     /src/legacypipe/py/legacyzpts
 
+# ugh gross
+RUN ln -s /usr/bin/source-extractor /usr/bin/sex
+
 # update legacypipe
-RUN cd /src/legacypipe && git pull \
-    && git checkout DR10.3 && \
+RUN cd /src/legacypipe && git pull && \
+  git checkout main && git pull && git describe && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
-# ugh
-RUN ln -s /usr/bin/source-extractor /usr/bin/sex
+RUN apt remove -y scamp && \
+    apt install -y autoconf libtool libfftw3-dev libatlas-base-dev libcurl4-openssl-dev && \
+    apt clean
+
+RUN git clone https://github.com/dstndstn/scamp.git && \
+    cd scamp && \
+    git checkout add-extname && \
+    ./autogen.sh && \
+    ./configure && \
+    make && \
+    make install && \
+    make clean
+
+# update legacypipe
+RUN cd /src/legacypipe && git pull && \
+  git checkout DR10.3.2 && git describe && \
+  python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
+  python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
