@@ -194,3 +194,13 @@ RUN cd /src/legacypipe && git pull && \
   git checkout DR10.3.2 && git describe && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
+
+RUN apt install -y valgrind
+
+ENV ARCH_FLAGS=-march=x86-64-v3
+
+#git checkout 0.96 && \
+# Astrometry.net - rebuild with generic optimization (deploying on AMD...)
+RUN cd astrometry && git checkout main && git pull && \
+    make clean && make && make py && make install INSTALL_DIR=/usr/local
+
