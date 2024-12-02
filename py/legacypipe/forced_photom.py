@@ -839,9 +839,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     F.y = y + tim.y0
 
     program_name = sys.argv[0]
-    ## FIXME -- from catalog?
-    release = 9999
-    version_hdr = get_version_header(program_name, surveydir, release)
+    version_hdr = get_version_header(program_name, surveydir, None)
     filename = getattr(ccd, 'image_filename')
     if filename is None:
         # HACK -- print only two directory names + filename of CPFILE.

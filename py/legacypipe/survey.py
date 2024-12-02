@@ -388,8 +388,9 @@ def get_version_header(program_name, survey_dir, release, git_version=None,
     # Requested by NOAO
     hdr.add_record(dict(name='SURVEYID', value='DECaLS BASS MzLS',
                         comment='Survey names'))
-    hdr.add_record(dict(name='DRVERSIO', value=release,
-                        comment='LegacySurveys Data Release number'))
+    if release is not None:
+        hdr.add_record(dict(name='DRVERSIO', value=release,
+                            comment='LegacySurveys Data Release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
                         comment='Observation type'))
     hdr.add_record(dict(name='PROCTYPE', value=proctype,
@@ -411,10 +412,6 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, gale
     import astropy
     if mpl:
         import matplotlib
-    try:
-        import mkl_fft
-    except ImportError:
-        mkl_fft = None
     import photutils
     import tractor
     import scipy
@@ -431,7 +428,6 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, gale
     if mpl:
         pkgs.append(('matplotlib', matplotlib))
     pkgs.extend([
-        ('mkl_fft', mkl_fft),
         ('numpy', np),
         ('photutils', photutils),
         ('scipy', scipy),

@@ -215,11 +215,52 @@ def main():
         print('No photometry results to write.')
         return 0
     # Keep only the first header
-    _,version_hdr,_,_ = FF[0]
-    version_hdr.delete('CPHDU')
-    version_hdr.delete('CCDNAME')
+    _,hdr,_,_ = FF[0]
+    # Drop header cards that are about an individual image
+    for key in ['CPHDU', 'CCDNAME', 'CPFILE', 'CAMERA', 'EXPNUM', 'FILTER',
+                'PLVER', 'PLPROCID', 'PROCDATE', 'TELESCOP', 'OBSERVAT',
+                'OBS-LAT', 'OBS-LONG', 'OBS-ELEV', 'INSTRUME']:
+        hdr.delete(key)
 
-    # unpack results
+    from legacypipe.survey import (
+        get_git_version, get_version_header, get_dependency_versions)
+    from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
+    gitver = get_git_version()
+    hdr.add_record(dict(name='FORCEDV', value=gitver,
+                        comment='forced-photom legacypipe git version'))
+    deps = get_dependency_versions(None, None, None, None, mpl=False)
+    for name,value,comment in deps:
+        hdr.add_record(dict(name=name, value=value, comment=comment))
+    command_line=' '.join(sys.argv)
+    hdr.add_record(dict(name='CMDLINE', value=command_line,
+                                   comment='forced-phot command-line'))
+    hdr.add_record(dict(name='BRICK', value=brick.brickname,
+                                comment='LegacySurveys brick RRRr[pm]DDd'))
+    hdr.add_record(dict(name='BRICKID' , value=brick.brickid,
+                                comment='LegacySurveys brick id'))
+    hdr.add_record(dict(name='RAMIN'   , value=brick.ra1,
+                                comment='Brick RA min (deg)'))
+    hdr.add_record(dict(name='RAMAX'   , value=brick.ra2,
+                                comment='Brick RA max (deg)'))
+    hdr.add_record(dict(name='DECMIN'  , value=brick.dec1,
+                                comment='Brick Dec min (deg)'))
+    hdr.add_record(dict(name='DECMAX'  , value=brick.dec2,
+                                comment='Brick Dec max (deg)'))
+    # Add NOAO-requested headers
+    hdr.add_record(dict(
+        name='RA', value=ra2hmsstring(brick.ra, separator=':'), comment='Brick center RA (hms)'))
+    hdr.add_record(dict(
+        name='DEC', value=dec2dmsstring(brick.dec, separator=':'), comment='Brick center DEC (dms)'))
+    hdr.add_record(dict(
+        name='CENTRA', value=brick.ra, comment='Brick center RA (deg)'))
+    hdr.add_record(dict(
+        name='CENTDEC', value=brick.dec, comment='Brick center Dec (deg)'))
+    for i,(r,d) in enumerate(radecpoly[:4]):
+        hdr.add_record(dict(
+            name='CORN%iRA' %(i+1), value=r, comment='Brick corner RA (deg)'))
+        hdr.add_record(dict(
+            name='CORN%iDEC'%(i+1), value=d, comment='Brick corner Dec (deg)'))
+
     print('Merging photometry results...')
     FF = [F for F,_,_,_ in FF]
     F = merge_tables(FF)
@@ -243,7 +284,7 @@ def main():
               }
     units = get_units_for_columns(columns, extras=eunits)
     with survey.write_output('forced-brick', brick=opt.brick) as out:
-        F.writeto(None, fits_object=out.fits, primheader=version_hdr,
+        F.writeto(None, fits_object=out.fits, primheader=hdr,
                   units=units, columns=columns)
 
     # Also average the flux measurements by band for each source and
@@ -313,7 +354,15 @@ def main():
             continue
         tbands.append(words[1])
 
-    for r in version_hdr.records():
+    # Delete then add so that the new cards appear at the end?
+    for r in hdr.records():
+        key = r['name']
+        if key == 'COMMENT':
+            continue
+        tprimhdr.delete(key)
+    tprimhdr.add_record(dict(name='COMMENT', value=None,
+                             comment='Headers below here are from the forced photometry'))
+    for r in hdr.records():
         tprimhdr.add_record(r)
 
     with survey.write_output('tractor-forced', brick=opt.brick) as out:
