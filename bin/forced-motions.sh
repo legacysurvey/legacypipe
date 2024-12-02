@@ -2,8 +2,6 @@
 
 brick=$1
 
-#out_dir=$SCRATCH/forced-motions-3
-#out_dir=$SCRATCH/forced-motions-4
 out_dir=$SCRATCH/forced-motions-dr10
 
 # On Perlmutter, RO-CFS is available on /dvs_ro/cfs both inside and outside shifter containers
@@ -16,7 +14,6 @@ survey_dir=$dr10
 
 export SKY_TEMPLATE_DIR=$COSMO/work/legacysurvey/dr10/calib/sky_pattern
 export LARGEGALAXIES_CAT=$COSMO/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
-#export LARGEGALAXIES_CAT=/global/cfs/cdirs/cosmo/staging/largegalaxies/v3.2/SGA-ellipse-v3.2.kd.fits
 export GAIA_CAT_DIR=$COSMO/data/gaia/edr3/healpix
 export GAIA_CAT_PREFIX=healpix
 export GAIA_CAT_SCHEME=nested
@@ -49,11 +46,9 @@ export MPLCONFIGDIR=$TMPCACHE/matplotlib
 mkdir $MPLCONFIGDIR
 cp -r $HOME/.config/matplotlib $MPLCONFIGDIR
 
-#python -O $LEGACYPIPE_DIR/legacypipe/forced_photom_brickwise.py \
+#export PYTHONPATH=.:${PYTHONPATH}
 
-export PYTHONPATH=.:${PYTHONPATH}
-#python -c "import legacypipe.forced_photom as x; print('forced_photom.py:', x.__file__)"
-python -O legacypipe/forced_photom_brickwise.py \
+python -O $LEGACYPIPE_DIR/legacypipe/forced_photom_brickwise.py \
        --brick $brick \
        --survey-dir ${survey_dir} \
        --catalog-dir ${cat_dir} \
