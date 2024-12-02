@@ -498,9 +498,9 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
                 break
     SGA = merge_tables(SGA)
     if 'brick_primary' in SGA.get_columns():
-        print('Total of', len(SGA), 'sources before BRICK_PRIMARY cut')
+        #print('Total of', len(SGA), 'sources before BRICK_PRIMARY cut')
         SGA.cut(SGA.brick_primary)
-    print('Total of', len(SGA), 'sources')
+    print('Read a total of', len(SGA), 'SGA entries')
     if len(SGA) == 0:
         return None
     I = np.array([i for i,ref_id in enumerate(SGA.ref_id) if ref_id in set(sga.ref_id)])

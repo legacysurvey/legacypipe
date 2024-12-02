@@ -27,8 +27,9 @@ export MKL_NUM_THREADS=1
 export KMP_AFFINITY=disabled
 export MPICH_GNI_FORK_MODE=FULLCOPY
 
-mkdir -p ${out_dir}/logs-forced
-echo Logging to ${out_dir}/logs-forced/${brick}.log
+bri=${brick:0:3}
+mkdir -p ${out_dir}/logs-forced/${bri}
+echo Logging to ${out_dir}/logs-forced/${bri}/${brick}.log
 
 # # Config directory nonsense
 export TMPCACHE=$(mktemp -d)
@@ -56,7 +57,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/forced_photom_brickwise.py \
        --bands g,r,i,z \
        --derivs \
        --threads 16 \
-       >> ${out_dir}/logs-forced/${brick}.log 2>&1
+       >> ${out_dir}/logs-forced/${bri}/${brick}.log 2>&1
 
 # Save the return value from the python command -- otherwise we
 # exit 0 because the rm succeeds!
