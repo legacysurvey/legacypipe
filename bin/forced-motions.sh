@@ -3,7 +3,8 @@
 brick=$1
 
 #out_dir=$SCRATCH/forced-motions-3
-out_dir=$SCRATCH/forced-motions-4
+#out_dir=$SCRATCH/forced-motions-4
+out_dir=$SCRATCH/forced-motions-dr10
 
 # On Perlmutter, RO-CFS is available on /dvs_ro/cfs both inside and outside shifter containers
 # (and on the login nodes too)
@@ -51,7 +52,7 @@ cp -r $HOME/.config/matplotlib $MPLCONFIGDIR
 #python -O $LEGACYPIPE_DIR/legacypipe/forced_photom_brickwise.py \
 
 export PYTHONPATH=.:${PYTHONPATH}
-python -c "import legacypipe.forced_photom as x; print('forced_photom.py:', x.__file__)"
+#python -c "import legacypipe.forced_photom as x; print('forced_photom.py:', x.__file__)"
 python -O legacypipe/forced_photom_brickwise.py \
        --brick $brick \
        --survey-dir ${survey_dir} \
@@ -59,9 +60,8 @@ python -O legacypipe/forced_photom_brickwise.py \
        --outdir ${out_dir} \
        --bands g,r,i,z \
        --derivs \
-       --threads 32 \
+       --threads 16 \
        >> ${out_dir}/logs-forced/${brick}.log 2>&1
-#--do-calib \
 
 # Save the return value from the python command -- otherwise we
 # exit 0 because the rm succeeds!

@@ -128,7 +128,6 @@ def main():
         if custom_brick:
             opt.catalog = tfn
     else:
-        # This is repeated code from forced_photom.py....
         from legacypipe.forced_photom import get_catalog_in_wcs
         T = get_catalog_in_wcs(targetwcs, survey, catsurvey)
         tprimhdr = None
@@ -205,10 +204,8 @@ def main():
     version_hdr.delete('CCDNAME')
 
     # unpack results
-    #outlier_masks = [m for _,_,m,_ in FF]
-    #outlier_hdrs  = [h for _,_,_,h in FF]
     print('Merging photometry results...')
-    FF            = [F for F,_,_,_ in FF]
+    FF = [F for F,_,_,_ in FF]
     F = merge_tables(FF)
 
     # with survey.write_output('forced-brick', brick=opt.brick) as out:
@@ -233,7 +230,7 @@ def main():
 
     _,Nap = F.apflux.shape
 
-    print('Forced-phot bands:', bands)
+    #print('Forced-phot bands:', bands)
     for b in bands:
         from legacypipe.format_catalog import clean_column_name
         b = clean_column_name(b)
@@ -246,14 +243,11 @@ def main():
         T.set('forced_nexp_%s'        % b, np.zeros(len(T), np.int32))
 
     objidmap = dict([((b,o),i) for i,(b,o) in enumerate(zip(T.brickid, T.objid))])
-    #brickid = brick.brickid
 
     for bid,objid,band,flux,fluxiv,psfdepth,galdepth,apflux,apfluxiv in zip(
             F.brickid, F.objid, F.filter, F.flux, F.flux_ivar, F.psfdepth, F.galdepth,
             F.apflux, F.apflux_ivar):
         key = (bid, objid)
-        #if bid != brickid:
-        #    continue
         try:
             i = objidmap[key]
         except KeyError:

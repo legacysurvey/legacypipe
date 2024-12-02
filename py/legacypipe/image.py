@@ -107,7 +107,6 @@ class LegacySurveyImage(object):
             else:
                 self.ccdname = ''
                 hdus = self.get_extension_list()
-                print('ext list:', hdus)
                 if len(hdus) == 1:
                     self.hdu = hdus[0]
 
@@ -429,7 +428,7 @@ class LegacySurveyImage(object):
         if site is None:
             print('AIRMASS missing and site not defined.')
             return None
-        print('Recomputing AIRMASS')
+        debug('Recomputing AIRMASS')
         from astropy.time import Time as apyTime
         from astropy.coordinates import SkyCoord, AltAz
         time = apyTime(self.mjdobs + 0.5*self.exptime/3600./24., format='mjd')
@@ -699,7 +698,7 @@ class LegacySurveyImage(object):
 
         # Zero out the inverse-variance (weight) where dq is flagged
         n = np.sum(dq != 0)
-        info('Zeroing out', n, 'invvar pixels where dq != 0')
+        debug('Zeroing out', n, 'invvar pixels where dq != 0')
         invvar[dq != 0] = 0.
 
         template_meta = None
@@ -791,7 +790,7 @@ class LegacySurveyImage(object):
         if subsky:
             from tractor.sky import ConstantSky
             debug('Instantiating and subtracting sky model')
-            print('Median sky value & range', np.median(skymod), skymod.min(), skymod.max(), 'all finite', np.all(np.isfinite(skymod)))
+            debug('Median sky value & range', np.median(skymod), skymod.min(), skymod.max(), 'all finite', np.all(np.isfinite(skymod)))
             assert(np.all(np.isfinite(skymod)))
             if pixels:
                 img -= skymod
@@ -877,8 +876,7 @@ class LegacySurveyImage(object):
         assert(np.all(np.isfinite(tim.getInvError())))
         assert(np.all(np.isfinite(img)))
         assert(np.isfinite(self.sig1))
-        print('All finite?', np.all(np.isfinite(img)))
-        print('Returning tim with image pixel range', img.min(), img.max())
+        debug('Returning tim with image pixel range', img.min(), img.max())
         tim.band = band
 
         # HACK -- create a local PSF model to instantiate the PsfEx
@@ -889,7 +887,6 @@ class LegacySurveyImage(object):
         tim.psfnorm = self.psf_norm(tim)
         # Galaxy-detection norm
         tim.galnorm = self.galaxy_norm(tim)
-        #print('Galnorm:', tim.galnorm)
         if not (np.isfinite(tim.psfnorm) and np.isfinite(tim.galnorm)):
             # This can happen if there is something very wrong with the PSF model (NaNs, etc)
             warnings.warn('Bad (nan) psfnorm or galnorm for %s' % self)
@@ -1182,7 +1179,7 @@ class LegacySurveyImage(object):
             thresh = 1.3 * fixedwt
             n = np.sum(invvar > thresh)
             if n > 0:
-                info('Clipping %i pixels with anomalously large oow values: max %g vs median %g' % (n, np.max(invvar), fixedwt))
+                debug('Clipping %i pixels with anomalously large oow values: max %g vs median %g' % (n, np.max(invvar), fixedwt))
                 invvar[invvar > thresh] = fixedwt
         invvar[invvar < 0.] = 0.
         assert(np.all(np.isfinite(invvar)))
@@ -1630,8 +1627,7 @@ class LegacySurveyImage(object):
         # Sigma of boxcar-smoothed image
         bsig1 = sig1 / boxcar
 
-        print('Sky_john: sky median', sky_clipped_median, 'sig1 from invvar:', sig1)
-
+        debug('Sky_john: sky median', sky_clipped_median, 'sig1 from invvar:', sig1)
         masked = np.abs(uniform_filter(img - sky_clipped_median, size=boxcar,
                                        mode='constant')) > (3.*bsig1)
         masked = binary_dilation(masked, iterations=3)
@@ -2358,7 +2354,7 @@ def fix_weight_quantization(wt, weightfn, ext, slc):
     H,_ = wt.shape
     if len(zscale) != H:
         raise ValueError('fix_weight_quantization: sliced zscale size does not match weight array: %i vs %i' % (len(zscale), H))
-    print('Zeroing out', np.sum(wt <= zscale[:,np.newaxis]*0.5), 'weight-map pixels below quantization error (= median %.3g)' % (np.median(zscale)*0.5))
+    debug('Zeroing out', np.sum(wt <= zscale[:,np.newaxis]*0.5), 'weight-map pixels below quantization error (= median %.3g)' % (np.median(zscale)*0.5))
     wt[wt <= zscale[:,np.newaxis]*0.5] = 0.
     return True
 

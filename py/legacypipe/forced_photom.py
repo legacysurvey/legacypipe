@@ -20,6 +20,10 @@ from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version
 from legacypipe.catalog import read_fits_catalog
 from legacypipe.outliers import read_outlier_mask_file
 
+def print_timing(*args):
+    #print(*args)
+    pass
+
 def get_parser():
     '''
     Returns the option parser for forced photometry of Legacy Survey images
@@ -336,7 +340,7 @@ def main(survey=None, opt=None, args=None):
         print('Wrote', opt.outlier_mask)
 
     tnow = Time()
-    print('Total:', tnow-t0)
+    print_timing('Total:', tnow-t0)
     return 0
 
 def bounce_one_ccd(X):
@@ -440,7 +444,7 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     # cut to those touching the chip
     sga.cut((xx > -keeprad) * (xx < W+keeprad) *
             (yy > -keeprad) * (yy < H+keeprad))
-    print('Read', len(sga), 'SGA galaxies touching the chip.')
+    print('Found', len(sga), 'SGA galaxies touching the chip.')
     if len(sga) == 0:
         print('No SGA galaxies touch this chip')
         return None
@@ -509,20 +513,15 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                           ccd, opt, zoomslice, radecpoly, outlier_bricks, ps):
     from functools import reduce
     from legacypipe.bits import DQ_BITS
-
     plots = (ps is not None)
-
     tlast = Time()
-    #print('Opt:', opt)
     im = survey.get_image_object(ccd)
-    print('Forced_photom_one_ccd: checking cache', survey.cache_dir)
     if survey.cache_dir is not None:
         im.check_for_cached_files(survey)
     if opt.do_calib:
         im.run_calibs(splinesky=True, survey=survey,
                       halos=True, subtract_largegalaxies=True)
     old_calibs_ok=True
-
     tim = im.get_tractor_image(slc=zoomslice,
                                radecpoly=radecpoly,
                                pixPsf=True,
@@ -531,16 +530,14 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                                constant_invvar=opt.constant_invvar,
                                old_calibs_ok=old_calibs_ok,
                                trim_edges=False)
-    print('Got tim:', tim)
+    #print('Got tim:', tim)
     if tim is None:
         return None
     chipwcs = tim.subwcs
     H,W = tim.shape
-
     tnow = Time()
-    print('Read image:', tnow-tlast)
+    print_timing('Read image:', tnow-tlast)
     tlast = tnow
-
     if ccd.camera == 'decam':
         # Halo subtraction
         from legacypipe.halos import subtract_one
@@ -556,7 +553,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                  (yy > -keeprad) * (yy < H+keeprad))
         Igaia, = np.nonzero(gaia.isgaia * gaia.pointsource)
         halostars = gaia[Igaia]
-        print('Got', len(gaia), 'Gaia stars,', len(halostars), 'for halo subtraction')
+        #print('Got', len(gaia), 'Gaia stars,', len(halostars), 'for halo subtraction')
         moffat = True
         _,halos = subtract_one((0, tim, halostars, moffat, old_calibs_ok))
         tim.data -= halos
@@ -582,15 +579,15 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     if opt.outlier_mask is not None:
         posneg_mask = np.zeros(tim.shape, np.uint8)
 
-    # # Outliers masks are computed within a survey (eg north/south
-    # # for dr9), and are stored in a brick-oriented way, in the
-    # # results directories.
+    # Outliers masks are computed within a survey (eg north/south
+    # for dr9), and are stored in a brick-oriented way, in the
+    # results directories.
     if outlier_bricks is None:
         outlier_bricks = bricks_touching_wcs(chipwcs, survey=survey)
 
     for b in outlier_bricks:
-        print('Reading outlier mask for brick', b.brickname,
-              ':', survey.find_file('outliers_mask', brick=b.brickname, output=False))
+        #print('Reading outlier mask for brick', b.brickname,
+        #      ':', survey.find_file('outliers_mask', brick=b.brickname, output=False))
         ok = read_outlier_mask_file(survey, [tim], b.brickname, pos_neg_mask=posneg_mask,
                                     subimage=False, output=False, ps=ps)
         if not ok:
@@ -629,15 +626,14 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         # Gaia stars: move RA,Dec to the epoch of this image.
         I = np.flatnonzero(T.ref_epoch > 0)
         if len(I):
-            print('Moving', len(I), 'Gaia stars to MJD', tim.time.toMjd())
+            #print('Moving', len(I), 'Gaia stars to MJD', tim.time.toMjd())
             ra,dec = radec_at_mjd(T.ra[I], T.dec[I], T.ref_epoch[I].astype(float),
-                                  T.pmra[I], T.pmdec[I], T.parallax[I],
-                                  tim.time.toMjd())
+                                  T.pmra[I], T.pmdec[I], T.parallax[I], tim.time.toMjd())
             T.ra [I] = ra
             T.dec[I] = dec
 
     tnow = Time()
-    print('Read catalog:', tnow-tlast)
+    print_timing('Read catalog:', tnow-tlast)
     tlast = tnow
 
     # Find SGA galaxies outside this chip and subtract them before we begin.
@@ -651,30 +647,26 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
             print('SGA galaxies outside but touching the image exist, but no flux measurements for'
                   ' band', tim.band, 'so no subtraction.')
         else:
-            print(len(I), 'SGA galaxies are outside the image.  Subtracting...')
+            #print(len(I), 'SGA galaxies are outside the image.  Subtracting...')
+            t0 = Time()
             cat = read_fits_catalog(T[I], bands=[tim.band])
             tr = Tractor([tim], cat)
             mod = tr.getModelImage(0)
             tim.data -= mod
+            print_timing('Subtracting SGA took', Time()-t0)
+            # Now drop those SGA galaxies from the catalog!
             I = np.flatnonzero(np.logical_not(sga_out))
             T.cut(I)
 
     # Add in a fake flux_{BAND} column, with flux 1.0 nanomaggies
     T.set('flux_'+tim.band, np.ones(len(T), np.float32))
     cat = read_fits_catalog(T, bands=[tim.band])
-
-    tnow = Time()
-    print('Parse catalog:', tnow-tlast)
-    tlast = tnow
-
     get_model = (opt.save_model is not None)
     if plots:
-        #opt.save_data = True
-        #opt.save_model = True
         get_model = True
         opt.plot_wcs = getattr(opt, 'plot_wcs', None)
 
-    print('Forced photom for', im, '...')
+    #print('Forced photom for', im, '...')
     F = run_forced_phot(cat, tim,
                         ceres=opt.ceres,
                         derivs=opt.derivs,
@@ -871,7 +863,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         print('Wrote', opt.save_data)
 
     tnow = Time()
-    print('Forced phot:', tnow-tlast)
+    print_timing('Forced phot:', tnow-tlast)
     return F,version_hdr,outlier_mask,outlier_header
 
 def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
@@ -979,7 +971,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
         if timing and (derivs or agn):
             t = Time()
-            print('Setting up:', t-tlast)
+            print_timing('Setting up:', t-tlast)
             tlast = t
 
         if derivs:
@@ -989,7 +981,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 fixed_also = True
 
             if fixed_also:
-                print('Forced photom with fixed positions:')
+                #print('Forced photom with fixed positions:')
                 R = tr.optimize_forced_photometry(variance=True, fitstats=False,
                                                   shared_params=False, priors=False,
                                                   **forced_kwargs)
@@ -1001,7 +993,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
                 if timing:
                     t = Time()
-                    print('Forced photom with fixed positions finished:', t-tlast)
+                    print_timing('Forced photom with fixed positions finished:', t-tlast)
                     tlast = t
 
             if full_position_fit:
@@ -1035,7 +1027,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             if fixed_also:
                 cat = realsrcs + derivsrcs
                 tr.setCatalog(Catalog(*cat))
-            print('Forced photom with position derivatives:')
+            #print('Forced photom with position derivatives:')
 
         if ps is None and not get_model:
             forced_kwargs.update(wantims=False)
@@ -1043,7 +1035,6 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         R = tr.optimize_forced_photometry(variance=True, fitstats=True,
                                           shared_params=False, priors=False,
                                           **forced_kwargs)
-
         if derivs or agn:
             cat = realsrcs
         N = len(cat)
@@ -1085,7 +1076,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
         if timing:
             t = Time()
-            print('Forced photom:', t-tlast)
+            print_timing('Forced photom:', t-tlast)
             tlast = t
 
         if ps is not None or get_model:
@@ -1289,7 +1280,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 #     t0 = Time()
                 # else:
                 #     t1 = Time()
-                #     print('Fitting took', t1-t0)
+                #     print_timing('Fitting took', t1-t0)
                 #     t0 = t1
                 src = cat[i]
                 src2 = src.copy()
@@ -1438,7 +1429,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
             if timing:
                 t = Time()
-                print('Full position fitting:', t-tlast)
+                print_timing('Full position fitting:', t-tlast)
                 tlast = t
 
     if windowed_peak:
@@ -1457,7 +1448,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         # in pixels
         fwhm = tim.psf_fwhm
         sigma = fwhm / 2.35
-        print('Gaussian PSF sigma:', sigma)
+        #print('Gaussian PSF sigma:', sigma)
 
         # HACK -- go in brightness order
         fluxes = []
@@ -1480,24 +1471,19 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 allxy.append((x,y))
             allxy = np.array(allxy)
 
-        #for i,src in enumerate(cat):
         for i in Ibright:
             src = cat[i]
-
             from tractor import PointSource
             if not isinstance(src, PointSource):
                 continue
             realmod = src.getUnitFluxModelPatch(tim)
             if realmod is None:
                 continue
-
             rd = src.getPosition()
             _,x0,y0 = tim.subwcs.radec2pixelxy(rd.ra, rd.dec)
             x0 -= 1.
             y0 -= 1.
-
             edge,xywin = windowed_centroid(tim.data, x0, y0, sigma, mask=(tim.getInvError() == 0))
-
             F.win_edge[i] = edge
             if xywin is not None:
                 F.win_converged[i] = True
@@ -1508,10 +1494,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 F.win_fracmasked[i] = fm
                 h,w = tim.shape
                 F.win_satur[i] = (tim.getInvError()[np.clip(int(ywin), 0, h-1), np.clip(int(xwin), 0, w-1)] == 0)
-                #print('Windowed centroid dra,ddec: (%.3f, %.3f) milli-arcsec' % (1000.*F.win_dra[i], 1000.*F.win_ddec[i]))
-                #print('  fracmasked: %.3f, satur: %s' % (F.win_fracmasked[i], F.win_satur[i]))
             else:
-
                 if ps is not None:
                     h,w = tim.shape
                     S = 25
@@ -1530,7 +1513,6 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                     else:
                         #print('failed windowed centroid too close to edge:', x0,y0)
                         pass
-
                 continue
 
             # Also measure the [XY]WIN of the PSF model
@@ -1541,11 +1523,9 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 r,d = tim.subwcs.pixelxy2radec(xwin + realmod.x0 + 1., ywin + realmod.y0 + 1.)
                 F.winpsf_dra [i] = 3600. * (r - rd.ra) * np.cos(np.deg2rad(rd.dec))
                 F.winpsf_ddec[i] = 3600. * (d - rd.dec)
-                #print('Windowed PSF centroid dra,ddec: (%.3f, %.3f) milli-arcsec' % (1000. * F.winpsf_dra[i], 1000. * F.winpsf_ddec[i]))
-
         if timing:
             t = Time()
-            print('Windowed centroid fitting:', t-tlast)
+            print_timing('Windowed centroid fitting:', t-tlast)
             tlast = t
 
     if do_apphot:
@@ -1570,7 +1550,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         H,W = img.shape
         Iap = np.flatnonzero((apxy[:,0] >= 0)   * (apxy[:,1] >= 0) *
                              (apxy[:,0] <= W-1) * (apxy[:,1] <= H-1))
-        print('Aperture photometry for', len(Iap), 'of', len(apxy[:,0]), 'sources within image bounds')
+        #print('Aperture photometry for', len(Iap), 'of', len(apxy[:,0]), 'sources within image bounds')
 
         for rad in apertures:
             aper = CircularAperture(apxy[Iap,:], rad)
@@ -1588,7 +1568,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         F.apflux_ivar = np.zeros((len(F), len(apertures)), np.float32)
         F.apflux_ivar[Iap,:] = apiv
         if timing:
-            print('Aperture photom:', Time()-tlast)
+            print_timing('Aperture photom:', Time()-tlast)
 
     if get_model:
         return F,mod
