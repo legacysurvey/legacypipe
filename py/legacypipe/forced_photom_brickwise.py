@@ -94,9 +94,9 @@ def main():
         brick = catsurvey.get_brick_by_name(opt.brick)
         if brick is None:
             raise RunbrickError('No such brick: "%s"' % brickname)
-        outfn = os.path.join(survey.output_dir, 'tractor-forced-%s.fits' % opt.brick)
-    #ra1,ra2,dec1,dec2 = brick.ra1, brick.ra2, brick.dec1, brick.dec2
-    #radecpoly = np.array([[ra2,dec1], [ra1,dec1], [ra1,dec2], [ra2,dec2], [ra2,dec1]])
+        outfn = survey.find_file('tractor-forced', brick=opt.brick, output=True)
+        print('Output filename:', outfn)
+        #outfn = os.path.join(survey.output_dir, opt.brick[:3], 'tractor-forced-%s.fits' % opt.brick)
 
     print('Brick', brick.brickname)
     if os.path.exists(outfn):
@@ -224,20 +224,27 @@ def main():
     FF = [F for F,_,_,_ in FF]
     F = merge_tables(FF)
 
-    # with survey.write_output('forced-brick', brick=opt.brick) as out:
-    #     F.writeto(None, fits_object=out.fits, primheader=version_hdr,
-    #               units=units, columns=columns)
-    #     print('Wrote', out.real_fn)
+    flux_unit = 'nanomaggies'
+    fluxiv_unit = 'nanomaggies^(-2)'
     from legacypipe.units import get_units_for_columns
-    from astrometry.util.file import trymakedirs
     columns = F.get_columns()
-    units = get_units_for_columns(columns)
-    #outfn = os.path.join(survey.output_dir, 'forced-brickwise-%s.fits' % opt.brick)
-    boutfn = outfn.replace('tractor-forced-', 'forced-brickwise-')
-    dirnm = os.path.dirname(boutfn)
-    trymakedirs(dirnm)
-    F.writeto(boutfn, primheader=version_hdr, units=units, columns=columns)
-    print('Wrote', boutfn)
+    eunits = {'full_fit_dra': 'arcsec',
+              'full_fit_ddec': 'arcsec',
+              'full_fit_flux': flux_unit,
+              'full_fit_flux_ivar': fluxiv_unit,
+              'full_fit_dra_ivar': 'arcsec^(-2)',
+              'full_fit_ddec_ivar': 'arcsec^(-2)',
+              'win_dra': 'arcsec',
+              'win_ddec': 'arcsec',
+              'winpsf_dra': 'arcsec',
+              'winpsf_ddec': 'arcsec',
+              'flux_motion': flux_unit,
+              'flux_motion_ivar': fluxiv_unit,
+              }
+    units = get_units_for_columns(columns, extras=eunits)
+    with survey.write_output('forced-brick', brick=opt.brick) as out:
+        F.writeto(None, fits_object=out.fits, primheader=version_hdr,
+                  units=units, columns=columns)
 
     # Also average the flux measurements by band for each source and
     # add them to a new tractor file!
@@ -290,14 +297,12 @@ def main():
         T.get('forced_apflux_%s' % b)[iv > 0] = f[iv > 0] / iv[iv > 0]
         T.get('forced_apflux_%s' % b)[iv == 0] = 0.
 
-        flux = 'nanomaggy'
-        fluxiv = '1/nanomaggy^2'
-        eunits.update({'forced_flux_%s'%b: flux,
-                       'forced_flux_ivar_%s'%b: fluxiv,
-                       'forced_apflux_%s'%b: flux,
-                       'forced_apflux_ivar_%s'%b: fluxiv,
-                       'forced_psfdepth_%s'%b: fluxiv,
-                       'forced_galdepth_%s'%b: fluxiv,
+        eunits.update({'forced_flux_%s'%b: flux_unit,
+                       'forced_flux_ivar_%s'%b: fluxiv_unit,
+                       'forced_apflux_%s'%b: flux_unit,
+                       'forced_apflux_ivar_%s'%b: fluxiv_unit,
+                       'forced_psfdepth_%s'%b: fluxiv_unit,
+                       'forced_galdepth_%s'%b: fluxiv_unit,
                        })
 
     columns = T.get_columns()
@@ -307,10 +312,13 @@ def main():
         if len(words) != 2 or words[0] != 'flux':
             continue
         tbands.append(words[1])
-    #outfn = os.path.join(survey.output_dir, 'tractor-forced-%s.fits' % opt.brick)
-    T.writeto(outfn, units=get_units_for_columns(columns, bands=tbands, extras=eunits),
-              primhdr=tprimhdr)
-    print('Wrote', outfn)
+
+    for r in version_hdr.records():
+        tprimhdr.add_record(r)
+
+    with survey.write_output('tractor-forced', brick=opt.brick) as out:
+        units=get_units_for_columns(columns, bands=tbands, extras=eunits)
+        T.writeto(None, fits_object=out.fits, primheader=tprimhdr, units=units)
 
 def calib_one_ccd(X):
     (i, N, survey,ccd) = X

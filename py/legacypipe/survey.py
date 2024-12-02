@@ -1294,6 +1294,10 @@ class LegacySurveyData(object):
         elif filetype == 'forced-brick':
             return swap(os.path.join(basedir, 'forced-brick', brickpre,
                                      'forced-%s.fits' % brick))
+        elif filetype == 'tractor-forced':
+            return swap(os.path.join(basedir, 'forced-brick', brickpre,
+                                     'tractor-forced-%s.fits' % brick))
+
         print('Unknown filetype "%s"' % filetype)
         assert(False)
 
