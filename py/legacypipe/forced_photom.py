@@ -218,10 +218,11 @@ def main(survey=None, opt=None, args=None):
         copy_files_to_cache(fnset)
 
     args = []
+    catalog = None
     for ccd in ccds:
         args.append((survey,
                      catsurvey_north, catsurvey_south, opt.catalog_resolve_dec_ngc,
-                     ccd, opt, zoomslice, None, None, ps))
+                     ccd, catalog, opt, zoomslice, None, None, ps))
 
     if opt.threads:
         from astrometry.util.multiproc import multiproc
@@ -510,7 +511,7 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     return SGA
 
 def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
-                          ccd, opt, zoomslice, radecpoly, outlier_bricks, ps):
+                          ccd, catalog, opt, zoomslice, radecpoly, outlier_bricks, ps):
     from functools import reduce
     from legacypipe.bits import DQ_BITS
     plots = (ps is not None)
@@ -558,20 +559,6 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         _,halos = subtract_one((0, tim, halostars, moffat, old_calibs_ok))
         tim.data -= halos
 
-    # The "north" and "south" directories often don't have
-    # 'survey-bricks" files of their own -- use the 'survey' one
-    # instead.
-    if catsurvey_south is not None:
-        try:
-            catsurvey_south.get_bricks_readonly()
-        except:
-            catsurvey_south.bricks = survey.get_bricks_readonly()
-    if catsurvey_north is not None:
-        try:
-            catsurvey_north.get_bricks_readonly()
-        except:
-            catsurvey_north.bricks = survey.get_bricks_readonly()
-
     # Apply outlier masks
     outlier_header = None
     outlier_mask = None
@@ -606,9 +593,25 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         imhdr['IMGFILE'] = ccd.image_filename.strip()
         outlier_header = imhdr
 
-    if opt.catalog:
+    if catalog is not None:
+        T = catalog
+    elif opt.catalog:
         T = fits_table(opt.catalog)
     else:
+        # The "north" and "south" directories often don't have
+        # 'survey-bricks" files of their own -- use the 'survey' one
+        # instead.
+        if catsurvey_south is not None:
+            try:
+                catsurvey_south.get_bricks_readonly()
+            except:
+                catsurvey_south.bricks = survey.get_bricks_readonly()
+        if catsurvey_north is not None:
+            try:
+                catsurvey_north.get_bricks_readonly()
+            except:
+                catsurvey_north.bricks = survey.get_bricks_readonly()
+
         chipwcs = tim.subwcs
         T = get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=catsurvey_south,
                                resolve_dec=resolve_dec, bands=[tim.band])
@@ -657,6 +660,19 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
             # Now drop those SGA galaxies from the catalog!
             I = np.flatnonzero(np.logical_not(sga_out))
             T.cut(I)
+
+    # If a catalog was passed in - after the SGA stuff, cut to sources inside this CCD
+    # (this cut applies to all sources, not just SGA sources)
+    if catalog is not None:
+        _,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
+        W,H = chipwcs.get_width(), chipwcs.get_height()
+        # Same as get_catalog_in_wcs
+        margin = 20
+        T.cut((xx >= -margin) * (xx <= (W+margin)) *
+              (yy >= -margin) * (yy <= (H+margin)))
+        if len(T) == 0:
+            print('After cutting to image bounds: no sources to photometer.')
+            return None
 
     # Add in a fake flux_{BAND} column, with flux 1.0 nanomaggies
     T.set('flux_'+tim.band, np.ones(len(T), np.float32))

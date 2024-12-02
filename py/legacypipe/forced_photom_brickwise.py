@@ -4,7 +4,7 @@ import numpy as np
 import fitsio
 from collections import Counter
 
-from legacypipe.forced_photom import forced_photom_one_ccd
+from legacypipe.forced_photom import forced_photom_one_ccd, find_missing_sga
 
 def main():
     from astrometry.util.fits import fits_table, merge_tables
@@ -127,6 +127,16 @@ def main():
         tprimhdr = fitsio.read_header(tfn)
         if custom_brick:
             opt.catalog = tfn
+        print('Checking for nearby SGA galaxies...')
+        # from get_catalog_in_wcs...
+        surveys = [(catsurvey, None)]
+        SGA = find_missing_sga(T, targetwcs, survey, surveys, None)#columns)
+        if SGA is not None:
+            print('SGA columns:', sga.get_columns())
+            print('T columns:', T.get_columns())
+            ## Add 'em in!
+            T = merge_tables([T, SGA], columns='fillzero')
+            print('merged T columns:', T.get_columns())
     else:
         from legacypipe.forced_photom import get_catalog_in_wcs
         T = get_catalog_in_wcs(targetwcs, survey, catsurvey)
@@ -184,8 +194,14 @@ def main():
     opt.do_calib = False
 
     args = []
+    Iphot = np.flatnonzero(np.logical_or(T.brick_primary, T.ref_cat == 'L3') *
+                           (T.type != 'DUP'))
+    Tphot = T[Iphot]
+    Torig = Tphot
     for i,ccd in enumerate(ccds):
-        args.append((i, N, survey, catsurvey, None, None, ccd, opt, None, radecpoly,
+        if not opt.threads:
+            Tphot = Torig.copy()
+        args.append((i, N, survey, catsurvey, None, None, ccd, Tphot, opt, None, radecpoly,
                      [brick], ps))
 
     if opt.threads:
