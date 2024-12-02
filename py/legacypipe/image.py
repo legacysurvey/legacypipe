@@ -1441,7 +1441,7 @@ class LegacySurveyImage(object):
         tmpfn = os.path.join(os.path.dirname(self.sefn),
                              'tmp-' + os.path.basename(self.sefn))
         args = [
-            'sex',
+            'source-extractor',
             '-c', os.path.join(sedir, self.camera + '.se'),
             '-PARAMETERS_NAME', os.path.join(sedir, self.camera + '.param'),
             '-FILTER_NAME %s' % os.path.join(sedir, self.camera + '.conv'),
