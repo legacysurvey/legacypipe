@@ -88,10 +88,9 @@ ENV PYTHON=python3
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && python3.6 setup-cython.py --with-ceres install --home /usr/local \
-    && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
-    && rm -R $(find . -name "*.o" -o -name "*.so") \
-    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
+    && python3 setup.py build_ext --with-ceres --with-cython --inplace \
+    && python3 setup.py install \
+    && rm -R $(find . -name "*.o" -o -name "*.so")
 
 # python = python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
@@ -110,6 +109,4 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
 
 ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 
-# ubuntu renames the (awfully named) executable
-RUN ln -s /usr/bin/sextractor /usr/bin/sex
-
+RUN ln -s /usr/bin/sextractor /usr/bin/source-extractor
