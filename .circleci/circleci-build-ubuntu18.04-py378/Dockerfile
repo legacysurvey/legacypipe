@@ -45,9 +45,6 @@ RUN apt -y update && apt install -y apt-utils && \
     psfex \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# ubuntu renames the (awfully named) executable
-RUN ln -s /usr/bin/sextractor /usr/bin/sex
-
 RUN python3.7 -m pip install setuptools \
  && python3.7 -m pip install pip --upgrade \
  && python3.8 -m pip install setuptools \
@@ -99,16 +96,17 @@ ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && python3.7 setup-cython.py --with-ceres install --home /usr/local --old-and-unmanageable \
-    && python3.8 setup-cython.py --with-ceres install --home /usr/local --old-and-unmanageable \
-    && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
+    && python3.7 setup.py build_ext --with-ceres --with-cython \
+    && python3.7 setup.py install --with-ceres --with-cython \
+    && python3.8 setup.py build_ext --with-ceres --with-cython \
+    && python3.8 setup.py install --with-ceres --with-cython \
     && rm -R $(find . -name "*.o" -o -name "*.so")
 
 # DUST maps
 RUN mkdir -p dust/maps \
   && cd dust/maps \
-  && wget -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_ngp.fits \
-  && wget -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_sgp.fits
+  && wget -nv http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_ngp.fits \
+  && wget -nv http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_sgp.fits
 ENV DUST_DIR=/src/dust
 
 # Unwise PSF
