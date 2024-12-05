@@ -93,13 +93,18 @@ RUN ln -s /usr/bin/python3.7 /usr/bin/python
 
 ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 
+RUN python3.7 -m pip install wheel wheelfile \
+&&  python3.8 -m pip install wheel wheelfile
+
+# https://github.com/pypa/setuptools/issues/4501
+RUN python3.8 -m pip install setuptools==70.3.0
+
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && python3.7 setup.py build_ext --with-ceres --with-cython \
-    && python3.7 setup.py install --with-ceres --with-cython \
-    && python3.8 setup.py build_ext --with-ceres --with-cython \
-    && python3.8 setup.py install --with-ceres --with-cython \
+    && cp setup-with-ceres-and-cython.py setup.py \
+    && python3.7 -m pip install . \
+    && python3.8 -m pip install . \
     && rm -R $(find . -name "*.o" -o -name "*.so")
 
 # DUST maps
@@ -114,4 +119,4 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
     && cd unwise_psf \
     && git checkout dr9.3
 
-
+RUN ln -s /usr/bin/sextractor /usr/bin/source-extractor
