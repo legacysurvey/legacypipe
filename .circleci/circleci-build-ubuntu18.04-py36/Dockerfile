@@ -88,8 +88,8 @@ ENV PYTHON=python3
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && python3 setup.py build_ext --with-ceres --with-cython --inplace \
-    && python3 setup.py install \
+    && python3 setup.py build_ext --with-ceres --with-cython \
+    && python3 setup.py install --with-ceres --with-cython \
     && rm -R $(find . -name "*.o" -o -name "*.so")
 
 # python = python3
