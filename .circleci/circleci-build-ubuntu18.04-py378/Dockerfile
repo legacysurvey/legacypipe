@@ -45,9 +45,6 @@ RUN apt -y update && apt install -y apt-utils && \
     psfex \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# ubuntu renames the (awfully named) executable
-RUN ln -s /usr/bin/sextractor /usr/bin/sex
-
 RUN python3.7 -m pip install setuptools \
  && python3.7 -m pip install pip --upgrade \
  && python3.8 -m pip install setuptools \
@@ -96,19 +93,25 @@ RUN ln -s /usr/bin/python3.7 /usr/bin/python
 
 ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 
+RUN python3.7 -m pip install wheel wheelfile \
+&&  python3.8 -m pip install wheel wheelfile
+
+# https://github.com/pypa/setuptools/issues/4501
+RUN python3.8 -m pip install setuptools==70.3.0
+
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && python3.7 setup-cython.py --with-ceres install --home /usr/local --old-and-unmanageable \
-    && python3.8 setup-cython.py --with-ceres install --home /usr/local --old-and-unmanageable \
-    && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
+    && cp setup-with-ceres-and-cython.py setup.py \
+    && python3.7 -m pip install . \
+    && python3.8 -m pip install . \
     && rm -R $(find . -name "*.o" -o -name "*.so")
 
 # DUST maps
 RUN mkdir -p dust/maps \
   && cd dust/maps \
-  && wget -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_ngp.fits \
-  && wget -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_sgp.fits
+  && wget -nv http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_ngp.fits \
+  && wget -nv http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_sgp.fits
 ENV DUST_DIR=/src/dust
 
 # Unwise PSF
@@ -116,4 +119,6 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
     && cd unwise_psf \
     && git checkout dr9.3
 
+RUN ln -s /usr/bin/sextractor /usr/bin/source-extractor
 
+RUN python3.8 -m pip install fitsio
