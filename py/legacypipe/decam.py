@@ -33,13 +33,12 @@ class DecamImage(CPImage):
                 N673 = 24.151,
                 # Merian
                 N540 = 24.000,
-                # IBIS - from Arjun, 2024-06-07, LTT6248
-                M411 = 23.00,
-                M464 = 23.43,
-                # IBIS - obsbot/decam.py 2024-10-28 minus 1.5 mags
-                M438 = 23.29,
-                M490 = 23.48,
-                M517 = 23.27,
+                # IBIS - Arjun, 2024-12-04
+                M411 = 23.043,
+                M438 = 23.330,
+                M464 = 23.456,
+                M490 = 23.535,
+                M517 = 23.554,
     )
 
     K_EXT = dict(g = 0.173,
