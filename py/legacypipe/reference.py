@@ -227,7 +227,7 @@ def fix_gaia(gaia, bands):
     from legacypipe.gaiacat import gaia_to_decam
 
     gaia.phot_g_mean_mag = gaia.phot_g_mean_mag.astype(np.float32)
-    gaia.G = gaia.phot_g_mean_mag.
+    gaia.G = gaia.phot_g_mean_mag
     # Sort by brightness (for reference-*.fits output table)
     sortmag = gaia.G.copy()
     sortmag[sortmag == 0] = gaia.phot_rp_mean_mag[sortmag == 0]

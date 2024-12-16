@@ -1,7 +1,8 @@
 import os
 from legacypipe.ps1cat import HealpixedCatalog
+import numpy as np
 
-def gaia_to_decam(gaia_cat, bands,
+def gaia_to_decam(gaia, bands,
                   average_color=1.4,
                   color_clip=(-0.6, 4.1)):
     from functools import reduce
