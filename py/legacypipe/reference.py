@@ -238,7 +238,7 @@ def fix_gaia(gaia, bands):
     for band in bands:
         if not band in bb:
             bb.append(band)
-    mags = gaia_to_decam(gaia, bands)
+    mags = gaia_to_decam(gaia, bb)
     for band,mag in zip(bb, mags):
         # no color terms - skip
         if mag is None:
