@@ -546,7 +546,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         ref_margin = mask_radius_for_mag(0.)
         mpix = int(np.ceil(ref_margin * 3600. / chipwcs.pixel_scale()))
         marginwcs = chipwcs.get_subimage(-mpix, -mpix, W+2*mpix, H+2*mpix)
-        gaia = read_gaia(marginwcs, None)
+        gaia = read_gaia(marginwcs, [tim.band])
         keeprad = np.ceil(gaia.keep_radius * 3600. / chipwcs.pixel_scale()).astype(int)
         _,xx,yy = chipwcs.radec2pixelxy(gaia.ra, gaia.dec)
         # cut to those touching the chip
