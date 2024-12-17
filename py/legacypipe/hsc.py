@@ -228,7 +228,7 @@ class HscImage(LegacySurveyImage):
 
         # We don't have a FWHM measurement, so hack up a measurement on the first
         # PSF basis image.
-        import photutils
+        from photutils.aperture import CircularAnnulus, aperture_photometry
         from scipy.interpolate import interp1d
         psf0 = psfex.psfbases[0,:,:]
         cx = bw//2
@@ -236,8 +236,8 @@ class HscImage(LegacySurveyImage):
         sb = []
         rads = np.arange(0, 20.1, 0.5)
         for rad1,rad2 in zip(rads, rads[1:]):
-            aper = photutils.CircularAnnulus((cx, cy), max(1e-3, rad1), rad2)
-            p = photutils.aperture_photometry(psf0, aper)
+            aper = CircularAnnulus((cx, cy), max(1e-3, rad1), rad2)
+            p = aperture_photometry(psf0, aper)
             f = p.field('aperture_sum')[0]
             f /= (np.pi * (rad2**2 - rad1**2))
             sb.append(f)
