@@ -81,6 +81,13 @@ class SuprimeData(LegacySurveyData):
         print('Maskbits:', self.get_maskbits())
         print('Maskbits descriptions:', self.get_maskbits_descriptions())
 
+class IbisData(LegacySurveyData):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.update_maskbits_bands(['M411', 'M438', 'M464', 'M490', 'M517'])
+        print('Maskbits:', self.get_maskbits())
+        print('Maskbits descriptions:', self.get_maskbits_descriptions())
+
 class RerunWithCcds(LegacySurveyData):
     def get_brick_by_name(self, brickname):
         # BRUTAL HACK -- runbrick.py's stage_tims first calls
@@ -110,6 +117,7 @@ runs = {
     'hsc-calexp': HscCalexpData,
     'rerun-ccds': RerunWithCcds,
     'suprime': SuprimeData,
+    'ibis': IbisData,
     None: LegacySurveyData,
 }
 
