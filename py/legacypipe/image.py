@@ -1727,7 +1727,7 @@ class LegacySurveyImage(object):
             x0,x1 = sx.start, sx.stop
             wcs = wcs.get_subimage(x0, y0, int(x1-x0), int(y1-y0))
         # Grab reference sources
-        refs,_ = get_reference_sources(survey, wcs, self.pixscale, None,
+        refs,_ = get_reference_sources(survey, wcs, self.pixscale, [self.band],
                                        tycho_stars=True, gaia_stars=gaia,
                                        large_galaxies=True,
                                        star_clusters=True,
