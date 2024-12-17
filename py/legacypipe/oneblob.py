@@ -228,9 +228,9 @@ class OneBlob(object):
         # - model selection (including iterative detection)
         # - metrics
 
-        print('OneBlob run starting: srcs', self.srcs)
-        for src in self.srcs:
-            print('OneBlob  ', src.getParams())
+        #print('OneBlob run starting: srcs', self.srcs)
+        #for src in self.srcs:
+        #    print('OneBlob  ', src.getParams())
 
         trun = tlast = Time()
         # Not quite so many plots...
@@ -1423,7 +1423,7 @@ class OneBlob(object):
                 srctractor.thawParam('images')
 
             # First-round optimization (during model selection)
-            print('OneBlob before model selection:', newsrc)
+            #print('OneBlob before model selection:', newsrc)
             try:
                 R = srctractor.optimize_loop(**self.optargs)
             except Exception as e:
@@ -1432,15 +1432,15 @@ class OneBlob(object):
                 traceback.print_exc()
                 raise(e)
                 continue
-            print('OneBlob after model selection:', newsrc)
+            #print('OneBlob after model selection:', newsrc)
             #print('Fit result:', newsrc)
             #print('Steps:', R['steps'])
             hit_limit = R.get('hit_limit', False)
             opt_steps = R.get('steps', -1)
             hit_ser_limit = False
             hit_r_limit = False
-            print('OneBlob steps:', opt_steps)
-            print('OneBlob hit limit:', hit_limit)
+            #print('OneBlob steps:', opt_steps)
+            #print('OneBlob hit limit:', hit_limit)
             if hit_limit:
                 debug('Source', newsrc, 'hit limit:')
                 if is_debug():

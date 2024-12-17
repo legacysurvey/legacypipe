@@ -1805,6 +1805,9 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
     blob_order = np.array([b for b,npix in blobvals.most_common()])
     del blobvals
 
+    # HACK -- reverse!
+    #blob_order = blob_order[-1::-1]
+    
     if custom_brick:
         U = None
     else:
@@ -1817,7 +1820,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
         # entries can be tuples, and if iblob is type np.int32 it
         # tries to do vector-comparison)
         if int(iblob) in skipblobs:
-            info('Skipping blob', iblob)
+            #info('Skipping blob', iblob)
             continue
 
         bslc  = blobslices[iblob]
@@ -1893,6 +1896,11 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
             # this yields  710 pixels -> 2 sub-blobs
             #             3600 pixels -> 8 sub-blobs (good for multi-processing!)
             target = 490
+
+            # HACK - IBIS / XMM
+            overlap = 32
+            target = 256
+
             # Minimum size that will get split into 2 or more sub-blobs
             threshsize = 1.5 * (target - overlap) + overlap
 

@@ -446,6 +446,7 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     sga.cut((xx > -keeprad) * (xx < W+keeprad) *
             (yy > -keeprad) * (yy < H+keeprad))
     print('Found', len(sga), 'SGA galaxies touching the chip.')
+    print('sga_ids', sga.ref_id)
     if len(sga) == 0:
         print('No SGA galaxies touch this chip')
         return None
@@ -490,17 +491,18 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
         # in both).
         for catsurvey,_ in surveys:
             fn = catsurvey.find_file('tractor', brick=brick)
+            print('Looking for catalog', fn)
             if os.path.exists(fn):
                 t = fits_table(fn, columns=['ref_cat', 'ref_id'])
                 I = np.flatnonzero(t.ref_cat == 'L3')
-                print('Read', len(I), 'SGA entries from', brick)
+                print('Read', len(I), 'SGA entries from', brick, 'tractor catalog')
                 SGA.append(fits_table(fn, columns=columns, rows=I))
                 break
     SGA = merge_tables(SGA)
     if 'brick_primary' in SGA.get_columns():
         #print('Total of', len(SGA), 'sources before BRICK_PRIMARY cut')
         SGA.cut(SGA.brick_primary)
-    print('Read a total of', len(SGA), 'SGA entries')
+    print('Read a total of', len(SGA), 'SGA entries in brick_primary')
     if len(SGA) == 0:
         return None
     I = np.array([i for i,ref_id in enumerate(SGA.ref_id) if ref_id in set(sga.ref_id)])

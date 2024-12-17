@@ -2283,6 +2283,7 @@ class NormalizedPsf(object):
         return img
 
     def _sampleImage(self, img, dx, dy, **kwargs):
+        
         xl,yl,img = super()._sampleImage(img, dx, dy, **kwargs)
         n = img.sum()
         if n != 0:
