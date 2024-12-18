@@ -6,6 +6,7 @@ export COSMO=/dvs_ro/cfs/cdirs/cosmo
 
 export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
 outdir=$SCRATCH/dr11-gpu
+#outdir=$SCRATCH/dr11-nogpu
 
 export GAIA_CAT_DIR=$COSMO/data/gaia/dr3/healpix
 export GAIA_CAT_PREFIX=healpix
@@ -69,10 +70,9 @@ echo "--------------------------------------------------------------------------
 echo -e "\nStarting on $(hostname)\n" >> "$log"
 echo "-----------------------------------------------------------------------------------------" >> "$log"
 
-echo "Running:"
-echo "python -u legacypipe/runbrick.py --brick "$brick" --zoom 0 200 0 200 --use-gpu --skip --skip-calibs --bands g,r,i,z --rgb-stretch 1.5 --nsatur 2 --survey-dir $LEGACY_SURVEY_DIR --outdir $outdir --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle --checkpoint-period 120 --pickle \'${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle\' --release 10099 --no-wise"
-
-python -c "from photutils.aperture import CircularAperture, aperture_photometry"
+#echo "Running:"
+#echo "python -u legacypipe/runbrick.py --brick "$brick" --zoom 0 200 0 200 --use-gpu --skip --skip-calibs --bands g,r,i,z --rgb-stretch 1.5 --nsatur 2 --survey-dir $LEGACY_SURVEY_DIR --outdir $outdir --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle --checkpoint-period 120 --pickle \'${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle\' --release 10099 --no-wise"
+#python -c "from photutils.aperture import CircularAperture, aperture_photometry"
 
 python -u legacypipe/runbrick.py \
      --brick "$brick" \
