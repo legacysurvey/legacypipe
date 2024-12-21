@@ -199,6 +199,6 @@ RUN git clone https://github.com/astromatic/scamp.git && \
 # 
 # update legacypipe
 RUN cd /src/legacypipe && git pull && \
-  git checkout DR10.3.3 && git describe && \
+  git checkout DR10.3.4 && git describe && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
