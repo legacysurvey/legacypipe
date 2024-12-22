@@ -424,7 +424,7 @@ class LegacySurveyImage(object):
                 airmass = float(airmass)
             except:
                 airmass = None
-        if not isfinite(airmass):
+        if not np.isfinite(airmass):
             airmass = None
         if airmass is None:
             airmass = self.recompute_airmass(primhdr, ra, dec)
