@@ -226,6 +226,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         ccds.cut(ccds.mjd_obs <= max_mjd)
         debug('Cut to', len(ccds), 'before MJD', max_mjd)
 
+    #ccds.writeto('ccds.fits')
+        
     # Create Image objects for each CCD
     ims = []
     info('Keeping', len(ccds), 'CCDs:')

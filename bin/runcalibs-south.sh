@@ -94,6 +94,9 @@ echo "Logging to $log"
 
 # TURN OFF -u for production!
 
+export LEGACYPIPE_DIR=.
+export PYTHONPATH=.:${PYTHONPATH}
+
 python -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
 	--camera ${camera} \
     --survey-dir ${LEGACY_SURVEY_DIR} \

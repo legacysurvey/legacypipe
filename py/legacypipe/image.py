@@ -419,6 +419,13 @@ class LegacySurveyImage(object):
 
     def get_airmass(self, primhdr, imghdr, ra, dec):
         airmass = primhdr.get('AIRMASS', None)
+        if isinstance(airmass, str):
+            try:
+                airmass = float(airmass)
+            except:
+                airmass = None
+        if not isfinite(airmass):
+            airmass = None
         if airmass is None:
             airmass = self.recompute_airmass(primhdr, ra, dec)
         return airmass
