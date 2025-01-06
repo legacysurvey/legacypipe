@@ -15,21 +15,17 @@ def main():
     parser.add_argument('-b', '--brick', help='Brick name to run') #, required=True)
     parser.add_argument('--zoom', type=int, nargs=4,
                         help='Set target image extent (default "0 3600 0 3600")')
-
     parser.add_argument('--radec', nargs=2,
         help='RA,Dec center for a custom location (not a brick)')
     parser.add_argument('-W', '--width', type=int, default=3600,
                         help='Target image width, default %(default)i')
     parser.add_argument('-H', '--height', type=int, default=3600,
                         help='Target image height, default %(default)i')
-
     parser.add_argument('--threads', type=int, help='Run multi-threaded', default=None)
-
     parser.add_argument('--catalog-dir', help='Set LEGACY_SURVEY_DIR to use to read catalogs')
     parser.add_argument('--survey-dir', help='Override LEGACY_SURVEY_DIR for reading images')
     parser.add_argument('-d', '--outdir', dest='output_dir',
                         help='Set output base directory, default "."')
-
     #parser.add_argument('--apphot', action='store_true',
     #                  help='Do aperture photometry?')
     #parser.add_argument('--no-forced', dest='forced', action='store_false',
@@ -38,18 +34,17 @@ def main():
                         help='Include RA,Dec derivatives in forced photometry?')
     parser.add_argument('--do-calib', default=False, action='store_true',
                         help='Run calibs if necessary?')
-
     parser.add_argument('--bands', default=None,
                         help='Comma-separated list of bands to forced-photometer.')
-
     parser.add_argument('--no-ceres', action='store_false', dest='ceres',
                         help='Do not use Ceres optimization engine (use scipy)')
     parser.add_argument('--ceres-threads', type=int, default=1,
                         help='Set number of threads used by Ceres')
+    parser.add_argument('--plots', default=None, help='Create plots; specify a base filename for the plots')
+    parser.add_argument('--too-many-sources', type=int, default=0,
+                        help='Fail if more than this number of catalog entries')
     parser.add_argument('-v', '--verbose', dest='verbose', action='count',
                         default=0, help='Make more verbose')
-
-    parser.add_argument('--plots', default=None, help='Create plots; specify a base filename for the plots')
     opt = parser.parse_args()
 
     import logging
@@ -144,6 +139,11 @@ def main():
         tprimhdr = None
         print('Got catalog in WCS:')
         T.about()
+
+    if opt.too_many_sources and len(T) > opt.too_many_sources:
+        print('Number of catalog entries: %i exceeds --too-many-sources=%i.  Failing!' %
+              (len(T), opt.too_many_sources))
+        return -1
 
     ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
     if ccds is None:
@@ -387,4 +387,4 @@ def photom_one_ccd(X):
     return forced_photom_one_ccd(*X)
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

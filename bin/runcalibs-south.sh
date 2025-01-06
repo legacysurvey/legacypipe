@@ -92,10 +92,11 @@ logdir=$(dirname $log)
 mkdir -p $logdir
 echo "Logging to $log"
 
-# TURN OFF -u for production!
 
 export LEGACYPIPE_DIR=.
 export PYTHONPATH=.:${PYTHONPATH}
+
+# TURN OFF -u for production!
 
 python -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
 	--camera ${camera} \
