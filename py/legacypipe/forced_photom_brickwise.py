@@ -196,7 +196,7 @@ def main():
 
     args = []
     Iphot = np.flatnonzero(np.logical_or(T.brick_primary, T.ref_cat == 'L3') *
-                           (T.type != 'DUP'))
+                           (T.type != 'DUP') * (T.type != 'NUN'))
     Tphot = T[Iphot]
     Torig = Tphot
     for i,ccd in enumerate(ccds):

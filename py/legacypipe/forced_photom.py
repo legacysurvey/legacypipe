@@ -405,10 +405,10 @@ def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None,
                   (yy >= -margin) * (yy <= (H+margin)))
             T.cut(T.brick_primary)
             #print('Cut to', len(T), 'on brick_primary')
-            # drop DUP sources
-            I, = np.nonzero([t.strip() != 'DUP' for t in T.type])
+            # drop DUP & NUN sources (NUN: eg see DR10 brick 0043m717
+            I, = np.nonzero([t.strip() not in ['DUP','NUN'] for t in T.type])
             T.cut(I)
-            #print('Cut to', len(T), 'after removing DUP')
+            #print('Cut to', len(T), 'after removing DUP and NUN')
             if len(T):
                 TT.append(T)
     if len(TT) == 0:
