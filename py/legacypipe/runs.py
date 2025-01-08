@@ -90,6 +90,7 @@ class IbisData(LegacySurveyData):
 
 class IbisWideData(IbisData):
     def ccds_for_fitting(self, brick, ccds):
+        import numpy as np
         I = np.flatnonzero(['_wide' in o for o in ccds.object])
         print('IBIS-wide run; cutting to', len(I), 'of', len(ccds), 'CCDs with "_wide" in the OBJECT name')
         return I
