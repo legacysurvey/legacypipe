@@ -88,6 +88,12 @@ class IbisData(LegacySurveyData):
         print('Maskbits:', self.get_maskbits())
         print('Maskbits descriptions:', self.get_maskbits_descriptions())
 
+class IbisWideData(IbisData):
+    def ccds_for_fitting(self, brick, ccds):
+        I = np.flatnonzero(['_wide' in o for o in ccds.object])
+        print('IBIS-wide run; cutting to', len(I), 'of', len(ccds), 'CCDs with "_wide" in the OBJECT name')
+        return I
+
 class RerunWithCcds(LegacySurveyData):
     def get_brick_by_name(self, brickname):
         # BRUTAL HACK -- runbrick.py's stage_tims first calls
@@ -118,6 +124,7 @@ runs = {
     'rerun-ccds': RerunWithCcds,
     'suprime': SuprimeData,
     'ibis': IbisData,
+    'ibis-wide': IbisWideData,
     None: LegacySurveyData,
 }
 
