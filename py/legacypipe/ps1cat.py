@@ -82,6 +82,8 @@ class ps1cat(HealpixedCatalog):
                    M464=0,
                    M490=0,
                    M517=0,
+                   # CaII H+K narrow-band
+                   N395=0,
     )
     def __init__(self,expnum=None,ccdname=None,ccdwcs=None):
         """Read PS1 or gaia sources for an exposure number + CCD name or CCD WCS
@@ -228,6 +230,9 @@ def ps1_to_decam(psmags, band):
         M464 = [ 0.0923, -0.5188, 1.9504, -2.7307, 1.2414],
         M490 = [ 0.1226, -0.7488, 1.2442, -1.1108, 0.4564],
         M517 = [ 0.0804, -0.6777, 0.3386, 1.0064, -0.7840],
+
+        # DECam
+        N395 = [ 0. ],
 
         )[band]
 

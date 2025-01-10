@@ -39,6 +39,8 @@ class DecamImage(CPImage):
                 M464 = 23.456,
                 M490 = 23.535,
                 M517 = 23.554,
+                # HACK
+                N395 = 24.000,
     )
 
     K_EXT = dict(g = 0.173,
@@ -61,6 +63,8 @@ class DecamImage(CPImage):
                  M464 = 0.223,
                  M490 = 0.197,
                  M517 = 0.174,
+                 # HACK
+                 N395 = 0.333,
     )
 
     '''A LegacySurveyImage (via CPImage) subclass to handle images from
