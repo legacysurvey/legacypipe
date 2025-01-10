@@ -95,6 +95,13 @@ class IbisWideData(IbisData):
         print('IBIS-wide run; cutting to', len(I), 'of', len(ccds), 'CCDs with "_wide" in the OBJECT name')
         return I
 
+class IbisSpecialData(IbisData):
+    def ccds_for_fitting(self, brick, ccds):
+        import numpy as np
+        I = np.flatnonzero([('Pyxis' in o or 'NGC7492' in o) for o in ccds.object])
+        print('IBIS-wide run; cutting to', len(I), 'of', len(ccds), 'CCDs with matching OBJECT name')
+        return I
+
 class RerunWithCcds(LegacySurveyData):
     def get_brick_by_name(self, brickname):
         # BRUTAL HACK -- runbrick.py's stage_tims first calls
@@ -126,6 +133,7 @@ runs = {
     'suprime': SuprimeData,
     'ibis': IbisData,
     'ibis-wide': IbisWideData,
+    'ibis-special': IbisSpecialData,
     None: LegacySurveyData,
 }
 

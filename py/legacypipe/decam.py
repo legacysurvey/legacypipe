@@ -63,9 +63,9 @@ class DecamImage(CPImage):
                  M464 = 0.223,
                  M490 = 0.197,
                  M517 = 0.174,
-                 # HACK
-                 N395 = 0.333,
-    )
+                 # From Arjun 2025-01-10
+                 N395 = 0.399,
+                 )
 
     '''A LegacySurveyImage (via CPImage) subclass to handle images from
     the Dark Energy Camera, DECam, on the Blanco telescope.
