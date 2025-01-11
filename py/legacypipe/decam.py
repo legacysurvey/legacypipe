@@ -115,6 +115,8 @@ class DecamImage(CPImage):
             return 0.4, 1.5
         if self.band in ['M411', 'M438', 'M464', 'M490', 'M517']:
             return 0.3, 1.5
+        if self.band == 'N395':
+            return 0.2, 1.2
         return super().get_ps1_calibrator_color_range()
 
     def clip_colorterm(self, c):
