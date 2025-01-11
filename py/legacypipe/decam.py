@@ -133,6 +133,11 @@ class DecamImage(CPImage):
         from legacypipe.ps1cat import ps1_to_decam
         return ps1_to_decam(cat, band)
 
+    def gaia_to_observed(self, cat, band):
+        from legacypipe.gaiacat import gaia_to_decam
+        mags = gaia_to_decam(cat, [band])
+        return mags[0]
+
     def get_gain(self, primhdr, hdr):
         return np.average((hdr['GAINA'],hdr['GAINB']))
 

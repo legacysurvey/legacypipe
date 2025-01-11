@@ -311,7 +311,7 @@ class LegacySurveyImage(object):
         stars from, eg, Pan-STARRS1 or SDSS.
         '''
         if name == 'ps1':
-            gicolor= cat.median[:,0] - cat.median[:,2]
+            gicolor = cat.median[:,0] - cat.median[:,2]
             color_lo, color_hi = self.get_ps1_calibrator_color_range()
             return ((cat.nmag_ok[:, 0] > 0) &
                     (cat.nmag_ok[:, 1] > 0) &
@@ -320,11 +320,21 @@ class LegacySurveyImage(object):
                     (gicolor < color_hi))
         if name == 'sdss':
             return np.ones(len(cat), bool)
+        if name == 'gaia':
+            color = cat.phot_bp_mean_mag - cat.phot_rp_mean_mag
+            color_lo, color_hi = self.get_gaia_calibrator_color_range()
+            return ((color > color_lo) * (color < color_hi) *
+                    (cat.phot_bp_mean_mag != 0) *
+                    (cat.phot_rp_mean_mag != 0))
         raise RuntimeError('Unknown photometric calibration set: %s' % name)
 
     def get_ps1_calibrator_color_range(self):
         # g-i color range to keep
         return 0.4, 2.7
+
+    def get_gaia_calibrator_color_range(self):
+        # bp-rp color range to keep
+        return 0.5, 3.0
 
     def clip_colorterm(self, c):
         return np.clip(c, -1., +1.)
@@ -335,6 +345,10 @@ class LegacySurveyImage(object):
             colorterm = self.clip_colorterm(colorterm)
             band = self.get_ps1_band()
             return cat.median[:, band] + colorterm
+        elif name == 'gaia':
+            # colorterm = self.colorterm_gaia_to_observed(cat, self.band)
+            # colorterm = self.clip_colorterm(colorterm)
+            return self.gaia_to_observed(cat, self.band)
         elif name == 'sdss':
             colorterm = self.colorterm_sdss_to_observed(cat.psfmag, self.band)
             colorterm = self.clip_colorterm(colorterm)
@@ -361,6 +375,9 @@ class LegacySurveyImage(object):
         raise RuntimeError('Not implemented: generic colorterm_ps1_to_observed')
     def colorterm_sdss_to_observed(self, cat, band):
         raise RuntimeError('Not implemented: generic colorterm_sdss_to_observed')
+
+    def gaia_to_observed(self, cat, band):
+        raise RuntimeError('Not implemented: generic gaia_to_observed')
 
     def get_photocal_mag_limits(self):
         MAGLIM=dict(
