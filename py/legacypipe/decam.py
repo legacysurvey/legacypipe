@@ -39,9 +39,9 @@ class DecamImage(CPImage):
                 M464 = 23.456,
                 M490 = 23.535,
                 M517 = 23.554,
-                # HACK
-                N395 = 24.000,
-    )
+                # average of CPMAGIC20250102
+                N395 = 21.649,
+                )
 
     K_EXT = dict(g = 0.173,
                  r = 0.090,
