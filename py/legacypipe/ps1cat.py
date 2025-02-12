@@ -31,22 +31,22 @@ class HealpixedCatalog(object):
             hp = hpxy
         return hp
 
-    def get_healpix_catalog(self, healpix):
+    def get_healpix_catalog(self, healpix, columns=None):
         from astrometry.util.fits import fits_table
         fname = self.fnpattern % dict(hp=healpix)
         #print('Reading', fname)
-        return fits_table(fname)
+        return fits_table(fname, columns=columns)
 
-    def get_healpix_catalogs(self, healpixes):
+    def get_healpix_catalogs(self, healpixes, columns=None):
         from astrometry.util.fits import merge_tables
         cats = []
         for hp in healpixes:
-            cats.append(self.get_healpix_catalog(hp))
+            cats.append(self.get_healpix_catalog(hp, columns=columns))
         if len(cats) == 1:
             return cats[0]
         return merge_tables(cats)
 
-    def get_catalog_in_wcs(self, wcs, step=100., margin=10):
+    def get_catalog_in_wcs(self, wcs, step=100., margin=10, columns=None):
         # Grid the CCD in pixel space
         W,H = wcs.get_width(), wcs.get_height()
         xx,yy = np.meshgrid(
@@ -58,7 +58,7 @@ class HealpixedCatalog(object):
         for r,d in zip(ra,dec):
             healpixes.add(self.healpix_for_radec(r, d))
         # Read catalog in those healpixes
-        cat = self.get_healpix_catalogs(healpixes)
+        cat = self.get_healpix_catalogs(healpixes, columns=columns)
         # Cut to sources actually within the CCD.
         _,xx,yy = wcs.radec2pixelxy(cat.ra, cat.dec)
         cat.x = xx
