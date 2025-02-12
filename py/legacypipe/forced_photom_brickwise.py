@@ -26,6 +26,7 @@ def main():
     parser.add_argument('--survey-dir', help='Override LEGACY_SURVEY_DIR for reading images')
     parser.add_argument('-d', '--outdir', dest='output_dir',
                         help='Set output base directory, default "."')
+    parser.add_argument('-r', '--run', default=None, help='Set the run type to execute')
     #parser.add_argument('--apphot', action='store_true',
     #                  help='Do aperture photometry?')
     #parser.add_argument('--no-forced', dest='forced', action='store_false',
@@ -64,8 +65,10 @@ def main():
     #if not opt.forced:
     #    opt.apphot = True
 
-    survey = LegacySurveyData(survey_dir=opt.survey_dir,
-                              output_dir=opt.output_dir)
+    from legacypipe.runs import get_survey
+    survey = get_survey(opt.run,
+                        survey_dir=opt.survey_dir,
+                        output_dir=opt.output_dir)
 
     if opt.catalog_dir is None:
         catsurvey = survey
