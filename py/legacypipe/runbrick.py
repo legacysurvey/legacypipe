@@ -4200,6 +4200,10 @@ def get_runbrick_kwargs(survey=None,
                             coadd_bw=coadd_bw)
         info(survey)
 
+    survey.update_maskbits_bands(bands)
+    print('Maskbits:', survey.get_maskbits())
+    print('Maskbits descriptions:', survey.get_maskbits_descriptions())
+
     blobdir = opt.pop('blob_mask_dir', None)
     if blobdir is not None:
         from legacypipe.survey import LegacySurveyData

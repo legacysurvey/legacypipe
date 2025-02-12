@@ -2,7 +2,7 @@
 
 brick="$1"
 
-outdir=$SCRATCH/ibis3-wide
+outdir=$SCRATCH/ibis3-n395
 
 unset BLOB_MASK_DIR
 export COSMO=/dvs_ro/cfs/cdirs/cosmo
@@ -82,22 +82,28 @@ export PYTHONPATH=.:${PYTHONPATH}
 # Deep fields:
 #       --blob-dilate 4 \
 
-python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
-       --run ibis-wide \
-       --skip \
-       --bands M411,M438,M464,M490,M517 \
+#       --plots \
+# -O
+#       --bands M411,M438,M464,M490,M517 \
+#      --run ibis-special \
+#       --skip \
+
+python -u -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
+       --blob-dilate 4 \
+       --coadd-bw \
+       --bands N395 \
        --nsatur 2 \
        --brick $brick \
        --rgb-stretch 1.5 \
        --sub-blobs \
        --no-wise \
-       --threads 32 \
        --skip-calibs \
        --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle \
        --checkpoint-period 300 \
        --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
        --outdir $outdir \
        --write-stage srcs \
+       --threads 32 \
        >> $log 2>&1
 
 #        --skip-coadd \
