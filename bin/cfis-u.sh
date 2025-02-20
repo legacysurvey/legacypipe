@@ -1,6 +1,6 @@
 #! /bin/bash
 
-img=$1
+img="$1"
 
 survey_dir=cfis-dir
 #out_dir=$SCRATCH/cfht-cosmos-u
@@ -32,22 +32,22 @@ export OMP_NUM_THREADS=1
 export MPICH_GNI_FORK_MODE=FULLCOPY
 export KMP_AFFINITY=disabled
 
-log=$out_dir/zpt-logs/$(echo $img | sed s/.fz//g | sed s/.fits/.log/g)
-logdir=$(dirname $log)
-mkdir -p $logdir
+log=$out_dir/zpt-logs/$(echo "$img" | sed s/.fz//g | sed s/.fits/.log/g)
+logdir=$(dirname "$log")
+mkdir -p "$logdir"
 echo "Logging to $log"
 
 export PYTHONPATH=.:${PYTHONPATH}
 
 python -u legacyzpts/legacy_zeropoints.py \
        --camera megaprime \
-       --survey-dir ${survey_dir} \
-       --outdir ${out_dir} \
-       --image $img \
+       --survey-dir "${survey_dir}" \
+       --outdir "${out_dir}" \
+       --image "${img}" \
        --sdss-photom \
        --threads 40 \
        --force-cfht-ccds \
-       >> $log 2>&1
+       >> "$log" 2>&1
 
 #       --plots --verboseplots \
 #       --choose_ccd 1 \

@@ -1,8 +1,9 @@
 #! /bin/bash
-brick=$1
+
 #python legacypipe/forced_photom_brickwise.py --catalog-dir $CSCRATCH/cfis-ls --survey-dir ~/cosmo/work/users/dstn/dr9/north -d $CSCRATCH/cfis-ls/forced-u -b $brick --threads 8
 
-#export COSMO=/global/cfs/cdirs/cosmo
+brick="$1"
+
 export COSMO=/dvs_ro/cfs/cdirs/cosmo
 
 #out_dir=$SCRATCH/cfis-xmm-forced-from-dr9
@@ -29,8 +30,8 @@ out_dir=$SCRATCH/cfht-cosmos-cahk/forced
 cat_dir=$COSMO/data/legacysurvey/dr9/south
 survey_dir=/global/cfs/cdirs/desi/users/dstn/cfis-dir
 
-mkdir -p ${out_dir}/logs-forced
-echo Logging to ${out_dir}/logs-forced/${brick}.log
+mkdir -p "${out_dir}/logs-forced"
+echo "Logging to ${out_dir}/logs-forced/${brick}.log"
 
 #export SKY_TEMPLATE_DIR=$COSMO/work/legacysurvey/dr10/calib/sky_pattern
 unset SKY_TEMPLATE_DIR
@@ -48,13 +49,13 @@ unset LARGEGALAXIES_CAT
 export PYTHONPATH=.:${PYTHONPATH}
 
 python -u -O legacypipe/forced_photom_brickwise.py \
-       --brick $brick \
-       --survey-dir ${survey_dir} \
-       --catalog-dir ${cat_dir} \
-       --outdir ${out_dir} \
+       --brick "${brick}" \
+       --survey-dir "${survey_dir}" \
+       --catalog-dir "${cat_dir}" \
+       --outdir "${out_dir}" \
        --threads 16 \
        --bands CaHK \
-       >> ${out_dir}/logs-forced/${brick}.log 2>&1
+       >> "${out_dir}/logs-forced/${brick}.log" 2>&1
 
 #       --bands u \
 #       --bands u,g,i,z \
