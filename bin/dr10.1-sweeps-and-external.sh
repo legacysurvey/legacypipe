@@ -44,7 +44,7 @@ export LEGACYPIPE_DIR=/src/legacypipe
 
 # ADM an abstruse way of getting my home directory as $HOME
 # ADM can be redefined in docker containers.
-HOM=`eval echo "~$USER"`
+#HOM=`eval echo "~$USER"`
 # ADM the next line can be uncommented for, e.g., developing code.
 #export LEGACYPIPE_DIR=$HOM/git/legacypipe/
 

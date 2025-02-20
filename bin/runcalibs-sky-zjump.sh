@@ -7,8 +7,6 @@ export LEGACY_SURVEY_DIR=$SCRATCH/sky-zjump
 
 outdir=$LEGACY_SURVEY_DIR/
 
-ncores=1
-
 export COSMO=/global/cfs/cdirs/cosmo
 
 export GAIA_CAT_DIR=$COSMO/data/gaia/edr3/healpix
@@ -82,7 +80,7 @@ echo "Logging to $log"
 export LEGACYPIPE_DIR=$HOME/legacypipe/py
 
 # python -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
-#     --threads ${ncores} \
+#     --threads 32 \
 # 	--camera ${camera} \
 #     --survey-dir ${LEGACY_SURVEY_DIR} \
 #     --image ${image_fn} \
