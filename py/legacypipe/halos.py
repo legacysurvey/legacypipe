@@ -38,9 +38,12 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
     assert(np.all(refs.ref_epoch > 0))
     rr,dd = radec_at_mjd(refs.ra, refs.dec, refs.ref_epoch.astype(float),
                          refs.pmra, refs.pmdec, refs.parallax, mjd)
+    if band not in ['g','r','i','z']:
+        print('No halo subtraction for band', band)
+        return 0.
     col = 'decam_mag_%s' % band
     if not col in refs.get_columns():
-        print('No halo subtraction for band', band)
+        print('No reference mag was computed for band', band, 'so no halo subtraction can be done')
         return 0.
     mag = refs.get(col)
     good = np.flatnonzero(mag != 0.)

@@ -379,7 +379,8 @@ def measure_image(img_fn, mp, image_dir='images',
         return
 
     rtns = mp.map(run_one_ext, [(img, ext, survey, splinesky,
-                                 measureargs['sdss_photom'], plots)
+                                 measureargs['sdss_photom'],
+                                 measureargs['gaia_photom'], plots)
                                 for ext in extlist])
 
     for ccd,photom in rtns:
@@ -477,7 +478,7 @@ def run_one_calib(X):
     return img
 
 def run_one_ext(X):
-    img, ext, survey, splinesky, sdss_photom, plots = X
+    img, ext, survey, splinesky, sdss_photom, gaia_photom, plots = X
 
     ps = None
     if plots:
@@ -487,7 +488,8 @@ def run_one_ext(X):
     img = survey.get_image_object(None, camera=img.camera,
                                   image_fn=img.image_filename, image_hdu=ext,
                                   prime_cache=False)
-    return run_zeropoints(img, splinesky=splinesky, sdss_photom=sdss_photom, ps=ps)
+    return run_zeropoints(img, splinesky=splinesky, sdss_photom=sdss_photom,
+                          gaia_photom=gaia_photom, ps=ps)
 
 class outputFns(object):
     def __init__(self, imgfn, outdir, camera, image_dir='images', debug=False):
@@ -660,6 +662,8 @@ def get_parser():
     parser.add_argument('--outdir', type=str, default=None, help='Where to write photom and annotated files; default [survey_dir]/zpt')
     parser.add_argument('--sdss-photom', default=False, action='store_true',
                         help='Use SDSS rather than PS-1 for photometric cal.')
+    parser.add_argument('--gaia-photom', default=False, action='store_true',
+                        help='Use Gaia rather than PS-1 for photometric cal.')
     parser.add_argument('--debug', action='store_true', default=False, help='Write additional files and plots for debugging')
     parser.add_argument('--choose_ccd', action='store', default=None, help='forced to use only the specified ccd')
     parser.add_argument('--force-cfht-ccds', action='store_true', default=False,
@@ -879,7 +883,7 @@ def main(args=None):
     tnow = Time()
     print("TIMING:total %s" % (tnow-tbegin,))
 
-def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
+def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False, ps=None):
     """Computes photometric and astrometric zeropoints for one CCD.
 
     Args:
@@ -1009,7 +1013,14 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
         ccds['zpt'] = zpt
         return ccds, None
 
-    # Load PS1 & Gaia catalogues
+    # Load Gaia & photometric calibrator catalogues
+
+    gaia = GaiaCatalog().get_catalog_in_wcs(wcs)
+    assert(gaia is not None)
+    assert(len(gaia) > 0)
+    gaia = GaiaCatalog.catalog_nantozero(gaia)
+    assert(gaia is not None)
+    print(len(gaia), 'Gaia stars')
 
     phot = None
     if sdss_photom:
@@ -1017,6 +1028,9 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
             phot = sdsscat(ccdwcs=wcs).get_stars(magrange=None)
         except OSError as e:
             print('No SDSS stars found for this image -- outside the SDSS footprint?', e)
+    elif gaia_photom:
+        # ....???
+        phot = gaia
     else:
         try:
             phot = ps1cat(ccdwcs=wcs).get_stars(magrange=None)
@@ -1028,6 +1042,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
 
     if sdss_photom:
         name = 'sdss'
+    elif gaia_photom:
+        name = 'gaia'
     else:
         name = 'ps1'
 
@@ -1040,16 +1056,10 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
             phot.legacy_survey_mag = imobj.photometric_calibrator_to_observed(name, phot)
             print(len(phot), 'photometric calibrator stars')
 
-    gaia = GaiaCatalog().get_catalog_in_wcs(wcs)
-    assert(gaia is not None)
-    assert(len(gaia) > 0)
-    gaia = GaiaCatalog.catalog_nantozero(gaia)
-    assert(gaia is not None)
-    print(len(gaia), 'Gaia stars')
-
     maxgaia = 1000
     if len(gaia) > maxgaia:
-        I = np.argsort(gaia.phot_g_mean_mag)
+        # omit (downgrade) those with G=0.0 ...
+        I = np.argsort(gaia.phot_g_mean_mag + 100.*(gaia.phot_g_mean_mag == 0))
         gaia.cut(I[:maxgaia])
         print('Cut to', len(gaia), 'Gaia stars with G mag in range %.2f to %.2f' %
               (gaia.phot_g_mean_mag[0], gaia.phot_g_mean_mag[-1]))
@@ -1116,6 +1126,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
         phot.flux0 = (10.**((zp0 - phot.legacy_survey_mag) / 2.5) * imobj.exptime
                      ).astype(np.float32)
 
+        match_phot = True
+
         if sdss_photom:
             phot.ra_sdss  = phot.ra.copy()
             phot.dec_sdss = phot.dec.copy()
@@ -1137,6 +1149,9 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
                 ('sdss_i', np.float32),
                 ('sdss_z', np.float32),
             ]
+        elif gaia_photom:
+            match_phot = False
+            phot_cols = []
         else:
             # we don't have/use proper motions for PS1 stars
             phot.rename('ra_ok',  'ra_now')
@@ -1167,32 +1182,33 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
                 ('ps1_mags_ok', bool),
             ]
 
-        # Match photometric stars to Gaia stars within 1".
-        I,J,_ = match_radec(gaia.ra_gaia, gaia.dec_gaia,
-                            phot.ra_phot, phot.dec_phot, 1./3600.,
-                            nearest=True)
-        print(len(I), 'of', len(gaia), 'Gaia and', len(phot), 'photometric cal stars matched')
+        if match_phot:
+            # Match photometric stars to Gaia stars within 1".
+            I,J,_ = match_radec(gaia.ra_gaia, gaia.dec_gaia,
+                                phot.ra_phot, phot.dec_phot, 1./3600.,
+                                nearest=True)
+            print(len(I), 'of', len(gaia), 'Gaia and', len(phot), 'photometric cal stars matched')
 
-        # Merged = photocal stars + unmatched Gaia
-        if len(I):
-            # Merge columns for the matched stars
-            for c in gaia.get_columns():
-                G = gaia.get(c)
-                # If column exists in both (eg, ra_now, dec_now), override
-                # the PHOT value with the Gaia value
-                if c in phot.get_columns():
-                    X = phot.get(c)
-                else:
-                    X = np.zeros(len(phot), G.dtype)
-                X[J] = G[I]
-                phot.set(c, X)
-            # unmatched Gaia stars
-            unmatched = np.ones(len(gaia), bool)
-            unmatched[I] = False
-            gaia.cut(unmatched)
-            del unmatched
+            # Merged = photocal stars + unmatched Gaia
+            if len(I):
+                # Merge columns for the matched stars
+                for c in gaia.get_columns():
+                    G = gaia.get(c)
+                    # If column exists in both (eg, ra_now, dec_now), override
+                    # the PHOT value with the Gaia value
+                    if c in phot.get_columns():
+                        X = phot.get(c)
+                    else:
+                        X = np.zeros(len(phot), G.dtype)
+                    X[J] = G[I]
+                    phot.set(c, X)
+                # unmatched Gaia stars
+                unmatched = np.ones(len(gaia), bool)
+                unmatched[I] = False
+                gaia.cut(unmatched)
+                del unmatched
 
-        refs.append(phot)
+            refs.append(phot)
     else:
         phot_cols = []
 

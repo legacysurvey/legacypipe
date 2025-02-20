@@ -39,7 +39,9 @@ class DecamImage(CPImage):
                 M464 = 23.456,
                 M490 = 23.535,
                 M517 = 23.554,
-    )
+                # average of CPMAGIC20250102
+                N395 = 21.649,
+                )
 
     K_EXT = dict(g = 0.173,
                  r = 0.090,
@@ -61,7 +63,9 @@ class DecamImage(CPImage):
                  M464 = 0.223,
                  M490 = 0.197,
                  M517 = 0.174,
-    )
+                 # From Arjun 2025-01-10
+                 N395 = 0.399,
+                 )
 
     '''A LegacySurveyImage (via CPImage) subclass to handle images from
     the Dark Energy Camera, DECam, on the Blanco telescope.
@@ -111,6 +115,8 @@ class DecamImage(CPImage):
             return 0.4, 1.5
         if self.band in ['M411', 'M438', 'M464', 'M490', 'M517']:
             return 0.3, 1.5
+        if self.band == 'N395':
+            return 0.2, 1.2
         return super().get_ps1_calibrator_color_range()
 
     def clip_colorterm(self, c):
@@ -126,6 +132,11 @@ class DecamImage(CPImage):
     def colorterm_ps1_to_observed(self, cat, band):
         from legacypipe.ps1cat import ps1_to_decam
         return ps1_to_decam(cat, band)
+
+    def gaia_to_observed(self, cat, band):
+        from legacypipe.gaiacat import gaia_to_decam
+        mags = gaia_to_decam(cat, [band])
+        return mags[0]
 
     def get_gain(self, primhdr, hdr):
         return np.average((hdr['GAINA'],hdr['GAINB']))

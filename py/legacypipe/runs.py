@@ -88,6 +88,34 @@ class IbisData(LegacySurveyData):
         print('Maskbits:', self.get_maskbits())
         print('Maskbits descriptions:', self.get_maskbits_descriptions())
 
+class IbisWideData(IbisData):
+    def ccds_for_fitting(self, brick, ccds):
+        import numpy as np
+        I = np.flatnonzero(['_wide' in o for o in ccds.object])
+        print('IBIS-wide run; cutting to', len(I), 'of', len(ccds), 'CCDs with "_wide" in the OBJECT name')
+        return I
+
+class IbisSpecialData(IbisData):
+    def ccds_for_fitting(self, brick, ccds):
+        import numpy as np
+        I = np.flatnonzero([('Pyxis' in o or 'NGC7492' in o) for o in ccds.object])
+        print('IBIS-wide run; cutting to', len(I), 'of', len(ccds), 'CCDs with matching OBJECT name')
+        return I
+
+class ClaudsTestData1(LegacySurveyData):
+    def filter_ccds(self, ccds):
+        import numpy as np
+        I = np.flatnonzero(np.isin(ccds.expnum, [1796492, 1796503, 1796353, 1795584]))
+        print('CLAUDS test #1: cutting CCDs to %i of %i on EXPNUM' % (len(I), len(ccds)))
+        return ccds[I]
+
+class ClaudsTestData2(LegacySurveyData):
+    def filter_ccds(self, ccds):
+        import numpy as np
+        I = np.flatnonzero(np.isin(ccds.expnum, [1796348, 1796344]))
+        print('CLAUDS test #2: cutting CCDs to %i of %i on EXPNUM' % (len(I), len(ccds)))
+        return ccds[I]
+
 class RerunWithCcds(LegacySurveyData):
     def get_brick_by_name(self, brickname):
         # BRUTAL HACK -- runbrick.py's stage_tims first calls
@@ -118,6 +146,10 @@ runs = {
     'rerun-ccds': RerunWithCcds,
     'suprime': SuprimeData,
     'ibis': IbisData,
+    'ibis-wide': IbisWideData,
+    'ibis-special': IbisSpecialData,
+    'clauds-test-1': ClaudsTestData1,
+    'clauds-test-2': ClaudsTestData2,
     None: LegacySurveyData,
 }
 

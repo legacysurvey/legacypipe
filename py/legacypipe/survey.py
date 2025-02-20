@@ -528,6 +528,7 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                    M464 = (2, 6.0 * rgb_stretch_factor),
                    M490 = (2, 6.0 * rgb_stretch_factor),
                    M517 = (2, 6.0 * rgb_stretch_factor),
+                   N395 = (2, 6.0 * rgb_stretch_factor),
                    # HSC
                    r2 =    (1, 3.4 * rgb_stretch_factor),
                    i2 =    (0, 3.0 * rgb_stretch_factor),

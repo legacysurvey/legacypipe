@@ -4371,6 +4371,5 @@
 1266993
 1267847
 1270142
-# found in DR11 census...
-# no stars
+# found in DR11 census... no stars; DeROSITAS
 886831

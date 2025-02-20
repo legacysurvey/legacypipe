@@ -21,7 +21,7 @@ from legacypipe.catalog import read_fits_catalog
 from legacypipe.outliers import read_outlier_mask_file
 
 def print_timing(*args):
-    #print(*args)
+    print(*args)
     pass
 
 def get_parser():
@@ -683,6 +683,14 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     if plots:
         get_model = True
         opt.plot_wcs = getattr(opt, 'plot_wcs', None)
+
+    from collections import Counter
+    print('Photometering', len(cat), 'sources in image of size', tim.shape)
+    for t,n in Counter(T.type).items():
+        print('  ', n, t, 'sources')
+    print('Largest galaxies:')
+    for i in np.argsort(-T.shape_r)[:5]:
+        print('  ', cat[i])
 
     #print('Forced photom for', im, '...')
     F = run_forced_phot(cat, tim,

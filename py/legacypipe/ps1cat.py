@@ -31,22 +31,22 @@ class HealpixedCatalog(object):
             hp = hpxy
         return hp
 
-    def get_healpix_catalog(self, healpix):
+    def get_healpix_catalog(self, healpix, columns=None):
         from astrometry.util.fits import fits_table
         fname = self.fnpattern % dict(hp=healpix)
         #print('Reading', fname)
-        return fits_table(fname)
+        return fits_table(fname, columns=columns)
 
-    def get_healpix_catalogs(self, healpixes):
+    def get_healpix_catalogs(self, healpixes, columns=None):
         from astrometry.util.fits import merge_tables
         cats = []
         for hp in healpixes:
-            cats.append(self.get_healpix_catalog(hp))
+            cats.append(self.get_healpix_catalog(hp, columns=columns))
         if len(cats) == 1:
             return cats[0]
         return merge_tables(cats)
 
-    def get_catalog_in_wcs(self, wcs, step=100., margin=10):
+    def get_catalog_in_wcs(self, wcs, step=100., margin=10, columns=None):
         # Grid the CCD in pixel space
         W,H = wcs.get_width(), wcs.get_height()
         xx,yy = np.meshgrid(
@@ -58,7 +58,7 @@ class HealpixedCatalog(object):
         for r,d in zip(ra,dec):
             healpixes.add(self.healpix_for_radec(r, d))
         # Read catalog in those healpixes
-        cat = self.get_healpix_catalogs(healpixes)
+        cat = self.get_healpix_catalogs(healpixes, columns=columns)
         # Cut to sources actually within the CCD.
         _,xx,yy = wcs.radec2pixelxy(cat.ra, cat.dec)
         cat.x = xx
@@ -82,6 +82,8 @@ class ps1cat(HealpixedCatalog):
                    M464=0,
                    M490=0,
                    M517=0,
+                   # CaII H+K narrow-band
+                   N395=0,
     )
     def __init__(self,expnum=None,ccdname=None,ccdwcs=None):
         """Read PS1 or gaia sources for an exposure number + CCD name or CCD WCS
@@ -228,6 +230,9 @@ def ps1_to_decam(psmags, band):
         M464 = [ 0.0923, -0.5188, 1.9504, -2.7307, 1.2414],
         M490 = [ 0.1226, -0.7488, 1.2442, -1.1108, 0.4564],
         M517 = [ 0.0804, -0.6777, 0.3386, 1.0064, -0.7840],
+
+        # DECam
+        N395 = [ -0.0175,  1.9864,  1.3696, -1.2493],
 
         )[band]
 
