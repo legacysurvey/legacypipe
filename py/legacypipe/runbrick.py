@@ -3264,7 +3264,7 @@ def stage_writecat(
         format_catalog(T[np.argsort(T.objid)], None, primhdr, bands,
                        survey.allbands, None, release,
                        write_kwargs=dict(fits_object=out.fits),
-                       N_wise_epochs=17, motions=gaia_stars, gaia_tagalong=True)
+                       N_wise_epochs=19, motions=gaia_stars, gaia_tagalong=True)
 
     # write fits file with galaxy-sim stuff (xy bounds of each sim)
     if 'sims_xy' in T.get_columns():
