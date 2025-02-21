@@ -130,7 +130,7 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
         return False
     F = fitsio.FITS(fn)
     for tim in tims:
-        extname = '%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
+        extname = 'MASK-%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
         if not extname in F:
             info('WARNING: Did not find extension', extname, 'in outlier-mask file', fn)
             return False
@@ -354,7 +354,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 # GZIP_1: 4.4M
                 # GZIP: 4.4M
                 # RICE: 2.8M
-                extname = '%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
+                extname = 'MASK-%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
                 out.fits.write(mask, header=hdr, extname=extname, compress='HCOMPRESS')
             del R
 

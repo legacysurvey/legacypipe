@@ -445,7 +445,7 @@ def stage_refs(survey=None,
         units = get_units_for_columns(cols, extras=extra_units)
         with survey.write_output('ref-sources', brick=brickname) as out:
             refstars.writeto(None, fits_object=out.fits, primheader=version_header,
-                             columns=cols, units=units)
+                             columns=cols, units=units, extname='REFERENCES')
 
     T_dup = None
     T_clusters = None
@@ -680,7 +680,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                             comment='NOIRLab data product type'))
     # Write per-brick CCDs table
     with survey.write_output('ccds-table', brick=brickname) as out:
-        ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
+        ccds.writeto(None, fits_object=out.fits, primheader=primhdr, extname='CCDS')
 
     if plots:
         import pylab as plt
@@ -771,7 +771,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     if not minimal_coadds:
         D = _depth_histogram(brick, targetwcs, bands, C.psfdetivs, C.galdetivs)
         with survey.write_output('depth-table', brick=brickname) as out:
-            D.writeto(None, fits_object=out.fits)
+            D.writeto(None, fits_object=out.fits, extname='DEPTH')
         del D
 
     coadd_list= [('image', C.coimgs)]
@@ -1061,7 +1061,8 @@ def stage_srcs(pixscale=None, targetwcs=None,
         detstars.set('flux_' + band, np.array([src.getBrightness().getFlux(band)
                                                for src in cat]))
     with survey.write_output('detected-sources', brick=brickname) as out:
-        detstars.writeto(None, fits_object=out.fits, primheader=version_header)
+        detstars.writeto(None, fits_object=out.fits, primheader=version_header,
+                         extname='DETECTIONS')
     del detstars
     if 'peaksn' in T.get_columns():
         # (can be missing if no sources are detected - only reference sources)
@@ -1543,7 +1544,7 @@ def stage_fitblobs(T=None,
         hdr.add_record(dict(name='IMTYPE', value='blobmap',
                             comment='LegacySurveys image type'))
         with survey.write_output('blobmap', brick=brickname, shape=blobmap.shape) as out:
-            out.fits.write(blobmap, header=hdr)
+            out.fits.write(blobmap, header=hdr, extname='BLOB-MAP')
 
     T.brickid = np.zeros(len(T), np.int32) + brickid
     T.brickname = np.array([brickname] * len(T))
@@ -1562,7 +1563,7 @@ def stage_fitblobs(T=None,
                                         comment='NOIRLab data product type'))
             with survey.write_output('all-models', brick=brickname) as out:
                 TT[np.argsort(TT.objid)].writeto(None, fits_object=out.fits, header=hdr,
-                                                 primheader=primhdr)
+                                                 primheader=primhdr, extname='ALL-MODELS')
 
     keys = ['cat', 'invvars', 'T', 'blobmap', 'refmap', 'version_header',
             'frozen_galaxies', 'T_dup']
@@ -2178,7 +2179,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
                             comment='NOIRLab data product type'))
     with survey.write_output('ccds-table', brick=brickname) as out:
-        ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
+        ccds.writeto(None, fits_object=out.fits, primheader=primhdr, extname='CCDS')
 
     if plots and False:
         import pylab as plt
@@ -2351,7 +2352,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # Compute depth histogram
     D = _depth_histogram(brick, targetwcs, bands, C.psfdetivs, C.galdetivs)
     with survey.write_output('depth-table', brick=brickname) as out:
-        D.writeto(None, fits_object=out.fits)
+        D.writeto(None, fits_object=out.fits, extname='DEPTH')
     del D
 
     U = None
@@ -3248,7 +3249,8 @@ def stage_writecat(
         T.fitbits[T.get(col)] |= FITBITS[bit]
 
     with survey.write_output('tractor-intermediate', brick=brickname) as out:
-        T[np.argsort(T.objid)].writeto(None, fits_object=out.fits, primheader=primhdr)
+        T[np.argsort(T.objid)].writeto(None, fits_object=out.fits, primheader=primhdr,
+                                       extname='CATALOG-INTERMEDIATE')
 
     # After writing tractor-i file, drop (reference) sources outside the brick.
     T.cut(T.in_bounds)
