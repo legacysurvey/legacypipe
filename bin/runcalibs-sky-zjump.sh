@@ -1,6 +1,5 @@
 #! /bin/bash
 
-
 # JumpSky for z-band S30 chips, on Perlmutter
 
 export LEGACY_SURVEY_DIR=$SCRATCH/sky-zjump
@@ -40,19 +39,19 @@ export KMP_AFFINITY=disabled
 
 # # Config directory nonsense
 export TMPCACHE=$(mktemp -d)
-mkdir $TMPCACHE/cache
-mkdir $TMPCACHE/config
+mkdir "$TMPCACHE/cache"
+mkdir "$TMPCACHE/config"
 # astropy
 export XDG_CACHE_HOME=$TMPCACHE/cache
 export XDG_CONFIG_HOME=$TMPCACHE/config
-mkdir $XDG_CACHE_HOME/astropy
-cp -r $HOME/.astropy/cache $XDG_CACHE_HOME/astropy
-mkdir $XDG_CONFIG_HOME/astropy
-cp -r $HOME/.astropy/config $XDG_CONFIG_HOME/astropy
+mkdir "$XDG_CACHE_HOME/astropy"
+cp -r "$HOME/.astropy/cache" "$XDG_CACHE_HOME/astropy"
+mkdir "$XDG_CONFIG_HOME/astropy"
+cp -r "$HOME/.astropy/config" "$XDG_CONFIG_HOME/astropy"
 # matplotlib
 export MPLCONFIGDIR=$TMPCACHE/matplotlib
-mkdir $MPLCONFIGDIR
-cp -r $HOME/.config/matplotlib $MPLCONFIGDIR
+mkdir "$MPLCONFIGDIR"
+cp -r "$HOME/.config/matplotlib" "$MPLCONFIGDIR"
 # # ipython
 # export IPYTHONDIR=$TMPCACHE/ipython
 # mkdir $IPYTHONDIR
@@ -67,7 +66,7 @@ camera=decam
 #cpdir=$(basename $(dirname "${image_fn}"))
 #logdir=$outdir/logs/$camera/$cpdir
 
-logdir=$outdir/logs/$camera/$(echo $expnum | cut -c 1-3)
+logdir=$outdir/logs/$camera/$(echo "$expnum" | cut -c 1-3)
 mkdir -p "$logdir"
 
 #log=$(echo $(basename "${image_fn}" | sed s#.fits.fz#.log#g))
@@ -94,17 +93,17 @@ export LEGACYPIPE_DIR=$HOME/legacypipe/py
 #     --no-check-photom \
 #     >> "$log" 2>&1
 
-python -O $LEGACYPIPE_DIR/legacyzpts/run-calib.py \
-    --survey-dir ${LEGACY_SURVEY_DIR} \
-    --expnum ${expnum} \
+python -O "$LEGACYPIPE_DIR/legacyzpts/run-calib.py" \
+    --survey-dir "${LEGACY_SURVEY_DIR}" \
+    --expnum "${expnum}" \
     --ccdname S30 \
     --no-psf \
-    --blob-mask-dir $BLOB_MASK_DIR \
+    --blob-mask-dir "$BLOB_MASK_DIR" \
     >> "$log" 2>&1
 
 status=$?
 
 # /Config directory nonsense
-rm -R $TMPCACHE
+rm -R "$TMPCACHE"
 
 exit $status
