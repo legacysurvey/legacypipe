@@ -921,6 +921,20 @@ def clean_band_name(band):
     '''
     return band.upper().replace('-','_')
 
+class FITSWrapper(fitsio.FITS):
+    '''
+    Used in our LegacySurveyData "write_output" context class, this allows easily
+    setting a default "dither_seed" keyword arg for all *write* calls.
+    '''
+    def __init__(self, *args, default_dither_seed=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.default_dither_seed = default_dither_seed
+
+    def write_image(self, *args, dither_seed=None, **kwargs):
+        if dither_seed is None:
+            dither_seed = self.default_dither_seed
+        return super().write_image(*args, dither_seed=dither_seed, **kwargs)
+
 class LegacySurveyData(object):
     '''
     A class describing the contents of a LEGACY_SURVEY_DIR directory --
@@ -1426,8 +1440,9 @@ class LegacySurveyData(object):
                 self.tmpfn = os.path.join(os.path.dirname(fn),
                                           'tmp-'+os.path.basename(fn))
                 if self.is_fits:
-                    self.fits = fitsio.FITS('mem://' + (compression or ''),
-                                            'rw')
+                    self.fits = FITSWrapper('mem://' + (compression or ''),
+                                            'rw',
+                                            default_dither_seed='checksum')
                 else:
                     self.fn = self.tmpfn
                 self.hashsum = hashsum
