@@ -381,8 +381,6 @@ def get_version_header(program_name, survey_dir, release, git_version=None,
                         comment='$LEGACY_SURVEY_DIR directory'))
     hdr.add_record(dict(name='LSDR', value='DR10',
                         comment='Data release number'))
-    hdr.add_record(dict(name='RUNDATE', value=datetime.datetime.now().isoformat(),
-                        comment='%s run time' % program_name))
     hdr.add_record(dict(name='SURVEY', value='DECaLS+BASS+MzLS',
                         comment='The LegacySurveys'))
     # Requested by NOIRLab
@@ -396,14 +394,17 @@ def get_version_header(program_name, survey_dir, release, git_version=None,
     hdr.add_record(dict(name='PROCTYPE', value=proctype,
                         comment='Processing type'))
 
-    hdr.add_record(dict(name='NODENAME', value=socket.gethostname(),
-                        comment='Machine where script was run'))
-    hdr.add_record(dict(name='HOSTNAME', value=os.environ.get('NERSC_HOST', 'none'),
-                        comment='NERSC machine where script was run'))
-    hdr.add_record(dict(name='JOB_ID', value=os.environ.get('SLURM_JOB_ID', 'none'),
-                        comment='SLURM job id'))
-    hdr.add_record(dict(name='ARRAY_ID', value=os.environ.get('ARRAY_TASK_ID', 'none'),
-                        comment='SLURM job array id'))
+    # These make the output data products not bitwise reproducible...
+    # hdr.add_record(dict(name='RUNDATE', value=datetime.datetime.now().isoformat(),
+    #                     comment='%s run time' % program_name))
+    # hdr.add_record(dict(name='NODENAME', value=socket.gethostname(),
+    #                     comment='Machine where script was run'))
+    # hdr.add_record(dict(name='HOSTNAME', value=os.environ.get('NERSC_HOST', 'none'),
+    #                     comment='NERSC machine where script was run'))
+    # hdr.add_record(dict(name='JOB_ID', value=os.environ.get('SLURM_JOB_ID', 'none'),
+    #                     comment='SLURM job id'))
+    # hdr.add_record(dict(name='ARRAY_ID', value=os.environ.get('ARRAY_TASK_ID', 'none'),
+    #                     comment='SLURM job array id'))
     return hdr
 
 def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir,
