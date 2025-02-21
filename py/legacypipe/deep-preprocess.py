@@ -132,7 +132,7 @@ def stage_deep_preprocess(
                                 comment='Brick Dec min (deg)'))
     version_header.add_record(dict(name='DECMAX'  , value=brick.dec2,
                                 comment='Brick Dec max (deg)'))
-    # Add NOAO-requested headers
+    # Add NOIRLab-requested headers
     version_header.add_record(dict(
         name='RA', value=ra2hmsstring(brick.ra, separator=':'), comment='Brick center RA (hms)'))
     version_header.add_record(dict(
@@ -546,7 +546,7 @@ def stage_deep_preprocess_2(
     for r in version_header.records():
         primhdr.add_record(r)
     primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
-                            comment='NOAO data product type'))
+                            comment='NOIRLab data product type'))
 
     # Write per-brick CCDs table
     with survey.write_output('ccds-table', brick=brickname) as out:

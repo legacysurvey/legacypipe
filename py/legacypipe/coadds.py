@@ -1078,7 +1078,7 @@ def write_coadd_images(band,
         hdr2.add_record(dict(name='IMTYPE', value=name,
                              comment='LegacySurveys image type'))
         hdr2.add_record(dict(name='PRODTYPE', value=prodtype,
-                             comment='NOAO image type'))
+                             comment='NOIRLab image type'))
         if name in ['image', 'model', 'blobmodel']:
             hdr2.add_record(dict(name='MAGZERO', value=22.5,
                                  comment='Magnitude zeropoint'))

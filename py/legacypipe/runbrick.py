@@ -181,7 +181,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                                 comment='Brick Dec min (deg)'))
     version_header.add_record(dict(name='DECMAX'  , value=brick.dec2,
                                 comment='Brick Dec max (deg)'))
-    # Add NOAO-requested headers
+    # Add NOIRLab-requested headers
     version_header.add_record(dict(
         name='RA', value=ra2hmsstring(brick.ra, separator=':'), comment='Brick center RA (hms)'))
     version_header.add_record(dict(
@@ -677,7 +677,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     for r in version_header.records():
         primhdr.add_record(r)
     primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
-                            comment='NOAO data product type'))
+                            comment='NOIRLab data product type'))
     # Write per-brick CCDs table
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
@@ -1559,7 +1559,7 @@ def stage_fitblobs(T=None,
             for r in version_header.records():
                 primhdr.add_record(r)
                 primhdr.add_record(dict(name='PRODTYPE', value='catalog',
-                                        comment='NOAO data product type'))
+                                        comment='NOIRLab data product type'))
             with survey.write_output('all-models', brick=brickname) as out:
                 TT[np.argsort(TT.objid)].writeto(None, fits_object=out.fits, header=hdr,
                                                  primheader=primhdr)
@@ -2176,7 +2176,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     for r in version_header.records():
         primhdr.add_record(r)
     primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
-                            comment='NOAO data product type'))
+                            comment='NOIRLab data product type'))
     with survey.write_output('ccds-table', brick=brickname) as out:
         ccds.writeto(None, fits_object=out.fits, primheader=primhdr)
 
@@ -3168,7 +3168,7 @@ def stage_writecat(
     for r in version_header.records():
         primhdr.add_record(r)
     primhdr.add_record(dict(name='PRODTYPE', value='catalog',
-                            comment='NOAO data product type'))
+                            comment='NOIRLab data product type'))
 
     if co_sky is not None:
         for band in bands:

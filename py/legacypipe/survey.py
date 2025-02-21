@@ -385,7 +385,7 @@ def get_version_header(program_name, survey_dir, release, git_version=None,
                         comment='%s run time' % program_name))
     hdr.add_record(dict(name='SURVEY', value='DECaLS+BASS+MzLS',
                         comment='The LegacySurveys'))
-    # Requested by NOAO
+    # Requested by NOIRLab
     hdr.add_record(dict(name='SURVEYID', value='DECaLS BASS MzLS',
                         comment='Survey names'))
     if release is not None:
