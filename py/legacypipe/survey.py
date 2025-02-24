@@ -381,11 +381,9 @@ def get_version_header(program_name, survey_dir, release, git_version=None,
                         comment='$LEGACY_SURVEY_DIR directory'))
     hdr.add_record(dict(name='LSDR', value='DR10',
                         comment='Data release number'))
-    hdr.add_record(dict(name='RUNDATE', value=datetime.datetime.now().isoformat(),
-                        comment='%s run time' % program_name))
     hdr.add_record(dict(name='SURVEY', value='DECaLS+BASS+MzLS',
                         comment='The LegacySurveys'))
-    # Requested by NOAO
+    # Requested by NOIRLab
     hdr.add_record(dict(name='SURVEYID', value='DECaLS BASS MzLS',
                         comment='Survey names'))
     if release is not None:
@@ -396,14 +394,17 @@ def get_version_header(program_name, survey_dir, release, git_version=None,
     hdr.add_record(dict(name='PROCTYPE', value=proctype,
                         comment='Processing type'))
 
-    hdr.add_record(dict(name='NODENAME', value=socket.gethostname(),
-                        comment='Machine where script was run'))
-    hdr.add_record(dict(name='HOSTNAME', value=os.environ.get('NERSC_HOST', 'none'),
-                        comment='NERSC machine where script was run'))
-    hdr.add_record(dict(name='JOB_ID', value=os.environ.get('SLURM_JOB_ID', 'none'),
-                        comment='SLURM job id'))
-    hdr.add_record(dict(name='ARRAY_ID', value=os.environ.get('ARRAY_TASK_ID', 'none'),
-                        comment='SLURM job array id'))
+    # These make the output data products not bitwise reproducible...
+    # hdr.add_record(dict(name='RUNDATE', value=datetime.datetime.now().isoformat(),
+    #                     comment='%s run time' % program_name))
+    # hdr.add_record(dict(name='NODENAME', value=socket.gethostname(),
+    #                     comment='Machine where script was run'))
+    # hdr.add_record(dict(name='HOSTNAME', value=os.environ.get('NERSC_HOST', 'none'),
+    #                     comment='NERSC machine where script was run'))
+    # hdr.add_record(dict(name='JOB_ID', value=os.environ.get('SLURM_JOB_ID', 'none'),
+    #                     comment='SLURM job id'))
+    # hdr.add_record(dict(name='ARRAY_ID', value=os.environ.get('ARRAY_TASK_ID', 'none'),
+    #                     comment='SLURM job array id'))
     return hdr
 
 def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir,
@@ -921,6 +922,20 @@ def clean_band_name(band):
     '''
     return band.upper().replace('-','_')
 
+class FITSWrapper(fitsio.FITS):
+    '''
+    Used in our LegacySurveyData "write_output" context class, this allows easily
+    setting a default "dither_seed" keyword arg for all *write* calls.
+    '''
+    def __init__(self, *args, default_dither_seed=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.default_dither_seed = default_dither_seed
+
+    def write_image(self, *args, dither_seed=None, **kwargs):
+        if dither_seed is None:
+            dither_seed = self.default_dither_seed
+        return super().write_image(*args, dither_seed=dither_seed, **kwargs)
+
 class LegacySurveyData(object):
     '''
     A class describing the contents of a LEGACY_SURVEY_DIR directory --
@@ -1426,8 +1441,9 @@ class LegacySurveyData(object):
                 self.tmpfn = os.path.join(os.path.dirname(fn),
                                           'tmp-'+os.path.basename(fn))
                 if self.is_fits:
-                    self.fits = fitsio.FITS('mem://' + (compression or ''),
-                                            'rw')
+                    self.fits = FITSWrapper('mem://' + (compression or ''),
+                                            'rw',
+                                            default_dither_seed='checksum')
                 else:
                     self.fn = self.tmpfn
                 self.hashsum = hashsum

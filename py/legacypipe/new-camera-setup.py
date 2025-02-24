@@ -350,8 +350,8 @@ def main():
         ps.savefig()
 
         plt.clf()
-        n,b,p = plt.hist((impix.flat[goodpix] - skymed) * np.sqrt(invvar.flat[goodpix]), bins=50,
-                         range=(-5,+5), log=True)
+        plt.hist((impix.flat[goodpix] - skymed) * np.sqrt(invvar.flat[goodpix]), bins=50,
+                 range=(-5,+5), log=True)
         plt.plot(xx, mx * yy/max(yy), 'b-')
         plt.xlim(-5,+5)
         plt.xlabel('Image pixels * sqrt(invvar)  (sigma)')

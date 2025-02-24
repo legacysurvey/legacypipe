@@ -146,13 +146,13 @@ class UnwiseCoadd(SimpleCoadd):
     def write_coadds(self, survey, brickname, hdr, band, coimg, comod, coiv, con):
         with survey.write_output('image', brick=brickname, band='W%i'%band,
                                  shape=coimg.shape) as out:
-            out.fits.write(coimg, header=hdr)
+            out.fits.write(coimg, header=hdr, extname='IMAGE_W%s' % band)
         with survey.write_output('model', brick=brickname, band='W%i'%band,
                                  shape=comod.shape) as out:
-            out.fits.write(comod, header=hdr)
+            out.fits.write(comod, header=hdr, extname='MODEL_W%s' % band)
         with survey.write_output('invvar', brick=brickname, band='W%i'%band,
                                  shape=coiv.shape) as out:
-            out.fits.write(coiv, header=hdr)
+            out.fits.write(coiv, header=hdr, extname='INVVAR_W%s' % band)
 
     def write_color_image(self, survey, brickname, coimgs, comods):
         from legacypipe.survey import imsave_jpeg
@@ -1078,7 +1078,7 @@ def write_coadd_images(band,
         hdr2.add_record(dict(name='IMTYPE', value=name,
                              comment='LegacySurveys image type'))
         hdr2.add_record(dict(name='PRODTYPE', value=prodtype,
-                             comment='NOAO image type'))
+                             comment='NOIRLab image type'))
         if name in ['image', 'model', 'blobmodel']:
             hdr2.add_record(dict(name='MAGZERO', value=22.5,
                                  comment='Magnitude zeropoint'))
@@ -1089,13 +1089,14 @@ def write_coadd_images(band,
                                  comment='Sky level estimated (+subtracted) from coadd'))
         if name in ['invvar', 'depth', 'galdepth']:
             hdr2.add_record(dict(name='BUNIT', value='1/nanomaggy^2',
-                                 comment='Ivar of ABmag=22.5-2.5*log10(nmgy)'))
+                                 comment='Inverse-variance maps; ABmag=22.5-2.5*log10(nmgy)'))
         if name in ['psfsize']:
             hdr2.add_record(dict(name='BUNIT', value='arcsec',
                                  comment='Effective PSF size'))
+        extname = '%s_%s' % (name.upper(), band)
         with survey.write_output(name, brick=brickname, band=band,
                                  shape=img.shape) as out:
-            out.fits.write(img, header=hdr2)
+            out.fits.write(img, header=hdr2, extname=extname)
 
 # Pretty much only used for plots; the real deal is make_coadds()
 def quick_coadds(tims, bands, targetwcs, images=None,

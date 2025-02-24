@@ -318,7 +318,7 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
 
     units = get_units_for_columns(cols, bands=[clean_column_name(b) for b in allbands] + wbands + gbands)
     T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units,
-              **write_kwargs)
+              extname='CATALOG', **write_kwargs)
 
 def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
     import fitsio

@@ -3,7 +3,7 @@ from legacypipe.cpimage import CPImage
 class MosaicImage(CPImage):
     '''
     Class for handling images from the Mosaic3 camera processed by the
-    NOAO Community Pipeline.
+    NOIRLab Community Pipeline.
     '''
     def __init__(self, survey, t, image_fn=None, image_hdu=0, **kwargs):
         super(MosaicImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu,

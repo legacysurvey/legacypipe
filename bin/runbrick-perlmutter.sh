@@ -54,26 +54,26 @@ echo Logging to: "$log"
 
 # # Config directory nonsense
 export TMPCACHE=$(mktemp -d)
-mkdir $TMPCACHE/cache
-mkdir $TMPCACHE/config
+mkdir "$TMPCACHE/cache"
+mkdir "$TMPCACHE/config"
 # astropy
 export XDG_CACHE_HOME=$TMPCACHE/cache
 export XDG_CONFIG_HOME=$TMPCACHE/config
-mkdir $XDG_CACHE_HOME/astropy
-cp -r $HOME/.astropy/cache $XDG_CACHE_HOME/astropy
-mkdir $XDG_CONFIG_HOME/astropy
-cp -r $HOME/.astropy/config $XDG_CONFIG_HOME/astropy
+mkdir "$XDG_CACHE_HOME/astropy"
+cp -r "$HOME/.astropy/cache" "$XDG_CACHE_HOME/astropy"
+mkdir "$XDG_CONFIG_HOME/astropy"
+cp -r "$HOME/.astropy/config" "$XDG_CONFIG_HOME/astropy"
 # matplotlib
 export MPLCONFIGDIR=$TMPCACHE/matplotlib
-mkdir $MPLCONFIGDIR
-cp -r $HOME/.config/matplotlib $MPLCONFIGDIR
+mkdir "$MPLCONFIGDIR"
+cp -r "$HOME/.config/matplotlib" "$MPLCONFIGDIR"
 
 echo -e "\n\n\n" >> "$log"
 echo "-----------------------------------------------------------------------------------------" >> "$log"
 echo -e "\nStarting on $(hostname)\n" >> "$log"
 echo "-----------------------------------------------------------------------------------------" >> "$log"
 
-python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
+python -O "$LEGACYPIPE_DIR/legacypipe/runbrick.py" \
        --zoom 100 300 100 300 \
      --brick "$brick" \
      --skip \
@@ -110,7 +110,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
 status=$?
 
 # /Config directory nonsense
-rm -R $TMPCACHE
+rm -R "$TMPCACHE"
 
 exit $status
 

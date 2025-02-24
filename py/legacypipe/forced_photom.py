@@ -328,7 +328,7 @@ def main(survey=None, opt=None, args=None):
                     mask = outlier_masks[i]
                     _,_,_,meth,tile = survey.get_compression_args('outliers_mask', shape=mask.shape)
                     fits.write(mask, header=outlier_hdrs[i], extname=ccds.ccdname[i],
-                               compress=meth, tile_dims=tile)
+                               compress=meth, tile_dims=tile, dither_seed='checksum')
             os.rename(tempfn, outfn)
             print('Wrote', outfn)
     elif opt.outlier_mask is not None:
@@ -337,7 +337,7 @@ def main(survey=None, opt=None, args=None):
             for i,(hdr,mask) in enumerate(zip(outlier_hdrs,outlier_masks)):
                 _,_,_,meth,tile = survey.get_compression_args('outliers_mask', shape=mask.shape)
                 F.write(mask, header=hdr, extname=ccds.ccdname[i],
-                        compress=meth, tile_dims=tile)
+                        compress=meth, tile_dims=tile, dither_seed='checksum')
         print('Wrote', opt.outlier_mask)
 
     tnow = Time()

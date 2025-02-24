@@ -165,7 +165,6 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
         import matplotlib
         matplotlib.use('Agg')
 
-    if plots:
         plt.figure(figsize=(8,6))
         mods = []
         for tim in tims:

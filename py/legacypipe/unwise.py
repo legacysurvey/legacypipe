@@ -116,7 +116,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             tile_crpix = tile.get('crpix_w%i' % band)
             dx = tile_crpix[0] - 1024.5
             dy = tile_crpix[1] - 1024.5
-            realwcs.set_crpix(x+dx, y+dy)
+            realwcs.set_crpix(float(x+dx), float(y+dy))
             debug('unWISE', tile.coadd_id, 'band', band, 'CRPIX', x,y,
                   'shift by', dx,dy, 'to', realwcs.crpix)
 

@@ -36,38 +36,35 @@ export OMP_NUM_THREADS=1
 export MPICH_GNI_FORK_MODE=FULLCOPY
 export KMP_AFFINITY=disabled
 
-bri=$(echo $brick | head -c 3)
-mkdir -p $outdir/logs/$bri
+bri=$(echo "$brick" | head -c 3)
+mkdir -p "$outdir/logs/$bri"
 log="$outdir/logs/$bri/$brick.log"
 
-mkdir -p $outdir/metrics/$bri
+mkdir -p "$outdir/metrics/$bri"
 
 # # Config directory nonsense
 export TMPCACHE=$(mktemp -d)
-mkdir $TMPCACHE/cache
-mkdir $TMPCACHE/config
+mkdir "$TMPCACHE/cache"
+mkdir "$TMPCACHE/config"
 # astropy
 export XDG_CACHE_HOME=$TMPCACHE/cache
 export XDG_CONFIG_HOME=$TMPCACHE/config
-mkdir $XDG_CACHE_HOME/astropy
-cp -r $HOME/.astropy/cache $XDG_CACHE_HOME/astropy
-mkdir $XDG_CONFIG_HOME/astropy
-cp -r $HOME/.astropy/config $XDG_CONFIG_HOME/astropy
+mkdir "$XDG_CACHE_HOME/astropy"
+cp -r "$HOME/.astropy/cache" "$XDG_CACHE_HOME/astropy"
+mkdir "$XDG_CONFIG_HOME/astropy"
+cp -r "$HOME/.astropy/config" "$XDG_CONFIG_HOME/astropy"
 # matplotlib
 export MPLCONFIGDIR=$TMPCACHE/matplotlib
-mkdir $MPLCONFIGDIR
-cp -r $HOME/.config/matplotlib $MPLCONFIGDIR
+mkdir "$MPLCONFIGDIR"
+cp -r "$HOME/.config/matplotlib" "$MPLCONFIGDIR"
 
-echo Logging to: $log
+echo "Logging to: $log"
 echo Running on $(hostname)
 
-echo -e "\n\n\n" >> $log
-echo "-----------------------------------------------------------------------------------------" >> $log
-#echo "PWD: $(pwd)" >> $log
-#echo >> $log
-
-echo -e "\nStarting on $(hostname)\n" >> $log
-echo "-----------------------------------------------------------------------------------------" >> $log
+echo -e "\n\n\n" >> "$log"
+echo "-----------------------------------------------------------------------------------------" >> "$log"
+echo -e "\nStarting on $(hostname)\n" >> "$log"
+echo "-----------------------------------------------------------------------------------------" >> "$log"
 
 export LEGACYPIPE_DIR=.
 export PYTHONPATH=.:${PYTHONPATH}
@@ -93,18 +90,18 @@ python -u -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --coadd-bw \
        --bands N395 \
        --nsatur 2 \
-       --brick $brick \
+       --brick "$brick" \
        --rgb-stretch 1.5 \
        --sub-blobs \
        --no-wise \
        --skip-calibs \
-       --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle \
+       --checkpoint "${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle" \
        --checkpoint-period 300 \
        --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
-       --outdir $outdir \
+       --outdir "$outdir" \
        --write-stage srcs \
        --threads 32 \
-       >> $log 2>&1
+       >> "$log" 2>&1
 
 #        --skip-coadd \
 #        --stage image_coadds \
@@ -114,5 +111,5 @@ python -u -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
 # exit 0 because the rm succeeds!
 status=$?
 # /Config directory nonsense
-rm -R $TMPCACHE
+rm -R "$TMPCACHE"
 exit $status

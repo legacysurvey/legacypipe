@@ -250,7 +250,7 @@ def main():
                                 comment='Brick Dec min (deg)'))
     hdr.add_record(dict(name='DECMAX'  , value=brick.dec2,
                                 comment='Brick Dec max (deg)'))
-    # Add NOAO-requested headers
+    # Add NOIRLab-requested headers
     hdr.add_record(dict(
         name='RA', value=ra2hmsstring(brick.ra, separator=':'), comment='Brick center RA (hms)'))
     hdr.add_record(dict(

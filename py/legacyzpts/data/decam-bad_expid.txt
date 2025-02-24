@@ -4371,5 +4371,7 @@
 1266993
 1267847
 1270142
-# DeROSITAS
+# found in DR11 census... no stars; DeROSITAS
 886831
+# 4MAPS problem
+930275
