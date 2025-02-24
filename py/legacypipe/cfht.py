@@ -5,6 +5,41 @@ from legacypipe.image import LegacySurveyImage
 from legacypipe.bits import DQ_BITS
 
 '''
+Some top-level instructions for handling CFHT data.
+
+The biggest issue we have faced is with the astrometry, so we use
+Scamp to jointly solve for distortion terms in overlapping sets of
+images.
+
+The scheme is:
+
+(1) run the "legacy_zeropoints.py" code on each image to create the
+PsfEx and sky calib files, and also zpt/*/*-photom.fits
+
+- for u band, we can use SDSS for photometric calibration, via the
+--sdss-photom flag
+
+- at NERSC, you can use a command such as:
+    shifter --image docker:legacysurvey/legacypipe:DR10.3.3 --module none ../bin/cfis-u.sh cfis-cosmos-u/2571171p.fits.fz
+
+(2) run legacyzpts/run-scamp.py to convert the photom.fits files into
+inputs for Scamp, and then run scamp on them
+
+- you need Scamp v2.13.1 or later to pick up a book-keeping change that adds the EXTNAME to the output files.
+- at NERSC, the container listed above should work
+
+
+(3) re-run the "legacy_zeropoints.py" code to produce final
+*-photom.fits and *-annotated.fits files
+
+(4) merge those *-annotated files into a survey-ccds-X.fits file
+
+
+
+
+'''
+
+'''
 This is for the "pitcairn" reductions for CFIS-r data.
 
 eg, search for data from here,

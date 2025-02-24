@@ -3,8 +3,7 @@
 img=$1
 
 survey_dir=cfis-dir
-#out_dir=$SCRATCH/cfht-cosmos-u
-out_dir=$SCRATCH/cfht-xmm-u
+out_dir=$SCRATCH/cfis-cosmos-u
 
 export COSMO=/dvs_ro/cfs/cdirs/cosmo
 
@@ -45,9 +44,9 @@ python -u legacyzpts/legacy_zeropoints.py \
        --outdir ${out_dir} \
        --image $img \
        --sdss-photom \
-       --threads 40 \
-       --force-cfht-ccds \
+       --threads 10 \
        >> $log 2>&1
+#       --force-cfht-ccds \
 
 #       --plots --verboseplots \
 #       --choose_ccd 1 \

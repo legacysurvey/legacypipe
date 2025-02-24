@@ -116,6 +116,11 @@ class ClaudsTestData2(LegacySurveyData):
         print('CLAUDS test #2: cutting CCDs to %i of %i on EXPNUM' % (len(I), len(ccds)))
         return ccds[I]
 
+class ClaudsTestData3(LegacySurveyData):
+    # Actually a CFIS test, but just keeping with the naming scheme...
+    def filter_ccd_kd_files(self, fns):
+        return [fn for fn in fns if ('cfis-cosmos-u' in fn)]
+
 class RerunWithCcds(LegacySurveyData):
     def get_brick_by_name(self, brickname):
         # BRUTAL HACK -- runbrick.py's stage_tims first calls
@@ -150,6 +155,7 @@ runs = {
     'ibis-special': IbisSpecialData,
     'clauds-test-1': ClaudsTestData1,
     'clauds-test-2': ClaudsTestData2,
+    'clauds-test-3': ClaudsTestData3,
     None: LegacySurveyData,
 }
 
