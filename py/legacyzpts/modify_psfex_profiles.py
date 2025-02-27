@@ -1,4 +1,9 @@
-# srun -N 1 -C haswell -t 04:00:00 -q interactive python modify_psfex_profiles.py
+# Example:
+# # srun -N 1 -C haswell -t 04:00:00 -q interactive python modify_psfex_profiles.py --ccd_path /dvs_ro/cfs/cdirs/cosmo/work/legacysurvey/dr11/survey-ccds-decam-dr11-merged.fits --base_dir /dvs_ro/cfs/cdirs/cosmo/work/legacysurvey/dr11/ --output_dir /pscratch/sd/r/rongpu/dr11/psfex-patched > modify_psfex_profiles.log
+# Or simply get the patched PSFEx model for an (unpatched) PSFEx file:
+# # from legacyzpts import modify_psfex_profiles
+# # computed_patched_psfex('/dvs_ro/cfs/cdirs/cosmo/work/legacysurvey/dr11/calib/psfex/decam/CP/V5.5/CP20230515/c4d_230516_085330_ooi_z_v1-psfex.fits', 'z')
+
 import os, warnings
 import numpy as np
 from astropy.table import Table
@@ -6,6 +11,8 @@ import fitsio
 from astropy.io import fits
 from multiprocessing import Pool
 from scipy.optimize import curve_fit
+import argparse
+
 
 def get_frac_moffat(r, alpha, beta):
     """
@@ -44,22 +51,7 @@ def get_sb_double_moffat(r, alpha1, beta1, alpha2, beta2, weight2):
     return i
 
 
-n_processes = 8
-test_q = False  # only process a small number of exposures
-
-base_dir = '/global/cfs/cdirs/cosmo/work/legacysurvey/dr10/'
-#input_dir = os.path.join(base_dir, 'calib/psfex')
-#output_dir = os.path.join(base_dir, 'calib/patched-psfex')
-input_dir = os.path.join(base_dir, 'calib/unpatched-psfex')
-output_dir = os.path.join(base_dir, 'calib/patched-psfex')
-#surveyccd_path = os.path.join(base_dir, 'survey-ccds-decam-dr10-z-v1.fits')
-#surveyccd_path = os.path.join(base_dir, 'survey-ccds-decam-dr10f-i-v1.fits')
-# (new ones)
-#surveyccd_path = 'survey-ccds-decam-dr100.fits'
-surveyccd_path = 'todo.fits'
-
-from legacypipe.survey import get_git_version
-version = get_git_version()
+n_processes = 128
 
 radius_lim1, radius_lim2 = 5.0, 6.0
 radius_lim3, radius_lim4 = 7., 8.
@@ -75,49 +67,22 @@ outlier_ccd_list = ['N20', 'S8', 'S10', 'S18', 'S21', 'S27']
 params_outlier = {'z_alpha2': 16, 'z_beta2': 2.3, 'z_weight2': 0.0095}
 pixscale = 0.262
 
-ccd = fitsio.read(surveyccd_path)
-ccd = Table(ccd)
 
-"""
-mask = ccd['ccd_cuts']==0
-print(np.sum(mask)/len(mask))
-ccd = ccd[mask]
-"""
+def computed_patched_psfex(psfex_path, band, recompute=False):
 
-unique_expnum = np.unique(ccd['expnum'])
-#print(len(unique_expnum))
-
-# randomly select exposures for testing
-if test_q:
-    np.random.seed(123)
-    exp_index_list = np.random.choice(len(unique_expnum), size=50, replace=False)
-else:
-    exp_index_list = np.arange(len(unique_expnum))
-
-def modify_psfex(exp_index):
-
-    mask = ccd['expnum']==unique_expnum[exp_index]
-    band = ccd['filter'][mask][0]
-    #print('band = {}'.format(band))
-
-    image_filename = ccd['image_filename'][mask][0]
-    psfex_filename = image_filename[:image_filename.find('.fits.fz')]+'-psfex.fits'
-    psfex_filename_new = psfex_filename
-    psfex_path = os.path.join(input_dir, psfex_filename)
-    output_path = os.path.join(output_dir, psfex_filename_new)
-
-    if os.path.isfile(output_path):
-        print('Output exists:', output_path)
-        return None
-
-    if not os.path.exists(psfex_path):
-        print('Input PsfEx file does not exist:', psfex_path)
-        return None
-
+    data = Table(fitsio.read(psfex_path))
     #print('Reading', psfex_path)
     hdu = fits.open(psfex_path)
     data = Table(hdu[1].data)
     #print(len(data))
+
+    if 'psf_patch_ver' in data.colnames:
+        print('Input PsfEx file is already patched:', psfex_path)
+        if not recompute:
+            return None
+
+    from legacypipe.survey import get_git_version
+    version = get_git_version()
 
     data['psf_patch_ver'] = version
     data['moffat_alpha'] = 0.
@@ -180,7 +145,7 @@ def modify_psfex(exp_index):
                 popt, pcov = curve_fit(get_sb_moffat, radius[mask], psfi_flat[mask]/(pixscale**2), bounds=((0, 1.8), np.inf))
                 alpha, beta = popt
             except RuntimeError:
-                print("Error: "+image_filename+", "+ccdname+".")
+                print("Error: "+psfex_path+", "+ccdname+".")
                 print("Error: fit failed to converge.")
                 alpha, beta = 0.8, 2.2  # using default values
                 data['failure'][ccd_index] = True
@@ -258,19 +223,65 @@ def modify_psfex(exp_index):
 
             data['psf_mask'][ccd_index, psf_index] = psfi_combine
 
-    ############################# Save new PSFEx file ####################################
+    return data
 
+
+def _wrapper(image_filename):
+
+    image_path = os.path.join(_base_dir, 'images', image_filename)
+    band = fitsio.read_header(image_path)['BAND']
+    #print('band = {}'.format(band))
+
+    psfex_filename = image_filename.replace('.fits.fz', '-psfex.fits')
+    psfex_path = os.path.join(_base_dir, 'calib/psfex', psfex_filename)
+    output_path = os.path.join(_output_dir, psfex_filename)
+
+    if os.path.isfile(output_path):
+        print('Output exists:', output_path)
+        return None
+
+    if not os.path.exists(psfex_path):
+        print('Input PsfEx file does not exist:', psfex_path)
+        return None
+
+    data = computed_patched_psfex(psfex_path, band)
+    if data is None:
+        return None
+
+    # Save new PSFEx file
     if not os.path.exists(os.path.dirname(output_path)):
-        os.makedirs(os.path.dirname(output_path))
+        try:
+            os.makedirs(os.path.dirname(output_path))
+        except FileExistsError:  # in case other processes created the directory
+            pass
     data.write(output_path)
     print('Wrote', output_path)
+
     return None
 
 
 def main():
+
+    global _base_dir, _output_dir
+    # _base_dir = '/dvs_ro/cfs/cdirs/cosmo/work/legacysurvey/dr11/'
+    # _output_dir = '/pscratch/sd/r/rongpu/dr11/psfex'
+
+    parser = argparse.ArgumentParser(description='Create patched PSFEx models')
+    parser.add_argument('--ccd_path', type=str, required=True, help='path of the survey-ccds file')
+    parser.add_argument('--base_dir', type=str, required=True, help='base directory (e.g., /dvs_ro/cfs/cdirs/cosmo/work/legacysurvey/dr11)')
+    parser.add_argument('--output_dir', type=str, required=True, help='output directory')
+    args = parser.parse_args()
+    surveyccd_path, _base_dir, _output_dir = args.ccd_path, args.base_dir, args.output_dir
+
+    ccd = Table(fitsio.read(surveyccd_path, columns=['expnum', 'image_filename']))
+
+    # Only keep unique exposures
+    _, idx = np.unique(ccd['expnum'], return_index=True)
+    ccd = ccd[idx]
+
     with Pool(processes=n_processes) as pool:
-        res = pool.map(modify_psfex, exp_index_list)
+        res = pool.map(_wrapper, ccd['image_filename'])
+
 
 if __name__=="__main__":
     main()
-
