@@ -134,13 +134,41 @@ if False:  # debugging
 hash_file = files("legacypipe").joinpath("data/HASH_PNe_geometry.csv")
 hash_tab = pd.read_csv(hash_file, index_col=0)
 
+# Separate the OpenNGC objects into PNe and GCls
+out_pne = out[out["type"] == "PN"]
+out_gcl = out[out["type"] == "GCl"]
+
 # Remove PNe that are in HASH from the out table
 req_min_sep = 5.0  # arcsec
-out_coords = SkyCoord(out["ra"] << u.deg, out["dec"] << u.deg)
+out_pne_coords = SkyCoord(out_pne["ra"] << u.deg, out_pne["dec"] << u.deg)
 hash_coords = SkyCoord(hash_tab["ra"] << u.deg, hash_tab["dec"] << u.deg)
-match_idxs, match_seps, _ = match_coordinates_sky(out_coords, hash_coords)
+match_idxs, match_seps, _ = match_coordinates_sky(out_pne_coords, hash_coords)
+# Note: Many PNe in OpenNGC were left out of the HASH table because they were not
+# in the legacy survey footprint and therefore could not be visualy verified.
+# These PNe are still included in the out table
 duplicate_mask = ~(match_seps.arcsec < req_min_sep)
-out = out[duplicate_mask]
+out_pne = out_pne[duplicate_mask]
+
+# Restructure the HASH catalog so that it can be appended to the out tables
+hash_tab = Table.from_pandas(hash_tab)
+# Convert from arcseconds to degrees
+hash_tab["major_axis"] /= 3600.0
+hash_tab["minor_axis"] /= 3600.0
+hash_tab["ba"] = hash_tab["major_axis"] / hash_tab["minor_axis"]
+hash_tab["ba"][pd.isna(hash_tab["ba"])] = 1.0
+hash_tab["alt_name"] = "--"
+hash_tab["type"] = "PN"
+hash_tab["radius"] = hash_tab["major_axis"] / 2
+# Uniformly inflate all HASH PNe radii by 15%
+hash_tab["radius"] *= 1.15
+hash_tab_keep = hash_tab[
+    ["name", "alt_name", "type", "ra", "dec", "radius", "pa", "ba"]
+]
+out = ap_vstack([out_gcl, out_pne, hash_tab_keep])
+
+# Make a minimum size cut on all objects of 10 arcseconds in radius
+min_size_deg = 10.0 / 3600.0
+out = out[out["radius"] >= min_size_deg]
 
 # Write PNe and GCls to file
 out = out[np.argsort(out["ra"])]
