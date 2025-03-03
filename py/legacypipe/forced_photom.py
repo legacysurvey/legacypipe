@@ -50,6 +50,8 @@ def get_parser():
                         help='Do not try to run calibrations')
     parser.add_argument('--skip', dest='skip', default=False, action='store_true',
                         help='Exit if the output file already exists')
+    parser.add_argument('--no-outliers', dest='do_outliers', default=True, action='store_false',
+                        help='Do not read outlier masks')
 
     parser.add_argument('--zoom', type=int, nargs=4, help='Set target image extent (eg "0 100 0 200")')
     parser.add_argument('--no-ceres', action='store_false', dest='ceres', help='Do not use Ceres optimization engine (use scipy)')
@@ -219,10 +221,13 @@ def main(survey=None, opt=None, args=None):
 
     args = []
     catalog = None
+    outlier_bricks = None
+    if not opt.do_outliers:
+        outlier_bricks = []
     for ccd in ccds:
         args.append((survey,
                      catsurvey_north, catsurvey_south, opt.catalog_resolve_dec_ngc,
-                     ccd, catalog, opt, zoomslice, None, None, ps))
+                     ccd, catalog, opt, zoomslice, None, outlier_bricks, ps))
 
     if opt.threads:
         from astrometry.util.multiproc import multiproc
