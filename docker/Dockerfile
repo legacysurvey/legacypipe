@@ -187,18 +187,30 @@ RUN apt remove -y scamp
 #    apt install -y autoconf libtool libfftw3-dev libatlas-base-dev libcurl4-openssl-dev && \
 #    apt clean
 #
-RUN apt -y update && apt install -y automake
+RUN apt -y update && apt install -y automake \
+    && apt install -y --no-install-recommends libplplot-dev
 
 RUN git clone https://github.com/astromatic/scamp.git && \
     cd scamp && \
     ./autogen.sh && \
-    ./configure && \
+    ./configure --enable-plplot && \
     make && \
     make install && \
     make clean
+
 # 
 # update legacypipe
+#  git checkout DR10.3.4 && git describe && \
 RUN cd /src/legacypipe && git pull && \
-  git checkout DR10.3.4 && git describe && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
+
+#RUN pip install --upgrade fitsio --break-system-packages
+
+RUN pip uninstall -y fitsio --break-system-packages
+#RUN git clone https://github.com/dstndstn/fitsio.git \
+#    && cd fitsio \
+#    && git checkout free-form-string \
+RUN git clone https://github.com/esheldon/fitsio.git \
+    && cd fitsio \
+    && pip install -e . --break-system-packages
