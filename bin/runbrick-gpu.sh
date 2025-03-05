@@ -74,7 +74,12 @@ echo "--------------------------------------------------------------------------
 #echo "python -u legacypipe/runbrick.py --brick "$brick" --zoom 0 200 0 200 --use-gpu --skip --skip-calibs --bands g,r,i,z --rgb-stretch 1.5 --nsatur 2 --survey-dir $LEGACY_SURVEY_DIR --outdir $outdir --checkpoint ${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle --checkpoint-period 120 --pickle \'${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle\' --release 10099 --no-wise"
 #python -c "from photutils.aperture import CircularAperture, aperture_photometry"
 
-python -u legacypipe/runbrick.py \
+## Run with a local checkout of the tractor and legacypipe repositories...
+#export TRACTOR_DIR=./tractor-git
+#export LEGACYPIPE_DIR=./legacypipe-git/py
+#export PYTHONPATH=$TRACTOR_DIR:$LEGACYPIPE_DIR:${PYTHONPATH}
+
+python -u $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --brick "$brick" \
      --zoom 100 300 100 300 \
      --use-gpu \
