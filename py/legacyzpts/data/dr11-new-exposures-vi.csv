@@ -1,0 +1,9 @@
+expnum,image_fname,ML_reasons,yufeng_badexp,yufeng_reason
+296728,decam/CP/V5.5.2LS/CP20140328/c4d_140329_085251_ooi_r_ls11.fits.fz,PSF,True,ghost
+296729,decam/CP/V5.5.2LS/CP20140328/c4d_140329_085549_ooi_r_ls11.fits.fz,PSF,True,ghost
+1302430,decam/CP/V5.5.2/CP20240602/c4d_240603_061518_ooi_i_v1.fits.fz,Telescope_Moving,True,interesting case where the trail is not continuous?
+1305360,decam/CP/V5.5.2/CP20240624/c4d_240625_070528_ooi_i_v1.fits.fz,NObjects,True,
+1318269,decam/CP/V5.5.2/CP20240810/c4d_240811_034014_ooi_r_v1.fits.fz,Ghost_Scatter,True,ghost
+1318270,decam/CP/V5.5.2/CP20240810/c4d_240811_034214_ooi_r_v1.fits.fz,Ghost_Scatter,True,ghost
+1322812,decam/CP/V5.5.2/CP20240829/c4d_240830_002921_ooi_i_v1.fits.fz,Telescope_Moving,True,trail
+1323324,decam/CP/V5.5.2/CP20240831/c4d_240831_235203_ooi_i_v1.fits.fz,Telescope_Moving,True,trail

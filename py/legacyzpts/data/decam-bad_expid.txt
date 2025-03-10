@@ -4488,3 +4488,13 @@
 1264396
 1278632
 1278633
+
+# Yufeng's updated ML-derived bad exposures (see the dr11-new-exposures-vi.csv file)
+296728
+296729
+1302430
+1305360
+1318269
+1318270
+1322812
+1323324
