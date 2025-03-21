@@ -453,7 +453,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             print('Reading temp SE catalog', tmpsefn)
             S = fits_table(tmpsefn, hdu=2, lower=False)
             print('Got', len(S), 'detections')
-            wcs = Sip(self.wcs_initial_fn)
+            wcs = self.get_wcs()
 
             gaiacat = GaiaCatalog()
             gaia = gaiacat.get_catalog_in_wcs(wcs)
