@@ -11,10 +11,6 @@ def gaia_to_decam(gaia, bands,
     RP = gaia.phot_rp_mean_mag.astype(np.float32)
     color = BP - RP
 
-    # Only compute the decam_mag* terms if we have phot_g_mean_mag
-    # (some stars in EDR3 have G=0(nan), BP=0(nan) but RP~20)
-    nomags = (G == 0.)
-
     # From Rongpu, 2020-04-12
     # no BP-RP color: use average color
     badcolor = reduce(np.logical_or,
@@ -57,6 +53,9 @@ def gaia_to_decam(gaia, bands,
             continue
         base, co = coeffs[b]
         mag = base_mag[base].copy()
+        # Zero out the mags if we don't have the base mag measured
+        # (eg, some stars in EDR3 have G=0(nan), BP=0(nan) but RP~20)
+        nomags = (mag == 0.)
         for order,c in enumerate(co):
             mag += c * color**order
         mag[nomags] = 0.
