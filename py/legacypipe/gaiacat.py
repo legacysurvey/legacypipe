@@ -4,7 +4,8 @@ import numpy as np
 
 def gaia_to_decam(gaia, bands,
                   average_color=1.4,
-                  color_clip=(-0.6, 4.1)):
+                  color_clip=(-0.6, 4.1),
+                  only_color_term=False):
     from functools import reduce
     G  = gaia.phot_g_mean_mag .astype(np.float32)
     BP = gaia.phot_bp_mean_mag.astype(np.float32)
@@ -56,6 +57,8 @@ def gaia_to_decam(gaia, bands,
         # Zero out the mags if we don't have the base mag measured
         # (eg, some stars in EDR3 have G=0(nan), BP=0(nan) but RP~20)
         nomags = (mag == 0.)
+        if only_color_term:
+            mag[:] = 0.
         for order,c in enumerate(co):
             mag += c * color**order
         mag[nomags] = 0.
