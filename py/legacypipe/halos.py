@@ -124,7 +124,13 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
         else:
              fd = dict(g=0.00045,
                        r=0.00033,
-                       i=0.00033)
+                       i=0.00033,
+                       M411=0.00065,
+                       M438=0.0006,
+                       M464=0.00055,
+                       M490=0.0005,
+                       M517=0.00045,
+                       )
              f = fd[band]
 
              halo[ylo:yhi+1, xlo:xhi+1] += (flux * apodize * f * (rads*pixscale)**-2
