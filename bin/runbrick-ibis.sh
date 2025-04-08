@@ -2,7 +2,7 @@
 
 brick="$1"
 
-outdir=$SCRATCH/ibis3-n395
+outdir=$SCRATCH/ibis4
 
 unset BLOB_MASK_DIR
 export COSMO=/dvs_ro/cfs/cdirs/cosmo
@@ -84,11 +84,13 @@ export PYTHONPATH=.:${PYTHONPATH}
 #       --bands M411,M438,M464,M490,M517 \
 #      --run ibis-special \
 #       --skip \
+#       --coadd-bw \
+#       --bands N395 \
 
 python -u -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --blob-dilate 4 \
-       --coadd-bw \
-       --bands N395 \
+       --run ibis \
+       --bands M411,M438,M464,M490,M517 \
        --nsatur 2 \
        --brick "$brick" \
        --rgb-stretch 1.5 \

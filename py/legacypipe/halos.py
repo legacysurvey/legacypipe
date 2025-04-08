@@ -35,7 +35,7 @@ def moffat(rr, alpha, beta):
 
 # Coefficients used in decam_halo_model.  The keys are also used to decide
 # which filters are supported (hence the zero entry for z)
-decam_outer_halo_coeffs = = dict(
+decam_outer_halo_coeffs = dict(
     g = 0.00045,
     r = 0.00033,
     i = 0.00033,
