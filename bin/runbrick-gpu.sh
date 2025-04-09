@@ -36,7 +36,50 @@ export OMP_NUM_THREADS=1
 export MPICH_GNI_FORK_MODE=FULLCOPY
 export KMP_AFFINITY=disabled
 
-brick="$1"
+
+
+
+brick=""
+zoom=""
+gpumode=""
+gpu=""
+threads=""
+
+while [[ $# -gt 0 ]]; do
+  key="$1"
+  case $key in
+    -brick)
+      brick="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    -zoom)
+      zoom="--zoom $2"
+      shift # past argument
+      shift # past value
+      ;;
+    -gpumode)
+      gpumode="--gpumode $2"
+      shift # past argument
+      shift # past value
+      ;;
+    -gpu)
+      gpu="--use-gpu"
+      shift # past argument
+      ;;
+    -threads)
+      threads="--threads $2"
+      shift # past argument
+      shift # past value
+      ;;
+    *)    # unknown option
+      echo "Error: Unknown option: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+#brick="$1"
 # strip whitespace from front and back
 #brick="${brick#"${brick%%[![:space:]]*}"}"
 #brick="${brick%"${brick##*[![:space:]]}"}"
@@ -79,10 +122,25 @@ echo "--------------------------------------------------------------------------
 #export LEGACYPIPE_DIR=./legacypipe-git/py
 #export PYTHONPATH=$TRACTOR_DIR:$LEGACYPIPE_DIR:${PYTHONPATH}
 
+#if [ $# -ge 2 ]; then
+#  gpumode="$2"
+#else
+#  gpumode=0
+#fi
+echo "BRICK = $brick"
+echo "GPUMODE = $gpumode"
+echo "GPU = $gpu"
+echo "ZOOM = $zoom"
+echo "THREADS = $threads"
+
+#python -u $LEGACYPIPE_DIR/legacypipe/runbrick.py \
+#python -u -m cProfile -o brick.pro $LEGACYPIPE_DIR/legacypipe/runbrick.py \
 python -u $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --brick "$brick" \
-     --zoom 100 300 100 300 \
-     --use-gpu \
+        $zoom \
+        $gpu \
+        $gpumode \
+        $threads \
      --skip-calibs \
      --bands g,r,i,z \
      --rgb-stretch 1.5 \
@@ -95,6 +153,9 @@ python -u $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --no-wise \
       >> "$log" 2>&1
 
+#     --use-gpu \
+#     --gpumode $gpumode \
+#     --zoom 100 300 100 300 \
 #     --checkpoint "${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle" \
 #     --checkpoint-period 120 \
 
