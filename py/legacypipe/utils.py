@@ -387,6 +387,10 @@ def run_ps(parent_pid=None, last=None):
                       rs = np.float32,
                       vsz = np.float32,
                       )
+    if not is_osx:
+        parsetypes.update(time = np.int32,
+                          elapsed = np.int32)
+
     T = fits_table()
     for c,v in zip(cols, vals):
         # print('Col', c, 'Values:', v[:3], '...')
@@ -433,7 +437,7 @@ def run_ps(parent_pid=None, last=None):
         for i,(p,t,cpu) in enumerate(zip(T.pid, T.elapsed, T.cputime)):
             if p in last_cpu:
                 (t_last, cpu_last) = last_cpu[p]
-                if cpu >= cpu_last:
+                if cpu >= cpu_last and t > t_last:
                     T.icpu[i] = 100. * (cpu - cpu_last) / (t - t_last)
 
     if is_osx:
@@ -485,6 +489,8 @@ def run_ps(parent_pid=None, last=None):
             lines = txt.split('\n')
             for line in lines:
                 words = line.split()
+                if len(words) != 3:
+                    continue
                 if words[0] == 'VmPeak:':
                     mem = int(words[1])
                     assert(words[2] == 'kB')

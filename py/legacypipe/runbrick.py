@@ -4316,6 +4316,11 @@ def main(args=None):
         return kwargs
     kwargs.update(command_line=' '.join(sys.argv))
 
+    # We really do not need to know about leap seconds
+    import astropy.utils.iers
+    c = astropy.utils.iers.Conf
+    c.auto_download = False
+
     if verbose == 0:
         lvl = logging.INFO
     else:
