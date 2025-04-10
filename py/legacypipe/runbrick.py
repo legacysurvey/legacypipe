@@ -1295,6 +1295,9 @@ def stage_fitblobs(T=None,
         last_checkpoint = CpuMeas()
         n_finished = 0
         n_finished_total = 0
+        ps_last = None
+        last_printout = CpuMeas()
+
         while True:
             import multiprocessing
             # Time to write a checkpoint file? (And have something to write?)
@@ -1312,6 +1315,45 @@ def stage_fitblobs(T=None,
                     print('Failed to write checkpoint file', checkpoint_filename)
                     import traceback
                     traceback.print_exc()
+
+            dt = tnow.wall_seconds_since(last_printout)
+            if dt > 10:
+                last_printout = tnow
+
+                import time
+                print('Running:')
+                status = Riter.get_running_jobs()
+                #print('running job status:', status)
+                # other threads may try to update status during iteration
+                status = status.copy()
+                jmap = job_id_map.copy()
+                from legacypipe.utils import run_ps
+                pid = os.getpid()
+                if ps_last is None:
+                    ps_last = run_ps(pid)
+                    time.sleep(1.)
+                ps = run_ps(pid, last=ps_last)
+                print('ps columns:', ps.get_columns())
+
+                tnow = time.time()
+                for jobid,s in status.items():
+                    if not jobid in jmap:
+                        print('trackingpool job id', jobid, 'not known')
+                        continue
+                    (brick,blob) = jmap[jobid]
+                    pid = s['pid']
+                    i = np.flatnonzero(ps.pid == pid)
+                    if len(i) != 1:
+                        print('did not find PID', pid)
+                        print('Blob %10s' % blob, 'pid', s['pid'], 'running for %7.1f sec' % (tnow - s['time']))
+                    else:
+                        i = i[0]
+                        print('Blob %10s' % blob, 'pid', s['pid'],
+                              'running for %.1f sec' % (tnow - s['time']),
+                              'CPU use now %5.1f %%,' % ps.proc_icpu[i],
+                              'VMsize %5.1f GB,' % (ps.vsz[i] / (1024 * 1024)),
+                              'VMpeak %5.1f GB' % (ps.proc_vmpeak[i] / (1024 * 1024)))
+
             # Wait for results (with timeout)
             try:
                 if mp.pool is not None:
@@ -1326,21 +1368,9 @@ def stage_fitblobs(T=None,
             except StopIteration:
                 break
             except multiprocessing.TimeoutError:
-
-                import time
-                print('Running:')
-                status = Riter.get_running_jobs()
-                # other threads may try to update during iteration
-                status = status.copy()
-                tnow = time.time()
-                for jobid,s in status.items():
-                    if not jobid in job_id_map:
-                        print('trackingpool job id', jobid, 'not known')
-                        continue
-                    (brick,blob) = job_id_map[jobid]
-                    print('Blob %10s' % blob, 'pid', s['pid'], 'running for %.1f sec' % (tnow - s['time']))
-
                 continue
+
+
         # Write checkpoint when done!
         _write_checkpoint(R, checkpoint_filename)
         debug('Got', n_finished_total, 'results; wrote', len(R), 'to checkpoint')

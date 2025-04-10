@@ -381,15 +381,15 @@ def run_ps(parent_pid=None, last=None):
 
     parsetypes = dict(pcpu = np.float32,
                       pmem = np.float32,
-                      pgid = np.int32,
-                      pid = np.int32,
-                      ppid = np.int32,
+                      pgid = np.int64,
+                      pid = np.int64,
+                      ppid = np.int64,
                       rs = np.float32,
                       vsz = np.float32,
                       )
     if not is_osx:
-        parsetypes.update(time = np.int32,
-                          elapsed = np.int32)
+        parsetypes.update(time = np.int64,
+                          elapsed = np.int64)
 
     T = fits_table()
     for c,v in zip(cols, vals):
@@ -453,7 +453,7 @@ def run_ps(parent_pid=None, last=None):
     T.proc_utime = np.zeros(len(T), np.float32)
     T.proc_stime = np.zeros(len(T), np.float32)
     T.processor  = np.zeros(len(T), np.int16)
-    T.proc_vmpeak = np.zeros(len(T), np.int32)
+    T.proc_vmpeak = np.zeros(len(T), np.int64)
 
     if last is not None:
         last_cpu = {}
@@ -466,6 +466,8 @@ def run_ps(parent_pid=None, last=None):
             # See:
             # http://man7.org/linux/man-pages/man5/proc.5.html
             procfn = '/proc/%i/stat' % p
+            if not os.path.exists(procfn):
+                continue
             txt = open(procfn).read()
             #print('Read', procfn, ':', txt)
             words = txt.split()
