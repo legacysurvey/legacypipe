@@ -1272,8 +1272,10 @@ def stage_fitblobs(T=None,
     if sub_blobs:
         ran_sub_blobs = []
 
+    job_id_map = {}
     # Create the iterator over blobs to process
-    blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims,
+    blobiter = _blob_iter(job_id_map,
+                          brickname, blobslices, blobsrcs, blobmap, targetwcs, tims,
                           cat, T, bands, plots, ps, reoptimize, iterative, use_ceres,
                           refmap, large_galaxies_force_pointsource, less_masking, brick,
                           frozen_galaxies,
@@ -1314,6 +1316,7 @@ def stage_fitblobs(T=None,
             try:
                 if mp.pool is not None:
                     timeout = max(1, checkpoint_period - dt)
+                    timeout = min(10, timeout)
                     r = Riter.next(timeout)
                 else:
                     r = next(Riter)
@@ -1323,6 +1326,20 @@ def stage_fitblobs(T=None,
             except StopIteration:
                 break
             except multiprocessing.TimeoutError:
+
+                import time
+                print('Running:')
+                status = Riter.get_running_jobs()
+                # other threads may try to update during iteration
+                status = status.copy()
+                tnow = time.time()
+                for jobid,s in status.items():
+                    if not jobid in job_id_map:
+                        print('trackingpool job id', jobid, 'not known')
+                        continue
+                    (brick,blob) = job_id_map[jobid]
+                    print('Blob %10s' % blob, 'pid', s['pid'], 'running for %.1f sec' % (tnow - s['time']))
+
                 continue
         # Write checkpoint when done!
         _write_checkpoint(R, checkpoint_filename)
@@ -1740,7 +1757,8 @@ def _check_checkpoints(R, blobslices, brickname):
         keepR.append(ri)
     return keepR
 
-def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T, bands,
+def _blob_iter(job_id_map,
+               brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T, bands,
                plots, ps, reoptimize, iterative, use_ceres, refmap,
                large_galaxies_force_pointsource, less_masking,
                brick, frozen_galaxies, single_thread=False,
@@ -1818,6 +1836,8 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
         U = find_unique_pixels(targetwcs, W, H, None,
                                brick.ra1, brick.ra2, brick.dec1, brick.dec2)
 
+    job_id = 0
+
     for nblob,iblob in enumerate(blob_order):
         # (convert iblob to int, because (with sub-blobs) skipblob
         # entries can be tuples, and if iblob is type np.int32 it
@@ -1849,6 +1869,8 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
             if np.all(U[bslc][blobmask] == False):
                 info('Blob %i is completely outside the unique region of this brick -- skipping' %
                      (nblob+1))
+                job_id_map[job_id] = (brickname, nblob+1)
+                job_id += 1
                 yield (brickname, iblob, None, None)
                 continue
 
@@ -1870,6 +1892,8 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
 
         if max_blobsize is not None and npix > max_blobsize:
             info('Number of pixels in blob,', npix, ', exceeds max blobsize', max_blobsize)
+            job_id_map[job_id] = (brickname, nblob+1)
+            job_id += 1
             yield (brickname, iblob, None, None)
             continue
 
@@ -1913,6 +1937,9 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
             # Regular blob.
             # Here we cut out subimages for the blob...
             subtimargs = get_subtim_args(tims, targetwcs, bx0,bx1, by0,by1, single_thread)
+            job_id_map[job_id] = (brickname, nblob+1)
+            job_id += 1
+
             yield (brickname, iblob, None,
                    (nblob+1, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                     blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
@@ -1974,6 +2001,9 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                 # Here we cut out subimages for the blob...
                 subtimargs = get_subtim_args(tims, targetwcs, sub_bx0,sub_bx1,
                                              sub_by0,sub_by1, single_thread)
+
+                job_id_map[job_id] = (brickname, sub_blob_name)
+                job_id += 1
 
                 yield (brickname, (iblob,sub_blob),
                        (bx0 + uniqx[j], bx0 + uniqx[j+1], by0 + uniqy[i], by0 + uniqy[i+1]),
@@ -3703,13 +3733,19 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             kwargs.update(wise_checkpoint_period=wise_checkpoint_period)
 
     if pool or (threads and threads > 1):
-        from astrometry.util.timingpool import TimingPool, TimingPoolMeas
+        # from astrometry.util.timingpool import TimingPool, TimingPoolMeas
+        # from astrometry.util.ttime import MemMeas
+        # if pool is None:
+        #     pool = TimingPool(threads, initializer=runbrick_global_init,
+        #                       initargs=[])
+        # poolmeas = TimingPoolMeas(pool, pickleTraffic=False)
+        # StageTime.add_measurement(poolmeas)
+        # StageTime.add_measurement(MemMeas)
         from astrometry.util.ttime import MemMeas
         if pool is None:
-            pool = TimingPool(threads, initializer=runbrick_global_init,
-                              initargs=[])
-        poolmeas = TimingPoolMeas(pool, pickleTraffic=False)
-        StageTime.add_measurement(poolmeas)
+            from legacypipe.trackingpool import TrackingPool
+            pool = TrackingPool(threads,
+                                initializer=runbrick_global_init, initargs=[])
         StageTime.add_measurement(MemMeas)
         mp = multiproc(None, pool=pool)
     else:

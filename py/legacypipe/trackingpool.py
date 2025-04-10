@@ -16,6 +16,8 @@ class TrackingIMapUnorderedIterator(IMapUnorderedIterator):
         if i in self._status:
             del self._status[i]
         super()._set(i, obj)
+    def get_running_jobs(self):
+        return self._status
 
 def worker(inqueue, outqueue, initializer=None, initargs=(), maxtasks=None,
            wrap_exception=False):
@@ -45,7 +47,7 @@ def worker(inqueue, outqueue, initializer=None, initargs=(), maxtasks=None,
 
         job, i, func, args, kwds = task
         #
-        put((job, i, False, ('start', os.getpid(), time.time())))
+        put((job, i, False, dict(event='start', pid=os.getpid(), time=time.time())))
         #
         try:
             result = (True, func(*args, **kwds))
@@ -204,12 +206,18 @@ class TrackingPool(Pool):
                 util.debug('result handler got sentinel')
                 break
 
-            #job, i, obj = task
-            job, i, done, obj = task
-            if not done:
+            status_update = False
+            if len(task) == 4:
+                job, i, done, obj = task
+                status_update = not(done)
+            else:
+                job, i, obj = task
+
+            if status_update:
                 try:
                     r = cache[job]
-                    r._set_status(i, obj)
+                    if isinstance(r, TrackingIMapUnorderedIterator):
+                        r._set_status(i, obj)
                 except:
                     import traceback
                     print('_handle_results failed to set status:')
@@ -320,7 +328,9 @@ if __name__ == '__main__':
                     s = out_iter._status
                     tnow = time.time()
                     print('Waiting:')
-                    for i,(event,pid,tstart) in s.items():
+                    for i,st in s.items():
+                        pid = st['pid']
+                        tstart = st['time']
                         print('  ', job_id_map[i], ': running in PID', pid, 'for %.1f sec' % (tnow - tstart))
                     continue
                 i,x = r
