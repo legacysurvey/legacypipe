@@ -19,6 +19,8 @@ from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 from legacypipe.utils import get_cpu_arch
 
+from legacypipe.utils import run_ps
+
 rgbkwargs_resid = dict(resids=True)
 
 import logging
