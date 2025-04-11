@@ -299,7 +299,7 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
         T = merge_tables(TT, columns='fillzero')
         write_results(fn, T, events, fitshdr)
 
-def run_ps(parent_pid=None, last=None):
+def run_ps(parent_pid=None, pid=None, last=None):
     import re
     import platform
     import time
@@ -340,8 +340,12 @@ def run_ps(parent_pid=None, last=None):
                'rss vsize wchan command"')
     else:
         # Linux
-        if parent_pid:
-            cmd = 'ps x --ppid %i' % parent_pid
+        if parent_pid or pid:
+            cmd = 'ps x'
+            if parent_pid:
+                cmd += ' --ppid %i' % parent_pid
+            if pid:
+                cmd += ' --pid %i' % pid
         else:
             cmd = 'ps ax'
         cmd += (' -o "user pcpu pmem state cputimes etimes pgid pid ppid ' +
@@ -423,6 +427,9 @@ def run_ps(parent_pid=None, last=None):
     if parent_pid is not None:
         # Cut to processes with the given parent PID
         T.cut(T.ppid == parent_pid)
+    if pid is not None:
+        # Cut to processes with the given PID
+        T.cut(T.pid == pid)
 
     T.unixtime = np.zeros(len(T), np.float64) + timenow
 

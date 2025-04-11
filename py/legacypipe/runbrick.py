@@ -1348,9 +1348,9 @@ def stage_fitblobs(T=None,
                         print('Blob %10s' % blob, 'pid', s['pid'], 'running for %7.1f sec' % (tnow - s['time']))
                     else:
                         i = i[0]
-                        print('Blob %10s' % blob, 'pid', s['pid'],
-                              'running for %.1f sec' % (tnow - s['time']),
-                              'CPU use now %5.1f %%,' % ps.proc_icpu[i],
+                        print('Blob %5s' % blob, 'pid %7i' % s['pid'],
+                              'total CPU %7.1f sec' % (tnow - s['time']),
+                              'CPU now %5.1f %%,' % ps.proc_icpu[i],
                               'VMsize %5.1f GB,' % (ps.vsz[i] / (1024 * 1024)),
                               'VMpeak %5.1f GB' % (ps.proc_vmpeak[i] / (1024 * 1024)))
 
