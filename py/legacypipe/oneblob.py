@@ -1307,6 +1307,11 @@ class OneBlob(object):
             for tim in srctims:
                 tim.freezeAllBut('sky')
             srctractor.thawParam('images')
+            # When we're fitting the background, using the sparse optimizer is critical
+            # when we have a lot of images: we're adding Nimages extra parameters, touching
+            # every pixel; you don't want Nimages x Npixels dense matrices.
+            from tractor.lsqr_optimizer import LsqrOptimizer
+            srctractor.optimizer = LsqrOptimizer()
             skyparams = srctractor.images.getParams()
 
         enable_galaxy_cache()
