@@ -51,11 +51,13 @@ RUN apt -y update && apt install -y apt-utils \
     python3.12-dev \
     python3-pip \
     plplot-driver-cairo \
+    libplplot-dev \
     source-extractor \
     psfex \
-    scamp \
     # Remove APT files
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+#    scamp \ -- Ubuntu currently (2025-04-14) shipping v 2.10; we need 2.14.0
 
 ENV FFLAGS=-fallow-argument-mismatch
 ENV FCFLAGS=-fallow-argument-mismatch
@@ -70,8 +72,6 @@ RUN wget -nv https://www.mpich.org/static/downloads/4.0.2/mpich-4.0.2.tar.gz \
   && cd .. && rm -Rf mpich-4.0.2
 # defaults to installing in /usr/local
 
-#FROM working
-
 # Pip installs
 RUN for x in \
     setuptools \
@@ -81,7 +81,6 @@ RUN for x in \
     scipy \
     pillow \
     psycopg2 \
-    fitsio \
     matplotlib \
     lacosmic \
     astropy \
@@ -90,6 +89,8 @@ RUN for x in \
     mpi4py \
     ; do pip3 install --break-system-packages $x; done \
     && rm -Rf /root/.cache/pip
+
+#    fitsio \ -- We need commit 273a00c (Feb 23/2025)
 
 RUN ln -s /usr/bin/python3.12-config /usr/local/bin/python3-config
 RUN ln -s /usr/bin/python3 /usr/bin/python
@@ -117,11 +118,9 @@ RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
 # The Tractor
 RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && git checkout dr10.5 \
+    && git checkout dr10.6 \
     && python setup.py build_ext --with-ceres --with-cython --inplace \
     && python setup.py install
-# pip no longer has "--install-option"??
-#    echo pip install --install-option="--with-ceres" --install-option="--with-cython" -v .
 
 # unwise_psf
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \
@@ -132,9 +131,6 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
 RUN git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
     && cd qdo \
     && python3 setup.py install
-
-# Legacypipe
-RUN git clone https://github.com/legacysurvey/legacypipe.git legacypipe
 
 ENV PYTHONPATH /src/unwise_psf/py:/src/legacypipe/py:/usr/local/lib/python
 
@@ -163,6 +159,25 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
   # Make astropy cache files readable!?!!
   && chmod -R a+rwX $HOME/.astropy
 
+# Compile a local version of Scamp to pick up adding EXTNAME to the results:
+# https://github.com/astromatic/scamp/commit/d936c73d7dd08382b70cb32ceb1a535ffca81732
+RUN git clone https://github.com/astromatic/scamp.git && \
+    cd scamp && \
+    ./autogen.sh && \
+    ./configure --enable-plplot && \
+    make && \
+    make install && \
+    make clean
+
+# Compile a local version of fitsio to pick up the ability to set the FPACK compression seed:
+# https://github.com/esheldon/fitsio/commit/273a00cf2770c989d35babc8b95d44dbbc4d2096
+RUN git clone https://github.com/esheldon/fitsio.git \
+    && cd fitsio \
+    && pip install -e . --break-system-packages
+
+# Legacypipe
+RUN git clone https://github.com/legacysurvey/legacypipe.git legacypipe
+
 RUN python -O -m compileall \
     -x lib2to3 \
     /usr/local/lib/python3.12/dist-packages \
@@ -180,37 +195,9 @@ RUN python -O -m compileall \
     /src/legacypipe/py/legacypipe \
     /src/legacypipe/py/legacyzpts
 
-# Compile a local version of Scamp to pick up adding EXTNAME to the results:
-# https://github.com/astromatic/scamp/commit/d936c73d7dd08382b70cb32ceb1a535ffca81732
-RUN apt remove -y scamp
-#&& \
-#    apt install -y autoconf libtool libfftw3-dev libatlas-base-dev libcurl4-openssl-dev && \
-#    apt clean
-#
-RUN apt -y update && apt install -y automake \
-    && apt install -y --no-install-recommends libplplot-dev
-
-RUN git clone https://github.com/astromatic/scamp.git && \
-    cd scamp && \
-    ./autogen.sh && \
-    ./configure --enable-plplot && \
-    make && \
-    make install && \
-    make clean
-
-# 
-# update legacypipe
-#  git checkout DR10.3.4 && git describe && \
-RUN cd /src/legacypipe && git pull && \
-  python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
-  python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
-
-#RUN pip install --upgrade fitsio --break-system-packages
-
-RUN pip uninstall -y fitsio --break-system-packages
-#RUN git clone https://github.com/dstndstn/fitsio.git \
-#    && cd fitsio \
-#    && git checkout free-form-string \
-RUN git clone https://github.com/esheldon/fitsio.git \
-    && cd fitsio \
-    && pip install -e . --break-system-packages
+# # 
+# # update legacypipe
+# #  git checkout DR10.3.4 && git describe && \
+# RUN cd /src/legacypipe && git pull && \
+#   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
+#   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
