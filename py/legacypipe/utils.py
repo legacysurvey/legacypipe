@@ -299,7 +299,7 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
         T = merge_tables(TT, columns='fillzero')
         write_results(fn, T, events, fitshdr)
 
-def run_ps(parent_pid=None, last=None):
+def run_ps(parent_pid=None, pid=None, last=None):
     import re
     import platform
     import time
@@ -340,8 +340,12 @@ def run_ps(parent_pid=None, last=None):
                'rss vsize wchan command"')
     else:
         # Linux
-        if parent_pid:
-            cmd = 'ps x --ppid %i' % parent_pid
+        if parent_pid or pid:
+            cmd = 'ps x'
+            if parent_pid:
+                cmd += ' --ppid %i' % parent_pid
+            if pid:
+                cmd += ' --pid %i' % pid
         else:
             cmd = 'ps ax'
         cmd += (' -o "user pcpu pmem state cputimes etimes pgid pid ppid ' +
@@ -381,15 +385,15 @@ def run_ps(parent_pid=None, last=None):
 
     parsetypes = dict(pcpu = np.float32,
                       pmem = np.float32,
-                      pgid = np.int32,
-                      pid = np.int32,
-                      ppid = np.int32,
+                      pgid = np.int64,
+                      pid = np.int64,
+                      ppid = np.int64,
                       rs = np.float32,
                       vsz = np.float32,
                       )
     if not is_osx:
-        parsetypes.update(time = np.int32,
-                          elapsed = np.int32)
+        parsetypes.update(time = np.int64,
+                          elapsed = np.int64)
 
     T = fits_table()
     for c,v in zip(cols, vals):
@@ -423,6 +427,9 @@ def run_ps(parent_pid=None, last=None):
     if parent_pid is not None:
         # Cut to processes with the given parent PID
         T.cut(T.ppid == parent_pid)
+    if pid is not None:
+        # Cut to processes with the given PID
+        T.cut(T.pid == pid)
 
     T.unixtime = np.zeros(len(T), np.float64) + timenow
 
@@ -453,7 +460,7 @@ def run_ps(parent_pid=None, last=None):
     T.proc_utime = np.zeros(len(T), np.float32)
     T.proc_stime = np.zeros(len(T), np.float32)
     T.processor  = np.zeros(len(T), np.int16)
-    T.proc_vmpeak = np.zeros(len(T), np.int32)
+    T.proc_vmpeak = np.zeros(len(T), np.int64)
 
     if last is not None:
         last_cpu = {}
@@ -466,6 +473,8 @@ def run_ps(parent_pid=None, last=None):
             # See:
             # http://man7.org/linux/man-pages/man5/proc.5.html
             procfn = '/proc/%i/stat' % p
+            if not os.path.exists(procfn):
+                continue
             txt = open(procfn).read()
             #print('Read', procfn, ':', txt)
             words = txt.split()

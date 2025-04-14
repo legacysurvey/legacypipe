@@ -19,6 +19,8 @@ from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 from legacypipe.utils import get_cpu_arch
 
+from legacypipe.utils import run_ps
+
 rgbkwargs_resid = dict(resids=True)
 
 import logging
@@ -1307,6 +1309,11 @@ class OneBlob(object):
             for tim in srctims:
                 tim.freezeAllBut('sky')
             srctractor.thawParam('images')
+            # When we're fitting the background, using the sparse optimizer is critical
+            # when we have a lot of images: we're adding Nimages extra parameters, touching
+            # every pixel; you don't want Nimages x Npixels dense matrices.
+            from tractor.lsqr_optimizer import LsqrOptimizer
+            srctractor.optimizer = LsqrOptimizer()
             skyparams = srctractor.images.getParams()
 
         enable_galaxy_cache()
