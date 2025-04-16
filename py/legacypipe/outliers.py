@@ -19,6 +19,20 @@ def get_bits_to_mask():
 def get_mask_extname(tim):
     return 'MASK-%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
 
+def get_old_mask_extname(tim):
+    return '%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
+
+def find_mask_in_outlier_file(F, tim):
+    # This function exists to handle a backward-compatibility case (hsc-co-4)
+    # F: fitsio.FITS object
+    extname = get_mask_extname(tim)
+    if extname in F:
+        return extname
+    extname = get_old_mask_extname(tim)
+    if extname in F:
+        return extname
+    return None
+
 # Creates the outliers-masked-{pos,neg} JPEGs and also applies the mask.
 # (does not create -pre and -post jpegs!)
 def recreate_outlier_jpegs(survey, tims, bands, targetwcs, brickname):
@@ -56,9 +70,10 @@ def recreate_outlier_jpegs(survey, tims, bands, targetwcs, brickname):
                 continue
 
             # Get the mask
-            extname = get_mask_extname(tim)
-            if not extname in F:
-                info('WARNING: Did not find extension', extname, 'in outlier-mask file', maskfn)
+            extname = find_mask_in_outlier_file(F, tim)
+            if extname is None:
+                name = get_mask_extname(tim)
+                info('WARNING: Did not find extension', name, 'in outlier-mask file', maskfn)
                 return False
             mask = F[extname].read()
             hdr = F[extname].read_header()
@@ -133,9 +148,10 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
         return False
     F = fitsio.FITS(fn)
     for tim in tims:
-        extname = get_mask_extname(tim)
-        if not extname in F:
-            info('WARNING: Did not find extension', extname, 'in outlier-mask file', fn)
+        extname = find_mask_in_outlier_file(F, tim)
+        if extname is None:
+            name = get_mask_extname(tim)
+            info('WARNING: Did not find extension', name, 'in outlier-mask file', fn)
             return False
         mask = F[extname].read()
         hdr = F[extname].read_header()
