@@ -16,6 +16,9 @@ from legacypipe.bits import OUTLIER_POS, OUTLIER_NEG
 def get_bits_to_mask():
     return OUTLIER_POS | OUTLIER_NEG
 
+def get_mask_extname(tim):
+    return 'MASK-%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
+
 # Creates the outliers-masked-{pos,neg} JPEGs and also applies the mask.
 # (does not create -pre and -post jpegs!)
 def recreate_outlier_jpegs(survey, tims, bands, targetwcs, brickname):
@@ -53,7 +56,7 @@ def recreate_outlier_jpegs(survey, tims, bands, targetwcs, brickname):
                 continue
 
             # Get the mask
-            extname = '%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
+            extname = get_mask_extname(tim)
             if not extname in F:
                 info('WARNING: Did not find extension', extname, 'in outlier-mask file', maskfn)
                 return False
@@ -130,7 +133,7 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
         return False
     F = fitsio.FITS(fn)
     for tim in tims:
-        extname = 'MASK-%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
+        extname = get_mask_extname(tim)
         if not extname in F:
             info('WARNING: Did not find extension', extname, 'in outlier-mask file', fn)
             return False
@@ -354,7 +357,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 # GZIP_1: 4.4M
                 # GZIP: 4.4M
                 # RICE: 2.8M
-                extname = 'MASK-%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
+                extname = get_mask_extname(tim)
                 out.fits.write(mask, header=hdr, extname=extname, compress='HCOMPRESS')
             del R
 
