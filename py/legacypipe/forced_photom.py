@@ -451,12 +451,12 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     sga.cut((xx > -keeprad) * (xx < W+keeprad) *
             (yy > -keeprad) * (yy < H+keeprad))
     print('Found', len(sga), 'SGA galaxies touching the chip.')
-    print('sga_ids', sga.ref_id)
+    print('ref_ids', sga.ref_id)
     if len(sga) == 0:
         print('No SGA galaxies touch this chip')
         return None
     Tsga = T[T.ref_cat == 'L3']
-    print(len(Tsga), 'SGA entries already exist in catalog')
+    print(len(Tsga), 'SGA entries already exist in catalog (ref_ids', Tsga.ref_id, ')')
     Isga = np.array([i for i,sga_id in enumerate(sga.ref_id) if not sga_id in set(Tsga.ref_id)])
     #assert(len(Isga) + len(Tsga) == len(sga))
     if len(Isga) == 0:

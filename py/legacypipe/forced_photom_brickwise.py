@@ -130,12 +130,11 @@ def main():
         surveys = [(catsurvey, None)]
         SGA = find_missing_sga(T, targetwcs, survey, surveys, None)#columns)
         if SGA is not None:
-            #print('SGA columns:', SGA.get_columns())
-            #print('T columns:', T.get_columns())
-            # They have the same set of columns
+            # These SGA sources came from other bricks, where they may be BRICK_PRIMARY,
+            # but they're not BRICK_PRIMARY in *this* brick.
+            SGA.brick_primary[:] = False
             ## Add 'em in!
             T = merge_tables([T, SGA], columns='fillzero')
-            #print('merged T columns:', T.get_columns())
     else:
         from legacypipe.forced_photom import get_catalog_in_wcs
         T = get_catalog_in_wcs(targetwcs, survey, catsurvey)
