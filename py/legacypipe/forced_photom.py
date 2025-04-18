@@ -540,9 +540,11 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                                trim_edges=False)
     #print('Got tim:', tim)
     if tim is None:
+        print('No overlap (tim is None)')
         return None
     chipwcs = tim.subwcs
     H,W = tim.shape
+    print('Image %s-%s-%s: size %i x %i' % (im.camera, im.expnum, im.ccdname, W, H))
     tnow = Time()
     print_timing('Read image:', tnow-tlast)
     tlast = tnow

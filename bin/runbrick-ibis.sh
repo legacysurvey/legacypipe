@@ -88,6 +88,7 @@ export PYTHONPATH=.:${PYTHONPATH}
 #       --bands N395 \
 
 python -u -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
+       --skip \
        --blob-dilate 4 \
        --run ibis \
        --bands M411,M438,M464,M490,M517 \

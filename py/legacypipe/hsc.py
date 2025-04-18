@@ -246,7 +246,7 @@ class HscImage(LegacySurveyImage):
         hwhm = f(psf0.max() / 2.)
         fwhm = hwhm * 2. * psfex.sampling
         psfex.fwhm = fwhm
-        print('Measured PsfEx FWHM', fwhm)
+        #print('Measured PsfEx FWHM %.2f' % fwhm)
 
         if normalizePsf:
             psf = NormalizedPixelizedPsfEx(None, psfex=psfex)

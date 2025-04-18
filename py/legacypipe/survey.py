@@ -2060,7 +2060,8 @@ def read_one_tim(X):
     tim = im.get_tractor_image(radecpoly=targetrd, **kwargs)
     if tim is not None:
         th,tw = tim.shape
-        print('Time to read %i x %i image, hdu %i:' % (tw,th, im.hdu), Time()-t0)
+        print('Time to read %s-%s-%s: %i x %i image, hdu %i:' %
+              (im.camera, im.expnum, im.ccdname, tw,th, im.hdu), Time()-t0)
     return tim
 
 

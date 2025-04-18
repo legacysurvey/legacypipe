@@ -179,7 +179,7 @@ def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir,
     #'[' + ', '.join([str(n) for n in ngood]) + ']')
     F.close()
     os.rename(tmpoutfn, realoutfn)
-    #print('Wrote', realoutfn)
+    print('Wrote', realoutfn)
     return rtn
 
 def _bounce_write_one(X):

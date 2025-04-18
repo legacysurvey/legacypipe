@@ -6,7 +6,10 @@
 #outdir=$SCRATCH/hsc-g-cosmos
 
 # HSC/WIDE COSMOS
-outdir=$SCRATCH/hsc-co-4
+#outdir=$SCRATCH/hsc-co-4
+
+# HSC/DEEP COSMOS
+outdir=$SCRATCH/hsc-co-deep
 
 export COSMO=/dvs_ro/cfs/cdirs/cosmo
 
@@ -91,10 +94,17 @@ echo "--------------------------------------------------------------------------
 # HSC COSMOS WIDE
 #       --bands g,r2,i2,z,y \
 
+# HSC COSMOS DEEP
+#       --bands g,r,r2,i,i2,z,y \
 
-python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
+#       --bands g,r,i,i2,z,y \
+
+export PYTHONPATH=.:${PYTHONPATH}
+#python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
+
+python -O legacypipe/runbrick.py \
        --brick $brick \
-       --bands g,r,i,i2,z,y \
+       --bands g,r,r2,i,i2,z,y \
        --pixscale 0.168 \
        --width 5600 --height 5600 \
        --rgb-stretch 1.5 \
@@ -105,7 +115,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --checkpoint-period 300 \
        --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
        --outdir $outdir \
-       --threads 32 \
+       --threads 64 \
        --stage image_coadds --minimal-coadds \
        --write-stage outliers \
        >> $log 2>&1
