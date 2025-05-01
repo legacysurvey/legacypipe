@@ -44,6 +44,7 @@ from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 from legacypipe.fit_on_coadds import stage_fit_on_coadds
 from legacypipe.blobmask import stage_blobmask
 from legacypipe.galex import stage_galex_forced
+import time
 
 import logging
 logger = logging.getLogger('legacypipe.runbrick')
@@ -1104,6 +1105,7 @@ def stage_fitblobs(T=None,
                    record_event=None,
                    custom_brick=False,
                    use_gpu=False,
+                   gpumode=0,
                    **kwargs):
     '''
     This is where the actual source fitting happens.
@@ -1280,7 +1282,7 @@ def stage_fitblobs(T=None,
                           max_blobsize=max_blobsize, custom_brick=custom_brick,
                           enable_sub_blobs=sub_blobs,
                           ran_sub_blobs=ran_sub_blobs,
-                          use_gpu=use_gpu)
+                          use_gpu=use_gpu,gpumode=gpumode)
 
     if checkpoint_filename is None:
         R.extend(mp.map(_bounce_one_blob, blobiter))
@@ -1746,7 +1748,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                skipblobs=None, max_blobsize=None, custom_brick=False,
                enable_sub_blobs=False,
                ran_sub_blobs=None,
-               use_gpu=False):
+               use_gpu=False,gpumode=0):
     '''
     *blobmap*: integer image map, with -1 indicating no-blob, other values indexing
         into *blobslices*,*blobsrcs*.
@@ -1910,7 +1912,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                     blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
                     reoptimize, iterative, use_ceres, refmap[bslc],
                     large_galaxies_force_pointsource, less_masking,
-                    frozen_galaxies.get(iblob, []), use_gpu))
+                    frozen_galaxies.get(iblob, []), use_gpu, gpumode))
             continue
 
         # Sub-blob.
@@ -1978,7 +1980,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                         plots, ps,
                         reoptimize, iterative, use_ceres, refmap[sub_slc],
                         large_galaxies_force_pointsource, less_masking, fro_gals,
-                        use_gpu))
+                        use_gpu, gpumode))
 
 def _bounce_one_blob(X):
     '''This wraps the one_blob function for multiprocessing purposes (and
@@ -3407,6 +3409,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               unwise_coadds=True,
               bail_out=False,
               use_gpu=False,
+              gpumode=0,
               ceres=True,
               wise_ceres=True,
               galex_ceres=True,
@@ -3668,6 +3671,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   wise_ceres=wise_ceres,
                   galex_ceres=galex_ceres,
                   use_gpu=use_gpu,
+                  gpumode=gpumode,
                   unwise_coadds=unwise_coadds,
                   bailout=bail_out,
                   minimal_coadds=minimal_coadds,
@@ -3965,6 +3969,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='Set PlotSequence starting number')
 
     parser.add_argument('--use-gpu', default=False, action='store_true')
+    parser.add_argument('--gpumode', default=0, type=int, help='Mode for GPU')
 
     parser.add_argument('--ceres', default=False, action='store_true',
                         help='Use Ceres Solver for all optimization?')
@@ -4271,6 +4276,7 @@ def get_runbrick_kwargs(survey=None,
 def main(args=None):
     import datetime
     from legacypipe.survey import get_git_version
+    t = time.time()
 
     print()
     print('runbrick.py starting at', datetime.datetime.now().isoformat())
@@ -4383,6 +4389,7 @@ def main(args=None):
         if ps_thread.is_alive():
             info('ps thread is still alive.')
 
+    print ("Total runtime:", time.time()-t)
     return rtn
 
 if __name__ == '__main__':

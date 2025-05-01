@@ -19,6 +19,10 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
+import time
+tc = np.zeros(4)
+tcc = np.zeros(4,dtype=np.int32)
+
 class SimpleCoadd(object):
     '''A class for handling coadds of unWISE (and GALEX) images.
     '''
@@ -218,6 +222,7 @@ def make_coadds(tims, bands, targetwcs,
                 plots=False, ps=None,
                 lanczos=True, mp=None,
                 satur_val=10.):
+    t = time.time()
     from astrometry.util.ttime import Time
     t0 = Time()
 
@@ -730,6 +735,9 @@ def make_coadds(tims, bands, targetwcs,
         t3 = Time()
         debug('coadds apphot:', t3-t2)
 
+    tc[0] += time.time()-t
+    tcc[0]+= 1
+    print ("TC", tc, tcc)
     return C
 
 def _make_coadds_plots_4(allresids, mods, ps):
@@ -1048,6 +1056,7 @@ def write_coadd_images(band,
                        psfdetiv=None, galdetiv=None, congood=None,
                        psfsize=None, **kwargs):
 
+    t = time.time()
     hdr = copy_header_with_wcs(version_header, targetwcs)
     # Grab headers from input images...
     get_coadd_headers(hdr, tims, band, coadd_headers)
@@ -1100,6 +1109,10 @@ def write_coadd_images(band,
         with survey.write_output(name, brick=brickname, band=band,
                                  shape=img.shape) as out:
             out.fits.write(img, header=hdr2)
+    tc[1] += time.time()-t
+    tcc[1]+= 1
+    print ("TC", tc, tcc)
+
 
 # Pretty much only used for plots; the real deal is make_coadds()
 def quick_coadds(tims, bands, targetwcs, images=None,

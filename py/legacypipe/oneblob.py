@@ -34,6 +34,8 @@ def is_debug():
 
 # Determines the order of elements in the DCHISQ array.
 MODEL_NAMES = ['psf', 'rex', 'dev', 'exp', 'ser']
+tx = np.zeros(3)
+tc = np.zeros(3, dtype=np.int32)
 
 def one_blob(X):
     '''
@@ -43,10 +45,22 @@ def one_blob(X):
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
      srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap,
-     large_galaxies_force_pointsource, less_masking, frozen_galaxies, use_gpu) = X
+     large_galaxies_force_pointsource, less_masking, frozen_galaxies, use_gpu, gpumode) = X
+
+    if (use_gpu):
+        import cupy as cp
+        dummy = cp.zeros(1)
+    t = time.time()
 
     debug('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
           (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
+
+    info('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
+          (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
+
+    if (iblob == 47):
+        print ("Blob id 47 = using CPU")
+        #use_gpu = False
 
     if len(timargs) == 0:
         return None
@@ -75,19 +89,28 @@ def one_blob(X):
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
                  less_masking, frozen_galaxies)
-    B = ob.init_table(Isrcs)
     if use_gpu:
         # need a branch of the tractor code that supports this!
+        print ("Using GPUFriendlyOptimizer")
         from tractor.factored_optimizer import GPUFriendlyOptimizer
         opt = GPUFriendlyOptimizer()
+        opt.setGPUMode(gpumode)
+        print('Optimizing with', type(opt))
         ob.trargs.update(optimizer=opt)
+    print ("Opt = ", ob.trargs['optimizer'])
+    B = ob.init_table(Isrcs)
     B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
+    tx[0] += time.time()-t
+    tc[0] += time.time()-t
     ob.finalize_table(B, bx0, by0)
 
     t1 = time.process_time()
     B.cpu_blob = np.empty(len(B), np.float32)
     B.cpu_blob[:] = t1 - t0
     B.iblob = iblob
+    if use_gpu:
+        opt.printTiming()
+    print ("One blob time: ", tx, tc) 
     return B
 
 class OneBlob(object):
@@ -236,6 +259,8 @@ class OneBlob(object):
         # print('OneBlob run starting: srcs', self.srcs)
         # for src in self.srcs:
         #     print('OneBlob  ', src.getParams())
+        info('Blob', self.name, 'started.')
+        t = time.time()
 
         trun = tlast = Time()
         # Not quite so many plots...
@@ -502,6 +527,8 @@ class OneBlob(object):
                 B.set(k, v)
             del M
 
+        tx[1] += time.time()-t
+        tc[1] += 1
         info('Blob', self.name, 'finished, total:', Time()-trun)
         return B
 
@@ -1320,6 +1347,7 @@ class OneBlob(object):
         srccat[0] = None
 
         if fit_background:
+            #print ("ENTERING OPTIMIZE 1 - ", type(srctractor), srctractor.optimize_loop)
             srctractor.optimize_loop(**self.optargs)
 
         if self.plots_per_source:
@@ -1430,6 +1458,7 @@ class OneBlob(object):
             # First-round optimization (during model selection)
             print('OneBlob before model selection:', newsrc)
             try:
+                #print ("ENTERING OPTIMIZE 2 - ", type(srctractor), srctractor.optimize_loop)
                 R = srctractor.optimize_loop(**self.optargs)
             except Exception as e:
                 print('Exception fitting source in model selection.  src:', newsrc)
@@ -1666,6 +1695,7 @@ class OneBlob(object):
                 continue
             modelMasks = models.model_masks(0, cat[i])
             tr.setModelMasks(modelMasks)
+            #print ("ENTERING OPTIMIZE 3 - ", type(tr), tr.optimize_loop)
             tr.optimize_loop(**self.optargs)
             cpu1 = time.process_time()
             cputime[i] += (cpu1 - cpu0)
@@ -1730,6 +1760,7 @@ class OneBlob(object):
 
             # First-round optimization
             #print('First-round initial log-prob:', srctractor.getLogProb())
+            #print ("ENTERING OPTIMIZE 4 - ", type(srctractor), srctractor.optimize_loop)
             srctractor.optimize_loop(**self.optargs)
             #print('First-round final log-prob:', srctractor.getLogProb())
 
