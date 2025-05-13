@@ -170,6 +170,18 @@ def rbmain():
     os.environ['UNWISE_MODEL_SKY_DIR'] = os.path.join(surveydir, 'images', 'unwise-mod')
     #python legacypipe/runbrick.py --radec  --width 100 --height 100 --outdir dup5b --survey-dir test/testcase12 --force-all --no-wise
     unwdir = os.path.join(surveydir, 'images', 'unwise')
+
+    main(args=['--radec', '346.684', '12.791', '--width', '100',
+               '--height', '100', '--no-wise-ceres',
+               '--unwise-dir', unwdir, '--survey-dir', surveydir,
+               '--outdir', 'out-testcase12', '--skip-coadd', '--force-all',
+               '--stage', 'image_coadds'])
+
+    # Check that the dither_seed gets set the same each time.
+    hdr = fitsio.read_header('out-testcase12/coadd/cus/custom-346684p12791/legacysurvey-custom-346684p12791-image-r.fits.fz', ext=1)
+    dither = hdr['ZDITHER0']
+    #assert(dither == 1652)
+
     main(args=['--radec', '346.684', '12.791', '--width', '100',
                '--height', '100', '--no-wise-ceres',
                '--unwise-dir', unwdir, '--survey-dir', surveydir,
