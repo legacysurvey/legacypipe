@@ -7,6 +7,7 @@ from legacypipe.survey import LegacySurveyData
 from legacypipe.ps1cat import ps1cat
 from legacypipe.gaiacat import GaiaCatalog
 #from legacypipe.gaiacat import GaiaCatalog
+from tractor import ModelMask
 
 logger = logging.getLogger('legacypipe.new-camera-setup')
 def info(*args):
@@ -373,7 +374,8 @@ def main():
     # Read PSF model
     print('Reading FWHM...')
     psf_fwhm = img.get_fwhm(primhdr, hdr)
-    print('Got PSF fwhm', psf_fwhm)
+    psf_sigma = psf_fwhm / 2.35
+    print('Got PSF fwhm', psf_fwhm, 'and sigma', psf_sigma, 'pixels')
     h,w = img.shape
     print('Image shape:', w, 'x', h)
     print('Reading PSF model...')
@@ -394,10 +396,84 @@ def main():
             for x in xx:
                 plt.subplot(ny, nx, k)
                 k += 1
-                patch = psf.getPatchSourcePatch(x, y)
+                patch = psf.getPointSourcePatch(x, y)
                 plt.imshow(patch.patch, interpolation='nearest', origin='lower')
                 plt.xticks([]); plt.yticks([])
-        plt.title('PSF model')
+        plt.suptitle('PSF model')
+        ps.savefig()
+
+        # zoom-in half-size
+        S = 5
+        k = 1
+        center_psf = None
+        psfims = []
+        plt.clf()
+        plt.subplots_adjust(hspace=0, wspace=0)
+        for y in yy:
+            for x in xx:
+                plt.subplot(ny, nx, k)
+                k += 1
+                patch = psf.getPointSourcePatch(x, y)
+                patch = patch.patch
+                ph,pw = patch.shape
+                patch = patch[ph//2-S : ph//2+S+1, pw//2-S : pw//2+S+1]
+                psfims.append(patch)
+                if y == yy[len(yy)//2] and x == xx[len(xx)//2]:
+                    center_psf = patch
+                plt.imshow(patch, interpolation='nearest', origin='lower')
+                plt.xticks([]); plt.yticks([])
+        plt.suptitle('PSF model (zoom-in)')
+        ps.savefig()
+
+        mx = max([np.max(np.abs(p - center_psf)) for p in psfims])
+
+        # zoom-in half-size, differential
+        k = 1
+        plt.clf()
+        plt.subplots_adjust(hspace=0, wspace=0)
+        for y in yy:
+            for x in xx:
+                plt.subplot(ny, nx, k)
+                plt.imshow(psfims[k-1] - center_psf, interpolation='nearest', origin='lower', vmin=-mx, vmax=mx)
+                plt.xticks([]); plt.yticks([])
+                k += 1
+        plt.suptitle('PSF model (difference from center)')
+        ps.savefig()
+
+        # Gaussian
+        # ASSUME HybridPixelizedPSF
+        gpsf = psf.gauss
+        print('Gaussian PSF:', gpsf)
+        cx,cy = xx[len(xx)//2], yy[len(yy)//2]
+        gpatch = gpsf.getPointSourcePatch(cx, cy, modelMask=ModelMask(int(cx-S), int(cy-S), 1+S*2, 1+S*2))
+        gpatch = gpatch.patch
+
+        mx = max([np.max(gpatch), np.max(center_psf)])
+        mn = min([np.min(gpatch), np.min(center_psf)])
+        plt.clf()
+        plt.subplot(1,3,1)
+        plt.imshow(center_psf, interpolation='nearest', origin='lower', vmin=mn, vmax=mx)
+        plt.title('Pixelized PSF (center)')
+        plt.subplot(1,3,2)
+        plt.imshow(gpatch, interpolation='nearest', origin='lower', vmin=mn, vmax=mx)
+        plt.title('Gaussian PSF')
+        plt.subplot(1,3,3)
+        plt.imshow(center_psf - gpatch, interpolation='nearest', origin='lower')
+        plt.title('Pix(center) - Gauss')
+        ps.savefig()
+
+        mx = max([np.max(np.abs(p - gpatch)) for p in psfims])
+
+        k = 1
+        plt.clf()
+        plt.subplots_adjust(hspace=0, wspace=0)
+        for y in yy:
+            for x in xx:
+                plt.subplot(ny, nx, k)
+                plt.imshow(psfims[k-1] - gpatch, interpolation='nearest', origin='lower', vmin=-mx, vmax=mx)
+                plt.xticks([]); plt.yticks([])
+                k += 1
+        plt.suptitle('PSF model (difference from Gaussian)')
         ps.savefig()
 
     zpt = img.get_zeropoint(primhdr, hdr)
@@ -429,7 +505,7 @@ def main():
         info('Choosing calibrator stars...')
         phot.use_for_photometry = img.get_photometric_calibrator_cuts(name, phot)
         info('use for photometry:', Counter(phot.use_for_photometry))
-        
+
         if len(phot) == 0 or np.sum(phot.use_for_photometry) == 0:
             phot = None
         else:
