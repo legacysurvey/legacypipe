@@ -370,6 +370,36 @@ def main():
         plt.title('Is uncertainty map correct?')
         ps.savefig()
 
+    # Read PSF model
+    print('Reading FWHM...')
+    psf_fwhm = img.get_fwhm(primhdr, hdr)
+    print('Got PSF fwhm', psf_fwhm)
+    h,w = img.shape
+    print('Image shape:', w, 'x', h)
+    print('Reading PSF model...')
+    psf = img.read_psf_model(w/2, h/2, gaussPsf=False, pixPsf=True, hybridPsf=True,
+                             normalizePsf=True,
+                             psf_sigma=psf_sigma,
+                             w=w, h=h)
+    print('Got PSF model:', psf)
+
+    if ps is not None:
+        nx,ny = 5,5
+        xx = np.linspace(0, w-1, nx)
+        yy = np.linspace(0, h-1, ny)
+        k = 1
+        plt.clf()
+        plt.subplots_adjust(hspace=0, wspace=0)
+        for y in yy:
+            for x in xx:
+                plt.subplot(ny, nx, k)
+                k += 1
+                patch = psf.getPatchSourcePatch(x, y)
+                plt.imshow(patch.patch, interpolation='nearest', origin='lower')
+                plt.xticks([]); plt.yticks([])
+        plt.title('PSF model')
+        ps.savefig()
+
     zpt = img.get_zeropoint(primhdr, hdr)
     info('Does a zeropoint already exist in the image headers?  zpt=', zpt)
 
