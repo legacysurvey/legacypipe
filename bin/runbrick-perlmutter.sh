@@ -7,10 +7,6 @@ export COSMO=/dvs_ro/cfs/cdirs/cosmo
 export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
 outdir=$SCRATCH/dr11
 
-# Using depth-cut v5 CCDs file, and v3 skies
-#export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr10
-#outdir=$PSCRATCH/dr10
-
 export GAIA_CAT_DIR=$COSMO/data/gaia/dr3/healpix
 export GAIA_CAT_PREFIX=healpix
 export GAIA_CAT_SCHEME=nested
@@ -74,7 +70,6 @@ echo -e "\nStarting on $(hostname)\n" >> "$log"
 echo "-----------------------------------------------------------------------------------------" >> "$log"
 
 python -O "$LEGACYPIPE_DIR/legacypipe/runbrick.py" \
-       --zoom 100 300 100 300 \
      --brick "$brick" \
      --skip \
      --skip-calibs \
