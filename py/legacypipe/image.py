@@ -65,7 +65,7 @@ class LegacySurveyImage(object):
         *get_tractor_image*.
 
         '''
-        super(LegacySurveyImage, self).__init__()
+        super().__init__()
         self.sky_before_psfex = False
         self.survey = survey
         self._fits = None
@@ -74,6 +74,7 @@ class LegacySurveyImage(object):
 
         if camera_setup:
             # new-camera-setup.py script -- don't read stuff yet!
+            self.band = None
             return
 
         if ccd is None and image_fn is None:

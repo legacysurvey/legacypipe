@@ -58,14 +58,14 @@ export PYTHONPATH=.:${PYTHONPATH}
     # COSMOS DEEP
 #       --bands g,r,r2,i,i2,z,y \
 
-python -O legacypipe/forced_photom_brickwise.py \
+python -u -O legacypipe/forced_photom_brickwise.py \
        --brick $brick \
        --bands g,r,r2,i,i2,z,y \
        --survey-dir $survey_dir \
        --catalog-dir ${catdir} \
        --outdir ${outdir} \
-       --threads 32 \
        >> ${outdir}/logs-forced/${brick}.log 2>&1
+#       --threads 32 \
 
 # Save the return value from the python command -- otherwise we
 # exit 0 because the rm succeeds!

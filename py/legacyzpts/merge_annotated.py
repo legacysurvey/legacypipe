@@ -1,6 +1,7 @@
 from legacyzpts import legacy_zeropoints_merge
 from astrometry.util.fits import fits_table
 import argparse
+import os
 
 """
 Merges the ccds-annnotated files and generate a survey-ccds file as an after-burner.

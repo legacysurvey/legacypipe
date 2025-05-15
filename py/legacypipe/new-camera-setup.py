@@ -1,9 +1,11 @@
 import os
 import sys
 import logging
+from collections import Counter
 import numpy as np
 from legacypipe.survey import LegacySurveyData
 from legacypipe.ps1cat import ps1cat
+from legacypipe.gaiacat import GaiaCatalog
 #from legacypipe.gaiacat import GaiaCatalog
 
 logger = logging.getLogger('legacypipe.new-camera-setup')
@@ -30,6 +32,9 @@ def main():
 
     parser.add_argument('--plots', action='store_true', default=False,
                         help='Make plots?')
+    parser.add_argument('--gaia-photom', default=False, action='store_true',
+                        help='Use Gaia rather than PS-1 for photometric cal.')
+
     parser.add_argument('image', metavar='image-filename', help='Image filename to read')
 
     opt = parser.parse_args()
@@ -163,6 +168,13 @@ def main():
     else:
         calname = basename
     img.name = calname
+
+    img.set_calib_filenames()
+
+    #
+    print('Re-creating image object using normal constructor...')
+    img = survey.get_image_object(None, camera=opt.camera,
+                                  image_fn=opt.image, image_hdu=opt.image_hdu)
 
     # Once legacy_zeropoints.py starts...
     ra_bore, dec_bore = img.get_radec_bore(primhdr)
@@ -363,25 +375,37 @@ def main():
 
     phot = None
     if zpt is None:
-        info('Fetching Pan-STARRS stars inside this image...')
-        try:
-            phot = ps1cat(ccdwcs=wcs).get_stars(magrange=None)
-            info('Found', len(phot), 'PS1 stars in this image')
-        except OSError as e:
-            print('No PS1 stars found for this image -- outside the PS1 footprint, or in the Galactic plane?', e)
+        if opt.gaia_photom:
+            info('Fetching Gaia stars inside this image...')
+            gaia = GaiaCatalog().get_catalog_in_wcs(wcs)
+            assert(gaia is not None)
+            assert(len(gaia) > 0)
+            gaia = GaiaCatalog.catalog_nantozero(gaia)
+            assert(gaia is not None)
+            print(len(gaia), 'Gaia stars')
+            phot = gaia
+        else:
+            info('Fetching Pan-STARRS stars inside this image...')
+            try:
+                phot = ps1cat(ccdwcs=wcs).get_stars(magrange=None)
+                info('Found', len(phot), 'PS1 stars in this image')
+            except OSError as e:
+                print('No PS1 stars found for this image -- outside the PS1 footprint, or in the Galactic plane?', e)
     if phot is not None:
-        name = 'ps1'
-        info('Cutting PS1 stars...')
-        phot.cut(img.get_photometric_calibrator_cuts(name, phot))
-        info(len(phot), 'PS1 stars passed cut to be used for calibration')
-        if len(phot) == 0:
+        if opt.gaia_photom:
+            name = 'gaia'
+        else:
+            name = 'ps1'
+        info('Choosing calibrator stars...')
+        phot.use_for_photometry = img.get_photometric_calibrator_cuts(name, phot)
+        info('use for photometry:', Counter(phot.use_for_photometry))
+        
+        if len(phot) == 0 or np.sum(phot.use_for_photometry) == 0:
             phot = None
         else:
             # Convert to Legacy Survey mags
-            info('Converting PS1 mags to the new camera...')
             phot.legacy_survey_mag = img.photometric_calibrator_to_observed(name, phot)
-
-    #gaia = GaiaCatalog().get_catalog_in_wcs(wcs)
+            print(len(phot), 'photometric calibrator stars')
 
 
 if __name__ == '__main__':

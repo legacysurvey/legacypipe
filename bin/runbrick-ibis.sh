@@ -106,9 +106,9 @@ python -u -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --threads 32 \
        >> "$log" 2>&1
 
+#       --stage image_coadds \
+#       --blob-image \
 #        --skip-coadd \
-#        --stage image_coadds \
-#        --blob-image \
 
 # Save the return value from the python command -- otherwise we
 # exit 0 because the rm succeeds!

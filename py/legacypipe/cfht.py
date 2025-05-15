@@ -80,8 +80,8 @@ class MegaPrimeImage(LegacySurveyImage):
     camera on CFHT.
     '''
     def __init__(self, survey, t, image_fn=None, image_hdu=0, **kwargs):
-        super(MegaPrimeImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu,
-                                             **kwargs)
+        super().__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu,
+                         **kwargs)
         # print('MegaPrimeImage: CCDs table entry', t)
         # for x in dir(t):
         #     if x.startswith('_'):
@@ -213,6 +213,15 @@ class MegaPrimeImage(LegacySurveyImage):
             sdssbands.update(CaHK=0)
             band = sdssbands[self.band]
             return cat.psfmag[:, band] + colorterm
+        elif name == 'gaia':
+            print('HACKING Gaia color terms for CFHT')
+            cat.about()
+            g = cat.phot_g_mean_mag
+            bp = cat.phot_bp_mean_mag
+            rp = cat.phot_rp_mean_mag
+            colorterm = np.zeros(len(cat))
+            return bp + colorterm
+            
         else:
             raise RuntimeError('No photometric conversion from %s to CFHT' % name)
 
@@ -393,7 +402,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         # Run sky calib first (for patching...)
         self.sky_before_psfex = True
 
-        self.do_solve_field = (self.band in ['CaHK', 'u'])
+        self.do_solve_field = (self.band in ['CaHK'])#, 'u'])
 
         self.do_lacosmic = (self.band in ['CaHK', 'u'])
 
