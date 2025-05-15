@@ -1111,6 +1111,9 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             tlast = t
 
         if ps is not None or get_model:
+            if not hasattr(R, 'ims1'):
+                print('R:', R)
+                return None,None
             (data,mod,ie,chi,_) = R.ims1[0]
 
         if ps is not None:
