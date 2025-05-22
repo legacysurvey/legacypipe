@@ -935,7 +935,9 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
     primhdr = imobj.read_image_primary_header()
     hdr = imobj.read_image_header(ext=imobj.hdu)
     set_ccd_metadata(ccds, imobj, primhdr, hdr)
-
+    # needed below...
+    ra_bore, dec_bore = imobj.get_radec_bore(primhdr)
+    airmass = imobj.get_airmass(primhdr, hdr, ra_bore, dec_bore)
 
     # Quick check for PsfEx file -- moved before WCS, for CFHT's benefit
     normalizePsf = True
