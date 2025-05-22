@@ -497,21 +497,82 @@ def main():
                 info('Found', len(phot), 'PS1 stars in this image')
             except OSError as e:
                 print('No PS1 stars found for this image -- outside the PS1 footprint, or in the Galactic plane?', e)
+    phot_name = 'none'
     if phot is not None:
         if opt.gaia_photom:
-            name = 'gaia'
+            phot_name = 'gaia'
         else:
-            name = 'ps1'
+            phot_name = 'ps1'
         info('Choosing calibrator stars...')
-        phot.use_for_photometry = img.get_photometric_calibrator_cuts(name, phot)
+        phot.use_for_photometry = img.get_photometric_calibrator_cuts(phot_name, phot)
         info('use for photometry:', Counter(phot.use_for_photometry))
 
         if len(phot) == 0 or np.sum(phot.use_for_photometry) == 0:
             phot = None
         else:
             # Convert to Legacy Survey mags
-            phot.legacy_survey_mag = img.photometric_calibrator_to_observed(name, phot)
+            phot.legacy_survey_mag = img.photometric_calibrator_to_observed(phot_name, phot)
             print(len(phot), 'photometric calibrator stars')
+
+    # Check the WCS -- show image cutouts at the locations of the brightest Gaia/PS1 stars.
+    print('Calling get_wcs()...')
+    wcs = img.get_wcs(hdr=hdr)
+    print('Got WCS model:', wcs)
+
+    mjdobs = img.get_mjd(primhdr)
+    print('MJD-obs:', mjdobs)
+    from tractor.tractortime import TAITime
+    import astropy.time
+    mjd_tai = astropy.time.Time(mjdobs, format='mjd', scale='utc').tai.mjd
+    tai = TAITime(None, mjd=mjd_tai)
+    print('TAI:', tai)
+
+    print('Calling get_tractor_wcs()...')
+    twcs = img.get_tractor_wcs(wcs, 0., 0., primhdr=primhdr, imghdr=hdr, tai=tai)
+    print('Got tractor WCS:', twcs)
+
+    if (phot is not None) and (ps is not None):
+        from tractor import RaDecPos
+
+        if phot_name == 'gaia':
+            from legacypipe.survey import GaiaPosition
+            pos = [GaiaPosition(*a) for a in zip(phot.ra, phot.dec, phot.ref_epoch,
+                                                 phot.pmra, phot.pmdec, phot.parallax)]
+        else:
+            pos = [RaDecPos(ra, dec) for ra,dec in zip(phot.ra, phot.dec)]
+        
+        xy = [twcs.positionToPixel(p) for p in pos]
+        xy = np.array(xy)
+        # image cutout half-size
+        S = 10
+        x,y = xy[:,0], xy[:,1]
+        keep = phot.use_for_photometry * (x > S) * (x < w-S) * (y > S) * (y < h-S)
+        kphot = phot[keep]
+        x,y = x[keep], y[keep]
+        I = np.argsort(kphot.legacy_survey_mag)
+        R,C = 6,6
+        for s in [S, S//2]:
+            plt.clf()
+            for i in range(R*C):
+                plt.subplot(R, C, i+1)
+                j = I[i]
+                ix,iy = int(x[j]), int(y[j])
+                x0,y0 = ix - s, iy - s
+                plt.imshow(impix[y0:y0+2*s+1, x0:x0+2*s+1], interpolation='nearest', origin='lower',
+                           cmap='gray')
+                ax = plt.axis()
+                # "imshow" puts pixel centers on integer coordinates;
+                # the first pixel goes from -0.5 to +0.5.
+                # If we have x == ix, the marker will be centered in the pixel.
+                plt.plot(x[j] - x0, y[j] - y0, 's', mec='r', mfc='none', ms=15)
+                plt.axis(ax)
+                plt.xticks([]); plt.yticks([])
+            plt.suptitle('%s stars, according to image WCS' % phot_name)
+            ps.savefig()
+
+    print('Running run_zeropoints from legacyzpts...')
+    from legacyzpts.legacy_zeropoints import run_zeropoints
+    ccds,phot = run_zeropoints(img, splinesky=True, gaia_photom=opt.gaia_photom, ps=ps)
 
 
 if __name__ == '__main__':
