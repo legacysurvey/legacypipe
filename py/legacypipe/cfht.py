@@ -3,6 +3,7 @@ import numpy as np
 import fitsio
 from legacypipe.image import LegacySurveyImage
 from legacypipe.bits import DQ_BITS
+from collections import Counter
 
 '''
 Some top-level instructions for handling CFHT data.
@@ -194,6 +195,13 @@ class MegaPrimeImage(LegacySurveyImage):
         # Note larger range than usual!
         return np.clip(c, -1., +4.)
 
+    def get_gaia_calibrator_color_range(self):
+        # bp-rp color range to keep
+        print('Gaia calibrator color range for', self.band, 'band')
+        if self.band == 'u':
+            return 0.5, 2.5
+        return super().get_gaia_calibrator_color_range()
+
     def photometric_calibrator_to_observed(self, name, cat):
         from legacypipe.ps1cat import ps1cat
         ps1band_map = ps1cat.ps1band
@@ -215,13 +223,34 @@ class MegaPrimeImage(LegacySurveyImage):
             return cat.psfmag[:, band] + colorterm
         elif name == 'gaia':
             print('HACKING Gaia color terms for CFHT')
-            cat.about()
+            #cat.about()
             g = cat.phot_g_mean_mag
             bp = cat.phot_bp_mean_mag
             rp = cat.phot_rp_mean_mag
+            bprp = bp - rp
+
+            # ok = np.isfinite(g) * np.isfinite(bprp) * (bp != 0.0) * (rp != 0.0)
+            # print('Ok Gaia stars:', Counter(ok))
+            # 
+            # # u band:
+            # color_lo, color_hi = 0.5, 2.5
+            # ok *= (bprp >= color_lo) * (bprp <= color_hi)
+            # print('Ok Gaia stars (with colors):', Counter(ok))
+
+            assert(self.band == 'u')
+            # u color term
+            # (cfht-etc : Untitled3.ipynb)
+            poly = [-2.70742102,  1.97970927,  0.68901694, -0.36920751]
+
             colorterm = np.zeros(len(cat))
-            return bp + colorterm
-            
+            for i,coeff in enumerate(poly):
+                colorterm += coeff * bprp**i
+            r = bp + colorterm
+            r[~np.isfinite(r)] = 0.
+            r[bp == 0] = 0.
+            r[rp == 0] = 0.
+            return r
+
         else:
             raise RuntimeError('No photometric conversion from %s to CFHT' % name)
 

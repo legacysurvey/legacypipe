@@ -1767,6 +1767,7 @@ def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
 
         tim = tractor.Image(data=subimg, inverr=subie, psf=subpsf)
         flux0 = ref_flux[istar]
+        #print('Initial flux:', flux0)
         x_init = x - xlo
         y_init = y - ylo
         src = tractor.PointSource(tractor.PixPos(x_init, y_init), tractor.Flux(flux0))
