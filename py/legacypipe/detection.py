@@ -601,7 +601,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         thisblob = blobs[y-y0, x-x0]
         saddlemap *= (blobs == thisblob)
 
-        oslcs = find_objects(saddlemap)
+        # 1*: python3.11 / scipy 1.15.3 seems to require this to be an int
+        oslcs = find_objects(saddlemap.astype(int))
         assert(len(oslcs) == 1)
         oslc = oslcs[0]
         saddlemap[oslc] = binary_fill_holes(saddlemap[oslc])

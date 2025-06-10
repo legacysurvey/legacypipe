@@ -68,27 +68,25 @@ RUN mkdir /src
 WORKDIR /src
 
 # Astrometry.net
-RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
+RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
     && make \
     && make extra \
-    && make py PYTHON=python3.8 \
-    && make py PYTHON=python3.9 \
-    && make install INSTALL_DIR=/usr/local PYTHON=python3.8 \
-    && make install INSTALL_DIR=/usr/local PYTHON=python3.9 \
+    && make py PYTHON=python3.8 PYTHON_CONFIG=python3.8-config \
+    && make py PYTHON=python3.9 PYTHON_CONFIG=python3.9-config \
+    && make install INSTALL_DIR=/usr/local PYTHON=python3.8 PYTHON_CONFIG=python3.8-config \
+    && make install INSTALL_DIR=/usr/local PYTHON=python3.9 PYTHON_CONFIG=python3.9-config \
     && make clean
 
 ENV PYTHON=python3
 
 # The Tractor
-RUN git clone http://github.com/dstndstn/tractor.git tractor \
+RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && python3.8 setup-cython.py --with-ceres install --home /usr/local \
-    && python3.9 setup-cython.py --with-ceres install --home /usr/local \
-    && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
+    && python3.8 setup.py --with-cython --with-ceres install --home /usr/local \
+    && python3.9 setup.py --with-cython --with-ceres install --home /usr/local \
     && rm -R $(find . -name "*.o" -o -name "*.so") \
-    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)") \
-    && echo 2
+    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
 
 # python = python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
@@ -96,8 +94,8 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 # DUST maps
 RUN mkdir -p dust/maps \
   && cd dust/maps \
-  && wget -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_ngp.fits \
-  && wget -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_sgp.fits
+  && wget -c https://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_ngp.fits \
+  && wget -c https://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_sgp.fits
 ENV DUST_DIR=/src/dust
 
 # Unwise PSF

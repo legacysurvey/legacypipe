@@ -63,16 +63,19 @@ RUN for x in \
 RUN mkdir /src
 WORKDIR /src
 
+# to help astrometry.net find netpbm (yuck)
+RUN ln -s /usr/include /usr/local/include/netpbm
+
 # Astrometry.net
-RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
+RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
     && make \
     && make extra \
-    && make py PYTHON=python3.10 \
-    && make py PYTHON=python3.11 \
-    && make install INSTALL_DIR=/usr/local PYTHON=python3.10 \
-    && make install INSTALL_DIR=/usr/local PYTHON=python3.11 \
-    && make clean
+    && make py PYTHON=python3.10 PYTHON_CONFIG=python3.10-config \
+    && make py PYTHON=python3.11 PYTHON_CONFIG=python3.11-config \
+    && make install INSTALL_DIR=/usr/local PYTHON=python3.10 PYTHON_CONFIG=python3.10-config \
+    && make install INSTALL_DIR=/usr/local PYTHON=python3.11 PYTHON_CONFIG=python3.11-config \
+    && make clean && echo 1
 
 ENV PYTHON=python3
 # python = python3
@@ -91,8 +94,8 @@ RUN git clone https://github.com/dstndstn/tractor.git tractor \
 # DUST maps
 RUN mkdir -p dust/maps \
   && cd dust/maps \
-  && wget -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_ngp.fits \
-  && wget -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_sgp.fits
+  && wget -nv -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_ngp.fits \
+  && wget -nv -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_sgp.fits
 ENV DUST_DIR=/src/dust
 
 # Unwise PSF
