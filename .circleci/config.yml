@@ -180,7 +180,7 @@ jobs:
               python3.12 -m coverage run --concurrency=multiprocessing test/unit_tests.py
               python3.12 -m coverage run --concurrency=multiprocessing -a test/runbrick_test.py psfex ceres
               python3.12 -m coverage run --concurrency=multiprocessing -a test/legacyzpts_test.py
-	      python3.12 -m coverage combine
+              python3.12 -m coverage combine
               coveralls
               ./codecov-upload.sh
 
