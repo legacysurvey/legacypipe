@@ -246,12 +246,13 @@ def measure_image(img_fn, mp, image_dir='images',
         # - all-zero weight map
         if run_calibs_only:
             return
-        debug('%s: Zero exposure time or low-level calibration flagged as bad; skipping image.'
+        print('%s: Zero exposure time or low-level calibration flagged as bad; skipping image.'
               % str(img))
         ccds = _ccds_table(camera)
         ccds['image_filename'] = img_fn
         ccds['err_message'] = 'Failed CP calib, or Exptime=0'
         ccds['zpt'] = 0.
+        set_ccd_metadata(ccds, img, primhdr, None)
         return ccds, None, img
 
     if measureargs['choose_ccd']:
@@ -883,6 +884,39 @@ def main(args=None):
     tnow = Time()
     print("TIMING:total %s" % (tnow-tbegin,))
 
+def set_ccd_metadata(ccds, img, primhdr, hdr):
+    # init_ccd():
+    namemap = { 'object': 'obj',
+                'filter': 'band',
+                'image_hdu': 'hdu',
+                'mjd_obs': 'mjdobs',
+    }
+    for key in ['image_filename', 'image_hdu', 'camera', 'expnum', 'plver', 'procdate',
+                'plprocid', 'ccdname', 'propid', 'exptime', 'mjd_obs',
+                'pixscale', 'width', 'height', 'fwhm', 'filter']:
+        val = getattr(img, namemap.get(key, key), None)
+        print('Setting', key, '=', val)
+        if val is None:
+            continue
+        ccds[key] = val
+
+    ra_bore, dec_bore = img.get_radec_bore(primhdr)
+    ccds['ra_bore'],ccds['dec_bore'] = ra_bore, dec_bore
+    # hdr can be None
+    try:
+        airmass = img.get_airmass(primhdr, hdr, ra_bore, dec_bore)
+        ccds['airmass'] = airmass
+    except:
+        pass
+    ccds['ha'] = img.get_ha_deg(primhdr)
+    try:
+        ccds['gain'] = img.get_gain(primhdr, hdr)
+    except:
+        pass
+    ccds['object'] = img.get_object(primhdr)
+    if hdr is not None:
+        ccds['AVSKY'] = hdr.get('AVSKY', np.nan)
+
 def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False, ps=None):
     """Computes photometric and astrometric zeropoints for one CCD.
 
@@ -898,31 +932,12 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
     # Initialize CCDs (annotated) table data structure.
     ccds = _ccds_table(imobj.camera, overrides=imobj.override_ccd_table_types())
 
-    # init_ccd():
-    namemap = { 'object': 'obj',
-                'filter': 'band',
-                'image_hdu': 'hdu',
-                'mjd_obs': 'mjdobs',
-    }
-    for key in ['image_filename', 'image_hdu', 'camera', 'expnum', 'plver', 'procdate',
-                'plprocid', 'ccdname', 'propid', 'exptime', 'mjd_obs',
-                'pixscale', 'width', 'height', 'fwhm', 'filter']:
-        val = getattr(imobj, namemap.get(key, key))
-        print('Setting', key, '=', val)
-        ccds[key] = val
-
     primhdr = imobj.read_image_primary_header()
     hdr = imobj.read_image_header(ext=imobj.hdu)
-
+    set_ccd_metadata(ccds, imobj, primhdr, hdr)
+    # needed below...
     ra_bore, dec_bore = imobj.get_radec_bore(primhdr)
-    ccds['ra_bore'],ccds['dec_bore'] = ra_bore, dec_bore
     airmass = imobj.get_airmass(primhdr, hdr, ra_bore, dec_bore)
-    ccds['airmass'] = airmass
-    ccds['ha'] = imobj.get_ha_deg(primhdr)
-    ccds['gain'] = imobj.get_gain(primhdr, hdr)
-    ccds['object'] = imobj.get_object(primhdr)
-
-    ccds['AVSKY'] = hdr.get('AVSKY', np.nan)
 
     # Quick check for PsfEx file -- moved before WCS, for CFHT's benefit
     normalizePsf = True

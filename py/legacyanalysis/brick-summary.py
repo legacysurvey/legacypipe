@@ -163,10 +163,9 @@ def depth_hist(opt):
 
         I = np.flatnonzero(depth > 0)
         ptiles = np.arange(0, 101, 10)
-        pcts = np.percentile(depth[I], ptiles, weights=T.area[I])
+        pcts = np.percentile(depth[I], ptiles) #, weights=T.area[I])
         for ptile,pct in zip(ptiles, pcts):
-            print('%s band, %3i-th depth percentile: %.2f' % (ptile, pct))
-
+            print('%s band, %3i-th depth percentile: %.2f' % (band, ptile, pct))
 
 def plots(opt):
     from astrometry.util.plotutils import antigray
