@@ -44,6 +44,7 @@ RUN ln -s /usr/bin/sextractor /usr/bin/sex
 # FIXME - should be
 # RUN ln -s /usr/bin/source-extractor /usr/bin/sex
 
+# photutils==1.0.0 \
 # photutils at 1.0.0 because of
 # https://github.com/astropy/photutils/issues/1095
 # new in 1.0.1, maybe fixed in next release?
@@ -56,7 +57,7 @@ RUN for x in \
     fitsio \
     matplotlib \
     astropy \
-    photutils==1.0.0 \
+    photutils \
     zmq \
     ; do \
     python3.8 -m pip install $x; \
@@ -107,3 +108,4 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
 RUN rm /usr/bin/sex; ln -s /usr/bin/source-extractor /usr/bin/sex
 
 ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
+
