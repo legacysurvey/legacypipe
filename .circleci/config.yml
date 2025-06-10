@@ -167,7 +167,7 @@ jobs:
               cd py
               export PYTHONPATH=${PYTHONPATH}:$(pwd)
               python3.12 -c "import sys; print(sys.path)"
-              python3.12 -c "import sys; import os; [os.system('echo "'+p+'" && ls "' + p + '"') for p in sys.path]"
+              python3.12 -c "import sys; import os; [os.system('echo \"'+p+'\" && ls \"' + p + '\"') for p in sys.path]"
               git clone https://github.com/legacysurvey/legacypipe-test-data.git
               export LPT=$(pwd)/legacypipe-test-data
               export LEGACYPIPE_TEST_DATA=$LPT
