@@ -161,6 +161,13 @@ def depth_hist(opt):
         plt.legend(loc='upper left')
         plt.savefig('depth-hist-%s-%s-%s.png' % (band, dr.lower(), hemi))
 
+        I = np.flatnonzero(depth > 0)
+        ptiles = np.arange(0, 101, 10)
+        pcts = np.percentile(depth[I], ptiles, weights=T.area[I])
+        for ptile,pct in zip(ptiles, pcts):
+            print('%s band, %3i-th depth percentile: %.2f' % (ptile, pct))
+
+
 def plots(opt):
     from astrometry.util.plotutils import antigray
     import tractor.sfd
