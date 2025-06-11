@@ -33,9 +33,9 @@ def rbmain():
 
     set_env()
 
-    test_4(False, False)
-    test_4b()
-    sys.exit(0)
+    # test_4(False, False)
+    # test_4b()
+    # sys.exit(0)
     
     oldargs = sys.argv
     sys.argv = [sys.argv[0]]
