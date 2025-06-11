@@ -627,13 +627,19 @@ def test_4(ceres, psfex):
 
         main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
                    '--force-all', '--no-write', '--coadd-bw',
-                   '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
-                   '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
-                   '--blob-image',
+                   '--stage', 'tims',
                    '--survey-dir', surveydir,
                    '--outdir', outdir, '-v'])
-        print('After generating PsfEx calib:')
-        os.system('find %s' % (os.path.join(surveydir, 'calib')))
+
+        # if will generate a psfex-single file
+        sfn = os.path.join(surveydir, 'calib', 'psfex-single', 'decam', 'CP', 'V4.8.2',
+                           'CP20170315', 'c4d_170316_062107_ooi_z_ls9',
+                           'c4d_170316_062107_ooi_z_ls9-N2-psfex.fits')
+        assert(os.path.exists(sfn))
+        P = fits_table(sfn)
+        print('PSF model:')
+        P.about()
+        print(P[0])
 
 def test_4b():
     # Custom RA,Dec; blob ra,dec.
