@@ -152,7 +152,7 @@ jobs:
               #python3.11 -u test/unit_tests.py
               #python3.11 -u test/runbrick_test.py psfex ceres
               #python3.11 -u test/legacyzpts_test.py
-	      python3.11 -u -m coverage run --concurrency=multiprocessing test/unit_tests.py
+              python3.11 -u -m coverage run --concurrency=multiprocessing test/unit_tests.py
               python3.11 -u -m coverage run --concurrency=multiprocessing -a test/runbrick_test.py psfex ceres
               python3.11 -u -m coverage run --concurrency=multiprocessing -a test/legacyzpts_test.py
               python3.11 -u -m coverage combine
@@ -183,10 +183,10 @@ jobs:
               export GAIA_CAT_PREFIX=chunk
               export PS1CAT_DIR=$LPT/ps1-qz-star-v3
               export TYCHO2_KD_DIR=$LPT
-	      # Due to a bug in the new PsfEx 3.24 that is only in this Ubuntu 24.04 image,
-	      # (https://github.com/astromatic/psfex/pull/22), don't run the "psfex" tests, and
+              # Due to a bug in the new PsfEx 3.24 that is only in this Ubuntu 24.04 image,
+              # (https://github.com/astromatic/psfex/pull/22), don't run the "psfex" tests, and
 	      # don't collect coverage metrics from U24/Py3.12
-	      # python3.12 -u -m coverage run --concurrency=multiprocessing test/unit_tests.py
+              # python3.12 -u -m coverage run --concurrency=multiprocessing test/unit_tests.py
               # python3.12 -u -m coverage run --concurrency=multiprocessing -a test/runbrick_test.py psfex ceres
               # python3.12 -u -m coverage run --concurrency=multiprocessing -a test/legacyzpts_test.py
               # python3.12 -u -m coverage combine
