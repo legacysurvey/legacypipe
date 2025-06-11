@@ -33,6 +33,7 @@ def rbmain():
 
     set_env()
 
+    test_4(False, False)
     test_4b()
     sys.exit(0)
     
@@ -433,75 +434,7 @@ def rbmain():
     del os.environ['GAIA_CAT_DIR']
     del os.environ['GAIA_CAT_VER']
 
-    # Test that we can run splinesky calib if required...
-
-    from legacypipe.decam import DecamImage
-    DecamImage.splinesky_boxsize = 128
-
-    surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
-
-    survey = LegacySurveyData(surveydir)
-    # get brick by id
-    brickid = 473357
-    brick = survey.get_brick(brickid)
-    assert(brick.brickname == '1867p255')
-    assert(brick.brickid == brickid)
-
-    outdir = 'out-testcase4'
-    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
-    os.environ['GAIA_CAT_VER'] = '2'
-
-    fn = os.path.join(surveydir, 'calib', 'sky-single', 'decam', 'CP', 'V4.8.2',
-                      'CP20170315', 'c4d_170316_062107_ooi_z_ls9',
-                      'c4d_170316_062107_ooi_z_ls9-N2-splinesky.fits')
-    if os.path.exists(fn):
-        os.unlink(fn)
-
-    main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
-               '--force-all', '--no-write', '--coadd-bw',
-               '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
-               '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
-               '--blob-image', '--no-hybrid-psf',
-               '--survey-dir', surveydir,
-               '--outdir', outdir, '-v', '--no-wise-ceres'])
-    print('Checking for calib file', fn)
-    assert(os.path.exists(fn))
-
-    # Test with blob-masking when creating sky calib.
-    os.unlink(fn)
-
-    main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
-               '--force-all', '--no-write', '--coadd-bw',
-               '--blob-mask-dir', surveydir,
-               '--survey-dir', surveydir,
-               '--stage', 'image_coadds',
-               '--outdir', 'out-testcase4b', '--plots'])
-    print('Checking for calib file', fn)
-    assert(os.path.exists(fn))
-
-    if ceres:
-        main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
-                   '--force-all', '--no-write', '--coadd-bw',
-                   '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
-                   '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
-                   '--survey-dir', surveydir,
-                   '--outdir', outdir])
-    if psfex:
-        # Check that we can regenerate PsfEx files if necessary.
-        fn = os.path.join(surveydir, 'calib', 'psfex', 'decam', 'CP', 'V4.8.2',
-                          'CP20170315', 'c4d_170316_062107_ooi_z_ls9-psfex.fits')
-        if os.path.exists(fn):
-            os.unlink(fn)
-
-        main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
-                   '--force-all', '--no-write', '--coadd-bw',
-                   '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
-                   '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
-                   '--blob-image',
-                   '--survey-dir', surveydir,
-                   '--outdir', outdir, '-v'])
-        print('After generating PsfEx calib:')
-        os.system('find %s' % (os.path.join(surveydir, 'calib')))
+    test_4(ceres, psfex)
 
     # Wrap-around, hybrid PSF
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase8')
@@ -641,6 +574,81 @@ def rbmain():
     #                '--no-wise', '--force-all', '--no-write', '--ceres',
     #                '--survey-dir', surveydir,
     #                '--outdir', 'out-testcase3-ceres'] + extra_args)
+
+def test_4(ceres, psfex):
+    from legacypipe.survey import LegacySurveyData
+
+    # Test that we can run splinesky calib if required...
+
+    from legacypipe.decam import DecamImage
+    DecamImage.splinesky_boxsize = 128
+
+    surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
+
+    survey = LegacySurveyData(surveydir)
+    # get brick by id
+    brickid = 473357
+    brick = survey.get_brick(brickid)
+    assert(brick.brickname == '1867p255')
+    assert(brick.brickid == brickid)
+
+    outdir = 'out-testcase4'
+    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
+    os.environ['GAIA_CAT_VER'] = '2'
+    os.environ['GAIA_CAT_PREFIX'] = 'chunk'
+    os.environ['GAIA_CAT_SCHEME'] = 'ring'
+
+    fn = os.path.join(surveydir, 'calib', 'sky-single', 'decam', 'CP', 'V4.8.2',
+                      'CP20170315', 'c4d_170316_062107_ooi_z_ls9',
+                      'c4d_170316_062107_ooi_z_ls9-N2-splinesky.fits')
+    if os.path.exists(fn):
+        os.unlink(fn)
+
+    main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
+               '--force-all', '--no-write', '--coadd-bw',
+               '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
+               '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
+               '--blob-image', '--no-hybrid-psf',
+               '--survey-dir', surveydir,
+               '--outdir', outdir, '-v', '--no-wise-ceres'])
+    print('Checking for calib file', fn)
+    assert(os.path.exists(fn))
+
+    # Test with blob-masking when creating sky calib.
+    os.unlink(fn)
+
+    main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
+               '--force-all', '--no-write', '--coadd-bw',
+               '--blob-mask-dir', surveydir,
+               '--survey-dir', surveydir,
+               '--stage', 'image_coadds',
+               '--outdir', 'out-testcase4b', '--plots'])
+    print('Checking for calib file', fn)
+    assert(os.path.exists(fn))
+
+    if ceres:
+        main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
+                   '--force-all', '--no-write', '--coadd-bw',
+                   '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
+                   '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
+                   '--survey-dir', surveydir,
+                   '--outdir', outdir])
+    if psfex:
+        # Check that we can regenerate PsfEx files if necessary.
+        fn = os.path.join(surveydir, 'calib', 'psfex', 'decam', 'CP', 'V4.8.2',
+                          'CP20170315', 'c4d_170316_062107_ooi_z_ls9-psfex.fits')
+        if os.path.exists(fn):
+            os.unlink(fn)
+
+        main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
+                   '--force-all', '--no-write', '--coadd-bw',
+                   '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
+                   '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
+                   '--blob-image',
+                   '--survey-dir', surveydir,
+                   '--outdir', outdir, '-v'])
+        print('After generating PsfEx calib:')
+        os.system('find %s' % (os.path.join(surveydir, 'calib')))
 
 def test_4b():
     # Custom RA,Dec; blob ra,dec.
