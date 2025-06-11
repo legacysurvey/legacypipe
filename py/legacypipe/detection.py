@@ -599,9 +599,13 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         saddlemap *= (allblobs[slc] == ablob)
         blobs,_ = label(saddlemap)
         thisblob = blobs[y-y0, x-x0]
+        print('saddlemap:', saddlemap.shape, saddlemap.dtype, ', blobs', blobs.shape, blobs.dtype, 'thisblob', thisblob)
         saddlemap *= (blobs == thisblob)
+        print('after masking saddlemap:', saddlemap.shape, saddlemap.dtype)
+        from collections import Counter
+        print('masked saddlemap values:', Counter(saddlemap.astype(int)))
 
-        # 1*: python3.11 / scipy 1.15.3 seems to require this to be an int
+        # astype(int): python3.11 / scipy 1.15.3 seems to require this to be an int
         oslcs = find_objects(saddlemap.astype(int))
         assert(len(oslcs) == 1)
         oslc = oslcs[0]

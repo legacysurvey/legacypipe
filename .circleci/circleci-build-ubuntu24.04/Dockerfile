@@ -65,8 +65,8 @@ RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
     && make \
     && make extra \
-    && make py PYTHON=python3.12 \
-    && make install INSTALL_DIR=/usr/local PYTHON=python3.12 \
+    && make py PYTHON=python3.12 PYTHON_CNOFIG=python3.12-config \
+    && make install INSTALL_DIR=/usr/local PYTHON=python3.12 PYTHON_CNOFIG=python3.12-config \
     && make clean
 
 ENV PYTHON=python3
@@ -76,7 +76,8 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 # The Tractor
 RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && python3.12 setup.py --with-cython --with-ceres install --home /usr/local \
+    && python3.12 setup.py build_ext --with-ceres --with-cython --inplace \
+    && python3.12 setup.py install \
     && rm -R $(find . -name "*.o" -o -name "*.so")
 
 # DUST maps

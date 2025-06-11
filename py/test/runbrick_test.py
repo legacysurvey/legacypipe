@@ -33,6 +33,9 @@ def rbmain():
 
     set_env()
 
+    test_4b()
+    sys.exit(0)
+    
     oldargs = sys.argv
     sys.argv = [sys.argv[0]]
     main()
@@ -547,26 +550,8 @@ def rbmain():
     # T = fits_table(fn)
     # assert(len(T) == 1)
 
-    # Custom RA,Dec; blob ra,dec.
-    surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
-    outdir = 'out-testcase4b'
-    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
-    # Catalog written with one entry (--blobradec)
-    fn = os.path.join(outdir, 'tractor', 'cus',
-                      'tractor-custom-186743p25461.fits')
-    if os.path.exists(fn):
-        os.unlink(fn)
-    main(args=['--radec', '186.743965', '25.461788',
-               '--width', '250', '--height', '250',
-               '--force-all', '--no-write', '--no-wise',
-               '--blobradec', '186.740369', '25.453855',
-               '--survey-dir', surveydir,
-               '--outdir', outdir])
-
-    assert(os.path.exists(fn))
-    T = fits_table(fn)
-    assert(len(T) == 1)
-
+    test_4b()
+    
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase3')
     outdir = 'out-testcase3'
     os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
@@ -656,6 +641,31 @@ def rbmain():
     #                '--no-wise', '--force-all', '--no-write', '--ceres',
     #                '--survey-dir', surveydir,
     #                '--outdir', 'out-testcase3-ceres'] + extra_args)
+
+def test_4b():
+    # Custom RA,Dec; blob ra,dec.
+    surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
+    outdir = 'out-testcase4b'
+    os.environ['TYCHO2_KD_DIR'] = surveydir
+    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
+    os.environ['GAIA_CAT_VER'] = '2'
+    os.environ['GAIA_CAT_PREFIX'] = 'chunk'
+    os.environ['GAIA_CAT_SCHEME'] = 'ring'
+    # Catalog written with one entry (--blobradec)
+    fn = os.path.join(outdir, 'tractor', 'cus',
+                      'tractor-custom-186743p25461.fits')
+    if os.path.exists(fn):
+        os.unlink(fn)
+    main(args=['--radec', '186.743965', '25.461788',
+               '--width', '250', '--height', '250',
+               '--force-all', '--no-write', '--no-wise',
+               '--blobradec', '186.740369', '25.453855',
+               '--survey-dir', surveydir,
+               '--outdir', outdir])
+
+    assert(os.path.exists(fn))
+    T = fits_table(fn)
+    assert(len(T) == 1)
 
 if __name__ == '__main__':
     rbmain()

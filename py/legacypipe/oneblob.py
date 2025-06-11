@@ -2293,6 +2293,7 @@ def _select_model(chisqs, nparams, galaxy_margin):
     diff = max([chisqs[name] - nparams[name] for name in chisqs.keys()
                 if name != 'none'] + [-1])
 
+    print('best fit source chisq: %.3f, vs threshold %.3f' % (diff, cut))
     if diff < cut:
         # Drop this source
         return keepmod
