@@ -40,9 +40,9 @@ def rbmain():
 
     reset_env()
 
-    # test_4(False, False)
-    # test_4b()
-    # sys.exit(0)
+    test_4(ceres, psfex)
+    test_4b()
+    sys.exit(0)
     
     oldargs = sys.argv
     sys.argv = [sys.argv[0]]
@@ -619,6 +619,9 @@ def test_4(ceres, psfex):
                    '--survey-dir', surveydir,
                    '--outdir', outdir])
     if psfex:
+        sys.stdout.flush()
+        print('Test 4: regenerating PsfEx file')
+        sys.stdout.flush()
         # Check that we can regenerate PsfEx files if necessary.
         fn = os.path.join(surveydir, 'calib', 'psfex', 'decam', 'CP', 'V4.8.2',
                           'CP20170315', 'c4d_170316_062107_ooi_z_ls9-psfex.fits')
@@ -641,7 +644,14 @@ def test_4(ceres, psfex):
         P.about()
         print(P[0])
 
+        # sys.stdout.flush()
+        # print('After generating PsfEx calib:')
+        # os.system('find %s' % (os.path.join(surveydir, 'calib')))
+        # sys.stdout.flush()
+
 def test_4b():
+    print('Test 4b')
+    
     # Custom RA,Dec; blob ra,dec.
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
     set_ref_env(surveydir)
@@ -661,6 +671,7 @@ def test_4b():
     assert(os.path.exists(fn))
     T = fits_table(fn)
     assert(len(T) == 1)
+    print('Test 4b finished')
 
 if __name__ == '__main__':
     rbmain()

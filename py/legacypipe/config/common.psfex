@@ -66,6 +66,6 @@ NTHREADS        1               # Number of simultaneous threads for
                                 # the SMP version of PSFEx
                                 # 0 = automatic
 
-# Save a catalog of stars, including the ones that PsfEx rejected, with flags for why
-# OUTCAT_TYPE        FITS_LDAC
-# OUTCAT_NAME        psfex_out.cat
+#---- PSFEx 3.24.2 ----
+OUTCAT_TYPE        FITS_LDAC
+OUTCAT_NAME        psfex_out.cat

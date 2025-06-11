@@ -140,8 +140,6 @@ jobs:
               export PYTHONPATH=${PYTHONPATH}:$(pwd)
               python3.11 -c "import sys; print(sys.path)"
               python3.11 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
-              python3.11 -u test/unit_tests.py
-              python3.11 -u test/runbrick_test.py psfex ceres
               git clone https://github.com/legacysurvey/legacypipe-test-data.git
               export LPT=$(pwd)/legacypipe-test-data
               export LEGACYPIPE_TEST_DATA=$LPT
@@ -151,7 +149,15 @@ jobs:
               export GAIA_CAT_PREFIX=chunk
               export PS1CAT_DIR=$LPT/ps1-qz-star-v3
               export TYCHO2_KD_DIR=$LPT
-              python3.11 -u test/legacyzpts_test.py
+              #python3.11 -u test/unit_tests.py
+              #python3.11 -u test/runbrick_test.py psfex ceres
+              #python3.11 -u test/legacyzpts_test.py
+	      python3.11 -u -m coverage run --concurrency=multiprocessing test/unit_tests.py
+              python3.11 -u -m coverage run --concurrency=multiprocessing -a test/runbrick_test.py psfex ceres
+              python3.11 -u -m coverage run --concurrency=multiprocessing -a test/legacyzpts_test.py
+              python3.11 -u -m coverage combine
+              coveralls
+              ./codecov-upload.sh
 
   build-from-docker-u2404-py3.12:
     docker:
@@ -177,12 +183,18 @@ jobs:
               export GAIA_CAT_PREFIX=chunk
               export PS1CAT_DIR=$LPT/ps1-qz-star-v3
               export TYCHO2_KD_DIR=$LPT
-              python3.12 -u -m coverage run --concurrency=multiprocessing test/unit_tests.py
-              python3.12 -u -m coverage run --concurrency=multiprocessing -a test/runbrick_test.py psfex ceres
-              python3.12 -u -m coverage run --concurrency=multiprocessing -a test/legacyzpts_test.py
-              python3.12 -u -m coverage combine
-              coveralls
-              ./codecov-upload.sh
+	      # Due to a bug in the new PsfEx 3.24 that is only in this Ubuntu 24.04 image,
+	      # (https://github.com/astromatic/psfex/pull/22), don't run the "psfex" tests, and
+	      # don't collect coverage metrics from U24/Py3.12
+	      # python3.12 -u -m coverage run --concurrency=multiprocessing test/unit_tests.py
+              # python3.12 -u -m coverage run --concurrency=multiprocessing -a test/runbrick_test.py psfex ceres
+              # python3.12 -u -m coverage run --concurrency=multiprocessing -a test/legacyzpts_test.py
+              # python3.12 -u -m coverage combine
+              # coveralls
+              # ./codecov-upload.sh
+              python3.12 -u test/unit_tests.py
+              python3.12 -u test/runbrick_test.py ceres
+              python3.12 -u test/legacyzpts_test.py
 
 workflows:
   version: 2

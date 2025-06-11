@@ -114,3 +114,5 @@ ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 #     python3.11 -m pip install $x; \
 #     done; \
 #     rm -R /root/.cache/pip
+
+RUN python3.11 -m pip install --no-cache-dir coverage coveralls
