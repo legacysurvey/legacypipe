@@ -4,6 +4,9 @@ import numpy as np
 import fitsio
 from collections import Counter
 
+from legacypipe.utils import freeze_iers
+freeze_iers()
+
 from legacypipe.forced_photom import forced_photom_one_ccd, find_missing_sga
 
 def main():
@@ -119,22 +122,15 @@ def main():
 
     opt.catalog = False
     tfn = catsurvey.find_file('tractor', brick=brick.brickname)
+    add_sga = False
     if os.path.exists(tfn):
         print('Reading catalog from', tfn)
         T = fits_table(tfn)
         tprimhdr = fitsio.read_header(tfn)
         if custom_brick:
             opt.catalog = tfn
-        print('Checking for nearby SGA galaxies...')
-        # from get_catalog_in_wcs...
-        surveys = [(catsurvey, None)]
-        SGA = find_missing_sga(T, targetwcs, survey, surveys, None)#columns)
-        if SGA is not None:
-            # These SGA sources came from other bricks, where they may be BRICK_PRIMARY,
-            # but they're not BRICK_PRIMARY in *this* brick.
-            SGA.brick_primary[:] = False
-            ## Add 'em in!
-            T = merge_tables([T, SGA], columns='fillzero')
+        add_sga = True
+        # don't look up the SGAs until we know which bands we want
     else:
         from legacypipe.forced_photom import get_catalog_in_wcs
         T = get_catalog_in_wcs(targetwcs, survey, catsurvey)
@@ -155,6 +151,7 @@ def main():
         ccds.cut(ccds.ccd_cuts == 0)
         print(len(ccds), 'CCDs survive cuts.')
         print('CCD filters:', Counter(ccds.filter).most_common())
+    bands = None
     if opt.bands:
         # Cut on bands to be used
         bands = opt.bands.split(',')
@@ -164,6 +161,19 @@ def main():
     print('Forced-photometering CCDs:')
     for ccd in ccds:
         print('  ', ccd.image_filename, 'expnum', ccd.expnum, 'ccdname', ccd.ccdname)
+
+    if add_sga:
+        print('Checking for nearby SGA galaxies...')
+        # from get_catalog_in_wcs...
+        surveys = [(catsurvey, None)]
+        bands = list(set(ccds.filter))
+        SGA = find_missing_sga(T, targetwcs, survey, surveys, None, bands=bands)
+        if SGA is not None:
+            # These SGA sources came from other bricks, where they may be BRICK_PRIMARY,
+            # but they're not BRICK_PRIMARY in *this* brick.
+            SGA.brick_primary[:] = False
+            ## Add 'em in!
+            T = merge_tables([T, SGA], columns='fillzero')
 
     # args for forced_photom_one_ccd:
     opt.apphot = True

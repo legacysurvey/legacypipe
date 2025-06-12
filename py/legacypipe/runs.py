@@ -130,7 +130,7 @@ class ClaudsTestData4(LegacySurveyData):
         I = np.flatnonzero(np.isin(ccds.expnum, [2571171, 2602665]))
         print('CLAUDS test #4: cutting CCDs to %i of %i on EXPNUM' % (len(I), len(ccds)))
         return ccds[I]
-
+    
 class RerunWithCcds(LegacySurveyData):
     def get_brick_by_name(self, brickname):
         # BRUTAL HACK -- runbrick.py's stage_tims first calls

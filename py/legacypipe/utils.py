@@ -47,6 +47,15 @@ def get_cpu_arch():
     cpu_arch = codenames.get((family, model), '')
     return cpu_arch
 
+def freeze_iers():
+    # Prevent any Astropy attempts to automatically download updated IERS-A tables.
+    import astropy.utils.iers
+    astropy.utils.iers.conf.auto_download = False
+    astropy.utils.iers.conf.auto_max_age = None
+    astropy.utils.iers.conf.iers_auto_url = 'frozen'
+    astropy.utils.iers.conf.iers_auto_url_mirror = 'frozen'
+    astropy.utils.iers.conf.iers_degraded_accuracy = 'ignore'
+
 galaxy_min_re = 0.01
 
 class EllipseWithPriors(EllipseESoft):

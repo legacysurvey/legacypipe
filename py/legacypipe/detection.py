@@ -591,6 +591,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         subslc = slice(ylo,yhi), slice(xlo,xhi)
         subx0 = xlo
         suby0 = ylo
+        # DEBUG - save the original slice
+        orig_slc = slc
         # swap in the +-50 pixel slice
         slc = subslc
         x0,y0 = subx0,suby0
@@ -602,6 +604,41 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         saddlemap *= (blobs == thisblob)
 
         oslcs = find_objects(saddlemap)
+        if len(oslcs) != 1:
+            print('oslcs:', oslcs)
+            if ps is not None:
+                plt.clf()
+                plt.imshow(sedsn, interpolation='nearest', origin='lower')
+                plt.colorbar()
+                ax = plt.axis()
+                plt.plot(px, py, 'o', mec='r', mfc='none')
+                sy,sx = orig_slc
+                y0,y1 = sy.start, sy.stop
+                x0,x1 = sx.start, sx.stop
+                plt.plot([x0,x1,x1,x0,x0], [y0,y0,y1,y1,y0], 'r-')
+                sy,sx = slc
+                y0,y1 = sy.start, sy.stop
+                x0,x1 = sx.start, sx.stop
+                plt.plot([x0,x1,x1,x0,x0], [y0,y0,y1,y1,y0], 'b-')
+                plt.axis(ax)
+                plt.title('sedsn and slcs')
+                ps.savefig()
+
+                plt.clf()
+                plt.imshow(dilatedmap[orig_slc] > level)
+                plt.title('Dilatedmap[orig_slc] > level')
+                ps.savefig()
+                
+                plt.clf()
+                plt.imshow(dilatedmap[slc] > level)
+                plt.title('Dilatedmap[slc] > level')
+                ps.savefig()
+
+                plt.clf()
+                plt.imshow(allblobs[slc] == ablob)
+                plt.title('blob matches (ablob)')
+                ps.savefig()
+                
         assert(len(oslcs) == 1)
         oslc = oslcs[0]
         saddlemap[oslc] = binary_fill_holes(saddlemap[oslc])

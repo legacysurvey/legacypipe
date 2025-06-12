@@ -22,16 +22,20 @@ fits_typemap[GaiaSource] = 'PSF'
 
 def prepare_fits_catalog(cat, invvars, T, bands, allbands=None,
                          prefix='', save_invvars=True, force_keep=None):
+    Nsrcs = len(cat)
     if T is None:
         from astrometry.util.fits import fits_table
         T = fits_table()
+    else:
+        Nsrcs = len(T)
+
     if allbands is None:
         allbands = bands
 
     params0 = cat.getParams()
 
-    flux = np.zeros((len(T), len(allbands)), np.float32)
-    flux_ivar = np.zeros((len(T), len(allbands)), np.float32)
+    flux = np.zeros((Nsrcs, len(allbands)), np.float32)
+    flux_ivar = np.zeros((Nsrcs, len(allbands)), np.float32)
 
     for band in bands:
         i = allbands.index(band)

@@ -176,11 +176,16 @@ def detection_plots(detmaps, detivs, bands, saturated_pix, tims,
     for band, detmap,detiv in zip(bands, detmaps, detivs):
         plt.clf()
         plt.subplot(2,1,1)
-        plt.hist((detmap * np.sqrt(detiv))[detiv>0], bins=50, range=(-5,8), log=True)
+        sn = detmap * np.sqrt(detiv)
+        print('Band', band, ':', np.sum(detiv>0), 'of', np.prod(detiv.shape), 'detiv pixels > 0')
+        sn = sn[detiv>0]
+        lo,hi = -5, +8
+        plt.hist(np.clip(sn, lo, hi), bins=50, range=(lo,hi), log=True)
         plt.title('Detection map pixel values (sigmas): band %s' % band)
         plt.subplot(2,1,2)
-        plt.hist((detmap * np.sqrt(detiv))[detiv>0], bins=50, range=(-5,8))
+        plt.hist(np.clip(sn, lo, hi), bins=50, range=(lo,hi), log=True)
         ps.savefig()
+        del sn
 
 def halo_plots_before(tims, bands, targetwcs, halostars, ps):
     coimgs,_ = quick_coadds(tims, bands, targetwcs)
