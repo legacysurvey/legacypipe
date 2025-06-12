@@ -10,12 +10,19 @@ import fitsio
 from legacypipe.runbrick import main
 from astrometry.util.fits import fits_table
 
-def set_env():
+def reset_env():
     for v in ['UNWISE_COADDS_TIMERESOLVED_DIR', 'SKY_TEMPLATE_DIR',
-              'LARGEGALAXIES_CAT', 'GAIA_CAT_DIR', 'TYCHO2_KD_DIR']:
+              'LARGEGALAXIES_CAT', 'GAIA_CAT_DIR', 'TYCHO2_KD_DIR',
+              'UNWISE_MODEL_SKY_DIR']:
         if v in os.environ:
             del os.environ[v]
 
+def set_ref_env(surveydir):
+    os.environ['TYCHO2_KD_DIR'] = surveydir
+    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
+    os.environ['GAIA_CAT_VER'] = '2'
+    os.environ['GAIA_CAT_PREFIX'] = 'chunk'
+    os.environ['GAIA_CAT_SCHEME'] = 'ring'
 
 def rbmain():
     from legacypipe.catalog import read_fits_catalog
@@ -31,8 +38,12 @@ def rbmain():
     ceres  = 'ceres'  in sys.argv
     psfex  = 'psfex'  in sys.argv
 
-    set_env()
+    reset_env()
 
+    test_4(ceres, psfex)
+    test_4b()
+    sys.exit(0)
+    
     oldargs = sys.argv
     sys.argv = [sys.argv[0]]
     main()
@@ -162,11 +173,7 @@ def rbmain():
     assert(isinstance(tim5.getPsf(), GaussianMixturePSF))
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase12')
-    os.environ['TYCHO2_KD_DIR'] = surveydir
-    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
-    os.environ['GAIA_CAT_VER'] = '2'
-    os.environ['GAIA_CAT_PREFIX'] = 'chunk'
-    os.environ['GAIA_CAT_SCHEME'] = 'ring'
+    set_ref_env(surveydir)
     os.environ['UNWISE_MODEL_SKY_DIR'] = os.path.join(surveydir, 'images', 'unwise-mod')
     #python legacypipe/runbrick.py --radec  --width 100 --height 100 --outdir dup5b --survey-dir test/testcase12 --force-all --no-wise
     unwdir = os.path.join(surveydir, 'images', 'unwise')
@@ -193,10 +200,7 @@ def rbmain():
                '--unwise-dir', unwdir, '--survey-dir', surveydir,
                '--outdir', 'out-testcase12', '--stage', 'wise_forced',
                '--plots'])
-    del os.environ['GAIA_CAT_DIR']
-    del os.environ['GAIA_CAT_VER']
-    del os.environ['TYCHO2_KD_DIR']
-    del os.environ['UNWISE_MODEL_SKY_DIR']
+    reset_env()
 
     M = fitsio.read('out-testcase12/coadd/cus/custom-346684p12791/legacysurvey-custom-346684p12791-maskbits.fits.fz')
     # Count masked & unmasked bits (the cluster splits this 100x100 field)
@@ -207,8 +211,7 @@ def rbmain():
     assert(c[MASKBITS['CLUSTER']] >= 4000)
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase9')
-    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
-    os.environ['GAIA_CAT_VER'] = '2'
+    set_ref_env(surveydir)
     os.environ['LARGEGALAXIES_CAT'] = os.path.join(surveydir,
                                                    'sga-sub.kd.fits')
     main(args=['--radec', '9.1228', '3.3975', '--width', '100',
@@ -326,9 +329,7 @@ def rbmain():
                    '--cache-dir', cachedir,
                    '--outdir', 'out-testcase9cache', '--force-all'])
 
-    del os.environ['GAIA_CAT_DIR']
-    del os.environ['GAIA_CAT_VER']
-    del os.environ['LARGEGALAXIES_CAT']
+    reset_env()
 
     # if ceres:
     #     surveydir = os.path.join(os.path.dirname(__file__), 'testcase3')
@@ -343,8 +344,7 @@ def rbmain():
     # fitscopy coadd/177/1773p595/legacysurvey-1773p595-ccds.fits"[#row<3 || #row==12]" cx.fits
     # python legacyanalysis/create_testcase.py cx.fits test/mzlsbass2 1773p595 --survey-dir dr9-north/ --fpack
     surveydir2 = os.path.join(os.path.dirname(__file__), 'mzlsbass2')
-    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir2, 'gaia')
-    os.environ['GAIA_CAT_VER'] = '2'
+    set_ref_env(surveydir2)
     main(args=['--brick', '1773p595', '--zoom', '1300', '1500', '700', '900',
                '--no-wise', '--force-all', '--no-write',
                '--survey-dir', surveydir2,
@@ -378,8 +378,7 @@ def rbmain():
                '--outdir', outdir, '--bail-out', '--checkpoint', chk,
                '--no-write'])
 
-    del os.environ['GAIA_CAT_DIR']
-    del os.environ['GAIA_CAT_VER']
+    reset_env()
 
     M = fitsio.read(os.path.join(outdir, 'coadd', '177', '1773p595',
                                  'legacysurvey-1773p595-maskbits.fits.fz'))
@@ -396,8 +395,7 @@ def rbmain():
                '--survey-dir', surveydir,
                '--outdir', outdir]
     print('python legacypipe/runbrick.py', ' '.join(the_args))
-    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
-    os.environ['GAIA_CAT_VER'] = '2'
+    set_ref_env(surveydir)
     main(args=the_args)
     fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
     assert(os.path.exists(fn))
@@ -427,84 +425,14 @@ def rbmain():
     print('Types:', T.type)
     # Since there is a Tycho-2 star in the blob, forced to be PSF.
     assert(T.type[0].strip() == 'PSF')
-    del os.environ['GAIA_CAT_DIR']
-    del os.environ['GAIA_CAT_VER']
+    reset_env()
 
-    # Test that we can run splinesky calib if required...
-
-    from legacypipe.decam import DecamImage
-    DecamImage.splinesky_boxsize = 128
-
-    surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
-
-    survey = LegacySurveyData(surveydir)
-    # get brick by id
-    brickid = 473357
-    brick = survey.get_brick(brickid)
-    assert(brick.brickname == '1867p255')
-    assert(brick.brickid == brickid)
-
-    outdir = 'out-testcase4'
-    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
-    os.environ['GAIA_CAT_VER'] = '2'
-
-    fn = os.path.join(surveydir, 'calib', 'sky-single', 'decam', 'CP', 'V4.8.2',
-                      'CP20170315', 'c4d_170316_062107_ooi_z_ls9',
-                      'c4d_170316_062107_ooi_z_ls9-N2-splinesky.fits')
-    if os.path.exists(fn):
-        os.unlink(fn)
-
-    main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
-               '--force-all', '--no-write', '--coadd-bw',
-               '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
-               '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
-               '--blob-image', '--no-hybrid-psf',
-               '--survey-dir', surveydir,
-               '--outdir', outdir, '-v', '--no-wise-ceres'])
-    print('Checking for calib file', fn)
-    assert(os.path.exists(fn))
-
-    # Test with blob-masking when creating sky calib.
-    os.unlink(fn)
-
-    main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
-               '--force-all', '--no-write', '--coadd-bw',
-               '--blob-mask-dir', surveydir,
-               '--survey-dir', surveydir,
-               '--stage', 'image_coadds',
-               '--outdir', 'out-testcase4b', '--plots'])
-    print('Checking for calib file', fn)
-    assert(os.path.exists(fn))
-
-    if ceres:
-        main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
-                   '--force-all', '--no-write', '--coadd-bw',
-                   '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
-                   '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
-                   '--survey-dir', surveydir,
-                   '--outdir', outdir])
-    if psfex:
-        # Check that we can regenerate PsfEx files if necessary.
-        fn = os.path.join(surveydir, 'calib', 'psfex', 'decam', 'CP', 'V4.8.2',
-                          'CP20170315', 'c4d_170316_062107_ooi_z_ls9-psfex.fits')
-        if os.path.exists(fn):
-            os.unlink(fn)
-
-        main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
-                   '--force-all', '--no-write', '--coadd-bw',
-                   '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
-                   '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
-                   '--blob-image',
-                   '--survey-dir', surveydir,
-                   '--outdir', outdir, '-v'])
-        print('After generating PsfEx calib:')
-        os.system('find %s' % (os.path.join(surveydir, 'calib')))
+    test_4(ceres, psfex)
 
     # Wrap-around, hybrid PSF
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase8')
     outdir = 'out-testcase8'
-    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
-    os.environ['GAIA_CAT_VER'] = '2'
+    set_ref_env(surveydir)
 
     main(args=['--brick', '1209p050', '--zoom', '720', '1095', '3220', '3500',
                '--force-all', '--no-write', '--no-wise', #'--plots',
@@ -515,14 +443,12 @@ def rbmain():
 
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase7')
     outdir = 'out-testcase7'
-    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
-    os.environ['GAIA_CAT_VER'] = '2'
+    set_ref_env(surveydir)
     main(args=['--brick', '1102p240', '--zoom', '250', '350', '1550', '1650',
                '--force-all', '--no-write', '--no-wise', #'--plots',
                '--survey-dir', surveydir,
                '--outdir', outdir])
-    del os.environ['GAIA_CAT_DIR']
-    del os.environ['GAIA_CAT_VER']
+    reset_env()
     fn = os.path.join(outdir, 'tractor', '110', 'tractor-1102p240.fits')
     assert(os.path.exists(fn))
     T = fits_table(fn)
@@ -547,30 +473,11 @@ def rbmain():
     # T = fits_table(fn)
     # assert(len(T) == 1)
 
-    # Custom RA,Dec; blob ra,dec.
-    surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
-    outdir = 'out-testcase4b'
-    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
-    # Catalog written with one entry (--blobradec)
-    fn = os.path.join(outdir, 'tractor', 'cus',
-                      'tractor-custom-186743p25461.fits')
-    if os.path.exists(fn):
-        os.unlink(fn)
-    main(args=['--radec', '186.743965', '25.461788',
-               '--width', '250', '--height', '250',
-               '--force-all', '--no-write', '--no-wise',
-               '--blobradec', '186.740369', '25.453855',
-               '--survey-dir', surveydir,
-               '--outdir', outdir])
-
-    assert(os.path.exists(fn))
-    T = fits_table(fn)
-    assert(len(T) == 1)
-
+    test_4b()
+    
     surveydir = os.path.join(os.path.dirname(__file__), 'testcase3')
     outdir = 'out-testcase3'
-    os.environ['GAIA_CAT_DIR'] = os.path.join(surveydir, 'gaia')
-    os.environ['GAIA_CAT_VER'] = '2'
+    set_ref_env(surveydir)
     checkpoint_fn = os.path.join(outdir, 'checkpoint.pickle')
     if os.path.exists(checkpoint_fn):
         os.unlink(checkpoint_fn)
@@ -656,6 +563,115 @@ def rbmain():
     #                '--no-wise', '--force-all', '--no-write', '--ceres',
     #                '--survey-dir', surveydir,
     #                '--outdir', 'out-testcase3-ceres'] + extra_args)
+
+def test_4(ceres, psfex):
+    from legacypipe.survey import LegacySurveyData
+
+    # Test that we can run splinesky calib if required...
+
+    from legacypipe.decam import DecamImage
+    DecamImage.splinesky_boxsize = 128
+
+    surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
+    set_ref_env(surveydir)
+    survey = LegacySurveyData(surveydir)
+    # get brick by id
+    brickid = 473357
+    brick = survey.get_brick(brickid)
+    assert(brick.brickname == '1867p255')
+    assert(brick.brickid == brickid)
+
+    outdir = 'out-testcase4'
+
+    fn = os.path.join(surveydir, 'calib', 'sky-single', 'decam', 'CP', 'V4.8.2',
+                      'CP20170315', 'c4d_170316_062107_ooi_z_ls9',
+                      'c4d_170316_062107_ooi_z_ls9-N2-splinesky.fits')
+    if os.path.exists(fn):
+        os.unlink(fn)
+
+    main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
+               '--force-all', '--no-write', '--coadd-bw',
+               '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
+               '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
+               '--blob-image', '--no-hybrid-psf',
+               '--survey-dir', surveydir,
+               '--outdir', outdir, '-v', '--no-wise-ceres'])
+    print('Checking for calib file', fn)
+    assert(os.path.exists(fn))
+
+    # Test with blob-masking when creating sky calib.
+    os.unlink(fn)
+
+    main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
+               '--force-all', '--no-write', '--coadd-bw',
+               '--blob-mask-dir', surveydir,
+               '--survey-dir', surveydir,
+               '--stage', 'image_coadds',
+               '--outdir', 'out-testcase4b', '--plots'])
+    print('Checking for calib file', fn)
+    assert(os.path.exists(fn))
+
+    if ceres:
+        main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
+                   '--force-all', '--no-write', '--coadd-bw',
+                   '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
+                   '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
+                   '--survey-dir', surveydir,
+                   '--outdir', outdir])
+    if psfex:
+        sys.stdout.flush()
+        print('Test 4: regenerating PsfEx file')
+        sys.stdout.flush()
+        # Check that we can regenerate PsfEx files if necessary.
+        fn = os.path.join(surveydir, 'calib', 'psfex', 'decam', 'CP', 'V4.8.2',
+                          'CP20170315', 'c4d_170316_062107_ooi_z_ls9-psfex.fits')
+        if os.path.exists(fn):
+            os.unlink(fn)
+
+        main(args=['--brick', '1867p255', '--zoom', '2050', '2300', '1150', '1400',
+                   '--force-all', '--no-write', '--coadd-bw',
+                   '--stage', 'tims',
+                   '--survey-dir', surveydir,
+                   '--outdir', outdir, '-v'])
+
+        # if will generate a psfex-single file
+        sfn = os.path.join(surveydir, 'calib', 'psfex-single', 'decam', 'CP', 'V4.8.2',
+                           'CP20170315', 'c4d_170316_062107_ooi_z_ls9',
+                           'c4d_170316_062107_ooi_z_ls9-N2-psfex.fits')
+        assert(os.path.exists(sfn))
+        P = fits_table(sfn)
+        print('PSF model:')
+        P.about()
+        print(P[0])
+
+        # sys.stdout.flush()
+        # print('After generating PsfEx calib:')
+        # os.system('find %s' % (os.path.join(surveydir, 'calib')))
+        # sys.stdout.flush()
+
+def test_4b():
+    print('Test 4b')
+    
+    # Custom RA,Dec; blob ra,dec.
+    surveydir = os.path.join(os.path.dirname(__file__), 'testcase4')
+    set_ref_env(surveydir)
+    outdir = 'out-testcase4b'
+    # Catalog written with one entry (--blobradec)
+    fn = os.path.join(outdir, 'tractor', 'cus',
+                      'tractor-custom-186743p25461.fits')
+    if os.path.exists(fn):
+        os.unlink(fn)
+    main(args=['--radec', '186.743965', '25.461788',
+               '--width', '250', '--height', '250',
+               '--force-all', '--no-write', '--no-wise',
+               '--blobradec', '186.740369', '25.453855',
+               '--survey-dir', surveydir,
+               '--outdir', outdir])
+
+    assert(os.path.exists(fn))
+    T = fits_table(fn)
+    assert(len(T) == 1)
+    print('Test 4b finished')
 
 if __name__ == '__main__':
     rbmain()

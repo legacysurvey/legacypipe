@@ -121,4 +121,4 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
 
 RUN ln -s /usr/bin/sextractor /usr/bin/source-extractor
 
-RUN python3.8 -m pip install fitsio
+RUN python3.8 -m pip install fitsio && echo 2
