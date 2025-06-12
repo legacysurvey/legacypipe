@@ -2064,7 +2064,6 @@ def read_one_tim(X):
               (im.camera, im.expnum, im.ccdname, tw,th, im.hdu), Time()-t0)
     return tim
 
-
 def read_psfex_conf(camera):
     psfex_conf = {}
     from pkg_resources import resource_filename

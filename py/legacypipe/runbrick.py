@@ -2200,6 +2200,245 @@ def _get_both_mods(X):
         tim.psf.clear_cache()
     return mod, blobmod, NEA
 
+def stage_forced_phot(survey=None, bands=None, forced_bands=None,
+                      version_header=None, targetwcs=None,
+                      tims=None, ps=None, brickname=None, ccds=None,
+                      custom_brick=False,
+                      T=None,
+                      refstars=None,
+                      blobmap=None,
+                      cat=None, pixscale=None, plots=False,
+                      coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
+                      star_halos=True,
+                      use_ceres=True,
+                      co_sky=None,
+                      saturated_pix=None,
+                      refmap=None,
+                      frozen_galaxies=None,
+                      bailout_mask=None,
+                      sub_blob_mask=None,
+                      coadd_headers={},
+                      mp=None,
+                      record_event=None,
+                      **kwargs):
+    '''
+    Read in images from the survey-ccds files in *forced_bands* bands.
+
+    Perform forced photometry on them, and also accumulate a coadd.
+
+    (Also run forced-photometry on the individual exposures in *tims* ??)
+    '''
+    if forced_bands is None:
+        return dict()
+
+    tlast = Time()
+    record_event and record_event('stage_forced_phot: starting')
+
+    # Copied code from stage_tims...
+    ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
+    survey.drop_cache()
+    if 'ccd_cuts' in ccds.get_columns():
+        ccds.cut(ccds.ccd_cuts == 0)
+        debug(len(ccds), 'CCDs survive cuts')
+    else:
+        warnings.warn('Not applying CCD cuts')
+    # Cut on bands to be used
+    ccds.cut(np.array([b in forced_bands for b in ccds.filter]))
+    debug('Cut to', len(ccds), 'CCDs in bands', ','.join(forced_bands))
+
+    # Not applying mjd_minmax or ccds_for_fitting cuts?
+    
+    # Create Image objects for each CCD
+    ims = []
+    info('Keeping', len(ccds), 'CCDs:')
+    for ccd in ccds:
+        im = survey.get_image_object(ccd)
+        if survey.cache_dir is not None:
+            im.check_for_cached_files(survey)
+        ims.append(im)
+        info(' ', im, im.band, 'expnum', im.expnum, 'exptime', im.exptime, 'propid', ccd.propid,
+              'seeing %.2f' % (ccd.fwhm*im.pixscale), 'MJD %.3f' % ccd.mjd_obs,
+              'object', getattr(ccd, 'object', '').strip(), '\n   ', im.print_imgpath)
+
+    tnow = Time()
+    debug('Finding images touching brick:', tnow-tlast)
+    tlast = tnow
+
+    # Skipping do_calibs
+
+    from legacypipe.survey import read_one_tim
+    from legacypipe.halos import subtract_one
+    from legacypipe.forced_photom import run_forced_phot
+
+    # args for read_one_tim
+    tim_args = dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
+                    hybridPsf=hybridPsf, normalizePsf=normalizePsf,
+                    subsky=subsky,
+                    apodize=apodize,
+                    constant_invvar=constant_invvar,
+                    pixels=read_image_pixels,
+                    old_calibs_ok=old_calibs_ok)
+
+    tims = list(mp.map(read_one_tim, [(im, targetrd, tim_args) for im in ims]))
+
+    # Cut the table of CCDs to match the 'tims' list
+    I = np.array([i for i,tim in enumerate(tims) if tim is not None])
+    ccds.cut(I)
+    tims = [tim for tim in tims if tim is not None]
+    assert(len(ccds) == len(tims))
+    if len(tims) == 0:
+        return dict()
+
+    # outliers
+    from legacypipe.outliers import mask_outlier_pixels
+
+    # no before-n-after outlier mask plots?
+    # no "Patch individual-CCD masked pixels from a coadd"
+
+    mask_outlier_pixels(
+        survey, tims, forced_bands, targetwcs, brickname, version_header,
+        mp=mp, plots=plots, ps=ps, make_badcoadds=False, refstars=refstars,
+        write_mask_file=False)
+
+    # from stage_halos...
+    if star_halos and refstars:
+        Igaia, = np.nonzero(refstars.isgaia * refstars.pointsource)
+        debug(len(Igaia), 'stars for halo subtraction')
+        if len(Igaia):
+            from legacypipe.halos import subtract_halos
+            halostars = refstars[Igaia]
+            subtract_halos(tims, halostars, forced_bands, mp, plots, ps, old_calibs_ok=old_calibs_ok)
+    # subtract SGA galaxies outside the chip?
+    # (only if we have SGA photometry for this band...)
+
+    # Which sources to photometer
+    do_phot = (np.logical_or(T.brick_primary, T.ref_cat == 'L3') *
+               (T.type != 'DUP') * (T.type != 'NUN'))
+
+    # This will get multiprocessed...
+    FF = []
+    mods = []
+    for tim in tims:
+        # Cut to sources within this chip
+        chipwcs = tim.subwcs
+        h,w = chipwcs.shape
+        _,x,y = chipwcs.radec2pixelxy(T.ra, T.dec)
+        # Same as get_catalog_in_wcs
+        margin = 20
+        I = np.flatnonzero((x >= -margin) * (x <= (W+margin)) *
+                           (y >= -margin) * (y <= (H+margin)) *
+                           do_phot)
+
+        sub_cat = [cat[i] for i in I]
+
+        print('Not subtracting SGA galaxies outside the image...')
+
+        # create copies before modifying the Flux object
+        sub_cat = [src.copy() for src in sub_cat]
+        for src in sub_cat:
+            fluxes = { tim.band : 1. }
+            src.brightness = NanoMaggies(**fluxes)
+
+        F,mod = run_forced_phot(sub_cat, tim,
+                            ceres=use_ceres,
+                            do_forced=True,
+                            do_apphot=True,
+                            get_model=True,
+                            ps=ps, timing=True)
+        print('run_forced_phot:')
+        F.about()
+
+        mods.append(mod)
+        FF.append(F)
+
+    # Create coadd
+    # code from stage_coadds...
+    # FIXME - ccds-table for forced-photometry results?
+
+    from legacypipe.survey import apertures_arcsec
+    # source pixel positions to probe depth maps, etc
+    ixy = (np.clip(T.ibx, 0, W-1).astype(int), np.clip(T.iby, 0, H-1).astype(int))
+    # convert apertures to pixels
+    apertures = apertures_arcsec / pixscale
+    # Aperture photometry locations
+    apxy = np.vstack((T.bx, T.by)).T
+
+    C = make_coadds(tims, forcecd_bands, targetwcs,
+                    mods=mods, xy=ixy, apertures=apertures, apxy=apxy,
+                    ngood=True, detmaps=True, psfsize=True, allmasks=True,
+                    callback=write_coadd_images,
+                    callback_args=(survey, brickname, version_header, tims,
+                                   targetwcs, co_sky, coadd_headers),
+                    mp=mp)
+    print('Coadd results:')
+    C.about()
+
+    
+    # # This will get multiprocessed...
+    # for im in ims:
+    #     tim = read_one_tim((im, targetrd, tim_args))
+    # outlier masks???
+    # 
+    #     # stellar halo subtraction
+    # 
+    #     # subtract SGA galaxies outside the chip?
+    #     # (only if we have SGA photometry for this band...)
+    # 
+    #     # cut to sources within this chip
+    #     
+    #     F,mod = run_forced_phot(cat, tim,
+    #                             ceres=opt.ceres,
+    #                             derivs=opt.derivs,
+    #                             fixed_also=True,
+    #                             agn=opt.agn,
+    #                             do_forced=opt.forced,
+    #                             do_apphot=opt.apphot,
+    #                             get_model=True,
+    #                             ps=ps, timing=True,
+    #                             ceres_threads=opt.ceres_threads)
+    #     if F is None:
+    #         continue
+    #     #F.psfsize = np.array([tim.psf_fwhm * tim.imobj.pixscale] * len(F), dtype=np.float32)
+    #     F.psfdepth = np.array([(1. / (tim.sig1 / tim.psfnorm)**2)] * len(F), dtype=np.float32)
+    #     F.galdepth = np.array([(1. / (tim.sig1 / tim.galnorm)**2)] * len(F), dtype=np.float32)
+    #     ### --> also add units to the dict below so the FITS headers have units
+    #     F.sky     = np.array([tim.midsky / tim.zpscale / tim.imobj.pixscale**2] * len(F), dtype=np.float32)
+    #     # opt.derivs...
+    #     # scaling dra,ddec etc
+    #     F.flux = F.flux_fixed
+    #     F.flux_ivar = F.flux_fixed_ivar
+    # 
+    #     _,x,y = tim.subwcs.radec2pixelxy(T.ra, T.dec)
+    #     x = (x-1).astype(np.float32)
+    #     y = (y-1).astype(np.float32)
+    #     h,w = tim.shape
+    #     ix = np.round(x).astype(int)
+    #     iy = np.round(y).astype(int)
+    #     F.dqmask = tim.dq[np.clip(iy, 0, h-1), np.clip(ix, 0, w-1)]
+    #     # Set an OUT-OF-BOUNDS bit.
+    #     F.dqmask[reduce(np.logical_or, [ix < 0, ix >= w, iy < 0, iy >= h])] |= DQ_BITS['edge2']
+    # 
+    #     F.x = x + tim.x0
+    #     F.y = y + tim.y0
+    # 
+    #     # coadds.py calls _resample_one; returns
+    #     #    itim,Yo,Xo,iv,im,mo,bmo,dq = R
+    #     # args: (itim,tim,mod,blobmod,lanczos,targetwcs,sbscale) = args
+    #     
+    #     
+    #     # coadds:
+    #     #   image
+    #     #   invvar
+    #     #   model
+    #     #   chi2
+    #     #   psfdepth
+    #     #   galdepth
+    #     #   n exp?
+    #     #   ormask/andmask for allmask/anymask
+    #     #   psf size
+    # 
+    #     # aperture photometry on coadd
+
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  custom_brick=False,

@@ -220,7 +220,7 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
 
 def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
                         mp=None, plots=False, ps=None, make_badcoadds=True,
-                        refstars=None):
+                        refstars=None, write_mask_file=True):
     from legacypipe.bits import DQ_BITS
     from scipy.ndimage import binary_dilation
 
@@ -265,9 +265,13 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
     #     plt.title('Star vetos')
     #     ps.savefig()
 
-    with survey.write_output('outliers_mask', brick=brickname) as out:
-        # empty Primary HDU
-        out.fits.write(None, header=version_header)
+    with (survey.write_output('outliers_mask', brick=brickname)
+          if write_mask_file
+          else None) as out:
+
+        if out:
+            # empty Primary HDU
+            out.fits.write(None, header=version_header)
 
         for band in bands:
             btims = [tim for tim in tims if tim.band == band]
@@ -358,6 +362,8 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 tim.inverr[(mask & maskbits) > 0] = 0.
                 tim.dq[(mask & maskbits) > 0] |= tim.dq_type(DQ_BITS['outlier'])
 
+                if not out:
+                    continue
                 # Write output!
                 from legacypipe.utils import copy_header_with_wcs
                 hdr = copy_header_with_wcs(None, tim.subwcs)
