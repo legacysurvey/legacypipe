@@ -1,6 +1,8 @@
 import os
 import numpy as np
 
+from contextlib import AbstractContextManager
+
 from tractor.ellipses import EllipseESoft
 from tractor.utils import _GaussianPriors
 
@@ -13,6 +15,10 @@ def log_debug(logger, args):
     if logger.isEnabledFor(logging.DEBUG):
         msg = ' '.join(map(str, args))
         logger.debug(msg)
+
+class EmptyContextManager(AbstractContextManager):
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
 
 # singleton
 cpu_arch = None

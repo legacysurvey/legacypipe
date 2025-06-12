@@ -2202,12 +2202,19 @@ def _get_both_mods(X):
 
 def stage_forced_phot(survey=None, bands=None, forced_bands=None,
                       version_header=None, targetwcs=None,
+                      targetrd=None,
                       tims=None, ps=None, brickname=None, ccds=None,
                       custom_brick=False,
                       T=None,
                       refstars=None,
                       blobmap=None,
                       cat=None, pixscale=None, plots=False,
+                      gaussPsf=False, pixPsf=True, hybridPsf=True,
+                      normalizePsf=True,
+                      subsky=True,
+                      apodize=False,
+                      constant_invvar=False,
+                      old_calibs_ok=True,
                       coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
                       star_halos=True,
                       use_ceres=True,
@@ -2228,6 +2235,8 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
 
     (Also run forced-photometry on the individual exposures in *tims* ??)
     '''
+    from legacypipe.survey import clean_band_name
+
     if forced_bands is None:
         return dict()
 
@@ -2247,6 +2256,9 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     debug('Cut to', len(ccds), 'CCDs in bands', ','.join(forced_bands))
 
     # Not applying mjd_minmax or ccds_for_fitting cuts?
+
+    print('HACKKKK -- cutting CCDs')
+    ccds = ccds[:5]
     
     # Create Image objects for each CCD
     ims = []
@@ -2276,7 +2288,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
                     subsky=subsky,
                     apodize=apodize,
                     constant_invvar=constant_invvar,
-                    pixels=read_image_pixels,
+                    pixels=True,
                     old_calibs_ok=old_calibs_ok)
 
     tims = list(mp.map(read_one_tim, [(im, targetrd, tim_args) for im in ims]))
@@ -2294,13 +2306,14 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
 
     # no before-n-after outlier mask plots?
     # no "Patch individual-CCD masked pixels from a coadd"
-
+    print('Masking outlier pixels...')
     mask_outlier_pixels(
         survey, tims, forced_bands, targetwcs, brickname, version_header,
         mp=mp, plots=plots, ps=ps, make_badcoadds=False, refstars=refstars,
         write_mask_file=False)
 
     # from stage_halos...
+    print('Subtracting stellar halos...')
     if star_halos and refstars:
         Igaia, = np.nonzero(refstars.isgaia * refstars.pointsource)
         debug(len(Igaia), 'stars for halo subtraction')
@@ -2311,6 +2324,8 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     # subtract SGA galaxies outside the chip?
     # (only if we have SGA photometry for this band...)
 
+    set_brick_primary(T, brick)
+
     # Which sources to photometer
     do_phot = (np.logical_or(T.brick_primary, T.ref_cat == 'L3') *
                (T.type != 'DUP') * (T.type != 'NUN'))
@@ -2319,6 +2334,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     FF = []
     mods = []
     for tim in tims:
+        print('Forced-photometering', tim)
         # Cut to sources within this chip
         chipwcs = tim.subwcs
         h,w = chipwcs.shape
@@ -2333,25 +2349,45 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
 
         print('Not subtracting SGA galaxies outside the image...')
 
+        from tractor import NanoMaggies
+        
         # create copies before modifying the Flux object
         sub_cat = [src.copy() for src in sub_cat]
         for src in sub_cat:
             fluxes = { tim.band : 1. }
             src.brightness = NanoMaggies(**fluxes)
 
+        kwargs = {}
+        if plots:
+            kwargs.update(ps=ps)
+
         F,mod = run_forced_phot(sub_cat, tim,
-                            ceres=use_ceres,
-                            do_forced=True,
-                            do_apphot=True,
-                            get_model=True,
-                            ps=ps, timing=True)
+                                ceres=use_ceres,
+                                do_forced=True,
+                                do_apphot=True,
+                                full_position_fit=False,
+                                windowed_peak=False,
+                                get_model=True,
+                                timing=False, **kwargs)
         print('run_forced_phot:')
         F.about()
+        #  tabledata object with 286 rows and 8 columns:
+        #     apflux (<class 'numpy.ndarray'>) shape (286, 8) dtype float32
+        #     apflux_ivar (<class 'numpy.ndarray'>) shape (286, 8) dtype float32
+        #     flux (<class 'numpy.ndarray'>) shape (286,) dtype float32
+        #     flux_ivar (<class 'numpy.ndarray'>) shape (286,) dtype float32
+        #     fracflux (<class 'numpy.ndarray'>) shape (286,) dtype float32
+        #     fracin (<class 'numpy.ndarray'>) shape (286,) dtype float32
+        #     fracmasked (<class 'numpy.ndarray'>) shape (286,) dtype float32
+        #     rchisq (<class 'numpy.ndarray'>) shape (286,) dtype float32
 
+        
         mods.append(mod)
         FF.append(F)
 
+
     # Create coadd
+    print('Creating coadd...')
     # code from stage_coadds...
     # FIXME - ccds-table for forced-photometry results?
 
@@ -2363,17 +2399,54 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     # Aperture photometry locations
     apxy = np.vstack((T.bx, T.by)).T
 
-    C = make_coadds(tims, forcecd_bands, targetwcs,
+    C = make_coadds(tims, forced_bands, targetwcs,
                     mods=mods, xy=ixy, apertures=apertures, apxy=apxy,
                     ngood=True, detmaps=True, psfsize=True, allmasks=True,
+                    mjdminmax=False,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims,
                                    targetwcs, co_sky, coadd_headers),
                     mp=mp)
-    print('Coadd results:')
-    C.about()
+    print('Coadd results contain:', dir(C))
+    # 'AP', 'T', 'allmasks', 'coimgs', 'comods', 'coresids', 'cowimgs', 'galdetivs', 'maximgs', 'psfdetivs'
+    print('Coadd Table contains:')
+    C.T.about()
 
-    
+    # Save per-source measurements of the maps produced during coadding
+    cols = ['nobs', 'ngood', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth']
+    for c in cols:
+        X = C.T.get(c)
+        print('Column', c, ': shape', X.shape, 'type', X.dtype)
+        for i,band in enumerate(forced_bands):
+            T.set('%s_%s' % (c, clean_band_name(band)), X[i,:])
+
+    # NEA
+
+    # Grab aperture fluxes
+    assert(C.AP is not None)
+
+    print('Aperture flux table:')
+    C.AP.about()
+    # How many apertures?
+    A = len(apertures_arcsec)
+    for src,dst in [('apflux_img_%s',       'apflux'),
+                    ('apflux_img_ivar_%s',  'apflux_ivar'),
+                    ('apflux_masked_%s',    'apflux_masked'),
+                    ('apflux_resid_%s',     'apflux_resid'),
+                    #('apflux_blobresid_%s', 'apflux_blobresid'),
+                    ]:
+        #X = np.zeros((len(T), len(forced_bands), A), np.float32)
+        for iband,band in enumerate(forced_bands):
+            #X[:,iband,:] = C.AP.get(src % band)
+            T.set('%s_%s' % (dst, clean_band_name(band)), C.AP.get(src % band))
+        #T.set(dst, X)
+
+    ff, fftot = get_fiber_fluxes(
+        cat, T, targetwcs, H, W, pixscale, forced_bands, plots=plots, ps=ps)
+    for iband,band in enumerate(forced_bands):
+        T.set('fiberflux_%s'    % (clean_band_name(band)), ff   [:,i])
+        T.set('fibertotflux_%s' % (clean_band_name(band)), fftot[:,i])
+
     # # This will get multiprocessed...
     # for im in ims:
     #     tim = read_one_tim((im, targetrd, tim_args))
@@ -3502,12 +3575,7 @@ def stage_writecat(
             T.set(c, GALEX.get(c))
         GALEX = None
 
-    if brick.ra1 > brick.ra2: # wrap-around case
-        T.brick_primary = (np.logical_or(T.ra >= brick.ra1, T.ra < brick.ra2) *
-                           (T.dec >= brick.dec1) * (T.dec < brick.dec2))
-    else:
-        T.brick_primary = ((T.ra  >= brick.ra1 ) * (T.ra  < brick.ra2) *
-                           (T.dec >= brick.dec1) * (T.dec < brick.dec2))
+    set_brick_primary(T, brick)
 
     H,W = maskbits.shape
     T.maskbits = maskbits[np.clip(T.iby, 0, H-1).astype(int),
@@ -3582,6 +3650,14 @@ def stage_writecat(
 
     record_event and record_event('stage_writecat: done')
     return dict(T=T, version_header=version_header)
+
+def set_brick_primary(T, brick):
+    if brick.ra1 > brick.ra2: # wrap-around case
+        T.brick_primary = (np.logical_or(T.ra >= brick.ra1, T.ra < brick.ra2) *
+                           (T.dec >= brick.dec1) * (T.dec < brick.dec2))
+    else:
+        T.brick_primary = ((T.ra  >= brick.ra1 ) * (T.ra  < brick.ra2) *
+                           (T.dec >= brick.dec1) * (T.dec < brick.dec2))
 
 def copy_wise_into_catalog(T, WISE, WISE_T, primhdr):
     # Convert WISE fluxes from Vega to AB.
@@ -3671,6 +3747,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               release=None,
               zoom=None,
               bands=None,
+              forced_bands=None,
               nblobs=None, blob=None, blobxy=None, blobradec=None, blobid=None,
               max_blobsize=None,
               nsigma=6,
@@ -3943,6 +4020,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         cache_outliers = True
 
     kwargs.update(ps=ps, nsigma=nsigma, saddle_fraction=saddle_fraction,
+                  forced_bands=forced_bands,
                   saddle_min=saddle_min,
                   blob_dilate=blob_dilate,
                   subsky_radii=subsky_radii,
@@ -4120,6 +4198,10 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         })
         if blob_image:
             prereqs.update({'image_coadds':'srcs'})
+
+    if forced_bands:
+        prereqs.update({'forced_phot': 'fitblobs',
+                        'coadds': 'forced_phot'})
 
     # HACK -- set the prereq to the stage after which you'd like to write out checksums.
     prereqs.update({'checksum': 'outliers'})
@@ -4389,6 +4471,9 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--bands', default=None,
                         help='Set the list of bands (filters) that are included in processing: comma-separated list, default "g,r,z"')
+
+    parser.add_argument('--forced-bands', default=None,
+                        help='Set the list of bands (filters) that will get forced photometry')
 
     parser.add_argument('--no-tycho', dest='tycho_stars', default=True,
                         action='store_false',

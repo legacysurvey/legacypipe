@@ -1,6 +1,7 @@
 import numpy as np
 import fitsio
 import os
+from legacypipe.utils import EmptyContextManager
 
 import logging
 logger = logging.getLogger('legacypipe.outliers')
@@ -264,12 +265,12 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
     #     plt.axis(ax)
     #     plt.title('Star vetos')
     #     ps.savefig()
-
+ 
     with (survey.write_output('outliers_mask', brick=brickname)
           if write_mask_file
-          else None) as out:
+          else EmptyContextManager()) as out:
 
-        if out:
+        if write_mask_file:
             # empty Primary HDU
             out.fits.write(None, header=version_header)
 
@@ -362,7 +363,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 tim.inverr[(mask & maskbits) > 0] = 0.
                 tim.dq[(mask & maskbits) > 0] |= tim.dq_type(DQ_BITS['outlier'])
 
-                if not out:
+                if not write_mask_file:
                     continue
                 # Write output!
                 from legacypipe.utils import copy_header_with_wcs

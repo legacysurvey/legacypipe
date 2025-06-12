@@ -349,7 +349,7 @@ class Coadd(object):
         if self.xy or self.allmasks:
             # raw exposure count
             self.nobs[Yo,Xo] += 1
-        if self.xy:
+        if self.xy and (mjd_args is not None):
             mjds, mjd_argmins, mjd_argmaxs = mjd_args
             # mjd_min/max
             update = np.logical_or(mjd_argmins[Yo,Xo] == -1,
@@ -505,6 +505,7 @@ def make_coadds(tims, bands, targetwcs,
                 xy=None, apertures=None, apxy=None,
                 ngood=False, detmaps=False, psfsize=False,
                 allmasks=True, anymasks=False,
+                mjdminmax=True,
                 get_max=False, sbscale=True,
                 psf_images=False, nsatur=None,
                 callback=None, callback_args=None,
@@ -601,7 +602,7 @@ def make_coadds(tims, bands, targetwcs,
     apargs = []
 
     mjd_args = None
-    if xy:
+    if xy and mjdminmax:
         # To save the memory of 2 x float64 maps, we instead do arg min/max maps
 
         # append a 0 to the list of mjds so that mjds[-1] gives 0.
@@ -705,7 +706,7 @@ def make_coadds(tims, bands, targetwcs,
     if plots:
         _make_coadds_plots_4(allresids, mods, ps)
 
-    if xy is not None:
+    if xy and mjdminmax:
         C.T.mjd_min = mjds[mjd_argmins[iy,ix]]
         C.T.mjd_max = mjds[mjd_argmaxs[iy,ix]]
         del mjd_argmins
