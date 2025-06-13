@@ -774,86 +774,8 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         # plt.title('chi: %s' % tim.name)
         # ps.savefig()
 
-    F.release   = T.release
-    F.brickid   = T.brickid
-    F.brickname = T.brickname
-    F.objid     = T.objid
+    forced_phot_add_extra_fields(F, T, ccd, im, tim, opt.derivs)
 
-    F.camera  = np.array([ccd.camera] * len(F))
-    F.expnum  = np.array([im.expnum]  * len(F), dtype=np.int64)
-    F.ccdname = np.array([im.ccdname] * len(F))
-
-    # "Denormalizing"
-    F.filter  = np.array([tim.band]      * len(F))
-    F.mjd     = np.array([im.mjdobs]     * len(F))
-    F.exptime = np.array([im.exptime]    * len(F), dtype=np.float32)
-    F.psfsize = np.array([tim.psf_fwhm * tim.imobj.pixscale] * len(F), dtype=np.float32)
-    F.ccd_cuts = np.array([ccd.ccd_cuts] * len(F))
-    F.airmass  = np.array([ccd.airmass ] * len(F), dtype=np.float32)
-    ### --> also add units to the dict below so the FITS headers have units
-    F.sky     = np.array([tim.midsky / tim.zpscale / tim.imobj.pixscale**2] * len(F), dtype=np.float32)
-    # in the same units as the depth maps -- flux inverse-variance.
-    F.psfdepth = np.array([(1. / (tim.sig1 / tim.psfnorm)**2)] * len(F), dtype=np.float32)
-    F.galdepth = np.array([(1. / (tim.sig1 / tim.galnorm)**2)] * len(F), dtype=np.float32)
-    F.fwhm     = np.array([tim.psf_fwhm] * len(F), dtype=np.float32)
-    F.skyrms   = np.array([ccd.skyrms]   * len(F), dtype=np.float32)
-    F.ccdzpt   = np.array([ccd.ccdzpt]   * len(F), dtype=np.float32)
-    F.ccdrarms = np.array([ccd.ccdrarms] * len(F), dtype=np.float32)
-    F.ccddecrms= np.array([ccd.ccddecrms]* len(F), dtype=np.float32)
-    F.ccdphrms = np.array([ccd.ccdphrms] * len(F), dtype=np.float32)
-
-    if opt.derivs:
-        # We don't need to apply a cos(Dec) correction --
-        # the fitting happens on pixel-space models multiplied by CD-inverse, so they're
-        # in Intermediate World Coordinates in degrees in the *directions* of RA,Dec, but isotropic.
-        # Multiplying by 3600 here, we take them to arcseconds,
-        # Isotropic in the sense that 1 arcsecond of motion in RA is the same distance
-        # as 1 arcsecond of motion in Dec.
-        with np.errstate(divide='ignore', invalid='ignore'):
-            F.dra  = (F.flux_dra  / np.abs(F.flux))
-            F.ddec = (F.flux_ddec / np.abs(F.flux))
-            F.dra_ivar  = 1. / (F.dra **2 * (1./F.flux_dra_ivar /(F.flux_dra **2) + 1./F.flux_ivar/(F.flux**2)))
-            F.ddec_ivar = 1. / (F.ddec**2 * (1./F.flux_ddec_ivar/(F.flux_ddec**2) + 1./F.flux_ivar/(F.flux**2)))
-        F.dra  *= 3600.
-        F.ddec *= 3600.
-        F.dra_ivar  *= 1./3600.**2
-        F.ddec_ivar *= 1./3600.**2
-        F.dra [F.flux == 0] = 0.
-        F.ddec[F.flux == 0] = 0.
-        F.dra_ivar [F.flux == 0] = 0.
-        F.ddec_ivar[F.flux == 0] = 0.
-        F.dra_ivar [F.flux_dra_ivar  == 0] = 0.
-        F.ddec_ivar[F.flux_ddec_ivar == 0] = 0.
-
-        # F.delete_column('flux_dra')
-        # F.delete_column('flux_ddec')
-        # F.delete_column('flux_dra_ivar')
-        # F.delete_column('flux_ddec_ivar')
-        F.flux_motion = F.flux
-        F.flux_motion_ivar = F.flux_ivar
-
-        F.flux = F.flux_fixed
-        F.flux_ivar = F.flux_fixed_ivar
-        F.delete_column('flux_fixed')
-        F.delete_column('flux_fixed_ivar')
-
-        for c in ['dra', 'ddec', 'dra_ivar', 'ddec_ivar', 'flux', 'flux_ivar']:
-            F.set(c, F.get(c).astype(np.float32))
-
-    F.ra  = T.ra
-    F.dec = T.dec
-    _,x,y = tim.subwcs.radec2pixelxy(T.ra, T.dec)
-    x = (x-1).astype(np.float32)
-    y = (y-1).astype(np.float32)
-    h,w = tim.shape
-    ix = np.round(x).astype(int)
-    iy = np.round(y).astype(int)
-    F.dqmask = tim.dq[np.clip(iy, 0, h-1), np.clip(ix, 0, w-1)]
-    # Set an OUT-OF-BOUNDS bit.
-    F.dqmask[reduce(np.logical_or, [ix < 0, ix >= w, iy < 0, iy >= h])] |= DQ_BITS['edge2']
-
-    F.x = x + tim.x0
-    F.y = y + tim.y0
 
     program_name = sys.argv[0]
     version_hdr = get_version_header(program_name, surveydir, None)
@@ -896,6 +818,90 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     tnow = Time()
     print_timing('Forced phot:', tnow-tlast)
     return F,version_hdr,outlier_mask,outlier_header
+
+def forced_phot_add_extra_fields(F, T, ccd, im, tim, derivs):
+    F.release   = T.release
+    F.brickid   = T.brickid
+    F.brickname = T.brickname
+    F.objid     = T.objid
+
+    F.camera  = np.array([im.camera] * len(F))
+    F.expnum  = np.array([im.expnum]  * len(F), dtype=np.int64)
+    F.ccdname = np.array([im.ccdname] * len(F))
+
+    # "Denormalizing"
+    F.filter  = np.array([tim.band]      * len(F))
+    F.mjd     = np.array([im.mjdobs]     * len(F))
+    F.exptime = np.array([im.exptime]    * len(F), dtype=np.float32)
+    F.psfsize = np.array([tim.psf_fwhm * tim.imobj.pixscale] * len(F), dtype=np.float32)
+    F.ccd_cuts = np.array([ccd.ccd_cuts] * len(F))
+    F.airmass  = np.array([ccd.airmass ] * len(F), dtype=np.float32)
+    ### --> also add units to the dict below so the FITS headers have units
+    F.sky     = np.array([tim.midsky / tim.zpscale / tim.imobj.pixscale**2] * len(F), dtype=np.float32)
+    # in the same units as the depth maps -- flux inverse-variance.
+    F.psfdepth = np.array([(1. / (tim.sig1 / tim.psfnorm)**2)] * len(F), dtype=np.float32)
+    F.galdepth = np.array([(1. / (tim.sig1 / tim.galnorm)**2)] * len(F), dtype=np.float32)
+    F.fwhm     = np.array([tim.psf_fwhm] * len(F), dtype=np.float32)
+    F.skyrms   = np.array([ccd.skyrms]   * len(F), dtype=np.float32)
+    F.ccdzpt   = np.array([ccd.ccdzpt]   * len(F), dtype=np.float32)
+    F.ccdrarms = np.array([ccd.ccdrarms] * len(F), dtype=np.float32)
+    F.ccddecrms= np.array([ccd.ccddecrms]* len(F), dtype=np.float32)
+    F.ccdphrms = np.array([ccd.ccdphrms] * len(F), dtype=np.float32)
+
+    if derivs:
+        # We don't need to apply a cos(Dec) correction --
+        # the fitting happens on pixel-space models multiplied by CD-inverse, so they're
+        # in Intermediate World Coordinates in degrees in the *directions* of RA,Dec, but isotropic.
+        # Multiplying by 3600 here, we take them to arcseconds,
+        # Isotropic in the sense that 1 arcsecond of motion in RA is the same distance
+        # as 1 arcsecond of motion in Dec.
+        with np.errstate(divide='ignore', invalid='ignore'):
+            F.dra  = (F.flux_dra  / np.abs(F.flux))
+            F.ddec = (F.flux_ddec / np.abs(F.flux))
+            F.dra_ivar  = 1. / (F.dra **2 * (
+                1./F.flux_dra_ivar /(F.flux_dra **2) + 1./F.flux_ivar/(F.flux**2)))
+            F.ddec_ivar = 1. / (F.ddec**2 * (
+                1./F.flux_ddec_ivar/(F.flux_ddec**2) + 1./F.flux_ivar/(F.flux**2)))
+        F.dra  *= 3600.
+        F.ddec *= 3600.
+        F.dra_ivar  *= 1./3600.**2
+        F.ddec_ivar *= 1./3600.**2
+        F.dra [F.flux == 0] = 0.
+        F.ddec[F.flux == 0] = 0.
+        F.dra_ivar [F.flux == 0] = 0.
+        F.ddec_ivar[F.flux == 0] = 0.
+        F.dra_ivar [F.flux_dra_ivar  == 0] = 0.
+        F.ddec_ivar[F.flux_ddec_ivar == 0] = 0.
+
+        # F.delete_column('flux_dra')
+        # F.delete_column('flux_ddec')
+        # F.delete_column('flux_dra_ivar')
+        # F.delete_column('flux_ddec_ivar')
+        F.flux_motion = F.flux
+        F.flux_motion_ivar = F.flux_ivar
+
+        F.flux = F.flux_fixed
+        F.flux_ivar = F.flux_fixed_ivar
+        F.delete_column('flux_fixed')
+        F.delete_column('flux_fixed_ivar')
+
+        for c in ['dra', 'ddec', 'dra_ivar', 'ddec_ivar', 'flux', 'flux_ivar']:
+            F.set(c, F.get(c).astype(np.float32))
+
+    F.ra  = T.ra
+    F.dec = T.dec
+    _,x,y = tim.subwcs.radec2pixelxy(T.ra, T.dec)
+    x = (x-1).astype(np.float32)
+    y = (y-1).astype(np.float32)
+    h,w = tim.shape
+    ix = np.round(x).astype(int)
+    iy = np.round(y).astype(int)
+    F.dqmask = tim.dq[np.clip(iy, 0, h-1), np.clip(ix, 0, w-1)]
+    # Set an OUT-OF-BOUNDS bit.
+    F.dqmask[reduce(np.logical_or, [ix < 0, ix >= w, iy < 0, iy >= h])] |= DQ_BITS['edge2']
+
+    F.x = x + tim.x0
+    F.y = y + tim.y0
 
 def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                     do_forced=True, do_apphot=True, get_model=False, ps=None,

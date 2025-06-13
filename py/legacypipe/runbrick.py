@@ -2333,7 +2333,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     # This will get multiprocessed...
     FF = []
     mods = []
-    for tim in tims:
+    for ccd,im,tim in zip(ccds, ims, tims):
         print('Forced-photometering', tim)
         # Cut to sources within this chip
         chipwcs = tim.subwcs
@@ -2381,9 +2381,13 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
         #     fracmasked (<class 'numpy.ndarray'>) shape (286,) dtype float32
         #     rchisq (<class 'numpy.ndarray'>) shape (286,) dtype float32
 
-        
+        if F is not None:
+            derivs = False
+            forced_phot_add_extra_fields(F, T[I], ccd, im, tim, derivs)
+
         mods.append(mod)
         FF.append(F)
+
 
 
     # Create coadd
