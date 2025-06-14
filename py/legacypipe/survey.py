@@ -918,9 +918,9 @@ def imsave_jpeg(jpegfn, img, **kwargs):
 
 def clean_band_name(band):
     '''
-    Converts a band name into upper case that is clean to use in a FITS header.
+    Makes a band name suitable for a FITS column name
     '''
-    return band.upper().replace('-','_')
+    return band.replace('-','_')
 
 class FITSWrapper(fitsio.FITS):
     '''

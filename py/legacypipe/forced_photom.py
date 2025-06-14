@@ -520,7 +520,6 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
 def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                           ccd, catalog, opt, zoomslice, radecpoly, outlier_bricks, ps):
     from functools import reduce
-    from legacypipe.bits import DQ_BITS
     plots = (ps is not None)
     tlast = Time()
     im = survey.get_image_object(ccd)
@@ -820,6 +819,8 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     return F,version_hdr,outlier_mask,outlier_header
 
 def forced_phot_add_extra_fields(F, T, ccd, im, tim, derivs):
+    from functools import reduce
+    from legacypipe.bits import DQ_BITS
     F.release   = T.release
     F.brickid   = T.brickid
     F.brickname = T.brickname

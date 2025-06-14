@@ -735,7 +735,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
             maskbits |= MASKBITS['CLUSTER'] * ((refmap & IN_BLOB['CLUSTER']) > 0)
             del refmap
 
-        cleanbands = [clean_band_name(b) for b in bands]
+        cleanbands = [clean_band_name(b).upper() for b in bands]
         # SATUR
         if saturated_pix is not None:
             for b, sat in zip(cleanbands, saturated_pix):
@@ -2203,6 +2203,11 @@ def _get_both_mods(X):
 def stage_forced_phot(survey=None, bands=None, forced_bands=None,
                       version_header=None, targetwcs=None,
                       targetrd=None,
+                      release=None,
+                      # TEMP
+                      invvars=None,
+                      gaia_stars=None,
+                      # /TEMP
                       tims=None, ps=None, brickname=None, ccds=None,
                       custom_brick=False,
                       T=None,
@@ -2240,6 +2245,11 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     if forced_bands is None:
         return dict()
 
+    clean_bands = [clean_band_name(b) for b in forced_bands]
+    clean_map = dict(list(zip(forced_bands, clean_bands)))
+
+
+    
     tlast = Time()
     record_event and record_event('stage_forced_phot: starting')
 
@@ -2257,8 +2267,10 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
 
     # Not applying mjd_minmax or ccds_for_fitting cuts?
 
-    print('HACKKKK -- cutting CCDs')
-    ccds = ccds[:5]
+    #print('HACKKKK -- cutting CCDs')
+    #ccds = ccds[:5]
+    # Last one takes FOREVER, don't know why
+    #ccds = ccds[:-1]
     
     # Create Image objects for each CCD
     ims = []
@@ -2280,7 +2292,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
 
     from legacypipe.survey import read_one_tim
     from legacypipe.halos import subtract_one
-    from legacypipe.forced_photom import run_forced_phot
+    from legacypipe.forced_photom import run_forced_phot, forced_phot_add_extra_fields
 
     # args for read_one_tim
     tim_args = dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
@@ -2344,6 +2356,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
         I = np.flatnonzero((x >= -margin) * (x <= (W+margin)) *
                            (y >= -margin) * (y <= (H+margin)) *
                            do_phot)
+        # FIXME... this is going to drop SGA galaxies outside the margin around this chip...
 
         sub_cat = [cat[i] for i in I]
 
@@ -2360,7 +2373,8 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
         kwargs = {}
         if plots:
             kwargs.update(ps=ps)
-
+        t0 = Time()
+        use_ceres = True
         F,mod = run_forced_phot(sub_cat, tim,
                                 ceres=use_ceres,
                                 do_forced=True,
@@ -2369,6 +2383,21 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
                                 windowed_peak=False,
                                 get_model=True,
                                 timing=False, **kwargs)
+        t1 = Time()
+        print('run_forced_phot (ceres=%s):' % use_ceres, t1-t0)
+        # if not use_ceres:
+        #     t0 = Time()
+        #     F,mod = run_forced_phot(sub_cat, tim,
+        #                             ceres=True,
+        #                             do_forced=True,
+        #                             do_apphot=True,
+        #                             full_position_fit=False,
+        #                             windowed_peak=False,
+        #                             get_model=True,
+        #                             timing=False, **kwargs)
+        #     t1 = Time()
+        #     print('run_forced_phot (ceres=True):', t1-t0)
+
         print('run_forced_phot:')
         F.about()
         #  tabledata object with 286 rows and 8 columns:
@@ -2383,13 +2412,48 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
 
         if F is not None:
             derivs = False
-            forced_phot_add_extra_fields(F, T[I], ccd, im, tim, derivs)
+            Tsub = T[I]
+            Tsub.release = np.zeros(len(Tsub), np.int16) + release
+            forced_phot_add_extra_fields(F, Tsub, ccd, im, tim, derivs)
+            FF.append(F)
 
         mods.append(mod)
-        FF.append(F)
 
+    F = merge_tables(FF, columns='fillzero')
+    print('All forced photometry results:')
+    F.about()
 
+    from legacypipe.units import get_units_for_columns
+    mag_unit = 'mag'
+    pixel_unit = 'pixel'
+    columns = F.get_columns()
+    eunits = {'ccdzpt': mag_unit,
+              'ccdphrms': mag_unit,
+              'x': pixel_unit,
+              'y': pixel_unit,
+              }
+    units = get_units_for_columns(columns, extras=eunits)
+    primhdr = fitsio.FITSHDR()
+    for r in version_header.records():
+        primhdr.add_record(r)
+    primhdr.add_record(dict(name='PRODTYPE', value='forced',
+                            comment='NOIRLab data product type'))
+    # add forced_bands headers similar to those for bands
+    primhdr.add_record(dict(name='FBANDS', value=','.join(forced_bands), comment='Forced-phot bands'))
+    primhdr.add_record(dict(name='NFBANDS', value=len(forced_bands), comment='Number of forced-phot bands'))
+    for i,band in enumerate(forced_bands):
+        primhdr.add_record(dict(name='FBAND%i' % i, value=forced_bands[i], comment='Forced-phot band'))
+    with survey.write_output('forced-brick', brick=brick.brickname) as out:
+        F.writeto(None, fits_object=out.fits, primheader=primhdr,
+                  units=units, columns=columns)
 
+    from legacypipe.forced_photom_brickwise import average_forced_phot
+    forced_units = average_forced_phot(F, T, prefix='')
+    print('After adding averaged forced-phot results:')
+    T.about()
+
+    del F
+    
     # Create coadd
     print('Creating coadd...')
     # code from stage_coadds...
@@ -2421,8 +2485,8 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     for c in cols:
         X = C.T.get(c)
         print('Column', c, ': shape', X.shape, 'type', X.dtype)
-        for i,band in enumerate(forced_bands):
-            T.set('%s_%s' % (c, clean_band_name(band)), X[i,:])
+        for i,band in enumerate(clean_bands):
+            T.set('%s_%s' % (c, band), X[:,i])
 
     # NEA
 
@@ -2440,81 +2504,68 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
                     #('apflux_blobresid_%s', 'apflux_blobresid'),
                     ]:
         #X = np.zeros((len(T), len(forced_bands), A), np.float32)
-        for iband,band in enumerate(forced_bands):
+        for iband,band in enumerate(clean_bands):
             #X[:,iband,:] = C.AP.get(src % band)
-            T.set('%s_%s' % (dst, clean_band_name(band)), C.AP.get(src % band))
+            T.set('%s_%s' % (dst, band), C.AP.get(src % band))
         #T.set(dst, X)
 
-    ff, fftot = get_fiber_fluxes(
-        cat, T, targetwcs, H, W, pixscale, forced_bands, plots=plots, ps=ps)
-    for iband,band in enumerate(forced_bands):
-        T.set('fiberflux_%s'    % (clean_band_name(band)), ff   [:,i])
-        T.set('fibertotflux_%s' % (clean_band_name(band)), fftot[:,i])
+    cat2 = []
+    for i,src in enumerate(cat):
+        fluxes = {}
+        for b in clean_bands:
+            fluxes[b] = T.get('flux_%s' % b)[i]
+        src = src.copy()
+        src.brightness = NanoMaggies(**fluxes)
+        cat2.append(src)
 
-    # # This will get multiprocessed...
-    # for im in ims:
-    #     tim = read_one_tim((im, targetrd, tim_args))
-    # outlier masks???
-    # 
-    #     # stellar halo subtraction
-    # 
-    #     # subtract SGA galaxies outside the chip?
-    #     # (only if we have SGA photometry for this band...)
-    # 
-    #     # cut to sources within this chip
-    #     
-    #     F,mod = run_forced_phot(cat, tim,
-    #                             ceres=opt.ceres,
-    #                             derivs=opt.derivs,
-    #                             fixed_also=True,
-    #                             agn=opt.agn,
-    #                             do_forced=opt.forced,
-    #                             do_apphot=opt.apphot,
-    #                             get_model=True,
-    #                             ps=ps, timing=True,
-    #                             ceres_threads=opt.ceres_threads)
-    #     if F is None:
-    #         continue
-    #     #F.psfsize = np.array([tim.psf_fwhm * tim.imobj.pixscale] * len(F), dtype=np.float32)
-    #     F.psfdepth = np.array([(1. / (tim.sig1 / tim.psfnorm)**2)] * len(F), dtype=np.float32)
-    #     F.galdepth = np.array([(1. / (tim.sig1 / tim.galnorm)**2)] * len(F), dtype=np.float32)
-    #     ### --> also add units to the dict below so the FITS headers have units
-    #     F.sky     = np.array([tim.midsky / tim.zpscale / tim.imobj.pixscale**2] * len(F), dtype=np.float32)
-    #     # opt.derivs...
-    #     # scaling dra,ddec etc
-    #     F.flux = F.flux_fixed
-    #     F.flux_ivar = F.flux_fixed_ivar
-    # 
-    #     _,x,y = tim.subwcs.radec2pixelxy(T.ra, T.dec)
-    #     x = (x-1).astype(np.float32)
-    #     y = (y-1).astype(np.float32)
-    #     h,w = tim.shape
-    #     ix = np.round(x).astype(int)
-    #     iy = np.round(y).astype(int)
-    #     F.dqmask = tim.dq[np.clip(iy, 0, h-1), np.clip(ix, 0, w-1)]
-    #     # Set an OUT-OF-BOUNDS bit.
-    #     F.dqmask[reduce(np.logical_or, [ix < 0, ix >= w, iy < 0, iy >= h])] |= DQ_BITS['edge2']
-    # 
-    #     F.x = x + tim.x0
-    #     F.y = y + tim.y0
-    # 
-    #     # coadds.py calls _resample_one; returns
-    #     #    itim,Yo,Xo,iv,im,mo,bmo,dq = R
-    #     # args: (itim,tim,mod,blobmod,lanczos,targetwcs,sbscale) = args
-    #     
-    #     
-    #     # coadds:
-    #     #   image
-    #     #   invvar
-    #     #   model
-    #     #   chi2
-    #     #   psfdepth
-    #     #   galdepth
-    #     #   n exp?
-    #     #   ormask/andmask for allmask/anymask
-    #     #   psf size
-    # 
-    #     # aperture photometry on coadd
+    print('T:', len(T))
+    T.about()
+    print('Catalog:', len(cat2))
+        
+    T.flux_ivar = np.vstack([T.get('flux_ivar_%s' % b) for b in clean_bands]).T
+    ff, fftot = get_fiber_fluxes(
+        cat2, T, targetwcs, H, W, pixscale, clean_bands, plots=plots, ps=ps)
+    for iband,band in enumerate(clean_bands):
+        T.set('fiberflux_%s'    % (band), ff   [:,iband])
+        T.set('fibertotflux_%s' % (band), fftot[:,iband])
+    T.delete_column('flux_ivar')
+
+    print('After fiberfluxes:')
+    T.about()
+    T.writeto('forced-T.fits')
+
+    # # HACK -- write out tractor catalog
+    #   (need the stage_coadds results for this to work)
+    # try:
+    #     from legacypipe.catalog import prepare_fits_catalog
+    #     Tx = T.copy()
+    #     Tx.mjd_min = np.zeros(len(T), np.float64)
+    #     Tx.mjd_max = np.zeros(len(T), np.float64)
+    #     Tx = prepare_fits_catalog(cat, invvars, Tx, bands, force_keep=T.force_keep_source)
+    #     Tx.type[Tx.dup] = 'DUP'
+    #     # Compute fiber fluxes
+    #     Tx.fiberflux, Tx.fibertotflux = get_fiber_fluxes(
+    #         cat, Tx, targetwcs, H, W, pixscale, bands, plots=plots, ps=ps)
+    #     set_brick_primary(Tx, brick)
+    #     Tx.cut(Tx.in_bounds)
+    #     # The "format_catalog" code expects all lower-case column names...
+    #     for c in Tx.columns():
+    #         if c != c.lower():
+    #             Tx.rename(c, c.lower())
+    #     primhdr = fitsio.FITSHDR()
+    #     for r in version_header.records():
+    #         primhdr.add_record(r)
+    #     from legacypipe.format_catalog import format_catalog
+    #     with survey.write_output('tractor', brick=brickname) as out:
+    #         format_catalog(Tx[np.argsort(Tx.objid)], None, primhdr, bands,
+    #                        survey.allbands, None, release,
+    #                        write_kwargs=dict(fits_object=out.fits),
+    #                        N_wise_epochs=19, motions=gaia_stars, gaia_tagalong=True)
+    # except:
+    #     import traceback
+    #     traceback.print_exc()
+    
+    return dict(T=T)
 
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
@@ -2776,7 +2827,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         maskbits |= MASKBITS['CLUSTER'] * ((refmap & IN_BLOB['CLUSTER']) > 0)
         del refmap
 
-    cleanbands = [clean_band_name(b) for b in bands]
+    cleanbands = [clean_band_name(b).upper() for b in bands]
     # SATUR
     if saturated_pix is not None:
         for b, sat in zip(cleanbands, saturated_pix):
