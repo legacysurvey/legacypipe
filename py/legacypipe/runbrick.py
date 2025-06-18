@@ -3379,11 +3379,14 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
         F.writeto(None, fits_object=out.fits, primheader=primhdr,
                   units=units, columns=columns)
 
+    # Create a fake table with just the forced-photometry results
+    TF = fits_table()
+    TF.brickid = T.brickid.copy()
+    TF.objid = T.objid.copy()
     from legacypipe.forced_photom_brickwise import average_forced_phot
-    forced_units = average_forced_phot(F, T, prefix='')
-    print('After adding averaged forced-phot results:')
-    T.about()
-
+    forced_units = average_forced_phot(F, TF, prefix='')
+    print('Averaged forced-phot results:')
+    TF.about()
     del F
 
     # Create coadd
@@ -3418,7 +3421,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
         X = C.T.get(c)
         print('Column', c, ': shape', X.shape, 'type', X.dtype)
         for i,band in enumerate(clean_bands):
-            T.set('%s_%s' % (c, band), X[:,i])
+            TF.set('%s_%s' % (c, band), X[:,i])
 
     # NEA
 
@@ -3438,33 +3441,35 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
         #X = np.zeros((len(T), len(forced_bands), A), np.float32)
         for iband,band in enumerate(clean_bands):
             #X[:,iband,:] = C.AP.get(src % band)
-            T.set('%s_%s' % (dst, band), C.AP.get(src % band))
+            TF.set('%s_%s' % (dst, band), C.AP.get(src % band))
         #T.set(dst, X)
 
     cat2 = []
     for i,src in enumerate(cat):
         fluxes = {}
         for b in clean_bands:
-            fluxes[b] = T.get('flux_%s' % b)[i]
+            fluxes[b] = TF.get('flux_%s' % b)[i]
         src = src.copy()
         src.brightness = NanoMaggies(**fluxes)
         cat2.append(src)
 
-    print('T:', len(T))
-    T.about()
+    print('TF:', len(TF))
+    TF.about()
     print('Catalog:', len(cat2))
 
-    T.flux_ivar = np.vstack([T.get('flux_ivar_%s' % b) for b in clean_bands]).T
+    TF.bx = T.bx
+    TF.by = T.by
+    TF.flux_ivar = np.vstack([TF.get('flux_ivar_%s' % b) for b in clean_bands]).T
     ff, fftot = get_fiber_fluxes(
-        cat2, T, targetwcs, H, W, pixscale, clean_bands, plots=plots, ps=ps)
+        cat2, TF, targetwcs, H, W, pixscale, clean_bands, plots=plots, ps=ps)
     for iband,band in enumerate(clean_bands):
-        T.set('fiberflux_%s'    % (band), ff   [:,iband])
-        T.set('fibertotflux_%s' % (band), fftot[:,iband])
-    T.delete_column('flux_ivar')
+        TF.set('fiberflux_%s'    % (band), ff   [:,iband])
+        TF.set('fibertotflux_%s' % (band), fftot[:,iband])
+    TF.delete_column('flux_ivar')
 
     print('After fiberfluxes:')
-    T.about()
-    T.writeto('forced-T.fits')
+    TF.about()
+    TF.writeto('forced-T.fits')
 
     # # HACK -- write out tractor catalog
     #   (need the stage_coadds results for this to work)
@@ -3497,7 +3502,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     #     import traceback
     #     traceback.print_exc()
 
-    return dict(T=T)
+    return dict(forced_T=TF, tims=tims)
 
 def stage_writecat(
     survey=None,
@@ -3506,6 +3511,8 @@ def stage_writecat(
     T=None,
     WISE=None,
     WISE_T=None,
+    forced_T=None,
+    forced_bands=None,
     maskbits=None,
     wise_mask_maps=None,
     apertures_arcsec=None,
@@ -3655,6 +3662,9 @@ def stage_writecat(
                           np.clip(T.ibx, 0, W-1).astype(int)]
     del maskbits
 
+    #if forced_T:
+    #    # Add columns from forced photometry.
+
     # Set Sersic indices for all galaxy types.
     # sigh, bytes vs strings.  In py3, T.type (dtype '|S3') are bytes.
     T.sersic[np.array([t in ['DEV',b'DEV'] for t in T.type])] = 4.0
@@ -3693,18 +3703,63 @@ def stage_writecat(
                                        extname='CATALOG-INTERMEDIATE')
 
     # After writing tractor-i file, drop (reference) sources outside the brick.
+    if forced_T is not None:
+        forced_T.cut(T.in_bounds)
     T.cut(T.in_bounds)
 
     # The "format_catalog" code expects all lower-case column names...
     for c in T.columns():
         if c != c.lower():
             T.rename(c, c.lower())
+
     from legacypipe.format_catalog import format_catalog
+
+    Iorder = np.argsort(T.objid)
+    T.cut(Iorder)
+    if forced_T is not None:
+        forced_T.cut(Iorder)
+
+    allbands = survey.allbands
+    if forced_bands is not None:
+        # merge in forced_bands...
+        band_order = ['u','g','r','i','z','y']
+        allbands = [b for b in band_order if b in survey.allbands or b in forced_bands]
+        # append any that aren't in band_order
+        for b in survey.allbands + forced_bands:
+            if not b in band_order:
+                allbands.append(b)
+    print('Allbands:', allbands)
+
+    columns,units = format_catalog(T, bands, allbands, release,
+                                   N_wise_epochs=19, motions=gaia_stars, gaia_tagalong=True)
+
+    print('Catalog columns to write:', columns)
+
+    if forced_T is not None:
+        unitmap = dict([(c,u) for c,u in zip(columns, units)])
+
+        from legacypipe.survey import clean_band_name
+        for c in ['brickid', 'objid', 'bx', 'by']:
+            forced_T.delete_column(c)
+        fc = forced_T.get_columns()
+        print('Forced photometry columns:', fc)
+        for c in fc:
+            T.set(c, forced_T.get(c))
+            
+        for b in forced_bands:
+            for c in ['apflux_blobresid_', 'blob_nea_', 'nea_',
+                      ### ?? thought we had ~ these?
+                      'fracflux_', 'fracin_', 'fracmasked_', 'rchisq_',
+                      ]:
+                columns.remove(c + clean_band_name(b))
+
+        units = [unitmap[c] for c in columns]
+
+    # FIXME - maskbits, set i-band bits
+
     with survey.write_output('tractor', brick=brickname) as out:
-        format_catalog(T[np.argsort(T.objid)], None, primhdr, bands,
-                       survey.allbands, None, release,
-                       write_kwargs=dict(fits_object=out.fits),
-                       N_wise_epochs=19, motions=gaia_stars, gaia_tagalong=True)
+        T.writeto(None, columns=columns, units=units, primheader=primhdr,
+                  extname='CATALOG', fits_object=out.fits)
 
     # write fits file with galaxy-sim stuff (xy bounds of each sim)
     if 'sims_xy' in T.get_columns():
@@ -4631,6 +4686,7 @@ def get_runbrick_kwargs(survey=None,
                         gpsf=False,
                         bands=None,
                         allbands=None,
+                        forced_bands=None,
                         coadd_bw=None,
                         **opt):
     if stage is None:
@@ -4645,6 +4701,10 @@ def get_runbrick_kwargs(survey=None,
     else:
         bands = bands.split(',')
     opt.update(bands=bands, coadd_bw=coadd_bw)
+
+    if forced_bands is not None:
+        forced_bands = forced_bands.split(',')
+        opt.update(forced_bands=forced_bands)
 
     if allbands is None:
         allbands = bands
