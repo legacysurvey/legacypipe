@@ -1295,7 +1295,7 @@ def stage_fitblobs(T=None,
         last_checkpoint = CpuMeas()
         n_finished = 0
         n_finished_total = 0
-        ps_last = None
+        procs_last = None
         last_printout = CpuMeas()
 
         while True:
@@ -1329,11 +1329,11 @@ def stage_fitblobs(T=None,
                 jmap = job_id_map.copy()
                 from legacypipe.utils import run_ps
                 pid = os.getpid()
-                if ps_last is None:
-                    ps_last = run_ps(pid)
+                if procs_last is None:
+                    procs_last = run_ps(pid)
                     time.sleep(1.)
-                ps = run_ps(pid, last=ps_last)
-                print('ps columns:', ps.get_columns())
+                procs = run_ps(pid, last=procs_last)
+                print('procs columns:', procs.get_columns())
 
                 tnow = time.time()
                 for jobid,s in status.items():
@@ -1342,7 +1342,7 @@ def stage_fitblobs(T=None,
                         continue
                     (brick,blob) = jmap[jobid]
                     pid = s['pid']
-                    i = np.flatnonzero(ps.pid == pid)
+                    i = np.flatnonzero(procs.pid == pid)
                     if len(i) != 1:
                         print('did not find PID', pid)
                         print('Blob %10s' % blob, 'pid', s['pid'], 'running for %7.1f sec' % (tnow - s['time']))
@@ -1350,9 +1350,9 @@ def stage_fitblobs(T=None,
                         i = i[0]
                         print('Blob %5s' % blob, 'pid %7i' % s['pid'],
                               'total CPU %7.1f sec' % (tnow - s['time']),
-                              'CPU now %5.1f %%,' % ps.proc_icpu[i],
-                              'VMsize %5.1f GB,' % (ps.vsz[i] / (1024 * 1024)),
-                              'VMpeak %5.1f GB' % (ps.proc_vmpeak[i] / (1024 * 1024)))
+                              'CPU now %5.1f %%,' % procs.proc_icpu[i],
+                              'VMsize %5.1f GB,' % (procs.vsz[i] / (1024 * 1024)),
+                              'VMpeak %5.1f GB' % (procs.proc_vmpeak[i] / (1024 * 1024)))
 
             # Wait for results (with timeout)
             try:
