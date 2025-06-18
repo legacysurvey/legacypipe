@@ -2590,29 +2590,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                 maskbits=maskbits,
                 version_header=version_header)
 
-def stage_post_coadds(tims=None, **kwargs):
-    from legacypipe.utils import run_ps
-    pid = os.getpid()
-    procs = run_ps(pid)
-    print('PS:')
-    procs.about()
-    print('pmem:', procs.pmem)
-    print('proc_vmpeak:', procs.proc_vmpeak)
-    print('vsz:', procs.vsz)
-
-    print('Tims:', tims)
-    for i in range(len(tims)):
-        tims[i] = None
-
-    procs = run_ps(pid, last=procs)
-    print('PS:')
-    procs.about()
-    print('pmem:', procs.pmem)
-    print('proc_vmpeak:', procs.proc_vmpeak)
-    print('vsz:', procs.vsz)
-
-    return dict(tims=None)
-
 def _add_bit_description(header, BITS, bits, bnpat, bitpat, bitmapname):
     for key,short,comm in bits:
         header.add_record(
@@ -3182,13 +3159,36 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     if forced_bands is None:
         return dict()
 
-    clean_bands = [clean_band_name(b) for b in forced_bands]
-    clean_map = dict(list(zip(forced_bands, clean_bands)))
-
-
-    
     tlast = Time()
     record_event and record_event('stage_forced_phot: starting')
+
+    # Before we begin, free the *tims* to reduce our memory use,
+    # before reading in the *forced_bands* imaging data.
+
+    from legacypipe.utils import run_ps
+    pid = os.getpid()
+    procs = run_ps(pid)
+    print('PS:')
+    procs.about()
+    print('pmem:', procs.pmem)
+    print('proc_vmpeak:', procs.proc_vmpeak)
+    print('vsz:', procs.vsz)
+
+    for i in range(len(tims)):
+        tims[i] = None
+
+    procs = run_ps(pid, last=procs)
+    print('PS:')
+    procs.about()
+    print('pmem:', procs.pmem)
+    print('proc_vmpeak:', procs.proc_vmpeak)
+    print('vsz:', procs.vsz)
+
+    print('T:')
+    T.about()
+    
+    clean_bands = [clean_band_name(b) for b in forced_bands]
+    clean_map = dict(list(zip(forced_bands, clean_bands)))
 
     # Copied code from stage_tims...
     ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
@@ -3204,11 +3204,6 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
 
     # Not applying mjd_minmax or ccds_for_fitting cuts?
 
-    #print('HACKKKK -- cutting CCDs')
-    #ccds = ccds[:5]
-    # Last one takes FOREVER, don't know why
-    #ccds = ccds[:-1]
-    
     # Create Image objects for each CCD
     ims = []
     info('Keeping', len(ccds), 'CCDs:')
@@ -3300,7 +3295,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
         print('Not subtracting SGA galaxies outside the image...')
 
         from tractor import NanoMaggies
-        
+
         # create copies before modifying the Flux object
         sub_cat = [src.copy() for src in sub_cat]
         for src in sub_cat:
@@ -3390,7 +3385,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     T.about()
 
     del F
-    
+
     # Create coadd
     print('Creating coadd...')
     # code from stage_coadds...
@@ -3458,7 +3453,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     print('T:', len(T))
     T.about()
     print('Catalog:', len(cat2))
-        
+
     T.flux_ivar = np.vstack([T.get('flux_ivar_%s' % b) for b in clean_bands]).T
     ff, fftot = get_fiber_fluxes(
         cat2, T, targetwcs, H, W, pixscale, clean_bands, plots=plots, ps=ps)
@@ -3501,7 +3496,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     # except:
     #     import traceback
     #     traceback.print_exc()
-    
+
     return dict(T=T)
 
 def stage_writecat(
@@ -4280,10 +4275,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     if forced_bands:
         prereqs.update({'forced_phot': prereqs['writecat'],
                         'writecat': 'forced_phot'})
-        #prereqs.update({'forced_phot': 'fitblobs',
-        #                'coadds': 'forced_phot'})
-        #prereqs.update({'writecat': 'post_coadds',
-        #                'post_coadds': 'coadds'})
 
     # HACK -- set the prereq to the stage after which you'd like to write out checksums.
     prereqs.update({'checksum': 'outliers'})
