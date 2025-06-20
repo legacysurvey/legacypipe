@@ -336,12 +336,17 @@ def average_forced_phot(F, T, prefix='forced_'):
         T.set('%spsfdepth_%s'    % (prefix, b), np.zeros(N, np.float32))
         T.set('%sgaldepth_%s'    % (prefix, b), np.zeros(N, np.float32))
         T.set('%snexp_%s'        % (prefix, b), np.zeros(N, np.int32))
+        T.set('%sfracflux_%s'    % (prefix, b), np.zeros(N, np.float32))
+        T.set('%sfracmasked_%s'  % (prefix, b), np.zeros(N, np.float32))
+        T.set('%sfracin_%s'      % (prefix, b), np.zeros(N, np.float32))
+        T.set('%srchisq_%s'      % (prefix, b), np.zeros(N, np.float32))
 
     objidmap = dict([((b,o),i) for i,(b,o) in enumerate(zip(T.brickid, T.objid))])
 
-    for bid,objid,band,flux,fluxiv,psfdepth,galdepth,apflux,apfluxiv in zip(
+    for (bid,objid,band,flux,fluxiv,psfdepth,galdepth,apflux,apfluxiv,
+         fracin, fracmasked, fracflux, rchisq) in zip(
             F.brickid, F.objid, F.filter, F.flux, F.flux_ivar, F.psfdepth, F.galdepth,
-            F.apflux, F.apflux_ivar):
+            F.apflux, F.apflux_ivar, F.fracin, F.fracmasked, F.fracflux, F.rchisq):
         key = (bid, objid)
         try:
             i = objidmap[key]
@@ -356,6 +361,26 @@ def average_forced_phot(F, T, prefix='forced_'):
         T.get('%spsfdepth_%s'    % (prefix, band))[i] += psfdepth
         T.get('%sgaldepth_%s'    % (prefix, band))[i] += galdepth
         T.get('%snexp_%s'        % (prefix, band))[i] += 1
+        T.get('%sfracin_%s'      % (prefix, band))[i] += fracin
+        T.get('%sfracmasked_%s'  % (prefix, band))[i] += fracmasked
+        T.get('%sfracflux_%s'    % (prefix, band))[i] += fracflux * fracin
+        T.get('%srchisq_%s'      % (prefix, band))[i] += rchisq * fracin
+
+    for band in clean_bands:
+        tinyval = 1e-16
+        nexp   = T.get('%snexp_%s' % (prefix, band))
+        fracin = T.get('%sfracin_%s' % (prefix, band))
+        fracmasked = T.get('%sfracmasked_%s' % (prefix, band))
+        fracflux   = T.get('%sfracflux_%s' % (prefix, band))
+        rchisq = T.get('%srchisq_%s' % (prefix, band))
+        fracmasked /= np.maximum(tinyval, fracin)
+        fracflux /= np.maximum(tinyval, fracin)
+        rchisq /= np.maximum(tinyval, fracin)
+        fracin /= np.maximum(1, nexp)
+        fracmasked[fracin == 0] = 0.
+        fracflux[fracin == 0] = 0.
+        rchisq[fracin == 0] = 0.
+        fracin[nexp == 0] = 0.
 
     eunits = {}
     flux_unit = 'nanomaggies'
