@@ -3155,6 +3155,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     (Also run forced-photometry on the individual exposures in *tims* ??)
     '''
     from legacypipe.survey import clean_band_name
+    from tractor import NanoMaggies
 
     if forced_bands is None:
         return dict()
@@ -3277,79 +3278,11 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     # This will get multiprocessed...
     FF = []
     mods = []
-    for ccd,im,tim in zip(ccds, ims, tims):
-        print('Forced-photometering', tim)
-        # Cut to sources within this chip
-        chipwcs = tim.subwcs
-        h,w = chipwcs.shape
-        _,x,y = chipwcs.radec2pixelxy(T.ra, T.dec)
-        # Same as get_catalog_in_wcs
-        margin = 20
-        I = np.flatnonzero((x >= -margin) * (x <= (W+margin)) *
-                           (y >= -margin) * (y <= (H+margin)) *
-                           do_phot)
-        # FIXME... this is going to drop SGA galaxies outside the margin around this chip...
 
-        sub_cat = [cat[i] for i in I]
-
-        print('Not subtracting SGA galaxies outside the image...')
-
-        from tractor import NanoMaggies
-
-        # create copies before modifying the Flux object
-        sub_cat = [src.copy() for src in sub_cat]
-        for src in sub_cat:
-            fluxes = { tim.band : 1. }
-            src.brightness = NanoMaggies(**fluxes)
-
-        kwargs = {}
-        if plots:
-            kwargs.update(ps=ps)
-        t0 = Time()
-        use_ceres = True
-        F,mod = run_forced_phot(sub_cat, tim,
-                                ceres=use_ceres,
-                                do_forced=True,
-                                do_apphot=True,
-                                full_position_fit=False,
-                                windowed_peak=False,
-                                get_model=True,
-                                timing=False, **kwargs)
-        t1 = Time()
-        print('run_forced_phot (ceres=%s):' % use_ceres, t1-t0)
-        # if not use_ceres:
-        #     t0 = Time()
-        #     F,mod = run_forced_phot(sub_cat, tim,
-        #                             ceres=True,
-        #                             do_forced=True,
-        #                             do_apphot=True,
-        #                             full_position_fit=False,
-        #                             windowed_peak=False,
-        #                             get_model=True,
-        #                             timing=False, **kwargs)
-        #     t1 = Time()
-        #     print('run_forced_phot (ceres=True):', t1-t0)
-
-        print('run_forced_phot:')
-        F.about()
-        #  tabledata object with 286 rows and 8 columns:
-        #     apflux (<class 'numpy.ndarray'>) shape (286, 8) dtype float32
-        #     apflux_ivar (<class 'numpy.ndarray'>) shape (286, 8) dtype float32
-        #     flux (<class 'numpy.ndarray'>) shape (286,) dtype float32
-        #     flux_ivar (<class 'numpy.ndarray'>) shape (286,) dtype float32
-        #     fracflux (<class 'numpy.ndarray'>) shape (286,) dtype float32
-        #     fracin (<class 'numpy.ndarray'>) shape (286,) dtype float32
-        #     fracmasked (<class 'numpy.ndarray'>) shape (286,) dtype float32
-        #     rchisq (<class 'numpy.ndarray'>) shape (286,) dtype float32
-
-        if F is not None:
-            derivs = False
-            Tsub = T[I]
-            Tsub.release = np.zeros(len(Tsub), np.int16) + release
-            forced_phot_add_extra_fields(F, Tsub, ccd, im, tim, derivs)
-            FF.append(F)
-
-        mods.append(mod)
+    args = [list(a) + [cat, T, do_phot, release] for a in zip(ccds, ims, tims)]
+    FF = mp.map(_forced_phot_one, args)
+    mods = [mod for F,mod in FF]
+    FF = [F for F,m in FF if F is not None]
 
     F = merge_tables(FF, columns='fillzero')
     print('All forced photometry results:')
@@ -3503,6 +3436,59 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     #     traceback.print_exc()
 
     return dict(forced_T=TF, tims=tims)
+
+def _forced_phot_one(args):
+    from legacypipe.forced_photom import run_forced_phot, forced_phot_add_extra_fields
+    from tractor import NanoMaggies
+
+    ccd, im, tim, cat, T, do_phot, release = args
+
+    print('Forced-photometering', tim)
+    # Cut to sources within this chip
+    chipwcs = tim.subwcs
+    h,w = chipwcs.shape
+    _,x,y = chipwcs.radec2pixelxy(T.ra, T.dec)
+    # Same as get_catalog_in_wcs
+    margin = 20
+    H,W = tim.shape
+    I = np.flatnonzero((x >= -margin) * (x <= (W+margin)) *
+                       (y >= -margin) * (y <= (H+margin)) *
+                       do_phot)
+    # FIXME... this is going to drop SGA galaxies outside the margin around this chip...
+    sub_cat = [cat[i] for i in I]
+
+    print('Not subtracting SGA galaxies outside the image...')
+
+
+    # create copies before modifying the Flux object
+    sub_cat = [src.copy() for src in sub_cat]
+    for src in sub_cat:
+        fluxes = { tim.band : 1. }
+        src.brightness = NanoMaggies(**fluxes)
+
+    kwargs = {}
+    #if plots:
+    #kwargs.update(ps=ps)
+    t0 = Time()
+    use_ceres = True
+    F,mod = run_forced_phot(sub_cat, tim,
+                            ceres=use_ceres,
+                            do_forced=True,
+                            do_apphot=True,
+                            full_position_fit=False,
+                            windowed_peak=False,
+                            get_model=True,
+                            timing=False, **kwargs)
+    t1 = Time()
+    print('run_forced_phot:', (t1-t0))
+
+    #F.about()
+    if F is not None:
+        derivs = False
+        Tsub = T[I]
+        Tsub.release = np.zeros(len(Tsub), np.int16) + release
+        forced_phot_add_extra_fields(F, Tsub, ccd, im, tim, derivs)
+    return F, mod
 
 def stage_writecat(
     survey=None,
@@ -3748,8 +3734,6 @@ def stage_writecat(
             
         for b in forced_bands:
             for c in ['apflux_blobresid_', 'blob_nea_', 'nea_',
-                      ### ?? thought we had ~ these?
-                      'fracflux_', 'fracin_', 'fracmasked_', 'rchisq_',
                       ]:
                 columns.remove(c + clean_band_name(b))
 
