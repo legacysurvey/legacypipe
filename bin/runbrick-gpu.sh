@@ -44,6 +44,10 @@ zoom=""
 gpumode=""
 gpu=""
 threads=""
+subblobs=""
+blobid=""
+md="cpu"
+th=""
 
 while [[ $# -gt 0 ]]; do
   key="$1"
@@ -60,6 +64,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     -gpumode)
       gpumode="--gpumode $2"
+      md="gpumode$2"
       shift # past argument
       shift # past value
       ;;
@@ -67,8 +72,23 @@ while [[ $# -gt 0 ]]; do
       gpu="--use-gpu"
       shift # past argument
       ;;
+    -sub-blobs)
+      subblobs="--sub-blobs"
+      shift # past argument
+      ;;
+    -blobid)
+      blobid="--bid $2"
+      shift # past argument
+      shift # past value
+      ;;
+    -outdir)
+      outdir="$2"
+      shift # past argument
+      shift # past value
+      ;;
     -threads)
       threads="--threads $2"
+      th="threads$2"
       shift # past argument
       shift # past value
       ;;
@@ -88,7 +108,7 @@ bri=${brick:0:3}
 mkdir -p "$outdir/logs/$bri"
 mkdir -p "$outdir/metrics/$bri"
 mkdir -p "$outdir/pickles/$bri"
-log="$outdir/logs/$bri/$brick.log"
+log="$outdir/logs/$bri/$brick-$md-$th.log"
 echo Logging to: "$log"
 #echo Running on $(hostname)
 
@@ -132,6 +152,9 @@ echo "GPUMODE = $gpumode"
 echo "GPU = $gpu"
 echo "ZOOM = $zoom"
 echo "THREADS = $threads"
+echo "SUBBLOBS = $subblobs"
+echo "BLOBID = $blobid"
+echo "LOG = $log"
 
 #python -u $LEGACYPIPE_DIR/legacypipe/runbrick.py \
 #python -u -m cProfile -o brick.pro $LEGACYPIPE_DIR/legacypipe/runbrick.py \
@@ -141,6 +164,8 @@ python -u $LEGACYPIPE_DIR/legacypipe/runbrick.py \
         $gpu \
         $gpumode \
         $threads \
+	$subblobs \
+	$blobid \
      --skip-calibs \
      --bands g,r,i,z \
      --rgb-stretch 1.5 \
