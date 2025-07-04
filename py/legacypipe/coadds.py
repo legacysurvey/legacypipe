@@ -427,12 +427,13 @@ class Coadd(object):
         if self.mods:
             # I think we always require unweighted = True
             assert(goodpix is not None)
-            # straight-up
-            self.comod[Yo,Xo] += goodpix * mo
-            # invvar-weighted
-            self.cowmod[Yo,Xo] += iv * mo
-            # chi-squared
-            self.cochi2[Yo,Xo] += iv * (im - mo)**2
+            if mo is not None:
+                # straight-up
+                self.comod[Yo,Xo] += goodpix * mo
+                # invvar-weighted
+                self.cowmod[Yo,Xo] += iv * mo
+                # chi-squared
+                self.cochi2[Yo,Xo] += iv * (im - mo)**2
             del mo
 
         if self.blobmods:
