@@ -3273,7 +3273,8 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
 
     # Which sources to photometer
     do_phot = (np.logical_or(T.brick_primary, T.ref_cat == 'L3') *
-               (T.type != 'DUP') * (T.type != 'NUN'))
+               (T.dup == False) * np.array([src is not None for src in cat]))
+    # (we don't have T.type yet; this is equivalent to T.type not equal to 'DUP' or 'NUN')
 
     # This will get multiprocessed...
     FF = []
