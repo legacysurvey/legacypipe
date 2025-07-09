@@ -26,7 +26,7 @@ def main():
     parser.add_argument('--name1', help='Name for first data set')
     parser.add_argument('--name2', help='Name for second data set')
     parser.add_argument('--plot-prefix', default='compare',
-                        help='Prefix for plot filenames; default "%default"')
+                        help='Prefix for plot filenames; default "%(default)s"')
     parser.add_argument('--match', default=1.0, type=float,
                         help='Astrometric cross-match distance in arcsec')
     parser.add_argument('dir1', help='First directory to compare')
@@ -97,7 +97,7 @@ def main():
     matched2.type = np.array([t.strip() for t in matched2.type])
     
     # Confusion matrix for source types
-    types = ['PSF', 'SIMP', 'EXP', 'DEV', 'COMP']
+    types = ['PSF', 'REX', 'EXP', 'DEV', 'SER']
     confusion = np.zeros((len(types), len(types)))
     labels = []
     assert(len(set(np.unique(matched1.type)) - set(types)) == 0)
@@ -127,20 +127,20 @@ def main():
     print(len(I), 'PSF to PSF')
     plt.plot(matched1.dchisq[I,0] - matched1.dchisq[I,1],
              matched2.dchisq[I,0] - matched2.dchisq[I,1], 'k.', label='PSF to PSF')
-    I = np.flatnonzero((matched1.type == 'PSF') * (matched2.type == 'SIMP'))
-    print(len(I), 'PSF to SIMP')
+    I = np.flatnonzero((matched1.type == 'PSF') * (matched2.type == 'REX'))
+    print(len(I), 'PSF to REX')
     plt.plot(matched1.dchisq[I,0] - matched1.dchisq[I,1],
-             matched2.dchisq[I,0] - matched2.dchisq[I,1], 'r.', label='PSF to SIMP')
-    I = np.flatnonzero((matched1.type == 'SIMP') * (matched2.type == 'PSF'))
-    print(len(I), 'SIMP to PSF')
+             matched2.dchisq[I,0] - matched2.dchisq[I,1], 'r.', label='PSF to REX')
+    I = np.flatnonzero((matched1.type == 'REX') * (matched2.type == 'PSF'))
+    print(len(I), 'REX to PSF')
     plt.plot(matched1.dchisq[I,0] - matched1.dchisq[I,1],
-             matched2.dchisq[I,0] - matched2.dchisq[I,1], 'g.', label='SIMP to PSF')
-    I = np.flatnonzero((matched1.type == 'SIMP') * (matched2.type == 'SIMP'))
-    print(len(I), 'SIMP to SIMP')
+             matched2.dchisq[I,0] - matched2.dchisq[I,1], 'g.', label='REX to PSF')
+    I = np.flatnonzero((matched1.type == 'REX') * (matched2.type == 'REX'))
+    print(len(I), 'REX to REX')
     plt.plot(matched1.dchisq[I,0] - matched1.dchisq[I,1],
-             matched2.dchisq[I,0] - matched2.dchisq[I,1], 'b.', label='SIMP to SIMP')
-    plt.xlabel('%s dchisq: PSF - SIMP' % name1)
-    plt.ylabel('%s dchisq: PSF - SIMP' % name2)
+             matched2.dchisq[I,0] - matched2.dchisq[I,1], 'b.', label='REX to REX')
+    plt.xlabel('%s dchisq: PSF - REX' % name1)
+    plt.ylabel('%s dchisq: PSF - REX' % name2)
     plt.legend(loc='upper left')
     #plt.xscale('symlog')
     #plt.yscale('symlog')
@@ -153,9 +153,9 @@ def main():
 
     plt.clf()
     I = np.flatnonzero((matched1.type == 'EXP') * (matched2.type == 'EXP'))
-    plt.plot(matched1.shapeexp_r[I], matched2.shapeexp_r[I], 'r.', label='exp')
+    plt.plot(matched1.shape_r[I], matched2.shape_r[I], 'r.', label='exp')
     I = np.flatnonzero((matched1.type == 'DEV') * (matched2.type == 'DEV'))
-    plt.plot(matched1.shapedev_r[I], matched2.shapedev_r[I], 'b.', label='dev')
+    plt.plot(matched1.shape_r[I], matched2.shape_r[I], 'b.', label='dev')
     plt.xlabel('%s radius (arcsec)' % name1)
     plt.ylabel('%s radius (arcsec)' % name2)
     plt.axis([0,4,0,4])
@@ -163,18 +163,23 @@ def main():
     ps.savefig()
 
     for iband,band,cc in [(1,'g','g'),(2,'r','r'),(4,'z','m')]:
-        K = np.flatnonzero((matched1.decam_flux_ivar[:,iband] > 0) *
-                           (matched2.decam_flux_ivar[:,iband] > 0))
+        flux_ivar_1 = matched1.get('flux_ivar_%s' % band)
+        flux_ivar_2 = matched2.get('flux_ivar_%s' % band)
+        flux_1 = matched1.get('flux_%s' % band)
+        flux_2 = matched2.get('flux_%s' % band)
+
+        K = np.flatnonzero((flux_ivar_1 > 0) *
+                           (flux_ivar_2 > 0))
         
         print('Median mw_trans', band, 'is',
-              np.median(matched1.decam_mw_transmission[:,iband]))
+              np.median(matched1.get('mw_transmission_%s' % band)))
         
         plt.clf()
-        plt.errorbar(matched1.decam_flux[K,iband],
-                     matched2.decam_flux[K,iband],
+        plt.errorbar(flux_1[K],
+                     flux_2[K],
                      fmt='.', color=cc,
-                     xerr=1./np.sqrt(matched1.decam_flux_ivar[K,iband]),
-                     yerr=1./np.sqrt(matched2.decam_flux_ivar[K,iband]),
+                     xerr=1./np.sqrt(flux_ivar_1[K]),
+                     yerr=1./np.sqrt(flux_ivar_2[K]),
                      alpha=0.1,
                      )
         plt.xlabel('%s flux: %s' % (name1, band))
@@ -186,26 +191,29 @@ def main():
 
 
     for iband,band,cc in [(1,'g','g'),(2,'r','r'),(4,'z','m')]:
-        good = ((matched1.decam_flux_ivar[:,iband] > 0) *
-                (matched2.decam_flux_ivar[:,iband] > 0))
+        flux_ivar_1 = matched1.get('flux_ivar_%s' % band)
+        flux_ivar_2 = matched2.get('flux_ivar_%s' % band)
+        flux_1 = matched1.get('flux_%s' % band)
+        flux_2 = matched2.get('flux_%s' % band)
+        good = (flux_ivar_1 > 0) * (flux_ivar_2 > 0)
         K = np.flatnonzero(good)
-        psf1 = (matched1.type == 'PSF ')
-        psf2 = (matched2.type == 'PSF ')
+        psf1 = (matched1.type == 'PSF')
+        psf2 = (matched2.type == 'PSF')
         P = np.flatnonzero(good * psf1 * psf2)
 
         mag1, magerr1 = NanoMaggies.fluxErrorsToMagErrors(
-            matched1.decam_flux[:,iband], matched1.decam_flux_ivar[:,iband])
-        
-        iv1 = matched1.decam_flux_ivar[:, iband]
-        iv2 = matched2.decam_flux_ivar[:, iband]
+            flux_1, flux_ivar_1)
+
+        iv1 = flux_ivar_1
+        iv2 = flux_ivar_2
         std = np.sqrt(1./iv1 + 1./iv2)
         
         plt.clf()
         plt.plot(mag1[K],
-                 (matched2.decam_flux[K,iband] - matched1.decam_flux[K,iband]) / std[K],
+                 (flux_2[K] - flux_1[K]) / std[K],
                  '.', alpha=0.1, color=cc)
         plt.plot(mag1[P],
-                 (matched2.decam_flux[P,iband] - matched1.decam_flux[P,iband]) / std[P],
+                 (flux_2[P] - flux_1[P]) / std[P],
                  '.', alpha=0.1, color='k')
         plt.ylabel('(%s - %s) flux / flux errors (sigma): %s' % (name2, name1, band))
         plt.xlabel('%s mag: %s' % (name1, band))
@@ -217,28 +225,30 @@ def main():
     plt.clf()
     lp,lt = [],[]
     for iband,band,cc in [(1,'g','g'),(2,'r','r'),(4,'z','m')]:
-        good = ((matched1.decam_flux_ivar[:,iband] > 0) *
-                (matched2.decam_flux_ivar[:,iband] > 0))
+        flux_ivar_1 = matched1.get('flux_ivar_%s' % band)
+        flux_ivar_2 = matched2.get('flux_ivar_%s' % band)
+        flux_1 = matched1.get('flux_%s' % band)
+        flux_2 = matched2.get('flux_%s' % band)
+
+        good = (flux_ivar_1 > 0) * (flux_ivar_2 > 0)
         #good = True
-        psf1 = (matched1.type == 'PSF ')
-        psf2 = (matched2.type == 'PSF ')
+        psf1 = (matched1.type == 'PSF')
+        psf2 = (matched2.type == 'PSF')
         mag1, magerr1 = NanoMaggies.fluxErrorsToMagErrors(
-            matched1.decam_flux[:,iband], matched1.decam_flux_ivar[:,iband])
-        iv1 = matched1.decam_flux_ivar[:, iband]
-        iv2 = matched2.decam_flux_ivar[:, iband]
+            flux_1, flux_ivar_1)
+        iv1 = flux_ivar_1
+        iv2 = flux_ivar_2
         std = np.sqrt(1./iv1 + 1./iv2)
         #std = np.hypot(std, 0.01)
         G = np.flatnonzero(good * psf1 * psf2 *
                            np.isfinite(mag1) *
                            (mag1 >= 20) * (mag1 < dict(g=24, r=23.5, z=22.5)[band]))
         
-        n,b,p = plt.hist((matched2.decam_flux[G,iband] -
-                          matched1.decam_flux[G,iband]) / std[G],
-                 range=(-4, 4), bins=50, histtype='step', color=cc,
-                 normed=True)
+        n,b,p = plt.hist((flux_2[G] - flux_1[G]) / std[G],
+                         range=(-4, 4), bins=50, histtype='step', color=cc,
+                         weights=np.ones(len(G))/len(G))
 
-        sig = (matched2.decam_flux[G,iband] -
-               matched1.decam_flux[G,iband]) / std[G]
+        sig = (flux_2[G] - flux_1[G]) / std[G]
         print('Raw mean and std of points:', np.mean(sig), np.std(sig))
         med = np.median(sig)
         rsigma = (np.percentile(sig, 84) - np.percentile(sig, 16)) / 2.
@@ -267,18 +277,20 @@ def main():
         
     for iband,band,cc in [(1,'g','g'),(2,'r','r'),(4,'z','m')]:
         plt.clf()
+        flux_ivar_1 = matched1.get('flux_ivar_%s' % band)
+        flux_ivar_2 = matched2.get('flux_ivar_%s' % band)
+        flux_1 = matched1.get('flux_%s' % band)
+        flux_2 = matched2.get('flux_%s' % band)
         mag1, magerr1 = NanoMaggies.fluxErrorsToMagErrors(
-            matched1.decam_flux[:,iband], matched1.decam_flux_ivar[:,iband])
+            flux_1, flux_ivar_1)
         mag2, magerr2 = NanoMaggies.fluxErrorsToMagErrors(
-            matched2.decam_flux[:,iband], matched2.decam_flux_ivar[:,iband])
+            flux_2, flux_ivar_2)
 
-        meanmag = NanoMaggies.nanomaggiesToMag((
-            matched1.decam_flux[:,iband] + matched2.decam_flux[:,iband]) / 2.)
+        meanmag = NanoMaggies.nanomaggiesToMag((flux_1 + flux_2) / 2.)
 
-        psf1 = (matched1.type == 'PSF ')
-        psf2 = (matched2.type == 'PSF ')
-        good = ((matched1.decam_flux_ivar[:,iband] > 0) *
-                (matched2.decam_flux_ivar[:,iband] > 0) *
+        psf1 = (matched1.type == 'PSF')
+        psf2 = (matched2.type == 'PSF')
+        good = ((flux_ivar_1 > 0) * (flux_ivar_2 > 0) *
                 np.isfinite(mag1) * np.isfinite(mag2))
         K = np.flatnonzero(good)
         P = np.flatnonzero(good * psf1 * psf2)
@@ -430,7 +442,7 @@ def main():
 
         slo,shi = -5,5
         plt.clf()
-        ha = dict(bins=25, range=(slo,shi), histtype='step', normed=True)
+        ha = dict(bins=25, range=(slo,shi), histtype='step') # normed
         y = (mag2 - mag1) / np.hypot(magerr1, magerr2)
         midmag = []
         nn = []
@@ -444,7 +456,7 @@ def main():
             rgb = [0.,0.,0.]
             rgb[0] = float(bini) / (len(magbins)-1)
             rgb[2] = 1. - rgb[0]
-            n,b,p = plt.hist(ybin, color=rgb, **ha)
+            n,b,p = plt.hist(ybin, color=rgb, weights=np.ones(len(ybin))/len(ybin), **ha)
             lt.append('mag %g to %g' % (mlo,mhi))
             lp.append(p[0])
             midmag.append((mlo+mhi)/2.)
