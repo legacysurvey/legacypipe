@@ -3271,8 +3271,9 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
 
     set_brick_primary(T, brick)
 
-    # Which sources to photometer
-    do_phot = (np.logical_or(T.brick_primary, T.ref_cat == 'L3') *
+    # Which sources to photometer... in forced_phot.py, we cut to brick_primary, but for consistency
+    # with eg DR10, let's keep all the sources.
+    do_phot = (#np.logical_or(T.brick_primary, T.ref_cat == 'L3') *
                (T.dup == False) * np.array([src is not None for src in cat]))
     # (we don't have T.type yet; this is equivalent to T.type not equal to 'DUP' or 'NUN')
 
