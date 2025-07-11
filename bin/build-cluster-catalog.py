@@ -151,11 +151,13 @@ out_pne = out_pne[duplicate_mask]
 
 # Restructure the HASH catalog so that it can be appended to the out tables
 hash_tab = Table.from_pandas(hash_tab)
+# Mask RNe that were assigned major/minor axis ratios of 0.0 arcsec
+# (This was done either because they couldn't be seen in the Legacy Survey)
+hash_tab = hash_tab[(hash_tab["major_axis"] > 0.0) & (hash_tab["minor_axis"] > 0.0)]
 # Convert from arcseconds to degrees
 hash_tab["major_axis"] /= 3600.0
 hash_tab["minor_axis"] /= 3600.0
-hash_tab["ba"] = hash_tab["major_axis"] / hash_tab["minor_axis"]
-hash_tab["ba"][pd.isna(hash_tab["ba"])] = 1.0
+hash_tab["ba"] = hash_tab["minor_axis"] / hash_tab["major_axis"]
 hash_tab["alt_name"] = "--"
 hash_tab["type"] = "PN"
 hash_tab["radius"] = hash_tab["major_axis"] / 2
@@ -164,7 +166,29 @@ hash_tab["radius"] *= 1.15
 hash_tab_keep = hash_tab[
     ["name", "alt_name", "type", "ra", "dec", "radius", "pa", "ba"]
 ]
-out = ap_vstack([out_gcl, out_pne, hash_tab_keep])
+
+# Read in catalog of known and visually verified Reflection Nebulae (RNe)
+# (See https://heasarc.gsfc.nasa.gov/w3browse/all/refnebulae.html for original catalog)
+rne_file = files("legacypipe").joinpath("data/RNe_geometry.csv")
+rne_tab = pd.read_csv(rne_file, index_col=0)
+# Mask RNe that were assigned major axis ratios of 0.0 arcsec
+# (This was done either because they couldn't be seen in the Legacy Survey or were part of larger RNe)
+rne_tab = rne_tab[(rne_tab["major_axis"] > 0.0) & (rne_tab["minor_axis"] > 0.0)]
+# Restructure the RNe catalog so that it can be appended to the out tables
+rne_tab["major_axis"] /= 3600.0
+rne_tab["minor_axis"] /= 3600.0
+rne_tab["ba"] = rne_tab["minor_axis"] / rne_tab["major_axis"]
+# Names are from the original catalog column 'Seq'
+rne_tab["name"] = rne_tab["name"].astype(int).astype(str)
+rne_tab["alt_name"] = "--"
+rne_tab["type"] = "RN"
+rne_tab["radius"] = rne_tab["major_axis"] / 2
+rne_tab_keep = rne_tab[["name", "alt_name", "type", "ra", "dec", "radius", "pa", "ba"]]
+# Convert the RNe pandas DataFrame to an Astropy Table (to be compatible with the other output tables)
+rne_tab_keep = Table.from_pandas(rne_tab_keep)
+
+# Combine all clusters, PNe, and RNe into a single table
+out = ap_vstack([out_gcl, out_pne, hash_tab_keep, rne_tab_keep])
 
 # Make a minimum size cut on all objects of 10 arcseconds in radius
 min_size_deg = 10.0 / 3600.0
