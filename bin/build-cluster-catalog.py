@@ -151,7 +151,7 @@ out_pne = out_pne[duplicate_mask]
 
 # Restructure the HASH catalog so that it can be appended to the out tables
 hash_tab = Table.from_pandas(hash_tab)
-# Mask RNe that were assigned major/minor axis ratios of 0.0 arcsec
+# Mask PNe that were assigned major/minor axis ratios of 0.0 arcsec
 # (This was done either because they couldn't be seen in the Legacy Survey)
 hash_tab = hash_tab[(hash_tab["major_axis"] > 0.0) & (hash_tab["minor_axis"] > 0.0)]
 # Convert from arcseconds to degrees
