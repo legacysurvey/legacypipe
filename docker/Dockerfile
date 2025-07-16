@@ -222,3 +222,22 @@ RUN apt install -y patchelf
 
 RUN patchelf --force-rpath --set-rpath /lib/x86_64-linux-gnu/ /usr/local/bin/listhead
 
+
+RUN cd qdo \
+  && git remote add dstn https://dstn@bitbucket.org/dstn/qdo.git \
+  && git fetch dstn \
+  && git checkout ssh-srun \
+  && python3 setup.py install
+
+RUN pip3 install --break-system-packages --no-cache cupy-cuda12x
+
+RUN cd legacypipe \
+  && git checkout gpu-powered
+
+#craig_factored_merge \
+RUN cd tractor \
+  && git fetch \
+  && git checkout dstn-gpu-test \
+  && python setup.py build_ext --with-ceres --with-cython --inplace \
+  && python setup.py install
+
