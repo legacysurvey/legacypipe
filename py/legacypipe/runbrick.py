@@ -280,7 +280,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                                 apodize=apodize,
                                 constant_invvar=constant_invvar,
                                 pixels=read_image_pixels,
-                                old_calibs_ok=old_calibs_ok))
+                                old_calibs_ok=old_calibs_ok,
+                                plots=plots, ps=ps))
                                 for im in ims]
     record_event and record_event('stage_tims: starting read_tims')
     if read_parallel:

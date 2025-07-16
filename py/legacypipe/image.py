@@ -635,7 +635,8 @@ class LegacySurveyImage(object):
                           no_remap_invvar=False,
                           constant_invvar=False,
                           old_calibs_ok=False,
-                          trim_edges=True):
+                          trim_edges=True,
+                          plots=False, ps=None):
         '''
         Returns a tractor.Image ("tim") object for this image.
 
@@ -814,6 +815,26 @@ class LegacySurveyImage(object):
         orig_sky = sky
         if subsky:
             from tractor.sky import ConstantSky
+
+            if plots:
+                zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
+                s = self.sig1 * zpscale
+                ima = dict(interpolation='nearest', origin='lower', vmin=midsky - 2.*s, vmax=midsky + 5.*s)
+                ima2 = dict(interpolation='nearest', origin='lower', vmin=-2.*s, vmax=+5.*s)
+                import pylab as plt
+                plt.clf()
+                plt.subplot(1,3,1)
+                plt.imshow(img, **ima)
+                plt.title('Image')
+                plt.subplot(1,3,2)
+                plt.imshow(skymod, **ima)
+                plt.title('Sky')
+                plt.subplot(1,3,3)
+                plt.imshow(img - skymod, **ima2)
+                plt.title('Image - Sky')
+                plt.suptitle(self.name)
+                ps.savefig()
+
             debug('Instantiating and subtracting sky model')
             debug('Median sky value & range', np.median(skymod), skymod.min(), skymod.max(), 'all finite', np.all(np.isfinite(skymod)))
             assert(np.all(np.isfinite(skymod)))
@@ -1543,9 +1564,9 @@ class LegacySurveyImage(object):
             plt.xlabel('X (pixels)')
             plt.ylabel('Y (pixels)')
 
-    def plot_mask(self, mask):
+    def plot_mask(self, mask, rgb=None):
         from legacypipe.detection import plot_mask
-        plot_mask(self.maybe_transposed(mask))
+        plot_mask(self.maybe_transposed(mask), rgb=rgb)
 
     def show_transposed(self):
         return self.height > self.width
@@ -1815,7 +1836,8 @@ class LegacySurveyImage(object):
             # we set zpscale, so model image is in ADU.
             debug('Using zeropoint:', self.ccdzpt, 'to scale galaxy model by', zpscale)
             img -= galmod
-            del galmod
+            if not plots:
+                del galmod
 
         haloimg = None
         halozpt = 0.
@@ -2003,28 +2025,25 @@ class LegacySurveyImage(object):
             plt.axis(ax)
             ps.savefig()
 
-            info('Image shape:', img.shape)
-            info('Sky xgrid:', skyobj.xgrid, 'ygrid', skyobj.ygrid)
-
             self.imshow((img - initsky) * boxcargood * blobgood * refgood, **ima2)
             plt.title('Unmasked pixels')
             ps.savefig()
 
-            gridvals = skyobj.spl(skyobj.xgrid, skyobj.ygrid) - initsky
+            gridvals = skyobj.get_grid().T - initsky
+            # print('grid values:')
+            # gh,gw = gridvals.shape
+            # for i in range(gh):
+            #     print('row', i, ':')
+            #     print('    ' + ','.join(['%.2f%s' % (gridvals[i, j], ('[z]' if gridvals[i,j] == 0 else ''))
+            #                             for j in range(gw)]))
+            #     print('    ', gridvals[i,:])
             plt.clf()
             self.imshow(gridvals.T, **ima2)
             plt.colorbar()
             self.plot_mask((gridvals.T == 0))
+            self.plot_mask((gridvals.T != 0) * (np.abs(gridvals.T) < 1e-10), rgb=(0,255,255))
             plt.title('Splinesky grid values')
             ps.savefig()
-
-            # plt.clf()
-            # plt.imshow(gridvals,
-            #            interpolation='nearest', origin='lower',
-            #            vmin=-0.5*sig1, vmax=+0.5*sig1, cmap='gray')
-            # plt.colorbar()
-            # plt.title('Splinesky grid values')
-            # ps.savefig()
 
             skypix = np.zeros_like(img)
             skyobj.addTo(skypix)
@@ -2145,6 +2164,42 @@ class LegacySurveyImage(object):
         T.writeto(tmpfn)
         os.rename(tmpfn, self.skyfn)
         debug('Wrote sky model', self.skyfn)
+
+        if plots:
+            print('Reading sky model from output file')
+            skyobj = self.read_sky_model(old_calibs_ok=True, slc=slc)
+
+            skypix = np.zeros_like(img)
+            skyobj.addTo(skypix)
+
+            # "img" at this point has had template, stellar halos, and SGA models subtracted
+            if sub_galaxies is not None:
+                # re-add the SGA model
+                img += galmod
+
+            plt.clf()
+            self.imshow(skypix - initsky, **ima)
+            plt.colorbar()
+            plt.title('Sky model - John (read from file)')
+            ps.savefig()
+
+            plt.clf()
+            self.imshow((img - skypix), **ima)
+            plt.colorbar()
+            plt.title('Image - Sky model (read from file)')
+            ps.savefig()
+
+            plt.clf()
+            self.imshow(skypix - initsky, **ima2)
+            plt.colorbar()
+            plt.title('Sky model - John (read from file)')
+            ps.savefig()
+
+            plt.clf()
+            self.imshow((img - skypix), **ima2)
+            plt.colorbar()
+            plt.title('Image - Sky model (read from file)')
+            ps.savefig()
 
     def get_tractor_sky_model(self, img, goodpix):
         boxsize = self.splinesky_boxsize
