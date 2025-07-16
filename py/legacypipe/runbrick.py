@@ -258,11 +258,11 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         record_event and record_event('stage_tims: starting calibs')
         kwa = dict(git_version=gitver, survey=survey,
                    old_calibs_ok=old_calibs_ok,
-                   survey_blob_mask=survey_blob_mask)
+                   survey_blob_mask=survey_blob_mask,
+                   ps=(ps if plots else None),
+                   splinesky=splinesky)
         if gaussPsf:
             kwa.update(psfex=False)
-        if splinesky:
-            kwa.update(splinesky=True)
         if not gaia_stars:
             kwa.update(gaia=False)
 
