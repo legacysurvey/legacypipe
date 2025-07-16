@@ -1322,11 +1322,7 @@ class LegacySurveyImage(object):
         Ti.xgrid = Ti.xgrid[:w]
         Ti.ygrid = Ti.ygrid[:h]
         skyclass = Ti.skyclass.strip()
-
-        if skyclass == 'tractor.splinesky.SplineSky':
-            clazz = LegacySplineSky
-        else:
-            clazz = get_class_from_name(skyclass)
+        clazz = get_class_from_name(skyclass)
         fromfits = getattr(clazz, 'from_fits_row')
         sky = fromfits(Ti)
         if slc is not None:
@@ -2331,20 +2327,6 @@ def psfex_single_to_merged(infn, expnum, ccdname):
     for k in ['chi2', 'polzero1', 'polzero2', 'polscal1', 'polscal2']:
         T.set(k, T.get(k).astype(np.float64))
     return T
-
-class LegacySplineSky(SplineSky):
-    @classmethod
-    def from_fits_row(cls, Ti):
-        gridvals = Ti.gridvals.copy()
-        # DR7 & previous don't have this...
-        if 'sky_med' in Ti.get_columns():
-            nswap = np.sum(gridvals == Ti.sky_med)
-            if nswap:
-                info('Swapping in SKY_JOHN values for', nswap, 'splinesky cells;', Ti.sky_med, '->', Ti.sky_john)
-            gridvals[gridvals == Ti.sky_med] = Ti.sky_john
-        sky = cls(Ti.xgrid, Ti.ygrid, gridvals, order=int(Ti.order))
-        sky.shift(Ti.x0, Ti.y0)
-        return sky
 
 # mixin
 class NormalizedPsf(object):
