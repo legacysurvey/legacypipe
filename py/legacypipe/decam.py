@@ -421,7 +421,7 @@ class DecamImage(CPImage):
              self.ccdname.strip() in ['S30'])):
             _,W = img.shape
             xbreak = W//2
-            skyobj = JumpSky.BlantonMethod(img, goodpix, boxsize, xbreak)
+            skyobj = JumpSky.BlantonMethod(img, goodpix, boxsize, xbreak, min_fraction=0.25)
         else:
             skyobj = SplineSky.BlantonMethod(img, goodpix, boxsize, min_fraction=0.25)
 
