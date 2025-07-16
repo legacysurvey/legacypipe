@@ -1361,13 +1361,15 @@ class LegacySurveyImage(object):
                     raise RuntimeError('Splinesky template version/run/scale %s/%s/%s does not match sky template %s/%s/%s, CCD %s' %
                                        (sver, srun, sscale, tver, trun, tscale, self.name))
 
-        # Remove any padding
-        h,w = Ti.gridh, Ti.gridw
-        Ti.gridvals = Ti.gridvals[:h, :w]
-        Ti.xgrid = Ti.xgrid[:w]
-        Ti.ygrid = Ti.ygrid[:h]
         skyclass = Ti.skyclass.strip()
         clazz = get_class_from_name(skyclass)
+        from tractor.splinesky import SplineSky
+        if isinstance(clazz, SplineSky):
+            # Remove any padding
+            h,w = Ti.gridh, Ti.gridw
+            Ti.gridvals = Ti.gridvals[:h, :w]
+            Ti.xgrid = Ti.xgrid[:w]
+            Ti.ygrid = Ti.ygrid[:h]
         fromfits = getattr(clazz, 'from_fits_row')
         sky = fromfits(Ti)
         if slc is not None:
@@ -1674,32 +1676,6 @@ class LegacySurveyImage(object):
 
         sky_median = np.median(img[good])
 
-        if not splinesky:
-            #### Constant sky -- This code branch has not been tested recently...
-            from tractor.sky import ConstantSky
-            if sky_mode != 0.:
-                skyval = sky_mode
-                skymeth = 'mode'
-            else:
-                skyval = sky_median
-                skymeth = 'median'
-            tsky = ConstantSky(skyval)
-            primhdr.add_record(dict(name='SKYMETH', value=skymeth,
-                                comment='estimate_mode, or fallback to median?'))
-            sig1 = 1./np.sqrt(np.median(wt[wt>0]))
-            masked = (img - skyval) > (5.*sig1)
-            masked = binary_dilation(masked, iterations=3)
-            masked[wt == 0] = True
-            primhdr.add_record(dict(name='SIG1', value=sig1,
-                                comment='Median stdev of unmasked pixels'))
-            trymakedirs(self.skyfn, dir=True)
-            tmpfn = os.path.join(os.path.dirname(self.skyfn),
-                             'tmp-' + os.path.basename(self.skyfn))
-            tsky.write_fits(tmpfn, hdr=primhdr)
-            os.rename(tmpfn, self.skyfn)
-            debug('Wrote sky model', self.skyfn)
-            return
-
         # Splinesky
         from scipy.ndimage.filters import uniform_filter
         from scipy.stats import sigmaclip
@@ -1735,6 +1711,67 @@ class LegacySurveyImage(object):
         initsky = sky_john
         if initsky == 0.0:
             initsky = sky_clipped_median
+
+        print('run_sky: splinesky =', splinesky)
+        if not splinesky:
+            #### Constant sky -- This code branch has not been tested recently...
+            from tractor.sky import ConstantSky
+            # if sky_mode != 0.:
+            #     skyval = sky_mode
+            #     skymeth = 'mode'
+            # else:
+            #     skyval = sky_median
+            #     skymeth = 'median'
+            skymeth = 'john'
+            skyval = sky_john
+
+            tsky = ConstantSky(skyval)
+            primhdr.add_record(dict(name='SKYMETH', value=skymeth,
+                                comment='estimate_mode, or fallback to median?'))
+            sig1 = 1./np.sqrt(np.median(wt[wt>0]))
+            masked = (img - skyval) > (5.*sig1)
+            masked = binary_dilation(masked, iterations=3)
+            masked[wt == 0] = True
+            primhdr.add_record(dict(name='SIG1', value=sig1,
+                                comment='Median stdev of unmasked pixels'))
+
+            T = tsky.to_fits_table()
+            for k,v,tofloat in ([
+                    ('expnum', self.expnum, False),
+                    ('ccdname', self.ccdname, False),
+                    ('legpipev', git_version, False),
+                    ('plver',    plver, False),
+                    ('plprocid', plprocid, False),
+                    ('procdate', procdate, False),
+                    ('imgdsum',  datasum, False),
+                    ('sig1', sig1, True),
+                    ('templ_ver', template_meta.get('version', -1), False),
+                    ('templ_run', template_meta.get('run', -1), False),
+                    ('templ_scale', template_meta.get('scale', 0.), True),
+                    #('halo_zpt', halozpt, False),
+                    #('blob_masked', blobmasked, False),
+                    #('sub_sga_ver', sub_sga_version, False),
+                    ('sky_mode', sky_mode, True),
+                    ('sky_med', sky_median, False),
+                    ('sky_cmed', sky_clipped_median, False),
+                    ('sky_john', sky_john, False),
+                    #('sky_fine', fine_rms),
+                    #('sky_fmasked', fmasked, True),
+            ]# + [('sky_p%i' % p, v, True) for p,v in zip(pcts, pctvals)]
+                                ):
+                arr = np.array([v])
+                if tofloat:
+                    arr = arr.astype(np.float32)
+                T.set(k, arr)
+
+            trymakedirs(self.skyfn, dir=True)
+            tmpfn = os.path.join(os.path.dirname(self.skyfn),
+                             'tmp-' + os.path.basename(self.skyfn))
+            #tsky.write_fits(tmpfn, hdr=primhdr)
+            T.writeto(tmpfn, primheader=primhdr)
+            os.rename(tmpfn, self.skyfn)
+            debug('Wrote sky model', self.skyfn)
+            return
 
         # Wait until after we have 'initsky' to make the first plots...
         if plots:
