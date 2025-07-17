@@ -14,8 +14,6 @@ import astropy.units as u
 from importlib.resources import files
 import sys
 
-sys.path.append("/Users/arielamsellem/Desktop/missing_PNe/legacypipe/")
-
 # import desimodel.io
 # import desimodel.footprint
 # tiles = desimodel.io.load_tiles(onlydesi=True)
