@@ -131,6 +131,10 @@ if False:  # debugging
 # Read in the HASH catalog
 hash_file = files("legacypipe").joinpath("data/HASH_PNe_geometry.csv")
 hash_tab = pd.read_csv(hash_file, index_col=0)
+# Add HASH catalog objects that are outside the DR10 footprint
+hash_noimage_file = files("legacypipe").joinpath("data/HASH_PNe_outside_footprint.csv")
+noimage_tab = pd.read_csv(hash_noimage_file, index_col=0)
+hash_tab = pd.concat([hash_tab, noimage_tab], axis=0)
 
 # Separate the OpenNGC objects into PNe and GCls
 out_pne = out[out["type"] == "PN"]
@@ -186,6 +190,10 @@ rne_tab_keep = rne_tab[["name", "alt_name", "type", "ra", "dec", "radius", "pa",
 rne_tab_keep = Table.from_pandas(rne_tab_keep)
 
 # Combine all clusters, PNe, and RNe into a single table
+print(f"Using {len(out_gcl)} globular clusters found in OpenNGC.")
+print(f"Using {len(out_pne)} planetary nebulae found in OpenNGC.")
+print(f"Using {len(hash_tab_keep)} planetary nebulae found in HASH.")
+print(f"Using {len(rne_tab_keep)} reflection nebulae found at HEASARC.")
 out = ap_vstack([out_gcl, out_pne, hash_tab_keep, rne_tab_keep])
 
 # Make a minimum size cut on all objects of 10 arcseconds in radius
