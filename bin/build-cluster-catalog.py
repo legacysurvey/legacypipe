@@ -23,11 +23,11 @@ sys.path.append("/Users/arielamsellem/Desktop/missing_PNe/legacypipe/")
 # Grab newest NGC catalog and its addendum
 if not os.path.isfile("/tmp/NGC.csv"):
     os.system(
-        "wget -P /tmp https://raw.githubusercontent.com/mattiaverga/OpenNGC/refs/heads/master/database_files/NGC.csv"
+        "wget -P /tmp https://raw.githubusercontent.com/mattiaverga/OpenNGC/refs/tags/v20231203/database_files/NGC.csv"
     )
 if not os.path.isfile("/tmp/addendum.csv"):
     os.system(
-        "wget -P /tmp https://raw.githubusercontent.com/mattiaverga/OpenNGC/refs/heads/master/database_files/addendum.csv"
+        "wget -P /tmp https://raw.githubusercontent.com/mattiaverga/OpenNGC/refs/tags/v20231203/database_files/addendum.csv"
     )
 
 NGC = ascii.read("/tmp/NGC.csv", delimiter=";")
