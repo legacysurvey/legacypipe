@@ -834,11 +834,7 @@ class LegacySurveyImage(object):
                 plt.title('Image - Sky')
                 from scipy.ndimage import median_filter
                 plt.subplot(2,3,4)
-                import time
-                t0 = time.time()
                 mimg = median_filter(img, 9)
-                t1 = time.time()
-                print('Median filtering image took', t1-t0, 'sec')
                 plt.imshow(mimg - midsky, **ima2)
                 plt.title('Image (median filt)')
                 plt.subplot(2,3,5)
@@ -1784,16 +1780,19 @@ class LegacySurveyImage(object):
             ima = dict(interpolation='nearest', origin='lower',
                        vmin=-2.*sig1, vmax=+5.*sig1, cmap='gray')
             ima2 = dict(interpolation='nearest', origin='lower',
-                        vmin=-0.5*sig1,vmax=+0.5*sig1,cmap='gray')
+                        vmin=-0.5*sig1,vmax=+1.25*sig1,cmap='gray')
 
             plt.clf()
             self.imshow(img - initsky + timg, **ima)
             plt.colorbar()
             plt.title('Image %s-%i-%s %s' % (self.camera, self.expnum,
                                              self.ccdname, self.band))
+            from scipy.ndimage import median_filter
+            mf_size = 9
+            median_img = median_filter(img, mf_size)
             ps.savefig()
             plt.clf()
-            self.imshow(img - initsky + timg, **ima2)
+            self.imshow(median_img - initsky + timg, **ima2)
             plt.colorbar()
             plt.title('Image %s-%i-%s %s' % (self.camera, self.expnum,
                                              self.ccdname, self.band))
@@ -1807,7 +1806,7 @@ class LegacySurveyImage(object):
                                                             self.ccdname, self.band))
                 ps.savefig()
                 plt.clf()
-                self.imshow(img - initsky, **ima2)
+                self.imshow(median_img - initsky, **ima2)
                 plt.colorbar()
                 plt.title('Image minus sky template for %s-%i-%s %s' % (self.camera, self.expnum,
                                                                         self.ccdname, self.band))
@@ -1906,7 +1905,7 @@ class LegacySurveyImage(object):
                 ps.savefig()
 
                 plt.clf()
-                self.imshow(img - galmod - initsky, **ima2)
+                self.imshow(median_img - median_filter(galmod, mf_size) - initsky, **ima2)
                 plt.colorbar()
                 plt.title('Image with SGA galaxies subtracted')
                 ps.savefig()
@@ -1946,7 +1945,7 @@ class LegacySurveyImage(object):
                     plt.title('Star halos to subtract')
                     ps.savefig()
                     plt.clf()
-                    self.imshow(img - haloimg - initsky, **ima2)
+                    self.imshow(median_filter(img - haloimg, mf_size) - initsky, **ima2)
                     plt.colorbar()
                     plt.title('Star halos subtracted')
                     ps.savefig()
@@ -2061,7 +2060,7 @@ class LegacySurveyImage(object):
 
             if boxcar_mask:
                 plt.clf()
-                self.imshow((img - initsky)*boxcargood, **ima2)
+                self.imshow((median_img - initsky)*boxcargood, **ima2)
                 plt.colorbar()
                 self.plot_mask(np.logical_not(boxcargood))
                 plt.title('Image (boxcar masked)')
@@ -2072,21 +2071,21 @@ class LegacySurveyImage(object):
 
             if survey_blob_mask is not None:
                 plt.clf()
-                self.imshow((img - initsky)*blobgood, **ima2)
+                self.imshow((median_img - initsky)*blobgood, **ima2)
                 plt.colorbar()
                 self.plot_mask(np.logical_not(blobgood))
                 plt.title('Image (blob masked)')
                 ps.savefig()
 
             plt.clf()
-            self.imshow((img - initsky)*refgood, **ima2)
+            self.imshow((median_img - initsky)*refgood, **ima2)
             plt.colorbar()
             self.plot_mask(np.logical_not(refgood))
             plt.title('Image (reference masked)')
             ps.savefig()
 
             plt.clf()
-            self.imshow((img - initsky)*(refgood * good), **ima2)
+            self.imshow((median_img - initsky)*(refgood * good), **ima2)
             plt.colorbar()
             self.plot_mask(np.logical_not((refgood * good)))
             plt.title('Image (all masked)')
@@ -2103,7 +2102,7 @@ class LegacySurveyImage(object):
             plt.axis(ax)
             ps.savefig()
 
-            self.imshow((img - initsky) * boxcargood * blobgood * refgood, **ima2)
+            self.imshow((median_img - initsky) * boxcargood * blobgood * refgood, **ima2)
             plt.title('Unmasked pixels')
             ps.savefig()
 
@@ -2131,6 +2130,24 @@ class LegacySurveyImage(object):
             plt.title('Sky model')
             ps.savefig()
 
+            # "img" at this point has had template, stellar halos, and SGA models subtracted
+            gmod = 0.
+            if sub_galaxies is not None:
+                # re-add the SGA model
+                gmod = galmod
+
+            plt.clf()
+            self.imshow(median_filter(img + gmod, mf_size) - skypix, **ima2)
+            plt.colorbar()
+            plt.title('Image - Sky model')
+            ps.savefig()
+
+            plt.clf()
+            self.imshow((img + gmod - skypix), **ima)
+            plt.colorbar()
+            plt.title('Image - Sky model')
+            ps.savefig()
+
             # skypix2 = np.zeros_like(img)
             # fineskyobj.addTo(skypix2)
             # plt.clf()
@@ -2138,69 +2155,69 @@ class LegacySurveyImage(object):
             # plt.title('Fine sky model')
             # ps.savefig()
 
-            plt.clf()
-            self.imshow((img - skypix), **ima2)
-            plt.colorbar()
-            plt.title('Image - Sky model')
-            ps.savefig()
-
-            plt.clf()
-            self.imshow((img - skypix), **ima)
-            plt.colorbar()
-            plt.title('Image - Sky model')
-            ps.savefig()
-
-            allgood = boxcargood * blobgood * refgood
-            h,w = img.shape
-            skyresid = img - skypix
-            rowmed = np.zeros(h)
-            for i in range(h):
-                rowmed[i] = np.median(skyresid[i,:][allgood[i,:]])
-            colmed = np.zeros(w)
-            for i in range(w):
-                colmed[i] = np.median(skyresid[:,i][allgood[:,i]])
-            plt.clf()
-            plt.subplot(2,1,1)
-            plt.plot(rowmed, 'k-')
-            plt.title('Row-wise median')
-            plt.subplot(2,1,2)
-            plt.plot(colmed, 'k-')
-            plt.title('Column-wise median')
-            plt.suptitle('masked image - sky model')
-            ps.savefig()
-
-            #(wt > 0)
-            isgoodrows = np.any(wt>0, axis=1)
-            isgoodcols = np.any(wt>0, axis=0)
-            goodrows = np.flatnonzero(isgoodrows)
-            goodcols = np.flatnonzero(isgoodcols)
-
-            plt.clf()
-            plt.subplot(2,1,1)
-            plt.plot(goodrows, np.median(img, axis=1)[isgoodrows], 'b-')
-            plt.plot(np.median(skypix, axis=1), 'r-')
-            plt.title('Row-wise median')
-            plt.subplot(2,1,2)
-            plt.plot(goodcols, np.median(img, axis=0)[isgoodcols], 'b-')
-            plt.plot(np.median(skypix, axis=0), 'r-')
-            plt.title('Column-wise median')
-            plt.suptitle('Unmasked image (blue) and sky (red) model')
-            ps.savefig()
-
-            plt.clf()
-            plt.subplot(2,1,1)
-            plt.plot(goodrows, (1. - np.sum(allgood, axis=1) / len(goodcols))[isgoodrows], 'k-')
-            plt.title('Row-wise')
-            plt.subplot(2,1,2)
-            plt.plot(goodcols, (1. - np.sum(allgood, axis=0) / len(goodrows))[isgoodcols], 'k-')
-            plt.title('Column-wise')
-            plt.suptitle('Fraction of masked pixels')
-            ps.savefig()
-
-            plt.clf()
-            plt.hist((img[good * refgood] - initsky).ravel(), bins=50)
-            plt.title('Unmasked pixels')
-            ps.savefig()
+            # plt.clf()
+            # self.imshow((img - skypix), **ima2)
+            # plt.colorbar()
+            # plt.title('Image - Sky model')
+            # ps.savefig()
+            # 
+            # plt.clf()
+            # self.imshow((img - skypix), **ima)
+            # plt.colorbar()
+            # plt.title('Image - Sky model')
+            # ps.savefig()
+            # 
+            # allgood = boxcargood * blobgood * refgood
+            # h,w = img.shape
+            # skyresid = img - skypix
+            # rowmed = np.zeros(h)
+            # for i in range(h):
+            #     rowmed[i] = np.median(skyresid[i,:][allgood[i,:]])
+            # colmed = np.zeros(w)
+            # for i in range(w):
+            #     colmed[i] = np.median(skyresid[:,i][allgood[:,i]])
+            # plt.clf()
+            # plt.subplot(2,1,1)
+            # plt.plot(rowmed, 'k-')
+            # plt.title('Row-wise median')
+            # plt.subplot(2,1,2)
+            # plt.plot(colmed, 'k-')
+            # plt.title('Column-wise median')
+            # plt.suptitle('masked image - sky model')
+            # ps.savefig()
+            # 
+            # #(wt > 0)
+            # isgoodrows = np.any(wt>0, axis=1)
+            # isgoodcols = np.any(wt>0, axis=0)
+            # goodrows = np.flatnonzero(isgoodrows)
+            # goodcols = np.flatnonzero(isgoodcols)
+            # 
+            # plt.clf()
+            # plt.subplot(2,1,1)
+            # plt.plot(goodrows, np.median(img, axis=1)[isgoodrows], 'b-')
+            # plt.plot(np.median(skypix, axis=1), 'r-')
+            # plt.title('Row-wise median')
+            # plt.subplot(2,1,2)
+            # plt.plot(goodcols, np.median(img, axis=0)[isgoodcols], 'b-')
+            # plt.plot(np.median(skypix, axis=0), 'r-')
+            # plt.title('Column-wise median')
+            # plt.suptitle('Unmasked image (blue) and sky (red) model')
+            # ps.savefig()
+            # 
+            # plt.clf()
+            # plt.subplot(2,1,1)
+            # plt.plot(goodrows, (1. - np.sum(allgood, axis=1) / len(goodcols))[isgoodrows], 'k-')
+            # plt.title('Row-wise')
+            # plt.subplot(2,1,2)
+            # plt.plot(goodcols, (1. - np.sum(allgood, axis=0) / len(goodrows))[isgoodcols], 'k-')
+            # plt.title('Column-wise')
+            # plt.suptitle('Fraction of masked pixels')
+            # ps.savefig()
+            # 
+            # plt.clf()
+            # plt.hist((img[good * refgood] - initsky).ravel(), bins=50)
+            # plt.title('Unmasked pixels')
+            # ps.savefig()
 
         if slc is not None:
             sy,sx = slc
@@ -2242,42 +2259,6 @@ class LegacySurveyImage(object):
         T.writeto(tmpfn)
         os.rename(tmpfn, self.skyfn)
         debug('Wrote sky model', self.skyfn)
-
-        if plots:
-            print('Reading sky model from output file')
-            skyobj = self.read_sky_model(old_calibs_ok=True, slc=slc)
-
-            skypix = np.zeros_like(img)
-            skyobj.addTo(skypix)
-
-            # "img" at this point has had template, stellar halos, and SGA models subtracted
-            if sub_galaxies is not None:
-                # re-add the SGA model
-                img += galmod
-
-            plt.clf()
-            self.imshow(skypix - initsky, **ima)
-            plt.colorbar()
-            plt.title('Sky model - John (read from file)')
-            ps.savefig()
-
-            plt.clf()
-            self.imshow((img - skypix), **ima)
-            plt.colorbar()
-            plt.title('Image - Sky model (read from file)')
-            ps.savefig()
-
-            plt.clf()
-            self.imshow(skypix - initsky, **ima2)
-            plt.colorbar()
-            plt.title('Sky model - John (read from file)')
-            ps.savefig()
-
-            plt.clf()
-            self.imshow((img - skypix), **ima2)
-            plt.colorbar()
-            plt.title('Image - Sky model (read from file)')
-            ps.savefig()
 
     def get_tractor_sky_model(self, img, goodpix):
         boxsize = self.splinesky_boxsize
