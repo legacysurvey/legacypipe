@@ -164,7 +164,7 @@ hash_tab["alt_name"] = "--"
 hash_tab["type"] = "PN"
 hash_tab["radius"] = hash_tab["major_axis"] / 2
 # Uniformly inflate all HASH PNe radii by 15%
-hash_tab["radius"] *= 1.15
+# hash_tab["radius"] *= 1.15
 hash_tab_keep = hash_tab[
     ["name", "alt_name", "type", "ra", "dec", "radius", "pa", "ba"]
 ]
