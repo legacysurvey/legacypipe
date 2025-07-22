@@ -68,6 +68,7 @@ def runbrick_global_init():
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                survey=None,
                survey_blob_mask=None,
+               sky_subtract_large_galaxies=True,
                ra=None, dec=None,
                release=None,
                plots=False, ps=None,
@@ -258,7 +259,8 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         record_event and record_event('stage_tims: starting calibs')
         kwa = dict(git_version=gitver, survey=survey,
                    old_calibs_ok=old_calibs_ok,
-                   survey_blob_mask=survey_blob_mask)
+                   survey_blob_mask=survey_blob_mask,
+                   subtract_largegalaxies=sky_subtract_large_galaxies)
         if gaussPsf:
             kwa.update(psfex=False)
         if splinesky:
@@ -3456,6 +3458,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               lanczos=True,
               blob_image=False,
               blob_mask=False,
+              sky_subtract_large_galaxies=True,
               minimal_coadds=False,
               do_calibs=True,
               old_calibs_ok=False,
@@ -3716,6 +3719,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   blob_dilate=blob_dilate,
                   subsky_radii=subsky_radii,
                   survey_blob_mask=survey_blob_mask,
+                  sky_subtract_large_galaxies=sky_subtract_large_galaxies,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
                   release=release,
                   normalizePsf=normalizePsf,
@@ -4136,6 +4140,11 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='With --stage image_coadds, also run the "blobmask" stage?')
     parser.add_argument('--minimal-coadds', action='store_true', default=False,
                         help='Only create image and invvar coadds in image_coadds stage')
+
+    parser.add_argument('--sky-no-subtract-large-galaxies',
+                        dest='sky_subtract_large_galaxies',
+                        default=True, action='store_false',
+                        help='For sky calibs: do not subtract large galaxies first')
 
     parser.add_argument(
         '--no-lanczos', dest='lanczos', action='store_false', default=True,
