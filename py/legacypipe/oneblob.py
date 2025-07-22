@@ -79,7 +79,7 @@ def one_blob(X):
                  iterative_nsigma)
     B = ob.init_table(Isrcs)
     B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
-        ob.finalize_table(B, bx0, by0)
+    ob.finalize_table(B, bx0, by0)
 
     t1 = time.process_time()
     B.cpu_blob = np.empty(len(B), np.float32)
