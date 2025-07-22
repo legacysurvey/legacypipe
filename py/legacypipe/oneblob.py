@@ -18,7 +18,6 @@ from legacypipe.bits import IN_BLOB
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 from legacypipe.utils import get_cpu_arch
-
 from legacypipe.utils import run_ps
 
 rgbkwargs_resid = dict(resids=True)
@@ -44,7 +43,7 @@ def one_blob(X):
     if X is None:
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
-     srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap,
+     srcs, bands, plots, ps, reoptimize, iterative, iterative_nsigma, use_ceres, refmap,
      large_galaxies_force_pointsource, less_masking, frozen_galaxies) = X
 
     debug('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
@@ -76,10 +75,11 @@ def one_blob(X):
     ob = OneBlob(nblob, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
-                 less_masking, frozen_galaxies)
+                 less_masking, frozen_galaxies,
+                 iterative_nsigma)
     B = ob.init_table(Isrcs)
     B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
-    ob.finalize_table(B, bx0, by0)
+        ob.finalize_table(B, bx0, by0)
 
     t1 = time.process_time()
     B.cpu_blob = np.empty(len(B), np.float32)
@@ -91,7 +91,8 @@ class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
-                 less_masking, frozen_galaxies):
+                 less_masking, frozen_galaxies,
+                 iterative_nsigma):
         self.name = name
         self.blobwcs = blobwcs
         self.pixscale = self.blobwcs.pixel_scale()
@@ -110,6 +111,7 @@ class OneBlob(object):
         self.deblend = False
         self.large_galaxies_force_pointsource = large_galaxies_force_pointsource
         self.less_masking = less_masking
+        self.iterative_nsigma = iterative_nsigma
         self.tims = create_tims(self.blobwcs, self.blobmask, timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
         self.plots2 = False
@@ -862,13 +864,12 @@ class OneBlob(object):
         avoid_x = Bold.safe_x0
         avoid_y = Bold.safe_y0
         avoid_r = np.zeros(len(avoid_x), np.float32) + 2.
-        nsigma = 6.
         avoid_map = (self.refmap != 0)
 
         Tnew,_,_ = run_sed_matched_filters(
             SEDs, self.bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r),
-            self.blobwcs, nsigma=nsigma, saturated_pix=satmaps, veto_map=avoid_map,
-            plots=False, ps=None, mp=mp)
+            self.blobwcs, nsigma=self.iterative_nsigma, saturated_pix=satmaps,
+            veto_map=avoid_map, plots=False, ps=None, mp=mp)
 
         detlogger.setLevel(detloglvl)
 
