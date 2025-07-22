@@ -131,6 +131,15 @@ class ClaudsTestData4(LegacySurveyData):
         print('CLAUDS test #4: cutting CCDs to %i of %i on EXPNUM' % (len(I), len(ccds)))
         return ccds[I]
 
+class Dr11Test1(LegacySurveyData):
+    def filter_ccds(self, ccds):
+        import numpy as np
+        # Brick 0301m040,
+        I = np.flatnonzero(np.isin(ccds.expnum, [247958, 400372, 388167, 390912]) *
+                           (ccds.ccdname == 'S31'))
+        print('DR11 test #1: cutting CCDs to %i of %i on EXPNUM & CCDNAME' % (len(I), len(ccds)))
+        return ccds[I]
+
 class RerunWithCcds(LegacySurveyData):
     def get_brick_by_name(self, brickname):
         # BRUTAL HACK -- runbrick.py's stage_tims first calls
@@ -167,6 +176,7 @@ runs = {
     'clauds-test-2': ClaudsTestData2,
     'clauds-test-3': ClaudsTestData3,
     'clauds-test-4': ClaudsTestData4,
+    'dr11-test-1': Dr11Test1,
     None: LegacySurveyData,
 }
 
