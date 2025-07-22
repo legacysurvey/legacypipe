@@ -12,6 +12,7 @@ import fitsio
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
 from astrometry.util.ttime import Time
+from astrometry.libkd.spherematch import match_radec
 
 from tractor import Tractor, Catalog
 from tractor.galaxy import disable_galaxy_cache
@@ -422,20 +423,20 @@ def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None,
     T._header = TT[0]._header
     del TT
 
-    SGA = find_missing_sga(T, chipwcs, survey, surveys, columns)
+    SGA = find_missing_sga(T, chipwcs, survey, surveys, columns, bands=bands)
     if SGA is not None:
         ## Add 'em in!
         T = merge_tables([T, SGA], columns='fillzero')
     print('Total of', len(T), 'catalog sources')
     return T
 
-def find_missing_sga(T, chipwcs, survey, surveys, columns):
+def find_missing_sga(T, chipwcs, survey, surveys, columns, bands=None):
     # Look up SGA large galaxies touching this chip.
     # The ones inside this chip(+margin) will already exist in the catalog;
     # we'll find the ones we're missing and read those extra brick catalogs.
     from legacypipe.reference import read_large_galaxies
     # Find all the SGA sources we need
-    sga = read_large_galaxies(survey, chipwcs, bands=None, extra_columns=['brickname'])
+    sga = read_large_galaxies(survey, chipwcs, bands=bands, extra_columns=['brickname'])
     if sga is None:
         print('No SGA galaxies found')
         return None
@@ -451,22 +452,30 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     sga.cut((xx > -keeprad) * (xx < W+keeprad) *
             (yy > -keeprad) * (yy < H+keeprad))
     print('Found', len(sga), 'SGA galaxies touching the chip.')
-    print('ref_ids', sga.ref_id)
     if len(sga) == 0:
         print('No SGA galaxies touch this chip')
         return None
     Tsga = T[T.ref_cat == 'L3']
-    print(len(Tsga), 'SGA entries already exist in catalog (ref_ids', Tsga.ref_id, ')')
-    Isga = np.array([i for i,sga_id in enumerate(sga.ref_id) if not sga_id in set(Tsga.ref_id)])
-    #assert(len(Isga) + len(Tsga) == len(sga))
+    print(len(Tsga), 'SGA entries already exist in catalog')
+
+    match_radius = 0.1/3600.
+    I,J,d = match_radec(sga.ra, sga.dec, Tsga.ra, Tsga.dec, match_radius, nearest=True)
+    print('Matched', len(I), 'from SGA to this brick catalog')
+    Isga = np.ones(len(sga), bool)
+    Isga[I] = False
+    Isga = np.flatnonzero(Isga)
+
     if len(Isga) == 0:
         print('All SGA galaxies already in catalogs')
         return None
     print('Finding', len(Isga), 'additional SGA entries in nearby bricks')
     sga.cut(Isga)
-    #print('Finding bricks to read...')
-    sgabricks = []
 
+    # This whole paragraph is just finding the bricks that will contain the galaxies in "sga".
+    # This *can* end up re-reading the same brick we're currently in, if for whatever reason
+    # an SGA galaxy in the middle of a brick gets dropped from the catalog
+    # (eg https://www.legacysurvey.org/viewer/?ra=34.0982&dec=31.9931&layer=ls-dr9&zoom=14&sga)
+    sgabricks = []
     for ra,dec,brick in zip(sga.ra, sga.dec, sga.brickname):
         bricks = survey.get_bricks_by_name(brick)
         # The SGA catalog has a "brickname", but it unfortunately is not always exactly correct...
@@ -489,7 +498,8 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     sgabricks = merge_tables(sgabricks)
     _,I = np.unique(sgabricks.brickname, return_index=True)
     sgabricks.cut(I)
-    print('Need to read', len(sgabricks), 'bricks to pick up SGA sources')
+
+    print('Need to read', len(sgabricks), 'bricks to pick up missing SGA sources')
     SGA = []
     for brick in sgabricks.brickname:
         # For picking up these SGA bricks, resolve doesn't matter (they're fixed
@@ -510,11 +520,45 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     print('Read a total of', len(SGA), 'SGA entries in brick_primary')
     if len(SGA) == 0:
         return None
-    I = np.array([i for i,ref_id in enumerate(SGA.ref_id) if ref_id in set(sga.ref_id)])
-    SGA.cut(I)
-    print('Found', len(SGA), 'desired SGA sources')
-    assert(len(sga) == len(SGA))
-    assert(set(sga.ref_id) == set(SGA.ref_id))
+
+    I,J,d = match_radec(sga.ra, sga.dec, SGA.ra, SGA.dec, match_radius, nearest=True)
+    print('Matched', len(I), 'desired SGA source(s)')
+    SGA.cut(J)
+
+    # This can *still* fail to find some (eg, the link given above).
+    unmatched = np.ones(len(sga), bool)
+    unmatched[I] = False
+    if np.any(unmatched):
+        print(np.sum(unmatched), 'SGA entries still not found.')
+        srcs = sga.sources[unmatched]
+        #for src in srcs:
+        #    print('Source:', src)
+        # create fake catalog entries??
+        # The sources aren't created if bands=None
+        if srcs[0] is not None:
+            from legacypipe.catalog import prepare_fits_catalog
+            from tractor import Catalog
+            srcs = list(srcs)
+            srcs = Catalog(*srcs)
+            fake_sga = prepare_fits_catalog(srcs, None, None, bands)
+            # expand the flux array...
+            for i,band in enumerate(bands):
+                fake_sga.set('flux_%s' % band, fake_sga.flux[:,i])
+            fake_sga.brick_primary = np.zeros(len(fake_sga), bool)
+            #print('Fake SGA catalog:')
+            #fake_sga.about()
+
+            if len(SGA):
+                #print('Normal SGA catalog:')
+                #SGA.about()
+                SGA = merge_tables([SGA, fake_sga], columns='fillzero')
+            else:
+                SGA = fake_sga
+    else:
+        assert(len(sga) == len(SGA))
+        assert(set(sga.ref_id) == set(SGA.ref_id))
+    #print('Returning SGA catalog:')
+    #SGA.about()
     return SGA
 
 def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,

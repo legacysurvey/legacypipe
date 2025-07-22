@@ -13,7 +13,7 @@ export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
 #export CACHE_DIR=/global/cscratch1/sd/dstn/dr10-cache
 #outdir=$LEGACY_SURVEY_DIR/zpt
 #outdir=$SCRATCH/zpt-dr11
-outdir=$SCRATCH/dr11/zpt
+outdir=$SCRATCH/dr11-old/zpt
 
 # NOTE: if you only want to regenerate sky calibs, MUST create a symlink
 # in $LSD/calib/psfex, eg to
@@ -43,8 +43,8 @@ export TYCHO2_KD_DIR=$COSMO_RO/staging/tycho2
 export LARGEGALAXIES_CAT=$COSMO_RO/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
 export PS1CAT_DIR=$COSMO_RO/work/ps1/cats/chunks-qz-star-v3
 
-#export SKY_TEMPLATE_DIR=/global/cfs/cdirs/cosmo/data/legacysurvey/dr9/calib/sky_pattern
-unset SKY_TEMPLATE_DIR
+export SKY_TEMPLATE_DIR=$COSMO_RO/data/legacysurvey/dr10/calib/sky_pattern
+#unset SKY_TEMPLATE_DIR
 unset BLOB_MASK_DIR
 
 # Don't add ~/.local/ to Python's sys.path
@@ -92,9 +92,8 @@ logdir=$(dirname $log)
 mkdir -p $logdir
 echo "Logging to $log"
 
-
-export LEGACYPIPE_DIR=.
-export PYTHONPATH=.:${PYTHONPATH}
+#export LEGACYPIPE_DIR=.
+#export PYTHONPATH=.:${PYTHONPATH}
 
 # TURN OFF -u for production!
 
@@ -105,7 +104,6 @@ python -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
     --outdir ${outdir} \
     --threads 32 \
     >> "$log" 2>&1
-
 
 #    --cache-dir ${CACHE_DIR} \
 #    --prime-cache \
