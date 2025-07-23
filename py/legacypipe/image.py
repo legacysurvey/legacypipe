@@ -635,7 +635,8 @@ class LegacySurveyImage(object):
                           no_remap_invvar=False,
                           constant_invvar=False,
                           old_calibs_ok=False,
-                          trim_edges=True):
+                          trim_edges=True,
+                          plots=False, ps=None):
         '''
         Returns a tractor.Image ("tim") object for this image.
 
@@ -814,6 +815,67 @@ class LegacySurveyImage(object):
         orig_sky = sky
         if subsky:
             from tractor.sky import ConstantSky
+
+            if plots:
+                zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
+                s = self.sig1 * zpscale
+                ima = dict(interpolation='nearest', origin='lower', vmin=-2.*s, vmax=+5.*s)
+                ima2 = dict(interpolation='nearest', origin='lower', vmin=-0.5*s, vmax=+1.25*s)
+                import pylab as plt
+                plt.clf()
+                plt.subplot(2,3,1)
+                plt.imshow(img - midsky, **ima)
+                plt.title('Image')
+                plt.subplot(2,3,2)
+                plt.imshow(skymod - midsky, **ima)
+                plt.title('Sky')
+                plt.subplot(2,3,3)
+                plt.imshow(img - skymod, **ima)
+                plt.title('Image - Sky')
+                from scipy.ndimage import median_filter
+                plt.subplot(2,3,4)
+                mimg = median_filter(img, 9)
+                plt.imshow(mimg - midsky, **ima2)
+                plt.title('Image (median filt)')
+                plt.subplot(2,3,5)
+                plt.imshow(skymod - midsky, **ima2)
+                plt.title('Sky')
+                plt.subplot(2,3,6)
+                plt.imshow(mimg - skymod, **ima2)
+                plt.title('Image - Sky (median filt)')
+                plt.suptitle(self.name + ' expnum %i' % self.expnum)
+                ps.savefig()
+
+                from tractor.splinesky import SplineSky
+                if isinstance(sky, SplineSky):
+                    grid = sky.get_grid()
+                    print('grid shape', grid.shape)
+                    print('xgrid:', sky.xgrid.shape)
+                    print('ygrid:', sky.ygrid.shape)
+                    mid = np.median(grid.ravel())
+                    scale = grid.max() - grid.min()
+                    plt.clf()
+                    h,w = img.shape
+                    plt.subplot(2,1,1)
+                    xx = np.arange(sky.xgrid[0]+1, sky.xgrid[-1])
+                    for i,y in enumerate(sky.ygrid):
+                        print('y grid point', y)
+                        plt.plot(xx, i + (sky.spl(xx, y)[:,0] - mid)/scale, '-')
+                        plt.plot(sky.xgrid, i + (grid[i,:] - mid)/scale, 'o')
+                    plt.axvline(sky.x0, color='r', linestyle='--')
+                    plt.axvline(sky.x0+w, color='r', linestyle='--')
+                    plt.title('x slices')
+                    plt.subplot(2,1,2)
+                    yy = np.arange(sky.ygrid[0]+1, sky.ygrid[-1])
+                    for i,x in enumerate(sky.xgrid):
+                        print('x grid point', x)
+                        plt.plot(yy, i + (sky.spl(x, yy)[0,:] - mid)/scale, '-')
+                        plt.plot(sky.ygrid, i + (grid[:,i] - mid)/scale, 'o')
+                    plt.axvline(sky.y0, color='r', linestyle='--')
+                    plt.axvline(sky.y0+h, color='r', linestyle='--')
+                    plt.title('y slices')
+                    ps.savefig()
+
             debug('Instantiating and subtracting sky model')
             debug('Median sky value & range', np.median(skymod), skymod.min(), skymod.max(), 'all finite', np.all(np.isfinite(skymod)))
             assert(np.all(np.isfinite(skymod)))
@@ -1295,17 +1357,15 @@ class LegacySurveyImage(object):
                     raise RuntimeError('Splinesky template version/run/scale %s/%s/%s does not match sky template %s/%s/%s, CCD %s' %
                                        (sver, srun, sscale, tver, trun, tscale, self.name))
 
-        # Remove any padding
-        h,w = Ti.gridh, Ti.gridw
-        Ti.gridvals = Ti.gridvals[:h, :w]
-        Ti.xgrid = Ti.xgrid[:w]
-        Ti.ygrid = Ti.ygrid[:h]
         skyclass = Ti.skyclass.strip()
-
-        if skyclass == 'tractor.splinesky.SplineSky':
-            clazz = LegacySplineSky
-        else:
-            clazz = get_class_from_name(skyclass)
+        clazz = get_class_from_name(skyclass)
+        from tractor.splinesky import SplineSky
+        if isinstance(clazz, SplineSky):
+            # Remove any padding
+            h,w = Ti.gridh, Ti.gridw
+            Ti.gridvals = Ti.gridvals[:h, :w]
+            Ti.xgrid = Ti.xgrid[:w]
+            Ti.ygrid = Ti.ygrid[:h]
         fromfits = getattr(clazz, 'from_fits_row')
         sky = fromfits(Ti)
         if slc is not None:
@@ -1543,9 +1603,9 @@ class LegacySurveyImage(object):
             plt.xlabel('X (pixels)')
             plt.ylabel('Y (pixels)')
 
-    def plot_mask(self, mask):
+    def plot_mask(self, mask, rgb=None):
         from legacypipe.detection import plot_mask
-        plot_mask(self.maybe_transposed(mask))
+        plot_mask(self.maybe_transposed(mask), rgb=rgb)
 
     def show_transposed(self):
         return self.height > self.width
@@ -1612,32 +1672,6 @@ class LegacySurveyImage(object):
 
         sky_median = np.median(img[good])
 
-        if not splinesky:
-            #### Constant sky -- This code branch has not been tested recently...
-            from tractor.sky import ConstantSky
-            if sky_mode != 0.:
-                skyval = sky_mode
-                skymeth = 'mode'
-            else:
-                skyval = sky_median
-                skymeth = 'median'
-            tsky = ConstantSky(skyval)
-            primhdr.add_record(dict(name='SKYMETH', value=skymeth,
-                                comment='estimate_mode, or fallback to median?'))
-            sig1 = 1./np.sqrt(np.median(wt[wt>0]))
-            masked = (img - skyval) > (5.*sig1)
-            masked = binary_dilation(masked, iterations=3)
-            masked[wt == 0] = True
-            primhdr.add_record(dict(name='SIG1', value=sig1,
-                                comment='Median stdev of unmasked pixels'))
-            trymakedirs(self.skyfn, dir=True)
-            tmpfn = os.path.join(os.path.dirname(self.skyfn),
-                             'tmp-' + os.path.basename(self.skyfn))
-            tsky.write_fits(tmpfn, hdr=primhdr)
-            os.rename(tmpfn, self.skyfn)
-            debug('Wrote sky model', self.skyfn)
-            return
-
         # Splinesky
         from scipy.ndimage.filters import uniform_filter
         from scipy.stats import sigmaclip
@@ -1674,6 +1708,67 @@ class LegacySurveyImage(object):
         if initsky == 0.0:
             initsky = sky_clipped_median
 
+        print('run_sky: splinesky =', splinesky)
+        if not splinesky:
+            #### Constant sky -- This code branch has not been tested recently...
+            from tractor.sky import ConstantSky
+            # if sky_mode != 0.:
+            #     skyval = sky_mode
+            #     skymeth = 'mode'
+            # else:
+            #     skyval = sky_median
+            #     skymeth = 'median'
+            skymeth = 'john'
+            skyval = sky_john
+
+            tsky = ConstantSky(skyval)
+            primhdr.add_record(dict(name='SKYMETH', value=skymeth,
+                                comment='estimate_mode, or fallback to median?'))
+            sig1 = 1./np.sqrt(np.median(wt[wt>0]))
+            masked = (img - skyval) > (5.*sig1)
+            masked = binary_dilation(masked, iterations=3)
+            masked[wt == 0] = True
+            primhdr.add_record(dict(name='SIG1', value=sig1,
+                                comment='Median stdev of unmasked pixels'))
+
+            T = tsky.to_fits_table()
+            for k,v,tofloat in ([
+                    ('expnum', self.expnum, False),
+                    ('ccdname', self.ccdname, False),
+                    ('legpipev', git_version, False),
+                    ('plver',    plver, False),
+                    ('plprocid', plprocid, False),
+                    ('procdate', procdate, False),
+                    ('imgdsum',  datasum, False),
+                    ('sig1', sig1, True),
+                    ('templ_ver', template_meta.get('version', -1), False),
+                    ('templ_run', template_meta.get('run', -1), False),
+                    ('templ_scale', template_meta.get('scale', 0.), True),
+                    #('halo_zpt', halozpt, False),
+                    #('blob_masked', blobmasked, False),
+                    #('sub_sga_ver', sub_sga_version, False),
+                    ('sky_mode', sky_mode, True),
+                    ('sky_med', sky_median, False),
+                    ('sky_cmed', sky_clipped_median, False),
+                    ('sky_john', sky_john, False),
+                    #('sky_fine', fine_rms),
+                    #('sky_fmasked', fmasked, True),
+            ]# + [('sky_p%i' % p, v, True) for p,v in zip(pcts, pctvals)]
+                                ):
+                arr = np.array([v])
+                if tofloat:
+                    arr = arr.astype(np.float32)
+                T.set(k, arr)
+
+            trymakedirs(self.skyfn, dir=True)
+            tmpfn = os.path.join(os.path.dirname(self.skyfn),
+                             'tmp-' + os.path.basename(self.skyfn))
+            #tsky.write_fits(tmpfn, hdr=primhdr)
+            T.writeto(tmpfn, primheader=primhdr)
+            os.rename(tmpfn, self.skyfn)
+            debug('Wrote sky model', self.skyfn)
+            return
+
         # Wait until after we have 'initsky' to make the first plots...
         if plots:
             if template is None:
@@ -1685,16 +1780,19 @@ class LegacySurveyImage(object):
             ima = dict(interpolation='nearest', origin='lower',
                        vmin=-2.*sig1, vmax=+5.*sig1, cmap='gray')
             ima2 = dict(interpolation='nearest', origin='lower',
-                        vmin=-0.5*sig1,vmax=+0.5*sig1,cmap='gray')
+                        vmin=-0.5*sig1,vmax=+1.25*sig1,cmap='gray')
 
             plt.clf()
             self.imshow(img - initsky + timg, **ima)
             plt.colorbar()
             plt.title('Image %s-%i-%s %s' % (self.camera, self.expnum,
                                              self.ccdname, self.band))
+            from scipy.ndimage import median_filter
+            mf_size = 9
+            median_img = median_filter(img, mf_size)
             ps.savefig()
             plt.clf()
-            self.imshow(img - initsky + timg, **ima2)
+            self.imshow(median_img - initsky + timg, **ima2)
             plt.colorbar()
             plt.title('Image %s-%i-%s %s' % (self.camera, self.expnum,
                                              self.ccdname, self.band))
@@ -1708,7 +1806,7 @@ class LegacySurveyImage(object):
                                                             self.ccdname, self.band))
                 ps.savefig()
                 plt.clf()
-                self.imshow(img - initsky, **ima2)
+                self.imshow(median_img - initsky, **ima2)
                 plt.colorbar()
                 plt.title('Image minus sky template for %s-%i-%s %s' % (self.camera, self.expnum,
                                                                         self.ccdname, self.band))
@@ -1807,7 +1905,7 @@ class LegacySurveyImage(object):
                 ps.savefig()
 
                 plt.clf()
-                self.imshow(img - galmod - initsky, **ima2)
+                self.imshow(median_img - median_filter(galmod, mf_size) - initsky, **ima2)
                 plt.colorbar()
                 plt.title('Image with SGA galaxies subtracted')
                 ps.savefig()
@@ -1815,7 +1913,8 @@ class LegacySurveyImage(object):
             # we set zpscale, so model image is in ADU.
             debug('Using zeropoint:', self.ccdzpt, 'to scale galaxy model by', zpscale)
             img -= galmod
-            del galmod
+            if not plots:
+                del galmod
 
         haloimg = None
         halozpt = 0.
@@ -1846,7 +1945,7 @@ class LegacySurveyImage(object):
                     plt.title('Star halos to subtract')
                     ps.savefig()
                     plt.clf()
-                    self.imshow(img - haloimg - initsky, **ima2)
+                    self.imshow(median_filter(img - haloimg, mf_size) - initsky, **ima2)
                     plt.colorbar()
                     plt.title('Star halos subtracted')
                     ps.savefig()
@@ -1961,7 +2060,7 @@ class LegacySurveyImage(object):
 
             if boxcar_mask:
                 plt.clf()
-                self.imshow((img - initsky)*boxcargood, **ima2)
+                self.imshow((median_img - initsky)*boxcargood, **ima2)
                 plt.colorbar()
                 self.plot_mask(np.logical_not(boxcargood))
                 plt.title('Image (boxcar masked)')
@@ -1972,21 +2071,21 @@ class LegacySurveyImage(object):
 
             if survey_blob_mask is not None:
                 plt.clf()
-                self.imshow((img - initsky)*blobgood, **ima2)
+                self.imshow((median_img - initsky)*blobgood, **ima2)
                 plt.colorbar()
                 self.plot_mask(np.logical_not(blobgood))
                 plt.title('Image (blob masked)')
                 ps.savefig()
 
             plt.clf()
-            self.imshow((img - initsky)*refgood, **ima2)
+            self.imshow((median_img - initsky)*refgood, **ima2)
             plt.colorbar()
             self.plot_mask(np.logical_not(refgood))
             plt.title('Image (reference masked)')
             ps.savefig()
 
             plt.clf()
-            self.imshow((img - initsky)*(refgood * good), **ima2)
+            self.imshow((median_img - initsky)*(refgood * good), **ima2)
             plt.colorbar()
             self.plot_mask(np.logical_not((refgood * good)))
             plt.title('Image (all masked)')
@@ -2003,28 +2102,25 @@ class LegacySurveyImage(object):
             plt.axis(ax)
             ps.savefig()
 
-            info('Image shape:', img.shape)
-            info('Sky xgrid:', skyobj.xgrid, 'ygrid', skyobj.ygrid)
-
-            self.imshow((img - initsky) * boxcargood * blobgood * refgood, **ima2)
+            self.imshow((median_img - initsky) * boxcargood * blobgood * refgood, **ima2)
             plt.title('Unmasked pixels')
             ps.savefig()
 
-            gridvals = skyobj.spl(skyobj.xgrid, skyobj.ygrid) - initsky
+            gridvals = skyobj.get_grid().T - initsky
+            # print('grid values:')
+            # gh,gw = gridvals.shape
+            # for i in range(gh):
+            #     print('row', i, ':')
+            #     print('    ' + ','.join(['%.2f%s' % (gridvals[i, j], ('[z]' if gridvals[i,j] == 0 else ''))
+            #                             for j in range(gw)]))
+            #     print('    ', gridvals[i,:])
             plt.clf()
             self.imshow(gridvals.T, **ima2)
             plt.colorbar()
             self.plot_mask((gridvals.T == 0))
+            self.plot_mask((gridvals.T != 0) * (np.abs(gridvals.T) < 1e-10), rgb=(0,255,255))
             plt.title('Splinesky grid values')
             ps.savefig()
-
-            # plt.clf()
-            # plt.imshow(gridvals,
-            #            interpolation='nearest', origin='lower',
-            #            vmin=-0.5*sig1, vmax=+0.5*sig1, cmap='gray')
-            # plt.colorbar()
-            # plt.title('Splinesky grid values')
-            # ps.savefig()
 
             skypix = np.zeros_like(img)
             skyobj.addTo(skypix)
@@ -2034,6 +2130,24 @@ class LegacySurveyImage(object):
             plt.title('Sky model')
             ps.savefig()
 
+            # "img" at this point has had template, stellar halos, and SGA models subtracted
+            gmod = 0.
+            if sub_galaxies is not None:
+                # re-add the SGA model
+                gmod = galmod
+
+            plt.clf()
+            self.imshow(median_filter(img + gmod, mf_size) - skypix, **ima2)
+            plt.colorbar()
+            plt.title('Image - Sky model')
+            ps.savefig()
+
+            plt.clf()
+            self.imshow((img + gmod - skypix), **ima)
+            plt.colorbar()
+            plt.title('Image - Sky model')
+            ps.savefig()
+
             # skypix2 = np.zeros_like(img)
             # fineskyobj.addTo(skypix2)
             # plt.clf()
@@ -2041,69 +2155,69 @@ class LegacySurveyImage(object):
             # plt.title('Fine sky model')
             # ps.savefig()
 
-            plt.clf()
-            self.imshow((img - skypix), **ima2)
-            plt.colorbar()
-            plt.title('Image - Sky model')
-            ps.savefig()
-
-            plt.clf()
-            self.imshow((img - skypix), **ima)
-            plt.colorbar()
-            plt.title('Image - Sky model')
-            ps.savefig()
-
-            allgood = boxcargood * blobgood * refgood
-            h,w = img.shape
-            skyresid = img - skypix
-            rowmed = np.zeros(h)
-            for i in range(h):
-                rowmed[i] = np.median(skyresid[i,:][allgood[i,:]])
-            colmed = np.zeros(w)
-            for i in range(w):
-                colmed[i] = np.median(skyresid[:,i][allgood[:,i]])
-            plt.clf()
-            plt.subplot(2,1,1)
-            plt.plot(rowmed, 'k-')
-            plt.title('Row-wise median')
-            plt.subplot(2,1,2)
-            plt.plot(colmed, 'k-')
-            plt.title('Column-wise median')
-            plt.suptitle('masked image - sky model')
-            ps.savefig()
-
-            #(wt > 0)
-            isgoodrows = np.any(wt>0, axis=1)
-            isgoodcols = np.any(wt>0, axis=0)
-            goodrows = np.flatnonzero(isgoodrows)
-            goodcols = np.flatnonzero(isgoodcols)
-
-            plt.clf()
-            plt.subplot(2,1,1)
-            plt.plot(goodrows, np.median(img, axis=1)[isgoodrows], 'b-')
-            plt.plot(np.median(skypix, axis=1), 'r-')
-            plt.title('Row-wise median')
-            plt.subplot(2,1,2)
-            plt.plot(goodcols, np.median(img, axis=0)[isgoodcols], 'b-')
-            plt.plot(np.median(skypix, axis=0), 'r-')
-            plt.title('Column-wise median')
-            plt.suptitle('Unmasked image (blue) and sky (red) model')
-            ps.savefig()
-
-            plt.clf()
-            plt.subplot(2,1,1)
-            plt.plot(goodrows, (1. - np.sum(allgood, axis=1) / len(goodcols))[isgoodrows], 'k-')
-            plt.title('Row-wise')
-            plt.subplot(2,1,2)
-            plt.plot(goodcols, (1. - np.sum(allgood, axis=0) / len(goodrows))[isgoodcols], 'k-')
-            plt.title('Column-wise')
-            plt.suptitle('Fraction of masked pixels')
-            ps.savefig()
-
-            plt.clf()
-            plt.hist((img[good * refgood] - initsky).ravel(), bins=50)
-            plt.title('Unmasked pixels')
-            ps.savefig()
+            # plt.clf()
+            # self.imshow((img - skypix), **ima2)
+            # plt.colorbar()
+            # plt.title('Image - Sky model')
+            # ps.savefig()
+            # 
+            # plt.clf()
+            # self.imshow((img - skypix), **ima)
+            # plt.colorbar()
+            # plt.title('Image - Sky model')
+            # ps.savefig()
+            # 
+            # allgood = boxcargood * blobgood * refgood
+            # h,w = img.shape
+            # skyresid = img - skypix
+            # rowmed = np.zeros(h)
+            # for i in range(h):
+            #     rowmed[i] = np.median(skyresid[i,:][allgood[i,:]])
+            # colmed = np.zeros(w)
+            # for i in range(w):
+            #     colmed[i] = np.median(skyresid[:,i][allgood[:,i]])
+            # plt.clf()
+            # plt.subplot(2,1,1)
+            # plt.plot(rowmed, 'k-')
+            # plt.title('Row-wise median')
+            # plt.subplot(2,1,2)
+            # plt.plot(colmed, 'k-')
+            # plt.title('Column-wise median')
+            # plt.suptitle('masked image - sky model')
+            # ps.savefig()
+            # 
+            # #(wt > 0)
+            # isgoodrows = np.any(wt>0, axis=1)
+            # isgoodcols = np.any(wt>0, axis=0)
+            # goodrows = np.flatnonzero(isgoodrows)
+            # goodcols = np.flatnonzero(isgoodcols)
+            # 
+            # plt.clf()
+            # plt.subplot(2,1,1)
+            # plt.plot(goodrows, np.median(img, axis=1)[isgoodrows], 'b-')
+            # plt.plot(np.median(skypix, axis=1), 'r-')
+            # plt.title('Row-wise median')
+            # plt.subplot(2,1,2)
+            # plt.plot(goodcols, np.median(img, axis=0)[isgoodcols], 'b-')
+            # plt.plot(np.median(skypix, axis=0), 'r-')
+            # plt.title('Column-wise median')
+            # plt.suptitle('Unmasked image (blue) and sky (red) model')
+            # ps.savefig()
+            # 
+            # plt.clf()
+            # plt.subplot(2,1,1)
+            # plt.plot(goodrows, (1. - np.sum(allgood, axis=1) / len(goodcols))[isgoodrows], 'k-')
+            # plt.title('Row-wise')
+            # plt.subplot(2,1,2)
+            # plt.plot(goodcols, (1. - np.sum(allgood, axis=0) / len(goodrows))[isgoodcols], 'k-')
+            # plt.title('Column-wise')
+            # plt.suptitle('Fraction of masked pixels')
+            # ps.savefig()
+            # 
+            # plt.clf()
+            # plt.hist((img[good * refgood] - initsky).ravel(), bins=50)
+            # plt.title('Unmasked pixels')
+            # ps.savefig()
 
         if slc is not None:
             sy,sx = slc
@@ -2276,20 +2390,6 @@ def psfex_single_to_merged(infn, expnum, ccdname):
     for k in ['chi2', 'polzero1', 'polzero2', 'polscal1', 'polscal2']:
         T.set(k, T.get(k).astype(np.float64))
     return T
-
-class LegacySplineSky(SplineSky):
-    @classmethod
-    def from_fits_row(cls, Ti):
-        gridvals = Ti.gridvals.copy()
-        # DR7 & previous don't have this...
-        if 'sky_med' in Ti.get_columns():
-            nswap = np.sum(gridvals == Ti.sky_med)
-            if nswap:
-                info('Swapping in SKY_JOHN values for', nswap, 'splinesky cells;', Ti.sky_med, '->', Ti.sky_john)
-            gridvals[gridvals == Ti.sky_med] = Ti.sky_john
-        sky = cls(Ti.xgrid, Ti.ygrid, gridvals, order=int(Ti.order))
-        sky.shift(Ti.x0, Ti.y0)
-        return sky
 
 # mixin
 class NormalizedPsf(object):

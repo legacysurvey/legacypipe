@@ -280,8 +280,10 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
                                       NanoMaggies(order=bands, **fluxes)))
     return Tnew, newcat, hot
 
-def plot_mask(X, rgb=(0,255,0), extent=None):
+def plot_mask(X, rgb=None, extent=None):
     import pylab as plt
+    if rgb is None:
+        rgb = (0, 255, 0)
     H,W = X.shape
     rgba = np.zeros((H, W, 4), np.uint8)
     rgba[:,:,0] = X*rgb[0]
