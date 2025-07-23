@@ -406,7 +406,7 @@ class DecamImage(CPImage):
         invvar[I,J] = 0.
 
     # S30, N14, S19, S16, S10
-    def get_tractor_sky_model(self, img, goodpix):
+    def get_spline_sky_model(self, img, goodpix):
         from tractor.splinesky import SplineSky
         from legacypipe.jumpsky import JumpSky
         boxsize = self.splinesky_boxsize
