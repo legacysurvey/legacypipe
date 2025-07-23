@@ -80,7 +80,7 @@ out["radius"] = (clusters["MajAx"] / 60).astype("f4")  # [degrees]
 out["pa"] = np.zeros(len(out), dtype="f4")
 out["ba"] = np.ones(len(out), dtype="f4")
 
-# Read the updated radii based on visual inspection by Arjun Dey (Feb 2020):
+# Read the updated radii based on visual inspection by Arjun Dey (Feb 2020) with updates by Ariel Amsellem (Jul 2025):
 radiifile = files("legacypipe").joinpath("data/NGC-star-clusters-radii.csv")
 newname, newradii, newpa, newba = np.loadtxt(
     radiifile, dtype=str, delimiter=",", unpack=True
