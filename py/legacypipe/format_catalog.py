@@ -42,11 +42,9 @@ def _expand_flux_columns(T, bands, allbands, keys):
             col = clean_column_name('%s_%s' % (key, b))
             T.set(col, A[:,i])
 
-def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
-                   write_kwargs=None, N_wise_epochs=None,
+def format_catalog(T, bands, allbands, release,
+                   N_wise_epochs=None,
                    motions=True, gaia_tagalong=False):
-    if write_kwargs is None:
-        write_kwargs = {}
     has_wise =    'flux_w1'    in T.columns()
     has_wise_lc = 'lc_flux_w1' in T.columns()
     has_galex =   'flux_nuv'   in T.columns()
@@ -317,8 +315,7 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
             cols[i] = cc[j]
 
     units = get_units_for_columns(cols, bands=[clean_column_name(b) for b in allbands] + wbands + gbands)
-    T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units,
-              extname='CATALOG', **write_kwargs)
+    return cols, units
 
 def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
     import fitsio
