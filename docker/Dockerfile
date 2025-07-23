@@ -197,28 +197,17 @@ RUN python -O -m compileall \
     /src/legacypipe/py/legacypipe \
     /src/legacypipe/py/legacyzpts
 
-# # 
-# # update legacypipe
-# #  git checkout DR10.3.4 && git describe && \
-# RUN cd /src/legacypipe && git pull && \
-#   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
-#   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
+# NERSC's shifter "mpich" module includes a bunch of BROKEN libraries that interfere
+# with executables we have installed.
 
-# NERSC's shifter "mpich" module includes a bunch of BROKEN libraries.
-
-RUN mv /usr/local/bin/modhead /usr/local/bin/modhead.real
-COPY <<EOF /usr/local/bin/modhead
-#! /bin/bash
-unset LD_LIBRARY_PATH
-/usr/local/bin/modhead.real "$@"
-EOF
-RUN chmod 755 /usr/local/bin/modhead
-
-RUN apt update && apt install -y chrpath
-RUN apt install -y patchelf
-
-#RUN chrpath -l /usr/local/bin/listhead
-#RUN chrpath -r /lib/x86_64-linux-gnu/ /usr/local/bin/listhead
-
+RUN apt update && apt install -y patchelf
 RUN patchelf --force-rpath --set-rpath /lib/x86_64-linux-gnu/ /usr/local/bin/listhead
+RUN patchelf --force-rpath --set-rpath /lib/x86_64-linux-gnu/ /usr/local/bin/modhead
+
+# update legacypipe
+RUN cd /src/legacypipe && \
+  git pull && \
+  git checkout DR10.3.5 && \
+  python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
+  python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
