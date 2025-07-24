@@ -181,7 +181,7 @@ rne_tab["major_axis"] /= 3600.0
 rne_tab["minor_axis"] /= 3600.0
 rne_tab["ba"] = rne_tab["minor_axis"] / rne_tab["major_axis"]
 # Names are from the original catalog column 'Seq'
-rne_tab["name"] = rne_tab["name"].astype(int).astype(str)
+rne_tab["name"] = rne_tab["name"].astype(str)
 rne_tab["alt_name"] = "--"
 rne_tab["type"] = "RN"
 rne_tab["radius"] = rne_tab["major_axis"] / 2
@@ -202,8 +202,36 @@ out = out[out["radius"] >= min_size_deg]
 # Offset all PA values by 90 degrees (to be compatible with the Legacy Survey convention)
 out["pa"][out["pa"] != 0.0] = (out["pa"][out["pa"] != 0.0] + 90.0) % 180.0
 
-# Write PNe and GCls to file
+# Table ordered by right ascension
 out = out[np.argsort(out["ra"])]
+
+# Convert the output table to a pandas DataFrame for easier manipulation
+out = out.to_pandas()
+# For globular clusters, insert a space between NGC/IC and identifier numbers; also, remove leading zeros from identifiers
+ngc_mask = (out["type"] == "GCl") & (out["name"].str.startswith("NGC"))
+out.loc[ngc_mask, "name"] = "NGC " + out.loc[ngc_mask, "name"].str[3:].astype(
+    int
+).astype(str)
+ic_mask = (out["type"] == "GCl") & (out["name"].str.startswith("IC"))
+out.loc[ic_mask, "name"] = "IC " + out.loc[ic_mask, "name"].str[2:].astype(int).astype(
+    str
+)
+
+# For deisgnations beginning with "ESO", ensure there is a space between ESO and the numeric identifier
+eso_mask = out["name"].notna() & out["name"].astype(str).str.startswith("ESO")
+eso_no_space_mask = eso_mask & (~out["name"].astype(str).str.startswith("ESO "))
+out.loc[eso_no_space_mask, "name"] = (
+    "ESO " + out.loc[eso_no_space_mask, "name"].astype(str).str[3:]
+).str.encode("utf-8")
+
+# For deisgnations beginning with "MWSC", add '[KPS2012] ' to the beginning of the designation (making the name SIMBAD compatible)
+mwsc_mask = (out["type"] == "GCl") & (out["name"].str.startswith("MWSC"))
+out.loc[mwsc_mask, "name"] = "[KPS2012] " + out.loc[mwsc_mask, "name"].astype(str)
+
+# Convert back to an astropy table
+out = Table.from_pandas(out)
+
+# Write PNe and GCls to file
 clusterfile = files("legacypipe").joinpath("data/NGC-star-clusters.fits")
 print("Writing {}".format(clusterfile))
 out.write(clusterfile, overwrite=True)
