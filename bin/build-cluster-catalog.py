@@ -141,7 +141,7 @@ out_pne = out[out["type"] == "PN"]
 out_gcl = out[out["type"] == "GCl"]
 
 # Remove PNe that are in HASH from the out table
-req_min_sep = 5.0  # arcsec
+req_min_sep = 5.5  # arcsec
 out_pne_coords = SkyCoord(out_pne["ra"] << u.deg, out_pne["dec"] << u.deg)
 hash_coords = SkyCoord(hash_tab["ra"] << u.deg, hash_tab["dec"] << u.deg)
 match_idxs, match_seps, _ = match_coordinates_sky(out_pne_coords, hash_coords)
@@ -200,22 +200,31 @@ out = ap_vstack([out_gcl, out_pne, hash_tab_keep, rne_tab_keep])
 min_size_deg = 10.0 / 3600.0
 out = out[out["radius"] >= min_size_deg]
 # Offset all PA values by 90 degrees (to be compatible with the Legacy Survey convention)
-out["pa"][out["pa"] != 0.0] = (out["pa"][out["pa"] != 0.0] + 90.0) % 180.0
-
-# Table ordered by right ascension
-out = out[np.argsort(out["ra"])]
+out["pa"][out["pa"] != 0.0] = (180.0 - out["pa"][out["pa"] != 0.0]) % 180.0
 
 # Convert the output table to a pandas DataFrame for easier manipulation
 out = out.to_pandas()
-# For globular clusters, insert a space between NGC/IC and identifier numbers; also, remove leading zeros from identifiers
-ngc_mask = (out["type"] == "GCl") & (out["name"].str.startswith("NGC"))
-out.loc[ngc_mask, "name"] = "NGC " + out.loc[ngc_mask, "name"].str[3:].astype(
-    int
-).astype(str)
-ic_mask = (out["type"] == "GCl") & (out["name"].str.startswith("IC"))
-out.loc[ic_mask, "name"] = "IC " + out.loc[ic_mask, "name"].str[2:].astype(int).astype(
-    str
-)
+
+# For globular clusters, insert a space between NGC/IC and identifier numbers
+# Also, remove leading zeros from identifiers and trailing en-dashes
+ngc_mask = out["name"].notna() & out["name"].str.startswith("NGC")
+out.loc[ngc_mask, "name"] = (
+    "NGC "
+    + out.loc[ngc_mask, "name"]
+    .str[3:]
+    .str.split("-")
+    .str[0]
+    .str.replace(r"^0+", " ", regex=True)
+).str.replace(r"NGC\s+", "NGC ", regex=True)
+ic_mask = out["name"].notna() & out["name"].str.startswith("IC")
+out.loc[ic_mask, "name"] = (
+    "IC "
+    + out.loc[ic_mask, "name"]
+    .str[2:]
+    .str.split("-")
+    .str[0]
+    .str.replace(r"^0+", " ", regex=True)
+).str.replace(r"IC\s+", "IC ", regex=True)
 
 # For deisgnations beginning with "ESO", ensure there is a space between ESO and the numeric identifier
 eso_mask = out["name"].notna() & out["name"].astype(str).str.startswith("ESO")
