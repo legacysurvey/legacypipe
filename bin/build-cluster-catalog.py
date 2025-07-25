@@ -199,8 +199,6 @@ out = ap_vstack([out_gcl, out_pne, hash_tab_keep, rne_tab_keep])
 # Make a minimum size cut on all objects of 10 arcseconds in radius
 min_size_deg = 10.0 / 3600.0
 out = out[out["radius"] >= min_size_deg]
-# Offset all PA values by 90 degrees (to be compatible with the Legacy Survey convention)
-out["pa"][out["pa"] != 0.0] = (180.0 - out["pa"][out["pa"] != 0.0]) % 180.0
 
 # Convert the output table to a pandas DataFrame for easier manipulation
 out = out.to_pandas()
