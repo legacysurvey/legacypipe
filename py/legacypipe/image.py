@@ -1745,7 +1745,7 @@ class LegacySurveyImage(object):
                 sky_mode = 0.
         else:
             sky_mode = 0.0
-        if nsot np.isfinite(sky_mode):
+        if not np.isfinite(sky_mode):
             sky_mode = 0.0
 
         sky_median = np.median(img[good])
@@ -1826,16 +1826,16 @@ class LegacySurveyImage(object):
         skypix = np.zeros_like(img)
         skyobj.addTo(skypix)
         pcts = [0,10,20,30,40,50,60,70,80,90,100]
-        pctpix = (img - skypix)[good * refgood]
+        pctpix = (img - skypix)[good]
         if len(pctpix):
-            assert(np.all(np.isfinite(img[good * refgood])))
-            assert(np.all(np.isfinite(skypix[good * refgood])))
+            assert(np.all(np.isfinite(img[good])))
+            assert(np.all(np.isfinite(skypix[good])))
             assert(np.all(np.isfinite(pctpix)))
-            pctvals = np.percentile((img - skypix)[good * refgood], pcts)
+            pctvals = np.percentile((img - skypix)[good], pcts)
         else:
             pctvals = [0] * len(pcts)
         H,W = img.shape
-        fmasked = float(np.sum((good * refgood) == 0)) / (H*W)
+        fmasked = float(np.sum(good == 0)) / (H*W)
         del skypix
 
         T = skyobj.to_fits_table()
@@ -1878,7 +1878,7 @@ class LegacySurveyImage(object):
         ima = dict(interpolation='nearest', origin='lower',
                    vmin=-2.*sig1, vmax=+5.*sig1, cmap='gray')
         ima2 = dict(interpolation='nearest', origin='lower',
-                    vmin=-0.5*sig1,vmax=+0.5*sig1,cmap='gray')
+                    vmin=-0.5*sig1,vmax=+0.5*sig1,cmap='RdBu')
 
         def show_img(img, title=''):
             plt.clf()
@@ -1887,8 +1887,11 @@ class LegacySurveyImage(object):
             plt.title(title)
             ps.savefig()
 
+            from scipy.ndimage import median_filter
+            mf_size = 9
+            median_img = median_filter(img, mf_size)
             plt.clf()
-            self.imshow(img, **ima2)
+            self.imshow(median_img, **ima2)
             plt.colorbar()
             plt.title(title)
             ps.savefig()
@@ -1939,19 +1942,19 @@ class LegacySurveyImage(object):
                        cmap='gray')
 
         plt.clf()
-        plt.imshow(refgood, **maskima)
+        self.imshow(refgood, **maskima)
         plt.title('Reference masks for %s' % imgname)
         ps.savefig()
 
         if blobmasked:
             plt.clf()
-            plt.imshow(blobgood, **maskima)
+            self.imshow(blobgood, **maskima)
             plt.title('Blob mask for %s' % imgname)
             ps.savefig()
             
         if boxcar_mask:
             plt.clf()
-            plt.imshow(boxcargood, **maskima)
+            self.imshow(boxcargood, **maskima)
             plt.title('Boxcar mask for %s' % imgname)
             ps.savefig()
 
@@ -1964,7 +1967,7 @@ class LegacySurveyImage(object):
             plt.clf()
             gimg = img - initsky
             gimg[~good] = np.nan
-            plt.imshow(gimg, **imx)
+            self.imshow(gimg, **imx)
             ax = plt.axis()
             for x in skyobj.xgrid:
                 # We transpose the image!
@@ -1987,8 +1990,18 @@ class LegacySurveyImage(object):
 
         skypix = np.zeros_like(img)
         skyobj.addTo(skypix)
-        show_img(skypix - initsky, title='Sky model: %s' % imgname)
-        show_img(img - skypix, title='Image - Sky model: %s' % imgname)
+        show_img(skypix - initsky, title='Sky model: %s for %s' % (type(skyobj), imgname))
+
+        sub = []
+        if template is not None:
+            sub.append('Templ')
+        if haloimg is not None:
+            sub.append('Halo')
+        resid_img = orig_img.copy()
+        if galmod is not None:
+            resid_img += galmod
+
+        show_img(img - skypix, title='Image (- %s) - Sky model: %s' % (','.join(sub), imgname))
 
         # allgood = boxcargood * blobgood * refgood
         # h,w = img.shape

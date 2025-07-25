@@ -429,6 +429,7 @@ class DecamImage(CPImage):
         return super().get_spline_sky_model(img, goodpix)
 
     def get_constant_sky_model(self, skylevel, img, goodpix):
+        from scipy.stats import sigmaclip
         if self.needs_sky_jump():
             from legacypipe.jumpsky import ConstantJumpSky
             H,W = img.shape
@@ -437,8 +438,8 @@ class DecamImage(CPImage):
             vals = []
             for slc in [(slice(H), slice(xbreak)),
                         (slice(H), slice(xbreak, W))]:
-                if np.sum(good[slc]) > 100:
-                    cimage, _, _ = sigmaclip(img[slc][good[slc]], low=2.0, high=2.0)
+                if np.sum(goodpix[slc]) > 100:
+                    cimage, _, _ = sigmaclip(img[slc][goodpix[slc]], low=2.0, high=2.0)
                     if len(cimage) > 0:
                         sky_john = np.median(cimage)
                         vals.append(sky_john)
@@ -446,7 +447,7 @@ class DecamImage(CPImage):
             if len(vals) == 2:
                 skyobj = ConstantJumpSky(xbreak, vals[0], vals[1])
                 return skyobj
-        return super().get_constant_sky_model(img, goodpix)
+        return super().get_constant_sky_model(skylevel, img, goodpix)
 
 
 def decam_cp_version_after(plver, after):
