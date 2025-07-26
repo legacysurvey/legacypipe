@@ -1298,7 +1298,7 @@ class LegacySurveyImage(object):
         skyclass = Ti.skyclass.strip()
         clazz = get_class_from_name(skyclass)
         from tractor.splinesky import SplineSky
-        if isinstance(clazz, SplineSky):
+        if issubclass(clazz, SplineSky):
             # Remove any padding
             h,w = Ti.gridh, Ti.gridw
             Ti.gridvals = Ti.gridvals[:h, :w]
