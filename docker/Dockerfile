@@ -87,10 +87,8 @@ RUN for x in \
     photutils \
     zmq \
     mpi4py \
-    ; do pip3 install --break-system-packages $x; done \
-    && rm -Rf /root/.cache/pip
-
-#    fitsio \ -- We need commit 273a00c (Feb 23/2025)
+    fitsio \
+    ; do pip3 install --break-system-packages --no-cache $x; done
 
 RUN ln -s /usr/bin/python3.12-config /usr/local/bin/python3-config
 RUN ln -s /usr/bin/python3 /usr/bin/python
@@ -115,10 +113,10 @@ RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
 
 #FROM working
 
+#    && git checkout dr10.6 \
 # The Tractor
 RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && git checkout dr10.6 \
     && python setup.py build_ext --with-ceres --with-cython --inplace \
     && python setup.py install
 
@@ -169,14 +167,18 @@ RUN git clone https://github.com/astromatic/scamp.git && \
     make install && \
     make clean
 
-# Compile a local version of fitsio to pick up the ability to set the FPACK compression seed:
-# https://github.com/esheldon/fitsio/commit/273a00cf2770c989d35babc8b95d44dbbc4d2096
-RUN git clone https://github.com/esheldon/fitsio.git \
-    && cd fitsio \
-    && pip install -e . --break-system-packages
+# # Compile a local version of fitsio to pick up the ability to set the FPACK compression seed:
+# # https://github.com/esheldon/fitsio/commit/273a00cf2770c989d35babc8b95d44dbbc4d2096
+# # -> went into fitsio 1.2.6
+# RUN git clone https://github.com/esheldon/fitsio.git \
+#     && cd fitsio \
+#     && pip install -e . --break-system-packages
 
 # Legacypipe
 RUN git clone https://github.com/legacysurvey/legacypipe.git legacypipe
+
+# Upgrade mpi4py
+RUN pip3 install --upgrade --break-system-packages mpi4py
 
 RUN python -O -m compileall \
     -x lib2to3 \
@@ -195,9 +197,17 @@ RUN python -O -m compileall \
     /src/legacypipe/py/legacypipe \
     /src/legacypipe/py/legacyzpts
 
-# # 
-# # update legacypipe
-# #  git checkout DR10.3.4 && git describe && \
-# RUN cd /src/legacypipe && git pull && \
-#   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
-#   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
+# NERSC's shifter "mpich" module includes a bunch of BROKEN libraries that interfere
+# with executables we have installed.
+
+RUN apt update && apt install -y patchelf
+RUN patchelf --force-rpath --set-rpath /lib/x86_64-linux-gnu/ /usr/local/bin/listhead
+RUN patchelf --force-rpath --set-rpath /lib/x86_64-linux-gnu/ /usr/local/bin/modhead
+
+# update legacypipe
+RUN cd /src/legacypipe && \
+  git pull && \
+  git checkout DR10.3.5 && \
+  python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
+  python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
+

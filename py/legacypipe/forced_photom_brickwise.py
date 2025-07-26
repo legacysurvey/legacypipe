@@ -300,64 +300,9 @@ def main():
         F.writeto(None, fits_object=out.fits, primheader=hdr,
                   units=units, columns=columns)
 
-    # Also average the flux measurements by band for each source and
+    # Average the flux measurements by band for each source and
     # add them to a new tractor file!
-    bands = list(set(F.filter))
-    bands.sort()
-
-    _,Nap = F.apflux.shape
-
-    #print('Forced-phot bands:', bands)
-    for b in bands:
-        from legacypipe.format_catalog import clean_column_name
-        b = clean_column_name(b)
-        T.set('forced_flux_%s'        % b, np.zeros(len(T), np.float32))
-        T.set('forced_flux_ivar_%s'   % b, np.zeros(len(T), np.float32))
-        T.set('forced_apflux_%s'      % b, np.zeros((len(T), Nap), np.float32))
-        T.set('forced_apflux_ivar_%s' % b, np.zeros((len(T), Nap), np.float32))
-        T.set('forced_psfdepth_%s'    % b, np.zeros(len(T), np.float32))
-        T.set('forced_galdepth_%s'    % b, np.zeros(len(T), np.float32))
-        T.set('forced_nexp_%s'        % b, np.zeros(len(T), np.int32))
-
-    objidmap = dict([((b,o),i) for i,(b,o) in enumerate(zip(T.brickid, T.objid))])
-
-    for bid,objid,band,flux,fluxiv,psfdepth,galdepth,apflux,apfluxiv in zip(
-            F.brickid, F.objid, F.filter, F.flux, F.flux_ivar, F.psfdepth, F.galdepth,
-            F.apflux, F.apflux_ivar):
-        key = (bid, objid)
-        try:
-            i = objidmap[key]
-        except KeyError:
-            continue
-        band = band.strip()
-        band = clean_column_name(band)
-        T.get('forced_flux_%s'        % band)[i] += flux * fluxiv
-        T.get('forced_flux_ivar_%s'   % band)[i] += fluxiv
-        T.get('forced_apflux_%s'      % band)[i] += apflux * apfluxiv
-        T.get('forced_apflux_ivar_%s' % band)[i] += apfluxiv
-        T.get('forced_psfdepth_%s'    % band)[i] += psfdepth
-        T.get('forced_galdepth_%s'    % band)[i] += galdepth
-        T.get('forced_nexp_%s'        % band)[i] += 1
-
-    eunits = {}
-    for b in bands:
-        b = clean_column_name(b)
-        iv = T.get('forced_flux_ivar_%s' % b)
-        f = T.get('forced_flux_%s' % b)
-        T.get('forced_flux_%s' % b)[iv > 0] = f[iv > 0] / iv[iv > 0]
-        T.get('forced_flux_%s' % b)[iv == 0] = 0.
-        iv = T.get('forced_apflux_ivar_%s' % b)
-        f = T.get('forced_apflux_%s' % b)
-        T.get('forced_apflux_%s' % b)[iv > 0] = f[iv > 0] / iv[iv > 0]
-        T.get('forced_apflux_%s' % b)[iv == 0] = 0.
-
-        eunits.update({'forced_flux_%s'%b: flux_unit,
-                       'forced_flux_ivar_%s'%b: fluxiv_unit,
-                       'forced_apflux_%s'%b: flux_unit,
-                       'forced_apflux_ivar_%s'%b: fluxiv_unit,
-                       'forced_psfdepth_%s'%b: fluxiv_unit,
-                       'forced_galdepth_%s'%b: fluxiv_unit,
-                       })
+    eunits = average_forced_phot(F, T)
 
     columns = T.get_columns()
     tbands = []
@@ -381,6 +326,93 @@ def main():
     with survey.write_output('tractor-forced', brick=opt.brick) as out:
         units=get_units_for_columns(columns, bands=tbands, extras=eunits)
         T.writeto(None, fits_object=out.fits, primheader=tprimhdr, units=units)
+
+def average_forced_phot(F, T, prefix='forced_'):
+    from legacypipe.survey import clean_band_name
+    bands = list(set(F.filter))
+    bands.sort()
+
+    _,Nap = F.apflux.shape
+    N = len(T)
+
+    clean_bands = [clean_band_name(b) for b in bands]
+    clean_map = dict(list(zip(bands, clean_bands)))
+
+    for b in clean_bands:
+        T.set('%sflux_%s'        % (prefix, b), np.zeros(N, np.float32))
+        T.set('%sflux_ivar_%s'   % (prefix, b), np.zeros(N, np.float32))
+        T.set('%sapflux_%s'      % (prefix, b), np.zeros((N, Nap), np.float32))
+        T.set('%sapflux_ivar_%s' % (prefix, b), np.zeros((N, Nap), np.float32))
+        T.set('%spsfdepth_%s'    % (prefix, b), np.zeros(N, np.float32))
+        T.set('%sgaldepth_%s'    % (prefix, b), np.zeros(N, np.float32))
+        T.set('%snexp_%s'        % (prefix, b), np.zeros(N, np.int32))
+        T.set('%sfracflux_%s'    % (prefix, b), np.zeros(N, np.float32))
+        T.set('%sfracmasked_%s'  % (prefix, b), np.zeros(N, np.float32))
+        T.set('%sfracin_%s'      % (prefix, b), np.zeros(N, np.float32))
+        T.set('%srchisq_%s'      % (prefix, b), np.zeros(N, np.float32))
+
+    objidmap = dict([((b,o),i) for i,(b,o) in enumerate(zip(T.brickid, T.objid))])
+
+    for (bid,objid,band,flux,fluxiv,psfdepth,galdepth,apflux,apfluxiv,
+         fracin, fracmasked, fracflux, rchisq) in zip(
+            F.brickid, F.objid, F.filter, F.flux, F.flux_ivar, F.psfdepth, F.galdepth,
+            F.apflux, F.apflux_ivar, F.fracin, F.fracmasked, F.fracflux, F.rchisq):
+        key = (bid, objid)
+        try:
+            i = objidmap[key]
+        except KeyError:
+            continue
+        band = band.strip()
+        band = clean_map[band]
+        T.get('%sflux_%s'        % (prefix, band))[i] += flux * fluxiv
+        T.get('%sflux_ivar_%s'   % (prefix, band))[i] += fluxiv
+        T.get('%sapflux_%s'      % (prefix, band))[i] += apflux * apfluxiv
+        T.get('%sapflux_ivar_%s' % (prefix, band))[i] += apfluxiv
+        T.get('%spsfdepth_%s'    % (prefix, band))[i] += psfdepth
+        T.get('%sgaldepth_%s'    % (prefix, band))[i] += galdepth
+        T.get('%snexp_%s'        % (prefix, band))[i] += 1
+        T.get('%sfracin_%s'      % (prefix, band))[i] += fracin
+        T.get('%sfracmasked_%s'  % (prefix, band))[i] += fracmasked
+        T.get('%sfracflux_%s'    % (prefix, band))[i] += fracflux * fracin
+        T.get('%srchisq_%s'      % (prefix, band))[i] += rchisq * fracin
+
+    for band in clean_bands:
+        tinyval = 1e-16
+        nexp   = T.get('%snexp_%s' % (prefix, band))
+        fracin = T.get('%sfracin_%s' % (prefix, band))
+        fracmasked = T.get('%sfracmasked_%s' % (prefix, band))
+        fracflux   = T.get('%sfracflux_%s' % (prefix, band))
+        rchisq = T.get('%srchisq_%s' % (prefix, band))
+        fracmasked /= np.maximum(tinyval, fracin)
+        fracflux /= np.maximum(tinyval, fracin)
+        rchisq /= np.maximum(tinyval, fracin)
+        fracin /= np.maximum(1, nexp)
+        fracmasked[fracin == 0] = 0.
+        fracflux[fracin == 0] = 0.
+        rchisq[fracin == 0] = 0.
+        fracin[nexp == 0] = 0.
+
+    eunits = {}
+    flux_unit = 'nanomaggies'
+    fluxiv_unit = 'nanomaggies^(-2)'
+    for b in clean_bands:
+        iv = T.get('%sflux_ivar_%s' % (prefix, b))
+        f  = T.get('%sflux_%s'      % (prefix, b))
+        T.get('%sflux_%s' % (prefix, b))[iv  > 0] = f[iv > 0] / iv[iv > 0]
+        T.get('%sflux_%s' % (prefix, b))[iv == 0] = 0.
+        iv = T.get('%sapflux_ivar_%s' % (prefix, b))
+        f  = T.get('%sapflux_%s'      % (prefix, b))
+        T.get('%sapflux_%s' % (prefix, b))[iv  > 0] = f[iv > 0] / iv[iv > 0]
+        T.get('%sapflux_%s' % (prefix, b))[iv == 0] = 0.
+
+        eunits.update({'%sflux_%s' % (prefix, b): flux_unit,
+                       '%sflux_ivar_%s' % (prefix, b): fluxiv_unit,
+                       '%sapflux_%s' % (prefix, b): flux_unit,
+                       '%sapflux_ivar_%s' % (prefix, b): fluxiv_unit,
+                       '%spsfdepth_%s' % (prefix, b): fluxiv_unit,
+                       '%sgaldepth_%s' % (prefix, b): fluxiv_unit,
+                       })
+    return eunits
 
 def calib_one_ccd(X):
     (i, N, survey,ccd) = X
