@@ -172,7 +172,7 @@ hash_tab_keep = hash_tab[
 # Read in catalog of known and visually verified Reflection Nebulae (RNe)
 # (See https://heasarc.gsfc.nasa.gov/w3browse/all/refnebulae.html for original catalog)
 rne_file = files("legacypipe").joinpath("data/RNe_geometry.csv")
-rne_tab = pd.read_csv(rne_file, index_col=0)
+rne_tab = pd.read_csv(rne_file, index_col=0, comment='#')
 # Mask RNe that were assigned major axis ratios of 0.0 arcsec
 # (This was done either because they couldn't be seen in the Legacy Survey or were part of larger RNe)
 rne_tab = rne_tab[(rne_tab["major_axis"] > 0.0) & (rne_tab["minor_axis"] > 0.0)]
