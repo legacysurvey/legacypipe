@@ -80,7 +80,7 @@ out["radius"] = (clusters["MajAx"] / 60).astype("f4")  # [degrees]
 out["pa"] = np.zeros(len(out), dtype="f4")
 out["ba"] = np.ones(len(out), dtype="f4")
 
-# Read the updated radii based on visual inspection by Arjun Dey (Feb 2020):
+# Read the updated radii based on visual inspection by Arjun Dey (Feb 2020) with updates by Ariel Amsellem (Jul 2025):
 radiifile = files("legacypipe").joinpath("data/NGC-star-clusters-radii.csv")
 newname, newradii, newpa, newba = np.loadtxt(
     radiifile, dtype=str, delimiter=",", unpack=True
@@ -141,7 +141,7 @@ out_pne = out[out["type"] == "PN"]
 out_gcl = out[out["type"] == "GCl"]
 
 # Remove PNe that are in HASH from the out table
-req_min_sep = 5.0  # arcsec
+req_min_sep = 5.5  # arcsec
 out_pne_coords = SkyCoord(out_pne["ra"] << u.deg, out_pne["dec"] << u.deg)
 hash_coords = SkyCoord(hash_tab["ra"] << u.deg, hash_tab["dec"] << u.deg)
 match_idxs, match_seps, _ = match_coordinates_sky(out_pne_coords, hash_coords)
@@ -172,7 +172,7 @@ hash_tab_keep = hash_tab[
 # Read in catalog of known and visually verified Reflection Nebulae (RNe)
 # (See https://heasarc.gsfc.nasa.gov/w3browse/all/refnebulae.html for original catalog)
 rne_file = files("legacypipe").joinpath("data/RNe_geometry.csv")
-rne_tab = pd.read_csv(rne_file, index_col=0)
+rne_tab = pd.read_csv(rne_file, index_col=0, comment='#')
 # Mask RNe that were assigned major axis ratios of 0.0 arcsec
 # (This was done either because they couldn't be seen in the Legacy Survey or were part of larger RNe)
 rne_tab = rne_tab[(rne_tab["major_axis"] > 0.0) & (rne_tab["minor_axis"] > 0.0)]
@@ -181,7 +181,7 @@ rne_tab["major_axis"] /= 3600.0
 rne_tab["minor_axis"] /= 3600.0
 rne_tab["ba"] = rne_tab["minor_axis"] / rne_tab["major_axis"]
 # Names are from the original catalog column 'Seq'
-rne_tab["name"] = rne_tab["name"].astype(int).astype(str)
+rne_tab["name"] = rne_tab["name"].astype(str)
 rne_tab["alt_name"] = "--"
 rne_tab["type"] = "RN"
 rne_tab["radius"] = rne_tab["major_axis"] / 2
@@ -200,8 +200,45 @@ out = ap_vstack([out_gcl, out_pne, hash_tab_keep, rne_tab_keep])
 min_size_deg = 10.0 / 3600.0
 out = out[out["radius"] >= min_size_deg]
 
+# Convert the output table to a pandas DataFrame for easier manipulation
+out = out.to_pandas()
+
+# For globular clusters, insert a space between NGC/IC and identifier numbers
+# Also, remove leading zeros from identifiers and trailing en-dashes
+ngc_mask = out["name"].notna() & out["name"].str.startswith("NGC")
+out.loc[ngc_mask, "name"] = (
+    "NGC "
+    + out.loc[ngc_mask, "name"]
+    .str[3:]
+    .str.split("-")
+    .str[0]
+    .str.replace(r"^0+", " ", regex=True)
+).str.replace(r"NGC\s+", "NGC ", regex=True)
+ic_mask = out["name"].notna() & out["name"].str.startswith("IC")
+out.loc[ic_mask, "name"] = (
+    "IC "
+    + out.loc[ic_mask, "name"]
+    .str[2:]
+    .str.split("-")
+    .str[0]
+    .str.replace(r"^0+", " ", regex=True)
+).str.replace(r"IC\s+", "IC ", regex=True)
+
+# For deisgnations beginning with "ESO", ensure there is a space between ESO and the numeric identifier
+eso_mask = out["name"].notna() & out["name"].astype(str).str.startswith("ESO")
+eso_no_space_mask = eso_mask & (~out["name"].astype(str).str.startswith("ESO "))
+out.loc[eso_no_space_mask, "name"] = (
+    "ESO " + out.loc[eso_no_space_mask, "name"].astype(str).str[3:]
+).str.encode("utf-8")
+
+# For deisgnations beginning with "MWSC", add '[KPS2012] ' to the beginning of the designation (making the name SIMBAD compatible)
+mwsc_mask = (out["type"] == "GCl") & (out["name"].str.startswith("MWSC"))
+out.loc[mwsc_mask, "name"] = "[KPS2012] " + out.loc[mwsc_mask, "name"].astype(str)
+
+# Convert back to an astropy table
+out = Table.from_pandas(out)
+
 # Write PNe and GCls to file
-out = out[np.argsort(out["ra"])]
 clusterfile = files("legacypipe").joinpath("data/NGC-star-clusters.fits")
 print("Writing {}".format(clusterfile))
 out.write(clusterfile, overwrite=True)
