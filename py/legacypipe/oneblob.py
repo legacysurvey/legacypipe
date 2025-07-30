@@ -19,6 +19,8 @@ from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 from legacypipe.utils import get_cpu_arch
 
+import os
+
 rgbkwargs_resid = dict(resids=True)
 
 import logging
@@ -34,8 +36,6 @@ def is_debug():
 
 # Determines the order of elements in the DCHISQ array.
 MODEL_NAMES = ['psf', 'rex', 'dev', 'exp', 'ser']
-tx = np.zeros(3)
-tc = np.zeros(3, dtype=np.int32)
 
 def one_blob(X):
     '''
@@ -45,9 +45,10 @@ def one_blob(X):
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
      srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap,
-     large_galaxies_force_pointsource, less_masking, frozen_galaxies, use_gpu, gpumode) = X
+     large_galaxies_force_pointsource, less_masking, frozen_galaxies, use_gpu, gpumode, bid) = X
 
-    if (use_gpu):
+    if (use_gpu and gpumode > 0):
+        #Prime gpu
         import cupy as cp
         dummy = cp.zeros(1)
     t = time.time()
@@ -55,12 +56,13 @@ def one_blob(X):
     debug('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
           (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
 
-    info('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
-          (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
+    pid = os.getpid()
+    info('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies ; pid %i' %
+          (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies), pid))
 
-    if (iblob == 47):
-        print ("Blob id 47 = using CPU")
-        #use_gpu = False
+    if bid is not None and iblob != bid:
+        print ("Skipping blob %s: blobid %i" % (nblob, iblob))
+        return None
 
     if len(timargs) == 0:
         return None
@@ -80,7 +82,7 @@ def one_blob(X):
         plt.figure(2, figsize=(3,3))
         plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
         plt.figure(1)
-
+#
     t0 = time.process_time()
     # A local WCS for this blob
     blobwcs = brickwcs.get_subimage(bx0, by0, blobw, blobh)
@@ -88,7 +90,8 @@ def one_blob(X):
     ob = OneBlob(nblob, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
-                 less_masking, frozen_galaxies)
+                 less_masking, frozen_galaxies, iblob=iblob)
+    opt = ob.trargs['optimizer']
     if use_gpu:
         # need a branch of the tractor code that supports this!
         print ("Using GPUFriendlyOptimizer")
@@ -97,28 +100,29 @@ def one_blob(X):
         opt.setGPUMode(gpumode)
         print('Optimizing with', type(opt))
         ob.trargs.update(optimizer=opt)
-    print ("Opt = ", ob.trargs['optimizer'])
+        ob.use_gpu = True
+        ob.gpumode = gpumode
     B = ob.init_table(Isrcs)
     B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
-    tx[0] += time.time()-t
-    tc[0] += time.time()-t
     ob.finalize_table(B, bx0, by0)
 
     t1 = time.process_time()
     B.cpu_blob = np.empty(len(B), np.float32)
     B.cpu_blob[:] = t1 - t0
     B.iblob = iblob
-    if use_gpu:
-        opt.printTiming()
-    print ("One blob time: ", tx, tc) 
+    if bid is not None and iblob == bid:
+        print ("Exiting.")
+        import sys
+        sys.exit(0)
     return B
 
 class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
-                 less_masking, frozen_galaxies):
+                 less_masking, frozen_galaxies, iblob=None):
         self.name = name
+        self.iblob = iblob #blob id
         self.blobwcs = blobwcs
         self.pixscale = self.blobwcs.pixel_scale()
         self.blobmask = blobmask
@@ -145,10 +149,13 @@ class OneBlob(object):
         self.blobh,self.blobw = blobmask.shape
         self.trargs = dict()
         self.frozen_galaxy_mods = []
+        self.use_gpu = False
+        self.gpumode = 0
 
         if len(frozen_galaxies):
             debug('Subtracting frozen galaxy models...')
             tr = Tractor(self.tims, Catalog(*frozen_galaxies))
+            tr.setBlobid(iblob) #Set blobid
             mm = []
             for tim in self.tims:
                 mh,mw = tim.shape
@@ -167,7 +174,8 @@ class OneBlob(object):
                     traceback.print_exc()
                     continue
                 self.frozen_galaxy_mods.append(mod)
-                tim.data -= mod
+                #tim.data -= mod
+                tim.setImage(tim.data-mod) #Update GPU flag
                 if self.plots:
                     mods.append(mod)
             if self.plots:
@@ -499,6 +507,11 @@ class OneBlob(object):
                     cat.freezeParam(isub)
                     continue
                 _convert_ellipses(src)
+                if src.numberOfParams() != nsrcparams:
+                    print ("EXCEPTION:", src.numberOfParams(), nsrcparams)
+                    print ("Exception - src params do not match! for ", src, isub)
+                    info('Blob', self.name, 'finished, total:', Time()-trun)
+                    return B
                 assert(src.numberOfParams() == nsrcparams)
                 # Compute inverse-variances
                 allderivs = tr.getDerivs()
@@ -527,8 +540,6 @@ class OneBlob(object):
                 B.set(k, v)
             del M
 
-        tx[1] += time.time()-t
-        tc[1] += 1
         info('Blob', self.name, 'finished, total:', Time()-trun)
         return B
 
@@ -807,7 +818,6 @@ class OneBlob(object):
                 # columns not in Bnew:
                 # {'safe_x0', 'safe_y0', 'started_in_blob'}
                 B.sources = srcs + newsrcs
-
         models.restore_images(self.tims)
         del models
         return B
@@ -845,7 +855,8 @@ class OneBlob(object):
                 mod.addTo(modimg)
             if len(self.frozen_galaxy_mods):
                 modimg += self.frozen_galaxy_mods[itim]
-            tim.data = modimg
+            #tim.data = modimg
+            tim.setImage(modimg) #Update GPU flag
         if self.plots:
             coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
                                        fill_holes=False)
@@ -859,7 +870,8 @@ class OneBlob(object):
             self.tims, self.blobwcs, self.bands, mp)
         # revert
         for tim,img in zip(self.tims, realimages):
-            tim.data = img
+            #tim.data = img
+            tim.setImage(img) #Update GPU flag
 
         if self.plots:
             import pylab as plt
@@ -1237,7 +1249,8 @@ class OneBlob(object):
                 mm.append(d)
 
                 saved_srctim_ies.append(ie)
-                tim.inverr = newie
+                #tim.inverr = newie
+                tim.setInvError(newie)
                 keep_srctims.append(tim)
 
             srctims = keep_srctims
@@ -1318,7 +1331,8 @@ class OneBlob(object):
             debug('Source is starting outside blob -- skipping.')
             if mask_others:
                 for ie,tim in zip(saved_srctim_ies, srctims):
-                    tim.inverr = ie
+                    #tim.inverr = ie
+                    tim.setInvError(ie)
             return None
 
         if is_galaxy:
@@ -1339,7 +1353,21 @@ class OneBlob(object):
             for tim in srctims:
                 tim.freezeAllBut('sky')
             srctractor.thawParam('images')
+            # When we're fitting the background, using the sparse optimizer is critical
+            # when we have a lot of images: we're adding Nimages extra parameters, touching
+            # every pixel; you don't want Nimages x Npixels dense matrices.
+            from tractor.lsqr_optimizer import LsqrOptimizer
+            if self.use_gpu and self.gpumode > 0:
+                from tractor.gpu_lsqr_optimizer import GPULsqrOptimizer
+                print ("Updating GPU optimizer for ",src)
+                srctractor.optimizer = GPULsqrOptimizer()
+                #print ("Updating optimizer for ",src)
+                #srctractor.optimizer = LsqrOptimizer()
+            else:
+                print ("Updating optimizer for ",src)
+                srctractor.optimizer = LsqrOptimizer()
             skyparams = srctractor.images.getParams()
+            #print ("SKYPARAMS", type(skyparams), type(srctractor.images), skyparams)
 
         enable_galaxy_cache()
 
@@ -1510,7 +1538,8 @@ class OneBlob(object):
                 debug('Source exited sub-blob!')
                 if mask_others:
                     for ie,tim in zip(saved_srctim_ies, srctims):
-                        tim.inverr = ie
+                        #tim.inverr = ie
+                        tim.setInvError(ie)
                 continue
 
             disable_galaxy_cache()
@@ -1605,7 +1634,8 @@ class OneBlob(object):
         if mask_others:
             for tim,ie in zip(srctims, saved_srctim_ies):
                 # revert tim to original (unmasked-by-others)
-                tim.inverr = ie
+                #tim.inverr = ie
+                tim.setInvError(ie)
 
         # After model selection, revert the sky
         if fit_background:
@@ -2165,11 +2195,13 @@ class SourceModels(object):
     def save_images(self, tims):
         self.orig_images = [tim.getImage() for tim in tims]
         for tim,img in zip(tims, self.orig_images):
-            tim.data = img.copy()
+            #tim.data = img.copy()
+            tim.setImage(img.copy()) #Update GPU flag
 
     def restore_images(self, tims):
         for tim,img in zip(tims, self.orig_images):
-            tim.data = img
+            #tim.data = img
+            tim.setImage(img) #Update GPU flag
 
     def create(self, tims, srcs, subtract=False, modelmasks=None):
         '''
@@ -2197,6 +2229,7 @@ class SourceModels(object):
                     mod = _clip_model_to_blob(mod, sh, ie)
                     if subtract and mod is not None:
                         mod.addTo(tim.getImage(), scale=-1)
+                        tim.setImage(tim.data) #Update GPU flag
                 mods.append(mod)
             self.models.append(mods)
 
@@ -2208,6 +2241,8 @@ class SourceModels(object):
             mod = mods[i]
             if mod is not None:
                 mod.addTo(tim.getImage())
+                tim.setImage(tim.data) #Update GPU flag
+
 
     def update_and_subtract(self, i, src, tims, tim_ies=None, ps=None):
         for itim,(tim,mods) in enumerate(zip(tims, self.models)):
@@ -2233,6 +2268,7 @@ class SourceModels(object):
                 img[outslice] -= p * (ie[outslice]>0)
             else:
                 mod.addTo(tim.getImage(), scale=-1)
+                tim.setImage(tim.data) #Update GPU flag
 
             # if mod.patch.max() > 1e6:
             #     if ps is not None:

@@ -24,7 +24,8 @@ class DecamImagePlusNoise(DecamImage):
         with np.errstate(divide='ignore'):
             ie = 1. / (np.hypot(1. / tim.inverr, self.addnoise))
         ie[tim.inverr == 0] = 0.
-        tim.inverr = ie
+        #tim.inverr = ie
+        tim.setInvError(ie)
         tim.data += np.random.normal(size=tim.shape) * self.addnoise
         print('Adding noise: sig1 was', tim.sig1)
         print('Adding', self.addnoise)

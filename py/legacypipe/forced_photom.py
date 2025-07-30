@@ -560,6 +560,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         moffat = True
         _,halos = subtract_one((0, tim, halostars, moffat, old_calibs_ok))
         tim.data -= halos
+        tim.setImage(tim.data) #Update GPU flag
 
     # The "north" and "south" directories often don't have
     # 'survey-bricks" files of their own -- use the 'survey' one
@@ -656,6 +657,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
             tr = Tractor([tim], cat)
             mod = tr.getModelImage(0)
             tim.data -= mod
+            tim.setImage(tim.data) #Update GPU flag
             I = np.flatnonzero(np.logical_not(sga_out))
             T.cut(I)
 
@@ -1262,7 +1264,8 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             timdata = tim.data
             timpsf  = tim.getPsf()
             # Fit on residual image
-            tim.data = timdata - orig_mod
+            tim.setImage(timdata - orig_mod) #Update GPU flag
+            #tim.data = timdata - orig_mod
 
             from tractor.dense_optimizer import ConstrainedDenseOptimizer
             from tractor.patch import ModelMask
@@ -1308,6 +1311,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 mod.clipTo(dw,dh)
                 # Add initial model back into residual image
                 mod.addTo(tim.data, scale=+1)
+                tim.setImage(tim.data) #Update GPU flag
                 slicex = mod.getSlice(parent=tim.data)
 
                 mh,mw = mod.shape
@@ -1413,8 +1417,10 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 if mod2 is None:
                     # Subtract off initial model
                     mod.addTo(tim.data, scale=-1)
+                    tim.setImage(tim.data) #Update GPU flag
                 else:
                     mod2.addTo(tim.data, scale=-1)
+                    tim.setImage(tim.data) #Update GPU flag
 
                 dec0 = src.getPosition().dec
                 cosdec = np.cos(np.deg2rad(dec0))
@@ -1433,7 +1439,8 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 #print('dRA,dDec (%.3f, %.3f) milli-arcsec' % (1000. * F.full_fit_dra[i], 1000. * F.full_fit_ddec[i]))
 
             # RESTORE tim data!
-            tim.data = timdata
+            tim.setImage(timdata) #Update GPU flag
+            #tim.data = timdata
             tim.psf  = timpsf
 
             if timing:

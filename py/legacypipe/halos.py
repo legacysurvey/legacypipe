@@ -15,6 +15,7 @@ def subtract_halos(tims, refs, bands, mp, plots, ps, moffat=True,
     haloimgs = mp.imap_unordered(subtract_one, args)
     for itim,h in haloimgs:
         tims[itim].data -= h
+        tims[itim].setImage(tims[itim].data) #Update GPU flag
 
 def subtract_one(X):
     itim, tim, refs, moffat, old_calibs_ok = X
