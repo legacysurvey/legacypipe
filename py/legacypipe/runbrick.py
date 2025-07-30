@@ -46,6 +46,11 @@ from legacypipe.blobmask import stage_blobmask
 from legacypipe.galex import stage_galex_forced
 import time
 
+ttr = np.zeros(8)
+
+def print_tr():
+    print ("TR ", ttr, ttr.sum())
+
 import logging
 logger = logging.getLogger('legacypipe.runbrick')
 def info(*args):
@@ -406,6 +411,7 @@ def stage_refs(survey=None,
                tims=None,
                **kwargs):
     from legacypipe.reference import get_reference_sources
+    t = time.time()
 
     record_event and record_event('stage_refs: starting')
     _add_stage_version(version_header, 'REFS', 'refs')
@@ -530,6 +536,8 @@ def stage_refs(survey=None,
             'refcat']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
+    ttr[4] += time.time()-t
+    print_tr()
     return rtn
 
 def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
@@ -548,6 +556,7 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
     for the outliers file.
     '''
     from legacypipe.outliers import patch_from_coadd, mask_outlier_pixels, read_outlier_mask_file
+    t = time.time()
 
     record_event and record_event('stage_outliers: starting')
     _add_stage_version(version_header, 'OUTL', 'outliers')
@@ -613,6 +622,8 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
             del badcoaddsneg
         info('"After" coadds:', Time()-t0)
 
+    ttr[5] += time.time()-t
+    print_tr()
     return dict(tims=tims, version_header=version_header)
 
 def stage_halos(pixscale=None, targetwcs=None,
@@ -665,6 +676,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        less_masking=False,
                        **kwargs):
     from legacypipe.utils import copy_header_with_wcs
+    t = time.time()
     record_event and record_event('stage_image_coadds: starting')
     '''
     Immediately after reading the images, we can create coadds of just
@@ -813,6 +825,8 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         del rgb
     del coadd_list
     del C
+    ttr[6] += time.time()-t
+    print_tr()
     return None
 
 def stage_srcs(pixscale=None, targetwcs=None,
@@ -846,6 +860,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
     from legacypipe.detection import (detection_maps, merge_hot_satur,
                         run_sed_matched_filters, segment_and_group_sources)
     from scipy.ndimage import binary_dilation
+    t = time.time()
 
     record_event and record_event('stage_srcs: starting')
     _add_stage_version(version_header, 'SRCS', 'srcs')
@@ -1041,6 +1056,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
                     continue
                 goodpix = (tim.inverr > 0)
                 tim.data[goodpix] -= cosky
+                tim.setImage(tim.data) #Update GPU flag
                 ccds.co_sky[itim] = cosky
     else:
         co_sky = None
@@ -1070,6 +1086,8 @@ def stage_srcs(pixscale=None, targetwcs=None,
             'ps', 'saturated_pix', 'version_header', 'co_sky', 'ccds']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
+    ttr[7] += time.time()-t
+    print_tr()
     return rtn
 
 def stage_fitblobs(T=None,
@@ -1106,6 +1124,7 @@ def stage_fitblobs(T=None,
                    custom_brick=False,
                    use_gpu=False,
                    gpumode=0,
+                   bid=None,
                    **kwargs):
     '''
     This is where the actual source fitting happens.
@@ -1114,6 +1133,8 @@ def stage_fitblobs(T=None,
     '''
     from tractor import Catalog
     from legacypipe.oneblob import MODEL_NAMES
+    t = time.time()
+    #return None
 
     record_event and record_event('stage_fitblobs: starting')
     _add_stage_version(version_header, 'FITB', 'fitblobs')
@@ -1282,11 +1303,15 @@ def stage_fitblobs(T=None,
                           max_blobsize=max_blobsize, custom_brick=custom_brick,
                           enable_sub_blobs=sub_blobs,
                           ran_sub_blobs=ran_sub_blobs,
-                          use_gpu=use_gpu,gpumode=gpumode)
+                          use_gpu=use_gpu,gpumode=gpumode,bid=bid)
+    print ("BLOBITER", type(blobiter))
+    print (blobiter)
 
     if checkpoint_filename is None:
+        print ("TEST1")
         R.extend(mp.map(_bounce_one_blob, blobiter))
     else:
+        print ("TEST2")
         from astrometry.util.ttime import CpuMeas
         # Begin running one_blob on each blob...
         Riter = mp.imap_unordered(_bounce_one_blob, blobiter)
@@ -1576,6 +1601,8 @@ def stage_fitblobs(T=None,
         keys.append('sub_blob_mask')
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
+    ttr[2] += time.time()-t
+    print_tr()
     return rtn
 
 # Also called by farm.py
@@ -1748,7 +1775,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                skipblobs=None, max_blobsize=None, custom_brick=False,
                enable_sub_blobs=False,
                ran_sub_blobs=None,
-               use_gpu=False,gpumode=0):
+               use_gpu=False,gpumode=0,bid=None):
     '''
     *blobmap*: integer image map, with -1 indicating no-blob, other values indexing
         into *blobslices*,*blobsrcs*.
@@ -1912,7 +1939,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                     blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
                     reoptimize, iterative, use_ceres, refmap[bslc],
                     large_galaxies_force_pointsource, less_masking,
-                    frozen_galaxies.get(iblob, []), use_gpu, gpumode))
+                    frozen_galaxies.get(iblob, []), use_gpu, gpumode, bid))
             continue
 
         # Sub-blob.
@@ -1980,7 +2007,7 @@ def _blob_iter(brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T
                         plots, ps,
                         reoptimize, iterative, use_ceres, refmap[sub_slc],
                         large_galaxies_force_pointsource, less_masking, fro_gals,
-                        use_gpu, gpumode))
+                        use_gpu, gpumode, bid))
 
 def _bounce_one_blob(X):
     '''This wraps the one_blob function for multiprocessing purposes (and
@@ -1989,6 +2016,7 @@ def _bounce_one_blob(X):
     from legacypipe.oneblob import one_blob
     (brickname, iblob, blob_unique, X) = X
     try:
+        t = time.time()
         result = one_blob(X)
         if result is not None:
             # Was this a sub-blobs?  If so, de-duplicate the catalog
@@ -2002,6 +2030,8 @@ def _bounce_one_blob(X):
                     result.cut((result.bx0 >= x0) * (result.bx0 < x1) *
                                (result.by0 >= y0) * (result.by0 < y1))
                 debug('Blob_unique cut kept', len(result), 'of', ntot, 'sources')
+        ttr[0] += time.time()-t
+        print_tr()
         ### This defines the format of the results in the checkpoints files
         return dict(brickname=brickname, iblob=iblob, result=result)
     except:
@@ -2162,6 +2192,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     from legacypipe.survey import apertures_arcsec
     from legacypipe.bits import IN_BLOB
     from legacypipe.survey import clean_band_name
+    t = time.time()
+    #return None
 
     record_event and record_event('stage_coadds: starting')
     _add_stage_version(version_header, 'COAD', 'coadds')
@@ -2519,6 +2551,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
     tnow = Time()
     debug('Aperture photometry wrap-up:', tnow-tlast)
+    ttr[1] += time.time()-t
+    print_tr()
 
     return dict(T=T, apertures_pix=apertures,
                 apertures_arcsec=apertures_arcsec,
@@ -3080,6 +3114,7 @@ def stage_writecat(
     '''
     from legacypipe.catalog import prepare_fits_catalog
     from legacypipe.utils import copy_header_with_wcs, add_bits
+    t = time.time()
 
     record_event and record_event('stage_writecat: starting')
     _add_stage_version(version_header, 'WCAT', 'writecat')
@@ -3276,6 +3311,8 @@ def stage_writecat(
         f.close()
 
     record_event and record_event('stage_writecat: done')
+    ttr[3] += time.time()-t
+    print_tr()
     return dict(T=T, version_header=version_header)
 
 def copy_wise_into_catalog(T, WISE, WISE_T, primhdr):
@@ -3410,6 +3447,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               bail_out=False,
               use_gpu=False,
               gpumode=0,
+              bid=None,
               ceres=True,
               wise_ceres=True,
               galex_ceres=True,
@@ -3672,6 +3710,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   galex_ceres=galex_ceres,
                   use_gpu=use_gpu,
                   gpumode=gpumode,
+                  bid=bid,
                   unwise_coadds=unwise_coadds,
                   bailout=bail_out,
                   minimal_coadds=minimal_coadds,
@@ -3970,6 +4009,7 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
 
     parser.add_argument('--use-gpu', default=False, action='store_true')
     parser.add_argument('--gpumode', default=0, type=int, help='Mode for GPU')
+    parser.add_argument('--bid', default=None, type=int, help='blob id')
 
     parser.add_argument('--ceres', default=False, action='store_true',
                         help='Use Ceres Solver for all optimization?')

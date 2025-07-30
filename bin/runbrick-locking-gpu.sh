@@ -12,8 +12,10 @@
 export COSMO=/dvs_ro/cfs/cdirs/cosmo
 
 export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
+#export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr10
 # Default output directory, can be overridden with -outdir
 outdir=$SCRATCH/dr11-gpu
+#outdir=$SCRATCH/dr10-gpu
 
 export GAIA_CAT_DIR=$COSMO/data/gaia/dr3/healpix
 export GAIA_CAT_PREFIX=healpix
@@ -285,6 +287,7 @@ echo "  --no-wise" >> "$log_file"
 
 python -u "$LEGACYPIPE_DIR/legacypipe/runbrick.py" \
   --brick "$brick_name" \
+  --run south \
   $zoom_arg \
   $use_gpu_flag \
   $gpumode_arg \

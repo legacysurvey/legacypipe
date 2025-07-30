@@ -19,6 +19,13 @@ from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 from legacypipe.utils import get_cpu_arch
 
+import os
+
+#from tractor.lsqr_optimizer import printTiming as lpt
+#from tractor.constrained_optimizer import printTiming as cpt
+#from tractor.gpu_lsqr_optimizer import printTiming as gpt
+#from tractor.engine import printTiming as ept
+
 rgbkwargs_resid = dict(resids=True)
 
 import logging
@@ -34,8 +41,11 @@ def is_debug():
 
 # Determines the order of elements in the DCHISQ array.
 MODEL_NAMES = ['psf', 'rex', 'dev', 'exp', 'ser']
-tx = np.zeros(3)
-tc = np.zeros(3, dtype=np.int32)
+tx = np.zeros(14)
+to = np.zeros(4)
+tc = np.zeros(5, dtype=np.int32)
+trn = np.zeros(7)
+trm = np.zeros(7)
 
 def one_blob(X):
     '''
@@ -45,9 +55,9 @@ def one_blob(X):
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
      srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap,
-     large_galaxies_force_pointsource, less_masking, frozen_galaxies, use_gpu, gpumode) = X
+     large_galaxies_force_pointsource, less_masking, frozen_galaxies, use_gpu, gpumode, bid) = X
 
-    if (use_gpu):
+    if (use_gpu and gpumode > 0):
         import cupy as cp
         dummy = cp.zeros(1)
     t = time.time()
@@ -55,12 +65,19 @@ def one_blob(X):
     debug('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
           (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
 
-    info('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
-          (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
+    pid = os.getpid()
+    info('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies ; pid %i' %
+          (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies), pid))
 
-    if (iblob == 47):
-        print ("Blob id 47 = using CPU")
-        #use_gpu = False
+    if bid is not None and iblob != bid:
+        print ("Skipping blob %s: blobid %i" % (nblob, iblob))
+        return None
+    #if (iblob == 47):
+    #    print ("Blob id 47 = using CPU")
+    #    #use_gpu = False
+    #if (iblob == 922):
+    #    print ("Skipping blob 922")
+    #    return None
 
     if len(timargs) == 0:
         return None
@@ -80,7 +97,7 @@ def one_blob(X):
         plt.figure(2, figsize=(3,3))
         plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
         plt.figure(1)
-
+#
     t0 = time.process_time()
     # A local WCS for this blob
     blobwcs = brickwcs.get_subimage(bx0, by0, blobw, blobh)
@@ -88,7 +105,8 @@ def one_blob(X):
     ob = OneBlob(nblob, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
-                 less_masking, frozen_galaxies)
+                 less_masking, frozen_galaxies, iblob=iblob)
+    opt = ob.trargs['optimizer']
     if use_gpu:
         # need a branch of the tractor code that supports this!
         print ("Using GPUFriendlyOptimizer")
@@ -97,28 +115,45 @@ def one_blob(X):
         opt.setGPUMode(gpumode)
         print('Optimizing with', type(opt))
         ob.trargs.update(optimizer=opt)
+        ob.use_gpu = True
+        ob.gpumode = gpumode
     print ("Opt = ", ob.trargs['optimizer'])
     B = ob.init_table(Isrcs)
     B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
     tx[0] += time.time()-t
-    tc[0] += time.time()-t
+    tc[0] += 1 
     ob.finalize_table(B, bx0, by0)
 
     t1 = time.process_time()
     B.cpu_blob = np.empty(len(B), np.float32)
     B.cpu_blob[:] = t1 - t0
     B.iblob = iblob
-    if use_gpu:
+    if use_gpu and opt is not None:
         opt.printTiming()
-    print ("One blob time: ", tx, tc) 
+    print ("One blob time: ", tx, tc, "TO", to) 
+    print ("Trn", trn, trn.sum())
+    print ("TRM", trm, trm.sum())
+    print ("Iter", trm[4])
+    print ("RMS", trn[4])
+    print ("MSOS", trm[2])
+    print ("Opt", to, to.sum())
+    #lpt()
+    #cpt()
+    #gpt()
+    #ept()
+    if bid is not None and iblob == bid:
+        print ("Exiting.")
+        import sys
+        sys.exit(0)
     return B
 
 class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
-                 less_masking, frozen_galaxies):
+                 less_masking, frozen_galaxies, iblob=None):
         self.name = name
+        self.iblob = iblob #blob id
         self.blobwcs = blobwcs
         self.pixscale = self.blobwcs.pixel_scale()
         self.blobmask = blobmask
@@ -145,10 +180,13 @@ class OneBlob(object):
         self.blobh,self.blobw = blobmask.shape
         self.trargs = dict()
         self.frozen_galaxy_mods = []
+        self.use_gpu = False
+        self.gpumode = 0
 
         if len(frozen_galaxies):
             debug('Subtracting frozen galaxy models...')
             tr = Tractor(self.tims, Catalog(*frozen_galaxies))
+            tr.setBlobid(iblob) #Set blobid
             mm = []
             for tim in self.tims:
                 mh,mw = tim.shape
@@ -167,7 +205,8 @@ class OneBlob(object):
                     traceback.print_exc()
                     continue
                 self.frozen_galaxy_mods.append(mod)
-                tim.data -= mod
+                #tim.data -= mod
+                tim.setImage(tim.data-mod) #Update GPU flag
                 if self.plots:
                     mods.append(mod)
             if self.plots:
@@ -327,6 +366,7 @@ class OneBlob(object):
         # Optimize individual sources, in order of flux.
         # First, choose the ordering...
         Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
+        t2 = time.time()
 
         # The sizes of the model patches fit here are determined by the
         # sources themselves, ie by the size of the mod patch returned by
@@ -336,6 +376,8 @@ class OneBlob(object):
                 cat, Ibright, B.cpu_source)
         else:
             self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source)
+        trn[2] += time.time()-t2
+        t2 = time.time()
 
         if self.plots:
             self._plots(tr, 'After source fitting')
@@ -407,12 +449,16 @@ class OneBlob(object):
             src.maskbits_forced_point_source = force_pointsource
 
         self.compute_segmentation_map()
+        trn[3] += time.time()-t2
+        t2 = time.time()
 
         # Next, model selections: point source vs rex vs dev/exp vs ser.
         B = self.run_model_selection(cat, Ibright, B,
                                      iterative_detection=iterative_detection)
 
         debug('Blob', self.name, 'finished model selection:', Time()-tlast)
+        trn[4] += time.time()-t2
+        t2 = time.time()
         tlast = Time()
 
         # Cut down to just the kept sources
@@ -482,6 +528,7 @@ class OneBlob(object):
                 self.ps.savefig()
 
         if compute_metrics:
+            t2 = time.time()
             # Compute variances on all parameters for the kept model
             B.srcinvvars = [None for i in range(len(B))]
             cat.thawAllRecursive()
@@ -499,6 +546,11 @@ class OneBlob(object):
                     cat.freezeParam(isub)
                     continue
                 _convert_ellipses(src)
+                if src.numberOfParams() != nsrcparams:
+                    print ("EXCEPTION:", src.numberOfParams(), nsrcparams)
+                    print ("Exception - src params do not match! for ", src, isub)
+                    info('Blob', self.name, 'finished, total:', Time()-trun)
+                    return B
                 assert(src.numberOfParams() == nsrcparams)
                 # Compute inverse-variances
                 allderivs = tr.getDerivs()
@@ -522,10 +574,13 @@ class OneBlob(object):
                 tr.catalog = cat
             del I
 
+            trn[5] += time.time()-t2
+            t2 = time.time()
             M = _compute_source_metrics(B.sources, self.tims, self.bands, tr)
             for k,v in M.items():
                 B.set(k, v)
             del M
+            trn[6] += time.time()-t2
 
         tx[1] += time.time()-t
         tc[1] += 1
@@ -694,6 +749,7 @@ class OneBlob(object):
         #   -fit, with Catalog([src])
         #   -subtract final model (from each tim)
         # -Replace original images
+        t2 = time.time()
 
         models = SourceModels()
         # Remember original tim images
@@ -714,6 +770,7 @@ class OneBlob(object):
 
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
+            print ("Blob ", self.name, "SRC ", srci)
             src = cat[srci]
             debug('Model selection for source %i of %i in blob %s; sourcei %i' %
                   (numi+1, len(Ibright), self.name, srci))
@@ -737,8 +794,11 @@ class OneBlob(object):
                            origin='lower')
                 plt.figure(1)
 
+            t2 = time.time()
             # Model selection for this source.
             keepsrc = self.model_selection_one_source(src, srci, models, B)
+            trm[2] += time.time()-t2
+            t2 = time.time()
 
             # Definitely keep ref stars (Gaia & Tycho)
             if keepsrc is None and getattr(src, 'reference_star', False):
@@ -764,10 +824,12 @@ class OneBlob(object):
 
             cpu1 = time.process_time()
             B.cpu_source[srci] += (cpu1 - cpu0)
+            trm[3] += time.time()-t2
 
         # At this point, we have subtracted our best model fits for each source
         # to be kept; the tims contain residual images.
 
+        t2 = time.time()
         if iterative_detection:
 
             if self.plots and False:
@@ -807,7 +869,7 @@ class OneBlob(object):
                 # columns not in Bnew:
                 # {'safe_x0', 'safe_y0', 'started_in_blob'}
                 B.sources = srcs + newsrcs
-
+        trm[4] += time.time()-t2
         models.restore_images(self.tims)
         del models
         return B
@@ -845,7 +907,8 @@ class OneBlob(object):
                 mod.addTo(modimg)
             if len(self.frozen_galaxy_mods):
                 modimg += self.frozen_galaxy_mods[itim]
-            tim.data = modimg
+            #tim.data = modimg
+            tim.setImage(modimg) #Update GPU flag
         if self.plots:
             coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
                                        fill_holes=False)
@@ -859,7 +922,8 @@ class OneBlob(object):
             self.tims, self.blobwcs, self.bands, mp)
         # revert
         for tim,img in zip(self.tims, realimages):
-            tim.data = img
+            #tim.data = img
+            tim.setImage(img) #Update GPU flag
 
         if self.plots:
             import pylab as plt
@@ -1004,7 +1068,10 @@ class OneBlob(object):
         bloblogger.setLevel(loglvl + 10)
 
         # Run the whole oneblob pipeline on the iterative sources!
+        t2 = time.time()
+        print ("BNEW")
         Bnew = self.run(Bnew, iterative_detection=False, compute_metrics=False)
+        tx[13] += time.time()-t2
 
         bloblogger.setLevel(loglvl)
 
@@ -1019,6 +1086,7 @@ class OneBlob(object):
     def model_selection_one_source(self, src, srci, models, B):
 
         # FIXME -- don't need these aliased variable names any more
+        t = time.time()
         modelMasks = models.model_masks(srci, src)
         srctims = self.tims
         srcwcs = self.blobwcs
@@ -1051,11 +1119,13 @@ class OneBlob(object):
             from scipy.ndimage import binary_dilation, binary_fill_holes
             from scipy.ndimage.measurements import label
             # Compute per-band detection maps
+            t2 = time.time()
             mp = multiproc()
             detmaps,detivs,_ = detection_maps(
                 srctims, srcwcs, self.bands, mp)
             # Compute the symmetric area that fits in this 'srcblobmask' region
             pos = src.getPosition()
+            tx[7] += time.time()-t2
             _,xx,yy = srcwcs.radec2pixelxy(pos.ra, pos.dec)
             bh,bw = srcblobmask.shape
             ix = int(np.clip(np.round(xx-1), 0, bw-1))
@@ -1237,7 +1307,8 @@ class OneBlob(object):
                 mm.append(d)
 
                 saved_srctim_ies.append(ie)
-                tim.inverr = newie
+                #tim.inverr = newie
+                tim.setInvError(newie)
                 keep_srctims.append(tim)
 
             srctims = keep_srctims
@@ -1318,7 +1389,8 @@ class OneBlob(object):
             debug('Source is starting outside blob -- skipping.')
             if mask_others:
                 for ie,tim in zip(saved_srctim_ies, srctims):
-                    tim.inverr = ie
+                    #tim.inverr = ie
+                    tim.setInvError(ie)
             return None
 
         if is_galaxy:
@@ -1339,7 +1411,21 @@ class OneBlob(object):
             for tim in srctims:
                 tim.freezeAllBut('sky')
             srctractor.thawParam('images')
+            # When we're fitting the background, using the sparse optimizer is critical
+            # when we have a lot of images: we're adding Nimages extra parameters, touching
+            # every pixel; you don't want Nimages x Npixels dense matrices.
+            from tractor.lsqr_optimizer import LsqrOptimizer
+            if self.use_gpu and self.gpumode > 0:
+                from tractor.gpu_lsqr_optimizer import GPULsqrOptimizer
+                print ("Updating GPU optimizer for ",src)
+                srctractor.optimizer = GPULsqrOptimizer()
+                #print ("Updating optimizer for ",src)
+                #srctractor.optimizer = LsqrOptimizer()
+            else:
+                print ("Updating optimizer for ",src)
+                srctractor.optimizer = LsqrOptimizer()
             skyparams = srctractor.images.getParams()
+            #print ("SKYPARAMS", type(skyparams), type(srctractor.images), skyparams)
 
         enable_galaxy_cache()
 
@@ -1348,7 +1434,9 @@ class OneBlob(object):
 
         if fit_background:
             #print ("ENTERING OPTIMIZE 1 - ", type(srctractor), srctractor.optimize_loop)
+            t2 = time.time()
             srctractor.optimize_loop(**self.optargs)
+            to[0] += time.time()-t2
 
         if self.plots_per_source:
             model_mod_rgb = {}
@@ -1459,13 +1547,17 @@ class OneBlob(object):
             print('OneBlob before model selection:', newsrc)
             try:
                 #print ("ENTERING OPTIMIZE 2 - ", type(srctractor), srctractor.optimize_loop)
+                t2 = time.time()
                 R = srctractor.optimize_loop(**self.optargs)
+                to[1] += time.time()-t2
+                tc[2] += 1
             except Exception as e:
                 print('Exception fitting source in model selection.  src:', newsrc)
                 import traceback
                 traceback.print_exc()
                 raise(e)
                 continue
+            t2 = time.time()
             print('OneBlob after model selection:', newsrc)
             #print('Fit result:', newsrc)
             #print('Steps:', R['steps'])
@@ -1510,7 +1602,8 @@ class OneBlob(object):
                 debug('Source exited sub-blob!')
                 if mask_others:
                     for ie,tim in zip(saved_srctim_ies, srctims):
-                        tim.inverr = ie
+                        #tim.inverr = ie
+                        tim.setInvError(ie)
                 continue
 
             disable_galaxy_cache()
@@ -1560,11 +1653,16 @@ class OneBlob(object):
                     debug('Source', newsrc, ': setting flux in band', band,
                           'to zero based on fracin = %.3g' % f)
                     newsrc.getBrightness().setFlux(band, 0.)
+            tx[3]+= time.time()-t2
+            t2 =time.time()
 
             # Compute inverse-variances
             # This uses the second-round modelMasks.
             allderivs = srctractor.getDerivs()
+            tx[4] += time.time()-t2
+            t2 =time.time()
             ivars = _compute_invvars(allderivs)
+            tx[5] += time.time()-t2
             assert(len(ivars) == nsrcparams)
 
             # If any fluxes have zero invvar, zero out the flux.
@@ -1589,6 +1687,7 @@ class OneBlob(object):
             if isinstance(newsrc, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
                 newsrc.shape = oldshape
 
+            t2 = time.time()
             # Use the original 'srctractor' here so that the different
             # models are evaluated on the same pixels.
             ch = _per_band_chisqs(srctractor, self.bands)
@@ -1601,11 +1700,13 @@ class OneBlob(object):
             B.all_model_opt_steps  [srci][name] = opt_steps
             if name == 'ser':
                 B.hit_ser_limit[srci] = hit_ser_limit
+            tx[11]+= time.time()-t2
 
         if mask_others:
             for tim,ie in zip(srctims, saved_srctim_ies):
                 # revert tim to original (unmasked-by-others)
-                tim.inverr = ie
+                #tim.inverr = ie
+                tim.setInvError(ie)
 
         # After model selection, revert the sky
         if fit_background:
@@ -1674,6 +1775,8 @@ class OneBlob(object):
                          (self.name, srci, force_pointsource, fit_background,
                           keepmod, str(keepsrc), str(src)), fontsize=10)
             self.ps.savefig()
+        tx[12] += time.time()-t
+        #srctractor.printDerivTiming()
 
         return keepsrc
 
@@ -1696,7 +1799,9 @@ class OneBlob(object):
             modelMasks = models.model_masks(0, cat[i])
             tr.setModelMasks(modelMasks)
             #print ("ENTERING OPTIMIZE 3 - ", type(tr), tr.optimize_loop)
+            t2 = time.time()
             tr.optimize_loop(**self.optargs)
+            to[2] += time.time()-t2
             cpu1 = time.process_time()
             cputime[i] += (cpu1 - cpu0)
 
@@ -1761,7 +1866,10 @@ class OneBlob(object):
             # First-round optimization
             #print('First-round initial log-prob:', srctractor.getLogProb())
             #print ("ENTERING OPTIMIZE 4 - ", type(srctractor), srctractor.optimize_loop)
+            t2 = time.time()
             srctractor.optimize_loop(**self.optargs)
+            to[3] += time.time()-t2
+            tc[3] += 1
             #print('First-round final log-prob:', srctractor.getLogProb())
 
             if is_galaxy:
@@ -2165,11 +2273,13 @@ class SourceModels(object):
     def save_images(self, tims):
         self.orig_images = [tim.getImage() for tim in tims]
         for tim,img in zip(tims, self.orig_images):
-            tim.data = img.copy()
+            #tim.data = img.copy()
+            tim.setImage(img.copy()) #Update GPU flag
 
     def restore_images(self, tims):
         for tim,img in zip(tims, self.orig_images):
-            tim.data = img
+            #tim.data = img
+            tim.setImage(img) #Update GPU flag
 
     def create(self, tims, srcs, subtract=False, modelmasks=None):
         '''
@@ -2197,6 +2307,7 @@ class SourceModels(object):
                     mod = _clip_model_to_blob(mod, sh, ie)
                     if subtract and mod is not None:
                         mod.addTo(tim.getImage(), scale=-1)
+                        tim.setImage(tim.data) #Update GPU flag
                 mods.append(mod)
             self.models.append(mods)
 
@@ -2208,6 +2319,8 @@ class SourceModels(object):
             mod = mods[i]
             if mod is not None:
                 mod.addTo(tim.getImage())
+                tim.setImage(tim.data) #Update GPU flag
+
 
     def update_and_subtract(self, i, src, tims, tim_ies=None, ps=None):
         for itim,(tim,mods) in enumerate(zip(tims, self.models)):
@@ -2233,6 +2346,7 @@ class SourceModels(object):
                 img[outslice] -= p * (ie[outslice]>0)
             else:
                 mod.addTo(tim.getImage(), scale=-1)
+                tim.setImage(tim.data) #Update GPU flag
 
             # if mod.patch.max() > 1e6:
             #     if ps is not None:

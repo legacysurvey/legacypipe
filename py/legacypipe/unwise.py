@@ -153,6 +153,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
             # Actually subtract the background!
             tim.data -= bg
+            tim.setImage(tim.data) #Update GPU flag
 
         # Floor the per-pixel variances,
         # and add Poisson contribution from sources
@@ -179,7 +180,8 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
 
             assert(np.all(np.isfinite(new_ie)))
             assert(np.all(new_ie >= 0.))
-            tim.inverr = new_ie
+            #tim.inverr = new_ie
+            tim.setInvError(new_ie)
 
             # Expand a 3-pixel radius around weight=0 (saturated) pixels
             # from Eddie via crowdsource
@@ -193,6 +195,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             msat = binary_dilation(msat, dilate)
             nbefore = np.sum(tim.inverr == 0)
             tim.inverr[msat] = 0
+            tim.setInvError(tim.inverr) #Reset GPU flag
             nafter = np.sum(tim.inverr == 0)
             debug('Masking an additional', (nafter-nbefore), 'near-saturated pixels in unWISE',
                   tile.coadd_id, 'band', band)
@@ -256,6 +259,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             du = binary_dilation(unique)
             tim.coadd_inverr = tim.inverr * du
         tim.inverr[unique == False] = 0.
+        tim.setInvError(tim.inverr) #Reset GPU flag
         del xx,yy,rr,dd,unique
 
         if plots:

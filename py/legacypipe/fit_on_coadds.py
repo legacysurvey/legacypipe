@@ -210,10 +210,12 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
         for jj, (correction, ii) in enumerate(zip(x, I)):
             goodpix = (tims[ii].inverr > 0)
             tims[ii].data[goodpix] += correction
+            tims[ii].setImage(tims[ii].data) #Update GPU flag
             tims[ii].sky = ConstantSky(0.0)
             # Also correct the full-field mosaics
             goodpix = (bandtims[jj].inverr > 0)
             bandtims[jj].data[goodpix] += correction
+            bandtims[jj].setImage(bandtims[jj].data) #Update GPU flag
             bandtims[jj].sky = ConstantSky(0.0)
 
         ## Check--
@@ -294,6 +296,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
             for ii in I:
                 goodpix = (tims[ii].inverr > 0)
                 tims[ii].data[goodpix] -= skymedian
+                tims[ii].setImage(tims[ii].data) #Update GPU flag
                 #print('Tim', tims[ii], 'after subtracting skymedian: median', np.median(tims[ii].data))
 
     else:
@@ -319,6 +322,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
            for ii in I:
                goodpix = (tims[ii].inverr > 0)
                tims[ii].data[goodpix] -= skymedian
+               tims[ii].setImage(tims[ii].data) #Update GPU flag
                # print('Tim', tims[ii], 'after subtracting skymedian: median', np.median(tims[ii].data))
 
            #print('Band', band, 'Coadd sky:', skymedian)
