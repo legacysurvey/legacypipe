@@ -432,9 +432,11 @@ def get_large_galaxy_version(fn):
     preburn = False
     hdr = fitsio.read_header(fn)
     try:
-        v = hdr.get('SGAVER')
-        if v is None: # old version
-            v = hdr.get('LSLGAVER')
+        # SGA2025
+        v = hdr.get('VER')
+        if v is None:
+            # SGA2020
+            v = hdr.get('SGAVER')
         if v is not None:
             v = v.strip()
             if 'ellipse' in v.lower():
@@ -506,6 +508,18 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
         if 'sga_id' in galaxies.columns():
             galaxies.rename('sga_id', 'ref_id')
 
+    '''
+    Desired behaviors.
+
+    Parent catalog:
+    - if overlaps LMC/SMC mask,
+      - no new source detection (only Gaia and SGA)
+      - in DR10, we did this by setting CLUSTER
+      - add new MASKBITS bit: CLOUDS (LMC/SMC), same behavior as CLUSTER
+    - ignore LMC/SMC SGA sources
+      - don't want to set GALAXY
+
+    '''
     if 'mag_leda' in galaxies.columns():
         galaxies.rename('mag_leda', 'mag')
 
