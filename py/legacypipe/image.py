@@ -1627,6 +1627,12 @@ class LegacySurveyImage(object):
         if plots:
             refgood = (refmap == 0)
         good[refmap != 0] = False
+
+        # What fraction of the image is within a large-galaxy (GALAXY) mask?
+        from legacypipe.bits import IN_BLOB
+        h,w = refmap.shape
+        frac_galaxy = np.sum((refmap & IN_BLOB['GALAXY']) != 0) / (h*w)
+        print('Large galaxies cover %.1f %% of this CCD' % (frac_galaxy * 100))
         del refmap
 
         # Subtract stellar halos
