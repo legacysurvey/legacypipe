@@ -77,7 +77,7 @@ while [[ $# -gt 0 ]]; do
       shift # past argument
       ;;
     -blobid)
-      blobid="--bid $2"
+      blobid="--blobid $2"
       shift # past argument
       shift # past value
       ;;
@@ -158,7 +158,7 @@ echo "LOG = $log"
 
 #python -u $LEGACYPIPE_DIR/legacypipe/runbrick.py \
 #python -u -m cProfile -o brick.pro $LEGACYPIPE_DIR/legacypipe/runbrick.py \
-python -u $LEGACYPIPE_DIR/legacypipe/runbrick.py \
+python -u -m cProfile -o profile.pro $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --brick "$brick" \
         $zoom \
         $gpu \
@@ -176,7 +176,9 @@ python -u $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --write-stage srcs \
      --release 10099 \
      --no-wise \
-      >> "$log" 2>&1
+     --stage fitblobs
+#\
+#      >> "$log" 2>&1
 
 #     --use-gpu \
 #     --gpumode $gpumode \

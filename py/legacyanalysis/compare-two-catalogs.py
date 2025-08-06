@@ -229,7 +229,7 @@ def main():
         flux_ivar_2 = matched2.get('flux_ivar_%s' % band)
         flux_1 = matched1.get('flux_%s' % band)
         flux_2 = matched2.get('flux_%s' % band)
-
+        
         good = (flux_ivar_1 > 0) * (flux_ivar_2 > 0)
         #good = True
         psf1 = (matched1.type == 'PSF')
