@@ -48,6 +48,10 @@ subblobs=""
 blobid=""
 md="cpu"
 th=""
+ngpu=""
+ng=""
+threads_per_gpu=""
+gpu_ids=""
 
 while [[ $# -gt 0 ]]; do
   key="$1"
@@ -92,6 +96,22 @@ while [[ $# -gt 0 ]]; do
       shift # past argument
       shift # past value
       ;;
+    -ngpu)
+      ngpu="--ngpu $2"
+      ng="-ngpu$2"
+      shift # past argument
+      shift # past value
+      ;;
+    -threads-per-gpu)
+      threads_per_gpu="--threads-per-gpu $2"
+      shift # past argument
+      shift # past value
+      ;;
+    -gpu-ids)
+      gpu_ids="--gpu-ids $2"
+      shift # past argument
+      shift # past value
+      ;;
     *)    # unknown option
       echo "Error: Unknown option: $1" >&2
       exit 1
@@ -108,7 +128,7 @@ bri=${brick:0:3}
 mkdir -p "$outdir/logs/$bri"
 mkdir -p "$outdir/metrics/$bri"
 mkdir -p "$outdir/pickles/$bri"
-log="$outdir/logs/$bri/$brick-$md-$th.log"
+log="$outdir/logs/$bri/$brick-$md$ng-$th.log"
 echo Logging to: "$log"
 #echo Running on $(hostname)
 
@@ -152,6 +172,9 @@ echo "GPUMODE = $gpumode"
 echo "GPU = $gpu"
 echo "ZOOM = $zoom"
 echo "THREADS = $threads"
+echo "NGPU = $ngpu"
+echo "THREADS_PER_GPU = $threads_per_gpu"
+echo "GPU_IDS = $gpu_ids"
 echo "SUBBLOBS = $subblobs"
 echo "BLOBID = $blobid"
 echo "LOG = $log"
@@ -164,6 +187,9 @@ python -u -m cProfile -o profile.pro $LEGACYPIPE_DIR/legacypipe/runbrick.py \
         $gpu \
         $gpumode \
         $threads \
+	$ngpu \
+	$threads_per_gpu \
+	$gpu_ids \
 	$subblobs \
 	$blobid \
      --skip-calibs \
