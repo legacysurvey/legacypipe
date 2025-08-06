@@ -918,9 +918,9 @@ def imsave_jpeg(jpegfn, img, **kwargs):
 
 def clean_band_name(band):
     '''
-    Converts a band name into upper case that is clean to use in a FITS header.
+    Makes a band name suitable for a FITS column name
     '''
-    return band.upper().replace('-','_')
+    return band.replace('-','_')
 
 class FITSWrapper(fitsio.FITS):
     '''
@@ -2063,7 +2063,6 @@ def read_one_tim(X):
         print('Time to read %s-%s-%s: %i x %i image, hdu %i:' %
               (im.camera, im.expnum, im.ccdname, tw,th, im.hdu), Time()-t0)
     return tim
-
 
 def read_psfex_conf(camera):
     psfex_conf = {}

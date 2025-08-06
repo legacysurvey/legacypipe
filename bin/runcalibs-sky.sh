@@ -1,31 +1,24 @@
 #! /bin/bash
 
-# Run legacy_zeropoints on a single image within a Shifter container at NERSC.
+export COSMO=/dvs_ro/cfs/cdirs/cosmo
 
-# Second-round sky calibs.
-
-export LEGACY_SURVEY_DIR=$CSCRATCH/dr10-sky-v3
-export CACHE_DIR=$CSCRATCH/dr10-cache
-
-outdir=$LEGACY_SURVEY_DIR/
+export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
+outdir=$SCRATCH/dr11
 
 ncores=32
 
-export GAIA_CAT_DIR=$CSCRATCH/gaia-edr3-healpix/healpix
-#/global/cfs/cdirs/desi/target/gaia_edr3/healpix
+export GAIA_CAT_DIR=$COSMO/data/gaia/dr3/healpix
 export GAIA_CAT_PREFIX=healpix
 export GAIA_CAT_SCHEME=nested
-export GAIA_CAT_VER=E
+export GAIA_CAT_VER=3
 
-#export DUST_DIR=/global/cfs/cdirs/cosmo/data/dust/v0_1
-export DUST_DIR=$CSCRATCH/dr10-cache/dust-v0_1
-export TYCHO2_KD_DIR=$CSCRATCH/dr10-cache/tycho2
-export LARGEGALAXIES_CAT=$CSCRATCH/dr10-cache/SGA-ellipse-v3.0.kd.fits
-#export SKY_TEMPLATE_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr10/calib/sky_pattern
-export SKY_TEMPLATE_DIR=$CSCRATCH/dr10-cache/calib/sky_pattern
-#export BLOB_MASK_DIR=/global/cfs/cdirs/cosmo/work/legacysurvey/dr10/early-coadds
-export BLOB_MASK_DIR=$CSCRATCH/dr10-cache/dr10-early-blobmasks
-#export PS1CAT_DIR=/global/cfs/cdirs/cosmo/work/ps1/cats/chunks-qz-star-v3
+export DUST_DIR=$COSMO/data/dust/v0_1
+
+export TYCHO2_KD_DIR=$COSMO/staging/tycho2
+export LARGEGALAXIES_CAT=$COSMO/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
+export SKY_TEMPLATE_DIR=$COSMO/work/legacysurvey/dr11/calib/sky_pattern
+export BLOB_MASK_DIR=$COSMO/work/legacysurvey/dr11-early-v2
+
 unset PS1CAT_DIR
 
 # Don't add ~/.local/ to Python's sys.path

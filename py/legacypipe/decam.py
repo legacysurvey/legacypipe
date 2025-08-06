@@ -424,7 +424,7 @@ class DecamImage(CPImage):
             from legacypipe.jumpsky import JumpSky
             _,W = img.shape
             xbreak = W//2
-            skyobj = JumpSky.BlantonMethod(img, goodpix, boxsize, xbreak)
+            skyobj = JumpSky.BlantonMethod(img, goodpix, boxsize, xbreak, min_fraction=0.25)
             return skyobj
         return super().get_spline_sky_model(img, goodpix)
 
@@ -448,7 +448,6 @@ class DecamImage(CPImage):
                 skyobj = ConstantJumpSky(xbreak, vals[0], vals[1])
                 return skyobj
         return super().get_constant_sky_model(skylevel, img, goodpix)
-
 
 def decam_cp_version_after(plver, after):
     from distutils.version import StrictVersion

@@ -635,7 +635,8 @@ class LegacySurveyImage(object):
                           no_remap_invvar=False,
                           constant_invvar=False,
                           old_calibs_ok=False,
-                          trim_edges=True):
+                          trim_edges=True,
+                          plots=False, ps=None):
         '''
         Returns a tractor.Image ("tim") object for this image.
 
@@ -814,6 +815,67 @@ class LegacySurveyImage(object):
         orig_sky = sky
         if subsky:
             from tractor.sky import ConstantSky
+
+            if plots:
+                zpscale = NanoMaggies.zeropointToScale(self.ccdzpt)
+                s = self.sig1 * zpscale
+                ima = dict(interpolation='nearest', origin='lower', vmin=-2.*s, vmax=+5.*s)
+                ima2 = dict(interpolation='nearest', origin='lower', vmin=-0.5*s, vmax=+1.25*s)
+                import pylab as plt
+                plt.clf()
+                plt.subplot(2,3,1)
+                plt.imshow(img - midsky, **ima)
+                plt.title('Image')
+                plt.subplot(2,3,2)
+                plt.imshow(skymod - midsky, **ima)
+                plt.title('Sky')
+                plt.subplot(2,3,3)
+                plt.imshow(img - skymod, **ima)
+                plt.title('Image - Sky')
+                from scipy.ndimage import median_filter
+                plt.subplot(2,3,4)
+                mimg = median_filter(img, 9)
+                plt.imshow(mimg - midsky, **ima2)
+                plt.title('Image (median filt)')
+                plt.subplot(2,3,5)
+                plt.imshow(skymod - midsky, **ima2)
+                plt.title('Sky')
+                plt.subplot(2,3,6)
+                plt.imshow(mimg - skymod, **ima2)
+                plt.title('Image - Sky (median filt)')
+                plt.suptitle(self.name + ' expnum %i' % self.expnum)
+                ps.savefig()
+
+                from tractor.splinesky import SplineSky
+                if isinstance(sky, SplineSky):
+                    grid = sky.get_grid()
+                    print('grid shape', grid.shape)
+                    print('xgrid:', sky.xgrid.shape)
+                    print('ygrid:', sky.ygrid.shape)
+                    mid = np.median(grid.ravel())
+                    scale = grid.max() - grid.min()
+                    plt.clf()
+                    h,w = img.shape
+                    plt.subplot(2,1,1)
+                    xx = np.arange(sky.xgrid[0]+1, sky.xgrid[-1])
+                    for i,y in enumerate(sky.ygrid):
+                        print('y grid point', y)
+                        plt.plot(xx, i + (sky.spl(xx, y)[:,0] - mid)/scale, '-')
+                        plt.plot(sky.xgrid, i + (grid[i,:] - mid)/scale, 'o')
+                    plt.axvline(sky.x0, color='r', linestyle='--')
+                    plt.axvline(sky.x0+w, color='r', linestyle='--')
+                    plt.title('x slices')
+                    plt.subplot(2,1,2)
+                    yy = np.arange(sky.ygrid[0]+1, sky.ygrid[-1])
+                    for i,x in enumerate(sky.xgrid):
+                        print('x grid point', x)
+                        plt.plot(yy, i + (sky.spl(x, yy)[0,:] - mid)/scale, '-')
+                        plt.plot(sky.ygrid, i + (grid[:,i] - mid)/scale, 'o')
+                    plt.axvline(sky.y0, color='r', linestyle='--')
+                    plt.axvline(sky.y0+h, color='r', linestyle='--')
+                    plt.title('y slices')
+                    ps.savefig()
+
             debug('Instantiating and subtracting sky model')
             debug('Median sky value & range', np.median(skymod), skymod.min(), skymod.max(), 'all finite', np.all(np.isfinite(skymod)))
             assert(np.all(np.isfinite(skymod)))
@@ -1542,9 +1604,9 @@ class LegacySurveyImage(object):
             plt.xlabel('X (pixels)')
             plt.ylabel('Y (pixels)')
 
-    def plot_mask(self, mask):
+    def plot_mask(self, mask, rgb=None):
         from legacypipe.detection import plot_mask
-        plot_mask(self.maybe_transposed(mask))
+        plot_mask(self.maybe_transposed(mask), rgb=rgb)
 
     def show_transposed(self):
         return self.height > self.width
@@ -1676,6 +1738,7 @@ class LegacySurveyImage(object):
             debug('SGA version:', sub_sga_version)
             debug('Large galaxies:', np.sum(refs.islargegalaxy))
             debug('Freezeparams:', np.sum(refs.islargegalaxy * refs.freezeparams))
+            # We already read the galaxies in the "refs" table
             # we only want to subtract pre-burned, frozen galaxies.
             I = np.flatnonzero(refs.islargegalaxy * refs.freezeparams)
             info('Found', len(I), 'SGA galaxies to subtract before sky')
@@ -1879,6 +1942,8 @@ class LegacySurveyImage(object):
 
         if not plots:
             return
+
+        # PLOTS
 
         import pylab as plt
         ima = dict(interpolation='nearest', origin='lower',
@@ -2195,20 +2260,6 @@ def psfex_single_to_merged(infn, expnum, ccdname):
     for k in ['chi2', 'polzero1', 'polzero2', 'polscal1', 'polscal2']:
         T.set(k, T.get(k).astype(np.float64))
     return T
-
-class LegacySplineSky(SplineSky):
-    @classmethod
-    def from_fits_row(cls, Ti):
-        gridvals = Ti.gridvals.copy()
-        # DR7 & previous don't have this...
-        if 'sky_med' in Ti.get_columns():
-            nswap = np.sum(gridvals == Ti.sky_med)
-            if nswap:
-                info('Swapping in SKY_JOHN values for', nswap, 'splinesky cells;', Ti.sky_med, '->', Ti.sky_john)
-            gridvals[gridvals == Ti.sky_med] = Ti.sky_john
-        sky = cls(Ti.xgrid, Ti.ygrid, gridvals, order=int(Ti.order))
-        sky.shift(Ti.x0, Ti.y0)
-        return sky
 
 # mixin
 class NormalizedPsf(object):
