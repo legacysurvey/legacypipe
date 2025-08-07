@@ -225,6 +225,7 @@ def measure_image(img_fn, mp, image_dir='images',
                   run_sky_only=False,
                   survey=None, psfex=True, camera=None,
                   prime_cache=False,
+                  sky_subtract_large_galaxies=True,
                   **measureargs):
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
     the FITS extensions for a given set of images.
@@ -313,7 +314,8 @@ def measure_image(img_fn, mp, image_dir='images',
     if run_sky or psfex:
         git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
         imgs = mp.map(run_one_calib, [(img_fn, camera, survey, ext, psfex, splinesky,
-                                       plots, survey_blob_mask, survey_zeropoints, git_version)
+                                       plots, survey_blob_mask, survey_zeropoints, git_version,
+                                       sky_subtract_large_galaxies)
                                       for ext in extlist])
         from legacyzpts.merge_calibs import merge_splinesky, merge_psfex
         class FakeOpts(object):
@@ -413,7 +415,7 @@ def measure_image(img_fn, mp, image_dir='images',
 
 def run_one_calib(X):
     (img_fn, camera, survey, ext, psfex, splinesky, plots, survey_blob_mask,
-     survey_zeropoints, git_version) = X
+     survey_zeropoints, git_version, sky_subtract_large_galaxies) = X
     img = survey.get_image_object(None, camera=camera,
                                   image_fn=img_fn, image_hdu=ext)
     img.check_for_cached_files(survey)
@@ -467,11 +469,15 @@ def run_one_calib(X):
         if plots:
             from astrometry.util.plotutils import PlotSequence
             ps = PlotSequence('plots-%s-%i-%s' % (camera, img.expnum, ext))
+
+        subtract_largegalaxies = have_zpt
+        if not sky_subtract_large_galaxies:
+            subtract_largegalaxies = False
         img.run_calibs(psfex=do_psf, sky=do_sky, splinesky=True,
                        git_version=git_version, survey=survey, ps=ps,
                        survey_blob_mask=survey_blob_mask,
                        halos=have_zpt,
-                       subtract_largegalaxies=have_zpt)
+                       subtract_largegalaxies=subtract_largegalaxies)
     except ZeroWeightError:
         print('Got ZeroWeightError running calibs for', img, 'but continuing')
     # Otherwise, let the exception propagate.
@@ -689,6 +695,10 @@ def get_parser():
                         help='The base directory to search for survey-ccds files for subtracting star halos before doing sky calibration.')
     parser.add_argument('--calibdir', default=None,
                         help='if None will use LEGACY_SURVEY_DIR/calib, e.g. /global/cscratch1/sd/desiproc/dr5-new/calib')
+    parser.add_argument('--sky-no-subtract-large-galaxies',
+                        dest='sky_subtract_large_galaxies',
+                        default=True, action='store_false',
+                        help='For sky calibs: do not subtract large galaxies first')
     parser.add_argument('--no-check-photom', dest='check_photom', action='store_false',
                         help='Do not check for photom file when deciding if this file is done or not.')
     parser.add_argument('--threads', default=None, type=int,
