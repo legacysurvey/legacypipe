@@ -117,20 +117,26 @@ def merge_splinesky(survey, expnum, ccds, skyoutfn, opt, imgs=None):
             skies.append(T)
     if len(skies) == 0:
         return
+
+    # Pad out the splinesky arrays to be all the same shapes.
+
+    # Handle a mix of SplineSky and ConstantSky models
+    grids = []
+    for t in skies:
+        grid = getattr(t, 'gridvals', None)
+        if grid is not None:
+            grids.append((grid[0], t.xgrid[0], t.ygrid[0]))
+            for c in ['gridvals', 'xgrid', 'ygrid', 'gridw', 'gridh']:
+                t.delete_column(c)
+        else:
+            grids.append((np.array([[0]]), np.array([0]), np.array([0])))
+
     T = fits_table()
-    T.gridw = np.array([t.gridvals[0].shape[1] for t in skies])
-    T.gridh = np.array([t.gridvals[0].shape[0] for t in skies])
-    padded = pad_arrays([t.gridvals[0] for t in skies])
-    T.gridvals = np.concatenate([[p] for p in padded])
-    padded = pad_arrays([t.xgrid[0] for t in skies])
-    T.xgrid = np.concatenate([[p] for p in padded])
-    padded = pad_arrays([t.ygrid[0] for t in skies])
-    T.ygrid = np.concatenate([[p] for p in padded])
-
-    for sky in skies:
-        for c in ['gridvals', 'xgrid', 'ygrid', 'gridw', 'gridh']:
-            sky.delete_column(c)
-
+    T.gridw = np.array([g.shape[1] for (g,x,y) in grids])
+    T.gridh = np.array([g.shape[0] for (g,x,y) in grids])
+    T.gridvals = np.stack(pad_arrays([g for (g,x,y) in grids]))
+    T.xgrid = np.stack(pad_arrays([x for (g,x,y) in grids]))
+    T.ygrid = np.stack(pad_arrays([y for (g,x,y) in grids]))
     T.add_columns_from(merge_tables(skies, columns='fillzero'))
     fn = skyoutfn
     trymakedirs(fn, dir=True)
