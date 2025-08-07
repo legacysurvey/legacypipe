@@ -2,10 +2,9 @@
 
 export COSMO=/dvs_ro/cfs/cdirs/cosmo
 
-export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
-outdir=$SCRATCH/dr11
-
-ncores=32
+export LEGACY_SURVEY_DIR=$SCRATCH/dr11-sky
+#export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
+outdir=$SCRATCH/dr11-sky-out
 
 export GAIA_CAT_DIR=$COSMO/data/gaia/dr3/healpix
 export GAIA_CAT_PREFIX=healpix
@@ -13,13 +12,13 @@ export GAIA_CAT_SCHEME=nested
 export GAIA_CAT_VER=3
 
 export DUST_DIR=$COSMO/data/dust/v0_1
-
 export TYCHO2_KD_DIR=$COSMO/staging/tycho2
 export LARGEGALAXIES_CAT=$COSMO/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
 export SKY_TEMPLATE_DIR=$COSMO/work/legacysurvey/dr11/calib/sky_pattern
 export BLOB_MASK_DIR=$COSMO/work/legacysurvey/dr11-early-v2
 
 unset PS1CAT_DIR
+unset GALEX_DIR
 
 # Don't add ~/.local/ to Python's sys.path
 export PYTHONNOUSERSITE=1
@@ -69,18 +68,18 @@ log=$logdir/$log
 echo "Logging to $log"
 
 python -O $LEGACYPIPE_DIR/legacyzpts/legacy_zeropoints.py \
-    --threads ${ncores} \
+    --threads 32 \
 	--camera ${camera} \
     --survey-dir ${LEGACY_SURVEY_DIR} \
-    --cache-dir ${CACHE_DIR} \
     --image ${image_fn} \
     --outdir ${outdir} \
     --run-sky-only \
     --run-calibs-only \
+    --no-check-photom \
     --blob-mask-dir $BLOB_MASK_DIR \
     --zeropoints-dir $LEGACY_SURVEY_DIR \
     --calibdir ${outdir}/calib \
-    --no-check-photom \
+    --sky-no-subtract-large-galaxies \
     >> "$log" 2>&1
 status=$?
 
