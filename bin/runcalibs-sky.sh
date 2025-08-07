@@ -2,8 +2,7 @@
 
 export COSMO=/dvs_ro/cfs/cdirs/cosmo
 
-export LEGACY_SURVEY_DIR=$SCRATCH/dr11-sky
-#export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
+export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
 outdir=$SCRATCH/dr11-sky-out
 
 export GAIA_CAT_DIR=$COSMO/data/gaia/dr3/healpix
