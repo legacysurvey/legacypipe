@@ -134,10 +134,19 @@ class ClaudsTestData4(LegacySurveyData):
 class Dr11Test1(LegacySurveyData):
     def filter_ccds(self, ccds):
         import numpy as np
-        # Brick 0301m040,
+        # Brick 0301m040 for i-band forced phot tests
         I = np.flatnonzero(np.isin(ccds.expnum, [247958, 400372, 388167, 390912]) *
                            (ccds.ccdname == 'S31'))
         print('DR11 test #1: cutting CCDs to %i of %i on EXPNUM & CCDNAME' % (len(I), len(ccds)))
+
+class Dr11Test2(LegacySurveyData):
+    def filter_ccds(self, ccds):
+        import numpy as np
+        # Brick 1847p145 for sky tests
+        I = np.flatnonzero(np.isin(ccds.expnum, [634440, 634064, 431192]) *
+                           (ccds.ccdname == 'S16'))
+                                   #(ccds.ccdname == 'S17'))
+        print('DR11 test #2: cutting CCDs to %i of %i on EXPNUM & CCDNAME' % (len(I), len(ccds)))
         return ccds[I]
 
 class RerunWithCcds(LegacySurveyData):
@@ -177,6 +186,7 @@ runs = {
     'clauds-test-3': ClaudsTestData3,
     'clauds-test-4': ClaudsTestData4,
     'dr11-test-1': Dr11Test1,
+    'dr11-test-2': Dr11Test2,
     None: LegacySurveyData,
 }
 

@@ -459,17 +459,17 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns, bands=None):
     print(len(Tsga), 'SGA entries already exist in catalog')
 
     match_radius = 0.1/3600.
-    I,J,d = match_radec(sga.ra, sga.dec, Tsga.ra, Tsga.dec, match_radius, nearest=True)
-    print('Matched', len(I), 'from SGA to this brick catalog')
-    Isga = np.ones(len(sga), bool)
-    Isga[I] = False
-    Isga = np.flatnonzero(Isga)
-
-    if len(Isga) == 0:
-        print('All SGA galaxies already in catalogs')
-        return None
-    print('Finding', len(Isga), 'additional SGA entries in nearby bricks')
-    sga.cut(Isga)
+    if len(Tsga):
+        I,J,d = match_radec(sga.ra, sga.dec, Tsga.ra, Tsga.dec, match_radius, nearest=True)
+        print('Matched', len(I), 'from SGA to this brick catalog')
+        Isga = np.ones(len(sga), bool)
+        Isga[I] = False
+        Isga = np.flatnonzero(Isga)
+        if len(Isga) == 0:
+            print('All SGA galaxies already in catalogs')
+            return None
+        print('Finding', len(Isga), 'additional SGA entries in nearby bricks')
+        sga.cut(Isga)
 
     # This whole paragraph is just finding the bricks that will contain the galaxies in "sga".
     # This *can* end up re-reading the same brick we're currently in, if for whatever reason
