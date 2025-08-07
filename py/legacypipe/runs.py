@@ -130,7 +130,15 @@ class ClaudsTestData4(LegacySurveyData):
         I = np.flatnonzero(np.isin(ccds.expnum, [2571171, 2602665]))
         print('CLAUDS test #4: cutting CCDs to %i of %i on EXPNUM' % (len(I), len(ccds)))
         return ccds[I]
-    
+
+class Dr11Test1(LegacySurveyData):
+    def filter_ccds(self, ccds):
+        import numpy as np
+        # Brick 0301m040 for i-band forced phot tests
+        I = np.flatnonzero(np.isin(ccds.expnum, [247958, 400372, 388167, 390912]) *
+                           (ccds.ccdname == 'S31'))
+        print('DR11 test #1: cutting CCDs to %i of %i on EXPNUM & CCDNAME' % (len(I), len(ccds)))
+
 class Dr11Test2(LegacySurveyData):
     def filter_ccds(self, ccds):
         import numpy as np
@@ -177,6 +185,7 @@ runs = {
     'clauds-test-2': ClaudsTestData2,
     'clauds-test-3': ClaudsTestData3,
     'clauds-test-4': ClaudsTestData4,
+    'dr11-test-1': Dr11Test1,
     'dr11-test-2': Dr11Test2,
     None: LegacySurveyData,
 }
