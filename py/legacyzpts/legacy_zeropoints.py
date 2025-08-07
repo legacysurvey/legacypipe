@@ -291,25 +291,26 @@ def measure_image(img_fn, mp, image_dir='images',
 
     plots = measureargs.get('plots', False)
 
+    run_sky = True
     if run_psf_only:
-        splinesky = False
+        run_sky = False
     if run_sky_only:
         psfex = False
 
-    # Validate the splinesky and psfex merged files, and (re)make them if
+    # Validate the sky and psfex merged files, and (re)make them if
     # they're missing.
-    if splinesky:
+    if run_sky:
         fn = survey.find_file('sky', img=img)
         if (fn is None or
             validate_version(fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
-            splinesky = False
+            run_sky = False
     if psfex:
         fn = survey.find_file('psf', img=img)
         if (fn is None or
             validate_version(fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
             psfex = False
 
-    if splinesky or psfex:
+    if run_sky or psfex:
         git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
         imgs = mp.map(run_one_calib, [(img_fn, camera, survey, ext, psfex, splinesky,
                                        plots, survey_blob_mask, survey_zeropoints, git_version)
@@ -320,7 +321,7 @@ def measure_image(img_fn, mp, image_dir='images',
         opts = FakeOpts()
         # Allow some CCDs to be missing, e.g., if the weight map is all zero.
         opts.all_found = False
-        if splinesky:
+        if run_sky:
             skyoutfn = survey.find_file('sky', img=img, use_cache=False)
             ccds = None
             err_splinesky = merge_splinesky(survey, img.expnum, ccds, skyoutfn, opts, imgs=imgs)
@@ -335,7 +336,7 @@ def measure_image(img_fn, mp, image_dir='images',
 
     # Now, if they're still missing it's because the entire exposure is borked
     # (WCS failed, weight maps are all zero, etc.), so exit gracefully.
-    if splinesky:
+    if run_sky:
         skyfn = survey.find_file('sky', img=img)
         if not os.path.exists(skyfn):
             print('Merged splinesky file not found {}'.format(skyfn))
@@ -418,7 +419,6 @@ def run_one_calib(X):
     img.check_for_cached_files(survey)
 
     do_psf = False
-    do_sky = False
     if psfex:
         do_psf = True
         try:
@@ -427,14 +427,13 @@ def run_one_calib(X):
                 do_psf = False
         except:
             pass
-    if splinesky:
-        do_sky = True
-        try:
-            sky = img.read_sky_model()
-            if sky is not None:
-                do_sky = False
-        except:
-            pass
+    do_sky = True
+    try:
+        sky = img.read_sky_model()
+        if sky is not None:
+            do_sky = False
+    except:
+        pass
 
     if (not do_psf) and (not do_sky):
         # Nothing to do!
