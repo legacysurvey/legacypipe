@@ -2052,6 +2052,12 @@ def _compute_source_metrics(srcs, tims, bands, tr):
                 fracin_num[isrc,iband] += np.abs(np.sum(patch))
                 fracin_den[isrc,iband] += np.abs(counts[isrc])
 
+                print('Fracin: band', band)
+                print('Fracin: abs(sum(patch))', np.abs(np.sum(patch)))
+                print('Fracin: abs(sum(patch)) / abs(counts)', np.abs(np.sum(patch)) / np.abs(counts[isrc]))
+                print('Fracin: sum(abs(patch))', np.sum(np.abs(patch)))
+                print('Fracin: sum(abs(patch)) / abs(counts)', np.sum(np.abs(patch)) / np.abs(counts[isrc]))
+
             tim.getSky().addTo(mod)
             chisq = ((tim.getImage() - mod) * tim.getInvError())**2
 
