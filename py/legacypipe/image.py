@@ -1694,10 +1694,10 @@ class LegacySurveyImage(object):
 
         # What fraction of the image is within a large-galaxy (GALAXY) mask?
         h,w = refmap.shape
-        frac_galaxy = np.sum((refmap & IN_BLOB['GALAXY']) != 0) / (h*w)
+        frac_galaxy = np.sum((refmap & (IN_BLOB['GALAXY'] | IN_BLOB['CLUSTER'])) != 0) / (h*w)
         if frac_galaxy >= largegalaxy_frac_constsky:
-            print('Large galaxies cover %.1f %% of this CCD, >= %.1f %%, using constant (not spline) sky'
-                  % (frac_galaxy * 100, largegalaxy_frac_constsky * 100))
+            info('Large galaxies/clusters cover %.1f %% of this CCD, >= %.1f %%, using constant (not spline) sky'
+                 % (frac_galaxy * 100, largegalaxy_frac_constsky * 100))
             splinesky = False
         del refmap
 
@@ -1790,8 +1790,8 @@ class LegacySurveyImage(object):
                 else:
                     fn2 = survey_blob_mask.find_file('blobmask', brick=brick.brickname)
                     if not os.path.exists(fn2):
-                        print('Warning: blobmap for brick', brick.brickname,
-                              'does not exist:', fn, 'nor does blobmask', fn2)
+                        info('Warning: blobmap for brick', brick.brickname,
+                             'does not exist:', fn, 'nor does blobmask', fn2)
                         continue
                     blobs = fitsio.read(fn2)
                     # Blobmasks are 0/1
@@ -1878,7 +1878,7 @@ class LegacySurveyImage(object):
                 if len(cimage) > 0:
                     sky_john_2 = np.median(cimage)
                 del cimage
-                print('Boxcar_mask updated sky_john from', sky_john, 'to', sky_john_2)
+                debug('Boxcar_mask updated sky_john from', sky_john, 'to', sky_john_2)
                 initsky = sky_john = sky_john_2
 
         if splinesky:
