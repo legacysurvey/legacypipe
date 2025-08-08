@@ -1773,7 +1773,7 @@ class LegacySurveyImage(object):
                 del galmod
 
         # Compute "fallback" sky estimates before more extensive masking
-        sky_est = fallback_sky = self.sky_estimates(img, wt, good)
+        sky_est = self.sky_estimates(img, wt, good)
         info('Fallback sky estimates: sky_john:', sky_est['sky_john'], 'sig1', sky_est['sig1'])
 
         # Apply reference map to mask out additional pixels.  Don't do this until after the
