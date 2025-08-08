@@ -210,7 +210,22 @@ def read_gaia(wcs, bands):
     from legacypipe.gaiacat import GaiaCatalog
     from legacypipe.survey import GaiaSource
 
-    gaia = GaiaCatalog().get_catalog_in_wcs(wcs)
+    # See also format_catalog.py
+    cols = [
+        'sourceid', 'ra', 'dec', 'pmra', 'pmdec', 'parallax',
+        'ra_error', 'dec_error', 'pmra_error', 'pmdec_error', 'parallax_error',
+        'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag',
+        'phot_g_mean_flux_over_error', 'phot_bp_mean_flux_over_error',
+        'phot_rp_mean_flux_over_error',
+        'phot_g_n_obs', 'phot_bp_n_obs', 'phot_rp_n_obs',
+        'astrometric_params_solved',
+        'phot_variable_flag', 'astrometric_excess_noise', 'astrometric_excess_noise_sig',
+        'astrometric_n_obs_al', 'astrometric_n_good_obs_al', 'astrometric_weight_al',
+        'duplicated_source', 'a_g_val', 'e_bp_min_rp_val', 'phot_bp_rp_excess_factor',
+        'astrometric_sigma5d_max',
+    ]
+
+    gaia = GaiaCatalog().get_catalog_in_wcs(wcs, columns=cols)
     debug('Got', len(gaia), 'Gaia stars nearby')
 
     fix_gaia(gaia, bands)
