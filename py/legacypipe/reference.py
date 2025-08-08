@@ -81,14 +81,14 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
             if gaia and len(gaia):
                 I,J,_ = match_radec(galaxies.ra, galaxies.dec, gaia.ra, gaia.dec,
                                     2./3600., nearest=True)
-                info('Matched', len(I), 'large galaxies to Gaia stars.')
+                debug('Matched', len(I), 'large galaxies to Gaia stars.')
                 if len(I):
                     gaia.donotfit[J] = True
             # Resolve possible Tycho2-large-galaxy duplicates (with larger radius)
             if tycho and len(tycho):
                 I,J,_ = match_radec(galaxies.ra, galaxies.dec, tycho.ra, tycho.dec,
                                     5./3600., nearest=True)
-                info('Matched', len(I), 'large galaxies to Tycho-2 stars.')
+                debug('Matched', len(I), 'large galaxies to Tycho-2 stars.')
                 if len(I):
                     tycho.donotfit[J] = True
             refs.append(galaxies)
@@ -212,7 +212,8 @@ def read_gaia(wcs, bands):
 
     # See also format_catalog.py
     cols = [
-        'sourceid', 'ra', 'dec', 'pmra', 'pmdec', 'parallax',
+        'source_id', 'ra', 'dec', 'pmra', 'pmdec', 'parallax',
+        'ref_epoch',
         'ra_error', 'dec_error', 'pmra_error', 'pmdec_error', 'parallax_error',
         'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag',
         'phot_g_mean_flux_over_error', 'phot_bp_mean_flux_over_error',
@@ -220,8 +221,11 @@ def read_gaia(wcs, bands):
         'phot_g_n_obs', 'phot_bp_n_obs', 'phot_rp_n_obs',
         'astrometric_params_solved',
         'phot_variable_flag', 'astrometric_excess_noise', 'astrometric_excess_noise_sig',
-        'astrometric_n_obs_al', 'astrometric_n_good_obs_al', 'astrometric_weight_al',
-        'duplicated_source', 'a_g_val', 'e_bp_min_rp_val', 'phot_bp_rp_excess_factor',
+        'astrometric_n_obs_al', 'astrometric_n_good_obs_al',
+        # 'astrometric_weight_al',  <-- does not exist in our Gaia-DR3 healpix catalogs
+        # 'a_g_val',
+        # 'e_bp_min_rp_val',
+        'duplicated_source', 'phot_bp_rp_excess_factor',
         'astrometric_sigma5d_max',
     ]
 
