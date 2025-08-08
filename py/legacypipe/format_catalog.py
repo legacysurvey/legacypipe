@@ -227,6 +227,8 @@ def format_catalog(T, bands, allbands, release,
         add_fluxlike(c)
     if has_wise:
         add_wiselike('psfdepth')
+    if has_galex:
+        add_galexlike('psfdepth')
 
     if has_wise:
         cols.extend(['wise_coadd_id', 'wise_x', 'wise_y'])

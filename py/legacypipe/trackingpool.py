@@ -53,6 +53,7 @@ def worker(inqueue, outqueue, initializer=None, initargs=(), maxtasks=None,
         try:
             result = (True, func(*args, **kwds))
         except Exception as e:
+            from multiprocessing.pool import _helper_reraises_exception
             if wrap_exception and func is not _helper_reraises_exception:
                 e = ExceptionWithTraceback(e, e.__traceback__)
             result = (False, e)

@@ -18,7 +18,7 @@ def debug(*args):
 class SimpleCoadd(object):
     '''A class for handling coadds of unWISE (and GALEX) images.
     '''
-    def __init__(self, ra, dec, W, H, pixscale, bands):
+    def __init__(self, ra, dec, W, H, pixscale, bands, do_detivs=True):
         from legacypipe.survey import wcs_for_brick, BrickDuck
         self.W = W
         self.H = H
@@ -37,9 +37,14 @@ class SimpleCoadd(object):
         # invvars
         self.co_invvars = dict([(band, np.zeros((self.H,self.W), np.float32))
                                 for band in bands])
+        self.do_detivs = do_detivs
+        if do_detivs:
+            # invvars used for psfdepth
+            self.co_detivs = dict([(band, np.zeros((self.H,self.W), np.float32))
+                                   for band in bands])
 
     def add(self, models, unique=False):
-        for name, band, wcs, img, mod, ie in models:
+        for name, band, wcs, img, mod, ie, detiv in models:
             debug('Accumulating tile', name, 'band', band)
             try:
                 Yo,Xo,Yi,Xi,resam = resample_with_wcs(self.wcs, wcs,
@@ -64,6 +69,8 @@ class SimpleCoadd(object):
             self.co_models [band][Yo,Xo] += rmod * iv
             self.co_nobs   [band][Yo,Xo] += 1
             self.co_invvars[band][Yo,Xo] += iv
+            if self.do_detivs:
+                self.co_detivs [band][Yo,Xo] += (iv > 0) * detiv
             debug('Band', band, ': now', np.sum(self.co_nobs[band]>0), 'pixels are set in image coadd')
 
     def finish(self, survey, brickname, version_header,
@@ -83,6 +90,15 @@ class SimpleCoadd(object):
                          for band in self.bands]
             ap_rphots = [np.zeros((len(ra), len(apertures)), np.float32)
                          for band in self.bands]
+
+            # Sample the "detivs" map at "apxy" (rounded integer) locations
+            if self.do_detivs:
+                xx = np.clip(xx-1, 0, self.W-1).astype(int)
+                yy = np.clip(yy-1, 0, self.H-1).astype(int)
+                psfdepths = [np.zeros(len(ra), np.float32)
+                             for band in self.bands]
+            else:
+                psfdepths = None
 
         coimgs = []
         comods = []
@@ -117,10 +133,13 @@ class SimpleCoadd(object):
                     p = aperture_photometry(coimg - comod, aper, mask=mask)
                     ap_rphots[iband][:,irad] = p.field('aperture_sum')
 
+                if self.do_detivs:
+                    psfdepths[iband][:] = self.co_detivs[band][yy,xx]
+
         self.write_color_image(survey, brickname, coimgs, comods)
 
         if apradec is not None:
-            return ap_iphots, ap_dphots, ap_rphots
+            return ap_iphots, ap_dphots, ap_rphots, psfdepths
 
     def add_to_header(self, hdr, band):
         pass
@@ -133,7 +152,7 @@ class SimpleCoadd(object):
 
 class UnwiseCoadd(SimpleCoadd):
     def __init__(self, ra, dec, W, H, pixscale):
-        super().__init__(ra, dec, W, H, pixscale, [1,2,3,4])
+        super().__init__(ra, dec, W, H, pixscale, [1,2,3,4], do_detivs=False)
 
     def add_to_header(self, hdr, band):
         hdr.add_record(dict(name='TELESCOP', value='WISE'))
