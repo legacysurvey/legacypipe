@@ -68,6 +68,7 @@ def runbrick_global_init():
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                survey=None,
                survey_blob_mask=None,
+               sky_subtract_large_galaxies=True,
                ra=None, dec=None,
                release=None,
                plots=False, ps=None,
@@ -259,6 +260,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
         kwa = dict(git_version=gitver, survey=survey,
                    old_calibs_ok=old_calibs_ok,
                    survey_blob_mask=survey_blob_mask,
+                   subtract_largegalaxies=sky_subtract_large_galaxies,
                    ps=(ps if plots else None),
                    splinesky=splinesky)
         if gaussPsf:
@@ -1094,6 +1096,8 @@ def stage_fitblobs(T=None,
                    max_blobsize=None,
                    reoptimize=False,
                    iterative=False,
+                   iterative_nsigma=None,
+                   nsigma=None,
                    large_galaxies_force_pointsource=True,
                    less_masking=False,
                    sub_blobs=False,
@@ -1273,11 +1277,16 @@ def stage_fitblobs(T=None,
     if sub_blobs:
         ran_sub_blobs = []
 
+    if iterative and (iterative_nsigma is None):
+        assert(nsigma is not None)
+        iterative_nsigma = nsigma
+
     job_id_map = {}
     # Create the iterator over blobs to process
     blobiter = _blob_iter(job_id_map,
                           brickname, blobslices, blobsrcs, blobmap, targetwcs, tims,
-                          cat, T, bands, plots, ps, reoptimize, iterative, use_ceres,
+                          cat, T, bands, plots, ps, reoptimize, iterative, iterative_nsigma,
+                          use_ceres,
                           refmap, large_galaxies_force_pointsource, less_masking, brick,
                           frozen_galaxies,
                           skipblobs=skipblobs,
@@ -1790,7 +1799,7 @@ def _check_checkpoints(R, blobslices, brickname):
 
 def _blob_iter(job_id_map,
                brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T, bands,
-               plots, ps, reoptimize, iterative, use_ceres, refmap,
+               plots, ps, reoptimize, iterative, iterative_nsigma, use_ceres, refmap,
                large_galaxies_force_pointsource, less_masking,
                brick, frozen_galaxies, single_thread=False,
                skipblobs=None, max_blobsize=None, custom_brick=False,
@@ -1974,7 +1983,7 @@ def _blob_iter(job_id_map,
             yield (brickname, iblob, None,
                    (nblob+1, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                     blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-                    reoptimize, iterative, use_ceres, refmap[bslc],
+                    reoptimize, iterative, iterative_nsigma, use_ceres, refmap[bslc],
                     large_galaxies_force_pointsource, less_masking,
                     frozen_galaxies.get(iblob, [])))
             continue
@@ -2045,7 +2054,7 @@ def _blob_iter(job_id_map,
                         blobmask[suby0:suby1, subx0:subx1],
                         subtimargs, [cat[i] for i in Isubsrcs], bands,
                         plots, ps,
-                        reoptimize, iterative, use_ceres, refmap[sub_slc],
+                        reoptimize, iterative, iterative_nsigma, use_ceres, refmap[sub_slc],
                         large_galaxies_force_pointsource, less_masking, fro_gals))
 
 def _bounce_one_blob(X):
@@ -3872,6 +3881,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               subsky_radii=None,
               reoptimize=False,
               iterative=False,
+              iterative_nsigma=False,
               wise=True,
               outliers=True,
               cache_outliers=False,
@@ -3879,6 +3889,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               lanczos=True,
               blob_image=False,
               blob_mask=False,
+              sky_subtract_large_galaxies=True,
               minimal_coadds=False,
               do_calibs=True,
               old_calibs_ok=False,
@@ -4140,6 +4151,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   blob_dilate=blob_dilate,
                   subsky_radii=subsky_radii,
                   survey_blob_mask=survey_blob_mask,
+                  sky_subtract_large_galaxies=sky_subtract_large_galaxies,
                   gaussPsf=gaussPsf, pixPsf=pixPsf, hybridPsf=hybridPsf,
                   release=release,
                   normalizePsf=normalizePsf,
@@ -4160,6 +4172,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   nsatur=nsatur,
                   reoptimize=reoptimize,
                   iterative=iterative,
+                  iterative_nsigma=iterative_nsigma,
                   outliers=outliers,
                   cache_outliers=cache_outliers,
                   remake_outlier_jpegs=remake_outlier_jpegs,
@@ -4536,6 +4549,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument(
         '--no-iterative', dest='iterative', action='store_false', default=True,
         help='Turn off iterative source detection?')
+    parser.add_argument('--iterative-nsigma', type=float, default=None,
+                        help='Set N sigma source detection thresh, for iterative detection')
 
     parser.add_argument('--no-wise', dest='wise', default=True,
                         action='store_false',
@@ -4561,6 +4576,11 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='With --stage image_coadds, also run the "blobmask" stage?')
     parser.add_argument('--minimal-coadds', action='store_true', default=False,
                         help='Only create image and invvar coadds in image_coadds stage')
+
+    parser.add_argument('--sky-no-subtract-large-galaxies',
+                        dest='sky_subtract_large_galaxies',
+                        default=True, action='store_false',
+                        help='For sky calibs: do not subtract large galaxies first')
 
     parser.add_argument(
         '--no-lanczos', dest='lanczos', action='store_false', default=True,

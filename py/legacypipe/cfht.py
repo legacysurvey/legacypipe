@@ -844,7 +844,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             pass
         return nil
 
-    def get_tractor_sky_model(self, img, goodpix):
+    def get_spline_sky_model(self, img, goodpix):
         from legacypipe.jumpsky import JumpSky
         boxsize = self.splinesky_boxsize
         _,W = img.shape

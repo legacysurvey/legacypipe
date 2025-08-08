@@ -405,27 +405,49 @@ class DecamImage(CPImage):
             dq[I,J] |= DQ_BITS['satur']
         invvar[I,J] = 0.
 
+    def needs_sky_jump(self):
+        return (
+            (self.band in ['g','r','i'] and
+             self.ccdname.strip() in ['S30', 'N14', 'S19', 'S16', 'S10'])
+            or
+            (self.band == 'z' and self.ccdname.strip() in ['S30'])
+            )
+
     # S30, N14, S19, S16, S10
-    def get_tractor_sky_model(self, img, goodpix):
-        from tractor.splinesky import SplineSky
-        from legacypipe.jumpsky import JumpSky
+    def get_spline_sky_model(self, img, goodpix):
         boxsize = self.splinesky_boxsize
         # For DECam chips where we drop half the chip, spline becomes
         # underconstrained
         if min(img.shape) / boxsize < 4:
             boxsize /= 2
-
-        if ((self.band in ['g','r','i'] and
-             self.ccdname.strip() in ['S30', 'N14', 'S19', 'S16', 'S10']) or
-            (self.band == 'z' and
-             self.ccdname.strip() in ['S30'])):
+        if self.needs_sky_jump():
+            from legacypipe.jumpsky import JumpSky
             _,W = img.shape
             xbreak = W//2
             skyobj = JumpSky.BlantonMethod(img, goodpix, boxsize, xbreak, min_fraction=0.25)
-        else:
-            skyobj = SplineSky.BlantonMethod(img, goodpix, boxsize, min_fraction=0.25)
+            return skyobj
+        return super().get_spline_sky_model(img, goodpix)
 
-        return skyobj
+    def get_constant_sky_model(self, skylevel, img, goodpix):
+        from scipy.stats import sigmaclip
+        if self.needs_sky_jump():
+            from legacypipe.jumpsky import ConstantJumpSky
+            H,W = img.shape
+            xbreak = W//2
+
+            vals = []
+            for slc in [(slice(H), slice(xbreak)),
+                        (slice(H), slice(xbreak, W))]:
+                if np.sum(goodpix[slc]) > 100:
+                    cimage, _, _ = sigmaclip(img[slc][goodpix[slc]], low=2.0, high=2.0)
+                    if len(cimage) > 0:
+                        sky_john = np.median(cimage)
+                        vals.append(sky_john)
+                    del cimage
+            if len(vals) == 2:
+                skyobj = ConstantJumpSky(xbreak, vals[0], vals[1])
+                return skyobj
+        return super().get_constant_sky_model(skylevel, img, goodpix)
 
 def decam_cp_version_after(plver, after):
     from distutils.version import StrictVersion

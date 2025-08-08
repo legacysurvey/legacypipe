@@ -81,14 +81,14 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
             if gaia and len(gaia):
                 I,J,_ = match_radec(galaxies.ra, galaxies.dec, gaia.ra, gaia.dec,
                                     2./3600., nearest=True)
-                info('Matched', len(I), 'large galaxies to Gaia stars.')
+                debug('Matched', len(I), 'large galaxies to Gaia stars.')
                 if len(I):
                     gaia.donotfit[J] = True
             # Resolve possible Tycho2-large-galaxy duplicates (with larger radius)
             if tycho and len(tycho):
                 I,J,_ = match_radec(galaxies.ra, galaxies.dec, tycho.ra, tycho.dec,
                                     5./3600., nearest=True)
-                info('Matched', len(I), 'large galaxies to Tycho-2 stars.')
+                debug('Matched', len(I), 'large galaxies to Tycho-2 stars.')
                 if len(I):
                     tycho.donotfit[J] = True
             refs.append(galaxies)
@@ -210,7 +210,26 @@ def read_gaia(wcs, bands):
     from legacypipe.gaiacat import GaiaCatalog
     from legacypipe.survey import GaiaSource
 
-    gaia = GaiaCatalog().get_catalog_in_wcs(wcs)
+    # See also format_catalog.py
+    cols = [
+        'source_id', 'ra', 'dec', 'pmra', 'pmdec', 'parallax',
+        'ref_epoch',
+        'ra_error', 'dec_error', 'pmra_error', 'pmdec_error', 'parallax_error',
+        'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag',
+        'phot_g_mean_flux_over_error', 'phot_bp_mean_flux_over_error',
+        'phot_rp_mean_flux_over_error',
+        'phot_g_n_obs', 'phot_bp_n_obs', 'phot_rp_n_obs',
+        'astrometric_params_solved',
+        'phot_variable_flag', 'astrometric_excess_noise', 'astrometric_excess_noise_sig',
+        'astrometric_n_obs_al', 'astrometric_n_good_obs_al',
+        # 'astrometric_weight_al',  <-- does not exist in our Gaia-DR3 healpix catalogs
+        # 'a_g_val',
+        # 'e_bp_min_rp_val',
+        'duplicated_source', 'phot_bp_rp_excess_factor',
+        'astrometric_sigma5d_max',
+    ]
+
+    gaia = GaiaCatalog().get_catalog_in_wcs(wcs, columns=cols)
     debug('Got', len(gaia), 'Gaia stars nearby')
 
     fix_gaia(gaia, bands)
@@ -432,9 +451,11 @@ def get_large_galaxy_version(fn):
     preburn = False
     hdr = fitsio.read_header(fn)
     try:
-        v = hdr.get('SGAVER')
-        if v is None: # old version
-            v = hdr.get('LSLGAVER')
+        # SGA2025
+        v = hdr.get('VER')
+        if v is None:
+            # SGA2020
+            v = hdr.get('SGAVER')
         if v is not None:
             v = v.strip()
             if 'ellipse' in v.lower():
@@ -503,15 +524,30 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
         galaxies.islargegalaxy = np.ones(len(galaxies), bool)
         galaxies.freezeparams = np.zeros(len(galaxies), bool)
         galaxies.preburned = np.zeros(len(galaxies), bool)
-        galaxies.rename('sga_id', 'ref_id')
+        if 'sga_id' in galaxies.columns():
+            galaxies.rename('sga_id', 'ref_id')
 
-    galaxies.rename('mag_leda', 'mag')
+    '''
+    Desired behaviors.
+
+    Parent catalog:
+    - if overlaps LMC/SMC mask,
+      - no new source detection (only Gaia and SGA)
+      - in DR10, we did this by setting CLUSTER
+      - add new MASKBITS bit: CLOUDS (LMC/SMC), same behavior as CLUSTER
+    - ignore LMC/SMC SGA sources
+      - don't want to set GALAXY
+
+    '''
+    if 'mag_leda' in galaxies.columns():
+        galaxies.rename('mag_leda', 'mag')
+
     # Pre-burned, frozen but non-SGA sources have diam=-1.
-    if 'diam' in galaxies.get_columns():
-        galaxies.radius = np.maximum(0., galaxies.diam / 2. / 60.) # [degree]
-    else:
+    if 'd26' in galaxies.get_columns():
         # SGA-2020
         galaxies.radius = np.maximum(0., galaxies.d26 / 2. / 60.) # [degree]
+    else:
+        galaxies.radius = np.maximum(0., galaxies.diam / 2. / 60.) # [degree]
     galaxies.keep_radius = 2. * galaxies.radius
     galaxies.sources = np.empty(len(galaxies), object)
     galaxies.sources[:] = None
