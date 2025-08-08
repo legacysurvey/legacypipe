@@ -93,6 +93,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         if tim is None:
             debug('Actually, no overlap with WISE coadd tile', tile.coadd_id)
             continue
+        tim.band = band
 
         if plots:
             sig1 = tim.sig1
@@ -481,7 +482,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             tile = tim.tile
             (dat, mod, _, _, _) = ims1[i]
             models.append((tile.coadd_id, band, tim.wcs.wcs, dat, mod,
-                           tim.coadd_inverr))
+                           tim.coadd_inverr, None))
 
     if plots:
         for i,tim in enumerate(tims):

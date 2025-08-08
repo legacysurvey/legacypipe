@@ -3053,7 +3053,7 @@ def stage_wise_forced(
             apphot = wcoadds.finish(survey, brickname, version_header,
                                     apradec=(T.ra,T.dec),
                                     apertures=wise_apertures_arcsec/wpixscale)
-            api,apd,apr = apphot
+            api,apd,apr,_ = apphot
             for iband,band in enumerate([1,2,3,4]):
                 WISE.set('apflux_w%i' % band, api[iband])
                 WISE.set('apflux_resid_w%i' % band, apr[iband])
@@ -3647,9 +3647,13 @@ def stage_writecat(
         WISE = None
 
     if GALEX is not None:
+        print('runbrick: GALEX table is:')
+        GALEX.about()
+
         for c in ['flux_nuv', 'flux_ivar_nuv', 'flux_fuv', 'flux_ivar_fuv',
                   'apflux_nuv', 'apflux_resid_nuv', 'apflux_ivar_nuv',
-                  'apflux_fuv', 'apflux_resid_fuv', 'apflux_ivar_fuv', ]:
+                  'apflux_fuv', 'apflux_resid_fuv', 'apflux_ivar_fuv',
+                  'psfdepth_nuv', 'psfdepth_fuv']:
             T.set(c, GALEX.get(c))
         GALEX = None
 
