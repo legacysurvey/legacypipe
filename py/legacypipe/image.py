@@ -1657,6 +1657,7 @@ class LegacySurveyImage(object):
             from legacypipe.utils import ZeroWeightError
             raise ZeroWeightError('No pixels with weight > 0 in: ' + str(self))
 
+        orig_img = None
         if plots:
             orig_img = img.copy()
 
@@ -1849,6 +1850,9 @@ class LegacySurveyImage(object):
         # everything is masked in one of the splinesky grid cells.
         initsky = sky_john
 
+        assert(np.isfinite(initsky))
+        assert(np.isfinite(sig1))
+
         if boxcar_mask:
             # Now mask bright objects in a boxcar-smoothed (image -
             # initial sky model) Smooth by a boxcar filter before cutting
@@ -2012,6 +2016,13 @@ class LegacySurveyImage(object):
         # plt.xlabel('Invvar weights')
         # plt.legend()
         # ps.savefig()
+
+        plt.clf()
+        plt.hist(wt.ravel(), bins=50, range=(0, 2./(sig1**2)), label='All weights')
+        plt.hist(wt[good].ravel(), bins=50, range=(0, 2./(sig1**2)), label='Good weights')
+        plt.axvline(1./sig1**2)
+        plt.legend()
+        ps.savefig()
 
         maskima = dict(interpolation='nearest', origin='lower', vmin=0, vmax=1,
                        cmap='gray')

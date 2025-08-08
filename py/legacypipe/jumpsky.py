@@ -22,7 +22,6 @@ class ConstantJumpSky(ConstantSky):
 
     def addTo(self, mod, scale=1.):
         ### FIXME -- x0 ???
-        H, W = mod.shape
         mod[:, :self.xbreak] += (self.left  * scale)
         mod[:, self.xbreak:] += (self.right * scale)
 
