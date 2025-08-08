@@ -2225,6 +2225,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  bailout_mask=None,
                  sub_blob_mask=None,
                  coadd_headers={},
+                 save_coadd_psf=False,
                  mp=None,
                  record_event=None,
                  **kwargs):
@@ -2345,11 +2346,17 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     ngood=True, detmaps=True, psfsize=True, allmasks=True,
                     lanczos=lanczos,
                     apertures=apertures, apxy=apxy,
+                    psf_images=save_coadd_psf,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims,
                                    targetwcs, co_sky, coadd_headers),
                     plots=plots, ps=ps, mp=mp)
     record_event and record_event('stage_coadds: extras')
+
+    if save_coadd_psf:
+        for band,psfimg in zip(bands, C.psf_imgs):
+            with survey.write_output('copsf', brick=brickname, band=band) as out:
+                out.fits.write(psfimg, header=version_header)
 
     # Coadds of galaxy sims only, image only
     if hasattr(tims[0], 'sims_image'):
@@ -2781,6 +2788,7 @@ def stage_wise_forced(
     record_event=None,
     wise_checkpoint_filename=None,
     wise_checkpoint_period=600,
+    save_unwise_psf=False,
     ps=None,
     plots=False,
     **kwargs):
@@ -3006,17 +3014,22 @@ def stage_wise_forced(
         # The "phot" results for the full-depth coadds are one table per
         # band.  Merge all those columns.
         wise_models = []
+        psfs = {}
         for i,p in enumerate(phots[:len(args)]):
+            key,theargs = args[i]
+            epoch,band = key
             if p is None:
-                key,theargs = args[i]
                 (wcat,tiles) = theargs[:2]
-                epoch,band = key
                 info('"None" result from WISE forced phot:', tiles, band, 'epoch', epoch)
                 continue
             if unwise_coadds:
                 wise_models.extend(p.models)
             if p.maskmap is not None:
                 wise_mask_maps = p.maskmap
+            if save_unwise_psf:
+                if not band in psfs:
+                    psfs[band] = []
+                psfs[band].extend(p.psfs)
             if WISE is None:
                 WISE = p.phot
             else:
@@ -3067,6 +3080,16 @@ def stage_wise_forced(
         if wise_mask_maps is not None:
             WISE.wise_mask[T.in_bounds,0] = wise_mask_maps[0][T.iby[T.in_bounds], T.ibx[T.in_bounds]]
             WISE.wise_mask[T.in_bounds,1] = wise_mask_maps[1][T.iby[T.in_bounds], T.ibx[T.in_bounds]]
+
+        if save_unwise_psf:
+            for band,psflist in psfs.items():
+                assert(len(psflist) > 0)
+                psfimg = 0.
+                for p in psflist:
+                    psfimg = psfimg + p.getImage(0., 0.)
+                psfimg /= len(psflist)
+                with survey.write_output('copsf', brick=brickname, band='W%i' % band) as out:
+                    out.fits.write(psfimg, header=version_header)
 
     # Unpack time-resolved results...
     WISE_T = None
@@ -3928,6 +3951,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               unwise_modelsky_dir=None,
               galex=False,
               galex_dir=None,
+              save_unwise_psf=False,
+              save_galex_psf=False,
+              save_coadd_psf=False,
               threads=None,
               plots=False, plots2=False, coadd_bw=False,
               plot_base=None, plot_number=0,
@@ -4195,6 +4221,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   unwise_modelsky_dir=unwise_modelsky_dir,
                   galex=galex,
                   galex_dir=galex_dir,
+                  save_unwise_psf=save_unwise_psf,
+                  save_galex_psf=save_galex_psf,
+                  save_coadd_psf=save_coadd_psf,
                   command_line=command_line,
                   read_parallel=read_parallel,
                   max_memory_gb=max_memory_gb,
@@ -4635,6 +4664,12 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         action='store_false', help='Do not subtract the sky background.')
     parser.add_argument('--no-unwise-coadds', dest='unwise_coadds', default=True,
                         action='store_false', help='Turn off writing FITS and JPEG unWISE coadds?')
+    parser.add_argument('--save-unwise-psf', default=False, action='store_true',
+                        help='Save unWISE PSF models?')
+    parser.add_argument('--save-galex-psf', default=False, action='store_true',
+                        help='Save GALEX PSF models?')
+    parser.add_argument('--save-coadd-psf', default=False, action='store_true',
+                        help='Save optical coadded PSF models?')
     parser.add_argument('--no-outliers', dest='outliers', default=True,
                         action='store_false', help='Do not compute or apply outlier masks')
     parser.add_argument('--cache-outliers', default=False,

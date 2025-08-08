@@ -48,6 +48,7 @@ def stage_galex_forced(
     galex_dir=None,
     brick=None,
     galex_ceres=True,
+    save_galex_psf=False,
     version_header=None,
     maskbits=None,
     mp=None,
@@ -182,6 +183,12 @@ def stage_galex_forced(
             GALEX.set(fluxcol, np.zeros(len(GALEX), np.float32))
             GALEX.set('flux_ivar_'+niceband, np.zeros(len(GALEX), np.float32))
         GALEX.set('psfdepth_'+niceband, depth[iband])
+
+    if save_galex_psf:
+        for band in ['n', 'f']:
+            psfimg = galex_psf(band, galex_dir)
+            with survey.write_output('copsf', brick=brickname, band='%suv' % band) as out:
+                out.fits.write(psfimg, header=version_header)
 
     debug('Returning: GALEX', GALEX)
     if logger.isEnabledFor(logging.DEBUG):

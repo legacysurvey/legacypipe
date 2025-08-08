@@ -568,6 +568,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     rtn.phot = phot
     rtn.models = None
     rtn.maskmap = None
+    rtn.psfs = [tim.psf for tim in tims]
     if get_models:
         rtn.models = models
     if get_masks:
