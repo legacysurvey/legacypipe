@@ -1639,6 +1639,7 @@ class LegacySurveyImage(object):
         wt = self.read_invvar(slc=slc, dq=dq)
         primhdr = self.read_image_primary_header()
         imghdr = self.read_image_header()
+        h,w = img.shape
 
         # Read metadata for consistency checks
         plver = primhdr.get('PLVER', 'V0.0').strip()
@@ -1656,6 +1657,7 @@ class LegacySurveyImage(object):
         if np.sum(good) == 0:
             from legacypipe.utils import ZeroWeightError
             raise ZeroWeightError('No pixels with weight > 0 in: ' + str(self))
+        info('%.1f %% of pixels have good weights' % (100. * np.sum(good) / (h*w)))
 
         orig_img = None
         if plots:
@@ -1691,16 +1693,13 @@ class LegacySurveyImage(object):
         refmap = get_reference_map(wcs, refs)
         if plots:
             refgood = (refmap == 0)
-        good[refmap != 0] = False
 
         # What fraction of the image is within a large-galaxy (GALAXY) mask?
-        h,w = refmap.shape
         frac_galaxy = np.sum((refmap & (IN_BLOB['GALAXY'] | IN_BLOB['CLUSTER'])) != 0) / (h*w)
         if frac_galaxy >= largegalaxy_frac_constsky:
             info('Large galaxies/clusters cover %.1f %% of this CCD, >= %.1f %%, using constant (not spline) sky'
                  % (frac_galaxy * 100, largegalaxy_frac_constsky * 100))
             splinesky = False
-        del refmap
 
         # Subtract stellar halos
         haloimg = None
@@ -1773,6 +1772,18 @@ class LegacySurveyImage(object):
             if not plots:
                 del galmod
 
+        # Compute "fallback" sky estimates before more extensive masking
+        sky_est = fallback_sky = self.sky_estimates(img, wt, good)
+        info('Fallback sky estimates: sky_john:', sky_est['sky_john'], 'sig1', sky_est['sig1'])
+
+        # Apply reference map to mask out additional pixels.  Don't do this until after the
+        # fallback sky estimate.
+        # FIXME -- we may want to ignore some bits here!
+        good[refmap != 0] = False
+        info('After reference-map masking: %.1f %% of pixels have good weights' %
+             (100. * np.sum(good) / (h*w)))
+        del refmap
+
         blobmasked = False
         blobgood = True
         if survey_blob_mask is not None:
@@ -1810,46 +1821,18 @@ class LegacySurveyImage(object):
             del allblobs
             info('Masked', ng-np.sum(good), 'additional CCD pixels from blob maps')
             blobmasked = True
+            info('After blob masking: %.1f %% of pixels have good weights' %
+                 (100. * np.sum(good) / (h*w)))
 
-        # Do a few different scalar sky estimates
-        if np.sum(good) > 100:
-            try:
-                sky_mode = estimate_mode(img[good], raiseOnWarn=False)
-            except:
-                sky_mode = 0.
-        else:
-            sky_mode = 0.0
-        if not np.isfinite(sky_mode):
-            sky_mode = 0.0
+        # Require 10% good pixels to compute new sky values
+        if np.sum(good) > (0.1 * h*w):
+            sky_est = self.sky_estimates(img, wt, good)
+            info('Updated sky estimates: sky_john:', sky_est['sky_john'], 'sig1', sky_est['sig1'])
 
-        sky_median = np.median(img[good])
-        sig1 = 1./np.sqrt(np.median(wt[good]))
-
-        # sigma-clipped median:
-        cimage,_,_ = sigmaclip(img[good], low=2.0, high=2.0)
-        sky_clipped_median = np.median(cimage)
-        del cimage
-
-        # from John (adapted):
-        # Smooth by a boxcar filter before cutting pixels above threshold --
-        boxcar = 5
-        # Sigma of boxcar-smoothed image
-        bsig1 = sig1 / boxcar
-        masked = np.abs(uniform_filter(img - sky_clipped_median, size=boxcar,
-                                       mode='constant')) > (3.*bsig1)
-        masked = binary_dilation(masked, iterations=3)
-        sky_john = sky_clipped_median
-        if np.sum(good * (masked==False)) > 100:
-            cimage, _, _ = sigmaclip(img[good * (masked==False)],
-                                     low=2.0, high=2.0)
-            if len(cimage) > 0:
-                sky_john = np.median(cimage)
-            del cimage
-
-        # Initial scalar sky estimate; also the fallback value if
+        # Initial scalar sky estimate; the fallback value if
         # everything is masked in one of the splinesky grid cells.
-        initsky = sky_john
-
+        initsky = sky_john = sky_est['sky_john']
+        sig1 = sky_est['sig1']
         assert(np.isfinite(initsky))
         assert(np.isfinite(sig1))
 
@@ -1891,7 +1874,6 @@ class LegacySurveyImage(object):
             # method encounters a fully-masked box, it fills it with zero.
             skyobj = self.get_spline_sky_model(img - initsky, good)
             skyobj.offset(initsky)
-
         else:
             # Constant sky
             skyobj = self.get_constant_sky_model(initsky, img, good)
@@ -1911,8 +1893,7 @@ class LegacySurveyImage(object):
             pctvals = np.percentile((img - skypix)[good], pcts)
         else:
             pctvals = [0] * len(pcts)
-        H,W = img.shape
-        fmasked = float(np.sum(good == 0)) / (H*W)
+        fmasked = float(np.sum(good == 0)) / (h*w)
         del skypix
 
         T = skyobj.to_fits_table()
@@ -1931,9 +1912,9 @@ class LegacySurveyImage(object):
                 ('halo_zpt', halozpt, False),
                 ('blob_masked', blobmasked, False),
                 ('sub_sga_ver', sub_sga_version, False),
-                ('sky_mode', sky_mode, True),
-                ('sky_med', sky_median, False),
-                ('sky_cmed', sky_clipped_median, False),
+                ('sky_mode', sky_est['sky_mode'], True),
+                ('sky_med', sky_est['sky_median'], False),
+                ('sky_cmed', sky_est['sky_clipped_median'], False),
                 ('sky_john', sky_john, False),
                 ('sky_fmasked', fmasked, True),] +
                 [('sky_p%i' % p, v, True) for p,v in zip(pcts, pctvals)]):
@@ -2140,6 +2121,42 @@ class LegacySurveyImage(object):
         # plt.hist((img[good * refgood] - initsky).ravel(), bins=50)
         # plt.title('Unmasked pixels')
         # ps.savefig()
+
+    def sky_estimates(self, img, wt, good):
+        from scipy.ndimage import binary_dilation, uniform_filter
+        from scipy.stats import sigmaclip
+        from astrometry.util.miscutils import estimate_mode
+
+        try:
+            sky_mode = estimate_mode(img[good], raiseOnWarn=False)
+        except:
+            sky_mode = 0.
+        if not np.isfinite(sky_mode):
+            sky_mode = 0.0
+        sky_median = np.median(img[good])
+        sig1 = 1./np.sqrt(np.median(wt[good]))
+        # sigma-clipped median:
+        cimage,_,_ = sigmaclip(img[good], low=2.0, high=2.0)
+        sky_clipped_median = np.median(cimage)
+        del cimage
+        # from John (adapted):
+        # Smooth by a boxcar filter before cutting pixels above threshold --
+        boxcar = 5
+        # Sigma of boxcar-smoothed image
+        bsig1 = sig1 / boxcar
+        masked = np.abs(uniform_filter(img - sky_clipped_median, size=boxcar,
+                                       mode='constant')) > (3.*bsig1)
+        masked = binary_dilation(masked, iterations=3)
+        sky_john = sky_clipped_median
+        if np.sum(good * (masked==False)) > 100:
+            cimage, _, _ = sigmaclip(img[good * (masked==False)],
+                                     low=2.0, high=2.0)
+            if len(cimage) > 0:
+                sky_john = np.median(cimage)
+            del cimage
+        return dict(sig1=sig1, sky_mode=sky_mode, sky_median=sky_median,
+                    sky_clipped_median=sky_clipped_median,
+                    sky_john=sky_john)
 
     def get_spline_sky_model(self, img, goodpix):
         boxsize = self.splinesky_boxsize

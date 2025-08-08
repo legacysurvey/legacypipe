@@ -142,10 +142,14 @@ class Dr11Test1(LegacySurveyData):
 class Dr11Test2(LegacySurveyData):
     def filter_ccds(self, ccds):
         import numpy as np
-        # Brick 1847p145 for sky tests
-        I = np.flatnonzero(np.isin(ccds.expnum, [634440, 634064, 431192]) *
-                           (ccds.ccdname == 'S16'))
-                                   #(ccds.ccdname == 'S17'))
+        # Brick 1847p145 for sky tests - big galaxy
+        #I = np.flatnonzero(np.isin(ccds.expnum, [634440, 634064, 431192]) *
+        #                   (ccds.ccdname == 'S16'))
+
+        # Brick 0059m717 - NGC104 globular cluster covers 100% of some chips
+        I = np.flatnonzero(np.isin(ccds.expnum, [380296])) # *
+        #(ccds.ccdname == 'S16'))
+
         print('DR11 test #2: cutting CCDs to %i of %i on EXPNUM & CCDNAME' % (len(I), len(ccds)))
         return ccds[I]
 
