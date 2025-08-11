@@ -33,10 +33,15 @@ class DecamImage(CPImage):
                 N673 = 24.151,
                 # Merian
                 N540 = 24.000,
-                # IBIS - from Arjun, 2024-06-07, LTT6248
-                M411 = 23.00,
-                M464 = 23.43,
-    )
+                # IBIS - Arjun, 2024-12-04
+                M411 = 23.043,
+                M438 = 23.330,
+                M464 = 23.456,
+                M490 = 23.535,
+                M517 = 23.554,
+                # average of CPMAGIC20250102
+                N395 = 21.649,
+                )
 
     K_EXT = dict(g = 0.173,
                  r = 0.090,
@@ -52,10 +57,15 @@ class DecamImage(CPImage):
                  N673 = 0.090,
                  # Merian
                  N540 = 0.173,
-                 # IBIS
+                 # IBIS - from Arjun 2024-10-29
                  M411 = 0.333,
-                 M464 = 0.230,
-    )
+                 M438 = 0.273,
+                 M464 = 0.223,
+                 M490 = 0.197,
+                 M517 = 0.174,
+                 # From Arjun 2025-01-10
+                 N395 = 0.399,
+                 )
 
     '''A LegacySurveyImage (via CPImage) subclass to handle images from
     the Dark Energy Camera, DECam, on the Blanco telescope.
@@ -103,8 +113,10 @@ class DecamImage(CPImage):
         # g-i color range to keep
         if self.band == 'N419':
             return 0.4, 1.5
-        if self.band in ['M411', 'M464']:
+        if self.band in ['M411', 'M438', 'M464', 'M490', 'M517']:
             return 0.3, 1.5
+        if self.band == 'N395':
+            return 0.2, 1.2
         return super().get_ps1_calibrator_color_range()
 
     def clip_colorterm(self, c):
@@ -120,6 +132,11 @@ class DecamImage(CPImage):
     def colorterm_ps1_to_observed(self, cat, band):
         from legacypipe.ps1cat import ps1_to_decam
         return ps1_to_decam(cat, band)
+
+    def gaia_to_observed(self, cat, band):
+        from legacypipe.gaiacat import gaia_to_decam
+        mags = gaia_to_decam(cat, [band])
+        return mags[0]
 
     def get_gain(self, primhdr, hdr):
         return np.average((hdr['GAINA'],hdr['GAINB']))
@@ -388,27 +405,49 @@ class DecamImage(CPImage):
             dq[I,J] |= DQ_BITS['satur']
         invvar[I,J] = 0.
 
+    def needs_sky_jump(self):
+        return (
+            (self.band in ['g','r','i'] and
+             self.ccdname.strip() in ['S30', 'N14', 'S19', 'S16', 'S10'])
+            or
+            (self.band == 'z' and self.ccdname.strip() in ['S30'])
+            )
+
     # S30, N14, S19, S16, S10
-    def get_tractor_sky_model(self, img, goodpix):
-        from tractor.splinesky import SplineSky
-        from legacypipe.jumpsky import JumpSky
+    def get_spline_sky_model(self, img, goodpix):
         boxsize = self.splinesky_boxsize
         # For DECam chips where we drop half the chip, spline becomes
         # underconstrained
         if min(img.shape) / boxsize < 4:
             boxsize /= 2
-
-        if ((self.band in ['g','r','i'] and
-             self.ccdname.strip() in ['S30', 'N14', 'S19', 'S16', 'S10']) or
-            (self.band == 'z' and
-             self.ccdname.strip() in ['S30'])):
+        if self.needs_sky_jump():
+            from legacypipe.jumpsky import JumpSky
             _,W = img.shape
             xbreak = W//2
-            skyobj = JumpSky.BlantonMethod(img, goodpix, boxsize, xbreak)
-        else:
-            skyobj = SplineSky.BlantonMethod(img, goodpix, boxsize, min_fraction=0.25)
+            skyobj = JumpSky.BlantonMethod(img, goodpix, boxsize, xbreak, min_fraction=0.25)
+            return skyobj
+        return super().get_spline_sky_model(img, goodpix)
 
-        return skyobj
+    def get_constant_sky_model(self, skylevel, img, goodpix):
+        from scipy.stats import sigmaclip
+        if self.needs_sky_jump():
+            from legacypipe.jumpsky import ConstantJumpSky
+            H,W = img.shape
+            xbreak = W//2
+
+            vals = []
+            for slc in [(slice(H), slice(xbreak)),
+                        (slice(H), slice(xbreak, W))]:
+                if np.sum(goodpix[slc]) > 100:
+                    cimage, _, _ = sigmaclip(img[slc][goodpix[slc]], low=2.0, high=2.0)
+                    if len(cimage) > 0:
+                        sky_john = np.median(cimage)
+                        vals.append(sky_john)
+                    del cimage
+            if len(vals) == 2:
+                skyobj = ConstantJumpSky(xbreak, vals[0], vals[1])
+                return skyobj
+        return super().get_constant_sky_model(skylevel, img, goodpix)
 
 def decam_cp_version_after(plver, after):
     from distutils.version import StrictVersion

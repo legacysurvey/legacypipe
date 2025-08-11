@@ -1,10 +1,13 @@
 import os
 import sys
 import logging
+from collections import Counter
 import numpy as np
 from legacypipe.survey import LegacySurveyData
 from legacypipe.ps1cat import ps1cat
+from legacypipe.gaiacat import GaiaCatalog
 #from legacypipe.gaiacat import GaiaCatalog
+from tractor import ModelMask
 
 logger = logging.getLogger('legacypipe.new-camera-setup')
 def info(*args):
@@ -30,6 +33,9 @@ def main():
 
     parser.add_argument('--plots', action='store_true', default=False,
                         help='Make plots?')
+    parser.add_argument('--gaia-photom', default=False, action='store_true',
+                        help='Use Gaia rather than PS-1 for photometric cal.')
+
     parser.add_argument('image', metavar='image-filename', help='Image filename to read')
 
     opt = parser.parse_args()
@@ -163,6 +169,13 @@ def main():
     else:
         calname = basename
     img.name = calname
+
+    img.set_calib_filenames()
+
+    #
+    print('Re-creating image object using normal constructor...')
+    img = survey.get_image_object(None, camera=opt.camera,
+                                  image_fn=opt.image, image_hdu=opt.image_hdu)
 
     # Once legacy_zeropoints.py starts...
     ra_bore, dec_bore = img.get_radec_bore(primhdr)
@@ -350,12 +363,117 @@ def main():
         ps.savefig()
 
         plt.clf()
-        n,b,p = plt.hist((impix.flat[goodpix] - skymed) * np.sqrt(invvar.flat[goodpix]), bins=50,
-                         range=(-5,+5), log=True)
+        plt.hist((impix.flat[goodpix] - skymed) * np.sqrt(invvar.flat[goodpix]), bins=50,
+                 range=(-5,+5), log=True)
         plt.plot(xx, mx * yy/max(yy), 'b-')
         plt.xlim(-5,+5)
         plt.xlabel('Image pixels * sqrt(invvar)  (sigma)')
         plt.title('Is uncertainty map correct?')
+        ps.savefig()
+
+    # Read PSF model
+    print('Reading FWHM...')
+    psf_fwhm = img.get_fwhm(primhdr, hdr)
+    psf_sigma = psf_fwhm / 2.35
+    print('Got PSF fwhm', psf_fwhm, 'and sigma', psf_sigma, 'pixels')
+    h,w = img.shape
+    print('Image shape:', w, 'x', h)
+    print('Reading PSF model...')
+    psf = img.read_psf_model(w/2, h/2, gaussPsf=False, pixPsf=True, hybridPsf=True,
+                             normalizePsf=True,
+                             psf_sigma=psf_sigma,
+                             w=w, h=h)
+    print('Got PSF model:', psf)
+
+    if ps is not None:
+        nx,ny = 5,5
+        xx = np.linspace(0, w-1, nx)
+        yy = np.linspace(0, h-1, ny)
+        k = 1
+        plt.clf()
+        plt.subplots_adjust(hspace=0, wspace=0)
+        for y in yy:
+            for x in xx:
+                plt.subplot(ny, nx, k)
+                k += 1
+                patch = psf.getPointSourcePatch(x, y)
+                plt.imshow(patch.patch, interpolation='nearest', origin='lower')
+                plt.xticks([]); plt.yticks([])
+        plt.suptitle('PSF model')
+        ps.savefig()
+
+        # zoom-in half-size
+        S = 5
+        k = 1
+        center_psf = None
+        psfims = []
+        plt.clf()
+        plt.subplots_adjust(hspace=0, wspace=0)
+        for y in yy:
+            for x in xx:
+                plt.subplot(ny, nx, k)
+                k += 1
+                patch = psf.getPointSourcePatch(x, y)
+                patch = patch.patch
+                ph,pw = patch.shape
+                patch = patch[ph//2-S : ph//2+S+1, pw//2-S : pw//2+S+1]
+                psfims.append(patch)
+                if y == yy[len(yy)//2] and x == xx[len(xx)//2]:
+                    center_psf = patch
+                plt.imshow(patch, interpolation='nearest', origin='lower')
+                plt.xticks([]); plt.yticks([])
+        plt.suptitle('PSF model (zoom-in)')
+        ps.savefig()
+
+        mx = max([np.max(np.abs(p - center_psf)) for p in psfims])
+
+        # zoom-in half-size, differential
+        k = 1
+        plt.clf()
+        plt.subplots_adjust(hspace=0, wspace=0)
+        for y in yy:
+            for x in xx:
+                plt.subplot(ny, nx, k)
+                plt.imshow(psfims[k-1] - center_psf, interpolation='nearest', origin='lower', vmin=-mx, vmax=mx)
+                plt.xticks([]); plt.yticks([])
+                k += 1
+        plt.suptitle('PSF model (difference from center)')
+        ps.savefig()
+
+        # Gaussian
+        # ASSUME HybridPixelizedPSF
+        gpsf = psf.gauss
+        print('Gaussian PSF:', gpsf)
+        cx,cy = xx[len(xx)//2], yy[len(yy)//2]
+        gpatch = gpsf.getPointSourcePatch(cx, cy, modelMask=ModelMask(int(cx-S), int(cy-S), 1+S*2, 1+S*2))
+        gpatch = gpatch.patch
+
+        mx = max([np.max(gpatch), np.max(center_psf)])
+        mn = min([np.min(gpatch), np.min(center_psf)])
+        plt.clf()
+        plt.subplot(1,3,1)
+        plt.imshow(center_psf, interpolation='nearest', origin='lower', vmin=mn, vmax=mx)
+        plt.title('Pixelized PSF (center)')
+        plt.subplot(1,3,2)
+        plt.imshow(gpatch, interpolation='nearest', origin='lower', vmin=mn, vmax=mx)
+        plt.title('Gaussian PSF')
+        plt.subplot(1,3,3)
+        plt.imshow(center_psf - gpatch, interpolation='nearest', origin='lower')
+        plt.title('Pix(center) - Gauss')
+        ps.savefig()
+
+        mx = max([np.max(np.abs(p - gpatch)) for p in psfims])
+
+        k = 1
+        plt.clf()
+        plt.subplots_adjust(hspace=0, wspace=0)
+        for y in yy:
+            for x in xx:
+                plt.subplot(ny, nx, k)
+                plt.imshow(psfims[k-1] - gpatch, interpolation='nearest', origin='lower', vmin=-mx, vmax=mx)
+                plt.xticks([]); plt.yticks([])
+                k += 1
+        plt.suptitle('PSF model (difference from Gaussian)')
         ps.savefig()
 
     zpt = img.get_zeropoint(primhdr, hdr)
@@ -363,25 +481,98 @@ def main():
 
     phot = None
     if zpt is None:
-        info('Fetching Pan-STARRS stars inside this image...')
-        try:
-            phot = ps1cat(ccdwcs=wcs).get_stars(magrange=None)
-            info('Found', len(phot), 'PS1 stars in this image')
-        except OSError as e:
-            print('No PS1 stars found for this image -- outside the PS1 footprint, or in the Galactic plane?', e)
+        if opt.gaia_photom:
+            info('Fetching Gaia stars inside this image...')
+            gaia = GaiaCatalog().get_catalog_in_wcs(wcs)
+            assert(gaia is not None)
+            assert(len(gaia) > 0)
+            gaia = GaiaCatalog.catalog_nantozero(gaia)
+            assert(gaia is not None)
+            print(len(gaia), 'Gaia stars')
+            phot = gaia
+        else:
+            info('Fetching Pan-STARRS stars inside this image...')
+            try:
+                phot = ps1cat(ccdwcs=wcs).get_stars(magrange=None)
+                info('Found', len(phot), 'PS1 stars in this image')
+            except OSError as e:
+                print('No PS1 stars found for this image -- outside the PS1 footprint, or in the Galactic plane?', e)
+    phot_name = 'none'
     if phot is not None:
-        name = 'ps1'
-        info('Cutting PS1 stars...')
-        phot.cut(img.get_photometric_calibrator_cuts(name, phot))
-        info(len(phot), 'PS1 stars passed cut to be used for calibration')
-        if len(phot) == 0:
+        if opt.gaia_photom:
+            phot_name = 'gaia'
+        else:
+            phot_name = 'ps1'
+        info('Choosing calibrator stars...')
+        phot.use_for_photometry = img.get_photometric_calibrator_cuts(phot_name, phot)
+        info('use for photometry:', Counter(phot.use_for_photometry))
+
+        if len(phot) == 0 or np.sum(phot.use_for_photometry) == 0:
             phot = None
         else:
             # Convert to Legacy Survey mags
-            info('Converting PS1 mags to the new camera...')
-            phot.legacy_survey_mag = img.photometric_calibrator_to_observed(name, phot)
+            phot.legacy_survey_mag = img.photometric_calibrator_to_observed(phot_name, phot)
+            print(len(phot), 'photometric calibrator stars')
 
-    #gaia = GaiaCatalog().get_catalog_in_wcs(wcs)
+    # Check the WCS -- show image cutouts at the locations of the brightest Gaia/PS1 stars.
+    print('Calling get_wcs()...')
+    wcs = img.get_wcs(hdr=hdr)
+    print('Got WCS model:', wcs)
+
+    mjdobs = img.get_mjd(primhdr)
+    print('MJD-obs:', mjdobs)
+    from tractor.tractortime import TAITime
+    import astropy.time
+    mjd_tai = astropy.time.Time(mjdobs, format='mjd', scale='utc').tai.mjd
+    tai = TAITime(None, mjd=mjd_tai)
+    print('TAI:', tai)
+
+    print('Calling get_tractor_wcs()...')
+    twcs = img.get_tractor_wcs(wcs, 0., 0., primhdr=primhdr, imghdr=hdr, tai=tai)
+    print('Got tractor WCS:', twcs)
+
+    if (phot is not None) and (ps is not None):
+        from tractor import RaDecPos
+
+        if phot_name == 'gaia':
+            from legacypipe.survey import GaiaPosition
+            pos = [GaiaPosition(*a) for a in zip(phot.ra, phot.dec, phot.ref_epoch,
+                                                 phot.pmra, phot.pmdec, phot.parallax)]
+        else:
+            pos = [RaDecPos(ra, dec) for ra,dec in zip(phot.ra, phot.dec)]
+        
+        xy = [twcs.positionToPixel(p) for p in pos]
+        xy = np.array(xy)
+        # image cutout half-size
+        S = 10
+        x,y = xy[:,0], xy[:,1]
+        keep = phot.use_for_photometry * (x > S) * (x < w-S) * (y > S) * (y < h-S)
+        kphot = phot[keep]
+        x,y = x[keep], y[keep]
+        I = np.argsort(kphot.legacy_survey_mag)
+        R,C = 6,6
+        for s in [S, S//2]:
+            plt.clf()
+            for i in range(R*C):
+                plt.subplot(R, C, i+1)
+                j = I[i]
+                ix,iy = int(x[j]), int(y[j])
+                x0,y0 = ix - s, iy - s
+                plt.imshow(impix[y0:y0+2*s+1, x0:x0+2*s+1], interpolation='nearest', origin='lower',
+                           cmap='gray')
+                ax = plt.axis()
+                # "imshow" puts pixel centers on integer coordinates;
+                # the first pixel goes from -0.5 to +0.5.
+                # If we have x == ix, the marker will be centered in the pixel.
+                plt.plot(x[j] - x0, y[j] - y0, 's', mec='r', mfc='none', ms=15)
+                plt.axis(ax)
+                plt.xticks([]); plt.yticks([])
+            plt.suptitle('%s stars, according to image WCS' % phot_name)
+            ps.savefig()
+
+    print('Running run_zeropoints from legacyzpts...')
+    from legacyzpts.legacy_zeropoints import run_zeropoints
+    ccds,phot = run_zeropoints(img, splinesky=True, gaia_photom=opt.gaia_photom, ps=ps)
 
 
 if __name__ == '__main__':

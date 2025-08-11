@@ -31,22 +31,22 @@ class HealpixedCatalog(object):
             hp = hpxy
         return hp
 
-    def get_healpix_catalog(self, healpix):
+    def get_healpix_catalog(self, healpix, columns=None):
         from astrometry.util.fits import fits_table
         fname = self.fnpattern % dict(hp=healpix)
         #print('Reading', fname)
-        return fits_table(fname)
+        return fits_table(fname, columns=columns)
 
-    def get_healpix_catalogs(self, healpixes):
+    def get_healpix_catalogs(self, healpixes, columns=None):
         from astrometry.util.fits import merge_tables
         cats = []
         for hp in healpixes:
-            cats.append(self.get_healpix_catalog(hp))
+            cats.append(self.get_healpix_catalog(hp, columns=columns))
         if len(cats) == 1:
             return cats[0]
         return merge_tables(cats)
 
-    def get_catalog_in_wcs(self, wcs, step=100., margin=10):
+    def get_catalog_in_wcs(self, wcs, step=100., margin=10, columns=None):
         # Grid the CCD in pixel space
         W,H = wcs.get_width(), wcs.get_height()
         xx,yy = np.meshgrid(
@@ -58,7 +58,7 @@ class HealpixedCatalog(object):
         for r,d in zip(ra,dec):
             healpixes.add(self.healpix_for_radec(r, d))
         # Read catalog in those healpixes
-        cat = self.get_healpix_catalogs(healpixes)
+        cat = self.get_healpix_catalogs(healpixes, columns=columns)
         # Cut to sources actually within the CCD.
         _,xx,yy = wcs.radec2pixelxy(cat.ra, cat.dec)
         cat.x = xx
@@ -78,7 +78,12 @@ class ps1cat(HealpixedCatalog):
                    N540=0,
                    # IBIS
                    M411=0,
+                   M438=0,
                    M464=0,
+                   M490=0,
+                   M517=0,
+                   # CaII H+K narrow-band
+                   N395=0,
     )
     def __init__(self,expnum=None,ccdname=None,ccdwcs=None):
         """Read PS1 or gaia sources for an exposure number + CCD name or CCD WCS
@@ -218,25 +223,22 @@ def ps1_to_decam(psmags, band):
         N540 = [ 0.36270593, -0.40238762,  0.0551082 ],
         # CFHT
         CaHK = [0., 2.3],
-        # IBIS -- from Arjun 2024-05-30
-        # M411 = [0, 0.1164,  1.1036, -0.5814,  0.0817],
-        # M464 = [0, 0.6712, -0.9042,  0.4621, -0.0737],
-        # 2024-06-02
-        # M411 = [0., -0.1761, 1.5862,-0.8962, 0.1526],
-        # M464 = [0.,  0.3244,-0.5258, 0.3082,-0.0524],
-        # 2024-06-04
+        # IBIS -- from Arjun 2024-12-04
         # g-r
-        # M411 = [ 0.05546,-0.07920, 2.50180,-1.44430],
-        # M464 = [ 0.12144,-0.53290, 1.25790,-0.93900],
-        # 2024-06-05
-        # g-i:
-        M411 = [0.,  0.1416,  0.9785, -0.3954],
-        M464 = [0.,  0.3244, -0.5258,  0.3082, -0.0524],
-    )[band]
+        M411 = [ 0.2226, -0.7799, 4.5390, -4.1288, 1.3112],
+        M438 = [ 0.0698, -0.1430, 3.0168, -4.3361, 1.9309],
+        M464 = [ 0.0923, -0.5188, 1.9504, -2.7307, 1.2414],
+        M490 = [ 0.1226, -0.7488, 1.2442, -1.1108, 0.4564],
+        M517 = [ 0.0804, -0.6777, 0.3386, 1.0064, -0.7840],
+
+        # DECam
+        N395 = [ -0.0175,  1.9864,  1.3696, -1.2493],
+
+        )[band]
 
     # Most are with respect to g-i, some are g-r...
     color = gi
-    if band in ['CaHK']: #, 'M411', 'M464']:
+    if band in ['CaHK', 'M411', 'M438', 'M464', 'M490', 'M517']:
         color = gr
 
     colorterm = np.zeros(len(color))

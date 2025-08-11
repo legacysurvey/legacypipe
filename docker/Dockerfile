@@ -1,4 +1,4 @@
-FROM ubuntu:22.04 as working
+FROM ubuntu:24.04 as working
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -6,16 +6,21 @@ RUN apt -y update && apt install -y apt-utils \
  && apt install -y --no-install-recommends \
     gcc \
     g++ \
+    gfortran \
     make \
     patch \
     git \
     file \
     pkg-config \
+    autoconf \
+    automake \
+    libtool \
     less \
     procps \
     htop \
     gdb \
     strace \
+    valgrind \
     vim \
     less \
     nano \
@@ -26,10 +31,13 @@ RUN apt -y update && apt install -y apt-utils \
     wcslib-dev \
     wcslib-tools \
     zlib1g-dev \
+    libatlas-base-dev \
     libbz2-dev \
     libcairo2-dev \
     libcfitsio-dev \
     libcfitsio-bin \
+    libcurl4-openssl-dev \
+    libfftw3-dev \
     libgsl-dev \
     libjpeg-dev \
     libnetpbm10-dev \
@@ -39,19 +47,18 @@ RUN apt -y update && apt install -y apt-utils \
     libceres-dev \
     postgresql-common \
     libpq-dev \
-    python3.10 \
-    python3.10-dev \
+    python3.12 \
+    python3.12-dev \
     python3-pip \
     plplot-driver-cairo \
+    libplplot-dev \
     source-extractor \
     psfex \
-    scamp \
     # Remove APT files
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-RUN apt -y update \
-  && apt install -y --no-install-recommends \
-      gfortran
+#    scamp \ -- Ubuntu currently (2025-04-14) shipping v 2.10; we need 2.14.0
+
 ENV FFLAGS=-fallow-argument-mismatch
 ENV FCFLAGS=-fallow-argument-mismatch
 
@@ -74,16 +81,16 @@ RUN for x in \
     scipy \
     pillow \
     psycopg2 \
-    fitsio \
     matplotlib \
+    lacosmic \
     astropy \
     photutils \
     zmq \
     mpi4py \
-    ; do pip3 install $x; done \
-    && rm -Rf /root/.cache/pip
+    fitsio \
+    ; do pip3 install --break-system-packages --no-cache $x; done
 
-RUN ln -s /usr/bin/python3.10-config /usr/local/bin/python3-config
+RUN ln -s /usr/bin/python3.12-config /usr/local/bin/python3-config
 RUN ln -s /usr/bin/python3 /usr/bin/python
 ENV PYTHON=python3
 ENV PYTHON_CONFIG=python3-config
@@ -92,21 +99,26 @@ ENV PYTHON_SCRIPT="/usr/bin/env python3"
 RUN mkdir -p /src
 WORKDIR /src
 
+# to help astrometry.net find netpbm (yuck)
 RUN ln -s /usr/include /usr/local/include/netpbm
 
 # Astrometry.net
+ENV ARCH_FLAGS=-march=x86-64-v3
 RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
-    && git checkout 0.94 \
+    && git checkout 0.97 \
+    && make \
+    && make py \
     && make install INSTALL_DIR=/usr/local
 
 #FROM working
 
+#    && git checkout dr10.6 \
 # The Tractor
 RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && git checkout dr10.4 \
-    && pip install --install-option="--with-ceres" --install-option="--with-cython" -v .
+    && python setup.py build_ext --with-ceres --with-cython --inplace \
+    && python setup.py install
 
 # unwise_psf
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \
@@ -117,9 +129,6 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
 RUN git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
     && cd qdo \
     && python3 setup.py install
-
-# Legacypipe
-RUN git clone https://github.com/legacysurvey/legacypipe.git legacypipe
 
 ENV PYTHONPATH /src/unwise_psf/py:/src/legacypipe/py:/usr/local/lib/python
 
@@ -135,8 +144,6 @@ ENV HOME /homedir
 RUN git config --global --add safe.directory /src/legacypipe \
  && git config --global --add safe.directory /src/unwise_psf
 
-RUN pip3 install --no-cache lacosmic
-
 RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
   # Create config files in $HOME
   && mkdir $HOME/.qdo && echo "[qdo]" > $HOME/.qdo/qdorc \
@@ -150,28 +157,57 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
   # Make astropy cache files readable!?!!
   && chmod -R a+rwX $HOME/.astropy
 
+# Compile a local version of Scamp to pick up adding EXTNAME to the results:
+# https://github.com/astromatic/scamp/commit/d936c73d7dd08382b70cb32ceb1a535ffca81732
+RUN git clone https://github.com/astromatic/scamp.git && \
+    cd scamp && \
+    ./autogen.sh && \
+    ./configure --enable-plplot && \
+    make && \
+    make install && \
+    make clean
+
+# # Compile a local version of fitsio to pick up the ability to set the FPACK compression seed:
+# # https://github.com/esheldon/fitsio/commit/273a00cf2770c989d35babc8b95d44dbbc4d2096
+# # -> went into fitsio 1.2.6
+# RUN git clone https://github.com/esheldon/fitsio.git \
+#     && cd fitsio \
+#     && pip install -e . --break-system-packages
+
+# Legacypipe
+RUN git clone https://github.com/legacysurvey/legacypipe.git legacypipe
+
+# Upgrade mpi4py
+RUN pip3 install --upgrade --break-system-packages mpi4py
+
 RUN python -O -m compileall \
     -x lib2to3 \
-    /usr/local/lib/python3.10/dist-packages \
-    /usr/lib/python3.10 \
+    /usr/local/lib/python3.12/dist-packages \
+    /usr/lib/python3.12 \
     /usr/local/lib/python \
     /src/unwise_psf/py \
     /src/legacypipe/py/legacypipe \
     /src/legacypipe/py/legacyzpts && \
     python    -m compileall \
     -x lib2to3 \
-    /usr/local/lib/python3.10/dist-packages \
-    /usr/lib/python3.10 \
+    /usr/local/lib/python3.12/dist-packages \
+    /usr/lib/python3.12 \
     /usr/local/lib/python \
     /src/unwise_psf/py \
     /src/legacypipe/py/legacypipe \
     /src/legacypipe/py/legacyzpts
 
+# NERSC's shifter "mpich" module includes a bunch of BROKEN libraries that interfere
+# with executables we have installed.
+
+RUN apt update && apt install -y patchelf
+RUN patchelf --force-rpath --set-rpath /lib/x86_64-linux-gnu/ /usr/local/bin/listhead
+RUN patchelf --force-rpath --set-rpath /lib/x86_64-linux-gnu/ /usr/local/bin/modhead
+
 # update legacypipe
-RUN cd /src/legacypipe && git pull \
-    && git checkout DR10.3 && \
+RUN cd /src/legacypipe && \
+  git pull && \
+  git checkout DR10.3.5 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
-# ugh
-RUN ln -s /usr/bin/source-extractor /usr/bin/sex

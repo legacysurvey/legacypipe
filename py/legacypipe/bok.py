@@ -8,7 +8,7 @@ Code specific to images from the 90prime camera on the Bok telescope.
 class BokImage(CPImage):
     '''
     Class for handling images from the 90prime camera processed by the
-    NOAO Community Pipeline.
+    NOIRLab Community Pipeline.
     '''
     def __init__(self, survey, t, image_fn=None, image_hdu=0, **kwargs):
         super(BokImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu, **kwargs)

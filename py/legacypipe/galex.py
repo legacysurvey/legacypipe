@@ -48,6 +48,7 @@ def stage_galex_forced(
     galex_dir=None,
     brick=None,
     galex_ceres=True,
+    save_galex_psf=False,
     version_header=None,
     maskbits=None,
     mp=None,
@@ -168,7 +169,7 @@ def stage_galex_forced(
     # No coverage? initialize result table
     if GALEX is None:
         GALEX = fits_table()
-    api,apd,apr = apphot
+    api,apd,apr,depth = apphot
     for iband,band in enumerate(['n','f']):
         niceband = band + 'uv'
         GALEX.set('apflux_%s' % niceband, api[iband])
@@ -181,6 +182,13 @@ def stage_galex_forced(
         if not fluxcol in GALEX.get_columns():
             GALEX.set(fluxcol, np.zeros(len(GALEX), np.float32))
             GALEX.set('flux_ivar_'+niceband, np.zeros(len(GALEX), np.float32))
+        GALEX.set('psfdepth_'+niceband, depth[iband])
+
+    if save_galex_psf:
+        for band in ['n', 'f']:
+            psfimg = galex_psf(band, galex_dir)
+            with survey.write_output('copsf', brick=brickname, band='%suv' % band) as out:
+                out.fits.write(psfimg, header=version_header)
 
     debug('Returning: GALEX', GALEX)
     if logger.isEnabledFor(logging.DEBUG):
@@ -241,10 +249,12 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
         if tim is None:
             debug('Actually, no overlap with tile', tile.tilename)
             continue
+        tim.band = band
 
         if pixelized_psf:
             psfimg = galex_psf(band, galex_dir)
             tim.psf = PixelizedPSF(psfimg)
+            tim.psfnorm = np.sqrt(np.sum(psfimg**2))
 
         tim.tile = tile
         tims.append(tim)
@@ -352,7 +362,7 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
         for i,tim in enumerate(tims):
             tile = tim.tile
             (dat, mod, ie, _, _) = ims1[i]
-            models.append((tile.visitname, band, tim.wcs.wcs, dat, mod, ie))
+            models.append((tile.visitname, band, tim.wcs.wcs, dat, mod, ie, tim.psfnorm**2/tim.sig1**2))
 
     if plots:
         for i,tim in enumerate(tims):
@@ -644,16 +654,20 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname,
     varimg = np.zeros_like(img)
     I = ((img + bgimg) * rrhrimg) > 0.1
     J = ((img + bgimg) * rrhrimg) <= 0.1
-    if np.sum(I) > 0:
+    if np.any(I):
         varimg[I] = (img[I] + bgimg[I]) * rrhrimg[I]
-    if np.sum(J) > 0:
+    if np.any(J):
         varimg[J] = bgimg[J] * rrhrimg[J]
     varimg /= rrhrimg**2
 
     inverr = np.zeros_like(img)
     K = varimg > 0
-    if np.sum(K) > 0:
-        inverr[K] = 1.0 / np.sqrt(varimg[K])
+    if np.sum(K) == 0:
+        print('All pixels lack variance estimates; subimage is X %i-%i, Y %i-%i, img range %.3f to %.3f'
+              % (x0, x1, y0, y1, img.min(), img.max()))
+        return None
+
+    inverr[K] = 1.0 / np.sqrt(varimg[K])
 
     zp = tile.get('%s_zpmag' % band)
     zpscale = NanoMaggies.zeropointToScale(zp)
@@ -676,6 +690,7 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname,
     tim = Image(data=img, inverr=inverr, psf=tpsf, wcs=twcs,
                 sky=tsky, photocal=photocal, name=name)
     tim.roi = [x0,x1,y0,y1]
+    tim.sig1 = 1./np.median(inverr[inverr>0])
     return tim
 
 def galex_coadds(onegal, galaxy=None, radius_mosaic=30, radius_mask=None,

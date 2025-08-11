@@ -93,6 +93,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
         if tim is None:
             debug('Actually, no overlap with WISE coadd tile', tile.coadd_id)
             continue
+        tim.band = band
 
         if plots:
             sig1 = tim.sig1
@@ -116,7 +117,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             tile_crpix = tile.get('crpix_w%i' % band)
             dx = tile_crpix[0] - 1024.5
             dy = tile_crpix[1] - 1024.5
-            realwcs.set_crpix(x+dx, y+dy)
+            realwcs.set_crpix(float(x+dx), float(y+dy))
             debug('unWISE', tile.coadd_id, 'band', band, 'CRPIX', x,y,
                   'shift by', dx,dy, 'to', realwcs.crpix)
 
@@ -481,7 +482,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
             tile = tim.tile
             (dat, mod, _, _, _) = ims1[i]
             models.append((tile.coadd_id, band, tim.wcs.wcs, dat, mod,
-                           tim.coadd_inverr))
+                           tim.coadd_inverr, None))
 
     if plots:
         for i,tim in enumerate(tims):
@@ -567,6 +568,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     rtn.phot = phot
     rtn.models = None
     rtn.maskmap = None
+    rtn.psfs = [tim.psf for tim in tims]
     if get_models:
         rtn.models = models
     if get_masks:

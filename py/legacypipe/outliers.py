@@ -1,6 +1,7 @@
 import numpy as np
 import fitsio
 import os
+from legacypipe.utils import EmptyContextManager
 
 import logging
 logger = logging.getLogger('legacypipe.outliers')
@@ -15,6 +16,23 @@ from legacypipe.bits import OUTLIER_POS, OUTLIER_NEG
 
 def get_bits_to_mask():
     return OUTLIER_POS | OUTLIER_NEG
+
+def get_mask_extname(tim):
+    return 'MASK-%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
+
+def get_old_mask_extname(tim):
+    return '%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
+
+def find_mask_in_outlier_file(F, tim):
+    # This function exists to handle a backward-compatibility case (hsc-co-4)
+    # F: fitsio.FITS object
+    extname = get_mask_extname(tim)
+    if extname in F:
+        return extname
+    extname = get_old_mask_extname(tim)
+    if extname in F:
+        return extname
+    return None
 
 # Creates the outliers-masked-{pos,neg} JPEGs and also applies the mask.
 # (does not create -pre and -post jpegs!)
@@ -53,9 +71,10 @@ def recreate_outlier_jpegs(survey, tims, bands, targetwcs, brickname):
                 continue
 
             # Get the mask
-            extname = '%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
-            if not extname in F:
-                info('WARNING: Did not find extension', extname, 'in outlier-mask file', maskfn)
+            extname = find_mask_in_outlier_file(F, tim)
+            if extname is None:
+                name = get_mask_extname(tim)
+                info('WARNING: Did not find extension', name, 'in outlier-mask file', maskfn)
                 return False
             mask = F[extname].read()
             hdr = F[extname].read_header()
@@ -130,9 +149,10 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
         return False
     F = fitsio.FITS(fn)
     for tim in tims:
-        extname = '%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
-        if not extname in F:
-            info('WARNING: Did not find extension', extname, 'in outlier-mask file', fn)
+        extname = find_mask_in_outlier_file(F, tim)
+        if extname is None:
+            name = get_mask_extname(tim)
+            info('WARNING: Did not find extension', name, 'in outlier-mask file', fn)
             return False
         mask = F[extname].read()
         hdr = F[extname].read_header()
@@ -201,7 +221,7 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
 
 def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
                         mp=None, plots=False, ps=None, make_badcoadds=True,
-                        refstars=None):
+                        refstars=None, write_mask_file=True):
     from legacypipe.bits import DQ_BITS
     from scipy.ndimage import binary_dilation
 
@@ -245,10 +265,14 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
     #     plt.axis(ax)
     #     plt.title('Star vetos')
     #     ps.savefig()
+ 
+    with (survey.write_output('outliers_mask', brick=brickname)
+          if write_mask_file
+          else EmptyContextManager()) as out:
 
-    with survey.write_output('outliers_mask', brick=brickname) as out:
-        # empty Primary HDU
-        out.fits.write(None, header=version_header)
+        if write_mask_file:
+            # empty Primary HDU
+            out.fits.write(None, header=version_header)
 
         for band in bands:
             btims = [tim for tim in tims if tim.band == band]
@@ -339,6 +363,8 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 tim.inverr[(mask & maskbits) > 0] = 0.
                 tim.dq[(mask & maskbits) > 0] |= tim.dq_type(DQ_BITS['outlier'])
 
+                if not write_mask_file:
+                    continue
                 # Write output!
                 from legacypipe.utils import copy_header_with_wcs
                 hdr = copy_header_with_wcs(None, tim.subwcs)
@@ -354,7 +380,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 # GZIP_1: 4.4M
                 # GZIP: 4.4M
                 # RICE: 2.8M
-                extname = '%s-%s-%s' % (tim.imobj.camera, tim.imobj.expnum, tim.imobj.ccdname)
+                extname = get_mask_extname(tim)
                 out.fits.write(mask, header=hdr, extname=extname, compress='HCOMPRESS')
             del R
 

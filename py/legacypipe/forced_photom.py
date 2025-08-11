@@ -12,6 +12,7 @@ import fitsio
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
 from astrometry.util.ttime import Time
+from astrometry.libkd.spherematch import match_radec
 
 from tractor import Tractor, Catalog
 from tractor.galaxy import disable_galaxy_cache
@@ -19,6 +20,10 @@ from tractor.galaxy import disable_galaxy_cache
 from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version_header, apertures_arcsec, radec_at_mjd
 from legacypipe.catalog import read_fits_catalog
 from legacypipe.outliers import read_outlier_mask_file
+
+def print_timing(*args):
+    print(*args)
+    pass
 
 def get_parser():
     '''
@@ -46,6 +51,8 @@ def get_parser():
                         help='Do not try to run calibrations')
     parser.add_argument('--skip', dest='skip', default=False, action='store_true',
                         help='Exit if the output file already exists')
+    parser.add_argument('--no-outliers', dest='do_outliers', default=True, action='store_false',
+                        help='Do not read outlier masks')
 
     parser.add_argument('--zoom', type=int, nargs=4, help='Set target image extent (eg "0 100 0 200")')
     parser.add_argument('--no-ceres', action='store_false', dest='ceres', help='Do not use Ceres optimization engine (use scipy)')
@@ -214,10 +221,14 @@ def main(survey=None, opt=None, args=None):
         copy_files_to_cache(fnset)
 
     args = []
+    catalog = None
+    outlier_bricks = None
+    if not opt.do_outliers:
+        outlier_bricks = []
     for ccd in ccds:
         args.append((survey,
                      catsurvey_north, catsurvey_south, opt.catalog_resolve_dec_ngc,
-                     ccd, opt, zoomslice, None, None, ps))
+                     ccd, catalog, opt, zoomslice, None, outlier_bricks, ps))
 
     if opt.threads:
         from astrometry.util.multiproc import multiproc
@@ -323,7 +334,7 @@ def main(survey=None, opt=None, args=None):
                     mask = outlier_masks[i]
                     _,_,_,meth,tile = survey.get_compression_args('outliers_mask', shape=mask.shape)
                     fits.write(mask, header=outlier_hdrs[i], extname=ccds.ccdname[i],
-                               compress=meth, tile_dims=tile)
+                               compress=meth, tile_dims=tile, dither_seed='checksum')
             os.rename(tempfn, outfn)
             print('Wrote', outfn)
     elif opt.outlier_mask is not None:
@@ -332,11 +343,11 @@ def main(survey=None, opt=None, args=None):
             for i,(hdr,mask) in enumerate(zip(outlier_hdrs,outlier_masks)):
                 _,_,_,meth,tile = survey.get_compression_args('outliers_mask', shape=mask.shape)
                 F.write(mask, header=hdr, extname=ccds.ccdname[i],
-                        compress=meth, tile_dims=tile)
+                        compress=meth, tile_dims=tile, dither_seed='checksum')
         print('Wrote', opt.outlier_mask)
 
     tnow = Time()
-    print('Total:', tnow-t0)
+    print_timing('Total:', tnow-t0)
     return 0
 
 def bounce_one_ccd(X):
@@ -400,10 +411,10 @@ def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None,
                   (yy >= -margin) * (yy <= (H+margin)))
             T.cut(T.brick_primary)
             #print('Cut to', len(T), 'on brick_primary')
-            # drop DUP sources
-            I, = np.nonzero([t.strip() != 'DUP' for t in T.type])
+            # drop DUP & NUN sources (NUN: eg see DR10 brick 0043m717
+            I, = np.nonzero([t.strip() not in ['DUP','NUN'] for t in T.type])
             T.cut(I)
-            #print('Cut to', len(T), 'after removing DUP')
+            #print('Cut to', len(T), 'after removing DUP and NUN')
             if len(T):
                 TT.append(T)
     if len(TT) == 0:
@@ -412,20 +423,20 @@ def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None,
     T._header = TT[0]._header
     del TT
 
-    SGA = find_missing_sga(T, chipwcs, survey, surveys, columns)
+    SGA = find_missing_sga(T, chipwcs, survey, surveys, columns, bands=bands)
     if SGA is not None:
         ## Add 'em in!
         T = merge_tables([T, SGA], columns='fillzero')
     print('Total of', len(T), 'catalog sources')
     return T
 
-def find_missing_sga(T, chipwcs, survey, surveys, columns):
+def find_missing_sga(T, chipwcs, survey, surveys, columns, bands=None):
     # Look up SGA large galaxies touching this chip.
     # The ones inside this chip(+margin) will already exist in the catalog;
     # we'll find the ones we're missing and read those extra brick catalogs.
     from legacypipe.reference import read_large_galaxies
     # Find all the SGA sources we need
-    sga = read_large_galaxies(survey, chipwcs, bands=None, extra_columns=['brickname'])
+    sga = read_large_galaxies(survey, chipwcs, bands=bands, extra_columns=['brickname'])
     if sga is None:
         print('No SGA galaxies found')
         return None
@@ -440,22 +451,31 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     # cut to those touching the chip
     sga.cut((xx > -keeprad) * (xx < W+keeprad) *
             (yy > -keeprad) * (yy < H+keeprad))
-    print('Read', len(sga), 'SGA galaxies touching the chip.')
+    print('Found', len(sga), 'SGA galaxies touching the chip.')
     if len(sga) == 0:
         print('No SGA galaxies touch this chip')
         return None
     Tsga = T[T.ref_cat == 'L3']
     print(len(Tsga), 'SGA entries already exist in catalog')
-    Isga = np.array([i for i,sga_id in enumerate(sga.ref_id) if not sga_id in set(Tsga.ref_id)])
-    #assert(len(Isga) + len(Tsga) == len(sga))
-    if len(Isga) == 0:
-        print('All SGA galaxies already in catalogs')
-        return None
-    print('Finding', len(Isga), 'additional SGA entries in nearby bricks')
-    sga.cut(Isga)
-    #print('Finding bricks to read...')
-    sgabricks = []
 
+    match_radius = 0.1/3600.
+    if len(Tsga):
+        I,J,d = match_radec(sga.ra, sga.dec, Tsga.ra, Tsga.dec, match_radius, nearest=True)
+        print('Matched', len(I), 'from SGA to this brick catalog')
+        Isga = np.ones(len(sga), bool)
+        Isga[I] = False
+        Isga = np.flatnonzero(Isga)
+        if len(Isga) == 0:
+            print('All SGA galaxies already in catalogs')
+            return None
+        print('Finding', len(Isga), 'additional SGA entries in nearby bricks')
+        sga.cut(Isga)
+
+    # This whole paragraph is just finding the bricks that will contain the galaxies in "sga".
+    # This *can* end up re-reading the same brick we're currently in, if for whatever reason
+    # an SGA galaxy in the middle of a brick gets dropped from the catalog
+    # (eg https://www.legacysurvey.org/viewer/?ra=34.0982&dec=31.9931&layer=ls-dr9&zoom=14&sga)
+    sgabricks = []
     for ra,dec,brick in zip(sga.ra, sga.dec, sga.brickname):
         bricks = survey.get_bricks_by_name(brick)
         # The SGA catalog has a "brickname", but it unfortunately is not always exactly correct...
@@ -478,51 +498,81 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     sgabricks = merge_tables(sgabricks)
     _,I = np.unique(sgabricks.brickname, return_index=True)
     sgabricks.cut(I)
-    print('Need to read', len(sgabricks), 'bricks to pick up SGA sources')
+
+    print('Need to read', len(sgabricks), 'bricks to pick up missing SGA sources')
     SGA = []
     for brick in sgabricks.brickname:
         # For picking up these SGA bricks, resolve doesn't matter (they're fixed
         # in both).
         for catsurvey,_ in surveys:
             fn = catsurvey.find_file('tractor', brick=brick)
+            print('Looking for catalog', fn)
             if os.path.exists(fn):
                 t = fits_table(fn, columns=['ref_cat', 'ref_id'])
                 I = np.flatnonzero(t.ref_cat == 'L3')
-                print('Read', len(I), 'SGA entries from', brick)
+                print('Read', len(I), 'SGA entries from', brick, 'tractor catalog')
                 SGA.append(fits_table(fn, columns=columns, rows=I))
                 break
     SGA = merge_tables(SGA)
     if 'brick_primary' in SGA.get_columns():
-        print('Total of', len(SGA), 'sources before BRICK_PRIMARY cut')
+        #print('Total of', len(SGA), 'sources before BRICK_PRIMARY cut')
         SGA.cut(SGA.brick_primary)
-    print('Total of', len(SGA), 'sources')
+    print('Read a total of', len(SGA), 'SGA entries in brick_primary')
     if len(SGA) == 0:
         return None
-    I = np.array([i for i,ref_id in enumerate(SGA.ref_id) if ref_id in set(sga.ref_id)])
-    SGA.cut(I)
-    print('Found', len(SGA), 'desired SGA sources')
-    assert(len(sga) == len(SGA))
-    assert(set(sga.ref_id) == set(SGA.ref_id))
+
+    I,J,d = match_radec(sga.ra, sga.dec, SGA.ra, SGA.dec, match_radius, nearest=True)
+    print('Matched', len(I), 'desired SGA source(s)')
+    SGA.cut(J)
+
+    # This can *still* fail to find some (eg, the link given above).
+    unmatched = np.ones(len(sga), bool)
+    unmatched[I] = False
+    if np.any(unmatched):
+        print(np.sum(unmatched), 'SGA entries still not found.')
+        srcs = sga.sources[unmatched]
+        #for src in srcs:
+        #    print('Source:', src)
+        # create fake catalog entries??
+        # The sources aren't created if bands=None
+        if srcs[0] is not None:
+            from legacypipe.catalog import prepare_fits_catalog
+            from tractor import Catalog
+            srcs = list(srcs)
+            srcs = Catalog(*srcs)
+            fake_sga = prepare_fits_catalog(srcs, None, None, bands)
+            # expand the flux array...
+            for i,band in enumerate(bands):
+                fake_sga.set('flux_%s' % band, fake_sga.flux[:,i])
+            fake_sga.brick_primary = np.zeros(len(fake_sga), bool)
+            #print('Fake SGA catalog:')
+            #fake_sga.about()
+
+            if len(SGA):
+                #print('Normal SGA catalog:')
+                #SGA.about()
+                SGA = merge_tables([SGA, fake_sga], columns='fillzero')
+            else:
+                SGA = fake_sga
+    else:
+        assert(len(sga) == len(SGA))
+        assert(set(sga.ref_id) == set(SGA.ref_id))
+    #print('Returning SGA catalog:')
+    #SGA.about()
     return SGA
 
 def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
-                          ccd, opt, zoomslice, radecpoly, outlier_bricks, ps):
+                          ccd, catalog, opt, zoomslice, radecpoly, outlier_bricks, ps):
     from functools import reduce
-    from legacypipe.bits import DQ_BITS
-
     plots = (ps is not None)
-
     tlast = Time()
-    #print('Opt:', opt)
     im = survey.get_image_object(ccd)
-    print('Forced_photom_one_ccd: checking cache', survey.cache_dir)
     if survey.cache_dir is not None:
         im.check_for_cached_files(survey)
     if opt.do_calib:
         im.run_calibs(splinesky=True, survey=survey,
                       halos=True, subtract_largegalaxies=True)
     old_calibs_ok=True
-
     tim = im.get_tractor_image(slc=zoomslice,
                                radecpoly=radecpoly,
                                pixPsf=True,
@@ -531,16 +581,16 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                                constant_invvar=opt.constant_invvar,
                                old_calibs_ok=old_calibs_ok,
                                trim_edges=False)
-    print('Got tim:', tim)
+    #print('Got tim:', tim)
     if tim is None:
+        print('No overlap (tim is None)')
         return None
     chipwcs = tim.subwcs
     H,W = tim.shape
-
+    print('Image %s-%s-%s: size %i x %i' % (im.camera, im.expnum, im.ccdname, W, H))
     tnow = Time()
-    print('Read image:', tnow-tlast)
+    print_timing('Read image:', tnow-tlast)
     tlast = tnow
-
     if ccd.camera == 'decam':
         # Halo subtraction
         from legacypipe.halos import subtract_one
@@ -548,7 +598,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         ref_margin = mask_radius_for_mag(0.)
         mpix = int(np.ceil(ref_margin * 3600. / chipwcs.pixel_scale()))
         marginwcs = chipwcs.get_subimage(-mpix, -mpix, W+2*mpix, H+2*mpix)
-        gaia = read_gaia(marginwcs, None)
+        gaia = read_gaia(marginwcs, [tim.band])
         keeprad = np.ceil(gaia.keep_radius * 3600. / chipwcs.pixel_scale()).astype(int)
         _,xx,yy = chipwcs.radec2pixelxy(gaia.ra, gaia.dec)
         # cut to those touching the chip
@@ -556,24 +606,10 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                  (yy > -keeprad) * (yy < H+keeprad))
         Igaia, = np.nonzero(gaia.isgaia * gaia.pointsource)
         halostars = gaia[Igaia]
-        print('Got', len(gaia), 'Gaia stars,', len(halostars), 'for halo subtraction')
+        #print('Got', len(gaia), 'Gaia stars,', len(halostars), 'for halo subtraction')
         moffat = True
         _,halos = subtract_one((0, tim, halostars, moffat, old_calibs_ok))
         tim.data -= halos
-
-    # The "north" and "south" directories often don't have
-    # 'survey-bricks" files of their own -- use the 'survey' one
-    # instead.
-    if catsurvey_south is not None:
-        try:
-            catsurvey_south.get_bricks_readonly()
-        except:
-            catsurvey_south.bricks = survey.get_bricks_readonly()
-    if catsurvey_north is not None:
-        try:
-            catsurvey_north.get_bricks_readonly()
-        except:
-            catsurvey_north.bricks = survey.get_bricks_readonly()
 
     # Apply outlier masks
     outlier_header = None
@@ -582,15 +618,15 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     if opt.outlier_mask is not None:
         posneg_mask = np.zeros(tim.shape, np.uint8)
 
-    # # Outliers masks are computed within a survey (eg north/south
-    # # for dr9), and are stored in a brick-oriented way, in the
-    # # results directories.
+    # Outliers masks are computed within a survey (eg north/south
+    # for dr9), and are stored in a brick-oriented way, in the
+    # results directories.
     if outlier_bricks is None:
         outlier_bricks = bricks_touching_wcs(chipwcs, survey=survey)
 
     for b in outlier_bricks:
-        print('Reading outlier mask for brick', b.brickname,
-              ':', survey.find_file('outliers_mask', brick=b.brickname, output=False))
+        #print('Reading outlier mask for brick', b.brickname,
+        #      ':', survey.find_file('outliers_mask', brick=b.brickname, output=False))
         ok = read_outlier_mask_file(survey, [tim], b.brickname, pos_neg_mask=posneg_mask,
                                     subimage=False, output=False, ps=ps)
         if not ok:
@@ -609,9 +645,25 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         imhdr['IMGFILE'] = ccd.image_filename.strip()
         outlier_header = imhdr
 
-    if opt.catalog:
+    if catalog is not None:
+        T = catalog
+    elif opt.catalog:
         T = fits_table(opt.catalog)
     else:
+        # The "north" and "south" directories often don't have
+        # 'survey-bricks" files of their own -- use the 'survey' one
+        # instead.
+        if catsurvey_south is not None:
+            try:
+                catsurvey_south.get_bricks_readonly()
+            except:
+                catsurvey_south.bricks = survey.get_bricks_readonly()
+        if catsurvey_north is not None:
+            try:
+                catsurvey_north.get_bricks_readonly()
+            except:
+                catsurvey_north.bricks = survey.get_bricks_readonly()
+
         chipwcs = tim.subwcs
         T = get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=catsurvey_south,
                                resolve_dec=resolve_dec, bands=[tim.band])
@@ -629,15 +681,14 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         # Gaia stars: move RA,Dec to the epoch of this image.
         I = np.flatnonzero(T.ref_epoch > 0)
         if len(I):
-            print('Moving', len(I), 'Gaia stars to MJD', tim.time.toMjd())
+            #print('Moving', len(I), 'Gaia stars to MJD', tim.time.toMjd())
             ra,dec = radec_at_mjd(T.ra[I], T.dec[I], T.ref_epoch[I].astype(float),
-                                  T.pmra[I], T.pmdec[I], T.parallax[I],
-                                  tim.time.toMjd())
+                                  T.pmra[I], T.pmdec[I], T.parallax[I], tim.time.toMjd())
             T.ra [I] = ra
             T.dec[I] = dec
 
     tnow = Time()
-    print('Read catalog:', tnow-tlast)
+    print_timing('Read catalog:', tnow-tlast)
     tlast = tnow
 
     # Find SGA galaxies outside this chip and subtract them before we begin.
@@ -651,30 +702,47 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
             print('SGA galaxies outside but touching the image exist, but no flux measurements for'
                   ' band', tim.band, 'so no subtraction.')
         else:
-            print(len(I), 'SGA galaxies are outside the image.  Subtracting...')
+            #print(len(I), 'SGA galaxies are outside the image.  Subtracting...')
+            t0 = Time()
             cat = read_fits_catalog(T[I], bands=[tim.band])
             tr = Tractor([tim], cat)
             mod = tr.getModelImage(0)
             tim.data -= mod
+            print_timing('Subtracting SGA took', Time()-t0)
+            # Now drop those SGA galaxies from the catalog!
             I = np.flatnonzero(np.logical_not(sga_out))
             T.cut(I)
+
+    # If a catalog was passed in - after the SGA stuff, cut to sources inside this CCD
+    # (this cut applies to all sources, not just SGA sources)
+    if catalog is not None:
+        _,xx,yy = chipwcs.radec2pixelxy(T.ra, T.dec)
+        W,H = chipwcs.get_width(), chipwcs.get_height()
+        # Same as get_catalog_in_wcs
+        margin = 20
+        T.cut((xx >= -margin) * (xx <= (W+margin)) *
+              (yy >= -margin) * (yy <= (H+margin)))
+        if len(T) == 0:
+            print('After cutting to image bounds: no sources to photometer.')
+            return None
 
     # Add in a fake flux_{BAND} column, with flux 1.0 nanomaggies
     T.set('flux_'+tim.band, np.ones(len(T), np.float32))
     cat = read_fits_catalog(T, bands=[tim.band])
-
-    tnow = Time()
-    print('Parse catalog:', tnow-tlast)
-    tlast = tnow
-
     get_model = (opt.save_model is not None)
     if plots:
-        #opt.save_data = True
-        #opt.save_model = True
         get_model = True
         opt.plot_wcs = getattr(opt, 'plot_wcs', None)
 
-    print('Forced photom for', im, '...')
+    from collections import Counter
+    print('Photometering', len(cat), 'sources in image of size', tim.shape)
+    for t,n in Counter(T.type).items():
+        print('  ', n, t, 'sources')
+    print('Largest galaxies:')
+    for i in np.argsort(-T.shape_r)[:5]:
+        print('  ', cat[i])
+
+    #print('Forced photom for', im, '...')
     F = run_forced_phot(cat, tim,
                         ceres=opt.ceres,
                         derivs=opt.derivs,
@@ -749,12 +817,60 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         # plt.title('chi: %s' % tim.name)
         # ps.savefig()
 
+    forced_phot_add_extra_fields(F, T, ccd, im, tim, opt.derivs)
+
+
+    program_name = sys.argv[0]
+    version_hdr = get_version_header(program_name, surveydir, None)
+    filename = getattr(ccd, 'image_filename')
+    if filename is None:
+        # HACK -- print only two directory names + filename of CPFILE.
+        fname = os.path.basename(im.imgfn.strip())
+        d = os.path.dirname(im.imgfn)
+        d1 = os.path.basename(d)
+        d = os.path.dirname(d)
+        d2 = os.path.basename(d)
+        filename = os.path.join(d2, d1, fname)
+        print('Trimmed filename to', filename)
+    version_hdr.add_record(dict(name='CPFILE', value=filename, comment='CP file'))
+    version_hdr.add_record(dict(name='CPHDU', value=im.hdu, comment='CP ext'))
+    version_hdr.add_record(dict(name='CAMERA', value=ccd.camera, comment='Camera'))
+    version_hdr.add_record(dict(name='EXPNUM', value=im.expnum, comment='Exposure num'))
+    version_hdr.add_record(dict(name='CCDNAME', value=im.ccdname, comment='CCD name'))
+    version_hdr.add_record(dict(name='FILTER', value=tim.band, comment='Bandpass of this image'))
+    version_hdr.add_record(dict(name='PLVER', value=ccd.plver, comment='CP pipeline version'))
+    version_hdr.add_record(dict(name='PLPROCID', value=ccd.plprocid, comment='CP pipeline id'))
+    version_hdr.add_record(dict(name='PROCDATE', value=ccd.procdate, comment='CP image DATE'))
+
+    keys = ['TELESCOP','OBSERVAT','OBS-LAT','OBS-LONG','OBS-ELEV',
+            'INSTRUME']
+    for key in keys:
+        if key in tim.primhdr:
+            version_hdr.add_record(dict(name=key, value=tim.primhdr[key]))
+
+    if opt.save_model or opt.save_data:
+        hdr = fitsio.FITSHDR()
+        tim.getWcs().wcs.add_to_header(hdr)
+    if opt.save_model:
+        fitsio.write(opt.save_model, model_img, header=hdr, clobber=True)
+        print('Wrote', opt.save_model)
+    if opt.save_data:
+        fitsio.write(opt.save_data, tim.getImage(), header=hdr, clobber=True)
+        print('Wrote', opt.save_data)
+
+    tnow = Time()
+    print_timing('Forced phot:', tnow-tlast)
+    return F,version_hdr,outlier_mask,outlier_header
+
+def forced_phot_add_extra_fields(F, T, ccd, im, tim, derivs):
+    from functools import reduce
+    from legacypipe.bits import DQ_BITS
     F.release   = T.release
     F.brickid   = T.brickid
     F.brickname = T.brickname
     F.objid     = T.objid
 
-    F.camera  = np.array([ccd.camera] * len(F))
+    F.camera  = np.array([im.camera] * len(F))
     F.expnum  = np.array([im.expnum]  * len(F), dtype=np.int64)
     F.ccdname = np.array([im.ccdname] * len(F))
 
@@ -777,7 +893,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     F.ccddecrms= np.array([ccd.ccddecrms]* len(F), dtype=np.float32)
     F.ccdphrms = np.array([ccd.ccdphrms] * len(F), dtype=np.float32)
 
-    if opt.derivs:
+    if derivs:
         # We don't need to apply a cos(Dec) correction --
         # the fitting happens on pixel-space models multiplied by CD-inverse, so they're
         # in Intermediate World Coordinates in degrees in the *directions* of RA,Dec, but isotropic.
@@ -787,8 +903,10 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         with np.errstate(divide='ignore', invalid='ignore'):
             F.dra  = (F.flux_dra  / np.abs(F.flux))
             F.ddec = (F.flux_ddec / np.abs(F.flux))
-            F.dra_ivar  = 1. / (F.dra **2 * (1./F.flux_dra_ivar /(F.flux_dra **2) + 1./F.flux_ivar/(F.flux**2)))
-            F.ddec_ivar = 1. / (F.ddec**2 * (1./F.flux_ddec_ivar/(F.flux_ddec**2) + 1./F.flux_ivar/(F.flux**2)))
+            F.dra_ivar  = 1. / (F.dra **2 * (
+                1./F.flux_dra_ivar /(F.flux_dra **2) + 1./F.flux_ivar/(F.flux**2)))
+            F.ddec_ivar = 1. / (F.ddec**2 * (
+                1./F.flux_ddec_ivar/(F.flux_ddec**2) + 1./F.flux_ivar/(F.flux**2)))
         F.dra  *= 3600.
         F.ddec *= 3600.
         F.dra_ivar  *= 1./3600.**2
@@ -829,50 +947,6 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
 
     F.x = x + tim.x0
     F.y = y + tim.y0
-
-    program_name = sys.argv[0]
-    ## FIXME -- from catalog?
-    release = 9999
-    version_hdr = get_version_header(program_name, surveydir, release)
-    filename = getattr(ccd, 'image_filename')
-    if filename is None:
-        # HACK -- print only two directory names + filename of CPFILE.
-        fname = os.path.basename(im.imgfn.strip())
-        d = os.path.dirname(im.imgfn)
-        d1 = os.path.basename(d)
-        d = os.path.dirname(d)
-        d2 = os.path.basename(d)
-        filename = os.path.join(d2, d1, fname)
-        print('Trimmed filename to', filename)
-    version_hdr.add_record(dict(name='CPFILE', value=filename, comment='CP file'))
-    version_hdr.add_record(dict(name='CPHDU', value=im.hdu, comment='CP ext'))
-    version_hdr.add_record(dict(name='CAMERA', value=ccd.camera, comment='Camera'))
-    version_hdr.add_record(dict(name='EXPNUM', value=im.expnum, comment='Exposure num'))
-    version_hdr.add_record(dict(name='CCDNAME', value=im.ccdname, comment='CCD name'))
-    version_hdr.add_record(dict(name='FILTER', value=tim.band, comment='Bandpass of this image'))
-    version_hdr.add_record(dict(name='PLVER', value=ccd.plver, comment='CP pipeline version'))
-    version_hdr.add_record(dict(name='PLPROCID', value=ccd.plprocid, comment='CP pipeline id'))
-    version_hdr.add_record(dict(name='PROCDATE', value=ccd.procdate, comment='CP image DATE'))
-
-    keys = ['TELESCOP','OBSERVAT','OBS-LAT','OBS-LONG','OBS-ELEV',
-            'INSTRUME']
-    for key in keys:
-        if key in tim.primhdr:
-            version_hdr.add_record(dict(name=key, value=tim.primhdr[key]))
-
-    if opt.save_model or opt.save_data:
-        hdr = fitsio.FITSHDR()
-        tim.getWcs().wcs.add_to_header(hdr)
-    if opt.save_model:
-        fitsio.write(opt.save_model, model_img, header=hdr, clobber=True)
-        print('Wrote', opt.save_model)
-    if opt.save_data:
-        fitsio.write(opt.save_data, tim.getImage(), header=hdr, clobber=True)
-        print('Wrote', opt.save_data)
-
-    tnow = Time()
-    print('Forced phot:', tnow-tlast)
-    return F,version_hdr,outlier_mask,outlier_header
 
 def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                     do_forced=True, do_apphot=True, get_model=False, ps=None,
@@ -979,7 +1053,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
         if timing and (derivs or agn):
             t = Time()
-            print('Setting up:', t-tlast)
+            print_timing('Setting up:', t-tlast)
             tlast = t
 
         if derivs:
@@ -989,7 +1063,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 fixed_also = True
 
             if fixed_also:
-                print('Forced photom with fixed positions:')
+                #print('Forced photom with fixed positions:')
                 R = tr.optimize_forced_photometry(variance=True, fitstats=False,
                                                   shared_params=False, priors=False,
                                                   **forced_kwargs)
@@ -1001,7 +1075,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
                 if timing:
                     t = Time()
-                    print('Forced photom with fixed positions finished:', t-tlast)
+                    print_timing('Forced photom with fixed positions finished:', t-tlast)
                     tlast = t
 
             if full_position_fit:
@@ -1035,7 +1109,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             if fixed_also:
                 cat = realsrcs + derivsrcs
                 tr.setCatalog(Catalog(*cat))
-            print('Forced photom with position derivatives:')
+            #print('Forced photom with position derivatives:')
 
         if ps is None and not get_model:
             forced_kwargs.update(wantims=False)
@@ -1043,7 +1117,6 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         R = tr.optimize_forced_photometry(variance=True, fitstats=True,
                                           shared_params=False, priors=False,
                                           **forced_kwargs)
-
         if derivs or agn:
             cat = realsrcs
         N = len(cat)
@@ -1085,10 +1158,13 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
         if timing:
             t = Time()
-            print('Forced photom:', t-tlast)
+            print_timing('Forced photom:', t-tlast)
             tlast = t
 
         if ps is not None or get_model:
+            if not hasattr(R, 'ims1'):
+                print('R:', R)
+                return None,None
             (data,mod,ie,chi,_) = R.ims1[0]
 
         if ps is not None:
@@ -1289,7 +1365,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 #     t0 = Time()
                 # else:
                 #     t1 = Time()
-                #     print('Fitting took', t1-t0)
+                #     print_timing('Fitting took', t1-t0)
                 #     t0 = t1
                 src = cat[i]
                 src2 = src.copy()
@@ -1438,7 +1514,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
             if timing:
                 t = Time()
-                print('Full position fitting:', t-tlast)
+                print_timing('Full position fitting:', t-tlast)
                 tlast = t
 
     if windowed_peak:
@@ -1457,7 +1533,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         # in pixels
         fwhm = tim.psf_fwhm
         sigma = fwhm / 2.35
-        print('Gaussian PSF sigma:', sigma)
+        #print('Gaussian PSF sigma:', sigma)
 
         # HACK -- go in brightness order
         fluxes = []
@@ -1480,24 +1556,19 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 allxy.append((x,y))
             allxy = np.array(allxy)
 
-        #for i,src in enumerate(cat):
         for i in Ibright:
             src = cat[i]
-
             from tractor import PointSource
             if not isinstance(src, PointSource):
                 continue
             realmod = src.getUnitFluxModelPatch(tim)
             if realmod is None:
                 continue
-
             rd = src.getPosition()
             _,x0,y0 = tim.subwcs.radec2pixelxy(rd.ra, rd.dec)
             x0 -= 1.
             y0 -= 1.
-
             edge,xywin = windowed_centroid(tim.data, x0, y0, sigma, mask=(tim.getInvError() == 0))
-
             F.win_edge[i] = edge
             if xywin is not None:
                 F.win_converged[i] = True
@@ -1508,10 +1579,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 F.win_fracmasked[i] = fm
                 h,w = tim.shape
                 F.win_satur[i] = (tim.getInvError()[np.clip(int(ywin), 0, h-1), np.clip(int(xwin), 0, w-1)] == 0)
-                #print('Windowed centroid dra,ddec: (%.3f, %.3f) milli-arcsec' % (1000.*F.win_dra[i], 1000.*F.win_ddec[i]))
-                #print('  fracmasked: %.3f, satur: %s' % (F.win_fracmasked[i], F.win_satur[i]))
             else:
-
                 if ps is not None:
                     h,w = tim.shape
                     S = 25
@@ -1530,7 +1598,6 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                     else:
                         #print('failed windowed centroid too close to edge:', x0,y0)
                         pass
-
                 continue
 
             # Also measure the [XY]WIN of the PSF model
@@ -1541,11 +1608,9 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 r,d = tim.subwcs.pixelxy2radec(xwin + realmod.x0 + 1., ywin + realmod.y0 + 1.)
                 F.winpsf_dra [i] = 3600. * (r - rd.ra) * np.cos(np.deg2rad(rd.dec))
                 F.winpsf_ddec[i] = 3600. * (d - rd.dec)
-                #print('Windowed PSF centroid dra,ddec: (%.3f, %.3f) milli-arcsec' % (1000. * F.winpsf_dra[i], 1000. * F.winpsf_ddec[i]))
-
         if timing:
             t = Time()
-            print('Windowed centroid fitting:', t-tlast)
+            print_timing('Windowed centroid fitting:', t-tlast)
             tlast = t
 
     if do_apphot:
@@ -1570,7 +1635,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         H,W = img.shape
         Iap = np.flatnonzero((apxy[:,0] >= 0)   * (apxy[:,1] >= 0) *
                              (apxy[:,0] <= W-1) * (apxy[:,1] <= H-1))
-        print('Aperture photometry for', len(Iap), 'of', len(apxy[:,0]), 'sources within image bounds')
+        #print('Aperture photometry for', len(Iap), 'of', len(apxy[:,0]), 'sources within image bounds')
 
         for rad in apertures:
             aper = CircularAperture(apxy[Iap,:], rad)
@@ -1588,7 +1653,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         F.apflux_ivar = np.zeros((len(F), len(apertures)), np.float32)
         F.apflux_ivar[Iap,:] = apiv
         if timing:
-            print('Aperture photom:', Time()-tlast)
+            print_timing('Aperture photom:', Time()-tlast)
 
     if get_model:
         return F,mod

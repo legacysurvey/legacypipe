@@ -18,6 +18,7 @@ from legacypipe.bits import IN_BLOB
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 from legacypipe.utils import get_cpu_arch
+from legacypipe.utils import run_ps
 
 rgbkwargs_resid = dict(resids=True)
 
@@ -42,7 +43,7 @@ def one_blob(X):
     if X is None:
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
-     srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap,
+     srcs, bands, plots, ps, reoptimize, iterative, iterative_nsigma, use_ceres, refmap,
      large_galaxies_force_pointsource, less_masking, frozen_galaxies) = X
 
     debug('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
@@ -74,7 +75,8 @@ def one_blob(X):
     ob = OneBlob(nblob, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
-                 less_masking, frozen_galaxies)
+                 less_masking, frozen_galaxies,
+                 iterative_nsigma)
     B = ob.init_table(Isrcs)
     B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
     ob.finalize_table(B, bx0, by0)
@@ -89,7 +91,8 @@ class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
-                 less_masking, frozen_galaxies):
+                 less_masking, frozen_galaxies,
+                 iterative_nsigma):
         self.name = name
         self.blobwcs = blobwcs
         self.pixscale = self.blobwcs.pixel_scale()
@@ -108,6 +111,7 @@ class OneBlob(object):
         self.deblend = False
         self.large_galaxies_force_pointsource = large_galaxies_force_pointsource
         self.less_masking = less_masking
+        self.iterative_nsigma = iterative_nsigma
         self.tims = create_tims(self.blobwcs, self.blobmask, timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
         self.plots2 = False
@@ -228,9 +232,9 @@ class OneBlob(object):
         # - model selection (including iterative detection)
         # - metrics
 
-        print('OneBlob run starting: srcs', self.srcs)
-        for src in self.srcs:
-            print('OneBlob  ', src.getParams())
+        #print('OneBlob run starting: srcs', self.srcs)
+        #for src in self.srcs:
+        #    print('OneBlob  ', src.getParams())
 
         trun = tlast = Time()
         # Not quite so many plots...
@@ -860,13 +864,12 @@ class OneBlob(object):
         avoid_x = Bold.safe_x0
         avoid_y = Bold.safe_y0
         avoid_r = np.zeros(len(avoid_x), np.float32) + 2.
-        nsigma = 6.
         avoid_map = (self.refmap != 0)
 
         Tnew,_,_ = run_sed_matched_filters(
             SEDs, self.bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r),
-            self.blobwcs, nsigma=nsigma, saturated_pix=satmaps, veto_map=avoid_map,
-            plots=False, ps=None, mp=mp)
+            self.blobwcs, nsigma=self.iterative_nsigma, saturated_pix=satmaps,
+            veto_map=avoid_map, plots=False, ps=None, mp=mp)
 
         detlogger.setLevel(detloglvl)
 
@@ -1307,6 +1310,11 @@ class OneBlob(object):
             for tim in srctims:
                 tim.freezeAllBut('sky')
             srctractor.thawParam('images')
+            # When we're fitting the background, using the sparse optimizer is critical
+            # when we have a lot of images: we're adding Nimages extra parameters, touching
+            # every pixel; you don't want Nimages x Npixels dense matrices.
+            from tractor.lsqr_optimizer import LsqrOptimizer
+            srctractor.optimizer = LsqrOptimizer()
             skyparams = srctractor.images.getParams()
 
         enable_galaxy_cache()
@@ -1439,8 +1447,8 @@ class OneBlob(object):
             opt_steps = R.get('steps', -1)
             hit_ser_limit = False
             hit_r_limit = False
-            print('OneBlob steps:', opt_steps)
-            print('OneBlob hit limit:', hit_limit)
+            #print('OneBlob steps:', opt_steps)
+            #print('OneBlob hit limit:', hit_limit)
             if hit_limit:
                 debug('Source', newsrc, 'hit limit:')
                 if is_debug():
@@ -1559,6 +1567,7 @@ class OneBlob(object):
             # models are evaluated on the same pixels.
             ch = _per_band_chisqs(srctractor, self.bands)
             chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
+            print('Chisq for', name, '=', chisqs[name])
             cpum1 = time.process_time()
             B.all_model_cpu[srci][name] = cpum1 - cpum0
             cputimes[name] = cpum1 - cpum0
@@ -2044,6 +2053,12 @@ def _compute_source_metrics(srcs, tims, bands, tr):
                 fracin_num[isrc,iband] += np.abs(np.sum(patch))
                 fracin_den[isrc,iband] += np.abs(counts[isrc])
 
+                print('Fracin: band', band)
+                print('Fracin: abs(sum(patch))', np.abs(np.sum(patch)))
+                print('Fracin: abs(sum(patch)) / abs(counts)', np.abs(np.sum(patch)) / np.abs(counts[isrc]))
+                print('Fracin: sum(abs(patch))', np.sum(np.abs(patch)))
+                print('Fracin: sum(abs(patch)) / abs(counts)', np.sum(np.abs(patch)) / np.abs(counts[isrc]))
+
             tim.getSky().addTo(mod)
             chisq = ((tim.getImage() - mod) * tim.getInvError())**2
 
@@ -2277,7 +2292,7 @@ def _select_model(chisqs, nparams, galaxy_margin):
     Returns keepmod (string), the name of the preferred model.
     '''
     keepmod = 'none'
-    #print('_select_model: chisqs', chisqs)
+    print('_select_model: chisqs', chisqs)
 
     # This is our "detection threshold": 5-sigma in
     # *parameter-penalized* units; ie, ~5.2-sigma for point sources
@@ -2286,6 +2301,7 @@ def _select_model(chisqs, nparams, galaxy_margin):
     diff = max([chisqs[name] - nparams[name] for name in chisqs.keys()
                 if name != 'none'] + [-1])
 
+    print('best fit source chisq: %.3f, vs threshold %.3f' % (diff, cut))
     if diff < cut:
         # Drop this source
         return keepmod

@@ -225,6 +225,7 @@ def measure_image(img_fn, mp, image_dir='images',
                   run_sky_only=False,
                   survey=None, psfex=True, camera=None,
                   prime_cache=False,
+                  sky_subtract_large_galaxies=True,
                   **measureargs):
     '''Wrapper on the camera-specific classes to measure the CCD-level data on all
     the FITS extensions for a given set of images.
@@ -246,12 +247,13 @@ def measure_image(img_fn, mp, image_dir='images',
         # - all-zero weight map
         if run_calibs_only:
             return
-        debug('%s: Zero exposure time or low-level calibration flagged as bad; skipping image.'
+        print('%s: Zero exposure time or low-level calibration flagged as bad; skipping image.'
               % str(img))
         ccds = _ccds_table(camera)
         ccds['image_filename'] = img_fn
         ccds['err_message'] = 'Failed CP calib, or Exptime=0'
         ccds['zpt'] = 0.
+        set_ccd_metadata(ccds, img, primhdr, None)
         return ccds, None, img
 
     if measureargs['choose_ccd']:
@@ -290,28 +292,30 @@ def measure_image(img_fn, mp, image_dir='images',
 
     plots = measureargs.get('plots', False)
 
+    run_sky = True
     if run_psf_only:
-        splinesky = False
+        run_sky = False
     if run_sky_only:
         psfex = False
 
-    # Validate the splinesky and psfex merged files, and (re)make them if
+    # Validate the sky and psfex merged files, and (re)make them if
     # they're missing.
-    if splinesky:
+    if run_sky:
         fn = survey.find_file('sky', img=img)
         if (fn is None or
             validate_version(fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
-            splinesky = False
+            run_sky = False
     if psfex:
         fn = survey.find_file('psf', img=img)
         if (fn is None or
             validate_version(fn, 'table', img.expnum, img.plver, img.plprocid, quiet=quiet)):
             psfex = False
 
-    if splinesky or psfex:
+    if run_sky or psfex:
         git_version = get_git_version(dirnm=os.path.dirname(legacypipe.__file__))
         imgs = mp.map(run_one_calib, [(img_fn, camera, survey, ext, psfex, splinesky,
-                                       plots, survey_blob_mask, survey_zeropoints, git_version)
+                                       plots, survey_blob_mask, survey_zeropoints, git_version,
+                                       sky_subtract_large_galaxies)
                                       for ext in extlist])
         from legacyzpts.merge_calibs import merge_splinesky, merge_psfex
         class FakeOpts(object):
@@ -319,7 +323,7 @@ def measure_image(img_fn, mp, image_dir='images',
         opts = FakeOpts()
         # Allow some CCDs to be missing, e.g., if the weight map is all zero.
         opts.all_found = False
-        if splinesky:
+        if run_sky:
             skyoutfn = survey.find_file('sky', img=img, use_cache=False)
             ccds = None
             err_splinesky = merge_splinesky(survey, img.expnum, ccds, skyoutfn, opts, imgs=imgs)
@@ -334,7 +338,7 @@ def measure_image(img_fn, mp, image_dir='images',
 
     # Now, if they're still missing it's because the entire exposure is borked
     # (WCS failed, weight maps are all zero, etc.), so exit gracefully.
-    if splinesky:
+    if run_sky:
         skyfn = survey.find_file('sky', img=img)
         if not os.path.exists(skyfn):
             print('Merged splinesky file not found {}'.format(skyfn))
@@ -379,7 +383,8 @@ def measure_image(img_fn, mp, image_dir='images',
         return
 
     rtns = mp.map(run_one_ext, [(img, ext, survey, splinesky,
-                                 measureargs['sdss_photom'], plots)
+                                 measureargs['sdss_photom'],
+                                 measureargs['gaia_photom'], plots)
                                 for ext in extlist])
 
     for ccd,photom in rtns:
@@ -410,13 +415,12 @@ def measure_image(img_fn, mp, image_dir='images',
 
 def run_one_calib(X):
     (img_fn, camera, survey, ext, psfex, splinesky, plots, survey_blob_mask,
-     survey_zeropoints, git_version) = X
+     survey_zeropoints, git_version, sky_subtract_large_galaxies) = X
     img = survey.get_image_object(None, camera=camera,
                                   image_fn=img_fn, image_hdu=ext)
     img.check_for_cached_files(survey)
 
     do_psf = False
-    do_sky = False
     if psfex:
         do_psf = True
         try:
@@ -425,14 +429,13 @@ def run_one_calib(X):
                 do_psf = False
         except:
             pass
-    if splinesky:
-        do_sky = True
-        try:
-            sky = img.read_sky_model()
-            if sky is not None:
-                do_sky = False
-        except:
-            pass
+    do_sky = True
+    try:
+        sky = img.read_sky_model()
+        if sky is not None:
+            do_sky = False
+    except:
+        pass
 
     if (not do_psf) and (not do_sky):
         # Nothing to do!
@@ -466,18 +469,22 @@ def run_one_calib(X):
         if plots:
             from astrometry.util.plotutils import PlotSequence
             ps = PlotSequence('plots-%s-%i-%s' % (camera, img.expnum, ext))
+
+        subtract_largegalaxies = have_zpt
+        if not sky_subtract_large_galaxies:
+            subtract_largegalaxies = False
         img.run_calibs(psfex=do_psf, sky=do_sky, splinesky=True,
                        git_version=git_version, survey=survey, ps=ps,
                        survey_blob_mask=survey_blob_mask,
                        halos=have_zpt,
-                       subtract_largegalaxies=have_zpt)
+                       subtract_largegalaxies=subtract_largegalaxies)
     except ZeroWeightError:
         print('Got ZeroWeightError running calibs for', img, 'but continuing')
     # Otherwise, let the exception propagate.
     return img
 
 def run_one_ext(X):
-    img, ext, survey, splinesky, sdss_photom, plots = X
+    img, ext, survey, splinesky, sdss_photom, gaia_photom, plots = X
 
     ps = None
     if plots:
@@ -487,7 +494,8 @@ def run_one_ext(X):
     img = survey.get_image_object(None, camera=img.camera,
                                   image_fn=img.image_filename, image_hdu=ext,
                                   prime_cache=False)
-    return run_zeropoints(img, splinesky=splinesky, sdss_photom=sdss_photom, ps=ps)
+    return run_zeropoints(img, splinesky=splinesky, sdss_photom=sdss_photom,
+                          gaia_photom=gaia_photom, ps=ps)
 
 class outputFns(object):
     def __init__(self, imgfn, outdir, camera, image_dir='images', debug=False):
@@ -660,6 +668,8 @@ def get_parser():
     parser.add_argument('--outdir', type=str, default=None, help='Where to write photom and annotated files; default [survey_dir]/zpt')
     parser.add_argument('--sdss-photom', default=False, action='store_true',
                         help='Use SDSS rather than PS-1 for photometric cal.')
+    parser.add_argument('--gaia-photom', default=False, action='store_true',
+                        help='Use Gaia rather than PS-1 for photometric cal.')
     parser.add_argument('--debug', action='store_true', default=False, help='Write additional files and plots for debugging')
     parser.add_argument('--choose_ccd', action='store', default=None, help='forced to use only the specified ccd')
     parser.add_argument('--force-cfht-ccds', action='store_true', default=False,
@@ -685,6 +695,10 @@ def get_parser():
                         help='The base directory to search for survey-ccds files for subtracting star halos before doing sky calibration.')
     parser.add_argument('--calibdir', default=None,
                         help='if None will use LEGACY_SURVEY_DIR/calib, e.g. /global/cscratch1/sd/desiproc/dr5-new/calib')
+    parser.add_argument('--sky-no-subtract-large-galaxies',
+                        dest='sky_subtract_large_galaxies',
+                        default=True, action='store_false',
+                        help='For sky calibs: do not subtract large galaxies first')
     parser.add_argument('--no-check-photom', dest='check_photom', action='store_false',
                         help='Do not check for photom file when deciding if this file is done or not.')
     parser.add_argument('--threads', default=None, type=int,
@@ -879,7 +893,40 @@ def main(args=None):
     tnow = Time()
     print("TIMING:total %s" % (tnow-tbegin,))
 
-def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
+def set_ccd_metadata(ccds, img, primhdr, hdr):
+    # init_ccd():
+    namemap = { 'object': 'obj',
+                'filter': 'band',
+                'image_hdu': 'hdu',
+                'mjd_obs': 'mjdobs',
+    }
+    for key in ['image_filename', 'image_hdu', 'camera', 'expnum', 'plver', 'procdate',
+                'plprocid', 'ccdname', 'propid', 'exptime', 'mjd_obs',
+                'pixscale', 'width', 'height', 'fwhm', 'filter']:
+        val = getattr(img, namemap.get(key, key), None)
+        print('Setting', key, '=', val)
+        if val is None:
+            continue
+        ccds[key] = val
+
+    ra_bore, dec_bore = img.get_radec_bore(primhdr)
+    ccds['ra_bore'],ccds['dec_bore'] = ra_bore, dec_bore
+    # hdr can be None
+    try:
+        airmass = img.get_airmass(primhdr, hdr, ra_bore, dec_bore)
+        ccds['airmass'] = airmass
+    except:
+        pass
+    ccds['ha'] = img.get_ha_deg(primhdr)
+    try:
+        ccds['gain'] = img.get_gain(primhdr, hdr)
+    except:
+        pass
+    ccds['object'] = img.get_object(primhdr)
+    if hdr is not None:
+        ccds['AVSKY'] = hdr.get('AVSKY', np.nan)
+
+def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False, ps=None):
     """Computes photometric and astrometric zeropoints for one CCD.
 
     Args:
@@ -894,31 +941,12 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
     # Initialize CCDs (annotated) table data structure.
     ccds = _ccds_table(imobj.camera, overrides=imobj.override_ccd_table_types())
 
-    # init_ccd():
-    namemap = { 'object': 'obj',
-                'filter': 'band',
-                'image_hdu': 'hdu',
-                'mjd_obs': 'mjdobs',
-    }
-    for key in ['image_filename', 'image_hdu', 'camera', 'expnum', 'plver', 'procdate',
-                'plprocid', 'ccdname', 'propid', 'exptime', 'mjd_obs',
-                'pixscale', 'width', 'height', 'fwhm', 'filter']:
-        val = getattr(imobj, namemap.get(key, key))
-        print('Setting', key, '=', val)
-        ccds[key] = val
-
     primhdr = imobj.read_image_primary_header()
     hdr = imobj.read_image_header(ext=imobj.hdu)
-
+    set_ccd_metadata(ccds, imobj, primhdr, hdr)
+    # needed below...
     ra_bore, dec_bore = imobj.get_radec_bore(primhdr)
-    ccds['ra_bore'],ccds['dec_bore'] = ra_bore, dec_bore
     airmass = imobj.get_airmass(primhdr, hdr, ra_bore, dec_bore)
-    ccds['airmass'] = airmass
-    ccds['ha'] = imobj.get_ha_deg(primhdr)
-    ccds['gain'] = imobj.get_gain(primhdr, hdr)
-    ccds['object'] = imobj.get_object(primhdr)
-
-    ccds['AVSKY'] = hdr.get('AVSKY', np.nan)
 
     # Quick check for PsfEx file -- moved before WCS, for CFHT's benefit
     normalizePsf = True
@@ -1009,7 +1037,14 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
         ccds['zpt'] = zpt
         return ccds, None
 
-    # Load PS1 & Gaia catalogues
+    # Load Gaia & photometric calibrator catalogues
+
+    gaia = GaiaCatalog().get_catalog_in_wcs(wcs)
+    assert(gaia is not None)
+    assert(len(gaia) > 0)
+    gaia = GaiaCatalog.catalog_nantozero(gaia)
+    assert(gaia is not None)
+    print(len(gaia), 'Gaia stars')
 
     phot = None
     if sdss_photom:
@@ -1017,6 +1052,9 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
             phot = sdsscat(ccdwcs=wcs).get_stars(magrange=None)
         except OSError as e:
             print('No SDSS stars found for this image -- outside the SDSS footprint?', e)
+    elif gaia_photom:
+        # ....???
+        phot = gaia
     else:
         try:
             phot = ps1cat(ccdwcs=wcs).get_stars(magrange=None)
@@ -1028,35 +1066,32 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
 
     if sdss_photom:
         name = 'sdss'
+    elif gaia_photom:
+        name = 'gaia'
     else:
         name = 'ps1'
 
     if phot is not None:
-        phot.cut(imobj.get_photometric_calibrator_cuts(name, phot))
-        if len(phot) == 0:
+        phot.use_for_photometry = imobj.get_photometric_calibrator_cuts(name, phot)
+        if len(phot) == 0 or np.sum(phot.use_for_photometry) == 0:
             phot = None
         else:
             # Convert to Legacy Survey mags
             phot.legacy_survey_mag = imobj.photometric_calibrator_to_observed(name, phot)
             print(len(phot), 'photometric calibrator stars')
 
-    gaia = GaiaCatalog().get_catalog_in_wcs(wcs)
-    assert(gaia is not None)
-    assert(len(gaia) > 0)
-    gaia = GaiaCatalog.catalog_nantozero(gaia)
-    assert(gaia is not None)
-    print(len(gaia), 'Gaia stars')
-
     maxgaia = 1000
     if len(gaia) > maxgaia:
-        I = np.argsort(gaia.phot_g_mean_mag)
+        # omit (downgrade) those with G=0.0 ...
+        I = np.argsort(gaia.phot_g_mean_mag + 100.*(gaia.phot_g_mean_mag == 0))
         gaia.cut(I[:maxgaia])
         print('Cut to', len(gaia), 'Gaia stars with G mag in range %.2f to %.2f' %
               (gaia.phot_g_mean_mag[0], gaia.phot_g_mean_mag[-1]))
 
     maxphot = 1000
     if phot is not None and len(phot) > maxphot:
-        I = np.argsort(phot.legacy_survey_mag)
+        # (use_for_photometry first; brightest to faintest)
+        I = np.argsort(phot.legacy_survey_mag + 100 * ~phot.use_for_photometry)
         phot.cut(I[:maxphot])
         print('Cut to', len(phot), 'photometric calibrator stars with mag in range %.2f to %.2f' %
               (phot.legacy_survey_mag[0], phot.legacy_survey_mag[-1]))
@@ -1104,7 +1139,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
         magerr = np.abs(2.5/np.log(10.) * 1./np.fmax(1., sn))
         gaia.set('phot_%s_mean_mag_error' % b, magerr)
     gaia.flux0 = np.ones(len(gaia), np.float32)
-    # we set 'astrom' and omit 'photom'; it will get filled in with zeros.
+    # we set 'astrom' and omit 'use_for_photometry'; it will get filled in with zeros.
     gaia.astrom = np.ones(len(gaia), bool)
 
     refs = [gaia]
@@ -1114,6 +1149,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
         # Initial flux estimate, from nominal zeropoint
         phot.flux0 = (10.**((zp0 - phot.legacy_survey_mag) / 2.5) * imobj.exptime
                      ).astype(np.float32)
+
+        match_phot = True
 
         if sdss_photom:
             phot.ra_sdss  = phot.ra.copy()
@@ -1136,6 +1173,9 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
                 ('sdss_i', np.float32),
                 ('sdss_z', np.float32),
             ]
+        elif gaia_photom:
+            match_phot = False
+            phot_cols = []
         else:
             # we don't have/use proper motions for PS1 stars
             phot.rename('ra_ok',  'ra_now')
@@ -1145,6 +1185,8 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
             phot.ra_phot = phot.ra_ps1
             phot.dec_phot = phot.dec_ps1
             phot.ps1_objid  = phot.obj_id
+            # gri
+            phot.ps1_mags_ok = ((phot.nmag_ok[:,0] > 0) * (phot.nmag_ok[:,1] > 0) * (phot.nmag_ok[:,2] > 0))
             bands = 'grizY'
             for band in bands:
                 i = ps1cat.ps1band.get(band, None)
@@ -1161,37 +1203,36 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
                 ('ps1_i', np.float32),
                 ('ps1_z', np.float32),
                 ('ps1_y', np.float32),
+                ('ps1_mags_ok', bool),
             ]
 
-        # we set 'photom' and omit 'astrom'; it will get filled in with zeros.
-        phot.photom = np.ones (len(phot), bool)
+        if match_phot:
+            # Match photometric stars to Gaia stars within 1".
+            I,J,_ = match_radec(gaia.ra_gaia, gaia.dec_gaia,
+                                phot.ra_phot, phot.dec_phot, 1./3600.,
+                                nearest=True)
+            print(len(I), 'of', len(gaia), 'Gaia and', len(phot), 'photometric cal stars matched')
 
-        # Match photometric stars to Gaia stars within 1".
-        I,J,_ = match_radec(gaia.ra_gaia, gaia.dec_gaia,
-                            phot.ra_phot, phot.dec_phot, 1./3600.,
-                            nearest=True)
-        print(len(I), 'of', len(gaia), 'Gaia and', len(phot), 'photometric cal stars matched')
+            # Merged = photocal stars + unmatched Gaia
+            if len(I):
+                # Merge columns for the matched stars
+                for c in gaia.get_columns():
+                    G = gaia.get(c)
+                    # If column exists in both (eg, ra_now, dec_now), override
+                    # the PHOT value with the Gaia value
+                    if c in phot.get_columns():
+                        X = phot.get(c)
+                    else:
+                        X = np.zeros(len(phot), G.dtype)
+                    X[J] = G[I]
+                    phot.set(c, X)
+                # unmatched Gaia stars
+                unmatched = np.ones(len(gaia), bool)
+                unmatched[I] = False
+                gaia.cut(unmatched)
+                del unmatched
 
-        # Merged = photocal stars + unmatched Gaia
-        if len(I):
-            # Merge columns for the matched stars
-            for c in gaia.get_columns():
-                G = gaia.get(c)
-                # If column exists in both (eg, ra_now, dec_now), override
-                # the PHOT value with the Gaia value; except for "photom".
-                if c in phot.get_columns():
-                    X = phot.get(c)
-                else:
-                    X = np.zeros(len(phot), G.dtype)
-                X[J] = G[I]
-                phot.set(c, X)
-            # unmatched Gaia stars
-            unmatched = np.ones(len(gaia), bool)
-            unmatched[I] = False
-            gaia.cut(unmatched)
-            del unmatched
-
-        refs.append(phot)
+            refs.append(phot)
     else:
         phot_cols = []
 
@@ -1218,7 +1259,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
              ('legacy_survey_mag', np.float32),
              ('psfmag', np.float32),
              ('astrom', bool),
-             ('photom', bool),
+             ('use_for_photometry', bool),
             ])
 
     refcols = refs.get_columns()
@@ -1540,7 +1581,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, ps=None):
 
     dmag = refs.legacy_survey_mag - phot.instpsfmag
     maglo, maghi = imobj.get_photocal_mag_limits()
-    kept = (refs.photom &
+    kept = (refs.use_for_photometry &
             (refs.legacy_survey_mag > maglo) &
             (refs.legacy_survey_mag < maghi) &
             np.isfinite(dmag))

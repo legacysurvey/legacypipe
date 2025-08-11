@@ -1,6 +1,7 @@
 from legacyzpts import legacy_zeropoints_merge
 from astrometry.util.fits import fits_table
 import argparse
+import os
 
 """
 Merges the ccds-annnotated files and generate a survey-ccds file as an after-burner.
@@ -18,10 +19,14 @@ def main(args=None):
     parser0.add_argument('--file_list',help='List of zeropoint fits files to concatenate')
     parser0.add_argument('--camera', type=str, help='decam, mosaic or 90prime')
     parser0.add_argument('--data_release', type=int, help='Number of LS DR')
+    parser0.add_argument('--out-dir', default=None, help='Base directory for outputs')
     opt = parser0.parse_args(args=args)
 
     fna = "ccds-annotated-"+opt.camera+"-dr"+str(opt.data_release)+".fits"
     fns = fna.replace("ccds-annotated", "survey-ccds")
+    if opt.out_dir is not None:
+        fna = os.path.join(opt.out_dir, fna)
+        fns = os.path.join(opt.out_dir, fns)
 
     arg1 = "--file_list"
     arg2 = "--outname"

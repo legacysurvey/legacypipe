@@ -381,28 +381,30 @@ def get_version_header(program_name, survey_dir, release, git_version=None,
                         comment='$LEGACY_SURVEY_DIR directory'))
     hdr.add_record(dict(name='LSDR', value='DR10',
                         comment='Data release number'))
-    hdr.add_record(dict(name='RUNDATE', value=datetime.datetime.now().isoformat(),
-                        comment='%s run time' % program_name))
     hdr.add_record(dict(name='SURVEY', value='DECaLS+BASS+MzLS',
                         comment='The LegacySurveys'))
-    # Requested by NOAO
+    # Requested by NOIRLab
     hdr.add_record(dict(name='SURVEYID', value='DECaLS BASS MzLS',
                         comment='Survey names'))
-    hdr.add_record(dict(name='DRVERSIO', value=release,
-                        comment='LegacySurveys Data Release number'))
+    if release is not None:
+        hdr.add_record(dict(name='DRVERSIO', value=release,
+                            comment='LegacySurveys Data Release number'))
     hdr.add_record(dict(name='OBSTYPE', value='object',
                         comment='Observation type'))
     hdr.add_record(dict(name='PROCTYPE', value=proctype,
                         comment='Processing type'))
 
-    hdr.add_record(dict(name='NODENAME', value=socket.gethostname(),
-                        comment='Machine where script was run'))
-    hdr.add_record(dict(name='HOSTNAME', value=os.environ.get('NERSC_HOST', 'none'),
-                        comment='NERSC machine where script was run'))
-    hdr.add_record(dict(name='JOB_ID', value=os.environ.get('SLURM_JOB_ID', 'none'),
-                        comment='SLURM job id'))
-    hdr.add_record(dict(name='ARRAY_ID', value=os.environ.get('ARRAY_TASK_ID', 'none'),
-                        comment='SLURM job array id'))
+    # These make the output data products not bitwise reproducible...
+    # hdr.add_record(dict(name='RUNDATE', value=datetime.datetime.now().isoformat(),
+    #                     comment='%s run time' % program_name))
+    # hdr.add_record(dict(name='NODENAME', value=socket.gethostname(),
+    #                     comment='Machine where script was run'))
+    # hdr.add_record(dict(name='HOSTNAME', value=os.environ.get('NERSC_HOST', 'none'),
+    #                     comment='NERSC machine where script was run'))
+    # hdr.add_record(dict(name='JOB_ID', value=os.environ.get('SLURM_JOB_ID', 'none'),
+    #                     comment='SLURM job id'))
+    # hdr.add_record(dict(name='ARRAY_ID', value=os.environ.get('ARRAY_TASK_ID', 'none'),
+    #                     comment='SLURM job array id'))
     return hdr
 
 def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir,
@@ -411,10 +413,6 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, gale
     import astropy
     if mpl:
         import matplotlib
-    try:
-        import mkl_fft
-    except ImportError:
-        mkl_fft = None
     import photutils
     import tractor
     import scipy
@@ -431,7 +429,6 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, gale
     if mpl:
         pkgs.append(('matplotlib', matplotlib))
     pkgs.extend([
-        ('mkl_fft', mkl_fft),
         ('numpy', np),
         ('photutils', photutils),
         ('scipy', scipy),
@@ -528,7 +525,11 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
                    N540 = (2, 6.0 * rgb_stretch_factor),
                    # IBIS
                    M411 = (2, 6.0 * rgb_stretch_factor),
+                   M438 = (2, 6.0 * rgb_stretch_factor),
                    M464 = (2, 6.0 * rgb_stretch_factor),
+                   M490 = (2, 6.0 * rgb_stretch_factor),
+                   M517 = (2, 6.0 * rgb_stretch_factor),
+                   N395 = (2, 6.0 * rgb_stretch_factor),
                    # HSC
                    r2 =    (1, 3.4 * rgb_stretch_factor),
                    i2 =    (0, 3.0 * rgb_stretch_factor),
@@ -643,6 +644,33 @@ def sdss_rgb(imgs, bands, scales=None, m=0.03, Q=20, mnmx=None, clip=True):
             if bf != 0.:
                 rgb[:,:,2] += bf*v
 
+    elif bands == ['M411', 'M438', 'M464', 'M490', 'M517']:
+        print('sdss_rgb: IBIS 5-band color scheme')
+
+        rgbvec = {
+            'M411': (0.0, 0.0, 0.6),
+            'M438': (0.0, 0.2, 0.4),
+            'M464': (0.0, 0.6, 0.0),
+            'M490': (0.4, 0.2, 0.0),
+            'M517': (0.6, 0.0, 0.0),
+        }
+        for img,band in zip(imgs, bands):
+            _,scale = rgbscales[band]
+            rf,gf,bf = rgbvec[band]
+            if mnmx is None:
+                v = (img * scale + m) * I
+            else:
+                mn,mx = mnmx
+                v = ((img * scale + m) - mn) / (mx - mn)
+            if clip:
+                v = np.clip(v, 0, 1)
+            if rf != 0.:
+                rgb[:,:,0] += rf*v
+            if gf != 0.:
+                rgb[:,:,1] += gf*v
+            if bf != 0.:
+                rgb[:,:,2] += bf*v
+
     else:
         for img,band in zip(imgs, bands):
             plane,scale = rgbscales[band]
@@ -723,6 +751,9 @@ def get_rgb(imgs, bands, allbands=['g','r','z'],
         bands[2] == 'I-A-L484' and
         bands[3] == 'I-A-L505' and
         bands[4] == 'I-A-L527'):
+        return sdss_rgb(imgs, bands)
+
+    if len(bands) == 5 and bands == ['M411', 'M438', 'M464', 'M490', 'M517']:
         return sdss_rgb(imgs, bands)
 
     if len(bands) == 5:
@@ -887,9 +918,23 @@ def imsave_jpeg(jpegfn, img, **kwargs):
 
 def clean_band_name(band):
     '''
-    Converts a band name into upper case that is clean to use in a FITS header.
+    Makes a band name suitable for a FITS column name
     '''
-    return band.upper().replace('-','_')
+    return band.replace('-','_')
+
+class FITSWrapper(fitsio.FITS):
+    '''
+    Used in our LegacySurveyData "write_output" context class, this allows easily
+    setting a default "dither_seed" keyword arg for all *write* calls.
+    '''
+    def __init__(self, *args, default_dither_seed=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.default_dither_seed = default_dither_seed
+
+    def write_image(self, *args, dither_seed=None, **kwargs):
+        if dither_seed is None:
+            dither_seed = self.default_dither_seed
+        return super().write_image(*args, dither_seed=dither_seed, **kwargs)
 
 class LegacySurveyData(object):
     '''
@@ -1261,6 +1306,10 @@ class LegacySurveyData(object):
         elif filetype == 'forced-brick':
             return swap(os.path.join(basedir, 'forced-brick', brickpre,
                                      'forced-%s.fits' % brick))
+        elif filetype == 'tractor-forced':
+            return swap(os.path.join(basedir, 'forced-brick', brickpre,
+                                     'tractor-forced-%s.fits' % brick))
+
         print('Unknown filetype "%s"' % filetype)
         assert(False)
 
@@ -1392,8 +1441,9 @@ class LegacySurveyData(object):
                 self.tmpfn = os.path.join(os.path.dirname(fn),
                                           'tmp-'+os.path.basename(fn))
                 if self.is_fits:
-                    self.fits = fitsio.FITS('mem://' + (compression or ''),
-                                            'rw')
+                    self.fits = FITSWrapper('mem://' + (compression or ''),
+                                            'rw',
+                                            default_dither_seed='checksum')
                 else:
                     self.fn = self.tmpfn
                 self.hashsum = hashsum
@@ -2010,9 +2060,9 @@ def read_one_tim(X):
     tim = im.get_tractor_image(radecpoly=targetrd, **kwargs)
     if tim is not None:
         th,tw = tim.shape
-        print('Time to read %i x %i image, hdu %i:' % (tw,th, im.hdu), Time()-t0)
+        print('Time to read %s-%s-%s: %i x %i image, hdu %i:' %
+              (im.camera, im.expnum, im.ccdname, tw,th, im.hdu), Time()-t0)
     return tim
-
 
 def read_psfex_conf(camera):
     psfex_conf = {}

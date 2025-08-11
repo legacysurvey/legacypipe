@@ -81,6 +81,78 @@ class SuprimeData(LegacySurveyData):
         print('Maskbits:', self.get_maskbits())
         print('Maskbits descriptions:', self.get_maskbits_descriptions())
 
+class IbisData(LegacySurveyData):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.update_maskbits_bands(['M411', 'M438', 'M464', 'M490', 'M517'])
+        print('Maskbits:', self.get_maskbits())
+        print('Maskbits descriptions:', self.get_maskbits_descriptions())
+
+class IbisWideData(IbisData):
+    def ccds_for_fitting(self, brick, ccds):
+        import numpy as np
+        I = np.flatnonzero(['_wide' in o for o in ccds.object])
+        print('IBIS-wide run; cutting to', len(I), 'of', len(ccds), 'CCDs with "_wide" in the OBJECT name')
+        return I
+
+class IbisSpecialData(IbisData):
+    def ccds_for_fitting(self, brick, ccds):
+        import numpy as np
+        I = np.flatnonzero([('Pyxis' in o or 'NGC7492' in o) for o in ccds.object])
+        print('IBIS-wide run; cutting to', len(I), 'of', len(ccds), 'CCDs with matching OBJECT name')
+        return I
+
+class ClaudsTestData1(LegacySurveyData):
+    def filter_ccds(self, ccds):
+        import numpy as np
+        I = np.flatnonzero(np.isin(ccds.expnum, [1796492, 1796503, 1796353, 1795584]))
+        print('CLAUDS test #1: cutting CCDs to %i of %i on EXPNUM' % (len(I), len(ccds)))
+        return ccds[I]
+
+class ClaudsTestData2(LegacySurveyData):
+    def filter_ccds(self, ccds):
+        import numpy as np
+        I = np.flatnonzero(np.isin(ccds.expnum, [1796348, 1796344]))
+        print('CLAUDS test #2: cutting CCDs to %i of %i on EXPNUM' % (len(I), len(ccds)))
+        return ccds[I]
+
+class ClaudsTestData3(LegacySurveyData):
+    # Actually a CFIS test, but just keeping with the naming scheme...
+    def filter_ccd_kd_files(self, fns):
+        return [fn for fn in fns if ('cfis-cosmos-u' in fn)]
+
+class ClaudsTestData4(LegacySurveyData):
+    # Actually a CFIS test, but just keeping with the naming scheme...
+    def filter_ccd_kd_files(self, fns):
+        return [fn for fn in fns if ('cfis-cosmos-u' in fn)]
+    def filter_ccds(self, ccds):
+        import numpy as np
+        I = np.flatnonzero(np.isin(ccds.expnum, [2571171, 2602665]))
+        print('CLAUDS test #4: cutting CCDs to %i of %i on EXPNUM' % (len(I), len(ccds)))
+        return ccds[I]
+
+class Dr11Test1(LegacySurveyData):
+    def filter_ccds(self, ccds):
+        import numpy as np
+        # Brick 0301m040 for i-band forced phot tests
+        I = np.flatnonzero(np.isin(ccds.expnum, [247958, 400372, 388167, 390912]) *
+                           (ccds.ccdname == 'S31'))
+        print('DR11 test #1: cutting CCDs to %i of %i on EXPNUM & CCDNAME' % (len(I), len(ccds)))
+
+class Dr11Test2(LegacySurveyData):
+    def filter_ccds(self, ccds):
+        import numpy as np
+        # Brick 1847p145 for sky tests - big galaxy
+        #I = np.flatnonzero(np.isin(ccds.expnum, [634440, 634064, 431192]) *
+        #                   (ccds.ccdname == 'S16'))
+
+        # Brick 0059m717 - NGC104 globular cluster covers 100% of some chips
+        I = np.flatnonzero(np.isin(ccds.expnum, [380296])) # *
+        #(ccds.ccdname == 'S16'))
+
+        print('DR11 test #2: cutting CCDs to %i of %i on EXPNUM & CCDNAME' % (len(I), len(ccds)))
+        return ccds[I]
+
 class RerunWithCcds(LegacySurveyData):
     def get_brick_by_name(self, brickname):
         # BRUTAL HACK -- runbrick.py's stage_tims first calls
@@ -110,6 +182,15 @@ runs = {
     'hsc-calexp': HscCalexpData,
     'rerun-ccds': RerunWithCcds,
     'suprime': SuprimeData,
+    'ibis': IbisData,
+    'ibis-wide': IbisWideData,
+    'ibis-special': IbisSpecialData,
+    'clauds-test-1': ClaudsTestData1,
+    'clauds-test-2': ClaudsTestData2,
+    'clauds-test-3': ClaudsTestData3,
+    'clauds-test-4': ClaudsTestData4,
+    'dr11-test-1': Dr11Test1,
+    'dr11-test-2': Dr11Test2,
     None: LegacySurveyData,
 }
 

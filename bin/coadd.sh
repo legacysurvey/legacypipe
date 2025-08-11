@@ -36,37 +36,35 @@ export KMP_AFFINITY=disabled
 
 # # Config directory nonsense
 export TMPCACHE=$(mktemp -d)
-mkdir $TMPCACHE/cache
-mkdir $TMPCACHE/config
+mkdir "$TMPCACHE/cache"
+mkdir "$TMPCACHE/config"
 # astropy
 export XDG_CACHE_HOME=$TMPCACHE/cache
 export XDG_CONFIG_HOME=$TMPCACHE/config
 mkdir $XDG_CACHE_HOME/astropy
-cp -r $HOME/.astropy/cache $XDG_CACHE_HOME/astropy
-mkdir $XDG_CONFIG_HOME/astropy
-cp -r $HOME/.astropy/config $XDG_CONFIG_HOME/astropy
+cp -r "$HOME/.astropy/cache" "$XDG_CACHE_HOME/astropy"
+mkdir "$XDG_CONFIG_HOME/astropy"
+cp -r "$HOME/.astropy/config" "$XDG_CONFIG_HOME/astropy"
 # matplotlib
 export MPLCONFIGDIR=$TMPCACHE/matplotlib
-mkdir $MPLCONFIGDIR
-cp -r $HOME/.config/matplotlib $MPLCONFIGDIR
+mkdir "$MPLCONFIGDIR"
+cp -r "$HOME/.config/matplotlib" "$MPLCONFIGDIR"
 
-
-bri=$(echo $brick | head -c 3)
-mkdir -p $outdir/logs/$bri
+bri=$(echo "$brick" | head -c 3)
+mkdir -p "$outdir/logs/$bri"
 log="$outdir/logs/$bri/$brick.log"
 
-mkdir -p $outdir/metrics/$bri
-#mkdir -p $outdir/pickles/$bri
+mkdir -p "$outdir/metrics/$bri"
 
-echo Logging to: $log
+echo "Logging to: $log"
 
-python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
-       --brick $brick \
+python -O "$LEGACYPIPE_DIR/legacypipe/runbrick.py" \
+       --brick "$brick" \
        --bands g,r,i,z \
        --rgb-stretch 1.5 \
-       --survey-dir $LEGACY_SURVEY_DIR \
-       --cache-dir $CACHE_DIR \
-       --outdir $outdir \
+       --survey-dir "$LEGACY_SURVEY_DIR" \
+       --cache-dir "$CACHE_DIR" \
+       --outdir "$outdir" \
        --skip-coadd \
        --stage image_coadds \
        --blob-mask \
@@ -78,7 +76,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --cache-outliers \
        --threads 8 \
        --max-memory-gb 14 \
-       >> $log 2>&1
+       >> "$log" 2>&1
 
 # phase 1:
 #       --threads 4 \
@@ -98,6 +96,6 @@ status=$?
 #echo "max_memory $(cat /sys/fs/cgroup/memory/slurm/uid_$SLURM_JOB_UID/job_$SLURM_JOB_ID/memory.max_usage_in_bytes)" >> $log
 
 # /Config directory nonsense
-rm -R $TMPCACHE
+rm -R "$TMPCACHE"
 
 exit $status

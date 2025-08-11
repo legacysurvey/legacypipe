@@ -156,8 +156,15 @@ def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir,
             b'NAXIS   =                    2 / number of data axes                            '+
             b'NAXIS1  =                 %4i / number of data axes                            ' % w+
             b'NAXIS2  =                 %4i / number of data axes                            ' % h)
-        hdr = np.zeros((1, len(hdrtxt)//80, 80), 'S1')
-        hdr.data = hdrtxt
+        #hdr = np.zeros((1, len(hdrtxt)//80, 80), 'S1')
+        #hdr.data = hdrtxt
+        hdrcards = []
+        while len(hdrtxt):
+            hdrcards.append(hdrtxt[:80])
+            hdrtxt = hdrtxt[80:]
+        hdr = np.array([hdrcards])
+        print('Hdr dtype', hdr.dtype, 'shape', hdr.shape)
+
         F.write([hdr], names=['Field Header Card'],extname='LDAC_IMHEAD')
 
         # ignore fwhm
@@ -172,7 +179,7 @@ def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir,
     #'[' + ', '.join([str(n) for n in ngood]) + ']')
     F.close()
     os.rename(tmpoutfn, realoutfn)
-    #print('Wrote', realoutfn)
+    print('Wrote', realoutfn)
     return rtn
 
 def _bounce_write_one(X):

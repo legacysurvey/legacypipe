@@ -1,6 +1,6 @@
 #! /bin/bash
 
-brick=$1
+brick="$1"
 
 # Avoid those annoying "X11 connection rejected because of wrong authentication." messages
 unset DISPLAY
@@ -35,39 +35,38 @@ export KMP_AFFINITY=disabled
 
 # # Config directory nonsense
 export TMPCACHE=$(mktemp -d)
-mkdir $TMPCACHE/cache
-mkdir $TMPCACHE/config
+mkdir "$TMPCACHE/cache"
+mkdir "$TMPCACHE/config"
 # astropy
 export XDG_CACHE_HOME=$TMPCACHE/cache
 export XDG_CONFIG_HOME=$TMPCACHE/config
-mkdir $XDG_CACHE_HOME/astropy
-cp -r $HOME/.astropy/cache $XDG_CACHE_HOME/astropy
-mkdir $XDG_CONFIG_HOME/astropy
-cp -r $HOME/.astropy/config $XDG_CONFIG_HOME/astropy
+mkdir "$XDG_CACHE_HOME/astropy"
+cp -r "$HOME/.astropy/cache" "$XDG_CACHE_HOME/astropy"
+mkdir "$XDG_CONFIG_HOME/astropy"
+cp -r "$HOME/.astropy/config" "$XDG_CONFIG_HOME/astropy"
 # matplotlib
 export MPLCONFIGDIR=$TMPCACHE/matplotlib
-mkdir $MPLCONFIGDIR
-cp -r $HOME/.config/matplotlib $MPLCONFIGDIR
+mkdir "$MPLCONFIGDIR"
+cp -r "$HOME/.config/matplotlib" "$MPLCONFIGDIR"
 
-
-bri=$(echo $brick | head -c 3)
-mkdir -p $outdir/logs/$bri
+bri=$(echo "$brick" | head -c 3)
+mkdir -p "$outdir/logs/$bri"
 log="$outdir/logs/$bri/$brick.log"
 
-mkdir -p $outdir/metrics/$bri
+mkdir -p "$outdir/metrics/$bri"
 
-echo Logging to: $log
+echo "Logging to: $log"
 
 ##### LOCAL VERSION
 export LEGACYPIPE_DIR=/global/homes/d/dstn/legacypipe/py
 
 python -O $LEGACYPIPE_DIR/legacypipe/deep-preprocess.py \
-       --brick $brick \
+       --brick "${brick}" \
        --bands g,r,i,z \
        --rgb-stretch 1.5 \
-       --survey-dir $LEGACY_SURVEY_DIR \
-       --cache-dir $CACHE_DIR \
-       --outdir $outdir \
+       --survey-dir "$LEGACY_SURVEY_DIR" \
+       --cache-dir "$CACHE_DIR" \
+       --outdir "$outdir" \
        --stage deep_preprocess_3 \
        --pickle "$outdir/pickles/$bri/runbrick-%(brick)s-%%(stage)s.pickle" \
        --blob-mask \
@@ -76,7 +75,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/deep-preprocess.py \
        --nsatur 2 \
        --cache-outliers \
        --threads 4  \
-       >> $log 2>&1
+       >> "$log" 2>&1
 
 #       --threads 8 \
 #       --skip-coadd \
@@ -95,6 +94,6 @@ status=$?
 #echo "max_memory $(cat /sys/fs/cgroup/memory/slurm/uid_$SLURM_JOB_UID/job_$SLURM_JOB_ID/memory.max_usage_in_bytes)" >> $log
 
 # /Config directory nonsense
-rm -R $TMPCACHE
+rm -R "$TMPCACHE"
 
 exit $status

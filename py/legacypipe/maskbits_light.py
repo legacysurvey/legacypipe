@@ -133,7 +133,7 @@ def main():
                                 comment='Brick Dec min (deg)'))
     version_header.add_record(dict(name='DECMAX'  , value=brick.dec2,
                                 comment='Brick Dec max (deg)'))
-    # Add NOAO-requested headers
+    # Add NOIRLab-requested headers
     version_header.add_record(dict(
         name='RA', value=ra2hmsstring(brick.ra, separator=':'), comment='Brick center RA (hms)'))
     version_header.add_record(dict(

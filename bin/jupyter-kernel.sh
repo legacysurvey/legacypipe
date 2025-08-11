@@ -39,7 +39,7 @@ if __name__ == '__main__':
     from ipykernel import kernelapp as app
     app.launch_new_instance()
 EOF
-/opt/conda/bin/python "$TMPSCRIPT" --ignore-cwd -f "$1"
+python3.12 "$TMPSCRIPT" --ignore-cwd -f "$1"
 rm "$TMPSCRIPT"
 
 # Clean up config directory nonsens.
