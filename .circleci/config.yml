@@ -1,67 +1,17 @@
 version: 2
 jobs:
-  build-from-docker-u1804-py3.6:
-    docker:
-      - image: legacysurvey/circleci-build-ubuntu18.04-py36
-    steps:
-      - run:
-          name: CPU info
-          command: cat /proc/cpuinfo
-      - checkout
-      - run:
-          name: Unit tests
-          command: |
-              cd py
-              export PYTHONPATH=${PYTHONPATH}:$(pwd)
-              python3.6 -c "import sys; print(sys.path)"
-              python3.6 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
-              #coverage run test/unit_tests.py
-              #coverage run -a test/runbrick_test.py
-              python3.6 test/unit_tests.py
-              python3.6 test/runbrick_test.py
-              git clone https://github.com/legacysurvey/legacypipe-test-data.git
-              export LPT=$(pwd)/legacypipe-test-data
-              export LEGACYPIPE_TEST_DATA=$LPT
-              export GAIA_CAT_DIR=$LPT/gaia-dr2
-              export GAIA_CAT_VER=2
-              export GAIA_CAT_SCHEME=ring
-              export GAIA_CAT_PREFIX=chunk
-              export PS1CAT_DIR=$LPT/ps1-qz-star-v3
-              export TYCHO2_KD_DIR=$LPT
-              python3.6 test/legacyzpts_test.py
 
-  build-from-docker-u1804-py3.7:
-    docker:
-      - image: legacysurvey/circleci-build-ubuntu18.04-py378
-    steps:
-      - run:
-          name: CPU info
-          command: cat /proc/cpuinfo
-      - checkout
-      - run:
-          name: Unit tests
-          command: |
-              cd py
-              export PYTHONPATH=${PYTHONPATH}:$(pwd)
-              python3.7 -c "import sys; print(sys.path)"
-              python3.7 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
-              git clone https://github.com/legacysurvey/legacypipe-test-data.git
-              export LPT=$(pwd)/legacypipe-test-data
-              export LEGACYPIPE_TEST_DATA=$LPT
-              export GAIA_CAT_DIR=$LPT/gaia-dr2
-              export GAIA_CAT_VER=2
-              export GAIA_CAT_SCHEME=ring
-              export GAIA_CAT_PREFIX=chunk
-              export PS1CAT_DIR=$LPT/ps1-qz-star-v3
-              export TYCHO2_KD_DIR=$LPT
-              coverage run --concurrency=multiprocessing -a test/legacyzpts_test.py
-              coverage run --concurrency=multiprocessing test/runbrick_test.py psfex ceres
-              coverage run --concurrency=multiprocessing -a test/unit_tests.py
-              coverage combine
-              coveralls
-              ./codecov-upload.sh
-              #python3.7 test/unit_tests.py
-              #python3.7 test/runbrick_test.py
+# Python 3.7 is missing a multiprocess Pool object we use in the trackingpool module.
+
+#   build-from-docker-u1804-py3.7:
+#     docker:
+#       - image: legacysurvey/circleci-build-ubuntu18.04-py378
+#               # coverage run --concurrency=multiprocessing -a test/legacyzpts_test.py
+#               # coverage run --concurrency=multiprocessing test/runbrick_test.py psfex ceres
+#               # coverage run --concurrency=multiprocessing -a test/unit_tests.py
+#               # coverage combine
+#               # coveralls
+#               # ./codecov-upload.sh
 
   build-from-docker-u1804-py3.8:
     docker:
@@ -78,10 +28,8 @@ jobs:
               export PYTHONPATH=${PYTHONPATH}:$(pwd)
               python3.8 -c "import sys; print(sys.path)"
               python3.8 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
-              #coverage run test/unit_tests.py
-              #coverage run -a test/runbrick_test.py
-              python3.8 test/unit_tests.py
-              python3.8 test/runbrick_test.py
+              python3.8 -u test/unit_tests.py
+              python3.8 -u test/runbrick_test.py psfex ceres
               git clone https://github.com/legacysurvey/legacypipe-test-data.git
               export LPT=$(pwd)/legacypipe-test-data
               export LEGACYPIPE_TEST_DATA=$LPT
@@ -91,7 +39,7 @@ jobs:
               export GAIA_CAT_PREFIX=chunk
               export PS1CAT_DIR=$LPT/ps1-qz-star-v3
               export TYCHO2_KD_DIR=$LPT
-              python3.8 test/legacyzpts_test.py
+              python3.8 -u test/legacyzpts_test.py
 
   build-from-docker-u2004-py3.8:
     docker:
@@ -108,10 +56,8 @@ jobs:
               export PYTHONPATH=${PYTHONPATH}:$(pwd)
               python3.8 -c "import sys; print(sys.path)"
               python3.8 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
-              #coverage run test/unit_tests.py
-              #coverage run -a test/runbrick_test.py
-              python3.8 test/unit_tests.py
-              python3.8 test/runbrick_test.py
+              python3.8 -u test/unit_tests.py
+              python3.8 -u test/runbrick_test.py psfex ceres
               git clone https://github.com/legacysurvey/legacypipe-test-data.git
               export LPT=$(pwd)/legacypipe-test-data
               export LEGACYPIPE_TEST_DATA=$LPT
@@ -121,7 +67,7 @@ jobs:
               export GAIA_CAT_PREFIX=chunk
               export PS1CAT_DIR=$LPT/ps1-qz-star-v3
               export TYCHO2_KD_DIR=$LPT
-              python3.8 test/legacyzpts_test.py
+              python3.8 -u test/legacyzpts_test.py
 
   build-from-docker-u2004-py3.9:
     docker:
@@ -138,10 +84,8 @@ jobs:
               export PYTHONPATH=${PYTHONPATH}:$(pwd)
               python3.9 -c "import sys; print(sys.path)"
               python3.9 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
-              #coverage run test/unit_tests.py
-              #coverage run -a test/runbrick_test.py
-              python3.9 test/unit_tests.py
-              python3.9 test/runbrick_test.py
+              python3.9 -u test/unit_tests.py
+              python3.9 -u test/runbrick_test.py psfex ceres
               git clone https://github.com/legacysurvey/legacypipe-test-data.git
               export LPT=$(pwd)/legacypipe-test-data
               export LEGACYPIPE_TEST_DATA=$LPT
@@ -151,7 +95,7 @@ jobs:
               export GAIA_CAT_PREFIX=chunk
               export PS1CAT_DIR=$LPT/ps1-qz-star-v3
               export TYCHO2_KD_DIR=$LPT
-              python3.9 test/legacyzpts_test.py
+              python3.9 -u test/legacyzpts_test.py
 
   build-from-docker-u2204-py3.10:
     docker:
@@ -168,10 +112,8 @@ jobs:
               export PYTHONPATH=${PYTHONPATH}:$(pwd)
               python3.10 -c "import sys; print(sys.path)"
               python3.10 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
-              #coverage run test/unit_tests.py
-              #coverage run -a test/runbrick_test.py
-              python3.10 test/unit_tests.py
-              python3.10 test/runbrick_test.py
+              python3.10 -u test/unit_tests.py
+              python3.10 -u test/runbrick_test.py psfex ceres
               git clone https://github.com/legacysurvey/legacypipe-test-data.git
               export LPT=$(pwd)/legacypipe-test-data
               export LEGACYPIPE_TEST_DATA=$LPT
@@ -181,7 +123,7 @@ jobs:
               export GAIA_CAT_PREFIX=chunk
               export PS1CAT_DIR=$LPT/ps1-qz-star-v3
               export TYCHO2_KD_DIR=$LPT
-              python3.10 test/legacyzpts_test.py
+              python3.10 -u test/legacyzpts_test.py
 
   build-from-docker-u2204-py3.11:
     docker:
@@ -198,10 +140,6 @@ jobs:
               export PYTHONPATH=${PYTHONPATH}:$(pwd)
               python3.11 -c "import sys; print(sys.path)"
               python3.11 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
-              #coverage run test/unit_tests.py
-              #coverage run -a test/runbrick_test.py
-              python3.11 test/unit_tests.py
-              python3.11 test/runbrick_test.py
               git clone https://github.com/legacysurvey/legacypipe-test-data.git
               export LPT=$(pwd)/legacypipe-test-data
               export LEGACYPIPE_TEST_DATA=$LPT
@@ -211,16 +149,62 @@ jobs:
               export GAIA_CAT_PREFIX=chunk
               export PS1CAT_DIR=$LPT/ps1-qz-star-v3
               export TYCHO2_KD_DIR=$LPT
-              python3.11 test/legacyzpts_test.py
+              #python3.11 -u test/unit_tests.py
+              #python3.11 -u test/runbrick_test.py psfex ceres
+              #python3.11 -u test/legacyzpts_test.py
+              python3.11 -u -m coverage run --concurrency=multiprocessing test/unit_tests.py
+              python3.11 -u -m coverage run --concurrency=multiprocessing -a test/runbrick_test.py psfex ceres
+              python3.11 -u -m coverage run --concurrency=multiprocessing -a test/legacyzpts_test.py
+              python3.11 -u -m coverage combine
+              coveralls
+              ./codecov-upload.sh
+
+  build-from-docker-u2404-py3.12:
+    docker:
+      - image: legacysurvey/circleci-build-ubuntu24.04
+    steps:
+      - run:
+          name: CPU info
+          command: cat /proc/cpuinfo
+      - checkout
+      - run:
+          name: Unit tests
+          command: |
+              cd py
+              export PYTHONPATH=${PYTHONPATH}:$(pwd)
+              python3.12 -c "import sys; print(sys.path)"
+              python3.12 -c "import sys; import os; [os.system('echo \"'+p+'\" && ls \"' + p + '\"') for p in sys.path]"
+              git clone https://github.com/legacysurvey/legacypipe-test-data.git
+              export LPT=$(pwd)/legacypipe-test-data
+              export LEGACYPIPE_TEST_DATA=$LPT
+              export GAIA_CAT_DIR=$LPT/gaia-dr2
+              export GAIA_CAT_VER=2
+              export GAIA_CAT_SCHEME=ring
+              export GAIA_CAT_PREFIX=chunk
+              export PS1CAT_DIR=$LPT/ps1-qz-star-v3
+              export TYCHO2_KD_DIR=$LPT
+              # Due to a bug in the new PsfEx 3.24 that is only in this Ubuntu 24.04 image,
+              # (https://github.com/astromatic/psfex/pull/22), don't run the "psfex" tests, and
+              # don't collect coverage metrics from U24/Py3.12
+              # python3.12 -u -m coverage run --concurrency=multiprocessing test/unit_tests.py
+              # python3.12 -u -m coverage run --concurrency=multiprocessing -a test/runbrick_test.py psfex ceres
+              # python3.12 -u -m coverage run --concurrency=multiprocessing -a test/legacyzpts_test.py
+              # python3.12 -u -m coverage combine
+              # coveralls
+              # ./codecov-upload.sh
+              python3.12 -u test/unit_tests.py
+              python3.12 -u test/runbrick_test.py ceres
+              python3.12 -u test/legacyzpts_test.py
 
 workflows:
   version: 2
   build:
     jobs:
+      - "build-from-docker-u2404-py3.12"
       - "build-from-docker-u2204-py3.11"
       - "build-from-docker-u2204-py3.10"
       - "build-from-docker-u2004-py3.8"
       - "build-from-docker-u2004-py3.9"
-      - "build-from-docker-u1804-py3.6"
-      - "build-from-docker-u1804-py3.7"
       - "build-from-docker-u1804-py3.8"
+#      - "build-from-docker-u1804-py3.7"
+#      - "build-from-docker-u1804-py3.6"

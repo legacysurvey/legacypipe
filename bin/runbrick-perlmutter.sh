@@ -7,10 +7,6 @@ export COSMO=/dvs_ro/cfs/cdirs/cosmo
 export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
 outdir=$SCRATCH/dr11
 
-# Using depth-cut v5 CCDs file, and v3 skies
-#export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr10
-#outdir=$PSCRATCH/dr10
-
 export GAIA_CAT_DIR=$COSMO/data/gaia/dr3/healpix
 export GAIA_CAT_PREFIX=healpix
 export GAIA_CAT_SCHEME=nested
@@ -23,7 +19,7 @@ export UNWISE_MODEL_SKY_DIR=$COSMO/data/unwise/neo7/unwise-catalog/mod
 
 export TYCHO2_KD_DIR=$COSMO/staging/tycho2
 export LARGEGALAXIES_CAT=$COSMO/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
-export SKY_TEMPLATE_DIR=$COSMO/work/legacysurvey/dr10/calib/sky_pattern
+export SKY_TEMPLATE_DIR=$COSMO/work/legacysurvey/dr11/calib/sky_pattern
 
 unset BLOB_MASK_DIR
 unset PS1CAT_DIR
@@ -54,30 +50,30 @@ echo Logging to: "$log"
 
 # # Config directory nonsense
 export TMPCACHE=$(mktemp -d)
-mkdir $TMPCACHE/cache
-mkdir $TMPCACHE/config
+mkdir "$TMPCACHE/cache"
+mkdir "$TMPCACHE/config"
 # astropy
 export XDG_CACHE_HOME=$TMPCACHE/cache
 export XDG_CONFIG_HOME=$TMPCACHE/config
-mkdir $XDG_CACHE_HOME/astropy
-cp -r $HOME/.astropy/cache $XDG_CACHE_HOME/astropy
-mkdir $XDG_CONFIG_HOME/astropy
-cp -r $HOME/.astropy/config $XDG_CONFIG_HOME/astropy
+mkdir "$XDG_CACHE_HOME/astropy"
+cp -r "$HOME/.astropy/cache" "$XDG_CACHE_HOME/astropy"
+mkdir "$XDG_CONFIG_HOME/astropy"
+cp -r "$HOME/.astropy/config" "$XDG_CONFIG_HOME/astropy"
 # matplotlib
 export MPLCONFIGDIR=$TMPCACHE/matplotlib
-mkdir $MPLCONFIGDIR
-cp -r $HOME/.config/matplotlib $MPLCONFIGDIR
+mkdir "$MPLCONFIGDIR"
+cp -r "$HOME/.config/matplotlib" "$MPLCONFIGDIR"
 
 echo -e "\n\n\n" >> "$log"
 echo "-----------------------------------------------------------------------------------------" >> "$log"
 echo -e "\nStarting on $(hostname)\n" >> "$log"
 echo "-----------------------------------------------------------------------------------------" >> "$log"
 
-python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
+python -O "$LEGACYPIPE_DIR/legacypipe/runbrick.py" \
      --brick "$brick" \
      --skip \
      --skip-calibs \
-     --bands g,r,z \
+     --bands g,r,i,z \
      --rgb-stretch 1.5 \
      --nsatur 2 \
      --survey-dir "$LEGACY_SURVEY_DIR" \
@@ -86,11 +82,11 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --checkpoint-period 120 \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
      --write-stage srcs \
-     --stage image_coadds \
      --release 10011 \
      --threads 32 \
       >> "$log" 2>&1
 
+#     --stage image_coadds \
 #     --bands g,r,i,z \
 #    --cache-dir "$CACHE_DIR" \
 
@@ -109,7 +105,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
 status=$?
 
 # /Config directory nonsense
-rm -R $TMPCACHE
+rm -R "$TMPCACHE"
 
 exit $status
 

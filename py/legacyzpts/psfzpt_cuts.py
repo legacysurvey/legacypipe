@@ -10,7 +10,12 @@ def psf_cuts_to_string(ccd_cuts, join=', '):
             s.append(k)
     return join.join(s)
 
-MJD_EARLY_DECAM = 56730.
+# Formerly:
+# 56730 - "paint applied to inner surfaces of shutter and FCM"
+#
+# 56516 - 2013-Aug-12 - "filter baffles installed and tested", immediately before start of DES Y1 ops.
+#   https://www.ctio.noirlab.edu/noao/content/Log-Configuration-Changes-and-Events
+MJD_EARLY_DECAM = 56516.
 
 
 def detrend_zeropoints(P, airmass_terms, mjd_terms):

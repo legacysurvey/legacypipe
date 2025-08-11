@@ -197,31 +197,11 @@ RUN python -O -m compileall \
     /src/legacypipe/py/legacypipe \
     /src/legacypipe/py/legacyzpts
 
-# # 
 # # update legacypipe
 # #  git checkout DR10.3.4 && git describe && \
 # RUN cd /src/legacypipe && git pull && \
 #   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
 #   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
-
-# NERSC's shifter "mpich" module includes a bunch of BROKEN libraries.
-
-RUN mv /usr/local/bin/modhead /usr/local/bin/modhead.real
-COPY <<EOF /usr/local/bin/modhead
-#! /bin/bash
-unset LD_LIBRARY_PATH
-/usr/local/bin/modhead.real "$@"
-EOF
-RUN chmod 755 /usr/local/bin/modhead
-
-RUN apt update && apt install -y chrpath
-RUN apt install -y patchelf
-
-#RUN chrpath -l /usr/local/bin/listhead
-#RUN chrpath -r /lib/x86_64-linux-gnu/ /usr/local/bin/listhead
-
-RUN patchelf --force-rpath --set-rpath /lib/x86_64-linux-gnu/ /usr/local/bin/listhead
-
 
 RUN cd qdo \
   && git remote add dstn https://dstn@bitbucket.org/dstn/qdo.git \
@@ -229,15 +209,34 @@ RUN cd qdo \
   && git checkout ssh-srun \
   && python3 setup.py install
 
+# NERSC's shifter "mpich" module includes a bunch of BROKEN libraries that interfere
+# with executables we have installed.
+RUN apt update && apt install -y patchelf
+RUN patchelf --force-rpath --set-rpath /lib/x86_64-linux-gnu/ /usr/local/bin/listhead
+RUN patchelf --force-rpath --set-rpath /lib/x86_64-linux-gnu/ /usr/local/bin/modhead
+
+# Install GPU code
+
 RUN pip3 install --break-system-packages --no-cache cupy-cuda12x
 
-RUN cd legacypipe \
-  && git checkout gpu-powered
+# update legacypipe
+RUN cd /src/legacypipe && \
+  git pull && \
+  git checkout DR10.3.5 && \
+  python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
+  python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
-#craig_factored_merge \
+RUN cd legacypipe \
+  && git pull \
+  && git checkout gpu-powered \
+  && git pull \
+  && python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
+  && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
+
+#  && git checkout dstn-gpu-test \
 RUN cd tractor \
   && git fetch \
-  && git checkout dstn-gpu-test \
+  && git checkout craig_factored_merge \
   && python setup.py build_ext --with-ceres --with-cython --inplace \
   && python setup.py install
 

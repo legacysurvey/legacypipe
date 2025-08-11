@@ -33,15 +33,33 @@ def subtract_one(X):
 def moffat(rr, alpha, beta):
     return (beta-1.)/(np.pi * alpha**2)*(1. + (rr/alpha)**2)**(-beta)
 
+
+# Coefficients used in decam_halo_model.  The keys are also used to decide
+# which filters are supported (hence the zero entry for z)
+decam_outer_halo_coeffs = dict(
+    g = 0.00045,
+    r = 0.00033,
+    i = 0.00033,
+    z = 0.0,
+    M411 = 0.00065,
+    M438 = 0.0006,
+    M464 = 0.00055,
+    M490 = 0.0005,
+    M517 = 0.00045,
+    )
+
 def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
                      old_calibs_ok=False):
     from legacypipe.survey import radec_at_mjd
     assert(np.all(refs.ref_epoch > 0))
     rr,dd = radec_at_mjd(refs.ra, refs.dec, refs.ref_epoch.astype(float),
                          refs.pmra, refs.pmdec, refs.parallax, mjd)
+    if band not in decam_outer_halo_coeffs.keys():
+        print('No halo subtraction for band', band)
+        return 0.
     col = 'decam_mag_%s' % band
     if not col in refs.get_columns():
-        print('No halo subtraction for band', band)
+        print('No reference mag was computed for band', band, 'so no halo subtraction can be done')
         return 0.
     mag = refs.get(col)
     good = np.flatnonzero(mag != 0.)
@@ -120,10 +138,7 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
                                            moffat(rads*pixscale, alpha, beta) * pixscale**2)
 
         else:
-             fd = dict(g=0.00045,
-                       r=0.00033,
-                       i=0.00033)
-             f = fd[band]
+             f = decam_outer_halo_coeffs[band]
 
              halo[ylo:yhi+1, xlo:xhi+1] += (flux * apodize * f * (rads*pixscale)**-2
                                             * pixscale**2)

@@ -342,9 +342,8 @@ class WiroImage(LegacySurveyImage):
         print('Mask values:', Counter(mask.ravel()))
         mask[img > self.SATUR] |= 1
         fitsio.write(tmpmaskfn, mask, header=hdr)
-        R = super().run_se(imgfn, tmpmaskfn)
+        super().run_se(imgfn, tmpmaskfn)
         os.unlink(tmpmaskfn)
-        return R
 
     def run_sky(self, **kwargs):
         # Sky variations are large enough that we don't want to do simple

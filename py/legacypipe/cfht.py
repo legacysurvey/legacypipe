@@ -5,6 +5,41 @@ from legacypipe.image import LegacySurveyImage
 from legacypipe.bits import DQ_BITS
 
 '''
+Some top-level instructions for handling CFHT data.
+
+The biggest issue we have faced is with the astrometry, so we use
+Scamp to jointly solve for distortion terms in overlapping sets of
+images.
+
+The scheme is:
+
+(1) run the "legacy_zeropoints.py" code on each image to create the
+PsfEx and sky calib files, and also zpt/*/*-photom.fits
+
+- for u band, we can use SDSS for photometric calibration, via the
+--sdss-photom flag
+
+- at NERSC, you can use a command such as:
+    shifter --image docker:legacysurvey/legacypipe:DR10.3.3 --module none ../bin/cfis-u.sh cfis-cosmos-u/2571171p.fits.fz
+
+(2) run legacyzpts/run-scamp.py to convert the photom.fits files into
+inputs for Scamp, and then run scamp on them
+
+- you need Scamp v2.13.1 or later to pick up a book-keeping change that adds the EXTNAME to the output files.
+- at NERSC, the container listed above should work
+
+
+(3) re-run the "legacy_zeropoints.py" code to produce final
+*-photom.fits and *-annotated.fits files
+
+(4) merge those *-annotated files into a survey-ccds-X.fits file
+
+
+
+
+'''
+
+'''
 This is for the "pitcairn" reductions for CFIS-r data.
 
 eg, search for data from here,
@@ -45,8 +80,8 @@ class MegaPrimeImage(LegacySurveyImage):
     camera on CFHT.
     '''
     def __init__(self, survey, t, image_fn=None, image_hdu=0, **kwargs):
-        super(MegaPrimeImage, self).__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu,
-                                             **kwargs)
+        super().__init__(survey, t, image_fn=image_fn, image_hdu=image_hdu,
+                         **kwargs)
         # print('MegaPrimeImage: CCDs table entry', t)
         # for x in dir(t):
         #     if x.startswith('_'):
@@ -178,6 +213,15 @@ class MegaPrimeImage(LegacySurveyImage):
             sdssbands.update(CaHK=0)
             band = sdssbands[self.band]
             return cat.psfmag[:, band] + colorterm
+        elif name == 'gaia':
+            print('HACKING Gaia color terms for CFHT')
+            cat.about()
+            g = cat.phot_g_mean_mag
+            bp = cat.phot_bp_mean_mag
+            rp = cat.phot_rp_mean_mag
+            colorterm = np.zeros(len(cat))
+            return bp + colorterm
+            
         else:
             raise RuntimeError('No photometric conversion from %s to CFHT' % name)
 
@@ -358,7 +402,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         # Run sky calib first (for patching...)
         self.sky_before_psfex = True
 
-        self.do_solve_field = (self.band in ['CaHK', 'u'])
+        self.do_solve_field = (self.band in ['CaHK'])#, 'u'])
 
         self.do_lacosmic = (self.band in ['CaHK', 'u'])
 
@@ -418,7 +462,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             print('Reading temp SE catalog', tmpsefn)
             S = fits_table(tmpsefn, hdu=2, lower=False)
             print('Got', len(S), 'detections')
-            wcs = Sip(self.wcs_initial_fn)
+            wcs = self.get_wcs()
 
             gaiacat = GaiaCatalog()
             gaia = gaiacat.get_catalog_in_wcs(wcs)
@@ -800,7 +844,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             pass
         return nil
 
-    def get_tractor_sky_model(self, img, goodpix):
+    def get_spline_sky_model(self, img, goodpix):
         from legacypipe.jumpsky import JumpSky
         boxsize = self.splinesky_boxsize
         _,W = img.shape

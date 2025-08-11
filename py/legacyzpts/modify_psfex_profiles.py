@@ -1,4 +1,9 @@
-# srun -N 1 -C haswell -t 04:00:00 -q interactive python modify_psfex_profiles.py
+# Example:
+# # srun -N 1 -C cpu -c 256 -t 04:00:00 -q interactive python modify_psfex_profiles.py --ccd_path /dvs_ro/cfs/cdirs/cosmo/work/legacysurvey/dr11/survey-ccds-decam-dr11-merged.fits --base_dir /dvs_ro/cfs/cdirs/cosmo/work/legacysurvey/dr11/ --output_dir /pscratch/sd/r/rongpu/dr11/psfex-patched --version DR11 > modify_psfex_profiles.log
+# Or simply get the patched PSFEx model for an (unpatched) PSFEx file:
+# # from legacyzpts import modify_psfex_profiles
+# # computed_patched_psfex('/dvs_ro/cfs/cdirs/cosmo/work/legacysurvey/dr11/calib/psfex/decam/CP/V5.5/CP20230515/c4d_230516_085330_ooi_z_v1-psfex.fits', 'z')
+
 import os, warnings
 import numpy as np
 from astropy.table import Table
@@ -6,6 +11,9 @@ import fitsio
 from astropy.io import fits
 from multiprocessing import Pool
 from scipy.optimize import curve_fit
+import argparse
+import time
+
 
 def get_frac_moffat(r, alpha, beta):
     """
@@ -44,22 +52,7 @@ def get_sb_double_moffat(r, alpha1, beta1, alpha2, beta2, weight2):
     return i
 
 
-n_processes = 8
-test_q = False  # only process a small number of exposures
-
-base_dir = '/global/cfs/cdirs/cosmo/work/legacysurvey/dr10/'
-#input_dir = os.path.join(base_dir, 'calib/psfex')
-#output_dir = os.path.join(base_dir, 'calib/patched-psfex')
-input_dir = os.path.join(base_dir, 'calib/unpatched-psfex')
-output_dir = os.path.join(base_dir, 'calib/patched-psfex')
-#surveyccd_path = os.path.join(base_dir, 'survey-ccds-decam-dr10-z-v1.fits')
-#surveyccd_path = os.path.join(base_dir, 'survey-ccds-decam-dr10f-i-v1.fits')
-# (new ones)
-#surveyccd_path = 'survey-ccds-decam-dr100.fits'
-surveyccd_path = 'todo.fits'
-
-from legacypipe.survey import get_git_version
-version = get_git_version()
+n_processes = 256
 
 radius_lim1, radius_lim2 = 5.0, 6.0
 radius_lim3, radius_lim4 = 7., 8.
@@ -75,51 +68,21 @@ outlier_ccd_list = ['N20', 'S8', 'S10', 'S18', 'S21', 'S27']
 params_outlier = {'z_alpha2': 16, 'z_beta2': 2.3, 'z_weight2': 0.0095}
 pixscale = 0.262
 
-ccd = fitsio.read(surveyccd_path)
-ccd = Table(ccd)
 
-"""
-mask = ccd['ccd_cuts']==0
-print(np.sum(mask)/len(mask))
-ccd = ccd[mask]
-"""
+def computed_patched_psfex(psfex_path, band, recompute=False):
 
-unique_expnum = np.unique(ccd['expnum'])
-#print(len(unique_expnum))
-
-# randomly select exposures for testing
-if test_q:
-    np.random.seed(123)
-    exp_index_list = np.random.choice(len(unique_expnum), size=50, replace=False)
-else:
-    exp_index_list = np.arange(len(unique_expnum))
-
-def modify_psfex(exp_index):
-
-    mask = ccd['expnum']==unique_expnum[exp_index]
-    band = ccd['filter'][mask][0]
-    #print('band = {}'.format(band))
-
-    image_filename = ccd['image_filename'][mask][0]
-    psfex_filename = image_filename[:image_filename.find('.fits.fz')]+'-psfex.fits'
-    psfex_filename_new = psfex_filename
-    psfex_path = os.path.join(input_dir, psfex_filename)
-    output_path = os.path.join(output_dir, psfex_filename_new)
-
-    if os.path.isfile(output_path):
-        print('Output exists:', output_path)
-        return None
-
-    if not os.path.exists(psfex_path):
-        print('Input PsfEx file does not exist:', psfex_path)
-        return None
-
-    #print('Reading', psfex_path)
-    hdu = fits.open(psfex_path)
-    data = Table(hdu[1].data)
+    data = Table(fitsio.read(psfex_path))
     #print(len(data))
 
-    data['psf_patch_ver'] = version
+    if 'psf_patch_ver' in data.colnames:
+        print('Input PsfEx file is already patched:', psfex_path)
+        if not recompute:
+            return None
+
+    if data['psf_mask'][0].shape!=(6, 63, 63):
+        print('WARNING: Irregular PSFEx model, ignored:', psfex_path)
+        return None
+
     data['moffat_alpha'] = 0.
     data['moffat_beta'] = 0.
     # sum of the difference between the original and new PSF model (first eigen-image)
@@ -129,10 +92,9 @@ def modify_psfex(exp_index):
     data['failure'] = False
 
     # loop over the CCDs in each exposure (note: not all CCDs meet ccd_cuts)
-    for ccd_index in range(len(data)):
+    for index in range(len(data)):
 
-        # expnum_str = data['expnum'][ccd_index]
-        ccdname = data['ccdname'][ccd_index].strip()
+        ccdname = data['ccdname'][index].strip()
 
         ########## Outer PSF parameters ###########
         if band=='z' and (ccdname in outlier_ccd_list):
@@ -142,13 +104,15 @@ def modify_psfex(exp_index):
             
         if band!='z':
             plexp2, weight2 = params_to_use[band+'_plexp2'], params_to_use[band+'_weight2']
+        elif band=='z':
+            alpha2, beta2, weight2 = params_to_use[band+'_alpha2'], params_to_use[band+'_beta2'], params_to_use[band+'_weight2']
         else:
-            alpha2, beta2, weight2 = params_to_use[band+'_alpha2'], params_to_use[band+'_beta2'],  params_to_use[band+'_weight2']
+            raise ValueError('PSF patching in {} band is not supported.'.format(band))
 
         ############################# Modify the first eigen-image ####################################
         psf_index = 0
 
-        psfi_original = data['psf_mask'][ccd_index, psf_index].copy()
+        psfi_original = data['psf_mask'][index][psf_index].copy()
         # normalize to a 22.5 magnitude star
         norm_factor = np.sum(psfi_original)
 
@@ -180,18 +144,18 @@ def modify_psfex(exp_index):
                 popt, pcov = curve_fit(get_sb_moffat, radius[mask], psfi_flat[mask]/(pixscale**2), bounds=((0, 1.8), np.inf))
                 alpha, beta = popt
             except RuntimeError:
-                print("Error: "+image_filename+", "+ccdname+".")
+                print("Error: "+psfex_path+", "+ccdname+".")
                 print("Error: fit failed to converge.")
                 alpha, beta = 0.8, 2.2  # using default values
-                data['failure'][ccd_index] = True
+                data['failure'][index] = True
                 import traceback
                 traceback.print_exc()
 
         #print('{} {} alpha, beta = {:.3f}, {:.3f}'.format(ccdname, band, alpha, beta))
 
         # save the Moffat parameters
-        data['moffat_alpha'][ccd_index] = alpha
-        data['moffat_beta'][ccd_index] = beta
+        data['moffat_alpha'][index] = alpha
+        data['moffat_beta'][index] = beta
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -225,21 +189,21 @@ def modify_psfex(exp_index):
         # restore to the original normalization
         psfi_combine = psfi_combine * norm_factor
 
-        data['psf_mask'][ccd_index, psf_index] = psfi_combine
+        data['psf_mask'][index][psf_index] = psfi_combine
 
         #########################################################
 
-        data['sum_diff'][ccd_index] = np.sum(psfi_original-psfi_combine)
+        data['sum_diff'][index] = np.sum(psfi_original-psfi_combine)
 
         from scipy.optimize import minimize_scalar
         func = lambda a: np.sum((a * psfi_combine - psfi_original)**2)
-        data['fit_original'][ccd_index] = minimize_scalar(func).x
+        data['fit_original'][index] = minimize_scalar(func).x
 
         ############################# Modify the other PSFEx eigen-images ####################################
 
         for psf_index in range(1, 6):
 
-            psfi = data['psf_mask'][ccd_index, psf_index]
+            psfi = data['psf_mask'][index][psf_index]
 
             grid = pixscale * np.linspace(-0.5*(psfi.shape[0]-1), 0.5*(psfi.shape[0]-1), psfi.shape[0])
             xx, yy = np.meshgrid(grid, grid)
@@ -256,20 +220,90 @@ def modify_psfex(exp_index):
             mask = (radius_grid>radius_lim2)
             psfi_combine[mask] = 0
 
-            data['psf_mask'][ccd_index, psf_index] = psfi_combine
+            data['psf_mask'][index][psf_index] = psfi_combine
 
-    ############################# Save new PSFEx file ####################################
+    return data
 
+
+def _wrapper(ccd_index):
+
+    image_filename = ccd['image_filename'][ccd_index]
+    image_path = os.path.join(_base_dir, 'images', image_filename)
+    band = ccd['filter'][ccd_index]
+    # band = fitsio.read_header(image_path)['BAND']
+    #print('band = {}'.format(band))
+
+    psfex_filename = image_filename.replace('.fits.fz', '-psfex.fits')
+    psfex_path = os.path.join(_base_dir, 'calib/psfex', psfex_filename)
+    output_path = os.path.join(_output_dir, psfex_filename)
+
+    if os.path.isfile(output_path):
+        print('Output exists:', output_path)
+        return None
+
+    if not os.path.exists(psfex_path):
+        print('Input PsfEx file does not exist:', psfex_path)
+        return None
+
+    data = computed_patched_psfex(psfex_path, band)
+    if data is None:
+        return None
+    data['psf_patch_ver'] = _psf_patch_ver
+
+    # Save new PSFEx file
     if not os.path.exists(os.path.dirname(output_path)):
-        os.makedirs(os.path.dirname(output_path))
+        try:
+            os.makedirs(os.path.dirname(output_path))
+        except FileExistsError:  # in case other processes created the directory
+            pass
     data.write(output_path)
     print('Wrote', output_path)
+
     return None
 
 
 def main():
+
+    time_start = time.time()
+
+    global _base_dir, _output_dir, _psf_patch_ver
+    # _base_dir = '/dvs_ro/cfs/cdirs/cosmo/work/legacysurvey/dr11/'
+    # _output_dir = '/pscratch/sd/r/rongpu/dr11/psfex'
+
+    parser = argparse.ArgumentParser(description='Create patched PSFEx models')
+    parser.add_argument('--ccd_path', type=str, required=True, help='path of the survey-ccds file')
+    parser.add_argument('--base_dir', type=str, required=True, help='base directory (e.g., /dvs_ro/cfs/cdirs/cosmo/work/legacysurvey/dr11)')
+    parser.add_argument('--output_dir', type=str, required=True, help='output directory')
+    parser.add_argument('--version', type=str, required=False, default=None, help='PSF patching code version (psf_patch_ver)')
+    args = parser.parse_args()
+    surveyccd_path, _base_dir, _output_dir, _psf_patch_ver = args.ccd_path, args.base_dir, args.output_dir, args.version
+
+    global ccd
+    ccd = Table(fitsio.read(surveyccd_path, columns=['expnum', 'image_filename', 'filter']))
+
+    # Only keep unique exposures
+    _, idx = np.unique(ccd['expnum'], return_index=True)
+    ccd = ccd[idx]
+
+    # Remove Y-band images (currently not supported)
+    mask = ccd['filter']=='Y'
+    if np.sum(mask)>0:
+        print('{} Y-band images are excluded.'.format(np.sum(mask)))
+        ccd = ccd[~mask]
+
+    mask = np.in1d(ccd['filter'], ['g', 'r', 'i', 'z'])
+    if np.sum(~mask)>0:
+        raise ValueError('Exposure list contains supported filters.')
+
+    if _psf_patch_ver is None:
+        from legacypipe.survey import get_git_version
+        _psf_patch_ver = get_git_version()
+
     with Pool(processes=n_processes) as pool:
-        res = pool.map(modify_psfex, exp_index_list)
+        res = pool.map(_wrapper, np.arange(len(ccd)))
+
+    print('All done!', time.strftime('%H:%M:%S', time.gmtime(time.time() - time_start)))
+
 
 if __name__=="__main__":
     main()

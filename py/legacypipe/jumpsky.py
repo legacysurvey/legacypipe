@@ -1,5 +1,52 @@
 import numpy as np
 from tractor.splinesky import SplineSky
+from tractor.sky import ConstantSky
+
+class ConstantJumpSky(ConstantSky):
+    def __init__(self, xbreak, left, right):
+        self.xbreak = xbreak
+        self.left = left
+        self.right = right
+        # ???
+        #self.x0 = 0
+        #self.y0 = 0
+
+    def copy(self):
+        c = type(self)(self.xbreak, self.left, self.right)
+        return c
+
+    def scale(self, s):
+        super().scale(s)
+        self.left *= s
+        self.right *= s
+
+    def addTo(self, mod, scale=1.):
+        ### FIXME -- x0 ???
+        mod[:, :self.xbreak] += (self.left  * scale)
+        mod[:, self.xbreak:] += (self.right * scale)
+
+    def offset(self, dsky):
+        self.left += dsky
+        self.right += dsky
+
+    def to_fits_table(self):
+        from astrometry.util.fits import fits_table
+        T = fits_table()
+        tt = type(self)
+        sky_type = '%s.%s' % (tt.__module__, tt.__name__)
+        T.skyclass = np.array([sky_type])
+        T.xbreak = np.atleast_1d(self.xbreak).astype(np.int32)
+        T.left  = np.atleast_1d(self.left).astype(np.float32)
+        T.right = np.atleast_1d(self.right).astype(np.float32)
+        return T
+
+    @classmethod
+    def from_fits_row(cls, t):
+        sky = cls(t.xbreak, t.left, t.right)
+        # FIXME ???
+        # sky.shift(t.x0, t.y0)
+        return sky
+
 '''
 This class implements a version of SplineSky where there is a discrete jump
 in sky level at the center of the chip.  It was created to handle DECam chip S30,

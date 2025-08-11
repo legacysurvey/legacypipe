@@ -41,7 +41,7 @@ except ImportError:
             setup_keywords['long_description'] = readme.read()
     else:
         setup_keywords['long_description'] = ''
-    setup_keywords['version'] = 'dr3.dev'
+    setup_keywords['version'] = '0.0'
 
 #
 # Set other keywords for the setup function.  These are automated, & should
