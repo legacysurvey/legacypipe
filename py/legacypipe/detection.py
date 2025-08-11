@@ -598,7 +598,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         thisblob = blobs[y-y0, x-x0]
         saddlemap *= (blobs == thisblob)
 
-        oslcs = find_objects(saddlemap)
+        oslcs = find_objects(saddlemap.astype(np.uint8))
         assert(len(oslcs) == 1)
         oslc = oslcs[0]
         saddlemap[oslc] = binary_fill_holes(saddlemap[oslc])
