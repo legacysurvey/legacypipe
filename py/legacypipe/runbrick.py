@@ -1417,8 +1417,6 @@ def stage_fitblobs(T=None,
             dt = tnow.wall_seconds_since(last_printout)
             if dt > 10:
                 last_printout = tnow
-
-                import time
                 print('Running:')
                 status = Riter.get_running_jobs()
                 #print('running job status:', status)
@@ -1431,8 +1429,7 @@ def stage_fitblobs(T=None,
                     procs_last = run_ps(pid)
                     time.sleep(1.)
                 procs = run_ps(pid, last=procs_last)
-                print('procs columns:', procs.get_columns())
-
+                #print('procs columns:', procs.get_columns())
                 tnow = time.time()
                 for jobid,s in status.items():
                     if not jobid in jmap:
@@ -4413,18 +4410,12 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     shared_lock = manager.Lock()
     
     if pool or (threads and threads > 1):
-        # from astrometry.util.timingpool import TimingPool, TimingPoolMeas
-        # from astrometry.util.ttime import MemMeas
-        # if pool is None:
-        #     pool = TimingPool(threads, initializer=runbrick_global_init,
-        #                       initargs=[])
-        # poolmeas = TimingPoolMeas(pool, pickleTraffic=False)
-        # StageTime.add_measurement(poolmeas)
-        # StageTime.add_measurement(MemMeas)
+        from astrometry.util.ttime import MemMeas
         from astrometry.util.ttime import MemMeas
         if pool is None:
             # from legacypipe.trackingpool import TrackingPool
             # pool = TrackingPool(threads,
+            from astrometry.util.timingpool import TimingPool, TimingPoolMeas
             pool = TimingPool(threads,
                               initializer=runbrick_global_init,
                               initargs=(shared_counter, shared_lock, _available_gpu_ids, _ngpu, _threads_per_gpu, gpumode))
