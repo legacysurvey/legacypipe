@@ -940,7 +940,7 @@ class OneBlob(object):
 
         #mod_detmaps,mod_detivs,_ = detection_maps(
         #    self.tims, self.blobwcs, self.bands, mp)
-        detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp, use_gpu=(self.use_gpu and self.gpumode > 0))
+        mod_detmaps,mod_detivs,_ = detection_maps(self.tims, self.blobwcs, self.bands, mp, use_gpu=(self.use_gpu and self.gpumode > 0))
         #if self.use_gpu and self.gpumode > 0:
         #    print ("Worker "+str(os.getpid())+" blob "+str(self.iblob)+" using GPU detection maps...")
         #    mod_detmaps,mod_detivs,_ = detection_maps_gpu(self.tims, self.blobwcs, self.bands, mp)
@@ -1148,7 +1148,7 @@ class OneBlob(object):
             # Compute per-band detection maps
             mp = multiproc()
             t2 = time.time()
-            detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp, use_gpu=(self.use_gpu and self.gpumode > 0))
+            detmaps,detivs,_ = detection_maps(self.tims, self.blobwcs, self.bands, mp, use_gpu=(self.use_gpu and self.gpumode > 0))
             #if self.use_gpu and self.gpumode > 0:
             #    print ("Worker "+str(os.getpid())+" blob "+str(self.iblob)+" using GPU detection maps...")
             #    detmaps,detivs,_ = detection_maps_gpu(srctims, srcwcs, self.bands, mp)
