@@ -21,10 +21,12 @@ from legacypipe.utils import get_cpu_arch
 
 import os
 
-#from tractor.lsqr_optimizer import printTiming as lpt
-#from tractor.constrained_optimizer import printTiming as cpt
-#from tractor.gpu_lsqr_optimizer import printTiming as gpt
-#from tractor.engine import printTiming as ept
+from tractor.lsqr_optimizer import printTiming as lpt
+from tractor.constrained_optimizer import printTiming as cpt
+from tractor.gpu_lsqr_optimizer import printTiming as gpt
+from tractor.engine import printTiming as ept
+from tractor.optimize import printTiming as oopt
+from detection import printTiming as dpt
 
 rgbkwargs_resid = dict(resids=True)
 
@@ -137,14 +139,16 @@ def one_blob(X):
     print ("RMS", trn[4])
     print ("MSOS", trm[2])
     print ("Opt", to, to.sum())
-    #lpt()
-    #cpt()
-    #gpt()
-    #ept()
-    if bid is not None and iblob == bid:
-        print ("Exiting.")
-        import sys
-        sys.exit(0)
+    lpt()
+    cpt()
+    gpt()
+    ept()
+    oopt()
+    dpt()
+    #if bid is not None and iblob == bid:
+    #    print ("Exiting.")
+    #    import sys
+    #    sys.exit(0)
     return B
 
 class OneBlob(object):
@@ -589,14 +593,22 @@ class OneBlob(object):
 
     def compute_segmentation_map(self):
         from functools import reduce
-        from legacypipe.detection import detection_maps
+        from legacypipe.detection import detection_maps, detection_maps_gpu
         from astrometry.util.multiproc import multiproc
         from scipy.ndimage import binary_dilation
 
         # Compute per-band detection maps
         mp = multiproc()
-        detmaps,detivs,satmaps = detection_maps(
-            self.tims, self.blobwcs, self.bands, mp)
+        detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp, use_gpu=(self.use_gpu and self.gpumode > 0))
+        #if self.use_gpu and self.gpumode > 0:
+        #    print ("Worker "+str(os.getpid())+" blob "+str(self.iblob)+" using GPU detection maps...")
+        #    detmaps,detivs,satmaps = detection_maps_gpu(self.tims, self.blobwcs, self.bands, mp)
+        #else:
+        #    print ("Worker "+str(os.getpid())+" blob "+str(self.iblob)+" using CPU detection maps...")
+        #    detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp)
+
+        #detmaps,detivs,satmaps = detection_maps(
+        #    self.tims, self.blobwcs, self.bands, mp)
 
         # same as in runbrick.py
         saturated_pix = reduce(np.logical_or,
@@ -878,6 +890,7 @@ class OneBlob(object):
         # Compute per-band detection maps
         from scipy.ndimage import binary_dilation
         from legacypipe.detection import sed_matched_filters, detection_maps, run_sed_matched_filters
+        from legacypipe.detection import detection_maps_gpu
         from astrometry.util.multiproc import multiproc
 
         if self.plots:
@@ -890,8 +903,15 @@ class OneBlob(object):
             self.ps.savefig()
 
         mp = multiproc()
-        detmaps,detivs,satmaps = detection_maps(
-            self.tims, self.blobwcs, self.bands, mp)
+        detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp, use_gpu=(self.use_gpu and self.gpumode > 0))
+        #if self.use_gpu and self.gpumode > 0:
+        #    print ("Worker "+str(os.getpid())+" blob "+str(self.iblob)+" using GPU detection maps...")
+        #    detmaps,detivs,satmaps = detection_maps_gpu(self.tims, self.blobwcs, self.bands, mp)
+        #else:
+        #    print ("Worker "+str(os.getpid())+" blob "+str(self.iblob)+" using CPU detection maps...")
+        #    detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp)
+        #detmaps,detivs,satmaps = detection_maps(
+        #    self.tims, self.blobwcs, self.bands, mp)
 
         # from runbrick.py
         satmaps = [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps]
@@ -918,8 +938,15 @@ class OneBlob(object):
             plt.title('Iterative detection: first-round models')
             self.ps.savefig()
 
-        mod_detmaps,mod_detivs,_ = detection_maps(
-            self.tims, self.blobwcs, self.bands, mp)
+        #mod_detmaps,mod_detivs,_ = detection_maps(
+        #    self.tims, self.blobwcs, self.bands, mp)
+        detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp, use_gpu=(self.use_gpu and self.gpumode > 0))
+        #if self.use_gpu and self.gpumode > 0:
+        #    print ("Worker "+str(os.getpid())+" blob "+str(self.iblob)+" using GPU detection maps...")
+        #    mod_detmaps,mod_detivs,_ = detection_maps_gpu(self.tims, self.blobwcs, self.bands, mp)
+        #else:
+        #    print ("Worker "+str(os.getpid())+" blob "+str(self.iblob)+" using CPU detection maps...")
+        #    mod_detmaps,mod_detivs,_ = detection_maps(self.tims, self.blobwcs, self.bands, mp)
         # revert
         for tim,img in zip(self.tims, realimages):
             #tim.data = img
@@ -1114,18 +1141,26 @@ class OneBlob(object):
         # finding symmetrized blobs of significant pixels
         mask_others = True
         if mask_others:
-            from legacypipe.detection import detection_maps
+            from legacypipe.detection import detection_maps, detection_maps_gpu
             from astrometry.util.multiproc import multiproc
             from scipy.ndimage import binary_dilation, binary_fill_holes
             from scipy.ndimage.measurements import label
             # Compute per-band detection maps
-            t2 = time.time()
             mp = multiproc()
-            detmaps,detivs,_ = detection_maps(
-                srctims, srcwcs, self.bands, mp)
+            t2 = time.time()
+            detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp, use_gpu=(self.use_gpu and self.gpumode > 0))
+            #if self.use_gpu and self.gpumode > 0:
+            #    print ("Worker "+str(os.getpid())+" blob "+str(self.iblob)+" using GPU detection maps...")
+            #    detmaps,detivs,_ = detection_maps_gpu(srctims, srcwcs, self.bands, mp)
+            #else:
+            #    print ("Worker "+str(os.getpid())+" blob "+str(self.iblob)+" using CPU detection maps...")
+            #    detmaps,detivs,_ = detection_maps(srctims, srcwcs, self.bands, mp)
+            #tx[6] += time.time()-t2
+            #t2 = time.time()
+            #detmaps,detivs,satmaps = detection_maps_gpu(srctims, srcwcs, self.bands, mp)
+            tx[7] += time.time()-t2
             # Compute the symmetric area that fits in this 'srcblobmask' region
             pos = src.getPosition()
-            tx[7] += time.time()-t2
             _,xx,yy = srcwcs.radec2pixelxy(pos.ra, pos.dec)
             bh,bw = srcblobmask.shape
             ix = int(np.clip(np.round(xx-1), 0, bw-1))

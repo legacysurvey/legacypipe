@@ -503,10 +503,16 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, gale
 def tim_get_resamp(tim, targetwcs):
     from astrometry.util.resample import resample_with_wcs,OverlapError
 
+    wcs_hash = hash(targetwcs)
     if hasattr(tim, 'resamp'):
-        return tim.resamp
+        if hasattr(tim, 'targetwcs_hash'):
+            if hash(tim.targetwcs_hash) == wcs_hash:
+                print(f'Re-using previous resamp with hash {wcs_hash=}')
+                return tim.resamp
     try:
         Yo,Xo,Yi,Xi,_ = resample_with_wcs(targetwcs, tim.subwcs, intType=np.int16)
+        tim.resamp = Yo,Xo,Yi,Xi
+        tim.targetwcs_hash = wcs_hash
     except OverlapError:
         debug('No overlap between tim', tim.name, 'and target WCS')
         return None
