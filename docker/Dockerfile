@@ -207,7 +207,7 @@ RUN patchelf --force-rpath --set-rpath /lib/x86_64-linux-gnu/ /usr/local/bin/mod
 # update legacypipe
 RUN cd /src/legacypipe && \
   git pull && \
-  git checkout DR10.3.5 && \
+  git checkout DR10.3.6 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
