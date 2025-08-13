@@ -118,7 +118,7 @@ RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
 RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
     && python setup.py build_ext --with-ceres --with-cython --inplace \
-    && python setup.py install
+    && pip install . --break-system-packages
 
 # unwise_psf
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \
