@@ -248,4 +248,5 @@ ENV LEGACYPIPE_DIR=/src/legacypipe/py
 
 RUN apt install -y libnvrtc12
 RUN apt install -y libcudart12 libcurand10 libcusolver11 libnccl2
-RUN python -m cupyx.tools.install_library --library cudnn --cuda 12.x
+RUN apt install -y libcufft11
+#RUN python -m cupyx.tools.install_library --library cudnn --cuda 12.x
