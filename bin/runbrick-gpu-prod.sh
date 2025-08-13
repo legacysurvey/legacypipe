@@ -81,6 +81,21 @@ python -c "import sys; print('\n'.join(sys.path))" >> "$log"
 
 #       --skip-calibs \
 
+# https://github.com/dmargala/desiscaleflow/blob/main/bin/desi_avoid_home
+# https://developer.nvidia.com/blog/cuda-pro-tip-understand-fat-binaries-jit-caching/
+# https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#env-vars
+#export CUDA_CACHE_PATH=$SCRATCH/.nv/ComputeCache
+export CUDA_CACHE_PATH=$TMPCACHE/.nv/ComputeCache
+mkdir -p $CUDA_CACHE_PATH
+#cp -r $HOME/.config/matplotlib $MPLCONFIGDIR
+
+# # undocumented, see https://github.com/cupy/cupy/issues/3887
+# export CUPY_CUDA_LIB_PATH=$SCRATCH/cupy/cuda_lib
+# https://docs.cupy.dev/en/stable/reference/environment.html#envvar-CUPY_CACHE_DIR
+#export CUPY_CACHE_DIR=/tmp/cupy/kernel_cache
+export CUPY_CACHE_DIR=$TMPCACHE/.cupy/kernel_cache
+mkdir -p $CUPY_CACHE_DIR
+
 python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --run south \
        --brick "$brick" \
