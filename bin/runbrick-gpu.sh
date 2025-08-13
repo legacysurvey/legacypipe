@@ -52,6 +52,7 @@ ngpu=""
 ng=""
 threads_per_gpu=""
 gpu_ids=""
+south=""
 
 while [[ $# -gt 0 ]]; do
   key="$1"
@@ -76,12 +77,16 @@ while [[ $# -gt 0 ]]; do
       gpu="--use-gpu"
       shift # past argument
       ;;
+    -south)
+      south="--run south"
+      shift # past argument
+      ;;
     -sub-blobs)
       subblobs="--sub-blobs"
       shift # past argument
       ;;
     -blobid)
-      blobid="--blobid $2"
+      blobid="--bid $2"
       shift # past argument
       shift # past value
       ;;
@@ -175,15 +180,17 @@ echo "THREADS = $threads"
 echo "NGPU = $ngpu"
 echo "THREADS_PER_GPU = $threads_per_gpu"
 echo "GPU_IDS = $gpu_ids"
+echo "SOUTH = $south"
 echo "SUBBLOBS = $subblobs"
 echo "BLOBID = $blobid"
 echo "LOG = $log"
 
 #python -u $LEGACYPIPE_DIR/legacypipe/runbrick.py \
 #python -u -m cProfile -o brick.pro $LEGACYPIPE_DIR/legacypipe/runbrick.py \
-python -u -m cProfile -o profile.pro $LEGACYPIPE_DIR/legacypipe/runbrick.py \
+python -u $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --brick "$brick" \
         $zoom \
+	$south \
         $gpu \
         $gpumode \
         $threads \
@@ -202,9 +209,7 @@ python -u -m cProfile -o profile.pro $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --write-stage srcs \
      --release 10099 \
      --no-wise \
-     --stage fitblobs
-#\
-#      >> "$log" 2>&1
+      >> "$log" 2>&1
 
 #     --use-gpu \
 #     --gpumode $gpumode \

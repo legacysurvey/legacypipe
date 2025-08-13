@@ -558,8 +558,9 @@ class OneBlob(object):
 
         # Compute per-band detection maps
         mp = multiproc()
-        detmaps,detivs,satmaps = detection_maps(
-            self.tims, self.blobwcs, self.bands, mp)
+        detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp, use_gpu=(self.use_gpu and self.gpumode > 0))
+        #detmaps,detivs,satmaps = detection_maps(
+        #    self.tims, self.blobwcs, self.bands, mp)
 
         # same as in runbrick.py
         saturated_pix = reduce(np.logical_or,
@@ -845,8 +846,9 @@ class OneBlob(object):
             self.ps.savefig()
 
         mp = multiproc()
-        detmaps,detivs,satmaps = detection_maps(
-            self.tims, self.blobwcs, self.bands, mp)
+        detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp, use_gpu=(self.use_gpu and self.gpumode > 0))
+        #detmaps,detivs,satmaps = detection_maps(
+        #    self.tims, self.blobwcs, self.bands, mp)
 
         # from runbrick.py
         satmaps = [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps]
@@ -873,8 +875,9 @@ class OneBlob(object):
             plt.title('Iterative detection: first-round models')
             self.ps.savefig()
 
-        mod_detmaps,mod_detivs,_ = detection_maps(
-            self.tims, self.blobwcs, self.bands, mp)
+        #mod_detmaps,mod_detivs,_ = detection_maps(
+        #    self.tims, self.blobwcs, self.bands, mp)
+        mod_detmaps,mod_detivs,_ = detection_maps(self.tims, self.blobwcs, self.bands, mp, use_gpu=(self.use_gpu and self.gpumode > 0))
         # revert
         for tim,img in zip(self.tims, realimages):
             #tim.data = img
@@ -1070,8 +1073,9 @@ class OneBlob(object):
             from scipy.ndimage.measurements import label
             # Compute per-band detection maps
             mp = multiproc()
-            detmaps,detivs,_ = detection_maps(
-                srctims, srcwcs, self.bands, mp)
+            detmaps,detivs,_ = detection_maps(self.tims, self.blobwcs, self.bands, mp, use_gpu=(self.use_gpu and self.gpumode > 0))
+            #detmaps,detivs,_ = detection_maps(
+            #    srctims, srcwcs, self.bands, mp)
             # Compute the symmetric area that fits in this 'srcblobmask' region
             pos = src.getPosition()
             _,xx,yy = srcwcs.radec2pixelxy(pos.ra, pos.dec)
