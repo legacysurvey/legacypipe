@@ -82,6 +82,7 @@ python -c "import sys; print('\n'.join(sys.path))" >> "$log"
 #       --skip-calibs \
 
 python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
+       --run south \
        --brick "$brick" \
        --use-gpu \
        --sub-blobs \
