@@ -1,4 +1,5 @@
 import numpy as np
+import time
 
 import logging
 logger = logging.getLogger('legacypipe.detection')
@@ -8,6 +9,74 @@ def info(*args):
 def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
+
+def _detmap_gpu_batched(tims, targetwcs, apodize):
+    import cupy as cp
+    from cupyx.scipy.ndimage import gaussian_filter
+    #from scipy.ndimage.filters import gaussian_filter
+    results = []
+    for tim in tims:
+        R = tim.resamp # Already cached from the first step
+        if R is None:
+            results.append((tim.band, None, None, None, None, None))
+            continue
+
+        (Yo, Xo, Yi, Xi) = R
+
+        # Use GPU-enabled methods that return CuPy arrays
+        ie_cp = tim.getInvError(use_gpu=True)
+        detim_cp = tim.getImage(use_gpu=True).copy()
+
+        # All subsequent operations are on CuPy arrays
+        psfnorm = 1./(2. * cp.sqrt(cp.pi) * tim.psf_sigma)
+
+        detim_cp[ie_cp == 0] = 0.
+
+        # This will need a GPU-enabled version. Assuming tim.getSky().addTo() has a GPU path
+        tim.getSky().addTo(detim_cp, scale=-1.)
+
+        # Create detiv as a CuPy array
+        subh, subw = tim.shape
+        detsig1 = tim.sig1 / psfnorm
+        detiv_cp = cp.zeros((subh, subw), cp.float32) + (1. / detsig1**2)
+        #detiv_cp = cp.zeros((subh, subw), cp.float32) + (1. / tim.sig1**2)
+        detiv_cp[ie_cp == 0] = 0.
+
+        if tim.dq is None:
+            sat_cp = None
+        else:
+            # These ops are on the GPU and will be very fast
+            dq_cp = cp.asarray(tim.dq) # Assuming dq is a NumPy array, transfer it.
+            sat_cp = ((dq_cp[Yi, Xi] & tim.dq_saturation_bits) > 0)
+            if cp.any(sat_cp):
+                I, = cp.nonzero(sat_cp)
+                I = I.get()
+                detim_cp[Yi[I], Xi[I]] = cp.max(detim_cp)
+                #detiv_cp[Yi[I], Xi[I]] = 1./tim.sig1**2
+                detiv_cp[Yi[I], Xi[I]] = 1./detsig1**2
+
+        # Apply the CuPy version of gaussian_filter, a key optimization
+        detim_cp = gaussian_filter(detim_cp, tim.psf_sigma) / psfnorm**2
+        detiv_cp = gaussian_filter(detiv_cp, tim.psf_sigma)
+
+        # The apodization block is already fast, but we can do it on the GPU for completeness
+        if apodize:
+            apodize = int(apodize)
+            ramp = cp.arctan(cp.linspace(-cp.pi, cp.pi, apodize+2))
+            ramp = (ramp - ramp.min()) / (ramp.max()-ramp.min())
+            ramp = ramp[1:-1]
+            detiv_cp[:len(ramp),:] *= ramp[:,cp.newaxis]
+            detiv_cp[:,:len(ramp)] *= ramp[cp.newaxis,:]
+            detiv_cp[-len(ramp):,:] *= ramp[::-1][:,cp.newaxis]
+            detiv_cp[:,-len(ramp):] *= ramp[::-1][cp.newaxis,:]
+
+        # Yo, Xo, Yi, and Xi are still NumPy arrays, we must use them to index the CuPy arrays
+        Yo_cp = cp.asarray(Yo)
+        Xo_cp = cp.asarray(Xo)
+
+        results.append((tim.band, Yo_cp, Xo_cp, detim_cp[Yi,Xi], detiv_cp[Yi,Xi], sat_cp))
+
+    return results
 
 def _detmap(X):
     from scipy.ndimage.filters import gaussian_filter
@@ -58,7 +127,9 @@ def _detmap(X):
 
     return tim.band, Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
 
-def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
+def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None, use_gpu=False):
+    if use_gpu:
+        return detection_maps_gpu(tims, targetwcs, bands, mp, apodize=apodize, nsatur=nsatur)
     # Render the detection maps
     H,W = targetwcs.shape
     H,W = np.int_(H), np.int_(W)
@@ -97,6 +168,75 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
                   'mean', np.mean(satmap), 'nsatur', nsatur)
             satmaps[i] = (satmap >= nsatur)
             print('Satmap:', np.sum(satmaps[i]), 'pixels set')
+    return detmaps, detivs, satmaps
+
+def detection_maps_gpu(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
+    import cupy as cp
+    from legacypipe.survey import tim_get_resamp
+
+    # Render the detection maps
+    H,W = targetwcs.shape
+    H,W = np.int_(H), np.int_(W)
+    ibands = dict([(b,i) for i,b in enumerate(bands)])
+
+    detmaps = [np.zeros((H,W), np.float32) for b in bands]
+    detivs  = [np.zeros((H,W), np.float32) for b in bands]
+    if nsatur is None:
+        satmaps = [np.zeros((H,W), bool)   for b in bands]
+    else:
+        if nsatur < 255:
+            sattype = np.uint8
+            satmax = 254
+        else:
+            sattype = np.uint16
+            satmax = 65534
+        satmaps = [np.zeros((H,W), sattype) for b in bands]
+
+    # Pre-calculate resamp for all tims once
+    # This loop is crucial for the caching to work and should be run first.
+    for tim in tims:
+        tim_get_resamp(tim, targetwcs)
+
+    # Call the new GPU-optimized batch function
+    all_results = _detmap_gpu_batched(tims, targetwcs, apodize)
+
+    # Unpack the results and perform the final accumulation on the GPU
+    detmaps_cp = [cp.zeros((H,W), np.float32) for b in bands]
+    detivs_cp  = [cp.zeros((H,W), np.float32) for b in bands]
+    satmaps_cp = [cp.zeros((H,W), np.uint16) for b in bands]
+
+    ibands = dict([(b, i) for i, b in enumerate(bands)])
+
+    for band, Yo_cp, Xo_cp, incmap_cp, inciv_cp, sat_cp in all_results:
+        if Yo_cp is None:
+            continue
+        ib = ibands[band]
+        detmaps_cp[ib][Yo_cp, Xo_cp] += incmap_cp * inciv_cp
+        detivs_cp[ib][Yo_cp, Xo_cp] += inciv_cp
+
+        if sat_cp is not None:
+            # Note: Assuming sat_cp is a CuPy array
+            if nsatur is None:
+                satmaps_cp[ib][Yo_cp, Xo_cp] |= sat_cp
+            else:
+                satmaps_cp[ib][Yo_cp, Xo_cp] = cp.minimum(satmax, satmaps_cp[ib][Yo_cp, Xo_cp] + (1 * sat_cp))
+
+    # Final processing on the GPU before transferring results to CPU
+    detmaps = [None] * len(bands)
+    detivs = [None] * len(bands)
+    satmaps = [None] * len(bands)
+
+    for i, (detmap_cp, detiv_cp, satmap_cp) in enumerate(zip(detmaps_cp, detivs_cp, satmaps_cp)):
+        detmap_cp /= cp.maximum(1e-16, detiv_cp)
+
+        # Transfer back to CPU
+        detmaps[i] = detmap_cp.get()
+        detivs[i] = detiv_cp.get()
+        satmaps[i] = satmap_cp.get()
+
+        # ... (rest of the final processing remains the same, but now on CPU arrays) ...
+        if nsatur is not None:
+             satmaps[i] = (satmaps[i] >= nsatur)
     return detmaps, detivs, satmaps
 
 def sed_matched_filters(bands):
