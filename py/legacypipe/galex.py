@@ -662,12 +662,16 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname,
 
     inverr = np.zeros_like(img)
     K = varimg > 0
-    if np.sum(K) == 0:
-        print('All pixels lack variance estimates; subimage is X %i-%i, Y %i-%i, img range %.3f to %.3f'
-              % (x0, x1, y0, y1, img.min(), img.max()))
-        return None
+    #if np.sum(K) == 0:
+    #    print('All pixels lack variance estimates; subimage is X %i-%i, Y %i-%i, img range %.3f to %.3f'
+    #          % (x0, x1, y0, y1, img.min(), img.max()))
+    #    return None
 
-    inverr[K] = 1.0 / np.sqrt(varimg[K])
+    if np.any(K):
+        inverr[K] = 1.0 / np.sqrt(varimg[K])
+        sig1 = 1./np.median(inverr[inverr>0])
+    else:
+        sig1 = 0.
 
     zp = tile.get('%s_zpmag' % band)
     zpscale = NanoMaggies.zeropointToScale(zp)
@@ -690,7 +694,7 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname,
     tim = Image(data=img, inverr=inverr, psf=tpsf, wcs=twcs,
                 sky=tsky, photocal=photocal, name=name)
     tim.roi = [x0,x1,y0,y1]
-    tim.sig1 = 1./np.median(inverr[inverr>0])
+    tim.sig1 = sig1
     return tim
 
 def galex_coadds(onegal, galaxy=None, radius_mosaic=30, radius_mask=None,
