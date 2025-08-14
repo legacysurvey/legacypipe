@@ -606,8 +606,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         saddlemap *= (blobs == thisblob)
         from collections import Counter
 
-        # astype(int): python3.11 / scipy 1.15.3 seems to require this to be an int
-        oslcs = find_objects(saddlemap.astype(int))
+        # python3.11 / scipy 1.15.3 seems to require this to be an int
+        oslcs = find_objects(saddlemap.astype(np.uint8))
         if len(oslcs) != 1:
             print('oslcs:', oslcs)
             if ps is not None:

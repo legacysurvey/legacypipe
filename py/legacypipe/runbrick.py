@@ -1329,40 +1329,38 @@ def stage_fitblobs(T=None,
             dt = tnow.wall_seconds_since(last_printout)
             if dt > 10:
                 last_printout = tnow
-
-                import time
-                print('Running:')
-                status = Riter.get_running_jobs()
-                #print('running job status:', status)
-                # other threads may try to update status during iteration
-                status = status.copy()
-                jmap = job_id_map.copy()
-                from legacypipe.utils import run_ps
-                pid = os.getpid()
-                if procs_last is None:
-                    procs_last = run_ps(pid)
-                    time.sleep(1.)
-                procs = run_ps(pid, last=procs_last)
-                print('procs columns:', procs.get_columns())
-
-                tnow = time.time()
-                for jobid,s in status.items():
-                    if not jobid in jmap:
-                        print('trackingpool job id', jobid, 'not known')
-                        continue
-                    (brick,blob) = jmap[jobid]
-                    pid = s['pid']
-                    i = np.flatnonzero(procs.pid == pid)
-                    if len(i) != 1:
-                        print('did not find PID', pid)
-                        print('Blob %10s' % blob, 'pid', s['pid'], 'running for %7.1f sec' % (tnow - s['time']))
-                    else:
-                        i = i[0]
-                        print('Blob %5s' % blob, 'pid %7i' % s['pid'],
-                              'total CPU %7.1f sec' % (tnow - s['time']),
-                              'CPU now %5.1f %%,' % procs.proc_icpu[i],
-                              'VMsize %5.1f GB,' % (procs.vsz[i] / (1024 * 1024)),
-                              'VMpeak %5.1f GB' % (procs.proc_vmpeak[i] / (1024 * 1024)))
+                if hasattr(Riter, 'get_running_jobs'):
+                    print('Running:')
+                    status = Riter.get_running_jobs()
+                    #print('running job status:', status)
+                    # other threads may try to update status during iteration
+                    status = status.copy()
+                    jmap = job_id_map.copy()
+                    from legacypipe.utils import run_ps
+                    pid = os.getpid()
+                    if procs_last is None:
+                        procs_last = run_ps(pid)
+                        time.sleep(1.)
+                    procs = run_ps(pid, last=procs_last)
+                    #print('procs columns:', procs.get_columns())
+                    tnow = time.time()
+                    for jobid,s in status.items():
+                        if not jobid in jmap:
+                            print('trackingpool job id', jobid, 'not known')
+                            continue
+                        (brick,blob) = jmap[jobid]
+                        pid = s['pid']
+                        i = np.flatnonzero(procs.pid == pid)
+                        if len(i) != 1:
+                            print('did not find PID', pid)
+                            print('Blob %10s' % blob, 'pid', s['pid'], 'running for %7.1f sec' % (tnow - s['time']))
+                        else:
+                            i = i[0]
+                            print('Blob %5s' % blob, 'pid %7i' % s['pid'],
+                                  'total CPU %7.1f sec' % (tnow - s['time']),
+                                  'CPU now %5.1f %%,' % procs.proc_icpu[i],
+                                  'VMsize %5.1f GB,' % (procs.vsz[i] / (1024 * 1024)),
+                                  'VMpeak %5.1f GB' % (procs.proc_vmpeak[i] / (1024 * 1024)))
 
             # Wait for results (with timeout)
             try:

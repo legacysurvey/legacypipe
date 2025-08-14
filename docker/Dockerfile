@@ -118,7 +118,7 @@ RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
 RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
     && python setup.py build_ext --with-ceres --with-cython --inplace \
-    && python setup.py install
+    && pip install . --break-system-packages
 
 # unwise_psf
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \
@@ -207,7 +207,7 @@ RUN patchelf --force-rpath --set-rpath /lib/x86_64-linux-gnu/ /usr/local/bin/mod
 # update legacypipe
 RUN cd /src/legacypipe && \
   git pull && \
-  git checkout DR10.3.5 && \
+  git checkout DR10.3.6 && \
   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
