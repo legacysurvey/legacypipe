@@ -94,6 +94,8 @@ MASKBITS = dict(
     SATUR_I    = 0x4000,
     ALLMASK_I  = 0x8000,
     SUB_BLOB   = 0x10000,
+    RESOLVED   = 0x20000, # Within a local dwarf galaxy whose stars are resolved
+    CLOUDS     = 0x40000, # Within one of the Magellanic Clouds
 )
 
 # Bits in the "brightblob" bitmask
@@ -122,4 +124,6 @@ MASKBITS_DESCRIPTIONS = [
         ('SATUR_I',   'SAT_I', 'i band saturated'),
         ('ALLMASK_I', 'ALL_I', 'any ALLMASK_I bit set'),
         ('SUB_BLOB',  'SUBBL', 'large blobs broken up'),
+        ('RESOLVED',  'RESLV', 'local dwarf galaxy'),
+        ('CLOUDS',    'CLOUD', 'Magellanic Cloud'),
 ]
