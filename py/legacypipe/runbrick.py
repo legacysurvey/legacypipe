@@ -716,7 +716,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
 
     if not minimal_coadds:
         # interim maskbits
-        from legacypipe.bits import IN_BLOB, maskbits_type
+        from legacypipe.bits import REF_MAP_BITS, maskbits_type
         from legacypipe.survey import clean_band_name
 
         MASKBITS = survey.get_maskbits()
@@ -733,7 +733,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         # reference-catalog masks
         if refmap is not None:
             for key in ['BRIGHT', 'MEDIUM', 'GALAXY', 'CLUSTER', 'RESOLVED', 'CLOUDS']:
-                maskbits |= MASKBITS[key] * ((refmap & IN_BLOB[key]) > 0)
+                maskbits |= MASKBITS[key] * ((refmap & REF_MAP_BITS[key]) > 0)
             del refmap
 
         cleanbands = [clean_band_name(b).upper() for b in bands]
@@ -1808,7 +1808,7 @@ def _blob_iter(job_id_map,
         this blob.
     *T*: a fits table parallel to *cat* with some extra info (very little used)
     '''
-    from legacypipe.bits import IN_BLOB
+    from legacypipe.bits import REF_MAP_BITS
     from collections import Counter
 
     def get_subtim_args(tims, targetwcs, bx0,bx1, by0,by1, single_thread):
@@ -1946,7 +1946,7 @@ def _blob_iter(job_id_map,
             do_sub_blobs = True
         # Check for a large blob that is fully contained in the
         # CLUSTER mask -- enable sub-blob processing if so.
-        if (not do_sub_blobs) and np.all((refmap[bslc][blobmask] & IN_BLOB['CLUSTER']) != 0):
+        if (not do_sub_blobs) and np.all((refmap[bslc][blobmask] & REF_MAP_BITS['CLUSTER']) != 0):
             info('Entire large blob is in CLUSTER mask')
             do_sub_blobs = True
 
@@ -2232,7 +2232,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     '''
     from functools import reduce
     from legacypipe.survey import apertures_arcsec
-    from legacypipe.bits import IN_BLOB, FITBITS_DESCRIPTIONS, maskbits_type
+    from legacypipe.bits import REF_MAP_BITS, FITBITS_DESCRIPTIONS, maskbits_type
     from legacypipe.survey import clean_band_name
 
     record_event and record_event('stage_coadds: starting')
@@ -2468,7 +2468,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # reference-catalog masks
     if refmap is not None:
         for key in ['BRIGHT', 'MEDIUM', 'GALAXY', 'CLUSTER', 'RESOLVED', 'CLOUDS']:
-            maskbits |= MASKBITS[key] * ((refmap & IN_BLOB[key]) > 0)
+            maskbits |= MASKBITS[key] * ((refmap & REF_MAP_BITS[key]) > 0)
         del refmap
 
     cleanbands = [clean_band_name(b).upper() for b in bands]

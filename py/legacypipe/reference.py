@@ -728,7 +728,7 @@ def read_star_clusters(targetwcs):
     return clusters
 
 def get_reference_map(wcs, refs):
-    from legacypipe.bits import IN_BLOB
+    from legacypipe.bits import REF_MAP_BITS
 
     H,W = wcs.shape
     H = int(H)
@@ -771,7 +771,7 @@ def get_reference_map(wcs, refs):
             yhi = int(np.clip(np.ceil (y+1 + rpix), 0, H))
             if xlo == xhi or ylo == yhi:
                 continue
-            bitval = np.uint8(IN_BLOB[bit])
+            bitval = np.uint8(REF_MAP_BITS[bit])
             if not ellipse:
                 rr = ((np.arange(ylo,yhi)[:,np.newaxis] - y)**2 +
                       (np.arange(xlo,xhi)[np.newaxis,:] - x)**2)

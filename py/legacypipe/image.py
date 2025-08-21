@@ -1626,7 +1626,7 @@ class LegacySurveyImage(object):
         from astrometry.util.miscutils import estimate_mode
         from legacypipe.reference import (get_reference_sources, get_galaxy_sources,
                                           get_reference_map)
-        from legacypipe.bits import IN_BLOB
+        from legacypipe.bits import REF_MAP_BITS
 
         plots = (ps is not None)
 
@@ -1695,7 +1695,7 @@ class LegacySurveyImage(object):
             refgood = (refmap == 0)
 
         # What fraction of the image is within a large-galaxy (GALAXY) mask?
-        frac_galaxy = np.sum((refmap & (IN_BLOB['GALAXY'] | IN_BLOB['CLUSTER'])) != 0) / (h*w)
+        frac_galaxy = np.sum((refmap & (REF_MAP_BITS['GALAXY'] | REF_MAP_BITS['CLUSTER'])) != 0) / (h*w)
         if frac_galaxy >= largegalaxy_frac_constsky:
             info('Large galaxies/clusters cover %.1f %% of this CCD, >= %.1f %%, using constant (not spline) sky'
                  % (frac_galaxy * 100, largegalaxy_frac_constsky * 100))

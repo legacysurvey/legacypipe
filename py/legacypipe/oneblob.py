@@ -14,7 +14,7 @@ from tractor.sersic import SersicGalaxy
 
 from legacypipe.survey import (RexGalaxy,
                                LegacyEllipseWithPriors, LegacySersicIndex, get_rgb)
-from legacypipe.bits import IN_BLOB
+from legacypipe.bits import REF_MAP_BITS
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 from legacypipe.utils import get_cpu_arch
@@ -271,11 +271,11 @@ class OneBlob(object):
             plt.clf()
             dimshow(self.rgb)
             ax = plt.axis()
-            bitset = ((self.refmap & IN_BLOB['MEDIUM']) != 0)
+            bitset = ((self.refmap & REF_MAP_BITS['MEDIUM']) != 0)
             plot_boundary_map(bitset, rgb=(255,0,0), iterations=2)
-            bitset = ((self.refmap & IN_BLOB['BRIGHT']) != 0)
+            bitset = ((self.refmap & REF_MAP_BITS['BRIGHT']) != 0)
             plot_boundary_map(bitset, rgb=(200,200,0), iterations=2)
-            bitset = ((self.refmap & IN_BLOB['GALAXY']) != 0)
+            bitset = ((self.refmap & REF_MAP_BITS['GALAXY']) != 0)
             plot_boundary_map(bitset, rgb=(0,255,0), iterations=2)
             plt.axis(ax)
             plt.title('Reference-source Masks')
@@ -352,17 +352,17 @@ class OneBlob(object):
         # Set any fitting behaviors based on geometric masks.
 
         # Fitting behaviors: force point-source
-        force_pointsource_mask = (IN_BLOB['BRIGHT'] | IN_BLOB['CLUSTER'])
+        force_pointsource_mask = (REF_MAP_BITS['BRIGHT'] | REF_MAP_BITS['CLUSTER'])
         # large_galaxies_force_pointsource is True by default.
         if self.large_galaxies_force_pointsource:
-            force_pointsource_mask |= IN_BLOB['GALAXY']
+            force_pointsource_mask |= REF_MAP_BITS['GALAXY']
         # Fit background?
-        fit_background_mask = IN_BLOB['BRIGHT']
+        fit_background_mask = REF_MAP_BITS['BRIGHT']
         if not self.less_masking:
-            fit_background_mask |= IN_BLOB['MEDIUM']
+            fit_background_mask |= REF_MAP_BITS['MEDIUM']
         ### this variable *also* forces fitting the background.
         if self.large_galaxies_force_pointsource:
-            fit_background_mask |= IN_BLOB['GALAXY']
+            fit_background_mask |= REF_MAP_BITS['GALAXY']
         for srci,src in enumerate(cat):
             _,ix,iy = self.blobwcs.radec2pixelxy(src.getPosition().ra,
                                                  src.getPosition().dec)
@@ -565,12 +565,12 @@ class OneBlob(object):
 
         # Do not compute segmentation map for sources in the CLUSTER mask
         # (or with very bad coords)
-        Iseg, = np.nonzero(ok * ((self.refmap[iy, ix] & IN_BLOB['CLUSTER']) == 0))
+        Iseg, = np.nonzero(ok * ((self.refmap[iy, ix] & REF_MAP_BITS['CLUSTER']) == 0))
         del ok
         # Zero out the S/N in CLUSTER mask
-        maxsn[(self.refmap & IN_BLOB['CLUSTER']) > 0] = 0.
+        maxsn[(self.refmap & REF_MAP_BITS['CLUSTER']) > 0] = 0.
         # (also zero out the satmap in the CLUSTER mask)
-        saturated_pix[(self.refmap & IN_BLOB['CLUSTER']) > 0] = False
+        saturated_pix[(self.refmap & REF_MAP_BITS['CLUSTER']) > 0] = False
 
         import heapq
         H,W = self.blobh, self.blobw

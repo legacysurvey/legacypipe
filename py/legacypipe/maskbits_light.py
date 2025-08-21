@@ -18,7 +18,7 @@ def write_maskbits_light(survey, brick, brickname, version_header,
                          targetwcs, W, H, refstars,
                          only_if_bad_mags=False):
     from legacypipe.utils import find_unique_pixels, copy_header_with_wcs
-    from legacypipe.bits import MASKBITS, IN_BLOB, maskbits_type
+    from legacypipe.bits import MASKBITS, REF_MAP_BITS, maskbits_type
     from legacypipe.reference import get_reference_map
 
     I = np.flatnonzero((refstars.donotfit==False) * (refstars.ref_id >= 0))
@@ -44,7 +44,7 @@ def write_maskbits_light(survey, brick, brickname, version_header,
     refmap = get_reference_map(targetwcs, refstars)
     if refmap is not None:
         for key in ['BRIGHT', 'MEDIUM', 'GALAXY', 'CLUSTER', 'RESOLVED', 'CLOUDS']:
-            maskbits |= MASKBITS[key] * ((refmap & IN_BLOB[key]) > 0)
+            maskbits |= MASKBITS[key] * ((refmap & REF_MAP_BITS[key]) > 0)
         del refmap
 
     hdr = copy_header_with_wcs(version_header, targetwcs)

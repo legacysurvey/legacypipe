@@ -99,8 +99,9 @@ MASKBITS = dict(
     CLOUDS     = 0x40000, # Within one of the Magellanic Clouds
 )
 
-# Bits used internally for reference masks; these fit in a uint8.
-IN_BLOB = dict(
+# Bits used internally for reference masks; these fit in a uint8,
+# and get transferred to MASKBITS at the end of the pipeline.
+REF_MAP_BITS = dict(
     BRIGHT  = 0x1,   # "bright" star
     MEDIUM  = 0x2,   # "medium-bright" star
     CLUSTER = 0x4,   # Globular cluster
