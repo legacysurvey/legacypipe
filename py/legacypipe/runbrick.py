@@ -2595,12 +2595,13 @@ def _add_bit_description(header, BITS, bits, bnpat, bitpat, bitmapname):
                  value=BITS[key],
                  comment='%s: %s' % (bitmapname, comm)))
     revmap = dict([(bit,name) for name,bit in BITS.items()])
+    commentmap = dict(bits)
     for bit in range(32):
         bitval = 1<<bit
         if not bitval in revmap:
             continue
         name = revmap[bitval]
-        comment = bits.get(name, '')
+        comment = commentmap.get(name, '')
         header.add_record(
             dict(name=bitpat % bit,
                  value=name,
