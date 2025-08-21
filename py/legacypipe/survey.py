@@ -1086,7 +1086,7 @@ class LegacySurveyData(object):
                 oldbits_allmask.append(bitval)
                 del self.maskbits[name]
 
-        self.maskbits_descriptions = [(a,b,c) for a,b,c in self.maskbits_descriptions
+        self.maskbits_descriptions = [(a,c) for a,c in self.maskbits_descriptions
                                       if not (a.startswith('SATUR_') or a.startswith('ALLMASK_'))]
         # Plug in new bands!
         nextbit = maxbit << 1
@@ -1108,8 +1108,8 @@ class LegacySurveyData(object):
             self.maskbits['ALLMASK_' + bandname] = bitval
             # Descriptions
             self.maskbits_descriptions.extend([
-                ('SATUR_'   + bandname, 'SAT_' + bandname, band + ' band saturated'),
-                ('ALLMASK_' + bandname, 'ALL_' + bandname, 'any ALLMASK_' + bandname + ' bit set'),
+                ('SATUR_'   + bandname, band + ' band saturated'),
+                ('ALLMASK_' + bandname, 'any ALLMASK_' + bandname + ' bit set'),
                 ])
 
     def get_default_release(self):

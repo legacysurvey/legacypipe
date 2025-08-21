@@ -762,7 +762,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         mbits = survey.get_maskbits_descriptions()
         hdr.add_record(dict(name='COMMENT', value='maskbits bits:'))
         _add_bit_description(hdr, MASKBITS, mbits,
-                             'MB_%s', 'MBIT_%i', 'maskbits')
+                             'MB_%s', 'MBIT_%i', 'maskbit')
         with survey.write_output('maskbits', brick=brickname, shape=maskbits.shape) as out:
             out.fits.write(maskbits, header=hdr, extname='MASKBITS')
 
@@ -2235,7 +2235,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     '''
     from functools import reduce
     from legacypipe.survey import apertures_arcsec
-    from legacypipe.bits import IN_BLOB
+    from legacypipe.bits import IN_BLOB, FITBITS_DESCRIPTIONS, maskbits_type
     from legacypipe.survey import clean_band_name
 
     record_event and record_event('stage_coadds: starting')
@@ -2462,10 +2462,10 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
     # Construct the maskbits map
     MASKBITS = survey.get_maskbits()
-    maskbits = np.zeros((H,W), np.int32)
+    maskbits = np.zeros((H,W), maskbits_type)
     if not custom_brick:
         # not BRICK_PRIMARY
-        maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int32)
+        maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(maskbits_type)
         del U
 
     # BRIGHT
@@ -2482,7 +2482,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         for b, sat in zip(cleanbands, saturated_pix):
             key = 'SATUR_' + b
             if key in MASKBITS:
-                maskbits |= (MASKBITS[key] * sat).astype(np.int32)
+                maskbits |= (MASKBITS[key] * sat).astype(maskbits_type)
 
     # ALLMASK_{g,r,z}
     for b,allmask in zip(cleanbands, C.allmasks):
@@ -2502,28 +2502,12 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     mbits = survey.get_maskbits_descriptions()
     version_header.add_record(dict(name='COMMENT', value='maskbits bits:'))
     _add_bit_description(version_header, MASKBITS, mbits,
-                         'MB_%s', 'MBIT_%i', 'maskbits')
+                         'MB_%s', 'MBIT_%i', 'maskbit')
 
     # Add the fitbits header cards to version_header
-    fbits = [
-        ('FORCED_POINTSOURCE',  'FPSF',  'forced to be PSF'),
-        ('FIT_BACKGROUND',      'FITBG', 'background levels fit'),
-        ('HIT_RADIUS_LIMIT',    'RLIM',  'hit radius limit during fit'),
-        ('HIT_SERSIC_LIMIT',    'SLIM',  'hit Sersic index limit during fit'),
-        ('FROZEN',              'FROZE', 'parameters were not fit'),
-        ('BRIGHT',              'BRITE', 'bright star'),
-        ('MEDIUM',              'MED',   'medium-bright star'),
-        ('GAIA',                'GAIA',  'Gaia source'),
-        ('TYCHO2',              'TYCHO', 'Tycho-2 star'),
-        ('LARGEGALAXY',         'LGAL',  'SGA large galaxy'),
-        ('WALKER',              'WALK',  'fitting moved pos > 1 arcsec'),
-        ('RUNNER',              'RUN',   'fitting moved pos > 2.5 arcsec'),
-        ('GAIA_POINTSOURCE',    'GPSF',  'Gaia source treated as point source'),
-        ('ITERATIVE',           'ITER',  'source detected during iterative detection'),
-        ]
     version_header.add_record(dict(name='COMMENT', value='fitbits bits:'))
-    _add_bit_description(version_header, FITBITS, fbits,
-                         'FB_%s', 'FBIT_%i', 'fitbits')
+    _add_bit_description(version_header, FITBITS, FITBITS_DESCRIPTIONS,
+                         'FB_%s', 'FBIT_%i', 'fitbit')
 
     if plots:
         import pylab as plt
@@ -2607,21 +2591,26 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                 version_header=version_header)
 
 def _add_bit_description(header, BITS, bits, bnpat, bitpat, bitmapname):
-    for key,short,comm in bits:
+    # BITS: name -> bit value (eg 0x400)
+    # bits: [name, description] list
+    # bnpat: eg "MB_%s"
+    # bitpat: eg "MBIT_%s"
+    for key,comm in bits:
         header.add_record(
-            dict(name=bnpat % short, value=BITS[key],
+            dict(name=bnpat % key,
+                 value=BITS[key],
                  comment='%s: %s' % (bitmapname, comm)))
     revmap = dict([(bit,name) for name,bit in BITS.items()])
-    nicemap = dict([(k,c) for k,short,c in bits])
     for bit in range(32):
         bitval = 1<<bit
         if not bitval in revmap:
             continue
         name = revmap[bitval]
-        nice = nicemap.get(name, '')
+        comment = bits.get(name, '')
         header.add_record(
-            dict(name=bitpat % bit, value=name,
-                 comment='%s bit %i (0x%x): %s' % (bitmapname, bit, bitval, nice)))
+            dict(name=bitpat % bit,
+                 value=name,
+                 comment='%s %i (0x%x): %s' % (bitmapname, bit, bitval, comment)))
 
 def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
                      fibersize=1.5, seeing=1., year=2020.0,
@@ -3557,6 +3546,7 @@ def stage_writecat(
     '''
     from legacypipe.catalog import prepare_fits_catalog
     from legacypipe.utils import copy_header_with_wcs, add_bits
+    from legcaypipe.bits import WISE_MASK_BITS
 
     record_event and record_event('stage_writecat: starting')
     _add_stage_version(version_header, 'WCAT', 'writecat')
@@ -3570,22 +3560,12 @@ def stage_writecat(
         maskbits |= MASKBITS['WISEM2'] * (wise_mask_maps[1] != 0)
 
     version_header.add_record(dict(name='COMMENT', value='wisemask bits:'))
-    wbits = [
-        (0, 'BRIGHT',  'BRIGH', 'Bright star core/wings'),
-        (1, 'SPIKE',   'SPIKE', 'PSF-based diffraction spike'),
-        (2, 'GHOST',   'GHOST', 'Optical ghost'),
-        (3, 'LATENT',  'LATNT', 'First latent'),
-        (4, 'LATENT2', 'LATN2', 'Second latent image'),
-        (5, 'HALO',    'HALO',  'AllWISE-like circular halo'),
-        (6, 'SATUR',   'SATUR', 'Bright star saturation'),
-        (7, 'SPIKE2',  'SPIK2', 'Geometric diffraction spike')]
-    for bit,name,short,comm in wbits:
-        version_header.add_record(dict(
-            name='WB_%s' % short, value=1<<bit,
-            comment='WISE mask bit %i: %s, %s' % (bit, name, comm)))
-    for bit,name,_,comm in wbits:
-        version_header.add_record(dict(
-            name='WBIT_%i' % bit, value=name, comment='WISE: %s' % comm))
+    bitvals = {}
+    bitdescrs = {}
+    for bitnum,name,comment in WISE_MASK_BITS:
+        bitvals[1 << bitnum] = name
+        bitdescrs[name] = comment
+    _add_bit_description(version_header, bitvals, bitdescrs, 'WB_%s', 'WBIT_%s', 'wisemask')
 
     # Record the meaning of ALLMASK/ANYMASK bits
     add_bits(version_header, DQ_BITS, 'allmask/anymask', 'AM', 'A')

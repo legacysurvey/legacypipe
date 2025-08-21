@@ -1,3 +1,4 @@
+import numpy as np
 
 ## These are the mask bits in ANYMASK / ALLMASK.
 #
@@ -98,6 +99,8 @@ MASKBITS = dict(
     CLOUDS     = 0x40000, # Within one of the Magellanic Clouds
 )
 
+
+
 # Bits in the "brightblob" bitmask
 IN_BLOB = dict(
     BRIGHT  = 0x1,   # "bright" star
@@ -107,23 +110,55 @@ IN_BLOB = dict(
 )
 
 MASKBITS_DESCRIPTIONS = [
-        ('NPRIMARY',  'NPRIM', 'not primary brick area'),
-        ('BRIGHT',    'BRIGH', 'bright star nearby'),
-        ('SATUR_G',   'SAT_G', 'g band saturated'),
-        ('SATUR_R',   'SAT_R', 'r band saturated'),
-        ('SATUR_Z',   'SAT_Z', 'z band saturated'),
-        ('ALLMASK_G', 'ALL_G', 'any ALLMASK_G bit set'),
-        ('ALLMASK_R', 'ALL_R', 'any ALLMASK_R bit set'),
-        ('ALLMASK_Z', 'ALL_Z', 'any ALLMASK_Z bit set'),
-        ('WISEM1',    'WISE1', 'WISE W1 (all masks)'),
-        ('WISEM2',    'WISE2', 'WISE W2 (all masks)'),
-        ('BAILOUT',   'BAIL',  'Bailed out processing'),
-        ('MEDIUM',    'MED',   'medium-bright star'),
-        ('GALAXY',    'GAL',   'SGA large galaxy'),
-        ('CLUSTER',   'CLUST', 'Globular cluster'),
-        ('SATUR_I',   'SAT_I', 'i band saturated'),
-        ('ALLMASK_I', 'ALL_I', 'any ALLMASK_I bit set'),
-        ('SUB_BLOB',  'SUBBL', 'large blobs broken up'),
-        ('RESOLVED',  'RESLV', 'local dwarf galaxy'),
-        ('CLOUDS',    'CLOUD', 'Magellanic Cloud'),
+    ('NPRIMARY',  'not primary brick area'),
+    ('BRIGHT',    'bright star nearby'),
+    ('SATUR_G',   'g band saturated'),
+    ('SATUR_R',   'r band saturated'),
+    ('SATUR_Z',   'z band saturated'),
+    ('ALLMASK_G', 'any ALLMASK_G bit set'),
+    ('ALLMASK_R', 'any ALLMASK_R bit set'),
+    ('ALLMASK_Z', 'any ALLMASK_Z bit set'),
+    ('WISEM1',    'WISE W1 (all masks)'),
+    ('WISEM2',    'WISE W2 (all masks)'),
+    ('BAILOUT',   'Bailed out processing'),
+    ('MEDIUM',    'medium-bright star'),
+    ('GALAXY',    'SGA large galaxy'),
+    ('CLUSTER',   'Globular cluster'),
+    ('SATUR_I',   'i band saturated'),
+    ('ALLMASK_I', 'any ALLMASK_I bit set'),
+    ('SUB_BLOB',  'large blobs broken up'),
+    ('RESOLVED',  'local dwarf galaxy'),
+    ('CLOUDS',    'Magellanic Cloud'),
+]
+
+# This is signed, not unsigned, because int32 is a supported FITS data type, uint32 isn't really
+maskbits_type = np.int32
+
+FITBITS_DESCRIPTIONS = [
+    ('FORCED_POINTSOURCE',  'forced to be PSF'),
+    ('FIT_BACKGROUND',      'background levels fit'),
+    ('HIT_RADIUS_LIMIT',    'hit radius limit during fit'),
+    ('HIT_SERSIC_LIMIT',    'hit Sersic index limit during fit'),
+    ('FROZEN',              'parameters were not fit'),
+    ('BRIGHT',              'bright star'),
+    ('MEDIUM',              'medium-bright star'),
+    ('GAIA',                'Gaia source'),
+    ('TYCHO2',              'Tycho-2 star'),
+    ('LARGEGALAXY',         'SGA large galaxy'),
+    ('WALKER',              'fitting moved pos > 1 arcsec'),
+    ('RUNNER',              'fitting moved pos > 2.5 arcsec'),
+    ('GAIA_POINTSOURCE',    'Gaia source treated as point source'),
+    ('ITERATIVE',           'source detected during iterative detection'),
+]
+
+# This is how the other bit masks should be written...
+WISE_MASK_BITS = [
+    (0, 'BRIGHT',  'Bright star core/wings'),
+    (1, 'SPIKE',   'PSF-based diffraction spike'),
+    (2, 'GHOST',   'Optical ghost'),
+    (3, 'LATENT',  'First latent'),
+    (4, 'LATENT2', 'Second latent image'),
+    (5, 'HALO',    'AllWISE-like circular halo'),
+    (6, 'SATUR',   'Bright star saturation'),
+    (7, 'SPIKE2',  'Geometric diffraction spike'),
 ]
