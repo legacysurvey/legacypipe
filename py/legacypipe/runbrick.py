@@ -3558,7 +3558,7 @@ def stage_writecat(
     bitvals = {}
     bitdescrs = []
     for bitnum,name,comment in WISE_MASK_BITS:
-        bitvals[1 << bitnum] = name
+        bitvals[name] = 1 << bitnum
         bitdescrs.append((name, comment))
     _add_bit_description(version_header, bitvals, bitdescrs, 'WB_%s', 'WBIT_%s', 'wisemask')
 
