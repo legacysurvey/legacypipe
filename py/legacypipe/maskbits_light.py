@@ -18,7 +18,7 @@ def write_maskbits_light(survey, brick, brickname, version_header,
                          targetwcs, W, H, refstars,
                          only_if_bad_mags=False):
     from legacypipe.utils import find_unique_pixels, copy_header_with_wcs
-    from legacypipe.bits import MASKBITS, IN_BLOB
+    from legacypipe.bits import MASKBITS, IN_BLOB, maskbits_type
     from legacypipe.reference import get_reference_map
 
     I = np.flatnonzero((refstars.donotfit==False) * (refstars.ref_id >= 0))
@@ -38,18 +38,14 @@ def write_maskbits_light(survey, brick, brickname, version_header,
     # !PRIMARY
     U = find_unique_pixels(targetwcs, W, H, None,
                            brick.ra1, brick.ra2, brick.dec1, brick.dec2)
-    maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int32)
+    maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(maskbits_type)
     del U
 
     refmap = get_reference_map(targetwcs, refstars)
-
-    # BRIGHT
     if refmap is not None:
-        maskbits |= MASKBITS['BRIGHT']  * ((refmap & IN_BLOB['BRIGHT'] ) > 0)
-        maskbits |= MASKBITS['MEDIUM']  * ((refmap & IN_BLOB['MEDIUM'] ) > 0)
-        maskbits |= MASKBITS['GALAXY']  * ((refmap & IN_BLOB['GALAXY'] ) > 0)
-        maskbits |= MASKBITS['CLUSTER'] * ((refmap & IN_BLOB['CLUSTER']) > 0)
-    del refmap
+        for key in ['BRIGHT', 'MEDIUM', 'GALAXY', 'CLUSTER', 'RESOLVED', 'CLOUDS']:
+            maskbits |= MASKBITS[key] * ((refmap & IN_BLOB[key]) > 0)
+        del refmap
 
     hdr = copy_header_with_wcs(version_header, targetwcs)
     with survey.write_output('maskbits-light', brick=brickname, shape=maskbits.shape) as out:

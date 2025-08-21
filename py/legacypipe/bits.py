@@ -99,14 +99,14 @@ MASKBITS = dict(
     CLOUDS     = 0x40000, # Within one of the Magellanic Clouds
 )
 
-
-
-# Bits in the "brightblob" bitmask
+# Bits used internally for reference masks; these fit in a uint8.
 IN_BLOB = dict(
     BRIGHT  = 0x1,   # "bright" star
     MEDIUM  = 0x2,   # "medium-bright" star
     CLUSTER = 0x4,   # Globular cluster
     GALAXY  = 0x8,   # large SGA galaxy
+    RESOLVED = 0x10, # nearby dwarf galaxy resolved into stars
+    CLOUDS   = 0x20, # SMC, LMC
 )
 
 MASKBITS_DESCRIPTIONS = [

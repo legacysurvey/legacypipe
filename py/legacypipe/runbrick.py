@@ -716,26 +716,24 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
 
     if not minimal_coadds:
         # interim maskbits
-        from legacypipe.bits import IN_BLOB
+        from legacypipe.bits import IN_BLOB, maskbits_type
         from legacypipe.survey import clean_band_name
 
         MASKBITS = survey.get_maskbits()
 
         refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
         # Construct a mask bits map
-        maskbits = np.zeros((H,W), np.int32)
+        maskbits = np.zeros((H,W), maskbits_type)
         # !PRIMARY
         if not custom_brick:
             U = find_unique_pixels(targetwcs, W, H, None,
                                    brick.ra1, brick.ra2, brick.dec1, brick.dec2)
-            maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(np.int32)
+            maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(maskbits_type)
             del U
-        # BRIGHT
+        # reference-catalog masks
         if refmap is not None:
-            maskbits |= MASKBITS['BRIGHT']  * ((refmap & IN_BLOB['BRIGHT'] ) > 0)
-            maskbits |= MASKBITS['MEDIUM']  * ((refmap & IN_BLOB['MEDIUM'] ) > 0)
-            maskbits |= MASKBITS['GALAXY']  * ((refmap & IN_BLOB['GALAXY'] ) > 0)
-            maskbits |= MASKBITS['CLUSTER'] * ((refmap & IN_BLOB['CLUSTER']) > 0)
+            for key in ['BRIGHT', 'MEDIUM', 'GALAXY', 'CLUSTER', 'RESOLVED', 'CLOUDS']:
+                maskbits |= MASKBITS[key] * ((refmap & IN_BLOB[key]) > 0)
             del refmap
 
         cleanbands = [clean_band_name(b).upper() for b in bands]
@@ -746,7 +744,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                 if not bitname in MASKBITS:
                     warnings.warn('Skipping SATUR mask for band %s' % b)
                     continue
-                maskbits |= (MASKBITS[bitname] * sat).astype(np.int32)
+                maskbits |= (MASKBITS[bitname] * sat).astype(maskbits_type)
         # ALLMASK_{g,r,z}
         for b,allmask in zip(cleanbands, C.allmasks):
             bitname = 'ALLMASK_' + b
@@ -761,8 +759,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         hdr = copy_header_with_wcs(version_header, targetwcs)
         mbits = survey.get_maskbits_descriptions()
         hdr.add_record(dict(name='COMMENT', value='maskbits bits:'))
-        _add_bit_description(hdr, MASKBITS, mbits,
-                             'MB_%s', 'MBIT_%i', 'maskbit')
+        _add_bit_description(hdr, MASKBITS, mbits, 'MB_%s', 'MBIT_%i', 'maskbit')
         with survey.write_output('maskbits', brick=brickname, shape=maskbits.shape) as out:
             out.fits.write(maskbits, header=hdr, extname='MASKBITS')
 
@@ -2468,12 +2465,10 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(maskbits_type)
         del U
 
-    # BRIGHT
+    # reference-catalog masks
     if refmap is not None:
-        maskbits |= MASKBITS['BRIGHT']  * ((refmap & IN_BLOB['BRIGHT'] ) > 0)
-        maskbits |= MASKBITS['MEDIUM']  * ((refmap & IN_BLOB['MEDIUM'] ) > 0)
-        maskbits |= MASKBITS['GALAXY']  * ((refmap & IN_BLOB['GALAXY'] ) > 0)
-        maskbits |= MASKBITS['CLUSTER'] * ((refmap & IN_BLOB['CLUSTER']) > 0)
+        for key in ['BRIGHT', 'MEDIUM', 'GALAXY', 'CLUSTER', 'RESOLVED', 'CLOUDS']:
+            maskbits |= MASKBITS[key] * ((refmap & IN_BLOB[key]) > 0)
         del refmap
 
     cleanbands = [clean_band_name(b).upper() for b in bands]
@@ -2501,8 +2496,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # Add the maskbits header cards to version_header
     mbits = survey.get_maskbits_descriptions()
     version_header.add_record(dict(name='COMMENT', value='maskbits bits:'))
-    _add_bit_description(version_header, MASKBITS, mbits,
-                         'MB_%s', 'MBIT_%i', 'maskbit')
+    _add_bit_description(version_header, MASKBITS, mbits, 'MB_%s', 'MBIT_%i', 'maskbit')
 
     # Add the fitbits header cards to version_header
     version_header.add_record(dict(name='COMMENT', value='fitbits bits:'))
