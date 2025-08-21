@@ -3556,10 +3556,10 @@ def stage_writecat(
 
     version_header.add_record(dict(name='COMMENT', value='wisemask bits:'))
     bitvals = {}
-    bitdescrs = {}
+    bitdescrs = []
     for bitnum,name,comment in WISE_MASK_BITS:
         bitvals[1 << bitnum] = name
-        bitdescrs[name] = comment
+        bitdescrs.append((name, comment))
     _add_bit_description(version_header, bitvals, bitdescrs, 'WB_%s', 'WBIT_%s', 'wisemask')
 
     # Record the meaning of ALLMASK/ANYMASK bits
