@@ -3541,7 +3541,7 @@ def stage_writecat(
     '''
     from legacypipe.catalog import prepare_fits_catalog
     from legacypipe.utils import copy_header_with_wcs, add_bits
-    from legcaypipe.bits import WISE_MASK_BITS
+    from legacypipe.bits import WISE_MASK_BITS
 
     record_event and record_event('stage_writecat: starting')
     _add_stage_version(version_header, 'WCAT', 'writecat')
