@@ -128,9 +128,9 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     refs.in_bounds = ((refs.ibx >= 0) * (refs.ibx < W) *
                       (refs.iby >= 0) * (refs.iby < H))
 
-    # ensure bool columns
+    # ensure bool columns exist
     for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster', 'isgaia',
-                'istycho', 'donotfit', 'freezeparams']:
+                'istycho', 'donotfit', 'freezeparams', 'isresolved', 'iscloud']:
         if not col in refs.get_columns():
             refs.set(col, np.zeros(len(refs), bool))
     # Copy flags from the 'refs' table to the source objects themselves.
@@ -475,6 +475,8 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
                         max_radius=2.):
     # Note, max_radius must include the brick radius!
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
+    from legacypipe.bits import SGA_FITMODE
+
     galfn = survey.find_file('large-galaxies')
     if galfn is None:
         debug('No large-galaxies catalog file')
@@ -498,6 +500,13 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
 
     refcat, preburn = get_large_galaxy_version(galfn)
     debug('Large galaxies version: "%s", preburned?' % refcat, preburn)
+
+    # FIXME - just die?
+    if not 'fitmode' in galaxies.get_columns():
+        warnings.warn('No "fitmode" column in SGA catalog!  Assuming fitmode = 0!')
+        galaxies.fitmode = np.zeros(len(galaxies), np.uint8)
+    galaxies.isresolved = ((galaxies.fitmode & SGA_FITMODE['RESOLVED']) != 0)
+    galaxies.iscloud    = ((galaxies.fitmode & SGA_FITMODE['CLOUDS'])   != 0)
 
     if preburn:
         # SGA ellipse catalog
@@ -739,10 +748,13 @@ def get_reference_map(wcs, refs):
     cd = np.reshape(cd, (2,2)) / (pixscale / 3600.)
 
     # circular/elliptical regions:
-    for col,bit,ellipse in [('isbright', 'BRIGHT', False),
-                            ('ismedium', 'MEDIUM', False),
-                            ('iscluster', 'CLUSTER', True),
-                            ('islargegalaxy', 'GALAXY', True),]:
+    for col,bit,ellipse in [('isbright',      'BRIGHT',   False),
+                            ('ismedium',      'MEDIUM',   False),
+                            ('iscluster',     'CLUSTER',  True),
+                            ('islargegalaxy', 'GALAXY',   True),
+                            ('isresolved',    'RESOLVED', True),
+                            ('iscloud',       'CLOUDS',   True),
+                            ]:
         isit = refs.get(col)
         if not np.any(isit & (refs.radius > 0)):
             debug('None marked', col)

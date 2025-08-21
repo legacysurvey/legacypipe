@@ -110,6 +110,14 @@ REF_MAP_BITS = dict(
     CLOUDS   = 0x20, # SMC, LMC
 )
 
+# Bitmask assumed for the SGA2025 "fitmode"
+SGA_FITMODE = dict(
+    FREEZE = 0x1,
+    FIXGEO = 0x2,
+    RESOLVED = 0x4,
+    CLOUDS = 0x8,
+)
+
 MASKBITS_DESCRIPTIONS = [
     ('NPRIMARY',  'not primary brick area'),
     ('BRIGHT',    'bright star nearby'),
