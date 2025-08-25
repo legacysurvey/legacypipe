@@ -6,7 +6,6 @@ export COSMO=/dvs_ro/cfs/cdirs/cosmo
 
 export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
 outdir=$SCRATCH/dr11-gpu
-#outdir=$SCRATCH/dr11-nogpu
 
 export GAIA_CAT_DIR=$COSMO/data/gaia/dr3/healpix
 export GAIA_CAT_PREFIX=healpix
@@ -54,7 +53,7 @@ threads_per_gpu=""
 gpu_ids=""
 south=""
 
-while [[ $# -gt 0 ]]; do
+while [[ $# -gt 1 ]]; do
   key="$1"
   case $key in
     -brick)
@@ -172,6 +171,9 @@ echo "--------------------------------------------------------------------------
 #else
 #  gpumode=0
 #fi
+
+brick="$1"
+
 echo "BRICK = $brick"
 echo "GPUMODE = $gpumode"
 echo "GPU = $gpu"
@@ -185,8 +187,6 @@ echo "SUBBLOBS = $subblobs"
 echo "BLOBID = $blobid"
 echo "LOG = $log"
 
-#python -u $LEGACYPIPE_DIR/legacypipe/runbrick.py \
-#python -u -m cProfile -o brick.pro $LEGACYPIPE_DIR/legacypipe/runbrick.py \
 python -u $LEGACYPIPE_DIR/legacypipe/runbrick.py \
      --brick "$brick" \
         $zoom \
