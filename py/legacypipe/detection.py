@@ -16,7 +16,10 @@ def _detmap_gpu_batched(tims, targetwcs, apodize):
     #from scipy.ndimage.filters import gaussian_filter
     results = []
     for tim in tims:
-        R = tim.resamp # Already cached from the first step
+        if hasattr(tim, 'resamp'):
+            R = tim.resamp # Already cached from the first step
+        else:
+            R = tim_get_resamp(tim, targetwcs)
         if R is None:
             results.append((tim.band, None, None, None, None, None))
             continue
