@@ -15,6 +15,11 @@ def main():
     parser.add_argument('brick')
     parser.add_argument('--plots', default=False, action='store_true')
     opt = parser.parse_args()
+    results = compare(opt)
+
+
+def compare(opt):
+    results = dict()
 
     from legacypipe.survey import LegacySurveyData
 
@@ -56,6 +61,10 @@ def main():
     I,J,D = match_radec(trA.ra, trA.dec, trB.ra, trB.dec, radius/3600.)
     print('Matched %i pairs with %i and %i unique objects' % (len(I), len(np.unique(I)), len(np.unique(J))))
     print('Matched within %.3f arcsec: median distance %.3f arcsec' % (radius, np.median(D * 3600.)))
+
+    results['matched'] = len(I)
+    results['uniqueA'] = len(np.unique(I))
+    results['uniqueB'] = len(np.unique(J))
 
     # Cut to only mutually closest matches
     # index in trB of the closest match to each trA.
@@ -122,18 +131,24 @@ def main():
 
     unmatchedA = None
     unmatchedB = None
+    results['unmatchedA'] = 0
+    results['nnmatchedB'] = 0
     if len(I) < len(trA):
         U = report_unmatched(trA, surveyA, blobA, I, 'A')
         unmatchedA = trA[U]
+        results['unmatchedA'] = len(unmatchedA)
     if len(J) < len(trB):
         U = report_unmatched(trB, surveyB, blobB, J, 'B')
         unmatchedB = trB[U]
+        results['unmatchedB'] = len(unmatchedB)
 
     K = np.flatnonzero(mA.type == mB.type)
+    results['ndiff'] = 0
     if len(K) < len(mA):
         U = np.ones(len(mA))
         U[K] = False
         U = np.flatnonzero(U)
+        results['ndiff'] = len(U)
         print('Different types:')
         for u in U:
             ta = mA[u]
@@ -142,7 +157,8 @@ def main():
 
     worst = []
     bands = ['g','r','z']
-    for band in bands:
+    results['flux_sigdiff'] = np.zeros(len(bands))
+    for ib, band in enumerate(bands):
         fA = mA.get('flux_%s' % band)
         fB = mB.get('flux_%s' % band)
         ivA = mA.get('flux_ivar_%s' % band)
@@ -161,6 +177,7 @@ def main():
         print('          abs flux difference: median %.2f, max %.2f sigma' %
               (madsig, maxdiffsig))
         print('          number of differences above 1 sigma: %i' % np.sum(sigdiff > 1.))
+        results['flux_sigdiff'][ib] = np.sum(sigdiff > 1.)
         I = np.argsort(-sigdiff)
         for i in I[:10]:
             if sigdiff[i] < 1:
@@ -175,7 +192,10 @@ def main():
             worst.append(('flux %s' % band, sigdiff[I], I))
 
     print()
-    for typ in ['REX', 'EXP', 'DEV', 'SER']:
+    types = ['REX', 'EXP', 'DEV', 'SER']
+    confusion = np.zeros((len(types), len(types)))
+    results['type_sigdiff'] = np.zeros(len(types))
+    for it, typ in enumerate(types):
         Iboth = np.flatnonzero((mA.type == typ) * (mB.type == typ))
         print(len(Iboth), 'are type', typ, 'in both catalogs.')
         if len(Iboth) == 0:
@@ -197,6 +217,7 @@ def main():
         print('  radius: abs difference: median %.2f, max %.1f arcsec' % (mad, maxdiff))
         print('          abs difference: median %.2f, max %.2f sigma' % (madsig, maxdiffsig))
         print('          number of differences above 1 sigma: %i' % np.sum(sigdiff > 1.))
+        results['type_sigdiff'][it] = np.sum(sigdiff > 1.)
         I = np.argsort(-sigdiff)
         print('          largest sigma differences:')
         for i in I[:10]:
@@ -207,6 +228,17 @@ def main():
         I = I[sigdiff[I] > 1][:10]
         if len(I):
             worst.append(('radius: %s' % typ, sigdiff[I], I))
+
+        Ia = np.flatnonzero(mA.type == typ)
+        if len(Ia) == 0:
+            continue
+        for j, t2 in enumerate(types):
+            Jb = np.flatnonzero(mB.type[Ia] == t2)
+            if len(Jb) == 0:
+                continue
+            confusion[it,j] = float(len(Jb)) / float(len(Ia))
+    results['confusion'] = confusion
+
 
     if opt.plots:
         import pylab as plt
@@ -277,6 +309,7 @@ def main():
                            interpolation='nearest', origin='lower')
             plt.suptitle(name)
             ps.savefig()
+    return results
     
 if __name__ == '__main__':
     sys.exit(main())

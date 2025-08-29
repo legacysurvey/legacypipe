@@ -172,8 +172,6 @@ echo "--------------------------------------------------------------------------
 #  gpumode=0
 #fi
 
-brick="$1"
-
 echo "BRICK = $brick"
 echo "GPUMODE = $gpumode"
 echo "GPU = $gpu"
