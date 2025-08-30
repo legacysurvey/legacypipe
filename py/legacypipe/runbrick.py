@@ -413,7 +413,7 @@ def stage_refs(survey=None,
 
     record_event and record_event('stage_refs: starting')
     _add_stage_version(version_header, 'REFS', 'refs')
-    refstars,refcat = get_reference_sources(survey, targetwcs, pixscale, bands,
+    refstars,refcat = get_reference_sources(survey, targetwcs, bands,
                                             tycho_stars=tycho_stars,
                                             gaia_stars=gaia_stars,
                                             large_galaxies=large_galaxies,

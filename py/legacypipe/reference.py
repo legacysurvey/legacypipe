@@ -13,7 +13,7 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
-def get_reference_sources(survey, targetwcs, pixscale, bands,
+def get_reference_sources(survey, targetwcs, bands,
                           tycho_stars=True,
                           gaia_stars=True,
                           large_galaxies=True,
@@ -24,9 +24,11 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                           galaxy_margin=None):
     # If bands = None, does not create sources.
     from astrometry.libkd.spherematch import match_radec
+    from collections import Counter
 
     H,W = targetwcs.shape
     H,W = int(H),int(W)
+    pixscale = targetwcs.pixel_scale()
 
     # How big of a margin to search for bright stars and star clusters --
     # this should be based on the maximum radius they are considered to
