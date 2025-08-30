@@ -34,6 +34,8 @@ import numpy as np
 
 import fitsio
 
+from collections import Counter
+
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.ttime import Time
 
@@ -428,6 +430,7 @@ def stage_refs(survey=None,
         cols = ['ra', 'dec', 'ref_cat', 'ref_id', 'mag',
                 'istycho', 'isgaia', 'islargegalaxy', 'iscluster',
                 'isbright', 'ismedium', 'freezeparams', 'pointsource', 'donotfit', 'in_bounds',
+                'fitmode', 'isresolved', 'ismcloud',
                 'ba', 'pa', 'decam_mag_g', 'decam_mag_r', 'decam_mag_i', 'decam_mag_z',
                 'zguess', 'mask_mag', 'radius', 'keep_radius', 'radius_pix', 'ibx', 'iby',
                 'ref_epoch', 'pmra', 'pmdec', 'parallax',
@@ -846,6 +849,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
     from tractor import Catalog
     from legacypipe.detection import (detection_maps, merge_hot_satur,
                         run_sed_matched_filters, segment_and_group_sources)
+    from legacypipe.reference import get_reference_map
     from scipy.ndimage import binary_dilation
 
     record_event and record_event('stage_srcs: starting')
@@ -895,10 +899,28 @@ def stage_srcs(pixscale=None, targetwcs=None,
         avoid_x = avoid_y = avoid_r = np.array([], dtype=np.int32)
     del avoid_xyr
 
+    # Compile the list of reference objects that suppress new source detection.
+    refs_no_sourcedet = []
+    # anything in the Cluster catalog (.iscluster)
     if T_clusters is not None and len(T_clusters) > 0:
-        from legacypipe.reference import get_reference_map
-        info('Avoiding source detection in', len(T_clusters), 'CLUSTER masks')
-        avoid_map = (get_reference_map(targetwcs, T_clusters) != 0)
+        refs_no_sourcedet.append(T_clusters)
+    # Magellanic clouds
+    if refstars:
+        I = np.flatnonzero(refstars.ismcloud)
+        if len(I):
+            refs_no_sourcedet.append(refstars[I])
+    if len(refs_no_sourcedet):
+        refs_no_sourcedet = merge_tables(refs_no_sourcedet)
+        info('Suppressing source detection in reference catalog masks:', Counter([str(r) for r in refs_no_sourcedet.ref_cat]).most_common())
+        refs_no_sourcedet.about()
+        refmap = get_reference_map(targetwcs, refs_no_sourcedet)
+        from legacypipe.bits import REF_MAP_BITS
+        for name,bitval in REF_MAP_BITS.items():
+            n = np.sum((refmap & bitval) != 0)
+            if n:
+                print('Bit', name, 'set for', n, 'pixels')
+        avoid_map = (refmap != 0)
+        #avoid_map = (get_reference_map(targetwcs, refs_no_sourcedet) != 0)
 
     record_event and record_event('stage_srcs: detection maps')
     tnow = Time()
@@ -1584,7 +1606,6 @@ def stage_fitblobs(T=None,
     del remap
 
     # How many sources in each blob?
-    from collections import Counter
     ninblob = Counter(T.blob)
     ninblob[-1] = 0
     T.ninblob = np.array([ninblob[b] for b in T.blob]).astype(np.int32)
@@ -4740,8 +4761,6 @@ def get_runbrick_kwargs(survey=None,
         info(survey)
 
     survey.update_maskbits_bands(bands)
-    print('Maskbits:', survey.get_maskbits())
-    print('Maskbits descriptions:', survey.get_maskbits_descriptions())
 
     blobdir = opt.pop('blob_mask_dir', None)
     if blobdir is not None:

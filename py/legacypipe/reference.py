@@ -49,6 +49,7 @@ def get_reference_sources(survey, targetwcs, bands,
     if tycho_stars:
         tycho = read_tycho2(survey, marginwcs, bands)
         if tycho and len(tycho):
+            info('Found', len(tycho), 'Tycho-2 stars nearby')
             refs.append(tycho)
 
     # Add Gaia stars
@@ -62,6 +63,7 @@ def get_reference_sources(survey, targetwcs, bands,
             merge_gaia_tycho(gaia, tycho, plots=plots, ps=ps,
                              targetwcs=targetwcs)
         if gaia is not None and len(gaia) > 0:
+            info('Found', len(gaia), 'Gaia stars nearby')
             refs.append(gaia)
 
     # Read the catalog of star (open and globular) clusters and add them to the
@@ -69,15 +71,13 @@ def get_reference_sources(survey, targetwcs, bands,
     if star_clusters:
         clusters = read_star_clusters(marginwcs)
         if clusters is not None:
-            debug('Found', len(clusters), 'star clusters nearby')
+            info('Found', len(clusters), 'star clusters nearby')
             refs.append(clusters)
 
     # Read large galaxies nearby.
     if large_galaxies:
-        kw = {}
-        if galaxy_margin is not None:
-            kw.update(max_radius=galaxy_margin + np.hypot(H,W)/2.*pixscale/3600)
-        galaxies = read_large_galaxies(survey, targetwcs, bands, clean_columns=clean_columns, **kw)
+        galaxies = read_large_galaxies(survey, targetwcs, bands, clean_columns=clean_columns,
+                                       max_radius=galaxy_margin)
         if galaxies is not None:
             # Resolve possible Gaia-large-galaxy duplicates
             if gaia and len(gaia):
@@ -93,6 +93,7 @@ def get_reference_sources(survey, targetwcs, bands,
                 debug('Matched', len(I), 'large galaxies to Tycho-2 stars.')
                 if len(I):
                     tycho.donotfit[J] = True
+            info('Found', len(galaxies), 'large galaxies nearby')
             refs.append(galaxies)
 
     if len(refs):
@@ -129,10 +130,12 @@ def get_reference_sources(survey, targetwcs, bands,
     # mark ones that are actually inside the brick area.
     refs.in_bounds = ((refs.ibx >= 0) * (refs.ibx < W) *
                       (refs.iby >= 0) * (refs.iby < H))
+    info('Reference sources touching this brick:', Counter([str(r) for r in refs.ref_cat]).most_common())
+    info('Reference sources within this brick:', Counter([str(r) for r in refs.ref_cat[refs.in_bounds]]).most_common())
 
     # ensure bool columns exist
     for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster', 'isgaia',
-                'istycho', 'donotfit', 'freezeparams', 'isresolved', 'iscloud']:
+                'istycho', 'donotfit', 'freezeparams', 'isresolved', 'ismcloud']:
         if not col in refs.get_columns():
             refs.set(col, np.zeros(len(refs), bool))
     # Copy flags from the 'refs' table to the source objects themselves.
@@ -474,26 +477,98 @@ def get_large_galaxy_version(fn):
 
 def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
                         extra_columns=None,
-                        max_radius=2.):
-    # Note, max_radius must include the brick radius!
+                        max_radius=None):
+    from astrometry.util.starutil_numpy import degrees_between
+    from legacypipe.bits import SGA_FITMODE, sga_fitmode_type
+
+    # max_radius (in deg) should be the largest radius in the SGA catalog!
+    if max_radius is None:
+        max_radius = 2.
+
+    galaxy_tables = []
+
+    rc,dc = targetwcs.radec_center()
+    brick_radius = targetwcs.radius()
+    max_radius += brick_radius
+
+    # Hard-coded Magellanic clouds
+    # (ra, dec, diam_arcmin, b/a, PA):
+    # LMC = (80.894167, -69.756111, 645.65, 0.85, 171.)
+    # SMC = (13.186667, -72.828611, 380.19, 0.64, 45.)
+    mclouds = fits_table()
+    mclouds.ra   = np.array([80.894167, 13.186667])
+    mclouds.dec  = np.array([-69.756111, -72.828611])
+    mclouds.diam = np.array([645.65, 380.19])
+    mclouds.ba   = np.array([0.85, 0.64])
+    mclouds.pa   = np.array([171., 45.])
+    mclouds.ref_cat = np.array(['MC', 'MC'])
+    mclouds.ref_id  = np.array([1, 2])
+    mclouds.name    = np.array(['LMC', 'SMC'])
+    mclouds.radius  = mclouds.diam / 2. / 60.
+    d = degrees_between(rc, dc, mclouds.ra, mclouds.dec)
+    touch = (d < brick_radius + mclouds.radius)
+    if np.any(touch):
+        mclouds.cut(touch)
+        mclouds.fitmode = np.array([SGA_FITMODE['MCLOUDS']]*len(mclouds), sga_fitmode_type)
+        mclouds.preburned = np.array([False] * len(mclouds))
+        mclouds.mag = np.array([0.] * len(mclouds))
+        print('Overlaps Magellanic cloud:', mclouds.name)
+        galaxy_tables.append(mclouds)
+    del mclouds
+
+    galaxies = read_sga(survey, rc, dc, max_radius)
+    if galaxies is not None:
+        galaxy_tables.append(galaxies)
+
+    galaxies = merge_tables(galaxy_tables, columns='fillzero')
+
+    galaxies.isresolved = ((galaxies.fitmode & SGA_FITMODE['RESOLVED']) != 0)
+    galaxies.ismcloud   = ((galaxies.fitmode & SGA_FITMODE['MCLOUDS' ]) != 0)
+
+    galaxies.sources = np.empty(len(galaxies), object)
+    galaxies.sources[:] = None
+    if bands is not None:
+        galaxies.sources[:] = get_galaxy_sources(galaxies, bands)
+
+    if clean_columns:
+        keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
+                        'sources', 'islargegalaxy', 'freezeparams', 'keep_radius',
+                        'fitmode', 'isresolved', 'ismcloud']
+        if extra_columns is not None:
+            keep_columns.extend(extra_columns)
+        for c in galaxies.get_columns():
+            if not c in keep_columns:
+                galaxies.delete_column(c)
+    '''
+    Desired behaviors.
+
+    Parent catalog:
+    - if overlaps LMC/SMC mask,
+      - no new source detection (only Gaia and SGA)
+      - in DR10, we did this by setting CLUSTER
+      - add new MASKBITS bit: MCLOUDS (LMC/SMC), same behavior as CLUSTER
+    - ignore LMC/SMC SGA sources
+      - don't want to set GALAXY
+    '''
+    return galaxies
+
+def read_sga(survey, rc, dc, max_radius):
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
-    from legacypipe.bits import SGA_FITMODE
+    from legacypipe.bits import SGA_FITMODE, sga_fitmode_type
 
     galfn = survey.find_file('large-galaxies')
     if galfn is None:
-        debug('No large-galaxies catalog file')
+        warnings.warn('No large-galaxies catalog (SGA) file!')
         return None
-    radius = max_radius
-    rc,dc = targetwcs.radec_center()
 
     debug('Reading', galfn)
     try:
         kd = tree_open(galfn, 'stars')
     except:
         kd = tree_open(galfn, 'largegals')
-    I = tree_search_radec(kd, rc, dc, radius)
+    I = tree_search_radec(kd, rc, dc, max_radius)
     debug('%i large galaxies within %.3g deg of RA,Dec (%.3f, %.3f)' %
-          (len(I), radius, rc,dc))
+          (len(I), max_radius, rc,dc))
     if len(I) == 0:
         return None
     # Read only the rows within range.
@@ -536,18 +611,6 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
         if 'sga_id' in galaxies.columns():
             galaxies.rename('sga_id', 'ref_id')
 
-    '''
-    Desired behaviors.
-
-    Parent catalog:
-    - if overlaps LMC/SMC mask,
-      - no new source detection (only Gaia and SGA)
-      - in DR10, we did this by setting CLUSTER
-      - add new MASKBITS bit: MCLOUDS (LMC/SMC), same behavior as CLUSTER
-    - ignore LMC/SMC SGA sources
-      - don't want to set GALAXY
-
-    '''
     if 'mag_leda' in galaxies.columns():
         galaxies.rename('mag_leda', 'mag')
 
@@ -557,21 +620,9 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
         galaxies.radius = np.maximum(0., galaxies.d26 / 2. / 60.) # [degree]
     else:
         galaxies.radius = np.maximum(0., galaxies.diam / 2. / 60.) # [degree]
+
     galaxies.keep_radius = 2. * galaxies.radius
-    galaxies.sources = np.empty(len(galaxies), object)
-    galaxies.sources[:] = None
 
-    if bands is not None:
-        galaxies.sources[:] = get_galaxy_sources(galaxies, bands)
-
-    if clean_columns:
-        keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
-                        'sources', 'islargegalaxy', 'freezeparams', 'keep_radius']
-        if extra_columns is not None:
-            keep_columns.extend(extra_columns)
-        for c in galaxies.get_columns():
-            if not c in keep_columns:
-                galaxies.delete_column(c)
     return galaxies
 
 def get_galaxy_sources(galaxies, bands):
@@ -615,7 +666,7 @@ def get_galaxy_sources(galaxies, bands):
         debug('i:', mag_i[:10])
         cols = galaxies.get_columns()
 
-    # Does the SGA catalog has flux_ columns for all the bands we're working with?
+    # Does the SGA catalog have flux_ columns for all the bands we're working with?
     missing_band = False
     has_band = {}
     for band in bands:
@@ -753,7 +804,7 @@ def get_reference_map(wcs, refs):
                             ('iscluster',     'CLUSTER',  True),
                             ('islargegalaxy', 'GALAXY',   True),
                             ('isresolved',    'RESOLVED', True),
-                            ('iscloud',       'MCLOUDS',  True),
+                            ('ismcloud',      'MCLOUDS',  True),
                             ]:
         isit = refs.get(col)
         if not np.any(isit & (refs.radius > 0)):
