@@ -520,6 +520,8 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
     if galaxies is not None:
         galaxy_tables.append(galaxies)
 
+    if len(galaxy_tables) == 0:
+        return None
     galaxies = merge_tables(galaxy_tables, columns='fillzero')
 
     galaxies.isresolved = ((galaxies.fitmode & SGA_FITMODE['RESOLVED']) != 0)
