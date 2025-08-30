@@ -506,7 +506,7 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
         warnings.warn('No "fitmode" column in SGA catalog!  Assuming fitmode = 0!')
         galaxies.fitmode = np.zeros(len(galaxies), np.uint8)
     galaxies.isresolved = ((galaxies.fitmode & SGA_FITMODE['RESOLVED']) != 0)
-    galaxies.iscloud    = ((galaxies.fitmode & SGA_FITMODE['CLOUDS'])   != 0)
+    galaxies.iscloud    = ((galaxies.fitmode & SGA_FITMODE['MCLOUDS'])   != 0)
 
     if preburn:
         # SGA ellipse catalog
@@ -543,7 +543,7 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
     - if overlaps LMC/SMC mask,
       - no new source detection (only Gaia and SGA)
       - in DR10, we did this by setting CLUSTER
-      - add new MASKBITS bit: CLOUDS (LMC/SMC), same behavior as CLUSTER
+      - add new MASKBITS bit: MCLOUDS (LMC/SMC), same behavior as CLUSTER
     - ignore LMC/SMC SGA sources
       - don't want to set GALAXY
 
@@ -753,7 +753,7 @@ def get_reference_map(wcs, refs):
                             ('iscluster',     'CLUSTER',  True),
                             ('islargegalaxy', 'GALAXY',   True),
                             ('isresolved',    'RESOLVED', True),
-                            ('iscloud',       'CLOUDS',   True),
+                            ('iscloud',       'MCLOUDS',  True),
                             ]:
         isit = refs.get(col)
         if not np.any(isit & (refs.radius > 0)):

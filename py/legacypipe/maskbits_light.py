@@ -43,7 +43,7 @@ def write_maskbits_light(survey, brick, brickname, version_header,
 
     refmap = get_reference_map(targetwcs, refstars)
     if refmap is not None:
-        for key in ['BRIGHT', 'MEDIUM', 'GALAXY', 'CLUSTER', 'RESOLVED', 'CLOUDS']:
+        for key in ['BRIGHT', 'MEDIUM', 'GALAXY', 'CLUSTER', 'RESOLVED', 'MCLOUDS']:
             maskbits |= MASKBITS[key] * ((refmap & REF_MAP_BITS[key]) > 0)
         del refmap
 

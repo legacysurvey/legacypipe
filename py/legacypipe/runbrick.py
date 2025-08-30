@@ -732,7 +732,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
             del U
         # reference-catalog masks
         if refmap is not None:
-            for key in ['BRIGHT', 'MEDIUM', 'GALAXY', 'CLUSTER', 'RESOLVED', 'CLOUDS']:
+            for key in ['BRIGHT', 'MEDIUM', 'GALAXY', 'CLUSTER', 'RESOLVED', 'MCLOUDS']:
                 maskbits |= MASKBITS[key] * ((refmap & REF_MAP_BITS[key]) > 0)
             del refmap
 
@@ -2467,7 +2467,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
     # reference-catalog masks
     if refmap is not None:
-        for key in ['BRIGHT', 'MEDIUM', 'GALAXY', 'CLUSTER', 'RESOLVED', 'CLOUDS']:
+        for key in ['BRIGHT', 'MEDIUM', 'GALAXY', 'CLUSTER', 'RESOLVED', 'MCLOUDS']:
             maskbits |= MASKBITS[key] * ((refmap & REF_MAP_BITS[key]) > 0)
         del refmap
 

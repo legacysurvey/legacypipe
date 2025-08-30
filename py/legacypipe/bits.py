@@ -96,26 +96,26 @@ MASKBITS = dict(
     ALLMASK_I  = 0x8000,
     SUB_BLOB   = 0x10000,
     RESOLVED   = 0x20000, # Within a local dwarf galaxy whose stars are resolved
-    CLOUDS     = 0x40000, # Within one of the Magellanic Clouds
+    MCLOUDS    = 0x40000, # Within one of the Magellanic Clouds
 )
 
 # Bits used internally for reference masks; these fit in a uint8,
 # and get transferred to MASKBITS at the end of the pipeline.
 REF_MAP_BITS = dict(
-    BRIGHT  = 0x1,   # "bright" star
-    MEDIUM  = 0x2,   # "medium-bright" star
-    CLUSTER = 0x4,   # Globular cluster
-    GALAXY  = 0x8,   # large SGA galaxy
+    BRIGHT   = 0x1,   # "bright" star
+    MEDIUM   = 0x2,   # "medium-bright" star
+    CLUSTER  = 0x4,   # Globular cluster
+    GALAXY   = 0x8,   # large SGA galaxy
     RESOLVED = 0x10, # nearby dwarf galaxy resolved into stars
-    CLOUDS   = 0x20, # SMC, LMC
+    MCLOUDS  = 0x20, # SMC, LMC
 )
 
 # Bitmask assumed for the SGA2025 "fitmode"
 SGA_FITMODE = dict(
-    FREEZE = 0x1,
-    FIXGEO = 0x2,
+    FREEZE   = 0x1,
+    FIXGEO   = 0x2,
     RESOLVED = 0x4,
-    CLOUDS = 0x8,
+    MCLOUDS  = 0x8,
 )
 
 MASKBITS_DESCRIPTIONS = [
@@ -137,7 +137,7 @@ MASKBITS_DESCRIPTIONS = [
     ('ALLMASK_I', 'any ALLMASK_I bit set'),
     ('SUB_BLOB',  'large blobs broken up'),
     ('RESOLVED',  'local dwarf galaxy'),
-    ('CLOUDS',    'Magellanic Cloud'),
+    ('MCLOUDS',   'Magellanic Cloud'),
 ]
 
 # This is signed, not unsigned, because int32 is a supported FITS data type, uint32 isn't really
