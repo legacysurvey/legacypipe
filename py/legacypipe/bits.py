@@ -117,6 +117,7 @@ SGA_FITMODE = dict(
     RESOLVED = 0x4,
     MCLOUDS  = 0x8,
 )
+sga_fitmode_type = np.uint8
 
 MASKBITS_DESCRIPTIONS = [
     ('NPRIMARY',  'not primary brick area'),

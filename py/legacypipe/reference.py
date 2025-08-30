@@ -504,9 +504,7 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
     # FIXME - just die?
     if not 'fitmode' in galaxies.get_columns():
         warnings.warn('No "fitmode" column in SGA catalog!  Assuming fitmode = 0!')
-        galaxies.fitmode = np.zeros(len(galaxies), np.uint8)
-    galaxies.isresolved = ((galaxies.fitmode & SGA_FITMODE['RESOLVED']) != 0)
-    galaxies.iscloud    = ((galaxies.fitmode & SGA_FITMODE['MCLOUDS'])   != 0)
+        galaxies.fitmode = np.zeros(len(galaxies), sga_fitmode_type)
 
     if preburn:
         # SGA ellipse catalog
