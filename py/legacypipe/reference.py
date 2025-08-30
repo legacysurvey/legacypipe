@@ -796,7 +796,8 @@ def get_reference_map(wcs, refs):
     refmap = np.zeros((H,W), np.uint8)
     pixscale = wcs.pixel_scale()
     cd = wcs.cd
-    cd = np.reshape(cd, (2,2)) / (pixscale / 3600.)
+    cd_pix = np.reshape(cd, (2,2)) / (pixscale / 3600.)
+    #debug('Scaled CD matrix:', cd_pix)
 
     # circular/elliptical regions:
     for col,bit,ellipse in [('isbright',      'BRIGHT',   False),
@@ -832,6 +833,9 @@ def get_reference_map(wcs, refs):
             xhi = int(np.clip(np.ceil (x+1 + rpix), 0, W))
             ylo = int(np.clip(np.floor(y   - rpix), 0, H))
             yhi = int(np.clip(np.ceil (y+1 + rpix), 0, H))
+            # debug('Reference source location: x,y (%.1f, %.1f)' % (x, y))
+            # debug('xlo, xhi', xlo, xhi)
+            # debug('ylo, yhi', ylo, yhi)
             if xlo == xhi or ylo == yhi:
                 continue
             bitval = np.uint8(REF_MAP_BITS[bit])
@@ -841,21 +845,39 @@ def get_reference_map(wcs, refs):
                 masked = (rr <= rpix**2)
             else:
                 # *should* have ba and pa if we got here...
-                xgrid,ygrid = np.meshgrid(np.arange(xlo,xhi), np.arange(ylo,yhi))
-                dx = xgrid - x
-                dy = ygrid - y
+                dx, dy = np.meshgrid(np.arange(xlo,xhi) - x,
+                                     np.arange(ylo,yhi) - y)
                 # Rotate to "intermediate world coords" via the unit-scaled CD matrix
-                du = cd[0][0] * dx + cd[0][1] * dy
-                dv = cd[1][0] * dx + cd[1][1] * dy
+                du = cd_pix[0][0] * dx + cd_pix[0][1] * dy
+                dv = cd_pix[1][0] * dx + cd_pix[1][1] * dy
                 debug('Object: PA', ref.pa, 'BA', ref.ba, 'Radius', ref.radius, 'pix', rpix)
+                # debug('corners:')
+                # debug('dx:', dx[0,0], dx[0,-1], dx[-1,0], dx[-1,-1])
+                # debug('dy:', dy[0,0], dy[0,-1], dy[-1,0], dy[-1,-1])
+                # debug('r(x,y):',
+                #       np.hypot(dx[0,0], dy[0,0]), np.hypot(dx[0,-1], dy[0,-1]),
+                #       np.hypot(dx[-1,0], dy[-1,0]), np.hypot(dx[-1,-1], dy[-1,-1]))
+                # debug('du:', du[0,0], du[0,-1], du[-1,0], du[-1,-1])
+                # debug('dv:', dv[0,0], dv[0,-1], dv[-1,0], dv[-1,-1])
+                # debug('r(u,v):',
+                #       np.hypot(du[0,0],   dv[0,0]), np.hypot(du[0,-1],  dv[0,-1]),
+                #       np.hypot(du[-1,0],  dv[-1,0]), np.hypot(du[-1,-1], dv[-1,-1]))
                 if not np.isfinite(ref.pa):
                     ref.pa = 0.
                 ct = np.cos(np.deg2rad(90.+ref.pa))
                 st = np.sin(np.deg2rad(90.+ref.pa))
                 v1 = ct * du + -st * dv
                 v2 = st * du +  ct * dv
-                r1 = rpix
-                r2 = rpix * ref.ba
+                # debug('v1:', v1[0,0], v1[0,-1], v1[-1,0], v1[-1,-1])
+                # debug('v2:', v2[0,0], v2[0,-1], v2[-1,0], v2[-1,-1])
+                # debug('r(v1,v2):',
+                #       np.hypot(v1[0,0],   v2[0,0]), np.hypot(v1[0,-1],  v2[0,-1]),
+                #       np.hypot(v1[-1,0],  v2[-1,0]), np.hypot(v1[-1,-1], v2[-1,-1]))
+                r1 = float(rpix)
+                r2 = float(rpix) * ref.ba
                 masked = (v1**2 / r1**2 + v2**2 / r2**2 < 1.)
+                #e = (v1**2 / r1**2 + v2**2 / r2**2)
+                #debug('ellipse ratio:', e[0,0], e[0,-1], e[-1,0], e[-1,-1])
+                debug('Masking', np.sum(masked), 'of', len(v1.flat), 'pixels')
             refmap[ylo:yhi, xlo:xhi] |= (bitval * masked)
     return refmap
