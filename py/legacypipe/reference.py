@@ -238,10 +238,10 @@ def read_gaia(wcs, bands):
     debug('Got', len(gaia), 'Gaia stars nearby')
 
     fix_gaia(gaia, bands)
-    # NOTE, must initialize gaia.sources array this way, or else numpy
-    # will try to be clever and create a 2-d array, because GaiaSource is
-    # iterable.
+
     gaia.sources = np.empty(len(gaia), object)
+    # np.empty seems to already initialize to "None", but just to be sure...
+    gaia.sources[:] = None
     if bands is not None:
         for i,g in enumerate(gaia):
             gaia.sources[i] = GaiaSource.from_catalog(g, bands)
