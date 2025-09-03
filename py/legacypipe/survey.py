@@ -1063,9 +1063,6 @@ class LegacySurveyData(object):
         Go through self.maskbits and self.maskbits_descriptions,
         updating the current bands (default GRZI) that have SATUR_ and
         ALLMASK_ entries.  Reuse these same bits in order.
-
-        This method exists for the convenience of subclassers, eg in
-        runs.py.
         '''
         oldbits_satur = []
         oldbits_allmask = []
@@ -1092,6 +1089,7 @@ class LegacySurveyData(object):
         nextbit = maxbit << 1
         for band in bands:
             bandname = clean_band_name(band)
+            bandname = bandname.upper()
             # SATUR_
             if len(oldbits_satur):
                 bitval = oldbits_satur.pop(0)

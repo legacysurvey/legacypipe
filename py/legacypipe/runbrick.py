@@ -747,14 +747,14 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                 if not bitname in MASKBITS:
                     warnings.warn('Skipping SATUR mask for band %s' % b)
                     continue
-                maskbits |= (MASKBITS[bitname] * sat).astype(maskbits_type)
+                maskbits |= (maskbits_type(MASKBITS[bitname]) * sat).astype(maskbits_type)
         # ALLMASK_{g,r,z}
         for b,allmask in zip(cleanbands, C.allmasks):
             bitname = 'ALLMASK_' + b
             if not bitname in MASKBITS:
                 warnings.warn('Skipping ALLMASK for band %s' % b)
                 continue
-            maskbits |= (MASKBITS[bitname] * (allmask > 0))
+            maskbits |= (maskbits_type(MASKBITS[bitname]) * (allmask > 0)).astype(maskbits_type)
 
         # omitting WISE, BAILOUT, SUB_BLOB
 
@@ -2489,7 +2489,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # reference-catalog masks
     if refmap is not None:
         for key in ['BRIGHT', 'MEDIUM', 'GALAXY', 'CLUSTER', 'RESOLVED', 'MCLOUDS']:
-            maskbits |= MASKBITS[key] * ((refmap & REF_MAP_BITS[key]) > 0)
+            maskbits |= (MASKBITS[key] * ((refmap & REF_MAP_BITS[key]) > 0)).astype(maskbits_type)
         del refmap
 
     cleanbands = [clean_band_name(b).upper() for b in bands]
@@ -2498,21 +2498,24 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         for b, sat in zip(cleanbands, saturated_pix):
             key = 'SATUR_' + b
             if key in MASKBITS:
-                maskbits |= (MASKBITS[key] * sat).astype(maskbits_type)
-
+                maskbits |= (maskbits_type(MASKBITS[key]) * sat).astype(maskbits_type)
+            else:
+                print('SATUR key %s not in MASKBITS' % key)
     # ALLMASK_{g,r,z}
     for b,allmask in zip(cleanbands, C.allmasks):
         key = 'ALLMASK_' + b
         if key in MASKBITS:
-            maskbits |= (MASKBITS[key] * (allmask > 0))
+            maskbits |= (maskbits_type(MASKBITS[key]) * (allmask > 0)).astype(maskbits_type)
+        else:
+            print('ALLMASK key %s not in MASKBITS' % key)
 
     # BAILOUT
     if bailout_mask is not None:
-        maskbits |= MASKBITS['BAILOUT'] * bailout_mask.astype(bool)
+        maskbits |= (MASKBITS['BAILOUT'] * bailout_mask.astype(bool)).astype(maskbits_type)
 
     # SUB_BLOB
     if sub_blob_mask is not None:
-        maskbits |= MASKBITS['SUB_BLOB'] * sub_blob_mask.astype(bool)
+        maskbits |= (MASKBITS['SUB_BLOB'] * sub_blob_mask.astype(bool)).astype(maskbits_type)
 
     # Add the maskbits header cards to version_header
     mbits = survey.get_maskbits_descriptions()
