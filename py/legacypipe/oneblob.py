@@ -21,12 +21,12 @@ from legacypipe.utils import get_cpu_arch
 
 import os
 
-from tractor.lsqr_optimizer import printTiming as lpt
-from tractor.constrained_optimizer import printTiming as cpt
-from tractor.gpu_lsqr_optimizer import printTiming as gpt
-from tractor.engine import printTiming as ept
-from tractor.optimize import printTiming as oopt
-from detection import printTiming as dpt
+#from tractor.lsqr_optimizer import printTiming as lpt
+#from tractor.constrained_optimizer import printTiming as cpt
+#from tractor.gpu_lsqr_optimizer import printTiming as gpt
+#from tractor.engine import printTiming as ept
+#from tractor.optimize import printTiming as oopt
+#from detection import printTiming as dpt
 
 rgbkwargs_resid = dict(resids=True)
 
@@ -109,6 +109,7 @@ def one_blob(X):
                  large_galaxies_force_pointsource,
                  less_masking, frozen_galaxies, iblob=iblob)
     opt = ob.trargs['optimizer']
+    print ("OPT", opt)
     if use_gpu:
         # need a branch of the tractor code that supports this!
         print ("Using GPUFriendlyOptimizer")
@@ -139,12 +140,12 @@ def one_blob(X):
     print ("RMS", trn[4])
     print ("MSOS", trm[2])
     print ("Opt", to, to.sum())
-    lpt()
-    cpt()
-    gpt()
-    ept()
-    oopt()
-    dpt()
+    #lpt()
+    #cpt()
+    #gpt()
+    #ept()
+    #oopt()
+    #dpt()
     #if bid is not None and iblob == bid:
     #    print ("Exiting.")
     #    import sys
@@ -781,9 +782,16 @@ class OneBlob(object):
         B.all_model_opt_steps     = np.array([{} for i in range(N)])
 
         # Model selection for sources, in decreasing order of brightness
+        print ("LEN CAT = ", len(cat))
         for numi,srci in enumerate(Ibright):
-            print ("Blob ", self.name, "SRC ", srci)
+            print ("Blob ", self.name, "SRC ", srci, "NUMI", numi)
+            #UNCOMMENT this to run only SRC 1
+            #if srci != 1:
+            #    print ("SKIPPING SRC ",srci)
+            #    continue
             src = cat[srci]
+            print ('Model selection for source %i of %i in blob %s; sourcei %i' %
+                  (numi+1, len(Ibright), self.name, srci))
             debug('Model selection for source %i of %i in blob %s; sourcei %i' %
                   (numi+1, len(Ibright), self.name, srci))
             cpu0 = time.process_time()
@@ -843,7 +851,6 @@ class OneBlob(object):
 
         t2 = time.time()
         if iterative_detection:
-
             if self.plots and False:
                 # One plot per tim is a little much, even for me...
                 import pylab as plt
@@ -1317,6 +1324,7 @@ class OneBlob(object):
             mm = []
             totalpix = 0
             for tim in srctims:
+                print ("TIM", tim)
                 # Zero out inverse-errors for all pixels outside
                 # 'dilated'.
                 try:
@@ -1429,6 +1437,7 @@ class OneBlob(object):
             return None
 
         if is_galaxy:
+            print ("IS GALAXY")
             # SGA galaxy: set the maximum allowed r_e.
             known_galaxy_logrmax = 0.
             if isinstance(src, (DevGalaxy,ExpGalaxy, SersicGalaxy)):
@@ -1468,7 +1477,7 @@ class OneBlob(object):
         srccat[0] = None
 
         if fit_background:
-            #print ("ENTERING OPTIMIZE 1 - ", type(srctractor), srctractor.optimize_loop)
+            print ("ENTERING OPTIMIZE 1 - ", type(srctractor), srctractor.optimize_loop)
             t2 = time.time()
             srctractor.optimize_loop(**self.optargs)
             to[0] += time.time()-t2
@@ -1522,6 +1531,7 @@ class OneBlob(object):
 
         cputimes = {}
         for name,newsrc in trymodels:
+            print ("NAME", name, "NEWSRC", newsrc)
             cpum0 = time.process_time()
 
             if name == 'gals':
@@ -1554,11 +1564,13 @@ class OneBlob(object):
 
             # Set maximum galaxy model sizes
             if is_galaxy:
+                print ("ISGAL2")
                 # This is a known large galaxy -- set max size based on initial size.
                 logrmax = known_galaxy_logrmax
                 if name in ('rex', 'exp', 'dev', 'ser'):
                     newsrc.shape.setMaxLogRadius(logrmax)
             else:
+                print ("NOTGAL2")
                 # FIXME -- could use different fractions for deV vs exp (or comp)
                 fblob = 0.8
                 sh,sw = srcwcs.shape
@@ -1581,7 +1593,7 @@ class OneBlob(object):
             # First-round optimization (during model selection)
             print('OneBlob before model selection:', newsrc)
             try:
-                #print ("ENTERING OPTIMIZE 2 - ", type(srctractor), srctractor.optimize_loop)
+                print ("ENTERING OPTIMIZE 2 - ", type(srctractor), srctractor.optimize_loop)
                 t2 = time.time()
                 R = srctractor.optimize_loop(**self.optargs)
                 to[1] += time.time()-t2
@@ -1629,12 +1641,15 @@ class OneBlob(object):
             ix = int(ix-1)
             iy = int(iy-1)
             sh,sw = srcblobmask.shape
+            print ("FINAL OneBlob NEWSRC", newsrc)
             if is_galaxy:
+                print ("IS GALAXY2")
                 # Allow (SGA) galaxies to exit the blob
                 pass
             elif ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
                 # Exited blob!
                 debug('Source exited sub-blob!')
+                print ("Exited subblob")
                 if mask_others:
                     for ie,tim in zip(saved_srctim_ies, srctims):
                         #tim.inverr = ie

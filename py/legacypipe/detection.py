@@ -193,7 +193,7 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None, use_gp
     except Exception as ex:
         mpp = -1
     tdet[0] += time.time()-t
-    print ("LEN DET", len(detmaps), len(detivs), len(satmaps), len(bands), H, W, len(tims), tdet, mpp)
+    #print ("LEN DET", len(detmaps), len(detivs), len(satmaps), len(bands), H, W, len(tims), tdet, mpp)
     return detmaps, detivs, satmaps
 
 def detection_maps_gpu(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
@@ -273,7 +273,7 @@ def detection_maps_gpu(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
              satmaps[i] = (satmaps[i] >= nsatur)
     gdet[2] += time.time()-tx
     gdet[0] += time.time()-t
-    print ("LEN GDET", len(detmaps), len(detivs), len(satmaps), len(bands), H, W, len(tims), gdet)
+    #print ("LEN GDET", len(detmaps), len(detivs), len(satmaps), len(bands), H, W, len(tims), gdet)
     return detmaps, detivs, satmaps
 
 def sed_matched_filters(bands):
