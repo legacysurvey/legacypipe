@@ -81,8 +81,14 @@ class SimpleCoadd(object):
             assert(apertures is not None)
             (ra,dec) = apradec
             ok,xx,yy = self.wcs.radec2pixelxy(ra, dec)
-            assert(np.all(ok))
+            if not np.all(ok):
+                Ibad = np.flatnonzero(~ok)
+                info('While aperture-photometering a coadd: %i RA,Dec positions' % np.sum(~ok),
+                     'could not be converted to X,Y pixel space.  RAs:', ra[Ibad], 'Decs:', dec[Ibad])
+            Iap = np.flatnonzero(ok)
             del ok
+            xx = xx[Iap]
+            yy = yy[Iap]
             apxy = np.vstack((xx - 1., yy - 1.)).T
             ap_iphots = [np.zeros((len(ra), len(apertures)), np.float32)
                          for band in self.bands]
@@ -128,13 +134,13 @@ class SimpleCoadd(object):
                 for irad,rad in enumerate(apertures):
                     aper = CircularAperture(apxy, rad)
                     p = aperture_photometry(coimg, aper, error=imsigma, mask=mask)
-                    ap_iphots[iband][:,irad] = p.field('aperture_sum')
-                    ap_dphots[iband][:,irad] = p.field('aperture_sum_err')
+                    ap_iphots[iband][Iap,irad] = p.field('aperture_sum')
+                    ap_dphots[iband][Iap,irad] = p.field('aperture_sum_err')
                     p = aperture_photometry(coimg - comod, aper, mask=mask)
-                    ap_rphots[iband][:,irad] = p.field('aperture_sum')
+                    ap_rphots[iband][Iap,irad] = p.field('aperture_sum')
 
                 if self.do_detivs:
-                    psfdepths[iband][:] = self.co_detivs[band][yy,xx]
+                    psfdepths[iband][Iap] = self.co_detivs[band][yy,xx]
 
         self.write_color_image(survey, brickname, coimgs, comods)
 
