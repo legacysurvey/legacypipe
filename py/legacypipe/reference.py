@@ -453,7 +453,7 @@ def fix_tycho(tycho):
     tycho.donotfit = np.zeros(len(tycho), bool)
 
 def get_large_galaxy_version(fn):
-    preburn = False
+    ellipse = False
     hdr = fitsio.read_header(fn)
     try:
         # SGA2025
@@ -464,16 +464,16 @@ def get_large_galaxy_version(fn):
         if v is not None:
             v = v.strip()
             if 'ellipse' in v.lower():
-                preburn = True
+                ellipse = True
                 v, _ = v.split('-')
             assert(len(v) == 2)
-            return v, preburn
+            return v, ellipse
     except KeyError:
         pass
     for k in ['3.0', '2.0']:
         if k in fn:
-            return 'L'+k[0], preburn
-    return 'LG', preburn
+            return 'L'+k[0], ellipse
+    return 'LG', ellipse
 
 def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
                         extra_columns=None,
@@ -577,16 +577,17 @@ def read_sga(survey, rc, dc, max_radius):
     galaxies = fits_table(galfn, rows=I)
     del kd
 
-    refcat, preburn = get_large_galaxy_version(galfn)
-    debug('Large galaxies version: "%s", preburned?' % refcat, preburn)
+    refcat, is_ellipse = get_large_galaxy_version(galfn)
+    debug('Large galaxies version: "%s", ellipse catalog?' % refcat, preburn)
 
     # FIXME - just die?
     if not 'fitmode' in galaxies.get_columns():
         warnings.warn('No "fitmode" column in SGA catalog!  Assuming fitmode = 0!')
         galaxies.fitmode = np.zeros(len(galaxies), sga_fitmode_type)
 
-    if preburn:
+    if is_ellipse:
         # SGA ellipse catalog
+
         # NOTE: fields such as ref_cat, preburned, etc, already exist in the
         # "galaxies" catalog read from disk.
         # The galaxies we want to appear in MASKBITS get
