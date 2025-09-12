@@ -221,7 +221,7 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
 
 def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
                         mp=None, plots=False, ps=None, make_badcoadds=True,
-                        refstars=None, write_mask_file=True):
+                        refobjs=None, write_mask_file=True):
     from legacypipe.bits import DQ_BITS
     from scipy.ndimage import binary_dilation
 
@@ -235,8 +235,8 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
         badcoadds_neg = None
 
     star_veto = np.zeros(targetwcs.shape, bool)
-    if refstars:
-        gaia = refstars[refstars.isgaia]
+    if refobjs:
+        gaia = refobjs[refobjs.isgaia]
         # Not moving Gaia stars to epoch of individual images...
         _,bx,by = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
         bx -= 1.

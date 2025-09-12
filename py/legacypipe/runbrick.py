@@ -415,18 +415,18 @@ def stage_refs(survey=None,
 
     record_event and record_event('stage_refs: starting')
     _add_stage_version(version_header, 'REFS', 'refs')
-    refstars,refcat = get_reference_sources(survey, targetwcs, bands,
+    refobjs,refcat = get_reference_sources(survey, targetwcs, bands,
                                             tycho_stars=tycho_stars,
                                             gaia_stars=gaia_stars,
                                             large_galaxies=large_galaxies,
                                             star_clusters=star_clusters,
                                             plots=plots, ps=ps)
-    # "refstars" is a table
+    # "refobjs" is a table
     # "refcat" is a list of tractor Sources
     # They are aligned
-    if refstars:
+    if refobjs:
         from legacypipe.units import get_units_for_columns
-        assert(len(refstars) == len(refcat))
+        assert(len(refobjs) == len(refcat))
         cols = ['ra', 'dec', 'ref_cat', 'ref_id', 'mag',
                 'istycho', 'isgaia', 'islargegalaxy', 'iscluster',
                 'isbright', 'ismedium', 'freezeparams', 'pointsource', 'donotfit', 'in_bounds',
@@ -445,43 +445,43 @@ def stage_refs(survey=None,
                 ]
         # Drop columns that don't exist (because one of the ref catalogs has no entries or is
         # not being used)
-        refcols = refstars.get_columns()
+        refcols = refobjs.get_columns()
         cols = [c for c in cols if c in refcols]
         extra_units = dict(zguess='mag', pa='deg', radius='deg', keep_radius='deg')
         units = get_units_for_columns(cols, extras=extra_units)
         with survey.write_output('ref-sources', brick=brickname) as out:
-            refstars.writeto(None, fits_object=out.fits, primheader=version_header,
+            refobjs.writeto(None, fits_object=out.fits, primheader=version_header,
                              columns=cols, units=units, extname='REFERENCES')
 
     T_dup = None
     T_clusters = None
-    if refstars:
+    if refobjs:
         # Pull out reference sources flagged do-not-fit; we add them
         # back in (much) later.  These are Gaia sources near the
         # centers of SGA large galaxies, so we want to propagate the
         # Gaia catalog information, but don't want to fit them.
-        I, = np.nonzero(refstars.donotfit)
+        I, = np.nonzero(refobjs.donotfit)
         if len(I):
-            T_dup = refstars[I]
+            T_dup = refobjs[I]
         # Pull out star clusters too.
-        I, = np.nonzero(refstars.iscluster)
+        I, = np.nonzero(refobjs.iscluster)
         if len(I):
-            T_clusters = refstars[I]
-        # Drop from refstars & refcat
-        drop = np.logical_or(refstars.donotfit, refstars.iscluster)
+            T_clusters = refobjs[I]
+        # Drop from refobjs & refcat
+        drop = np.logical_or(refobjs.donotfit, refobjs.iscluster)
         if np.any(drop):
             I, = np.nonzero(np.logical_not(drop))
-            refstars.cut(I)
+            refobjs.cut(I)
             refcat = [refcat[i] for i in I]
-            assert(len(refstars) == len(refcat))
+            assert(len(refobjs) == len(refcat))
         del I,drop
 
-    if plots and refstars:
+    if plots and refobjs:
         import pylab as plt
         from tractor import Tractor
         for tim in tims:
-            I = np.flatnonzero(refstars.istycho | refstars.isgaia)
-            stars = refstars[I]
+            I = np.flatnonzero(refobjs.istycho | refobjs.isgaia)
+            stars = refobjs[I]
             info(len(stars), 'ref stars')
             stars.index = I
             ok,xx,yy = tim.subwcs.radec2pixelxy(stars.ra, stars.dec)
@@ -533,7 +533,7 @@ def stage_refs(survey=None,
             plt.suptitle('Ref stars: %s' % tim.name)
             ps.savefig()
 
-    keys = ['refstars', 'gaia_stars', 'T_dup', 'T_clusters', 'version_header',
+    keys = ['refobjs', 'gaia_stars', 'T_dup', 'T_clusters', 'version_header',
             'refcat']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
@@ -542,7 +542,7 @@ def stage_refs(survey=None,
 def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
                    mp=None, nsigma=None, plots=None, ps=None, record_event=None,
                    survey=None, brickname=None, version_header=None,
-                   refstars=None, outlier_mask_file=None,
+                   refobjs=None, outlier_mask_file=None,
                    outliers=True, cache_outliers=False, remake_outlier_jpegs=False,
                    **kwargs):
     '''This pipeline stage tries to detect artifacts in the individual
@@ -595,7 +595,7 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
             make_badcoadds = True
             badcoaddspos, badcoaddsneg = mask_outlier_pixels(
                 survey, tims, bands, targetwcs, brickname, version_header,
-                mp=mp, plots=plots, ps=ps, make_badcoadds=make_badcoadds, refstars=refstars)
+                mp=mp, plots=plots, ps=ps, make_badcoadds=make_badcoadds, refobjs=refobjs)
             info('Masking outliers:', Time()-t0)
 
         # Make before-n-after plots (after)
@@ -630,7 +630,7 @@ def stage_halos(pixscale=None, targetwcs=None,
                 version_header=None,
                 mp=None, nsigma=None,
                 survey=None, brick=None,
-                refstars=None,
+                refobjs=None,
                 star_halos=True,
                 old_calibs_ok=True,
                 record_event=None,
@@ -639,12 +639,12 @@ def stage_halos(pixscale=None, targetwcs=None,
     _add_stage_version(version_header, 'HALO', 'halos')
 
     # Subtract star halos?
-    if star_halos and refstars:
-        Igaia, = np.nonzero(refstars.isgaia * refstars.pointsource)
+    if star_halos and refobjs:
+        Igaia, = np.nonzero(refobjs.isgaia * refobjs.pointsource)
         debug(len(Igaia), 'stars for halo subtraction')
         if len(Igaia):
             from legacypipe.halos import subtract_halos
-            halostars = refstars[Igaia]
+            halostars = refobjs[Igaia]
 
             if plots:
                 from legacypipe.runbrick_plots import halo_plots_before, halo_plots_after
@@ -666,7 +666,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        mp=None, record_event=None,
                        co_sky=None,
                        custom_brick=False,
-                       refstars=None,
+                       refobjs=None,
                        T_clusters=None,
                        saturated_pix=None,
                        less_masking=False,
@@ -724,7 +724,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
 
         MASKBITS = survey.get_maskbits()
 
-        refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
+        refmap = get_blobiter_ref_map(refobjs, T_clusters, less_masking, targetwcs)
         # Construct a mask bits map
         maskbits = np.zeros((H,W), maskbits_type)
         # !PRIMARY
@@ -829,7 +829,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
                saddle_fraction=None,
                saddle_min=None,
                survey=None, brick=None,
-               refcat=None, refstars=None,
+               refcat=None, refobjs=None,
                T_clusters=None,
                ccds=None,
                ubercal_sky=False,
@@ -858,28 +858,28 @@ def stage_srcs(pixscale=None, targetwcs=None,
 
     avoid_map = None
     avoid_xyr = []
-    if refstars:
+    if refobjs:
         # Don't detect new sources where we already have reference stars
         # To treat fast-moving stars, we evaluate proper motions at each image
         # epoch and exclude the set of integer pixel locations.
         # Init with ref sources without proper motions:
-        I = np.flatnonzero(refstars.in_bounds * (refstars.ref_epoch == 0) *
-                           np.logical_not(refstars.islargegalaxy))
-        xy = set(zip(refstars.ibx[I], refstars.iby[I]))
+        I = np.flatnonzero(refobjs.in_bounds * (refobjs.ref_epoch == 0) *
+                           np.logical_not(refobjs.islargegalaxy))
+        xy = set(zip(refobjs.ibx[I], refobjs.iby[I]))
         ns = len(xy)
         # For moving stars, evaluate position at epoch of each input image
-        I = np.flatnonzero(refstars.in_bounds * (refstars.ref_epoch > 0) *
-                           np.logical_not(refstars.islargegalaxy))
+        I = np.flatnonzero(refobjs.in_bounds * (refobjs.ref_epoch > 0) *
+                           np.logical_not(refobjs.islargegalaxy))
         if len(I):
             from legacypipe.survey import radec_at_mjd
             for tim in tims:
                 ra,dec = radec_at_mjd(
-                    refstars.ra[I], refstars.dec[I], refstars.ref_epoch[I].astype(float),
-                    refstars.pmra[I], refstars.pmdec[I], refstars.parallax[I],
+                    refobjs.ra[I], refobjs.dec[I], refobjs.ref_epoch[I].astype(float),
+                    refobjs.pmra[I], refobjs.pmdec[I], refobjs.parallax[I],
                     tim.time.toMjd())
                 _,xx,yy = targetwcs.radec2pixelxy(ra, dec)
                 xy.update(zip(np.round(xx-1.).astype(int), np.round(yy-1.).astype(int)))
-        debug('Avoiding', ns, 'stationary and', len(xy)-ns, '(from %i stars) pixels' % np.sum(refstars.in_bounds * (refstars.ref_epoch > 0)))
+        debug('Avoiding', ns, 'stationary and', len(xy)-ns, '(from %i stars) pixels' % np.sum(refobjs.in_bounds * (refobjs.ref_epoch > 0)))
         # Add a ~1" exclusion zone around reference stars
         # (assuming pixel_scale ~ 0.25")
         r_excl = 4
@@ -888,8 +888,8 @@ def stage_srcs(pixscale=None, targetwcs=None,
         # (We tried a larger exclusion radius on SGA sources, for
         # pre-burning SGA catalog; results were so-so)
         r_sga_excl = r_excl
-        J = np.flatnonzero(refstars.islargegalaxy * refstars.in_bounds)
-        avoid_xyr.extend([(x,y,r_sga_excl) for x,y in zip(refstars.ibx[J], refstars.iby[J])])
+        J = np.flatnonzero(refobjs.islargegalaxy * refobjs.in_bounds)
+        avoid_xyr.extend([(x,y,r_sga_excl) for x,y in zip(refobjs.ibx[J], refobjs.iby[J])])
     avoid_xyr = np.array(avoid_xyr, dtype=np.int32)
     if len(avoid_xyr) > 0:
         avoid_x = avoid_xyr[:,0]
@@ -905,10 +905,10 @@ def stage_srcs(pixscale=None, targetwcs=None,
     if T_clusters is not None and len(T_clusters) > 0:
         refs_no_sourcedet.append(T_clusters)
     # Magellanic clouds
-    if refstars:
-        I = np.flatnonzero(refstars.ismcloud)
+    if refobjs:
+        I = np.flatnonzero(refobjs.ismcloud)
         if len(I):
-            refs_no_sourcedet.append(refstars[I])
+            refs_no_sourcedet.append(refobjs[I])
     if len(refs_no_sourcedet):
         refs_no_sourcedet = merge_tables(refs_no_sourcedet)
         info('Suppressing source detection in reference catalog masks:', Counter([str(r) for r in refs_no_sourcedet.ref_cat]).most_common())
@@ -953,7 +953,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
     if plots:
         from legacypipe.runbrick_plots import detection_plots
         detection_plots(detmaps, detivs, bands, saturated_pix, tims,
-                        targetwcs, refstars, large_galaxies, gaia_stars, ps)
+                        targetwcs, refobjs, large_galaxies, gaia_stars, ps)
 
     # SED-matched detections
     record_event and record_event('stage_srcs: SED-matched')
@@ -990,9 +990,9 @@ def stage_srcs(pixscale=None, targetwcs=None,
                     src.needs_initial_flux = True
         cats.extend(newcat)
         tables.append(Tnew)
-    if refstars and len(refstars):
+    if refobjs and len(refobjs):
         cats.extend(refcat)
-        tables.append(refstars)
+        tables.append(refobjs)
     T = merge_tables(tables, columns='fillzero')
     cat = Catalog(*cats)
     cat.freezeAllParams()
@@ -1006,7 +1006,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
 
     if plots:
         from legacypipe.runbrick_plots import detection_plots_2
-        detection_plots_2(tims, bands, targetwcs, refstars, Tnew, hot,
+        detection_plots_2(tims, bands, targetwcs, refobjs, Tnew, hot,
                           saturated_pix, ps)
 
     # Find "hot" pixels that are separated by masked pixels,
@@ -1126,7 +1126,7 @@ def stage_fitblobs(T=None,
                    write_pickle_filename=None,
                    write_metrics=True,
                    get_all_models=False,
-                   refstars=None,
+                   refobjs=None,
                    bailout=False,
                    record_event=None,
                    custom_brick=False,
@@ -1220,9 +1220,9 @@ def stage_fitblobs(T=None,
     # drop any cached data before we start pickling/multiprocessing
     survey.drop_cache()
 
-    if plots and refstars:
+    if plots and refobjs:
         from legacypipe.runbrick_plots import fitblobs_plots_2
-        fitblobs_plots_2(blobmap, refstars, ps)
+        fitblobs_plots_2(blobmap, refobjs, ps)
 
     skipblobs = []
     R = []
@@ -1289,7 +1289,7 @@ def stage_fitblobs(T=None,
             R.append(dict(brickname=brickname, iblob=-1, result=None))
 
     frozen_galaxies = get_frozen_galaxies(T, blobsrcs, blobmap, targetwcs, cat)
-    refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
+    refmap = get_blobiter_ref_map(refobjs, T_clusters, less_masking, targetwcs)
     # We pass this list in to _blob_iter; it appends any blob numbers
     # that were processed as sub-blobs.
     ran_sub_blobs = None
@@ -1652,10 +1652,10 @@ def stage_fitblobs(T=None,
     return rtn
 
 # Also called by farm.py
-def get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs):
-    if refstars:
+def get_blobiter_ref_map(refobjs, T_clusters, less_masking, targetwcs):
+    if refobjs:
         from legacypipe.reference import get_reference_map
-        refs = refstars[refstars.donotfit == False]
+        refs = refobjs[refobjs.donotfit == False]
         if T_clusters is not None:
             refs = merge_tables([refs, T_clusters], columns='fillzero')
 
@@ -2231,7 +2231,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
                  custom_brick=False,
                  T=None,
-                 refstars=None,
+                 refobjs=None,
                  blobmap=None,
                  cat=None, pixscale=None, plots=False,
                  coadd_bw=False, brick=None, W=None, H=None, lanczos=True,
@@ -3165,7 +3165,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
                       tims=None, ps=None, brickname=None, ccds=None,
                       custom_brick=False,
                       T=None,
-                      refstars=None,
+                      refobjs=None,
                       blobmap=None,
                       cat=None, pixscale=None, plots=False,
                       gaussPsf=False, pixPsf=True, hybridPsf=True,
@@ -3294,17 +3294,17 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     print('Masking outlier pixels...')
     mask_outlier_pixels(
         survey, tims, forced_bands, targetwcs, brickname, version_header,
-        mp=mp, plots=plots, ps=ps, make_badcoadds=False, refstars=refstars,
+        mp=mp, plots=plots, ps=ps, make_badcoadds=False, refobjs=refobjs,
         write_mask_file=False)
 
     # from stage_halos...
     print('Subtracting stellar halos...')
-    if star_halos and refstars:
-        Igaia, = np.nonzero(refstars.isgaia * refstars.pointsource)
+    if star_halos and refobjs:
+        Igaia, = np.nonzero(refobjs.isgaia * refobjs.pointsource)
         debug(len(Igaia), 'stars for halo subtraction')
         if len(Igaia):
             from legacypipe.halos import subtract_halos
-            halostars = refstars[Igaia]
+            halostars = refobjs[Igaia]
             subtract_halos(tims, halostars, forced_bands, mp, plots, ps, old_calibs_ok=old_calibs_ok)
     # subtract SGA galaxies outside the chip?
     # (only if we have SGA photometry for this band...)
