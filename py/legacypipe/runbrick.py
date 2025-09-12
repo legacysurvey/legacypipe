@@ -1525,7 +1525,7 @@ def stage_fitblobs(T=None,
 
     cat = Catalog(*cat)
     # freeze special catalog entries (so that number of catalog parameters is corrrect)
-    for i in range(n_newcat), len(cat)):
+    for i in range(n_newcat, len(cat)):
         cat.freezeParam(i)
 
     if len(BB) == 0:
