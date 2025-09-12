@@ -50,6 +50,7 @@ CCD_CUTS = dict(
     plver = 0x80000,
 )
 
+# These are per-source fitting behaviors and results.
 FITBITS = dict(
     FORCED_POINTSOURCE = 0x1,
     FIT_BACKGROUND     = 0x2,

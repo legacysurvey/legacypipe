@@ -64,6 +64,7 @@ def get_reference_sources(survey, targetwcs, bands,
                              targetwcs=targetwcs)
         if gaia is not None and len(gaia) > 0:
             info('Found', len(gaia), 'Gaia stars nearby')
+            gaia.dup = np.zeros(len(gaia), bool)
             refs.append(gaia)
 
     # Read the catalog of star (open and globular) clusters and add them to the
@@ -85,14 +86,16 @@ def get_reference_sources(survey, targetwcs, bands,
                                     2./3600., nearest=True)
                 debug('Matched', len(I), 'large galaxies to Gaia stars.')
                 if len(I):
-                    gaia.donotfit[J] = True
+                    gaia.ignore_source[J] = True
+                    gaia.dup[J] = True
             # Resolve possible Tycho2-large-galaxy duplicates (with larger radius)
             if tycho and len(tycho):
                 I,J,_ = match_radec(galaxies.ra, galaxies.dec, tycho.ra, tycho.dec,
                                     5./3600., nearest=True)
                 debug('Matched', len(I), 'large galaxies to Tycho-2 stars.')
                 if len(I):
-                    tycho.donotfit[J] = True
+                    tycho.ignore_source[J] = True
+                    tycho.dup[J] = True
             info('Found', len(galaxies), 'large galaxies nearby')
             refs.append(galaxies)
 
@@ -135,20 +138,19 @@ def get_reference_sources(survey, targetwcs, bands,
 
     # ensure bool columns exist
     for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster', 'isgaia',
-                'istycho', 'donotfit', 'freezeparams', 'isresolved', 'ismcloud']:
+                'istycho', 'freezeparams', 'isresolved', 'ismcloud', 'ignore_source']:
         if not col in refs.get_columns():
             refs.set(col, np.zeros(len(refs), bool))
+            debug('Adding False values for missing column "%s" in refs' % col)
     # Copy flags from the 'refs' table to the source objects themselves.
     sources = refs.sources
     refs.delete_column('sources')
-    for i,(donotfit,freeze) in enumerate(zip(refs.donotfit, refs.freezeparams)):
-        if donotfit:
-            sources[i] = None
+    for i,(ignore,freeze) in enumerate(zip(refs.ignore_source, refs.freezeparams)):
         if sources[i] is None:
             continue
+        sources[i].ignore_source = ignore
         sources[i].is_reference_source = True
-        if freeze:
-            sources[i].freezeparams = True
+        sources[i].freezeparams = freeze
 
     return refs,sources
 
@@ -331,7 +333,7 @@ def fix_gaia(gaia, bands):
     gaia.istycho = np.zeros(len(gaia), bool)
     gaia.isbright = (gaia.mask_mag < 13.)
     gaia.ismedium = (gaia.mask_mag < 16.)
-    gaia.donotfit = np.zeros(len(gaia), bool)
+    gaia.ignore_source = np.zeros(len(gaia), bool)
 
 def mask_radius_for_mag(mag):
     # Returns a masking radius in degrees for a star of the given magnitude.
@@ -450,7 +452,7 @@ def fix_tycho(tycho):
     tycho.istycho = np.ones(len(tycho), bool)
     tycho.isbright = np.ones(len(tycho), bool)
     tycho.ismedium = np.ones(len(tycho), bool)
-    tycho.donotfit = np.zeros(len(tycho), bool)
+    tycho.ignore_source = np.zeros(len(tycho), bool)
 
 def get_large_galaxy_version(fn):
     ellipse = False
@@ -512,6 +514,7 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
         mclouds.fitmode = np.array([SGA_FITMODE['MCLOUDS']]*len(mclouds), sga_fitmode_type)
         mclouds.preburned = np.array([False] * len(mclouds))
         mclouds.mag = np.array([0.] * len(mclouds))
+        mclouds.ignore_source = np.array([True] * len(mclouds))
         print('Overlaps Magellanic cloud:', mclouds.name)
         galaxy_tables.append(mclouds)
     del mclouds
@@ -535,12 +538,13 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
     if clean_columns:
         keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
                         'sources', 'islargegalaxy', 'freezeparams', 'keep_radius',
-                        'fitmode', 'isresolved', 'ismcloud']
+                        'fitmode', 'isresolved', 'ismcloud', 'ignore_source']
         if extra_columns is not None:
             keep_columns.extend(extra_columns)
         for c in galaxies.get_columns():
             if not c in keep_columns:
                 galaxies.delete_column(c)
+                debug('Deleting extra column "%s" from galaxy table' % c)
     '''
     Desired behaviors.
 
@@ -557,6 +561,7 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
 def read_sga(survey, rc, dc, max_radius):
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
     from legacypipe.bits import SGA_FITMODE, sga_fitmode_type
+    from functools import reduce
 
     galfn = survey.find_file('large-galaxies')
     if galfn is None:
@@ -580,37 +585,69 @@ def read_sga(survey, rc, dc, max_radius):
     refcat, is_ellipse = get_large_galaxy_version(galfn)
     debug('Large galaxies version: "%s", ellipse catalog?' % refcat, preburn)
 
+    has_fitmode = ('fitmode' in galaxies.get_columns())
     # FIXME - just die?
-    if not 'fitmode' in galaxies.get_columns():
+    if not has_fitmode:
         warnings.warn('No "fitmode" column in SGA catalog!  Assuming fitmode = 0!')
         galaxies.fitmode = np.zeros(len(galaxies), sga_fitmode_type)
 
+    galaxies.ignore_source = np.zeros(len(galaxies), bool)
+
     if is_ellipse:
         # SGA ellipse catalog
+        if has_fitmode:
+            # SGA-2025
+            galaxies.islargegalaxy = (galaxies.sga_id > -1)
+            galaxies.freezeparams = ((galaxies.fitmode & SGA_FITMODE['FREEZE']) != 0)
 
-        # NOTE: fields such as ref_cat, preburned, etc, already exist in the
-        # "galaxies" catalog read from disk.
-        # The galaxies we want to appear in MASKBITS get
-        # 'islargegalaxy' set.  This includes both pre-burned
-        # galaxies, and ones where the preburning failed and we want
-        # to fall back to the SGA-parent ellipse for masking.
-        galaxies.islargegalaxy = np.logical_or(
-            np.logical_not(galaxies.in_footprint_grz),
-            (galaxies.ref_cat == refcat) * (galaxies.sga_id > -1))
-        # The pre-fit galaxies whose parameters will stay fixed
-        galaxies.freezeparams = (galaxies.preburned * galaxies.freeze)
+            galaxies.set_galaxy_maskbit = reduce(np.logical_or, [
+                galaxies.freezeparams & galaxies.islargegalaxy,
+                galaxies.fitmode == 0,
+                galaxies.fitmode == SGA_FITMODE['FIXGEO'] # FIXGEO and not RESOLVED
+            ])
+            # FIXGEO sources should not generate Tractor sources that we fit or
+            # render in any way - they're just a place to hold data so they can finally
+            # appear in the output catalog.
+            galaxies.ignore_source |= ((galaxies.fitmode & SGA_FITMODE['FIXGEO']) != 0)
 
+        else:
+            # SGA-2020
+            # NOTE: fields such as ref_cat, preburned, etc, already exist in the
+            # "galaxies" catalog read from disk.
+            # The galaxies we want to appear in MASKBITS get
+            # 'islargegalaxy' set.  This includes both pre-burned
+            # galaxies, and ones where the preburning failed and we want
+            # to fall back to the SGA-parent ellipse for masking.
+            galaxies.islargegalaxy = np.logical_or(
+                np.logical_not(galaxies.in_footprint_grz),
+                (galaxies.ref_cat == refcat) * (galaxies.sga_id > -1))
+            # The pre-fit galaxies whose parameters will stay fixed
+            galaxies.freezeparams = (galaxies.preburned * galaxies.freeze)
+
+            galaxies.set_galaxy_maskbit = galaxies.islargegalaxy
+            
         # set ref_cat and ref_id for galaxies outside the footprint
         I = np.flatnonzero(np.logical_not(galaxies.in_footprint_grz))
         galaxies.ref_id[I] = galaxies.sga_id[I]
         galaxies.ref_cat[I] = np.array([refcat] * len(I))
 
     else:
-        # SGA parent catalog
+        # SGA parent catalog.
         galaxies.ref_cat = np.array([refcat] * len(galaxies))
-        galaxies.islargegalaxy = np.ones(len(galaxies), bool)
-        galaxies.freezeparams = np.zeros(len(galaxies), bool)
-        galaxies.preburned = np.zeros(len(galaxies), bool)
+
+        if has_fitmode:
+            # SGA-2025
+            # The fitmode FREEZE bit is not allowed in the parent catalog
+            assert(np.all((galaxies.fitmode & SGA_FITMODE['FREEZE']) == 0))
+            galaxies.set_galaxy_maskbit = reduce(np.logical_or, [
+                galaxies.fitmode == 0,
+                galaxies.fitmode == SGA_FITMODE['FIXGEO']
+            ])
+        else:
+            # SGA-2020
+            galaxies.islargegalaxy = np.ones(len(galaxies), bool)
+            galaxies.freezeparams = np.zeros(len(galaxies), bool)
+            galaxies.preburned = np.zeros(len(galaxies), bool)
         if 'sga_id' in galaxies.columns():
             galaxies.rename('sga_id', 'ref_id')
 
@@ -803,13 +840,16 @@ def get_reference_map(wcs, refs):
     #debug('Scaled CD matrix:', cd_pix)
 
     # circular/elliptical regions:
-    for col,bit,ellipse in [('isbright',      'BRIGHT',   False),
-                            ('ismedium',      'MEDIUM',   False),
-                            ('iscluster',     'CLUSTER',  True),
-                            ('islargegalaxy', 'GALAXY',   True),
-                            ('isresolved',    'RESOLVED', True),
-                            ('ismcloud',      'MCLOUDS',  True),
+    for col,bit,ellipse in [('isbright',           'BRIGHT',   False),
+                            ('ismedium',           'MEDIUM',   False),
+                            ('iscluster',          'CLUSTER',  True),
+                            ('set_galaxy_maskbit', 'GALAXY',   True),
+                            ('isresolved',         'RESOLVED', True),
+                            ('ismcloud',           'MCLOUDS',  True),
                             ]:
+        if not col in refs.get_columns():
+            debug('No "%s" column in reference table; skipping')
+            continue
         isit = refs.get(col)
         if not np.any(isit & (refs.radius > 0)):
             debug('None marked', col)

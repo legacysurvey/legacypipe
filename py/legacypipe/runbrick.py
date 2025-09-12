@@ -429,7 +429,7 @@ def stage_refs(survey=None,
         assert(len(refobjs) == len(refcat))
         cols = ['ra', 'dec', 'ref_cat', 'ref_id', 'mag',
                 'istycho', 'isgaia', 'islargegalaxy', 'iscluster',
-                'isbright', 'ismedium', 'freezeparams', 'pointsource', 'donotfit', 'in_bounds',
+                'isbright', 'ismedium', 'freezeparams', 'pointsource', 'ignore_source', 'in_bounds',
                 'fitmode', 'isresolved', 'ismcloud',
                 'ba', 'pa', 'decam_mag_g', 'decam_mag_r', 'decam_mag_i', 'decam_mag_z',
                 'zguess', 'mask_mag', 'radius', 'keep_radius', 'radius_pix', 'ibx', 'iby',
@@ -452,29 +452,6 @@ def stage_refs(survey=None,
         with survey.write_output('ref-sources', brick=brickname) as out:
             refobjs.writeto(None, fits_object=out.fits, primheader=version_header,
                              columns=cols, units=units, extname='REFERENCES')
-
-    T_dup = None
-    T_clusters = None
-    if refobjs:
-        # Pull out reference sources flagged do-not-fit; we add them
-        # back in (much) later.  These are Gaia sources near the
-        # centers of SGA large galaxies, so we want to propagate the
-        # Gaia catalog information, but don't want to fit them.
-        I, = np.nonzero(refobjs.donotfit)
-        if len(I):
-            T_dup = refobjs[I]
-        # Pull out star clusters too.
-        I, = np.nonzero(refobjs.iscluster)
-        if len(I):
-            T_clusters = refobjs[I]
-        # Drop from refobjs & refcat
-        drop = np.logical_or(refobjs.donotfit, refobjs.iscluster)
-        if np.any(drop):
-            I, = np.nonzero(np.logical_not(drop))
-            refobjs.cut(I)
-            refcat = [refcat[i] for i in I]
-            assert(len(refobjs) == len(refcat))
-        del I,drop
 
     if plots and refobjs:
         import pylab as plt
@@ -533,8 +510,7 @@ def stage_refs(survey=None,
             plt.suptitle('Ref stars: %s' % tim.name)
             ps.savefig()
 
-    keys = ['refobjs', 'gaia_stars', 'T_dup', 'T_clusters', 'version_header',
-            'refcat']
+    keys = ['refobjs', 'refcat', 'gaia_stars', 'version_header']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
@@ -667,7 +643,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        co_sky=None,
                        custom_brick=False,
                        refobjs=None,
-                       T_clusters=None,
                        saturated_pix=None,
                        less_masking=False,
                        **kwargs):
@@ -724,7 +699,7 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
 
         MASKBITS = survey.get_maskbits()
 
-        refmap = get_blobiter_ref_map(refobjs, T_clusters, less_masking, targetwcs)
+        refmap = get_blobiter_ref_map(refobjs, less_masking, targetwcs)
         # Construct a mask bits map
         maskbits = np.zeros((H,W), maskbits_type)
         # !PRIMARY
@@ -830,7 +805,6 @@ def stage_srcs(pixscale=None, targetwcs=None,
                saddle_min=None,
                survey=None, brick=None,
                refcat=None, refobjs=None,
-               T_clusters=None,
                ccds=None,
                ubercal_sky=False,
                nsatur=None,
@@ -899,28 +873,27 @@ def stage_srcs(pixscale=None, targetwcs=None,
         avoid_x = avoid_y = avoid_r = np.array([], dtype=np.int32)
     del avoid_xyr
 
-    # Compile the list of reference objects that suppress new source detection.
-    refs_no_sourcedet = []
-    # anything in the Cluster catalog (.iscluster)
-    if T_clusters is not None and len(T_clusters) > 0:
-        refs_no_sourcedet.append(T_clusters)
-    # Magellanic clouds
     if refobjs:
-        I = np.flatnonzero(refobjs.ismcloud)
-        if len(I):
-            refs_no_sourcedet.append(refobjs[I])
-    if len(refs_no_sourcedet):
-        refs_no_sourcedet = merge_tables(refs_no_sourcedet)
-        info('Suppressing source detection in reference catalog masks:', Counter([str(r) for r in refs_no_sourcedet.ref_cat]).most_common())
-        refs_no_sourcedet.about()
-        refmap = get_reference_map(targetwcs, refs_no_sourcedet)
-        from legacypipe.bits import REF_MAP_BITS
-        for name,bitval in REF_MAP_BITS.items():
-            n = np.sum((refmap & bitval) != 0)
-            if n:
-                print('Bit', name, 'set for', n, 'pixels')
-        avoid_map = (refmap != 0)
-        #avoid_map = (get_reference_map(targetwcs, refs_no_sourcedet) != 0)
+        # Reference objects that suppress new source detection.
+        I_no_sourcedet = np.flatnonzero(
+            reduce(np.logical_or, [
+                # CLUSTER catalog
+                refobjs.iscluster,
+                # Magellanic clouds
+                refobjs.ismcloud,
+                # SGA frozen sources
+                refobjs.freezeparams,
+                ]))
+        if len(I_no_sourcedet):
+            info('Suppressing source detection in reference catalog masks:', Counter([str(r) for r in refobjs.ref_cat[I_no_sourcedet]]).most_common())
+            refmap = get_reference_map(targetwcs, refobjs[I_no_sourcedet])
+            from legacypipe.bits import REF_MAP_BITS
+            for name,bitval in REF_MAP_BITS.items():
+                n = np.sum((refmap & bitval) != 0)
+                if n:
+                    print('Bit', name, 'set for', n, 'pixels')
+            avoid_map = (refmap != 0)
+            #avoid_map = (get_reference_map(targetwcs, refs_no_sourcedet) != 0)
 
     record_event and record_event('stage_srcs: detection maps')
     tnow = Time()
@@ -1097,8 +1070,6 @@ def stage_srcs(pixscale=None, targetwcs=None,
     return rtn
 
 def stage_fitblobs(T=None,
-                   T_clusters=None,
-                   T_dup=None,
                    brickname=None,
                    brickid=None,
                    brick=None,
@@ -1289,7 +1260,7 @@ def stage_fitblobs(T=None,
             R.append(dict(brickname=brickname, iblob=-1, result=None))
 
     frozen_galaxies = get_frozen_galaxies(T, blobsrcs, blobmap, targetwcs, cat)
-    refmap = get_blobiter_ref_map(refobjs, T_clusters, less_masking, targetwcs)
+    refmap = get_blobiter_ref_map(refobjs, less_masking, targetwcs)
     # We pass this list in to _blob_iter; it appends any blob numbers
     # that were processed as sub-blobs.
     ran_sub_blobs = None
@@ -1301,6 +1272,21 @@ def stage_fitblobs(T=None,
         iterative_nsigma = nsigma
 
     job_id_map = {}
+
+    # Hold aside special entries in "T" and "cat": DUP, clusters, Magellanic clouds, ...
+    Ispecial = np.flatnonzero(T.ignore_source)
+    if len(Ispecial):
+        Iregular = np.flatnonzero(~T.ignore_source)
+        T_special = T[Ispecial]
+        T.cut(Iregular)
+        cat_special = [cat[i] for i in Ispecial]
+        cat = [cat[i] for i in Iregular]
+        del Iregular
+    else:
+        T_special = None
+        cat_special = None
+    del Ispecial
+
     # Create the iterator over blobs to process
     blobiter = _blob_iter(job_id_map,
                           brickname, blobslices, blobsrcs, blobmap, targetwcs, tims,
@@ -1398,7 +1384,6 @@ def stage_fitblobs(T=None,
             except multiprocessing.TimeoutError:
                 continue
 
-
         # Write checkpoint when done!
         _write_checkpoint(R, checkpoint_filename)
         debug('Got', n_finished_total, 'results; wrote', len(R), 'to checkpoint')
@@ -1494,9 +1479,9 @@ def stage_fitblobs(T=None,
         assert(nb == 5) # psf, rex, dev, exp, ser
 
     # We want to order sources (and assign objids) so that sources outside the brick
-    # are at the end, and T_dup sources are included.
+    # are at the end
 
-    # Grab source positions
+    # Copy source positions back to the object table
     T.ra  = np.array([src.getPosition().ra  for src in newcat], dtype=np.float64)
     T.dec = np.array([src.getPosition().dec for src in newcat], dtype=np.float64)
 
@@ -1513,28 +1498,46 @@ def stage_fitblobs(T=None,
                   'force_keep_source', 'fit_background', 'forced_pointsource']:
             T.set(k, BB.get(k))
 
+    # Merge "special" sources and T_refbail back in.
     T.regular = np.ones(len(T), bool)
-    T.dup = np.zeros(len(T), bool)
-    Tall = [T]
-    dup_cat = []
-    if T_dup:
-        from legacypipe.survey import GaiaSource
-        T_dup.type = np.array(['DUP']*len(T_dup))
-        T_dup.dup = np.ones(len(T_dup), bool)
-        Tall.append(T_dup)
-        # re-create source objects for DUP stars
-        for g in T_dup:
-            src = GaiaSource.from_catalog(g, bands)
-            src.brightness.setParams([0] * src.brightness.numberOfParams())
-            dup_cat.append(src)
+    T_all = [T]
+    n_newcat = len(newcat)
+    cat = newcat
+    if T_special is not None:
+        # Flag "DUP" sources
+        T_special.type[T_special.dup] = 'DUP'
+        T_all.append(T_special)
+        cat.extend(cat_special)
     if T_refbail:
-        Tall.append(T_refbail)
-        dup_cat.extend(cat_refbail)
-    if len(Tall) > 1:
-        T = merge_tables(Tall, columns='fillzero')
-    T_dup = None
-    del T_refbail
+        T_all.append(T_refbail)
+        cat.extend(cat_refbail)
+        del cat_refbail
 
+    if len(T_all) > 1:
+        T = merge_tables(T_all, columns='fillzero')
+    del T_all
+    del T_refbail
+    del T_special
+    del cat_special
+    del newcat
+
+    assert(len(cat) == len(T))
+
+    cat = Catalog(*cat)
+    # freeze special catalog entries (so that number of catalog parameters is corrrect)
+    for i in range(n_newcat), len(cat)):
+        cat.freezeParam(i)
+
+    if len(BB) == 0:
+        invvars = None
+    else:
+        invvars = np.hstack(BB.srcinvvars)
+        assert(cat.numberOfParams() == len(invvars))
+    # NOTE that "BB" can now be shorter than cat and T.
+    assert(np.sum(T.regular) == len(BB))
+    # We assume below (when unpacking BB for all-models) that the
+    # "regular" entries are at the beginning of T.
+    
     _,bx,by = targetwcs.radec2pixelxy(T.ra, T.dec)
     T.bx = (bx - 1.).astype(np.float32)
     T.by = (by - 1.).astype(np.float32)
@@ -1545,9 +1548,10 @@ def stage_fitblobs(T=None,
     if not 'bx0' in T.get_columns():
         T.bx0 = T.bx.copy()
         T.by0 = T.by.copy()
+
     # DUP sources are Gaia/Tycho-2 stars, so fill in bx0=bx.
-    T.bx0[T.dup] = T.bx[T.dup]
-    T.by0[T.dup] = T.by[T.dup]
+    #T.bx0[T.dup] = T.bx[T.dup]
+    #T.by0[T.dup] = T.by[T.dup]
 
     # Order sources by RA.
     # (Here we're just setting 'objid', not actually reordering arrays.)
@@ -1555,24 +1559,6 @@ def stage_fitblobs(T=None,
     I = np.argsort(T.ra + (-2000 * T.in_bounds) + (-1000 * T.regular))
     T.objid = np.empty(len(T), np.int32)
     T.objid[I] = np.arange(len(T))
-
-    # Extend catalog with sources for T_dup entries
-    cat = Catalog(*(newcat + dup_cat))
-    # freeze DUP entries (so that number of catalog parameters is corrrect)
-    for i in range(len(newcat), len(cat)):
-        cat.freezeParam(i)
-    del newcat
-    del dup_cat
-    assert(len(cat) == len(T))
-    if len(BB) == 0:
-        invvars = None
-    else:
-        invvars = np.hstack(BB.srcinvvars)
-        assert(cat.numberOfParams() == len(invvars))
-    # NOTE that "BB" can now be shorter than cat and T.
-    assert(np.sum(T.regular) == len(BB))
-    # We assume below (when unpacking BB for all-models) that the
-    # "regular" entries are at the beginning of T.
 
     # Set blob numbers
     T.blob = np.empty(len(T), np.int32)
@@ -1640,7 +1626,7 @@ def stage_fitblobs(T=None,
                                                  primheader=primhdr, extname='ALL-MODELS')
 
     keys = ['cat', 'invvars', 'T', 'blobmap', 'refmap', 'version_header',
-            'frozen_galaxies', 'T_dup']
+            'frozen_galaxies']
     if get_all_models:
         keys.append('all_models')
     if bailout:
@@ -1652,15 +1638,11 @@ def stage_fitblobs(T=None,
     return rtn
 
 # Also called by farm.py
-def get_blobiter_ref_map(refobjs, T_clusters, less_masking, targetwcs):
+def get_blobiter_ref_map(refobjs, less_masking, targetwcs):
     if refobjs:
         from legacypipe.reference import get_reference_map
-        refs = refobjs[refobjs.donotfit == False]
-        if T_clusters is not None:
-            refs = merge_tables([refs, T_clusters], columns='fillzero')
-
-        refmap = get_reference_map(targetwcs, refs)
-        del refs
+        ### ignore DUP entries??
+        refmap = get_reference_map(targetwcs, refobjs)
     else:
         HH, WW = targetwcs.shape
         refmap = np.zeros((int(HH), int(WW)), np.uint8)
@@ -2251,7 +2233,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     model fits, and we can create coadds of the images, model, and
     residuals.  We also perform aperture photometry in this stage.
     '''
-    from functools import reduce
     from legacypipe.survey import apertures_arcsec
     from legacypipe.bits import REF_MAP_BITS, FITBITS_DESCRIPTIONS, maskbits_type
     from legacypipe.survey import clean_band_name
