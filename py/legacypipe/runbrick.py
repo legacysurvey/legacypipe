@@ -820,6 +820,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
     sources are also split into "blobs" of overlapping pixels.  Each
     of these blobs will be processed independently.
     '''
+    from functools import reduce
     from tractor import Catalog
     from legacypipe.detection import (detection_maps, merge_hot_satur,
                         run_sed_matched_filters, segment_and_group_sources)
@@ -963,9 +964,32 @@ def stage_srcs(pixscale=None, targetwcs=None,
                     src.needs_initial_flux = True
         cats.extend(newcat)
         tables.append(Tnew)
+
+    # Hold aside "special" entries in the ref catalog: DUP, clusters, Magellanic clouds, ...
     if refobjs and len(refobjs):
-        cats.extend(refcat)
-        tables.append(refobjs)
+        Ispecial = np.flatnonzero(refobjs.ignore_source)
+        if len(Ispecial):
+            Iregular = np.flatnonzero(~refobjs.ignore_source)
+            T_special = refobjs[Ispecial]
+            # note: leave the original "refobjs" alone, it gets used later, eg in
+            # get_reference_map for oneblob.  (and may as well keep "refcat" matching)
+            T_ref = refobjs[Iregular]
+            cat_special = [refcat[i] for i in Ispecial]
+            cat_ref = [refcat[i] for i in Iregular]
+            del Iregular
+            assert(len(refcat) == len(refobjs))
+            assert(len(cat_ref) == len(T_ref))
+            assert(len(cat_special) == len(T_special))
+        else:
+            T_special = None
+            cat_special = None
+            T_ref = refobjs
+            cat_ref = refcat
+        del Ispecial
+        if len(cat_ref):
+            cats.extend(cat_ref)
+            tables.append(T_ref)
+
     T = merge_tables(tables, columns='fillzero')
     cat = Catalog(*cats)
     cat.freezeAllParams()
@@ -1063,7 +1087,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
         # (can be missing if no sources are detected - only reference sources)
         T.delete_column('peaksn')
 
-    keys = ['T', 'tims', 'blobsrcs', 'blobslices', 'blobmap', 'cat',
+    keys = ['T', 'cat', 'T_special', 'cat_special', 'tims', 'blobsrcs', 'blobslices', 'blobmap',
             'ps', 'saturated_pix', 'version_header', 'co_sky', 'ccds']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
@@ -1076,6 +1100,8 @@ def stage_fitblobs(T=None,
                    version_header=None,
                    blobsrcs=None, blobslices=None, blobmap=None,
                    cat=None,
+                   T_special=None,
+                   cat_special=None,
                    targetwcs=None,
                    W=None,H=None,
                    bands=None, ps=None, tims=None,
@@ -1272,20 +1298,6 @@ def stage_fitblobs(T=None,
         iterative_nsigma = nsigma
 
     job_id_map = {}
-
-    # Hold aside special entries in "T" and "cat": DUP, clusters, Magellanic clouds, ...
-    Ispecial = np.flatnonzero(T.ignore_source)
-    if len(Ispecial):
-        Iregular = np.flatnonzero(~T.ignore_source)
-        T_special = T[Ispecial]
-        T.cut(Iregular)
-        cat_special = [cat[i] for i in Ispecial]
-        cat = [cat[i] for i in Iregular]
-        del Iregular
-    else:
-        T_special = None
-        cat_special = None
-    del Ispecial
 
     # Create the iterator over blobs to process
     blobiter = _blob_iter(job_id_map,
@@ -1639,11 +1651,14 @@ def stage_fitblobs(T=None,
 
 # Also called by farm.py
 def get_blobiter_ref_map(refobjs, less_masking, targetwcs):
+    refmap = None
     if refobjs:
         from legacypipe.reference import get_reference_map
-        ### ignore DUP entries??
-        refmap = get_reference_map(targetwcs, refobjs)
-    else:
+        # ignore DUP entries
+        I = np.flatnonzero(~refobjs.dup)
+        if len(I):
+            refmap = get_reference_map(targetwcs, refobjs)
+    if refmap is None:
         HH, WW = targetwcs.shape
         refmap = np.zeros((int(HH), int(WW)), np.uint8)
     return refmap
