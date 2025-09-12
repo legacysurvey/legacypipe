@@ -583,7 +583,7 @@ def read_sga(survey, rc, dc, max_radius):
     del kd
 
     refcat, is_ellipse = get_large_galaxy_version(galfn)
-    debug('Large galaxies version: "%s", ellipse catalog?' % refcat, preburn)
+    debug('Large galaxies version: "%s", ellipse catalog?' % refcat, is_ellipse)
 
     has_fitmode = ('fitmode' in galaxies.get_columns())
     # FIXME - just die?
