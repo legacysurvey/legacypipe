@@ -62,7 +62,7 @@ def main():
 
     I,J,_ = match_radec(G.ra, G.dec, T.ra, T.dec, 1./3600., nearest=True)
     print('Matched', len(I), 'sources')
-    #assert(len(I) == 7)
+    assert(len(I) == 5)
     K = np.argsort(G.phot_g_mean_mag[I])
     I = I[K]
     J = J[K]
@@ -97,21 +97,10 @@ def main():
     #  [-0.044 -0.063 -0.042]
     #  [ 0.246 -0.161 -0.404]]
 
+    assert(np.all(np.abs(dmags)[:, 0] < 0.25))
+    assert(np.all(np.abs(dmags)[:, 1] < 0.8))
     # Looks like the z-band in particular is pretty bad on the highly saturated stars!
-
-    # g
-    k = np.flatnonzero(np.isfinite(tmags[:,0]))
-    assert(len(k) == 5)
-    assert(np.all(np.abs(dmags)[k, 0] < 0.25))
-    # r
-    k = np.flatnonzero(np.isfinite(tmags[:,1]))
-    assert(len(k) == 4)
-    assert(np.all(np.abs(dmags)[k, 1] < 0.8))
-    # z
-    k = np.flatnonzero(np.isfinite(tmags[:,2]))
-    assert(len(k) == 4)
-    assert(np.all(np.abs(dmags)[k, 2] < 0.8))
-    #assert(np.all(np.abs(dmags)[3:, :] < 0.5))
+    assert(np.all(np.abs(dmags)[:, 3:] < 0.5))
 
     gmags = np.vstack((G.phot_bp_mean_mag[I], G.phot_g_mean_mag[I], G.phot_rp_mean_mag[I])).T
     dmags = tmags - gmags
