@@ -282,10 +282,10 @@ class OneBlob(object):
             self.ps.savefig()
 
         tr = self.tractor(self.tims, cat)
-
         # Fit any sources marked with 'needs_initial_flux' -- saturated, and SGA
         fitflux = [src for src in cat if getattr(src, 'needs_initial_flux', False)]
         if len(fitflux):
+            debug('Fitting initial fluxes for %i sources...' % len(fitflux))
             self._fit_fluxes(cat, self.tims, self.bands, fitcat=fitflux)
             if self.plots:
                 self._plots(tr, 'Fitting initial fluxes')
@@ -305,6 +305,7 @@ class OneBlob(object):
         # The sizes of the model patches fit here are determined by the
         # sources themselves, ie by the size of the mod patch returned by
         #  src.getModelPatch(tim)
+        debug('Fitting fluxes...')
         if len(cat) > 1:
             self._optimize_individual_sources_subtract(
                 cat, Ibright, B.cpu_source)
@@ -385,6 +386,7 @@ class OneBlob(object):
         self.compute_segmentation_map()
 
         # Next, model selections: point source vs rex vs dev/exp vs ser.
+        debug('Running model selection')
         B = self.run_model_selection(cat, Ibright, B,
                                      iterative_detection=iterative_detection)
 

@@ -848,7 +848,7 @@ def get_reference_map(wcs, refs):
                             ('ismcloud',           'MCLOUDS',  True),
                             ]:
         if not col in refs.get_columns():
-            debug('No "%s" column in reference table; skipping')
+            debug('No "%s" column in reference table; skipping' % col)
             continue
         isit = refs.get(col)
         if not np.any(isit & (refs.radius > 0)):
