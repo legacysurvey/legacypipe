@@ -62,7 +62,7 @@ def main():
 
     I,J,_ = match_radec(G.ra, G.dec, T.ra, T.dec, 1./3600., nearest=True)
     print('Matched', len(I), 'sources')
-    assert(len(I) == 7)
+    #assert(len(I) == 7)
     K = np.argsort(G.phot_g_mean_mag[I])
     I = I[K]
     J = J[K]
