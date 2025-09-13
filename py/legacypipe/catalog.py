@@ -71,11 +71,11 @@ def prepare_fits_catalog(cat, invvars, T, bands, allbands=None,
         cat.setAllParams(allparams0)
 
     print('Fluxes in:', bands)
-    for j in len(cat):
+    for j in range(len(cat)):
         print('  ', ', '.join(['%.3f' % flux[j,allbands.index(band)] for band in bands]))
 
     print('Flux_ivars in:', bands)
-    for j in len(cat):
+    for j in range(len(cat)):
         print('  ', ', '.join(['%.3f' % flux_ivar[j,allbands.index(band)] for band in bands]))
 
     T.set('%sflux' % prefix, flux)
