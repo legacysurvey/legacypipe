@@ -1516,8 +1516,6 @@ def stage_fitblobs(T=None,
     n_newcat = len(newcat)
     cat = newcat
     if T_special is not None:
-        # Flag "DUP" sources
-        T_special.type[T_special.dup] = 'DUP'
         T_all.append(T_special)
         cat.extend(cat_special)
     if T_refbail:
