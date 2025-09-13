@@ -3486,7 +3486,14 @@ def _forced_phot_one(args):
     I = np.flatnonzero((x >= -margin) * (x <= (W+margin)) *
                        (y >= -margin) * (y <= (H+margin)) *
                        do_phot)
-    # FIXME... this is going to drop SGA galaxies outside the margin around this chip...
+    # FIXME... this is going to drop SGA galaxies outside the margin
+    # around this chip...
+
+    # Note to self - when this gets fixed, make sure that special
+    # sources like the MC (LMC/SMC), and RESOLVED sources, don't get
+    # subtracted - they don't really have models.  Use the
+    # *ignore_source* flag (which should be propagated from the ref
+    # table to the sources).
     sub_cat = [cat[i] for i in I]
 
     print('Not subtracting SGA galaxies outside the image...')
