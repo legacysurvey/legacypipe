@@ -3724,6 +3724,11 @@ def stage_writecat(
         T[np.argsort(T.objid)].writeto(None, fits_object=out.fits, primheader=primhdr,
                                        extname='CATALOG-INTERMEDIATE')
 
+    # After writing tractor-i file, drop (reference) sources outside the brick.
+    if forced_T is not None:
+        forced_T.cut(T.in_bounds)
+    T.cut(T.in_bounds)
+
     # The "format_catalog" code expects all lower-case column names...
     for c in T.columns():
         if c != c.lower():
