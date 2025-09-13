@@ -43,6 +43,10 @@ def prepare_fits_catalog(cat, invvars, T, bands, allbands=None,
     flux      = np.zeros((Nsrcs, len(allbands)), np.float32)
     flux_ivar = np.zeros((Nsrcs, len(allbands)), np.float32)
 
+    print('prepare_fits_catalog:')
+    for src in cat:
+        print('  ', src)
+
     for band in bands:
         i = allbands.index(band)
         for j,src in enumerate(cat):
@@ -66,6 +70,14 @@ def prepare_fits_catalog(cat, invvars, T, bands, allbands=None,
         # ... then reset the parameters.
         cat.setAllParams(allparams0)
 
+    print('Fluxes in:', bands)
+    for j in len(cat):
+        print('  ', ', '.join(['%.3f' % flux[j,allbands.index(band)] for band in bands]))
+
+    print('Flux_ivars in:', bands)
+    for j in len(cat):
+        print('  ', ', '.join(['%.3f' % flux_ivar[j,allbands.index(band)] for band in bands]))
+
     T.set('%sflux' % prefix, flux)
     if save_invvars:
         T.set('%sflux_ivar' % prefix, flux_ivar)
@@ -81,6 +93,10 @@ def prepare_fits_catalog(cat, invvars, T, bands, allbands=None,
         T.delete_column('%stype_ivar' % prefix)
 
     cat.setAllParams(allparams0)
+
+    print('after prepare_fits_catalog:')
+    for src in cat:
+        print('  ', src)
 
     # mod RA
     ra = T.get('%sra' % prefix)
