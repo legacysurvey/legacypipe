@@ -3186,6 +3186,12 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     '''
     from legacypipe.survey import clean_band_name
     from tractor import NanoMaggies
+    from legacypipe.utils import run_ps
+    from legacypipe.survey import read_one_tim, apertures_arcsec
+    from legacypipe.halos import subtract_one
+    from legacypipe.forced_photom import run_forced_phot, forced_phot_add_extra_fields
+    from legacypipe.outliers import mask_outlier_pixels
+    from legacypipe.units import get_units_for_columns
 
     if forced_bands is None:
         return dict()
@@ -3196,7 +3202,6 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     # Before we begin, free the *tims* to reduce our memory use,
     # before reading in the *forced_bands* imaging data.
 
-    from legacypipe.utils import run_ps
     pid = os.getpid()
     procs = run_ps(pid)
     print('PS:')
@@ -3217,7 +3222,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
 
     print('T:')
     T.about()
-    
+
     clean_bands = [clean_band_name(b) for b in forced_bands]
     clean_map = dict(list(zip(forced_bands, clean_bands)))
 
@@ -3253,10 +3258,6 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
 
     # Skipping do_calibs
 
-    from legacypipe.survey import read_one_tim
-    from legacypipe.halos import subtract_one
-    from legacypipe.forced_photom import run_forced_phot, forced_phot_add_extra_fields
-
     # args for read_one_tim
     tim_args = dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
                     hybridPsf=hybridPsf, normalizePsf=normalizePsf,
@@ -3277,7 +3278,6 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
         return dict()
 
     # outliers
-    from legacypipe.outliers import mask_outlier_pixels
 
     # no before-n-after outlier mask plots?
     # no "Patch individual-CCD masked pixels from a coadd"
@@ -3307,6 +3307,8 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
                (T.dup == False) * np.array([src is not None for src in cat]))
     # (we don't have T.type yet; this is equivalent to T.type not equal to 'DUP' or 'NUN')
 
+    print('Objects to forced-photometer: catalog contains %i total.  %i are non-DUP.  %i have sources.  %i satisfy both.' % (len(T), np.sum(T.dup == False), len([src is not None for src in cat]), np.sum(do_phot)))
+
     # This will get multiprocessed...
     FF = []
     mods = []
@@ -3320,7 +3322,6 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     print('All forced photometry results:')
     F.about()
 
-    from legacypipe.units import get_units_for_columns
     mag_unit = 'mag'
     pixel_unit = 'pixel'
     columns = F.get_columns()
@@ -3359,7 +3360,6 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     # code from stage_coadds...
     # FIXME - ccds-table for forced-photometry results?
 
-    from legacypipe.survey import apertures_arcsec
     # source pixel positions to probe depth maps, etc
     ixy = (np.clip(T.ibx, 0, W-1).astype(int), np.clip(T.iby, 0, H-1).astype(int))
     # convert apertures to pixels
@@ -3491,6 +3491,7 @@ def _forced_phot_one(args):
 
     print('Not subtracting SGA galaxies outside the image...')
 
+    print('Forced-photometering %i sources in & near this image' % len(sub_cat))
 
     # create copies before modifying the Flux object
     sub_cat = [src.copy() for src in sub_cat]
@@ -3604,6 +3605,7 @@ def stage_writecat(
     T.ra_ivar /= np.cos(np.deg2rad(T.dec))**2
 
     # Compute fiber fluxes
+    debug('Computing fiber fluxes...')
     T.fiberflux, T.fibertotflux = get_fiber_fluxes(
         cat, T, targetwcs, H, W, pixscale, bands, plots=plots, ps=ps)
 
@@ -3741,8 +3743,6 @@ def stage_writecat(
 
     columns,units = format_catalog(T, bands, allbands, release,
                                    N_wise_epochs=19, motions=gaia_stars, gaia_tagalong=True)
-
-    print('Catalog columns to write:', columns)
 
     if forced_T is not None:
         unitmap = dict([(c,u) for c,u in zip(columns, units)])
