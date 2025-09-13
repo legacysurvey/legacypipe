@@ -1559,10 +1559,6 @@ def stage_fitblobs(T=None,
         T.bx0 = T.bx.copy()
         T.by0 = T.by.copy()
 
-    # DUP sources are Gaia/Tycho-2 stars, so fill in bx0=bx.
-    #T.bx0[T.dup] = T.bx[T.dup]
-    #T.by0[T.dup] = T.by[T.dup]
-
     # Order sources by RA.
     # (Here we're just setting 'objid', not actually reordering arrays.)
     # (put all the regular * in_bounds sources, then dup in-bound, then oob)
@@ -3719,11 +3715,6 @@ def stage_writecat(
         T[np.argsort(T.objid)].writeto(None, fits_object=out.fits, primheader=primhdr,
                                        extname='CATALOG-INTERMEDIATE')
 
-    # After writing tractor-i file, drop (reference) sources outside the brick.
-    if forced_T is not None:
-        forced_T.cut(T.in_bounds)
-    T.cut(T.in_bounds)
-
     # The "format_catalog" code expects all lower-case column names...
     for c in T.columns():
         if c != c.lower():
@@ -3731,6 +3722,7 @@ def stage_writecat(
 
     from legacypipe.format_catalog import format_catalog
 
+    # Reorder by objid
     Iorder = np.argsort(T.objid)
     T.cut(Iorder)
     if forced_T is not None:
