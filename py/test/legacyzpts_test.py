@@ -58,6 +58,11 @@ def main():
     # Cross-match to Gaia and check mags -- this is an end-to-end check on the calibs.
     T = fits_table('tractor/111/tractor-1110p322.fits')
     T.cut(T.brick_primary)
+    # because of the '--zoom', brick_primary isn't right (it's for the original full brick)
+    H,W = 400,400
+    in_bounds = (T.bx > 0) * (T.bx < W) * (T.by > 0) * (T.by < H)
+    T.cut(in_bounds)
+
     #G = fits_table(os.path.join(survey_dir, 'gaia-dr2', 'chunk-02791.fits'))
     G = fits_table('metrics/111/reference-1110p322.fits')
 
