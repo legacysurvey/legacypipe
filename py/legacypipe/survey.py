@@ -154,6 +154,13 @@ class GaiaPosition(ParamList):
         return ('%s: RA, Dec = (%.5f, %.5f), pm (%.1f, %.1f), parallax %.3f' %
                 (self.getName(), self.ra, self.dec, self.pmra, self.pmdec, self.parallax))
 
+    def __getstate__(self):
+        '''
+        For pickling: omit cached positions
+        '''
+        d = self.__dict__.copy()
+        d['cached_positions'] = dict()
+        return d
 
 class GaiaSource(PointSource):
     @staticmethod
