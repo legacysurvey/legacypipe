@@ -2115,7 +2115,7 @@ def _get_both_mods(X):
     try:
         Yo,Xo,Yi,Xi,_ = resample_with_wcs(tim.subwcs, targetwcs)
     except OverlapError:
-        return None,None
+        return None,None,None
     timblobmap = np.empty(mod.shape, blobmap.dtype)
     timblobmap[:,:] = -1
     timblobmap[Yo,Xo] = blobmap[Yi,Xi]
@@ -2358,8 +2358,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     callback_args=(survey, brickname, version_header, tims,
                                    targetwcs, co_sky, coadd_headers),
                     plots=plots, ps=ps, mp=mp)
-    record_event and record_event('stage_coadds: extras')
 
+    record_event and record_event('stage_coadds: extras')
     if save_coadd_psf:
         for band,psfimg in zip(bands, C.psf_imgs):
             with survey.write_output('copsf', brick=brickname, band=band) as out:
@@ -2453,6 +2453,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     if hasattr(tims[0], 'sims_image'):
         coadd_list.append(('simscoadd', sims_coadd, {}, None))
 
+    record_event and record_event('stage_coadds: writing image files')
     for name,ims,rgbkw,mask in coadd_list:
         if mask is not None:
             # Update in-place!
@@ -2468,6 +2469,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     del C.coblobmods
     del C.coresids
 
+    record_event and record_event('stage_coadds: maskbits')
     # Construct the maskbits map
     MASKBITS = survey.get_maskbits()
     maskbits = np.zeros((H,W), maskbits_type)
@@ -4903,8 +4905,7 @@ def main(args=None):
             ps_queue.append((time(), msg))
         kwargs.update(record_event=record_event)
         if ps_t0 > 0:
-            record_event('start')
-
+            ps_queue.append((ps_t0, 'start'))
         ps_thread = threading.Thread(
             target=run_ps_thread,
             args=(os.getpid(), os.getppid(), ps_file, ps_shutdown, ps_queue),
