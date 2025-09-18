@@ -147,7 +147,7 @@ def stage_galex_forced(
         for i,p in enumerate(phots[:len(args)]):
             if p is None:
                 (_,_,tiles,band) = args[i][:4]
-                print('"None" result from GALEX forced phot:', tiles, band)
+                print('"None" result from GALEX forced phot band', band, '- probably no coverage')
                 continue
             galex_models.extend(p.models)
             if GALEX is None:
@@ -187,7 +187,7 @@ def stage_galex_forced(
     if save_galex_psf:
         for band in ['n', 'f']:
             psfimg = galex_psf(band, galex_dir)
-            with survey.write_output('copsf', brick=brickname, band='%suv' % band) as out:
+            with survey.write_output('copsf', brick=brickname, band='%sUV' % band.upper()) as out:
                 out.fits.write(psfimg, header=version_header)
 
     debug('Returning: GALEX', GALEX)
@@ -271,6 +271,9 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
         central_flux_acc[I] += tim.getImage()[y[I], x[I]] * iv
         central_flux_wt [I] += iv
         del x,y,good,I
+
+    if len(tims) == 0:
+        return None
 
     central_flux = central_flux_acc / np.maximum(central_flux_wt, 1e-16)
     del central_flux_acc, central_flux_wt

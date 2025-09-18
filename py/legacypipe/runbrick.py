@@ -1397,6 +1397,7 @@ def stage_fitblobs(T=None,
         last_printout = CpuMeas()
 
         while True:
+            import time
             import multiprocessing
             # Time to write a checkpoint file? (And have something to write?)
             tnow = CpuMeas()

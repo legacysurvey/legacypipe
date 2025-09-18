@@ -53,7 +53,7 @@ def worker(inqueue, outqueue, initializer=None, initargs=(), maxtasks=None,
         try:
             result = (True, func(*args, **kwds))
         except Exception as e:
-            from multiprocessing.pool import _helper_reraises_exception
+            from multiprocessing.pool import _helper_reraises_exception, ExceptionWithTraceback
             if wrap_exception and func is not _helper_reraises_exception:
                 e = ExceptionWithTraceback(e, e.__traceback__)
             result = (False, e)
@@ -63,6 +63,7 @@ def worker(inqueue, outqueue, initializer=None, initargs=(), maxtasks=None,
             put((job, i, True, result))
             #
         except Exception as e:
+            from multiprocessing.pool import MaybeEncodingError
             wrapped = MaybeEncodingError(e, result[1])
             util.debug("Possible encoding error while sending result: %s" % (
                 wrapped))
