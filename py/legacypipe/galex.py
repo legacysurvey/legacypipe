@@ -187,7 +187,7 @@ def stage_galex_forced(
     if save_galex_psf:
         for band in ['n', 'f']:
             psfimg = galex_psf(band, galex_dir)
-            with survey.write_output('copsf', brick=brickname, band='%suv' % band) as out:
+            with survey.write_output('copsf', brick=brickname, band='%sUV' % band.upper()) as out:
                 out.fits.write(psfimg, header=version_header)
 
     debug('Returning: GALEX', GALEX)
