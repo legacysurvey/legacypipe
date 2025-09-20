@@ -60,6 +60,9 @@ RUN for x in \
 RUN mkdir /src
 WORKDIR /src
 
+# compile for a fairly old standard (for Perlmutter)
+ENV ARCH_FLAGS=-march=x86-64-v3
+
 # Astrometry.net
 RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
@@ -77,8 +80,8 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
     && python3.12 setup.py build_ext --with-ceres --with-cython --inplace \
-    && python3.12 setup.py install \
-    && rm -R $(find . -name "*.o" -o -name "*.so")
+    && pip install . --break-system-packages \
+    && rm -R $(find . -name "*.o" -o -name "*.so") && echo 1
 
 # DUST maps
 RUN mkdir -p dust/maps \
