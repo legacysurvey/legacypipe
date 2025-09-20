@@ -218,6 +218,12 @@ RUN patchelf --force-rpath --set-rpath /lib/x86_64-linux-gnu/ /usr/local/bin/mod
 # Install GPU code
 RUN pip3 install --break-system-packages --no-cache cupy-cuda12x
 
+RUN apt install -y libnvrtc12 libcudart12 libcurand10 libcusolver11 libnccl2 \
+    libcufft11 libcusparse12
+#RUN python -m cupyx.tools.install_library --library cudnn --cuda 12.x
+
+ENV LEGACYPIPE_DIR=/src/legacypipe/py
+
 # update legacypipe
 # RUN cd /src/legacypipe && \
 #   git pull && \
@@ -239,14 +245,3 @@ RUN cd tractor \
   && python setup.py build_ext --with-ceres --with-cython --inplace \
   && pip install . --break-system-packages
 
-# ugh EGGS GO AWAY NOBODY WANTS YOU
-# ("pip install" above correctly deletes the previously installed egg)
-#RUN rm -R /usr/local/lib/python3.12/dist-packages/tractor-10.6.dev1-py3.12-linux-x86_64.egg
-
-ENV LEGACYPIPE_DIR=/src/legacypipe/py
-
-RUN apt install -y libnvrtc12
-RUN apt install -y libcudart12 libcurand10 libcusolver11 libnccl2
-RUN apt install -y libcufft11
-RUN apt install -y libcusparse12
-#RUN python -m cupyx.tools.install_library --library cudnn --cuda 12.x
