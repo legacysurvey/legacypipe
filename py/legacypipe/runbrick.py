@@ -28,6 +28,7 @@ To see the code we run on each "blob" of pixels, see "oneblob.py".
 '''
 import sys
 import os
+import time
 import warnings
 
 import numpy as np
@@ -1198,6 +1199,7 @@ def stage_fitblobs(T=None,
     The `one_blob` function is called for each "blob" of pixels with
     the sources contained within that blob.
     '''
+    import time
     from tractor import Catalog
     from legacypipe.oneblob import MODEL_NAMES
     t = time.time()
@@ -1397,6 +1399,7 @@ def stage_fitblobs(T=None,
         last_printout = CpuMeas()
 
         while True:
+            import time
             import multiprocessing
             # Time to write a checkpoint file? (And have something to write?)
             tnow = CpuMeas()
@@ -2348,6 +2351,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     model fits, and we can create coadds of the images, model, and
     residuals.  We also perform aperture photometry in this stage.
     '''
+    import time
     from functools import reduce
     from legacypipe.survey import apertures_arcsec
     from legacypipe.bits import IN_BLOB
@@ -3674,6 +3678,7 @@ def stage_writecat(
     Final stage in the pipeline: format results for the output
     catalog.
     '''
+    import time
     from legacypipe.catalog import prepare_fits_catalog
     from legacypipe.utils import copy_header_with_wcs, add_bits
     t = time.time()
@@ -4292,12 +4297,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         release = survey.get_default_release()
         if release is None:
             release = 9999
-
-    if fit_on_coadds:
-        # Implied options!
-        #subsky = False
-        large_galaxies = True
-        large_galaxies_force_pointsource = False
 
     if remake_outlier_jpegs:
         cache_outliers = True

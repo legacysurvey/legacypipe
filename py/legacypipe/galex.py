@@ -147,7 +147,7 @@ def stage_galex_forced(
         for i,p in enumerate(phots[:len(args)]):
             if p is None:
                 (_,_,tiles,band) = args[i][:4]
-                print('"None" result from GALEX forced phot:', tiles, band)
+                print('"None" result from GALEX forced phot band', band, '- probably no coverage')
                 continue
             galex_models.extend(p.models)
             if GALEX is None:
@@ -187,7 +187,7 @@ def stage_galex_forced(
     if save_galex_psf:
         for band in ['n', 'f']:
             psfimg = galex_psf(band, galex_dir)
-            with survey.write_output('copsf', brick=brickname, band='%suv' % band) as out:
+            with survey.write_output('copsf', brick=brickname, band='%sUV' % band.upper()) as out:
                 out.fits.write(psfimg, header=version_header)
 
     debug('Returning: GALEX', GALEX)
@@ -271,6 +271,9 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
         central_flux_acc[I] += tim.getImage()[y[I], x[I]] * iv
         central_flux_wt [I] += iv
         del x,y,good,I
+
+    if len(tims) == 0:
+        return None
 
     central_flux = central_flux_acc / np.maximum(central_flux_wt, 1e-16)
     del central_flux_acc, central_flux_wt
@@ -662,12 +665,16 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname,
 
     inverr = np.zeros_like(img)
     K = varimg > 0
-    if np.sum(K) == 0:
-        print('All pixels lack variance estimates; subimage is X %i-%i, Y %i-%i, img range %.3f to %.3f'
-              % (x0, x1, y0, y1, img.min(), img.max()))
-        return None
+    #if np.sum(K) == 0:
+    #    print('All pixels lack variance estimates; subimage is X %i-%i, Y %i-%i, img range %.3f to %.3f'
+    #          % (x0, x1, y0, y1, img.min(), img.max()))
+    #    return None
 
-    inverr[K] = 1.0 / np.sqrt(varimg[K])
+    if np.any(K):
+        inverr[K] = 1.0 / np.sqrt(varimg[K])
+        sig1 = 1./np.median(inverr[inverr>0])
+    else:
+        sig1 = 0.
 
     zp = tile.get('%s_zpmag' % band)
     zpscale = NanoMaggies.zeropointToScale(zp)
@@ -690,7 +697,7 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname,
     tim = Image(data=img, inverr=inverr, psf=tpsf, wcs=twcs,
                 sky=tsky, photocal=photocal, name=name)
     tim.roi = [x0,x1,y0,y1]
-    tim.sig1 = 1./np.median(inverr[inverr>0])
+    tim.sig1 = sig1
     return tim
 
 def galex_coadds(onegal, galaxy=None, radius_mosaic=30, radius_mask=None,

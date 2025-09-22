@@ -4,9 +4,9 @@
 
 export COSMO=/dvs_ro/cfs/cdirs/cosmo
 
-## FIXME
-#export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
-export LEGACY_SURVEY_DIR=$SCRATCH/dr11-sky
+## FIXME?
+export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
+#export LEGACY_SURVEY_DIR=$SCRATCH/dr11-sky
 
 outdir=$SCRATCH/dr11-gpu
 
@@ -78,8 +78,8 @@ echo "PYTHONPATH: $PYTHONPATH" >> "$log"
 python -c "import tractor; print(tractor.__file__)" >> "$log"
 python -c "import legacypipe; print(legacypipe.__file__)" >> "$log"
 python -c "import sys; print('\n'.join(sys.path))" >> "$log"
-
-#       --skip-calibs \
+nvidia-smi >> "$log"
+set | grep ^SLURM >> "$log"
 
 # https://github.com/dmargala/desiscaleflow/blob/main/bin/desi_avoid_home
 # https://developer.nvidia.com/blog/cuda-pro-tip-understand-fat-binaries-jit-caching/
@@ -87,7 +87,6 @@ python -c "import sys; print('\n'.join(sys.path))" >> "$log"
 #export CUDA_CACHE_PATH=$SCRATCH/.nv/ComputeCache
 export CUDA_CACHE_PATH=$TMPCACHE/.nv/ComputeCache
 mkdir -p $CUDA_CACHE_PATH
-#cp -r $HOME/.config/matplotlib $MPLCONFIGDIR
 
 # # undocumented, see https://github.com/cupy/cupy/issues/3887
 # export CUPY_CUDA_LIB_PATH=$SCRATCH/cupy/cuda_lib
@@ -101,10 +100,10 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --brick "$brick" \
        --use-gpu \
        --sub-blobs \
-       --ngpu 2 \
-       --threads 64 \
+       --ngpu 1 \
+       --threads 32 \
+       --threads-per-gpu 8 \
        --gpumode 2 \
-       --threads-per-gpu 4 \
        --bands g,r,z \
        --rgb-stretch 1.5 \
        --nsatur 2 \
@@ -115,7 +114,6 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --checkpoint-period 120 \
        --write-stage srcs \
        --release 10099 \
-       --no-wise \
        >> "$log" 2>&1
 
 # Save the return value from the python command -- otherwise we
