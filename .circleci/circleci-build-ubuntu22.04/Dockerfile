@@ -84,10 +84,13 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 # The Tractor
 RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && python3.10 setup.py --with-ceres --with-cython install --home /usr/local \
-    && python3.11 setup.py --with-ceres --with-cython install --home /usr/local \
+    && cp setup-with-ceres-and-cython.py setup.py \
+    && python3.10 -m pip install -v . \
+    && python3.11 -m pip install -v . \
     && rm -R $(find . -name "*.o" -o -name "*.so")
 
+#    && python3.10 setup.py build_ext --with-ceres --with-cython --inplace \
+#    && python3.11 setup.py build_ext --with-ceres --with-cython --inplace \
 #    && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
 #    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
 
