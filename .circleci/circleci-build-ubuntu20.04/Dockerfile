@@ -84,10 +84,14 @@ ENV PYTHON=python3
 # The Tractor
 RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && python3.8 setup.py --with-cython --with-ceres install --home /usr/local \
-    && python3.9 setup.py --with-cython --with-ceres install --home /usr/local \
-    && rm -R $(find . -name "*.o" -o -name "*.so") \
+    && cp setup-with-ceres-and-cython.py setup.py \
+    && python3.8 -m pip install -v . \
+    && python3.9 -m pip install -v . \
     && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
+
+#    && rm -R $(find . -name "*.o" -o -name "*.so") \
+
+#    && python3.9 setup.py build_ext --with-cython --with-ceres --inplace \
 
 # python = python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
