@@ -1345,7 +1345,7 @@ def stage_fitblobs(T=None,
                     traceback.print_exc()
 
             dt = tnow.wall_seconds_since(last_printout)
-            if dt > 10:
+            if dt > 60:
                 last_printout = tnow
                 if hasattr(Riter, 'get_running_jobs'):
                     print('Running:')
@@ -1370,8 +1370,8 @@ def stage_fitblobs(T=None,
                         pid = s['pid']
                         i = np.flatnonzero(procs.pid == pid)
                         if len(i) != 1:
-                            print('did not find PID', pid)
-                            print('Blob %10s' % blob, 'pid', s['pid'], 'running for %7.1f sec' % (tnow - s['time']))
+                            print('Blob %10s' % blob, 'pid', pid, '"running" for %7.1f sec, but did not find PID %i: crashed?' %
+                                  (tnow - s['time'], pid))
                         else:
                             i = i[0]
                             print('Blob %5s' % blob, 'pid %7i' % s['pid'],
