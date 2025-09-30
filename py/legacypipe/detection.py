@@ -1,5 +1,6 @@
 import numpy as np
 import time
+from legacypipe.survey import tim_get_resamp
 
 import logging
 logger = logging.getLogger('legacypipe.detection')
@@ -83,7 +84,6 @@ def _detmap_gpu_batched(tims, targetwcs, apodize):
 
 def _detmap(X):
     from scipy.ndimage.filters import gaussian_filter
-    from legacypipe.survey import tim_get_resamp
     (tim, targetwcs, apodize) = X
     R = tim_get_resamp(tim, targetwcs)
     if R is None:
@@ -175,7 +175,6 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None, use_gp
 
 def detection_maps_gpu(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
     import cupy as cp
-    from legacypipe.survey import tim_get_resamp
 
     # Render the detection maps
     H,W = targetwcs.shape
