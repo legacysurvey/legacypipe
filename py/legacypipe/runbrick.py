@@ -2172,7 +2172,7 @@ def _bounce_one_blob(X):
             Xlist[-2] = gpumode
             X = tuple(Xlist)
     else:
-        print ("X is None for worker {pid}")
+        print (f"X is None for worker {pid}")
 
     try:
         t = time.time()
