@@ -54,11 +54,6 @@ import time
 
 _GLOBAL_LEGACYPIPE_CONTEXT = {'is_gpu_worker': False, 'gpu_device_id': None, 'gpumode': 0}
 
-ttr = np.zeros(8)
-
-def print_tr():
-    print ("TR ", ttr, ttr.sum())
-
 import logging
 logger = logging.getLogger('legacypipe.runbrick')
 def info(*args):
