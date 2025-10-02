@@ -338,20 +338,33 @@ def get_git_version(dirnm=None):
     -------
     Git version string
     '''
-    from astrometry.util.run_command import run_command
-    cmd = ''
+    import os
+    import subprocess
+
     if dirnm is None:
-        # Get the git version of the legacypipe product
         import legacypipe
         dirnm = os.path.dirname(legacypipe.__file__)
 
-    cmd = "cd '%s' && git describe" % dirnm
-    rtn,version,err = run_command(cmd)
-    if rtn:
-        raise RuntimeError('Failed to get version string (%s): ' % cmd +
-                           version + err)
-    version = version.strip()
-    return version
+    try:
+        p = subprocess.run(
+            ['git', '-C', dirnm, 'describe'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+            close_fds=True)
+    except Exception as e:
+        raise RuntimeError(f"Failed to invoke git: {e}")
+
+    if p.returncode != 0:
+        out = (p.stdout or '').strip()
+        err = (p.stderr or '').strip()
+        raise RuntimeError(
+            f"Failed to get version string (git -C '{dirnm}' describe): {out} {err}"
+        )
+
+    return p.stdout.strip()
+
 
 def get_version_header(program_name, survey_dir, release, git_version=None,
                        proctype='tile'):
