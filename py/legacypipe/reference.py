@@ -774,36 +774,32 @@ def get_galaxy_sources(galaxies, bands):
 
     else:
         print('SGA parent - sources')
-        syntax_bomb()
-        # # SGA parent catalog: 'preburned' is not set
-        # # This also can happen in the preburned/ellipse catalog when fitting
-        # # fails, or no-grz, etc.
-        # I, = np.nonzero(np.logical_not(galaxies.preburned))
-        # for ii,g in zip(I, galaxies[I]):
-        #     # Initialize each source with an exponential disk--
-        #     fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag))
-        #                    for band in bands])
-        #     assert(np.all(np.isfinite(list(fluxes.values()))))
-        #     rr = g.radius * 3600. / 2 # factor of two accounts for R(25)-->reff [arcsec]
-        #     assert(np.isfinite(rr))
-        #     assert(np.isfinite(g.ba))
-        #     assert(np.isfinite(g.pa))
-        #     ba = g.ba
-        #     if ba <= 0.0 or ba > 1.0:
-        #         # Make round!
-        #         ba = 1.0
-        #     logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, ba, 180-g.pa) # note the 180 rotation
-        #     assert(np.isfinite(logr))
-        #     assert(np.isfinite(ee1))
-        #     assert(np.isfinite(ee2))
-        #     shape = LegacyEllipseWithPriors(logr, ee1, ee2)
-        #     shape.setMaxLogRadius(logr + np.log(radius_max_factor))
-        #     src = ExpGalaxy(RaDecPos(g.ra, g.dec),
-        #                     NanoMaggies(order=bands, **fluxes),
-        #                     shape)
-        #     assert(np.isfinite(src.getLogPrior()))
-        #     src.needs_initial_flux = True
-        #     srcs[ii] = src
+        I, = np.nonzero(np.logical_not(galaxies.ignore_source))
+        for ii,g in zip(I, galaxies[I]):
+            # Initialize each source with an exponential disk--
+            fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag))
+                           for band in bands])
+            assert(np.all(np.isfinite(list(fluxes.values()))))
+            rr = g.radius * 3600. / 2 # factor of two accounts for R(25)-->reff [arcsec]
+            assert(np.isfinite(rr))
+            assert(np.isfinite(g.ba))
+            assert(np.isfinite(g.pa))
+            ba = g.ba
+            if ba <= 0.0 or ba > 1.0:
+                # Make round!
+                ba = 1.0
+            logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, ba, 180-g.pa) # note the 180 rotation
+            assert(np.isfinite(logr))
+            assert(np.isfinite(ee1))
+            assert(np.isfinite(ee2))
+            shape = LegacyEllipseWithPriors(logr, ee1, ee2)
+            shape.setMaxLogRadius(logr + np.log(radius_max_factor))
+            src = ExpGalaxy(RaDecPos(g.ra, g.dec),
+                            NanoMaggies(order=bands, **fluxes),
+                            shape)
+            assert(np.isfinite(src.getLogPrior()))
+            src.needs_initial_flux = True
+            srcs[ii] = src
 
     return srcs
 
