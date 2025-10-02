@@ -592,12 +592,15 @@ def read_sga(survey, rc, dc, max_radius):
         galaxies.fitmode = np.zeros(len(galaxies), sga_fitmode_type)
 
     galaxies.ignore_source = np.zeros(len(galaxies), bool)
+    galaxies.ref_cat = np.array([refcat] * len(galaxies))
 
     if is_ellipse:
+        print('SGA ellipse catalog')
         # SGA ellipse catalog
         if has_fitmode:
+            print('Has fitmode')
             # SGA-2025
-            galaxies.islargegalaxy = (galaxies.sga_id > -1)
+            galaxies.islargegalaxy = (galaxies.ref_id > -1)
             galaxies.freezeparams = ((galaxies.fitmode & SGA_FITMODE['FREEZE']) != 0)
 
             galaxies.set_galaxy_maskbit = reduce(np.logical_or, [
@@ -611,6 +614,7 @@ def read_sga(survey, rc, dc, max_radius):
             galaxies.ignore_source |= ((galaxies.fitmode & SGA_FITMODE['FIXGEO']) != 0)
 
         else:
+            print('No fitmode -- SGA-2020?')
             # SGA-2020
             # NOTE: fields such as ref_cat, preburned, etc, already exist in the
             # "galaxies" catalog read from disk.
@@ -626,16 +630,17 @@ def read_sga(survey, rc, dc, max_radius):
 
             galaxies.set_galaxy_maskbit = galaxies.islargegalaxy
             
-        # set ref_cat and ref_id for galaxies outside the footprint
-        I = np.flatnonzero(np.logical_not(galaxies.in_footprint_grz))
-        galaxies.ref_id[I] = galaxies.sga_id[I]
-        galaxies.ref_cat[I] = np.array([refcat] * len(I))
+            # set ref_cat and ref_id for galaxies outside the footprint
+            I = np.flatnonzero(np.logical_not(galaxies.in_footprint_grz))
+            galaxies.ref_id[I] = galaxies.sga_id[I]
 
     else:
+        print('SGA parent catalog')
         # SGA parent catalog.
         galaxies.ref_cat = np.array([refcat] * len(galaxies))
 
         if has_fitmode:
+            print('Has fitmode')
             # SGA-2025
             # The fitmode FREEZE bit is not allowed in the parent catalog
             assert(np.all((galaxies.fitmode & SGA_FITMODE['FREEZE']) == 0))
@@ -644,6 +649,7 @@ def read_sga(survey, rc, dc, max_radius):
                 galaxies.fitmode == SGA_FITMODE['FIXGEO']
             ])
         else:
+            print('No fitmode -- SGA-2020?')
             # SGA-2020
             galaxies.islargegalaxy = np.ones(len(galaxies), bool)
             galaxies.freezeparams = np.zeros(len(galaxies), bool)
@@ -716,81 +722,88 @@ def get_galaxy_sources(galaxies, bands):
             missing_band = True
             warnings.warn('No "flux_%s" column in SGA catalog; will have to fit for fluxes' % band)
 
-    # If we have pre-burned galaxies, re-create the Tractor sources for them.
-    I, = np.nonzero(galaxies.preburned)
-    for ii,g in zip(I, galaxies[I]):
-        typ = fits_reverse_typemap[g.type.strip()]
-        pos = RaDecPos(g.ra, g.dec)
-        fluxes = dict([(band, g.get('flux_%s' % band) if has_band[band] else 1.) for band in bands])
-        bright = NanoMaggies(order=bands, **fluxes)
-        shape = None
-        # put the Rex branch first, because Rex is a subclass of ExpGalaxy!
-        if issubclass(typ, RexGalaxy):
-            assert(np.isfinite(g.shape_r))
-            logre = np.log(g.shape_r)
-            shape = LogRadius(logre)
-            # set prior max at 2x SGA radius
-            shape.setMaxLogRadius(logre + np.log(radius_max_factor))
-        elif issubclass(typ, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
-            assert(np.isfinite(g.shape_r))
-            assert(np.isfinite(g.shape_e1))
-            assert(np.isfinite(g.shape_e2))
-            shape = EllipseE(g.shape_r, g.shape_e1, g.shape_e2)
-            # switch to softened ellipse (better fitting behavior)
-            shape = EllipseESoft.fromEllipseE(shape)
-            # and then to our custom ellipse class
-            logre = shape.logre
-            shape = LegacyEllipseWithPriors(logre, shape.ee1, shape.ee2)
-            assert(np.all(np.isfinite(shape.getParams())))
-            # set prior max at 2x SGA radius
-            shape.setMaxLogRadius(logre + np.log(radius_max_factor))
+    # awful
+    is_ellipse_cat = ('sersic' in cols)
+    print('Ellipse cat?', is_ellipse_cat)
+    print('bands', bands)
 
-        if issubclass(typ, PointSource):
-            src = typ(pos, bright)
-        # this catches Rex too
-        elif issubclass(typ, (DevGalaxy, ExpGalaxy)):
-            src = typ(pos, bright, shape)
-        elif issubclass(typ, (SersicGalaxy)):
-            assert(np.isfinite(g.sersic))
-            sersic = LegacySersicIndex(g.sersic)
-            src = typ(pos, bright, shape, sersic)
-        else:
-            raise RuntimeError('Unknown preburned SGA source type "%s"' % typ)
-        debug('Created', src)
-        if missing_band:
-            src.needs_initial_flux = True
-        assert(np.isfinite(src.getLogPrior()))
-        srcs[ii] = src
+    if is_ellipse_cat:
+        for ii,g in enumerate(galaxies):
+            typ = fits_reverse_typemap[g.type.strip()]
+            pos = RaDecPos(g.ra, g.dec)
+            fluxes = dict([(band, g.get('flux_%s' % band) if has_band[band] else 1.) for band in bands])
+            bright = NanoMaggies(order=bands, **fluxes)
+            shape = None
+            # put the Rex branch first, because Rex is a subclass of ExpGalaxy!
+            if issubclass(typ, RexGalaxy):
+                assert(np.isfinite(g.shape_r))
+                logre = np.log(g.shape_r)
+                shape = LogRadius(logre)
+                # set prior max at 2x SGA radius
+                shape.setMaxLogRadius(logre + np.log(radius_max_factor))
+            elif issubclass(typ, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
+                assert(np.isfinite(g.shape_r))
+                assert(np.isfinite(g.shape_e1))
+                assert(np.isfinite(g.shape_e2))
+                shape = EllipseE(g.shape_r, g.shape_e1, g.shape_e2)
+                # switch to softened ellipse (better fitting behavior)
+                shape = EllipseESoft.fromEllipseE(shape)
+                # and then to our custom ellipse class
+                logre = shape.logre
+                shape = LegacyEllipseWithPriors(logre, shape.ee1, shape.ee2)
+                assert(np.all(np.isfinite(shape.getParams())))
+                # set prior max at 2x SGA radius
+                shape.setMaxLogRadius(logre + np.log(radius_max_factor))
 
-    # SGA parent catalog: 'preburned' is not set
-    # This also can happen in the preburned/ellipse catalog when fitting
-    # fails, or no-grz, etc.
-    I, = np.nonzero(np.logical_not(galaxies.preburned))
-    for ii,g in zip(I, galaxies[I]):
-        # Initialize each source with an exponential disk--
-        fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag))
-                       for band in bands])
-        assert(np.all(np.isfinite(list(fluxes.values()))))
-        rr = g.radius * 3600. / 2 # factor of two accounts for R(25)-->reff [arcsec]
-        assert(np.isfinite(rr))
-        assert(np.isfinite(g.ba))
-        assert(np.isfinite(g.pa))
-        ba = g.ba
-        if ba <= 0.0 or ba > 1.0:
-            # Make round!
-            ba = 1.0
-        logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, ba, 180-g.pa) # note the 180 rotation
-        assert(np.isfinite(logr))
-        assert(np.isfinite(ee1))
-        assert(np.isfinite(ee2))
-        shape = LegacyEllipseWithPriors(logr, ee1, ee2)
-        shape.setMaxLogRadius(logr + np.log(radius_max_factor))
-        src = ExpGalaxy(RaDecPos(g.ra, g.dec),
-                        NanoMaggies(order=bands, **fluxes),
-                        shape)
-        assert(np.isfinite(src.getLogPrior()))
-        src.needs_initial_flux = True
-        srcs[ii] = src
+            if issubclass(typ, PointSource):
+                src = typ(pos, bright)
+            # this catches Rex too
+            elif issubclass(typ, (DevGalaxy, ExpGalaxy)):
+                src = typ(pos, bright, shape)
+            elif issubclass(typ, (SersicGalaxy)):
+                assert(np.isfinite(g.sersic))
+                sersic = LegacySersicIndex(g.sersic)
+                src = typ(pos, bright, shape, sersic)
+            else:
+                raise RuntimeError('Unknown SGA-ellipse source type "%s"' % typ)
+            debug('Created', src)
+            if missing_band:
+                src.needs_initial_flux = True
+            assert(np.isfinite(src.getLogPrior()))
+            srcs[ii] = src
+
+    else:
+        print('SGA parent - sources')
+        syntax_bomb()
+        # # SGA parent catalog: 'preburned' is not set
+        # # This also can happen in the preburned/ellipse catalog when fitting
+        # # fails, or no-grz, etc.
+        # I, = np.nonzero(np.logical_not(galaxies.preburned))
+        # for ii,g in zip(I, galaxies[I]):
+        #     # Initialize each source with an exponential disk--
+        #     fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag))
+        #                    for band in bands])
+        #     assert(np.all(np.isfinite(list(fluxes.values()))))
+        #     rr = g.radius * 3600. / 2 # factor of two accounts for R(25)-->reff [arcsec]
+        #     assert(np.isfinite(rr))
+        #     assert(np.isfinite(g.ba))
+        #     assert(np.isfinite(g.pa))
+        #     ba = g.ba
+        #     if ba <= 0.0 or ba > 1.0:
+        #         # Make round!
+        #         ba = 1.0
+        #     logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, ba, 180-g.pa) # note the 180 rotation
+        #     assert(np.isfinite(logr))
+        #     assert(np.isfinite(ee1))
+        #     assert(np.isfinite(ee2))
+        #     shape = LegacyEllipseWithPriors(logr, ee1, ee2)
+        #     shape.setMaxLogRadius(logr + np.log(radius_max_factor))
+        #     src = ExpGalaxy(RaDecPos(g.ra, g.dec),
+        #                     NanoMaggies(order=bands, **fluxes),
+        #                     shape)
+        #     assert(np.isfinite(src.getLogPrior()))
+        #     src.needs_initial_flux = True
+        #     srcs[ii] = src
 
     return srcs
 
