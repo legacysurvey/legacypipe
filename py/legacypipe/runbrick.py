@@ -95,29 +95,30 @@ def runbrick_global_init(shared_counter, shared_lock, available_gpu_ids_param, n
     is_gpu_worker = False
     gpu_device_id = None
 
-    try:
-        import cupy as cp
-        if not cp.cuda.is_available():
-            info(f"Worker process {pid}: CuPy found, but no CUDA devices available. Running as CPU worker.")
-            is_gpu_worker = False
-        else:
-            with _next_gpu_id_lock: # Protect the counter for atomic access
-                if _available_gpu_ids and _next_gpu_id_counter.value < _ngpu * _threads_per_gpu:
-                    gpu_device_id = _available_gpu_ids[_next_gpu_id_counter.value % len(_available_gpu_ids)]
-                    _next_gpu_id_counter.value += 1
-                    is_gpu_worker = True
-                    print(f'Worker PID {pid}: Assigned GPU {gpu_device_id}. Shared counter incremented to {_next_gpu_id_counter.value}.')
-                else:
-                    info(f"Worker process {pid}: All GPU slots taken or no GPUs available. Running as CPU worker.")
-                    is_gpu_worker = False
+    if ngpu_param > 0:
+        try:
+            import cupy as cp
+            if not cp.cuda.is_available():
+                info(f"Worker process {pid}: CuPy found, but no CUDA devices available. Running as CPU worker.")
+                is_gpu_worker = False
+            else:
+                with _next_gpu_id_lock: # Protect the counter for atomic access
+                    if _available_gpu_ids and _next_gpu_id_counter.value < _ngpu * _threads_per_gpu:
+                        gpu_device_id = _available_gpu_ids[_next_gpu_id_counter.value % len(_available_gpu_ids)]
+                        _next_gpu_id_counter.value += 1
+                        is_gpu_worker = True
+                        print(f'Worker PID {pid}: Assigned GPU {gpu_device_id}. Shared counter incremented to {_next_gpu_id_counter.value}.')
+                    else:
+                        info(f"Worker process {pid}: All GPU slots taken or no GPUs available. Running as CPU worker.")
+                        is_gpu_worker = False
 
-    except ImportError:
-        info(f"Worker process {pid}: ImportError: Could not import cupy. Running as CPU worker.")
-        is_gpu_worker = False
-    except Exception as e: # Catch any other unexpected errors during GPU setup
-        info(f"Worker process {pid}: Unexpected error during GPU setup: {e}. Running as CPU worker.")
-        traceback.print_exc()
-        is_gpu_worker = False
+        except ImportError:
+            info(f"Worker process {pid}: ImportError: Could not import cupy. Running as CPU worker.")
+            is_gpu_worker = False
+        except Exception as e: # Catch any other unexpected errors during GPU setup
+            info(f"Worker process {pid}: Unexpected error during GPU setup: {e}. Running as CPU worker.")
+            traceback.print_exc()
+            is_gpu_worker = False
 
     if not is_gpu_worker:
         _gpumode = 0
