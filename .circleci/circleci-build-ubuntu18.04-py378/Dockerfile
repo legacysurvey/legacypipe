@@ -105,7 +105,7 @@ RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cp setup-with-ceres-and-cython.py setup.py \
     && python3.7 -m pip install . \
     && python3.8 -m pip install . \
-    && rm -R $(find . -name "*.o" -o -name "*.so")
+    && rm -R $(find . -name "*.o" -o -name "*.so") && echo 1
 
 # DUST maps
 RUN mkdir -p dust/maps \

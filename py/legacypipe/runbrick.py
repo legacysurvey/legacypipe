@@ -4165,12 +4165,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         if release is None:
             release = 9999
 
-    if fit_on_coadds:
-        # Implied options!
-        #subsky = False
-        large_galaxies = True
-        large_galaxies_force_pointsource = False
-
     if remake_outlier_jpegs:
         cache_outliers = True
 
