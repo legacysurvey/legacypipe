@@ -350,8 +350,9 @@ def get_git_version(dirnm=None):
             ['git', '-C', dirnm, 'describe'],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            capture_output=True,
-            text=True)
+            text=True,
+            check=False,
+            close_fds=True)
     except Exception as e:
         raise RuntimeError(f"Failed to invoke git: {e}")
 
