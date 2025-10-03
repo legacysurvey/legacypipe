@@ -54,11 +54,6 @@ import time
 
 _GLOBAL_LEGACYPIPE_CONTEXT = {'is_gpu_worker': False, 'gpu_device_id': None, 'gpumode': 0}
 
-ttr = np.zeros(8)
-
-def print_tr():
-    print ("TR ", ttr, ttr.sum())
-
 import logging
 logger = logging.getLogger('legacypipe.runbrick')
 def info(*args):
@@ -95,29 +90,30 @@ def runbrick_global_init(shared_counter, shared_lock, available_gpu_ids_param, n
     is_gpu_worker = False
     gpu_device_id = None
 
-    try:
-        import cupy as cp
-        if not cp.cuda.is_available():
-            info(f"Worker process {pid}: CuPy found, but no CUDA devices available. Running as CPU worker.")
-            is_gpu_worker = False
-        else:
-            with _next_gpu_id_lock: # Protect the counter for atomic access
-                if _available_gpu_ids and _next_gpu_id_counter.value < _ngpu * _threads_per_gpu:
-                    gpu_device_id = _available_gpu_ids[_next_gpu_id_counter.value % len(_available_gpu_ids)]
-                    _next_gpu_id_counter.value += 1
-                    is_gpu_worker = True
-                    print(f'Worker PID {pid}: Assigned GPU {gpu_device_id}. Shared counter incremented to {_next_gpu_id_counter.value}.')
-                else:
-                    info(f"Worker process {pid}: All GPU slots taken or no GPUs available. Running as CPU worker.")
-                    is_gpu_worker = False
+    if ngpu_param > 0:
+        try:
+            import cupy as cp
+            if not cp.cuda.is_available():
+                info(f"Worker process {pid}: CuPy found, but no CUDA devices available. Running as CPU worker.")
+                is_gpu_worker = False
+            else:
+                with _next_gpu_id_lock: # Protect the counter for atomic access
+                    if _available_gpu_ids and _next_gpu_id_counter.value < _ngpu * _threads_per_gpu:
+                        gpu_device_id = _available_gpu_ids[_next_gpu_id_counter.value % len(_available_gpu_ids)]
+                        _next_gpu_id_counter.value += 1
+                        is_gpu_worker = True
+                        print(f'Worker PID {pid}: Assigned GPU {gpu_device_id}. Shared counter incremented to {_next_gpu_id_counter.value}.')
+                    else:
+                        info(f"Worker process {pid}: All GPU slots taken or no GPUs available. Running as CPU worker.")
+                        is_gpu_worker = False
 
-    except ImportError:
-        info(f"Worker process {pid}: ImportError: Could not import cupy. Running as CPU worker.")
-        is_gpu_worker = False
-    except Exception as e: # Catch any other unexpected errors during GPU setup
-        info(f"Worker process {pid}: Unexpected error during GPU setup: {e}. Running as CPU worker.")
-        traceback.print_exc()
-        is_gpu_worker = False
+        except ImportError:
+            info(f"Worker process {pid}: ImportError: Could not import cupy. Running as CPU worker.")
+            is_gpu_worker = False
+        except Exception as e: # Catch any other unexpected errors during GPU setup
+            info(f"Worker process {pid}: Unexpected error during GPU setup: {e}. Running as CPU worker.")
+            traceback.print_exc()
+            is_gpu_worker = False
 
     if not is_gpu_worker:
         _gpumode = 0
@@ -473,7 +469,6 @@ def stage_refs(survey=None,
                tims=None,
                **kwargs):
     from legacypipe.reference import get_reference_sources
-    t = time.time()
 
     record_event and record_event('stage_refs: starting')
     _add_stage_version(version_header, 'REFS', 'refs')
@@ -598,8 +593,6 @@ def stage_refs(survey=None,
             'refcat']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
-    ttr[4] += time.time()-t
-    print_tr()
     return rtn
 
 def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
@@ -618,7 +611,6 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
     for the outliers file.
     '''
     from legacypipe.outliers import patch_from_coadd, mask_outlier_pixels, read_outlier_mask_file
-    t = time.time()
 
     record_event and record_event('stage_outliers: starting')
     _add_stage_version(version_header, 'OUTL', 'outliers')
@@ -684,8 +676,6 @@ def stage_outliers(tims=None, targetwcs=None, W=None, H=None, bands=None,
             del badcoaddsneg
         info('"After" coadds:', Time()-t0)
 
-    ttr[5] += time.time()-t
-    print_tr()
     return dict(tims=tims, version_header=version_header)
 
 def stage_halos(pixscale=None, targetwcs=None,
@@ -738,7 +728,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
                        less_masking=False,
                        **kwargs):
     from legacypipe.utils import copy_header_with_wcs
-    t = time.time()
     record_event and record_event('stage_image_coadds: starting')
     '''
     Immediately after reading the images, we can create coadds of just
@@ -887,8 +876,6 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
         del rgb
     del coadd_list
     del C
-    ttr[6] += time.time()-t
-    print_tr()
     return None
 
 def stage_srcs(pixscale=None, targetwcs=None,
@@ -922,7 +909,6 @@ def stage_srcs(pixscale=None, targetwcs=None,
     from legacypipe.detection import (detection_maps, merge_hot_satur,
                         run_sed_matched_filters, segment_and_group_sources)
     from scipy.ndimage import binary_dilation
-    t = time.time()
 
     record_event and record_event('stage_srcs: starting')
     _add_stage_version(version_header, 'SRCS', 'srcs')
@@ -1149,8 +1135,6 @@ def stage_srcs(pixscale=None, targetwcs=None,
             'ps', 'saturated_pix', 'version_header', 'co_sky', 'ccds']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
-    ttr[7] += time.time()-t
-    print_tr()
     return rtn
 
 def stage_fitblobs(T=None,
@@ -1202,7 +1186,6 @@ def stage_fitblobs(T=None,
     import time
     from tractor import Catalog
     from legacypipe.oneblob import MODEL_NAMES
-    t = time.time()
     #return None
 
     record_event and record_event('stage_fitblobs: starting')
@@ -1380,14 +1363,10 @@ def stage_fitblobs(T=None,
                           enable_sub_blobs=sub_blobs,
                           ran_sub_blobs=ran_sub_blobs,
                           use_gpu=use_gpu,gpumode=gpumode,bid=bid)
-    print ("BLOBITER", type(blobiter))
-    print (blobiter)
 
     if checkpoint_filename is None:
-        print ("TEST1")
         R.extend(mp.map(_bounce_one_blob, blobiter))
     else:
-        print ("TEST2")
         from astrometry.util.ttime import CpuMeas
         # Begin running one_blob on each blob...
         Riter = mp.imap_unordered(_bounce_one_blob, blobiter)
@@ -1721,8 +1700,6 @@ def stage_fitblobs(T=None,
         keys.append('sub_blob_mask')
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
-    ttr[2] += time.time()-t
-    print_tr()
     return rtn
 
 # Also called by farm.py
@@ -2175,7 +2152,6 @@ def _bounce_one_blob(X):
         print (f"X is None for worker {pid}")
 
     try:
-        t = time.time()
         if is_gpu_worker:
             import cupy as cp
             cp.cuda.Device(gpu_device_id).use()
@@ -2192,8 +2168,6 @@ def _bounce_one_blob(X):
                     result.cut((result.bx0 >= x0) * (result.bx0 < x1) *
                                (result.by0 >= y0) * (result.by0 < y1))
                 debug('Blob_unique cut kept', len(result), 'of', ntot, 'sources')
-        ttr[0] += time.time()-t
-        print_tr()
         ### This defines the format of the results in the checkpoints files
         return dict(brickname=brickname, iblob=iblob, result=result)
     except:
@@ -2356,7 +2330,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     from legacypipe.survey import apertures_arcsec
     from legacypipe.bits import IN_BLOB
     from legacypipe.survey import clean_band_name
-    t = time.time()
     #return None
 
     record_event and record_event('stage_coadds: starting')
@@ -2721,8 +2694,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
     tnow = Time()
     debug('Aperture photometry wrap-up:', tnow-tlast)
-    ttr[1] += time.time()-t
-    print_tr()
 
     return dict(T=T, apertures_pix=apertures,
                 apertures_arcsec=apertures_arcsec,
@@ -3681,7 +3652,6 @@ def stage_writecat(
     import time
     from legacypipe.catalog import prepare_fits_catalog
     from legacypipe.utils import copy_header_with_wcs, add_bits
-    t = time.time()
 
     record_event and record_event('stage_writecat: starting')
     _add_stage_version(version_header, 'WCAT', 'writecat')
@@ -3924,8 +3894,6 @@ def stage_writecat(
         f.close()
 
     record_event and record_event('stage_writecat: done')
-    ttr[3] += time.time()-t
-    print_tr()
     return dict(T=T, version_header=version_header)
 
 def set_brick_primary(T, brick):
@@ -4374,6 +4342,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     # --- Set up available GPU IDs for the initializer ---
     _available_gpu_ids = []
+    if not use_gpu:
+        #ngpu defaults to 1 but in CPU only mode we want this to be 0
+        ngpu = 0
     _ngpu = ngpu
     _threads_per_gpu = threads_per_gpu
     if gpu_ids == '':
