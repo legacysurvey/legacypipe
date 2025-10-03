@@ -1545,12 +1545,14 @@ class OneBlob(object):
             params = newsrc.getParams()
             reset = False
             for i,(pname,iv) in enumerate(zip(newsrc.getParamNames(), ivars)):
-                if iv == 0:
+                # ugly...
+                if iv == 0 and 'brightness' in pname:
                     debug('Zeroing out flux', pname, 'based on iv==0')
                     params[i] = 0.
                     reset = True
             if reset:
                 newsrc.setParams(params)
+                debug('Recomputing ivars with source parameters', newsrc)
                 allderivs = srctractor.getDerivs()
                 ivars = _compute_invvars(allderivs)
                 assert(len(ivars) == nsrcparams)
@@ -1776,6 +1778,8 @@ class OneBlob(object):
                 from tractor.lsqr_optimizer import LsqrOptimizer
                 btr.optimizer = LsqrOptimizer()
             btr.optimize_forced_photometry(shared_params=False, wantims=False)
+            for src in fitcat:
+                src.getBrightness().thawAllParams()
         for src in fitcat:
             src.thawAllParams()
 

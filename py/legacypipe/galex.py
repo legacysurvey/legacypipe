@@ -87,21 +87,29 @@ def stage_galex_forced(
     # Sources to photometer
     do_phot = np.ones(len(cat), bool)
 
+    for i,src in enumerate(cat):
+        if src is None:
+            do_phot[i] = False
+
     # Drop sources within the CLUSTER mask from forced photometry.
     Icluster = None
-    if maskbits is not None:
+    if maskbits is not None and np.any(do_phot):
         incluster = (maskbits & MASKBITS['CLUSTER'] > 0)
         if np.any(incluster):
             print('Checking for sources inside CLUSTER mask')
-            ra  = np.array([src.getPosition().ra  for src in cat])
-            dec = np.array([src.getPosition().dec for src in cat])
+            Igood = np.flatnonzero(do_phot)
+            ra  = np.array([cat[i].getPosition().ra  for i in Igood])
+            dec = np.array([cat[i].getPosition().dec for i in Igood])
             ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
             xx = np.round(xx - 1).astype(int)
             yy = np.round(yy - 1).astype(int)
-            I = np.flatnonzero(ok * (xx >= 0)*(xx < W) * (yy >= 0)*(yy < H))
-            if len(I):
-                Icluster = I[incluster[yy[I], xx[I]]]
-                print('Found', len(Icluster), 'of', len(cat), 'sources inside CLUSTER mask')
+            Iinbounds = np.flatnonzero(ok * (xx >= 0)*(xx < W) * (yy >= 0)*(yy < H))
+            if len(Iinbounds):
+                Igood = Igood[Iinbounds]
+                xx,yy = xx[Iinbounds], yy[Iinbounds]
+                del Iinbounds
+                Icluster = Igood[incluster[yy, xx]]
+                print('Found', len(Icluster), 'of', len(Igood), 'sources inside CLUSTER mask')
                 do_phot[Icluster] = False
     Nskipped = len(do_phot) - np.sum(do_phot)
 
@@ -130,8 +138,6 @@ def stage_galex_forced(
     # Initialize coadds even if we don't have any overlapping tiles -- we'll write zero images.
     # Create the WCS into which we'll resample the tiles.
     # Same center as "targetwcs" but bigger pixel scale.
-    gra  = np.array([src.getPosition().ra  for src in cat])
-    gdec = np.array([src.getPosition().dec for src in cat])
     rc,dc = targetwcs.radec_center()
     gpixscale = galex_pixscale
     ww = int(W * pixscale / gpixscale)
@@ -156,13 +162,10 @@ def stage_galex_forced(
                 GALEX.add_columns_from(p.phot)
         gcoadds.add(galex_models)
 
-        if Nskipped > 0:
-            from legacypipe.runbrick import _fill_skipped_values
-            GALEX = _fill_skipped_values(GALEX, Nskipped, do_phot)
-            assert(len(GALEX) == len(cat))
-            assert(len(GALEX) == len(T))
-
     # Coadds and aperture photometry even if no coverage...
+    Iphot = np.flatnonzero(do_phot)
+    gra  = np.array([cat[i].getPosition().ra  for i in Iphot])
+    gdec = np.array([cat[i].getPosition().dec for i in Iphot])
     apphot = gcoadds.finish(survey, brickname, version_header,
                             apradec=(gra,gdec),
                             apertures=galex_apertures_arcsec/gpixscale)
@@ -183,6 +186,15 @@ def stage_galex_forced(
             GALEX.set(fluxcol, np.zeros(len(GALEX), np.float32))
             GALEX.set('flux_ivar_'+niceband, np.zeros(len(GALEX), np.float32))
         GALEX.set('psfdepth_'+niceband, depth[iband])
+
+    debug('catalog length:', len(cat), len(do_phot), 'do_phot:', np.sum(do_phot), 'Nskipped', Nskipped)
+    debug('GALEX:', len(GALEX))
+    if Nskipped > 0:
+        from legacypipe.runbrick import _fill_skipped_values
+        GALEX = _fill_skipped_values(GALEX, Nskipped, do_phot)
+        debug('Filled GALEX:', len(GALEX))
+        assert(len(GALEX) == len(cat))
+        assert(len(GALEX) == len(T))
 
     if save_galex_psf:
         for band in ['n', 'f']:
@@ -665,12 +677,16 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname,
 
     inverr = np.zeros_like(img)
     K = varimg > 0
-    if np.sum(K) == 0:
-        print('All pixels lack variance estimates; subimage is X %i-%i, Y %i-%i, img range %.3f to %.3f'
-              % (x0, x1, y0, y1, img.min(), img.max()))
-        return None
+    #if np.sum(K) == 0:
+    #    print('All pixels lack variance estimates; subimage is X %i-%i, Y %i-%i, img range %.3f to %.3f'
+    #          % (x0, x1, y0, y1, img.min(), img.max()))
+    #    return None
 
-    inverr[K] = 1.0 / np.sqrt(varimg[K])
+    if np.any(K):
+        inverr[K] = 1.0 / np.sqrt(varimg[K])
+        sig1 = 1./np.median(inverr[inverr>0])
+    else:
+        sig1 = 0.
 
     zp = tile.get('%s_zpmag' % band)
     zpscale = NanoMaggies.zeropointToScale(zp)
@@ -693,7 +709,7 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname,
     tim = Image(data=img, inverr=inverr, psf=tpsf, wcs=twcs,
                 sky=tsky, photocal=photocal, name=name)
     tim.roi = [x0,x1,y0,y1]
-    tim.sig1 = 1./np.median(inverr[inverr>0])
+    tim.sig1 = sig1
     return tim
 
 def galex_coadds(onegal, galaxy=None, radius_mosaic=30, radius_mask=None,
