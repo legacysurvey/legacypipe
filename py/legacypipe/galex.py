@@ -138,8 +138,6 @@ def stage_galex_forced(
     # Initialize coadds even if we don't have any overlapping tiles -- we'll write zero images.
     # Create the WCS into which we'll resample the tiles.
     # Same center as "targetwcs" but bigger pixel scale.
-    gra  = np.array([src.getPosition().ra  for src in cat])
-    gdec = np.array([src.getPosition().dec for src in cat])
     rc,dc = targetwcs.radec_center()
     gpixscale = galex_pixscale
     ww = int(W * pixscale / gpixscale)
@@ -164,13 +162,10 @@ def stage_galex_forced(
                 GALEX.add_columns_from(p.phot)
         gcoadds.add(galex_models)
 
-        if Nskipped > 0:
-            from legacypipe.runbrick import _fill_skipped_values
-            GALEX = _fill_skipped_values(GALEX, Nskipped, do_phot)
-            assert(len(GALEX) == len(cat))
-            assert(len(GALEX) == len(T))
-
     # Coadds and aperture photometry even if no coverage...
+    Iphot = np.flatnonzero(do_phot)
+    gra  = np.array([cat[i].getPosition().ra  for i in Iphot])
+    gdec = np.array([cat[i].getPosition().dec for i in Iphot])
     apphot = gcoadds.finish(survey, brickname, version_header,
                             apradec=(gra,gdec),
                             apertures=galex_apertures_arcsec/gpixscale)
@@ -191,6 +186,15 @@ def stage_galex_forced(
             GALEX.set(fluxcol, np.zeros(len(GALEX), np.float32))
             GALEX.set('flux_ivar_'+niceband, np.zeros(len(GALEX), np.float32))
         GALEX.set('psfdepth_'+niceband, depth[iband])
+
+    debug('catalog length:', len(cat), len(do_phot), 'do_phot:', np.sum(do_phot), 'Nskipped', Nskipped)
+    debug('GALEX:', len(GALEX))
+    if Nskipped > 0:
+        from legacypipe.runbrick import _fill_skipped_values
+        GALEX = _fill_skipped_values(GALEX, Nskipped, do_phot)
+        debug('Filled GALEX:', len(GALEX))
+        assert(len(GALEX) == len(cat))
+        assert(len(GALEX) == len(T))
 
     if save_galex_psf:
         for band in ['n', 'f']:
