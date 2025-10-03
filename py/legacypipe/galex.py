@@ -87,21 +87,29 @@ def stage_galex_forced(
     # Sources to photometer
     do_phot = np.ones(len(cat), bool)
 
+    for i,src in enumerate(cat):
+        if src is None:
+            do_phot[i] = False
+
     # Drop sources within the CLUSTER mask from forced photometry.
     Icluster = None
-    if maskbits is not None:
+    if maskbits is not None and np.any(do_phot):
         incluster = (maskbits & MASKBITS['CLUSTER'] > 0)
         if np.any(incluster):
             print('Checking for sources inside CLUSTER mask')
-            ra  = np.array([src.getPosition().ra  for src in cat])
-            dec = np.array([src.getPosition().dec for src in cat])
+            Igood = np.flatnonzero(do_phot)
+            ra  = np.array([cat[i].getPosition().ra  for i in Igood])
+            dec = np.array([cat[i].getPosition().dec for i in Igood])
             ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
             xx = np.round(xx - 1).astype(int)
             yy = np.round(yy - 1).astype(int)
-            I = np.flatnonzero(ok * (xx >= 0)*(xx < W) * (yy >= 0)*(yy < H))
-            if len(I):
-                Icluster = I[incluster[yy[I], xx[I]]]
-                print('Found', len(Icluster), 'of', len(cat), 'sources inside CLUSTER mask')
+            Iinbounds = np.flatnonzero(ok * (xx >= 0)*(xx < W) * (yy >= 0)*(yy < H))
+            if len(Iinbounds):
+                Igood = Igood[Iinbounds]
+                xx,yy = xx[Iinbounds], yy[Iinbounds]
+                del Iinbounds
+                Icluster = Igood[incluster[yy, xx]]
+                print('Found', len(Icluster), 'of', len(Igood), 'sources inside CLUSTER mask')
                 do_phot[Icluster] = False
     Nskipped = len(do_phot) - np.sum(do_phot)
 
