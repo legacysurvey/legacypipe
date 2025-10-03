@@ -4391,15 +4391,15 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                               initializer=runbrick_global_init,
                               initargs=(shared_counter, shared_lock, _available_gpu_ids, _ngpu, _threads_per_gpu, gpumode))
             poolmeas = TimingPoolMeas(pool, pickleTraffic=False)
-            StageTime.add_measurement(poolmeas)
-        StageTime.add_measurement(MemMeas)
+            StageTime.add_measurement_once(poolmeas)
+        StageTime.add_measurement_once(MemMeas)
         mp = multiproc(None, pool=pool)
     else:
         from astrometry.util.ttime import CpuMeas
         from astrometry.util.ttime import MemMeas
         mp = multiproc(init=runbrick_global_init, initargs=(shared_counter, shared_lock, _available_gpu_ids, _ngpu, _threads_per_gpu, gpumode))
-        StageTime.add_measurement(CpuMeas)
-        StageTime.add_measurement(MemMeas)
+        StageTime.add_measurement_once(CpuMeas)
+        StageTime.add_measurement_once(MemMeas)
         pool = None
     kwargs.update(mp=mp)
 
@@ -4562,6 +4562,10 @@ class StageTime(Time):
     @classmethod
     def add_measurement(cls, m):
         cls.measurements.append(m)
+    @classmethod
+    def add_measurement_once(cls, m):
+        if not m in cls.measurements:
+            cls.measurements.append(m)
     def __init__(self):
         self.meas = [m() for m in self.measurements]
 
