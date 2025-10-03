@@ -1781,6 +1781,8 @@ class OneBlob(object):
                 from tractor.lsqr_optimizer import LsqrOptimizer
                 btr.optimizer = LsqrOptimizer()
             btr.optimize_forced_photometry(shared_params=False, wantims=False)
+            for src in fitcat:
+                src.getBrightness().thawAllParams()
         for src in fitcat:
             src.thawAllParams()
 
