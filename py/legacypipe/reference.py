@@ -538,7 +538,8 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
     if clean_columns:
         keep_columns = ['ra', 'dec', 'radius', 'mag', 'ref_cat', 'ref_id', 'ba', 'pa',
                         'sources', 'islargegalaxy', 'freezeparams', 'keep_radius',
-                        'fitmode', 'isresolved', 'ismcloud', 'ignore_source']
+                        'fitmode', 'isresolved', 'ismcloud', 'ignore_source',
+                        'set_galaxy_maskbit']
         if extra_columns is not None:
             keep_columns.extend(extra_columns)
         for c in galaxies.get_columns():
@@ -648,6 +649,11 @@ def read_sga(survey, rc, dc, max_radius):
                 galaxies.fitmode == 0,
                 galaxies.fitmode == SGA_FITMODE['FIXGEO']
             ])
+            # FIXGEO sources should not generate Tractor sources that we fit or
+            # render in any way - they're just a place to hold data so they can finally
+            # appear in the output catalog.
+            galaxies.ignore_source |= ((galaxies.fitmode & SGA_FITMODE['FIXGEO']) != 0)
+
         else:
             print('No fitmode -- SGA-2020?')
             # SGA-2020

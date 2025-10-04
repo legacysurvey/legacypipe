@@ -1518,6 +1518,7 @@ def stage_fitblobs(T=None,
     if T_special is not None:
         T_all.append(T_special)
         cat.extend(cat_special)
+        print('cat_special:', cat_special)
     if T_refbail:
         T_all.append(T_refbail)
         cat.extend(cat_refbail)
@@ -3624,6 +3625,26 @@ def stage_writecat(
         if len(I):
             T.ra_ivar [I] = T_orig.ra_ivar [I]
             T.dec_ivar[I] = T_orig.dec_ivar[I]
+
+    # For "special" reference sources, currently sources don't get created (in reference.py)
+    # for these objects, so create them now and create catalog entries for them.
+    I = np.flatnonzero(np.logical_not(T.regular))
+    if len(I):
+        from legacypipe.reference import get_galaxy_sources
+        from tractor import Catalog
+        ti = T_orig[I]
+        # so that sources get created...
+        ti.ignore_source = np.zeros(len(ti))
+        special = get_galaxy_sources(ti, bands)
+        debug('re-made special sources:', special)
+        ts = prepare_fits_catalog(Catalog(*special), None, None, bands)
+        _,bx,by = targetwcs.radec2pixelxy(ts.ra, ts.dec)
+        ts.bx = (bx - 1.).astype(np.float32)
+        ts.by = (by - 1.).astype(np.float32)
+        cols = T.get_columns()
+        for c in ts.get_columns():
+            if c in cols:
+                T.get(c)[I] = ts.get(c)
 
     # In oneblob.py we have a step where we zero out the fluxes for sources
     # with tiny "fracin" values.  Repeat that here, but zero out more stuff...
