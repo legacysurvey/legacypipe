@@ -3628,6 +3628,8 @@ def stage_writecat(
 
     # For "special" reference sources, currently sources don't get created (in reference.py)
     # for these objects, so create them now and create catalog entries for them.
+    # We should maybe just create the sources for these guys in reference.py instead...
+    # This was from ticket #765, using the SGA-parent catalog
     I = np.flatnonzero(np.logical_not(T.regular))
     if len(I):
         from legacypipe.reference import get_galaxy_sources
