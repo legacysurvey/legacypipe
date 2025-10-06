@@ -81,14 +81,14 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
             if gaia and len(gaia):
                 I,J,_ = match_radec(galaxies.ra, galaxies.dec, gaia.ra, gaia.dec,
                                     2./3600., nearest=True)
-                info('Matched', len(I), 'large galaxies to Gaia stars.')
+                debug('Matched', len(I), 'large galaxies to Gaia stars.')
                 if len(I):
                     gaia.donotfit[J] = True
             # Resolve possible Tycho2-large-galaxy duplicates (with larger radius)
             if tycho and len(tycho):
                 I,J,_ = match_radec(galaxies.ra, galaxies.dec, tycho.ra, tycho.dec,
                                     5./3600., nearest=True)
-                info('Matched', len(I), 'large galaxies to Tycho-2 stars.')
+                debug('Matched', len(I), 'large galaxies to Tycho-2 stars.')
                 if len(I):
                     tycho.donotfit[J] = True
             refs.append(galaxies)
@@ -124,9 +124,22 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
     # cut ones whose position + radius are outside the brick bounds.
     refs.cut((xx > -keeprad) * (xx < W+keeprad) *
              (yy > -keeprad) * (yy < H+keeprad))
+    debug('Cut to', len(refs), 'touching this brick')
+    from collections import Counter
+    debug('ref_cats:', Counter(refs.ref_cat))
     # mark ones that are actually inside the brick area.
     refs.in_bounds = ((refs.ibx >= 0) * (refs.ibx < W) *
                       (refs.iby >= 0) * (refs.iby < H))
+
+    # drop SGA-parent galaxies that are outside the brick area.
+    keep = np.ones(len(refs), bool)
+    keep[refs.islargegalaxy *
+         np.logical_not(refs.in_bounds) *
+         np.logical_not(refs.freezeparams)] = False
+    refs.cut(keep)
+    del keep
+    debug('Dropped non-frozen galaxies outside the brick:', len(refs), 'refs')
+    debug('ref_cats:', Counter(refs.ref_cat))
 
     # ensure bool columns
     for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster', 'isgaia',
@@ -210,10 +223,29 @@ def read_gaia(wcs, bands):
     from legacypipe.gaiacat import GaiaCatalog
     from legacypipe.survey import GaiaSource
 
-    gaia = GaiaCatalog().get_catalog_in_wcs(wcs)
+    # See also format_catalog.py
+    cols = [
+        'source_id', 'ra', 'dec', 'pmra', 'pmdec', 'parallax',
+        'ref_epoch',
+        'ra_error', 'dec_error', 'pmra_error', 'pmdec_error', 'parallax_error',
+        'phot_g_mean_mag', 'phot_bp_mean_mag', 'phot_rp_mean_mag',
+        'phot_g_mean_flux_over_error', 'phot_bp_mean_flux_over_error',
+        'phot_rp_mean_flux_over_error',
+        'phot_g_n_obs', 'phot_bp_n_obs', 'phot_rp_n_obs',
+        'astrometric_params_solved',
+        'phot_variable_flag', 'astrometric_excess_noise', 'astrometric_excess_noise_sig',
+        'astrometric_n_obs_al', 'astrometric_n_good_obs_al',
+        # 'astrometric_weight_al',  <-- does not exist in our Gaia-DR3 healpix catalogs
+        # 'a_g_val',
+        # 'e_bp_min_rp_val',
+        'duplicated_source', 'phot_bp_rp_excess_factor',
+        'astrometric_sigma5d_max',
+    ]
+
+    gaia = GaiaCatalog().get_catalog_in_wcs(wcs, columns=cols)
     debug('Got', len(gaia), 'Gaia stars nearby')
 
-    fix_gaia(gaia)
+    fix_gaia(gaia, bands)
     # NOTE, must initialize gaia.sources array this way, or else numpy
     # will try to be clever and create a 2-d array, because GaiaSource is
     # iterable.
@@ -223,68 +255,27 @@ def read_gaia(wcs, bands):
             gaia.sources[i] = GaiaSource.from_catalog(g, bands)
     return gaia
 
-def fix_gaia(gaia):
-    from functools import reduce
+def fix_gaia(gaia, bands):
+    from legacypipe.gaiacat import gaia_to_decam
 
     gaia.phot_g_mean_mag = gaia.phot_g_mean_mag.astype(np.float32)
-
     gaia.G = gaia.phot_g_mean_mag
     # Sort by brightness (for reference-*.fits output table)
     sortmag = gaia.G.copy()
     sortmag[sortmag == 0] = gaia.phot_rp_mean_mag[sortmag == 0]
     gaia.cut(np.argsort(sortmag))
 
-    # Gaia to DECam color transformations for stars
-    color = gaia.phot_bp_mean_mag - gaia.phot_rp_mean_mag
-
-    # Only compute the decam_mag* terms if we have phot_g_mean_mag
-    # (some stars in EDR3 have G=0(nan), BP=0(nan) but RP~20)
-    nomags = (gaia.phot_g_mean_mag == 0.)
-
-    # From Rongpu, 2020-04-12
-    # no BP-RP color: use average color
-    badcolor = reduce(np.logical_or,
-                      [np.logical_not(np.isfinite(color)),
-                       gaia.phot_bp_mean_mag == 0,
-                       gaia.phot_rp_mean_mag == 0,])
-    color[badcolor] = 1.4
-    # clip to reasonable range for the polynomial fit
-    color = np.clip(color, -0.6, 4.1)
-    for b,coeffs in [
-            ('g', [-0.1178631039, 0.3650113495, 0.5608615360, -0.2850687702,
-                   -1.0243473939, 1.4378375491, 0.0679401731, -1.1713172509,
-                   0.9107811975, -0.3374324004, 0.0683946390, -0.0073089582,
-                   0.0003230170]),
-            ('r', [0.1139078673, -0.2868955307, 0.0013196434, 0.1029151074,
-                   0.1196710702, -0.3729031390, 0.1859874242, 0.1370162451,
-                   -0.1808580848, 0.0803219195, -0.0180218196, 0.0020584707,
-                   -0.0000953486]),
-            ('i', [0.3396481660, -0.6491867119, -0.3330769819, 0.4381097294,
-                   0.5752125977, -1.4746570523, 1.2979140762, -0.6371018151,
-                   0.1948940062, -0.0382055596, 0.0046907449, -0.0003296841,
-                   0.0000101480]),
-            ('z', [0.4811198057, -0.9990015041, 0.1403990019, 0.2150988888,
-                   -0.2917655866, 0.1326831887, -0.0259205004, 0.0018548776])]:
-        mag = gaia.G.copy()
-        for order,c in enumerate(coeffs):
-            mag += c * color**order
-        mag[nomags] = 0.
-        gaia.set('decam_mag_%s' % b, mag)
-    del color
-
-    #  For possible future use:
-    #  BASS/MzLS:
-    #  coeffs = dict(
-    #  g = [-0.1299895823, 0.3120393968, 0.5989482686, 0.3125882487,
-    #      -1.9401592247, 1.1011670449, 2.0741304659, -3.3930306403,
-    #      2.1857291197, -0.7674676232, 0.1542300648, -0.0167007725,
-    #      0.0007573720],
-    #  r = [0.0901464643, -0.2463711147, 0.0094963025, -0.1187138789,
-    #      0.4131107392, -0.1832183301, -0.6015486252, 0.9802538471,
-    #      -0.6613809948, 0.2426395251, -0.0505867727, 0.0056462458,
-    #      -0.0002625789],
-    #  z = [0.4862049092, -1.0278704657, 0.1220984456, 0.3000129189,
-    #      -0.3770662617, 0.1696090596, -0.0331679127, 0.0023867628])
+    # Including DECam griz, plus the bands we're actually processing
+    bb = ['g','r','i','z']
+    for band in bands:
+        if not band in bb:
+            bb.append(band)
+    mags = gaia_to_decam(gaia, bb)
+    for band,mag in zip(bb, mags):
+        # no color terms - skip
+        if mag is None:
+            continue
+        gaia.set('decam_mag_%s' % band, mag)
 
     # force this source to remain a point source?
     # Long history here, starting DJS, [decam-chatter 5486] Solved! GAIA separation
@@ -292,7 +283,8 @@ def fix_gaia(gaia):
     # Updated for Gaia DR2 by Eisenstein,
     # [decam-data 2770] Re: [desi-milkyway 639] GAIA in DECaLS DR7
     # And made far more restrictive following BGS feedback.
-    # Then, for Gaia-EDR3, Rongpu found we no longer need to look at astrometric_excess_noise.
+    # Then, for Gaia-EDR3, Rongpu found we no longer need to look at
+    # astrometric_excess_noise.
     gaia.pointsource = (gaia.G <= 18.)
 
     # in our catalog files, this is in float32; in the Gaia data model it's
@@ -472,9 +464,11 @@ def get_large_galaxy_version(fn):
     preburn = False
     hdr = fitsio.read_header(fn)
     try:
-        v = hdr.get('SGAVER')
-        if v is None: # old version
-            v = hdr.get('LSLGAVER')
+        # SGA2025
+        v = hdr.get('VER')
+        if v is None:
+            # SGA2020
+            v = hdr.get('SGAVER')
         if v is not None:
             v = v.strip()
             if 'ellipse' in v.lower():
@@ -543,15 +537,30 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
         galaxies.islargegalaxy = np.ones(len(galaxies), bool)
         galaxies.freezeparams = np.zeros(len(galaxies), bool)
         galaxies.preburned = np.zeros(len(galaxies), bool)
-        galaxies.rename('sga_id', 'ref_id')
+        if 'sga_id' in galaxies.columns():
+            galaxies.rename('sga_id', 'ref_id')
 
-    galaxies.rename('mag_leda', 'mag')
+    '''
+    Desired behaviors.
+
+    Parent catalog:
+    - if overlaps LMC/SMC mask,
+      - no new source detection (only Gaia and SGA)
+      - in DR10, we did this by setting CLUSTER
+      - add new MASKBITS bit: CLOUDS (LMC/SMC), same behavior as CLUSTER
+    - ignore LMC/SMC SGA sources
+      - don't want to set GALAXY
+
+    '''
+    if 'mag_leda' in galaxies.columns():
+        galaxies.rename('mag_leda', 'mag')
+
     # Pre-burned, frozen but non-SGA sources have diam=-1.
-    if 'diam' in galaxies.get_columns():
-        galaxies.radius = np.maximum(0., galaxies.diam / 2. / 60.) # [degree]
-    else:
+    if 'd26' in galaxies.get_columns():
         # SGA-2020
         galaxies.radius = np.maximum(0., galaxies.d26 / 2. / 60.) # [degree]
+    else:
+        galaxies.radius = np.maximum(0., galaxies.diam / 2. / 60.) # [degree]
     galaxies.keep_radius = 2. * galaxies.radius
     galaxies.sources = np.empty(len(galaxies), object)
     galaxies.sources[:] = None
