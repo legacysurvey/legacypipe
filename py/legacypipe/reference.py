@@ -130,13 +130,26 @@ def get_reference_sources(survey, targetwcs, bands,
     # cut ones whose position + radius are outside the brick bounds.
     refs.cut((xx > -keeprad) * (xx < W+keeprad) *
              (yy > -keeprad) * (yy < H+keeprad))
+    debug('Cut to', len(refs), 'touching this brick')
+    from collections import Counter
+    debug('ref_cats:', Counter(refs.ref_cat))
     # mark ones that are actually inside the brick area.
     refs.in_bounds = ((refs.ibx >= 0) * (refs.ibx < W) *
                       (refs.iby >= 0) * (refs.iby < H))
     info('Reference sources touching this brick:', Counter([str(r) for r in refs.ref_cat]).most_common())
     info('Reference sources within this brick:', Counter([str(r) for r in refs.ref_cat[refs.in_bounds]]).most_common())
 
-    # ensure bool columns exist
+    # drop SGA-parent galaxies that are outside the brick area.
+    keep = np.ones(len(refs), bool)
+    keep[refs.islargegalaxy *
+         np.logical_not(refs.in_bounds) *
+         np.logical_not(refs.freezeparams)] = False
+    refs.cut(keep)
+    del keep
+    debug('Dropped non-frozen galaxies outside the brick:', len(refs), 'refs')
+    debug('ref_cats:', Counter(refs.ref_cat))
+
+    # ensure bool columns
     for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster', 'isgaia',
                 'istycho', 'freezeparams', 'isresolved', 'ismcloud', 'ignore_source']:
         if not col in refs.get_columns():
