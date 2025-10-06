@@ -488,61 +488,12 @@ def get_large_galaxy_version(fn):
 
 def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
                         extra_columns=None,
-<<<<<<< HEAD
                         max_radius=2.):
     # Note, max_radius must include the brick radius!
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
     galfn = survey.find_file('large-galaxies')
     if galfn is None:
         debug('No large-galaxies catalog file')
-=======
-                        max_radius=None):
-    from astrometry.util.starutil_numpy import degrees_between
-    from legacypipe.bits import SGA_FITMODE, sga_fitmode_type
-
-    # max_radius (in deg) should be the largest radius in the SGA catalog!
-    if max_radius is None:
-        max_radius = 2.
-
-    galaxy_tables = []
-
-    rc,dc = targetwcs.radec_center()
-    brick_radius = targetwcs.radius()
-    max_radius += brick_radius
-
-    # Hard-coded Magellanic clouds
-    # (ra, dec, diam_arcmin, b/a, PA):
-    # LMC = (80.894167, -69.756111, 645.65, 0.85, 171.)
-    # SMC = (13.186667, -72.828611, 380.19, 0.64, 45.)
-    mclouds = fits_table()
-    mclouds.ra   = np.array([80.894167, 13.186667])
-    mclouds.dec  = np.array([-69.756111, -72.828611])
-    mclouds.diam = np.array([645.65, 380.19])
-    mclouds.ba   = np.array([0.85, 0.64])
-    mclouds.pa   = np.array([171., 45.])
-    mclouds.ref_cat = np.array(['MC', 'MC'])
-    mclouds.ref_id  = np.array([1, 2])
-    mclouds.name    = np.array(['LMC', 'SMC'])
-    mclouds.radius  = mclouds.diam / 2. / 60.
-    d = degrees_between(rc, dc, mclouds.ra, mclouds.dec)
-    touch = (d < brick_radius + mclouds.radius)
-    if np.any(touch):
-        mclouds.cut(touch)
-        mclouds.fitmode = np.array([SGA_FITMODE['MCLOUDS']]*len(mclouds), sga_fitmode_type)
-        mclouds.preburned = np.array([False] * len(mclouds))
-        mclouds.mag = np.array([0.] * len(mclouds))
-        mclouds.ignore_source = np.array([True] * len(mclouds))
-        mclouds.freezeparams = np.array([True] * len(mclouds))
-        print('Overlaps Magellanic cloud:', mclouds.name)
-        galaxy_tables.append(mclouds)
-    del mclouds
-
-    galaxies = read_sga(survey, rc, dc, max_radius)
-    if galaxies is not None:
-        galaxy_tables.append(galaxies)
-
-    if len(galaxy_tables) == 0:
->>>>>>> ea8154ed (ensure reference-catalog columns exist before checking them)
         return None
     radius = max_radius
     rc,dc = targetwcs.radec_center()
@@ -834,13 +785,10 @@ def get_reference_map(wcs, refs):
             xhi = int(np.clip(np.ceil (x+1 + rpix), 0, W))
             ylo = int(np.clip(np.floor(y   - rpix), 0, H))
             yhi = int(np.clip(np.ceil (y+1 + rpix), 0, H))
-<<<<<<< HEAD
-=======
             debug('Reference source location: x,y (%.1f, %.1f)' % (x, y))
             debug('Reference source radius: %.1f pixels' % rpix)
             debug('un-clipped xlo, xhi:', np.floor(x-rpix), np.ceil(x+rpix))
             debug('un-clipped ylo, yhi:', np.floor(y-rpix), np.ceil(y+rpix))
->>>>>>> ea8154ed (ensure reference-catalog columns exist before checking them)
             if xlo == xhi or ylo == yhi:
                 continue
             bitval = np.uint8(IN_BLOB[bit])
