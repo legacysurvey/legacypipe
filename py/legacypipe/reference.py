@@ -549,9 +549,11 @@ def read_sga(survey, rc, dc, brick_radius, max_radius):
         kd = tree_open(galfn, 'largegals')
 
     # Magellanic clouds -- pull out of the SGA for special-casing
+    lmc_ref_id = 5053785
+    smc_ref_id = 5053799
     mclouds = []
-    for name,ra,dec,refid in [('LMC', 80.894, -69.756, 5053785),
-                              ('SMC', 13.187, -72.829, 5053799),
+    for name,ra,dec,refid in [('LMC', 80.894, -69.756, lmc_ref_id),
+                              ('SMC', 13.187, -72.829, smc_ref_id),
                               ]:
         from astrometry.util.starutil_numpy import degrees_between
         # Quick shortcut for bricks far from the MCs
@@ -591,6 +593,8 @@ def read_sga(survey, rc, dc, brick_radius, max_radius):
     # Read only the rows within range.
     galaxies = fits_table(galfn, rows=I)
     del kd
+    # Drop LMC,SMC from the "regular" galaxy search results.
+    galaxies.cut(np.logical_not(np.isin(galaxies.ref_id, [lmc_ref_id, smc_ref_id])))
 
     refcat, is_ellipse = get_large_galaxy_version(galfn)
     debug('Large galaxies version: "%s", ellipse catalog?' % refcat, is_ellipse)
