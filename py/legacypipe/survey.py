@@ -1280,7 +1280,7 @@ class LegacySurveyData(object):
                 os.path.join(basedir, 'metrics', brickpre,
                              '%s-%s.jpg' % (filetype, brick)))
 
-        elif filetype == 'outliers_mask':
+        elif filetype == 'outliers-mask':
             return swap(os.path.join(basedir, 'metrics', brickpre,
                                      'outlier-mask-%s.fits.fz' % (brick)))
 
@@ -1407,7 +1407,7 @@ class LegacySurveyData(object):
             res = camconf.get((expnum, None), '')
         return res
 
-    def write_output(self, filetype, hashsum=True, filename=None, **kwargs):
+    def write_output(self, filetype, hashsum=True, filename=None, shape=None, **kwargs):
         '''
         Returns a context manager for writing an output file.
 
