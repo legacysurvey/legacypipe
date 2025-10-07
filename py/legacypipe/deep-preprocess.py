@@ -337,7 +337,7 @@ def stage_deep_preprocess_2(
     coivs  = []
     have_bands = []
 
-    with survey.write_output('outliers_mask', brick=brickname) as out:
+    with survey.write_output('outliers-mask', brick=brickname) as out:
         # empty Primary HDU
         out.fits.write(None, header=version_header)
 
@@ -504,8 +504,7 @@ def stage_deep_preprocess_2(
                 hdr.add_record(dict(name='Y0', value=y0))
 
                 extname = '%s-%s-%s' % (im.camera, im.expnum, im.ccdname)
-                out.fits.write(outl_mask.astype(np.uint8), header=hdr, extname=extname,
-                               compress='HCOMPRESS')
+                out.fits.write(outl_mask.astype(np.uint8), header=hdr, extname=extname)
             del R
 
             # Un-touched pixels -> 0
