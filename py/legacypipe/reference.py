@@ -146,6 +146,19 @@ def get_reference_sources(survey, targetwcs, pixscale, bands,
                 'istycho', 'donotfit', 'freezeparams']:
         if not col in refs.get_columns():
             refs.set(col, np.zeros(len(refs), bool))
+            debug('Adding False values for missing column "%s" in refs' % col)
+
+    # drop SGA-parent galaxies that are outside the brick area.
+    keep = np.ones(len(refs), bool)
+    keep[refs.islargegalaxy *
+         np.logical_not(refs.in_bounds) *
+         np.logical_not(refs.freezeparams)] = False
+
+    refs.cut(keep)
+    del keep
+    debug('Dropped non-frozen galaxies outside the brick:', len(refs), 'refs')
+    debug('ref_cats:', Counter(refs.ref_cat))
+
     # Copy flags from the 'refs' table to the source objects themselves.
     sources = refs.sources
     refs.delete_column('sources')
@@ -782,6 +795,10 @@ def get_reference_map(wcs, refs):
             xhi = int(np.clip(np.ceil (x+1 + rpix), 0, W))
             ylo = int(np.clip(np.floor(y   - rpix), 0, H))
             yhi = int(np.clip(np.ceil (y+1 + rpix), 0, H))
+            debug('Reference source location: x,y (%.1f, %.1f)' % (x, y))
+            debug('Reference source radius: %.1f pixels' % rpix)
+            debug('un-clipped xlo, xhi:', np.floor(x-rpix), np.ceil(x+rpix))
+            debug('un-clipped ylo, yhi:', np.floor(y-rpix), np.ceil(y+rpix))
             if xlo == xhi or ylo == yhi:
                 continue
             bitval = np.uint8(IN_BLOB[bit])
