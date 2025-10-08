@@ -944,20 +944,23 @@ class FITSWrapper(fitsio.FITS):
 
     def write_image(self, img, **kwargs):
         kw = {}
+        kw.update(kwargs)
+        # the fits.write() function passes defaults to fits.write_image(), so
+        # we need to override the kwargs with our compression args.
         if self.compression_kwargs is not None:
             kw.update(self.compression_kwargs)
-        kw.update(kwargs)
         if 'compress' in kwargs and img is not None:
             H,W = img.shape
             if W < 4 or H < 4:
                 # Don't use compression
+                print('Image shape is', img.shape, ': disabling compression')
                 del kw['compress']
             else:
                 default_tile_size = 100
                 tilew = find_tile_size(W, default_tile_size)
                 tileh = find_tile_size(H, default_tile_size)
                 kw.update(tile_dims=(tileh, tilew))
-        print('Writing FITS image with kwargs', kw)
+        debug('Writing FITS image with kwargs', kw)
         return super().write_image(img, **kw)
 
 class LegacySurveyData(object):
@@ -1351,11 +1354,26 @@ class LegacySurveyData(object):
         return fn
 
     def get_compression_kwargs(self, filetype, shape=None):
+
+        if filetype in ['wise-jpeg', 'wisemodel-jpeg', 'wiseresid-jpeg',
+                        'galex-jpeg', 'galexmodel-jpeg', 'galexresid-jpeg',
+                        'outliers-pre', 'outliers-post',
+                        'outliers-masked-pos', 'outliers-masked-neg',
+                        'image-jpeg', 'imageblob-jpeg', 'blobmodel-jpeg', 'resid-jpeg',
+                        'ref-sources', 'depth-table', 'detected-sources',
+                        'ccds-table', 'forced-brick', 'tractor-forced', 'forced',
+                        'all-models', 'tractor', 'tractor-intermediate',
+                        'galaxy-sims', 'checksums', 'ccds',
+                        'copsf',
+                        ]:
+            return {}
+
         args = dict(dither_seed='checksum')
 
         if filetype in ['image', 'blobmodel', 'model', 'chi2', 'invvar']:
             args.update(compress='RICE')
-        elif filetype in ['nexp', 'maskbits', 'maskbits-light', 'outliers-mask']:
+        elif filetype in ['nexp', 'maskbits', 'maskbits-light', 'outliers-mask',
+                          'blobmask', 'blobmap']:
             # outliers-mask tests:
             # HCOMPRESS;: 943k
             # GZIP_1: 4.4M
@@ -1371,7 +1389,7 @@ class LegacySurveyData(object):
                         'depth', 'galdepth', 'psfsize']:
             # Preserve zeros
             args.update(qmethod='SUBTRACTIVE_DITHER_2')
-        elif filetype in ['outliers-mask', 'maskbits', 'maskbits-light']:
+        elif filetype in ['outliers-mask', 'maskbits', 'maskbits-light', 'nexp']:
             pass
         else:
             print('Warning: unknown filetype "%s" in get_compression_kwargs (qmethod)' % filetype)
@@ -1384,7 +1402,7 @@ class LegacySurveyData(object):
             args.update(qlevel=0.0)
         elif filetype in ['invvar']:
             args.update(qlevel=16)
-        elif filetype in ['outliers-mask', 'maskbits', 'maskbits-light']:
+        elif filetype in ['outliers-mask', 'maskbits', 'maskbits-light', 'nexp']:
             pass
         else:
             print('Warning: unknown filetype "%s" in get_compression_kwargs (qlevel)' % filetype)
@@ -1536,7 +1554,7 @@ class LegacySurveyData(object):
                 relfn = relfn[1:]
 
         compression = self.get_compression_kwargs(filetype, shape=shape)
-
+        debug('Preparing to write a', filetype, 'file: compression kwargs', compression)
         out = OutputFileContext(fn, self, hashsum=hashsum, relative_fn=relfn,
                                 compression=compression)
         return out
