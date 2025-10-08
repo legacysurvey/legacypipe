@@ -942,6 +942,10 @@ class FITSWrapper(fitsio.FITS):
         super().__init__(*args, **kwargs)
         self.compression_kwargs = compression
 
+    # See https://github.com/esheldon/fitsio/issues/449
+    def reopen(self):
+        self.update_hdu_list()
+
     def write_image(self, img, **kwargs):
         kw = {}
         kw.update(kwargs)
