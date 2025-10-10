@@ -1296,6 +1296,7 @@ def stage_fitblobs(T=None,
                           ran_sub_blobs=ran_sub_blobs)
 
     if checkpoint_filename is None:
+        # FIXME -- add worker-died checks & logging here
         R.extend(mp.map(_bounce_one_blob, blobiter))
     else:
         from astrometry.util.ttime import CpuMeas
@@ -1378,7 +1379,19 @@ def stage_fitblobs(T=None,
                 break
             except multiprocessing.TimeoutError:
                 continue
+            except trackingpool.PoolWorkerDiedException as e:
+                print('A worker died (maybe OOM-killed?) while processing a blob.')
+                print(e)
+                index = e.index
+                jmap = job_id_map.copy()
+                if not index in jmap:
+                    print('Unknown which blob that worker was processing.  index %i\n' % index)
+                else:
+                    (brick,blob) = jmap[index]
+                    print('Worker was processing index %i: brick %s blob %s' % (index, brick, blob))
 
+                _write_checkpoint(R, checkpoint_filename)
+                raise e
 
         # Write checkpoint when done!
         _write_checkpoint(R, checkpoint_filename)
