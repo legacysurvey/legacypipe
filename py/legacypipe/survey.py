@@ -1364,6 +1364,7 @@ class LegacySurveyData(object):
                         'outliers-pre', 'outliers-post',
                         'outliers-masked-pos', 'outliers-masked-neg',
                         'image-jpeg', 'imageblob-jpeg', 'blobmodel-jpeg', 'resid-jpeg',
+                        'model-jpeg',
                         'ref-sources', 'depth-table', 'detected-sources',
                         'ccds-table', 'forced-brick', 'tractor-forced', 'forced',
                         'all-models', 'tractor', 'tractor-intermediate',
