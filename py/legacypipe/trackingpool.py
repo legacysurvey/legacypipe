@@ -75,6 +75,13 @@ def worker(inqueue, outqueue, initializer=None, initargs=(), maxtasks=None,
         completed += 1
     util.debug('worker exiting after %d tasks' % completed)
 
+class PoolWorkerDiedException(Exception):
+    def __init__(self, *args, index=None, pid=None, exitcode=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.index = index
+        self.pid = pid
+        self.exitcode = exitcode
+
 # just a list where we can also tag along the next_worker_id integer
 class MyList(list):
     pass
@@ -82,13 +89,22 @@ class MyList(list):
 class TrackingPool(Pool):
 
     def __init__(self, processes=None, initializer=None, initargs=(),
-                 maxtasksperchild=None, context=None):
+                 maxtasksperchild=None, context=None, raise_deadworker_exception=True):
+        '''
+        raise_deadworker_exception:
+          * True: if a worker process dies or is killed, make the
+            pool.map() (or individual imap_unordered() element) raise an exception
+          * False: if a worker process dies, return a RuntimeError()
+            for that pool.map() result, instead of a return value!
+
+        '''
         # Attributes initialized early to make sure that they exist in
         # __del__() if __init__() raises an exception
         self._pool = MyList()
         self._pool.next_worker_id = 1000
         self._worker_pids = {}
         self._state = INIT
+        self._raise_deadworker_exception = raise_deadworker_exception
 
         self._ctx = context or get_context()
         self._setup_queues()
@@ -149,7 +165,8 @@ class TrackingPool(Pool):
 
         self._result_handler = threading.Thread(
             target=TrackingPool._handle_results,
-            args=(self._outqueue, self._quick_get, self._cache, self._worker_pids)
+            args=(self._outqueue, self._quick_get, self._cache, self._worker_pids,
+                  self._raise_deadworker_exception)
             )
         self._result_handler.daemon = True
         self._result_handler._state = RUN
@@ -196,7 +213,7 @@ class TrackingPool(Pool):
 
     # From Python 3.12.7 : pool.py
     @staticmethod
-    def _handle_results(outqueue, get, cache, pids):
+    def _handle_results(outqueue, get, cache, pids, raise_deadworker_exception):
         thread = threading.current_thread()
 
         quitting = False
@@ -233,13 +250,19 @@ class TrackingPool(Pool):
                 if job is None:
                     # A worker died!
                     exitcode = obj
+                    pid = pids[worker_id]
                     del pids[worker_id]
                     try:
                         job, i = working_on[worker_id]
                         util.debug('worker %s was working on job %s item %s' % (worker_id, job, i))
                         # Return a RuntimeError to the caller, or actually raise it and cause
                         # the whole pool.map() call to fail?
-                        obj = (True, [RuntimeError('Worker died with exit code %s' % exitcode)])
+                        exc = PoolWorkerDiedException('Worker died with exit code %s: pid %i, was working on map index %i' %
+                                                      (exitcode, pid, i), index=i, pid=pid, exitcode=exitcode)
+                        if raise_deadworker_exception:
+                            obj = (False, exc)
+                        else:
+                            obj = (True, [exc])
                         done = True
                     except KeyError:
                         util.debug('Worker %s died, but I don\'t know what it was working on!' %
