@@ -105,9 +105,7 @@ def main(survey=None, opt=None, args=None):
             fits.write(None, header=version_hdr)
             for i in I:
                 mask = outlier_masks[i]
-                _,_,_,meth,tile = survey.get_compression_args('outliers_mask', shape=mask.shape)
-                fits.write(mask, header=outlier_hdrs[i], extname=ccds.ccdname[i],
-                           compress=meth, tile_dims=tile)
+                fits.write(mask, header=outlier_hdrs[i], extname=ccds.ccdname[i])
         os.rename(tempfn, outfn)
         print('Wrote', outfn)
 

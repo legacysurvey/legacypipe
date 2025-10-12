@@ -332,18 +332,14 @@ def main(survey=None, opt=None, args=None):
                 fits.write(None, header=version_hdr)
                 for i in I:
                     mask = outlier_masks[i]
-                    _,_,_,meth,tile = survey.get_compression_args('outliers_mask', shape=mask.shape)
-                    fits.write(mask, header=outlier_hdrs[i], extname=ccds.ccdname[i],
-                               compress=meth, tile_dims=tile, dither_seed='checksum')
+                    fits.write(mask, header=outlier_hdrs[i], extname=ccds.ccdname[i])
             os.rename(tempfn, outfn)
             print('Wrote', outfn)
     elif opt.outlier_mask is not None:
         with fitsio.FITS(opt.outlier_mask, 'rw', clobber=True) as F:
             F.write(None, header=version_hdr)
             for i,(hdr,mask) in enumerate(zip(outlier_hdrs,outlier_masks)):
-                _,_,_,meth,tile = survey.get_compression_args('outliers_mask', shape=mask.shape)
-                F.write(mask, header=hdr, extname=ccds.ccdname[i],
-                        compress=meth, tile_dims=tile, dither_seed='checksum')
+                F.write(mask, header=hdr, extname=ccds.ccdname[i])
         print('Wrote', opt.outlier_mask)
 
     tnow = Time()
