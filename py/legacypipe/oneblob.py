@@ -35,6 +35,8 @@ def debug(*args):
 def is_debug():
     return logger.isEnabledFor(logging.DEBUG)
 
+chat = debug
+
 # Determines the order of elements in the DCHISQ array.
 MODEL_NAMES = ['psf', 'rex', 'dev', 'exp', 'ser']
 
@@ -1495,7 +1497,7 @@ class OneBlob(object):
                 srctractor.thawParam('images')
 
             # First-round optimization (during model selection)
-            print('OneBlob before model selection:', newsrc)
+            chat('OneBlob before model selection:', newsrc)
             try:
                 #print ("ENTERING OPTIMIZE 2 - ", type(srctractor), srctractor.optimize_loop)
                 R = srctractor.optimize_loop(**self.optargs)
@@ -1505,7 +1507,7 @@ class OneBlob(object):
                 traceback.print_exc()
                 raise(e)
                 continue
-            print('OneBlob after model selection:', newsrc)
+            chat('OneBlob after model selection:', newsrc)
             #print('Fit result:', newsrc)
             #print('Steps:', R['steps'])
             hit_limit = R.get('hit_limit', False)
@@ -1635,7 +1637,7 @@ class OneBlob(object):
             # models are evaluated on the same pixels.
             ch = _per_band_chisqs(srctractor, self.bands)
             chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
-            #print('Chisq for', name, '=', chisqs[name])
+            chat('Chisq for', name, '=', chisqs[name])
             cpum1 = time.process_time()
             B.all_model_cpu[srci][name] = cpum1 - cpum0
             cputimes[name] = cpum1 - cpum0
@@ -2373,7 +2375,7 @@ def _select_model(chisqs, nparams, galaxy_margin):
     Returns keepmod (string), the name of the preferred model.
     '''
     keepmod = 'none'
-    #print('_select_model: chisqs', chisqs)
+    chat('_select_model: chisqs', chisqs)
 
     # This is our "detection threshold": 5-sigma in
     # *parameter-penalized* units; ie, ~5.2-sigma for point sources
@@ -2382,7 +2384,7 @@ def _select_model(chisqs, nparams, galaxy_margin):
     diff = max([chisqs[name] - nparams[name] for name in chisqs.keys()
                 if name != 'none'] + [-1])
 
-    #print('best fit source chisq: %.3f, vs threshold %.3f' % (diff, cut))
+    chat('best fit source chisq: %.3f, vs threshold %.3f' % (diff, cut))
     if diff < cut:
         # Drop this source
         return keepmod

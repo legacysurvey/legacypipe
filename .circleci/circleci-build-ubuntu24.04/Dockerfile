@@ -72,16 +72,9 @@ RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
     && make install INSTALL_DIR=/usr/local PYTHON=python3.12 PYTHON_CNOFIG=python3.12-config \
     && make clean
 
-ENV PYTHON=python3
 # python = python3
+ENV PYTHON=python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
-
-# The Tractor
-RUN git clone https://github.com/dstndstn/tractor.git tractor \
-    && cd tractor \
-    && python3.12 setup.py build_ext --with-ceres --with-cython --inplace \
-    && pip install . --break-system-packages \
-    && rm -R $(find . -name "*.o" -o -name "*.so") && echo 1
 
 # DUST maps
 RUN mkdir -p dust/maps \
@@ -92,6 +85,13 @@ ENV DUST_DIR=/src/dust
 
 # Unwise PSF
 RUN git clone https://github.com/legacysurvey/unwise_psf.git
+
+# The Tractor
+RUN git clone https://github.com/dstndstn/tractor.git tractor \
+    && cd tractor \
+    && python3.12 setup.py build_ext --with-ceres --with-cython --inplace \
+    && pip install . --break-system-packages \
+    && rm -R $(find . -name "*.o" -o -name "*.so") && echo 1
 
 ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 
