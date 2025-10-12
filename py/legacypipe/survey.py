@@ -1390,10 +1390,12 @@ class LegacySurveyData(object):
         else:
             print('Warning: unknown filetype "%s" in get_compression_kwargs (compress)' % filetype)
 
-        if filetype in ['image', 'blobmodel', 'model', 'chi2', 'invvar',
-                        'depth', 'galdepth', 'psfsize']:
+        if filetype in ['image', 'blobmodel', 'model']:
             # Preserve zeros
             args.update(qmethod='SUBTRACTIVE_DITHER_2')
+        elif filetype in ['invvar', 'chi2', 'depth', 'galdepth', 'psfsize']:
+            # No dithering - to avoid small positive values from going negative.
+            args.update(qmethod='NO_DITHER')
         elif filetype in ['outliers-mask', 'maskbits', 'maskbits-light', 'nexp']:
             pass
         else:
