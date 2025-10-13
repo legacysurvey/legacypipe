@@ -266,7 +266,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
     #     plt.title('Star vetos')
     #     ps.savefig()
  
-    with (survey.write_output('outliers_mask', brick=brickname)
+    with (survey.write_output('outliers-mask', brick=brickname)
           if write_mask_file
           else EmptyContextManager()) as out:
 
@@ -376,12 +376,8 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 hdr.add_record(dict(name='X0', value=tim.x0))
                 hdr.add_record(dict(name='Y0', value=tim.y0))
 
-                # HCOMPRESS;: 943k
-                # GZIP_1: 4.4M
-                # GZIP: 4.4M
-                # RICE: 2.8M
                 extname = get_mask_extname(tim)
-                out.fits.write(mask, header=hdr, extname=extname, compress='HCOMPRESS')
+                out.fits.write(mask, header=hdr, extname=extname)
             del R
 
             if make_badcoadds:

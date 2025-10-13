@@ -922,19 +922,50 @@ def clean_band_name(band):
     '''
     return band.replace('-','_')
 
+# CFITSIO's fpack compression can't handle partial tile
+# sizes < 4 pix.  Select a tile size that works, or don't
+# compress if we can't find one.
+def find_tile_size(W, tilew):
+    while tilew <= W:
+        remain = W % tilew
+        if remain == 0 or remain >= 4:
+            break
+        tilew += 1
+    return tilew
+
 class FITSWrapper(fitsio.FITS):
     '''
     Used in our LegacySurveyData "write_output" context class, this allows easily
     setting a default "dither_seed" keyword arg for all *write* calls.
     '''
-    def __init__(self, *args, default_dither_seed=None, **kwargs):
+    def __init__(self, *args, compression=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.default_dither_seed = default_dither_seed
+        self.compression_kwargs = compression
 
-    def write_image(self, *args, dither_seed=None, **kwargs):
-        if dither_seed is None:
-            dither_seed = self.default_dither_seed
-        return super().write_image(*args, dither_seed=dither_seed, **kwargs)
+    # See https://github.com/esheldon/fitsio/issues/449
+    def reopen(self):
+        self.update_hdu_list()
+
+    def write_image(self, img, **kwargs):
+        kw = {}
+        kw.update(kwargs)
+        # the fits.write() function passes defaults to fits.write_image(), so
+        # we need to override the kwargs with our compression args.
+        if self.compression_kwargs is not None:
+            kw.update(self.compression_kwargs)
+        if 'compress' in kwargs and img is not None:
+            H,W = img.shape
+            if W < 4 or H < 4:
+                # Don't use compression
+                print('Image shape is', img.shape, ': disabling compression')
+                del kw['compress']
+            else:
+                default_tile_size = 100
+                tilew = find_tile_size(W, default_tile_size)
+                tileh = find_tile_size(H, default_tile_size)
+                kw.update(tile_dims=(tileh, tilew))
+        debug('Writing FITS image with kwargs', kw)
+        return super().write_image(img, **kw)
 
 class LegacySurveyData(object):
     '''
@@ -1256,7 +1287,7 @@ class LegacySurveyData(object):
                 os.path.join(basedir, 'metrics', brickpre,
                              '%s-%s.jpg' % (filetype, brick)))
 
-        elif filetype == 'outliers_mask':
+        elif filetype == 'outliers-mask':
             return swap(os.path.join(basedir, 'metrics', brickpre,
                                      'outlier-mask-%s.fits.fz' % (brick)))
 
@@ -1326,59 +1357,63 @@ class LegacySurveyData(object):
         debug('Cached file miss:', fn, '-/->', cfn)
         return fn
 
-    def get_compression_args(self, filetype, shape=None):
-        comp = dict(# g: sigma ~ 0.002.  qz -1e-3: 6 MB, -1e-4: 10 MB
-            image         = ('R', 'qz -1e-4'),
-            blobmodel     = ('R', 'qz -1e-4'),
-            model         = ('R', 'qz -1e-4'),
-            chi2          = ('R', 'qz -0.1'),
-            invvar        = ('R', 'q0 16'),
-            nexp          = ('H', None),
-            outliers_mask = ('R', None),
-            maskbits      = ('H', None),
-            maskbits_light = ('H', None),
-            depth         = ('G', 'qz 0'),
-            galdepth      = ('G', 'qz 0'),
-            psfsize       = ('G', 'qz 0'),
-            ).get(filetype.replace('-','_'))
-        if comp is None:
-            return None
-        method, args = comp
-        mname = dict(R='RICE',
-                     H='HCOMPRESS',
-                     G='GZIP',
-                     ).get(method)
-        if args is None:
-            pat = '[compress %s %%(tilew)i,%%(tileh)i]' % method
-        else:
-            pat = '[compress %s %%(tilew)i,%%(tileh)i; %s]' % (method, args)
-        # Default tile compression size:
-        tilew,tileh = 100,100
-        if shape is not None:
-            H,W = shape
-            # CFITSIO's fpack compression can't handle partial tile
-            # sizes < 4 pix.  Select a tile size that works, or don't
-            # compress if we can't find one.
-            if W < 4 or H < 4:
-                return None
-            while tilew <= W:
-                remain = W % tilew
-                if remain == 0 or remain >= 4:
-                    break
-                tilew += 1
-            while tileh <= H:
-                remain = H % tileh
-                if remain == 0 or remain >= 4:
-                    break
-                tileh += 1
-        s = pat % dict(tilew=tilew, tileh=tileh)
-        return s, method, args, mname, (tilew,tileh)
+    def get_compression_kwargs(self, filetype, shape=None):
 
-    def get_compression_string(self, filetype, shape=None, **kwargs):
-        A = self.get_compression_args(filetype, shape=shape)
-        if A is None:
-            return None
-        return A[0]
+        if filetype in ['wise-jpeg', 'wisemodel-jpeg', 'wiseresid-jpeg',
+                        'galex-jpeg', 'galexmodel-jpeg', 'galexresid-jpeg',
+                        'outliers-pre', 'outliers-post',
+                        'outliers-masked-pos', 'outliers-masked-neg',
+                        'image-jpeg', 'imageblob-jpeg', 'blobmodel-jpeg', 'resid-jpeg',
+                        'model-jpeg',
+                        'ref-sources', 'depth-table', 'detected-sources',
+                        'ccds-table', 'forced-brick', 'tractor-forced', 'forced',
+                        'all-models', 'tractor', 'tractor-intermediate',
+                        'galaxy-sims', 'checksums', 'ccds',
+                        'copsf',
+                        ]:
+            return {}
+
+        args = dict(dither_seed='checksum')
+
+        if filetype in ['image', 'blobmodel', 'model', 'chi2', 'invvar']:
+            args.update(compress='RICE')
+        elif filetype in ['nexp', 'maskbits', 'maskbits-light', 'outliers-mask',
+                          'blobmask', 'blobmap']:
+            # outliers-mask tests:
+            # HCOMPRESS;: 943k
+            # GZIP_1: 4.4M
+            # GZIP: 4.4M
+            # RICE: 2.8M
+            args.update(compress='HCOMPRESS')
+        elif filetype in ['depth', 'galdepth', 'psfsize']:
+            args.update(compress='GZIP')
+        else:
+            print('Warning: unknown filetype "%s" in get_compression_kwargs (compress)' % filetype)
+
+        if filetype in ['image', 'blobmodel', 'model']:
+            # Preserve zeros
+            args.update(qmethod='SUBTRACTIVE_DITHER_2')
+        elif filetype in ['invvar', 'chi2', 'depth', 'galdepth', 'psfsize']:
+            # No dithering - to avoid small positive values from going negative.
+            args.update(qmethod='NO_DITHER')
+        elif filetype in ['outliers-mask', 'maskbits', 'maskbits-light', 'nexp']:
+            pass
+        else:
+            print('Warning: unknown filetype "%s" in get_compression_kwargs (qmethod)' % filetype)
+
+        if filetype in ['image', 'blobmodel', 'model']:
+            args.update(qlevel=-1e-4)
+        elif filetype in ['chi2']:
+            args.update(qlevel=-0.1)
+        elif filetype in ['depth', 'galdepth', 'psfsize']:
+            args.update(qlevel=0.0)
+        elif filetype in ['invvar']:
+            args.update(qlevel=16)
+        elif filetype in ['outliers-mask', 'maskbits', 'maskbits-light', 'nexp']:
+            pass
+        else:
+            print('Warning: unknown filetype "%s" in get_compression_kwargs (qlevel)' % filetype)
+        return args
 
     def get_psfex_conf(self, camera, expnum, ccdname):
         '''
@@ -1397,7 +1432,7 @@ class LegacySurveyData(object):
             res = camconf.get((expnum, None), '')
         return res
 
-    def write_output(self, filetype, hashsum=True, filename=None, **kwargs):
+    def write_output(self, filetype, hashsum=True, filename=None, shape=None, **kwargs):
         '''
         Returns a context manager for writing an output file.
 
@@ -1428,10 +1463,6 @@ class LegacySurveyData(object):
         class OutputFileContext(object):
             def __init__(self, fn, survey, hashsum=True, relative_fn=None,
                          compression=None):
-                '''
-                *compression*: a CFITSIO compression specification, eg:
-                    "[compress R 100,100; qz -0.05]"
-                '''
                 self.real_fn = fn
                 self.relative_fn = relative_fn
                 self.survey = survey
@@ -1441,9 +1472,7 @@ class LegacySurveyData(object):
                 self.tmpfn = os.path.join(os.path.dirname(fn),
                                           'tmp-'+os.path.basename(fn))
                 if self.is_fits:
-                    self.fits = FITSWrapper('mem://' + (compression or ''),
-                                            'rw',
-                                            default_dither_seed='checksum')
+                    self.fits = FITSWrapper('mem://', 'rw', compression=compression)
                 else:
                     self.fn = self.tmpfn
                 self.hashsum = hashsum
@@ -1517,14 +1546,11 @@ class LegacySurveyData(object):
                     self.survey.add_hashcode(fn, hashcode)
             # end of OutputFileContext class
 
-
         if filename is not None:
             fn = filename
         else:
             # Get the output filename for this filetype
             fn = self.find_file(filetype, output=True, **kwargs)
-
-        compress = self.get_compression_string(filetype, **kwargs)
 
         # Find the relative path (relative to output_dir), which is the string
         # we will put in the shasum file.
@@ -1534,8 +1560,10 @@ class LegacySurveyData(object):
             if relfn.startswith('/'):
                 relfn = relfn[1:]
 
+        compression = self.get_compression_kwargs(filetype, shape=shape)
+        debug('Preparing to write a', filetype, 'file: compression kwargs', compression)
         out = OutputFileContext(fn, self, hashsum=hashsum, relative_fn=relfn,
-                                compression=compress)
+                                compression=compression)
         return out
 
     def add_hashcode(self, fn, hashcode):
