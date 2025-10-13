@@ -143,7 +143,7 @@ class TrackingPool(Pool):
         sentinels = self._get_sentinels()
 
         self._worker_handler = threading.Thread(
-            target=TrackingPool._handle_workers,
+            target=TrackingPool._my_handle_workers,
             args=(self._cache, self._taskqueue, self._ctx, self.Process,
                   self._processes, self._pool, self._inqueue, self._outqueue,
                   self._initializer, self._initargs, self._maxtasksperchild,
@@ -164,7 +164,7 @@ class TrackingPool(Pool):
         self._task_handler.start()
 
         self._result_handler = threading.Thread(
-            target=TrackingPool._handle_results,
+            target=TrackingPool._my_handle_results,
             args=(self._outqueue, self._quick_get, self._cache, self._worker_pids,
                   self._raise_deadworker_exception)
             )
@@ -213,7 +213,7 @@ class TrackingPool(Pool):
 
     # From Python 3.12.7 : pool.py
     @staticmethod
-    def _handle_results(outqueue, get, cache, pids, raise_deadworker_exception):
+    def _my_handle_results(outqueue, get, cache, pids, raise_deadworker_exception):
         thread = threading.current_thread()
 
         quitting = False
@@ -326,7 +326,7 @@ class TrackingPool(Pool):
         for use after reaping workers which have exited.
         """
         n_create = processes - len(pool)
-        for i in range(n_create):
+        for _ in range(n_create):
             worker_id = pool.next_worker_id
             pool.next_worker_id += 1
             w = Process(ctx, target=worker,
@@ -365,14 +365,14 @@ class TrackingPool(Pool):
         return cleaned
 
     @staticmethod
-    def _maintain_pool(ctx, Process, processes, pool, inqueue, outqueue,
-                       initializer, initargs, maxtasksperchild,
-                       wrap_exception, pids):
+    def _my_maintain_pool(ctx, Process, processes, pool, inqueue, outqueue,
+                          initializer, initargs, maxtasksperchild,
+                          wrap_exception, pids):
         """Clean up any exited workers and start replacements for them.
         """
         cleaned = TrackingPool._join_exited_workers(pool)
         if cleaned:
-            for worker_id, exitcode, worker_pid in cleaned:
+            for worker_id, exitcode, _ in cleaned:
                 # notify the handle_results() thread that this worker has died;
                 # whatever it was working on is toast
                 outqueue.put((None, None, False, worker_id, exitcode))
@@ -382,18 +382,18 @@ class TrackingPool(Pool):
                                                  wrap_exception, pids)
 
     @classmethod
-    def _handle_workers(cls, cache, taskqueue, ctx, Process, processes,
-                        pool, inqueue, outqueue, initializer, initargs,
-                        maxtasksperchild, wrap_exception, sentinels,
-                        change_notifier, pids):
+    def _my_handle_workers(cls, cache, taskqueue, ctx, Process, processes,
+                           pool, inqueue, outqueue, initializer, initargs,
+                           maxtasksperchild, wrap_exception, sentinels,
+                           change_notifier, pids):
         thread = threading.current_thread()
 
         # Keep maintaining workers until the cache gets drained, unless the pool
         # is terminated.
         while thread._state == RUN or (cache and thread._state != TERMINATE):
-            cls._maintain_pool(ctx, Process, processes, pool, inqueue,
-                               outqueue, initializer, initargs,
-                               maxtasksperchild, wrap_exception, pids)
+            cls._my_maintain_pool(ctx, Process, processes, pool, inqueue,
+                                  outqueue, initializer, initargs,
+                                  maxtasksperchild, wrap_exception, pids)
 
             current_sentinels = [*cls._get_worker_sentinels(pool), *sentinels]
 
