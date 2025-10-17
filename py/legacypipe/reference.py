@@ -552,8 +552,8 @@ def read_sga(survey, rc, dc, brick_radius, max_radius):
     lmc_ref_id = 5053785
     smc_ref_id = 5053799
     mclouds = []
-    for name,ra,dec,refid in [('LMC', 80.894, -69.756, lmc_ref_id),
-                              ('SMC', 13.187, -72.829, smc_ref_id),
+    for name,ra,dec,refid,mc_refid in [('LMC', 80.894, -69.756, lmc_ref_id, 1),
+                                       ('SMC', 13.187, -72.829, smc_ref_id, 2),
                               ]:
         from astrometry.util.starutil_numpy import degrees_between
         # Quick shortcut for bricks far from the MCs
@@ -573,6 +573,9 @@ def read_sga(survey, rc, dc, brick_radius, max_radius):
         galaxies.radius = np.maximum(0., galaxies.diam / 2. / 60.) # [degree]
         touch = (d < brick_radius + galaxies.radius)
         if np.any(touch):
+            # Replace the SGA REF_CAT and REF_ID columns
+            galaxies.ref_id[:] = mc_refid
+            galaxies.ref_cat[:] = 'MC'
             mclouds.append(galaxies)
     if len(mclouds):
         mclouds = merge_tables(mclouds)
