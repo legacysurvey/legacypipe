@@ -3689,6 +3689,8 @@ def stage_writecat(
         _,bx,by = targetwcs.radec2pixelxy(ts.ra, ts.dec)
         ts.bx = (bx - 1.).astype(np.float32)
         ts.by = (by - 1.).astype(np.float32)
+        ts.bx0 = ts.bx
+        ts.by0 = ts.by
         cols = T.get_columns()
         for c in ts.get_columns():
             if c in cols:
