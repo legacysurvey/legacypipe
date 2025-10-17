@@ -673,20 +673,18 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname,
         varimg[I] = (img[I] + bgimg[I]) * rrhrimg[I]
     if np.any(J):
         varimg[J] = bgimg[J] * rrhrimg[J]
+    del I,J
     varimg /= rrhrimg**2
 
     inverr = np.zeros_like(img)
-    K = varimg > 0
-    #if np.sum(K) == 0:
-    #    print('All pixels lack variance estimates; subimage is X %i-%i, Y %i-%i, img range %.3f to %.3f'
-    #          % (x0, x1, y0, y1, img.min(), img.max()))
-    #    return None
-
-    if np.any(K):
-        inverr[K] = 1.0 / np.sqrt(varimg[K])
-        sig1 = 1./np.median(inverr[inverr>0])
-    else:
-        sig1 = 0.
+    K = np.flatnonzero(varimg > 0)
+    if len(K) == 0:
+        debug('All GALEX pixels lack variance estimates; subimage is X %i-%i, Y %i-%i, img range %.3f to %.3f'
+              % (x0, x1, y0, y1, img.min(), img.max()))
+        return None
+    inverr[K] = 1.0 / np.sqrt(varimg[K])
+    sig1 = 1./np.median(inverr[inverr>0])
+    del K, varimg
 
     zp = tile.get('%s_zpmag' % band)
     zpscale = NanoMaggies.zeropointToScale(zp)
@@ -694,6 +692,7 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname,
     if nanomaggies:
         # scale the image pixels to be in nanomaggies.
         img /= zpscale
+        sig1 /= zpscale
         inverr *= zpscale
         photocal = LinearPhotoCal(1., band=bandname)
     else:
