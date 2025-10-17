@@ -1566,6 +1566,7 @@ def stage_fitblobs(T=None,
         cat.extend(cat_special)
         print('cat_special:', cat_special)
     if T_refbail:
+        # these get "regular" = False
         T_all.append(T_refbail)
         cat.extend(cat_refbail)
         del cat_refbail
@@ -3681,10 +3682,18 @@ def stage_writecat(
         from legacypipe.reference import get_galaxy_sources
         from tractor import Catalog
         ti = T_orig[I]
-        # so that sources get created...
+        # set "ignore_source" to zero so that source objects DO get created...
         ti.ignore_source = np.zeros(len(ti))
+        # ffs - see "awful" comment in reference.py - this can happen with --bailout
+        ti.delete_column('sersic')
         special = get_galaxy_sources(ti, bands)
         debug('re-made special sources:', special)
+        # convert ellipses from log-radius and softened ellipticities back to vanilla ellipses.
+        for src in special:
+            from tractor import DevGalaxy, ExpGalaxy
+            from tractor.sersic import SersicGalaxy
+            if isinstance(src, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
+                src.shape = src.shape.toEllipseE()
         ts = prepare_fits_catalog(Catalog(*special), None, None, bands)
         _,bx,by = targetwcs.radec2pixelxy(ts.ra, ts.dec)
         ts.bx = (bx - 1.).astype(np.float32)
