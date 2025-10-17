@@ -799,8 +799,7 @@ def get_galaxy_sources(galaxies, bands):
 
     else:
         print('SGA parent - sources')
-        I, = np.nonzero(np.logical_not(galaxies.ignore_source))
-        for ii,g in zip(I, galaxies[I]):
+        for ii,g in enumerate(galaxies):
             # Initialize each source with an exponential disk--
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag))
                            for band in bands])
@@ -813,12 +812,19 @@ def get_galaxy_sources(galaxies, bands):
             if ba <= 0.0 or ba > 1.0:
                 # Make round!
                 ba = 1.0
-            logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, ba, 180-g.pa) # note the 180 rotation
-            assert(np.isfinite(logr))
-            assert(np.isfinite(ee1))
-            assert(np.isfinite(ee2))
-            shape = LegacyEllipseWithPriors(logr, ee1, ee2)
-            shape.setMaxLogRadius(logr + np.log(radius_max_factor))
+            if g.ignore_source:
+                # "ignore_source" objects include FIXGEO and RESOLVED ones where we're
+                # just defining an ellipse that goes into the "maskbits" maps, but not
+                # sources; make it a regular ellipse so that it can get carried into the
+                # tractor catalogs without having to be converted back to a "vanilla ellipse"
+                shape = EllipseE.fromRAbPhi(rr, ba, 180-g.pa)
+            else:
+                logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, ba, 180-g.pa) # note the 180 rotation
+                assert(np.isfinite(logr))
+                assert(np.isfinite(ee1))
+                assert(np.isfinite(ee2))
+                shape = LegacyEllipseWithPriors(logr, ee1, ee2)
+                shape.setMaxLogRadius(logr + np.log(radius_max_factor))
             src = ExpGalaxy(RaDecPos(g.ra, g.dec),
                             NanoMaggies(order=bands, **fluxes),
                             shape)

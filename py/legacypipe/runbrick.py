@@ -1561,12 +1561,12 @@ def stage_fitblobs(T=None,
     T_all = [T]
     n_newcat = len(newcat)
     cat = newcat
+    # T_special and T_refbail both get "regular" = False
     if T_special is not None:
         T_all.append(T_special)
         cat.extend(cat_special)
         print('cat_special:', cat_special)
     if T_refbail:
-        # these get "regular" = False
         T_all.append(T_refbail)
         cat.extend(cat_refbail)
         del cat_refbail
@@ -3673,37 +3673,10 @@ def stage_writecat(
             T.ra_ivar [I] = T_orig.ra_ivar [I]
             T.dec_ivar[I] = T_orig.dec_ivar[I]
 
-    # For "special" reference sources, currently sources don't get created (in reference.py)
-    # for these objects, so create them now and create catalog entries for them.
-    # We should maybe just create the sources for these guys in reference.py instead...
-    # This was from ticket #765, using the SGA-parent catalog
+    # For "special" reference sources
     I = np.flatnonzero(np.logical_not(T.regular))
-    if len(I):
-        from legacypipe.reference import get_galaxy_sources
-        from tractor import Catalog
-        ti = T_orig[I]
-        # set "ignore_source" to zero so that source objects DO get created...
-        ti.ignore_source = np.zeros(len(ti))
-        # ffs - see "awful" comment in reference.py - this can happen with --bailout
-        ti.delete_column('sersic')
-        special = get_galaxy_sources(ti, bands)
-        debug('re-made special sources:', special)
-        # convert ellipses from log-radius and softened ellipticities back to vanilla ellipses.
-        for src in special:
-            from tractor import DevGalaxy, ExpGalaxy
-            from tractor.sersic import SersicGalaxy
-            if isinstance(src, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
-                src.shape = src.shape.toEllipseE()
-        ts = prepare_fits_catalog(Catalog(*special), None, None, bands)
-        _,bx,by = targetwcs.radec2pixelxy(ts.ra, ts.dec)
-        ts.bx = (bx - 1.).astype(np.float32)
-        ts.by = (by - 1.).astype(np.float32)
-        ts.bx0 = ts.bx
-        ts.by0 = ts.by
-        cols = T.get_columns()
-        for c in ts.get_columns():
-            if c in cols:
-                T.get(c)[I] = ts.get(c)
+    T.bx0[I] = T.bx[I]
+    T.by0[I] = T.by[I]
 
     # In oneblob.py we have a step where we zero out the fluxes for sources
     # with tiny "fracin" values.  Repeat that here, but zero out more stuff...

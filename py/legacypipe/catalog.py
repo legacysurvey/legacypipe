@@ -123,6 +123,9 @@ def _get_tractor_fits_values(T, cat, pat):
     shape = np.zeros((len(T), 3), np.float32)
     sersic = np.zeros(len(T), np.float32)
     for i,src in enumerate(cat):
+        if isinstance(src, (ExpGalaxy, DevGalaxy, SersicGalaxy)):
+            from tractor.ellipses import EllipseE
+            assert(isinstance(src.shape, EllipseE))
         # Grab elliptical shapes
         if isinstance(src, RexGalaxy):
             shape[i,0] = src.shape.getAllParams()[0]
