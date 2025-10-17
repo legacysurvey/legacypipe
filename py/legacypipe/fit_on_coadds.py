@@ -461,6 +461,7 @@ def stage_fit_on_coadds(
     from tractor.sky import ConstantSky
     from tractor.psf import PixelizedPSF
     from tractor.tractortime import TAITime
+    from tractor.psf import HybridPixelizedPSF, NCircularGaussianPSF
     import astropy.time
     import fitsio
     if plots or plots2:
@@ -601,8 +602,10 @@ def stage_fit_on_coadds(
             print('Using average PSF sigma', psf_sigma)
 
             psf = PixelizedPSF(psfimg)
-            gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
+            gaussian_psf = NCircularGaussianPSF([psf_sigma], [1.])
+            psf = HybridPixelizedPSF(psf, gauss=gaussian_psf)
 
+            gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
             psfnorm = np.sqrt(np.sum(psfimg**2))
             print('Gaussian PSF norm', gnorm, 'vs pixelized', psfnorm)
 
