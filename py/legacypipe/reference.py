@@ -575,7 +575,7 @@ def read_sga(survey, rc, dc, brick_radius, max_radius):
         if np.any(touch):
             # Replace the SGA REF_CAT and REF_ID columns
             galaxies.ref_id[:] = mc_refid
-            galaxies.ref_cat[:] = 'MC'
+            galaxies.ref_cat = np.array(['MC'])
             mclouds.append(galaxies)
     if len(mclouds):
         mclouds = merge_tables(mclouds)
