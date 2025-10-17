@@ -711,6 +711,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
     nveto = 0
     nsaddle = 0
     naper = 0
+    noslc = 0
     for i,(x,y) in enumerate(zip(px, py)):
         if this_veto_map[y,x]:
             nveto += 1
@@ -784,6 +785,9 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
                 plt.imshow(allblobs[slc] == ablob)
                 plt.title('blob matches (ablob)')
                 ps.savefig()
+
+            noslc += 1
+            continue
 
         assert(len(oslcs) == 1)
         oslc = oslcs[0]
@@ -859,7 +863,7 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
             ps.savefig()
 
     info('Of', len(px), 'potential peaks:', nveto, 'in veto map,', nsaddle, 'cut by saddle test,',
-          naper, 'cut by aper test,', np.sum(keep), 'kept')
+          naper, 'cut by aper test,', noslc, 'with "oslc" issue;', np.sum(keep), 'kept')
 
     if ps is not None:
         pxdrop = px[np.logical_not(keep)]
