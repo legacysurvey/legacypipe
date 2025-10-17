@@ -4444,6 +4444,12 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             R = runstage(stage, pickle_pat, mystagefunc, prereqs=prereqs,
                          initial_args=initargs, **kwargs)
         info('All done:', StageTime()-t0)
+    except Exception as e:
+        print('runstage ... caught exception', e)
+        if pool is not None:
+            print('pool.terminate()...')
+            pool.terminate()
+        raise e
     finally:
         print('runstage ... finally clause')
         if pool is not None:
