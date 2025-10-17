@@ -129,6 +129,7 @@ def stage_galex_forced(
         btiles = tiles[tiles.get('has_%s' % band)]
         if len(btiles) == 0:
             continue
+        debug('GALEX band', band, ': names', [n.strip() for n in btiles.tilename], 'exptimes', btiles.get(band+'exptime'))
         args.append((galex_dir, gcat, btiles, band, roiradec, pixpsf, ps, galex_ceres))
     # Run the forced photometry!
     record_event and record_event('stage_galex_forced: photometry')
@@ -677,8 +678,8 @@ def galex_tractor_image(tile, band, galex_dir, radecbox, bandname,
     varimg /= rrhrimg**2
 
     inverr = np.zeros_like(img)
-    K = np.flatnonzero(varimg > 0)
-    if len(K) == 0:
+    K = (varimg > 0)
+    if not np.any(K):
         debug('All GALEX pixels lack variance estimates; subimage is X %i-%i, Y %i-%i, img range %.3f to %.3f'
               % (x0, x1, y0, y1, img.min(), img.max()))
         return None
