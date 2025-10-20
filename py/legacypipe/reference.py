@@ -139,16 +139,6 @@ def get_reference_sources(survey, targetwcs, bands,
     info('Reference sources touching this brick:', Counter([str(r) for r in refs.ref_cat]).most_common())
     info('Reference sources within this brick:', Counter([str(r) for r in refs.ref_cat[refs.in_bounds]]).most_common())
 
-    # drop SGA-parent galaxies that are outside the brick area.
-    keep = np.ones(len(refs), bool)
-    keep[refs.islargegalaxy *
-         np.logical_not(refs.in_bounds) *
-         np.logical_not(refs.freezeparams)] = False
-    refs.cut(keep)
-    del keep
-    debug('Dropped non-frozen galaxies outside the brick:', len(refs), 'refs')
-    debug('ref_cats:', Counter(refs.ref_cat))
-
     # ensure bool columns
     for col in ['isbright', 'ismedium', 'islargegalaxy', 'iscluster', 'isgaia',
                 'istycho', 'freezeparams', 'isresolved', 'ismcloud', 'ignore_source']:
@@ -161,7 +151,6 @@ def get_reference_sources(survey, targetwcs, bands,
     keep[refs.islargegalaxy *
          np.logical_not(refs.in_bounds) *
          np.logical_not(refs.freezeparams)] = False
-
     refs.cut(keep)
     del keep
     debug('Dropped non-frozen galaxies outside the brick:', len(refs), 'refs')
