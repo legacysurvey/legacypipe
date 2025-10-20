@@ -568,7 +568,9 @@ def read_sga(survey, rc, dc, brick_radius, max_radius):
         # First, find the MC in the SGA
         radius = 1./60 # in deg
         I = tree_search_radec(kd, ra, dec, radius)
-        assert(len(I) > 0)
+        if len(I) == 0:
+            # Not close enough
+            continue
         # Read only the rows within range.
         galaxies = fits_table(galfn, rows=I)
         galaxies.cut(galaxies.ref_id == refid)
