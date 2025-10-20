@@ -811,8 +811,7 @@ def get_galaxy_sources(galaxies, bands):
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag))
                            for band in bands])
             assert(np.all(np.isfinite(list(fluxes.values()))))
-            rr = g.radius * 3600. / 2 # factor of two accounts for R(25)-->reff [arcsec]
-            assert(np.isfinite(rr))
+            assert(np.isfinite(g.radius))
             assert(np.isfinite(g.ba))
             assert(np.isfinite(g.pa))
             ba = g.ba
@@ -824,8 +823,9 @@ def get_galaxy_sources(galaxies, bands):
                 # just defining an ellipse that goes into the "maskbits" maps, but not
                 # sources; make it a regular ellipse so that it can get carried into the
                 # tractor catalogs without having to be converted back to a "vanilla ellipse"
-                shape = EllipseE.fromRAbPhi(rr, ba, 180-g.pa)
+                shape = EllipseE.fromRAbPhi(g.radius * 3600., ba, 180-g.pa)
             else:
+                rr = g.radius * 3600. / 2. # factor of 2 accounts for approx R(25)-->reff [arcsec]
                 logr, ee1, ee2 = EllipseESoft.rAbPhiToESoft(rr, ba, 180-g.pa) # note the 180 rotation
                 assert(np.isfinite(logr))
                 assert(np.isfinite(ee1))
