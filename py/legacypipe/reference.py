@@ -151,7 +151,6 @@ def get_reference_sources(survey, targetwcs, bands,
     keep[refs.islargegalaxy *
          np.logical_not(refs.in_bounds) *
          np.logical_not(refs.freezeparams)] = False
-
     refs.cut(keep)
     del keep
     debug('Dropped non-frozen galaxies outside the brick:', len(refs), 'refs')
