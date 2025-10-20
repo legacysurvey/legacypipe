@@ -57,10 +57,17 @@ def main():
 
     # Cross-match to Gaia and check mags -- this is an end-to-end check on the calibs.
     T = fits_table('tractor/111/tractor-1110p322.fits')
+    T.cut(T.brick_primary)
+    # because of the '--zoom', brick_primary isn't right (it's for the original full brick)
+    H,W = 400,400
+    in_bounds = (T.bx > 0) * (T.bx < W) * (T.by > 0) * (T.by < H)
+    T.cut(in_bounds)
+
     #G = fits_table(os.path.join(survey_dir, 'gaia-dr2', 'chunk-02791.fits'))
     G = fits_table('metrics/111/reference-1110p322.fits')
 
     I,J,_ = match_radec(G.ra, G.dec, T.ra, T.dec, 1./3600., nearest=True)
+    print('Matched', len(I), 'sources')
     assert(len(I) == 5)
     K = np.argsort(G.phot_g_mean_mag[I])
     I = I[K]
@@ -96,11 +103,10 @@ def main():
     #  [-0.044 -0.063 -0.042]
     #  [ 0.246 -0.161 -0.404]]
 
-    # Looks like the z-band in particular is pretty bad on the highly saturated stars!
-
     assert(np.all(np.abs(dmags)[:, 0] < 0.25))
     assert(np.all(np.abs(dmags)[:, 1] < 0.8))
-    assert(np.all(np.abs(dmags)[3:, :] < 0.5))
+    # Looks like the z-band in particular is pretty bad on the highly saturated stars!
+    assert(np.all(np.abs(dmags)[:, 3:] < 0.5))
 
     gmags = np.vstack((G.phot_bp_mean_mag[I], G.phot_g_mean_mag[I], G.phot_rp_mean_mag[I])).T
     dmags = tmags - gmags
