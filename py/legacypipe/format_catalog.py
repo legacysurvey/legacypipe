@@ -121,6 +121,12 @@ def format_catalog(T, bands, allbands, release,
 
     T.release = np.zeros(len(T), np.int16) + release
 
+    # Add LS_ID_ -- from
+    # https://github.com/desihub/desitarget/blob/main/py/desitarget/data/targetmask.yaml#L263-L265
+    T.ls_id_dr11 = ((T.release.astype(np.int64) << 42) |
+                    (T.brickid.astype(np.int64) << 22) |
+                    (T.objid.astype(np.int64)))
+
     # Add the distance to the nearest neighbour, (out to a max of 1 arcmin)
     T.nearest_neighbor = np.zeros(len(T), np.float32)
     # the tractor catalogs can contain (reference) objects outside the brick, so some
@@ -130,7 +136,7 @@ def format_catalog(T, bands, allbands, release,
     del I, J, d
 
     # Column ordering...
-    cols = ['release', 'brickid', 'brickname', 'objid', 'brick_primary',
+    cols = ['ls_id_dr11', 'release', 'brickid', 'brickname', 'objid', 'brick_primary',
             'maskbits', 'fitbits',
             'type', 'ra', 'dec', 'ra_ivar', 'dec_ivar',
             'bx', 'by', 'dchisq', 'ebv', 'mjd_min', 'mjd_max',
