@@ -70,36 +70,6 @@ def formatwarning(message, category, filename, lineno, line=None):
 
 warnings.formatwarning = formatwarning
 
-#def get_process_memory_usage():
-#    """
-#    Returns the total memory usage (in MiB) of the current process and all its children.
-#    """
-#    import os, psutil, time, subprocess
-#    current_process = psutil.Process(os.getpid())
-#
-#    # Get memory usage for the main process
-#    # RSS (Resident Set Size) is the non-swapped physical memory used
-#    mem_usage_mib = current_process.memory_info().rss / (1024 * 1024)
-#    print (f'Main {mem_usage_mib=}')
-#
-#    # Sum memory usage of all child processes (recursively)
-#    for child in current_process.children(recursive=True):
-#        try:
-#            mem_usage_mib += child.memory_info().rss / (1024 * 1024)
-#        except (psutil.NoSuchProcess, psutil.AccessDenied):
-#            # Child process might have exited, or permissions are restricted
-#            continue
-#
-#    print (f'Total {mem_usage_mib=}')
-#
-#    result = subprocess.run(['free', '-g'], capture_output=True, text=True, check=True)
-#
-#    # Log the output
-#    print("--- System Memory Report (free -g) ---")
-#    print(result.stdout)
-#    print("--------------------------------------")
-#    return mem_usage_mib
-
 def runbrick_global_init(shared_counter, shared_lock, available_gpu_ids_param, ngpu_param, threads_per_gpu_param, gpumode_param):
     from tractor.galaxy import disable_galaxy_cache
 
@@ -2417,13 +2387,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     from legacypipe.survey import clean_band_name
     #return None
 
-    #print ("Starting Coadds")
-    #get_process_memory_usage()
-
     import gc
     gc.collect()
-    #print ("GC Coadds")
-    #get_process_memory_usage()
 
     record_event and record_event('stage_coadds: starting')
     _add_stage_version(version_header, 'COAD', 'coadds')
@@ -2500,14 +2465,10 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
 
     Ireg = np.flatnonzero(T.regular)
 
-    #print ("Coadds 1b")
-    #get_process_memory_usage()
     Nreg = len(Ireg)
     bothmods = mp.map(_get_both_mods, [(tim, [cat[i] for i in Ireg], T.blob[Ireg], blobmap,
                                         targetwcs, frozen_galaxies, ps, plots)
                                        for tim in tims])
-    #print ("GetBothMods", type(bothmods))
-    #get_process_memory_usage()
     mods     = [r[0] for r in bothmods]
     blobmods = [r[1] for r in bothmods]
     NEA      = [r[2] for r in bothmods]
@@ -2545,8 +2506,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                                    targetwcs, co_sky, coadd_headers),
                     plots=plots, ps=ps, mp=mp)
     record_event and record_event('stage_coadds: extras')
-    #print ("Coadds 3")
-    #get_process_memory_usage()
 
     if save_coadd_psf:
         for band,psfimg in zip(bands, C.psf_imgs):
@@ -2699,9 +2658,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     version_header.add_record(dict(name='COMMENT', value='maskbits bits:'))
     _add_bit_description(version_header, MASKBITS, mbits,
                          'MB_%s', 'MBIT_%i', 'maskbits')
-
-    #print ("Coadds 6")
-    #get_process_memory_usage()
 
     # Add the fitbits header cards to version_header
     fbits = [

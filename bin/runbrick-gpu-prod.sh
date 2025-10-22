@@ -8,7 +8,7 @@ export COSMO=/dvs_ro/cfs/cdirs/cosmo
 export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
 #export LEGACY_SURVEY_DIR=$SCRATCH/dr11-sky
 
-outdir=$SCRATCH/dr11-gpu
+outdir=$SCRATCH/dr11-gpu-prod-2b
 
 export GAIA_CAT_DIR=$COSMO/data/gaia/dr3/healpix
 export GAIA_CAT_PREFIX=healpix
@@ -41,6 +41,8 @@ export KMP_AFFINITY=disabled
 brick="$1"
 bri=${brick:0:3}
 
+gpuid="$2"
+
 mkdir -p "$outdir/logs/$bri"
 mkdir -p "$outdir/metrics/$bri"
 mkdir -p "$outdir/pickles/$bri"
@@ -71,6 +73,11 @@ echo "--------------------------------------------------------------------------
 #export LEGACYPIPE_DIR=/src/legacypipe/py
 #export PYTHONPATH=/src/unwise_psf/py:/src/legacypipe/py:/usr/local/lib/python
 
+export LEGACYPIPE_DIR=/global/cfs/cdirs/desi/users/cdwarner/code/Tractor/legacypipe/py/
+export TRACTOR_DIR=/global/cfs/cdirs/desi/users/cdwarner/code/Tractor/tractor/
+export PYTHONPATH=${TRACTOR_DIR}:${LEGACYPIPE_DIR}:${PYTHONPATH}
+#export PYTHONPATH=${LEGACYPIPE_DIR}:${PYTHONPATH}
+
 cd $LEGACYPIPE_DIR
 
 echo "LEGACYPIPE_DIR: $LEGACYPIPE_DIR" >> "$log"
@@ -80,6 +87,9 @@ python -c "import legacypipe; print(legacypipe.__file__)" >> "$log"
 python -c "import sys; print('\n'.join(sys.path))" >> "$log"
 nvidia-smi >> "$log"
 set | grep ^SLURM >> "$log"
+
+echo "Testing CUPY" >> "$log"
+python -c 'import cupy as cp; x = cp.zeros(1); print("X", x)' >> "$log" 2>&1
 
 # https://github.com/dmargala/desiscaleflow/blob/main/bin/desi_avoid_home
 # https://developer.nvidia.com/blog/cuda-pro-tip-understand-fat-binaries-jit-caching/
@@ -95,15 +105,18 @@ mkdir -p $CUDA_CACHE_PATH
 export CUPY_CACHE_DIR=$TMPCACHE/.cupy/kernel_cache
 mkdir -p $CUPY_CACHE_DIR
 
-python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
+#python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
+#       --gpu-id "$gpuid" \
+python $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --run south \
        --brick "$brick" \
        --use-gpu \
        --sub-blobs \
-       --ngpu 1 \
-       --threads 32 \
+       --threads 24 \
        --threads-per-gpu 8 \
        --gpumode 2 \
+       --ngpu 1 \
+       --gpu-id "$gpuid" \
        --bands g,r,z \
        --rgb-stretch 1.5 \
        --nsatur 2 \
@@ -114,6 +127,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --checkpoint-period 120 \
        --write-stage srcs \
        --release 10099 \
+       --no-wise \
        >> "$log" 2>&1
 
 # Save the return value from the python command -- otherwise we
