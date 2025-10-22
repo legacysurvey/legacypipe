@@ -73,7 +73,8 @@ python -O "$LEGACYPIPE_DIR/legacypipe/runbrick.py" \
      --brick "$brick" \
      --skip \
      --skip-calibs \
-     --bands g,r,i,z \
+     --bands g,r,z \
+     --forced-bands i \
      --rgb-stretch 1.5 \
      --nsatur 2 \
      --survey-dir "$LEGACY_SURVEY_DIR" \
