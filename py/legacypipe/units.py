@@ -13,7 +13,8 @@ def get_units_for_columns(cols, bands=None, extras=None):
         ra=deg, dec=deg, ra_ivar=degiv, dec_ivar=degiv,
         ebv='mag',
         shape_r=arcsec,
-        shape_r_ivar=arcseciv)
+        shape_r_ivar=arcseciv,
+        nearest_neighbor=arcsec)
     unitmap.update(pmra=pm, pmdec=pm, pmra_ivar=pmiv, pmdec_ivar=pmiv,
                  parallax='mas', parallax_ivar='mas^(-2)')
     unitmap.update(gaia_phot_g_mean_mag='mag',

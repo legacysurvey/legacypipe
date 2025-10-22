@@ -45,6 +45,8 @@ def _expand_flux_columns(T, bands, allbands, keys):
 def format_catalog(T, bands, allbands, release,
                    N_wise_epochs=None,
                    motions=True, gaia_tagalong=False):
+    from astrometry.libkd.spherematch import match_radec
+
     has_wise =    'flux_w1'    in T.columns()
     has_wise_lc = 'lc_flux_w1' in T.columns()
     has_galex =   'flux_nuv'   in T.columns()
@@ -119,11 +121,20 @@ def format_catalog(T, bands, allbands, release,
 
     T.release = np.zeros(len(T), np.int16) + release
 
+    # Add the distance to the nearest neighbour, (out to a max of 1 arcmin)
+    T.nearest_neighbor = np.zeros(len(T), np.float32)
+    # the tractor catalogs can contain (reference) objects outside the brick, so some
+    # could be quite far away (eg, LMC).
+    I,J,d = match_radec(T.ra, T.dec, T.ra, T.dec, 1./60., notself=True, nearest=True)
+    T.nearest_neighbor[I] = d * 3600.
+    del I, J, d
+
     # Column ordering...
     cols = ['release', 'brickid', 'brickname', 'objid', 'brick_primary',
             'maskbits', 'fitbits',
             'type', 'ra', 'dec', 'ra_ivar', 'dec_ivar',
             'bx', 'by', 'dchisq', 'ebv', 'mjd_min', 'mjd_max',
+            'nearest_neighbor',
             'ref_cat', 'ref_id']
     if motions:
         cols.extend(['pmra', 'pmdec', 'parallax',
