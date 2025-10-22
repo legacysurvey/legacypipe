@@ -278,7 +278,7 @@ class PanStarrsImage(LegacySurveyImage):
             maskvals[name] = val
         return maskvals
 
-    def remap_dq(self, dq, hdr):
+    def remap_dq(self, dq, hdr, slc):
         new_dq = np.zeros(dq.shape, np.int16)
         maskvals = self.get_mask_names(hdr)
         # Ignore STARCORE

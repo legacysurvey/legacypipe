@@ -31,7 +31,7 @@ class CPImage(LegacySurveyImage):
                                       self.ccdname, self.mjdobs,
                                       img, invvar, x0, y0)
 
-    def remap_dq(self, dq, header):
+    def remap_dq(self, dq, header, slc):
         '''
         Called by get_tractor_image() to map the results from read_dq
         into a bitmask.

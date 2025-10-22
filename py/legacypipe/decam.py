@@ -294,9 +294,9 @@ class DecamImage(CPImage):
             return iv,hdr
         return iv
 
-    def read_dq(self, header=None, **kwargs):
-        # Reduce DQ size
-        dq = super().read_dq(header=header, **kwargs)
+    def read_dq(self, header=None, slc=None, **kwargs):
+        # Reduce DQ data type size (int16)
+        dq = super().read_dq(header=header, slc=slc, **kwargs)
         if header:
             # unpack
             dq,hdr = dq
@@ -307,7 +307,7 @@ class DecamImage(CPImage):
             dq = dq,hdr
         return dq
 
-    def remap_dq(self, dq, header):
+    def remap_dq(self, dq, header, slc):
         '''
         Called by get_tractor_image() to map the results from read_dq
         into a bitmask.
@@ -387,6 +387,45 @@ class DecamImage(CPImage):
                 assert(np.all((dq & bothbits) != bothbits))
         # should already be this type...
         dq = dq.astype(self.dq_type)
+
+        # extra S17 masking
+        if self.ccdname == 'S17':
+            from astrometry.util.miscutils import get_overlapping_region
+            from legacypipe.bits import DQ_BITS
+            x0, y0 = 0, 0
+            H, W = dq.shape
+            if slc is not None:
+                sy, sx = slc
+                y0, y1 = sy.start, sy.stop
+                x0, x1 = sx.start, sx.stop
+            else:
+                y1 = H
+                x1 = W
+            # Bad region in S17 - (the hi is non-inclusive)
+            ybad_lo, ybad_hi =   0, 3888+1
+            xbad_lo, xbad_hi = 538,  543+1
+            # Let's shift the bad-pixel rectangle to local coordinates in our "dq" sub-image,
+            # so the bounds checking is simpler.
+            ybad_lo -= y0
+            ybad_hi -= y0
+            xbad_lo -= x0
+            xbad_hi -= x0
+            debug('DQ slice: x [%i, %i), y [%i, %i)' % (x0, x1, y0, y1))
+            debug('Local coords of bad S17 region: x [%i, %i), y [%i, %i)' %
+                  (xbad_lo, xbad_hi, ybad_lo, ybad_hi))
+            if xbad_lo >= W or ybad_lo >= H or xbad_hi <= 0 or ybad_hi <= 0:
+                debug('S17: no overlap')
+                pass
+            else:
+                # clip
+                xbad_lo = max(0, xbad_lo)
+                ybad_lo = max(0, ybad_lo)
+                xbad_hi = min(W, xbad_hi)
+                ybad_hi = min(H, ybad_hi)
+                debug('Clipped local coords: x [%i, %i), y [%i, %i)' %
+                  (xbad_lo, xbad_hi, ybad_lo, ybad_hi))
+                dq[ybad_lo:ybad_hi, xbad_lo:xbad_hi] |= DQ_BITS['badpix']
+
         return dq
 
     def fix_saturation(self, img, dq, invvar, primhdr, imghdr, slc):

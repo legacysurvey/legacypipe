@@ -708,7 +708,7 @@ class LegacySurveyImage(object):
         if get_dq:
             dq,dqhdr = self.read_dq(slc=slc, header=True)
             if dq is not None:
-                dq = self.remap_dq(dq, dqhdr)
+                dq = self.remap_dq(dq, dqhdr, slc)
         # Read inverse-variance (weight) map
         if get_invvar:
             invvar = self.read_invvar(slc=slc, dq=dq)
@@ -1218,7 +1218,7 @@ class LegacySurveyImage(object):
         dq = self._read_fits(self.dqfn, self.dq_hdu, **kwargs)
         return dq
 
-    def remap_dq(self, dq, header):
+    def remap_dq(self, dq, header, slc):
         '''
         Called by get_tractor_image() to map the results from read_dq
         into a bitmask.
@@ -1635,7 +1635,7 @@ class LegacySurveyImage(object):
         img = self.read_image(slc=slc)
         dq,dqhdr = self.read_dq(slc=slc, header=True)
         if dq is not None:
-            dq = self.remap_dq(dq, dqhdr)
+            dq = self.remap_dq(dq, dqhdr, slc)
         wt = self.read_invvar(slc=slc, dq=dq)
         primhdr = self.read_image_primary_header()
         imghdr = self.read_image_header()
