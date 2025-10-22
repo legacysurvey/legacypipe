@@ -993,7 +993,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
     dq,dqhdr = imobj.read_dq(header=True, slc=slc)
     #print('DQ:', dq.shape)
     if dq is not None:
-        dq = imobj.remap_dq(dq, dqhdr)
+        dq = imobj.remap_dq(dq, dqhdr, slc)
     invvar = imobj.read_invvar(dq=dq, slc=slc)
     #print('Invvar:', invvar.shape)
     img = imobj.read_image(slc=slc)

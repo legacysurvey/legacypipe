@@ -282,7 +282,7 @@ class HscImage(LegacySurveyImage):
             img = img,hdr
         return img
 
-    def remap_dq(self, dq, header):
+    def remap_dq(self, dq, header, slc):
         return remap_hsc_bitmask(dq, header)
 
     def get_zeropoint(self, primhdr, hdr):
