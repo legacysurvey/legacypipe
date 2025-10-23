@@ -50,6 +50,7 @@ import queue
 import traceback
 import threading
 import time
+import datetime
 
 
 _GLOBAL_LEGACYPIPE_CONTEXT = {'is_gpu_worker': False, 'gpu_device_id': None, 'gpumode': 0}
@@ -2185,7 +2186,7 @@ def _bounce_one_blob(X):
     pid = os.getpid()
 
     (brickname, iblob, blob_unique, X) = X
-    info(f"Worker PID {pid}: Final _GLOBAL_LEGACYPIPE_CONTEXT: {_GLOBAL_LEGACYPIPE_CONTEXT} running {iblob=}")
+    info(f"Worker PID {pid}: Final _GLOBAL_LEGACYPIPE_CONTEXT: {_GLOBAL_LEGACYPIPE_CONTEXT} running {iblob=} at "+str(datetime.datetime.now()))
     if X is not None:
         if X[-3] and not is_gpu_worker:
             info(f"Updating {gpumode=} for worker {pid}")
@@ -2200,6 +2201,15 @@ def _bounce_one_blob(X):
         if is_gpu_worker:
             import cupy as cp
             cp.cuda.Device(gpu_device_id).use()
+            free_mem, total_mem = cp.cuda.runtime.memGetInfo()
+            free_mem_g = free_mem/1024.**3
+            if free_mem_g < 1.0:
+                print (f"Free memory under 1 GiB {free_mem_g=}; Running {pid} in CPU mode.")
+                Xlist = list(X)
+                Xlist[-2] = 0
+                X = tuple(Xlist)
+            else:
+                print (f"Free memory {free_mem_g=}; Runing in GPU mode")
         result = one_blob(X)
         if result is not None:
             # Was this a sub-blobs?  If so, de-duplicate the catalog
@@ -2377,6 +2387,9 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     from legacypipe.survey import clean_band_name
     #return None
 
+    import gc
+    gc.collect()
+
     record_event and record_event('stage_coadds: starting')
     _add_stage_version(version_header, 'COAD', 'coadds')
     tlast = Time()
@@ -2449,7 +2462,9 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                 if blobmap[yy,xx] != -1:
                     bb.append(blobmap[yy,xx])
 
+
     Ireg = np.flatnonzero(T.regular)
+
     Nreg = len(Ireg)
     bothmods = mp.map(_get_both_mods, [(tim, [cat[i] for i in Ireg], T.blob[Ireg], blobmap,
                                         targetwcs, frozen_galaxies, ps, plots)
@@ -2467,6 +2482,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         blobneas    = NEA[:,:,1]
         nea_wts     = NEA[:,:,2]
     del bothmods, NEA
+
     tnow = Time()
     debug('Model images:', tnow-tlast)
     tlast = tnow
