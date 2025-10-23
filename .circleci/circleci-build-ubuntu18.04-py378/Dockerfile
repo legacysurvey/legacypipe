@@ -98,14 +98,9 @@ RUN python3.7 -m pip install wheel wheelfile \
 
 # https://github.com/pypa/setuptools/issues/4501
 RUN python3.8 -m pip install setuptools==70.3.0
+RUN python3.8 -m pip install fitsio
 
-# The Tractor
-RUN git clone http://github.com/dstndstn/tractor.git tractor \
-    && cd tractor \
-    && cp setup-with-ceres-and-cython.py setup.py \
-    && python3.7 -m pip install . \
-    && python3.8 -m pip install . \
-    && rm -R $(find . -name "*.o" -o -name "*.so") && echo 1
+RUN ln -s /usr/bin/sextractor /usr/bin/source-extractor
 
 # DUST maps
 RUN mkdir -p dust/maps \
@@ -119,6 +114,10 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
     && cd unwise_psf \
     && git checkout dr9.3
 
-RUN ln -s /usr/bin/sextractor /usr/bin/source-extractor
-
-RUN python3.8 -m pip install fitsio && echo 2
+# The Tractor
+RUN git clone http://github.com/dstndstn/tractor.git tractor \
+    && cd tractor \
+    && cp setup-with-ceres-and-cython.py setup.py \
+    && python3.7 -m pip install . \
+    && python3.8 -m pip install . \
+    && rm -R $(find . -name "*.o" -o -name "*.so") && echo 1

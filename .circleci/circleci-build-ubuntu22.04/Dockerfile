@@ -77,22 +77,9 @@ RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
     && make install INSTALL_DIR=/usr/local PYTHON=python3.11 PYTHON_CONFIG=python3.11-config \
     && make clean && echo 1
 
-ENV PYTHON=python3
 # python = python3
+ENV PYTHON=python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
-
-# The Tractor
-RUN git clone https://github.com/dstndstn/tractor.git tractor \
-    && cd tractor \
-    && cp setup-with-ceres-and-cython.py setup.py \
-    && python3.10 -m pip install -v . \
-    && python3.11 -m pip install -v . \
-    && rm -R $(find . -name "*.o" -o -name "*.so")
-
-#    && python3.10 setup.py build_ext --with-ceres --with-cython --inplace \
-#    && python3.11 setup.py build_ext --with-ceres --with-cython --inplace \
-#    && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
-#    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
 
 # DUST maps
 RUN mkdir -p dust/maps \
@@ -106,16 +93,14 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git
 #    && cd unwise_psf \
 #    && git checkout dr9.3
 
+# The Tractor
+RUN git clone https://github.com/dstndstn/tractor.git tractor \
+    && cd tractor \
+    && cp setup-with-ceres-and-cython.py setup.py \
+    && python3.10 -m pip install -v . \
+    && python3.11 -m pip install -v . \
+    && rm -R $(find . -name "*.o" -o -name "*.so")
+
 ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
-
-
-# # Upgrade fitsio for dither_seed stuff
-# RUN for x in \
-#     fitsio \
-#     ; do \
-#     python3.10 -m pip install $x; \
-#     python3.11 -m pip install $x; \
-#     done; \
-#     rm -R /root/.cache/pip
 
 RUN python3.11 -m pip install --no-cache-dir coverage coveralls

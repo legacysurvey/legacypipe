@@ -1365,6 +1365,7 @@ def stage_fitblobs(T=None,
                           use_gpu=use_gpu,gpumode=gpumode,bid=bid)
 
     if checkpoint_filename is None:
+        # FIXME -- add worker-died checks & logging here
         R.extend(mp.map(_bounce_one_blob, blobiter))
     else:
         from astrometry.util.ttime import CpuMeas
@@ -1414,7 +1415,10 @@ def stage_fitblobs(T=None,
                     procs = run_ps(pid, last=procs_last)
                     #print('procs columns:', procs.get_columns())
                     tnow = time.time()
-                    for jobid,s in status.items():
+                    keys = list(status.keys())
+                    keys.sort()
+                    for jobid in keys:
+                        s = status[jobid]
                         if not jobid in jmap:
                             print('trackingpool job id', jobid, 'not known')
                             continue
@@ -1433,21 +1437,62 @@ def stage_fitblobs(T=None,
                                   'VMpeak %5.1f GB' % (procs.proc_vmpeak[i] / (1024 * 1024)))
 
             # Wait for results (with timeout)
+            from legacypipe.trackingpool import PoolWorkerDiedException
             try:
                 if mp.pool is not None:
                     timeout = max(1, checkpoint_period - dt)
                     timeout = min(10, timeout)
+                    debug('Main thread: waiting for result...')
                     r = Riter.next(timeout)
+
+                    rstr = ''
+                    if r is None:
+                        rstr = 'None'
+                    else:
+                        rr = r['result']
+                        rrstr = '%i srcs'%len(rr) if rr is not None else 'none'
+                        rstr = 'brick %s blob %s: %s' % (r['brickname'], r['iblob'], rrstr)
+                    debug('Main thread: got result: [%s]' % rstr)
+
                 else:
                     r = next(Riter)
                 R.append(r)
                 n_finished += 1
                 n_finished_total += 1
             except StopIteration:
+                print('Main thread: reached end of results')
                 break
             except multiprocessing.TimeoutError:
+                debug('Main thread: timed out waiting for result')
                 continue
+            except PoolWorkerDiedException as e:
+                print('Main thread: worker died')
+                print('A worker died (maybe OOM-killed?) while processing a blob.')
+                print(e)
+                workitem = 'unknown'
+                index = e.index
+                jmap = job_id_map.copy()
+                if not index in jmap:
+                    print('Unknown which blob that worker was processing.  index %i\n' % index)
+                    workitem = 'unknown (index %i)' % index
+                else:
+                    (brick,blob) = jmap[index]
+                    print('Worker was processing index %i: brick %s blob %s' % (index, brick, blob))
+                    workitem = 'brick %s blob %s' % (brick, blob)
 
+                print('Writing checkpoints before exiting...')
+                _write_checkpoint(R, checkpoint_filename)
+                print('Wrote checkpoints')
+                print('terminating pool...')
+                mp.pool.terminate()
+                print('raising exception...')
+                #raise e
+                raise RunbrickError('Worker process died (OOM?) while processing: %s' % workitem)
+            except Exception as e:
+                print('Main thread: Exception fetching result:', e)
+                import traceback
+                traceback.print_exc()
+                raise e
 
         # Write checkpoint when done!
         _write_checkpoint(R, checkpoint_filename)
@@ -4539,15 +4584,20 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     t0 = StageTime()
     R = None
-    for stage in stages:
-        R = runstage(stage, pickle_pat, mystagefunc, prereqs=prereqs,
-                     initial_args=initargs, **kwargs)
+    try:
+        for stage in stages:
+            R = runstage(stage, pickle_pat, mystagefunc, prereqs=prereqs,
+                         initial_args=initargs, **kwargs)
+        info('All done:', StageTime()-t0)
+    finally:
+        print('runstage ... finally clause')
+        if pool is not None:
+            print('pool.close()...')
+            pool.close()
+            print('pool.join()...')
+            pool.join()
+    print('run_brick returning...')
 
-    info('All done:', StageTime()-t0)
-
-    if pool is not None:
-        pool.close()
-        pool.join()
     return R
 
 def flush(x=None):

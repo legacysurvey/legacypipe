@@ -79,21 +79,8 @@ RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
     && make install INSTALL_DIR=/usr/local PYTHON=python3.9 PYTHON_CONFIG=python3.9-config \
     && make clean
 
-ENV PYTHON=python3
-
-# The Tractor
-RUN git clone https://github.com/dstndstn/tractor.git tractor \
-    && cd tractor \
-    && cp setup-with-ceres-and-cython.py setup.py \
-    && python3.8 -m pip install -v . \
-    && python3.9 -m pip install -v . \
-    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
-
-#    && rm -R $(find . -name "*.o" -o -name "*.so") \
-
-#    && python3.9 setup.py build_ext --with-cython --with-ceres --inplace \
-
 # python = python3
+ENV PYTHON=python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # DUST maps
@@ -108,8 +95,15 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
     && cd unwise_psf \
     && git checkout dr9.3
 
-# ubuntu renames the (awfully named) executable
-RUN rm /usr/bin/sex; ln -s /usr/bin/source-extractor /usr/bin/sex
+# The Tractor
+RUN git clone https://github.com/dstndstn/tractor.git tractor \
+    && cd tractor \
+    && cp setup-with-ceres-and-cython.py setup.py \
+    && python3.8 -m pip install -v . \
+    && python3.9 -m pip install -v . \
+    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
+
+#    && rm -R $(find . -name "*.o" -o -name "*.so") \
+#    && python3.9 setup.py build_ext --with-cython --with-ceres --inplace \
 
 ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
-
