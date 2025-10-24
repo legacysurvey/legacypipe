@@ -50,6 +50,7 @@ def get_reference_sources(survey, targetwcs, bands,
         tycho = read_tycho2(survey, marginwcs, bands)
         if tycho and len(tycho):
             info('Found', len(tycho), 'Tycho-2 stars nearby')
+            tycho.dup = np.zeros(len(tycho), bool)
             refs.append(tycho)
 
     # Add Gaia stars
