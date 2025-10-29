@@ -616,9 +616,34 @@ class OneBlob(object):
         ix = np.clip(np.round(ix)-1, 0, self.blobw-1).astype(np.int32)
         iy = np.clip(np.round(iy)-1, 0, self.blobh-1).astype(np.int32)
 
+        if np.any(ix < 0):
+            print (f"Negative ix {ix=}")
+            ok[ix < 0] = False
+            ix[ix < 0] = 0
+        if np.any(iy < 0):
+            print (f"Negative iy {iy=}")
+            ok[iy < 0] = False
+            iy[iy < 0] = 0
+        
         # Do not compute segmentation map for sources in the CLUSTER mask
         # (or with very bad coords)
-        Iseg, = np.nonzero(ok * ((self.refmap[iy, ix] & REF_MAP_BITS['CLUSTER']) == 0))
+        try:
+            Iseg, = np.nonzero(ok * ((self.refmap[iy, ix] & IN_BLOB['CLUSTER']) == 0))
+        except IndexError as ex:
+            print ("IndexError bug #131")
+            print (f'{self.blobwcs=}')
+            print ("radec2pixelxy ", self.blobwcs.radec2pixelxy)
+            print (f'{ix=} {iy=} {ok=}')
+            print ("Shapes", ix.shape, iy.shape, ok.shape, self.refmap.shape)
+            for src in self.srcs:
+                print (f'{src=} {src.getPosition().ra=} {src.getPosition().dec=}')
+            import traceback
+            traceback.print_exc()
+            H,W = self.blobh, self.blobw
+            self.segmap = np.empty((H,W), np.int32)
+            self.segmap[:,:] = -1
+            return None
+
         del ok
         # Zero out the S/N in CLUSTER mask
         maxsn[(self.refmap & REF_MAP_BITS['CLUSTER']) > 0] = 0.

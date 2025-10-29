@@ -2220,8 +2220,8 @@ def _bounce_one_blob(X):
                 Xlist = list(X)
                 Xlist[-2] = 0
                 X = tuple(Xlist)
-            else:
-                print (f"Free memory {free_mem_g=}; Runing in GPU mode")
+            #else:
+            #    print (f"Free memory {free_mem_g=}; Runing in GPU mode")
         result = one_blob(X)
         if result is not None:
             # Was this a sub-blobs?  If so, de-duplicate the catalog
@@ -2398,9 +2398,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     from legacypipe.bits import REF_MAP_BITS, FITBITS_DESCRIPTIONS, maskbits_type
     from legacypipe.survey import clean_band_name
     #return None
-
-    import gc
-    gc.collect()
 
     record_event and record_event('stage_coadds: starting')
     _add_stage_version(version_header, 'COAD', 'coadds')
