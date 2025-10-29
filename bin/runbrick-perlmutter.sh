@@ -13,12 +13,12 @@ export GAIA_CAT_SCHEME=nested
 export GAIA_CAT_VER=3
 
 export DUST_DIR=$COSMO/data/dust/v0_1
-export UNWISE_COADDS_DIR=$COSMO/data/unwise/neo7/unwise-coadds/fulldepth:$COSMO/data/unwise/allwise/unwise-coadds/fulldepth
+export UNWISE_COADDS_DIR=$COSMO/data/unwise/neo6/unwise-coadds/fulldepth:$COSMO/data/unwise/allwise/unwise-coadds/fulldepth
 export UNWISE_COADDS_TIMERESOLVED_DIR=$COSMO/work/wise/outputs/merge/neo7
 export UNWISE_MODEL_SKY_DIR=$COSMO/data/unwise/neo7/unwise-catalog/mod
 
 export TYCHO2_KD_DIR=$COSMO/staging/tycho2
-export LARGEGALAXIES_CAT=$COSMO/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
+export LARGEGALAXIES_CAT=$COSMO/work/legacysurvey/sga/2025/SGA2025-ellipse-dr11a-v0.10.kd.fits
 export SKY_TEMPLATE_DIR=$COSMO/work/legacysurvey/dr11/calib/sky_pattern
 
 unset BLOB_MASK_DIR
@@ -78,19 +78,18 @@ python -O "$LEGACYPIPE_DIR/legacypipe/runbrick.py" \
      --rgb-stretch 1.5 \
      --nsatur 2 \
      --survey-dir "$LEGACY_SURVEY_DIR" \
-      --outdir "$outdir" \
+     --outdir "$outdir" \
      --checkpoint "${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle" \
      --checkpoint-period 120 \
      --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
      --write-stage srcs \
-     --release 10011 \
+     --release 11000 \
      --threads 32 \
       >> "$log" 2>&1
 
 #     --stage image_coadds \
 #     --bands g,r,i,z \
-#    --cache-dir "$CACHE_DIR" \
-
+#     --cache-dir "$CACHE_DIR" \
 #     --cache-outliers \
 #     --max-memory-gb 20 \
 # --no-wise-ceres helps for very dense fields.
