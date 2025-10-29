@@ -154,6 +154,13 @@ class GaiaPosition(ParamList):
         return ('%s: RA, Dec = (%.5f, %.5f), pm (%.1f, %.1f), parallax %.3f' %
                 (self.getName(), self.ra, self.dec, self.pmra, self.pmdec, self.parallax))
 
+    def __getstate__(self):
+        '''
+        For pickling: omit cached positions
+        '''
+        d = self.__dict__.copy()
+        d['cached_positions'] = dict()
+        return d
 
 class GaiaSource(PointSource):
     @staticmethod
@@ -1094,9 +1101,6 @@ class LegacySurveyData(object):
         Go through self.maskbits and self.maskbits_descriptions,
         updating the current bands (default GRZI) that have SATUR_ and
         ALLMASK_ entries.  Reuse these same bits in order.
-
-        This method exists for the convenience of subclassers, eg in
-        runs.py.
         '''
         oldbits_satur = []
         oldbits_allmask = []
@@ -1117,12 +1121,13 @@ class LegacySurveyData(object):
                 oldbits_allmask.append(bitval)
                 del self.maskbits[name]
 
-        self.maskbits_descriptions = [(a,b,c) for a,b,c in self.maskbits_descriptions
+        self.maskbits_descriptions = [(a,c) for a,c in self.maskbits_descriptions
                                       if not (a.startswith('SATUR_') or a.startswith('ALLMASK_'))]
         # Plug in new bands!
         nextbit = maxbit << 1
         for band in bands:
             bandname = clean_band_name(band)
+            bandname = bandname.upper()
             # SATUR_
             if len(oldbits_satur):
                 bitval = oldbits_satur.pop(0)
@@ -1139,8 +1144,8 @@ class LegacySurveyData(object):
             self.maskbits['ALLMASK_' + bandname] = bitval
             # Descriptions
             self.maskbits_descriptions.extend([
-                ('SATUR_'   + bandname, 'SAT_' + bandname, band + ' band saturated'),
-                ('ALLMASK_' + bandname, 'ALL_' + bandname, 'any ALLMASK_' + bandname + ' bit set'),
+                ('SATUR_'   + bandname, band + ' band saturated'),
+                ('ALLMASK_' + bandname, 'any ALLMASK_' + bandname + ' bit set'),
                 ])
 
     def get_default_release(self):

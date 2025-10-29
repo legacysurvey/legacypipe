@@ -1626,7 +1626,7 @@ class LegacySurveyImage(object):
         from astrometry.util.miscutils import estimate_mode
         from legacypipe.reference import (get_reference_sources, get_galaxy_sources,
                                           get_reference_map)
-        from legacypipe.bits import IN_BLOB
+        from legacypipe.bits import REF_MAP_BITS
 
         plots = (ps is not None)
 
@@ -1684,7 +1684,7 @@ class LegacySurveyImage(object):
             x0,x1 = sx.start, sx.stop
             wcs = wcs.get_subimage(x0, y0, int(x1-x0), int(y1-y0))
         # Grab reference sources
-        refs,_ = get_reference_sources(survey, wcs, self.pixscale, [self.band],
+        refs,_ = get_reference_sources(survey, wcs, [self.band],
                                        tycho_stars=True, gaia_stars=gaia,
                                        large_galaxies=True,
                                        star_clusters=True,
@@ -1695,7 +1695,7 @@ class LegacySurveyImage(object):
             refgood = (refmap == 0)
 
         # What fraction of the image is within a large-galaxy (GALAXY) mask?
-        frac_galaxy = np.sum((refmap & (IN_BLOB['GALAXY'] | IN_BLOB['CLUSTER'])) != 0) / (h*w)
+        frac_galaxy = np.sum((refmap & (REF_MAP_BITS['GALAXY'] | REF_MAP_BITS['CLUSTER'])) != 0) / (h*w)
         if frac_galaxy >= largegalaxy_frac_constsky:
             info('Large galaxies/clusters cover %.1f %% of this CCD, >= %.1f %%, using constant (not spline) sky'
                  % (frac_galaxy * 100, largegalaxy_frac_constsky * 100))
@@ -1706,9 +1706,9 @@ class LegacySurveyImage(object):
         halozpt = 0.
         if halos and self.camera == 'decam':
             # Subtract halos from Gaia stars.
-            # "refs.donotfit" are Gaia sources that are near SGA galaxies.
+            # "refs.dup" are Gaia sources that are near SGA galaxies.
             Igaia, = np.nonzero(refs.isgaia * refs.pointsource *
-                                np.logical_not(refs.donotfit))
+                                np.logical_not(refs.dup))
             if len(Igaia):
                 info('Subtracting %i Gaia halos before estimating sky' % len(Igaia))
                 from legacypipe.halos import decam_halo_model
@@ -1738,8 +1738,8 @@ class LegacySurveyImage(object):
             if galfn is None:
                 subtract_largegalaxies = False
         if subtract_largegalaxies:
-            sub_sga_version,_ = get_large_galaxy_version(galfn)
-            debug('SGA version:', sub_sga_version)
+            sub_sga_version,ellipse = get_large_galaxy_version(galfn)
+            debug('SGA version:', sub_sga_version, 'Ellipse?', ellipse)
             debug('Large galaxies:', np.sum(refs.islargegalaxy))
             debug('Freezeparams:', np.sum(refs.islargegalaxy * refs.freezeparams))
             # We already read the galaxies in the "refs" table
