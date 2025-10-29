@@ -2478,9 +2478,22 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     Ireg = np.flatnonzero(T.regular)
 
     Nreg = len(Ireg)
-    bothmods = mp.map(_get_both_mods, [(tim, [cat[i] for i in Ireg], T.blob[Ireg], blobmap,
-                                        targetwcs, frozen_galaxies, ps, plots)
-                                       for tim in tims])
+
+    #Create input args for _get_both_mods
+    X = [(tim, [cat[i] for i in Ireg], T.blob[Ireg], blobmap, targetwcs, frozen_galaxies, ps, plots) for tim in tims]
+    bothmods = []
+    #Loop over the prepared input list X
+    for args_tuple in X:
+        #Call the function directly with the tuple as its argument
+        #Running single threaded saves memory and time!
+        result = _get_both_mods(args_tuple)
+        bothmods.append(result)
+
+    #bothmods = mp.map(_get_both_mods, [(tim, [cat[i] for i in Ireg], T.blob[Ireg], blobmap,
+    #                                    targetwcs, frozen_galaxies, ps, plots)
+    #                                   for tim in tims])
+    del X
+
     mods     = [r[0] for r in bothmods]
     blobmods = [r[1] for r in bothmods]
     NEA      = [r[2] for r in bothmods]
