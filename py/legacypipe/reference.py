@@ -778,7 +778,9 @@ def get_galaxy_sources(galaxies, bands):
                     ba = 1.0
                 shape = EllipseE.fromRAbPhi(g.radius * 3600., ba, 180-g.pa)
                 pos = RaDecPos(g.ra, g.dec)
-                fluxes = dict([0.] * len(bands))
+                fluxes = dict()
+                for band in bands:
+                    fluxes[band] = 0.
                 bright = NanoMaggies(order=bands, **fluxes)
                 src = ExpGalaxy(pos, bright, shape)
                 srcs[ii] = src
