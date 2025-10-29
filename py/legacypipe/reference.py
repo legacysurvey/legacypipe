@@ -760,16 +760,26 @@ def get_galaxy_sources(galaxies, bands):
     print('bands', bands)
 
     if is_ellipse_cat:
+        # The LogRadius and EllipseWithPriors classes have a minimum log-radius (log(0.01))
+        # Due to numerical round-off, we can have shape_r = 0.01 but the log is *slightly*
+        # less than the limit, so the prior goes to -inf.  Clip up!
+        from legacypipe.utils import galaxy_min_re
+        min_logre = np.log(galaxy_min_re)
+
         for ii,g in enumerate(galaxies):
             typ = fits_reverse_typemap[g.type.strip()]
             pos = RaDecPos(g.ra, g.dec)
             fluxes = dict([(band, g.get('flux_%s' % band) if has_band[band] else 1.) for band in bands])
             bright = NanoMaggies(order=bands, **fluxes)
             shape = None
+            if not issubclass(typ, PointSource):
+                logre = np.log(g.shape_r)
+                if logre < min_logre:
+                    debug('Clipped log_radius from %g up to %g' % (logre, min_logre))
+                    logre = min_logre
             # put the Rex branch first, because Rex is a subclass of ExpGalaxy!
             if issubclass(typ, RexGalaxy):
                 assert(np.isfinite(g.shape_r))
-                logre = np.log(g.shape_r)
                 shape = LogRadius(logre)
                 # set prior max at 2x SGA radius
                 shape.setMaxLogRadius(logre + np.log(radius_max_factor))
@@ -781,7 +791,7 @@ def get_galaxy_sources(galaxies, bands):
                 # switch to softened ellipse (better fitting behavior)
                 shape = EllipseESoft.fromEllipseE(shape)
                 # and then to our custom ellipse class
-                logre = shape.logre
+                # (note that we're using the clipped "logre" computed above!)
                 shape = LegacyEllipseWithPriors(logre, shape.ee1, shape.ee2)
                 assert(np.all(np.isfinite(shape.getParams())))
                 # set prior max at 2x SGA radius

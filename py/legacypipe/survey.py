@@ -234,9 +234,8 @@ class LogRadius(EllipseESoft):
     type where only the radius is variable, and is represented in log
     space.'''
     def __init__(self, *args, **kwargs):
-        super(LogRadius, self).__init__(*args, **kwargs)
-        self.lowers = [None]
-        # MAGIC -- 10" default max r_e!
+        super().__init__(*args, **kwargs)
+        # MAGIC number -- 10" default max r_e!
         # SEE ALSO utils.py : class(EllipseWithPriors)!
         self.uppers = [np.log(10.)]
         self.lowers = [np.log(galaxy_min_re)]
