@@ -1370,10 +1370,14 @@ class LegacySurveyData(object):
                         'outliers-masked-pos', 'outliers-masked-neg',
                         'image-jpeg', 'imageblob-jpeg', 'blobmodel-jpeg', 'resid-jpeg',
                         'model-jpeg',
+                        # These are FITS tables
                         'ref-sources', 'depth-table', 'detected-sources',
                         'ccds-table', 'forced-brick', 'tractor-forced', 'forced',
                         'all-models', 'tractor', 'tractor-intermediate',
-                        'galaxy-sims', 'checksums', 'ccds',
+                        'galaxy-sims', 'ccds',
+                        # Text
+                        'checksums',
+                        # Small images (PSF models of coadds)
                         'copsf',
                         ]:
             return {}
@@ -1401,7 +1405,7 @@ class LegacySurveyData(object):
         elif filetype in ['invvar', 'chi2', 'depth', 'galdepth', 'psfsize']:
             # No dithering - to avoid small positive values from going negative.
             args.update(qmethod='NO_DITHER')
-        elif filetype in ['outliers-mask', 'maskbits', 'maskbits-light', 'nexp']:
+        elif filetype in ['outliers-mask', 'maskbits', 'maskbits-light', 'nexp', 'blobmap']:
             pass
         else:
             print('Warning: unknown filetype "%s" in get_compression_kwargs (qmethod)' % filetype)
@@ -1414,7 +1418,7 @@ class LegacySurveyData(object):
             args.update(qlevel=0.0)
         elif filetype in ['invvar']:
             args.update(qlevel=16)
-        elif filetype in ['outliers-mask', 'maskbits', 'maskbits-light', 'nexp']:
+        elif filetype in ['outliers-mask', 'maskbits', 'maskbits-light', 'nexp', 'blobmap']:
             pass
         else:
             print('Warning: unknown filetype "%s" in get_compression_kwargs (qlevel)' % filetype)
