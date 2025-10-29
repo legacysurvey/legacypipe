@@ -767,6 +767,23 @@ def get_galaxy_sources(galaxies, bands):
         min_logre = np.log(galaxy_min_re)
 
         for ii,g in enumerate(galaxies):
+            if g.ignore_source:
+                # FIXGEO type objects - only have BA,PA,etc
+                assert(np.isfinite(g.radius))
+                assert(np.isfinite(g.ba))
+                assert(np.isfinite(g.pa))
+                ba = g.ba
+                if ba <= 0.0 or ba > 1.0:
+                    # Make round!
+                    ba = 1.0
+                shape = EllipseE.fromRAbPhi(g.radius * 3600., ba, 180-g.pa)
+                pos = RaDecPos(g.ra, g.dec)
+                fluxes = dict([0.] * len(bands))
+                bright = NanoMaggies(order=bands, **fluxes)
+                src = ExpGalaxy(pos, bright, shape)
+                srcs[ii] = src
+                continue
+
             typ = fits_reverse_typemap[g.type.strip()]
             pos = RaDecPos(g.ra, g.dec)
             fluxes = dict([(band, g.get('flux_%s' % band) if has_band[band] else 1.) for band in bands])
