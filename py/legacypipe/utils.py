@@ -83,7 +83,7 @@ class EllipseWithPriors(EllipseESoft):
     # GaussianPriorsMixin.  GaussianPriorsMixin sets a "gpriors"
     # member variable to a _GaussianPriors
     def __init__(self, *args, **kwargs):
-        super(EllipseWithPriors, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         if self.ellipsePriors is None:
             ellipsePriors = _GaussianPriors(None)
             ellipsePriors.add('ee1', 0., self.ellipticityStd,
