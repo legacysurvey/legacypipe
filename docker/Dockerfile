@@ -231,17 +231,31 @@ ENV LEGACYPIPE_DIR=/src/legacypipe/py
 #   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
 #   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
 
+RUN git config --global --add safe.directory /src/tractor
+
+# Heck, why not just add the stuff that John needs from the "cutouts" container?
+RUN pip install --break-system-packages django requests
+RUN git clone https://github.com/legacysurvey/imagine.git
+RUN cd imagine/viewer && ln -s settings_test.py settings.py
+RUN cd imagine && mv data data-orig && ln -s /dvs_ro/cfs/cdirs/cosmo/webapp/viewer/data .
+RUN cp /src/imagine/docker/cutouts/cutout /usr/local/bin/
+RUN chmod 755 /usr/local/bin/cutout
+ENV PYTHONPATH /src/unwise_psf/py:/src/legacypipe/py:/usr/local/lib/python:/src/imagine
+
+RUN pip install --break-system-packages psutil
+
 RUN cd legacypipe \
   && git pull \
-  && git checkout gpu-powered \
+  && git checkout gpu-powered+flags \
   && git pull \
   && python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
   && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
-  && echo 1
+  && echo 12
 
 RUN cd tractor \
   && git fetch \
   && git checkout craig_factored_merge \
   && python setup.py build_ext --with-ceres --with-cython --inplace \
-  && pip install . --break-system-packages
+  && pip install . --break-system-packages \
+  && echo 1
 
