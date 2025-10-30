@@ -4,10 +4,7 @@
 
 export COSMO=/dvs_ro/cfs/cdirs/cosmo
 
-## FIXME?
 export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/dr11
-#export LEGACY_SURVEY_DIR=$SCRATCH/dr11-sky
-
 outdir=$SCRATCH/dr11-gpu
 
 export GAIA_CAT_DIR=$COSMO/data/gaia/dr3/healpix
@@ -16,12 +13,12 @@ export GAIA_CAT_SCHEME=nested
 export GAIA_CAT_VER=3
 
 export DUST_DIR=$COSMO/data/dust/v0_1
-export UNWISE_COADDS_DIR=$COSMO/data/unwise/neo7/unwise-coadds/fulldepth:$COSMO/data/unwise/allwise/unwise-coadds/fulldepth
-export UNWISE_COADDS_TIMERESOLVED_DIR=$COSMO/work/wise/outputs/merge/neo7
-export UNWISE_MODEL_SKY_DIR=$COSMO/data/unwise/neo7/unwise-catalog/mod
+export UNWISE_COADDS_DIR=$COSMO/data/unwise/neo6/unwise-coadds/fulldepth:$COSMO/data/unwise/allwise/unwise-coadds/fulldepth
+export UNWISE_COADDS_TIMERESOLVED_DIR=$COSMO/work/wise/outputs/merge/neo6
+export UNWISE_MODEL_SKY_DIR=$COSMO/data/unwise/neo6/unwise-catalog/mod
 
 export TYCHO2_KD_DIR=$COSMO/staging/tycho2
-export LARGEGALAXIES_CAT=$COSMO/staging/largegalaxies/v3.0/SGA-ellipse-v3.0.kd.fits
+export LARGEGALAXIES_CAT=$COSMO/work/legacysurvey/sga/2025/SGA2025-ellipse-dr11a-v0.10.kd.fits
 export SKY_TEMPLATE_DIR=$COSMO/work/legacysurvey/dr11/calib/sky_pattern
 
 unset BLOB_MASK_DIR
@@ -99,12 +96,13 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --run south \
        --brick "$brick" \
        --use-gpu \
-       --sub-blobs \
        --ngpu 1 \
        --threads 32 \
        --threads-per-gpu 8 \
        --gpumode 2 \
+       --sub-blobs \
        --bands g,r,z \
+       --forced-bands i \
        --rgb-stretch 1.5 \
        --nsatur 2 \
        --survey-dir "$LEGACY_SURVEY_DIR" \
@@ -113,7 +111,7 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --checkpoint "${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle" \
        --checkpoint-period 120 \
        --write-stage srcs \
-       --release 10099 \
+       --release 11000 \
        >> "$log" 2>&1
 
 # Save the return value from the python command -- otherwise we
