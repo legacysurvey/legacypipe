@@ -14,8 +14,8 @@ export GAIA_CAT_VER=3
 
 export DUST_DIR=$COSMO/data/dust/v0_1
 export UNWISE_COADDS_DIR=$COSMO/data/unwise/neo6/unwise-coadds/fulldepth:$COSMO/data/unwise/allwise/unwise-coadds/fulldepth
-export UNWISE_COADDS_TIMERESOLVED_DIR=$COSMO/work/wise/outputs/merge/neo7
-export UNWISE_MODEL_SKY_DIR=$COSMO/data/unwise/neo7/unwise-catalog/mod
+export UNWISE_COADDS_TIMERESOLVED_DIR=$COSMO/work/wise/outputs/merge/neo6
+export UNWISE_MODEL_SKY_DIR=$COSMO/data/unwise/neo6/unwise-catalog/mod
 
 export TYCHO2_KD_DIR=$COSMO/staging/tycho2
 export LARGEGALAXIES_CAT=$COSMO/work/legacysurvey/sga/2025/SGA2025-ellipse-dr11a-v0.10.kd.fits
@@ -70,6 +70,7 @@ echo -e "\nStarting on $(hostname)\n" >> "$log"
 echo "-----------------------------------------------------------------------------------------" >> "$log"
 
 python -O "$LEGACYPIPE_DIR/legacypipe/runbrick.py" \
+     --run south \
      --brick "$brick" \
      --skip \
      --skip-calibs \
