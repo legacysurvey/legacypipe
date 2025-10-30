@@ -628,7 +628,7 @@ class OneBlob(object):
         # Do not compute segmentation map for sources in the CLUSTER mask
         # (or with very bad coords)
         try:
-            Iseg, = np.nonzero(ok * ((self.refmap[iy, ix] & IN_BLOB['CLUSTER']) == 0))
+            Iseg, = np.nonzero(ok * ((self.refmap[iy, ix] & REF_MAP_BITS['CLUSTER']) == 0))
         except IndexError as ex:
             print ("IndexError bug #131")
             print (f'{self.blobwcs=}')
