@@ -3771,22 +3771,25 @@ def stage_writecat(
     columns,units = format_catalog(T, bands, allbands, release,
                                    N_wise_epochs=19, motions=gaia_stars, gaia_tagalong=True)
 
-    if forced_T is not None:
+    if forced_bands is not None:
+        from legacypipe.survey import clean_band_name
+
         unitmap = dict([(c,u) for c,u in zip(columns, units)])
 
-        from legacypipe.survey import clean_band_name
-        for c in ['brickid', 'objid', 'bx', 'by']:
-            forced_T.delete_column(c)
-        fc = forced_T.get_columns()
-        print('Forced photometry columns:', fc)
-        for c in fc:
-            T.set(c, forced_T.get(c))
-            
-        for b in forced_bands:
-            for c in ['apflux_blobresid_', 'blob_nea_', 'nea_',
-                      ]:
-                columns.remove(c + clean_band_name(b))
+        if forced_T is not None:
+            # Add forced-photometry columns into the table "T"
+            for c in ['brickid', 'objid', 'bx', 'by']:
+                forced_T.delete_column(c)
+            fc = forced_T.get_columns()
+            print('Forced photometry columns:', fc)
+            for c in fc:
+                T.set(c, forced_T.get(c))
 
+        # Remove columns that we don't produce for forced-photometry bands
+        for b in forced_bands:
+            for c in ['apflux_blobresid_', 'blob_nea_', 'nea_']:
+                columns.remove(c + clean_band_name(b))
+        # Re-align the units with the list of columns.
         units = [unitmap[c] for c in columns]
 
     # FIXME - maskbits, set i-band bits
