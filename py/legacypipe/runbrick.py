@@ -3453,11 +3453,8 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
                     ('apflux_resid_%s',     'apflux_resid'),
                     #('apflux_blobresid_%s', 'apflux_blobresid'),
                     ]:
-        #X = np.zeros((len(T), len(forced_bands), A), np.float32)
         for iband,band in enumerate(clean_bands):
-            #X[:,iband,:] = C.AP.get(src % band)
-            TF.set('%s_%s' % (dst, band), C.AP.get(src % band))
-        #T.set(dst, X)
+            TF.set('%s_%s' % (dst, band), C.AP.get(src % band).astype(np.float32))
 
     cat2 = []
     for i,src in enumerate(cat):
@@ -3484,38 +3481,6 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
 
     print('After fiberfluxes:')
     TF.about()
-    TF.writeto('forced-T.fits')
-
-    # # HACK -- write out tractor catalog
-    #   (need the stage_coadds results for this to work)
-    # try:
-    #     from legacypipe.catalog import prepare_fits_catalog
-    #     Tx = T.copy()
-    #     Tx.mjd_min = np.zeros(len(T), np.float64)
-    #     Tx.mjd_max = np.zeros(len(T), np.float64)
-    #     Tx = prepare_fits_catalog(cat, invvars, Tx, bands, force_keep=T.force_keep_source)
-    #     Tx.type[Tx.dup] = 'DUP'
-    #     # Compute fiber fluxes
-    #     Tx.fiberflux, Tx.fibertotflux = get_fiber_fluxes(
-    #         cat, Tx, targetwcs, H, W, pixscale, bands, plots=plots, ps=ps)
-    #     set_brick_primary(Tx, brick)
-    #     Tx.cut(Tx.in_bounds)
-    #     # The "format_catalog" code expects all lower-case column names...
-    #     for c in Tx.columns():
-    #         if c != c.lower():
-    #             Tx.rename(c, c.lower())
-    #     primhdr = fitsio.FITSHDR()
-    #     for r in version_header.records():
-    #         primhdr.add_record(r)
-    #     from legacypipe.format_catalog import format_catalog
-    #     with survey.write_output('tractor', brick=brickname) as out:
-    #         format_catalog(Tx[np.argsort(Tx.objid)], None, primhdr, bands,
-    #                        survey.allbands, None, release,
-    #                        write_kwargs=dict(fits_object=out.fits),
-    #                        N_wise_epochs=19, motions=gaia_stars, gaia_tagalong=True)
-    # except:
-    #     import traceback
-    #     traceback.print_exc()
 
     return dict(forced_T=TF, tims=tims)
 
