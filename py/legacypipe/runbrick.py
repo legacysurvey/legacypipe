@@ -1138,8 +1138,11 @@ def stage_srcs(pixscale=None, targetwcs=None,
     detstars.blob_y0 = bb[detstars.blob, 0]
     detstars.blob_y1 = bb[detstars.blob, 1]
     for band in bands:
-        detstars.set('flux_' + band, np.array([src.getBrightness().getFlux(band)
-                                               for src in cat]))
+        bandflux = np.zeros(len(cat), 'f4')
+        for isrc, src in enumerate(cat):
+            if src:
+                bandflux[isrc] = src.getBrightness().getFlux(band)
+        detstars.set('flux_' + band, bandflux)
     with survey.write_output('detected-sources', brick=brickname) as out:
         detstars.writeto(None, fits_object=out.fits, primheader=version_header,
                          extname='DETECTIONS')
