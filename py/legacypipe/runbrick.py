@@ -2871,19 +2871,20 @@ def stage_wise_forced(
         if np.any(incluster):
             info('Checking for sources inside CLUSTER mask')
             # With --bail-out, we can have (reference) sources set to None
-            Igood, = np.nonzero([src is not None for src in cat])
+            Igood = np.flatnonzero([src is not None for src in cat])
+            # compute x,y for the good ones
             ra  = np.array([cat[i].getPosition().ra  for i in Igood])
             dec = np.array([cat[i].getPosition().dec for i in Igood])
             ok,xx,yy = targetwcs.radec2pixelxy(ra, dec)
             xx = np.round(xx - 1).astype(int)
             yy = np.round(yy - 1).astype(int)
-            I = np.flatnonzero(ok * (xx >= 0)*(xx < W) * (yy >= 0)*(yy < H))
-            if len(I):
-                I = Igood[I]
-                Icluster = I[incluster[yy[I], xx[I]]]
+            xygood = (ok * (xx >= 0) * (xx < W) * (yy >= 0) * (yy < H))
+            Igood = Igood[xygood]
+            if len(Igood):
+                Icluster = Igood[incluster[yy[xygood], xx[xygood]]]
                 info('Found', len(Icluster), 'of', len(cat), 'sources inside CLUSTER mask')
                 do_phot[Icluster] = False
-            del I,Icluster,Igood,ra,dec,ok,xx,yy
+            del Icluster,Igood,xygood,ra,dec,ok,xx,yy
         del incluster
     Nskipped = len(T) - np.sum(do_phot)
 
