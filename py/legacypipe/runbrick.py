@@ -3696,8 +3696,12 @@ def stage_writecat(
         for c in ['flux_nuv', 'flux_ivar_nuv', 'flux_fuv', 'flux_ivar_fuv',
                   'apflux_nuv', 'apflux_resid_nuv', 'apflux_ivar_nuv',
                   'apflux_fuv', 'apflux_resid_fuv', 'apflux_ivar_fuv',
-                  'psfdepth_nuv', 'psfdepth_fuv']:
+                  'psfdepth_nuv', 'psfdepth_fuv', 'nobs_nuv', 'nobs_fuv',]:
             T.set(c, GALEX.get(c))
+        T.fracflux_nuv = GALEX.profracflux_nuv
+        T.fracflux_fuv = GALEX.profracflux_fuv
+        T.rchisq_nuv = GALEX.prochi2_nuv
+        T.rchisq_fuv = GALEX.prochi2_fuv
         GALEX = None
 
     set_brick_primary(T, brick)
