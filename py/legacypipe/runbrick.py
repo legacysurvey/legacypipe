@@ -483,6 +483,8 @@ def stage_refs(survey=None,
                 src.getBrightness().freezeAllBut(tim.band)
                 try:
                     from tractor.ceres_optimizer import CeresOptimizer
+                    # import the sub-package that actually pulls in _ceres.so
+                    from tractor.ceres import ceres_forced_phot
                     ceres_block = 8
                     tr.optimizer = CeresOptimizer(BW=ceres_block, BH=ceres_block)
                 except ImportError:

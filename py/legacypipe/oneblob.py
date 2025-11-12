@@ -2005,19 +2005,15 @@ def _compute_source_metrics(srcs, tims, bands, tr):
                 if counts[isrc] == 0:
                     continue
                 H,W = mod.shape
-                patch.clipTo(W,H)
+                ok = patch.clipTo(W,H)
+                if (not ok) or np.all(patch.patch == 0):
+                    continue
                 srcmods[isrc] = patch
                 patch.addTo(mod)
 
             # Now compute metrics for each source
             for isrc,patch in enumerate(srcmods):
                 if patch is None:
-                    continue
-                if patch.patch is None:
-                    continue
-                if counts[isrc] == 0:
-                    continue
-                if np.sum(patch.patch**2) == 0:
                     continue
                 slc = patch.getSlice(mod)
                 patch = patch.patch
