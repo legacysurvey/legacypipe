@@ -4801,7 +4801,7 @@ def get_runbrick_kwargs(survey=None,
                             coadd_bw=coadd_bw)
         info(survey)
 
-    survey.update_maskbits_bands(bands)
+    survey.update_maskbits_bands(bands + (forced_bands or []))
 
     blobdir = opt.pop('blob_mask_dir', None)
     if blobdir is not None:
