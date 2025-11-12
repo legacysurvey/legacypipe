@@ -3776,7 +3776,7 @@ def stage_writecat(
     print('Allbands:', allbands)
 
     columns,units = format_catalog(T, bands, allbands, release,
-                                   N_wise_epochs=19, motions=gaia_stars, gaia_tagalong=True)
+                                   N_wise_epochs=15, motions=gaia_stars, gaia_tagalong=True)
 
     if forced_bands is not None:
         from legacypipe.survey import clean_band_name
