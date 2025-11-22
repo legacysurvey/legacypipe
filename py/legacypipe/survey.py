@@ -398,7 +398,7 @@ def get_version_header(program_name, survey_dir, release, git_version=None,
                         comment='legacypipe git version'))
     hdr.add_record(dict(name='LSDIR', value=survey_dir,
                         comment='$LEGACY_SURVEY_DIR directory'))
-    hdr.add_record(dict(name='LSDR', value='DR10',
+    hdr.add_record(dict(name='LSDR', value='DR11',
                         comment='Data release number'))
     hdr.add_record(dict(name='SURVEY', value='DECaLS+BASS+MzLS',
                         comment='The LegacySurveys'))

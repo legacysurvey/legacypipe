@@ -2101,19 +2101,15 @@ def _compute_source_metrics(srcs, tims, bands, tr):
                 if counts[isrc] == 0:
                     continue
                 H,W = mod.shape
-                patch.clipTo(W,H)
+                ok = patch.clipTo(W,H)
+                if (not ok) or np.all(patch.patch == 0):
+                    continue
                 srcmods[isrc] = patch
                 patch.addTo(mod)
 
             # Now compute metrics for each source
             for isrc,patch in enumerate(srcmods):
                 if patch is None:
-                    continue
-                if patch.patch is None:
-                    continue
-                if counts[isrc] == 0:
-                    continue
-                if np.sum(patch.patch**2) == 0:
                     continue
                 slc = patch.getSlice(mod)
                 patch = patch.patch
@@ -2138,39 +2134,32 @@ def _compute_source_metrics(srcs, tims, bands, tr):
                 # fraction of this source's flux that is inside this patch.
                 # This can be < 1 when the source is near an edge, or if the
                 # source is a huge diffuse galaxy in a small patch.
-                fin = np.abs(np.sum(patch) / counts[isrc])
-
-                # print('fin:', fin)
-                # print('fracflux_num: fin *',
-                #      np.sum((mod[slc] - patch) * np.abs(patch)) /
-                #      np.sum(patch**2))
+                # Everything is made a bit complicated by the fact that model patches
+                # can go negative (because pixelized PSF models are noisy).
+                # Usually PSF models get normalized, so sum(model)/counts = 1.
+                # counts (ie, source's total flux) can also go negative!
+                fin = np.clip(np.sum(patch) / counts[isrc], 0., 1.)
 
                 fracflux_num[isrc,iband] += (fin *
                     np.sum((mod[slc] - patch) * np.abs(patch)) /
                     np.sum(patch**2))
                 fracflux_den[isrc,iband] += fin
 
-                fracmasked_num[isrc,iband] += (
-                    np.sum((tim.getInvError()[slc] == 0) * np.abs(patch)) /
-                    np.abs(counts[isrc]))
+                fracmasked_num[isrc,iband] += np.clip(
+                    np.sum((tim.getInvError()[slc] == 0) * patch) /
+                    counts[isrc], 0., 1.)
                 fracmasked_den[isrc,iband] += fin
 
                 fracin_num[isrc,iband] += np.abs(np.sum(patch))
                 fracin_den[isrc,iband] += np.abs(counts[isrc])
 
-                # print('Fracin: band', band)
-                # print('Fracin: abs(sum(patch))', np.abs(np.sum(patch)))
-                # print('Fracin: abs(sum(patch)) / abs(counts)', np.abs(np.sum(patch)) / np.abs(counts[isrc]))
-                # print('Fracin: sum(abs(patch))', np.sum(np.abs(patch)))
-                # print('Fracin: sum(abs(patch)) / abs(counts)', np.sum(np.abs(patch)) / np.abs(counts[isrc]))
-
+            # Compute rchisq in a separate loop because we want the
+            # sky model added in here, but not for the other metrics!
             tim.getSky().addTo(mod)
             chisq = ((tim.getImage() - mod) * tim.getInvError())**2
 
             for isrc,patch in enumerate(srcmods):
-                if patch is None or patch.patch is None:
-                    continue
-                if counts[isrc] == 0:
+                if patch is None:
                     continue
                 slc = patch.getSlice(mod)
                 # We compute numerator and denom separately to handle
@@ -2178,11 +2167,11 @@ def _compute_source_metrics(srcs, tims, bands, tr):
                 # Also, to normalize by the number of images.  (Being
                 # on the edge of an image is like being in half an
                 # image.)
-                rchi2_num[isrc,iband] += (np.sum(chisq[slc] * patch.patch) /
-                                          counts[isrc])
+                rchi2_num[isrc,iband] += (np.abs(np.sum(chisq[slc] * patch.patch) /
+                                                 np.abs(counts[isrc])))
                 # If the source is not near an image edge,
                 # sum(patch.patch) == counts[isrc].
-                rchi2_den[isrc,iband] += np.sum(patch.patch) / counts[isrc]
+                rchi2_den[isrc,iband] += np.abs(np.sum(patch.patch)) / np.abs(counts[isrc])
 
     assert(np.all(np.isfinite(fracflux_den)))
     assert(np.all(np.isfinite(rchi2_den)))

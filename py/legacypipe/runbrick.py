@@ -543,6 +543,8 @@ def stage_refs(survey=None,
                 src.getBrightness().freezeAllBut(tim.band)
                 try:
                     from tractor.ceres_optimizer import CeresOptimizer
+                    # import the sub-package that actually pulls in _ceres.so
+                    from tractor.ceres import ceres_forced_phot
                     ceres_block = 8
                     tr.optimizer = CeresOptimizer(BW=ceres_block, BH=ceres_block)
                 except ImportError:
@@ -3812,8 +3814,12 @@ def stage_writecat(
         for c in ['flux_nuv', 'flux_ivar_nuv', 'flux_fuv', 'flux_ivar_fuv',
                   'apflux_nuv', 'apflux_resid_nuv', 'apflux_ivar_nuv',
                   'apflux_fuv', 'apflux_resid_fuv', 'apflux_ivar_fuv',
-                  'psfdepth_nuv', 'psfdepth_fuv']:
+                  'psfdepth_nuv', 'psfdepth_fuv', 'nobs_nuv', 'nobs_fuv',]:
             T.set(c, GALEX.get(c))
+        T.fracflux_nuv = GALEX.profracflux_nuv
+        T.fracflux_fuv = GALEX.profracflux_fuv
+        T.rchisq_nuv = GALEX.prochi2_nuv
+        T.rchisq_fuv = GALEX.prochi2_fuv
         GALEX = None
 
     set_brick_primary(T, brick)
@@ -3888,7 +3894,7 @@ def stage_writecat(
     print('Allbands:', allbands)
 
     columns,units = format_catalog(T, bands, allbands, release,
-                                   N_wise_epochs=19, motions=gaia_stars, gaia_tagalong=True)
+                                   N_wise_epochs=15, motions=gaia_stars, gaia_tagalong=True)
 
     if forced_bands is not None:
         from legacypipe.survey import clean_band_name
@@ -4970,7 +4976,7 @@ def get_runbrick_kwargs(survey=None,
                             coadd_bw=coadd_bw)
         info(survey)
 
-    survey.update_maskbits_bands(bands)
+    survey.update_maskbits_bands(bands + (forced_bands or []))
 
     blobdir = opt.pop('blob_mask_dir', None)
     if blobdir is not None:

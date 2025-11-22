@@ -193,14 +193,14 @@ def add_bits(hdr, bitmap, description, desc, bitpre):
     bits = list(bitmap.values())
     bits.sort()
     revmap = dict((v,k) for k,v in bitmap.items())
-    for i in range(16):
+    for i in range(31):
         bit = 1<<i
         if not bit in revmap:
             continue
         hdr.add_record(
-            dict(name='%s_%s' % (desc, revmap[bit].upper()[:5]), value=bit,
+            dict(name='%s_%s' % (desc, revmap[bit].upper()), value=bit,
                  comment='%s bit 2**%i' % (description, i)))
-    for i in range(16):
+    for i in range(31):
         bit = 1<<i
         if not bit in revmap:
             continue

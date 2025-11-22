@@ -255,6 +255,7 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
     central_flux_wt  = np.zeros(len(cat), np.float32)
     ra  = np.array([src.getPosition().ra  for src in cat])
     dec = np.array([src.getPosition().dec for src in cat])
+    nexp = np.zeros(len(cat), np.int16)
 
     for tile in tiles:
         info('Reading GALEX tile', tile.visitname.strip(), 'band', band)
@@ -284,6 +285,7 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
         central_flux_acc[I] += tim.getImage()[y[I], x[I]] * iv
         central_flux_wt [I] += iv
         del x,y,good,I
+        nexp[I] += (iv > 0)
 
     if len(tims) == 0:
         return None
@@ -338,8 +340,7 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
     t0 = Time()
 
     R = tractor.optimize_forced_photometry(
-        fitstats=True, variance=True, shared_params=False,
-        wantims=wantims)
+        fitstats=True, variance=True, shared_params=False, wantims=wantims)
     info('GALEX forced photometry took', Time() - t0)
     #info('Result:', R)
 
@@ -416,6 +417,18 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
     phot.set('flux_' + niceband, nm.astype(np.float32))
     phot.set('flux_ivar_' + niceband, nm_ivar.astype(np.float32))
     #phot.set(band + '_mjd', mjd)
+
+    # rchisq, fracflux
+    fskeys = ['prochi2', 'profracflux']
+    if R.fitstats is not None:
+        for k in fskeys:
+            x = getattr(R.fitstats, k)
+            phot.set(k + '_' + niceband, x.astype(np.float32))
+    else:
+        for k in fskeys:
+            phot.set(k + '_' + niceband, np.zeros(len(phot), np.float32))
+    # nobs
+    phot.set('nobs_%s' % niceband, nexp)
 
     rtn = gphotduck()
     rtn.phot = phot
