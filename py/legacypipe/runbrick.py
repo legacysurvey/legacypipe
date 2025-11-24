@@ -3692,16 +3692,19 @@ def stage_writecat(
     if GALEX is not None:
         print('runbrick: GALEX table is:')
         GALEX.about()
-
+        galex_cols = GALEX.get_columns()
         for c in ['flux_nuv', 'flux_ivar_nuv', 'flux_fuv', 'flux_ivar_fuv',
                   'apflux_nuv', 'apflux_resid_nuv', 'apflux_ivar_nuv',
                   'apflux_fuv', 'apflux_resid_fuv', 'apflux_ivar_fuv',
                   'psfdepth_nuv', 'psfdepth_fuv', 'nobs_nuv', 'nobs_fuv',]:
-            T.set(c, GALEX.get(c))
-        T.fracflux_nuv = GALEX.profracflux_nuv
-        T.fracflux_fuv = GALEX.profracflux_fuv
-        T.rchisq_nuv = GALEX.prochi2_nuv
-        T.rchisq_fuv = GALEX.prochi2_fuv
+            if not c in galex_cols:
+                # Fill in missing columns (eg, if no FUV coverage)
+                dtype = np.float32
+                if c.startswith('nobs'):
+                    dtype = np.int16
+                T.set(c, np.zeros(len(T), dtype))
+            else:
+                T.set(c, GALEX.get(c))
         GALEX = None
 
     set_brick_primary(T, brick)

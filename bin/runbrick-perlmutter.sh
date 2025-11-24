@@ -86,6 +86,7 @@ python -O "$LEGACYPIPE_DIR/legacypipe/runbrick.py" \
      --write-stage srcs \
      --release 11000 \
      --threads 32 \
+     --stage fitblobs \
       >> "$log" 2>&1
 
 #     --stage image_coadds \
