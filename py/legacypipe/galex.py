@@ -284,8 +284,8 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
         iv = tim.getInvvar()[y[I], x[I]]
         central_flux_acc[I] += tim.getImage()[y[I], x[I]] * iv
         central_flux_wt [I] += iv
-        del x,y,good,I
         nexp[I] += (iv > 0)
+        del x,y,good,I
 
     if len(tims) == 0:
         return None
@@ -419,14 +419,15 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
     #phot.set(band + '_mjd', mjd)
 
     # rchisq, fracflux
-    fskeys = ['prochi2', 'profracflux']
+    fskeys = [('prochi2', 'rchisq'),
+              ('profracflux', 'fracflux')]
     if R.fitstats is not None:
-        for k in fskeys:
+        for k,k_out in fskeys:
             x = getattr(R.fitstats, k)
-            phot.set(k + '_' + niceband, x.astype(np.float32))
+            phot.set(k_out + '_' + niceband, x.astype(np.float32))
     else:
-        for k in fskeys:
-            phot.set(k + '_' + niceband, np.zeros(len(phot), np.float32))
+        for k,k_out in fskeys:
+            phot.set(k_out + '_' + niceband, np.zeros(len(phot), np.float32))
     # nobs
     phot.set('nobs_%s' % niceband, nexp)
 
