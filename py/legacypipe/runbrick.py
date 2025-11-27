@@ -3794,9 +3794,11 @@ def stage_writecat(
         'neo7': 17,
     }
     N_wise_epochs = wise_epochs_map.get(dirname)
-    if N_wise_epoch is None:
-        N_wise_epoch = 17
-        warnings.warn('Could not determine array size for WISE time-resolved measurements; defaulting to %i' % N_wise_epoch)
+    if N_wise_epochs is None:
+        N_wise_epochs = 17
+        warnings.warn('Could not determine array size for WISE time-resolved measurements; defaulting to %i' % N_wise_epochs)
+    else:
+        print('unWISE time-resolved version: %s - saving %i elements' % (dirname, N_wise_epochs))
 
     columns,units = format_catalog(T, bands, allbands, release,
                                    N_wise_epochs=N_wise_epochs, motions=gaia_stars, gaia_tagalong=True)
