@@ -233,6 +233,8 @@ def format_catalog(T, bands, allbands, release,
         add_fluxlike(c)
         if has_wise:
             add_wiselike(c)
+        if has_galex:
+            add_galexlike(c)
     for c in ['fracmasked', 'fracin', 'ngood', 'anymask', 'allmask']:
         add_fluxlike(c)
     if has_wise:

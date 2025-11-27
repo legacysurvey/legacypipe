@@ -3696,7 +3696,8 @@ def stage_writecat(
         for c in ['flux_nuv', 'flux_ivar_nuv', 'flux_fuv', 'flux_ivar_fuv',
                   'apflux_nuv', 'apflux_resid_nuv', 'apflux_ivar_nuv',
                   'apflux_fuv', 'apflux_resid_fuv', 'apflux_ivar_fuv',
-                  'psfdepth_nuv', 'psfdepth_fuv', 'nobs_nuv', 'nobs_fuv',]:
+                  'psfdepth_nuv', 'psfdepth_fuv', 'nobs_nuv', 'nobs_fuv',
+                  'rchisq_nuv', 'rchisq_fuv', 'fracflux_nuv', 'fracflux_fuv']:
             if not c in galex_cols:
                 # Fill in missing columns (eg, if no FUV coverage)
                 dtype = np.float32
