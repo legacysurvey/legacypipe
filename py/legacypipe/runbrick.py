@@ -3672,6 +3672,7 @@ def stage_writecat(
     T=None,
     WISE=None,
     WISE_T=None,
+    unwise_tr_dir=None,
     forced_T=None,
     forced_bands=None,
     maskbits=None,
@@ -3897,8 +3898,28 @@ def stage_writecat(
                 allbands.append(b)
     print('Allbands:', allbands)
 
+    # ASSUME that the UNWISE_COADDS_TIMERESOLVED_DIR ends with "/neo#" and look up the target
+    # array size based on that.
+    dirname = None
+    if unwise_tr_dir is not None:
+        dirname = os.path.basename(unwise_tr_dir)
+    wise_epochs_map = {
+        # DR7/8
+        'neo4' : 11,
+        # DR9
+        'neo6': 15,
+        # DR10
+        'neo7': 17,
+    }
+    N_wise_epochs = wise_epochs_map.get(dirname)
+    if N_wise_epochs is None:
+        N_wise_epochs = 17
+        warnings.warn('Could not determine array size for WISE time-resolved measurements; defaulting to %i' % N_wise_epochs)
+    else:
+        print('unWISE time-resolved version: %s - saving %i elements' % (dirname, N_wise_epochs))
+
     columns,units = format_catalog(T, bands, allbands, release,
-                                   N_wise_epochs=15, motions=gaia_stars, gaia_tagalong=True)
+                                   N_wise_epochs=N_wise_epochs, motions=gaia_stars, gaia_tagalong=True)
 
     if forced_bands is not None:
         from legacypipe.survey import clean_band_name
