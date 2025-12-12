@@ -134,6 +134,7 @@ class OneBlob(object):
         self.blobwcs = blobwcs
         self.pixscale = self.blobwcs.pixel_scale()
         self.blobmask = blobmask
+        self.blobh,self.blobw = blobmask.shape
         self.srcs = srcs
         self.bands = bands
         self.plots = plots
@@ -153,9 +154,36 @@ class OneBlob(object):
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
         self.plots2 = False
         alphas = [0.1, 0.3, 1.0]
+
+        # callback function for tractor.optimize_loop: bail out if the
+        # optimizer moves a source center outside the blob
+        def check_step(tractor=None, **kwargs):
+            # Returns True if the step should be accepted.
+            if tractor.isParamFrozen('catalog'):
+                return True
+            for src in tractor.catalog:
+                if src is None:
+                    continue
+                pos = src.pos
+                ok,ix,iy = self.blobwcs.radec2pixelxy(pos.ra, pos.dec)
+                if not ok:
+                    info('Optimizer stepped so far that WCS failed!  Source:', src)
+                    return False
+                ix = int(ix - 1)
+                iy = int(iy - 1)
+                if ix < 0 or iy < 0 or ix >= self.blobw or iy >= self.blobh:
+                    # stepped outside the blob rectangle!
+                    info('Optimizer stepped to blob coord (%i, %i) - blob size %i x %i - reject!  Source:'
+                          % (ix, iy, self.blobw, self.blobh), src)
+                    return False
+                if not self.blobmask[iy, ix]:
+                    # stepped outside the blob mask!
+                    info('Optimizer stepped to a pixel outside the blob mask - reject!  Source:', src)
+                    return False
+            return True
+
         self.optargs = dict(priors=True, shared_params=False, alphas=alphas,
-                            print_progress=True)
-        self.blobh,self.blobw = blobmask.shape
+                            print_progress=True, check_step=check_step)
         self.trargs = dict()
         self.frozen_galaxy_mods = []
         self.use_gpu = False
