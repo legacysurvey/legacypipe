@@ -120,117 +120,28 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     - *subsky*: boolean.  Subtract sky model from tims?
 
     '''
-    from legacypipe.survey import (
-        get_git_version, get_version_header, get_dependency_versions,
-        wcs_for_brick, read_one_tim)
-    from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
+    from legacypipe.survey import get_git_version, read_one_tim
 
     tlast = Time()
     record_event and record_event('stage_tims: starting')
 
     assert(survey is not None)
 
-    # Get brick object
-    custom_brick = (ra is not None)
-    if custom_brick:
-        from legacypipe.survey import BrickDuck
-        # Custom brick; create a fake 'brick' object
-        brick = BrickDuck(ra, dec, brickname)
-    else:
-        brick = survey.get_brick_by_name(brickname)
-        if brick is None:
-            raise RunbrickError('No such brick: "%s"' % brickname)
+    custom_brick, brick, targetwcs, targetrd = get_brick(survey, ra, dec, brickname, W, H, pixscale,
+                                                         target_extent)
     brickid = brick.brickid
     brickname = brick.brickname
-
-    # Get WCS object describing brick
-    targetwcs = wcs_for_brick(brick, W=W, H=H, pixscale=pixscale)
-    if target_extent is not None:
-        (x0,x1,y0,y1) = target_extent
-        W = x1-x0
-        H = y1-y0
-        targetwcs = targetwcs.get_subimage(x0, y0, W, H)
-    pixscale = targetwcs.pixel_scale()
-    targetrd = np.array([targetwcs.pixelxy2radec(x,y) for x,y in
-                         [(1,1),(W,1),(W,H),(1,H),(1,1)]])
-    # custom brick -- set RA,Dec bounds
-    if custom_brick:
-        brick.ra1,_  = targetwcs.pixelxy2radec(W, H/2)
-        brick.ra2,_  = targetwcs.pixelxy2radec(1, H/2)
-        _, brick.dec1 = targetwcs.pixelxy2radec(W/2, 1)
-        _, brick.dec2 = targetwcs.pixelxy2radec(W/2, H)
 
     # Create FITS header with version strings
     gitver = get_git_version()
 
-    version_header = get_version_header(program_name, survey.survey_dir, release,
-                                        git_version=gitver)
+    version_header = get_runbrick_header(program_name, survey, release, gitver,
+                                         unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir,
+                                         command_line, brick, targetrd)
 
-    deps = get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir)
-    for name,value,comment in deps:
-        version_header.add_record(dict(name=name, value=value, comment=comment))
-    if command_line is not None:
-        version_header.add_record(dict(name='CMDLINE', value=command_line,
-                                       comment='runbrick command-line'))
-    version_header.add_record(dict(name='BRICK', value=brickname,
-                                comment='LegacySurveys brick RRRr[pm]DDd'))
-    version_header.add_record(dict(name='BRICKID' , value=brickid,
-                                comment='LegacySurveys brick id'))
-    version_header.add_record(dict(name='RAMIN'   , value=brick.ra1,
-                                comment='Brick RA min (deg)'))
-    version_header.add_record(dict(name='RAMAX'   , value=brick.ra2,
-                                comment='Brick RA max (deg)'))
-    version_header.add_record(dict(name='DECMIN'  , value=brick.dec1,
-                                comment='Brick Dec min (deg)'))
-    version_header.add_record(dict(name='DECMAX'  , value=brick.dec2,
-                                comment='Brick Dec max (deg)'))
-    # Add NOIRLab-requested headers
-    version_header.add_record(dict(
-        name='RA', value=ra2hmsstring(brick.ra, separator=':'), comment='Brick center RA (hms)'))
-    version_header.add_record(dict(
-        name='DEC', value=dec2dmsstring(brick.dec, separator=':'), comment='Brick center DEC (dms)'))
-    version_header.add_record(dict(
-        name='CENTRA', value=brick.ra, comment='Brick center RA (deg)'))
-    version_header.add_record(dict(
-        name='CENTDEC', value=brick.dec, comment='Brick center Dec (deg)'))
-    for i,(r,d) in enumerate(targetrd[:4]):
-        version_header.add_record(dict(
-            name='CORN%iRA' %(i+1), value=r, comment='Brick corner RA (deg)'))
-        version_header.add_record(dict(
-            name='CORN%iDEC'%(i+1), value=d, comment='Brick corner Dec (deg)'))
+    # Find CCDs to read
+    ccds = get_ccds(survey, targetwcs, bands, brick, min_mjd, max_mjd)
 
-    # Find CCDs
-    ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
-    if ccds is None:
-        raise NothingToDoError('No CCDs touching brick')
-    debug(len(ccds), 'CCDs touching target WCS')
-    survey.drop_cache()
-
-    if 'ccd_cuts' in ccds.get_columns():
-        ccds.cut(ccds.ccd_cuts == 0)
-        debug(len(ccds), 'CCDs survive cuts')
-    else:
-        warnings.warn('Not applying CCD cuts')
-
-    # Cut on bands to be used
-    ccds.cut(np.array([b in bands for b in ccds.filter]))
-    debug('Cut to', len(ccds), 'CCDs in bands', ','.join(bands))
-
-    debug('Cutting on CCDs to be used for fitting...')
-    I = survey.ccds_for_fitting(brick, ccds)
-    if I is not None:
-        debug('Cutting to', len(I), 'of', len(ccds), 'CCDs for fitting.')
-        ccds.cut(I)
-
-    if min_mjd is not None:
-        ccds.cut(ccds.mjd_obs >= min_mjd)
-        debug('Cut to', len(ccds), 'after MJD', min_mjd)
-    if max_mjd is not None:
-        ccds.cut(ccds.mjd_obs <= max_mjd)
-        debug('Cut to', len(ccds), 'before MJD', max_mjd)
-
-    #ccds.writeto('ccds.fits')
-        
     # Create Image objects for each CCD
     ims = []
     info('Keeping', len(ccds), 'CCDs:')
@@ -389,6 +300,111 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
+
+def get_brick(survey, ra, dec, brickname, W, H, pixscale, target_extent):
+    from legacypipe.survey import wcs_for_brick
+    # Get brick object
+    custom_brick = (ra is not None)
+    if custom_brick:
+        from legacypipe.survey import BrickDuck
+        # Custom brick; create a fake 'brick' object
+        brick = BrickDuck(ra, dec, brickname)
+    else:
+        brick = survey.get_brick_by_name(brickname)
+        if brick is None:
+            raise RunbrickError('No such brick: "%s"' % brickname)
+
+    # Get WCS object describing brick
+    targetwcs = wcs_for_brick(brick, W=W, H=H, pixscale=pixscale)
+    if target_extent is not None:
+        (x0,x1,y0,y1) = target_extent
+        W = x1-x0
+        H = y1-y0
+        targetwcs = targetwcs.get_subimage(x0, y0, W, H)
+    pixscale = targetwcs.pixel_scale()
+    targetrd = np.array([targetwcs.pixelxy2radec(x,y) for x,y in
+                         [(1,1),(W,1),(W,H),(1,H),(1,1)]])
+    # custom brick -- set RA,Dec bounds
+    if custom_brick:
+        brick.ra1,_  = targetwcs.pixelxy2radec(W, H/2)
+        brick.ra2,_  = targetwcs.pixelxy2radec(1, H/2)
+        _, brick.dec1 = targetwcs.pixelxy2radec(W/2, 1)
+        _, brick.dec2 = targetwcs.pixelxy2radec(W/2, H)
+
+    return custom_brick, brick, targetwcs, targetrd
+
+def get_runbrick_header(program_name, survey, release, gitver,
+                        unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir,
+                        command_line, brick, targetrd):
+    from legacypipe.survey import get_version_header, get_dependency_versions
+    from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
+
+    version_header = get_version_header(program_name, survey, release, git_version=gitver)
+
+    deps = get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir)
+    for name,value,comment in deps:
+        version_header.add_record(dict(name=name, value=value, comment=comment))
+    if command_line is not None:
+        version_header.add_record(dict(name='CMDLINE', value=command_line,
+                                       comment='runbrick command-line'))
+    version_header.add_record(dict(name='BRICK', value=brick.brickname,
+                                comment='LegacySurveys brick RRRr[pm]DDd'))
+    version_header.add_record(dict(name='BRICKID' , value=brick.brickid,
+                                comment='LegacySurveys brick id'))
+    version_header.add_record(dict(name='RAMIN'   , value=brick.ra1,
+                                comment='Brick RA min (deg)'))
+    version_header.add_record(dict(name='RAMAX'   , value=brick.ra2,
+                                comment='Brick RA max (deg)'))
+    version_header.add_record(dict(name='DECMIN'  , value=brick.dec1,
+                                comment='Brick Dec min (deg)'))
+    version_header.add_record(dict(name='DECMAX'  , value=brick.dec2,
+                                comment='Brick Dec max (deg)'))
+    # Add NOIRLab-requested headers
+    version_header.add_record(dict(
+        name='RA', value=ra2hmsstring(brick.ra, separator=':'), comment='Brick center RA (hms)'))
+    version_header.add_record(dict(
+        name='DEC', value=dec2dmsstring(brick.dec, separator=':'), comment='Brick center DEC (dms)'))
+    version_header.add_record(dict(
+        name='CENTRA', value=brick.ra, comment='Brick center RA (deg)'))
+    version_header.add_record(dict(
+        name='CENTDEC', value=brick.dec, comment='Brick center Dec (deg)'))
+    for i,(r,d) in enumerate(targetrd[:4]):
+        version_header.add_record(dict(
+            name='CORN%iRA' %(i+1), value=r, comment='Brick corner RA (deg)'))
+        version_header.add_record(dict(
+            name='CORN%iDEC'%(i+1), value=d, comment='Brick corner Dec (deg)'))
+    return version_header
+
+def get_ccds(survey, targetwcs, bands, brick, min_mjd, max_mjd):
+    ccds = survey.ccds_touching_wcs(targetwcs, ccdrad=None)
+    if ccds is None:
+        raise NothingToDoError('No CCDs touching brick')
+    debug(len(ccds), 'CCDs touching target WCS')
+    survey.drop_cache()
+
+    if 'ccd_cuts' in ccds.get_columns():
+        ccds.cut(ccds.ccd_cuts == 0)
+        debug(len(ccds), 'CCDs survive cuts')
+    else:
+        warnings.warn('Not applying CCD cuts')
+
+    # Cut on bands to be used
+    ccds.cut(np.array([b in bands for b in ccds.filter]))
+    debug('Cut to', len(ccds), 'CCDs in bands', ','.join(bands))
+
+    debug('Cutting on CCDs to be used for fitting...')
+    I = survey.ccds_for_fitting(brick, ccds)
+    if I is not None:
+        debug('Cutting to', len(I), 'of', len(ccds), 'CCDs for fitting.')
+        ccds.cut(I)
+
+    if min_mjd is not None:
+        ccds.cut(ccds.mjd_obs >= min_mjd)
+        debug('Cut to', len(ccds), 'after MJD', min_mjd)
+    if max_mjd is not None:
+        ccds.cut(ccds.mjd_obs <= max_mjd)
+        debug('Cut to', len(ccds), 'before MJD', max_mjd)
+    return ccds
 
 def _add_stage_version(version_header, short, stagename):
     from legacypipe.survey import get_git_version

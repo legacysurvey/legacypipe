@@ -15,6 +15,123 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
+def stage_just_coadd(W=3600, H=3600, pixscale=0.262, brickname=None,
+                     survey=None,
+                     ra=None, dec=None,
+                     plots=False, ps=None,
+                     target_extent=None, program_name='runbrick.py',
+                     bands=None,
+                     old_calibs_ok=True,
+                     splinesky=True,
+                     subsky=True,
+                     gaussPsf=False, pixPsf=True, hybridPsf=True,
+                     normalizePsf=True,
+                     apodize=False,
+                     constant_invvar=False,
+                     read_image_pixels = True,
+                     min_mjd=None, max_mjd=None,
+                     mp=None,
+                     record_event=None,
+                     unwise_dir=None,
+                     unwise_tr_dir=None,
+                     unwise_modelsky_dir=None,
+                     galex_dir=None,
+                     command_line=None,
+                     # stage_image_coadds:
+                     lanczos=True,
+                     write_metrics=True,
+                     minimal_coadds=False,
+                     co_sky=None,
+                     saturated_pix=None,
+                     less_masking=False,
+                     nsatur=None,
+                     #
+                     **kwargs):
+    # stage_tims:
+    custom_brick, brick, targetwcs, targetrd = get_brick(survey, ra, dec, brickname, W, H, pixscale,
+                                                         target_extent)
+    brickid = brick.brickid
+    brickname = brick.brickname
+
+    # Create FITS header with version strings
+    gitver = get_git_version()
+
+    version_header = get_runbrick_header(program_name, survey, release, gitver,
+                                         unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir,
+                                         command_line, brick, targetrd)
+    # Find CCDs to read
+    ccds = get_ccds(survey, targetwcs, bands, brick, min_mjd, max_mjd)
+    
+    # Create Image objects for each CCD
+    ims = []
+    info('Keeping', len(ccds), 'CCDs:')
+    for ccd in ccds:
+        im = survey.get_image_object(ccd)
+        if survey.cache_dir is not None:
+            im.check_for_cached_files(survey)
+        ims.append(im)
+        info(' ', im, im.band, 'expnum', im.expnum, 'exptime', im.exptime, 'propid', ccd.propid,
+              'seeing %.2f' % (ccd.fwhm*im.pixscale), 'MJD %.3f' % ccd.mjd_obs,
+              'object', getattr(ccd, 'object', '').strip(), '\n   ', im.print_imgpath)
+
+    # kwargs for read_tim
+    tim_kwargs = dict(gaussPsf=gaussPsf, pixPsf=pixPsf,
+                      hybridPsf=hybridPsf, normalizePsf=normalizePsf,
+                      subsky=subsky,
+                      apodize=apodize,
+                      constant_invvar=constant_invvar,
+                      pixels=read_image_pixels,
+                      old_calibs_ok=old_calibs_ok,
+                      plots=plots, ps=ps)
+
+    # From stage_image_coadds:
+    primhdr = fitsio.FITSHDR()
+    for r in version_header.records():
+        primhdr.add_record(r)
+    primhdr.add_record(dict(name='PRODTYPE', value='ccdinfo',
+                            comment='NOIRLab data product type'))
+    # Write per-brick CCDs table
+    with survey.write_output('ccds-table', brick=brickname) as out:
+        ccds.writeto(None, fits_object=out.fits, primheader=primhdr, extname='CCDS')
+
+    # kw = dict(ngood=True, coweights=False)
+    # if minimal_coadds:
+    #     kw.update(allmasks=False)
+    # else:
+    #     kw.update(detmaps=True)
+
+    # from make_coadds:
+    for band in bands:
+        debug('Computing coadd for band', band)
+        I = np.flatnonzero(ccds.filter == band)
+        print('Band', band, ':', len(I), 'CCDs')
+
+        mods = blobmods = False
+        unweighted=True
+        ngood = True
+        xy = allmasks = anymasks = None
+        psfsize = do_max = psf_images = False
+        satur_val = 10.
+        sbscale = True
+
+        coadd = Coadd(band, H, W, detmaps, mods, blobmods, unweighted, ngood,
+                      xy, allmasks, anymasks, nsatur, psfsize, do_max, psf_images,
+                      satur_val, targetwcs)
+
+        for ccd,im in zip(ccds[I], [ims[i] for i in I]):
+            tim = read_one_tim(im, targetrd, tim_kwargs)
+            if tim is None:
+                continue
+            tim.sbscale = (targetwcs.pixel_scale() / tim.subwcs.pixel_scale())**2
+            args = (-1, tim, None, None, lanczos, targetwcs, sbscale)
+            R = _resample_one(args)
+            itim,Yo,Xo,iv,im,mo,bmo,dq = R
+            mjd_args = None
+            coadd.accumulate(tim, itim,Yo,Xo,iv,im,mo,bmo,dq, mjd_args)
+            del Yo,Xo,iv,im,mo,bmo,dq,R
+        coadd.finish()
+
+
 class SimpleCoadd(object):
     '''A class for handling coadds of unWISE (and GALEX) images.
     '''
