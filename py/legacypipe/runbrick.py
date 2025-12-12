@@ -129,6 +129,7 @@ def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
 
     custom_brick, brick, targetwcs, targetrd = get_brick(survey, ra, dec, brickname, W, H, pixscale,
                                                          target_extent)
+    H,W = targetwcs.shape
     brickid = brick.brickid
     brickname = brick.brickname
 
