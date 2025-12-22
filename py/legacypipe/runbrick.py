@@ -2262,7 +2262,7 @@ def _get_mod(X):
 def _get_both_mods(X):
     from astrometry.util.resample import resample_with_wcs, OverlapError
     from astrometry.util.miscutils import get_overlapping_region
-    (tim, srcs, srcblobs, blobmap, targetwcs, frozen_galaxies, ps, plots) = X
+    (tim, targetwcs, srcs, srcblobs, blobmap, frozen_galaxies, ps, plots) = X
     mod = np.zeros(tim.getModelShape(), np.float32)
     blobmod = np.zeros(tim.getModelShape(), np.float32)
     assert(len(srcs) == len(srcblobs))
@@ -2270,7 +2270,7 @@ def _get_both_mods(X):
     try:
         Yo,Xo,Yi,Xi,_ = resample_with_wcs(tim.subwcs, targetwcs)
     except OverlapError:
-        return None,None,None
+        return [],None
     timblobmap = np.empty(mod.shape, blobmap.dtype)
     timblobmap[:,:] = -1
     timblobmap[Yo,Xo] = blobmap[Yi,Xi]
@@ -2371,7 +2371,7 @@ def _get_both_mods(X):
 
     if hasattr(tim.psf, 'clear_cache'):
         tim.psf.clear_cache()
-    return mod, blobmod, NEA
+    return [mod, blobmod], NEA
 
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
@@ -2482,16 +2482,13 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     Nreg = len(Ireg)
 
     #Create input args for _get_both_mods
-    X = [(tim, [cat[i] for i in Ireg], T.blob[Ireg], blobmap, targetwcs, frozen_galaxies, ps, plots) for tim in tims]
+    X = [(tim, targetwcs, [cat[i] for i in Ireg], T.blob[Ireg], blobmap, frozen_galaxies, ps, plots) for tim in tims]
     bothmods = mp.map(_get_both_mods, X)
-    #bothmods = mp.map(_get_both_mods, [(tim, [cat[i] for i in Ireg], T.blob[Ireg], blobmap,
-    #                                    targetwcs, frozen_galaxies, ps, plots)
-    #                                   for tim in tims])
     del X
 
-    mods     = [r[0] for r in bothmods]
-    blobmods = [r[1] for r in bothmods]
-    NEA      = [r[2] for r in bothmods]
+    mods     = [ims[0] if len(ims) else None for ims,_ in bothmods]
+    blobmods = [ims[1] if len(ims) else None for ims,_ in bothmods]
+    NEA      = [extra for _,extra in bothmods]
     NEA = np.array(NEA)
     # NEA shape (tims, srcs, 3:[nea, blobnea, weight])
     if len(NEA.shape) == 2:

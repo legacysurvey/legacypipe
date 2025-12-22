@@ -989,7 +989,13 @@ def _make_coadds_plots_1(im, band, mods, mo, iv, unweighted,
     allresids.append((tim.time.toYear(), tim.name, rgbimg,rgbmod,thisres))
 
 def _resample_one(args):
-    (itim,tim,mod,blobmod,lanczos,targetwcs,sbscale) = args
+    (itim,tim,mod,blobmod,lanczos,targetwcs,sbscale,
+     mod_callback,mod_callback_args) = args
+    cb_images = []
+    cb_extras = None
+    if mod_callback is not None:
+        cb_images, cb_extras = mod_callback(tim, targetwcs, *mod_callback_args)
+
     if lanczos:
         from astrometry.util.miscutils import patch_image
         patched = tim.getImage().copy()
@@ -998,10 +1004,12 @@ def _resample_one(args):
         patch_image(patched, okpix)
         del okpix
         imgs = [patched]
+        del patched
         if mod is not None:
             imgs.append(mod)
         if blobmod is not None:
             imgs.append(blobmod)
+        imgs.extend(cb_images)
     else:
         imgs = []
 
@@ -1014,6 +1022,8 @@ def _resample_one(args):
         return None
     mo = None
     bmo = None
+    # resampled callback images
+    cb_re = None
     if lanczos:
         im = rimgs[0]
         inext = 1
@@ -1023,17 +1033,18 @@ def _resample_one(args):
         if blobmod is not None:
             bmo = rimgs[inext]
             inext += 1
-        del patched,imgs,rimgs
+        cb_re = rimgs[inext:]
+        del imgs,rimgs
     else:
-        im = tim.getImage ()[Yi,Xi]
+        im = tim.getImage()[Yi,Xi]
         if mod is not None:
             mo = mod[Yi,Xi]
         if blobmod is not None:
             bmo = blobmod[Yi,Xi]
+        cb_re = [cb[Yi,Xi] for im in cb_images]
     iv = tim.getInvvar()[Yi,Xi]
     if sbscale:
         fscale = tim.sbscale
-        debug('Applying surface-brightness scaling of %.3f to' % fscale, tim.name)
         im *=  fscale
         iv /= (fscale**2)
         if mod is not None:
@@ -1044,7 +1055,7 @@ def _resample_one(args):
         dq = None
     else:
         dq = tim.dq[Yi,Xi]
-    return itim,Yo,Xo,iv,im,mo,bmo,dq
+    return itim,Yo,Xo,iv,im,mo,bmo,dq, cb_re,cb_extras
 
 def _apphot_one(args):
     (irad, band, rad, img, sigma, mask, isimage, apxy) = args
