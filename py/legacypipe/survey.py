@@ -523,7 +523,7 @@ def tim_get_resamp(tim, targetwcs):
     if hasattr(tim, 'resamp'):
         if hasattr(tim, 'targetwcs_hash'):
             if hash(tim.targetwcs_hash) == wcs_hash:
-                debug(f'Re-using previous resamp with hash {wcs_hash=}')
+                #debug(f'Re-using previous resamp with hash {wcs_hash=}')
                 return tim.resamp
     try:
         Yo,Xo,Yi,Xi,_ = resample_with_wcs(targetwcs, tim.subwcs, intType=np.int16)

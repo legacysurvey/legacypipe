@@ -511,7 +511,7 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
     brick_radius = targetwcs.radius()
     max_radius += brick_radius
 
-    galaxies = read_sga(survey, rc, dc, brick_radius, max_radius)
+    galaxies = read_sga(targetwcs, survey, rc, dc, brick_radius, max_radius)
     if galaxies is None:
         return None
 
@@ -537,7 +537,7 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
 
     return galaxies
 
-def read_sga(survey, rc, dc, brick_radius, max_radius):
+def read_sga(targetwcs, survey, rc, dc, brick_radius, max_radius):
     from astrometry.libkd.spherematch import tree_open, tree_search_radec
     from legacypipe.bits import SGA_FITMODE, sga_fitmode_type
     from functools import reduce
@@ -676,6 +676,16 @@ def read_sga(survey, rc, dc, brick_radius, max_radius):
             # render in any way - they're just a place to hold data so they can finally
             # appear in the output catalog.
             galaxies.ignore_source |= ((galaxies.fitmode & SGA_FITMODE['FIXGEO']) != 0)
+
+            # SGA entries outside the current brick/region should also
+            # get the ignore_source treatment.
+            _,xx,yy = targetwcs.radec2pixelxy(galaxies.ra, galaxies.dec)
+            xx = np.round(xx-1.).astype(np.int32)
+            yy = np.round(yy-1.).astype(np.int32)
+            H,W = targetwcs.shape
+            in_bounds = ((xx >= 0) * (xx < W) *
+                         (yy >= 0) * (yy < H))
+            galaxies.ignore_source |= ~in_bounds
 
         else:
             print('No fitmode -- SGA-2020?')
