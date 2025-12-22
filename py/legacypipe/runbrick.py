@@ -2477,14 +2477,15 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     bb.append(blobmap[yy,xx])
 
 
+    # Input args for _get_both_mods
     Ireg = np.flatnonzero(T.regular)
-
     Nreg = len(Ireg)
-
-    #Create input args for _get_both_mods
-    X = [(tim, targetwcs, [cat[i] for i in Ireg], T.blob[Ireg], blobmap, frozen_galaxies, ps, plots) for tim in tims]
-    bothmods = mp.map(_get_both_mods, X)
-    del X
+    reg_cat = [cat[i] for i in Ireg]
+    reg_blob = T.blob[Ireg]
+    both_args = [(tim, targetwcs, reg_cat, reg_blob, blobmap, frozen_galaxies, ps, plots)
+                 for tim in tims]
+    bothmods = mp.map(_get_both_mods, both_args)
+    #del both_args
 
     mods     = [ims[0] if len(ims) else None for ims,_ in bothmods]
     blobmods = [ims[1] if len(ims) else None for ims,_ in bothmods]
@@ -2521,6 +2522,8 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims,
                                    targetwcs, co_sky, coadd_headers),
+                    mod_callback=_get_both_mods, mod_callback_args=both_args,
+                    mod_callback_types=[np.float32, np.float32],
                     plots=plots, ps=ps, mp=mp)
 
     record_event and record_event('stage_coadds: extras')
@@ -2555,14 +2558,12 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     for band in survey.allbands:
         T.set('nea_%s' % band, np.zeros(len(T), np.float32))
         T.set('blob_nea_%s' % band, np.zeros(len(T), np.float32))
-    for iband,band in enumerate(bands):
+    for iband,(band,extra_data) in enumerate(zip(bands, C.extra_data)):
         num  = np.zeros(Nreg, np.float32)
         den  = np.zeros(Nreg, np.float32)
         bnum = np.zeros(Nreg, np.float32)
-        for tim,nea,bnea,nea_wt in zip(
-                tims, neas, blobneas, nea_wts):
-            if not tim.band == band:
-                continue
+        btims = [tim for tim in tims if tim.band == band]
+        for tim,(nea,bnea,nea_wt) in zip(btims, extra_data):
             iv = 1./(tim.sig1**2)
             I, = np.nonzero(nea)
             wt = nea_wt[I]

@@ -334,9 +334,13 @@ class Coadd(object):
             self.psf_img = 0.
 
         if extra_types:
-            self.extras = [np.zeros((H,W), t) for t in extra_types]
+            self.extra_ims = [np.zeros((H,W), t) for t in extra_types]
+            self.extra_w_ims = [np.zeros((H,W), t) for t in extra_types]
+            self.kwargs.update(extra_ims=self.extra_w_ims)
         else:
-            self.extras = None
+            self.extra_ims = None
+            self.extra_w_ims = None
+        self.extra_data = []
 
         self.unweighted = unweighted
         self.satur_val = satur_val
@@ -353,7 +357,7 @@ class Coadd(object):
         self.do_max = do_max
         self.targetwcs = targetwcs
 
-    def accumulate(self, tim, itim, Yo,Xo,iv,im,mo,bmo,dq, mjd_args, extras):
+    def accumulate(self, tim, itim, Yo,Xo,iv,im,mo,bmo,dq, mjd_args, cb_images,cb_extras):
         # invvar-weighted image
         self.cowimg[Yo,Xo] += iv * im
         self.cow   [Yo,Xo] += iv
@@ -485,9 +489,11 @@ class Coadd(object):
         if self.do_max:
             self.maximg[Yo,Xo] = np.maximum(self.maximg[Yo,Xo], im * (iv>0))
 
-        if self.extras:
-            for e,this_extra in zip(self.extras, extras):
-                e[Yo,Xo] += goodpix * this_extra
+        if self.extra_ims:
+            for e_weighted,e_unweighted,im in zip(self.extra_w_ims, self.extra_ims,cb_images):
+                e_weighted[Yo,Xo] += iv * im
+                e_unweighted[Yo,Xo] += goodpix * im
+        self.extra_data.append(cb_extras)
 
     def finish(self):
         tinyw = 1e-30
@@ -542,6 +548,13 @@ class Coadd(object):
                 self.psfsizemap[:,:] = (1. / np.sqrt(self.psfsizemap)) * tosigma * tofwhm
             self.psfsizemap[self.flatcow == 0] = 0.
 
+        if self.extra_ims:
+            for e,e_unw in zip(self.extra_w_ims, self.extra_ims):
+                e /= np.maximum(self.cow, tinyw)
+                # Patch pixels with no data in the weighted coadd.
+                e[self.cow == 0] = e_unw[self.cow == 0]
+            self.extra_ims = None
+
 def make_coadds(tims, bands, targetwcs,
                 coweights=True,
                 mods=None, blobmods=None,
@@ -576,6 +589,8 @@ def make_coadds(tims, bands, targetwcs,
     unweighted=True
 
     C.coimgs = []
+    if mod_callback:
+        C.extra_data = []
     if coweights:
         # the pixelwise inverse-variances (weights) of the "coimgs".
         C.cowimgs = []
@@ -686,7 +701,7 @@ def make_coadds(tims, bands, targetwcs,
                                      tim, Yo, Xo)
 
             coadd.accumulate(tim, itim,Yo,Xo,iv,im,mo,bmo,dq,
-                             mjd_args)
+                             mjd_args, cb_re,cb_extras)
 
             del Yo,Xo,iv,im,mo,bmo,dq,R
 
@@ -714,6 +729,8 @@ def make_coadds(tims, bands, targetwcs,
             C.satmaps.append(coadd.satmap)
         if psf_images:
             C.psf_imgs.append(coadd.psf_img)
+        if mod_callback:
+            C.extra_data.append(coadd.extra_data)
         if xy:
             C.T.nobs   [:,iband] = coadd.nobs   [iy,ix]
             C.T.anymask[:,iband] = coadd.ormask [iy,ix]
@@ -1057,6 +1074,7 @@ def _resample_one(args):
         if blobmod is not None:
             bmo = blobmod[Yi,Xi]
         cb_re = [cb[Yi,Xi] for im in cb_images]
+        del cb_images
     iv = tim.getInvvar()[Yi,Xi]
     if sbscale:
         fscale = tim.sbscale
@@ -1158,8 +1176,7 @@ def write_coadd_images(band,
                        cowimg=None, cow=None, cowmod=None, cochi2=None,
                        cowblobmod=None,
                        psfdetiv=None, galdetiv=None, congood=None,
-                       psfsize=None, **kwargs):
-
+                       psfsize=None, extra_ims=None, **kwargs):
     t = time.time()
     hdr = copy_header_with_wcs(version_header, targetwcs)
     # Grab headers from input images...
