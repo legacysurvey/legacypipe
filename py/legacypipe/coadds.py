@@ -238,7 +238,7 @@ def _unwise_to_rgb(imgs):
 class Coadd(object):
     def __init__(self, band, H, W, detmaps, mods, blobmods, unweighted, ngood,
                  xy, allmasks, anymasks, nsatur, psfsize, do_max, psf_images,
-                 satur_val, targetwcs):
+                 satur_val, targetwcs, extra_types):
         # coadded weight map (moo)
         self.cow    = np.zeros((H,W), np.float32)
         # coadded weighted image map
@@ -333,6 +333,11 @@ class Coadd(object):
         if psf_images:
             self.psf_img = 0.
 
+        if extra_types:
+            self.extras = [np.zeros((H,W), t) for t in extra_types]
+        else:
+            self.extras = None
+
         self.unweighted = unweighted
         self.satur_val = satur_val
         self.xy = xy
@@ -348,7 +353,7 @@ class Coadd(object):
         self.do_max = do_max
         self.targetwcs = targetwcs
 
-    def accumulate(self, tim, itim, Yo,Xo,iv,im,mo,bmo,dq, mjd_args):
+    def accumulate(self, tim, itim, Yo,Xo,iv,im,mo,bmo,dq, mjd_args, extras):
         # invvar-weighted image
         self.cowimg[Yo,Xo] += iv * im
         self.cow   [Yo,Xo] += iv
@@ -480,6 +485,10 @@ class Coadd(object):
         if self.do_max:
             self.maximg[Yo,Xo] = np.maximum(self.maximg[Yo,Xo], im * (iv>0))
 
+        if self.extras:
+            for e,this_extra in zip(self.extras, extras):
+                e[Yo,Xo] += goodpix * this_extra
+
     def finish(self):
         tinyw = 1e-30
         self.cowimg /= np.maximum(self.cow, tinyw)
@@ -543,6 +552,8 @@ def make_coadds(tims, bands, targetwcs,
                 get_max=False, sbscale=True,
                 psf_images=False, nsatur=None,
                 callback=None, callback_args=None,
+                mod_callback=None, mod_callback_args=None,
+                mod_callback_types=None,
                 plots=False, ps=None,
                 lanczos=True, mp=None,
                 satur_val=10.):
@@ -627,7 +638,11 @@ def make_coadds(tims, bands, targetwcs,
                 bmo = None
             else:
                 bmo = blobmods[itim]
-            args.append((itim,tim,mo,bmo,lanczos,targetwcs,sbscale))
+            cb_args = None
+            if mod_callback_args is not None:
+                cb_args = mod_callback_args[i]
+            args.append((itim,tim,mo,bmo,lanczos,targetwcs,sbscale,
+                         mod_callback, cb_args))
         if mp is not None:
             imaps.append(mp.imap_unordered(_resample_one, args))
         else:
@@ -657,12 +672,12 @@ def make_coadds(tims, bands, targetwcs,
         coadd = Coadd(band, H, W, detmaps,
                       (mods is not None), (blobmods is not None), unweighted, ngood,
                       xy, allmasks, anymasks, nsatur, psfsize, max, psf_images,
-                      satur_val, targetwcs)
+                      satur_val, targetwcs, mod_callback_types)
 
         for R in timiter:
             if R is None:
                 continue
-            itim,Yo,Xo,iv,im,mo,bmo,dq = R
+            itim,Yo,Xo,iv,im,mo,bmo,dq, cb_re,cb_extras = R
             tim = tims[itim]
 
             if plots:
