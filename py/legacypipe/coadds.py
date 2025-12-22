@@ -238,7 +238,7 @@ def _unwise_to_rgb(imgs):
 class Coadd(object):
     def __init__(self, band, H, W, detmaps, mods, blobmods, unweighted, ngood,
                  xy, allmasks, anymasks, nsatur, psfsize, do_max, psf_images,
-                 satur_val, targetwcs, extra_types):
+                 satur_val, targetwcs):
         # coadded weight map (moo)
         self.cow    = np.zeros((H,W), np.float32)
         # coadded weighted image map
@@ -333,15 +333,7 @@ class Coadd(object):
         if psf_images:
             self.psf_img = 0.
 
-        if extra_types:
-            self.extra_ims = [np.zeros((H,W), t) for t in extra_types]
-            self.extra_w_ims = [np.zeros((H,W), t) for t in extra_types]
-            self.kwargs.update(extra_ims=self.extra_w_ims)
-        else:
-            self.extra_ims = None
-            self.extra_w_ims = None
-        self.extra_data = []
-
+        self.mod_callback_data = []
         self.unweighted = unweighted
         self.satur_val = satur_val
         self.xy = xy
@@ -357,7 +349,7 @@ class Coadd(object):
         self.do_max = do_max
         self.targetwcs = targetwcs
 
-    def accumulate(self, tim, itim, Yo,Xo,iv,im,mo,bmo,dq, mjd_args, cb_images,cb_extras):
+    def accumulate(self, tim, itim, Yo,Xo,iv,im,mo,bmo,dq, mjd_args, cb_data):
         # invvar-weighted image
         self.cowimg[Yo,Xo] += iv * im
         self.cow   [Yo,Xo] += iv
@@ -489,11 +481,7 @@ class Coadd(object):
         if self.do_max:
             self.maximg[Yo,Xo] = np.maximum(self.maximg[Yo,Xo], im * (iv>0))
 
-        if self.extra_ims:
-            for e_weighted,e_unweighted,im in zip(self.extra_w_ims, self.extra_ims,cb_images):
-                e_weighted[Yo,Xo] += iv * im
-                e_unweighted[Yo,Xo] += goodpix * im
-        self.extra_data.append(cb_extras)
+        self.mod_callback_data.append(cb_data)
 
     def finish(self):
         tinyw = 1e-30
@@ -548,13 +536,6 @@ class Coadd(object):
                 self.psfsizemap[:,:] = (1. / np.sqrt(self.psfsizemap)) * tosigma * tofwhm
             self.psfsizemap[self.flatcow == 0] = 0.
 
-        if self.extra_ims:
-            for e,e_unw in zip(self.extra_w_ims, self.extra_ims):
-                e /= np.maximum(self.cow, tinyw)
-                # Patch pixels with no data in the weighted coadd.
-                e[self.cow == 0] = e_unw[self.cow == 0]
-            self.extra_ims = None
-
 def make_coadds(tims, bands, targetwcs,
                 coweights=True,
                 mods=None, blobmods=None,
@@ -566,10 +547,16 @@ def make_coadds(tims, bands, targetwcs,
                 psf_images=False, nsatur=None,
                 callback=None, callback_args=None,
                 mod_callback=None, mod_callback_args=None,
-                mod_callback_types=None,
                 plots=False, ps=None,
                 lanczos=True, mp=None,
                 satur_val=10.):
+    '''
+    mods: list of model images to coadd, same length and in same order as tims.
+
+    mod_callback: function to call (while multi-processing per-tim) to generate "mod" and
+      "blobmod" images, plus "extra" data (the NEA stats)
+    mod_callback_args: list, aligned with tims, of arguments to pass to mod_callback
+    '''
     t = time.time()
     from astrometry.util.ttime import Time
     t0 = Time()
@@ -590,7 +577,7 @@ def make_coadds(tims, bands, targetwcs,
 
     C.coimgs = []
     if mod_callback:
-        C.extra_data = []
+        C.mod_callback_data = []
     if coweights:
         # the pixelwise inverse-variances (weights) of the "coimgs".
         C.cowimgs = []
@@ -657,7 +644,7 @@ def make_coadds(tims, bands, targetwcs,
             if mod_callback_args is not None:
                 cb_args = mod_callback_args[i]
             args.append((itim,tim,mo,bmo,lanczos,targetwcs,sbscale,
-                         mod_callback, cb_args))
+                         mod_callback,cb_args))
         if mp is not None:
             imaps.append(mp.imap_unordered(_resample_one, args))
         else:
@@ -685,14 +672,16 @@ def make_coadds(tims, bands, targetwcs,
         debug('Computing coadd for band', band)
 
         coadd = Coadd(band, H, W, detmaps,
-                      (mods is not None), (blobmods is not None), unweighted, ngood,
+                      (mods is not None) or (mod_callback is not None),
+                      (blobmods is not None) or (mod_callback is not None),
+                      unweighted, ngood,
                       xy, allmasks, anymasks, nsatur, psfsize, max, psf_images,
-                      satur_val, targetwcs, mod_callback_types)
+                      satur_val, targetwcs)
 
         for R in timiter:
             if R is None:
                 continue
-            itim,Yo,Xo,iv,im,mo,bmo,dq, cb_re,cb_extras = R
+            itim,Yo,Xo,iv,im,mo,bmo,dq,cb_data = R
             tim = tims[itim]
 
             if plots:
@@ -701,9 +690,9 @@ def make_coadds(tims, bands, targetwcs,
                                      tim, Yo, Xo)
 
             coadd.accumulate(tim, itim,Yo,Xo,iv,im,mo,bmo,dq,
-                             mjd_args, cb_re,cb_extras)
+                             mjd_args,cb_data)
 
-            del Yo,Xo,iv,im,mo,bmo,dq,R
+            del Yo,Xo,iv,im,mo,bmo,dq,cb_data,R
 
         coadd.finish()
 
@@ -730,7 +719,7 @@ def make_coadds(tims, bands, targetwcs,
         if psf_images:
             C.psf_imgs.append(coadd.psf_img)
         if mod_callback:
-            C.extra_data.append(coadd.extra_data)
+            C.mod_callback_data.append(coadd.mod_callback_data)
         if xy:
             C.T.nobs   [:,iband] = coadd.nobs   [iy,ix]
             C.T.anymask[:,iband] = coadd.ormask [iy,ix]
@@ -1023,10 +1012,12 @@ def _make_coadds_plots_1(im, band, mods, mo, iv, unweighted,
 def _resample_one(args):
     (itim,tim,mod,blobmod,lanczos,targetwcs,sbscale,
      mod_callback,mod_callback_args) = args
-    cb_images = []
-    cb_extras = None
+    cb_data = None
     if mod_callback is not None:
-        cb_images, cb_extras = mod_callback(tim, targetwcs, *mod_callback_args)
+        cb_images, cb_data = mod_callback(tim, targetwcs, *mod_callback_args)
+        if cb_images:
+            mod, blobmod = cb_images
+        del cb_images
 
     if lanczos:
         from astrometry.util.miscutils import patch_image
@@ -1041,7 +1032,6 @@ def _resample_one(args):
             imgs.append(mod)
         if blobmod is not None:
             imgs.append(blobmod)
-        imgs.extend(cb_images)
     else:
         imgs = []
 
@@ -1054,8 +1044,6 @@ def _resample_one(args):
         return None
     mo = None
     bmo = None
-    # resampled callback images
-    cb_re = None
     if lanczos:
         im = rimgs[0]
         inext = 1
@@ -1065,7 +1053,6 @@ def _resample_one(args):
         if blobmod is not None:
             bmo = rimgs[inext]
             inext += 1
-        cb_re = rimgs[inext:]
         del imgs,rimgs
     else:
         im = tim.getImage()[Yi,Xi]
@@ -1073,8 +1060,6 @@ def _resample_one(args):
             mo = mod[Yi,Xi]
         if blobmod is not None:
             bmo = blobmod[Yi,Xi]
-        cb_re = [cb[Yi,Xi] for im in cb_images]
-        del cb_images
     iv = tim.getInvvar()[Yi,Xi]
     if sbscale:
         fscale = tim.sbscale
@@ -1088,7 +1073,7 @@ def _resample_one(args):
         dq = None
     else:
         dq = tim.dq[Yi,Xi]
-    return itim,Yo,Xo,iv,im,mo,bmo,dq, cb_re,cb_extras
+    return itim,Yo,Xo,iv,im,mo,bmo,dq,cb_data
 
 def _apphot_one(args):
     (irad, band, rad, img, sigma, mask, isimage, apxy) = args

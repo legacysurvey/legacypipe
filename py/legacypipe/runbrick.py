@@ -2270,7 +2270,7 @@ def _get_both_mods(X):
     try:
         Yo,Xo,Yi,Xi,_ = resample_with_wcs(tim.subwcs, targetwcs)
     except OverlapError:
-        return [],None
+        return None,None
     timblobmap = np.empty(mod.shape, blobmap.dtype)
     timblobmap[:,:] = -1
     timblobmap[Yo,Xo] = blobmap[Yi,Xi]
@@ -2459,8 +2459,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         plt.title('Iterative model residuals')
         ps.savefig()
 
-    # Render model images...
-    record_event and record_event('stage_coadds: model images')
+    record_event and record_event('stage_coadds: coadds')
 
     # Re-add the blob that this galaxy is actually inside
     # (that blob got dropped way earlier, before fitblobs)
@@ -2476,7 +2475,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                 if blobmap[yy,xx] != -1:
                     bb.append(blobmap[yy,xx])
 
-
     # Input args for _get_both_mods
     Ireg = np.flatnonzero(T.regular)
     Nreg = len(Ireg)
@@ -2484,26 +2482,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     reg_blob = T.blob[Ireg]
     both_args = [(tim, targetwcs, reg_cat, reg_blob, blobmap, frozen_galaxies, ps, plots)
                  for tim in tims]
-    bothmods = mp.map(_get_both_mods, both_args)
-    #del both_args
-
-    mods     = [ims[0] if len(ims) else None for ims,_ in bothmods]
-    blobmods = [ims[1] if len(ims) else None for ims,_ in bothmods]
-    NEA      = [extra for _,extra in bothmods]
-    NEA = np.array(NEA)
-    # NEA shape (tims, srcs, 3:[nea, blobnea, weight])
-    if len(NEA.shape) == 2:
-        # no regular sources
-        neas = blobneas = nea_wts = []
-    else:
-        neas        = NEA[:,:,0]
-        blobneas    = NEA[:,:,1]
-        nea_wts     = NEA[:,:,2]
-    del bothmods, NEA
-
-    tnow = Time()
-    debug('Model images:', tnow-tlast)
-    tlast = tnow
 
     # source pixel positions to probe depth maps, etc
     ixy = (np.clip(T.ibx, 0, W-1).astype(int), np.clip(T.iby, 0, H-1).astype(int))
@@ -2512,8 +2490,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # Aperture photometry locations
     apxy = np.vstack((T.bx, T.by)).T
 
-    record_event and record_event('stage_coadds: coadds')
-    C = make_coadds(tims, bands, targetwcs, mods=mods, blobmods=blobmods,
+    C = make_coadds(tims, bands, targetwcs,
                     xy=ixy,
                     ngood=True, detmaps=True, psfsize=True, allmasks=True,
                     lanczos=lanczos,
@@ -2523,7 +2500,6 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     callback_args=(survey, brickname, version_header, tims,
                                    targetwcs, co_sky, coadd_headers),
                     mod_callback=_get_both_mods, mod_callback_args=both_args,
-                    mod_callback_types=[np.float32, np.float32],
                     plots=plots, ps=ps, mp=mp)
 
     record_event and record_event('stage_coadds: extras')
@@ -2558,12 +2534,13 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     for band in survey.allbands:
         T.set('nea_%s' % band, np.zeros(len(T), np.float32))
         T.set('blob_nea_%s' % band, np.zeros(len(T), np.float32))
-    for iband,(band,extra_data) in enumerate(zip(bands, C.extra_data)):
+    for iband,(band,cb_data) in enumerate(zip(bands, C.mod_callback_data)):
         num  = np.zeros(Nreg, np.float32)
         den  = np.zeros(Nreg, np.float32)
         bnum = np.zeros(Nreg, np.float32)
         btims = [tim for tim in tims if tim.band == band]
-        for tim,(nea,bnea,nea_wt) in zip(btims, extra_data):
+        assert(len(btims) == len(cb_data))
+        for tim,(nea,bnea,nea_wt) in zip(btims, cb_data):
             iv = 1./(tim.sig1**2)
             I, = np.nonzero(nea)
             wt = nea_wt[I]
