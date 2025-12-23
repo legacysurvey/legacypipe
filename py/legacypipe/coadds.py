@@ -575,6 +575,9 @@ def make_coadds(tims, bands, targetwcs,
     # always, for patching SATUR, etc pixels?
     unweighted=True
 
+    have_mods = (mods is not None) or (mod_callback is not None)
+    have_blobmods = (blobmods is not None) or (mod_callback is not None)
+
     C.coimgs = []
     if mod_callback:
         C.mod_callback_data = []
@@ -584,10 +587,10 @@ def make_coadds(tims, bands, targetwcs,
     if detmaps:
         C.galdetivs = []
         C.psfdetivs = []
-    if mods is not None:
+    if have_mods:
         C.comods = []
         C.coresids = []
-    if blobmods is not None:
+    if have_blobmods:
         C.coblobmods = []
         C.coblobresids = []
     if apertures is not None:
@@ -642,7 +645,7 @@ def make_coadds(tims, bands, targetwcs,
                 bmo = blobmods[itim]
             cb_args = None
             if mod_callback_args is not None:
-                cb_args = mod_callback_args[i]
+                cb_args = mod_callback_args[itim]
             args.append((itim,tim,mo,bmo,lanczos,targetwcs,sbscale,
                          mod_callback,cb_args))
         if mp is not None:
@@ -671,10 +674,7 @@ def make_coadds(tims, bands, targetwcs,
     for iband,(band,timiter) in enumerate(zip(bands, imaps)):
         debug('Computing coadd for band', band)
 
-        coadd = Coadd(band, H, W, detmaps,
-                      (mods is not None) or (mod_callback is not None),
-                      (blobmods is not None) or (mod_callback is not None),
-                      unweighted, ngood,
+        coadd = Coadd(band, H, W, detmaps, have_mods, have_blobmods, unweighted, ngood,
                       xy, allmasks, anymasks, nsatur, psfsize, max, psf_images,
                       satur_val, targetwcs)
 
@@ -699,10 +699,10 @@ def make_coadds(tims, bands, targetwcs,
         C.coimgs.append(coadd.cowimg)
         if coweights:
             C.cowimgs.append(coadd.cow)
-        if mods is not None:
+        if have_mods:
             C.comods.append(coadd.cowmod)
             C.coresids.append(coadd.coresid)
-        if blobmods is not None:
+        if have_blobmods:
             C.coblobmods.append(coadd.cowblobmod)
             C.coblobresids.append(coadd.coblobresid)
         if detmaps:
@@ -743,10 +743,10 @@ def make_coadds(tims, bands, targetwcs,
             for irad,rad in enumerate(apertures):
                 apargs.append((irad, band, rad, coadd.cowimg, imsigma, mask,
                                True, apxy))
-                if mods is not None:
+                if have_mods:
                     apargs.append((irad, band, rad, coadd.coresid, None, None,
                                    False, apxy))
-                if blobmods is not None:
+                if have_blobmods:
                     apargs.append((irad, band, rad, coadd.coblobresid, None, None,
                                    False, apxy))
 
@@ -781,9 +781,9 @@ def make_coadds(tims, bands, targetwcs,
             apimg = []
             apimgerr = []
             apmask = []
-            if mods is not None:
+            if have_mods:
                 apres = []
-            if blobmods is not None:
+            if have_blobmods:
                 apblobres = []
             for irad,rad in enumerate(apertures):
                 (airad, aband, isimg, ap_img, ap_err, ap_mask) = next(apresults)
@@ -794,7 +794,7 @@ def make_coadds(tims, bands, targetwcs,
                 apimgerr.append(ap_err)
                 apmask.append(ap_mask)
 
-                if mods is not None:
+                if have_mods:
                     (airad, aband, isimg, ap_img, ap_err, ap_mask) = next(apresults)
                     assert(airad == irad)
                     assert(aband == band)
@@ -803,7 +803,7 @@ def make_coadds(tims, bands, targetwcs,
                     assert(ap_err is None)
                     assert(ap_mask is None)
 
-                if blobmods is not None:
+                if have_blobmods:
                     (airad, aband, isimg, ap_img, ap_err, ap_mask) = next(apresults)
                     assert(airad == irad)
                     assert(aband == band)
@@ -822,11 +822,11 @@ def make_coadds(tims, bands, targetwcs,
             ap = np.vstack(apmask).T
             ap[np.logical_not(np.isfinite(ap))] = 0.
             C.AP.set('apflux_masked_%s' % band, ap)
-            if mods is not None:
+            if have_mods:
                 ap = np.vstack(apres).T
                 ap[np.logical_not(np.isfinite(ap))] = 0.
                 C.AP.set('apflux_resid_%s' % band, ap)
-            if blobmods is not None:
+            if have_blobmods:
                 ap = np.vstack(apblobres).T
                 ap[np.logical_not(np.isfinite(ap))] = 0.
                 C.AP.set('apflux_blobresid_%s' % band, ap)

@@ -2259,7 +2259,7 @@ def _get_mod(X):
         tim.psf.clear_cache()
     return mod
 
-def _get_both_mods(X):
+def _get_both_mods(*X):
     from astrometry.util.resample import resample_with_wcs, OverlapError
     from astrometry.util.miscutils import get_overlapping_region
     (tim, targetwcs, srcs, srcblobs, blobmap, frozen_galaxies, ps, plots) = X
@@ -2480,7 +2480,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     Nreg = len(Ireg)
     reg_cat = [cat[i] for i in Ireg]
     reg_blob = T.blob[Ireg]
-    both_args = [(tim, targetwcs, reg_cat, reg_blob, blobmap, frozen_galaxies, ps, plots)
+    both_args = [(reg_cat, reg_blob, blobmap, frozen_galaxies, ps, plots)
                  for tim in tims]
 
     # source pixel positions to probe depth maps, etc
@@ -2540,7 +2540,13 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         bnum = np.zeros(Nreg, np.float32)
         btims = [tim for tim in tims if tim.band == band]
         assert(len(btims) == len(cb_data))
-        for tim,(nea,bnea,nea_wt) in zip(btims, cb_data):
+        # cb_data: list-of-lists, (ntim x nsrcs x 3)
+        for tim,data in zip(btims, cb_data):
+            data = np.array(data)
+            assert(data.shape[-1] == 3)
+            nea    = data[:,0]
+            bnea   = data[:,1]
+            nea_wt = data[:,2]
             iv = 1./(tim.sig1**2)
             I, = np.nonzero(nea)
             wt = nea_wt[I]
@@ -3458,7 +3464,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     FF = []
     mods = []
 
-    args = [list(a) + [cat, T, do_phot, release] for a in zip(ccds, ims, tims)]
+    args = [list(a) + [cat, T, do_phot, release, use_ceres] for a in zip(ccds, ims, tims)]
     FF = mp.map(_forced_phot_one, args)
     mods = [mod for F,mod in FF]
     FF = [F for F,m in FF if F is not None]
@@ -3583,7 +3589,7 @@ def _forced_phot_one(args):
     from legacypipe.forced_photom import run_forced_phot, forced_phot_add_extra_fields
     from tractor import NanoMaggies
 
-    ccd, im, tim, cat, T, do_phot, release = args
+    ccd, im, tim, cat, T, do_phot, release, use_ceres = args
 
     print('Forced-photometering', tim)
     # Cut to sources within this chip
@@ -3620,7 +3626,6 @@ def _forced_phot_one(args):
     #if plots:
     #kwargs.update(ps=ps)
     t0 = Time()
-    use_ceres = True
     F,mod = run_forced_phot(sub_cat, tim,
                             ceres=use_ceres,
                             do_forced=True,
