@@ -3518,6 +3518,17 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     # Aperture photometry locations
     apxy = np.vstack((T.bx, T.by)).T
 
+    Ireg = np.flatnonzero(do_phot)
+    # HACK -- replace the catalog brightnesses with the forced-photometry results!
+    orig_bright = [cat[i].brightness for i in Ireg]
+    for i in Ireg:
+        br = dict([(b, TF.get('flux_%s' % b)) for b in clean_bands])
+        cat[i].brightness = NanoMaggies(**br)
+    reg_cat = [cat[i] for i in Ireg]
+    reg_blob = T.blob[Ireg]
+    both_args = [(reg_cat, reg_blob, blobmap, frozen_galaxies, ps, plots)
+                 for tim in tims]
+
     C = make_coadds(tims, forced_bands, targetwcs,
                     mods=mods, xy=ixy, apertures=apertures, apxy=apxy,
                     ngood=True, detmaps=True, psfsize=True, allmasks=True,
@@ -3525,7 +3536,13 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims,
                                    targetwcs, co_sky, coadd_headers),
+                    mod_callback=_get_both_mods, mod_callback_args=both_args,
                     mp=mp)
+
+    # Revert catalog brightness
+    for i,br in zip(Ireg, orig_bright):
+        cat[i].brightness = br
+
     print('Coadd results contain:', dir(C))
     # 'AP', 'T', 'allmasks', 'coimgs', 'comods', 'coresids', 'cowimgs', 'galdetivs', 'maximgs', 'psfdetivs'
     print('Coadd Table contains:')
@@ -3540,7 +3557,45 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
             TF.set('%s_%s' % (c, band), X[:,i])
 
     # NEA
+    # average NEA stats per band -- after psfsize,psfdepth computed.
+    # first init all bands expected by format_catalog
+    for band in clean_bands:
+        T.set('nea_%s' % band, np.zeros(len(T), np.float32))
+        T.set('blob_nea_%s' % band, np.zeros(len(T), np.float32))
+    for iband,(band,cb_data) in enumerate(zip(bands, C.mod_callback_data)):
+        num  = np.zeros(Nreg, np.float32)
+        den  = np.zeros(Nreg, np.float32)
+        bnum = np.zeros(Nreg, np.float32)
+        btims = [tim for tim in tims if tim.band == band]
+        assert(len(btims) == len(cb_data))
+        # cb_data: list-of-lists, (ntim x nsrcs x 3)
+        for tim,data in zip(btims, cb_data):
+            data = np.array(data)
+            assert(data.shape[-1] == 3)
+            nea    = data[:,0]
+            bnea   = data[:,1]
+            nea_wt = data[:,2]
+            iv = 1./(tim.sig1**2)
+            I, = np.nonzero(nea)
+            wt = nea_wt[I]
+            num[I] += iv * wt * 1./(nea[I] * tim.imobj.pixscale**2)
+            den[I] += iv * wt
+            I, = np.nonzero(bnea)
+            bnum[I] += iv * 1./bnea[I]
+        # bden is the coadded per-pixel inverse variance derived from psfdepth and psfsize
+        # this ends up in arcsec units, not pixels
+        bden = T.psfdepth[Ireg,iband] * (4 * np.pi * (T.psfsize[Ireg,iband]/2.3548)**2)
+        # numerator and denominator are for the inverse-NEA!
+        with np.errstate(divide='ignore', invalid='ignore'):
+            nea  = den  / num
+            bnea = bden / bnum
+        nea [np.logical_not(np.isfinite(nea ))] = 0.
+        bnea[np.logical_not(np.isfinite(bnea))] = 0.
+        # Set vals in T
+        T.get('nea_%s' % band)[Ireg] = nea
+        T.get('blob_nea_%s' % band)[Ireg] = bnea
 
+            
     # Grab aperture fluxes
     assert(C.AP is not None)
 
