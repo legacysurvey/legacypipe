@@ -2259,10 +2259,10 @@ def _get_mod(X):
         tim.psf.clear_cache()
     return mod
 
-def _get_both_mods(X):
+def _get_both_mods(*X):
     from astrometry.util.resample import resample_with_wcs, OverlapError
     from astrometry.util.miscutils import get_overlapping_region
-    (tim, srcs, srcblobs, blobmap, targetwcs, frozen_galaxies, ps, plots) = X
+    (tim, targetwcs, srcs, srcblobs, blobmap, frozen_galaxies, ps, plots) = X
     mod = np.zeros(tim.getModelShape(), np.float32)
     blobmod = np.zeros(tim.getModelShape(), np.float32)
     assert(len(srcs) == len(srcblobs))
@@ -2270,7 +2270,7 @@ def _get_both_mods(X):
     try:
         Yo,Xo,Yi,Xi,_ = resample_with_wcs(tim.subwcs, targetwcs)
     except OverlapError:
-        return None,None,None
+        return None,None
     timblobmap = np.empty(mod.shape, blobmap.dtype)
     timblobmap[:,:] = -1
     timblobmap[Yo,Xo] = blobmap[Yi,Xi]
@@ -2371,7 +2371,7 @@ def _get_both_mods(X):
 
     if hasattr(tim.psf, 'clear_cache'):
         tim.psf.clear_cache()
-    return mod, blobmod, NEA
+    return [mod, blobmod], NEA
 
 def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                  tims=None, ps=None, brickname=None, ccds=None,
@@ -2459,8 +2459,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         plt.title('Iterative model residuals')
         ps.savefig()
 
-    # Render model images...
-    record_event and record_event('stage_coadds: model images')
+    record_event and record_event('stage_coadds: coadds')
 
     # Re-add the blob that this galaxy is actually inside
     # (that blob got dropped way earlier, before fitblobs)
@@ -2476,36 +2475,13 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                 if blobmap[yy,xx] != -1:
                     bb.append(blobmap[yy,xx])
 
-
+    # Input args for _get_both_mods
     Ireg = np.flatnonzero(T.regular)
-
     Nreg = len(Ireg)
-
-    #Create input args for _get_both_mods
-    X = [(tim, [cat[i] for i in Ireg], T.blob[Ireg], blobmap, targetwcs, frozen_galaxies, ps, plots) for tim in tims]
-    bothmods = mp.map(_get_both_mods, X)
-    #bothmods = mp.map(_get_both_mods, [(tim, [cat[i] for i in Ireg], T.blob[Ireg], blobmap,
-    #                                    targetwcs, frozen_galaxies, ps, plots)
-    #                                   for tim in tims])
-    del X
-
-    mods     = [r[0] for r in bothmods]
-    blobmods = [r[1] for r in bothmods]
-    NEA      = [r[2] for r in bothmods]
-    NEA = np.array(NEA)
-    # NEA shape (tims, srcs, 3:[nea, blobnea, weight])
-    if len(NEA.shape) == 2:
-        # no regular sources
-        neas = blobneas = nea_wts = []
-    else:
-        neas        = NEA[:,:,0]
-        blobneas    = NEA[:,:,1]
-        nea_wts     = NEA[:,:,2]
-    del bothmods, NEA
-
-    tnow = Time()
-    debug('Model images:', tnow-tlast)
-    tlast = tnow
+    reg_cat = [cat[i] for i in Ireg]
+    reg_blob = T.blob[Ireg]
+    both_args = [(reg_cat, reg_blob, blobmap, frozen_galaxies, ps, plots)
+                 for tim in tims]
 
     # source pixel positions to probe depth maps, etc
     ixy = (np.clip(T.ibx, 0, W-1).astype(int), np.clip(T.iby, 0, H-1).astype(int))
@@ -2514,8 +2490,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # Aperture photometry locations
     apxy = np.vstack((T.bx, T.by)).T
 
-    record_event and record_event('stage_coadds: coadds')
-    C = make_coadds(tims, bands, targetwcs, mods=mods, blobmods=blobmods,
+    C = make_coadds(tims, bands, targetwcs,
                     xy=ixy,
                     ngood=True, detmaps=True, psfsize=True, allmasks=True,
                     lanczos=lanczos,
@@ -2524,6 +2499,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims,
                                    targetwcs, co_sky, coadd_headers),
+                    mod_callback=_get_both_mods, mod_callback_args=both_args,
                     plots=plots, ps=ps, mp=mp)
 
     record_event and record_event('stage_coadds: extras')
@@ -2558,14 +2534,19 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     for band in survey.allbands:
         T.set('nea_%s' % band, np.zeros(len(T), np.float32))
         T.set('blob_nea_%s' % band, np.zeros(len(T), np.float32))
-    for iband,band in enumerate(bands):
+    for iband,(band,cb_data) in enumerate(zip(bands, C.mod_callback_data)):
         num  = np.zeros(Nreg, np.float32)
         den  = np.zeros(Nreg, np.float32)
         bnum = np.zeros(Nreg, np.float32)
-        for tim,nea,bnea,nea_wt in zip(
-                tims, neas, blobneas, nea_wts):
-            if not tim.band == band:
-                continue
+        btims = [tim for tim in tims if tim.band == band]
+        assert(len(btims) == len(cb_data))
+        # cb_data: list-of-lists, (ntim x nsrcs x 3)
+        for tim,data in zip(btims, cb_data):
+            data = np.array(data)
+            assert(data.shape[-1] == 3)
+            nea    = data[:,0]
+            bnea   = data[:,1]
+            nea_wt = data[:,2]
             iv = 1./(tim.sig1**2)
             I, = np.nonzero(nea)
             wt = nea_wt[I]
@@ -3483,7 +3464,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     FF = []
     mods = []
 
-    args = [list(a) + [cat, T, do_phot, release] for a in zip(ccds, ims, tims)]
+    args = [list(a) + [cat, T, do_phot, release, use_ceres] for a in zip(ccds, ims, tims)]
     FF = mp.map(_forced_phot_one, args)
     mods = [mod for F,mod in FF]
     FF = [F for F,m in FF if F is not None]
@@ -3608,7 +3589,7 @@ def _forced_phot_one(args):
     from legacypipe.forced_photom import run_forced_phot, forced_phot_add_extra_fields
     from tractor import NanoMaggies
 
-    ccd, im, tim, cat, T, do_phot, release = args
+    ccd, im, tim, cat, T, do_phot, release, use_ceres = args
 
     print('Forced-photometering', tim)
     # Cut to sources within this chip
@@ -3645,7 +3626,6 @@ def _forced_phot_one(args):
     #if plots:
     #kwargs.update(ps=ps)
     t0 = Time()
-    use_ceres = True
     F,mod = run_forced_phot(sub_cat, tim,
                             ceres=use_ceres,
                             do_forced=True,
