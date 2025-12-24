@@ -462,6 +462,7 @@ def stage_refs(survey=None,
                pixscale=None,
                targetwcs=None,
                bands=None,
+               forced_bands=None,
                version_header=None,
                tycho_stars=True,
                gaia_stars=True,
@@ -475,7 +476,12 @@ def stage_refs(survey=None,
 
     record_event and record_event('stage_refs: starting')
     _add_stage_version(version_header, 'REFS', 'refs')
-    refobjs,refcat = get_reference_sources(survey, targetwcs, bands,
+
+    thebands = bands
+    if forced_bands is not None:
+        thebands = thebands + forced_bands
+
+    refobjs,refcat = get_reference_sources(survey, targetwcs, thebands,
                                             tycho_stars=tycho_stars,
                                             gaia_stars=gaia_stars,
                                             large_galaxies=large_galaxies,
@@ -3519,18 +3525,20 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     apxy = np.vstack((T.bx, T.by)).T
 
     Ireg = np.flatnonzero(do_phot)
+    Nreg = len(Ireg)
     # HACK -- replace the catalog brightnesses with the forced-photometry results!
     orig_bright = [cat[i].brightness for i in Ireg]
     for i in Ireg:
-        br = dict([(b, TF.get('flux_%s' % b)) for b in clean_bands])
+        br = dict([(b, TF.get('flux_%s' % b)[i]) for b in clean_bands])
         cat[i].brightness = NanoMaggies(**br)
     reg_cat = [cat[i] for i in Ireg]
     reg_blob = T.blob[Ireg]
+
     both_args = [(reg_cat, reg_blob, blobmap, frozen_galaxies, ps, plots)
                  for tim in tims]
 
     C = make_coadds(tims, forced_bands, targetwcs,
-                    mods=mods, xy=ixy, apertures=apertures, apxy=apxy,
+                    mods=None, xy=ixy, apertures=apertures, apxy=apxy,
                     ngood=True, detmaps=True, psfsize=True, allmasks=True,
                     mjdminmax=False,
                     callback=write_coadd_images,
@@ -3562,7 +3570,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     for band in clean_bands:
         T.set('nea_%s' % band, np.zeros(len(T), np.float32))
         T.set('blob_nea_%s' % band, np.zeros(len(T), np.float32))
-    for iband,(band,cb_data) in enumerate(zip(bands, C.mod_callback_data)):
+    for iband,(band,cb_data) in enumerate(zip(forced_bands, C.mod_callback_data)):
         num  = np.zeros(Nreg, np.float32)
         den  = np.zeros(Nreg, np.float32)
         bnum = np.zeros(Nreg, np.float32)
@@ -3971,9 +3979,6 @@ def stage_writecat(
                 T.set(c, forced_T.get(c))
 
         # Remove columns that we don't produce for forced-photometry bands
-        for b in forced_bands:
-            for c in ['apflux_blobresid_', 'blob_nea_', 'nea_']:
-                columns.remove(c + clean_band_name(b))
         # Re-align the units with the list of columns.
         units = [unitmap[c] for c in columns]
 
