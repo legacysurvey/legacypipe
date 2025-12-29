@@ -462,6 +462,7 @@ def stage_refs(survey=None,
                pixscale=None,
                targetwcs=None,
                bands=None,
+               forced_bands=None,
                version_header=None,
                tycho_stars=True,
                gaia_stars=True,
@@ -475,7 +476,12 @@ def stage_refs(survey=None,
 
     record_event and record_event('stage_refs: starting')
     _add_stage_version(version_header, 'REFS', 'refs')
-    refobjs,refcat = get_reference_sources(survey, targetwcs, bands,
+
+    thebands = bands
+    if forced_bands is not None:
+        thebands = thebands + forced_bands
+
+    refobjs,refcat = get_reference_sources(survey, targetwcs, thebands,
                                             tycho_stars=tycho_stars,
                                             gaia_stars=gaia_stars,
                                             large_galaxies=large_galaxies,
@@ -3461,17 +3467,13 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     print('Objects to forced-photometer: catalog contains %i total.  %i are non-DUP.  %i have sources.  %i satisfy both.' % (len(T), np.sum(T.dup == False), len([src is not None for src in cat]), np.sum(do_phot)))
 
     # This will get multiprocessed...
-    FF = []
-    mods = []
-
     args = [list(a) + [cat, T, do_phot, release, use_ceres] for a in zip(ccds, ims, tims)]
     FF = mp.map(_forced_phot_one, args)
-    mods = [mod for F,mod in FF]
-    FF = [F for F,m in FF if F is not None]
-
+    FF = [F for F in FF if F is not None]
     F = merge_tables(FF, columns='fillzero')
     print('All forced photometry results:')
     F.about()
+    del FF
 
     mag_unit = 'mag'
     pixel_unit = 'pixel'
@@ -3518,14 +3520,33 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     # Aperture photometry locations
     apxy = np.vstack((T.bx, T.by)).T
 
+    Ireg = np.flatnonzero(do_phot)
+    Nreg = len(Ireg)
+    # HACK -- replace the catalog brightnesses with the forced-photometry results!
+    orig_bright = [cat[i].brightness for i in Ireg]
+    for i in Ireg:
+        br = dict([(b, TF.get('flux_%s' % b)[i]) for b in clean_bands])
+        cat[i].brightness = NanoMaggies(**br)
+    reg_cat = [cat[i] for i in Ireg]
+    reg_blob = T.blob[Ireg]
+
+    both_args = [(reg_cat, reg_blob, blobmap, frozen_galaxies, ps, plots)
+                 for tim in tims]
+
     C = make_coadds(tims, forced_bands, targetwcs,
-                    mods=mods, xy=ixy, apertures=apertures, apxy=apxy,
+                    mods=None, xy=ixy, apertures=apertures, apxy=apxy,
                     ngood=True, detmaps=True, psfsize=True, allmasks=True,
                     mjdminmax=False,
                     callback=write_coadd_images,
                     callback_args=(survey, brickname, version_header, tims,
                                    targetwcs, co_sky, coadd_headers),
+                    mod_callback=_get_both_mods, mod_callback_args=both_args,
                     mp=mp)
+
+    # Revert catalog brightness
+    for i,br in zip(Ireg, orig_bright):
+        cat[i].brightness = br
+
     print('Coadd results contain:', dir(C))
     # 'AP', 'T', 'allmasks', 'coimgs', 'comods', 'coresids', 'cowimgs', 'galdetivs', 'maximgs', 'psfdetivs'
     print('Coadd Table contains:')
@@ -3540,7 +3561,45 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
             TF.set('%s_%s' % (c, band), X[:,i])
 
     # NEA
+    # average NEA stats per band -- after psfsize,psfdepth computed.
+    # first init all bands expected by format_catalog
+    for band in clean_bands:
+        T.set('nea_%s' % band, np.zeros(len(T), np.float32))
+        T.set('blob_nea_%s' % band, np.zeros(len(T), np.float32))
+    for iband,(band,cb_data) in enumerate(zip(forced_bands, C.mod_callback_data)):
+        num  = np.zeros(Nreg, np.float32)
+        den  = np.zeros(Nreg, np.float32)
+        bnum = np.zeros(Nreg, np.float32)
+        btims = [tim for tim in tims if tim.band == band]
+        assert(len(btims) == len(cb_data))
+        # cb_data: list-of-lists, (ntim x nsrcs x 3)
+        for tim,data in zip(btims, cb_data):
+            data = np.array(data)
+            assert(data.shape[-1] == 3)
+            nea    = data[:,0]
+            bnea   = data[:,1]
+            nea_wt = data[:,2]
+            iv = 1./(tim.sig1**2)
+            I, = np.nonzero(nea)
+            wt = nea_wt[I]
+            num[I] += iv * wt * 1./(nea[I] * tim.imobj.pixscale**2)
+            den[I] += iv * wt
+            I, = np.nonzero(bnea)
+            bnum[I] += iv * 1./bnea[I]
+        # bden is the coadded per-pixel inverse variance derived from psfdepth and psfsize
+        # this ends up in arcsec units, not pixels
+        bden = T.psfdepth[Ireg,iband] * (4 * np.pi * (T.psfsize[Ireg,iband]/2.3548)**2)
+        # numerator and denominator are for the inverse-NEA!
+        with np.errstate(divide='ignore', invalid='ignore'):
+            nea  = den  / num
+            bnea = bden / bnum
+        nea [np.logical_not(np.isfinite(nea ))] = 0.
+        bnea[np.logical_not(np.isfinite(bnea))] = 0.
+        # Set vals in T
+        T.get('nea_%s' % band)[Ireg] = nea
+        T.get('blob_nea_%s' % band)[Ireg] = bnea
 
+            
     # Grab aperture fluxes
     assert(C.AP is not None)
 
@@ -3626,24 +3685,22 @@ def _forced_phot_one(args):
     #if plots:
     #kwargs.update(ps=ps)
     t0 = Time()
-    F,mod = run_forced_phot(sub_cat, tim,
-                            ceres=use_ceres,
-                            do_forced=True,
-                            do_apphot=True,
-                            full_position_fit=False,
-                            windowed_peak=False,
-                            get_model=True,
-                            timing=False, **kwargs)
+    F = run_forced_phot(sub_cat, tim,
+                        ceres=use_ceres,
+                        do_forced=True,
+                        do_apphot=True,
+                        full_position_fit=False,
+                        windowed_peak=False,
+                        timing=False, **kwargs)
     t1 = Time()
     print('run_forced_phot:', (t1-t0))
 
-    #F.about()
     if F is not None:
         derivs = False
         Tsub = T[I]
         Tsub.release = np.zeros(len(Tsub), np.int16) + release
         forced_phot_add_extra_fields(F, Tsub, ccd, im, tim, derivs)
-    return F, mod
+    return F
 
 def stage_writecat(
     survey=None,
@@ -3903,9 +3960,7 @@ def stage_writecat(
 
     if forced_bands is not None:
         from legacypipe.survey import clean_band_name
-
         unitmap = dict([(c,u) for c,u in zip(columns, units)])
-
         if forced_T is not None:
             # Add forced-photometry columns into the table "T"
             for c in ['brickid', 'objid', 'bx', 'by']:
@@ -3914,16 +3969,10 @@ def stage_writecat(
             print('Forced photometry columns:', fc)
             for c in fc:
                 T.set(c, forced_T.get(c))
-
-        # Remove columns that we don't produce for forced-photometry bands
-        for b in forced_bands:
-            for c in ['apflux_blobresid_', 'blob_nea_', 'nea_']:
-                columns.remove(c + clean_band_name(b))
         # Re-align the units with the list of columns.
         units = [unitmap[c] for c in columns]
 
     # FIXME - maskbits, set i-band bits
-
     with survey.write_output('tractor', brick=brickname) as out:
         T.writeto(None, columns=columns, units=units, primheader=primhdr,
                   extname='CATALOG', fits_object=out.fits)
