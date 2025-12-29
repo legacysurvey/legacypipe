@@ -3467,17 +3467,13 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     print('Objects to forced-photometer: catalog contains %i total.  %i are non-DUP.  %i have sources.  %i satisfy both.' % (len(T), np.sum(T.dup == False), len([src is not None for src in cat]), np.sum(do_phot)))
 
     # This will get multiprocessed...
-    FF = []
-    mods = []
-
     args = [list(a) + [cat, T, do_phot, release, use_ceres] for a in zip(ccds, ims, tims)]
     FF = mp.map(_forced_phot_one, args)
-    mods = [mod for F,mod in FF]
-    FF = [F for F,m in FF if F is not None]
-
+    FF = [F for F in FF if F is not None]
     F = merge_tables(FF, columns='fillzero')
     print('All forced photometry results:')
     F.about()
+    del FF
 
     mag_unit = 'mag'
     pixel_unit = 'pixel'
@@ -3689,24 +3685,22 @@ def _forced_phot_one(args):
     #if plots:
     #kwargs.update(ps=ps)
     t0 = Time()
-    F,mod = run_forced_phot(sub_cat, tim,
-                            ceres=use_ceres,
-                            do_forced=True,
-                            do_apphot=True,
-                            full_position_fit=False,
-                            windowed_peak=False,
-                            get_model=True,
-                            timing=False, **kwargs)
+    F = run_forced_phot(sub_cat, tim,
+                        ceres=use_ceres,
+                        do_forced=True,
+                        do_apphot=True,
+                        full_position_fit=False,
+                        windowed_peak=False,
+                        timing=False, **kwargs)
     t1 = Time()
     print('run_forced_phot:', (t1-t0))
 
-    #F.about()
     if F is not None:
         derivs = False
         Tsub = T[I]
         Tsub.release = np.zeros(len(Tsub), np.int16) + release
         forced_phot_add_extra_fields(F, Tsub, ccd, im, tim, derivs)
-    return F, mod
+    return F
 
 def stage_writecat(
     survey=None,
