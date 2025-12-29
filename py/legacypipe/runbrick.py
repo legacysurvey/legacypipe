@@ -3966,9 +3966,7 @@ def stage_writecat(
 
     if forced_bands is not None:
         from legacypipe.survey import clean_band_name
-
         unitmap = dict([(c,u) for c,u in zip(columns, units)])
-
         if forced_T is not None:
             # Add forced-photometry columns into the table "T"
             for c in ['brickid', 'objid', 'bx', 'by']:
@@ -3977,13 +3975,10 @@ def stage_writecat(
             print('Forced photometry columns:', fc)
             for c in fc:
                 T.set(c, forced_T.get(c))
-
-        # Remove columns that we don't produce for forced-photometry bands
         # Re-align the units with the list of columns.
         units = [unitmap[c] for c in columns]
 
     # FIXME - maskbits, set i-band bits
-
     with survey.write_output('tractor', brick=brickname) as out:
         T.writeto(None, columns=columns, units=units, primheader=primhdr,
                   extname='CATALOG', fits_object=out.fits)
