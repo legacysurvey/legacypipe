@@ -994,7 +994,7 @@ class FITSWrapper(fitsio.FITS):
                 tilew = find_tile_size(W, default_tile_size)
                 tileh = find_tile_size(H, default_tile_size)
                 kw.update(tile_dims=(tileh, tilew))
-        debug('Writing FITS image with kwargs', kw)
+        #debug('Writing FITS image with kwargs', kw)
         return super().write_image(img, **kw)
 
 class LegacySurveyData(object):

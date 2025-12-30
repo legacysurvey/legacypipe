@@ -430,7 +430,7 @@ def compare_one(X):
 
     # Compute the error on our estimate of (thisimg - co) =
     # sum in quadrature of the errors on thisimg and co.
-    with np.errstate(divide='ignore'):
+    with np.errstate(divide='ignore', invalid='ignore'):
         diffvar = 1./wt + 1./otherwt
         sndiff = (rimg - otherimg) / np.sqrt(diffvar)
 
