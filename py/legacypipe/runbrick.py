@@ -30,12 +30,17 @@ import sys
 import os
 import time
 import warnings
+import signal
+from collections import Counter
+import multiprocessing
+import queue
+import traceback
+import threading
+import time
+import datetime
 
 import numpy as np
-
 import fitsio
-
-from collections import Counter
 
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.ttime import Time
@@ -47,13 +52,6 @@ from legacypipe.coadds import make_coadds, write_coadd_images, quick_coadds
 from legacypipe.fit_on_coadds import stage_fit_on_coadds
 from legacypipe.blobmask import stage_blobmask
 from legacypipe.galex import stage_galex_forced
-import multiprocessing
-import queue
-import traceback
-import threading
-import time
-import datetime
-
 
 _GLOBAL_LEGACYPIPE_CONTEXT = {'is_gpu_worker': False, 'gpu_device_id': None, 'gpumode': 0}
 
@@ -87,8 +85,10 @@ def runbrick_global_init(shared_counter, shared_lock, available_gpu_ids_param, n
 
     pid = os.getpid()
     info(f'Worker process {pid}: Starting initialization at {time.time()}')
-    info('Starting process', os.getpid(), Time()-Time())
     disable_galaxy_cache()
+
+    # ignore SIGUSR1
+    signal.signal(signal.SIGUSR1, signal.SIG_IGN)
 
     is_gpu_worker = False
     gpu_device_id = None
@@ -1165,6 +1165,24 @@ def stage_srcs(pixscale=None, targetwcs=None,
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
 
+# global, used by sigusr1
+pool_worker_pids = None
+pool_obj = None
+signal_quitting = False
+def sigusr1(sig, stackframe):
+    print('SIGUSR1 was received in PID %i' % os.getpid())
+    global signal_quitting
+    signal_quitting = True
+    print('Closing pool...')
+    if pool_obj is not None:
+        pool_obj.close()
+    print('pool_worker_pids:', pool_worker_pids)
+    if pool_worker_pids is not None:
+        for p in list(pool_worker_pids.values()):
+            pfd = os.pidfd_open(p)
+            print('Sending SIGUSR1 to worker PID %s' % p)
+            signal.pidfd_send_signal(pfd, signal.SIGUSR1)
+
 def stage_fitblobs(T=None,
                    brickname=None,
                    brickid=None,
@@ -1407,6 +1425,17 @@ def stage_fitblobs(T=None,
         procs_last = None
         last_printout = CpuMeas()
 
+        # Set up checkpointing & resuming blob fitting
+        global signal_quitting
+        signal_quitting = False
+        global pool_worker_pids
+        pool_worker_pids = None
+        if hasattr(mp.pool, '_worker_pids'):
+            pool_worker_pids = mp.pool._worker_pids
+        global pool_obj
+        pool_obj = mp.pool
+        old_sigusr1 = signal.signal(signal.SIGUSR1, sigusr1)
+
         while True:
             import time
             import multiprocessing
@@ -1465,6 +1494,13 @@ def stage_fitblobs(T=None,
                                   'VMsize %5.1f GB,' % (procs.vsz[i] / (1024 * 1024)),
                                   'VMpeak %5.1f GB' % (procs.proc_vmpeak[i] / (1024 * 1024)))
 
+            if signal_quitting:
+                print('Main thread: got SIGUSR1 - closing pool...')
+                # FIXME - this isn't strong enough, this just prevents new work arrays from
+                # being submitted.
+                mp.pool.close()
+                print('Main thread: got SIGUSR1 - closed pool')
+
             # Wait for results (with timeout)
             from legacypipe.trackingpool import PoolWorkerDiedException
             try:
@@ -1474,14 +1510,15 @@ def stage_fitblobs(T=None,
                     debug('Main thread: waiting for result...')
                     r = Riter.next(timeout)
 
-                    rstr = ''
-                    if r is None:
-                        rstr = 'None'
-                    else:
-                        rr = r['result']
-                        rrstr = '%i srcs'%len(rr) if rr is not None else 'none'
-                        rstr = 'brick %s blob %s: %s' % (r['brickname'], r['iblob'], rrstr)
-                    debug('Main thread: got result: [%s]' % rstr)
+                    if not signal_quitting:
+                        rstr = ''
+                        if r is None:
+                            rstr = 'None'
+                        else:
+                            rr = r['result']
+                            rrstr = '%i srcs'%len(rr) if rr is not None else 'none'
+                            rstr = 'brick %s blob %s: %s' % (r['brickname'], r['iblob'], rrstr)
+                        debug('Main thread: got result: [%s]' % rstr)
 
                 else:
                     r = next(Riter)
@@ -1509,6 +1546,9 @@ def stage_fitblobs(T=None,
                     print('Worker was processing index %i: brick %s blob %s' % (index, brick, blob))
                     workitem = 'brick %s blob %s' % (brick, blob)
 
+                if signal_quitting:
+                    continue
+
                 print('Writing checkpoints before exiting...')
                 _write_checkpoint(R, checkpoint_filename)
                 print('Wrote checkpoints')
@@ -1526,6 +1566,15 @@ def stage_fitblobs(T=None,
         # Write checkpoint when done!
         _write_checkpoint(R, checkpoint_filename)
         debug('Got', n_finished_total, 'results; wrote', len(R), 'to checkpoint')
+
+        pool_worker_pids = None
+        pool_obj = None
+        signal.signal(signal.SIGUSR1, old_sigusr1)
+        if signal_quitting:
+            print('Quitting due to SIGUSR1 signal')
+            # (pool gets cleaned up in the runstage "finally" clause)
+            sys.exit(0)
+
     debug('Fitting sources:', Time()-tlast)
 
     # Repackage the results from one_blob...
@@ -2017,6 +2066,12 @@ def _blob_iter(job_id_map,
     job_id = 0
 
     for nblob,iblob in enumerate(blob_order):
+
+        global signal_quitting
+        if signal_quitting:
+            print('_blob_iter: signal_quitting')
+            break
+
         # (convert iblob to int, because (with sub-blobs) skipblob
         # entries can be tuples, and if iblob is type np.int32 it
         # tries to do vector-comparison)
@@ -4483,14 +4538,17 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         from astrometry.util.ttime import MemMeas
         from astrometry.util.ttime import MemMeas
         if pool is None:
-            # from legacypipe.trackingpool import TrackingPool
-            # pool = TrackingPool(threads,
-            from astrometry.util.timingpool import TimingPool, TimingPoolMeas
-            pool = TimingPool(threads,
-                              initializer=runbrick_global_init,
-                              initargs=(shared_counter, shared_lock, _available_gpu_ids, _ngpu, _threads_per_gpu, gpumode))
-            poolmeas = TimingPoolMeas(pool, pickleTraffic=False)
-            StageTime.add_measurement_once(poolmeas)
+            from legacypipe.trackingpool import TrackingPool
+            pool = TrackingPool(threads,
+                                initializer=runbrick_global_init,
+                                initargs=(shared_counter, shared_lock, _available_gpu_ids, _ngpu,
+                                          _threads_per_gpu, gpumode))
+            # from astrometry.util.timingpool import TimingPool, TimingPoolMeas
+            # pool = TimingPool(threads,
+            #                   initializer=runbrick_global_init,
+            #                   initargs=(shared_counter, shared_lock, _available_gpu_ids, _ngpu, _threads_per_gpu, gpumode))
+            # poolmeas = TimingPoolMeas(pool, pickleTraffic=False)
+            # StageTime.add_measurement_once(poolmeas)
         StageTime.add_measurement_once(MemMeas)
         mp = multiproc(None, pool=pool)
     else:

@@ -1,5 +1,8 @@
-import numpy as np
+import os
 import time
+import signal
+
+import numpy as np
 
 from astrometry.util.ttime import Time
 from astrometry.util.resample import resample_with_wcs, OverlapError
@@ -20,8 +23,6 @@ from legacypipe.runbrick_plots import _plot_mods
 from legacypipe.utils import get_cpu_arch
 from legacypipe.utils import run_ps
 
-import os
-
 rgbkwargs_resid = dict(resids=True)
 
 import logging
@@ -39,6 +40,13 @@ chat = debug
 
 # Determines the order of elements in the DCHISQ array.
 MODEL_NAMES = ['psf', 'rex', 'dev', 'exp', 'ser']
+
+quit_now = False
+
+def sigusr1(sig, stackframe):
+    print('SIGUSR1 was received in worker PID %i' % os.getpid())
+    global quit_now
+    quit_now = True
 
 def one_blob(X):
     '''
@@ -90,6 +98,9 @@ def one_blob(X):
     # A local WCS for this blob
     blobwcs = brickwcs.get_subimage(bx0, by0, blobw, blobh)
 
+    print('Worker listening to SIGUSR1: PID %i' % (os.getpid()))
+    oldsigusr1 = signal.signal(signal.SIGUSR1, sigusr1)
+
     ob = OneBlob(nblob, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
@@ -110,6 +121,13 @@ def one_blob(X):
 
     B = ob.init_table(Isrcs)
     B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
+    #if B is None:
+    if quit_now:
+        print('one_blob quit_now')
+        # revert signal
+        signal.signal(signal.SIGUSR1, oldsigusr1)
+        return ob
+
     ob.finalize_table(B, bx0, by0)
 
     t1 = time.process_time()
@@ -120,7 +138,41 @@ def one_blob(X):
         print ("Exiting.")
         import sys
         sys.exit(0)
+
+    signal.signal(signal.SIGUSR1, oldsigusr1)
+
     return B
+
+class CheckStep(object):
+    def __init__(self, blobwcs, blobmask):
+        self.blobwcs = blobwcs
+        self.blobh, self.blobw = blobwcs.shape
+        self.blobmask = blobmask
+
+    def __call__(self, tractor=None, **kwargs):
+        # Returns True if the step should be accepted.
+        if tractor.isParamFrozen('catalog'):
+            return True
+        for src in tractor.catalog:
+            if src is None:
+                continue
+            pos = src.pos
+            ok,ix,iy = self.blobwcs.radec2pixelxy(pos.ra, pos.dec)
+            if not ok:
+                info('Optimizer stepped so far that WCS failed!  Source:', src)
+                return False
+            ix = int(ix - 1)
+            iy = int(iy - 1)
+            if ix < 0 or iy < 0 or ix >= self.blobw or iy >= self.blobh:
+                # stepped outside the blob rectangle!
+                info('Optimizer stepped to blob coord (%i, %i) - blob size %i x %i - reject!  Source:'
+                      % (ix, iy, self.blobw, self.blobh), src)
+                return False
+            if not self.blobmask[iy, ix]:
+                # stepped outside the blob mask!
+                info('Optimizer stepped to a pixel outside the blob mask - reject!  Source:', src)
+                return False
+        return True
 
 class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
@@ -136,6 +188,10 @@ class OneBlob(object):
         self.blobmask = blobmask
         self.blobh,self.blobw = blobmask.shape
         self.srcs = srcs
+
+        self.done_fitting = None
+        self.done_model_selection = None
+
         self.bands = bands
         self.plots = plots
         self.refmap = refmap
@@ -157,30 +213,7 @@ class OneBlob(object):
 
         # callback function for tractor.optimize_loop: bail out if the
         # optimizer moves a source center outside the blob
-        def check_step(tractor=None, **kwargs):
-            # Returns True if the step should be accepted.
-            if tractor.isParamFrozen('catalog'):
-                return True
-            for src in tractor.catalog:
-                if src is None:
-                    continue
-                pos = src.pos
-                ok,ix,iy = self.blobwcs.radec2pixelxy(pos.ra, pos.dec)
-                if not ok:
-                    info('Optimizer stepped so far that WCS failed!  Source:', src)
-                    return False
-                ix = int(ix - 1)
-                iy = int(iy - 1)
-                if ix < 0 or iy < 0 or ix >= self.blobw or iy >= self.blobh:
-                    # stepped outside the blob rectangle!
-                    info('Optimizer stepped to blob coord (%i, %i) - blob size %i x %i - reject!  Source:'
-                          % (ix, iy, self.blobw, self.blobh), src)
-                    return False
-                if not self.blobmask[iy, ix]:
-                    # stepped outside the blob mask!
-                    info('Optimizer stepped to a pixel outside the blob mask - reject!  Source:', src)
-                    return False
-            return True
+        check_step = CheckStep(self.blobwcs, self.blobmask)
 
         self.optargs = dict(priors=True, shared_params=False, alphas=alphas,
                             print_progress=True, check_step=check_step)
@@ -383,6 +416,9 @@ class OneBlob(object):
         else:
             self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source)
 
+        if quit_now:
+            return None
+
         if self.plots:
             self._plots(tr, 'After source fitting')
             plt.clf()
@@ -460,7 +496,8 @@ class OneBlob(object):
         debug('Running model selection')
         B = self.run_model_selection(cat, Ibright, B,
                                      iterative_detection=iterative_detection)
-
+        if quit_now:
+            return None
         debug('Blob', self.name, 'finished model selection:', Time()-tlast)
         tlast = Time()
 
@@ -790,8 +827,14 @@ class OneBlob(object):
         B.all_model_hit_r_limit   = np.array([{} for i in range(N)])
         B.all_model_opt_steps     = np.array([{} for i in range(N)])
 
+        self.done_model_selection = np.zeros(len(cat), bool)
+
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
+            if quit_now:
+                print('quit_now in model selection')
+                return
+
             src = cat[srci]
             debug('Model selection for source %i of %i in blob %s; sourcei %i' %
                   (numi+1, len(Ibright), self.name, srci))
@@ -800,6 +843,7 @@ class OneBlob(object):
             if src.freezeparams:
                 info('Frozen source', src, '-- keeping as-is!')
                 B.sources[srci] = src
+                self.done_model_selection[srci] = True
                 continue
 
             # Add this source's initial model back in.
@@ -842,6 +886,8 @@ class OneBlob(object):
 
             cpu1 = time.process_time()
             B.cpu_source[srci] += (cpu1 - cpu0)
+
+            self.done_model_selection[srci] = True
 
         # At this point, we have subtracted our best model fits for each source
         # to be kept; the tims contain residual images.
@@ -1829,12 +1875,20 @@ class OneBlob(object):
         # (modelMasks sizes are determined at this point)
         models.create(self.tims, cat, subtract=True)
 
+        self.done_fitting = np.zeros(len(cat), bool)
+
         # For sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
+
+            if quit_now:
+                print('quit_now while fitting individual sources...')
+                return
+
             cpu0 = time.process_time()
             src = cat[srci]
             if src.freezeparams:
                 debug('Frozen source', src, '-- keeping as-is!')
+                self.done_fitting[srci] = True
                 continue
             debug('Fitting source', srci, '(%i of %i in blob %s)' %
                   (numi+1, len(Ibright), self.name), ':', src)
@@ -1880,6 +1934,8 @@ class OneBlob(object):
             debug('Finished fitting:', src)
             cpu1 = time.process_time()
             cputime[srci] += (cpu1 - cpu0)
+
+            self.done_fitting[srci] = True
 
         models.restore_images(self.tims)
         del models
