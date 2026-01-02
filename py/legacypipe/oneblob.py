@@ -199,10 +199,6 @@ class OneBlob(object):
         self.blobmask = blobmask
         self.blobh,self.blobw = blobmask.shape
         self.srcs = srcs
-
-        self.done_fitting = None
-        self.done_model_selection = None
-
         self.bands = bands
         self.plots = plots
         self.refmap = refmap
@@ -310,9 +306,26 @@ class OneBlob(object):
         B.y0 = (y0 - 1.).astype(np.float32)
         B.safe_x0 = np.clip(np.round(x0-1).astype(int), 0, self.blobw-1)
         B.safe_y0 = np.clip(np.round(y0-1).astype(int), 0, self.blobh-1)
-        B.started_in_blob = self.blobmask[B.safe_y0, B.safe_x0]
         # This uses 'initial' pixel positions, because that's what determines
         # the fitting behaviors.
+        B.started_in_blob = self.blobmask[B.safe_y0, B.safe_x0]
+
+        N = len(self.srcs)
+        B.done_fitting = np.zeros(N, bool)
+        B.done_model_selection = np.zeros(N, bool)
+        B.cpu_source         = np.zeros(N, np.float32)
+        B.hit_limit          = np.zeros(N, bool)
+        B.hit_ser_limit      = np.zeros(N, bool)
+        B.hit_r_limit        = np.zeros(N, bool)
+        B.dchisq = np.zeros((N, 5), np.float32)
+        B.all_models    = np.array([{} for i in range(N)])
+        B.all_model_ivs = np.array([{} for i in range(N)])
+        B.all_model_cpu = np.array([{} for i in range(N)])
+        B.all_model_hit_limit     = np.array([{} for i in range(N)])
+        B.all_model_hit_r_limit   = np.array([{} for i in range(N)])
+        B.all_model_opt_steps     = np.array([{} for i in range(N)])
+        B.force_keep_source  = np.zeros(N, bool)
+
         return B
 
     def finalize_table(self, B, bx0, by0):
@@ -365,13 +378,8 @@ class OneBlob(object):
         cat = Catalog(*self.srcs)
 
         N = len(B)
-        B.cpu_source         = np.zeros(N, np.float32)
-        B.force_keep_source  = np.zeros(N, bool)
         B.fit_background     = np.zeros(N, bool)
         B.forced_pointsource = np.zeros(N, bool)
-        B.hit_limit          = np.zeros(N, bool)
-        B.hit_ser_limit      = np.zeros(N, bool)
-        B.hit_r_limit        = np.zeros(N, bool)
         B.blob_symm_width    = np.zeros(N, np.int16)
         B.blob_symm_height   = np.zeros(N, np.int16)
         B.blob_symm_npix     = np.zeros(N, np.int32)
@@ -412,6 +420,8 @@ class OneBlob(object):
             self._fit_fluxes(cat, self.tims, self.bands, fitcat=fitflux)
             if self.plots:
                 self._plots(tr, 'Fitting initial fluxes')
+            for src in fitflux:
+                src.needs_initial_flux = False
         del fitflux
 
         if self.plots:
@@ -428,15 +438,16 @@ class OneBlob(object):
         # The sizes of the model patches fit here are determined by the
         # sources themselves, ie by the size of the mod patch returned by
         #  src.getModelPatch(tim)
-        if (self.done_fitting is None) or not np.all(self.done_fitting):
+        if np.all(B.done_fitting):
+            print('Skipping fitting individual sources (already finished that)')
+        else:
             debug('Fitting fluxes...')
             if len(cat) > 1:
                 self._optimize_individual_sources_subtract(
-                    cat, Ibright, B.cpu_source)
+                    cat, Ibright, B.cpu_source, B.done_fitting)
             else:
-                self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source)
-        else:
-            print('Skipping fitting individual sources (already finished that)')
+                self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source,
+                                                  B.done_fitting)
 
         if quit_now:
             return B
@@ -572,13 +583,13 @@ class OneBlob(object):
                 plt.title('Before final opt')
                 self.ps.savefig()
 
-            self.done_fitting = None
             Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
+            fakedone = np.zeros(len(B), bool)
             if len(cat) > 1:
                 self._optimize_individual_sources_subtract(
-                    cat, Ibright, B.cpu_source)
+                    cat, Ibright, B.cpu_source, fakedone)
             else:
-                self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source)
+                self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source, fakedone)
 
             if self.plots:
                 import pylab as plt
@@ -841,25 +852,13 @@ class OneBlob(object):
         # (model sizes are determined at this point)
         models.create(self.tims, cat, subtract=True)
 
-        N = len(cat)
-        B.dchisq = np.zeros((N, 5), np.float32)
-        B.all_models    = np.array([{} for i in range(N)])
-        B.all_model_ivs = np.array([{} for i in range(N)])
-        B.all_model_cpu = np.array([{} for i in range(N)])
-        B.all_model_hit_limit     = np.array([{} for i in range(N)])
-        B.all_model_hit_r_limit   = np.array([{} for i in range(N)])
-        B.all_model_opt_steps     = np.array([{} for i in range(N)])
-
-        if self.done_model_selection is None:
-            self.done_model_selection = np.zeros(len(cat), bool)
-
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
             if quit_now:
                 print('quit_now in model selection')
                 return B
 
-            if self.done_model_selection[srci]:
+            if B.done_model_selection[srci]:
                 print('Already done model selection for srci', srci)
                 continue
 
@@ -871,7 +870,7 @@ class OneBlob(object):
             if src.freezeparams:
                 info('Frozen source', src, '-- keeping as-is!')
                 B.sources[srci] = src
-                self.done_model_selection[srci] = True
+                B.done_model_selection[srci] = True
                 continue
 
             # Add this source's initial model back in.
@@ -917,8 +916,7 @@ class OneBlob(object):
 
             cpu1 = time.process_time()
             B.cpu_source[srci] += (cpu1 - cpu0)
-
-            self.done_model_selection[srci] = True
+            B.done_model_selection[srci] = True
 
         # At this point, we have subtracted our best model fits for each source
         # to be kept; the tims contain residual images.
@@ -962,6 +960,7 @@ class OneBlob(object):
                 # columns not in Bnew:
                 # {'safe_x0', 'safe_y0', 'started_in_blob'}
                 B.sources = srcs + newsrcs
+            del Bnew
         models.restore_images(self.tims)
         del models
         return B
@@ -1144,11 +1143,8 @@ class OneBlob(object):
         oldsrcs = self.srcs
         self.srcs = newsrcs
 
-        
-        
-        Bnew = fits_table()
-        Bnew.sources = newsrcs
-        Bnew.Isrcs = np.array([-1]*len(Bnew))
+        isrcs = np.array([-1]*len(Bnew))
+        Bnew = self.init_table(isrcs)
         Bnew.x0 = Tnew.ibx.astype(np.float32)
         Bnew.y0 = Tnew.iby.astype(np.float32)
         # Be quieter during iterative detection!
@@ -1159,9 +1155,8 @@ class OneBlob(object):
         # Run the whole oneblob pipeline on the iterative sources!
         Bnew = self.run(Bnew, iterative_detection=False, compute_metrics=False)
 
-        bloblogger.setLevel(loglvl)
-
         # revert
+        bloblogger.setLevel(loglvl)
         self.srcs = oldsrcs
 
         if len(Bnew) == 0:
@@ -1856,7 +1851,7 @@ class OneBlob(object):
 
         return keepsrc
 
-    def _optimize_individual_sources(self, tr, cat, Ibright, cputime):
+    def _optimize_individual_sources(self, tr, cat, Ibright, cputime, done_fitting):
         # Single source (though this is coded to handle multiple sources)
         # Fit sources one at a time, but don't subtract other models
         cat.freezeAllParams()
@@ -1866,6 +1861,9 @@ class OneBlob(object):
         enable_galaxy_cache()
 
         for i in Ibright:
+            if done_fitting[i]:
+                print('Already done fitting sourcei', i)
+                continue
             cpu0 = time.process_time()
             cat.freezeAllBut(i)
             src = cat[i]
@@ -1878,6 +1876,7 @@ class OneBlob(object):
             tr.optimize_loop(**self.optargs)
             cpu1 = time.process_time()
             cputime[i] += (cpu1 - cpu0)
+            done_fitting[i] = True
 
         tr.setModelMasks(None)
         disable_galaxy_cache()
@@ -1889,7 +1888,7 @@ class OneBlob(object):
         return tr
 
     def _optimize_individual_sources_subtract(self, cat, Ibright,
-                                              cputime):
+                                              cputime, done_fitting):
         # -Remember the original images
         # -Compute initial models for each source (in each tim)
         # -Subtract initial models from images
@@ -1906,9 +1905,6 @@ class OneBlob(object):
         # (modelMasks sizes are determined at this point)
         models.create(self.tims, cat, subtract=True)
 
-        if self.done_fitting is None:
-            self.done_fitting = np.zeros(len(cat), bool)
-
         # For sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
 
@@ -1916,7 +1912,7 @@ class OneBlob(object):
                 print('quit_now while fitting individual sources...')
                 return
 
-            if self.done_fitting[srci]:
+            if done_fitting[srci]:
                 print('Already done fitting sourcei', srci)
                 continue
 
@@ -1924,7 +1920,7 @@ class OneBlob(object):
             src = cat[srci]
             if src.freezeparams:
                 debug('Frozen source', src, '-- keeping as-is!')
-                self.done_fitting[srci] = True
+                done_fitting[srci] = True
                 continue
             debug('Fitting source', srci, '(%i of %i in blob %s)' %
                   (numi+1, len(Ibright), self.name), ':', src)
@@ -1971,7 +1967,7 @@ class OneBlob(object):
             cpu1 = time.process_time()
             cputime[srci] += (cpu1 - cpu0)
 
-            self.done_fitting[srci] = True
+            done_fitting[srci] = True
 
         models.restore_images(self.tims)
         del models
