@@ -1321,6 +1321,7 @@ def stage_fitblobs(T=None,
 
     skipblobs = []
     R = []
+    halfdone_blob_map = {}
     # Check for existing checkpoint file.
     if checkpoint_filename and os.path.exists(checkpoint_filename):
         from astrometry.util.file import unpickle_from_file
@@ -1332,8 +1333,13 @@ def stage_fitblobs(T=None,
             import traceback
             print('Failed to read checkpoint file ' + checkpoint_filename)
             traceback.print_exc()
-        keepR = _check_checkpoints(R, blobslices, brickname)
+
+        keepR, halfdone_blobs = _check_checkpoints(R, blobslices, brickname)
         info('Keeping', len(keepR), 'of', len(R), 'checkpointed results')
+        info('Found', len(halfdone_blobs), 'checkpointed blobs')
+        for d in halfdone_blobs:
+            halfdone_blob_map[d['iblob']] = d['result']
+
         R = keepR
         skipblobs = [r['iblob'] for r in R]
 
@@ -1409,7 +1415,8 @@ def stage_fitblobs(T=None,
                           max_blobsize=max_blobsize, custom_brick=custom_brick,
                           enable_sub_blobs=sub_blobs,
                           ran_sub_blobs=ran_sub_blobs,
-                          use_gpu=use_gpu,gpumode=gpumode,bid=bid)
+                          use_gpu=use_gpu,gpumode=gpumode,bid=bid,
+                          halfdone_blob_map=halfdone_blob_map)
 
     if checkpoint_filename is None:
         # FIXME -- add worker-died checks & logging here
@@ -1935,7 +1942,9 @@ def _check_checkpoints(R, blobslices, brickname):
     # based on blob bounding-box.  This can fail if the code changes
     # between writing & reading the checkpoint, resulting in a
     # different set of detected sources.
+    from legacypipe.oneblob import OneBlob
     keepR = []
+    halfdone_blobs = []
     for ri in R:
         brick = ri['brickname']
         iblob = ri['iblob']
@@ -1947,8 +1956,10 @@ def _check_checkpoints(R, blobslices, brickname):
 
         if r is None:
             pass
+        elif isinstance(r, OneBlob):
+            halfdone_blobs.append(ri)
+            continue
         else:
-            # sub-blobs break this!
             sub_blob = (type(iblob) is tuple)
             if sub_blob:
                 iblob = r.iblob
@@ -1981,7 +1992,7 @@ def _check_checkpoints(R, blobslices, brickname):
                               'does not match expected', [bx0,bx1,by0,by1], 'for iblob', iblob)
                         continue
         keepR.append(ri)
-    return keepR
+    return keepR, halfdone_blobs
 
 def _blob_iter(job_id_map,
                brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T, bands,
@@ -1991,7 +2002,8 @@ def _blob_iter(job_id_map,
                skipblobs=None, max_blobsize=None, custom_brick=False,
                enable_sub_blobs=False,
                ran_sub_blobs=None,
-               use_gpu=False,gpumode=0,bid=None):
+               use_gpu=False,gpumode=0,bid=None,
+               halfdone_blob_map=None):
     '''
     *blobmap*: integer image map, with -1 indicating no-blob, other values indexing
         into *blobslices*,*blobsrcs*.
@@ -2047,15 +2059,16 @@ def _blob_iter(job_id_map,
 
     if skipblobs is None:
         skipblobs = []
+    if halfdone_blob_map is None:
+        halfdone_blob_map = {}
+    else:
+        print('Half-done blobs:', halfdone_blob_map.keys())
 
     # sort blobs by size so that larger ones start running first
     blobvals = Counter(blobmap[blobmap>=0])
     blob_order = np.array([b for b,npix in blobvals.most_common()])
     del blobvals
 
-    # HACK -- reverse!
-    #blob_order = blob_order[-1::-1]
-    
     if custom_brick:
         U = None
     else:
@@ -2066,7 +2079,6 @@ def _blob_iter(job_id_map,
     job_id = 0
 
     for nblob,iblob in enumerate(blob_order):
-
         global signal_quitting
         if signal_quitting:
             print('_blob_iter: signal_quitting')
@@ -2173,12 +2185,16 @@ def _blob_iter(job_id_map,
             job_id_map[job_id] = (brickname, nblob+1)
             job_id += 1
 
+            halfdone = halfdone_blob_map.get(int(iblob), None)
+            if halfdone is not None:
+                info('Found a mid-way checkpoint for this blob')
+
             yield (brickname, iblob, None,
                    (nblob+1, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
                     blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
                     reoptimize, iterative, iterative_nsigma, use_ceres, refmap[bslc],
                     large_galaxies_force_pointsource, less_masking,
-                    frozen_galaxies.get(iblob, []), use_gpu, gpumode, bid))
+                    frozen_galaxies.get(iblob, []), use_gpu, gpumode, bid, halfdone))
             continue
 
         # Sub-blob.
@@ -2238,6 +2254,10 @@ def _blob_iter(job_id_map,
                 job_id_map[job_id] = (brickname, sub_blob_name)
                 job_id += 1
 
+                halfdone = halfdone_blob_map.get((int(iblob),sub_blob), None)
+                if halfdone is not None:
+                    info('Found a mid-way checkpoint for this sub-blob')
+
                 yield (brickname, (iblob,sub_blob),
                        (bx0 + uniqx[j], bx0 + uniqx[j+1], by0 + uniqy[i], by0 + uniqy[i+1]),
                        (sub_blob_name, iblob,
@@ -2249,7 +2269,7 @@ def _blob_iter(job_id_map,
                         plots, ps,
                         reoptimize, iterative, iterative_nsigma, use_ceres, refmap[sub_slc],
                         large_galaxies_force_pointsource, less_masking, fro_gals,
-                        use_gpu, gpumode, bid))
+                        use_gpu, gpumode, bid, halfdone))
 
 def _bounce_one_blob(X):
     '''This wraps the one_blob function for multiprocessing purposes (and

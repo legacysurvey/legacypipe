@@ -56,7 +56,8 @@ def one_blob(X):
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
      srcs, bands, plots, ps, reoptimize, iterative, iterative_nsigma, use_ceres, refmap,
-     large_galaxies_force_pointsource, less_masking, frozen_galaxies, use_gpu, gpumode, bid) = X
+     large_galaxies_force_pointsource, less_masking, frozen_galaxies, use_gpu, gpumode, bid,
+     halfdone) = X
 
     if (use_gpu and gpumode > 0):
         #Prime gpu
@@ -93,7 +94,7 @@ def one_blob(X):
         plt.figure(2, figsize=(3,3))
         plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
         plt.figure(1)
-#
+
     t0 = time.process_time()
     # A local WCS for this blob
     blobwcs = brickwcs.get_subimage(bx0, by0, blobw, blobh)
@@ -101,12 +102,19 @@ def one_blob(X):
     print('Worker listening to SIGUSR1: PID %i' % (os.getpid()))
     oldsigusr1 = signal.signal(signal.SIGUSR1, sigusr1)
 
-    ob = OneBlob(nblob, blobwcs, blobmask, timargs, srcs, bands,
-                 plots, ps, use_ceres, refmap,
-                 large_galaxies_force_pointsource,
-                 less_masking, frozen_galaxies,
-                 iterative_nsigma,
-                 iblob=iblob)
+    if halfdone is not None:
+        print('Got a partway-complete result; resuming.')
+        ob, B = halfdone
+        ob.tims = create_tims(blobwcs, blobmask, timargs)
+    else:
+        ob = OneBlob(nblob, blobwcs, blobmask, timargs, srcs, bands,
+                     plots, ps, use_ceres, refmap,
+                     large_galaxies_force_pointsource,
+                     less_masking, frozen_galaxies,
+                     iterative_nsigma,
+                     iblob=iblob)
+        B = ob.init_table(Isrcs)
+
     opt = ob.trargs['optimizer']
     if use_gpu:
         # need a branch of the tractor code that supports this!
@@ -119,14 +127,13 @@ def one_blob(X):
         ob.use_gpu = True
         ob.gpumode = gpumode
 
-    B = ob.init_table(Isrcs)
     B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
-    #if B is None:
+
     if quit_now:
         print('one_blob quit_now')
         # revert signal
         signal.signal(signal.SIGUSR1, oldsigusr1)
-        return ob
+        return ob, B
 
     ob.finalize_table(B, bx0, by0)
 
@@ -151,6 +158,10 @@ class CheckStep(object):
 
     def __call__(self, tractor=None, **kwargs):
         # Returns True if the step should be accepted.
+        if quit_now:
+            print('CheckStep: quit_now is set!')
+            # raise an exception...?
+
         if tractor.isParamFrozen('catalog'):
             return True
         for src in tractor.catalog:
@@ -276,6 +287,14 @@ class OneBlob(object):
         from tractor.dense_optimizer import ConstrainedDenseOptimizer
         self.trargs.update(optimizer=ConstrainedDenseOptimizer())
         self.optargs.update(dchisq = 0.1)
+
+    def __getstate__(self):
+        # Remove "tims" from the pickled object
+        tims = self.tims
+        self.tims = None
+        R = super().__getstate__()
+        self.tims = tims
+        return R
 
     def init_table(self, Isrcs):
         # Per-source measurements for this blob
@@ -409,15 +428,18 @@ class OneBlob(object):
         # The sizes of the model patches fit here are determined by the
         # sources themselves, ie by the size of the mod patch returned by
         #  src.getModelPatch(tim)
-        debug('Fitting fluxes...')
-        if len(cat) > 1:
-            self._optimize_individual_sources_subtract(
-                cat, Ibright, B.cpu_source)
+        if (self.done_fitting is None) or not np.all(self.done_fitting):
+            debug('Fitting fluxes...')
+            if len(cat) > 1:
+                self._optimize_individual_sources_subtract(
+                    cat, Ibright, B.cpu_source)
+            else:
+                self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source)
         else:
-            self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source)
+            print('Skipping fitting individual sources (already finished that)')
 
         if quit_now:
-            return None
+            return B
 
         if self.plots:
             self._plots(tr, 'After source fitting')
@@ -497,7 +519,7 @@ class OneBlob(object):
         B = self.run_model_selection(cat, Ibright, B,
                                      iterative_detection=iterative_detection)
         if quit_now:
-            return None
+            return B
         debug('Blob', self.name, 'finished model selection:', Time()-tlast)
         tlast = Time()
 
@@ -550,6 +572,7 @@ class OneBlob(object):
                 plt.title('Before final opt')
                 self.ps.savefig()
 
+            self.done_fitting = None
             Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
             if len(cat) > 1:
                 self._optimize_individual_sources_subtract(
@@ -827,13 +850,18 @@ class OneBlob(object):
         B.all_model_hit_r_limit   = np.array([{} for i in range(N)])
         B.all_model_opt_steps     = np.array([{} for i in range(N)])
 
-        self.done_model_selection = np.zeros(len(cat), bool)
+        if self.done_model_selection is None:
+            self.done_model_selection = np.zeros(len(cat), bool)
 
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
             if quit_now:
                 print('quit_now in model selection')
-                return
+                return B
+
+            if self.done_model_selection[srci]:
+                print('Already done model selection for srci', srci)
+                continue
 
             src = cat[srci]
             debug('Model selection for source %i of %i in blob %s; sourcei %i' %
@@ -861,6 +889,9 @@ class OneBlob(object):
 
             # Model selection for this source.
             keepsrc = self.model_selection_one_source(src, srci, models, B)
+            if quit_now:
+                print('quit_now in model selection')
+                return B
 
             # Definitely keep ref stars (Gaia & Tycho)
             if keepsrc is None and getattr(src, 'reference_star', False):
@@ -952,8 +983,6 @@ class OneBlob(object):
 
         mp = multiproc()
         detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp, use_gpu=(self.use_gpu and self.gpumode > 0))
-        #detmaps,detivs,satmaps = detection_maps(
-        #    self.tims, self.blobwcs, self.bands, mp)
 
         # from runbrick.py
         satmaps = [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps]
@@ -969,7 +998,6 @@ class OneBlob(object):
                 mod.addTo(modimg)
             if len(self.frozen_galaxy_mods):
                 modimg += self.frozen_galaxy_mods[itim]
-            #tim.data = modimg
             tim.setImage(modimg) #Update GPU flag
         if self.plots:
             coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
@@ -980,12 +1008,9 @@ class OneBlob(object):
             plt.title('Iterative detection: first-round models')
             self.ps.savefig()
 
-        #mod_detmaps,mod_detivs,_ = detection_maps(
-        #    self.tims, self.blobwcs, self.bands, mp)
         mod_detmaps,mod_detivs,_ = detection_maps(self.tims, self.blobwcs, self.bands, mp, use_gpu=(self.use_gpu and self.gpumode > 0))
         # revert
         for tim,img in zip(self.tims, realimages):
-            #tim.data = img
             tim.setImage(img) #Update GPU flag
 
         if self.plots:
@@ -1119,6 +1144,8 @@ class OneBlob(object):
         oldsrcs = self.srcs
         self.srcs = newsrcs
 
+        
+        
         Bnew = fits_table()
         Bnew.sources = newsrcs
         Bnew.Isrcs = np.array([-1]*len(Bnew))
@@ -1545,6 +1572,10 @@ class OneBlob(object):
         for name,newsrc in trymodels:
             cpum0 = time.process_time()
 
+            if quit_now:
+                print('quit_now in model selection (one source)')
+                return None
+
             if name == 'gals':
                 # If 'rex' was better than 'psf', or the source is
                 # bright, try the galaxy models.
@@ -1875,7 +1906,8 @@ class OneBlob(object):
         # (modelMasks sizes are determined at this point)
         models.create(self.tims, cat, subtract=True)
 
-        self.done_fitting = np.zeros(len(cat), bool)
+        if self.done_fitting is None:
+            self.done_fitting = np.zeros(len(cat), bool)
 
         # For sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
@@ -1883,6 +1915,10 @@ class OneBlob(object):
             if quit_now:
                 print('quit_now while fitting individual sources...')
                 return
+
+            if self.done_fitting[srci]:
+                print('Already done fitting sourcei', srci)
+                continue
 
             cpu0 = time.process_time()
             src = cat[srci]
