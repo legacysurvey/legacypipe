@@ -47,6 +47,17 @@ def sigusr1(sig, stackframe):
     print('SIGUSR1 was received in worker PID %i' % os.getpid())
     global quit_now
     quit_now = True
+    # set an alarm...
+    signal.alarm(10)
+
+def sigalarm(sig, stackframe):
+    print('SIGALARM was received in worker PID %i' % os.getpid())
+    raise QuitNowException()
+
+# similar to KeyboardInterrupt, inherit from BaseException so that
+# "try:except Exception" does not catch this.
+class QuitNowException(BaseException):
+    pass
 
 def one_blob(X):
     '''
@@ -99,54 +110,69 @@ def one_blob(X):
     # A local WCS for this blob
     blobwcs = brickwcs.get_subimage(bx0, by0, blobw, blobh)
 
+    oldsigalarm = signal.signal(signal.SIGALRM, sigalarm)
     print('Worker listening to SIGUSR1: PID %i' % (os.getpid()))
     oldsigusr1 = signal.signal(signal.SIGUSR1, sigusr1)
 
-    if halfdone is not None:
-        print('Got a partway-complete result; resuming.')
-        ob, B = halfdone
-        ob.tims = create_tims(blobwcs, blobmask, timargs)
-    else:
-        ob = OneBlob(nblob, blobwcs, blobmask, timargs, srcs, bands,
-                     plots, ps, use_ceres, refmap,
-                     large_galaxies_force_pointsource,
-                     less_masking, frozen_galaxies,
-                     iterative_nsigma,
-                     iblob=iblob)
-        B = ob.init_table(Isrcs)
+    try:
+        ob = None
+        B = None
 
-    opt = ob.trargs['optimizer']
-    if use_gpu:
-        # need a branch of the tractor code that supports this!
-        print ("Using GPUFriendlyOptimizer")
-        from tractor.factored_optimizer import GPUFriendlyOptimizer
-        opt = GPUFriendlyOptimizer()
-        opt.setGPUMode(gpumode)
-        print('Optimizing with', type(opt))
-        ob.trargs.update(optimizer=opt)
-        ob.use_gpu = True
-        ob.gpumode = gpumode
+        if halfdone is not None:
+            ob = halfdone
+            B = ob.B
+            del ob.B
+            N = len(ob.srcs)
+            print('Got a partway-complete result; resuming.  Done %i/%i fitting, %i/%i model sel.' %
+                  (np.sum(B.done_fitting), N, np.sum(B.done_model_selection), N))
+            ob.tims = create_tims(blobwcs, blobmask, timargs)
+        else:
+            ob = OneBlob(nblob, blobwcs, blobmask, timargs, srcs, bands,
+                         plots, ps, use_ceres, refmap,
+                         large_galaxies_force_pointsource,
+                         less_masking, frozen_galaxies,
+                         iterative_nsigma,
+                         iblob=iblob)
+            B = ob.init_table(Isrcs)
 
-    B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
+        opt = ob.trargs['optimizer']
+        if use_gpu:
+            # need a branch of the tractor code that supports this!
+            print ("Using GPUFriendlyOptimizer")
+            from tractor.factored_optimizer import GPUFriendlyOptimizer
+            opt = GPUFriendlyOptimizer()
+            opt.setGPUMode(gpumode)
+            print('Optimizing with', type(opt))
+            ob.trargs.update(optimizer=opt)
+            ob.use_gpu = True
+            ob.gpumode = gpumode
 
-    if quit_now:
-        print('one_blob quit_now')
-        # revert signal
+        B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
+        if quit_now:
+            print('one_blob quit_now')
+            ob.B = B
+            return ob
+
+        ob.finalize_table(B, bx0, by0)
+
+        t1 = time.process_time()
+        B.cpu_blob = np.empty(len(B), np.float32)
+        B.cpu_blob[:] = t1 - t0
+        B.iblob = iblob
+        if bid is not None and iblob == bid:
+            print ("Exiting.")
+            import sys
+            sys.exit(0)
+
+    except QuitNowException as q:
+        print('Caught QuitNowException; saving checkpoint state')
+        if ob is not None:
+            ob.B = B
+        return ob
+    finally:
+        # revert signals
         signal.signal(signal.SIGUSR1, oldsigusr1)
-        return ob, B
-
-    ob.finalize_table(B, bx0, by0)
-
-    t1 = time.process_time()
-    B.cpu_blob = np.empty(len(B), np.float32)
-    B.cpu_blob[:] = t1 - t0
-    B.iblob = iblob
-    if bid is not None and iblob == bid:
-        print ("Exiting.")
-        import sys
-        sys.exit(0)
-
-    signal.signal(signal.SIGUSR1, oldsigusr1)
+        signal.signal(signal.SIGALRM, oldsigalarm)
 
     return B
 
@@ -158,9 +184,10 @@ class CheckStep(object):
 
     def __call__(self, tractor=None, **kwargs):
         # Returns True if the step should be accepted.
-        if quit_now:
-            print('CheckStep: quit_now is set!')
-            # raise an exception...?
+
+        #if quit_now:
+        #    print('CheckStep: quit_now is set!')
+        #    # raise an exception...?
 
         if tractor.isParamFrozen('catalog'):
             return True
@@ -326,6 +353,13 @@ class OneBlob(object):
         B.all_model_opt_steps     = np.array([{} for i in range(N)])
         B.force_keep_source  = np.zeros(N, bool)
 
+        B.fit_background     = np.zeros(N, bool)
+        B.forced_pointsource = np.zeros(N, bool)
+        B.blob_symm_width    = np.zeros(N, np.int16)
+        B.blob_symm_height   = np.zeros(N, np.int16)
+        B.blob_symm_npix     = np.zeros(N, np.int32)
+        B.blob_symm_nimages  = np.zeros(N, np.int16)
+
         return B
 
     def finalize_table(self, B, bx0, by0):
@@ -377,22 +411,16 @@ class OneBlob(object):
         self.plots1 = self.plots
         cat = Catalog(*self.srcs)
 
-        N = len(B)
-        B.fit_background     = np.zeros(N, bool)
-        B.forced_pointsource = np.zeros(N, bool)
-        B.blob_symm_width    = np.zeros(N, np.int16)
-        B.blob_symm_height   = np.zeros(N, np.int16)
-        B.blob_symm_npix     = np.zeros(N, np.int32)
-        B.blob_symm_nimages  = np.zeros(N, np.int16)
-
-        # Save initial fluxes for all sources (used if we force
-        # keeping a reference star)
         for src in self.srcs:
+            # when resuming: src can be None
+            if src is None:
+                continue
+            # Save initial fluxes for all sources (used if we force
+            # keeping a reference star)
             src.initial_brightness = src.brightness.copy()
 
-        # Set the freezeparams field for each source.  (This is set for
-        # large galaxies with the 'freeze' column set.)
-        for src in self.srcs:
+            # Set the freezeparams field for each source.  (This is set for
+            # large galaxies with the 'freeze' column set.)
             src.freezeparams = getattr(src, 'freezeparams', False)
 
         if self.plots:
@@ -414,7 +442,7 @@ class OneBlob(object):
 
         tr = self.tractor(self.tims, cat)
         # Fit any sources marked with 'needs_initial_flux' -- saturated, and SGA
-        fitflux = [src for src in cat if getattr(src, 'needs_initial_flux', False)]
+        fitflux = [src for src in cat if (src is not None and getattr(src, 'needs_initial_flux', False))]
         if len(fitflux):
             debug('Fitting initial fluxes for %i sources...' % len(fitflux))
             self._fit_fluxes(cat, self.tims, self.bands, fitcat=fitflux)
@@ -507,6 +535,8 @@ class OneBlob(object):
         if self.large_galaxies_force_pointsource:
             fit_background_mask |= REF_MAP_BITS['GALAXY']
         for srci,src in enumerate(cat):
+            if src is None:
+                continue
             _,ix,iy = self.blobwcs.radec2pixelxy(src.getPosition().ra,
                                                  src.getPosition().dec)
             ix = int(np.clip(ix-1, 0, self.blobw-1))
@@ -523,7 +553,11 @@ class OneBlob(object):
             # Also set a parameter on 'src' for use in compute_segmentation_map()
             src.maskbits_forced_point_source = force_pointsource
 
-        self.compute_segmentation_map()
+        if getattr(self, 'segmap', None) is not None:
+            # resuming from checkpoint
+            pass
+        else:
+            self.compute_segmentation_map()
 
         # Next, model selections: point source vs rex vs dev/exp vs ser.
         debug('Running model selection')
@@ -887,7 +921,10 @@ class OneBlob(object):
                 plt.figure(1)
 
             # Model selection for this source.
-            keepsrc = self.model_selection_one_source(src, srci, models, B)
+            try:
+                keepsrc = self.model_selection_one_source(src, srci, models, B)
+            except QuitNowException as q:
+                print('Caught QuitNowException; quitting.')
             if quit_now:
                 print('quit_now in model selection')
                 return B
@@ -1143,7 +1180,8 @@ class OneBlob(object):
         oldsrcs = self.srcs
         self.srcs = newsrcs
 
-        isrcs = np.array([-1]*len(Bnew))
+        isrcs = np.empty(len(newsrcs), np.int32)
+        isrcs[:] = -1
         Bnew = self.init_table(isrcs)
         Bnew.x0 = Tnew.ibx.astype(np.float32)
         Bnew.y0 = Tnew.iby.astype(np.float32)
@@ -2167,6 +2205,9 @@ def _compute_invvars(allderivs):
 def _argsort_by_brightness(cat, bands, ref_first=False):
     fluxes = []
     for src in cat:
+        if src is None:
+            fluxes.append(0.)
+            continue
         # HACK -- here we just *sum* the nanomaggies in each band.  Bogus!
         br = src.getBrightness()
         flux = sum([br.getFlux(band) for band in bands])
@@ -2370,11 +2411,11 @@ class SourceModels(object):
             sh = tim.shape
             ie = tim.getInvError()
             for src in srcs:
-
+                if src is None:
+                    continue
                 mm = None
                 if modelmasks is not None:
                     mm = modelmasks[itim].get(src, None)
-
                 mod = src.getModelPatch(tim, modelMask=mm)
                 if mod is not None and mod.patch is not None:
                     if not np.all(np.isfinite(mod.patch)):
