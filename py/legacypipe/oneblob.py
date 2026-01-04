@@ -41,9 +41,15 @@ chat = debug
 # Determines the order of elements in the DCHISQ array.
 MODEL_NAMES = ['psf', 'rex', 'dev', 'exp', 'ser']
 
+quit_now = False
+
 def sigusr1(sig, stackframe):
     print('SIGUSR1 was received in worker PID %i' % os.getpid())
-    raise QuitNowException()
+    global quit_now
+    # only raise the exception once
+    if not quit_now:
+        quit_now = True
+        raise QuitNowException()
 
 # similar to KeyboardInterrupt, inherit from BaseException so that
 # "try:except Exception" does not catch this.
@@ -102,10 +108,11 @@ def one_blob(X):
     blobwcs = brickwcs.get_subimage(bx0, by0, blobw, blobh)
 
     print('Worker listening to SIGUSR1: PID %i' % (os.getpid()))
-    oldsigusr1 = signal.signal(signal.SIGUSR1, sigusr1)
+    oldsigusr1 = signal.SIG_DFL
     try:
         B = None
         ob = None
+        oldsigusr1 = signal.signal(signal.SIGUSR1, sigusr1)
 
         if halfdone is not None:
             ob = halfdone
@@ -149,9 +156,11 @@ def one_blob(X):
             sys.exit(0)
 
     except QuitNowException as q:
-        print('Caught QuitNowException; saving checkpoint state')
         if ob is not None:
+            print('Caught QuitNowException; saving checkpoint state for blob %s' % nblob)
             ob.B = B
+        else:
+            print('Caught QuitNowException; ob None for blob %s' % nblob)
         return ob
     finally:
         # revert signals

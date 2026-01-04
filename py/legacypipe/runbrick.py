@@ -1170,11 +1170,11 @@ pool_worker_pids = None
 pool_obj = None
 signal_quitting = False
 def sigusr1(sig, stackframe):
-    print('SIGUSR1 was received in PID %i' % os.getpid())
+    print('SIGUSR1 was received in main PID %i' % os.getpid())
     global signal_quitting
     signal_quitting = True
-    print('Closing pool...')
     if pool_obj is not None:
+        print('Closing pool...')
         pool_obj.close()
     print('pool_worker_pids:', pool_worker_pids)
     if pool_worker_pids is not None:
@@ -1442,6 +1442,7 @@ def stage_fitblobs(T=None,
         global pool_obj
         pool_obj = mp.pool
         old_sigusr1 = signal.signal(signal.SIGUSR1, sigusr1)
+        closed_pool = False
 
         while True:
             import time
@@ -1466,47 +1467,17 @@ def stage_fitblobs(T=None,
             if dt > 60:
                 last_printout = tnow
                 if hasattr(Riter, 'get_running_jobs'):
-                    print('Running:')
-                    status = Riter.get_running_jobs()
-                    #print('running job status:', status)
-                    # other threads may try to update status during iteration
-                    status = status.copy()
-                    jmap = job_id_map.copy()
-                    from legacypipe.utils import run_ps
-                    pid = os.getpid()
-                    if procs_last is None:
-                        procs_last = run_ps(pid)
-                        time.sleep(1.)
-                    procs = run_ps(pid, last=procs_last)
-                    #print('procs columns:', procs.get_columns())
-                    tnow = time.time()
-                    keys = list(status.keys())
-                    keys.sort()
-                    for jobid in keys:
-                        s = status[jobid]
-                        if not jobid in jmap:
-                            print('trackingpool job id', jobid, 'not known')
-                            continue
-                        (brick,blob) = jmap[jobid]
-                        pid = s['pid']
-                        i = np.flatnonzero(procs.pid == pid)
-                        if len(i) != 1:
-                            print('Blob %10s' % blob, 'pid', pid, '"running" for %7.1f sec, but did not find PID %i: crashed?' %
-                                  (tnow - s['time'], pid))
-                        else:
-                            i = i[0]
-                            print('Blob %5s' % blob, 'pid %7i' % s['pid'],
-                                  'total CPU %7.1f sec' % (tnow - s['time']),
-                                  'CPU now %5.1f %%,' % procs.proc_icpu[i],
-                                  'VMsize %5.1f GB,' % (procs.vsz[i] / (1024 * 1024)),
-                                  'VMpeak %5.1f GB' % (procs.proc_vmpeak[i] / (1024 * 1024)))
+                    procs_last = print_running_jobs(Riter, job_id_map, procs_last)
 
             if signal_quitting:
-                print('Main thread: got SIGUSR1 - closing pool...')
-                # FIXME - this isn't strong enough, this just prevents new work arrays from
-                # being submitted.
-                mp.pool.close()
-                print('Main thread: got SIGUSR1 - closed pool')
+                if not closed_pool:
+                    print('Main thread: got SIGUSR1 - closing pool...')
+                    mp.pool.close()
+                    print('Main thread: got SIGUSR1 - closed pool')
+                    closed_pool = True
+                if hasattr(Riter, 'get_running_jobs'):
+                    print('Main thread: waiting for jobs:')
+                    print_running_jobs(Riter, job_id_map, procs_last)
 
             # Wait for results (with timeout)
             from legacypipe.trackingpool import PoolWorkerDiedException
@@ -1529,6 +1500,19 @@ def stage_fitblobs(T=None,
 
                 else:
                     r = next(Riter)
+
+                if signal_quitting:
+                    if r is None:
+                        debug('Main thread: got result', r)
+                        # Don't save it in the checkpoint.
+                        continue
+                    else:
+                        try:
+                            debug('Main thread: got result for blobid %s: %s' % (r.get('iblob', None), type(r.get('result', None))))
+                        except:
+                            pass
+
+                # We should only get r=None during signal_quitting.
                 R.append(r)
                 n_finished += 1
                 n_finished_total += 1
@@ -1827,6 +1811,43 @@ def stage_fitblobs(T=None,
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
+
+def print_running_jobs(Riter, job_id_map, procs_last):
+    print('Running:')
+    status = Riter.get_running_jobs()
+    #print('running job status:', status)
+    # other threads may try to update status during iteration
+    status = status.copy()
+    jmap = job_id_map.copy()
+    from legacypipe.utils import run_ps
+    pid = os.getpid()
+    if procs_last is None:
+        procs_last = run_ps(pid)
+        time.sleep(1.)
+    procs = run_ps(pid, last=procs_last)
+    #print('procs columns:', procs.get_columns())
+    tnow = time.time()
+    keys = list(status.keys())
+    keys.sort()
+    for jobid in keys:
+        s = status[jobid]
+        if not jobid in jmap:
+            print('trackingpool job id', jobid, 'not known')
+            continue
+        (brick,blob) = jmap[jobid]
+        pid = s['pid']
+        i = np.flatnonzero(procs.pid == pid)
+        if len(i) != 1:
+            print('Blob %10s' % blob, 'pid', pid, '"running" for %7.1f sec, but did not find PID %i: crashed?' %
+                  (tnow - s['time'], pid))
+        else:
+            i = i[0]
+            print('Blob %5s' % blob, 'pid %7i' % s['pid'],
+                  'total CPU %7.1f sec' % (tnow - s['time']),
+                  'CPU now %5.1f %%,' % procs.proc_icpu[i],
+                  'VMsize %5.1f GB,' % (procs.vsz[i] / (1024 * 1024)),
+                  'VMpeak %5.1f GB' % (procs.proc_vmpeak[i] / (1024 * 1024)))
+    return procs_last
 
 # Also called by farm.py
 def get_blobiter_ref_map(refobjs, less_masking, targetwcs):
@@ -2275,7 +2296,7 @@ def _bounce_one_blob(X):
     '''This wraps the one_blob function for multiprocessing purposes (and
     now also does some post-processing).
     '''
-    from legacypipe.oneblob import one_blob
+    from legacypipe.oneblob import one_blob, QuitNowException
     global _GLOBAL_LEGACYPIPE_CONTEXT
     is_gpu_worker = _GLOBAL_LEGACYPIPE_CONTEXT['is_gpu_worker']
     gpu_device_id = _GLOBAL_LEGACYPIPE_CONTEXT['gpu_device_id']
@@ -2323,6 +2344,12 @@ def _bounce_one_blob(X):
                 debug('Blob_unique cut kept', len(result), 'of', ntot, 'sources')
         ### This defines the format of the results in the checkpoints files
         return dict(brickname=brickname, iblob=iblob, result=result)
+    except QuitNowException as q:
+        print('Caught QuitNowException in bounce_one_blob.')
+        #import traceback
+        #traceback.print_exc()
+        return None
+
     except:
         import traceback
         print('Exception in one_blob: brick %s, iblob %s' % (brickname, iblob))
