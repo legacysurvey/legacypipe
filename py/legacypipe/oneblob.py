@@ -67,6 +67,11 @@ def one_blob(X):
      large_galaxies_force_pointsource, less_masking, frozen_galaxies, use_gpu, gpumode, bid,
      halfdone) = X
 
+    if quit_now:
+        print('Quit_now is set; not processing blob %s' % nblob)
+        # don't return None -- this is a different thing!
+        raise QuitNowException()
+
     if (use_gpu and gpumode > 0):
         #Prime gpu
         import cupy as cp
