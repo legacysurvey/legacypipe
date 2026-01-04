@@ -41,17 +41,8 @@ chat = debug
 # Determines the order of elements in the DCHISQ array.
 MODEL_NAMES = ['psf', 'rex', 'dev', 'exp', 'ser']
 
-quit_now = False
-
 def sigusr1(sig, stackframe):
     print('SIGUSR1 was received in worker PID %i' % os.getpid())
-    global quit_now
-    quit_now = True
-    # set an alarm...
-    signal.alarm(10)
-
-def sigalarm(sig, stackframe):
-    print('SIGALARM was received in worker PID %i' % os.getpid())
     raise QuitNowException()
 
 # similar to KeyboardInterrupt, inherit from BaseException so that
@@ -115,8 +106,8 @@ def one_blob(X):
     oldsigusr1 = signal.signal(signal.SIGUSR1, sigusr1)
 
     try:
-        ob = None
         B = None
+        ob = None
 
         if halfdone is not None:
             ob = halfdone
@@ -148,11 +139,6 @@ def one_blob(X):
             ob.gpumode = gpumode
 
         B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
-        if quit_now:
-            print('one_blob quit_now')
-            ob.B = B
-            return ob
-
         ob.finalize_table(B, bx0, by0)
 
         t1 = time.process_time()
@@ -184,11 +170,6 @@ class CheckStep(object):
 
     def __call__(self, tractor=None, **kwargs):
         # Returns True if the step should be accepted.
-
-        #if quit_now:
-        #    print('CheckStep: quit_now is set!')
-        #    # raise an exception...?
-
         if tractor.isParamFrozen('catalog'):
             return True
         for src in tractor.catalog:
@@ -477,9 +458,6 @@ class OneBlob(object):
                 self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source,
                                                   B.done_fitting)
 
-        if quit_now:
-            return B
-
         if self.plots:
             self._plots(tr, 'After source fitting')
             plt.clf()
@@ -563,8 +541,6 @@ class OneBlob(object):
         debug('Running model selection')
         B = self.run_model_selection(cat, Ibright, B,
                                      iterative_detection=iterative_detection)
-        if quit_now:
-            return B
         debug('Blob', self.name, 'finished model selection:', Time()-tlast)
         tlast = Time()
 
@@ -888,10 +864,6 @@ class OneBlob(object):
 
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
-            if quit_now:
-                print('quit_now in model selection')
-                return B
-
             if B.done_model_selection[srci]:
                 print('Already done model selection for srci', srci)
                 continue
@@ -921,13 +893,7 @@ class OneBlob(object):
                 plt.figure(1)
 
             # Model selection for this source.
-            try:
-                keepsrc = self.model_selection_one_source(src, srci, models, B)
-            except QuitNowException as q:
-                print('Caught QuitNowException; quitting.')
-            if quit_now:
-                print('quit_now in model selection')
-                return B
+            keepsrc = self.model_selection_one_source(src, srci, models, B)
 
             # Definitely keep ref stars (Gaia & Tycho)
             if keepsrc is None and getattr(src, 'reference_star', False):
@@ -1605,10 +1571,6 @@ class OneBlob(object):
         for name,newsrc in trymodels:
             cpum0 = time.process_time()
 
-            if quit_now:
-                print('quit_now in model selection (one source)')
-                return None
-
             if name == 'gals':
                 # If 'rex' was better than 'psf', or the source is
                 # bright, try the galaxy models.
@@ -1945,11 +1907,6 @@ class OneBlob(object):
 
         # For sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
-
-            if quit_now:
-                print('quit_now while fitting individual sources...')
-                return
-
             if done_fitting[srci]:
                 print('Already done fitting sourcei', srci)
                 continue
