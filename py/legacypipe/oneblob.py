@@ -531,19 +531,16 @@ class OneBlob(object):
             # Also set a parameter on 'src' for use in compute_segmentation_map()
             src.maskbits_forced_point_source = force_pointsource
 
-        if getattr(self, 'segmap', None) is not None:
-            # resuming from checkpoint
-            pass
-        else:
-            self.compute_segmentation_map()
 
+        segmap = self.compute_segmentation_map(cat)
         # Next, model selections: point source vs rex vs dev/exp vs ser.
         debug('Running model selection')
         Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
-        B = self.run_model_selection(cat, Ibright, B,
+        B = self.run_model_selection(cat, Ibright, B, segmap,
                                      iterative_detection=iterative_detection)
         debug('Blob', self.name, 'finished model selection:', Time()-tlast)
         tlast = Time()
+        del segmap
 
         # Cut down to just the kept sources
         # note that "B" is returned by run_model_selection -- may be a new table with larger
@@ -749,9 +746,6 @@ class OneBlob(object):
                 print (f'{src=} {src.getPosition().ra=} {src.getPosition().dec=}')
             import traceback
             traceback.print_exc()
-            H,W = self.blobh, self.blobw
-            self.segmap = np.empty((H,W), np.int32)
-            self.segmap[:,:] = -1
             return None
 
         del ok
@@ -818,8 +812,6 @@ class OneBlob(object):
         Ibright = _argsort_by_brightness([cat[i] for i in Iseg], self.bands)
         _set_kingdoms(segmap, radius, Iseg[Ibright], ix, iy)
 
-        self.segmap = segmap
-
         if self.plots:
             import pylab as plt
             plt.clf()
@@ -842,8 +834,9 @@ class OneBlob(object):
             plt.title('Segments')
             self.ps.savefig()
 
+        return segmap
 
-    def run_model_selection(self, cat, Ibright, B, iterative_detection=True):
+    def run_model_selection(self, cat, Ibright, B, segmap, iterative_detection=True):
         # We compute & subtract initial models for the other sources while
         # fitting each source:
         # -Remember the original images
@@ -894,7 +887,7 @@ class OneBlob(object):
                 plt.figure(1)
 
             # Model selection for this source.
-            keepsrc = self.model_selection_one_source(src, srci, models, B)
+            keepsrc = self.model_selection_one_source(src, srci, models, B, segmap)
 
             # Definitely keep ref stars (Gaia & Tycho)
             if keepsrc is None and getattr(src, 'reference_star', False):
@@ -1168,7 +1161,7 @@ class OneBlob(object):
 
         return Bnew
 
-    def model_selection_one_source(self, src, srci, models, B):
+    def model_selection_one_source(self, src, srci, models, B, segmap):
 
         # FIXME -- don't need these aliased variable names any more
         modelMasks = models.model_masks(srci, src)
@@ -1293,7 +1286,7 @@ class OneBlob(object):
                 plt.subplot(2,2,3)
                 dh,dw = flipblobs.shape
                 sx0,sy0 = srcwcs_x0y0
-                mysegmap = self.segmap[sy0:sy0+dh, sx0:sx0+dw]
+                mysegmap = segmap[sy0:sy0+dh, sx0:sx0+dw]
                 # renumber for plotting
                 _,S = np.unique(mysegmap, return_inverse=True)
                 dimshow(S.reshape(mysegmap.shape), cmap='tab20',
@@ -1305,9 +1298,9 @@ class OneBlob(object):
 
                 plt.subplot(2,2,4)
                 dilated = binary_dilation(flipblobs, iterations=4)
-                s = self.segmap[iy + sy0, ix + sx0]
+                s = segmap[iy + sy0, ix + sx0]
                 if s != -1:
-                    dilated *= (self.segmap[sy0:sy0+dh, sx0:sx0+dw] == s)
+                    dilated *= (segmap[sy0:sy0+dh, sx0:sx0+dw] == s)
                 dimshow(dilated)
                 if s != -1:
                     plt.title('Dilated goodblob * Segmentation map')
@@ -1340,9 +1333,9 @@ class OneBlob(object):
 
             dh,dw = flipblobs.shape
             sx0,sy0 = srcwcs_x0y0
-            s = self.segmap[iy + sy0, ix + sx0]
+            s = segmap[iy + sy0, ix + sx0]
             if s != -1:
-                dilated *= (self.segmap[sy0:sy0+dh, sx0:sx0+dw] == s)
+                dilated *= (segmap[sy0:sy0+dh, sx0:sx0+dw] == s)
 
             if not np.any(dilated):
                 debug('No pixels in segmented dilated symmetric mask')
