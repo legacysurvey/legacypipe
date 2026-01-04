@@ -78,8 +78,8 @@ def one_blob(X):
         dummy = cp.zeros(1)
     t = time.time()
 
-    debug('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
-          (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
+    #debug('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
+    #      (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
 
     pid = os.getpid()
     info('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies ; pid %i' %
@@ -270,8 +270,7 @@ class OneBlob(object):
                     traceback.print_exc()
                     continue
                 self.frozen_galaxy_mods.append(mod)
-                #tim.data -= mod
-                tim.setImage(tim.data-mod) #Update GPU flag
+                tim.setImage(tim.data - mod)
                 if self.plots:
                     mods.append(mod)
             if self.plots:
@@ -391,13 +390,8 @@ class OneBlob(object):
         # - compute segmentation map
         # - model selection (including iterative detection)
         # - metrics
-
-        # print('OneBlob run starting: srcs', self.srcs)
-        # for src in self.srcs:
-        #     print('OneBlob  ', src.getParams())
-        info('Blob', self.name, 'started.')
+        info('Blob %s started.' % self.name)
         t = time.time()
-
         trun = tlast = Time()
         # Not quite so many plots...
         self.plots1 = self.plots
@@ -492,8 +486,8 @@ class OneBlob(object):
                 plt.figure(2)
                 mods = list(tr.getModelImages())
                 coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=mods,
-                                           fill_holes=False)
-                dimshow(get_rgb(coimgs,self.bands), ticks=False)
+                                        fill_holes=False)
+                dimshow(get_rgb(coimgs, self.bands), ticks=False)
                 plt.savefig('blob-%s-initmodel.png' % (self.name))
                 res = [(tim.getImage() - mod) for tim,mod in zip(self.tims, mods)]
                 coresids,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=res)
@@ -684,10 +678,8 @@ class OneBlob(object):
 
         # Compute per-band detection maps
         mp = multiproc()
-        detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp, use_gpu=(self.use_gpu and self.gpumode > 0))
-        #detmaps,detivs,satmaps = detection_maps(
-        #    self.tims, self.blobwcs, self.bands, mp)
-
+        detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp,
+                                                use_gpu=(self.use_gpu and self.gpumode > 0))
         # same as in runbrick.py
         saturated_pix = reduce(np.logical_or,
                                [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps])
@@ -995,7 +987,8 @@ class OneBlob(object):
             self.ps.savefig()
 
         mp = multiproc()
-        detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp, use_gpu=(self.use_gpu and self.gpumode > 0))
+        detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp,
+                                                use_gpu=(self.use_gpu and self.gpumode > 0))
 
         # from runbrick.py
         satmaps = [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps]
@@ -1014,14 +1007,15 @@ class OneBlob(object):
             tim.setImage(modimg) #Update GPU flag
         if self.plots:
             coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
-                                       fill_holes=False)
+                                    fill_holes=False)
             import pylab as plt
             plt.clf()
             dimshow(get_rgb(coimgs,self.bands), ticks=False)
             plt.title('Iterative detection: first-round models')
             self.ps.savefig()
 
-        mod_detmaps,mod_detivs,_ = detection_maps(self.tims, self.blobwcs, self.bands, mp, use_gpu=(self.use_gpu and self.gpumode > 0))
+        mod_detmaps,mod_detivs,_ = detection_maps(self.tims, self.blobwcs, self.bands, mp,
+                                                  use_gpu=(self.use_gpu and self.gpumode > 0))
         # revert
         for tim,img in zip(self.tims, realimages):
             tim.setImage(img) #Update GPU flag
@@ -1147,7 +1141,7 @@ class OneBlob(object):
         if len(Tnew) == 0:
             return None
 
-        info('Blob %s:'%self.name, 'Measuring', len(Tnew), 'iterative sources')
+        info('Blob %s: Measuring %i iterative sources' % (self.name, len(Tnew)))
 
         from tractor import NanoMaggies, RaDecPos
         newsrcs = [PointSource(RaDecPos(t.ra, t.dec),
@@ -1215,9 +1209,8 @@ class OneBlob(object):
             from scipy.ndimage.measurements import label
             # Compute per-band detection maps
             mp = multiproc()
-            detmaps,detivs,_ = detection_maps(self.tims, self.blobwcs, self.bands, mp, use_gpu=(self.use_gpu and self.gpumode > 0))
-            #detmaps,detivs,_ = detection_maps(
-            #    srctims, srcwcs, self.bands, mp)
+            detmaps,detivs,_ = detection_maps(self.tims, self.blobwcs, self.bands, mp,
+                                              use_gpu=(self.use_gpu and self.gpumode > 0))
             # Compute the symmetric area that fits in this 'srcblobmask' region
             pos = src.getPosition()
             _,xx,yy = srcwcs.radec2pixelxy(pos.ra, pos.dec)
@@ -1401,7 +1394,6 @@ class OneBlob(object):
                 mm.append(d)
 
                 saved_srctim_ies.append(ie)
-                #tim.inverr = newie
                 tim.setInvError(newie)
                 keep_srctims.append(tim)
 
@@ -1483,7 +1475,6 @@ class OneBlob(object):
             debug('Source is starting outside blob -- skipping.')
             if mask_others:
                 for ie,tim in zip(saved_srctim_ies, srctims):
-                    #tim.inverr = ie
                     tim.setInvError(ie)
             return None
 
@@ -1499,7 +1490,6 @@ class OneBlob(object):
 
         x0,y0 = srcwcs_x0y0
         debug('Source at blob coordinates', x0+ix, y0+iy, '- forcing pointsource?', force_pointsource, ', is large galaxy?', is_galaxy, ', fitting sky background:', fit_background)
-
 
         if fit_background:
             for tim in srctims:
@@ -1636,7 +1626,7 @@ class OneBlob(object):
                 srctractor.thawParam('images')
 
             # First-round optimization (during model selection)
-            chat('OneBlob before model selection:', newsrc)
+            chat('OneBlob (%s) before model selection: %s' % (self.name, str(newsrc)))
             try:
                 #print ("ENTERING OPTIMIZE 2 - ", type(srctractor), srctractor.optimize_loop)
                 R = srctractor.optimize_loop(**self.optargs)
@@ -1646,15 +1636,11 @@ class OneBlob(object):
                 traceback.print_exc()
                 raise(e)
                 continue
-            chat('OneBlob after model selection:', newsrc)
-            #print('Fit result:', newsrc)
-            #print('Steps:', R['steps'])
+            chat('OneBlob (%s) after model selection: %s' % (self.name, str(newsrc)))
             hit_limit = R.get('hit_limit', False)
             opt_steps = R.get('steps', -1)
             hit_ser_limit = False
             hit_r_limit = False
-            #print('OneBlob steps:', opt_steps)
-            #print('OneBlob hit limit:', hit_limit)
             if hit_limit:
                 debug('Source', newsrc, 'hit limit:')
                 if is_debug():
@@ -1776,7 +1762,7 @@ class OneBlob(object):
             # models are evaluated on the same pixels.
             ch = _per_band_chisqs(srctractor, self.bands)
             chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
-            chat('Chisq for', name, '=', chisqs[name])
+            #chat('Chisq for', name, '=', chisqs[name])
             cpum1 = time.process_time()
             B.all_model_cpu[srci][name] = cpum1 - cpum0
             cputimes[name] = cpum1 - cpum0
@@ -1789,7 +1775,6 @@ class OneBlob(object):
         if mask_others:
             for tim,ie in zip(srctims, saved_srctim_ies):
                 # revert tim to original (unmasked-by-others)
-                #tim.inverr = ie
                 tim.setInvError(ie)
 
         # After model selection, revert the sky
