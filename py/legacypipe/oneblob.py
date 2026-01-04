@@ -101,10 +101,8 @@ def one_blob(X):
     # A local WCS for this blob
     blobwcs = brickwcs.get_subimage(bx0, by0, blobw, blobh)
 
-    oldsigalarm = signal.signal(signal.SIGALRM, sigalarm)
     print('Worker listening to SIGUSR1: PID %i' % (os.getpid()))
     oldsigusr1 = signal.signal(signal.SIGUSR1, sigusr1)
-
     try:
         B = None
         ob = None
@@ -158,7 +156,6 @@ def one_blob(X):
     finally:
         # revert signals
         signal.signal(signal.SIGUSR1, oldsigusr1)
-        signal.signal(signal.SIGALRM, oldsigalarm)
 
     return B
 
