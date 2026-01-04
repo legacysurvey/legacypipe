@@ -440,9 +440,7 @@ class OneBlob(object):
             plt.title('Initial models')
             self.ps.savefig()
 
-        # Optimize individual sources, in order of flux.
-        # First, choose the ordering...
-        Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
+        # Optimize individual sources
 
         # The sizes of the model patches fit here are determined by the
         # sources themselves, ie by the size of the mod patch returned by
@@ -451,6 +449,7 @@ class OneBlob(object):
             print('Skipping fitting individual sources (already finished that)')
         else:
             debug('Fitting fluxes...')
+            Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
             if len(cat) > 1:
                 self._optimize_individual_sources_subtract(
                     cat, Ibright, B.cpu_source, B.done_fitting)
@@ -539,6 +538,7 @@ class OneBlob(object):
 
         # Next, model selections: point source vs rex vs dev/exp vs ser.
         debug('Running model selection')
+        Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
         B = self.run_model_selection(cat, Ibright, B,
                                      iterative_detection=iterative_detection)
         debug('Blob', self.name, 'finished model selection:', Time()-tlast)
