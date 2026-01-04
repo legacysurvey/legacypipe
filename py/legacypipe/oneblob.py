@@ -128,13 +128,13 @@ def one_blob(X):
                   (np.sum(B.done_fitting), N, np.sum(B.done_model_selection), N))
             ob.tims = create_tims(blobwcs, blobmask, timargs)
         else:
-            ob = OneBlob(nblob, blobwcs, blobmask, timargs, srcs, bands,
+            ob = OneBlob(nblob, blobwcs, blobmask, timargs, bands,
                          plots, ps, use_ceres, refmap,
                          large_galaxies_force_pointsource,
                          less_masking, frozen_galaxies,
                          iterative_nsigma,
                          iblob=iblob)
-            B = ob.init_table(Isrcs)
+            B = ob.init_table(srcs, Isrcs)
 
         opt = ob.trargs['optimizer']
         if use_gpu:
@@ -205,7 +205,7 @@ class CheckStep(object):
         return True
 
 class OneBlob(object):
-    def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
+    def __init__(self, name, blobwcs, blobmask, timargs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
                  less_masking, frozen_galaxies,
@@ -217,7 +217,6 @@ class OneBlob(object):
         self.pixscale = self.blobwcs.pixel_scale()
         self.blobmask = blobmask
         self.blobh,self.blobw = blobmask.shape
-        self.srcs = srcs
         self.bands = bands
         self.plots = plots
         self.refmap = refmap
@@ -310,15 +309,15 @@ class OneBlob(object):
         self.tims = tims
         return R
 
-    def init_table(self, Isrcs):
+    def init_table(self, srcs, Isrcs):
         # Per-source measurements for this blob
         B = fits_table()
-        B.sources = self.srcs
+        B.sources = srcs
         B.Isrcs = Isrcs
         # Did sources start within the blob?
         _,x0,y0 = self.blobwcs.radec2pixelxy(
-            np.array([src.getPosition().ra  for src in self.srcs]),
-            np.array([src.getPosition().dec for src in self.srcs]))
+            np.array([src.getPosition().ra  for src in srcs]),
+            np.array([src.getPosition().dec for src in srcs]))
         # blob-relative initial positions (zero-indexed)
         B.x0 = (x0 - 1.).astype(np.float32)
         B.y0 = (y0 - 1.).astype(np.float32)
@@ -328,22 +327,21 @@ class OneBlob(object):
         # the fitting behaviors.
         B.started_in_blob = self.blobmask[B.safe_y0, B.safe_x0]
 
-        N = len(self.srcs)
+        N = len(srcs)
         B.done_fitting = np.zeros(N, bool)
         B.done_model_selection = np.zeros(N, bool)
-        B.cpu_source         = np.zeros(N, np.float32)
-        B.hit_limit          = np.zeros(N, bool)
-        B.hit_ser_limit      = np.zeros(N, bool)
-        B.hit_r_limit        = np.zeros(N, bool)
+        B.cpu_source    = np.zeros(N, np.float32)
+        B.hit_limit     = np.zeros(N, bool)
+        B.hit_ser_limit = np.zeros(N, bool)
+        B.hit_r_limit   = np.zeros(N, bool)
         B.dchisq = np.zeros((N, 5), np.float32)
         B.all_models    = np.array([{} for i in range(N)])
         B.all_model_ivs = np.array([{} for i in range(N)])
         B.all_model_cpu = np.array([{} for i in range(N)])
-        B.all_model_hit_limit     = np.array([{} for i in range(N)])
-        B.all_model_hit_r_limit   = np.array([{} for i in range(N)])
-        B.all_model_opt_steps     = np.array([{} for i in range(N)])
+        B.all_model_hit_limit   = np.array([{} for i in range(N)])
+        B.all_model_hit_r_limit = np.array([{} for i in range(N)])
+        B.all_model_opt_steps   = np.array([{} for i in range(N)])
         B.force_keep_source  = np.zeros(N, bool)
-
         B.fit_background     = np.zeros(N, bool)
         B.forced_pointsource = np.zeros(N, bool)
         B.blob_symm_width    = np.zeros(N, np.int16)
@@ -365,22 +363,20 @@ class OneBlob(object):
 
         # Setting values here (after .run() has completed) means that iterative sources
         # (which get merged with the original table B) get values also.
-        B.blob_x0     = np.zeros(len(B), np.int16) + bx0
-        B.blob_y0     = np.zeros(len(B), np.int16) + by0
-        B.blob_width  = np.zeros(len(B), np.int16) + self.blobw
-        B.blob_height = np.zeros(len(B), np.int16) + self.blobh
-        B.blob_npix   = np.zeros(len(B), np.int32) + np.sum(self.blobmask)
-        B.blob_nimages= np.zeros(len(B), np.int16) + len(self.tims)
+        B.blob_x0       = np.zeros(len(B), np.int16) + bx0
+        B.blob_y0       = np.zeros(len(B), np.int16) + by0
+        B.blob_width    = np.zeros(len(B), np.int16) + self.blobw
+        B.blob_height   = np.zeros(len(B), np.int16) + self.blobh
+        B.blob_npix     = np.zeros(len(B), np.int32) + np.sum(self.blobmask)
+        B.blob_nimages  = np.zeros(len(B), np.int16) + len(self.tims)
         B.blob_totalpix = np.zeros(len(B), np.int32) + self.total_pix
         B.cpu_arch = np.zeros(len(B), dtype='U3')
         B.cpu_arch[:] = get_cpu_arch()
         # Convert to whole-brick (zero-indexed) pixel positions.
         # (do this here rather than above to ease handling iterative detections)
-        B.x0 += bx0
-        B.y0 += by0
-        # these are now in brick coords... rename for consistency in runbrick.py
-        B.rename('x0', 'bx0')
-        B.rename('y0', 'by0')
+        B.bx0 = B.x0 + bx0
+        B.by0 = B.y0 + by0
+        del B.x0, B.y0
 
     def run(self, B, reoptimize=False, iterative_detection=True,
             compute_metrics=True):
@@ -395,9 +391,8 @@ class OneBlob(object):
         trun = tlast = Time()
         # Not quite so many plots...
         self.plots1 = self.plots
-        cat = Catalog(*self.srcs)
 
-        for src in self.srcs:
+        for src in B.sources:
             # when resuming: src can be None
             if src is None:
                 continue
@@ -411,7 +406,7 @@ class OneBlob(object):
 
         if self.plots:
             import pylab as plt
-            self._initial_plots()
+            self._initial_plots(B.sources)
             from legacypipe.detection import plot_boundary_map
             plt.clf()
             dimshow(self.rgb)
@@ -426,6 +421,7 @@ class OneBlob(object):
             plt.title('Reference-source Masks')
             self.ps.savefig()
 
+        cat = Catalog(*B.sources)
         tr = self.tractor(self.tims, cat)
         # Fit any sources marked with 'needs_initial_flux' -- saturated, and SGA
         fitflux = [src for src in cat if (src is not None and getattr(src, 'needs_initial_flux', False))]
@@ -471,10 +467,10 @@ class OneBlob(object):
             # Plot source locations
             ax = plt.axis()
             _,xf,yf = self.blobwcs.radec2pixelxy(
-                np.array([src.getPosition().ra  for src in self.srcs]),
-                np.array([src.getPosition().dec for src in self.srcs]))
+                np.array([src.getPosition().ra  for src in cat]),
+                np.array([src.getPosition().dec for src in cat]))
             plt.plot(xf-1, yf-1, 'r.', label='Sources')
-            Ir = np.flatnonzero([is_reference_source(src) for src in self.srcs])
+            Ir = np.flatnonzero([is_reference_source(src) for src in cat])
             if len(Ir):
                 plt.plot(xf[Ir]-1, yf[Ir]-1, 'o', mec='g', mfc='none', ms=8, mew=2,
                          label='Ref source')
@@ -550,6 +546,8 @@ class OneBlob(object):
         tlast = Time()
 
         # Cut down to just the kept sources
+        # note that "B" is returned by run_model_selection -- may be a new table with larger
+        # size thanks to iterative detection.
         cat = B.sources
         I = np.array([i for i,s in enumerate(cat) if s is not None])
         B.cut(I)
@@ -670,7 +668,7 @@ class OneBlob(object):
         info('Blob', self.name, 'finished, total:', Time()-trun)
         return B
 
-    def compute_segmentation_map(self):
+    def compute_segmentation_map(self, cat):
         from functools import reduce
         from legacypipe.detection import detection_maps
         from astrometry.util.multiproc import multiproc
@@ -723,8 +721,8 @@ class OneBlob(object):
             self.ps.savefig()
 
         ok,ix,iy = self.blobwcs.radec2pixelxy(
-            np.array([src.getPosition().ra  for src in self.srcs]),
-            np.array([src.getPosition().dec for src in self.srcs]))
+            np.array([src.getPosition().ra  for src in cat]),
+            np.array([src.getPosition().dec for src in cat]))
         ix = np.clip(np.round(ix)-1, 0, self.blobw-1).astype(np.int32)
         iy = np.clip(np.round(iy)-1, 0, self.blobh-1).astype(np.int32)
 
@@ -747,7 +745,7 @@ class OneBlob(object):
             print ("radec2pixelxy ", self.blobwcs.radec2pixelxy)
             print (f'{ix=} {iy=} {ok=}')
             print ("Shapes", ix.shape, iy.shape, ok.shape, self.refmap.shape)
-            for src in self.srcs:
+            for src in cat:
                 print (f'{src=} {src.getPosition().ra=} {src.getPosition().dec=}')
             import traceback
             traceback.print_exc()
@@ -766,7 +764,7 @@ class OneBlob(object):
         H,W = self.blobh, self.blobw
         segmap = np.empty((H,W), np.int32)
         segmap[:,:] = -1
-        # Iseg are the indices in self.srcs of sources to segment
+        # Iseg are the indices in cat of sources to segment
         sy = iy[Iseg]
         sx = ix[Iseg]
         segmap[sy, sx] = Iseg
@@ -774,12 +772,12 @@ class OneBlob(object):
         # Reference sources forced to be point sources get a max radius:
         ref_radius = 25
         for j,i in enumerate(Iseg):
-            if getattr(self.srcs[i], 'forced_point_source', False):
+            if getattr(cat[i], 'forced_point_source', False):
                 maxr2[j] = ref_radius**2
         # Sources inside maskbits masks that are forced to be point sources
         # also get a max radius.
         for j,i in enumerate(Iseg):
-            if getattr(self.srcs[i], 'maskbits_forced_point_source', False):
+            if getattr(cat[i], 'maskbits_forced_point_source', False):
                 maxr2[j] = ref_radius**2
 
         mask = self.blobmask
@@ -817,7 +815,7 @@ class OneBlob(object):
         # in that radius, each pixel gets assigned to its nearest
         # source.
         radius = 5
-        Ibright = _argsort_by_brightness([self.srcs[i] for i in Iseg], self.bands)
+        Ibright = _argsort_by_brightness([cat[i] for i in Iseg], self.bands)
         _set_kingdoms(segmap, radius, Iseg[Ibright], ix, iy)
 
         self.segmap = segmap
@@ -837,7 +835,7 @@ class OneBlob(object):
             plt.clf()
             dimshow(self.rgb)
             ax = plt.axis()
-            for i in range(len(self.srcs)):
+            for i in range(len(cat)):
                 plot_boundary_map(segmap == i)
             plt.plot(ix, iy, 'r.')
             plt.axis(ax)
@@ -907,8 +905,8 @@ class OneBlob(object):
                 keepsrc = src
 
             B.sources[srci] = keepsrc
-            B.force_keep_source[srci] = getattr(keepsrc, 'force_keep_source', False)
             cat[srci] = keepsrc
+            B.force_keep_source[srci] = getattr(keepsrc, 'force_keep_source', False)
 
             models.update_and_subtract(srci, keepsrc, self.tims)
 
@@ -1147,13 +1145,11 @@ class OneBlob(object):
         newsrcs = [PointSource(RaDecPos(t.ra, t.dec),
                                NanoMaggies(**dict([(b,1) for b in self.bands])))
                                for t in Tnew]
-        # Save
-        oldsrcs = self.srcs
-        self.srcs = newsrcs
 
         isrcs = np.empty(len(newsrcs), np.int32)
         isrcs[:] = -1
-        Bnew = self.init_table(isrcs)
+        Bnew = self.init_table(newsrcs, isrcs)
+        # FIXME -- float32 ??!
         Bnew.x0 = Tnew.ibx.astype(np.float32)
         Bnew.y0 = Tnew.iby.astype(np.float32)
         # Be quieter during iterative detection!
@@ -1166,7 +1162,6 @@ class OneBlob(object):
 
         # revert
         bloblogger.setLevel(loglvl)
-        self.srcs = oldsrcs
 
         if len(Bnew) == 0:
             return None
@@ -2021,7 +2016,7 @@ class OneBlob(object):
                                 fill_holes=False, addnoise=addnoise)
         dimshow(get_rgb(coimgs,self.bands))
 
-    def _initial_plots(self):
+    def _initial_plots(self, cat):
         import pylab as plt
         debug('Plotting blob image for blob', self.name)
         coimgs,_,sat = quick_coadds(self.tims, self.bands, self.blobwcs,
@@ -2039,8 +2034,8 @@ class OneBlob(object):
             plt.figure(1)
 
         _,x0,y0 = self.blobwcs.radec2pixelxy(
-            np.array([src.getPosition().ra  for src in self.srcs]),
-            np.array([src.getPosition().dec for src in self.srcs]))
+            np.array([src.getPosition().ra  for src in cat]),
+            np.array([src.getPosition().dec for src in cat]))
 
         h,w = sat.shape
         ix = np.clip(np.round(x0)-1, 0, w-1).astype(int)
@@ -2053,7 +2048,7 @@ class OneBlob(object):
             plt.plot(x0[srcsat]-1, y0[srcsat]-1, 'o', mec='orange', mfc='none', ms=5, mew=2,
                      label='SATUR at center')
         # ref sources
-        Ir = np.flatnonzero([is_reference_source(src) for src in self.srcs])
+        Ir = np.flatnonzero([is_reference_source(src) for src in cat])
         if len(Ir):
             plt.plot(x0[Ir]-1, y0[Ir]-1, 'o', mec='g', mfc='none', ms=8, mew=2,
                          label='Ref source')
