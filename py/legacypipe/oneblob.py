@@ -114,8 +114,8 @@ def one_blob(X):
 
     print('Worker listening to SIGUSR1: PID %i' % (os.getpid()))
     oldsigusr1 = signal.SIG_DFL
+    B = None
     try:
-        B = None
         ob = None
         oldsigusr1 = signal.signal(signal.SIGUSR1, sigusr1)
 
@@ -151,9 +151,6 @@ def one_blob(X):
         B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
         ob.finalize_table(B, bx0, by0)
 
-        t1 = time.process_time()
-        B.cpu_blob = np.empty(len(B), np.float32)
-        B.cpu_blob[:] = t1 - t0
         B.iblob = iblob
         if bid is not None and iblob == bid:
             print ("Exiting.")
@@ -168,6 +165,11 @@ def one_blob(X):
             print('Caught QuitNowException; ob None for blob %s' % nblob)
         return ob
     finally:
+        if B is not None:
+            # increment timer
+            if 'cpu_blob' in B.get_columns():
+                t1 = time.process_time()
+                B.cpu_blob[:] += (t1 - t0)
         # revert signals
         signal.signal(signal.SIGUSR1, oldsigusr1)
 
@@ -348,6 +350,8 @@ class OneBlob(object):
         B.blob_symm_height   = np.zeros(N, np.int16)
         B.blob_symm_npix     = np.zeros(N, np.int32)
         B.blob_symm_nimages  = np.zeros(N, np.int16)
+
+        B.cpu_blob = np.zeros(N, np.float32)
 
         return B
 
@@ -955,8 +959,6 @@ class OneBlob(object):
                 B.delete_column('sources')
                 Bnew.delete_column('sources')
                 B = merge_tables([B, Bnew], columns='fillzero')
-                # columns not in Bnew:
-                # {'safe_x0', 'safe_y0', 'started_in_blob'}
                 B.sources = srcs + newsrcs
             del Bnew
         models.restore_images(self.tims)
