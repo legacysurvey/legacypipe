@@ -376,7 +376,8 @@ class OneBlob(object):
         # (do this here rather than above to ease handling iterative detections)
         B.bx0 = B.x0 + bx0
         B.by0 = B.y0 + by0
-        del B.x0, B.y0
+        B.delete_column('x0')
+        B.delete_column('y0')
 
     def run(self, B, reoptimize=False, iterative_detection=True,
             compute_metrics=True):
