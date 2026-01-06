@@ -2240,10 +2240,17 @@ def _blob_iter(job_id_map,
         skipblobset = set(skipblobs)
 
         for i in range(nsuby):
+            if signal_quitting:
+                print('_blob_iter: signal_quitting')
+                break
             # These are in *blob* coordinates
             suby0 = i*(subh - overlap)
             suby1 = min(suby0 + subh, blobh)
             for j in range(nsubx):
+                if signal_quitting:
+                    print('_blob_iter: signal_quitting')
+                    break
+
                 sub_blob = i*nsubx+j
                 if (int(iblob),sub_blob) in skipblobset:
                     debug('Skipping sub-blob (from checkpoint)', (iblob,sub_blob))
