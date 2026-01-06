@@ -123,7 +123,7 @@ def one_blob(X):
             ob = halfdone
             B = ob.B
             del ob.B
-            N = len(ob.srcs)
+            N = len(B.sources)
             print('Got a partway-complete result; resuming.  Done %i/%i fitting, %i/%i model sel.' %
                   (np.sum(B.done_fitting), N, np.sum(B.done_model_selection), N))
             ob.tims = create_tims(blobwcs, blobmask, timargs)

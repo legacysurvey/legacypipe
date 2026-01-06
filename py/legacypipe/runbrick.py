@@ -2296,7 +2296,7 @@ def _bounce_one_blob(X):
     '''This wraps the one_blob function for multiprocessing purposes (and
     now also does some post-processing).
     '''
-    from legacypipe.oneblob import one_blob, QuitNowException
+    from legacypipe.oneblob import one_blob, OneBlob, QuitNowException
     global _GLOBAL_LEGACYPIPE_CONTEXT
     is_gpu_worker = _GLOBAL_LEGACYPIPE_CONTEXT['is_gpu_worker']
     gpu_device_id = _GLOBAL_LEGACYPIPE_CONTEXT['gpu_device_id']
@@ -2331,8 +2331,12 @@ def _bounce_one_blob(X):
             #    print (f"Free memory {free_mem_g=}; Runing in GPU mode")
         result = one_blob(X)
         if result is not None:
+
+            if isinstance(result, OneBlob):
+                # blob checkpoint - just return as-is
+                pass
             # Was this a sub-blobs?  If so, de-duplicate the catalog
-            if blob_unique is not None:
+            elif blob_unique is not None:
                 x0,x1,y0,y1 = blob_unique
                 debug('Got blob_unique (x0,x1,y0,y1) =', blob_unique)
                 ntot = len(result)
@@ -2345,6 +2349,8 @@ def _bounce_one_blob(X):
         ### This defines the format of the results in the checkpoints files
         return dict(brickname=brickname, iblob=iblob, result=result)
     except QuitNowException as q:
+        # This should only happen for the final blob to be processed, where one_blob raises
+        # an exception any time it is called after the quit signal has been received.
         print('Caught QuitNowException in bounce_one_blob.')
         #import traceback
         #traceback.print_exc()
