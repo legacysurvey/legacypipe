@@ -1063,7 +1063,7 @@ class OneBlob(object):
         avoid_r = np.zeros(len(avoid_x), np.float32) + 2.
         avoid_map = (self.refmap != 0)
 
-        Tnew,_,_ = run_sed_matched_filters(
+        Tnew, newsrcs, _ = run_sed_matched_filters(
             SEDs, self.bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r),
             self.blobwcs, nsigma=self.iterative_nsigma, saturated_pix=satmaps,
             veto_map=avoid_map, plots=False, ps=None, mp=mp)
@@ -1146,17 +1146,15 @@ class OneBlob(object):
             self.ps.savefig()
 
         B = 0.2
-        Tnew.cut(det_max > B * np.maximum(mod_max, 1.))
+        keep = (det_max > B * np.maximum(mod_max, 1.))
+        Tnew.cut(keep)
         debug('Cut to', len(Tnew), 'iterative sources compared to model detection map')
         if len(Tnew) == 0:
             return None
+        newsrcs = [newsrcs[i] for i,k in enumerate(keep) if k]
+        assert(len(Tnew) == len(newsrcs))
 
         info('Blob %s: Measuring %i iterative sources' % (self.name, len(Tnew)))
-
-        from tractor import NanoMaggies, RaDecPos
-        newsrcs = [PointSource(RaDecPos(t.ra, t.dec),
-                               NanoMaggies(**dict([(b,1) for b in self.bands])))
-                               for t in Tnew]
 
         isrcs = np.empty(len(newsrcs), np.int32)
         isrcs[:] = -1
