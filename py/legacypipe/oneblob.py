@@ -729,11 +729,18 @@ class OneBlob(object):
             plt.title('max s/n for segmentation')
             self.ps.savefig()
 
+        Iseg = np.flatnonzero([src is not None for src in cat])
         ok,ix,iy = self.blobwcs.radec2pixelxy(
-            np.array([src.getPosition().ra  for src in cat]),
-            np.array([src.getPosition().dec for src in cat]))
+            np.array([cat[i].getPosition().ra  for i in Iseg]),
+            np.array([cat[i].getPosition().dec for i in Iseg]))
         ix = np.clip(np.round(ix)-1, 0, self.blobw-1).astype(np.int32)
         iy = np.clip(np.round(iy)-1, 0, self.blobh-1).astype(np.int32)
+
+        Iseg = Iseg[ok]
+        ix = ix[ok]
+        iy = iy[ok]
+        del ok
+        assert(len(Iseg) == len(ix))
 
         if np.any(ix < 0):
             print (f"Negative ix {ix=}")
@@ -747,20 +754,23 @@ class OneBlob(object):
         # Do not compute segmentation map for sources in the CLUSTER mask
         # (or with very bad coords)
         try:
-            Iseg, = np.nonzero(ok * ((self.refmap[iy, ix] & REF_MAP_BITS['CLUSTER']) == 0))
+            I = ((self.refmap[iy, ix] & REF_MAP_BITS['CLUSTER']) == 0)
+            Iseg = Iseg[I]
+            ix = ix[I]
+            iy = iy[I]
+            del I
         except IndexError as ex:
             print ("IndexError bug #131")
             print (f'{self.blobwcs=}')
             print ("radec2pixelxy ", self.blobwcs.radec2pixelxy)
-            print (f'{ix=} {iy=} {ok=}')
-            print ("Shapes", ix.shape, iy.shape, ok.shape, self.refmap.shape)
+            print (f'{ix=} {iy=}')
+            print ("Shapes", ix.shape, iy.shape, self.refmap.shape)
             for src in cat:
                 print (f'{src=} {src.getPosition().ra=} {src.getPosition().dec=}')
             import traceback
             traceback.print_exc()
             return None
 
-        del ok
         # Zero out the S/N in CLUSTER mask
         maxsn[(self.refmap & REF_MAP_BITS['CLUSTER']) > 0] = 0.
         # (also zero out the satmap in the CLUSTER mask)
@@ -770,9 +780,9 @@ class OneBlob(object):
         H,W = self.blobh, self.blobw
         segmap = np.empty((H,W), np.int32)
         segmap[:,:] = -1
-        # Iseg are the indices in cat of sources to segment
-        sy = iy[Iseg]
-        sx = ix[Iseg]
+        # Iseg are the indices in cat of sources to segment, sx,sy their coordinates
+        sy = iy
+        sx = ix
         segmap[sy, sx] = Iseg
         maxr2 = np.zeros(len(Iseg), np.int32)
         # Reference sources forced to be point sources get a max radius:
@@ -780,9 +790,8 @@ class OneBlob(object):
         for j,i in enumerate(Iseg):
             if getattr(cat[i], 'forced_point_source', False):
                 maxr2[j] = ref_radius**2
-        # Sources inside maskbits masks that are forced to be point sources
-        # also get a max radius.
-        for j,i in enumerate(Iseg):
+            # Sources inside maskbits masks that are forced to be point sources
+            # also get a max radius.
             if getattr(cat[i], 'maskbits_forced_point_source', False):
                 maxr2[j] = ref_radius**2
 
@@ -822,7 +831,7 @@ class OneBlob(object):
         # source.
         radius = 5
         Ibright = _argsort_by_brightness([cat[i] for i in Iseg], self.bands)
-        _set_kingdoms(segmap, radius, Iseg[Ibright], ix, iy)
+        _set_kingdoms(segmap, radius, Iseg[Ibright], ix[Ibright], iy[Ibright])
 
         if self.plots:
             import pylab as plt
@@ -2108,7 +2117,7 @@ def _set_kingdoms(segmap, radius, I, ix, iy):
     '''
     radius: int
     ix,iy: int arrays
-    I: indices into ix,iy that will be placed into 'segmap'
+    I: indices into the original sources array that will be placed into 'segmap'
     '''
     # ensure that each source owns a tiny radius around its center
     # in the segmentation map.  If there is more than one source
@@ -2121,8 +2130,7 @@ def _set_kingdoms(segmap, radius, I, ix, iy):
     H,W = segmap.shape
     xcoords = np.arange(W)
     ycoords = np.arange(H)
-    for i in I:
-        x,y = ix[i], iy[i]
+    for i,x,y in zip(I, ix, iy):
         yslc = slice(max(0, y-radius), min(H, y+radius+1))
         xslc = slice(max(0, x-radius), min(W, x+radius+1))
         slc = (yslc, xslc)
