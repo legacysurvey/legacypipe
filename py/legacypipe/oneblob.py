@@ -2137,7 +2137,7 @@ def _set_kingdoms(segmap, radius, I, ix, iy):
         # Radius to new source
         newr = np.hypot(xcoords[np.newaxis, xslc] - x, ycoords[yslc, np.newaxis] - y)
         assert(newr.shape == oldr.shape)
-        newr = (newr + 0.5).astype(np.uint8)
+        newr = np.minimum(newr + 0.5, 255.).astype(np.uint8)
         # Pixels that are within range and closer to this source than any other.
         owned = (newr <= radius) * (newr < oldr)
         segmap[slc][owned] = i
@@ -2167,7 +2167,7 @@ def _argsort_by_brightness(cat, bands, ref_first=False):
     fluxes = []
     for src in cat:
         if src is None:
-            fluxes.append(0.)
+            fluxes.append(-1000.)
             continue
         # HACK -- here we just *sum* the nanomaggies in each band.  Bogus!
         br = src.getBrightness()
