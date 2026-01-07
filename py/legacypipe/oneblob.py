@@ -1171,7 +1171,8 @@ class OneBlob(object):
         bloblogger.setLevel(loglvl + 10)
 
         # Run the whole oneblob pipeline on the iterative sources!
-        Bnew = self.run(Bnew, iterative_detection=False, compute_metrics=False)
+        Bnew = self.run(Bnew, iterative_detection=False, compute_metrics=False,
+                        mask_others=False)
 
         print('On return from iterative .run() of %s: sources' % self.name)
         for src in Bnew.sources:
