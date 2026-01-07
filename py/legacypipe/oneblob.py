@@ -979,6 +979,7 @@ class OneBlob(object):
                 Bnew.delete_column('sources')
                 B = merge_tables([B, Bnew], columns='fillzero')
                 B.sources = srcs + newsrcs
+                del srcs, newsrcs
             del Bnew
         models.restore_images(self.tims)
         del models
