@@ -384,7 +384,7 @@ class OneBlob(object):
         B.delete_column('y0')
 
     def run(self, B, reoptimize=False, iterative_detection=True,
-            compute_metrics=True):
+            compute_metrics=True, mask_others=True):
         # The overall steps here are:
         # - fit initial fluxes for small number of sources that may need it
         # - optimize individual sources
@@ -549,7 +549,8 @@ class OneBlob(object):
         debug('Blob %s: Running model selection' % name)
         Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
         B = self.run_model_selection(cat, Ibright, B, segmap,
-                                     iterative_detection=iterative_detection)
+                                     iterative_detection=iterative_detection,
+                                     mask_others=mask_others)
         debug('Blob', name, 'finished model selection:', Time()-tlast)
         tlast = Time()
         del segmap
@@ -857,7 +858,8 @@ class OneBlob(object):
 
         return segmap
 
-    def run_model_selection(self, cat, Ibright, B, segmap, iterative_detection=True):
+    def run_model_selection(self, cat, Ibright, B, segmap, iterative_detection=True,
+                            mask_others=True):
         # We compute & subtract initial models for the other sources while
         # fitting each source:
         # -Remember the original images
@@ -908,7 +910,8 @@ class OneBlob(object):
                 plt.figure(1)
 
             # Model selection for this source.
-            keepsrc = self.model_selection_one_source(src, srci, models, B, segmap)
+            keepsrc = self.model_selection_one_source(src, srci, models, B, segmap,
+                                                      mask_others=mask_others)
 
             # Definitely keep ref stars (Gaia & Tycho)
             if keepsrc is None and getattr(src, 'reference_star', False):
@@ -1182,7 +1185,8 @@ class OneBlob(object):
 
         return Bnew
 
-    def model_selection_one_source(self, src, srci, models, B, segmap):
+    def model_selection_one_source(self, src, srci, models, B, segmap,
+                                   mask_others=True):
 
         # FIXME -- don't need these aliased variable names any more
         modelMasks = models.model_masks(srci, src)
@@ -1208,9 +1212,17 @@ class OneBlob(object):
             plt.title('Model selection: data')
             self.ps.savefig()
 
-        # Mask out other sources while fitting this one, by
-        # finding symmetrized blobs of significant pixels
-        mask_others = True
+        bh,bw = srcblobmask.shape
+        pos = src.getPosition()
+        _,xx,yy = srcwcs.radec2pixelxy(pos.ra, pos.dec)
+        ix = int(np.clip(np.round(xx-1), 0, bw-1))
+        iy = int(np.clip(np.round(yy-1), 0, bh-1))
+
+        # an extra mask to apply, in srcblobwcs shape
+        source_mask = None
+
+        # Mask out other sources while fitting this one,
+        # symmetrizing the blob mask and applying a segmentation mask.
         if mask_others:
             from legacypipe.detection import detection_maps
             from astrometry.util.multiproc import multiproc
@@ -1221,11 +1233,6 @@ class OneBlob(object):
             detmaps,detivs,_ = detection_maps(self.tims, self.blobwcs, self.bands, mp,
                                               use_gpu=(self.use_gpu and self.gpumode > 0))
             # Compute the symmetric area that fits in this 'srcblobmask' region
-            pos = src.getPosition()
-            _,xx,yy = srcwcs.radec2pixelxy(pos.ra, pos.dec)
-            bh,bw = srcblobmask.shape
-            ix = int(np.clip(np.round(xx-1), 0, bw-1))
-            iy = int(np.clip(np.round(yy-1), 0, bh-1))
             flipw = min(ix, bw-1-ix)
             fliph = min(iy, bh-1-iy)
             flipblobs = np.zeros(srcblobmask.shape, bool)
@@ -1352,26 +1359,37 @@ class OneBlob(object):
                 debug('No pixels in dilated symmetric mask')
                 return None
 
-            dh,dw = flipblobs.shape
+            source_mask = dilated
+
+        if segmap is not None:
+            # Segmap is the size of the full blob, so apply a pixel offset
             sx0,sy0 = srcwcs_x0y0
             s = segmap[iy + sy0, ix + sx0]
             if s != -1:
-                dilated *= (segmap[sy0:sy0+dh, sx0:sx0+dw] == s)
+                if source_mask is None:
+                    source_mask = srcblobmask & (segmap[sy0:sy0+bh, sx0:sx0+bw] == s)
+                else:
+                    source_mask &= (segmap[sy0:sy0+bh, sx0:sx0+bw] == s)
 
-            if not np.any(dilated):
-                debug('No pixels in segmented dilated symmetric mask')
+        if source_mask is not None:
+            if not np.any(source_mask):
+                debug('No pixels in single-source mask')
                 return None
 
-            yin = np.max(dilated, axis=1)
-            xin = np.max(dilated, axis=0)
+            # Trim the fitting area down to the mask.
+            # find bounding box
+            yin = np.max(source_mask, axis=1)
+            xin = np.max(source_mask, axis=0)
             yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
             xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
             (oldx0,oldy0) = srcwcs_x0y0
             srcwcs = srcwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
             srcwcs_x0y0 = (oldx0 + xl, oldy0 + yl)
             srcblobmask = srcblobmask[yl:yh+1, xl:xh+1]
-            dilated = dilated[yl:yh+1, xl:xh+1]
-            flipblobs = flipblobs[yl:yh+1, xl:xh+1]
+            source_mask = source_mask[yl:yh+1, xl:xh+1]
+            bh,bw = srcblobmask.shape
+            ix -= xl
+            iy -= yl
 
             saved_srctim_ies = []
             keep_srctims = []
@@ -1387,8 +1405,7 @@ class OneBlob(object):
                     continue
                 ie = tim.getInvError()
                 newie = np.zeros_like(ie)
-
-                good, = np.nonzero(dilated[Yi,Xi] * (ie[Yo,Xo] > 0))
+                good, = np.nonzero(source_mask[Yi,Xi] * (ie[Yo,Xo] > 0))
                 if len(good) == 0:
                     debug('Tim has inverr all == 0')
                     continue
@@ -1398,70 +1415,18 @@ class OneBlob(object):
                 xl,xh = xx.min(), xx.max()
                 yl,yh = yy.min(), yy.max()
                 totalpix += len(xx)
-
                 d = { src: ModelMask(xl, yl, 1+xh-xl, 1+yh-yl) }
                 mm.append(d)
-
                 saved_srctim_ies.append(ie)
                 tim.setInvError(newie)
                 keep_srctims.append(tim)
-
             srctims = keep_srctims
             modelMasks = mm
-
             B.blob_symm_nimages[srci] = len(srctims)
             B.blob_symm_npix[srci] = totalpix
             sh,sw = srcwcs.shape
             B.blob_symm_width [srci] = sw
             B.blob_symm_height[srci] = sh
-
-            # if self.plots_per_source:
-            #     from legacypipe.detection import plot_boundary_map
-            #     plt.clf()
-            #     dimshow(get_rgb(coimgs, self.bands))
-            #     ax = plt.axis()
-            #     plt.plot(x-1, y-1, 'r+')
-            #     plt.axis(ax)
-            #     sx0,sy0 = srcwcs_x0y0
-            #     sh,sw = srcwcs.shape
-            #     ext = [sx0, sx0+sw, sy0, sy0+sh]
-            #     plot_boundary_map(flipblobs, rgb=(255,255,255), extent=ext)
-            #     plot_boundary_map(dilated, rgb=(0,255,0), extent=ext)
-            #     plt.title('symmetrized blobs')
-            #     self.ps.savefig()
-            #     nil,nil,coimgs,nil = quick_coadds(
-            #         srctims, self.bands, self.blobwcs,
-            #         fill_holes=False, get_cow=True)
-            #     dimshow(get_rgb(coimgs, self.bands))
-            #     ax = plt.axis()
-            #     plt.plot(x-1, y-1, 'r+')
-            #     plt.axis(ax)
-            #     plt.title('Symmetric-blob masked')
-            #     self.ps.savefig()
-            #     plt.clf()
-            #     for tim in srctims:
-            #         ie = tim.getInvError()
-            #         sigmas = (tim.getImage() * ie)[ie > 0]
-            #         plt.hist(sigmas, range=(-5,5), bins=21, histtype='step')
-            #         plt.axvline(np.mean(sigmas), alpha=0.5)
-            #     plt.axvline(0., color='k', lw=3, alpha=0.5)
-            #     plt.xlabel('Image pixels (sigma)')
-            #     plt.title('Symmetrized pixel values')
-            #     self.ps.savefig()
-            # # plot the modelmasks for each tim.
-            # plt.clf()
-            # R = int(np.floor(np.sqrt(len(srctims))))
-            # C = int(np.ceil(len(srctims) / float(R)))
-            # for i,tim in enumerate(srctims):
-            #     plt.subplot(R, C, i+1)
-            #     msk = modelMasks[i][src].mask
-            #     print('Mask:', msk)
-            #     if msk is None:
-            #         continue
-            #     plt.imshow(msk, interpolation='nearest', origin='lower', vmin=0, vmax=1)
-            #     plt.title(tim.name)
-            # plt.suptitle('Model Masks')
-            # self.ps.savefig()
 
         srctractor = self.tractor(srctims, [src])
         srctractor.setModelMasks(modelMasks)
@@ -1482,7 +1447,7 @@ class OneBlob(object):
             pass
         elif ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
             debug('Source is starting outside blob -- skipping.')
-            if mask_others:
+            if source_mask is not None:
                 for ie,tim in zip(saved_srctim_ies, srctims):
                     tim.setInvError(ie)
             return None
@@ -1683,9 +1648,8 @@ class OneBlob(object):
             elif ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
                 # Exited blob!
                 debug('Source exited sub-blob!')
-                if mask_others:
+                if source_mask is not None:
                     for ie,tim in zip(saved_srctim_ies, srctims):
-                        #tim.inverr = ie
                         tim.setInvError(ie)
                 continue
 
@@ -1781,7 +1745,7 @@ class OneBlob(object):
             if name == 'ser':
                 B.hit_ser_limit[srci] = hit_ser_limit
 
-        if mask_others:
+        if source_mask is not None:
             for tim,ie in zip(srctims, saved_srctim_ies):
                 # revert tim to original (unmasked-by-others)
                 tim.setInvError(ie)
