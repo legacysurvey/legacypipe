@@ -467,9 +467,6 @@ class OneBlob(object):
             else:
                 self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source,
                                                   B.done_fitting)
-            print('Blob %s: after initial fitting:' % name)
-            for src in cat:
-                print('  %s - %s' % (name, str(src)))
 
         if self.plots:
             self._plots(tr, 'After source fitting')
