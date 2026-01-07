@@ -391,7 +391,12 @@ class OneBlob(object):
         # - compute segmentation map
         # - model selection (including iterative detection)
         # - metrics
-        info('Blob %s started.' % self.name)
+        if iterative_detection:
+            name = self.name
+        else:
+            name = str(self.name) + '-iter'
+
+        info('Blob %s started.  %i sources' % (name, len(B.sources)))
         t = time.time()
         trun = tlast = Time()
         # Not quite so many plots...
@@ -462,6 +467,9 @@ class OneBlob(object):
             else:
                 self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source,
                                                   B.done_fitting)
+            print('Blob %s: after initial fitting:' % name)
+            for src in cat:
+                print('  %s - %s' % (name, str(src)))
 
         if self.plots:
             self._plots(tr, 'After source fitting')
@@ -489,16 +497,16 @@ class OneBlob(object):
                 coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=mods,
                                         fill_holes=False)
                 dimshow(get_rgb(coimgs, self.bands), ticks=False)
-                plt.savefig('blob-%s-initmodel.png' % (self.name))
+                plt.savefig('blob-%s-initmodel.png' % (name))
                 res = [(tim.getImage() - mod) for tim,mod in zip(self.tims, mods)]
                 coresids,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=res)
                 dimshow(get_rgb(coresids, self.bands, resids=True), ticks=False)
-                plt.savefig('blob-%s-initresid.png' % (self.name))
+                plt.savefig('blob-%s-initresid.png' % (name))
                 dimshow(get_rgb(coresids, self.bands), ticks=False)
-                plt.savefig('blob-%s-initsub.png' % (self.name))
+                plt.savefig('blob-%s-initsub.png' % (name))
                 plt.figure(1)
 
-        debug('Blob', self.name, 'finished initial fitting:', Time()-tlast)
+        debug('Blob', name, 'finished initial fitting:', Time()-tlast)
         tlast = Time()
 
         # Set any fitting behaviors based on geometric masks.
@@ -536,14 +544,13 @@ class OneBlob(object):
             # Also set a parameter on 'src' for use in compute_segmentation_map()
             src.maskbits_forced_point_source = force_pointsource
 
-
         segmap = self.compute_segmentation_map(cat)
         # Next, model selections: point source vs rex vs dev/exp vs ser.
-        debug('Running model selection')
+        debug('Blob %s: Running model selection' % name)
         Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
         B = self.run_model_selection(cat, Ibright, B, segmap,
                                      iterative_detection=iterative_detection)
-        debug('Blob', self.name, 'finished model selection:', Time()-tlast)
+        debug('Blob', name, 'finished model selection:', Time()-tlast)
         tlast = Time()
         del segmap
 
@@ -574,11 +581,11 @@ class OneBlob(object):
             coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=mods,
                                     fill_holes=False)
             dimshow(get_rgb(coimgs,self.bands), ticks=False)
-            plt.savefig('blob-%s-model.png' % (self.name))
+            plt.savefig('blob-%s-model.png' % (name))
             res = [(tim.getImage() - mod) for tim,mod in zip(self.tims, mods)]
             coresids,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=res)
             dimshow(get_rgb(coresids, self.bands, resids=True), ticks=False)
-            plt.savefig('blob-%s-resid.png' % (self.name))
+            plt.savefig('blob-%s-resid.png' % (name))
             plt.figure(1)
 
         # Do another quick round of flux-only fitting?
@@ -637,7 +644,7 @@ class OneBlob(object):
                 if src.numberOfParams() != nsrcparams:
                     print ("EXCEPTION:", src.numberOfParams(), nsrcparams)
                     print ("Exception - src params do not match! for ", src, isub)
-                    info('Blob', self.name, 'finished, total:', Time()-trun)
+                    info('Blob', name, 'finished, total:', Time()-trun)
                     return B
                 assert(src.numberOfParams() == nsrcparams)
                 # Compute inverse-variances
@@ -667,7 +674,7 @@ class OneBlob(object):
                 B.set(k, v)
             del M
 
-        info('Blob', self.name, 'finished, total:', Time()-trun)
+        info('Blob', name, 'finished, total:', Time()-trun)
         return B
 
     def compute_segmentation_map(self, cat):
@@ -1155,6 +1162,10 @@ class OneBlob(object):
 
         # Run the whole oneblob pipeline on the iterative sources!
         Bnew = self.run(Bnew, iterative_detection=False, compute_metrics=False)
+
+        print('On return from iterative .run() of %s: sources' % self.name)
+        for src in Bnew.sources:
+            print('  ', src)
 
         # revert
         bloblogger.setLevel(loglvl)
