@@ -2425,6 +2425,7 @@ class SourceModels(object):
                 p = mod.patch[inslice]
                 img = tim.getImage()
                 img[outslice] -= p * (ie[outslice]>0)
+                tim.setImage(tim.data)
             else:
                 mod.addTo(tim.getImage(), scale=-1)
                 tim.setImage(tim.data) #Update GPU flag
