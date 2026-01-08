@@ -2314,11 +2314,10 @@ def _bounce_one_blob(X):
     (brickname, iblob, blob_unique, X) = X
     info(f"Worker PID {pid}: Final _GLOBAL_LEGACYPIPE_CONTEXT: {_GLOBAL_LEGACYPIPE_CONTEXT} running {iblob=} at "+str(datetime.datetime.now()))
     if X is not None:
-        if X[-3] and not is_gpu_worker:
+        if X[-4] and not is_gpu_worker:
             info(f"Updating {gpumode=} for worker {pid}")
             Xlist = list(X)
-            #Xlist[-3] = False
-            Xlist[-2] = gpumode
+            Xlist[-3] = gpumode
             X = tuple(Xlist)
     else:
         print (f"X is None for worker {pid}")
@@ -2332,7 +2331,7 @@ def _bounce_one_blob(X):
             if free_mem_g < 1.0:
                 print (f"Free memory under 1 GiB {free_mem_g=}; Running {pid} in CPU mode.")
                 Xlist = list(X)
-                Xlist[-2] = 0
+                Xlist[-3] = 0
                 X = tuple(Xlist)
             #else:
             #    print (f"Free memory {free_mem_g=}; Runing in GPU mode")

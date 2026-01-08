@@ -86,7 +86,7 @@ def one_blob(X):
           (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies), pid))
 
     if bid is not None and iblob != bid:
-        print ("Skipping blob %s: blobid %i" % (nblob, iblob))
+        print ("Skipping blob %s: blobid %i, bid %s" % (nblob, iblob, bid))
         return None
 
     if len(timargs) == 0:
