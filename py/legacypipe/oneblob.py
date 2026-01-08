@@ -114,7 +114,6 @@ def one_blob(args):
     # A local WCS for this blob
     blobwcs = args.brickwcs.get_subimage(args.bx0, args.by0, args.blobw, args.blobh)
 
-    print('Worker listening to SIGUSR1: PID %i' % (os.getpid()))
     oldsigusr1 = signal.SIG_DFL
     B = None
     try:
@@ -126,11 +125,11 @@ def one_blob(args):
             B = ob.B
             del ob.B
             N = len(B.sources)
-            print('Got a partway-complete result; resuming.  Done %i/%i fitting, %i/%i model sel.' %
-                  (np.sum(B.done_fitting), N, np.sum(B.done_model_selection), N))
+            info('Blob %s: resuming from checkpoint: done %i/%i fitting, %i/%i model sel' %
+                 (args.blobname, np.sum(B.done_fitting), N, np.sum(B.done_model_selection), N))
             ob.tims = create_tims(blobwcs, args.blobmask, args.timargs)
         else:
-            ob = OneBlob(args.blobname, blobwcs, args.blobmask, args.timargs, args.bands,
+            ob = OneBlob(args.blobname, args.nblobs, blobwcs, args.blobmask, args.timargs, args.bands,
                          args.plots, args.ps, args.use_ceres, args.refmap,
                          args.large_galaxies_force_pointsource,
                          args.less_masking, args.frozen_galaxies,
@@ -141,11 +140,10 @@ def one_blob(args):
         opt = ob.trargs['optimizer']
         if args.use_gpu:
             # need a branch of the tractor code that supports this!
-            print ("Using GPUFriendlyOptimizer")
+            info('Blob %s: using GPU mode %s' % (args.blobname, args.gpumode))
             from tractor.factored_optimizer import GPUFriendlyOptimizer
             opt = GPUFriendlyOptimizer()
             opt.setGPUMode(args.gpumode)
-            print('Optimizing with', type(opt))
             ob.trargs.update(optimizer=opt)
             ob.use_gpu = True
             ob.gpumode = args.gpumode
@@ -193,29 +191,32 @@ class CheckStep(object):
             pos = src.pos
             ok,ix,iy = self.blobwcs.radec2pixelxy(pos.ra, pos.dec)
             if not ok:
-                info('Optimizer stepped so far that WCS failed!  Source:', src)
+                info('Optimizer stepped so far that WCS failed!  Source: %s' % str(src))
                 return False
             ix = int(ix - 1)
             iy = int(iy - 1)
             if ix < 0 or iy < 0 or ix >= self.blobw or iy >= self.blobh:
                 # stepped outside the blob rectangle!
-                info('Optimizer stepped to blob coord (%i, %i) - blob size %i x %i - reject!  Source:'
-                      % (ix, iy, self.blobw, self.blobh), src)
+                info('Optimizer stepped to blob coord (%i, %i) - blob size %i x %i - reject!  Source: %s'
+                     % (ix, iy, self.blobw, self.blobh, str(src)))
                 return False
             if not self.blobmask[iy, ix]:
                 # stepped outside the blob mask!
-                info('Optimizer stepped to a pixel outside the blob mask - reject!  Source:', src)
+                info('Optimizer stepped to a pixel outside the blob mask - reject!  Source: %s' %
+                     (str(src)))
                 return False
         return True
 
 class OneBlob(object):
-    def __init__(self, name, blobwcs, blobmask, timargs, bands,
+    def __init__(self, name, nblobs, blobwcs, blobmask, timargs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
                  less_masking, frozen_galaxies,
                  iterative_nsigma,
                  iblob=None):
         self.name = name
+        self.nblobs = nblobs
+        self.prefix = 'Blob %s of %s:' % (name, nblobs)
         self.iblob = iblob #blob id
         self.blobwcs = blobwcs
         self.pixscale = self.blobwcs.pixel_scale()
@@ -313,6 +314,11 @@ class OneBlob(object):
         self.tims = tims
         return R
 
+    def info(self, *args):
+        info(self.prefix, *args)
+    def debug(self, *args):
+        debug(self.prefix, *args)
+
     def init_table(self, srcs, Isrcs):
         # Per-source measurements for this blob
         B = fits_table()
@@ -386,19 +392,16 @@ class OneBlob(object):
         B.delete_column('y0')
 
     def run(self, B, reoptimize=False, iterative_detection=True,
-            compute_metrics=True, mask_others=True):
+            compute_metrics=True, mask_others=True, is_iterative=False):
         # The overall steps here are:
         # - fit initial fluxes for small number of sources that may need it
         # - optimize individual sources
         # - compute segmentation map
         # - model selection (including iterative detection)
         # - metrics
-        if iterative_detection:
-            name = self.name
-        else:
-            name = str(self.name) + '-iter'
+        self.prefix = 'Blob %s%s of %s:' % (self.name, '-iter' if is_iterative else '', self.nblobs)
 
-        info('Blob %s started.  %i sources' % (name, len(B.sources)))
+        self.info('Starting: %i sources' % (len(B.sources)))
         t = time.time()
         trun = tlast = Time()
         # Not quite so many plots...
@@ -438,7 +441,7 @@ class OneBlob(object):
         # Fit any sources marked with 'needs_initial_flux' -- saturated, and SGA
         fitflux = [src for src in cat if (src is not None and getattr(src, 'needs_initial_flux', False))]
         if len(fitflux):
-            debug('Fitting initial fluxes for %i sources...' % len(fitflux))
+            self.debug('Fitting initial fluxes for %i sources' % len(fitflux))
             self._fit_fluxes(cat, self.tims, self.bands, fitcat=fitflux)
             if self.plots:
                 self._plots(tr, 'Fitting initial fluxes')
@@ -459,9 +462,9 @@ class OneBlob(object):
         # sources themselves, ie by the size of the mod patch returned by
         #  src.getModelPatch(tim)
         if np.all(B.done_fitting):
-            print('Skipping fitting individual sources (already finished that)')
+            self.info('Skipping fitting individual sources (already finished that)')
         else:
-            debug('Fitting fluxes...')
+            self.debug('Initial fitting')
             Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
             if len(cat) > 1:
                 self._optimize_individual_sources_subtract(
@@ -505,7 +508,7 @@ class OneBlob(object):
                 plt.savefig('blob-%s-initsub.png' % (name))
                 plt.figure(1)
 
-        debug('Blob', name, 'finished initial fitting:', Time()-tlast)
+        self.debug('Finished initial fitting: %s' % (Time()-tlast))
         tlast = Time()
 
         # Set any fitting behaviors based on geometric masks.
@@ -545,12 +548,12 @@ class OneBlob(object):
 
         segmap = self.compute_segmentation_map(cat)
         # Next, model selections: point source vs rex vs dev/exp vs ser.
-        debug('Blob %s: Running model selection' % name)
+        self.debug('Starting model selection')
         Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
         B = self.run_model_selection(cat, Ibright, B, segmap,
                                      iterative_detection=iterative_detection,
                                      mask_others=mask_others)
-        debug('Blob', name, 'finished model selection:', Time()-tlast)
+        self.debug('Finished model selection: %s' % (Time()-tlast))
         tlast = Time()
         del segmap
 
@@ -674,7 +677,7 @@ class OneBlob(object):
                 B.set(k, v)
             del M
 
-        info('Blob', name, 'finished, total:', Time()-trun)
+        self.info('Finished, total: %s' % (Time()-trun))
         return B
 
     def compute_segmentation_map(self, cat):
@@ -881,16 +884,16 @@ class OneBlob(object):
         # Model selection for sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
             if B.done_model_selection[srci]:
-                print('Already done model selection for srci', srci)
+                self.debug('Already done model selection for srci %i' % srci)
                 continue
 
             src = cat[srci]
-            debug('Model selection for source %i of %i in blob %s; sourcei %i' %
-                  (numi+1, len(Ibright), self.name, srci))
+            self.debug('Model selection for source %i of %i; sourcei %i' %
+                       (numi+1, len(Ibright), srci))
             cpu0 = time.process_time()
 
             if src.freezeparams:
-                info('Frozen source', src, '-- keeping as-is!')
+                self.debug('Frozen source, keeping as-is: %s' % (str(src)))
                 B.sources[srci] = src
                 B.done_model_selection[srci] = True
                 continue
@@ -909,14 +912,19 @@ class OneBlob(object):
                 plt.figure(1)
 
             # Model selection for this source.
+            pre = self.prefix
+            self.prefix = '%s source %i of %i model sel' % (pre, numi+1, len(Ibright))
             keepsrc = self.model_selection_one_source(src, srci, models, B, segmap,
                                                       mask_others=mask_others)
+            self.prefix = pre
 
             # Definitely keep ref stars (Gaia & Tycho)
             if keepsrc is None and getattr(src, 'reference_star', False):
-                debug('Dropped reference star:', src)
+                self.debug('Reference star would have been dropped: resetting brightness: %s' %
+                           (str(src)))
+                ## FIXME?  This initial_brightness is *before* even our initial round of fitting.
+                ## FIXME?  Do we really want to subtract the *initial* brightness in update_and_subtract?
                 src.brightness = src.initial_brightness
-                debug('  Reset brightness to', src.brightness)
                 src.force_keep_source = True
                 keepsrc = src
 
@@ -1157,7 +1165,7 @@ class OneBlob(object):
         newsrcs = [newsrcs[i] for i,k in enumerate(keep) if k]
         assert(len(Tnew) == len(newsrcs))
 
-        info('Blob %s: Measuring %i iterative sources' % (self.name, len(Tnew)))
+        self.info('Measuring %i iterative sources' % (len(Tnew)))
 
         isrcs = np.empty(len(newsrcs), np.int32)
         isrcs[:] = -1
@@ -1171,7 +1179,7 @@ class OneBlob(object):
 
         # Run the whole oneblob pipeline on the iterative sources!
         Bnew = self.run(Bnew, iterative_detection=False, compute_metrics=False,
-                        mask_others=False)
+                        mask_others=False, is_iterative=True)
 
         # revert
         bloblogger.setLevel(loglvl)
@@ -1596,7 +1604,7 @@ class OneBlob(object):
                 srctractor.thawParam('images')
 
             # First-round optimization (during model selection)
-            chat('OneBlob (%s) before model selection: %s' % (self.name, str(newsrc)))
+            self.debug('Before model selection: %s' % (str(newsrc)))
             try:
                 #print ("ENTERING OPTIMIZE 2 - ", type(srctractor), srctractor.optimize_loop)
                 R = srctractor.optimize_loop(**self.optargs)
@@ -1606,7 +1614,7 @@ class OneBlob(object):
                 traceback.print_exc()
                 raise(e)
                 continue
-            chat('OneBlob (%s) after model selection: %s' % (self.name, str(newsrc)))
+            self.debug('After model selection: %s' % (str(newsrc)))
             hit_limit = R.get('hit_limit', False)
             opt_steps = R.get('steps', -1)
             hit_ser_limit = False
@@ -1873,7 +1881,7 @@ class OneBlob(object):
         # For sources, in decreasing order of brightness
         for numi,srci in enumerate(Ibright):
             if done_fitting[srci]:
-                print('Already done fitting sourcei', srci)
+                self.debug('Already done fitting sourcei %i' % (srci))
                 continue
 
             cpu0 = time.process_time()
@@ -1882,8 +1890,8 @@ class OneBlob(object):
                 debug('Frozen source', src, '-- keeping as-is!')
                 done_fitting[srci] = True
                 continue
-            debug('Fitting source', srci, '(%i of %i in blob %s)' %
-                  (numi+1, len(Ibright), self.name), ':', src)
+            self.debug('Fitting source %i of %i (source id %i): %s' %
+                       (numi+1, len(Ibright), srci, str(src)))
             # Add this source's initial model back in.
             models.add(srci, self.tims)
 
@@ -1923,10 +1931,10 @@ class OneBlob(object):
             srctractor.setModelMasks(None)
             disable_galaxy_cache()
 
-            debug('Finished fitting:', src)
+            self.debug('Finished fitting source %i of %i (source id %i): %s' %
+                       (numi+1, len(Ibright), srci, str(src)))
             cpu1 = time.process_time()
             cputime[srci] += (cpu1 - cpu0)
-
             done_fitting[srci] = True
 
         models.restore_images(self.tims)
