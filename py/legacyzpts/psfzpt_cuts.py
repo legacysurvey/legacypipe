@@ -404,8 +404,13 @@ def add_psfzpt_cuts(T, camera, bad_expid, image2coadd='', **kw):
         # radec_rms = 0.2
         # zpt_diff_avg = 0.1
         # CFIS/XMM (u/r only)
-        u0 = 25.45
+        #u0 = 25.45
         r0 = 26.27
+
+        # CFIS/u test region: 23.2 (!?!)
+        u0 = 23.20
+        kw.update(phrms_cut = 0.2)
+        
         g0 = 25.0
         z0 = 25.0
         du = (-0.5, +0.25)
