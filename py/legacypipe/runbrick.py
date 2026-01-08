@@ -1546,7 +1546,6 @@ def stage_fitblobs(T=None,
                 print('terminating pool...')
                 mp.pool.terminate()
                 print('raising exception...')
-                #raise e
                 raise RunbrickError('Worker process died (OOM?) while processing: %s' % workitem)
             except Exception as e:
                 print('Main thread: Exception fetching result:', e)
@@ -2100,7 +2099,16 @@ def _blob_iter(job_id_map,
 
     job_id = 0
 
-    for nblob,iblob in enumerate(blob_order):
+    Nblobs = len(blobslices)
+
+    common_blob_args = dict(nblobs=Nblobs, brickwcs=targetwcs, bands=bands,
+                            plots=plots, ps=ps, reoptimize=reoptimize, iterative=iterative,
+                            iterative_nsigma=iterative_nsigma, use_ceres=use_ceres,
+                            large_galaxies_force_pointsource=large_galaxies_force_pointsource,
+                            less_masking=less_masking,
+                            use_gpu=use_gpu, gpumode=gpumode, bid=bid)
+
+    for blob_rank,iblob in enumerate(blob_order):
         global signal_quitting
         if signal_quitting:
             print('_blob_iter: signal_quitting')
@@ -2130,13 +2138,15 @@ def _blob_iter(job_id_map,
         # at least one pixel should be set!
         assert(np.any(blobmask))
 
+        blobname = '%i' % (blob_rank + 1)
+
         if U is not None:
             # If the blob is solely outside the unique region of this brick,
             # skip it!
             if np.all(U[bslc][blobmask] == False):
-                info('Blob %i is completely outside the unique region of this brick -- skipping' %
-                     (nblob+1))
-                job_id_map[job_id] = (brickname, nblob+1)
+                info('Blob %s is completely outside the unique region of this brick -- skipping' %
+                     (blobname))
+                job_id_map[job_id] = (brickname, blobname)
                 job_id += 1
                 yield (brickname, iblob, None, None)
                 continue
@@ -2152,14 +2162,14 @@ def _blob_iter(job_id_map,
             break
 
         npix = np.sum(blobmask)
-        info(('Blob %i of %i, id: %i, sources: %i, size: %ix%i, npix %i, brick X: %i,%i, ' +
+        info(('Blob %s of %i, id: %i, sources: %i, size: %ix%i, npix %i, brick X: %i,%i, ' +
                'Y: %i,%i, one pixel: %i %i') %
-              (nblob+1, len(blobslices), iblob, len(Isrcs), blobw, blobh, npix,
+              (blobname, Nblobs, iblob, len(Isrcs), blobw, blobh, npix,
                bx0,bx1,by0,by1, onex,oney))
 
         if max_blobsize is not None and npix > max_blobsize:
-            info('Number of pixels in blob,', npix, ', exceeds max blobsize', max_blobsize)
-            job_id_map[job_id] = (brickname, nblob+1)
+            info('Number of pixels in blob, %i exceeds max blobsize %i' % (npix, max_blobsize))
+            job_id_map[job_id] = (brickname, blobname)
             job_id += 1
             yield (brickname, iblob, None, None)
             continue
@@ -2178,7 +2188,7 @@ def _blob_iter(job_id_map,
         # Check for a large blob that is fully contained in the
         # CLUSTER mask -- enable sub-blob processing if so.
         if (not do_sub_blobs) and np.all((refmap[bslc][blobmask] & REF_MAP_BITS['CLUSTER']) != 0):
-            info('Entire large blob is in CLUSTER mask')
+            info('Entire large blob is in CLUSTER mask.  Splitting into sub-blobs')
             do_sub_blobs = True
 
         threshsize = None
@@ -2204,7 +2214,7 @@ def _blob_iter(job_id_map,
             # Regular blob.
             # Here we cut out subimages for the blob...
             subtimargs = get_subtim_args(tims, targetwcs, bx0,bx1, by0,by1, single_thread)
-            job_id_map[job_id] = (brickname, nblob+1)
+            job_id_map[job_id] = (brickname, blobname)
             job_id += 1
 
             halfdone = halfdone_blob_map.get(int(iblob), None)
@@ -2212,16 +2222,13 @@ def _blob_iter(job_id_map,
                 info('Found a mid-way checkpoint for this blob')
 
             yield (brickname, iblob, None,
-                   OneBlobArgs(nblob=nblob+1, iblob=iblob, Isrcs=Isrcs, brickwcs=targetwcs,
+                   OneBlobArgs(blobname=blobname, iblob=iblob, Isrcs=Isrcs,
                                bx0=bx0, by0=by0, blobw=blobw, blobh=blobh, blobmask=blobmask,
-                               timargs=subtimargs, srcs=[cat[i] for i in Isrcs], bands=bands,
-                               plots=plots, ps=ps, reoptimize=reoptimize, iterative=iterative,
-                               iterative_nsigma=iterative_nsigma, use_ceres=use_ceres,
+                               timargs=subtimargs, srcs=[cat[i] for i in Isrcs], 
                                refmap=refmap[bslc],
-                               large_galaxies_force_pointsource=large_galaxies_force_pointsource,
-                               less_masking=less_masking,
                                frozen_galaxies=frozen_galaxies.get(iblob, []),
-                               use_gpu=use_gpu, gpumode=gpumode, bid=bid, halfdone=halfdone))
+                               halfdone=halfdone,
+                               **common_blob_args))
             continue
 
         # Sub-blob.
@@ -2276,9 +2283,9 @@ def _blob_iter(job_id_map,
                 clipy = np.clip(T.iby[Isrcs], 0, H-1)
                 Isubsrcs = Isrcs[(clipx >= sub_bx0) * (clipx < sub_bx1) *
                                  (clipy >= sub_by0) * (clipy < sub_by1)]
-                sub_blob_name = '%i-%i' % (nblob+1, 1+sub_blob)
-                info(len(Isubsrcs), 'of', len(Isrcs), 'sources are within sub-blob',
-                     sub_blob_name)
+                sub_blob_name = '%s-%i' % (blobname, 1+sub_blob)
+                info('%i of %i sources are within sub-blob %s' %
+                     (len(Isubsrcs), len(Isrcs), sub_blob_name))
                 if len(Isubsrcs) == 0:
                     continue
                 # Here we cut out subimages for the blob...
@@ -2290,23 +2297,20 @@ def _blob_iter(job_id_map,
 
                 halfdone = halfdone_blob_map.get((int(iblob),sub_blob), None)
                 if halfdone is not None:
-                    info('Found a mid-way checkpoint for this sub-blob')
+                    info('Found a mid-way checkpoint for sub-blob %s' % sub_blob_name)
 
                 yield (brickname, (iblob,sub_blob),
                        (bx0 + uniqx[j], bx0 + uniqx[j+1], by0 + uniqy[i], by0 + uniqy[i+1]),
-                       OneBlobArgs(nblob=sub_blob_name, iblob=iblob, Isrcs=Isubsrcs, brickwcs=targetwcs,
+                       OneBlobArgs(blobname=sub_blob_name, iblob=iblob, Isrcs=Isubsrcs,
                                    bx0=sub_bx0, by0=sub_by0,
                                    blobw=sub_bx1-sub_bx0, blobh=sub_by1-sub_by0,
                                    # "blobmask" has already been cut to this blob, so don't use sub_slc
                                    blobmask=blobmask[suby0:suby1, subx0:subx1],
-                                   timargs=subtimargs, srcs=[cat[i] for i in Isubsrcs], bands=bands,
-                                   plots=plots, ps=ps, reoptimize=reoptimize, iterative=iterative,
-                                   iterative_nsigma=iterative_nsigma, use_ceres=use_ceres,
+                                   timargs=subtimargs, srcs=[cat[i] for i in Isubsrcs],
                                    refmap=refmap[sub_slc],
-                                   large_galaxies_force_pointsource=large_galaxies_force_pointsource,
-                                   less_masking=less_masking,
                                    frozen_galaxies=fro_gals,
-                                   use_gpu=use_gpu, gpumode=gpumode, bid=bid, halfdone=halfdone))
+                                   halfdone=halfdone,
+                                   **common_blob_args))
 
 def _bounce_one_blob(X):
     '''This wraps the one_blob function for multiprocessing purposes (and

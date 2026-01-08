@@ -59,7 +59,8 @@ class QuitNowException(BaseException):
     pass
 
 OneBlobArgs = namedtuple('OneBlobArgs', [
-    'nblob', 'iblob', 'Isrcs', 'brickwcs', 'bx0', 'by0', 'blobw', 'blobh', 'blobmask', 'timargs',
+    'blobname', 'nblobs', 'iblob', 'Isrcs', 'brickwcs', 'bx0', 'by0', 'blobw', 'blobh', 'blobmask',
+    'timargs',
     'srcs', 'bands', 'plots', 'ps', 'reoptimize', 'iterative', 'iterative_nsigma', 'use_ceres',
     'refmap', 'large_galaxies_force_pointsource', 'less_masking', 'frozen_galaxies', 'use_gpu',
     'gpumode', 'bid', 'halfdone'])
@@ -72,7 +73,7 @@ def one_blob(args):
         return None
 
     if quit_now:
-        print('Quit_now is set; not processing blob %s' % args.nblob)
+        print('Quit_now is set; not processing blob %s' % args.blobname)
         # don't return None -- this is a different thing!
         raise QuitNowException()
 
@@ -82,12 +83,12 @@ def one_blob(args):
         dummy = cp.zeros(1)
     t = time.time()
     pid = os.getpid()
-    info('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies; pid %i' %
-         (args.nblob, args.iblob, len(args.Isrcs), args.blobw, args.blobh, len(args.timargs),
+    info('Fitting blob %s of %i: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies; pid %i' %
+         (args.blobname, args.nblobs, args.iblob, len(args.Isrcs), args.blobw, args.blobh, len(args.timargs),
           len(args.frozen_galaxies), pid))
 
     if args.bid is not None and args.iblob != args.bid:
-        print ("Skipping blob %s: blobid %i, bid %s" % (args.nblob, args.iblob, args.bid))
+        print ("Skipping blob %s: blobid %i, bid %s" % (args.blobname, args.iblob, args.bid))
         return None
 
     if len(args.timargs) == 0:
@@ -129,7 +130,7 @@ def one_blob(args):
                   (np.sum(B.done_fitting), N, np.sum(B.done_model_selection), N))
             ob.tims = create_tims(blobwcs, args.blobmask, args.timargs)
         else:
-            ob = OneBlob(args.nblob, blobwcs, args.blobmask, args.timargs, args.bands,
+            ob = OneBlob(args.blobname, blobwcs, args.blobmask, args.timargs, args.bands,
                          args.plots, args.ps, args.use_ceres, args.refmap,
                          args.large_galaxies_force_pointsource,
                          args.less_masking, args.frozen_galaxies,
@@ -160,10 +161,10 @@ def one_blob(args):
 
     except QuitNowException as q:
         if ob is not None:
-            print('Caught QuitNowException; saving checkpoint state for blob %s' % args.nblob)
+            print('Caught QuitNowException; saving checkpoint state for blob %s' % args.blobname)
             ob.B = B
         else:
-            print('Caught QuitNowException; ob None for blob %s' % args.nblob)
+            print('Caught QuitNowException; ob None for blob %s' % args.blobname)
         return ob
     finally:
         if B is not None:
@@ -1161,7 +1162,6 @@ class OneBlob(object):
         isrcs = np.empty(len(newsrcs), np.int32)
         isrcs[:] = -1
         Bnew = self.init_table(newsrcs, isrcs)
-        # FIXME -- float32 ??!
         Bnew.x0 = Tnew.ibx.astype(np.float32)
         Bnew.y0 = Tnew.iby.astype(np.float32)
         # Be quieter during iterative detection!
@@ -1172,10 +1172,6 @@ class OneBlob(object):
         # Run the whole oneblob pipeline on the iterative sources!
         Bnew = self.run(Bnew, iterative_detection=False, compute_metrics=False,
                         mask_others=False)
-
-        print('On return from iterative .run() of %s: sources' % self.name)
-        for src in Bnew.sources:
-            print('  ', src)
 
         # revert
         bloblogger.setLevel(loglvl)
