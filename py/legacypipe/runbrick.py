@@ -2034,6 +2034,7 @@ def _blob_iter(job_id_map,
     '''
     from legacypipe.bits import REF_MAP_BITS
     from collections import Counter
+    from legacypipe.oneblob import OneBlobArgs
 
     def get_subtim_args(tims, targetwcs, bx0,bx1, by0,by1, single_thread):
         rr,dd = targetwcs.pixelxy2radec([bx0,bx0,bx1,bx1],[by0,by1,by1,by0])
@@ -2211,11 +2212,16 @@ def _blob_iter(job_id_map,
                 info('Found a mid-way checkpoint for this blob')
 
             yield (brickname, iblob, None,
-                   (nblob+1, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
-                    blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-                    reoptimize, iterative, iterative_nsigma, use_ceres, refmap[bslc],
-                    large_galaxies_force_pointsource, less_masking,
-                    frozen_galaxies.get(iblob, []), use_gpu, gpumode, bid, halfdone))
+                   OneBlobArgs(nblob=nblob+1, iblob=iblob, Isrcs=Isrcs, brickwcs=targetwcs,
+                               bx0=bx0, by0=by0, blobw=blobw, blobh=blobh, blobmask=blobmask,
+                               timargs=subtimargs, srcs=[cat[i] for i in Isrcs], bands=bands,
+                               plots=plots, ps=ps, reoptimize=reoptimize, iterative=iterative,
+                               iterative_nsigma=iterative_nsigma, use_ceres=use_ceres,
+                               refmap=refmap[bslc],
+                               large_galaxies_force_pointsource=large_galaxies_force_pointsource,
+                               less_masking=less_masking,
+                               frozen_galaxies=frozen_galaxies.get(iblob, []),
+                               use_gpu=use_gpu, gpumode=gpumode, bid=bid, halfdone=halfdone))
             continue
 
         # Sub-blob.
@@ -2288,16 +2294,19 @@ def _blob_iter(job_id_map,
 
                 yield (brickname, (iblob,sub_blob),
                        (bx0 + uniqx[j], bx0 + uniqx[j+1], by0 + uniqy[i], by0 + uniqy[i+1]),
-                       (sub_blob_name, iblob,
-                        Isubsrcs, targetwcs, sub_bx0, sub_by0,
-                        sub_bx1 - sub_bx0, sub_by1 - sub_by0,
-                        # "blobmask" has already been cut to this blob, so don't use sub_slc
-                        blobmask[suby0:suby1, subx0:subx1],
-                        subtimargs, [cat[i] for i in Isubsrcs], bands,
-                        plots, ps,
-                        reoptimize, iterative, iterative_nsigma, use_ceres, refmap[sub_slc],
-                        large_galaxies_force_pointsource, less_masking, fro_gals,
-                        use_gpu, gpumode, bid, halfdone))
+                       OneBlobArgs(nblob=sub_blob_name, iblob=iblob, Isrcs=Isubsrcs, brickwcs=targetwcs,
+                                   bx0=sub_bx0, by0=sub_by0,
+                                   blobw=sub_bx1-sub_bx0, blobh=sub_by1-sub_by0,
+                                   # "blobmask" has already been cut to this blob, so don't use sub_slc
+                                   blobmask=blobmask[suby0:suby1, subx0:subx1],
+                                   timargs=subtimargs, srcs=[cat[i] for i in Isubsrcs], bands=bands,
+                                   plots=plots, ps=ps, reoptimize=reoptimize, iterative=iterative,
+                                   iterative_nsigma=iterative_nsigma, use_ceres=use_ceres,
+                                   refmap=refmap[sub_slc],
+                                   large_galaxies_force_pointsource=large_galaxies_force_pointsource,
+                                   less_masking=less_masking,
+                                   frozen_galaxies=fro_gals,
+                                   use_gpu=use_gpu, gpumode=gpumode, bid=bid, halfdone=halfdone))
 
 def _bounce_one_blob(X):
     '''This wraps the one_blob function for multiprocessing purposes (and
@@ -2311,14 +2320,12 @@ def _bounce_one_blob(X):
 
     pid = os.getpid()
 
-    (brickname, iblob, blob_unique, X) = X
+    (brickname, iblob, blob_unique, args) = X
     info(f"Worker PID {pid}: Final _GLOBAL_LEGACYPIPE_CONTEXT: {_GLOBAL_LEGACYPIPE_CONTEXT} running {iblob=} at "+str(datetime.datetime.now()))
-    if X is not None:
-        if X[-4] and not is_gpu_worker:
+    if args is not None:
+        if args.use_gpu and not is_gpu_worker:
             info(f"Updating {gpumode=} for worker {pid}")
-            Xlist = list(X)
-            Xlist[-3] = gpumode
-            X = tuple(Xlist)
+            args = args._replace(gpumode=gpumode)
     else:
         print (f"X is None for worker {pid}")
 
@@ -2330,14 +2337,11 @@ def _bounce_one_blob(X):
             free_mem_g = free_mem/1024.**3
             if free_mem_g < 1.0:
                 print (f"Free memory under 1 GiB {free_mem_g=}; Running {pid} in CPU mode.")
-                Xlist = list(X)
-                Xlist[-3] = 0
-                X = tuple(Xlist)
+                args = args._replace(gpumode=0)
             #else:
             #    print (f"Free memory {free_mem_g=}; Runing in GPU mode")
-        result = one_blob(X)
+        result = one_blob(args)
         if result is not None:
-
             if isinstance(result, OneBlob):
                 # blob checkpoint - just return as-is
                 pass
@@ -2358,10 +2362,7 @@ def _bounce_one_blob(X):
         # This should only happen for the final blob to be processed, where one_blob raises
         # an exception any time it is called after the quit signal has been received.
         print('Caught QuitNowException in bounce_one_blob.')
-        #import traceback
-        #traceback.print_exc()
         return None
-
     except:
         import traceback
         print('Exception in one_blob: brick %s, iblob %s' % (brickname, iblob))

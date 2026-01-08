@@ -2,6 +2,8 @@ import os
 import time
 import signal
 
+from collections import namedtuple
+
 import numpy as np
 
 from astrometry.util.ttime import Time
@@ -56,53 +58,52 @@ def sigusr1(sig, stackframe):
 class QuitNowException(BaseException):
     pass
 
-def one_blob(X):
+OneBlobArgs = namedtuple('OneBlobArgs', [
+    'nblob', 'iblob', 'Isrcs', 'brickwcs', 'bx0', 'by0', 'blobw', 'blobh', 'blobmask', 'timargs',
+    'srcs', 'bands', 'plots', 'ps', 'reoptimize', 'iterative', 'iterative_nsigma', 'use_ceres',
+    'refmap', 'large_galaxies_force_pointsource', 'less_masking', 'frozen_galaxies', 'use_gpu',
+    'gpumode', 'bid', 'halfdone'])
+
+def one_blob(args):
     '''
     Fits sources contained within a "blob" of pixels.
     '''
-    if X is None:
+    if args is None:
         return None
-    (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
-     srcs, bands, plots, ps, reoptimize, iterative, iterative_nsigma, use_ceres, refmap,
-     large_galaxies_force_pointsource, less_masking, frozen_galaxies, use_gpu, gpumode, bid,
-     halfdone) = X
 
     if quit_now:
-        print('Quit_now is set; not processing blob %s' % nblob)
+        print('Quit_now is set; not processing blob %s' % args.nblob)
         # don't return None -- this is a different thing!
         raise QuitNowException()
 
-    if (use_gpu and gpumode > 0):
-        #Prime gpu
+    if (args.use_gpu and args.gpumode > 0):
+        # Prime gpu
         import cupy as cp
         dummy = cp.zeros(1)
     t = time.time()
-
-    #debug('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
-    #      (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
-
     pid = os.getpid()
-    info('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies ; pid %i' %
-          (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies), pid))
+    info('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies; pid %i' %
+         (args.nblob, args.iblob, len(args.Isrcs), args.blobw, args.blobh, len(args.timargs),
+          len(args.frozen_galaxies), pid))
 
-    if bid is not None and iblob != bid:
-        print ("Skipping blob %s: blobid %i, bid %s" % (nblob, iblob, bid))
+    if args.bid is not None and args.iblob != args.bid:
+        print ("Skipping blob %s: blobid %i, bid %s" % (args.nblob, args.iblob, args.bid))
         return None
 
-    if len(timargs) == 0:
+    if len(args.timargs) == 0:
         return None
-    if len(Isrcs) == 0:
+    if len(args.Isrcs) == 0:
         return None
 
-    assert(blobmask.shape == (blobh,blobw))
-    assert(refmap.shape == (blobh,blobw))
+    assert(args.blobmask.shape == (args.blobh,args.blobw))
+    assert(args.refmap.shape == (args.blobh,args.blobw))
 
-    for g in frozen_galaxies:
+    for g in args.frozen_galaxies:
         debug('Frozen galaxy:', g)
 
     LegacySersicIndex.stepsize = 0.001
 
-    if plots:
+    if args.plots:
         import pylab as plt
         plt.figure(2, figsize=(3,3))
         plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99)
@@ -110,7 +111,7 @@ def one_blob(X):
 
     t0 = time.process_time()
     # A local WCS for this blob
-    blobwcs = brickwcs.get_subimage(bx0, by0, blobw, blobh)
+    blobwcs = args.brickwcs.get_subimage(args.bx0, args.by0, args.blobw, args.blobh)
 
     print('Worker listening to SIGUSR1: PID %i' % (os.getpid()))
     oldsigusr1 = signal.SIG_DFL
@@ -119,50 +120,50 @@ def one_blob(X):
         ob = None
         oldsigusr1 = signal.signal(signal.SIGUSR1, sigusr1)
 
-        if halfdone is not None:
-            ob = halfdone
+        if args.halfdone is not None:
+            ob = args.halfdone
             B = ob.B
             del ob.B
             N = len(B.sources)
             print('Got a partway-complete result; resuming.  Done %i/%i fitting, %i/%i model sel.' %
                   (np.sum(B.done_fitting), N, np.sum(B.done_model_selection), N))
-            ob.tims = create_tims(blobwcs, blobmask, timargs)
+            ob.tims = create_tims(blobwcs, args.blobmask, args.timargs)
         else:
-            ob = OneBlob(nblob, blobwcs, blobmask, timargs, bands,
-                         plots, ps, use_ceres, refmap,
-                         large_galaxies_force_pointsource,
-                         less_masking, frozen_galaxies,
-                         iterative_nsigma,
-                         iblob=iblob)
-            B = ob.init_table(srcs, Isrcs)
+            ob = OneBlob(args.nblob, blobwcs, args.blobmask, args.timargs, args.bands,
+                         args.plots, args.ps, args.use_ceres, args.refmap,
+                         args.large_galaxies_force_pointsource,
+                         args.less_masking, args.frozen_galaxies,
+                         args.iterative_nsigma,
+                         iblob=args.iblob)
+            B = ob.init_table(args.srcs, args.Isrcs)
 
         opt = ob.trargs['optimizer']
-        if use_gpu:
+        if args.use_gpu:
             # need a branch of the tractor code that supports this!
             print ("Using GPUFriendlyOptimizer")
             from tractor.factored_optimizer import GPUFriendlyOptimizer
             opt = GPUFriendlyOptimizer()
-            opt.setGPUMode(gpumode)
+            opt.setGPUMode(args.gpumode)
             print('Optimizing with', type(opt))
             ob.trargs.update(optimizer=opt)
             ob.use_gpu = True
-            ob.gpumode = gpumode
+            ob.gpumode = args.gpumode
 
-        B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
-        ob.finalize_table(B, bx0, by0)
+        B = ob.run(B, reoptimize=args.reoptimize, iterative_detection=args.iterative)
+        ob.finalize_table(B, args.bx0, args.by0)
 
-        B.iblob = iblob
-        if bid is not None and iblob == bid:
+        B.iblob = args.iblob
+        if args.bid is not None and args.iblob == args.bid:
             print ("Exiting.")
             import sys
             sys.exit(0)
 
     except QuitNowException as q:
         if ob is not None:
-            print('Caught QuitNowException; saving checkpoint state for blob %s' % nblob)
+            print('Caught QuitNowException; saving checkpoint state for blob %s' % args.nblob)
             ob.B = B
         else:
-            print('Caught QuitNowException; ob None for blob %s' % nblob)
+            print('Caught QuitNowException; ob None for blob %s' % args.nblob)
         return ob
     finally:
         if B is not None:
