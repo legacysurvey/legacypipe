@@ -294,9 +294,9 @@ class DecamImage(CPImage):
             return iv,hdr
         return iv
 
-    def read_dq(self, header=None, **kwargs):
-        # Reduce DQ size
-        dq = super().read_dq(header=header, **kwargs)
+    def read_dq(self, header=None, slc=None, **kwargs):
+        # Reduce DQ data type size (int16)
+        dq = super().read_dq(header=header, slc=slc, **kwargs)
         if header:
             # unpack
             dq,hdr = dq
@@ -307,7 +307,7 @@ class DecamImage(CPImage):
             dq = dq,hdr
         return dq
 
-    def remap_dq(self, dq, header):
+    def remap_dq(self, dq, header, slc):
         '''
         Called by get_tractor_image() to map the results from read_dq
         into a bitmask.
@@ -387,6 +387,45 @@ class DecamImage(CPImage):
                 assert(np.all((dq & bothbits) != bothbits))
         # should already be this type...
         dq = dq.astype(self.dq_type)
+
+        # extra S17 masking
+        if self.ccdname == 'S17':
+            from astrometry.util.miscutils import get_overlapping_region
+            from legacypipe.bits import DQ_BITS
+            x0, y0 = 0, 0
+            H, W = dq.shape
+            if slc is not None:
+                sy, sx = slc
+                y0, y1 = sy.start, sy.stop
+                x0, x1 = sx.start, sx.stop
+            else:
+                y1 = H
+                x1 = W
+            # Bad region in S17 - (the hi is non-inclusive)
+            ybad_lo, ybad_hi =   0, 3888+1
+            xbad_lo, xbad_hi = 538,  543+1
+            # Let's shift the bad-pixel rectangle to local coordinates in our "dq" sub-image,
+            # so the bounds checking is simpler.
+            ybad_lo -= y0
+            ybad_hi -= y0
+            xbad_lo -= x0
+            xbad_hi -= x0
+            debug('DQ slice: x [%i, %i), y [%i, %i)' % (x0, x1, y0, y1))
+            debug('Local coords of bad S17 region: x [%i, %i), y [%i, %i)' %
+                  (xbad_lo, xbad_hi, ybad_lo, ybad_hi))
+            if xbad_lo >= W or ybad_lo >= H or xbad_hi <= 0 or ybad_hi <= 0:
+                debug('S17: no overlap')
+                pass
+            else:
+                # clip
+                xbad_lo = max(0, xbad_lo)
+                ybad_lo = max(0, ybad_lo)
+                xbad_hi = min(W, xbad_hi)
+                ybad_hi = min(H, ybad_hi)
+                debug('Clipped local coords: x [%i, %i), y [%i, %i)' %
+                  (xbad_lo, xbad_hi, ybad_lo, ybad_hi))
+                dq[ybad_lo:ybad_hi, xbad_lo:xbad_hi] |= DQ_BITS['badpix']
+
         return dq
 
     def fix_saturation(self, img, dq, invvar, primhdr, imghdr, slc):
@@ -405,27 +444,49 @@ class DecamImage(CPImage):
             dq[I,J] |= DQ_BITS['satur']
         invvar[I,J] = 0.
 
+    def needs_sky_jump(self):
+        return (
+            (self.band in ['g','r','i'] and
+             self.ccdname.strip() in ['S30', 'N14', 'S19', 'S16', 'S10'])
+            or
+            (self.band == 'z' and self.ccdname.strip() in ['S30'])
+            )
+
     # S30, N14, S19, S16, S10
-    def get_tractor_sky_model(self, img, goodpix):
-        from tractor.splinesky import SplineSky
-        from legacypipe.jumpsky import JumpSky
+    def get_spline_sky_model(self, img, goodpix):
         boxsize = self.splinesky_boxsize
         # For DECam chips where we drop half the chip, spline becomes
         # underconstrained
         if min(img.shape) / boxsize < 4:
             boxsize /= 2
-
-        if ((self.band in ['g','r','i'] and
-             self.ccdname.strip() in ['S30', 'N14', 'S19', 'S16', 'S10']) or
-            (self.band == 'z' and
-             self.ccdname.strip() in ['S30'])):
+        if self.needs_sky_jump():
+            from legacypipe.jumpsky import JumpSky
             _,W = img.shape
             xbreak = W//2
-            skyobj = JumpSky.BlantonMethod(img, goodpix, boxsize, xbreak)
-        else:
-            skyobj = SplineSky.BlantonMethod(img, goodpix, boxsize, min_fraction=0.25)
+            skyobj = JumpSky.BlantonMethod(img, goodpix, boxsize, xbreak, min_fraction=0.25)
+            return skyobj
+        return super().get_spline_sky_model(img, goodpix)
 
-        return skyobj
+    def get_constant_sky_model(self, skylevel, img, goodpix):
+        from scipy.stats import sigmaclip
+        if self.needs_sky_jump():
+            from legacypipe.jumpsky import ConstantJumpSky
+            H,W = img.shape
+            xbreak = W//2
+
+            vals = []
+            for slc in [(slice(H), slice(xbreak)),
+                        (slice(H), slice(xbreak, W))]:
+                if np.sum(goodpix[slc]) > 100:
+                    cimage, _, _ = sigmaclip(img[slc][goodpix[slc]], low=2.0, high=2.0)
+                    if len(cimage) > 0:
+                        sky_john = np.median(cimage)
+                        vals.append(sky_john)
+                    del cimage
+            if len(vals) == 2:
+                skyobj = ConstantJumpSky(xbreak, vals[0], vals[1])
+                return skyobj
+        return super().get_constant_sky_model(skylevel, img, goodpix)
 
 def decam_cp_version_after(plver, after):
     from distutils.version import StrictVersion

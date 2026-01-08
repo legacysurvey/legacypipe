@@ -5,7 +5,8 @@ import numpy as np
 def gaia_to_decam(gaia, bands,
                   average_color=1.4,
                   color_clip=None,
-                  only_color_term=False):
+                  only_color_term=False,
+                  missing_mag=30.):
     from functools import reduce
     G  = gaia.phot_g_mean_mag .astype(np.float32)
     BP = gaia.phot_bp_mean_mag.astype(np.float32)
@@ -72,7 +73,7 @@ def gaia_to_decam(gaia, bands,
             mag[:] = 0.
         for order,c in enumerate(co):
             mag += c * cc**order
-        mag[nomags] = 0.
+        mag[nomags] = missing_mag
         mags.append(mag)
     return mags
 

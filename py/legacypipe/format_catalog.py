@@ -42,11 +42,11 @@ def _expand_flux_columns(T, bands, allbands, keys):
             col = clean_column_name('%s_%s' % (key, b))
             T.set(col, A[:,i])
 
-def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
-                   write_kwargs=None, N_wise_epochs=None,
+def format_catalog(T, bands, allbands, release,
+                   N_wise_epochs=None,
                    motions=True, gaia_tagalong=False):
-    if write_kwargs is None:
-        write_kwargs = {}
+    from astrometry.libkd.spherematch import match_radec
+
     has_wise =    'flux_w1'    in T.columns()
     has_wise_lc = 'lc_flux_w1' in T.columns()
     has_galex =   'flux_nuv'   in T.columns()
@@ -121,11 +121,26 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
 
     T.release = np.zeros(len(T), np.int16) + release
 
+    # Add LS_ID_ -- from
+    # https://github.com/desihub/desitarget/blob/main/py/desitarget/data/targetmask.yaml#L263-L265
+    T.ls_id_dr11 = ((T.release.astype(np.int64) << 42) |
+                    (T.brickid.astype(np.int64) << 22) |
+                    (T.objid.astype(np.int64)))
+
+    # Add the distance to the nearest neighbour, (out to a max of 1 arcmin)
+    T.nearest_neighbor = np.zeros(len(T), np.float32)
+    # the tractor catalogs can contain (reference) objects outside the brick, so some
+    # could be quite far away (eg, LMC).
+    I,J,d = match_radec(T.ra, T.dec, T.ra, T.dec, 1./60., notself=True, nearest=True)
+    T.nearest_neighbor[I] = d * 3600.
+    del I, J, d
+
     # Column ordering...
-    cols = ['release', 'brickid', 'brickname', 'objid', 'brick_primary',
+    cols = ['ls_id_dr11', 'release', 'brickid', 'brickname', 'objid', 'brick_primary',
             'maskbits', 'fitbits',
             'type', 'ra', 'dec', 'ra_ivar', 'dec_ivar',
             'bx', 'by', 'dchisq', 'ebv', 'mjd_min', 'mjd_max',
+            'nearest_neighbor',
             'ref_cat', 'ref_id']
     if motions:
         cols.extend(['pmra', 'pmdec', 'parallax',
@@ -218,6 +233,8 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
         add_fluxlike(c)
         if has_wise:
             add_wiselike(c)
+        if has_galex:
+            add_galexlike(c)
     for c in ['fracmasked', 'fracin', 'ngood', 'anymask', 'allmask']:
         add_fluxlike(c)
     if has_wise:
@@ -229,6 +246,8 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
         add_fluxlike(c)
     if has_wise:
         add_wiselike('psfdepth')
+    if has_galex:
+        add_galexlike('psfdepth')
 
     if has_wise:
         cols.extend(['wise_coadd_id', 'wise_x', 'wise_y'])
@@ -317,8 +336,7 @@ def format_catalog(T, hdr, primhdr, bands, allbands, outfn, release,
             cols[i] = cc[j]
 
     units = get_units_for_columns(cols, bands=[clean_column_name(b) for b in allbands] + wbands + gbands)
-    T.writeto(outfn, columns=cols, header=hdr, primheader=primhdr, units=units,
-              extname='CATALOG', **write_kwargs)
+    return cols, units
 
 def format_all_models(T, newcat, BB, bands, allbands, force_keep=None):
     import fitsio

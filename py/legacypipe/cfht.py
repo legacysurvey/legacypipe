@@ -302,7 +302,7 @@ class MegaPrimeImage(LegacySurveyImage):
     #         hdr = self.read_image_header()
     #     return wcs_pv2sip_hdr(self.hdr)
 
-    # def remap_dq(self, dq, header):
+    # def remap_dq(self, dq, header, slc):
     #     '''
     #     Called by get_tractor_image() to map the results from read_dq
     #     into a bitmask.  We only have a 0/1 bad pixel mask.
@@ -873,7 +873,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             pass
         return nil
 
-    def get_tractor_sky_model(self, img, goodpix):
+    def get_spline_sky_model(self, img, goodpix):
         from legacypipe.jumpsky import JumpSky
         boxsize = self.splinesky_boxsize
         _,W = img.shape

@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -33,10 +33,8 @@ RUN apt install -y gpgv && \
     libgoogle-glog-dev \
     libceres-dev \
     python3-pip \
-    python3.10 \
-    python3.10-dev \
-    python3.11 \
-    python3.11-dev \
+    python3.12 \
+    python3.12-dev \
     source-extractor \
     psfex \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
@@ -55,27 +53,24 @@ RUN for x in \
     photutils \
     zmq \
     ; do \
-    python3.10 -m pip install $x; \
-    python3.11 -m pip install $x; \
+    python3.12 -m pip install $x --break-system-packages; \
     done; \
     rm -R /root/.cache/pip
 
 RUN mkdir /src
 WORKDIR /src
 
-# to help astrometry.net find netpbm (yuck)
-RUN ln -s /usr/include /usr/local/include/netpbm
+# compile for a fairly old standard (for Perlmutter)
+ENV ARCH_FLAGS=-march=x86-64-v3
 
 # Astrometry.net
 RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
     && make \
     && make extra \
-    && make py PYTHON=python3.10 PYTHON_CONFIG=python3.10-config \
-    && make py PYTHON=python3.11 PYTHON_CONFIG=python3.11-config \
-    && make install INSTALL_DIR=/usr/local PYTHON=python3.10 PYTHON_CONFIG=python3.10-config \
-    && make install INSTALL_DIR=/usr/local PYTHON=python3.11 PYTHON_CONFIG=python3.11-config \
-    && make clean && echo 1
+    && make py PYTHON=python3.12 PYTHON_CNOFIG=python3.12-config \
+    && make install INSTALL_DIR=/usr/local PYTHON=python3.12 PYTHON_CNOFIG=python3.12-config \
+    && make clean
 
 # python = python3
 ENV PYTHON=python3
@@ -84,23 +79,20 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 # DUST maps
 RUN mkdir -p dust/maps \
   && cd dust/maps \
-  && wget -nv -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_ngp.fits \
-  && wget -nv -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_sgp.fits
+  && wget -c https://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_ngp.fits \
+  && wget -c https://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_sgp.fits
 ENV DUST_DIR=/src/dust
 
 # Unwise PSF
 RUN git clone https://github.com/legacysurvey/unwise_psf.git
-#    && cd unwise_psf \
-#    && git checkout dr9.3
 
 # The Tractor
 RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && cp setup-with-ceres-and-cython.py setup.py \
-    && python3.10 -m pip install -v . \
-    && python3.11 -m pip install -v . \
-    && rm -R $(find . -name "*.o" -o -name "*.so")
+    && python3.12 setup.py build_ext --with-ceres --with-cython --inplace \
+    && pip install . --break-system-packages \
+    && rm -R $(find . -name "*.o" -o -name "*.so") && echo 1
 
 ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 
-RUN python3.11 -m pip install --no-cache-dir coverage coveralls
+RUN python3.12 -m pip install --break-system-packages --no-cache-dir coverage coveralls

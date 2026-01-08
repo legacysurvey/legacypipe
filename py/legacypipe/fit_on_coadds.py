@@ -249,7 +249,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
         xcen, ycen = np.round(x0 - 1).astype('int'), np.round(y0 - 1).astype('int')
         ymask, xmask = np.ogrid[-ycen:bigH-ycen, -xcen:bigW-xcen]
 
-        refs, _ = get_reference_sources(survey, bigtargetwcs, bigtargetwcs.pixel_scale(), ['r'],
+        refs, _ = get_reference_sources(survey, bigtargetwcs, ['r'],
                                         tycho_stars=True, gaia_stars=True,
                                         large_galaxies=True, star_clusters=True)
         refmask = get_reference_map(bigtargetwcs, refs) == 0 # True=skypix
@@ -299,7 +299,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
         # regular mosaic
         C = make_coadds(tims, bands, targetwcs, callback=None, sbscale=False, mp=mp)
 
-        refs, _ = get_reference_sources(survey, targetwcs, targetwcs.pixel_scale(), ['r'],
+        refs, _ = get_reference_sources(survey, targetwcs, ['r'],
                                         tycho_stars=True, gaia_stars=True,
                                         large_galaxies=True, star_clusters=True)
         refmask = get_reference_map(targetwcs, refs) == 0 # True=skypix
@@ -362,7 +362,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
                     get_rgb(C.coimgs, bands), origin='lower')
 
         # ccdpos QA
-        refs, _ = get_reference_sources(survey, targetwcs, targetwcs.pixel_scale(), ['r'],
+        refs, _ = get_reference_sources(survey, targetwcs, ['r'],
                                         tycho_stars=False, gaia_stars=False,
                                         large_galaxies=True, star_clusters=False)
 

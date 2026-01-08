@@ -44,6 +44,7 @@ RUN ln -s /usr/bin/sextractor /usr/bin/sex
 # FIXME - should be
 # RUN ln -s /usr/bin/source-extractor /usr/bin/sex
 
+# photutils==1.0.0 \
 # photutils at 1.0.0 because of
 # https://github.com/astropy/photutils/issues/1095
 # new in 1.0.1, maybe fixed in next release?
@@ -56,7 +57,7 @@ RUN for x in \
     fitsio \
     matplotlib \
     astropy \
-    photutils==1.0.0 \
+    photutils \
     zmq \
     ; do \
     python3.8 -m pip install $x; \
@@ -68,36 +69,25 @@ RUN mkdir /src
 WORKDIR /src
 
 # Astrometry.net
-RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
+RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
     && make \
     && make extra \
-    && make py PYTHON=python3.8 \
-    && make py PYTHON=python3.9 \
-    && make install INSTALL_DIR=/usr/local PYTHON=python3.8 \
-    && make install INSTALL_DIR=/usr/local PYTHON=python3.9 \
+    && make py PYTHON=python3.8 PYTHON_CONFIG=python3.8-config \
+    && make py PYTHON=python3.9 PYTHON_CONFIG=python3.9-config \
+    && make install INSTALL_DIR=/usr/local PYTHON=python3.8 PYTHON_CONFIG=python3.8-config \
+    && make install INSTALL_DIR=/usr/local PYTHON=python3.9 PYTHON_CONFIG=python3.9-config \
     && make clean
 
-ENV PYTHON=python3
-
-# The Tractor
-RUN git clone http://github.com/dstndstn/tractor.git tractor \
-    && cd tractor \
-    && python3.8 setup-cython.py --with-ceres install --home /usr/local \
-    && python3.9 setup-cython.py --with-ceres install --home /usr/local \
-    && make version && cp tractor/version.py /usr/local/lib/python/tractor/ \
-    && rm -R $(find . -name "*.o" -o -name "*.so") \
-    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)") \
-    && echo 2
-
 # python = python3
+ENV PYTHON=python3
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # DUST maps
 RUN mkdir -p dust/maps \
   && cd dust/maps \
-  && wget -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_ngp.fits \
-  && wget -c http://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_sgp.fits
+  && wget -c https://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_ngp.fits \
+  && wget -c https://portal.nersc.gov/project/cosmo/temp/dstn/travis-ci/maps/SFD_dust_4096_sgp.fits
 ENV DUST_DIR=/src/dust
 
 # Unwise PSF
@@ -105,7 +95,15 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
     && cd unwise_psf \
     && git checkout dr9.3
 
-# ubuntu renames the (awfully named) executable
-RUN rm /usr/bin/sex; ln -s /usr/bin/source-extractor /usr/bin/sex
+# The Tractor
+RUN git clone https://github.com/dstndstn/tractor.git tractor \
+    && cd tractor \
+    && cp setup-with-ceres-and-cython.py setup.py \
+    && python3.8 -m pip install -v . \
+    && python3.9 -m pip install -v . \
+    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
+
+#    && rm -R $(find . -name "*.o" -o -name "*.so") \
+#    && python3.9 setup.py build_ext --with-cython --with-ceres --inplace \
 
 ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py

@@ -14,11 +14,10 @@ from tractor.sersic import SersicGalaxy
 
 from legacypipe.survey import (RexGalaxy,
                                LegacyEllipseWithPriors, LegacySersicIndex, get_rgb)
-from legacypipe.bits import IN_BLOB
+from legacypipe.bits import REF_MAP_BITS
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 from legacypipe.utils import get_cpu_arch
-
 from legacypipe.utils import run_ps
 
 rgbkwargs_resid = dict(resids=True)
@@ -34,6 +33,8 @@ def debug(*args):
 def is_debug():
     return logger.isEnabledFor(logging.DEBUG)
 
+chat = debug
+
 # Determines the order of elements in the DCHISQ array.
 MODEL_NAMES = ['psf', 'rex', 'dev', 'exp', 'ser']
 
@@ -44,7 +45,7 @@ def one_blob(X):
     if X is None:
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
-     srcs, bands, plots, ps, reoptimize, iterative, use_ceres, refmap,
+     srcs, bands, plots, ps, reoptimize, iterative, iterative_nsigma, use_ceres, refmap,
      large_galaxies_force_pointsource, less_masking, frozen_galaxies) = X
 
     debug('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
@@ -76,7 +77,8 @@ def one_blob(X):
     ob = OneBlob(nblob, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
-                 less_masking, frozen_galaxies)
+                 less_masking, frozen_galaxies,
+                 iterative_nsigma)
     B = ob.init_table(Isrcs)
     B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
     ob.finalize_table(B, bx0, by0)
@@ -91,7 +93,8 @@ class OneBlob(object):
     def __init__(self, name, blobwcs, blobmask, timargs, srcs, bands,
                  plots, ps, use_ceres, refmap,
                  large_galaxies_force_pointsource,
-                 less_masking, frozen_galaxies):
+                 less_masking, frozen_galaxies,
+                 iterative_nsigma):
         self.name = name
         self.blobwcs = blobwcs
         self.pixscale = self.blobwcs.pixel_scale()
@@ -110,6 +113,7 @@ class OneBlob(object):
         self.deblend = False
         self.large_galaxies_force_pointsource = large_galaxies_force_pointsource
         self.less_masking = less_masking
+        self.iterative_nsigma = iterative_nsigma
         self.tims = create_tims(self.blobwcs, self.blobmask, timargs)
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
         self.plots2 = False
@@ -269,21 +273,21 @@ class OneBlob(object):
             plt.clf()
             dimshow(self.rgb)
             ax = plt.axis()
-            bitset = ((self.refmap & IN_BLOB['MEDIUM']) != 0)
+            bitset = ((self.refmap & REF_MAP_BITS['MEDIUM']) != 0)
             plot_boundary_map(bitset, rgb=(255,0,0), iterations=2)
-            bitset = ((self.refmap & IN_BLOB['BRIGHT']) != 0)
+            bitset = ((self.refmap & REF_MAP_BITS['BRIGHT']) != 0)
             plot_boundary_map(bitset, rgb=(200,200,0), iterations=2)
-            bitset = ((self.refmap & IN_BLOB['GALAXY']) != 0)
+            bitset = ((self.refmap & REF_MAP_BITS['GALAXY']) != 0)
             plot_boundary_map(bitset, rgb=(0,255,0), iterations=2)
             plt.axis(ax)
             plt.title('Reference-source Masks')
             self.ps.savefig()
 
         tr = self.tractor(self.tims, cat)
-
         # Fit any sources marked with 'needs_initial_flux' -- saturated, and SGA
         fitflux = [src for src in cat if getattr(src, 'needs_initial_flux', False)]
         if len(fitflux):
+            debug('Fitting initial fluxes for %i sources...' % len(fitflux))
             self._fit_fluxes(cat, self.tims, self.bands, fitcat=fitflux)
             if self.plots:
                 self._plots(tr, 'Fitting initial fluxes')
@@ -303,6 +307,7 @@ class OneBlob(object):
         # The sizes of the model patches fit here are determined by the
         # sources themselves, ie by the size of the mod patch returned by
         #  src.getModelPatch(tim)
+        debug('Fitting fluxes...')
         if len(cat) > 1:
             self._optimize_individual_sources_subtract(
                 cat, Ibright, B.cpu_source)
@@ -350,17 +355,19 @@ class OneBlob(object):
         # Set any fitting behaviors based on geometric masks.
 
         # Fitting behaviors: force point-source
-        force_pointsource_mask = (IN_BLOB['BRIGHT'] | IN_BLOB['CLUSTER'])
+        force_pointsource_mask = (REF_MAP_BITS['BRIGHT'] |
+                                  REF_MAP_BITS['CLUSTER'] |
+                                  REF_MAP_BITS['MCLOUDS'])
         # large_galaxies_force_pointsource is True by default.
         if self.large_galaxies_force_pointsource:
-            force_pointsource_mask |= IN_BLOB['GALAXY']
+            force_pointsource_mask |= REF_MAP_BITS['GALAXY']
         # Fit background?
-        fit_background_mask = IN_BLOB['BRIGHT']
+        fit_background_mask = REF_MAP_BITS['BRIGHT']
         if not self.less_masking:
-            fit_background_mask |= IN_BLOB['MEDIUM']
+            fit_background_mask |= REF_MAP_BITS['MEDIUM']
         ### this variable *also* forces fitting the background.
         if self.large_galaxies_force_pointsource:
-            fit_background_mask |= IN_BLOB['GALAXY']
+            fit_background_mask |= REF_MAP_BITS['GALAXY']
         for srci,src in enumerate(cat):
             _,ix,iy = self.blobwcs.radec2pixelxy(src.getPosition().ra,
                                                  src.getPosition().dec)
@@ -381,6 +388,7 @@ class OneBlob(object):
         self.compute_segmentation_map()
 
         # Next, model selections: point source vs rex vs dev/exp vs ser.
+        debug('Running model selection')
         B = self.run_model_selection(cat, Ibright, B,
                                      iterative_detection=iterative_detection)
 
@@ -563,12 +571,12 @@ class OneBlob(object):
 
         # Do not compute segmentation map for sources in the CLUSTER mask
         # (or with very bad coords)
-        Iseg, = np.nonzero(ok * ((self.refmap[iy, ix] & IN_BLOB['CLUSTER']) == 0))
+        Iseg, = np.nonzero(ok * ((self.refmap[iy, ix] & REF_MAP_BITS['CLUSTER']) == 0))
         del ok
         # Zero out the S/N in CLUSTER mask
-        maxsn[(self.refmap & IN_BLOB['CLUSTER']) > 0] = 0.
+        maxsn[(self.refmap & REF_MAP_BITS['CLUSTER']) > 0] = 0.
         # (also zero out the satmap in the CLUSTER mask)
-        saturated_pix[(self.refmap & IN_BLOB['CLUSTER']) > 0] = False
+        saturated_pix[(self.refmap & REF_MAP_BITS['CLUSTER']) > 0] = False
 
         import heapq
         H,W = self.blobh, self.blobw
@@ -862,13 +870,12 @@ class OneBlob(object):
         avoid_x = Bold.safe_x0
         avoid_y = Bold.safe_y0
         avoid_r = np.zeros(len(avoid_x), np.float32) + 2.
-        nsigma = 6.
         avoid_map = (self.refmap != 0)
 
         Tnew,_,_ = run_sed_matched_filters(
             SEDs, self.bands, detmaps, detivs, (avoid_x,avoid_y,avoid_r),
-            self.blobwcs, nsigma=nsigma, saturated_pix=satmaps, veto_map=avoid_map,
-            plots=False, ps=None, mp=mp)
+            self.blobwcs, nsigma=self.iterative_nsigma, saturated_pix=satmaps,
+            veto_map=avoid_map, plots=False, ps=None, mp=mp)
 
         detlogger.setLevel(detloglvl)
 
@@ -1399,7 +1406,6 @@ class OneBlob(object):
                     newsrc = ser = SersicGalaxy(
                         exp.getPosition().copy(), exp.getBrightness().copy(),
                         exp.getShape().copy(), LegacySersicIndex(1.))
-                #print('Initialized SER model:', newsrc)
 
             srccat[0] = newsrc
 
@@ -1430,7 +1436,7 @@ class OneBlob(object):
                 srctractor.thawParam('images')
 
             # First-round optimization (during model selection)
-            #print('OneBlob before model selection:', newsrc)
+            chat('OneBlob before model selection:', newsrc)
             try:
                 R = srctractor.optimize_loop(**self.optargs)
             except Exception as e:
@@ -1439,7 +1445,7 @@ class OneBlob(object):
                 traceback.print_exc()
                 raise(e)
                 continue
-            #print('OneBlob after model selection:', newsrc)
+            chat('OneBlob after model selection:', newsrc)
             #print('Fit result:', newsrc)
             #print('Steps:', R['steps'])
             hit_limit = R.get('hit_limit', False)
@@ -1544,12 +1550,14 @@ class OneBlob(object):
             params = newsrc.getParams()
             reset = False
             for i,(pname,iv) in enumerate(zip(newsrc.getParamNames(), ivars)):
-                if iv == 0:
+                # ugly...
+                if iv == 0 and 'brightness' in pname:
                     debug('Zeroing out flux', pname, 'based on iv==0')
                     params[i] = 0.
                     reset = True
             if reset:
                 newsrc.setParams(params)
+                debug('Recomputing ivars with source parameters', newsrc)
                 allderivs = srctractor.getDerivs()
                 ivars = _compute_invvars(allderivs)
                 assert(len(ivars) == nsrcparams)
@@ -1566,6 +1574,7 @@ class OneBlob(object):
             # models are evaluated on the same pixels.
             ch = _per_band_chisqs(srctractor, self.bands)
             chisqs[name] = _chisq_improvement(newsrc, ch, chisqs_none)
+            chat('Chisq for', name, '=', chisqs[name])
             cpum1 = time.process_time()
             B.all_model_cpu[srci][name] = cpum1 - cpum0
             cputimes[name] = cpum1 - cpum0
@@ -1774,6 +1783,8 @@ class OneBlob(object):
                 from tractor.lsqr_optimizer import LsqrOptimizer
                 btr.optimizer = LsqrOptimizer()
             btr.optimize_forced_photometry(shared_params=False, wantims=False)
+            for src in fitcat:
+                src.getBrightness().thawAllParams()
         for src in fitcat:
             src.thawAllParams()
 
@@ -1994,19 +2005,15 @@ def _compute_source_metrics(srcs, tims, bands, tr):
                 if counts[isrc] == 0:
                     continue
                 H,W = mod.shape
-                patch.clipTo(W,H)
+                ok = patch.clipTo(W,H)
+                if (not ok) or np.all(patch.patch == 0):
+                    continue
                 srcmods[isrc] = patch
                 patch.addTo(mod)
 
             # Now compute metrics for each source
             for isrc,patch in enumerate(srcmods):
                 if patch is None:
-                    continue
-                if patch.patch is None:
-                    continue
-                if counts[isrc] == 0:
-                    continue
-                if np.sum(patch.patch**2) == 0:
                     continue
                 slc = patch.getSlice(mod)
                 patch = patch.patch
@@ -2031,33 +2038,32 @@ def _compute_source_metrics(srcs, tims, bands, tr):
                 # fraction of this source's flux that is inside this patch.
                 # This can be < 1 when the source is near an edge, or if the
                 # source is a huge diffuse galaxy in a small patch.
-                fin = np.abs(np.sum(patch) / counts[isrc])
-
-                # print('fin:', fin)
-                # print('fracflux_num: fin *',
-                #      np.sum((mod[slc] - patch) * np.abs(patch)) /
-                #      np.sum(patch**2))
+                # Everything is made a bit complicated by the fact that model patches
+                # can go negative (because pixelized PSF models are noisy).
+                # Usually PSF models get normalized, so sum(model)/counts = 1.
+                # counts (ie, source's total flux) can also go negative!
+                fin = np.clip(np.sum(patch) / counts[isrc], 0., 1.)
 
                 fracflux_num[isrc,iband] += (fin *
                     np.sum((mod[slc] - patch) * np.abs(patch)) /
                     np.sum(patch**2))
                 fracflux_den[isrc,iband] += fin
 
-                fracmasked_num[isrc,iband] += (
-                    np.sum((tim.getInvError()[slc] == 0) * np.abs(patch)) /
-                    np.abs(counts[isrc]))
+                fracmasked_num[isrc,iband] += np.clip(
+                    np.sum((tim.getInvError()[slc] == 0) * patch) /
+                    counts[isrc], 0., 1.)
                 fracmasked_den[isrc,iband] += fin
 
                 fracin_num[isrc,iband] += np.abs(np.sum(patch))
                 fracin_den[isrc,iband] += np.abs(counts[isrc])
 
+            # Compute rchisq in a separate loop because we want the
+            # sky model added in here, but not for the other metrics!
             tim.getSky().addTo(mod)
             chisq = ((tim.getImage() - mod) * tim.getInvError())**2
 
             for isrc,patch in enumerate(srcmods):
-                if patch is None or patch.patch is None:
-                    continue
-                if counts[isrc] == 0:
+                if patch is None:
                     continue
                 slc = patch.getSlice(mod)
                 # We compute numerator and denom separately to handle
@@ -2065,11 +2071,11 @@ def _compute_source_metrics(srcs, tims, bands, tr):
                 # Also, to normalize by the number of images.  (Being
                 # on the edge of an image is like being in half an
                 # image.)
-                rchi2_num[isrc,iband] += (np.sum(chisq[slc] * patch.patch) /
-                                          counts[isrc])
+                rchi2_num[isrc,iband] += (np.abs(np.sum(chisq[slc] * patch.patch) /
+                                                 np.abs(counts[isrc])))
                 # If the source is not near an image edge,
                 # sum(patch.patch) == counts[isrc].
-                rchi2_den[isrc,iband] += np.sum(patch.patch) / counts[isrc]
+                rchi2_den[isrc,iband] += np.abs(np.sum(patch.patch)) / np.abs(counts[isrc])
 
     assert(np.all(np.isfinite(fracflux_den)))
     assert(np.all(np.isfinite(rchi2_den)))
@@ -2284,7 +2290,7 @@ def _select_model(chisqs, nparams, galaxy_margin):
     Returns keepmod (string), the name of the preferred model.
     '''
     keepmod = 'none'
-    #print('_select_model: chisqs', chisqs)
+    debug('_select_model: chisqs', chisqs)
 
     # This is our "detection threshold": 5-sigma in
     # *parameter-penalized* units; ie, ~5.2-sigma for point sources
@@ -2293,6 +2299,7 @@ def _select_model(chisqs, nparams, galaxy_margin):
     diff = max([chisqs[name] - nparams[name] for name in chisqs.keys()
                 if name != 'none'] + [-1])
 
+    debug('best fit source chisq: %.3f, vs threshold %.3f' % (diff, cut))
     if diff < cut:
         # Drop this source
         return keepmod

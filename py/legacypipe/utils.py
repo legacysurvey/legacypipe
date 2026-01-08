@@ -1,6 +1,8 @@
 import os
 import numpy as np
 
+from contextlib import AbstractContextManager
+
 from tractor.ellipses import EllipseESoft
 from tractor.utils import _GaussianPriors
 
@@ -13,6 +15,10 @@ def log_debug(logger, args):
     if logger.isEnabledFor(logging.DEBUG):
         msg = ' '.join(map(str, args))
         logger.debug(msg)
+
+class EmptyContextManager(AbstractContextManager):
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
 
 # singleton
 cpu_arch = None
@@ -47,6 +53,15 @@ def get_cpu_arch():
     cpu_arch = codenames.get((family, model), '')
     return cpu_arch
 
+def freeze_iers():
+    # Prevent any Astropy attempts to automatically download updated IERS-A tables.
+    import astropy.utils.iers
+    astropy.utils.iers.conf.auto_download = False
+    astropy.utils.iers.conf.auto_max_age = None
+    astropy.utils.iers.conf.iers_auto_url = 'frozen'
+    astropy.utils.iers.conf.iers_auto_url_mirror = 'frozen'
+    astropy.utils.iers.conf.iers_degraded_accuracy = 'ignore'
+
 galaxy_min_re = 0.01
 
 class EllipseWithPriors(EllipseESoft):
@@ -68,7 +83,7 @@ class EllipseWithPriors(EllipseESoft):
     # GaussianPriorsMixin.  GaussianPriorsMixin sets a "gpriors"
     # member variable to a _GaussianPriors
     def __init__(self, *args, **kwargs):
-        super(EllipseWithPriors, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         if self.ellipsePriors is None:
             ellipsePriors = _GaussianPriors(None)
             ellipsePriors.add('ee1', 0., self.ellipticityStd,
@@ -178,14 +193,14 @@ def add_bits(hdr, bitmap, description, desc, bitpre):
     bits = list(bitmap.values())
     bits.sort()
     revmap = dict((v,k) for k,v in bitmap.items())
-    for i in range(16):
+    for i in range(31):
         bit = 1<<i
         if not bit in revmap:
             continue
         hdr.add_record(
-            dict(name='%s_%s' % (desc, revmap[bit].upper()[:5]), value=bit,
+            dict(name='%s_%s' % (desc, revmap[bit].upper()), value=bit,
                  comment='%s bit 2**%i' % (description, i)))
-    for i in range(16):
+    for i in range(31):
         bit = 1<<i
         if not bit in revmap:
             continue

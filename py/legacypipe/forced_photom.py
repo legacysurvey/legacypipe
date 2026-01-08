@@ -12,6 +12,7 @@ import fitsio
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.file import trymakedirs
 from astrometry.util.ttime import Time
+from astrometry.libkd.spherematch import match_radec
 
 from tractor import Tractor, Catalog
 from tractor.galaxy import disable_galaxy_cache
@@ -331,18 +332,14 @@ def main(survey=None, opt=None, args=None):
                 fits.write(None, header=version_hdr)
                 for i in I:
                     mask = outlier_masks[i]
-                    _,_,_,meth,tile = survey.get_compression_args('outliers_mask', shape=mask.shape)
-                    fits.write(mask, header=outlier_hdrs[i], extname=ccds.ccdname[i],
-                               compress=meth, tile_dims=tile, dither_seed='checksum')
+                    fits.write(mask, header=outlier_hdrs[i], extname=ccds.ccdname[i])
             os.rename(tempfn, outfn)
             print('Wrote', outfn)
     elif opt.outlier_mask is not None:
         with fitsio.FITS(opt.outlier_mask, 'rw', clobber=True) as F:
             F.write(None, header=version_hdr)
             for i,(hdr,mask) in enumerate(zip(outlier_hdrs,outlier_masks)):
-                _,_,_,meth,tile = survey.get_compression_args('outliers_mask', shape=mask.shape)
-                F.write(mask, header=hdr, extname=ccds.ccdname[i],
-                        compress=meth, tile_dims=tile, dither_seed='checksum')
+                F.write(mask, header=hdr, extname=ccds.ccdname[i])
         print('Wrote', opt.outlier_mask)
 
     tnow = Time()
@@ -422,20 +419,20 @@ def get_catalog_in_wcs(chipwcs, survey, catsurvey_north, catsurvey_south=None,
     T._header = TT[0]._header
     del TT
 
-    SGA = find_missing_sga(T, chipwcs, survey, surveys, columns)
+    SGA = find_missing_sga(T, chipwcs, survey, surveys, columns, bands=bands)
     if SGA is not None:
         ## Add 'em in!
         T = merge_tables([T, SGA], columns='fillzero')
     print('Total of', len(T), 'catalog sources')
     return T
 
-def find_missing_sga(T, chipwcs, survey, surveys, columns):
+def find_missing_sga(T, chipwcs, survey, surveys, columns, bands=None):
     # Look up SGA large galaxies touching this chip.
     # The ones inside this chip(+margin) will already exist in the catalog;
     # we'll find the ones we're missing and read those extra brick catalogs.
     from legacypipe.reference import read_large_galaxies
     # Find all the SGA sources we need
-    sga = read_large_galaxies(survey, chipwcs, bands=None, extra_columns=['brickname'])
+    sga = read_large_galaxies(survey, chipwcs, bands=bands, extra_columns=['brickname'])
     if sga is None:
         print('No SGA galaxies found')
         return None
@@ -451,22 +448,30 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     sga.cut((xx > -keeprad) * (xx < W+keeprad) *
             (yy > -keeprad) * (yy < H+keeprad))
     print('Found', len(sga), 'SGA galaxies touching the chip.')
-    print('ref_ids', sga.ref_id)
     if len(sga) == 0:
         print('No SGA galaxies touch this chip')
         return None
     Tsga = T[T.ref_cat == 'L3']
-    print(len(Tsga), 'SGA entries already exist in catalog (ref_ids', Tsga.ref_id, ')')
-    Isga = np.array([i for i,sga_id in enumerate(sga.ref_id) if not sga_id in set(Tsga.ref_id)])
-    #assert(len(Isga) + len(Tsga) == len(sga))
-    if len(Isga) == 0:
-        print('All SGA galaxies already in catalogs')
-        return None
-    print('Finding', len(Isga), 'additional SGA entries in nearby bricks')
-    sga.cut(Isga)
-    #print('Finding bricks to read...')
-    sgabricks = []
+    print(len(Tsga), 'SGA entries already exist in catalog')
 
+    match_radius = 0.1/3600.
+    if len(Tsga):
+        I,J,d = match_radec(sga.ra, sga.dec, Tsga.ra, Tsga.dec, match_radius, nearest=True)
+        print('Matched', len(I), 'from SGA to this brick catalog')
+        Isga = np.ones(len(sga), bool)
+        Isga[I] = False
+        Isga = np.flatnonzero(Isga)
+        if len(Isga) == 0:
+            print('All SGA galaxies already in catalogs')
+            return None
+        print('Finding', len(Isga), 'additional SGA entries in nearby bricks')
+        sga.cut(Isga)
+
+    # This whole paragraph is just finding the bricks that will contain the galaxies in "sga".
+    # This *can* end up re-reading the same brick we're currently in, if for whatever reason
+    # an SGA galaxy in the middle of a brick gets dropped from the catalog
+    # (eg https://www.legacysurvey.org/viewer/?ra=34.0982&dec=31.9931&layer=ls-dr9&zoom=14&sga)
+    sgabricks = []
     for ra,dec,brick in zip(sga.ra, sga.dec, sga.brickname):
         bricks = survey.get_bricks_by_name(brick)
         # The SGA catalog has a "brickname", but it unfortunately is not always exactly correct...
@@ -489,7 +494,8 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     sgabricks = merge_tables(sgabricks)
     _,I = np.unique(sgabricks.brickname, return_index=True)
     sgabricks.cut(I)
-    print('Need to read', len(sgabricks), 'bricks to pick up SGA sources')
+
+    print('Need to read', len(sgabricks), 'bricks to pick up missing SGA sources')
     SGA = []
     for brick in sgabricks.brickname:
         # For picking up these SGA bricks, resolve doesn't matter (they're fixed
@@ -510,17 +516,50 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns):
     print('Read a total of', len(SGA), 'SGA entries in brick_primary')
     if len(SGA) == 0:
         return None
-    I = np.array([i for i,ref_id in enumerate(SGA.ref_id) if ref_id in set(sga.ref_id)])
-    SGA.cut(I)
-    print('Found', len(SGA), 'desired SGA sources')
-    assert(len(sga) == len(SGA))
-    assert(set(sga.ref_id) == set(SGA.ref_id))
+
+    I,J,d = match_radec(sga.ra, sga.dec, SGA.ra, SGA.dec, match_radius, nearest=True)
+    print('Matched', len(I), 'desired SGA source(s)')
+    SGA.cut(J)
+
+    # This can *still* fail to find some (eg, the link given above).
+    unmatched = np.ones(len(sga), bool)
+    unmatched[I] = False
+    if np.any(unmatched):
+        print(np.sum(unmatched), 'SGA entries still not found.')
+        srcs = sga.sources[unmatched]
+        #for src in srcs:
+        #    print('Source:', src)
+        # create fake catalog entries??
+        # The sources aren't created if bands=None
+        if srcs[0] is not None:
+            from legacypipe.catalog import prepare_fits_catalog
+            from tractor import Catalog
+            srcs = list(srcs)
+            srcs = Catalog(*srcs)
+            fake_sga = prepare_fits_catalog(srcs, None, None, bands)
+            # expand the flux array...
+            for i,band in enumerate(bands):
+                fake_sga.set('flux_%s' % band, fake_sga.flux[:,i])
+            fake_sga.brick_primary = np.zeros(len(fake_sga), bool)
+            #print('Fake SGA catalog:')
+            #fake_sga.about()
+
+            if len(SGA):
+                #print('Normal SGA catalog:')
+                #SGA.about()
+                SGA = merge_tables([SGA, fake_sga], columns='fillzero')
+            else:
+                SGA = fake_sga
+    else:
+        assert(len(sga) == len(SGA))
+        assert(set(sga.ref_id) == set(SGA.ref_id))
+    #print('Returning SGA catalog:')
+    #SGA.about()
     return SGA
 
 def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                           ccd, catalog, opt, zoomslice, radecpoly, outlier_bricks, ps):
     from functools import reduce
-    from legacypipe.bits import DQ_BITS
     plots = (ps is not None)
     tlast = Time()
     im = survey.get_image_object(ccd)
@@ -774,86 +813,8 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         # plt.title('chi: %s' % tim.name)
         # ps.savefig()
 
-    F.release   = T.release
-    F.brickid   = T.brickid
-    F.brickname = T.brickname
-    F.objid     = T.objid
+    forced_phot_add_extra_fields(F, T, ccd, im, tim, opt.derivs)
 
-    F.camera  = np.array([ccd.camera] * len(F))
-    F.expnum  = np.array([im.expnum]  * len(F), dtype=np.int64)
-    F.ccdname = np.array([im.ccdname] * len(F))
-
-    # "Denormalizing"
-    F.filter  = np.array([tim.band]      * len(F))
-    F.mjd     = np.array([im.mjdobs]     * len(F))
-    F.exptime = np.array([im.exptime]    * len(F), dtype=np.float32)
-    F.psfsize = np.array([tim.psf_fwhm * tim.imobj.pixscale] * len(F), dtype=np.float32)
-    F.ccd_cuts = np.array([ccd.ccd_cuts] * len(F))
-    F.airmass  = np.array([ccd.airmass ] * len(F), dtype=np.float32)
-    ### --> also add units to the dict below so the FITS headers have units
-    F.sky     = np.array([tim.midsky / tim.zpscale / tim.imobj.pixscale**2] * len(F), dtype=np.float32)
-    # in the same units as the depth maps -- flux inverse-variance.
-    F.psfdepth = np.array([(1. / (tim.sig1 / tim.psfnorm)**2)] * len(F), dtype=np.float32)
-    F.galdepth = np.array([(1. / (tim.sig1 / tim.galnorm)**2)] * len(F), dtype=np.float32)
-    F.fwhm     = np.array([tim.psf_fwhm] * len(F), dtype=np.float32)
-    F.skyrms   = np.array([ccd.skyrms]   * len(F), dtype=np.float32)
-    F.ccdzpt   = np.array([ccd.ccdzpt]   * len(F), dtype=np.float32)
-    F.ccdrarms = np.array([ccd.ccdrarms] * len(F), dtype=np.float32)
-    F.ccddecrms= np.array([ccd.ccddecrms]* len(F), dtype=np.float32)
-    F.ccdphrms = np.array([ccd.ccdphrms] * len(F), dtype=np.float32)
-
-    if opt.derivs:
-        # We don't need to apply a cos(Dec) correction --
-        # the fitting happens on pixel-space models multiplied by CD-inverse, so they're
-        # in Intermediate World Coordinates in degrees in the *directions* of RA,Dec, but isotropic.
-        # Multiplying by 3600 here, we take them to arcseconds,
-        # Isotropic in the sense that 1 arcsecond of motion in RA is the same distance
-        # as 1 arcsecond of motion in Dec.
-        with np.errstate(divide='ignore', invalid='ignore'):
-            F.dra  = (F.flux_dra  / np.abs(F.flux))
-            F.ddec = (F.flux_ddec / np.abs(F.flux))
-            F.dra_ivar  = 1. / (F.dra **2 * (1./F.flux_dra_ivar /(F.flux_dra **2) + 1./F.flux_ivar/(F.flux**2)))
-            F.ddec_ivar = 1. / (F.ddec**2 * (1./F.flux_ddec_ivar/(F.flux_ddec**2) + 1./F.flux_ivar/(F.flux**2)))
-        F.dra  *= 3600.
-        F.ddec *= 3600.
-        F.dra_ivar  *= 1./3600.**2
-        F.ddec_ivar *= 1./3600.**2
-        F.dra [F.flux == 0] = 0.
-        F.ddec[F.flux == 0] = 0.
-        F.dra_ivar [F.flux == 0] = 0.
-        F.ddec_ivar[F.flux == 0] = 0.
-        F.dra_ivar [F.flux_dra_ivar  == 0] = 0.
-        F.ddec_ivar[F.flux_ddec_ivar == 0] = 0.
-
-        # F.delete_column('flux_dra')
-        # F.delete_column('flux_ddec')
-        # F.delete_column('flux_dra_ivar')
-        # F.delete_column('flux_ddec_ivar')
-        F.flux_motion = F.flux
-        F.flux_motion_ivar = F.flux_ivar
-
-        F.flux = F.flux_fixed
-        F.flux_ivar = F.flux_fixed_ivar
-        F.delete_column('flux_fixed')
-        F.delete_column('flux_fixed_ivar')
-
-        for c in ['dra', 'ddec', 'dra_ivar', 'ddec_ivar', 'flux', 'flux_ivar']:
-            F.set(c, F.get(c).astype(np.float32))
-
-    F.ra  = T.ra
-    F.dec = T.dec
-    _,x,y = tim.subwcs.radec2pixelxy(T.ra, T.dec)
-    x = (x-1).astype(np.float32)
-    y = (y-1).astype(np.float32)
-    h,w = tim.shape
-    ix = np.round(x).astype(int)
-    iy = np.round(y).astype(int)
-    F.dqmask = tim.dq[np.clip(iy, 0, h-1), np.clip(ix, 0, w-1)]
-    # Set an OUT-OF-BOUNDS bit.
-    F.dqmask[reduce(np.logical_or, [ix < 0, ix >= w, iy < 0, iy >= h])] |= DQ_BITS['edge2']
-
-    F.x = x + tim.x0
-    F.y = y + tim.y0
 
     program_name = sys.argv[0]
     version_hdr = get_version_header(program_name, surveydir, None)
@@ -896,6 +857,92 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
     tnow = Time()
     print_timing('Forced phot:', tnow-tlast)
     return F,version_hdr,outlier_mask,outlier_header
+
+def forced_phot_add_extra_fields(F, T, ccd, im, tim, derivs):
+    from functools import reduce
+    from legacypipe.bits import DQ_BITS
+    F.release   = T.release
+    F.brickid   = T.brickid
+    F.brickname = T.brickname
+    F.objid     = T.objid
+
+    F.camera  = np.array([im.camera] * len(F))
+    F.expnum  = np.array([im.expnum]  * len(F), dtype=np.int64)
+    F.ccdname = np.array([im.ccdname] * len(F))
+
+    # "Denormalizing"
+    F.filter  = np.array([tim.band]      * len(F))
+    F.mjd     = np.array([im.mjdobs]     * len(F))
+    F.exptime = np.array([im.exptime]    * len(F), dtype=np.float32)
+    F.psfsize = np.array([tim.psf_fwhm * tim.imobj.pixscale] * len(F), dtype=np.float32)
+    F.ccd_cuts = np.array([ccd.ccd_cuts] * len(F))
+    F.airmass  = np.array([ccd.airmass ] * len(F), dtype=np.float32)
+    ### --> also add units to the dict below so the FITS headers have units
+    F.sky     = np.array([tim.midsky / tim.zpscale / tim.imobj.pixscale**2] * len(F), dtype=np.float32)
+    # in the same units as the depth maps -- flux inverse-variance.
+    F.psfdepth = np.array([(1. / (tim.sig1 / tim.psfnorm)**2)] * len(F), dtype=np.float32)
+    F.galdepth = np.array([(1. / (tim.sig1 / tim.galnorm)**2)] * len(F), dtype=np.float32)
+    F.fwhm     = np.array([tim.psf_fwhm] * len(F), dtype=np.float32)
+    F.skyrms   = np.array([ccd.skyrms]   * len(F), dtype=np.float32)
+    F.ccdzpt   = np.array([ccd.ccdzpt]   * len(F), dtype=np.float32)
+    F.ccdrarms = np.array([ccd.ccdrarms] * len(F), dtype=np.float32)
+    F.ccddecrms= np.array([ccd.ccddecrms]* len(F), dtype=np.float32)
+    F.ccdphrms = np.array([ccd.ccdphrms] * len(F), dtype=np.float32)
+
+    if derivs:
+        # We don't need to apply a cos(Dec) correction --
+        # the fitting happens on pixel-space models multiplied by CD-inverse, so they're
+        # in Intermediate World Coordinates in degrees in the *directions* of RA,Dec, but isotropic.
+        # Multiplying by 3600 here, we take them to arcseconds,
+        # Isotropic in the sense that 1 arcsecond of motion in RA is the same distance
+        # as 1 arcsecond of motion in Dec.
+        with np.errstate(divide='ignore', invalid='ignore'):
+            F.dra  = (F.flux_dra  / np.abs(F.flux))
+            F.ddec = (F.flux_ddec / np.abs(F.flux))
+            F.dra_ivar  = 1. / (F.dra **2 * (
+                1./F.flux_dra_ivar /(F.flux_dra **2) + 1./F.flux_ivar/(F.flux**2)))
+            F.ddec_ivar = 1. / (F.ddec**2 * (
+                1./F.flux_ddec_ivar/(F.flux_ddec**2) + 1./F.flux_ivar/(F.flux**2)))
+        F.dra  *= 3600.
+        F.ddec *= 3600.
+        F.dra_ivar  *= 1./3600.**2
+        F.ddec_ivar *= 1./3600.**2
+        F.dra [F.flux == 0] = 0.
+        F.ddec[F.flux == 0] = 0.
+        F.dra_ivar [F.flux == 0] = 0.
+        F.ddec_ivar[F.flux == 0] = 0.
+        F.dra_ivar [F.flux_dra_ivar  == 0] = 0.
+        F.ddec_ivar[F.flux_ddec_ivar == 0] = 0.
+
+        # F.delete_column('flux_dra')
+        # F.delete_column('flux_ddec')
+        # F.delete_column('flux_dra_ivar')
+        # F.delete_column('flux_ddec_ivar')
+        F.flux_motion = F.flux
+        F.flux_motion_ivar = F.flux_ivar
+
+        F.flux = F.flux_fixed
+        F.flux_ivar = F.flux_fixed_ivar
+        F.delete_column('flux_fixed')
+        F.delete_column('flux_fixed_ivar')
+
+        for c in ['dra', 'ddec', 'dra_ivar', 'ddec_ivar', 'flux', 'flux_ivar']:
+            F.set(c, F.get(c).astype(np.float32))
+
+    F.ra  = T.ra
+    F.dec = T.dec
+    _,x,y = tim.subwcs.radec2pixelxy(T.ra, T.dec)
+    x = (x-1).astype(np.float32)
+    y = (y-1).astype(np.float32)
+    h,w = tim.shape
+    ix = np.round(x).astype(int)
+    iy = np.round(y).astype(int)
+    F.dqmask = tim.dq[np.clip(iy, 0, h-1), np.clip(ix, 0, w-1)]
+    # Set an OUT-OF-BOUNDS bit.
+    F.dqmask[reduce(np.logical_or, [ix < 0, ix >= w, iy < 0, iy >= h])] |= DQ_BITS['edge2']
+
+    F.x = x + tim.x0
+    F.y = y + tim.y0
 
 def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                     do_forced=True, do_apphot=True, get_model=False, ps=None,

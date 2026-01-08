@@ -22,16 +22,26 @@ fits_typemap[GaiaSource] = 'PSF'
 
 def prepare_fits_catalog(cat, invvars, T, bands, allbands=None,
                          prefix='', save_invvars=True, force_keep=None):
+    Nsrcs = len(cat)
     if T is None:
         from astrometry.util.fits import fits_table
         T = fits_table()
+    else:
+        Nsrcs = len(T)
+
     if allbands is None:
         allbands = bands
 
-    params0 = cat.getParams()
+    # Note that there is "getParams()" and "getAllParams()", where the
+    # "regular" version only gives you parameters that are not
+    # "frozen".  We set "special" reference sources (eg Magellanic
+    # clouds) to be frozen, because we don't create sources for them,
+    # measure uncertainties for them, etc, so they don't have "invvar"
+    # entries.
+    allparams0 = cat.getAllParams()
 
-    flux = np.zeros((len(T), len(allbands)), np.float32)
-    flux_ivar = np.zeros((len(T), len(allbands)), np.float32)
+    flux      = np.zeros((Nsrcs, len(allbands)), np.float32)
+    flux_ivar = np.zeros((Nsrcs, len(allbands)), np.float32)
 
     for band in bands:
         i = allbands.index(band)
@@ -44,13 +54,17 @@ def prepare_fits_catalog(cat, invvars, T, bands, allbands=None,
         # Oh my, this is tricky... set parameter values to the variance
         # vector so that we can read off the parameter variances via the
         # python object apis.
+        # Because of the "special" objects described above, first zero out everything:
+        cat.setAllParams(np.zeros(len(allparams0)))
+        # then set un-frozen parameters to the inverse-variances!
         cat.setParams(invvars)
 
         for j,src in enumerate(cat):
             if src is not None:
                 flux_ivar[j,i] = sum(b.getFlux(band) for b in src.getBrightnesses())
 
-        cat.setParams(params0)
+        # ... then reset the parameters.
+        cat.setAllParams(allparams0)
 
     T.set('%sflux' % prefix, flux)
     if save_invvars:
@@ -59,14 +73,14 @@ def prepare_fits_catalog(cat, invvars, T, bands, allbands=None,
     _get_tractor_fits_values(T, cat, '%s%%s' % prefix)
 
     if save_invvars:
+        cat.setAllParams(np.zeros(len(allparams0)))
         if invvars is not None:
             cat.setParams(invvars)
-        else:
-            cat.setParams(np.zeros(cat.numberOfParams()))
         _get_tractor_fits_values(T, cat, '%s%%s_ivar' % prefix)
-        # Heh, "no uncertainty here!"
+        # Heh, "no uncertainty on the types!"
         T.delete_column('%stype_ivar' % prefix)
-    cat.setParams(params0)
+
+    cat.setAllParams(allparams0)
 
     # mod RA
     ra = T.get('%sra' % prefix)
@@ -109,6 +123,9 @@ def _get_tractor_fits_values(T, cat, pat):
     shape = np.zeros((len(T), 3), np.float32)
     sersic = np.zeros(len(T), np.float32)
     for i,src in enumerate(cat):
+        if isinstance(src, (ExpGalaxy, DevGalaxy, SersicGalaxy)):
+            from tractor.ellipses import EllipseE
+            assert(isinstance(src.shape, EllipseE))
         # Grab elliptical shapes
         if isinstance(src, RexGalaxy):
             shape[i,0] = src.shape.getAllParams()[0]

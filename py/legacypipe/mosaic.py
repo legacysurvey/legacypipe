@@ -90,7 +90,7 @@ class MosaicImage(CPImage):
     def remap_invvar(self, invvar, primhdr, img, dq):
         return self.remap_invvar_shotnoise(invvar, primhdr, img, dq)
 
-    def remap_dq(self, dq, header):
+    def remap_dq(self, dq, header, slc):
         '''
         Called by get_tractor_image() to map the results from read_dq
         into a bitmask.

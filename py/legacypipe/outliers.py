@@ -1,6 +1,7 @@
 import numpy as np
 import fitsio
 import os
+from legacypipe.utils import EmptyContextManager
 
 import logging
 logger = logging.getLogger('legacypipe.outliers')
@@ -220,7 +221,7 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
 
 def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_header,
                         mp=None, plots=False, ps=None, make_badcoadds=True,
-                        refstars=None):
+                        refobjs=None, write_mask_file=True):
     from legacypipe.bits import DQ_BITS
     from scipy.ndimage import binary_dilation
 
@@ -234,8 +235,8 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
         badcoadds_neg = None
 
     star_veto = np.zeros(targetwcs.shape, bool)
-    if refstars:
-        gaia = refstars[refstars.isgaia]
+    if refobjs:
+        gaia = refobjs[refobjs.isgaia]
         # Not moving Gaia stars to epoch of individual images...
         _,bx,by = targetwcs.radec2pixelxy(gaia.ra, gaia.dec)
         bx -= 1.
@@ -264,10 +265,14 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
     #     plt.axis(ax)
     #     plt.title('Star vetos')
     #     ps.savefig()
+ 
+    with (survey.write_output('outliers-mask', brick=brickname)
+          if write_mask_file
+          else EmptyContextManager()) as out:
 
-    with survey.write_output('outliers_mask', brick=brickname) as out:
-        # empty Primary HDU
-        out.fits.write(None, header=version_header)
+        if write_mask_file:
+            # empty Primary HDU
+            out.fits.write(None, header=version_header)
 
         for band in bands:
             btims = [tim for tim in tims if tim.band == band]
@@ -358,6 +363,8 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 tim.inverr[(mask & maskbits) > 0] = 0.
                 tim.dq[(mask & maskbits) > 0] |= tim.dq_type(DQ_BITS['outlier'])
 
+                if not write_mask_file:
+                    continue
                 # Write output!
                 from legacypipe.utils import copy_header_with_wcs
                 hdr = copy_header_with_wcs(None, tim.subwcs)
@@ -369,12 +376,8 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 hdr.add_record(dict(name='X0', value=tim.x0))
                 hdr.add_record(dict(name='Y0', value=tim.y0))
 
-                # HCOMPRESS;: 943k
-                # GZIP_1: 4.4M
-                # GZIP: 4.4M
-                # RICE: 2.8M
                 extname = get_mask_extname(tim)
-                out.fits.write(mask, header=hdr, extname=extname, compress='HCOMPRESS')
+                out.fits.write(mask, header=hdr, extname=extname)
             del R
 
             if make_badcoadds:

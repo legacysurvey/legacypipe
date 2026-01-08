@@ -280,8 +280,10 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
                                       NanoMaggies(order=bands, **fluxes)))
     return Tnew, newcat, hot
 
-def plot_mask(X, rgb=(0,255,0), extent=None):
+def plot_mask(X, rgb=None, extent=None):
     import pylab as plt
+    if rgb is None:
+        rgb = (0, 255, 0)
     H,W = X.shape
     rgba = np.zeros((H, W, 4), np.uint8)
     rgba[:,:,0] = X*rgb[0]
@@ -591,6 +593,8 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         subslc = slice(ylo,yhi), slice(xlo,xhi)
         subx0 = xlo
         suby0 = ylo
+        # DEBUG - save the original slice
+        orig_slc = slc
         # swap in the +-50 pixel slice
         slc = subslc
         x0,y0 = subx0,suby0
@@ -600,8 +604,45 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         blobs,_ = label(saddlemap)
         thisblob = blobs[y-y0, x-x0]
         saddlemap *= (blobs == thisblob)
+        from collections import Counter
 
-        oslcs = find_objects(saddlemap)
+        # python3.11 / scipy 1.15.3 seems to require this to be an int
+        oslcs = find_objects(saddlemap.astype(np.uint8))
+        if len(oslcs) != 1:
+            print('oslcs:', oslcs)
+            if ps is not None:
+                plt.clf()
+                plt.imshow(sedsn, interpolation='nearest', origin='lower')
+                plt.colorbar()
+                ax = plt.axis()
+                plt.plot(px, py, 'o', mec='r', mfc='none')
+                sy,sx = orig_slc
+                y0,y1 = sy.start, sy.stop
+                x0,x1 = sx.start, sx.stop
+                plt.plot([x0,x1,x1,x0,x0], [y0,y0,y1,y1,y0], 'r-')
+                sy,sx = slc
+                y0,y1 = sy.start, sy.stop
+                x0,x1 = sx.start, sx.stop
+                plt.plot([x0,x1,x1,x0,x0], [y0,y0,y1,y1,y0], 'b-')
+                plt.axis(ax)
+                plt.title('sedsn and slcs')
+                ps.savefig()
+
+                plt.clf()
+                plt.imshow(dilatedmap[orig_slc] > level)
+                plt.title('Dilatedmap[orig_slc] > level')
+                ps.savefig()
+                
+                plt.clf()
+                plt.imshow(dilatedmap[slc] > level)
+                plt.title('Dilatedmap[slc] > level')
+                ps.savefig()
+
+                plt.clf()
+                plt.imshow(allblobs[slc] == ablob)
+                plt.title('blob matches (ablob)')
+                ps.savefig()
+                
         assert(len(oslcs) == 1)
         oslc = oslcs[0]
         saddlemap[oslc] = binary_fill_holes(saddlemap[oslc])

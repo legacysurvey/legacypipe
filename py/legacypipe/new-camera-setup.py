@@ -208,7 +208,7 @@ def main():
          'number of pixels == 0:', np.sum(dq == 0))
     if dq is not None:
         info('Remapping data quality / mask file...')
-        dq = img.remap_dq(dq, dqhdr)
+        dq = img.remap_dq(dq, dqhdr, slc)
     if dq is None:
         info('No DQ file')
     else:
