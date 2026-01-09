@@ -1294,7 +1294,7 @@ class LegacySurveyData(object):
                           'galex-jpeg', 'galexmodel-jpeg', 'galexresid-jpeg',
                           ]:
             ty = filetype.split('-')[0]
-            tag = self.get_colorscheme_tag()
+            tag = self.get_colorscheme_tag(colorscheme)
             return swap(
                 os.path.join(codir, '%s%s-%s-%s.jpg' % (sname, tag, brick, ty)))
 
