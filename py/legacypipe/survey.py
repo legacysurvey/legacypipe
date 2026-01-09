@@ -1167,8 +1167,16 @@ class LegacySurveyData(object):
         from legacypipe.detection import sed_matched_filters
         return sed_matched_filters(bands)
 
+    def get_colorschemes(self):
+        return [None]
+
+    def get_colorscheme_tag(self, colorscheme):
+        # Returns filename tag for this RGB color scheme
+        return ''
+
     def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s',
                   camera=None, expnum=None, ccdname=None, tier=None, img=None,
+                  colorscheme=None,
                   output=False, use_cache=True, **kwargs):
         '''
         Returns the filename of a Legacy Survey file.
@@ -1286,8 +1294,9 @@ class LegacySurveyData(object):
                           'galex-jpeg', 'galexmodel-jpeg', 'galexresid-jpeg',
                           ]:
             ty = filetype.split('-')[0]
+            tag = self.get_colorscheme_tag()
             return swap(
-                os.path.join(codir, '%s-%s-%s.jpg' % (sname, brick, ty)))
+                os.path.join(codir, '%s%s-%s-%s.jpg' % (sname, tag, brick, ty)))
 
         elif filetype in ['outliers-pre', 'outliers-post',
                           'outliers-masked-pos', 'outliers-masked-neg']:
@@ -2070,7 +2079,7 @@ class LegacySurveyData(object):
         ccds = self.filter_ccds(ccds)
         return ccds
 
-    def get_rgb(self, imgs, bands, coadd_bw=None, **kwargs):
+    def get_rgb(self, imgs, bands, coadd_bw=None, colorscheme=None, **kwargs):
         rgb = get_rgb(imgs, bands, allbands=self.allbands, **kwargs)
         kwa = {}
         bw = self.coadd_bw if coadd_bw is None else coadd_bw

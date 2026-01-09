@@ -482,6 +482,8 @@ def main(args=None):
                         help='Omit the zpt_diff_avg bit (ie variation among chips in an exposure)')
     parser.add_argument('--good-ccd-fraction', default=0.7, type=float,
                         help='Fraction of CCDs in an exposure that must be good to keep any chips')
+    parser.add_argument('--no-zpt-cuts', default=False, action='store_true',
+                        help='Omit all zeropoint cuts')
     parser.add_argument('--max-seeing', default=None, type=float,
                         help='Seeing cut (default 3 arcsec)')
     parser.add_argument('--phrms-cut', default=None, type=float,
@@ -552,6 +554,9 @@ def main(args=None):
         ccds.ccd_cuts &= ~psfzpt_cuts.CCD_CUT_BITS['zpt_diff_avg']
     if not args.plver:
         ccds.ccd_cuts &= ~psfzpt_cuts.CCD_CUT_BITS['plver']
+    if args.no_zpt_cuts:
+        ccds.ccd_cuts &= ~psfzpt_cuts.CCD_CUT_BITS['zpt_small']
+        ccds.ccd_cuts &= ~psfzpt_cuts.CCD_CUT_BITS['zpt_large']
 
     depthbit = psfzpt_cuts.CCD_CUT_BITS['depth_cut']
     manybadbit = psfzpt_cuts.CCD_CUT_BITS['too_many_bad_ccds']

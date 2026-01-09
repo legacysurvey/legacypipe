@@ -880,3 +880,28 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         xbreak = W//2
         skyobj = JumpSky.BlantonMethod(img, goodpix, boxsize, xbreak)
         return skyobj
+
+    def photometric_calibrator_to_observed(self, name, cat):
+        # UNIONS
+        if name == 'gaia' and self.band in ['r']:
+            g = cat.phot_g_mean_mag
+            bp = cat.phot_bp_mean_mag
+            rp = cat.phot_rp_mean_mag
+            color = bp - rp
+            color = np.clip(color, 0.0, 3.0)
+
+            # Untitled458.ipynb
+            poly = [ 0.50732251, -1.01993514,  0.48052265, -0.03777559]
+            ref_band = g
+
+            colorterm = np.zeros(len(cat))
+            for i,coeff in enumerate(poly):
+                colorterm += coeff * color**i
+
+            m = ref_band + colorterm
+            m[~np.isfinite(m)] = 0.
+            m[bp == 0] = 0.
+            m[rp == 0] = 0.
+            return m
+            
+        return super().photometric_calibrator_to_observer(name, cat)

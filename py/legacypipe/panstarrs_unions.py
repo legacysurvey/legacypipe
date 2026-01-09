@@ -51,6 +51,12 @@ class PanStarrsImage(LegacySurveyImage):
         tile2 = int(tile2, 10)
         return tile1 * 1000 + tile2
 
+    def get_exptime(self, primhdr):
+        # The coadds are AVERAGES of the input images; exptime isn't well defined,
+        # and they're used to scale CCDZPT values.
+        # Let's fake it so that this scaling is a NO-OP
+        return 1.
+
     def get_camera(self, primhdr):
         # nothing in the headers...
         return 'panstarrs'

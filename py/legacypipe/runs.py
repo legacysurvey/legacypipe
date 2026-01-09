@@ -170,6 +170,19 @@ class RerunWithCcds(LegacySurveyData):
     def get_ccd_kdtrees(self):
         return []
 
+class UnionsRun(LegacySurveyData):
+    def get_colorschemes(self):
+        return ['ugr', 'riz']
+    def get_colorscheme_tag(self, colorscheme):
+        # Returns filename tag for this RGB color scheme
+        return '-'+colorscheme
+    def get_rgb(self, imgs, bands, coadd_bw=None, colorscheme=None, **kwargs):
+        print('get_rgb: colorscheme', colorscheme, 'bands', bands, 'N imgs:', len(imgs))
+        return super().get_rgb(img, bands, coadd_bw=coadd_bw, **kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.update_maskbits_bands(['u', 'g', 'r', 'i', 'z'])
+
 runs = {
     'decam': DecamSurvey,
     '90prime-mosaic': NinetyPrimeMosaic,
