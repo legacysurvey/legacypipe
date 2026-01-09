@@ -59,6 +59,19 @@ class HscImage(LegacySurveyImage):
         self.old_single_psffn = None
         self.old_single_skyfn = None
 
+    def get_band(self, primhdr):
+        # UNIONS whigs-g / wishes-z: CORR files.  They have FILTER01 = 'HSC-g', eg.
+        try:
+            band = super().get_band(primhdr)
+            return band
+        except:
+            pass
+        band = primhdr['FILTER01']
+        band = band.strip()
+        if band.startswith('HSC-'):
+            band = band.replace('HSC-', '')
+        return band
+
     def set_ccdzpt(self, ccdzpt):
         # Adjust zeropoint for exposure time
         self.ccdzpt = ccdzpt + 2.5 * np.log10(self.exptime)

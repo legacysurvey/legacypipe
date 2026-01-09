@@ -61,14 +61,14 @@ def _ccds_table(camera='decam', overrides=None):
     https://github.com/legacysurvey/legacyzpts/blob/master/DESCRIPTION_OF_OUTPUTS.md
     '''
     max_camera_length = max([len(c) for c in CAMERAS])
-    if max_camera_length > 9:
+    if max_camera_length > 10:
         print('Warning! Increase camera length header card to S{}'.format(max_camera_length))
 
     cols = [
         ('err_message', 'S30'),
         ('image_filename', 'S120'),
         ('image_hdu', 'i2'),
-        ('camera', 'S9'),
+        ('camera', 'S10'),
         ('expnum', 'i8'),
         ('plver', 'S8'),
         ('procdate', 'S19'),

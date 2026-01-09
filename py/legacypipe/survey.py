@@ -1014,10 +1014,12 @@ class LegacySurveyData(object):
         from legacypipe.mosaic import MosaicImage
         from legacypipe.bok    import BokImage
         from legacypipe.ptf    import PtfImage
+        # UNIONS
         #from legacypipe.cfht   import MegaPrimeImage
         from legacypipe.cfht   import MegaPrimeElixirImage
+        #from legacypipe.panstarrs import PanStarrsImage
+        from legacypipe.panstarrs_unions import PanStarrsImage
         from legacypipe.hsc    import HscImage
-        from legacypipe.panstarrs import PanStarrsImage
         from legacypipe.wiro   import WiroImage
         from legacypipe.suprime import SuprimeImage
         from collections import OrderedDict
@@ -1068,9 +1070,11 @@ class LegacySurveyData(object):
             'mosaic3': MosaicImage,
             '90prime': BokImage,
             'ptf'    : PtfImage,
+            # UNIONS
             #'megaprime': MegaPrimeImage,
             'megaprime': MegaPrimeElixirImage,
             'hsc'    : HscImage,
+            # UNIONS - see the import where we select panstarrs_unions
             'panstarrs' : PanStarrsImage,
             'wiro'   : WiroImage,
             'suprimecam': SuprimeImage,
