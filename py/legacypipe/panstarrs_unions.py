@@ -12,7 +12,7 @@ class PanStarrsImage(LegacySurveyImage):
 
         # Nominal zeropoints
         # These are used only for "ccdskybr", so are not critical.
-        self.zp0 = dict(i = 25.0)
+        self.zp0 = dict(i = 16.87)
         self.k_ext = dict(i = 0.08)
 
     @classmethod
@@ -68,11 +68,27 @@ class PanStarrsImage(LegacySurveyImage):
         if hdr is not None:
             tan = Tan(hdr)
         else:
-            tan = Tan(self.image_filename, self.hdu)
+            print('Reading TAN header from filename "%s", hdu "%s"' % (self.imgfn, self.hdu))
+            tan = Tan(str(self.imgfn), int(self.hdu))
         return tan
 
     def get_airmass(self, primhdr, imghdr, ra, dec):
-        return None
+        return 1.2
+        #return None
+
+    def get_fwhm(self, primhdr, imghdr):
+        # ???
+        if hasattr(self, 'merged_psffn'):
+            try:
+                psf = self.read_psf_model(0, 0, pixPsf=True)
+                print('get_fwhm: read PSF model', psf)
+                return psf.fwhm
+            except:
+                print('Failed to read PSF model to get_fwhm:')
+                import traceback
+                traceback.print_exc()
+                pass
+        return np.nan
 
     def read_dq(self, header=True, **kwargs):
         img = self.read_image(header=header, **kwargs)
@@ -119,3 +135,44 @@ class PanStarrsImage(LegacySurveyImage):
         if tmpmaskfn is not None:
             os.remove(tmpmaskfn)
         return R
+
+    def gaia_to_observed(self, gaia, band):
+        from functools import reduce
+        G  = gaia.phot_g_mean_mag .astype(np.float32)
+        BP = gaia.phot_bp_mean_mag.astype(np.float32)
+        RP = gaia.phot_rp_mean_mag.astype(np.float32)
+        color = BP - RP
+
+        # From Rongpu, 2020-04-12
+        # no BP-RP color: use average color
+        average_color=1.4
+        badcolor = reduce(np.logical_or,
+                          [np.logical_not(np.isfinite(color)),
+                           BP == 0, RP == 0,])
+        color[badcolor] = average_color
+        # clip colors
+        lo,hi = (0.5, 3.0)
+        color = np.clip(color, lo, hi)
+
+        coeffs = {
+            # Untitled458.ipynb
+            'i': ('RP', [ 0.00900635, -0.04966931,  0.03259645]),
+        }
+
+        base_mag, coeff = coeffs[band]
+        base_mags = dict(G=G, BP=BP, RP=RP)
+        mag = base_mags[base_mag].copy()
+        nomags = (mag == 0.)
+        for order,c in enumerate(coeff):
+            mag += c * color**order
+        missing_mag = 30.
+        mag[nomags] = missing_mag
+        return mag
+
+    #def get_photometric_calibrator_cuts(self, name, cat):
+    #            color = cat.phot_bp_mean_mag - cat.phot_rp_mean_mag
+    # def get_photocal_mag_limits(self):
+    #     MAGLIM=dict(
+    #         i=[16, 19.5],
+    #     )
+    #     return MAGLIM.get(self.band, (16.,20.))

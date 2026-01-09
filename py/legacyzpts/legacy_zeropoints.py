@@ -73,7 +73,7 @@ def _ccds_table(camera='decam', overrides=None):
         ('plver', 'S8'),
         ('procdate', 'S19'),
         ('plprocid', 'S7'),
-        ('ccdname', 'S4'),
+        ('ccdname', 'S5'),
         ('ccdnum', 'i2'),
         ('expid', 'S17'),
         ('object', 'S35'),
