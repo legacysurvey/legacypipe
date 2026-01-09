@@ -2512,7 +2512,10 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         U = find_unique_pixels(targetwcs, W, H, None,
                                brick.ra1, brick.ra2, brick.dec1, brick.dec2)
 
-    # Create JPEG coadds
+    # Create JPEG coadds, potentially with different RGB color schemes.
+    record_event and record_event('stage_coadds: writing jpeg image files')
+    schemes = survey.get_colorschemes()
+
     coadd_list= [('image', C.coimgs, {}, None),
                  ('model', C.comods, {}, None),
                  ('blobmodel', C.coblobmods, {}, None,),
@@ -2520,17 +2523,17 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     if hasattr(tims[0], 'sims_image'):
         coadd_list.append(('simscoadd', sims_coadd, {}, None))
 
-    record_event and record_event('stage_coadds: writing image files')
     for name,ims,rgbkw,mask in coadd_list:
         if mask is not None:
             # Update in-place!
             ims = [im * mask for im in ims]
             del mask
-        rgb,kwa = survey.get_rgb(ims, bands, **rgbkw)
-        with survey.write_output(name + '-jpeg', brick=brickname) as out:
-            imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
-            info('Wrote', out.fn)
-        del rgb
+        for scheme in schemes:
+            rgb,kwa = survey.get_rgb(ims, bands, colorscheme=scheme, **rgbkw)
+            with survey.write_output(name + '-jpeg', brick=brickname, colorscheme=scheme) as out:
+                imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
+                info('Wrote', out.fn)
+            del rgb
         del ims
     del C.comods
     del C.coblobmods

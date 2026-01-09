@@ -177,8 +177,26 @@ class UnionsRun(LegacySurveyData):
         # Returns filename tag for this RGB color scheme
         return '-'+colorscheme
     def get_rgb(self, imgs, bands, coadd_bw=None, colorscheme=None, **kwargs):
+        from legacypipe.survey import rgb_stretch_factor
         print('get_rgb: colorscheme', colorscheme, 'bands', bands, 'N imgs:', len(imgs))
+        if colorscheme in ['ugr', 'riz']:
+            ii = [i for i,b in zip(imgs,bands) if b in colorscheme]
+            bb = [b for i,b in zip(imgs,bands) if b in colorscheme]
+            if colorscheme == 'ugr':
+                scales = dict(
+                    u =    (2, 1.5 * rgb_stretch_factor),
+                    g =    (1, 6.0 * rgb_stretch_factor),
+                    r =    (0, 3.4 * rgb_stretch_factor),
+                )
+            elif colorscheme == 'riz':
+                scales = dict(
+                    r =    (2, 5.0 * rgb_stretch_factor),
+                    i =    (1, 3.0 * rgb_stretch_factor),
+                    z =    (0, 4.0 * rgb_stretch_factor),
+                )
+            return self.sdss_rgb(ii, bb, scales=scales)
         return super().get_rgb(img, bands, coadd_bw=coadd_bw, **kwargs)
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.update_maskbits_bands(['u', 'g', 'r', 'i', 'z'])
@@ -204,6 +222,7 @@ runs = {
     'clauds-test-4': ClaudsTestData4,
     'dr11-test-1': Dr11Test1,
     'dr11-test-2': Dr11Test2,
+    'unions': UnionsRun,
     None: LegacySurveyData,
 }
 
