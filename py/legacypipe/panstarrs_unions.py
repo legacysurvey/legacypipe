@@ -2,7 +2,7 @@ import os
 import numpy as np
 import fitsio
 from astrometry.util.util import Tan
-from legacypipe.image import LegacySurveyImage
+from legacypipe.image import LegacySurveyImage, info, debug
 from legacypipe.bits import DQ_BITS
 from legacypipe.survey import create_temp
 
@@ -103,3 +103,19 @@ class PanStarrsImage(LegacySurveyImage):
     def check_image_header(self, imghdr):
         pass
             
+    def run_se(self, imgfn, maskfn):
+        tmpmaskfn = None
+        if maskfn is None:
+            # Create an all-zeros fake flags.fits file.
+            phdr = self.read_image_primary_header()
+            # Are these the right way around?
+            H = phdr['NAXIS1']
+            W = phdr['NAXIS2']
+            tmpmaskfn = create_temp(suffix='.fits')
+            debug('Writing fake mask file', tmpmaskfn)
+            fitsio.write(tmpmaskfn, np.zeros((H,W), np.uint8), clobber=True)
+            maskfn = tmpmaskfn
+        R = super().run_se(imgfn, maskfn)
+        if tmpmaskfn is not None:
+            os.remove(tmpmaskfn)
+        return R
