@@ -1854,11 +1854,16 @@ class OneBlob(object):
                 src.pos.lowers = [ra - maxmove/cosdec, dec - maxmove]
                 src.pos.uppers = [ra + maxmove/cosdec, dec + maxmove]
 
-            # FIXME -- do we need to create this local 'srctrcator' any more?
-            srctims = self.tims
             modelMasks = models.model_masks(srci, src)
+            # sub-select the images (and corresponding modelmasks) that actually overlap this source
+            srctims = []
+            srcmm = []
+            for mm, tim in zip(modelMasks, self.tims):
+                if src in mm:
+                    srctims.append(tim)
+                    srcmm.append(mm)
             srctractor = self.tractor(srctims, [src])
-            srctractor.setModelMasks(modelMasks)
+            srctractor.setModelMasks(srcmm)
 
             # First-round optimization
             #print('First-round initial log-prob:', srctractor.getLogProb())
