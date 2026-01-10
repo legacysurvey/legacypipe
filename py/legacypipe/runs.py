@@ -172,14 +172,74 @@ class RerunWithCcds(LegacySurveyData):
 
 class UnionsRun(LegacySurveyData):
     def get_colorschemes(self):
-        return ['ugr', 'riz']
+        return ['ugr', 'riz', 'ugriz']
     def get_colorscheme_tag(self, colorscheme):
         # Returns filename tag for this RGB color scheme
         return '-'+colorscheme
     def get_rgb(self, imgs, bands, coadd_bw=None, colorscheme=None, **kwargs):
         from legacypipe.survey import rgb_stretch_factor, sdss_rgb
         print('get_rgb: colorscheme', colorscheme, 'bands', bands, 'N imgs:', len(imgs))
-        if colorscheme in ['ugr', 'riz']:
+
+        # for coadd_bw (code from survey.py)
+        kwa = {}
+        bw = self.coadd_bw if coadd_bw is None else coadd_bw
+        if bw and len(bands) == 1:
+            rgb = rgb.sum(axis=2)
+            kwa = dict(cmap='gray')
+
+        if colorscheme == 'ugriz':
+            rgbscales=dict(u = (0, 1.8 *  rgb_stretch_factor),
+                           g = (0, 15.0 * rgb_stretch_factor),
+                           r = (0, 6.0 *  rgb_stretch_factor),
+                           i = (0, 4.0 *  rgb_stretch_factor),
+                           z = (0, 4.0 *  rgb_stretch_factor),
+                          )
+            #rgbvec = dict(
+            #    u = (0.0, 0.0, 0.6),
+            #    g = (0.0, 0.2, 0.4),
+            #    r = (0.0, 0.6, 0.0),
+            #    i = (0.4, 0.2, 0.0),
+            #    z = (0.6, 0.0, 0.0))
+
+            # downweight u
+            rgbvec = dict(
+                u = (0.0 , 0.0 , 0.4),
+                g = (0.0 , 0.05, 0.6),
+                r = (0.0 , 0.65, 0.0),
+                i = (0.35, 0.3 , 0.0),
+                z = (0.65, 0.0 , 0.0))
+
+            I = 0
+            for img,band in zip(imgs, bands):
+                _,scale = rgbscales[band]
+                img = np.maximum(0, img * scale + m)
+                I = I + img
+            I /= len(bands)
+            if Q is not None:
+                fI = np.arcsinh(Q * I) / np.sqrt(Q)
+                I += (I == 0.) * 1e-6
+                I = fI / I
+            H,W = I.shape
+            rgb = np.zeros((H,W,3), np.float32)
+            for img,band in zip(imgs, bands):
+                _,scale = rgbscales[band]
+                rf,gf,bf = rgbvec[band]
+                if mnmx is None:
+                    v = (img * scale + m) * I
+                else:
+                    mn,mx = mnmx
+                    v = ((img * scale + m) - mn) / (mx - mn)
+                if clip:
+                    v = np.clip(v, 0, 1)
+                if rf != 0.:
+                    rgb[:,:,0] += rf*v
+                if gf != 0.:
+                    rgb[:,:,1] += gf*v
+                if bf != 0.:
+                    rgb[:,:,2] += bf*v
+            return rgb,{}
+
+        elif colorscheme in ['ugr', 'riz']:
             ii = [i for i,b in zip(imgs,bands) if b in colorscheme]
             bb = [b for i,b in zip(imgs,bands) if b in colorscheme]
             if colorscheme == 'ugr':
@@ -195,12 +255,8 @@ class UnionsRun(LegacySurveyData):
                     z =    (0, 4.0 * rgb_stretch_factor),
                 )
             rgb = sdss_rgb(ii, bb, scales=scales)
-            # for coadd_bw (code from survey.py)
-            kwa = {}
-            bw = self.coadd_bw if coadd_bw is None else coadd_bw
             if bw and len(bands) == 1:
                 rgb = rgb.sum(axis=2)
-                kwa = dict(cmap='gray')
             return rgb,kwa
         return super().get_rgb(img, bands, coadd_bw=coadd_bw, **kwargs)
 

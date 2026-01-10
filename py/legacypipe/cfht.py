@@ -712,7 +712,11 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             os.remove(tmpimgfn)
 
     def run_lacosmic(self):
-        import lacosmic
+        #import lacosmic
+        #from locosmic import lacosmic
+        # v1.3.0
+        from lacosmic.core import lacosmic
+
         from astrometry.util.file import trymakedirs
         from legacypipe.bits import DQ_BITS
 
@@ -739,8 +743,8 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         threshold = 6.
         neighbor_threshold = 1.
         print('run_lacosmic: running lacosmic')
-        _,crmask = lacosmic.lacosmic(img, contrast, threshold, neighbor_threshold,
-                                     error=err, mask=mask)
+        _,crmask = lacosmic(img, contrast, threshold, neighbor_threshold,
+                            error=err, mask=mask)
         print('run_lacosmic: masked', np.sum(crmask), 'pixels')
         tmpfn = self.lacosmic_fn.replace('-cr.fits', '-cr-temp.fits')
         trymakedirs(self.lacosmic_fn, dir=True)
@@ -903,5 +907,5 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             m[bp == 0] = 0.
             m[rp == 0] = 0.
             return m
-            
-        return super().photometric_calibrator_to_observer(name, cat)
+
+        return super().photometric_calibrator_to_observed(name, cat)
