@@ -177,7 +177,7 @@ class UnionsRun(LegacySurveyData):
         # Returns filename tag for this RGB color scheme
         return '-'+colorscheme
     def get_rgb(self, imgs, bands, coadd_bw=None, colorscheme=None, **kwargs):
-        from legacypipe.survey import rgb_stretch_factor
+        from legacypipe.survey import rgb_stretch_factor, sdss_rgb
         print('get_rgb: colorscheme', colorscheme, 'bands', bands, 'N imgs:', len(imgs))
         if colorscheme in ['ugr', 'riz']:
             ii = [i for i,b in zip(imgs,bands) if b in colorscheme]
@@ -194,7 +194,14 @@ class UnionsRun(LegacySurveyData):
                     i =    (1, 3.0 * rgb_stretch_factor),
                     z =    (0, 4.0 * rgb_stretch_factor),
                 )
-            return self.sdss_rgb(ii, bb, scales=scales)
+            rgb = sdss_rgb(ii, bb, scales=scales)
+            # for coadd_bw (code from survey.py)
+            kwa = {}
+            bw = self.coadd_bw if coadd_bw is None else coadd_bw
+            if bw and len(bands) == 1:
+                rgb = rgb.sum(axis=2)
+                kwa = dict(cmap='gray')
+            return rgb,kwa
         return super().get_rgb(img, bands, coadd_bw=coadd_bw, **kwargs)
 
     def __init__(self, **kwargs):

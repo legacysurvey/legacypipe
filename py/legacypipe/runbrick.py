@@ -2515,7 +2515,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
     # Create JPEG coadds, potentially with different RGB color schemes.
     record_event and record_event('stage_coadds: writing jpeg image files')
     schemes = survey.get_colorschemes()
-
+    print('Color schemes:', schemes)
     coadd_list= [('image', C.coimgs, {}, None),
                  ('model', C.comods, {}, None),
                  ('blobmodel', C.coblobmods, {}, None,),
@@ -4438,14 +4438,16 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     def mystagefunc(stage, mp=None, **kwargs):
         # Update the (pickled) survey output directory, so that running
         # with an updated --output-dir overrides the pickle file.
-        picsurvey = kwargs.get('survey',None)
-        if picsurvey is not None:
-            picsurvey.output_dir = survey.output_dir
-            picsurvey.allbands = survey.allbands
-            picsurvey.coadd_bw = survey.coadd_bw
-            # Also pick up maskbits updates, eg from --run
-            picsurvey.maskbits_descriptions = survey.maskbits_descriptions
-            picsurvey.maskbits = survey.maskbits
+        # picsurvey = kwargs.get('survey',None)
+        # if picsurvey is not None:
+        #     picsurvey.output_dir = survey.output_dir
+        #     picsurvey.allbands = survey.allbands
+        #     picsurvey.coadd_bw = survey.coadd_bw
+        #     # Also pick up maskbits updates, eg from --run
+        #     picsurvey.maskbits_descriptions = survey.maskbits_descriptions
+        #     picsurvey.maskbits = survey.maskbits
+        kwargs.update(survey=survey)
+        print('Updated LegacySurveyData to', survey)
 
         flush()
         if mp is not None and threads is not None and threads > 1:
