@@ -1593,6 +1593,11 @@ def stage_fitblobs(T=None,
             info('No sources, but continuing because of --bail-out')
         else:
             raise NothingToDoError('No sources passed significance tests.')
+    for r in R:
+        cols = r.get_columns()
+        for c in ['done_fitting', 'done_model_selection']:
+            if c in cols:
+                r.delete_column(c)
     # Merge results R into one big table
     BB = merge_tables(R)
     del R
