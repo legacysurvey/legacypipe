@@ -1179,9 +1179,15 @@ def sigusr1(sig, stackframe):
     print('pool_worker_pids:', pool_worker_pids)
     if pool_worker_pids is not None:
         for p in list(pool_worker_pids.values()):
-            pfd = os.pidfd_open(p)
             print('Sending SIGUSR1 to worker PID %s' % p)
-            signal.pidfd_send_signal(pfd, signal.SIGUSR1)
+            try:
+                pfd = os.pidfd_open(p)
+                signal.pidfd_send_signal(pfd, signal.SIGUSR1)
+            except Exception as e:
+                cmd = 'kill -SIGUSR1 %i' % p
+                print('Signalling via os.pidfd & pidfd_send_signal failed (%s) trying shell: %s' % (str(e), cmd))
+                rtn = os.system(cmd)
+                print('Return value:', rtn)
 
 def stage_fitblobs(T=None,
                    brickname=None,
