@@ -1,3 +1,4 @@
+import numpy as np
 from legacypipe.survey import LegacySurveyData
 
 class DecamSurvey(LegacySurveyData):
@@ -208,6 +209,12 @@ class UnionsRun(LegacySurveyData):
                 r = (0.0 , 0.65, 0.0),
                 i = (0.35, 0.3 , 0.0),
                 z = (0.65, 0.0 , 0.0))
+
+            # from sdss_rgb
+            m=0.03
+            Q=20
+            mnmx=None
+            clip=True
 
             I = 0
             for img,band in zip(imgs, bands):
