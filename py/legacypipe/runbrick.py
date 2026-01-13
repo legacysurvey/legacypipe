@@ -1380,16 +1380,22 @@ def stage_fitblobs(T=None,
                     # other threads may try to update status during iteration
                     status = status.copy()
                     jmap = job_id_map.copy()
+
                     from legacypipe.utils import run_ps
                     pid = os.getpid()
                     if procs_last is None:
                         procs_last = run_ps(pid)
                         time.sleep(1.)
                     procs = run_ps(pid, last=procs_last)
+                    procs_last = procs
                     #print('procs columns:', procs.get_columns())
                     tnow = time.time()
                     keys = list(status.keys())
                     keys.sort()
+                    pss_sum = 0
+                    uss_sum = 0
+                    GB = (1024**3)
+                    MB = (1024**2)
                     for jobid in keys:
                         s = status[jobid]
                         if not jobid in jmap:
@@ -1397,18 +1403,32 @@ def stage_fitblobs(T=None,
                             continue
                         (brick,blob) = jmap[jobid]
                         pid = s['pid']
+
+                        pstxt = ''
+                        try:
+                            import psutil
+                            pr = psutil.Process(pid)
+                            mem = pr.memory_full_info()
+                            pstxt = ', PSS %5.1f GB, USS %5.1f GB' % (mem.pss/GB, mem.uss/GB)
+                            pss_sum += mem.pss
+                            uss_sum += mem.uss
+                        except Exception as e:
+                            print('failed to run psutil:', e)
+                            import traceback
+                            traceback.print_exc()
+
                         i = np.flatnonzero(procs.pid == pid)
                         if len(i) != 1:
                             print('Blob %10s' % blob, 'pid', pid, '"running" for %7.1f sec, but did not find PID %i: crashed?' %
                                   (tnow - s['time'], pid))
                         else:
                             i = i[0]
-                            print('Blob %5s' % blob, 'pid %7i' % s['pid'],
-                                  'total CPU %7.1f sec' % (tnow - s['time']),
-                                  'CPU now %5.1f %%,' % procs.proc_icpu[i],
-                                  'VMsize %5.1f GB,' % (procs.vsz[i] / (1024 * 1024)),
-                                  'VMpeak %5.1f GB' % (procs.proc_vmpeak[i] / (1024 * 1024)))
-
+                            print(('Blob %5s pid %7i, total CPU %7.1f sec, CPU now %5.1f %%, ' +
+                                   'VMsize %5.1f GB, VMpeak %5.1f GB%s') %
+                                  (blob, s['pid'], tnow - s['time'], procs.proc_icpu[i],
+                                   procs.vsz[i]/MB, procs.proc_vmpeak[i]/MB, pstxt))
+                    if pss_sum > 0:
+                        print('Total: PSS %5.1f GB, USS %5.1f GB' % (pss_sum/GB, uss_sum/GB))
             # Wait for results (with timeout)
             from legacypipe.trackingpool import PoolWorkerDiedException
             try:
