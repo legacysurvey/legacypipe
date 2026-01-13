@@ -1113,7 +1113,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
         T.delete_column('peaksn')
 
     keys = ['T', 'cat', 'T_special', 'cat_special', 'tims', 'blobsrcs', 'blobslices', 'blobmap',
-            'ps', 'saturated_pix', 'version_header', 'co_sky', 'ccds']
+            'ps', 'saturated_pix', 'version_header', 'co_sky', 'ccds', 'nsigma']
     L = locals()
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
