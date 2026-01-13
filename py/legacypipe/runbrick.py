@@ -775,15 +775,20 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
     if hasattr(tims[0], 'sims_image'):
         coadd_list.append(('simscoadd', sims_coadd))
 
+    schemes = survey.get_colorschemes()
+    print('Color schemes:', schemes)
     for name,ims in coadd_list:
-        rgb,kwa = survey.get_rgb(ims, bands)
-        del ims
-        with survey.write_output(name + '-jpeg', brick=brickname) as out:
-            imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
-            debug('Wrote', out.fn)
+        for scheme in schemes:
+            rgb,kwa = survey.get_rgb(ims, bands, colorscheme=scheme)
+            with survey.write_output(name + '-jpeg', brick=brickname, colorscheme=scheme) as out:
+                imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
+                debug('Wrote', out.fn)
 
-        # Blob-outlined version
-        if blobmap is not None:
+            if name != 'image':
+                continue
+            # Blob-outlined version
+            if blobmap is None:
+                continue
             from scipy.ndimage import binary_dilation
             outline = np.logical_xor(
                 binary_dilation(blobmap >= 0, structure=np.ones((3,3))),
@@ -796,19 +801,20 @@ def stage_image_coadds(survey=None, targetwcs=None, bands=None, tims=None,
             rgb[:,:,1][outline] = 1
             rgb[:,:,2][outline] = 0
 
-            with survey.write_output(name+'blob-jpeg', brick=brickname) as out:
+            with survey.write_output(name+'blob-jpeg', brick=brickname, colorscheme=scheme) as out:
                 imsave_jpeg(out.fn, rgb, origin='lower', **kwa)
                 debug('Wrote', out.fn)
+            del rgb
+        del ims
 
-            # write out blob map
-            if write_metrics:
-                hdr = copy_header_with_wcs(version_header, targetwcs)
-                hdr.add_record(dict(name='IMTYPE', value='blobmap',
-                                    comment='LegacySurveys image type'))
-                with survey.write_output('blobmap', brick=brickname,
-                                         shape=blobmap.shape) as out:
-                    out.fits.write(blobmap, header=hdr)
-        del rgb
+    if blobmap is not None and write_metrics:
+        # write out blob map
+        hdr = copy_header_with_wcs(version_header, targetwcs)
+        hdr.add_record(dict(name='IMTYPE', value='blobmap',
+                            comment='LegacySurveys image type'))
+        with survey.write_output('blobmap', brick=brickname,
+                                 shape=blobmap.shape) as out:
+            out.fits.write(blobmap, header=hdr)
     del coadd_list
     del C
     return None
