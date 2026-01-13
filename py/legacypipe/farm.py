@@ -188,6 +188,10 @@ def main():
                         help='Network port (TCP) for big blobs, if --big=queue')
     parser.add_argument('--big-command-port', default=5566, type=int,
                         help='Network port (TCP) for big blob commands, if --big=queue')
+
+    parser.add_argument('--sub-blobs', default=False, action='store_true',
+                        help='Split large blobs into sub-blobs that can be processed in parallel.')
+
     parser.add_argument('-v', '--verbose', dest='verbose', action='count',
                         default=0, help='Make more verbose')
     opt = parser.parse_args()
@@ -558,7 +562,6 @@ def network_thread(ctx, port, command_port, inqueues, outqueue, finished_bricks,
         #         # recv timed out; check work queue again
         #         continue
 
-
         events = sock.poll(timeout=0)
         nwaitingCounter[events] += 1
 
@@ -817,6 +820,9 @@ def get_blob_iter(skipblobs=None,
                   T=None,
                   T_clusters=None,
                   custom_brick=False,
+                  iterative_nsigma=None,
+                  nsigma=None,
+                  sub_blobs=False,
                   **kwargs):
     from legacypipe.runbrick import get_frozen_galaxies, get_blobiter_ref_map
     if skipblobs is None:
@@ -826,20 +832,32 @@ def get_blob_iter(skipblobs=None,
     survey.drop_cache()
 
     frozen_galaxies = get_frozen_galaxies(T, blobsrcs, blobmap, targetwcs, cat)
-    refmap = get_blobiter_ref_map(refstars, T_clusters, less_masking, targetwcs)
+    refmap = get_blobiter_ref_map(refstars, less_masking, targetwcs)
+
+    job_id_map = {}
+    ran_sub_blobs = []
+
+    # HACK - previously this wasn't saved in src pickles
+    if nsigma is None:
+        nsigma=6
+
+    if iterative and (iterative_nsigma is None):
+        iterative_nsigma = nsigma
 
     # Create the iterator over blobs to process
-    blobiter = _blob_iter(brickname, blobslices, blobsrcs, blobmap,
+    blobiter = _blob_iter(job_id_map, brickname, blobslices, blobsrcs, blobmap,
                           targetwcs, tims,
                           cat, T, bands, plots, ps,
-                          reoptimize, iterative, use_ceres,
+                          reoptimize, iterative, iterative_nsigma, use_ceres,
                           refmap,
                           large_galaxies_force_pointsource,
                           less_masking,
                           brick,
                           frozen_galaxies,
                           max_blobsize=max_blobsize, custom_brick=custom_brick,
-                          skipblobs=skipblobs)
+                          skipblobs=skipblobs,
+                          enable_sub_blobs=sub_blobs,
+                          ran_sub_blobs=ran_sub_blobs)
     return blobiter
 
 class PrioritizedItem(object):
@@ -909,6 +927,9 @@ def queue_work(brickname, inqueue, bigqueue, checkpointqueue, opt):
         #print('checkpointqueue approx size:', checkpointqueue.qsize())
         kwargs.update(skipblobs=skipblobs)
 
+    # Updated from command-line args
+    kwargs.update(sub_blobs=opt.sub_blobs)
+
     # (brickname is in the kwargs read from the pickle!)
     assert(kwargs['brickname'] == brickname)
     blobiter = get_blob_iter(**kwargs)
@@ -924,6 +945,7 @@ def queue_work(brickname, inqueue, bigqueue, checkpointqueue, opt):
 
         (br, iblob, unique_area, args) = arg
         if unique_area is not None:
+            # FIXME - sub-blobs
             print('WARNING, ignoring unique_area argument in farm.py!')
         assert(br == brickname)
         if args is None:

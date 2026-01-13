@@ -1,4 +1,5 @@
 import os
+import sys
 import argparse
 import pickle
 import time
@@ -6,6 +7,16 @@ import time
 import zmq
 
 from legacypipe.oneblob import one_blob
+
+import logging
+logger = logging.getLogger('worker')
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
+def debug(*args):
+    from legacypipe.utils import log_debug
+    log_debug(logger, args)
+
 
 def worker(workq, resultq):
     import socket
@@ -17,11 +28,20 @@ def worker(workq, resultq):
     while True:
         qsize = workq.qsize()
         ta_wall = time.time()
+        debug('%s getting work (qsize %i)' % (myid, qsize))
         work = workq.get()
         tb_wall = time.time()
         work = pickle.loads(work)
         tc_wall = time.time()
-        (brickname, iblob, args) = work
+        (brickname, iblob, blob_unique, args) = work
+        bname = ''
+        try:
+            bname = args[0]
+        except:
+            pass
+        info('%s got work: brick %s, blobid %s, name %s' % (myid, brickname, iblob, bname))
+
+        # FIXME -- actually deal with blob_unique...
 
         # DEBUG -- unpack "args" to print the following...
         # (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
@@ -37,6 +57,7 @@ def worker(workq, resultq):
         t0_cpu  = time.process_time()
 
         result = one_blob(args)
+        info('%s got result: type %s' % (myid, type(result)))
 
         t1_cpu  = time.process_time()
         t1_wall = time.time()
@@ -57,7 +78,7 @@ def worker(workq, resultq):
         tpickle = t3_wall - t2_wall
         tput = t4_wall - t3_wall
         if max([tget, tpickle, tput, tunpickle]) > 1:
-            print('Worker', myid, ': work %5.2f, unpickle %5.2f, get work %5.2f (queue size %i), pickle %5.2f, put results %5.2f' % (t1_wall-t0_wall, tunpickle, tget, qsize, tpickle, tput))
+            info('Worker %s: work %5.2f, unpickle %5.2f, get work %5.2f (queue size %i), pickle %5.2f, put results %5.2f' % (myid, t1_wall-t0_wall, tunpickle, tget, qsize, tpickle, tput))
 
 def queue_feeder(server, workq, resultq):
     from queue import Empty
@@ -147,8 +168,22 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('server', nargs=1, help='Server URL, eg tcp://edison08:5555')
     parser.add_argument('--threads', type=int, help='Number of processes to run')
+    parser.add_argument('-v', '--verbose', dest='verbose', action='count',
+                        default=0, help='Make more verbose')
 
     opt = parser.parse_args()
+
+    if opt.verbose == 0:
+        lvl = logging.INFO
+    else:
+        lvl = logging.DEBUG
+    logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+    # Make quieter
+    #logging.getLogger('legacypipe.runbrick').setLevel(lvl+10)
+    # tractor logging is *soooo* chatty
+    logging.getLogger('tractor.engine').setLevel(lvl + 10)
+    # silence "findfont: score(<Font 'DejaVu Sans Mono' ...)" messages
+    logging.getLogger('matplotlib.font_manager').disabled = True
 
     server = opt.server[0]
 
