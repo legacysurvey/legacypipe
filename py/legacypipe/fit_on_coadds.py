@@ -552,10 +552,11 @@ def stage_fit_on_coadds(
 
             for band,img,iv in zip(bands, C.coimgs, C.cowimgs):
                 # from scipy.ndimage.filters import gaussian_filter
-                # plt.clf()
-                # plt.hist((img * np.sqrt(iv))[iv>0], bins=50, range=(-5,8), log=True)
-                # plt.title('Coadd pixel values (sigmas): band %s' % band)
-                # ps.savefig()
+                plt.clf()
+                plt.hist((img * np.sqrt(iv))[iv>0], bins=50, range=(-5,8), log=True)
+                plt.title('Coadd pixel values (sigmas): band %s' % band)
+                ps.savefig()
+
                 psf_sigma = np.mean([(tim.psf_sigma * tim.imobj.pixscale / pixscale)
                                      for tim in tims if tim.band == band])
                 gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
@@ -595,6 +596,7 @@ def stage_fit_on_coadds(
             psf_sigma = np.mean([(tim.psf_sigma * tim.imobj.pixscale / pixscale)
                                  for tim in tims if tim.band == band])
             print('Using average PSF sigma', psf_sigma)
+            print('PSF img sum', psfimg.sum())
 
             psf = PixelizedPSF(psfimg)
             gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
@@ -629,9 +631,27 @@ def stage_fit_on_coadds(
                 # Poisson terms.
                 median_iv = np.median(iv[iv>0])
                 assert(median_iv > 0)
+                if plots2:
+                    iv_before = iv.copy()
                 iv = iv * np.sqrt(iv) / np.sqrt(median_iv)
                 assert(np.all(np.isfinite(iv)))
                 assert(np.all(iv >= 0))
+
+                if plots2:
+                    mx = max(iv_before.max(), iv.max())
+                    ima = dict(interpolation='nearest', origin='lower', vmin=0, vmax=mx)
+                    plt.clf()
+                    plt.subplot(1,2,1)
+                    plt.imshow(iv_before, **ima)
+                    plt.subplot(1,2,1)
+                    plt.imshow(iv, **ima)
+                    plt.title('Reweighted ivars: %s band' % band)
+                    ps.savefig()
+
+                    plt.clf()
+                    plt.hist((img * np.sqrt(iv))[iv>0], bins=50, range=(-5,8), log=True)
+                    plt.title('Coadd pixel values (sigmas); reweighted: band %s' % band)
+                    ps.savefig()
 
             cotim = Image(img, invvar=iv, wcs=twcs, psf=psf,
                           photocal=LinearPhotoCal(1., band=band),
