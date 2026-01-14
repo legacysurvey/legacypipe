@@ -166,9 +166,10 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None, use_gp
                 satmaps[ib][Yo,Xo] = np.minimum(satmax, satmaps[ib][Yo,Xo] + (1*sat))
                 nmaps[ib][Yo,Xo] = np.minimum(satmax, nmaps[ib][Yo,Xo] + 1)
         del Yo,Xo,incmap,inciv,sat
-    for i,(detmap,detiv,satmap,nmap) in enumerate(zip(detmaps, detivs, satmaps, nmaps)):
+    for i,(detmap,detiv,satmap) in enumerate(zip(detmaps, detivs, satmaps)):
         detmap /= np.maximum(1e-16, detiv)
         if nsatur is not None:
+            nmap = nmaps[i]
             print('Saturmap for band', bands[i], ': range', satmap.min(), satmap.max(),
                   'mean', np.mean(satmap), 'nsatur', nsatur)
             # Set the SATUR bit if the number of images in the stack with SATUR set is > nsatur,
