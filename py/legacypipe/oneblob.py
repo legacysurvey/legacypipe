@@ -1800,7 +1800,7 @@ class OneBlob(object):
                         final_mods.append(modimg)
 
                 debug('Batch %i fits:' % batchnum)
-                for newsrc,i in zip(R, srcbatch):
+                for newsrc,(i,_) in zip(R, srcbatch):
                     s = cat[i]
                     # Add this source's initial model back in.
                     models.add(i, self.tims)
