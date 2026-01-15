@@ -1705,10 +1705,8 @@ class OneBlob(object):
         return tr
 
     def _optimize_individual_sources_parallel(self, cat, Ibright, cputime, mp):
-        #from legacypipe.detection import plot_boundary_map
         from scipy.spatial import ConvexHull
         from astrometry.util.miscutils import point_in_poly
-        from collections import Counter
 
         models = SourceModels()
         # Remember original tim images
@@ -1722,47 +1720,22 @@ class OneBlob(object):
             plt.clf()
             self._plot_coadd(self.tims, self.blobwcs)
             ax = plt.axis()
-            #coimgs,_ = quick_coadds(tims, self.bands, self.blobwcs)
-            #rgb = get_rgb(coimgs,self.bands)
-            #dimshow(rgb)
             plt.title('Initial residuals + modelMasks')
             for numi,srci in enumerate(Ibright):
                 src = cat[srci]
                 if src.freezeparams:
                     continue
                 modelMasks = models.model_masks(srci, src)
-                assert(len(modelMasks) == len(self.tims))
-                allxx = []
-                allyy = []
-                for mm,tim in zip(modelMasks, self.tims):
-                    try:
-                        mm = mm[src]
-                    except KeyError:
-                        print('Source', numi, 'not found in tim', tim)
-                        continue
-                    rr,dd = tim.subwcs.pixelxy2radec(1 + np.array([mm.x0, mm.x0, mm.x1, mm.x1]),
-                                                     1 + np.array([mm.y0, mm.y1, mm.y1, mm.y0]))
-                    ok,xx,yy = self.blobwcs.radec2pixelxy(rr, dd)
-                    assert(np.all(ok))
-                    allxx.append(xx - 1.)
-                    allyy.append(yy - 1.)
-                if len(allxx) == 0:
-                    print('Source', numi, 'no overlap')
+                xb,yb = mm_bounds_in_blob(modelMasks, src, self.tims, self.blobwcs)
+                if xb is None:
                     continue
-                allxx = np.hstack(allxx)
-                allyy = np.hstack(allyy)
-                hull = ConvexHull(np.vstack((allxx, allyy)).T)
-                verts = np.append(hull.vertices, hull.vertices[0])
-                plt.plot(allxx[verts], allyy[verts], '-', lw=2, alpha=0.5)
+                plt.plot(xb, yb, '-', lw=2, alpha=0.5)
             plt.axis(ax)
             self.ps.savefig()
 
-        # plt.clf()
-        # self._plot_coadd(self.tims, self.blobwcs)
-        # H,W = self.blobwcs.shape
-        # plt.title('Initial residuals + modelMasks')
-
+        # Binary map of the blob-space model-masks that are in this batch.
         blobmm = np.zeros(self.blobwcs.shape, bool)
+        # source indices in this batch
         srcbatch = []
         batchnum = 1
 
@@ -1774,30 +1747,12 @@ class OneBlob(object):
             src = cat[srci]
             if src.freezeparams:
                 continue
+            # Find this source's model-mask bounds in blob space, check for intersection with
+            # current batch.
             modelMasks = models.model_masks(srci, src)
-            assert(len(modelMasks) == len(self.tims))
-            allxx = []
-            allyy = []
-            for mm,tim in zip(modelMasks, self.tims):
-                try:
-                    mm = mm[src]
-                except KeyError:
-                    continue
-                rr,dd = tim.subwcs.pixelxy2radec(1 + np.array([mm.x0, mm.x0, mm.x1, mm.x1]),
-                                                 1 + np.array([mm.y0, mm.y1, mm.y1, mm.y0]))
-                ok,xx,yy = self.blobwcs.radec2pixelxy(rr, dd)
-                assert(np.all(ok))
-                allxx.append(xx - 1.)
-                allyy.append(yy - 1.)
-            if len(allxx) == 0:
-                #print('Source', numi, 'no overlap')
+            hx,hy = mm_bounds_in_blob(modelMasks, src, self.tims, self.blobwcs)
+            if hx is None:
                 continue
-            allxx = np.hstack(allxx)
-            allyy = np.hstack(allyy)
-            hull = ConvexHull(np.vstack((allxx, allyy)).T)
-            verts = np.append(hull.vertices, hull.vertices[0])
-            hx = allxx[verts]
-            hy = allyy[verts]
             xlo = min(np.clip(np.floor(hx), 0, W).astype(int))
             ylo = min(np.clip(np.floor(hy), 0, H).astype(int))
             xhi = max(np.clip(np.ceil (hx), 0, W).astype(int))
@@ -1813,18 +1768,7 @@ class OneBlob(object):
             conflict = np.any(np.logical_and(hin, sub))
             lastone = (numi == len(Ibright)-1)
             if conflict or lastone:
-                # # Conflict (overlap)
-                # rgb = np.zeros((H,W,4), np.uint8)
-                # # alpha
-                # rgb[ylo:yhi, xlo:xhi, 3] = 64
-                # rgb[ylo:yhi, xlo:xhi, 0] = hin*255
-                # plt.imshow(rgb, interpolation='nearest', origin='lower')
-                # plt.axis([0, W, 0, H])
-                # self.ps.savefig()
-                # 
-                # plt.clf()
-                # self._plot_coadd(self.tims, self.blobwcs)
-                print(len(srcbatch), 'in source batch', batchnum)
+                debug('%i in source batch %i' % (len(srcbatch), batchnum))
 
                 if self.plots:
                     coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs)
@@ -1832,31 +1776,19 @@ class OneBlob(object):
 
                 # Process this batch...
                 args = []
-                for j,i in enumerate(srcbatch):
+                for j,(i,mm) in enumerate(srcbatch):
                     s = cat[i]
-                    # FIXME - avoid re-creating these
-                    mm = models.model_masks(i, s)
-                    # FIXME ?  We could send sub-images[mms]
+                    # FIXME -- we could send sub-images (tim[mm]) to reduce the pickle volume...
                     orig_mods = [models.models[it][i] for it in range(len(self.tims))]
                     plotfns = []
                     #if self.plots:
+                    #    # Create a plot for each item in the batch?
                     #    plotfns.append(self.ps.getnext())
                     args.append((batchnum, j, s, self.tims, mm, orig_mods, self.trargs, self.optargs,
                                  self.bands, self.blobwcs, plotfns))
-                print('Fitting batch in parallel...')
+                debug('Fitting batch %i in parallel...' % batchnum)
                 R = mp.map(fit_one, args)
-                print('Fitting batch in parallel done')
-
-                # if self.plots:
-                #     coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs)
-                #     init_rgb_2 = get_rgb(coimgs,self.bands)
-                #     plt.clf()
-                #     plt.subplot(1,2,1)
-                #     plt.imshow(init_rgb, interpolation='nearest', origin='lower')
-                #     plt.subplot(1,2,2)
-                #     plt.imshow(init_rgb_2, interpolation='nearest', origin='lower')
-                #     plt.suptitle('before-n-after, should be equal')
-                #     self.ps.savefig()
+                debug('Done fitting batch %i in parallel' % batchnum)
 
                 if self.plots:
                     init_mods = []
@@ -1866,8 +1798,8 @@ class OneBlob(object):
                         init_mods.append(modimg)
                         modimg = np.zeros_like(tim.data)
                         final_mods.append(modimg)
-                    
-                print('Updating fit models...')
+
+                debug('Batch %i fits:' % batchnum)
                 for newsrc,i in zip(R, srcbatch):
                     s = cat[i]
                     # Add this source's initial model back in.
@@ -1881,11 +1813,10 @@ class OneBlob(object):
                             mod.addTo(init_mods[it])
 
                     # Copy the fit params
-                    #assert((s is None) == (newsrc is None))
                     assert(len(s.getParams()) == len(newsrc.getParams()))
-                    print('Batch fit:')
-                    print('Old:', s)
-                    print('New:', newsrc)
+                    debug('Old:', s)
+                    debug('New:', newsrc)
+                    # The source type remains the same - keep the object, just copy params.
                     s.setParams(newsrc.getParams())
                     # Re-remove the final fit model for this source
                     models.update_and_subtract(i, s, self.tims)
@@ -1896,8 +1827,6 @@ class OneBlob(object):
                             if mod is None:
                                 continue
                             mod.addTo(final_mods[it])
-
-                print('All done fitting batch')
 
                 if self.plots:
                     plt.clf()
@@ -1915,7 +1844,6 @@ class OneBlob(object):
                     for x0,x1,y0,y1 in bounds:
                         plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'r-', lw=2)
                     plt.axis(ax)
-
                     plt.subplot(2,2,3)
                     coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=init_mods)
                     dimshow(get_rgb(coimgs,self.bands))
@@ -1924,27 +1852,7 @@ class OneBlob(object):
                     coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=final_mods)
                     dimshow(get_rgb(coimgs,self.bands))
                     plt.title('Final models after batch')
-
                     self.ps.savefig()
-
-                    # mods = []
-                    # for it,tim in enumerate(self.tims):
-                    #     modimg = np.zeros_like(tim.data)
-                    #     mods.append(modimg)
-                    #     for i in srcbatch:
-                    #         mod = models.models[it][i]
-                    #         if mod is None:
-                    #             continue
-                    #         mod.addTo(modimg)
-                    # plt.clf()
-                    # coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=mods)
-                    # dimshow(get_rgb(coimgs,self.bands))
-                    # ax = plt.axis()
-                    # for x0,x1,y0,y1 in bounds:
-                    #     plt.plot([x0,x0,x1,x1,x0], [y0,y1,y1,y0,y0], 'r-', lw=2)
-                    # plt.axis(ax)
-                    # plt.title('Fit model batch')
-                    # self.ps.savefig()
 
                 srcbatch = []
                 if lastone:
@@ -1955,25 +1863,13 @@ class OneBlob(object):
                 batchnum += 1
                 blobmm[:,:] = False
 
-            srcbatch.append(srci)
+            srcbatch.append((srci, modelMasks))
             bounds.append((xlo,xhi,ylo,yhi))
             blobmm[hslc] = hin
 
-            # rgb = np.zeros((H,W,4), np.uint8)
-            # # alpha
-            # rgb[ylo:yhi, xlo:xhi, 3] = 64
-            # rgb[ylo:yhi, xlo:xhi, 1] = hin*255
-            # plt.imshow(rgb, interpolation='nearest', origin='lower')
-
-        # print(len(srcbatch), 'in final source batch')
-        # plt.axis([0, W, 0, H])
-        # self.ps.savefig()
-
-        print('Exited loop;', len(srcbatch), 'outstanding in source batch')
+        debug('Exited loop; %i outstanding in source batch' % len(srcbatch))
         assert(len(srcbatch) == 0)
 
-
-    
     def _optimize_individual_sources_subtract(self, cat, Ibright,
                                               cputime):
         # -Remember the original images
@@ -2145,6 +2041,7 @@ class OneBlob(object):
 
 def mm_bounds_in_blob(modelMasks, src, tims, blobwcs):
     from scipy.spatial import ConvexHull
+    assert(len(modelMasks) == len(tims))
     allxx = []
     allyy = []
     for mm,tim in zip(modelMasks, tims):
@@ -2173,31 +2070,27 @@ def fit_one(X):
 
     plots = (len(plotfns) > 0)
     if plots:
+        import pylab as plt
         coimgs,_ = quick_coadds(tims, bands, blobwcs)
         rgb_data0 = get_rgb(coimgs, bands)
 
-    #print('Batch %i:%i, tims: %i, orig_mods: %i' % (batchnum, batchrank, len(tims), len(orig_mods)))
+        xbounds,ybounds = mm_bounds_in_blob(mm, src, tims, blobwcs)
+        if xbounds is None:
+            xbounds = []
+            ybounds = []
+
+        ok,x,y = blobwcs.radec2pixelxy(src.pos.ra, src.pos.dec)
+        #print('Batch %i:%i, source center %i, %i' % (batchnum, batchrank, int(x-1), int(y-1)))
+
     # Add this source's initial model back in.
     for mod,tim in zip(orig_mods, tims):
         if mod is None:
             continue
         mod.addTo(tim.getImage())
 
-    ok,x,y = blobwcs.radec2pixelxy(src.pos.ra, src.pos.dec)
-    print('Batch %i:%i, source center %i, %i' % (batchnum, batchrank, int(x-1), int(y-1)))
-
-    #print('mm:', mm)
-    #m = mm[src]
-    #xbounds = [m.x0, m.x0, m.x1, m.x1, m.x0]
-    #ybounds = [m.y0, m.y1, m.y1, m.y0, m.y0]
-    xbounds,ybounds = mm_bounds_in_blob(mm, src, tims, blobwcs)
-    if xbounds is None:
-        xbounds = []
-        ybounds = []
-    import pylab as plt
-
-    coimgs,_ = quick_coadds(tims, bands, blobwcs)
-    rgb_data = get_rgb(coimgs, bands)
+    if plots:
+        coimgs,_ = quick_coadds(tims, bands, blobwcs)
+        rgb_data = get_rgb(coimgs, bands)
 
     is_galaxy = isinstance(src, Galaxy)
     if is_galaxy:
@@ -2217,40 +2110,18 @@ def fit_one(X):
     srctractor.setModelMasks(mm)
 
     if plots:
-        # plt.clf()
         modimgs = list(srctractor.getModelImages())
         coimgs,_ = quick_coadds(tims, bands, blobwcs, images=modimgs)
         rgb_mods0 = get_rgb(coimgs, bands)
-        # dimshow(get_rgb(coimgs, bands))
-        # ax = plt.axis()
-        # plt.plot(xbounds, ybounds, 'r-', alpha=0.5, lw=2)
-        # plt.axis(ax)
-        # plt.title('Batch %i:%i: initial model' % (batchnum, batchrank))
-        # plt.savefig('plot-%03i-%03i-2.png' % (batchnum, batchrank))
 
     # First-round optimization
     srctractor.optimize_loop(**optargs)
 
     if plots:
-        # plt.clf()
-        # dimshow(
-        # ax = plt.axis()
-        # plt.plot(xbounds, ybounds, 'r-', alpha=0.5, lw=2)
-        # plt.axis(ax)
-        # plt.title('Batch %i:%i: data' % (batchnum, batchrank))
-        # plt.savefig('plot-%03i-%03i-1.png' % (batchnum, batchrank))
-        #     
-        # plt.clf()
         modimgs = list(srctractor.getModelImages())
         coimgs,_ = quick_coadds(tims, bands, blobwcs, images=modimgs)
         rgb_mods1 = get_rgb(coimgs, bands)
-        # dimshow(get_rgb(coimgs, bands))
-        # ax = plt.axis()
-        # plt.plot(xbounds, ybounds, 'r-', alpha=0.5, lw=2)
-        # plt.axis(ax)
-        # plt.title('Batch %i:%i: final model' % (batchnum, batchrank))
-        # plt.savefig('plot-%03i-%03i-3.png' % (batchnum, batchrank))
-    
+
         plt.clf()
         plt.subplot(2,2,1)
         plt.imshow(rgb_data0, interpolation='nearest', origin='lower')
