@@ -47,7 +47,7 @@ def one_blob(X):
         return None
     (nblob, iblob, Isrcs, brickwcs, bx0, by0, blobw, blobh, blobmask, timargs,
      srcs, bands, plots, ps, reoptimize, iterative, iterative_nsigma, use_ceres, refmap,
-     large_galaxies_force_pointsource, less_masking, frozen_galaxies) = X
+     large_galaxies_force_pointsource, less_masking, frozen_galaxies, blob_mp) = X
 
     debug('Fitting blob %s: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies' %
           (nblob, iblob, len(Isrcs), blobw, blobh, len(timargs), len(frozen_galaxies)))
@@ -81,7 +81,7 @@ def one_blob(X):
                  less_masking, frozen_galaxies,
                  iterative_nsigma)
     B = ob.init_table(Isrcs)
-    B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative)
+    B = ob.run(B, reoptimize=reoptimize, iterative_detection=iterative, blob_mp=blob_mp)
     ob.finalize_table(B, bx0, by0)
 
     t1 = time.process_time()
@@ -229,7 +229,7 @@ class OneBlob(object):
         B.rename('y0', 'by0')
 
     def run(self, B, reoptimize=False, iterative_detection=True,
-            compute_metrics=True, mask_others=True):
+            compute_metrics=True, mask_others=True, blob_mp=None):
         # The overall steps here are:
         # - fit initial fluxes for small number of sources that may need it
         # - optimize individual sources
@@ -312,22 +312,12 @@ class OneBlob(object):
         #  src.getModelPatch(tim)
         debug('Fitting...')
         if len(cat) > 1:
-            #self._optimize_individual_sources_subtract(
 
-            from astrometry.util.multiproc import multiproc
-            from legacypipe.trackingpool import TrackingPool
-            from legacypipe.runbrick import runbrick_global_init
-            pool = TrackingPool(16,
-                                initializer=runbrick_global_init, initargs=[])
-            mp = multiproc(None, pool=pool)
-
-            batches = self._optimize_individual_sources_parallel(
-                cat, Ibright, B.cpu_source, mp)
-            print('closing mp pool...')
-            mp.close()
-            print('closed pool')
-            del mp
-            del pool
+            if blob_mp is not None:
+                batches = self._optimize_individual_sources_parallel(
+                    cat, Ibright, B.cpu_source, blob_mp)
+            else:
+                self._optimize_individual_sources_subtract(cat, Ibright, B.cpu_source)
 
         else:
             self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source)
@@ -407,23 +397,10 @@ class OneBlob(object):
 
         # Next, model selections: point source vs rex vs dev/exp vs ser.
         debug('Blob %s: Running model selection' % self.name)
-        if len(cat) > 1:
-            from astrometry.util.multiproc import multiproc
-            from legacypipe.trackingpool import TrackingPool
-            from legacypipe.runbrick import runbrick_global_init
-            pool = TrackingPool(16,
-                                initializer=runbrick_global_init, initargs=[])
-            mp = multiproc(None, pool=pool)
-
-            B = self.run_model_selection_parallel(cat, B, batches, self.segmap, mp,
+        if len(cat) > 1 and blob_mp is not None:
+            B = self.run_model_selection_parallel(cat, B, batches, self.segmap, blob_mp,
                                                   iterative_detection=iterative_detection,
                                                   mask_others=mask_others)
-            print('closing mp pool...')
-            mp.close()
-            print('closed pool')
-            del mp
-            del pool
-
         else:
             Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
             B = self.run_model_selection(cat, Ibright, B, self.segmap,
@@ -2014,7 +1991,8 @@ class OneBlob(object):
                 blobmm[:,:] = False
 
             srcbatch.append((srci, modelMasks))
-            bounds.append((xlo,xhi,ylo,yhi))
+            if self.plots:
+                bounds.append((xlo,xhi,ylo,yhi))
             blobmm[hslc] = hin
 
         debug('Exited loop; %i outstanding in source batch' % len(srcbatch))

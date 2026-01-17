@@ -62,6 +62,13 @@ def formatwarning(message, category, filename, lineno, line=None):
 
 warnings.formatwarning = formatwarning
 
+from legacypipe.trackingpool import TrackingPool
+from multiprocessing.managers import BaseManager
+class MyManager(BaseManager):
+    pass
+MyManager.register('TrackingPool', TrackingPool)
+
+
 def runbrick_global_init():
     from tractor.galaxy import disable_galaxy_cache
     info('Starting process', os.getpid(), Time()-Time())
@@ -1137,6 +1144,7 @@ def stage_fitblobs(T=None,
                    less_masking=False,
                    sub_blobs=False,
                    use_ceres=True, mp=None,
+                   blob_mp=None,
                    checkpoint_filename=None,
                    checkpoint_period=600,
                    write_pickle_filename=None,
@@ -1329,7 +1337,8 @@ def stage_fitblobs(T=None,
                           single_thread=(mp is None or mp.pool is None),
                           max_blobsize=max_blobsize, custom_brick=custom_brick,
                           enable_sub_blobs=sub_blobs,
-                          ran_sub_blobs=ran_sub_blobs)
+                          ran_sub_blobs=ran_sub_blobs,
+                          blob_mp=blob_mp)
 
     if checkpoint_filename is None:
         # FIXME -- add worker-died checks & logging here
@@ -1879,7 +1888,8 @@ def _blob_iter(job_id_map,
                brick, frozen_galaxies, single_thread=False,
                skipblobs=None, max_blobsize=None, custom_brick=False,
                enable_sub_blobs=False,
-               ran_sub_blobs=None):
+               ran_sub_blobs=None,
+               blob_mp=None):
     '''
     *blobmap*: integer image map, with -1 indicating no-blob, other values indexing
         into *blobslices*,*blobsrcs*.
@@ -2060,7 +2070,8 @@ def _blob_iter(job_id_map,
                     blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
                     reoptimize, iterative, iterative_nsigma, use_ceres, refmap[bslc],
                     large_galaxies_force_pointsource, less_masking,
-                    frozen_galaxies.get(iblob, [])))
+                    frozen_galaxies.get(iblob, []),
+                    blob_mp))
             continue
 
         # Sub-blob.
@@ -2130,7 +2141,8 @@ def _blob_iter(job_id_map,
                         subtimargs, [cat[i] for i in Isubsrcs], bands,
                         plots, ps,
                         reoptimize, iterative, iterative_nsigma, use_ceres, refmap[sub_slc],
-                        large_galaxies_force_pointsource, less_masking, fro_gals))
+                        large_galaxies_force_pointsource, less_masking, fro_gals,
+                        blob_mp))
 
 def _bounce_one_blob(X):
     '''This wraps the one_blob function for multiprocessing purposes (and
@@ -4297,6 +4309,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         if wise_checkpoint_period is not None:
             kwargs.update(wise_checkpoint_period=wise_checkpoint_period)
 
+    pool_manager = None
+    blob_pool = None
+
     if pool or (threads and threads > 1):
         # from astrometry.util.timingpool import TimingPool, TimingPoolMeas
         # from astrometry.util.ttime import MemMeas
@@ -4313,6 +4328,14 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                                 initializer=runbrick_global_init, initargs=[])
         StageTime.add_measurement_once(MemMeas)
         mp = multiproc(None, pool=pool)
+
+        pool_manager = MyManager()
+        pool_manager.start()
+
+        blob_pool = pool_manager.TrackingPool(threads, initializer=runbrick_global_init, initargs=[])
+        blob_mp = multiproc(nthreads=None, pool=blob_pool)
+        kwargs.update(blob_mp=blob_mp)
+
     else:
         from astrometry.util.ttime import CpuMeas
         from astrometry.util.ttime import MemMeas
@@ -4476,6 +4499,13 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             pool.close()
             print('pool.join()...')
             pool.join()
+        if blob_pool is not None:
+            print('closing blob_pool...()')
+            blob_pool.close()
+            print('joining blob_pool...()')
+            blob_pool.join()
+        if pool_manager is not None:
+            pool_manager.shutdown()
     print('run_brick returning...')
 
     return R
