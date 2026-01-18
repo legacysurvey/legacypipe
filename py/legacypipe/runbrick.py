@@ -72,59 +72,37 @@ def formatwarning(message, category, filename, lineno, line=None):
 
 warnings.formatwarning = formatwarning
 
-def runbrick_global_init(shared_counter, shared_lock, available_gpu_ids_param, ngpu_param, threads_per_gpu_param, gpumode_param):
+#New init method is cleaner - GPU assignment now occurs in _blobiter and _bounce_one_blob
+def runbrick_global_init(shared_counter, shared_lock, available_gpu_ids_param,
+                          ngpu_param, threads_per_gpu_param, gpumode_param):
+    import os
+    import time
     from tractor.galaxy import disable_galaxy_cache
 
-    # Assign the shared objects and parameters to the module's global variables *within the worker process*
+    # Access the module-level global dictionary
     global _GLOBAL_LEGACYPIPE_CONTEXT
 
-    _next_gpu_id_counter = shared_counter
-    _next_gpu_id_lock = shared_lock
-    _available_gpu_ids = available_gpu_ids_param
-    _ngpu = ngpu_param
-    _threads_per_gpu = threads_per_gpu_param
-    _gpumode = gpumode_param
-
     pid = os.getpid()
-    info(f'Worker process {pid}: Starting initialization at {time.time()}')
-    info('Starting process', os.getpid(), Time()-Time())
+
+    # 1. Store shared objects and config for the 'Lazy' phase
+    _GLOBAL_LEGACYPIPE_CONTEXT['shared_counter'] = shared_counter
+    _GLOBAL_LEGACYPIPE_CONTEXT['shared_lock'] = shared_lock
+    _GLOBAL_LEGACYPIPE_CONTEXT['available_gpu_ids'] = available_gpu_ids_param
+    _GLOBAL_LEGACYPIPE_CONTEXT['max_gpu_slots'] = ngpu_param * threads_per_gpu_param
+    _GLOBAL_LEGACYPIPE_CONTEXT['target_gpumode'] = gpumode_param
+
+    # 2. Initialize State Flags
+    # These will be updated by the first task this worker receives
+    _GLOBAL_LEGACYPIPE_CONTEXT['initialized'] = False
+    _GLOBAL_LEGACYPIPE_CONTEXT['is_gpu_worker'] = False
+    _GLOBAL_LEGACYPIPE_CONTEXT['gpu_device_id'] = None
+    _GLOBAL_LEGACYPIPE_CONTEXT['gpumode'] = 0 # Default to CPU mode
+
+    # 3. Perform necessary one-time CPU setup
     disable_galaxy_cache()
 
-    is_gpu_worker = False
-    gpu_device_id = None
-
-    if ngpu_param > 0:
-        try:
-            import cupy as cp
-            if not cp.cuda.is_available():
-                info(f"Worker process {pid}: CuPy found, but no CUDA devices available. Running as CPU worker.")
-                is_gpu_worker = False
-            else:
-                with _next_gpu_id_lock: # Protect the counter for atomic access
-                    if _available_gpu_ids and _next_gpu_id_counter.value < _ngpu * _threads_per_gpu:
-                        gpu_device_id = _available_gpu_ids[_next_gpu_id_counter.value % len(_available_gpu_ids)]
-                        _next_gpu_id_counter.value += 1
-                        is_gpu_worker = True
-                        print(f'Worker PID {pid}: Assigned GPU {gpu_device_id}. Shared counter incremented to {_next_gpu_id_counter.value}.')
-                    else:
-                        info(f"Worker process {pid}: All GPU slots taken or no GPUs available. Running as CPU worker.")
-                        is_gpu_worker = False
-
-        except ImportError:
-            info(f"Worker process {pid}: ImportError: Could not import cupy. Running as CPU worker.")
-            is_gpu_worker = False
-        except Exception as e: # Catch any other unexpected errors during GPU setup
-            info(f"Worker process {pid}: Unexpected error during GPU setup: {e}. Running as CPU worker.")
-            traceback.print_exc()
-            is_gpu_worker = False
-
-    if not is_gpu_worker:
-        _gpumode = 0
-    # Set the worker's internal global context
-    _GLOBAL_LEGACYPIPE_CONTEXT['is_gpu_worker'] = is_gpu_worker
-    _GLOBAL_LEGACYPIPE_CONTEXT['gpu_device_id'] = gpu_device_id
-    _GLOBAL_LEGACYPIPE_CONTEXT['gpumode'] = _gpumode
-    info(f"Worker PID {pid}: Final _GLOBAL_LEGACYPIPE_CONTEXT: {_GLOBAL_LEGACYPIPE_CONTEXT}")
+    # logging (using info if available in your scope, or print)
+    print(f"Worker PID {pid}: Basic initialization complete. Awaiting first task...")
 
 
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
@@ -1378,6 +1356,7 @@ def stage_fitblobs(T=None,
         iterative_nsigma = nsigma
 
     job_id_map = {}
+    gpu_tuple = (use_gpu, gpumode, ngpu, threads_per_gpu)
 
     # Create the iterator over blobs to process
     blobiter = _blob_iter(job_id_map,
@@ -1391,10 +1370,11 @@ def stage_fitblobs(T=None,
                           max_blobsize=max_blobsize, custom_brick=custom_brick,
                           enable_sub_blobs=sub_blobs,
                           ran_sub_blobs=ran_sub_blobs,
-                          use_gpu=use_gpu,gpumode=gpumode,bid=bid)
+                          gpu_tuple=gpu_tuple,bid=bid)
 
     if checkpoint_filename is None:
         # FIXME -- add worker-died checks & logging here
+        print ("No checkpoint")
         R.extend(mp.map(_bounce_one_blob, blobiter))
     else:
         from astrometry.util.ttime import CpuMeas
@@ -1545,16 +1525,19 @@ def stage_fitblobs(T=None,
     # Reorder the sources:
     # sub-blobs breaks this: MxN results R for one blob
     #assert(len(R) == len(blobsrcs))
-    # drop brickname,iblob from the results
-    R = [r['result'] for r in R]
-    # Drop now-empty blobs.
-    R = [r for r in R if r is not None and len(r)]
+    # Filter out total failures/skips (None values)
+    R = [r for r in R if r is not None]
+    # Extract the 'result' field from the dictionary
+    # AND filter out results that are None or have 0 sources
+    R = [r['result'] for r in R if r.get('result') is not None and len(r['result']) > 0]
+
     if len(R) == 0:
         if bailout:
             info('No sources, but continuing because of --bail-out')
-        else:
-            raise NothingToDoError('No sources passed significance tests.')
-    # Merge results R into one big table
+            return dict(fitblobs=None)
+        return None
+
+    # BB = merge_tables(R) should now succeed
     BB = merge_tables(R)
     del R
     if len(BB):
@@ -1942,7 +1925,8 @@ def _blob_iter(job_id_map,
                skipblobs=None, max_blobsize=None, custom_brick=False,
                enable_sub_blobs=False,
                ran_sub_blobs=None,
-               use_gpu=False,gpumode=0,bid=None):
+               gpu_tuple=None,
+               bid=None):
     '''
     *blobmap*: integer image map, with -1 indicating no-blob, other values indexing
         into *blobslices*,*blobsrcs*.
@@ -1996,105 +1980,75 @@ def _blob_iter(job_id_map,
                                subsky, subpsf, tim.name, tim.band, tim.sig1, tim.imobj))
         return subtimargs
 
-    if skipblobs is None:
-        skipblobs = []
+    #New logic 1/17/25 - first figure out which blobs should be sent to GPU then yield in second loop
+    # 1. Config & Initial Setup
+    if gpu_tuple is not None:
+        (use_gpu, gpumode, ngpu, threads_per_gpu) = gpu_tuple
+    else:
+        ngpu, use_gpu, gpumode, threads_per_gpu = 0, False, 0, 0
 
-    # sort blobs by size so that larger ones start running first
-    blobvals = Counter(blobmap[blobmap>=0])
-    blob_order = np.array([b for b,npix in blobvals.most_common()])
+    num_gpu_slots = ngpu * threads_per_gpu
+    skipblobset = set(skipblobs or [])
+
+    blobvals = Counter(blobmap[blobmap >= 0])
+    blob_order = np.array([b for b, npix in blobvals.most_common()])
     del blobvals
 
-    # HACK -- reverse!
-    #blob_order = blob_order[-1::-1]
-    
+    H,W = targetwcs.shape
     if custom_brick:
         U = None
     else:
-        H,W = targetwcs.shape
+        H, W = targetwcs.shape
         U = find_unique_pixels(targetwcs, W, H, None,
                                brick.ra1, brick.ra2, brick.dec1, brick.dec2)
 
-    job_id = 0
+    all_tasks_metadata = []
+    #print ("Blob order", blob_order)
 
-    for nblob,iblob in enumerate(blob_order):
-        # (convert iblob to int, because (with sub-blobs) skipblob
-        # entries can be tuples, and if iblob is type np.int32 it
-        # tries to do vector-comparison)
-        if int(iblob) in skipblobs:
-            #info('Skipping blob', iblob)
+    # 2. DISCOVERY PHASE (Original logging style preserved here)
+    for nblob, iblob in enumerate(blob_order):
+        bslc = blobslices[iblob]
+        Isrcs = blobsrcs[iblob]
+        sy, sx = bslc
+        by0, by1, bx0, bx1 = sy.start, sy.stop, sx.start, sx.stop
+        blobh, blobw = by1 - by0, bx1 - bx0
+        blobmask = (blobmap[bslc] == iblob)
+
+        # Skip checks
+        if int(iblob) in skipblobset:
+            all_tasks_metadata.append({'size': -1, 'iblob': iblob, 'nblob_idx': nblob+1})
             continue
 
-        bslc  = blobslices[iblob]
-        Isrcs = blobsrcs  [iblob]
-        assert(len(Isrcs) > 0)
-
-        # blob bbox in targetwcs coords
-        sy,sx = bslc
-        by0,by1 = sy.start, sy.stop
-        bx0,bx1 = sx.start, sx.stop
-        blobh,blobw = by1 - by0, bx1 - bx0
-
-        # Here we assume the "blobmap" array has been remapped so that
-        # -1 means "no blob", while 0 and up label the blobs, thus
-        # iblob equals the value in the "blobmap" map.
-        blobmask = (blobmap[bslc] == iblob)
-        # at least one pixel should be set!
-        assert(np.any(blobmask))
-
-        if U is not None:
-            # If the blob is solely outside the unique region of this brick,
-            # skip it!
-            if np.all(U[bslc][blobmask] == False):
-                info('Blob %i is completely outside the unique region of this brick -- skipping' %
-                     (nblob+1))
-                job_id_map[job_id] = (brickname, nblob+1)
-                job_id += 1
-                yield (brickname, iblob, None, None)
-                continue
-
-        # find one pixel within the blob, for debugging purposes
-        onex = oney = None
-        for y in range(by0, by1):
-            ii = np.flatnonzero(blobmask[y-by0,:])
-            if len(ii) == 0:
-                continue
-            onex = bx0 + ii[0]
-            oney = y
-            break
+        if U is not None and np.all(U[bslc][blobmask] == False):
+            info(f'Blob {nblob+1} is completely outside the unique region of this brick -- skipping')
+            all_tasks_metadata.append({'size': -1, 'iblob': iblob, 'nblob_idx': nblob+1})
+            continue
 
         npix = np.sum(blobmask)
+
+        # Find one pixel for debug (Legacy Style)
+        onex = oney = None
+        ii = np.flatnonzero(blobmask)
+        if len(ii) > 0:
+            local_y, local_x = np.unravel_index(ii[0], blobmask.shape)
+            onex, oney = bx0 + local_x, by0 + local_y
+
+        # LEGACY PRINT 1: Blob Info
         info(('Blob %i of %i, id: %i, sources: %i, size: %ix%i, npix %i, brick X: %i,%i, ' +
                'Y: %i,%i, one pixel: %i %i') %
               (nblob+1, len(blobslices), iblob, len(Isrcs), blobw, blobh, npix,
                bx0,bx1,by0,by1, onex,oney))
 
         if max_blobsize is not None and npix > max_blobsize:
-            info('Number of pixels in blob,', npix, ', exceeds max blobsize', max_blobsize)
-            job_id_map[job_id] = (brickname, nblob+1)
-            job_id += 1
-            yield (brickname, iblob, None, None)
+            info('Number of pixels in blob, %i, exceeds max blobsize %i' % (npix, max_blobsize))
+            all_tasks_metadata.append({'size': -1, 'iblob': iblob, 'nblob_idx': nblob+1})
             continue
 
-        # Split into overlapping sub-blobs?
-        # We include the "blob-unique" bounding-box in the tokens we yield from this function.
-        # Then, in bounce_one_blob, after the sub-blob finishes processing, that unique-area
-        # cut is applied.
-        # To identify these sub-blobs, we return iblob = a tuple of the original iblob plus
-        # a sub-blob identifier.  Sub-blobs can get saved to the checkpoints files, and by
-        # checking "skipblobs" below, we don't re-run them.
+        # Sub-blob logic
+        do_sub_blobs = enable_sub_blobs or np.all((refmap[bslc][blobmask] & REF_MAP_BITS['CLUSTER']) != 0)
 
-        do_sub_blobs = False
-        if enable_sub_blobs:
-            do_sub_blobs = True
-        # Check for a large blob that is fully contained in the
-        # CLUSTER mask -- enable sub-blob processing if so.
-        if (not do_sub_blobs) and np.all((refmap[bslc][blobmask] & REF_MAP_BITS['CLUSTER']) != 0):
-            info('Entire large blob is in CLUSTER mask')
-            do_sub_blobs = True
-
-        threshsize = None
         if do_sub_blobs:
-            # split into ~500-pixel sub-blobs.
+            # split into ~500-pixel sub-blobs. 
             # "overlap" is the duplicated / overlapping region between sub-blobs.
             overlap = 50
             # target sub-blob size for selecting number of sub-blobs
@@ -2105,96 +2059,121 @@ def _blob_iter(job_id_map,
             # HACK - IBIS / XMM
             overlap = 32
             target = 256
-
             # Minimum size that will get split into 2 or more sub-blobs
             threshsize = 1.5 * (target - overlap) + overlap
-
         do_sub_blobs = do_sub_blobs and (blobw >= threshsize or blobh >= threshsize)
 
         if not do_sub_blobs:
-            # Regular blob.
-            # Here we cut out subimages for the blob...
-            subtimargs = get_subtim_args(tims, targetwcs, bx0,bx1, by0,by1, single_thread)
-            job_id_map[job_id] = (brickname, nblob+1)
-            job_id += 1
+            # Regular Blob Task
+            all_tasks_metadata.append({
+                'nsrcs': len(Isrcs),
+                'size': npix,
+                'iblob': iblob,
+                'sub_idx': None,
+                'coords': (bx0, bx1, by0, by1),
+                'Isrcs': Isrcs,
+                'blobmask': blobmask,
+                'nblob_idx': nblob + 1,
+                'onex': onex,
+                'oney': oney,
+            })
+        else:
+            # LEGACY PRINT 2: Split Info
+            nsubx = int(max(1, np.round((blobw - overlap) / (target - overlap))))
+            nsuby = int(max(1, np.round((blobh - overlap) / (target - overlap))))
+            subw = (blobw + (nsubx-1)*overlap + nsubx-1) // nsubx
+            subh = (blobh + (nsuby-1)*overlap + nsuby-1) // nsuby
+            info('Will split into %i x %i sub-blobs of %i x %i pixels' % (nsubx, nsuby, subw, subh))
 
-            yield (brickname, iblob, None,
-                   (nblob+1, iblob, Isrcs, targetwcs, bx0, by0, blobw, blobh,
-                    blobmask, subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
-                    reoptimize, iterative, iterative_nsigma, use_ceres, refmap[bslc],
-                    large_galaxies_force_pointsource, less_masking,
-                    frozen_galaxies.get(iblob, []), use_gpu, gpumode, bid))
+            uniqx = [0] + [n*(subw-overlap) + overlap//2 for n in range(1, nsubx)] + [blobw]
+            uniqy = [0] + [n*(subh-overlap) + overlap//2 for n in range(1, nsuby)] + [blobh]
+
+            for i in range(nsuby):
+                s_y0, s_y1 = i*(subh-overlap), min(i*(subh-overlap)+subh, blobh)
+                for j in range(nsubx):
+                    sub_idx = i*nsubx + j
+                    if (int(iblob), sub_idx) in skipblobset:
+                        continue
+
+                    s_x0, s_x1 = j*(subw-overlap), min(j*(subw-overlap)+subw, blobw)
+                    s_bx0, s_bx1, s_by0, s_by1 = bx0+s_x0, bx0+s_x1, by0+s_y0, by0+s_y1
+
+                    clipx = np.clip(T.ibx[Isrcs], 0, W-1)
+                    clipy = np.clip(T.iby[Isrcs], 0, H-1)
+                    Isubsrcs = Isrcs[(clipx >= s_bx0)*(clipx < s_bx1)*(clipy >= s_by0)*(clipy < s_by1)]
+
+                    sub_blob_name = '%i-%i' % (nblob+1, 1+sub_idx)
+                    info('%i of %i sources are within sub-blob %s' %
+                         (len(Isubsrcs), len(Isrcs), sub_blob_name))
+
+                    if len(Isubsrcs) == 0:
+                        continue
+
+                    sub_mask = blobmask[s_y0:s_y1, s_x0:s_x1]
+                    all_tasks_metadata.append({
+                        'nsrcs': len(Isubsrcs),
+                        'size': np.sum(sub_mask),
+                        'iblob': iblob,
+                        'sub_idx': sub_idx,
+                        'nblob_idx': nblob + 1,
+                        'sub_name': sub_blob_name,
+                        'coords': (s_bx0, s_bx1, s_by0, s_by1),
+                        'Isrcs': Isubsrcs,
+                        'blobmask': sub_mask,
+                        'onex': s_bx0,
+                        'oney': s_by0,
+                        'unique_bounds': (bx0+uniqx[j], bx0+uniqx[j+1], by0+uniqy[i], by0+uniqy[i+1])
+                    })
+
+    # 3. GLOBAL DECISION: Determine the sorting metric
+    # Determine sorting metric: 'nsrcs' if any sub-blobs exist, else 'size'
+    any_sub = any(t.get('sub_idx') is not None for t in all_tasks_metadata if t['size'] != -1)
+    sort_metric = 'nsrcs' if any_sub else 'size'
+
+    # 4. GLOBAL SORT
+    # We use a lambda to pull the chosen metric from the metadata dictionaries
+    all_tasks_metadata.sort(key=lambda x: x.get(sort_metric, 0), reverse=True)
+
+    # 5. YIELD PHASE (New concisely logged dispatch)
+    job_id = 0
+    total_tasks = len(all_tasks_metadata)
+    for rank, task in enumerate(all_tasks_metadata):
+        task_rank = rank + 1
+        iblob = task['iblob']
+
+        if task['size'] == -1:
+            job_id_map[job_id] = (brickname, task['nblob_idx'])
+            yield (brickname, iblob, None, None)
+            job_id += 1
             continue
 
-        # Sub-blob.
-        nsubx = int(max(1, np.round((blobw - overlap) / (target - overlap))))
-        nsuby = int(max(1, np.round((blobh - overlap) / (target - overlap))))
-        # subimage size, including overlaps
-        subw = (blobw + (nsubx-1)*overlap + nsubx-1) // nsubx
-        subh = (blobh + (nsuby-1)*overlap + nsuby-1) // nsuby
-        info('Will split into', nsubx, 'x', nsuby, 'sub-blobs of', subw, 'x', subh, 'pixels')
-        # save this blob id
-        if ran_sub_blobs is not None:
+        is_priority = (rank < num_gpu_slots) if use_gpu else False
+        bx0, bx1, by0, by1 = task['coords']
+        Isrcs = task['Isrcs']
+        sub_idx = task.get('sub_idx')
+        display_name = task.get('sub_name', f"{task['nblob_idx']}")
+
+        # DISPATCH LOG: Shows final order and priority
+        p_str = "[GPU PRIORITY]" if is_priority else "[CPU]"
+        val = task[sort_metric]
+        if is_priority:
+            info(f"Dispatching Rank {task_rank}/{total_tasks}: Blob {display_name} {p_str} ({val} {sort_metric}, size {task['size']} npix)")
+        else:
+            debug(f"Dispatching Rank {task_rank}/{total_tasks}: Blob {display_name} {p_str} ({val} {sort_metric}, size {task['size']} npix)")
+
+        subtimargs = get_subtim_args(tims, targetwcs, bx0, bx1, by0, by1, single_thread)
+
+        job_id_map[job_id] = (brickname, display_name)
+        job_id += 1
+        if sub_idx is not None and ran_sub_blobs is not None:
             ran_sub_blobs.append(int(iblob))
 
-        uniqx = [0] + [n * (subw - overlap) + overlap//2 for n in range(1,nsubx)] + [blobw]
-        uniqy = [0] + [n * (subh - overlap) + overlap//2 for n in range(1,nsuby)] + [blobh]
-        debug('Unique x boundaries:', uniqx, 'y boundaries', uniqy)
-
-        fro_gals = frozen_galaxies.get(iblob, [])
-
-        assert(len(cat) == len(T))
-
-        skipblobset = set(skipblobs)
-
-        for i in range(nsuby):
-            # These are in *blob* coordinates
-            suby0 = i*(subh - overlap)
-            suby1 = min(suby0 + subh, blobh)
-            for j in range(nsubx):
-                sub_blob = i*nsubx+j
-                if (int(iblob),sub_blob) in skipblobset:
-                    debug('Skipping sub-blob (from checkpoint)', (iblob,sub_blob))
-                    continue
-                # These are in *blob* coordinates
-                subx0 = j*(subw - overlap)
-                subx1 = min(subx0 + subw, blobw)
-                # These are in *brick* coordinates thanks to adding bx0,by0.
-                sub_bx0 = bx0 + subx0
-                sub_bx1 = bx0 + subx1
-                sub_by0 = by0 + suby0
-                sub_by1 = by0 + suby1
-                sub_slc = slice(sub_by0, sub_by1), slice(sub_bx0, sub_bx1)
-
-                H,W = blobmap.shape
-                clipx = np.clip(T.ibx[Isrcs], 0, W-1)
-                clipy = np.clip(T.iby[Isrcs], 0, H-1)
-                Isubsrcs = Isrcs[(clipx >= sub_bx0) * (clipx < sub_bx1) *
-                                 (clipy >= sub_by0) * (clipy < sub_by1)]
-                sub_blob_name = '%i-%i' % (nblob+1, 1+sub_blob)
-                info(len(Isubsrcs), 'of', len(Isrcs), 'sources are within sub-blob',
-                     sub_blob_name)
-                if len(Isubsrcs) == 0:
-                    continue
-                # Here we cut out subimages for the blob...
-                subtimargs = get_subtim_args(tims, targetwcs, sub_bx0,sub_bx1,
-                                             sub_by0,sub_by1, single_thread)
-
-                job_id_map[job_id] = (brickname, sub_blob_name)
-                job_id += 1
-
-                yield (brickname, (iblob,sub_blob),
-                       (bx0 + uniqx[j], bx0 + uniqx[j+1], by0 + uniqy[i], by0 + uniqy[i+1]),
-                       (sub_blob_name, iblob,
-                        Isubsrcs, targetwcs, sub_bx0, sub_by0,
-                        sub_bx1 - sub_bx0, sub_by1 - sub_by0,
-                        # "blobmask" has already been cut to this blob, so don't use sub_slc
-                        blobmask[suby0:suby1, subx0:subx1],
-                        subtimargs, [cat[i] for i in Isubsrcs], bands,
-                        plots, ps,
-                        reoptimize, iterative, iterative_nsigma, use_ceres, refmap[sub_slc],
-                        large_galaxies_force_pointsource, less_masking, fro_gals,
-                        use_gpu, gpumode, bid))
+        yield (brickname, (iblob, sub_idx) if sub_idx is not None else iblob, task.get('unique_bounds'),
+               (task_rank, iblob, Isrcs, targetwcs, bx0, by0, bx1-bx0, by1-by0,
+                task['blobmask'], subtimargs, [cat[i] for i in Isrcs], bands, plots, ps,
+                reoptimize, iterative, iterative_nsigma, use_ceres, refmap[by0:by1, bx0:bx1],
+                large_galaxies_force_pointsource, less_masking, frozen_galaxies.get(iblob, []),
+                use_gpu, gpumode, bid, is_priority))
 
 def _bounce_one_blob(X):
     '''This wraps the one_blob function for multiprocessing purposes (and
@@ -2202,55 +2181,114 @@ def _bounce_one_blob(X):
     '''
     from legacypipe.oneblob import one_blob
     global _GLOBAL_LEGACYPIPE_CONTEXT
-    is_gpu_worker = _GLOBAL_LEGACYPIPE_CONTEXT['is_gpu_worker']
-    gpu_device_id = _GLOBAL_LEGACYPIPE_CONTEXT['gpu_device_id']
-    gpumode = _GLOBAL_LEGACYPIPE_CONTEXT['gpumode']
-
     pid = os.getpid()
 
-    (brickname, iblob, blob_unique, X) = X
-    info(f"Worker PID {pid}: Final _GLOBAL_LEGACYPIPE_CONTEXT: {_GLOBAL_LEGACYPIPE_CONTEXT} running {iblob=} at "+str(datetime.datetime.now()))
-    if X is not None:
-        if X[-3] and not is_gpu_worker:
-            info(f"Updating {gpumode=} for worker {pid}")
-            Xlist = list(X)
-            #Xlist[-3] = False
-            Xlist[-2] = gpumode
-            X = tuple(Xlist)
-    else:
-        print (f"X is None for worker {pid}")
+    # Unpack the high-level tuple
+    (brickname, iblob, blob_unique, X_inner) = X
 
+    if X_inner is None:
+        debug(f"{iblob=}, worker {pid} has no sources.")
+        return None
+
+    # --- 1. INITIALIZATION & GPU ASSIGNMENT (Lazy & Task-Driven) ---
+    # We only run this logic once per worker process.
+    if not _GLOBAL_LEGACYPIPE_CONTEXT.get('initialized', False):
+        # Indices relative to the inner tuple:
+        # [..., use_gpu(-4), gpumode(-3), bid(-2), is_priority(-1)]
+        is_priority = X_inner[-1]
+
+        lock = _GLOBAL_LEGACYPIPE_CONTEXT['shared_lock']
+        with lock:
+            # Double-check inside the lock
+            if not _GLOBAL_LEGACYPIPE_CONTEXT.get('initialized', False):
+                counter = _GLOBAL_LEGACYPIPE_CONTEXT['shared_counter']
+                available_ids = _GLOBAL_LEGACYPIPE_CONTEXT['available_gpu_ids']
+                max_slots = _GLOBAL_LEGACYPIPE_CONTEXT['max_gpu_slots']
+
+                # Only try to grab a GPU if this specific task is a priority blob
+                if is_priority and available_ids and counter.value < max_slots:
+                    try:
+                        import cupy as cp
+                        if cp.cuda.is_available():
+                            gpu_id = available_ids[counter.value % len(available_ids)]
+                            _GLOBAL_LEGACYPIPE_CONTEXT['is_gpu_worker'] = True
+                            _GLOBAL_LEGACYPIPE_CONTEXT['gpu_device_id'] = gpu_id
+                            # We keep the gpumode requested by main (e.g., 2)
+                            _GLOBAL_LEGACYPIPE_CONTEXT['gpumode'] = _GLOBAL_LEGACYPIPE_CONTEXT['target_gpumode']
+                            counter.value += 1
+                            print(f"Worker PID {pid}: GRABBED GPU {gpu_id} using priority Blob id {iblob=}.")
+                    except Exception as e:
+                        print(f"Worker PID {pid}: GPU setup failed: {e}. Falling back to CPU.")
+
+                # If we didn't get a GPU (either not priority or init failed), we are a CPU worker
+                if not _GLOBAL_LEGACYPIPE_CONTEXT.get('is_gpu_worker', False):
+                    _GLOBAL_LEGACYPIPE_CONTEXT['is_gpu_worker'] = False
+                    _GLOBAL_LEGACYPIPE_CONTEXT['gpu_device_id'] = None
+                    _GLOBAL_LEGACYPIPE_CONTEXT['gpumode'] = 0
+
+                _GLOBAL_LEGACYPIPE_CONTEXT['initialized'] = True
+
+    # --- 2. PREPARE PARAMETERS FOR THIS SPECIFIC BLOB ---
+    is_gpu_worker = _GLOBAL_LEGACYPIPE_CONTEXT['is_gpu_worker']
+    gpu_device_id = _GLOBAL_LEGACYPIPE_CONTEXT['gpu_device_id']
+    worker_gpumode = _GLOBAL_LEGACYPIPE_CONTEXT['gpumode']
+
+    # Unpack flags from X_inner to decide behavior
+    # [..., use_gpu(-4), gpumode(-3), bid(-2), is_priority(-1)]
+    task_wants_gpu = X_inner[-4]
+
+    # Create the stripped list (remove 'is_priority' flag so one_blob is happy)
+    # Indices in Xlist are now: [..., use_gpu(-3), gpumode(-2), bid(-1)]
+    Xlist = list(X_inner[:-1])
+
+    # If the task wants a GPU but this worker is CPU-only, force CPU mode
+    if task_wants_gpu and not is_gpu_worker:
+        Xlist[-3] = False # use_gpu = False
+        Xlist[-2] = 0     # gpumode = 0
+    else:
+        # If we ARE a GPU worker, ensure the task uses the worker's assigned gpumode
+        # (Usually 2, but we pass it explicitly to be sure)
+        Xlist[-2] = worker_gpumode
+
+    # Final conversion back to tuple for the call
+    X_to_pass = tuple(Xlist)
+
+    info(f"Worker PID {pid}: Context {is_gpu_worker=}, {gpu_device_id=} running {iblob=} at {datetime.datetime.now()}")
+
+    # --- 3. EXECUTION ---
     try:
         if is_gpu_worker:
             import cupy as cp
             cp.cuda.Device(gpu_device_id).use()
+
+            # Check Memory Availability
             free_mem, total_mem = cp.cuda.runtime.memGetInfo()
-            free_mem_g = free_mem/1024.**3
+            free_mem_g = free_mem / 1024.**3
             if free_mem_g < 1.0:
-                print (f"Free memory under 1 GiB {free_mem_g=}; Running {pid} in CPU mode.")
-                Xlist = list(X)
-                Xlist[-2] = 0
-                X = tuple(Xlist)
-            #else:
-            #    print (f"Free memory {free_mem_g=}; Runing in GPU mode")
-        result = one_blob(X)
-        if result is not None:
-            # Was this a sub-blobs?  If so, de-duplicate the catalog
-            if blob_unique is not None:
-                x0,x1,y0,y1 = blob_unique
-                debug('Got blob_unique (x0,x1,y0,y1) =', blob_unique)
-                ntot = len(result)
-                if ntot > 0:
-                    debug('Range of result bx0:', result.bx0.min(), result.bx0.max())
-                    debug('Range of result by0:', result.by0.min(), result.by0.max())
-                    result.cut((result.bx0 >= x0) * (result.bx0 < x1) *
-                               (result.by0 >= y0) * (result.by0 < y1))
-                debug('Blob_unique cut kept', len(result), 'of', ntot, 'sources')
-        ### This defines the format of the results in the checkpoints files
+                print(f"Free memory under 1 GiB {free_mem_g=:.2f}; Running {pid} in CPU mode for Blob {iblob}.")
+                # Temporarily override X for this call only
+                temp_list = list(X_to_pass)
+                temp_list[-3] = False # use_gpu
+                temp_list[-2] = 0     # gpumode
+                X_to_pass = tuple(temp_list)
+
+        # Execute one_blob
+        result = one_blob(X_to_pass)
+
+        # Post-processing for sub-blobs (De-duplication)
+        if result is not None and blob_unique is not None:
+            x0, x1, y0, y1 = blob_unique
+            ntot = len(result)
+            if ntot > 0:
+                # Keep only sources where the center falls within our unique sub-blob bounds
+                result.cut((result.bx0 >= x0) * (result.bx0 < x1) *
+                           (result.by0 >= y0) * (result.by0 < y1))
+                # debug('Blob_unique cut kept', len(result), 'of', ntot, 'sources')
+
         return dict(brickname=brickname, iblob=iblob, result=result)
-    except:
-        import traceback
-        print('Exception in one_blob: brick %s, iblob %s' % (brickname, iblob))
+
+    except Exception:
+        print(f'Exception in one_blob: brick {brickname}, iblob {iblob}')
         traceback.print_exc()
         raise
 
