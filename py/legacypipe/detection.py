@@ -143,13 +143,14 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None, use_gp
     if nsatur is None:
         satmaps = [np.zeros((H,W), bool)   for b in bands]
     else:
-        if nsatur < 255:
-            sattype = np.uint8
-            satmax = 254
-        else:
-            sattype = np.uint16
-            satmax = 65534
-        satmaps = [np.zeros((H,W), sattype) for b in bands]
+        satmax = 254
+        if nsatur > satmax:
+            warnings.warn('Clipping nsatur to %i' % satmax)
+            nsatur = satmax
+        # Count how many pixels in the stack are saturated
+        satmaps = [np.zeros((H,W), np.uint8) for b in bands]
+        # Count the total number of pixels in the stack
+        nmaps = [np.zeros((H,W), np.uint8) for b in bands]
 
     for band,Yo,Xo,incmap,inciv,sat in mp.imap_unordered(
             _detmap, [(tim, targetwcs, apodize) for tim in tims]):
@@ -163,13 +164,18 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None, use_gp
                 satmaps[ib][Yo,Xo] |= sat
             else:
                 satmaps[ib][Yo,Xo] = np.minimum(satmax, satmaps[ib][Yo,Xo] + (1*sat))
+                nmaps[ib][Yo,Xo] = np.minimum(satmax, nmaps[ib][Yo,Xo] + 1)
         del Yo,Xo,incmap,inciv,sat
     for i,(detmap,detiv,satmap) in enumerate(zip(detmaps, detivs, satmaps)):
         detmap /= np.maximum(1e-16, detiv)
         if nsatur is not None:
+            nmap = nmaps[i]
             print('Saturmap for band', bands[i], ': range', satmap.min(), satmap.max(),
                   'mean', np.mean(satmap), 'nsatur', nsatur)
-            satmaps[i] = (satmap >= nsatur)
+            # Set the SATUR bit if the number of images in the stack with SATUR set is > nsatur,
+            #  OR if *every* image in the stack has SATUR set (to catch the case where the number in
+            # the stack is less than nsatur such that nsatur could never be reached).
+            satmaps[i] = np.logical_or(satmap >= nsatur, satmap == nmap)
             print('Satmap:', np.sum(satmaps[i]), 'pixels set')
     return detmaps, detivs, satmaps
 
