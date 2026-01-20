@@ -1871,6 +1871,8 @@ def _check_checkpoints(R, blobslices, brickname):
     # different set of detected sources.
     keepR = []
     for ri in R:
+        if ri is None:
+            continue
         brick = ri['brickname']
         iblob = ri['iblob']
         r = ri['result']
