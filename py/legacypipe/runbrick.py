@@ -3809,6 +3809,8 @@ def stage_writecat(
         'neo6': 15,
         # DR10
         'neo7': 17,
+        # DR11?
+        'neo11': 25,
     }
     N_wise_epochs = wise_epochs_map.get(dirname)
     if N_wise_epochs is None:
