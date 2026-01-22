@@ -2107,6 +2107,14 @@ def _blob_iter(job_id_map,
     all_tasks_metadata = []
     #print ("Blob order", blob_order)
 
+    Nblobs = len(blobslices)
+    common_blob_args = dict(nblobs=Nblobs, brickwcs=targetwcs, bands=bands,
+                            plots=plots, ps=ps, reoptimize=reoptimize, iterative=iterative,
+                            iterative_nsigma=iterative_nsigma, use_ceres=use_ceres,
+                            large_galaxies_force_pointsource=large_galaxies_force_pointsource,
+                            less_masking=less_masking,
+                            use_gpu=use_gpu, gpumode=gpumode, bid=bid)
+
     # 2. DISCOVERY PHASE (Original logging style preserved here)
     for nblob, iblob in enumerate(blob_order):
         bslc = blobslices[iblob]
@@ -2116,59 +2124,6 @@ def _blob_iter(job_id_map,
         blobh, blobw = by1 - by0, bx1 - bx0
         blobmask = (blobmap[bslc] == iblob)
 
- #<<<< gpu-checkpoint
-    Nblobs = len(blobslices)
-
-    common_blob_args = dict(nblobs=Nblobs, brickwcs=targetwcs, bands=bands,
-                            plots=plots, ps=ps, reoptimize=reoptimize, iterative=iterative,
-                            iterative_nsigma=iterative_nsigma, use_ceres=use_ceres,
-                            large_galaxies_force_pointsource=large_galaxies_force_pointsource,
-                            less_masking=less_masking,
-                            use_gpu=use_gpu, gpumode=gpumode, bid=bid)
-
-    for blob_rank,iblob in enumerate(blob_order):
-        global signal_quitting
-        if signal_quitting:
-            print('_blob_iter: signal_quitting')
-            break
-
-        # (convert iblob to int, because (with sub-blobs) skipblob
-        # entries can be tuples, and if iblob is type np.int32 it
-        # tries to do vector-comparison)
-        if int(iblob) in skipblobs:
-            #info('Skipping blob', iblob)
-            continue
-
-        bslc  = blobslices[iblob]
-        Isrcs = blobsrcs  [iblob]
-        assert(len(Isrcs) > 0)
-
-        # blob bbox in targetwcs coords
-        sy,sx = bslc
-        by0,by1 = sy.start, sy.stop
-        bx0,bx1 = sx.start, sx.stop
-        blobh,blobw = by1 - by0, bx1 - bx0
-
-        # Here we assume the "blobmap" array has been remapped so that
-        # -1 means "no blob", while 0 and up label the blobs, thus
-        # iblob equals the value in the "blobmap" map.
-        blobmask = (blobmap[bslc] == iblob)
-        # at least one pixel should be set!
-        assert(np.any(blobmask))
-
-        blobname = '%i' % (blob_rank + 1)
-
-        if U is not None:
-            # If the blob is solely outside the unique region of this brick,
-            # skip it!
-            if np.all(U[bslc][blobmask] == False):
-                info('Blob %s is completely outside the unique region of this brick -- skipping' %
-                     (blobname))
-                job_id_map[job_id] = (brickname, blobname)
-                job_id += 1
-                yield (brickname, iblob, None, None)
-                continue
-#=======
         # Skip checks
         if int(iblob) in skipblobset:
             all_tasks_metadata.append({'size': -1, 'iblob': iblob, 'nblob_idx': nblob+1})
@@ -2180,7 +2135,6 @@ def _blob_iter(job_id_map,
             continue
 
         npix = np.sum(blobmask)
-#>>>>>>> gpu-powered+flags
 
         # Find one pixel for debug (Legacy Style)
         onex = oney = None
@@ -2189,44 +2143,13 @@ def _blob_iter(job_id_map,
             local_y, local_x = np.unravel_index(ii[0], blobmask.shape)
             onex, oney = bx0 + local_x, by0 + local_y
 
- #<<<<<<< gpu-checkpoint
-        npix = np.sum(blobmask)
-        info(('Blob %s of %i, id: %i, sources: %i, size: %ix%i, npix %i, brick X: %i,%i, ' +
-#=======
         # LEGACY PRINT 1: Blob Info
         info(('Blob %i of %i, id: %i, sources: %i, size: %ix%i, npix %i, brick X: %i,%i, ' +
-#>>>>>>> gpu-powered+flags
                'Y: %i,%i, one pixel: %i %i') %
               (blobname, Nblobs, iblob, len(Isrcs), blobw, blobh, npix,
                bx0,bx1,by0,by1, onex,oney))
 
         if max_blobsize is not None and npix > max_blobsize:
- #<<<<<<< gpu-checkpoint
-            info('Number of pixels in blob, %i exceeds max blobsize %i' % (npix, max_blobsize))
-            job_id_map[job_id] = (brickname, blobname)
-            job_id += 1
-            yield (brickname, iblob, None, None)
-            continue
-
-        # Split into overlapping sub-blobs?
-        # We include the "blob-unique" bounding-box in the tokens we yield from this function.
-        # Then, in bounce_one_blob, after the sub-blob finishes processing, that unique-area
-        # cut is applied.
-        # To identify these sub-blobs, we return iblob = a tuple of the original iblob plus
-        # a sub-blob identifier.  Sub-blobs can get saved to the checkpoints files, and by
-        # checking "skipblobs" below, we don't re-run them.
-
-        do_sub_blobs = False
-        if enable_sub_blobs:
-            do_sub_blobs = True
-        # Check for a large blob that is fully contained in the
-        # CLUSTER mask -- enable sub-blob processing if so.
-        if (not do_sub_blobs) and np.all((refmap[bslc][blobmask] & REF_MAP_BITS['CLUSTER']) != 0):
-            info('Entire large blob is in CLUSTER mask.  Splitting into sub-blobs')
-            do_sub_blobs = True
-
-        threshsize = None
-#=======
             info('Number of pixels in blob, %i, exceeds max blobsize %i' % (npix, max_blobsize))
             all_tasks_metadata.append({'size': -1, 'iblob': iblob, 'nblob_idx': nblob+1})
             continue
@@ -2234,7 +2157,6 @@ def _blob_iter(job_id_map,
         # Sub-blob logic
         do_sub_blobs = enable_sub_blobs or np.all((refmap[bslc][blobmask] & REF_MAP_BITS['CLUSTER']) != 0)
 
-#>>>>>>> gpu-powered+flags
         if do_sub_blobs:
             # split into ~500-pixel sub-blobs. 
             # "overlap" is the duplicated / overlapping region between sub-blobs.
@@ -2350,6 +2272,11 @@ def _blob_iter(job_id_map,
     for rank, task in enumerate(all_tasks_metadata):
         task_rank = rank + 1
         iblob = task['iblob']
+
+        global signal_quitting
+        if signal_quitting:
+            print('_blob_iter: signal_quitting')
+            break
 
         if task['size'] == -1:
             job_id_map[job_id] = (brickname, task['nblob_idx'])
