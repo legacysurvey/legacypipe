@@ -726,7 +726,7 @@ class OneBlob(object):
                              self.bands, self.blobwcs, self.blobmask, self.pixscale,
                              B.forced_pointsource[i],
                              B.fit_background[i]))
-            debug('Model selection for batch %i (%i sources) in parallel...' % (ibatch+1, len(batch)))
+            info('Model selection for batch %i (%i sources) in parallel...' % (ibatch+1, len(batch)))
             R = mp.map(model_select_one, args)
             debug('Done model selection on batch %i in parallel' % (ibatch+1))
 
@@ -1910,7 +1910,7 @@ class OneBlob(object):
                     #    plotfns.append(self.ps.getnext())
                     args.append((batchnum, j, s, self.tims, mm, orig_mods, self.trargs, self.optargs,
                                  self.bands, self.blobwcs, plotfns))
-                debug('Fitting batch %i (%i sources) in parallel...' % (batchnum, len(srcbatch)))
+                info('Fitting batch %i (%i sources) in parallel...' % (batchnum, len(srcbatch)))
                 R = mp.map(fit_one, args)
                 debug('Done fitting batch %i in parallel' % batchnum)
                 # Save just the source indices for the batches.
