@@ -63,7 +63,7 @@ OneBlobArgs = namedtuple('OneBlobArgs', [
     'timargs',
     'srcs', 'bands', 'plots', 'ps', 'reoptimize', 'iterative', 'iterative_nsigma', 'use_ceres',
     'refmap', 'large_galaxies_force_pointsource', 'less_masking', 'frozen_galaxies', 'use_gpu',
-    'gpumode', 'bid', 'halfdone'])
+    'gpumode', 'bid', 'halfdone', 'is_priority'])
 
 def one_blob(args):
     '''
