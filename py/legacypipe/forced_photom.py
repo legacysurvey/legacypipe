@@ -957,6 +957,9 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
     fixed_also: if derivs=True, also run without derivatives and report
     that flux too?
     '''
+    if len(cat) == 0:
+        return None
+
     if timing:
         tlast = Time()
     if ps is not None:
@@ -1162,7 +1165,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         if ps is not None or get_model:
             if not hasattr(R, 'ims1'):
                 print('R:', R)
-                return None,None
+                return None
             (data,mod,ie,chi,_) = R.ims1[0]
 
         if ps is not None:
