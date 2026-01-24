@@ -159,7 +159,7 @@ def one_blob(args):
 
     except QuitNowException as q:
         if ob is not None:
-            print('Caught QuitNowException; saving checkpoint state for blob %s' % args.blobname)
+            print('Caught QuitNowException; returning checkpoint state for blob %s' % args.blobname)
             ob.B = B
         else:
             print('Caught QuitNowException; ob None for blob %s' % args.blobname)

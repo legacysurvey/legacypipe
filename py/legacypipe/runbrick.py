@@ -1163,7 +1163,9 @@ def sigusr1(sig, stackframe):
                 pfd = os.pidfd_open(p)
                 signal.pidfd_send_signal(pfd, signal.SIGUSR1)
             except Exception as e:
-                cmd = 'kill -SIGUSR1 %i' % p
+                # This is the bash-style builtin - doesn't work to os.system it!
+                #cmd = 'kill -SIGUSR1 %i' % p
+                cmd = '/usr/bin/kill -s SIGUSR1 %i' % p
                 print('Signalling via os.pidfd & pidfd_send_signal failed (%s) trying shell: %s' % (str(e), cmd))
                 rtn = os.system(cmd)
                 print('Return value:', rtn)
@@ -1472,7 +1474,10 @@ def stage_fitblobs(T=None,
                 if mp.pool is not None:
                     timeout = max(1, checkpoint_period - dt)
                     timeout = min(10, timeout)
-                    debug('Main thread: waiting for result...')
+                    if signal_quitting:
+                        info('Main thread: waiting for result...')
+                    else:
+                        debug('Main thread: waiting for result...')
                     r = Riter.next(timeout)
 
                     if not signal_quitting:
@@ -1490,12 +1495,12 @@ def stage_fitblobs(T=None,
 
                 if signal_quitting:
                     if r is None:
-                        debug('Main thread: got result', r)
+                        info('Main thread: signal_quitting; got result', r)
                         # Don't save it in the checkpoint.
                         continue
                     else:
                         try:
-                            debug('Main thread: got result for blobid %s: %s' % (r.get('iblob', None), type(r.get('result', None))))
+                            info('Main thread: got result for blobid %s: %s' % (r.get('iblob', None), type(r.get('result', None))))
                         except:
                             pass
 
@@ -1541,8 +1546,9 @@ def stage_fitblobs(T=None,
                 raise e
 
         # Write checkpoint when done!
+        info('Writing checkpoints...')
         _write_checkpoint(R, checkpoint_filename)
-        debug('Got', n_finished_total, 'results; wrote', len(R), 'to checkpoint')
+        debug('Got %i results, wrote %i to checkpoint' % (n_finished_total, len(R)))
 
         pool_worker_pids = None
         pool_obj = None
@@ -2146,7 +2152,7 @@ def _blob_iter(job_id_map,
         # LEGACY PRINT 1: Blob Info
         info(('Blob %i of %i, id: %i, sources: %i, size: %ix%i, npix %i, brick X: %i,%i, ' +
                'Y: %i,%i, one pixel: %i %i') %
-              (blobname, Nblobs, iblob, len(Isrcs), blobw, blobh, npix,
+              (nblob+1, Nblobs, iblob, len(Isrcs), blobw, blobh, npix,
                bx0,bx1,by0,by1, onex,oney))
 
         if max_blobsize is not None and npix > max_blobsize:
@@ -2158,7 +2164,7 @@ def _blob_iter(job_id_map,
         do_sub_blobs = enable_sub_blobs or np.all((refmap[bslc][blobmask] & REF_MAP_BITS['CLUSTER']) != 0)
 
         if do_sub_blobs:
-            # split into ~500-pixel sub-blobs. 
+            # split into ~500-pixel sub-blobs.
             # "overlap" is the duplicated / overlapping region between sub-blobs.
             overlap = 50
             # target sub-blob size for selecting number of sub-blobs
@@ -2176,6 +2182,7 @@ def _blob_iter(job_id_map,
         if not do_sub_blobs:
             # Regular Blob Task
             all_tasks_metadata.append({
+                'blobname': '%i' % (nblob+1),
                 'nsrcs': len(Isrcs),
                 'size': npix,
                 'iblob': iblob,
@@ -2221,6 +2228,7 @@ def _blob_iter(job_id_map,
 
                     sub_mask = blobmask[s_y0:s_y1, s_x0:s_x1]
                     all_tasks_metadata.append({
+                        'blobname': sub_blob_name,
                         'nsrcs': len(Isubsrcs),
                         'size': np.sum(sub_mask),
                         'iblob': iblob,
@@ -2283,17 +2291,20 @@ def _blob_iter(job_id_map,
         if sub_idx is not None and ran_sub_blobs is not None:
             ran_sub_blobs.append(int(iblob))
 
-        halfdone = halfdone_blob_map.get((int(iblob),sub_blob), None)
+        if sub_idx is not None:
+            halfdone = halfdone_blob_map.get((int(iblob),sub_idx))
+        else:
+            halfdone = halfdone_blob_map.get(int(iblob))
         if halfdone is not None:
-            info('Found a mid-way checkpoint for sub-blob %s' % sub_blob_name)
+            info('Found a mid-way checkpoint for blob %s' % (task['blobname']))
 
         yield (brickname, (iblob, sub_idx) if sub_idx is not None else iblob,
                task.get('unique_bounds'),
-               OneBlobArgs(blobname=task_rank, iblob=iblob, Isrcs=Isubsrcs,
+               OneBlobArgs(blobname=task['blobname'], iblob=iblob, Isrcs=Isrcs,
                            bx0=bx0, by0=by0, blobw=bx1-bx0, blobh=by1-by0,
                            # "blobmask" has already been cut to this blob, so don't use sub_slc
                            blobmask=task['blobmask'],
-                           timargs=subtimargs, srcs=[cat[i] for i in Isubsrcs],
+                           timargs=subtimargs, srcs=[cat[i] for i in Isrcs],
                            refmap=refmap[by0:by1, bx0:bx1],
                            frozen_galaxies=frozen_galaxies.get(iblob, []),
                            halfdone=halfdone,
