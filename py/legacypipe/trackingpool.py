@@ -11,14 +11,37 @@ class TrackingIMapUnorderedIterator(IMapUnorderedIterator):
     def __init__(self, pool):
         super().__init__(pool)
         self._status = {}
+        self._updates = {}
+    def _add_update(self, i, x):
+        if not i in self._updates:
+            self._updates[i] = []
+        self._updates[i].append(x)
     def _set_status(self, i, s):
         self._status[i] = s
     def _set(self, i, obj):
         if i in self._status:
             del self._status[i]
         super()._set(i, obj)
+    def get_and_clear_updates(self):
+        rtn = self._updates
+        self._updates = {}
+        return rtn
     def get_running_jobs(self):
         return self._status
+
+# This looks like a global, but it is only used within worker processes
+_worker_pipe_data = None
+def update_process_status(x):
+    '''
+    Can be called by the target of a multiprocess call to send updates in the middle
+    of the computation.  These will be streamed back to the main process and be available
+    in the TrackingIMapUnorderedIterator object.
+    '''
+    if _worker_pipe_data is None:
+        util.info('update_process_status() called, but pipe to main process is not available.')
+        return
+    put, job, i, worker_id = _worker_pipe_data
+    put((job, i, False, worker_id, dict(event='update', value=x)))
 
 def worker(inqueue, outqueue, initializer=None, initargs=(), maxtasks=None,
            wrap_exception=False, worker_id=None):
@@ -52,6 +75,9 @@ def worker(inqueue, outqueue, initializer=None, initargs=(), maxtasks=None,
 
         put((job, i, False, worker_id, dict(event='start', pid=os.getpid(), time=time.time())))
 
+        global _worker_pipe_data
+        _worker_pipe_data = (put, job, i, worker_id)
+
         try:
             result = (True, func(*args, **kwds))
         except Exception as e:
@@ -59,6 +85,9 @@ def worker(inqueue, outqueue, initializer=None, initargs=(), maxtasks=None,
             if wrap_exception and func is not _helper_reraises_exception:
                 e = ExceptionWithTraceback(e, e.__traceback__)
             result = (False, e)
+
+        _worker_pipe_data = None
+
         try:
 
             put((job, i, True, worker_id, result))
@@ -269,19 +298,32 @@ class TrackingPool(Pool):
                                    worker_id)
                         util.debug('working_on: %s' % (str(working_on)))
                 else:
-                    # Worker status update ... currently we only have a "start" update, so use this
-                    # as the started-working signal.
-                    util.debug('worker %i is working on job %i, item %i' % (worker_id, job, i))
-                    working_on[worker_id] = (job, i)
-                    try:
-                        r = cache[job]
-                        if isinstance(r, TrackingIMapUnorderedIterator):
-                            r._set_status(i, obj)
-                    except:
-                        import traceback
-                        print('_handle_results failed to set status:')
-                        traceback.print_exc()
-                        pass
+                    # Worker status update ...
+                    if obj['event'] == 'start':
+                        # the worker started working!
+                        util.debug('worker %i is working on job %i, item %i' % (worker_id, job, i))
+                        working_on[worker_id] = (job, i)
+                        try:
+                            r = cache[job]
+                            if isinstance(r, TrackingIMapUnorderedIterator):
+                                r._set_status(i, obj)
+                        except:
+                            import traceback
+                            print('_handle_results failed to set status:')
+                            traceback.print_exc()
+                            pass
+                    elif obj['event'] == 'update':
+                        # the worker delivered a user status update
+                        util.debug('worker %i, job %i, item %i, delivered an update' % (worker_id, job, i))
+                        try:
+                            r = cache[job]
+                            if isinstance(r, TrackingIMapUnorderedIterator):
+                                r._add_update(i, obj['value'])
+                        except:
+                            import traceback
+                            print('_handle_results failed to set update:')
+                            traceback.print_exc()
+                            pass
             if done:
                 try:
                     util.debug('worker %i returned result for job %i item %i' %
@@ -407,7 +449,7 @@ def test_input_generator(n, job_id_map):
         import numpy as np
         x = np.random.random((1000,1000))
 
-        r = 1000 + i
+        r = 100 + i
         job_id_map[i] = r
         print('Yielding input', r)
         yield (r,x)
@@ -421,31 +463,66 @@ def test_sleep(x):
     print('Done', i)
     return x
 
+def test_stream(x):
+    import numpy as np
+    (i,a) = x
+    print('Starting', i, 'in pid', os.getpid())
+    import time
+    for j in range(np.random.randint(1,5)):
+        update_process_status('working on %i, step %i' % (i,j))
+        time.sleep(1)
+    print('Done', i)
+    return x
+
 if __name__ == '__main__':
     import time
 
     job_id_map = {}
     in_iter = test_input_generator(100, job_id_map)
     with TrackingPool(4) as pool:
-        out_iter = pool.imap_unordered(test_sleep, in_iter)
+        out_iter = pool.imap_unordered(test_stream, in_iter)
         while True:
             try:
                 try:
-                    #r = next(out_iter, 1.)
-                    r = out_iter.next(1.)
+                    #r = out_iter.next(1.)
+                    r = out_iter.next()
                 except multiprocessing.TimeoutError:
-                    s = out_iter._status
-                    tnow = time.time()
-                    print('Waiting:')
-                    for i,st in s.items():
-                        pid = st['pid']
-                        tstart = st['time']
-                        print('  ', job_id_map[i], ': running in PID', pid, 'for %.1f sec' % (tnow - tstart))
+                    time.sleep(0.01)
+                    print('out_iter status:', out_iter._status)
                     continue
                 i,x = r
                 print('Got result', i)
                 time.sleep(0.01)
-                print('out_iter status:', out_iter._status)
+                s = out_iter.get_and_clear_updates()
+                for i,v in s.items():
+                    print('  %i: %s: sent update: %s' % (i, job_id_map[i], v))
             except StopIteration:
                 print('StopIteration')
                 break
+
+    if False:
+        job_id_map = {}
+        in_iter = test_input_generator(100, job_id_map)
+        with TrackingPool(4) as pool:
+            out_iter = pool.imap_unordered(test_sleep, in_iter)
+            while True:
+                try:
+                    try:
+                        #r = next(out_iter, 1.)
+                        r = out_iter.next(1.)
+                    except multiprocessing.TimeoutError:
+                        s = out_iter._status
+                        tnow = time.time()
+                        print('Waiting:')
+                        for i,st in s.items():
+                            pid = st['pid']
+                            tstart = st['time']
+                            print('  ', job_id_map[i], ': running in PID', pid, 'for %.1f sec' % (tnow - tstart))
+                        continue
+                    i,x = r
+                    print('Got result', i)
+                    time.sleep(0.01)
+                    print('out_iter status:', out_iter._status)
+                except StopIteration:
+                    print('StopIteration')
+                    break
