@@ -294,6 +294,14 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             coimg = np.zeros((H,W), np.float32)
             cow   = np.zeros((H,W), np.float32)
             masks = np.zeros((H,W), np.int16)
+            nimgs = np.zeros((H,W), np.int16)
+            minimg = np.empty((H,W), np.float32)
+            maximg = np.empty((H,W), np.float32)
+            # weight of the min/max
+            minwt = np.zeros((H,W), np.float32)
+            maxwt = np.zeros((H,W), np.float32)
+            minimg[:,:] = +1e100
+            maximg[:,:] = -1e100
 
             results = mp.imap_unordered(
                 blur_resample_one, [(i_btim,tim,sig,targetwcs)
@@ -302,14 +310,30 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 if r is None:
                     continue
                 Yo,Xo,iacc,wacc,macc = r
-                coimg[Yo,Xo] += iacc
+                coimg[Yo,Xo] += iacc * wacc
                 cow  [Yo,Xo] += wacc
                 masks[Yo,Xo] |= macc
+                nimgs[Yo,Xo] += 1
+                K = np.flatnonzero(iacc < minimg[Yo,Xo])
+                if len(K) > 0:
+                    minimg[Yo[K], Xo[K]] = iacc[K]
+                    minwt [Yo[K], Xo[K]] = wacc[K]
+                K = np.flatnonzero(iacc > maximg[Yo,Xo])
+                if len(K) > 0:
+                    maximg[Yo[K], Xo[K]] = iacc[K]
+                    maxwt [Yo[K], Xo[K]] = wacc[K]
                 del Yo,Xo,iacc,wacc,macc
                 del r
             del results
 
-            #
+            # Produce a clipped weighted coadd where we have enough overlapping pixels.
+            K = np.flatnonzero(nimgs >= 5)
+            info('Outliers in %s band: %i of %i coadd pixels have >= 5 exposures' %
+                 (band, len(K), nimgs.size))
+            if len(K):
+                coimg.flat[K] -= (minwt.flat[K] * minimg.flat[K] + maxwt.flat[K] * maximg.flat[K])
+                cow  .flat[K] -= (minwt.flat[K]                  + maxwt.flat[K])
+
             veto = np.logical_or(star_veto,
                                  np.logical_or(
                 binary_dilation(masks & DQ_BITS['bleed'], iterations=3),
@@ -322,14 +346,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             #     plt.title('SATUR, BLEED veto (%s band)' % band)
             #     ps.savefig()
 
-            # HACK -- mp.imap was added to astrometry.net somewhat recently, hasn't make it into
-            # our docker container yet... hack... will only work with --threads
-            try:
-                # mp.imap
-                imap = mp.pool.imap
-            except:
-                imap = map
-            R = imap(
+            R = mp.imap(
                 compare_one, [(i_btim, tim, sig, targetwcs, coimg, cow, veto, make_badcoadds, plots,ps)
                               for i_btim,(tim,sig) in enumerate(zip(btims,addsigs))])
             del coimg, cow, veto
@@ -399,12 +416,9 @@ def compare_one(X):
     from astrometry.util.resample import resample_with_wcs,OverlapError
 
     (i_tim,tim,sig,targetwcs, coimg,cow, veto, make_badcoadds, plots,ps) = X
-
     if plots:
         import pylab as plt
-
     H,W = targetwcs.shape
-
     img = gaussian_filter(tim.getImage(), sig)
     try:
         Yo,Xo,Yi,Xi,[rimg] = resample_with_wcs(
@@ -417,10 +431,8 @@ def compare_one(X):
     if Xi.dtype != np.int16:
         Yi = Yi.astype(np.int16)
         Xi = Xi.astype(np.int16)
-
     # Compare against reference image...
     maskedpix = np.zeros(tim.shape, np.uint8)
-
     # Subtract this image from the coadd
     otherwt = cow[Yo,Xo] - wt
     otherimg = (coimg[Yo,Xo] - rimg*wt) / np.maximum(otherwt, 1e-16)
@@ -578,7 +590,7 @@ def blur_resample_one(X):
     del img
     blurnorm = 1./(2. * np.sqrt(np.pi) * sig)
     wt = tim.getInvvar()[Yi,Xi] / (blurnorm**2)
-    return i_tim, (Yo, Xo, rimg*wt, wt, tim.dq[Yi,Xi])
+    return i_tim, (Yo, Xo, rimg, wt, tim.dq[Yi,Xi])
 
 def patch_from_coadd(coimgs, targetwcs, bands, tims, mp=None):
     H,W = targetwcs.shape
