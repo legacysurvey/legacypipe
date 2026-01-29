@@ -158,6 +158,10 @@ def one_blob(args):
             ob.trargs.update(optimizer=opt)
             ob.use_gpu = True
             ob.gpumode = args.gpumode
+        else:
+            from tractor.smarter_dense_optimizer import SmarterDenseOptimizer
+            opt = SmarterDenseOptimizer()
+            ob.trargs.update(optimizer=opt)
 
         B = ob.run(B, reoptimize=args.reoptimize, iterative_detection=args.iterative)
         ob.finalize_table(B, args.bx0, args.by0)
@@ -263,6 +267,20 @@ class OneBlob(object):
         self.use_gpu = False
         self.gpumode = 0
 
+        # if use_ceres:
+        #     from tractor.ceres_optimizer import CeresOptimizer
+        #     ceres_optimizer = CeresOptimizer()
+        #     self.optargs.update(scale_columns=False,
+        #                         scaled=False,
+        #                         dynamic_scale=False)
+        #     self.trargs.update(optimizer=ceres_optimizer)
+        # else:
+        #     self.optargs.update(dchisq = 0.1)
+
+        from tractor.dense_optimizer import ConstrainedDenseOptimizer
+        self.trargs.update(optimizer=ConstrainedDenseOptimizer())
+        self.optargs.update(dchisq = 0.1)
+
         if len(frozen_galaxies):
             debug('Subtracting frozen galaxy models...')
             tr = Tractor(self.tims, Catalog(*frozen_galaxies))
@@ -302,20 +320,6 @@ class OneBlob(object):
                 dimshow(get_rgb(coimgs, self.bands))
                 plt.title('After subtracting frozen galaxies')
                 self.ps.savefig()
-
-        # if use_ceres:
-        #     from tractor.ceres_optimizer import CeresOptimizer
-        #     ceres_optimizer = CeresOptimizer()
-        #     self.optargs.update(scale_columns=False,
-        #                         scaled=False,
-        #                         dynamic_scale=False)
-        #     self.trargs.update(optimizer=ceres_optimizer)
-        # else:
-        #     self.optargs.update(dchisq = 0.1)
-
-        from tractor.dense_optimizer import ConstrainedDenseOptimizer
-        self.trargs.update(optimizer=ConstrainedDenseOptimizer())
-        self.optargs.update(dchisq = 0.1)
 
     def __getstate__(self):
         # Remove "tims" from the pickled object
