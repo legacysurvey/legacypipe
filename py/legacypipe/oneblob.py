@@ -283,16 +283,18 @@ class OneBlob(object):
 
         if len(frozen_galaxies):
             debug('Subtracting frozen galaxy models...')
-            tr = Tractor(self.tims, Catalog(*frozen_galaxies))
+            status_update('Subtracting %i frozen galaxy models...' % len(frozen_galaxies))
+            tr = self.tractor(self.tims, Catalog(*frozen_galaxies))
             tr.setBlobid(iblob) #Set blobid
-            mm = []
-            for tim in self.tims:
-                mh,mw = tim.shape
-                mm.append(dict([(g, ModelMask(0, 0, mw, mh)) for g in frozen_galaxies]))
-            tr.setModelMasks(mm)
+            # FIXME -- can we set *max* sizes instead?
+            # mm = []
+            # for tim in self.tims:
+            #     mh,mw = tim.shape
+            #     mm.append(dict([(g, ModelMask(0, 0, mw, mh)) for g in frozen_galaxies]))
+            # tr.setModelMasks(mm)
             if self.plots:
                 mods = []
-            for tim in self.tims:
+            for itim,tim in enumerate(self.tims):
                 try:
                     mod = tr.getModelImage(tim)
                 except:
