@@ -1019,7 +1019,6 @@ class OneBlob(object):
         return B
 
     def iterative_detection(self, Bold, models):
-        # Compute per-band detection maps
         from scipy.ndimage import binary_dilation
         from legacypipe.detection import sed_matched_filters, detection_maps, run_sed_matched_filters
         from astrometry.util.multiproc import multiproc
@@ -1063,7 +1062,7 @@ class OneBlob(object):
 
         mod_detmaps,mod_detivs,_ = detection_maps(self.tims, self.blobwcs, self.bands, mp,
                                                   use_gpu=(self.use_gpu and self.gpumode > 0))
-        # revert
+        # revert the tim image data
         for tim,img in zip(self.tims, realimages):
             tim.setImage(img) #Update GPU flag
 
@@ -1097,7 +1096,8 @@ class OneBlob(object):
         # source positions (including ones that will get cut!)
         avoid_x = Bold.safe_x0
         avoid_y = Bold.safe_y0
-        avoid_r = np.zeros(len(avoid_x), np.float32) + 2.
+        # magic number 4: matching r_excl in runbrick.py
+        avoid_r = np.zeros(len(avoid_x), np.float32) + 4.
         avoid_map = (self.refmap != 0)
 
         Tnew, newsrcs, _ = run_sed_matched_filters(
@@ -1139,7 +1139,22 @@ class OneBlob(object):
             _,xx,yy = self.blobwcs.radec2pixelxy(rr, dd)
 
             plt.plot(Bold.safe_x0, Bold.safe_y0, 'o', ms=5, mec='r',
-                     mfc='none', label='Avoid (r=2)')
+                     mfc='none', label='Avoid (r=4)')
+            plt.plot(xx-1, yy-1, 'r+', label='Old', **crossa)
+            plt.axis(ax)
+            plt.legend()
+            plt.title('Iterative detections (avoid)')
+            self.ps.savefig()
+
+            plt.clf()
+            plt.imshow(avoid_map, origin='lower', interpolation='nearest', vmin=0, vmax=1)
+            plt.title('Iterative detection: avoid map')
+            self.ps.savefig()
+
+            plt.clf()
+            dimshow(get_rgb(coimgs,self.bands), ticks=False)
+            plt.plot(Bold.safe_x0, Bold.safe_y0, 'o', ms=5, mec='r',
+                     mfc='none', label='Avoid (r=4)')
             plt.plot(xx-1, yy-1, 'r+', label='Old', **crossa)
             plt.plot(Tnew.ibx, Tnew.iby, '+', color=(0,1,0), label='New',
                      **crossa)

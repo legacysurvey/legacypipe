@@ -4672,7 +4672,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     
     if pool or (threads and threads > 1):
         from astrometry.util.ttime import MemMeas
-        from astrometry.util.ttime import MemMeas
         if pool is None:
             from legacypipe.trackingpool import TrackingPool
             pool = TrackingPool(threads,
