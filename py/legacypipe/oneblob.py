@@ -58,6 +58,17 @@ def sigusr1(sig, stackframe):
 class QuitNowException(BaseException):
     pass
 
+_last_status_update = None
+def status_update(s, force=False):
+    global _last_status_update
+    tnow = time.time()
+    if force or (_last_status_update is None) or (tnow - _last_status_update > 10):
+        from legacypipe.trackingpool import update_process_status
+        sent = update_process_status(dict(type='progress', message=s))
+        #if not sent:
+        #    info('Failed to send status update to main process: %s')
+        _last_status_update = tnow
+
 OneBlobArgs = namedtuple('OneBlobArgs', [
     'blobname', 'nblobs', 'iblob', 'Isrcs', 'brickwcs', 'bx0', 'by0', 'blobw', 'blobh', 'blobmask',
     'timargs',
@@ -400,8 +411,10 @@ class OneBlob(object):
         # - model selection (including iterative detection)
         # - metrics
         self.prefix = 'Blob %s%s of %s:' % (self.name, '-iter' if is_iterative else '', self.nblobs)
+        self.iterstring = ' (iterative)' if is_iterative else ''
 
         self.info('Starting: %i sources' % (len(B.sources)))
+        status_update('Starting up%s' % self.iterstring)
         t = time.time()
         trun = tlast = Time()
         # Not quite so many plots...
@@ -441,6 +454,7 @@ class OneBlob(object):
         # Fit any sources marked with 'needs_initial_flux' -- saturated, and SGA
         fitflux = [src for src in cat if (src is not None and getattr(src, 'needs_initial_flux', False))]
         if len(fitflux):
+            status_update('Fitting initial fluxes for %i sources%s' % (len(fitflux), self.iterstring))
             self.debug('Fitting initial fluxes for %i sources' % len(fitflux))
             self._fit_fluxes(cat, self.tims, self.bands, fitcat=fitflux)
             if self.plots:
@@ -470,6 +484,7 @@ class OneBlob(object):
                 self._optimize_individual_sources_subtract(
                     cat, Ibright, B.cpu_source, B.done_fitting)
             else:
+                status_update('Fitting source%s' % (self.iterstring))
                 self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source,
                                                   B.done_fitting)
 
@@ -546,6 +561,7 @@ class OneBlob(object):
             # Also set a parameter on 'src' for use in compute_segmentation_map()
             src.maskbits_forced_point_source = force_pointsource
 
+        status_update('Computing segmentation map%s' % self.iterstring)
         segmap = self.compute_segmentation_map(cat)
         # Next, model selections: point source vs rex vs dev/exp vs ser.
         self.debug('Starting model selection')
@@ -627,6 +643,7 @@ class OneBlob(object):
                 self.ps.savefig()
 
         if compute_metrics:
+            status_update('Computing metrics%s' % self.iterstring)
             # Compute variances on all parameters for the kept model
             B.srcinvvars = [None for i in range(len(B))]
             cat.thawAllRecursive()
@@ -678,6 +695,7 @@ class OneBlob(object):
             del M
 
         self.info('Finished, total: %s' % (Time()-trun))
+        status_update('Finished%s' % self.iterstring, force=True)
         return B
 
     def compute_segmentation_map(self, cat):
@@ -890,6 +908,8 @@ class OneBlob(object):
             src = cat[srci]
             self.debug('Model selection for source %i of %i; sourcei %i' %
                        (numi+1, len(Ibright), srci))
+            status_update('Model selection for source %i of %i%s' %
+                          (numi+1, len(Ibright), self.iterstring))
             cpu0 = time.process_time()
 
             if src.freezeparams:
@@ -1890,6 +1910,7 @@ class OneBlob(object):
                 debug('Frozen source', src, '-- keeping as-is!')
                 done_fitting[srci] = True
                 continue
+            status_update('Fitting source %i of %i%s' % (numi+1, len(Ibright), self.iterstring))
             self.debug('Fitting source %i of %i (source id %i): %s' %
                        (numi+1, len(Ibright), srci, str(src)))
             # Add this source's initial model back in.

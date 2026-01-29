@@ -1420,6 +1420,7 @@ def stage_fitblobs(T=None,
         n_finished_total = 0
         procs_last = None
         last_printout = CpuMeas()
+        job_status_map = {}
 
         # Set up checkpointing & resuming blob fitting
         global signal_quitting
@@ -1456,7 +1457,7 @@ def stage_fitblobs(T=None,
             if dt > 60:
                 last_printout = tnow
                 if hasattr(Riter, 'get_running_jobs'):
-                    procs_last = print_running_jobs(Riter, job_id_map, procs_last)
+                    procs_last = print_running_jobs(Riter, job_id_map, job_status_map, procs_last)
 
             if signal_quitting:
                 if not closed_pool:
@@ -1466,7 +1467,7 @@ def stage_fitblobs(T=None,
                     closed_pool = True
                 if hasattr(Riter, 'get_running_jobs'):
                     print('Main thread: waiting for jobs:')
-                    print_running_jobs(Riter, job_id_map, procs_last)
+                    print_running_jobs(Riter, job_id_map, job_status_map, procs_last)
 
             # Wait for results (with timeout)
             from legacypipe.trackingpool import PoolWorkerDiedException
@@ -1476,8 +1477,8 @@ def stage_fitblobs(T=None,
                     timeout = min(10, timeout)
                     if signal_quitting:
                         info('Main thread: waiting for result...')
-                    else:
-                        debug('Main thread: waiting for result...')
+                    #else:
+                    #    debug('Main thread: waiting for result...')
                     r = Riter.next(timeout)
 
                     if not signal_quitting:
@@ -1512,7 +1513,7 @@ def stage_fitblobs(T=None,
                 print('Main thread: reached end of results')
                 break
             except multiprocessing.TimeoutError:
-                debug('Main thread: timed out waiting for result')
+                #debug('Main thread: timed out waiting for result')
                 continue
             except PoolWorkerDiedException as e:
                 print('Main thread: worker died')
@@ -1814,13 +1815,27 @@ def stage_fitblobs(T=None,
     rtn = dict([(k,L[k]) for k in keys])
     return rtn
 
-def print_running_jobs(Riter, job_id_map, procs_last):
+def print_running_jobs(Riter, job_id_map, job_status_map, procs_last):
     print('Running:')
     status = Riter.get_running_jobs()
     #print('running job status:', status)
     # other threads may try to update status during iteration
     status = status.copy()
     jmap = job_id_map.copy()
+
+    updates = Riter.get_and_clear_updates()
+    for i,up in updates.items():
+        # take only final update
+        latest = None
+        for u in up:
+            if u.get('type', None) == 'progress':
+                latest = u.get('message', None)
+            # FIXME -- if we send mid-stream checkpoints, find those here.
+            #
+        if latest is not None:
+            job_status_map[i] = latest
+    del updates
+
     from legacypipe.utils import run_ps
     pid = os.getpid()
     if procs_last is None:
@@ -1848,7 +1863,8 @@ def print_running_jobs(Riter, job_id_map, procs_last):
                   'total CPU %7.1f sec' % (tnow - s['time']),
                   'CPU now %5.1f %%,' % procs.proc_icpu[i],
                   'VMsize %5.1f GB,' % (procs.vsz[i] / (1024 * 1024)),
-                  'VMpeak %5.1f GB' % (procs.proc_vmpeak[i] / (1024 * 1024)))
+                  'VMpeak %5.1f GB' % (procs.proc_vmpeak[i] / (1024 * 1024)),
+                  'Status: %s' % job_status_map.get(jobid, 'unknown'))
     return procs_last
 
 # Also called by farm.py

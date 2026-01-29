@@ -29,7 +29,7 @@ class TrackingIMapUnorderedIterator(IMapUnorderedIterator):
     def get_running_jobs(self):
         return self._status
 
-# This looks like a global, but it is only used within worker processes
+# This global is only used within worker processes
 _worker_pipe_data = None
 def update_process_status(x):
     '''
@@ -37,14 +37,18 @@ def update_process_status(x):
     of the computation.  These will be streamed back to the main process and be available
     in the TrackingIMapUnorderedIterator object.
     '''
+    global _worker_pipe_data
     if _worker_pipe_data is None:
         util.info('update_process_status() called, but pipe to main process is not available.')
-        return
+        return False
     put, job, i, worker_id = _worker_pipe_data
     put((job, i, False, worker_id, dict(event='update', value=x)))
+    return True
 
 def worker(inqueue, outqueue, initializer=None, initargs=(), maxtasks=None,
            wrap_exception=False, worker_id=None):
+    global _worker_pipe_data
+
     if (maxtasks is not None) and not (isinstance(maxtasks, int)
                                        and maxtasks >= 1):
         raise AssertionError("Maxtasks {!r} is not valid".format(maxtasks))
@@ -75,7 +79,6 @@ def worker(inqueue, outqueue, initializer=None, initargs=(), maxtasks=None,
 
         put((job, i, False, worker_id, dict(event='start', pid=os.getpid(), time=time.time())))
 
-        global _worker_pipe_data
         _worker_pipe_data = (put, job, i, worker_id)
 
         try:
@@ -89,15 +92,12 @@ def worker(inqueue, outqueue, initializer=None, initargs=(), maxtasks=None,
         _worker_pipe_data = None
 
         try:
-
             put((job, i, True, worker_id, result))
-
         except Exception as e:
             from multiprocessing.pool import MaybeEncodingError
             wrapped = MaybeEncodingError(e, result[1])
             util.debug("Possible encoding error while sending result: %s" % (
                 wrapped))
-
             put((job, i, True, worker_id, (False, wrapped)))
 
         task = job = result = func = args = kwds = None
