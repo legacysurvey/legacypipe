@@ -175,7 +175,7 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None, use_gp
             # Set the SATUR bit if the number of images in the stack with SATUR set is > nsatur,
             #  OR if *every* image in the stack has SATUR set (to catch the case where the number in
             # the stack is less than nsatur such that nsatur could never be reached).
-            satmaps[i] = np.logical_or(satmap >= nsatur, satmap == nmap)
+            satmaps[i] = np.logical_or(satmap >= nsatur, (satmap == nmap) * (nmap > 0))
             print('Satmap:', np.sum(satmaps[i]), 'pixels set')
     return detmaps, detivs, satmaps
 
