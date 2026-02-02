@@ -130,7 +130,8 @@ def _detmap(X):
 
     return tim.band, Yo, Xo, detim[Yi,Xi], detiv[Yi,Xi], sat
 
-def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None, use_gpu=False):
+def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None, use_gpu=False,
+                   plots=False, ps=None):
     if use_gpu:
         return detection_maps_gpu(tims, targetwcs, bands, mp, apodize=apodize, nsatur=nsatur)
     # Render the detection maps
@@ -148,9 +149,11 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None, use_gp
             warnings.warn('Clipping nsatur to %i' % satmax)
             nsatur = satmax
         # Count how many pixels in the stack are saturated
-        satmaps = [np.zeros((H,W), np.uint8) for b in bands]
+        nsatmaps = [np.zeros((H,W), np.uint8) for b in bands]
         # Count the total number of pixels in the stack
         nmaps = [np.zeros((H,W), np.uint8) for b in bands]
+        # placeholder
+        satmaps = [None for b in bands]
 
     for band,Yo,Xo,incmap,inciv,sat in mp.imap_unordered(
             _detmap, [(tim, targetwcs, apodize) for tim in tims]):
@@ -163,20 +166,42 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None, use_gp
             if nsatur is None:
                 satmaps[ib][Yo,Xo] |= sat
             else:
-                satmaps[ib][Yo,Xo] = np.minimum(satmax, satmaps[ib][Yo,Xo] + (1*sat))
-                nmaps[ib][Yo,Xo] = np.minimum(satmax, nmaps[ib][Yo,Xo] + 1)
+                nsatmaps[ib][Yo,Xo] = np.minimum(satmax, nsatmaps[ib][Yo,Xo] + (1*sat))
+                nmaps   [ib][Yo,Xo] = np.minimum(satmax, nmaps   [ib][Yo,Xo] +  1)
         del Yo,Xo,incmap,inciv,sat
-    for i,(detmap,detiv,satmap) in enumerate(zip(detmaps, detivs, satmaps)):
+    for i,(detmap,detiv) in enumerate(zip(detmaps, detivs)):
         detmap /= np.maximum(1e-16, detiv)
         if nsatur is not None:
             nmap = nmaps[i]
-            print('Saturmap for band', bands[i], ': range', satmap.min(), satmap.max(),
-                  'mean', np.mean(satmap), 'nsatur', nsatur)
+            nsat = nsatmaps[i]
+            debug('Saturmap for band', bands[i], ': range', nsat.min(), nsat.max(),
+                  'mean', np.mean(nsat), 'nsatur', nsatur)
             # Set the SATUR bit if the number of images in the stack with SATUR set is > nsatur,
             #  OR if *every* image in the stack has SATUR set (to catch the case where the number in
             # the stack is less than nsatur such that nsatur could never be reached).
-            satmaps[i] = np.logical_or(satmap >= nsatur, (satmap == nmap) * (nmap > 0))
+            satmaps[i] = np.logical_or(nsat >= nsatur, (nsat == nmap) * (nmap > 0))
             print('Satmap:', np.sum(satmaps[i]), 'pixels set')
+
+            if plots:
+                import pylab as plt
+                plt.clf()
+                plt.suptitle('Saturation map: %s band' % bands[i])
+                plt.subplot(2,2,1)
+                plt.imshow(nsat, interpolation='nearest', origin='lower', vmin=0, vmax=nsatur)
+                plt.colorbar()
+                plt.title('N satur')
+                plt.subplot(2,2,2)
+                plt.imshow(nmap, interpolation='nearest', origin='lower', vmin=0)
+                plt.colorbar()
+                plt.title('N coverage')
+                plt.subplot(2,2,3)
+                plt.imshow(satmaps[i], interpolation='nearest', origin='lower', vmin=0, vmax=1)
+                plt.title('Satmap')
+                plt.subplot(2,2,4)
+                plt.imshow(detmap, interpolation='nearest', origin='lower', vmin=0)
+                plt.title('Detmap')
+                ps.savefig()
+
     return detmaps, detivs, satmaps
 
 def detection_maps_gpu(tims, targetwcs, bands, mp, apodize=None, nsatur=None):

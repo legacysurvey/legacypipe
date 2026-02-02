@@ -382,7 +382,9 @@ def tim_plots(tims, bands, ps):
                 plt.subplot(1,3,3)
                 plt.imshow(dq, interpolation='nearest', origin='lower',
                            cmap='tab10', vmin=-0.5, vmax=9.5)
-                plt.colorbar()
+                cb = plt.colorbar(location='bottom')
+                cb.set_ticks(list(range(9)), labels=['None', 'Bad', 'No val', 'SAT', 'BLEED', 'CR',
+                                                     'Lo wt', 'Diff', 'Streak'])
                 plt.title('DQ codes')
                 plt.suptitle('%s (%s %s) PLVER %s' % (tim.name, im.image_filename, im.ccdname, im.plver))
                 ps.savefig()

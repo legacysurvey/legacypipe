@@ -947,7 +947,8 @@ def stage_srcs(pixscale=None, targetwcs=None,
     tnow = Time()
     debug('Rendering detection maps...')
     detmaps, detivs, satmaps = detection_maps(tims, targetwcs, bands, mp,
-                                              apodize=10, nsatur=nsatur)
+                                              apodize=10, nsatur=nsatur,
+                                              plots=plots, ps=ps)
     tnow = Time()
     debug('Detmaps:', tnow-tlast)
     tlast = tnow

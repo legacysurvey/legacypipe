@@ -1224,7 +1224,7 @@ def write_coadd_images(band,
 # Pretty much only used for plots; the real deal is make_coadds()
 def quick_coadds(tims, bands, targetwcs, images=None,
                  get_cow=False, get_n2=False, fill_holes=True, get_max=False,
-                 get_saturated=False,
+                 get_saturated=False, get_co2=False,
                  addnoise=False):
     W = int(targetwcs.get_width())
     H = int(targetwcs.get_height())
@@ -1233,6 +1233,8 @@ def quick_coadds(tims, bands, targetwcs, images=None,
     cons = []
     if get_n2:
         cons2 = []
+    if get_co2:
+        coimgs2 = []
     if get_cow:
         # moo
         cowimgs = []
@@ -1298,10 +1300,14 @@ def quick_coadds(tims, bands, targetwcs, images=None,
         cons.append(con)
         if get_n2:
             cons2.append(con2)
+        if get_co2:
+            coimgs2.append(coimg2 / np.maximum(1, con2))
 
     rtn = [coimgs,cons]
     if get_cow:
         rtn.extend([cowimgs, wimgs])
+    if get_co2:
+        rtn.append(coimgs2)
     if get_n2:
         rtn.append(cons2)
     if get_max:

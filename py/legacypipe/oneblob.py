@@ -459,12 +459,13 @@ class OneBlob(object):
         tr = self.tractor(self.tims, cat)
         # Fit any sources marked with 'needs_initial_flux' -- saturated, and SGA
         fitflux = [src for src in cat if (src is not None and getattr(src, 'needs_initial_flux', False))]
+        debug('%i sources need initial flux fitting.' % len(fitflux))
         if len(fitflux):
             status_update('Fitting initial fluxes for %i sources%s' % (len(fitflux), self.iterstring))
             self.debug('Fitting initial fluxes for %i sources' % len(fitflux))
             self._fit_fluxes(cat, self.tims, self.bands, fitcat=fitflux)
             if self.plots:
-                self._plots(tr, 'Fitting initial fluxes')
+                self._plots(tr, 'After fitting initial fluxes')
             for src in fitflux:
                 src.needs_initial_flux = False
         del fitflux
@@ -475,6 +476,10 @@ class OneBlob(object):
             self._plot_coadd(self.tims, self.blobwcs, model=tr)
             plt.title('Initial models')
             self.ps.savefig()
+            # Save the initial source locations for later plotting
+            _,xfit0,yfit0 = self.blobwcs.radec2pixelxy(
+                np.array([src.getPosition().ra  for src in cat]),
+                np.array([src.getPosition().dec for src in cat]))
 
         # Optimize individual sources
 
@@ -494,11 +499,17 @@ class OneBlob(object):
                 self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source,
                                                   B.done_fitting)
 
+        tr.setModelMasks(None)
+
         if self.plots:
             self._plots(tr, 'After source fitting')
             plt.clf()
             self._plot_coadd(self.tims, self.blobwcs, model=tr)
             plt.title('After source fitting')
+            self.ps.savefig()
+            plt.clf()
+            self._plot_coadd(self.tims, self.blobwcs, model=tr, inverr_mask=False)
+            plt.title('After source fitting (not masking inverr)')
             self.ps.savefig()
             # Plot source locations
             ax = plt.axis()
@@ -506,13 +517,15 @@ class OneBlob(object):
                 np.array([src.getPosition().ra  for src in cat]),
                 np.array([src.getPosition().dec for src in cat]))
             plt.plot(xf-1, yf-1, 'r.', label='Sources')
+            plt.plot([xfit0-1, xf-1], [yfit0-1, yf-1], 'r-')
+            plt.plot(xfit0-1, yfit0-1, 'o', mec='r', mfc='none')
             Ir = np.flatnonzero([is_reference_source(src) for src in cat])
             if len(Ir):
                 plt.plot(xf[Ir]-1, yf[Ir]-1, 'o', mec='g', mfc='none', ms=8, mew=2,
                          label='Ref source')
             plt.legend()
             plt.axis(ax)
-            plt.title('After source fitting')
+            plt.title('After source fitting: models')
             self.ps.savefig()
             if self.plots_single:
                 plt.figure(2)
@@ -912,8 +925,8 @@ class OneBlob(object):
                 continue
 
             src = cat[srci]
-            self.debug('Model selection for source %i of %i; sourcei %i' %
-                       (numi+1, len(Ibright), srci))
+            self.debug('Model selection for source %i of %i; sourcei %i, initial model %s' %
+                       (numi+1, len(Ibright), srci, str(src)))
             status_update('Model selection for source %i of %i%s' %
                           (numi+1, len(Ibright), self.iterstring))
             cpu0 = time.process_time()
@@ -1520,12 +1533,12 @@ class OneBlob(object):
             from tractor.lsqr_optimizer import LsqrOptimizer
             if self.use_gpu and self.gpumode > 0:
                 from tractor.gpu_lsqr_optimizer import GPULsqrOptimizer
-                print ("Updating GPU optimizer for ",src)
+                #print ("Updating GPU optimizer for ",src)
                 srctractor.optimizer = GPULsqrOptimizer()
                 #print ("Updating optimizer for ",src)
                 #srctractor.optimizer = LsqrOptimizer()
             else:
-                print ("Updating optimizer for ",src)
+                #print ("Updating optimizer for ",src)
                 srctractor.optimizer = LsqrOptimizer()
 
             skyparams = srctractor.images.getParams()
@@ -1655,7 +1668,7 @@ class OneBlob(object):
                 traceback.print_exc()
                 raise(e)
                 continue
-            self.debug('After model selection: %s' % (str(newsrc)))
+            self.debug('After  model selection: %s' % (str(newsrc)))
             hit_limit = R.get('hit_limit', False)
             opt_steps = R.get('steps', -1)
             hit_ser_limit = False
@@ -2009,7 +2022,32 @@ class OneBlob(object):
                 except ImportError:
                     from tractor.lsqr_optimizer import LsqrOptimizer
                     btr.optimizer = LsqrOptimizer()
+
+            debug('Fitting %i sources in %i image for band %s.  Optimizer: %s' %
+                 (len(fitcat), len(btims), b, str(type(btr.optimizer))))
+
+            if self.plots:
+                mods = list(btr.getModelImages())
+                mod0,_ = quick_coadds(btims, [b], self.blobwcs, images=mods,
+                                        fill_holes=False)
+
             btr.optimize_forced_photometry(shared_params=False, wantims=False)
+
+            if self.plots:
+                mods = list(btr.getModelImages())
+                mod1,_ = quick_coadds(btims, [b], self.blobwcs, images=mods,
+                                        fill_holes=False)
+                import pylab as plt
+                plt.clf()
+                plt.subplot(1,2,1)
+                dimshow(get_rgb(mod0, [b]))
+                plt.title('Before')
+                plt.subplot(1,2,2)
+                dimshow(get_rgb(mod1, [b]))
+                plt.title('After')
+                plt.suptitle('Flux fitting: %s band' % b)
+                self.ps.savefig()
+
             for src in fitcat:
                 src.getBrightness().thawAllParams()
         for src in fitcat:
@@ -2030,7 +2068,8 @@ class OneBlob(object):
             if hasattr(tim, 'resamp'):
                 del tim.resamp
 
-    def _plot_coadd(self, tims, wcs, model=None, resid=None, addnoise=False):
+    def _plot_coadd(self, tims, wcs, model=None, resid=None, addnoise=False,
+                    inverr_mask=True):
         if resid is not None:
             mods = list(resid.getChiImages())
             coimgs,_ = quick_coadds(tims, self.bands, wcs, images=mods,
@@ -2041,8 +2080,13 @@ class OneBlob(object):
         mods = None
         if model is not None:
             mods = list(model.getModelImages())
-        coimgs,_ = quick_coadds(tims, self.bands, wcs, images=mods,
-                                fill_holes=False, addnoise=addnoise)
+        if not inverr_mask:
+            _,_,coimgs = quick_coadds(tims, self.bands, wcs, images=mods,
+                                      fill_holes=False, addnoise=addnoise,
+                                      get_co2=True)
+        else:
+            coimgs,_ = quick_coadds(tims, self.bands, wcs, images=mods,
+                                    fill_holes=False, addnoise=addnoise)
         dimshow(get_rgb(coimgs,self.bands))
 
     def _initial_plots(self, cat):
