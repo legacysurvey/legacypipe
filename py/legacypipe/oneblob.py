@@ -1403,7 +1403,7 @@ class OneBlob(object):
                 # The hole-fill can still fail (eg, in small test images) if
                 # the bleed trail splits the blob into two pieces.
                 # Skip this test for reference sources.
-                if is_reference_source(src):
+                if has_fixed_position(src):
                     debug('Reference source center is outside symmetric blob; keeping')
                 else:
                     debug('Source center is not in the symmetric blob mask; skipping')
@@ -1500,9 +1500,14 @@ class OneBlob(object):
         iy = int(iy-1)
         # Start in blob
         sh,sw = srcwcs.shape
+        optargs = self.optargs.copy()
         if is_galaxy:
             # allow SGA galaxy sources to start outside the blob
-            pass
+            optargs.update(check_step=None)
+        elif has_fixed_position(src):
+            debug('Reference source is starting outside blob -- allowing.')
+            optargs.update(check_step=None)
+            # (Gaia sources will have their positions fixed, so just fitting fluxes)
         elif ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
             debug('Source is starting outside blob -- skipping.')
             if source_mask is not None:
@@ -1551,7 +1556,7 @@ class OneBlob(object):
 
         if fit_background:
             #print ("ENTERING OPTIMIZE 1 - ", type(srctractor), srctractor.optimize_loop)
-            srctractor.optimize_loop(**self.optargs)
+            srctractor.optimize_loop(**optargs)
 
         if self.plots_per_source:
             model_mod_rgb = {}
@@ -1661,7 +1666,7 @@ class OneBlob(object):
             self.debug('Before model selection: %s' % (str(newsrc)))
             try:
                 #print ("ENTERING OPTIMIZE 2 - ", type(srctractor), srctractor.optimize_loop)
-                R = srctractor.optimize_loop(**self.optargs)
+                R = srctractor.optimize_loop(**optargs)
             except Exception as e:
                 print('Exception fitting source in model selection.  src:', newsrc)
                 import traceback
@@ -1702,6 +1707,9 @@ class OneBlob(object):
             sh,sw = srcblobmask.shape
             if is_galaxy:
                 # Allow (SGA) galaxies to exit the blob
+                pass
+            elif is_reference_source(src):
+                # and Gaia stars
                 pass
             elif ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
                 # Exited blob!
@@ -1947,6 +1955,23 @@ class OneBlob(object):
             status_update('Fitting source %i of %i%s' % (numi+1, len(Ibright), self.iterstring))
             self.debug('Fitting source %i of %i (source id %i): %s' %
                        (numi+1, len(Ibright), srci, str(src)))
+
+            modelMasks = models.model_masks(srci, src)
+            # sub-select the images (and corresponding modelmasks) that actually overlap this source
+            srctims = []
+            srcmm = []
+            for mm, tim in zip(modelMasks, self.tims):
+                if src in mm:
+                    srctims.append(tim)
+                    srcmm.append(mm)
+            srctractor = self.tractor(srctims, [src])
+            srctractor.setModelMasks(srcmm)
+
+            if len(srctims) == 0:
+                # eg, bright Gaia stars from off the brick can end up here??
+                debug('No images overlap this source; skipping')
+                continue
+
             # Add this source's initial model back in.
             models.add(srci, self.tims)
 
@@ -1963,21 +1988,15 @@ class OneBlob(object):
                 src.pos.lowers = [ra - maxmove/cosdec, dec - maxmove]
                 src.pos.uppers = [ra + maxmove/cosdec, dec + maxmove]
 
-            modelMasks = models.model_masks(srci, src)
-            # sub-select the images (and corresponding modelmasks) that actually overlap this source
-            srctims = []
-            srcmm = []
-            for mm, tim in zip(modelMasks, self.tims):
-                if src in mm:
-                    srctims.append(tim)
-                    srcmm.append(mm)
-            srctractor = self.tractor(srctims, [src])
-            srctractor.setModelMasks(srcmm)
+            debug('%i images overlap this source' % len(srctims))
+            optargs = self.optargs.copy()
+            if has_fixed_position(src):
+                optargs.update(check_step=None)
 
             # First-round optimization
             #print('First-round initial log-prob:', srctractor.getLogProb())
             #print ("ENTERING OPTIMIZE 4 - ", type(srctractor), srctractor.optimize_loop)
-            srctractor.optimize_loop(**self.optargs)
+            srctractor.optimize_loop(**optargs)
             #print('First-round final log-prob:', srctractor.getLogProb())
 
             if is_galaxy:
@@ -2014,14 +2033,21 @@ class OneBlob(object):
             # Images for this band
             btims = [tim for tim in tims if tim.band == b]
             btr = self.tractor(btims, fitcat)
+
+            # FIXME -- SmarterDenseOptimizer currently only handles _single sources_ so
+            # cannot be used here!
+            got_ceres = False
             if self.use_ceres:
                 try:
                     from tractor.ceres_optimizer import CeresOptimizer
                     ceres_block = 8
                     btr.optimizer = CeresOptimizer(BW=ceres_block, BH=ceres_block)
+                    got_ceres = True
                 except ImportError:
-                    from tractor.lsqr_optimizer import LsqrOptimizer
-                    btr.optimizer = LsqrOptimizer()
+                    pass
+            if not got_ceres:
+                from tractor.lsqr_optimizer import LsqrOptimizer
+                btr.optimizer = LsqrOptimizer()
 
             debug('Fitting %i sources in %i image for band %s.  Optimizer: %s' %
                  (len(fitcat), len(btims), b, str(type(btr.optimizer))))
@@ -2240,6 +2266,12 @@ def _argsort_by_brightness(cat, bands, ref_first=False):
 
 def is_reference_source(src):
     return getattr(src, 'is_reference_source', False)
+
+def has_fixed_position(src):
+    if src is None:
+        return False
+    #return isinstance(src, GaiaPosition)
+    return (len(src.pos.getParams()) == 0)
 
 def _compute_source_metrics(srcs, tims, bands, tr):
     # rchi2 quality-of-fit metric
