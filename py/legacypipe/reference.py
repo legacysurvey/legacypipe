@@ -363,14 +363,15 @@ def fix_gaia(gaia, bands):
     # Then, for Gaia-EDR3, Rongpu found we no longer need to look at
     # astrometric_excess_noise.
     # Then, 2026-01-31, Dustin suggested we could also use significant proper motions to force PSF.
-    pm_snr = np.hypot(gaia.pmra  / gaia.pmra_error,
-                      gaia.pmdec / gaia.pmdec_error)
+    with np.errstate(invalid='ignore', divide='ignore'):
+        pm_snr = np.hypot(gaia.pmra  / gaia.pmra_error,
+                          gaia.pmdec / gaia.pmdec_error)
     pm_snr[np.logical_not(np.isfinite(pm_snr))] = 0.
 
     gaia.pointsource = np.logical_or(gaia.G <= 18.,
                                      pm_snr > 5.)
-    print('Gaia pointsource: %i have G<=18; %i have pm_snr > 5 (and G>18); %i total' %
-          (np.sum(gaia.G <= 18.), np.sum((pm_snr > 5) * (gaia.G > 18)), np.sum(gaia.pointsource)))
+    info('Gaia pointsource: %i have G<=18; %i have pm_snr > 5 (and G>18); %i total' %
+         (np.sum(gaia.G <= 18.), np.sum((pm_snr > 5) * (gaia.G > 18)), np.sum(gaia.pointsource)))
 
     # in our catalog files, this is in float32; in the Gaia data model it's
     # a byte, with only values 3 and 31 in DR2.
