@@ -146,7 +146,7 @@ def get_reference_sources(survey, targetwcs, bands,
                         keep = np.ones(len(gaia), bool)
                         keep[Igaia] = False
                         gaia.cut(keep)
-                    del keep
+                        del keep
                     del Igaia
                 del Igal
 
