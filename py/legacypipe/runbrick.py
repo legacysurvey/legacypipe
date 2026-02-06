@@ -1211,6 +1211,7 @@ def stage_fitblobs(T=None,
                    gpu_ids=[0],
                    threads_per_gpu=16,
                    bid=None,
+                   do_segmentation=True,
                    **kwargs):
     '''
     This is where the actual source fitting happens.
@@ -1405,7 +1406,8 @@ def stage_fitblobs(T=None,
                           enable_sub_blobs=sub_blobs,
                           ran_sub_blobs=ran_sub_blobs,
                           gpu_tuple=gpu_tuple,bid=bid,
-                          halfdone_blob_map=halfdone_blob_map)
+                          halfdone_blob_map=halfdone_blob_map,
+                          do_segmentation=do_segmentation)
 
     if checkpoint_filename is None:
         # FIXME -- add worker-died checks & logging here
@@ -2046,7 +2048,8 @@ def _blob_iter(job_id_map,
                ran_sub_blobs=None,
                gpu_tuple=None,
                bid=None,
-               halfdone_blob_map=None):
+               halfdone_blob_map=None,
+               do_segmentation=True):
     '''
     *blobmap*: integer image map, with -1 indicating no-blob, other values indexing
         into *blobslices*,*blobsrcs*.
@@ -2136,7 +2139,8 @@ def _blob_iter(job_id_map,
                             iterative_nsigma=iterative_nsigma, use_ceres=use_ceres,
                             large_galaxies_force_pointsource=large_galaxies_force_pointsource,
                             less_masking=less_masking,
-                            use_gpu=use_gpu, gpumode=gpumode, bid=bid)
+                            use_gpu=use_gpu, gpumode=gpumode, bid=bid,
+                            do_segmentation=do_segmentation)
 
     # 2. DISCOVERY PHASE (Original logging style preserved here)
     for nblob, iblob in enumerate(blob_order):
@@ -4334,6 +4338,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               gpu_ids=[0],
               threads_per_gpu=16,
               bid=None,
+              do_segmentation=True,
               ceres=True,
               wise_ceres=True,
               galex_ceres=True,
@@ -4600,6 +4605,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   gpu_ids=gpu_ids,
                   threads_per_gpu=threads_per_gpu,
                   bid=bid,
+                  do_segmentation=do_segmentation,
                   unwise_coadds=unwise_coadds,
                   bailout=bail_out,
                   minimal_coadds=minimal_coadds,
@@ -5162,6 +5168,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--max-memory-gb', type=float, default=None,
                         help='Maximum (estimated) memory to allow for tim pixels, in GB')
     parser.add_argument('--rgb-stretch', type=float, help='Stretch RGB jpeg plots by this factor.')
+    parser.add_argument('--no-segmentation', dest='do_segmentation', default=True,
+                        action='store_false', help='Turn off segmentation during fitblobs')
     return parser
 
 def get_runbrick_kwargs(survey=None,

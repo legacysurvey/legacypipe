@@ -74,7 +74,7 @@ OneBlobArgs = namedtuple('OneBlobArgs', [
     'timargs',
     'srcs', 'bands', 'plots', 'ps', 'reoptimize', 'iterative', 'iterative_nsigma', 'use_ceres',
     'refmap', 'large_galaxies_force_pointsource', 'less_masking', 'frozen_galaxies', 'use_gpu',
-    'gpumode', 'bid', 'halfdone', 'is_priority'])
+    'gpumode', 'bid', 'halfdone', 'is_priority', 'do_segmentation'])
 
 def one_blob(args):
     '''
@@ -145,6 +145,7 @@ def one_blob(args):
                          args.large_galaxies_force_pointsource,
                          args.less_masking, args.frozen_galaxies,
                          args.iterative_nsigma,
+                         do_segmentation=args.do_segmentation,
                          iblob=args.iblob)
             B = ob.init_table(args.srcs, args.Isrcs)
 
@@ -228,6 +229,7 @@ class OneBlob(object):
                  large_galaxies_force_pointsource,
                  less_masking, frozen_galaxies,
                  iterative_nsigma,
+                 do_segmentation=True,
                  iblob=None):
         self.name = name
         self.nblobs = nblobs
@@ -255,6 +257,7 @@ class OneBlob(object):
         self.total_pix = sum([np.sum(t.getInvError() > 0) for t in self.tims])
         self.plots2 = False
         alphas = [0.1, 0.3, 1.0]
+        self.do_segmentation = do_segmentation
 
         # callback function for tractor.optimize_loop: bail out if the
         # optimizer moves a source center outside the blob
@@ -581,7 +584,9 @@ class OneBlob(object):
             src.maskbits_forced_point_source = force_pointsource
 
         status_update('Computing segmentation map%s' % self.iterstring)
-        segmap = self.compute_segmentation_map(cat)
+        segmap = None
+        if self.do_segmentation:
+            segmap = self.compute_segmentation_map(cat)
         # Next, model selections: point source vs rex vs dev/exp vs ser.
         self.debug('Starting model selection')
         Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
@@ -1370,21 +1375,27 @@ class OneBlob(object):
                 plt.axis(ax)
 
                 plt.subplot(2,2,3)
-                dh,dw = flipblobs.shape
-                sx0,sy0 = srcwcs_x0y0
-                mysegmap = segmap[sy0:sy0+dh, sx0:sx0+dw]
-                # renumber for plotting
-                _,S = np.unique(mysegmap, return_inverse=True)
-                dimshow(S.reshape(mysegmap.shape), cmap='tab20',
-                        interpolation='nearest', origin='lower')
-                ax = plt.axis()
-                plt.plot(ix, iy, 'kx', ms=15, mew=3)
-                plt.axis(ax)
-                plt.title('Segmentation map')
+                if segmap is not None:
+                    dh,dw = flipblobs.shape
+                    sx0,sy0 = srcwcs_x0y0
+                    mysegmap = segmap[sy0:sy0+dh, sx0:sx0+dw]
+                    # renumber for plotting
+                    _,S = np.unique(mysegmap, return_inverse=True)
+                    dimshow(S.reshape(mysegmap.shape), cmap='tab20',
+                            interpolation='nearest', origin='lower')
+                    ax = plt.axis()
+                    plt.plot(ix, iy, 'kx', ms=15, mew=3)
+                    plt.axis(ax)
+                    plt.title('Segmentation map')
+                else:
+                    plt.title('(No segmentation map)')
 
                 plt.subplot(2,2,4)
                 dilated = binary_dilation(flipblobs, iterations=4)
-                s = segmap[iy + sy0, ix + sx0]
+                if segmap is None:
+                    s = -1
+                else:
+                    s = segmap[iy + sy0, ix + sx0]
                 if s != -1:
                     dilated *= (segmap[sy0:sy0+dh, sx0:sx0+dw] == s)
                 dimshow(dilated)
