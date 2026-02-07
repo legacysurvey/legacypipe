@@ -125,7 +125,6 @@ class TrackingPool(Pool):
             pool.map() (or individual imap_unordered() element) raise an exception
           * False: if a worker process dies, return a RuntimeError()
             for that pool.map() result, instead of a return value!
-
         '''
         # Attributes initialized early to make sure that they exist in
         # __del__() if __init__() raises an exception
@@ -162,10 +161,10 @@ class TrackingPool(Pool):
         try:
             self._repopulate_pool()
         except Exception:
-            for worker in self._pool.values():
+            for worker in self._pool:
                 if worker.exitcode is None:
                     worker.terminate()
-            for worker in self._pool.values():
+            for worker in self._pool:
                 worker.join()
             raise
 
