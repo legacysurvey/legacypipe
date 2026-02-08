@@ -392,7 +392,6 @@ class OneBlob(object):
 
         self.info('Starting: %i sources' % (len(B.sources)))
         status_update('Starting up%s' % self.iterstring)
-        t = time.time()
         trun = tlast = Time()
         # Not quite so many plots...
         self.plots1 = self.plots
@@ -2421,7 +2420,8 @@ class SourceModels(object):
             mods = []
             sh = tim.shape
             ie = tim.getInvError()
-            for srci,src in enumerate(srcs):
+            #for srci,src in enumerate(srcs):
+            for src in srcs:
                 if src is None:
                     continue
                 mm = None
@@ -2436,7 +2436,7 @@ class SourceModels(object):
                         print('PSF:', tim.getPsf())
                     assert(np.all(np.isfinite(mod.patch)))
 
-                    mh,mw = mod.shape
+                    #mh,mw = mod.shape
 
                     mod = _clip_model_to_blob(mod, sh, ie)
 

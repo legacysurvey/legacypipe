@@ -3,7 +3,7 @@ import threading
 from multiprocessing import get_context, util
 
 from multiprocessing.pool import (Pool, _PoolCache,
-                                  INIT, RUN, TERMINATE, MaybeEncodingError)
+                                  INIT, RUN, TERMINATE)
 from legacypipe.trackingpool import TrackingPool, MyList, TrackingIMapUnorderedIterator, worker
 
 # Two kinds of priority pools one could want:
@@ -68,9 +68,7 @@ from legacypipe.trackingpool import TrackingPool, MyList, TrackingIMapUnorderedI
 # workers always get the best task available at the moment.  This does
 # make it synchronous, though.
 
-'''
-Implements the second kind of priority pool discussed above.
-'''
+# Implements the second kind of priority pool discussed above.
 class PriorityPool(TrackingPool):
 
     def __init__(self, n_high_priority, n_low_priority,
@@ -378,7 +376,7 @@ class MyArgs(object):
         return self.val
 
 def priority_work_generator(n):
-    for i in range(n):
+    for _ in range(n):
         p = np.random.randint(0, 1000)
         yield p, MyArgs(np.zeros(10, int) + p)
 

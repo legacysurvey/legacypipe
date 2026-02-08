@@ -1184,7 +1184,6 @@ def _resample_one(args):
 
 def _apphot_one(args):
     (irad, band, rad, img, sigma, mask, isimage, apxy) = args
-    from photutils.aperture import CircularAperture, aperture_photometry
     result = [irad, band, isimage]
     aper = CircularAperture(apxy, rad)
     p = aperture_photometry(img, aper, error=sigma, mask=mask)
@@ -1269,7 +1268,6 @@ def write_coadd_images(band,
                        cowblobmod=None,
                        psfdetiv=None, galdetiv=None, congood=None,
                        psfsize=None, extra_ims=None, **kwargs):
-    t = time.time()
     hdr = copy_header_with_wcs(version_header, targetwcs)
     # Grab headers from input images...
     get_coadd_headers(hdr, tims, band, coadd_headers)
