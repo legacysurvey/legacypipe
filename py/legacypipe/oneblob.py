@@ -1254,6 +1254,10 @@ class OneBlob(object):
         # FIXME -- don't need these aliased variable names any more
         modelMasks = models.model_masks(srci, src)
 
+        for d in modelMasks:
+            mask = d.get(src)
+            debug('model selection: initial modelmask:', mask)
+
         srctims = self.tims
         srcwcs = self.blobwcs
         srcwcs_x0y0 = (0, 0)
@@ -1491,6 +1495,7 @@ class OneBlob(object):
                 totalpix += len(xx)
                 d = { src: ModelMask(xl, yl, 1+xh-xl, 1+yh-yl) }
                 mm.append(d)
+                print('Adjusting modelMask to', d[src])
                 saved_srctim_ies.append(ie)
                 tim.setInvError(newie)
                 keep_srctims.append(tim)
@@ -1695,22 +1700,15 @@ class OneBlob(object):
             self.debug('Before model selection: %s' % (str(newsrc)))
             # Try fitting just the fluxes first...
             newsrc.freezeAllBut('brightness')
-            #print('Fitting fluxes:')
-            #srctractor.printThawedParams()
-
-            # gpu-optimizer assumes source pos is not frozen
-            opt = srctractor.optimizer
-            from tractor.smarter_dense_optimizer import SmarterDenseOptimizer
-            sm = SmarterDenseOptimizer()
-            srctractor.optimizer = sm
+            #srctractor.optimize_loop(**optargs)
+            print('Fitting fluxes:')
+            srctractor.printThawedParams()
             srctractor.optimize_loop(**optargs)
-            srctractor.optimizer = opt
-
             #srctractor.optimize_forced_photometry(shared_params=False, wantims=False)
             self.debug('After model selection (just fluxes): %s' % (str(newsrc)))
             newsrc.thawAllParams()
-            #print('Fitting for model selection:')
-            #srctractor.printThawedParams()
+            print('Fitting for model selection:')
+            srctractor.printThawedParams()
 
             try:
                 #print ("ENTERING OPTIMIZE 2 - ", type(srctractor), srctractor.optimize_loop)
