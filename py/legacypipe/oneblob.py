@@ -185,6 +185,8 @@ class CheckStep(object):
                 return False
             ix = int(ix - 1)
             iy = int(iy - 1)
+            #debug('CheckStep: coords (%i,%i) in blob sized %ix%i: %s' %
+            #     (ix, iy, self.blobw, self.blobh, str(src)))
             if ix < 0 or iy < 0 or ix >= self.blobw or iy >= self.blobh:
                 # stepped outside the blob rectangle!
                 info('Optimizer stepped to blob coord (%i, %i) - blob size %i x %i - reject!  Source: %s'
@@ -238,7 +240,8 @@ class OneBlob(object):
         check_step = CheckStep(self.blobwcs, self.blobmask)
 
         self.optargs = dict(priors=True, shared_params=False, alphas=alphas,
-                            print_progress=True, check_step=check_step)
+                            print_progress=True, check_step=check_step,
+                            dchisq = 0.1)
         self.trargs = dict()
         self.frozen_galaxy_mods = []
 
@@ -251,8 +254,6 @@ class OneBlob(object):
         #     self.trargs.update(optimizer=ceres_optimizer)
         # else:
         #     self.optargs.update(dchisq = 0.1)
-
-        self.optargs.update(dchisq = 0.1)
 
         if len(frozen_galaxies):
             debug('Subtracting frozen galaxy models...')
@@ -554,6 +555,7 @@ class OneBlob(object):
         segmap = None
         if self.do_segmentation:
             segmap = self.compute_segmentation_map(cat)
+        mask_others = self.do_segmentation
         # Next, model selections: point source vs rex vs dev/exp vs ser.
         self.debug('Starting model selection')
         Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
@@ -864,6 +866,7 @@ class OneBlob(object):
 
         # Create initial models for each tim x each source
         # (model sizes are determined at this point)
+        self.debug('Creating (& subtracting) initial models for model selection...')
         models.create(self.tims, cat, subtract=True)
 
         # Model selection for sources, in decreasing order of brightness
@@ -1193,6 +1196,11 @@ class OneBlob(object):
 
         # FIXME -- don't need these aliased variable names any more
         modelMasks = models.model_masks(srci, src)
+
+        for d in modelMasks:
+            mask = d.get(src)
+            debug('model selection: initial modelmask:', mask)
+
         srctims = self.tims
         srcwcs = self.blobwcs
         srcwcs_x0y0 = (0, 0)
@@ -1226,6 +1234,10 @@ class OneBlob(object):
 
         # Mask out other sources while fitting this one,
         # symmetrizing the blob mask and applying a segmentation mask.
+
+        ## FIXME -- we already have a modelMask from the "models" object --
+        ## should this only *trim* that?
+
         if mask_others:
             from legacypipe.detection import detection_maps
             from astrometry.util.multiproc import multiproc
@@ -1424,6 +1436,7 @@ class OneBlob(object):
                 totalpix += len(xx)
                 d = { src: ModelMask(xl, yl, 1+xh-xl, 1+yh-yl) }
                 mm.append(d)
+                print('Adjusting modelMask to', d[src])
                 saved_srctim_ies.append(ie)
                 tim.setInvError(newie)
                 keep_srctims.append(tim)
@@ -1447,16 +1460,14 @@ class OneBlob(object):
                                        src.getPosition().dec)
         ix = int(ix-1)
         iy = int(iy-1)
-        # Start in blob
         sh,sw = srcwcs.shape
         optargs = self.optargs.copy()
         if is_galaxy:
             # allow SGA galaxy sources to start outside the blob
             optargs.update(check_step=None)
         elif has_fixed_position(src):
-            debug('Reference source is starting outside blob -- allowing.')
+            # eg, Gaia sources - positions fixed, so no need to check
             optargs.update(check_step=None)
-            # (Gaia sources will have their positions fixed, so just fitting fluxes)
         elif ix < 0 or iy < 0 or ix >= sw or iy >= sh or not srcblobmask[iy,ix]:
             debug('Source is starting outside blob -- skipping.')
             if source_mask is not None:
@@ -1475,7 +1486,7 @@ class OneBlob(object):
                 print('WARNING: unknown galaxy type:', src)
 
         x0,y0 = srcwcs_x0y0
-        debug('Source at blob coordinates', x0+ix, y0+iy, '- forcing pointsource?', force_pointsource, ', is large galaxy?', is_galaxy, ', fitting sky background:', fit_background)
+        debug('Source at blob coordinates', x0+ix, y0+iy, ', local coords %i,%i of %ix%i' % (ix, iy, sw, sh), '- forcing pointsource?', force_pointsource, ', is large galaxy?', is_galaxy, ', fitting sky background:', fit_background)
 
         if fit_background:
             for tim in srctims:
@@ -1595,12 +1606,39 @@ class OneBlob(object):
             srctractor.setModelMasks(mm)
             enable_galaxy_cache()
 
+            # DEBUG
+            maxsize = None
+            maxpix = 0
+            for d in mm:
+                try:
+                    mask = d[newsrc]
+                    mh,mw = mask.shape
+                    npix = int(mh)*int(mw)
+                    if npix > maxpix:
+                        maxpix = npix
+                        maxsize = mh,mw
+                except KeyError:
+                    pass
+            debug('Model selection: starting with max modelmask size', maxsize, src)
+
             if fit_background:
                 # Reset sky params
                 srctractor.images.setParams(skyparams)
                 srctractor.thawParam('images')
 
             self.debug('Before model selection: %s' % (str(newsrc)))
+            # Try fitting just the fluxes first...
+            newsrc.freezeAllBut('brightness')
+            #srctractor.optimize_loop(**optargs)
+            print('Fitting fluxes:')
+            srctractor.printThawedParams()
+            srctractor.optimize_loop(**optargs)
+            #srctractor.optimize_forced_photometry(shared_params=False, wantims=False)
+            self.debug('After model selection (just fluxes): %s' % (str(newsrc)))
+            newsrc.thawAllParams()
+            print('Fitting for model selection:')
+            srctractor.printThawedParams()
+
             try:
                 R = srctractor.optimize_loop(**optargs)
             except Exception as e:
@@ -2389,7 +2427,7 @@ class SourceModels(object):
             mods = []
             sh = tim.shape
             ie = tim.getInvError()
-            for src in srcs:
+            for srci,src in enumerate(srcs):
                 if src is None:
                     continue
                 mm = None
@@ -2403,7 +2441,15 @@ class SourceModels(object):
                         print('tim:', tim)
                         print('PSF:', tim.getPsf())
                     assert(np.all(np.isfinite(mod.patch)))
+
+                    mh,mw = mod.shape
+
                     mod = _clip_model_to_blob(mod, sh, ie)
+
+                    #mh2,mw2 = mod.shape
+                    #debug('sourcei %i: %i x %i model -> clip %i x %i for source' % (srci, mw,mh,mw2,mh2),
+                    #src, 'in tim', tim)
+
                     if subtract and mod is not None:
                         mod.addTo(tim.getImage(), scale=-1)
                         tim.setImage(tim.data)
