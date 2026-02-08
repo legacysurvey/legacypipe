@@ -149,7 +149,6 @@ def one_blob(args):
                          iblob=args.iblob)
             B = ob.init_table(args.srcs, args.Isrcs)
 
-        opt = ob.trargs['optimizer']
         if args.use_gpu:
             # need a branch of the tractor code that supports this!
             info('Blob %s: using GPU mode %s' % (args.blobname, args.gpumode))
@@ -1698,7 +1697,15 @@ class OneBlob(object):
             newsrc.freezeAllBut('brightness')
             #print('Fitting fluxes:')
             #srctractor.printThawedParams()
+
+            # gpu-optimizer assumes source pos is not frozen
+            opt = srctractor.optimizer
+            from tractor.smarter_dense_optimizer import SmarterDenseOptimizer
+            sm = SmarterDenseOptimizer()
+            srctractor.optimizer = sm
             srctractor.optimize_loop(**optargs)
+            srctractor.optimizer = opt
+
             #srctractor.optimize_forced_photometry(shared_params=False, wantims=False)
             self.debug('After model selection (just fluxes): %s' % (str(newsrc)))
             newsrc.thawAllParams()
