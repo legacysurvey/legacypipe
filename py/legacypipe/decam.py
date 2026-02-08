@@ -326,7 +326,7 @@ class DecamImage(CPImage):
                 ignore.append(5)
             dq = remap_dq_cp_codes(dq, ignore_codes=ignore)
 
-            if False:
+            if True:
                 # In some runs (not captured by plver), the DES
                 # star mask (circular mask around saturated stars) got
                 # copied into the BLEED mask.
