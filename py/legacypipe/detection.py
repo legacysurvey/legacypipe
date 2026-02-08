@@ -1,5 +1,4 @@
 import numpy as np
-import time
 from legacypipe.survey import tim_get_resamp
 
 import logging

@@ -1,14 +1,10 @@
-import threading
-import multiprocessing
-from multiprocessing.pool import Pool, mapstar
-from legacypipe.trackingpool import TrackingPool, MyList, TrackingIMapUnorderedIterator
-
-from legacypipe.trackingpool import worker
-
-from multiprocessing.pool import (Pool, IMapUnorderedIterator, _PoolCache,
-                                  INIT, RUN, TERMINATE, MaybeEncodingError)
-from multiprocessing import get_context, util
 import queue
+import threading
+from multiprocessing import get_context, util
+
+from multiprocessing.pool import (Pool, _PoolCache,
+                                  INIT, RUN, TERMINATE, MaybeEncodingError)
+from legacypipe.trackingpool import TrackingPool, MyList, TrackingIMapUnorderedIterator, worker
 
 # Two kinds of priority pools one could want:
 
@@ -141,11 +137,11 @@ class PriorityPool(TrackingPool):
         try:
             self._repopulate_pool()
         except Exception:
-            for worker in self._pool:
-                if worker.exitcode is None:
-                    worker.terminate()
-            for worker in self._pool:
-                worker.join()
+            for w in self._pool:
+                if w.exitcode is None:
+                    w.terminate()
+            for w in self._pool:
+                w.join()
             raise
 
         sentinels = self._get_sentinels()
@@ -310,9 +306,9 @@ class FakeInqueue(object):
         self.high = high
     def get(self):
         if self.high:
-            p,val = self.pq.get_high_priority()
+            _,val = self.pq.get_high_priority()
             return val
-        p,val = self.pq.get_low_priority()
+        _,val = self.pq.get_low_priority()
         return val
 
 from collections import deque
@@ -412,11 +408,11 @@ def func2(i):
     return i.get()[0]
 
 if __name__ == '__main__':
-    import logging
     import sys
-    import multiprocessing.util as mpu
-    #logging.basicConfig(level=logging.DEBUG, format='%(message)s', stream=sys.stdout)
+    #import multiprocessing.util as mpu
     #mpu.log_to_stderr(level=logging.DEBUG)
+    #import logging
+    #logging.basicConfig(level=logging.DEBUG, format='%(message)s', stream=sys.stdout)
 
     p = PriorityPool(2, 2,
                      initialize_high_priority=init_hi,

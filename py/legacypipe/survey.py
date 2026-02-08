@@ -344,7 +344,6 @@ def get_git_version(dirnm=None):
     -------
     Git version string
     '''
-    import os
     import subprocess
 
     if dirnm is None:

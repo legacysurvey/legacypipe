@@ -37,7 +37,6 @@ def update_process_status(x):
     of the computation.  These will be streamed back to the main process and be available
     in the TrackingIMapUnorderedIterator object.
     '''
-    global _worker_pipe_data
     if _worker_pipe_data is None:
         util.info('update_process_status() called, but pipe to main process is not available.')
         return False

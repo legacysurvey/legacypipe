@@ -64,9 +64,7 @@ def status_update(s, force=False):
     tnow = time.time()
     if force or (_last_status_update is None) or (tnow - _last_status_update > 10):
         from legacypipe.trackingpool import update_process_status
-        sent = update_process_status(dict(type='progress', message=s))
-        #if not sent:
-        #    info('Failed to send status update to main process: %s')
+        update_process_status(dict(type='progress', message=s))
         _last_status_update = tnow
 
 OneBlobArgs = namedtuple('OneBlobArgs', [
@@ -88,7 +86,6 @@ def one_blob(args):
         # don't return None -- this is a different thing!
         raise QuitNowException()
 
-    t = time.time()
     pid = os.getpid()
     info('Fitting blob %s of %i: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies; pid %i' %
          (args.blobname, args.nblobs, args.iblob, len(args.Isrcs), args.blobw, args.blobh, len(args.timargs),
@@ -150,7 +147,7 @@ def one_blob(args):
 
         B.iblob = args.iblob
 
-    except QuitNowException as q:
+    except QuitNowException:
         if ob is not None:
             print('Caught QuitNowException; returning checkpoint state for blob %s' % args.blobname)
             ob.B = B
@@ -269,7 +266,7 @@ class OneBlob(object):
             # tr.setModelMasks(mm)
             if self.plots:
                 mods = []
-            for itim,tim in enumerate(self.tims):
+            for tim in self.tims:
                 try:
                     mod = tr.getModelImage(tim)
                 except:

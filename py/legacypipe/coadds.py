@@ -131,7 +131,7 @@ def stage_just_coadd(W=3600, H=3600, pixscale=0.262, brickname=None,
             R = _resample_one(args)
             itim,Yo,Xo,iv,im,mo,bmo,dq = R
             mjd_args = None
-            coadd.accumulate(tim, itim,Yo,Xo,iv,im,mo,bmo,dq, mjd_args)
+            coadd.accumulate(tim, itim,Yo,Xo,iv,im,mo,bmo,dq, mjd_args, None)
             del Yo,Xo,iv,im,mo,bmo,dq,R
         coadd.finish()
 
@@ -246,7 +246,6 @@ class SimpleCoadd(object):
             self.write_coadds(survey, brickname, hdr, band, coimg, comod, coiv, con)
 
             if apradec is not None:
-                from photutils.aperture import CircularAperture, aperture_photometry
                 mask = (coiv == 0)
                 with np.errstate(divide='ignore'):
                     imsigma = 1.0/np.sqrt(coiv)
@@ -669,7 +668,6 @@ def make_coadds(tims, bands, targetwcs,
       "blobmod" images, plus "extra" data (the NEA stats)
     mod_callback_args: list, aligned with tims, of arguments to pass to mod_callback
     '''
-    t = time.time()
     from astrometry.util.ttime import Time
     t0 = Time()
 
