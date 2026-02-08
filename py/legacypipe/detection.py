@@ -255,7 +255,7 @@ def detection_maps_gpu(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
             else:
                 satmaps_cp[ib][Yo_cp, Xo_cp] = cp.minimum(satmax, satmaps_cp[ib][Yo_cp, Xo_cp] + (1 * sat_cp))
                 nmaps[ib][Yo,Xo] = np.minimum(satmax, nmaps[ib][Yo,Xo] + 1)
-        del Yo,Xo,incmap,inciv,sat
+    del all_results
 
     # Final processing on the GPU before transferring results to CPU
     detmaps = [None] * len(bands)
