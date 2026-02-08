@@ -73,8 +73,8 @@ OneBlobArgs = namedtuple('OneBlobArgs', [
     'blobname', 'nblobs', 'iblob', 'Isrcs', 'brickwcs', 'bx0', 'by0', 'blobw', 'blobh', 'blobmask',
     'timargs',
     'srcs', 'bands', 'plots', 'ps', 'reoptimize', 'iterative', 'iterative_nsigma', 'use_ceres',
-    'refmap', 'large_galaxies_force_pointsource', 'less_masking', 'frozen_galaxies', 'use_gpu',
-    'gpumode', 'bid', 'halfdone', 'is_priority', 'do_segmentation'])
+    'refmap', 'large_galaxies_force_pointsource', 'less_masking', 'frozen_galaxies',
+    'halfdone', 'do_segmentation'])
 
 def one_blob(args):
     '''
@@ -88,19 +88,11 @@ def one_blob(args):
         # don't return None -- this is a different thing!
         raise QuitNowException()
 
-    if (args.use_gpu and args.gpumode > 0):
-        # Prime gpu
-        import cupy as cp
-        dummy = cp.zeros(1)
     t = time.time()
     pid = os.getpid()
     info('Fitting blob %s of %i: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies; pid %i' %
          (args.blobname, args.nblobs, args.iblob, len(args.Isrcs), args.blobw, args.blobh, len(args.timargs),
           len(args.frozen_galaxies), pid))
-
-    if args.bid is not None and args.iblob != args.bid:
-        print ("Skipping blob %s: blobid %i, bid %s" % (args.blobname, args.iblob, args.bid))
-        return None
 
     if len(args.timargs) == 0:
         return None
@@ -149,29 +141,14 @@ def one_blob(args):
                          iblob=args.iblob)
             B = ob.init_table(args.srcs, args.Isrcs)
 
-        opt = ob.trargs['optimizer']
-        if args.use_gpu:
-            # need a branch of the tractor code that supports this!
-            info('Blob %s: using GPU mode %s' % (args.blobname, args.gpumode))
-            from tractor.factored_optimizer import GPUFriendlyOptimizer
-            opt = GPUFriendlyOptimizer()
-            opt.setGPUMode(args.gpumode)
-            ob.trargs.update(optimizer=opt)
-            ob.use_gpu = True
-            ob.gpumode = args.gpumode
-        else:
-            from tractor.smarter_dense_optimizer import SmarterDenseOptimizer
-            opt = SmarterDenseOptimizer()
-            ob.trargs.update(optimizer=opt)
+        from tractor.smarter_dense_optimizer import SmarterDenseOptimizer
+        opt = SmarterDenseOptimizer()
+        ob.trargs.update(optimizer=opt)
 
         B = ob.run(B, reoptimize=args.reoptimize, iterative_detection=args.iterative)
         ob.finalize_table(B, args.bx0, args.by0)
 
         B.iblob = args.iblob
-        if args.bid is not None and args.iblob == args.bid:
-            print ("Exiting.")
-            import sys
-            sys.exit(0)
 
     except QuitNowException as q:
         if ob is not None:
@@ -267,8 +244,6 @@ class OneBlob(object):
                             print_progress=True, check_step=check_step)
         self.trargs = dict()
         self.frozen_galaxy_mods = []
-        self.use_gpu = False
-        self.gpumode = 0
 
         # if use_ceres:
         #     from tractor.ceres_optimizer import CeresOptimizer
@@ -1513,16 +1488,7 @@ class OneBlob(object):
             # when we have a lot of images: we're adding Nimages extra parameters, touching
             # every pixel; you don't want Nimages x Npixels dense matrices.
             from tractor.lsqr_optimizer import LsqrOptimizer
-            if self.use_gpu and self.gpumode > 0:
-                from tractor.gpu_lsqr_optimizer import GPULsqrOptimizer
-                #print ("Updating GPU optimizer for ",src)
-                srctractor.optimizer = GPULsqrOptimizer()
-                #print ("Updating optimizer for ",src)
-                #srctractor.optimizer = LsqrOptimizer()
-            else:
-                #print ("Updating optimizer for ",src)
-                srctractor.optimizer = LsqrOptimizer()
-
+            srctractor.optimizer = LsqrOptimizer()
             skyparams = srctractor.images.getParams()
 
         enable_galaxy_cache()

@@ -52,8 +52,6 @@ from legacypipe.fit_on_coadds import stage_fit_on_coadds
 from legacypipe.blobmask import stage_blobmask
 from legacypipe.galex import stage_galex_forced
 
-_GLOBAL_LEGACYPIPE_CONTEXT = {'is_gpu_worker': False, 'gpu_device_id': None, 'gpumode': 0}
-
 import logging
 logger = logging.getLogger('legacypipe.runbrick')
 def info(*args):
@@ -69,41 +67,11 @@ def formatwarning(message, category, filename, lineno, line=None):
 
 warnings.formatwarning = formatwarning
 
-#New init method is cleaner - GPU assignment now occurs in _blobiter and _bounce_one_blob
-def runbrick_global_init(shared_counter, shared_lock, available_gpu_ids_param,
-                          ngpu_param, threads_per_gpu_param, gpumode_param):
-    import os
-    import time
+def runbrick_global_init():
     from tractor.galaxy import disable_galaxy_cache
-
-    # Access the module-level global dictionary
-    global _GLOBAL_LEGACYPIPE_CONTEXT
-
-    pid = os.getpid()
-
     # ignore SIGUSR1
     signal.signal(signal.SIGUSR1, signal.SIG_IGN)
-
-    # 1. Store shared objects and config for the 'Lazy' phase
-    _GLOBAL_LEGACYPIPE_CONTEXT['shared_counter'] = shared_counter
-    _GLOBAL_LEGACYPIPE_CONTEXT['shared_lock'] = shared_lock
-    _GLOBAL_LEGACYPIPE_CONTEXT['available_gpu_ids'] = available_gpu_ids_param
-    _GLOBAL_LEGACYPIPE_CONTEXT['max_gpu_slots'] = ngpu_param * threads_per_gpu_param
-    _GLOBAL_LEGACYPIPE_CONTEXT['target_gpumode'] = gpumode_param
-
-    # 2. Initialize State Flags
-    # These will be updated by the first task this worker receives
-    _GLOBAL_LEGACYPIPE_CONTEXT['initialized'] = False
-    _GLOBAL_LEGACYPIPE_CONTEXT['is_gpu_worker'] = False
-    _GLOBAL_LEGACYPIPE_CONTEXT['gpu_device_id'] = None
-    _GLOBAL_LEGACYPIPE_CONTEXT['gpumode'] = 0 # Default to CPU mode
-
-    # 3. Perform necessary one-time CPU setup
     disable_galaxy_cache()
-
-    # logging (using info if available in your scope, or print)
-    print(f"Worker PID {pid}: Basic initialization complete. Awaiting first task...")
-
 
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                survey=None,
@@ -1221,12 +1189,6 @@ def stage_fitblobs(T=None,
                    bailout=False,
                    record_event=None,
                    custom_brick=False,
-                   use_gpu=False,
-                   gpumode=0,
-                   ngpu=1,
-                   gpu_ids=[0],
-                   threads_per_gpu=16,
-                   bid=None,
                    do_segmentation=True,
                    **kwargs):
     '''
@@ -1407,7 +1369,6 @@ def stage_fitblobs(T=None,
         iterative_nsigma = nsigma
 
     job_id_map = {}
-    gpu_tuple = (use_gpu, gpumode, ngpu, threads_per_gpu)
 
     # Create the iterator over blobs to process
     blobiter = _blob_iter(job_id_map,
@@ -1421,7 +1382,6 @@ def stage_fitblobs(T=None,
                           max_blobsize=max_blobsize, custom_brick=custom_brick,
                           enable_sub_blobs=sub_blobs,
                           ran_sub_blobs=ran_sub_blobs,
-                          gpu_tuple=gpu_tuple,bid=bid,
                           halfdone_blob_map=halfdone_blob_map,
                           do_segmentation=do_segmentation)
 
@@ -2062,8 +2022,6 @@ def _blob_iter(job_id_map,
                skipblobs=None, max_blobsize=None, custom_brick=False,
                enable_sub_blobs=False,
                ran_sub_blobs=None,
-               gpu_tuple=None,
-               bid=None,
                halfdone_blob_map=None,
                do_segmentation=True):
     '''
@@ -2120,16 +2078,6 @@ def _blob_iter(job_id_map,
                                subsky, subpsf, tim.name, tim.band, tim.sig1, tim.imobj))
         return subtimargs
 
-    #New logic 1/17/25 - first figure out which blobs should be sent to GPU then yield in second loop
-    # 1. Config & Initial Setup
-    if gpu_tuple is not None:
-        (use_gpu, gpumode, ngpu, threads_per_gpu) = gpu_tuple
-    else:
-        ngpu, use_gpu, gpumode, threads_per_gpu = 0, False, 0, 0
-
-    num_gpu_slots = ngpu * threads_per_gpu
-    skipblobset = set(skipblobs or [])
-
     if halfdone_blob_map is None:
         halfdone_blob_map = {}
     else:
@@ -2154,10 +2102,8 @@ def _blob_iter(job_id_map,
                             iterative_nsigma=iterative_nsigma, use_ceres=use_ceres,
                             large_galaxies_force_pointsource=large_galaxies_force_pointsource,
                             less_masking=less_masking,
-                            use_gpu=use_gpu, gpumode=gpumode, bid=bid,
                             do_segmentation=do_segmentation)
 
-    # 2. DISCOVERY PHASE (Original logging style preserved here)
     for nblob, iblob in enumerate(blob_order):
         bslc = blobslices[iblob]
         Isrcs = blobsrcs[iblob]
@@ -2299,19 +2245,10 @@ def _blob_iter(job_id_map,
             job_id += 1
             continue
 
-        is_priority = (rank < num_gpu_slots) if use_gpu else False
         bx0, bx1, by0, by1 = task['coords']
         Isrcs = task['Isrcs']
         sub_idx = task.get('sub_idx')
         display_name = task.get('sub_name', f"{task['nblob_idx']}")
-
-        # DISPATCH LOG: Shows final order and priority
-        p_str = "[GPU PRIORITY]" if is_priority else "[CPU]"
-        val = task[sort_metric]
-        if is_priority:
-            info(f"Dispatching Rank {task_rank}/{total_tasks}: Blob {display_name} {p_str} ({val} {sort_metric}, size {task['size']} npix)")
-        else:
-            debug(f"Dispatching Rank {task_rank}/{total_tasks}: Blob {display_name} {p_str} ({val} {sort_metric}, size {task['size']} npix)")
 
         subtimargs = get_subtim_args(tims, targetwcs, bx0, bx1, by0, by1, single_thread)
 
@@ -2337,7 +2274,6 @@ def _blob_iter(job_id_map,
                            refmap=refmap[by0:by1, bx0:bx1],
                            frozen_galaxies=frozen_galaxies.get(iblob, []),
                            halfdone=halfdone,
-                           is_priority=is_priority,
                            **common_blob_args))
 
 def _bounce_one_blob(X):
@@ -2345,83 +2281,15 @@ def _bounce_one_blob(X):
     now also does some post-processing).
     '''
     from legacypipe.oneblob import one_blob, OneBlob, QuitNowException
-    global _GLOBAL_LEGACYPIPE_CONTEXT
     pid = os.getpid()
 
     # Unpack the high-level tuple
     (brickname, iblob, blob_unique, args) = X
 
     if args is None:
-        debug(f"{iblob=}, worker {pid} has no sources.")
         return dict(brickname=brickname, iblob=iblob, result=None)
 
-    # --- 1. INITIALIZATION & GPU ASSIGNMENT (Lazy & Task-Driven) ---
-    # We only run this logic once per worker process.
-    if not _GLOBAL_LEGACYPIPE_CONTEXT.get('initialized', False):
-        lock = _GLOBAL_LEGACYPIPE_CONTEXT['shared_lock']
-        with lock:
-            # Double-check inside the lock
-            if not _GLOBAL_LEGACYPIPE_CONTEXT.get('initialized', False):
-                counter = _GLOBAL_LEGACYPIPE_CONTEXT['shared_counter']
-                available_ids = _GLOBAL_LEGACYPIPE_CONTEXT['available_gpu_ids']
-                max_slots = _GLOBAL_LEGACYPIPE_CONTEXT['max_gpu_slots']
-
-                # Only try to grab a GPU if this specific task is a priority blob
-                if args.is_priority and available_ids and counter.value < max_slots:
-                    try:
-                        import cupy as cp
-                        if cp.cuda.is_available():
-                            gpu_id = available_ids[counter.value % len(available_ids)]
-                            _GLOBAL_LEGACYPIPE_CONTEXT['is_gpu_worker'] = True
-                            _GLOBAL_LEGACYPIPE_CONTEXT['gpu_device_id'] = gpu_id
-                            # We keep the gpumode requested by main (e.g., 2)
-                            _GLOBAL_LEGACYPIPE_CONTEXT['gpumode'] = _GLOBAL_LEGACYPIPE_CONTEXT['target_gpumode']
-                            counter.value += 1
-                            print(f"Worker PID {pid}: GRABBED GPU {gpu_id} using priority Blob id {iblob=}.")
-                    except Exception as e:
-                        print(f"Worker PID {pid}: GPU setup failed: {e}. Falling back to CPU.")
-
-                # If we didn't get a GPU (either not priority or init failed), we are a CPU worker
-                if not _GLOBAL_LEGACYPIPE_CONTEXT.get('is_gpu_worker', False):
-                    _GLOBAL_LEGACYPIPE_CONTEXT['is_gpu_worker'] = False
-                    _GLOBAL_LEGACYPIPE_CONTEXT['gpu_device_id'] = None
-                    _GLOBAL_LEGACYPIPE_CONTEXT['gpumode'] = 0
-
-                _GLOBAL_LEGACYPIPE_CONTEXT['initialized'] = True
-
-    # --- 2. PREPARE PARAMETERS FOR THIS SPECIFIC BLOB ---
-    is_gpu_worker = _GLOBAL_LEGACYPIPE_CONTEXT['is_gpu_worker']
-    gpu_device_id = _GLOBAL_LEGACYPIPE_CONTEXT['gpu_device_id']
-    worker_gpumode = _GLOBAL_LEGACYPIPE_CONTEXT['gpumode']
-
-    # Grab flags from args to decide behavior
-    task_wants_gpu = args.use_gpu
-
-    # If the task wants a GPU but this worker is CPU-only, force CPU mode
-    if task_wants_gpu and not is_gpu_worker:
-        args = args._replace(use_gpu=False, gpumode=0)
-    else:
-        # If we ARE a GPU worker, ensure the task uses the worker's assigned gpumode
-        # (Usually 2, but we pass it explicitly to be sure)
-        args = args._replace(gpumode=worker_gpumode)
-
-    info(f"Worker PID {pid}: Context {is_gpu_worker=}, {gpu_device_id=} running {iblob=} at {datetime.datetime.now()}")
-
-    # --- 3. EXECUTION ---
     try:
-        if is_gpu_worker:
-            import cupy as cp
-            cp.cuda.Device(gpu_device_id).use()
-
-            # Check Memory Availability
-            free_mem, total_mem = cp.cuda.runtime.memGetInfo()
-            free_mem_g = free_mem / 1024.**3
-            if free_mem_g < 1.0:
-                print(f"Free memory under 1 GiB {free_mem_g=:.2f}; Running {pid} in CPU mode for Blob {iblob}.")
-                # Temporarily override for this call only
-                args = args._replace(use_gpu=False, gpumode=0)
-
-        # Execute one_blob
         result = one_blob(args)
 
         if result is not None:
@@ -4340,12 +4208,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               min_mjd=None, max_mjd=None,
               unwise_coadds=True,
               bail_out=False,
-              use_gpu=False,
-              gpumode=0,
-              ngpu=1,
-              gpu_ids=[0],
-              threads_per_gpu=16,
-              bid=None,
               do_segmentation=True,
               ceres=True,
               wise_ceres=True,
@@ -4607,12 +4469,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   use_ceres=ceres,
                   wise_ceres=wise_ceres,
                   galex_ceres=galex_ceres,
-                  use_gpu=use_gpu,
-                  gpumode=gpumode,
-                  ngpu=ngpu,
-                  gpu_ids=gpu_ids,
-                  threads_per_gpu=threads_per_gpu,
-                  bid=bid,
                   do_segmentation=do_segmentation,
                   unwise_coadds=unwise_coadds,
                   bailout=bail_out,
@@ -4645,66 +4501,19 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         if wise_checkpoint_period is not None:
             kwargs.update(wise_checkpoint_period=wise_checkpoint_period)
 
-    # --- Set up available GPU IDs for the initializer ---
-    _available_gpu_ids = []
-    if not use_gpu:
-        #ngpu defaults to 1 but in CPU only mode we want this to be 0
-        ngpu = 0
-    _ngpu = ngpu
-    _threads_per_gpu = threads_per_gpu
-    if gpu_ids == '':
-        gpu_ids = []
-    else:
-        gpu_ids = gpu_ids.split(',')
-        try:
-            for ig in range(len(gpu_ids)):
-                gpu_ids[ig] = int(gpu_ids[ig])
-        except Exception as ex:
-            print("Exception processing gpu_ids: "+str(ex))
-            traceback.print_exc()
-            sys.exit(-1)
-    if use_gpu and ngpu > 0:
-        if len(gpu_ids) == 0:
-            # This assumes CUDA_VISIBLE_DEVICES is set appropriately, or you want all detected GPUs
-            _available_gpu_ids = list(range(ngpu))
-            info(f"Main process: GPUs available for workers: {_available_gpu_ids}")
-        elif len(gpu_ids) != ngpu:
-            _available_gpu_ids = gpu_ids
-            _ngpu = len(gpu_ids)
-            info(f"Warning: {gpu_ids=} does not match {ngpu=}.  gpu_ids takes priority and {_ngpu=} will be used.")
-            ngpu = _ngpu
-            kwargs.update(ngpu=ngpu)
-        else:
-            _available_gpu_ids = gpu_ids
-            info(f"Main process: GPUs available for workers: {_available_gpu_ids}")
-        
-    if len(_available_gpu_ids) == 0:
-        info("Main process: No GPUs configured or CuPy not available; all workers will be CPU-only.")
-
-    manager = multiprocessing.Manager()
-    shared_counter = manager.Value('i', 0)
-    shared_lock = manager.Lock()
-    
     if pool or (threads and threads > 1):
         from astrometry.util.ttime import MemMeas
         if pool is None:
             from legacypipe.trackingpool import TrackingPool
             pool = TrackingPool(threads,
                                 initializer=runbrick_global_init,
-                                initargs=(shared_counter, shared_lock, _available_gpu_ids, _ngpu,
-                                          _threads_per_gpu, gpumode))
-            # from astrometry.util.timingpool import TimingPool, TimingPoolMeas
-            # pool = TimingPool(threads,
-            #                   initializer=runbrick_global_init,
-            #                   initargs=(shared_counter, shared_lock, _available_gpu_ids, _ngpu, _threads_per_gpu, gpumode))
-            # poolmeas = TimingPoolMeas(pool, pickleTraffic=False)
-            # StageTime.add_measurement_once(poolmeas)
+                                initargs=(,))
         StageTime.add_measurement_once(MemMeas)
         mp = multiproc(None, pool=pool)
     else:
         from astrometry.util.ttime import CpuMeas
         from astrometry.util.ttime import MemMeas
-        mp = multiproc(init=runbrick_global_init, initargs=(shared_counter, shared_lock, _available_gpu_ids, _ngpu, _threads_per_gpu, gpumode))
+        mp = multiproc(init=runbrick_global_init, initargs=(,))
         StageTime.add_measurement_once(CpuMeas)
         StageTime.add_measurement_once(MemMeas)
         pool = None
@@ -4977,13 +4786,6 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='Base filename for plots, default brick-BRICK')
     parser.add_argument('--plot-number', type=int, default=0,
                         help='Set PlotSequence starting number')
-
-    parser.add_argument('--use-gpu', default=False, action='store_true')
-    parser.add_argument('--gpumode', default=0, type=int, help='Mode for GPU')
-    parser.add_argument('--ngpu', default=1, type=int, help='Number of GPUs')
-    parser.add_argument('--gpu-ids', default='', type=str, help='Comma separated list of GPU ids e.g. 0,1,2,3')
-    parser.add_argument('--threads-per-gpu', default=16, type=int, help='Max threads per GPU - CPU will fulfill remaining threads')
-    parser.add_argument('--bid', default=None, type=int, help='blob id')
 
     parser.add_argument('--ceres', default=False, action='store_true',
                         help='Use Ceres Solver for all optimization?')
