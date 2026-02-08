@@ -17,10 +17,6 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
-import time
-tc = np.zeros(4)
-tcc = np.zeros(4,dtype=np.int32)
-
 def stage_just_coadd(W=3600, H=3600, pixscale=0.262, brickname=None,
                      survey=None,
                      ra=None, dec=None,
@@ -949,9 +945,6 @@ def make_coadds(tims, bands, targetwcs,
         t3 = Time()
         debug('coadds apphot:', t3-t2)
 
-    tc[0] += time.time()-t
-    tcc[0]+= 1
-    print ("TC", tc, tcc)
     return C
 
 def _make_coadds_plots_4(allresids, mods, ps):
@@ -1331,10 +1324,6 @@ def write_coadd_images(band,
         with survey.write_output(name, brick=brickname, band=band,
                                  shape=img.shape) as out:
             out.fits.write(img, header=hdr2, extname=extname)
-
-    tc[1] += time.time()-t
-    tcc[1]+= 1
-    print ("TC", tc, tcc)
 
 # Pretty much only used for plots; the real deal is make_coadds()
 def quick_coadds(tims, bands, targetwcs, images=None,

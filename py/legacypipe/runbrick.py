@@ -33,7 +33,6 @@ import warnings
 import signal
 from collections import Counter
 import multiprocessing
-import queue
 import traceback
 import threading
 import time
@@ -1126,7 +1125,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
                     continue
                 goodpix = (tim.inverr > 0)
                 tim.data[goodpix] -= cosky
-                tim.setImage(tim.data) #Update GPU flag
+                tim.setImage(tim.data)
                 ccds.co_sky[itim] = cosky
     else:
         co_sky = None
@@ -2148,7 +2147,6 @@ def _blob_iter(job_id_map,
                                brick.ra1, brick.ra2, brick.dec1, brick.dec2)
 
     all_tasks_metadata = []
-    #print ("Blob order", blob_order)
 
     Nblobs = len(blobslices)
     common_blob_args = dict(nblobs=Nblobs, brickwcs=targetwcs, bands=bands,
@@ -2187,7 +2185,6 @@ def _blob_iter(job_id_map,
             local_y, local_x = np.unravel_index(ii[0], blobmask.shape)
             onex, oney = bx0 + local_x, by0 + local_y
 
-        # LEGACY PRINT 1: Blob Info
         info(('Blob %i of %i, id: %i, sources: %i, size: %ix%i, npix %i, brick X: %i,%i, ' +
                'Y: %i,%i, one pixel: %i %i') %
               (nblob+1, Nblobs, iblob, len(Isrcs), blobw, blobh, npix,
@@ -2233,16 +2230,13 @@ def _blob_iter(job_id_map,
                 'oney': oney,
             })
         else:
-            # LEGACY PRINT 2: Split Info
             nsubx = int(max(1, np.round((blobw - overlap) / (target - overlap))))
             nsuby = int(max(1, np.round((blobh - overlap) / (target - overlap))))
             subw = (blobw + (nsubx-1)*overlap + nsubx-1) // nsubx
             subh = (blobh + (nsuby-1)*overlap + nsuby-1) // nsuby
             info('Will split into %i x %i sub-blobs of %i x %i pixels' % (nsubx, nsuby, subw, subh))
-
             uniqx = [0] + [n*(subw-overlap) + overlap//2 for n in range(1, nsubx)] + [blobw]
             uniqy = [0] + [n*(subh-overlap) + overlap//2 for n in range(1, nsuby)] + [blobh]
-
             for i in range(nsuby):
                 s_y0, s_y1 = i*(subh-overlap), min(i*(subh-overlap)+subh, blobh)
                 for j in range(nsubx):
@@ -2260,7 +2254,6 @@ def _blob_iter(job_id_map,
                     sub_blob_name = '%i-%i' % (nblob+1, 1+sub_idx)
                     info('%i of %i sources are within sub-blob %s' %
                          (len(Isubsrcs), len(Isrcs), sub_blob_name))
-
                     if len(Isubsrcs) == 0:
                         continue
 
@@ -2281,16 +2274,14 @@ def _blob_iter(job_id_map,
                         'unique_bounds': (bx0+uniqx[j], bx0+uniqx[j+1], by0+uniqy[i], by0+uniqy[i+1])
                     })
 
-    # 3. GLOBAL DECISION: Determine the sorting metric
     # Determine sorting metric: 'nsrcs' if any sub-blobs exist, else 'size'
     any_sub = any(t.get('sub_idx') is not None for t in all_tasks_metadata if t['size'] != -1)
     sort_metric = 'nsrcs' if any_sub else 'size'
 
-    # 4. GLOBAL SORT
-    # We use a lambda to pull the chosen metric from the metadata dictionaries
+    # Sort - use a lambda to pull the chosen metric from the metadata dictionaries
     all_tasks_metadata.sort(key=lambda x: x.get(sort_metric, 0), reverse=True)
 
-    # 5. YIELD PHASE (New concisely logged dispatch)
+    # Yield
     job_id = 0
     total_tasks = len(all_tasks_metadata)
     for rank, task in enumerate(all_tasks_metadata):
@@ -2454,11 +2445,11 @@ def _bounce_one_blob(X):
     except QuitNowException as q:
         # This should only happen for the final blob to be processed, where one_blob raises
         # an exception any time it is called after the quit signal has been received.
-        print('Caught QuitNowException in bounce_one_blob.')
+        info('Caught QuitNowException in bounce_one_blob.')
         return None
 
     except Exception:
-        print(f'Exception in one_blob: brick {brickname}, iblob {iblob}')
+        info(f'Exception in one_blob: brick {brickname}, iblob {iblob}')
         traceback.print_exc()
         raise
 

@@ -280,15 +280,12 @@ class OneBlob(object):
         # else:
         #     self.optargs.update(dchisq = 0.1)
 
-        from tractor.dense_optimizer import ConstrainedDenseOptimizer
-        self.trargs.update(optimizer=ConstrainedDenseOptimizer())
         self.optargs.update(dchisq = 0.1)
 
         if len(frozen_galaxies):
             debug('Subtracting frozen galaxy models...')
             status_update('Subtracting %i frozen galaxy models...' % len(frozen_galaxies))
             tr = self.tractor(self.tims, Catalog(*frozen_galaxies))
-            tr.setBlobid(iblob) #Set blobid
             # FIXME -- can we set *max* sizes instead?
             # mm = []
             # for tim in self.tims:
@@ -378,9 +375,7 @@ class OneBlob(object):
         B.blob_symm_height   = np.zeros(N, np.int16)
         B.blob_symm_npix     = np.zeros(N, np.int32)
         B.blob_symm_nimages  = np.zeros(N, np.int16)
-
         B.cpu_blob = np.zeros(N, np.float32)
-
         return B
 
     def finalize_table(self, B, bx0, by0):
@@ -778,43 +773,20 @@ class OneBlob(object):
         ok,ix,iy = self.blobwcs.radec2pixelxy(
             np.array([cat[i].getPosition().ra  for i in Iseg]),
             np.array([cat[i].getPosition().dec for i in Iseg]))
-        ix = np.clip(np.round(ix)-1, 0, self.blobw-1).astype(np.int32)
-        iy = np.clip(np.round(iy)-1, 0, self.blobh-1).astype(np.int32)
-
         Iseg = Iseg[ok]
         ix = ix[ok]
         iy = iy[ok]
         del ok
         assert(len(Iseg) == len(ix))
+        ix = np.clip(np.round(ix)-1, 0, self.blobw-1).astype(np.int32)
+        iy = np.clip(np.round(iy)-1, 0, self.blobh-1).astype(np.int32)
 
-        if np.any(ix < 0):
-            print (f"Negative ix {ix=}")
-            ok[ix < 0] = False
-            ix[ix < 0] = 0
-        if np.any(iy < 0):
-            print (f"Negative iy {iy=}")
-            ok[iy < 0] = False
-            iy[iy < 0] = 0
-        
         # Do not compute segmentation map for sources in the CLUSTER mask
-        # (or with very bad coords)
-        try:
-            I = ((self.refmap[iy, ix] & REF_MAP_BITS['CLUSTER']) == 0)
-            Iseg = Iseg[I]
-            ix = ix[I]
-            iy = iy[I]
-            del I
-        except IndexError as ex:
-            print ("IndexError bug #131")
-            print (f'{self.blobwcs=}')
-            print ("radec2pixelxy ", self.blobwcs.radec2pixelxy)
-            print (f'{ix=} {iy=}')
-            print ("Shapes", ix.shape, iy.shape, self.refmap.shape)
-            for src in cat:
-                print (f'{src=} {src.getPosition().ra=} {src.getPosition().dec=}')
-            import traceback
-            traceback.print_exc()
-            return None
+        I = ((self.refmap[iy, ix] & REF_MAP_BITS['CLUSTER']) == 0)
+        Iseg = Iseg[I]
+        ix = ix[I]
+        iy = iy[I]
+        del I
 
         # Zero out the S/N in CLUSTER mask
         maxsn[(self.refmap & REF_MAP_BITS['CLUSTER']) > 0] = 0.
@@ -1068,7 +1040,7 @@ class OneBlob(object):
                 mod.addTo(modimg)
             if len(self.frozen_galaxy_mods):
                 modimg += self.frozen_galaxy_mods[itim]
-            tim.setImage(modimg) #Update GPU flag
+            tim.setImage(modimg)
         if self.plots:
             coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs,
                                     fill_holes=False)
@@ -1082,7 +1054,7 @@ class OneBlob(object):
                                                   use_gpu=(self.use_gpu and self.gpumode > 0))
         # revert the tim image data
         for tim,img in zip(self.tims, realimages):
-            tim.setImage(img) #Update GPU flag
+            tim.setImage(img)
 
         if self.plots:
             import pylab as plt
@@ -1245,7 +1217,6 @@ class OneBlob(object):
 
         if len(Bnew) == 0:
             return None
-
         return Bnew
 
     def model_selection_one_source(self, src, srci, models, B, segmap,
@@ -1403,7 +1374,6 @@ class OneBlob(object):
                     plt.title('Dilated goodblob * Segmentation map')
                 else:
                     plt.title('Dilated goodblob (no Segmentation map)')
-
                 self.ps.savefig()
 
             # If there is no longer a source detected at the original source
@@ -1558,7 +1528,6 @@ class OneBlob(object):
                 srctractor.optimizer = LsqrOptimizer()
 
             skyparams = srctractor.images.getParams()
-            #print ("SKYPARAMS", type(skyparams), type(srctractor.images), skyparams)
 
         enable_galaxy_cache()
 
@@ -1566,7 +1535,6 @@ class OneBlob(object):
         srccat[0] = None
 
         if fit_background:
-            #print ("ENTERING OPTIMIZE 1 - ", type(srctractor), srctractor.optimize_loop)
             srctractor.optimize_loop(**optargs)
 
         if self.plots_per_source:
@@ -1673,10 +1641,8 @@ class OneBlob(object):
                 srctractor.images.setParams(skyparams)
                 srctractor.thawParam('images')
 
-            # First-round optimization (during model selection)
             self.debug('Before model selection: %s' % (str(newsrc)))
             try:
-                #print ("ENTERING OPTIMIZE 2 - ", type(srctractor), srctractor.optimize_loop)
                 R = srctractor.optimize_loop(**optargs)
             except Exception as e:
                 print('Exception fitting source in model selection.  src:', newsrc)
@@ -1848,8 +1814,8 @@ class OneBlob(object):
             debug('Best dchisq is 0 -- dropping source')
             keepsrc = None
 
-        B.hit_limit    [srci] = B.all_model_hit_limit    [srci].get(keepmod, False)
-        B.hit_r_limit  [srci] = B.all_model_hit_r_limit  [srci].get(keepmod, False)
+        B.hit_limit  [srci] = B.all_model_hit_limit  [srci].get(keepmod, False)
+        B.hit_r_limit[srci] = B.all_model_hit_r_limit[srci].get(keepmod, False)
         if keepmod != 'ser':
             B.hit_ser_limit[srci] = False
 
@@ -1918,7 +1884,6 @@ class OneBlob(object):
                 continue
             modelMasks = models.model_masks(0, cat[i])
             tr.setModelMasks(modelMasks)
-            #print ("ENTERING OPTIMIZE 3 - ", type(tr), tr.optimize_loop)
             tr.optimize_loop(**self.optargs)
             cpu1 = time.process_time()
             cputime[i] += (cpu1 - cpu0)
@@ -1928,7 +1893,6 @@ class OneBlob(object):
         disable_galaxy_cache()
 
     def tractor(self, tims, cat):
-        #print('Creating Tractor: args', self.trargs)
         tr = Tractor(tims, cat, **self.trargs)
         tr.freezeParams('images')
         return tr
@@ -2005,10 +1969,7 @@ class OneBlob(object):
                 optargs.update(check_step=None)
 
             # First-round optimization
-            #print('First-round initial log-prob:', srctractor.getLogProb())
-            #print ("ENTERING OPTIMIZE 4 - ", type(srctractor), srctractor.optimize_loop)
             srctractor.optimize_loop(**optargs)
-            #print('First-round final log-prob:', srctractor.getLogProb())
 
             if is_galaxy:
                 # Drop limits on SGA positions
@@ -2128,7 +2089,6 @@ class OneBlob(object):
 
     def _initial_plots(self, cat):
         import pylab as plt
-        debug('Plotting blob image for blob', self.name)
         coimgs,_,sat = quick_coadds(self.tims, self.bands, self.blobwcs,
                                     fill_holes=False, get_saturated=True)
         self.rgb = get_rgb(coimgs, self.bands)
@@ -2281,7 +2241,6 @@ def is_reference_source(src):
 def has_fixed_position(src):
     if src is None:
         return False
-    #return isinstance(src, GaiaPosition)
     return (len(src.pos.getParams()) == 0)
 
 def _compute_source_metrics(srcs, tims, bands, tr):
@@ -2456,13 +2415,11 @@ class SourceModels(object):
     def save_images(self, tims):
         self.orig_images = [tim.getImage() for tim in tims]
         for tim,img in zip(tims, self.orig_images):
-            #tim.data = img.copy()
-            tim.setImage(img.copy()) #Update GPU flag
+            tim.setImage(img.copy())
 
     def restore_images(self, tims):
         for tim,img in zip(tims, self.orig_images):
-            #tim.data = img
-            tim.setImage(img) #Update GPU flag
+            tim.setImage(img)
 
     def create(self, tims, srcs, subtract=False, modelmasks=None):
         '''
@@ -2490,7 +2447,7 @@ class SourceModels(object):
                     mod = _clip_model_to_blob(mod, sh, ie)
                     if subtract and mod is not None:
                         mod.addTo(tim.getImage(), scale=-1)
-                        tim.setImage(tim.data) #Update GPU flag
+                        tim.setImage(tim.data)
                 mods.append(mod)
             self.models.append(mods)
 
@@ -2502,8 +2459,7 @@ class SourceModels(object):
             mod = mods[i]
             if mod is not None:
                 mod.addTo(tim.getImage())
-                tim.setImage(tim.data) #Update GPU flag
-
+                tim.setImage(tim.data)
 
     def update_and_subtract(self, i, src, tims, tim_ies=None, ps=None):
         for itim,(tim,mods) in enumerate(zip(tims, self.models)):
@@ -2530,34 +2486,7 @@ class SourceModels(object):
                 tim.setImage(tim.data)
             else:
                 mod.addTo(tim.getImage(), scale=-1)
-                tim.setImage(tim.data) #Update GPU flag
-
-            # if mod.patch.max() > 1e6:
-            #     if ps is not None:
-            #         z = np.zeros_like(tim.getImage())
-            #         import pylab as plt
-            #         plt.clf()
-            #         plt.suptitle('tim: %s' % tim.name)
-            #         plt.subplot(2,2,1)
-            #         plt.imshow(mod.patch, interpolation='nearest', origin='lower')
-            #         plt.colorbar()
-            #         plt.title('mod')
-            #         plt.subplot(2,2,2)
-            #         plt.imshow(tim.getImage(), interpolation='nearest', origin='lower')
-            #         plt.colorbar()
-            #         plt.title('tim (before)')
-            #         mod.addTo(z, scale=1)
-            #         plt.subplot(2,2,3)
-            #         plt.imshow(z, interpolation='nearest', origin='lower')
-            #         plt.colorbar()
-            #         plt.title('mod')
-            #         img = tim.getImage().copy()
-            #         mod.addTo(img, scale=-1)
-            #         plt.subplot(2,2,4)
-            #         plt.imshow(img, interpolation='nearest', origin='lower')
-            #         plt.colorbar()
-            #         plt.title('tim-mod')
-            #         ps.savefig()
+                tim.setImage(tim.data)
 
     def model_masks(self, i, src):
         modelMasks = []
