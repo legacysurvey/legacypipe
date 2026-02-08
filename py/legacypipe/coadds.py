@@ -17,6 +17,10 @@ def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
 
+import time
+tc = np.zeros(4)
+tcc = np.zeros(4,dtype=np.int32)
+
 def stage_just_coadd(W=3600, H=3600, pixscale=0.262, brickname=None,
                      survey=None,
                      ra=None, dec=None,
