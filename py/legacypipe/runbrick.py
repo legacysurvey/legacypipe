@@ -1031,6 +1031,8 @@ def stage_srcs(pixscale=None, targetwcs=None,
         tables.append(Tnew)
 
     # Hold aside "special" entries in the ref catalog: DUP, clusters, Magellanic clouds, ...
+    T_special = None
+    cat_special = None
     if refobjs and len(refobjs):
         Ispecial = np.flatnonzero(refobjs.ignore_source)
         if len(Ispecial):
