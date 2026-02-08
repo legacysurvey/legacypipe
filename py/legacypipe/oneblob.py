@@ -725,8 +725,7 @@ class OneBlob(object):
 
         # Compute per-band detection maps
         mp = multiproc()
-        detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp,
-                                                use_gpu=(self.use_gpu and self.gpumode > 0))
+        detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp)
         # same as in runbrick.py
         saturated_pix = reduce(np.logical_or,
                                [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps])
@@ -1023,8 +1022,7 @@ class OneBlob(object):
             self.ps.savefig()
 
         mp = multiproc()
-        detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp,
-                                                use_gpu=(self.use_gpu and self.gpumode > 0))
+        detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp)
 
         # from runbrick.py
         satmaps = [binary_dilation(satmap > 0, iterations=4) for satmap in satmaps]
@@ -1050,8 +1048,7 @@ class OneBlob(object):
             plt.title('Iterative detection: first-round models')
             self.ps.savefig()
 
-        mod_detmaps,mod_detivs,_ = detection_maps(self.tims, self.blobwcs, self.bands, mp,
-                                                  use_gpu=(self.use_gpu and self.gpumode > 0))
+        mod_detmaps,mod_detivs,_ = detection_maps(self.tims, self.blobwcs, self.bands, mp)
         # revert the tim image data
         for tim,img in zip(self.tims, realimages):
             tim.setImage(img)
@@ -1264,8 +1261,7 @@ class OneBlob(object):
             from scipy.ndimage.measurements import label
             # Compute per-band detection maps
             mp = multiproc()
-            detmaps,detivs,_ = detection_maps(self.tims, self.blobwcs, self.bands, mp,
-                                              use_gpu=(self.use_gpu and self.gpumode > 0))
+            detmaps,detivs,_ = detection_maps(self.tims, self.blobwcs, self.bands, mp)
             # Compute the symmetric area that fits in this 'srcblobmask' region
             flipw = min(ix, bw-1-ix)
             fliph = min(iy, bh-1-iy)
