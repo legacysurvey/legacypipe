@@ -217,13 +217,14 @@ def detection_maps_gpu(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
     if nsatur is None:
         satmaps = [np.zeros((H,W), bool)   for b in bands]
     else:
-        if nsatur < 255:
-            sattype = np.uint8
-            satmax = 254
-        else:
-            sattype = np.uint16
-            satmax = 65534
-        satmaps = [np.zeros((H,W), sattype) for b in bands]
+        satmax = 254
+        if nsatur > satmax:
+            warnings.warn('Clipping nsatur to %i' % satmax)
+            nsatur = satmax
+        # Count how many pixels in the stack are saturated
+        satmaps = [np.zeros((H,W), np.uint8) for b in bands]
+        # Count the total number of pixels in the stack
+        nmaps = [np.zeros((H,W), np.uint8) for b in bands]
 
     # Pre-calculate resamp for all tims once
     # This loop is crucial for the caching to work and should be run first.
@@ -253,6 +254,8 @@ def detection_maps_gpu(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
                 satmaps_cp[ib][Yo_cp, Xo_cp] |= sat_cp
             else:
                 satmaps_cp[ib][Yo_cp, Xo_cp] = cp.minimum(satmax, satmaps_cp[ib][Yo_cp, Xo_cp] + (1 * sat_cp))
+                nmaps[ib][Yo,Xo] = np.minimum(satmax, nmaps[ib][Yo,Xo] + 1)
+        del Yo,Xo,incmap,inciv,sat
 
     # Final processing on the GPU before transferring results to CPU
     detmaps = [None] * len(bands)
@@ -269,7 +272,15 @@ def detection_maps_gpu(tims, targetwcs, bands, mp, apodize=None, nsatur=None):
 
         # ... (rest of the final processing remains the same, but now on CPU arrays) ...
         if nsatur is not None:
-             satmaps[i] = (satmaps[i] >= nsatur)
+            satmaps[i] = (satmaps[i] >= nsatur)
+            nmap = nmaps[i]
+            print('Saturmap for band', bands[i], ': range', satmap.min(), satmap.max(),
+                  'mean', np.mean(satmap), 'nsatur', nsatur)
+            # Set the SATUR bit if the number of images in the stack with SATUR set is > nsatur,
+            #  OR if *every* image in the stack has SATUR set (to catch the case where the number in
+            # the stack is less than nsatur such that nsatur could never be reached).
+            satmaps[i] = np.logical_or(satmap >= nsatur, (satmap == nmap) * (nmap > 0))
+            print('Satmap:', np.sum(satmaps[i]), 'pixels set')
     return detmaps, detivs, satmaps
 
 def sed_matched_filters(bands):
