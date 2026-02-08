@@ -91,7 +91,7 @@ def recreate_outlier_jpegs(survey, tims, bands, targetwcs, brickname):
                 # Apply this mask!
                 tim.dq |= tim.dq_type(((mask & maskbits) > 0) * DQ_BITS['outlier'])
                 tim.inverr[(mask & maskbits) > 0] = 0.
-                tim.setInvError(tim.inverr) #Reset GPU flag
+                tim.setInvError(tim.inverr)
 
             # Accumulate pos/neg coadds
             Ibad = np.flatnonzero((mask[Yi,Xi] & OUTLIER_POS) != 0)
@@ -174,7 +174,7 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
                 # Apply this mask!
                 tim.dq |= tim.dq_type(((mask & maskbits) > 0) * DQ_BITS['outlier'])
                 tim.inverr[(mask & maskbits) > 0] = 0.
-                tim.setInvError(tim.inverr) #Reset GPU flag
+                tim.setInvError(tim.inverr)
             if pos_neg_mask is not None:
                 pos_neg_mask |= mask
         else:
@@ -193,7 +193,7 @@ def read_outlier_mask_file(survey, tims, brickname, subimage=True, output=True, 
                 # Apply this mask!
                 tim.dq[ty, tx] |= tim.dq_type(((mask[my, mx] & maskbits) > 0) * DQ_BITS['outlier'])
                 tim.inverr[ty, tx][(mask[my, mx] & maskbits) > 0] = 0.
-                tim.setInvError(tim.inverr) #Reset GPU flag
+                tim.setInvError(tim.inverr)
             if pos_neg_mask is not None:
                 pos_neg_mask[ty,tx] |= mask[my, mx]
 
@@ -381,7 +381,7 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
                 # Apply the mask!
                 maskbits = get_bits_to_mask()
                 tim.inverr[(mask & maskbits) > 0] = 0.
-                tim.setInvError(tim.inverr) #Reset GPU flag
+                tim.setInvError(tim.inverr)
                 tim.dq[(mask & maskbits) > 0] |= tim.dq_type(DQ_BITS['outlier'])
 
                 if not write_mask_file:
