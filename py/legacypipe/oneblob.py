@@ -506,13 +506,13 @@ class OneBlob(object):
                 coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=mods,
                                         fill_holes=False)
                 dimshow(get_rgb(coimgs, self.bands), ticks=False)
-                plt.savefig('blob-%s-initmodel.png' % (name))
+                plt.savefig('blob-%s-initmodel.png' % (self.name))
                 res = [(tim.getImage() - mod) for tim,mod in zip(self.tims, mods)]
                 coresids,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=res)
                 dimshow(get_rgb(coresids, self.bands, resids=True), ticks=False)
-                plt.savefig('blob-%s-initresid.png' % (name))
+                plt.savefig('blob-%s-initresid.png' % (self.name))
                 dimshow(get_rgb(coresids, self.bands), ticks=False)
-                plt.savefig('blob-%s-initsub.png' % (name))
+                plt.savefig('blob-%s-initsub.png' % (self.name))
                 plt.figure(1)
 
         self.debug('Finished initial fitting: %s' % (Time()-tlast))
@@ -594,11 +594,11 @@ class OneBlob(object):
             coimgs,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=mods,
                                     fill_holes=False)
             dimshow(get_rgb(coimgs,self.bands), ticks=False)
-            plt.savefig('blob-%s-model.png' % (name))
+            plt.savefig('blob-%s-model.png' % (self.name))
             res = [(tim.getImage() - mod) for tim,mod in zip(self.tims, mods)]
             coresids,_ = quick_coadds(self.tims, self.bands, self.blobwcs, images=res)
             dimshow(get_rgb(coresids, self.bands, resids=True), ticks=False)
-            plt.savefig('blob-%s-resid.png' % (name))
+            plt.savefig('blob-%s-resid.png' % (self.name))
             plt.figure(1)
 
         # Do another quick round of flux-only fitting?
@@ -658,7 +658,7 @@ class OneBlob(object):
                 if src.numberOfParams() != nsrcparams:
                     print ("EXCEPTION:", src.numberOfParams(), nsrcparams)
                     print ("Exception - src params do not match! for ", src, isub)
-                    info('Blob', name, 'finished, total:', Time()-trun)
+                    info('Blob', self.name, 'finished, total:', Time()-trun)
                     return B
                 assert(src.numberOfParams() == nsrcparams)
                 # Compute inverse-variances
@@ -1925,7 +1925,7 @@ class OneBlob(object):
                 src.pos.lowers = [ra - maxmove/cosdec, dec - maxmove]
                 src.pos.uppers = [ra + maxmove/cosdec, dec + maxmove]
 
-            debug('%i images overlap this source' % len(srctims))
+            #debug('%i images overlap this source' % len(srctims))
             optargs = self.optargs.copy()
             if has_fixed_position(src):
                 optargs.update(check_step=None)

@@ -2079,6 +2079,7 @@ def _blob_iter(job_id_map,
         halfdone_blob_map = {}
     else:
         info('Half-done blobs:', halfdone_blob_map.keys())
+    skipblobset = set(skipblobs or [])
 
     blobvals = Counter(blobmap[blobmap >= 0])
     blob_order = np.array([b for b, npix in blobvals.most_common()])
@@ -4504,13 +4505,13 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             from legacypipe.trackingpool import TrackingPool
             pool = TrackingPool(threads,
                                 initializer=runbrick_global_init,
-                                initargs=(,))
+                                initargs=())
         StageTime.add_measurement_once(MemMeas)
         mp = multiproc(None, pool=pool)
     else:
         from astrometry.util.ttime import CpuMeas
         from astrometry.util.ttime import MemMeas
-        mp = multiproc(init=runbrick_global_init, initargs=(,))
+        mp = multiproc(init=runbrick_global_init, initargs=())
         StageTime.add_measurement_once(CpuMeas)
         StageTime.add_measurement_once(MemMeas)
         pool = None

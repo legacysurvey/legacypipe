@@ -2,9 +2,9 @@ import numpy as np
 
 import logging
 logger = logging.getLogger('legacypipe.halos')
-# def info(*args):
-#     from legacypipe.utils import log_info
-#     log_info(logger, args)
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
 def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
