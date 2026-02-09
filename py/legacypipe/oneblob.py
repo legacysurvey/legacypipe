@@ -128,6 +128,10 @@ def one_blob(args):
             info('Blob %s: resuming from checkpoint: done %i/%i fitting, %i/%i model sel' %
                  (args.blobname, np.sum(B.done_fitting), N, np.sum(B.done_model_selection), N))
             ob.tims = create_tims(blobwcs, args.blobmask, args.timargs)
+            ob.plots = args.plots
+            ob.ps = args.ps
+            # FIXME -- update more parameters??
+
         else:
             ob = OneBlob(args.blobname, args.nblobs, blobwcs, args.blobmask, args.timargs, args.bands,
                          args.plots, args.ps, args.use_ceres, args.refmap,
@@ -448,8 +452,8 @@ class OneBlob(object):
             self.ps.savefig()
             # Save the initial source locations for later plotting
             _,xfit0,yfit0 = self.blobwcs.radec2pixelxy(
-                np.array([src.getPosition().ra  for src in cat]),
-                np.array([src.getPosition().dec for src in cat]))
+                np.array([src.getPosition().ra  for src in cat if src is not None]),
+                np.array([src.getPosition().dec for src in cat if src is not None]))
 
         # Optimize individual sources
 
@@ -483,13 +487,14 @@ class OneBlob(object):
             self.ps.savefig()
             # Plot source locations
             ax = plt.axis()
+            goodcat = [src for src in cat if src is not None]
             _,xf,yf = self.blobwcs.radec2pixelxy(
-                np.array([src.getPosition().ra  for src in cat]),
-                np.array([src.getPosition().dec for src in cat]))
+                np.array([src.getPosition().ra  for src in goodcat]),
+                np.array([src.getPosition().dec for src in goodcat]))
             plt.plot(xf-1, yf-1, 'r.', label='Sources')
             plt.plot([xfit0-1, xf-1], [yfit0-1, yf-1], 'r-')
             plt.plot(xfit0-1, yfit0-1, 'o', mec='r', mfc='none')
-            Ir = np.flatnonzero([is_reference_source(src) for src in cat])
+            Ir = np.flatnonzero([is_reference_source(src) for src in goodcat])
             if len(Ir):
                 plt.plot(xf[Ir]-1, yf[Ir]-1, 'o', mec='g', mfc='none', ms=8, mew=2,
                          label='Ref source')
@@ -2093,9 +2098,10 @@ class OneBlob(object):
             plt.savefig('blob-%s-data.png' % (self.name))
             plt.figure(1)
 
+        goodcat = [src for src in cat if src is not None]
         _,x0,y0 = self.blobwcs.radec2pixelxy(
-            np.array([src.getPosition().ra  for src in cat]),
-            np.array([src.getPosition().dec for src in cat]))
+            np.array([src.getPosition().ra  for src in goodcat]),
+            np.array([src.getPosition().dec for src in goodcat]))
 
         h,w = sat.shape
         ix = np.clip(np.round(x0)-1, 0, w-1).astype(int)
@@ -2108,7 +2114,7 @@ class OneBlob(object):
             plt.plot(x0[srcsat]-1, y0[srcsat]-1, 'o', mec='orange', mfc='none', ms=5, mew=2,
                      label='SATUR at center')
         # ref sources
-        Ir = np.flatnonzero([is_reference_source(src) for src in cat])
+        Ir = np.flatnonzero([is_reference_source(src) for src in goodcat])
         if len(Ir):
             plt.plot(x0[Ir]-1, y0[Ir]-1, 'o', mec='g', mfc='none', ms=8, mew=2,
                          label='Ref source')
