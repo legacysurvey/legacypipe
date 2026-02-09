@@ -1141,8 +1141,9 @@ def stage_srcs(pixscale=None, targetwcs=None,
     detstars.blob_x1 = bb[detstars.blob, 3]
     detstars.blob_y0 = bb[detstars.blob, 0]
     detstars.blob_y1 = bb[detstars.blob, 1]
+    detstars.needs_initial_flux = np.array([getattr(src, 'needs_initial_flux', False) for src in cat])
     for band in bands:
-        bandflux = np.zeros(len(cat), 'f4')
+        bandflux = np.zeros(len(cat), np.float32)
         for isrc, src in enumerate(cat):
             if src:
                 bandflux[isrc] = src.getBrightness().getFlux(band)
@@ -1417,6 +1418,7 @@ def stage_fitblobs(T=None,
                           refmap, large_galaxies_force_pointsource, less_masking, brick,
                           frozen_galaxies,
                           skipblobs=skipblobs,
+                          blobxy=blobxy,
                           single_thread=(mp is None or mp.pool is None),
                           max_blobsize=max_blobsize, custom_brick=custom_brick,
                           enable_sub_blobs=sub_blobs,
@@ -2060,6 +2062,7 @@ def _blob_iter(job_id_map,
                large_galaxies_force_pointsource, less_masking,
                brick, frozen_galaxies, single_thread=False,
                skipblobs=None, max_blobsize=None, custom_brick=False,
+               blobxy=None,
                enable_sub_blobs=False,
                ran_sub_blobs=None,
                gpu_tuple=None,
@@ -2251,6 +2254,20 @@ def _blob_iter(job_id_map,
 
                     s_x0, s_x1 = j*(subw-overlap), min(j*(subw-overlap)+subw, blobw)
                     s_bx0, s_bx1, s_by0, s_by1 = bx0+s_x0, bx0+s_x1, by0+s_y0, by0+s_y1
+
+                    # Only keep sub-blobs containing one of the "blobxy" points.
+                    if blobxy is not None:
+                        ok = False
+                        for x,y in blobxy:
+                            if x >= s_bx0 and x < s_bx1 and y >= s_by0 and y < s_by1:
+                                # We filter for being in the whole blob before even calling _blob_iter,
+                                # so just checking the bounds of the sub-blob should be sufficient.
+                                #if blobmask[y-by0, x-bx0]:
+                                ok = True
+                                break
+                        if not ok:
+                            debug('Sub-blob does not contain a --blobxy, skipping')
+                            continue
 
                     clipx = np.clip(T.ibx[Isrcs], 0, W-1)
                     clipy = np.clip(T.iby[Isrcs], 0, H-1)
