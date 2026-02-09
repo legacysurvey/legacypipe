@@ -4569,7 +4569,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     if plot_base is None:
         plot_base = plot_base_default
     ps = PlotSequence(plot_base % dict(brick=brick))
-    initargs.update(ps=ps)
+    initargs.update(ps=ps, plots=plots)
     if plot_number:
         ps.skipto(plot_number)
 
