@@ -323,31 +323,35 @@ def tim_plots(tims, bands, ps):
             ps.savefig()
 
     # Plot image pixels, invvars, masks
-    for tim in tims:
-        plt.clf()
-        plt.subplot(2,2,1)
-        dimshow(tim.getImage(), vmin=-3.*tim.sig1, vmax=10.*tim.sig1)
-        plt.title('image')
-        plt.subplot(2,2,2)
-        dimshow(tim.getInvError(), vmin=0, vmax=1.1/tim.sig1)
-        plt.title('inverr')
-        if tim.dq is not None:
-            # plt.subplot(2,2,3)
-            # dimshow(tim.dq, vmin=0, vmax=tim.dq.max())
-            # plt.title('DQ')
-            plt.subplot(2,2,3)
-            dimshow(((tim.dq & tim.dq_saturation_bits) > 0),
-                    vmin=0, vmax=1.5, cmap='hot')
-            plt.title('SATUR')
-        plt.subplot(2,2,4)
-        dimshow(tim.getImage() * (tim.getInvError() > 0),
-                vmin=-3.*tim.sig1, vmax=10.*tim.sig1)
-        okpix = tim.getImage()[tim.getInvError() > 0]
-        plt.title('image (masked) range [%.3g, %.3g]' % (np.min(okpix), np.max(okpix)))
-        plt.suptitle(tim.name)
-        ps.savefig()
+    for b in bands:
+        for tim in tims:
+            if tim.band != b:
+                continue
+            plt.clf()
+            plt.subplot(2,2,1)
+            dimshow(tim.getImage(), vmin=-3.*tim.sig1, vmax=10.*tim.sig1)
+            plt.title('image')
+            plt.subplot(2,2,2)
+            dimshow(tim.getInvError(), vmin=0, vmax=1.1/tim.sig1)
+            plt.title('inverr')
+            if tim.dq is not None:
+                # plt.subplot(2,2,3)
+                # dimshow(tim.dq, vmin=0, vmax=tim.dq.max())
+                # plt.title('DQ')
+                plt.subplot(2,2,3)
+                dimshow(((tim.dq & tim.dq_saturation_bits) > 0),
+                        vmin=0, vmax=1.5, cmap='hot')
+                plt.title('SATUR')
+            plt.subplot(2,2,4)
+            dimshow(tim.getImage() * (tim.getInvError() > 0),
+                    vmin=-3.*tim.sig1, vmax=10.*tim.sig1)
+            okpix = tim.getImage()[tim.getInvError() > 0]
+            plt.title('image (masked) range [%.3g, %.3g]' % (np.min(okpix), np.max(okpix)))
+            plt.suptitle(tim.name)
+            ps.savefig()
 
-        if True and tim.dq is not None:
+            if tim.dq is None:
+                continue
             from legacypipe.bits import DQ_BITS
             plt.clf()
             bitmap = dict([(v,k) for k,v in DQ_BITS.items()])
@@ -382,7 +386,9 @@ def tim_plots(tims, bands, ps):
                 plt.subplot(1,3,3)
                 plt.imshow(dq, interpolation='nearest', origin='lower',
                            cmap='tab10', vmin=-0.5, vmax=9.5)
-                plt.colorbar()
+                cb = plt.colorbar(location='bottom')
+                cb.set_ticks(list(range(9)), labels=['None', 'Bad', 'No val', 'SAT', 'BLEED', 'CR',
+                                                     'Lo wt', 'Diff', 'Streak'])
                 plt.title('DQ codes')
                 plt.suptitle('%s (%s %s) PLVER %s' % (tim.name, im.image_filename, im.ccdname, im.plver))
                 ps.savefig()

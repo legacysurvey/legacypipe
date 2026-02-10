@@ -606,6 +606,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         moffat = True
         _,halos = subtract_one((0, tim, halostars, moffat, old_calibs_ok))
         tim.data -= halos
+        tim.setImage(tim.data)
 
     # Apply outlier masks
     outlier_header = None
@@ -704,6 +705,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
             tr = Tractor([tim], cat)
             mod = tr.getModelImage(0)
             tim.data -= mod
+            tim.setImage(tim.data)
             print_timing('Subtracting SGA took', Time()-t0)
             # Now drop those SGA galaxies from the catalog!
             I = np.flatnonzero(np.logical_not(sga_out))
@@ -955,6 +957,9 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
     fixed_also: if derivs=True, also run without derivatives and report
     that flux too?
     '''
+    if len(cat) == 0:
+        return None
+
     if timing:
         tlast = Time()
     if ps is not None:
@@ -1160,7 +1165,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         if ps is not None or get_model:
             if not hasattr(R, 'ims1'):
                 print('R:', R)
-                return None,None
+                return None
             (data,mod,ie,chi,_) = R.ims1[0]
 
         if ps is not None:
@@ -1334,7 +1339,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             timdata = tim.data
             timpsf  = tim.getPsf()
             # Fit on residual image
-            tim.data = timdata - orig_mod
+            tim.setImage(timdata - orig_mod)
 
             from tractor.dense_optimizer import ConstrainedDenseOptimizer
             from tractor.patch import ModelMask
@@ -1380,6 +1385,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 mod.clipTo(dw,dh)
                 # Add initial model back into residual image
                 mod.addTo(tim.data, scale=+1)
+                tim.setImage(tim.data)
                 slicex = mod.getSlice(parent=tim.data)
 
                 mh,mw = mod.shape
@@ -1485,8 +1491,10 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 if mod2 is None:
                     # Subtract off initial model
                     mod.addTo(tim.data, scale=-1)
+                    tim.setImage(tim.data)
                 else:
                     mod2.addTo(tim.data, scale=-1)
+                    tim.setImage(tim.data)
 
                 dec0 = src.getPosition().dec
                 cosdec = np.cos(np.deg2rad(dec0))
@@ -1505,7 +1513,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                 #print('dRA,dDec (%.3f, %.3f) milli-arcsec' % (1000. * F.full_fit_dra[i], 1000. * F.full_fit_ddec[i]))
 
             # RESTORE tim data!
-            tim.data = timdata
+            tim.setImage(timdata)
             tim.psf  = timpsf
 
             if timing:

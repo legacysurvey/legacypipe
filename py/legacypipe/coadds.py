@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
@@ -5,6 +6,8 @@ from astrometry.util.resample import resample_with_wcs, OverlapError
 from legacypipe.bits import DQ_BITS
 from legacypipe.survey import tim_get_resamp
 from legacypipe.utils import copy_header_with_wcs
+
+from photutils.aperture import CircularAperture, aperture_photometry
 
 import logging
 logger = logging.getLogger('legacypipe.coadds')
@@ -128,10 +131,9 @@ def stage_just_coadd(W=3600, H=3600, pixscale=0.262, brickname=None,
             R = _resample_one(args)
             itim,Yo,Xo,iv,im,mo,bmo,dq = R
             mjd_args = None
-            coadd.accumulate(tim, itim,Yo,Xo,iv,im,mo,bmo,dq, mjd_args)
+            coadd.accumulate(tim, itim,Yo,Xo,iv,im,mo,bmo,dq, mjd_args, None)
             del Yo,Xo,iv,im,mo,bmo,dq,R
         coadd.finish()
-
 
 class SimpleCoadd(object):
     '''A class for handling coadds of unWISE (and GALEX) images.
@@ -244,7 +246,6 @@ class SimpleCoadd(object):
             self.write_coadds(survey, brickname, hdr, band, coimg, comod, coiv, con)
 
             if apradec is not None:
-                from photutils.aperture import CircularAperture, aperture_photometry
                 mask = (coiv == 0)
                 with np.errstate(divide='ignore'):
                     imsigma = 1.0/np.sqrt(coiv)
@@ -443,6 +444,7 @@ class Coadd(object):
         if psf_images:
             self.psf_img = 0.
 
+        self.mod_callback_data = []
         self.unweighted = unweighted
         self.satur_val = satur_val
         self.xy = xy
@@ -458,7 +460,7 @@ class Coadd(object):
         self.do_max = do_max
         self.targetwcs = targetwcs
 
-    def accumulate(self, tim, itim, Yo,Xo,iv,im,mo,bmo,dq, mjd_args):
+    def accumulate(self, tim, itim, Yo,Xo,iv,im,mo,bmo,dq, mjd_args, cb_data):
         # invvar-weighted image
         self.cowimg[Yo,Xo] += iv * im
         self.cow   [Yo,Xo] += iv
@@ -590,6 +592,8 @@ class Coadd(object):
         if self.do_max:
             self.maximg[Yo,Xo] = np.maximum(self.maximg[Yo,Xo], im * (iv>0))
 
+        self.mod_callback_data.append(cb_data)
+
     def finish(self):
         tinyw = 1e-30
         self.cowimg /= np.maximum(self.cow, tinyw)
@@ -653,9 +657,17 @@ def make_coadds(tims, bands, targetwcs,
                 get_max=False, sbscale=True,
                 psf_images=False, nsatur=None,
                 callback=None, callback_args=None,
+                mod_callback=None, mod_callback_args=None,
                 plots=False, ps=None,
                 lanczos=True, mp=None,
                 satur_val=10.):
+    '''
+    mods: list of model images to coadd, same length and in same order as tims.
+
+    mod_callback: function to call (while multi-processing per-tim) to generate "mod" and
+      "blobmod" images, plus "extra" data (the NEA stats)
+    mod_callback_args: list, aligned with tims, of arguments to pass to mod_callback
+    '''
     from astrometry.util.ttime import Time
     t0 = Time()
 
@@ -673,17 +685,22 @@ def make_coadds(tims, bands, targetwcs,
     # always, for patching SATUR, etc pixels?
     unweighted=True
 
+    have_mods = (mods is not None) or (mod_callback is not None)
+    have_blobmods = (blobmods is not None) or (mod_callback is not None)
+
     C.coimgs = []
+    if mod_callback:
+        C.mod_callback_data = []
     if coweights:
         # the pixelwise inverse-variances (weights) of the "coimgs".
         C.cowimgs = []
     if detmaps:
         C.galdetivs = []
         C.psfdetivs = []
-    if mods is not None:
+    if have_mods:
         C.comods = []
         C.coresids = []
-    if blobmods is not None:
+    if have_blobmods:
         C.coblobmods = []
         C.coblobresids = []
     if apertures is not None:
@@ -736,7 +753,11 @@ def make_coadds(tims, bands, targetwcs,
                 bmo = None
             else:
                 bmo = blobmods[itim]
-            args.append((itim,tim,mo,bmo,lanczos,targetwcs,sbscale))
+            cb_args = None
+            if mod_callback_args is not None:
+                cb_args = mod_callback_args[itim]
+            args.append((itim,tim,mo,bmo,lanczos,targetwcs,sbscale,
+                         mod_callback,cb_args))
         if mp is not None:
             imaps.append(mp.imap_unordered(_resample_one, args))
         else:
@@ -763,15 +784,14 @@ def make_coadds(tims, bands, targetwcs,
     for iband,(band,timiter) in enumerate(zip(bands, imaps)):
         debug('Computing coadd for band', band)
 
-        coadd = Coadd(band, H, W, detmaps,
-                      (mods is not None), (blobmods is not None), unweighted, ngood,
+        coadd = Coadd(band, H, W, detmaps, have_mods, have_blobmods, unweighted, ngood,
                       xy, allmasks, anymasks, nsatur, psfsize, max, psf_images,
                       satur_val, targetwcs)
 
         for R in timiter:
             if R is None:
                 continue
-            itim,Yo,Xo,iv,im,mo,bmo,dq = R
+            itim,Yo,Xo,iv,im,mo,bmo,dq,cb_data = R
             tim = tims[itim]
 
             if plots:
@@ -780,19 +800,19 @@ def make_coadds(tims, bands, targetwcs,
                                      tim, Yo, Xo)
 
             coadd.accumulate(tim, itim,Yo,Xo,iv,im,mo,bmo,dq,
-                             mjd_args)
+                             mjd_args,cb_data)
 
-            del Yo,Xo,iv,im,mo,bmo,dq,R
+            del Yo,Xo,iv,im,mo,bmo,dq,cb_data,R
 
         coadd.finish()
 
         C.coimgs.append(coadd.cowimg)
         if coweights:
             C.cowimgs.append(coadd.cow)
-        if mods is not None:
+        if have_mods:
             C.comods.append(coadd.cowmod)
             C.coresids.append(coadd.coresid)
-        if blobmods is not None:
+        if have_blobmods:
             C.coblobmods.append(coadd.cowblobmod)
             C.coblobresids.append(coadd.coblobresid)
         if detmaps:
@@ -808,6 +828,8 @@ def make_coadds(tims, bands, targetwcs,
             C.satmaps.append(coadd.satmap)
         if psf_images:
             C.psf_imgs.append(coadd.psf_img)
+        if mod_callback:
+            C.mod_callback_data.append(coadd.mod_callback_data)
         if xy:
             C.T.nobs   [:,iband] = coadd.nobs   [iy,ix]
             C.T.anymask[:,iband] = coadd.ormask [iy,ix]
@@ -831,10 +853,10 @@ def make_coadds(tims, bands, targetwcs,
             for irad,rad in enumerate(apertures):
                 apargs.append((irad, band, rad, coadd.cowimg, imsigma, mask,
                                True, apxy))
-                if mods is not None:
+                if have_mods:
                     apargs.append((irad, band, rad, coadd.coresid, None, None,
                                    False, apxy))
-                if blobmods is not None:
+                if have_blobmods:
                     apargs.append((irad, band, rad, coadd.coblobresid, None, None,
                                    False, apxy))
 
@@ -869,9 +891,9 @@ def make_coadds(tims, bands, targetwcs,
             apimg = []
             apimgerr = []
             apmask = []
-            if mods is not None:
+            if have_mods:
                 apres = []
-            if blobmods is not None:
+            if have_blobmods:
                 apblobres = []
             for irad,rad in enumerate(apertures):
                 (airad, aband, isimg, ap_img, ap_err, ap_mask) = next(apresults)
@@ -882,7 +904,7 @@ def make_coadds(tims, bands, targetwcs,
                 apimgerr.append(ap_err)
                 apmask.append(ap_mask)
 
-                if mods is not None:
+                if have_mods:
                     (airad, aband, isimg, ap_img, ap_err, ap_mask) = next(apresults)
                     assert(airad == irad)
                     assert(aband == band)
@@ -891,7 +913,7 @@ def make_coadds(tims, bands, targetwcs,
                     assert(ap_err is None)
                     assert(ap_mask is None)
 
-                if blobmods is not None:
+                if have_blobmods:
                     (airad, aband, isimg, ap_img, ap_err, ap_mask) = next(apresults)
                     assert(airad == irad)
                     assert(aband == band)
@@ -910,11 +932,11 @@ def make_coadds(tims, bands, targetwcs,
             ap = np.vstack(apmask).T
             ap[np.logical_not(np.isfinite(ap))] = 0.
             C.AP.set('apflux_masked_%s' % band, ap)
-            if mods is not None:
+            if have_mods:
                 ap = np.vstack(apres).T
                 ap[np.logical_not(np.isfinite(ap))] = 0.
                 C.AP.set('apflux_resid_%s' % band, ap)
-            if blobmods is not None:
+            if have_blobmods:
                 ap = np.vstack(apblobres).T
                 ap[np.logical_not(np.isfinite(ap))] = 0.
                 C.AP.set('apflux_blobresid_%s' % band, ap)
@@ -1095,7 +1117,15 @@ def _make_coadds_plots_1(im, band, mods, mo, iv, unweighted,
     allresids.append((tim.time.toYear(), tim.name, rgbimg,rgbmod,thisres))
 
 def _resample_one(args):
-    (itim,tim,mod,blobmod,lanczos,targetwcs,sbscale) = args
+    (itim,tim,mod,blobmod,lanczos,targetwcs,sbscale,
+     mod_callback,mod_callback_args) = args
+    cb_data = None
+    if mod_callback is not None:
+        cb_images, cb_data = mod_callback(tim, targetwcs, *mod_callback_args)
+        if cb_images:
+            mod, blobmod = cb_images
+        del cb_images
+
     if lanczos:
         from astrometry.util.miscutils import patch_image
         patched = tim.getImage().copy()
@@ -1104,6 +1134,7 @@ def _resample_one(args):
         patch_image(patched, okpix)
         del okpix
         imgs = [patched]
+        del patched
         if mod is not None:
             imgs.append(mod)
         if blobmod is not None:
@@ -1129,9 +1160,9 @@ def _resample_one(args):
         if blobmod is not None:
             bmo = rimgs[inext]
             inext += 1
-        del patched,imgs,rimgs
+        del imgs,rimgs
     else:
-        im = tim.getImage ()[Yi,Xi]
+        im = tim.getImage()[Yi,Xi]
         if mod is not None:
             mo = mod[Yi,Xi]
         if blobmod is not None:
@@ -1139,7 +1170,6 @@ def _resample_one(args):
     iv = tim.getInvvar()[Yi,Xi]
     if sbscale:
         fscale = tim.sbscale
-        debug('Applying surface-brightness scaling of %.3f to' % fscale, tim.name)
         im *=  fscale
         iv /= (fscale**2)
         if mod is not None:
@@ -1150,11 +1180,10 @@ def _resample_one(args):
         dq = None
     else:
         dq = tim.dq[Yi,Xi]
-    return itim,Yo,Xo,iv,im,mo,bmo,dq
+    return itim,Yo,Xo,iv,im,mo,bmo,dq,cb_data
 
 def _apphot_one(args):
     (irad, band, rad, img, sigma, mask, isimage, apxy) = args
-    from photutils.aperture import CircularAperture, aperture_photometry
     result = [irad, band, isimage]
     aper = CircularAperture(apxy, rad)
     p = aperture_photometry(img, aper, error=sigma, mask=mask)
@@ -1238,8 +1267,7 @@ def write_coadd_images(band,
                        cowimg=None, cow=None, cowmod=None, cochi2=None,
                        cowblobmod=None,
                        psfdetiv=None, galdetiv=None, congood=None,
-                       psfsize=None, **kwargs):
-
+                       psfsize=None, extra_ims=None, **kwargs):
     hdr = copy_header_with_wcs(version_header, targetwcs)
     # Grab headers from input images...
     get_coadd_headers(hdr, tims, band, coadd_headers)
@@ -1297,7 +1325,7 @@ def write_coadd_images(band,
 # Pretty much only used for plots; the real deal is make_coadds()
 def quick_coadds(tims, bands, targetwcs, images=None,
                  get_cow=False, get_n2=False, fill_holes=True, get_max=False,
-                 get_saturated=False,
+                 get_saturated=False, get_co2=False,
                  addnoise=False):
     W = int(targetwcs.get_width())
     H = int(targetwcs.get_height())
@@ -1306,6 +1334,8 @@ def quick_coadds(tims, bands, targetwcs, images=None,
     cons = []
     if get_n2:
         cons2 = []
+    if get_co2:
+        coimgs2 = []
     if get_cow:
         # moo
         cowimgs = []
@@ -1371,10 +1401,14 @@ def quick_coadds(tims, bands, targetwcs, images=None,
         cons.append(con)
         if get_n2:
             cons2.append(con2)
+        if get_co2:
+            coimgs2.append(coimg2 / np.maximum(1, con2))
 
     rtn = [coimgs,cons]
     if get_cow:
         rtn.extend([cowimgs, wimgs])
+    if get_co2:
+        rtn.append(coimgs2)
     if get_n2:
         rtn.append(cons2)
     if get_max:

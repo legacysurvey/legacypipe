@@ -2,9 +2,9 @@ import numpy as np
 
 import logging
 logger = logging.getLogger('legacypipe.halos')
-# def info(*args):
-#     from legacypipe.utils import log_info
-#     log_info(logger, args)
+def info(*args):
+    from legacypipe.utils import log_info
+    log_info(logger, args)
 def debug(*args):
     from legacypipe.utils import log_debug
     log_debug(logger, args)
@@ -15,15 +15,16 @@ def subtract_halos(tims, refs, bands, mp, plots, ps, moffat=True,
     haloimgs = mp.imap_unordered(subtract_one, args)
     for itim,h in haloimgs:
         tims[itim].data -= h
+        tims[itim].setImage(tims[itim].data)
 
 def subtract_one(X):
     itim, tim, refs, moffat, old_calibs_ok = X
     if tim.imobj.camera != 'decam':
-        print('Warning: Stellar halo subtraction is only implemented for DECam')
+        info('Warning: Stellar halo subtraction is only implemented for DECam')
         return itim, 0.
     col = 'decam_mag_%s' % tim.band
     if not col in refs.get_columns():
-        print('Warning: no support for halo subtraction in band %s' % tim.band)
+        info('Warning: no support for halo subtraction in band %s' % tim.band)
         return itim, 0.
     return itim, decam_halo_model(refs, tim.time.toMjd(), tim.subwcs,
                                   tim.imobj.pixscale, tim.band, tim.imobj, moffat,

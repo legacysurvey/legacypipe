@@ -344,20 +344,32 @@ def get_git_version(dirnm=None):
     -------
     Git version string
     '''
-    from astrometry.util.run_command import run_command
-    cmd = ''
+    import subprocess
+
     if dirnm is None:
-        # Get the git version of the legacypipe product
         import legacypipe
         dirnm = os.path.dirname(legacypipe.__file__)
 
-    cmd = "cd '%s' && git describe" % dirnm
-    rtn,version,err = run_command(cmd)
-    if rtn:
-        raise RuntimeError('Failed to get version string (%s): ' % cmd +
-                           version + err)
-    version = version.strip()
-    return version
+    try:
+        p = subprocess.run(
+            ['git', '-C', dirnm, 'describe'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+            close_fds=True)
+    except Exception as e:
+        raise RuntimeError(f"Failed to invoke git: {e}")
+
+    if p.returncode != 0:
+        out = (p.stdout or '').strip()
+        err = (p.stderr or '').strip()
+        raise RuntimeError(
+            f"Failed to get version string (git -C '{dirnm}' describe): {out} {err}"
+        )
+
+    return p.stdout.strip()
+
 
 def get_version_header(program_name, survey_dir, release, git_version=None,
                        proctype='tile'):
@@ -422,7 +434,6 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, gale
     import photutils
     import tractor
     import scipy
-    import unwise_psf
 
     depvers = []
     headers = []
@@ -439,8 +450,14 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, gale
         ('photutils', photutils),
         ('scipy', scipy),
         ('tractor', tractor),
-        ('unwise_psf', unwise_psf),
     ])
+    try:
+        import unwise_psf
+        pkgs.append(
+            ('unwise_psf', unwise_psf))
+    except ImportError:
+        print('Warning: failed to load package unwise_psf to get version string')
+
     for name,pkg in pkgs:
         if pkg is None:
             depvers.append((name, 'none'))
@@ -501,10 +518,16 @@ def get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, gale
 def tim_get_resamp(tim, targetwcs):
     from astrometry.util.resample import resample_with_wcs,OverlapError
 
+    wcs_hash = hash(targetwcs)
     if hasattr(tim, 'resamp'):
-        return tim.resamp
+        if hasattr(tim, 'targetwcs_hash'):
+            if hash(tim.targetwcs_hash) == wcs_hash:
+                #debug(f'Re-using previous resamp with hash {wcs_hash=}')
+                return tim.resamp
     try:
         Yo,Xo,Yi,Xi,_ = resample_with_wcs(targetwcs, tim.subwcs, intType=np.int16)
+        tim.resamp = Yo,Xo,Yi,Xi
+        tim.targetwcs_hash = wcs_hash
     except OverlapError:
         debug('No overlap between tim', tim.name, 'and target WCS')
         return None
@@ -970,7 +993,7 @@ class FITSWrapper(fitsio.FITS):
                 tilew = find_tile_size(W, default_tile_size)
                 tileh = find_tile_size(H, default_tile_size)
                 kw.update(tile_dims=(tileh, tilew))
-        debug('Writing FITS image with kwargs', kw)
+        #debug('Writing FITS image with kwargs', kw)
         return super().write_image(img, **kw)
 
 class LegacySurveyData(object):

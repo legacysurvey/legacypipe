@@ -209,10 +209,12 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
         for jj, (correction, ii) in enumerate(zip(x, I)):
             goodpix = (tims[ii].inverr > 0)
             tims[ii].data[goodpix] += correction
+            tims[ii].setImage(tims[ii].data)
             tims[ii].sky = ConstantSky(0.0)
             # Also correct the full-field mosaics
             goodpix = (bandtims[jj].inverr > 0)
             bandtims[jj].data[goodpix] += correction
+            bandtims[jj].setImage(bandtims[jj].data)
             bandtims[jj].sky = ConstantSky(0.0)
 
         ## Check--
@@ -293,6 +295,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
             for ii in I:
                 goodpix = (tims[ii].inverr > 0)
                 tims[ii].data[goodpix] -= skymedian
+                tims[ii].setImage(tims[ii].data)
                 #print('Tim', tims[ii], 'after subtracting skymedian: median', np.median(tims[ii].data))
 
     else:
@@ -318,6 +321,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
            for ii in I:
                goodpix = (tims[ii].inverr > 0)
                tims[ii].data[goodpix] -= skymedian
+               tims[ii].setImage(tims[ii].data)
                # print('Tim', tims[ii], 'after subtracting skymedian: median', np.median(tims[ii].data))
 
            #print('Band', band, 'Coadd sky:', skymedian)
@@ -457,6 +461,7 @@ def stage_fit_on_coadds(
     from tractor.sky import ConstantSky
     from tractor.psf import PixelizedPSF
     from tractor.tractortime import TAITime
+    from tractor.psf import HybridPixelizedPSF, NCircularGaussianPSF
     import astropy.time
     import fitsio
     if plots or plots2:
@@ -599,8 +604,10 @@ def stage_fit_on_coadds(
             print('PSF img sum', psfimg.sum())
 
             psf = PixelizedPSF(psfimg)
-            gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
+            gaussian_psf = NCircularGaussianPSF([psf_sigma], [1.])
+            psf = HybridPixelizedPSF(psf, gauss=gaussian_psf)
 
+            gnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
             psfnorm = np.sqrt(np.sum(psfimg**2))
             print('Gaussian PSF norm', gnorm, 'vs pixelized', psfnorm)
 
