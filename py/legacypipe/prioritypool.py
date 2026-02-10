@@ -296,6 +296,24 @@ class PriorityPool(TrackingPool):
                               for i,(p,arg) in enumerate(iterable)])
         return result
 
+    def imap_unordered(self, func, iterable):
+        self.priority_imap_unordered(func, [(0,x) for x in iterable])
+
+    def apply(self, *args, **kwargs):
+        raise RuntimeError('prioritypool.apply()')
+    def map(self, *args, **kwargs):
+        raise RuntimeError('prioritypool.map()')
+    def starmap(self, *args, **kwargs):
+        raise RuntimeError('prioritypool.starmap()')
+    def starmap_async(self, *args, **kwargs):
+        raise RuntimeError('prioritypool.starmap_async()')
+    def imap(self, *args, **kwargs):
+        raise RuntimeError('prioritypool.imap()')
+    def apply_async(self, *args, **kwargs):
+        raise RuntimeError('prioritypool.apply_async()')
+    def map_async(self, *args, **kwargs):
+        raise RuntimeError('prioritypool.map_async()')
+
 # make it so we can reuse the worker() function from TrackingPool.  It gets work by
 # calling the _inqueue.get() method.  So fake that.
 class FakeInqueue(object):

@@ -59,16 +59,32 @@ def debug(*args):
     log_debug(logger, args)
 
 def formatwarning(message, category, filename, lineno, line=None):
-    #return 'Warning: %s (%s:%i)' % (message, filename, lineno)
     return 'Warning: %s' % (message)
-
 warnings.formatwarning = formatwarning
 
-def runbrick_global_init():
-    from tractor.galaxy import disable_galaxy_cache
-    # ignore SIGUSR1
+_LEGACYPIPE_GPU_CONTEXT = None
+
+def runbrick_init_gpu_worker(gpu_id_list, gpumode):
+    my_gpu_id = gpu_id_list.pop()
+    del gpu_id_list
+    info('Initializing GPU worker: pid %i, using GPU id %i' % (os.getpid(), my_gpu_id))
+    import cupy as cp
+    cp.cuda.Device(my_gpu_id).use()
+    global _LEGACYPIPE_GPU_CONTEXT
+    _LEGACYPIPE_GPU_CONTEXT = dict(is_gpu_worker=True, gpumode=gpumode)
+    runbrick_init_cpu_worker()
+
+def runbrick_init_cpu_worker():
+    info('Initializing CPU worker: pid %i' % (os.getpid()))
+    runbrick_init_worker_common()
+
+def runbrick_init_worker_common():
+    # ignore SIGUSR1 - for blob checkpointing
     signal.signal(signal.SIGUSR1, signal.SIG_IGN)
-    disable_galaxy_cache()
+    runbrick_init()
+
+def runbrick_init():
+    pass
 
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                survey=None,
@@ -4243,6 +4259,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               save_galex_psf=False,
               save_coadd_psf=False,
               threads=None,
+              ngpu=0,
+              gpu_ids=[],
+              threads_per_gpu=16,
               plots=False, plots2=False, coadd_bw=False,
               plot_base=None, plot_number=0,
               command_line=None,
@@ -4259,7 +4278,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               wise_checkpoint_period=None,
               prereqs_update=None,
               stagefunc = None,
-              pool = None,
               **bonus_kwargs,
               ):
     '''Run the full Legacy Survey data reduction pipeline.
@@ -4523,22 +4541,42 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         if wise_checkpoint_period is not None:
             kwargs.update(wise_checkpoint_period=wise_checkpoint_period)
 
-    if pool or (threads and threads > 1):
-        from astrometry.util.ttime import MemMeas
-        if pool is None:
-            from legacypipe.trackingpool import TrackingPool
-            pool = TrackingPool(threads,
-                                initializer=runbrick_global_init,
-                                initargs=())
-        StageTime.add_measurement_once(MemMeas)
+    # --- Set up available GPU IDs for the initializer ---
+    available_gpu_ids = []
+    # If specified, --gpu-ids takes precedent
+    if len(gpu_ids):
+        available_gpu_ids = [int(g) for g in gpu_ids.split(',')]
+    elif ngpu:
+        available_gpu_ids = list(range(ngpu))
+
+    gpu_id_manager = None
+    if threads and threads > 1:
+        from legacypipe.prioritypool import PriorityPool
+
+        gpu_threads = 0
+        if len(available_gpu_ids):
+            gpus_to_use = []
+            for gpuid in available_gpu_ids:
+                gpus_to_use.extend([gpuid] * threads_per_gpu)
+            gpu_id_manager = multiprocessing.Manager()
+            gpu_id_list = gpu_id_manager.list(gpus_to_use)
+            gpu_threads = len(gpus_to_use)
+
+        pool = PriorityPool(threads, gpu_threads,
+                            initialize_high_priority=runbrick_init_gpu_worker,
+                            initialize_high_priority_args=(gpu_id_list, gpumode),
+                            initialize_low_priority=runbrick_init_cpu_worker,
+                            initialize_low_priority_args=(,))
         mp = multiproc(None, pool=pool)
+
     else:
         from astrometry.util.ttime import CpuMeas
-        from astrometry.util.ttime import MemMeas
         mp = multiproc(init=runbrick_global_init, initargs=())
         StageTime.add_measurement_once(CpuMeas)
-        StageTime.add_measurement_once(MemMeas)
         pool = None
+
+    from astrometry.util.ttime import MemMeas
+    StageTime.add_measurement_once(MemMeas)
     kwargs.update(mp=mp)
 
     if nblobs is not None:
@@ -4697,6 +4735,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             pool.join()
     debug('run_brick returning...')
 
+    if gpu_id_manager:
+        gpu_id_manager.shutdown()
+
     return R
 
 def flush(x=None):
@@ -4794,6 +4835,11 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='Copy image (ooi, ood, oow) files to --cache-dir before starting.')
 
     parser.add_argument('--threads', type=int, help='Run multi-threaded')
+
+    parser.add_argument('--ngpu', default=0, type=int, help='Number of GPUs')
+    parser.add_argument('--gpu-ids', default='', type=str, help='Comma separated list of GPU ids e.g. 0,1,2,3')
+    parser.add_argument('--threads-per-gpu', default=16, type=int, help='Threads per GPU')
+
     parser.add_argument('-p', '--plots', dest='plots', action='store_true',
                         help='Per-blob plots?')
     parser.add_argument('--plots2', action='store_true',
