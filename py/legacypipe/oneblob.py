@@ -63,7 +63,7 @@ OneBlobArgs = namedtuple('OneBlobArgs', [
     'timargs',
     'srcs', 'bands', 'plots', 'ps', 'reoptimize', 'iterative', 'iterative_nsigma', 'use_ceres',
     'refmap', 'large_galaxies_force_pointsource', 'less_masking', 'frozen_galaxies', 'use_gpu',
-    'gpumode', 'bid', 'halfdone'])
+    'gpumode', 'bid', 'halfdone', 'is_priority'])
 
 def one_blob(args):
     '''
@@ -160,7 +160,7 @@ def one_blob(args):
 
     except QuitNowException as q:
         if ob is not None:
-            print('Caught QuitNowException; saving checkpoint state for blob %s' % args.blobname)
+            print('Caught QuitNowException; returning checkpoint state for blob %s' % args.blobname)
             ob.B = B
         else:
             print('Caught QuitNowException; ob None for blob %s' % args.blobname)

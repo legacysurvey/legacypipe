@@ -1,6 +1,18 @@
 #! /bin/bash
 
 # Script for running the legacypipe code within a Shifter container at NERSC
+# ... on GPU, with blob checkpointing via SIGUSR1
+
+function on_sigusr1() {
+    echo "Caught SIGUSR1 in runbrick.sh script"
+    echo "Jobs:"
+    jobs
+    echo "(end of jobs)"
+    echo "Trying to kill job %1..."
+    kill -USR1 %1
+    echo "Killed job %1"
+}
+trap on_sigusr1 USR1
 
 export COSMO=/dvs_ro/cfs/cdirs/cosmo
 
@@ -112,11 +124,33 @@ python -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --checkpoint-period 120 \
        --write-stage srcs \
        --release 11000 \
-       >> "$log" 2>&1
+       >> "$log" 2>&1 &
 
-# Save the return value from the python command -- otherwise we
-# exit 0 because the rm succeeds!
+# It seems to be necessary to put the job in the background and "wait"
+# on it in order for signals to be delivered to this bash script.
+# When that happens, the "wait" is interrupted (with return value 138)
+# and our signal handler (at the top of this file) gets called; this
+# sends the signal to runbrick.py, which then hopefully exits
+# gracefully!  We *must* wait a second time for this clean return,
+# otherwise this script returns with the job still running in the
+# background and it gets swiftly killed by Slurm.
+
+echo "Running runbrick.py in the background.  Jobs:"
+jobs
+echo "(end of jobs)"
+echo "Waiting..."
+wait
+
+# Save the return value from the first "wait" - if interrupted with SIGUSR1 this will be 138,
+# otherwise the return value of the python command.
 status=$?
+
+echo "wait returned.  (status $status); jobs:"
+jobs
+echo "(end of jobs)"
+wait
+bstatus=$?
+echo "wait #2 returned.  (status $bstatus)"
 
 # /Config directory nonsense
 rm -R $TMPCACHE
