@@ -35,8 +35,6 @@ from collections import Counter
 import multiprocessing
 import queue
 import traceback
-import threading
-import time
 import datetime
 
 import numpy as np
@@ -379,7 +377,7 @@ def get_runbrick_header(program_name, survey, release, gitver,
     from legacypipe.survey import get_version_header, get_dependency_versions
     from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
 
-    version_header = get_version_header(program_name, survey, release, git_version=gitver)
+    version_header = get_version_header(program_name, survey.survey_dir, release, git_version=gitver)
 
     deps = get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir)
     for name,value,comment in deps:
@@ -956,7 +954,7 @@ def stage_srcs(pixscale=None, targetwcs=None,
             for name,bitval in REF_MAP_BITS.items():
                 n = np.sum((refmap & bitval) != 0)
                 if n:
-                    print('Bit', name, 'set for', n, 'pixels')
+                    info('Bit', name, 'set for', n, 'pixels')
             avoid_map = (refmap != 0)
             #avoid_map = (get_reference_map(targetwcs, refs_no_sourcedet) != 0)
 
@@ -1144,8 +1142,9 @@ def stage_srcs(pixscale=None, targetwcs=None,
     detstars.blob_x1 = bb[detstars.blob, 3]
     detstars.blob_y0 = bb[detstars.blob, 0]
     detstars.blob_y1 = bb[detstars.blob, 1]
+    detstars.needs_initial_flux = np.array([getattr(src, 'needs_initial_flux', False) for src in cat])
     for band in bands:
-        bandflux = np.zeros(len(cat), 'f4')
+        bandflux = np.zeros(len(cat), np.float32)
         for isrc, src in enumerate(cat):
             if src:
                 bandflux[isrc] = src.getBrightness().getFlux(band)
@@ -1169,16 +1168,16 @@ pool_worker_pids = None
 pool_obj = None
 signal_quitting = False
 def sigusr1(sig, stackframe):
-    print('SIGUSR1 was received in main PID %i' % os.getpid())
+    info('SIGUSR1 was received in main PID %i' % os.getpid())
     global signal_quitting
     signal_quitting = True
     if pool_obj is not None:
-        print('Closing pool...')
+        info('Closing pool...')
         pool_obj.close()
-    print('pool_worker_pids:', pool_worker_pids)
+    info('pool_worker_pids:', pool_worker_pids)
     if pool_worker_pids is not None:
         for p in list(pool_worker_pids.values()):
-            print('Sending SIGUSR1 to worker PID %s' % p)
+            info('Sending SIGUSR1 to worker PID %s' % p)
             try:
                 pfd = os.pidfd_open(p)
                 signal.pidfd_send_signal(pfd, signal.SIGUSR1)
@@ -1186,9 +1185,9 @@ def sigusr1(sig, stackframe):
                 # This is the bash-style builtin - doesn't work to os.system it!
                 #cmd = 'kill -SIGUSR1 %i' % p
                 cmd = '/usr/bin/kill -s SIGUSR1 %i' % p
-                print('Signalling via os.pidfd & pidfd_send_signal failed (%s) trying shell: %s' % (str(e), cmd))
+                info('Signalling via os.pidfd & pidfd_send_signal failed (%s) trying shell: %s' % (str(e), cmd))
                 rtn = os.system(cmd)
-                print('Return value:', rtn)
+                info('Return value:', rtn)
 
 def stage_fitblobs(T=None,
                    brickname=None,
@@ -1420,6 +1419,7 @@ def stage_fitblobs(T=None,
                           refmap, large_galaxies_force_pointsource, less_masking, brick,
                           frozen_galaxies,
                           skipblobs=skipblobs,
+                          blobxy=blobxy,
                           single_thread=(mp is None or mp.pool is None),
                           max_blobsize=max_blobsize, custom_brick=custom_brick,
                           enable_sub_blobs=sub_blobs,
@@ -1483,12 +1483,12 @@ def stage_fitblobs(T=None,
 
             if signal_quitting:
                 if not closed_pool:
-                    print('Main thread: got SIGUSR1 - closing pool...')
+                    info('Main thread: got SIGUSR1 - closing pool...')
                     mp.pool.close()
-                    print('Main thread: got SIGUSR1 - closed pool')
+                    info('Main thread: got SIGUSR1 - closed pool')
                     closed_pool = True
                 if hasattr(Riter, 'get_running_jobs'):
-                    print('Main thread: waiting for jobs:')
+                    info('Main thread: waiting for jobs:')
                     print_running_jobs(Riter, job_id_map, job_status_map, procs_last)
 
             # Wait for results (with timeout)
@@ -1532,35 +1532,35 @@ def stage_fitblobs(T=None,
                 n_finished += 1
                 n_finished_total += 1
             except StopIteration:
-                print('Main thread: reached end of results')
+                debug('Main thread: reached end of results')
                 break
             except multiprocessing.TimeoutError:
                 #debug('Main thread: timed out waiting for result')
                 continue
             except PoolWorkerDiedException as e:
-                print('Main thread: worker died')
-                print('A worker died (maybe OOM-killed?) while processing a blob.')
-                print(e)
+                info('Main thread: worker died')
+                info('A worker died (maybe OOM-killed?) while processing a blob.')
+                info(e)
                 workitem = 'unknown'
                 index = e.index
                 jmap = job_id_map.copy()
                 if not index in jmap:
-                    print('Unknown which blob that worker was processing.  index %i\n' % index)
+                    info('Unknown which blob that worker was processing.  index %i\n' % index)
                     workitem = 'unknown (index %i)' % index
                 else:
                     (brick,blob) = jmap[index]
-                    print('Worker was processing index %i: brick %s blob %s' % (index, brick, blob))
+                    info('Worker was processing index %i: brick %s blob %s' % (index, brick, blob))
                     workitem = 'brick %s blob %s' % (brick, blob)
 
                 if signal_quitting:
                     continue
 
-                print('Writing checkpoints before exiting...')
+                info('Writing checkpoints before exiting...')
                 _write_checkpoint(R, checkpoint_filename)
-                print('Wrote checkpoints')
-                print('terminating pool...')
+                info('Wrote checkpoints')
+                info('terminating pool...')
                 mp.pool.terminate()
-                print('raising exception...')
+                info('raising exception...')
                 raise RunbrickError('Worker process died (OOM?) while processing: %s' % workitem)
             except Exception as e:
                 print('Main thread: Exception fetching result:', e)
@@ -1577,7 +1577,7 @@ def stage_fitblobs(T=None,
         pool_obj = None
         signal.signal(signal.SIGUSR1, old_sigusr1)
         if signal_quitting:
-            print('Quitting due to SIGUSR1 signal')
+            info('Quitting due to SIGUSR1 signal')
             # (pool gets cleaned up in the runstage "finally" clause)
             sys.exit(0)
 
@@ -1711,7 +1711,7 @@ def stage_fitblobs(T=None,
     if T_special is not None:
         T_all.append(T_special)
         cat.extend(cat_special)
-        print('cat_special:', cat_special)
+        info('cat_special:', cat_special)
     if T_refbail:
         T_all.append(T_refbail)
         cat.extend(cat_refbail)
@@ -1838,9 +1838,9 @@ def stage_fitblobs(T=None,
     return rtn
 
 def print_running_jobs(Riter, job_id_map, job_status_map, procs_last):
-    print('Running:')
+    info('Running:')
     status = Riter.get_running_jobs()
-    #print('running job status:', status)
+    #info('running job status:', status)
     # other threads may try to update status during iteration
     status = status.copy()
     jmap = job_id_map.copy()
@@ -1864,24 +1864,24 @@ def print_running_jobs(Riter, job_id_map, job_status_map, procs_last):
         procs_last = run_ps(pid)
         time.sleep(1.)
     procs = run_ps(pid, last=procs_last)
-    #print('procs columns:', procs.get_columns())
+    #info('procs columns:', procs.get_columns())
     tnow = time.time()
     keys = list(status.keys())
     keys.sort()
     for jobid in keys:
         s = status[jobid]
         if not jobid in jmap:
-            print('trackingpool job id', jobid, 'not known')
+            info('trackingpool job id', jobid, 'not known')
             continue
         (brick,blob) = jmap[jobid]
         pid = s['pid']
         i = np.flatnonzero(procs.pid == pid)
         if len(i) != 1:
-            print('Blob %10s' % blob, 'pid', pid, '"running" for %7.1f sec, but did not find PID %i: crashed?' %
+            info('Blob %10s' % blob, 'pid', pid, '"running" for %7.1f sec, but did not find PID %i: crashed?' %
                   (tnow - s['time'], pid))
         else:
             i = i[0]
-            print('Blob %5s' % blob, 'pid %7i' % s['pid'],
+            info('Blob %5s' % blob, 'pid %7i' % s['pid'],
                   'total CPU %7.1f sec' % (tnow - s['time']),
                   'CPU now %5.1f %%,' % procs.proc_icpu[i],
                   'VMsize %5.1f GB,' % (procs.vsz[i] / (1024 * 1024)),
@@ -2063,6 +2063,7 @@ def _blob_iter(job_id_map,
                large_galaxies_force_pointsource, less_masking,
                brick, frozen_galaxies, single_thread=False,
                skipblobs=None, max_blobsize=None, custom_brick=False,
+               blobxy=None,
                enable_sub_blobs=False,
                ran_sub_blobs=None,
                gpu_tuple=None,
@@ -2136,7 +2137,7 @@ def _blob_iter(job_id_map,
     if halfdone_blob_map is None:
         halfdone_blob_map = {}
     else:
-        print('Half-done blobs:', halfdone_blob_map.keys())
+        info('Half-done blobs:', halfdone_blob_map.keys())
 
     blobvals = Counter(blobmap[blobmap >= 0])
     blob_order = np.array([b for b, npix in blobvals.most_common()])
@@ -2255,6 +2256,20 @@ def _blob_iter(job_id_map,
                     s_x0, s_x1 = j*(subw-overlap), min(j*(subw-overlap)+subw, blobw)
                     s_bx0, s_bx1, s_by0, s_by1 = bx0+s_x0, bx0+s_x1, by0+s_y0, by0+s_y1
 
+                    # Only keep sub-blobs containing one of the "blobxy" points.
+                    if blobxy is not None:
+                        ok = False
+                        for x,y in blobxy:
+                            if x >= s_bx0 and x < s_bx1 and y >= s_by0 and y < s_by1:
+                                # We filter for being in the whole blob before even calling _blob_iter,
+                                # so just checking the bounds of the sub-blob should be sufficient.
+                                #if blobmask[y-by0, x-bx0]:
+                                ok = True
+                                break
+                        if not ok:
+                            debug('Sub-blob does not contain a --blobxy, skipping')
+                            continue
+
                     clipx = np.clip(T.ibx[Isrcs], 0, W-1)
                     clipy = np.clip(T.iby[Isrcs], 0, H-1)
                     Isubsrcs = Isrcs[(clipx >= s_bx0)*(clipx < s_bx1)*(clipy >= s_by0)*(clipy < s_by1)]
@@ -2301,7 +2316,7 @@ def _blob_iter(job_id_map,
 
         global signal_quitting
         if signal_quitting:
-            print('_blob_iter: signal_quitting')
+            info('_blob_iter: signal_quitting')
             break
 
         if task['size'] == -1:
@@ -3302,7 +3317,7 @@ def stage_wise_forced(
             traceback.print_exc()
         n_a = len(runargs)
         runargs = [(key,a) for (key,a) in runargs if not key in photresults]
-        print('Running', len(runargs), 'of', n_a, 'images not in checkpoint')
+        info('Running', len(runargs), 'of', n_a, 'images not in checkpoint')
 
     # Run the forced photometry!
     record_event and record_event('stage_wise_forced: photometry')
@@ -3574,23 +3589,23 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
 
     pid = os.getpid()
     procs = run_ps(pid)
-    print('PS:')
+    info('PS:')
     procs.about()
-    print('pmem:', procs.pmem)
-    print('proc_vmpeak:', procs.proc_vmpeak)
-    print('vsz:', procs.vsz)
+    info('pmem:', procs.pmem)
+    info('proc_vmpeak:', procs.proc_vmpeak)
+    info('vsz:', procs.vsz)
 
     for i in range(len(tims)):
         tims[i] = None
 
     procs = run_ps(pid, last=procs)
-    print('PS:')
+    info('PS:')
     procs.about()
-    print('pmem:', procs.pmem)
-    print('proc_vmpeak:', procs.proc_vmpeak)
-    print('vsz:', procs.vsz)
+    info('pmem:', procs.pmem)
+    info('proc_vmpeak:', procs.proc_vmpeak)
+    info('vsz:', procs.vsz)
 
-    print('T:')
+    info('T:')
     T.about()
 
     clean_bands = [clean_band_name(b) for b in forced_bands]
@@ -3651,14 +3666,14 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
 
     # no before-n-after outlier mask plots?
     # no "Patch individual-CCD masked pixels from a coadd"
-    print('Masking outlier pixels...')
+    info('Masking outlier pixels...')
     mask_outlier_pixels(
         survey, tims, forced_bands, targetwcs, brickname, version_header,
         mp=mp, plots=plots, ps=ps, make_badcoadds=False, refobjs=refobjs,
         write_mask_file=False)
 
     # from stage_halos...
-    print('Subtracting stellar halos...')
+    info('Subtracting stellar halos...')
     if star_halos and refobjs:
         Igaia, = np.nonzero(refobjs.isgaia * refobjs.pointsource)
         debug(len(Igaia), 'stars for halo subtraction')
@@ -3677,15 +3692,15 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
                (T.dup == False) * np.array([src is not None for src in cat]))
     # (we don't have T.type yet; this is equivalent to T.type not equal to 'DUP' or 'NUN')
 
-    print('Objects to forced-photometer: catalog contains %i total.  %i are non-DUP.  %i have sources.  %i satisfy both.' % (len(T), np.sum(T.dup == False), len([src is not None for src in cat]), np.sum(do_phot)))
+    info('Objects to forced-photometer: catalog contains %i total.  %i are non-DUP.  %i have sources.  %i satisfy both.' % (len(T), np.sum(T.dup == False), len([src is not None for src in cat]), np.sum(do_phot)))
 
     # This will get multiprocessed...
     args = [list(a) + [cat, T, do_phot, release, use_ceres] for a in zip(ccds, ims, tims)]
     FF = mp.map(_forced_phot_one, args)
     FF = [F for F in FF if F is not None]
     F = merge_tables(FF, columns='fillzero')
-    print('All forced photometry results:')
-    F.about()
+    #print('All forced photometry results:')
+    #F.about()
     del FF
 
     mag_unit = 'mag'
@@ -3717,12 +3732,12 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     TF.objid = T.objid.copy()
     from legacypipe.forced_photom_brickwise import average_forced_phot
     forced_units = average_forced_phot(F, TF, prefix='')
-    print('Averaged forced-phot results:')
-    TF.about()
+    #print('Averaged forced-phot results:')
+    #TF.about()
     del F
 
     # Create coadd
-    print('Creating coadd...')
+    info('Creating coadd...')
     # code from stage_coadds...
     # FIXME - ccds-table for forced-photometry results?
 
@@ -3760,16 +3775,16 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     for i,br in zip(Ireg, orig_bright):
         cat[i].brightness = br
 
-    print('Coadd results contain:', dir(C))
+    info('Coadd results contain:', dir(C))
     # 'AP', 'T', 'allmasks', 'coimgs', 'comods', 'coresids', 'cowimgs', 'galdetivs', 'maximgs', 'psfdetivs'
-    print('Coadd Table contains:')
-    C.T.about()
+    #print('Coadd Table contains:')
+    #C.T.about()
 
     # Save per-source measurements of the maps produced during coadding
     cols = ['nobs', 'ngood', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth']
     for c in cols:
         X = C.T.get(c)
-        print('Column', c, ': shape', X.shape, 'type', X.dtype)
+        #print('Column', c, ': shape', X.shape, 'type', X.dtype)
         for i,band in enumerate(clean_bands):
             TF.set('%s_%s' % (c, band), X[:,i])
 
@@ -3816,8 +3831,8 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     # Grab aperture fluxes
     assert(C.AP is not None)
 
-    print('Aperture flux table:')
-    C.AP.about()
+    # print('Aperture flux table:')
+    # C.AP.about()
     # How many apertures?
     A = len(apertures_arcsec)
     for src,dst in [('apflux_img_%s',       'apflux'),
@@ -3838,9 +3853,9 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
         src.brightness = NanoMaggies(**fluxes)
         cat2.append(src)
 
-    print('TF:', len(TF))
-    TF.about()
-    print('Catalog:', len(cat2))
+    # print('TF:', len(TF))
+    # TF.about()
+    # print('Catalog:', len(cat2))
 
     TF.bx = T.bx
     TF.by = T.by
@@ -3852,8 +3867,8 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
         TF.set('fibertotflux_%s' % (band), fftot[:,iband])
     TF.delete_column('flux_ivar')
 
-    print('After fiberfluxes:')
-    TF.about()
+    # print('After fiberfluxes:')
+    # TF.about()
 
     return dict(forced_T=TF, tims=tims)
 
@@ -3863,7 +3878,7 @@ def _forced_phot_one(args):
 
     ccd, im, tim, cat, T, do_phot, release, use_ceres = args
 
-    print('Forced-photometering', tim)
+    info('Forced-photometering', tim)
     # Cut to sources within this chip
     chipwcs = tim.subwcs
     h,w = chipwcs.shape
@@ -3884,9 +3899,9 @@ def _forced_phot_one(args):
     # table to the sources).
     sub_cat = [cat[i] for i in I]
 
-    print('Not subtracting SGA galaxies outside the image...')
+    info('Not subtracting SGA galaxies outside the image...')
 
-    print('Forced-photometering %i sources in & near this image' % len(sub_cat))
+    info('Forced-photometering %i sources in & near this image' % len(sub_cat))
 
     # create copies before modifying the Flux object
     sub_cat = [src.copy() for src in sub_cat]
@@ -3906,7 +3921,7 @@ def _forced_phot_one(args):
                         windowed_peak=False,
                         timing=False, **kwargs)
     t1 = Time()
-    print('run_forced_phot:', (t1-t0))
+    info('run_forced_phot:', (t1-t0))
 
     if F is not None:
         derivs = False
@@ -4059,8 +4074,8 @@ def stage_writecat(
         WISE = None
 
     if GALEX is not None:
-        print('runbrick: GALEX table is:')
-        GALEX.about()
+        #print('runbrick: GALEX table is:')
+        #GALEX.about()
         galex_cols = GALEX.get_columns()
         for c in ['flux_nuv', 'flux_ivar_nuv', 'flux_fuv', 'flux_ivar_fuv',
                   'apflux_nuv', 'apflux_resid_nuv', 'apflux_ivar_nuv',
@@ -4146,7 +4161,7 @@ def stage_writecat(
         for b in survey.allbands + forced_bands:
             if not b in band_order:
                 allbands.append(b)
-    print('Allbands:', allbands)
+    #print('Allbands:', allbands)
 
     # ASSUME that the UNWISE_COADDS_TIMERESOLVED_DIR ends with "/neo#" and look up the target
     # array size based on that.
@@ -4168,7 +4183,7 @@ def stage_writecat(
         N_wise_epochs = 17
         warnings.warn('Could not determine array size for WISE time-resolved measurements; defaulting to %i' % N_wise_epochs)
     else:
-        print('unWISE time-resolved version: %s - saving %i elements' % (dirname, N_wise_epochs))
+        info('unWISE time-resolved version: %s - saving %i elements' % (dirname, N_wise_epochs))
 
     columns,units = format_catalog(T, bands, allbands, release,
                                    N_wise_epochs=N_wise_epochs, motions=gaia_stars, gaia_tagalong=True)
@@ -4181,9 +4196,16 @@ def stage_writecat(
             for c in ['brickid', 'objid', 'bx', 'by']:
                 forced_T.delete_column(c)
             fc = forced_T.get_columns()
-            print('Forced photometry columns:', fc)
+            #print('Forced photometry columns:', fc)
             for c in fc:
                 T.set(c, forced_T.get(c))
+        else:
+            # No actual coverage... fill in fake values for forced-photom columns.
+            for band in forced_bands:
+                b = clean_band_name(band)
+                for prefix in ['nea_', 'blob_nea_']:
+                    T.set(prefix + b, np.zeros(len(T), np.float32))
+
         # Re-align the units with the list of columns.
         units = [unitmap[c] for c in columns]
 
@@ -4572,7 +4594,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     if plot_base is None:
         plot_base = plot_base_default
     ps = PlotSequence(plot_base % dict(brick=brick))
-    initargs.update(ps=ps)
+    initargs.update(ps=ps, plots=plots)
     if plot_number:
         ps.skipto(plot_number)
 
@@ -4865,17 +4887,17 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     except Exception as e:
         print('runstage ... caught exception', e)
         if pool is not None:
-            print('pool.terminate()...')
+            info('pool.terminate()...')
             pool.terminate()
         raise e
     finally:
-        print('runstage ... finally clause')
+        debug('runstage ... finally clause')
         if pool is not None:
-            print('pool.close()...')
+            debug('pool.close()...')
             pool.close()
-            print('pool.join()...')
+            debug('pool.join()...')
             pool.join()
-    print('run_brick returning...')
+    debug('run_brick returning...')
 
     return R
 
@@ -5328,18 +5350,18 @@ def main(args=None):
     from legacypipe.survey import get_git_version
     t = time.time()
 
-    print()
-    print('runbrick.py starting at', datetime.datetime.now().isoformat())
-    print('legacypipe git version:', get_git_version())
+    info()
+    info('runbrick.py starting at', datetime.datetime.now().isoformat())
+    info('legacypipe git version:', get_git_version())
     if args is None:
-        print('Command-line args:', sys.argv)
+        info('Command-line args:', sys.argv)
         cmd = 'python'
         for vv in sys.argv:
             cmd += ' {}'.format(vv)
-        print(cmd)
+        info(cmd)
     else:
-        print('Args:', args)
-    print()
+        info('Args:', args)
+    info()
 
     parser = get_parser()
     parser.add_argument(
@@ -5419,20 +5441,20 @@ def main(args=None):
         run_brick(opt.brick, survey, **kwargs)
         rtn = 0
     except NothingToDoError as e:
-        print()
+        info()
         if hasattr(e, 'message'):
-            print(e.message)
+            info(e.message)
         else:
-            print(e)
-        print()
+            info(e)
+        info()
         rtn = 0
     except RunbrickError as e:
-        print()
+        info()
         if hasattr(e, 'message'):
-            print(e.message)
+            info(e.message)
         else:
-            print(e)
-        print()
+            info(e)
+        info()
         rtn = -1
 
     if ps_file is not None:
@@ -5443,7 +5465,7 @@ def main(args=None):
         if ps_thread.is_alive():
             info('ps thread is still alive.')
 
-    print ("Total runtime:", time.time()-t)
+    info('Total runtime: %.1f sec' % (time.time()-t))
     return rtn
 
 if __name__ == '__main__':
