@@ -63,15 +63,19 @@ def formatwarning(message, category, filename, lineno, line=None):
 warnings.formatwarning = formatwarning
 
 _LEGACYPIPE_GPU_CONTEXT = None
+def is_gpu_worker():
+    if _LEGACYPIPE_GPU_CONTEXT is None:
+        return False
+    return _LEGACYPIPE_GPU_CONTEXT.get('is_gpu_worker', False)
 
-def runbrick_init_gpu_worker(gpu_id_list, gpumode):
+def runbrick_init_gpu_worker(gpu_id_list):
     my_gpu_id = gpu_id_list.pop()
     del gpu_id_list
     info('Initializing GPU worker: pid %i, using GPU id %i' % (os.getpid(), my_gpu_id))
     import cupy as cp
     cp.cuda.Device(my_gpu_id).use()
     global _LEGACYPIPE_GPU_CONTEXT
-    _LEGACYPIPE_GPU_CONTEXT = dict(is_gpu_worker=True, gpumode=gpumode)
+    _LEGACYPIPE_GPU_CONTEXT = dict(is_gpu_worker=True)
     runbrick_init_cpu_worker()
 
 def runbrick_init_cpu_worker():
@@ -4564,9 +4568,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
         pool = PriorityPool(threads, gpu_threads,
                             initialize_high_priority=runbrick_init_gpu_worker,
-                            initialize_high_priority_args=(gpu_id_list, gpumode),
+                            initialize_high_priority_args=(gpu_id_list,),
                             initialize_low_priority=runbrick_init_cpu_worker,
-                            initialize_low_priority_args=(,))
+                            initialize_low_priority_args=())
         mp = multiproc(None, pool=pool)
 
     else:

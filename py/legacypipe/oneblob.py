@@ -86,10 +86,13 @@ def one_blob(args):
         # don't return None -- this is a different thing!
         raise QuitNowException()
 
+    from legacypipe.runbrick import is_gpu_worker
+    is_gpu = is_gpu_worker()
+
     pid = os.getpid()
-    info('Fitting blob %s of %i: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies; pid %i' %
+    info('Fitting blob %s of %i: blobid %i, nsources %i, size %i x %i, %i images, %i frozen galaxies; pid %i; is GPU? %s' %
          (args.blobname, args.nblobs, args.iblob, len(args.Isrcs), args.blobw, args.blobh, len(args.timargs),
-          len(args.frozen_galaxies), pid))
+          len(args.frozen_galaxies), pid, is_gpu))
 
     if len(args.timargs) == 0:
         return None
