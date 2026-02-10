@@ -1694,7 +1694,8 @@ class OneBlob(object):
             if fit_background:
                 # Reset sky params
                 srctractor.images.setParams(skyparams)
-                srctractor.thawParam('images')
+                # freeze sky before flux fitting
+                srctractor.freezeParam('images')
 
             # First-round optimization (during model selection)
             self.debug('Before model selection: %s' % (str(newsrc)))
@@ -1702,6 +1703,7 @@ class OneBlob(object):
             # Fit just the fluxes first...
             newsrc.freezeAllBut('brightness')
             # gpu-optimizer assumes source pos is not frozen
+            # SmarterDenseOptimizer isn't so smart when the sky is also being fit!
             opt = srctractor.optimizer
             from tractor.smarter_dense_optimizer import SmarterDenseOptimizer
             sm = SmarterDenseOptimizer()
@@ -1710,6 +1712,9 @@ class OneBlob(object):
             srctractor.optimizer = opt
             self.debug('After model selection (just fluxes): %s' % (str(newsrc)))
             newsrc.thawAllParams()
+
+            if fit_background:
+                srctractor.thawParam('images')
 
             try:
                 #print ("ENTERING OPTIMIZE 2 - ", type(srctractor), srctractor.optimize_loop)
