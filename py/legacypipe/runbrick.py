@@ -4056,6 +4056,13 @@ def stage_writecat(
             #print('Forced photometry columns:', fc)
             for c in fc:
                 T.set(c, forced_T.get(c))
+        else:
+            # No actual coverage... fill in fake values for forced-photom columns.
+            for band in forced_bands:
+                b = clean_band_name(band)
+                for prefix in ['nea_', 'blob_nea_']:
+                    T.set(prefix + b, np.zeros(len(T), np.float32))
+
         # Re-align the units with the list of columns.
         units = [unitmap[c] for c in columns]
 
