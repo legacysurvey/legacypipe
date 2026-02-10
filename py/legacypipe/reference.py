@@ -89,6 +89,16 @@ def get_reference_sources(survey, targetwcs, bands,
                 if len(I):
                     gaia.ignore_source[J] = True
                     gaia.dup[J] = True
+
+                # HACK -- in NGC 1672, for example, we see a cluster of Gaia sources right around
+                # the galaxy core, and this seems to cause problems.
+                I2,J2,_ = match_radec(galaxies.ra, galaxies.dec, gaia.ra, gaia.dec,
+                                      15./3600.)
+                info('HACK -- Matched an additional', len(I2)-len(I), 'large galaxies to Gaia stars.')
+                if len(I2):
+                    gaia.ignore_source[J2] = True
+                    gaia.dup[J2] = True
+
             # Resolve possible Tycho2-large-galaxy duplicates (with larger radius)
             if tycho and len(tycho):
                 I,J,_ = match_radec(galaxies.ra, galaxies.dec, tycho.ra, tycho.dec,

@@ -148,7 +148,8 @@ def one_blob(args):
             ob.use_gpu = True
             ob.gpumode = args.gpumode
 
-        B = ob.run(B, reoptimize=args.reoptimize, iterative_detection=args.iterative)
+        B = ob.run(B, reoptimize=args.reoptimize, iterative_detection=args.iterative,
+                   mask_others=False, do_segmentation=False)
         ob.finalize_table(B, args.bx0, args.by0)
 
         B.iblob = args.iblob
@@ -392,7 +393,7 @@ class OneBlob(object):
         B.delete_column('y0')
 
     def run(self, B, reoptimize=False, iterative_detection=True,
-            compute_metrics=True, mask_others=True, is_iterative=False):
+            compute_metrics=True, mask_others=True, do_segmentation=True, is_iterative=False):
         # The overall steps here are:
         # - fit initial fluxes for small number of sources that may need it
         # - optimize individual sources
@@ -439,15 +440,19 @@ class OneBlob(object):
         cat = Catalog(*B.sources)
         tr = self.tractor(self.tims, cat)
         # Fit any sources marked with 'needs_initial_flux' -- saturated, and SGA
-        fitflux = [src for src in cat if (src is not None and getattr(src, 'needs_initial_flux', False))]
-        if len(fitflux):
-            self.debug('Fitting initial fluxes for %i sources' % len(fitflux))
-            self._fit_fluxes(cat, self.tims, self.bands, fitcat=fitflux)
-            if self.plots:
-                self._plots(tr, 'Fitting initial fluxes')
-            for src in fitflux:
-                src.needs_initial_flux = False
-        del fitflux
+        if np.any(B.done_fitting):
+            # we're resuming and got past here previously
+            pass
+        else:
+            fitflux = [src for src in cat if (src is not None and getattr(src, 'needs_initial_flux', False))]
+            if len(fitflux):
+                self.debug('Fitting initial fluxes for %i sources' % len(fitflux))
+                self._fit_fluxes(cat, self.tims, self.bands, fitcat=fitflux)
+                if self.plots:
+                    self._plots(tr, 'Fitting initial fluxes')
+                for src in fitflux:
+                    src.needs_initial_flux = False
+            del fitflux
 
         if self.plots:
             self._plots(tr, 'Initial models')
@@ -466,6 +471,10 @@ class OneBlob(object):
         else:
             self.debug('Initial fitting')
             Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
+
+            #print('HACK - fitting only first 10!')
+            #Ibright = Ibright[:10]
+
             if len(cat) > 1:
                 self._optimize_individual_sources_subtract(
                     cat, Ibright, B.cpu_source, B.done_fitting)
@@ -546,10 +555,17 @@ class OneBlob(object):
             # Also set a parameter on 'src' for use in compute_segmentation_map()
             src.maskbits_forced_point_source = force_pointsource
 
-        segmap = self.compute_segmentation_map(cat)
+        if do_segmentation:
+            segmap = self.compute_segmentation_map(cat)
+        else:
+            segmap = None
         # Next, model selections: point source vs rex vs dev/exp vs ser.
         self.debug('Starting model selection')
         Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
+
+        #print('HACK - fitting only first 10!')
+        #Ibright = Ibright[:10]
+
         B = self.run_model_selection(cat, Ibright, B, segmap,
                                      iterative_detection=iterative_detection,
                                      mask_others=mask_others)
