@@ -2033,6 +2033,49 @@ def _check_checkpoints(R, blobslices, brickname):
         keepR.append(ri)
     return keepR, halfdone_blobs
 
+def get_subtim_args(tims, targetwcs, bx0,bx1, by0,by1, single_thread):
+    rr,dd = targetwcs.pixelxy2radec([bx0,bx0,bx1,bx1],[by0,by1,by1,by0])
+    subtimargs = []
+    for tim in tims:
+        h,w = tim.shape
+        _,x,y = tim.subwcs.radec2pixelxy(rr,dd)
+        sx0,sx1 = x.min(), x.max()
+        sy0,sy1 = y.min(), y.max()
+        #print('blob extent in pixel space of', tim.name, ': x',
+        # (sx0,sx1), 'y', (sy0,sy1), 'tim shape', (h,w))
+        if sx1 < 0 or sy1 < 0 or sx0 > w or sy0 > h:
+            continue
+        sx0 = int(np.clip(int(np.floor(sx0 - 1)), 0, w-1))
+        sx1 = int(np.clip(int(np.ceil (sx1 - 1)), 0, w-1)) + 1
+        sy0 = int(np.clip(int(np.floor(sy0 - 1)), 0, h-1))
+        sy1 = int(np.clip(int(np.ceil (sy1 - 1)), 0, h-1)) + 1
+        subslc = slice(sy0,sy1),slice(sx0,sx1)
+        subimg = tim.getImage   ()[subslc]
+        subie  = tim.getInvError()[subslc]
+        if tim.dq is None:
+            subdq = None
+        else:
+            subdq  = tim.dq[subslc]
+        subwcs = tim.getWcs().shifted(sx0, sy0)
+        subsky = tim.getSky().shifted(sx0, sy0)
+        subpsf = tim.getPsf().getShifted(sx0, sy0)
+        subwcsobj = tim.subwcs.get_subimage(sx0, sy0, sx1-sx0, sy1-sy0)
+        tim.imobj.psfnorm = tim.psfnorm
+        tim.imobj.galnorm = tim.galnorm
+        # FIXME -- maybe the cache is worth sending?
+        if hasattr(tim.psf, 'clear_cache'):
+            tim.psf.clear_cache()
+        # Yuck!  If we're not running with --threads AND oneblob.py modifies the data,
+        # bad things happen!
+        if single_thread:
+            subimg = subimg.copy()
+            subie = subie.copy()
+            subdq = subdq.copy()
+        subtimargs.append((subimg, subie, subdq, subwcs, subwcsobj,
+                           tim.getPhotoCal(),
+                           subsky, subpsf, tim.name, tim.band, tim.sig1, tim.imobj))
+    return subtimargs
+
 def _blob_iter(job_id_map,
                brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T, bands,
                plots, ps, reoptimize, iterative, iterative_nsigma, use_ceres, refmap,
@@ -2044,6 +2087,78 @@ def _blob_iter(job_id_map,
                ran_sub_blobs=None,
                halfdone_blob_map=None,
                do_segmentation=True):
+    from legacypipe.oneblob import OneBlobArgs
+    all_tasks_metadata = get_blob_metadata(
+        blobslices, blobsrcs, targetwcs, T, bands,
+        plots, ps, reoptimize, iterative, iterative_nsigma, use_ceres, refmap,
+        large_galaxies_force_pointsource, less_masking,
+        brick,
+        skipblobs=skipblobs, max_blobsize=max_blobsize, custom_brick=custom_brick,
+        blobxy=blobxy, enable_sub_blobs=enable_sub_blobs, do_segmentation=do_segmentation)
+
+    if halfdone_blob_map is None:
+        halfdone_blob_map = {}
+    else:
+        info('Half-done blobs:', halfdone_blob_map.keys())
+
+    # Yield
+    job_id = 0
+    total_tasks = len(all_tasks_metadata)
+    for rank, task in enumerate(all_tasks_metadata):
+        task_rank = rank + 1
+        iblob = task['iblob']
+
+        global signal_quitting
+        if signal_quitting:
+            info('_blob_iter: signal_quitting')
+            break
+
+        if task['size'] == -1:
+            job_id_map[job_id] = (brickname, task['nblob_idx'])
+            yield (brickname, iblob, None, None)
+            job_id += 1
+            continue
+
+        bx0, bx1, by0, by1 = task['coords']
+        Isrcs = task['Isrcs']
+        sub_idx = task.get('sub_idx')
+        display_name = task.get('sub_name', f"{task['nblob_idx']}")
+
+        subtimargs = get_subtim_args(tims, targetwcs, bx0, bx1, by0, by1, single_thread)
+
+        job_id_map[job_id] = (brickname, display_name)
+        job_id += 1
+        if sub_idx is not None and ran_sub_blobs is not None:
+            ran_sub_blobs.append(int(iblob))
+
+        if sub_idx is not None:
+            halfdone = halfdone_blob_map.get((int(iblob),sub_idx))
+        else:
+            halfdone = halfdone_blob_map.get(int(iblob))
+        if halfdone is not None:
+            info('Found a mid-way checkpoint for blob %s' % (task['blobname']))
+
+        yield (brickname, (iblob, sub_idx) if sub_idx is not None else iblob,
+               task.get('unique_bounds'),
+               OneBlobArgs(blobname=task['blobname'], iblob=iblob, Isrcs=Isrcs,
+                           bx0=bx0, by0=by0, blobw=bx1-bx0, blobh=by1-by0,
+                           # "blobmask" has already been cut to this blob, so don't use sub_slc
+                           blobmask=task['blobmask'],
+                           timargs=subtimargs, srcs=[cat[i] for i in Isrcs],
+                           refmap=refmap[by0:by1, bx0:bx1],
+                           frozen_galaxies=frozen_galaxies.get(iblob, []),
+                           halfdone=halfdone,
+                           **common_blob_args))
+
+def get_blob_metadata(
+    blobslices, blobsrcs, targetwcs, T, bands,
+    plots, ps, reoptimize, iterative, iterative_nsigma, use_ceres, refmap,
+    large_galaxies_force_pointsource, less_masking,
+    brick,
+    skipblobs=None, max_blobsize=None, custom_brick=False,
+    blobxy=None,
+    enable_sub_blobs=False,
+    do_segmentation=True):
     '''
     *blobmap*: integer image map, with -1 indicating no-blob, other values indexing
         into *blobslices*,*blobsrcs*.
@@ -2053,55 +2168,7 @@ def _blob_iter(job_id_map,
     '''
     from legacypipe.bits import REF_MAP_BITS
     from collections import Counter
-    from legacypipe.oneblob import OneBlobArgs
 
-    def get_subtim_args(tims, targetwcs, bx0,bx1, by0,by1, single_thread):
-        rr,dd = targetwcs.pixelxy2radec([bx0,bx0,bx1,bx1],[by0,by1,by1,by0])
-        subtimargs = []
-        for tim in tims:
-            h,w = tim.shape
-            _,x,y = tim.subwcs.radec2pixelxy(rr,dd)
-            sx0,sx1 = x.min(), x.max()
-            sy0,sy1 = y.min(), y.max()
-            #print('blob extent in pixel space of', tim.name, ': x',
-            # (sx0,sx1), 'y', (sy0,sy1), 'tim shape', (h,w))
-            if sx1 < 0 or sy1 < 0 or sx0 > w or sy0 > h:
-                continue
-            sx0 = int(np.clip(int(np.floor(sx0 - 1)), 0, w-1))
-            sx1 = int(np.clip(int(np.ceil (sx1 - 1)), 0, w-1)) + 1
-            sy0 = int(np.clip(int(np.floor(sy0 - 1)), 0, h-1))
-            sy1 = int(np.clip(int(np.ceil (sy1 - 1)), 0, h-1)) + 1
-            subslc = slice(sy0,sy1),slice(sx0,sx1)
-            subimg = tim.getImage   ()[subslc]
-            subie  = tim.getInvError()[subslc]
-            if tim.dq is None:
-                subdq = None
-            else:
-                subdq  = tim.dq[subslc]
-            subwcs = tim.getWcs().shifted(sx0, sy0)
-            subsky = tim.getSky().shifted(sx0, sy0)
-            subpsf = tim.getPsf().getShifted(sx0, sy0)
-            subwcsobj = tim.subwcs.get_subimage(sx0, sy0, sx1-sx0, sy1-sy0)
-            tim.imobj.psfnorm = tim.psfnorm
-            tim.imobj.galnorm = tim.galnorm
-            # FIXME -- maybe the cache is worth sending?
-            if hasattr(tim.psf, 'clear_cache'):
-                tim.psf.clear_cache()
-            # Yuck!  If we're not running with --threads AND oneblob.py modifies the data,
-            # bad things happen!
-            if single_thread:
-                subimg = subimg.copy()
-                subie = subie.copy()
-                subdq = subdq.copy()
-            subtimargs.append((subimg, subie, subdq, subwcs, subwcsobj,
-                               tim.getPhotoCal(),
-                               subsky, subpsf, tim.name, tim.band, tim.sig1, tim.imobj))
-        return subtimargs
-
-    if halfdone_blob_map is None:
-        halfdone_blob_map = {}
-    else:
-        info('Half-done blobs:', halfdone_blob_map.keys())
     skipblobset = set(skipblobs or [])
 
     blobvals = Counter(blobmap[blobmap >= 0])
@@ -2261,55 +2328,7 @@ def _blob_iter(job_id_map,
 
     # Sort - use a lambda to pull the chosen metric from the metadata dictionaries
     all_tasks_metadata.sort(key=lambda x: x.get(sort_metric, 0), reverse=True)
-
-    # Yield
-    job_id = 0
-    total_tasks = len(all_tasks_metadata)
-    for rank, task in enumerate(all_tasks_metadata):
-        task_rank = rank + 1
-        iblob = task['iblob']
-
-        global signal_quitting
-        if signal_quitting:
-            info('_blob_iter: signal_quitting')
-            break
-
-        if task['size'] == -1:
-            job_id_map[job_id] = (brickname, task['nblob_idx'])
-            yield (brickname, iblob, None, None)
-            job_id += 1
-            continue
-
-        bx0, bx1, by0, by1 = task['coords']
-        Isrcs = task['Isrcs']
-        sub_idx = task.get('sub_idx')
-        display_name = task.get('sub_name', f"{task['nblob_idx']}")
-
-        subtimargs = get_subtim_args(tims, targetwcs, bx0, bx1, by0, by1, single_thread)
-
-        job_id_map[job_id] = (brickname, display_name)
-        job_id += 1
-        if sub_idx is not None and ran_sub_blobs is not None:
-            ran_sub_blobs.append(int(iblob))
-
-        if sub_idx is not None:
-            halfdone = halfdone_blob_map.get((int(iblob),sub_idx))
-        else:
-            halfdone = halfdone_blob_map.get(int(iblob))
-        if halfdone is not None:
-            info('Found a mid-way checkpoint for blob %s' % (task['blobname']))
-
-        yield (brickname, (iblob, sub_idx) if sub_idx is not None else iblob,
-               task.get('unique_bounds'),
-               OneBlobArgs(blobname=task['blobname'], iblob=iblob, Isrcs=Isrcs,
-                           bx0=bx0, by0=by0, blobw=bx1-bx0, blobh=by1-by0,
-                           # "blobmask" has already been cut to this blob, so don't use sub_slc
-                           blobmask=task['blobmask'],
-                           timargs=subtimargs, srcs=[cat[i] for i in Isrcs],
-                           refmap=refmap[by0:by1, bx0:bx1],
-                           frozen_galaxies=frozen_galaxies.get(iblob, []),
-                           halfdone=halfdone,
-                           **common_blob_args))
+    return all_tasks_metadata
 
 def _bounce_one_blob(X):
     '''This wraps the one_blob function for multiprocessing purposes (and
