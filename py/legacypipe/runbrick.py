@@ -1197,7 +1197,9 @@ def stage_fitblobs(T=None,
                    large_galaxies_force_pointsource=True,
                    less_masking=False,
                    sub_blobs=False,
-                   use_ceres=True, mp=None,
+                   use_ceres=True,
+                   mp=None,
+                   mp_hi=None,
                    checkpoint_filename=None,
                    checkpoint_period=600,
                    write_pickle_filename=None,
@@ -1388,30 +1390,51 @@ def stage_fitblobs(T=None,
 
     job_id_map = {}
 
-    # Create the iterator over blobs to process
-    blobiter = _blob_iter(job_id_map,
-                          brickname, blobslices, blobsrcs, blobmap, targetwcs, tims,
-                          cat, T, bands, plots, ps, reoptimize, iterative, iterative_nsigma,
-                          use_ceres,
-                          refmap, large_galaxies_force_pointsource, less_masking, brick,
-                          frozen_galaxies,
-                          skipblobs=skipblobs,
-                          blobxy=blobxy,
-                          single_thread=(mp is None or mp.pool is None),
-                          max_blobsize=max_blobsize, custom_brick=custom_brick,
-                          enable_sub_blobs=sub_blobs,
-                          ran_sub_blobs=ran_sub_blobs,
-                          halfdone_blob_map=halfdone_blob_map,
-                          do_segmentation=do_segmentation)
+    # # Create the iterator over blobs to process
+    # blobiter = _blob_iter(job_id_map,
+    #                       brickname, blobslices, blobsrcs, blobmap, targetwcs, tims,
+    #                       cat, T, bands, plots, ps, reoptimize, iterative, iterative_nsigma,
+    #                       use_ceres,
+    #                       refmap, large_galaxies_force_pointsource, less_masking, brick,
+    #                       frozen_galaxies,
+    #                       skipblobs=skipblobs,
+    #                       blobxy=blobxy,
+    #                       single_thread=(mp is None or mp.pool is None),
+    #                       max_blobsize=max_blobsize, custom_brick=custom_brick,
+    #                       enable_sub_blobs=sub_blobs,
+    #                       ran_sub_blobs=ran_sub_blobs,
+    #                       halfdone_blob_map=halfdone_blob_map,
+    #                       do_segmentation=do_segmentation)
+
+    blob_meta = get_blob_metadata(
+        blobslices, blobsrcs, targetwcs, T, bands,
+        plots, ps, reoptimize, iterative, iterative_nsigma, use_ceres, refmap,
+        large_galaxies_force_pointsource, less_masking, brick,
+        skipblobs=skipblobs, max_blobsize=max_blobsize, custom_brick=custom_brick,
+        blobxy=blobxy, enable_sub_blobs=enable_sub_blobs, do_segmentation=do_segmentation)
+
+    from collections import deque
+    blob_meta = deque(blob_meta)
+
+    args = (brickname, targetwcs, tims, cat, refmap, frozen_galaxies)
+    kwargs = dict(single_thread=single_thread,
+                  halfdone_blob_map=halfdone_blob_map)
+    job_id_map_high = {}
+    job_id_map_low = {}
+
+    iter_hi = iter_deque(blob_meta, True, job_id_map_high, *args, **kwargs)
+    iter_lo = iter_deque(blob_meta, False, job_id_map_low, *args, **kwargs)
+
+    Riter_hi = mp_hi.imap_unordered(_bounce_one_blob, iter_hi)
+    Riter_lo =    mp.imap_unordered(_bounce_one_blob, iter_lo)
 
     if checkpoint_filename is None:
         # FIXME -- add worker-died checks & logging here
         print ("No checkpoint")
-        R.extend(mp.map(_bounce_one_blob, blobiter))
+        #R.extend(mp.map(_bounce_one_blob, blobiter))
+        R = list(Riter_hi) + list(Riter_lo)
     else:
         from astrometry.util.ttime import CpuMeas
-        # Begin running one_blob on each blob...
-        Riter = mp.imap_unordered(_bounce_one_blob, blobiter)
         # measure wall time and write out checkpoint file periodically.
         last_checkpoint = CpuMeas()
         n_finished = 0
@@ -1452,12 +1475,14 @@ def stage_fitblobs(T=None,
                     traceback.print_exc()
 
             dt = tnow.wall_seconds_since(last_printout)
-            if dt > 60:
-                last_printout = tnow
-                if hasattr(Riter, 'get_running_jobs'):
-                    procs_last = print_running_jobs(Riter, job_id_map, job_status_map, procs_last)
+            # FIXME
+            # if dt > 60:
+            #     last_printout = tnow
+            #     if hasattr(Riter, 'get_running_jobs'):
+            #         procs_last = print_running_jobs(Riter, job_id_map, job_status_map, procs_last)
 
             if signal_quitting:
+                # FIXME - mp_hi too
                 if not closed_pool:
                     info('Main thread: got SIGUSR1 - closing pool...')
                     mp.pool.close()
@@ -1467,6 +1492,10 @@ def stage_fitblobs(T=None,
                     info('Main thread: waiting for jobs:')
                     print_running_jobs(Riter, job_id_map, job_status_map, procs_last)
 
+            if Riter_hi is None and Riter_lo is None:
+                info('Both iterators finished - done!')
+                break
+
             # Wait for results (with timeout)
             from legacypipe.trackingpool import PoolWorkerDiedException
             try:
@@ -1475,9 +1504,28 @@ def stage_fitblobs(T=None,
                     timeout = min(10, timeout)
                     if signal_quitting:
                         info('Main thread: waiting for result...')
-                    #else:
-                    #    debug('Main thread: waiting for result...')
-                    r = Riter.next(timeout)
+
+                    r = None
+                    for Riter,hi,t_out = [(Riter_hi, True, 0.),
+                                          (Riter_lo, False, 0.),
+                                          (Riter_hi, True, timeout),
+                                          (Riter_lo, False, timeout),]:
+                        if Riter is None:
+                            continue
+                        try:
+                            r = Riter.next(t_out)
+                            info('Riter', ('hi' if hi else 'lo'), 'got', r)
+                        except StopIteration:
+                            info('Reached end of', ('hi' if hi else 'lo'))
+                            if hi:
+                                Riter_hi = None
+                            else:
+                                Riter_lo = None
+                            continue
+                        except multiprocessing.TimeoutError:
+                            pass
+                        if r is not None:
+                            break
 
                     if not signal_quitting:
                         rstr = ''
@@ -1490,7 +1538,8 @@ def stage_fitblobs(T=None,
                         debug('Main thread: got result: [%s]' % rstr)
 
                 else:
-                    r = next(Riter)
+                    #r = next(Riter)
+                    raise RuntimeError('meh')
 
                 if signal_quitting:
                     if r is None:
@@ -1507,12 +1556,6 @@ def stage_fitblobs(T=None,
                 R.append(r)
                 n_finished += 1
                 n_finished_total += 1
-            except StopIteration:
-                debug('Main thread: reached end of results')
-                break
-            except multiprocessing.TimeoutError:
-                #debug('Main thread: timed out waiting for result')
-                continue
             except PoolWorkerDiedException as e:
                 info('Main thread: worker died')
                 info('A worker died (maybe OOM-killed?) while processing a blob.')
@@ -2076,25 +2119,83 @@ def get_subtim_args(tims, targetwcs, bx0,bx1, by0,by1, single_thread):
                            subsky, subpsf, tim.name, tim.band, tim.sig1, tim.imobj))
     return subtimargs
 
-def _blob_iter(job_id_map,
-               brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T, bands,
-               plots, ps, reoptimize, iterative, iterative_nsigma, use_ceres, refmap,
-               large_galaxies_force_pointsource, less_masking,
-               brick, frozen_galaxies, single_thread=False,
-               skipblobs=None, max_blobsize=None, custom_brick=False,
-               blobxy=None,
-               enable_sub_blobs=False,
-               ran_sub_blobs=None,
-               halfdone_blob_map=None,
-               do_segmentation=True):
+def iter_deque(blob_meta, high_priority, job_id_map,
+               brickname, targetwcs, tims, cat, refmap,
+               frozen_galaxies,
+               single_thread=False,
+               halfdone_blob_map=None):
     from legacypipe.oneblob import OneBlobArgs
-    all_tasks_metadata = get_blob_metadata(
-        blobslices, blobsrcs, targetwcs, T, bands,
-        plots, ps, reoptimize, iterative, iterative_nsigma, use_ceres, refmap,
-        large_galaxies_force_pointsource, less_masking,
-        brick,
-        skipblobs=skipblobs, max_blobsize=max_blobsize, custom_brick=custom_brick,
-        blobxy=blobxy, enable_sub_blobs=enable_sub_blobs, do_segmentation=do_segmentation)
+
+    if halfdone_blob_map is None:
+        halfdone_blob_map = {}
+    else:
+        info('Half-done blobs:', halfdone_blob_map.keys())
+
+    job_id = 0
+    while True:
+        global signal_quitting
+        if signal_quitting:
+            info('_blob_iter: signal_quitting')
+            break
+
+        if high_priority:
+            try:
+                task = blob_meta.popleft()
+            except IndexError:
+                info('High-priority blob iterator: ran out of elements')
+                break
+        else:
+            try:
+                task = blob_meta.pop()
+            except IndexError:
+                info('Low-priority blob iterator: ran out of elements')
+                break
+
+        iblob = task['iblob']
+        print('High' if high_priority else 'Low', 'priority: blob', iblob)
+        if task['size'] == -1:
+            job_id_map[job_id] = (brickname, task['nblob_idx'])
+            yield (brickname, iblob, None, None)
+            job_id += 1
+            continue
+
+        bx0, bx1, by0, by1 = task['coords']
+        Isrcs = task['Isrcs']
+        sub_idx = task.get('sub_idx')
+        display_name = task.get('sub_name', f"{task['nblob_idx']}")
+        common_blob_args = task['common_args']
+
+        subtimargs = get_subtim_args(tims, targetwcs, bx0, bx1, by0, by1, single_thread)
+
+        job_id_map[job_id] = (brickname, display_name)
+        job_id += 1
+        if sub_idx is not None and ran_sub_blobs is not None:
+            ran_sub_blobs.append(int(iblob))
+
+        if sub_idx is not None:
+            halfdone = halfdone_blob_map.get((int(iblob),sub_idx))
+        else:
+            halfdone = halfdone_blob_map.get(int(iblob))
+        if halfdone is not None:
+            info('Found a mid-way checkpoint for blob %s' % (task['blobname']))
+
+        yield (brickname, (iblob, sub_idx) if sub_idx is not None else iblob,
+               task.get('unique_bounds'),
+               OneBlobArgs(blobname=task['blobname'], iblob=iblob, Isrcs=Isrcs,
+                           bx0=bx0, by0=by0, blobw=bx1-bx0, blobh=by1-by0,
+                           # "blobmask" has already been cut to this blob, so don't use sub_slc
+                           blobmask=task['blobmask'],
+                           timargs=subtimargs, srcs=[cat[i] for i in Isrcs],
+                           refmap=refmap[by0:by1, bx0:bx1],
+                           frozen_galaxies=frozen_galaxies.get(iblob, []),
+                           halfdone=halfdone,
+                           **common_blob_args))
+
+def _blob_iter(all_tasks_metadata, job_id_map,
+               brickname, targetwcs, tims, cat, refmap,
+               frozen_galaxies, single_thread=False,
+               halfdone_blob_map=None):
+    from legacypipe.oneblob import OneBlobArgs
 
     if halfdone_blob_map is None:
         halfdone_blob_map = {}
@@ -2262,6 +2363,7 @@ def get_blob_metadata(
                 'nblob_idx': nblob + 1,
                 'onex': onex,
                 'oney': oney,
+                'common_args': common_blob_args,
             })
         else:
             nsubx = int(max(1, np.round((blobw - overlap) / (target - overlap))))
@@ -2319,7 +2421,8 @@ def get_blob_metadata(
                         'blobmask': sub_mask,
                         'onex': s_bx0,
                         'oney': s_by0,
-                        'unique_bounds': (bx0+uniqx[j], bx0+uniqx[j+1], by0+uniqy[i], by0+uniqy[i+1])
+                        'unique_bounds': (bx0+uniqx[j], bx0+uniqx[j+1], by0+uniqy[i], by0+uniqy[i+1]),
+                        'common_args': common_blob_args
                     })
 
     # Determine sorting metric: 'nsrcs' if any sub-blobs exist, else 'size'
@@ -4574,7 +4677,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     gpu_id_manager = None
     if threads and threads > 1:
-        from legacypipe.prioritypool import PriorityPool
 
         gpu_threads = 0
         if len(available_gpu_ids):
@@ -4585,12 +4687,24 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             gpu_id_list = gpu_id_manager.list(gpus_to_use)
             gpu_threads = len(gpus_to_use)
 
-        pool = PriorityPool(threads, gpu_threads,
-                            initialize_high_priority=runbrick_init_gpu_worker,
-                            initialize_high_priority_args=(gpu_id_list,),
-                            initialize_low_priority=runbrick_init_cpu_worker,
-                            initialize_low_priority_args=())
+        # from legacypipe.prioritypool import PriorityPool
+        # pool = PriorityPool(threads, gpu_threads,
+        #                     initialize_high_priority=runbrick_init_gpu_worker,
+        #                     initialize_high_priority_args=(gpu_id_list,),
+        #                     initialize_low_priority=runbrick_init_cpu_worker,
+        #                     initialize_low_priority_args=())
+
+        from legacypipe.trackingpool import TrackingPool
+        pool_gpu = TrackingPool(gpu_threads,
+                                initializer=runbrick_init_gpu_worker,
+                                initargs=(gpu_id_list,))
+        mp_hi = multiproc(None, pool=pool_gpu)
+
+        pool = TrackingPool(threads,
+                            initializer=runbrick_init_cpu_worker,
+                            initargs=())
         mp = multiproc(None, pool=pool)
+        kwargs.update(mp_hi=mp_hi)
 
     else:
         from astrometry.util.ttime import CpuMeas
