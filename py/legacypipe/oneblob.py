@@ -12,8 +12,7 @@ from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import dimshow
 
 from tractor import Tractor, PointSource, Image, Catalog, Patch, Galaxy
-from tractor.galaxy import (DevGalaxy, ExpGalaxy,
-                            disable_galaxy_cache, enable_galaxy_cache)
+from tractor.galaxy import DevGalaxy, ExpGalaxy
 from tractor.patch import ModelMask
 from tractor.sersic import SersicGalaxy
 
@@ -1501,8 +1500,6 @@ class OneBlob(object):
             srctractor.optimizer = LsqrOptimizer()
             skyparams = srctractor.images.getParams()
 
-        enable_galaxy_cache()
-
         # Compute the log-likehood without a source here.
         srccat[0] = None
 
@@ -1606,7 +1603,6 @@ class OneBlob(object):
             # Need to create newsrc->mask mappings though:
             mm = remap_modelmask(modelMasks, src, newsrc)
             srctractor.setModelMasks(mm)
-            enable_galaxy_cache()
 
             # DEBUG
             maxsize = None
@@ -1700,8 +1696,6 @@ class OneBlob(object):
                     for ie,tim in zip(saved_srctim_ies, srctims):
                         tim.setInvError(ie)
                 continue
-
-            disable_galaxy_cache()
 
             if self.plots_per_source:
                 # save RGB images for the model
@@ -1875,7 +1869,6 @@ class OneBlob(object):
 
         models = SourceModels()
         models.create(self.tims, cat)
-        enable_galaxy_cache()
 
         for i in Ibright:
             if done_fitting[i]:
@@ -1895,7 +1888,6 @@ class OneBlob(object):
             done_fitting[i] = True
 
         tr.setModelMasks(None)
-        disable_galaxy_cache()
 
     def tractor(self, tims, cat):
         tr = Tractor(tims, cat, **self.trargs)
@@ -1985,7 +1977,6 @@ class OneBlob(object):
             models.update_and_subtract(srci, src, self.tims)
 
             srctractor.setModelMasks(None)
-            disable_galaxy_cache()
 
             self.debug('Finished fitting source %i of %i (source id %i): %s' %
                        (numi+1, len(Ibright), srci, str(src)))
