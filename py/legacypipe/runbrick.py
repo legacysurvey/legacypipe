@@ -1521,7 +1521,7 @@ def stage_fitblobs(T=None,
                             continue
                         try:
                             r = Riter.next(t_out)
-                            info('Riter', ('hi' if hi else 'lo'), 'got', r)
+                            #info('Riter', ('hi' if hi else 'lo'), 'got', r)
                         except StopIteration:
                             info('Reached end of', ('hi' if hi else 'lo'))
                             if hi:
@@ -4693,37 +4693,39 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     elif ngpu:
         available_gpu_ids = list(range(ngpu))
 
+    gpu_threads = 0
+    if len(available_gpu_ids):
+        gpus_to_use = []
+        for gpuid in available_gpu_ids:
+            gpus_to_use.extend([gpuid] * threads_per_gpu)
+        gpu_threads = len(gpus_to_use)
+
+    # from legacypipe.prioritypool import PriorityPool
+    # pool = PriorityPool(threads, gpu_threads,
+    #                     initialize_high_priority=runbrick_init_gpu_worker,
+    #                     initialize_high_priority_args=(gpu_id_list,),
+    #                     initialize_low_priority=runbrick_init_cpu_worker,
+    #                     initialize_low_priority_args=())
+
     gpu_id_manager = None
-    if threads and threads > 1:
-
-        gpu_threads = 0
-        if len(available_gpu_ids):
-            gpus_to_use = []
-            for gpuid in available_gpu_ids:
-                gpus_to_use.extend([gpuid] * threads_per_gpu)
-            gpu_id_manager = multiprocessing.Manager()
-            gpu_id_list = gpu_id_manager.list(gpus_to_use)
-            gpu_threads = len(gpus_to_use)
-
-        # from legacypipe.prioritypool import PriorityPool
-        # pool = PriorityPool(threads, gpu_threads,
-        #                     initialize_high_priority=runbrick_init_gpu_worker,
-        #                     initialize_high_priority_args=(gpu_id_list,),
-        #                     initialize_low_priority=runbrick_init_cpu_worker,
-        #                     initialize_low_priority_args=())
-
+    if gpu_threads == 1:
+        runbrick_init_gpu_worker(gpus_to_use)
+    elif gpu_threads > 1:
+        gpu_id_manager = multiprocessing.Manager()
+        gpu_id_list = gpu_id_manager.list(gpus_to_use)
         from legacypipe.trackingpool import TrackingPool
         pool_gpu = TrackingPool(gpu_threads,
                                 initializer=runbrick_init_gpu_worker,
                                 initargs=(gpu_id_list,))
         mp_hi = multiproc(None, pool=pool_gpu)
+        kwargs.update(mp_hi=mp_hi)
 
+    if threads and threads > 1:
+        from legacypipe.trackingpool import TrackingPool
         pool = TrackingPool(threads,
                             initializer=runbrick_init_cpu_worker,
                             initargs=())
         mp = multiproc(None, pool=pool)
-        kwargs.update(mp_hi=mp_hi)
-
     else:
         from astrometry.util.ttime import CpuMeas
         mp = multiproc(init=runbrick_init, initargs=())
