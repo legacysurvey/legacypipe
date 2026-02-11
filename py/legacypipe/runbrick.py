@@ -72,8 +72,10 @@ def runbrick_init_gpu_worker(gpu_id_list):
     my_gpu_id = gpu_id_list.pop()
     del gpu_id_list
     info('Initializing GPU worker: pid %i, using GPU id %i' % (os.getpid(), my_gpu_id))
-    import cupy as cp
-    cp.cuda.Device(my_gpu_id).use()
+
+    #import cupy as cp
+    #cp.cuda.Device(my_gpu_id).use()
+
     global _LEGACYPIPE_GPU_CONTEXT
     _LEGACYPIPE_GPU_CONTEXT = dict(is_gpu_worker=True)
     runbrick_init_cpu_worker()
@@ -1407,26 +1409,31 @@ def stage_fitblobs(T=None,
     #                       do_segmentation=do_segmentation)
 
     blob_meta = get_blob_metadata(
-        blobslices, blobsrcs, targetwcs, T, bands,
+        blobslices, blobsrcs, blobmap, targetwcs, T, bands,
         plots, ps, reoptimize, iterative, iterative_nsigma, use_ceres, refmap,
         large_galaxies_force_pointsource, less_masking, brick,
         skipblobs=skipblobs, max_blobsize=max_blobsize, custom_brick=custom_brick,
-        blobxy=blobxy, enable_sub_blobs=enable_sub_blobs, do_segmentation=do_segmentation)
+        blobxy=blobxy, enable_sub_blobs=sub_blobs, do_segmentation=do_segmentation)
 
     from collections import deque
     blob_meta = deque(blob_meta)
 
-    args = (brickname, targetwcs, tims, cat, refmap, frozen_galaxies)
+    single_thread=(mp is None or mp.pool is None)
+    args = (brickname, targetwcs, tims, cat, refmap, frozen_galaxies, ran_sub_blobs)
     kwargs = dict(single_thread=single_thread,
                   halfdone_blob_map=halfdone_blob_map)
     job_id_map_high = {}
     job_id_map_low = {}
 
-    iter_hi = iter_deque(blob_meta, True, job_id_map_high, *args, **kwargs)
-    iter_lo = iter_deque(blob_meta, False, job_id_map_low, *args, **kwargs)
-
-    Riter_hi = mp_hi.imap_unordered(_bounce_one_blob, iter_hi)
-    Riter_lo =    mp.imap_unordered(_bounce_one_blob, iter_lo)
+    if mp_hi is None:
+        iter_hi = iter_deque(blob_meta, True, job_id_map_high, *args, **kwargs)
+        Riter_hi = mp.imap_unordered(_bounce_one_blob, iter_hi)
+        Riter_lo = None
+    else:
+        iter_hi = iter_deque(blob_meta, True, job_id_map_high, *args, **kwargs)
+        iter_lo = iter_deque(blob_meta, False, job_id_map_low, *args, **kwargs)
+        Riter_hi = mp_hi.imap_unordered(_bounce_one_blob, iter_hi)
+        Riter_lo =    mp.imap_unordered(_bounce_one_blob, iter_lo)
 
     if checkpoint_filename is None:
         # FIXME -- add worker-died checks & logging here
@@ -1506,10 +1513,10 @@ def stage_fitblobs(T=None,
                         info('Main thread: waiting for result...')
 
                     r = None
-                    for Riter,hi,t_out = [(Riter_hi, True, 0.),
-                                          (Riter_lo, False, 0.),
-                                          (Riter_hi, True, timeout),
-                                          (Riter_lo, False, timeout),]:
+                    for Riter,hi,t_out in [(Riter_hi, True, 0.),
+                                           (Riter_lo, False, 0.),
+                                           (Riter_hi, True, timeout),
+                                           (Riter_lo, False, timeout),]:
                         if Riter is None:
                             continue
                         try:
@@ -1538,8 +1545,19 @@ def stage_fitblobs(T=None,
                         debug('Main thread: got result: [%s]' % rstr)
 
                 else:
-                    #r = next(Riter)
-                    raise RuntimeError('meh')
+                    r = None
+                    if Riter_hi is not None:
+                        try:
+                            r = next(Riter_hi)
+                        except StopIteration:
+                            info('Reached end of hi')
+                            Riter_hi = None
+                    if Riter_lo is not None:
+                        try:
+                            r = next(Riter_lo)
+                        except StopIteration:
+                            info('Reached end of lo')
+                            Riter_lo = None
 
                 if signal_quitting:
                     if r is None:
@@ -2121,7 +2139,7 @@ def get_subtim_args(tims, targetwcs, bx0,bx1, by0,by1, single_thread):
 
 def iter_deque(blob_meta, high_priority, job_id_map,
                brickname, targetwcs, tims, cat, refmap,
-               frozen_galaxies,
+               frozen_galaxies, ran_sub_blobs,
                single_thread=False,
                halfdone_blob_map=None):
     from legacypipe.oneblob import OneBlobArgs
@@ -2252,7 +2270,7 @@ def _blob_iter(all_tasks_metadata, job_id_map,
                            **common_blob_args))
 
 def get_blob_metadata(
-    blobslices, blobsrcs, targetwcs, T, bands,
+        blobslices, blobsrcs, blobmap, targetwcs, T, bands,
     plots, ps, reoptimize, iterative, iterative_nsigma, use_ceres, refmap,
     large_galaxies_force_pointsource, less_masking,
     brick,
@@ -4708,7 +4726,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     else:
         from astrometry.util.ttime import CpuMeas
-        mp = multiproc(init=runbrick_global_init, initargs=())
+        mp = multiproc(init=runbrick_init, initargs=())
         StageTime.add_measurement_once(CpuMeas)
         pool = None
 
