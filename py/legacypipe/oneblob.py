@@ -144,8 +144,19 @@ def one_blob(args):
                          iblob=args.iblob)
             B = ob.init_table(args.srcs, args.Isrcs)
 
-        from tractor.smarter_dense_optimizer import SmarterDenseOptimizer
-        opt = SmarterDenseOptimizer()
+        if is_gpu:
+            import cupy as cp
+            cp.get = lambda x: x.get()
+            from tractor.gpu_optimizer import GpuOptimizer
+            opt = GpuOptimizer(cp)
+        else:
+            #from tractor.smarter_dense_optimizer import SmarterDenseOptimizer
+            #opt = SmarterDenseOptimizer()
+            # Or: use the GPU code, but with Numpy instead of Cupy.
+            np.get = lambda x: x
+            from tractor.gpu_optimizer import GpuOptimizer
+            opt = GpuOptimizer(np)
+
         ob.trargs.update(optimizer=opt)
 
         B = ob.run(B, reoptimize=args.reoptimize, iterative_detection=args.iterative)

@@ -73,8 +73,8 @@ def runbrick_init_gpu_worker(gpu_id_list):
     del gpu_id_list
     info('Initializing GPU worker: pid %i, using GPU id %i' % (os.getpid(), my_gpu_id))
 
-    #import cupy as cp
-    #cp.cuda.Device(my_gpu_id).use()
+    import cupy as cp
+    cp.cuda.Device(my_gpu_id).use()
 
     global _LEGACYPIPE_GPU_CONTEXT
     _LEGACYPIPE_GPU_CONTEXT = dict(is_gpu_worker=True)
