@@ -157,6 +157,14 @@ def one_blob(args):
             from tractor.gpu_optimizer import GpuOptimizer
             opt = GpuOptimizer(np)
 
+        # if use_ceres:
+        #     from tractor.ceres_optimizer import CeresOptimizer
+        #     ceres_optimizer = CeresOptimizer()
+        #     self.optargs.update(scale_columns=False,
+        #                         scaled=False,
+        #                         dynamic_scale=False)
+        #     self.trargs.update(optimizer=ceres_optimizer)
+
         ob.trargs.update(optimizer=opt)
 
         B = ob.run(B, reoptimize=args.reoptimize, iterative_detection=args.iterative)
@@ -261,16 +269,6 @@ class OneBlob(object):
                             dchisq = 0.1)
         self.trargs = dict()
         self.frozen_galaxy_mods = []
-
-        # if use_ceres:
-        #     from tractor.ceres_optimizer import CeresOptimizer
-        #     ceres_optimizer = CeresOptimizer()
-        #     self.optargs.update(scale_columns=False,
-        #                         scaled=False,
-        #                         dynamic_scale=False)
-        #     self.trargs.update(optimizer=ceres_optimizer)
-        # else:
-        #     self.optargs.update(dchisq = 0.1)
 
         if len(frozen_galaxies):
             debug('Subtracting frozen galaxy models...')
@@ -1883,16 +1881,18 @@ class OneBlob(object):
 
         for i in Ibright:
             if done_fitting[i]:
-                print('Already done fitting sourcei', i)
+                debug('Already done fitting sourcei', i)
                 continue
             cpu0 = time.process_time()
             cat.freezeAllBut(i)
             src = cat[i]
             if src.freezeparams:
                 debug('Frozen source', src, '-- keeping as-is!')
+                done_fitting[i] = True
                 continue
-            modelMasks = models.model_masks(0, cat[i])
+            modelMasks = models.model_masks(i, src)
             tr.setModelMasks(modelMasks)
+            print('opt_indiv: setting modelMasks:', modelMasks)
             tr.optimize_loop(**self.optargs)
             cpu1 = time.process_time()
             cputime[i] += (cpu1 - cpu0)
