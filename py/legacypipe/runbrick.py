@@ -4709,32 +4709,57 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
 
     gpu_id_manager = None
     if gpu_threads == 1:
-        runbrick_init_gpu_worker(gpus_to_use)
+        # Starting a single GPU thread: no need to use a Manager to coordinate GPU allocation
+        pass
     elif gpu_threads > 1:
+        # Coordinate multiple GPU worker processes -- using a shared (managed) list
         gpu_id_manager = multiprocessing.Manager()
-        gpu_id_list = gpu_id_manager.list(gpus_to_use)
-        from legacypipe.trackingpool import TrackingPool
-        pool_gpu = TrackingPool(gpu_threads,
-                                initializer=runbrick_init_gpu_worker,
-                                initargs=(gpu_id_list,))
-        mp_hi = multiproc(None, pool=pool_gpu)
-        kwargs.update(mp_hi=mp_hi)
+        gpus_to_use = gpu_id_manager.list(gpus_to_use)
 
-    if threads and threads > 1:
-        from legacypipe.trackingpool import TrackingPool
-        pool = TrackingPool(threads,
-                            initializer=runbrick_init_cpu_worker,
-                            initargs=())
-        mp = multiproc(None, pool=pool)
-    else:
+    # This seems overly complicated, but basically we want:
+    # --threads indicates CPU-only threads (actually worker processes, not threads)
+    # --gpu-threads are GPU threads
+    # If threads + gpu-threads == 1, just create a "fake" mp, with kwarg mp
+    # Otherwse, create a pool for each.  If there are both CPU and GPU pools, the GPU is mp_hi,
+    # otherwise just mp.
+
+    if threads is None:
+        if gpu_threads == 1:
+            threads = 0
+        else:
+            threads = 1
+
+    if gpu_threads + threads == 1:
         from astrometry.util.ttime import CpuMeas
-        mp = multiproc(init=runbrick_init, initargs=())
+        if gpu_threads == 1:
+            mp = multiproc(init=runbrick_init_gpu_worker, initargs=(gpus_to_use,))
+        else:
+            mp = multiproc(init=runbrick_init, initargs=())
         StageTime.add_measurement_once(CpuMeas)
         pool = None
+        kwargs.update(mp=mp)
+    else:
+        from legacypipe.trackingpool import TrackingPool
+        if gpu_threads > 0:
+            print('Creating %i GPU workers' % gpu_threads)
+            pool_gpu = TrackingPool(gpu_threads,
+                                    initializer=runbrick_init_gpu_worker,
+                                    initargs=(gpus_to_use,))
+            mp_hi = multiproc(None, pool=pool_gpu)
+            if threads > 0:
+                kwargs.update(mp_hi=mp_hi)
+            else:
+                kwargs.update(mp=mp_hi)
+        if threads > 0:
+            print('Creating %i CPU workers' % threads)
+            pool = TrackingPool(threads,
+                                initializer=runbrick_init_cpu_worker,
+                                initargs=())
+            mp = multiproc(None, pool=pool)
+            kwargs.update(mp=mp)
 
     from astrometry.util.ttime import MemMeas
     StageTime.add_measurement_once(MemMeas)
-    kwargs.update(mp=mp)
 
     if nblobs is not None:
         kwargs.update(nblobs=nblobs)
