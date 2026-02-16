@@ -2405,7 +2405,15 @@ def _initialize_models(src):
         dev = DevGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
         exp = ExpGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
         oldmodel = 'psf'
+    elif isinstance(src, RexGalaxy):
+        psf = PointSource(src.getPosition(), src.getBrightness()).copy()
+        rex = src.copy()
+        shape = LegacyEllipseWithPriors(src.shape.re, 0., 0.)
+        dev = DevGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
+        exp = ExpGalaxy(src.getPosition(), src.getBrightness(), shape).copy()
+        oldmodel = 'rex'
     elif isinstance(src, DevGalaxy):
+        psf = PointSource(src.getPosition(), src.getBrightness()).copy()
         rex = RexGalaxy(src.getPosition(), src.getBrightness(),
                         LogRadius(np.log(src.getShape().re))).copy()
         dev = src.copy()
