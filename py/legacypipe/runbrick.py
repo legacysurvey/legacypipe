@@ -68,6 +68,26 @@ def is_gpu_worker():
         return False
     return _LEGACYPIPE_GPU_CONTEXT.get('is_gpu_worker', False)
 
+class CupyMemMeas(object):
+    '''
+    A measurement class for the *astrometry.util.Time* class that measures Cupy memory use
+    '''
+    def __init__(self):
+        import cupy as cp
+        mempool = cp.get_default_memory_pool()
+        # total number of bytes allocated by the pool
+        self.mem_total = mempool.total_bytes()
+        # memory in active use in arrays
+        self.mem_used = mempool.used_bytes()
+        # acquired but not used by the pool
+        self.mem_free = mempool.free_bytes()
+        # upper limit of memory allocation
+        self.mem_limit = mempool.get_limit()
+    def format_diff(self, other):
+        gb = 1024.**3
+        return 'Cupy mem: %.3f GB total, %.3f GB used, %.3f GB free, %.3f GB max' % (
+            self.mem_total/gb, self.mem_used/gb, self.mem_free/gb, self.mem_limit/gb)
+
 def runbrick_init_gpu_worker(gpu_id_list):
     my_gpu_id = gpu_id_list.pop()
     del gpu_id_list
@@ -75,6 +95,9 @@ def runbrick_init_gpu_worker(gpu_id_list):
 
     import cupy as cp
     cp.cuda.Device(my_gpu_id).use()
+
+    StageTime.add_measurement_once(CupyMemMeas)
+    Time.add_measurement(CupyMemMeas)
 
     global _LEGACYPIPE_GPU_CONTEXT
     _LEGACYPIPE_GPU_CONTEXT = dict(is_gpu_worker=True)
