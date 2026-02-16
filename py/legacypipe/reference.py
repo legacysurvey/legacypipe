@@ -912,7 +912,7 @@ def get_galaxy_sources(galaxies, bands):
             # this catches Rex too
             elif issubclass(typ, (DevGalaxy, ExpGalaxy)):
                 src = typ(pos, bright, shape)
-            elif issubclass(typ, (SersicGalaxy)):
+            elif issubclass(typ, SersicGalaxy):
                 assert(np.isfinite(g.sersic))
                 sersic = LegacySersicIndex(g.sersic)
                 src = typ(pos, bright, shape, sersic)
