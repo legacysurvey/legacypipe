@@ -101,7 +101,7 @@ def runbrick_init_gpu_worker(gpu_id_list):
 
     global _LEGACYPIPE_GPU_CONTEXT
     _LEGACYPIPE_GPU_CONTEXT = dict(is_gpu_worker=True)
-    runbrick_init_cpu_worker()
+    runbrick_init_worker_common()
 
 def runbrick_init_cpu_worker():
     info('Initializing CPU worker: pid %i' % (os.getpid()))
