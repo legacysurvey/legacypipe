@@ -668,12 +668,16 @@ class OneBlob(object):
                     B.srcinvvars[isub] = np.zeros(nsrcparams, np.float32)
                     cat.freezeParam(isub)
                     continue
+                old_shape = getattr(src, 'shape', None)
                 _convert_ellipses(src)
                 if src.numberOfParams() != nsrcparams:
-                    print ("EXCEPTION:", src.numberOfParams(), nsrcparams)
-                    print ("Exception - src params do not match! for ", src, isub)
-                    info('Blob', self.name, 'finished, total:', Time()-trun)
-                    return B
+                    self.info('src.numparams %i vs %i.  Old: %s, New: %s' % (
+                        src.numberOfParams(), nsrcparams, s1, str(src)))
+                    print('new:')
+                    src.printThawedParams()
+                    print('old (copy):')
+                    sc.printThawedParams()
+                    raise RuntimeError('Mismatch in number of parameters after changing ellipse parameterization')
                 assert(src.numberOfParams() == nsrcparams)
                 # Compute inverse-variances
                 allderivs = tr.getDerivs()
@@ -684,7 +688,15 @@ class OneBlob(object):
                 assert(len(B.srcinvvars[isub]) == cat[isub].numberOfParams())
                 cat.freezeParam(isub)
                 del ivars
-
+                # revert ellipse -- This is required for a nasty
+                # little corner case: single threaded and frozen
+                # sources in sub-blobs.  They appear in the "cat" args
+                # to multiple oneblob calls, so if we modify them by
+                # changing their ellipse types, bad things can happen
+                # (eg, Rex go from having LogRadius shapes to EllipseE
+                # shapes, so their number of parameters change).
+                if old_shape is not None:
+                    src.shape = old_shape
             # Check for sources with zero inverse-variance -- I think these
             # can be generated during the "Simultaneous re-opt" stage above --
             # sources can get scattered outside the blob.
@@ -1208,8 +1220,6 @@ class OneBlob(object):
 
     def model_selection_one_source(self, src, srci, models, B, segmap,
                                    mask_others=True):
-
-        # FIXME -- don't need these aliased variable names any more
         modelMasks = models.model_masks(srci, src)
 
         srctims = self.tims
