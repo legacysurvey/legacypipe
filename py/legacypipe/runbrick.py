@@ -1244,7 +1244,7 @@ def stage_fitblobs(T=None,
     import time
     from tractor import Catalog
     from legacypipe.oneblob import MODEL_NAMES
-    #return None
+
 
     record_event and record_event('stage_fitblobs: starting')
     _add_stage_version(version_header, 'FITB', 'fitblobs')
@@ -5526,6 +5526,7 @@ def main(args=None):
 if __name__ == '__main__':
     from astrometry.util.ttime import MemMeas
     Time.add_measurement(MemMeas)
+    from legacypipe.runbrick import main
     sys.exit(main())
 
 # Test bricks & areas
