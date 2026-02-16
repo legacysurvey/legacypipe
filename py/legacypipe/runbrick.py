@@ -1662,7 +1662,6 @@ def stage_fitblobs(T=None,
     if len(BB):
         # Pull out the source indices...
         II = BB.Isrcs
-        newcat = BB.sources
         # ... and make the table T parallel with BB.
         # For iterative sources:
         n_iter = np.sum(II < 0)
@@ -1679,7 +1678,21 @@ def stage_fitblobs(T=None,
             T.iterative = np.zeros(len(T), bool)
         assert(np.all(II >= 0))
         assert(np.all(II < len(T)))
+        # As with blobs, sub-blobs can generate a situation where the
+        # same source (same Isrc / II) scatters across the sub-blob
+        # unique area so ends up in this final catalog twice.  (They
+        # can also scatter the opposite way so they appear zero times,
+        # but that is a silent failure!)
+        _,U = np.unique(II, return_index=True)
+        if len(U) < len(II):
+            # Arbitrarily select the first one to keep!
+            II = II[U]
+            BB.cut(U)
+            del U
+        assert(np.all(II >= 0))
+        assert(np.all(II < len(T)))
         assert(len(np.unique(II)) == len(II))
+        newcat = BB.sources
         T.cut(II)
         del BB.Isrcs, II
         assert(len(T) == len(BB))
