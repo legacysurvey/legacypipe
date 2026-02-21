@@ -123,6 +123,7 @@ def one_blob(args):
         oldsigusr1 = signal.signal(signal.SIGUSR1, sigusr1)
 
         if args.halfdone is not None:
+            # We're resuming from a blob-checkpoint
             ob = args.halfdone
             B = ob.B
             del ob.B
@@ -145,17 +146,14 @@ def one_blob(args):
             B = ob.init_table(args.srcs, args.Isrcs)
 
         if is_gpu:
-            import cupy as cp
-            cp.get = lambda x: x.get()
             from tractor.gpu_optimizer import GpuOptimizer
-            opt = GpuOptimizer(cp)
+            opt = GpuOptimizer('cupy')
         else:
             #from tractor.smarter_dense_optimizer import SmarterDenseOptimizer
             #opt = SmarterDenseOptimizer()
             # Or: use the GPU code, but with Numpy instead of Cupy.
-            np.get = lambda x: x
             from tractor.gpu_optimizer import GpuOptimizer
-            opt = GpuOptimizer(np)
+            opt = GpuOptimizer('numpy')
 
         # if use_ceres:
         #     from tractor.ceres_optimizer import CeresOptimizer
