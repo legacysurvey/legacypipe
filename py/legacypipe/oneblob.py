@@ -999,7 +999,11 @@ class OneBlob(object):
                     plt.colorbar()
                     self.ps.savefig()
 
+            oldprefix = self.prefix
             Bnew = self.iterative_detection(B, models)
+            self.prefix = oldprefix
+            self.iterstring = ''
+
             if Bnew is not None:
                 from astrometry.util.fits import merge_tables
                 # B.sources is a list of objects... merge() with
