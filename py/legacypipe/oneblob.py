@@ -929,8 +929,9 @@ class OneBlob(object):
             # Model selection for this source.
             pre = self.prefix
             self.prefix = '%s source %i of %i model sel' % (pre, numi+1, len(Ibright))
+            plots = self.plots_per_source * (numi < 50)
             keepsrc = self.model_selection_one_source(src, srci, models, B, segmap,
-                                                      mask_others=mask_others)
+                                                      mask_others=mask_others, plots=plots)
             self.prefix = pre
 
             # Definitely keep ref stars (Gaia & Tycho)
@@ -956,6 +957,14 @@ class OneBlob(object):
                 dimshow(get_rgb(coimgs,self.bands), ticks=False)
                 plt.savefig('blob-%s-%i-sub.png' % (self.name, srci))
                 plt.figure(1)
+            if self.plots and (numi % 100 == 99):
+                import pylab as plt
+                plt.clf()
+                tr = self.tractor(self.tims, cat)
+                self._plot_coadd(self.tims, self.blobwcs, model=tr)
+                del tr
+                plt.title('Model selection after %i sources' % (numi+1))
+                self.ps.savefig()
 
             cpu1 = time.process_time()
             B.cpu_source[srci] += (cpu1 - cpu0)
@@ -1217,30 +1226,13 @@ class OneBlob(object):
         return Bnew
 
     def model_selection_one_source(self, src, srci, models, B, segmap,
-                                   mask_others=True):
+                                   mask_others=True, plots=False):
         modelMasks = models.model_masks(srci, src)
 
         srctims = self.tims
         srcwcs = self.blobwcs
         srcwcs_x0y0 = (0, 0)
         srcblobmask = self.blobmask
-
-        if self.plots_per_source:
-            # This is a handy blob-coordinates plot of the data
-            # going into the fit.
-            import pylab as plt
-            plt.clf()
-            _,_,coimgs,_ = quick_coadds(srctims, self.bands,self.blobwcs,
-                                        fill_holes=False, get_cow=True)
-            dimshow(get_rgb(coimgs, self.bands))
-            ax = plt.axis()
-            pos = src.getPosition()
-            _,x,y = self.blobwcs.radec2pixelxy(pos.ra, pos.dec)
-            ix,iy = int(np.round(x-1)), int(np.round(y-1))
-            plt.plot(x-1, y-1, 'r+')
-            plt.axis(ax)
-            plt.title('Model selection: data')
-            self.ps.savefig()
 
         bh,bw = srcblobmask.shape
         pos = src.getPosition()
@@ -1292,7 +1284,7 @@ class OneBlob(object):
             blobs,_ = label(flipblobs)
             goodblob = blobs[iy,ix]
 
-            if self.plots_per_source and True:
+            if plots:
                 # This plot is about the symmetric-blob definitions
                 # when fitting sources.
                 import pylab as plt
@@ -1465,6 +1457,25 @@ class OneBlob(object):
             sh,sw = srcwcs.shape
             B.blob_symm_width [srci] = sw
             B.blob_symm_height[srci] = sh
+
+        if plots:
+            # This is a handy blob-coordinates plot of the data
+            # going into the fit.
+            import pylab as plt
+            plt.clf()
+            _,_,coimgs,_ = quick_coadds(srctims, self.bands,self.blobwcs,
+                                        fill_holes=False, get_cow=True)
+            dimshow(get_rgb(coimgs, self.bands))
+            ax = plt.axis()
+            pos = src.getPosition()
+            _,x,y = self.blobwcs.radec2pixelxy(pos.ra, pos.dec)
+            ix,iy = int(np.round(x-1)), int(np.round(y-1))
+            plt.plot(x-1, y-1, 'r+')
+            ex0,ex1,ey0,ey1 = model_masks_to_blob_extent(srctims, modelMasks, src, srcwcs)
+            plt.plot([ex0,ex0,ex1,ex1,ex0], [ey0,ey1,ey1,ey0,ey0], 'r-')
+            plt.axis(ax)
+            plt.title('Model selection: data')
+            self.ps.savefig()
 
         srctractor = self.tractor(srctims, [src])
         srctractor.setModelMasks(modelMasks)
@@ -1714,7 +1725,7 @@ class OneBlob(object):
                         tim.setInvError(ie)
                 continue
 
-            if self.plots_per_source:
+            if plots:
                 # save RGB images for the model
                 modimgs = list(srctractor.getModelImages())
                 co,_ = quick_coadds(srctims, self.bands, srcwcs, images=modimgs)
@@ -1836,7 +1847,7 @@ class OneBlob(object):
             B.hit_ser_limit[srci] = False
 
         # This is the model-selection plot
-        if self.plots_per_source:
+        if plots:
             import pylab as plt
             plt.clf()
             rows,cols = 3, 6
@@ -1847,9 +1858,21 @@ class OneBlob(object):
             rgb = get_rgb(coimgs, self.bands)
             dimshow(rgb, ticks=False)
             # next over: rgb with same stretch as models
+            #plt.subplot(rows, cols, 2)
+            #rgb = get_rgb(coimgs, self.bands)
+            #dimshow(rgb, ticks=False)
+            # next: zoom in
             plt.subplot(rows, cols, 2)
-            rgb = get_rgb(coimgs, self.bands)
-            dimshow(rgb, ticks=False)
+            if ey0 is not None:
+                ey0 = int(np.clip(np.floor(ey0), 0, sh))
+                ey1 = int(np.clip(np.ceil (ey1)+1, 0, sh))
+                ex0 = int(np.clip(np.floor(ex0), 0, sw))
+                ex1 = int(np.clip(np.ceil (ex1)+1, 0, sw))
+                sslice = (slice(ey0,ey1), slice(ex0,ex1), slice(None))
+            else:
+                sslice = (slice(None), slice(None), slice(None))
+            dimshow(rgb[sslice], ticks=False)
+
             for imod,modname in enumerate(modnames):
                 if modname != 'none' and not modname in chisqs:
                     continue
@@ -1857,13 +1880,13 @@ class OneBlob(object):
                 # Second row: models
                 plt.subplot(rows, cols, 1+imod+1*cols)
                 rgb = model_mod_rgb[modname]
-                dimshow(rgb, ticks=False)
+                dimshow(rgb[sslice], ticks=False)
                 axes.append(plt.gca())
                 plt.title(modname)
                 # Third row: residuals (not chis)
                 plt.subplot(rows, cols, 1+imod+2*cols)
                 rgb = model_resid_rgb[modname]
-                dimshow(rgb, ticks=False)
+                dimshow(rgb[sslice], ticks=False)
                 axes.append(plt.gca())
                 plt.title('chisq %.0f' % chisqs[modname], fontsize=8)
                 # Highlight the model to be kept
@@ -2687,3 +2710,28 @@ def _per_band_chisqs(tractor, bands):
         chi = tractor.getChiImage(img=img)
         chisqs[img.band] = chisqs[img.band] + (chi ** 2).sum()
     return chisqs
+
+def model_masks_to_blob_extent(tims, modelMasks, src, wcs):
+    xlo = xhi = ylo = yhi = None
+    for tim,mm in zip(tims, modelMasks):
+        mask = mm.get(src, None)
+        if mask is None:
+            continue
+        x0,x1,y0,y1 = mask.extent
+        # FITS coordinates, inclusive
+        x0 += 1
+        y0 += 1
+        r,d = tim.subwcs.pixelxy2radec([x0, x0, x1, x1], [y0, y1, y1, y0])
+        ok,x,y = wcs.radec2pixelxy(r, d)
+        assert(all(ok))
+        x -= 1
+        y -= 1
+        if xlo is None or min(x) < xlo:
+            xlo = min(x)
+        if xhi is None or max(x) > xhi:
+            xhi = max(x)
+        if ylo is None or min(y) < ylo:
+            ylo = min(y)
+        if yhi is None or max(y) > yhi:
+            yhi = max(y)
+    return xlo,xhi,ylo,yhi
