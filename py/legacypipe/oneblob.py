@@ -134,7 +134,7 @@ def one_blob(args):
             ob.plots = args.plots
             ob.ps = args.ps
             # FIXME -- update more parameters??
-
+            ob.large_galaxies_force_pointsource = args.large_galaxies_force_pointsource
         else:
             ob = OneBlob(args.blobname, args.nblobs, blobwcs, args.blobmask, args.timargs, args.bands,
                          args.plots, args.ps, args.use_ceres, args.refmap,
