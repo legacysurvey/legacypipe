@@ -2206,7 +2206,7 @@ def iter_deque(blob_meta, high_priority, job_id_map,
                 break
 
         iblob = task['iblob']
-        print('High' if high_priority else 'Low', 'priority: blob', iblob)
+        debug('High' if high_priority else 'Low', 'priority: blob', iblob)
         if task['size'] == -1:
             job_id_map[job_id] = (brickname, task['nblob_idx'])
             yield (brickname, iblob, None, None)

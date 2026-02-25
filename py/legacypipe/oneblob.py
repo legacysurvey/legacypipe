@@ -201,6 +201,9 @@ class CheckStep(object):
         for src in tractor.catalog:
             if src is None:
                 continue
+            # ConstantSurfaceBrightness
+            if not hasattr(src, 'pos'):
+                continue
             pos = src.pos
             ok,ix,iy = self.blobwcs.radec2pixelxy(pos.ra, pos.dec)
             if not ok:
@@ -542,9 +545,11 @@ class OneBlob(object):
         fit_background_mask = REF_MAP_BITS['BRIGHT']
         if not self.less_masking:
             fit_background_mask |= REF_MAP_BITS['MEDIUM']
+
         ### this variable *also* forces fitting the background.
-        if self.large_galaxies_force_pointsource:
-            fit_background_mask |= REF_MAP_BITS['GALAXY']
+        #if self.large_galaxies_force_pointsource:
+        fit_background_mask |= REF_MAP_BITS['GALAXY']
+
         for srci,src in enumerate(cat):
             if src is None:
                 continue
@@ -1481,13 +1486,21 @@ class OneBlob(object):
             plt.title('Model selection: data')
             self.ps.savefig()
 
-        srctractor = self.tractor(srctims, [src])
-        srctractor.setModelMasks(modelMasks)
-        srccat = srctractor.getCatalog()
-
         is_galaxy = isinstance(src, Galaxy)
         force_pointsource = B.forced_pointsource[srci]
         fit_background = B.fit_background[srci]
+
+        if fit_background:
+            # Fit the source + a constant surface brightness with the same bands as the source.
+            from tractor.basics import ConstantSurfaceBrightness
+            br = src.getBrightness().copy()
+            br.setParams(np.zeros(br.numberOfParams()))
+            sb = ConstantSurfaceBrightness(br)
+            srctractor = self.tractor(srctims, [src, sb])
+        else:
+            srctractor = self.tractor(srctims, [src])
+        srctractor.setModelMasks(modelMasks)
+        srccat = srctractor.getCatalog()
 
         _,ix,iy = srcwcs.radec2pixelxy(src.getPosition().ra,
                                        src.getPosition().dec)
@@ -1521,22 +1534,27 @@ class OneBlob(object):
         x0,y0 = srcwcs_x0y0
         debug('Source at blob coordinates', x0+ix, y0+iy, ', local coords %i,%i of %ix%i' % (ix, iy, sw, sh), '- forcing pointsource?', force_pointsource, ', is large galaxy?', is_galaxy, ', fitting sky background:', fit_background)
 
-        if fit_background:
-            for tim in srctims:
-                tim.freezeAllBut('sky')
-            srctractor.thawParam('images')
-            # When we're fitting the background, using the sparse optimizer is critical
-            # when we have a lot of images: we're adding Nimages extra parameters, touching
-            # every pixel; you don't want Nimages x Npixels dense matrices.
-            from tractor.lsqr_optimizer import LsqrOptimizer
-            srctractor.optimizer = LsqrOptimizer()
-            skyparams = srctractor.images.getParams()
+        # if fit_background:
+        #     for tim in srctims:
+        #         tim.freezeAllBut('sky')
+        #     srctractor.thawParam('images')
+        #     # When we're fitting the background, using the sparse optimizer is critical
+        #     # when we have a lot of images: we're adding Nimages extra parameters, touching
+        #     # every pixel; you don't want Nimages x Npixels dense matrices.
+        #     from tractor.lsqr_optimizer import LsqrOptimizer
+        #     srctractor.optimizer = LsqrOptimizer()
+        #     skyparams = srctractor.images.getParams()
 
         # Compute the log-likehood without a source here.
         srccat[0] = None
 
         if fit_background:
+            mm = remap_modelmask(modelMasks, src, None)
+            srctractor.setModelMasks(mm)
             srctractor.optimize_loop(**optargs)
+            print('Fitting background with no source: sb', srccat[1])
+            # Save the const sb levels fit with no source?  or just zero?
+            skyparams = srccat[1].getParams()
 
         if self.plots_per_source:
             model_mod_rgb = {}
@@ -1652,28 +1670,30 @@ class OneBlob(object):
             debug('Model selection: starting with max modelmask size', maxsize, src)
 
             if fit_background:
-                # Reset sky params
-                srctractor.images.setParams(skyparams)
-                # freeze sky before flux fitting
-                srctractor.freezeParam('images')
+                # # Reset sky params
+                # srctractor.images.setParams(skyparams)
+                # # freeze sky before flux fitting
+                # srctractor.freezeParam('images')
+                srccat[1].setParams(skyparams)
+                #srccat.freezeParam(1)
 
             # First-round optimization (during model selection)
             self.debug('Before model selection: %s' % (str(newsrc)))
 
             # Fit just the fluxes first...
             newsrc.freezeAllBut('brightness')
-            # SmarterDenseOptimizer isn't so smart when the sky is also being fit!
-            opt = srctractor.optimizer
-            from tractor.smarter_dense_optimizer import SmarterDenseOptimizer
-            sm = SmarterDenseOptimizer()
-            srctractor.optimizer = sm
+            # # SmarterDenseOptimizer isn't so smart when the sky is also being fit!
+            # opt = srctractor.optimizer
+            # from tractor.smarter_dense_optimizer import SmarterDenseOptimizer
+            # sm = SmarterDenseOptimizer()
+            # srctractor.optimizer = sm
             srctractor.optimize_loop(**optargs)
-            srctractor.optimizer = opt
+            # srctractor.optimizer = opt
             self.debug('After model selection (just fluxes): %s' % (str(newsrc)))
             newsrc.thawAllParams()
 
-            if fit_background:
-                srctractor.thawParam('images')
+            #if fit_background:
+            #    srctractor.thawParam('images')
 
             try:
                 R = srctractor.optimize_loop(**optargs)
@@ -1751,7 +1771,8 @@ class OneBlob(object):
             if fit_background:
                 # We have to freeze the sky here before computing
                 # uncertainties
-                srctractor.freezeParam('images')
+                #srctractor.freezeParam('images')
+                srccat.freezeParam(1)
 
             nsrcparams = newsrc.numberOfParams()
             _convert_ellipses(newsrc)
@@ -1763,6 +1784,12 @@ class OneBlob(object):
             fracin = dict([(b, []) for b in self.bands])
             fluxes = dict([(b, newsrc.getBrightness().getFlux(b))
                            for b in self.bands])
+
+            if fit_background:
+                # set the SB to zero before computing model metrics
+                sb0 = srccat[1].getParams()
+                srccat[1].setParams(np.zeros(len(sb0)))
+
             for tim,mod in zip(srctims, srctractor.getModelImages(sky=False)):
                 f = (mod * (tim.getInvError() > 0)).sum() / fluxes[tim.band]
                 fracin[tim.band].append(f)
@@ -1824,9 +1851,9 @@ class OneBlob(object):
                 # revert tim to original (unmasked-by-others)
                 tim.setInvError(ie)
 
-        # After model selection, revert the sky
-        if fit_background:
-            srctractor.images.setParams(skyparams)
+        # # After model selection, revert the sky
+        # if fit_background:
+        #     srctractor.images.setParams(skyparams)
 
         # Actually select which model to keep.  The MODEL_NAMES
         # array determines the order of the elements in the DCHISQ
@@ -1861,6 +1888,10 @@ class OneBlob(object):
             coimgs,_ = quick_coadds(srctims, self.bands, srcwcs)
             rgb = get_rgb(coimgs, self.bands)
             dimshow(rgb, ticks=False)
+            if ey0 is not None:
+                ax = plt.axis()
+                plt.plot([ex0,ex0,ex1,ex1,ex0], [ey0,ey1,ey1,ey0,ey0], 'r-')
+                plt.axis(ax)
             # next over: rgb with same stretch as models
             #plt.subplot(rows, cols, 2)
             #rgb = get_rgb(coimgs, self.bands)
