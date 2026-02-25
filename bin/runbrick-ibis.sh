@@ -83,8 +83,9 @@ python -u -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
        --outdir "$outdir" \
        --write-stage srcs \
-       --threads 32 \
+       --threads 128 \
        >> "$log" 2>&1
+
 
 # helps in deep fields:
 #       --blob-dilate 4 \
