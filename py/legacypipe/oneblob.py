@@ -136,6 +136,7 @@ def one_blob(args):
             # FIXME -- update more parameters??
             ob.large_galaxies_force_pointsource = args.large_galaxies_force_pointsource
         else:
+            # we should just make OneBlob's constructor take a OneBlobArgs object!
             ob = OneBlob(args.blobname, args.nblobs, blobwcs, args.blobmask, args.timargs, args.bands,
                          args.plots, args.ps, args.use_ceres, args.refmap,
                          args.large_galaxies_force_pointsource,
@@ -575,9 +576,9 @@ class OneBlob(object):
             # Also set a parameter on 'src' for use in compute_segmentation_map()
             src.maskbits_forced_point_source = force_pointsource
 
-        status_update('Computing segmentation map%s' % self.iterstring)
         segmap = None
         if self.do_segmentation:
+            status_update('Computing segmentation map%s' % self.iterstring)
             segmap = self.compute_segmentation_map(cat)
         mask_others = self.do_segmentation
         # Next, model selections: point source vs rex vs dev/exp vs ser.

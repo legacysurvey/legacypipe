@@ -1417,19 +1417,32 @@ def stage_fitblobs(T=None,
 
     # Create the list of blobs to process
     blob_meta = get_blob_metadata(
-        blobslices, blobsrcs, blobmap, targetwcs, T, bands,
-        plots, ps, reoptimize, iterative, iterative_nsigma, use_ceres, refmap,
-        large_galaxies_force_pointsource, less_masking, brick,
+        blobslices, blobsrcs, blobmap, targetwcs, T, refmap, brick,
         skipblobs=skipblobs, max_blobsize=max_blobsize, custom_brick=custom_brick,
-        blobxy=blobxy, enable_sub_blobs=sub_blobs, do_segmentation=do_segmentation)
+        blobxy=blobxy, enable_sub_blobs=sub_blobs)
 
     from collections import deque
     blob_meta = deque(blob_meta)
 
     single_thread=(mp is None or mp.pool is None)
     args = (brickname, targetwcs, tims, cat, refmap, frozen_galaxies, ran_sub_blobs)
+    oneblob_kwargs = dict(
+        nblobs=len(blobslices),
+        brickwcs=targetwcs,
+        bands=bands,
+        do_segmentation=do_segmentation,
+        use_ceres=use_ceres,
+        plots=plots, ps=ps,
+        reoptimize=reoptimize,
+        iterative=iterative,
+        iterative_nsigma=iterative_nsigma,
+        large_galaxies_force_pointsource=large_galaxies_force_pointsource,
+        less_masking=less_masking,
++    )
     kwargs = dict(single_thread=single_thread,
-                  halfdone_blob_map=halfdone_blob_map)
+                  halfdone_blob_map=halfdone_blob_map,
+                  oneblob_kwargs=oneblob_kwargs)
+
     job_id_map_high = {}
     job_id_map_low = {}
 
@@ -2161,8 +2174,13 @@ def iter_deque(blob_meta, high_priority, job_id_map,
                brickname, targetwcs, tims, cat, refmap,
                frozen_galaxies, ran_sub_blobs,
                single_thread=False,
-               halfdone_blob_map=None):
+               halfdone_blob_map=None,
+               oneblob_kwargs=None
+               ):
     from legacypipe.oneblob import OneBlobArgs
+
+    if oneblob_kwargs is None:
+        oneblob_kwargs = {}
 
     if halfdone_blob_map is None:
         halfdone_blob_map = {}
@@ -2201,7 +2219,6 @@ def iter_deque(blob_meta, high_priority, job_id_map,
         Isrcs = task['Isrcs']
         sub_idx = task.get('sub_idx')
         display_name = task.get('sub_name', f"{task['nblob_idx']}")
-        common_blob_args = task['common_args']
 
         subtimargs = get_subtim_args(tims, targetwcs, bx0, bx1, by0, by1, single_thread)
 
@@ -2227,17 +2244,12 @@ def iter_deque(blob_meta, high_priority, job_id_map,
                            refmap=refmap[by0:by1, bx0:bx1],
                            frozen_galaxies=frozen_galaxies.get(iblob, []),
                            halfdone=halfdone,
-                           **common_blob_args))
+                           **oneblob_kwargs))
 
 def get_blob_metadata(
-        blobslices, blobsrcs, blobmap, targetwcs, T, bands,
-    plots, ps, reoptimize, iterative, iterative_nsigma, use_ceres, refmap,
-    large_galaxies_force_pointsource, less_masking,
-    brick,
-    skipblobs=None, max_blobsize=None, custom_brick=False,
-    blobxy=None,
-    enable_sub_blobs=False,
-    do_segmentation=True):
+        blobslices, blobsrcs, blobmap, targetwcs, T, refmap, brick,
+        skipblobs=None, max_blobsize=None, custom_brick=False,
+        blobxy=None, enable_sub_blobs=False):
     '''
     *blobmap*: integer image map, with -1 indicating no-blob, other values indexing
         into *blobslices*,*blobsrcs*.
@@ -2264,12 +2276,6 @@ def get_blob_metadata(
     all_tasks_metadata = []
 
     Nblobs = len(blobslices)
-    common_blob_args = dict(nblobs=Nblobs, brickwcs=targetwcs, bands=bands,
-                            plots=plots, ps=ps, reoptimize=reoptimize, iterative=iterative,
-                            iterative_nsigma=iterative_nsigma, use_ceres=use_ceres,
-                            large_galaxies_force_pointsource=large_galaxies_force_pointsource,
-                            less_masking=less_masking,
-                            do_segmentation=do_segmentation)
 
     for nblob, iblob in enumerate(blob_order):
         bslc = blobslices[iblob]
@@ -2341,7 +2347,6 @@ def get_blob_metadata(
                 'nblob_idx': nblob + 1,
                 'onex': onex,
                 'oney': oney,
-                'common_args': common_blob_args,
             })
         else:
             nsubx = int(max(1, np.round((blobw - overlap) / (target - overlap))))
@@ -2397,7 +2402,6 @@ def get_blob_metadata(
                         'onex': s_bx0,
                         'oney': s_by0,
                         'unique_bounds': (bx0+uniqx[j], bx0+uniqx[j+1], by0+uniqy[i], by0+uniqy[i+1]),
-                        'common_args': common_blob_args
                     })
 
     # Determine sorting metric: 'nsrcs' if any sub-blobs exist, else 'size'
