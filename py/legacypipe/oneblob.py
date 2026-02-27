@@ -553,14 +553,20 @@ class OneBlob(object):
         for srci,src in enumerate(cat):
             if src is None:
                 continue
-            _,ix,iy = self.blobwcs.radec2pixelxy(src.getPosition().ra,
-                                                 src.getPosition().dec)
+            pos = src.getPosition()
+            ok,ix,iy = self.blobwcs.radec2pixelxy(pos.ra, pos.dec)
+            if not ok:
+                info('Source', src, 'has RA,Dec', pos, 'so weird that WCS fails!  Ignoring.')
+                cat[srci] = None
+                continue
             ix = int(np.clip(ix-1, 0, self.blobw-1))
             iy = int(np.clip(iy-1, 0, self.blobh-1))
             bits = self.refmap[iy, ix]
             force_pointsource = ((bits & force_pointsource_mask) > 0)
             fit_background = ((bits & fit_background_mask) > 0)
             is_galaxy = isinstance(src, Galaxy)
+
+            # SGA sources that come in should never get forced to point-source via masks.
             if is_galaxy:
                 fit_background = False
                 force_pointsource = False

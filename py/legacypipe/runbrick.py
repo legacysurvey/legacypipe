@@ -1403,7 +1403,7 @@ def stage_fitblobs(T=None,
 
     frozen_galaxies = get_frozen_galaxies(T, blobsrcs, blobmap, targetwcs, cat)
     refmap = get_blobiter_ref_map(refobjs, less_masking, targetwcs)
-    # We pass this list in to _blob_iter; it appends any blob numbers
+    # We pass this list in to get_blob_meta; it appends any blob numbers
     # that were processed as sub-blobs.
     ran_sub_blobs = None
     if sub_blobs:
@@ -1415,22 +1415,7 @@ def stage_fitblobs(T=None,
 
     job_id_map = {}
 
-    # # Create the iterator over blobs to process
-    # blobiter = _blob_iter(job_id_map,
-    #                       brickname, blobslices, blobsrcs, blobmap, targetwcs, tims,
-    #                       cat, T, bands, plots, ps, reoptimize, iterative, iterative_nsigma,
-    #                       use_ceres,
-    #                       refmap, large_galaxies_force_pointsource, less_masking, brick,
-    #                       frozen_galaxies,
-    #                       skipblobs=skipblobs,
-    #                       blobxy=blobxy,
-    #                       single_thread=(mp is None or mp.pool is None),
-    #                       max_blobsize=max_blobsize, custom_brick=custom_brick,
-    #                       enable_sub_blobs=sub_blobs,
-    #                       ran_sub_blobs=ran_sub_blobs,
-    #                       halfdone_blob_map=halfdone_blob_map,
-    #                       do_segmentation=do_segmentation)
-
+    # Create the list of blobs to process
     blob_meta = get_blob_metadata(
         blobslices, blobsrcs, blobmap, targetwcs, T, bands,
         plots, ps, reoptimize, iterative, iterative_nsigma, use_ceres, refmap,
@@ -1461,7 +1446,6 @@ def stage_fitblobs(T=None,
     if checkpoint_filename is None:
         # FIXME -- add worker-died checks & logging here
         print ("No checkpoint")
-        #R.extend(mp.map(_bounce_one_blob, blobiter))
         R = list(Riter_hi) + list(Riter_lo)
     else:
         from astrometry.util.ttime import CpuMeas
@@ -2189,7 +2173,7 @@ def iter_deque(blob_meta, high_priority, job_id_map,
     while True:
         global signal_quitting
         if signal_quitting:
-            info('_blob_iter: signal_quitting')
+            info('iter_deque (%s): signal_quitting' % ('high' if high_priority else 'low'))
             break
 
         if high_priority:
@@ -2218,66 +2202,6 @@ def iter_deque(blob_meta, high_priority, job_id_map,
         sub_idx = task.get('sub_idx')
         display_name = task.get('sub_name', f"{task['nblob_idx']}")
         common_blob_args = task['common_args']
-
-        subtimargs = get_subtim_args(tims, targetwcs, bx0, bx1, by0, by1, single_thread)
-
-        job_id_map[job_id] = (brickname, display_name)
-        job_id += 1
-        if sub_idx is not None and ran_sub_blobs is not None:
-            ran_sub_blobs.append(int(iblob))
-
-        if sub_idx is not None:
-            halfdone = halfdone_blob_map.get((int(iblob),sub_idx))
-        else:
-            halfdone = halfdone_blob_map.get(int(iblob))
-        if halfdone is not None:
-            info('Found a mid-way checkpoint for blob %s' % (task['blobname']))
-
-        yield (brickname, (iblob, sub_idx) if sub_idx is not None else iblob,
-               task.get('unique_bounds'),
-               OneBlobArgs(blobname=task['blobname'], iblob=iblob, Isrcs=Isrcs,
-                           bx0=bx0, by0=by0, blobw=bx1-bx0, blobh=by1-by0,
-                           # "blobmask" has already been cut to this blob, so don't use sub_slc
-                           blobmask=task['blobmask'],
-                           timargs=subtimargs, srcs=[cat[i] for i in Isrcs],
-                           refmap=refmap[by0:by1, bx0:bx1],
-                           frozen_galaxies=frozen_galaxies.get(iblob, []),
-                           halfdone=halfdone,
-                           **common_blob_args))
-
-def _blob_iter(all_tasks_metadata, job_id_map,
-               brickname, targetwcs, tims, cat, refmap,
-               frozen_galaxies, single_thread=False,
-               halfdone_blob_map=None):
-    from legacypipe.oneblob import OneBlobArgs
-
-    if halfdone_blob_map is None:
-        halfdone_blob_map = {}
-    else:
-        info('Half-done blobs:', halfdone_blob_map.keys())
-
-    # Yield
-    job_id = 0
-    total_tasks = len(all_tasks_metadata)
-    for rank, task in enumerate(all_tasks_metadata):
-        task_rank = rank + 1
-        iblob = task['iblob']
-
-        global signal_quitting
-        if signal_quitting:
-            info('_blob_iter: signal_quitting')
-            break
-
-        if task['size'] == -1:
-            job_id_map[job_id] = (brickname, task['nblob_idx'])
-            yield (brickname, iblob, None, None)
-            job_id += 1
-            continue
-
-        bx0, bx1, by0, by1 = task['coords']
-        Isrcs = task['Isrcs']
-        sub_idx = task.get('sub_idx')
-        display_name = task.get('sub_name', f"{task['nblob_idx']}")
 
         subtimargs = get_subtim_args(tims, targetwcs, bx0, bx1, by0, by1, single_thread)
 
@@ -2442,9 +2366,6 @@ def get_blob_metadata(
                         ok = False
                         for x,y in blobxy:
                             if x >= s_bx0 and x < s_bx1 and y >= s_by0 and y < s_by1:
-                                # We filter for being in the whole blob before even calling _blob_iter,
-                                # so just checking the bounds of the sub-blob should be sufficient.
-                                #if blobmask[y-by0, x-bx0]:
                                 ok = True
                                 break
                         if not ok:
