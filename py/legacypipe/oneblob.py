@@ -71,7 +71,7 @@ OneBlobArgs = namedtuple('OneBlobArgs', [
     'timargs',
     'srcs', 'bands', 'plots', 'ps', 'reoptimize', 'iterative', 'iterative_nsigma', 'use_ceres',
     'refmap', 'large_galaxies_force_pointsource', 'less_masking', 'frozen_galaxies',
-    'halfdone', 'do_segmentation'])
+    'halfdone', 'do_segmentation', 'bright_masking'])
 
 def one_blob(args):
     '''
@@ -135,6 +135,7 @@ def one_blob(args):
             ob.ps = args.ps
             # FIXME -- update more parameters??
             ob.large_galaxies_force_pointsource = args.large_galaxies_force_pointsource
+            ob.bright_masking = args.bright_masking
         else:
             # we should just make OneBlob's constructor take a OneBlobArgs object!
             ob = OneBlob(args.blobname, args.nblobs, blobwcs, args.blobmask, args.timargs, args.bands,
@@ -143,7 +144,8 @@ def one_blob(args):
                          args.less_masking, args.frozen_galaxies,
                          args.iterative_nsigma,
                          do_segmentation=args.do_segmentation,
-                         iblob=args.iblob)
+                         iblob=args.iblob,
+                         bright_masking=args.bright_masking)
             B = ob.init_table(args.srcs, args.Isrcs)
 
         if is_gpu:
@@ -233,6 +235,7 @@ class OneBlob(object):
                  less_masking, frozen_galaxies,
                  iterative_nsigma,
                  do_segmentation=True,
+                 bright_masking=False,
                  iblob=None):
         self.name = name
         self.nblobs = nblobs
@@ -261,6 +264,7 @@ class OneBlob(object):
         self.plots2 = False
         alphas = [0.1, 0.3, 1.0]
         self.do_segmentation = do_segmentation
+        self.bright_masking = bright_masking
 
         # callback function for tractor.optimize_loop: bail out if the
         # optimizer moves a source center outside the blob
@@ -897,6 +901,37 @@ class OneBlob(object):
         #   -subtract final model (from each tim)
         # -Replace original images
 
+        brightmap = None
+        if self.bright_masking:
+            from legacypipe.coadds import make_coadds
+            from scipy.ndimage import label, find_objects, binary_dilation
+            # from astrometry.util.multiproc import multiproc
+            # from legacypipe.detection import detection_maps
+            # # sigh... just coadd and take pixels above threshold?
+            # mp = multiproc()
+            # detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp)
+            # del satmaps
+            # brightmap = np.zeros(self.blobwcs.shape, bool)
+            # for det,detiv in zip(detmaps,detivs):
+            #     detsn = det * np.sqrt(detiv)
+            #     brightmap |= (detsn > 10.)
+            brightmap = np.zeros(self.blobwcs.shape, bool)
+            co = make_coadds(self.tims, self.bands, self.blobwcs, allmasks=False, mjdminmax=False)
+            for im,iv in zip(co.coimgs, co.cowimgs):
+                sn = im * np.sqrt(iv)
+                brightmap |= (sn > 10.)
+            brightmap = binary_dilation(brightmap, iterations=2)
+            # fill holes?
+            brightmap,_ = label(brightmap)
+
+            if self.plots:
+                import pylab as plt
+                plt.clf()
+                plt.imshow(brightmap > 0, interpolation='nearest', origin='lower', vmin=0, vmax=1,
+                           cmap='gray')
+                plt.title('Brightmap')
+                self.ps.savefig()
+
         models = SourceModels()
         # Remember original tim images
         models.save_images(self.tims)
@@ -943,7 +978,9 @@ class OneBlob(object):
             self.prefix = '%s source %i of %i model sel' % (pre, numi+1, len(Ibright))
             plots = self.plots_per_source * (numi < 50)
             keepsrc = self.model_selection_one_source(src, srci, models, B, segmap,
-                                                      mask_others=mask_others, plots=plots)
+                                                      mask_others=mask_others,
+                                                      brightmap=brightmap,
+                                                      plots=plots)
             self.prefix = pre
 
             # Definitely keep ref stars (Gaia & Tycho)
@@ -1242,7 +1279,7 @@ class OneBlob(object):
         return Bnew
 
     def model_selection_one_source(self, src, srci, models, B, segmap,
-                                   mask_others=True, plots=False):
+                                   mask_others=True, brightmap=None, plots=False):
         modelMasks = models.model_masks(srci, src)
 
         srctims = self.tims
@@ -1416,6 +1453,23 @@ class OneBlob(object):
                     source_mask = srcblobmask & (segmap[sy0:sy0+bh, sx0:sx0+bw] == s)
                 else:
                     source_mask &= (segmap[sy0:sy0+bh, sx0:sx0+bw] == s)
+
+        if brightmap is not None:
+            sx0,sy0 = srcwcs_x0y0
+            s = brightmap[iy + sy0, ix + sx0]
+            if s == 0:
+                # The current source is not in a bright blob.
+                # Mask out all pixels in bright blobs
+                brmask = (brightmap[sy0:sy0+bh, sx0:sx0+bw] == 0)
+            else:
+                # The current source is in a bright blob.
+                # Mask out all pixels in *other* bright blobs
+                brmask = ((brightmap[sy0:sy0+bh, sx0:sx0+bw] == 0) |
+                          (brightmap[sy0:sy0+bh, sx0:sx0+bw] == s))
+            if source_mask is None:
+                source_mask = srcblobmask & brmask
+            else:
+                source_mask &= brmask
 
         if source_mask is not None:
             if not np.any(source_mask):

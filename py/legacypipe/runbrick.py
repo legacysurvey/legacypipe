@@ -1221,6 +1221,7 @@ def stage_fitblobs(T=None,
                    nsigma=None,
                    large_galaxies_force_pointsource=True,
                    less_masking=False,
+                   bright_masking=False,
                    sub_blobs=False,
                    use_ceres=True,
                    mp=None,
@@ -1438,7 +1439,8 @@ def stage_fitblobs(T=None,
         iterative_nsigma=iterative_nsigma,
         large_galaxies_force_pointsource=large_galaxies_force_pointsource,
         less_masking=less_masking,
-+    )
+        bright_masking=bright_masking,
+    )
     kwargs = dict(single_thread=single_thread,
                   halfdone_blob_map=halfdone_blob_map,
                   oneblob_kwargs=oneblob_kwargs)
@@ -4352,6 +4354,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               unwise_coadds=True,
               bail_out=False,
               do_segmentation=True,
+              bright_masking=False,
               ceres=True,
               wise_ceres=True,
               galex_ceres=True,
@@ -4615,6 +4618,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   wise_ceres=wise_ceres,
                   galex_ceres=galex_ceres,
                   do_segmentation=do_segmentation,
+                  bright_masking=bright_masking,
                   unwise_coadds=unwise_coadds,
                   bailout=bail_out,
                   minimal_coadds=minimal_coadds,
@@ -5191,6 +5195,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--rgb-stretch', type=float, help='Stretch RGB jpeg plots by this factor.')
     parser.add_argument('--no-segmentation', dest='do_segmentation', default=True,
                         action='store_false', help='Turn off segmentation during fitblobs')
+    parser.add_argument('--bright-masking', default=False,
+                        action='store_true', help='Mask other bright pixels during fitting')
     return parser
 
 def get_runbrick_kwargs(survey=None,
