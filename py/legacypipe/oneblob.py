@@ -904,7 +904,7 @@ class OneBlob(object):
         brightmap = None
         if self.bright_masking:
             from legacypipe.coadds import make_coadds
-            from scipy.ndimage import label, find_objects, binary_dilation
+            from scipy.ndimage import label, find_objects, binary_dilation, binary_fill_holes
             # from astrometry.util.multiproc import multiproc
             # from legacypipe.detection import detection_maps
             # # sigh... just coadd and take pixels above threshold?
@@ -921,7 +921,8 @@ class OneBlob(object):
                 sn = im * np.sqrt(iv)
                 brightmap |= (sn > 10.)
             brightmap = binary_dilation(brightmap, iterations=2)
-            # fill holes?
+            # fill holes for, eg, bright stars with saturated cores.  Should we explicitly fill SATUR?
+            brightmap = binary_fill_holes(brightmap)
             brightmap,_ = label(brightmap)
 
             if self.plots:
@@ -1467,9 +1468,16 @@ class OneBlob(object):
                 brmask = ((brightmap[sy0:sy0+bh, sx0:sx0+bw] == 0) |
                           (brightmap[sy0:sy0+bh, sx0:sx0+bw] == s))
             if source_mask is None:
-                source_mask = srcblobmask & brmask
-            else:
-                source_mask &= brmask
+                #source_mask = srcblobmask & brmask
+                # cut this to the modelmask area
+                x0,x1,y0,y1 = model_masks_to_blob_extent(srctims, modelMasks, src, srcwcs, to_int=True)
+                if x0 is None:
+                    print('No overlap?', len(srctims), 'tims')
+                    return None
+                source_mask = np.zeros(srcblobmask.shape, bool)
+                source_mask[y0:y1, x0:x1] = True
+
+            source_mask &= brmask
 
         if source_mask is not None:
             if not np.any(source_mask):
@@ -2807,7 +2815,7 @@ def _per_band_chisqs(tractor, bands):
         chisqs[img.band] = chisqs[img.band] + (chi ** 2).sum()
     return chisqs
 
-def model_masks_to_blob_extent(tims, modelMasks, src, wcs):
+def model_masks_to_blob_extent(tims, modelMasks, src, wcs, to_int=False):
     xlo = xhi = ylo = yhi = None
     for tim,mm in zip(tims, modelMasks):
         mask = mm.get(src, None)
@@ -2830,4 +2838,13 @@ def model_masks_to_blob_extent(tims, modelMasks, src, wcs):
             ylo = min(y)
         if yhi is None or max(y) > yhi:
             yhi = max(y)
+    if xlo is None:
+        return None,None,None,None
+    if to_int:
+        h,w = wcs.shape
+        ylo = int(np.clip(np.floor(ylo), 0, h))
+        yhi = int(np.clip(np.ceil (yhi)+1, 0, h))
+        xlo = int(np.clip(np.floor(xlo), 0, w))
+        xhi = int(np.clip(np.ceil (xhi)+1, 0, w))
+
     return xlo,xhi,ylo,yhi
