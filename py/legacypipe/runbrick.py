@@ -1428,6 +1428,7 @@ def stage_fitblobs(T=None,
     single_thread=(mp is None or mp.pool is None)
     args = (brickname, targetwcs, tims, cat, refmap, frozen_galaxies, ran_sub_blobs)
     oneblob_kwargs = dict(
+        refcat=refobjs,
         nblobs=len(blobslices),
         brickwcs=targetwcs,
         bands=bands,
@@ -1435,7 +1436,7 @@ def stage_fitblobs(T=None,
         use_ceres=use_ceres,
         plots=plots, ps=ps,
         reoptimize=reoptimize,
-        iterative=iterative,
+        iterative=iterative,        
         iterative_nsigma=iterative_nsigma,
         large_galaxies_force_pointsource=large_galaxies_force_pointsource,
         less_masking=less_masking,

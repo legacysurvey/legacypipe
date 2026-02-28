@@ -10,6 +10,7 @@ from astrometry.util.ttime import Time
 from astrometry.util.resample import resample_with_wcs, OverlapError
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.util.plotutils import dimshow
+from astrometry.util.starutil_numpy import arcsec_between
 
 from tractor import Tractor, PointSource, Image, Catalog, Patch, Galaxy
 from tractor.galaxy import DevGalaxy, ExpGalaxy
@@ -71,7 +72,7 @@ OneBlobArgs = namedtuple('OneBlobArgs', [
     'timargs',
     'srcs', 'bands', 'plots', 'ps', 'reoptimize', 'iterative', 'iterative_nsigma', 'use_ceres',
     'refmap', 'large_galaxies_force_pointsource', 'less_masking', 'frozen_galaxies',
-    'halfdone', 'do_segmentation', 'bright_masking'])
+    'halfdone', 'do_segmentation', 'refcat', 'bright_masking'])
 
 def one_blob(args):
     '''
@@ -145,6 +146,7 @@ def one_blob(args):
                          args.iterative_nsigma,
                          do_segmentation=args.do_segmentation,
                          iblob=args.iblob,
+                         refcat=args.refcat,
                          bright_masking=args.bright_masking)
             B = ob.init_table(args.srcs, args.Isrcs)
 
@@ -236,7 +238,8 @@ class OneBlob(object):
                  iterative_nsigma,
                  do_segmentation=True,
                  bright_masking=False,
-                 iblob=None):
+                 iblob=None,
+                 refcat=None):
         self.name = name
         self.nblobs = nblobs
         self.prefix = 'Blob %s of %s:' % (name, nblobs)
@@ -248,6 +251,7 @@ class OneBlob(object):
         self.bands = bands
         self.plots = plots
         self.refmap = refmap
+        self.refcat = refcat
         #self.plots_per_source = False
         self.plots_per_source = plots
         self.plots_per_model = False
@@ -573,8 +577,17 @@ class OneBlob(object):
 
             # SGA sources that come in should never get forced to point-source via masks.
             if is_galaxy:
-                fit_background = False
                 force_pointsource = False
+                fit_background = False
+                # Fit background if this SGA source is within *another* galaxy's mask
+                # (it will always be inside its *own* mask so we can't just check that!)
+                #
+                if self.is_galaxy_in_other_galaxy(src, ix, iy):
+                    fit_background = True
+                    info('Source', src, "is in another galaxy's mask")
+                else:
+                    info('Source', src, "is not in another galaxy's mask")
+
             B.forced_pointsource[srci] = force_pointsource
             B.fit_background[srci] = fit_background
             # Also set a parameter on 'src' for use in compute_segmentation_map()
@@ -731,6 +744,36 @@ class OneBlob(object):
         self.info('Finished, total: %s' % (Time()-trun))
         status_update('Finished%s' % self.iterstring, force=True)
         return B
+
+    def is_galaxy_in_other_galaxy(self, src, ix, iy):
+        from legacypipe.reference import get_reference_map
+        # We need to find this galaxy in the "refcat" table and remove it.
+        # We're doing this before any fitting, so the source coordinates should be equal
+        # to those in the refcat.
+        # First cut to just SGA sources (otherwise, we'll have Gaia stars, possibly DUP)
+        if self.refcat is None:
+            self.debug('is_galaxy_in: no refcat')
+            return False
+        if len(self.refcat) == 0:
+            self.debug('is_galaxy_in: zero-length refcat')
+            return False
+        sgacat = self.refcat[np.array([c.startswith('L') for c in self.refcat.ref_cat])]
+        if len(sgacat) == 0:
+            self.debug('is_galaxy_in: no SGA objects')
+            return False
+        pos = src.pos
+        d = arcsec_between(pos.ra, pos.dec, sgacat.ra, sgacat.dec)
+        i = np.argmin(d)
+        self.debug('closest ref source:', d[i], 'arcsec')
+        if d[i] > 5:
+            self.debug('is_galaxy_in: could not find self in SGA')
+            return False
+        sgacat.cut(d > d[i])
+        if len(sgacat) == 0:
+            return False
+        refmap = get_reference_map(self.blobwcs, sgacat)
+        #self.debug('is_galaxy_in: refmap has %i of %i pixels set' % (np.sum(refmap != 0), refmap.size))
+        return refmap[iy, ix] != 0
 
     def compute_segmentation_map(self, cat):
         from functools import reduce
@@ -921,7 +964,7 @@ class OneBlob(object):
                 sn = im * np.sqrt(iv)
                 brightmap |= (sn > 10.)
             brightmap = binary_dilation(brightmap, iterations=2)
-            # fill holes for, eg, bright stars with saturated cores.  Should we explicitly fill SATUR?
+            # fill holes?  satur?
             brightmap = binary_fill_holes(brightmap)
             brightmap,_ = label(brightmap)
 
@@ -1297,6 +1340,11 @@ class OneBlob(object):
         # an extra mask to apply, in srcblobwcs shape
         source_mask = None
 
+        # if mask_others or (segmap is not None) or (brightmap is not None):
+        #     x0,x1,y0,y1 = model_masks_to_blob_extent(srctims, modelMasks, src, srcwcs)
+        #     h,w = y1-y0, x1-x0
+        #     source_mask = np.ones((h,w), bool)
+
         # Mask out other sources while fitting this one,
         # symmetrizing the blob mask and applying a segmentation mask.
 
@@ -1456,6 +1504,8 @@ class OneBlob(object):
                     source_mask &= (segmap[sy0:sy0+bh, sx0:sx0+bw] == s)
 
         if brightmap is not None:
+            #assert(segmap is None)
+            #assert(mask_others)
             sx0,sy0 = srcwcs_x0y0
             s = brightmap[iy + sy0, ix + sx0]
             if s == 0:
@@ -1501,11 +1551,11 @@ class OneBlob(object):
                 except OverlapError:
                     continue
                 ie = tim.getInvError()
-                newie = np.zeros_like(ie)
+                #newie = np.zeros_like(ie)
                 # this is kind of cosmetic (for making the Model selection plot nice):
                 # keep ies outside the modelMask
-                #newie = ie.copy()
-                #newie[y0:y1, x0:x1] = 0
+                newie = ie.copy()
+                newie[y0:y1, x0:x1] = 0
                 good, = np.nonzero(source_mask[Yi,Xi] * (ie[y0+Yo,x0+Xo] > 0))
                 if len(good) == 0:
                     debug('Tim has inverr all == 0')
