@@ -1484,57 +1484,104 @@ class OneBlob(object):
                 debug('No pixels in single-source mask')
                 return None
 
-            # Trim the fitting area down to the mask.
-            # find bounding box
-            yin = np.max(source_mask, axis=1)
-            xin = np.max(source_mask, axis=0)
-            yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
-            xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
-            (oldx0,oldy0) = srcwcs_x0y0
-            srcwcs = srcwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
-            srcwcs_x0y0 = (oldx0 + xl, oldy0 + yl)
-            srcblobmask = srcblobmask[yl:yh+1, xl:xh+1]
-            source_mask = source_mask[yl:yh+1, xl:xh+1]
-            bh,bw = srcblobmask.shape
-            ix -= xl
-            iy -= yl
-
             saved_srctim_ies = []
             keep_srctims = []
-            mm = []
+            keep_mm = []
             totalpix = 0
-            for tim in srctims:
-                # Zero out inverse-errors for all pixels outside
-                # 'dilated'.
+            for tim,tim_mm in zip(srctims, modelMasks):
+                # Zero out inverse-errors for all pixels in the modelmask but
+                # with source_mask=0.
+                mm = tim_mm.get(src)
+                if mm is None:
+                    continue
+                x0,x1,y0,y1 = mm.extent
+                mmwcs = tim.subwcs.get_subimage(x0, y0, x1-x0, y1-y0)
                 try:
-                    Yo,Xo,Yi,Xi,_ = resample_with_wcs(
-                        tim.subwcs, srcwcs, intType=np.int16)
+                    Yo,Xo,Yi,Xi,_ = resample_with_wcs(mmwcs, srcwcs)
                 except OverlapError:
                     continue
                 ie = tim.getInvError()
                 newie = np.zeros_like(ie)
-                good, = np.nonzero(source_mask[Yi,Xi] * (ie[Yo,Xo] > 0))
+                # this is kind of cosmetic (for making the Model selection plot nice):
+                # keep ies outside the modelMask
+                #newie = ie.copy()
+                #newie[y0:y1, x0:x1] = 0
+                good, = np.nonzero(source_mask[Yi,Xi] * (ie[y0+Yo,x0+Xo] > 0))
                 if len(good) == 0:
                     debug('Tim has inverr all == 0')
                     continue
                 yy = Yo[good]
                 xx = Xo[good]
-                newie[yy,xx] = ie[yy,xx]
-                xl,xh = xx.min(), xx.max()
-                yl,yh = yy.min(), yy.max()
+                newie[y0+yy,x0+xx] = ie[y0+yy,x0+xx]
                 totalpix += len(xx)
-                d = { src: ModelMask(xl, yl, 1+xh-xl, 1+yh-yl) }
-                mm.append(d)
                 saved_srctim_ies.append(ie)
                 tim.setInvError(newie)
                 keep_srctims.append(tim)
+                keep_mm.append(tim_mm)
             srctims = keep_srctims
-            modelMasks = mm
+            modelMasks = keep_mm
             B.blob_symm_nimages[srci] = len(srctims)
             B.blob_symm_npix[srci] = totalpix
             sh,sw = srcwcs.shape
             B.blob_symm_width [srci] = sw
             B.blob_symm_height[srci] = sh
+
+        # if source_mask is not None:
+        #     if not np.any(source_mask):
+        #         debug('No pixels in single-source mask')
+        #         return None
+        # 
+        #     # Trim the fitting area down to the mask.
+        #     # find bounding box
+        #     yin = np.max(source_mask, axis=1)
+        #     xin = np.max(source_mask, axis=0)
+        #     yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
+        #     xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
+        #     (oldx0,oldy0) = srcwcs_x0y0
+        #     srcwcs = srcwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
+        #     srcwcs_x0y0 = (oldx0 + xl, oldy0 + yl)
+        #     srcblobmask = srcblobmask[yl:yh+1, xl:xh+1]
+        #     source_mask = source_mask[yl:yh+1, xl:xh+1]
+        #     bh,bw = srcblobmask.shape
+        #     ix -= xl
+        #     iy -= yl
+        # 
+        #     saved_srctim_ies = []
+        #     keep_srctims = []
+        #     mm = []
+        #     totalpix = 0
+        #     for tim in srctims:
+        #         # Zero out inverse-errors for all pixels outside
+        #         # 'dilated'.
+        #         try:
+        #             Yo,Xo,Yi,Xi,_ = resample_with_wcs(
+        #                 tim.subwcs, srcwcs, intType=np.int16)
+        #         except OverlapError:
+        #             continue
+        #         ie = tim.getInvError()
+        #         newie = np.zeros_like(ie)
+        #         good, = np.nonzero(source_mask[Yi,Xi] * (ie[Yo,Xo] > 0))
+        #         if len(good) == 0:
+        #             debug('Tim has inverr all == 0')
+        #             continue
+        #         yy = Yo[good]
+        #         xx = Xo[good]
+        #         newie[yy,xx] = ie[yy,xx]
+        #         xl,xh = xx.min(), xx.max()
+        #         yl,yh = yy.min(), yy.max()
+        #         totalpix += len(xx)
+        #         d = { src: ModelMask(xl, yl, 1+xh-xl, 1+yh-yl) }
+        #         mm.append(d)
+        #         saved_srctim_ies.append(ie)
+        #         tim.setInvError(newie)
+        #         keep_srctims.append(tim)
+        #     srctims = keep_srctims
+        #     modelMasks = mm
+        #     B.blob_symm_nimages[srci] = len(srctims)
+        #     B.blob_symm_npix[srci] = totalpix
+        #     sh,sw = srcwcs.shape
+        #     B.blob_symm_width [srci] = sw
+        #     B.blob_symm_height[srci] = sh
 
         if plots:
             # This is a handy blob-coordinates plot of the data
