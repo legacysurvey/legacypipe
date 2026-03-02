@@ -858,7 +858,7 @@ class OneBlob(object):
         # in the segmentation map.  If there is more than one source
         # in that radius, each pixel gets assigned to its nearest
         # source.
-        radius = 5
+        radius = 10
         Ibright = _argsort_by_brightness([cat[i] for i in Iseg], self.bands)
         _set_kingdoms(segmap, radius, Iseg[Ibright], ix[Ibright], iy[Ibright])
 
