@@ -1524,6 +1524,19 @@ class OneBlob(object):
             B.blob_symm_width [srci] = sw
             B.blob_symm_height[srci] = sh
 
+        # sub-select the images (and corresponding modelmasks) that actually overlap this source
+        keeptims = []
+        keepmm = []
+        for mm, tim in zip(modelMasks, srctims):
+            if src in mm:
+                keeptims.append(tim)
+                keepmm.append(mm)
+        srctims = keeptims
+        modelMasks = keepmm
+        if len(srctims) == 0:
+            debug('No images overlap source:', src)
+            return None
+
         if plots:
             # This is a handy blob-coordinates plot of the data
             # going into the fit.
@@ -2084,8 +2097,9 @@ class OneBlob(object):
             btims = [tim for tim in tims if tim.band == b]
             btr = self.tractor(btims, fitcat)
 
-            # FIXME -- SmarterDenseOptimizer currently only handles _single sources_ so
-            # cannot be used here!
+            # SmarterDenseOptimizer currently only handles _single sources_ so
+            # cannot be used here! (and using a dense matrix isn't great for
+            # forced photometry)
             got_ceres = False
             if self.use_ceres:
                 try:
