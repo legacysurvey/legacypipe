@@ -1591,6 +1591,9 @@ class OneBlob(object):
         x0,y0 = srcwcs_x0y0
         debug('Source at blob coordinates', x0+ix, y0+iy, ', local coords %i,%i of %ix%i' % (ix, iy, sw, sh), '- forcing pointsource?', force_pointsource, ', is large galaxy?', is_galaxy, ', fitting sky background:', fit_background)
 
+        opt = srctractor.optimizer
+        opt.cache_image_params(srctractor)
+
         # Compute the log-likehood without a source here.
         srccat[0] = None
 
@@ -1861,6 +1864,8 @@ class OneBlob(object):
             if name == 'ser':
                 B.hit_ser_limit[srci] = hit_ser_limit
 
+        opt.clear_cached_image_params()
+
         if source_mask is not None:
             for tim,ie in zip(srctims, saved_srctim_ies):
                 # revert tim to original (unmasked-by-others)
@@ -1964,7 +1969,14 @@ class OneBlob(object):
             modelMasks = models.model_masks(i, src)
             tr.setModelMasks(modelMasks)
             print('opt_indiv: setting modelMasks:', modelMasks)
+
+            opt = tr.optimizer
+            opt.cache_image_params(tr)
+
             tr.optimize_loop(**self.optargs)
+
+            opt.clear_cached_image_params()
+
             cpu1 = time.process_time()
             cputime[i] += (cpu1 - cpu0)
             done_fitting[i] = True
@@ -2047,8 +2059,13 @@ class OneBlob(object):
             if has_fixed_position(src):
                 optargs.update(check_step=None)
 
+            opt = srctractor.optimizer
+            opt.cache_image_params(srctractor)
+
             # First-round optimization
             srctractor.optimize_loop(**optargs)
+
+            opt.clear_cached_image_params()
 
             if is_galaxy:
                 # Drop limits on SGA positions
