@@ -550,9 +550,7 @@ class OneBlob(object):
         fit_background_mask = REF_MAP_BITS['BRIGHT']
         if not self.less_masking:
             fit_background_mask |= REF_MAP_BITS['MEDIUM']
-
-        ### this variable *also* forces fitting the background.
-        #if self.large_galaxies_force_pointsource:
+        # (we used to only turn this on if large_galaxies_force_pointsource)
         fit_background_mask |= REF_MAP_BITS['GALAXY']
 
         for srci,src in enumerate(cat):
@@ -1526,63 +1524,6 @@ class OneBlob(object):
             B.blob_symm_width [srci] = sw
             B.blob_symm_height[srci] = sh
 
-        # if source_mask is not None:
-        #     if not np.any(source_mask):
-        #         debug('No pixels in single-source mask')
-        #         return None
-        # 
-        #     # Trim the fitting area down to the mask.
-        #     # find bounding box
-        #     yin = np.max(source_mask, axis=1)
-        #     xin = np.max(source_mask, axis=0)
-        #     yl,yh = np.flatnonzero(yin)[np.array([0,-1])]
-        #     xl,xh = np.flatnonzero(xin)[np.array([0,-1])]
-        #     (oldx0,oldy0) = srcwcs_x0y0
-        #     srcwcs = srcwcs.get_subimage(xl, yl, 1+xh-xl, 1+yh-yl)
-        #     srcwcs_x0y0 = (oldx0 + xl, oldy0 + yl)
-        #     srcblobmask = srcblobmask[yl:yh+1, xl:xh+1]
-        #     source_mask = source_mask[yl:yh+1, xl:xh+1]
-        #     bh,bw = srcblobmask.shape
-        #     ix -= xl
-        #     iy -= yl
-        # 
-        #     saved_srctim_ies = []
-        #     keep_srctims = []
-        #     mm = []
-        #     totalpix = 0
-        #     for tim in srctims:
-        #         # Zero out inverse-errors for all pixels outside
-        #         # 'dilated'.
-        #         try:
-        #             Yo,Xo,Yi,Xi,_ = resample_with_wcs(
-        #                 tim.subwcs, srcwcs, intType=np.int16)
-        #         except OverlapError:
-        #             continue
-        #         ie = tim.getInvError()
-        #         newie = np.zeros_like(ie)
-        #         good, = np.nonzero(source_mask[Yi,Xi] * (ie[Yo,Xo] > 0))
-        #         if len(good) == 0:
-        #             debug('Tim has inverr all == 0')
-        #             continue
-        #         yy = Yo[good]
-        #         xx = Xo[good]
-        #         newie[yy,xx] = ie[yy,xx]
-        #         xl,xh = xx.min(), xx.max()
-        #         yl,yh = yy.min(), yy.max()
-        #         totalpix += len(xx)
-        #         d = { src: ModelMask(xl, yl, 1+xh-xl, 1+yh-yl) }
-        #         mm.append(d)
-        #         saved_srctim_ies.append(ie)
-        #         tim.setInvError(newie)
-        #         keep_srctims.append(tim)
-        #     srctims = keep_srctims
-        #     modelMasks = mm
-        #     B.blob_symm_nimages[srci] = len(srctims)
-        #     B.blob_symm_npix[srci] = totalpix
-        #     sh,sw = srcwcs.shape
-        #     B.blob_symm_width [srci] = sw
-        #     B.blob_symm_height[srci] = sh
-
         if plots:
             # This is a handy blob-coordinates plot of the data
             # going into the fit.
@@ -1650,17 +1591,6 @@ class OneBlob(object):
         x0,y0 = srcwcs_x0y0
         debug('Source at blob coordinates', x0+ix, y0+iy, ', local coords %i,%i of %ix%i' % (ix, iy, sw, sh), '- forcing pointsource?', force_pointsource, ', is large galaxy?', is_galaxy, ', fitting sky background:', fit_background)
 
-        # if fit_background:
-        #     for tim in srctims:
-        #         tim.freezeAllBut('sky')
-        #     srctractor.thawParam('images')
-        #     # When we're fitting the background, using the sparse optimizer is critical
-        #     # when we have a lot of images: we're adding Nimages extra parameters, touching
-        #     # every pixel; you don't want Nimages x Npixels dense matrices.
-        #     from tractor.lsqr_optimizer import LsqrOptimizer
-        #     srctractor.optimizer = LsqrOptimizer()
-        #     skyparams = srctractor.images.getParams()
-
         # Compute the log-likehood without a source here.
         srccat[0] = None
 
@@ -1668,7 +1598,7 @@ class OneBlob(object):
             mm = remap_modelmask(modelMasks, src, None)
             srctractor.setModelMasks(mm)
             srctractor.optimize_loop(**optargs)
-            print('Fitting background with no source: sb', srccat[1])
+            debug('Fitting background with no source: sb', srccat[1])
             # Save the const sb levels fit with no source?  or just zero?
             skyparams = srccat[1].getParams()
 
@@ -1703,8 +1633,7 @@ class OneBlob(object):
 
         if oldmodel == 'psf':
             if getattr(src, 'forced_point_source', False):
-                # This is set in the GaiaSource contructor from
-                # gaia.pointsource
+                # This is set in the GaiaSource contructor from gaia.pointsource
                 debug('Gaia source is forced to be a point source -- not trying other models')
             elif force_pointsource:
                 # Geometric mask
@@ -1770,46 +1699,18 @@ class OneBlob(object):
             mm = remap_modelmask(modelMasks, src, newsrc)
             srctractor.setModelMasks(mm)
 
-            # DEBUG
-            maxsize = None
-            maxpix = 0
-            for d in mm:
-                try:
-                    mask = d[newsrc]
-                    mh,mw = mask.shape
-                    npix = int(mh)*int(mw)
-                    if npix > maxpix:
-                        maxpix = npix
-                        maxsize = mh,mw
-                except KeyError:
-                    pass
-            debug('Model selection: starting with max modelmask size', maxsize, src)
-
             if fit_background:
                 # # Reset sky params
-                # srctractor.images.setParams(skyparams)
-                # # freeze sky before flux fitting
-                # srctractor.freezeParam('images')
                 srccat[1].setParams(skyparams)
-                #srccat.freezeParam(1)
 
             # First-round optimization (during model selection)
             self.debug('Before model selection: %s' % (str(newsrc)))
 
             # Fit just the fluxes first...
             newsrc.freezeAllBut('brightness')
-            # # SmarterDenseOptimizer isn't so smart when the sky is also being fit!
-            # opt = srctractor.optimizer
-            # from tractor.smarter_dense_optimizer import SmarterDenseOptimizer
-            # sm = SmarterDenseOptimizer()
-            # srctractor.optimizer = sm
             srctractor.optimize_loop(**optargs)
-            # srctractor.optimizer = opt
             self.debug('After model selection (just fluxes): %s' % (str(newsrc)))
             newsrc.thawAllParams()
-
-            #if fit_background:
-            #    srctractor.thawParam('images')
 
             try:
                 R = srctractor.optimize_loop(**optargs)
@@ -1830,7 +1731,6 @@ class OneBlob(object):
                     for nm,p,low,upp in zip(newsrc.getParamNames(), newsrc.getParams(),
                                             newsrc.getLowerBounds(), newsrc.getUpperBounds()):
                         debug('  ', nm, '=', p, 'bounds', low, upp)
-
                 if name == 'ser':
                     si = newsrc.sersicindex
                     sival = si.getValue()
@@ -1887,7 +1787,6 @@ class OneBlob(object):
             if fit_background:
                 # We have to freeze the sky here before computing
                 # uncertainties
-                #srctractor.freezeParam('images')
                 srccat.freezeParam(1)
 
             nsrcparams = newsrc.numberOfParams()
@@ -1967,10 +1866,6 @@ class OneBlob(object):
                 # revert tim to original (unmasked-by-others)
                 tim.setInvError(ie)
 
-        # # After model selection, revert the sky
-        # if fit_background:
-        #     srctractor.images.setParams(skyparams)
-
         # Actually select which model to keep.  The MODEL_NAMES
         # array determines the order of the elements in the DCHISQ
         # column of the catalog.
@@ -1979,7 +1874,6 @@ class OneBlob(object):
                    'dev':dev, 'exp':exp, 'ser':ser}[keepmod]
         bestchi = chisqs.get(keepmod, 0.)
         B.dchisq[srci, :] = np.array([chisqs.get(k,0) for k in MODEL_NAMES])
-        #print('Keeping model', keepmod, '(chisqs: ', chisqs, ')')
 
         if keepsrc is not None and bestchi == 0.:
             # Weird edge case, or where some best-fit fluxes go
@@ -2008,10 +1902,6 @@ class OneBlob(object):
                 ax = plt.axis()
                 plt.plot([ex0,ex0,ex1,ex1,ex0], [ey0,ey1,ey1,ey0,ey0], 'r-')
                 plt.axis(ax)
-            # next over: rgb with same stretch as models
-            #plt.subplot(rows, cols, 2)
-            #rgb = get_rgb(coimgs, self.bands)
-            #dimshow(rgb, ticks=False)
             # next: zoom in
             plt.subplot(rows, cols, 2)
             if ey0 is not None:
@@ -2023,7 +1913,6 @@ class OneBlob(object):
             else:
                 sslice = (slice(None), slice(None), slice(None))
             dimshow(rgb[sslice], ticks=False)
-
             for imod,modname in enumerate(modnames):
                 if modname != 'none' and not modname in chisqs:
                     continue
