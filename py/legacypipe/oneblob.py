@@ -1560,7 +1560,10 @@ class OneBlob(object):
         force_pointsource = B.forced_pointsource[srci]
         fit_background = B.fit_background[srci]
 
-        if fit_background:
+        fit_sb = False
+        fit_sky = fit_background
+
+        if fit_sb:
             # Fit the source + a constant surface brightness with the same bands as the source.
             from tractor.basics import ConstantSurfaceBrightness
             br = src.getBrightness().copy()
@@ -1607,13 +1610,25 @@ class OneBlob(object):
         # Compute the log-likehood without a source here.
         srccat[0] = None
 
-        if fit_background:
+        if fit_sb:
             mm = remap_modelmask(modelMasks, src, None)
             srctractor.setModelMasks(mm)
             srctractor.optimize_loop(**optargs)
             debug('Fitting background with no source: sb', srccat[1])
             # Save the const sb levels fit with no source?  or just zero?
             skyparams = srccat[1].getParams()
+        if fit_sky:
+            for tim in srctims:
+                tim.freezeAllBut('sky')
+            srctractor.thawParam('images')
+            initial_skyparams = srctractor.images.getParams()
+            # When we're fitting the background, using the sparse optimizer is critical
+            # when we have a lot of images: we're adding Nimages extra parameters, touching
+            # every pixel; you don't want Nimages x Npixels dense matrices.
+            from tractor.lsqr_optimizer import LsqrOptimizer
+            srctractor.optimizer = LsqrOptimizer()
+            srctractor.optimize_loop(**optargs)
+            skyparams = srctractor.images.getParams()
 
         if self.plots_per_source:
             model_mod_rgb = {}
@@ -1712,9 +1727,11 @@ class OneBlob(object):
             mm = remap_modelmask(modelMasks, src, newsrc)
             srctractor.setModelMasks(mm)
 
-            if fit_background:
+            if fit_sb:
                 # # Reset sky params
                 srccat[1].setParams(skyparams)
+            if fit_sky:
+                srctractor.images.setParams(skyparams)
 
             # First-round optimization (during model selection)
             self.debug('Before model selection: %s' % (str(newsrc)))
@@ -1797,10 +1814,12 @@ class OneBlob(object):
             if isinstance(newsrc, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
                 oldshape = newsrc.shape
 
-            if fit_background:
+            if fit_sb:
                 # We have to freeze the sky here before computing
                 # uncertainties
                 srccat.freezeParam(1)
+            if fit_sky:
+                srctractor.freezeParam('images')
 
             nsrcparams = newsrc.numberOfParams()
             _convert_ellipses(newsrc)
@@ -1813,10 +1832,10 @@ class OneBlob(object):
             fluxes = dict([(b, newsrc.getBrightness().getFlux(b))
                            for b in self.bands])
 
-            if fit_background:
+            if fit_sb:
                 # set the SB to zero before computing model metrics
-                sb0 = srccat[1].getParams()
-                srccat[1].setParams(np.zeros(len(sb0)))
+                sb_fit = srccat[1].getParams()
+                srccat[1].setParams(np.zeros(len(sb_fit)))
 
             for tim,mod in zip(srctims, srctractor.getModelImages(sky=False)):
                 f = (mod * (tim.getInvError() > 0)).sum() / fluxes[tim.band]
@@ -1831,7 +1850,6 @@ class OneBlob(object):
                     newsrc.getBrightness().setFlux(band, 0.)
 
             # Compute inverse-variances
-            # This uses the second-round modelMasks.
             allderivs = srctractor.getDerivs()
             ivars = _compute_invvars(allderivs)
             assert(len(ivars) == nsrcparams)
@@ -1859,6 +1877,10 @@ class OneBlob(object):
             # Now revert the ellipses!
             if isinstance(newsrc, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
                 newsrc.shape = oldshape
+
+            if fit_sb:
+                # Turn the background back on before measuring chi-sq
+                srccat[1].setParams(sb_fit)
 
             # Use the original 'srctractor' here so that the different
             # models are evaluated on the same pixels.
@@ -1899,6 +1921,10 @@ class OneBlob(object):
         B.hit_r_limit[srci] = B.all_model_hit_r_limit[srci].get(keepmod, False)
         if keepmod != 'ser':
             B.hit_ser_limit[srci] = False
+
+        if fit_sky:
+            # Revert sky params back the way we found them.
+            srctractor.images.setParams(initial_skyparams)
 
         # This is the model-selection plot
         if plots:
