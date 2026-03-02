@@ -401,7 +401,7 @@ class OneBlob(object):
         B.delete_column('y0')
 
     def run(self, B, reoptimize=False, iterative_detection=True,
-            compute_metrics=True, mask_others=True, is_iterative=False):
+            compute_metrics=True, mask_others=False, is_iterative=False):
         # The overall steps here are:
         # - fit initial fluxes for small number of sources that may need it
         # - optimize individual sources
@@ -582,7 +582,7 @@ class OneBlob(object):
         if self.do_segmentation:
             status_update('Computing segmentation map%s' % self.iterstring)
             segmap = self.compute_segmentation_map(cat)
-        mask_others = self.do_segmentation
+        mask_others = False #self.do_segmentation
         # Next, model selections: point source vs rex vs dev/exp vs ser.
         self.debug('Starting model selection')
         Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
@@ -887,7 +887,7 @@ class OneBlob(object):
         return segmap
 
     def run_model_selection(self, cat, Ibright, B, segmap, iterative_detection=True,
-                            mask_others=True):
+                            mask_others=False):
         # We compute & subtract initial models for the other sources while
         # fitting each source:
         # -Remember the original images
@@ -1278,7 +1278,7 @@ class OneBlob(object):
         return Bnew
 
     def model_selection_one_source(self, src, srci, models, B, segmap,
-                                   mask_others=True, brightmap=None, plots=False):
+                                   mask_others=False, brightmap=None, plots=False):
         modelMasks = models.model_masks(srci, src)
 
         srctims = self.tims
