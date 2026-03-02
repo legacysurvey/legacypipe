@@ -2130,21 +2130,22 @@ def _check_checkpoints(R, blobslices, brickname):
     return keepR, halfdone_blobs
 
 def get_subtim_args(tims, targetwcs, bx0,bx1, by0,by1, single_thread):
-    rr,dd = targetwcs.pixelxy2radec([bx0,bx0,bx1,bx1],[by0,by1,by1,by0])
+    rr,dd = targetwcs.pixelxy2radec(1 + np.array([bx0,bx0,bx1,bx1]),
+                                    1 + np.array([by0,by1,by1,by0]))
     subtimargs = []
     for tim in tims:
         h,w = tim.shape
         _,x,y = tim.subwcs.radec2pixelxy(rr,dd)
+        x -= 1.
+        y -= 1.
         sx0,sx1 = x.min(), x.max()
         sy0,sy1 = y.min(), y.max()
-        #print('blob extent in pixel space of', tim.name, ': x',
-        # (sx0,sx1), 'y', (sy0,sy1), 'tim shape', (h,w))
         if sx1 < 0 or sy1 < 0 or sx0 > w or sy0 > h:
             continue
-        sx0 = int(np.clip(int(np.floor(sx0 - 1)), 0, w-1))
-        sx1 = int(np.clip(int(np.ceil (sx1 - 1)), 0, w-1)) + 1
-        sy0 = int(np.clip(int(np.floor(sy0 - 1)), 0, h-1))
-        sy1 = int(np.clip(int(np.ceil (sy1 - 1)), 0, h-1)) + 1
+        sx0 = int(np.clip(int(np.floor(sx0)), 0, w-1))
+        sx1 = int(np.clip(int(np.ceil (sx1)), 0, w-1)) + 1
+        sy0 = int(np.clip(int(np.floor(sy0)), 0, h-1))
+        sy1 = int(np.clip(int(np.ceil (sy1)), 0, h-1)) + 1
         subslc = slice(sy0,sy1),slice(sx0,sx1)
         subimg = tim.getImage   ()[subslc]
         subie  = tim.getInvError()[subslc]
