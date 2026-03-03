@@ -1564,11 +1564,12 @@ class OneBlob(object):
         force_pointsource = B.forced_pointsource[srci]
         fit_background = B.fit_background[srci]
 
-        #fit_sb = False
-        #fit_sky = fit_background
+        # Use per-image sky background level
+        fit_sb = False
+        fit_sky = fit_background
 
-        fit_sb = fit_background
-        fit_sky = False
+        #fit_sb = fit_background
+        #fit_sky = False
 
         if fit_sb:
             # Fit the source + a constant surface brightness with the same bands as the source.
