@@ -3565,6 +3565,13 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     tlast = Time()
     record_event and record_event('stage_forced_phot: starting')
 
+    _add_stage_version(version_header, 'FORCED', 'forced')
+    version_header.add_record(dict(name='FBANDS', value=','.join(forced_bands),
+                                   comment='Force-photometry bands'))
+    for i,band in enumerate(forced_bands):
+        version_header.add_record(dict(name='FBAND%i' % i, value=band,
+                                       comment='Forced-photometry band'))
+
     # Before we begin, free the *tims* to reduce our memory use,
     # before reading in the *forced_bands* imaging data.
 
