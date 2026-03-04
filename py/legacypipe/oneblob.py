@@ -676,11 +676,17 @@ class OneBlob(object):
                     cat.freezeParam(isub)
                     continue
                 nsrcparams = src.numberOfParams()
+                if getattr(src, 'freezeparams', False):
+                    # SGA frozen-sources.  Do these get uncertainties measured?
+                    _convert_ellipses(src)
                 if B.force_keep_source[isub]:
                     B.srcinvvars[isub] = np.zeros(nsrcparams, np.float32)
                     cat.freezeParam(isub)
                     continue
-                # Compute inverse-variances
+                # Compute inverse-variances.  (We compute
+                # inverse-variances during model selection, but that
+                # is on a subset of pixels (segmentation, model masks,
+                # etc).
                 allderivs = tr.getDerivs()
                 ivars = _compute_invvars(allderivs)
                 del allderivs
