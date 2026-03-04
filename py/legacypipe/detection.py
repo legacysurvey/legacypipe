@@ -263,6 +263,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
 
     peaksn = []
     apsn = []
+    peaksed = []
 
     for sedname,sed in SEDs:
         if plots:
@@ -284,6 +285,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
         rr = np.append(rr, np.zeros_like(px) + exclusion_radius).astype(int)
         peaksn.extend(peakval)
         apsn.extend(apval)
+        peaksed.extend([sedname] * len(peakval))
 
     # New peaks:
     peakx = xx[n0:]
@@ -305,6 +307,7 @@ def run_sed_matched_filters(SEDs, bands, detmaps, detivs, omit_xy,
         assert(len(apsn) == len(Tnew))
         Tnew.peaksn = np.array(peaksn)
         Tnew.apsn = np.array(apsn)
+        Tnew.peaksed = np.array(peaksed)
         for r,d,x,y in zip(pr,pd,peakx,peaky):
             fluxes = dict([(band, detmap[y, x])
                            for band,detmap in zip(bands,detmaps)])
