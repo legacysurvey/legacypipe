@@ -674,23 +674,11 @@ class OneBlob(object):
                 if src is None:
                     cat.freezeParam(isub)
                     continue
-                # Convert to "vanilla" ellipse parameterization
                 nsrcparams = src.numberOfParams()
                 if B.force_keep_source[isub]:
                     B.srcinvvars[isub] = np.zeros(nsrcparams, np.float32)
                     cat.freezeParam(isub)
                     continue
-                old_shape = getattr(src, 'shape', None)
-                _convert_ellipses(src)
-                if src.numberOfParams() != nsrcparams:
-                    self.info('src.numparams %i vs %i.  Old: %s, New: %s' % (
-                        src.numberOfParams(), nsrcparams, s1, str(src)))
-                    print('new:')
-                    src.printThawedParams()
-                    print('old (copy):')
-                    sc.printThawedParams()
-                    raise RuntimeError('Mismatch in number of parameters after changing ellipse parameterization')
-                assert(src.numberOfParams() == nsrcparams)
                 # Compute inverse-variances
                 allderivs = tr.getDerivs()
                 ivars = _compute_invvars(allderivs)
@@ -700,15 +688,6 @@ class OneBlob(object):
                 assert(len(B.srcinvvars[isub]) == cat[isub].numberOfParams())
                 cat.freezeParam(isub)
                 del ivars
-                # revert ellipse -- This is required for a nasty
-                # little corner case: single threaded and frozen
-                # sources in sub-blobs.  They appear in the "cat" args
-                # to multiple oneblob calls, so if we modify them by
-                # changing their ellipse types, bad things can happen
-                # (eg, Rex go from having LogRadius shapes to EllipseE
-                # shapes, so their number of parameters change).
-                if old_shape is not None:
-                    src.shape = old_shape
             # Check for sources with zero inverse-variance -- I think these
             # can be generated during the "Simultaneous re-opt" stage above --
             # sources can get scattered outside the blob.
@@ -1705,11 +1684,11 @@ class OneBlob(object):
                 if smod == 'dev':
                     newsrc = ser = SersicGalaxy(
                         dev.getPosition().copy(), dev.getBrightness().copy(),
-                        dev.getShape().copy(), LegacySersicIndex(4.))
+                        dev.soft_shape.copy(), LegacySersicIndex(4.))
                 elif smod == 'exp':
                     newsrc = ser = SersicGalaxy(
                         exp.getPosition().copy(), exp.getBrightness().copy(),
-                        exp.getShape().copy(), LegacySersicIndex(1.))
+                        exp.soft_shape.copy(), LegacySersicIndex(1.))
 
             srccat[0] = newsrc
 
@@ -1811,12 +1790,6 @@ class OneBlob(object):
                 model_resid_rgb[name] = rgb
 
             # Compute inverse-variances for each source.
-            # Convert to "vanilla" ellipse parameterization
-            # (but save old shapes first)
-            # we do this (rather than making a copy) because we want to
-            # use the same modelMask maps.
-            if isinstance(newsrc, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
-                oldshape = newsrc.shape
 
             if fit_sb:
                 # We have to freeze the sky here before computing
@@ -1825,6 +1798,10 @@ class OneBlob(object):
             if fit_sky:
                 srctractor.freezeParam('images')
 
+            # Convert to "vanilla" ellipse parameterization
+            # (but save old shapes first)
+            if isinstance(newsrc, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
+                newsrc.soft_shape = newsrc.shape
             nsrcparams = newsrc.numberOfParams()
             _convert_ellipses(newsrc)
             assert(newsrc.numberOfParams() == nsrcparams)
@@ -1877,10 +1854,6 @@ class OneBlob(object):
             B.all_model_ivs[srci][name] = np.array(ivars).astype(np.float32)
             B.all_models[srci][name] = newsrc.copy()
             assert(B.all_models[srci][name].numberOfParams() == nsrcparams)
-
-            # Now revert the ellipses!
-            if isinstance(newsrc, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
-                newsrc.shape = oldshape
 
             if fit_sb:
                 # Turn the background back on before measuring chi-sq

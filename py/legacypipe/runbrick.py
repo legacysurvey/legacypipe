@@ -2237,6 +2237,10 @@ def iter_deque(blob_meta, high_priority, job_id_map,
         if halfdone is not None:
             info('Found a mid-way checkpoint for blob %s' % (task['blobname']))
 
+        fro_gals = frozen_galaxies.get(iblob, [])
+        if single_thread:
+            # FIXME -- any additional properties that need to be copied?
+            fro_gals = [g.copy() for g in fro_gals]
         yield (brickname, (iblob, sub_idx) if sub_idx is not None else iblob,
                task.get('unique_bounds'),
                OneBlobArgs(blobname=task['blobname'], iblob=iblob, Isrcs=Isrcs,
@@ -2245,7 +2249,7 @@ def iter_deque(blob_meta, high_priority, job_id_map,
                            blobmask=task['blobmask'],
                            timargs=subtimargs, srcs=[cat[i] for i in Isrcs],
                            refmap=refmap[by0:by1, bx0:bx1],
-                           frozen_galaxies=frozen_galaxies.get(iblob, []),
+                           frozen_galaxies=fro_gals,
                            halfdone=halfdone,
                            **oneblob_kwargs))
 
