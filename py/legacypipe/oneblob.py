@@ -1930,17 +1930,6 @@ class OneBlob(object):
             coimgs,_ = quick_coadds(srctims, self.bands, srcwcs)
             rgb = get_rgb(coimgs, self.bands)
             dimshow(rgb, ticks=False)
-            sslice = (slice(None), slice(None), slice(None))
-
-            #if ey0 is not None:
-            #    ey0 = int(np.clip(np.floor(ey0), 0, sh))
-            #    ey1 = int(np.clip(np.ceil (ey1)+1, 0, sh))
-            #    ex0 = int(np.clip(np.floor(ex0), 0, sw))
-            #    ex1 = int(np.clip(np.ceil (ex1)+1, 0, sw))
-            #    sslice = (slice(ey0,ey1), slice(ex0,ex1), slice(None))
-            #else:
-            #    sslice = (slice(None), slice(None), slice(None))
-            #dimshow(rgb[sslice], ticks=False)
             for imod,modname in enumerate(modnames):
                 if modname != 'none' and not modname in chisqs:
                     continue
@@ -1948,13 +1937,13 @@ class OneBlob(object):
                 # Second row: models
                 plt.subplot(rows, cols, 1+imod+1*cols)
                 rgb = model_mod_rgb[modname]
-                dimshow(rgb[sslice], ticks=False)
+                dimshow(rgb, ticks=False)
                 axes.append(plt.gca())
                 plt.title(modname)
                 # Third row: residuals (not chis)
                 plt.subplot(rows, cols, 1+imod+2*cols)
                 rgb = model_resid_rgb[modname]
-                dimshow(rgb[sslice], ticks=False)
+                dimshow(rgb, ticks=False)
                 axes.append(plt.gca())
                 plt.title('chisq %.0f' % chisqs[modname], fontsize=8)
                 # Highlight the model to be kept
