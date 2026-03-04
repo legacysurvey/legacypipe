@@ -362,6 +362,7 @@ class OneBlob(object):
         B.all_model_hit_limit   = np.array([{} for i in range(N)])
         B.all_model_hit_r_limit = np.array([{} for i in range(N)])
         B.all_model_opt_steps   = np.array([{} for i in range(N)])
+        B.selected_model_name = np.zeros(N, 'U4')
         B.force_keep_source  = np.zeros(N, bool)
         B.fit_background     = np.zeros(N, bool)
         B.forced_pointsource = np.zeros(N, bool)
@@ -1883,6 +1884,7 @@ class OneBlob(object):
                    'dev':dev, 'exp':exp, 'ser':ser}[keepmod]
         bestchi = chisqs.get(keepmod, 0.)
         B.dchisq[srci, :] = np.array([chisqs.get(k,0) for k in MODEL_NAMES])
+        B.selected_model_name[srci] = keepmod
 
         if keepsrc is not None and bestchi == 0.:
             # Weird edge case, or where some best-fit fluxes go
