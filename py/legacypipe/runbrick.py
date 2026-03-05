@@ -1771,7 +1771,8 @@ def stage_fitblobs(T=None,
                   'blob_symm_nimages', 'bx0', 'by0',
                   'hit_limit', 'hit_ser_limit', 'hit_r_limit',
                   'dchisq',
-                  'force_keep_source', 'fit_background', 'forced_pointsource']:
+                  'force_keep_source', 'fit_background', 'forced_pointsource',
+                  'ran_on_gpu']:
             T.set(k, BB.get(k))
 
     # Merge "special" sources and T_refbail back in.

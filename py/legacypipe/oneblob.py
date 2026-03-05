@@ -172,6 +172,7 @@ def one_blob(args):
         ob.finalize_table(B, args.bx0, args.by0)
 
         B.iblob = args.iblob
+        B.ran_on_gpu[:] = is_gpu
 
     except QuitNowException:
         if ob is not None:
@@ -371,6 +372,7 @@ class OneBlob(object):
         B.blob_symm_npix     = np.zeros(N, np.int32)
         B.blob_symm_nimages  = np.zeros(N, np.int16)
         B.cpu_blob = np.zeros(N, np.float32)
+        B.ran_on_gpu = np.zeros(N, bool)
         return B
 
     def finalize_table(self, B, bx0, by0):
