@@ -1326,7 +1326,7 @@ class OneBlob(object):
             from scipy.ndimage.measurements import label
             # Compute per-band detection maps
             mp = multiproc()
-            detmaps,detivs,_ = detection_maps(self.tims, self.blobwcs, self.bands, mp)
+            detmaps,detivs,_ = detection_maps(srctims, srcwcs, self.bands, mp)
             # Compute the symmetric area that fits in this 'srcblobmask' region
             flipw = min(ix, sw-1-ix)
             fliph = min(iy, sh-1-iy)
