@@ -2316,9 +2316,15 @@ def _set_kingdoms(segmap, radius, I, ix, iy):
     # in that radius, each pixel gets assigned to its nearest
     # source.
     # 'kingdom' records the current distance to nearest source
-    assert(radius < 255)
-    kingdom = np.empty(segmap.shape, np.uint8)
-    kingdom[:,:,] = 255
+    if radius < 255:
+        rmax = 255
+        rtype = np.uint8
+    else:
+        rmax = 65535
+        rtype = np.uint16
+    assert(radius < rmax)
+    best_r = np.empty(segmap.shape, rtype)
+    best_r[:,:,] = rmax
     H,W = segmap.shape
     xcoords = np.arange(W)
     ycoords = np.arange(H)
@@ -2327,15 +2333,15 @@ def _set_kingdoms(segmap, radius, I, ix, iy):
         xslc = slice(max(0, x-radius), min(W, x+radius+1))
         slc = (yslc, xslc)
         # Radius to nearest earlier source
-        oldr = kingdom[slc]
+        oldr = best_r[slc]
         # Radius to new source
         newr = np.hypot(xcoords[np.newaxis, xslc] - x, ycoords[yslc, np.newaxis] - y)
         assert(newr.shape == oldr.shape)
-        newr = np.minimum(newr + 0.5, 255.).astype(np.uint8)
+        newr = np.minimum(newr + 0.5, rmax).astype(rtype)
         # Pixels that are within range and closer to this source than any other.
         owned = (newr <= radius) * (newr < oldr)
         segmap[slc][owned] = i
-        kingdom[slc][owned] = newr[owned]
+        best_r[slc][owned] = newr[owned]
 
 def _convert_ellipses(src):
     if isinstance(src, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
