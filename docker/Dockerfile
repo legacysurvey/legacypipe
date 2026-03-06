@@ -235,7 +235,7 @@ RUN git config --global --add safe.directory /src/tractor
 
 # Heck, why not just add the stuff that John needs from the "cutouts" container?
 RUN pip install --break-system-packages django requests
-RUN git clone https://github.com/legacysurvey/imagine.git
+RUN git clone https://github.com/legacysurvey/imagine.git && echo 1
 RUN cd imagine/viewer && ln -s settings_test.py settings.py
 RUN cd imagine && mv data data-orig && ln -s /dvs_ro/cfs/cdirs/cosmo/webapp/viewer/data .
 RUN cp /src/imagine/docker/cutouts/cutout /usr/local/bin/
@@ -244,18 +244,20 @@ ENV PYTHONPATH /src/unwise_psf/py:/src/legacypipe/py:/usr/local/lib/python:/src/
 
 RUN pip install --break-system-packages psutil
 
+RUN pip3 install --upgrade --break-system-packages --no-cache cupy-cuda12x
+
 RUN cd legacypipe \
   && git pull \
-  && git checkout gpu-powered+flags \
+  && git checkout main-gpu \
   && git pull \
   && python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
   && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
-  && echo 12
+  && echo 1.7 && git describe
 
 RUN cd tractor \
   && git fetch \
-  && git checkout craig_factored_merge \
+  && git checkout main-gpu \
+  && git pull \
   && python setup.py build_ext --with-ceres --with-cython --inplace \
   && pip install . --break-system-packages \
-  && echo 1
-
+  && echo 1.7 && git describe
