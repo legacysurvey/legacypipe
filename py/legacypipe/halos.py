@@ -37,15 +37,15 @@ def moffat(rr, alpha, beta):
 # Coefficients used in decam_halo_model.  The keys are also used to decide
 # which filters are supported (hence the zero entry for z)
 decam_outer_halo_coeffs = dict(
-    g = [0.00045, -2],
-    r = [0.00033, -2],
-    i = [0.00033, -2],
-    z = [0.0, 0.0],
-    M411 = [0.00027125, -1.6901],
-    M438 = [0.00023144, -1.6375],
-    M464 = [0.00017692, -1.6324],
-    M490 = [0.00016855, -1.5664],
-    M517 = [0.00013529, -1.5163],
+    g = 0.00045,
+    r = 0.00033,
+    i = 0.00033,
+    z = 0.0,
+    M411 = 0.00065,
+    M438 = 0.0006,
+    M464 = 0.00055,
+    M490 = 0.0005,
+    M517 = 0.00045,
     )
 
 def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
@@ -86,9 +86,9 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
 
         rad_arcsec = ref.radius * 3600.
         # We subtract halos out to N x their masking radii.
-        rad_arcsec *= 8.0
+        rad_arcsec *= 4.0
         # Rongpu says only apply within:
-        rad_arcsec = np.minimum(rad_arcsec, 800.)
+        rad_arcsec = np.minimum(rad_arcsec, 400.)
         pixrad = int(np.ceil(rad_arcsec / pixscale))
 
         xlo = int(np.clip(np.floor(x - pixrad), 0, W-1))
@@ -138,9 +138,9 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
                                            moffat(rads*pixscale, alpha, beta) * pixscale**2)
 
         else:
-             f, exp = decam_outer_halo_coeffs[band]
+             f = decam_outer_halo_coeffs[band]
 
-             halo[ylo:yhi+1, xlo:xhi+1] += (flux * apodize * f * (rads*pixscale)**exp
+             halo[ylo:yhi+1, xlo:xhi+1] += (flux * apodize * f * (rads*pixscale)**-2
                                             * pixscale**2)
 
         if have_inner_moffat:

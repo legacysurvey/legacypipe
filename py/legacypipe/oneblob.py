@@ -172,6 +172,7 @@ def one_blob(args):
         ob.finalize_table(B, args.bx0, args.by0)
 
         B.iblob = args.iblob
+        B.ran_on_gpu[:] = is_gpu
 
     except QuitNowException:
         if ob is not None:
@@ -362,6 +363,7 @@ class OneBlob(object):
         B.all_model_hit_limit   = np.array([{} for i in range(N)])
         B.all_model_hit_r_limit = np.array([{} for i in range(N)])
         B.all_model_opt_steps   = np.array([{} for i in range(N)])
+        B.selected_model_name = np.zeros(N, 'U4')
         B.force_keep_source  = np.zeros(N, bool)
         B.fit_background     = np.zeros(N, bool)
         B.forced_pointsource = np.zeros(N, bool)
@@ -370,6 +372,7 @@ class OneBlob(object):
         B.blob_symm_npix     = np.zeros(N, np.int32)
         B.blob_symm_nimages  = np.zeros(N, np.int16)
         B.cpu_blob = np.zeros(N, np.float32)
+        B.ran_on_gpu = np.zeros(N, bool)
         return B
 
     def finalize_table(self, B, bx0, by0):
@@ -674,24 +677,18 @@ class OneBlob(object):
                 if src is None:
                     cat.freezeParam(isub)
                     continue
-                # Convert to "vanilla" ellipse parameterization
                 nsrcparams = src.numberOfParams()
+                if getattr(src, 'freezeparams', False):
+                    # SGA frozen-sources.  Do these get uncertainties measured?
+                    _convert_ellipses(src)
                 if B.force_keep_source[isub]:
                     B.srcinvvars[isub] = np.zeros(nsrcparams, np.float32)
                     cat.freezeParam(isub)
                     continue
-                old_shape = getattr(src, 'shape', None)
-                _convert_ellipses(src)
-                if src.numberOfParams() != nsrcparams:
-                    self.info('src.numparams %i vs %i.  Old: %s, New: %s' % (
-                        src.numberOfParams(), nsrcparams, s1, str(src)))
-                    print('new:')
-                    src.printThawedParams()
-                    print('old (copy):')
-                    sc.printThawedParams()
-                    raise RuntimeError('Mismatch in number of parameters after changing ellipse parameterization')
-                assert(src.numberOfParams() == nsrcparams)
-                # Compute inverse-variances
+                # Compute inverse-variances.  (We compute
+                # inverse-variances during model selection, but that
+                # is on a subset of pixels (segmentation, model masks,
+                # etc).
                 allderivs = tr.getDerivs()
                 ivars = _compute_invvars(allderivs)
                 del allderivs
@@ -700,15 +697,6 @@ class OneBlob(object):
                 assert(len(B.srcinvvars[isub]) == cat[isub].numberOfParams())
                 cat.freezeParam(isub)
                 del ivars
-                # revert ellipse -- This is required for a nasty
-                # little corner case: single threaded and frozen
-                # sources in sub-blobs.  They appear in the "cat" args
-                # to multiple oneblob calls, so if we modify them by
-                # changing their ellipse types, bad things can happen
-                # (eg, Rex go from having LogRadius shapes to EllipseE
-                # shapes, so their number of parameters change).
-                if old_shape is not None:
-                    src.shape = old_shape
             # Check for sources with zero inverse-variance -- I think these
             # can be generated during the "Simultaneous re-opt" stage above --
             # sources can get scattered outside the blob.
@@ -1340,7 +1328,7 @@ class OneBlob(object):
             from scipy.ndimage.measurements import label
             # Compute per-band detection maps
             mp = multiproc()
-            detmaps,detivs,_ = detection_maps(self.tims, self.blobwcs, self.bands, mp)
+            detmaps,detivs,_ = detection_maps(srctims, srcwcs, self.bands, mp)
             # Compute the symmetric area that fits in this 'srcblobmask' region
             flipw = min(ix, sw-1-ix)
             fliph = min(iy, sh-1-iy)
@@ -1564,11 +1552,12 @@ class OneBlob(object):
         force_pointsource = B.forced_pointsource[srci]
         fit_background = B.fit_background[srci]
 
-        #fit_sb = False
-        #fit_sky = fit_background
+        # Use per-image sky background level
+        fit_sb = False
+        fit_sky = fit_background
 
-        fit_sb = fit_background
-        fit_sky = False
+        #fit_sb = fit_background
+        #fit_sky = False
 
         if fit_sb:
             # Fit the source + a constant surface brightness with the same bands as the source.
@@ -1704,11 +1693,11 @@ class OneBlob(object):
                 if smod == 'dev':
                     newsrc = ser = SersicGalaxy(
                         dev.getPosition().copy(), dev.getBrightness().copy(),
-                        dev.getShape().copy(), LegacySersicIndex(4.))
+                        dev.soft_shape.copy(), LegacySersicIndex(4.))
                 elif smod == 'exp':
                     newsrc = ser = SersicGalaxy(
                         exp.getPosition().copy(), exp.getBrightness().copy(),
-                        exp.getShape().copy(), LegacySersicIndex(1.))
+                        exp.soft_shape.copy(), LegacySersicIndex(1.))
 
             srccat[0] = newsrc
 
@@ -1810,12 +1799,6 @@ class OneBlob(object):
                 model_resid_rgb[name] = rgb
 
             # Compute inverse-variances for each source.
-            # Convert to "vanilla" ellipse parameterization
-            # (but save old shapes first)
-            # we do this (rather than making a copy) because we want to
-            # use the same modelMask maps.
-            if isinstance(newsrc, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
-                oldshape = newsrc.shape
 
             if fit_sb:
                 # We have to freeze the sky here before computing
@@ -1824,6 +1807,10 @@ class OneBlob(object):
             if fit_sky:
                 srctractor.freezeParam('images')
 
+            # Convert to "vanilla" ellipse parameterization
+            # (but save old shapes first)
+            if isinstance(newsrc, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
+                newsrc.soft_shape = newsrc.shape
             nsrcparams = newsrc.numberOfParams()
             _convert_ellipses(newsrc)
             assert(newsrc.numberOfParams() == nsrcparams)
@@ -1877,10 +1864,6 @@ class OneBlob(object):
             B.all_models[srci][name] = newsrc.copy()
             assert(B.all_models[srci][name].numberOfParams() == nsrcparams)
 
-            # Now revert the ellipses!
-            if isinstance(newsrc, (DevGalaxy, ExpGalaxy, SersicGalaxy)):
-                newsrc.shape = oldshape
-
             if fit_sb:
                 # Turn the background back on before measuring chi-sq
                 srccat[1].setParams(sb_fit)
@@ -1909,6 +1892,7 @@ class OneBlob(object):
                    'dev':dev, 'exp':exp, 'ser':ser}[keepmod]
         bestchi = chisqs.get(keepmod, 0.)
         B.dchisq[srci, :] = np.array([chisqs.get(k,0) for k in MODEL_NAMES])
+        B.selected_model_name[srci] = keepmod
 
         if keepsrc is not None and bestchi == 0.:
             # Weird edge case, or where some best-fit fluxes go
@@ -1948,17 +1932,6 @@ class OneBlob(object):
             coimgs,_ = quick_coadds(srctims, self.bands, srcwcs)
             rgb = get_rgb(coimgs, self.bands)
             dimshow(rgb, ticks=False)
-            sslice = (slice(None), slice(None), slice(None))
-
-            #if ey0 is not None:
-            #    ey0 = int(np.clip(np.floor(ey0), 0, sh))
-            #    ey1 = int(np.clip(np.ceil (ey1)+1, 0, sh))
-            #    ex0 = int(np.clip(np.floor(ex0), 0, sw))
-            #    ex1 = int(np.clip(np.ceil (ex1)+1, 0, sw))
-            #    sslice = (slice(ey0,ey1), slice(ex0,ex1), slice(None))
-            #else:
-            #    sslice = (slice(None), slice(None), slice(None))
-            #dimshow(rgb[sslice], ticks=False)
             for imod,modname in enumerate(modnames):
                 if modname != 'none' and not modname in chisqs:
                     continue
@@ -1966,13 +1939,13 @@ class OneBlob(object):
                 # Second row: models
                 plt.subplot(rows, cols, 1+imod+1*cols)
                 rgb = model_mod_rgb[modname]
-                dimshow(rgb[sslice], ticks=False)
+                dimshow(rgb, ticks=False)
                 axes.append(plt.gca())
                 plt.title(modname)
                 # Third row: residuals (not chis)
                 plt.subplot(rows, cols, 1+imod+2*cols)
                 rgb = model_resid_rgb[modname]
-                dimshow(rgb[sslice], ticks=False)
+                dimshow(rgb, ticks=False)
                 axes.append(plt.gca())
                 plt.title('chisq %.0f' % chisqs[modname], fontsize=8)
                 # Highlight the model to be kept
@@ -2093,8 +2066,38 @@ class OneBlob(object):
             if has_fixed_position(src):
                 optargs.update(check_step=None)
 
+            if self.plots:
+                mods = list(srctractor.getModelImages())
+                mod0,_ = quick_coadds(srctims, self.bands, self.blobwcs, images=mods,
+                                      fill_holes=False)
+                rgb,_ = quick_coadds(srctims, self.bands, self.blobwcs,
+                                      fill_holes=False)
+
             # First-round optimization
             srctractor.optimize_loop(**optargs)
+
+            if self.plots:
+                mods = list(srctractor.getModelImages())
+                mod1,_ = quick_coadds(srctims, self.bands, self.blobwcs, images=mods,
+                                      fill_holes=False)
+                import pylab as plt
+                plt.clf()
+                plt.subplot(1,3,1)
+                dimshow(get_rgb(rgb, self.bands))
+                plt.title('Data')
+                ax = plt.axis()
+                ex0,ex1,ey0,ey1 = model_masks_to_blob_extent(srctims, srcmm, src, self.blobwcs,
+                                                             to_int=True)
+                plt.plot([ex0,ex0,ex1,ex1,ex0], [ey0,ey1,ey1,ey0,ey0], 'r-')
+                plt.axis(ax)
+                plt.subplot(1,3,2)
+                dimshow(get_rgb(mod0, self.bands))
+                plt.title('Initial model')
+                plt.subplot(1,3,3)
+                dimshow(get_rgb(mod1, self.bands))
+                plt.title('Fit model')
+                plt.suptitle('Source fitting')
+                self.ps.savefig()
 
             if is_galaxy:
                 # Drop limits on SGA positions
@@ -2123,6 +2126,10 @@ class OneBlob(object):
         for src in fitcat:
             src.freezeAllBut('brightness')
         debug('Fitting fluxes for %i of %i sources' % (len(fitcat), len(cat)))
+
+        if self.plots:
+            bmods = []
+
         for b in bands:
             for src in fitcat:
                 src.getBrightness().freezeAllBut(b)
@@ -2160,21 +2167,26 @@ class OneBlob(object):
                 mods = list(btr.getModelImages())
                 mod1,_ = quick_coadds(btims, [b], self.blobwcs, images=mods,
                                         fill_holes=False)
-                import pylab as plt
-                plt.clf()
-                plt.subplot(1,2,1)
-                dimshow(get_rgb(mod0, [b]))
-                plt.title('Before')
-                plt.subplot(1,2,2)
-                dimshow(get_rgb(mod1, [b]))
-                plt.title('After')
-                plt.suptitle('Flux fitting: %s band' % b)
-                self.ps.savefig()
+                bmods.append((mod0, mod1))
 
             for src in fitcat:
                 src.getBrightness().thawAllParams()
         for src in fitcat:
             src.thawAllParams()
+
+        if self.plots:
+            import pylab as plt
+            plt.clf()
+            R,C = 2, len(bands)
+            for i,(b,(mod0,mod1)) in enumerate(zip(bands, bmods)):
+                plt.subplot(R, C, i+1)
+                dimshow(get_rgb(mod0, [b]))
+                plt.title('Before (%s)' % b)
+                plt.subplot(R, C, i+C+1)
+                dimshow(get_rgb(mod1, [b]))
+                plt.title('After (%s)' % b)
+            plt.suptitle('Flux fitting')
+            self.ps.savefig()
 
     def _plots(self, tr, title):
         plotmods = []
@@ -2304,9 +2316,15 @@ def _set_kingdoms(segmap, radius, I, ix, iy):
     # in that radius, each pixel gets assigned to its nearest
     # source.
     # 'kingdom' records the current distance to nearest source
-    assert(radius < 255)
-    kingdom = np.empty(segmap.shape, np.uint8)
-    kingdom[:,:,] = 255
+    if radius < 255:
+        rmax = 255
+        rtype = np.uint8
+    else:
+        rmax = 65535
+        rtype = np.uint16
+    assert(radius <= rmax)
+    best_r = np.empty(segmap.shape, rtype)
+    best_r[:,:,] = rmax
     H,W = segmap.shape
     xcoords = np.arange(W)
     ycoords = np.arange(H)
@@ -2315,15 +2333,15 @@ def _set_kingdoms(segmap, radius, I, ix, iy):
         xslc = slice(max(0, x-radius), min(W, x+radius+1))
         slc = (yslc, xslc)
         # Radius to nearest earlier source
-        oldr = kingdom[slc]
+        oldr = best_r[slc]
         # Radius to new source
         newr = np.hypot(xcoords[np.newaxis, xslc] - x, ycoords[yslc, np.newaxis] - y)
         assert(newr.shape == oldr.shape)
-        newr = np.minimum(newr + 0.5, 255.).astype(np.uint8)
+        newr = np.minimum(newr + 0.5, rmax).astype(rtype)
         # Pixels that are within range and closer to this source than any other.
         owned = (newr <= radius) * (newr < oldr)
         segmap[slc][owned] = i
-        kingdom[slc][owned] = newr[owned]
+        best_r[slc][owned] = newr[owned]
 
 def _convert_ellipses(src):
     if isinstance(src, (DevGalaxy, ExpGalaxy, SersicGalaxy)):

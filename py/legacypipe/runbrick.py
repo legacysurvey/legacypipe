@@ -385,10 +385,11 @@ def get_brick(survey, ra, dec, brickname, W, H, pixscale, target_extent):
 def get_runbrick_header(program_name, survey, release, gitver,
                         unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir,
                         command_line, brick, targetrd):
-    from legacypipe.survey import get_version_header, get_dependency_versions
+    from legacypipe.survey import get_dependency_versions
     from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
 
-    version_header = get_version_header(program_name, survey.survey_dir, release, git_version=gitver)
+    version_header = survey.get_output_header(program_name=program_name,
+                                              release=release, git_version=gitver)
 
     deps = get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir)
     for name,value,comment in deps:
@@ -1461,7 +1462,9 @@ def stage_fitblobs(T=None,
     if checkpoint_filename is None:
         # FIXME -- add worker-died checks & logging here
         print ("No checkpoint")
-        R = list(Riter_hi) + list(Riter_lo)
+        R = list(Riter_hi)
+        if Riter_lo is not None:
+            R.extend(list(Riter_lo))
     else:
         from astrometry.util.ttime import CpuMeas
         # measure wall time and write out checkpoint file periodically.
@@ -1771,7 +1774,8 @@ def stage_fitblobs(T=None,
                   'blob_symm_nimages', 'bx0', 'by0',
                   'hit_limit', 'hit_ser_limit', 'hit_r_limit',
                   'dchisq',
-                  'force_keep_source', 'fit_background', 'forced_pointsource']:
+                  'force_keep_source', 'fit_background', 'forced_pointsource',
+                  'ran_on_gpu']:
             T.set(k, BB.get(k))
 
     # Merge "special" sources and T_refbail back in.
@@ -2237,6 +2241,10 @@ def iter_deque(blob_meta, high_priority, job_id_map,
         if halfdone is not None:
             info('Found a mid-way checkpoint for blob %s' % (task['blobname']))
 
+        fro_gals = frozen_galaxies.get(iblob, [])
+        if single_thread:
+            # FIXME -- any additional properties that need to be copied?
+            fro_gals = [g.copy() for g in fro_gals]
         yield (brickname, (iblob, sub_idx) if sub_idx is not None else iblob,
                task.get('unique_bounds'),
                OneBlobArgs(blobname=task['blobname'], iblob=iblob, Isrcs=Isrcs,
@@ -2245,7 +2253,7 @@ def iter_deque(blob_meta, high_priority, job_id_map,
                            blobmask=task['blobmask'],
                            timargs=subtimargs, srcs=[cat[i] for i in Isrcs],
                            refmap=refmap[by0:by1, bx0:bx1],
-                           frozen_galaxies=frozen_galaxies.get(iblob, []),
+                           frozen_galaxies=fro_gals,
                            halfdone=halfdone,
                            **oneblob_kwargs))
 
@@ -3565,6 +3573,13 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     tlast = Time()
     record_event and record_event('stage_forced_phot: starting')
 
+    _add_stage_version(version_header, 'FORCED', 'forced')
+    version_header.add_record(dict(name='FBANDS', value=','.join(forced_bands),
+                                   comment='Force-photometry bands'))
+    for i,band in enumerate(forced_bands):
+        version_header.add_record(dict(name='FBAND%i' % i, value=band,
+                                       comment='Forced-photometry band'))
+
     # Before we begin, free the *tims* to reduce our memory use,
     # before reading in the *forced_bands* imaging data.
 
@@ -4319,7 +4334,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               subsky_radii=None,
               reoptimize=False,
               iterative=False,
-              iterative_nsigma=False,
+              iterative_nsigma=None,
               wise=True,
               outliers=True,
               cache_outliers=False,
