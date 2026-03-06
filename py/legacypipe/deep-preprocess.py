@@ -66,7 +66,7 @@ def stage_deep_preprocess(
         depth_margin=0.5,
         **kwargs):
     from legacypipe.survey import (
-        get_git_version, get_version_header, get_dependency_versions,
+        get_git_version, get_dependency_versions,
         wcs_for_brick, read_one_tim)
     from legacypipe.depthcut import make_depth_cut
 
@@ -109,10 +109,7 @@ def stage_deep_preprocess(
         _, brick.dec2 = targetwcs.pixelxy2radec(W/2, H)
 
     # Create FITS header with version strings
-    gitver = get_git_version()
-
-    version_header = get_version_header(program_name, survey.survey_dir, release,
-                                        git_version=gitver)
+    version_header = survey.get_output_header(program_name, release)
 
     deps = get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir)
     for name,value,comment in deps:

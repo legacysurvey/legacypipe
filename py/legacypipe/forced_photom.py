@@ -17,7 +17,7 @@ from astrometry.libkd.spherematch import match_radec
 from tractor import Tractor, Catalog
 from tractor.galaxy import disable_galaxy_cache
 
-from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version_header, apertures_arcsec, radec_at_mjd
+from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, apertures_arcsec, radec_at_mjd
 from legacypipe.catalog import read_fits_catalog
 from legacypipe.outliers import read_outlier_mask_file
 
@@ -817,9 +817,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
 
     forced_phot_add_extra_fields(F, T, ccd, im, tim, opt.derivs)
 
-
-    program_name = sys.argv[0]
-    version_hdr = get_version_header(program_name, surveydir, None)
+    version_hdr = survey.get_output_header()
     filename = getattr(ccd, 'image_filename')
     if filename is None:
         # HACK -- print only two directory names + filename of CPFILE.

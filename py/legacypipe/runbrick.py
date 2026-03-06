@@ -385,10 +385,11 @@ def get_brick(survey, ra, dec, brickname, W, H, pixscale, target_extent):
 def get_runbrick_header(program_name, survey, release, gitver,
                         unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir,
                         command_line, brick, targetrd):
-    from legacypipe.survey import get_version_header, get_dependency_versions
+    from legacypipe.survey import get_dependency_versions
     from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
 
-    version_header = get_version_header(program_name, survey.survey_dir, release, git_version=gitver)
+    version_header = survey.get_output_header(program_name=program_name,
+                                              release=release, git_version=gitver)
 
     deps = get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir)
     for name,value,comment in deps:

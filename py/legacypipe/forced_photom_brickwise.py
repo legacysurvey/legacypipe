@@ -236,7 +236,7 @@ def main():
         hdr.delete(key)
 
     from legacypipe.survey import (
-        get_git_version, get_version_header, get_dependency_versions)
+        get_git_version, get_dependency_versions)
     from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
     gitver = get_git_version()
     hdr.add_record(dict(name='FORCEDV', value=gitver,
