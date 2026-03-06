@@ -581,6 +581,41 @@ class OneBlob(object):
             # Also set a parameter on 'src' for use in compute_segmentation_map()
             src.maskbits_forced_point_source = force_pointsource
 
+        # SGA/large-galaxy segmentation
+        if True:
+
+            self.gal_seg = np.empty((self.blobh,self.blobw), np.int32)
+            self.gal_seg[:,:] = -1
+            srcinds = []
+            srcix,srciy = [],[]
+            for srci,src in enumerate(cat):
+                if src is None:
+                    continue
+                is_galaxy = isinstance(src, Galaxy)
+                if not is_galaxy:
+                    continue
+                pos = src.getPosition()
+                _,ix,iy = self.blobwcs.radec2pixelxy(pos.ra, pos.dec)
+                ix = int(np.clip(ix-1, 0, self.blobw-1))
+                iy = int(np.clip(iy-1, 0, self.blobh-1))
+                srcinds.append(srci)
+                srcix.append(ix)
+                srciy.append(iy)
+            _set_kingdoms(self.gal_seg, 65535, srcinds, srcix, srciy)
+            del srcinds, srcix, srciy
+
+            if self.plots:
+                import pylab as plt
+                plt.clf()
+                dimshow(self.gal_seg)
+                ax = plt.axis()
+                from legacypipe.detection import plot_boundary_map
+                plot_boundary_map(self.gal_seg >= 0)
+                plt.plot(ix, iy, 'r.')
+                plt.axis(ax)
+                plt.title('Galaxy segmentation map')
+                self.ps.savefig()
+
         segmap = None
         if self.do_segmentation:
             status_update('Computing segmentation map%s' % self.iterstring)
@@ -1470,6 +1505,15 @@ class OneBlob(object):
                     source_mask = srcblobmask & (segmap[sy0:sy0+sh, sx0:sx0+sw] == s)
                 else:
                     source_mask &= (segmap[sy0:sy0+sh, sx0:sx0+sw] == s)
+
+        is_galaxy = isinstance(src, Galaxy)
+        if is_galaxy and (self.gal_seg is not None):
+            s = self.gal_seg[iy + sy0, ix + sx0]
+            if s != -1:
+                if source_mask is None:
+                    source_mask = srcblobmask & (self.gal_seg[sy0:sy0+sh, sx0:sx0+sw] == s)
+                else:
+                    source_mask &= (self.gal_seg[sy0:sy0+sh, sx0:sx0+sw] == s)
 
         if brightmap is not None:
             s = brightmap[iy + sy0, ix + sx0]
