@@ -91,8 +91,8 @@ class IbisData(LegacySurveyData):
     def get_output_header(self, **kwargs):
         hdr = super().get_output_header(**kwargs)
         hdr.delete('LSDR')
-        hdr.add_record(dict(name='IBIS_DR', value='DR1',
-                            comment='IBIS data release number'))
+        hdr.add_record(dict(name='MBDR', value='DR1',
+                            comment='Medium-band survey data release number'))
         hdr.delete('SURVEY')
         hdr.add_record(dict(name='SURVEY', value='IBIS',
                             comment='DECam IBIS'))
