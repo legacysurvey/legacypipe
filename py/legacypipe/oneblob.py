@@ -2222,7 +2222,7 @@ class OneBlob(object):
             import pylab as plt
             plt.clf()
             R,C = 2, len(bands)
-            for i,(b,mod0,mod1) in enumerate(zip(bands, bmods)):
+            for i,(b,(mod0,mod1)) in enumerate(zip(bands, bmods)):
                 plt.subplot(R, C, i+1)
                 dimshow(get_rgb(mod0, [b]))
                 plt.title('Before (%s)' % b)
@@ -2366,7 +2366,7 @@ def _set_kingdoms(segmap, radius, I, ix, iy):
     else:
         rmax = 65535
         rtype = np.uint16
-    assert(radius < rmax)
+    assert(radius <= rmax)
     best_r = np.empty(segmap.shape, rtype)
     best_r[:,:,] = rmax
     H,W = segmap.shape

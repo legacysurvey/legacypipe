@@ -1461,7 +1461,9 @@ def stage_fitblobs(T=None,
     if checkpoint_filename is None:
         # FIXME -- add worker-died checks & logging here
         print ("No checkpoint")
-        R = list(Riter_hi) + list(Riter_lo)
+        R = list(Riter_hi)
+        if Riter_lo is not None:
+            R.extend(list(Riter_lo))
     else:
         from astrometry.util.ttime import CpuMeas
         # measure wall time and write out checkpoint file periodically.
