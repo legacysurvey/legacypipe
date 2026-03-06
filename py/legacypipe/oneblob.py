@@ -2066,8 +2066,38 @@ class OneBlob(object):
             if has_fixed_position(src):
                 optargs.update(check_step=None)
 
+            if self.plots:
+                mods = list(srctractor.getModelImages())
+                mod0,_ = quick_coadds(srctims, self.bands, self.blobwcs, images=mods,
+                                      fill_holes=False)
+                rgb,_ = quick_coadds(srctims, self.bands, self.blobwcs,
+                                      fill_holes=False)
+
             # First-round optimization
             srctractor.optimize_loop(**optargs)
+
+            if self.plots:
+                mods = list(srctractor.getModelImages())
+                mod1,_ = quick_coadds(srctims, self.bands, self.blobwcs, images=mods,
+                                      fill_holes=False)
+                import pylab as plt
+                plt.clf()
+                plt.subplot(1,3,1)
+                dimshow(get_rgb(rgb, self.bands))
+                plt.title('Data')
+                ax = plt.axis()
+                ex0,ex1,ey0,ey1 = model_masks_to_blob_extent(srctims, srcmm, src, self.blobwcs,
+                                                             to_int=True)
+                plt.plot([ex0,ex0,ex1,ex1,ex0], [ey0,ey1,ey1,ey0,ey0], 'r-')
+                plt.axis(ax)
+                plt.subplot(1,3,2)
+                dimshow(get_rgb(mod0, self.bands))
+                plt.title('Initial model')
+                plt.subplot(1,3,3)
+                dimshow(get_rgb(mod1, self.bands))
+                plt.title('Fit model')
+                plt.suptitle('Source fitting')
+                self.ps.savefig()
 
             if is_galaxy:
                 # Drop limits on SGA positions
@@ -2096,6 +2126,10 @@ class OneBlob(object):
         for src in fitcat:
             src.freezeAllBut('brightness')
         debug('Fitting fluxes for %i of %i sources' % (len(fitcat), len(cat)))
+
+        if self.plots:
+            bmods = []
+
         for b in bands:
             for src in fitcat:
                 src.getBrightness().freezeAllBut(b)
@@ -2133,21 +2167,26 @@ class OneBlob(object):
                 mods = list(btr.getModelImages())
                 mod1,_ = quick_coadds(btims, [b], self.blobwcs, images=mods,
                                         fill_holes=False)
-                import pylab as plt
-                plt.clf()
-                plt.subplot(1,2,1)
-                dimshow(get_rgb(mod0, [b]))
-                plt.title('Before')
-                plt.subplot(1,2,2)
-                dimshow(get_rgb(mod1, [b]))
-                plt.title('After')
-                plt.suptitle('Flux fitting: %s band' % b)
-                self.ps.savefig()
+                bmods.append((mod0, mod1))
 
             for src in fitcat:
                 src.getBrightness().thawAllParams()
         for src in fitcat:
             src.thawAllParams()
+
+        if self.plots:
+            import pylab as plt
+            plt.clf()
+            R,C = 2, len(bands)
+            for i,(b,mod0,mod1) in enumerate(zip(bands, bmods)):
+                plt.subplot(R, C, i+1)
+                dimshow(get_rgb(mod0, [b]))
+                plt.title('Before (%s)' % b)
+                plt.subplot(R, C, i+C+1)
+                dimshow(get_rgb(mod1, [b]))
+                plt.title('After (%s)' % b)
+            plt.suptitle('Flux fitting')
+            self.ps.savefig()
 
     def _plots(self, tr, title):
         plotmods = []
