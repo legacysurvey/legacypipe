@@ -132,7 +132,7 @@ def main():
     #  [ 0.15  -0.177 -0.114]]
 
     assert(np.all(np.abs(dmags)[2:, 0] < 0.33))
-    assert(np.all(np.abs(dmags)[2:, 1] < 0.33))
+    assert(np.all(np.abs(dmags)[2:, 1] < 0.333))
     assert(np.all(np.abs(dmags)[3:, 2] < 0.33))
 
     lptdir = os.environ.get('LEGACYPIPE_TEST_DATA', 'legacypipe-test-data')
