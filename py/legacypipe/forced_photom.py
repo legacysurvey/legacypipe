@@ -1178,9 +1178,6 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                        interpolation='nearest', origin='lower',
                        cmap='gray')
 
-            xy = np.array([tim.getWcs().positionToPixel(src.getPosition())
-                           for src in cat])
-
             plt.clf()
             if derivs:
                 r,c = 2,4

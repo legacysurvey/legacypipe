@@ -218,7 +218,7 @@ class MegaPrimeImage(LegacySurveyImage):
             cat.about()
             g = cat.phot_g_mean_mag
             bp = cat.phot_bp_mean_mag
-            rp = cat.phot_rp_mean_mag
+            #rp = cat.phot_rp_mean_mag
             colorterm = np.zeros(len(cat))
             return bp + colorterm
             
@@ -329,7 +329,6 @@ class MegaPrimeImage(LegacySurveyImage):
 
     def fix_saturation(self, img, dq, invvar, primhdr, imghdr, slc):
         I,J = np.nonzero(img > self.get_satur())
-        from legacypipe.bits import DQ_BITS
         if len(I):
             dq[I,J] |= DQ_BITS['satur']
             invvar[I,J] = 0
@@ -685,7 +684,6 @@ class MegaPrimeElixirImage(MegaPrimeImage):
     def run_lacosmic(self):
         import lacosmic
         from astrometry.util.file import trymakedirs
-        from legacypipe.bits import DQ_BITS
 
         img = self.read_image()
         print('run_lacosmic: got img, range', img.min(), img.max())
@@ -759,7 +757,6 @@ class MegaPrimeElixirImage(MegaPrimeImage):
 
     # don't need overridden read_image_header
     def read_dq(self, header=False, use_lacosmic=None, **kwargs):
-        from legacypipe.bits import DQ_BITS
         # Image pixels to be ignored have value 0.0
         img = self._read_fits(self.imgfn, self.hdu, header=header, **kwargs)
         if header:

@@ -239,7 +239,6 @@ def halo_plots_after(tims, bands, targetwcs, halostars, coimgs, ps):
 def tim_plots(tims, bands, ps):
     # Pixel histograms of subimages.
     for b in bands:
-        sig1 = np.median([tim.sig1 for tim in tims if tim.band == b])
         plt.clf()
         # First select the histogram range...
         blo,bhi = 0., 0.

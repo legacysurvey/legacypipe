@@ -18,7 +18,6 @@ from legacypipe.outliers import blur_resample_one
 from legacypipe.outliers import OUTLIER_POS, OUTLIER_NEG
 from legacypipe.bits import DQ_BITS
 from legacypipe.utils import NothingToDoError, RunbrickError
-from legacypipe.runbrick import stage_refs
 
 import logging
 logger = logging.getLogger('legacypipe.deep-preprocess')

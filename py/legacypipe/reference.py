@@ -1,6 +1,7 @@
 import os
 import warnings
 import numpy as np
+from collections import Counter
 import fitsio
 from astrometry.util.fits import fits_table, merge_tables
 
@@ -24,7 +25,6 @@ def get_reference_sources(survey, targetwcs, bands,
                           galaxy_margin=None):
     # If bands = None, does not create sources.
     from astrometry.libkd.spherematch import match_radec
-    from collections import Counter
 
     H,W = targetwcs.shape
     H,W = int(H),int(W)
@@ -200,7 +200,6 @@ def get_reference_sources(survey, targetwcs, bands,
     refs.cut((xx > -keeprad) * (xx < W+keeprad) *
              (yy > -keeprad) * (yy < H+keeprad))
     debug('Cut to', len(refs), 'touching this brick')
-    from collections import Counter
     debug('ref_cats:', Counter(refs.ref_cat))
     # mark ones that are actually inside the brick area.
     refs.in_bounds = ((refs.ibx >= 0) * (refs.ibx < W) *
@@ -701,7 +700,6 @@ def read_sga(targetwcs, survey, rc, dc, brick_radius, max_radius):
 
     galaxies.ignore_source = np.zeros(len(galaxies), bool)
     if 'ref_cat' in galaxies.get_columns():
-        from collections import Counter
         info('SGA catalog already has ref_cat, with entries:', Counter(galaxies.ref_cat))
     else:
         galaxies.ref_cat = np.array([refcat] * len(galaxies))

@@ -51,10 +51,12 @@ def stage_just_coadd(W=3600, H=3600, pixscale=0.262, brickname=None,
                      #
                      **kwargs):
     # stage_tims:
+    from legacypipe.runbrick import get_brick
+    from legacypipe.survey import get_git_version
+
     custom_brick, brick, targetwcs, targetrd = get_brick(survey, ra, dec, brickname, W, H, pixscale,
                                                          target_extent)
     H,W = targetwcs.shape
-    brickid = brick.brickid
     brickname = brick.brickname
 
     # Create FITS header with version strings
@@ -117,6 +119,7 @@ def stage_just_coadd(W=3600, H=3600, pixscale=0.262, brickname=None,
         psfsize = do_max = psf_images = False
         satur_val = 10.
         sbscale = True
+        detmaps = False
 
         coadd = Coadd(band, H, W, detmaps, mods, blobmods, unweighted, ngood,
                       xy, allmasks, anymasks, nsatur, psfsize, do_max, psf_images,

@@ -11,7 +11,6 @@ def worker(workq, resultq):
     import socket
     myid = '%s-pid%05i' % (socket.gethostname(), os.getpid())
 
-    req = None
     meta = None
     tprev_wall = time.time()
     while True:
