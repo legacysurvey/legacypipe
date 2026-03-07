@@ -1978,7 +1978,7 @@ class OneBlob(object):
                 if mask is None:
                     print('opt: source', src, 'tim', tim,'-> no mm')
                     continue
-                ie = tim.getInvError()[mask.getSlice()]
+                ie = tim.getInvError()[mask.y0:mask.y1, mask.x0:mask.x1]
                 print('opt: source', src, 'tim', tim, 'mm', mask, 'tim ie in mask: shape',
                       ie.shape, 'range', ie.min(), ie.max())
             tr.optimize_loop(**self.optargs)
