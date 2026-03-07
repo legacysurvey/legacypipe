@@ -2,6 +2,7 @@ import os
 import warnings
 import numpy as np
 import fitsio
+from astrometry.util.file import trymakedirs
 from astrometry.util.fits import fits_table
 from tractor.splinesky import SplineSky
 from tractor import PixelizedPsfEx, PixelizedPSF
@@ -1548,7 +1549,6 @@ class LegacySurveyImage(object):
         return psfexflags
 
     def run_psfex(self, git_version=None, ps=None):
-        from astrometry.util.file import trymakedirs
         from legacypipe.survey import get_git_version
         trymakedirs(self.psffn, dir=True)
         primhdr = self.read_image_primary_header()
