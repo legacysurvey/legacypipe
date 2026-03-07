@@ -559,7 +559,6 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns, bands=None):
 
 def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                           ccd, catalog, opt, zoomslice, radecpoly, outlier_bricks, ps):
-    from functools import reduce
     plots = (ps is not None)
     tlast = Time()
     im = survey.get_image_object(ccd)

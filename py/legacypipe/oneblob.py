@@ -22,7 +22,6 @@ from legacypipe.bits import REF_MAP_BITS
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 from legacypipe.utils import get_cpu_arch
-from legacypipe.utils import run_ps
 
 rgbkwargs_resid = dict(resids=True)
 
@@ -1034,7 +1033,6 @@ class OneBlob(object):
             self.iterstring = ''
 
             if Bnew is not None:
-                from astrometry.util.fits import merge_tables
                 # B.sources is a list of objects... merge() with
                 # fillzero doesn't handle them well.
                 srcs = B.sources
