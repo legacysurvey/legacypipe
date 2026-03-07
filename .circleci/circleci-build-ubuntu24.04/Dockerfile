@@ -91,7 +91,8 @@ RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
     && python3.12 setup.py build_ext --with-ceres --with-cython --inplace \
     && pip install . --break-system-packages \
-    && rm -R $(find . -name "*.o" -o -name "*.so") && echo 1
+    && rm -R $(find . -name "*.o" -o -name "*.so") \
+    && echo 2
 
 ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 
