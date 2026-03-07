@@ -57,7 +57,12 @@ RUN apt -y update && apt install -y apt-utils \
     # Remove APT files
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-#    scamp \ -- Ubuntu currently (2025-04-14) shipping v 2.10; we need 2.14.0
+# patchelf to fix NERSC stuff; Cuda
+RUN apt -y update \
+ && apt install -y patchelf \
+ && apt install -y libnvrtc12 libcudart12 libcurand10 libcusolver11 libnccl2 \
+    libcufft11 libcusparse12 \
+ && apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 ENV FFLAGS=-fallow-argument-mismatch
 ENV FCFLAGS=-fallow-argument-mismatch
@@ -88,7 +93,10 @@ RUN for x in \
     zmq \
     mpi4py \
     fitsio \
-    ; do pip3 install --break-system-packages --no-cache $x; done
+    requests \
+    django \
+    cupy-cuda12x \
+; do pip3 install --break-system-packages --no-cache $x; done
 
 RUN ln -s /usr/bin/python3.12-config /usr/local/bin/python3-config
 RUN ln -s /usr/bin/python3 /usr/bin/python
@@ -106,7 +114,7 @@ RUN ln -s /usr/include /usr/local/include/netpbm
 ENV ARCH_FLAGS=-march=x86-64-v3
 RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
-    && git checkout 0.97 \
+    && git checkout 0.98 \
     && make \
     && make py \
     && make install INSTALL_DIR=/usr/local
@@ -125,16 +133,11 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git \
     && cd unwise_psf \
     && git checkout dr10.0
 
-# QDO
-RUN git clone https://bitbucket.org/berkeleylab/qdo.git qdo \
+# QDO - dustin's version
+RUN git clone https://bitbucket.org/dstn/qdo.git \
     && cd qdo \
+    && git checkout ssh-srun \
     && python3 setup.py install
-
-ENV PYTHONPATH /src/unwise_psf/py:/src/legacypipe/py:/usr/local/lib/python
-
-SHELL ["/bin/bash", "-c"]
-ENTRYPOINT ["/bin/bash", "-c"]
-CMD ["/bin/bash"]
 
 # ?
 RUN mkdir /homedir && chmod 777 /homedir
@@ -142,7 +145,8 @@ ENV HOME /homedir
 
 # otherwise "fatal: detected dubious ownership in repository" upon 'git describe'
 RUN git config --global --add safe.directory /src/legacypipe \
- && git config --global --add safe.directory /src/unwise_psf
+ && git config --global --add safe.directory /src/unwise_psf \
+ && git config --global --add safe.directory /src/tractor
 
 RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
   # Create config files in $HOME
@@ -159,6 +163,7 @@ RUN echo "export PS1='[container] \\u@\\h:\\w$ '" >> $HOME/.bashrc \
 
 # Compile a local version of Scamp to pick up adding EXTNAME to the results:
 # https://github.com/astromatic/scamp/commit/d936c73d7dd08382b70cb32ceb1a535ffca81732
+# (that's in 2.14.0; ubuntu currently has 2.10.0 (as of 2026-03-07))
 RUN git clone https://github.com/astromatic/scamp.git && \
     cd scamp && \
     ./autogen.sh && \
@@ -167,18 +172,8 @@ RUN git clone https://github.com/astromatic/scamp.git && \
     make install && \
     make clean
 
-# # Compile a local version of fitsio to pick up the ability to set the FPACK compression seed:
-# # https://github.com/esheldon/fitsio/commit/273a00cf2770c989d35babc8b95d44dbbc4d2096
-# # -> went into fitsio 1.2.6
-# RUN git clone https://github.com/esheldon/fitsio.git \
-#     && cd fitsio \
-#     && pip install -e . --break-system-packages
-
 # Legacypipe
 RUN git clone https://github.com/legacysurvey/legacypipe.git legacypipe
-
-# Upgrade mpi4py
-RUN pip3 install --upgrade --break-system-packages mpi4py
 
 RUN python -O -m compileall \
     -x lib2to3 \
@@ -197,18 +192,6 @@ RUN python -O -m compileall \
     /src/legacypipe/py/legacypipe \
     /src/legacypipe/py/legacyzpts
 
-# # update legacypipe
-# #  git checkout DR10.3.4 && git describe && \
-# RUN cd /src/legacypipe && git pull && \
-#   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
-#   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
-
-RUN cd qdo \
-  && git remote add dstn https://dstn@bitbucket.org/dstn/qdo.git \
-  && git fetch dstn \
-  && git checkout ssh-srun \
-  && python3 setup.py install
-
 # NERSC's shifter "mpich" module includes a bunch of BROKEN libraries that interfere
 # with executables we have installed.
 RUN apt update && apt install -y patchelf
@@ -222,25 +205,21 @@ RUN apt install -y libnvrtc12 libcudart12 libcurand10 libcusolver11 libnccl2 \
     libcufft11 libcusparse12
 #RUN python -m cupyx.tools.install_library --library cudnn --cuda 12.x
 
-ENV LEGACYPIPE_DIR=/src/legacypipe/py
-
-# update legacypipe
-# RUN cd /src/legacypipe && \
-#   git pull && \
-#   git checkout DR10.3.6 && \
-#   python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} && \
-#   python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts}
-
-RUN git config --global --add safe.directory /src/tractor
 
 # Heck, why not just add the stuff that John needs from the "cutouts" container?
-RUN pip install --break-system-packages django requests
 RUN git clone https://github.com/legacysurvey/imagine.git && echo 1
 RUN cd imagine/viewer && ln -s settings_test.py settings.py
 RUN cd imagine && mv data data-orig && ln -s /dvs_ro/cfs/cdirs/cosmo/webapp/viewer/data .
 RUN cp /src/imagine/docker/cutouts/cutout /usr/local/bin/
 RUN chmod 755 /usr/local/bin/cutout
 ENV PYTHONPATH /src/unwise_psf/py:/src/legacypipe/py:/usr/local/lib/python:/src/imagine
+
+ENV PYTHONPATH /src/unwise_psf/py:/src/legacypipe/py:/usr/local/lib/python
+SHELL ["/bin/bash", "-c"]
+ENTRYPOINT ["/bin/bash", "-c"]
+CMD ["/bin/bash"]
+
+ENV LEGACYPIPE_DIR=/src/legacypipe/py
 
 RUN pip install --break-system-packages psutil
 

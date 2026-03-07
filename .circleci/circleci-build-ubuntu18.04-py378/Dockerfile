@@ -37,20 +37,17 @@ RUN apt -y update && apt install -y apt-utils && \
     python3-zmq \
     python3-tk \
     python3-wheel \
-    python3.7 \
-    python3.7-dev \
     python3.8 \
     python3.8-dev \
     sextractor \
     psfex \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-RUN python3.7 -m pip install setuptools \
- && python3.7 -m pip install pip --upgrade \
- && python3.8 -m pip install setuptools \
- && python3.8 -m pip install pip --upgrade
+#RUN apt remove -y python-pip-whl
 
-RUN apt remove -y python-pip-whl
+RUN python3.8 -m pip install --no-cache-dir --upgrade setuptools \
+ && python3.8 -m pip install --no-cache-dir --upgrade pip \
+ && python3.8 -m pip install --no-cache-dir wheel wheelfile
 
 # Pip installs
 RUN for x in \
@@ -64,13 +61,11 @@ RUN for x in \
     fitsio \
     astropy \
     photutils \
+    coverage \
+    coveralls \
     ; do \
-    python3.7 -m pip install $x; \
-    python3.8 -m pip install $x; \
-    done; \
-    rm -R /root/.cache/pip
-
-RUN python3.7 -m pip install --no-cache-dir coverage coveralls
+    python3.8 -m pip install --no-cache-dir $x; \
+    done;
 
 RUN mkdir /src
 WORKDIR /src
@@ -80,27 +75,18 @@ RUN git clone http://github.com/dstndstn/astrometry.net.git astrometry \
     && cd astrometry \
     && make \
     && make extra \
-    && make py PYTHON=python3.7 \
     && make py PYTHON=python3.8 \
-    && make install INSTALL_DIR=/usr/local PYTHON=python3.7 \
     && make install INSTALL_DIR=/usr/local PYTHON=python3.8 \
-    && make clean \
-    && echo 2
+    && make clean
 
-ENV PYTHON=python3.7
-# python = python3.7
-RUN ln -s /usr/bin/python3.7 /usr/bin/python
-
-ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
-
-RUN python3.7 -m pip install wheel wheelfile \
-&&  python3.8 -m pip install wheel wheelfile
-
-# https://github.com/pypa/setuptools/issues/4501
-RUN python3.8 -m pip install setuptools==70.3.0
-RUN python3.8 -m pip install fitsio
+ENV PYTHON=python3.8
+RUN ln -s /usr/bin/python3.8 /usr/bin/python
 
 RUN ln -s /usr/bin/sextractor /usr/bin/source-extractor
+
+# https://github.com/pypa/setuptools/issues/4501
+#RUN python3.8 -m pip install setuptools==70.3.0
+#RUN python3.8 -m pip install fitsio
 
 # DUST maps
 RUN mkdir -p dust/maps \
@@ -112,12 +98,13 @@ ENV DUST_DIR=/src/dust
 # Unwise PSF
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \
     && cd unwise_psf \
-    && git checkout dr9.3
+    && git checkout dr10.0
+
+ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
 
 # The Tractor
 RUN git clone http://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && cp setup-with-ceres-and-cython.py setup.py \
-    && python3.7 -m pip install . \
-    && python3.8 -m pip install . \
+    && python3.8 setup.py build_ext --with-ceres --with-cython --inplace \
+    && python3.8 -m pip install . --break-system-packages \
     && rm -R $(find . -name "*.o" -o -name "*.so") && echo 1

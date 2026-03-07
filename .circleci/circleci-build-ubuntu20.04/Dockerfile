@@ -39,16 +39,6 @@ RUN apt -y update && apt install -y apt-utils && \
     psfex \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# ubuntu renames the (awfully named) executable
-RUN ln -s /usr/bin/sextractor /usr/bin/sex
-# FIXME - should be
-# RUN ln -s /usr/bin/source-extractor /usr/bin/sex
-
-# photutils==1.0.0 \
-# photutils at 1.0.0 because of
-# https://github.com/astropy/photutils/issues/1095
-# new in 1.0.1, maybe fixed in next release?
-
 # Pip installs
 RUN for x in \
     cython \
@@ -93,17 +83,14 @@ ENV DUST_DIR=/src/dust
 # Unwise PSF
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \
     && cd unwise_psf \
-    && git checkout dr9.3
+    && git checkout dr10.0
 
 # The Tractor
 RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && cp setup-with-ceres-and-cython.py setup.py \
-    && python3.8 -m pip install -v . \
-    && python3.9 -m pip install -v . \
-    && (cd && PYTHONPATH=/usr/local/lib/python python3 -c "import tractor; print(tractor.__version__)")
-
-#    && rm -R $(find . -name "*.o" -o -name "*.so") \
-#    && python3.9 setup.py build_ext --with-cython --with-ceres --inplace \
+    && python3.8 setup.py build_ext --with-ceres --with-cython --inplace \
+    && python3.8 -m pip install . \
+    && python3.9 setup.py build_ext --with-ceres --with-cython --inplace \
+    && python3.9 -m pip install .
 
 ENV PYTHONPATH=/usr/local/lib/python:/src/unwise_psf/py:/src/legacypipe/py
