@@ -637,7 +637,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             imgfn = tmpimgfn
             ext = 0
 
-        with importlib.resources.path('legacypipe', 'data/an-cfht.cfg') as configfn:
+        with importlib.resources.path('legacypipe.data', 'an-cfht.cfg') as configfn:
             for ds in [2, 4]:
                 args = ['--config', configfn,
                         '--downsample', ds,

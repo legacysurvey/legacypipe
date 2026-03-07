@@ -216,7 +216,7 @@ def validate_version(fn, filetype, expnum, plver, plprocid,
 def apply_amp_correction_northern(camera, band, expnum, ccdname, mjdobs,
                                   img, invvar, x0, y0):
     import importlib
-    with importlib.resources.path('legacypipe', 'data/ampcorrections.fits') as fn:
+    with importlib.resources.path('legacypipe.data', 'ampcorrections.fits') as fn:
         A = fits_table(fn)
     # Find relevant row -- camera, filter, ccdname, mjd_start, mjd_end,
     # And then multiple rows of:

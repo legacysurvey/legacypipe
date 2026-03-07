@@ -2124,8 +2124,7 @@ def read_one_tim(X):
 def read_psfex_conf(camera):
     psfex_conf = {}
     import importlib
-    with importlib.resources.path('legacypipe', 'data/%s-special-psfex-conf.dat' % camera)
-        as fn:
+    with importlib.resources.path('legacypipe.data', '%s-special-psfex-conf.dat' % camera) as fn:
         if not os.path.exists(fn):
             debug('could not find special psfex configuration file for camera "' +
                 camera + '" - not using per-image psfex configurations.')

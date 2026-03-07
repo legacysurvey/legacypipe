@@ -257,7 +257,7 @@ class WiroImage(LegacySurveyImage):
             primhdr = self.read_image_primary_header()
             r,d = self.get_radec_bore(primhdr)
             pixscale = self.get_pixscale(None,None)
-            with importlib.resources.path('legacypipe', 'data/an-wiro.cfg') as configfn:
+            with importlib.resources.path('legacypipe.data', 'an-wiro.cfg') as configfn:
                 args = ['--config', configfn,
                         '--tweak-order', 3,
                         '--scale-low', pixscale * 0.8,
@@ -301,7 +301,7 @@ class WiroImage(LegacySurveyImage):
             primhdr = self.read_image_primary_header()
             r,d = self.get_radec_bore(primhdr)
             # Initial astrometry -- using solve-field on the image??
-            with importlib.resources.path('legacypipe', 'data/an-wiro.cfg') as configfn:
+            with importlib.resources.path('legacypipe.data', 'an-wiro.cfg') as configfn:
                 args = ['--config', configfn,
                         '--tweak-order', 3,
                         '--scale-low', self.pixscale * 0.8,

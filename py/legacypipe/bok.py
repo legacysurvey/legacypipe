@@ -73,7 +73,7 @@ class BokImage(CPImage):
         if header:
             # unpack tuple
             dq,hdr = dq
-        with importlib.resources.path('legacypipe', 'config/ksb_staticmask_ood_v1.fits.fz') as fn:
+        with importlib.resources.path('legacypipe.config', 'ksb_staticmask_ood_v1.fits.fz') as fn:
             F = fitsio.FITS(fn)[self.hdu]
             if slc is not None:
                 mask = F[slc]

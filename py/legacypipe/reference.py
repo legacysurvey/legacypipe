@@ -973,7 +973,8 @@ def read_star_clusters(targetwcs):
     import importlib
     from astrometry.util.starutil_numpy import degrees_between
 
-    with importlib.resources.path('legacypipe', 'data/NGC-star-clusters.fits') as clusterfile:
+    with importlib.resources.path('legacypipe.data', 'NGC-star-clusters.fits') as clusterfile:
+        clusterfile = str(clusterfile)
         debug('Reading {}'.format(clusterfile))
         clusters = fits_table(clusterfile, columns=['ra', 'dec', 'radius', 'type', 'ba', 'pa'])
     clusters.ref_id = np.arange(len(clusters))
