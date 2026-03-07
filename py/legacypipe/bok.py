@@ -66,7 +66,6 @@ class BokImage(CPImage):
 
     def read_dq(self, slc=None, header=False, **kwargs):
         # Add supplemental static mask.
-        import os
         import fitsio
         from legacypipe.utils import get_data_file
         dq = super(BokImage, self).read_dq(slc=slc, header=header, **kwargs)

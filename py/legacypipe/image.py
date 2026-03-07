@@ -1519,7 +1519,7 @@ class LegacySurveyImage(object):
         return tmpimgfn,tmpmaskfn
 
     def run_se(self, imgfn, maskfn):
-        from astrometry.util.file import trymakedirs
+        trymakedirs(self.sefn, dir=True)
         with self.survey.get_se_dir() as sedir:
             # We write the SE catalog to a temp file then rename, to avoid
             # partially-written outputs.

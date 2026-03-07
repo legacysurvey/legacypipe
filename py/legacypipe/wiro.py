@@ -288,7 +288,7 @@ class WiroImage(LegacySurveyImage):
                 xy.cut(np.argsort(xy.mag))
                 xy.cut(xy.mag != 0)
                 xy.writeto(tmpxy)
-    
+
                 cmd = ' '.join([str(x) for x in ['solve-field'] + args + [tmpxy]])
                 print('Running:', cmd)
                 os.system(cmd)
