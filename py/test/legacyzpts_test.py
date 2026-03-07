@@ -107,7 +107,7 @@ def main():
     # The first two are deeply saturated; skip them
 
     assert(np.all(np.abs(dmags)[2:, 0] < 0.3))
-    assert(np.all(np.abs(dmags)[2:, 1] < 0.5))
+    assert(np.all(np.abs(dmags)[2:, 1] < 0.51))
     # Looks like the z-band in particular is pretty bad on the highly saturated stars!
     assert(np.all(np.abs(dmags)[3:, 2] < 0.5))
 

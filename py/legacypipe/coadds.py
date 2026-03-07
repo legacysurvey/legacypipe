@@ -48,11 +48,12 @@ def stage_just_coadd(W=3600, H=3600, pixscale=0.262, brickname=None,
                      saturated_pix=None,
                      less_masking=False,
                      nsatur=None,
+                     release=None,
                      #
                      **kwargs):
     # stage_tims:
-    from legacypipe.runbrick import get_brick, get_runbrick_header
-    from legacypipe.survey import get_git_version
+    from legacypipe.runbrick import get_brick, get_runbrick_header, get_ccds
+    from legacypipe.survey import get_git_version, read_one_tim
 
     custom_brick, brick, targetwcs, targetrd = get_brick(survey, ra, dec, brickname, W, H, pixscale,
                                                          target_extent)

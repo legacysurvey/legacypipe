@@ -221,7 +221,6 @@ class MegaPrimeImage(LegacySurveyImage):
             #rp = cat.phot_rp_mean_mag
             colorterm = np.zeros(len(cat))
             return bp + colorterm
-            
         else:
             raise RuntimeError('No photometric conversion from %s to CFHT' % name)
 
@@ -266,7 +265,7 @@ class MegaPrimeImage(LegacySurveyImage):
     #     ### FIXME -- no distortion solution in here
     #     # from astrometry.util.util import Tan
     #     # return Tan(self.hdr)
-    # 
+    #
     #     # "pitcairn" reductions have PV header cards (CTYPE is still RA---TAN)
     #     from astrometry.util.util import wcs_pv2sip_hdr
     #     if hdr is None:
@@ -427,7 +426,6 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         hdr = fitsio.read_header(imgfn)
         skyimg = np.zeros(img.shape, np.float32)
         sky.addTo(skyimg)
-        from collections import Counter
         img[mask != 0] = skyimg[mask != 0]
 
         print('Image type:', img.dtype, 'min, median, max', img.min(), np.median(img.ravel()), img.max())
