@@ -4,6 +4,7 @@ from legacypipe.image import LegacySurveyImage
 from legacypipe.bits import DQ_BITS
 from legacypipe.survey import create_temp
 
+'''
 This class handles Pan-STARRS STACKed image products (DR1/DR2).
 
 https://outerspace.stsci.edu/display/PANSTARRS/PS1+Stack+images
