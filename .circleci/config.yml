@@ -169,8 +169,6 @@ jobs:
           command: |
               cd py
               export PYTHONPATH=${PYTHONPATH}:$(pwd)
-              python3.11 -c "import sys; print(sys.path)"
-              python3.11 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
               git clone https://github.com/legacysurvey/legacypipe-test-data.git
               export LPT=$(pwd)/legacypipe-test-data
               export LEGACYPIPE_TEST_DATA=$LPT
@@ -180,7 +178,7 @@ jobs:
               export GAIA_CAT_PREFIX=chunk
               export PS1CAT_DIR=$LPT/ps1-qz-star-v3
               export TYCHO2_KD_DIR=$LPT
-	      python3.13 -u test/unit_tests.py
+              python3.13 -u test/unit_tests.py
               python3.13 -u test/runbrick_test.py psfex ceres
               python3.13 -u test/legacyzpts_test.py
 
@@ -197,8 +195,6 @@ jobs:
           command: |
               cd py
               export PYTHONPATH=${PYTHONPATH}:$(pwd)
-              python3.11 -c "import sys; print(sys.path)"
-              python3.11 -c "import sys; import os; os.system('ls {' + ','.join(sys.path) + '}')"
               git clone https://github.com/legacysurvey/legacypipe-test-data.git
               export LPT=$(pwd)/legacypipe-test-data
               export LEGACYPIPE_TEST_DATA=$LPT
@@ -208,7 +204,7 @@ jobs:
               export GAIA_CAT_PREFIX=chunk
               export PS1CAT_DIR=$LPT/ps1-qz-star-v3
               export TYCHO2_KD_DIR=$LPT
-	      python3.14 -u test/unit_tests.py
+              python3.14 -u test/unit_tests.py
               python3.14 -u test/runbrick_test.py psfex ceres
               python3.14 -u test/legacyzpts_test.py
 
