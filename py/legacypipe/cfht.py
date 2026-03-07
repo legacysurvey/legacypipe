@@ -616,7 +616,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         return super().get_wcs(hdr=hdr)
 
     def run_solve_field(self):
-        import importlib
+        from legacypipe.utils import get_data_file
         from astrometry.util.file import trymakedirs
         from legacypipe.survey import create_temp
         # Initial astrometry -- using solve-field on the image
@@ -637,7 +637,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             imgfn = tmpimgfn
             ext = 0
 
-        with importlib.resources.path('legacypipe.data', 'an-cfht.cfg') as configfn:
+        with get_data_file('data', 'an-cfht.cfg') as configfn:
             for ds in [2, 4]:
                 args = ['--config', configfn,
                         '--downsample', ds,

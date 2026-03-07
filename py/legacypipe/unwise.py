@@ -682,10 +682,9 @@ def unwise_tiles_touching_wcs(wcs, polygons=True):
     '''
     from astrometry.util.miscutils import polygons_intersect
     from astrometry.util.starutil_numpy import degrees_between
+    from legacypipe.utils import get_data_file
 
-    import importlib
-    with importlib.resources.path('legacypipe.data', 'wise-tiles.fits') as atlasfn:
-        atlasfn = str(atlasfn)
+    with get_data_file('data', 'wise-tiles.fits') as atlasfn:
         T = fits_table(atlasfn)
     trad = wcs.radius()
     wrad = np.sqrt(2.) / 2. * 2048 * 2.75 / 3600.

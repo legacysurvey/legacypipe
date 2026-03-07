@@ -249,7 +249,7 @@ class WiroImage(LegacySurveyImage):
 
     def zeropointing_completed(self, annfn, photomfn, ann, photom, hdr):
         if not os.path.exists(self.wcs_final_fn):
-            import importlib
+            from legacypipe.utils import get_data_file
             from astrometry.util.file import trymakedirs
             from astrometry.util.fits import fits_table
             from legacypipe.survey import create_temp
@@ -257,7 +257,7 @@ class WiroImage(LegacySurveyImage):
             primhdr = self.read_image_primary_header()
             r,d = self.get_radec_bore(primhdr)
             pixscale = self.get_pixscale(None,None)
-            with importlib.resources.path('legacypipe.data', 'an-wiro.cfg') as configfn:
+            with get_data_file('data', 'an-wiro.cfg') as configfn:
                 args = ['--config', configfn,
                         '--tweak-order', 3,
                         '--scale-low', pixscale * 0.8,
@@ -296,12 +296,12 @@ class WiroImage(LegacySurveyImage):
 
     def run_calibs(self, **kwargs):
         if not os.path.exists(self.wcs_initial_fn):
-            import importlib
+            from legacypipe.utils import get_data_file
             from astrometry.util.file import trymakedirs
             primhdr = self.read_image_primary_header()
             r,d = self.get_radec_bore(primhdr)
             # Initial astrometry -- using solve-field on the image??
-            with importlib.resources.path('legacypipe.data', 'an-wiro.cfg') as configfn:
+            with get_data_file('data', 'an-wiro.cfg') as configfn:
                 args = ['--config', configfn,
                         '--tweak-order', 3,
                         '--scale-low', self.pixscale * 0.8,

@@ -68,12 +68,12 @@ class BokImage(CPImage):
         # Add supplemental static mask.
         import os
         import fitsio
-        import importlib
+        from legacypipe.utils import get_data_file
         dq = super(BokImage, self).read_dq(slc=slc, header=header, **kwargs)
         if header:
             # unpack tuple
             dq,hdr = dq
-        with importlib.resources.path('legacypipe.config', 'ksb_staticmask_ood_v1.fits.fz') as fn:
+        with get_data_file('config', 'ksb_staticmask_ood_v1.fits.fz') as fn:
             F = fitsio.FITS(fn)[self.hdu]
             if slc is not None:
                 mask = F[slc]
