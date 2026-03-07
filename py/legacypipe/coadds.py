@@ -1,4 +1,3 @@
-import time
 import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
@@ -68,7 +67,7 @@ def stage_just_coadd(W=3600, H=3600, pixscale=0.262, brickname=None,
                                          command_line, brick, targetrd)
     # Find CCDs to read
     ccds = get_ccds(survey, targetwcs, bands, brick, min_mjd, max_mjd)
-    
+
     # Create Image objects for each CCD
     ims = []
     info('Keeping', len(ccds), 'CCDs:')

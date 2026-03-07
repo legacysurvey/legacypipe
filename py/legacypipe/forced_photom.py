@@ -14,8 +14,10 @@ from astrometry.util.file import trymakedirs
 from astrometry.util.ttime import Time
 from astrometry.libkd.spherematch import match_radec
 
-from tractor import Tractor, Catalog
-from tractor.galaxy import disable_galaxy_cache
+from tractor import Tractor, Catalog, PointSource
+from tractor.galaxy import ExpGalaxy, DevGalaxy
+from tractor.sersic import SersicGalaxy
+from legacypipe.survey import RexGalaxy
 
 from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, apertures_arcsec, radec_at_mjd
 from legacypipe.catalog import read_fits_catalog
@@ -456,7 +458,7 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns, bands=None):
 
     match_radius = 0.1/3600.
     if len(Tsga):
-        I,J,d = match_radec(sga.ra, sga.dec, Tsga.ra, Tsga.dec, match_radius, nearest=True)
+        I,J,_ = match_radec(sga.ra, sga.dec, Tsga.ra, Tsga.dec, match_radius, nearest=True)
         print('Matched', len(I), 'from SGA to this brick catalog')
         Isga = np.ones(len(sga), bool)
         Isga[I] = False
@@ -767,8 +769,8 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
             mod = np.zeros(sh, np.float32)
             chi = np.zeros(sh, np.float32)
             tchi = (tim.getImage() - model_img) * tim.getInvError()
-            Yo,Xo,Yi,Xi,rims = resample_with_wcs(opt.plot_wcs, tim.subwcs,
-                                                 [tim.getImage(), model_img, tchi])
+            Yo,Xo,_,_,rims = resample_with_wcs(opt.plot_wcs, tim.subwcs,
+                                               [tim.getImage(), model_img, tchi])
             img[Yo,Xo] = rims[0]
             mod[Yo,Xo] = rims[1]
             chi[Yo,Xo] = rims[2]
@@ -986,7 +988,6 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         Iderivs = []
         first = True
         for i,src in enumerate(cat):
-            from tractor import PointSource
             realsrcs.append(src)
             if not isinstance(src, PointSource):
                 continue
@@ -1014,11 +1015,6 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             cat = realsrcs + derivsrcs
 
     if agn:
-        from tractor.galaxy import ExpGalaxy, DevGalaxy
-        from tractor import PointSource
-        from tractor.sersic import SersicGalaxy
-        from legacypipe.survey import RexGalaxy
-
         realsrcs = []
         agnsrcs = []
         iagn = []
@@ -1042,7 +1038,6 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
     tr = Tractor([tim], cat, optimizer=opti)
     tr.freezeParam('images')
-    disable_galaxy_cache()
 
     F = fits_table()
 
@@ -1536,7 +1531,6 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
         fluxes = []
         Ibright = []
         for i,src in enumerate(cat):
-            from tractor import PointSource
             if not isinstance(src, PointSource):
                 continue
             realmod = src.getUnitFluxModelPatch(tim)
@@ -1555,7 +1549,6 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
 
         for i in Ibright:
             src = cat[i]
-            from tractor import PointSource
             if not isinstance(src, PointSource):
                 continue
             realmod = src.getUnitFluxModelPatch(tim)
@@ -1674,7 +1667,7 @@ def windowed_centroid(pix, x0, y0, psf_sigma, nsigma=5, mask=None):
     yy = yy.ravel()
     pix = pix[ylo:yhi, xlo:xhi].ravel()
 
-    for step in range(10):
+    for _ in range(10):
         ri2 = (xwin - xx)**2 + (ywin - yy)**2
         # r_i < r_max
         rin = (ri2 < radius**2)

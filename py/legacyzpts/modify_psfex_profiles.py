@@ -227,7 +227,7 @@ def computed_patched_psfex(psfex_path, band, recompute=False):
 def _wrapper(ccd_index):
 
     image_filename = ccd['image_filename'][ccd_index]
-    image_path = os.path.join(_base_dir, 'images', image_filename)
+    #image_path = os.path.join(_base_dir, 'images', image_filename)
     band = ccd['filter'][ccd_index]
     # band = fitsio.read_header(image_path)['BAND']
     #print('band = {}'.format(band))
@@ -299,7 +299,7 @@ def main():
         _psf_patch_ver = get_git_version()
 
     with Pool(processes=n_processes) as pool:
-        res = pool.map(_wrapper, np.arange(len(ccd)))
+        pool.map(_wrapper, np.arange(len(ccd)))
 
     print('All done!', time.strftime('%H:%M:%S', time.gmtime(time.time() - time_start)))
 

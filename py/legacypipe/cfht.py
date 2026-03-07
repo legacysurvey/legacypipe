@@ -346,7 +346,6 @@ class MegaPrimeImage(LegacySurveyImage):
     #         print('Computed sig1 by Blanton method:', self.sig1)
     #     else:
     #         print('sig1 from CCDs file:', self.sig1)
-    # 
     #     iv = np.zeros_like(img) + (1./self.sig1**2)
     #     return iv
 
@@ -429,7 +428,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         img[mask != 0] = skyimg[mask != 0]
 
         print('Image type:', img.dtype, 'min, median, max', img.min(), np.median(img.ravel()), img.max())
-        
+
         # FIXME -- Replace the header with the WCS from our initial
         # WCS solution, so that the SE catalog's alpha_j2000,
         # delta_j2000 columns are correct??
@@ -503,7 +502,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         iline = 0
         header = []
         # find my HDU in the header
-        for i in range(1, self.hdu+1):
+        for _ in range(1, self.hdu+1):
             header = []
             while True:
                 if iline >= len(lines):
