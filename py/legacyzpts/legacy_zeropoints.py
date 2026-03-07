@@ -861,11 +861,9 @@ def main(args=None):
 
         if version_header is None and not measureargs['run_calibs_only']:
             # One-time initializations (only do if we actually have to process some images!)
-            from legacypipe.survey import get_version_header, get_dependency_versions
+            from legacypipe.survey import get_dependency_versions
             release = 10000
-            gitver = get_git_version()
-            version_header = get_version_header('legacy_zeropoints.py', survey.survey_dir, release,
-                                                git_version=gitver, proctype='InstCal')
+            version_header = survey.get_output_header(release=release, proctype='InstCal')
             deps = get_dependency_versions(None, None, None, None)
             for name,value,comment in deps:
                 version_header.add_record(dict(name=name, value=value, comment=comment))
