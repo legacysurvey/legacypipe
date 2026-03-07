@@ -1623,7 +1623,6 @@ class LegacySurveyImage(object):
         from scipy.ndimage import binary_dilation, uniform_filter
         from scipy.stats import sigmaclip
         from astrometry.util.file import trymakedirs
-        from astrometry.util.miscutils import estimate_mode
         from legacypipe.reference import (get_reference_sources, get_galaxy_sources,
                                           get_reference_map)
         from legacypipe.bits import REF_MAP_BITS

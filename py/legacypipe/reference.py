@@ -584,7 +584,7 @@ def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
                         extra_columns=None,
                         max_radius=None):
     from astrometry.util.starutil_numpy import degrees_between
-    from legacypipe.bits import SGA_FITMODE, sga_fitmode_type
+    from legacypipe.bits import SGA_FITMODE
 
     # max_radius (in deg) should be the largest radius in the SGA catalog!
     if max_radius is None:

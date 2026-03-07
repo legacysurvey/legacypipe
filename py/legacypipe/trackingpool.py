@@ -4,7 +4,7 @@ import queue
 import threading
 import multiprocessing
 from multiprocessing.pool import (Pool, IMapUnorderedIterator, _PoolCache,
-                                  INIT, RUN, TERMINATE, MaybeEncodingError, mapstar)
+                                  INIT, RUN, TERMINATE, mapstar)
 from multiprocessing import get_context, util
 
 class TrackingIMapUnorderedIterator(IMapUnorderedIterator):

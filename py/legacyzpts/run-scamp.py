@@ -81,22 +81,18 @@ def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir,
         #print('CCD', ccd, ':', len(I1), 'in CCD,', len(I2), 'with Gaia RA,', len(I), 'with S/N > 5.  Median S/N %.1f' % np.median(P.sn[I2]))
         ngood.append(len(I))
         try:
-            t0 = time.time()
             imghdr = fitsio.read_header(imgfn, ext=ccd)
-            #print('Reading image header with fitsio:', time.time()-t0)
             w,h = imghdr['ZNAXIS1'], imghdr['ZNAXIS2']
         except:
             # Older images, eg cfht-s82-u/931347p.fits.fz, suffer from
             # https://github.com/esheldon/fitsio/issues/324
             # Try reading with astropy.
             from astropy.io import fits as afits
-            t0 = time.time()
             if astropy_img_fits is None:
                 astropy_img_fits = afits.open(imgfn)
             hdu = astropy_img_fits[ccd]
             h,w = hdu.shape
             imghdr = hdu.header
-            #print('Reading image header with astropy:', time.time()-t0)
         newhdr['EXTNAME'] = ccd
         for c in ['QRUNID']:
             newhdr[c] = imghdr[c]
