@@ -1,4 +1,3 @@
-import numpy as np
 from glob import glob
 import os
 from legacypipe.survey import LegacySurveyData

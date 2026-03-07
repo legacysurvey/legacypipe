@@ -1,6 +1,5 @@
 import os
 import tempfile
-import time
 import shutil
 import fitsio
 import numpy as np
@@ -29,7 +28,7 @@ def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir,
     realoutfn = relpath.replace('-photom.fits', '-scamp.fits')
 
     rtn = realoutfn
-    
+
     tmpoutfn  = os.path.join(scamp_dir, tmpoutfn)
     realoutfn = os.path.join(scamp_dir, realoutfn)
     if os.path.exists(realoutfn):
@@ -74,7 +73,7 @@ def write_one_scamp_catalog(photom_fn, scamp_dir, survey_dir, photom_base_dir,
     astropy_img_fits = None
     primhdr = None
     for ccd in ccds:
-        I1 = np.flatnonzero((P.ccdname == ccd))
+        #I1 = np.flatnonzero((P.ccdname == ccd))
         I2 = np.flatnonzero((P.ccdname == ccd) * (P.ra_gaia != 0.0))
         #print('  CCD', ccd, ':', len(I), 'stars, 10/50/90th pct S/N:', ', '.join(['%.1f' % p for p in np.percentile(P.sn[I], [10,50,90])]))
         I = np.flatnonzero((P.ccdname == ccd) * (P.ra_gaia != 0.0) * (P.sn > 5.))

@@ -2,9 +2,7 @@ import warnings
 
 from legacypipe.cpimage import CPImage
 
-'''
-Code specific to images from the 90prime camera on the Bok telescope.
-'''
+# Code specific to images from the 90prime camera on the Bok telescope.
 class BokImage(CPImage):
     '''
     Class for handling images from the 90prime camera processed by the

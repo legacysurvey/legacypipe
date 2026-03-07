@@ -583,7 +583,6 @@ def get_large_galaxy_version(fn):
 def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
                         extra_columns=None,
                         max_radius=None):
-    from astrometry.util.starutil_numpy import degrees_between
     from legacypipe.bits import SGA_FITMODE
 
     # max_radius (in deg) should be the largest radius in the SGA catalog!
@@ -739,7 +738,7 @@ def read_sga(targetwcs, survey, rc, dc, brick_radius, max_radius):
             galaxies.freezeparams = (galaxies.preburned * galaxies.freeze)
 
             galaxies.set_galaxy_maskbit = galaxies.islargegalaxy
-            
+
             # set ref_cat and ref_id for galaxies outside the footprint
             I = np.flatnonzero(np.logical_not(galaxies.in_footprint_grz))
             galaxies.ref_id[I] = galaxies.sga_id[I]

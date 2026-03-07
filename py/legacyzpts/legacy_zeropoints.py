@@ -742,11 +742,10 @@ def main(args=None):
             continue
         image_list.append(fn)
 
-    ''' Produce zeropoints for all CP images in image_list
-    image_list -- iterable list of image filenames
-    args -- parsed argparser objection from get_parser()
+    # Produce zeropoints for all CP images in image_list
+    # image_list -- iterable list of image filenames
+    # args -- parsed argparser objection from get_parser()
 
-    '''
     from pkg_resources import resource_filename
 
     assert(not args is None)

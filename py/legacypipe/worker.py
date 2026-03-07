@@ -92,14 +92,14 @@ def queue_feeder(server, workq, resultq):
 
     nonemsg = pickle.dumps(None, -1)
 
-    was_full = False
+    #was_full = False
 
     nassigned = 0
     while True:
 
         if workq.full():
             #print('Work queue is full.  Waiting.')
-            was_full = True
+            #was_full = True
             #s_0 = workq.qsize()
             # FIXME -- dynamic sleep time?
             time.sleep(0.1)
@@ -112,10 +112,11 @@ def queue_feeder(server, workq, resultq):
         #     print('Work queue is newly not-full.  Work queue size:', workq.qsize())
         # was_full = False
 
-        t_0 = time.time()
+        #t_0 = time.time()
         # Check for a result produced by worker processes
         try:
             result,rmeta,brick,iblob = resultq.get_nowait()
+            del brick
             #print('Completed work: brick', brick, 'blob', iblob)
         except Empty:
             result,rmeta = nonemsg,nonemsg
@@ -123,7 +124,7 @@ def queue_feeder(server, workq, resultq):
         #      (workq.qsize(), resultq.qsize()))
 
         # Send result (if any) to server (and get back work item)
-        t_a = time.time()
+        #t_a = time.time()
         sock.send_multipart([jobid, rmeta, result])
         #t_b = time.time()
         work = sock.recv()

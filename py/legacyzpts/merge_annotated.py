@@ -3,16 +3,14 @@ from astrometry.util.fits import fits_table
 import argparse
 import os
 
-"""
-Merges the ccds-annnotated files and generate a survey-ccds file as an after-burner.
-Uses the following naming convention:
-    ccds-annotated-<camera>-<drN>.fits
-    survey-ccds-<camera>-<drN>.fits
-where camera and the DR number are inputs.
-Note that there are no checks on whether the input file list consists of annotated files.
-
-M. Landriau, September 2019
-"""
+# Merges the ccds-annnotated files and generate a survey-ccds file as an after-burner.
+# Uses the following naming convention:
+#     ccds-annotated-<camera>-<drN>.fits
+#     survey-ccds-<camera>-<drN>.fits
+# where camera and the DR number are inputs.
+# Note that there are no checks on whether the input file list consists of annotated files.
+# 
+# M. Landriau, September 2019
 
 def main(args=None):
     parser0 = argparse.ArgumentParser(description='Generates an annotated CCDs file and a legacypipe-compatible CCDs file from a set of reduced imaging.')

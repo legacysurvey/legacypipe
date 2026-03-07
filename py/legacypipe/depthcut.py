@@ -66,7 +66,7 @@ def make_depth_cut(survey, ccds, bands, targetrd, brick, W, H, pixscale,
 
     # as an implementation detail, keep_propids will get added to first_propids
     first_propids = list(set(first_propids).union(keep_propids))
-    
+
     cH,cW = H//10, W//10
     coarsewcs = targetwcs.scale(0.1)
     coarsewcs.imagew = cW
@@ -646,6 +646,7 @@ def main():
         bargs.append((survey, brick, plots, kwargs))
 
     if args.threads is not None:
+        from astrometry.util.multiproc import multiproc
         mp = multiproc(args.threads)
         rtns = mp.map(run_one_brick, bargs)
         for rtn in rtns:

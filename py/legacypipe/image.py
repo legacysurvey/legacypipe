@@ -2087,7 +2087,7 @@ class LegacySurveyImage(object):
         # plt.title('Column-wise median')
         # plt.suptitle('masked image - sky model')
         # ps.savefig()
-        # 
+        #
         # #(wt > 0)
         # isgoodrows = np.any(wt>0, axis=1)
         # isgoodcols = np.any(wt>0, axis=0)
