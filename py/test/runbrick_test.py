@@ -593,7 +593,7 @@ def test_4(ceres, psfex):
                '--force-all', '--no-write', '--coadd-bw',
                '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
                '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
-               '--blob-image', '--no-hybrid-psf',
+               '--blob-image', #'--no-hybrid-psf',
                '--survey-dir', surveydir,
                '--outdir', outdir, '-v', '--no-wise-ceres'])
     print('Checking for calib file', fn)
