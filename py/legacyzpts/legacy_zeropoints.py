@@ -1368,7 +1368,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
         ps.savefig()
 
         # Run a source detection on the image and cross-match with Gaia star positions.
-        from scipy.ndimage import gaussian_filter, binary_dilation, binary_fill_holes
+        from scipy.ndimage import gaussian_filter, binary_dilation, binary_fill_holes, label
         print('FWHM', imobj.fwhm)
         psf_sigma = imobj.fwhm / 2.35
         psfnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)

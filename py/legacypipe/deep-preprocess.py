@@ -108,7 +108,8 @@ def stage_deep_preprocess(
         _, brick.dec2 = targetwcs.pixelxy2radec(W/2, H)
 
     # Create FITS header with version strings
-    version_header = survey.get_output_header(program_name, release)
+    gitver = get_git_version()
+    version_header = survey.get_output_header(program_name, release, git_version=gitver)
 
     deps = get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir)
     for name,value,comment in deps:

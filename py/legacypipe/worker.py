@@ -125,9 +125,9 @@ def queue_feeder(server, workq, resultq):
         # Send result (if any) to server (and get back work item)
         t_a = time.time()
         sock.send_multipart([jobid, rmeta, result])
-        t_b = time.time()
+        #t_b = time.time()
         work = sock.recv()
-        t_c = time.time()
+        #t_c = time.time()
         # only unpickle very short work packets to check for None.
         if len(work) < 10:
             realwork = pickle.loads(work)
@@ -138,7 +138,7 @@ def queue_feeder(server, workq, resultq):
         nassigned += 1
         # We don't unpickle the work packet, we let the worker process do that
         workq.put(work)
-        t_e = time.time()
+        #t_e = time.time()
         #print('Queue feeder: read result: %5.2f, send: %5.2f, recv: %5.2f, queue %5.2f, queue size %i' %
         #      (t_a - t_0, t_b - t_a, t_c - t_b, t_e - t_c, workq.qsize()))
 

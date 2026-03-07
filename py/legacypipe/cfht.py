@@ -216,7 +216,7 @@ class MegaPrimeImage(LegacySurveyImage):
         elif name == 'gaia':
             print('HACKING Gaia color terms for CFHT')
             cat.about()
-            g = cat.phot_g_mean_mag
+            #g = cat.phot_g_mean_mag
             bp = cat.phot_bp_mean_mag
             #rp = cat.phot_rp_mean_mag
             colorterm = np.zeros(len(cat))
@@ -451,7 +451,6 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         if self.cut_to_gaia:
             # Filter SE detections to Gaia stars
             from astrometry.util.fits import fits_table
-            from astrometry.util.util import Sip
             from astrometry.libkd.spherematch import match_radec
             from astrometry.util.file import trymakedirs
             from legacypipe.gaiacat import GaiaCatalog
