@@ -4,7 +4,6 @@ from legacypipe.image import LegacySurveyImage
 from legacypipe.bits import DQ_BITS
 from legacypipe.survey import create_temp
 
-'''
 This class handles Pan-STARRS STACKed image products (DR1/DR2).
 
 https://outerspace.stsci.edu/display/PANSTARRS/PS1+Stack+images
@@ -53,9 +52,7 @@ HIERARCH FPA.FILTER = 'i.00000 ' / Filter used (instrument name)
 MJD-OBS =     57515.0391846985 / Time of exposure
 
 The "STARCORE" bit masks quite aggressively.
-
 '''
-
 class PanStarrsImage(LegacySurveyImage):
     def __init__(self, survey, ccd, image_fn=None, image_hdu=0, **kwargs):
         if ccd is not None:

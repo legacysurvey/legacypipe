@@ -140,7 +140,7 @@ def computed_patched_psfex(psfex_path, band, recompute=False):
             # popt, pcov =  curve_fit(get_sb_moffat, radius, psfi_flat/(pixscale**2))
             mask = (radius>radius_min) & (radius<radius_max)
             try:
-                popt, pcov = curve_fit(get_sb_moffat, radius[mask], psfi_flat[mask]/(pixscale**2), bounds=((0, 1.8), np.inf))
+                popt, _ = curve_fit(get_sb_moffat, radius[mask], psfi_flat[mask]/(pixscale**2), bounds=((0, 1.8), np.inf))
                 alpha, beta = popt
             except RuntimeError:
                 print("Error: "+psfex_path+", "+ccdname+".")

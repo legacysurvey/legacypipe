@@ -519,7 +519,7 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns, bands=None):
     if len(SGA) == 0:
         return None
 
-    I,J,d = match_radec(sga.ra, sga.dec, SGA.ra, SGA.dec, match_radius, nearest=True)
+    I,J,_ = match_radec(sga.ra, sga.dec, SGA.ra, SGA.dec, match_radius, nearest=True)
     print('Matched', len(I), 'desired SGA source(s)')
     SGA.cut(J)
 
@@ -671,7 +671,6 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
             T.writeto(opt.write_cat)
             print('Wrote catalog to', opt.write_cat)
 
-    surveydir = survey.get_survey_dir()
     version_hdr = survey.get_output_header()
     del survey
 

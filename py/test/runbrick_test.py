@@ -185,7 +185,7 @@ def rbmain():
                '--stage', 'image_coadds'])
 
     # Check that the dither_seed gets set the same each time.
-    hdr = fitsio.read_header('out-testcase12/coadd/cus/custom-346684p12791/legacysurvey-custom-346684p12791-image-r.fits.fz', ext=1)
+    #hdr = fitsio.read_header('out-testcase12/coadd/cus/custom-346684p12791/legacysurvey-custom-346684p12791-image-r.fits.fz', ext=1)
     #dither = hdr['ZDITHER0']
     #assert(dither == 1652)
 

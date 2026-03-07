@@ -116,6 +116,7 @@ def queue_feeder(server, workq, resultq):
         # Check for a result produced by worker processes
         try:
             result,rmeta,brick,iblob = resultq.get_nowait()
+            del brick
             #print('Completed work: brick', brick, 'blob', iblob)
         except Empty:
             result,rmeta = nonemsg,nonemsg
