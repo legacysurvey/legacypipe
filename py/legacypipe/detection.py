@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 from legacypipe.survey import tim_get_resamp
 

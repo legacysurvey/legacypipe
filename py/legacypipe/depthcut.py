@@ -646,6 +646,7 @@ def main():
         bargs.append((survey, brick, plots, kwargs))
 
     if args.threads is not None:
+        from astrometry.util.multiproc import multiproc
         mp = multiproc(args.threads)
         rtns = mp.map(run_one_brick, bargs)
         for rtn in rtns:
