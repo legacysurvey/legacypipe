@@ -172,71 +172,51 @@ RUN git clone https://github.com/astromatic/scamp.git && \
     make install && \
     make clean
 
-# Legacypipe
-RUN git clone https://github.com/legacysurvey/legacypipe.git legacypipe
-
-RUN python -O -m compileall \
-    -x lib2to3 \
-    /usr/local/lib/python3.12/dist-packages \
-    /usr/lib/python3.12 \
-    /usr/local/lib/python \
-    /src/unwise_psf/py \
-    /src/legacypipe/py/legacypipe \
-    /src/legacypipe/py/legacyzpts && \
-    python    -m compileall \
-    -x lib2to3 \
-    /usr/local/lib/python3.12/dist-packages \
-    /usr/lib/python3.12 \
-    /usr/local/lib/python \
-    /src/unwise_psf/py \
-    /src/legacypipe/py/legacypipe \
-    /src/legacypipe/py/legacyzpts
-
 # NERSC's shifter "mpich" module includes a bunch of BROKEN libraries that interfere
 # with executables we have installed.
-RUN apt update && apt install -y patchelf
 RUN patchelf --force-rpath --set-rpath /lib/x86_64-linux-gnu/ /usr/local/bin/listhead
 RUN patchelf --force-rpath --set-rpath /lib/x86_64-linux-gnu/ /usr/local/bin/modhead
 
-# Install GPU code
-RUN pip3 install --break-system-packages --no-cache cupy-cuda12x
+# Add the stuff that John needs from the "cutouts" container
+RUN git clone https://github.com/legacysurvey/imagine.git \
+ && cd imagine/viewer \
+ && ln -s settings_test.py settings.py \
+ && cd /src/imagine/ \
+ && mv data data-orig \
+ && ln -s /dvs_ro/cfs/cdirs/cosmo/webapp/viewer/data . \
+ && cp /src/imagine/docker/cutouts/cutout /usr/local/bin/ \
+ && chmod 755 /usr/local/bin/cutout
 
-RUN apt install -y libnvrtc12 libcudart12 libcurand10 libcusolver11 libnccl2 \
-    libcufft11 libcusparse12
-#RUN python -m cupyx.tools.install_library --library cudnn --cuda 12.x
-
-
-# Heck, why not just add the stuff that John needs from the "cutouts" container?
-RUN git clone https://github.com/legacysurvey/imagine.git && echo 1
-RUN cd imagine/viewer && ln -s settings_test.py settings.py
-RUN cd imagine && mv data data-orig && ln -s /dvs_ro/cfs/cdirs/cosmo/webapp/viewer/data .
-RUN cp /src/imagine/docker/cutouts/cutout /usr/local/bin/
-RUN chmod 755 /usr/local/bin/cutout
 ENV PYTHONPATH /src/unwise_psf/py:/src/legacypipe/py:/usr/local/lib/python:/src/imagine
-
-ENV PYTHONPATH /src/unwise_psf/py:/src/legacypipe/py:/usr/local/lib/python
 SHELL ["/bin/bash", "-c"]
 ENTRYPOINT ["/bin/bash", "-c"]
 CMD ["/bin/bash"]
 
 ENV LEGACYPIPE_DIR=/src/legacypipe/py
 
-RUN pip install --break-system-packages psutil
+# RUN cd tractor \
+#   && git fetch \
+#   && git checkout main-gpu \
+#   && git pull \
+#   && python setup.py build_ext --with-ceres --with-cython --inplace \
+#   && pip install . --break-system-packages \
+#   && echo 1.7 && git describe
 
-RUN pip3 install --upgrade --break-system-packages --no-cache cupy-cuda12x
+RUN python -O -m compileall \
+    -x lib2to3 \
+    /usr/local/lib/python3.12/dist-packages \
+    /usr/lib/python3.12 \
+    /usr/local/lib/python \
+    /src/unwise_psf/py && \
+    python    -m compileall \
+    -x lib2to3 \
+    /usr/local/lib/python3.12/dist-packages \
+    /usr/lib/python3.12 \
+    /usr/local/lib/python \
+    /src/unwise_psf/py
 
-RUN cd legacypipe \
-  && git pull \
-  && git checkout main-gpu \
-  && git pull \
+RUN git clone https://github.com/legacysurvey/legacypipe.git \
+  && cd legacypipe \
   && python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
   && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
-  && echo 1.7 && git describe
-
-RUN cd tractor \
-  && git fetch \
-  && git checkout main-gpu \
-  && git pull \
-  && python setup.py build_ext --with-ceres --with-cython --inplace \
-  && pip install . --break-system-packages \
-  && echo 1.7 && git describe
+  && git describe
