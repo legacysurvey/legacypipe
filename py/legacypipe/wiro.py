@@ -249,86 +249,84 @@ class WiroImage(LegacySurveyImage):
 
     def zeropointing_completed(self, annfn, photomfn, ann, photom, hdr):
         if not os.path.exists(self.wcs_final_fn):
-            from pkg_resources import resource_filename
+            import importlib
             from astrometry.util.file import trymakedirs
             from astrometry.util.fits import fits_table
             from legacypipe.survey import create_temp
             # Final astrometry -- using solve-field on the "photom" results!
-            dirname = resource_filename('legacypipe', 'data')
-            configfn = os.path.join(dirname, 'an-wiro.cfg')
             primhdr = self.read_image_primary_header()
             r,d = self.get_radec_bore(primhdr)
             pixscale = self.get_pixscale(None,None)
-            args = ['--config', configfn,
-                    '--tweak-order', 3,
-                    '--scale-low', pixscale * 0.8,
-                    '--scale-high', pixscale * 1.2,
-                    '--scale-units', 'app',
-                    '--width', 4096, '--height', 4096,
-                    '--no-plots',
-                    '--no-remove-lines',
-                    '--continue',
-                    '--crpix-center',
-                    '--new-fits', 'none',
-                    '--temp-axy',
-                    '--solved', 'none',
-                    '--match', 'none',
-                    '--corr', 'none',
-                    '--index-xyls', 'none',
-                    '--rdls', 'none',
-                    '--wcs', self.wcs_final_fn]
-            if r is not None and d is not None:
-                args.extend(['--ra', r, '--dec', d, '--radius', 5])
-            print('Creating final WCS using solve-field...')
-            trymakedirs(self.wcs_final_fn, dir=True)
-            tmpxy = create_temp(suffix='.fits')
-            xy = fits_table()
-            xy.x = 1. + photom.x_fit
-            xy.y = 1. + photom.y_fit
-            xy.mag = photom.psfmag
-            xy.cut(np.argsort(xy.mag))
-            xy.cut(xy.mag != 0)
-            xy.writeto(tmpxy)
-
-            cmd = ' '.join([str(x) for x in ['solve-field'] + args + [tmpxy]])
-            print('Running:', cmd)
-            os.system(cmd)
-            os.unlink(tmpxy)
+            with importlib.resources.path('legacypipe', 'data/an-wiro.cfg') as configfn:
+                args = ['--config', configfn,
+                        '--tweak-order', 3,
+                        '--scale-low', pixscale * 0.8,
+                        '--scale-high', pixscale * 1.2,
+                        '--scale-units', 'app',
+                        '--width', 4096, '--height', 4096,
+                        '--no-plots',
+                        '--no-remove-lines',
+                        '--continue',
+                        '--crpix-center',
+                        '--new-fits', 'none',
+                        '--temp-axy',
+                        '--solved', 'none',
+                        '--match', 'none',
+                        '--corr', 'none',
+                        '--index-xyls', 'none',
+                        '--rdls', 'none',
+                        '--wcs', self.wcs_final_fn]
+                if r is not None and d is not None:
+                    args.extend(['--ra', r, '--dec', d, '--radius', 5])
+                print('Creating final WCS using solve-field...')
+                trymakedirs(self.wcs_final_fn, dir=True)
+                tmpxy = create_temp(suffix='.fits')
+                xy = fits_table()
+                xy.x = 1. + photom.x_fit
+                xy.y = 1. + photom.y_fit
+                xy.mag = photom.psfmag
+                xy.cut(np.argsort(xy.mag))
+                xy.cut(xy.mag != 0)
+                xy.writeto(tmpxy)
+    
+                cmd = ' '.join([str(x) for x in ['solve-field'] + args + [tmpxy]])
+                print('Running:', cmd)
+                os.system(cmd)
+                os.unlink(tmpxy)
 
     def run_calibs(self, **kwargs):
         if not os.path.exists(self.wcs_initial_fn):
-            from pkg_resources import resource_filename
+            import importlib
             from astrometry.util.file import trymakedirs
-            # Initial astrometry -- using solve-field on the image??
-            dirname = resource_filename('legacypipe', 'data')
-            configfn = os.path.join(dirname, 'an-wiro.cfg')
             primhdr = self.read_image_primary_header()
             r,d = self.get_radec_bore(primhdr)
-            args = ['--config', configfn,
-                    '--tweak-order', 3,
-                    '--scale-low', self.pixscale * 0.8,
-                    '--scale-high', self.pixscale * 1.2,
-                    '--scale-units', 'app',
-                    '--width', 4096, '--height', 4096,
-                    '--no-plots',
-                    '--no-remove-lines',
-                    '--continue',
-                    '--crpix-center',
-                    '--new-fits', 'none',
-                    '--temp-axy',
-                    '--solved', 'none',
-                    '--match', 'none',
-                    '--corr', 'none',
-                    '--index-xyls', 'none',
-                    '--rdls', 'none',
-                    '--wcs', self.wcs_initial_fn]
-            if r is not None and d is not None:
-                args.extend(['--ra', r, '--dec', d, '--radius', 5])
-            print('Creating initial WCS using solve-field...')
-            trymakedirs(self.wcs_initial_fn, dir=True)
-            cmd = ' '.join([str(x) for x in ['solve-field'] + args + [self.imgfn]])
-            print('Running:', cmd)
-            os.system(cmd)
+            # Initial astrometry -- using solve-field on the image??
+            with importlib.resources.path('legacypipe', 'data/an-wiro.cfg') as configfn:
+                args = ['--config', configfn,
+                        '--tweak-order', 3,
+                        '--scale-low', self.pixscale * 0.8,
+                        '--scale-high', self.pixscale * 1.2,
+                        '--scale-units', 'app',
+                        '--width', 4096, '--height', 4096,
+                        '--no-plots',
+                        '--no-remove-lines',
+                        '--continue',
+                        '--crpix-center',
+                        '--new-fits', 'none',
+                        '--temp-axy',
+                        '--solved', 'none',
+                        '--match', 'none',
+                        '--corr', 'none',
+                        '--index-xyls', 'none',
+                        '--rdls', 'none',
+                        '--wcs', self.wcs_initial_fn]
+                if r is not None and d is not None:
+                    args.extend(['--ra', r, '--dec', d, '--radius', 5])
+                print('Creating initial WCS using solve-field...')
+                trymakedirs(self.wcs_initial_fn, dir=True)
+                cmd = ' '.join([str(x) for x in ['solve-field'] + args + [self.imgfn]])
+                print('Running:', cmd)
+                os.system(cmd)
         super().run_calibs(**kwargs)
 
     def run_se(self, imgfn, maskfn):

@@ -970,12 +970,12 @@ def read_star_clusters(targetwcs):
     legacypipe/bin/build-cluster-catalog.py.
 
     """
-    from pkg_resources import resource_filename
+    import importlib
     from astrometry.util.starutil_numpy import degrees_between
 
-    clusterfile = resource_filename('legacypipe', 'data/NGC-star-clusters.fits')
-    debug('Reading {}'.format(clusterfile))
-    clusters = fits_table(clusterfile, columns=['ra', 'dec', 'radius', 'type', 'ba', 'pa'])
+    with importlib.resources.path('legacypipe', 'data/NGC-star-clusters.fits') as clusterfile:
+        debug('Reading {}'.format(clusterfile))
+        clusters = fits_table(clusterfile, columns=['ra', 'dec', 'radius', 'type', 'ba', 'pa'])
     clusters.ref_id = np.arange(len(clusters))
 
     assert(np.all(np.isfinite(clusters.radius)))

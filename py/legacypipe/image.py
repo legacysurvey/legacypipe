@@ -1520,28 +1520,27 @@ class LegacySurveyImage(object):
 
     def run_se(self, imgfn, maskfn):
         from astrometry.util.file import trymakedirs
-        sedir = self.survey.get_se_dir()
-        trymakedirs(self.sefn, dir=True)
-        # We write the SE catalog to a temp file then rename, to avoid
-        # partially-written outputs.
-        tmpfn = os.path.join(os.path.dirname(self.sefn),
-                             'tmp-' + os.path.basename(self.sefn))
-        args = [
-            'source-extractor',
-            '-c', os.path.join(sedir, self.camera + '.se'),
-            '-PARAMETERS_NAME', os.path.join(sedir, self.camera + '.param'),
-            '-FILTER_NAME %s' % os.path.join(sedir, self.camera + '.conv'),
-            '-CATALOG_NAME %s' % tmpfn,
-            '-VERBOSE_TYPE QUIET',]
-        if maskfn is not None:
-            args.append('-FLAG_IMAGE %s' % maskfn)
-        args.append(imgfn)
-        cmd = ' '.join(args)
-        print(cmd)
-        rtn = os.system(cmd)
-        if rtn:
-            raise RuntimeError('Command failed: ' + cmd)
-        os.rename(tmpfn, self.sefn)
+        with self.survey.get_se_dir() as sedir:
+            # We write the SE catalog to a temp file then rename, to avoid
+            # partially-written outputs.
+            tmpfn = os.path.join(os.path.dirname(self.sefn),
+                                 'tmp-' + os.path.basename(self.sefn))
+            args = [
+                'source-extractor',
+                '-c', os.path.join(sedir, self.camera + '.se'),
+                '-PARAMETERS_NAME', os.path.join(sedir, self.camera + '.param'),
+                '-FILTER_NAME %s' % os.path.join(sedir, self.camera + '.conv'),
+                '-CATALOG_NAME %s' % tmpfn,
+                '-VERBOSE_TYPE QUIET',]
+            if maskfn is not None:
+                args.append('-FLAG_IMAGE %s' % maskfn)
+            args.append(imgfn)
+            cmd = ' '.join(args)
+            print(cmd)
+            rtn = os.system(cmd)
+            if rtn:
+                raise RuntimeError('Command failed: ' + cmd)
+            os.rename(tmpfn, self.sefn)
 
     def get_psfex_conf(self):
         # Return any additional PsfEx command-line flags desired.
@@ -1551,7 +1550,6 @@ class LegacySurveyImage(object):
     def run_psfex(self, git_version=None, ps=None):
         from astrometry.util.file import trymakedirs
         from legacypipe.survey import get_git_version
-        sedir = self.survey.get_se_dir()
         trymakedirs(self.psffn, dir=True)
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', 'V0.0').strip()
@@ -1569,11 +1567,12 @@ class LegacySurveyImage(object):
         # This is the output filename that psfex will choose (since we tell it the PSF_SUFFIX)
         psftmpfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.psf.tmp')
         psfexflags = self.get_psfex_conf()
-        cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .psf.tmp %s %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, psfexflags, self.sefn)
-        print(cmd)
-        rtn = os.system(cmd)
-        if rtn:
-            raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
+        with self.survey.get_se_dir() as sedir:
+            cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .psf.tmp %s %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, psfexflags, self.sefn)
+            print(cmd)
+            rtn = os.system(cmd)
+            if rtn:
+                raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
 
         # Convert into a "merged psfex" format file.
         T = psfex_single_to_merged(psftmpfn, self.expnum, self.ccdname)

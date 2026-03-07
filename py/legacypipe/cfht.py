@@ -616,16 +616,13 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         return super().get_wcs(hdr=hdr)
 
     def run_solve_field(self):
-        from pkg_resources import resource_filename
+        import importlib
         from astrometry.util.file import trymakedirs
         from legacypipe.survey import create_temp
         # Initial astrometry -- using solve-field on the image
-        dirname = resource_filename('legacypipe', 'data')
-        configfn = os.path.join(dirname, 'an-cfht.cfg')
         primhdr = self.read_image_primary_header()
         hdr = self.read_image_header()
         r,d = self.get_radec_bore(primhdr)
-
         imgfn = self.imgfn
         ext = self.hdu
         tmpimgfn = None
@@ -640,39 +637,40 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             imgfn = tmpimgfn
             ext = 0
 
-        for ds in [2, 4]:
-            args = ['--config', configfn,
-                    '--downsample', ds,
-                    '--objs', 130,
-                    '--tweak-order', 1,
-                    '--scale-low', self.pixscale * 0.8,
-                    '--scale-high', self.pixscale * 1.2,
-                    '--scale-units', 'app',
-                    '--width', 2112, '--height', 4644,
-                    '--no-plots',
-                    '--no-remove-lines',
-                    '--continue',
-                    '--crpix-x', hdr['CRPIX1'],
-                    '--crpix-y', hdr['CRPIX2'],
-                    '--new-fits', 'none',
-                    '--temp-axy',
-                    '--solved', 'none',
-                    '--match', 'none',
-                    '--corr', 'none',
-                    '--index-xyls', 'none',
-                    '--rdls', 'none',
-                    '--wcs', self.wcs_initial_fn,
-                    '--extension', ext]
-            if r is not None and d is not None:
-                args.extend(['--ra', r, '--dec', d, '--radius', 5])
-            print('Creating initial WCS using solve-field...')
-            trymakedirs(self.wcs_initial_fn, dir=True)
-            cmd = ' '.join([str(x) for x in ['solve-field'] + args + [imgfn]])
-            print('Running:', cmd)
-            rtn = os.system(cmd)
-            print('solve-field return value:', rtn)
-            if os.path.exists(self.wcs_initial_fn):
-                break
+        with importlib.resources.path('legacypipe', 'data/an-cfht.cfg') as configfn:
+            for ds in [2, 4]:
+                args = ['--config', configfn,
+                        '--downsample', ds,
+                        '--objs', 130,
+                        '--tweak-order', 1,
+                        '--scale-low', self.pixscale * 0.8,
+                        '--scale-high', self.pixscale * 1.2,
+                        '--scale-units', 'app',
+                        '--width', 2112, '--height', 4644,
+                        '--no-plots',
+                        '--no-remove-lines',
+                        '--continue',
+                        '--crpix-x', hdr['CRPIX1'],
+                        '--crpix-y', hdr['CRPIX2'],
+                        '--new-fits', 'none',
+                        '--temp-axy',
+                        '--solved', 'none',
+                        '--match', 'none',
+                        '--corr', 'none',
+                        '--index-xyls', 'none',
+                        '--rdls', 'none',
+                        '--wcs', self.wcs_initial_fn,
+                        '--extension', ext]
+                if r is not None and d is not None:
+                    args.extend(['--ra', r, '--dec', d, '--radius', 5])
+                print('Creating initial WCS using solve-field...')
+                trymakedirs(self.wcs_initial_fn, dir=True)
+                cmd = ' '.join([str(x) for x in ['solve-field'] + args + [imgfn]])
+                print('Running:', cmd)
+                rtn = os.system(cmd)
+                print('solve-field return value:', rtn)
+                if os.path.exists(self.wcs_initial_fn):
+                    break
 
         if tmpimgfn is not None:
             os.remove(tmpimgfn)

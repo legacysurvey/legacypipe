@@ -151,15 +151,15 @@ def main():
     # test funpack_files?
 
     info('Source Extractor & PsfEx will read the following config files:')
-    sedir = survey.get_se_dir()
-    for (typ, suff) in [('SE config', '.se'),
-                         ('SE params', '.param'),
-                         ('SE convolution filter', '.conv'),
-                         ('PsfEx config', '.psfex'),
-                         ]:
-        fn = os.path.join(sedir, img.camera + suff)
-        ex = os.path.exists(fn)
-        info('  %s: %s (%s)' % (typ, fn, 'exists' if ex else 'does not exist'))
+    with survey.get_se_dir() as sedir:
+        for (typ, suff) in [('SE config', '.se'),
+                             ('SE params', '.param'),
+                             ('SE convolution filter', '.conv'),
+                             ('PsfEx config', '.psfex'),
+                             ]:
+            fn = os.path.join(sedir, img.camera + suff)
+            ex = os.path.exists(fn)
+            info('  %s: %s (%s)' % (typ, fn, 'exists' if ex else 'does not exist'))
 
     info('Special PsfEx flags for this CCD:', survey.get_psfex_conf(img.camera, img.expnum, img.ccdname))
 
