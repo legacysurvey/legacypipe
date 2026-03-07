@@ -1,4 +1,5 @@
 import numpy as np
+import sys
 import os
 from glob import glob
 from astrometry.util.fits import fits_table, merge_tables

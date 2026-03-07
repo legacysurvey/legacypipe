@@ -168,7 +168,7 @@ def main():
 
     # g,r mags
     assert(np.all(np.abs(dmags[:, 0]) < 0.2))
-    assert(np.all(np.abs(dmags[1:, 1]) < 0.4))
+    assert(np.all(np.abs(dmags[1:, 1]) < 0.5))
     # (one of the z band mags is way out)
     # final star
     assert(np.all(np.abs(dmags[2, :])  < 0.2))

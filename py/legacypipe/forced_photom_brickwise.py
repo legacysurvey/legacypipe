@@ -94,7 +94,7 @@ def main():
     else:
         brick = catsurvey.get_brick_by_name(opt.brick)
         if brick is None:
-            raise RunbrickError('No such brick: "%s"' % brickname)
+            raise RunbrickError('No such brick: "%s"' % opt.brick)
         outfn = survey.find_file('tractor-forced', brick=opt.brick, output=True)
         print('Output filename:', outfn)
         #outfn = os.path.join(survey.output_dir, opt.brick[:3], 'tractor-forced-%s.fits' % opt.brick)

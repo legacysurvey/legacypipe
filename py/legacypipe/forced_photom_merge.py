@@ -150,7 +150,7 @@ def main():
         # 'survey-bricks" files of their own -- use the 'survey' one
         # instead.
         brick = None
-        for s in [survey, catsurvey]:
+        for s in [survey]:
             try:
                 brick = s.get_brick_by_name(opt.brick)
                 break
