@@ -672,6 +672,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
             print('Wrote catalog to', opt.write_cat)
 
     surveydir = survey.get_survey_dir()
+    version_hdr = survey.get_output_header()
     del survey
 
     if opt.move_gaia:
@@ -817,7 +818,6 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
 
     forced_phot_add_extra_fields(F, T, ccd, im, tim, opt.derivs)
 
-    version_hdr = survey.get_output_header()
     filename = getattr(ccd, 'image_filename')
     if filename is None:
         # HACK -- print only two directory names + filename of CPFILE.

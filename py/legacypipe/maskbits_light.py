@@ -3,8 +3,6 @@ import os
 
 import numpy as np
 
-#from astrometry.util.ttime import Time
-
 import logging
 logger = logging.getLogger('legacypipe.maskbits-light')
 def info(*args):
@@ -57,7 +55,7 @@ def main():
     from astrometry.util.fits import fits_table
 
     from legacypipe.runs import get_survey
-    from legacypipe.survey import get_git_version, get_dependency_versions, wcs_for_brick
+    from legacypipe.survey import get_dependency_versions, wcs_for_brick
 
     import argparse
     parser = argparse.ArgumentParser()
