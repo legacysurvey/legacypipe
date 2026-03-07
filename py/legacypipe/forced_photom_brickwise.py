@@ -4,7 +4,7 @@ import numpy as np
 import fitsio
 from collections import Counter
 
-from legacypipe.utils import freeze_iers
+from legacypipe.utils import freeze_iers, RunbrickError
 freeze_iers()
 
 from legacypipe.forced_photom import forced_photom_one_ccd, find_missing_sga

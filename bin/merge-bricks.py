@@ -1,4 +1,3 @@
-import fitsio
 import numpy as np
 from glob import glob
 import os

@@ -22,7 +22,6 @@ from legacypipe.bits import REF_MAP_BITS
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 from legacypipe.utils import get_cpu_arch
-from legacypipe.utils import run_ps
 
 rgbkwargs_resid = dict(resids=True)
 
@@ -888,26 +887,19 @@ class OneBlob(object):
         # -Replace original images
 
         brightmap = None
+        # Mask other blobs of bright pixels while fitting a source in a bright blob.
         if self.bright_masking:
             from legacypipe.coadds import make_coadds
-            from scipy.ndimage import label, find_objects, binary_dilation, binary_fill_holes
-            # from astrometry.util.multiproc import multiproc
-            # from legacypipe.detection import detection_maps
-            # # sigh... just coadd and take pixels above threshold?
-            # mp = multiproc()
-            # detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp)
-            # del satmaps
-            # brightmap = np.zeros(self.blobwcs.shape, bool)
-            # for det,detiv in zip(detmaps,detivs):
-            #     detsn = det * np.sqrt(detiv)
-            #     brightmap |= (detsn > 10.)
+            from scipy.ndimage import label, binary_dilation, binary_fill_holes
             brightmap = np.zeros(self.blobwcs.shape, bool)
-            co = make_coadds(self.tims, self.bands, self.blobwcs, allmasks=False, mjdminmax=False)
+            co = make_coadds(self.tims, self.bands, self.blobwcs,
+                             allmasks=False, mjdminmax=False)
             for im,iv in zip(co.coimgs, co.cowimgs):
                 sn = im * np.sqrt(iv)
                 brightmap |= (sn > 10.)
             brightmap = binary_dilation(brightmap, iterations=2)
-            # fill holes for, eg, bright stars with saturated cores.  Should we explicitly fill SATUR?
+            # fill holes for, eg, bright stars with saturated cores.
+            # Should we explicitly fill SATUR?
             brightmap = binary_fill_holes(brightmap)
             brightmap,_ = label(brightmap)
 
@@ -1041,7 +1033,6 @@ class OneBlob(object):
             self.iterstring = ''
 
             if Bnew is not None:
-                from astrometry.util.fits import merge_tables
                 # B.sources is a list of objects... merge() with
                 # fillzero doesn't handle them well.
                 srcs = B.sources

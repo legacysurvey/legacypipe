@@ -533,7 +533,6 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns, bands=None):
         # The sources aren't created if bands=None
         if srcs[0] is not None:
             from legacypipe.catalog import prepare_fits_catalog
-            from tractor import Catalog
             srcs = list(srcs)
             srcs = Catalog(*srcs)
             fake_sga = prepare_fits_catalog(srcs, None, None, bands)
@@ -559,7 +558,6 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns, bands=None):
 
 def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
                           ccd, catalog, opt, zoomslice, radecpoly, outlier_bricks, ps):
-    from functools import reduce
     plots = (ps is not None)
     tlast = Time()
     im = survey.get_image_object(ccd)
@@ -672,6 +670,7 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
             print('Wrote catalog to', opt.write_cat)
 
     surveydir = survey.get_survey_dir()
+    version_hdr = survey.get_output_header()
     del survey
 
     if opt.move_gaia:
@@ -817,7 +816,6 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
 
     forced_phot_add_extra_fields(F, T, ccd, im, tim, opt.derivs)
 
-    version_hdr = survey.get_output_header()
     filename = getattr(ccd, 'image_filename')
     if filename is None:
         # HACK -- print only two directory names + filename of CPFILE.
@@ -1179,9 +1177,6 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
             imdq = dict(vmin=0, vmax=1,
                        interpolation='nearest', origin='lower',
                        cmap='gray')
-
-            xy = np.array([tim.getWcs().positionToPixel(src.getPosition())
-                           for src in cat])
 
             plt.clf()
             if derivs:
