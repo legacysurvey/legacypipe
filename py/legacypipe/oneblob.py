@@ -1973,16 +1973,7 @@ class OneBlob(object):
                 continue
             modelMasks = models.model_masks(i, src)
             tr.setModelMasks(modelMasks)
-            for mmim,tim in zip(modelMasks, self.tims):
-                mask = mmim.get(src)
-                if mask is None:
-                    print('opt: source', src, 'tim', tim,'-> no mm')
-                    continue
-                ie = tim.getInvError()[mask.y0:mask.y1, mask.x0:mask.x1]
-                print('opt: source', src, 'tim', tim, 'mm', mask, 'tim ie in mask: shape',
-                      ie.shape, 'range', ie.min(), ie.max())
             tr.optimize_loop(**self.optargs)
-            print('opt:', src)
             cpu1 = time.process_time()
             cputime[i] += (cpu1 - cpu0)
             done_fitting[i] = True
