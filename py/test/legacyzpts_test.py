@@ -74,7 +74,7 @@ def main():
     I = I[K]
     J = J[K]
     tmags = -2.5*(np.log10(np.vstack((T.flux_g[J], T.flux_r[J], T.flux_z[J]))) - 9).T
-    gmags = np.vstack((G.decam_mag_g[I], G.decam_mag_r[I], G.decam_mag_z[I])).T    
+    gmags = np.vstack((G.decam_mag_g[I], G.decam_mag_r[I], G.decam_mag_z[I])).T
     dmags = tmags - gmags
 
     np.set_printoptions(precision=3, suppress=True)

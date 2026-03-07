@@ -533,7 +533,6 @@ def find_missing_sga(T, chipwcs, survey, surveys, columns, bands=None):
         # The sources aren't created if bands=None
         if srcs[0] is not None:
             from legacypipe.catalog import prepare_fits_catalog
-            from tractor import Catalog
             srcs = list(srcs)
             srcs = Catalog(*srcs)
             fake_sga = prepare_fits_catalog(srcs, None, None, bands)
