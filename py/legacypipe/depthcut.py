@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import fitsio
 from legacypipe.utils import find_unique_pixels
 
 import logging

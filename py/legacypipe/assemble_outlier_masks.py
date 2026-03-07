@@ -44,7 +44,6 @@ def main(survey=None, opt=None, args=None):
     if survey is None:
         survey = LegacySurveyData(survey_dir=opt.survey_dir,
                                   output_dir=opt.out_dir)
-    surveydir = survey.get_survey_dir()
     release = 9999
     version_hdr = survey.get_output_header(release=release)
 

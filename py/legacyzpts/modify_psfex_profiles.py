@@ -8,7 +8,6 @@ import os, warnings
 import numpy as np
 from astropy.table import Table
 import fitsio
-from astropy.io import fits
 from multiprocessing import Pool
 from scipy.optimize import curve_fit
 import argparse

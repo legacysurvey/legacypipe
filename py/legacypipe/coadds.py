@@ -51,7 +51,7 @@ def stage_just_coadd(W=3600, H=3600, pixscale=0.262, brickname=None,
                      #
                      **kwargs):
     # stage_tims:
-    from legacypipe.runbrick import get_brick
+    from legacypipe.runbrick import get_brick, get_runbrick_header
     from legacypipe.survey import get_git_version
 
     custom_brick, brick, targetwcs, targetrd = get_brick(survey, ra, dec, brickname, W, H, pixscale,
@@ -615,7 +615,7 @@ class Coadd(object):
             self.andmask[self.nobs == 0] = 0
 
         if self.nsatur:
-            self.satmap = (self.satmap >= nsatur)
+            self.satmap = (self.satmap >= self.nsatur)
 
         if self.psf_images:
             self.psf_img /= np.sum(self.psf_img)
