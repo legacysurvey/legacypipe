@@ -9,7 +9,7 @@ import os
 #     survey-ccds-<camera>-<drN>.fits
 # where camera and the DR number are inputs.
 # Note that there are no checks on whether the input file list consists of annotated files.
-# 
+#
 # M. Landriau, September 2019
 
 def main(args=None):
