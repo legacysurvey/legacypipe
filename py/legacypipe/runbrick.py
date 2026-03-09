@@ -3848,8 +3848,9 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
         fluxes = {}
         for b in clean_bands:
             fluxes[b] = TF.get('flux_%s' % b)[i]
-        src = src.copy()
-        src.brightness = NanoMaggies(**fluxes)
+        if src is not None:
+            src = src.copy()
+            src.brightness = NanoMaggies(**fluxes)
         cat2.append(src)
 
     # print('TF:', len(TF))
