@@ -310,7 +310,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
         for coimg, coiv, band in zip(C.coimgs, C.cowimgs, bands):
            skypix = refmask * (coiv>0)
            skypix_mask = _build_objmask(coimg, coiv, skypix)
-           _, skymedian, _ = sigma_clipped_stats(coimg, mask=np.logical_not(skypix_mask), sigma=3.0)
+           _skymean, _skymedian, _skysig = sigma_clipped_stats(coimg, mask=np.logical_not(skypix_mask), sigma=3.0)
 
            skydict.update({'{}SKYMN00'.format(band.upper()): (np.float32(_skymean), 'mean {} sky'.format(band))})
            skydict.update({'{}SKYMD00'.format(band.upper()): (np.float32(_skymedian), 'median {} sky'.format(band))})
@@ -320,7 +320,7 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
            I = np.where(allbands == band)[0]
            for ii in I:
                goodpix = (tims[ii].inverr > 0)
-               tims[ii].data[goodpix] -= skymedian
+               tims[ii].data[goodpix] -= _skymedian
                tims[ii].setImage(tims[ii].data)
                # print('Tim', tims[ii], 'after subtracting skymedian: median', np.median(tims[ii].data))
 
@@ -328,15 +328,15 @@ def ubercal_skysub(tims, targetwcs, survey, brickname, bands, mp,
            if plots2:
                plt.clf()
                plt.hist(coimg.ravel(), bins=50, range=(-3,3), density=True)
-               plt.axvline(skymedian, color='k')
+               plt.axvline(_skymedian, color='k')
                for ii in I:
                    #print('Tim', tims[ii], 'median', np.median(tims[ii].data))
-                   plt.hist((tims[ii].data - skymedian).ravel(), bins=50, range=(-3,3), histtype='step', density=True)
+                   plt.hist((tims[ii].data - _skymedian).ravel(), bins=50, range=(-3,3), histtype='step', density=True)
                plt.title('Band %s: tim pix & skymedian' % band)
                ps.savefig()
 
                # Produce skymedian-subtracted, masked image for later RGB plot
-               coimg -= skymedian
+               coimg -= _skymedian
                coimg[~skypix_mask] = 0.
                #coimg[np.logical_not(skymask * (coiv > 0))] = 0.
 

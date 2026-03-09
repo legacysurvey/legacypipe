@@ -4,7 +4,7 @@ import queue
 import threading
 import multiprocessing
 from multiprocessing.pool import (Pool, IMapUnorderedIterator, _PoolCache,
-                                  INIT, RUN, TERMINATE, MaybeEncodingError)
+                                  INIT, RUN, TERMINATE, mapstar)
 from multiprocessing import get_context, util
 
 class TrackingIMapUnorderedIterator(IMapUnorderedIterator):
@@ -347,7 +347,7 @@ class TrackingPool(Pool):
 
         util.debug('result handler exiting: len(cache)=%s, thread._state=%s',
               len(cache), thread._state)
-    
+
     def _repopulate_pool(self):
         self._repopulate_pool_static(self._ctx, self.Process,
                                      self._processes,
@@ -473,8 +473,6 @@ def test_stream(x):
     return x
 
 if __name__ == '__main__':
-    import time
-
     job_id_map = {}
     in_iter = test_input_generator(100, job_id_map)
     with TrackingPool(4) as pool:

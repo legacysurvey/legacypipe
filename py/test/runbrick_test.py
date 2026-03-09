@@ -43,7 +43,7 @@ def rbmain():
     test_4(ceres, psfex)
     test_4b()
     sys.exit(0)
-    
+
     oldargs = sys.argv
     sys.argv = [sys.argv[0]]
     main()
@@ -185,8 +185,8 @@ def rbmain():
                '--stage', 'image_coadds'])
 
     # Check that the dither_seed gets set the same each time.
-    hdr = fitsio.read_header('out-testcase12/coadd/cus/custom-346684p12791/legacysurvey-custom-346684p12791-image-r.fits.fz', ext=1)
-    dither = hdr['ZDITHER0']
+    #hdr = fitsio.read_header('out-testcase12/coadd/cus/custom-346684p12791/legacysurvey-custom-346684p12791-image-r.fits.fz', ext=1)
+    #dither = hdr['ZDITHER0']
     #assert(dither == 1652)
 
     main(args=['--radec', '346.684', '12.791', '--width', '100',
@@ -593,7 +593,7 @@ def test_4(ceres, psfex):
                '--force-all', '--no-write', '--coadd-bw',
                '--unwise-dir', os.path.join(surveydir, 'images', 'unwise'),
                '--unwise-tr-dir', os.path.join(surveydir,'images','unwise-tr'),
-               '--blob-image', '--no-hybrid-psf',
+               '--blob-image', #'--no-hybrid-psf',
                '--survey-dir', surveydir,
                '--outdir', outdir, '-v', '--no-wise-ceres'])
     print('Checking for calib file', fn)

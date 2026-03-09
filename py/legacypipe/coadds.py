@@ -1,4 +1,3 @@
-import time
 import numpy as np
 import fitsio
 from astrometry.util.fits import fits_table
@@ -48,13 +47,16 @@ def stage_just_coadd(W=3600, H=3600, pixscale=0.262, brickname=None,
                      saturated_pix=None,
                      less_masking=False,
                      nsatur=None,
+                     release=None,
                      #
                      **kwargs):
     # stage_tims:
+    from legacypipe.runbrick import get_brick, get_runbrick_header, get_ccds
+    from legacypipe.survey import get_git_version, read_one_tim
+
     custom_brick, brick, targetwcs, targetrd = get_brick(survey, ra, dec, brickname, W, H, pixscale,
                                                          target_extent)
     H,W = targetwcs.shape
-    brickid = brick.brickid
     brickname = brick.brickname
 
     # Create FITS header with version strings
@@ -65,7 +67,7 @@ def stage_just_coadd(W=3600, H=3600, pixscale=0.262, brickname=None,
                                          command_line, brick, targetrd)
     # Find CCDs to read
     ccds = get_ccds(survey, targetwcs, bands, brick, min_mjd, max_mjd)
-    
+
     # Create Image objects for each CCD
     ims = []
     info('Keeping', len(ccds), 'CCDs:')
@@ -117,6 +119,7 @@ def stage_just_coadd(W=3600, H=3600, pixscale=0.262, brickname=None,
         psfsize = do_max = psf_images = False
         satur_val = 10.
         sbscale = True
+        detmaps = False
 
         coadd = Coadd(band, H, W, detmaps, mods, blobmods, unweighted, ngood,
                       xy, allmasks, anymasks, nsatur, psfsize, do_max, psf_images,
@@ -612,7 +615,7 @@ class Coadd(object):
             self.andmask[self.nobs == 0] = 0
 
         if self.nsatur:
-            self.satmap = (self.satmap >= nsatur)
+            self.satmap = (self.satmap >= self.nsatur)
 
         if self.psf_images:
             self.psf_img /= np.sum(self.psf_img)

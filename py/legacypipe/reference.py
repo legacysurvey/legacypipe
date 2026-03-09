@@ -1,6 +1,7 @@
 import os
 import warnings
 import numpy as np
+from collections import Counter
 import fitsio
 from astrometry.util.fits import fits_table, merge_tables
 
@@ -24,7 +25,6 @@ def get_reference_sources(survey, targetwcs, bands,
                           galaxy_margin=None):
     # If bands = None, does not create sources.
     from astrometry.libkd.spherematch import match_radec
-    from collections import Counter
 
     H,W = targetwcs.shape
     H,W = int(H),int(W)
@@ -200,7 +200,6 @@ def get_reference_sources(survey, targetwcs, bands,
     refs.cut((xx > -keeprad) * (xx < W+keeprad) *
              (yy > -keeprad) * (yy < H+keeprad))
     debug('Cut to', len(refs), 'touching this brick')
-    from collections import Counter
     debug('ref_cats:', Counter(refs.ref_cat))
     # mark ones that are actually inside the brick area.
     refs.in_bounds = ((refs.ibx >= 0) * (refs.ibx < W) *
@@ -584,8 +583,7 @@ def get_large_galaxy_version(fn):
 def read_large_galaxies(survey, targetwcs, bands, clean_columns=True,
                         extra_columns=None,
                         max_radius=None):
-    from astrometry.util.starutil_numpy import degrees_between
-    from legacypipe.bits import SGA_FITMODE, sga_fitmode_type
+    from legacypipe.bits import SGA_FITMODE
 
     # max_radius (in deg) should be the largest radius in the SGA catalog!
     if max_radius is None:
@@ -701,7 +699,6 @@ def read_sga(targetwcs, survey, rc, dc, brick_radius, max_radius):
 
     galaxies.ignore_source = np.zeros(len(galaxies), bool)
     if 'ref_cat' in galaxies.get_columns():
-        from collections import Counter
         info('SGA catalog already has ref_cat, with entries:', Counter(galaxies.ref_cat))
     else:
         galaxies.ref_cat = np.array([refcat] * len(galaxies))
@@ -741,7 +738,7 @@ def read_sga(targetwcs, survey, rc, dc, brick_radius, max_radius):
             galaxies.freezeparams = (galaxies.preburned * galaxies.freeze)
 
             galaxies.set_galaxy_maskbit = galaxies.islargegalaxy
-            
+
             # set ref_cat and ref_id for galaxies outside the footprint
             I = np.flatnonzero(np.logical_not(galaxies.in_footprint_grz))
             galaxies.ref_id[I] = galaxies.sga_id[I]
@@ -854,8 +851,8 @@ def get_galaxy_sources(galaxies, bands):
 
     # awful
     is_ellipse_cat = ('sersic' in cols)
-    print('Ellipse cat?', is_ellipse_cat)
-    print('bands', bands)
+    info('Reading SGA %s cat with bands %s' %
+         ('ellipse' if is_ellipse_cat else 'parent', ', '.join(bands)))
 
     if is_ellipse_cat:
         # The LogRadius and EllipseWithPriors classes have a minimum log-radius (log(0.01))
@@ -932,7 +929,6 @@ def get_galaxy_sources(galaxies, bands):
             srcs[ii] = src
 
     else:
-        print('SGA parent - sources')
         for ii,g in enumerate(galaxies):
             # Initialize each source with an exponential disk--
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag))
@@ -973,12 +969,13 @@ def read_star_clusters(targetwcs):
     legacypipe/bin/build-cluster-catalog.py.
 
     """
-    from pkg_resources import resource_filename
+    from legacypipe.utils import get_data_file
     from astrometry.util.starutil_numpy import degrees_between
 
-    clusterfile = resource_filename('legacypipe', 'data/NGC-star-clusters.fits')
-    debug('Reading {}'.format(clusterfile))
-    clusters = fits_table(clusterfile, columns=['ra', 'dec', 'radius', 'type', 'ba', 'pa'])
+    with get_data_file('data', 'NGC-star-clusters.fits') as clusterfile:
+        clusterfile = str(clusterfile)
+        debug('Reading {}'.format(clusterfile))
+        clusters = fits_table(clusterfile, columns=['ra', 'dec', 'radius', 'type', 'ba', 'pa'])
     clusters.ref_id = np.arange(len(clusters))
 
     assert(np.all(np.isfinite(clusters.radius)))

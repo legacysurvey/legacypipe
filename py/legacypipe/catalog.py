@@ -128,6 +128,7 @@ def _get_tractor_fits_values(T, cat, pat):
             assert(isinstance(src.shape, EllipseE))
         # Grab elliptical shapes
         if isinstance(src, RexGalaxy):
+            # only radius
             shape[i,0] = src.shape.getAllParams()[0]
         elif isinstance(src, (ExpGalaxy, DevGalaxy, SersicGalaxy)):
             shape[i,:] = src.shape.getAllParams()

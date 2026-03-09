@@ -2,13 +2,12 @@
 # # srun -N 1 -C cpu -c 256 -t 04:00:00 -q interactive python modify_psfex_profiles.py --ccd_path /dvs_ro/cfs/cdirs/cosmo/work/legacysurvey/dr11/survey-ccds-decam-dr11-merged.fits --base_dir /dvs_ro/cfs/cdirs/cosmo/work/legacysurvey/dr11/ --output_dir /pscratch/sd/r/rongpu/dr11/psfex-patched --version DR11 > modify_psfex_profiles.log
 # Or simply get the patched PSFEx model for an (unpatched) PSFEx file:
 # # from legacyzpts import modify_psfex_profiles
-# # computed_patched_psfex('/dvs_ro/cfs/cdirs/cosmo/work/legacysurvey/dr11/calib/psfex/decam/CP/V5.5/CP20230515/c4d_230516_085330_ooi_z_v1-psfex.fits', 'z')
+# # modify_psfex_profiles.computed_patched_psfex('/dvs_ro/cfs/cdirs/cosmo/work/legacysurvey/dr11/calib/psfex/decam/CP/V5.5/CP20230515/c4d_230516_085330_ooi_z_v1-psfex.fits', 'z')
 
 import os, warnings
 import numpy as np
 from astropy.table import Table
 import fitsio
-from astropy.io import fits
 from multiprocessing import Pool
 from scipy.optimize import curve_fit
 import argparse
@@ -57,11 +56,18 @@ n_processes = 256
 radius_lim1, radius_lim2 = 5.0, 6.0
 radius_lim3, radius_lim4 = 7., 8.
 
+known_filters = ['g', 'r', 'i', 'z', 'M411', 'M438', 'M464', 'M490', 'M517']
+
 params = {
 'g_weight2': 0.00045, 'g_plexp2': -2.,
 'r_weight2': 0.00033, 'r_plexp2': -2.,
 'i_weight2': 0.00033, 'i_plexp2': -2.,
 'z_alpha2': 17.650, 'z_beta2': 1.7, 'z_weight2': 0.0145,
+'M411_weight2': 0.00027125, 'M411_plexp2': -1.6901,
+'M438_weight2': 0.00023144, 'M438_plexp2': -1.6375,
+'M464_weight2': 0.00017692, 'M464_plexp2': -1.6324,
+'M490_weight2': 0.00016855, 'M490_plexp2': -1.5664,
+'M517_weight2': 0.00013529, 'M517_plexp2': -1.5163,
 }
 
 outlier_ccd_list = ['N20', 'S8', 'S10', 'S18', 'S21', 'S27']
@@ -141,7 +147,7 @@ def computed_patched_psfex(psfex_path, band, recompute=False):
             # popt, pcov =  curve_fit(get_sb_moffat, radius, psfi_flat/(pixscale**2))
             mask = (radius>radius_min) & (radius<radius_max)
             try:
-                popt, pcov = curve_fit(get_sb_moffat, radius[mask], psfi_flat[mask]/(pixscale**2), bounds=((0, 1.8), np.inf))
+                popt, _ = curve_fit(get_sb_moffat, radius[mask], psfi_flat[mask]/(pixscale**2), bounds=((0, 1.8), np.inf))
                 alpha, beta = popt
             except RuntimeError:
                 print("Error: "+psfex_path+", "+ccdname+".")
@@ -228,7 +234,7 @@ def computed_patched_psfex(psfex_path, band, recompute=False):
 def _wrapper(ccd_index):
 
     image_filename = ccd['image_filename'][ccd_index]
-    image_path = os.path.join(_base_dir, 'images', image_filename)
+    #image_path = os.path.join(_base_dir, 'images', image_filename)
     band = ccd['filter'][ccd_index]
     # band = fitsio.read_header(image_path)['BAND']
     #print('band = {}'.format(band))
@@ -291,16 +297,16 @@ def main():
         print('{} Y-band images are excluded.'.format(np.sum(mask)))
         ccd = ccd[~mask]
 
-    mask = np.in1d(ccd['filter'], ['g', 'r', 'i', 'z'])
+    mask = np.in1d(ccd['filter'], known_filters)
     if np.sum(~mask)>0:
-        raise ValueError('Exposure list contains supported filters.')
+        raise ValueError('Exposure list contains unsupported filters.')
 
     if _psf_patch_ver is None:
         from legacypipe.survey import get_git_version
         _psf_patch_ver = get_git_version()
 
     with Pool(processes=n_processes) as pool:
-        res = pool.map(_wrapper, np.arange(len(ccd)))
+        pool.map(_wrapper, np.arange(len(ccd)))
 
     print('All done!', time.strftime('%H:%M:%S', time.gmtime(time.time() - time_start)))
 

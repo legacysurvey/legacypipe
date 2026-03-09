@@ -96,8 +96,9 @@ RUN git clone https://github.com/legacysurvey/unwise_psf.git
 # The Tractor
 RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
-    && cp setup-with-ceres-and-cython.py setup.py \
+    && python3.10 setup.py build_ext --with-ceres --with-cython --inplace \
     && python3.10 -m pip install -v . \
+    && python3.11 setup.py build_ext --with-ceres --with-cython --inplace \
     && python3.11 -m pip install -v . \
     && rm -R $(find . -name "*.o" -o -name "*.so")
 

@@ -1,9 +1,6 @@
 import sys
-import os
 
 import numpy as np
-
-#from astrometry.util.ttime import Time
 
 import logging
 logger = logging.getLogger('legacypipe.maskbits-light')
@@ -57,9 +54,7 @@ def main():
     from astrometry.util.fits import fits_table
 
     from legacypipe.runs import get_survey
-    from legacypipe.survey import (
-        get_git_version, get_version_header, get_dependency_versions,
-        wcs_for_brick)
+    from legacypipe.survey import get_dependency_versions, wcs_for_brick
 
     import argparse
     parser = argparse.ArgumentParser()
@@ -103,17 +98,12 @@ def main():
     targetrd = np.array([targetwcs.pixelxy2radec(x,y) for x,y in
                          [(1,1),(W,1),(W,H),(1,H),(1,1)]])
 
-    program_name = 'maskbits-light.py'
-    release = None
-    command_line = ' '.join(sys.argv)
-
     # Create FITS header with version strings
-    gitver = get_git_version()
-    version_header = get_version_header(program_name, survey.survey_dir, release,
-                                        git_version=gitver)
+    version_header = survey.get_output_header()
     deps = get_dependency_versions(None, None, None, None, mpl=False)
     for name,value,comment in deps:
         version_header.add_record(dict(name=name, value=value, comment=comment))
+    command_line = ' '.join(sys.argv)
     if command_line is not None:
         version_header.add_record(dict(name='CMDLINE', value=command_line,
                                        comment='runbrick command-line'))

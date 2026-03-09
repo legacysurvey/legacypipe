@@ -16,15 +16,12 @@ from tractor.galaxy import DevGalaxy, ExpGalaxy
 from tractor.patch import ModelMask
 from tractor.sersic import SersicGalaxy
 
-from legacypipe.survey import (RexGalaxy,
-                               LegacyEllipseWithPriors, LegacySersicIndex, get_rgb)
+from legacypipe.survey import (LegacyEllipseWithPriors, LegacySersicIndex,
+                               RexGalaxy, get_rgb)
 from legacypipe.bits import REF_MAP_BITS
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 from legacypipe.utils import get_cpu_arch
-from legacypipe.utils import run_ps
-
-rgbkwargs_resid = dict(resids=True)
 
 import logging
 logger = logging.getLogger('legacypipe.oneblob')
@@ -37,15 +34,13 @@ def debug(*args):
 def is_debug():
     return logger.isEnabledFor(logging.DEBUG)
 
-chat = debug
-
 # Determines the order of elements in the DCHISQ array.
 MODEL_NAMES = ['psf', 'rex', 'dev', 'exp', 'ser']
 
 quit_now = False
 
 def sigusr1(sig, stackframe):
-    print('SIGUSR1 was received in worker PID %i' % os.getpid())
+    info('SIGUSR1 was received in worker PID %i' % os.getpid())
     global quit_now
     # only raise the exception once
     if not quit_now:
@@ -81,8 +76,8 @@ def one_blob(args):
         return None
 
     if quit_now:
-        print('Quit_now is set; not processing blob %s' % args.blobname)
-        # don't return None -- this is a different thing!
+        info('Quit_now is set; not processing blob %s' % args.blobname)
+        # don't return None -- this triggers different behavior
         raise QuitNowException()
 
     from legacypipe.runbrick import is_gpu_worker
@@ -176,10 +171,10 @@ def one_blob(args):
 
     except QuitNowException:
         if ob is not None:
-            print('Caught QuitNowException; returning checkpoint state for blob %s' % args.blobname)
+            info('Caught QuitNowException; returning checkpoint state for blob %s' % args.blobname)
             ob.B = B
         else:
-            print('Caught QuitNowException; ob None for blob %s' % args.blobname)
+            info('Caught QuitNowException; ob None for blob %s' % args.blobname)
         return ob
     finally:
         if B is not None:
@@ -292,7 +287,7 @@ class OneBlob(object):
             for tim in self.tims:
                 try:
                     mod = tr.getModelImage(tim)
-                except:
+                except Exception:
                     print('Exception getting frozen-galaxies model.')
                     print('galaxies:', frozen_galaxies)
                     print('tim:', tim)
@@ -923,26 +918,19 @@ class OneBlob(object):
         # -Replace original images
 
         brightmap = None
+        # Mask other blobs of bright pixels while fitting a source in a bright blob.
         if self.bright_masking:
             from legacypipe.coadds import make_coadds
-            from scipy.ndimage import label, find_objects, binary_dilation, binary_fill_holes
-            # from astrometry.util.multiproc import multiproc
-            # from legacypipe.detection import detection_maps
-            # # sigh... just coadd and take pixels above threshold?
-            # mp = multiproc()
-            # detmaps,detivs,satmaps = detection_maps(self.tims, self.blobwcs, self.bands, mp)
-            # del satmaps
-            # brightmap = np.zeros(self.blobwcs.shape, bool)
-            # for det,detiv in zip(detmaps,detivs):
-            #     detsn = det * np.sqrt(detiv)
-            #     brightmap |= (detsn > 10.)
+            from scipy.ndimage import label, binary_dilation, binary_fill_holes
             brightmap = np.zeros(self.blobwcs.shape, bool)
-            co = make_coadds(self.tims, self.bands, self.blobwcs, allmasks=False, mjdminmax=False)
+            co = make_coadds(self.tims, self.bands, self.blobwcs,
+                             allmasks=False, mjdminmax=False)
             for im,iv in zip(co.coimgs, co.cowimgs):
                 sn = im * np.sqrt(iv)
                 brightmap |= (sn > 10.)
             brightmap = binary_dilation(brightmap, iterations=2)
-            # fill holes for, eg, bright stars with saturated cores.  Should we explicitly fill SATUR?
+            # fill holes for, eg, bright stars with saturated cores.
+            # Should we explicitly fill SATUR?
             brightmap = binary_fill_holes(brightmap)
             brightmap,_ = label(brightmap)
 
@@ -1076,7 +1064,6 @@ class OneBlob(object):
             self.iterstring = ''
 
             if Bnew is not None:
-                from astrometry.util.fits import merge_tables
                 # B.sources is a list of objects... merge() with
                 # fillzero doesn't handle them well.
                 srcs = B.sources
@@ -2026,7 +2013,6 @@ class OneBlob(object):
                 continue
             modelMasks = models.model_masks(i, src)
             tr.setModelMasks(modelMasks)
-            #print('opt_indiv: setting modelMasks:', modelMasks)
             tr.optimize_loop(**self.optargs)
             cpu1 = time.process_time()
             cputime[i] += (cpu1 - cpu0)
@@ -2253,6 +2239,7 @@ class OneBlob(object):
             mods = list(resid.getChiImages())
             coimgs,_ = quick_coadds(tims, self.bands, wcs, images=mods,
                                     fill_holes=False)
+            rgbkwargs_resid = dict(resids=True)
             dimshow(get_rgb(coimgs,self.bands, **rgbkwargs_resid))
             return
 

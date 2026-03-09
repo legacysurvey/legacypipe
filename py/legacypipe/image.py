@@ -2,6 +2,7 @@ import os
 import warnings
 import numpy as np
 import fitsio
+from astrometry.util.file import trymakedirs
 from astrometry.util.fits import fits_table
 from tractor.splinesky import SplineSky
 from tractor import PixelizedPsfEx, PixelizedPSF
@@ -19,7 +20,6 @@ def debug(*args):
 '''
 Base class for handling the details of images from the different cameras we process.
 '''
-
 class LegacySurveyImage(object):
     '''
     A base class containing common code for the images we handle.
@@ -404,7 +404,7 @@ class LegacySurveyImage(object):
             try:
                 ra_bore = hmsstring2ra(primhdr['RA'])
                 dec_bore = dmsstring2dec(primhdr['DEC'])
-            except:
+            except Exception:
                 pass
         if dec_bore is None and 'TELRA' in primhdr.keys():
             ra_bore = hmsstring2ra(primhdr['TELRA'])
@@ -533,7 +533,7 @@ class LegacySurveyImage(object):
         "annotated" files.  (The objects are passed as *ann* and *photom*,
         along with the annotated header *hdr*.)
         '''
-        pass
+        return
 
     def __str__(self):
         return self.name
@@ -846,7 +846,6 @@ class LegacySurveyImage(object):
                 plt.suptitle(self.name + ' expnum %i' % self.expnum)
                 ps.savefig()
 
-                from tractor.splinesky import SplineSky
                 if isinstance(sky, SplineSky):
                     grid = sky.get_grid()
                     print('grid shape', grid.shape)
@@ -1359,7 +1358,6 @@ class LegacySurveyImage(object):
 
         skyclass = Ti.skyclass.strip()
         clazz = get_class_from_name(skyclass)
-        from tractor.splinesky import SplineSky
         if issubclass(clazz, SplineSky):
             # Remove any padding
             h,w = Ti.gridh, Ti.gridw
@@ -1519,29 +1517,28 @@ class LegacySurveyImage(object):
         return tmpimgfn,tmpmaskfn
 
     def run_se(self, imgfn, maskfn):
-        from astrometry.util.file import trymakedirs
-        sedir = self.survey.get_se_dir()
         trymakedirs(self.sefn, dir=True)
-        # We write the SE catalog to a temp file then rename, to avoid
-        # partially-written outputs.
-        tmpfn = os.path.join(os.path.dirname(self.sefn),
-                             'tmp-' + os.path.basename(self.sefn))
-        args = [
-            'source-extractor',
-            '-c', os.path.join(sedir, self.camera + '.se'),
-            '-PARAMETERS_NAME', os.path.join(sedir, self.camera + '.param'),
-            '-FILTER_NAME %s' % os.path.join(sedir, self.camera + '.conv'),
-            '-CATALOG_NAME %s' % tmpfn,
-            '-VERBOSE_TYPE QUIET',]
-        if maskfn is not None:
-            args.append('-FLAG_IMAGE %s' % maskfn)
-        args.append(imgfn)
-        cmd = ' '.join(args)
-        print(cmd)
-        rtn = os.system(cmd)
-        if rtn:
-            raise RuntimeError('Command failed: ' + cmd)
-        os.rename(tmpfn, self.sefn)
+        with self.survey.get_se_dir() as sedir:
+            # We write the SE catalog to a temp file then rename, to avoid
+            # partially-written outputs.
+            tmpfn = os.path.join(os.path.dirname(self.sefn),
+                                 'tmp-' + os.path.basename(self.sefn))
+            args = [
+                'source-extractor',
+                '-c', os.path.join(sedir, self.camera + '.se'),
+                '-PARAMETERS_NAME', os.path.join(sedir, self.camera + '.param'),
+                '-FILTER_NAME %s' % os.path.join(sedir, self.camera + '.conv'),
+                '-CATALOG_NAME %s' % tmpfn,
+                '-VERBOSE_TYPE QUIET',]
+            if maskfn is not None:
+                args.append('-FLAG_IMAGE %s' % maskfn)
+            args.append(imgfn)
+            cmd = ' '.join(args)
+            print(cmd)
+            rtn = os.system(cmd)
+            if rtn:
+                raise RuntimeError('Command failed: ' + cmd)
+            os.rename(tmpfn, self.sefn)
 
     def get_psfex_conf(self):
         # Return any additional PsfEx command-line flags desired.
@@ -1549,9 +1546,7 @@ class LegacySurveyImage(object):
         return psfexflags
 
     def run_psfex(self, git_version=None, ps=None):
-        from astrometry.util.file import trymakedirs
         from legacypipe.survey import get_git_version
-        sedir = self.survey.get_se_dir()
         trymakedirs(self.psffn, dir=True)
         primhdr = self.read_image_primary_header()
         plver = primhdr.get('PLVER', 'V0.0').strip()
@@ -1569,11 +1564,12 @@ class LegacySurveyImage(object):
         # This is the output filename that psfex will choose (since we tell it the PSF_SUFFIX)
         psftmpfn = os.path.join(psfdir, os.path.basename(self.sefn).replace('.fits','') + '.psf.tmp')
         psfexflags = self.get_psfex_conf()
-        cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .psf.tmp %s %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, psfexflags, self.sefn)
-        print(cmd)
-        rtn = os.system(cmd)
-        if rtn:
-            raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
+        with self.survey.get_se_dir() as sedir:
+            cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .psf.tmp %s %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, psfexflags, self.sefn)
+            print(cmd)
+            rtn = os.system(cmd)
+            if rtn:
+                raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
 
         # Convert into a "merged psfex" format file.
         T = psfex_single_to_merged(psftmpfn, self.expnum, self.ccdname)
@@ -1622,8 +1618,6 @@ class LegacySurveyImage(object):
                 largegalaxy_frac_constsky=0.1):
         from scipy.ndimage import binary_dilation, uniform_filter
         from scipy.stats import sigmaclip
-        from astrometry.util.file import trymakedirs
-        from astrometry.util.miscutils import estimate_mode
         from legacypipe.reference import (get_reference_sources, get_galaxy_sources,
                                           get_reference_map)
         from legacypipe.bits import REF_MAP_BITS
@@ -1957,7 +1951,7 @@ class LegacySurveyImage(object):
             ps.savefig()
 
         imgname = '%s-%i-%s %s' % (self.camera, self.expnum, self.ccdname, self.band)
-                                   
+
         show_img(orig_img - initsky, title='Image %s' % imgname)
         if template is not None:
             show_img(template, title='Sky template for %s' % imgname)
@@ -2018,7 +2012,7 @@ class LegacySurveyImage(object):
             self.imshow(blobgood, **maskima)
             plt.title('Blob mask for %s' % imgname)
             ps.savefig()
-            
+
         if boxcar_mask:
             plt.clf()
             self.imshow(boxcargood, **maskima)
@@ -2088,13 +2082,13 @@ class LegacySurveyImage(object):
         # plt.title('Column-wise median')
         # plt.suptitle('masked image - sky model')
         # ps.savefig()
-        # 
+        #
         # #(wt > 0)
         # isgoodrows = np.any(wt>0, axis=1)
         # isgoodcols = np.any(wt>0, axis=0)
         # goodrows = np.flatnonzero(isgoodrows)
         # goodcols = np.flatnonzero(isgoodcols)
-        # 
+        #
         # plt.clf()
         # plt.subplot(2,1,1)
         # plt.plot(goodrows, np.median(img, axis=1)[isgoodrows], 'b-')
@@ -2106,7 +2100,7 @@ class LegacySurveyImage(object):
         # plt.title('Column-wise median')
         # plt.suptitle('Unmasked image (blue) and sky (red) model')
         # ps.savefig()
-        # 
+        #
         # plt.clf()
         # plt.subplot(2,1,1)
         # plt.plot(goodrows, (1. - np.sum(allgood, axis=1) / len(goodcols))[isgoodrows], 'k-')
@@ -2116,7 +2110,7 @@ class LegacySurveyImage(object):
         # plt.title('Column-wise')
         # plt.suptitle('Fraction of masked pixels')
         # ps.savefig()
-        # 
+        #
         # plt.clf()
         # plt.hist((img[good * refgood] - initsky).ravel(), bins=50)
         # plt.title('Unmasked pixels')
@@ -2235,7 +2229,7 @@ class LegacySurveyImage(object):
             #print('Not deleting temp files for SE!')
             for fn in todelete:
                 os.unlink(fn)
-        
+
         if psfex:
             try:
                 self.run_psfex(**psfex_kwargs)
@@ -2310,7 +2304,6 @@ class NormalizedPsf(object):
         return img
 
     def _sampleImage(self, img, dx, dy, **kwargs):
-        
         xl,yl,img = super()._sampleImage(img, dx, dy, **kwargs)
         n = img.sum()
         if n != 0:

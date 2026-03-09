@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 from legacypipe.survey import tim_get_resamp
 
@@ -640,7 +641,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         blobs,_ = label(saddlemap)
         thisblob = blobs[y-y0, x-x0]
         saddlemap *= (blobs == thisblob)
-        from collections import Counter
 
         # python3.11 / scipy 1.15.3 seems to require this to be an int
         oslcs = find_objects(saddlemap.astype(np.uint8))
