@@ -77,6 +77,7 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
             debug('Read inner Moffat parameters', (inner_alpha, inner_beta),
                   'from PsfEx file')
 
+    info('Halo subtraction: applying radius scaling of %.2f' % radius_scaling)
     H,W = wcs.shape
     H = int(H)
     W = int(W)
