@@ -1,6 +1,6 @@
-FROM ubuntu:24.04 as working
+FROM ubuntu:24.04 AS working
 
-ENV DEBIAN_FRONTEND noninteractive
+ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt -y update && apt install -y apt-utils \
  && apt install -y --no-install-recommends \
@@ -121,7 +121,6 @@ RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
 
 #FROM working
 
-#    && git checkout dr10.6 \
 # The Tractor
 RUN git clone https://github.com/dstndstn/tractor.git tractor \
     && cd tractor \
@@ -141,7 +140,7 @@ RUN git clone https://bitbucket.org/dstn/qdo.git \
 
 # ?
 RUN mkdir /homedir && chmod 777 /homedir
-ENV HOME /homedir
+ENV HOME=/homedir
 
 # otherwise "fatal: detected dubious ownership in repository" upon 'git describe'
 RUN git config --global --add safe.directory /src/legacypipe \
@@ -187,20 +186,12 @@ RUN git clone https://github.com/legacysurvey/imagine.git \
  && cp /src/imagine/docker/cutouts/cutout /usr/local/bin/ \
  && chmod 755 /usr/local/bin/cutout
 
-ENV PYTHONPATH /src/unwise_psf/py:/src/legacypipe/py:/usr/local/lib/python:/src/imagine
+ENV PYTHONPATH=/src/unwise_psf/py:/src/legacypipe/py:/usr/local/lib/python:/src/imagine
 SHELL ["/bin/bash", "-c"]
 ENTRYPOINT ["/bin/bash", "-c"]
 CMD ["/bin/bash"]
 
 ENV LEGACYPIPE_DIR=/src/legacypipe/py
-
-# RUN cd tractor \
-#   && git fetch \
-#   && git checkout main-gpu \
-#   && git pull \
-#   && python setup.py build_ext --with-ceres --with-cython --inplace \
-#   && pip install . --break-system-packages \
-#   && echo 1.7 && git describe
 
 RUN python -O -m compileall \
     -x lib2to3 \
@@ -215,8 +206,17 @@ RUN python -O -m compileall \
     /usr/local/lib/python \
     /src/unwise_psf/py
 
+RUN cd tractor \
+  && git fetch \
+  && git pull \
+  && python setup.py build_ext --with-ceres --with-cython --inplace \
+  && pip install . --break-system-packages \
+  && echo dr10.9 && git describe
+
 RUN git clone https://github.com/legacysurvey/legacypipe.git \
   && cd legacypipe \
+  && git pull \
   && python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
   && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
-  && git describe
+  && git describe \
+  && echo 3
