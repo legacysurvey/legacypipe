@@ -64,7 +64,7 @@ class WiroImage(LegacySurveyImage):
         # TELDEC  = '-4:-50:-23.-9'
         try:
             return super.get_radec_bore(primhdr)
-        except:
+        except Exception:
             return None,None
 
     def get_expnum(self, primhdr):

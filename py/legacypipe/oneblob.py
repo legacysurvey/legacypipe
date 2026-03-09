@@ -291,7 +291,7 @@ class OneBlob(object):
             for tim in self.tims:
                 try:
                     mod = tr.getModelImage(tim)
-                except:
+                except Exception:
                     print('Exception getting frozen-galaxies model.')
                     print('galaxies:', frozen_galaxies)
                     print('tim:', tim)

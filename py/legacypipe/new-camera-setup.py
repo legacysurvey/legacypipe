@@ -540,7 +540,7 @@ def main():
                                                  phot.pmra, phot.pmdec, phot.parallax)]
         else:
             pos = [RaDecPos(ra, dec) for ra,dec in zip(phot.ra, phot.dec)]
-        
+
         xy = [twcs.positionToPixel(p) for p in pos]
         xy = np.array(xy)
         # image cutout half-size

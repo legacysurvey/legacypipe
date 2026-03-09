@@ -653,12 +653,12 @@ def forced_photom_one_ccd(survey, catsurvey_north, catsurvey_south, resolve_dec,
         if catsurvey_south is not None:
             try:
                 catsurvey_south.get_bricks_readonly()
-            except:
+            except Exception:
                 catsurvey_south.bricks = survey.get_bricks_readonly()
         if catsurvey_north is not None:
             try:
                 catsurvey_north.get_bricks_readonly()
-            except:
+            except Exception:
                 catsurvey_north.bricks = survey.get_bricks_readonly()
 
         chipwcs = tim.subwcs
@@ -1251,7 +1251,7 @@ def run_forced_phot(cat, tim, ceres=True, derivs=False, agn=False,
                     F.ddec = (F.flux_ddec / F.flux) * 3600.
                 F.dra [F.flux == 0] = 0.
                 F.ddec[F.flux == 0] = 0.
-                # 
+
                 dra_pix = F.dra[i] / pixscale
                 ddec_pix = F.ddec[i] / pixscale
                 dra_pix = ddec_pix = 0

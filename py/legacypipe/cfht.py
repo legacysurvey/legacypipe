@@ -357,7 +357,7 @@ class MegaPrimeImage(LegacySurveyImage):
     #     trymakedirs(self.sefn, dir=True)
     #     # We write the SE catalog to a temp file then rename, to avoid
     #     # partially-written outputs.
-    # 
+    #
     #     from legacypipe.survey import create_temp
     #     import fitsio
     # 
