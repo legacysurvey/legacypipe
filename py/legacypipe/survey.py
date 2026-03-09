@@ -1118,6 +1118,9 @@ class LegacySurveyData(object):
     def get_default_release(self):
         return None
 
+    def get_halo_kwargs(self):
+        return {}
+
     def ccds_for_fitting(self, brick, ccds):
         # By default, use all.
         return None

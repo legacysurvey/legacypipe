@@ -101,6 +101,9 @@ class IbisData(LegacySurveyData):
                             comment='Survey names'))
         return hdr
 
+    def get_halo_kwargs(self):
+        return dict(radius_scaling=2.)
+
 class IbisWideData(IbisData):
     def ccds_for_fitting(self, brick, ccds):
         import numpy as np

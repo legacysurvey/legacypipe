@@ -700,7 +700,9 @@ def stage_halos(pixscale=None, targetwcs=None,
                 from legacypipe.runbrick_plots import halo_plots_before, halo_plots_after
                 coimgs = halo_plots_before(tims, bands, targetwcs, halostars, ps)
 
-            subtract_halos(tims, halostars, bands, mp, plots, ps, old_calibs_ok=old_calibs_ok)
+            halo_kwargs = survey.get_halo_kwargs()
+            subtract_halos(tims, halostars, bands, mp, plots, ps,
+                           old_calibs_ok=old_calibs_ok, **halo_kwargs)
 
             if plots:
                 halo_plots_after(tims, bands, targetwcs, halostars, coimgs, ps)
@@ -3676,7 +3678,9 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
         if len(Igaia):
             from legacypipe.halos import subtract_halos
             halostars = refobjs[Igaia]
-            subtract_halos(tims, halostars, forced_bands, mp, plots, ps, old_calibs_ok=old_calibs_ok)
+            halo_kwargs = survey.get_halo_kwargs()
+            subtract_halos(tims, halostars, forced_bands, mp, plots, ps,
+                           old_calibs_ok=old_calibs_ok, **halo_kwargs)
     # subtract SGA galaxies outside the chip?
     # (only if we have SGA photometry for this band...)
 
