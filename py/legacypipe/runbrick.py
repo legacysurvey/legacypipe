@@ -3838,7 +3838,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
                     ('apflux_img_ivar_%s',  'apflux_ivar'),
                     ('apflux_masked_%s',    'apflux_masked'),
                     ('apflux_resid_%s',     'apflux_resid'),
-                    #('apflux_blobresid_%s', 'apflux_blobresid'),
+                    ('apflux_blobresid_%s', 'apflux_blobresid'),
                     ]:
         for iband,band in enumerate(clean_bands):
             TF.set('%s_%s' % (dst, band), C.AP.get(src % band).astype(np.float32))
