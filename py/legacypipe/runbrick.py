@@ -59,16 +59,61 @@ def debug(*args):
     log_debug(logger, args)
 
 def formatwarning(message, category, filename, lineno, line=None):
-    #return 'Warning: %s (%s:%i)' % (message, filename, lineno)
     return 'Warning: %s' % (message)
-
 warnings.formatwarning = formatwarning
 
-def runbrick_global_init():
-    from tractor.galaxy import disable_galaxy_cache
-    # ignore SIGUSR1
+_LEGACYPIPE_GPU_CONTEXT = None
+def is_gpu_worker():
+    if _LEGACYPIPE_GPU_CONTEXT is None:
+        return False
+    return _LEGACYPIPE_GPU_CONTEXT.get('is_gpu_worker', False)
+
+class CupyMemMeas(object):
+    '''
+    A measurement class for the *astrometry.util.Time* class that measures Cupy memory use
+    '''
+    def __init__(self):
+        import cupy as cp
+        mempool = cp.get_default_memory_pool()
+        # total number of bytes allocated by the pool
+        self.mem_total = mempool.total_bytes()
+        # memory in active use in arrays
+        self.mem_used = mempool.used_bytes()
+        # acquired but not used by the pool
+        self.mem_free = mempool.free_bytes()
+        # upper limit of memory allocation
+        self.mem_limit = mempool.get_limit()
+    def format_diff(self, other):
+        gb = 1024.**3
+        return 'Cupy mem: %.3f GB total, %.3f GB used, %.3f GB free, %.3f GB max' % (
+            self.mem_total/gb, self.mem_used/gb, self.mem_free/gb, self.mem_limit/gb)
+
+def runbrick_init_gpu_worker(gpu_id_list):
+    my_gpu_id = gpu_id_list.pop()
+    del gpu_id_list
+    info('Initializing GPU worker: pid %i, using GPU id %i' % (os.getpid(), my_gpu_id))
+
+    import cupy as cp
+    cp.cuda.Device(my_gpu_id).use()
+
+    StageTime.add_measurement_once(CupyMemMeas)
+    Time.add_measurement(CupyMemMeas)
+
+    global _LEGACYPIPE_GPU_CONTEXT
+    _LEGACYPIPE_GPU_CONTEXT = dict(is_gpu_worker=True)
+    runbrick_init_worker_common()
+
+def runbrick_init_cpu_worker():
+    info('Initializing CPU worker: pid %i' % (os.getpid()))
+    runbrick_init_worker_common()
+
+def runbrick_init_worker_common():
+    # ignore SIGUSR1 - for blob checkpointing
     signal.signal(signal.SIGUSR1, signal.SIG_IGN)
-    disable_galaxy_cache()
+    runbrick_init()
+
+def runbrick_init():
+    pass
 
 def stage_tims(W=3600, H=3600, pixscale=0.262, brickname=None,
                survey=None,
@@ -340,10 +385,11 @@ def get_brick(survey, ra, dec, brickname, W, H, pixscale, target_extent):
 def get_runbrick_header(program_name, survey, release, gitver,
                         unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir,
                         command_line, brick, targetrd):
-    from legacypipe.survey import get_version_header, get_dependency_versions
+    from legacypipe.survey import get_dependency_versions
     from astrometry.util.starutil_numpy import ra2hmsstring, dec2dmsstring
 
-    version_header = get_version_header(program_name, survey.survey_dir, release, git_version=gitver)
+    version_header = survey.get_output_header(program_name=program_name,
+                                              release=release, git_version=gitver)
 
     deps = get_dependency_versions(unwise_dir, unwise_tr_dir, unwise_modelsky_dir, galex_dir)
     for name,value,comment in deps:
@@ -654,7 +700,9 @@ def stage_halos(pixscale=None, targetwcs=None,
                 from legacypipe.runbrick_plots import halo_plots_before, halo_plots_after
                 coimgs = halo_plots_before(tims, bands, targetwcs, halostars, ps)
 
-            subtract_halos(tims, halostars, bands, mp, plots, ps, old_calibs_ok=old_calibs_ok)
+            halo_kwargs = survey.get_halo_kwargs()
+            subtract_halos(tims, halostars, bands, mp, plots, ps,
+                           old_calibs_ok=old_calibs_ok, **halo_kwargs)
 
             if plots:
                 halo_plots_after(tims, bands, targetwcs, halostars, coimgs, ps)
@@ -1176,8 +1224,11 @@ def stage_fitblobs(T=None,
                    nsigma=None,
                    large_galaxies_force_pointsource=True,
                    less_masking=False,
+                   bright_masking=False,
                    sub_blobs=False,
-                   use_ceres=True, mp=None,
+                   use_ceres=True,
+                   mp=None,
+                   mp_hi=None,
                    checkpoint_filename=None,
                    checkpoint_period=600,
                    write_pickle_filename=None,
@@ -1197,7 +1248,7 @@ def stage_fitblobs(T=None,
     import time
     from tractor import Catalog
     from legacypipe.oneblob import MODEL_NAMES
-    #return None
+
 
     record_event and record_event('stage_fitblobs: starting')
     _add_stage_version(version_header, 'FITB', 'fitblobs')
@@ -1356,7 +1407,7 @@ def stage_fitblobs(T=None,
 
     frozen_galaxies = get_frozen_galaxies(T, blobsrcs, blobmap, targetwcs, cat)
     refmap = get_blobiter_ref_map(refobjs, less_masking, targetwcs)
-    # We pass this list in to _blob_iter; it appends any blob numbers
+    # We pass this list in to get_blob_meta; it appends any blob numbers
     # that were processed as sub-blobs.
     ran_sub_blobs = None
     if sub_blobs:
@@ -1368,30 +1419,56 @@ def stage_fitblobs(T=None,
 
     job_id_map = {}
 
-    # Create the iterator over blobs to process
-    blobiter = _blob_iter(job_id_map,
-                          brickname, blobslices, blobsrcs, blobmap, targetwcs, tims,
-                          cat, T, bands, plots, ps, reoptimize, iterative, iterative_nsigma,
-                          use_ceres,
-                          refmap, large_galaxies_force_pointsource, less_masking, brick,
-                          frozen_galaxies,
-                          skipblobs=skipblobs,
-                          blobxy=blobxy,
-                          single_thread=(mp is None or mp.pool is None),
-                          max_blobsize=max_blobsize, custom_brick=custom_brick,
-                          enable_sub_blobs=sub_blobs,
-                          ran_sub_blobs=ran_sub_blobs,
-                          halfdone_blob_map=halfdone_blob_map,
-                          do_segmentation=do_segmentation)
+    # Create the list of blobs to process
+    blob_meta = get_blob_metadata(
+        blobslices, blobsrcs, blobmap, targetwcs, T, refmap, brick,
+        skipblobs=skipblobs, max_blobsize=max_blobsize, custom_brick=custom_brick,
+        blobxy=blobxy, enable_sub_blobs=sub_blobs)
+
+    from collections import deque
+    blob_meta = deque(blob_meta)
+
+    single_thread=(mp is None or mp.pool is None)
+    args = (brickname, targetwcs, tims, cat, refmap, frozen_galaxies, ran_sub_blobs)
+    oneblob_kwargs = dict(
+        nblobs=len(blobslices),
+        brickwcs=targetwcs,
+        bands=bands,
+        do_segmentation=do_segmentation,
+        use_ceres=use_ceres,
+        plots=plots, ps=ps,
+        reoptimize=reoptimize,
+        iterative=iterative,
+        iterative_nsigma=iterative_nsigma,
+        large_galaxies_force_pointsource=large_galaxies_force_pointsource,
+        less_masking=less_masking,
+        bright_masking=bright_masking,
+    )
+    kwargs = dict(single_thread=single_thread,
+                  halfdone_blob_map=halfdone_blob_map,
+                  oneblob_kwargs=oneblob_kwargs)
+
+    job_id_map_high = {}
+    job_id_map_low = {}
+
+    if mp_hi is None:
+        iter_hi = iter_deque(blob_meta, True, job_id_map_high, *args, **kwargs)
+        Riter_hi = mp.imap_unordered(_bounce_one_blob, iter_hi)
+        Riter_lo = None
+    else:
+        iter_hi = iter_deque(blob_meta, True, job_id_map_high, *args, **kwargs)
+        iter_lo = iter_deque(blob_meta, False, job_id_map_low, *args, **kwargs)
+        Riter_hi = mp_hi.imap_unordered(_bounce_one_blob, iter_hi)
+        Riter_lo =    mp.imap_unordered(_bounce_one_blob, iter_lo)
 
     if checkpoint_filename is None:
         # FIXME -- add worker-died checks & logging here
         print ("No checkpoint")
-        R.extend(mp.map(_bounce_one_blob, blobiter))
+        R = list(Riter_hi)
+        if Riter_lo is not None:
+            R.extend(list(Riter_lo))
     else:
         from astrometry.util.ttime import CpuMeas
-        # Begin running one_blob on each blob...
-        Riter = mp.imap_unordered(_bounce_one_blob, blobiter)
         # measure wall time and write out checkpoint file periodically.
         last_checkpoint = CpuMeas()
         n_finished = 0
@@ -1432,12 +1509,14 @@ def stage_fitblobs(T=None,
                     traceback.print_exc()
 
             dt = tnow.wall_seconds_since(last_printout)
-            if dt > 60:
-                last_printout = tnow
-                if hasattr(Riter, 'get_running_jobs'):
-                    procs_last = print_running_jobs(Riter, job_id_map, job_status_map, procs_last)
+            # FIXME
+            # if dt > 60:
+            #     last_printout = tnow
+            #     if hasattr(Riter, 'get_running_jobs'):
+            #         procs_last = print_running_jobs(Riter, job_id_map, job_status_map, procs_last)
 
             if signal_quitting:
+                # FIXME - mp_hi too
                 if not closed_pool:
                     info('Main thread: got SIGUSR1 - closing pool...')
                     mp.pool.close()
@@ -1447,6 +1526,10 @@ def stage_fitblobs(T=None,
                     info('Main thread: waiting for jobs:')
                     print_running_jobs(Riter, job_id_map, job_status_map, procs_last)
 
+            if Riter_hi is None and Riter_lo is None:
+                info('Both iterators finished - done!')
+                break
+
             # Wait for results (with timeout)
             from legacypipe.trackingpool import PoolWorkerDiedException
             try:
@@ -1455,9 +1538,28 @@ def stage_fitblobs(T=None,
                     timeout = min(10, timeout)
                     if signal_quitting:
                         info('Main thread: waiting for result...')
-                    #else:
-                    #    debug('Main thread: waiting for result...')
-                    r = Riter.next(timeout)
+
+                    r = None
+                    for Riter,hi,t_out in [(Riter_hi, True, 0.),
+                                           (Riter_lo, False, 0.),
+                                           (Riter_hi, True, timeout),
+                                           (Riter_lo, False, timeout),]:
+                        if Riter is None:
+                            continue
+                        try:
+                            r = Riter.next(t_out)
+                            #info('Riter', ('hi' if hi else 'lo'), 'got', r)
+                        except StopIteration:
+                            info('Reached end of', ('hi' if hi else 'lo'))
+                            if hi:
+                                Riter_hi = None
+                            else:
+                                Riter_lo = None
+                            continue
+                        except multiprocessing.TimeoutError:
+                            pass
+                        if r is not None:
+                            break
 
                     if not signal_quitting:
                         rstr = ''
@@ -1470,7 +1572,19 @@ def stage_fitblobs(T=None,
                         debug('Main thread: got result: [%s]' % rstr)
 
                 else:
-                    r = next(Riter)
+                    r = None
+                    if Riter_hi is not None:
+                        try:
+                            r = next(Riter_hi)
+                        except StopIteration:
+                            info('Reached end of hi')
+                            Riter_hi = None
+                    if Riter_lo is not None:
+                        try:
+                            r = next(Riter_lo)
+                        except StopIteration:
+                            info('Reached end of lo')
+                            Riter_lo = None
 
                 if signal_quitting:
                     if r is None:
@@ -1487,12 +1601,6 @@ def stage_fitblobs(T=None,
                 R.append(r)
                 n_finished += 1
                 n_finished_total += 1
-            except StopIteration:
-                debug('Main thread: reached end of results')
-                break
-            except multiprocessing.TimeoutError:
-                #debug('Main thread: timed out waiting for result')
-                continue
             except PoolWorkerDiedException as e:
                 info('Main thread: worker died')
                 info('A worker died (maybe OOM-killed?) while processing a blob.')
@@ -1581,7 +1689,6 @@ def stage_fitblobs(T=None,
     if len(BB):
         # Pull out the source indices...
         II = BB.Isrcs
-        newcat = BB.sources
         # ... and make the table T parallel with BB.
         # For iterative sources:
         n_iter = np.sum(II < 0)
@@ -1598,7 +1705,21 @@ def stage_fitblobs(T=None,
             T.iterative = np.zeros(len(T), bool)
         assert(np.all(II >= 0))
         assert(np.all(II < len(T)))
+        # As with blobs, sub-blobs can generate a situation where the
+        # same source (same Isrc / II) scatters across the sub-blob
+        # unique area so ends up in this final catalog twice.  (They
+        # can also scatter the opposite way so they appear zero times,
+        # but that is a silent failure!)
+        _,U = np.unique(II, return_index=True)
+        if len(U) < len(II):
+            # Arbitrarily select the first one to keep!
+            II = II[U]
+            BB.cut(U)
+            del U
+        assert(np.all(II >= 0))
+        assert(np.all(II < len(T)))
         assert(len(np.unique(II)) == len(II))
+        newcat = BB.sources
         T.cut(II)
         del BB.Isrcs, II
         assert(len(T) == len(BB))
@@ -1655,7 +1776,8 @@ def stage_fitblobs(T=None,
                   'blob_symm_nimages', 'bx0', 'by0',
                   'hit_limit', 'hit_ser_limit', 'hit_r_limit',
                   'dchisq',
-                  'force_keep_source', 'fit_background', 'forced_pointsource']:
+                  'force_keep_source', 'fit_background', 'forced_pointsource',
+                  'ran_on_gpu']:
             T.set(k, BB.get(k))
 
     # Merge "special" sources and T_refbail back in.
@@ -2013,17 +2135,134 @@ def _check_checkpoints(R, blobslices, brickname):
         keepR.append(ri)
     return keepR, halfdone_blobs
 
-def _blob_iter(job_id_map,
-               brickname, blobslices, blobsrcs, blobmap, targetwcs, tims, cat, T, bands,
-               plots, ps, reoptimize, iterative, iterative_nsigma, use_ceres, refmap,
-               large_galaxies_force_pointsource, less_masking,
-               brick, frozen_galaxies, single_thread=False,
-               skipblobs=None, max_blobsize=None, custom_brick=False,
-               blobxy=None,
-               enable_sub_blobs=False,
-               ran_sub_blobs=None,
+def get_subtim_args(tims, targetwcs, bx0,bx1, by0,by1, single_thread):
+    rr,dd = targetwcs.pixelxy2radec(1 + np.array([bx0,bx0,bx1,bx1]),
+                                    1 + np.array([by0,by1,by1,by0]))
+    subtimargs = []
+    for tim in tims:
+        h,w = tim.shape
+        _,x,y = tim.subwcs.radec2pixelxy(rr,dd)
+        x -= 1.
+        y -= 1.
+        sx0,sx1 = x.min(), x.max()
+        sy0,sy1 = y.min(), y.max()
+        if sx1 < 0 or sy1 < 0 or sx0 > w or sy0 > h:
+            continue
+        sx0 = int(np.clip(int(np.floor(sx0)), 0, w-1))
+        sx1 = int(np.clip(int(np.ceil (sx1)), 0, w-1)) + 1
+        sy0 = int(np.clip(int(np.floor(sy0)), 0, h-1))
+        sy1 = int(np.clip(int(np.ceil (sy1)), 0, h-1)) + 1
+        subslc = slice(sy0,sy1),slice(sx0,sx1)
+        subimg = tim.getImage   ()[subslc]
+        subie  = tim.getInvError()[subslc]
+        if tim.dq is None:
+            subdq = None
+        else:
+            subdq  = tim.dq[subslc]
+        subwcs = tim.getWcs().shifted(sx0, sy0)
+        subsky = tim.getSky().shifted(sx0, sy0)
+        subpsf = tim.getPsf().getShifted(sx0, sy0)
+        subwcsobj = tim.subwcs.get_subimage(sx0, sy0, sx1-sx0, sy1-sy0)
+        tim.imobj.psfnorm = tim.psfnorm
+        tim.imobj.galnorm = tim.galnorm
+        # FIXME -- maybe the cache is worth sending?
+        if hasattr(tim.psf, 'clear_cache'):
+            tim.psf.clear_cache()
+        # Yuck!  If we're not running with --threads AND oneblob.py modifies the data,
+        # bad things happen!
+        if single_thread:
+            subimg = subimg.copy()
+            subie = subie.copy()
+            subdq = subdq.copy()
+        subtimargs.append((subimg, subie, subdq, subwcs, subwcsobj,
+                           tim.getPhotoCal(),
+                           subsky, subpsf, tim.name, tim.band, tim.sig1, tim.imobj))
+    return subtimargs
+
+def iter_deque(blob_meta, high_priority, job_id_map,
+               brickname, targetwcs, tims, cat, refmap,
+               frozen_galaxies, ran_sub_blobs,
+               single_thread=False,
                halfdone_blob_map=None,
-               do_segmentation=True):
+               oneblob_kwargs=None
+               ):
+    from legacypipe.oneblob import OneBlobArgs
+
+    if oneblob_kwargs is None:
+        oneblob_kwargs = {}
+
+    if halfdone_blob_map is None:
+        halfdone_blob_map = {}
+    else:
+        info('Half-done blobs:', halfdone_blob_map.keys())
+
+    job_id = 0
+    while True:
+        global signal_quitting
+        if signal_quitting:
+            info('iter_deque (%s): signal_quitting' % ('high' if high_priority else 'low'))
+            break
+
+        if high_priority:
+            try:
+                task = blob_meta.popleft()
+            except IndexError:
+                info('High-priority blob iterator: ran out of elements')
+                break
+        else:
+            try:
+                task = blob_meta.pop()
+            except IndexError:
+                info('Low-priority blob iterator: ran out of elements')
+                break
+
+        iblob = task['iblob']
+        debug('High' if high_priority else 'Low', 'priority: blob', iblob)
+        if task['size'] == -1:
+            job_id_map[job_id] = (brickname, task['nblob_idx'])
+            yield (brickname, iblob, None, None)
+            job_id += 1
+            continue
+
+        bx0, bx1, by0, by1 = task['coords']
+        Isrcs = task['Isrcs']
+        sub_idx = task.get('sub_idx')
+        display_name = task.get('sub_name', f"{task['nblob_idx']}")
+
+        subtimargs = get_subtim_args(tims, targetwcs, bx0, bx1, by0, by1, single_thread)
+
+        job_id_map[job_id] = (brickname, display_name)
+        job_id += 1
+        if sub_idx is not None and ran_sub_blobs is not None:
+            ran_sub_blobs.append(int(iblob))
+
+        if sub_idx is not None:
+            halfdone = halfdone_blob_map.get((int(iblob),sub_idx))
+        else:
+            halfdone = halfdone_blob_map.get(int(iblob))
+        if halfdone is not None:
+            info('Found a mid-way checkpoint for blob %s' % (task['blobname']))
+
+        fro_gals = frozen_galaxies.get(iblob, [])
+        if single_thread:
+            # FIXME -- any additional properties that need to be copied?
+            fro_gals = [g.copy() for g in fro_gals]
+        yield (brickname, (iblob, sub_idx) if sub_idx is not None else iblob,
+               task.get('unique_bounds'),
+               OneBlobArgs(blobname=task['blobname'], iblob=iblob, Isrcs=Isrcs,
+                           bx0=bx0, by0=by0, blobw=bx1-bx0, blobh=by1-by0,
+                           # "blobmask" has already been cut to this blob, so don't use sub_slc
+                           blobmask=task['blobmask'],
+                           timargs=subtimargs, srcs=[cat[i] for i in Isrcs],
+                           refmap=refmap[by0:by1, bx0:bx1],
+                           frozen_galaxies=fro_gals,
+                           halfdone=halfdone,
+                           **oneblob_kwargs))
+
+def get_blob_metadata(
+        blobslices, blobsrcs, blobmap, targetwcs, T, refmap, brick,
+        skipblobs=None, max_blobsize=None, custom_brick=False,
+        blobxy=None, enable_sub_blobs=False):
     '''
     *blobmap*: integer image map, with -1 indicating no-blob, other values indexing
         into *blobslices*,*blobsrcs*.
@@ -2033,55 +2272,7 @@ def _blob_iter(job_id_map,
     '''
     from legacypipe.bits import REF_MAP_BITS
     from collections import Counter
-    from legacypipe.oneblob import OneBlobArgs
 
-    def get_subtim_args(tims, targetwcs, bx0,bx1, by0,by1, single_thread):
-        rr,dd = targetwcs.pixelxy2radec([bx0,bx0,bx1,bx1],[by0,by1,by1,by0])
-        subtimargs = []
-        for tim in tims:
-            h,w = tim.shape
-            _,x,y = tim.subwcs.radec2pixelxy(rr,dd)
-            sx0,sx1 = x.min(), x.max()
-            sy0,sy1 = y.min(), y.max()
-            #print('blob extent in pixel space of', tim.name, ': x',
-            # (sx0,sx1), 'y', (sy0,sy1), 'tim shape', (h,w))
-            if sx1 < 0 or sy1 < 0 or sx0 > w or sy0 > h:
-                continue
-            sx0 = int(np.clip(int(np.floor(sx0 - 1)), 0, w-1))
-            sx1 = int(np.clip(int(np.ceil (sx1 - 1)), 0, w-1)) + 1
-            sy0 = int(np.clip(int(np.floor(sy0 - 1)), 0, h-1))
-            sy1 = int(np.clip(int(np.ceil (sy1 - 1)), 0, h-1)) + 1
-            subslc = slice(sy0,sy1),slice(sx0,sx1)
-            subimg = tim.getImage   ()[subslc]
-            subie  = tim.getInvError()[subslc]
-            if tim.dq is None:
-                subdq = None
-            else:
-                subdq  = tim.dq[subslc]
-            subwcs = tim.getWcs().shifted(sx0, sy0)
-            subsky = tim.getSky().shifted(sx0, sy0)
-            subpsf = tim.getPsf().getShifted(sx0, sy0)
-            subwcsobj = tim.subwcs.get_subimage(sx0, sy0, sx1-sx0, sy1-sy0)
-            tim.imobj.psfnorm = tim.psfnorm
-            tim.imobj.galnorm = tim.galnorm
-            # FIXME -- maybe the cache is worth sending?
-            if hasattr(tim.psf, 'clear_cache'):
-                tim.psf.clear_cache()
-            # Yuck!  If we're not running with --threads AND oneblob.py modifies the data,
-            # bad things happen!
-            if single_thread:
-                subimg = subimg.copy()
-                subie = subie.copy()
-                subdq = subdq.copy()
-            subtimargs.append((subimg, subie, subdq, subwcs, subwcsobj,
-                               tim.getPhotoCal(),
-                               subsky, subpsf, tim.name, tim.band, tim.sig1, tim.imobj))
-        return subtimargs
-
-    if halfdone_blob_map is None:
-        halfdone_blob_map = {}
-    else:
-        info('Half-done blobs:', halfdone_blob_map.keys())
     skipblobset = set(skipblobs or [])
 
     blobvals = Counter(blobmap[blobmap >= 0])
@@ -2098,12 +2289,6 @@ def _blob_iter(job_id_map,
     all_tasks_metadata = []
 
     Nblobs = len(blobslices)
-    common_blob_args = dict(nblobs=Nblobs, brickwcs=targetwcs, bands=bands,
-                            plots=plots, ps=ps, reoptimize=reoptimize, iterative=iterative,
-                            iterative_nsigma=iterative_nsigma, use_ceres=use_ceres,
-                            large_galaxies_force_pointsource=large_galaxies_force_pointsource,
-                            less_masking=less_masking,
-                            do_segmentation=do_segmentation)
 
     for nblob, iblob in enumerate(blob_order):
         bslc = blobslices[iblob]
@@ -2199,9 +2384,6 @@ def _blob_iter(job_id_map,
                         ok = False
                         for x,y in blobxy:
                             if x >= s_bx0 and x < s_bx1 and y >= s_by0 and y < s_by1:
-                                # We filter for being in the whole blob before even calling _blob_iter,
-                                # so just checking the bounds of the sub-blob should be sufficient.
-                                #if blobmask[y-by0, x-bx0]:
                                 ok = True
                                 break
                         if not ok:
@@ -2232,7 +2414,7 @@ def _blob_iter(job_id_map,
                         'blobmask': sub_mask,
                         'onex': s_bx0,
                         'oney': s_by0,
-                        'unique_bounds': (bx0+uniqx[j], bx0+uniqx[j+1], by0+uniqy[i], by0+uniqy[i+1])
+                        'unique_bounds': (bx0+uniqx[j], bx0+uniqx[j+1], by0+uniqy[i], by0+uniqy[i+1]),
                     })
 
     # Determine sorting metric: 'nsrcs' if any sub-blobs exist, else 'size'
@@ -2241,55 +2423,7 @@ def _blob_iter(job_id_map,
 
     # Sort - use a lambda to pull the chosen metric from the metadata dictionaries
     all_tasks_metadata.sort(key=lambda x: x.get(sort_metric, 0), reverse=True)
-
-    # Yield
-    job_id = 0
-    total_tasks = len(all_tasks_metadata)
-    for rank, task in enumerate(all_tasks_metadata):
-        task_rank = rank + 1
-        iblob = task['iblob']
-
-        global signal_quitting
-        if signal_quitting:
-            info('_blob_iter: signal_quitting')
-            break
-
-        if task['size'] == -1:
-            job_id_map[job_id] = (brickname, task['nblob_idx'])
-            yield (brickname, iblob, None, None)
-            job_id += 1
-            continue
-
-        bx0, bx1, by0, by1 = task['coords']
-        Isrcs = task['Isrcs']
-        sub_idx = task.get('sub_idx')
-        display_name = task.get('sub_name', f"{task['nblob_idx']}")
-
-        subtimargs = get_subtim_args(tims, targetwcs, bx0, bx1, by0, by1, single_thread)
-
-        job_id_map[job_id] = (brickname, display_name)
-        job_id += 1
-        if sub_idx is not None and ran_sub_blobs is not None:
-            ran_sub_blobs.append(int(iblob))
-
-        if sub_idx is not None:
-            halfdone = halfdone_blob_map.get((int(iblob),sub_idx))
-        else:
-            halfdone = halfdone_blob_map.get(int(iblob))
-        if halfdone is not None:
-            info('Found a mid-way checkpoint for blob %s' % (task['blobname']))
-
-        yield (brickname, (iblob, sub_idx) if sub_idx is not None else iblob,
-               task.get('unique_bounds'),
-               OneBlobArgs(blobname=task['blobname'], iblob=iblob, Isrcs=Isrcs,
-                           bx0=bx0, by0=by0, blobw=bx1-bx0, blobh=by1-by0,
-                           # "blobmask" has already been cut to this blob, so don't use sub_slc
-                           blobmask=task['blobmask'],
-                           timargs=subtimargs, srcs=[cat[i] for i in Isrcs],
-                           refmap=refmap[by0:by1, bx0:bx1],
-                           frozen_galaxies=frozen_galaxies.get(iblob, []),
-                           halfdone=halfdone,
-                           **common_blob_args))
+    return all_tasks_metadata
 
 def _bounce_one_blob(X):
     '''This wraps the one_blob function for multiprocessing purposes (and
@@ -3441,6 +3575,13 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     tlast = Time()
     record_event and record_event('stage_forced_phot: starting')
 
+    _add_stage_version(version_header, 'FORCED', 'forced')
+    version_header.add_record(dict(name='FBANDS', value=','.join(forced_bands),
+                                   comment='Force-photometry bands'))
+    for i,band in enumerate(forced_bands):
+        version_header.add_record(dict(name='FBAND%i' % i, value=band,
+                                       comment='Forced-photometry band'))
+
     # Before we begin, free the *tims* to reduce our memory use,
     # before reading in the *forced_bands* imaging data.
 
@@ -3537,7 +3678,9 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
         if len(Igaia):
             from legacypipe.halos import subtract_halos
             halostars = refobjs[Igaia]
-            subtract_halos(tims, halostars, forced_bands, mp, plots, ps, old_calibs_ok=old_calibs_ok)
+            halo_kwargs = survey.get_halo_kwargs()
+            subtract_halos(tims, halostars, forced_bands, mp, plots, ps,
+                           old_calibs_ok=old_calibs_ok, **halo_kwargs)
     # subtract SGA galaxies outside the chip?
     # (only if we have SGA photometry for this band...)
 
@@ -4068,6 +4211,7 @@ def stage_writecat(
 
     # FIXME - maskbits, set i-band bits
     with survey.write_output('tractor', brick=brickname) as out:
+        T,columns,units,primhdr = survey.modify_tractor_catalog(T, columns, units, primhdr)
         T.writeto(None, columns=columns, units=units, primheader=primhdr,
                   extname='CATALOG', fits_object=out.fits)
 
@@ -4195,7 +4339,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               subsky_radii=None,
               reoptimize=False,
               iterative=False,
-              iterative_nsigma=False,
+              iterative_nsigma=None,
               wise=True,
               outliers=True,
               cache_outliers=False,
@@ -4231,6 +4375,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               unwise_coadds=True,
               bail_out=False,
               do_segmentation=True,
+              bright_masking=False,
               ceres=True,
               wise_ceres=True,
               galex_ceres=True,
@@ -4243,6 +4388,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               save_galex_psf=False,
               save_coadd_psf=False,
               threads=None,
+              ngpu=0,
+              gpu_ids=[],
+              threads_per_gpu=16,
               plots=False, plots2=False, coadd_bw=False,
               plot_base=None, plot_number=0,
               command_line=None,
@@ -4259,7 +4407,6 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               wise_checkpoint_period=None,
               prereqs_update=None,
               stagefunc = None,
-              pool = None,
               **bonus_kwargs,
               ):
     '''Run the full Legacy Survey data reduction pipeline.
@@ -4492,6 +4639,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   wise_ceres=wise_ceres,
                   galex_ceres=galex_ceres,
                   do_segmentation=do_segmentation,
+                  bright_masking=bright_masking,
                   unwise_coadds=unwise_coadds,
                   bailout=bail_out,
                   minimal_coadds=minimal_coadds,
@@ -4523,23 +4671,81 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
         if wise_checkpoint_period is not None:
             kwargs.update(wise_checkpoint_period=wise_checkpoint_period)
 
-    if pool or (threads and threads > 1):
-        from astrometry.util.ttime import MemMeas
-        if pool is None:
-            from legacypipe.trackingpool import TrackingPool
-            pool = TrackingPool(threads,
-                                initializer=runbrick_global_init,
-                                initargs=())
-        StageTime.add_measurement_once(MemMeas)
-        mp = multiproc(None, pool=pool)
-    else:
+    # --- Set up available GPU IDs for the initializer ---
+    available_gpu_ids = []
+    # If specified, --gpu-ids takes precedent
+    if len(gpu_ids):
+        available_gpu_ids = [int(g) for g in gpu_ids.split(',')]
+    elif ngpu:
+        available_gpu_ids = list(range(ngpu))
+
+    gpu_threads = 0
+    if len(available_gpu_ids):
+        gpus_to_use = []
+        for gpuid in available_gpu_ids:
+            gpus_to_use.extend([gpuid] * threads_per_gpu)
+        gpu_threads = len(gpus_to_use)
+
+    # from legacypipe.prioritypool import PriorityPool
+    # pool = PriorityPool(threads, gpu_threads,
+    #                     initialize_high_priority=runbrick_init_gpu_worker,
+    #                     initialize_high_priority_args=(gpu_id_list,),
+    #                     initialize_low_priority=runbrick_init_cpu_worker,
+    #                     initialize_low_priority_args=())
+
+    gpu_id_manager = None
+    if gpu_threads == 1:
+        # Starting a single GPU thread: no need to use a Manager to coordinate GPU allocation
+        pass
+    elif gpu_threads > 1:
+        # Coordinate multiple GPU worker processes -- using a shared (managed) list
+        gpu_id_manager = multiprocessing.Manager()
+        gpus_to_use = gpu_id_manager.list(gpus_to_use)
+
+    # This seems overly complicated, but basically we want:
+    # --threads indicates CPU-only threads (actually worker processes, not threads)
+    # --gpu-threads are GPU threads
+    # If threads + gpu-threads == 1, just create a "fake" mp, with kwarg mp
+    # Otherwse, create a pool for each.  If there are both CPU and GPU pools, the GPU is mp_hi,
+    # otherwise just mp.
+
+    if threads is None:
+        if gpu_threads == 1:
+            threads = 0
+        else:
+            threads = 1
+
+    if gpu_threads + threads == 1:
         from astrometry.util.ttime import CpuMeas
-        from astrometry.util.ttime import MemMeas
-        mp = multiproc(init=runbrick_global_init, initargs=())
+        if gpu_threads == 1:
+            mp = multiproc(init=runbrick_init_gpu_worker, initargs=(gpus_to_use,))
+        else:
+            mp = multiproc(init=runbrick_init, initargs=())
         StageTime.add_measurement_once(CpuMeas)
-        StageTime.add_measurement_once(MemMeas)
         pool = None
-    kwargs.update(mp=mp)
+        kwargs.update(mp=mp)
+    else:
+        from legacypipe.trackingpool import TrackingPool
+        if gpu_threads > 0:
+            print('Creating %i GPU workers' % gpu_threads)
+            pool_gpu = TrackingPool(gpu_threads,
+                                    initializer=runbrick_init_gpu_worker,
+                                    initargs=(gpus_to_use,))
+            mp_hi = multiproc(None, pool=pool_gpu)
+            if threads > 0:
+                kwargs.update(mp_hi=mp_hi)
+            else:
+                kwargs.update(mp=mp_hi)
+        if threads > 0:
+            print('Creating %i CPU workers' % threads)
+            pool = TrackingPool(threads,
+                                initializer=runbrick_init_cpu_worker,
+                                initargs=())
+            mp = multiproc(None, pool=pool)
+            kwargs.update(mp=mp)
+
+    from astrometry.util.ttime import MemMeas
+    StageTime.add_measurement_once(MemMeas)
 
     if nblobs is not None:
         kwargs.update(nblobs=nblobs)
@@ -4697,6 +4903,9 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             pool.join()
     debug('run_brick returning...')
 
+    if gpu_id_manager:
+        gpu_id_manager.shutdown()
+
     return R
 
 def flush(x=None):
@@ -4794,6 +5003,11 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
                         help='Copy image (ooi, ood, oow) files to --cache-dir before starting.')
 
     parser.add_argument('--threads', type=int, help='Run multi-threaded')
+
+    parser.add_argument('--ngpu', default=0, type=int, help='Number of GPUs')
+    parser.add_argument('--gpu-ids', default='', type=str, help='Comma separated list of GPU ids e.g. 0,1,2,3')
+    parser.add_argument('--threads-per-gpu', default=16, type=int, help='Threads per GPU')
+
     parser.add_argument('-p', '--plots', dest='plots', action='store_true',
                         help='Per-blob plots?')
     parser.add_argument('--plots2', action='store_true',
@@ -5002,6 +5216,8 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--rgb-stretch', type=float, help='Stretch RGB jpeg plots by this factor.')
     parser.add_argument('--no-segmentation', dest='do_segmentation', default=True,
                         action='store_false', help='Turn off segmentation during fitblobs')
+    parser.add_argument('--bright-masking', default=False,
+                        action='store_true', help='Mask other bright pixels during fitting')
     return parser
 
 def get_runbrick_kwargs(survey=None,
@@ -5262,6 +5478,7 @@ def main(args=None):
 if __name__ == '__main__':
     from astrometry.util.ttime import MemMeas
     Time.add_measurement(MemMeas)
+    from legacypipe.runbrick import main
     sys.exit(main())
 
 # Test bricks & areas

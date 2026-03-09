@@ -243,7 +243,7 @@ class HscImage(LegacySurveyImage):
             sb.append(f)
         f = interp1d(sb, rads[:-1])
         mx = psf0.max()
-        hwhm = f(psf0.max() / 2.)
+        hwhm = f(mx / 2.)
         fwhm = hwhm * 2. * psfex.sampling
         psfex.fwhm = fwhm
         #print('Measured PsfEx FWHM %.2f' % fwhm)

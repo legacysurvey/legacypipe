@@ -73,16 +73,15 @@ def detrend_decam_zeropoints(P):
         ('i', 0.0495),
         ('z', 0.0715),
         ('Y', 0.058)]
-    '''
-    the columns are:
-    * 1 and 2: the lower and upper bound of the relative MJD, where zero
-      corresponds to 1/1/2014 or MJD_OBS = 56658.500
-    * 3 and 4: the values of the zero points defining the ends of the
-      line segment (i.e., at the lower and upper bound of MJD_OBS
-      specified in cols 1 and 2)
-    * 5 and 6: the zero point and slope of the linear fit defining the
-      segment (calculable from columns 1 through 4)
-    '''
+
+    # the columns are:
+    # * 1 and 2: the lower and upper bound of the relative MJD, where zero
+    #   corresponds to 1/1/2014 or MJD_OBS = 56658.500
+    # * 3 and 4: the values of the zero points defining the ends of the
+    #   line segment (i.e., at the lower and upper bound of MJD_OBS
+    #   specified in cols 1 and 2)
+    # * 5 and 6: the zero point and slope of the linear fit defining the
+    #   segment (calculable from columns 1 through 4)
     mjd_terms = [
         ('g', 25.08, [
             ( -150.0,     0.0, 25.220, 25.200, 25.200,  -1.3332e-04 ),

@@ -306,7 +306,7 @@ def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
 
     nlarge = nmedium = nsmall = 0
     for src,cflux in zip(cat, central_flux):
-        from tractor import PointSource, Tractor, ExpGalaxy, DevGalaxy
+        from tractor import PointSource, ExpGalaxy, DevGalaxy
         from tractor.sersic import SersicGalaxy
 
         R = radius_small

@@ -2,9 +2,8 @@
 
 brick="$1"
 
-outdir=$SCRATCH/ibis4
+outdir=$SCRATCH/ibis-dr1
 
-unset BLOB_MASK_DIR
 export COSMO=/dvs_ro/cfs/cdirs/cosmo
 
 export LEGACY_SURVEY_DIR=$COSMO/work/legacysurvey/ibis
@@ -20,6 +19,7 @@ export TYCHO2_KD_DIR=$COSMO/staging/tycho2
 export PS1CAT_DIR=$COSMO/work/ps1/cats/chunks-qz-star-v3
 
 unset SKY_TEMPLATE_DIR
+unset BLOB_MASK_DIR
 
 # PYTHONPATH is set in the container.
 #export PYTHONPATH=/usr/local/lib/python:/usr/local/lib/python3.6/dist-packages:/src/unwise_psf/py:.
@@ -66,30 +66,11 @@ echo "--------------------------------------------------------------------------
 echo -e "\nStarting on $(hostname)\n" >> "$log"
 echo "-----------------------------------------------------------------------------------------" >> "$log"
 
-export LEGACYPIPE_DIR=.
-export PYTHONPATH=.:${PYTHONPATH}
-#cd $LEGACYPIPE_DIR
-#export LEGACYPIPE_DIR=/src/legacypipe/py
-#       --bands M464 \
-#       --bands $band \
-#       --coadd-bw \
-#       --skip-calibs \
-#       --bands M411,M464 \
-
-# Deep fields:
-#       --blob-dilate 4 \
-
-#       --plots \
-# -O
-#       --bands M411,M438,M464,M490,M517 \
-#      --run ibis-special \
-#       --skip \
-#       --coadd-bw \
-#       --bands N395 \
+export LEGACYPIPE_DIR=/src/legacypipe/py
 
 python -u -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --skip \
-       --blob-dilate 4 \
+       --skip-calibs \
        --run ibis \
        --bands M411,M438,M464,M490,M517 \
        --nsatur 2 \
@@ -97,18 +78,17 @@ python -u -O $LEGACYPIPE_DIR/legacypipe/runbrick.py \
        --rgb-stretch 1.5 \
        --sub-blobs \
        --no-wise \
-       --skip-calibs \
        --checkpoint "${outdir}/checkpoints/${bri}/checkpoint-${brick}.pickle" \
        --checkpoint-period 300 \
        --pickle "${outdir}/pickles/${bri}/runbrick-%(brick)s-%%(stage)s.pickle" \
        --outdir "$outdir" \
        --write-stage srcs \
-       --threads 32 \
+       --threads 128 \
        >> "$log" 2>&1
 
-#       --stage image_coadds \
-#       --blob-image \
-#        --skip-coadd \
+
+# helps in deep fields:
+#       --blob-dilate 4 \
 
 # Save the return value from the python command -- otherwise we
 # exit 0 because the rm succeeds!

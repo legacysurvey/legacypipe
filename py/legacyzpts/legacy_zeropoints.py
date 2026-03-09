@@ -18,7 +18,6 @@ from astrometry.util.file import trymakedirs
 from astrometry.util.ttime import Time
 from astrometry.util.fits import fits_table, merge_tables
 from astrometry.libkd.spherematch import match_radec
-from astrometry.util.starutil_numpy import hmsstring2ra
 
 import legacypipe
 from legacypipe.ps1cat import ps1cat, sdsscat
@@ -743,11 +742,10 @@ def main(args=None):
             continue
         image_list.append(fn)
 
-    ''' Produce zeropoints for all CP images in image_list
-    image_list -- iterable list of image filenames
-    args -- parsed argparser objection from get_parser()
+    # Produce zeropoints for all CP images in image_list
+    # image_list -- iterable list of image filenames
+    # args -- parsed argparser objection from get_parser()
 
-    '''
     from pkg_resources import resource_filename
 
     assert(not args is None)
@@ -861,11 +859,9 @@ def main(args=None):
 
         if version_header is None and not measureargs['run_calibs_only']:
             # One-time initializations (only do if we actually have to process some images!)
-            from legacypipe.survey import get_version_header, get_dependency_versions
+            from legacypipe.survey import get_dependency_versions
             release = 10000
-            gitver = get_git_version()
-            version_header = get_version_header('legacy_zeropoints.py', survey.survey_dir, release,
-                                                git_version=gitver, proctype='InstCal')
+            version_header = survey.get_output_header(release=release, proctype='InstCal')
             deps = get_dependency_versions(None, None, None, None)
             for name,value,comment in deps:
                 version_header.add_record(dict(name=name, value=value, comment=comment))
@@ -1371,9 +1367,7 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
         ps.savefig()
 
         # Run a source detection on the image and cross-match with Gaia star positions.
-        from scipy.ndimage import gaussian_filter
-        from scipy.ndimage import binary_dilation, binary_fill_holes
-        from scipy.ndimage import label, find_objects
+        from scipy.ndimage import gaussian_filter, binary_dilation, binary_fill_holes, label
         print('FWHM', imobj.fwhm)
         psf_sigma = imobj.fwhm / 2.35
         psfnorm = 1./(2. * np.sqrt(np.pi) * psf_sigma)
@@ -1715,7 +1709,6 @@ def run_zeropoints(imobj, splinesky=False, sdss_photom=False, gaia_photom=False,
 def tractor_fit_sources(imobj, wcs, ref_ra, ref_dec, ref_flux, img, ierr,
                         psf, ccd_x0, ccd_y0, Rfit=10, ps=None):
     import tractor
-    from tractor import PixelizedPSF
     from tractor.brightness import LinearPhotoCal
 
     fitmods = []

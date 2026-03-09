@@ -9,7 +9,7 @@ import numpy as np
 
 from astrometry.util.fits import fits_table, merge_tables
 
-from legacypipe.survey import LegacySurveyData, get_version_header, apertures_arcsec, wcs_for_brick
+from legacypipe.survey import LegacySurveyData, apertures_arcsec, wcs_for_brick
 
 def merge_forced(survey, brickname, cat, bands='grz'):
     # Get list of CCDs -- from pipeline run results, or straight from CCDs table?
@@ -150,7 +150,7 @@ def main():
         # 'survey-bricks" files of their own -- use the 'survey' one
         # instead.
         brick = None
-        for s in [survey, catsurvey]:
+        for s in [survey]:
             try:
                 brick = s.get_brick_by_name(opt.brick)
                 break
@@ -177,10 +177,9 @@ def main():
         print('No catalog entries!')
         return 0
 
-    program_name = sys.argv[0]
     ## FIXME -- from catalog?
     release = 9999
-    version_hdr = get_version_header(program_name, opt.survey_dir, release)
+    version_hdr = survey.get_output_header(release=release)
 
     from legacypipe.utils import add_bits
     from legacypipe.bits import DQ_BITS

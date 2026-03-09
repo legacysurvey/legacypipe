@@ -53,9 +53,7 @@ HIERARCH FPA.FILTER = 'i.00000 ' / Filter used (instrument name)
 MJD-OBS =     57515.0391846985 / Time of exposure
 
 The "STARCORE" bit masks quite aggressively.
-
 '''
-
 class PanStarrsImage(LegacySurveyImage):
     def __init__(self, survey, ccd, image_fn=None, image_hdu=0, **kwargs):
         if ccd is not None:

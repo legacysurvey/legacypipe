@@ -216,12 +216,11 @@ class MegaPrimeImage(LegacySurveyImage):
         elif name == 'gaia':
             print('HACKING Gaia color terms for CFHT')
             cat.about()
-            g = cat.phot_g_mean_mag
+            #g = cat.phot_g_mean_mag
             bp = cat.phot_bp_mean_mag
-            rp = cat.phot_rp_mean_mag
+            #rp = cat.phot_rp_mean_mag
             colorterm = np.zeros(len(cat))
             return bp + colorterm
-            
         else:
             raise RuntimeError('No photometric conversion from %s to CFHT' % name)
 
@@ -266,7 +265,7 @@ class MegaPrimeImage(LegacySurveyImage):
     #     ### FIXME -- no distortion solution in here
     #     # from astrometry.util.util import Tan
     #     # return Tan(self.hdr)
-    # 
+    #
     #     # "pitcairn" reductions have PV header cards (CTYPE is still RA---TAN)
     #     from astrometry.util.util import wcs_pv2sip_hdr
     #     if hdr is None:
@@ -329,7 +328,6 @@ class MegaPrimeImage(LegacySurveyImage):
 
     def fix_saturation(self, img, dq, invvar, primhdr, imghdr, slc):
         I,J = np.nonzero(img > self.get_satur())
-        from legacypipe.bits import DQ_BITS
         if len(I):
             dq[I,J] |= DQ_BITS['satur']
             invvar[I,J] = 0
@@ -348,7 +346,6 @@ class MegaPrimeImage(LegacySurveyImage):
     #         print('Computed sig1 by Blanton method:', self.sig1)
     #     else:
     #         print('sig1 from CCDs file:', self.sig1)
-    # 
     #     iv = np.zeros_like(img) + (1./self.sig1**2)
     #     return iv
 
@@ -360,7 +357,7 @@ class MegaPrimeImage(LegacySurveyImage):
     #     trymakedirs(self.sefn, dir=True)
     #     # We write the SE catalog to a temp file then rename, to avoid
     #     # partially-written outputs.
-    # 
+    #
     #     from legacypipe.survey import create_temp
     #     import fitsio
     # 
@@ -428,11 +425,10 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         hdr = fitsio.read_header(imgfn)
         skyimg = np.zeros(img.shape, np.float32)
         sky.addTo(skyimg)
-        from collections import Counter
         img[mask != 0] = skyimg[mask != 0]
 
         print('Image type:', img.dtype, 'min, median, max', img.min(), np.median(img.ravel()), img.max())
-        
+
         # FIXME -- Replace the header with the WCS from our initial
         # WCS solution, so that the SE catalog's alpha_j2000,
         # delta_j2000 columns are correct??
@@ -452,7 +448,6 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         if self.cut_to_gaia:
             # Filter SE detections to Gaia stars
             from astrometry.util.fits import fits_table
-            from astrometry.util.util import Sip
             from astrometry.libkd.spherematch import match_radec
             from astrometry.util.file import trymakedirs
             from legacypipe.gaiacat import GaiaCatalog
@@ -507,7 +502,7 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         iline = 0
         header = []
         # find my HDU in the header
-        for i in range(1, self.hdu+1):
+        for _ in range(1, self.hdu+1):
             header = []
             while True:
                 if iline >= len(lines):
@@ -621,16 +616,13 @@ class MegaPrimeElixirImage(MegaPrimeImage):
         return super().get_wcs(hdr=hdr)
 
     def run_solve_field(self):
-        from pkg_resources import resource_filename
+        from legacypipe.utils import get_data_file
         from astrometry.util.file import trymakedirs
         from legacypipe.survey import create_temp
         # Initial astrometry -- using solve-field on the image
-        dirname = resource_filename('legacypipe', 'data')
-        configfn = os.path.join(dirname, 'an-cfht.cfg')
         primhdr = self.read_image_primary_header()
         hdr = self.read_image_header()
         r,d = self.get_radec_bore(primhdr)
-
         imgfn = self.imgfn
         ext = self.hdu
         tmpimgfn = None
@@ -645,39 +637,40 @@ class MegaPrimeElixirImage(MegaPrimeImage):
             imgfn = tmpimgfn
             ext = 0
 
-        for ds in [2, 4]:
-            args = ['--config', configfn,
-                    '--downsample', ds,
-                    '--objs', 130,
-                    '--tweak-order', 1,
-                    '--scale-low', self.pixscale * 0.8,
-                    '--scale-high', self.pixscale * 1.2,
-                    '--scale-units', 'app',
-                    '--width', 2112, '--height', 4644,
-                    '--no-plots',
-                    '--no-remove-lines',
-                    '--continue',
-                    '--crpix-x', hdr['CRPIX1'],
-                    '--crpix-y', hdr['CRPIX2'],
-                    '--new-fits', 'none',
-                    '--temp-axy',
-                    '--solved', 'none',
-                    '--match', 'none',
-                    '--corr', 'none',
-                    '--index-xyls', 'none',
-                    '--rdls', 'none',
-                    '--wcs', self.wcs_initial_fn,
-                    '--extension', ext]
-            if r is not None and d is not None:
-                args.extend(['--ra', r, '--dec', d, '--radius', 5])
-            print('Creating initial WCS using solve-field...')
-            trymakedirs(self.wcs_initial_fn, dir=True)
-            cmd = ' '.join([str(x) for x in ['solve-field'] + args + [imgfn]])
-            print('Running:', cmd)
-            rtn = os.system(cmd)
-            print('solve-field return value:', rtn)
-            if os.path.exists(self.wcs_initial_fn):
-                break
+        with get_data_file('data', 'an-cfht.cfg') as configfn:
+            for ds in [2, 4]:
+                args = ['--config', configfn,
+                        '--downsample', ds,
+                        '--objs', 130,
+                        '--tweak-order', 1,
+                        '--scale-low', self.pixscale * 0.8,
+                        '--scale-high', self.pixscale * 1.2,
+                        '--scale-units', 'app',
+                        '--width', 2112, '--height', 4644,
+                        '--no-plots',
+                        '--no-remove-lines',
+                        '--continue',
+                        '--crpix-x', hdr['CRPIX1'],
+                        '--crpix-y', hdr['CRPIX2'],
+                        '--new-fits', 'none',
+                        '--temp-axy',
+                        '--solved', 'none',
+                        '--match', 'none',
+                        '--corr', 'none',
+                        '--index-xyls', 'none',
+                        '--rdls', 'none',
+                        '--wcs', self.wcs_initial_fn,
+                        '--extension', ext]
+                if r is not None and d is not None:
+                    args.extend(['--ra', r, '--dec', d, '--radius', 5])
+                print('Creating initial WCS using solve-field...')
+                trymakedirs(self.wcs_initial_fn, dir=True)
+                cmd = ' '.join([str(x) for x in ['solve-field'] + args + [imgfn]])
+                print('Running:', cmd)
+                rtn = os.system(cmd)
+                print('solve-field return value:', rtn)
+                if os.path.exists(self.wcs_initial_fn):
+                    break
 
         if tmpimgfn is not None:
             os.remove(tmpimgfn)
@@ -685,7 +678,6 @@ class MegaPrimeElixirImage(MegaPrimeImage):
     def run_lacosmic(self):
         import lacosmic
         from astrometry.util.file import trymakedirs
-        from legacypipe.bits import DQ_BITS
 
         img = self.read_image()
         print('run_lacosmic: got img, range', img.min(), img.max())
@@ -759,7 +751,6 @@ class MegaPrimeElixirImage(MegaPrimeImage):
 
     # don't need overridden read_image_header
     def read_dq(self, header=False, use_lacosmic=None, **kwargs):
-        from legacypipe.bits import DQ_BITS
         # Image pixels to be ignored have value 0.0
         img = self._read_fits(self.imgfn, self.hdu, header=header, **kwargs)
         if header:
