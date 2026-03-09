@@ -4211,6 +4211,7 @@ def stage_writecat(
 
     # FIXME - maskbits, set i-band bits
     with survey.write_output('tractor', brick=brickname) as out:
+        T,columns,units,primhdr = survey.modify_tractor_catalog(T, columns, units, primhdr)
         T.writeto(None, columns=columns, units=units, primheader=primhdr,
                   extname='CATALOG', fits_object=out.fits)
 

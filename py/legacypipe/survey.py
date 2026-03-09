@@ -1185,6 +1185,9 @@ class LegacySurveyData(object):
         #                     comment='SLURM job array id'))
         return hdr
 
+    def modify_tractor_catalog(self, T, columns, units, primhdr):
+        return T, columns, units, primhdr
+
     def find_file(self, filetype, brick=None, brickpre=None, band='%(band)s',
                   camera=None, expnum=None, ccdname=None, tier=None, img=None,
                   output=False, use_cache=True, **kwargs):

@@ -104,6 +104,12 @@ class IbisData(LegacySurveyData):
     def get_halo_kwargs(self):
         return dict(radius_scaling=2.)
 
+    def modify_tractor_catalog(self, T, columns, units, primhdr):
+        remap = dict(ls_id_dr11='ibis_id')
+        columns = [remap.get(c, c) for c in columns]
+        T.rename('ls_id_dr1', 'ibis_id')
+        return T, columns, units, primhdr
+
 class IbisWideData(IbisData):
     def ccds_for_fitting(self, brick, ccds):
         import numpy as np
