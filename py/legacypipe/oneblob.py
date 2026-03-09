@@ -1304,6 +1304,7 @@ class OneBlob(object):
         _,xx,yy = srcwcs.radec2pixelxy(pos.ra, pos.dec)
         ix = int(np.clip(np.round(xx-1), 0, sw-1))
         iy = int(np.clip(np.round(yy-1), 0, sh-1))
+        in_bounds = (xx > -0.5) and (yy > -0.5) and (xx < sw-0.5) and (yy < sh-0.5)
 
         # an extra mask to apply, in srcblobwcs shape
         source_mask = None
@@ -1458,7 +1459,7 @@ class OneBlob(object):
                 else:
                     source_mask &= (segmap[sy0:sy0+sh, sx0:sx0+sw] == s)
 
-        if brightmap is not None:
+        if (brightmap is not None) and in_bounds:
             s = brightmap[iy + sy0, ix + sx0]
             if s == 0:
                 # The current source is not in a bright blob.
