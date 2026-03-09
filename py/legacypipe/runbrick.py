@@ -3748,17 +3748,17 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     # Aperture photometry locations
     apxy = np.vstack((T.bx, T.by)).T
 
-    Ireg = np.flatnonzero(do_phot)
-    Nreg = len(Ireg)
+    Iphot = np.flatnonzero(do_phot)
+    Nphot = len(Iphot)
     # HACK -- replace the catalog brightnesses with the forced-photometry results!
-    orig_bright = [cat[i].brightness for i in Ireg]
-    for i in Ireg:
+    orig_bright = [cat[i].brightness for i in Iphot]
+    for i in Iphot:
         br = dict([(b, TF.get('flux_%s' % b)[i]) for b in clean_bands])
         cat[i].brightness = NanoMaggies(**br)
-    reg_cat = [cat[i] for i in Ireg]
-    reg_blob = T.blob[Ireg]
+    phot_cat = [cat[i] for i in Iphot]
+    phot_blob = T.blob[Iphot]
 
-    both_args = [(reg_cat, reg_blob, blobmap, frozen_galaxies, ps, plots)
+    both_args = [(phot_cat, phot_blob, blobmap, frozen_galaxies, ps, plots)
                  for tim in tims]
 
     C = make_coadds(tims, forced_bands, targetwcs,
@@ -3772,7 +3772,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
                     mp=mp)
 
     # Revert catalog brightness
-    for i,br in zip(Ireg, orig_bright):
+    for i,br in zip(Iphot, orig_bright):
         cat[i].brightness = br
 
     info('Coadd results contain:', dir(C))
@@ -3795,9 +3795,9 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
         T.set('nea_%s' % band, np.zeros(len(T), np.float32))
         T.set('blob_nea_%s' % band, np.zeros(len(T), np.float32))
     for iband,(band,cb_data) in enumerate(zip(forced_bands, C.mod_callback_data)):
-        num  = np.zeros(Nreg, np.float32)
-        den  = np.zeros(Nreg, np.float32)
-        bnum = np.zeros(Nreg, np.float32)
+        num  = np.zeros(Nphot, np.float32)
+        den  = np.zeros(Nphot, np.float32)
+        bnum = np.zeros(Nphot, np.float32)
         btims = [tim for tim in tims if tim.band == band]
         assert(len(btims) == len(cb_data))
         # cb_data: list-of-lists, (ntim x nsrcs x 3)
@@ -3816,7 +3816,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
             bnum[I] += iv * 1./bnea[I]
         # bden is the coadded per-pixel inverse variance derived from psfdepth and psfsize
         # this ends up in arcsec units, not pixels
-        bden = T.psfdepth[Ireg,iband] * (4 * np.pi * (T.psfsize[Ireg,iband]/2.3548)**2)
+        bden = T.psfdepth[Iphot,iband] * (4 * np.pi * (T.psfsize[Iphot,iband]/2.3548)**2)
         # numerator and denominator are for the inverse-NEA!
         with np.errstate(divide='ignore', invalid='ignore'):
             nea  = den  / num
@@ -3824,10 +3824,9 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
         nea [np.logical_not(np.isfinite(nea ))] = 0.
         bnea[np.logical_not(np.isfinite(bnea))] = 0.
         # Set vals in T
-        T.get('nea_%s' % band)[Ireg] = nea
-        T.get('blob_nea_%s' % band)[Ireg] = bnea
+        T.get('nea_%s' % band)[Iphot] = nea
+        T.get('blob_nea_%s' % band)[Iphot] = bnea
 
-            
     # Grab aperture fluxes
     assert(C.AP is not None)
 
