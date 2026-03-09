@@ -851,8 +851,8 @@ def get_galaxy_sources(galaxies, bands):
 
     # awful
     is_ellipse_cat = ('sersic' in cols)
-    print('Ellipse cat?', is_ellipse_cat)
-    print('bands', bands)
+    info('Reading SGA %s cat with bands %s' %
+         ('ellipse' if is_ellipse_cat else 'parent', ', '.join(bands)))
 
     if is_ellipse_cat:
         # The LogRadius and EllipseWithPriors classes have a minimum log-radius (log(0.01))
@@ -929,7 +929,6 @@ def get_galaxy_sources(galaxies, bands):
             srcs[ii] = src
 
     else:
-        print('SGA parent - sources')
         for ii,g in enumerate(galaxies):
             # Initialize each source with an exponential disk--
             fluxes = dict([(band, NanoMaggies.magToNanomaggies(g.mag))

@@ -16,14 +16,12 @@ from tractor.galaxy import DevGalaxy, ExpGalaxy
 from tractor.patch import ModelMask
 from tractor.sersic import SersicGalaxy
 
-from legacypipe.survey import (RexGalaxy,
-                               LegacyEllipseWithPriors, LegacySersicIndex, get_rgb)
+from legacypipe.survey import (LegacyEllipseWithPriors, LegacySersicIndex,
+                               RexGalaxy, get_rgb)
 from legacypipe.bits import REF_MAP_BITS
 from legacypipe.coadds import quick_coadds
 from legacypipe.runbrick_plots import _plot_mods
 from legacypipe.utils import get_cpu_arch
-
-rgbkwargs_resid = dict(resids=True)
 
 import logging
 logger = logging.getLogger('legacypipe.oneblob')
@@ -36,15 +34,13 @@ def debug(*args):
 def is_debug():
     return logger.isEnabledFor(logging.DEBUG)
 
-chat = debug
-
 # Determines the order of elements in the DCHISQ array.
 MODEL_NAMES = ['psf', 'rex', 'dev', 'exp', 'ser']
 
 quit_now = False
 
 def sigusr1(sig, stackframe):
-    print('SIGUSR1 was received in worker PID %i' % os.getpid())
+    info('SIGUSR1 was received in worker PID %i' % os.getpid())
     global quit_now
     # only raise the exception once
     if not quit_now:
@@ -80,8 +76,8 @@ def one_blob(args):
         return None
 
     if quit_now:
-        print('Quit_now is set; not processing blob %s' % args.blobname)
-        # don't return None -- this is a different thing!
+        info('Quit_now is set; not processing blob %s' % args.blobname)
+        # don't return None -- this triggers different behavior
         raise QuitNowException()
 
     from legacypipe.runbrick import is_gpu_worker
@@ -175,10 +171,10 @@ def one_blob(args):
 
     except QuitNowException:
         if ob is not None:
-            print('Caught QuitNowException; returning checkpoint state for blob %s' % args.blobname)
+            info('Caught QuitNowException; returning checkpoint state for blob %s' % args.blobname)
             ob.B = B
         else:
-            print('Caught QuitNowException; ob None for blob %s' % args.blobname)
+            info('Caught QuitNowException; ob None for blob %s' % args.blobname)
         return ob
     finally:
         if B is not None:
@@ -2199,6 +2195,7 @@ class OneBlob(object):
             mods = list(resid.getChiImages())
             coimgs,_ = quick_coadds(tims, self.bands, wcs, images=mods,
                                     fill_holes=False)
+            rgbkwargs_resid = dict(resids=True)
             dimshow(get_rgb(coimgs,self.bands, **rgbkwargs_resid))
             return
 
