@@ -3085,13 +3085,14 @@ def get_fiber_fluxes(cat, T, targetwcs, H, W, pixscale, bands,
 
         for iband,band in enumerate(bands):
             plt.clf()
-            flux = [src.getBrightness().getFlux(band) for src in cat]
-            plt.plot(flux, fiberflux[:,iband], 'b.', label='FiberFlux')
-            plt.plot(flux, fibertotflux[:,iband], 'gx', label='FiberTotFlux')
+            Iok = np.flatnonzero([src is not None for src in cat])
+            flux = [src.getBrightness().getFlux(band) for src in cat if src is not None]
+            plt.plot(flux, fiberflux[Iok,iband], 'b.', label='FiberFlux')
+            plt.plot(flux, fibertotflux[Iok,iband], 'gx', label='FiberTotFlux')
             if 'apflux' in T.get_columns():
-                plt.plot(flux, T.apflux[:, iband, 1], 'r+', label='Apflux(1.5)')
+                plt.plot(flux, T.apflux[Iok, iband, 1], 'r+', label='Apflux(1.5)')
             else:
-                plt.plot(flux, T.get('apflux_%s' % band)[:, 1], 'r+', label='Apflux(1.5)')
+                plt.plot(flux, T.get('apflux_%s' % band)[Iok, 1], 'r+', label='Apflux(1.5)')
             plt.legend()
             plt.xlabel('Catalog total flux')
             plt.ylabel('Aperture flux')
