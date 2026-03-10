@@ -66,7 +66,7 @@ OneBlobArgs = namedtuple('OneBlobArgs', [
     'timargs',
     'srcs', 'bands', 'plots', 'ps', 'reoptimize', 'iterative', 'iterative_nsigma', 'use_ceres',
     'refmap', 'large_galaxies_force_pointsource', 'less_masking', 'frozen_galaxies',
-    'halfdone', 'do_segmentation', 'bright_masking'])
+    'halfdone', 'do_segmentation', 'bright_masking', 'galaxy_masking'])
 
 def one_blob(args):
     '''
@@ -130,7 +130,6 @@ def one_blob(args):
             ob.ps = args.ps
             # FIXME -- update more parameters??
             ob.large_galaxies_force_pointsource = args.large_galaxies_force_pointsource
-            ob.bright_masking = args.bright_masking
         else:
             # we should just make OneBlob's constructor take a OneBlobArgs object!
             ob = OneBlob(args.blobname, args.nblobs, blobwcs, args.blobmask, args.timargs, args.bands,
@@ -140,7 +139,7 @@ def one_blob(args):
                          args.iterative_nsigma,
                          do_segmentation=args.do_segmentation,
                          iblob=args.iblob,
-                         bright_masking=args.bright_masking)
+                         )
             B = ob.init_table(args.srcs, args.Isrcs)
 
         if is_gpu:
@@ -163,7 +162,10 @@ def one_blob(args):
 
         ob.trargs.update(optimizer=opt)
 
-        B = ob.run(B, reoptimize=args.reoptimize, iterative_detection=args.iterative)
+        B = ob.run(B, reoptimize=args.reoptimize, iterative_detection=args.iterative,
+                   galaxy_masking=args.galaxy_masking,
+                   bright_masking=args.bright_masking,
+                   )
         ob.finalize_table(B, args.bx0, args.by0)
 
         B.iblob = args.iblob
@@ -399,7 +401,10 @@ class OneBlob(object):
         B.delete_column('y0')
 
     def run(self, B, reoptimize=False, iterative_detection=True,
-            compute_metrics=True, mask_others=False, is_iterative=False):
+            compute_metrics=True, mask_others=False, is_iterative=False,
+            galaxy_masking=False,
+            bright_masking=False,
+            ):
         # The overall steps here are:
         # - fit initial fluxes for small number of sources that may need it
         # - optimize individual sources
@@ -586,6 +591,8 @@ class OneBlob(object):
         Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
         B = self.run_model_selection(cat, Ibright, B, segmap,
                                      iterative_detection=iterative_detection,
+                                     galaxy_masking=galaxy_masking,
+                                     bright_masking=bright_masking,
                                      mask_others=mask_others)
         self.debug('Finished model selection: %s' % (Time()-tlast))
         tlast = Time()
@@ -869,7 +876,10 @@ class OneBlob(object):
 
         return segmap
 
-    def run_model_selection(self, cat, Ibright, B, segmap, iterative_detection=True,
+    def run_model_selection(self, cat, Ibright, B, segmap,
+                            iterative_detection=True,
+                            galaxy_masking=False,
+                            bright_masking=False,
                             mask_others=False):
         # We compute & subtract initial models for the other sources while
         # fitting each source:
@@ -884,7 +894,7 @@ class OneBlob(object):
 
         brightmap = None
         # Mask other blobs of bright pixels while fitting a source in a bright blob.
-        if self.bright_masking:
+        if bright_masking and len(cat) > 1:
             from legacypipe.coadds import make_coadds
             from scipy.ndimage import label, binary_dilation, binary_fill_holes
             brightmap = np.zeros(self.blobwcs.shape, bool)
@@ -905,6 +915,44 @@ class OneBlob(object):
                 plt.imshow(brightmap > 0, interpolation='nearest', origin='lower', vmin=0, vmax=1,
                            cmap='gray')
                 plt.title('Brightmap')
+                self.ps.savefig()
+
+        # SGA/large-galaxy segmentation
+        gal_segmap = None
+        if galaxy_masking:
+            # Find galaxies
+            gal_inds = []
+            gal_ix,gal_iy = [],[]
+            for srci,src in enumerate(cat):
+                if src is None:
+                    continue
+                is_galaxy = isinstance(src, Galaxy)
+                if not is_galaxy:
+                    continue
+                pos = src.getPosition()
+                _,ix,iy = self.blobwcs.radec2pixelxy(pos.ra, pos.dec)
+                ix = int(np.clip(ix-1, 0, self.blobw-1))
+                iy = int(np.clip(iy-1, 0, self.blobh-1))
+                gal_inds.append(srci)
+                gal_ix.append(ix)
+                gal_iy.append(iy)
+            # Only create galaxy segmentation map if >1 galaxies
+            if len(gal_inds) > 1:
+                gal_segmap = np.empty((self.blobh,self.blobw), np.int32)
+                gal_segmap[:,:] = -1
+                _set_kingdoms(gal_segmap, 65535, gal_inds, gal_ix, gal_iy)
+            del gal_inds, gal_ix, gal_iy
+
+            if self.plots and (gal_segmap is not None):
+                import pylab as plt
+                plt.clf()
+                dimshow(gal_segmap)
+                ax = plt.axis()
+                from legacypipe.detection import plot_boundary_map
+                plot_boundary_map(gal_segmap >= 0)
+                plt.plot(ix, iy, 'r.')
+                plt.axis(ax)
+                plt.title('Galaxy segmentation map')
                 self.ps.savefig()
 
         models = SourceModels()
@@ -955,6 +1003,7 @@ class OneBlob(object):
             keepsrc = self.model_selection_one_source(src, srci, models, B, segmap,
                                                       mask_others=mask_others,
                                                       brightmap=brightmap,
+                                                      gal_segmap=gal_segmap,
                                                       plots=plots)
             self.prefix = pre
 
@@ -1253,7 +1302,10 @@ class OneBlob(object):
         return Bnew
 
     def model_selection_one_source(self, src, srci, models, B, segmap,
-                                   mask_others=False, brightmap=None, plots=False):
+                                   mask_others=False,
+                                   brightmap=None,
+                                   gal_segmap=None,
+                                   plots=False):
         blob_modelMasks = models.model_masks(srci, src)
 
         # Create tiny local tims corresponding to the modelMasks.
@@ -1458,6 +1510,15 @@ class OneBlob(object):
                     source_mask = srcblobmask & (segmap[sy0:sy0+sh, sx0:sx0+sw] == s)
                 else:
                     source_mask &= (segmap[sy0:sy0+sh, sx0:sx0+sw] == s)
+
+        is_galaxy = isinstance(src, Galaxy)
+        if is_galaxy and (gal_segmap is not None):
+            s = gal_segmap[iy + sy0, ix + sx0]
+            if s != -1:
+                if source_mask is None:
+                    source_mask = srcblobmask & (gal_segmap[sy0:sy0+sh, sx0:sx0+sw] == s)
+                else:
+                    source_mask &= (gal_segmap[sy0:sy0+sh, sx0:sx0+sw] == s)
 
         if (brightmap is not None) and in_bounds:
             s = brightmap[iy + sy0, ix + sx0]
@@ -2063,7 +2124,7 @@ class OneBlob(object):
             # First-round optimization
             srctractor.optimize_loop(**optargs)
 
-            if self.plots:
+            if self.plots and (numi<20 or numi%20 == 0):
                 mods = list(srctractor.getModelImages())
                 mod1,_ = quick_coadds(srctims, self.bands, self.blobwcs, images=mods,
                                       fill_holes=False)
@@ -2083,7 +2144,7 @@ class OneBlob(object):
                 plt.subplot(1,3,3)
                 dimshow(get_rgb(mod1, self.bands))
                 plt.title('Fit model')
-                plt.suptitle('Source fitting')
+                plt.suptitle('Source fitting: %i of %i' % (numi+1, len(Ibright)))
                 self.ps.savefig()
 
             if is_galaxy:
