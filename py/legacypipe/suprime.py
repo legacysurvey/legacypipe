@@ -1,4 +1,5 @@
 import os
+import warnings
 import numpy as np
 from legacypipe.image import LegacySurveyImage
 

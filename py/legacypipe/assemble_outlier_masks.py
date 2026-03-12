@@ -4,7 +4,7 @@ import numpy as np
 import fitsio
 
 from astrometry.util.file import trymakedirs
-from legacypipe.survey import LegacySurveyData, bricks_touching_wcs, get_version_header
+from legacypipe.survey import LegacySurveyData, bricks_touching_wcs
 from legacypipe.outliers import read_outlier_mask_file
 
 def get_parser():
@@ -44,10 +44,8 @@ def main(survey=None, opt=None, args=None):
     if survey is None:
         survey = LegacySurveyData(survey_dir=opt.survey_dir,
                                   output_dir=opt.out_dir)
-    surveydir = survey.get_survey_dir()
-    program_name = sys.argv[0]
     release = 9999
-    version_hdr = get_version_header(program_name, surveydir, release)
+    version_hdr = survey.get_output_header(release=release)
 
     # Read metadata from survey-ccds.fits table
     ccds = survey.find_ccds(camera=opt.camera, expnum=opt.expnum,

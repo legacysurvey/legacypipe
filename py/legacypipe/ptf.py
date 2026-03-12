@@ -235,7 +235,6 @@ class PtfImage(LegacySurveyImage):
         if se and os.path.exists(self.sefn) and (not force):
             se = False
         if se:
-            sedir = self.survey.get_se_dir()
             trymakedirs(self.sefn, dir=True)
             ####
             trymakedirs('junk',dir=True) #need temp dir for mask-2 and invvar map
@@ -253,28 +252,28 @@ class PtfImage(LegacySurveyImage):
             magzp  = zeropoint_for_ptf(hdr)
             seeing = hdr['PIXSCALE'] * hdr['MEDFWHM']
             gain= hdr['GAIN']
-            cmd = ' '.join(['sex','-c', os.path.join(sedir,'ptf.se'),
-                            '-WEIGHT_IMAGE %s' % invvarfn, '-WEIGHT_TYPE MAP_WEIGHT',
-                            '-GAIN %f' % gain,
-                            '-FLAG_IMAGE %s' % maskfn,
-                            '-FLAG_TYPE OR',
-                            '-SEEING_FWHM %f' % seeing,
-                            '-DETECT_MINAREA 3',
-                            '-PARAMETERS_NAME', os.path.join(sedir,'ptf.param'),
-                            '-FILTER_NAME', os.path.join(sedir, 'ptf_gauss_3.0_5x5.conv'),
-                            '-STARNNW_NAME', os.path.join(sedir, 'ptf_default.nnw'),
-                            '-PIXEL_SCALE 0',
-                            # SE has a *bizarre* notion of "sigma"
-                            '-DETECT_THRESH 1.0',
-                            '-ANALYSIS_THRESH 1.0',
-                            '-MAG_ZEROPOINT %f' % magzp,
-                            '-CATALOG_NAME', self.sefn,
-                            self.imgfn])
-            print(cmd)
-            if os.system(cmd):
-                raise RuntimeError('Command failed: ' + cmd)
+            with self.survey.get_se_dir() as sedir:
+                cmd = ' '.join(['sex','-c', os.path.join(sedir,'ptf.se'),
+                                '-WEIGHT_IMAGE %s' % invvarfn, '-WEIGHT_TYPE MAP_WEIGHT',
+                                '-GAIN %f' % gain,
+                                '-FLAG_IMAGE %s' % maskfn,
+                                '-FLAG_TYPE OR',
+                                '-SEEING_FWHM %f' % seeing,
+                                '-DETECT_MINAREA 3',
+                                '-PARAMETERS_NAME', os.path.join(sedir,'ptf.param'),
+                                '-FILTER_NAME', os.path.join(sedir, 'ptf_gauss_3.0_5x5.conv'),
+                                '-STARNNW_NAME', os.path.join(sedir, 'ptf_default.nnw'),
+                                '-PIXEL_SCALE 0',
+                                # SE has a *bizarre* notion of "sigma"
+                                '-DETECT_THRESH 1.0',
+                                '-ANALYSIS_THRESH 1.0',
+                                '-MAG_ZEROPOINT %f' % magzp,
+                                '-CATALOG_NAME', self.sefn,
+                                self.imgfn])
+                print(cmd)
+                if os.system(cmd):
+                    raise RuntimeError('Command failed: ' + cmd)
         if psfex:
-            sedir = self.survey.get_se_dir()
             trymakedirs(self.psffn, dir=True)
             # If we wrote *.psf instead of *.fits in a previous run...
             oldfn = self.psffn.replace('.fits', '.psf')
@@ -282,11 +281,12 @@ class PtfImage(LegacySurveyImage):
                 print('Moving', oldfn, 'to', self.psffn)
                 os.rename(oldfn, self.psffn)
             else:
-                cmd= ' '.join(['psfex',self.sefn,'-c', os.path.join(sedir,'ptf.psfex'),
-                    '-PSF_DIR',os.path.dirname(self.psffn)])
-                print(cmd)
-                if os.system(cmd):
-                    raise RuntimeError('Command failed: ' + cmd)
+                with self.survey.get_se_dir() as sedir:
+                    cmd= ' '.join(['psfex',self.sefn,'-c', os.path.join(sedir,'ptf.psfex'),
+                        '-PSF_DIR',os.path.dirname(self.psffn)])
+                    print(cmd)
+                    if os.system(cmd):
+                        raise RuntimeError('Command failed: ' + cmd)
 
     def get_tractor_image(self, slc=None, radecpoly=None,
                           gaussPsf=False, const2psf=False, pixPsf=False,

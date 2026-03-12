@@ -390,7 +390,6 @@ class DecamImage(CPImage):
 
         # extra S17 masking
         if self.ccdname == 'S17':
-            from astrometry.util.miscutils import get_overlapping_region
             from legacypipe.bits import DQ_BITS
             x0, y0 = 0, 0
             H, W = dq.shape

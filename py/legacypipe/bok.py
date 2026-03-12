@@ -2,9 +2,7 @@ import warnings
 
 from legacypipe.cpimage import CPImage
 
-'''
-Code specific to images from the 90prime camera on the Bok telescope.
-'''
+# Code specific to images from the 90prime camera on the Bok telescope.
 class BokImage(CPImage):
     '''
     Class for handling images from the 90prime camera processed by the
@@ -68,20 +66,18 @@ class BokImage(CPImage):
 
     def read_dq(self, slc=None, header=False, **kwargs):
         # Add supplemental static mask.
-        import os
         import fitsio
-        from pkg_resources import resource_filename
+        from legacypipe.utils import get_data_file
         dq = super(BokImage, self).read_dq(slc=slc, header=header, **kwargs)
         if header:
             # unpack tuple
             dq,hdr = dq
-        dirname = resource_filename('legacypipe', 'config')
-        fn = os.path.join(dirname, 'ksb_staticmask_ood_v1.fits.fz')
-        F = fitsio.FITS(fn)[self.hdu]
-        if slc is not None:
-            mask = F[slc]
-        else:
-            mask = F.read()
+        with get_data_file('config', 'ksb_staticmask_ood_v1.fits.fz') as fn:
+            F = fitsio.FITS(fn)[self.hdu]
+            if slc is not None:
+                mask = F[slc]
+            else:
+                mask = F.read()
 
         # Pixels where the mask==1 that are not already masked get marked
         # with code 1 ("bad").

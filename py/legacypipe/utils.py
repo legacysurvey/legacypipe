@@ -20,6 +20,20 @@ class EmptyContextManager(AbstractContextManager):
     def __exit__(self, exc_type, exc_value, traceback):
         pass
 
+class FakeContextString(str, EmptyContextManager):
+    pass
+
+def get_data_file(*path):
+    '''
+    Call like:
+
+    with get_data_file('data', 'wise-tiles.fits') as atlasfn:
+    '''
+    import legacypipe
+    dirnm = os.path.dirname(legacypipe.__file__)
+    fn = os.path.join(dirnm, *path)
+    return FakeContextString(fn)
+
 # singleton
 cpu_arch = None
 def get_cpu_arch():
@@ -213,7 +227,6 @@ def run_ps_thread(parent_pid, parent_ppid, fn, shutdown, event_queue):
     import time
     import fitsio
     from functools import reduce
-    import re
 
     # my pid = parent pid -- this is a thread.
     print('run_ps_thread starting: parent PID', parent_pid, ', my PID', os.getpid(), fn)
