@@ -679,10 +679,10 @@ class OneBlob(object):
                 if src is None:
                     cat.freezeParam(isub)
                     continue
-                nsrcparams = src.numberOfParams()
                 if getattr(src, 'freezeparams', False):
                     # SGA frozen-sources.  Do these get uncertainties measured?
                     _convert_ellipses(src)
+                nsrcparams = src.numberOfParams()
                 if B.force_keep_source[isub]:
                     B.srcinvvars[isub] = np.zeros(nsrcparams, np.float32)
                     cat.freezeParam(isub)
@@ -1650,6 +1650,9 @@ class OneBlob(object):
                'forcing pointsource? %s, is large galaxy? %s, fitting sky background: %s') %
               (sx0+ix, sy0+iy, ix, iy, sw, sh, force_pointsource, is_galaxy, fit_background))
 
+        opt = srctractor.optimizer
+        opt.cache_image_params(srctractor)
+
         # Compute the log-likehood without a source here.
         srccat[0] = None
 
@@ -1933,6 +1936,8 @@ class OneBlob(object):
             if fit_sky:
                 srctractor.thawParam('images')
 
+        opt.clear_cached_image_params()
+
         # Actually select which model to keep.  The MODEL_NAMES
         # array determines the order of the elements in the DCHISQ
         # column of the catalog.
@@ -2031,7 +2036,14 @@ class OneBlob(object):
                 continue
             modelMasks = models.model_masks(i, src)
             tr.setModelMasks(modelMasks)
+
+            opt = tr.optimizer
+            opt.cache_image_params(tr)
+
             tr.optimize_loop(**self.optargs)
+
+            opt.clear_cached_image_params()
+
             cpu1 = time.process_time()
             cputime[i] += (cpu1 - cpu0)
             done_fitting[i] = True
@@ -2114,6 +2126,9 @@ class OneBlob(object):
             if has_fixed_position(src):
                 optargs.update(check_step=None)
 
+            opt = srctractor.optimizer
+            opt.cache_image_params(srctractor)
+
             if self.plots:
                 mods = list(srctractor.getModelImages())
                 mod0,_ = quick_coadds(srctims, self.bands, self.blobwcs, images=mods,
@@ -2123,6 +2138,8 @@ class OneBlob(object):
 
             # First-round optimization
             srctractor.optimize_loop(**optargs)
+
+            opt.clear_cached_image_params()
 
             if self.plots and (numi<20 or numi%20 == 0):
                 mods = list(srctractor.getModelImages())
