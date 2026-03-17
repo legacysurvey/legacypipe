@@ -679,10 +679,10 @@ class OneBlob(object):
                 if src is None:
                     cat.freezeParam(isub)
                     continue
-                nsrcparams = src.numberOfParams()
                 if getattr(src, 'freezeparams', False):
                     # SGA frozen-sources.  Do these get uncertainties measured?
                     _convert_ellipses(src)
+                nsrcparams = src.numberOfParams()
                 if B.force_keep_source[isub]:
                     B.srcinvvars[isub] = np.zeros(nsrcparams, np.float32)
                     cat.freezeParam(isub)
