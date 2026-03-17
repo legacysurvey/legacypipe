@@ -2037,8 +2037,6 @@ class OneBlob(object):
             modelMasks = models.model_masks(i, src)
             tr.setModelMasks(modelMasks)
 
-            print('opt_indiv: setting modelMasks:', modelMasks)
-
             opt = tr.optimizer
             opt.cache_image_params(tr)
 
