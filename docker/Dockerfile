@@ -54,15 +54,9 @@ RUN apt -y update && apt install -y apt-utils \
     libplplot-dev \
     source-extractor \
     psfex \
+    patchelf \
     # Remove APT files
-    && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-# patchelf to fix NERSC stuff; Cuda
-RUN apt -y update \
- && apt install -y patchelf \
- && apt install -y libnvrtc12 libcudart12 libcurand10 libcusolver11 libnccl2 \
-    libcufft11 libcusparse12 \
- && apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    && apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 ENV FFLAGS=-fallow-argument-mismatch
 ENV FCFLAGS=-fallow-argument-mismatch
@@ -95,7 +89,6 @@ RUN for x in \
     fitsio \
     requests \
     django \
-    cupy-cuda12x \
 ; do pip3 install --break-system-packages --no-cache $x; done
 
 RUN ln -s /usr/bin/python3.12-config /usr/local/bin/python3-config
@@ -120,12 +113,6 @@ RUN git clone https://github.com/dstndstn/astrometry.net.git astrometry \
     && make install INSTALL_DIR=/usr/local
 
 #FROM working
-
-# The Tractor
-RUN git clone https://github.com/dstndstn/tractor.git tractor \
-    && cd tractor \
-    && python setup.py build_ext --with-ceres --with-cython --inplace \
-    && pip install . --break-system-packages
 
 # unwise_psf
 RUN git clone https://github.com/legacysurvey/unwise_psf.git \
@@ -206,12 +193,24 @@ RUN python -O -m compileall \
     /usr/local/lib/python \
     /src/unwise_psf/py
 
-RUN cd tractor \
+# Cuda
+RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb \
+ && dpkg -i cuda-keyring_1.1-1_all.deb \
+ && apt update \
+ && apt install -y cuda-toolkit-13-2 \
+ && apt clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+RUN python -m pip install --no-cache-dir --break-system-packages cupy-cuda13x
+RUN python -m pip install pynvtx --break-system-packages
+
+# # The Tractor
+RUN git clone https://github.com/dstndstn/tractor.git tractor \
+  && cd tractor \
   && git fetch \
   && git pull \
   && python setup.py build_ext --with-ceres --with-cython --inplace \
   && pip install . --break-system-packages \
-  && echo dr10.9 && git describe
+  && echo dr11.0 && git describe
 
 RUN git clone https://github.com/legacysurvey/legacypipe.git \
   && cd legacypipe \
@@ -219,4 +218,12 @@ RUN git clone https://github.com/legacysurvey/legacypipe.git \
   && python    -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
   && python -O -m compileall /src/legacypipe/py/{legacypipe,legacyzpts} \
   && git describe \
-  && echo 3
+  && echo dr11.0.0
+
+# For Nsight Systems profiler --
+#RUN wget https://developer.nvidia.com/downloads/assets/tools/secure/nsight-systems/2026_1/NsightSystems-linux-cli-public-2026.1.2.63-3729663.deb
+#RUN dpkg -i NsightSystems-linux-cli-public-2026.1.2.63-3729663.deb
+#
+# OR
+# apt install cuda-nsight-systems-13-2
+# or cuda-nsight-13-2 ?
