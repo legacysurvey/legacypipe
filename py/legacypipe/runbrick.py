@@ -1555,7 +1555,7 @@ def stage_fitblobs(T=None,
                             r = Riter.next(t_out)
                             #info('Riter', ('hi' if hi else 'lo'), 'got', r)
                         except StopIteration:
-                            info('Reached end of', ('hi' if hi else 'lo'))
+                            debug('Reached end of', ('hi' if hi else 'lo'))
                             if hi:
                                 Riter_hi = None
                             else:
@@ -1574,7 +1574,7 @@ def stage_fitblobs(T=None,
                             rr = r['result']
                             rrstr = '%i srcs'%len(rr) if rr is not None else 'none'
                             rstr = 'brick %s blob %s: %s' % (r['brickname'], r['iblob'], rrstr)
-                        debug('Main thread: got result: [%s]' % rstr)
+                        #debug('Main thread: got result: [%s]' % rstr)
 
                 else:
                     r = None
@@ -1582,13 +1582,13 @@ def stage_fitblobs(T=None,
                         try:
                             r = next(Riter_hi)
                         except StopIteration:
-                            info('Reached end of hi')
+                            debug('Reached end of hi')
                             Riter_hi = None
                     if Riter_lo is not None:
                         try:
                             r = next(Riter_lo)
                         except StopIteration:
-                            info('Reached end of lo')
+                            debug('Reached end of lo')
                             Riter_lo = None
 
                 if signal_quitting:
@@ -3582,27 +3582,8 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
 
     # Before we begin, free the *tims* to reduce our memory use,
     # before reading in the *forced_bands* imaging data.
-
-    pid = os.getpid()
-    procs = run_ps(pid)
-    info('PS:')
-    procs.about()
-    info('pmem:', procs.pmem)
-    info('proc_vmpeak:', procs.proc_vmpeak)
-    info('vsz:', procs.vsz)
-
     for i in range(len(tims)):
         tims[i] = None
-
-    procs = run_ps(pid, last=procs)
-    info('PS:')
-    procs.about()
-    info('pmem:', procs.pmem)
-    info('proc_vmpeak:', procs.proc_vmpeak)
-    info('vsz:', procs.vsz)
-
-    info('T:')
-    T.about()
 
     clean_bands = [clean_band_name(b) for b in forced_bands]
     clean_map = dict(list(zip(forced_bands, clean_bands)))
