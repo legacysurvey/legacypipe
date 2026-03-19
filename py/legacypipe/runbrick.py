@@ -1547,13 +1547,12 @@ def stage_fitblobs(T=None,
                     r = None
                     for Riter,hi,t_out in [(Riter_hi, True, 0.),
                                            (Riter_lo, False, 0.),
-                                           (Riter_hi, True, timeout),
-                                           (Riter_lo, False, timeout),]:
+                                           (Riter_hi, True, timeout/2.),
+                                           (Riter_lo, False, timeout/2.),]:
                         if Riter is None:
                             continue
                         try:
                             r = Riter.next(t_out)
-                            #info('Riter', ('hi' if hi else 'lo'), 'got', r)
                         except StopIteration:
                             debug('Reached end of', ('hi' if hi else 'lo'))
                             if hi:
@@ -1602,10 +1601,10 @@ def stage_fitblobs(T=None,
                         except:
                             pass
 
-                # We should only get r=None during signal_quitting.
-                R.append(r)
-                n_finished += 1
-                n_finished_total += 1
+                if r is not None:
+                    R.append(r)
+                    n_finished += 1
+                    n_finished_total += 1
             except PoolWorkerDiedException as e:
                 info('Main thread: worker died')
                 info('A worker died (maybe OOM-killed?) while processing a blob.')
