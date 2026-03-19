@@ -3636,7 +3636,7 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     tims = [tim for tim in tims if tim is not None]
     assert(len(ccds) == len(tims))
     if len(tims) == 0:
-        return dict()
+        return dict(tims=tims)
 
     # outliers
 
@@ -3676,6 +3676,8 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     args = [list(a) + [cat, T, do_phot, release, use_ceres] for a in zip(ccds, ims, tims)]
     FF = mp.map(_forced_phot_one, args)
     FF = [F for F in FF if F is not None]
+    if len(FF) == 0:
+        return dict(tims=tims)
     F = merge_tables(FF, columns='fillzero')
     del FF
 
@@ -3863,6 +3865,8 @@ def _forced_phot_one(args):
     info('Not subtracting SGA galaxies outside the image...')
 
     info('Forced-photometering %i sources in & near this image' % len(sub_cat))
+    if len(sub_cat) == 0:
+        return None
 
     # create copies before modifying the Flux object
     sub_cat = [src.copy() for src in sub_cat]
