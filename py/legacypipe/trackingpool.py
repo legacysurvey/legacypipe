@@ -382,7 +382,6 @@ class TrackingPool(Pool):
             pool.append(w)
             pid = w.pid
             pids[worker_id] = pid
-            print('New worker PID:', pid)
             util.debug('added worker %i with pid %s' % (worker_id, pid))
 
     @staticmethod

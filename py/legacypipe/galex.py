@@ -16,6 +16,14 @@ from tractor.psf import PixelizedPSF
 
 import logging
 logger = logging.getLogger('legacypipe.galex')
+def error(*args):
+    from legacypipe.utils import log_error
+    log_error(logger, args)
+    import traceback
+    traceback.print_exc()
+def warning(*args):
+    from legacypipe.utils import log_warning
+    log_warning(logger, args)
 def info(*args):
     from legacypipe.utils import log_info
     log_info(logger, args)
@@ -96,7 +104,7 @@ def stage_galex_forced(
     if maskbits is not None and np.any(do_phot):
         incluster = (maskbits & MASKBITS['CLUSTER'] > 0)
         if np.any(incluster):
-            print('Checking for sources inside CLUSTER mask')
+            info('Checking for sources inside CLUSTER mask')
             Igood = np.flatnonzero(do_phot)
             ra  = np.array([cat[i].getPosition().ra  for i in Igood])
             dec = np.array([cat[i].getPosition().dec for i in Igood])
@@ -109,7 +117,7 @@ def stage_galex_forced(
                 xx,yy = xx[Iinbounds], yy[Iinbounds]
                 del Iinbounds
                 Icluster = Igood[incluster[yy, xx]]
-                print('Found', len(Icluster), 'of', len(Igood), 'sources inside CLUSTER mask')
+                info('Found', len(Icluster), 'of', len(Igood), 'sources inside CLUSTER mask')
                 do_phot[Icluster] = False
     Nskipped = len(do_phot) - np.sum(do_phot)
 
@@ -154,7 +162,7 @@ def stage_galex_forced(
         for i,p in enumerate(phots[:len(args)]):
             if p is None:
                 (_,_,tiles,band) = args[i][:4]
-                print('"None" result from GALEX forced phot band', band, '- probably no coverage')
+                info('"None" result from GALEX forced phot band', band, '- probably no coverage')
                 continue
             galex_models.extend(p.models)
             if GALEX is None:
@@ -222,9 +230,7 @@ def galex_phot(X):
     try:
         G = galex_forcedphot(galex_dir, cat, tiles, band, roiradec, **kwargs)
     except:
-        import traceback
-        print('galex_forcedphot failed:')
-        traceback.print_exc()
+        error('galex_forcedphot failed:')
     return G
 
 def galex_forcedphot(galex_dir, cat, tiles, band, roiradecbox,
@@ -767,7 +773,7 @@ def galex_coadds(onegal, galaxy=None, radius_mosaic=30, radius_mask=None,
     # Read the custom Tractor catalog
     tractorfile = os.path.join(output_dir, '{}-tractor.fits'.format(galaxy))
     if not os.path.isfile(tractorfile):
-        print('Missing Tractor catalog {}'.format(tractorfile))
+        warning('Missing Tractor catalog {}'.format(tractorfile))
         return 0
 
     cat = fits_table(tractorfile)
@@ -830,7 +836,7 @@ def galex_coadds(onegal, galaxy=None, radius_mosaic=30, radius_mask=None,
     coimgs, comods, coresids, coimgs_central, comods_nocentral = [], [], [], [], []
     for niceband, band in zip(nicegbands, gbands):
         J = np.flatnonzero(galex_tiles.get('has_'+band))
-        print(len(J), 'GALEX tiles have coverage in band', band)
+        info(len(J), 'GALEX tiles have coverage in band', band)
 
         coimg = np.zeros((H, W), np.float32)
         comod = np.zeros((H, W), np.float32)
@@ -845,13 +851,11 @@ def galex_coadds(onegal, galaxy=None, radius_mosaic=30, radius_mask=None,
             tile = galex_tiles[j]
             fn = os.path.join(galex_dir, tile.tilename.strip(),
                               '%s-%sd-intbgsub.fits.gz' % (tile.tilename, band))
-            #print(fn)
 
             gwcs = Tan(*[float(f) for f in
                          [tile.crval1, tile.crval2, tile.crpix1, tile.crpix2,
                           tile.cdelt1, 0., 0., tile.cdelt2, 3840., 3840.]])
             img = fitsio.read(fn)
-            #print('Read', img.shape)
 
             try:
                 Yo, Xo, Yi, Xi, _ = resample_with_wcs(targetwcs, gwcs, [], 3)
@@ -924,8 +928,7 @@ def galex_coadds(onegal, galaxy=None, radius_mosaic=30, radius_mask=None,
         for thisimg, imtype in zip( (coimg, comod, comod_nocentral),
                                 ('image', 'model', 'model-nocentral') ):
             fitsfile = os.path.join(output_dir, '{}-{}-{}.fits'.format(galaxy, imtype, niceband))
-            if verbose:
-                print('Writing {}'.format(fitsfile))
+            debug('Writing {}'.format(fitsfile))
             fitsio.write(fitsfile, thisimg * 10**(-0.4 * (zp - 22.5)), clobber=True)
 
     # Build a color mosaic (but note that the images here are in units of
@@ -939,8 +942,7 @@ def galex_coadds(onegal, galaxy=None, radius_mosaic=30, radius_mask=None,
                              ('image', 'model', 'resid', 'model-nocentral', 'image-central') ):
         rgb = _galex_rgb(imgs)
         jpgfile = os.path.join(output_dir, '{}-{}-FUVNUV.jpg'.format(galaxy, imtype))
-        if verbose:
-            print('Writing {}'.format(jpgfile))
+        debug('Writing {}'.format(jpgfile))
         imsave_jpeg(jpgfile, rgb, origin='lower')
 
     return 1

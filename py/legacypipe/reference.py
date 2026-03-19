@@ -100,7 +100,7 @@ def get_reference_sources(survey, targetwcs, bands,
                 # catalog into the SGA catalog, and then dropping the
                 # Gaia entries.
                 #
-                print('Merging SGA and Gaia entries...')
+                debug('Merging SGA and Gaia entries...')
 
                 # FIXME - I just hard-coded Gaia DR3 for simplicity
                 Igal = np.flatnonzero(galaxies.ref_cat == 'G3')
@@ -704,10 +704,10 @@ def read_sga(targetwcs, survey, rc, dc, brick_radius, max_radius):
         galaxies.ref_cat = np.array([refcat] * len(galaxies))
 
     if is_ellipse:
-        print('SGA ellipse catalog')
+        debug('SGA ellipse catalog')
         # SGA ellipse catalog
         if has_fitmode:
-            print('Has fitmode')
+            debug('SGA ellipse catalog has fitmode')
             # SGA-2025
             galaxies.islargegalaxy = np.array([c.startswith('L') for c in galaxies.ref_cat])
             galaxies.freezeparams = ((galaxies.fitmode & SGA_FITMODE['FREEZE']) != 0)
@@ -723,7 +723,7 @@ def read_sga(targetwcs, survey, rc, dc, brick_radius, max_radius):
             galaxies.ignore_source |= ((galaxies.fitmode & SGA_FITMODE['FIXGEO']) != 0)
 
         else:
-            print('No fitmode -- SGA-2020?')
+            info('SGA catalog has no fitmode -- SGA-2020?')
             # SGA-2020
             # NOTE: fields such as ref_cat, preburned, etc, already exist in the
             # "galaxies" catalog read from disk.
@@ -744,12 +744,12 @@ def read_sga(targetwcs, survey, rc, dc, brick_radius, max_radius):
             galaxies.ref_id[I] = galaxies.sga_id[I]
 
     else:
-        print('SGA parent catalog')
+        debug('SGA parent catalog')
         # SGA parent catalog.
         galaxies.ref_cat = np.array([refcat] * len(galaxies))
 
         if has_fitmode:
-            print('Has fitmode')
+            debug('SGA parent catalog has fitmode')
             # SGA-2025
             # The fitmode FREEZE bit is not allowed in the parent catalog
             assert(np.all((galaxies.fitmode & SGA_FITMODE['FREEZE']) == 0))
@@ -773,7 +773,7 @@ def read_sga(targetwcs, survey, rc, dc, brick_radius, max_radius):
             galaxies.ignore_source |= ~in_bounds
 
         else:
-            print('No fitmode -- SGA-2020?')
+            info('SGA parent catalog has no fitmode -- SGA-2020?')
             # SGA-2020
             galaxies.islargegalaxy = np.ones(len(galaxies), bool)
             galaxies.freezeparams = np.zeros(len(galaxies), bool)

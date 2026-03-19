@@ -25,6 +25,14 @@ from legacypipe.utils import get_cpu_arch
 
 import logging
 logger = logging.getLogger('legacypipe.oneblob')
+def error(*args):
+    from legacypipe.utils import log_error
+    log_error(logger, args)
+    import traceback
+    traceback.print_exc()
+def warning(*args):
+    from legacypipe.utils import log_warning
+    log_warning(logger, args)
 def info(*args):
     from legacypipe.utils import log_info
     log_info(logger, args)
@@ -275,8 +283,7 @@ class OneBlob(object):
         self.frozen_galaxy_mods = []
 
         if len(frozen_galaxies):
-            debug('Subtracting frozen galaxy models...')
-            status_update('Subtracting %i frozen galaxy models...' % len(frozen_galaxies))
+            self.status('Subtracting %i frozen galaxy models...' % len(frozen_galaxies))
             tr = self.tractor(self.tims, Catalog(*frozen_galaxies))
             # FIXME -- can we set *max* sizes instead?
             # mm = []
@@ -290,11 +297,8 @@ class OneBlob(object):
                 try:
                     mod = tr.getModelImage(tim)
                 except Exception:
-                    print('Exception getting frozen-galaxies model.')
-                    print('galaxies:', frozen_galaxies)
-                    print('tim:', tim)
-                    import traceback
-                    traceback.print_exc()
+                    error('Exception getting frozen-galaxies model.  Galaxies:', frozen_galaxies,
+                          'Tim:', tim)
                     continue
                 self.frozen_galaxy_mods.append(mod)
                 tim.setImage(tim.data - mod)
@@ -327,6 +331,10 @@ class OneBlob(object):
         info(self.prefix, *args)
     def debug(self, *args):
         debug(self.prefix, *args)
+    def status(self, *args, force=False):
+        self.debug(*args)
+        status_update(self.prefix + (' ' if len(self.prefix) else '') +
+                      ' '.join(str(s) for s in args), force=force)
 
     def init_table(self, srcs, Isrcs):
         # Per-source measurements for this blob
@@ -412,10 +420,8 @@ class OneBlob(object):
         # - model selection (including iterative detection)
         # - metrics
         self.prefix = 'Blob %s%s of %s:' % (self.name, '-iter' if is_iterative else '', self.nblobs)
-        self.iterstring = ' (iterative)' if is_iterative else ''
 
-        self.info('Starting: %i sources' % (len(B.sources)))
-        status_update('Starting up%s' % self.iterstring)
+        self.status('Starting: %i sources' % (len(B.sources)))
         trun = tlast = Time()
         # Not quite so many plots...
         self.plots1 = self.plots
@@ -451,18 +457,21 @@ class OneBlob(object):
 
         cat = Catalog(*B.sources)
         tr = self.tractor(self.tims, cat)
-        # Fit any sources marked with 'needs_initial_flux' -- saturated, and SGA
-        fitflux = [src for src in cat if (src is not None and getattr(src, 'needs_initial_flux', False))]
-        debug('%i sources need initial flux fitting.' % len(fitflux))
-        if len(fitflux):
-            status_update('Fitting initial fluxes for %i sources%s' % (len(fitflux), self.iterstring))
-            self.debug('Fitting initial fluxes for %i sources' % len(fitflux))
-            self._fit_fluxes(cat, self.tims, self.bands, fitcat=fitflux)
-            if self.plots:
-                self._plots(tr, 'After fitting initial fluxes')
-            for src in fitflux:
-                src.needs_initial_flux = False
-        del fitflux
+
+        if np.any(B.done_fitting):
+            self.info('Skipping fitting initial fluxes (already finished that)')
+        else:
+            # Fit any sources marked with 'needs_initial_flux' -- saturated, and SGA
+            fitflux = [src for src in cat
+                       if (src is not None and getattr(src, 'needs_initial_flux', False))]
+            if len(fitflux):
+                self.status('Fitting initial fluxes for %i sources' % (len(fitflux)))
+                self._fit_fluxes(cat, self.tims, self.bands, fitcat=fitflux)
+                if self.plots:
+                    self._plots(tr, 'After fitting initial fluxes')
+                for src in fitflux:
+                    src.needs_initial_flux = False
+            del fitflux
 
         if self.plots:
             self._plots(tr, 'Initial models')
@@ -489,7 +498,7 @@ class OneBlob(object):
                 self._optimize_individual_sources_subtract(
                     cat, Ibright, B.cpu_source, B.done_fitting)
             else:
-                status_update('Fitting source%s' % (self.iterstring))
+                self.status('Fitting source')
                 self._optimize_individual_sources(tr, cat, Ibright, B.cpu_source,
                                                   B.done_fitting)
 
@@ -583,7 +592,7 @@ class OneBlob(object):
 
         segmap = None
         if self.do_segmentation:
-            status_update('Computing segmentation map%s' % self.iterstring)
+            self.status('Computing segmentation map')
             segmap = self.compute_segmentation_map(cat)
         mask_others = False #self.do_segmentation
         # Next, model selections: point source vs rex vs dev/exp vs ser.
@@ -668,7 +677,7 @@ class OneBlob(object):
                 self.ps.savefig()
 
         if compute_metrics:
-            status_update('Computing metrics%s' % self.iterstring)
+            self.status('Computing metrics')
             # Compute variances on all parameters for the kept model
             B.srcinvvars = [None for i in range(len(B))]
             cat.thawAllRecursive()
@@ -717,7 +726,7 @@ class OneBlob(object):
             del M
 
         self.info('Finished, total: %s' % (Time()-trun))
-        status_update('Finished%s' % self.iterstring, force=True)
+        self.status('Finished', force=True)
         return B
 
     def compute_segmentation_map(self, cat):
@@ -971,10 +980,9 @@ class OneBlob(object):
                 continue
 
             src = cat[srci]
-            self.debug('Model selection for source %i of %i; sourcei %i, initial model %s' %
-                       (numi+1, len(Ibright), srci, str(src)))
-            status_update('Model selection for source %i of %i%s' %
-                          (numi+1, len(Ibright), self.iterstring))
+            self.status('Model selection for source %i of %i' % (numi+1, len(Ibright)))
+            self.debug('Initial model:', str(src))
+
             cpu0 = time.process_time()
 
             if src.freezeparams:
@@ -1075,7 +1083,6 @@ class OneBlob(object):
             oldprefix = self.prefix
             Bnew = self.iterative_detection(B, models)
             self.prefix = oldprefix
-            self.iterstring = ''
 
             if Bnew is not None:
                 # B.sources is a list of objects... merge() with
@@ -1644,7 +1651,7 @@ class OneBlob(object):
                 # MAGIC 2. = factor by which r_e is allowed to grow for an SGA galaxy.
                 known_galaxy_logrmax = np.log(src.shape.re * 2.)
             else:
-                print('WARNING: unknown galaxy type:', src)
+                warning('WARNING: unknown galaxy type:', src)
 
         debug(('Source at blob coordinates %i,%i, local source coords %i,%i of %ix%i; ' +
                'forcing pointsource? %s, is large galaxy? %s, fitting sky background: %s') %
@@ -1793,11 +1800,8 @@ class OneBlob(object):
             try:
                 R = srctractor.optimize_loop(**optargs)
             except Exception as e:
-                print('Exception fitting source in model selection.  src:', newsrc)
-                import traceback
-                traceback.print_exc()
+                error('Exception fitting source in model selection.  src:', newsrc)
                 raise(e)
-                continue
             self.debug('After  model selection: %s' % (str(newsrc)))
             hit_limit = R.get('hit_limit', False)
             opt_steps = R.get('steps', -1)
@@ -2085,9 +2089,7 @@ class OneBlob(object):
                 debug('Frozen source', src, '-- keeping as-is!')
                 done_fitting[srci] = True
                 continue
-            status_update('Fitting source %i of %i%s' % (numi+1, len(Ibright), self.iterstring))
-            self.debug('Fitting source %i of %i (source id %i): %s' %
-                       (numi+1, len(Ibright), srci, str(src)))
+            self.status('Fitting source %i of %i' % (numi+1, len(Ibright)))
 
             modelMasks = models.model_masks(srci, src)
             # sub-select the images (and corresponding modelmasks) that actually overlap this source
@@ -2658,20 +2660,11 @@ class SourceModels(object):
                 mod = src.getModelPatch(tim, modelMask=mm)
                 if mod is not None and mod.patch is not None:
                     if not np.all(np.isfinite(mod.patch)):
-                        print('Non-finite mod patch')
-                        print('source:', src)
-                        print('tim:', tim)
-                        print('PSF:', tim.getPsf())
+                        warning('Non-finite mod patch.  Source:', src, 'tim:', tim,
+                                'PSF:', tim.getPsf())
                     assert(np.all(np.isfinite(mod.patch)))
 
-                    #mh,mw = mod.shape
-
                     mod = _clip_model_to_blob(mod, sh, ie)
-
-                    #mh2,mw2 = mod.shape
-                    #debug('sourcei %i: %i x %i model -> clip %i x %i for source' % (srci, mw,mh,mw2,mh2),
-                    #src, 'in tim', tim)
-
                     if subtract and mod is not None:
                         mod.addTo(tim.getImage(), scale=-1)
                         tim.setImage(tim.data)
@@ -2790,7 +2783,7 @@ def _select_model(chisqs, nparams, galaxy_margin):
     diff = max([chisqs[name] - nparams[name] for name in chisqs.keys()
                 if name != 'none'] + [-1])
 
-    debug('best fit source chisq: %.3f, vs threshold %.3f' % (diff, cut))
+    #debug('best fit source chisq: %.3f, vs threshold %.3f' % (diff, cut))
     if diff < cut:
         # Drop this source
         return keepmod

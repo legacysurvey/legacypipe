@@ -110,7 +110,7 @@ def stage_just_coadd(W=3600, H=3600, pixscale=0.262, brickname=None,
     for band in bands:
         debug('Computing coadd for band', band)
         I = np.flatnonzero(ccds.filter == band)
-        print('Band', band, ':', len(I), 'CCDs')
+        info('Band', band, ':', len(I), 'CCDs')
 
         mods = blobmods = False
         unweighted=True

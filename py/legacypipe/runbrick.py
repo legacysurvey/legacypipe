@@ -51,6 +51,13 @@ from legacypipe.galex import stage_galex_forced
 
 import logging
 logger = logging.getLogger('legacypipe.runbrick')
+def error(*args):
+    from legacypipe.utils import log_error
+    log_error(logger, args)
+    traceback.print_exc()
+def warning(*args):
+    from legacypipe.utils import log_warning
+    log_warning(logger, args)
 def info(*args):
     from legacypipe.utils import log_info
     log_info(logger, args)
@@ -569,7 +576,7 @@ def stage_refs(survey=None,
                 sz = edge
                 sl = slice(y-sz, y+sz+1), slice(x-sz, x+sz+1)
                 for data,mod,ie,chi,roi in getattr(R, 'ims1', []):
-                    print('x,y', x, y, 'tim shape', tim.shape, 'slice', sl,
+                    debug('x,y', x, y, 'tim shape', tim.shape, 'slice', sl,
                           'roi', roi, 'data size', data.shape)
                     subimg = data[sl]
                     mn,mx = np.percentile(subimg.ravel(), [25,99])
@@ -1347,9 +1354,7 @@ def stage_fitblobs(T=None,
             R = unpickle_from_file(checkpoint_filename)
             debug('Read', len(R), 'results from checkpoint file', checkpoint_filename)
         except:
-            import traceback
-            print('Failed to read checkpoint file ' + checkpoint_filename)
-            traceback.print_exc()
+            error('Failed to read checkpoint file ' + checkpoint_filename)
 
         keepR, halfdone_blobs = _check_checkpoints(R, blobslices, brickname)
         info('Keeping', len(keepR), 'of', len(R), 'checkpointed results')
@@ -1465,7 +1470,7 @@ def stage_fitblobs(T=None,
 
     if checkpoint_filename is None:
         # FIXME -- add worker-died checks & logging here
-        print ("No checkpoint")
+        info("No checkpoint")
         R = list(Riter_hi)
         if Riter_lo is not None:
             R.extend(list(Riter_lo))
@@ -1506,9 +1511,7 @@ def stage_fitblobs(T=None,
                     dt = 0.
                     n_finished = 0
                 except:
-                    print('Failed to write checkpoint file', checkpoint_filename)
-                    import traceback
-                    traceback.print_exc()
+                    error('Failed to write checkpoint file', checkpoint_filename)
 
             dt = tnow.wall_seconds_since(last_printout)
             # FIXME
@@ -1629,9 +1632,7 @@ def stage_fitblobs(T=None,
                 info('raising exception...')
                 raise RunbrickError('Worker process died (OOM?) while processing: %s' % workitem)
             except Exception as e:
-                print('Main thread: Exception fetching result:', e)
-                import traceback
-                traceback.print_exc()
+                error('Main thread: Exception fetching result:', e)
                 raise e
 
         # Write checkpoint when done!
@@ -2094,7 +2095,7 @@ def _check_checkpoints(R, blobslices, brickname):
         r = ri['result']
 
         if brick != brickname:
-            print('Checkpoint brick mismatch:', brick, brickname)
+            warning('Checkpoint brick mismatch:', brick, brickname)
             continue
 
         if r is None:
@@ -2108,11 +2109,11 @@ def _check_checkpoints(R, blobslices, brickname):
                 iblob = r.iblob
             else:
                 if r.iblob != iblob:
-                    print('Checkpoint iblob mismatch:', r.iblob, iblob)
+                    warning('Checkpoint iblob mismatch:', r.iblob, iblob)
                     continue
 
             if iblob >= len(blobslices):
-                print('Checkpointed iblob', iblob, 'is too large! (>= %i)' % len(blobslices))
+                warning('Checkpointed iblob', iblob, 'is too large! (>= %i)' % len(blobslices))
                 continue
             if len(r) == 0:
                 pass
@@ -2126,13 +2127,13 @@ def _check_checkpoints(R, blobslices, brickname):
                 if sub_blob:
                     # check that it's a subset?
                     if rx0 < bx0 or ry0 < by0 or rx1 > bx1 or ry1 > by1:
-                        print('Checkpointed sub-blob bbox', [rx0,rx1,ry0,ry1],
-                              'is not inside expected', [bx0,bx1,by0,by1], 'for iblob', iblob)
+                        warning('Checkpointed sub-blob bbox', [rx0,rx1,ry0,ry1],
+                                'is not inside expected', [bx0,bx1,by0,by1], 'for iblob', iblob)
                         continue
                 else:
                     if rx0 != bx0 or ry0 != by0 or rx1 != bx1 or ry1 != by1:
-                        print('Checkpointed blob bbox', [rx0,rx1,ry0,ry1],
-                              'does not match expected', [bx0,bx1,by0,by1], 'for iblob', iblob)
+                        warning('Checkpointed blob bbox', [rx0,rx1,ry0,ry1],
+                                'does not match expected', [bx0,bx1,by0,by1], 'for iblob', iblob)
                         continue
         keepR.append(ri)
     return keepR, halfdone_blobs
@@ -2468,8 +2469,7 @@ def _bounce_one_blob(X):
         return None
 
     except Exception:
-        info(f'Exception in one_blob: brick {brickname}, iblob {iblob}')
-        traceback.print_exc()
+        error(f'Exception in one_blob: brick {brickname}, iblob {iblob}')
         raise
 
 def _get_mod(X):
@@ -3306,9 +3306,7 @@ def stage_wise_forced(
             photresults = unpickle_from_file(wise_checkpoint_filename)
             info('Read', len(photresults), 'results from checkpoint file', wise_checkpoint_filename)
         except:
-            import traceback
-            print('Failed to read checkpoint file', wise_checkpoint_filename)
-            traceback.print_exc()
+            error('Failed to read checkpoint file', wise_checkpoint_filename)
         n_a = len(runargs)
         runargs = [(key,a) for (key,a) in runargs if not key in photresults]
         info('Running', len(runargs), 'of', n_a, 'images not in checkpoint')
@@ -3343,9 +3341,7 @@ def stage_wise_forced(
                     dt = 0.
                     n_finished = 0
                 except:
-                    print('Failed to write checkpoint file', wise_checkpoint_filename)
-                    import traceback
-                    traceback.print_exc()
+                    error('Failed to write checkpoint file', wise_checkpoint_filename)
             # Wait for results (with timeout)
             try:
                 info('waiting for result (%i to go)...' % (len(runargs)-n_finished_total))
@@ -3374,7 +3370,6 @@ def stage_wise_forced(
             except TimeoutError:
                 continue
             except:
-                import traceback
                 traceback.print_exc()
         # Write checkpoint when done!
         _write_checkpoint(photresults, wise_checkpoint_filename)
@@ -3702,8 +3697,6 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     FF = mp.map(_forced_phot_one, args)
     FF = [F for F in FF if F is not None]
     F = merge_tables(FF, columns='fillzero')
-    #print('All forced photometry results:')
-    #F.about()
     del FF
 
     mag_unit = 'mag'
@@ -3735,8 +3728,6 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     TF.objid = T.objid.copy()
     from legacypipe.forced_photom_brickwise import average_forced_phot
     forced_units = average_forced_phot(F, TF, prefix='')
-    #print('Averaged forced-phot results:')
-    #TF.about()
     del F
 
     # Create coadd
@@ -3780,14 +3771,11 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
 
     info('Coadd results contain:', dir(C))
     # 'AP', 'T', 'allmasks', 'coimgs', 'comods', 'coresids', 'cowimgs', 'galdetivs', 'maximgs', 'psfdetivs'
-    #print('Coadd Table contains:')
-    #C.T.about()
 
     # Save per-source measurements of the maps produced during coadding
     cols = ['nobs', 'ngood', 'anymask', 'allmask', 'psfsize', 'psfdepth', 'galdepth']
     for c in cols:
         X = C.T.get(c)
-        #print('Column', c, ': shape', X.shape, 'type', X.dtype)
         for i,band in enumerate(clean_bands):
             TF.set('%s_%s' % (c, band), X[:,i])
 
@@ -3833,8 +3821,6 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
     # Grab aperture fluxes
     assert(C.AP is not None)
 
-    # print('Aperture flux table:')
-    # C.AP.about()
     # How many apertures?
     A = len(apertures_arcsec)
     for src,dst in [('apflux_img_%s',       'apflux'),
@@ -3856,10 +3842,6 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
             src.brightness = NanoMaggies(**fluxes)
         cat2.append(src)
 
-    # print('TF:', len(TF))
-    # TF.about()
-    # print('Catalog:', len(cat2))
-
     TF.bx = T.bx
     TF.by = T.by
     TF.flux_ivar = np.vstack([TF.get('flux_ivar_%s' % b) for b in clean_bands]).T
@@ -3869,10 +3851,6 @@ def stage_forced_phot(survey=None, bands=None, forced_bands=None,
         TF.set('fiberflux_%s'    % (band), ff   [:,iband])
         TF.set('fibertotflux_%s' % (band), fftot[:,iband])
     TF.delete_column('flux_ivar')
-
-    # print('After fiberfluxes:')
-    # TF.about()
-
     return dict(forced_T=TF, tims=tims)
 
 def _forced_phot_one(args):
@@ -4077,8 +4055,6 @@ def stage_writecat(
         WISE = None
 
     if GALEX is not None:
-        #print('runbrick: GALEX table is:')
-        #GALEX.about()
         galex_cols = GALEX.get_columns()
         for c in ['flux_nuv', 'flux_ivar_nuv', 'flux_fuv', 'flux_ivar_fuv',
                   'apflux_nuv', 'apflux_resid_nuv', 'apflux_ivar_nuv',
@@ -4164,7 +4140,6 @@ def stage_writecat(
         for b in survey.allbands + forced_bands:
             if not b in band_order:
                 allbands.append(b)
-    #print('Allbands:', allbands)
 
     # ASSUME that the UNWISE_COADDS_TIMERESOLVED_DIR ends with "/neo#" and look up the target
     # array size based on that.
@@ -4199,7 +4174,6 @@ def stage_writecat(
             for c in ['brickid', 'objid', 'bx', 'by']:
                 forced_T.delete_column(c)
             fc = forced_T.get_columns()
-            #print('Forced photometry columns:', fc)
             for c in fc:
                 T.set(c, forced_T.get(c))
         else:
@@ -4732,7 +4706,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
     else:
         from legacypipe.trackingpool import TrackingPool
         if gpu_threads > 0:
-            print('Creating %i GPU workers' % gpu_threads)
+            info('Creating %i GPU workers' % gpu_threads)
             pool_gpu = TrackingPool(gpu_threads,
                                     initializer=runbrick_init_gpu_worker,
                                     initargs=(gpus_to_use,))
@@ -4742,7 +4716,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
             else:
                 kwargs.update(mp=mp_hi)
         if threads > 0:
-            print('Creating %i CPU workers' % threads)
+            info('Creating %i CPU workers' % threads)
             pool = TrackingPool(threads,
                                 initializer=runbrick_init_cpu_worker,
                                 initargs=())
@@ -4894,7 +4868,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                          initial_args=initargs, **kwargs)
         info('All done:', StageTime()-t0)
     except Exception as e:
-        print('runstage ... caught exception', e)
+        warning('runstage ... caught exception', e)
         if pool is not None:
             info('pool.terminate()...')
             pool.terminate()
@@ -5254,8 +5228,7 @@ def get_runbrick_kwargs(survey=None,
     if stage is None:
         stage = []
     if brick is not None and radec is not None:
-        print('Only ONE of --brick and --radec may be specified.')
-        return None, -1
+        raise RunbrickError('Only ONE of --brick and --radec may be specified.')
     opt.update(radec=radec)
 
     if bands is None:
@@ -5270,11 +5243,6 @@ def get_runbrick_kwargs(survey=None,
 
     if allbands is None:
         allbands = bands
-        # # Make sure at least 'bands' are in allbands.
-        # allbands = ['g','r','z']
-        # for b in bands:
-        #     if not b in allbands:
-        #         allbands.append(b)
 
     if survey is None:
         from legacypipe.runs import get_survey
@@ -5308,9 +5276,7 @@ def get_runbrick_kwargs(survey=None,
                 T = fits_table(fn)
                 info('Read', len(T), 'sources from', fn)
             except:
-                print('Failed to read file', fn)
-                import traceback
-                traceback.print_exc()
+                error('Failed to read file', fn)
                 exists = False
 
         if skip:
@@ -5318,7 +5284,7 @@ def get_runbrick_kwargs(survey=None,
                 return survey,0
         elif check_done:
             if not exists:
-                print('Does not exist:', fn)
+                warning('Does not exist:', fn)
                 return survey,-1
             info('Found:', fn)
             return survey,0
@@ -5362,20 +5328,8 @@ def get_runbrick_kwargs(survey=None,
 def main(args=None):
     import datetime
     from legacypipe.survey import get_git_version
+    from legacypipe.utils import LogFormatter
     t = time.time()
-
-    info()
-    info('runbrick.py starting at', datetime.datetime.now().isoformat())
-    info('legacypipe git version:', get_git_version())
-    if args is None:
-        info('Command-line args:', sys.argv)
-        cmd = 'python'
-        for vv in sys.argv:
-            cmd += ' {}'.format(vv)
-        info(cmd)
-    else:
-        info('Args:', args)
-    info()
 
     parser = get_parser()
     parser.add_argument(
@@ -5409,13 +5363,32 @@ def main(args=None):
         lvl = logging.INFO
     else:
         lvl = logging.DEBUG
-    logging.basicConfig(level=lvl, format='%(message)s', stream=sys.stdout)
+
+    format = ('[%(levelname)s %(name)s %(funcName)s (%(filename)s:%(lineno)d) pid%(process)d ' +
+              '%(relativeCreatedSec).2f] %(message)s')
+    fmt = LogFormatter(fmt=format)
+    sh = logging.StreamHandler(stream=sys.stdout)
+    sh.setFormatter(fmt)
+    logging.basicConfig(level=lvl, handlers=[sh])
     # tractor logging is *soooo* chatty
     logging.getLogger('tractor.engine').setLevel(lvl + 10)
     # silence "findfont: score(<Font 'DejaVu Sans Mono' ...)" messages
     logging.getLogger('matplotlib.font_manager').disabled = True
+    logging.getLogger('matplotlib').disabled = True
     # route warnings through the logging system
     logging.captureWarnings(True)
+
+    info('runbrick.py starting at', datetime.datetime.now().isoformat())
+    info('legacypipe git version:', get_git_version())
+    if args is None:
+        info('Command-line args:', sys.argv)
+        cmd = 'python'
+        for vv in sys.argv:
+            cmd += ' {}'.format(vv)
+        info(cmd)
+    else:
+        info('Args:', args)
+
     if opt.plots:
         import matplotlib
         matplotlib.use('Agg')
@@ -5474,10 +5447,10 @@ def main(args=None):
     if ps_file is not None:
         # Try to shut down ps thread gracefully
         ps_shutdown.set()
-        info('Attempting to join the ps thread...')
+        debug('Attempting to join the ps thread...')
         ps_thread.join(1.0)
         if ps_thread.is_alive():
-            info('ps thread is still alive.')
+            debug('ps thread is still alive.')
 
     info('Total runtime: %.1f sec' % (time.time()-t))
     return rtn

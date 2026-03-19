@@ -1,10 +1,19 @@
 import os
+import logging
 import numpy as np
 
 from contextlib import AbstractContextManager
 
 from tractor.ellipses import EllipseESoft
 from tractor.utils import _GaussianPriors
+
+def log_error(logger, args):
+    msg = ' '.join(map(str, args))
+    logger.error(msg)
+
+def log_warning(logger, args):
+    msg = ' '.join(map(str, args))
+    logger.warning(msg)
 
 def log_info(logger, args):
     msg = ' '.join(map(str, args))
@@ -539,3 +548,43 @@ def run_ps(parent_pid=None, pid=None, last=None):
             pass
 
     return T
+
+# The logging system records the filename and line that a log message came from.  However, when we
+# use "log_debug" or other convenience functions, *that* is the location that gets logged, which
+# isn't helpful.  This function walks up the stack trace, ignoring such functions and returning the
+# first "real" code location it finds.
+def better_function_name(source, filename, lineno, stack=None):
+    '''
+    (source, filename, lineno): string function name, default filename and lineno to retmurn.
+    stack: eg from traceback.extract_stack().
+    '''
+    if stack is None:
+        import traceback
+        stack = traceback.extract_stack()
+    stack = reversed(stack)
+    found_source = False
+    name = source
+    for s in stack:
+        #print('  call stack:', s.name, s.filename, s.lineno, '"%s"' % s.line)
+        if not found_source:
+            if s.name == source:
+                found_source = True
+        else:
+            if s.name in ['log_debug', 'log_info', 'log_warning', 'log_error',
+                          'debug', 'info', 'warning', 'error']:
+                continue
+            else:
+                name = s.name
+                filename = os.path.basename(s.filename)
+                lineno = s.lineno
+                break
+    return name, filename, lineno
+
+class LogFormatter(logging.Formatter):
+    def format(self, record):
+        # Loop past "log_debug" etc function names in the stack trace
+        record.funcName, record.filename, record.lineno = better_function_name(
+            record.funcName, record.filename, record.lineno)
+        # Number of seconds since the logger was created.
+        record.relativeCreatedSec = record.relativeCreated / 1000
+        return super().format(record)

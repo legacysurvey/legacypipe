@@ -300,8 +300,8 @@ def mask_outlier_pixels(survey, tims, bands, targetwcs, brickname, version_heade
             # weight of the min/max
             minwt = np.zeros((H,W), np.float32)
             maxwt = np.zeros((H,W), np.float32)
-            minimg[:,:] = +1e100
-            maximg[:,:] = -1e100
+            minimg[:,:] = +1e30
+            maximg[:,:] = -1e30
 
             results = mp.imap_unordered(
                 blur_resample_one, [(i_btim,tim,sig,targetwcs)

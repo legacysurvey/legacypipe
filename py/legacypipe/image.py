@@ -10,6 +10,14 @@ from legacypipe.bits import DQ_BITS
 
 import logging
 logger = logging.getLogger('legacypipe.image')
+def error(*args):
+    from legacypipe.utils import log_error
+    log_error(logger, args)
+    import traceback
+    traceback.print_exc()
+def warning(*args):
+    from legacypipe.utils import log_warning
+    log_warning(logger, args)
 def info(*args):
     from legacypipe.utils import log_info
     log_info(logger, args)
@@ -99,7 +107,6 @@ class LegacySurveyImage(object):
                 hdr = self.read_image_header(ext=image_hdu)
                 # Parse ZNAXIS[12] / NAXIS[12] ?
                 info = self.read_image_fits()[image_hdu].get_info()
-                #print('Image info:', info)
                 self.height,self.width = info['dims']
                 self.hdu = info['hdunum'] - 1
                 self.ccdname = self.get_ccdname(primhdr, hdr)
@@ -165,8 +172,8 @@ class LegacySurveyImage(object):
             try:
                 self.plver = getattr(ccd, 'plver', 'xxx').strip()
             except:
-                print('Failed to read PLVER header card as a string.  This probably means your python fitsio package is too old.')
-                print('Try upgrading to version 1.0.5 or later.')
+                error('Failed to read PLVER header card as a string.  This probably means your python '
+                      'fitsio package is too old.  Try upgrading to version 1.0.5 or later.')
                 raise
             self.procdate = getattr(ccd, 'procdate', 'xxxxxxx').strip()
             self.plprocid = getattr(ccd, 'plprocid', 'xxxxxxx').strip()
@@ -451,7 +458,7 @@ class LegacySurveyImage(object):
     def recompute_airmass(self, primhdr, ra, dec):
         site = self.get_site()
         if site is None:
-            print('AIRMASS missing and site not defined.')
+            info('AIRMASS missing and site not defined.')
             return None
         debug('Recomputing AIRMASS')
         from astropy.time import Time as apyTime
@@ -848,9 +855,9 @@ class LegacySurveyImage(object):
 
                 if isinstance(sky, SplineSky):
                     grid = sky.get_grid()
-                    print('grid shape', grid.shape)
-                    print('xgrid:', sky.xgrid.shape)
-                    print('ygrid:', sky.ygrid.shape)
+                    debug('grid shape', grid.shape)
+                    debug('xgrid:', sky.xgrid.shape)
+                    debug('ygrid:', sky.ygrid.shape)
                     mid = np.median(grid.ravel())
                     scale = grid.max() - grid.min()
                     plt.clf()
@@ -858,7 +865,7 @@ class LegacySurveyImage(object):
                     plt.subplot(2,1,1)
                     xx = np.arange(sky.xgrid[0]+1, sky.xgrid[-1])
                     for i,y in enumerate(sky.ygrid):
-                        print('y grid point', y)
+                        debug('y grid point', y)
                         plt.plot(xx, i + (sky.spl(xx, y)[:,0] - mid)/scale, '-')
                         plt.plot(sky.xgrid, i + (grid[i,:] - mid)/scale, 'o')
                     plt.axvline(sky.x0, color='r', linestyle='--')
@@ -867,7 +874,7 @@ class LegacySurveyImage(object):
                     plt.subplot(2,1,2)
                     yy = np.arange(sky.ygrid[0]+1, sky.ygrid[-1])
                     for i,x in enumerate(sky.xgrid):
-                        print('x grid point', x)
+                        debug('x grid point', x)
                         plt.plot(yy, i + (sky.spl(x, yy)[0,:] - mid)/scale, '-')
                         plt.plot(sky.ygrid, i + (grid[:,i] - mid)/scale, 'o')
                     plt.axvline(sky.y0, color='r', linestyle='--')
@@ -1205,7 +1212,7 @@ class LegacySurveyImage(object):
         '''
         if self._image_header is not None:
             return self._image_header
-        print('Reading', self.imgfn, 'ext', self.hdu)
+        debug('Reading', self.imgfn, 'ext', self.hdu)
         self._image_header = self.read_image_fits()[self.hdu].read_header()
         return self._image_header
 
@@ -1239,8 +1246,8 @@ class LegacySurveyImage(object):
             try:
                 fixed = fix_weight_quantization(invvar, self.wtfn, self.hdu, slc)
             except Exception as e:
-                print('Fix_weight_quantization bailed out on', self.wtfn,
-                      'hdu', self.hdu, ':', e)
+                warning('Fix_weight_quantization bailed out on', self.wtfn,
+                        'hdu', self.hdu, ':', e)
 
             if not fixed:
                 # Clamp near-zero (incl negative!) weight to zero,
@@ -1508,11 +1515,11 @@ class LegacySurveyImage(object):
                 cmd = 'funpack -E %i -O %s %s' % (maskhdu, tmpmaskfn, maskfn)
             debug(cmd)
             if os.system(cmd):
-                print('Command failed: ' + cmd)
+                warning('Command failed: ' + cmd)
                 M,hdr = self._read_fits(maskfn, maskhdu, header=True)
-                print('Read', M.dtype, M.shape)
+                info('Read', M.dtype, M.shape)
                 fitsio.write(tmpmaskfn, M, header=hdr, clobber=True)
-                print('Wrote', tmpmaskfn, 'with fitsio')
+                info('Wrote', tmpmaskfn, 'with fitsio')
 
         return tmpimgfn,tmpmaskfn
 
@@ -1534,7 +1541,7 @@ class LegacySurveyImage(object):
                 args.append('-FLAG_IMAGE %s' % maskfn)
             args.append(imgfn)
             cmd = ' '.join(args)
-            print(cmd)
+            info('run_se:', cmd)
             rtn = os.system(cmd)
             if rtn:
                 raise RuntimeError('Command failed: ' + cmd)
@@ -1566,7 +1573,7 @@ class LegacySurveyImage(object):
         psfexflags = self.get_psfex_conf()
         with self.survey.get_se_dir() as sedir:
             cmd = 'psfex -c %s -PSF_DIR %s -PSF_SUFFIX .psf.tmp %s %s' % (os.path.join(sedir, self.camera + '.psfex'), psfdir, psfexflags, self.sefn)
-            print(cmd)
+            info('run_psfex:', cmd)
             rtn = os.system(cmd)
             if rtn:
                 raise RuntimeError('Command failed: %s: return value: %i' % (cmd,rtn))
@@ -2212,12 +2219,10 @@ class LegacySurveyImage(object):
                 self.run_sky(**sky_kwargs)
             except ZeroWeightError as zwe:
                 # PsfEx isn't going to succeed either, so bail out now
-                print('ZeroWeightError running sky:', zwe)
+                warning('ZeroWeightError running sky:', zwe)
                 raise zwe
             except Exception as ex:
-                print('Exception running sky:', ex)
-                import traceback
-                traceback.print_exc()
+                error('Exception running sky:', ex)
                 skyexc = ex
 
         if se:
@@ -2226,7 +2231,6 @@ class LegacySurveyImage(object):
             imgfn,maskfn = self.funpack_files(self.imgfn, self.dqfn,
                                               self.hdu, self.dq_hdu, todelete)
             self.run_se(imgfn, maskfn)
-            #print('Not deleting temp files for SE!')
             for fn in todelete:
                 os.unlink(fn)
 
@@ -2343,7 +2347,6 @@ def fix_weight_quantization(wt, weightfn, ext, slc):
     hdr = hdu.header
     table = hdu.data
     zquant = hdr.get('ZQUANTIZ','').strip()
-    #print('Fpack quantization method:', zquant)
     if len(zquant) == 0:
         # Not fpacked?
         return True

@@ -108,7 +108,7 @@ def detection_maps(tims, targetwcs, bands, mp, apodize=None, nsatur=None,
             #  OR if *every* image in the stack has SATUR set (to catch the case where the number in
             # the stack is less than nsatur such that nsatur could never be reached).
             satmaps[i] = np.logical_or(nsat >= nsatur, (nsat == nmap) * (nmap > 0))
-            print('Satmap:', np.sum(satmaps[i]), 'pixels set')
+            info('Satmap:', np.sum(satmaps[i]), 'pixels set')
 
             if plots:
                 import pylab as plt
@@ -645,7 +645,6 @@ def sed_matched_detection(sedname, sed, detmaps, detivs, bands,
         # python3.11 / scipy 1.15.3 seems to require this to be an int
         oslcs = find_objects(saddlemap.astype(np.uint8))
         if len(oslcs) != 1:
-            print('oslcs:', oslcs)
             if ps is not None:
                 plt.clf()
                 plt.imshow(sedsn, interpolation='nearest', origin='lower')

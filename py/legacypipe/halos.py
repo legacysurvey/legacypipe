@@ -2,6 +2,9 @@ import numpy as np
 
 import logging
 logger = logging.getLogger('legacypipe.halos')
+def warning(*args):
+    from legacypipe.utils import log_warning
+    log_warning(logger, args)
 def info(*args):
     from legacypipe.utils import log_info
     log_info(logger, args)
@@ -57,14 +60,14 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
     rr,dd = radec_at_mjd(refs.ra, refs.dec, refs.ref_epoch.astype(float),
                          refs.pmra, refs.pmdec, refs.parallax, mjd)
     if band not in decam_outer_halo_coeffs.keys():
-        print('No halo subtraction for band', band)
+        warning('No halo subtraction for band', band)
         return 0.
     col = 'decam_mag_%s' % band
     if not col in refs.get_columns():
-        print('No reference mag was computed for band', band, 'so no halo subtraction can be done')
+        warning('No reference mag was computed for band', band, 'so no halo subtraction can be done')
         return 0.
     mag = refs.get(col)
-    good = np.flatnonzero(mag != 0.)
+    good = np.flatnonzero((mag != 0.) * (refs.radius > 0))
     fluxes = 10.**((mag - 22.5) / -2.5)
 
     have_inner_moffat = False
@@ -77,7 +80,7 @@ def decam_halo_model(refs, mjd, wcs, pixscale, band, imobj, include_moffat,
             debug('Read inner Moffat parameters', (inner_alpha, inner_beta),
                   'from PsfEx file')
 
-    info('Halo subtraction: applying radius scaling of %.2f' % radius_scaling)
+    debug('Halo subtraction: applying radius scaling of %.2f' % radius_scaling)
     H,W = wcs.shape
     H = int(H)
     W = int(W)
