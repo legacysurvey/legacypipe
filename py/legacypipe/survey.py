@@ -15,6 +15,11 @@ from legacypipe.utils import EllipseWithPriors, galaxy_min_re
 
 import logging
 logger = logging.getLogger('legacypipe.survey')
+def error(*args):
+    from legacypipe.utils import log_error
+    log_error(logger, args)
+    import traceback
+    traceback.print_exc()
 def info(*args):
     from legacypipe.utils import log_info
     log_info(logger, args)
@@ -2073,9 +2078,7 @@ class LegacySurveyData(object):
             try:
                 kd = tree_open(fn, 'expnum')
             except:
-                debug('Failed to open', fn, ':')
-                import traceback
-                traceback.print_exc()
+                error('Failed to open', fn, ':')
                 continue
             if kd is None:
                 return None
@@ -2109,10 +2112,8 @@ def run_calibs(X):
     debug('run_calibs for image', im, ':', kwargs)
     try:
         return im.run_calibs(**kwargs)
-    except:
-        print('Exception in run_calibs:', im, kwargs)
-        import traceback
-        traceback.print_exc()
+    except Exception as e:
+        error('Exception in run_calibs:', im, kwargs, e)
         if not noraise:
             raise
 
@@ -2123,7 +2124,7 @@ def read_one_tim(X):
     tim = im.get_tractor_image(radecpoly=targetrd, **kwargs)
     if tim is not None:
         th,tw = tim.shape
-        print('Time to read %s-%s-%s: %i x %i image, hdu %i:' %
+        debug('Time to read %s-%s-%s: %i x %i image, hdu %i:' %
               (im.camera, im.expnum, im.ccdname, tw,th, im.hdu), Time()-t0)
     return tim
 
