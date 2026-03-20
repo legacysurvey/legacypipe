@@ -683,6 +683,8 @@ class OneBlob(object):
             cat.thawAllRecursive()
             cat.freezeAllParams()
             for isub in range(len(B.sources)):
+                if (isub+1)%1000 == 0:
+                    self.status('Computing metrics: source %i of %i' % (isub+1, len(B.sources)))
                 cat.thawParam(isub)
                 src = cat[isub]
                 if src is None:
@@ -720,7 +722,7 @@ class OneBlob(object):
                 tr.catalog = cat
             del I
 
-            M = _compute_source_metrics(B.sources, self.tims, self.bands, tr)
+            M = _compute_source_metrics(B.sources, self.tims, self.bands, tr, self.status)
             for k,v in M.items():
                 B.set(k, v)
             del M
@@ -2455,7 +2457,7 @@ def has_fixed_position(src):
         return False
     return (len(src.pos.getParams()) == 0)
 
-def _compute_source_metrics(srcs, tims, bands, tr):
+def _compute_source_metrics(srcs, tims, bands, tr, status):
     # rchi2 quality-of-fit metric
     rchi2_num    = np.zeros((len(srcs),len(bands)), np.float32)
     rchi2_den    = np.zeros((len(srcs),len(bands)), np.float32)
@@ -2484,6 +2486,9 @@ def _compute_source_metrics(srcs, tims, bands, tr):
             # For each source, compute its model and record its flux
             # in this image.  Also compute the full model *mod*.
             for isrc,src in enumerate(srcs):
+                if (isrc+1)%1000 == 0:
+                    status('Computing frac metrics: band %s (%i of %i), source %i of %i, patches' %
+                           (band, iband+1, len(bands), isrc+1, len(srcs)))
                 patch = tr.getModelPatch(tim, src)
                 if patch is None or patch.patch is None:
                     continue
@@ -2500,6 +2505,8 @@ def _compute_source_metrics(srcs, tims, bands, tr):
 
             # Now compute metrics for each source
             for isrc,patch in enumerate(srcmods):
+                status('Computing frac metrics: band %s (%i of %i), source %i of %i, metrics' %
+                       (band, iband+1, len(bands), isrc+1, len(srcs)))
                 if patch is None:
                     continue
                 slc = patch.getSlice(mod)
@@ -2550,6 +2557,8 @@ def _compute_source_metrics(srcs, tims, bands, tr):
             chisq = ((tim.getImage() - mod) * tim.getInvError())**2
 
             for isrc,patch in enumerate(srcmods):
+                status('Computing frac metrics: band %s (%i of %i), source %i of %i, rchi2' %
+                       (band, iband+1, len(bands), isrc+1, len(srcs)))
                 if patch is None:
                     continue
                 slc = patch.getSlice(mod)
