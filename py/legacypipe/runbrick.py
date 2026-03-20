@@ -1931,10 +1931,8 @@ def stage_fitblobs(T=None,
 
 def print_running_jobs(Riter, job_id_map, job_status_map, procs_last):
     info('Running:')
-    status = Riter.get_running_jobs()
-    #info('running job status:', status)
+    status = Riter.get_running_jobs_copy()
     # other threads may try to update status during iteration
-    status = status.copy()
     jmap = job_id_map.copy()
 
     updates = Riter.get_and_clear_updates()

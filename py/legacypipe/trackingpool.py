@@ -10,24 +10,40 @@ from multiprocessing import get_context, util
 class TrackingIMapUnorderedIterator(IMapUnorderedIterator):
     def __init__(self, pool):
         super().__init__(pool)
+        self._lock = threading.Lock()
         self._status = {}
         self._updates = {}
-    def _add_update(self, i, x):
-        if not i in self._updates:
-            self._updates[i] = []
-        self._updates[i].append(x)
+        self._checkpoints = {}
     def _set_status(self, i, s):
-        self._status[i] = s
+        with self._lock:
+            self._status[i] = s
     def _set(self, i, obj):
-        if i in self._status:
-            del self._status[i]
-        super()._set(i, obj)
+        with self._lock:
+            if i in self._status:
+                del self._status[i]
+            super()._set(i, obj)
+    def _add_update(self, i, x):
+        with self._lock:
+            # create an empty list if necessary, then append x
+            self._updates.setdefault(i, []).append(x)
     def get_and_clear_updates(self):
-        rtn = self._updates
-        self._updates = {}
-        return rtn
+        with self._lock:
+            rtn = self._updates
+            self._updates = {}
+            return rtn
+    def _add_checkpoint(self, i, x):
+        with self._lock:
+            # create an empty list if necessary, then append x
+            self._checkpoints.setdefault(i, []).append(x)
+    def get_and_clear_checkpoints(self):
+        with self._lock:
+            rtn = self._checkpoints
+            self._checkpoints = {}
+            return rtn
     def get_running_jobs(self):
         return self._status
+    def get_running_jobs_copy(self):
+        return self._status.copy()
 
 # This global is only used within worker processes
 _worker_pipe_data = None
@@ -42,6 +58,18 @@ def update_process_status(x):
         return False
     put, job, i, worker_id = _worker_pipe_data
     put((job, i, False, worker_id, dict(event='update', value=x)))
+    return True
+def send_process_checkpoint(x):
+    '''
+    Can be called by the target of a multiprocess call to send a checkpoint in the middle
+    of the computation.  These will be streamed back to the main process and be available
+    in the TrackingIMapUnorderedIterator object.
+    '''
+    if _worker_pipe_data is None:
+        util.info('send_process_checkpoint() called, but pipe to main process is not available.')
+        return False
+    put, job, i, worker_id = _worker_pipe_data
+    put((job, i, False, worker_id, dict(event='checkpoint', value=x)))
     return True
 
 def worker(inqueue, outqueue, initializer=None, initargs=(), maxtasks=None,
@@ -305,11 +333,10 @@ class TrackingPool(Pool):
                             r = cache[job]
                             if isinstance(r, TrackingIMapUnorderedIterator):
                                 r._set_status(i, obj)
-                        except:
+                        except Exception as e:
+                            util.sub_warning('_handle_results failed to set status:', e)
                             import traceback
-                            print('_handle_results failed to set status:')
                             traceback.print_exc()
-                            pass
                     elif obj['event'] == 'update':
                         # the worker delivered a user status update
                         util.debug('worker %i, job %i, item %i, delivered an update' % (worker_id, job, i))
@@ -317,11 +344,21 @@ class TrackingPool(Pool):
                             r = cache[job]
                             if isinstance(r, TrackingIMapUnorderedIterator):
                                 r._add_update(i, obj['value'])
-                        except:
+                        except Exception as e:
+                            util.sub_warning('_handle_results failed to set update:', e)
                             import traceback
-                            print('_handle_results failed to set update:')
                             traceback.print_exc()
-                            pass
+                    elif obj['event'] == 'checkpoint':
+                        # the worker delivered a checkpoint
+                        util.debug('worker %i, job %i, item %i, delivered a checkpoint' % (worker_id, job, i))
+                        try:
+                            r = cache[job]
+                            if isinstance(r, TrackingIMapUnorderedIterator):
+                                r._add_checkpoint(i, obj['value'])
+                        except Exception as e:
+                            util.sub_warning('_handle_results failed to set checkpoint:', e)
+                            import traceback
+                            traceback.print_exc()
             if done:
                 try:
                     util.debug('worker %i returned result for job %i item %i' %

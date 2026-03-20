@@ -84,6 +84,7 @@ def one_blob(args):
         return None
 
     if quit_now:
+        # This happens when the pool sends us one last task after the signal has been sent.
         info('Quit_now is set; not processing blob %s' % args.blobname)
         # don't return None -- this triggers different behavior
         raise QuitNowException()
