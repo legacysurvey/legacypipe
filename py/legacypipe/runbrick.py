@@ -1480,7 +1480,8 @@ def stage_fitblobs(T=None,
         last_checkpoint = CpuMeas()
         n_finished = 0
         n_finished_total = 0
-        procs_last = None
+        procs_last_hi = None
+        procs_last_lo = None
         last_printout = CpuMeas()
         job_status_map = {}
 
@@ -1495,6 +1496,7 @@ def stage_fitblobs(T=None,
         pool_obj = mp.pool
         old_sigusr1 = signal.signal(signal.SIGUSR1, sigusr1)
         closed_pool = False
+        closed_pool_hi = False
 
         while True:
             import time
@@ -1514,25 +1516,35 @@ def stage_fitblobs(T=None,
                     error('Failed to write checkpoint file', checkpoint_filename)
 
             dt = tnow.wall_seconds_since(last_printout)
-            # FIXME
-            # if dt > 60:
-            #     last_printout = tnow
-            #     if hasattr(Riter, 'get_running_jobs'):
-            #         procs_last = print_running_jobs(Riter, job_id_map, job_status_map, procs_last)
+            if dt > max(60, checkpoint_period):
+                last_printout = tnow
+                if Riter_hi is not None and hasattr(Riter_hi, 'get_running_jobs'):
+                    procs_last_hi = print_running_jobs(Riter_hi, job_id_map_high,
+                                                       job_status_map, procs_last_hi)
+                if Riter_lo is not None and hasattr(Riter_lo, 'get_running_jobs'):
+                    procs_last_lo = print_running_jobs(Riter_lo, job_id_map_low,
+                                                       job_status_map, procs_last_lo)
 
             if signal_quitting:
-                # FIXME - mp_hi too
                 if not closed_pool:
                     info('Main thread: got SIGUSR1 - closing pool...')
                     mp.pool.close()
                     info('Main thread: got SIGUSR1 - closed pool')
                     closed_pool = True
-                if hasattr(Riter, 'get_running_jobs'):
+                if mp_hi is not None and not closed_pool_hi:
+                    info('Main thread: got SIGUSR1 - closing high-priority pool...')
+                    mp_hi.pool.close()
+                    info('Main thread: got SIGUSR1 - closed high-priority pool')
+                    closed_pool_hi = True
+                if Riter_hi is not None and hasattr(Riter_hi, 'get_running_jobs'):
+                    info('Main thread: waiting for high-priority jobs:')
+                    print_running_jobs(Riter_hi, job_id_map_high, job_status_map, procs_last_hi)
+                if Riter_lo is not None and hasattr(Riter_lo, 'get_running_jobs'):
                     info('Main thread: waiting for jobs:')
-                    print_running_jobs(Riter, job_id_map, job_status_map, procs_last)
+                    print_running_jobs(Riter_lo, job_id_map_low, job_status_map, procs_last_lo)
 
             if Riter_hi is None and Riter_lo is None:
-                info('Both iterators finished - done!')
+                debug('Both iterators finished - done!')
                 break
 
             # Wait for results (with timeout)
