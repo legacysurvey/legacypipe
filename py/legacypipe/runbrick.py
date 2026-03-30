@@ -3189,6 +3189,8 @@ def stage_wise_forced(
     _add_stage_version(version_header, 'WISE', 'wise_forced')
     version_header.add_record(dict(name='W_CERES', value=wise_ceres,
                                    comment='WISE forced phot: use Ceres optimizer?'))
+    version_header.add_record(dict(name='WISE_GAIA_ONLY', value=wise_gaia_only,
+                                   comment='WISE forced phot: only Gaia + SGA sources?'))
     if not plots:
         ps = None
 
