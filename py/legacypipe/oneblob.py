@@ -611,7 +611,7 @@ class OneBlob(object):
             # Next, model selections: point source vs rex vs dev/exp vs ser.
             self.debug('Starting model selection')
             Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
-            B = self.run_model_selection(cat, Ibright, B, segmap,
+            B = self.run_model_selection(cat, Ibright, B, self.segmap,
                                          iterative_detection=iterative_detection,
                                          galaxy_masking=galaxy_masking,
                                          bright_masking=bright_masking,
