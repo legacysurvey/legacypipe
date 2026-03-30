@@ -3165,6 +3165,7 @@ def stage_wise_forced(
     unwise_tr_dir=None,
     unwise_modelsky_dir=None,
     wise_ceres=True,
+    wise_gaia_only=False,
     unwise_coadds=True,
     version_header=None,
     maskbits=None,
@@ -3223,6 +3224,13 @@ def stage_wise_forced(
                 do_phot[Icluster] = False
             del Icluster,Igood,xygood,ra,dec,ok,xx,yy
         del incluster
+
+    if wise_gaia_only:
+        # Only photometer reference sources: Gaia and SGA.
+        info('Only photometering reference sources:', Counter(T.ref_cat))
+        do_phot[np.array([len(r.strip()) == 0 for r in T.ref_cat])] = False
+        info('do_phot: now', Counter(do_phot))
+
     Nskipped = len(T) - np.sum(do_phot)
 
     wcat = []
@@ -4350,6 +4358,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
               galaxy_masking=False,
               ceres=True,
               wise_ceres=True,
+              wise_gaia_only=False,
               galex_ceres=True,
               unwise_dir=None,
               unwise_tr_dir=None,
@@ -4609,6 +4618,7 @@ def run_brick(brick, survey, radec=None, pixscale=0.262,
                   remake_outlier_jpegs=remake_outlier_jpegs,
                   use_ceres=ceres,
                   wise_ceres=wise_ceres,
+                  wise_gaia_only=wise_gaia_only,
                   galex_ceres=galex_ceres,
                   do_segmentation=do_segmentation,
                   bright_masking=bright_masking,
@@ -5002,6 +5012,10 @@ python -u legacypipe/runbrick.py --plots --brick 2440p070 --zoom 1900 2400 450 9
     parser.add_argument('--no-wise-ceres', dest='wise_ceres', default=True,
                         action='store_false',
                         help='Do not use Ceres Solver for unWISE forced phot')
+
+    parser.add_argument('--wise-gaia-only', dest='wise_gaia_only', default=False,
+                        action='store_true',
+                        help='unWISE forced phot: only photometer Gaia + SGA sources')
 
     parser.add_argument('--no-galex-ceres', dest='galex_ceres', default=True,
                         action='store_false',
