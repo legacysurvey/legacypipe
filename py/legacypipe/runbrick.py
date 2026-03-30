@@ -3225,11 +3225,35 @@ def stage_wise_forced(
         del incluster
     Nskipped = len(T) - np.sum(do_phot)
 
+    from legacypipe.utils import NanoMaggiesWithPrior
+    #$flux_prior_std = None
+    #flux_prior_std = 1.
+    #flux_prior_std = 10.
+    #flux_prior_std = 30.
+    #flux_prior_std = 100.
+    #flux_prior_std = 300.
+    #flux_prior_std = 1000.
+    #flux_prior_std = 3000.
+    #flux_prior_std = 10000.
+    #flux_prior_std = 30000.
+    #flux_prior_std = 100000.
+    #flux_prior_std = 300000.
+    #flux_prior_std = 1000000.
+    #flux_prior_std = 3000000.
+    #flux_prior_std = 10000000.
+    #flux_prior_std = 100000000.
+    flux_prior_std = 1000000000.
+
+    NanoMaggiesWithPrior.setFluxPriorStd(flux_prior_std)
+    version_header.add_record(dict(name='W_FLUX_PRIOR', value=flux_prior_std,
+                                   comment='WISE forced phot: flux prior std'))
+
     wcat = []
     for i in np.flatnonzero(do_phot):
         src = cat[i]
         src = src.copy()
-        src.setBrightness(NanoMaggies(w=1.))
+        #src.setBrightness(NanoMaggies(w=1.))
+        src.setBrightness(NanoMaggiesWithPrior(w=1.))
         wcat.append(src)
 
     # use Aaron's WISE pixelized PSF model (unwise_psf repository)?
@@ -3246,7 +3270,8 @@ def stage_wise_forced(
             args.append(((-1,band),
                          (wcat, wtiles, band, roiradec, wise_ceres, wpixpsf,
                           unwise_coadds, get_masks, ps, True,
-                          unwise_modelsky_dir, 'Full-depth W%i' % (band))))
+                          unwise_modelsky_dir, 'Full-depth W%i' % (band),
+                          flux_prior_std)))
 
     # Add time-resolved WISE coadds
     # Skip if $UNWISE_COADDS_TIMERESOLVED_DIR or --unwise-tr-dir not set.
@@ -3302,7 +3327,8 @@ def stage_wise_forced(
                 eargs.append(((ie,band),
                               (wcat, eptiles, band, roiradec,
                                wise_ceres, wpixpsf, False, None, ps, False,
-                               unwise_modelsky_dir, 'Epoch %i W%i' % (ie+1, band))))
+                               unwise_modelsky_dir, 'Epoch %i W%i' % (ie+1, band),
+                               flux_prior_std)))
 
     runargs = args + eargs
     info('unWISE forced phot: total of', len(runargs), 'images to photometer')

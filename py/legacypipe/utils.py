@@ -6,6 +6,7 @@ from contextlib import AbstractContextManager
 
 from tractor.ellipses import EllipseESoft
 from tractor.utils import _GaussianPriors
+from tractor.brightness import NanoMaggies
 
 def log_error(logger, args):
     msg = ' '.join(map(str, args))
@@ -84,6 +85,56 @@ def freeze_iers():
     astropy.utils.iers.conf.iers_auto_url = 'frozen'
     astropy.utils.iers.conf.iers_auto_url_mirror = 'frozen'
     astropy.utils.iers.conf.iers_degraded_accuracy = 'ignore'
+
+'''
+A class for when you want all fluxes to have the same prior.
+'''
+class NanoMaggiesWithPrior(NanoMaggies):
+    flux_std = None
+
+    @classmethod
+    def setFluxPriorStd(cls, s):
+        cls.flux_std = s
+
+    def getLogPrior(self):
+        if self.flux_std is None:
+            print('NanoMaggiesWithPrior: no flux_std set in getLogPrior')
+            return 0.
+        p = self.getAllParams()
+        chisq = 0.
+        for p_i in p:
+            # prior mean=0
+            chisq += p_i**2 / self.flux_std**2
+        return -0.5 * chisq
+
+    def getLogPriorDerivatives(self):
+        '''
+        This has to return
+        r,c,v,b,mu
+        where
+        c is a list-of-ints
+        r,v,b,mu are each a list-of-iterables-of-{int,float}
+        '''
+        if self.flux_std is None:
+            print('NanoMaggiesWithPrior: no flux_std set in getLogPriorDerivatives')
+            return 0.
+        rows = []
+        cols = []
+        vals = []
+        bs = []
+        mus = []
+        p = self.getParams()
+        for i,p_i in enumerate(p):
+            cols.append(i)
+            vals.append([1. / self.flux_std])
+            rows.append([i])
+            bs.append([-p_i / self.flux_std])
+            mus.append([0.])
+        return rows, cols, vals, bs, mus
+
+    @classmethod
+    def getName(cls):
+        return 'NanoMaggiesWithPrior(%s)' % cls.flux_std
 
 galaxy_min_re = 0.01
 
@@ -588,3 +639,20 @@ class LogFormatter(logging.Formatter):
         # Number of seconds since the logger was created.
         record.relativeCreatedSec = record.relativeCreated / 1000
         return super().format(record)
+
+if __name__ == '__main__':
+    NanoMaggiesWithPrior.setFluxPriorStd(10.)
+    f = NanoMaggiesWithPrior(w=1.)
+    print('f:', f)
+    print('log prior:', f.getLogPrior())
+    print('log prior deriv:', f.getLogPriorDerivatives())
+
+    f = NanoMaggiesWithPrior(g=1., r=2.)
+    print('f:', f)
+    print('log prior:', f.getLogPrior())
+    print('log prior deriv:', f.getLogPriorDerivatives())
+    
+    f = NanoMaggiesWithPrior(w=10.)
+    print('f:', f)
+    print('log prior:', f.getLogPrior())
+    print('log prior deriv:', f.getLogPriorDerivatives())

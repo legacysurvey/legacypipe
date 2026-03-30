@@ -8,6 +8,9 @@ from wise.unwise import get_unwise_tractor_image
 
 import logging
 logger = logging.getLogger('legacypipe.unwise')
+def warning(*args):
+    from legacypipe.utils import log_warning
+    log_warning(logger, args)
 def info(*args):
     from legacypipe.utils import log_info
     log_info(logger, args)
@@ -333,7 +336,7 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
                 psf.setParams(p1)
                 debug('Broadened PSF:', psf)
             else:
-                print('WARNING: cannot apply psf_broadening to WISE PSF of type', type(psf))
+                warning('WARNING: cannot apply psf_broadening to WISE PSF of type', type(psf))
 
         wcs = tim.wcs.wcs
         _,fx,fy = wcs.radec2pixelxy(ra, dec)
@@ -423,9 +426,18 @@ def unwise_forcedphot(cat, tiles, band=1, roiradecbox=None,
     tractor.freezeParamsRecursive('*')
     tractor.thawPathsTo(wanyband)
 
+    print('Optimizer:', tractor.optimizer)
+
+    priors = False
+    from legacypipe.utils import NanoMaggiesWithPrior
+    if NanoMaggiesWithPrior.flux_std is not None:
+        priors = True
+    #print('NanoMaggiesWithPrior: set std', NanoMaggiesWithPrior.flux_std)
+    
     t0 = Time()
     R = tractor.optimize_forced_photometry(
-        fitstats=True, variance=True, shared_params=False, wantims=wantims)
+        fitstats=True, variance=True, shared_params=False, wantims=wantims,
+        priors=priors)
     info(tag + 'unWISE forced photometry took', Time() - t0)
 
     if use_ceres:
@@ -600,7 +612,8 @@ def unwise_phot(X):
     This is the entry-point from runbrick.py, called via mp.map()
     '''
     (key, (wcat, tiles, band, roiradec, wise_ceres, pixelized_psf, get_mods,
-           get_masks, ps, move_crpix, modelsky_dir, tag)) = X
+           get_masks, ps, move_crpix, modelsky_dir, tag,
+           flux_prior_std)) = X
     kwargs = dict(roiradecbox=roiradec, band=band, pixelized_psf=pixelized_psf,
                   get_masks=get_masks, ps=ps, move_crpix=move_crpix,
                   modelsky_dir=modelsky_dir, tag=tag)
@@ -609,6 +622,11 @@ def unwise_phot(X):
 
     if wise_ceres and len(wcat) == 0:
         wise_ceres = False
+
+    from legacypipe.utils import NanoMaggiesWithPrior
+    NanoMaggiesWithPrior.setFluxPriorStd(flux_prior_std)
+    print('NanoMaggiesWithPrior: set std', NanoMaggiesWithPrior.flux_std)
+    print('wise_ceres:', wise_ceres)
 
     # DEBUG
     #kwargs.update(save_fits=True)
