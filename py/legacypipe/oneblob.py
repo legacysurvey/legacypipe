@@ -139,6 +139,12 @@ def one_blob(args):
             ob.ps = args.ps
             # FIXME -- update more parameters??
             ob.large_galaxies_force_pointsource = args.large_galaxies_force_pointsource
+            # (temporary) - set defaults from older checkpoints
+            if not hasattr(ob, 'segmap'):
+                ob.segmap = None
+            if not hasattr(ob, 'saved_segmap'):
+                ob.saved_segmap = None
+
         else:
             # we should just make OneBlob's constructor take a OneBlobArgs object!
             ob = OneBlob(args.blobname, args.nblobs, blobwcs, args.blobmask, args.timargs, args.bands,
@@ -272,6 +278,10 @@ class OneBlob(object):
         alphas = [0.1, 0.3, 1.0]
         self.do_segmentation = do_segmentation
         self.bright_masking = bright_masking
+
+        self.segmap = None
+        # When we do iterative detection, the original segmentation map gets saved here.
+        self.saved_segmap = None
 
         # callback function for tractor.optimize_loop: bail out if the
         # optimizer moves a source center outside the blob
@@ -431,9 +441,11 @@ class OneBlob(object):
             # when resuming: src can be None
             if src is None:
                 continue
-            # Save initial fluxes for all sources (used if we force
-            # keeping a reference star)
-            src.initial_brightness = src.brightness.copy()
+            # when resuming, this will already have been set, don't re-set it.
+            if not hasattr(src, 'initial_brightness'):
+                # Save initial fluxes for all sources (used if we force
+                # keeping a reference star)
+                src.initial_brightness = src.brightness.copy()
 
             # Set the freezeparams field for each source.  (This is set for
             # large galaxies with the 'freeze' column set.)
@@ -591,22 +603,22 @@ class OneBlob(object):
             # Also set a parameter on 'src' for use in compute_segmentation_map()
             src.maskbits_forced_point_source = force_pointsource
 
-        segmap = None
-        if self.do_segmentation:
-            self.status('Computing segmentation map')
-            segmap = self.compute_segmentation_map(cat)
-        mask_others = False #self.do_segmentation
-        # Next, model selections: point source vs rex vs dev/exp vs ser.
-        self.debug('Starting model selection')
-        Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
-        B = self.run_model_selection(cat, Ibright, B, segmap,
-                                     iterative_detection=iterative_detection,
-                                     galaxy_masking=galaxy_masking,
-                                     bright_masking=bright_masking,
-                                     mask_others=mask_others)
-        self.debug('Finished model selection: %s' % (Time()-tlast))
+        if not np.all(B.done_fitting):
+            if self.do_segmentation:
+                self.status('Computing segmentation map')
+                self.segmap = self.compute_segmentation_map(cat)
+                mask_others = False #self.do_segmentation
+            # Next, model selections: point source vs rex vs dev/exp vs ser.
+            self.debug('Starting model selection')
+            Ibright = _argsort_by_brightness(cat, self.bands, ref_first=True)
+            B = self.run_model_selection(cat, Ibright, B, segmap,
+                                         iterative_detection=iterative_detection,
+                                         galaxy_masking=galaxy_masking,
+                                         bright_masking=bright_masking,
+                                         mask_others=mask_others)
+            self.debug('Finished model selection: %s' % (Time()-tlast))
         tlast = Time()
-        del segmap
+        self.segmap = None
 
         # Cut down to just the kept sources
         # note that "B" is returned by run_model_selection -- may be a new table with larger
@@ -1301,8 +1313,12 @@ class OneBlob(object):
         bloblogger.setLevel(loglvl + 10)
 
         # Run the whole oneblob pipeline on the iterative sources!
+        self.saved_segmap = self.segmap
+        self.segmap = None
         Bnew = self.run(Bnew, iterative_detection=False, compute_metrics=False,
                         mask_others=False, is_iterative=True)
+        self.segmap = self.saved_segmap
+        self.saved_segmap = None
 
         # revert
         bloblogger.setLevel(loglvl)
