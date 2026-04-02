@@ -4089,9 +4089,6 @@ def stage_writecat(
                           np.clip(T.ibx, 0, W-1).astype(int)]
     del maskbits
 
-    #if forced_T:
-    #    # Add columns from forced photometry.
-
     # Set Sersic indices for all galaxy types.
     # sigh, bytes vs strings.  In py3, T.type (dtype '|S3') are bytes.
     T.sersic[np.array([t in ['DEV',b'DEV'] for t in T.type])] = 4.0
@@ -5352,7 +5349,7 @@ def main(args=None):
     parser.add_argument(
         '--ps', help='Run "ps" and write results to given filename?')
     parser.add_argument(
-        '--ps-t0', type=int, default=0, help='Unix-time start for "--ps"')
+        '--ps-t0', type=int, default=0, help='Unix-time start for "--ps"; eg "--ps-t0 (date "+%s")"')
 
     opt = parser.parse_args(args=args)
 
