@@ -2859,7 +2859,7 @@ def stage_coadds(survey=None, bands=None, version_header=None, targetwcs=None,
         # not BRICK_PRIMARY
         maskbits |= MASKBITS['NPRIMARY'] * np.logical_not(U).astype(maskbits_type)
         if wise_gaia_only:
-            maskbits |= MASKBITS['WISE_GAIA'] * np.logical_not(U).astype(maskbits_type)
+            maskbits |= MASKBITS['WISE_GAIA'] * U.astype(maskbits_type)
         del U
     else:
         if wise_gaia_only:
